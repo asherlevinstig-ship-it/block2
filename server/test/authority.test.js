@@ -237,6 +237,31 @@ function seedDungeonPlayer(room, name, inst, pos) {
   return c;
 }
 
+// Build an active King-of-the-Hill instance, stubbing the status-sync broadcast
+// (these tests target scoring/crown logic, not the payload serialization).
+function activeKingEvent(room, now = Date.now()) {
+  room.eventSeq = 0;
+  room.broadcastEventStatus = () => {};
+  const ev = room.createKingInstance(now, now);
+  ev.phase = 'active';
+  ev.endsAt = now + 1e6;
+  ev.lastScoreAt = now;
+  room.serverEvent = ev;
+  room.eventInstances = new Map();
+  room.activeEventInstanceId = '';
+  return ev;
+}
+
+// Register a participant on a given team at a given arena position.
+function addKingParticipant(room, ev, name, teamId, pos) {
+  const c = makeClient(name);
+  seedPlayer(room, c, { ...pos, name });
+  room.clients.push(c);
+  ev.participants.set(c.sessionId, { returnPos: { x: pos.x, y: pos.y, z: pos.z }, teamId, teamName: teamId, respawnAt: 0 });
+  room.ensureKingScore(ev, teamId, teamId);
+  return c;
+}
+
 test('profile merge ignores client-owned economy and accepts safe identity fields', () => {
   const current = defaultProfile('Old');
   current.S.lvl = 2;
@@ -1520,6 +1545,67 @@ test('shard Grievous bleeds a wounded player and stops once they heal to full', 
   const afterFull = room.playerHp.get(p.sessionId).hp;
   room.tickInstanceHazards(inst, 1.0, room.instancePlayers(inst));
   assert.equal(room.playerHp.get(p.sessionId).hp, afterFull, 'at full HP Grievous deals no further damage');
+});
+
+test('King of the Hill scores time only for the crown-holding team', () => {
+  const T = 1_000_000;
+  const room = makeRoom();
+  const ev = activeKingEvent(room, T);
+  const holder = addKingParticipant(room, ev, 'holder', 'red', { x: 680, y: 16, z: 500 });
+  addKingParticipant(room, ev, 'other', 'blue', { x: 690, y: 16, z: 500 });
+  ev.crown.holderSid = holder.sessionId;
+  ev.crown.holderTeamId = 'red';
+
+  room.tickKingEvent(ev, T + 1000);   // 1s of crown time
+
+  assert.equal(room.ensureKingScore(ev, 'red').ms, 1000, 'the holding team accrues the elapsed time');
+  assert.equal(room.ensureKingScore(ev, 'blue').ms, 0, 'a non-holding team scores nothing');
+});
+
+test('an unheld King crown is claimed by a participant standing on it', () => {
+  const T = 1_000_000;
+  const room = makeRoom();
+  const ev = activeKingEvent(room, T);
+  const a = addKingParticipant(room, ev, 'claimer', 'red', { x: ev.crown.x, y: 16, z: ev.crown.z });
+  ev.crown.holderSid = '';   // the crown is on the ground
+
+  room.tickKingEvent(ev, T + 100);
+
+  assert.equal(ev.crown.holderSid, a.sessionId, 'the hunter on the crown picks it up');
+  assert.equal(ev.crown.holderTeamId, 'red', 'the crown takes the claimer\'s team');
+});
+
+test('killing the King crown-holder hands the crown to an enemy slayer, or drops it', () => {
+  const room = makeRoom();
+  const ev = activeKingEvent(room);
+  const holder = addKingParticipant(room, ev, 'holder', 'red', { x: 680, y: 16, z: 500 });
+  const slayer = addKingParticipant(room, ev, 'slayer', 'blue', { x: 682, y: 16, z: 500 });
+  ev.crown.holderSid = holder.sessionId; ev.crown.holderTeamId = 'red';
+
+  // an enemy-team slayer gets the killing-blow credit -> the crown transfers
+  room.playerLastHit.set(holder.sessionId, { attackerSid: slayer.sessionId, at: Date.now() });
+  const handled = room.handleKingPlayerDeath(holder, room.state.players.get(holder.sessionId), room.playerHp.get(holder.sessionId));
+  assert.equal(handled, true, 'a participant death inside King is handled by the event');
+  assert.equal(ev.crown.holderSid, slayer.sessionId, 'the enemy slayer steals the crown');
+
+  // the holder reclaims, then dies with no recent enemy hit -> the crown drops
+  ev.crown.holderSid = holder.sessionId; ev.crown.holderTeamId = 'red';
+  room.playerLastHit.delete(holder.sessionId);
+  room.handleKingPlayerDeath(holder, room.state.players.get(holder.sessionId), room.playerHp.get(holder.sessionId));
+  assert.equal(ev.crown.holderSid, '', 'with no enemy slayer the crown falls to the ground');
+});
+
+test('King participants who wander out of the arena are teleported back in', () => {
+  const T = 1_000_000;
+  const room = makeRoom();
+  const ev = activeKingEvent(room, T);
+  const wanderer = addKingParticipant(room, ev, 'wanderer', 'red', { x: 680, y: 16, z: 500 });
+  const p = room.state.players.get(wanderer.sessionId);
+  p.x = ev.arena.maxX + 50; p.z = 500;   // strays well outside the arena bounds
+
+  room.tickKingEvent(ev, T + 100);
+
+  assert.equal(room.pointInKingArena(ev, p.x, p.z), true, 'the wanderer is pulled back inside the arena');
 });
 
 test('food use consumes edible items and heals server HP', () => {
