@@ -212,6 +212,31 @@ function itemCount(prof, id) {
   return (prof.inv || []).reduce((n, s) => n + (s && s.id === id ? s.count : 0), 0);
 }
 
+// Minimal dungeon instance carrying the shard-hazard bookkeeping that
+// tickInstanceHazards / onDungeonTrashDeath read, without generating a real dungeon.
+function hazInstance(room, id, mods, plus = 0) {
+  const inst = {
+    id, rank: 1, shardPlus: plus, world: new Uint8Array(0),
+    players: new Set(), cleared: false,
+    hazMods: new Set(mods),
+    haz: {
+      pools: [], vols: [], orbs: [], ghosts: [], quakes: [],
+      bleed: new Map(), grv: new Map(), quakeT: 999, orbT: 999,
+    },
+  };
+  room.instances[id] = inst;
+  return inst;
+}
+
+// Seed a player already inside the given dungeon instance and register them as a client.
+function seedDungeonPlayer(room, name, inst, pos) {
+  const c = makeClient(name);
+  seedPlayer(room, c, { ...pos, dgn: inst.id, hp: pos.hp ?? 20 });
+  inst.players.add(c.sessionId);
+  room.clients.push(c);
+  return c;
+}
+
 test('profile merge ignores client-owned economy and accepts safe identity fields', () => {
   const current = defaultProfile('Old');
   current.S.lvl = 2;
@@ -1406,6 +1431,95 @@ test('a lethal aegis bounty strike completes the contract and notifies both hunt
   assert.ok(attacker.sent.some(e => e.type === 'pvpBountyComplete' && e.msg.targetSid === target.sessionId), 'killer is told the contract completed');
   assert.ok(target.sent.some(e => e.type === 'pvpBountySlain'), 'target is told who slew them');
   assert.equal(room.aegisBounties.has(attacker.sessionId), false, 'the spent bounty is cleared');
+});
+
+test('shard Volatile corpse blast damages players in radius and scales with +N', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Volatile'], 2);
+  const near = seedDungeonPlayer(room, 'near', inst, { x: 30.5, y: 9, z: 30.5 });
+  const far = seedDungeonPlayer(room, 'far', inst, { x: 40.5, y: 9, z: 30.5 });   // ~10 blocks away
+
+  room.onDungeonTrashDeath('g1', 30, 9, 30);   // Volatile queues a corpse blast: dmg 4+plus, fuse 1.1s
+  assert.equal(inst.haz.vols.length, 1);
+  room.tickInstanceHazards(inst, 1.2, room.instancePlayers(inst));   // fuse elapses -> detonate
+
+  assert.equal(room.playerHp.get(near.sessionId).hp, 14, 'player on the corpse takes 4+plus = 6');
+  assert.equal(room.playerHp.get(far.sessionId).hp, 20, 'player outside the 3-block radius is unharmed');
+  assert.equal(inst.haz.vols.length, 0, 'the blast is consumed');
+});
+
+test('shard Explosive orb detonates and damages players in radius', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Explosive'], 1);
+  const near = seedDungeonPlayer(room, 'near', inst, { x: 25.5, y: 9, z: 25.5 });
+  const far = seedDungeonPlayer(room, 'far', inst, { x: 35.5, y: 9, z: 25.5 });
+  inst.haz.orbs.push({ id: 'o1', x: 25, z: 25, y: 9, fuse: 0.5 });   // a primed orb about to blow
+
+  room.tickInstanceHazards(inst, 0.6, room.instancePlayers(inst));
+
+  assert.equal(room.playerHp.get(near.sessionId).hp, 13, 'orb deals 6+plus = 7 in radius');
+  assert.equal(room.playerHp.get(far.sessionId).hp, 20, 'player outside the blast is unharmed');
+  assert.equal(inst.haz.orbs.length, 0, 'the orb is consumed');
+});
+
+test('shard Quaking telegraphs then strikes only players who stand still', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Quaking'], 0);
+  inst.haz.quakeT = 0;   // a telegraph fires on the next tick
+  const stay = seedDungeonPlayer(room, 'stay', inst, { x: 50.5, y: 9, z: 50.5 });
+  const flee = seedDungeonPlayer(room, 'flee', inst, { x: 52.5, y: 9, z: 50.5 });
+
+  room.tickInstanceHazards(inst, 0.1, room.instancePlayers(inst));   // plant a shockwave under each player
+  assert.equal(inst.haz.quakes.length, 2);
+
+  room.state.players.get(flee.sessionId).x = 60.5;                   // one hunter sidesteps the telegraph
+  room.tickInstanceHazards(inst, 1.1, room.instancePlayers(inst));   // shockwaves detonate
+
+  assert.ok(room.playerHp.get(stay.sessionId).hp < 20, 'standing in the shockwave hurts');
+  assert.equal(room.playerHp.get(flee.sessionId).hp, 20, 'leaving the telegraphed tile avoids it');
+});
+
+test('shard Sanguine pool heals wounded trash but not full-HP or distant mobs', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Sanguine'], 0);
+  room.state.mobs.set('wounded', { x: 30, y: 9, z: 30, hp: 10, maxHp: 20, kind: 'zombie', dgn: 'g1' });
+  room.state.mobs.set('full', { x: 30, y: 9, z: 30, hp: 20, maxHp: 20, kind: 'zombie', dgn: 'g1' });
+  room.state.mobs.set('distant', { x: 50, y: 9, z: 50, hp: 5, maxHp: 20, kind: 'zombie', dgn: 'g1' });
+
+  room.onDungeonTrashDeath('g1', 30, 9, 30);   // Sanguine leaves an ichor pool
+  assert.equal(inst.haz.pools.length, 1);
+  room.tickInstanceHazards(inst, 1.0, []);     // heals 6/s
+
+  assert.equal(room.state.mobs.get('wounded').hp, 16, 'wounded trash in the pool heals 6/s');
+  assert.equal(room.state.mobs.get('full').hp, 20, 'already-full trash stays capped');
+  assert.equal(room.state.mobs.get('distant').hp, 5, 'trash outside the pool is untouched');
+});
+
+test('shard Bursting applies a stacking bleed that ticks for damage over time', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Bursting'], 0);
+  const p = seedDungeonPlayer(room, 'bleeder', inst, { x: 20.5, y: 9, z: 20.5 });
+
+  room.onDungeonTrashDeath('g1', 20, 9, 20);   // a kill near the party applies one bleed stack
+  assert.equal(inst.haz.bleed.get(p.sessionId).stacks, 1);
+  room.tickInstanceHazards(inst, 2.0, room.instancePlayers(inst));   // 0.5/stack/s -> 1 damage after 2s
+
+  assert.equal(room.playerHp.get(p.sessionId).hp, 19, 'the bleed stack ticks for 1');
+});
+
+test('shard Grievous bleeds a wounded player and stops once they heal to full', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Grievous'], 0);
+  const p = seedDungeonPlayer(room, 'hurt', inst, { x: 20.5, y: 9, z: 20.5, hp: 17 });   // 85% < 90% threshold
+
+  for (let i = 0; i < 6; i++) room.tickInstanceHazards(inst, 1.0, room.instancePlayers(inst));
+  assert.ok(room.playerHp.get(p.sessionId).hp < 17, 'a wounded player accrues Grievous bleed');
+
+  room.playerHp.get(p.sessionId).hp = 20;   // heal to full clears the stacks
+  room.tickInstanceHazards(inst, 1.0, room.instancePlayers(inst));
+  const afterFull = room.playerHp.get(p.sessionId).hp;
+  room.tickInstanceHazards(inst, 1.0, room.instancePlayers(inst));
+  assert.equal(room.playerHp.get(p.sessionId).hp, afterFull, 'at full HP Grievous deals no further damage');
 });
 
 test('food use consumes edible items and heals server HP', () => {

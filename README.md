@@ -40,7 +40,7 @@ server/
     teams.mixin.js      persistent teams: create/join/invite/kick/transfer/LFG
     dragons.mixin.js    dragons (hatch/incubate/breed/perch/mount/breath) and familiars
   test/
-    authority.test.js   130 unit tests, mostly anti-cheat and server-authority assertions
+    authority.test.js   141 unit tests, mostly anti-cheat and server-authority assertions
     integration.test.js boots a room and exercises the join → play → save round-trip
 client/
   index.html            the full single-player game with the multiplayer layer patched in
@@ -190,13 +190,14 @@ and the sim rate live in `GameRoom.js`.
 ## Tests
 
 ```bash
-npm test               # 130 unit tests (server/test/authority.test.js)
+npm test               # 141 unit tests (server/test/authority.test.js)
 npm run test:integration   # boots a room and runs the join → play → save round-trip
 ```
 
 The unit suite is overwhelmingly **anti-cheat and authority** coverage: forged saves can't grant
 gold/XP/items, melee damage is validated against the real inventory, mounts/dragons/familiars are
 server-gated, rate limiters throttle floods, PvP bounty strikes are range/line-of-sight/terrain
-validated, and the dungeon generator is asserted byte-identical to the client's.
+validated, shard affix hazards (Volatile/Explosive/Quaking/Sanguine/Bursting/Grievous) deal the
+right damage in the right radius, and the dungeon generator is asserted byte-identical to the client's.
 
 Both suites run on every push and pull request via [GitHub Actions](.github/workflows/ci.yml).
