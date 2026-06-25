@@ -1608,6 +1608,121 @@ test('King participants who wander out of the arena are teleported back in', () 
   assert.equal(room.pointInKingArena(ev, p.x, p.z), true, 'the wanderer is pulled back inside the arena');
 });
 
+test('boss summons reinforcements at HP thresholds and enrages once near death', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', [], 0);
+  inst.rank = 2;
+  room.mobSeq = 0;
+  const m = { x: 100, y: 9, z: 100, yaw: 0, hp: 100, maxHp: 100, kind: 'boss', dgn: 'g1', state: 'chase' };
+  room.state.mobs.set('boss1', m);
+  const meta = room.freshMeta(100, 100, 12, 1.2, 'boss', 2, true);
+  room.mobMeta['boss1'] = meta;
+  const tick = () => room.bossBrain(m, 'boss1', meta, 0.1, null, 99, [], () => 9, () => false);
+
+  m.hp = 70; tick();
+  assert.equal(meta.sum1, false, 'above 66% no wave spawns');
+  const base = room.state.mobs.size;
+
+  m.hp = 66; tick();   // 2 + floor(rank/2) = 3 adds
+  assert.equal(meta.sum1, true);
+  assert.equal(room.state.mobs.size, base + 3, 'first wave at 66%');
+
+  m.hp = 40; const afterFirst = room.state.mobs.size; tick();
+  assert.equal(room.state.mobs.size, afterFirst, 'no extra wave between thresholds');
+
+  m.hp = 33; tick();
+  assert.equal(meta.sum2, true);
+  assert.equal(room.state.mobs.size, afterFirst + 3, 'second wave at 33%');
+
+  const spd = meta.speed;
+  m.hp = 20; tick();
+  assert.equal(meta.enraged, true);
+  assert.ok(Math.abs(meta.speed - spd * 1.4) < 1e-9, 'enrage hastes the boss 1.4x');
+
+  m.hp = 10; tick();
+  assert.ok(Math.abs(meta.speed - spd * 1.4) < 1e-9, 'enrage speed is applied only once');
+});
+
+test('the boss stays dormant until a hunter closes in, then opens with a long slam tell', () => {
+  const room = makeRoom();
+  hazInstance(room, 'g1', [], 0);
+  const m = { x: 100, y: 9, z: 100, yaw: 0, hp: 100, maxHp: 100, kind: 'boss', dgn: 'g1', state: 'chase' };
+  const meta = room.freshMeta(100, 100, 12, 1.2, 'boss', 2, true);
+  room.mobMeta['boss1'] = meta;
+  room.state.mobs.set('boss1', m);
+
+  const far = { p: { x: 130, y: 9, z: 100 } };
+  const consumedFar = room.bossBrain(m, 'boss1', meta, 0.1, far, 30, [], () => 9, () => false);
+  assert.ok(!meta.woke, 'a distant hunter does not wake the boss');
+  assert.equal(m.state, 'chase');
+  assert.equal(consumedFar, false, 'dormant boss yields to ordinary pursuit');
+
+  const near = { p: { x: 108, y: 9, z: 100 } };   // bd 8 < 14, clear line of sight
+  const consumedNear = room.bossBrain(m, 'boss1', meta, 0.1, near, 8, [], () => 9, () => false);
+  assert.equal(meta.woke, true);
+  assert.equal(m.state, 'slamWind');
+  assert.ok(Math.abs(meta.stateT - 1.6) < 1e-9, 'the wake slam telegraphs longer than a normal slam');
+  assert.equal(consumedNear, true);
+});
+
+test('the boss slam strikes hunters in range when its windup resolves', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', [], 0);
+  const near = seedDungeonPlayer(room, 'near', inst, { x: 102, y: 9, z: 100 });   // 2 blocks, in range
+  const far = seedDungeonPlayer(room, 'far', inst, { x: 110, y: 9, z: 100 });     // 10 blocks, out
+  const m = { x: 100, y: 9, z: 100, yaw: 0, hp: 100, maxHp: 100, kind: 'boss', dgn: 'g1', state: 'slamWind' };
+  const meta = room.freshMeta(100, 100, 12, 1.2, 'boss', 2, true);
+  meta.woke = true; meta.stateT = 0.05;   // windup about to land; slamDmg = 6 + 2*rank = 10
+  room.mobMeta['boss1'] = meta;
+  room.state.mobs.set('boss1', m);
+  const candidates = room.instancePlayers(inst);
+
+  room.bossBrain(m, 'boss1', meta, 0.1, candidates[0], 2, candidates, () => 9, () => false);
+
+  assert.equal(room.playerHp.get(near.sessionId).hp, 10, 'a hunter in the slam radius takes slamDmg');
+  assert.equal(room.playerHp.get(far.sessionId).hp, 20, 'a hunter outside the radius is unscathed');
+  assert.equal(m.state, 'recover', 'the boss recovers after slamming');
+});
+
+test('a charging boss that hits a wall crashes and is stunned', () => {
+  const room = makeRoom();
+  hazInstance(room, 'g1', [], 0);
+  const m = { x: 100, y: 9, z: 100, yaw: 0, hp: 100, maxHp: 100, kind: 'boss', dgn: 'g1', state: 'charge' };
+  const meta = room.freshMeta(100, 100, 12, 1.2, 'boss', 2, true);
+  meta.woke = true; meta.stateT = 1.0; meta.chargedHit = new Set(); meta.cdx = 1; meta.cdz = 0;
+  room.mobMeta['boss1'] = meta;
+  room.state.mobs.set('boss1', m);
+  const best = { p: { x: 120, y: 9, z: 100 } };
+
+  // ground() returns -1 ahead: the path is blocked, so the charge crashes
+  room.bossBrain(m, 'boss1', meta, 0.1, best, 20, [], () => -1, () => false);
+
+  assert.equal(m.state, 'stun', 'crashing into a wall stuns the boss');
+  assert.ok(Math.abs(meta.stateT - 1.7) < 1e-9, 'the stun lasts 1.7s');
+  assert.equal(m.x, 100, 'a crashing boss does not pass through the wall');
+});
+
+test('a stunned boss takes extra (crit) melee damage — the wall-crash punish window', () => {
+  const room = makeRoom();
+  const client = makeClient('fighter');
+  seedPlayer(room, client, { x: 100.5, y: 16, z: 100.5, lvl: 9 });
+  room.clients = [client];
+  room.state.mobs.set('b1', { x: 102, y: 16, z: 100.5, yaw: 0, hp: 1000, maxHp: 1000, kind: 'boss', dgn: '', state: '' });
+  room.mobMeta['b1'] = room.freshMeta(102, 100.5, 12, 1.2, 'boss', 2, true);
+
+  room.handleAttack(client, { id: 'b1' });
+  const normal = 1000 - room.state.mobs.get('b1').hp;
+
+  room.state.mobs.get('b1').hp = 1000;
+  room.state.mobs.get('b1').state = 'stun';
+  room.lastAttackMsg.set(client.sessionId, 0);   // clear the swing cadence
+  room.handleAttack(client, { id: 'b1' });
+  const stunned = 1000 - room.state.mobs.get('b1').hp;
+
+  assert.ok(stunned > normal, 'a stunned boss takes more damage than an unstunned one');
+  assert.ok(Math.abs(stunned - normal * 1.5) < 1e-6, 'the stun window is a 1.5x crit');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');
