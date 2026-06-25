@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# runtime persistence (JsonStore output) — regenerated at runtime
+data/
+
+# server logs
+*.log
+
+# local editor / tool state
+.claude/settings.local.json
+
+# nested, unrelated project that carries its own git repository
+pebble/

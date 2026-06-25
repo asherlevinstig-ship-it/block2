@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "blockcraft",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "process.env.PORT='2569';process.env.DEV_CHEATS='1';require('./server/index.js')"],
+      "port": 2569
+    }
+  ]
+}
