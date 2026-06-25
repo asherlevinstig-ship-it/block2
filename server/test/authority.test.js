@@ -34,6 +34,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 const W = require('../world');
+const AI = require('../ai');
 const { GameRoom, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { defaultProfile, mergeClientSave, clampJobXpGain, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds } = require('../store');
@@ -1721,6 +1722,70 @@ test('a stunned boss takes extra (crit) melee damage — the wall-crash punish w
 
   assert.ok(stunned > normal, 'a stunned boss takes more damage than an unstunned one');
   assert.ok(Math.abs(stunned - normal * 1.5) < 1e-6, 'the stun window is a 1.5x crit');
+});
+
+test('a projectile flies straight and strikes a target standing in its path', () => {
+  const noWall = () => false;
+  const a = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: true };   // bolt: flat trajectory
+  const target = { p: { x: 5, y: 4.5, z: 0 } };
+  let r = 'fly';
+  for (let i = 0; i < 30 && r === 'fly'; i++) r = AI.arrowStep(a, 0.05, noWall, [target]);
+  assert.ok(r !== 'fly' && r !== 'block' && r.hit === target, 'the bolt connects with the target in its path');
+});
+
+test('a projectile misses a target that has stepped aside (genuinely dodgeable)', () => {
+  const noWall = () => false;
+  const a = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: true };
+  const dodger = { p: { x: 5, y: 4.5, z: 3 } };   // 3 blocks off the z=0 flight line
+  let r = 'fly';
+  for (let i = 0; i < 60 && r === 'fly'; i++) r = AI.arrowStep(a, 0.05, noWall, [dodger]);
+  assert.equal(r, 'fly', 'a sidestepped target is never inside the hit cylinder');
+  assert.ok(a.x > 5, 'the projectile flew on past where the target had been');
+});
+
+test('a projectile is blocked by a wall instead of tunneling through', () => {
+  const wall = (x) => x >= 3;   // solid from x=3 onward
+  const a = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: true };
+  let r = 'fly', steps = 0;
+  while (r === 'fly' && steps++ < 50) r = AI.arrowStep(a, 0.05, (x) => wall(x), []);
+  assert.equal(r, 'block', 'the projectile is stopped by the wall');
+  assert.ok(a.x < 4, 'it stops at the wall, not past it');
+});
+
+test('arrows drop under gravity while bolts hold a flat line', () => {
+  const noWall = () => false;
+  const arrow = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: false };
+  const bolt = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: true };
+  for (let i = 0; i < 10; i++) { AI.arrowStep(arrow, 0.05, noWall, []); AI.arrowStep(bolt, 0.05, noWall, []); }
+  assert.ok(arrow.y < 5 && arrow.vy < 0, 'an arrow loses height and gains downward velocity');
+  assert.equal(bolt.y, 5, 'a bolt holds its line');
+});
+
+test('substepping stops a fast projectile from tunneling through a thin wall', () => {
+  const wall = (x) => x === 5;   // a single 1-block-thick wall column
+  // one coarse step covers 8 blocks in a single hop and skips the wall cell
+  const coarse = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: true };
+  const rCoarse = AI.arrowStep(coarse, 0.5, (x) => wall(x), []);
+  // the real sim instead takes 3 substeps of dt/3 from the same start
+  const fine = { x: 0, y: 5, z: 0, vx: 16, vy: 0, vz: 0, bolt: true };
+  let rFine = 'fly';
+  for (let s = 0; s < 3 && rFine === 'fly'; s++) rFine = AI.arrowStep(fine, 0.5 / 3, (x) => wall(x), []);
+  assert.notEqual(rCoarse, 'block', 'a single coarse step would tunnel past the thin wall');
+  assert.equal(rFine, 'block', 'three substeps catch the wall the full tick would have skipped');
+});
+
+test('a mob fires a bolt aimed at its target at the correct speed', () => {
+  const room = makeRoom();
+  room.sArrows = [];
+  const mob = { x: 0, y: 9, z: 0 };
+  room.fireArrow(mob, '', 20, 10.4, 0, 5, true);   // bolt toward (20, 10.4, 0); no spread
+
+  assert.equal(room.sArrows.length, 1, 'the shot is queued as a server-simulated projectile');
+  const a = room.sArrows[0];
+  assert.ok(Math.abs(Math.hypot(a.vx, a.vy, a.vz) - 10) < 1e-6, 'a bolt launches at exactly 10 u/s');
+  assert.ok(a.vx > 9 && Math.abs(a.vz) < 1e-9, 'it travels toward the target, mostly +x');
+  assert.equal(a.dmg, 5);
+  assert.equal(a.bolt, true);
 });
 
 test('food use consumes edible items and heals server HP', () => {

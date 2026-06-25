@@ -40,7 +40,7 @@ server/
     teams.mixin.js      persistent teams: create/join/invite/kick/transfer/LFG
     dragons.mixin.js    dragons (hatch/incubate/breed/perch/mount/breath) and familiars
   test/
-    authority.test.js   150 unit tests, mostly anti-cheat and server-authority assertions
+    authority.test.js   156 unit tests, mostly anti-cheat and server-authority assertions
     integration.test.js boots a room and exercises the join → play → save round-trip
 client/
   index.html            the full single-player game with the multiplayer layer patched in
@@ -190,7 +190,7 @@ and the sim rate live in `GameRoom.js`.
 ## Tests
 
 ```bash
-npm test               # 150 unit tests (server/test/authority.test.js)
+npm test               # 156 unit tests (server/test/authority.test.js)
 npm run test:integration   # boots a room and runs the join → play → save round-trip
 ```
 
