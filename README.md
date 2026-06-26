@@ -39,6 +39,7 @@ server/
     spawning.mixin.js   overworld density spawning, elite camps, boss brain, gate placement
     events.mixin.js     server events (parkour, King of the Hill), skyship, day cycle, sleep
     teams.mixin.js      persistent teams: create/join/invite/kick/transfer/LFG
+    metrics.mixin.js    behaviour-free load metrics (instances, dungeon mob-sync waste, tick ms)
     dragons.mixin.js    dragons (hatch/incubate/breed/perch/mount/breath) and familiars
   test/
     authority.test.js   156 unit tests, mostly anti-cheat and server-authority assertions

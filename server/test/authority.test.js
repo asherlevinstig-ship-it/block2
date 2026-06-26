@@ -1867,6 +1867,32 @@ test('DungeonInstance.hasLivingPlayers tracks live roster members inside the ins
   assert.equal(inst.hasLivingPlayers(), false, 'all members dead or gone -> wipe');
 });
 
+test('metricsSnapshot reports room load and the dungeon mob-sync waste filtering would save', () => {
+  const room = makeRoom();
+  const ow = makeClient('ow'), r1 = makeClient('r1'), r2 = makeClient('r2');
+  room.clients = [ow, r1, r2];
+  seedPlayer(room, ow, { x: 20, z: 20 });        // overworld
+  seedPlayer(room, r1, { dgn: 'g1' });            // raiding g1
+  seedPlayer(room, r2, { dgn: 'g1' });
+  putInstance(room, { id: 'g1', players: [r1.sessionId, r2.sessionId] });
+  room.state.mobs.set('o1', { dgn: '' }); room.state.mobs.set('o2', { dgn: '' });
+  room.state.mobs.set('d1', { dgn: 'g1' }); room.state.mobs.set('d2', { dgn: 'g1' }); room.state.mobs.set('d3', { dgn: 'g1' });
+  room.recordTick(2); room.recordTick(4); room.recordTick(8);
+
+  const s = room.metricsSnapshot();
+  assert.equal(s.players, 3);
+  assert.equal(s.owPlayers, 1);
+  assert.equal(s.dgnPlayers, 2);
+  assert.equal(s.instances, 1);
+  assert.equal(s.mobs, 5);
+  assert.equal(s.owMobs, 2);
+  assert.equal(s.dgnMobs, 3);
+  // 3 dungeon mobs sync to all 3 clients, but only 2 are inside g1: 3 * (3 - 2) = 3 wasted syncs
+  assert.equal(s.wastedMobSyncs, 3);
+  assert.equal(s.tickMaxMs, 8, 'tracks the worst tick');
+  assert.ok(s.tickAvgMs > 0, 'tracks a rolling average tick time');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');

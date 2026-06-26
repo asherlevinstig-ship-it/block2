@@ -1,3 +1,4 @@
+const { performance } = require('perf_hooks');
 const { Room } = require('colyseus');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -145,6 +146,7 @@ class GameRoom extends Room {
       if (gateCount) console.log('[persist] restored ' + gateCount + ' gates');
     } catch (e) { console.warn('[persist] gate load failed:', e.message); }
     this.clock.setInterval(() => this.flush(), 30000);
+    this.clock.setInterval(() => this.logMetrics(), 60000);
     this.clock.setInterval(() => this.completeFurnaces(true), 1000);
     this.clock.setInterval(() => this.broadcastSkyshipSync(), 30000);
     this.clock.setInterval(() => this.broadcastDayCycleSync(), 30000);
@@ -398,7 +400,12 @@ class GameRoom extends Room {
       this.broadcast('chat', { name: p.name, text });
     });
 
-    this.setSimulationInterval(dtMs => this.update(dtMs / 1000), 100); // 10 Hz
+    this.tickMetrics = { lastMs: 0, avgMs: 0, maxMs: 0, samples: 0 };
+    this.setSimulationInterval(dtMs => {
+      const t0 = performance.now();
+      this.update(dtMs / 1000);
+      this.recordTick(performance.now() - t0);
+    }, 100); // 10 Hz
   }
 
   async onJoin(client, options) {
@@ -2380,6 +2387,7 @@ applyMixin(GameRoom, require('./dungeon.mixin'));
 applyMixin(GameRoom, require('./spawning.mixin'));
 applyMixin(GameRoom, require('./combat.mixin'));
 applyMixin(GameRoom, require('./teams.mixin'));
+applyMixin(GameRoom, require('./metrics.mixin'));
 
 
 module.exports = {
