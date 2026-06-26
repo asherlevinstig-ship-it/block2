@@ -47,6 +47,19 @@ class DungeonInstance {
   hasPlayer(sid) { return this.players.has(sid); }
   get playerCount() { return this.players.size; }
 
+  // True while at least one roster member is still inside this instance and alive.
+  // Drives the wipe check: when it goes false, the run fails.
+  hasLivingPlayers() {
+    const room = this.room;
+    if (!room) return false;
+    for (const sid of this.players) {
+      const p = room.state.players.get(sid);
+      const hp = room.playerHp.get(sid);
+      if (p && p.dgn === this.id && (!hp || hp.hp > 0)) return true;
+    }
+    return false;
+  }
+
   // Tear the instance down: drop its mobs (and their meta), purge its in-flight
   // projectiles, and remove the instance from the room's registry. The caller owns
   // any extra bookkeeping (e.g. clearDungeonInstance also clears boss contribution).

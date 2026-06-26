@@ -681,15 +681,6 @@ class DungeonMixin {
     if (inst) inst.removePlayer(sid);
     this.bossContrib.forEach(byPlayer => byPlayer.delete(sid));
   }
-  instanceHasLivingPlayers(inst) {
-    if (!inst) return false;
-    for (const sid of inst.players) {
-      const p = this.state.players.get(sid);
-      const hp = this.playerHp.get(sid);
-      if (p && p.dgn === inst.id && (!hp || hp.hp > 0)) return true;
-    }
-    return false;
-  }
   clearDungeonInstance(dgn) {
     const inst = this.instances[dgn];
     if (!inst) return;

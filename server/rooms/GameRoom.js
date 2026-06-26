@@ -1364,7 +1364,7 @@ class GameRoom extends Room {
       const reason = inst && inst.players.size <= 1 ? 'solo' : 'wipe';
       client.send('dungeonDeath', { reason: 'death' });
       this.ejectFromDungeon(client.sessionId);
-      if (inst && !this.instanceHasLivingPlayers(inst)) this.failDungeon(dgn, reason);
+      if (inst && !inst.hasLivingPlayers()) this.failDungeon(dgn, reason);
     } else {
       hp.hp = hp.max;
       client.send('worldDeath', {});

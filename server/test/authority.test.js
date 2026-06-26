@@ -1851,6 +1851,22 @@ test('DungeonInstance.dispose tears down only its own mobs, projectiles, and reg
   assert.equal(room.instances.dg9, undefined, 'the instance removes itself from the room');
 });
 
+test('DungeonInstance.hasLivingPlayers tracks live roster members inside the instance', () => {
+  const room = { state: { players: new Map() }, playerHp: new Map(), instances: {} };
+  const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, { id: 'dgA', seed: 0, rank: 0, kind: 'public', shardPlus: 0, shardMods: '' }, room);
+  inst.addPlayer('alive'); inst.addPlayer('downed'); inst.addPlayer('left');
+  room.state.players.set('alive', { dgn: 'dgA' });
+  room.state.players.set('downed', { dgn: 'dgA' });
+  room.state.players.set('left', { dgn: '' });          // walked out
+  room.playerHp.set('alive', { hp: 12, max: 20 });
+  room.playerHp.set('downed', { hp: 0, max: 20 });       // dead
+
+  assert.equal(inst.hasLivingPlayers(), true, 'one live member keeps the run going');
+
+  room.playerHp.get('alive').hp = 0;                     // the last fighter goes down
+  assert.equal(inst.hasLivingPlayers(), false, 'all members dead or gone -> wipe');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');
