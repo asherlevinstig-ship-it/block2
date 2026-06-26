@@ -200,6 +200,11 @@ class EconomyMixin {
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
     const tier = jobPerkTier(prof, 'blacksmith');
     const dur = tier ? Math.min(99999, info.dur + Math.max(1, Math.round(info.dur * (0.08 + tier * 0.04)))) : info.dur;
+    for (let i = 0; i < prof.inv.length && left > 0; i++) {   // reuse freed holes before growing
+      if (prof.inv[i]) continue;
+      prof.inv[i] = { id, count: 1, dur };
+      left--;
+    }
     while (left > 0 && prof.inv.length < 36) {
       prof.inv.push({ id, count: 1, dur });
       left--;
@@ -582,8 +587,12 @@ class EconomyMixin {
     const f = this.getFurnaceState(key);
     if (!f.output) return client.send('furnaceReject', { reason: 'empty' });
     const out = f.output;
-    f.output = null;
     const finalCount = this.craftedOutputCount(rec.prof, out.id, out.count);
+    // leave the output in the furnace if it can't all fit — don't null it then lose it
+    if (this.inventorySpaceFor(rec.prof, out.id, finalCount) < finalCount) {
+      return client.send('furnaceReject', { reason: 'full' });
+    }
+    f.output = null;
     this.addRewardItem(rec.prof, out.id, finalCount);
     this.dirtyPlayers.add(rec.token);
     this.dirtyFurnaces = true;

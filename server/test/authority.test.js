@@ -1938,6 +1938,30 @@ test('chest deposit consumes only what the chest accepts (no overflow dupe)', ()
   assert.equal(owner.sent.at(-1).msg.count, 2, 'the tx reports the 2 actually deposited');
 });
 
+test('addCraftedRewardItem reuses freed slots for crafted tools', () => {
+  const room = makeRoom();
+  const prof = { inv: Array.from({ length: 36 }, (_, i) => i === 7 ? null : { id: 800 + i, count: 1 }) };
+  room.addCraftedRewardItem(prof, I.IRON_PICK, 1);
+  assert.ok(prof.inv[7] && prof.inv[7].id === I.IRON_PICK, 'the crafted tool fills the freed hole instead of being dropped');
+});
+
+test('taking furnace output with a full bag leaves it in the furnace (no loss)', () => {
+  const room = makeRoom();
+  const client = makeClient('smith');
+  const inv = Array.from({ length: 36 }, (_, i) => ({ id: 800 + i, count: 64 }));   // bag is full
+  seedPlayer(room, client, { x: 20.5, z: 20.5, inv });
+  room.clients = [client];
+  room.world.setB(20, 10, 20, W.B.FURNACE);
+  const key = 'overworld:20,10,20';
+  room.getFurnaceState(key).output = { id: I.IRON_INGOT, count: 1 };
+
+  room.handleFurnaceTake(client, { x: 20, y: 10, z: 20 });
+
+  assert.equal(client.sent.at(-1).type, 'furnaceReject');
+  assert.equal(client.sent.at(-1).msg.reason, 'full');
+  assert.deepEqual(room.getFurnaceState(key).output, { id: I.IRON_INGOT, count: 1 }, 'the smelt output stays in the furnace');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');
