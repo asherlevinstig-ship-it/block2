@@ -71,6 +71,7 @@ class DungeonInstance {
     for (const id of dead) { room.state.mobs.delete(id); delete room.mobMeta[id]; }
     room.sArrows = room.sArrows.filter(a => a.dgn !== this.id);
     room.sFireballs = room.sFireballs.filter(a => a.dgn !== this.id);
+    if (room.bossContrib) room.bossContrib.delete(this.id);   // don't leak boss-loot tracking on teardown
     delete room.instances[this.id];
   }
 }

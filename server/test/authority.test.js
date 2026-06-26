@@ -1832,7 +1832,7 @@ test('DungeonInstance encapsulates instance state plus world and edit access', (
 });
 
 test('DungeonInstance.dispose tears down only its own mobs, projectiles, and registry entry', () => {
-  const room = { state: { mobs: new Map() }, mobMeta: {}, instances: {}, sArrows: [], sFireballs: [] };
+  const room = { state: { mobs: new Map() }, mobMeta: {}, instances: {}, sArrows: [], sFireballs: [], bossContrib: new Map([['dg9', new Map()], ['other', new Map()]]) };
   const g = { id: 'dg9', seed: 1, rank: 0, kind: 'public', shardPlus: 0, shardMods: '' };
   const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
   room.instances['dg9'] = inst;
@@ -1848,6 +1848,8 @@ test('DungeonInstance.dispose tears down only its own mobs, projectiles, and reg
   assert.equal(room.mobMeta.m1, undefined);
   assert.deepEqual(room.sArrows, [{ dgn: 'other' }], 'only its arrows are purged');
   assert.deepEqual(room.sFireballs, []);
+  assert.equal(room.bossContrib.has('dg9'), false, 'its boss-contribution tracking is cleared (no leak)');
+  assert.equal(room.bossContrib.has('other'), true, 'another instance\'s tracking is left alone');
   assert.equal(room.instances.dg9, undefined, 'the instance removes itself from the room');
 });
 
@@ -1891,6 +1893,49 @@ test('metricsSnapshot reports room load and the dungeon mob-sync waste filtering
   assert.equal(s.wastedMobSyncs, 3);
   assert.equal(s.tickMaxMs, 8, 'tracks the worst tick');
   assert.ok(s.tickAvgMs > 0, 'tracks a rolling average tick time');
+});
+
+test('addRewardItem reuses freed inventory slots instead of dropping the item', () => {
+  const room = makeRoom();
+  const prof = { inv: Array.from({ length: 36 }, (_, i) => i === 5 ? null : { id: 900 + i, count: 1 }) };
+  const leftover = room.addRewardItem(prof, 555, 1);
+  assert.equal(leftover, 0, 'the item is placed, not lost');
+  assert.deepEqual(prof.inv[5], { id: 555, count: 1 }, 'it fills the freed hole at slot 5');
+
+  const full = { inv: Array.from({ length: 36 }, (_, i) => ({ id: 900 + i, count: 64 })) };
+  assert.equal(room.addRewardItem(full, 555, 3), 3, 'a genuinely full bag reports all 3 as leftover');
+});
+
+test('a shop purchase with a full bag is rejected without charging gold', () => {
+  const room = makeRoom();
+  const client = makeClient('buyer');
+  const inv = Array.from({ length: 36 }, (_, i) => ({ id: 800 + i, count: 64 }));   // no room for torches
+  const { prof } = seedPlayer(room, client, { gold: 500, inv });
+  room.clients = [client];
+
+  room.handleShop(client, { action: 'buy', id: W.B.TORCH });
+
+  assert.equal(prof.gold, 500, 'no gold is spent when the purchase cannot fit');
+  assert.equal(client.sent.at(-1).type, 'shopReject');
+  assert.equal(client.sent.at(-1).msg.reason, 'full');
+});
+
+test('chest deposit consumes only what the chest accepts (no overflow dupe)', () => {
+  const room = makeRoom();
+  const owner = makeClient('owner');
+  const { prof } = seedPlayer(room, owner, { token: 'owner_token_123', inv: [{ id: W.B.PLANKS, count: 10 }] });
+  room.world.setB(20, 10, 20, W.B.CHEST);
+  room.createPlacedChest(owner, 'overworld:20,10,20', 'personal');
+  const slots = room.getChestState('overworld:20,10,20');
+  slots[0] = { id: W.B.PLANKS, count: 62 };                       // room for only 2 more
+  for (let i = 1; i < 18; i++) slots[i] = { id: 99, count: 64 };   // rest of the chest is full
+
+  room.handleChestDeposit(owner, { x: 20, y: 10, z: 20, id: W.B.PLANKS, count: 10 });
+
+  const after = room.getChestState('overworld:20,10,20');         // re-read (records normalize per call)
+  assert.equal(after[0].count, 64, 'the chest takes only the 2 that fit');
+  assert.equal(itemCount(prof, W.B.PLANKS), 8, 'inventory loses exactly the 2 deposited — not refunded the full 10');
+  assert.equal(owner.sent.at(-1).msg.count, 2, 'the tx reports the 2 actually deposited');
 });
 
 test('food use consumes edible items and heals server HP', () => {

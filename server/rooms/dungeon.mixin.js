@@ -684,8 +684,7 @@ class DungeonMixin {
   clearDungeonInstance(dgn) {
     const inst = this.instances[dgn];
     if (!inst) return;
-    this.bossContrib.delete(dgn);
-    inst.dispose();
+    inst.dispose();   // also clears bossContrib for this instance
   }
   failDungeon(dgn, reason) {
     const inst = this.instances[dgn];

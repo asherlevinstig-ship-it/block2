@@ -148,22 +148,43 @@ class EconomyMixin {
     if (rec.scope === 'dungeon') return this.canAccessChest(client, key) && this.isChestEmpty(key);
     return !!rec.owner && rec.owner === this.clientToken(client) && this.isChestEmpty(key);
   }
+  // Adds up to `count` of `id` to the inventory. Returns the number it could NOT place
+  // (0 = all placed) so callers that paid for the items can refund on a full bag.
   addRewardItem(prof, id, count) {
     let left = Math.max(0, Math.min(999, count | 0));
-    if (!left) return;
-    if (ARMOR_INFO[id] && prof && prof.armor && prof.armor.id === id) return;
+    if (!left) return 0;
+    if (ARMOR_INFO[id] && prof && prof.armor && prof.armor.id === id) return 0;   // already equipped: intentional no-op
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
     for (const slot of prof.inv) {
       if (!slot || slot.id !== id || slot.dur != null) continue;
       const add = Math.min(left, 64 - slot.count);
       if (add > 0) { slot.count += add; left -= add; }
-      if (!left) return;
+      if (!left) return 0;
+    }
+    // reuse null holes left by consumed stacks before growing the array (mirrors addChestItem)
+    for (let i = 0; i < prof.inv.length && left > 0; i++) {
+      if (prof.inv[i]) continue;
+      const add = Math.min(left, 64);
+      prof.inv[i] = { id, count: add };
+      left -= add;
     }
     while (left > 0 && prof.inv.length < 36) {
       const add = Math.min(left, 64);
       prof.inv.push({ id, count: add });
       left -= add;
     }
+    return left;
+  }
+  // How many of `id` would fit right now (without mutating) — used to make purchases atomic.
+  inventorySpaceFor(prof, id, count) {
+    const inv = prof && Array.isArray(prof.inv) ? prof.inv : [];
+    let room = 0;
+    for (const slot of inv) {
+      if (slot && slot.id === id && slot.dur == null) room += Math.max(0, 64 - slot.count);
+      else if (!slot) room += 64;
+    }
+    room += Math.max(0, 36 - inv.length) * 64;
+    return Math.min(Math.max(0, count | 0), room);
   }
   craftedOutputCount(prof, id, count) {
     let out = Math.max(1, count | 0);
@@ -365,6 +386,7 @@ class EconomyMixin {
       const kr = this.keyRank(id);
       if (kr >= 0 && kr > this.maxUnlockedGateRankForKey(client, TEAM_KEYS.includes(id) ? 'team' : 'solo')) return client.send('shopReject', { reason: 'rank' });
       if ((rec.prof.gold | 0) < price) return client.send('shopReject', { reason: 'gold' });
+      if (this.inventorySpaceFor(rec.prof, id, count) < count) return client.send('shopReject', { reason: 'full' });
       rec.prof.gold -= price;
       this.addRewardItem(rec.prof, id, count);
       this.dirtyPlayers.add(rec.token);
@@ -395,13 +417,16 @@ class EconomyMixin {
     const info = this.parseChestKey(key);
     if (info && info.space !== 'overworld') this.sendDungeonStatus(info.space);
   }
+  // Adds up to `count` of `id` to a chest. Returns the number actually placed (0..count),
+  // so the caller consumes from inventory only what the chest accepted (no dupe on a full chest).
   addChestItem(slots, id, count) {
-    let left = Math.max(0, Math.min(999, count | 0));
+    const want = Math.max(0, Math.min(999, count | 0));
+    let left = want;
     for (const slot of slots) {
       if (!slot || slot.id !== id || slot.dur != null) continue;
       const add = Math.min(left, 64 - slot.count);
       if (add > 0) { slot.count += add; left -= add; }
-      if (!left) return true;
+      if (!left) return want;
     }
     for (let i = 0; i < slots.length && left > 0; i++) {
       if (!slots[i]) {
@@ -410,7 +435,7 @@ class EconomyMixin {
         left -= add;
       }
     }
-    return left === 0;
+    return want - left;
   }
   removeChestItem(slots, slotIndex, count) {
     const i = Math.max(0, Math.min(slots.length - 1, slotIndex | 0));
@@ -434,15 +459,16 @@ class EconomyMixin {
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', {});
     const id = m.id | 0, count = Math.max(1, Math.min(64, m.count | 0 || 1));
     const slots = this.getChestState(key);
-    if (!this.consumeItem(rec.prof, id, count)) return client.send('chestReject', {});
-    if (!this.addChestItem(slots, id, count)) {
-      this.addRewardItem(rec.prof, id, count);
-      return client.send('chestReject', {});
-    }
+    // place into the chest first, then consume exactly what it accepted — never refund a
+    // full count after a partial deposit (which would duplicate the overflow).
+    const want = Math.min(count, this.countItem(rec.prof, id));
+    const placed = want > 0 ? this.addChestItem(slots, id, want) : 0;
+    if (placed <= 0) return client.send('chestReject', {});
+    this.consumeItem(rec.prof, id, placed);
     this.dirtyPlayers.add(rec.token);
     if (key.startsWith('overworld:')) this.dirtyChests = true;
     this.sendChest(client, key);
-    client.send('chestTx', { action: 'deposit', id, count });
+    client.send('chestTx', { action: 'deposit', id, count: placed });
   }
   handleChestWithdraw(client, m) {
     const key = this.chestKeyForPlayer(client, m);
