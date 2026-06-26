@@ -743,8 +743,7 @@ class GameRoom extends Room {
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
     if (!W.inWorld(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
     if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
-    const wi = W.idx(x, y, z);
-    const prev = inst.world[wi];
+    const prev = inst.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
     if (prev === W.B.BEDROCK) return this.rejectEdit(client, x, y, z, prev, id);
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 10) return this.rejectEdit(client, x, y, z, prev, id);
@@ -753,8 +752,8 @@ class GameRoom extends Room {
       return this.rejectEdit(client, x, y, z, prev, id);
     }
     if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id);
-    inst.world[wi] = id;
-    inst.edits.push({ x, y, z, id });
+    inst.setB(x, y, z, id);
+    inst.addEdit(x, y, z, id);
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest(p.dgn + ':' + x + ',' + y + ',' + z);
     if (id === W.B.CHEST) this.createPlacedChest(client, p.dgn + ':' + x + ',' + y + ',' + z, 'dungeon');
     if (id === W.B.AIR && prev !== W.B.AIR) this.awardMine(client, prev, m.slot);

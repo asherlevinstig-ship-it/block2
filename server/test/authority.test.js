@@ -35,6 +35,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 
 const W = require('../world');
 const AI = require('../ai');
+const { DungeonInstance } = require('../rooms/dungeonInstance');
 const { GameRoom, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { defaultProfile, mergeClientSave, clampJobXpGain, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds } = require('../store');
@@ -1786,6 +1787,33 @@ test('a mob fires a bolt aimed at its target at the correct speed', () => {
   assert.ok(a.vx > 9 && Math.abs(a.vz) < 1e-9, 'it travels toward the target, mostly +x');
   assert.equal(a.dmg, 5);
   assert.equal(a.bolt, true);
+});
+
+test('DungeonInstance encapsulates instance state plus world and edit access', () => {
+  const g = { id: 'dg1', seed: 7, rank: 2, kind: 'public', shardPlus: 3, shardName: 'Glimmering', shardMods: 'Empowered,Volatile,Explosive' };
+  const d = { world: new Uint8Array(W.WX * W.WX), bossRoom: { x: 100, z: 120 } };   // 1MB buffer covers the y=0 plane
+  const inst = new DungeonInstance(d, g);
+
+  assert.equal(inst.id, 'dg1');
+  assert.equal(inst.shardPlus, 3);
+  assert.deepEqual([...inst.shardModSet].sort(), ['Empowered', 'Explosive', 'Volatile']);
+  assert.deepEqual([...inst.hazMods].sort(), ['Explosive', 'Volatile'], 'only hazard affixes (not stat affixes like Empowered) become hazMods');
+  assert.deepEqual(inst.bossRoom, { x: 100, z: 120 });
+
+  assert.equal(inst.getB(3, 0, 2), W.B.AIR);
+  inst.setB(3, 0, 2, W.B.STONE);
+  assert.equal(inst.getB(3, 0, 2), W.B.STONE, 'setB/getB round-trip through the world buffer');
+  assert.equal(inst.getB(-1, 0, 0), W.B.AIR, 'out-of-world reads are AIR');
+
+  inst.addEdit(3, 0, 2, W.B.STONE);
+  assert.deepEqual(inst.edits, [{ x: 3, y: 0, z: 2, id: W.B.STONE }]);
+
+  inst.addPlayer('s1'); inst.addPlayer('s2');
+  assert.equal(inst.playerCount, 2);
+  assert.equal(inst.hasPlayer('s1'), true);
+  inst.removePlayer('s1');
+  assert.equal(inst.hasPlayer('s1'), false);
+  assert.equal(inst.playerCount, 1);
 });
 
 test('food use consumes edible items and heals server HP', () => {

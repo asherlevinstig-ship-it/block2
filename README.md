@@ -34,6 +34,7 @@ server/
     mixin.js            copies a method group onto GameRoom.prototype (keeps call sites + tests unchanged)
     combat.mixin.js     melee, abilities, legendary weapons, projectiles, loot, mob kills
     dungeon.mixin.js    gates, party/solo/team/shard instances, dungeon hazards, clears
+    dungeonInstance.js  DungeonInstance class — per-instance state (world/edits/roster/hazards)
     economy.mixin.js    crafting, smelting, shops, chests, furnaces, inventory mutation
     spawning.mixin.js   overworld density spawning, elite camps, boss brain, gate placement
     events.mixin.js     server events (parkour, King of the Hill), skyship, day cycle, sleep

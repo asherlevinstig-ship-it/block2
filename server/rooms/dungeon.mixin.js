@@ -2,13 +2,14 @@
 // Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
   BOSS_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_OF, GATE_DISTANCE_BANDS,
-  HAZARD_MOD_SET, I, SHARD_ITEM_IDS, SHARD_TIERS, SOLO_KEYS, TEAM_KEYS, rollShardMods,
+  I, SHARD_ITEM_IDS, SHARD_TIERS, SOLO_KEYS, TEAM_KEYS, rollShardMods,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
+const { DungeonInstance } = require('./dungeonInstance');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class DungeonMixin {
@@ -413,24 +414,10 @@ class DungeonMixin {
 
   createInstance(g) {
     const d = D.generateDungeon(g.rank, g.seed);
-    const plus = g.shardPlus | 0;
-    const modSet = new Set((g.shardMods || '').split(',').filter(Boolean));
-    const inst = {
-      id: g.id, seed: g.seed, rank: g.rank,
-      world: d.world, edits: [], players: new Set(), cleared: false,
-      kind: g.kind || 'public',
-      bossRoom: { x: d.bossRoom.x, z: d.bossRoom.z },
-      lootChestTotal: this.countGeneratedDungeonChests(d.world),
-      shardPlus: plus, shardName: g.shardName || '', shardMods: g.shardMods || '',
-      shardModSet: modSet,
-      hazMods: new Set([...modSet].filter(k => HAZARD_MOD_SET.has(k))),
-      haz: {
-        pools: [], vols: [], orbs: [], ghosts: [], quakes: [],
-        bleed: new Map(), grv: new Map(),
-        quakeT: 6 + Math.random() * 5, orbT: 9 + Math.random() * 6,
-      },
-    };
+    const inst = new DungeonInstance(d, g);
+    inst.lootChestTotal = this.countGeneratedDungeonChests(d.world);
     this.instances[g.id] = inst;
+    const plus = inst.shardPlus, modSet = inst.shardModSet;
     // shard affix multipliers (Phase B): base +N scaling plus stat affixes
     const baseHp = 1 + 0.18 * plus, baseDmg = 1 + 0.12 * plus;
     let trashHpMul = baseHp, trashDmgMul = baseDmg, bossHpMul = baseHp, bossDmgMul = baseDmg;
