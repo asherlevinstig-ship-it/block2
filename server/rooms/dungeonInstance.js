@@ -10,8 +10,10 @@ const W = require('../world');
 const { HAZARD_MOD_SET } = require('./constants');
 
 class DungeonInstance {
-  // d: the generated dungeon ({ world, rooms, spawns, bossRoom }); g: the Gate schema.
-  constructor(d, g) {
+  // d: the generated dungeon ({ world, rooms, spawns, bossRoom }); g: the Gate schema;
+  // room: the owning GameRoom, used by methods that touch shared state (mobs, projectiles).
+  constructor(d, g, room) {
+    this.room = room;
     this.id = g.id;
     this.seed = g.seed;
     this.rank = g.rank;
@@ -44,6 +46,20 @@ class DungeonInstance {
   removePlayer(sid) { this.players.delete(sid); }
   hasPlayer(sid) { return this.players.has(sid); }
   get playerCount() { return this.players.size; }
+
+  // Tear the instance down: drop its mobs (and their meta), purge its in-flight
+  // projectiles, and remove the instance from the room's registry. The caller owns
+  // any extra bookkeeping (e.g. clearDungeonInstance also clears boss contribution).
+  dispose() {
+    const room = this.room;
+    if (!room) return;
+    const dead = [];
+    room.state.mobs.forEach((m, id) => { if (m.dgn === this.id) dead.push(id); });
+    for (const id of dead) { room.state.mobs.delete(id); delete room.mobMeta[id]; }
+    room.sArrows = room.sArrows.filter(a => a.dgn !== this.id);
+    room.sFireballs = room.sFireballs.filter(a => a.dgn !== this.id);
+    delete room.instances[this.id];
+  }
 }
 
 module.exports = { DungeonInstance };

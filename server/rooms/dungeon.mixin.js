@@ -326,7 +326,7 @@ class DungeonMixin {
   enterGateInstance(client, g, inst) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !g || !inst) return false;
-    inst.players.add(client.sessionId);
+    inst.addPlayer(client.sessionId);
     p.dgn = g.id;
     p.dim = 'dungeon';
     p.mount = '';                 // can't ride into a dungeon
@@ -414,7 +414,7 @@ class DungeonMixin {
 
   createInstance(g) {
     const d = D.generateDungeon(g.rank, g.seed);
-    const inst = new DungeonInstance(d, g);
+    const inst = new DungeonInstance(d, g, this);
     inst.lootChestTotal = this.countGeneratedDungeonChests(d.world);
     this.instances[g.id] = inst;
     const plus = inst.shardPlus, modSet = inst.shardModSet;
@@ -663,17 +663,9 @@ class DungeonMixin {
     p.dgn = '';
     p.dim = 'overworld';
     if (!inst) return;
-    inst.players.delete(sid);
-    if (inst.players.size === 0) {
-      const dead = [];
-      this.state.mobs.forEach((m, id) => { if (m.dgn === inst.id) dead.push(id); });
-      for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
-      this.sArrows = this.sArrows.filter(a => a.dgn !== inst.id);
-      this.sFireballs = this.sFireballs.filter(a => a.dgn !== inst.id);
-      delete this.instances[inst.id];
-    } else {
-      this.sendDungeonStatus(dgn);
-    }
+    inst.removePlayer(sid);
+    if (inst.playerCount === 0) inst.dispose();
+    else this.sendDungeonStatus(dgn);
   }
   ejectFromDungeon(sid) {
     const p = this.state.players.get(sid);
@@ -686,7 +678,7 @@ class DungeonMixin {
     p.z = W.TOWN.TC + 7.5;
     const hp = this.playerHp.get(sid);
     if (hp) hp.hp = hp.max;
-    if (inst) inst.players.delete(sid);
+    if (inst) inst.removePlayer(sid);
     this.bossContrib.forEach(byPlayer => byPlayer.delete(sid));
   }
   instanceHasLivingPlayers(inst) {
@@ -701,13 +693,8 @@ class DungeonMixin {
   clearDungeonInstance(dgn) {
     const inst = this.instances[dgn];
     if (!inst) return;
-    const dead = [];
-    this.state.mobs.forEach((m, id) => { if (m.dgn === dgn) dead.push(id); });
-    for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
-    this.sArrows = this.sArrows.filter(a => a.dgn !== dgn);
-    this.sFireballs = this.sFireballs.filter(a => a.dgn !== dgn);
     this.bossContrib.delete(dgn);
-    delete this.instances[dgn];
+    inst.dispose();
   }
   failDungeon(dgn, reason) {
     const inst = this.instances[dgn];

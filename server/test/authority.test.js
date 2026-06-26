@@ -254,6 +254,21 @@ function activeKingEvent(room, now = Date.now()) {
   return ev;
 }
 
+// Put a real DungeonInstance into the room (replaces hand-rolled instance literals so
+// the production roster/teardown methods — addPlayer, dispose — work as they do live).
+function putInstance(room, opts) {
+  const g = {
+    id: opts.id, seed: opts.seed || 0, rank: opts.rank || 0,
+    kind: opts.kind || 'public', shardPlus: 0, shardName: '', shardMods: '',
+  };
+  const inst = new DungeonInstance({ world: opts.world || new Uint8Array(0), bossRoom: opts.bossRoom || { x: 20.5, z: 20.5 } }, g, room);
+  for (const sid of (opts.players || [])) inst.addPlayer(sid);
+  if (opts.cleared) inst.cleared = true;
+  if (opts.lootChestTotal != null) inst.lootChestTotal = opts.lootChestTotal;
+  room.instances[opts.id] = inst;
+  return inst;
+}
+
 // Register a participant on a given team at a given arena position.
 function addKingParticipant(room, ev, name, teamId, pos) {
   const c = makeClient(name);
@@ -1816,6 +1831,26 @@ test('DungeonInstance encapsulates instance state plus world and edit access', (
   assert.equal(inst.playerCount, 1);
 });
 
+test('DungeonInstance.dispose tears down only its own mobs, projectiles, and registry entry', () => {
+  const room = { state: { mobs: new Map() }, mobMeta: {}, instances: {}, sArrows: [], sFireballs: [] };
+  const g = { id: 'dg9', seed: 1, rank: 0, kind: 'public', shardPlus: 0, shardMods: '' };
+  const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
+  room.instances['dg9'] = inst;
+  room.state.mobs.set('m1', { dgn: 'dg9' }); room.mobMeta.m1 = {};
+  room.state.mobs.set('m2', { dgn: 'other' }); room.mobMeta.m2 = {};
+  room.sArrows = [{ dgn: 'dg9' }, { dgn: 'other' }];
+  room.sFireballs = [{ dgn: 'dg9' }];
+
+  inst.dispose();
+
+  assert.equal(room.state.mobs.has('m1'), false, 'its own mob is removed');
+  assert.equal(room.state.mobs.has('m2'), true, 'another instance\'s mob is left alone');
+  assert.equal(room.mobMeta.m1, undefined);
+  assert.deepEqual(room.sArrows, [{ dgn: 'other' }], 'only its arrows are purged');
+  assert.deepEqual(room.sFireballs, []);
+  assert.equal(room.instances.dg9, undefined, 'the instance removes itself from the room');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');
@@ -2103,7 +2138,7 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   room.clients.push(client);
   seedPlayer(room, client, { x: 20.5, z: 20.5 });
   room.createInstance = g => {
-    const inst = { id: g.id, seed: g.seed, rank: g.rank, edits: [], players: new Set(), cleared: false };
+    const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
     room.instances[g.id] = inst;
     return inst;
   };
@@ -2149,7 +2184,7 @@ test('team gate lobby waits until all joined hunters are ready', () => {
   gate.team = 'T1';
   room.state.gates.set(gate.id, gate);
   room.createInstance = g => {
-    const inst = { id: g.id, seed: g.seed, rank: g.rank, kind: g.kind, edits: [], players: new Set(), cleared: false };
+    const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
     room.instances[g.id] = inst;
     return inst;
   };
@@ -2546,7 +2581,7 @@ test('dungeon boss loot grants progression gate keys', () => {
   const client = makeClient('hunter');
   room.clients = [client];
   const { prof } = seedPlayer(room, client, { token: 'hunter_token_123', dgn: 'g1' });
-  room.instances.g1 = { id: 'g1', rank: 0, players: new Set([client.sessionId]), cleared: false, bossRoom: { x: 20.5, z: 20.5 } };
+  putInstance(room, { id: 'g1', players: [client.sessionId] });
   room.recordBossContribution(client, 'g1', 8);
   const oldRandom = Math.random;
   Math.random = () => 0.99;
@@ -2580,7 +2615,7 @@ test('boss rewards require recent contribution, proximity, and server-side life'
   seedPlayer(room, afk, { token: 'afk_token_123', dgn: 'g1', x: 20.5, z: 20.5 });
   seedPlayer(room, far, { token: 'far_token_123', dgn: 'g1', x: 90.5, z: 90.5 });
   seedPlayer(room, dead, { token: 'dead_token_123', dgn: 'g1', x: 20.5, z: 20.5, hp: 0 });
-  room.instances.g1 = { id: 'g1', rank: 0, players: new Set(['active', 'afk', 'far', 'dead']), cleared: false, bossRoom: { x: 20.5, z: 20.5 } };
+  putInstance(room, { id: 'g1', players: ['active', 'afk', 'far', 'dead'] });
   room.recordBossContribution(active, 'g1', 8);
   room.recordBossContribution(far, 'g1', 8);
   room.recordBossContribution(dead, 'g1', 8);
@@ -2610,7 +2645,7 @@ test('solo dungeon death fails the instance and closes the gate', () => {
   room.state.gates.set(gate.id, gate);
   room.gateTtls.set(gate.id, Date.now() + 60000);
   room.gateLootedChests.set(gate.id, new Set());
-  room.instances.g1 = { id: 'g1', rank: 0, players: new Set([client.sessionId]), cleared: false, bossRoom: { x: 20.5, z: 20.5 } };
+  putInstance(room, { id: 'g1', players: [client.sessionId] });
   room.state.mobs.set('m1', { dgn: 'g1' });
   room.mobMeta.m1 = {};
 
@@ -2635,7 +2670,7 @@ test('team dungeon closes only after the party wipes', () => {
   room.state.gates.set(gate.id, gate);
   room.gateTtls.set(gate.id, Date.now() + 60000);
   room.gateLootedChests.set(gate.id, new Set());
-  room.instances.g1 = { id: 'g1', rank: 0, players: new Set([a.sessionId, b.sessionId]), cleared: false, bossRoom: { x: 20.5, z: 20.5 } };
+  putInstance(room, { id: 'g1', players: [a.sessionId, b.sessionId] });
 
   room.hurtPlayer(a, 99);
   assert.equal(room.instances.g1 != null, true);
@@ -2675,7 +2710,7 @@ test('cleared dungeon consumes its gate and support contribution can earn boss r
   room.state.gates.set(gate.id, gate);
   room.gateTtls.set(gate.id, Date.now() + 60000);
   room.gateLootedChests.set(gate.id, new Set());
-  room.instances.g1 = { id: 'g1', rank: 0, kind: 'team', players: new Set([healer.sessionId, ally.sessionId]), cleared: false, bossRoom: { x: 20.5, z: 20.5 }, lootChestTotal: 0 };
+  putInstance(room, { id: 'g1', kind: 'team', players: [healer.sessionId, ally.sessionId], lootChestTotal: 0 });
 
   room.recordBossSupport(healer, 'g1', 8);
   room.recordBossContribution(ally, 'g1', 4);
@@ -2691,7 +2726,7 @@ test('generated dungeon chests can contain gate keys', () => {
   const room = makeRoom();
   const w = new Uint8Array(W.WX * W.WH * W.WX);
   w[W.idx(1, 9, 12)] = W.B.CHEST;
-  room.instances.g5 = { id: 'g5', rank: 0, seed: 1, world: w };
+  putInstance(room, { id: 'g5', seed: 1, world: w });
 
   const rec = room.getChestRecord('g5:1,9,12');
 
@@ -2712,7 +2747,7 @@ test('dungeon status reports rank type party boss and remaining chests', () => {
   const b = makeClient('b');
   seedPlayer(room, a, { name: 'Alice', token: 'alice_token_123', dgn: 'g5', lvl: 3, team: 'T1' });
   seedPlayer(room, b, { name: 'Bob', token: 'bobbb_token_123', dgn: 'g5', lvl: 2, team: 'T1' });
-  room.instances.g5 = { id: 'g5', rank: 2, kind: 'team', players: new Set(['a', 'b']), cleared: false, lootChestTotal: 3 };
+  putInstance(room, { id: 'g5', rank: 2, kind: 'team', players: ['a', 'b'], lootChestTotal: 3 });
   room.gateLootedChests.set('g5', new Set(['12,9,10']));
   room.state.mobs.set('boss', { dgn: 'g5', kind: 'boss', hp: 10 });
 
