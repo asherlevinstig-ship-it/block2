@@ -223,6 +223,7 @@ class EconomyMixin {
     if (id === I.LEGEND_ARMOR && rec.prof.armor && rec.prof.armor.id === I.LEGEND_ARMOR) {
       return client.send('craftLegendaryReject', { reason: 'owned', id });
     }
+    if (this.inventorySpaceFor(rec.prof, id, 1) < 1) return client.send('craftLegendaryReject', { reason: 'full', id });
     if (!this.consumeItem(rec.prof, I.LEGEND_TOKEN, craft.cost)) {
       return client.send('craftLegendaryReject', { reason: 'tokens', id, cost: craft.cost });
     }

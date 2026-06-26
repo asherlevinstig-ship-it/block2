@@ -1938,6 +1938,21 @@ test('chest deposit consumes only what the chest accepts (no overflow dupe)', ()
   assert.equal(owner.sent.at(-1).msg.count, 2, 'the tx reports the 2 actually deposited');
 });
 
+test('crafting a legendary with a full bag is rejected without spending tokens', () => {
+  const room = makeRoom();
+  const client = makeClient('crafter');
+  const inv = Array.from({ length: 35 }, (_, i) => ({ id: 800 + i, count: 64 }));
+  inv.push({ id: I.LEGEND_TOKEN, count: 3 });    // 36th slot fills the bag
+  const { prof } = seedPlayer(room, client, { x: GUARDIAN_POS.x, z: GUARDIAN_POS.z, inv });
+  room.clients = [client];
+
+  room.handleCraftLegendary(client, { id: I.LEGEND_SWORD });
+
+  assert.equal(client.sent.at(-1).type, 'craftLegendaryReject');
+  assert.equal(client.sent.at(-1).msg.reason, 'full');
+  assert.equal(itemCount(prof, I.LEGEND_TOKEN), 3, 'no tokens are spent when the result cannot fit');
+});
+
 test('addCraftedRewardItem reuses freed slots for crafted tools', () => {
   const room = makeRoom();
   const prof = { inv: Array.from({ length: 36 }, (_, i) => i === 7 ? null : { id: 800 + i, count: 1 }) };
