@@ -16,6 +16,20 @@ const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class EventsMixin {
+  // Server-event and day-cycle state, co-located with the mixin that owns it.
+  // Called once from onCreate. serverEvent is seeded via the mixin's own helpers.
+  initEventsState() {
+    this.eventSeq = 0;
+    this.skyshipEpoch = Date.now();
+    this.dayEpoch = Date.now() - .35 * DAY_MS;
+    this.sleepingPlayers = new Set();
+    this.serverEvent = this.createIdleEvent(Date.now() + EVENT_FIRST_DELAY_MS, this.pickNextServerEvent().kind);
+    this.eventInstances = new Map();
+    this.activeEventInstanceId = '';
+    this.eventCourseBlocks = new Set();
+    this.eventTransientEditKeys = new Set();
+  }
+
   skyshipSyncPayload() {
     return {
       serverNow: Date.now(), epoch: this.skyshipEpoch,

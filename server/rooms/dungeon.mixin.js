@@ -13,6 +13,17 @@ const { DungeonInstance } = require('./dungeonInstance');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class DungeonMixin {
+  // Dungeon / gate lifecycle state, co-located with the mixin that owns it.
+  // Called once from onCreate, before restoreSavedGates (which fills gateSeq/gateTtls).
+  initDungeonState() {
+    this.dungeonLobbies = new Map();
+    this.gateSeq = 0;
+    this.gateTtls = new Map();
+    this.gateLootedChests = new Map();
+    this.gateTimer = 40;       // countdown to the next public gate spawn (sim-loop driven)
+    this.gateTtl = 0;
+  }
+
   dungeonStatusPayload(inst) {
     if (!inst) return null;
     const party = [];

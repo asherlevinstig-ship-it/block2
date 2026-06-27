@@ -52,20 +52,9 @@ class GameRoom extends Room {
 
     // ---- persistence ----
     this.store = createStore();
-    this.profiles = new Map();
-    this.tokens = new Map();
-    this.dirtyWorld = false;
-    this.dirtyWorldProgress = false;
-    this.dirtyLandClaims = false;
-    this.dirtyChests = false;
-    this.dirtyFurnaces = false;
-    this.dirtyIncubations = false;
-    this.dirtyGates = false;
-    this.dirtyTeams = false;
-    this.dirtyGuilds = false;
-    this.dirtyPlayers = new Set();
-    this.lastSaveMsg = new Map();
-    this.lastJobXpAt = new Map();   // token -> last save time, for the jobXp anti-inflation rate cap
+    this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
+
+    // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
     this.lastMoveMsg = new Map();
     this.lastAttackMsg = new Map();
     this.rateBuckets = new Map();   // sessionId -> Map(bucket -> {tokens,last}) for handler flood control
@@ -74,25 +63,19 @@ class GameRoom extends Room {
     this.playerHp = new Map();
     this.playerHunger = new Map();
     this.bossContrib = new Map();
-    this.dungeonLobbies = new Map();
-    this.gateSeq = 0;
-    this.gateTtls = new Map();
-    this.gateLootedChests = new Map();
+
+    // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
+    this.initDungeonState();        // must precede restoreSavedGates (populates gateSeq/gateTtls)
+
+    // ---- world features ----
     this.landClaims = new Map();
     this.cropTimers = new Map();
     this.dragonIncubations = new Map();
     this.nestDragons = new Map();        // "x,y,z#slot" -> { type, token, loveUntil, breedCdUntil, breedAccum }
-    this.dirtyNests = false;
     this.cropGrowAcc = 0;
-    this.eventSeq = 0;
-    this.skyshipEpoch = Date.now();
-    this.dayEpoch = Date.now() - .35 * DAY_MS;
-    this.sleepingPlayers = new Set();
-    this.serverEvent = this.createIdleEvent(Date.now() + EVENT_FIRST_DELAY_MS, this.pickNextServerEvent().kind);
-    this.eventInstances = new Map();
-    this.activeEventInstanceId = '';
-    this.eventCourseBlocks = new Set();
-    this.eventTransientEditKeys = new Set();
+
+    // ---- server events / day cycle (events.mixin.js) ----
+    this.initEventsState();
     const saved = await this.store.loadWorldEdits();
     this.worldProgress = { highestGateRankCleared: -1 };
     let applied = 0;
@@ -205,8 +188,6 @@ class GameRoom extends Room {
     } catch (e) { console.warn('[persist] guild load failed:', e.message); }
     this.spawnAcc = 0;
     this.animalSpawnAcc = 0;
-    this.gateTimer = 40;
-    this.gateTtl = 0;
 
     // ---- message handlers ----
     this.onMessage('move', (client, m) => {
@@ -595,6 +576,29 @@ class GameRoom extends Room {
     if (p) this.broadcast('chat', { name: '[System]', text: p.name + ' has left' });
     this.state.players.delete(client.sessionId);
     this.flush();   // persist the departing player's final state now (README: flush on each departure)
+  }
+
+  // Persistence bookkeeping. Persistence has no mixin (flush() and the onCreate
+  // loaders live here in GameRoom), so this stays in this file, but grouping the
+  // dirty flags and save-timing maps here names the cluster and keeps onCreate lean.
+  // The dirty* flags must be cleared before the onCreate restore loaders run, since
+  // restoreSavedGates and friends may set them.
+  initPersistenceState() {
+    this.profiles = new Map();
+    this.tokens = new Map();
+    this.dirtyWorld = false;
+    this.dirtyWorldProgress = false;
+    this.dirtyLandClaims = false;
+    this.dirtyChests = false;
+    this.dirtyFurnaces = false;
+    this.dirtyIncubations = false;
+    this.dirtyGates = false;
+    this.dirtyTeams = false;
+    this.dirtyGuilds = false;
+    this.dirtyNests = false;
+    this.dirtyPlayers = new Set();
+    this.lastSaveMsg = new Map();
+    this.lastJobXpAt = new Map();   // token -> last save time, for the jobXp anti-inflation rate cap
   }
 
   async flush() {
