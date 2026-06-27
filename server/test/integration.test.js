@@ -13,12 +13,25 @@ const assert = require('node:assert/strict');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const { Client } = require('colyseus.js');
 
 const PORT = 2599;
 const ENDPOINT = 'ws://localhost:' + PORT;
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
+function register(username, password, displayName) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({ username, password, displayName });
+    const req = http.request({ hostname: '127.0.0.1', port: PORT, path: '/auth/register', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } }, res => {
+      let data = ''; res.on('data', c => data += c); res.on('end', () => {
+        if (res.statusCode !== 200) return reject(new Error('register failed: ' + res.statusCode + ' ' + data));
+        resolve(String((res.headers['set-cookie'] || [])[0] || '').split(';')[0]);
+      });
+    });
+    req.on('error', reject); req.end(body);
+  });
+}
 async function waitFor(fn, label = 'condition', timeout = 5000, step = 50) {
   const start = Date.now();
   for (;;) {
@@ -43,10 +56,16 @@ async function main() {
     catch (e) { failures++; results.push('  FAIL ' + name + '\n         ' + e.message); }
   };
 
-  const clientA = new Client(ENDPOINT);
-  const clientB = new Client(ENDPOINT);
-  const A = await clientA.joinOrCreate('blockcraft', { name: 'Alpha', token: 'tAAAAAAAAAAAAAAAA' });
-  const B = await clientB.joinOrCreate('blockcraft', { name: 'Bravo', token: 'tBBBBBBBBBBBBBBBB' });
+  const unauthenticated = new Client(ENDPOINT);
+  await test('unauthenticated matchmaking is rejected', async () => {
+    await assert.rejects(() => unauthenticated.joinOrCreate('blockcraft', { name: 'Intruder' }), /auth/i);
+  });
+  const cookieA = await register('alpha_user', 'correct horse alpha', 'Alpha');
+  const cookieB = await register('bravo_user', 'correct horse bravo', 'Bravo');
+  const clientA = new Client(ENDPOINT, { headers: { Cookie: cookieA } });
+  const clientB = new Client(ENDPOINT, { headers: { Cookie: cookieB } });
+  const A = await clientA.joinOrCreate('blockcraft', { name: 'Alpha' });
+  const B = await clientB.joinOrCreate('blockcraft', { name: 'Bravo' });
 
   const inbox = room => {
     const box = {};
@@ -104,12 +123,14 @@ async function main() {
     assert.equal(B.state.players.get(A.sessionId).name, 'AlphaPrime');
   });
 
-  await test('a forged jobXp save is rate-capped (no instant max profession)', async () => {
+  await test('forged progression saves are ignored and validated job transactions still work', async () => {
     A.send('save', { job: 'miner', jobXp: 1e9 });
+    await wait(250);
+    assert.equal(A.state.players.get(A.sessionId).job, '', 'legacy save changed the authoritative job');
+    A.send('setJob', { job: 'miner' });
     await waitFor(() => { const p = A.state.players.get(A.sessionId); return p && p.job === 'miner'; }, 'A to register the miner job');
-    await wait(200);
     const lvl = A.state.players.get(A.sessionId).jobLvl;
-    assert.ok(lvl > 0 && lvl < 10, 'forged jobXp produced job level ' + lvl + ' (rate cap failed if near 99)');
+    assert.equal(lvl, 1, 'forged jobXp changed the authoritative profession level');
   });
 
   await test('a leaving player is removed from the other player\'s state', async () => {

@@ -18,3 +18,7 @@ jobs:
         run: npm test
       - name: Integration test (live two-client room)
         run: npm run test:integration
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
+      - name: Browser end-to-end tests
+        run: npm run test:e2e

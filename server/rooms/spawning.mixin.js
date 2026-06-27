@@ -413,6 +413,44 @@ class SpawningMixin {
     return spawned;
   }
 
+  ensurePublicGateRank(rank) {
+    const ri = Math.max(0, Math.min(4, rank | 0));
+    let gate = null;
+    this.state.gates.forEach(g => {
+      if (!gate && g && g.active && g.kind === 'public' && (g.rank | 0) === ri) gate = g;
+    });
+    if (gate) return gate;
+    if (this.spawnGate(ri)) {
+      this.state.gates.forEach(g => {
+        if (!gate && g && g.active && g.kind === 'public' && (g.rank | 0) === ri) gate = g;
+      });
+      if (gate) return gate;
+    }
+
+    // The introductory Gate is a progression promise, so random placement is
+    // allowed to fail over to a deterministic scan of the same legal band.
+    const band = GATE_DISTANCE_BANDS[ri];
+    for (let d = band.min; d <= band.max; d += 2) {
+      for (let span = -d; span <= d; span += 4) {
+        const candidates = [
+          { x: W.TOWN.TC + span, z: W.TOWN.TC - d },
+          { x: W.TOWN.TC + d, z: W.TOWN.TC + span },
+          { x: W.TOWN.TC + span, z: W.TOWN.TC + d },
+          { x: W.TOWN.TC - d, z: W.TOWN.TC + span },
+        ];
+        for (const pos of candidates) {
+          if (pos.x < 6 || pos.x > W.WX - 6 || pos.z < 6 || pos.z > W.WX - 6) continue;
+          const gy = this.world.standHeight(pos.x + .5, pos.z + .5, W.WH - 2);
+          if (gy < 3 || gy > 34) continue;
+          gate = this.createGate({ x: pos.x + .5, y: gy, z: pos.z + .5, rank: ri, kind: 'public', ttl: 180 });
+          this.broadcast('chat', { name: '[System]', text: 'A guaranteed ' + 'EDCBA'[ri] + '-Rank Gate has opened for the new Hunter' });
+          return gate;
+        }
+      }
+    }
+    return null;
+  }
+
   gateSpawnCandidate(rank) {
     const band = GATE_DISTANCE_BANDS[Math.max(0, Math.min(4, rank | 0))] || GATE_DISTANCE_BANDS[0];
     const d = Math.floor(band.min + Math.random() * (band.max - band.min + 1));

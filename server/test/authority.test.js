@@ -36,7 +36,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 const W = require('../world');
 const AI = require('../ai');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
-const { GameRoom, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
+const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { defaultProfile, mergeClientSave, clampJobXpGain, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
@@ -105,6 +105,20 @@ function fakeWorld() {
     standHeight() { return 16; },
   };
 }
+
+test('only one room may own the global world persistence lease', () => {
+  const owner = {}, overflow = {};
+  claimGlobalWorld(owner);
+  try {
+    assert.throws(() => claimGlobalWorld(overflow), /global Blockcraft world is already active/);
+    releaseGlobalWorld(overflow);
+    assert.throws(() => claimGlobalWorld(overflow), /global Blockcraft world is already active/, 'a non-owner cannot release the lease');
+  } finally {
+    releaseGlobalWorld(owner);
+  }
+  assert.doesNotThrow(() => claimGlobalWorld(overflow), 'the next room can load the world after disposal');
+  releaseGlobalWorld(overflow);
+});
 
 function makeRoom() {
   const room = Object.create(GameRoom.prototype);
@@ -279,7 +293,7 @@ function addKingParticipant(room, ev, name, teamId, pos) {
   return c;
 }
 
-test('profile merge ignores client-owned economy and accepts safe identity fields', () => {
+test('profile merge accepts only identity and ignores every client-owned progression field', () => {
   const current = defaultProfile('Old');
   current.S.lvl = 2;
   current.S.xp = 9;
@@ -301,7 +315,7 @@ test('profile merge ignores client-owned economy and accepts safe identity field
   assert.equal(merged.name, 'NewName');
   assert.equal(merged.S.lvl, 2);
   assert.equal(merged.S.xp, 9);
-  assert.equal(merged.S.path, 'mage');
+  assert.equal(merged.S.path, '');
   assert.equal(merged.job, '');
   assert.equal(merged.jobXp, 0);
   assert.equal(merged.gold, 50);
@@ -309,14 +323,14 @@ test('profile merge ignores client-owned economy and accepts safe identity field
   assert.deepEqual(merged.utilityUnlocks, []);
   assert.deepEqual(merged.utilityLoadout, { active: '', passive: [] });
   assert.deepEqual(merged.inv, [{ id: W.B.LOG, count: 3 }]);
-  assert.deepEqual(merged.pos, [10, 11, 12]);
+  assert.deepEqual(merged.pos, current.pos);
 });
 
-test('profile merge accepts the job but never the raw client jobXp', () => {
+test('profile merge rejects client job and jobXp changes', () => {
   const current = defaultProfile('Worker');
   const merged = mergeClientSave(current, { job: 'miner', jobXp: 42 });
-  assert.equal(merged.job, 'miner');
-  assert.equal(merged.jobXp, current.jobXp, 'raw client jobXp is ignored by merge (rate-capped by the save handler)');
+  assert.equal(merged.job, '');
+  assert.equal(merged.jobXp, current.jobXp);
   assert.equal(mergeClientSave(current, { job: 'hacker', jobXp: 99 }).job, '');
   // sanitizeProfile reads jobXp from the trusted store (disk), which is unchanged.
   assert.equal(sanitizeProfile({ job: 'adventurer', jobXp: 77 }).jobXp, 77);
@@ -339,6 +353,168 @@ test('jobXp gain is rate-capped so a forged save cannot claim instant max profes
   assert.equal(clampJobXpGain(0, 1e9, 999_999_999), Math.ceil(3600 * 20), 'window capped at 3600s');
 });
 
+test('stat spending is an atomic server transaction', () => {
+  const room = makeRoom(), client = makeClient('stat_owner');
+  const { prof } = seedPlayer(room, client);
+  prof.S.pts = 3;
+  room.handleSpendStat(client, { stat: 'vit', amount: 2 });
+  assert.equal(prof.S.pts, 1);
+  assert.equal(prof.S.vit, 3);
+  assert.equal(room.playerHp.get(client.sessionId).max, 24);
+  room.handleSpendStat(client, { stat: 'str', amount: 2 });
+  assert.equal(prof.S.str, 1, 'insufficient points cannot partially spend');
+  assert.equal(client.sent.at(-1).msg.ok, false);
+});
+
+test('jobs and repeatable contracts are created progressed and claimed only by the server', () => {
+  const room = makeRoom(), client = makeClient('job_owner');
+  const { prof } = seedPlayer(room, client);
+  room.handleSetJob(client, { job: 'miner' });
+  assert.equal(prof.job, 'miner');
+  room.handleJobContract(client, { action: 'take' });
+  assert.equal(prof.jobContract.job, 'miner');
+  prof.jobContract = { job: 'miner', type: 'mine', target: W.B.STONE, need: 2, have: 0, rewardGold: 30, rewardJobXp: 16, title: 'Stone Quota', desc: 'Mine stone.' };
+  room.recordMineProgress(client, W.B.STONE);
+  room.recordMineProgress(client, W.B.STONE);
+  assert.equal(prof.jobContract.have, 2);
+  assert.equal(prof.jobXp, 4, 'validated mining grants profession XP');
+  room.handleJobContract(client, { action: 'claim' });
+  assert.equal(prof.jobContract, null);
+  assert.equal(prof.gold, 30);
+  assert.equal(prof.jobXp, 20);
+});
+
+test('new adventurers receive Mara field work first, then level-gated random contracts', () => {
+  const room = makeRoom();
+  const prof = defaultProfile('Adventurer');
+  prof.job = 'adventurer';
+  prof.S.lvl = 2;
+  for (let i = 0; i < 30; i++) {
+    const first = room.makeServerJobContract(prof);
+    assert.equal(first.type, 'quest');
+    assert.equal(first.title, "Mara's Field Work");
+  }
+
+  const random = Math.random;
+  try {
+    prof.adventurerContractsCompleted = 1;
+    for (let i = 0; i < 30; i++) assert.notEqual(room.makeServerJobContract(prof).type, 'gate');
+    Math.random = () => .4; // middle entry in the three-contract Level 3 pool
+    prof.S.lvl = 3;
+    assert.equal(room.makeServerJobContract(prof).type, 'gate');
+  } finally {
+    Math.random = random;
+  }
+});
+
+test('claiming the first adventurer contract permanently unlocks the rotating pool', () => {
+  const room = makeRoom(), client = makeClient('first_contract_owner');
+  const { prof } = seedPlayer(room, client, { lvl: 3 });
+  room.handleSetJob(client, { job: 'adventurer' });
+  room.handleJobContract(client, { action: 'take' });
+  assert.equal(prof.jobContract.title, "Mara's Field Work");
+  prof.jobContract.have = 1;
+  room.handleJobContract(client, { action: 'claim' });
+  assert.equal(prof.adventurerContractsCompleted, 1);
+  assert.equal(sanitizeProfile(prof).adventurerContractsCompleted, 1);
+  assert.notEqual(room.makeServerJobContract(prof).title, "Mara's Field Work");
+  assert.equal(sanitizeProfile({ job: 'adventurer', jobXp: 12 }).adventurerContractsCompleted, 1, 'legacy experienced adventurers do not receive newcomer work');
+});
+
+test('armor equip validates ownership in the server inventory', () => {
+  const room = makeRoom(), client = makeClient('armor_owner');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_ARMOR, count: 1 }] });
+  room.handleEquipArmor(client, { id: I.DIA_ARMOR });
+  assert.equal(prof.armor, null);
+  room.handleEquipArmor(client, { id: I.IRON_ARMOR });
+  assert.deepEqual(prof.armor, { id: I.IRON_ARMOR, count: 1 });
+  assert.equal(itemCount(prof, I.IRON_ARMOR), 0, 'equipping atomically removes the inventory item');
+  assert.equal(room.state.players.get(client.sessionId).armorId, I.IRON_ARMOR);
+  prof.inv[0] = { id: I.DIA_ARMOR, count: 1 };
+  room.handleEquipArmor(client, { id: I.DIA_ARMOR });
+  assert.deepEqual(prof.armor, { id: I.DIA_ARMOR, count: 1 });
+  assert.equal(itemCount(prof, I.IRON_ARMOR), 1, 'swapping armor returns the previous piece in the consumed slot');
+  assert.equal(itemCount(prof, I.DIA_ARMOR), 0);
+  room.handleEquipArmor(client, { id: 0 });
+  assert.equal(prof.armor, null);
+  assert.equal(itemCount(prof, I.DIA_ARMOR), 1, 'unequipping returns the item to inventory');
+});
+
+test('NPC chain acceptance progress rewards and milestones are server-owned', () => {
+  const room = makeRoom(), client = makeClient('quest_owner');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });
+  room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
+  assert.equal(prof.activeNpcQuest.title, 'First Hands');
+  room.handleNpcQuest(client, { action: 'claim' });
+  assert.equal(itemCount(prof, W.B.LOG), 0);
+  assert.equal(prof.activeNpcQuest, null);
+  assert.equal(prof.npcQuestChains['Mara Vale'], 1);
+  assert.ok(prof.gold > 0);
+  assert.ok(prof.S.xp > 0 || prof.S.lvl > 1);
+  const forged = mergeClientSave(prof, { npcQuestChains: { 'Mara Vale': 999 }, activeNpcQuest: { giver: 'Mara Vale', type: 'gate', need: 1, have: 1 } });
+  assert.equal(forged.npcQuestChains['Mara Vale'], 1);
+  assert.equal(forged.activeNpcQuest, null);
+});
+
+test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate', () => {
+  const room = makeRoom(), client = makeClient('mara_path_owner');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });
+  const ensured = [];
+  room.ensurePublicGateRank = rank => { ensured.push(rank); return { id: 'tutorial_e', rank, active: true }; };
+
+  room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
+  assert.equal(prof.activeNpcQuest.levelTarget, 2);
+  room.handleNpcQuest(client, { action: 'claim' });
+  assert.equal(prof.S.lvl, 2);
+
+  room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
+  assert.equal(prof.activeNpcQuest.title, 'Road Ready');
+  assert.equal(prof.activeNpcQuest.levelTarget, 3);
+  for (let i = 0; i < 3; i++) room.recordKillProgress(client);
+  room.handleNpcQuest(client, { action: 'claim' });
+  assert.equal(prof.S.lvl, 3);
+  assert.equal(prof.npcQuestChains['Mara Vale'], 2);
+
+  room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
+  assert.equal(prof.activeNpcQuest.title, 'The First Gate');
+  assert.equal(prof.activeNpcQuest.type, 'gate');
+  assert.equal(prof.activeNpcQuest.gateRank, 0);
+  assert.deepEqual(ensured, [0]);
+  room.recordGateProgress(client, 1);
+  assert.equal(prof.activeNpcQuest.have, 0, 'a higher-rank clear does not replace the promised E-rank lesson');
+  room.recordGateProgress(client, 0);
+  assert.equal(prof.activeNpcQuest.have, 1);
+});
+
+test('first quest bonus requires authoritative Mara completion and is single-claim', () => {
+  const room = makeRoom(), client = makeClient('first_quest_owner');
+  const { prof } = seedPlayer(room, client);
+  assert.equal(room.handleClaimFirstQuestReward(client), false);
+  assert.equal(prof.gold, 0);
+  assert.equal(prof.firstQuestRewardClaimed, false);
+  assert.equal(client.sent.at(-1).msg.reason, 'quest');
+
+  prof.npcQuestChains['Mara Vale'] = 1;
+  assert.equal(room.handleClaimFirstQuestReward(client), true);
+  assert.equal(prof.gold, 100);
+  assert.equal(prof.firstQuestRewardClaimed, true);
+  assert.equal(room.handleClaimFirstQuestReward(client), false);
+  assert.equal(prof.gold, 100);
+  assert.equal(client.sent.at(-1).msg.claimed, true);
+});
+
+test('combat path is chosen once only after the authoritative level 2 unlock', () => {
+  const room = makeRoom(), client = makeClient('path_owner');
+  const { prof } = seedPlayer(room, client);
+  room.setPath(client, 'shadow');
+  assert.equal(prof.S.path, '', 'training-time level 1 selection is rejected');
+  prof.S.lvl = 2;
+  room.setPath(client, 'shadow');
+  assert.equal(prof.S.path, 'shadow');
+  room.setPath(client, 'mage');
+  assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
+});
+
 test('utility loadout can equip only server-earned utilities', () => {
   const current = defaultProfile('Wayfinder');
   current.utilityUnlocks = ['compass', 'minimap'];
@@ -348,10 +524,10 @@ test('utility loadout can equip only server-earned utilities', () => {
     utilityLoadout: { active: 'world_map', passive: ['minimap', 'feather_step', 'compass', 'minimap'] },
   });
   assert.deepEqual(merged.utilityUnlocks, ['compass', 'minimap']);
-  assert.deepEqual(merged.utilityLoadout, { active: '', passive: ['minimap', 'compass'] });
+  assert.deepEqual(merged.utilityLoadout, { active: '', passive: ['compass'] });
 });
 
-test('profile merge accepts safe profession contracts only for active job', () => {
+test('profile merge rejects client-created profession contracts', () => {
   const current = defaultProfile('Worker');
   const merged = mergeClientSave(current, {
     job: 'miner',
@@ -367,9 +543,7 @@ test('profile merge accepts safe profession contracts only for active job', () =
       desc: 'Mine stone for builders',
     },
   });
-  assert.equal(merged.jobContract.job, 'miner');
-  assert.equal(merged.jobContract.type, 'mine');
-  assert.equal(merged.jobContract.title, 'Stone Order');
+  assert.equal(merged.jobContract, null);
   const adventurer = sanitizeProfile({ job: 'adventurer', jobContract: { job: 'adventurer', type: 'gate', need: 1, title: 'Gate Scout' } });
   assert.equal(adventurer.jobContract.job, 'adventurer');
   assert.equal(adventurer.jobContract.type, 'gate');
@@ -377,13 +551,13 @@ test('profile merge accepts safe profession contracts only for active job', () =
   assert.equal(sanitizeProfile({ job: 'monk', jobContract: { job: 'monk', type: 'hack', need: 1 } }).jobContract, null);
 });
 
-test('profile merge persists legendary armor equip slot only', () => {
+test('profile merge rejects client armor and inventory changes', () => {
   const current = defaultProfile('Armor');
   const merged = mergeClientSave(current, {
     armor: { id: I.LEGEND_ARMOR, count: 9 },
     inv: [{ id: I.DIAMOND, count: 64 }],
   });
-  assert.deepEqual(merged.armor, { id: I.LEGEND_ARMOR, count: 1 });
+  assert.equal(merged.armor, null);
   assert.deepEqual(merged.inv, []);
   assert.deepEqual(sanitizeProfile({ armor: { id: I.LEGEND_ARMOR, count: 99 } }).armor, { id: I.LEGEND_ARMOR, count: 1 });
   assert.deepEqual(sanitizeProfile({
@@ -396,7 +570,7 @@ test('profile merge persists legendary armor equip slot only', () => {
 test('profile merge and sanitize support normal equipped armor', () => {
   const current = defaultProfile('Armor');
   const iron = mergeClientSave(current, { armor: { id: I.IRON_ARMOR, count: 1 } });
-  assert.deepEqual(iron.armor, { id: I.IRON_ARMOR, count: 1 });
+  assert.equal(iron.armor, null);
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.DIA_ARMOR, count: 4 },
     inv: [{ id: I.DIA_ARMOR, count: 1 }, { id: I.DIAMOND, count: 2 }],
@@ -408,11 +582,12 @@ test('mount unlocks persist, sanitize/migrate to known dragons, and are never re
   // legacy 'dragon' migrates to ember; dupes/junk dropped; only known species survive
   assert.deepEqual(sanitizeProfile({ name: 'R', mountUnlocks: ['dragon', 'dragon:frost', 'horse', 'dragon:griffin', 7] }).mountUnlocks,
     ['dragon:ember', 'dragon:frost']);
-  // a client save is additive: it can add a valid unlock but cannot remove an existing one
+  // client saves can neither add nor remove unlocks
   const current = defaultProfile('R');
   current.mountUnlocks = ['dragon:ember'];
   assert.deepEqual(mergeClientSave(current, { mountUnlocks: [] }).mountUnlocks, ['dragon:ember']);
-  assert.deepEqual(mergeClientSave(defaultProfile('R'), { mountUnlocks: ['dragon:void', 'bogus'] }).mountUnlocks, ['dragon:void']);
+  assert.deepEqual(mergeClientSave(defaultProfile('R'), { mountUnlocks: ['dragon:void', 'bogus'] }).mountUnlocks, []);
+  assert.deepEqual(mergeClientSave(defaultProfile('R'), { familiarUnlocks: ['shade', 'sprite'] }).familiarUnlocks, []);
 });
 
 test('dragon care persists safe happiness by species', () => {
@@ -433,11 +608,11 @@ test('dragon care persists safe happiness by species', () => {
   const current = defaultProfile('Caretaker');
   current.dragonCare = { ember: { happiness: 40, fedAt: 10 } };
   const merged = mergeClientSave(current, { dragonCare: { ember: { happiness: 70, fedAt: 20 }, frost: { happiness: 55, fedAt: 30 } } });
-  assert.equal(merged.dragonCare.ember.happiness, 70);
-  assert.equal(merged.dragonCare.frost.happiness, 55);
+  assert.equal(merged.dragonCare.ember.happiness, 40);
+  assert.equal(merged.dragonCare.frost, undefined);
 });
 
-test('dragon names sanitize and persist only for bonded species on client saves', () => {
+test('dragon names sanitize from trusted storage but client saves cannot mutate them', () => {
   const cleaned = sanitizeProfile({
     mountUnlocks: ['dragon:ember'],
     dragonNames: { ember: '  Cinder <One>  ', frost: 'Snow' },
@@ -450,8 +625,8 @@ test('dragon names sanitize and persist only for bonded species on client saves'
     mountUnlocks: ['dragon:frost'],
     dragonNames: { ember: 'Ash', frost: 'Glacier', void: 'Nope' },
   });
-  assert.deepEqual(merged.mountUnlocks, ['dragon:ember', 'dragon:frost']);
-  assert.deepEqual(merged.dragonNames, { ember: 'Ash', frost: 'Glacier' });
+  assert.deepEqual(merged.mountUnlocks, ['dragon:ember']);
+  assert.deepEqual(merged.dragonNames, {});
 });
 
 test('dragon mounts are server-gated per species; horse is always allowed', () => {
@@ -744,24 +919,24 @@ test('boss dragon eggs favor species the player has not hatched yet', () => {
   assert.equal(pool.includes(room.pickDragonEggForPlayer(client, pool)), true);
 });
 
-test('starter armor grant adds one inventory armor without duplicating', () => {
+test('starter armor grant adds basic armor without flattening later upgrades', () => {
   const room = makeRoom();
   const prof = defaultProfile('Starter');
 
   assert.equal(room.ensureStarterArmor(prof), true);
-  assert.equal(itemCount(prof, I.LEGEND_ARMOR), 1);
+  assert.equal(itemCount(prof, I.IRON_ARMOR), 1);
   assert.equal(room.ensureStarterArmor(prof), false);
-  assert.equal(itemCount(prof, I.LEGEND_ARMOR), 1);
+  assert.equal(itemCount(prof, I.IRON_ARMOR), 1);
   assert.equal(room.ensureStarterLegendaryWeapon(prof), false);
   assert.equal(itemCount(prof, I.LEGEND_SWORD), 0);
   assert.equal(itemCount(prof, I.BLACKHOLE_STAFF), 0);
 
   const equipped = defaultProfile('Equipped');
-  equipped.armor = { id: I.LEGEND_ARMOR, count: 1 };
+  equipped.armor = { id: I.DIA_ARMOR, count: 1 };
   assert.equal(room.ensureStarterArmor(equipped), false);
-  assert.equal(itemCount(equipped, I.LEGEND_ARMOR), 0);
+  assert.equal(itemCount(equipped, I.IRON_ARMOR), 0);
   room.addRewardItem(equipped, I.LEGEND_ARMOR, 1);
-  assert.equal(itemCount(equipped, I.LEGEND_ARMOR), 0);
+  assert.equal(itemCount(equipped, I.LEGEND_ARMOR), 1);
 });
 
 test('farm testing kit grants durable hoes and starter crop items once', () => {
@@ -2357,6 +2532,14 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
     shardName: '',
     shardMods: '',
   });
+
+  client.sent.length = 0;
+  assert.equal(room.resumeDungeonInstance(client), true);
+  assert.deepEqual(client.sent.find(e => e.type === 'enterDungeon').msg, enter.msg, 'reconnect rebuilds the identical instance payload');
+  const resumedStatus = client.sent.find(e => e.type === 'dungeonStatus').msg;
+  assert.equal(resumedStatus.id, 'g-high');
+  assert.equal(resumedStatus.party.length, 1);
+  assert.equal(resumedStatus.cleared, false);
 });
 
 test('team gate lobby waits until all joined hunters are ready', () => {
@@ -3135,6 +3318,18 @@ test('public gate refill can spawn every missing unlocked rank at once', () => {
 
   assert.equal(count, 3);
   assert.deepEqual(spawned, [0, 2, 4]);
+});
+
+test('the promised E-rank gate has a deterministic placement fallback', () => {
+  const room = makeRoom();
+  room.spawnGate = () => false;
+  room.world.standHeight = () => 10;
+
+  const gate = room.ensurePublicGateRank(0);
+  assert.ok(gate);
+  assert.equal(gate.rank, 0);
+  assert.equal(gate.kind, 'public');
+  assert.equal(room.ensurePublicGateRank(0), gate, 'an active E-rank gate is reused');
 });
 
 test('public gate spawning unlocks only once a surface player reaches level 3', () => {

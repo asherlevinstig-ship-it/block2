@@ -360,6 +360,7 @@ class EconomyMixin {
     const finalCount = this.craftedOutputCount(rec.prof, outId, outCount * times);
     this.addCraftedRewardItem(rec.prof, outId, finalCount);
     this.dirtyPlayers.add(rec.token);
+    this.recordCraftProgress(client, outId, finalCount);
     const msg = { out: { id: outId, count: outCount }, times };
     if (finalCount !== outCount * times) msg.finalCount = finalCount;
     client.send('craftResult', msg);
@@ -401,6 +402,7 @@ class EconomyMixin {
     if (!this.consumeItem(rec.prof, id, count)) return client.send('shopReject', { reason: 'item' });
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + price));
     this.dirtyPlayers.add(rec.token);
+    if (isTavern) this.recordTavernSaleProgress(client, id, count);
     client.send('shopResult', { action, vendor: isTavern ? 'tavern' : 'market', id, count, gold: price });
   }
   chestKeyForPlayer(client, m) {

@@ -17,6 +17,9 @@ class DungeonInstance {
     this.id = g.id;
     this.seed = g.seed;
     this.rank = g.rank;
+    this.gateX = g.x;
+    this.gateY = g.y;
+    this.gateZ = g.z;
     this.world = d.world;              // Uint8Array world buffer (same layout as the overworld)
     this.edits = [];                  // party mining/building log, replayed to late joiners
     this.players = new Set();         // session ids currently inside

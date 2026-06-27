@@ -4,8 +4,11 @@ const express = require('express');
 const { Server } = require('colyseus');
 const { WebSocketTransport } = require('@colyseus/ws-transport');
 const { GameRoom } = require('./rooms/GameRoom');
+const { getAuthService } = require('./auth');
 
 const app = express();
+app.set('trust proxy', 1);
+getAuthService().attach(app);
 
 // the game client
 app.use(express.static(path.join(__dirname, '..', 'client')));
@@ -17,10 +20,12 @@ app.use(express.static(path.join(__dirname, '..', 'client')));
 // --global-name=Colyseus --platform=browser --outfile=client/vendor/colyseus.browser.js).
 const colyseusBrowserSdk = path.join(__dirname, '..', 'client', 'vendor', 'colyseus.browser.js');
 app.get('/colyseus.js', (req, res) => res.sendFile(colyseusBrowserSdk));
+app.get('/three.js', (req, res) => res.sendFile(require.resolve('three/build/three.min.js')));
 
 const server = http.createServer(app);
 const gameServer = new Server({
   transport: new WebSocketTransport({ server }),
+  gracefullyShutdown: process.env.BLOCKCRAFT_E2E !== '1',
 });
 
 gameServer.define('blockcraft', GameRoom);

@@ -617,6 +617,7 @@ class CombatMixin {
       }
       const baseXp = this.isAnimalKind(kind) ? 4 : 12;
       this.awardGrant(client, { source: this.isAnimalKind(kind) ? 'hunt' : 'mob', xp: Math.round(baseXp * DANGER_RINGS[ring].loot * (killedMeta.elite ? 1.75 : 1)), items, dangerRing: ring, elite: !!killedMeta.elite });
+      this.recordKillProgress(client);
       if (!dgn && killedMeta.elite && killedMeta.campId)
         this.progressRegionalContract(client, 'clear_elite_camp', { targetId: killedMeta.campId });
       if (dgn) this.onDungeonTrashDeath(dgn, dx, dy, dz);
@@ -655,6 +656,7 @@ class CombatMixin {
       xp: Math.round((drop.xp || 0) * DANGER_RINGS[Number.isFinite(x) && Number.isFinite(z) ? dangerRingAt(x, z) : 0].loot),
       items,
     });
+    this.recordMineProgress(client, blockId);
   }
   rollBossKeyDrops(rank) {
     const next = Math.min(4, (rank | 0) + 1);
@@ -714,6 +716,7 @@ class CombatMixin {
       client.send('profile', rec.prof);
     }
     const after = Math.max(-1, Math.min(4, rec.prof.highestGateRankCleared | 0));
+    this.recordGateProgress(client, ri);
     return {
       clearedRank: ri,
       highestGateRankCleared: after,

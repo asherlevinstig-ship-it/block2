@@ -122,17 +122,36 @@
       <tr><td>T</td><td>team menu &mdash; create, name &amp; join teams of up to 5</td></tr>
     </table>
     <div class="panel-actions">
-      <input id="playername" maxlength="16" placeholder="HUNTER NAME" autocomplete="off">
-      <button id="playbtn">PLAY</button>
+      <div class="account-fields">
+        <input id="authuser" maxlength="24" placeholder="ACCOUNT USERNAME" autocomplete="username">
+        <input id="authpass" type="password" maxlength="128" placeholder="PASSWORD (10+ CHARACTERS)" autocomplete="current-password">
+        <input id="playername" maxlength="16" placeholder="HUNTER NAME" autocomplete="nickname">
+        <div id="authstatus">SIGN IN OR CREATE AN ACCOUNT</div>
+      </div>
+      <div class="account-actions"><button id="playbtn">SIGN IN &amp; PLAY</button><button id="registerbtn" type="button">CREATE ACCOUNT</button><button id="logoutbtn" class="hidden" type="button">LOG OUT</button></div>
     </div>
     <div class="start-help-hint">Press Enter for controls and field guide</div>
   </div>
 </div>
 <div id="loadscreen" class="hidden"><div id="loadpanel"><div class="loadsigil">◆</div><h2>LOADING WORLD</h2><div id="loadstatus">Preparing your hunter profile...</div><div id="loadbar"><i></i></div></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/three.js"></script>
 <script src="/colyseus.js"></script>
 <script>
+Promise.all([
+  import('./js/auth.mjs'),
+  import('./js/progression.mjs'),
+  import('./js/inventory.mjs'),
+  import('./js/quests-jobs.mjs'),
+  import('./js/network.mjs'),
+  import('./js/rendering.mjs'),
+]).then(([authModule,progressionModule,inventoryModule,questJobModule,networkModule,renderingModule])=>{
+const {createAuthController}=authModule;
+const {bindProgressionMessages}=progressionModule;
+const {createInventoryModel,createEquipmentModel}=inventoryModule;
+const {createQuestModel}=questJobModule;
+const {createNetworkController}=networkModule;
+const {createRenderingRuntime}=renderingModule;
 "use strict";
 /* ============================================================
    BLOCKCRAFT SURVIVAL — voxel engine + full crafting loop:
@@ -1613,7 +1632,8 @@ function buildChunkGeometry(cx, cz, translucentPass){
 }
 
 // ---------------- three.js ----------------
-const scene = new THREE.Scene();
+const rendering=createRenderingRuntime({THREE,mount:document.getElementById('game'),width:innerWidth,height:innerHeight,pixelRatio:devicePixelRatio});
+const {scene,camera,renderer}=rendering;
 const townGroup = new THREE.Group();   // overworld-only visuals, hidden inside dungeons
 scene.add(townGroup);
 const SKY = new THREE.Color(0x8fc4e8);
@@ -1634,11 +1654,6 @@ const dummyHead=new THREE.Mesh(new THREE.BoxGeometry(.48,.48,.48),dummyClothMat)
 const dummyArm=new THREE.Mesh(new THREE.BoxGeometry(1.45,.18,.18),dummyWoodMat);dummyArm.position.y=1.62;tutorialDummyGroup.add(dummyArm);
 tutorialDummyGroup.position.set(TRAINING_MEADOW.x-22,TRAINING_MEADOW.G+1,TRAINING_MEADOW.z-20);
 tutorialDummyGroup.visible=false;scene.add(tutorialDummyGroup);
-const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.08, 300);
-const renderer = new THREE.WebGLRenderer({antialias:false});
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-document.getElementById('game').appendChild(renderer.domElement);
 
 const matOpaque = new THREE.MeshBasicMaterial({ map:atlasTex, vertexColors:true });
 const matTrans  = new THREE.MeshBasicMaterial({ map:atlasTex, vertexColors:true, transparent:true, opacity:0.92, depthWrite:false, side:THREE.DoubleSide });
@@ -3551,25 +3566,9 @@ function gateSystemUnlocked(){ return ((S&&S.lvl)|0) >= 3; }
 function gateCutsceneSeen(){ try{ return localStorage.getItem('bc_gatecut_v1')==='1'; }catch(e){ return false; } }
 function markGateCutsceneSeen(){ try{ localStorage.setItem('bc_gatecut_v1','1'); }catch(e){} }
 function resetGateCutsceneSeen(){ try{ localStorage.removeItem('bc_gatecut_v1'); }catch(e){} }
-const jobXpNeed=(lvl)=>Math.round(30*Math.pow(Math.max(1,lvl|0),1.45));
-function jobLevelFromXp(xp){
-  let lvl=1, left=Math.max(0,xp|0);
-  while(lvl<99){
-    const need=jobXpNeed(lvl);
-    if(left<need) break;
-    left-=need; lvl++;
-  }
-  return lvl;
-}
-function jobXpIntoLevel(xp){
-  let lvl=1, left=Math.max(0,xp|0);
-  while(lvl<99){
-    const need=jobXpNeed(lvl);
-    if(left<need) break;
-    left-=need; lvl++;
-  }
-  return {lvl, xp:left, need:jobXpNeed(lvl)};
-}
+const jobXpNeed=questJobModule.jobXpNeed;
+const jobLevelFromXp=questJobModule.jobLevelFromXp;
+const jobXpIntoLevel=questJobModule.jobXpIntoLevel;
 function activeJob(){ return JOBS[playerJob]||null; }
 function activeJobName(){ const j=activeJob(); return j?j.name:'None'; }
 function jobLvl(jobId=playerJob){ return playerJob===jobId ? jobLevelFromXp(jobXp) : 0; }
@@ -3621,24 +3620,7 @@ function jobTitleFor(jobId, lvl){
   for(const [need,title] of list) if(lvl>=need) return title;
   return JOBS[jobId]?JOBS[jobId].name:'';
 }
-function clampJobContract(c){
-  if(!c || typeof c!=='object' || !JOBS[c.job]) return null;
-  const type=String(c.type||'').slice(0,20);
-  if(!['mine','farm','cook','smith','repair','meditate','sell','kill','gate','quest','event'].includes(type)) return null;
-  const out={
-    job:c.job,
-    type,
-    target:c.target==null?0:(c.target|0),
-    need:Math.max(1,Math.min(999,c.need|0)),
-    have:Math.max(0,Math.min(999,c.have|0)),
-    rewardGold:Math.max(0,Math.min(9999,c.rewardGold|0)),
-    rewardJobXp:Math.max(0,Math.min(9999,c.rewardJobXp|0)),
-    title:String(c.title||'Job Contract').slice(0,48),
-    desc:String(c.desc||'Complete the work order.').slice(0,140),
-  };
-  out.have=Math.min(out.have,out.need);
-  return out;
-}
+const clampJobContract=c=>questJobModule.clampJobContract(c,JOBS);
 function clampRegionalContract(c){
   if(!c || typeof c!=='object') return null;
   const types=['scout_landmark','clear_elite_camp','collect_biome','recover_buried_cache','solve_puzzle_shrine','visit_road_merchant'];
@@ -3723,6 +3705,10 @@ function makeJobContract(jobId){
   if(!JOBS[jobId]) return null;
   const lvl=playerJob===jobId?jobLevelFromXp(jobXp):1;
   const scale=Math.min(5,Math.max(0,lvl-1));
+  if(jobId==='adventurer' && jobXp<=0) return clampJobContract({
+    job:jobId, type:'quest', need:1, have:0, title:"Mara's Field Work",
+    desc:'Complete your next story quest for Mara Vale.', rewardGold:34, rewardJobXp:20
+  });
   const pools={
     adventurer:[
       {type:'quest', need:1, title:'Town Errand', desc:'Complete any town quest for a resident.', rewardGold:34+scale*5, rewardJobXp:20+scale*5},
@@ -3755,6 +3741,7 @@ function makeJobContract(jobId){
 }
 function jobContractReady(){ return !!(jobContract && jobContract.have>=jobContract.need); }
 function jobContractProgress(kind, n=1, target=0){
+  if(NET.on) return; // authoritative progress arrives from validated server actions
   if(!jobContract || !playerJob || jobContract.job!==playerJob || !JOBS[jobContract.job]) return;
   if(jobContractReady()) return;
   const type=jobContract.type;
@@ -3775,6 +3762,7 @@ function jobContractProgress(kind, n=1, target=0){
 }
 function claimJobContract(){
   if(!jobContractReady()) return;
+  if(NET.on&&NET.room){ NET.room.send('jobContract',{action:'claim'}); return; }
   const c=jobContract;
   let rewardGold=c.rewardGold|0;
   if(c.job==='adventurer' && jobPerkTier('adventurer')) rewardGold=Math.round(rewardGold*(1+jobPerkTier('adventurer')*.06));
@@ -3792,6 +3780,7 @@ function jobColorArr(jobId){
   return [((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255];
 }
 function gainJobXP(jobId, n, reason){
+  if(NET.on) return; // the server owns persistent profession XP
   if(!jobId || playerJob!==jobId || !JOBS[jobId]) return;
   n=Math.max(0,Math.round(n||0));
   if(!n) return;
@@ -5608,10 +5597,8 @@ function sendPlayerMetaNow(){
   if(!NET.on||!NET.room) return;
   try{
     const heldId=displayHeldId();
-    const armorId=armorSlot?armorSlot.id:0;
-    const jobLvl=playerJob?jobLevelFromXp(jobXp):0;
-    NET.lastMeta=[S.path||'', heldId, armorId, playerJob||'', jobLvl].join('|');
-    NET.room.send('meta',{name:(document.getElementById('playername').value||'Hunter').slice(0,16), path:S.path||'', heldId, armorId, job:playerJob||'', jobLvl});
+    NET.lastMeta=[S.path||'', heldId].join('|');
+    NET.room.send('meta',{name:(document.getElementById('playername').value||'Hunter').slice(0,16), path:S.path||'', heldId});
   }catch(e){}
 }
 function setAbilityPath(path, opts={}){
@@ -6483,6 +6470,7 @@ function renderStat(){
   statPanel.innerHTML=h;
   statPanel.querySelectorAll('button[data-attr]').forEach(b=>b.addEventListener('click',()=>{
     if(S.pts<=0) return;
+    if(NET.on&&NET.room){ NET.room.send('spendStat',{stat:b.dataset.attr,amount:1}); return; }
     S.pts--; S[b.dataset.attr]++;
     if(b.dataset.attr==='vit') hp=Math.min(maxHp(),hp+2);
     if(b.dataset.attr==='int') mp=Math.min(maxMp(),mp+3);
@@ -7214,6 +7202,7 @@ function beginDungeon(ri, seed, editLog, opts){
     if(gate){ scene.remove(gate.grp); gate=null; }
     clearNetGates();
     dungeon=generateDungeon(ri, seed);
+    dungeon.seed=seed>>>0;
     dungeon.back=opts.back;
     dungeon.shard=opts.shard||null;
     dungeon.cleared=!!opts.cleared;
@@ -7273,7 +7262,7 @@ function onBossKilled(){
   dungeon.cleared=true;
   const ri=dungeon.rank;
   sysMsg('<b>Boss defeated!</b> The '+RANKS[ri].n+'-Rank Gate is cleared');
-  questGate();
+  questGate(ri);
   const shc=dungeon.shard;
   const plus=shc?shc.plus:0;
   gainXP(Math.round((50+ri*40)*(1+.4*plus)));
@@ -7403,8 +7392,9 @@ function raycast(maxDist){
 // slots: 0-8 hotbar, 9-35 backpack. stack: {id, count, dur?} or null
 const inv = new Array(36).fill(null);
 let selected = 0;
-const stackMax = id => ITEMS[id] ? ITEMS[id].stack : 64;
-function newStack(id, count){ const s={id, count}; if(ITEMS[id].tool) s.dur=ITEMS[id].tool.dur; return s; }
+let inventoryModel=null,equipmentModel=null;
+const stackMax=id=>inventoryModel.stackMax(id);
+const newStack=(id,count)=>inventoryModel.newStack(id,count);
 function toolPlus(stack){ return Math.max(0, Math.min(3, stack && stack.plus ? stack.plus|0 : 0)); }
 function toolMaxDur(stackOrId){
   const id=typeof stackOrId==='number'?stackOrId:(stackOrId&&stackOrId.id);
@@ -7451,28 +7441,19 @@ function noteRecipeSeen(id){
   recipeSeen.add(id);
   saveRecipeSeen();
 }
+inventoryModel=createInventoryModel({
+  slots:inv,items:ITEMS,getEquippedArmor:()=>equippedArmor(),onDiscover:noteRecipeSeen,
+  onChange:()=>{refreshHUD();if(uiOpen)renderUI();},
+});
+equipmentModel=createEquipmentModel({
+  items:ITEMS,inventory:inventoryModel,getArmor:()=>armorSlot,setArmor:value=>{armorSlot=value;},
+  onChange:()=>{refreshAppearanceDummy();refreshHUD();},
+});
 function scanRecipeInventory(){
   for(const s of inv) if(s) noteRecipeSeen(s.id);
 }
 function addItem(id, count){
-  noteRecipeSeen(id);
-  if(equippedArmor() && id===armorSlot.id) return 0;
-  // merge into existing stacks
-  for(let i=0;i<36 && count>0;i++){
-    const s=inv[i];
-    if(s && s.id===id && !ITEMS[id].tool && s.count<stackMax(id)){
-      const add=Math.min(count, stackMax(id)-s.count); s.count+=add; count-=add;
-    }
-  }
-  // empty slots, hotbar first
-  for(let i=0;i<36 && count>0;i++){
-    if(!inv[i]){
-      const add=Math.min(count, stackMax(id));
-      inv[i]=newStack(id, add); count-=add;
-    }
-  }
-  refreshHUD(); if(uiOpen) renderUI();
-  return count; // leftover (discarded if no room)
+  return inventoryModel.add(id,count);
 }
 function addCraftedItem(id, count){
   if(ITEMS[id] && ITEMS[id].tool && playerJob==='blacksmith'){
@@ -7609,6 +7590,11 @@ const keys = {};
 let locked=false, lockFallback=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
 const overlay=document.getElementById('overlay');
 const playbtn=document.getElementById('playbtn');
+const registerbtn=document.getElementById('registerbtn');
+const logoutbtn=document.getElementById('logoutbtn');
+const authuser=document.getElementById('authuser');
+const authpass=document.getElementById('authpass');
+const authstatus=document.getElementById('authstatus');
 const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
@@ -7620,7 +7606,7 @@ const pathPanelEl=document.getElementById('pathpanel');
 const awakeningWin=document.getElementById('awakeningwin');
 const awakeningPanel=document.getElementById('awakeningpanel');
 let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
-let pathChoiceOpen=false,pathChoiceAfterTutorial=false;
+let pathChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
 const onboardingFlags={looked:false,arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:false,inventory:false,finish:false};
 const ONBOARDING_FULL_TURN=Math.PI*2;
@@ -7652,17 +7638,17 @@ function finishWorldLoading(reason){
 }
 const ONBOARDING_STEPS=[];
 ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
-  {kind:'move',pillar:'Pillar 1 - Movement', key:'W A S D', text:'Walk to the glowing pillar.', sub:'Use W A S D to move around the training meadow.', done:()=>onboardingArrived},
-  {kind:'mouse',pillar:'Pillar 2 - Mouse Camera', key:'Mouse 360', text:'Turn the camera all the way around with the mouse.', sub:'Keep moving the mouse left or right until you complete a full 360 turn.', done:()=>onboardingArrived&&onboardingFlags.looked},
-  {kind:'arrows',pillar:'Pillar 3 - Arrow Camera', key:'Arrow Keys 360', text:'Turn the camera all the way around with the arrow keys.', sub:'Hold Left or Right Arrow until you complete a full 360 turn.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
-  {kind:'jump',pillar:'Pillar 4 - Jumping', key:'Space', text:'Press Space to jump.', sub:'Jumping helps you climb terrain, ramps, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
-  {kind:'tree',pillar:'Pillar 5 - Chop Wood', key:'Left Click / F', text:'Aim at a log and hold Left Click or F until it breaks.', sub:'The training tree is beside this pillar.', done:()=>onboardingArrived&&onboardingFlags.tree},
-  {kind:'craft',pillar:'Pillar 6 - Crafting', key:'E', text:'Open inventory and craft oak planks from a log.', sub:'Choose the plank recipe, then take the result.', done:()=>onboardingArrived&&onboardingFlags.crafted},
-  {kind:'build',pillar:'Pillar 7 - Building', key:'G / Right Click', text:'Place 3 plank blocks on the build pad.', sub:'Select planks, then press G or right-click the ground.', done:()=>onboardingArrived&&onboardingFlags.built>=3},
-  {kind:'farm',pillar:'Pillar 8 - Farming', key:'G / Right Click', text:'Harvest the mature wheat.', sub:'Aim at the tall wheat, then press G or right-click it.', done:()=>onboardingArrived&&onboardingFlags.farmed},
-  {kind:'eat',pillar:'Pillar 9 - Eating', key:'G / Right Click', text:'Select bread, then press G or right-click to eat it.', sub:'You are hungry now. Food restores hunger and can heal you a little.', done:()=>onboardingArrived&&onboardingFlags.ate},
-  {kind:'combat',pillar:'Pillar 10 - Combat Dummy', key:'Left Click / F', text:'Aim at the dummy and attack it.', sub:'Use Left Click or F when the dummy is in front of you.', done:()=>onboardingArrived&&onboardingFlags.dummy},
-  {kind:'finish',pillar:'Pillar 11 - Begin Adventure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'The town HUD stays simple. More details appear when needed.', done:()=>onboardingArrived}
+  {kind:'move',pillar:'Lesson 1 / 11 — Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
+  {kind:'mouse',pillar:'Lesson 2 / 11 — Mouse Camera', key:'MOUSE 360°', text:'Turn the camera through one full circle.', sub:'Keep moving the mouse left or right until the ring is complete.', done:()=>onboardingArrived&&onboardingFlags.looked},
+  {kind:'arrows',pillar:'Lesson 3 / 11 — Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'This is an alternate camera control when the mouse is inconvenient.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
+  {kind:'jump',pillar:'Lesson 4 / 11 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
+  {kind:'tree',pillar:'Lesson 5 / 11 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
+  {kind:'craft',pillar:'Lesson 6 / 11 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
+  {kind:'build',pillar:'Lesson 7 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingArrived&&onboardingFlags.built>=3},
+  {kind:'farm',pillar:'Lesson 8 / 11 — Farming', key:'G / RIGHT CLICK', text:'Harvest one mature wheat crop.', sub:'Aim at the tall golden wheat and use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
+  {kind:'eat',pillar:'Lesson 9 / 11 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
+  {kind:'combat',pillar:'Lesson 10 / 11 — Combat', key:'LEFT CLICK / F', text:'Aim at the training dummy and strike it.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingArrived&&onboardingFlags.dummy},
+  {kind:'finish',pillar:'Lesson 11 / 11 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Training is complete. New systems will appear when they become relevant.', done:()=>onboardingArrived}
 );
 
 function showStartHelp(){
@@ -7729,7 +7715,9 @@ function setTownTutorialChoice(step){
   }catch(e){}
 }
 function shouldOfferTownJobGuidance(){
-  return firstQuestMilestoneComplete() && !townTutorialsDone();
+  // The first quest now reveals one system at a time: reward -> path -> ability
+  // training -> optional town tutorials.
+  return firstQuestMilestoneComplete() && !!S.path && abilityTutorialDone() && !townTutorialsDone();
 }
 function onboardingKind(){
   const s=ONBOARDING_STEPS[onboardingStep];
@@ -7779,11 +7767,6 @@ function ensureOnboardingItem(id,count){
 }
 function grantOnboardingKit(){
   ensureOnboardingItem(I.WOOD_AXE,1);
-  ensureOnboardingItem(I.WOOD_HOE,1);
-  ensureOnboardingItem(I.WHEAT_SEEDS,4);
-  ensureOnboardingItem(I.BREAD,2);
-  ensureOnboardingItem(B.PLANKS,8);
-  ensureOnboardingItem(B.LOG,1);
   refreshHUD();
 }
 function makeOnboardingPlayerHungry(){
@@ -7799,7 +7782,6 @@ function repairOnboardingBuildPad(){
     setB(cx+40+ox,G,cz-18+oz,B.COBBLE);
     for(let y=G+1;y<=G+5;y++) setB(cx+40+ox,y,cz-18+oz,B.AIR);
   }
-  ensureOnboardingItem(B.PLANKS,8);
   rebuildAround(cx+40,cz-18);
   refreshHUD();
 }
@@ -7809,6 +7791,10 @@ function onboardingBuildHasRoom(){
     if(getB(cx+40+ox,G,cz-18+oz)===B.COBBLE && getB(cx+40+ox,G+1,cz-18+oz)===B.AIR) return true;
   }
   return false;
+}
+function isOnboardingBuildPad(x,y,z){
+  const {x:cx,z:cz,G}=TRAINING_MEADOW;
+  return y===G+1 && Math.abs(x-(cx+40))<=1 && Math.abs(z-(cz-18))<=1;
 }
 function repairOnboardingFarmPatch(){
   if(!TRAINING_MEADOW) return;
@@ -7841,13 +7827,16 @@ function prepareOnboardingStep(){
   }
   else if(kind==='build'){
     repairOnboardingBuildPad();
+    if(countItem(B.PLANKS)<3) ensureOnboardingItem(B.PLANKS,3);
     selectItemForOnboarding(B.PLANKS);
   }
   else if(kind==='farm'){
+    ensureOnboardingItem(I.WOOD_HOE,1);
     repairOnboardingFarmPatch();
     selectItemForOnboarding(I.WOOD_HOE);
   }
   else if(kind==='eat'){
+    ensureOnboardingItem(I.BREAD,1);
     selectItemForOnboarding(I.BREAD);
     makeOnboardingPlayerHungry();
   }
@@ -7892,10 +7881,7 @@ function beginOnboarding(){
   if(meadowTutorialDone()){
     onboardingActive=false;
     document.body.classList.remove('onboarding');
-    if(!S.path) showPathSelection(true);
-    else {
-      finishOnboardingToTown();
-    }
+    finishOnboardingToTown();
     return;
   }
   resetForFreshOnboarding();
@@ -8021,6 +8007,7 @@ function completeAbilityTraining(){
   renderBars();
   sysMsg('<b>Ability training complete.</b> Your Lv2 ability is on <b>Q</b>. More unlock at <b>Lv5</b> and <b>Lv8</b>.');
   showName('Q ability unlocked');
+  requestTownJobGuidance();
   refreshPlayUi();
 }
 function tickAbilityTraining(now){
@@ -8107,8 +8094,7 @@ function townTutorialInfo(step){
 const townChoicesEl=document.getElementById('townchoices');
 function renderTownTutorialOptions(force=false){
   if(!townChoicesEl) return;
-  const maraStarted=firstQuestMilestoneComplete();
-  if(!maraStarted || townTutorialsDone() || onboardingActive || pathChoiceOpen || townGuidanceSequenceHold || (rewardWin&&!rewardWin.classList.contains('hidden'))){ townChoicesEl.classList.add('hidden'); return; }
+  if(!shouldOfferTownJobGuidance() || onboardingActive || pathChoiceOpen || townGuidanceSequenceHold || (rewardWin&&!rewardWin.classList.contains('hidden'))){ townChoicesEl.classList.add('hidden'); return; }
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
     ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
@@ -8232,39 +8218,6 @@ function requestTownJobGuidance(){
     renderTownTutorialOptions(true);
   }
 }
-const TOWN_TUTORIAL_PANEL_RESET_KEY='bc_town_tutorial_panel_reset_v1';
-function resetTownTutorialPanelForTesting(){
-  try{
-    if(localStorage.getItem(TOWN_TUTORIAL_PANEL_RESET_KEY)==='1') return false;
-    localStorage.setItem(TOWN_TUTORIAL_PANEL_RESET_KEY,'1');
-    localStorage.removeItem('bc_town_tutorial_steps_v1');
-    localStorage.removeItem('bc_town_tutorials_done_v1');
-    localStorage.removeItem('bc_town_job_guidance_done_v1');
-    localStorage.removeItem('bc_town_tutorial_choice_v1');
-    localStorage.removeItem('bc_town_tutorial_menu_dismissed_v1');
-    localStorage.setItem('bc_town_job_guidance_pending_v1','1');
-  }catch(e){}
-  saveNpcQuestChains();
-  townGuidanceActive=false;
-  townGuidanceStep='menu';
-  renderTownTutorialOptions(true);
-  eventLog('Town Tutorials reset — all three learning options are available again.');
-  return true;
-}
-function migrateJobBoardTutorialFix(){
-  try{
-    if(localStorage.getItem('bc_job_tutorial_completion_fix_v1')==='1') return;
-    localStorage.setItem('bc_job_tutorial_completion_fix_v1','1');
-    const done=JSON.parse(localStorage.getItem('bc_town_tutorial_steps_v1')||'{}');
-    delete done.job;
-    localStorage.setItem('bc_town_tutorial_steps_v1',JSON.stringify(done));
-    localStorage.removeItem('bc_town_tutorials_done_v1');
-    localStorage.removeItem('bc_town_job_guidance_done_v1');
-    if(localStorage.getItem('bc_town_tutorial_choice_v1')==='job') localStorage.removeItem('bc_town_tutorial_choice_v1');
-  }catch(e){}
-  if(townGuidanceStep==='job') townGuidanceActive=false;
-  renderTownTutorialOptions(true);
-}
 function clearTownGuidance(){
   if(!townGuidanceActive) return;
   if(townGuidanceStep==='job'){
@@ -8279,6 +8232,9 @@ function clearTownGuidance(){
   tutorialPillarGroup.visible=false;
 }
 function tickTownGuidance(now){
+  // Meadow and ability tutorials own the shared tutorial HUD/pillar. Town
+  // guidance must not start or hide their instructions while either is active.
+  if(onboardingActive || abilityTrainingActive) return;
   if(townGuidanceSequenceHold || (rewardWin && !rewardWin.classList.contains('hidden'))){
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
@@ -8308,7 +8264,6 @@ function tickTownGuidance(now){
 function finishOnboardingToTown(){
   onboardingActive=false;
   pathChoiceOpen=false;
-  pathChoiceAfterTutorial=false;
   document.body.classList.remove('onboarding');
   document.body.classList.remove('path-selecting');
   pathSelectEl.classList.add('hidden');
@@ -8360,11 +8315,11 @@ function pathCardHTML(key){
     +'</div>';
 }
 function shouldOpenLevel2PathChoice(){
-  return !!(S && S.lvl>=2 && !S.path && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
+  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
-function showPathSelection(afterTutorial=false){
+function showPathSelection(){
   pathChoiceOpen=true;
-  pathChoiceAfterTutorial=!!afterTutorial;
   onboardingActive=false;
   document.body.classList.remove('onboarding');
   document.body.classList.add('path-selecting');
@@ -8373,7 +8328,7 @@ function showPathSelection(afterTutorial=false){
   tutorialDummyGroup.visible=false;
   if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
   lockFallback=false; locked=false;
-  const awakeningChoice=!afterTutorial && S.lvl>=2 && !S.path;
+  const awakeningChoice=S.lvl>=2 && !S.path;
   pathPanelEl.innerHTML=
     '<h1>'+(awakeningChoice?'LEVEL 2 - CHOOSE YOUR AWAKENING':'CHOOSE YOUR PATH')+'</h1>'+
     '<div class="pathintro">'+(awakeningChoice
@@ -8388,12 +8343,8 @@ function showPathSelection(afterTutorial=false){
     if(!setAbilityPath(path,{message:false})) return;
     pathSelectEl.classList.add('hidden');
     document.body.classList.remove('path-selecting');
-    if(pathChoiceAfterTutorial) finishOnboardingToTown();
-    else {
-      pathChoiceOpen=false;
-      pathChoiceAfterTutorial=false;
-      refreshPlayUi();
-    }
+    pathChoiceOpen=false;
+    refreshPlayUi();
     sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
     if(S.lvl>=2 && !abilityTutorialDone()){
       setTimeout(()=>{
@@ -8404,7 +8355,10 @@ function showPathSelection(afterTutorial=false){
 }
 function completeOnboarding(){
   setMeadowTutorialDone();
-  showPathSelection(true);
+  // Paths unlock authoritatively at level 2. Training ends at level 1, so send
+  // the player to Mara first and let shouldOpenLevel2PathChoice() open this once
+  // the server confirms the first quest level-up.
+  finishOnboardingToTown();
 }
 function updateOnboardingHud(){
   if(!onboardingActive){tutorialEl.classList.add('hidden');return;}
@@ -8419,7 +8373,7 @@ function updateOnboardingHud(){
 }
 function updateOnboardingPillar(now){
   if(abilityTrainingActive) return;
-  tutorialDummyGroup.visible=onboardingActive&&dim==='overworld';
+  tutorialDummyGroup.visible=onboardingActive&&dim==='overworld'&&onboardingKind()==='combat';
   if(tutorialDummyGroup.visible){
     tutorialDummyGroup.rotation.y=Math.sin(now*.003)*.08;
     const hitGlow=onboardingFlags.dummy?.18:0;
@@ -8458,8 +8412,9 @@ function tickOnboarding(now){
     ensureOnboardingItem(B.LOG,1);
     if(uiOpen) renderUI();
   }
-  if(onboardingKind()==='build'&&onboardingFlags.built<=0&&(!onboardingBuildHasRoom()||countItem(B.PLANKS)<3)){
-    repairOnboardingBuildPad();
+  if(onboardingKind()==='build'&&onboardingFlags.built<3&&(!onboardingBuildHasRoom()||countItem(B.PLANKS)<3-onboardingFlags.built)){
+    if(!onboardingBuildHasRoom()) repairOnboardingBuildPad();
+    if(countItem(B.PLANKS)<3-onboardingFlags.built) ensureOnboardingItem(B.PLANKS,3-onboardingFlags.built);
     selectItemForOnboarding(B.PLANKS);
   }
   if(onboardingKind()==='farm'&&!onboardingFlags.farmed&&!onboardingFarmHasMatureWheat()) repairOnboardingFarmPatch();
@@ -8471,7 +8426,7 @@ function tickOnboarding(now){
   const step=ONBOARDING_STEPS[onboardingStep];
   if(!step) return completeOnboarding();
   if(step.done()){
-    if(!onboardingNextAt) onboardingNextAt=now+650;
+    if(!onboardingNextAt) onboardingNextAt=now+500;
     if(now>=onboardingNextAt){
       onboardingStep++;
       onboardingNextAt=0;
@@ -8510,7 +8465,17 @@ function enterPlayFallback(){
   locked=true;
   refreshPlayUi();
 }
-function startPlaying(){
+const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn});
+const AUTH=AUTH_UI.state;
+const setAuthStatus=(text,kind='')=>AUTH_UI.setStatus(text,kind);
+const renderAuthState=()=>AUTH_UI.render();
+const checkAuth=()=>AUTH_UI.check();
+const authenticate=(create=false)=>AUTH_UI.authenticate(create);
+async function startPlaying(create=false){
+  if(AUTH.busy)return;AUTH.busy=true;playbtn.disabled=true;registerbtn.disabled=true;
+  const authenticated=await authenticate(create);
+  AUTH.busy=false;playbtn.disabled=false;registerbtn.disabled=false;
+  if(!authenticated)return;
   SFX.init();
   if(!NET.tried) showWorldLoading('Preparing world...');
   netConnect();
@@ -8527,11 +8492,16 @@ function startPlaying(){
   }
 }
 try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
-try{ document.getElementById('playername').focus(); }catch(e){}
+checkAuth();
+try{ authuser.focus(); }catch(e){}
 function primeMenuAudio(){ SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
-playbtn.addEventListener('click', startPlaying);
+playbtn.addEventListener('click', ()=>startPlaying(false));
+registerbtn.addEventListener('click', ()=>startPlaying(true));
+logoutbtn.addEventListener('click',async()=>{
+  await AUTH_UI.signOut();NET.tried=false;
+});
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
   if(hasLock) lockFallback=false;
@@ -8955,7 +8925,7 @@ function secondaryAction(){
   rebuildAround(px,pz);
   netSendEdit(px,py,pz,placeId);
   SFX.place(); vmSwing();
-  if(onboardingActive&&onboardingArrived&&onboardingKind()==='build'&&placeId===B.PLANKS&&isTrainingMeadowLand(px,pz,8)) onboardingFlags.built=(onboardingFlags.built||0)+1;
+  if(onboardingActive&&onboardingArrived&&onboardingKind()==='build'&&placeId===B.PLANKS&&isOnboardingBuildPad(px,py,pz)) onboardingFlags.built=(onboardingFlags.built||0)+1;
   if(placeId===B.SAND) maybeFall(px,py,pz);
 }
 function interactWithVillager(vill){
@@ -9386,9 +9356,11 @@ function slotInteract(acc, e, opts={}){
       acc.set(cursorStack||null);
       cursorStack=cur||null;
       removeEquippedArmorCopies();
+      if(NET.on&&NET.room) NET.room.send('equipArmor',{id:armorSlot?armorSlot.id:0});
       SFX.equip();
     } else if(e.button===2 && !cursorStack && s){
       cursorStack=s; acc.set(null);
+      if(NET.on&&NET.room) NET.room.send('equipArmor',{id:0});
       SFX.equip();
     }
     renderUI(); renderCursor(); renderAbilities(); updateAbilityHUD(); refreshHUD(); refreshAppearanceDummy(); return;
@@ -9852,15 +9824,8 @@ const playerKb=new THREE.Vector3();
 // ---------------- gold, quests & the market ----------------
 let gold=0;
 function addGold(n){ gold+=n; }
-function countItem(id){ let c=0; for(const s of inv) if(s&&s.id===id) c+=s.count; return c; }
-function removeItems(id,n){
-  for(let i=0;i<36&&n>0;i++){
-    const s=inv[i];
-    if(s&&s.id===id){ const take=Math.min(n,s.count); s.count-=take; n-=take; if(s.count<=0)inv[i]=null; }
-  }
-  refreshHUD();
-  return n<=0;
-}
+const countItem=id=>inventoryModel.count(id);
+const removeItems=(id,n)=>inventoryModel.remove(id,n);
 function requestShop(action, vendor, id){
   if(NET.on && NET.room){ NET.room.send('shop', {action, vendor, id}); return true; }
   return false;
@@ -10109,14 +10074,9 @@ function saveNpcQuestChains(){
 }
 function applyServerNpcQuestChains(chains){
   const server=sanitizeNpcQuestChainsClient(chains);
-  let changed=false;
-  for(const key in npcQuestChains){
-    const local=npcQuestChains[key]|0;
-    if(local>(server[key]|0)){ server[key]=local; changed=true; }
-  }
   npcQuestChains=server;
-  saveNpcQuestChains();
-  return changed;
+  try{localStorage.setItem('bc_npc_quest_chains',JSON.stringify(server));}catch(e){}
+  return false;
 }
 loadNpcQuestChains();
 function onlineBountyTargetCount(){
@@ -10152,9 +10112,9 @@ function rollGuardianQuest(giver){
 }
 const NPC_QUEST_CHAINS={
   'Mara Vale':[
-    {title:'First Hands', type:'fetch', item:B.LOG, need:6, desc:'Gather {N} logs outside the walls so the town can keep building.', gold:16, xp:28},
-    {title:'A Clean Start', type:'fetch', item:B.PLANKS, need:10, desc:'Turn those first logs into {N} planks for repairs around the plaza.', gold:20, xp:32},
-    {title:'Beyond The Gate', type:'kill', need:3, desc:'Prove you can survive past the road. Slay {N} monsters and return.', gold:34, xp:48},
+    {title:'First Hands', type:'fetch', item:B.LOG, need:6, desc:'Gather {N} logs beyond the walls. This first field task will take you to Level 2.', gold:16, xp:28, levelTarget:2},
+    {title:'Road Ready', type:'kill', need:3, desc:'Defeat {N} monsters beyond town. Return ready for Level 3 and your first Gate.', gold:24, xp:47, levelTarget:3},
+    {title:'The First Gate', type:'gate', need:1, gateRank:0, desc:'An E-rank Gate has opened for you. Find it, clear it, and return to Mara.', gold:50, xp:60},
     {title:'A Better Sense', type:'utility', utility:'compass', need:1, desc:'Earn and equip a utility. Start with Compass Sense from a Guild Contract, then return to Mara.', gold:42, xp:58},
     {title:'Meat Becomes Gold', type:'sell', item:I.MONSTER_MEAT, need:1, desc:'Go hunting, bring Monster Meat to Greta at the tavern, and sell {N} piece for gold.', gold:38, xp:54, rewardItems:[{id:I.SHADOW_SIGIL,count:1}]},
     {title:'A Shadow Companion', type:'familiar', familiar:'shade', need:1, desc:'Use the Shadow Sigil Mara gave you to bind Shade, then return. Press K to call it afterward.', gold:52, xp:72, rewardItems:[{id:B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]},
@@ -10252,39 +10212,12 @@ function completeNpcChainStep(q){
   else sysMsg('<b>'+escHTML(key)+'</b> chain step '+npcQuestChains[key]+'/'+chain.length+' complete.');
 }
 const FIRST_VILLAGER_BONUS_KEY='bc_first_villager_quest_bonus_v1';
-const FIRST_QUEST_REPLAY_KEY='bc_first_quest_server_reward_v4';
-function prepareFirstQuestReplay(){
-  let previousBonusClaimed=false;
-  try{
-    if(localStorage.getItem(FIRST_QUEST_REPLAY_KEY)==='1') return false;
-    previousBonusClaimed=localStorage.getItem(FIRST_VILLAGER_BONUS_KEY)==='1';
-    localStorage.setItem(FIRST_QUEST_REPLAY_KEY,'1');
-    localStorage.removeItem(FIRST_VILLAGER_BONUS_KEY);
-    localStorage.removeItem('bc_town_tutorial_steps_v1');
-    localStorage.removeItem('bc_town_tutorials_done_v1');
-    localStorage.removeItem('bc_town_guidance_done_v2');
-    localStorage.removeItem('bc_town_job_guidance_done_v1');
-    localStorage.removeItem('bc_town_job_guidance_pending_v1');
-    localStorage.removeItem('bc_town_tutorial_choice_v1');
-    localStorage.removeItem('bc_town_tutorial_menu_dismissed_v1');
-  }catch(e){}
-  if(previousBonusClaimed) gold=Math.max(0,gold-100);
-  npcQuestChains['Mara Vale']=0;
-  saveNpcQuestChains();
-  const logsNeeded=Math.max(0,6-countItem(B.LOG));
-  if(logsNeeded) addItem(B.LOG,logsNeeded);
-  addItem(B.PLANKS,8);
-  townGuidanceActive=false;
-  tutorialEl.classList.add('hidden');
-  tutorialPillarGroup.visible=false;
-  eventLog('Mara Vale\'s first quest and 100-gold milestone were reset. Quest materials were supplied.');
-  return true;
-}
 function firstVillagerBonusClaimed(){
   try{ return localStorage.getItem(FIRST_VILLAGER_BONUS_KEY)==='1'; }catch(e){ return false; }
 }
 let serverFirstQuestComplete=false;
 let pendingFirstQuestRewardContinue=null;
+let firstQuestRewardRequestPending=false;
 function firstQuestMilestoneComplete(){
   return NET.on ? serverFirstQuestComplete : firstVillagerBonusClaimed();
 }
@@ -10305,7 +10238,7 @@ function showFirstVillagerReward(onContinue){
     '<h2>FIRST QUEST COMPLETE</h2>'+
     '<div class="rsub">THE TOWN RECOGNISES YOUR PROGRESS</div>'+
     '<div class="rewardloot">'+rewardLineHTML({label:'Gold',value:'+100'})+'</div>'+
-    '<div class="rnote">New town guidance is now available. Follow the next pillar of light.</div>'+
+    '<div class="rnote">You reached Level 2. Continue to choose your awakening.</div>'+
     '<button id="rewardclose">CONTINUE</button>';
   rewardWin.classList.remove('hidden');
   const btn=document.getElementById('rewardclose');
@@ -10315,7 +10248,8 @@ function showFirstVillagerReward(onContinue){
 }
 function awardFirstVillagerQuestBonus(onContinue){
   if(NET.on&&NET.room){
-    if(serverFirstQuestComplete) return false;
+    if(serverFirstQuestComplete||firstQuestRewardRequestPending) return false;
+    firstQuestRewardRequestPending=true;
     pendingFirstQuestRewardContinue=onContinue||null;
     NET.room.send('claimFirstQuestReward',{});
     return true;
@@ -10331,6 +10265,7 @@ function awardFirstVillagerQuestBonus(onContinue){
 }
 function applyFirstQuestRewardResult(m){
   if(!m) return;
+  firstQuestRewardRequestPending=false;
   if(typeof m.totalGold==='number') gold=Math.max(0,m.totalGold|0);
   if(m.ok || m.claimed){
     serverFirstQuestComplete=true;
@@ -10402,31 +10337,15 @@ function npcFlavor(v){
   const persona=v.personality ? '<br><small style="color:#7f93aa">Personality: '+escHTML(v.personality)+'</small>' : '';
   return '<small style="color:#b8985e">'+line+'</small>'+persona;
 }
-function questDone(){
-  if(!quest) return false;
-  if(quest.type==='fetch') return countItem(quest.item)>=quest.need;
-  if(quest.type==='utility') return quest.utility ? utilityUnlocked(quest.utility) : utilityUnlocks.length>0;
-  if(quest.type==='familiar') return quest.familiar ? familiarUnlocks.includes(quest.familiar) : familiarUnlocks.length>0;
-  if(quest.type==='mount') return quest.mount==='dragon' ? dragonUnlocks.length>0 : !!mounted;
-  if(quest.type==='mount_use') return quest.mount==='dragon' ? (mounted&&isDragon(mountKind)) : mounted;
-  return quest.have>=quest.need;
-}
-function questProgressText(q=quest){
-  if(!q) return '';
-  if(q.type==='pvp_bounty') return 'Target: '+escHTML(q.targetName||'Unknown')+' - '+(questDone()?'completed':fmtTimeLeft((q.expiresAt||0)-Date.now()));
-  if(q.type==='fetch') return Math.min(q.need,countItem(q.item))+' / '+q.need;
-  if(q.type==='utility'){
-    const name=(UTILITY_DEFS[q.utility]&&UTILITY_DEFS[q.utility].name)||'utility';
-    return utilityUnlocked(q.utility)?'Unlocked: '+escHTML(name):'Not unlocked yet';
-  }
-  if(q.type==='familiar'){
-    const name=(FAMILIARS[q.familiar]&&FAMILIARS[q.familiar].name)||'familiar';
-    return familiarUnlocks.includes(q.familiar)?'Bound: '+escHTML(name):'Not bound yet';
-  }
-  if(q.type==='mount') return dragonUnlocks.length?'Dragon bonded':'No dragon bonded yet';
-  if(q.type==='mount_use') return mounted&&isDragon(mountKind)?'Mounted':'Not mounted yet';
-  return Math.min(q.need||1,q.have||0)+' / '+(q.need||1);
-}
+const questModel=createQuestModel({
+  countItem,utilityUnlocked,utilityUnlocks:()=>utilityUnlocks,familiarUnlocks:()=>familiarUnlocks,
+  dragonUnlocks:()=>dragonUnlocks,mounted:()=>!!mounted,mountKind:()=>mountKind,isDragon,
+  escape:escHTML,formatTime:fmtTimeLeft,
+  utilityName:id=>(UTILITY_DEFS[id]&&UTILITY_DEFS[id].name)||'utility',
+  familiarName:id=>(FAMILIARS[id]&&FAMILIARS[id].name)||'familiar',
+});
+const questDone=()=>questModel.done(quest);
+const questProgressText=(q=quest)=>questModel.progressText(q);
 function questExpired(){
   return !!(quest && quest.type==='pvp_bounty' && quest.expiresAt && Date.now()>quest.expiresAt && !questDone());
 }
@@ -10504,6 +10423,7 @@ function questBump(){
 }
 function questSell(id, count=1, vendor=''){
   if(!quest || quest.type!=='sell' || questDone()) return;
+  if(NET.on&&(quest.source||'npc')==='npc') return;
   if(quest.item && id && quest.item!==id) return;
   if(quest.vendor && vendor && quest.vendor!==vendor) return;
   quest.have=Math.min(quest.need, (quest.have||0)+Math.max(1,count|0));
@@ -10520,7 +10440,8 @@ function questSystemCheck(){
 }
 function maraQuestCue(q){
   if(!q || q.giver!=='Mara Vale') return;
-  if(q.type==='utility') showName('Take a Guild Contract at the Job Board');
+  if(q.type==='gate') showName('Find and clear the E-rank Gate');
+  else if(q.type==='utility') showName('Take a Guild Contract at the Job Board');
   else if(q.type==='sell') showName('Hunt Monster Meat, then sell it to Greta');
   else if(q.type==='familiar') showName('Use the Shadow Sigil, then press K');
   else if(q.type==='mount') showName('Place the Egg Insulator, then use the Dragon Egg');
@@ -10568,16 +10489,19 @@ function tickQuestTimers(){
 function questKill(){
   gainJobXP('adventurer', 3, 'hunt');
   jobContractProgress('kill', 1, 0);
+  if(NET.on&&quest&&(quest.source||'npc')==='npc') return;
   if(quest&&quest.type==='kill'&&!questDone()){ quest.have++; questBump(); }
 }
 function questMine(id){
   awardJobForBlock(id);
+  if(NET.on&&quest&&(quest.source||'npc')==='npc') return;
   if(quest&&quest.type==='mine'&&quest.item===id&&!questDone()){ quest.have++; questBump(); }
 }
-function questGate(){
+function questGate(rank=0){
   gainJobXP('adventurer', 18, 'gate');
   jobContractProgress('gate', 1, 0);
-  if(quest&&quest.type==='gate'&&!questDone()){ quest.have++; questBump(); }
+  if(NET.on&&quest&&(quest.source||'npc')==='npc') return;
+  if(quest&&quest.type==='gate'&&!questDone()&&(quest.gateRank==null||quest.gateRank===rank)){ quest.have++; questBump(); }
 }
 function questHud(){
   if(!quest) return '';
@@ -10999,6 +10923,7 @@ function openDragonBondUI(){
 }
 function chooseJob(id, reopenFocus=''){
   if(!JOBS[id]) return;
+  if(NET.on&&NET.room){ NET.room.send('setJob',{job:id}); return; }
   const old=playerJob;
   playerJob=id;
   if(old!==id) jobContract=null;
@@ -11225,9 +11150,13 @@ function openJobsUI(focusJob='', sourceTitle=''){
     if(c && jobContractReady()) box.appendChild(qBtn('CLAIM', ()=>claimJobContract()));
     else if(c){
       box.appendChild(qBtn('GUIDE', ()=>openJobContractGuide(c)));
-      box.appendChild(qBtn('ABANDON', ()=>{ jobContract=null; sysMsg('Job contract abandoned'); refreshHUD(); openJobsUI(); }, false));
+      box.appendChild(qBtn('ABANDON', ()=>{
+        if(NET.on&&NET.room){ NET.room.send('jobContract',{action:'abandon'}); return; }
+        jobContract=null; sysMsg('Job contract abandoned'); refreshHUD(); openJobsUI();
+      }, false));
     }
     else box.appendChild(qBtn('TAKE CONTRACT', ()=>{
+      if(NET.on&&NET.room){ NET.room.send('jobContract',{action:'take'}); return; }
       jobContract=makeJobContract(playerJob);
       sysMsg('New contract: <b>'+escHTML(jobContract.title)+'</b>');
       clearTownJobGuidance();
@@ -11259,7 +11188,11 @@ function openJobsUI(focusJob='', sourceTitle=''){
   row.appendChild(qBtn('TOWN TUTORIALS', ()=>openTownTutorialsUI()));
   row.appendChild(qBtn('GUILD CONTRACTS', ()=>openRegionalContractsUI()));
   row.appendChild(qBtn('UTILITIES', ()=>openUtilitiesUI()));
-  row.appendChild(qBtn('CLEAR JOB', ()=>{ if(!playerJob) return; playerJob=''; jobContract=null; sysMsg('Job cleared'); openJobsUI(); refreshAppearanceDummy(); }, !playerJob));
+  row.appendChild(qBtn('CLEAR JOB', ()=>{
+    if(!playerJob)return;
+    if(NET.on&&NET.room){NET.room.send('setJob',{job:''});return;}
+    playerJob='';jobContract=null;sysMsg('Job cleared');openJobsUI();refreshAppearanceDummy();
+  }, !playerJob));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
 function iconNode(id){
@@ -11472,6 +11405,8 @@ function openQuestUI(v){
     const rewardGold=playerJob==='adventurer'&&tier ? Math.round(quest.gold*(1+tier*.05)) : quest.gold;
     body.innerHTML='"'+escHTML(v.done||'You have done well. The town is in your debt.')+'"<br><br>'+npcFlavor(v)+'<br><br>Reward: <b>'+rewardGold+' gold</b> + '+quest.xp+' XP'+rewardItemsText(quest);
     row.appendChild(qBtn('TURN IN', ()=>{
+      if(NET.on&&NET.room&&quest.source==='guardian'){NET.room.send('claimAegisTrial',{});return;}
+      if(NET.on&&NET.room&&(quest.source||'npc')==='npc'){NET.room.send('npcQuest',{action:'claim'});return;}
       if(quest.type==='fetch' && !removeItems(quest.item, quest.need)) return;
       const wasAegisTrial=quest.source==='guardian';
       const wasFirstGuideQuest=(quest.source||'npc')==='npc' && quest.role==='guide' && (quest.chainStep|0)===0;
@@ -11499,7 +11434,10 @@ function openQuestUI(v){
       ? 'Return to '+quest.giver+' to turn this in.'
       : quest.desc+'<br>Progress: '+progress;
     body.innerHTML='"'+escHTML(sameSource&&sameGiver?'How goes the task?':'That work belongs elsewhere.')+'"<br><br>'+npcFlavor(v)+'<br><br><b>'+escHTML(questTypeLabel(quest))+'</b> from '+escHTML(quest.giver)+'<br>'+returnLine;
-    row.appendChild(qBtn('ABANDON', ()=>{ quest=null; closeQWin(); }, true));
+    row.appendChild(qBtn('ABANDON', ()=>{
+      if(NET.on&&NET.room&&(quest.source||'npc')==='npc'){NET.room.send('npcQuest',{action:'abandon'});return;}
+      quest=null; closeQWin();
+    }, true));
   } else {
     const offer=rollQuest(giver, v.role, source);
     const lootLine=source==='guardian'
@@ -11513,6 +11451,7 @@ function openQuestUI(v){
       if(source==='guardian' && offer.type==='pvp_bounty'){
         if(requestAegisBounty(offer)) return;
       }
+      if(NET.on&&NET.room&&source==='npc'){NET.room.send('npcQuest',{action:'accept',giver,role:v.role||'town'});return;}
       quest=offer;
       SFX.quest();
       sysMsg(escHTML(questTypeLabel(quest))+' accepted from <b>'+escHTML(giver)+'</b>');
@@ -13005,31 +12944,36 @@ function headTrack(v, dt){
 }
 
 // ---------------- multiplayer (colyseus) ----------------
-const NET={on:false, room:null, tod:null, remotes:{}, lastMove:0, lastMeta:'', lastSave:0, lastSnap:'', pending:[], dgn:'', pendingDungeonStatus:null};
+const NETWORK=createNetworkController({
+  Client:typeof Colyseus==='undefined'?null:Colyseus.Client,
+  endpoint:()=>((location.protocol==='https:'?'wss':'ws')+'://'+location.host),
+  roomName:'blockcraft',sessionStorage,tokenKey:'bc_reconnect_token',
+  onAttach:netAttachRoom,
+  onUnavailable:()=>{eventLog('Solo mode: no server SDK');setWorldLoadingStatus('Starting solo world...');setTimeout(()=>finishWorldLoading('solo'),900);},
+  onInterrupted:()=>eventLog('Connection interrupted - reconnecting...'),
+  onReconnectAttempt:n=>setWorldLoadingStatus('Reconnecting to world... '+n+'/4'),
+  onRestored:()=>eventLog('Connection restored'),
+  onFailure:netConnectionFailed,
+});
+const NET=NETWORK.state;
+let e2eJourneyResult=null;
 
 function netConnect(){
-  if(NET.tried) return;
-  NET.tried=true;
-  if(typeof Colyseus==='undefined'){ eventLog('Solo mode: no server SDK'); setWorldLoadingStatus('Starting solo world...'); setTimeout(()=>finishWorldLoading('solo'),900); return; }
   const name=(document.getElementById('playername').value||'Hunter').slice(0,16);
-  let token='';
   try{
-    token=localStorage.getItem('bc_token')||'';
-    if(!/^[A-Za-z0-9_-]{8,64}$/.test(token)){
-      token='t'+Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>('0'+b.toString(16)).slice(-2)).join('');
-      localStorage.setItem('bc_token', token);
-    }
+    localStorage.removeItem('bc_token');
     localStorage.setItem('bc_name', name);
   }catch(e){}
-  const proto=location.protocol==='https:'?'wss':'ws';
-  const client=new Colyseus.Client(proto+'://'+location.host);
   setWorldLoadingStatus('Connecting to world server...');
-  client.joinOrCreate('blockcraft',{name, token}).then(room=>{
-    NET.on=true; NET.room=room;
+  NETWORK.connect(name);
+}
+
+function netAttachRoom(room,name,client){
     setWorldLoadingStatus('Syncing hunter profile...');
     let staleLocalMobs=0;
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net){ removeMob(i); staleLocalMobs++; }
     eventLog('Connected as '+name);
+    room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     if(staleLocalMobs) eventLog('Cleared '+staleLocalMobs+' pre-connection local mob'+(staleLocalMobs===1?'':'s')+'.','[Damage Audit]');
 
     room.state.listen('tod', v=>{ NET.tod=v; });
@@ -13044,6 +12988,36 @@ function netConnect(){
 
     room.onMessage('trainingReset', ()=>resetTrainingMeadowLocal());
     room.onMessage('profile', m=>netRestoreProfile(m));
+    bindProgressionMessages(room,{
+      getJobXp:()=>jobXp,setJobXp:v=>{jobXp=v;},setContract:v=>{jobContract=v;},clampContract:clampJobContract,
+      jobLevel:jobLevelFromXp,contractReady:jobContractReady,
+      onJobLevel:level=>{SFX.level();sysMsg('<b>'+escHTML((JOBS[playerJob]&&JOBS[playerJob].name)||'Job')+' Level '+level+'</b> reached');},
+      onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> complete - claim it from Jobs');},
+      reconcileArmor:()=>{cursorStack=null;renderCursor();if(uiOpen)renderUI();},
+      reject:why=>{sysMsg(why);SFX.error();},
+      accept:m=>{
+        if(m.type==='jobContract'&&m.action==='claim'){SFX.coin();sysMsg('Contract claimed'+(m.rewardGold?' - <b>+'+m.rewardGold+' gold</b>':'')+'.');}
+        if(m.type==='jobContract'&&m.action==='take')clearTownJobGuidance();
+        if(m.type==='job'&&m.job)sysMsg('You are now working as a <b>'+escHTML(JOBS[m.job]&&JOBS[m.job].name||m.job)+'</b>.');
+        if((m.type==='job'||m.type==='jobContract')&&qOpen)openJobsUI(m.job||playerJob);
+      },
+      refresh:()=>{renderBars();renderStat();refreshHUD();refreshAppearanceDummy();if(qOpen&&qMode==='management')openJobsUI();},
+    });
+    room.onMessage('npcQuest', m=>{
+      if(!m)return;
+      quest=m.quest||null;
+      if(m.completed){SFX.coin();SFX.level();sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.');}
+      else if(m.action==='accept'&&quest){SFX.quest();sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> accepted from '+escHTML(quest.giver)+'.');maraQuestCue(quest);}
+      else if(m.action==='abandon')sysMsg('Quest abandoned.');
+      else if(m.action==='progress'&&quest&&questDone())sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> complete - return to '+escHTML(quest.giver)+'.');
+      refreshHUD();if(qOpen)closeQWin();
+    });
+    room.onMessage('aegisTrialReward', m=>{
+      quest=null;SFX.coin();SFX.level();
+      const reward=m&&m.reward||{},label=reward.kind||'Aegis Cache';
+      sysMsg('<b>Aegis Trial complete</b> - +'+((m&&m.rewardGold)||0)+' gold, +'+((m&&m.rewardXp)||0)+' XP, <b>'+escHTML(label)+'</b>.');
+      refreshHUD();if(qOpen)closeQWin();
+    });
     room.onMessage('guildHallSync', m=>{
       guildHallState={
         floors:Array.isArray(m&&m.floors)?m.floors:[],fellowships:Array.isArray(m&&m.fellowships)?m.fellowships:[],guild:m&&m.guild||null,
@@ -13146,7 +13120,7 @@ function netConnect(){
     });
     room.onMessage('gateReject', m=>gateRejected(m));
     room.onMessage('dedit', m=>{ if(dim==='dungeon') netWriteEdit(m.x, m.y, m.z, m.id); });
-    room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(); } });
+    room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); } });
     room.onMessage('dungeonDeath', ()=>{
       if(dim==='dungeon') exitDungeon(true);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
@@ -13392,12 +13366,15 @@ function netConnect(){
       resetTrainingMeadowLocal();
       room.send('trainingReset',{});
     }
-    room.onLeave(()=>{ NET.on=false; eventLog('Disconnected from server'); });
-  }).catch(()=>{
-    setWorldLoadingStatus('Starting solo world...');
-    setTimeout(()=>finishWorldLoading('solo'),900);
-    eventLog('No server found — playing solo');
-  });
+}
+
+function netConnectionFailed(err){
+  NET.tried=false;NET.on=false;locked=false;lockFallback=false;
+  loadscreen.classList.add('hidden');overlay.classList.remove('hidden');
+  const authError=err&&/auth/i.test(String(err.message||err));
+  setAuthStatus(authError?'SESSION EXPIRED - SIGN IN AGAIN':'COULD NOT JOIN THE SERVER','bad');
+  if(authError)AUTH_UI.expire();
+  eventLog('Server connection failed');
 }
 
 // ---- persistence: restore on join, snapshot on a timer ----
@@ -13426,14 +13403,13 @@ function netRestoreProfile(m){
         } else inv[i]=null;
       }
     }
-    if(m.armor && ITEMS[m.armor.id] && ITEMS[m.armor.id].armor) armorSlot={id:m.armor.id, count:1};
-    else armorSlot=null;
+    equipmentModel.restore(m.armor);
     dragonUnlocks=[];
     if(Array.isArray(m.mountUnlocks)) for(const k of m.mountUnlocks){
       const t = k==='dragon' ? 'ember' : (typeof k==='string' && k.slice(0,7)==='dragon:') ? k.slice(7) : '';
       if(DRAGON_TYPES[t] && !dragonUnlocks.includes(t)) dragonUnlocks.push(t);
     }
-    familiarUnlocks = Array.isArray(m.familiarUnlocks) ? m.familiarUnlocks.filter(k=>k==='shade'||k==='fang') : [];
+    familiarUnlocks = Array.isArray(m.familiarUnlocks) ? m.familiarUnlocks.filter(k=>['shade','fang','mote','sprite'].includes(k)) : [];
     activeFamiliar='';   // summon state isn't persisted; recall with K
     dragonCare={};
     if(m.dragonCare && typeof m.dragonCare==='object'){
@@ -13452,15 +13428,15 @@ function netRestoreProfile(m){
     jobXp=Math.max(0, m.jobXp|0);
     jobContract=clampJobContract(m.jobContract);
     applyServerNpcQuestChains(m.npcQuestChains);
+    if(!quest||quest.source!=='guardian')quest=m.activeNpcQuest||null;
+    if(m.aegisTrialReady&&!quest)quest={source:'guardian',type:'pvp_bounty',have:1,need:1,giver:'Aegis Guardian',role:'guardian',title:'Silent Bounty',gold:135+(S.lvl||1)*8,xp:130+(S.lvl||1)*12};
     regionalContract=clampRegionalContract(m.regionalContract);
     utilityUnlocks=clampUtilityUnlocks(m.utilityUnlocks);
     utilityLoadout=clampUtilityLoadout(m.utilityLoadout);
     removeEquippedArmorCopies();
     if(typeof m.gold==='number') gold=Math.max(0,m.gold|0);
     serverFirstQuestComplete=m.firstQuestRewardClaimed===true;
-    prepareFirstQuestReplay();
-    resetTownTutorialPanelForTesting();
-    migrateJobBoardTutorialFix();
+    firstQuestRewardRequestPending=false;
     if(typeof m.highestGateRankCleared==='number') highestGateRankCleared=Math.max(-1,Math.min(4,m.highestGateRankCleared|0));
     discoveredIds.clear();if(Array.isArray(m.discoveries))for(const id of m.discoveries)if(typeof id==='string')discoveredIds.add(id);
     if(Array.isArray(m.pos) && !onboardingActive){
@@ -13584,20 +13560,6 @@ function farmRejected(m){
 function netSnapshot(){
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
-    S:{lvl:S.lvl, xp:S.xp, pts:S.pts, str:S.str, agi:S.agi, vit:S.vit, int:S.int, path:S.path||''},
-    job:playerJob||'',
-    jobXp:jobXp|0,
-    jobContract:clampJobContract(jobContract),
-    npcQuestChains:sanitizeNpcQuestChainsClient(npcQuestChains),
-    inv:inv.map(s=>s?{id:s.id, count:s.count, ...(s.dur!=null?{dur:s.dur}:{}), ...(s.plus?{plus:s.plus|0}:{})}:null),
-    armor:armorSlot?{id:armorSlot.id,count:1}:null,
-    gold:gold,
-    mountUnlocks: dragonUnlocks.map(t=>'dragon:'+t),
-    familiarUnlocks: familiarUnlocks.slice(),
-    dragonCare,
-    dragonNames,
-    utilityLoadout:clampUtilityLoadout(utilityLoadout),
-    pos:[player.pos.x, player.pos.y, player.pos.z],
   };
 }
 
@@ -17504,12 +17466,10 @@ function netTick(dt, now){
     NET.lastMove=now;
     NET.room.send('move',{x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw});
     const heldId=displayHeldId();
-    const armorId=armorSlot?armorSlot.id:0;
-    const jobLvl=playerJob?jobLevelFromXp(jobXp):0;
-    const meta=[S.path||'', heldId, armorId, playerJob||'', jobLvl].join('|');
+    const meta=[S.path||'', heldId].join('|');
     if(meta!==NET.lastMeta){
       NET.lastMeta=meta;
-      NET.room.send('meta',{name:(document.getElementById('playername').value||'Hunter').slice(0,16), path:S.path||'', heldId, armorId, job:playerJob||'', jobLvl});
+      NET.room.send('meta',{name:(document.getElementById('playername').value||'Hunter').slice(0,16), path:S.path||'', heldId});
     }
   }
   for(const sid in NET.remotes){
@@ -17564,6 +17524,9 @@ function currentLocationInfo(){
   }
   if(dim==='ability'){
     return { cls:'event', name:'Ability Training Room', meta:'Private tutorial instance' };
+  }
+  if(dim==='overworld' && onboardingActive && isTrainingMeadowLand(player.pos.x,player.pos.z,4)){
+    return { cls:'town', name:'Hunter Training Meadow', meta:'Safe training grounds' };
   }
   if(serverEvent&&serverEvent.kind==='king'&&serverEvent.phase==='active'&&serverEvent.participating){
     return { cls:'event', name:'King of the Hill Arena', meta:'Fight for crown control' };
@@ -17653,7 +17616,7 @@ function questObjective(){
   const qLabel=quest.source==='guardian'?'Aegis Trial':'Story Quest';
   if(questDone()) return {label:qLabel, text:'Turn in '+questTypeLabel(quest)+' to '+quest.giver};
   if(quest.type==='pvp_bounty') return {label:qLabel, text:'Assassinate '+(quest.targetName||'target')+' - '+fmtTimeLeft((quest.expiresAt||0)-Date.now())};
-  if(quest.type==='gate') return {label:qLabel, text:'Clear a Gate for '+quest.giver};
+  if(quest.type==='gate') return {label:qLabel, text:'Clear '+(quest.gateRank===0?'the E-rank Gate':'a Gate')+' for '+quest.giver};
   if(quest.type==='kill') return {label:qLabel, text:'Defeat enemies for '+quest.giver+' '+quest.have+'/'+quest.need};
   if(quest.type==='mine') return {label:qLabel, text:'Mine '+quest.have+'/'+quest.need+' for '+quest.giver};
   if(quest.type==='fetch') return {label:qLabel, text:'Bring '+Math.min(quest.need,countItem(quest.item))+'/'+quest.need+' to '+quest.giver};
@@ -17830,7 +17793,7 @@ function tick(now){
   tickOnboarding(now);
   tickAbilityTraining(now);
   tickTownGuidance(now);
-  if(shouldOpenLevel2PathChoice()) showPathSelection(false);
+  if(shouldOpenLevel2PathChoice()) showPathSelection();
   else if(!cutscene && !abilityTrainingActive && !abilityAwakeningOpen && abilityHudAvailable() && !abilityTutorialDone()){
     if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
   }
@@ -17884,8 +17847,8 @@ function tick(now){
       meditateJobAcc+=dt;
       while(meditateJobAcc>=5){
         meditateJobAcc-=5;
-        gainJobXP('monk', 2, 'meditate');
-        jobContractProgress('meditate', 5, 0);
+        if(NET.on&&NET.room) NET.room.send('meditateTick',{});
+        else { gainJobXP('monk', 2, 'meditate'); jobContractProgress('meditate', 5, 0); }
         const mt=jobPerkTier('monk');
         if(mt){
           buffs.regen=Math.max(buffs.regen, 4+mt*2);
@@ -18144,15 +18107,92 @@ function tick(now){
   updateVisibleChunks(false);
   updateLandMinimap();
   updateBossUI();
-  renderer.render(scene,camera);
+  rendering.render();
 }
 requestAnimationFrame(tick);
 
 addEventListener('resize', ()=>{
-  camera.aspect=innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
+  rendering.resize(innerWidth,innerHeight);
 });
+if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSearchParams(location.search).has('e2e')){
+  const e2eCompleteOnboardingStep=()=>{
+    if(!onboardingActive) return false;
+    const target=onboardingRoute[onboardingStep],kind=onboardingKind();
+    if(!target||!player) return false;
+    player.pos.set(target.x,surfaceY(target.x,target.z)+2,target.z);
+    onboardingArrived=true;
+    if(kind==='mouse')onboardingFlags.looked=true;
+    else if(kind==='arrows')onboardingFlags.arrowLook=true;
+    else if(kind==='jump')onboardingFlags.jumped=true;
+    else if(kind==='tree')onboardingFlags.tree=true;
+    else if(kind==='craft')onboardingFlags.crafted=true;
+    else if(kind==='build')onboardingFlags.built=3;
+    else if(kind==='farm')onboardingFlags.farmed=true;
+    else if(kind==='eat')onboardingFlags.ate=true;
+    else if(kind==='combat')onboardingFlags.dummy=true;
+    onboardingNextAt=performance.now()-1;
+    tickOnboarding(performance.now());
+    return true;
+  };
+  const e2eGateRanks=()=>{
+    const ranks=[];
+    const gates=NET.room&&NET.room.state&&NET.room.state.gates;
+    if(gates&&gates.forEach)gates.forEach(g=>{if(g&&g.active&&!ranks.includes(g.rank|0))ranks.push(g.rank|0);});
+    return ranks.sort((a,b)=>a-b);
+  };
+  const e2eFirstGate=()=>{
+    let found=null;
+    const gates=NET.room&&NET.room.state&&NET.room.state.gates;
+    if(gates&&gates.forEach)gates.forEach(g=>{
+      if(!found&&g&&g.active&&(g.rank|0)===0)found={id:g.id,rank:g.rank|0,x:+g.x,y:+g.y,z:+g.z,kind:g.kind||'public'};
+    });
+    return found;
+  };
+  const e2eWalkTo=async(target)=>{
+    if(!target||!NET.on||!NET.room) return false;
+    const sx=player.pos.x,sy=player.pos.y,sz=player.pos.z;
+    const tx=target.x,ty=target.y,tz=target.z;
+    const steps=Math.max(1,Math.ceil(Math.hypot(tx-sx,tz-sz)/1.8));
+    for(let step=1;step<=steps;step++){
+      const t=step/steps;
+      player.pos.set(sx+(tx-sx)*t,sy+(ty-sy)*t,sz+(tz-sz)*t);
+      NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw});
+      await new Promise(resolve=>setTimeout(resolve,80));
+    }
+    return true;
+  };
+  const e2eWalkToFirstGate=async()=>{
+    const target=e2eFirstGate();
+    if(!target) return false;
+    return await e2eWalkTo({x:target.x+1.5,y:target.y+.5,z:target.z})&&target.id;
+  };
+  const e2eUseDungeonExit=()=>{
+    if(dim!=='dungeon'||!dungeon||!dungeon.cleared||!exitPortal) return false;
+    player.pos.set(exitPortal.position.x,exitPortal.position.y+.5,exitPortal.position.z);
+    exitDungeon(false);
+    return true;
+  };
+  const e2eDungeonBossCount=()=>{
+    let count=0;
+    const synced=NET.room&&NET.room.state&&NET.room.state.mobs;
+    if(synced&&synced.forEach)synced.forEach(m=>{if(m&&m.dgn===NET.dgn&&m.kind==='boss')count++;});
+    return count;
+  };
+  window.__BLOCKCRAFT_E2E__={
+    status:()=>({connected:NET.on,reconnecting:NET.reconnecting,attachCount:NET.attachCount,job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,armor:armorSlot&&armorSlot.id,level:S.lvl,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),e2eJourneyResult:e2eJourneyResult?JSON.parse(JSON.stringify(e2eJourneyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),firstGate:e2eFirstGate()}),
+    inventoryCount:id=>inventoryModel.count(id),
+    send:(type,message={})=>{if(!NET.on||!NET.room)throw new Error('not connected');NET.room.send(type,message);},
+    disconnect:()=>{if(!NET.room||!NET.room.connection)throw new Error('no active connection');NET.room.connection.close();},
+    shutdown:()=>NETWORK.shutdown(),
+    finishOnboarding:()=>completeOnboarding(),
+    completeOnboardingStep:e2eCompleteOnboardingStep,
+    useFirstAbility:()=>cast(0),
+    walkToFirstGate:e2eWalkToFirstGate,
+    walkToMara:()=>e2eWalkTo({x:HUB.guide.x,y:TOWN.G+1,z:HUB.guide.z}),
+    useDungeonExit:e2eUseDungeonExit,
+  };
+}
+}).catch(err=>{console.error('Blockcraft client failed to load',err);});
 </script>
 </body>
 </html>

@@ -433,6 +433,7 @@ class EventsMixin {
     ev.leaderboard.push({ sid: client.sessionId, name: p && p.name || 'Hunter', ms, resets: part.resets | 0 });
     ev.leaderboard.sort((a, b) => (a.ms - b.ms) || (a.resets - b.resets));
     this.awardGrant(client, { source: 'event', event: EVENT_PARKOUR.name, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
+    this.recordEventProgress(client);
     this.unlockUtility(client, 'feather_step', 'Parkour finish unlocked');
     client.send('eventComplete', this.eventPayload(client));
     this.teleportEventPlayer(client, part.returnPos, 'complete', ev);
@@ -643,7 +644,11 @@ class EventsMixin {
     if (!bounty || bounty.targetSid !== client.sessionId) return;
     const killer = this.clients.find(c => c.sessionId === killerSid);
     this.aegisBounties.delete(killerSid);
-    if (killer) killer.send('pvpBountyComplete', { targetSid: client.sessionId, targetName: p.name || bounty.targetName || 'Hunter' });
+    if (killer) {
+      const rec = this.profileFor(killer);
+      if (rec) { rec.prof.aegisTrialReady = true; this.dirtyPlayers.add(rec.token); }
+      killer.send('pvpBountyComplete', { targetSid: client.sessionId, targetName: p.name || bounty.targetName || 'Hunter' });
+    }
     client.send('pvpBountySlain', { hunterSid: killerSid });
   }
   handleKingPlayerDeath(client, p, hp) {
@@ -707,6 +712,7 @@ class EventsMixin {
       if (!client) continue;
       if (winner && part.teamId === winner.teamId) {
         this.awardGrant(client, { source: 'event', event: EVENT_KING.name, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
+        this.recordEventProgress(client);
       }
       client.send('eventFailed', { reason: reason || 'timeout', name: ev.name, id: ev.id, leaderboard: this.eventLeaderboardPayload(ev), winner: winner && winner.name || '' });
       this.teleportKingPlayer(client, part.returnPos, 'failed', ev);

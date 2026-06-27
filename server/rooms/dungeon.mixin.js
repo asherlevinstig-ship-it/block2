@@ -316,12 +316,25 @@ class DungeonMixin {
   }
   gateEntryPayload(g, inst) {
     return {
-      id: g.id, seed: inst.seed, rank: inst.rank, kind: inst.kind || g.kind,
+      id: inst.id, seed: inst.seed, rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
       edits: inst.edits,
-      bx: g.x, by: g.y, bz: g.z,
+      bx: g ? g.x : inst.gateX, by: g ? g.y : inst.gateY, bz: g ? g.z : inst.gateZ,
       cleared: inst.cleared,
       shardPlus: inst.shardPlus || 0, shardName: inst.shardName || '', shardMods: inst.shardMods || '',
     };
+  }
+  resumeDungeonInstance(client) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !p.dgn) return false;
+    const inst = this.instances[p.dgn];
+    if (!inst || !inst.hasPlayer(client.sessionId)) {
+      p.dgn = '';
+      p.dim = 'overworld';
+      return false;
+    }
+    client.send('enterDungeon', this.gateEntryPayload(null, inst));
+    this.sendDungeonStatus(inst.id);
+    return true;
   }
   enterGateInstance(client, g, inst) {
     const p = this.state.players.get(client.sessionId);

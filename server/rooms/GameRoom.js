@@ -5,7 +5,24 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, clampJobXpGain, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { getAuthService } = require('../auth');
+
+// Blockcraft is one persistent global world, not a set of independent room
+// shards. Colyseus normally creates another room when the first reaches
+// maxClients; allowing that would give two simulations write access to the
+// same world persistence. Keep a process-local lease so overflow fails closed
+// instead of starting a second, divergent world writer.
+let activeGlobalRoom = null;
+function claimGlobalWorld(room) {
+  if (activeGlobalRoom && activeGlobalRoom !== room) {
+    throw new Error('the global Blockcraft world is already active; refusing a second persistence writer');
+  }
+  activeGlobalRoom = room;
+}
+function releaseGlobalWorld(room) {
+  if (activeGlobalRoom === room) activeGlobalRoom = null;
+}
 
 const {
   ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
@@ -19,7 +36,15 @@ const {
 } = require('./constants');
 
 class GameRoom extends Room {
+  static async onAuth(_token, request) {
+    const account = getAuthService().authenticateRequest(request);
+    if (!account) throw new Error('authentication required');
+    return account;
+  }
+
   async onCreate() {
+    claimGlobalWorld(this);
+    try {
     this.maxClients = 16;
     this.setState(new State());
     this.world = W.createWorld();
@@ -247,11 +272,16 @@ class GameRoom extends Room {
       if (!p || !m) return;
       if (typeof m.name === 'string') p.name = cleanName(m.name);
       if (['shadow', 'mage', 'guardian'].includes(m.path)) this.setPath(client, m.path);
-      p.job = JOB_IDS.has(m.job) ? m.job : '';
-      p.jobLvl = clampN(m.jobLvl, 0, 99) | 0;
       p.heldId = clampN(m.heldId, 0, 999) | 0;
-      p.armorId = ARMOR_INFO[m.armorId | 0] ? (m.armorId | 0) : 0;
     });
+
+    this.onMessage('spendStat', (client, m) => this.handleSpendStat(client, m));
+    this.onMessage('setJob', (client, m) => this.handleSetJob(client, m));
+    this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
+    this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
+    this.onMessage('equipArmor', (client, m) => this.handleEquipArmor(client, m));
+    this.onMessage('npcQuest', (client, m) => this.handleNpcQuest(client, m));
+    this.onMessage('claimAegisTrial', (client) => this.handleClaimAegisTrial(client));
 
     this.onMessage('edit', (client, m) => this.handleWorldEdit(client, m));
     this.onMessage('trainingReset', (client) => this.resetTrainingMeadow(client));
@@ -286,9 +316,6 @@ class GameRoom extends Room {
       const existing = this.profiles.get(token) || defaultProfile();
       const prof = mergeClientSave(existing, m);
       if (existing.noPersist) prof.noPersist = true;   // a failed-load session stays non-persistable across saves
-      // jobXp is client-tracked but rate-capped here so a forged save can't claim an instant max profession
-      prof.jobXp = clampJobXpGain(existing.jobXp, m.jobXp, now - (this.lastJobXpAt.get(token) || now));
-      this.lastJobXpAt.set(token, now);
       const p = this.state.players.get(client.sessionId);
       if (p) {
         prof.name = p.name;
@@ -306,20 +333,10 @@ class GameRoom extends Room {
       this.dirtyPlayers.add(token);
     });
 
-    this.onMessage('claimFirstQuestReward', (client) => {
-      const token = this.tokens.get(client.sessionId);
-      const prof = token && this.profiles.get(token);
-      if (!token || !prof) return;
-      if (prof.firstQuestRewardClaimed) {
-        client.send('firstQuestReward', { ok: false, claimed: true, totalGold: prof.gold | 0 });
-        return;
-      }
-      prof.firstQuestRewardClaimed = true;
-      prof.gold = Math.max(0, (prof.gold | 0) + 100);
-      this.profiles.set(token, prof);
-      this.dirtyPlayers.add(token);
-      client.send('firstQuestReward', { ok: true, gold: 100, totalGold: prof.gold | 0 });
-    });
+    this.onMessage('claimFirstQuestReward', client => this.handleClaimFirstQuestReward(client));
+    if (process.env.BLOCKCRAFT_E2E === '1') {
+      this.onMessage('e2eJourney', (client, m) => this.handleE2EJourney(client, m));
+    }
 
     this.onMessage('teamCreate', (client, m) => {
       const r = this.createPersistentTeam(client, m && m.name, !!(m && m.private));
@@ -407,10 +424,15 @@ class GameRoom extends Room {
       this.update(dtMs / 1000);
       this.recordTick(performance.now() - t0);
     }, 100); // 10 Hz
+    } catch (e) {
+      releaseGlobalWorld(this);
+      throw e;
+    }
   }
 
-  async onJoin(client, options) {
-    const token = cleanToken(options && options.token);
+  async onJoin(client, options, auth) {
+    const token = cleanToken(auth && auth.id);
+    if (!token) throw new Error('authenticated account required');
     if (token) this.tokens.set(client.sessionId, token);
     let prof = null;
     if (token) {
@@ -426,13 +448,13 @@ class GameRoom extends Room {
         }
       }
       if (loadFailed) {
-        prof = defaultProfile(options && options.name);
+        prof = defaultProfile(options && options.name || auth.displayName);
         prof.noPersist = true;
         this.profiles.set(token, prof);
       } else if (prof) {
         this.profiles.set(token, prof);
       } else {
-        prof = defaultProfile(options && options.name);
+        prof = defaultProfile(options && options.name || auth.displayName);
         this.profiles.set(token, prof);
         this.dirtyPlayers.add(token);
       }
@@ -455,7 +477,7 @@ class GameRoom extends Room {
       }
     }
     const p = new Player();
-    p.name = cleanName(options && typeof options.name === 'string' ? options.name : (prof ? prof.name : 'Hunter'));
+    p.name = cleanName(options && typeof options.name === 'string' ? options.name : (prof ? prof.name : auth.displayName));
     if (prof) {
       p.lvl = prof.S.lvl;
       p.path = prof.S.path;
@@ -473,6 +495,9 @@ class GameRoom extends Room {
       p.z = W.TOWN.TC + 7.5 + (Math.random() * 2 - 1);
     }
     this.state.players.set(client.sessionId, p);
+    if (prof && prof.activeNpcQuest && prof.activeNpcQuest.type === 'gate' && prof.activeNpcQuest.gateRank >= 0) {
+      this.ensurePublicGateRank(prof.activeNpcQuest.gateRank);
+    }
     if (token) {
       for (const rec of this.teamRecords.values()) {
         if (rec.members.has(token)) { this.attachTeamSession(client.sessionId, rec); break; }
@@ -493,7 +518,25 @@ class GameRoom extends Room {
   }
 
 
-  onLeave(client) {
+  async onLeave(client, consented) {
+    if (consented === false) {
+      try {
+        await this.allowReconnection(client, 15);
+        const token = this.tokens.get(client.sessionId);
+        const profile = token && this.profiles.get(token);
+        if (profile) client.send('profile', profile);
+        const hunger = this.playerHunger.get(client.sessionId);
+        if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
+        this.resumeDungeonInstance(client);
+        return;
+      } catch (_) {
+        // The reconnect window elapsed; perform the normal durable cleanup.
+      }
+    }
+    this.finalizeLeave(client);
+  }
+
+  finalizeLeave(client) {
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     this.detachTeamSession(client.sessionId);
     const p = this.state.players.get(client.sessionId);
@@ -553,6 +596,8 @@ class GameRoom extends Room {
       });
     }
     this.blackholeCd.delete(client.sessionId);
+    if (this.dragonBreathCd) this.dragonBreathCd.delete(client.sessionId);
+    if (this.dragonAbilityCd) for (const key of [...this.dragonAbilityCd.keys()]) if (key.startsWith(client.sessionId + ':')) this.dragonAbilityCd.delete(key);
     if (this.legendaryCd) for (const key of [...this.legendaryCd.keys()]) if (key.startsWith(client.sessionId + ':')) this.legendaryCd.delete(key);
     if (this.phoenixUsed) this.phoenixUsed.delete(client.sessionId);
     this.bossContrib.forEach(byPlayer => byPlayer.delete(client.sessionId));
@@ -684,7 +729,74 @@ class GameRoom extends Room {
     }
   }
 
-  async onDispose() { await this.flush(); }
+  async onDispose() {
+    try { await this.flush(); }
+    finally { releaseGlobalWorld(this); }
+  }
+
+  handleClaimFirstQuestReward(client) {
+    const rec = this.profileFor(client);
+    if (!rec) return false;
+    const prof = rec.prof;
+    if (prof.firstQuestRewardClaimed) {
+      client.send('firstQuestReward', { ok: false, claimed: true, totalGold: prof.gold | 0 });
+      return false;
+    }
+    const maraStep = prof.npcQuestChains && (prof.npcQuestChains['Mara Vale'] | 0);
+    if (maraStep < 1) {
+      client.send('firstQuestReward', { ok: false, claimed: false, reason: 'quest', totalGold: prof.gold | 0 });
+      return false;
+    }
+    prof.firstQuestRewardClaimed = true;
+    prof.gold = Math.max(0, (prof.gold | 0) + 100);
+    this.dirtyPlayers.add(rec.token);
+    client.send('firstQuestReward', { ok: true, gold: 100, totalGold: prof.gold | 0 });
+    return true;
+  }
+
+  handleE2EJourney(client, m) {
+    if (process.env.BLOCKCRAFT_E2E !== '1') return false;
+    const rec = this.profileFor(client);
+    const q = rec && rec.prof.activeNpcQuest;
+    const action = m && String(m.action || '');
+    if (!rec || !q || q.giver !== 'Mara Vale') return false;
+    if (action === 'prepareFirstQuest' && q.type === 'fetch' && (q.item | 0) === W.B.LOG) {
+      const missing = Math.max(0, (q.need | 0) - this.countItem(rec.prof, W.B.LOG));
+      if (missing) this.addRewardItem(rec.prof, W.B.LOG, missing);
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'completeRoadReady' && q.type === 'kill') {
+      while ((q.have | 0) < (q.need | 0)) this.recordKillProgress(client);
+      return true;
+    }
+    if (action === 'defeatFirstGateBoss' && q.type === 'gate' && (q.gateRank | 0) === 0) {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      if (!p || !inst || inst.cleared || (inst.rank | 0) !== 0) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      let bossId = '', boss = null;
+      this.state.mobs.forEach((mob, id) => {
+        if (!boss && mob && mob.dgn === inst.id && mob.kind === 'boss') {
+          bossId = String(id);
+          boss = mob;
+        }
+      });
+      if (!boss) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = inst.bossRoom.x;
+      p.z = inst.bossRoom.z;
+      this.recordBossContribution(client, inst.id, Math.max(1, boss.maxHp | 0));
+      this.finishMobKill(client, bossId, boss);
+      client.send('e2eJourneyResult', { action, requestId, ok: true });
+      return true;
+    }
+    return false;
+  }
 
   // ---------------- helpers ----------------
   resetTrainingMeadow(client = null) {
@@ -858,15 +970,15 @@ class GameRoom extends Room {
   }
   ensureStarterArmor(prof) {
     if (!prof || typeof prof !== 'object') return false;
-    if (prof.armor && prof.armor.id === I.LEGEND_ARMOR) return false;
+    if (prof.armor && ARMOR_INFO[prof.armor.id]) return false;
     if (!Array.isArray(prof.inv)) prof.inv = [];
-    if (prof.inv.some(s => s && s.id === I.LEGEND_ARMOR)) return false;
+    if (prof.inv.some(s => s && ARMOR_INFO[s.id])) return false;
     let slot = prof.inv.findIndex(s => !s);
     if (slot < 0) {
       if (prof.inv.length >= 36) return false;
       slot = prof.inv.length;
     }
-    prof.inv[slot] = { id: I.LEGEND_ARMOR, count: 1 };
+    prof.inv[slot] = { id: I.IRON_ARMOR, count: 1 };
     return true;
   }
   ensureStarterLegendaryWeapon(prof) {
@@ -1278,6 +1390,7 @@ class GameRoom extends Room {
     rec.prof.gold = (rec.prof.gold | 0) - cost;
     target.s.dur = target.max;
     this.dirtyPlayers.add(rec.token);
+    this.recordRepairProgress(client, false);
     client.send('blacksmithRepairResult', {
       toolSlot: target.i,
       tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s) },
@@ -1320,6 +1433,7 @@ class GameRoom extends Room {
     s.plus = cost.next;
     s.dur = this.toolMaxDur(s, cost.info);
     this.dirtyPlayers.add(rec.token);
+    this.recordRepairProgress(client, true);
     client.send('blacksmithUpgradeResult', {
       slot,
       tool: { id: s.id, count: s.count || 1, dur: s.dur, plus: s.plus },
@@ -1354,6 +1468,7 @@ class GameRoom extends Room {
     const gain = Math.max(1, Math.ceil(max * (0.5 + tier * 0.06)));
     best.s.dur = Math.min(max, best.cur + gain);
     this.dirtyPlayers.add(rec.token);
+    this.recordRepairProgress(client, false);
     client.send('repairResult', {
       kitSlot,
       toolSlot: best.i,
@@ -1821,6 +1936,7 @@ class GameRoom extends Room {
       if (this.world.getB(x, y + 1, z) !== W.B.AIR) return client.send('farmReject', { reason: 'blocked' });
       this.setWorldBlock(x, y, z, W.B.FARMLAND);
       this.damageTool(client, rec, slot, W.B.FARMLAND);
+      this.recordFarmProgress(client, action);
       return client.send('farmResult', { action, x, y, z, slot });
     }
     if (action === 'plant') {
@@ -1829,6 +1945,7 @@ class GameRoom extends Room {
       this.dirtyPlayers.add(rec.token);
       this.setWorldBlock(x, y, z, W.B.WHEAT_1);
       this.cropTimers.set(x + ',' + y + ',' + z, Date.now() + CROP_GROW_MS);
+      this.recordFarmProgress(client, action);
       return client.send('farmResult', { action, x, y, z, slot });
     }
     if (action === 'harvest') {
@@ -1837,6 +1954,7 @@ class GameRoom extends Room {
       this.setWorldBlock(x, y, z, W.B.AIR);
       const wheat = 1 + (Math.random() < jobPerkChance(rec.prof, 'farmer', 0.10) ? 1 : 0);
       this.awardGrant(client, { source: 'farm', xp: 1, items: [{ id: I.WHEAT, count: wheat }, { id: I.WHEAT_SEEDS, count: 1 + ((Math.random() * 3) | 0) }] });
+      this.recordFarmProgress(client, action);
       return client.send('farmResult', { action, x, y, z, slot });
     }
     client.send('farmReject', { reason: 'invalid' });
@@ -2396,6 +2514,7 @@ class GameRoom extends Room {
 
 const applyMixin = require('./mixin');
 applyMixin(GameRoom, require('./events.mixin'));
+applyMixin(GameRoom, require('./progression.mixin'));
 applyMixin(GameRoom, require('./dragons.mixin'));
 applyMixin(GameRoom, require('./economy.mixin'));
 applyMixin(GameRoom, require('./dungeon.mixin'));
@@ -2406,7 +2525,7 @@ applyMixin(GameRoom, require('./metrics.mixin'));
 
 
 module.exports = {
-  GameRoom, skyshipSnapshot,
+  GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot,
   SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS,
   SKYSHIP_BOARD_RANK, SKYSHIP_BOARD_GOLD,
   DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange,

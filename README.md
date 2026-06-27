@@ -12,9 +12,9 @@ npm start
 # open http://localhost:2567 in two browser windows
 ```
 
-Enter a hunter name, hit PLAY, and you're in the shared world. If no server is
-reachable the client gracefully falls back to solo mode, so `client/index.html`
-also works standalone.
+Create an account (or sign in), choose a hunter name, and hit PLAY. Multiplayer
+requires an authenticated server session; the standalone client still supports
+solo mode when the Colyseus SDK is not present.
 
 ## Project layout
 
@@ -45,7 +45,14 @@ server/
     authority.test.js   156 unit tests, mostly anti-cheat and server-authority assertions
     integration.test.js boots a room and exercises the join → play → save round-trip
 client/
-  index.html            the full single-player game with the multiplayer layer patched in
+  index.html            rendering/gameplay shell and module composition root
+  js/auth.mjs           account/session UI controller
+  js/inventory.mjs      inventory stacking/removal and equipment profile model
+  js/network.mjs        join/resume/reconnect lifecycle controller
+  js/progression.mjs    authoritative progression message reconciliation
+  js/quests-jobs.mjs    quest progress and profession XP/contract rules
+  js/reconnect.mjs      bounded WebSocket reconnect policy
+  js/rendering.mjs      Three.js renderer/camera lifecycle
   styles.css            UI/HUD stylesheet (extracted from index.html, linked + served statically)
   vendor/colyseus.browser.js   prebuilt standalone Colyseus browser SDK (served at /colyseus.js)
 data/                   default JsonStore output (world.json, players/, chests, furnaces, gates, …)
@@ -135,23 +142,34 @@ DoTs, Quaking shockwaves, and Explosive orbs (orbs and ghosts ride the normal
 `Mob` sync; everything else is driven by `fx` events the client renders). On a
 clear every eligible hunter receives bonus loot and a Legendary Weapon Token.
 
-**Persistence.** The world and every Hunter survive restarts. A storage
+**Persistence.** The overworld is deliberately **one global world**, not one
+world per Colyseus room. Exactly one `GameRoom` may own its persistence lease
+in a server process. At the 16-player capacity, matchmaking fails closed
+instead of creating a second, unsynchronized writer. World state (edits,
+claims, containers, gates, teams, and guilds) lives in the single `main`
+namespace; profiles remain isolated by verified account ID. Run one
+game-server process; horizontal replicas require a shared simulation or
+elected leader, not additional Colyseus rooms.
+
+The world and every Hunter survive restarts. A storage
 adapter (`server/store.js`) sits behind four calls — `loadWorldEdits`,
 `saveWorldEdits`, `loadPlayer`, `savePlayer` — with two backends:
 
-- **JsonStore** (default): atomic writes to `./data/world.json` and
-  `./data/players/{token}.json`. Set `DATA_DIR` to relocate.
+- **JsonStore** (default): atomic writes to `./data/world.json`, account records
+  in `./data/auth.json`, and profiles in `./data/players/{accountId}.json`.
+  Set `DATA_DIR` to relocate.
 - **FirebaseStore**: `npm i firebase-admin`, then run with `STORE=firebase`
   and either `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account
   key or `FIREBASE_SERVICE_ACCOUNT` containing the JSON inline. World edits
   are sharded into `worlds/main/chunks/{cx_cz}` documents (never near the
-  1MB Firestore limit); profiles live at `players/{token}`.
+  1MB Firestore limit); profiles live at `players/{accountId}`.
 
-Identity is an anonymous device token the client mints once into
-`localStorage` and presents on join. When Firebase Auth is added, the client
-sends its Firebase ID token instead, the server verifies it with
-`admin.auth().verifyIdToken()`, and the UID becomes the profile key — the
-adapter interface doesn't change.
+Identity uses first-party accounts with scrypt-hashed passwords. Successful
+login creates a random server-side session referenced by an HttpOnly,
+`SameSite=Strict` cookie. Colyseus verifies the cookie during matchmaking and
+uses the server-issued account ID as the profile key; clients cannot select or
+forge profile ownership. Sessions last seven days and are invalidated by a
+server restart or explicit logout.
 
 Flow: on boot the room replays saved edits into the deterministic world; on
 join the server loads your profile, spawns you at your last overworld
@@ -180,8 +198,8 @@ and the sim rate live in `GameRoom.js`.
   `KING_ACTIVE_MS`, skyship `SKYSHIP_*`.
 - **Economy:** `SHOP_BUY` / `SHOP_SELL`, `TAVERN_BUY` / `TAVERN_SELL`, `LAND_BASE_PRICE`,
   `guildFloorPrice`, `RECIPES`, `SMELT`, `TOOL_INFO` (durability).
-- **Room size & sim rate:** `maxClients` (16) and the `setSimulationInterval(…, 100)` 10 Hz tick
-  in `GameRoom.js`.
+- **Room size & sim rate:** the single global room has a hard `maxClients` of
+  16 and the `setSimulationInterval(…, 100)` 10 Hz tick in `GameRoom.js`.
 
 > **Dev/test affordances** in `constants.js` — `BETA_LEGENDARY_TEST`, `BETA_FARM_TEST`, `BETA_EVENT_TEST`
 > (legendary `testWeapon` casts without owning the weapon, the auto-granted farm starter kit, and the
@@ -192,7 +210,8 @@ and the sim rate live in `GameRoom.js`.
 ## Tests
 
 ```bash
-npm test               # 156 unit tests (server/test/authority.test.js)
+npm test               # authority, authentication, and client-module unit tests
+npm run test:e2e       # browser progression, socket reconnect, and reload restoration
 npm run test:integration   # boots a room and runs the join → play → save round-trip
 ```
 

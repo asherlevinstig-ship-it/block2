@@ -4,6 +4,9 @@
 //   JsonStore  (default)        -> ./data/*.json on disk, atomic writes
 //   FirebaseStore (STORE=firebase) -> Firestore via firebase-admin
 //
+// World methods address the one global `main` world. Player methods are a
+// separate persistence domain keyed by verified account ID; room/session IDs
+// are never persistence keys.
 // Both implement: loadWorldEdits(), saveWorldEdits(obj), loadWorldProgress(), saveWorldProgress(obj), loadLandClaims(), saveLandClaims(obj), loadChests(), saveChests(obj),
 //                 loadFurnaces(), saveFurnaces(obj), loadIncubations(), saveIncubations(obj), loadNestDragons(), saveNestDragons(obj), loadGates(), saveGates(obj), loadTeams(), saveTeams(obj),
 //                 loadPlayer(token), savePlayer(token, profile)
@@ -102,10 +105,13 @@ function defaultProfile(name) {
     job: '',
     jobXp: 0,
     jobContract: null,
+    adventurerContractsCompleted: 0,
     highestGateRankCleared: -1,
     gold: 0,
     firstQuestRewardClaimed: false,
     npcQuestChains: {},
+    activeNpcQuest: null,
+    aegisTrialReady: false,
     inv: [],
     armor: null,
     mountUnlocks: [],
@@ -194,6 +200,24 @@ function sanitizeNpcQuestChains(chains) {
   return out;
 }
 
+function sanitizeActiveNpcQuest(q) {
+  if (!q || typeof q !== 'object') return null;
+  const types = new Set(['fetch', 'mine', 'kill', 'gate', 'sell', 'utility', 'familiar', 'mount', 'mount_use']);
+  const type = types.has(q.type) ? q.type : '';
+  const giver = cleanShortText(q.giver, '', 64);
+  if (!type || !giver) return null;
+  return {
+    source: 'npc', giver, role: cleanShortText(q.role, 'town', 32),
+    chainKey: giver, chainStep: clampI(q.chainStep, 0, 99), chainTotal: clampI(q.chainTotal, 1, 99),
+    chainTitle: cleanShortText(q.chainTitle, 'Town Work', 64), title: cleanShortText(q.title, 'Town Work', 64),
+    type, item: clampI(q.item, 0, 999), need: clampI(q.need, 1, 999), have: clampI(q.have, 0, clampI(q.need, 1, 999)),
+    gold: clampI(q.gold, 0, 99999), xp: clampI(q.xp, 0, 99999), desc: cleanShortText(q.desc, 'Complete the task.', 180),
+    levelTarget: clampI(q.levelTarget, 0, 999), gateRank: clampI(q.gateRank, -1, 4),
+    utility: cleanShortText(q.utility, '', 32), familiar: cleanShortText(q.familiar, '', 32), mount: cleanShortText(q.mount, '', 32),
+    rewardItems: Array.isArray(q.rewardItems) ? q.rewardItems.slice(0, 4).map(it => ({ id: clampI(it && it.id, 1, 999), count: clampI(it && it.count, 1, 64) })) : [],
+  };
+}
+
 function sanitizeWorldProgress(p) {
   const raw = p && typeof p === 'object' ? p : {};
   return { highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 4) };
@@ -238,11 +262,16 @@ function sanitizeProfile(p) {
   out.job = cleanJob(p.job);
   out.jobXp = clampI(p.jobXp, 0, 1e9);
   out.jobContract = sanitizeJobContract(p.jobContract);
+  out.adventurerContractsCompleted = p.adventurerContractsCompleted == null
+    ? (out.job === 'adventurer' && out.jobXp > 0 ? 1 : 0)
+    : clampI(p.adventurerContractsCompleted, 0, 1e9);
   if (out.jobContract && out.jobContract.job !== out.job) out.jobContract = null;
   out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
   out.firstQuestRewardClaimed = p.firstQuestRewardClaimed === true;
   out.npcQuestChains = sanitizeNpcQuestChains(p.npcQuestChains);
+  out.activeNpcQuest = sanitizeActiveNpcQuest(p.activeNpcQuest);
+  out.aegisTrialReady = p.aegisTrialReady === true;
   out.inv = [];
   if (Array.isArray(p.inv)) {
     for (const s of p.inv.slice(0, INV_MAX)) {
@@ -279,44 +308,9 @@ function mergeClientSave(current, snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return current;
   const out = sanitizeProfile(current);
   out.name = cleanName(snapshot.name || out.name);
-  const reqPath = snapshot.S && snapshot.S.path;
-  if (!out.S.path && out.S.lvl >= 2 && ['', 'shadow', 'mage', 'guardian'].includes(reqPath)) {
-    out.S.path = reqPath;
-  }
-  if (typeof snapshot.job === 'string') out.job = cleanJob(snapshot.job);
-  // jobXp is NOT trusted from the raw snapshot here — the room save handler applies
-  // it through clampJobXpGain (anti-inflation rate cap). out.jobXp stays the stored value.
-  if (snapshot.jobContract !== undefined) out.jobContract = sanitizeJobContract(snapshot.jobContract);
-  if (out.jobContract && out.jobContract.job !== out.job) out.jobContract = null;
-  if (snapshot.npcQuestChains !== undefined) out.npcQuestChains = sanitizeNpcQuestChains(snapshot.npcQuestChains);
-  if (snapshot.utilityLoadout !== undefined) out.utilityLoadout = sanitizeUtilityLoadout(snapshot.utilityLoadout, out.utilityUnlocks);
-  // regionalContract is server-owned. The browser receives it for UI, but
-  // client saves cannot forge progress, targets, or reward claims.
-  for (const k of sanitizeMountUnlocks(snapshot.mountUnlocks)) {   // unlocks are additive — never revoked by a client save
-    if (!out.mountUnlocks.includes(k)) out.mountUnlocks.push(k);
-  }
-  for (const k of sanitizeFamiliarUnlocks(snapshot.familiarUnlocks)) {
-    if (!out.familiarUnlocks.includes(k)) out.familiarUnlocks.push(k);
-  }
-  const incomingCare = sanitizeDragonCare(snapshot.dragonCare);
-  for (const type in incomingCare) {
-    const cur = out.dragonCare[type] || { happiness: 50, fedAt: 0 };
-    out.dragonCare[type] = {
-      happiness: Math.max(cur.happiness | 0, incomingCare[type].happiness | 0),
-      fedAt: Math.max(cur.fedAt | 0, incomingCare[type].fedAt | 0),
-    };
-  }
-  const incomingNames = sanitizeDragonNames(snapshot.dragonNames);
-  for (const type in incomingNames) {
-    if (out.mountUnlocks.includes('dragon:' + type)) out.dragonNames[type] = incomingNames[type];
-  }
-  if (snapshot.armor && typeof snapshot.armor === 'object') {
-    const a = cleanSlot(snapshot.armor);
-    out.armor = a && ARMOR_IDS.has(a.id) ? { id: a.id, count: 1 } : out.armor;
-  }
-  let pos = Array.isArray(snapshot.pos) ? snapshot.pos : out.pos;
-  if (pos.length !== 3 || pos.some(v => !isFinite(+v))) pos = out.pos;
-  out.pos = [clampF(pos[0], 0, 1000), clampF(pos[1], 1, 80), clampF(pos[2], 0, 1000)];
+  // Persistent progression is server-owned. Snapshot saves are only a legacy
+  // identity heartbeat; dedicated validated handlers mutate path, stats, jobs,
+  // contracts, equipment, inventory, economy, unlocks, quests, and position.
   return out;
 }
 
@@ -661,13 +655,12 @@ class JsonStore {
 //
 // Schema:
 //   worlds/main/chunks/{cx_cz}   { edits: { "x,y,z": id, ... } }
-//   players/{token}              the sanitized profile
+//   players/{accountId}          the sanitized profile
 //
 // World edits are sharded by 16x16 chunk column so no document approaches
 // Firestore's 1MB limit, and saves touch only dirty regions of the map.
-// When Firebase Auth is added later, the client sends its Firebase ID token,
-// the server verifies it with admin.auth().verifyIdToken(), and the UID
-// replaces the anonymous device token as the players/{token} key.
+// Authentication is handled before this adapter; the verified account ID is
+// used as the player document key for both storage backends.
 class FirebaseStore {
   constructor() {
     const admin = require('firebase-admin');
