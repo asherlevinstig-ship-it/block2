@@ -905,7 +905,6 @@ class GameRoom extends Room {
     const lvl = Math.max(1, Math.min(999, p.lvl | 0));
     let dmg = Math.min(28, 4 + Math.floor(lvl / 3));
     dmg += this.meleeProfile(p, sid).bonus;     // equipped weapon, validated server-side
-    if (!this.abilityBuffs) this.abilityBuffs = new Map();
     const buffs = this.abilityBuffs.get(sid);
     if (buffs && buffs.umbralUntil > Date.now()) dmg *= 1.6;
     return dmg;
@@ -1233,7 +1232,6 @@ class GameRoom extends Room {
     return 20 + (intv - 1) * 3;
   }
   ensureAbilityState(client) {
-    if (!this.abilityState) this.abilityState = new Map();
     const rec = this.profileFor(client);
     const maxMp = this.maxMpForProfile(rec && rec.prof);
     let st = this.abilityState.get(client.sessionId);
@@ -1307,7 +1305,6 @@ class GameRoom extends Room {
       client.send('hurt', { n: -hp.max, reason: 'training' });
       return;
     }
-    if (!this.abilityBuffs) this.abilityBuffs = new Map();
     const buffs = this.abilityBuffs.get(client.sessionId);
     if (buffs && buffs.ironUntil > Date.now()) amount *= .5;
     const rec = this.profileFor(client);
@@ -1476,8 +1473,7 @@ class GameRoom extends Room {
     const hp = this.ensurePlayerHp(client);
     const rec = this.profileFor(client);
     const hasPhoenix = rec && rec.prof && Array.isArray(rec.prof.inv) && rec.prof.inv.some(s => s && s.id === I.PHOENIX_SWORD);
-    if (hasPhoenix && !(this.phoenixUsed && this.phoenixUsed.has(client.sessionId))) {
-      if (!this.phoenixUsed) this.phoenixUsed = new Set();
+    if (hasPhoenix && !this.phoenixUsed.has(client.sessionId)) {
       this.phoenixUsed.add(client.sessionId);
       hp.hp = Math.max(1, Math.ceil(hp.max * .35));
       client.send('hurt', { n: -hp.hp });
@@ -1517,7 +1513,6 @@ class GameRoom extends Room {
       }
       if (hp.hp <= 0) continue;
       const before = Math.ceil(h.hunger);
-      if (!this.pvel) this.pvel = new Map();
       const moving = (this.pvel.get(client.sessionId) || { x: 0, z: 0 });
       const moveRate = Math.min(1, Math.hypot(moving.x || 0, moving.z || 0) / 6);
       h.hunger = Math.max(0, h.hunger - dt * (0.055 + moveRate * 0.045));

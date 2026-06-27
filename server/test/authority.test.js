@@ -146,6 +146,8 @@ function makeRoom() {
   room.dungeonLobbies = new Map();
   room.blackholeCd = new Map();
   room.legendaryCd = new Map();
+  room.dragonBreathCd = new Map();
+  room.dragonAbilityCd = new Map();
   room.phoenixUsed = new Set();
   room._timers = [];
   room.clock = { setTimeout(fn) { room._timers.push(fn); } };

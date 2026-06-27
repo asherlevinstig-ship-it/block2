@@ -396,7 +396,6 @@ class CombatMixin {
     const kind = 'dragon:' + type;
     if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
       return client.send('dragonAbilityReject', { reason: 'unowned' });
-    if (!this.dragonAbilityCd) this.dragonAbilityCd = new Map();
     const now = Date.now();
     const cooldowns = { ember: 7000, frost: 9000, storm: 6500, verdant: 12000, void: 10000 };
     const care = this.dragonCareFor(rec.prof, type) || { happiness: 50 };
