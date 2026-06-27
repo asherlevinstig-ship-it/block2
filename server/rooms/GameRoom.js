@@ -523,7 +523,6 @@ class GameRoom extends Room {
         this.dirtyPlayers.add(token);
       }
       this.tokens.delete(client.sessionId);
-      this.lastJobXpAt.delete(token);
     }
     this.lastSaveMsg.delete(client.sessionId);
     this.lastMoveMsg.delete(client.sessionId);
@@ -599,7 +598,6 @@ class GameRoom extends Room {
     this.dirtyNests = false;
     this.dirtyPlayers = new Set();
     this.lastSaveMsg = new Map();
-    this.lastJobXpAt = new Map();   // token -> last save time, for the jobXp anti-inflation rate cap
   }
 
   async flush() {

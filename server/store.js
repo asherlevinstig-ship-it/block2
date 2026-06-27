@@ -19,19 +19,6 @@ const INV_MAX = 36;
 const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, Math.round(v))) : a; };
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
 
-// Profession XP is tracked client-side because some sources (e.g. monk meditation,
-// NPC quests) never reach the server, so the save message reports it. To stop a
-// forged save from claiming an instant max profession, the room credits jobXp at
-// no more than a generous ceiling per elapsed second — a rate no legitimate play
-// approaches, so honest progress passes through untouched while inflation is capped.
-const JOBXP_RATE_CAP = 20;
-function clampJobXpGain(currentXp, claimedXp, elapsedMs, ratePerSec = JOBXP_RATE_CAP) {
-  currentXp = clampI(currentXp, 0, 1e9);
-  claimedXp = clampI(claimedXp, 0, 1e9);
-  if (claimedXp <= currentXp) return currentXp;            // jobXp never decreases via a save
-  const windowSec = Math.min(3600, Math.max(5, elapsedMs / 1000));
-  return Math.min(claimedXp, currentXp + Math.ceil(windowSec * ratePerSec));
-}
 const ARMOR_IDS = new Set([137, 183, 184]);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
@@ -782,4 +769,4 @@ function createStore() {
   return new JsonStore(process.env.DATA_DIR);
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, clampJobXpGain, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken };
+module.exports = { createStore, JsonStore, FirebaseStore, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken };

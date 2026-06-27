@@ -38,7 +38,7 @@ const AI = require('../ai');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
-const { defaultProfile, mergeClientSave, clampJobXpGain, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore } = require('../store');
+const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 
 const I = {
@@ -138,7 +138,6 @@ function makeRoom() {
   room.playerLastHit = new Map();
   room.playerHunger = new Map();
   room.rateBuckets = new Map();
-  room.lastJobXpAt = new Map();
   room.pvel = new Map();
   room.abilityState = new Map();
   room.abilityBuffs = new Map();
@@ -337,22 +336,6 @@ test('profile merge rejects client job and jobXp changes', () => {
   // sanitizeProfile reads jobXp from the trusted store (disk), which is unchanged.
   assert.equal(sanitizeProfile({ job: 'adventurer', jobXp: 77 }).jobXp, 77);
   assert.equal(sanitizeProfile({ job: 'monk', jobXp: 123 }).jobXp, 123);
-});
-
-test('jobXp gain is rate-capped so a forged save cannot claim instant max profession', () => {
-  // a forged save claiming a huge jobXp is capped to a small per-second ceiling
-  const capped = clampJobXpGain(100, 1e9, 10_000);      // 10s elapsed, 20 xp/s -> +200 max
-  assert.equal(capped, 300, 'instant-max claim clamped to current + rate*seconds');
-
-  // a short window still allows a minimum 5s allowance (no zero-progress lockout)
-  assert.equal(clampJobXpGain(100, 1e9, 0), 200, '5s minimum window applies');
-
-  // honest, modest gains pass through untouched
-  assert.equal(clampJobXpGain(100, 140, 10_000), 140, 'legitimate gain under the cap is unchanged');
-
-  // jobXp never decreases via a save, and a very long idle window is bounded at 1 hour
-  assert.equal(clampJobXpGain(500, 100, 10_000), 500, 'a lower claim cannot reduce stored jobXp');
-  assert.equal(clampJobXpGain(0, 1e9, 999_999_999), Math.ceil(3600 * 20), 'window capped at 3600s');
 });
 
 test('stat spending is an atomic server transaction', () => {

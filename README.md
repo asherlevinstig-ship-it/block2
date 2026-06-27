@@ -87,7 +87,7 @@ no bedrock, and a 10-block reach check from the editing player.
 | Melee & abilities | server    | damage derived from the *server* inventory (not the cosmetic `heldId`), line-of-sight + range + rate checked |
 | Legendary weapons | server    | each weapon's effect (meteors, chains, blackholes, revives…) is fully simulated server-side |
 | Dragons & familiars | server  | hatching, breeding, mounts, breath, and familiar binds are all server-gated per species/item |
-| Profession XP     | server-capped | tracked client-side (some sources never reach the server), but the save channel credits `jobXp` at no more than a generous per-second ceiling, so a forged save can't claim an instant max profession |
+| Profession XP     | server    | `jobXp` is server-owned: the save channel ignores client-sent profession XP entirely, and only validated server handlers (mining, kills, quests, contracts, meditation…) grant it, each clamped per event, so a forged save can't claim an instant max profession |
 | Land / guilds / teams | server | claims, guild-hall floors, and persistent parties are owned and persisted server-side |
 | Server events     | server    | parkour and King of the Hill instances, scoring, and the roaming skyship run on the server clock |
 

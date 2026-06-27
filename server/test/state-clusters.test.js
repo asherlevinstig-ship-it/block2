@@ -37,7 +37,7 @@ const CLUSTERS = {
   initPersistenceState: [
     'profiles', 'tokens', 'dirtyWorld', 'dirtyWorldProgress', 'dirtyLandClaims', 'dirtyChests',
     'dirtyFurnaces', 'dirtyIncubations', 'dirtyGates', 'dirtyTeams', 'dirtyGuilds', 'dirtyNests',
-    'dirtyPlayers', 'lastSaveMsg', 'lastJobXpAt',
+    'dirtyPlayers', 'lastSaveMsg',
   ],
   initDragonState: ['dragonIncubations', 'nestDragons'],
 };
