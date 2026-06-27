@@ -203,10 +203,17 @@ class TeamsMixin {
     const id = this.teamMgr.bySid.get(sid);
     if (!id) return;
     const live = this.teamMgr.teams.get(id);
+    const rec = this.teamRecords.get(id);
     this.teamMgr.bySid.delete(sid);
     if (live) {
       live.members.delete(sid);
-      if (live.leader === sid) live.leader = [...live.members][0] || '';
+      // Keep the displayed leader consistent with authority (rec.leader): show the real
+      // leader's online session, or no one if they're offline — never promote a stand-in who
+      // can't actually lead. A genuine departure reassigns rec.leader first (see doTeamLeave).
+      if (live.leader === sid) {
+        const leaderSid = rec ? this.onlineSidForToken(rec.leader) : '';
+        live.leader = (leaderSid && leaderSid !== sid) ? leaderSid : '';
+      }
       this.syncTeam(live);
     }
     this.setPlayerTeam(sid, '');

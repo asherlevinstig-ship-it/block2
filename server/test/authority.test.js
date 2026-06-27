@@ -2018,6 +2018,25 @@ test('handleFarm is rate-limited like the other mutating handlers', () => {
   assert.ok(throttled, 'a flood of farm actions is throttled like edit/chest/shop');
 });
 
+test('a disconnecting team leader is not replaced by a stand-in falsely shown as leader', () => {
+  const room = makeRoom();
+  const leader = makeClient('leader');
+  const member = makeClient('member');
+  room.clients = [leader, member];
+  seedPlayer(room, leader, { token: 'leader_token_123' });
+  seedPlayer(room, member, { token: 'member_token_123' });
+  const r = room.createPersistentTeam(leader, 'Wolves');
+  room.joinPersistentTeam(member, 'Wolves');
+  const live = room.teamMgr.teams.get(r.team.id);
+  assert.equal(live.leader, leader.sessionId, 'the real leader is shown while online');
+
+  room.detachTeamSession(leader.sessionId);   // leader disconnects (as onLeave does)
+
+  assert.notEqual(live.leader, member.sessionId, 'the remaining member is not promoted to displayed leader');
+  assert.equal(live.leader, '', 'no online leader is shown while the real leader is offline');
+  assert.equal(room.teamRecords.get(r.team.id).leader, 'leader_token_123', 'authority (persistent leader) is unchanged');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');
