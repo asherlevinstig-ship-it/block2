@@ -15,6 +15,13 @@ const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class DragonsMixin {
+  // Dragon incubation and nesting state, co-located with the mixin that owns it.
+  // Called once from onCreate, before the incubation/nest restore loaders run.
+  initDragonState() {
+    this.dragonIncubations = new Map();
+    this.nestDragons = new Map();        // "x,y,z#slot" -> { type, token, loveUntil, breedCdUntil, breedAccum }
+  }
+
   hasMountUnlock(client, kind) {
     const rec = this.profileFor(client);
     return !!(rec && Array.isArray(rec.prof.mountUnlocks) && rec.prof.mountUnlocks.includes(kind));

@@ -67,12 +67,13 @@ class GameRoom extends Room {
     // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
     this.initDungeonState();        // must precede restoreSavedGates (populates gateSeq/gateTtls)
 
-    // ---- world features ----
+    // ---- land claims & farming (handled inline in GameRoom; no mixin) ----
     this.landClaims = new Map();
     this.cropTimers = new Map();
-    this.dragonIncubations = new Map();
-    this.nestDragons = new Map();        // "x,y,z#slot" -> { type, token, loveUntil, breedCdUntil, breedAccum }
     this.cropGrowAcc = 0;
+
+    // ---- dragon incubation / nesting (dragons.mixin.js) ----
+    this.initDragonState();         // must precede the incubation/nest restore loaders below
 
     // ---- server events / day cycle (events.mixin.js) ----
     this.initEventsState();
