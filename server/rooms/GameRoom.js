@@ -1805,6 +1805,7 @@ class GameRoom extends Room {
     const p = this.state.players.get(client.sessionId);
     const rec = this.profileFor(client);
     if (!p || !rec || !m || p.dgn) return client.send('farmReject', { reason: 'invalid' });
+    if (this.rateLimited(client, 'farm', 10, 20)) return client.send('farmReject', { reason: 'rate' });
     const action = String(m.action || '');
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     const slot = Math.max(0, Math.min(35, m.slot | 0));

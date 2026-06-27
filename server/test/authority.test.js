@@ -2003,6 +2003,21 @@ test('flush never persists a non-persistable (failed-load) profile', async () =>
   assert.deepEqual(saved, ['tokNormal'], 'the failed-load profile is never written over the real file');
 });
 
+test('handleFarm is rate-limited like the other mutating handlers', () => {
+  const room = makeRoom();
+  const client = makeClient('farmer');
+  seedPlayer(room, client, { x: 20.5, z: 20.5 });
+  room.clients = [client];
+
+  let throttled = false;
+  for (let i = 0; i < 30; i++) {
+    room.handleFarm(client, { action: 'till', x: 20, y: 10, z: 20, slot: 0 });
+    const last = client.sent.at(-1);
+    if (last.type === 'farmReject' && last.msg.reason === 'rate') { throttled = true; break; }
+  }
+  assert.ok(throttled, 'a flood of farm actions is throttled like edit/chest/shop');
+});
+
 test('food use consumes edible items and heals server HP', () => {
   const room = makeRoom();
   const client = makeClient('eater');
