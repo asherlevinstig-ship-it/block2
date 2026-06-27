@@ -38,7 +38,7 @@ const AI = require('../ai');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
 const { GameRoom, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
-const { defaultProfile, mergeClientSave, clampJobXpGain, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds } = require('../store');
+const { defaultProfile, mergeClientSave, clampJobXpGain, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 
 const I = {
@@ -1975,6 +1975,32 @@ test('taking furnace output with a full bag leaves it in the furnace (no loss)',
   assert.equal(client.sent.at(-1).type, 'furnaceReject');
   assert.equal(client.sent.at(-1).msg.reason, 'full');
   assert.deepEqual(room.getFurnaceState(key).output, { id: I.IRON_INGOT, count: 1 }, 'the smelt output stays in the furnace');
+});
+
+test('JsonStore.loadPlayer returns null for a missing profile but throws for a corrupt one', async () => {
+  const os = require('os'), fs = require('fs'), path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-store-'));
+  const store = new JsonStore(dir);
+
+  assert.equal(await store.loadPlayer('missing_token_abcd'), null, 'a never-seen token is a new player');
+  await store.savePlayer('good_token_abcd', { gold: 5 });
+  assert.equal((await store.loadPlayer('good_token_abcd')).gold, 5, 'a valid profile round-trips');
+
+  fs.writeFileSync(path.join(dir, 'players', 'bad_token_abcd.json'), '{ not valid json');
+  await assert.rejects(() => store.loadPlayer('bad_token_abcd'), /corrupt/, 'a corrupt file throws rather than reading as null');
+});
+
+test('flush never persists a non-persistable (failed-load) profile', async () => {
+  const room = makeRoom();
+  const saved = [];
+  room.store = { savePlayer: async (t) => { saved.push(t); } };   // only the player section runs (no dirty flags set)
+  room.profiles.set('tokNormal', { gold: 1 });
+  room.profiles.set('tokFailed', { gold: 0, noPersist: true });
+  room.dirtyPlayers = new Set(['tokNormal', 'tokFailed']);
+
+  await room.flush();
+
+  assert.deepEqual(saved, ['tokNormal'], 'the failed-load profile is never written over the real file');
 });
 
 test('food use consumes edible items and heals server HP', () => {

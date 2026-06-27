@@ -641,7 +641,16 @@ class JsonStore {
   _pfile(token) {
     return path.join(this.dir, 'players', token.replace(/[^A-Za-z0-9_-]/g, '') + '.json');
   }
-  async loadPlayer(token) { return this._read(this._pfile(token)); }
+  async loadPlayer(token) {
+    // Distinguish "no save yet" (new player) from a real read failure so the caller never
+    // overwrites an existing-but-unreadable profile with a default. (_read swallows both.)
+    const file = this._pfile(token);
+    let txt;
+    try { txt = fs.readFileSync(file, 'utf8'); }
+    catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+    try { return JSON.parse(txt); }
+    catch (e) { throw new Error('corrupt profile file ' + file + ': ' + e.message); }
+  }
   async savePlayer(token, profile) { this._write(this._pfile(token), { ...profile, savedAt: Date.now() }); }
 }
 

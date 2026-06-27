@@ -285,6 +285,7 @@ class GameRoom extends Room {
       this.lastSaveMsg.set(client.sessionId, now);
       const existing = this.profiles.get(token) || defaultProfile();
       const prof = mergeClientSave(existing, m);
+      if (existing.noPersist) prof.noPersist = true;   // a failed-load session stays non-persistable across saves
       // jobXp is client-tracked but rate-capped here so a forged save can't claim an instant max profession
       prof.jobXp = clampJobXpGain(existing.jobXp, m.jobXp, now - (this.lastJobXpAt.get(token) || now));
       this.lastJobXpAt.set(token, now);
@@ -414,19 +415,31 @@ class GameRoom extends Room {
     let prof = null;
     if (token) {
       prof = this.profiles.get(token);
+      let loadFailed = false;
       if (!prof) {
         try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
-        catch (e) { console.warn('[persist] load failed for ' + token, e.message); }
+        catch (e) {
+          // Couldn't read an existing save (corrupt file or I/O error). Do NOT overwrite it:
+          // hand out a playable default flagged non-persistable so flush() never clobbers the file.
+          console.warn('[persist] load failed for ' + token + ' — using a non-persistable default to protect the saved profile:', e.message);
+          loadFailed = true;
+        }
       }
-      if (prof) this.profiles.set(token, prof);
-      else {
+      if (loadFailed) {
+        prof = defaultProfile(options && options.name);
+        prof.noPersist = true;
+        this.profiles.set(token, prof);
+      } else if (prof) {
+        this.profiles.set(token, prof);
+      } else {
         prof = defaultProfile(options && options.name);
         this.profiles.set(token, prof);
         this.dirtyPlayers.add(token);
       }
-      if (this.ensureStarterArmor(prof)) this.dirtyPlayers.add(token);
-      if (this.ensureStarterLegendaryWeapon(prof)) this.dirtyPlayers.add(token);
-      if (BETA_FARM_TEST && this.ensureFarmTestKit(prof)) this.dirtyPlayers.add(token);
+      const grantedArmor = this.ensureStarterArmor(prof);
+      const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
+      const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
+      if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
       if (Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
         this.dirtyPlayers.add(token);
@@ -546,6 +559,7 @@ class GameRoom extends Room {
     this.pvel.delete(client.sessionId);
     if (p) this.broadcast('chat', { name: '[System]', text: p.name + ' has left' });
     this.state.players.delete(client.sessionId);
+    this.flush();   // persist the departing player's final state now (README: flush on each departure)
   }
 
   async flush() {
@@ -663,7 +677,7 @@ class GameRoom extends Room {
       this.dirtyPlayers.clear();
       for (const t of toks) {
         const prof = this.profiles.get(t);
-        if (!prof) continue;
+        if (!prof || prof.noPersist) continue;   // never overwrite a save we couldn't load
         try { await this.store.savePlayer(t, prof); }
         catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
       }
