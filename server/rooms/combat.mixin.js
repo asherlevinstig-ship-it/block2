@@ -15,6 +15,25 @@ const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class CombatMixin {
+  // Combat-domain simulation state. Co-located here (rather than inline in
+  // GameRoom.onCreate) so this mixin owns the fields it reads and writes:
+  // server-simulated projectiles, ability/legendary/dragon cooldowns, and
+  // per-player ability state. Called once from onCreate. `pvel` is read here
+  // for shot leading but written by the core `move` handler in GameRoom.
+  initCombatState() {
+    this.sArrows = [];          // server-simulated projectiles
+    this.sFireballs = [];       // server-simulated ability projectiles (and dragon breath)
+    this.sMeteors = [];         // delayed legendary weapon impacts
+    this.dragonBreathCd = new Map();   // sessionId -> next breath time
+    this.blackholeCd = new Map();
+    this.legendaryCd = new Map();
+    this.dragonAbilityCd = new Map();
+    this.phoenixUsed = new Set();
+    this.abilityState = new Map();
+    this.abilityBuffs = new Map();
+    this.pvel = new Map();      // sessionId -> {x,z} horizontal velocity estimate (written by the move handler)
+  }
+
   handleBlackholeStaff(client, m) {
     const rec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);

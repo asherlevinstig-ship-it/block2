@@ -180,17 +180,7 @@ class GameRoom extends Room {
     this.mobSeq = 0;
     this.mobMeta = {};
     this.instances = {};
-    this.sArrows = [];          // server-simulated projectiles
-    this.sFireballs = [];       // server-simulated ability projectiles (and dragon breath)
-    this.dragonBreathCd = new Map();   // sessionId -> next breath time
-    this.sMeteors = [];         // delayed legendary weapon impacts
-    this.blackholeCd = new Map();
-    this.legendaryCd = new Map();
-    this.dragonAbilityCd = new Map();
-    this.phoenixUsed = new Set();
-    this.abilityState = new Map();
-    this.abilityBuffs = new Map();
-    this.pvel = new Map();      // sessionId -> {x,z} horizontal velocity estimate
+    this.initCombatState();     // combat-domain sim state lives in combat.mixin.js
     this.teamMgr = new TeamManager(5);
     this.teamRecords = new Map();
     try {
