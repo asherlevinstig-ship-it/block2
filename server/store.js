@@ -24,6 +24,10 @@ const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
 
 const ARMOR_IDS = new Set([137, 183, 184]);
+// Guided-onboarding focus states the persistence layer will accept. Kept local
+// (like ARMOR_IDS/TUTORIAL_VERSIONS) to keep store.js free of game-code requires;
+// must stay in lockstep with PROGRESSION_FOCUS_STATES in rooms/constants.js.
+const PROGRESSION_FOCUS_STATES = new Set(['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
 const DRAGON_SPECIES = new Set(['ember', 'verdant', 'frost', 'storm', 'void']);
@@ -340,7 +344,7 @@ function sanitizeProfile(p) {
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
   out.utilityUnlocks = sanitizeUtilityUnlocks(p.utilityUnlocks);
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
-  out.progressionFocus = ['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract'].includes(p.progressionFocus) ? p.progressionFocus : '';
+  out.progressionFocus = PROGRESSION_FOCUS_STATES.has(p.progressionFocus) ? p.progressionFocus : '';
   if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'next_adventurer_contract';
   if (out.progressionFocus === 'next_adventurer_contract' && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;

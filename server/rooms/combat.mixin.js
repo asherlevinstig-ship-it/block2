@@ -635,7 +635,7 @@ class CombatMixin {
       }
       const baseXp = this.isAnimalKind(kind) ? 4 : 12;
       this.awardGrant(client, { source: this.isAnimalKind(kind) ? 'hunt' : 'mob', xp: Math.round(baseXp * DANGER_RINGS[ring].loot * (killedMeta.elite ? 1.75 : 1)), items, dangerRing: ring, elite: !!killedMeta.elite });
-      this.recordKillProgress(client);
+      this.recordKillProgress(client, !this.isAnimalKind(kind));
       if (!dgn && killedMeta.elite && killedMeta.campId)
         this.progressRegionalContract(client, 'clear_elite_camp', { targetId: killedMeta.campId });
       if (dgn) this.onDungeonTrashDeath(dgn, dx, dy, dz);

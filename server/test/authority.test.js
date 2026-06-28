@@ -2984,10 +2984,6 @@ test('teams persist identity membership and clear progression', () => {
   const joined = room.joinPersistentTeam(member, 'Raiders');
   assert.equal(joined.team.id, 'T1');
   assert.equal(room.teamRecords.get('T1').members.has('member_token_123'), true);
-
-  room.teamRecords.get('T1').highestGateRankCleared = 1;
-  room.profiles.get('leader_token_123').S.lvl = 8;
-  assert.equal(room.maxUnlockedGateRankForTeam('T1'), 2);
 });
 
 test('team persistence sanitizes records and explicit leave removes membership', () => {

@@ -193,13 +193,17 @@ class EconomyMixin {
     }
     return out;
   }
-  addCraftedRewardItem(prof, id, count) {
+  // Returns the count that could NOT be placed (0 = all placed). durOverride, when
+  // given, pins the durability instead of the default/blacksmith-perk value.
+  addCraftedRewardItem(prof, id, count, durOverride) {
     const info = TOOL_INFO[id];
     if (!info) return this.addRewardItem(prof, id, count);
     let left = Math.max(0, Math.min(64, count | 0));
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
     const tier = jobPerkTier(prof, 'blacksmith');
-    const dur = tier ? Math.min(99999, info.dur + Math.max(1, Math.round(info.dur * (0.08 + tier * 0.04)))) : info.dur;
+    const dur = durOverride != null
+      ? Math.max(1, Math.min(99999, durOverride | 0))
+      : (tier ? Math.min(99999, info.dur + Math.max(1, Math.round(info.dur * (0.08 + tier * 0.04)))) : info.dur);
     for (let i = 0; i < prof.inv.length && left > 0; i++) {   // reuse freed holes before growing
       if (prof.inv[i]) continue;
       prof.inv[i] = { id, count: 1, dur };
@@ -209,6 +213,7 @@ class EconomyMixin {
       prof.inv.push({ id, count: 1, dur });
       left--;
     }
+    return left;
   }
   handleCraftLegendary(client, m) {
     const rec = this.profileFor(client);

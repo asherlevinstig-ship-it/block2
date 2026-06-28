@@ -54,6 +54,12 @@ test('Hunter XP curve has explicit rank thresholds and steepens at high rank', a
   }
 });
 
+test('progression focus states stay identical across client and server', async () => {
+  const { PROGRESSION_FOCUS_STATES } = await clientModule('progression.mjs');
+  const serverStates = require('../rooms/constants').PROGRESSION_FOCUS_STATES;
+  assert.deepEqual([...PROGRESSION_FOCUS_STATES], [...serverStates], 'client/server onboarding focus whitelist parity');
+});
+
 test('inventory and equipment models own stacking consumption and profile restore', async () => {
   const { createInventoryModel, createEquipmentModel } = await clientModule('inventory.mjs');
   const slots = new Array(4).fill(null), changes = [];

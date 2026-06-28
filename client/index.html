@@ -147,7 +147,7 @@ Promise.all([
   import('./js/rendering.mjs'),
 ]).then(([authModule,progressionModule,inventoryModule,questJobModule,networkModule,renderingModule])=>{
 const {createAuthController}=authModule;
-const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,nextHunterRankLevel,xpNeedForLevel}=progressionModule;
+const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,nextHunterRankLevel,xpNeedForLevel,PROGRESSION_FOCUS_STATES}=progressionModule;
 const {createInventoryModel,createEquipmentModel}=inventoryModule;
 const {createQuestModel}=questJobModule;
 const {createNetworkController}=networkModule;
@@ -13613,7 +13613,7 @@ function netRestoreProfile(m){
     playerJob=JOBS[m.job]?m.job:'';
     jobXp=Math.max(0, m.jobXp|0);
     jobContract=clampJobContract(m.jobContract);
-    progressionFocus=['first_promotion_job','first_promotion_contract','first_d_gate','next_adventurer_contract'].includes(m.progressionFocus)?m.progressionFocus:'';
+    progressionFocus=PROGRESSION_FOCUS_STATES.includes(m.progressionFocus)?m.progressionFocus:'';
     firstPromotionSeen=m.firstPromotionSeen===true;
     applyServerNpcQuestChains(m.npcQuestChains);
     if(!quest||quest.source!=='guardian')quest=m.activeNpcQuest||null;

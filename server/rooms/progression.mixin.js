@@ -5,6 +5,16 @@ const {
 
 const STAT_KEYS = new Set(['str', 'agi', 'vit', 'int']);
 
+// One-time starter kit handed out when the first Adventurer contract graduates.
+// Declared once so placement and the client manifest can't drift. `crafted` items
+// take a slot each (no stacking); `dur` pins a worn-in durability on the pick.
+const GRADUATION_REWARD = Object.freeze([
+  Object.freeze({ id: I.IRON_SWORD, count: 1, crafted: true }),
+  Object.freeze({ id: I.IRON_PICK, count: 1, crafted: true, dur: Math.max(1, Math.floor(TOOL_INFO[I.IRON_PICK].dur * .4)) }),
+  Object.freeze({ id: I.IRON_INGOT, count: 8 }),
+  Object.freeze({ id: I.REPAIR_KIT, count: 1 }),
+]);
+
 // Compact trusted copies of the town quest chains. Fields: title, type, item/requirement,
 // need, base gold, base XP, optional reward items.
 const Q = (title, type, item, need, gold, xp, rewardItems = [], extra = {}) => ({ title, type, item, need, gold, xp, rewardItems, ...extra });
@@ -138,10 +148,11 @@ class ProgressionMixin {
     if (action === 'take') {
       if (rec.prof.jobContract) return this.progressionReject(client, 'jobContract', 'active');
       rec.prof.jobContract = this.makeServerJobContract(rec.prof);
-      if (rec.prof.progressionFocus === 'first_promotion_contract' && rec.prof.job === 'adventurer') {
-        rec.prof.progressionFocus = '';
-      }
-      if (rec.prof.progressionFocus === 'next_adventurer_contract' && rec.prof.job === 'adventurer') {
+      // 'first_promotion_contract' specifically guides taking the first adventurer
+      // contract; 'next_adventurer_contract' just nudges back to the board, so any
+      // contract take clears it (otherwise a job switch could strand the objective).
+      if (rec.prof.progressionFocus === 'next_adventurer_contract' ||
+          (rec.prof.progressionFocus === 'first_promotion_contract' && rec.prof.job === 'adventurer')) {
         rec.prof.progressionFocus = '';
       }
     } else if (action === 'abandon') {
@@ -152,18 +163,13 @@ class ProgressionMixin {
       const graduation = c.job === 'adventurer' && !(rec.prof.adventurerContractsCompleted | 0);
       let graduationInventory = null;
       if (graduation) {
+        // Place the whole bundle on a draft inventory; commit only if every item
+        // fits, so a near-full inventory is rejected cleanly with nothing granted.
         const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
-        const beforeSword = draft.inv.filter(slot => slot && slot.id === I.IRON_SWORD).length;
-        const existingPickSlots = new Set(draft.inv.map((slot, index) => slot && slot.id === I.IRON_PICK ? index : -1).filter(index => index >= 0));
-        this.addCraftedRewardItem(draft, I.IRON_SWORD, 1);
-        this.addCraftedRewardItem(draft, I.IRON_PICK, 1);
-        const swordPlaced = draft.inv.filter(slot => slot && slot.id === I.IRON_SWORD).length > beforeSword;
-        const pickSlot = draft.inv.findIndex((slot, index) => slot && slot.id === I.IRON_PICK && !existingPickSlots.has(index));
-        const pickPlaced = pickSlot >= 0;
-        if (pickPlaced) draft.inv[pickSlot].dur = Math.max(1, Math.floor(TOOL_INFO[I.IRON_PICK].dur * .4));
-        const cachePlaced = this.addRewardItem(draft, I.IRON_INGOT, 8) === 0
-          && this.addRewardItem(draft, I.REPAIR_KIT, 1) === 0;
-        if (!swordPlaced || !pickPlaced || !cachePlaced) return this.progressionReject(client, 'jobContract', 'full');
+        const placed = GRADUATION_REWARD.every(r => (r.crafted
+          ? this.addCraftedRewardItem(draft, r.id, r.count, r.dur)
+          : this.addRewardItem(draft, r.id, r.count)) === 0);
+        if (!placed) return this.progressionReject(client, 'jobContract', 'full');
         graduationInventory = draft.inv;
       }
       let rewardGold = c.rewardGold | 0;
@@ -182,12 +188,7 @@ class ProgressionMixin {
       rec.prof.jobContract = null;
       return this.progressionChanged(client, 'jobContract', {
         action, rewardGold, rewardXp, graduation,
-        rewardItems: graduation ? [
-          { id: I.IRON_SWORD, count: 1 },
-          { id: I.IRON_PICK, count: 1 },
-          { id: I.IRON_INGOT, count: 8 },
-          { id: I.REPAIR_KIT, count: 1 },
-        ] : [],
+        rewardItems: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
       });
     } else return this.progressionReject(client, 'jobContract', 'action');
     return this.progressionChanged(client, 'jobContract', { action });
@@ -305,8 +306,7 @@ class ProgressionMixin {
     this.grantHunterXp(rec.prof, q.xp);
     for (const it of q.rewardItems || []) this.addRewardItem(rec.prof, it.id, it.count);
     rec.prof.npcQuestChains[q.giver] = Math.max((rec.prof.npcQuestChains[q.giver] | 0), (q.chainStep | 0) + 1);
-    if (q.giver === 'Mara Vale' && q.type === 'gate' && (q.gateRank | 0) === 0 && (q.chainStep | 0) === 2 &&
-        this.maxUnlockedGateRankForProfile(rec.prof) >= 1) {
+    if (q.giver === 'Mara Vale' && q.type === 'gate' && (q.gateRank | 0) === 0 && (q.chainStep | 0) === 2) {
       rec.prof.progressionFocus = rec.prof.job === 'adventurer'
         ? (rec.prof.jobContract ? '' : 'first_promotion_contract')
         : 'first_promotion_job';
@@ -413,8 +413,11 @@ class ProgressionMixin {
     this.progressJobContract(client, upgraded ? 'smith' : 'repair', 1, 0);
   }
 
-  recordKillProgress(client) {
+  recordKillProgress(client, hostile = true) {
     this.grantJobXp(client, 'adventurer', 3);
+    // Kill objectives ("defeat hostile creatures") must not be satisfied by
+    // slaughtering passive animals, which have their own 'hunt' reward path.
+    if (!hostile) return;
     this.progressJobContract(client, 'kill', 1, 0);
     this.progressNpcQuest(client, 'kill', 1, 0);
   }

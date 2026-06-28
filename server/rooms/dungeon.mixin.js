@@ -84,7 +84,10 @@ class DungeonMixin {
   }
   canEnterGate(client, gate) {
     if (!gate || !gate.active) return false;
-    if (!this.canAccessGateRank(client, gate.rank)) return false;
+    // Owned/team/shard gates grant entry by entitlement: the rank was already
+    // enforced when the key was bought and the gate created, so a lower-level
+    // teammate is not re-gated at the portal. Only walk-up public gates check
+    // the entrant's own Hunter rank here.
     if (gate.kind === 'solo') return !!gate.owner && gate.owner === this.clientToken(client);
     if (gate.kind === 'team') {
       const p = this.state.players.get(client.sessionId);
@@ -95,7 +98,7 @@ class DungeonMixin {
       const p = this.state.players.get(client.sessionId);
       return !!p && !!gate.team && gate.team === this.cleanTeamId(p.team);
     }
-    return true;
+    return this.canAccessGateRank(client, gate.rank);
   }
   isValidRestoredPublicGate(raw) {
     const rank = Math.max(0, Math.min(4, raw.rank | 0));
@@ -368,15 +371,18 @@ class DungeonMixin {
     let refundedItem = 0;
     let refundedTo = '';
     if (gate && gate.refundItem > 0 && gate.refundOwner) {
-      refundedItem = gate.refundItem | 0;
-      refundedTo = gate.refundOwner;
       let payer = gate.refundOwner === token ? prof : this.profiles.get(gate.refundOwner);
       if (!payer) {
         payer = sanitizeProfile(await this.store.loadPlayer(gate.refundOwner));
         this.profiles.set(gate.refundOwner, payer);
       }
-      this.addRewardItem(payer, refundedItem, 1);
-      this.dirtyPlayers.add(gate.refundOwner);
+      // Only report a refund the inventory actually accepted; a full inventory
+      // would otherwise lose the key while the client is told it was returned.
+      if (this.addRewardItem(payer, gate.refundItem | 0, 1) === 0) {
+        refundedItem = gate.refundItem | 0;
+        refundedTo = gate.refundOwner;
+        this.dirtyPlayers.add(gate.refundOwner);
+      }
     }
     if (gate) this.expireGate(gate.id);
     prof.pos = recovery.pos.slice();

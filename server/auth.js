@@ -46,13 +46,10 @@ class AuthService {
   }
 
   sweep(now = Date.now()) {
-    let sessionsChanged = false;
-    for (const [sid, session] of this.sessions) if (session.expiresAt <= now) {
-      this.sessions.delete(sid);
-      sessionsChanged = true;
-    }
+    // Dropping in-memory expired sessions needs no disk write: load() re-filters
+    // expired rows on boot, so a stale row never outlives a restart anyway.
+    for (const [sid, session] of this.sessions) if (session.expiresAt <= now) this.sessions.delete(sid);
     for (const [ip, row] of this.attempts) if (row.resetAt <= now) this.attempts.delete(ip);
-    if (sessionsChanged) this.save();
   }
 
   stop() {
@@ -132,7 +129,7 @@ class AuthService {
     const key = this.sessionKey(sid);
     const session = this.sessions.get(key);
     if (!session) return null;
-    if (session.expiresAt <= Date.now()) { this.sessions.delete(key); this.save(); return null; }
+    if (session.expiresAt <= Date.now()) { this.sessions.delete(key); return null; }
     return this.byId.get(session.accountId) || null;
   }
 

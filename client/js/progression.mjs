@@ -3,10 +3,11 @@ export const PROGRESSION_ERRORS = Object.freeze({
   unowned: 'You do not own that armor',
   incomplete: 'That contract is not complete',
   active: 'You already have an active contract',
-  full: 'Make one empty inventory slot before claiming this reward',
+  full: 'Free up inventory space before claiming this reward',
   range: 'Meditate inside the Town Shrine',
 });
 
+export const PROGRESSION_FOCUS_STATES = Object.freeze(['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
 export const HUNTER_RANK_LEVELS = Object.freeze([1, 4, 8, 13, 19, 27]);
 export const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.12, 1.35, 1.7, 2.2, 2.8]);
 export const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);

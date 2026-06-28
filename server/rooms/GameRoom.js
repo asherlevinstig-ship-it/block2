@@ -1213,21 +1213,6 @@ class GameRoom extends Room {
     }
     return false;
   }
-  maxUnlockedGateRankForTeam(team) {
-    const clean = this.cleanTeamId(team);
-    if (!clean) return -1;
-    const rec = this.teamRecords && this.teamRecords.get(clean);
-    let rank = -1;
-    if (rec && rec.members) for (const token of rec.members) {
-      rank = Math.max(rank, this.maxUnlockedGateRankForProfile(this.profiles.get(token)));
-    }
-    this.state.players.forEach((p, sessionId) => {
-      if (this.cleanTeamId(p.team) !== clean) return;
-      const token = this.tokens.get(sessionId);
-      rank = Math.max(rank, this.maxUnlockedGateRankForProfile(this.profiles.get(token)));
-    });
-    return rank;
-  }
   maxUnlockedGateRankForKey(client, kind) {
     return this.maxUnlockedGateRankForClient(client);
   }
