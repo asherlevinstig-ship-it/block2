@@ -24,8 +24,14 @@ test('accounts use scrypt hashes and verified server sessions', async () => {
   const req = { headers: { cookie: 'other=x; bc_session=' + encodeURIComponent(sid) } };
   assert.deepEqual(auth.authenticateRequest(req), { id: account.id, username: 'test_hunter', displayName: 'Test Hunter' });
   assert.equal(auth.authenticateRequest({ headers: { cookie: 'bc_session=tampered' } }), false);
-  auth.sessions.delete(sid);
+  const sessionDisk = fs.readFileSync(path.join(dir, 'auth.json'), 'utf8');
+  assert.equal(sessionDisk.includes(sid), false, 'raw session bearer reached persistent storage');
+  const restarted = new AuthService(dir);
+  assert.deepEqual(restarted.authenticateRequest(req), { id: account.id, username: 'test_hunter', displayName: 'Test Hunter' });
+  restarted.stop();
+  auth.sessions.delete(auth.sessionKey(sid));
   assert.equal(auth.authenticateRequest(req), false, 'revoked session remained usable');
+  auth.stop();
 });
 
 test('registration rejects weak credentials and duplicate usernames', async () => {
@@ -34,4 +40,5 @@ test('registration rejects weak credentials and duplicate usernames', async () =
   await assert.rejects(() => auth.register('valid_user', 'short', 'X'), /Password/);
   await auth.register('valid_user', 'long enough password', 'X');
   await assert.rejects(() => auth.register('VALID_USER', 'another good password', 'Y'), /already registered/);
+  auth.stop();
 });

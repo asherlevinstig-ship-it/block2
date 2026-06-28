@@ -46,8 +46,13 @@ class AuthService {
   }
 
   sweep(now = Date.now()) {
-    for (const [sid, session] of this.sessions) if (session.expiresAt <= now) this.sessions.delete(sid);
+    let sessionsChanged = false;
+    for (const [sid, session] of this.sessions) if (session.expiresAt <= now) {
+      this.sessions.delete(sid);
+      sessionsChanged = true;
+    }
     for (const [ip, row] of this.attempts) if (row.resetAt <= now) this.attempts.delete(ip);
+    if (sessionsChanged) this.save();
   }
 
   stop() {
@@ -55,7 +60,7 @@ class AuthService {
   }
 
   load() {
-    let data = { accounts: [] };
+    let data = { accounts: [], sessions: [] };
     try { data = JSON.parse(fs.readFileSync(this.file, 'utf8')); }
     catch (e) { if (e.code !== 'ENOENT') throw new Error('cannot read auth database: ' + e.message); }
     for (const raw of Array.isArray(data.accounts) ? data.accounts : []) {
@@ -65,11 +70,17 @@ class AuthService {
       this.accounts.set(username, account);
       this.byId.set(account.id, account);
     }
+    const now = Date.now();
+    for (const raw of Array.isArray(data.sessions) ? data.sessions : []) {
+      if (!/^[a-f0-9]{64}$/.test(raw.id || '') || !this.byId.has(raw.accountId) || !(Number(raw.expiresAt) > now)) continue;
+      this.sessions.set(raw.id, { accountId: raw.accountId, expiresAt: Number(raw.expiresAt) });
+    }
   }
 
   save() {
     const tmp = this.file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ accounts: [...this.accounts.values()] }));
+    const sessions = [...this.sessions].map(([id, session]) => ({ id, ...session }));
+    fs.writeFileSync(tmp, JSON.stringify({ accounts: [...this.accounts.values()], sessions }));
     fs.renameSync(tmp, this.file);
     try { fs.chmodSync(this.file, 0o600); } catch (_) {}
   }
@@ -108,14 +119,20 @@ class AuthService {
 
   issueSession(account) {
     const sid = b64url(crypto.randomBytes(32));
-    this.sessions.set(sid, { accountId: account.id, expiresAt: Date.now() + SESSION_MS });
+    this.sessions.set(this.sessionKey(sid), { accountId: account.id, expiresAt: Date.now() + SESSION_MS });
+    this.save();
     return sid;
   }
 
+  sessionKey(sid) {
+    return crypto.createHash('sha256').update(String(sid || '')).digest('hex');
+  }
+
   sessionAccount(sid) {
-    const session = this.sessions.get(String(sid || ''));
+    const key = this.sessionKey(sid);
+    const session = this.sessions.get(key);
     if (!session) return null;
-    if (session.expiresAt <= Date.now()) { this.sessions.delete(String(sid)); return null; }
+    if (session.expiresAt <= Date.now()) { this.sessions.delete(key); this.save(); return null; }
     return this.byId.get(session.accountId) || null;
   }
 
@@ -168,7 +185,10 @@ class AuthService {
     });
     app.post('/auth/logout', (req, res) => {
       const sid = parseCookies(req.headers.cookie)[COOKIE];
-      if (sid) this.sessions.delete(sid);
+      if (sid) {
+        this.sessions.delete(this.sessionKey(sid));
+        this.save();
+      }
       res.setHeader('Set-Cookie', this.cookie('', req, true));
       res.json({ ok: true });
     });
