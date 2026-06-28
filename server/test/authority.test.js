@@ -21,6 +21,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
         onMessage(type, fn) { this._handlers.set(type, fn); }
         broadcast() {}
       },
+      matchMaker: { isGracefullyShuttingDown: false },
     };
   }
   if (request === '@colyseus/schema') {
@@ -38,7 +39,7 @@ const AI = require('../ai');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
-const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore } = require('../store');
+const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 
 const I = {
@@ -46,6 +47,7 @@ const I = {
   IRON_INGOT: 102,
   DIAMOND: 103,
   IRON_PICK: 112,
+  IRON_SWORD: 124,
   WOOD_HOE: 172,
   STONE_HOE: 173,
   IRON_HOE: 174,
@@ -55,6 +57,7 @@ const I = {
   BREAD: 178,
   MONSTER_MEAT: 179,
   COOKED_MEAT: 180,
+  REPAIR_KIT: 182,
   DRAGON_TREAT: 190,
   SHADOW_SIGIL: 191,
   FANG_TOTEM: 192,
@@ -358,7 +361,8 @@ test('jobs and repeatable contracts are created progressed and claimed only by t
   assert.equal(prof.job, 'miner');
   room.handleJobContract(client, { action: 'take' });
   assert.equal(prof.jobContract.job, 'miner');
-  prof.jobContract = { job: 'miner', type: 'mine', target: W.B.STONE, need: 2, have: 0, rewardGold: 30, rewardJobXp: 16, title: 'Stone Quota', desc: 'Mine stone.' };
+  assert.ok(prof.jobContract.rewardXp > 0, 'profession work contributes Hunter XP');
+  prof.jobContract = { job: 'miner', type: 'mine', target: W.B.STONE, need: 2, have: 0, rewardGold: 30, rewardJobXp: 16, rewardXp: 35, title: 'Stone Quota', desc: 'Mine stone.' };
   room.recordMineProgress(client, W.B.STONE);
   room.recordMineProgress(client, W.B.STONE);
   assert.equal(prof.jobContract.have, 2);
@@ -367,6 +371,8 @@ test('jobs and repeatable contracts are created progressed and claimed only by t
   assert.equal(prof.jobContract, null);
   assert.equal(prof.gold, 30);
   assert.equal(prof.jobXp, 20);
+  assert.equal(prof.S.lvl, 2);
+  assert.equal(prof.S.xp, 10, 'contract Hunter XP uses the shared level-up transaction');
 });
 
 test('new adventurers receive Mara field work first, then level-gated random contracts', () => {
@@ -376,7 +382,8 @@ test('new adventurers receive Mara field work first, then level-gated random con
   prof.S.lvl = 2;
   for (let i = 0; i < 30; i++) {
     const first = room.makeServerJobContract(prof);
-    assert.equal(first.type, 'quest');
+    assert.equal(first.type, 'kill');
+    assert.equal(first.need, 3);
     assert.equal(first.title, "Mara's Field Work");
   }
 
@@ -398,12 +405,43 @@ test('claiming the first adventurer contract permanently unlocks the rotating po
   room.handleSetJob(client, { job: 'adventurer' });
   room.handleJobContract(client, { action: 'take' });
   assert.equal(prof.jobContract.title, "Mara's Field Work");
-  prof.jobContract.have = 1;
+  room.recordKillProgress(client);
+  room.recordKillProgress(client);
+  room.recordKillProgress(client);
   room.handleJobContract(client, { action: 'claim' });
   assert.equal(prof.adventurerContractsCompleted, 1);
+  assert.equal(itemCount(prof, I.IRON_SWORD), 1, 'graduation grants a guaranteed iron weapon');
+  const practicePick = prof.inv.find(slot => slot && slot.id === I.IRON_PICK);
+  assert.equal(!!practicePick, true, 'graduation provides a tool for repair practice');
+  assert.equal(practicePick.dur < 251 * .5, true, 'the practice tool arrives worn');
+  assert.equal(itemCount(prof, I.IRON_INGOT) >= 8, true, 'graduation guarantees the armor recipe materials');
+  assert.equal(itemCount(prof, I.REPAIR_KIT), 1, 'graduation includes tool-care supplies');
+  assert.equal(prof.utilityUnlocks.includes('compass'), true, 'graduation unlocks the utility required by Mara\'s next quest');
+  assert.equal(prof.progressionFocus, 'first_d_gate');
+  room.recordGateProgress(client, 0);
+  assert.equal(prof.progressionFocus, 'first_d_gate', 'another E clear does not finish D-rank preparation');
+  room.recordGateProgress(client, 1);
+  assert.equal(prof.progressionFocus, 'next_adventurer_contract', 'clearing D-rank points back to the repeatable loop');
+  assert.equal(sanitizeProfile(prof).progressionFocus, 'next_adventurer_contract');
+  room.handleJobContract(client, { action: 'take' });
+  assert.equal(prof.progressionFocus, '');
+  assert.notEqual(prof.jobContract.title, "Mara's Field Work");
   assert.equal(sanitizeProfile(prof).adventurerContractsCompleted, 1);
   assert.notEqual(room.makeServerJobContract(prof).title, "Mara's Field Work");
   assert.equal(sanitizeProfile({ job: 'adventurer', jobXp: 12 }).adventurerContractsCompleted, 1, 'legacy experienced adventurers do not receive newcomer work');
+});
+
+test('first adventurer graduation cannot lose its guaranteed weapon to a full inventory', () => {
+  const room = makeRoom(), client = makeClient('full_graduation_owner');
+  const inv = Array.from({ length: 36 }, (_, i) => ({ id: 500 + i, count: 64 }));
+  const { prof } = seedPlayer(room, client, { lvl: 3, inv });
+  room.handleSetJob(client, { job: 'adventurer' });
+  room.handleJobContract(client, { action: 'take' });
+  prof.jobContract.have = prof.jobContract.need;
+  room.handleJobContract(client, { action: 'claim' });
+  assert.equal(prof.adventurerContractsCompleted, 0);
+  assert.equal(prof.jobContract.title, "Mara's Field Work");
+  assert.equal(client.sent.at(-1).msg.reason, 'full');
 });
 
 test('armor equip validates ownership in the server inventory', () => {
@@ -469,6 +507,20 @@ test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate'
   assert.equal(prof.activeNpcQuest.have, 0, 'a higher-rank clear does not replace the promised E-rank lesson');
   room.recordGateProgress(client, 0);
   assert.equal(prof.activeNpcQuest.have, 1);
+  room.awardLoot(client, { xp: 70, gold: 0, items: [] });
+  room.handleNpcQuest(client, { action: 'claim' });
+  assert.equal(prof.S.lvl, 4, 'the E-rank dungeon and Mara claim earn D-Rank through XP');
+  assert.equal(prof.progressionFocus, 'first_promotion_job');
+  assert.equal(prof.firstPromotionSeen, false);
+  assert.equal(room.handleAckFirstPromotion(client), true);
+  assert.equal(prof.firstPromotionSeen, true);
+  room.handleSetJob(client, { job: 'adventurer' });
+  assert.equal(prof.progressionFocus, 'first_promotion_contract');
+  room.handleJobContract(client, { action: 'take' });
+  assert.equal(prof.progressionFocus, '');
+  assert.equal(prof.jobContract.title, "Mara's Field Work");
+  assert.equal(prof.jobContract.type, 'kill');
+  assert.equal(prof.jobContract.need, 3);
 });
 
 test('first quest bonus requires authoritative Mara completion and is single-claim', () => {
@@ -1340,6 +1392,8 @@ test('tavern buys farmed and hunted food for server gold', () => {
   const client = makeClient('seller');
   const { prof } = seedPlayer(room, client, {
     gold: 2,
+    x: W.TOWN.TC + 19.5,
+    z: W.TOWN.TC + 13.5,
     inv: [{ id: I.BREAD, count: 2 }, { id: I.MONSTER_MEAT, count: 1 }],
   });
 
@@ -2245,7 +2299,7 @@ test('hunger drains and starvation damages players', () => {
 test('key shop catalog exposes tuned prices beyond starter ranks', () => {
   const room = makeRoom();
   const client = makeClient('buyer');
-  const { prof } = seedPlayer(room, client, { gold: 2000, highestGateRankCleared: 4 });
+  const { prof } = seedPlayer(room, client, { gold: 2000, lvl: 4, highestGateRankCleared: 4 });
 
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
   assert.equal(client.sent.at(-1).msg.gold, -110);
@@ -2482,7 +2536,7 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   ]);
   const client = makeClient('runner');
   room.clients.push(client);
-  seedPlayer(room, client, { x: 20.5, z: 20.5 });
+  seedPlayer(room, client, { x: 20.5, z: 20.5, lvl: 13 });
   room.createInstance = g => {
     const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
     room.instances[g.id] = inst;
@@ -2525,6 +2579,80 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   assert.equal(resumedStatus.id, 'g-high');
   assert.equal(resumedStatus.party.length, 1);
   assert.equal(resumedStatus.cleared, false);
+});
+
+test('the tavern sells deterministic Gate food only to nearby hunters', () => {
+  const room = makeRoom(), client = makeClient('travel_food_buyer');
+  const { prof } = seedPlayer(room, client, { gold: 30 });
+  room.handleShop(client, { action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT });
+  assert.equal(prof.gold, 30);
+  assert.equal(client.sent.at(-1).msg.reason, 'range');
+  const p = room.state.players.get(client.sessionId);
+  p.x = W.TOWN.TC + 19.5; p.z = W.TOWN.TC + 13.5;
+  room.handleShop(client, { action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT });
+  assert.equal(prof.gold, 22);
+  assert.equal(itemCount(prof, I.COOKED_MEAT), 1);
+});
+
+test('tutorial milestones are server-owned and legacy progressed hunters migrate as complete', () => {
+  assert.deepEqual(defaultProfile('New').tutorials, {
+    onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0,
+  });
+  const legacy = sanitizeProfile({
+    name: 'Legacy',
+    S: { lvl: 3, path: 'mage' },
+    highestGateRankCleared: -1,
+  });
+  assert.deepEqual(legacy.tutorials, TUTORIAL_VERSIONS);
+
+  const current = defaultProfile('Trusted');
+  current.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  const merged = mergeClientSave(current, {
+    tutorials: { onboarding: 0, ability: 999, intro: 999, gate: 999 },
+  });
+  assert.deepEqual(merged.tutorials, current.tutorials);
+
+  const room = makeRoom(), client = makeClient('tutorial_owner');
+  const { prof } = seedPlayer(room, client);
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'ability', version: 999 }), false);
+  assert.equal(prof.tutorials.ability, 0);
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability }), true);
+  assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability);
+});
+
+test('restart recovery ejects safely and refunds consumed private gate currency once', async () => {
+  for (const [kind, item] of [['solo', I.SOLO_KEY_E], ['shard', I.SHARD_MINOR]]) {
+    const room = makeRoom();
+    room.bootId = 'new-process';
+    room.flush = async () => {};
+    const client = makeClient('restart-' + kind);
+    const { token, prof } = seedPlayer(room, client);
+    const gate = makeGate('g-restart-' + kind, 30.5, 31.5, 0, kind);
+    gate.refundItem = item;
+    gate.refundOwner = token;
+    gate.owner = token;
+    room.state.gates.set(gate.id, gate);
+    room.gateTtls.set(gate.id, Date.now() + 60_000);
+    prof.dungeonRecovery = {
+      gateId: gate.id,
+      bootId: 'old-process',
+      pos: [32, 16.5, 31.5],
+      enteredAt: Date.now(),
+    };
+
+    const result = await room.recoverDungeonAfterRestart(token, prof);
+
+    assert.equal(result.refunded, true);
+    assert.equal(result.refundedItem, item);
+    assert.equal(itemCount(prof, item), 1);
+    assert.deepEqual(prof.pos, [32, 16.5, 31.5]);
+    assert.equal(prof.dungeonRecovery, null);
+    assert.equal(room.state.gates.has(gate.id), false);
+
+    const repeated = await room.recoverDungeonAfterRestart(token, prof);
+    assert.equal(repeated, null);
+    assert.equal(itemCount(prof, item), 1, 'recovery cannot refund the same entry twice');
+  }
 });
 
 test('team gate lobby waits until all joined hunters are ready', () => {
@@ -2654,8 +2782,8 @@ test('sharded gate entry allows the owner and teammates but rejects strangers', 
   const owner = makeClient('owner');
   const mate = makeClient('mate');
   const stranger = makeClient('stranger');
-  seedPlayer(room, owner, { token: 'owner_token_123', team: 'T1', x: 20.5, z: 20.5 });
-  seedPlayer(room, mate, { token: 'mate_token_123', team: 'T1', x: 20.5, z: 20.5 });
+  seedPlayer(room, owner, { token: 'owner_token_123', team: 'T1', x: 20.5, z: 20.5, lvl: 8 });
+  seedPlayer(room, mate, { token: 'mate_token_123', team: 'T1', x: 20.5, z: 20.5, lvl: 8 });
   seedPlayer(room, stranger, { token: 'stranger_token', team: '', x: 20.5, z: 20.5 });
 
   const g = makeGate('g-shard', 20.5, 20.5, 2, 'shard');
@@ -2789,7 +2917,7 @@ test('sharded gate fields survive a persistence round-trip', () => {
   assert.equal(saved.g7.shardMods, 'Empowered,Quaking');   // bogus affix stripped
 });
 
-test('key tiers require clearing the previous public gate rank', () => {
+test('key tiers require the matching Hunter rank earned through XP', () => {
   const room = makeRoom();
   const client = makeClient('buyer');
   const { prof } = seedPlayer(room, client, {
@@ -2806,10 +2934,14 @@ test('key tiers require clearing the previous public gate rank', () => {
 
   prof.highestGateRankCleared = 0;
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
+  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rank' } }, 'an E clear does not promote the player');
+
+  prof.S.lvl = 4;
+  room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
   assert.equal(client.sent.at(-1).type, 'shopResult');
 });
 
-test('team key rank access uses team clear progress', () => {
+test('team key rank access uses the opener Hunter rank, not team clear progress', () => {
   const room = makeRoom();
   const veteran = makeClient('veteran');
   const opener = makeClient('opener');
@@ -2820,6 +2952,10 @@ test('team key rank access uses team clear progress', () => {
     inv: [{ id: I.TEAM_KEY_D, count: 1 }],
   });
 
+  room.handleUseGateKey(opener, { slot: 0 });
+  assert.deepEqual(opener.sent.at(-1), { type: 'gateKeyReject', msg: { reason: 'rank' } });
+
+  prof.S.lvl = 4;
   room.handleUseGateKey(opener, { slot: 0 });
 
   const result = opener.sent.find(e => e.type === 'gateKeyResult').msg;
@@ -2850,6 +2986,7 @@ test('teams persist identity membership and clear progression', () => {
   assert.equal(room.teamRecords.get('T1').members.has('member_token_123'), true);
 
   room.teamRecords.get('T1').highestGateRankCleared = 1;
+  room.profiles.get('leader_token_123').S.lvl = 8;
   assert.equal(room.maxUnlockedGateRankForTeam('T1'), 2);
 });
 
@@ -2955,7 +3092,8 @@ test('dungeon boss loot grants progression gate keys', () => {
   const lootMsg = client.sent.find(e => e.type === 'loot');
   assert.equal(lootMsg.msg.rank, 0);
   assert.equal(lootMsg.msg.progress.newClear, true);
-  assert.equal(lootMsg.msg.progress.nextUnlockedRank, 1);
+  assert.equal(lootMsg.msg.progress.nextRank, 1);
+  assert.equal(lootMsg.msg.progress.nextRankUnlocked, false);
 });
 
 test('boss rewards require recent contribution, proximity, and server-side life', () => {
@@ -2987,15 +3125,20 @@ test('boss rewards require recent contribution, proximity, and server-side life'
   assert.equal(afk.sent.find(e => e.type === 'lootReject').msg.reason, 'contribution');
   assert.equal(far.sent.find(e => e.type === 'lootReject').msg.reason, 'range');
   assert.equal(dead.sent.find(e => e.type === 'lootReject').msg.reason, 'dead');
-  assert.equal(afk.sent.find(e => e.type === 'lootReject').msg.progress.nextUnlockedRank, 1);
+  assert.equal(afk.sent.find(e => e.type === 'lootReject').msg.progress.nextRank, 1);
+  assert.equal(afk.sent.find(e => e.type === 'lootReject').msg.progress.nextRankUnlocked, false);
 });
 
 test('solo dungeon death fails the instance and closes the gate', () => {
   const room = makeRoom();
   const client = makeClient('solo');
   room.clients = [client];
-  seedPlayer(room, client, { token: 'solo_token_123', dgn: 'g1', hp: 5 });
-  const gate = makeGate('g1', 20.5, 20.5, 0, 'solo');
+  const { prof } = seedPlayer(room, client, { token: 'solo_token_123', dgn: 'g1', hp: 5 });
+  prof.activeNpcQuest = { giver: 'Mara Vale', type: 'gate', gateRank: 0, have: 0, need: 1 };
+  const replacement = makeGate('g2', 30.5, 30.5, 0, 'public');
+  const ensured = [];
+  room.ensurePublicGateRank = rank => { ensured.push(rank); return replacement; };
+  const gate = makeGate('g1', 20.5, 20.5, 0, 'public');
   room.state.gates.set(gate.id, gate);
   room.gateTtls.set(gate.id, Date.now() + 60000);
   room.gateLootedChests.set(gate.id, new Set());
@@ -3007,9 +3150,33 @@ test('solo dungeon death fails the instance and closes the gate', () => {
 
   assert.equal(client.sent.some(e => e.type === 'dungeonDeath'), true);
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 2, W.TOWN.TC + 7.5]);
   assert.equal(room.instances.g1, undefined);
   assert.equal(room.state.gates.has('g1'), false);
   assert.equal(room.state.mobs.has('m1'), false);
+  assert.deepEqual(ensured, [0]);
+  assert.equal(prof.activeNpcQuest.have, 0);
+});
+
+test('a failed first D-rank attempt immediately restores the promised public Gate', () => {
+  const room = makeRoom(), client = makeClient('d_retry');
+  room.clients = [client];
+  const { prof } = seedPlayer(room, client, { token: 'd_retry_token_123', dgn: 'g1', hp: 5, highestGateRankCleared: 0 });
+  prof.progressionFocus = 'first_d_gate';
+  const ensured = [];
+  room.ensurePublicGateRank = rank => { ensured.push(rank); return makeGate('g2', 40.5, 40.5, rank, 'public'); };
+  const gate = makeGate('g1', 20.5, 20.5, 1, 'public');
+  room.state.gates.set(gate.id, gate);
+  room.gateTtls.set(gate.id, Date.now() + 60000);
+  room.gateLootedChests.set(gate.id, new Set());
+  putInstance(room, { id: 'g1', rank: 1, players: [client.sessionId] });
+
+  room.hurtPlayer(client, 99);
+
+  assert.equal(prof.progressionFocus, 'first_d_gate');
+  assert.equal(prof.highestGateRankCleared, 0);
+  assert.deepEqual(ensured, [1]);
+  assert.equal(room.instances.g1, undefined);
 });
 
 test('team dungeon closes only after the party wipes', () => {
@@ -3328,18 +3495,18 @@ test('public gate spawning unlocks only once a surface player reaches level 3', 
   assert.equal(room.publicGateSpawningUnlocked([]), false);
 });
 
-test('public gate unlock rank comes from persisted clear progress', () => {
+test('public gate availability comes from online Hunter XP rank, not clear records', () => {
   const room = makeRoom();
   const fresh = makeClient('fresh');
   const veteran = makeClient('veteran');
   seedPlayer(room, fresh, { token: 'fresh_token_123', lvl: 99, highestGateRankCleared: -1 });
   seedPlayer(room, veteran, { token: 'veteran_token_123', lvl: 1, highestGateRankCleared: 2 });
 
-  assert.equal(room.maxUnlockedPublicRank(), 3);
+  assert.equal(room.maxUnlockedPublicRank(), 4);
 
   const emptyRoom = makeRoom();
   emptyRoom.worldProgress.highestGateRankCleared = 3;
-  assert.equal(emptyRoom.maxUnlockedPublicRank(), 4);
+  assert.equal(emptyRoom.maxUnlockedPublicRank(), 0);
 });
 
 test('gate persistence sanitizes active gate metadata', () => {
@@ -3351,6 +3518,8 @@ test('gate persistence sanitizes active gate metadata', () => {
       seed: -1,
       owner: 'owner_token_123',
       team: 'Team! One',
+      refundItem: 150,
+      refundOwner: 'owner_token_123',
       x: 999,
       y: -5,
       z: 64,
@@ -3366,9 +3535,11 @@ test('gate persistence sanitizes active gate metadata', () => {
       kind: 'team',
       rank: 4,
       seed: 0,
-      owner: '',
+      owner: 'owner_token_123',
       team: 'TeamOne',
-      x: 128,
+      refundItem: 150,
+      refundOwner: 'owner_token_123',
+      x: 999,
       y: 1,
       z: 64,
       expiresAt: 4102444800000,
@@ -3583,7 +3754,7 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   assert.equal(client.sent.at(-1).type, 'skyshipBoardReject');
   assert.equal(client.sent.at(-1).msg.reason, 'rank');
 
-  seeded.prof.S.lvl = 16;
+  seeded.prof.S.lvl = 27;
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).msg.reason, 'gold');
 
@@ -3735,6 +3906,8 @@ test('regional guild contracts rotate through the requested exploration archetyp
     assert.ok(offer.rewardGold > 0);
     assert.ok(offer.rewardXp > 0);
   }
+  const aRankOffers = room.regionalContractOffers(0, 19);
+  assert.ok(aRankOffers.every(offer => offer.rewardXp >= 713), 'regional work remains meaningful at A-rank');
 });
 
 test('regional contract acceptance progress and claim are server-owned', () => {

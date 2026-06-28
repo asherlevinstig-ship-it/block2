@@ -5,7 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "test": "node --test server/test/authority.test.js server/test/auth.test.js server/test/client-modules.test.js server/test/state-clusters.test.js",
+    "test": "node --test server/test/authority.test.js server/test/auth.test.js server/test/client-modules.test.js server/test/progression-balance.test.js server/test/state-clusters.test.js",
     "test:integration": "node server/test/integration.test.js",
     "test:e2e": "playwright test"
   },

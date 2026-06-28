@@ -9,6 +9,14 @@ const { getAuthService } = require('./auth');
 const app = express();
 app.set('trust proxy', 1);
 getAuthService().attach(app);
+let gameServer;
+
+if (process.env.BLOCKCRAFT_E2E === '1') {
+  app.post('/__e2e/shutdown', (_req, res) => {
+    res.status(202).json({ ok: true });
+    setTimeout(() => gameServer.gracefullyShutdown(true), 25);
+  });
+}
 
 // the game client
 app.use(express.static(path.join(__dirname, '..', 'client')));
@@ -23,7 +31,7 @@ app.get('/colyseus.js', (req, res) => res.sendFile(colyseusBrowserSdk));
 app.get('/three.js', (req, res) => res.sendFile(require.resolve('three/build/three.min.js')));
 
 const server = http.createServer(app);
-const gameServer = new Server({
+gameServer = new Server({
   transport: new WebSocketTransport({ server }),
   gracefullyShutdown: process.env.BLOCKCRAFT_E2E !== '1',
 });

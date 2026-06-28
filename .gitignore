@@ -7,6 +7,10 @@ data/
 # server logs
 *.log
 
+# playwright e2e artifacts
+test-results/
+playwright-report/
+
 # local editor / tool state
 .claude/settings.local.json
 

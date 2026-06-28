@@ -69,12 +69,15 @@ class Gate extends Schema {
     this.shardPlus = 0;      // shard tier +N (0 = not a sharded gate)
     this.shardName = '';     // shard tier name (Minor..Radiant)
     this.shardMods = '';     // CSV of active affix names
+    this.refundItem = 0;     // private entry currency returned if a live instance is lost on restart
+    this.refundOwner = '';   // verified account that paid that currency
   }
 }
 defineTypes(Gate, {
   active: 'boolean', x: 'number', y: 'number', z: 'number', rank: 'uint8',
   id: 'string', seed: 'uint32', kind: 'string', owner: 'string', team: 'string',
   shardPlus: 'uint8', shardName: 'string', shardMods: 'string',
+  refundItem: 'uint16', refundOwner: 'string',
 });
 
 class State extends Schema {

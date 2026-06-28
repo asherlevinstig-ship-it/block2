@@ -1,6 +1,6 @@
 const W = require('../world');
 const {
-  ARMOR_INFO, I, JOB_IDS, TOOL_INFO, jobLevelFromXp, jobPerkTier,
+  ARMOR_INFO, I, JOB_IDS, TOOL_INFO, hunterActivityXpForLevel, jobLevelFromXp, jobPerkTier,
 } = require('./constants');
 
 const STAT_KEYS = new Set(['str', 'agi', 'vit', 'int']);
@@ -107,6 +107,9 @@ class ProgressionMixin {
       rec.prof.job = job;
       rec.prof.jobContract = null;
     }
+    if (rec.prof.progressionFocus === 'first_promotion_job' && job === 'adventurer') {
+      rec.prof.progressionFocus = 'first_promotion_contract';
+    }
     return this.progressionChanged(client, 'job', { job });
   }
 
@@ -117,14 +120,14 @@ class ProgressionMixin {
     const level = Math.max(1, prof && prof.S ? prof.S.lvl | 0 : 1);
     if (job === 'adventurer' && !(prof.adventurerContractsCompleted | 0)) {
       return {
-        job, type: 'quest', need: 1, have: 0,
-        title: "Mara's Field Work", desc: 'Complete your next story quest for Mara Vale.',
-        rewardGold: 34, rewardJobXp: 20,
+        job, type: 'kill', need: 3, have: 0,
+        title: "Mara's Field Work", desc: 'Defeat 3 hostile creatures beyond the town walls.',
+        rewardGold: 34, rewardJobXp: 20, rewardXp: hunterActivityXpForLevel(level, .5),
       };
     }
     const pool = contractPools(job, scale).filter(contract => contract.type !== 'gate' || level >= 3);
     if (!pool.length) return null;
-    return { ...pool[(Math.random() * pool.length) | 0], job, have: 0 };
+    return { ...pool[(Math.random() * pool.length) | 0], job, have: 0, rewardXp: hunterActivityXpForLevel(level, .5) };
   }
 
   handleJobContract(client, m) {
@@ -135,18 +138,57 @@ class ProgressionMixin {
     if (action === 'take') {
       if (rec.prof.jobContract) return this.progressionReject(client, 'jobContract', 'active');
       rec.prof.jobContract = this.makeServerJobContract(rec.prof);
+      if (rec.prof.progressionFocus === 'first_promotion_contract' && rec.prof.job === 'adventurer') {
+        rec.prof.progressionFocus = '';
+      }
+      if (rec.prof.progressionFocus === 'next_adventurer_contract' && rec.prof.job === 'adventurer') {
+        rec.prof.progressionFocus = '';
+      }
     } else if (action === 'abandon') {
       rec.prof.jobContract = null;
     } else if (action === 'claim') {
       const c = rec.prof.jobContract;
       if (!c || (c.have | 0) < (c.need | 0)) return this.progressionReject(client, 'jobContract', 'incomplete');
+      const graduation = c.job === 'adventurer' && !(rec.prof.adventurerContractsCompleted | 0);
+      let graduationInventory = null;
+      if (graduation) {
+        const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
+        const beforeSword = draft.inv.filter(slot => slot && slot.id === I.IRON_SWORD).length;
+        const existingPickSlots = new Set(draft.inv.map((slot, index) => slot && slot.id === I.IRON_PICK ? index : -1).filter(index => index >= 0));
+        this.addCraftedRewardItem(draft, I.IRON_SWORD, 1);
+        this.addCraftedRewardItem(draft, I.IRON_PICK, 1);
+        const swordPlaced = draft.inv.filter(slot => slot && slot.id === I.IRON_SWORD).length > beforeSword;
+        const pickSlot = draft.inv.findIndex((slot, index) => slot && slot.id === I.IRON_PICK && !existingPickSlots.has(index));
+        const pickPlaced = pickSlot >= 0;
+        if (pickPlaced) draft.inv[pickSlot].dur = Math.max(1, Math.floor(TOOL_INFO[I.IRON_PICK].dur * .4));
+        const cachePlaced = this.addRewardItem(draft, I.IRON_INGOT, 8) === 0
+          && this.addRewardItem(draft, I.REPAIR_KIT, 1) === 0;
+        if (!swordPlaced || !pickPlaced || !cachePlaced) return this.progressionReject(client, 'jobContract', 'full');
+        graduationInventory = draft.inv;
+      }
       let rewardGold = c.rewardGold | 0;
       if (c.job === 'adventurer' && jobPerkTier(rec.prof, 'adventurer')) rewardGold = Math.round(rewardGold * (1 + jobPerkTier(rec.prof, 'adventurer') * .06));
       rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
+      const rewardXp = Math.max(0, c.rewardXp | 0);
+      this.grantHunterXp(rec.prof, rewardXp);
       rec.prof.jobXp = Math.max(0, (rec.prof.jobXp | 0) + Math.max(0, c.rewardJobXp | 0));
       if (c.job === 'adventurer') rec.prof.adventurerContractsCompleted = Math.max(0, (rec.prof.adventurerContractsCompleted | 0) + 1);
+      if (graduation) {
+        rec.prof.inv = graduationInventory;
+        this.unlockUtility(client, 'compass', 'First Adventurer contract complete');
+        rec.prof.progressionFocus = 'first_d_gate';
+        this.ensurePublicGateRank(1);
+      }
       rec.prof.jobContract = null;
-      return this.progressionChanged(client, 'jobContract', { action, rewardGold });
+      return this.progressionChanged(client, 'jobContract', {
+        action, rewardGold, rewardXp, graduation,
+        rewardItems: graduation ? [
+          { id: I.IRON_SWORD, count: 1 },
+          { id: I.IRON_PICK, count: 1 },
+          { id: I.IRON_INGOT, count: 8 },
+          { id: I.REPAIR_KIT, count: 1 },
+        ] : [],
+      });
     } else return this.progressionReject(client, 'jobContract', 'action');
     return this.progressionChanged(client, 'jobContract', { action });
   }
@@ -198,7 +240,8 @@ class ProgressionMixin {
     const quest = {
       source: 'npc', giver, role: String(role || 'town').slice(0, 32), chainKey: giver, chainStep: step, chainTotal: chain.length,
       chainTitle: def.title, title: def.title, type: def.type, need: def.need, have: 0,
-      gold: Math.round(def.gold + lvl * 2 + step * 4), xp: Math.round(def.xp + lvl * 5 + step * 6),
+      gold: Math.round(def.gold + lvl * 2 + step * 4),
+      xp: Math.max(Math.round(def.xp + lvl * 5 + step * 6), hunterActivityXpForLevel(lvl, .75)),
       desc: def.desc || (def.type === 'fetch' ? `Bring ${def.need} of ${textTarget}.` : `Complete ${def.need} ${def.type} objective${def.need === 1 ? '' : 's'}.`),
       rewardItems: def.rewardItems || [],
     };
@@ -259,14 +302,16 @@ class ProgressionMixin {
     if (!q || !this.npcQuestReady(client, q)) return this.progressionReject(client, 'npcQuest', 'incomplete');
     if (q.type === 'fetch' && !this.consumeItem(rec.prof, q.item | 0, q.need | 0)) return this.progressionReject(client, 'npcQuest', 'items');
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + (q.gold | 0));
-    rec.prof.S.xp += Math.max(0, q.xp | 0);
-    while (rec.prof.S.xp >= this.xpNeed(rec.prof.S.lvl)) {
-      rec.prof.S.xp -= this.xpNeed(rec.prof.S.lvl);
-      rec.prof.S.lvl++;
-      rec.prof.S.pts += 3;
-    }
+    this.grantHunterXp(rec.prof, q.xp);
     for (const it of q.rewardItems || []) this.addRewardItem(rec.prof, it.id, it.count);
     rec.prof.npcQuestChains[q.giver] = Math.max((rec.prof.npcQuestChains[q.giver] | 0), (q.chainStep | 0) + 1);
+    if (q.giver === 'Mara Vale' && q.type === 'gate' && (q.gateRank | 0) === 0 && (q.chainStep | 0) === 2 &&
+        this.maxUnlockedGateRankForProfile(rec.prof) >= 1) {
+      rec.prof.progressionFocus = rec.prof.job === 'adventurer'
+        ? (rec.prof.jobContract ? '' : 'first_promotion_contract')
+        : 'first_promotion_job';
+      rec.prof.firstPromotionSeen = false;
+    }
     rec.prof.activeNpcQuest = null;
     this.grantJobXp(client, 'adventurer', 12);
     this.progressJobContract(client, 'quest', 1, 0);
@@ -289,11 +334,11 @@ class ProgressionMixin {
   handleClaimAegisTrial(client) {
     const rec = this.profileFor(client);
     if (!rec || !rec.prof.aegisTrialReady) return this.progressionReject(client, 'aegisTrial', 'incomplete');
-    const lvl = Math.max(1, rec.prof.S.lvl | 0), rewardGold = 135 + lvl * 8, rewardXp = 130 + lvl * 12;
+    const lvl = Math.max(1, rec.prof.S.lvl | 0), rewardGold = 135 + lvl * 8;
+    const rewardXp = Math.max(130 + lvl * 12, hunterActivityXpForLevel(lvl, 1));
     rec.prof.aegisTrialReady = false;
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
-    rec.prof.S.xp += rewardXp;
-    while (rec.prof.S.xp >= this.xpNeed(rec.prof.S.lvl)) { rec.prof.S.xp -= this.xpNeed(rec.prof.S.lvl); rec.prof.S.lvl++; rec.prof.S.pts += 3; }
+    this.grantHunterXp(rec.prof, rewardXp);
     let reward;
     const roll = Math.random();
     if (roll < .45) reward = { kind: 'Rare Weapon', id: Math.random() < .5 ? I.DIA_SWORD : I.IRON_SWORD };
@@ -375,9 +420,15 @@ class ProgressionMixin {
   }
 
   recordGateProgress(client, rank = 0) {
+    const rec = this.profileFor(client);
     this.grantJobXp(client, 'adventurer', 18);
     this.progressJobContract(client, 'gate', 1, 0);
     this.progressNpcQuest(client, 'gate', 1, rank);
+    if (rec && rec.prof.progressionFocus === 'first_d_gate' && (rank | 0) >= 1) {
+      rec.prof.progressionFocus = 'next_adventurer_contract';
+      this.dirtyPlayers.add(rec.token);
+      client.send('profile', rec.prof);
+    }
   }
 
   recordEventProgress(client) {

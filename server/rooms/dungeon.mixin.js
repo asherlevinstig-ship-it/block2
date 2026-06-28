@@ -84,6 +84,7 @@ class DungeonMixin {
   }
   canEnterGate(client, gate) {
     if (!gate || !gate.active) return false;
+    if (!this.canAccessGateRank(client, gate.rank)) return false;
     if (gate.kind === 'solo') return !!gate.owner && gate.owner === this.clientToken(client);
     if (gate.kind === 'team') {
       const p = this.state.players.get(client.sessionId);
@@ -121,13 +122,15 @@ class DungeonMixin {
       g.rank = Math.max(0, Math.min(4, raw.rank | 0));
       g.seed = raw.seed >>> 0;
       g.kind = kind;
-      g.owner = (g.kind === 'solo' || g.kind === 'shard') ? (cleanToken(raw.owner) || '') : '';
+      g.owner = (g.kind === 'solo' || g.kind === 'team' || g.kind === 'shard') ? (cleanToken(raw.owner) || '') : '';
       g.team = (g.kind === 'team' || g.kind === 'shard') ? this.cleanTeamId(raw.team) : '';
       if (g.kind === 'shard') {
         g.shardPlus = Math.max(0, Math.min(5, raw.shardPlus | 0));
         g.shardName = typeof raw.shardName === 'string' ? raw.shardName.slice(0, 16) : '';
         g.shardMods = typeof raw.shardMods === 'string' ? raw.shardMods : '';
       }
+      g.refundItem = Math.max(0, raw.refundItem | 0);
+      g.refundOwner = cleanToken(raw.refundOwner) || '';
       g.active = true;
       this.state.gates.set(g.id, g);
       this.gateTtls.set(g.id, raw.expiresAt);
@@ -139,7 +142,7 @@ class DungeonMixin {
     this.mirrorPrimaryGate();
     return count;
   }
-  createGate({ x, y, z, rank, kind, owner, team, ttl, shardPlus, shardName, shardMods }) {
+  createGate({ x, y, z, rank, kind, owner, team, ttl, shardPlus, shardName, shardMods, refundItem, refundOwner }) {
     const g = new Gate();
     g.x = x; g.y = y; g.z = z;
     g.rank = Math.max(0, Math.min(4, rank | 0));
@@ -151,6 +154,8 @@ class DungeonMixin {
     g.shardPlus = Math.max(0, Math.min(5, shardPlus | 0));
     g.shardName = typeof shardName === 'string' ? shardName.slice(0, 16) : '';
     g.shardMods = Array.isArray(shardMods) ? shardMods.join(',') : (shardMods || '');
+    g.refundItem = Math.max(0, refundItem | 0);
+    g.refundOwner = cleanToken(refundOwner) || '';
     g.active = true;
     this.state.gates.set(g.id, g);
     this.gateTtls.set(g.id, Date.now() + Math.max(15, ttl || 75) * 1000);
@@ -213,9 +218,11 @@ class DungeonMixin {
       ...pos,
       rank: info.rank,
       kind: info.kind,
-      owner: info.kind === 'solo' ? rec.token : '',
+      owner: rec.token,
       team: info.kind === 'team' ? team : '',
       ttl: 180,
+      refundItem: item.id,
+      refundOwner: rec.token,
     });
     client.send('gateKeyResult', { id: gate.id, rank: gate.rank, kind: gate.kind, x: gate.x, y: gate.y, z: gate.z, slot });
   }
@@ -248,6 +255,8 @@ class DungeonMixin {
       shardPlus: tier.plus,
       shardName: tier.name,
       shardMods: mods,
+      refundItem: item.id,
+      refundOwner: rec.token,
     });
     client.send('shardAttuneResult', {
       id: gate.id, rank: gate.rank, plus: gate.shardPlus, name: gate.shardName,
@@ -334,6 +343,53 @@ class DungeonMixin {
       shardPlus: inst.shardPlus || 0, shardName: inst.shardName || '', shardMods: inst.shardMods || '',
     };
   }
+  armDungeonRecovery(client, g) {
+    const rec = this.profileFor(client);
+    if (!rec || !g) return;
+    rec.prof.dungeonRecovery = {
+      gateId: g.id,
+      bootId: this.bootId,
+      pos: [g.x + 1.5, g.y + .5, g.z],
+      enteredAt: Date.now(),
+    };
+    this.dirtyPlayers.add(rec.token);
+  }
+  clearDungeonRecoveryForSid(sid) {
+    const token = this.tokens.get(sid);
+    const prof = token && this.profiles.get(token);
+    if (!prof || !prof.dungeonRecovery) return;
+    prof.dungeonRecovery = null;
+    this.dirtyPlayers.add(token);
+  }
+  async recoverDungeonAfterRestart(token, prof) {
+    const recovery = prof && prof.dungeonRecovery;
+    if (!recovery || recovery.bootId === this.bootId) return null;
+    const gate = this.state.gates.get(recovery.gateId);
+    let refundedItem = 0;
+    let refundedTo = '';
+    if (gate && gate.refundItem > 0 && gate.refundOwner) {
+      refundedItem = gate.refundItem | 0;
+      refundedTo = gate.refundOwner;
+      let payer = gate.refundOwner === token ? prof : this.profiles.get(gate.refundOwner);
+      if (!payer) {
+        payer = sanitizeProfile(await this.store.loadPlayer(gate.refundOwner));
+        this.profiles.set(gate.refundOwner, payer);
+      }
+      this.addRewardItem(payer, refundedItem, 1);
+      this.dirtyPlayers.add(gate.refundOwner);
+    }
+    if (gate) this.expireGate(gate.id);
+    prof.pos = recovery.pos.slice();
+    prof.dungeonRecovery = null;
+    this.dirtyPlayers.add(token);
+    await this.flush();
+    return {
+      gateId: recovery.gateId,
+      refundedItem,
+      refunded: refundedTo === token,
+      x: prof.pos[0], y: prof.pos[1], z: prof.pos[2],
+    };
+  }
   resumeDungeonInstance(client) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !p.dgn) return false;
@@ -350,6 +406,7 @@ class DungeonMixin {
   enterGateInstance(client, g, inst) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !g || !inst) return false;
+    this.armDungeonRecovery(client, g);
     inst.addPlayer(client.sessionId);
     p.dgn = g.id;
     p.dim = 'dungeon';
@@ -684,6 +741,7 @@ class DungeonMixin {
     }
     const dgn = p.dgn;
     const inst = this.instances[dgn];
+    this.clearDungeonRecoveryForSid(sid);
     p.dgn = '';
     p.dim = 'overworld';
     if (!inst) return;
@@ -695,11 +753,18 @@ class DungeonMixin {
     const p = this.state.players.get(sid);
     if (!p || !p.dgn) return;
     const inst = this.instances[p.dgn];
+    this.clearDungeonRecoveryForSid(sid);
     p.dgn = '';
     p.dim = 'overworld';
     p.x = W.TOWN.TC + .5;
     p.y = W.TOWN.G + 2;
     p.z = W.TOWN.TC + 7.5;
+    const token = this.tokens.get(sid);
+    const prof = token && this.profiles.get(token);
+    if (prof) {
+      prof.pos = [p.x, p.y, p.z];
+      this.dirtyPlayers.add(token);
+    }
     const hp = this.playerHp.get(sid);
     if (hp) hp.hp = hp.max;
     if (inst) inst.removePlayer(sid);
@@ -715,8 +780,12 @@ class DungeonMixin {
     if (!inst) return;
     for (const sid of [...inst.players]) {
       const client = this.clients.find(c => c.sessionId === sid);
-      if (client) client.send('dungeonFailed', { reason: reason || 'wipe' });
       this.ejectFromDungeon(sid);
+      const p = this.state.players.get(sid);
+      if (client) client.send('dungeonFailed', {
+        reason: reason || 'wipe',
+        x: p && p.x, y: p && p.y, z: p && p.z,
+      });
     }
     this.clearDungeonInstance(dgn);
     this.expireGate(dgn);

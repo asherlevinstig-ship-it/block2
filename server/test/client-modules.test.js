@@ -37,6 +37,23 @@ test('progression module reconciles authoritative updates and rejection messages
   assert.deepEqual(events, [['level', 2], ['ready'], ['refresh'], ['armor'], ['reject', 'You do not own that armor']]);
 });
 
+test('Hunter XP curve has explicit rank thresholds and steepens at high rank', async () => {
+  const progression = await clientModule('progression.mjs');
+  const serverProgression = require('../rooms/constants');
+  const { hunterActivityXpForLevel, hunterRankIndexForLevel, gateRankIndexForLevel, nextHunterRankLevel, xpNeedForLevel } = progression;
+  assert.deepEqual([1, 4, 8, 13, 19, 27].map(hunterRankIndexForLevel), [0, 1, 2, 3, 4, 5]);
+  assert.equal(gateRankIndexForLevel(99), 4, 'gate tiers stop at A while Hunter rank reaches S');
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(nextHunterRankLevel), [4, 8, 13, 19, 27, 0]);
+  assert.equal(xpNeedForLevel(3), 130, 'the polished onboarding still reaches Level 3 on schedule');
+  assert.ok(xpNeedForLevel(18) > xpNeedForLevel(7) * 4);
+  assert.ok(xpNeedForLevel(26) > xpNeedForLevel(18) * 2);
+  for (let level = 1; level <= 40; level++) {
+    assert.equal(xpNeedForLevel(level), serverProgression.xpNeedForLevel(level), `client/server XP parity at Level ${level}`);
+    assert.equal(hunterRankIndexForLevel(level), serverProgression.hunterRankIndexForLevel(level), `client/server rank parity at Level ${level}`);
+    assert.equal(hunterActivityXpForLevel(level, .75), serverProgression.hunterActivityXpForLevel(level, .75), `client/server reward parity at Level ${level}`);
+  }
+});
+
 test('inventory and equipment models own stacking consumption and profile restore', async () => {
   const { createInventoryModel, createEquipmentModel } = await clientModule('inventory.mjs');
   const slots = new Array(4).fill(null), changes = [];

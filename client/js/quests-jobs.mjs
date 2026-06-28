@@ -23,6 +23,7 @@ export function clampJobContract(contract, knownJobs) {
     have: Math.max(0, Math.min(999, contract.have | 0)),
     rewardGold: Math.max(0, Math.min(9999, contract.rewardGold | 0)),
     rewardJobXp: Math.max(0, Math.min(9999, contract.rewardJobXp | 0)),
+    rewardXp: Math.max(0, Math.min(99999, contract.rewardXp | 0)),
     title: String(contract.title || 'Job Contract').slice(0, 48),
     desc: String(contract.desc || 'Complete the work order.').slice(0, 140),
   };

@@ -692,15 +692,7 @@ class CombatMixin {
   awardLoot(client, loot) {
     const rec = this.profileFor(client);
     if (rec) {
-      if (loot.xp) {
-        const S = rec.prof.S;
-        S.xp += Math.max(0, loot.xp | 0);
-        while (S.xp >= this.xpNeed(S.lvl)) {
-          S.xp -= this.xpNeed(S.lvl);
-          S.lvl++;
-          S.pts += 3;
-        }
-      }
+      this.grantHunterXp(rec.prof, loot.xp);
       rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + (loot.gold | 0)));
       if (loot.coal) this.addRewardItem(rec.prof, REWARD_ITEMS.coal, loot.coal);
       if (loot.iron) this.addRewardItem(rec.prof, REWARD_ITEMS.iron, loot.iron);
@@ -734,12 +726,15 @@ class CombatMixin {
       client.send('profile', rec.prof);
     }
     const after = Math.max(-1, Math.min(4, rec.prof.highestGateRankCleared | 0));
+    const availableRank = this.maxUnlockedGateRankForProfile(rec.prof);
     this.recordGateProgress(client, ri);
     return {
       clearedRank: ri,
       highestGateRankCleared: after,
       newClear: before < ri,
-      nextUnlockedRank: ri < 4 ? ri + 1 : null,
+      nextRank: ri < 4 ? ri + 1 : null,
+      nextRankUnlocked: ri < 4 && availableRank >= ri + 1,
+      availableRank,
     };
   }
   dungeonRewardProgress(rank, clearResult) {
@@ -748,7 +743,9 @@ class CombatMixin {
       clearedRank: ri,
       highestGateRankCleared: clearResult ? clearResult.highestGateRankCleared : null,
       newClear: !!(clearResult && clearResult.newClear),
-      nextUnlockedRank: ri < 4 ? ri + 1 : null,
+      nextRank: ri < 4 ? ri + 1 : null,
+      nextRankUnlocked: !!(clearResult && clearResult.nextRankUnlocked),
+      availableRank: clearResult ? clearResult.availableRank : null,
     };
   }
   setPath(client, path) {

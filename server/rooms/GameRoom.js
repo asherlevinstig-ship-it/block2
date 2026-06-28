@@ -1,11 +1,11 @@
 const { performance } = require('perf_hooks');
-const { Room } = require('colyseus');
+const { Room, matchMaker } = require('colyseus');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
 const { getAuthService } = require('../auth');
 
 // Blockcraft is one persistent global world, not a set of independent room
@@ -31,8 +31,8 @@ const {
   LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
   SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, dangerRingAt, dayTimeAt, dragonMountType,
-  isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier, mobTargetInRange, shadeMitigation,
-  skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName,
+  gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
+  mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, xpNeedForLevel,
 } = require('./constants');
 
 class GameRoom extends Room {
@@ -46,6 +46,7 @@ class GameRoom extends Room {
     claimGlobalWorld(this);
     try {
     this.maxClients = 16;
+    this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
     this.world = W.createWorld();
     this.world.generate();
@@ -63,6 +64,7 @@ class GameRoom extends Room {
     this.playerHp = new Map();
     this.playerHunger = new Map();
     this.bossContrib = new Map();
+    this.restartRecoveries = new Map();
 
     // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
     this.initDungeonState();        // must precede restoreSavedGates (populates gateSeq/gateTtls)
@@ -306,6 +308,15 @@ class GameRoom extends Room {
     });
 
     this.onMessage('claimFirstQuestReward', client => this.handleClaimFirstQuestReward(client));
+    this.onMessage('ackFirstPromotion', client => this.handleAckFirstPromotion(client));
+    this.onMessage('tutorialComplete', (client, m) => this.handleTutorialComplete(client, m));
+    this.onMessage('dungeonRecoveryRequest', client => {
+      const token = this.tokens.get(client.sessionId);
+      const recovery = token && this.restartRecoveries.get(token);
+      if (!recovery) return;
+      client.send('dungeonRestartRecovery', recovery);
+      this.restartRecoveries.delete(token);
+    });
     if (process.env.BLOCKCRAFT_E2E === '1') {
       this.onMessage('e2eJourney', (client, m) => this.handleE2EJourney(client, m));
     }
@@ -448,6 +459,7 @@ class GameRoom extends Room {
         }
       }
     }
+    const restartRecovery = prof ? await this.recoverDungeonAfterRestart(token, prof) : null;
     const p = new Player();
     p.name = cleanName(options && typeof options.name === 'string' ? options.name : (prof ? prof.name : auth.displayName));
     if (prof) {
@@ -479,6 +491,10 @@ class GameRoom extends Room {
     const hunger = this.ensurePlayerHunger(client);
     client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
     if (prof) client.send('profile', prof);
+    if (restartRecovery) {
+      this.restartRecoveries.set(token, restartRecovery);
+      client.send('dungeonRestartRecovery', restartRecovery);
+    }
     this.sendLandClaims(client);
     this.sendDragonIncubations(client);
     this.sendNestDragons(client);
@@ -491,6 +507,9 @@ class GameRoom extends Room {
 
 
   async onLeave(client, consented) {
+    // A process shutdown is not a voluntary dungeon exit. Keep the live
+    // attempt marker intact so onDispose can flush it for next-boot recovery.
+    if (matchMaker && matchMaker.isGracefullyShuttingDown) return;
     if (consented === false) {
       try {
         await this.allowReconnection(client, 15);
@@ -671,6 +690,8 @@ class GameRoom extends Room {
           shardPlus: g.shardPlus,
           shardName: g.shardName,
           shardMods: g.shardMods,
+          refundItem: g.refundItem,
+          refundOwner: g.refundOwner,
           x: g.x,
           y: g.y,
           z: g.z,
@@ -747,11 +768,124 @@ class GameRoom extends Room {
     return true;
   }
 
+  handleTutorialComplete(client, m) {
+    const rec = this.profileFor(client);
+    const tutorial = m && typeof m.tutorial === 'string' ? m.tutorial : '';
+    const expected = TUTORIAL_VERSIONS[tutorial] | 0;
+    const version = m && (m.version | 0);
+    if (!rec || !expected || version !== expected) {
+      client.send('tutorialProgress', { ok: false, tutorial, reason: 'invalid' });
+      return false;
+    }
+    if (!rec.prof.tutorials || typeof rec.prof.tutorials !== 'object') {
+      rec.prof.tutorials = Object.fromEntries(Object.keys(TUTORIAL_VERSIONS).map(key => [key, 0]));
+    }
+    rec.prof.tutorials[tutorial] = Math.max(rec.prof.tutorials[tutorial] | 0, expected);
+    this.dirtyPlayers.add(rec.token);
+    client.send('tutorialProgress', {
+      ok: true,
+      tutorial,
+      version: expected,
+      tutorials: { ...rec.prof.tutorials },
+    });
+    return true;
+  }
+
+  handleAckFirstPromotion(client) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof.progressionFocus) return false;
+    rec.prof.firstPromotionSeen = true;
+    this.dirtyPlayers.add(rec.token);
+    client.send('firstPromotionAck', { ok: true, progressionFocus: rec.prof.progressionFocus });
+    return true;
+  }
+
   handleE2EJourney(client, m) {
     if (process.env.BLOCKCRAFT_E2E !== '1') return false;
     const rec = this.profileFor(client);
-    const q = rec && rec.prof.activeNpcQuest;
     const action = m && String(m.action || '');
+    if (!rec) return false;
+    if (action === 'preparePrivateGateRestart') {
+      rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      this.awardGrant(client, {
+        source: 'e2e-private-gate',
+        items: [
+          { id: I.SOLO_KEY_E, count: 1 },
+          { id: I.SHARD_MINOR, count: 1 },
+        ],
+      });
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'prepareTeamGateRestart') {
+      rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      this.awardGrant(client, {
+        source: 'e2e-team-gate',
+        items: [{ id: I.TEAM_KEY_E, count: 1 }],
+      });
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'prepareFirstGateFailure') {
+      rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      rec.prof.npcQuestChains['Mara Vale'] = 2;
+      rec.prof.activeNpcQuest = this.buildNpcQuest(rec.prof, 'Mara Vale', 'guide');
+      if (!rec.prof.activeNpcQuest || !this.ensurePublicGateRank(0)) return false;
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'prepareReturningHunter') {
+      rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'prepareTownTutorialPersistence') {
+      rec.prof.S.lvl = Math.max(2, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      rec.prof.firstQuestRewardClaimed = true;
+      rec.prof.npcQuestChains['Mara Vale'] = Math.max(1, rec.prof.npcQuestChains['Mara Vale'] | 0);
+      rec.prof.gold = Math.max(250, rec.prof.gold | 0);
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'completeMaraFieldWork') {
+      const c = rec.prof.jobContract;
+      if (!c || c.job !== 'adventurer' || c.title !== "Mara's Field Work" || c.type !== 'kill') return false;
+      while ((c.have | 0) < (c.need | 0)) this.recordKillProgress(client);
+      return true;
+    }
+    if (action === 'failDRankGate') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      const ok = !!(p && inst && !inst.cleared && (inst.rank | 0) === 1);
+      if (ok) this.hurtPlayer(client, 999999, 'e2e-d-gate-failure');
+      client.send('e2eJourneyResult', { action, requestId, ok });
+      return ok;
+    }
+    if (action === 'defeatDRankBoss') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      if (!p || !inst || inst.cleared || (inst.rank | 0) !== 1) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      let bossId = '', boss = null;
+      this.state.mobs.forEach((mob, id) => {
+        if (!boss && mob && mob.dgn === inst.id && mob.kind === 'boss') { bossId = String(id); boss = mob; }
+      });
+      if (!boss) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = inst.bossRoom.x;
+      p.z = inst.bossRoom.z;
+      this.recordBossContribution(client, inst.id, Math.max(1, boss.maxHp | 0));
+      this.finishMobKill(client, bossId, boss);
+      client.send('e2eJourneyResult', { action, requestId, ok: true });
+      return true;
+    }
+    const q = rec.prof.activeNpcQuest;
     if (!rec || !q || q.giver !== 'Mara Vale') return false;
     if (action === 'prepareFirstQuest' && q.type === 'fetch' && (q.item | 0) === W.B.LOG) {
       const missing = Math.max(0, (q.need | 0) - this.countItem(rec.prof, W.B.LOG));
@@ -761,6 +895,15 @@ class GameRoom extends Room {
     if (action === 'completeRoadReady' && q.type === 'kill') {
       while ((q.have | 0) < (q.need | 0)) this.recordKillProgress(client);
       return true;
+    }
+    if (action === 'failFirstGate' && q.type === 'gate' && (q.gateRank | 0) === 0) {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      const ok = !!(p && inst && !inst.cleared && (inst.rank | 0) === 0);
+      if (ok) this.hurtPlayer(client, 999999, 'e2e-gate-failure');
+      client.send('e2eJourneyResult', { action, requestId, ok });
+      return ok;
     }
     if (action === 'defeatFirstGateBoss' && q.type === 'gate' && (q.gateRank | 0) === 0) {
       const requestId = m && String(m.requestId || '').slice(0, 32);
@@ -928,7 +1071,20 @@ class GameRoom extends Room {
     return { cd: 250, bonus: 0 };
   }
   xpNeed(lvl) {
-    return Math.round(25 * Math.pow(Math.max(1, lvl), 1.5));
+    return xpNeedForLevel(lvl);
+  }
+  grantHunterXp(prof, amount) {
+    const S = prof && prof.S;
+    const granted = Math.max(0, Math.min(1000000, Math.round(Number(amount) || 0)));
+    if (!S || !granted) return { granted: 0, levels: 0 };
+    const before = Math.max(1, S.lvl | 0);
+    S.xp = Math.max(0, S.xp | 0) + granted;
+    while (S.xp >= this.xpNeed(S.lvl)) {
+      S.xp -= this.xpNeed(S.lvl);
+      S.lvl++;
+      S.pts += 3;
+    }
+    return { granted, levels: Math.max(0, (S.lvl | 0) - before) };
   }
   profileFor(client) {
     const token = this.tokens.get(client.sessionId);
@@ -1031,19 +1187,16 @@ class GameRoom extends Room {
     return rec ? Math.max(-1, Math.min(4, rec.prof.highestGateRankCleared | 0)) : -1;
   }
   maxUnlockedGateRankForProfile(prof) {
-    const cleared = prof ? Math.max(-1, Math.min(4, prof.highestGateRankCleared | 0)) : -1;
-    return Math.max(0, Math.min(4, cleared + 1));
+    const lvl = prof && prof.S ? Math.max(1, prof.S.lvl | 0) : 1;
+    return gateRankIndexForLevel(lvl);
   }
   playerRankGateIndexForProfile(prof) {
     const lvl = prof && prof.S ? Math.max(1, prof.S.lvl | 0) : 1;
-    const levelRank = Math.max(0, Math.min(4, Math.floor((lvl - 1) / 3)));
-    return Math.max(levelRank, this.maxUnlockedGateRankForProfile(prof));
+    return gateRankIndexForLevel(lvl);
   }
   playerHunterRankIndexForProfile(prof) {
     const lvl = prof && prof.S ? Math.max(1, prof.S.lvl | 0) : 1;
-    const levelRank = Math.max(0, Math.min(5, Math.floor((lvl - 1) / 3)));
-    const cleared = prof ? Math.max(-1, Math.min(4, prof.highestGateRankCleared | 0)) : -1;
-    return Math.max(levelRank, Math.max(0, Math.min(5, cleared + 1)));
+    return hunterRankIndexForLevel(lvl);
   }
   maxUnlockedGateRankForClient(client) {
     const rec = this.profileFor(client);
@@ -1064,7 +1217,10 @@ class GameRoom extends Room {
     const clean = this.cleanTeamId(team);
     if (!clean) return -1;
     const rec = this.teamRecords && this.teamRecords.get(clean);
-    let rank = rec ? this.maxUnlockedGateRankForProfile({ highestGateRankCleared: rec.highestGateRankCleared }) : -1;
+    let rank = -1;
+    if (rec && rec.members) for (const token of rec.members) {
+      rank = Math.max(rank, this.maxUnlockedGateRankForProfile(this.profiles.get(token)));
+    }
     this.state.players.forEach((p, sessionId) => {
       if (this.cleanTeamId(p.team) !== clean) return;
       const token = this.tokens.get(sessionId);
@@ -1073,18 +1229,13 @@ class GameRoom extends Room {
     return rank;
   }
   maxUnlockedGateRankForKey(client, kind) {
-    if (kind === 'team') {
-      const p = this.state.players.get(client.sessionId);
-      const teamRank = p ? this.maxUnlockedGateRankForTeam(p.team) : -1;
-      if (teamRank >= 0) return teamRank;
-    }
     return this.maxUnlockedGateRankForClient(client);
   }
   canAccessGateRank(client, rank) {
     return (rank | 0) <= this.maxUnlockedGateRankForClient(client);
   }
   maxUnlockedPublicRank() {
-    let rank = this.maxUnlockedGateRankForProfile(this.worldProgress);
+    let rank = 0;
     this.tokens.forEach(token => {
       rank = Math.max(rank, this.maxUnlockedGateRankForProfile(this.profiles.get(token)));
     });
@@ -1487,9 +1638,17 @@ class GameRoom extends Room {
       const dgn = p.dgn;
       const inst = this.instances[dgn];
       const reason = inst && inst.players.size <= 1 ? 'solo' : 'wipe';
-      client.send('dungeonDeath', { reason: 'death' });
       this.ejectFromDungeon(client.sessionId);
-      if (inst && !inst.hasLivingPlayers()) this.failDungeon(dgn, reason);
+      client.send('dungeonDeath', { reason: 'death', x: p.x, y: p.y, z: p.z });
+      if (inst && !inst.hasLivingPlayers()) {
+        this.failDungeon(dgn, reason);
+        const quest = rec && rec.prof && rec.prof.activeNpcQuest;
+        if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) {
+          this.ensurePublicGateRank(quest.gateRank);
+        } else if (rec && rec.prof && rec.prof.progressionFocus === 'first_d_gate') {
+          this.ensurePublicGateRank(1);
+        }
+      }
     } else {
       hp.hp = hp.max;
       client.send('worldDeath', {});
@@ -1565,13 +1724,7 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     const amount = Math.max(0, Math.min(100000, n | 0));
     if (rec && amount) {
-      const S = rec.prof.S;
-      S.xp += amount;
-      while (S.xp >= this.xpNeed(S.lvl)) {
-        S.xp -= this.xpNeed(S.lvl);
-        S.lvl++;
-        S.pts += 3;
-      }
+      this.grantHunterXp(rec.prof, amount);
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
     }
@@ -1595,7 +1748,7 @@ class GameRoom extends Room {
     scored.sort((a, b) => b.r - a.r);
     return scored[0].s;
   }
-  regionalContractOffers(now = Date.now()) {
+  regionalContractOffers(now = Date.now(), level = 1) {
     const bucket = this.regionalContractBucket(now);
     const landmarks = W.regionalLandmarkSpecs();
     const small = W.smallDiscoverySpecs();
@@ -1604,7 +1757,7 @@ class GameRoom extends Room {
       const ring = dangerRingAt(s.x, s.z);
       return {
         rewardGold: Math.round(baseGold * DANGER_RINGS[ring].loot),
-        rewardXp: Math.round(baseXp * DANGER_RINGS[ring].loot),
+        rewardXp: Math.max(Math.round(baseXp * DANGER_RINGS[ring].loot), hunterActivityXpForLevel(level, .75)),
         rewardItems: ring >= 2 ? [{ id: ring >= 3 ? I.DIAMOND : I.IRON_INGOT, count: ring >= 3 ? 1 : 2 }] : [],
       };
     };
@@ -1631,7 +1784,7 @@ class GameRoom extends Room {
       targetName: bio.name, targetItem: bio.item, targetItemName: bio.name, need: 3 + (bucket % 2), have: 0,
       title: 'Gather ' + bio.name,
       desc: 'Bring back regional material gathered from its native biome.',
-      rewardGold: 46, rewardXp: 26, rewardItems: [], acceptedAt: 0, seed: bucket,
+      rewardGold: 46, rewardXp: Math.max(26, hunterActivityXpForLevel(level, .75)), rewardItems: [], acceptedAt: 0, seed: bucket,
     });
     const cache = this.pickContractTarget(small.filter(s => s.type === 'buried_chest'), bucket, 41);
     if (cache) offers.push({
@@ -1675,7 +1828,7 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     if (!rec) return client.send('regionalContracts', { offers: [], active: null });
     client.send('regionalContracts', {
-      offers: this.regionalContractOffers().map(c => this.publicRegionalContract(c)),
+      offers: this.regionalContractOffers(Date.now(), rec.prof.S.lvl).map(c => this.publicRegionalContract(c)),
       active: this.publicRegionalContract(rec.prof.regionalContract),
     });
   }
@@ -1689,7 +1842,7 @@ class GameRoom extends Room {
     if (rec.prof.regionalContract)
       return client.send('regionalContractReject', { reason: 'active' });
     const id = String(m && m.id || '');
-    const offer = this.regionalContractOffers().find(c => c.id === id);
+    const offer = this.regionalContractOffers(Date.now(), rec.prof.S.lvl).find(c => c.id === id);
     if (!offer) return client.send('regionalContractReject', { reason: 'expired' });
     rec.prof.regionalContract = { ...offer, have: 0, acceptedAt: Date.now() };
     this.dirtyPlayers.add(rec.token);
@@ -1720,11 +1873,7 @@ class GameRoom extends Room {
     const rewardItems = Array.isArray(c.rewardItems) ? c.rewardItems.map(it => ({ id: it.id | 0, count: Math.max(1, it.count | 0) })) : [];
     const rewardGold = Math.max(0, c.rewardGold | 0), rewardXp = Math.max(0, c.rewardXp | 0);
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + rewardGold));
-    if (rewardXp) {
-      const S = rec.prof.S;
-      S.xp += rewardXp;
-      while (S.xp >= this.xpNeed(S.lvl)) { S.xp -= this.xpNeed(S.lvl); S.lvl++; S.pts += 3; }
-    }
+    this.grantHunterXp(rec.prof, rewardXp);
     for (const it of rewardItems) this.addRewardItem(rec.prof, it.id, it.count);
     const done = this.publicRegionalContract(c);
     rec.prof.regionalContract = null;
@@ -1849,15 +1998,7 @@ class GameRoom extends Room {
   awardGrant(client, grant) {
     const rec = this.profileFor(client);
     if (rec) {
-      if (grant.xp) {
-        const S = rec.prof.S;
-        S.xp += Math.max(0, grant.xp | 0);
-        while (S.xp >= this.xpNeed(S.lvl)) {
-          S.xp -= this.xpNeed(S.lvl);
-          S.lvl++;
-          S.pts += 3;
-        }
-      }
+      this.grantHunterXp(rec.prof, grant.xp);
       for (const item of grant.items || []) {
         this.addRewardItem(rec.prof, item.id, item.count);
         if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });

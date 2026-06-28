@@ -108,6 +108,7 @@
   #eventjoin{font-family:inherit;font-size:10px;letter-spacing:2px;padding:6px 9px;background:#2b1d48;color:#e8d8ff;border:1px solid #b88cff;border-radius:4px;cursor:pointer;white-space:nowrap;flex:0 0 auto}
   #eventjoin:disabled{opacity:.45;cursor:default}
   #rewardwin{position:fixed;right:18px;top:178px;width:360px;max-width:calc(100vw - 36px);z-index:9;pointer-events:none}
+  #rewardwin.promotion-open{z-index:40;pointer-events:auto}
   #rewardpanel{background:linear-gradient(160deg, rgba(12,22,44,.97), rgba(6,10,22,.97));border:1px solid #4fd8ff;box-shadow:0 0 24px rgba(79,216,255,.38), inset 0 0 32px rgba(79,216,255,.07);border-radius:8px;padding:14px 16px;color:#d8e8ff;pointer-events:auto;position:relative;overflow:hidden}
   #rewardpanel:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#4fd8ff,#ffd24a,#b88cff)}
   #rewardpanel.earned{border-color:#ffd24a;box-shadow:0 0 26px rgba(255,210,74,.28), inset 0 0 32px rgba(79,216,255,.07)}
@@ -245,6 +246,11 @@
   #currentquest{position:fixed;right:14px;top:282px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:none;color:#f7ecbf;text-shadow:1px 1px 0 #000;background:linear-gradient(135deg,rgba(30,22,10,.86),rgba(10,14,24,.82));border:1px solid rgba(255,210,74,.5);box-shadow:0 0 18px rgba(255,210,74,.18), inset 0 0 20px rgba(255,210,74,.05);border-radius:7px;padding:10px 12px}
   #currentquest .qt{font-size:10px;letter-spacing:2px;color:#ffd24a;text-transform:uppercase;margin-bottom:4px}
   #currentquest .qv{font-size:13px;line-height:1.35;color:#fff3c4}
+  #currentquest .prepchecklist{display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;margin-top:8px;padding-top:7px;border-top:1px solid rgba(255,210,74,.2);font-size:11px;color:#cbd5e1}
+  #currentquest .prepchecklist div{display:flex;align-items:center;gap:5px;white-space:nowrap}
+  #currentquest .prepchecklist b{width:12px;color:#8090a4}
+  #currentquest .prepchecklist .done{color:#a7db83}
+  #currentquest .prepchecklist .done b{color:#7ed957}
   #townchoices{position:fixed;right:14px;top:390px;width:330px;max-width:calc(100vw - 28px);z-index:7;color:#d8e8ff;background:linear-gradient(155deg,rgba(11,25,40,.94),rgba(7,13,23,.94));border:1px solid rgba(79,216,255,.55);box-shadow:0 0 20px rgba(79,216,255,.18);border-radius:8px;padding:11px;pointer-events:auto}
   #townchoices .tct{font-size:11px;letter-spacing:2px;color:#4fd8ff;margin-bottom:3px}
   #townchoices .tcs{font-size:9px;letter-spacing:1.5px;color:#8fb8d8;margin-bottom:8px}

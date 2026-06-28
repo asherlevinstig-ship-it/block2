@@ -16,6 +16,10 @@ const path = require('path');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
+const TUTORIAL_VERSIONS = Object.freeze({
+  onboarding: 7, ability: 2, intro: 1, gate: 1,
+  townJob: 1, townTavern: 1, townLand: 1,
+});
 const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, Math.round(v))) : a; };
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
 
@@ -110,6 +114,10 @@ function defaultProfile(name) {
     regionalContract: null,
     utilityUnlocks: [],
     utilityLoadout: { active: '', passive: [] },
+    progressionFocus: '',
+    firstPromotionSeen: false,
+    tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0 },
+    dungeonRecovery: null,
     pos: [64.5, 20, 71.5],
   };
 }
@@ -136,6 +144,7 @@ function sanitizeJobContract(c) {
     have: clampI(c.have, 0, need),
     rewardGold: clampI(c.rewardGold, 0, 9999),
     rewardJobXp: clampI(c.rewardJobXp, 0, 9999),
+    rewardXp: clampI(c.rewardXp, 0, 99999),
     title: cleanShortText(c.title, 'Job Contract', 48),
     desc: cleanShortText(c.desc, 'Complete the work order.', 140),
   };
@@ -203,6 +212,58 @@ function sanitizeActiveNpcQuest(q) {
     utility: cleanShortText(q.utility, '', 32), familiar: cleanShortText(q.familiar, '', 32), mount: cleanShortText(q.mount, '', 32),
     rewardItems: Array.isArray(q.rewardItems) ? q.rewardItems.slice(0, 4).map(it => ({ id: clampI(it && it.id, 1, 999), count: clampI(it && it.count, 1, 64) })) : [],
   };
+}
+
+function sanitizeDungeonRecovery(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const gateId = cleanGateId(raw.gateId);
+  const bootId = cleanShortText(raw.bootId, '', 64);
+  const pos = Array.isArray(raw.pos) ? raw.pos : [];
+  if (!gateId || !bootId || pos.length !== 3 || pos.some(v => !isFinite(+v))) return null;
+  return {
+    gateId,
+    bootId,
+    pos: [clampF(pos[0], 0, 1000), clampF(pos[1], 1, 80), clampF(pos[2], 0, 1000)],
+    enteredAt: clampI(raw.enteredAt, 0, 4102444800000),
+  };
+}
+
+function sanitizeTutorials(raw, profile) {
+  const out = { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0 };
+  const S = profile && profile.S || {};
+  const chains = profile && profile.npcQuestChains || {};
+  const legacyTownDone = (S.lvl | 0) >= 3 || (chains['Mara Vale'] | 0) >= 2;
+  if (raw && typeof raw === 'object') {
+    for (const key of Object.keys(TUTORIAL_VERSIONS)) {
+      const missingLegacyTownKey = key.startsWith('town') && !Object.prototype.hasOwnProperty.call(raw, key);
+      out[key] = missingLegacyTownKey && legacyTownDone
+        ? TUTORIAL_VERSIONS[key]
+        : clampI(raw[key], 0, TUTORIAL_VERSIONS[key]);
+    }
+    return out;
+  }
+
+  // Profiles created before tutorial milestones were persisted must not be
+  // treated as brand-new hunters on their next browser or device.
+  const progressed = (S.lvl | 0) > 1
+    || !!S.path
+    || Object.keys(chains).length > 0
+    || profile.firstQuestRewardClaimed === true
+    || (profile.highestGateRankCleared | 0) >= 0;
+  if (progressed) out.onboarding = TUTORIAL_VERSIONS.onboarding;
+  if (S.path) {
+    out.ability = TUTORIAL_VERSIONS.ability;
+    out.intro = TUTORIAL_VERSIONS.intro;
+  }
+  if ((S.lvl | 0) >= 3 || (profile.highestGateRankCleared | 0) >= 0) {
+    out.gate = TUTORIAL_VERSIONS.gate;
+  }
+  if (legacyTownDone) {
+    out.townJob = TUTORIAL_VERSIONS.townJob;
+    out.townTavern = TUTORIAL_VERSIONS.townTavern;
+    out.townLand = TUTORIAL_VERSIONS.townLand;
+  }
+  return out;
 }
 
 function sanitizeWorldProgress(p) {
@@ -279,6 +340,12 @@ function sanitizeProfile(p) {
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
   out.utilityUnlocks = sanitizeUtilityUnlocks(p.utilityUnlocks);
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
+  out.progressionFocus = ['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract'].includes(p.progressionFocus) ? p.progressionFocus : '';
+  if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'next_adventurer_contract';
+  if (out.progressionFocus === 'next_adventurer_contract' && out.jobContract) out.progressionFocus = '';
+  out.firstPromotionSeen = p.firstPromotionSeen === true;
+  out.tutorials = sanitizeTutorials(p.tutorials, out);
+  out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
   const armor = cleanSlot(p.armor);
   out.armor = armor && ARMOR_IDS.has(armor.id) ? { id: armor.id, count: 1 } : null;
   if (out.armor) {
@@ -514,11 +581,13 @@ function sanitizeGates(gates) {
       kind,
       rank: clampI(raw.rank, 0, 4),
       seed: clampI(raw.seed, 0, 4294967295),
-      owner: (kind === 'solo' || kind === 'shard') ? (cleanToken(raw.owner) || '') : '',
+      owner: (kind === 'solo' || kind === 'team' || kind === 'shard') ? (cleanToken(raw.owner) || '') : '',
       team: (kind === 'team' || kind === 'shard') ? cleanTeam(raw.team) : '',
-      x: clampF(raw.x, 0, 128),
+      refundItem: clampI(raw.refundItem, 0, 999),
+      refundOwner: cleanToken(raw.refundOwner) || '',
+      x: clampF(raw.x, 0, 1000),
       y: clampF(raw.y, 1, 80),
-      z: clampF(raw.z, 0, 128),
+      z: clampF(raw.z, 0, 1000),
       expiresAt: clampI(raw.expiresAt, 0, 4102444800000),
       lootedChests,
     };
@@ -769,4 +838,4 @@ function createStore() {
   return new JsonStore(process.env.DATA_DIR);
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken };
+module.exports = { createStore, JsonStore, FirebaseStore, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken, TUTORIAL_VERSIONS };

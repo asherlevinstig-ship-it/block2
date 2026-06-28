@@ -377,6 +377,7 @@ class EconomyMixin {
     const isRoad = m.vendor === 'road';
     const isGuild = m.vendor === 'guild';
     const p=this.state.players.get(client.sessionId);
+    if(isTavern&&(!p||p.dgn||Math.hypot(p.x-(W.TOWN.TC+19.5),p.z-(W.TOWN.TC+13.5))>8))return client.send('shopReject',{reason:'range'});
     if(isRoad&&(!p||p.dgn||!W.smallDiscoverySpecs().some(s=>s.type==='traveling_merchant'&&Math.hypot(p.x-s.x,p.z-s.z)<6)))return client.send('shopReject',{reason:'range'});
     if (isGuild) {
       const guild = this.guildForToken && this.guildForToken(rec.token);

@@ -71,5 +71,10 @@ export function createNetworkController(options) {
     }
   }
 
-  return { state, connect, reconnect, shutdown };
+  function pauseReconnect() {
+    stopped = true;
+    state.reconnecting = false;
+  }
+
+  return { state, connect, reconnect, pauseReconnect, shutdown };
 }
