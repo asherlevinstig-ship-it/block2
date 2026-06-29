@@ -1,9 +1,131 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 const { pathToFileURL } = require('node:url');
+const W = require('../world');
+const serverDungeon = require('../dungeon');
+const { DimensionGrid, isDimensionGrid } = require('../../shared/dimension-grid');
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
+
+test('GameContext owns shared services, state slices, module APIs, and runtime lifecycle', async () => {
+  const { createGameContext } = await clientModule('game-context.mjs');
+  const clock = { now: () => 42 };
+  const context = createGameContext({ services: { clock }, state: { session: { connected: false } } });
+
+  assert.equal(context.requireService('clock'), clock);
+  assert.equal(context.requireState('session').connected, false);
+  context.registerState('world', { dimension: 'overworld' });
+  context.registerModule('world', { getBlock: () => 7 });
+  context.markModuleLoaded('world');
+  context.markModuleLoaded('world');
+  context.setPhase('ready');
+
+  assert.equal(context.requireModule('world').getBlock(), 7);
+  assert.deepEqual(context.snapshot(), {
+    phase: 'ready',
+    services: ['clock'],
+    state: ['session', 'world'],
+    modules: ['world'],
+    loadedModules: ['world'],
+  });
+  assert.throws(() => context.provide('clock', {}), /already registered/);
+  assert.throws(() => context.requireService('missing'), /Unknown service/);
+  assert.throws(() => context.registerState('bad', null), /must be an object/);
+});
+
+test('DimensionGrid provides one origin-aware storage contract for every dimension kind', () => {
+  const grid = new DimensionGrid({kind:'tutorial',id:'training',originX:100,originY:5,originZ:200,width:4,height:3,depth:5,empty:0,outside:9});
+  assert.equal(isDimensionGrid(grid), true);
+  assert.deepEqual(grid.bounds, {minX:100,minY:5,minZ:200,maxX:103,maxY:7,maxZ:204});
+  assert.equal(grid.getB(99,5,200), 9);
+  assert.equal(grid.setB(102,6,203,7), true);
+  assert.equal(grid.getB(102,6,203), 7);
+  assert.equal(grid.index(102,6,203), 34);
+  assert.equal(grid.setB(104,6,203,1), false);
+  grid.fill(3);
+  assert.equal(grid.getB(100,5,200), 3);
+  assert.equal(grid.byteLength, 60);
+  assert.equal(W.createWorld() instanceof DimensionGrid, true);
+  assert.equal(serverDungeon.generateDungeon(0,1).world instanceof DimensionGrid, true);
+});
+
+test('client dimensions and server consume the shared grid contract', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.js', 'ui.js'];
+  const runtimeSource = runtimeFiles.map(name =>
+    fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', name), 'utf8')
+  ).join('\n');
+  const dimensionScript = html.indexOf('<script src="/shared/dimension-grid.js"></script>');
+  const dungeonScript = html.indexOf('<script src="/shared/dungeon-generation.js"></script>');
+  assert.equal(dimensionScript >= 0 && dungeonScript > dimensionScript, true);
+  assert.match(html, /<script src="\/shared\/dungeon-generation\.js"><\/script>/);
+  assert.match(html, /import\('\.\/js\/game-context\.mjs'\)/);
+  assert.match(html, /createGameContext\(\{services:/);
+  let previousModule = -1;
+  for (const name of runtimeFiles) {
+    const offset = html.indexOf(`'./js/${name}'`);
+    assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
+    previousModule = offset;
+  }
+  assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
+  assert.match(runtimeSource, /BlockcraftDungeonGeneration\.createDungeonGeneration/);
+  assert.doesNotMatch(runtimeSource, /function generateDungeon\(ri, seed\)/);
+  for (const kind of ['overworld','tutorial','event']) assert.match(runtimeSource, new RegExp("new DimensionGrid\\(\\{kind:'"+kind));
+  assert.doesNotMatch(runtimeSource, /new Uint8Array\(WX\*WH\*WX\)/);
+  assert.match(runtimeSource, /export const api=gameContext\.requireModule\('world'\)/);
+  assert.match(runtimeSource, /import \{api as worldApi,state as worldState\} from '\.\/world\.mjs'/);
+  assert.match(runtimeSource, /export const api=gameContext\.requireModule\('dimensions'\)/);
+  for (const name of ['world','dimensions','combat','ui']) {
+    assert.match(runtimeSource, new RegExp(`gameContext\\.registerState\\('${name}'`));
+    assert.match(runtimeSource, new RegExp(`gameContext\\.registerModule\\('${name}'`));
+  }
+});
+
+test('browser and Node adapters generate byte-identical dungeons', () => {
+  const dimensionSource = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'dimension-grid.js'), 'utf8');
+  const dungeonSource = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'dungeon-generation.js'), 'utf8');
+  const browser = { Uint8Array, Set, Math, Number, TypeError };
+  vm.createContext(browser);
+  vm.runInContext(dimensionSource, browser);
+  vm.runInContext(dungeonSource, browser);
+  const browserDungeon = browser.BlockcraftDungeonGeneration.createDungeonGeneration({
+    B: W.B,
+    hash2: W.hash2,
+  });
+
+  for (const [rank, seed] of [[0, 1], [2, 0x12345678], [4, 0xfedcba98]]) {
+    const nodeResult = serverDungeon.generateDungeon(rank, seed);
+    const browserResult = browserDungeon.generateDungeon(rank, seed);
+    assert.deepEqual(JSON.parse(JSON.stringify(browserResult.rooms)), nodeResult.rooms);
+    assert.deepEqual(JSON.parse(JSON.stringify(browserResult.spawns)), nodeResult.spawns);
+    assert.deepEqual(Buffer.from(browserResult.world.data), Buffer.from(nodeResult.world.data));
+  }
+});
+
+test('onboarding building counts a three-block stack above the stone pad', async () => {
+  const { isOnboardingBuildPlacement, countOnboardingBuildBlocks } = await clientModule('onboarding.mjs');
+  const meadow = { x: 100, z: 200, G: 12 };
+  assert.deepEqual([13, 14, 15].map(y => isOnboardingBuildPlacement(140, y, 182, meadow)), [true, true, true]);
+  assert.equal(isOnboardingBuildPlacement(140, 18, 182, meadow), false, 'placements above the cleared tutorial volume do not count');
+  assert.equal(isOnboardingBuildPlacement(142, 13, 182, meadow), false, 'placements outside the stone pad do not count');
+  const stack = new Set(['140,13,182', '140,14,182', '140,15,182']);
+  assert.equal(countOnboardingBuildBlocks(meadow, (x, y, z) => stack.has(`${x},${y},${z}`) ? 5 : 0, 5), 3,
+    'progress is recovered from the blocks in the world even if a placement event was missed');
+});
+
+test('onboarding resource manifest restores every tutorial log and mature crop', async () => {
+  const { onboardingResourceCells } = await clientModule('onboarding.mjs');
+  const cells = onboardingResourceCells({ x: 100, z: 200, G: 12 }, { LOG: 5, WHEAT_3: 25 });
+  assert.deepEqual(cells.filter(cell => cell.id === 5).map(cell => [cell.x, cell.y, cell.z]), [
+    [122, 13, 194], [122, 14, 194], [122, 15, 194], [122, 16, 194],
+  ]);
+  assert.deepEqual(cells.filter(cell => cell.id === 25).map(cell => [cell.x, cell.y, cell.z]), [
+    [108, 13, 172], [110, 13, 172], [112, 13, 172],
+  ]);
+});
 
 test('reconnect policy retries with bounded exponential delays', async () => {
   const { reconnectWithBackoff } = await clientModule('reconnect.mjs');

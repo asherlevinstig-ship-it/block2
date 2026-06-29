@@ -43,7 +43,7 @@ class EconomyMixin {
     const info = this.parseChestKey(key);
     if (!info || info.space === 'overworld') return null;
     const inst = this.instances[info.space];
-    if (!inst || !inst.world || inst.world[W.idx(info.x, info.y, info.z)] !== W.B.CHEST) return null;
+    if (!inst || inst.getB(info.x, info.y, info.z) !== W.B.CHEST) return null;
     const chestId = info.x + ',' + info.y + ',' + info.z;
     const looted = this.gateLootedChests.get(info.space) || new Set();
     if (looted.has(chestId)) return { scope: 'dungeon', owner: '', team: '', slots: new Array(18).fill(null) };
@@ -416,7 +416,7 @@ class EconomyMixin {
     if (!p || !m) return null;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     if (!W.inWorld(x, y, z)) return null;
-    const block = p.dgn ? (this.instances[p.dgn] && this.instances[p.dgn].world[W.idx(x, y, z)]) : this.world.getB(x, y, z);
+    const block = p.dgn ? (this.instances[p.dgn] && this.instances[p.dgn].getB(x, y, z)) : this.world.getB(x, y, z);
     if (block !== W.B.CHEST) return null;
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 6) return null;
     return (p.dgn || 'overworld') + ':' + x + ',' + y + ',' + z;
@@ -503,7 +503,7 @@ class EconomyMixin {
     if (!p || !m) return false;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     if (!W.inWorld(x, y, z)) return false;
-    const block = p.dgn ? (this.instances[p.dgn] && this.instances[p.dgn].world[W.idx(x, y, z)]) : this.world.getB(x, y, z);
+    const block = p.dgn ? (this.instances[p.dgn] && this.instances[p.dgn].getB(x, y, z)) : this.world.getB(x, y, z);
     return block === W.B.FURNACE && Math.hypot(x + .5 - p.x, z + .5 - p.z) <= 6;
   }
   furnaceKeyForPlayer(client, m) {

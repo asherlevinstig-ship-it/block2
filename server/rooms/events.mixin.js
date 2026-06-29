@@ -312,26 +312,11 @@ class EventsMixin {
   }
   clearEventCourse() {
     if (!this.eventCourseBlocks) this.eventCourseBlocks = new Set();
-    for (const key of this.eventCourseBlocks) {
-      const [x, y, z] = key.split(',').map(Number);
-      if (!W.inWorld(x, y, z)) continue;
-      this.world.setB(x, y, z, W.B.AIR);
-      this.state.edits.set(key, W.B.AIR);
-      this.dirtyWorld = true;
-      if (!this.eventTransientEditKeys) this.eventTransientEditKeys = new Set();
-      this.eventTransientEditKeys.add(key);
-    }
     this.eventCourseBlocks.clear();
   }
   setEventBlock(x, y, z, id) {
     if (!W.inWorld(x, y, z)) return;
-    const key = x + ',' + y + ',' + z;
-    this.world.setB(x, y, z, id);
-    this.state.edits.set(key, id);
-    this.dirtyWorld = true;
-    this.eventCourseBlocks.add(key);
-    if (!this.eventTransientEditKeys) this.eventTransientEditKeys = new Set();
-    this.eventTransientEditKeys.add(key);
+    this.eventCourseBlocks.add(x + ',' + y + ',' + z + ',' + id);
   }
   eventPlatform(cx, y, cz, rx, rz, id) {
     for (let x = cx - rx; x <= cx + rx; x++) {
@@ -417,6 +402,25 @@ class EventsMixin {
     p.dim = inEvent ? 'event' : 'overworld';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
     client.send('eventTeleport', { x: pos.x, y: pos.y, z: pos.z, reason: reason || 'event', eventId: inEvent ? ev.id : '', course: inEvent ? ev.course : null });
+  }
+  resumeEventParticipant(client) {
+    const p = client && this.state.players.get(client.sessionId);
+    const ev = this.currentEventInstance() || this.serverEvent;
+    if (!p || !ev || ev.phase !== 'active' || !ev.participants || !ev.participants.has(client.sessionId)) return false;
+    p.dim = 'event';
+    p.dgn = ev.id;
+    client.send('eventTeleport', {
+      kind: ev.kind,
+      eventId: ev.id,
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      reason: 'reconnect',
+      course: ev.kind === EVENT_PARKOUR.kind ? ev.course : null,
+      arena: ev.kind === EVENT_KING.kind ? ev.arena : null,
+    });
+    client.send('eventStarted', this.eventPayload(client));
+    return true;
   }
   startParkourEvent(now) {
     const ev = this.currentEventInstance() || this.serverEvent;
@@ -504,16 +508,26 @@ class EventsMixin {
     const r = Math.min(150, (a.size || KING_ARENA_SIZE) * .38);
     const x = Math.max(a.minX + 6, Math.min(a.maxX - 6, a.x + Math.cos(ang) * r));
     const z = Math.max(a.minZ + 6, Math.min(a.maxZ - 6, a.z + Math.sin(ang) * r));
-    const y = this.world.standHeight(x, z, W.WH - 2) + 1.05;
-    return { x, y: y > 1 ? y : W.TOWN.G + 2, z };
+    return { x, y: W.TOWN.G + 1.05, z };
   }
   teleportKingPlayer(client, pos, reason, evArg) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !pos) return;
-    p.dim = 'overworld';
-    p.dgn = '';
+    const ev = evArg || this.currentEventInstance() || this.serverEvent;
+    const inEvent = !!(ev && ev.phase === 'active' && reason !== 'complete' && reason !== 'failed');
+    p.dim = inEvent ? 'event' : 'overworld';
+    p.dgn = inEvent ? ev.id : '';
+    if (inEvent) p.mount = '';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
-    client.send('eventTeleport', { kind: EVENT_KING.kind, x: pos.x, y: pos.y, z: pos.z, reason: reason || 'king', eventId: evArg && evArg.id || '' });
+    client.send('eventTeleport', {
+      kind: EVENT_KING.kind,
+      x: pos.x,
+      y: pos.y,
+      z: pos.z,
+      reason: reason || 'king',
+      eventId: inEvent ? ev.id : '',
+      arena: inEvent ? ev.arena : null,
+    });
   }
   startKingEvent(now) {
     const ev = this.currentEventInstance() || this.serverEvent;
@@ -578,7 +592,7 @@ class EventsMixin {
     if (!ev.participants.has(attackerSid) || !ev.participants.has(targetSid) || attackerSid === targetSid) return;
     const attacker = this.state.players.get(attackerSid);
     const target = this.state.players.get(targetSid);
-    if (!attacker || !target || target.dgn || attacker.dgn) return;
+    if (!attacker || !target || attacker.dim !== 'event' || target.dim !== 'event' || attacker.dgn !== ev.id || target.dgn !== ev.id) return;
     const aPart = ev.participants.get(attackerSid), tPart = ev.participants.get(targetSid);
     if (aPart.teamId === tPart.teamId) return;
     if (Math.hypot(attacker.x - target.x, attacker.z - target.z) > KING_HIT_RANGE) return;
@@ -701,7 +715,7 @@ class EventsMixin {
       const p = this.state.players.get(sid);
       if (!client || !p) continue;
       if (part.respawnAt && now < part.respawnAt) continue;
-      if (!this.pointInKingArena(ev, p.x, p.z)) this.teleportKingPlayer(client, this.kingSpawnPos(ev, sid), 'arena', ev);
+      if (!this.pointInKingArena(ev, p.x, p.z) || p.y < W.TOWN.G - 8) this.teleportKingPlayer(client, this.kingSpawnPos(ev, sid), 'arena', ev);
       if (!ev.crown.holderSid && Math.hypot(p.x - ev.crown.x, p.z - ev.crown.z) <= KING_CROWN_PICKUP_RADIUS) {
         this.setKingCrownHolder(ev, sid, 'pickup');
       }
@@ -778,7 +792,7 @@ class EventsMixin {
     this.broadcastEventStatus(false);
   }
   isEventProtectedBlock(x, y, z) {
-    return !!(this.eventCourseBlocks && this.eventCourseBlocks.has(x + ',' + y + ',' + z));
+    return false;
   }
   guildForToken(token) {
     if (!token || !this.guilds) return null;

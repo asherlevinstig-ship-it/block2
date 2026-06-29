@@ -325,7 +325,7 @@ class CombatMixin {
     const inst = dgn ? this.instances[dgn] : null;
     const get = (x, y, z) => {
       if (!W.inWorld(x, y, z)) return W.B.AIR;
-      return inst ? inst.world[W.idx(x, y, z)] : this.world.getB(x, y, z);
+      return inst ? inst.getB(x, y, z) : this.world.getB(x, y, z);
     };
     let best = { x: p.x, y: p.y, z: p.z };
     for (let t = .75; t <= range; t += .45) {
@@ -591,7 +591,7 @@ class CombatMixin {
       if (!dgn && this.isTownProtected(bx, bz)) continue;
       if (!dgn && this.isLandOwnedByOther(client, bx, bz)) continue;
       if (!dgn && this.isEventProtectedBlock(bx, by, bz)) continue;
-      const id = inst ? inst.world[W.idx(bx, by, bz)] : this.world.getB(bx, by, bz);
+      const id = inst ? inst.getB(bx, by, bz) : this.world.getB(bx, by, bz);
       if (!ABILITY_BREAKABLE.has(id)) continue;
       if (id === W.B.BEDROCK || id === W.B.CHEST || id === W.B.FURNACE) continue;
       out.push({ x: bx, y: by, z: bz, id, score: Math.hypot(bx + .5 - x, by + .5 - y, bz + .5 - z) });
@@ -600,7 +600,7 @@ class CombatMixin {
     let n = 0;
     for (const b of out.slice(0, maxBreaks)) {
       if (inst) {
-        inst.world[W.idx(b.x, b.y, b.z)] = W.B.AIR;
+        inst.setB(b.x, b.y, b.z, W.B.AIR);
         inst.edits.push({ x: b.x, y: b.y, z: b.z, id: W.B.AIR });
         this.sendSpace(dgn, 'dedit', { x: b.x, y: b.y, z: b.z, id: W.B.AIR });
       } else {

@@ -36,8 +36,9 @@ Module._load = function patchedLoad(request, parent, isMain) {
 
 const W = require('../world');
 const AI = require('../ai');
+const D = require('../dungeon');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
-const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange } = require('../rooms/GameRoom');
+const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
@@ -47,6 +48,7 @@ const I = {
   IRON_INGOT: 102,
   DIAMOND: 103,
   IRON_PICK: 112,
+  WOOD_SWORD: 122,
   IRON_SWORD: 124,
   WOOD_HOE: 172,
   STONE_HOE: 173,
@@ -169,6 +171,7 @@ function makeRoom() {
   room.cropGrowAcc = 0;
   room.eventInstances = new Map();
   room.activeEventInstanceId = '';
+  room.tutorialReturns = new Map();
   room.animalSpawnAcc = 0;
   room.worldProgress = { highestGateRankCleared: -1 };
   room.teamMgr = new (require('../teams').TeamManager)(5);
@@ -236,7 +239,7 @@ function itemCount(prof, id) {
 // tickInstanceHazards / onDungeonTrashDeath read, without generating a real dungeon.
 function hazInstance(room, id, mods, plus = 0) {
   const inst = {
-    id, rank: 1, shardPlus: plus, world: new Uint8Array(0),
+    id, rank: 1, shardPlus: plus, world: new D.DungeonGrid(1, 1, 1),
     players: new Set(), cleared: false,
     hazMods: new Set(mods),
     haz: {
@@ -279,7 +282,7 @@ function putInstance(room, opts) {
     id: opts.id, seed: opts.seed || 0, rank: opts.rank || 0,
     kind: opts.kind || 'public', shardPlus: 0, shardName: '', shardMods: '',
   };
-  const inst = new DungeonInstance({ world: opts.world || new Uint8Array(0), bossRoom: opts.bossRoom || { x: 20.5, z: 20.5 } }, g, room);
+  const inst = new DungeonInstance({ world: opts.world || new D.DungeonGrid(), bossRoom: opts.bossRoom || { x: 20.5, z: 20.5 } }, g, room);
   for (const sid of (opts.players || [])) inst.addPlayer(sid);
   if (opts.cleared) inst.cleared = true;
   if (opts.lootChestTotal != null) inst.lootChestTotal = opts.lootChestTotal;
@@ -493,6 +496,11 @@ test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate'
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(prof.activeNpcQuest.title, 'Road Ready');
   assert.equal(prof.activeNpcQuest.levelTarget, 3);
+  assert.equal(itemCount(prof, I.WOOD_SWORD), 1, 'Mara gives a wooden sword when Road Ready begins');
+  assert.equal(prof.maraRoadReadySwordGranted, true);
+  room.handleNpcQuest(client, { action: 'abandon' });
+  room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
+  assert.equal(itemCount(prof, I.WOOD_SWORD), 1, 're-accepting Road Ready cannot duplicate the starter sword');
   for (let i = 0; i < 3; i++) room.recordKillProgress(client);
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.S.lvl, 3);
@@ -2020,7 +2028,7 @@ test('a mob fires a bolt aimed at its target at the correct speed', () => {
 
 test('DungeonInstance encapsulates instance state plus world and edit access', () => {
   const g = { id: 'dg1', seed: 7, rank: 2, kind: 'public', shardPlus: 3, shardName: 'Glimmering', shardMods: 'Empowered,Volatile,Explosive' };
-  const d = { world: new Uint8Array(W.WX * W.WX), bossRoom: { x: 100, z: 120 } };   // 1MB buffer covers the y=0 plane
+  const d = { world: new D.DungeonGrid(), bossRoom: { x: 100, z: 120 } };
   const inst = new DungeonInstance(d, g);
 
   assert.equal(inst.id, 'dg1');
@@ -2048,7 +2056,7 @@ test('DungeonInstance encapsulates instance state plus world and edit access', (
 test('DungeonInstance.dispose tears down only its own mobs, projectiles, and registry entry', () => {
   const room = { state: { mobs: new Map() }, mobMeta: {}, instances: {}, sArrows: [], sFireballs: [], bossContrib: new Map([['dg9', new Map()], ['other', new Map()]]) };
   const g = { id: 'dg9', seed: 1, rank: 0, kind: 'public', shardPlus: 0, shardMods: '' };
-  const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
+  const inst = new DungeonInstance({ world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } }, g, room);
   room.instances['dg9'] = inst;
   room.state.mobs.set('m1', { dgn: 'dg9' }); room.mobMeta.m1 = {};
   room.state.mobs.set('m2', { dgn: 'other' }); room.mobMeta.m2 = {};
@@ -2069,7 +2077,7 @@ test('DungeonInstance.dispose tears down only its own mobs, projectiles, and reg
 
 test('DungeonInstance.hasLivingPlayers tracks live roster members inside the instance', () => {
   const room = { state: { players: new Map() }, playerHp: new Map(), instances: {} };
-  const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, { id: 'dgA', seed: 0, rank: 0, kind: 'public', shardPlus: 0, shardMods: '' }, room);
+  const inst = new DungeonInstance({ world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } }, { id: 'dgA', seed: 0, rank: 0, kind: 'public', shardPlus: 0, shardMods: '' }, room);
   inst.addPlayer('alive'); inst.addPlayer('downed'); inst.addPlayer('left');
   room.state.players.set('alive', { dgn: 'dgA' });
   room.state.players.set('downed', { dgn: 'dgA' });
@@ -2538,7 +2546,7 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   room.clients.push(client);
   seedPlayer(room, client, { x: 20.5, z: 20.5, lvl: 13 });
   room.createInstance = g => {
-    const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
+    const inst = new DungeonInstance({ world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } }, g, room);
     room.instances[g.id] = inst;
     return inst;
   };
@@ -2618,6 +2626,71 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   assert.equal(prof.tutorials.ability, 0);
   assert.equal(room.handleTutorialComplete(client, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability }), true);
   assert.equal(prof.tutorials.ability, TUTORIAL_VERSIONS.ability);
+
+  const p = room.state.players.get(client.sessionId);
+  p.x = W.TRAINING_MEADOW.x; p.y = W.TRAINING_MEADOW.G + 1; p.z = W.TRAINING_MEADOW.z;
+  prof.pos = [p.x, p.y, p.z];
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding }), true);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5]);
+  assert.deepEqual([p.x, p.y, p.z], prof.pos, 'completion moves both server state and the durable profile to town');
+
+  const affected = defaultProfile('Already Complete');
+  affected.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  affected.pos = [W.TRAINING_MEADOW.x, W.TRAINING_MEADOW.G + 1, W.TRAINING_MEADOW.z];
+  assert.equal(room.moveCompletedTutorialProfileToTown(affected), true);
+  assert.deepEqual(affected.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5]);
+});
+
+test('generated dungeons use compact instance-local grids', () => {
+  const d = D.generateDungeon(4, 0x5eed1234);
+  const fullWorldBytes = W.WX * W.WH * W.WX;
+
+  assert.equal(d.world instanceof D.DungeonGrid, true);
+  assert.equal(d.world.width, D.DUNGEON_WIDTH);
+  assert.equal(d.world.height, D.DUNGEON_HEIGHT);
+  assert.equal(d.world.depth, D.DUNGEON_WIDTH);
+  assert.equal(d.world.byteLength, D.DUNGEON_WIDTH * D.DUNGEON_HEIGHT * D.DUNGEON_WIDTH);
+  assert.equal(d.world.byteLength < fullWorldBytes / 100, true, 'an instance uses under 1% of a full world buffer');
+  assert.equal(D.standHeightIn(d.world, d.entrance.x, d.entrance.z, 12), 9);
+  assert.equal(AI.makeSolid(d.world)(-1, 9, 0), true, 'the compact edge remains collision-solid');
+
+  for (const room of d.rooms) {
+    assert.equal(room.x + room.rx < d.world.width, true, 'rooms fit the compact x extent');
+    assert.equal(room.z + room.rz < d.world.depth, true, 'rooms fit the compact z extent');
+  }
+});
+
+test('onboarding and ability tutorials use private server spaces and restore the overworld position', () => {
+  const onboardingRoom = makeRoom(), newcomer = makeClient('newcomer');
+  const { prof } = seedPlayer(onboardingRoom, newcomer, { x: 500.5, y: 16, z: 507.5 });
+  onboardingRoom.clients = [newcomer];
+  assert.equal(onboardingRoom.handleTutorialEnter(newcomer, { kind: 'onboarding' }), true);
+  const p = onboardingRoom.state.players.get(newcomer.sessionId);
+  assert.equal(p.dim, 'tutorial');
+  assert.match(p.dgn, /^tutorial-onboarding-/);
+  assert.deepEqual([p.x, p.y, p.z], [W.TRAINING_MEADOW.x - 32, W.TRAINING_MEADOW.G + 2, W.TRAINING_MEADOW.z + 24]);
+  assert.equal(newcomer.sent.some(e => e.type === 'tutorialDimension' && e.msg.active && e.msg.spaceId === p.dgn), true);
+
+  onboardingRoom.handleWorldEdit(newcomer, { x: W.TRAINING_MEADOW.x, y: W.TRAINING_MEADOW.G + 1, z: W.TRAINING_MEADOW.z, id: W.B.PLANKS });
+  assert.equal(onboardingRoom.state.edits.size, 0, 'private tutorial edits never enter persistent overworld state');
+  onboardingRoom.handleTutorialComplete(newcomer, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding });
+  assert.equal(p.dim, 'overworld');
+  assert.equal(p.dgn, '');
+  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5]);
+  assert.deepEqual(prof.pos, [p.x, p.y, p.z]);
+
+  const abilityRoom = makeRoom(), awakened = makeClient('awakened');
+  const returnPos = [512.5, 16, 498.5];
+  seedPlayer(abilityRoom, awakened, { x: returnPos[0], y: returnPos[1], z: returnPos[2], lvl: 2 });
+  abilityRoom.clients = [awakened];
+  assert.equal(abilityRoom.handleTutorialEnter(awakened, { kind: 'ability' }), true);
+  const ap = abilityRoom.state.players.get(awakened.sessionId);
+  assert.equal(ap.dim, 'tutorial');
+  assert.match(ap.dgn, /^tutorial-ability-/);
+  abilityRoom.handleTutorialComplete(awakened, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability });
+  assert.equal(ap.dim, 'overworld');
+  assert.equal(ap.dgn, '');
+  assert.deepEqual([ap.x, ap.y, ap.z], returnPos);
 });
 
 test('restart recovery ejects safely and refunds consumed private gate currency once', async () => {
@@ -2666,7 +2739,7 @@ test('team gate lobby waits until all joined hunters are ready', () => {
   gate.team = 'T1';
   room.state.gates.set(gate.id, gate);
   room.createInstance = g => {
-    const inst = new DungeonInstance({ world: new Uint8Array(0), bossRoom: { x: 0, z: 0 } }, g, room);
+    const inst = new DungeonInstance({ world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } }, g, room);
     room.instances[g.id] = inst;
     return inst;
   };
@@ -3241,8 +3314,8 @@ test('cleared dungeon consumes its gate and support contribution can earn boss r
 
 test('generated dungeon chests can contain gate keys', () => {
   const room = makeRoom();
-  const w = new Uint8Array(W.WX * W.WH * W.WX);
-  w[W.idx(1, 9, 12)] = W.B.CHEST;
+  const w = new D.DungeonGrid();
+  w.setB(1, 9, 12, W.B.CHEST);
   putInstance(room, { id: 'g5', seed: 1, world: w });
 
   const rec = room.getChestRecord('g5:1,9,12');
@@ -3291,10 +3364,20 @@ test('public gate placement uses deeper distance bands by rank', () => {
     const ok = room.spawnGate(rank);
     assert.equal(ok, true);
     const gate = [...room.state.gates.values()].find(g => g.rank === rank);
-    const ring = Math.max(Math.abs(Math.floor(gate.x) - W.TOWN.TC), Math.abs(Math.floor(gate.z) - W.TOWN.TC));
-    assert.equal(ring >= bands[rank][0], true);
-    assert.equal(ring <= bands[rank][1], true);
+    const distance = townDistance(Math.floor(gate.x), Math.floor(gate.z));
+    assert.equal(distance >= bands[rank][0], true);
+    assert.equal(distance <= bands[rank][1], true);
   }
+});
+
+test('danger rings and gate validation share circular town distance', () => {
+  const room = makeRoom();
+  const diagonal = W.TOWN.TC + 160;
+
+  assert.equal(townDistance(W.TOWN.TC + 90, W.TOWN.TC), 90);
+  assert.equal(dangerRingAt(W.TOWN.TC + 90, W.TOWN.TC), 1);
+  assert.equal(room.isValidRestoredPublicGate({ rank: 0, x: W.TOWN.TC + 120, z: W.TOWN.TC }), true);
+  assert.equal(room.isValidRestoredPublicGate({ rank: 0, x: diagonal, z: diagonal }), false);
 });
 
 test('authoritative room world generates biome blocks', () => {
@@ -3307,6 +3390,8 @@ test('authoritative room world generates biome blocks', () => {
   assert.equal(w.getB(20, 20, 70), W.B.RED_SAND);
   assert.equal(w.getB(20, 19, 70), W.B.TERRACOTTA);
   assert.equal(w.getB(35, 20, 90), W.B.CACTUS);
+  assert.notEqual(w.getB(W.TRAINING_MEADOW.x + 30, W.TRAINING_MEADOW.G + 1, W.TRAINING_MEADOW.z - 12), W.B.TABLE,
+    'the tutorial table is no longer baked into the shared overworld');
 });
 
 test('regional landmark layout is deterministic, distributed, and includes every requested archetype', () => {
@@ -3423,6 +3508,11 @@ test('king of the hill queues participants scores crown time and transfers crown
 
   const pa = room.state.players.get(alpha.sessionId);
   const pb = room.state.players.get(bravo.sessionId);
+  assert.equal(pa.dim, 'event');
+  assert.equal(pb.dim, 'event');
+  assert.equal(pa.dgn, ev.id);
+  assert.equal(pb.dgn, ev.id);
+  assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.arena && e.msg.eventId === ev.id), true);
   pa.x = ev.arena.x; pa.y = 16; pa.z = ev.arena.z;
   pb.x = ev.arena.x + 1.5; pb.y = 16; pb.z = ev.arena.z;
   room.setKingCrownHolder(ev, alpha.sessionId, 'test');

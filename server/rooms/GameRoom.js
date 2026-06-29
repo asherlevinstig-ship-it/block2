@@ -32,7 +32,7 @@ const {
   SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, dangerRingAt, dayTimeAt, dragonMountType,
   gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
-  mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, xpNeedForLevel,
+  mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
 
 class GameRoom extends Room {
@@ -65,6 +65,7 @@ class GameRoom extends Room {
     this.playerHunger = new Map();
     this.bossContrib = new Map();
     this.restartRecoveries = new Map();
+    this.tutorialReturns = new Map();
 
     // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
     this.initDungeonState();        // must precede restoreSavedGates (populates gateSeq/gateTtls)
@@ -82,17 +83,14 @@ class GameRoom extends Room {
     const saved = await this.store.loadWorldEdits();
     this.worldProgress = { highestGateRankCleared: -1 };
     let applied = 0;
-    let skippedTraining = 0;
     for (const k in saved) {
       const [x, y, z] = k.split(',').map(Number);
       const id = saved[k] | 0;
       if (!W.inWorld(x, y, z) || id < 0 || id > W.MAX_BLOCK_ID) continue;
-      if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 2)) { skippedTraining++; continue; }
       this.world.setB(x, y, z, id);
       this.state.edits.set(k, id);
       applied++;
     }
-    if (skippedTraining) this.dirtyWorld = true;
     try {
       this.worldProgress = await this.store.loadWorldProgress();
       if ((this.worldProgress.highestGateRankCleared | 0) >= 0) console.log('[persist] world gate progress rank ' + 'EDCBA'[this.worldProgress.highestGateRankCleared | 0]);
@@ -258,7 +256,9 @@ class GameRoom extends Room {
     this.onMessage('claimAegisTrial', (client) => this.handleClaimAegisTrial(client));
 
     this.onMessage('edit', (client, m) => this.handleWorldEdit(client, m));
-    this.onMessage('trainingReset', (client) => this.resetTrainingMeadow(client));
+    this.onMessage('trainingReset', (client) => this.handleTutorialEnter(client, { kind: 'onboarding' }));
+    this.onMessage('tutorialEnter', (client, m) => this.handleTutorialEnter(client, m));
+    this.onMessage('tutorialExit', (client) => this.handleTutorialExit(client));
     this.onMessage('landClaimBuy', (client, m) => this.handleLandClaimBuy(client, m));
     this.onMessage('useFood', (client, m) => this.handleUseFood(client, m));
     this.onMessage('useRepairKit', (client, m) => this.handleUseRepairKit(client, m));
@@ -445,6 +445,7 @@ class GameRoom extends Room {
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
+      if (this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
       if (Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
         this.dirtyPlayers.add(token);
@@ -518,7 +519,7 @@ class GameRoom extends Room {
         if (profile) client.send('profile', profile);
         const hunger = this.playerHunger.get(client.sessionId);
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
-        this.resumeDungeonInstance(client);
+        if (!this.resumeTutorialDimension(client) && !this.resumeEventParticipant(client)) this.resumeDungeonInstance(client);
         return;
       } catch (_) {
         // The reconnect window elapsed; perform the normal durable cleanup.
@@ -529,6 +530,7 @@ class GameRoom extends Room {
 
   finalizeLeave(client) {
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
+    if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
     this.detachTeamSession(client.sessionId);
     const p = this.state.players.get(client.sessionId);
     const wasInDungeon = !!(p && p.dgn);
@@ -627,7 +629,6 @@ class GameRoom extends Room {
       this.state.edits.forEach((v, k) => {
         if (this.eventTransientEditKeys && this.eventTransientEditKeys.has(k)) return;
         const [x, , z] = k.split(',').map(Number);
-        if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 2)) return;
         obj[k] = v;
       });
       try { await this.store.saveWorldEdits(obj); }
@@ -781,6 +782,18 @@ class GameRoom extends Room {
       rec.prof.tutorials = Object.fromEntries(Object.keys(TUTORIAL_VERSIONS).map(key => [key, 0]));
     }
     rec.prof.tutorials[tutorial] = Math.max(rec.prof.tutorials[tutorial] | 0, expected);
+    if (tutorial === 'onboarding') {
+      const spawn = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
+      rec.prof.pos = spawn;
+      this.leaveTutorialDimension(client, spawn);
+      const p = this.state.players.get(client.sessionId);
+      if (p) {
+        p.dim = 'overworld'; p.dgn = '';
+        p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
+      }
+    } else if (tutorial === 'ability') {
+      this.leaveTutorialDimension(client);
+    }
     this.dirtyPlayers.add(rec.token);
     client.send('tutorialProgress', {
       ok: true,
@@ -788,6 +801,70 @@ class GameRoom extends Room {
       version: expected,
       tutorials: { ...rec.prof.tutorials },
     });
+    return true;
+  }
+
+  moveCompletedTutorialProfileToTown(prof) {
+    if (!prof || !prof.tutorials || (prof.tutorials.onboarding | 0) < TUTORIAL_VERSIONS.onboarding) return false;
+    if (!Array.isArray(prof.pos) || !W.isTrainingMeadowLand(prof.pos[0], prof.pos[2], 4)) return false;
+    prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
+    return true;
+  }
+
+  tutorialSpaceId(client, kind) {
+    return 'tutorial-' + kind + '-' + String(client && client.sessionId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
+  }
+
+  handleTutorialEnter(client, m) {
+    const p = client && this.state.players.get(client.sessionId);
+    const rec = client && this.profileFor(client);
+    const kind = m && String(m.kind || '');
+    if (!p || !rec || !['onboarding', 'ability'].includes(kind)) return false;
+    if (p.dgn && p.dim !== 'tutorial') {
+      client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
+      return false;
+    }
+    if (!this.tutorialReturns) this.tutorialReturns = new Map();
+    if (!this.tutorialReturns.has(client.sessionId)) {
+      this.tutorialReturns.set(client.sessionId, { x: p.x, y: p.y, z: p.z, yaw: p.yaw });
+    }
+    const spaceId = this.tutorialSpaceId(client, kind);
+    const spawn = kind === 'ability'
+      ? { x: 805, y: 20, z: 847 }
+      : { x: W.TRAINING_MEADOW.x - 32, y: W.TRAINING_MEADOW.G + 2, z: W.TRAINING_MEADOW.z + 24 };
+    p.dim = 'tutorial';
+    p.dgn = spaceId;
+    p.mount = '';
+    p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
+    client.send('tutorialDimension', { active: true, kind, spaceId, ...spawn });
+    return true;
+  }
+
+  leaveTutorialDimension(client, forcedPos = null) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || p.dim !== 'tutorial') return false;
+    const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
+    const pos = forcedPos
+      ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
+      : (ret || { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 7.5 });
+    p.dim = 'overworld';
+    p.dgn = '';
+    p.x = pos.x; p.y = pos.y; p.z = pos.z;
+    if (ret && Number.isFinite(ret.yaw)) p.yaw = ret.yaw;
+    if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
+    client.send('tutorialDimension', { active: false, x: p.x, y: p.y, z: p.z });
+    return true;
+  }
+
+  handleTutorialExit(client) {
+    return this.leaveTutorialDimension(client);
+  }
+
+  resumeTutorialDimension(client) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
+    const kind = p.dgn.includes('-ability-') ? 'ability' : 'onboarding';
+    client.send('tutorialDimension', { active: true, kind, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
     return true;
   }
 
@@ -935,24 +1012,6 @@ class GameRoom extends Room {
   }
 
   // ---------------- helpers ----------------
-  resetTrainingMeadow(client = null) {
-    if (!W.TRAINING_MEADOW || !W.buildTrainingMeadow) return;
-    W.buildTrainingMeadow((x, y, z, id) => this.world.setB(x, y, z, id));
-    const keys = [];
-    this.state.edits.forEach((id, key) => {
-      const [x, , z] = key.split(',').map(Number);
-      if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 2)) keys.push(key);
-    });
-    for (const key of keys) this.state.edits.delete(key);
-    if (this.cropTimers) {
-      for (const key of [...this.cropTimers.keys()]) {
-        const [x, , z] = key.split(',').map(Number);
-        if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 2)) this.cropTimers.delete(key);
-      }
-    }
-    this.dirtyWorld = true;
-    this.broadcast('trainingReset', {});
-  }
   // Per-client token-bucket rate limiter shared by the high-frequency mutating
   // handlers. A bucket holds up to `burst` tokens and refills at `ratePerSec`;
   // each accepted message spends one. This permits short legitimate bursts
@@ -991,10 +1050,6 @@ class GameRoom extends Room {
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, 'overworld:' + x + ',' + y + ',' + z)) {
       return this.rejectEdit(client, x, y, z, prev, id);
     }
-    if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 2)) {
-      if (id === W.B.AIR && prev !== W.B.AIR) this.awardMine(client, prev, m.slot, x, y, z);
-      return;
-    }
     const naturalHarvest = id === W.B.AIR && !this.state.edits.has(x + ',' + y + ',' + z);
     if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id);
     this.world.setB(x, y, z, id);
@@ -1010,7 +1065,7 @@ class GameRoom extends Room {
     if (!p || !m || !p.dgn) return;
     const inst = this.instances[p.dgn]; if (!inst) return;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
-    if (!W.inWorld(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
+    if (!inst.inBounds(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
     if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
     const prev = inst.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
@@ -1239,9 +1294,10 @@ class GameRoom extends Room {
     return typeof id === 'string' ? id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) : '';
   }
   countGeneratedDungeonChests(wbuf) {
-    if (!wbuf) return 0;
+    if (!wbuf || !(wbuf.data instanceof Uint8Array)) return 0;
+    const blocks = wbuf.data;
     let count = 0;
-    for (let i = 0; i < wbuf.length; i++) if (wbuf[i] === W.B.CHEST) count++;
+    for (let i = 0; i < blocks.length; i++) if (blocks[i] === W.B.CHEST) count++;
     return count;
   }
   isTownProtected(x, z) {
@@ -1429,7 +1485,7 @@ class GameRoom extends Room {
   }
   isTrainingMeadowPlayer(client) {
     const p = client && this.state.players.get(client.sessionId);
-    return !!(p && !p.dgn && W.isTrainingMeadowLand && W.isTrainingMeadowLand(p.x, p.z, 4));
+    return !!(p && p.dim === 'tutorial' && p.dgn);
   }
   hurtPlayer(client, amount, reason = 'combat') {
     if (!client) return;
@@ -2411,7 +2467,6 @@ class GameRoom extends Room {
       for (const s of candidates) {
         // The Town of Beginnings is a hard sanctuary for overworld hostiles.
         if (!m.dgn && !this.isAnimalKind(m.kind) && this.isTownProtected(s.p.x, s.p.z)) continue;
-        if (!m.dgn && !this.isAnimalKind(m.kind) && W.isTrainingMeadowLand && W.isTrainingMeadowLand(s.p.x, s.p.z, 4)) continue;
         const d = Math.hypot(s.p.x - m.x, s.p.z - m.z);
         if (d < bd && mobTargetInRange(m.kind, m.y, s.p.y, d)) { bd = d; best = s; }
       }
@@ -2642,5 +2697,5 @@ module.exports = {
   GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot,
   SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS,
   SKYSHIP_BOARD_RANK, SKYSHIP_BOARD_GOLD,
-  DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange,
+  DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance,
 };

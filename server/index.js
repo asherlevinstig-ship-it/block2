@@ -18,6 +18,9 @@ if (process.env.BLOCKCRAFT_E2E === '1') {
   });
 }
 
+// runtime-neutral rules consumed by both the Node server and browser client
+app.use('/shared', express.static(path.join(__dirname, '..', 'shared')));
+
 // the game client
 app.use(express.static(path.join(__dirname, '..', 'client')));
 

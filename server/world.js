@@ -5,6 +5,7 @@
 // The server uses this for: mob ground heights, gate placement,
 // and validating block edits. Building interiors are approximated as
 // solid footprints (mobs never need to path inside them).
+const { DimensionGrid } = require('../shared/dimension-grid');
 
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
@@ -25,11 +26,11 @@ const B = {
 const MAX_BLOCK_ID = 34;
 const NON_SOLID = new Set([B.AIR, B.WATER, B.LAVA, B.TORCH, B.LANTERN, B.CAMPFIRE, B.EGG_INSULATOR, B.WHEAT_1, B.WHEAT_2, B.WHEAT_3]);
 
-const world = new Uint8Array(WX * WH * WX);
 const idx = (x, y, z) => y * WX * WX + z * WX + x;
 const inWorld = (x, y, z) => x >= 0 && x < WX && y >= 0 && y < WH && z >= 0 && z < WX;
-const getB = (x, y, z) => (inWorld(x, y, z) ? world[idx(x, y, z)] : B.AIR);
-const setB = (x, y, z, v) => { if (inWorld(x, y, z)) world[idx(x, y, z)] = v; };
+const worldGrid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WX, height: WH, depth: WX, empty: B.AIR, outside: B.AIR });
+const getB = (x, y, z) => worldGrid.getB(x, y, z);
+const setB = (x, y, z, v) => worldGrid.setB(x, y, z, v);
 const isSolid = id => !NON_SOLID.has(id);
 
 function hash2(x, z) {
@@ -374,7 +375,6 @@ function generate() {
   buildRoadNetwork(setB);
   buildSmallDiscoveries(setB);
   buildRegionalLandmarks(setB);
-  buildTrainingMeadow(setB);
   buildLavaBorder();
   buildTown();
 }
@@ -503,9 +503,10 @@ function standHeight(x, z, fromY) {
 }
 
 function createWorld() {
-  const buf = new Uint8Array(WX * WH * WX);
-  const getLocal = (x, y, z) => (inWorld(x, y, z) ? buf[idx(x, y, z)] : B.AIR);
-  const setLocal = (x, y, z, v) => { if (inWorld(x, y, z)) buf[idx(x, y, z)] = v; };
+  const grid = new DimensionGrid({ kind: 'overworld', id: 'global', width: WX, height: WH, depth: WX, empty: B.AIR, outside: B.AIR });
+  const buf = grid.data;
+  const getLocal = (x, y, z) => grid.getB(x, y, z);
+  const setLocal = (x, y, z, v) => grid.setB(x, y, z, v);
   const fillLocal = (xa, ya, za, xb, yb, zb, id) => {
     for (let x = Math.min(xa, xb); x <= Math.max(xa, xb); x++)
       for (let y = Math.min(ya, yb); y <= Math.max(ya, yb); y++)
@@ -602,7 +603,6 @@ function createWorld() {
     buildRoadNetwork(setLocal);
     buildSmallDiscoveries(setLocal);
     buildRegionalLandmarks(setLocal);
-    buildTrainingMeadow(setLocal);
     buildLavaBorderLocal();
     buildTownLocal();
   };
@@ -622,19 +622,15 @@ function createWorld() {
       if (isSolid(getLocal(bx, y, bz))) return y + 1;
     return -1;
   };
-  return {
-    buffer: buf,
-    generate: generateLocal,
-    getB: getLocal,
-    setB: setLocal,
-    standHeight: standHeightLocal,
-    isSolid,
-  };
+  grid.generate = generateLocal;
+  grid.standHeight = standHeightLocal;
+  grid.isSolid = isSolid;
+  return grid;
 }
 
 module.exports = {
   WX, WH, TOWN, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
-  generate, getB, setB, idx, inWorld, isSolid, standHeight, hash2, isLavaBorderLand, createWorld,
+  generate, getB, setB, idx, inWorld, isSolid, standHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, isTrainingMeadowLand, buildTrainingMeadow,
   buildGuildHallBase,

@@ -2,7 +2,7 @@
 // Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
   BOSS_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_OF, GATE_DISTANCE_BANDS,
-  I, SHARD_ITEM_IDS, SHARD_TIERS, SOLO_KEYS, TEAM_KEYS, rollShardMods,
+  I, SHARD_ITEM_IDS, SHARD_TIERS, SOLO_KEYS, TEAM_KEYS, rollShardMods, townDistance,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -106,8 +106,8 @@ class DungeonMixin {
     const x = +raw.x, z = +raw.z;
     if (!isFinite(x) || !isFinite(z)) return false;
     if (x < 6 || x > W.WX - 6 || z < 6 || z > W.WX - 6) return false;
-    const ring = Math.max(Math.abs(x - W.TOWN.TC), Math.abs(z - W.TOWN.TC));
-    return ring >= band.min && ring <= band.max;
+    const distance = townDistance(x, z);
+    return distance >= band.min && distance <= band.max;
   }
   restoreSavedGates(savedGates) {
     const now = Date.now();

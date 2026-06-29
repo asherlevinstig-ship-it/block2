@@ -13,8 +13,8 @@ function makeSolid(instWorld, overworld) {
     return (x, y, z) => world.isSolid(world.getB(x, y, z));
   }
   return (x, y, z) => {
-    if (x < 0 || x >= W.WX || y < 0 || y >= W.WH || z < 0 || z >= W.WX) return true;
-    return !NON_SOLID.has(instWorld[W.idx(x, y, z)]);
+    if (!instWorld.inBounds(x, y, z)) return true;
+    return !NON_SOLID.has(instWorld.getB(x, y, z));
   };
 }
 

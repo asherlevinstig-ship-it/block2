@@ -10,8 +10,8 @@ class Player extends Schema {
     this.path = '';          // '', 'shadow', 'mage', 'guardian'
     this.job = '';           // '', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk'
     this.jobLvl = 0;         // profession level for nameplates
-    this.dim = 'overworld';  // 'overworld' | 'dungeon'
-    this.dgn = '';           // dungeon instance id ('' = overworld)
+    this.dim = 'overworld';  // overworld | dungeon | tutorial | event
+    this.dgn = '';           // private-space id ('' = shared overworld)
     this.team = '';          // team id ('' = none)
     this.heldId = 0;         // cosmetic render id for currently selected item
     this.armorId = 0;        // cosmetic render id for equipped armor

@@ -104,6 +104,7 @@ function defaultProfile(name) {
     highestGateRankCleared: -1,
     gold: 0,
     firstQuestRewardClaimed: false,
+    maraRoadReadySwordGranted: false,
     npcQuestChains: {},
     activeNpcQuest: null,
     aegisTrialReady: false,
@@ -321,6 +322,7 @@ function sanitizeProfile(p) {
   out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
   out.firstQuestRewardClaimed = p.firstQuestRewardClaimed === true;
+  out.maraRoadReadySwordGranted = p.maraRoadReadySwordGranted === true;
   out.npcQuestChains = sanitizeNpcQuestChains(p.npcQuestChains);
   out.activeNpcQuest = sanitizeActiveNpcQuest(p.activeNpcQuest);
   out.aegisTrialReady = p.aegisTrialReady === true;

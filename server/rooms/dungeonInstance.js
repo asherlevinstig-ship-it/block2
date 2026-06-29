@@ -6,13 +6,14 @@
 // This is the home for "what IS a dungeon instance"; the room (GameRoom) still
 // owns cross-cutting behaviour that needs room services (spawning mobs, damaging
 // players, broadcasting fx), reading and mutating these fields.
-const W = require('../world');
+const { isDimensionGrid } = require('../../shared/dimension-grid');
 const { HAZARD_MOD_SET } = require('./constants');
 
 class DungeonInstance {
   // d: the generated dungeon ({ world, rooms, spawns, bossRoom }); g: the Gate schema;
   // room: the owning GameRoom, used by methods that touch shared state (mobs, projectiles).
   constructor(d, g, room) {
+    if (!d || !isDimensionGrid(d.world)) throw new TypeError('DungeonInstance requires a DimensionGrid world');
     this.room = room;
     this.id = g.id;
     this.seed = g.seed;
@@ -20,7 +21,7 @@ class DungeonInstance {
     this.gateX = g.x;
     this.gateY = g.y;
     this.gateZ = g.z;
-    this.world = d.world;              // Uint8Array world buffer (same layout as the overworld)
+    this.world = d.world;              // compact instance-local DungeonGrid
     this.edits = [];                  // party mining/building log, replayed to late joiners
     this.players = new Set();         // session ids currently inside
     this.cleared = false;
@@ -40,8 +41,11 @@ class DungeonInstance {
   }
 
   // ---- world access (same semantics as the overworld W.getB/setB) ----
-  getB(x, y, z) { return W.inWorld(x, y, z) ? this.world[W.idx(x, y, z)] : W.B.AIR; }
-  setB(x, y, z, id) { if (W.inWorld(x, y, z)) this.world[W.idx(x, y, z)] = id; }
+  inBounds(x, y, z) {
+    return this.world.inBounds(x, y, z);
+  }
+  getB(x, y, z) { return this.world.getB(x, y, z); }
+  setB(x, y, z, id) { return this.world.setB(x, y, z, id); }
   addEdit(x, y, z, id) { this.edits.push({ x, y, z, id }); }
 
   // ---- roster ----

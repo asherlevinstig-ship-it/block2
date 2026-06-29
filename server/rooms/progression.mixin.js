@@ -21,7 +21,7 @@ const Q = (title, type, item, need, gold, xp, rewardItems = [], extra = {}) => (
 const NPC_QUEST_CHAINS = {
   'Mara Vale': [
     Q('First Hands','fetch',W.B.LOG,6,16,28,[],{levelTarget:2,desc:'Gather 6 logs beyond the walls. This first field task will take you to Level 2.'}),
-    Q('Road Ready','kill',0,3,24,47,[],{levelTarget:3,desc:'Defeat 3 monsters beyond town. Return ready for Level 3 and your first Gate.'}),
+    Q('Road Ready','kill',0,3,24,47,[],{levelTarget:3,desc:'Take this wooden sword and defeat 3 monsters beyond town. Return ready for Level 3 and your first Gate.'}),
     Q('The First Gate','gate',0,1,50,60,[],{gateRank:0,desc:'An E-rank Gate has opened for you. Find it, clear it, and return to Mara.'}),
     Q('A Better Sense','utility','compass',1,42,58),Q('Meat Becomes Gold','sell',I.MONSTER_MEAT,1,38,54,[{id:I.SHADOW_SIGIL,count:1}]),Q('A Shadow Companion','familiar','shade',1,52,72,[{id:W.B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]),Q('First Bonded Mount','mount','dragon',1,78,100),Q('Sky Legs','mount_use','dragon',1,64,88)
   ],
@@ -287,8 +287,16 @@ class ProgressionMixin {
       if (q.type === 'gate' && q.gateRank >= 0 && !this.ensurePublicGateRank(q.gateRank)) {
         return this.progressionReject(client, 'npcQuest', 'gate');
       }
+      const grantRoadReadySword = q.giver === 'Mara Vale' && (q.chainStep | 0) === 1 && !rec.prof.maraRoadReadySwordGranted;
+      if (grantRoadReadySword) {
+        const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
+        if (this.addCraftedRewardItem(draft, I.WOOD_SWORD, 1) !== 0) return this.progressionReject(client, 'npcQuest', 'full');
+        rec.prof.inv = draft.inv;
+        rec.prof.maraRoadReadySwordGranted = true;
+      }
       rec.prof.activeNpcQuest = q;
       this.dirtyPlayers.add(rec.token);
+      if (grantRoadReadySword) client.send('profile', rec.prof);
       client.send('npcQuest', { action, quest: q });
       return true;
     }

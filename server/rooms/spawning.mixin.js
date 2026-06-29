@@ -4,7 +4,7 @@
 const {
   ANIMAL_BASE_KIND, ANIMAL_DESPAWN_RADIUS, ANIMAL_SPAWN_INTERVAL, BIOME_ANIMAL, DANGER_RINGS, ELITE_FAMILIES,
   GATE_DISTANCE_BANDS, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, I, LOCAL_ANIMAL_COUNT_RADIUS,
-  LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, animalBudgetFor, dangerRingAt, hostileBudgetFor,
+  LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, animalBudgetFor, dangerRingAt, hostileBudgetFor, townDistance,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -352,7 +352,6 @@ class SpawningMixin {
       const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
       if (x < 2 || x > W.WX - 2 || z < 2 || z > W.WX - 2) continue;
       if (Math.max(Math.abs(x - W.TOWN.TC), Math.abs(z - W.TOWN.TC)) < W.TOWN.HS + 2) continue;
-      if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 18)) continue;
       if (cluster && this.countOverworldMobsNear(x, z, LOCAL_HOSTILE_COUNT_RADIUS, m => !this.isAnimalKind(m.kind)) >= cluster.hostileBudget) continue;
       const gy = this.world.standHeight(x, z, W.WH - 2);
       if (gy < 2) continue;
@@ -381,7 +380,6 @@ class SpawningMixin {
       const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
       if (x < 3 || x > W.WX - 3 || z < 3 || z > W.WX - 3) continue;
       if (Math.max(Math.abs(x - W.TOWN.TC), Math.abs(z - W.TOWN.TC)) < W.TOWN.HS + 5) continue;
-      if (W.isTrainingMeadowLand && W.isTrainingMeadowLand(x, z, 18)) continue;
       if (cluster && this.countOverworldMobsNear(x, z, LOCAL_ANIMAL_COUNT_RADIUS, m => this.isAnimalKind(m.kind)) >= cluster.animalBudget) continue;
       const gy = this.world.standHeight(x, z, W.WH - 2);
       const ground = this.world.getB(Math.floor(x), gy - 1, Math.floor(z));
@@ -440,6 +438,8 @@ class SpawningMixin {
         ];
         for (const pos of candidates) {
           if (pos.x < 6 || pos.x > W.WX - 6 || pos.z < 6 || pos.z > W.WX - 6) continue;
+          const distance = townDistance(pos.x, pos.z);
+          if (distance < band.min || distance > band.max) continue;
           const gy = this.world.standHeight(pos.x + .5, pos.z + .5, W.WH - 2);
           if (gy < 3 || gy > 34) continue;
           gate = this.createGate({ x: pos.x + .5, y: gy, z: pos.z + .5, rank: ri, kind: 'public', ttl: 180 });
@@ -454,13 +454,11 @@ class SpawningMixin {
   gateSpawnCandidate(rank) {
     const band = GATE_DISTANCE_BANDS[Math.max(0, Math.min(4, rank | 0))] || GATE_DISTANCE_BANDS[0];
     const d = Math.floor(band.min + Math.random() * (band.max - band.min + 1));
-    const side = (Math.random() * 4) | 0;
-    const span = Math.floor(-d + Math.random() * (d * 2 + 1));
-    const cx = W.TOWN.TC, cz = W.TOWN.TC;
-    if (side === 0) return { x: Math.floor(cx + span), z: Math.floor(cz - d) };
-    if (side === 1) return { x: Math.floor(cx + d), z: Math.floor(cz + span) };
-    if (side === 2) return { x: Math.floor(cx + span), z: Math.floor(cz + d) };
-    return { x: Math.floor(cx - d), z: Math.floor(cz + span) };
+    const angle = Math.random() * Math.PI * 2;
+    return {
+      x: Math.round(W.TOWN.TC + Math.cos(angle) * d),
+      z: Math.round(W.TOWN.TC + Math.sin(angle) * d),
+    };
   }
 
   spawnGate(forceRank) {
@@ -470,8 +468,8 @@ class SpawningMixin {
       const pos = this.gateSpawnCandidate(ri);
       const x = pos.x, z = pos.z;
       if (x < 6 || x > W.WX - 6 || z < 6 || z > W.WX - 6) continue;
-      const ring = Math.max(Math.abs(x - W.TOWN.TC), Math.abs(z - W.TOWN.TC));
-      if (ring < band.min || ring > band.max) continue;
+      const distance = townDistance(x, z);
+      if (distance < band.min || distance > band.max) continue;
       const gy = this.world.standHeight(x + .5, z + .5, W.WH - 2);
       if (gy < 3 || gy > 34) continue;
       this.createGate({ x: x + .5, y: gy, z: z + .5, rank: ri, kind: 'public', ttl: 75 });
