@@ -67,6 +67,25 @@ class DungeonInstance {
     return false;
   }
 
+  // Per-instance simulation entry point, called once per server tick from the GameRoom
+  // update() loop. This is the seam the eventual DungeonRoom split turns into the room's
+  // own update(): the instance owns its mob brains and hazards, while cross-cutting helpers
+  // (simulateMob, tickInstanceHazards, hurt/fx/loot) stay on the room and are reached via
+  // the passed `room`. `spaces` maps dgn -> [{p,sid}] (as built in update()); `mobIds` are
+  // the ids of this instance's mobs, snapshotted before the loop so a wipe that deletes a
+  // mob mid-tick is handled by the live re-fetch.
+  tick(room, dt, spaces, mobIds) {
+    const players = spaces[this.id] || [];
+    for (const id of mobIds) {
+      const m = room.state.mobs.get(id);
+      if (!m) continue;                       // killed earlier this tick (projectile, blackhole pop)
+      const meta = room.mobMeta[id];
+      if (!meta) continue;
+      room.simulateMob(m, id, meta, dt, spaces);
+    }
+    if (this.hazMods && this.hazMods.size) room.tickInstanceHazards(this, dt, players);
+  }
+
   // Tear the instance down: drop its mobs (and their meta), purge its in-flight
   // projectiles, and remove the instance from the room's registry. The caller owns
   // any extra bookkeeping (e.g. clearDungeonInstance also clears boss contribution).

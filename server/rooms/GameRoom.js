@@ -2417,9 +2417,26 @@ class GameRoom extends Room {
       if (done) this.sArrows.splice(i, 1);
     }
 
-    // ---- mob brains ----
-    this.state.mobs.forEach((m, id) => {
-      const meta = this.mobMeta[id]; if (!meta) return;
+    // ---- mob brains: overworld inline, each live dungeon via its instance.tick() ----
+    const mobsByDgn = {};
+    this.state.mobs.forEach((mm, mid) => { (mobsByDgn[mm.dgn || ''] = mobsByDgn[mm.dgn || ''] || []).push(mid); });
+    for (const oid of mobsByDgn[''] || []) {
+      const om = this.state.mobs.get(oid); if (!om) continue;
+      const ometa = this.mobMeta[oid]; if (!ometa) continue;
+      this.simulateMob(om, oid, ometa, dt, spaces);
+    }
+    // snapshot keys: a hazard wipe can delete the instance mid-iteration
+    for (const gid of Object.keys(this.instances)) {
+      const inst = this.instances[gid];
+      if (inst) inst.tick(this, dt, spaces, mobsByDgn[gid] || []);
+    }
+    this.tickGateLifecycle(dt, surface);
+  }
+
+  // Per-mob AI brain for one mob (overworld or dungeon). Extracted verbatim from the update()
+  // loop so a DungeonInstance can drive its own mobs through the same code path; behaviour is
+  // unchanged. `spaces` maps dgn -> [{p,sid}] players, as built in update().
+  simulateMob(m, id, meta, dt, spaces) {
       const inst = m.dgn ? this.instances[m.dgn] : null;
       if (m.dgn && !inst) return;
       const ground = (x, z, fromY) => inst ? D.standHeightIn(inst.world, x, z, fromY) : this.world.standHeight(x, z, fromY);
@@ -2650,17 +2667,11 @@ class GameRoom extends Room {
         if (gy > 0) { m.x = nx; m.z = nz; m.y = gy; m.yaw = Math.atan2(dx, dz); }
         else if (!meta.alert) meta.patrolT = .5;
       }
-    });
+  }
 
-    // ---- shard environmental hazards (per active instance) ----
-    // snapshot keys: a hazard wipe can delete the instance mid-iteration
-    for (const id of Object.keys(this.instances)) {
-      const inst = this.instances[id];
-      if (!inst || !inst.hazMods || !inst.hazMods.size) continue;
-      this.tickInstanceHazards(inst, dt, spaces[id] || []);
-    }
-
-    // gate lifecycle
+  // Gate expiry + public-gate spawning, lifted out of update() so the mob/instance dispatch
+  // above reads cleanly. Runs once per tick on the overworld `surface` players.
+  tickGateLifecycle(dt, surface) {
     const expiredGates = [];
     const nowMs = Date.now();
     this.gateTtls.forEach((expiresAt, id) => {

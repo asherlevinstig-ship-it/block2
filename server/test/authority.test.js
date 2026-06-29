@@ -1812,6 +1812,31 @@ test('shard Bolstering empowers surviving trash near a kill but not distant mobs
   assert.equal(room.mobMeta.near.dmg, 9, 'capped melee gain is 4 + 5*1');
 });
 
+test('DungeonInstance.tick simulates only its own mobs and runs its hazards', () => {
+  const room = makeRoom();
+  const g = { id: 'd1', seed: 1, rank: 1, kind: 'shard', shardPlus: 0, shardName: 'Glimmering', shardMods: 'Sanguine' };
+  const inst = new DungeonInstance({ world: new D.DungeonGrid(), bossRoom: { x: 20.5, z: 20.5 } }, g, room);
+  room.instances.d1 = inst;
+  assert.ok(inst.hazMods.has('Sanguine'), 'the instance carries its hazard affix');
+
+  // a wounded trash mob inside this instance, sitting in a standing ichor pool
+  room.state.mobs.set('m1', { x: 20, y: 9, z: 20, hp: 10, maxHp: 20, kind: 'zombie', dgn: 'd1', yaw: 0, state: '' });
+  room.mobMeta.m1 = room.freshMeta(20, 20, 4, 1.5, 'zombie', 1, true);
+  room.mobMeta.m1.atkCd = 1.0;
+  inst.haz.pools.push({ x: 20, z: 20, t: 6 });
+
+  // an overworld mob outside this instance that tick() must not touch
+  room.state.mobs.set('ow', { x: 5, y: 9, z: 5, hp: 10, maxHp: 20, kind: 'zombie', dgn: '', yaw: 0, state: '' });
+  room.mobMeta.ow = room.freshMeta(5, 5, 4, 1.5, 'zombie', 0, true);
+  room.mobMeta.ow.atkCd = 1.0;
+
+  inst.tick(room, 1.0, { d1: [] }, ['m1']);
+
+  assert.ok(room.mobMeta.m1.atkCd < 1.0, 'the instance simulated its own mob (brain ran: atkCd decremented)');
+  assert.equal(room.state.mobs.get('m1').hp, 16, 'the instance ran its Sanguine hazard (pool healed the wounded mob 6/s)');
+  assert.equal(room.mobMeta.ow.atkCd, 1.0, 'a mob outside the instance was left untouched');
+});
+
 test('King of the Hill scores time only for the crown-holding team', () => {
   const T = 1_000_000;
   const room = makeRoom();
