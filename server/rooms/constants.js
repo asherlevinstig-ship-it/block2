@@ -152,11 +152,13 @@ function rollShardMods(plus) {
 const HAZARD_MOD_SET = new Set(['Volatile', 'Sanguine', 'Spiteful', 'Bursting', 'Grievous', 'Quaking', 'Explosive', 'Bolstering']);
 // Bolstering: a trash death emboldens surviving trash within BOLSTER_RADIUS, stacking up to
 // BOLSTER_MAX_STACKS. Each stack adds (BOLSTER_HP + shardPlus) to max/current HP and BOLSTER_DMG
-// to melee + ranged damage. Rewards even/cleave killing; punishes leaving stragglers alive.
+// to melee + ranged damage. Tuned as an attrition affix: HP carries the threat (tankier
+// survivors), while the damage bump stays small (base trash hits for only 3-7) so a stacked
+// straggler is dangerous, not a one-shot. Rewards even/cleave killing.
 const BOLSTER_RADIUS = 6;
 const BOLSTER_HP = 5;
-const BOLSTER_DMG = 2;
-const BOLSTER_MAX_STACKS = 8;
+const BOLSTER_DMG = 1;
+const BOLSTER_MAX_STACKS = 5;
 const keyForRank = (kind, rank) => (kind === 'team' ? TEAM_KEYS : SOLO_KEYS)[Math.max(0, Math.min(4, rank | 0))];
 const SOLO_KEY_PRICES = [45, 110, 240, 460, 800];
 const TEAM_KEY_PRICES = [70, 165, 350, 650, 1100];

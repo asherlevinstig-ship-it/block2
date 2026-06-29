@@ -1800,16 +1800,16 @@ test('shard Bolstering empowers surviving trash near a kill but not distant mobs
   assert.equal(room.mobMeta.near.bolster, 1, 'a nearby survivor gains one Bolstering stack');
   assert.equal(room.state.mobs.get('near').maxHp, 25, 'each stack adds BOLSTER_HP (5) to max HP');
   assert.equal(room.state.mobs.get('near').hp, 25, 'current HP is bumped alongside max HP');
-  assert.equal(room.mobMeta.near.dmg, 6, 'each stack adds BOLSTER_DMG (2) to melee damage');
-  assert.equal(room.mobMeta.near.arrowDmg, 4, 'ranged damage is bolstered too');
+  assert.equal(room.mobMeta.near.dmg, 5, 'each stack adds BOLSTER_DMG (1) to melee damage');
+  assert.equal(room.mobMeta.near.arrowDmg, 3, 'ranged damage is bolstered too');
   assert.equal(room.state.mobs.get('far').maxHp, 20, 'trash outside the radius is untouched');
   assert.equal(room.state.mobs.get('boss').maxHp, 100, 'the boss is never bolstered');
   assert.equal(room.state.mobs.get('orb').maxHp, 2, 'hazard entities (orbs) are never bolstered');
 
   for (let i = 0; i < 12; i++) room.onDungeonTrashDeath('g1', 30, 9, 30);   // far more kills than the cap
-  assert.equal(room.mobMeta.near.bolster, 8, 'Bolstering stacks cap at BOLSTER_MAX_STACKS (8)');
-  assert.equal(room.state.mobs.get('near').maxHp, 60, 'capped HP gain is 20 + 8*5');
-  assert.equal(room.mobMeta.near.dmg, 20, 'capped melee gain is 4 + 8*2');
+  assert.equal(room.mobMeta.near.bolster, 5, 'Bolstering stacks cap at BOLSTER_MAX_STACKS (5)');
+  assert.equal(room.state.mobs.get('near').maxHp, 45, 'capped HP gain is 20 + 5*5');
+  assert.equal(room.mobMeta.near.dmg, 9, 'capped melee gain is 4 + 5*1');
 });
 
 test('King of the Hill scores time only for the crown-holding team', () => {
