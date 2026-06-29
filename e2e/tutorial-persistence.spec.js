@@ -61,7 +61,7 @@ test('server tutorial milestones restore a returning hunter in a fresh browser',
       tutorials: TUTORIALS,
     });
     expect(await freshPage.evaluate(() => document.body.classList.contains('onboarding'))).toBe(false);
-    await expect(freshPage.locator('#tutorialhud')).not.toContainText('Lesson 1 / 11');
+    await expect(freshPage.locator('#tutorialhud')).not.toContainText('Lesson 1 / 10');
     await expect(freshPage.locator('#zonename')).toHaveText('Town of Beginnings');
     await expect(freshPage.locator('#awakeningwin')).toBeHidden();
     expect(await freshPage.evaluate(() => ({

@@ -1,0 +1,1736 @@
+/* Blockcraft combat runtime module. Player state, inventory interaction, mining, targeting, and combat input.
+ * These classic modules intentionally share one global lexical scope and load in order.
+ */
+// ---------------- player ----------------
+const player = {
+  pos: new THREE.Vector3(WX/2+.5, 0, WX/2+.5),
+  vel: new THREE.Vector3(),
+  yaw: 0, pitch: 0,
+  w:0.3, h:1.8, eye:1.62,
+  onGround:false,
+};
+player.pos.set(TOWN.TC+.5, TOWN.G+1, TOWN.TC+7.5); // plaza, facing the fountain
+updateVisibleChunks(true);
+
+function collides(p){
+  const minX=Math.floor(p.x-player.w), maxX=Math.floor(p.x+player.w);
+  const minY=Math.floor(p.y),          maxY=Math.floor(p.y+player.h);
+  const minZ=Math.floor(p.z-player.w), maxZ=Math.floor(p.z+player.w);
+  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++)for(let z=minZ;z<=maxZ;z++)
+    if(isSolid(getB(x,y,z))) return true;
+  return false;
+}
+function moveAxis(axis, amt){
+  if(amt===0) return;
+  player.pos[axis]+=amt;
+  if(collides(player.pos)){
+    player.pos[axis]-=amt;
+    let step=amt/2;
+    for(let i=0;i<5;i++){
+      player.pos[axis]+=step;
+      if(collides(player.pos)) player.pos[axis]-=step;
+      step/=2;
+    }
+    if(axis==='y'){ if(amt<0) player.onGround=true; player.vel.y=0; }
+  }
+}
+function playerTouchesLava(){
+  const xs=[Math.floor(player.pos.x-player.w), Math.floor(player.pos.x), Math.floor(player.pos.x+player.w)];
+  const zs=[Math.floor(player.pos.z-player.w), Math.floor(player.pos.z), Math.floor(player.pos.z+player.w)];
+  const ys=[Math.floor(player.pos.y+.15), Math.floor(player.pos.y+.8), Math.floor(player.pos.y+player.h*.85)];
+  for(const x of xs)for(const y of ys)for(const z of zs) if(getB(x,y,z)===B.LAVA) return true;
+  return false;
+}
+function tickLavaBorder(now){
+  if(dim!=='overworld') return;
+  // only burns when the player is actually touching lava (not merely near the border)
+  if(playerTouchesLava()){
+    if(now-lastLavaHurt>650){
+      lastLavaHurt=now;
+      damagePlayer(5,'local:lava');
+      SFX.boom();
+      burst(player.pos.x, player.pos.y+.6, player.pos.z, [1,.32,.08], 18, 2.2, 2.8, .55);
+      sysMsg('The <b>lava</b> burns!');
+    }
+    // gentle nudge back toward land + dampened sinking so it isn't an inescapable pit
+    const cx=WX/2, dx=cx-player.pos.x, dz=cx-player.pos.z, d=Math.hypot(dx,dz)||1;
+    player.pos.x+=dx/d*.18; player.pos.z+=dz/d*.18;
+    player.vel.y=Math.max(player.vel.y,-.5);
+  }
+  // keep the player inside the world bounds (no aggressive border shove)
+  player.pos.x=Math.max(.55,Math.min(WX-.55,player.pos.x));
+  player.pos.z=Math.max(.55,Math.min(WX-.55,player.pos.z));
+}
+function raycast(maxDist){
+  const dir = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ'));
+  const o = new THREE.Vector3(player.pos.x, player.pos.y+player.eye, player.pos.z);
+  let x=Math.floor(o.x), y=Math.floor(o.y), z=Math.floor(o.z);
+  const stepX=Math.sign(dir.x), stepY=Math.sign(dir.y), stepZ=Math.sign(dir.z);
+  const tdx=Math.abs(1/dir.x), tdy=Math.abs(1/dir.y), tdz=Math.abs(1/dir.z);
+  let tx=(stepX>0?(x+1-o.x):(o.x-x))*tdx;
+  let ty=(stepY>0?(y+1-o.y):(o.y-y))*tdy;
+  let tz=(stepZ>0?(z+1-o.z):(o.z-z))*tdz;
+  let face=[0,0,0], t=0;
+  for(let i=0;i<128;i++){
+    const id=getB(x,y,z);
+    if(id!==B.AIR && id!==B.WATER && id!==B.LAVA) return {x,y,z,face,id};
+    if(tx<ty && tx<tz){ x+=stepX; t=tx; tx+=tdx; face=[-stepX,0,0]; }
+    else if(ty<tz){ y+=stepY; t=ty; ty+=tdy; face=[0,-stepY,0]; }
+    else { z+=stepZ; t=tz; tz+=tdz; face=[0,0,-stepZ]; }
+    if(t>maxDist) break;
+  }
+  return null;
+}
+
+// ---------------- inventory ----------------
+// slots: 0-8 hotbar, 9-35 backpack. stack: {id, count, dur?} or null
+const inv = new Array(36).fill(null);
+let selected = 0;
+let inventoryModel=null,equipmentModel=null;
+const stackMax=id=>inventoryModel.stackMax(id);
+const newStack=(id,count)=>inventoryModel.newStack(id,count);
+function toolPlus(stack){ return Math.max(0, Math.min(3, stack && stack.plus ? stack.plus|0 : 0)); }
+function toolMaxDur(stackOrId){
+  const id=typeof stackOrId==='number'?stackOrId:(stackOrId&&stackOrId.id);
+  const info=ITEMS[id]&&ITEMS[id].tool;
+  if(!info) return 0;
+  const plus=typeof stackOrId==='number'?0:toolPlus(stackOrId);
+  return Math.min(99999, Math.round(info.dur*(1+plus*.15)));
+}
+function toolSpeedFor(stack){
+  const info=stack&&ITEMS[stack.id]&&ITEMS[stack.id].tool;
+  if(!info) return 0;
+  return info.speed*(1+toolPlus(stack)*.08);
+}
+function toolDamageFor(stack){
+  const info=stack&&ITEMS[stack.id]&&ITEMS[stack.id].tool;
+  if(!info) return 1;
+  return (info.dmg||1)+toolPlus(stack)*2;
+}
+function itemNameWithPlus(stack){
+  if(!stack||!ITEMS[stack.id]) return '';
+  const p=toolPlus(stack);
+  return ITEMS[stack.id].name+(p?' +'+p:'');
+}
+function applyBlacksmithCraftPerk(stack){
+  if(!stack || playerJob!=='blacksmith') return stack;
+  const info=ITEMS[stack.id]&&ITEMS[stack.id].tool;
+  if(!info) return stack;
+  const tier=jobPerkTier('blacksmith');
+  if(!tier) return stack;
+  const bonus=Math.max(1, Math.round(info.dur*(.08+tier*.04)));
+  stack.dur=Math.min(toolMaxDur(stack),(stack.dur==null?toolMaxDur(stack):stack.dur)+bonus);
+  showJobPerk('blacksmith','+'+bonus+' durability');
+  return stack;
+}
+const RECIPE_SEEN_KEY='blockcraft.recipeSeen.v1';
+const recipeSeen=new Set();
+try{ for(const id of JSON.parse(localStorage.getItem(RECIPE_SEEN_KEY)||'[]')) recipeSeen.add(+id); }catch(e){}
+function saveRecipeSeen(){
+  try{ localStorage.setItem(RECIPE_SEEN_KEY, JSON.stringify([...recipeSeen].slice(0,256))); }catch(e){}
+}
+function noteRecipeSeen(id){
+  id=+id;
+  if(!ITEMS[id] || recipeSeen.has(id)) return;
+  recipeSeen.add(id);
+  saveRecipeSeen();
+}
+inventoryModel=createInventoryModel({
+  slots:inv,items:ITEMS,getEquippedArmor:()=>equippedArmor(),onDiscover:noteRecipeSeen,
+  onChange:()=>{refreshHUD();if(uiOpen)renderUI();},
+});
+equipmentModel=createEquipmentModel({
+  items:ITEMS,inventory:inventoryModel,getArmor:()=>armorSlot,setArmor:value=>{armorSlot=value;},
+  onChange:()=>{refreshAppearanceDummy();refreshHUD();},
+});
+function scanRecipeInventory(){
+  for(const s of inv) if(s) noteRecipeSeen(s.id);
+}
+function addItem(id, count){
+  return inventoryModel.add(id,count);
+}
+function addCraftedItem(id, count){
+  if(ITEMS[id] && ITEMS[id].tool && playerJob==='blacksmith'){
+    noteRecipeSeen(id);
+    let left=Math.max(1,count||1);
+    for(let i=0;i<36 && left>0;i++){
+      if(!inv[i]){
+        inv[i]=applyBlacksmithCraftPerk(newStack(id,1));
+        left--;
+      }
+    }
+    refreshHUD(); if(uiOpen) renderUI();
+    return left;
+  }
+  return addItem(id,count);
+}
+function cookingOutputCount(id, n){
+  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT].includes(id) || playerJob!=='cook') return n;
+  const extra=Math.random()<jobPerkChance('cook', .08) ? Math.max(1, Math.floor(n*.25)) : 0;
+  if(extra) showJobPerk('cook','+'+extra+' food');
+  return n+extra;
+}
+
+// ---------------- furnaces ----------------
+const furnaces = {}; // "x,y,z" -> {input, fuel, output, burn, burnMax, progress}
+function getFurnace(key){ return furnaces[key] || (furnaces[key]={input:null,fuel:null,output:null,burn:0,burnMax:0,progress:0}); }
+function tickFurnaces(dt){
+  if(NET.on){ if(uiOpen && uiMode==='furnace') updateFurnaceBars(false); return; }
+  let changed=false;
+  for(const key in furnaces){
+    const f=furnaces[key];
+    const recipe = f.input ? SMELT[f.input.id] : null;
+    const canOut = recipe && (!f.output || (f.output.id===recipe[0] && f.output.count+recipe[1]<=stackMax(recipe[0])));
+    if(f.burn<=0 && recipe && canOut && f.fuel && FUEL[f.fuel.id]){
+      f.burnMax = f.burn = FUEL[f.fuel.id]*SMELT_TIME;
+      f.fuel.count--; if(f.fuel.count<=0) f.fuel=null;
+      changed=true;
+    }
+    if(f.burn>0){
+      f.burn-=dt;
+      if(recipe && canOut){
+        f.progress+=dt;
+        if(f.progress>=SMELT_TIME){
+          f.progress=0;
+          if(f.output) f.output.count+=recipe[1]; else f.output=newStack(recipe[0],recipe[1]);
+          f.input.count--; if(f.input.count<=0) f.input=null;
+          changed=true;
+        }
+      } else f.progress=0;
+    } else { f.progress=0; }
+  }
+  if(uiOpen && uiMode==='furnace') updateFurnaceBars(changed);
+}
+
+// ---------------- mining state ----------------
+let mouseL=false;
+let mining=null; // {x,y,z,progress,total,willDrop}
+function toolFor(blockId){
+  const s=inv[selected];
+  return (s && ITEMS[s.id].tool) ? {stack:s, ...ITEMS[s.id].tool, speed:toolSpeedFor(s), maxDur:toolMaxDur(s)} : null;
+}
+function meleeSwingTime(){
+  const s=inv[selected];
+  const tool=s && ITEMS[s.id] && ITEMS[s.id].tool;
+  return (tool && tool.cls==='axe') ? .55 : .35;   // axes swing slower (matches the server cadence); everything else standard
+}
+function startMine(hit){
+  const info=BREAK[hit.id];
+  if(!info){ mining=null; return; }
+  const tool=toolFor(hit.id);
+  let total=info.t, willDrop=true;
+  const effective = tool && info.cls && tool.cls===info.cls;
+  if(effective) total = info.t / tool.speed;
+  if(info.tier){ // pick required for drop
+    const tier = (tool && tool.cls==='pick') ? tool.tier : 0;
+    if(tier < info.tier){ willDrop=false; total = info.t*3; }
+  }
+  total=Math.max(total,.15);
+  mining={x:hit.x,y:hit.y,z:hit.z,id:hit.id,progress:0,total,willDrop, effective};
+}
+function finishMine(){
+  const m=mining; mining=null;
+  const info=BREAK[m.id];
+  // furnace drops its contents
+  if(m.id===B.CHEST){
+    const c=chests[m.x+','+m.y+','+m.z];
+    if(c){ for(const s of c.slots) if(s) addItem(s.id,s.count); delete chests[m.x+','+m.y+','+m.z]; }
+  }
+  if(m.id===B.FURNACE){
+    const f=furnaces[m.x+','+m.y+','+m.z];
+    if(f){ for(const s of [f.input,f.fuel,f.output]) if(s) addItem(s.id,s.count); delete furnaces[m.x+','+m.y+','+m.z]; }
+  }
+  if(isLightBlock(m.id)) removeTorchMesh(m.x,m.y,m.z);
+  if(isCropBlock(m.id)) removeCropMesh(m.x,m.y,m.z);
+  if(m.id===B.EGG_INSULATOR) removeInsulatorMesh(m.x,m.y,m.z,true);
+  burst(m.x+.5, m.y+.5, m.z+.5, BLOCK_COLORS[m.id]||[.5,.5,.5], 14, 2.6, 2.2, .55);
+  setB(m.x,m.y,m.z,B.AIR);
+  if(onboardingActive&&onboardingArrived&&onboardingKind()==='tree'&&m.id===B.LOG&&isTrainingMeadowLand(m.x,m.z,8)) onboardingFlags.tree=true;
+  rebuildAround(m.x,m.z);
+  netSendEdit(m.x,m.y,m.z,B.AIR);
+  if(!NET.on && m.willDrop){
+    let droppedId=0, droppedCount=0;
+    if(info.drop===null){} // no drop (glass)
+    else if(info.drop){ droppedId=info.drop[0]; droppedCount=info.drop[1]; addItem(droppedId, droppedCount); }
+    else { droppedId=m.id; droppedCount=1; addItem(m.id,1); }
+    if(droppedId && playerJob==='miner' && Math.random()<jobPerkChance('miner', .08)){
+      addItem(droppedId, 1);
+      showJobPerk('miner','bonus '+itemLabel(droppedId));
+    }
+    if(droppedId && activeFamiliar==='sprite' && Math.random()<spriteForageChance((S&&S.lvl)||1)) addItem(droppedId, 1);   // Sprite foraging bonus
+    if(m.id===B.GRASS && Math.random()<.35) addItem(I.WHEAT_SEEDS,1);
+  }
+  if(activeFamiliar==='sprite' && m.willDrop && info && info.drop!==null) spriteForage(m.x,m.y,m.z);   // the sprite zips in to gather (visual; bonus is server-side in MP)
+  if(!NET.on && XP_MINE[m.id]) gainXP(XP_MINE[m.id]);
+  questMine(m.id);
+  SFX.breakBlk(info?info.cls:null);
+  comboBump();
+  camShake=Math.max(camShake,.3);
+  veinStrike(m);
+  triggerFalls(m.x,m.y,m.z);
+  // tool durability
+  const tool=toolFor(m.id);
+  if(!NET.on && tool && m.effective){
+    const save=playerJob==='miner' && Math.random()<jobPerkChance('miner', .06);
+    if(!save) tool.stack.dur--;
+    else showJobPerk('miner','tool spared');
+    if(tool.stack.dur<=0){ inv[selected]=null; showName('Tool broke!'); }
+    refreshHUD();
+  }
+}
+
+// ---------------- input & states ----------------
+const keys = {};
+let locked=false, lockFallback=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
+const overlay=document.getElementById('overlay');
+const playbtn=document.getElementById('playbtn');
+const registerbtn=document.getElementById('registerbtn');
+const logoutbtn=document.getElementById('logoutbtn');
+const authuser=document.getElementById('authuser');
+const authpass=document.getElementById('authpass');
+const authstatus=document.getElementById('authstatus');
+const loadscreen=document.getElementById('loadscreen');
+const loadstatus=document.getElementById('loadstatus');
+const uiEl=document.getElementById('ui');
+const uipanel=document.getElementById('uipanel');
+const hintEl=document.getElementById('hint');
+const tutorialEl=document.getElementById('tutorialhud');
+const pathSelectEl=document.getElementById('pathselect');
+const pathPanelEl=document.getElementById('pathpanel');
+const awakeningWin=document.getElementById('awakeningwin');
+const awakeningPanel=document.getElementById('awakeningpanel');
+let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
+const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1};
+let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0};
+function applyServerTutorials(raw){
+  raw=raw&&typeof raw==='object'?raw:{};
+  for(const key of Object.keys(TUTORIAL_VERSIONS)){
+    serverTutorials[key]=Math.max(0,Math.min(TUTORIAL_VERSIONS[key],raw[key]|0));
+  }
+  try{
+    if(serverTutorials.onboarding>=7)localStorage.setItem('bc_onboarding_done_v7','1');
+    if(serverTutorials.ability>=2)localStorage.setItem('bc_ability_tutorial_done_v2','1');
+    if(serverTutorials.intro>=1)localStorage.setItem('bc_introcut','1');
+    if(serverTutorials.gate>=1)localStorage.setItem('bc_gatecut_v1','1');
+    const townDone=JSON.parse(localStorage.getItem('bc_town_tutorial_steps_v1')||'{}');
+    if(serverTutorials.townJob>=1)townDone.job=true;
+    if(serverTutorials.townTavern>=1)townDone.tavern=true;
+    if(serverTutorials.townLand>=1)townDone.land=true;
+    localStorage.setItem('bc_town_tutorial_steps_v1',JSON.stringify(townDone));
+    if(['job','tavern','land'].every(key=>townDone[key]))localStorage.setItem('bc_town_tutorials_done_v1','1');
+  }catch(e){}
+}
+function markTutorialComplete(tutorial,version){
+  if(!TUTORIAL_VERSIONS[tutorial]||version!==TUTORIAL_VERSIONS[tutorial])return;
+  serverTutorials[tutorial]=Math.max(serverTutorials[tutorial]|0,version);
+  if(NET.on&&NET.room)NET.room.send('tutorialComplete',{tutorial,version});
+}
+function syncLocalTutorialsToServer(){
+  const completed={
+    onboarding:onboardingDone(),ability:abilityTutorialDone(),intro:cutsceneSeen(),gate:gateCutsceneSeen(),
+    townJob:townTutorialStepDone('job'),townTavern:townTutorialStepDone('tavern'),townLand:townTutorialStepDone('land')
+  };
+  for(const key of Object.keys(completed))if(completed[key]&&serverTutorials[key]<TUTORIAL_VERSIONS[key]){
+    markTutorialComplete(key,TUTORIAL_VERSIONS[key]);
+  }
+}
+function cancelOnboardingForProfileRestore(){
+  if(dim==='tutorial') exitOnboardingRoom(false);
+  onboardingActive=false;
+  onboardingArrived=false;
+  document.body.classList.remove('onboarding');
+  tutorialEl.classList.add('hidden');
+  tutorialPillarGroup.visible=false;
+  tutorialDummyGroup.visible=false;
+}
+let pathChoiceOpen=false;
+let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
+const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:false,inventory:false,finish:false};
+const ONBOARDING_FULL_TURN=Math.PI*2;
+let onboardingArrowTurn=0,onboardingPreparedStep=-1;
+let townGuidanceActive=false,townGuidanceStep='quest';
+let worldLoading=false, worldLoadingTimer=0, worldLoadingMinUntil=0;
+let onboardingResourceRegenAt=0;
+const ONBOARDING_RESOURCE_REGEN_MS=2500;
+function setWorldLoadingStatus(text){
+  if(loadstatus) loadstatus.textContent=text||'Loading...';
+}
+function showWorldLoading(text){
+  worldLoading=true;
+  worldLoadingMinUntil=Date.now()+650;
+  clearTimeout(worldLoadingTimer);
+  setWorldLoadingStatus(text||'Preparing your hunter profile...');
+  if(loadscreen){ loadscreen.classList.remove('hidden','fade'); }
+  worldLoadingTimer=setTimeout(()=>finishWorldLoading('fallback'),6500);
+}
+function finishWorldLoading(reason){
+  if(!worldLoading) return;
+  const wait=Math.max(0,worldLoadingMinUntil-Date.now());
+  clearTimeout(worldLoadingTimer);
+  worldLoadingTimer=setTimeout(()=>{
+    worldLoading=false;
+    if(loadscreen){
+      loadscreen.classList.add('fade');
+      setTimeout(()=>{ if(!worldLoading) loadscreen.classList.add('hidden'); },380);
+    }
+  },wait);
+}
+const ONBOARDING_STEPS=[];
+ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
+  {kind:'move',pillar:'Lesson 1 / 10 — Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
+  {kind:'arrows',pillar:'Lesson 2 / 10 — Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
+  {kind:'jump',pillar:'Lesson 3 / 10 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
+  {kind:'tree',pillar:'Lesson 4 / 10 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
+  {kind:'craft',pillar:'Lesson 5 / 10 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
+  {kind:'build',pillar:'Lesson 6 / 10 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingArrived&&onboardingFlags.built>=3},
+  {kind:'farm',pillar:'Lesson 7 / 10 — Farming', key:'G / RIGHT CLICK', text:'Harvest one mature wheat crop.', sub:'Aim at the tall golden wheat and use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
+  {kind:'eat',pillar:'Lesson 8 / 10 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
+  {kind:'combat',pillar:'Lesson 9 / 10 — Combat', key:'LEFT CLICK / F', text:'Aim at the training dummy and strike it.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingArrived&&onboardingFlags.dummy},
+  {kind:'finish',pillar:'Lesson 10 / 10 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Training is complete. New systems will appear when they become relevant.', done:()=>onboardingArrived}
+);
+
+function showStartHelp(){
+  overlay.classList.remove('compact');
+}
+function onboardingDone(){
+  try{return serverTutorials.onboarding>=7||localStorage.getItem('bc_onboarding_done_v7')==='1';}catch(e){return serverTutorials.onboarding>=7;}
+}
+function meadowTutorialDone(){
+  try{return localStorage.getItem('bc_meadow_tutorial_done_v1')==='1';}catch(e){return false;}
+}
+function setMeadowTutorialDone(){
+  try{localStorage.setItem('bc_meadow_tutorial_done_v1','1');}catch(e){}
+}
+function townGuidanceDone(){
+  try{return localStorage.getItem('bc_town_guidance_done_v2')==='1';}catch(e){return false;}
+}
+function townJobGuidanceDone(){
+  try{return localStorage.getItem('bc_town_job_guidance_done_v1')==='1';}catch(e){return false;}
+}
+function townTutorialStepDone(step){
+  const tutorial={job:'townJob',tavern:'townTavern',land:'townLand'}[step];
+  if(tutorial&&serverTutorials[tutorial]>=1)return true;
+  try{return !!JSON.parse(localStorage.getItem('bc_town_tutorial_steps_v1')||'{}')[step];}catch(e){return false;}
+}
+function completeTownTutorialStep(step){
+  const tutorial={job:'townJob',tavern:'townTavern',land:'townLand'}[step];
+  if(!tutorial)return false;
+  try{
+    const done=JSON.parse(localStorage.getItem('bc_town_tutorial_steps_v1')||'{}');
+    done[step]=true;
+    localStorage.setItem('bc_town_tutorial_steps_v1',JSON.stringify(done));
+    if(['job','tavern','land'].every(k=>done[k])) localStorage.setItem('bc_town_tutorials_done_v1','1');
+  }catch(e){}
+  markTutorialComplete(tutorial,1);
+  renderTownTutorialOptions();
+  return true;
+}
+function townTutorialsDone(){
+  return ['job','tavern','land'].every(townTutorialStepDone);
+}
+function setTownTutorialsDone(){
+  try{
+    localStorage.setItem('bc_town_tutorial_steps_v1',JSON.stringify({job:true,tavern:true,land:true}));
+    localStorage.setItem('bc_town_tutorials_done_v1','1');
+    localStorage.removeItem('bc_town_tutorial_choice_v1');
+    localStorage.removeItem('bc_town_tutorial_menu_dismissed_v1');
+  }catch(e){}
+  markTutorialComplete('townJob',1);
+  markTutorialComplete('townTavern',1);
+  markTutorialComplete('townLand',1);
+}
+function townTutorialMenuDismissed(){
+  try{return localStorage.getItem('bc_town_tutorial_menu_dismissed_v1')==='1';}catch(e){return false;}
+}
+function setTownTutorialMenuDismissed(){
+  try{localStorage.setItem('bc_town_tutorial_menu_dismissed_v1','1');}catch(e){}
+}
+function townJobGuidancePending(){
+  try{return localStorage.getItem('bc_town_job_guidance_pending_v1')==='1';}catch(e){return false;}
+}
+function setTownJobGuidancePending(){
+  try{localStorage.setItem('bc_town_job_guidance_pending_v1','1');}catch(e){}
+}
+function townTutorialChoice(){
+  try{return localStorage.getItem('bc_town_tutorial_choice_v1')||'';}catch(e){return '';}
+}
+function setTownTutorialChoice(step){
+  townGuidanceStep=step||'menu';
+  try{
+    localStorage.setItem('bc_town_tutorial_choice_v1', townGuidanceStep);
+    localStorage.removeItem('bc_town_tutorial_menu_dismissed_v1');
+  }catch(e){}
+}
+function shouldOfferTownJobGuidance(){
+  // The first quest now reveals one system at a time: reward -> path -> ability
+  // training -> optional town tutorials.
+  return firstQuestMilestoneComplete() && !!S.path && abilityTutorialDone() && !townTutorialsDone();
+}
+function onboardingKind(){
+  const s=ONBOARDING_STEPS[onboardingStep];
+  return s&&s.kind||'';
+}
+function tutorialSafe(){
+  return (onboardingActive && dim==='tutorial') || (abilityTrainingActive && dim==='ability');
+}
+function abilityTutorialDone(){
+  try{return serverTutorials.ability>=2||localStorage.getItem('bc_ability_tutorial_done_v2')==='1';}catch(e){return serverTutorials.ability>=2;}
+}
+function setAbilityTutorialDone(){
+  try{localStorage.setItem('bc_ability_tutorial_done_v2','1');}catch(e){}
+  markTutorialComplete('ability',2);
+}
+function resetAbilityTutorialDone(){
+  try{localStorage.removeItem('bc_ability_tutorial_done_v2');}catch(e){}
+}
+function resetTrainingMeadowLocal(){
+  if(!TRAINING_MEADOW||typeof buildTrainingMeadow!=='function') return;
+  buildTrainingMeadow(setB);
+  for(const key of Object.keys(cropMeshes)){
+    const [x,y,z]=key.split(',').map(Number);
+    if(isTrainingMeadowLand(x,z,2)) removeCropMesh(x,y,z);
+  }
+  const {x:cx,z:cz,R}=TRAINING_MEADOW;
+  for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
+    if(!isTrainingMeadowLand(x,z)) continue;
+    for(let y=1;y<WH;y++) if(isCropBlock(getB(x,y,z))) syncCropMesh(x,y,z,getB(x,y,z));
+  }
+  rebuildAllChunks();
+}
+function findInvSlot(id){
+  for(let i=0;i<36;i++) if(inv[i]&&inv[i].id===id) return i;
+  return -1;
+}
+function selectItemForOnboarding(id){
+  const i=findInvSlot(id);
+  if(i>=0&&i<9){selectSlot(i);return true;}
+  if(i>=9&&i<36&&!inv[selected]){
+    inv[selected]=inv[i];inv[i]=null;refreshHUD();return true;
+  }
+  return false;
+}
+function ensureOnboardingItem(id,count){
+  if(countItem(id)>=count) return;
+  addItem(id,count-countItem(id));
+}
+function grantOnboardingKit(){
+  ensureOnboardingItem(I.WOOD_AXE,1);
+  refreshHUD();
+}
+function tutorialResourcesNeedRegen(){
+  return onboardingResourceCells(TRAINING_MEADOW,B).some(cell=>getB(cell.x,cell.y,cell.z)!==cell.id);
+}
+function regenerateTutorialResources(){
+  const {x:cx,z:cz,G}=TRAINING_MEADOW;
+  for(const cell of onboardingResourceCells(TRAINING_MEADOW,B)){
+    setB(cell.x,cell.y,cell.z,cell.id);
+    if(cell.id===B.WHEAT_3) syncCropMesh(cell.x,cell.y,cell.z,cell.id);
+  }
+  for(let x=cx+8;x<=cx+12;x++) setB(x,G,cz-28,B.FARMLAND);
+  rebuildAround(cx+22,cz-6);
+  rebuildAround(cx+10,cz-28);
+}
+function tickTutorialResourceRegen(now){
+  if(!tutorialResourcesNeedRegen()){
+    onboardingResourceRegenAt=0;
+    return;
+  }
+  if(!onboardingResourceRegenAt) onboardingResourceRegenAt=now+ONBOARDING_RESOURCE_REGEN_MS;
+  if(now>=onboardingResourceRegenAt){
+    regenerateTutorialResources();
+    onboardingResourceRegenAt=0;
+  }
+}
+function makeOnboardingPlayerHungry(){
+  const target=Math.max(30,Math.min(maxHunger()-45,55));
+  hunger=Math.min(hunger,target);
+  hp=Math.min(hp,Math.max(1,maxHp()-4));
+  renderBars();
+}
+function repairOnboardingBuildPad(){
+  if(!TRAINING_MEADOW) return;
+  const {x:cx,z:cz,G}=TRAINING_MEADOW;
+  for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++){
+    setB(cx+40+ox,G,cz-18+oz,B.COBBLE);
+    for(let y=G+1;y<=G+5;y++) setB(cx+40+ox,y,cz-18+oz,B.AIR);
+  }
+  rebuildAround(cx+40,cz-18);
+  refreshHUD();
+}
+function onboardingBuildHasRoom(){
+  const {x:cx,z:cz,G}=TRAINING_MEADOW;
+  for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++){
+    if(getB(cx+40+ox,G,cz-18+oz)===B.COBBLE && getB(cx+40+ox,G+1,cz-18+oz)===B.AIR) return true;
+  }
+  return false;
+}
+function isOnboardingBuildPad(x,y,z){
+  return isOnboardingBuildPlacement(x,y,z,TRAINING_MEADOW);
+}
+function repairOnboardingFarmPatch(){
+  if(!TRAINING_MEADOW) return;
+  const {x:cx,z:cz,G}=TRAINING_MEADOW;
+  for(let x=cx+8;x<=cx+12;x++){
+    setB(x,G,cz-28,B.FARMLAND);
+    const crop=(x-cx)%2===0?B.WHEAT_3:B.AIR;
+    setB(x,G+1,cz-28,crop);
+    if(crop===B.AIR) removeCropMesh(x,G+1,cz-28);
+    else syncCropMesh(x,G+1,cz-28,crop);
+  }
+  rebuildAround(cx+10,cz-28);
+}
+function onboardingFarmHasMatureWheat(){
+  const {x:cx,z:cz,G}=TRAINING_MEADOW;
+  for(let x=cx+8;x<=cx+12;x++) if(getB(x,G+1,cz-28)===B.WHEAT_3) return true;
+  return false;
+}
+function prepareOnboardingStep(){
+  if(!onboardingActive) return;
+  grantOnboardingKit();
+  const kind=onboardingKind();
+  const entering=onboardingPreparedStep!==onboardingStep;
+  onboardingPreparedStep=onboardingStep;
+  if(entering&&kind==='arrows') onboardingArrowTurn=0;
+  if(kind==='tree') selectItemForOnboarding(I.WOOD_AXE);
+  else if(kind==='craft'){
+    if(countItem(B.LOG)+countCraftCellItem(B.LOG)<=0 && countItem(B.PLANKS)<=0) ensureOnboardingItem(B.LOG,1);
+  }
+  else if(kind==='build'){
+    repairOnboardingBuildPad();
+    if(countItem(B.PLANKS)<3) ensureOnboardingItem(B.PLANKS,3);
+    selectItemForOnboarding(B.PLANKS);
+  }
+  else if(kind==='farm'){
+    ensureOnboardingItem(I.WOOD_HOE,1);
+    repairOnboardingFarmPatch();
+    selectItemForOnboarding(I.WOOD_HOE);
+  }
+  else if(kind==='eat'){
+    ensureOnboardingItem(I.BREAD,1);
+    selectItemForOnboarding(I.BREAD);
+    makeOnboardingPlayerHungry();
+  }
+}
+function buildOnboardingRoute(){
+  const sx=TRAINING_MEADOW.x, sz=TRAINING_MEADOW.z;
+  return [
+    {x:sx-20, z:sz+18},
+    {x:sx-8, z:sz+12},
+    {x:sx+4, z:sz+6},
+    {x:sx+14, z:sz},
+    {x:sx+22, z:sz-6},
+    {x:sx+30, z:sz-12},
+    {x:sx+40, z:sz-18},
+    {x:sx+10, z:sz-28},
+    {x:sx-8, z:sz-28},
+    {x:sx-22, z:sz-20},
+    {x:sx-32, z:sz-8},
+  ];
+}
+function resetForFreshOnboarding(){
+  S.lvl=1; S.xp=0; S.pts=0; S.str=1; S.agi=1; S.vit=1; S.int=1; S.path='';
+  hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
+  gold=0;
+  highestGateRankCleared=-1;
+  armorSlot=null;
+  for(let i=0;i<inv.length;i++) inv[i]=null;
+  quest=null;
+  playerJob=''; jobXp=0; jobContract=null;
+  regionalContract=null; regionalContractOffers=[];
+  utilityUnlocks=[]; utilityLoadout={active:'',passive:[]};
+  discoveredIds.clear();
+  if(typeof dragonUnlocks!=='undefined') dragonUnlocks=[];
+  if(typeof familiarUnlocks!=='undefined') familiarUnlocks=[];
+  refreshHUD();
+  renderBars();
+  renderAbilities();
+  updateLandMinimap();
+}
+function beginOnboarding(){
+  if(onboardingDone()) return;
+  if(meadowTutorialDone()){
+    onboardingActive=false;
+    document.body.classList.remove('onboarding');
+    finishOnboardingToTown();
+    return;
+  }
+  resetForFreshOnboarding();
+  if(!enterOnboardingRoom()) return;
+  onboardingActive=true;
+  onboardingStep=0;
+  onboardingNextAt=0;
+  onboardingArrived=false;
+  onboardingStartPos=player?player.pos.clone():null;
+  onboardingRoute=buildOnboardingRoute();
+  resetTrainingMeadowLocal();
+  if(player){
+    player.pos.set(TRAINING_MEADOW.x-32,TRAINING_MEADOW.G+2,TRAINING_MEADOW.z+24);
+    player.vel.set(0,0,0);
+    player.yaw=-Math.PI/4;
+  }
+  for(const k in onboardingFlags) onboardingFlags[k]=false;
+  onboardingFlags.built=0;
+  onboardingResourceRegenAt=0;
+  onboardingArrowTurn=0;
+  onboardingPreparedStep=-1;
+  grantOnboardingKit();
+  prepareOnboardingStep();
+  document.body.classList.add('onboarding');
+  updateOnboardingHud();
+}
+function abilityHudAvailable(){
+  return !!(S && S.lvl>=2);
+}
+function showAbilityAwakening(){
+  if(abilityAwakeningOpen || abilityTrainingActive || abilityTutorialDone() || !S.path || !abilityHudAvailable()) return false;
+  if(onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
+  abilityAwakeningOpen=true;
+  const P=PATHS[S.path]||PATHS.shadow;
+  const first=P.ab[0];
+  awakeningPanel.innerHTML='<div class="awpill">Level 2 Reached</div>'
+    +'<h1>ABILITY AWAKENED</h1>'
+    +'<div class="awtext">Your hunter path has awakened. You have unlocked your first combat ability, and the ability hotbar is now part of your HUD.</div>'
+    +'<div class="awability" style="color:'+P.col+'">'
+      +'<div class="awicon">'+escHTML(first.g)+'</div>'
+      +'<div class="awname">'+escHTML('Q - '+first.n)+'</div>'
+      +'<div class="awsub">'+escHTML(first.txt)+'<br>R unlocks at Level 5. H unlocks at Level 8.</div>'
+    +'</div>'
+    +'<div><button id="awakeningbegin" type="button">BEGIN ABILITY TRAINING</button></div>';
+  awakeningWin.classList.remove('hidden');
+  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
+  locked=false;
+  lockFallback=false;
+  refreshPlayUi();
+  const btn=document.getElementById('awakeningbegin');
+  if(btn) btn.addEventListener('click', ()=>{
+    SFX.uiClick();
+    awakeningWin.classList.add('hidden');
+    abilityAwakeningOpen=false;
+    startAbilityTraining(true);
+  });
+  return true;
+}
+function startAbilityTraining(){
+  if(abilityTrainingActive || abilityTutorialDone() || onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
+  if(!abilityHudAvailable()) return false;
+  if(dim==='overworld' && !enterAbilityRoom()) return false;
+  awakeningWin.classList.add('hidden');
+  abilityAwakeningOpen=false;
+  abilityTrainingActive=true;
+  abilityTrainingUsed=false;
+  abilityTrainingFinishAt=0;
+  abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+2,TOWN.TC+7.5));
+  if(player){
+    player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+2,ABILITY_MEADOW.z+12);
+    player.vel.set(0,0,0);
+    player.yaw=Math.PI;
+    player.pitch=0;
+  }
+  hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
+  renderBars();
+  renderAbilities();
+  updateAbilityHUD();
+  closeUI(false);
+  if(statOpen) closeStat(false);
+  if(qOpen) closeQWin(false);
+  showName('Ability Awakening');
+  sysMsg('<b>Ability Awakening:</b> you unlocked your first path power. Press <b>Q</b> in the meadow.');
+  updateAbilityTrainingHud();
+  lockFallback=true;
+  locked=true;
+  try{ renderer.domElement.requestPointerLock(); }catch(e){ enterPlayFallback(); }
+  refreshPlayUi();
+  return true;
+}
+function updateAbilityTrainingHud(){
+  if(!abilityTrainingActive){ if(!onboardingActive&&!townGuidanceActive) tutorialEl.classList.add('hidden'); return; }
+  const P=PATHS[S.path]||PATHS.shadow;
+  const first=P.ab[0];
+  tutorialEl.classList.remove('hidden');
+  tutorialEl.innerHTML='<div class="tutpill">Ability Awakening - '+escHTML(P.name)+'</div>'
+    +'<div class="tutkey">'+(abilityTrainingUsed?'NICE HIT':'PRESS Q')+'</div>'
+    +'<div class="tuttext">'+escHTML(abilityTrainingUsed?'Your first ability is ready for real combat.':'Use '+first.n+' on the training dummy.')+'</div>'
+    +'<div class="tutsub">'+escHTML('Your ability hotbar is now visible. Q unlocks at Level 2; R unlocks at Level 5; H unlocks at Level 8.')+'</div>';
+}
+function noteAbilityTrainingCast(){
+  if(!abilityTrainingActive || abilityTrainingUsed) return;
+  abilityTrainingUsed=true;
+  const p=tutorialDummyGroup.position;
+  burst(p.x,p.y+1.3,p.z,[.55,.35,1],28,3.0,2.4,.7);
+  ringPulse(p.x,p.y+.08,p.z,1.8,PATHS[S.path]?parseInt(PATHS[S.path].col.replace('#',''),16):0x8b5cf6,.55);
+  SFX.crit();
+  updateAbilityTrainingHud();
+  abilityTrainingFinishAt=performance.now()+1300;
+}
+function completeAbilityTraining(){
+  if(!abilityTrainingActive) return;
+  setAbilityTutorialDone();
+  abilityTrainingActive=false;
+  abilityTrainingUsed=false;
+  abilityTrainingFinishAt=0;
+  tutorialDummyGroup.visible=false;
+  tutorialPillarGroup.visible=false;
+  tutorialEl.classList.add('hidden');
+  exitAbilityRoom();
+  abilityTrainingReturn=null;
+  hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
+  renderBars();
+  sysMsg('<b>Ability training complete.</b> Your Lv2 ability is on <b>Q</b>. More unlock at <b>Lv5</b> and <b>Lv8</b>.');
+  showName('Q ability unlocked');
+  requestTownJobGuidance();
+  refreshPlayUi();
+}
+function tickAbilityTraining(now){
+  if(!abilityTrainingActive) return;
+  const target={x:ABILITY_MEADOW.x,z:ABILITY_MEADOW.z};
+  const y=surfaceY(target.x,target.z);
+  tutorialPillarGroup.visible=true;
+  tutorialPillarGroup.position.set(target.x,y+4,target.z);
+  tutorialBeam.material.opacity=.22+.12*Math.sin(now*.004);
+  tutorialRing.position.y=-3.92+Math.sin(now*.005)*.08;
+  const s=1+.08*Math.sin(now*.006);
+  tutorialRing.scale.set(s,s,s);
+  tutorialDummyGroup.visible=true;
+  tutorialDummyGroup.position.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+1,ABILITY_MEADOW.z);
+  tutorialDummyGroup.rotation.y=Math.sin(now*.003)*.08;
+  const hitGlow=abilityTrainingUsed?.18:0;
+  dummyBody.scale.set(1+hitGlow,1+hitGlow,1+hitGlow);
+  updateAbilityTrainingHud();
+  if(abilityTrainingFinishAt && now>=abilityTrainingFinishAt) completeAbilityTraining();
+}
+function updateTownGuidanceHud(){
+  if(!townGuidanceActive){tutorialEl.classList.add('hidden');return;}
+  const step=townGuidanceStep||'quest';
+  const info=townTutorialInfo(step);
+  const target=info.target;
+  const near=player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<(info.near||4.2);
+  tutorialEl.classList.remove('hidden');
+  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(info.pill)+'</div>'
+    +'<div class="tutkey">'+escHTML(near?info.nearKey:info.farKey)+'</div>'
+    +'<div class="tuttext">'+escHTML(near?info.nearText:info.farText)+'</div>'
+    +'<div class="tutsub">'+escHTML(near?info.nearSub:info.farSub)+'</div>';
+}
+let cachedLandTutorialTarget=null;
+function landTutorialTarget(){
+  if(cachedLandTutorialTarget && !landClaims.has(landKey(cachedLandTutorialTarget.x,cachedLandTutorialTarget.z))) return cachedLandTutorialTarget;
+  const dirs=[[0,-1]];
+  for(const [dx,dz] of dirs) for(let distance=TOWN.HS+7;distance<=TOWN.HS+20;distance+=2) for(let side=0;side<=14;side+=2) for(const sign of side?[1,-1]:[1]){
+    const x=Math.round(TOWN.TC+dx*distance-dz*side*sign),z=Math.round(TOWN.TC+dz*distance+dx*side*sign);
+    const hs=[terrainHeight(x,z),terrainHeight(x+2,z),terrainHeight(x-2,z),terrainHeight(x,z+2),terrainHeight(x,z-2)];
+    if(isTownLand(x,z)||isLavaBorderLand(x,z)||landClaims.has(landKey(x,z))) continue;
+    if(Math.min(...hs)<=SEA+1 || Math.max(...hs)-Math.min(...hs)>2) continue;
+    cachedLandTutorialTarget={x,z}; return cachedLandTutorialTarget;
+  }
+  return cachedLandTutorialTarget={x:TOWN.TC,z:TOWN.TC-TOWN.HS-9};
+}
+function landTutorialRoute(target){
+  const dx=target.x-TOWN.TC,dz=target.z-TOWN.TC;
+  if(Math.abs(dx)>Math.abs(dz)){
+    const s=Math.sign(dx)||1;
+    return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC+s*(TOWN.HS-3),z:TOWN.TC},{x:TOWN.TC+s*(TOWN.HS+4),z:TOWN.TC},target];
+  }
+  const s=Math.sign(dz)||1;
+  return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+s*(TOWN.HS-3)},{x:TOWN.TC,z:TOWN.TC+s*(TOWN.HS+4)},target];
+}
+function townTutorialInfo(step){
+  if(step==='job') return {
+    pill:'Town Tutorial - Job Board', target:HUB.jobs, near:4.0, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the glowing pillar to the Job Board.', nearText:'Open the Job Board.',
+    farSub:'The Job Board gives repeatable work, guild contracts, and exploration goals.', nearSub:'Take a job or guild contract for your next objective.'
+  };
+  if(step==='tavern') return {
+    pill:'Town Tutorial - Tavern', target:{x:bartender.grp.position.x,z:bartender.grp.position.z}, near:4.0, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the glowing pillar to the tavern.', nearText:'Speak to Greta and buy an item.',
+    farSub:'The tavern sells useful supplies and buys food. You need at least 5 gold to buy the cheapest item.',
+    nearSub:gold>=5?'Buy a potion or stew. You can also sell food here for gold.':'You need at least 5 gold first. Complete a quest or job contract, then come back.'
+  };
+  if(step==='land') return {
+    pill:'Town Tutorial - Buy Land', target:landTutorialTarget(), near:5.0, farKey:'FOLLOW THE BLUE TRAIL', nearKey:'PRESS L',
+    farText:'Follow the highlighted trail through the marked town gate.', nearText:'You reached dry wilderness. Press L to buy land.',
+    farSub:'Stay on the blue trail until you reach the glowing wilderness marker.',
+    nearSub:'In Land Claim mode, click a tile marked Available. Nearby land costs about '+landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9)+' gold.'
+  };
+  if(step==='menu') return {
+    pill:'Town Tutorial - Choose Next', target:HUB.guide, near:9999, farKey:'TOWN HELP', nearKey:'TOWN HELP',
+    farText:'Choose what to learn next.', nearText:'Choose what to learn next.',
+    farSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.', nearSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.'
+  };
+  return {
+    pill:'Town Step 1 - First Quest', target:HUB.guide, near:4.2, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the glowing pillar to the Quest Giver.', nearText:'Speak to the Quest Giver.',
+    farSub:'The town is safe. Your first goal is to meet the Quest Giver and pick up a task.', nearSub:'Accept your first quest so you have a clear reason to leave town.'
+  };
+}
+const townChoicesEl=document.getElementById('townchoices');
+function renderTownTutorialOptions(force=false){
+  if(!townChoicesEl) return;
+  if(!shouldOfferTownJobGuidance() || onboardingActive || pathChoiceOpen || townGuidanceSequenceHold || (rewardWin&&!rewardWin.classList.contains('hidden'))){ townChoicesEl.classList.add('hidden'); return; }
+  const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
+  const choices=[
+    ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
+    ['tavern','TAVERN',gold>=5?'Visit Greta and buy an item.':'Earn 5 gold, then visit Greta and buy an item.',gold>=5],
+    ['land','BUY LAND',gold>=firstLandPrice?'Leave town and buy a wilderness title.':'Earn about '+firstLandPrice+' gold, then buy a wilderness title.',gold>=firstLandPrice]
+  ].filter(c=>!townTutorialStepDone(c[0]));
+  townChoicesEl.innerHTML='<div class="tct">TOWN TUTORIALS</div><div class="tcs">CHOOSE WHAT TO LEARN NEXT</div>';
+  for(const [step,label,desc,ready] of choices){
+    const active=townGuidanceActive&&townGuidanceStep===step;
+    const row=document.createElement('div'); row.className='tcrow'+(active?' active':'');
+    const text=document.createElement('div'); text.innerHTML='<div class="tcname">'+escHTML(label)+'</div><div class="tcdesc">'+escHTML(desc)+'</div>'; row.appendChild(text);
+    const button=document.createElement('button'); button.textContent=active?'ACTIVE':'BEGIN';
+    button.onpointerdown=e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      guideTownTutorialChoice(step,ready);
+    };
+    row.appendChild(button);
+    townChoicesEl.appendChild(row);
+  }
+  townChoicesEl.classList.remove('hidden');
+}
+function openTownTutorialsUI(){
+  if(qOpen) closeQWin(true);
+  renderTownTutorialOptions(true);
+  return;
+  openQWin('management');
+  qpanelEl.innerHTML='';
+  const h=document.createElement('h2'); h.textContent='TOWN TUTORIALS'; qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='CHOOSE WHAT TO LEARN NEXT'; qpanelEl.appendChild(sub);
+  const info=document.createElement('p'); info.className='qtext';
+  info.innerHTML='Pick a guided town activity. The large prompt and glowing pillar will point you there.';
+  qpanelEl.appendChild(info);
+  const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
+  const choices=[
+    ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
+    ['tavern','TAVERN',gold>=5?'Visit Greta, buy supplies, and learn where food becomes gold.':'Needs 5 gold to buy the cheapest tavern item. Earn gold first.',gold>=5],
+    ['land','BUY LAND',gold>=firstLandPrice?'Leave town, open Land Claim mode with L, and buy a wilderness tile.':'Needs about '+firstLandPrice+' gold for a near-town claim. Earn gold first.',gold>=firstLandPrice]
+  ];
+  for(const [step,label,desc,ready] of choices){
+    const r=document.createElement('div'); r.className='shoprow';
+    const mark=document.createElement('b'); mark.style.color=step==='job'?'#8bbf5a':step==='tavern'?'#ffd24a':'#9fd7ff'; mark.style.fontSize='22px'; mark.textContent=step==='job'?'!':step==='tavern'?'☕':'⌂';
+    r.appendChild(mark);
+    const txt=document.createElement('span'); txt.innerHTML='<b>'+label+'</b><br><small>'+escHTML(desc)+'</small>'; r.appendChild(txt);
+    r.appendChild(qBtn(ready?'SHOW GLOW':'EARN GOLD', ()=>guideTownTutorialChoice(step, ready)));
+    qpanelEl.appendChild(r);
+  }
+  const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
+  row.appendChild(qBtn('CLOSE', ()=>{ setTownTutorialMenuDismissed(); closeQWin(true); }, true));
+}
+function guideTownTutorialChoice(step, ready=true){
+  if(!ready){
+    sysMsg(step==='tavern'
+      ? 'You need <b>5 gold</b> before the tavern buying tutorial.'
+      : 'You need more <b>gold</b> before the land buying tutorial.');
+  }
+  setTownTutorialChoice(step);
+  townGuidanceActive=true;
+  const info=townTutorialInfo(step);
+  const y=surfaceY(info.target.x,info.target.z);
+  tutorialPillarGroup.visible=true;
+  tutorialPillarGroup.position.set(info.target.x,y+4,info.target.z);
+  updateTownGuidanceHud();
+  renderTownTutorialOptions();
+  showName('Tutorial started: '+(step==='job'?'Job Board':step==='tavern'?'Tavern':'Buy Land'));
+  eventLog('Town tutorial started — follow the glowing pillar.');
+  lockFallback=true;
+  try{ renderer.domElement.requestPointerLock(); }catch(e){}
+  refreshPlayUi();
+}
+function startTownGuidance(){
+  if(!firstQuestMilestoneComplete() && !quest){
+    townGuidanceStep='quest';
+    townGuidanceActive=true;
+    updateTownGuidanceHud();
+    return;
+  }
+  if(shouldOfferTownJobGuidance() && !quest){
+    const selected=townTutorialChoice();
+    if(selected && !townTutorialStepDone(selected)){
+      townGuidanceStep=selected;
+      townGuidanceActive=true;
+      updateTownGuidanceHud();
+    }
+    renderTownTutorialOptions();
+    return;
+  }
+}
+function clearTownJobGuidance(){
+  const shouldClear=townGuidanceStep==='job'||townJobGuidancePending();
+  if(!shouldClear) return;
+  try{
+    localStorage.setItem('bc_town_job_guidance_done_v1','1');
+    localStorage.removeItem('bc_town_job_guidance_pending_v1');
+  }catch(e){}
+  if(townGuidanceStep==='job'){
+    completeTownTutorialStep('job');
+    townGuidanceActive=false;
+    tutorialEl.classList.add('hidden');
+    tutorialPillarGroup.visible=false;
+  }
+}
+function clearTownTutorialStep(step){
+  if(townGuidanceStep!==step) return;
+  if(step==='job') clearTownJobGuidance();
+  else {
+    completeTownTutorialStep(step);
+    try{localStorage.removeItem('bc_town_job_guidance_pending_v1');}catch(e){}
+    townGuidanceActive=false;
+    tutorialEl.classList.add('hidden');
+    tutorialPillarGroup.visible=false;
+  }
+}
+function requestTownJobGuidance(){
+  if(townTutorialsDone()) return;
+  setTownJobGuidancePending();
+  if(!quest){
+    townGuidanceActive=false;
+    tutorialEl.classList.add('hidden');
+    tutorialPillarGroup.visible=false;
+    renderTownTutorialOptions(true);
+  }
+}
+function clearTownGuidance(){
+  if(!townGuidanceActive) return;
+  if(townGuidanceStep==='job'){
+    clearTownJobGuidance();
+    return;
+  }
+  townGuidanceStep='quest';
+  townGuidanceActive=true;
+  townGuidanceActive=false;
+  try{localStorage.setItem('bc_town_guidance_done_v2','1');}catch(e){}
+  tutorialEl.classList.add('hidden');
+  tutorialPillarGroup.visible=false;
+}
+function tickTownGuidance(now){
+  // Meadow and ability tutorials own the shared tutorial HUD/pillar. Town
+  // guidance must not start or hide their instructions while either is active.
+  if(onboardingActive || abilityTrainingActive) return;
+  if(townGuidanceSequenceHold || (rewardWin && !rewardWin.classList.contains('hidden'))){
+    tutorialPillarGroup.visible=false;
+    tutorialEl.classList.add('hidden');
+    return;
+  }
+  if(!townGuidanceActive){
+    startTownGuidance();
+    return;
+  }
+  if(townGuidanceStep==='quest' && (quest || playerJob)){ clearTownGuidance(); return; }
+  if(townGuidanceStep==='job' && (jobContract || regionalContract)){ clearTownJobGuidance(); return; }
+  if(onboardingActive || pathChoiceOpen || qOpen || dim!=='overworld'){
+    tutorialPillarGroup.visible=false;
+    tutorialEl.classList.add('hidden');
+    return;
+  }
+  const target=townTutorialInfo(townGuidanceStep).target;
+  const y=surfaceY(target.x,target.z);
+  tutorialPillarGroup.visible=true;
+  tutorialPillarGroup.position.set(target.x,y+4,target.z);
+  tutorialBeam.material.opacity=.25+.14*Math.sin(now*.004);
+  tutorialRing.position.y=-3.92+Math.sin(now*.005)*.08;
+  const s=1+.08*Math.sin(now*.006);
+  tutorialRing.scale.set(s,s,s);
+  updateTownGuidanceHud();
+}
+function finishOnboardingToTown(){
+  onboardingActive=false;
+  pathChoiceOpen=false;
+  document.body.classList.remove('onboarding');
+  document.body.classList.remove('path-selecting');
+  pathSelectEl.classList.add('hidden');
+  tutorialEl.classList.add('hidden');
+  tutorialPillarGroup.visible=false;
+  tutorialDummyGroup.visible=false;
+  if(dim==='tutorial') exitOnboardingRoom();
+  if(player){
+    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+7.5);
+    player.vel.set(0,0,0);
+    player.yaw=Math.PI;
+  }
+  try{localStorage.setItem('bc_onboarding_done_v7','1');}catch(e){}
+  markTutorialComplete('onboarding',7);
+  sysMsg('<b>Training complete.</b> Welcome to the Town of Beginnings.');
+  startTownGuidance();
+  sendPlayerMetaNow();
+  sendProfileSaveNow();
+  lockFallback=true;
+  locked=true;
+  try{
+    renderer.domElement.requestPointerLock();
+    setTimeout(()=>{ if(document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
+  }catch(e){
+    enterPlayFallback();
+  }
+  refreshPlayUi();
+}
+function hexToRgba(hex,a){
+  const m=String(hex||'').replace('#','');
+  if(!/^[0-9a-fA-F]{6}$/.test(m)) return 'rgba(79,216,255,'+(a==null ? .3 : a)+')';
+  const n=parseInt(m,16);
+  return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+(a==null ? .3 : a)+')';
+}
+function pathCardHTML(key){
+  const P=PATHS[key], selected=S.path===key;
+  const glow=hexToRgba(P.col,.32);
+  const perks={
+    shadow:['Fast repositioning and burst attacks','Summon a shadow ally later','Best for aggressive solo explorers'],
+    mage:['Ranged elemental damage','Control crowds with frost and lightning','Best for players who like spell timing'],
+    guardian:['Damage reduction and survival tools','Knock enemies away when surrounded','Best for front-line or team play']
+  }[key]||[];
+  return '<div class="pathselect-card" data-path="'+key+'" style="--path-col:'+P.col+';--path-glow:'+glow+'">'
+    +(selected?'<div class="current">CURRENT</div>':'')
+    +'<div class="sigil">'+escHTML(P.ab[0].g)+'</div>'
+    +'<h2>'+escHTML(P.name)+'</h2>'
+    +'<p>'+escHTML(P.desc)+'</p>'
+    +'<ul>'+perks.map(p=>'<li>'+escHTML(p)+'</li>').join('')+'</ul>'
+    +'<ul>'+P.ab.map((a,i)=>'<li><b>'+escHTML(a.g+' '+a.n)+'</b> - Lv '+AB_UNLOCK[i]+' - '+escHTML(a.txt)+'</li>').join('')+'</ul>'
+    +'<button type="button">'+(selected?'CONTINUE AS '+escHTML(P.name).toUpperCase():'CHOOSE '+escHTML(P.name).toUpperCase())+'</button>'
+    +'</div>';
+}
+function shouldOpenLevel2PathChoice(){
+  const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
+  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+}
+function showPathSelection(){
+  pathChoiceOpen=true;
+  onboardingActive=false;
+  document.body.classList.remove('onboarding');
+  document.body.classList.add('path-selecting');
+  tutorialEl.classList.add('hidden');
+  tutorialPillarGroup.visible=false;
+  tutorialDummyGroup.visible=false;
+  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
+  lockFallback=false; locked=false;
+  const awakeningChoice=S.lvl>=2 && !S.path;
+  pathPanelEl.innerHTML=
+    '<h1>'+(awakeningChoice?'LEVEL 2 - CHOOSE YOUR AWAKENING':'CHOOSE YOUR PATH')+'</h1>'+
+    '<div class="pathintro">'+(awakeningChoice
+      ? 'You reached Level 2, but you do not have a combat path yet. Choose one now to unlock your first ability, then you will be taken to the ability meadow.'
+      : 'Training is complete. Before you enter the Town of Beginnings, choose the combat path that fits how you want to play. Your path defines your main ability style and future unlocks.')+'</div>'+
+    '<div id="pathcards">'+Object.keys(PATHS).map(pathCardHTML).join('')+'</div>'+
+    '<div id="pathnote">You can inspect your path later from the Status window with <b>C</b>. Choose carefully: this becomes part of your hunter profile.</div>';
+  pathSelectEl.classList.remove('hidden');
+  refreshPlayUi();
+  pathPanelEl.querySelectorAll('.pathselect-card').forEach(card=>card.addEventListener('click',()=>{
+    const path=card.dataset.path;
+    if(!setAbilityPath(path,{message:false})) return;
+    pathSelectEl.classList.add('hidden');
+    document.body.classList.remove('path-selecting');
+    pathChoiceOpen=false;
+    refreshPlayUi();
+    sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
+    if(S.lvl>=2 && !abilityTutorialDone()){
+      setTimeout(()=>{
+        if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
+      }, 250);
+    }
+  }));
+}
+function completeOnboarding(){
+  setMeadowTutorialDone();
+  // Paths unlock authoritatively at level 2. Training ends at level 1, so send
+  // the player to Mara first and let shouldOpenLevel2PathChoice() open this once
+  // the server confirms the first quest level-up.
+  finishOnboardingToTown();
+}
+function updateOnboardingHud(){
+  if(!onboardingActive){tutorialEl.classList.add('hidden');return;}
+  const s=ONBOARDING_STEPS[Math.min(onboardingStep,ONBOARDING_STEPS.length-1)];
+  tutorialEl.classList.remove('hidden');
+  const lockedText=onboardingArrived?s.text:'Follow the glowing pillar for '+s.pillar+'.';
+  const key=onboardingArrived?s.key:'FOLLOW LIGHT';
+  let sub=s.sub;
+  if(onboardingArrived&&s.kind==='arrows') sub+=' Progress: '+Math.min(100,Math.floor(onboardingArrowTurn/ONBOARDING_FULL_TURN*100))+'%';
+  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(s.pillar)+'</div><div class="tutkey">'+escHTML(key)+'</div><div class="tuttext">'+escHTML(lockedText)+'</div><div class="tutsub">'+escHTML(sub)+'</div>';
+}
+function updateOnboardingPillar(now){
+  if(abilityTrainingActive) return;
+  tutorialDummyGroup.visible=onboardingActive&&dim==='tutorial'&&onboardingKind()==='combat';
+  if(tutorialDummyGroup.visible){
+    tutorialDummyGroup.rotation.y=Math.sin(now*.003)*.08;
+    const hitGlow=onboardingFlags.dummy?.18:0;
+    dummyBody.scale.set(1+hitGlow,1+hitGlow,1+hitGlow);
+  }
+  if(!onboardingActive||dim!=='tutorial'){tutorialPillarGroup.visible=false;return;}
+  const target=onboardingRoute[onboardingStep]; if(!target){tutorialPillarGroup.visible=false;return;}
+  const y=surfaceY(target.x,target.z);
+  tutorialPillarGroup.visible=true;
+  tutorialPillarGroup.position.set(target.x,y+4,target.z);
+  tutorialBeam.material.opacity=.22+.12*Math.sin(now*.004);
+  tutorialRing.position.y=-3.92+Math.sin(now*.005)*.08;
+  const s=1+.08*Math.sin(now*.006);
+  tutorialRing.scale.set(s,s,s);
+}
+function tryHitTutorialDummy(){
+  if(!onboardingActive||!onboardingArrived||onboardingKind()!=='combat'||dim!=='overworld') return false;
+  const p=tutorialDummyGroup.position;
+  if(Math.hypot(player.pos.x-p.x,player.pos.z-p.z)>5.5) return false;
+  const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+  const to=new THREE.Vector3(p.x-player.pos.x,p.y+1.2-(player.pos.y+player.eye),p.z-player.pos.z);
+  const dist=to.length(); if(dist<.001||dist>6) return false;
+  to.normalize();
+  if(dir.dot(to)<.88) return false;
+  onboardingFlags.dummy=true;
+  burst(p.x,p.y+1.4,p.z,[1,.82,.28],18,2.4,1.8,.45);
+  ringPulse(p.x,p.y+.08,p.z,1.3,0xffd24a,.55);
+  SFX.crit();
+  vmSwing();
+  return true;
+}
+function tickOnboarding(now){
+  if(!onboardingActive) return;
+  updateOnboardingPillar(now);
+  tickTutorialResourceRegen(now);
+  if(onboardingKind()==='craft'&&!onboardingFlags.crafted&&countItem(B.LOG)+countCraftCellItem(B.LOG)<=0&&countItem(B.PLANKS)<=0){
+    ensureOnboardingItem(B.LOG,1);
+    if(uiOpen) renderUI();
+  }
+  if(onboardingKind()==='build') onboardingFlags.built=countOnboardingBuildBlocks(TRAINING_MEADOW,getB,B.PLANKS);
+  if(onboardingKind()==='build'&&onboardingFlags.built<3&&(!onboardingBuildHasRoom()||countItem(B.PLANKS)<3-onboardingFlags.built)){
+    if(!onboardingBuildHasRoom()) repairOnboardingBuildPad();
+    if(countItem(B.PLANKS)<3-onboardingFlags.built) ensureOnboardingItem(B.PLANKS,3-onboardingFlags.built);
+    selectItemForOnboarding(B.PLANKS);
+  }
+  if(onboardingKind()==='farm'&&!onboardingFlags.farmed&&!onboardingFarmHasMatureWheat()) repairOnboardingFarmPatch();
+  if(onboardingKind()==='eat'&&!onboardingFlags.ate) makeOnboardingPlayerHungry();
+  const target=onboardingRoute[onboardingStep];
+  const wasArrived=onboardingArrived;
+  onboardingArrived=!!(target&&player&&dim==='tutorial'&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<2.2);
+  if(wasArrived!==onboardingArrived) updateOnboardingHud();
+  const step=ONBOARDING_STEPS[onboardingStep];
+  if(!step) return completeOnboarding();
+  if(step.done()){
+    if(!onboardingNextAt) onboardingNextAt=now+500;
+    if(now>=onboardingNextAt){
+      onboardingStep++;
+      onboardingNextAt=0;
+      onboardingArrived=false;
+      if(onboardingStep>=ONBOARDING_STEPS.length) completeOnboarding();
+      else { prepareOnboardingStep(); updateOnboardingHud(); }
+    }
+  } else onboardingNextAt=0;
+}
+function calmTownHud(){
+  return !onboardingActive && dim==='overworld' && player && isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
+}
+function refreshPlayUi(){
+  const showHud = locked || uiOpen || statOpen || qOpen || claimMode;
+  overlay.classList.toggle('hidden', showHud);
+  document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
+  const minimal=onboardingActive;
+  const calm=calmTownHud();
+  document.body.classList.toggle('calm-town', showHud&&calm);
+  document.getElementById('hotbar').classList.toggle('hidden', !showHud);
+  document.getElementById('stats').classList.toggle('hidden', !showHud || minimal);
+  document.getElementById('abilities').classList.toggle('hidden', !showHud || minimal || !abilityHudAvailable());
+  document.getElementById('locationhud').classList.toggle('hidden', !showHud);
+  document.getElementById('coords').classList.toggle('hidden', !showHud);
+  document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus));
+  document.getElementById('landmap').classList.toggle('hidden', true);
+  document.getElementById('eventhud').classList.toggle('hidden', true);
+  hintEl.classList.add('hidden');
+  updateLandMinimap();
+  playbtn.textContent='RESUME';
+  if(!locked) mouseL=false, mining=null;
+}
+function enterPlayFallback(){
+  if(document.pointerLockElement===renderer.domElement) return;
+  lockFallback=true;
+  locked=true;
+  refreshPlayUi();
+}
+const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn});
+const AUTH=AUTH_UI.state;
+const setAuthStatus=(text,kind='')=>AUTH_UI.setStatus(text,kind);
+const renderAuthState=()=>AUTH_UI.render();
+const checkAuth=()=>AUTH_UI.check();
+const authenticate=(create=false)=>AUTH_UI.authenticate(create);
+async function startPlaying(create=false){
+  if(AUTH.busy)return;AUTH.busy=true;playbtn.disabled=true;registerbtn.disabled=true;
+  const authenticated=await authenticate(create);
+  AUTH.busy=false;playbtn.disabled=false;registerbtn.disabled=false;
+  if(!authenticated)return;
+  SFX.init();
+  if(!NET.tried) showWorldLoading('Preparing world...');
+  netConnect();
+  lockFallback=false;
+  locked=true;
+  refreshPlayUi();
+  try{
+    renderer.domElement.requestPointerLock();
+    setTimeout(()=>{ if(document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
+  }catch(e){
+    enterPlayFallback();
+  }
+}
+try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
+checkAuth();
+try{ authuser.focus(); }catch(e){}
+function primeMenuAudio(){ SFX.init(); }
+overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
+overlay.addEventListener('keydown', primeMenuAudio, {once:true});
+playbtn.addEventListener('click', ()=>startPlaying(false));
+registerbtn.addEventListener('click', ()=>startPlaying(true));
+logoutbtn.addEventListener('click',async()=>{
+  await AUTH_UI.signOut();NET.tried=false;
+});
+document.addEventListener('pointerlockchange', ()=>{
+  const hasLock = document.pointerLockElement === renderer.domElement;
+  if(hasLock) lockFallback=false;
+  locked = hasLock || lockFallback;
+  refreshPlayUi();
+});
+document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !qOpen) enterPlayFallback(); });
+
+let hintDone=false;
+addEventListener('keydown', e=>{
+  if(chatTyping) return;
+  if(pathChoiceOpen){
+    e.preventDefault();
+    return;
+  }
+  if(e.code==='Enter' && !locked && !overlay.classList.contains('hidden')){
+    e.preventDefault();
+    showStartHelp();
+    return;
+  }
+  if(e.code==='Enter' && locked){
+    e.preventDefault();
+    if(uiOpen || statOpen || qOpen) return;
+    if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
+    lockFallback=false;
+    locked=false;
+    showStartHelp();
+    refreshPlayUi();
+    return;
+  }
+  if((e.code==='Slash' || e.code==='Backquote') && locked){
+    e.preventDefault();
+    openChat();
+    return;
+  }
+  keys[e.code]=true;
+  acknowledgeSmartSuggestionKey(e.code);
+  if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
+  if(e.code==='KeyE'){
+    if(onboardingActive&&onboardingArrived) onboardingFlags.inventory=true;
+    if(uiOpen) closeUI();
+    else if(locked){
+      const nearbyVillager=villagerUnderCrosshair(4.5);
+      if(nearbyVillager){
+        e.preventDefault();
+        interactWithVillager(nearbyVillager);
+      } else openUI('inv');
+    }
+  }
+  if(e.code==='KeyC'){
+    if(statOpen) closeStat();
+    else if(locked) openStat();
+  }
+  if(e.code==='KeyO' && !e.repeat){
+    e.preventDefault();
+    if(qOpen && questLogOpen) closeQWin();
+    else if(locked && !uiOpen && !statOpen) openQuestLogUI();
+    return;
+  }
+  if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
+  if(e.code==='Escape'){
+    let closed=false;
+    if(uiOpen){ closeUI(false); closed=true; }
+    if(statOpen){ closeStat(false); closed=true; }
+    if(qOpen){ closeQWin(false); closed=true; }
+    if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
+    if(closed){ e.preventDefault(); return; }
+  }
+  if(locked){
+    if(e.code.startsWith('Arrow')) e.preventDefault();
+    if(e.code==='KeyQ') cast(0);
+    if(e.code==='KeyR') cast(1);
+    if(e.code==='KeyH') cast(2);
+    if(e.code==='KeyF' && !e.repeat) primaryAction();
+    if(e.code==='KeyG' && !e.repeat) secondaryAction();
+    if(e.code==='KeyJ' && !e.repeat){ if(!castDragonAbility()) castArmorPower(); }
+    if(e.code==='KeyY' && !e.repeat) cycleBetaAbilityPath();
+    if(e.code==='Semicolon' && !e.repeat) cycleBetaLegendaryWeapon();
+    if(e.code==='KeyM') showName(SFX.toggleMute()?'Sound muted':'Sound on');
+    if(e.code==='KeyT') openTeamUI();
+    if(e.code==='KeyB' && !e.repeat) openDragonBondUI();
+    if(e.code==='KeyV' && !e.repeat) toggleAppearanceDummy();
+    if(e.code==='KeyU' && !e.repeat) toggleAbilityDemo();
+    if(e.code==='KeyL' && !e.repeat) toggleClaimMode();
+    if(e.code==='KeyZ' && !e.repeat) toggleMount();
+    if(e.code==='KeyX' && !e.repeat) cycleDragon();
+    if(e.code==='KeyK' && !e.repeat) cycleFamiliar();
+    if(e.code==='KeyN' && !e.repeat) shadowStep();
+    if(e.code.startsWith('Digit')){ const n=+e.code.slice(5); if(n>=1&&n<=9) selectSlot(n-1); }
+  } else if(claimMode && e.code==='KeyL' && !e.repeat){
+    toggleClaimMode(false);
+  }
+});
+function stopPrimaryAction(){ mouseL=false; mining=null; suppressMine=false; }
+addEventListener('keyup', e=>{
+  keys[e.code]=false;
+  if(e.code==='KeyF') stopPrimaryAction();
+});
+addEventListener('mousemove', e=>{
+  claimMouse.x=e.clientX; claimMouse.y=e.clientY;
+  cursorEl.style.left=(e.clientX-18)+'px';
+  cursorEl.style.top =(e.clientY-18)+'px';
+  if(claimMode) updateClaimHover();
+});
+function primaryAction(){
+  if(cutscene){ skipCutscene(); return; }
+  if(isMeditating){ stopMeditation(); return; }
+  if(isDragon(mountKind)){ mouseL=true; dragonBreathe(); return; }   // ride: primary action breathes
+  vmSwing();
+  if(tryHitTutorialDummy()){ suppressMine=true; mouseL=true; return; }
+  if(selectedLegendaryWeapon() && castLegendaryWeapon()){ suppressMine=true; mouseL=false; return; }
+  if(attackCd<=0){
+    const mob=mobUnderCrosshair();
+    if(mob){ attackCd=meleeSwingTime(); suppressMine=true; attackMob(mob); mouseL=true; return; }
+    const rival=remoteUnderCrosshair();
+    if(rival){
+      attackCd=.45; suppressMine=true; mouseL=true;
+      const p=rival.remote.grp.position;
+      burst(p.x, p.y+1.1, p.z, [1,.82,.18], 6, 1.5, 1.1, .3);
+      if(activeAegisBounty()) NET.room.send('pvpBountyHit',{sid:rival.sid});
+      else NET.room.send('eventHit',{sid:rival.sid});
+      return;
+    }
+  }
+  mouseL=true;
+}
+let isMeditating=false, meditateStartedAt=0, meditationPrevView=null;
+function inMeditationSpot(){
+  const x=player.pos.x, z=player.pos.z;
+  return dim==='overworld' && Math.abs(player.pos.y-(TOWN.G+1))<2.5 &&
+    x>=tc(43)-.25 && x<=tc(51)+.25 &&
+    z>=tc(41)-.25 && z<=tc(55)+.25;
+}
+function startMeditation(){
+  if(!meditationPrevView) meditationPrevView={ yaw:player.yaw, pitch:player.pitch };
+  isMeditating=true;
+  meditateStartedAt=performance.now();
+  player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=-0.18;
+  if(!appearanceDummy){
+    appearanceDummy=buildAppearanceDummy();
+    appearanceBackDummy=buildAppearanceDummy();
+    meditationOwnedAppearance=true;
+  } else {
+    meditationOwnedAppearance=false;
+  }
+  if(appearanceDummy){
+    appearanceDummy.grp.visible=true;
+    poseMeditationDummy(appearanceDummy,0,performance.now(),true);
+  }
+  if(appearanceBackDummy) appearanceBackDummy.grp.visible=false;
+  meditateJobAcc=0;
+  applyMeditationCamera();
+  SFX.meditate(true);
+  sysMsg('You settle into meditation at the <b>Town Shrine</b>');
+  ringPulse(player.pos.x,TOWN.G+1.08,player.pos.z,1.4,0x7dd3fc,.55);
+  glowFlash(player.pos.x,TOWN.G+1.4,player.pos.z,0x7dd3fc,2.2,.45);
+}
+function stopMeditation(){
+  if(!isMeditating) return;
+  isMeditating=false;
+  if(meditationOwnedAppearance && !appearancePreviewActive){
+    disposeAppearanceDummy();
+  } else if(appearancePreviewActive && appearanceBackDummy) {
+    appearanceBackDummy.grp.visible=true;
+  }
+  if(meditationPrevView){
+    player.yaw=meditationPrevView.yaw;
+    player.pitch=meditationPrevView.pitch;
+    meditationPrevView=null;
+  }
+  SFX.meditate(false);
+  sysMsg('Meditation ended');
+}
+function applyMeditationCamera(){
+  const r=4.2;
+  camera.position.set(player.pos.x+Math.sin(player.yaw)*r, TOWN.G+3.05, player.pos.z+Math.cos(player.yaw)*r);
+  camera.lookAt(player.pos.x, TOWN.G+1.48, player.pos.z);
+}
+function toggleMeditation(){
+  if(isMeditating){ stopMeditation(); return true; }
+  if(!inMeditationSpot()) return false;
+  startMeditation();
+  return true;
+}
+function heldToolClass(cls){
+  const s=inv[selected], info=s&&ITEMS[s.id]&&ITEMS[s.id].tool;
+  return info && info.cls===cls ? {stack:s, info} : null;
+}
+function damageHeldToolLocal(){
+  const s=inv[selected], info=s&&ITEMS[s.id]&&ITEMS[s.id].tool;
+  if(!info) return;
+  s.dur=(s.dur==null?info.dur:s.dur)-1;
+  if(s.dur<=0){ inv[selected]=null; showName('Tool broke!'); }
+  refreshHUD();
+}
+function farmAction(hit){
+  if(!hit || dim!=='overworld') return false;
+  const s=inv[selected];
+  const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand(hit.x,hit.z,2);
+  if(hit.id===B.WHEAT_3){
+    if(!canBuildHere(hit.x,hit.z)){
+      sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That crop belongs to another claim');
+      return true;
+    }
+    if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'harvest',x:hit.x,y:hit.y,z:hit.z,slot:selected});
+    else {
+      setB(hit.x,hit.y,hit.z,B.AIR); removeCropMesh(hit.x,hit.y,hit.z); rebuildAround(hit.x,hit.z);
+      addItem(I.WHEAT,1); addItem(I.WHEAT_SEEDS,1+((Math.random()*2)|0));
+      if(playerJob==='farmer' && Math.random()<jobPerkChance('farmer', .1)){
+        addItem(I.WHEAT,1);
+        showJobPerk('farmer','bonus wheat');
+      }
+      gainJobXP('farmer',5,'harvest');
+      jobContractProgress('farm', 1, B.WHEAT_3);
+    }
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
+    SFX.breakBlk(null); vmSwing(); return true;
+  }
+  if(s && s.id===I.WHEAT_SEEDS && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
+    if(!canBuildHere(hit.x,hit.z)){
+      sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That land is protected by another claim');
+      return true;
+    }
+    if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'plant',x:hit.x,y:hit.y+1,z:hit.z,slot:selected});
+    else {
+      setB(hit.x,hit.y+1,hit.z,B.WHEAT_1); syncCropMesh(hit.x,hit.y+1,hit.z,B.WHEAT_1);
+      s.count--; if(s.count<=0) inv[selected]=null; refreshHUD();
+      gainJobXP('farmer',1,'plant');
+      jobContractProgress('farm', 1, I.WHEAT_SEEDS);
+    }
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
+    SFX.place(); vmSwing(); return true;
+  }
+  if(heldToolClass('hoe') && (hit.id===B.GRASS || hit.id===B.DIRT) && getB(hit.x,hit.y+1,hit.z)===B.AIR){
+    if(!canBuildHere(hit.x,hit.z)){
+      sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That land is protected by another claim');
+      return true;
+    }
+    if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'till',x:hit.x,y:hit.y,z:hit.z,slot:selected});
+    else {
+      setB(hit.x,hit.y,hit.z,B.FARMLAND); rebuildAround(hit.x,hit.z); damageHeldToolLocal();
+      gainJobXP('farmer',1,'till');
+      jobContractProgress('farm', 1, B.FARMLAND);
+    }
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
+    SFX.place(); vmSwing(); return true;
+  }
+  return false;
+}
+function mostDamagedToolSlot(exceptSlot=-1){
+  let best=null;
+  for(let i=0;i<36;i++){
+    if(i===exceptSlot) continue;
+    const s=inv[i], info=s&&ITEMS[s.id]&&ITEMS[s.id].tool;
+    if(!info) continue;
+    const max=toolMaxDur(s);
+    const cur=s.dur==null?max:s.dur;
+    if(cur>=max) continue;
+    const missing=max-cur;
+    if(!best||missing>best.missing) best={slot:i, stack:s, info, cur, missing};
+  }
+  return best;
+}
+function useRepairKit(slot=selected){
+  const kit=inv[slot];
+  if(!kit||kit.id!==I.REPAIR_KIT) return false;
+  const target=mostDamagedToolSlot(slot);
+  if(!target){ sysMsg('No damaged <b>tool</b> to repair'); return true; }
+  if(NET.on&&NET.room){ NET.room.send('useRepairKit',{slot}); return true; }
+  kit.count--; if(kit.count<=0) inv[slot]=null;
+  const bt=jobPerkTier('blacksmith');
+  const gain=Math.max(1, Math.ceil(toolMaxDur(target.stack)*(.5 + bt*.06)));
+  const before=target.cur;
+  target.stack.dur=Math.min(toolMaxDur(target.stack), before+gain);
+  refreshHUD(); if(uiOpen) renderUI();
+  gainJobXP('blacksmith',5,'repair');
+  jobContractProgress('repair', 1, I.REPAIR_KIT);
+  sysMsg('Repair Kit restored <b>'+Math.round(target.stack.dur-before)+' durability</b> to '+ITEMS[target.stack.id].name);
+  return true;
+}
+function isJobBoardHit(hit){
+  if(!hit || dim!=='overworld') return false;
+  const jbx=(HUB.jobs.x|0), jbz=(HUB.jobs.z|0);
+  return Math.abs(hit.x-jbx)<=1 && Math.abs(hit.z-jbz)<=1 && hit.y>=TOWN.G+1 && hit.y<=TOWN.G+3 &&
+    (hit.id===B.PLANKS || hit.id===B.LOG);
+}
+function nearJobBoard(){
+  return dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<3.4;
+}
+function nearDragonRoost(){
+  return dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<13;
+}
+function nearSkyshipGangway(){
+  return dim==='overworld' && player.pos.x>=HUB.skyport.x-15.5 && player.pos.x<=HUB.skyport.x-6.5 &&
+    Math.abs(player.pos.z-HUB.skyport.z)<=3.25 && player.pos.y>=HUB.skyport.y+.25 && player.pos.y<=HUB.skyport.y+4;
+}
+function tryBoardSkyship(){
+  if(!nearSkyshipGangway()) return false;
+  if(NET.on&&NET.room){ NET.room.send('skyshipBoard',{}); return true; }
+  if(!skyShip||skyShip.state!=='docked'){ sysMsg('The airship is not currently docked'); return true; }
+  if(localPlayerHunterRankIndex()<5){ sysMsg('Boarding requires an <b>S-Rank Hunter</b>'); return true; }
+  if(gold<1000){ sysMsg('Boarding requires <b>1,000 gold</b> in your possession'); return true; }
+  sysMsg('<b>Boarding approved.</b> Westwind crew has cleared you for the western route.');
+  return true;
+}
+function nearbySmallDiscovery(range=6){
+  if(dim!=='overworld')return null;let best=null,bd=range;
+  for(const s of smallDiscoveries){const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);if(d<bd){bd=d;best=s;}}
+  return best;
+}
+const localDiscoveryClaims=new Set();
+function interactSmallDiscovery(s,hit){
+  if(!s||!['rare_plant','lore_tablet','fishing_pool','puzzle_shrine'].includes(s.type))return false;
+  const msg={id:s.id,x:hit?hit.x:0,y:hit?hit.y:0,z:hit?hit.z:0};
+  if(NET.on&&NET.room){NET.room.send('discoveryInteract',msg);return true;}
+  const claimKey=s.type==='fishing_pool'?s.id+':'+Math.floor(Date.now()/600000):s.id;
+  if(localDiscoveryClaims.has(claimKey)){sysMsg(s.type==='fishing_pool'?'The pool needs time to replenish.':'You have already searched this discovery');return true;}
+  if(s.type==='puzzle_shrine'&&(!hit||hit.x!==s.target.x||hit.y!==s.target.y||hit.z!==s.target.z)){sysMsg('Two flames agree. Touch the one that does not.');return true;}
+  localDiscoveryClaims.add(claimKey);
+  if(s.type==='fishing_pool'){addItem(I.RIVER_FISH,2);sysMsg('You catch <b>Silverfin x2</b>');}
+  else if(s.type==='rare_plant'){const ids=[I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM];addItem(ids[biomeAt(s.x,s.z)]||I.WINDSEED,2);sysMsg('A rare regional plant yields useful material.');}
+  else if(s.type==='lore_tablet'){gainXP(12);sysMsg('The weathered tablet preserves a fragment of old-road lore.');}
+  else{addItem(I.IRON_INGOT,2);gainXP(15);sysMsg('The odd flame yields. A hidden compartment opens.');}
+  return true;
+}
+function secondaryAction(){
+  if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<2.8){ enterDungeon(); return; }
+  if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
+  if(tryBoardSkyship()) return;
+  if(isMeditating){ stopMeditation(); return; }
+  if(toggleMeditation()) return;
+  const heldRC=inv[selected];
+  if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
+  if(heldRC && heldRC.id===I.REPAIR_KIT){ useRepairKit(selected); return; }
+  if(heldRC && DRAGON_EGG_TO_TYPE[heldRC.id]!==undefined){ hatchDragonEgg(selected); return; }
+  if(heldRC && FAMILIAR_BY_SIGIL[heldRC.id]){ bindFamiliarItem(selected); return; }
+  if(heldRC && heldRC.id===I.DRAGON_TREAT && feedMountedDragon(selected)) return;
+  if(heldRC && POTIONS[heldRC.id]){ drinkPotion(heldRC.id); return; }
+  if(heldRC && FOOD_VALUES[heldRC.id]){ eatFood(selected); return; }
+  if(nearJobBoard()){ openJobsUI(); return; }
+  if(guardianUnderCrosshair(8)){ openGuardianUI(); return; }
+  const vill=villagerUnderCrosshair(4.5);
+  if(vill){
+    interactWithVillager(vill);
+    return;
+  }
+  if(nearDragonRoost()){ openDragonBondUI(); return; }
+  const hit=raycast(6);
+  if(!hit) return;
+  if(interactSmallDiscovery(nearbySmallDiscovery(7),hit))return;
+  if(isJobBoardHit(hit)){ openJobsUI(); return; }
+  if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2){ openShardUI(); return; }
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX &&
+     ((hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)||(hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8))){ openShopUI(); return; }
+  if(hit.id===B.CHEST){ openUI('chest', hit.x+','+hit.y+','+hit.z); return; }
+  if(hit.id===B.TABLE){ openUI('table'); return; }
+  if(hit.id===B.FURNACE){ openUI('furnace', hit.x+','+hit.y+','+hit.z); return; }
+  if(hit.id===B.EGG_INSULATOR){
+    // 1. ride a dragon up to the nest, interact to perch it there
+    if(isDragon(mountKind)){
+      if(perchKeysAt(hit.x,hit.y,hit.z).length>=DRAGON_PERCH_SLOTS_C){ sysMsg('This nest is full'); return; }
+      perchMyDragon(hit); return;
+    }
+    // 2. feed a Dragon Treat to a perched dragon that isn't yet smitten
+    const held=inv[selected];
+    if(held && held.id===I.DRAGON_TREAT){
+      const occ=perchKeysAt(hit.x,hit.y,hit.z);
+      const hungry=occ.find(k=>!(perchedDragons[k].loveUntil>Date.now()));
+      if(hungry){ feedNestDragon(hungry); return; }
+      sysMsg(occ.length ? 'The dragons here are already smitten' : 'Perch a dragon here first'); return;
+    }
+    // 3. existing egg incubation/hatch flow
+    const inc=dragonIncubationMeshes[incubationKey(hit.x,hit.y,hit.z)];
+    if(inc){
+      if(NET.on && NET.room){ NET.room.send('hatchDragonEgg', {slot:selected, x:hit.x, y:hit.y, z:hit.z}); return; }
+      claimLocalIncubation(hit.x, hit.y, hit.z);     // solo: claim once the timer ends
+      return;
+    }
+    const eggSlot=firstDragonEggSlot();
+    if(eggSlot>=0){ hatchDragonEgg(eggSlot, hit); return; }
+    // 4. otherwise recall a perched dragon if one is here
+    const occ=perchKeysAt(hit.x,hit.y,hit.z);
+    if(occ.length){ recallNestDragon(occ[occ.length-1]); return; }
+    sysMsg('Ride a dragon here to perch it, or use a <b>Dragon Egg</b>');
+    return;
+  }
+  if(hit.id===B.BED){ trySleep(hit); return; }
+  if(farmAction(hit)) return;
+  const s=inv[selected];
+  if(!s || ITEMS[s.id].place===undefined) return;
+  const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2];
+  if(!inWorld(px,py,pz)) return;
+  const cur=getB(px,py,pz);
+  if(cur!==B.AIR && cur!==B.WATER) return;
+  const placeId=s.id;
+  if(dim==='overworld' && !canBuildHere(px,pz,py,placeId)){
+    sysMsg(isLavaBorderLand(px,pz) ? 'The <b>world border</b> is protected' : isTownLand(px,pz) ? 'Only <b>fellowship decor</b> can be placed on your hall floor' : 'That land is protected by another claim');
+    return;
+  }
+  setB(px,py,pz,placeId);
+  if(collides(player.pos)){ setB(px,py,pz,cur); return; }
+  if(isLightBlock(placeId)) addTorchMesh(px,py,pz);
+  syncInsulatorMesh(px,py,pz,placeId);
+  s.count--; if(s.count<=0) inv[selected]=null;
+  refreshHUD();
+  rebuildAround(px,pz);
+  netSendEdit(px,py,pz,placeId);
+  SFX.place(); vmSwing();
+  if(onboardingActive&&onboardingArrived&&onboardingKind()==='build'&&placeId===B.PLANKS&&isOnboardingBuildPad(px,py,pz)) onboardingFlags.built=(onboardingFlags.built||0)+1;
+  if(placeId===B.SAND) maybeFall(px,py,pz);
+}
+function interactWithVillager(vill){
+  if(!vill) return false;
+  if(vill.role==='guild_receptionist') openGuildHallUI();
+  else if(vill.role==='bartender') openTavernUI();
+  else if(vill.role==='traveling_merchant'){
+    sysMsg('<b>Road Merchant:</b> "What the town lacks, the road provides."');
+    const s=nearbySmallDiscovery(8);
+    if(NET.on&&NET.room&&s&&s.type==='traveling_merchant') NET.room.send('regionalContractVisit',{id:s.id});
+    openShopUI('road');
+  }
+  else if(vill.role==='patron') sysMsg('<b>'+escHTML(vill.name||'Patron')+'</b>: '+escHTML(vill.line||'Warm fire, fair drink. That is enough for tonight.'));
+  else if(vill.role==='stablemaster') openStablemasterUI(vill);
+  else openQuestUI(vill);
+  return true;
+}
+addEventListener('mousedown', e=>{
+  if(claimMode){
+    if(e.button===0) requestLandClaim();
+    return;
+  }
+  if(!locked) return;
+  if(e.button===0){
+    primaryAction();
+  }
+  else if(e.button===2){
+    secondaryAction();
+  }
+});
+addEventListener('mouseup', e=>{ if(e.button===0) stopPrimaryAction(); });
+addEventListener('contextmenu', e=> e.preventDefault());
+addEventListener('wheel', e=>{ if(locked) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
+
+gameContext.registerState('combat', Object.freeze({
+  player,
+  inventory:inv,
+  get selectedSlot(){ return selected; },
+  get inventoryModel(){ return inventoryModel; },
+  get equipmentModel(){ return equipmentModel; },
+  get inputLocked(){ return locked; },
+  get uiOpen(){ return uiOpen; },
+}));
+gameContext.registerModule('combat', Object.freeze({
+  collides,
+  primaryAction,
+  secondaryAction,
+  stopPrimaryAction,
+}));
+

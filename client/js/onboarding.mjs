@@ -4,6 +4,36 @@
 // modules. State the rest of the client also reads (progressionFocus, the
 // inventory, DOM nodes, helpers) is injected; firstPromotionSeen/Shown are owned
 // here since nothing outside onboarding touches them.
+export function isOnboardingBuildPlacement(x, y, z, meadow) {
+  if (!meadow) return false;
+  const { x: cx, z: cz, G } = meadow;
+  return y >= G + 1 && y <= G + 5 &&
+    Math.abs(x - (cx + 40)) <= 1 && Math.abs(z - (cz - 18)) <= 1;
+}
+
+export function countOnboardingBuildBlocks(meadow, getBlock, plankId) {
+  if (!meadow || typeof getBlock !== 'function') return 0;
+  const { x: cx, z: cz, G } = meadow;
+  let count = 0;
+  for (let x = cx + 39; x <= cx + 41; x++) {
+    for (let z = cz - 19; z <= cz - 17; z++) {
+      for (let y = G + 1; y <= G + 5; y++) {
+        if (getBlock(x, y, z) === plankId) count++;
+      }
+    }
+  }
+  return count;
+}
+
+export function onboardingResourceCells(meadow, blocks) {
+  if (!meadow || !blocks) return [];
+  const { x: cx, z: cz, G } = meadow;
+  const cells = [];
+  for (let y = G + 1; y <= G + 4; y++) cells.push({ x: cx + 22, y, z: cz - 6, id: blocks.LOG });
+  for (let x = cx + 8; x <= cx + 12; x += 2) cells.push({ x, y: G + 1, z: cz - 28, id: blocks.WHEAT_3 });
+  return cells;
+}
+
 export function createOnboardingUI(deps) {
   const {
     rewardWin, rewardPanel, I, ITEMS, HUB,

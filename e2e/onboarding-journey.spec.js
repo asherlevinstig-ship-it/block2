@@ -27,7 +27,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await page.locator('#registerbtn').click();
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
-  const lessons = ['move','mouse','arrows','jump','tree','craft','build','farm','eat','combat','finish'];
+  const lessons = ['move','arrows','jump','tree','craft','build','farm','eat','combat','finish'];
   for (let step = 0; step < lessons.length; step++) {
     const before = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status());
     expect(before.onboardingStep).toBe(step);

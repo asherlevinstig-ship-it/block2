@@ -51,10 +51,10 @@ test('fresh meadow keeps its instructions visible and defers path choice until l
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   await expect(page.locator('#tutorialhud')).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('#tutorialhud')).toContainText('Lesson 1 / 11 — Movement');
+  await expect(page.locator('#tutorialhud')).toContainText('Lesson 1 / 10 — Movement');
   await expect(page.locator('#zonename')).toHaveText('Hunter Training Meadow');
   await expect(page.locator('#zonemeta')).toHaveText('Safe training grounds');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal)).toBe(11);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal)).toBe(10);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe('move');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('');
 
