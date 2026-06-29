@@ -138,7 +138,8 @@ it and their **team** parties in (inviting = `team join`). The server rolls the
 affixes, scales mobs at spawn (Empowered/Fortified/Tyrannical plus a per-`+N`
 bump, Frenzied at runtime), and simulates all environmental hazards — Volatile
 corpse blasts, Sanguine ichor pools, Spiteful ghosts, Bursting/Grievous bleed
-DoTs, Quaking shockwaves, and Explosive orbs (orbs and ghosts ride the normal
+DoTs, Quaking shockwaves, Explosive orbs, and Bolstering (each trash death
+empowers nearby survivors, stacking) — (orbs and ghosts ride the normal
 `Mob` sync; everything else is driven by `fx` events the client renders). On a
 clear every eligible hunter receives bonus loot and a Legendary Weapon Token.
 
@@ -218,7 +219,7 @@ npm run test:integration   # boots a room and runs the join → play → save ro
 The unit suite is overwhelmingly **anti-cheat and authority** coverage: forged saves can't grant
 gold/XP/items, melee damage is validated against the real inventory, mounts/dragons/familiars are
 server-gated, rate limiters throttle floods, PvP bounty strikes are range/line-of-sight/terrain
-validated, shard affix hazards (Volatile/Explosive/Quaking/Sanguine/Bursting/Grievous) deal the
+validated, shard affix hazards (Volatile/Explosive/Quaking/Sanguine/Bursting/Grievous/Bolstering) deal the
 right damage in the right radius, and the dungeon generator is asserted byte-identical to the client's.
 
 Both suites run on every push and pull request via [GitHub Actions](.github/workflows/ci.yml).

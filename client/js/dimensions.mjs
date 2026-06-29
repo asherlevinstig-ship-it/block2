@@ -1069,6 +1069,7 @@ const AFFIX_STYLE={
   Grievous:{col:0xbe123c,label:'GRIEVOUS'},
   Quaking:{col:0xf59e0b,label:'QUAKE'},
   Explosive:{col:0xffaa33,label:'EXPLODE'},
+  Bolstering:{col:0xf97316,label:'BOLSTER'},
 };
 function dungeonMods(dgn){ return dgn&&dgn.shard&&Array.isArray(dgn.shard.mods) ? dgn.shard.mods : []; }
 function hasAffix(dgn,name){ return dungeonMods(dgn).includes(name); }
@@ -1076,7 +1077,7 @@ function dungeonMoodColor(dgn){
   const mods=dungeonMods(dgn);
   if(mods.includes('Sanguine')||mods.includes('Grievous')||mods.includes('Bursting')) return 0x16070c;
   if(mods.includes('Spiteful')) return 0x06111b;
-  if(mods.includes('Volatile')||mods.includes('Explosive')) return 0x190b05;
+  if(mods.includes('Volatile')||mods.includes('Explosive')||mods.includes('Bolstering')) return 0x190b05;
   if(mods.includes('Quaking')||mods.includes('Fortified')) return 0x100d09;
   if(mods.includes('Empowered')||mods.includes('Tyrannical')||mods.includes('Frenzied')) return 0x120817;
   return 0x070811;

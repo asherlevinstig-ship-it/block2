@@ -3091,6 +3091,7 @@ const SHARD_MODS={
   Grievous:   'below 90% health you bleed until fully healed',
   Quaking:    'shockwaves erupt beneath your feet',
   Explosive:  'unstable orbs spawn \u2014 destroy them fast',
+  Bolstering: 'each kill emboldens nearby survivors \u2014 cleave them down evenly',
 };
 function rollMods(plus){
   const keys=Object.keys(SHARD_MODS);
@@ -7850,6 +7851,11 @@ function netFx(m){
   } else if(m.t==='bleed'){                // Bursting trash death inflicts bleed
     glowFlash(player.pos.x,player.pos.y+1,player.pos.z,0xdc2626,2.4,.28);
     showName('Bursting wound!');
+  } else if(m.t==='bolster'){              // Bolstering: a kill emboldens nearby survivors
+    glowFlash(m.x,(m.y||player.pos.y)+1,m.z,0xf97316,2.8,.3);
+    ringPulse(m.x,(m.y||player.pos.y)+.08,m.z,2.8,0xf97316,.4);
+    burst(m.x,(m.y||player.pos.y)+1,m.z,[1,.6,.2],14,2.4,2.2,.5);
+    showName('Survivors bolstered!');
   }
 }
 function netLegendaryFx(m){

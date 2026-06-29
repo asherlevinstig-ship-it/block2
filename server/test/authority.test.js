@@ -1786,6 +1786,32 @@ test('shard Grievous bleeds a wounded player and stops once they heal to full', 
   assert.equal(room.playerHp.get(p.sessionId).hp, afterFull, 'at full HP Grievous deals no further damage');
 });
 
+test('shard Bolstering empowers surviving trash near a kill but not distant mobs, the boss, or hazard entities', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', ['Bolstering'], 0);
+  room.state.mobs.set('near', { x: 32, y: 9, z: 30, hp: 20, maxHp: 20, kind: 'zombie', dgn: 'g1' });
+  room.state.mobs.set('far', { x: 50, y: 9, z: 50, hp: 20, maxHp: 20, kind: 'zombie', dgn: 'g1' });
+  room.state.mobs.set('boss', { x: 31, y: 9, z: 30, hp: 100, maxHp: 100, kind: 'boss', dgn: 'g1' });
+  room.state.mobs.set('orb', { x: 31, y: 9, z: 30, hp: 2, maxHp: 2, kind: 'orb', dgn: 'g1' });
+  room.mobMeta.near = room.freshMeta(32, 30, 4, 1.5, 'zombie', 0, true);   // dmg 4, arrowDmg 2
+  room.mobMeta.far = room.freshMeta(50, 50, 4, 1.5, 'zombie', 0, true);
+
+  room.onDungeonTrashDeath('g1', 30, 9, 30);   // a kill within BOLSTER_RADIUS (6) of 'near'
+  assert.equal(room.mobMeta.near.bolster, 1, 'a nearby survivor gains one Bolstering stack');
+  assert.equal(room.state.mobs.get('near').maxHp, 25, 'each stack adds BOLSTER_HP (5) to max HP');
+  assert.equal(room.state.mobs.get('near').hp, 25, 'current HP is bumped alongside max HP');
+  assert.equal(room.mobMeta.near.dmg, 6, 'each stack adds BOLSTER_DMG (2) to melee damage');
+  assert.equal(room.mobMeta.near.arrowDmg, 4, 'ranged damage is bolstered too');
+  assert.equal(room.state.mobs.get('far').maxHp, 20, 'trash outside the radius is untouched');
+  assert.equal(room.state.mobs.get('boss').maxHp, 100, 'the boss is never bolstered');
+  assert.equal(room.state.mobs.get('orb').maxHp, 2, 'hazard entities (orbs) are never bolstered');
+
+  for (let i = 0; i < 12; i++) room.onDungeonTrashDeath('g1', 30, 9, 30);   // far more kills than the cap
+  assert.equal(room.mobMeta.near.bolster, 8, 'Bolstering stacks cap at BOLSTER_MAX_STACKS (8)');
+  assert.equal(room.state.mobs.get('near').maxHp, 60, 'capped HP gain is 20 + 8*5');
+  assert.equal(room.mobMeta.near.dmg, 20, 'capped melee gain is 4 + 8*2');
+});
+
 test('King of the Hill scores time only for the crown-holding team', () => {
   const T = 1_000_000;
   const room = makeRoom();

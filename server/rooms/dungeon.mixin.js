@@ -1,6 +1,7 @@
 // Dungeon gates, party instances, entry/exit, and server-authored shard hazards.
 // Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
+  BOLSTER_DMG, BOLSTER_HP, BOLSTER_MAX_STACKS, BOLSTER_RADIUS,
   BOSS_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_OF, GATE_DISTANCE_BANDS,
   I, SHARD_ITEM_IDS, SHARD_TIERS, SOLO_KEYS, TEAM_KEYS, rollShardMods, townDistance,
 } = require('./constants');
@@ -624,6 +625,28 @@ class DungeonMixin {
       }
       this.sendSpace(dgn, 'fx', { t: 'bleed', dgn });
     }
+    if (inst.hazMods.has('Bolstering')) this.bolsterNearbyTrash(inst, x, z);
+  }
+  // Bolstering: a trash death emboldens every surviving trash within BOLSTER_RADIUS,
+  // stacking up to BOLSTER_MAX_STACKS. The dying mob has already been removed from
+  // state by finishMobKill, so it never bolsters itself; bosses and hazard entities
+  // (orbs, ghosts) are excluded so only real trash grows.
+  bolsterNearbyTrash(inst, x, z) {
+    const plus = inst.shardPlus | 0;
+    let bolstered = false;
+    this.state.mobs.forEach((mm, id) => {
+      if (mm.dgn !== inst.id || mm.kind === 'boss' || mm.kind === 'orb' || mm.kind === 'ghost') return;
+      const meta = this.mobMeta[id];
+      if (!meta || (meta.bolster | 0) >= BOLSTER_MAX_STACKS) return;
+      if (Math.hypot(mm.x - x, mm.z - z) > BOLSTER_RADIUS) return;
+      meta.bolster = (meta.bolster | 0) + 1;
+      const hpBump = BOLSTER_HP + plus;
+      mm.maxHp += hpBump; mm.hp += hpBump;
+      meta.dmg += BOLSTER_DMG;
+      meta.arrowDmg = (meta.arrowDmg | 0) + BOLSTER_DMG;
+      bolstered = true;
+    });
+    if (bolstered) this.sendSpace(inst.id, 'fx', { t: 'bolster', x, z, dgn: inst.id });
   }
   spawnGhost(inst, x, z) {
     const { id } = this.spawnHazMob(inst, 'ghost', x, z, 1, true, 2 + (inst.shardPlus | 0), 3.0 + Math.random() * .4);

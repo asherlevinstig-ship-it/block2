@@ -107,7 +107,8 @@ plaza pedestal to open a **sharded gate** with rolled **affixes** (`SHARD_MOD_KE
 `rollShardMods` → 1–3 mods). Stat affixes (Empowered/Fortified/Tyrannical/Frenzied) scale
 mobs at spawn; the rest are **server-simulated hazards** (`HAZARD_MOD_SET`): Volatile
 corpse blasts, Sanguine ichor pools, Spiteful ghosts, Bursting/Grievous bleeds, Quaking
-shockwaves, Explosive orbs. Clearing one rewards bonus loot + a Legendary Weapon Token.
+shockwaves, Explosive orbs, and Bolstering (each trash death empowers surviving trash
+nearby, stacking). Clearing one rewards bonus loot + a Legendary Weapon Token.
 
 ---
 
