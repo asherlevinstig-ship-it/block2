@@ -38,6 +38,7 @@ const W = require('../world');
 const AI = require('../ai');
 const D = require('../dungeon');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
+const { DungeonRoom } = require('../rooms/DungeonRoom');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS } = require('../store');
@@ -178,6 +179,15 @@ function makeRoom() {
   room.teamRecords = new Map();
   room.guilds = new Map();
   room.guildSeq = 0;
+  return room;
+}
+
+// A DungeonRoom shares all of GameRoom's state shape (it extends it), so reuse makeRoom()
+// and rebase the prototype so DungeonRoom's own onCreate/update/gateFromOptions resolve.
+function makeDungeonRoom() {
+  const room = makeRoom();
+  Object.setPrototypeOf(room, DungeonRoom.prototype);
+  room.mobSeq = 0;
   return room;
 }
 
@@ -1835,6 +1845,55 @@ test('DungeonInstance.tick simulates only its own mobs and runs its hazards', ()
   assert.ok(room.mobMeta.m1.atkCd < 1.0, 'the instance simulated its own mob (brain ran: atkCd decremented)');
   assert.equal(room.state.mobs.get('m1').hp, 16, 'the instance ran its Sanguine hazard (pool healed the wounded mob 6/s)');
   assert.equal(room.mobMeta.ow.atkCd, 1.0, 'a mob outside the instance was left untouched');
+});
+
+test('DungeonRoom.createInstance populates the room with one gate instance: trash + a boss, all tagged', () => {
+  const room = makeDungeonRoom();
+  const g = { id: 'dr-make', seed: 7, rank: 1, kind: 'public', shardPlus: 0, shardName: '', shardMods: '' };
+  const inst = room.createInstance(g);
+  assert.equal(room.instances['dr-make'], inst, 'the instance is registered on the room');
+  let total = 0, boss = 0, wrongTag = 0;
+  room.state.mobs.forEach(m => { total++; if (m.kind === 'boss') boss++; if (m.dgn !== 'dr-make') wrongTag++; });
+  assert.ok(total > 1, 'the instance spawned its trash pack into the room state');
+  assert.equal(boss, 1, 'and exactly one boss');
+  assert.equal(wrongTag, 0, 'every spawned mob is tagged to this instance');
+});
+
+test('DungeonRoom.update simulates its instance: an adjacent mob attacks a joined hunter', () => {
+  const room = makeDungeonRoom();
+  const g = { id: 'dr-fight', seed: 7, rank: 1, kind: 'public', shardPlus: 0, shardName: '', shardMods: '' };
+  const inst = new DungeonInstance({ world: new D.DungeonGrid(), bossRoom: { x: 20.5, z: 20.5 } }, g, room);
+  room.instances['dr-fight'] = inst;
+  room.instance = inst;
+
+  const c = makeClient('hunter');
+  seedPlayer(room, c, { x: 20.5, y: 9, z: 20.5, dgn: 'dr-fight', hp: 20 });
+  room.clients.push(c);
+  inst.addPlayer('hunter');
+
+  // an alerted zombie right next to the hunter
+  room.state.mobs.set('z1', { x: 21.3, y: 9, z: 20.5, yaw: 0, hp: 30, maxHp: 30, kind: 'zombie', dgn: 'dr-fight', state: '' });
+  room.mobMeta.z1 = room.freshMeta(21.3, 20.5, 5, 1.5, 'zombie', 1, true);
+  room.mobMeta.z1.atkCd = 0;
+
+  for (let i = 0; i < 25; i++) room.update(0.1);   // windup -> lunge -> melee lands within ~1.5s
+
+  assert.ok(room.playerHp.get('hunter').hp < 20, 'the DungeonRoom simulated its mob and it damaged the hunter');
+});
+
+test('DungeonRoom.update runs its instance hazards (Sanguine heals wounded trash)', () => {
+  const room = makeDungeonRoom();
+  const g = { id: 'dr-haz', seed: 1, rank: 1, kind: 'shard', shardPlus: 0, shardName: 'Glimmering', shardMods: 'Sanguine' };
+  const inst = new DungeonInstance({ world: new D.DungeonGrid(), bossRoom: { x: 20.5, z: 20.5 } }, g, room);
+  room.instances['dr-haz'] = inst;
+  room.instance = inst;
+  room.state.mobs.set('w1', { x: 20, y: 9, z: 20, hp: 10, maxHp: 20, kind: 'zombie', dgn: 'dr-haz', yaw: 0, state: '' });
+  room.mobMeta.w1 = room.freshMeta(20, 20, 4, 1.5, 'zombie', 1, true);
+  inst.haz.pools.push({ x: 20, z: 20, t: 6 });
+
+  room.update(1.0);
+
+  assert.equal(room.state.mobs.get('w1').hp, 16, 'update ran inst.tick -> hazards, healing the wounded mob 6/s');
 });
 
 test('King of the Hill scores time only for the crown-holding team', () => {

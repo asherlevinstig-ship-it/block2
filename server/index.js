@@ -4,6 +4,7 @@ const express = require('express');
 const { Server } = require('colyseus');
 const { WebSocketTransport } = require('@colyseus/ws-transport');
 const { GameRoom } = require('./rooms/GameRoom');
+const { DungeonRoom } = require('./rooms/DungeonRoom');
 const { getAuthService } = require('./auth');
 
 const app = express();
@@ -40,6 +41,9 @@ gameServer = new Server({
 });
 
 gameServer.define('blockcraft', GameRoom);
+// One DungeonRoom per gate instance (sub-phase 2a). Registered but not yet joined by the
+// client — the live game still runs dungeons as in-room instances until 2b wires the handoff.
+gameServer.define('dungeon', DungeonRoom).filterBy(['gateId']);
 
 const PORT = process.env.PORT || 2567;
 server.listen(PORT, () =>
