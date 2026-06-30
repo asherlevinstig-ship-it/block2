@@ -1,4 +1,5 @@
 const W = require('../world');
+const { hunterXpForActivity } = require('./xp-economy');
 const {
   ARMOR_INFO, I, JOB_IDS, TOOL_INFO, hunterActivityXpForLevel, jobLevelFromXp, jobPerkTier,
 } = require('./constants');
@@ -132,12 +133,12 @@ class ProgressionMixin {
       return {
         job, type: 'kill', need: 3, have: 0,
         title: "Mara's Field Work", desc: 'Defeat 3 hostile creatures beyond the town walls.',
-        rewardGold: 34, rewardJobXp: 20, rewardXp: hunterActivityXpForLevel(level, .5),
+        rewardGold: 34, rewardJobXp: 20, rewardXp: hunterXpForActivity(level, 'job_contract'),
       };
     }
     const pool = contractPools(job, scale).filter(contract => contract.type !== 'gate' || level >= 3);
     if (!pool.length) return null;
-    return { ...pool[(Math.random() * pool.length) | 0], job, have: 0, rewardXp: hunterActivityXpForLevel(level, .5) };
+    return { ...pool[(Math.random() * pool.length) | 0], job, have: 0, rewardXp: hunterXpForActivity(level, 'job_contract') };
   }
 
   handleJobContract(client, m) {
@@ -176,7 +177,7 @@ class ProgressionMixin {
       if (c.job === 'adventurer' && jobPerkTier(rec.prof, 'adventurer')) rewardGold = Math.round(rewardGold * (1 + jobPerkTier(rec.prof, 'adventurer') * .06));
       rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
       const rewardXp = Math.max(0, c.rewardXp | 0);
-      this.grantHunterXp(rec.prof, rewardXp);
+      this.grantHunterXp(rec.prof, rewardXp, client, 'job_contract');
       rec.prof.jobXp = Math.max(0, (rec.prof.jobXp | 0) + Math.max(0, c.rewardJobXp | 0));
       if (c.job === 'adventurer') rec.prof.adventurerContractsCompleted = Math.max(0, (rec.prof.adventurerContractsCompleted | 0) + 1);
       if (graduation) {
@@ -242,7 +243,7 @@ class ProgressionMixin {
       source: 'npc', giver, role: String(role || 'town').slice(0, 32), chainKey: giver, chainStep: step, chainTotal: chain.length,
       chainTitle: def.title, title: def.title, type: def.type, need: def.need, have: 0,
       gold: Math.round(def.gold + lvl * 2 + step * 4),
-      xp: Math.max(Math.round(def.xp + lvl * 5 + step * 6), hunterActivityXpForLevel(lvl, .75)),
+      xp: Math.max(Math.round(def.xp + lvl * 5 + step * 6), hunterXpForActivity(lvl, 'town_quest')),
       desc: def.desc || (def.type === 'fetch' ? `Bring ${def.need} of ${textTarget}.` : `Complete ${def.need} ${def.type} objective${def.need === 1 ? '' : 's'}.`),
       rewardItems: def.rewardItems || [],
     };
@@ -297,7 +298,11 @@ class ProgressionMixin {
       rec.prof.activeNpcQuest = q;
       this.dirtyPlayers.add(rec.token);
       if (grantRoadReadySword) client.send('profile', rec.prof);
-      client.send('npcQuest', { action, quest: q });
+      client.send('npcQuest', {
+        action,
+        quest: q,
+        grantedItems: grantRoadReadySword ? [{ id: I.WOOD_SWORD, count: 1 }] : [],
+      });
       return true;
     }
     if (action === 'abandon') {
@@ -311,7 +316,7 @@ class ProgressionMixin {
     if (!q || !this.npcQuestReady(client, q)) return this.progressionReject(client, 'npcQuest', 'incomplete');
     if (q.type === 'fetch' && !this.consumeItem(rec.prof, q.item | 0, q.need | 0)) return this.progressionReject(client, 'npcQuest', 'items');
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + (q.gold | 0));
-    this.grantHunterXp(rec.prof, q.xp);
+    this.grantHunterXp(rec.prof, q.xp, client, 'town_quest');
     for (const it of q.rewardItems || []) this.addRewardItem(rec.prof, it.id, it.count);
     rec.prof.npcQuestChains[q.giver] = Math.max((rec.prof.npcQuestChains[q.giver] | 0), (q.chainStep | 0) + 1);
     if (q.giver === 'Mara Vale' && q.type === 'gate' && (q.gateRank | 0) === 0 && (q.chainStep | 0) === 2) {
@@ -343,10 +348,10 @@ class ProgressionMixin {
     const rec = this.profileFor(client);
     if (!rec || !rec.prof.aegisTrialReady) return this.progressionReject(client, 'aegisTrial', 'incomplete');
     const lvl = Math.max(1, rec.prof.S.lvl | 0), rewardGold = 135 + lvl * 8;
-    const rewardXp = Math.max(130 + lvl * 12, hunterActivityXpForLevel(lvl, 1));
+    const rewardXp = Math.max(130 + lvl * 12, hunterXpForActivity(lvl, 'aegis_trial'));
     rec.prof.aegisTrialReady = false;
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
-    this.grantHunterXp(rec.prof, rewardXp);
+    this.grantHunterXp(rec.prof, rewardXp, client, 'aegis_trial');
     let reward;
     const roll = Math.random();
     if (roll < .45) reward = { kind: 'Rare Weapon', id: Math.random() < .5 ? I.DIA_SWORD : I.IRON_SWORD };

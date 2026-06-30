@@ -11,6 +11,7 @@ const {
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
+const { hunterXpForActivity } = require('./xp-economy');
 const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
@@ -208,6 +209,8 @@ class EventsMixin {
       fallY: ev.course.fallY,
       blocks: ev.course.blocks,
     } : null;
+    const rec = client && this.profileFor(client);
+    const rewardXp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
     return {
       kind: ev.kind,
       name: ev.name,
@@ -232,6 +235,7 @@ class EventsMixin {
       } : null,
       leaderboard: this.eventLeaderboardPayload(ev),
       reward: EVENT_REWARD_TOKENS,
+      rewardXp,
     };
   }
   sendEventStatus(client) {
@@ -450,7 +454,9 @@ class EventsMixin {
     ev.completed.add(client.sessionId);
     ev.leaderboard.push({ sid: client.sessionId, name: p && p.name || 'Hunter', ms, resets: part.resets | 0 });
     ev.leaderboard.sort((a, b) => (a.ms - b.ms) || (a.resets - b.resets));
-    this.awardGrant(client, { source: 'event', event: EVENT_PARKOUR.name, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
+    const rec = this.profileFor(client);
+    const xp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
+    this.awardGrant(client, { source: 'event', event: EVENT_PARKOUR.name, xp, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
     this.recordEventProgress(client);
     this.unlockUtility(client, 'feather_step', 'Parkour finish unlocked');
     client.send('eventComplete', this.eventPayload(client));
@@ -739,7 +745,9 @@ class EventsMixin {
       const client = this.clients.find(c => c.sessionId === sid);
       if (!client) continue;
       if (winner && part.teamId === winner.teamId) {
-        this.awardGrant(client, { source: 'event', event: EVENT_KING.name, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
+        const rec = this.profileFor(client);
+        const xp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
+        this.awardGrant(client, { source: 'event', event: EVENT_KING.name, xp, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
         this.recordEventProgress(client);
       }
       client.send('eventFailed', { reason: reason || 'timeout', name: ev.name, id: ev.id, leaderboard: this.eventLeaderboardPayload(ev), winner: winner && winner.name || '' });

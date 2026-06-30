@@ -69,7 +69,7 @@ async function main() {
 
   const inbox = room => {
     const box = {};
-    for (const type of ['chat', 'editReject']) room.onMessage(type, m => (box[type] = box[type] || []).push(m));
+    for (const type of ['chat', 'comms', 'commsReject', 'commsMuteResult', 'commsReportResult', 'editReject']) room.onMessage(type, m => (box[type] = box[type] || []).push(m));
     room.onMessage('*', () => {});   // swallow the many broadcast types this harness doesn't assert on
     return box;
   };
@@ -94,10 +94,34 @@ async function main() {
     assert.ok(moved < 20, 'far teleport was not clamped (moved ' + moved.toFixed(1) + ' blocks in one tick)');
   });
 
-  await test('chat relays from one player to the other', async () => {
+  await test('custom typed chat is rejected by the server', async () => {
     A.send('chat', { text: 'hello bravo' });
-    const got = await waitFor(() => (bBox.chat || []).find(m => m.text === 'hello bravo'), 'B to receive chat');
-    assert.equal(got.name, 'Alpha');
+    const rejection = await waitFor(() => (aBox.commsReject || []).find(m => m.reason === 'custom'), 'A custom chat rejection');
+    assert.equal(rejection.reason, 'custom');
+  });
+
+  await test('localized comms support proximity chat and direct whispers', async () => {
+    A.send('comms', { mode: 'local', phrase: 'hello' });
+    const local = await waitFor(() => (bBox.comms || []).find(m => m.text === 'Hello!'), 'B to receive local comms');
+    assert.equal(local.mode, 'local');
+    assert.equal(local.fromSid, A.sessionId);
+    await wait(300);
+    A.send('comms', { mode: 'local', phrase: 'hello' });
+    const duplicate = await waitFor(() => (aBox.commsReject || []).find(m => m.reason === 'duplicate'), 'duplicate quick-chat rejection');
+    assert.equal(duplicate.reason, 'duplicate');
+    B.send('comms', { mode: 'whisper', target: A.sessionId, phrase: 'thanks' });
+    const whisper = await waitFor(() => (aBox.comms || []).find(m => m.text === 'Thanks!'), 'A to receive whisper');
+    assert.equal(whisper.mode, 'whisper');
+    assert.equal(whisper.name, 'Bravo');
+    A.send('commsReport', { target: B.sessionId });
+    const report = await waitFor(() => (aBox.commsReportResult || []).find(m => m.ok), 'moderation report acknowledgement');
+    assert.match(report.id, /^report_/);
+    A.send('commsMute', { target: B.sessionId, muted: true });
+    await waitFor(() => (aBox.commsMuteResult || []).find(m => m.target === B.sessionId && m.muted), 'mute acknowledgement');
+    await wait(300);
+    B.send('comms', { mode: 'whisper', target: A.sessionId, phrase: 'hello' });
+    const muted = await waitFor(() => (bBox.commsReject || []).find(m => m.reason === 'muted'), 'muted whisper rejection');
+    assert.equal(muted.reason, 'muted');
   });
 
   await test('in-town block edit is rejected and not applied', async () => {

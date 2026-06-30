@@ -7,6 +7,14 @@ const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
 const { getAuthService } = require('../auth');
+const { hunterXpForActivity } = require('./xp-economy');
+const QUICK_CHAT = Object.freeze({
+  hello:'Hello!', follow:'Follow me.', wait:'Wait a moment.', thanks:'Thanks!', good_job:'Good job!', yes:'Yes.', no:'No.',
+  gate_ready:'Ready for the Gate?', gate_need_one:'We need one more hunter.', gate_enter:'Enter now.',
+  dungeon_group:'Group up.', dungeon_boss:'Focus the boss!', dungeon_loot:'Loot here.', dungeon_retreat:'Retreat!',
+  town_trade:'Trading at the market.', town_repairs:'I need repairs.', town_work:'Looking for work.',
+  danger_help:'Help me!', danger_run:'Run!', danger_safe:'It is safe now.',
+});
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -32,6 +40,7 @@ const {
   SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, dangerRingAt, dayTimeAt, dragonMountType,
   gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
+  nextHunterRankLevel,
   mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
 
@@ -64,6 +73,8 @@ class GameRoom extends Room {
     this.playerHp = new Map();
     this.playerHunger = new Map();
     this.bossContrib = new Map();
+    this.recentApprovedComms = [];
+    this.moderationReports = [];
     this.restartRecoveries = new Map();
     this.tutorialReturns = new Map();
 
@@ -327,18 +338,85 @@ class GameRoom extends Room {
     this.onMessage('tchat', (client, m) => {
       const t = this.teamMgr.teamOf(client.sessionId);
       const p = this.state.players.get(client.sessionId);
-      if (!t || !p || !m || typeof m.text !== 'string') return;
-      const text = m.text.replace(/[<>]/g, '').trim().slice(0, 140);
-      if (!text) return;
+      if (!t || !p || !m) return;
+      const text = QUICK_CHAT[m.phrase];
+      if (!text) return client.send('commsReject', { reason: 'phrase' });
       for (const sid of t.members) {
         const c = this.clients.find(c => c.sessionId === sid);
         if (c) c.send('tchat', { name: p.name, text });
       }
     });
+    this.onMessage('comms', (client, m) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || !m) return;
+      const text = QUICK_CHAT[m.phrase];
+      const mode = ['local', 'party', 'whisper'].includes(m.mode) ? m.mode : 'local';
+      if (!text) return client.send('commsReject', { reason: 'phrase' });
+      const now = Date.now(), signature = mode + ':' + String(m.target || '') + ':' + m.phrase;
+      if (now - (client._lastCommsAt || 0) < 250) return client.send('commsReject', { reason: 'rate' });
+      if (client._lastCommsSignature === signature && now - (client._lastCommsSignatureAt || 0) < 2000) return client.send('commsReject', { reason: 'duplicate' });
+      client._lastCommsAt = now; client._lastCommsSignature = signature; client._lastCommsSignatureAt = now;
+      const senderToken = this.tokens.get(client.sessionId) || '';
+      this.recentApprovedComms.push({ at: now, from: senderToken, phrase: m.phrase, mode });
+      if (this.recentApprovedComms.length > 200) this.recentApprovedComms.splice(0, this.recentApprovedComms.length - 200);
+      const send = c => { if (c === client || !(c._mutedComms instanceof Set) || !c._mutedComms.has(senderToken)) c.send('comms', { mode, fromSid: client.sessionId, name: p.name || 'Hunter', text }); };
+      if (mode === 'party') {
+        const team = this.teamMgr.teamOf(client.sessionId);
+        if (!team) return client.send('commsReject', { reason: 'party' });
+        for (const sid of team.members) { const c = this.clients.find(other => other.sessionId === sid); if (c) send(c); }
+        return;
+      }
+      if (mode === 'whisper') {
+        const targetKey = typeof m.target === 'string' ? m.target.trim().toLowerCase() : '';
+        const target = this.clients.find(other => {
+          const q = this.state.players.get(other.sessionId);
+          return other.sessionId.toLowerCase() === targetKey || (q && String(q.name).toLowerCase() === targetKey);
+        });
+        if (!target) return client.send('commsReject', { reason: 'target' });
+        if (target !== client && target._mutedComms instanceof Set && target._mutedComms.has(senderToken)) return client.send('commsReject', { reason: 'muted' });
+        send(client); if (target !== client) send(target);
+        return;
+      }
+      for (const c of this.clients) {
+        const q = this.state.players.get(c.sessionId);
+        if (q && (q.dim || 'overworld') === (p.dim || 'overworld') && (q.dgn || '') === (p.dgn || '') && Math.hypot(q.x - p.x, q.z - p.z) <= 48) send(c);
+      }
+    });
+    this.onMessage('commsMute', (client, m) => {
+      const target = m && typeof m.target === 'string' ? m.target : '';
+      const targetClient = this.clients.find(other => other.sessionId === target);
+      const targetToken = targetClient ? this.tokens.get(targetClient.sessionId) : cleanToken(m && m.targetToken);
+      if (!targetToken || targetToken === this.tokens.get(client.sessionId)) return client.send('commsMuteResult', { ok: false, target });
+      if (!(client._mutedComms instanceof Set)) client._mutedComms = new Set();
+      if (m.muted === false) client._mutedComms.delete(targetToken); else client._mutedComms.add(targetToken);
+      const rec = this.profileFor(client); if (rec) { rec.prof.mutedPlayers = [...client._mutedComms]; this.dirtyPlayers.add(rec.token); }
+      client.send('commsMuteResult', { ok: true, target, targetToken, muted: client._mutedComms.has(targetToken) });
+    });
+    this.onMessage('commsBlockList', client => {
+      const entries = [...(client._mutedComms || [])].map(targetToken => ({ targetToken, name: this.profiles.get(targetToken)?.name || 'Blocked Hunter' }));
+      client.send('commsBlockList', { entries });
+    });
+    this.onMessage('commsReport', (client, m) => {
+      const target = this.clients.find(other => other.sessionId === (m && m.target));
+      const reporter = this.tokens.get(client.sessionId), reported = target && this.tokens.get(target.sessionId);
+      if (!reporter || !reported || reporter === reported) return client.send('commsReportResult', { ok: false });
+      const now = Date.now(), duplicate = this.moderationReports.some(r => r.reporter === reporter && r.reported === reported && now - r.at < 3600000);
+      if (duplicate) return client.send('commsReportResult', { ok: false, reason: 'rate' });
+      const history = this.recentApprovedComms.filter(entry => entry.from === reported && now - entry.at < 300000).slice(-12).map(entry => ({ at: entry.at, phrase: entry.phrase, mode: entry.mode }));
+      const record = { id: 'report_' + now.toString(36) + '_' + this.moderationReports.length, at: now, reporter, reported, reportedName: this.state.players.get(target.sessionId)?.name || 'Hunter', history };
+      this.moderationReports.push(record); if (this.moderationReports.length > 500) this.moderationReports.shift();
+      console.warn('[moderation]', JSON.stringify(record));
+      Promise.resolve(this.store.saveModerationReport(record)).catch(error => console.warn('[moderation] report persistence failed:', error.message));
+      client.send('commsReportResult', { ok: true, id: record.id });
+    });
 
     this.onMessage('enterGate', (client, m) => this.enterGate(client, m));
     this.onMessage('dungeonLobbyReady', (client, m) => this.handleDungeonLobbyReady(client, m));
     this.onMessage('dungeonLobbyLeave', (client) => this.leaveDungeonLobby(client.sessionId, true));
+    this.onMessage('dungeonMatchmakingAdvertise', (client, m) => this.handleDungeonMatchmakingAdvertise(client, m));
+    this.onMessage('dungeonMatchmakingRequest', client => this.sendDungeonMatchmaking(client));
+    this.onMessage('dungeonMatchmakingJoin', (client, m) => this.handleDungeonMatchmakingJoin(client, m));
+    this.onMessage('dungeonPing', (client, m) => this.handleDungeonPing(client, m));
     this.onMessage('exitGate', (client) => this.leaveInstance(client.sessionId));
     this.onMessage('useGateKey', (client, m) => this.handleUseGateKey(client, m));
     this.onMessage('attuneShard', (client, m) => this.handleAttuneShard(client, m));
@@ -369,7 +447,7 @@ class GameRoom extends Room {
       if (!text) return;
       if (text.startsWith('/give')) return this.handleDevGive(client, text);
       if (text.startsWith('/event')) return this.handleDevEvent(client, text);
-      this.broadcast('chat', { name: p.name, text });
+      client.send('commsReject', { reason: 'custom' });
     });
 
     this.tickMetrics = { lastMs: 0, avgMs: 0, maxMs: 0, samples: 0 };
@@ -421,6 +499,7 @@ class GameRoom extends Room {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
         this.dirtyPlayers.add(token);
       }
+      client._mutedComms = new Set(prof.mutedPlayers || []);
       if (Array.isArray(prof.pos)) {
         const bx = Math.floor(prof.pos[0]), by = Math.floor(prof.pos[1]), bz = Math.floor(prof.pos[2]);
         const feetBlocked = W.isSolid(this.world.getB(bx, by, bz));
@@ -853,6 +932,18 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     const action = m && String(m.action || '');
     if (!rec) return false;
+    if (action === 'positionAck') {
+      const p = this.state.players.get(client.sessionId);
+      client.send('e2eJourneyResult', {
+        action,
+        requestId: String(m && m.requestId || '').slice(0, 32),
+        ok: !!p,
+        x: p ? p.x : 0,
+        y: p ? p.y : 0,
+        z: p ? p.z : 0,
+      });
+      return !!p;
+    }
     if (action === 'preparePrivateGateRestart') {
       rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
@@ -1099,18 +1190,36 @@ class GameRoom extends Room {
   xpNeed(lvl) {
     return xpNeedForLevel(lvl);
   }
-  grantHunterXp(prof, amount) {
+  grantHunterXp(prof, amount, client = null, source = 'activity') {
     const S = prof && prof.S;
     const granted = Math.max(0, Math.min(1000000, Math.round(Number(amount) || 0)));
     if (!S || !granted) return { granted: 0, levels: 0 };
     const before = Math.max(1, S.lvl | 0);
+    const beforeRank = hunterRankIndexForLevel(before);
     S.xp = Math.max(0, S.xp | 0) + granted;
     while (S.xp >= this.xpNeed(S.lvl)) {
       S.xp -= this.xpNeed(S.lvl);
       S.lvl++;
       S.pts += 3;
     }
-    return { granted, levels: Math.max(0, (S.lvl | 0) - before) };
+    const levels = Math.max(0, (S.lvl | 0) - before);
+    const rank = hunterRankIndexForLevel(S.lvl);
+    if (client && rank > beforeRank) {
+      const gateRank = Math.min(4, rank);
+      client.send('rankUp', {
+        fromRank: beforeRank,
+        rank,
+        rankName: 'EDCBAS'[rank] + '-Rank Hunter',
+        gateRank,
+        gateRankName: 'EDCBA'[gateRank] + '-Rank Gates',
+        level: S.lvl | 0,
+        levels,
+        statPoints: levels * 3,
+        nextRankLevel: nextHunterRankLevel(rank),
+        source: String(source || 'activity').slice(0, 32),
+      });
+    }
+    return { granted, levels, rankUp: rank > beforeRank, fromRank: beforeRank, rank };
   }
   profileFor(client) {
     const token = this.tokens.get(client.sessionId);
@@ -1130,8 +1239,12 @@ class GameRoom extends Room {
     if (rec.prof.utilityUnlocks.includes(id)) return false;
     rec.prof.utilityUnlocks.push(id);
     rec.prof.utilityLoadout = sanitizeUtilityLoadout(rec.prof.utilityLoadout, rec.prof.utilityUnlocks);
+    const loadout = rec.prof.utilityLoadout;
+    const equipped = loadout.active === id || loadout.passive.includes(id);
+    if (!equipped && loadout.passive.length < 3) loadout.passive.push(id);
     this.dirtyPlayers.add(rec.token);
-    client.send('utilityUnlock', { id, reason });
+    client.send('utilityUnlock', { id, reason, equipped: loadout.active === id || loadout.passive.includes(id) });
+    client.send('utilityLoadout', loadout);
     return true;
   }
   handleUtilityLoadout(client, m) {
@@ -1477,6 +1590,7 @@ class GameRoom extends Room {
     const dmg = Math.max(0, Math.round(amount));
     hp.hp = Math.max(0, hp.hp - dmg);
     client.send('hurt', { n: dmg, reason });
+    if (p && p.dgn) this.sendDungeonStatus(p.dgn);
     if (hp.hp <= 0) this.handlePlayerDeath(client);
   }
   handleUseFood(client, m) {
@@ -1708,6 +1822,7 @@ class GameRoom extends Room {
     rec.last = Date.now();
     byPlayer.set(client.sessionId, rec);
     this.bossContrib.set(dgn, byPlayer);
+    if (!rec.lastSync || rec.last - rec.lastSync >= 500) { rec.lastSync = rec.last; this.sendDungeonStatus(dgn); }
   }
   recordBossSupport(client, dgn, amount) {
     if (!client || !dgn || !(amount > 0)) return;
@@ -1717,6 +1832,7 @@ class GameRoom extends Room {
     rec.last = Date.now();
     byPlayer.set(client.sessionId, rec);
     this.bossContrib.set(dgn, byPlayer);
+    if (!rec.lastSync || rec.last - rec.lastSync >= 500) { rec.lastSync = rec.last; this.sendDungeonStatus(dgn); }
   }
   bossRewardEligibility(client, inst) {
     const p = this.state.players.get(client.sessionId);
@@ -1736,7 +1852,7 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     const amount = Math.max(0, Math.min(100000, n | 0));
     if (rec && amount) {
-      this.grantHunterXp(rec.prof, amount);
+      this.grantHunterXp(rec.prof, amount, client, 'combat');
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
     }
@@ -1769,7 +1885,7 @@ class GameRoom extends Room {
       const ring = dangerRingAt(s.x, s.z);
       return {
         rewardGold: Math.round(baseGold * DANGER_RINGS[ring].loot),
-        rewardXp: Math.max(Math.round(baseXp * DANGER_RINGS[ring].loot), hunterActivityXpForLevel(level, .75)),
+        rewardXp: Math.max(Math.round(baseXp * DANGER_RINGS[ring].loot), hunterXpForActivity(level, 'guild_contract')),
         rewardItems: ring >= 2 ? [{ id: ring >= 3 ? I.DIAMOND : I.IRON_INGOT, count: ring >= 3 ? 1 : 2 }] : [],
       };
     };
@@ -1796,7 +1912,7 @@ class GameRoom extends Room {
       targetName: bio.name, targetItem: bio.item, targetItemName: bio.name, need: 3 + (bucket % 2), have: 0,
       title: 'Gather ' + bio.name,
       desc: 'Bring back regional material gathered from its native biome.',
-      rewardGold: 46, rewardXp: Math.max(26, hunterActivityXpForLevel(level, .75)), rewardItems: [], acceptedAt: 0, seed: bucket,
+      rewardGold: 46, rewardXp: Math.max(26, hunterXpForActivity(level, 'guild_contract')), rewardItems: [], acceptedAt: 0, seed: bucket,
     });
     const cache = this.pickContractTarget(small.filter(s => s.type === 'buried_chest'), bucket, 41);
     if (cache) offers.push({
@@ -1885,7 +2001,7 @@ class GameRoom extends Room {
     const rewardItems = Array.isArray(c.rewardItems) ? c.rewardItems.map(it => ({ id: it.id | 0, count: Math.max(1, it.count | 0) })) : [];
     const rewardGold = Math.max(0, c.rewardGold | 0), rewardXp = Math.max(0, c.rewardXp | 0);
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + rewardGold));
-    this.grantHunterXp(rec.prof, rewardXp);
+    this.grantHunterXp(rec.prof, rewardXp, client, 'guild_contract');
     for (const it of rewardItems) this.addRewardItem(rec.prof, it.id, it.count);
     const done = this.publicRegionalContract(c);
     rec.prof.regionalContract = null;
@@ -2010,7 +2126,7 @@ class GameRoom extends Room {
   awardGrant(client, grant) {
     const rec = this.profileFor(client);
     if (rec) {
-      this.grantHunterXp(rec.prof, grant.xp);
+      this.grantHunterXp(rec.prof, grant.xp, client, grant.source || 'grant');
       for (const item of grant.items || []) {
         this.addRewardItem(rec.prof, item.id, item.count);
         if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });

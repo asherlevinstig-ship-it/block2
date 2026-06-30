@@ -8,6 +8,9 @@ async function enterGate(page, gateId) {
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gateId)).toBe(gateId);
   await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gateId);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gateId);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.rewardXp)).toBeGreaterThan(0);
+  await expect(page.locator('#qpanel')).toContainText('Boss clear reward:');
+  await expect(page.locator('#qpanel')).toContainText('Hunter XP');
   await page.getByRole('button', { name: 'READY', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('dungeon');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gateId);
@@ -38,6 +41,9 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
     }
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
+  await expect(page.locator('#rewardpanel')).toContainText('TRAINING COMPLETE');
+  await expect(page.locator('#rewardpanel')).toContainText('MARA VALE');
+  await page.locator('#trainingcontinue').click();
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(1);
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
@@ -180,6 +186,13 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'claim' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().maraStep)).toBe(3);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest)).toBe(null);
+  await expect(page.locator('#rankupwin')).toBeVisible();
+  await expect(page.locator('#rankuppanel')).toContainText('D-RANK HUNTER');
+  await expect(page.locator('#rankuppanel')).toContainText('D-RANK GATES');
+  await expect(page.locator('#rankuppanel')).toContainText('+3');
+  await expect(page.locator('#rankuppanel')).toContainText('C-Rank begins at Level 8');
+  await page.locator('#rankupcontinue').click();
+  await expect(page.locator('#rankupwin')).toBeHidden();
   await expect(page.locator('#rewardwin')).toBeVisible();
   await expect(page.locator('#rewardpanel')).toContainText('FIRST PROMOTION');
   await expect(page.locator('#rewardpanel')).toContainText('D-RANK ACCESS UNLOCKED');
@@ -196,6 +209,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
     label: 'First Promotion', text: 'Visit the Job Board and choose Adventurer',
   });
+  await expect(page.locator('#rankupwin')).toBeHidden();
   await expect(page.locator('#rewardwin')).toBeHidden();
   await expect(page.locator('#currentquest')).toContainText('choose Adventurer');
 
@@ -223,6 +237,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(102))).toBeGreaterThanOrEqual(8);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(182))).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityUnlocks)).toContain('compass');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityLoadout.passive)).toContain('compass');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_d_gate');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
     label: 'D-Rank Preparation', text: 'Visit Greta at the tavern and stock 3 food',
@@ -236,10 +251,8 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect(page.locator('#currentquest')).toContainText('Visit Greta at the tavern');
 
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToTavern())).toBe(true);
-  for (let i = 0; i < 3; i++) {
-    await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('shop', { action: 'buy', vendor: 'tavern', id: 180 }));
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(180))).toBe(i + 1);
-  }
+  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('shop', { action: 'buy', vendor: 'tavern', id: 180, count: 3 }));
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(180))).toBe(3);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep?.next?.id)).toBe('tool');
   await expect(page.locator('#currentquest')).toContainText('Use your Repair Kit');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.usePrepRepairKit())).toBe(true);
@@ -286,8 +299,19 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonCleared)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('next_adventurer_contract');
+  const rankProgress = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().rankProgress);
+  expect(rankProgress).toMatchObject({ rank: 1, nextRank: 2, nextRankLevel: 8, maxRank: false });
+  expect(rankProgress.remaining).toBeGreaterThan(0);
+  await expect(page.locator('#rewardpanel')).toContainText('ADVENTURER LOOP UNLOCKED');
+  await expect(page.locator('#rewardpanel')).toContainText('all grant Hunter XP');
+  await expect(page.locator('#rewardpanel')).toContainText('C-Rank at Level 8');
+  await expect(page.locator('#rewardpanel')).toContainText('follow Compass Sense to the Job Board');
+  await expect(page.locator('#rewardclose')).toHaveText('TRACK NEXT CONTRACT');
+  await page.locator('#rewardclose').click();
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useDungeonExit())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().compassTarget)).toMatchObject({ label: 'Board' });
+  await expect(page.locator('#coords')).toContainText('C in');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
     label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract',
   });

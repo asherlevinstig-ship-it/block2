@@ -376,36 +376,43 @@ class EconomyMixin {
   handleShop(client, m) {
     const rec = this.profileFor(client);
     if (!rec || !m) return;
-    if (this.rateLimited(client, 'shop', 8, 16)) return client.send('shopReject', { reason: 'rate' });
     const action = m.action === 'sell' ? 'sell' : 'buy';
     const isTavern = m.vendor === 'tavern';
     const isRoad = m.vendor === 'road';
     const isGuild = m.vendor === 'guild';
+    const vendor = isTavern ? 'tavern' : isRoad ? 'road' : isGuild ? 'guild' : 'market';
+    const reject = reason => client.send('shopReject', { reason, vendor });
+    if (this.rateLimited(client, 'shop', 8, 16)) return reject('rate');
     const p=this.state.players.get(client.sessionId);
-    if(isTavern&&(!p||p.dgn||Math.hypot(p.x-(W.TOWN.TC+19.5),p.z-(W.TOWN.TC+13.5))>8))return client.send('shopReject',{reason:'range'});
-    if(isRoad&&(!p||p.dgn||!W.smallDiscoverySpecs().some(s=>s.type==='traveling_merchant'&&Math.hypot(p.x-s.x,p.z-s.z)<6)))return client.send('shopReject',{reason:'range'});
+    if(isTavern&&(!p||p.dgn||Math.hypot(p.x-(W.TOWN.TC+19.5),p.z-(W.TOWN.TC+13.5))>8))return reject('range');
+    if(isRoad&&(!p||p.dgn||!W.smallDiscoverySpecs().some(s=>s.type==='traveling_merchant'&&Math.hypot(p.x-s.x,p.z-s.z)<6)))return reject('range');
     if (isGuild) {
       const guild = this.guildForToken && this.guildForToken(rec.token);
-      if (!this.nearGuildReception || !this.nearGuildReception(client)) return client.send('shopReject', { reason: 'range' });
-      if (!guild || !(guild.floor > 0)) return client.send('shopReject', { reason: 'guild_floor' });
-      if (action !== 'buy') return client.send('shopReject', { reason: 'invalid' });
+      if (!this.nearGuildReception || !this.nearGuildReception(client)) return reject('range');
+      if (!guild || !(guild.floor > 0)) return reject('guild_floor');
+      if (action !== 'buy') return reject('invalid');
     }
     const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : ROAD_MERCHANT_BUY) : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
     const id = m.id | 0;
     const entry = this.findCatalogEntry(catalog, id);
-    if (!entry) return client.send('shopReject', { reason: 'invalid' });
-    const [, count, price] = entry;
+    if (!entry) return reject('invalid');
+    let [, count, price] = entry;
+    if (action === 'buy' && isTavern && id === I.COOKED_MEAT) {
+      const bundles = Math.max(1, Math.min(3, m.count | 0 || 1));
+      count *= bundles;
+      price *= bundles;
+    }
     if (action === 'buy') {
       const kr = this.keyRank(id);
-      if (kr >= 0 && kr > this.maxUnlockedGateRankForKey(client, TEAM_KEYS.includes(id) ? 'team' : 'solo')) return client.send('shopReject', { reason: 'rank' });
-      if ((rec.prof.gold | 0) < price) return client.send('shopReject', { reason: 'gold' });
-      if (this.inventorySpaceFor(rec.prof, id, count) < count) return client.send('shopReject', { reason: 'full' });
+      if (kr >= 0 && kr > this.maxUnlockedGateRankForKey(client, TEAM_KEYS.includes(id) ? 'team' : 'solo')) return reject('rank');
+      if ((rec.prof.gold | 0) < price) return reject('gold');
+      if (this.inventorySpaceFor(rec.prof, id, count) < count) return reject('full');
       rec.prof.gold -= price;
       this.addRewardItem(rec.prof, id, count);
       this.dirtyPlayers.add(rec.token);
       return client.send('shopResult', { action, vendor: m.vendor || 'market', id, count, gold: -price });
     }
-    if (!this.consumeItem(rec.prof, id, count)) return client.send('shopReject', { reason: 'item' });
+    if (!this.consumeItem(rec.prof, id, count)) return reject('item');
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + price));
     this.dirtyPlayers.add(rec.token);
     if (isTavern) this.recordTavernSaleProgress(client, id, count);

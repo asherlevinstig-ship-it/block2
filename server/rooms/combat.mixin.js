@@ -10,6 +10,7 @@ const {
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
+const { threatXpForRing } = require('./xp-economy');
 const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
@@ -633,8 +634,8 @@ class CombatMixin {
           if (regional) items.push({ id: regional.item, count: 1 + ring });
         }
       }
-      const baseXp = this.isAnimalKind(kind) ? 4 : 12;
-      this.awardGrant(client, { source: this.isAnimalKind(kind) ? 'hunt' : 'mob', xp: Math.round(baseXp * DANGER_RINGS[ring].loot * (killedMeta.elite ? 1.75 : 1)), items, dangerRing: ring, elite: !!killedMeta.elite });
+      const animal = this.isAnimalKind(kind);
+      this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp: threatXpForRing(ring, { elite: !!killedMeta.elite, animal }), items, dangerRing: ring, elite: !!killedMeta.elite });
       this.recordKillProgress(client, !this.isAnimalKind(kind));
       if (!dgn && killedMeta.elite && killedMeta.campId)
         this.progressRegionalContract(client, 'clear_elite_camp', { targetId: killedMeta.campId });
@@ -692,7 +693,7 @@ class CombatMixin {
   awardLoot(client, loot) {
     const rec = this.profileFor(client);
     if (rec) {
-      this.grantHunterXp(rec.prof, loot.xp);
+      this.grantHunterXp(rec.prof, loot.xp, client, loot.source || 'gate');
       rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + (loot.gold | 0)));
       if (loot.coal) this.addRewardItem(rec.prof, REWARD_ITEMS.coal, loot.coal);
       if (loot.iron) this.addRewardItem(rec.prof, REWARD_ITEMS.iron, loot.iron);

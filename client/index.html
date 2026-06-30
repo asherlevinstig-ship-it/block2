@@ -22,14 +22,18 @@
 </div>
 <div id="abilities" class="hidden"></div>
 <div id="familiarhud" class="hidden"></div>
+<div id="dungeonparty" class="hidden"></div>
+<div id="dungeonping" class="hidden"></div>
 <div id="sysmsgs"></div>
 <div id="eventhud" class="hidden"><div><div class="et" id="eventtitle">PARKOUR EVENT</div><div class="es" id="eventsub">Waiting for next event</div></div><button id="eventjoin" type="button">JOIN QUEUE</button></div>
 <div id="coachhud" class="hidden"><div><div class="ct" id="coachtitle">NEXT STEP</div><div class="cs" id="coachsub">Helpful suggestion</div></div><kbd id="coachlearn">FOLLOW LIGHT</kbd><button id="coachdismiss" type="button" aria-label="Dismiss suggestion">×</button></div>
 <div id="claimhud" class="hidden"></div>
 <div id="landmap" class="hidden"><div class="mt">CLAIM MAP</div><canvas id="landmapcanvas" width="132" height="132"></canvas></div>
 <div id="rewardwin" class="hidden"><div id="rewardpanel"></div></div>
+<div id="rankupwin" class="hidden"><div id="rankuppanel"></div></div>
 <div id="chatlog"></div>
-<input id="chatin" maxlength="140" placeholder="say something... (Enter to send, Esc to cancel)">
+<div id="chatbar"><button id="chatmode" type="button">LOCAL</button><select id="chattarget" aria-label="Whisper target"></select><button id="chatmute" type="button">MUTE</button><button id="chatreport" type="button">REPORT</button><select id="chatin" aria-label="Quick chat phrase"><option value="hello">Hello!</option></select><button id="chatblocked" type="button">BLOCKED</button><button id="chatsound" type="button" aria-label="Toggle communication sounds">SOUND</button></div>
+<div id="chatwheel" class="hidden"><div id="chatwheelitems"></div><div class="wheelcenter"><b id="chatwheelmode">LOCAL</b><span>Release Tab to send</span></div></div>
 <div id="mineprog"><span id="minelbl"></span><div id="minebarw"><i id="minebar"></i></div></div>
 <div id="combochip"></div>
 <div id="statwin" class="hidden"><div id="statpanel"></div></div>
@@ -52,6 +56,7 @@
 <div id="pathselect" class="hidden"><div id="pathpanel"></div></div>
 <div id="awakeningwin" class="hidden"><div id="awakeningpanel"></div></div>
 <div id="hint" class="hidden"></div>
+<div id="gateprompt" class="hidden" aria-live="polite"></div>
 
 <div id="ui"><div id="uipanel"></div></div>
 <div id="cursoritem"></div>
@@ -106,7 +111,7 @@
       <tr><td>U</td><td>toggle third-person ability demo bot</td></tr>
       <tr><td>1 – 9 / wheel</td><td>select hotbar slot</td></tr>
       <tr><td>Enter</td><td>show this controls screen</td></tr>
-      <tr><td>/</td><td>chat &amp; commands</td></tr>
+      <tr><td>Tab</td><td>open comms bar &middot; Tab cycles Local / Party / Whisper</td></tr>
       <tr><td>Esc</td><td>close open panels</td></tr>
     </table>
     <table>
@@ -130,7 +135,7 @@
         <input id="playername" maxlength="16" placeholder="HUNTER NAME" autocomplete="nickname">
         <div id="authstatus">SIGN IN OR CREATE AN ACCOUNT</div>
       </div>
-      <div class="account-actions"><button id="playbtn">SIGN IN &amp; PLAY</button><button id="registerbtn" type="button">CREATE ACCOUNT</button><button id="logoutbtn" class="hidden" type="button">LOG OUT</button></div>
+      <div class="account-actions"><button id="playbtn" disabled>SIGN IN &amp; PLAY</button><button id="registerbtn" type="button" disabled>CREATE ACCOUNT</button><button id="logoutbtn" class="hidden" type="button" disabled>LOG OUT</button></div>
     </div>
     <div class="start-help-hint">Press Enter for controls and field guide</div>
   </div>
@@ -154,33 +159,40 @@
       import('./js/rendering.mjs'),
       import('./js/onboarding.mjs?v=3'),
     ]);
-    const gameContext=gameContextModule.createGameContext({services:{
-      auth:authModule,
-      progression:progressionModule,
-      inventory:inventoryModule,
-      quests:questJobModule,
-      network:networkModule,
-      rendering:renderingModule,
-      onboarding:onboardingModule,
-    }});
+    const gameContext=gameContextModule.createGameContext({
+      services:{
+        auth:authModule,
+        progression:progressionModule,
+        inventory:inventoryModule,
+        quests:questJobModule,
+        network:networkModule,
+        rendering:renderingModule,
+        onboarding:onboardingModule,
+      },
+      state:{uiShell:{qOpen:false}},
+    });
     window.BlockcraftGameContext=gameContext;
-    for(const src of ['./js/world.mjs','./js/dimensions.mjs']){
+    const uiShellState=gameContext.requireState('uiShell');
+    Object.defineProperty(window,'qOpen',{
+      get:()=>uiShellState.qOpen,
+      set:value=>{uiShellState.qOpen=!!value;},
+      configurable:true,
+    });
+    for(const src of ['./js/world.mjs','./js/dimensions.mjs','./js/combat.mjs','./js/hud.mjs','./js/menus.mjs','./js/networking.mjs']){
       await import(src);
       gameContext.markModuleLoaded(src.slice(src.lastIndexOf('/')+1,src.lastIndexOf('.')));
     }
-    for(const src of ['./js/combat.js','./js/ui.js']){
-      await new Promise((resolve,reject)=>{
-        const script=document.createElement('script');
-        script.src=src;
-        script.onload=resolve;
-        script.onerror=()=>reject(new Error('Failed to load '+src));
-        document.body.appendChild(script);
-      });
-      gameContext.markModuleLoaded(src.slice(src.lastIndexOf('/')+1,-3));
-    }
+    await import('./js/frame-loop.mjs');
+    gameContext.markModuleLoaded('frame-loop');
     gameContext.setPhase('ready');
     document.documentElement.dataset.gamePhase='ready';
     document.documentElement.dataset.gameModules=gameContext.snapshot().loadedModules.join(',');
+    for(const id of ['playbtn','registerbtn','logoutbtn']){
+      const button=document.getElementById(id);
+      if(button)button.disabled=false;
+    }
+    const authUser=document.getElementById('authuser');
+    if(authUser&&(document.activeElement===document.body||!document.activeElement))authUser.focus();
   }catch(err){
     if(window.BlockcraftGameContext) window.BlockcraftGameContext.setPhase('failed');
     document.documentElement.dataset.gamePhase='failed';

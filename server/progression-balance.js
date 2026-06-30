@@ -5,6 +5,7 @@ const {
   hunterActivityXpForLevel,
   xpNeedForLevel,
 } = require('./rooms/constants');
+const { hunterXpForActivity, threatXpForRing } = require('./rooms/xp-economy');
 
 const RANK_PACING_TARGETS = Object.freeze([
   null,
@@ -48,4 +49,20 @@ function progressionPacingSnapshot() {
   return [1, 2, 3, 4].map(simulateMixedActivities);
 }
 
-module.exports = { RANK_PACING_TARGETS, progressionPacingSnapshot, simulateMixedActivities, xpToNextRank };
+function activityEconomySnapshot(rank) {
+  const level = HUNTER_RANK_LEVELS[rank];
+  const ring = Math.min(3, rank);
+  return {
+    rank: RANK_PACING_TARGETS[rank].rank,
+    base: HUNTER_ACTIVITY_XP_BY_RANK[rank],
+    jobContract: hunterXpForActivity(level, 'job_contract'),
+    townQuest: hunterXpForActivity(level, 'town_quest'),
+    guildContract: hunterXpForActivity(level, 'guild_contract'),
+    event: hunterXpForActivity(level, 'event'),
+    gate: BOSS_REWARD_BY_RANK[rank].xp,
+    threat: threatXpForRing(ring),
+    greenFrontierThreat: threatXpForRing(0),
+  };
+}
+
+module.exports = { RANK_PACING_TARGETS, activityEconomySnapshot, progressionPacingSnapshot, simulateMixedActivities, xpToNextRank };

@@ -54,7 +54,7 @@ test('DimensionGrid provides one origin-aware storage contract for every dimensi
 
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
-  const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.js', 'ui.js'];
+  const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.mjs', 'hud.mjs', 'menus.mjs', 'networking.mjs', 'frame-loop.mjs'];
   const runtimeSource = runtimeFiles.map(name =>
     fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', name), 'utf8')
   ).join('\n');
@@ -63,7 +63,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.equal(dimensionScript >= 0 && dungeonScript > dimensionScript, true);
   assert.match(html, /<script src="\/shared\/dungeon-generation\.js"><\/script>/);
   assert.match(html, /import\('\.\/js\/game-context\.mjs'\)/);
-  assert.match(html, /createGameContext\(\{services:/);
+  assert.match(html, /createGameContext\(\{\s*services:/);
   let previousModule = -1;
   for (const name of runtimeFiles) {
     const offset = html.indexOf(`'./js/${name}'`);
@@ -71,6 +71,36 @@ test('client dimensions and server consume the shared grid contract', () => {
     previousModule = offset;
   }
   assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
+  assert.match(html, /id="playbtn" disabled/);
+  assert.match(html, /id="registerbtn" type="button" disabled/);
+  assert.match(html, /dataset\.gamePhase='ready'[\s\S]*button\.disabled=false/);
+  assert.doesNotMatch(html, /\.\/js\/ui\.js/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /HUD hotbar/);
+  const menusSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  assert.match(menusSource, /inventory \/ crafting UI/);
+  assert.match(menusSource, /registerModule\('menus'/);
+  assert.match(menusSource, /export const api=gameContext\.requireModule\('menus'\)/);
+  const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(networkingSource, /registerState\('networking'/);
+  assert.match(networkingSource, /registerModule\('networking'/);
+  assert.match(networkingSource, /export const api=gameContext\.requireModule\('networking'\)/);
+  assert.match(networkingSource, /multiplayer \(colyseus\)/);
+  assert.match(networkingSource, /Event'[\s\S]*Hunter XP/, 'event completion names its exact XP reward');
+  assert.match(menusSource, /Boss clear reward:[\s\S]*Hunter XP/, 'Gate lobby previews authoritative boss XP');
+  for (const [file, factory] of [
+    ['network-session.mjs', 'createNetworkSession'],
+    ['social.mjs', 'createSocialSystem'],
+    ['network-frame-pump.mjs', 'createNetworkFramePump'],
+    ['companions.mjs', 'createCompanionSystem'],
+    ['replication-visuals.mjs', 'createReplicationVisuals'],
+  ]) {
+    const extractedSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', file), 'utf8');
+    assert.match(extractedSource, new RegExp(`export function ${factory}\\(`));
+    assert.match(networkingSource, new RegExp(`import \\{${factory}\\} from '\\./${file}'`));
+  }
+  const compatibilityBindings = (networkingSource.match(/get:\(\)=>/g) || []).length;
+  assert.ok(compatibilityBindings <= 89, 'networking compatibility surface must not grow');
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /main loop/);
   assert.match(runtimeSource, /BlockcraftDungeonGeneration\.createDungeonGeneration/);
   assert.doesNotMatch(runtimeSource, /function generateDungeon\(ri, seed\)/);
   for (const kind of ['overworld','tutorial','event']) assert.match(runtimeSource, new RegExp("new DimensionGrid\\(\\{kind:'"+kind));
@@ -78,6 +108,12 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(runtimeSource, /export const api=gameContext\.requireModule\('world'\)/);
   assert.match(runtimeSource, /import \{api as worldApi,state as worldState\} from '\.\/world\.mjs'/);
   assert.match(runtimeSource, /export const api=gameContext\.requireModule\('dimensions'\)/);
+  assert.match(runtimeSource, /import \{api as worldApi,state as worldState\} from '\.\/world\.mjs'/);
+  assert.match(runtimeSource, /import \{api as dimensionsApi,state as dimensionsState\} from '\.\/dimensions\.mjs'/);
+  assert.match(runtimeSource, /export const api=gameContext\.requireModule\('combat'\)/);
+  assert.match(runtimeSource, /export const api=gameContext\.requireModule\('hud'\)/);
+  assert.match(runtimeSource, /export const api=gameContext\.requireModule\('ui'\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'onboarding.mjs'), 'utf8'), /TRAINING COMPLETE/);
   for (const name of ['world','dimensions','combat','ui']) {
     assert.match(runtimeSource, new RegExp(`gameContext\\.registerState\\('${name}'`));
     assert.match(runtimeSource, new RegExp(`gameContext\\.registerModule\\('${name}'`));
@@ -127,6 +163,30 @@ test('onboarding resource manifest restores every tutorial log and mature crop',
   ]);
 });
 
+test('first D-rank clear produces a one-time repeatable-loop handoff', async () => {
+  const { gateMilestoneHandoff, rankPromotionDetails } = await clientModule('onboarding.mjs');
+  assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 1, nextRank: 2 } }, true), {
+    label: 'ADVENTURER LOOP UNLOCKED',
+    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Exit through the return portal, then follow Compass Sense to the Job Board and work toward C-Rank at Level 8.',
+    action: 'TRACK NEXT CONTRACT',
+  });
+  assert.equal(gateMilestoneHandoff({ firstClear: { rank: 0 } }, true), null);
+  assert.equal(gateMilestoneHandoff({ firstClear: { rank: 1 } }, false), null);
+  assert.equal(gateMilestoneHandoff({}, true), null);
+  assert.deepEqual(rankPromotionDetails({
+    fromRank: 1, rank: 2, gateRank: 2, level: 8, statPoints: 3, nextRankLevel: 13,
+  }), {
+    rank: 2,
+    letter: 'C',
+    title: 'C-RANK HUNTER',
+    gateAccess: 'C-RANK GATES',
+    level: 8,
+    statPoints: 3,
+    next: 'B-Rank begins at Level 13',
+  });
+  assert.equal(rankPromotionDetails({ fromRank: 2, rank: 2 }), null);
+});
+
 test('reconnect policy retries with bounded exponential delays', async () => {
   const { reconnectWithBackoff } = await clientModule('reconnect.mjs');
   const attempts = [], delays = [];
@@ -174,6 +234,37 @@ test('Hunter XP curve has explicit rank thresholds and steepens at high rank', a
     assert.equal(hunterRankIndexForLevel(level), serverProgression.hunterRankIndexForLevel(level), `client/server rank parity at Level ${level}`);
     assert.equal(hunterActivityXpForLevel(level, .75), serverProgression.hunterActivityXpForLevel(level, .75), `client/server reward parity at Level ${level}`);
   }
+});
+
+test('client XP previews match the authoritative activity economy', async () => {
+  const client = await clientModule('progression.mjs');
+  const server = require('../rooms/xp-economy');
+  assert.deepEqual({ ...client.HUNTER_ACTIVITY_XP_WEIGHTS }, { ...server.XP_ACTIVITY_WEIGHTS });
+  for (const level of [1, 4, 8, 13, 19, 27]) {
+    for (const type of Object.keys(server.XP_ACTIVITY_WEIGHTS)) {
+      assert.equal(client.hunterXpForActivity(level, type), server.hunterXpForActivity(level, type));
+    }
+  }
+});
+
+test('rank progress counts all level XP remaining to the next Hunter rank', async () => {
+  const { HUNTER_RANK_LEVELS, rankProgressForLevel, xpNeedForLevel } = await clientModule('progression.mjs');
+  const freshD = rankProgressForLevel(4, 0);
+  const dRequired = [4, 5, 6, 7].reduce((sum, level) => sum + xpNeedForLevel(level), 0);
+  assert.deepEqual(freshD, {
+    rank: 1,
+    nextRank: 2,
+    nextRankLevel: 8,
+    earned: 0,
+    required: dRequired,
+    remaining: dRequired,
+    progress: 0,
+    maxRank: false,
+  });
+  const midD = rankProgressForLevel(6, 25);
+  assert.equal(midD.earned, xpNeedForLevel(4) + xpNeedForLevel(5) + 25);
+  assert.equal(midD.remaining, dRequired - midD.earned);
+  assert.equal(rankProgressForLevel(HUNTER_RANK_LEVELS.at(-1), 999).maxRank, true);
 });
 
 test('progression focus states stay identical across client and server', async () => {
@@ -287,4 +378,92 @@ test('network controller shutdown leaves deliberately without starting reconnect
   assert.equal(reconnects, 0);
   assert.equal(controller.state.room, null);
   assert.equal(controller.state.on, false);
+});
+
+test('network controller falls back when a stored session resume never settles', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const storage = new Map([['resume', 'stale:token']]), attached = [], events = [];
+  const fresh = { reconnectionToken: 'fresh:token', onLeave(fn) { this.leaveHandler = fn; } };
+  class Client {
+    reconnect(token) {
+      events.push(['resume', token]);
+      return new Promise(() => {});
+    }
+    async joinOrCreate(name, options) {
+      events.push(['join', name, options.name]);
+      return fresh;
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume', resumeTimeout: 10,
+    sessionStorage: { getItem: key => storage.get(key) || '', setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
+    onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onRestored() {}, onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(events, [['resume', 'stale:token'], ['join', 'blockcraft', 'Hunter']]);
+  assert.deepEqual(attached, [fresh]);
+  assert.equal(controller.state.on, true);
+  assert.equal(storage.get('resume'), 'fresh:token');
+});
+
+test('network controller retries when a fresh room join never settles', async () => {
+  const attached = [], events = [];
+  const fresh = { reconnectionToken: 'fresh:token', onLeave(fn) { this.leaveHandler = fn; } };
+  let joins = 0;
+  class Client {
+    joinOrCreate() {
+      joins++;
+      events.push(['join', joins]);
+      return joins === 1 ? new Promise(() => {}) : Promise.resolve(fresh);
+    }
+  }
+  const { createNetworkController } = await clientModule('network.mjs');
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    joinTimeout: 10, joinAttempts: 2,
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onRestored() {}, onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  assert.deepEqual(events, [['join', 1], ['join', 2]]);
+  assert.deepEqual(attached, [fresh]);
+  assert.equal(controller.state.on, true);
+});
+
+test('network controller bounds a hung live reconnect and falls back to a fresh join', async () => {
+  const attached = [], events = [];
+  const first = { reconnectionToken: 'live:token', onLeave(fn) { this.leaveHandler = fn; } };
+  const fresh = { reconnectionToken: 'fresh:token', onLeave(fn) { this.leaveHandler = fn; } };
+  let joins = 0;
+  class Client {
+    joinOrCreate() {
+      joins++;
+      events.push(['join', joins]);
+      return Promise.resolve(joins === 1 ? first : fresh);
+    }
+    reconnect(token) {
+      events.push(['reconnect', token]);
+      return new Promise(() => {});
+    }
+  }
+  const { createNetworkController } = await clientModule('network.mjs');
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    liveReconnectTimeout: 10, reconnectAttempts: 1, joinTimeout: 10, joinAttempts: 1,
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onRestored() {}, onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  first.leaveHandler();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(events, [['join', 1], ['reconnect', 'live:token'], ['join', 2]]);
+  assert.deepEqual(attached, [first, fresh]);
+  assert.equal(controller.state.room, fresh);
+  assert.equal(controller.state.on, true);
 });

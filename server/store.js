@@ -119,6 +119,7 @@ function defaultProfile(name) {
     regionalContract: null,
     utilityUnlocks: [],
     utilityLoadout: { active: '', passive: [] },
+    mutedPlayers: [],
     progressionFocus: '',
     firstPromotionSeen: false,
     tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0 },
@@ -128,7 +129,7 @@ function defaultProfile(name) {
 }
 
 function cleanName(name) {
-  return (typeof name === 'string' ? name : 'Hunter').replace(/[<>]/g, '').trim().slice(0, 16) || 'Hunter';
+  return (typeof name === 'string' ? name : 'Hunter').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16) || 'Hunter';
 }
 
 function cleanShortText(v, fallback, max) {
@@ -346,6 +347,7 @@ function sanitizeProfile(p) {
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
   out.utilityUnlocks = sanitizeUtilityUnlocks(p.utilityUnlocks);
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
+  out.mutedPlayers = Array.isArray(p.mutedPlayers) ? [...new Set(p.mutedPlayers.map(cleanToken).filter(Boolean))].slice(0, 256) : [];
   out.progressionFocus = PROGRESSION_FOCUS_STATES.has(p.progressionFocus) ? p.progressionFocus : '';
   if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'next_adventurer_contract';
   if (out.progressionFocus === 'next_adventurer_contract' && out.jobContract) out.progressionFocus = '';
@@ -708,6 +710,10 @@ class JsonStore {
     catch (e) { throw new Error('corrupt profile file ' + file + ': ' + e.message); }
   }
   async savePlayer(token, profile) { this._write(this._pfile(token), { ...profile, savedAt: Date.now() }); }
+  async saveModerationReport(report) {
+    fs.mkdirSync(this.dir, { recursive: true });
+    fs.appendFileSync(path.join(this.dir, 'moderation-reports.jsonl'), JSON.stringify(report) + '\n', 'utf8');
+  }
 }
 
 // ---------------- Firestore store ----------------
@@ -833,6 +839,9 @@ class FirebaseStore {
   }
   async savePlayer(token, profile) {
     await this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() });
+  }
+  async saveModerationReport(report) {
+    await this.db.collection('moderationReports').doc(report.id).set(report);
   }
 }
 

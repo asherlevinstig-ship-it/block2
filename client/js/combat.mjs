@@ -1,6 +1,126 @@
-/* Blockcraft combat runtime module. Player state, inventory interaction, mining, targeting, and combat input.
- * These classic modules intentionally share one global lexical scope and load in order.
- */
+import {api as worldApi,state as worldState} from './world.mjs';
+import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
+const gameContext=window.BlockcraftGameContext;
+const uiShellState=gameContext.requireState('uiShell');
+const getB=worldApi.getBlock,setB=worldApi.setBlock;
+const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
+function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
+
+const legacyCombatBindings={
+  "isDragon":{get:()=>isDragon},
+  "abilityAwakeningOpen":{get:()=>abilityAwakeningOpen,set:value=>{abilityAwakeningOpen=value;}},
+  "abilityHudAvailable":{get:()=>abilityHudAvailable},
+  "abilityTrainingActive":{get:()=>abilityTrainingActive,set:value=>{abilityTrainingActive=value;}},
+  "abilityTrainingFinishAt":{get:()=>abilityTrainingFinishAt,set:value=>{abilityTrainingFinishAt=value;}},
+  "abilityTrainingReturn":{get:()=>abilityTrainingReturn,set:value=>{abilityTrainingReturn=value;}},
+  "abilityTrainingUsed":{get:()=>abilityTrainingUsed,set:value=>{abilityTrainingUsed=value;}},
+  "abilityTutorialDone":{get:()=>abilityTutorialDone},
+  "addCraftedItem":{get:()=>addCraftedItem},
+  "addItem":{get:()=>addItem},
+  "applyBlacksmithCraftPerk":{get:()=>applyBlacksmithCraftPerk},
+  "applyMeditationCamera":{get:()=>applyMeditationCamera},
+  "applyServerTutorials":{get:()=>applyServerTutorials},
+  "AUTH_UI":{get:()=>AUTH_UI},
+  "awakeningWin":{get:()=>awakeningWin},
+  "beginOnboarding":{get:()=>beginOnboarding},
+  "calmTownHud":{get:()=>calmTownHud},
+  "cancelOnboardingForProfileRestore":{get:()=>cancelOnboardingForProfileRestore},
+  "clearTownJobGuidance":{get:()=>clearTownJobGuidance},
+  "clearTownTutorialStep":{get:()=>clearTownTutorialStep},
+  "completeOnboarding":{get:()=>completeOnboarding},
+  "completeTownTutorialStep":{get:()=>completeTownTutorialStep},
+  "cookingOutputCount":{get:()=>cookingOutputCount},
+  "equipmentModel":{get:()=>equipmentModel,set:value=>{equipmentModel=value;}},
+  "finishMine":{get:()=>finishMine},
+  "finishWorldLoading":{get:()=>finishWorldLoading},
+  "getFurnace":{get:()=>getFurnace},
+  "hintDone":{get:()=>hintDone,set:value=>{hintDone=value;}},
+  "hintEl":{get:()=>hintEl},
+  "inMeditationSpot":{get:()=>inMeditationSpot},
+  "inv":{get:()=>inv},
+  "inventoryModel":{get:()=>inventoryModel,set:value=>{inventoryModel=value;}},
+  "isMeditating":{get:()=>isMeditating,set:value=>{isMeditating=value;}},
+  "itemNameWithPlus":{get:()=>itemNameWithPlus},
+  "keys":{get:()=>keys},
+  "landTutorialRoute":{get:()=>landTutorialRoute},
+  "loadscreen":{get:()=>loadscreen},
+  "locked":{get:()=>locked,set:value=>{locked=value;}},
+  "lockFallback":{get:()=>lockFallback,set:value=>{lockFallback=value;}},
+  "markTutorialComplete":{get:()=>markTutorialComplete},
+  "mining":{get:()=>mining,set:value=>{mining=value;}},
+  "mostDamagedToolSlot":{get:()=>mostDamagedToolSlot},
+  "mouseL":{get:()=>mouseL,set:value=>{mouseL=value;}},
+  "moveAxis":{get:()=>moveAxis},
+  "nearbySmallDiscovery":{get:()=>nearbySmallDiscovery},
+  "newStack":{get:()=>newStack},
+  "noteAbilityTrainingCast":{get:()=>noteAbilityTrainingCast},
+  "ONBOARDING_FULL_TURN":{get:()=>ONBOARDING_FULL_TURN},
+  "ONBOARDING_STEPS":{get:()=>ONBOARDING_STEPS},
+  "onboardingActive":{get:()=>onboardingActive,set:value=>{onboardingActive=value;}},
+  "onboardingArrived":{get:()=>onboardingArrived,set:value=>{onboardingArrived=value;}},
+  "onboardingArrowTurn":{get:()=>onboardingArrowTurn,set:value=>{onboardingArrowTurn=value;}},
+  "onboardingDone":{get:()=>onboardingDone},
+  "onboardingFlags":{get:()=>onboardingFlags},
+  "onboardingKind":{get:()=>onboardingKind},
+  "onboardingNextAt":{get:()=>onboardingNextAt,set:value=>{onboardingNextAt=value;}},
+  "onboardingRoute":{get:()=>onboardingRoute,set:value=>{onboardingRoute=value;}},
+  "onboardingStep":{get:()=>onboardingStep,set:value=>{onboardingStep=value;}},
+  "openTownTutorialsUI":{get:()=>openTownTutorialsUI},
+  "overlay":{get:()=>overlay},
+  "pathChoiceOpen":{get:()=>pathChoiceOpen,set:value=>{pathChoiceOpen=value;}},
+  "player":{get:()=>player},
+  "prepareOnboardingStep":{get:()=>prepareOnboardingStep},
+  "raycast":{get:()=>raycast},
+  "recipeSeen":{get:()=>recipeSeen},
+  "refreshPlayUi":{get:()=>refreshPlayUi},
+  "renderTownTutorialOptions":{get:()=>renderTownTutorialOptions},
+  "requestTownJobGuidance":{get:()=>requestTownJobGuidance},
+  "resetAbilityTutorialDone":{get:()=>resetAbilityTutorialDone},
+  "resetTrainingMeadowLocal":{get:()=>resetTrainingMeadowLocal},
+  "scanRecipeInventory":{get:()=>scanRecipeInventory},
+  "selected":{get:()=>selected,set:value=>{selected=value;}},
+  "serverTutorials":{get:()=>serverTutorials,set:value=>{serverTutorials=value;}},
+  "setAuthStatus":{get:()=>setAuthStatus},
+  "setWorldLoadingStatus":{get:()=>setWorldLoadingStatus},
+  "shouldOfferTownJobGuidance":{get:()=>shouldOfferTownJobGuidance},
+  "shouldOpenLevel2PathChoice":{get:()=>shouldOpenLevel2PathChoice},
+  "showAbilityAwakening":{get:()=>showAbilityAwakening},
+  "showPathSelection":{get:()=>showPathSelection},
+  "stackMax":{get:()=>stackMax},
+  "startMine":{get:()=>startMine},
+  "startTownGuidance":{get:()=>startTownGuidance},
+  "stopMeditation":{get:()=>stopMeditation},
+  "syncLocalTutorialsToServer":{get:()=>syncLocalTutorialsToServer},
+  "tickAbilityTraining":{get:()=>tickAbilityTraining},
+  "tickFurnaces":{get:()=>tickFurnaces},
+  "tickLavaBorder":{get:()=>tickLavaBorder},
+  "tickOnboarding":{get:()=>tickOnboarding},
+  "tickTownGuidance":{get:()=>tickTownGuidance},
+  "toolDamageFor":{get:()=>toolDamageFor},
+  "toolMaxDur":{get:()=>toolMaxDur},
+  "toolPlus":{get:()=>toolPlus},
+  "toolSpeedFor":{get:()=>toolSpeedFor},
+  "townGuidanceActive":{get:()=>townGuidanceActive,set:value=>{townGuidanceActive=value;}},
+  "townGuidanceStep":{get:()=>townGuidanceStep,set:value=>{townGuidanceStep=value;}},
+  "townTutorialChoice":{get:()=>townTutorialChoice},
+  "townTutorialInfo":{get:()=>townTutorialInfo},
+  "townTutorialsDone":{get:()=>townTutorialsDone},
+  "townTutorialStepDone":{get:()=>townTutorialStepDone},
+  "tutorialEl":{get:()=>tutorialEl},
+  "tutorialSafe":{get:()=>tutorialSafe},
+  "uiEl":{get:()=>uiEl},
+  "uiFurnaceKey":{get:()=>uiFurnaceKey,set:value=>{uiFurnaceKey=value;}},
+  "uiMode":{get:()=>uiMode,set:value=>{uiMode=value;}},
+  "uiOpen":{get:()=>uiOpen,set:value=>{uiOpen=value;}},
+  "uipanel":{get:()=>uipanel},
+  "updateOnboardingHud":{get:()=>updateOnboardingHud},
+  "useRepairKit":{get:()=>useRepairKit},
+};
+for(const [bindingName,binding] of Object.entries(legacyCombatBindings)){
+  const descriptor=Object.getOwnPropertyDescriptor(globalThis,bindingName);
+  if(!descriptor||descriptor.configurable)Object.defineProperty(globalThis,bindingName,{...binding,configurable:true});
+}
+/* Blockcraft combat ES module. Player state, inventory interaction, mining, targeting, and combat input. */
 // ---------------- player ----------------
 const player = {
   pos: new THREE.Vector3(WX/2+.5, 0, WX/2+.5),
@@ -732,7 +852,7 @@ function startAbilityTraining(){
   updateAbilityHUD();
   closeUI(false);
   if(statOpen) closeStat(false);
-  if(qOpen) closeQWin(false);
+  if(uiShellState.qOpen) closeQWin(false);
   showName('Ability Awakening');
   sysMsg('<b>Ability Awakening:</b> you unlocked your first path power. Press <b>Q</b> in the meadow.');
   updateAbilityTrainingHud();
@@ -888,7 +1008,7 @@ function renderTownTutorialOptions(force=false){
   townChoicesEl.classList.remove('hidden');
 }
 function openTownTutorialsUI(){
-  if(qOpen) closeQWin(true);
+  if(uiShellState.qOpen) closeQWin(true);
   renderTownTutorialOptions(true);
   return;
   openQWin('management');
@@ -1016,7 +1136,7 @@ function tickTownGuidance(now){
   }
   if(townGuidanceStep==='quest' && (quest || playerJob)){ clearTownGuidance(); return; }
   if(townGuidanceStep==='job' && (jobContract || regionalContract)){ clearTownJobGuidance(); return; }
-  if(onboardingActive || pathChoiceOpen || qOpen || dim!=='overworld'){
+  if(onboardingActive || pathChoiceOpen || uiShellState.qOpen || dim!=='overworld'){
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
     return;
@@ -1050,6 +1170,7 @@ function finishOnboardingToTown(){
   markTutorialComplete('onboarding',7);
   sysMsg('<b>Training complete.</b> Welcome to the Town of Beginnings.');
   startTownGuidance();
+  setTimeout(()=>ONBOARD.showTrainingComplete(),120);
   sendPlayerMetaNow();
   sendProfileSaveNow();
   lockFallback=true;
@@ -1088,7 +1209,7 @@ function pathCardHTML(key){
 }
 function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
-  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
   pathChoiceOpen=true;
@@ -1213,7 +1334,7 @@ function calmTownHud(){
   return !onboardingActive && dim==='overworld' && player && isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
 }
 function refreshPlayUi(){
-  const showHud = locked || uiOpen || statOpen || qOpen || claimMode;
+  const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode;
   overlay.classList.toggle('hidden', showHud);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
   const minimal=onboardingActive;
@@ -1264,13 +1385,14 @@ async function startPlaying(create=false){
 }
 try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
 checkAuth();
-try{ authuser.focus(); }catch(e){}
 function primeMenuAudio(){ SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
 playbtn.addEventListener('click', ()=>startPlaying(false));
 registerbtn.addEventListener('click', ()=>startPlaying(true));
 logoutbtn.addEventListener('click',async()=>{
+  const rankContinue=document.getElementById('rankupcontinue');
+  if(rankContinue)rankContinue.click();
   await AUTH_UI.signOut();NET.tried=false;
 });
 document.addEventListener('pointerlockchange', ()=>{
@@ -1279,7 +1401,7 @@ document.addEventListener('pointerlockchange', ()=>{
   locked = hasLock || lockFallback;
   refreshPlayUi();
 });
-document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !qOpen) enterPlayFallback(); });
+document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
 
 let hintDone=false;
 addEventListener('keydown', e=>{
@@ -1288,6 +1410,7 @@ addEventListener('keydown', e=>{
     e.preventDefault();
     return;
   }
+  if(e.code==='Tab'&&locked){e.preventDefault();startQuickChatWheel();return;}
   if(e.code==='Enter' && !locked && !overlay.classList.contains('hidden')){
     e.preventDefault();
     showStartHelp();
@@ -1295,7 +1418,7 @@ addEventListener('keydown', e=>{
   }
   if(e.code==='Enter' && locked){
     e.preventDefault();
-    if(uiOpen || statOpen || qOpen) return;
+    if(uiOpen || statOpen || uiShellState.qOpen) return;
     if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
     lockFallback=false;
     locked=false;
@@ -1328,21 +1451,32 @@ addEventListener('keydown', e=>{
   }
   if(e.code==='KeyO' && !e.repeat){
     e.preventDefault();
-    if(qOpen && questLogOpen) closeQWin();
+    if(uiShellState.qOpen && questLogOpen) closeQWin();
     else if(locked && !uiOpen && !statOpen) openQuestLogUI();
     return;
   }
   if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
   if(e.code==='Escape'){
     let closed=false;
+    const rankUpWin=document.getElementById('rankupwin');
+    if(rankUpWin&&!rankUpWin.classList.contains('hidden')){
+      const rankContinue=document.getElementById('rankupcontinue');
+      if(rankContinue)rankContinue.click();else rankUpWin.classList.add('hidden');
+      closed=true;
+    }
     if(uiOpen){ closeUI(false); closed=true; }
     if(statOpen){ closeStat(false); closed=true; }
-    if(qOpen){ closeQWin(false); closed=true; }
+    if(uiShellState.qOpen){ closeQWin(false); closed=true; }
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
     if(closed){ e.preventDefault(); return; }
   }
   if(locked){
     if(e.code.startsWith('Arrow')) e.preventDefault();
+    if(dim==='dungeon'&&!e.repeat&&['F1','F2','F3'].includes(e.code)){
+      e.preventDefault();
+      if(NET.on&&NET.room)NET.room.send('dungeonPing',{kind:e.code==='F1'?'group':e.code==='F2'?'boss':'loot'});
+      return;
+    }
     if(e.code==='KeyQ') cast(0);
     if(e.code==='KeyR') cast(1);
     if(e.code==='KeyH') cast(2);
@@ -1601,7 +1735,7 @@ function interactSmallDiscovery(s,hit){
   return true;
 }
 function secondaryAction(){
-  if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<2.8){ enterDungeon(); return; }
+  if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
@@ -1722,6 +1856,7 @@ gameContext.registerState('combat', Object.freeze({
   player,
   inventory:inv,
   get selectedSlot(){ return selected; },
+  set selectedSlot(value){ selected=Math.max(0,Math.min(8,value|0)); },
   get inventoryModel(){ return inventoryModel; },
   get equipmentModel(){ return equipmentModel; },
   get inputLocked(){ return locked; },
@@ -1734,3 +1869,8 @@ gameContext.registerModule('combat', Object.freeze({
   stopPrimaryAction,
 }));
 
+
+export const state=gameContext.requireState('combat');
+export const api=gameContext.requireModule('combat');
+export {worldApi,worldState,dimensionsApi,dimensionsState};
+export default api;

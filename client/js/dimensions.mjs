@@ -2,7 +2,7 @@ import {api as worldApi,state as worldState} from './world.mjs';
 const gameContext=window.BlockcraftGameContext;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 /* Blockcraft dimensions runtime module. Ability spaces, dungeon dimensions, gates, decoration, and dimension HUD state.
- * These classic modules intentionally share one global lexical scope and load in order.
+ * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
  */
 // ---------------- ability pathways ----------------
 const PATHS={
@@ -897,10 +897,20 @@ function renderStat(){
   h+='<div class="srow"><span>LEVEL</span><b>'+S.lvl+'</b></div>';
   const rankIdx=localPlayerRankIndex(), hunterRankIdx=localPlayerHunterRankIndex();
   const nextLvl=nextRankLevel(hunterRankIdx);
+  const rankProgress=currentRankProgress();
   const clearedGate=highestGateRankCleared>=0 ? gateRankLetter(highestGateRankCleared)+' cleared' : 'none cleared';
   h+='<div class="srow"><span>PLAYER RANK</span><b style="color:#d8f2ff">'+localPlayerRankName()+'</b></div>';
   h+='<div class="srow"><span>GATE ACCESS</span><b>'+gateRankLetter(rankIdx)+'-Rank available &middot; '+clearedGate+(nextLvl?' &middot; next Hunter rank at Lv '+nextLvl:' &middot; top Hunter rank')+'</b></div>';
   h+='<div class="srow"><span>XP</span><b>'+Math.floor(S.xp)+' / '+xpNeed()+'</b></div>';
+  if(rankProgress.maxRank){
+    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>S-RANK ACHIEVED</b></div><div class="rjbar"><i style="width:100%"></i></div><p>Hunter XP still advances levels, stat points, and mastery.</p></div>';
+  }else{
+    const nextLetter=hunterRankLetter(rankProgress.nextRank);
+    h+='<div class="rankjourney"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK AT LEVEL '+rankProgress.nextRankLevel+'</b></div>'+
+      '<div class="rjbar"><i style="width:'+Math.round(rankProgress.progress*100)+'%"></i></div>'+
+      '<div class="rjcount"><b>'+rankProgress.remaining.toLocaleString('en-US')+' HUNTER XP REMAINING</b><span>'+rankProgress.earned.toLocaleString('en-US')+' / '+rankProgress.required.toLocaleString('en-US')+'</span></div>'+
+      '<p>Earn Hunter XP your way: town quests, job and Guild contracts, Gates, server events, or hostile threats. Gate clears award XP; rank advances when your level crosses the threshold.</p></div>';
+  }
   h+='<div class="srow"><span>HP / MP / SP / Food</span><b>'+Math.ceil(hp)+'/'+maxHp()+' &middot; '+Math.floor(mp)+'/'+maxMp()+' &middot; '+Math.floor(sp)+'/'+maxSp()+' &middot; '+Math.floor(hunger)+'/'+maxHunger()+'</b></div>';
   const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
   h+='<div class="srow"><span>ARMOR</span><b>'+(armor?ITEMS[armor.id].name+' &middot; -'+Math.round((armorInfo.mitigation||0)*100)+'% damage'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';

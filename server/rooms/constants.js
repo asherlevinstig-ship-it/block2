@@ -509,7 +509,7 @@ const sstep = (a, b, x) => { x = Math.min(1, Math.max(0, (x - a) / (b - a))); re
 
 // shared pure helpers (used by GameRoom and its system mixins)
 function clampN(v, a, b) { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; }
-function cleanName(v) { return String(v || 'Hunter').replace(/[<>]/g, '').trim().slice(0, 16) || 'Hunter'; }
+function cleanName(v) { return String(v || 'Hunter').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16) || 'Hunter'; }
 function cleanDragonName(v, fallback = 'Dragon') {
   return String(v == null ? fallback : v).replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 18) || fallback;
 }

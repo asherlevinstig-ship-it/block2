@@ -1,5 +1,5 @@
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
- * These classic modules intentionally share one global lexical scope and load in order.
+ * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
  */
 const gameContext=window.BlockcraftGameContext;
 const authModule=gameContext.requireService('auth');
@@ -10,12 +10,12 @@ const networkModule=gameContext.requireService('network');
 const renderingModule=gameContext.requireService('rendering');
 const onboardingModule=gameContext.requireService('onboarding');
 const {createAuthController}=authModule;
-const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,nextHunterRankLevel,xpNeedForLevel,PROGRESSION_FOCUS_STATES}=progressionModule;
+const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,hunterXpForActivity,nextHunterRankLevel,rankProgressForLevel,xpNeedForLevel,PROGRESSION_FOCUS_STATES}=progressionModule;
 const {createInventoryModel,createEquipmentModel}=inventoryModule;
 const {createQuestModel}=questJobModule;
 const {createNetworkController}=networkModule;
 const {createRenderingRuntime}=renderingModule;
-const {createOnboardingUI,isOnboardingBuildPlacement,countOnboardingBuildBlocks,onboardingResourceCells}=onboardingModule;
+const {createOnboardingUI,isOnboardingBuildPlacement,countOnboardingBuildBlocks,onboardingResourceCells,gateMilestoneHandoff}=onboardingModule;
 "use strict";
 /* ============================================================
    BLOCKCRAFT SURVIVAL — voxel engine + full crafting loop:
@@ -3486,6 +3486,7 @@ function hunterRankLetter(ri){ return HUNTER_RANK_LETTERS[Math.max(0,Math.min(5,
 function localPlayerHunterRankIndex(){ return playerHunterRankIndex(S.lvl,highestGateRankCleared); }
 function playerRankName(lvl=S.lvl, cleared=-1){ return hunterRankLetter(playerHunterRankIndex(lvl, cleared))+'-Rank Hunter'; }
 function localPlayerRankName(){ return playerRankName(S.lvl, highestGateRankCleared); }
+function currentRankProgress(){ return rankProgressForLevel(S.lvl,S.xp); }
 function gateSystemUnlocked(){ return ((S&&S.lvl)|0) >= 3; }
 function gateCutsceneSeen(){ try{ return serverTutorials.gate>=1||localStorage.getItem('bc_gatecut_v1')==='1'; }catch(e){ return serverTutorials.gate>=1; } }
 function markGateCutsceneSeen(){ try{ localStorage.setItem('bc_gatecut_v1','1'); }catch(e){} markTutorialComplete('gate',1); }
@@ -3631,7 +3632,7 @@ function makeJobContract(jobId){
   const scale=Math.min(5,Math.max(0,lvl-1));
   if(jobId==='adventurer' && jobXp<=0) return clampJobContract({
     job:jobId, type:'kill', need:3, have:0, title:"Mara's Field Work",
-    desc:'Defeat 3 hostile creatures beyond the town walls.', rewardGold:34, rewardJobXp:20, rewardXp:hunterActivityXpForLevel(S.lvl,.5)
+    desc:'Defeat 3 hostile creatures beyond the town walls.', rewardGold:34, rewardJobXp:20, rewardXp:hunterXpForActivity(S.lvl,'job_contract')
   });
   const pools={
     adventurer:[
@@ -3661,7 +3662,7 @@ function makeJobContract(jobId){
     ],
   };
   const pool=pools[jobId]||[];
-  return clampJobContract({...pool[(Math.random()*pool.length)|0], job:jobId, have:0, rewardXp:hunterActivityXpForLevel(S.lvl,.5)});
+  return clampJobContract({...pool[(Math.random()*pool.length)|0], job:jobId, have:0, rewardXp:hunterXpForActivity(S.lvl,'job_contract')});
 }
 function jobContractReady(){ return !!(jobContract && jobContract.have>=jobContract.need); }
 function jobContractProgress(kind, n=1, target=0){
@@ -3784,14 +3785,17 @@ function renderEventHud(){
   const name=serverEvent.name||'Parkour';
   const isKing=serverEvent.kind==='king';
   const reward=serverEvent.reward||2;
+  const rewardXp=Math.max(0,serverEvent.rewardXp|0);
+  const rewardText=reward+' legendary tokens'+(rewardXp?' + '+rewardXp.toLocaleString('en-US')+' Hunter XP':'');
   let sub='Waiting for event';
   let btn='JOIN QUEUE', disabled=true;
   if(serverEvent.phase==='idle'){
-    sub='Next '+name+' event in '+fmtClock((serverEvent.nextAt||0)-now);
+    sub='Next '+name+' event in '+fmtClock((serverEvent.nextAt||0)-now)+' - reward '+rewardText;
     btn='TEST EVENT';
     disabled=false;
   } else if(serverEvent.phase==='queue'){
     sub='Starts in '+fmtClock((serverEvent.startsAt||0)-now)+' · queued '+(serverEvent.queueSize||0)+' · reward '+reward+' legendary tokens';
+    if(rewardXp) sub+=' + '+rewardXp.toLocaleString('en-US')+' Hunter XP';
     btn=serverEvent.joined?'SIGNED UP':'JOIN QUEUE';
     disabled=false;
   } else if(serverEvent.phase==='active'){
@@ -4006,6 +4010,8 @@ function applyGateProgress(p){
 function showDungeonReward(m, earned){
   if(!rewardWin||!rewardPanel) return;
   if(earned) applyGateProgress(m&&m.progress);
+  const milestone=gateMilestoneHandoff(m,earned);
+  const resumePlay=!!(milestone&&(locked||lockFallback));
   const ri=Math.max(0,Math.min(4,(m&&typeof m.rank==='number')?m.rank:(dungeon?dungeon.rank:0)));
   const kind=gateKindLabel((m&&m.kind)||((dungeon&&dungeon.kind)||'public'));
   const rows=[];
@@ -4019,6 +4025,7 @@ function showDungeonReward(m, earned){
   }
   rewardPanel.className=earned?'earned':'missed';
   const shardLine=earned&&m.shard ? '<div class="rbonus"><b>Shard bonus:</b> '+escHTML((m.shard.name||'Sharded')+' +'+(m.shard.plus||0))+' increased boss gold, XP, and legendary token drops.</div>' : '';
+  const milestoneLine=milestone?'<div class="rbonus"><b>'+escHTML(milestone.label)+':</b> '+escHTML(milestone.text)+'</div>':'';
   const body=earned
     ? (rows.length?'<div class="rewardloot">'+rows.map(rewardLineHTML).join('')+'</div>':'<div class="rnote">No item drops this time.</div>')
     : '<div class="rnote"><b>No loot earned.</b><br>'+escHTML(rewardReasonText(m&&m.reason))+'</div>';
@@ -4027,13 +4034,33 @@ function showDungeonReward(m, earned){
     '<div class="rsub">'+escHTML(RANKS[ri].n+'-Rank '+kind+' Gate')+'</div>'+
     body+
     shardLine+
+    milestoneLine+
     '<div class="rnote">'+escHTML(rewardUnlockText(m||{}, earned))+'</div>'+
-    '<button id="rewardclose">CLOSE</button>';
+    '<button id="rewardclose">'+escHTML(milestone?milestone.action:'CLOSE')+'</button>';
   rewardWin.classList.remove('hidden');
+  rewardWin.classList.toggle('promotion-open',!!milestone);
+  rewardWin.style.pointerEvents=milestone?'auto':'';
+  rewardWin.style.zIndex=milestone?'40':'';
+  if(milestone){
+    if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
+    locked=false;
+    lockFallback=false;
+    refreshPlayUi();
+  }
   const btn=document.getElementById('rewardclose');
-  if(btn) btn.onclick=()=>rewardWin.classList.add('hidden');
+  if(btn) btn.onclick=()=>{
+    rewardWin.classList.add('hidden');
+    rewardWin.classList.remove('promotion-open');
+    rewardWin.style.pointerEvents='';
+    rewardWin.style.zIndex='';
+    if(resumePlay){
+      lockFallback=true;
+      locked=true;
+      refreshPlayUi();
+    }
+  };
   clearTimeout(rewardHideTimer);
-  rewardHideTimer=setTimeout(()=>rewardWin.classList.add('hidden'), 12000);
+  if(!milestone) rewardHideTimer=setTimeout(()=>rewardWin.classList.add('hidden'), 12000);
 }
 // First-promotion / field-work-graduation modals and the D-rank prep objective +
 // checklist now live in client/js/onboarding.mjs, wired up as ONBOARD below.
@@ -4057,6 +4084,10 @@ function renderBars(){
   barEls.hu.style.width=Math.max(0,hunger/maxHunger()*100)+'%';
   barEls.huT.textContent='FOOD '+Math.floor(hunger)+'/'+maxHunger();
   barEls.xp.style.width=Math.min(100,S.xp/xpNeed()*100)+'%';
+  const rankProgress=currentRankProgress();
+  barEls.xp.parentElement.title=rankProgress.maxRank
+    ? 'S-Rank Hunter · '+Math.floor(S.xp)+' / '+xpNeed()+' XP to next level'
+    : hunterRankLetter(rankProgress.nextRank)+'-Rank in '+rankProgress.remaining.toLocaleString('en-US')+' Hunter XP';
 }
 renderBars();
 function gainXP(n){
@@ -4071,7 +4102,7 @@ function gainXP(n){
     if(S.lvl>=2 && S.path && !abilityTutorialDone() && !shouldRunLevel2Cutscene) showAbilityAwakening();
     else sysMsg('You have reached <b>Level '+S.lvl+'</b>. +3 stat points');
     const afterRank=localPlayerRankIndex();
-    if(afterRank>beforeRank) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(afterRank)+'-Rank gates can now appear.');
+    if(afterRank>beforeRank && !NET.on) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(afterRank)+'-Rank gates can now appear.');
     SFX.level();
     burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 26, 2.6, 3, .8);
     if(shouldRunLevel2Cutscene){ markCutsceneSeen(); setTimeout(()=>startIntroCutscene(false), 500); }
@@ -5625,6 +5656,7 @@ const legacyWorldBindings={
   "hash2":{get:()=>hash2},
   "healingPlusVfx":{get:()=>healingPlusVfx},
   "highestGateRankCleared":{get:()=>highestGateRankCleared,set:value=>{highestGateRankCleared=value;}},
+  "currentRankProgress":{get:()=>currentRankProgress},
   "highlight":{get:()=>highlight},
   "hp":{get:()=>hp,set:value=>{hp=value;}},
   "HUB":{get:()=>HUB},

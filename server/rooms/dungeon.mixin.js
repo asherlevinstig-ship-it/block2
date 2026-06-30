@@ -11,6 +11,7 @@ const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
 const { DungeonInstance } = require('./dungeonInstance');
+const { GATE_INTERACT_RANGE, gateEncounterPreview, gateReadinessForProfile, gateRoleForProfile } = require('./gate-readiness');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class DungeonMixin {
@@ -21,6 +22,7 @@ class DungeonMixin {
     this.gateSeq = 0;
     this.gateTtls = new Map();
     this.gateLootedChests = new Map();
+    this.dungeonPingAt = new Map();
     this.gateTimer = 40;       // countdown to the next public gate spawn (sim-loop driven)
     this.gateTtl = 0;
   }
@@ -30,7 +32,12 @@ class DungeonMixin {
     const party = [];
     inst.players.forEach(sid => {
       const p = this.state.players.get(sid);
-      if (p && p.dgn === inst.id) party.push({ name: p.name, lvl: p.lvl, team: p.team || '' });
+      if (p && p.dgn === inst.id) {
+        const hp = this.playerHp.get(sid) || { hp: 0, max: 1 };
+        const token = this.tokens.get(sid), profile = token && this.profiles.get(token);
+        const contribution = this.bossContrib.get(inst.id)?.get(sid) || { damage: 0, support: 0 };
+        party.push({ sid, name: p.name, lvl: p.lvl, team: p.team || '', hp: Math.max(0, Math.ceil(hp.hp)), maxHp: Math.max(1, Math.ceil(hp.max)), downed: hp.hp <= 0, role: gateRoleForProfile(profile || {}), contribution: Math.round((contribution.damage || 0) + (contribution.support || 0)) });
+      }
     });
     let bossAlive = false;
     this.state.mobs.forEach(m => { if (m.dgn === inst.id && m.kind === 'boss' && m.hp > 0) bossAlive = true; });
@@ -79,7 +86,7 @@ class DungeonMixin {
     let gate = requested ? this.state.gates.get(requested) : null;
     if (!gate && this.state.gate.active) gate = this.state.gates.get(this.state.gate.id) || this.state.gate;
     if (!gate || !gate.active) return { gate: null, reason: 'gone' };
-    if (Math.hypot(gate.x - p.x, gate.z - p.z) > 5) return { gate: null, reason: 'range' };
+    if (Math.hypot(gate.x - p.x, gate.z - p.z) > GATE_INTERACT_RANGE) return { gate: null, reason: 'range' };
     if (!this.canEnterGate(client, gate)) return { gate: null, reason: gate.kind || 'locked' };
     return { gate, reason: '' };
   }
@@ -278,38 +285,112 @@ class DungeonMixin {
     this.dirtyGates = true;
     this.mirrorPrimaryGate();
   }
-  dungeonLobbyPayload(lobby) {
+  dungeonLobbyPayload(lobby, viewerSid = '') {
     const g = this.state.gates.get(lobby.gateId);
+    const rank = g ? (g.rank | 0) : (lobby.rank | 0);
+    const shardPlus = g ? (g.shardPlus | 0) : 0;
+    const baseReward = BOSS_REWARD_BY_RANK[Math.max(0, Math.min(4, rank))];
+    if (!lobby.preview) {
+      const layout = g ? D.generateDungeon(rank, g.seed) : null;
+      lobby.preview = gateEncounterPreview(g || { rank, kind: lobby.kind }, layout);
+    }
+    const preview = lobby.preview;
     const members = [];
     for (const sid of lobby.members) {
       const p = this.state.players.get(sid);
       if (!p) continue;
+      const token = this.tokens.get(sid);
+      const profile = token && this.profiles.get(token);
       members.push({
         sid,
         name: p.name || 'Hunter',
         ready: lobby.ready.has(sid),
         leader: sid === lobby.leader,
+        readiness: gateReadinessForProfile(profile || {}, rank),
       });
     }
     const readyCount = members.reduce((n, m) => n + (m.ready ? 1 : 0), 0);
     return {
       id: lobby.id,
       gateId: lobby.gateId,
-      rank: g ? (g.rank | 0) : (lobby.rank | 0),
+      rank,
       kind: g ? (g.kind || lobby.kind || 'public') : (lobby.kind || 'public'),
+      rally: g ? { x: g.x, y: g.y, z: g.z } : null,
+      rewardXp: Math.round(baseReward.xp * (1 + .25 * Math.max(0, shardPlus))),
+      preview,
       members,
       readyCount,
       needed: members.length,
       leader: lobby.leader || '',
+      advertised: !!lobby.advertised,
+      canAdvertise: !viewerSid || viewerSid === lobby.leader,
     };
+  }
+  handleDungeonPing(client, m) {
+    const p = this.state.players.get(client.sessionId), kind = m && m.kind;
+    if (!p || !p.dgn || !['group', 'boss', 'loot'].includes(kind)) return;
+    if (!this.dungeonPingAt) this.dungeonPingAt = new Map();
+    const now = Date.now(), last = this.dungeonPingAt.get(client.sessionId) || 0;
+    if (now - last < 1500) return;
+    this.dungeonPingAt.set(client.sessionId, now);
+    let x = p.x, y = p.y, z = p.z;
+    if (kind === 'boss') this.state.mobs.forEach(mob => { if (mob.dgn === p.dgn && mob.kind === 'boss' && mob.hp > 0) { x = mob.x; y = mob.y; z = mob.z; } });
+    const payload = { kind, from: p.name || 'Hunter', x, y, z, at: now };
+    for (const sid of this.instances[p.dgn]?.players || []) {
+      const c = this.clients.find(other => other.sessionId === sid);
+      if (c) c.send('dungeonPing', payload);
+    }
   }
   sendDungeonLobby(lobby) {
     if (!lobby) return;
-    const payload = this.dungeonLobbyPayload(lobby);
+    this.broadcastDungeonMatchmaking();
     for (const sid of lobby.members) {
       const c = this.clients.find(cl => cl.sessionId === sid);
-      if (c) c.send('dungeonLobby', payload);
+      if (c) {
+        const p = this.state.players.get(sid), g = this.state.gates.get(lobby.gateId);
+        const payload = this.dungeonLobbyPayload(lobby, sid);
+        payload.youDistance = p && g ? Math.hypot(g.x - p.x, g.z - p.z) : Infinity;
+        payload.canReady = payload.youDistance <= GATE_INTERACT_RANGE;
+        c.send('dungeonLobby', payload);
+      }
     }
+  }
+  dungeonMatchmakingPayload(client) {
+    const p = this.state.players.get(client.sessionId), out = [];
+    if (!p || p.dgn || !this.dungeonLobbies) return out;
+    for (const lobby of this.dungeonLobbies.values()) {
+      if (!lobby.advertised || lobby.members.has(client.sessionId) || lobby.members.size >= 4) continue;
+      const g = this.state.gates.get(lobby.gateId);
+      if (!g || !g.active || !this.canEnterGate(client, g)) continue;
+      const distance = Math.hypot(g.x - p.x, g.z - p.z);
+      if (distance > 120) continue;
+      const leader = this.state.players.get(lobby.leader), preview = lobby.preview || gateEncounterPreview(g);
+      const leaderToken = this.tokens.get(lobby.leader), leaderProfile = leaderToken && this.profiles.get(leaderToken);
+      const leaderReadiness = gateReadinessForProfile(leaderProfile || {}, g.rank);
+      out.push({ gateId: g.id, rank: g.rank | 0, kind: g.kind || 'public', leaderName: leader && leader.name || 'Hunter', leaderRole: gateRoleForProfile(leaderProfile || {}), readiness: leaderReadiness.status, readinessScore: leaderReadiness.score, readinessTotal: leaderReadiness.total, members: lobby.members.size, capacity: 4, distance: Math.round(distance), difficulty: ['Initiate','Dangerous','Severe','Extreme','Cataclysmic'][g.rank | 0], recommendedParty: preview.recommendedParty });
+    }
+    return out.sort((a, b) => a.distance - b.distance).slice(0, 12);
+  }
+  sendDungeonMatchmaking(client) { client.send('dungeonMatchmaking', { listings: this.dungeonMatchmakingPayload(client) }); }
+  broadcastDungeonMatchmaking() { for (const client of this.clients) this.sendDungeonMatchmaking(client); }
+  handleDungeonMatchmakingAdvertise(client, m) {
+    let lobby = null;
+    for (const value of this.dungeonLobbies.values()) if (value.members.has(client.sessionId)) { lobby = value; break; }
+    if (!lobby || lobby.leader !== client.sessionId) return client.send('gateReject', { reason: 'leader' });
+    lobby.advertised = !(m && m.active === false);
+    this.sendDungeonLobby(lobby);
+  }
+  handleDungeonMatchmakingJoin(client, m) {
+    const gateId = m && typeof m.gateId === 'string' ? m.gateId : '';
+    const lobby = this.dungeonLobbies && this.dungeonLobbies.get(gateId), g = this.state.gates.get(gateId), p = this.state.players.get(client.sessionId);
+    if (!lobby || !lobby.advertised || !g || !g.active) return client.send('gateReject', { reason: 'lobby' });
+    if (!p || p.dgn || !this.canEnterGate(client, g)) return client.send('gateReject', { reason: 'locked' });
+    if (Math.hypot(g.x - p.x, g.z - p.z) > 120) return client.send('gateReject', { reason: 'range' });
+    if (lobby.members.size >= 4) return client.send('gateReject', { reason: 'full' });
+    this.leaveDungeonLobby(client.sessionId, false);
+    lobby.members.add(client.sessionId);
+    lobby.ready.delete(client.sessionId);
+    this.sendDungeonLobby(lobby);
   }
   disbandDungeonLobby(gateId, reason = 'cancelled') {
     if (!this.dungeonLobbies) return;
@@ -320,6 +401,7 @@ class DungeonMixin {
       const c = this.clients.find(cl => cl.sessionId === sid);
       if (c) c.send('dungeonLobbyClosed', { gateId, reason });
     }
+    this.broadcastDungeonMatchmaking();
   }
   leaveDungeonLobby(sid, notify = true) {
     if (!this.dungeonLobbies) return;
@@ -331,6 +413,7 @@ class DungeonMixin {
       if (notify && client) client.send('dungeonLobbyClosed', { gateId, reason: 'left' });
       if (!lobby.members.size) {
         this.dungeonLobbies.delete(gateId);
+        this.broadcastDungeonMatchmaking();
         return;
       }
       if (lobby.leader === sid) lobby.leader = [...lobby.members][0] || '';
@@ -472,6 +555,7 @@ class DungeonMixin {
         members: new Set(),
         ready: new Set(),
         createdAt: Date.now(),
+        advertised: false,
       };
       this.dungeonLobbies.set(g.id, lobby);
     }
@@ -490,7 +574,7 @@ class DungeonMixin {
     if (!lobby || !lobby.members.has(client.sessionId)) return client.send('gateReject', { reason: 'lobby' });
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
-    if (!this.canEnterGate(client, g) || Math.hypot(g.x - p.x, g.z - p.z) > 7) {
+    if (!this.canEnterGate(client, g) || Math.hypot(g.x - p.x, g.z - p.z) > GATE_INTERACT_RANGE) {
       this.leaveDungeonLobby(client.sessionId, true);
       return client.send('gateReject', { reason: 'range' });
     }

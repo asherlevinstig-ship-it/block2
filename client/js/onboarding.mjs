@@ -34,24 +34,53 @@ export function onboardingResourceCells(meadow, blocks) {
   return cells;
 }
 
+export function gateMilestoneHandoff(message, earned = true) {
+  const firstClear = message && message.firstClear;
+  if (!earned || !firstClear || (firstClear.rank | 0) !== 1) return null;
+  return {
+    label: 'ADVENTURER LOOP UNLOCKED',
+    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Exit through the return portal, then follow Compass Sense to the Job Board and work toward C-Rank at Level 8.',
+    action: 'TRACK NEXT CONTRACT',
+  };
+}
+
+export function rankPromotionDetails(message) {
+  const rank = Math.max(0, Math.min(5, (message && message.rank) | 0));
+  if (!message || rank <= Math.max(0, (message.fromRank | 0))) return null;
+  const letter = 'EDCBAS'[rank];
+  const gateRank = Math.max(0, Math.min(4, message.gateRank | 0));
+  const nextRankLevel = Math.max(0, message.nextRankLevel | 0);
+  return {
+    rank,
+    letter,
+    title: `${letter}-RANK HUNTER`,
+    gateAccess: `${'EDCBA'[gateRank]}-RANK GATES`,
+    level: Math.max(1, message.level | 0),
+    statPoints: Math.max(0, message.statPoints | 0),
+    next: nextRankLevel
+      ? `${'EDCBAS'[rank + 1]}-Rank begins at Level ${nextRankLevel}`
+      : 'Maximum Hunter rank achieved',
+  };
+}
+
 export function createOnboardingUI(deps) {
   const {
-    rewardWin, rewardPanel, I, ITEMS, HUB,
+    rewardWin, rewardPanel, rankUpWin, rankUpPanel, I, ITEMS, HUB,
     escHTML, rewardLineHTML, countItem, hasAnyArmorItem, toolMaxDur, refreshPlayUi,
     getFocus, getInv, releasePointerLock, restoreLock, clearRewardTimer, sendNet,
   } = deps;
 
-  let firstPromotionSeen = false, firstPromotionShown = false;
+  let firstPromotionSeen = false, firstPromotionShown = false, trainingCompleteShown = false;
 
   function firstPromotionObjective() {
     const focus = getFocus();
-    if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and choose Adventurer' };
-    if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board" };
+    if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and choose Adventurer', target: HUB.jobs };
+    if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board", target: HUB.jobs };
     if (focus === 'first_d_gate') {
       const prep = dRankPrepStatus();
       return { label: 'D-Rank Preparation', text: prep.next.text, checklist: prep.checks };
     }
-    if (focus === 'next_adventurer_contract') return { label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract' };
+    if (focus === 'next_adventurer_contract') return { label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract', target: HUB.jobs };
     return null;
   }
 
@@ -91,6 +120,31 @@ export function createOnboardingUI(deps) {
     let html = '<div class="qt">' + escHTML(obj.label || 'Current Quest') + '</div><div class="qv">' + escHTML(obj.text) + '</div>';
     if (Array.isArray(obj.checklist)) html += '<div class="prepchecklist">' + obj.checklist.map(c => '<div class="' + (c.done ? 'done' : 'todo') + '"><b>' + (c.done ? '&#10003;' : '&#9675;') + '</b>' + escHTML(c.label) + '</div>').join('') + '</div>';
     return html;
+  }
+
+  function showTrainingComplete() {
+    if (!rewardWin || !rewardPanel || trainingCompleteShown) return false;
+    trainingCompleteShown = true;
+    rewardPanel.className = 'earned';
+    rewardPanel.innerHTML =
+      '<h2>TRAINING COMPLETE</h2>' +
+      '<div class="rsub">WELCOME TO THE TOWN OF BEGINNINGS</div>' +
+      '<div class="rewardloot">' +
+        rewardLineHTML({ label: 'Next Contact', value: 'MARA VALE' }) +
+        rewardLineHTML({ label: 'First Assignment', value: 'FIRST HANDS' }) +
+      '</div>' +
+      '<div class="rnote"><b>Your next three steps:</b><br>Follow the green light to Mara, accept your first field quest, then return at Level 2 to awaken your combat path.</div>' +
+      '<button id="trainingcontinue">MEET MARA</button>';
+    rewardWin.classList.remove('hidden');
+    releasePointerLock();
+    clearRewardTimer();
+    const btn = document.getElementById('trainingcontinue');
+    if (btn) btn.onclick = () => {
+      rewardWin.classList.add('hidden');
+      restoreLock();
+      refreshPlayUi();
+    };
+    return true;
   }
 
   function showFieldWorkGraduation() {
@@ -155,9 +209,34 @@ export function createOnboardingUI(deps) {
     return true;
   }
 
+  function showRankPromotion(message) {
+    const details = rankPromotionDetails(message);
+    if (!details || !rankUpWin || !rankUpPanel) return false;
+    rankUpPanel.innerHTML =
+      '<div class="rupill">HUNTER PROMOTION</div>' +
+      '<div class="rurank">' + escHTML(details.letter) + '</div>' +
+      '<h2>' + escHTML(details.title) + '</h2>' +
+      '<div class="rusub">RANK EARNED THROUGH HUNTER XP</div>' +
+      '<div class="rurewards">' +
+        '<div class="rureward"><span>LEVEL REACHED</span><b>LEVEL ' + details.level + '</b></div>' +
+        '<div class="rureward"><span>GATE ACCESS</span><b>' + escHTML(details.gateAccess) + '</b></div>' +
+        '<div class="rureward"><span>STAT POINTS EARNED</span><b>+' + details.statPoints + '</b></div>' +
+      '</div>' +
+      '<div class="runext"><b>Next target:</b> ' + escHTML(details.next) + '.<br>Keep earning Hunter XP from quests, contracts, Gates, events, and hostile threats.</div>' +
+      '<button id="rankupcontinue">CONTINUE</button>';
+    rankUpWin.classList.remove('hidden');
+    releasePointerLock();
+    const btn = document.getElementById('rankupcontinue');
+    if (btn) btn.onclick = () => {
+      rankUpWin.classList.add('hidden');
+      if (!rewardWin || rewardWin.classList.contains('hidden')) restoreLock();
+    };
+    return true;
+  }
+
   return {
     firstPromotionObjective, dRankPrepStatus, objectiveHudHTML,
-    showFieldWorkGraduation, showFirstPromotion,
+    showTrainingComplete, showFieldWorkGraduation, showFirstPromotion, showRankPromotion,
     isSeen: () => firstPromotionSeen,
     setSeen: v => { firstPromotionSeen = v === true; },
   };

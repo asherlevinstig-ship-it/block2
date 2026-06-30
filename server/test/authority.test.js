@@ -367,6 +367,36 @@ test('stat spending is an atomic server transaction', () => {
   assert.equal(client.sent.at(-1).msg.ok, false);
 });
 
+test('crossing an XP rank threshold emits one authoritative promotion', () => {
+  const room = makeRoom(), client = makeClient('rank_up_owner');
+  const { prof } = seedPlayer(room, client, { lvl: 3 });
+  prof.S.xp = room.xpNeed(3) - 10;
+
+  const result = room.grantHunterXp(prof, 10, client, 'town_quest');
+  assert.deepEqual(result, { granted: 10, levels: 1, rankUp: true, fromRank: 0, rank: 1 });
+  assert.equal(prof.S.lvl, 4);
+  assert.equal(prof.S.pts, 3);
+  assert.deepEqual(client.sent.at(-1), {
+    type: 'rankUp',
+    msg: {
+      fromRank: 0,
+      rank: 1,
+      rankName: 'D-Rank Hunter',
+      gateRank: 1,
+      gateRankName: 'D-Rank Gates',
+      level: 4,
+      levels: 1,
+      statPoints: 3,
+      nextRankLevel: 8,
+      source: 'town_quest',
+    },
+  });
+
+  client.sent.length = 0;
+  assert.equal(room.grantHunterXp(prof, 1, client, 'town_quest').rankUp, false);
+  assert.equal(client.sent.some(message => message.type === 'rankUp'), false);
+});
+
 test('jobs and repeatable contracts are created progressed and claimed only by the server', () => {
   const room = makeRoom(), client = makeClient('job_owner');
   const { prof } = seedPlayer(room, client);
@@ -585,6 +615,24 @@ test('utility loadout can equip only server-earned utilities', () => {
   });
   assert.deepEqual(merged.utilityUnlocks, ['compass', 'minimap']);
   assert.deepEqual(merged.utilityLoadout, { active: '', passive: ['compass'] });
+});
+
+test('new utilities auto-equip into a free passive slot without replacing the player loadout', () => {
+  const room = makeRoom(), client = makeClient('utility_owner');
+  const { prof } = seedPlayer(room, client);
+  prof.utilityUnlocks = ['minimap', 'feather_step'];
+  prof.utilityLoadout = { active: '', passive: ['minimap', 'feather_step'] };
+
+  assert.equal(room.unlockUtility(client, 'compass', 'Navigation ready'), true);
+  assert.deepEqual(prof.utilityLoadout, { active: '', passive: ['minimap', 'feather_step', 'compass'] });
+  assert.deepEqual(client.sent.slice(-2), [
+    { type: 'utilityUnlock', msg: { id: 'compass', reason: 'Navigation ready', equipped: true } },
+    { type: 'utilityLoadout', msg: { active: '', passive: ['minimap', 'feather_step', 'compass'] } },
+  ]);
+
+  assert.equal(room.unlockUtility(client, 'party_compass', 'Team ready'), true);
+  assert.deepEqual(prof.utilityLoadout.passive, ['minimap', 'feather_step', 'compass']);
+  assert.equal(client.sent.at(-2).msg.equipped, false);
 });
 
 test('profile merge rejects client-created profession contracts', () => {
@@ -1362,6 +1410,7 @@ test('rate limiter allows a burst then throttles, isolating buckets and clients'
   const room = makeRoom();
   const a = makeClient('a');
   const b = makeClient('b');
+  room.clients = [a, b];
 
   // a fresh bucket starts full: `burst` calls pass, the next is throttled.
   let allowed = 0;
@@ -1391,7 +1440,7 @@ test('throttled mutating handlers reject instead of mutating', () => {
   client.sent.length = 0;
   room.handleShop(client, { action: 'buy', id: W.B.TORCH });
   assert.equal(prof.gold, goldBefore, 'throttled buy spends no gold');
-  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rate' } });
+  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rate', vendor: 'market' } });
 });
 
 test('shop buy transaction spends server gold and grants catalog items', () => {
@@ -2672,6 +2721,8 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   assert.equal(p.dgn, '');
   assert.equal(room.dungeonLobbies.get('g-high').members.has(client.sessionId), true);
   assert.equal(client.sent.at(-1).type, 'dungeonLobby');
+  assert.equal(client.sent.at(-1).msg.rewardXp, 813, 'Gate lobby previews the exact boss XP reward');
+  assert.deepEqual(client.sent.at(-1).msg.rally, { x: 20.5, y: 16, z: 20.5 });
 
   room.handleDungeonLobbyReady(client, { gateId: 'g-high', ready: true });
 
@@ -2702,6 +2753,42 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   assert.equal(resumedStatus.id, 'g-high');
   assert.equal(resumedStatus.party.length, 1);
   assert.equal(resumedStatus.cleared, false);
+});
+
+test('communication safety data sanitizes display names and persists account blocks', () => {
+  const profile = sanitizeProfile({ name: '<Bad! Name>✨', mutedPlayers: ['target_token_123', 'target_token_123', '../bad'] });
+  assert.equal(profile.name, 'Bad Name');
+  assert.deepEqual(profile.mutedPlayers, ['target_token_123']);
+  assert.deepEqual(defaultProfile('Safe_Name-2').mutedPlayers, []);
+});
+
+test('Gate matchmaking advertises nearby eligible parties and joins without bypassing readiness range', () => {
+  const room = makeRoom();
+  const gate = makeGate('g-match', 20.5, 20.5, 0);
+  room.state.gate = gate;
+  room.state.gates = new Map([[gate.id, gate]]);
+  const leader = makeClient('match-leader'), hunter = makeClient('match-hunter');
+  room.clients.push(leader, hunter);
+  seedPlayer(room, leader, { x: 20.5, z: 20.5, lvl: 3, inv: [{ id: I.WOOD_SWORD, count: 1 }] });
+  seedPlayer(room, hunter, { x: 45.5, z: 20.5, lvl: 3, inv: [{ id: I.WOOD_SWORD, count: 1 }] });
+
+  room.enterGate(leader, { id: gate.id });
+  room.handleDungeonMatchmakingAdvertise(leader, { active: true });
+
+  const listing = hunter.sent.filter(e => e.type === 'dungeonMatchmaking').at(-1).msg.listings[0];
+  assert.equal(listing.gateId, gate.id);
+  assert.equal(listing.leaderName, 'Tester');
+  assert.equal(listing.members, 1);
+  assert.equal(listing.distance, 25);
+  assert.equal(listing.leaderRole, 'Striker');
+
+  room.handleDungeonMatchmakingJoin(hunter, { gateId: gate.id });
+  const lobby = room.dungeonLobbies.get(gate.id);
+  assert.equal(lobby.members.has(hunter.sessionId), true);
+  const joined = hunter.sent.filter(e => e.type === 'dungeonLobby').at(-1).msg;
+  assert.equal(joined.canReady, false);
+  assert.equal(joined.advertised, true);
+  assert.deepEqual(joined.rally, { x: 20.5, y: 16, z: 20.5 });
 });
 
 test('the tavern sells deterministic Gate food bundles only to nearby hunters', () => {
@@ -3121,14 +3208,14 @@ test('key tiers require the matching Hunter rank earned through XP', () => {
   });
 
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
-  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rank' } });
+  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rank', vendor: 'market' } });
 
   room.handleUseGateKey(client, { slot: 0 });
   assert.deepEqual(client.sent.at(-1), { type: 'gateKeyReject', msg: { reason: 'rank' } });
 
   prof.highestGateRankCleared = 0;
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
-  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rank' } }, 'an E clear does not promote the player');
+  assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rank', vendor: 'market' } }, 'an E clear does not promote the player');
 
   prof.S.lvl = 4;
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
@@ -3456,6 +3543,7 @@ test('dungeon status reports rank type party boss and remaining chests', () => {
   const room = makeRoom();
   const a = makeClient('a');
   const b = makeClient('b');
+  room.clients = [a, b];
   seedPlayer(room, a, { name: 'Alice', token: 'alice_token_123', dgn: 'g5', lvl: 3, team: 'T1' });
   seedPlayer(room, b, { name: 'Bob', token: 'bobbb_token_123', dgn: 'g5', lvl: 2, team: 'T1' });
   putInstance(room, { id: 'g5', rank: 2, kind: 'team', players: ['a', 'b'], lootChestTotal: 3 });
@@ -3467,9 +3555,17 @@ test('dungeon status reports rank type party boss and remaining chests', () => {
   assert.equal(status.rank, 2);
   assert.equal(status.kind, 'team');
   assert.deepEqual(status.party.map(p => p.name), ['Alice', 'Bob']);
+  assert.deepEqual(status.party.map(p => p.sid), ['a', 'b']);
+  assert.equal(status.party.every(p => p.maxHp > 0 && typeof p.role === 'string'), true);
   assert.equal(status.bossAlive, true);
   assert.equal(status.cleared, false);
   assert.equal(status.remainingChests, 2);
+
+  room.handleDungeonPing(a, { kind: 'group' });
+  const ping = b.sent.find(e => e.type === 'dungeonPing');
+  assert.equal(ping.msg.kind, 'group');
+  assert.equal(ping.msg.from, 'Alice');
+  assert.equal(Number.isFinite(ping.msg.x), true);
 });
 
 test('public gate placement uses deeper distance bands by rank', () => {
@@ -3568,6 +3664,8 @@ test('parkour server event queues teleports protects course and grants completio
   assert.equal(room.serverEvent.phase, 'queue');
   assert.equal(room.eventInstances.has(room.serverEvent.id), true);
   assert.equal(client.sent.some(e => e.type === 'eventStatus' && e.msg.phase === 'queue'), true);
+  assert.equal(client.sent.find(e => e.type === 'eventStatus' && e.msg.phase === 'queue').msg.rewardXp, 70,
+    'event queue previews the same Hunter XP awarded on completion');
 
   room.handleEventJoin(client);
   assert.equal(room.serverEvent.queue.has(client.sessionId), true);
@@ -3597,7 +3695,7 @@ test('parkour server event queues teleports protects course and grants completio
   room.tickServerEvent(Date.now());
 
   assert.equal(itemCount(prof, I.LEGEND_TOKEN), 2);
-  assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'event' && e.msg.items[0].id === I.LEGEND_TOKEN && e.msg.items[0].count === 2), true);
+  assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'event' && e.msg.xp === 70 && e.msg.items[0].id === I.LEGEND_TOKEN && e.msg.items[0].count === 2), true);
   assert.equal(client.sent.some(e => e.type === 'eventComplete'), true);
   const completeMsg = client.sent.find(e => e.type === 'eventComplete');
   assert.equal(completeMsg.msg.leaderboard.length, 1);
@@ -4309,12 +4407,12 @@ test('guild reception sells decor only to fellowships with claimed floors', () =
   const bad = seedPlayer(room, stranger, { ...pos, token: 'stranger_token_123', name: 'Stranger', gold: 1000 });
 
   room.handleShop(stranger, { action: 'buy', vendor: 'guild', id: W.B.LANTERN });
-  assert.deepEqual(stranger.sent.at(-1), { type: 'shopReject', msg: { reason: 'guild_floor' } });
+  assert.deepEqual(stranger.sent.at(-1), { type: 'shopReject', msg: { reason: 'guild_floor', vendor: 'guild' } });
   assert.equal(bad.prof.gold, 1000);
 
   room.handleGuildCreate(leader, { name: 'Hall Makers' });
   room.handleShop(leader, { action: 'buy', vendor: 'guild', id: W.B.LANTERN });
-  assert.deepEqual(leader.sent.at(-1), { type: 'shopReject', msg: { reason: 'guild_floor' } });
+  assert.deepEqual(leader.sent.at(-1), { type: 'shopReject', msg: { reason: 'guild_floor', vendor: 'guild' } });
 
   room.handleGuildFloorBuy(leader);
   room.handleShop(leader, { action: 'buy', vendor: 'guild', id: W.B.LANTERN });
