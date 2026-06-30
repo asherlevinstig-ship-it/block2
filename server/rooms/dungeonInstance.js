@@ -27,6 +27,8 @@ class DungeonInstance {
     this.cleared = false;
     this.kind = g.kind || 'public';
     this.bossRoom = { x: d.bossRoom.x, z: d.bossRoom.z };
+    // entry room — where a DungeonRoom spawns a joining hunter (falls back to the boss room)
+    this.entrance = d.entrance ? { x: d.entrance.x, z: d.entrance.z } : { x: this.bossRoom.x, z: this.bossRoom.z };
     this.lootChestTotal = 0;          // set by the room after construction (needs a chest count)
     this.shardPlus = g.shardPlus | 0;
     this.shardName = g.shardName || '';

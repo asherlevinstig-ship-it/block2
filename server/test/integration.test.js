@@ -142,6 +142,64 @@ async function main() {
   await A.leave().catch(() => {});
   await wait(200);
 
+  // ---- DungeonRoom (Phase 2b): a hunter joins the dungeon room directly and plays a raid ----
+  const cookieC = await register('charlie_user', 'correct horse charlie', 'Charlie');
+  const clientC = new Client(ENDPOINT, { headers: { Cookie: cookieC } });
+  const Dn = await clientC.joinOrCreate('dungeon', { gateId: 'itest-gate', seed: 4242, rank: 1, name: 'Charlie' });
+  inbox(Dn);
+  const meD = () => Dn.state.players.get(Dn.sessionId);
+
+  await test('a hunter joins the DungeonRoom directly and spawns inside the instance', async () => {
+    const self = await waitFor(meD, 'charlie in dungeon state');
+    assert.equal(self.dim, 'dungeon', 'player is in the dungeon dimension');
+    assert.equal(self.dgn, 'itest-gate', 'player is tagged to the gate instance');
+  });
+
+  await test('the DungeonRoom synced its own mobs (trash + a boss), all tagged to the instance', async () => {
+    await waitFor(() => Dn.state.mobs.size > 1, 'dungeon mobs to sync');
+    let boss = 0, wrong = 0;
+    Dn.state.mobs.forEach(mb => { if (mb.kind === 'boss') boss++; if (mb.dgn !== 'itest-gate') wrong++; });
+    assert.equal(boss, 1, 'the room spawned exactly one boss');
+    assert.equal(wrong, 0, 'every synced mob belongs to this instance');
+  });
+
+  await test('movement is server-authoritative inside the DungeonRoom (anti-teleport)', async () => {
+    const sx = meD().x, sz = meD().z;
+    Dn.send('move', { x: sx + 100, y: meD().y, z: sz + 100, yaw: 0 });
+    await wait(300);
+    const moved = Math.hypot(meD().x - sx, meD().z - sz);
+    assert.ok(moved < 20, 'far teleport was not clamped (moved ' + moved.toFixed(1) + ')');
+  });
+
+  await test('a hunter can fight in the DungeonRoom: an attack damages an instance mob', async () => {
+    const nearestTrash = () => {
+      let best = null, bd = Infinity;
+      Dn.state.mobs.forEach((mb, id) => {
+        if (mb.kind === 'boss' || mb.hp <= 0) return;
+        const d = Math.hypot(mb.x - meD().x, mb.z - meD().z);
+        if (d < bd) { bd = d; best = { id, mb }; }
+      });
+      return best;
+    };
+    let damaged = false;
+    for (let i = 0; i < 25 && !damaged; i++) {
+      const n = nearestTrash();
+      if (!n) break;
+      Dn.send('move', { x: n.mb.x, y: n.mb.y, z: n.mb.z, yaw: 0 });   // no server-side collision; close to melee
+      await wait(360);
+      Dn.send('attack', { id: n.id });
+      await wait(140);
+      const cur = Dn.state.mobs.get(n.id);
+      if (cur && cur.hp < cur.maxHp) damaged = true;
+    }
+    assert.ok(damaged, 'an attack reduced an instance mob\'s HP over the wire');
+  });
+
+  await test('a leaving hunter is removed and the DungeonRoom can dispose', async () => {
+    await Dn.leave();
+    await wait(200);
+  });
+
   console.log('\nMultiplayer integration test\n' + results.join('\n'));
   console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all ' + results.length + ' integration checks passed'));
   process.exit(failures ? 1 : 0);

@@ -508,6 +508,11 @@ test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate'
   assert.equal(prof.activeNpcQuest.levelTarget, 3);
   assert.equal(itemCount(prof, I.WOOD_SWORD), 1, 'Mara gives a wooden sword when Road Ready begins');
   assert.equal(prof.maraRoadReadySwordGranted, true);
+  assert.deepEqual(
+    client.sent.filter(message => message.type === 'npcQuest').at(-1).msg.grantedItems,
+    [{ id: I.WOOD_SWORD, count: 1 }],
+    'Road Ready explicitly tells the client which starter weapon Mara granted',
+  );
   room.handleNpcQuest(client, { action: 'abandon' });
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(itemCount(prof, I.WOOD_SWORD), 1, 're-accepting Road Ready cannot duplicate the starter sword');
@@ -2699,17 +2704,23 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   assert.equal(resumedStatus.cleared, false);
 });
 
-test('the tavern sells deterministic Gate food only to nearby hunters', () => {
+test('the tavern sells deterministic Gate food bundles only to nearby hunters', () => {
   const room = makeRoom(), client = makeClient('travel_food_buyer');
-  const { prof } = seedPlayer(room, client, { gold: 30 });
+  const { prof } = seedPlayer(room, client, { gold: 60 });
   room.handleShop(client, { action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT });
-  assert.equal(prof.gold, 30);
+  assert.equal(prof.gold, 60);
   assert.equal(client.sent.at(-1).msg.reason, 'range');
   const p = room.state.players.get(client.sessionId);
   p.x = W.TOWN.TC + 19.5; p.z = W.TOWN.TC + 13.5;
   room.handleShop(client, { action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT });
-  assert.equal(prof.gold, 22);
+  assert.equal(prof.gold, 52);
   assert.equal(itemCount(prof, I.COOKED_MEAT), 1);
+  room.handleShop(client, { action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT, count: 3 });
+  assert.equal(prof.gold, 28);
+  assert.equal(itemCount(prof, I.COOKED_MEAT), 4);
+  assert.deepEqual(client.sent.at(-1).msg, {
+    action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT, count: 3, gold: -24,
+  });
 });
 
 test('tutorial milestones are server-owned and legacy progressed hunters migrate as complete', () => {

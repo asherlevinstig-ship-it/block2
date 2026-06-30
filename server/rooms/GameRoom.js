@@ -191,36 +191,7 @@ class GameRoom extends Room {
     this.animalSpawnAcc = 0;
 
     // ---- message handlers ----
-    this.onMessage('move', (client, m) => {
-      const p = this.state.players.get(client.sessionId);
-      if (!p || !m) return;
-      const nx = clampN(m.x, 0, W.WX), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, 0, W.WX);
-      const now = Date.now();
-      const last = this.lastMoveMsg.get(client.sessionId) || now;
-      const dt = Math.max(0.05, Math.min(0.5, (now - last) / 1000));
-      this.lastMoveMsg.set(client.sessionId, now);
-      const dx = nx - p.x, dz = nz - p.z;
-      const hd = Math.hypot(dx, dz);
-      // mounted players move faster, so the anti-teleport clamp is loosened to match
-      const mounted = !!p.mount;
-      const maxStep = (mounted ? 20 : 12) * dt + 1.25;
-      const velCap = mounted ? 16 : 9;
-      let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
-      let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
-      const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
-      const borderMax = W.WX - W.LAVA_BORDER_WIDTH - 1.35;
-      sx = clampN(sx, borderMin, borderMax);
-      sz = clampN(sz, borderMin, borderMax);
-      const dy = ny - p.y;
-      const maxYStep = 18 * dt + 2.5;
-      const sy = Math.abs(dy) > maxYStep ? p.y + Math.sign(dy) * maxYStep : ny;
-      this.pvel.set(client.sessionId, {
-        x: Math.max(-velCap, Math.min(velCap, (sx - p.x) / dt)),
-        z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
-      });
-      p.x = sx; p.y = sy; p.z = sz;
-      p.yaw = clampN(m.yaw, -10, 10);
-    });
+    this.onMessage('move', (client, m) => this.handleMove(client, m));
 
     this.onMessage('mount', (client, m) => this.handleMount(client, m));
     this.onMessage('dismount', (client) => this.handleDismount(client));
@@ -2362,6 +2333,62 @@ class GameRoom extends Room {
     if (night) this.tickLocalHostileSpawns(dt, surfaceClusters);
 
     // ---- projectiles (3 substeps for dodgeable flight) ----
+    this.stepProjectiles(dt, spaces);
+
+    // ---- mob brains: overworld inline, each live dungeon via its instance.tick() ----
+    const mobsByDgn = {};
+    this.state.mobs.forEach((mm, mid) => { (mobsByDgn[mm.dgn || ''] = mobsByDgn[mm.dgn || ''] || []).push(mid); });
+    for (const oid of mobsByDgn[''] || []) {
+      const om = this.state.mobs.get(oid); if (!om) continue;
+      const ometa = this.mobMeta[oid]; if (!ometa) continue;
+      this.simulateMob(om, oid, ometa, dt, spaces);
+    }
+    // snapshot keys: a hazard wipe can delete the instance mid-iteration
+    for (const gid of Object.keys(this.instances)) {
+      const inst = this.instances[gid];
+      if (inst) inst.tick(this, dt, spaces, mobsByDgn[gid] || []);
+    }
+    this.tickGateLifecycle(dt, surface);
+  }
+
+  // Server-authoritative player movement: anti-teleport step clamp + velocity cap (used for
+  // skeleton lead). Shared by GameRoom and DungeonRoom so a player moves identically in either.
+  handleMove(client, m) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !m) return;
+    const nx = clampN(m.x, 0, W.WX), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, 0, W.WX);
+    const now = Date.now();
+    const last = this.lastMoveMsg.get(client.sessionId) || now;
+    const dt = Math.max(0.05, Math.min(0.5, (now - last) / 1000));
+    this.lastMoveMsg.set(client.sessionId, now);
+    const dx = nx - p.x, dz = nz - p.z;
+    const hd = Math.hypot(dx, dz);
+    // mounted players move faster, so the anti-teleport clamp is loosened to match
+    const mounted = !!p.mount;
+    const maxStep = (mounted ? 20 : 12) * dt + 1.25;
+    const velCap = mounted ? 16 : 9;
+    let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
+    let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
+    const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
+    const borderMax = W.WX - W.LAVA_BORDER_WIDTH - 1.35;
+    sx = clampN(sx, borderMin, borderMax);
+    sz = clampN(sz, borderMin, borderMax);
+    const dy = ny - p.y;
+    const maxYStep = 18 * dt + 2.5;
+    const sy = Math.abs(dy) > maxYStep ? p.y + Math.sign(dy) * maxYStep : ny;
+    this.pvel.set(client.sessionId, {
+      x: Math.max(-velCap, Math.min(velCap, (sx - p.x) / dt)),
+      z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
+    });
+    p.x = sx; p.y = sy; p.z = sz;
+    p.yaw = clampN(m.yaw, -10, 10);
+  }
+
+  // Step all in-flight projectiles (ability fireballs, legendary meteors, skeleton/bolt arrows)
+  // for one tick, 3 substeps each so they stay dodgeable. Every projectile is dgn-scoped, so this
+  // runs identically for the overworld (GameRoom) and a single dungeon (DungeonRoom). `spaces`
+  // maps dgn -> [{p,sid}] players, as built by the caller's update().
+  stepProjectiles(dt, spaces) {
     for (let i = this.sFireballs.length - 1; i >= 0; i--) {
       const f = this.sFireballs[i];
       f.life -= dt;
@@ -2416,21 +2443,6 @@ class GameRoom extends Room {
       }
       if (done) this.sArrows.splice(i, 1);
     }
-
-    // ---- mob brains: overworld inline, each live dungeon via its instance.tick() ----
-    const mobsByDgn = {};
-    this.state.mobs.forEach((mm, mid) => { (mobsByDgn[mm.dgn || ''] = mobsByDgn[mm.dgn || ''] || []).push(mid); });
-    for (const oid of mobsByDgn[''] || []) {
-      const om = this.state.mobs.get(oid); if (!om) continue;
-      const ometa = this.mobMeta[oid]; if (!ometa) continue;
-      this.simulateMob(om, oid, ometa, dt, spaces);
-    }
-    // snapshot keys: a hazard wipe can delete the instance mid-iteration
-    for (const gid of Object.keys(this.instances)) {
-      const inst = this.instances[gid];
-      if (inst) inst.tick(this, dt, spaces, mobsByDgn[gid] || []);
-    }
-    this.tickGateLifecycle(dt, surface);
   }
 
   // Per-mob AI brain for one mob (overworld or dungeon). Extracted verbatim from the update()
