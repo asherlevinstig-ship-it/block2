@@ -59,6 +59,11 @@ class DungeonRoom extends GameRoom {
       seed: (options.seed | 0) || 1,
       rank: options.rank | 0,
       kind: options.kind || 'public',
+      // gate world coords so gateEntryPayload's back-position (bx/by/bz) returns the hunter to
+      // the overworld gate on exit; the client passes these from the gate it entered.
+      x: Number.isFinite(options.gateX) ? options.gateX : 0,
+      y: Number.isFinite(options.gateY) ? options.gateY : 0,
+      z: Number.isFinite(options.gateZ) ? options.gateZ : 0,
       shardPlus: options.shardPlus | 0,
       shardName: options.shardName || '',
       shardMods: options.shardMods || '',

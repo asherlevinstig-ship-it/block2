@@ -1617,8 +1617,28 @@ function spawnDungeonMob(x,z,boss,ri){
   scene.add(m.grp);
   mobs.push(m);
 }
+// DungeonRoom 2c-i: opt-in flag (off by default) to route gate entry through a real `dungeon`
+// Colyseus room instead of the in-room instance. Enable with ?dungeonRoom or bc_dungeon_room=1.
+const USE_DUNGEON_ROOM=(()=>{ try{ return new URLSearchParams(location.search).has('dungeonRoom')||localStorage.getItem('bc_dungeon_room')==='1'; }catch(e){ return false; } })();
+// Clear the room-specific synced entities (remote hunters + their net mobs) before swapping the
+// live connection between the overworld `blockcraft` room and a `dungeon` room, so the destination
+// room's state.onAdd rebuilds cleanly. beginDungeon handles gates + non-net mobs on arrival.
+function clearRoomEntitiesForSwitch(){
+  for(const sid in NET.remotes) netRemoveRemote(sid);
+  for(let i=mobs.length-1;i>=0;i--) if(mobs[i].net) removeMob(i);
+}
 function enterDungeon(){
   if(NET.on){
+    if(USE_DUNGEON_ROOM && gate && gate.id && NETWORK.switchRoom){
+      clearRoomEntitiesForSwitch();
+      NETWORK.switchRoom('dungeon', {
+        gateId:gate.id, seed:(gate.seed>>>0)||0, rank:gate.rank|0, kind:gate.kind||'public',
+        gateX:gate.x, gateY:gate.y, gateZ:gate.z,
+        shardPlus:(gate.shard&&gate.shard.plus)|0, shardName:(gate.shard&&gate.shard.name)||'',
+        shardMods:(gate.shard&&gate.shard.mods&&gate.shard.mods.join(','))||'',
+      });
+      return;
+    }
     NET.room.send('enterGate', { id: gate && gate.id || '' });
     return;
   }
@@ -1671,7 +1691,11 @@ function exitDungeon(instant){
     clearDungeonDecor();
     if(!dungeon.cleared) sysMsg('You <b>fled</b> the gate');
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
-    if(NET.on && NET.dgn){ NET.room.send('exitGate'); NET.dgn=''; }
+    if(NET.on && NET.dgn){
+      if(USE_DUNGEON_ROOM && NET.roomName==='dungeon' && NETWORK.returnToPrimary){
+        clearRoomEntitiesForSwitch(); NETWORK.returnToPrimary(); NET.dgn='';
+      } else { NET.room.send('exitGate'); NET.dgn=''; }
+    }
     if(exitPortal){ scene.remove(exitPortal); exitPortal=null; }
     world=owWorld; dim='overworld';
     netFlushPending();
