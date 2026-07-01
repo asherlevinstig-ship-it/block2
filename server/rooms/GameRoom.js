@@ -8,13 +8,7 @@ const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
-const QUICK_CHAT = Object.freeze({
-  hello:'Hello!', follow:'Follow me.', wait:'Wait a moment.', thanks:'Thanks!', good_job:'Good job!', yes:'Yes.', no:'No.',
-  gate_ready:'Ready for the Gate?', gate_need_one:'We need one more hunter.', gate_enter:'Enter now.',
-  dungeon_group:'Group up.', dungeon_boss:'Focus the boss!', dungeon_loot:'Loot here.', dungeon_retreat:'Retreat!',
-  town_trade:'Trading at the market.', town_repairs:'I need repairs.', town_work:'Looking for work.',
-  danger_help:'Help me!', danger_run:'Run!', danger_safe:'It is safe now.',
-});
+const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -250,6 +244,7 @@ class GameRoom extends Room {
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
     this.onMessage('attack', (client, m) => this.handleAttack(client, m));
+    this.onMessage('banditSpare', (client, m) => this.handleBanditSpare(client, m));
     this.onMessage('eventHit', (client, m) => this.handleEventHit(client, m));
     this.onMessage('requestAegisBounty', (client) => this.handleRequestAegisBounty(client));
     this.onMessage('pvpBountyHit', (client, m) => this.handlePvpBountyHit(client, m));
@@ -353,8 +348,8 @@ class GameRoom extends Room {
       const mode = ['local', 'party', 'whisper'].includes(m.mode) ? m.mode : 'local';
       if (!text) return client.send('commsReject', { reason: 'phrase' });
       const now = Date.now(), signature = mode + ':' + String(m.target || '') + ':' + m.phrase;
-      if (now - (client._lastCommsAt || 0) < 250) return client.send('commsReject', { reason: 'rate' });
-      if (client._lastCommsSignature === signature && now - (client._lastCommsSignatureAt || 0) < 2000) return client.send('commsReject', { reason: 'duplicate' });
+      if (now - (client._lastCommsAt || 0) < COMMS_RULES.rapidCooldownMs) return client.send('commsReject', { reason: 'rate' });
+      if (client._lastCommsSignature === signature && now - (client._lastCommsSignatureAt || 0) < COMMS_RULES.duplicateCooldownMs) return client.send('commsReject', { reason: 'duplicate' });
       client._lastCommsAt = now; client._lastCommsSignature = signature; client._lastCommsSignatureAt = now;
       const senderToken = this.tokens.get(client.sessionId) || '';
       this.recentApprovedComms.push({ at: now, from: senderToken, phrase: m.phrase, mode });
@@ -379,7 +374,7 @@ class GameRoom extends Room {
       }
       for (const c of this.clients) {
         const q = this.state.players.get(c.sessionId);
-        if (q && (q.dim || 'overworld') === (p.dim || 'overworld') && (q.dgn || '') === (p.dgn || '') && Math.hypot(q.x - p.x, q.z - p.z) <= 48) send(c);
+        if (q && (q.dim || 'overworld') === (p.dim || 'overworld') && (q.dgn || '') === (p.dgn || '') && Math.hypot(q.x - p.x, q.z - p.z) <= COMMS_RULES.localRange) send(c);
       }
     });
     this.onMessage('commsMute', (client, m) => {
@@ -400,9 +395,9 @@ class GameRoom extends Room {
       const target = this.clients.find(other => other.sessionId === (m && m.target));
       const reporter = this.tokens.get(client.sessionId), reported = target && this.tokens.get(target.sessionId);
       if (!reporter || !reported || reporter === reported) return client.send('commsReportResult', { ok: false });
-      const now = Date.now(), duplicate = this.moderationReports.some(r => r.reporter === reporter && r.reported === reported && now - r.at < 3600000);
+      const now = Date.now(), duplicate = this.moderationReports.some(r => r.reporter === reporter && r.reported === reported && now - r.at < COMMS_RULES.reportCooldownMs);
       if (duplicate) return client.send('commsReportResult', { ok: false, reason: 'rate' });
-      const history = this.recentApprovedComms.filter(entry => entry.from === reported && now - entry.at < 300000).slice(-12).map(entry => ({ at: entry.at, phrase: entry.phrase, mode: entry.mode }));
+      const history = this.recentApprovedComms.filter(entry => entry.from === reported && now - entry.at < COMMS_RULES.reportHistoryMs).slice(-12).map(entry => ({ at: entry.at, phrase: entry.phrase, mode: entry.mode }));
       const record = { id: 'report_' + now.toString(36) + '_' + this.moderationReports.length, at: now, reporter, reported, reportedName: this.state.players.get(target.sessionId)?.name || 'Hunter', history };
       this.moderationReports.push(record); if (this.moderationReports.length > 500) this.moderationReports.shift();
       console.warn('[moderation]', JSON.stringify(record));
@@ -425,6 +420,7 @@ class GameRoom extends Room {
     this.onMessage('farm', (client, m) => this.handleFarm(client, m));
     this.onMessage('eventJoin', (client) => this.handleEventJoin(client));
     this.onMessage('eventLeave', (client) => this.handleEventLeave(client));
+    this.onMessage('eventReady', (client) => this.handleEventReady(client));
     this.onMessage('eventDebugStart', (client) => this.handleEventDebugStart(client));
     this.onMessage('chestOpen', (client, m) => this.handleChestOpen(client, m));
     this.onMessage('chestDeposit', (client, m) => this.handleChestDeposit(client, m));
@@ -1023,6 +1019,18 @@ class GameRoom extends Room {
       this.finishMobKill(client, bossId, boss);
       client.send('e2eJourneyResult', { action, requestId, ok: true });
       return true;
+    }
+    if (action === 'expireOwnedGate') {
+      // Test-only cleanup: the DungeonRoom 2c-i flag-gated entry path (client-side switchRoom)
+      // never notifies this room, so a gate entered that way is never consumed/expired like a
+      // normal enterGate would — it otherwise lingers active (up to its TTL) and can leak into
+      // an unrelated test's "find the first gate" query against this shared world.
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const g = this.state.gates.get(String(m && m.gateId || ''));
+      const ok = !!(g && g.owner === rec.token);
+      if (ok) this.expireGate(g.id);
+      client.send('e2eJourneyResult', { action, requestId, ok });
+      return ok;
     }
     const q = rec.prof.activeNpcQuest;
     if (!rec || !q || q.giver !== 'Mara Vale') return false;
@@ -1938,6 +1946,11 @@ class GameRoom extends Room {
       desc: 'Visit a traveling merchant and confirm the road is still open.',
       ...mkReward(merchant, 38, 22), acceptedAt: 0, seed: bucket,
     });
+    const banditCamp=this.pickContractTarget(landmarks.filter(s=>s.type==='bandit_camp'),bucket,79);
+    if(banditCamp)offers.push({id:'regional_'+bucket+'_roadcamp_'+banditCamp.id,type:'road_clear_camp',targetId:banditCamp.id,targetType:'bandit_camp',targetName:banditCamp.name,need:1,have:0,title:'Road Warden: Break the Camp',desc:'Clear the named bandit camp and defeat its captain.',...mkReward(banditCamp,78,54),acceptedAt:0,seed:bucket});
+    const roadType=['road_escort','road_rescue','road_recover','road_spare','road_roles'][bucket%5];
+    const roadText={road_escort:['Safe Arrival','Escort a caravan safely to its destination.'],road_rescue:['Roadside Rescue','Defeat a patrol threatening a merchant caravan.'],road_recover:['Stolen Manifest','Recover supplies carried to a bandit camp.'],road_spare:['Mercy with Teeth','Spare one surrendered bandit and recover their stolen goods.'],road_roles:['Know the Enemy','Defeat three specialist bandits.']}[roadType];
+    offers.push({id:'regional_'+bucket+'_'+roadType,type:roadType,targetId:'',targetType:'road_warden',targetName:'Regional Roads',need:roadType==='road_roles'?2:1,have:0,title:'Road Warden: '+roadText[0],desc:roadText[1],rewardGold:72,rewardXp:Math.max(48,hunterXpForActivity(level,'guild_contract')),rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:0,seed:bucket});
     return offers;
   }
   publicRegionalContract(c) {
@@ -2005,10 +2018,14 @@ class GameRoom extends Room {
     for (const it of rewardItems) this.addRewardItem(rec.prof, it.id, it.count);
     const done = this.publicRegionalContract(c);
     rec.prof.regionalContract = null;
+    if(String(c.type||'').startsWith('road_')){
+      rec.prof.roadWardenRep=Math.min(9999,(rec.prof.roadWardenRep|0)+1);
+      if(rec.prof.roadWardenRep>=3)this.unlockUtility(client,'trail_sense','Road Warden reputation III');
+    }
     this.unlockUtility(client, 'compass', 'Guild contract complete');
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
-    client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems });
+    client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems, roadWardenRep: rec.prof.roadWardenRep | 0 });
     client.send('profile', rec.prof);
     this.sendRegionalContracts(client);
   }
@@ -2438,13 +2455,19 @@ class GameRoom extends Room {
 
     if (dayF > 0.5) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
     }
     const surfaceClusters = this.surfaceDensityClusters(surface);
     this.cleanupFarOverworldMobs(surfaceClusters);
     this.maintainEliteCamps(dt, surfaceClusters);
     this.maintainDiscoveryNests(dt, surfaceClusters);
+    if (dayF > .35) this.maintainBanditCamps(dt, surfaceClusters);
+    else {
+      const gone=[];this.state.mobs.forEach((m,id)=>{if(!m.dgn&&this.mobMeta[id]&&this.mobMeta[id].bandit)gone.push(id);});
+      for(const id of gone){this.state.mobs.delete(id);delete this.mobMeta[id];}
+    }
+    this.tickRoadCaravans(dt, dayF > .35);
     this.tickLocalAnimalSpawns(dt, surfaceClusters);
     if (night) this.tickLocalHostileSpawns(dt, surfaceClusters);
 
@@ -2472,6 +2495,11 @@ class GameRoom extends Room {
   handleMove(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return;
+    if (typeof this.eventMovementLocked === 'function' && this.eventMovementLocked(client.sessionId)) {
+      p.yaw = clampN(m.yaw, -10, 10);
+      this.pvel.set(client.sessionId, { x: 0, z: 0 });
+      return;
+    }
     const nx = clampN(m.x, 0, W.WX), ny = clampN(m.y, -20, W.WH + 10), nz = clampN(m.z, 0, W.WX);
     const now = Date.now();
     const last = this.lastMoveMsg.get(client.sessionId) || now;
@@ -2608,7 +2636,7 @@ class GameRoom extends Room {
         return;
       }
 
-      let best = null, bd = 26;
+      let best = null, bd = meta.scout ? 42 : 26;
       for (const s of candidates) {
         // The Town of Beginnings is a hard sanctuary for overworld hostiles.
         if (!m.dgn && !this.isAnimalKind(m.kind) && this.isTownProtected(s.p.x, s.p.z)) continue;
@@ -2672,10 +2700,42 @@ class GameRoom extends Room {
             tx = meta.tx; tz = meta.tz; moveMul = .4;
             m.state = '';
           }
+        } else if (!m.dgn && meta.bandit) {
+          if (meta.surrendered) { m.state='surrender'; return; }
+          meta.ralliedT=Math.max(0,(meta.ralliedT||0)-dt);
+          if (meta.banditCaptain && best) {
+            meta.commandT=(meta.commandT||0)-dt;
+            if(meta.commandT<=0){meta.commandT=6;m.state='rally';this.state.mobs.forEach((o,oid)=>{const om=this.mobMeta[oid];if(om&&om.banditCampId===meta.banditCampId&&!om.surrendered){om.alert=true;om.ralliedT=5;if(m.hp<m.maxHp*.3&&!om.banditCaptain)om.retreating=true;}});}
+          }
+          if (meta.banditPatrol && !meta.banditCaptain && m.hp <= m.maxHp * .3) {
+            meta.retreating = true; meta.alert = false; meta.tx = meta.sx; meta.tz = meta.sz;
+          }
+          if (best && !meta.retreating && !meta.alert) this.alertPack(id);
+          if (!best || meta.retreating) {
+            if (meta.retreating) {
+              tx = meta.sx; tz = meta.sz; moveMul = 1.15; m.state = 'retreat';
+            } else if (meta.banditPatrol && meta.patrolRoute && meta.patrolRoute.length) {
+              const point = meta.patrolRoute[meta.patrolStep % meta.patrolRoute.length];
+              if (Math.hypot(m.x - point.x, m.z - point.z) < 4) meta.patrolStep = (meta.patrolStep + 1) % meta.patrolRoute.length;
+              const next = meta.patrolRoute[meta.patrolStep % meta.patrolRoute.length], side = meta.formationSide || 0;
+              tx = next.x + side * 1.5; tz = next.z - side * 1.5; moveMul = .75; m.state = 'patrol';
+            } else {
+              meta.patrolT -= dt;
+              if (meta.patrolT <= 0) {
+              meta.patrolT = 5 + Math.random() * 4;
+              const angle = Math.random() * Math.PI * 2, radius = 12 + Math.random() * 12;
+              meta.tx = meta.sx + Math.cos(angle) * radius; meta.tz = meta.sz + Math.sin(angle) * radius;
+              }
+              tx = meta.tx; tz = meta.tz; moveMul = .65; m.state = '';
+            }
+          }
         } else if (!m.dgn) meta.alert = true;                // the overworld horde hunts
 
         if (meta.alert && best) {
-          if (RANGED_ENEMY_KINDS.has(m.kind)) {
+          if (meta.brute && ((meta.bruteT||0)>0 || (bd<3.8&&meta.atkCd<=0))) {
+            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;}meta.bruteT-=dt;m.state='bruteWind';rooted=true;
+            if(meta.bruteT<=0){m.state='';for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35));}}}
+          } else if (RANGED_ENEMY_KINDS.has(m.kind)) {
             if (meta.drawT > 0) {
               meta.drawT -= dt;
               m.state = 'draw';
@@ -2685,7 +2745,7 @@ class GameRoom extends Room {
                 m.state = '';
                 const v = this.pvel.get(best.sid) || { x: 0, z: 0 };
                 const lead = bd / 16 * .5;
-                this.fireArrow(m, m.dgn, best.p.x + v.x * lead, best.p.y + 1.4, best.p.z + v.z * lead, meta.arrowDmg, false);
+                this.fireArrow(m, m.dgn, best.p.x + v.x * lead, best.p.y + 1.4, best.p.z + v.z * lead, meta.arrowDmg*(meta.ralliedT>0?1.25:1), false);
                 meta.shootCd = 1.8 + Math.random() * .8;
               }
             } else {
@@ -2721,7 +2781,7 @@ class GameRoom extends Room {
               if (bd < 1.5 && Math.abs(best.p.y - m.y) < 2.1 && meta.atkCd <= 0) {
                 meta.atkCd = 1.1;
                 const c = this.clients.find(c => c.sessionId === best.sid);
-                if (c) this.hurtPlayer(c, Math.round(meta.dmg * frenzyDmg));
+                if (c) this.hurtPlayer(c, Math.round(meta.dmg * frenzyDmg * (meta.ralliedT>0?1.25:1)));
                 meta.lunging = 0;
               }
             } else {

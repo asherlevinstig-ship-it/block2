@@ -537,10 +537,11 @@ class CombatMixin {
   }
   damageMobByAbility(client, mobId, mob, damage) {
     if (!mob || mob.hp <= 0) return;
+    if (this.mobMeta[String(mobId)] && this.mobMeta[String(mobId)].friendly) return;
     if (!this.isAnimalKind(mob.kind)) this.alertPack(String(mobId));
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, damage);
     this.emitDamageNumber(client, mob, damage, false);
-    mob.hp -= Math.max(0, damage);
+    mob.hp -= Math.max(0, damage) * this.banditProtectionMultiplier(String(mobId), mob);
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
   // Tell the attacker the actual damage their hit dealt, so the client can float a
@@ -556,6 +557,7 @@ class CombatMixin {
     const mobId = String(m.id);
     const mob = this.state.mobs.get(mobId);
     if (!mob) return;
+    if (this.mobMeta[mobId] && this.mobMeta[mobId].friendly) return;
     const p = this.state.players.get(client.sessionId);
     if (!p || (p.dgn || '') !== (mob.dgn || '')) return;
     if (!this.isPlayerAlive(client)) return;
@@ -573,7 +575,7 @@ class CombatMixin {
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
     this.emitDamageNumber(client, mob, dmg, crit);
-    mob.hp -= dmg;
+    mob.hp -= dmg * this.banditProtectionMultiplier(mobId, mob);
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
   breakBlocksInRadius(client, x, y, z, radius, maxBreaks) {
@@ -626,6 +628,11 @@ class CombatMixin {
       const ring = dgn ? 0 : Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
       let items = dgn ? [] : this.rollOverworldKeyDrops(ring);
       if (!dgn && this.isAnimalKind(kind)) items = (ANIMAL_LOOT[kind] || [{ id: I.MONSTER_MEAT, count: 1 }]).map(it => ({ ...it }));
+      else if (!dgn && killedMeta.bandit) {
+        items.push({ id: I.COAL, count: 1 + Math.floor(ring / 2) });
+        if (ring >= 1 || Math.random() < .3) items.push({ id: I.IRON_INGOT, count: 1 });
+        if (killedMeta.banditCaptain) items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + ring });
+      }
       else if (!dgn) {
         items.push({ id: I.MONSTER_MEAT, count: 1 + Math.floor(ring / 2) });
         if (killedMeta.elite) {
@@ -637,10 +644,12 @@ class CombatMixin {
       const animal = this.isAnimalKind(kind);
       this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp: threatXpForRing(ring, { elite: !!killedMeta.elite, animal }), items, dangerRing: ring, elite: !!killedMeta.elite });
       this.recordKillProgress(client, !this.isAnimalKind(kind));
+      if(!dgn&&killedMeta.bandit&&['shield','scout','brute'].includes(killedMeta.banditRole))this.progressRegionalContract(client,'road_roles',{});
       if (!dgn && killedMeta.elite && killedMeta.campId)
         this.progressRegionalContract(client, 'clear_elite_camp', { targetId: killedMeta.campId });
       if (dgn) this.onDungeonTrashDeath(dgn, dx, dy, dz);
     }
+    if (!dgn && killedMeta.bandit) this.onBanditKilled(killedMeta, client);
   }
   awardMine(client, blockId, slot, x, y, z) {
     const rec = this.profileFor(client);
@@ -765,8 +774,21 @@ class CombatMixin {
     this.state.mobs.forEach((o, oid) => {
       const om = this.mobMeta[oid];
       if (!om || om.alert || (o.dgn || '') !== (mob.dgn || '')) return;
-      if (Math.hypot(o.x - mob.x, o.z - mob.z) < 12) { om.alert = true; }
+      if ((meta.banditCampId && om.banditCampId === meta.banditCampId) || Math.hypot(o.x - mob.x, o.z - mob.z) < 12) om.alert = true;
     });
+  }
+  banditProtectionMultiplier(mobId, mob) {
+    const meta=this.mobMeta[String(mobId)];if(!meta||!meta.bandit||meta.shield)return meta&&meta.shield ? .72 : 1;
+    let protectedByShield=false;this.state.mobs.forEach((other,id)=>{const om=this.mobMeta[id];if(om&&om.shield&&om.banditCampId===meta.banditCampId&&other.hp>0&&Math.hypot(other.x-mob.x,other.z-mob.z)<5)protectedByShield=true;});
+    return protectedByShield ? .58 : 1;
+  }
+  handleBanditSpare(client, m) {
+    const id=String(m&&m.id||''),mob=this.state.mobs.get(id),meta=this.mobMeta[id],p=this.state.players.get(client.sessionId);
+    if(!mob||!meta||!meta.surrendered||!p||p.dgn||Math.hypot(mob.x-p.x,mob.z-p.z)>5)return;
+    const ring=Math.max(0,Math.min(3,meta.dangerRing|0));this.state.mobs.delete(id);delete this.mobMeta[id];
+    this.awardGrant(client,{source:'bandit_spared',xp:8+ring*4,items:[{id:I.COAL,count:2+ring},{id:I.IRON_INGOT,count:1}]});
+    this.progressRegionalContract(client,'road_spare',{});
+    client.send('banditSpared',{campId:meta.banditCampId});
   }
   fireArrow(mob, dgn, tx, ty, tz, dmg, bolt) {
     const sx = mob.x, sy = mob.y + (bolt ? 1.6 : 1.35), sz = mob.z;

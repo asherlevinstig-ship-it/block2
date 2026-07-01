@@ -25,13 +25,7 @@ let chatMode='local';
 let chatWheel=null;
 const mutedPlayers=new Set();
 let commsSound=localStorage.getItem('bc_comms_sound')!=='0';
-const QUICK_CHAT_OPTIONS={
-  hello:'Hello!',follow:'Follow me.',wait:'Wait a moment.',thanks:'Thanks!',good_job:'Good job!',yes:'Yes.',no:'No.',
-  gate_ready:'Ready for the Gate?',gate_need_one:'We need one more hunter.',gate_enter:'Enter now.',
-  dungeon_group:'Group up.',dungeon_boss:'Focus the boss!',dungeon_loot:'Loot here.',dungeon_retreat:'Retreat!',
-  town_trade:'Trading at the market.',town_repairs:'I need repairs.',town_work:'Looking for work.',
-  danger_help:'Help me!',danger_run:'Run!',danger_safe:'It is safe now.',
-};
+const {PHRASES:QUICK_CHAT_OPTIONS,CONTEXTS:QUICK_CHAT_CONTEXTS,CHANNELS:COMMS_CHANNELS,RULES:COMMS_RULES,phraseIdsFor}=globalThis.BlockcraftCommsRules;
 function chatLine(name, text, channel=''){
   const d=document.createElement('div'); d.className='chatline';
   if(channel)d.classList.add(channel);
@@ -59,14 +53,14 @@ function setChatMode(mode){
 }
 function cycleChatMode(){setChatMode(chatMode==='local'?'party':chatMode==='party'?'whisper':'local');}
 function quickChatContext(){
-  if(typeof hp==='number'&&typeof maxHp==='function'&&hp<=maxHp()*.35)return ['danger_help','danger_run','danger_safe'];
-  if(dim==='dungeon')return ['dungeon_group','dungeon_boss','dungeon_loot','dungeon_retreat'];
-  if(dungeonLobbyState||(gate&&dim==='overworld'&&Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z)<=12))return ['gate_ready','gate_need_one','gate_enter'];
-  if(dim==='overworld'&&typeof isTownLand==='function'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return ['town_trade','town_repairs','town_work'];
-  return [];
+  if(typeof hp==='number'&&typeof maxHp==='function'&&hp<=maxHp()*.35)return 'danger';
+  if(dim==='dungeon')return 'dungeon';
+  if(dungeonLobbyState||(gate&&dim==='overworld'&&Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z)<=12))return 'gate';
+  if(dim==='overworld'&&typeof isTownLand==='function'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return 'town';
+  return 'universal';
 }
 function populateQuickChat(){
-  const ids=[...quickChatContext(),'hello','follow','wait','thanks','good_job','yes','no'];
+  const context=quickChatContext(),ids=context==='universal'?[...QUICK_CHAT_CONTEXTS.universal]:phraseIdsFor(context);
   chatInEl.innerHTML='';
   for(const id of ids){const option=document.createElement('option');option.value=id;option.textContent=QUICK_CHAT_OPTIONS[id];chatInEl.appendChild(option);}
   chatInEl.value=ids[0];
@@ -91,7 +85,7 @@ function renderQuickChatWheel(){
 function startQuickChatWheel(){
   if(chatWheel)return;
   chatTyping=true;for(const k in keys)keys[k]=false;setChatMode(chatMode);
-  const ids=populateQuickChat().slice(0,8);
+  const ids=populateQuickChat().slice(0,COMMS_RULES.maxWheelPhrases);
   chatWheel={started:performance.now(),ids,selected:0,x:0,y:-90};
   chatWheelModeEl.textContent=chatMode.toUpperCase();chatWheelEl.classList.remove('hidden');renderQuickChatWheel();
 }
@@ -208,7 +202,7 @@ function showChatBubble(sid,text,mode){
   if(!remote||!remote.grp)return;
   if(remote.chatBubble){remote.grp.remove(remote.chatBubble);if(remote.chatBubble.material.map)remote.chatBubble.material.map.dispose();remote.chatBubble.material.dispose();}
   const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');canvas.width=512;canvas.height=128;
-  ctx.fillStyle=mode==='whisper'?'rgba(51,25,66,.94)':mode==='party'?'rgba(20,58,43,.94)':'rgba(12,20,32,.94)';ctx.strokeStyle=mode==='whisper'?'#d49cff':mode==='party'?'#82e6a7':'#9fd8ff';ctx.lineWidth=4;
+  ctx.fillStyle=mode==='whisper'?'rgba(51,25,66,.94)':mode==='party'?'rgba(20,58,43,.94)':'rgba(12,20,32,.94)';ctx.strokeStyle=(COMMS_CHANNELS[mode]||COMMS_CHANNELS.local).color;ctx.lineWidth=4;
   ctx.beginPath();ctx.roundRect(8,8,496,96,18);ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(242,104);ctx.lineTo(256,124);ctx.lineTo(273,104);ctx.fill();
   ctx.fillStyle='#fff';ctx.font='bold 25px Courier New';ctx.textAlign='center';ctx.textBaseline='middle';
   const safe=String(text).slice(0,90),words=safe.split(/\s+/),lines=[''];

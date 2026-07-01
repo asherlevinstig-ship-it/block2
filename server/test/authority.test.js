@@ -3681,7 +3681,18 @@ test('parkour server event queues teleports protects course and grants completio
 
   room.serverEvent.startsAt = Date.now() - 1;
   room.tickServerEvent(Date.now());
+  assert.equal(room.serverEvent.phase, 'starting');
+  const staged = room.state.players.get(client.sessionId);
+  const stagedPos = [staged.x, staged.y, staged.z];
+  room.handleMove(client, { x: staged.x + 10, y: staged.y + 4, z: staged.z + 10, yaw: 1 });
+  assert.deepEqual([staged.x, staged.y, staged.z], stagedPos, 'server locks participant movement before GO');
+  room.handleEventReady(client);
+  room.tickServerEvent(Date.now());
+  const goAt = room.serverEvent.goAt;
+  room.tickServerEvent(goAt);
   assert.equal(room.serverEvent.phase, 'active');
+  assert.equal(room.serverEvent.endsAt - goAt, 10 * 60 * 1000);
+  assert.equal(client.sent.some(e => e.type === 'eventGo' && e.msg.phase === 'active'), true);
   assert.equal(client.sent.some(e => e.type === 'eventTeleport' && e.msg.reason === 'start'), true);
   assert.equal(room.state.players.get(client.sessionId).dgn, room.serverEvent.id);
   assert.equal(client.sent.some(e => e.type === 'eventTeleport' && e.msg.eventId === room.serverEvent.id && e.msg.course && e.msg.course.blocks.length > 0), true);
@@ -3700,6 +3711,20 @@ test('parkour server event queues teleports protects course and grants completio
   const completeMsg = client.sent.find(e => e.type === 'eventComplete');
   assert.equal(completeMsg.msg.leaderboard.length, 1);
   assert.equal(completeMsg.msg.leaderboard[0].name, 'Tester');
+  const resultMsg = client.sent.find(e => e.type === 'eventResult');
+  assert.equal(resultMsg.msg.outcome, 'complete');
+  assert.equal(resultMsg.msg.placement, 1);
+  assert.equal(resultMsg.msg.reward.xp, 70);
+  assert.equal(resultMsg.msg.reward.tokens, 2);
+  assert.equal(room.state.players.get(client.sessionId).dim, 'event', 'results remain visible before the return countdown ends');
+
+  const finishedEvent = room.serverEvent;
+  const returnAt = finishedEvent.participants.get(client.sessionId).returnAt;
+  room.tickServerEvent(returnAt + 1);
+  assert.equal(client.sent.some(e => e.type === 'eventTeleport' && e.msg.reason === 'return'), true);
+  assert.equal(room.state.players.get(client.sessionId).dim, 'overworld');
+  assert.equal(room.state.players.get(client.sessionId).dgn, '');
+  assert.equal(room.serverEvent.phase, 'idle');
 });
 
 test('king of the hill queues participants scores crown time and transfers crown on kill', () => {
@@ -3721,9 +3746,20 @@ test('king of the hill queues participants scores crown time and transfers crown
   room.startKingEvent(now);
 
   const ev = room.serverEvent;
+  assert.equal(ev.phase, 'starting');
+  assert.equal(ev.crown.holderSid, '', 'the crown remains unclaimed during staging');
+  room.handleEventReady(alpha);
+  room.handleEventReady(bravo);
+  room.tickServerEvent(now);
+  room.tickServerEvent(ev.goAt);
   assert.equal(ev.phase, 'active');
+  assert.ok(ev.crown.holderSid, 'GO assigns the first crown holder');
   assert.equal(ev.participants.size, 2);
   assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.kind === 'king' && e.msg.reason === 'start'), true);
+  const goPayload = alpha.sent.find(e => e.type === 'eventGo').msg;
+  assert.equal(goPayload.eventSquad.members.length, 1);
+  assert.equal(goPayload.eventSquad.members[0].name, 'Alpha');
+  assert.equal(goPayload.eventSquad.id, goPayload.eventTeam.id);
 
   const pa = room.state.players.get(alpha.sessionId);
   const pb = room.state.players.get(bravo.sessionId);
@@ -3737,7 +3773,8 @@ test('king of the hill queues participants scores crown time and transfers crown
   room.setKingCrownHolder(ev, alpha.sessionId, 'test');
   ev.lastScoreAt = now - 1000;
   room.tickKingEvent(ev, now);
-  assert.equal(ev.scores.get('solo:' + alpha.sessionId).ms >= 1000, true);
+  assert.equal(ev.scores.get(ev.participants.get(alpha.sessionId).teamId).ms >= 1000, true);
+  assert.equal(room.eventPayload(alpha).leaderboard[0].teamId, ev.participants.get(alpha.sessionId).teamId);
 
   room.playerHp.set(alpha.sessionId, { hp: 2, max: 20 });
   room.handleEventHit(bravo, { sid: alpha.sessionId });
@@ -3745,6 +3782,128 @@ test('king of the hill queues participants scores crown time and transfers crown
   assert.equal(room.playerHp.get(alpha.sessionId).hp, 20);
   assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.kind === 'king' && e.msg.reason === 'respawn'), true);
   assert.equal(broadcasts.some(e => e.type === 'eventCrown' && e.msg.holderSid === bravo.sessionId), true);
+});
+
+test('event queues wait for minimum players and grant one near-capacity final-call extension', () => {
+  const room = makeRoom();
+  const alpha = makeClient('alpha');
+  room.clients = [alpha];
+  seedPlayer(room, alpha, { token: 'queue_alpha_token_123', name: 'Alpha' });
+  const now = Date.now();
+  const ev = room.createKingInstance(now, now);
+  room.eventInstances.set(ev.id, ev);
+  room.setServerEventFromInstance(ev);
+  room.handleEventJoin(alpha);
+
+  room.tickServerEvent(now);
+  assert.equal(ev.phase, 'queue');
+  assert.equal(ev.waitingForPlayers, true);
+  assert.equal(ev.startsAt, now + 30000);
+  const waiting = alpha.sent.find(e => e.type === 'eventStatus' && e.msg.waitingForPlayers);
+  assert.equal(waiting.msg.minParticipants, 2);
+  assert.equal(waiting.msg.queueCapacity, 8);
+
+  const partyMate = makeClient('party-mate');
+  room.clients.push(partyMate);
+  seedPlayer(room, partyMate, { token: 'queue_party_mate_token_123', name: 'Party Mate' });
+  room.state.players.get(alpha.sessionId).team = 'party-one';
+  room.state.players.get(partyMate.sessionId).team = 'party-one';
+  room.handleEventJoin(partyMate);
+  ev.startsAt = now;
+  room.tickServerEvent(now);
+  assert.equal(ev.phase, 'queue');
+  assert.equal(ev.waitingReason, 'teams', 'one five-player squad still needs an opposing squad');
+
+  for (let i = 0; i < 5; i++) {
+    const client = makeClient('extra-' + i);
+    room.clients.push(client);
+    seedPlayer(room, client, { token: 'queue_extra_token_' + i + '_123', name: 'Extra ' + i });
+    room.handleEventJoin(client);
+  }
+  ev.startsAt = now;
+  ev.lastJoinAt = now;
+  room.tickServerEvent(now);
+  assert.equal(ev.phase, 'queue');
+  assert.equal(ev.queueExtended, true);
+  assert.equal(ev.startsAt, now + 15000);
+});
+
+test('King teams preserve parties then fellowships and ability-balance ungrouped hunters', () => {
+  const room = makeRoom();
+  const clients = ['party-a', 'party-b', 'guild-a', 'guild-b', 'solo-a', 'solo-b'].map(makeClient);
+  room.clients = clients;
+  const seeded = clients.map((client, i) => seedPlayer(room, client, {
+    token: 'king_balance_token_' + i + '_123',
+    name: 'Hunter ' + i,
+    lvl: 6 + i,
+  }));
+  room.state.players.get(clients[0].sessionId).team = 'party-one';
+  room.state.players.get(clients[1].sessionId).team = 'party-one';
+  room.state.players.get(clients[0].sessionId).path = 'guardian';
+  room.state.players.get(clients[1].sessionId).path = 'mage';
+  room.guilds.set('G1', {
+    id: 'G1', name: 'Stone Oath', leader: seeded[2].token,
+    members: new Set([seeded[2].token, seeded[3].token]),
+  });
+  room.state.players.get(clients[2].sessionId).path = 'shadow';
+  room.state.players.get(clients[3].sessionId).path = 'guardian';
+  room.state.players.get(clients[4].sessionId).path = 'mage';
+  room.state.players.get(clients[5].sessionId).path = 'shadow';
+
+  const assignments = room.buildKingEventTeams(clients.map(c => c.sessionId));
+  assert.equal(assignments.get(clients[0].sessionId).teamId, assignments.get(clients[1].sessionId).teamId, 'party remains together');
+  assert.equal(assignments.get(clients[0].sessionId).groupSource, 'party');
+  assert.equal(assignments.get(clients[2].sessionId).teamId, assignments.get(clients[3].sessionId).teamId, 'fellowship remains together');
+  assert.equal(assignments.get(clients[2].sessionId).groupSource, 'fellowship');
+  assert.equal(assignments.get(clients[4].sessionId).groupSource, 'ability');
+  assert.ok(new Set([...assignments.values()].map(a => a.teamId)).size >= 2);
+  assert.equal([...assignments.values()].some(a => /Azure|Crimson/.test(a.teamName)), false);
+  const sizes = new Map();
+  for (const assignment of assignments.values()) sizes.set(assignment.teamId, (sizes.get(assignment.teamId) || 0) + 1);
+  assert.equal([...sizes.values()].every(size => size <= 5), true);
+});
+
+test('ability-balanced King event squads never exceed the dungeon party cap of five', () => {
+  const room = makeRoom();
+  const clients = Array.from({ length: 11 }, (_, i) => makeClient('solo-' + i));
+  room.clients = clients;
+  clients.forEach((client, i) => {
+    const seeded = seedPlayer(room, client, { token: 'solo_cap_token_' + i + '_123', name: 'Solo ' + i, lvl: 2 + i });
+    const paths = ['shadow', 'mage', 'guardian'];
+    seeded.prof.S.path = paths[i % paths.length];
+    room.state.players.get(client.sessionId).path = seeded.prof.S.path;
+  });
+  const assignments = room.buildKingEventTeams(clients.map(client => client.sessionId));
+  const sizes = new Map();
+  for (const assignment of assignments.values()) sizes.set(assignment.teamId, (sizes.get(assignment.teamId) || 0) + 1);
+  assert.equal(sizes.size, 3);
+  assert.equal([...sizes.values()].every(size => size <= 5), true);
+  assert.deepEqual([...sizes.values()].sort((a, b) => b - a), [4, 4, 3]);
+});
+
+test('staging removes AFK hunters and cancels safely below the minimum', () => {
+  const room = makeRoom();
+  const alpha = makeClient('alpha');
+  const bravo = makeClient('bravo');
+  room.clients = [alpha, bravo];
+  seedPlayer(room, alpha, { token: 'afk_alpha_token_123', name: 'Alpha' });
+  seedPlayer(room, bravo, { token: 'afk_bravo_token_123', name: 'Bravo' });
+  const now = Date.now();
+  const ev = room.createKingInstance(now, now);
+  room.eventInstances.set(ev.id, ev);
+  room.setServerEventFromInstance(ev);
+  room.handleEventJoin(alpha);
+  room.handleEventJoin(bravo);
+  room.startKingEvent(now);
+  room.handleEventReady(alpha);
+
+  room.tickServerEvent(ev.readyDeadline + 1);
+
+  assert.equal(bravo.sent.some(e => e.type === 'eventAfk'), true);
+  assert.equal(bravo.sent.some(e => e.type === 'eventTeleport' && e.msg.reason === 'afk' && !e.msg.eventId), true);
+  assert.equal(alpha.sent.some(e => e.type === 'eventCancelled' && e.msg.reason === 'afk'), true);
+  assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.reason === 'cancel' && !e.msg.eventId), true);
+  assert.equal(room.serverEvent.phase, 'idle');
 });
 
 test('parkour beta test shortcut opens and accelerates the event queue', () => {
@@ -4109,6 +4268,82 @@ test('active distant hunter camps maintain ring-scaled elite guards', () => {
   }
 });
 
+test('daytime bandit camps maintain grouped melee and ranged patrols', () => {
+  const room = makeRoom();
+  room.mobSeq = 0;
+  const camp = W.regionalLandmarkSpecs().find(s => s.type === 'bandit_camp');
+  assert.ok(camp, 'expected a generated bandit camp');
+  room.state.players.set('scout', { x: camp.x, y: camp.y + 1, z: camp.z, dgn: '', dim: 'overworld', lvl: 1 });
+  room.banditCampAcc = 7;
+  room.maintainBanditCamps(0, null);
+  const bandits = [];
+  room.state.mobs.forEach((mob, id) => { if (room.mobMeta[id] && room.mobMeta[id].banditCampId === camp.id) bandits.push({ mob, meta: room.mobMeta[id] }); });
+  const desired = Math.min(5, 3 + dangerRingAt(camp.x, camp.z));
+  assert.equal(bandits.length, desired);
+  assert.ok(bandits.some(entry => entry.mob.kind === 'bandit'));
+  assert.ok(bandits.some(entry => entry.mob.kind === 'bandit_archer'));
+  assert.ok(bandits.some(entry => entry.mob.kind === 'bandit_shield'));
+  const patrol = bandits.filter(entry => entry.meta.banditPatrol);
+  assert.equal(patrol.length, 2);
+  assert.equal(new Set(patrol.map(entry => entry.meta.patrolId)).size, 1);
+  assert.equal(patrol.every(entry => entry.meta.patrolRoute.length >= 2), true);
+  assert.equal(bandits.every(entry => entry.meta.bandit && !entry.meta.alert), true);
+  assert.equal(bandits.every(entry => Math.hypot(entry.meta.tx - camp.x, entry.meta.tz - camp.z) >= 17), true);
+});
+
+test('a bandit camp alerts as a group, summons its captain, then enters a timed cleared state', () => {
+  const room = makeRoom(); room.mobSeq = 0;
+  const camp = W.regionalLandmarkSpecs().find(s => s.type === 'bandit_camp');
+  room.state.players.set('scout', { x: camp.x, y: camp.y + 1, z: camp.z, dgn: '', dim: 'overworld', lvl: 1 });
+  room.banditCampAcc = 7; room.maintainBanditCamps(0, null);
+  const guardIds = [...room.state.mobs.keys()];
+  for (const id of guardIds) room.mobMeta[id].alert = false;
+  room.alertPack(guardIds[0]);
+  assert.equal(guardIds.every(id => room.mobMeta[id].alert), true, 'one guard alerts the entire camp');
+  for (const id of guardIds) {
+    const meta = room.mobMeta[id]; room.state.mobs.delete(id); delete room.mobMeta[id]; room.onBanditKilled(meta, null);
+  }
+  const captainId = [...room.state.mobs.keys()].find(id => room.mobMeta[id] && room.mobMeta[id].banditCaptain);
+  assert.ok(captainId, 'the final guard summons a captain');
+  const captainMeta = room.mobMeta[captainId]; room.state.mobs.delete(captainId); delete room.mobMeta[captainId];
+  room.onBanditKilled(captainMeta, null);
+  const state = room.banditCampStates.get(camp.id);
+  assert.equal(state.phase, 'cleared');
+  assert.ok(state.respawnAt >= Date.now() + 4.9 * 60 * 1000);
+  const retainers=[...room.state.mobs.keys()].filter(id=>room.mobMeta[id]&&room.mobMeta[id].captainRetainer);
+  assert.equal(retainers.length,2);
+  assert.equal(retainers.every(id=>['surrender','retreat'].includes(room.state.mobs.get(id).state)),true,'captain death breaks retainer morale');
+  room.banditCampAcc = 7; room.maintainBanditCamps(0, null);
+  assert.equal([...room.state.mobs.keys()].filter(id=>room.mobMeta[id]&&room.mobMeta[id].banditCampId===camp.id).length,2,'camp spawns no replacement squad during cooldown');
+});
+
+test('shield bandits reduce damage dealt to nearby squad members',()=>{
+  const room=makeRoom(),shield={x:10,z:10,hp:20},ally={x:12,z:10,hp:20};room.state.mobs.set('shield',shield);room.state.mobs.set('ally',ally);
+  room.mobMeta.shield={bandit:true,shield:true,banditCampId:'camp'};room.mobMeta.ally={bandit:true,banditCampId:'camp'};
+  assert.equal(room.banditProtectionMultiplier('shield',shield),.72);
+  assert.equal(room.banditProtectionMultiplier('ally',ally),.58);
+  shield.x=30;assert.equal(room.banditProtectionMultiplier('ally',ally),1);
+});
+
+test('road caravans spawn visible friendly formations, halt for bandits, and cannot be damaged by players', () => {
+  const room = makeRoom(); room.mobSeq = 0;
+  const road = W.roadNetworkSpecs()[0]; room.spawnRoadCaravan(road);
+  const caravan = [...room.roadCaravans.values()][0];
+  assert.ok(caravan);
+  assert.deepEqual([caravan.wagonId, caravan.merchantId, caravan.muleId, ...caravan.guardIds].map(id => room.state.mobs.get(id).kind),
+    ['caravan_wagon', 'caravan_merchant', 'pack_mule', 'caravan_guard', 'caravan_guard']);
+  assert.equal([caravan.wagonId, caravan.merchantId, caravan.muleId, ...caravan.guardIds].every(id => room.mobMeta[id].friendly), true);
+  const guard = room.state.mobs.get(caravan.guardIds[0]), before = guard.hp;
+  room.damageMobByAbility(null, caravan.guardIds[0], guard, 999);
+  assert.equal(guard.hp, before, 'player combat cannot damage caravan members');
+  const wagon = room.state.mobs.get(caravan.wagonId), banditId = String(++room.mobSeq);
+  const bandit = { kind: 'bandit', x: wagon.x + 2, y: wagon.y, z: wagon.z, hp: 30, maxHp: 30, dgn: '', state: '', yaw: 0 }; room.state.mobs.set(banditId, bandit);
+  room.mobMeta[banditId] = room.freshMeta(bandit.x, bandit.z, 3, 1, 'bandit', 0, true); room.mobMeta[banditId].bandit = true;
+  room.tickRoadCaravans(2, true);
+  assert.equal(caravan.state, 'ambushed');
+  assert.ok(guard.hp < before, 'bandits damage the caravan guard while the convoy is halted');
+});
+
 test('major landmarks are connected by deterministic roads with frequent mixed breadcrumbs', () => {
   const roadsA = W.roadNetworkSpecs(), roadsB = W.roadNetworkSpecs();
   const crumbs = W.roadBreadcrumbSpecs(), majors = W.regionalLandmarkSpecs().filter(s => s.major);
@@ -4198,14 +4433,15 @@ test('road merchants enforce proximity and sell their distinct stock', () => {
 test('regional guild contracts rotate through the requested exploration archetypes', () => {
   const room = makeRoom();
   const offers = room.regionalContractOffers(0);
-  assert.deepEqual(new Set(offers.map(o => o.type)), new Set([
+  const types=new Set(offers.map(o=>o.type));
+  for(const type of [
     'scout_landmark',
     'clear_elite_camp',
     'collect_biome',
     'recover_buried_cache',
     'solve_puzzle_shrine',
-    'visit_road_merchant',
-  ]));
+    'visit_road_merchant','road_clear_camp','road_escort',
+  ])assert.ok(types.has(type),type+' offer is present');
   for (const offer of offers) {
     assert.ok(offer.id && offer.title && offer.desc);
     assert.ok(offer.rewardGold > 0);

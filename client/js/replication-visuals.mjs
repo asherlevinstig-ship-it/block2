@@ -1,14 +1,47 @@
 export function createReplicationVisuals({NET,player}){
 // ---- server mobs: kind-aware models, state-driven telegraph animation ----
-const ANIMAL_BASE_KIND={prairie_hare:'rabbit',forest_stag:'deer',dune_hare:'rabbit',ridge_boar:'boar',frost_stag:'deer',mire_boar:'boar'};
+const ANIMAL_BASE_KIND={prairie_hare:'rabbit',forest_stag:'deer',dune_hare:'rabbit',ridge_boar:'boar',frost_stag:'deer',mire_boar:'boar',pack_mule:'deer'};
 function isAnimalKind(kind){ return kind==='deer'||kind==='boar'||kind==='rabbit'||!!ANIMAL_BASE_KIND[kind]; }
-const RANGED_ENEMY_KINDS=new Set(['skeleton','bone_archer','ash_archer','void_archer']);
+const RANGED_ENEMY_KINDS=new Set(['skeleton','bone_archer','ash_archer','void_archer','bandit_archer']);
 const ENEMY_FAMILY_COLORS={
   husk:[.72,.48,.24],bone_archer:[.78,.67,.48],
   raider:[.64,.25,.18],ash_archer:[.58,.34,.3],
   dreadguard:[.3,.14,.42],void_archer:[.37,.2,.55],
   elite_husk:[1,.54,.18],elite_raider:[.95,.2,.12],elite_dreadguard:[.65,.16,.9],
+  bandit:[.42,.29,.18],bandit_archer:[.31,.4,.22],bandit_captain:[.55,.16,.12],
+  bandit_shield:[.22,.31,.42],bandit_scout:[.48,.39,.16],bandit_brute:[.5,.2,.16],
+  caravan_guard:[.2,.38,.62],caravan_merchant:[.48,.27,.6],
 };
+const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon'};
+function textSprite(text,color='#ffffff',scale=1){
+  const cv=document.createElement('canvas');cv.width=256;cv.height=64;const cx=cv.getContext('2d');cx.font='bold 26px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.strokeStyle='rgba(0,0,0,.9)';cx.lineWidth=7;cx.strokeText(text,128,32);cx.fillStyle=color;cx.fillText(text,128,32);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));sp.scale.set(2.8*scale,.7*scale,1);return sp;
+}
+function decorateEncounter(m,ref){
+  const name=ENCOUNTER_NAMES[ref.kind];if(!name)return;
+  const friendly=ref.kind.indexOf('caravan_')===0||ref.kind==='pack_mule',hostile=ref.kind.indexOf('bandit')===0;
+  const label=textSprite(name,friendly?'#8edcff':hostile?'#ff9b82':'#fff');label.position.y=m.wagon?2.35:2.65;m.grp.add(label);
+  const bg=new THREE.Sprite(new THREE.SpriteMaterial({color:0x120f0e,transparent:true,opacity:.9,depthTest:false})),fill=new THREE.Sprite(new THREE.SpriteMaterial({color:friendly?0x55c9ff:0xf05242,depthTest:false}));
+  bg.scale.set(1.35,.13,1);fill.scale.set(1.29,.075,1);bg.position.y=label.position.y-.42;fill.position.set(0,bg.position.y,.01);m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile};
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(m.wagon?1.25:.58,.035,6,30),new THREE.MeshBasicMaterial({color:friendly?0x5dd5ff:0xff5c46,transparent:true,opacity:.7,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.y=.06;m.grp.add(ring);m.encounterUi.ring=ring;
+  if(hostile){const alert=textSprite('?', '#ffd45c',.55),engaged=textSprite('!', '#ff6048',.62);alert.position.y=engaged.position.y=label.position.y+.48;m.grp.add(alert,engaged);m.encounterUi.alert=alert;m.encounterUi.engaged=engaged;}
+  if(ref.kind==='bandit_captain'){const tell=new THREE.Mesh(new THREE.RingGeometry(1.7,1.82,40),new THREE.MeshBasicMaterial({color:0xff4f32,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));tell.rotation.x=-Math.PI/2;tell.position.y=.08;m.grp.add(tell);m.encounterUi.tell=tell;m.spawnT=2.2;}
+}
+function tickEncounterReadability(m,dt,t){
+  const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1)));u.fill.scale.x=1.29*pct;u.fill.position.x=-(1.29-u.fill.scale.x)/2;
+  if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
+  if(r.state==='retreat'){u.label.material.color.set(0xffd26b);u.ring.material.color.set(0xffc34d);}else u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
+  if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
+  else if(u.tell){u.tell.visible=r.state==='windup';if(u.tell.visible){u.tell.scale.setScalar(1+Math.sin(t*8)*.12);u.tell.material.opacity=.85;}}
+  if(m.wagon){const wreck=r.kind==='caravan_wreck',damaged=pct<.65,critical=pct<.3;m.grp.rotation.z=wreck?.22:0;if(m.mats[0])m.mats[0].color.set(wreck?0x34271f:critical?0x49301f:damaged?0x5b3822:0x704321);if((damaged||wreck)&&m.grp.visible&&Math.random()<dt*(wreck?18:critical?14:6))spawnParticle({x:m.grp.position.x+(Math.random()-.5),y:m.grp.position.y+1.2,z:m.grp.position.z+(Math.random()-.5),vx:(Math.random()-.5)*.25,vy:.8,vz:(Math.random()-.5)*.25,life:1,grav:-.1,r:.28,g:.28,b:.28});}
+}
+function makeCaravanWagon(wrecked){
+  const grp=new THREE.Group(),wood=new THREE.MeshLambertMaterial({color:0x704321}),cloth=new THREE.MeshLambertMaterial({color:0xd7c49a}),dark=new THREE.MeshLambertMaterial({color:0x29231e}),mats=[wood,cloth,dark];
+  addBox(grp,[1.55,.42,2.15],[0,.72,0],wood);addBox(grp,[1.45,.85,.12],[0,1.35,-.92],cloth);addBox(grp,[1.45,.85,.12],[0,1.35,.92],cloth);
+  for(const x of [-.76,.76])for(const z of [-.65,.65]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.38,.38,.14,10),dark);wheel.rotation.z=Math.PI/2;wheel.position.set(x,.45,z);grp.add(wheel);}
+  if(wrecked)grp.rotation.z=.22;
+  grp.add(blobShadow(1.5));return {grp,mats,legs:[],arms:[],head:null,baseCol:[.44,.26,.13],wagon:true};
+}
 function makeAnimal(kind){
   const grp=new THREE.Group(), mats=[], legs=[];
   const reg=m=>{mats.push(m);return m;};
@@ -59,6 +92,10 @@ function makeAnimal(kind){
   return {grp,mats,legs,arms:[],head:null,animal:true,baseCol};
 }
 function netAddMob(id, ref){
+  if(ref.kind==='caravan_wagon'||ref.kind==='caravan_wreck'){
+    const m={...makeCaravanWagon(ref.kind==='caravan_wreck'),net:true,netId:id,ref,hp:ref.hp,kind:ref.kind,kb:new THREE.Vector3(),phase:0,hitT:0,slowT:0,aT:0,lastState:''};
+    decorateEncounter(m,ref);m.grp.position.set(ref.x,ref.y,ref.z);scene.add(m.grp);mobs.push(m);return;
+  }
   if(ref.kind==='orb'){
     const grp=new THREE.Group();
     const mat=new THREE.MeshBasicMaterial({color:0xffaa33});
@@ -74,7 +111,7 @@ function netAddMob(id, ref){
     const m={...makeAnimal(ref.kind), net:true, netId:id, ref, hp:ref.hp,
       kind:ref.kind, kb:new THREE.Vector3(), phase:Math.random()*10, hitT:0, slowT:0,
       aT:0, lastState:''};
-    m.grp.position.set(ref.x, ref.y, ref.z);
+    decorateEncounter(m,ref);m.grp.position.set(ref.x, ref.y, ref.z);
     scene.add(m.grp);
     mobs.push(m);
     return;
@@ -97,6 +134,9 @@ function netAddMob(id, ref){
     tintMob(m);
     const col=ENEMY_FAMILY_COLORS[ref.kind];
     if(col){m.baseCol=col;m.mats.forEach(mm=>mm.color.setRGB(col[0],col[1],col[2]));}
+    if(ref.kind==='bandit_captain')m.grp.scale.setScalar(1.25);
+    if(ref.kind==='bandit_brute')m.grp.scale.setScalar(1.18);
+    if(ref.kind==='bandit_shield'){const shield=new THREE.Mesh(new THREE.BoxGeometry(.5,.72,.1),new THREE.MeshLambertMaterial({color:0x33485d}));shield.position.set(-.48,1.05,-.08);shield.rotation.y=.25;m.grp.add(shield);}
     if(ref.kind.indexOf('elite_')===0){m.grp.scale.setScalar(1.28);decorateBoss(m);}
     if(ref.elite){                                          // synced dungeon elite: larger, horned, violet-tinted
       m.grp.scale.setScalar(1.32);
@@ -107,6 +147,7 @@ function netAddMob(id, ref){
     }
   }
   m.grp.position.set(ref.x, ref.y, ref.z);
+  decorateEncounter(m,ref);
   scene.add(m.grp);
   mobs.push(m);
 }
@@ -135,6 +176,8 @@ function netMobTick(m, dt, t){
   p.z+=mvz*Math.min(1,dt*10);
   p.y+=(r.y-p.y)*Math.min(1,dt*10);
   m.grp.rotation.y += angDiff(r.yaw, m.grp.rotation.y)*Math.min(1,dt*8);
+  tickEncounterReadability(m,dt,t);
+  if(m.wagon)return;
   const moving=Math.hypot(mvx,mvz)>.08;
   if(m.animal){
     const sw=moving?Math.sin(t*((ANIMAL_BASE_KIND[r.kind]||r.kind)==='rabbit'?12:8)+m.phase)*.55:0;

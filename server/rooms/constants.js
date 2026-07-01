@@ -20,7 +20,7 @@ const SKYSHIP_BOARD_GOLD = 1000;
 const GUILD_HALL = { x1: W.TOWN.TC - 39, x2: W.TOWN.TC - 4, z1: W.TOWN.TC - 40, z2: W.TOWN.TC - 28, receptionistX: W.TOWN.TC - 9.5, receptionistZ: W.TOWN.TC - 37.5 };
 const GUILD_FLOOR_MAX = 6;
 const guildFloorPrice = floorCount => 500 + Math.max(0, floorCount | 0) * 250;
-const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass']);
+const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense']);
 
 function skyshipSnapshot(epoch, now = Date.now()) {
   const elapsed = ((now - epoch) % SKYSHIP_CYCLE_MS + SKYSHIP_CYCLE_MS) % SKYSHIP_CYCLE_MS;
@@ -313,7 +313,7 @@ function dangerRingAt(x, z) {
   for (let i = 1; i < DANGER_RINGS.length; i++) if (d >= DANGER_RINGS[i].min) ring = i;
   return ring;
 }
-const RANGED_ENEMY_KINDS = new Set(['skeleton', 'bone_archer', 'ash_archer', 'void_archer']);
+const RANGED_ENEMY_KINDS = new Set(['skeleton', 'bone_archer', 'ash_archer', 'void_archer', 'bandit_archer']);
 const ELITE_FAMILIES = ['elite_husk', 'elite_raider', 'elite_dreadguard'];
 function mobTargetInRange(kind, mobY, playerY, horizontal) {
   const dy = Math.abs((playerY || 0) - (mobY || 0));
@@ -416,7 +416,7 @@ const ITEM_NAMES = {
   [I.RIVER_FISH]: 'Silverfin', [I.IRON_INGOT]: 'Iron Ingot', [I.DIAMOND]: 'Diamond',
 };
 const GUILD_BOARD_POS = { x: W.TOWN.TC + 4.5, z: W.TOWN.TC - 8.5 };
-const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant'];
+const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
 const FOOD_VALUES = {
   [I.BREAD]: { hunger: 30, heal: 2 },
   [I.MONSTER_MEAT]: { hunger: 22, heal: 1 },

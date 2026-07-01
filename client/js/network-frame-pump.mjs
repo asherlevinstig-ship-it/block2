@@ -13,7 +13,11 @@ export function createNetworkFramePump({
 }){
   return function netTick(dt,now){
     if(!NET.on) return;
-    if(now-(NET.lastSave||0)>10000){
+    // 'save' and 'meta' only have handlers on the overworld `blockcraft` room (DungeonRoom's 2c-i
+    // profile is read-only and doesn't sync cosmetic meta) — Colyseus 0.15 disconnects a client
+    // outright for an unregistered message type, so these must not reach a `dungeon` room.
+    const isOverworldRoom=NET.room&&NET.room.name==='blockcraft';
+    if(isOverworldRoom&&now-(NET.lastSave||0)>10000){
       NET.lastSave=now;
       try{
         const snap=JSON.stringify(netSnapshot());
@@ -25,7 +29,7 @@ export function createNetworkFramePump({
       NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw});
       const heldId=displayHeldId();
       const meta=[S.path||'',heldId].join('|');
-      if(meta!==NET.lastMeta){
+      if(isOverworldRoom&&meta!==NET.lastMeta){
         NET.lastMeta=meta;
         NET.room.send('meta',{
           name:(document.getElementById('playername').value||'Hunter').slice(0,16),

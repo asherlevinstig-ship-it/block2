@@ -157,12 +157,17 @@ function netAttachRoom(room,name,client){
       if(m&&m.refunded)sysMsg('The server restarted during your Gate. You were returned safely and your entry item was refunded.');
       else sysMsg('The server restarted during your Gate. You were returned safely to the entrance.');
     });
-    room.send('dungeonRecoveryRequest',{});
+    // These three requests only have handlers on the overworld `blockcraft` room. Colyseus 0.15
+    // forcibly disconnects a client that sends a message type with no registered handler (and no
+    // wildcard), so sending them to a `dungeon` room (DungeonRoom 2c-i) would silently kick the
+    // hunter out mid-attach instead of just warning.
+    const isOverworldRoom=room.name==='blockcraft';
+    if(isOverworldRoom) room.send('dungeonRecoveryRequest',{});
     if(staleLocalMobs) eventLog('Cleared '+staleLocalMobs+' pre-connection local mob'+(staleLocalMobs===1?'':'s')+'.','[Damage Audit]');
 
     room.state.listen('tod', v=>{ NET.tod=v; });
     room.onMessage('dayCycleSync', m=>applyDayCycleSync(m));
-    room.send('dayCycleSyncRequest', {});
+    if(isOverworldRoom) room.send('dayCycleSyncRequest', {});
     room.state.edits.onAdd((id,key)=>netApplyEdit(key,id));
     room.state.edits.onChange((id,key)=>netApplyEdit(key,id));
     room.state.players.onAdd((p,sid)=>{ if(sid!==room.sessionId) netAddRemote(sid,p); });
@@ -273,7 +278,7 @@ function netAttachRoom(room,name,client){
       updateLandMinimap();
     });
     room.onMessage('skyshipSync', m=>applySkyShipSync(m));
-    room.send('skyshipSyncRequest', {});
+    if(isOverworldRoom) room.send('skyshipSyncRequest', {});
     room.onMessage('skyshipBoardResult', ()=>{
       SFX.uiOpen();
       sysMsg('<b>Boarding approved.</b> S-Rank and 1,000 gold verified for the western route.');
@@ -404,6 +409,22 @@ function netAttachRoom(room,name,client){
     room.onMessage('discoveryReject',m=>{
       const r=m&&m.reason;sysMsg(r==='pattern'?escHTML(m.hint||'The pattern does not respond.'):r==='claimed'?'You have already claimed this discovery.':r==='cooldown'?'The fishing pool needs time to replenish.':'Nothing happens.');
     });
+    room.onMessage('banditCampState',m=>{
+      if(!m)return;
+      if(m.phase==='captain')sysMsg('<b>Bandit Captain!</b> The camp leader has entered the fight.');
+      else if(m.phase==='cleared'){discoveredIds.add(m.id);updateLandMinimap();sysMsg('<b>Bandit Camp Cleared!</b> The camp chest is unlocked for a short time.');}
+    });
+    room.onMessage('banditPatrolSighted',m=>{if(m)sysMsg('<b>Bandit tracks:</b> '+escHTML(m.text||'A patrol has passed nearby.'));});
+    room.onMessage('banditCaravanRescued',()=>sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.'));
+    room.onMessage('banditSpared',()=>sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.'));
+    room.onMessage('caravanState',m=>{
+      if(!m)return;
+      if(m.state==='departed')sysMsg('A merchant caravan has departed along the regional road.');
+      else if(m.state==='arrived')sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes.');
+      else if(m.state==='wrecked')sysMsg('<b>Caravan lost.</b> Bandits carried its supplies toward a nearby camp.');
+      else if(m.state==='recovered')sysMsg('<b>Stolen caravan supplies recovered!</b>');
+    });
+    room.onMessage('overworldActivity',m=>{overworldActivity=m||null;updateLandMinimap();});
     room.onMessage('regionalContracts',m=>{
       regionalContractOffers=Array.isArray(m&&m.offers)?m.offers.map(clampRegionalContract).filter(Boolean):[];
       regionalContract=clampRegionalContract(m&&m.active);
@@ -423,9 +444,10 @@ function netAttachRoom(room,name,client){
       if(m&&m.rewardXp) gainXP(m.rewardXp|0);
       if(m&&m.rewardGold) addGold(m.rewardGold|0);
       if(Array.isArray(m&&m.rewardItems)) for(const it of m.rewardItems) if(ITEMS[it.id]) addItem(it.id,it.count||1);
+      if(typeof (m&&m.roadWardenRep)==='number') roadWardenRep=Math.max(0,m.roadWardenRep|0);
       regionalContract=null;
       renderRegionalContractsUI();
-      sysMsg('Guild contract claimed'+(c?': <b>'+escHTML(c.title)+'</b>':'')+' - <b>+'+((m&&m.rewardGold)|0)+' gold</b>');
+      sysMsg((c&&String(c.type||'').startsWith('road_')?'Road Warden':'Guild')+' contract claimed'+(c?': <b>'+escHTML(c.title)+'</b>':'')+' - <b>+'+((m&&m.rewardGold)|0)+' gold</b>');
     });
     room.onMessage('regionalContractReject',m=>{
       const r=m&&m.reason;
@@ -434,13 +456,18 @@ function netAttachRoom(room,name,client){
     room.onMessage('craftLegendaryResult', m=>applyLegendaryCraftResult(m));
     room.onMessage('craftLegendaryReject', m=>legendaryCraftRejected(m));
     room.onMessage('eventStatus', m=>applyEventStatus(m));
-    room.onMessage('eventJoined', m=>{ applyEventStatus(m); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue'); });
-    room.onMessage('eventLeft', m=>{ applyEventStatus(m); sysMsg('Left the event queue'); });
+    room.onMessage('eventJoined', m=>{ applyEventStatus(m); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue. Watch the countdown banner.'); });
+    room.onMessage('eventLeft', m=>{ applyEventStatus(m); sysMsg('Left the event queue. You can rejoin while the countdown is still open.'); });
     room.onMessage('eventReject', m=>eventRejected(m));
     room.onMessage('eventStarted', m=>applyEventStatus(m));
+    room.onMessage('eventGo', m=>eventGo(m));
+    room.onMessage('eventReady', m=>applyEventStatus(m));
+    room.onMessage('eventAfk', m=>eventAfk(m));
+    room.onMessage('eventCancelled', m=>eventCancelled(m));
     room.onMessage('eventTeleport', m=>applyEventTeleport(m));
     room.onMessage('eventComplete', m=>eventCompleted(m));
     room.onMessage('eventFailed', m=>eventFailed(m));
+    room.onMessage('eventResult', m=>showEventResult(m));
     room.onMessage('pvpBountyAssigned', m=>acceptAegisBounty(m));
     room.onMessage('pvpBountyComplete', m=>completeAegisBounty(m));
     room.onMessage('pvpBountyFail', m=>failAegisBounty(m&&m.reason));
@@ -455,9 +482,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('pvpBountySlain', ()=>sysMsg('You were slain by an <b>Aegis bounty</b>.'));
     room.onMessage('eventCrown', m=>{
       if(!m) return;
-      const who=escHTML(m.holderName||'A hunter');
-      const team=m.teamName?' <b>('+escHTML(m.teamName)+')</b>':'';
-      sysMsg('<b>'+who+'</b>'+team+' now holds the crown.');
+      kingCrownChanged(m);
     });
     room.onMessage('mineNoDrop', ()=>sysMsg('Your tool is too weak to harvest that block'));
     room.onMessage('toolSync', m=>applyToolSync(m));
@@ -552,7 +577,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('tchat', m=>chatLine('\u2766 '+m.name, m.text));
     room.onMessage('comms',m=>{
       if(!m)return;
-      const label=m.mode==='party'?'◆ Party':m.mode==='whisper'?'✦ Whisper':'◉ Local';
+      const channel=(globalThis.BlockcraftCommsRules.CHANNELS[m.mode]||globalThis.BlockcraftCommsRules.CHANNELS.local),label=channel.icon+' '+channel.label;
       chatLine(label+' · '+(m.name||'Hunter'),m.text||'',m.mode||'local');SOCIAL.playCommsCue(m.mode||'local');
       if(m.fromSid&&m.fromSid!==room.sessionId)SOCIAL.showChatBubble(m.fromSid,m.text||'',m.mode||'local');
     });
@@ -661,6 +686,7 @@ function netRestoreProfile(m){
     if(!quest||quest.source!=='guardian')quest=m.activeNpcQuest||null;
     if(m.aegisTrialReady&&!quest)quest={source:'guardian',type:'pvp_bounty',have:1,need:1,giver:'Aegis Guardian',role:'guardian',title:'Silent Bounty',gold:135+(S.lvl||1)*8,xp:130+(S.lvl||1)*12};
     regionalContract=clampRegionalContract(m.regionalContract);
+    roadWardenRep=Math.max(0,m.roadWardenRep|0);
     utilityUnlocks=clampUtilityUnlocks(m.utilityUnlocks);
     utilityLoadout=clampUtilityLoadout(m.utilityLoadout);
     removeEquippedArmorCopies();

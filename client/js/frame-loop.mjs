@@ -15,9 +15,11 @@ const netTick=networkingApi.tick;
 const coordsEl=document.getElementById('coords');
 const currentQuestEl=document.getElementById('currentquest');
 const locationEl=document.getElementById('locationhud');
+const activityTrackerEl=document.getElementById('activitytracker');
 const zoneNameEl=document.getElementById('zonename');
 const zoneMetaEl=document.getElementById('zonemeta');
 const gatePromptEl=document.getElementById('gateprompt');
+const encounterPromptEl=document.getElementById('encounterprompt');
 const dungeonPartyEl=document.getElementById('dungeonparty');
 const dungeonPingEl=document.getElementById('dungeonping');
 const gateRallyGroup=new THREE.Group();
@@ -50,7 +52,8 @@ function currentLocationInfo(){
   }
   if(dim==='event'){
     const name=serverEvent&&serverEvent.name ? serverEvent.name : 'Server Event';
-    return { cls:'event', name:name+' Arena', meta:'Timed event instance' };
+    const left=serverEvent&&serverEvent.endsAt?(' - '+fmtTimeLeft(serverEvent.endsAt-Date.now())+' left'):'';
+    return { cls:'event', name:name+' Arena', meta:'Timed event instance'+left };
   }
   if(dim==='ability'){
     return { cls:'event', name:'Ability Training Room', meta:'Private tutorial instance' };
@@ -186,7 +189,8 @@ function currentObjective(){
     return {label:'Current Goal', text:boss+' - party '+party+chests};
   }
   if(dim==='event'){
-    const text=serverEvent&&serverEvent.kind==='king' ? 'Hold the crown longer than every team' : 'Reach the finish before time runs out';
+    const left=serverEvent&&serverEvent.endsAt?(' - '+fmtTimeLeft(serverEvent.endsAt-Date.now())+' left'):'';
+    const text=serverEvent&&serverEvent.kind==='king' ? 'Hold the crown longer than every team'+left : 'Reach the finish before time runs out'+left;
     return {label:'Current Goal', text};
   }
   const guided=tutorialObjective();
@@ -331,13 +335,43 @@ function updateDungeonCoordination(now){
   dungeonPingGroup.visible=true;dungeonPingGroup.position.set(activeDungeonPing.x||0,(activeDungeonPing.y||8)+.1,activeDungeonPing.z||0);
   const pulse=1+Math.sin(now*.009)*.18;dungeonPingRing.scale.setScalar(pulse);dungeonPingRing.rotation.z=now*.001;
 }
+function updateOverworldActivityTracker(){
+  if(!activityTrackerEl)return;
+  if(dim!=='overworld'||!overworldActivity||onboardingActive){activityTrackerEl.classList.add('hidden');return;}
+  const a=overworldActivity,c=a.caravan,camp=a.camp,patrol=a.patrol;
+  let title='',text='',target=null,danger=false;
+  if(c&&c.state==='ambushed'){title='Caravan Under Attack';text='Defend the wagon and its remaining guards.';target=c;danger=true;}
+  else if(a.recoveryCamp){title='Stolen Supplies';text='Clear the marked bandit camp to recover the caravan cargo.';target=a.recoveryCamp;danger=true;}
+  else if(c){title='Road Caravan';text='Escort the convoy · '+Math.round((c.progress||0)*100)+'% · wagon '+Math.max(0,Math.ceil(c.hp||0))+'/'+Math.max(1,Math.ceil(c.maxHp||1));target=c;}
+  else if(camp&&camp.phase==='captain'){title='Bandit Captain';text='Defeat the leader to unlock the camp chest.';target=camp;danger=true;}
+  else if(camp&&camp.phase==='guards'){title='Bandit Camp';text='Guards remaining: '+(camp.guards|0)+'. Clear them to draw out the captain.';target=camp;danger=true;}
+  else if(patrol){title='Bandit Tracks';text='A roaming patrol is active nearby.';target=patrol;danger=true;}
+  else if((a.discountUntil||0)>Date.now()){title='Merchant Favour';text='Road merchant discount active for '+Math.max(1,Math.ceil((a.discountUntil-Date.now())/60000))+' min.';}
+  if(!title){activityTrackerEl.classList.add('hidden');return;}
+  let nav='';
+  if(target){const d=Math.hypot(target.x-player.pos.x,target.z-player.pos.z);nav=d<35?'Nearby':d<90?'In the surrounding region':'Far away';if(utilityEquipped('compass')||(target===patrol&&utilityEquipped('trail_sense')))nav=bearingLabelTo(target.x,target.z)+' · '+Math.round(d)+'m';}
+  const mapOn=utilityEquipped('minimap')||utilityEquipped('world_map');if(target)nav+=(nav?' · ':'')+(mapOn?'shown on map':'equip Mini Map to plot');
+  activityTrackerEl.classList.remove('hidden');activityTrackerEl.classList.toggle('danger',danger);
+  activityTrackerEl.innerHTML='<div class="at">'+escHTML(title)+'</div><div class="av">'+escHTML(text)+'</div>'+(nav?'<div class="am">'+escHTML(nav)+'</div>':'');
+}
+function updateEncounterPrompt(){
+  if(!encounterPromptEl||dim!=='overworld'||!overworldActivity||!overworldActivity.caravan){if(encounterPromptEl)encounterPromptEl.classList.add('hidden');return;}
+  const c=overworldActivity.caravan,d=Math.hypot(c.x-player.pos.x,c.z-player.pos.z);
+  if(d>18){encounterPromptEl.classList.add('hidden');return;}
+  const danger=c.state==='ambushed';encounterPromptEl.classList.toggle('danger',danger);
+  encounterPromptEl.textContent=danger?'Defend Wagon · defeat the attacking bandits':'Escort Caravan · remain nearby to earn escort credit';
+  encounterPromptEl.classList.remove('hidden');
+}
 function updateInfoHud(held){
   document.body.classList.toggle('calm-town', (locked || uiOpen || statOpen || qOpen || claimMode) && calmTownHud());
   if(onboardingActive){
+    if(activityTrackerEl)activityTrackerEl.classList.add('hidden');
     coordsEl.innerHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>';
     if(currentQuestEl){currentQuestEl.classList.add('hidden');currentQuestEl.innerHTML='';}
     return;
   }
+  updateOverworldActivityTracker();
+  updateEncounterPrompt();
   if(calmTownHud()){
     const rank=rankHudProgress();
     coordsEl.innerHTML=[
@@ -442,7 +476,7 @@ function tick(now){
     const sprintKey=keys['ShiftLeft']||keys['ShiftRight'];
     let f=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
     let s=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
-    if(cutscene){ f=0; s=0; }
+    if(cutscene||eventStartLocked()){ f=0; s=0; }
     if(isMeditating && (f!==0 || s!==0 || keys['Space'])){
       stopMeditation();
     }
@@ -533,6 +567,7 @@ function tick(now){
     moveAxis('x', vx*(inWater?.6:1)*dt);
     moveAxis('z', vz*(inWater?.6:1)*dt);
     moveAxis('y', player.vel.y*dt);
+    if(eventStartLocked()){holdEventStartPosition();player.onGround=true;}
     if(player.onGround) lastGroundT=now;
     if(player.onGround && !wasGround && prevVy<-9){             // landing feedback
       const feather=utilityEquipped('feather_step');
@@ -803,6 +838,23 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     exitDungeon(false);
     return true;
   };
+  // Flees the dungeon via the entrance portal without requiring a clear, mirroring the real
+  // proximity-triggered right-click in combat.mjs. Drives the DungeonRoom 2c-i flag-gated path,
+  // which enters/exits through NETWORK.switchRoom()/returnToPrimary() instead of enterGate/exitGate.
+  const e2eFleeDungeon=()=>{
+    if(dim!=='dungeon'||!exitPortal) return false;
+    player.pos.set(exitPortal.position.x,exitPortal.position.y+.5,exitPortal.position.z);
+    exitDungeon(false);
+    return true;
+  };
+  // Calls the real client enterDungeon() (what a right-click near the gate triggers) instead of
+  // sending 'enterGate' directly, so the flag-gated switchRoom path (which never sends 'enterGate')
+  // is actually exercised.
+  const e2eEnterTrackedGate=()=>{
+    if(!gate||!gate.id) return false;
+    enterDungeon();
+    return true;
+  };
   const e2eDungeonBossCount=()=>{
     let count=0;
     const synced=NET.room&&NET.room.state&&NET.room.state.mobs;
@@ -810,7 +862,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     return count;
   };
   window.__BLOCKCRAFT_E2E__={
-    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return {connected:NET.on,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,progressionFocus,firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate()};},
+    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return {connected:NET.on,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,progressionFocus,firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
     inventoryCount:id=>inventoryModel.count(id),
     inventorySlot:id=>inventoryModel.slots.findIndex(stack=>stack&&stack.id===id),
     trackedGate:()=>gate?{id:gate.id||'',rank:gate.rank|0,kind:gate.kind||'public'}:null,
@@ -830,6 +882,8 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     walkToJobs:()=>e2eWalkTo({x:HUB.jobs.x,y:TOWN.G+1,z:HUB.jobs.z}),
     usePrepRepairKit:()=>{const slot=inv.findIndex(s=>s&&s.id===I.REPAIR_KIT);return slot>=0&&useRepairKit(slot);},
     useDungeonExit:e2eUseDungeonExit,
+    fleeDungeon:e2eFleeDungeon,
+    enterTrackedGate:e2eEnterTrackedGate,
   };
 }
 

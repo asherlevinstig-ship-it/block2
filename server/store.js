@@ -69,8 +69,8 @@ function sanitizeDragonNames(names) {
 }
 const JOB_IDS = new Set(['', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk']);
 const JOB_CONTRACT_TYPES = new Set(['mine', 'farm', 'cook', 'smith', 'repair', 'meditate', 'sell', 'kill', 'gate', 'quest', 'event']);
-const REGIONAL_CONTRACT_TYPES = new Set(['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant']);
-const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass']);
+const REGIONAL_CONTRACT_TYPES = new Set(['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles']);
+const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense']);
 const cleanJob = job => JOB_IDS.has(job) ? job : '';
 
 function sanitizeUtilityUnlocks(list) {
@@ -117,6 +117,7 @@ function defaultProfile(name) {
     discoveries: [],
     claimedDiscoveries: [],
     regionalContract: null,
+    roadWardenRep: 0,
     utilityUnlocks: [],
     utilityLoadout: { active: '', passive: [] },
     mutedPlayers: [],
@@ -345,6 +346,7 @@ function sanitizeProfile(p) {
   out.discoveries = cleanDiscoveryList(p.discoveries);
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
+  out.roadWardenRep = clampI(p.roadWardenRep, 0, 9999);
   out.utilityUnlocks = sanitizeUtilityUnlocks(p.utilityUnlocks);
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
   out.mutedPlayers = Array.isArray(p.mutedPlayers) ? [...new Set(p.mutedPlayers.map(cleanToken).filter(Boolean))].slice(0, 256) : [];

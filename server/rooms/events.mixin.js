@@ -15,6 +15,14 @@ const { hunterXpForActivity } = require('./xp-economy');
 const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const EVENT_START_MS = 4000;
+const EVENT_RESULTS_MS = 7000;
+const EVENT_READY_MS = 10000;
+const EVENT_QUEUE_RETRY_MS = 30000;
+const EVENT_QUEUE_EXTENSION_MS = 15000;
+const EVENT_QUEUE_CAPACITY = 8;
+const EVENT_QUEUE_NEAR_FULL = 6;
+const EVENT_TEAM_MAX = 5;
 
 class EventsMixin {
   // Server-event and day-cycle state, co-located with the mixin that owns it.
@@ -124,6 +132,9 @@ class EventsMixin {
       lastSync: 0,
     };
   }
+  minParticipantsForEvent(ev) {
+    return ev && ev.kind === EVENT_KING.kind ? 2 : 1;
+  }
   createParkourInstance(now, startsAt) {
     const seed = (Math.random() * 1000000) | 0;
     const course = this.generateParkourCourse(seed);
@@ -141,6 +152,9 @@ class EventsMixin {
       leaderboard: [],
       course,
       cleanupAt: 0,
+      queueExtended: false,
+      waitingForPlayers: false,
+      lastJoinAt: 0,
     };
   }
   createKingInstance(now, startsAt) {
@@ -169,6 +183,9 @@ class EventsMixin {
       scores: new Map(),
       lastScoreAt: 0,
       cleanupAt: 0,
+      queueExtended: false,
+      waitingForPlayers: false,
+      lastJoinAt: 0,
     };
   }
   currentEventInstance() {
@@ -187,6 +204,7 @@ class EventsMixin {
         .sort((a, b) => (b.ms - a.ms) || String(a.name).localeCompare(String(b.name)))
         .slice(0, 5)
         .map(row => ({
+          teamId: row.teamId || '',
           name: row.name || 'Hunters',
           ms: row.ms | 0,
           holder: !!(inst.crown && inst.crown.holderTeamId === row.teamId),
@@ -197,6 +215,33 @@ class EventsMixin {
       ms: row.ms | 0,
       resets: row.resets | 0,
     }));
+  }
+  eventResultPayload(ev, sid, outcome, reward, extra = {}) {
+    const part = ev && ev.participants && ev.participants.get(sid);
+    const leaderboard = this.eventLeaderboardPayload(ev);
+    let placement = 0;
+    if (ev && ev.kind === EVENT_PARKOUR.kind) {
+      const index = (ev.leaderboard || []).findIndex(row => row.sid === sid);
+      placement = index >= 0 ? index + 1 : 0;
+    } else if (part) {
+      const index = leaderboard.findIndex(row => row.name === part.teamName);
+      placement = index >= 0 ? index + 1 : 0;
+    }
+    return {
+      id: ev && ev.id || '',
+      kind: ev && ev.kind || '',
+      name: ev && ev.name || 'Server Event',
+      outcome,
+      placement,
+      participantCount: ev && ev.participants ? ev.participants.size : 0,
+      contribution: ev && ev.kind === EVENT_KING.kind
+        ? { label: 'Crown time', valueMs: part && ev.scores.get(part.teamId) ? ev.scores.get(part.teamId).ms | 0 : 0 }
+        : { label: 'Finish time', valueMs: part && part.finishedAt ? Math.max(0, part.finishedAt - (part.startedAt || ev.startsAt || part.finishedAt)) : 0, resets: part && part.resets | 0 },
+      reward: reward || { xp: 0, tokens: 0 },
+      leaderboard,
+      returnAt: part && part.returnAt || Date.now() + EVENT_RESULTS_MS,
+      ...extra,
+    };
   }
   eventPayload(client) {
     const ev = this.currentEventInstance() || this.serverEvent || this.createIdleEvent(Date.now() + EVENT_FIRST_DELAY_MS);
@@ -218,10 +263,35 @@ class EventsMixin {
       id: ev.id,
       nextAt: ev.nextAt || 0,
       startsAt: ev.startsAt || 0,
+      goAt: ev.goAt || 0,
       endsAt: ev.endsAt || 0,
       queueSize: ev.queue ? ev.queue.size : 0,
+      queueCapacity: EVENT_QUEUE_CAPACITY,
+      minParticipants: this.minParticipantsForEvent(ev),
+      waitingForPlayers: !!ev.waitingForPlayers,
+      waitingReason: ev.waitingReason || '',
+      queueExtended: !!ev.queueExtended,
       joined: !!(sid && ev.queue && ev.queue.has(sid)),
       participating,
+      participantCount: ev.participants ? ev.participants.size : 0,
+      ready: !!(sid && ev.participants && ev.participants.get(sid) && ev.participants.get(sid).ready),
+      readyCount: ev.participants ? [...ev.participants.values()].filter(part => part.ready).length : 0,
+      eventTeam: participating ? {
+        id: ev.participants.get(sid).teamId || '',
+        name: ev.participants.get(sid).teamName || '',
+        source: ev.participants.get(sid).groupSource || '',
+      } : null,
+      eventSquad: participating && ev.kind === EVENT_KING.kind ? {
+        id: ev.participants.get(sid).teamId || '',
+        name: ev.participants.get(sid).teamName || '',
+        source: ev.participants.get(sid).groupSource || '',
+        members: [...ev.participants.entries()]
+          .filter(([, part]) => part.teamId === ev.participants.get(sid).teamId)
+          .map(([memberSid]) => {
+            const player = this.state.players.get(memberSid);
+            return { sid: memberSid, name: player && player.name || 'Hunter', path: player && player.path || '' };
+          }),
+      } : null,
       completed: !!(sid && ev.completed && ev.completed.has(sid)),
       course: coursePayload,
       arena: ev.arena || null,
@@ -258,7 +328,11 @@ class EventsMixin {
       return client.send('eventReject', { reason: ev.phase === 'active' ? 'active' : 'closed' });
     }
     if (p.dgn) return client.send('eventReject', { reason: 'dungeon' });
+    if (!ev.queue.has(client.sessionId) && ev.queue.size >= EVENT_QUEUE_CAPACITY)
+      return client.send('eventReject', { reason: 'full' });
     ev.queue.add(client.sessionId);
+    ev.lastJoinAt = Date.now();
+    ev.waitingForPlayers = ev.queue.size < this.minParticipantsForEvent(ev);
     client.send('eventJoined', this.eventPayload(client));
     this.broadcastEventStatus(true);
   }
@@ -266,9 +340,19 @@ class EventsMixin {
     const ev = this.currentEventInstance() || this.serverEvent;
     if (!ev) return;
     if (ev.phase === 'queue' && ev.queue.delete(client.sessionId)) {
+      ev.waitingForPlayers = ev.queue.size < this.minParticipantsForEvent(ev);
       client.send('eventLeft', this.eventPayload(client));
       this.broadcastEventStatus(true);
     }
+  }
+  handleEventReady(client) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    const part = ev && ev.phase === 'starting' && ev.participants && ev.participants.get(client.sessionId);
+    if (!part || part.ready) return;
+    part.ready = true;
+    part.readyAt = Date.now();
+    client.send('eventReady', this.eventPayload(client));
+    this.broadcastEventStatus(true);
   }
   handleEventDebugStart(client) {
     if (!BETA_EVENT_TEST) return client.send('eventReject', { reason: 'closed' });
@@ -401,7 +485,8 @@ class EventsMixin {
     const p = this.state.players.get(client.sessionId);
     if (!p || !pos) return;
     const ev = evArg || this.currentEventInstance() || this.serverEvent;
-    const inEvent = ev && ev.phase === 'active' && reason !== 'complete' && reason !== 'failed';
+    const inEvent = ev && (ev.phase === 'starting' || ev.phase === 'active')
+      && reason !== 'complete' && reason !== 'failed' && reason !== 'return' && reason !== 'afk' && reason !== 'cancel';
     p.dgn = inEvent ? ev.id : '';
     p.dim = inEvent ? 'event' : 'overworld';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
@@ -410,7 +495,7 @@ class EventsMixin {
   resumeEventParticipant(client) {
     const p = client && this.state.players.get(client.sessionId);
     const ev = this.currentEventInstance() || this.serverEvent;
-    if (!p || !ev || ev.phase !== 'active' || !ev.participants || !ev.participants.has(client.sessionId)) return false;
+    if (!p || !ev || (ev.phase !== 'starting' && ev.phase !== 'active') || !ev.participants || !ev.participants.has(client.sessionId)) return false;
     p.dim = 'event';
     p.dgn = ev.id;
     client.send('eventTeleport', {
@@ -429,17 +514,20 @@ class EventsMixin {
   startParkourEvent(now) {
     const ev = this.currentEventInstance() || this.serverEvent;
     if (!ev || ev.phase !== 'queue') return;
-    ev.phase = 'active';
-    ev.endsAt = now + EVENT_ACTIVE_MS;
+    ev.phase = 'starting';
+    ev.goAt = 0;
+    ev.readyDeadline = now + EVENT_READY_MS;
+    ev.startsAt = 0;
+    ev.endsAt = 0;
     for (const sid of ev.queue) {
       const client = this.clients.find(c => c.sessionId === sid);
       const p = this.state.players.get(sid);
       if (!client || !p || p.dgn) continue;
-      ev.participants.set(sid, { returnPos: this.eventReturnPos(p), resets: 0, startedAt: now, finishedAt: 0 });
+      ev.participants.set(sid, { returnPos: this.eventReturnPos(p), resets: 0, startedAt: 0, finishedAt: 0, ready: false, readyAt: 0 });
       this.teleportEventPlayer(client, ev.course.start, 'start', ev);
       client.send('eventStarted', this.eventPayload(client));
     }
-    this.broadcast('chat', { name: '[Event]', text: 'Parkour has begun. Reach the finish before the timer ends.' });
+    if (ev.participants.size <= 0) return this.endParkourEvent('empty');
     this.broadcastEventStatus(true);
   }
   completeParkourPlayer(client) {
@@ -458,9 +546,14 @@ class EventsMixin {
     const xp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
     this.awardGrant(client, { source: 'event', event: EVENT_PARKOUR.name, xp, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
     this.recordEventProgress(client);
-    this.unlockUtility(client, 'feather_step', 'Parkour finish unlocked');
+    const unlocked = this.unlockUtility(client, 'feather_step', 'Parkour finish unlocked');
+    part.returnAt = now + EVENT_RESULTS_MS;
     client.send('eventComplete', this.eventPayload(client));
-    this.teleportEventPlayer(client, part.returnPos, 'complete', ev);
+    client.send('eventResult', this.eventResultPayload(ev, client.sessionId, 'complete', {
+      xp,
+      tokens: EVENT_REWARD_TOKENS,
+      unlock: unlocked ? 'Feather Step' : '',
+    }));
     this.broadcastEventStatus(true);
   }
   endParkourEvent(reason) {
@@ -468,17 +561,19 @@ class EventsMixin {
     if (!ev || ev.phase === 'idle') return;
     ev.phase = 'ended';
     ev.cleanupAt = Date.now() + 60000;
+    ev.returnAt = Date.now() + EVENT_RESULTS_MS;
     for (const [sid, part] of ev.participants) {
       if (ev.completed.has(sid)) continue;
       const client = this.clients.find(c => c.sessionId === sid);
+      part.returnAt = ev.returnAt;
       if (client) {
         client.send('eventFailed', { reason: reason || 'timeout', name: ev.name, id: ev.id, leaderboard: this.eventLeaderboardPayload(ev) });
-        this.teleportEventPlayer(client, part.returnPos, 'failed', ev);
+        client.send('eventResult', this.eventResultPayload(ev, sid, 'failed', { xp: 0, tokens: 0 }, {
+          reason: reason || 'timeout',
+        }));
       }
     }
     this.broadcast('chat', { name: '[Event]', text: 'Parkour event ended.' });
-    this.activeEventInstanceId = '';
-    this.serverEvent = this.createIdleEvent(Date.now() + this.randomEventDelay(), this.pickNextServerEvent().kind);
     this.broadcastEventStatus(true);
   }
   eventTeamIdForSid(sid) {
@@ -493,6 +588,90 @@ class EventsMixin {
       return t && t.name ? t.name : p.team;
     }
     return p.name || 'Solo Hunter';
+  }
+  eventAbilityBalanceValue(sid) {
+    const client = this.clients.find(c => c.sessionId === sid);
+    const rec = client && this.profileFor(client);
+    const S = rec && rec.prof && rec.prof.S || {};
+    return Math.max(1, S.lvl | 0) * 10
+      + Math.max(1, S.str | 0) + Math.max(1, S.agi | 0)
+      + Math.max(1, S.vit | 0) + Math.max(1, S.int | 0);
+  }
+  kingSocialGroupForSid(sid) {
+    const p = this.state.players.get(sid);
+    if (p && p.team) {
+      const team = this.state.teams.get(p.team);
+      return { id: 'party:' + p.team, name: team && team.name || 'Hunter Party', source: 'party' };
+    }
+    const token = this.tokens.get(sid);
+    const guild = token && this.guildForToken(token);
+    if (guild) return { id: 'fellowship:' + guild.id, name: guild.name || 'Fellowship Squad', source: 'fellowship' };
+    return { id: 'solo:' + sid, name: '', source: 'ability' };
+  }
+  buildKingEventTeams(sids) {
+    const socialGroups = new Map();
+    const solos = [];
+    for (const sid of sids) {
+      const social = this.kingSocialGroupForSid(sid);
+      if (social.source === 'ability') {
+        solos.push(sid);
+        continue;
+      }
+      if (!socialGroups.has(social.id)) socialGroups.set(social.id, { ...social, sids: [] });
+      socialGroups.get(social.id).sids.push(sid);
+    }
+    const assignments = new Map();
+    const eventTeams = [];
+    for (const group of [...socialGroups.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+      const chunks = [];
+      for (let i = 0; i < group.sids.length; i += EVENT_TEAM_MAX) chunks.push(group.sids.slice(i, i + EVENT_TEAM_MAX));
+      chunks.forEach((members, index) => {
+        const suffix = chunks.length > 1 ? ' ' + (index + 1) : '';
+        const team = {
+          id: group.id + (chunks.length > 1 ? ':' + index : ''),
+          name: group.name + suffix,
+          source: group.source,
+          members,
+          count: members.length,
+        };
+        eventTeams.push(team);
+        for (const sid of members) assignments.set(sid, { teamId: team.id, teamName: team.name, groupSource: team.source });
+      });
+    }
+    if (solos.length) {
+      const neededForCapacity = Math.ceil(solos.length / EVENT_TEAM_MAX);
+      const neededForOpponent = eventTeams.length === 0 ? 2 : eventTeams.length === 1 ? 1 : 0;
+      const squadCount = Math.min(solos.length, Math.max(1, neededForCapacity, neededForOpponent));
+      const squads = Array.from({ length: squadCount }, (_, i) => ({
+        id: 'balanced:' + (i + 1),
+        name: 'Event Squad ' + (i + 1),
+        source: 'ability',
+        members: [],
+        count: 0,
+        power: 0,
+        paths: { shadow: 0, mage: 0, guardian: 0 },
+      }));
+      const ordered = solos.slice().sort((a, b) => this.eventAbilityBalanceValue(b) - this.eventAbilityBalanceValue(a) || a.localeCompare(b));
+      for (const sid of ordered) {
+        const p = this.state.players.get(sid);
+        const path = p && ['shadow', 'mage', 'guardian'].includes(p.path) ? p.path : '';
+        const eligible = squads.filter(squad => squad.count < EVENT_TEAM_MAX);
+        eligible.sort((a, b) =>
+          (a.count - b.count)
+          || ((a.power + (path ? a.paths[path] * 20 : 0)) - (b.power + (path ? b.paths[path] * 20 : 0)))
+          || a.id.localeCompare(b.id));
+        const squad = eligible[0];
+        squad.members.push(sid);
+        squad.count++;
+        squad.power += this.eventAbilityBalanceValue(sid);
+        if (path) squad.paths[path]++;
+        assignments.set(sid, { teamId: squad.id, teamName: squad.name, groupSource: squad.source });
+      }
+    }
+    return assignments;
+  }
+  kingEventTeamCount(sids) {
+    return new Set([...this.buildKingEventTeams(sids).values()].map(assignment => assignment.teamId)).size;
   }
   playerName(sid) {
     const p = sid && this.state.players.get(sid);
@@ -520,7 +699,8 @@ class EventsMixin {
     const p = this.state.players.get(client.sessionId);
     if (!p || !pos) return;
     const ev = evArg || this.currentEventInstance() || this.serverEvent;
-    const inEvent = !!(ev && ev.phase === 'active' && reason !== 'complete' && reason !== 'failed');
+    const inEvent = !!(ev && (ev.phase === 'starting' || ev.phase === 'active')
+      && reason !== 'complete' && reason !== 'failed' && reason !== 'return' && reason !== 'afk' && reason !== 'cancel');
     p.dim = inEvent ? 'event' : 'overworld';
     p.dgn = inEvent ? ev.id : '';
     if (inEvent) p.mount = '';
@@ -538,16 +718,36 @@ class EventsMixin {
   startKingEvent(now) {
     const ev = this.currentEventInstance() || this.serverEvent;
     if (!ev || ev.phase !== 'queue') return;
-    ev.phase = 'active';
-    ev.endsAt = now + KING_ACTIVE_MS;
-    ev.lastScoreAt = now;
+    ev.phase = 'starting';
+    ev.goAt = 0;
+    ev.readyDeadline = now + EVENT_READY_MS;
+    ev.startsAt = 0;
+    ev.endsAt = 0;
+    ev.lastScoreAt = 0;
+    const eligible = [];
     for (const sid of ev.queue) {
       const client = this.clients.find(c => c.sessionId === sid);
       const p = this.state.players.get(sid);
       if (!client || !p || p.dgn) continue;
-      const teamId = this.eventTeamIdForSid(sid);
-      const teamName = this.eventTeamNameForSid(sid);
-      ev.participants.set(sid, { returnPos: this.eventReturnPos(p), teamId, teamName, respawnAt: 0 });
+      eligible.push(sid);
+    }
+    const assignments = this.buildKingEventTeams(eligible);
+    if (new Set([...assignments.values()].map(assignment => assignment.teamId)).size < 2) {
+      ev.phase = 'queue';
+      ev.waitingForPlayers = true;
+      ev.waitingReason = 'teams';
+      ev.startsAt = now + EVENT_QUEUE_RETRY_MS;
+      return this.broadcastEventStatus(true);
+    }
+    for (const sid of eligible) {
+      const p = this.state.players.get(sid);
+      const assignment = assignments.get(sid);
+      const teamId = assignment.teamId;
+      const teamName = assignment.teamName;
+      ev.participants.set(sid, {
+        returnPos: this.eventReturnPos(p), teamId, teamName, groupSource: assignment.groupSource,
+        respawnAt: 0, ready: false, readyAt: 0,
+      });
       this.ensureKingScore(ev, teamId, teamName);
     }
     if (ev.participants.size <= 0) return this.endKingEvent('empty');
@@ -558,10 +758,89 @@ class EventsMixin {
         client.send('eventStarted', this.eventPayload(client));
       }
     }
-    const firstSid = [...ev.participants.keys()][(Math.random() * ev.participants.size) | 0];
-    this.setKingCrownHolder(ev, firstSid, 'start');
-    this.broadcast('chat', { name: '[Event]', text: 'King of the Hill has begun. Hold the crown for the longest time.' });
     this.broadcastEventStatus(true);
+  }
+  armEventCountdown(ev, now) {
+    if (!ev || ev.phase !== 'starting' || ev.goAt) return;
+    ev.goAt = now + EVENT_START_MS;
+    ev.startsAt = ev.goAt;
+    ev.endsAt = ev.goAt + (ev.kind === EVENT_KING.kind ? KING_ACTIVE_MS : EVENT_ACTIVE_MS);
+    this.broadcastEventStatus(true);
+  }
+  cancelStagedEvent(ev, reason, now = Date.now()) {
+    if (!ev || (ev.phase !== 'queue' && ev.phase !== 'starting')) return;
+    ev.phase = 'ended';
+    for (const [sid, part] of ev.participants || []) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (!client) continue;
+      client.send('eventCancelled', { id: ev.id, name: ev.name, reason: reason || 'players' });
+      if (ev.kind === EVENT_KING.kind) this.teleportKingPlayer(client, part.returnPos, 'cancel', ev);
+      else this.teleportEventPlayer(client, part.returnPos, 'cancel', ev);
+    }
+    ev.cleanupAt = now + 60000;
+    this.broadcast('chat', { name: '[Event]', text: ev.name + ' cancelled — not enough ready hunters.' });
+    this.activeEventInstanceId = '';
+    this.serverEvent = this.createIdleEvent(now + this.randomEventDelay(), this.pickNextServerEvent().kind);
+    this.broadcastEventStatus(true);
+  }
+  tickStartingEvent(ev, now) {
+    const minimum = this.minParticipantsForEvent(ev);
+    const teamCount = ev.kind === EVENT_KING.kind
+      ? new Set([...ev.participants.values()].map(part => part.teamId)).size
+      : 1;
+    if (ev.participants.size < minimum || teamCount < 2 && ev.kind === EVENT_KING.kind)
+      return this.cancelStagedEvent(ev, 'players', now);
+    if (ev.goAt) {
+      if (now >= ev.goAt) this.beginStagedEvent(ev, now);
+      return;
+    }
+    const ready = [...ev.participants.values()].filter(part => part.ready).length;
+    if (ready >= ev.participants.size) return this.armEventCountdown(ev, now);
+    if (now < (ev.readyDeadline || 0)) return;
+    for (const [sid, part] of [...ev.participants.entries()]) {
+      if (part.ready) continue;
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (client) {
+        client.send('eventAfk', { id: ev.id, name: ev.name });
+        if (ev.kind === EVENT_KING.kind) this.teleportKingPlayer(client, part.returnPos, 'afk', ev);
+        else this.teleportEventPlayer(client, part.returnPos, 'afk', ev);
+      }
+      ev.participants.delete(sid);
+    }
+    const remainingTeams = ev.kind === EVENT_KING.kind
+      ? new Set([...ev.participants.values()].map(part => part.teamId)).size
+      : 1;
+    if (ev.participants.size < minimum || remainingTeams < 2 && ev.kind === EVENT_KING.kind)
+      return this.cancelStagedEvent(ev, 'afk', now);
+    this.armEventCountdown(ev, now);
+  }
+  beginStagedEvent(ev, now) {
+    if (!ev || ev.phase !== 'starting') return;
+    ev.phase = 'active';
+    ev.startedAt = now;
+    ev.endsAt = now + (ev.kind === EVENT_KING.kind ? KING_ACTIVE_MS : EVENT_ACTIVE_MS);
+    if (ev.kind === EVENT_KING.kind) {
+      ev.lastScoreAt = now;
+      const firstSid = [...ev.participants.keys()][(Math.random() * ev.participants.size) | 0];
+      if (firstSid) this.setKingCrownHolder(ev, firstSid, 'start');
+    } else {
+      for (const part of ev.participants.values()) part.startedAt = now;
+    }
+    for (const sid of ev.participants.keys()) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (client) client.send('eventGo', this.eventPayload(client));
+    }
+    this.broadcast('chat', {
+      name: '[Event]',
+      text: ev.kind === EVENT_KING.kind
+        ? 'King of the Hill has begun. Hold the crown for the longest time.'
+        : 'Parkour has begun. Reach the finish before the timer ends.',
+    });
+    this.broadcastEventStatus(true);
+  }
+  eventMovementLocked(sid, now = Date.now()) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    return !!(ev && ev.phase === 'starting' && ev.participants && ev.participants.has(sid));
   }
   setKingCrownHolder(ev, sid, reason) {
     if (!ev || ev.kind !== EVENT_KING.kind) return;
@@ -733,6 +1012,7 @@ class EventsMixin {
     this.tickKingEvent(ev, Date.now());
     ev.phase = 'ended';
     ev.cleanupAt = Date.now() + 60000;
+    ev.returnAt = Date.now() + EVENT_RESULTS_MS;
     const winners = [...ev.scores.values()].sort((a, b) => {
       const byScore = b.ms - a.ms;
       if (byScore) return byScore;
@@ -744,18 +1024,41 @@ class EventsMixin {
     for (const [sid, part] of ev.participants) {
       const client = this.clients.find(c => c.sessionId === sid);
       if (!client) continue;
+      part.returnAt = ev.returnAt;
+      let reward = { xp: 0, tokens: 0 };
+      const won = !!(winner && part.teamId === winner.teamId);
       if (winner && part.teamId === winner.teamId) {
         const rec = this.profileFor(client);
         const xp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
         this.awardGrant(client, { source: 'event', event: EVENT_KING.name, xp, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
         this.recordEventProgress(client);
+        reward = { xp, tokens: EVENT_REWARD_TOKENS };
       }
       client.send('eventFailed', { reason: reason || 'timeout', name: ev.name, id: ev.id, leaderboard: this.eventLeaderboardPayload(ev), winner: winner && winner.name || '' });
-      this.teleportKingPlayer(client, part.returnPos, 'failed', ev);
+      client.send('eventResult', this.eventResultPayload(ev, sid, won ? 'win' : 'loss', reward, {
+        reason: reason || 'timeout',
+        winner: winner && winner.name || '',
+      }));
     }
     this.broadcast('chat', { name: '[Event]', text: winner ? 'King of the Hill ended. ' + winner.name + ' held the crown longest.' : 'King of the Hill ended.' });
+    this.broadcastEventStatus(true);
+  }
+  returnFinishedEventPlayers(ev, now) {
+    if (!ev || !ev.participants) return;
+    for (const [sid, part] of ev.participants) {
+      if (part.returned || !part.returnAt || now < part.returnAt) continue;
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (client) {
+        if (ev.kind === EVENT_KING.kind) this.teleportKingPlayer(client, part.returnPos, 'return', ev);
+        else this.teleportEventPlayer(client, part.returnPos, 'return', ev);
+      }
+      part.returned = true;
+    }
+    if (ev.phase !== 'ended') return;
+    const waiting = [...ev.participants.values()].some(part => !part.returned && part.returnAt && now < part.returnAt);
+    if (waiting) return;
     this.activeEventInstanceId = '';
-    this.serverEvent = this.createIdleEvent(Date.now() + this.randomEventDelay(), this.pickNextServerEvent().kind);
+    this.serverEvent = this.createIdleEvent(now + this.randomEventDelay(), this.pickNextServerEvent().kind);
     this.broadcastEventStatus(true);
   }
   tickServerEvent(now) {
@@ -766,11 +1069,30 @@ class EventsMixin {
       }
     }
     const ev = this.currentEventInstance() || this.serverEvent;
+    if (ev && ev.participants) this.returnFinishedEventPlayers(ev, now);
+    if (ev !== (this.currentEventInstance() || this.serverEvent)) return;
     if (ev.phase === 'idle' && now >= ev.nextAt) this.announceServerEvent(now, ev.kind);
     else if (ev.phase === 'queue' && now >= ev.startsAt) {
-      if (ev.kind === EVENT_KING.kind) this.startKingEvent(now);
+      const minimum = this.minParticipantsForEvent(ev);
+      const eligible = [...ev.queue].filter(sid => {
+        const p = this.state.players.get(sid);
+        return p && !p.dgn && this.clients.some(client => client.sessionId === sid);
+      });
+      const lacksTeams = ev.kind === EVENT_KING.kind && eligible.length >= minimum && this.kingEventTeamCount(eligible) < 2;
+      if (eligible.length < minimum || lacksTeams) {
+        ev.waitingForPlayers = true;
+        ev.waitingReason = lacksTeams ? 'teams' : 'players';
+        ev.startsAt = now + EVENT_QUEUE_RETRY_MS;
+        this.broadcastEventStatus(true);
+      } else if (!ev.queueExtended && ev.queue.size >= EVENT_QUEUE_NEAR_FULL && now - (ev.lastJoinAt || 0) <= EVENT_QUEUE_RETRY_MS) {
+        ev.queueExtended = true;
+        ev.startsAt = now + EVENT_QUEUE_EXTENSION_MS;
+        this.broadcast('chat', { name: '[Event]', text: ev.name + ' queue extended for a final call.' });
+        this.broadcastEventStatus(true);
+      } else if (ev.kind === EVENT_KING.kind) this.startKingEvent(now);
       else this.startParkourEvent(now);
     }
+    else if (ev.phase === 'starting') this.tickStartingEvent(ev, now);
     else if (ev.phase === 'active') {
       if (now >= ev.endsAt) {
         if (ev.kind === EVENT_KING.kind) this.endKingEvent('timeout');

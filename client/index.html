@@ -24,8 +24,12 @@
 <div id="familiarhud" class="hidden"></div>
 <div id="dungeonparty" class="hidden"></div>
 <div id="dungeonping" class="hidden"></div>
+<div id="encounterprompt" class="hidden"></div>
 <div id="sysmsgs"></div>
-<div id="eventhud" class="hidden"><div><div class="et" id="eventtitle">PARKOUR EVENT</div><div class="es" id="eventsub">Waiting for next event</div></div><button id="eventjoin" type="button">JOIN QUEUE</button></div>
+<div id="kinghud" class="hidden"><div class="khhead"><span>KING OF THE HILL</span><b id="kingtime">0:00</b></div><div class="khteam" id="kingteam">EVENT SQUAD</div><div class="khcrown" id="kingcrown">Crown unclaimed</div><div class="khroster" id="kingroster"></div><div class="khscores" id="kingscores"></div><div class="khannounce hidden" id="kingannounce"></div></div>
+<div id="eventhud" class="hidden"><div class="eventcrest">!</div><div class="eventbody"><div class="et" id="eventtitle">PARKOUR EVENT</div><div class="es" id="eventsub">Waiting for next event</div><div class="eventmeta"><span id="eventqueuepill">QUEUE 0</span><span id="eventrewardpill">REWARD</span><span id="eventtimepill">0:00</span></div><div class="eventbar"><i id="eventbar"></i></div></div><button id="eventjoin" type="button">JOIN QUEUE</button></div>
+<div id="eventstart" class="hidden"><div id="eventstartpanel"><div class="eskicker">SERVER EVENT</div><h1 id="eventstartname">PARKOUR</h1><div class="esobjective"><span>OBJECTIVE</span><b id="eventstartobjective">Reach the finish platform</b></div><div class="esrules" id="eventstartrules">Falls reset you to the start · Finish before time expires</div><div class="esreward" id="eventstartreward">2 LEGENDARY TOKENS</div><div class="escount" id="eventstartcount">GET READY</div></div></div>
+<div id="eventresult" class="hidden"><div id="eventresultpanel"><div class="ercrest">✦</div><div class="erkicker">SERVER EVENT COMPLETE</div><h1 id="eventresulttitle">VICTORY</h1><div id="eventresultname"></div><div id="eventresultstats"></div><div id="eventresultrewards"></div><div class="erreturn"><span id="eventresultreturn">Returning to the overworld…</span><b id="eventresulttime">7</b></div><div class="erbar"><i id="eventresultbar"></i></div></div></div>
 <div id="coachhud" class="hidden"><div><div class="ct" id="coachtitle">NEXT STEP</div><div class="cs" id="coachsub">Helpful suggestion</div></div><kbd id="coachlearn">FOLLOW LIGHT</kbd><button id="coachdismiss" type="button" aria-label="Dismiss suggestion">×</button></div>
 <div id="claimhud" class="hidden"></div>
 <div id="landmap" class="hidden"><div class="mt">CLAIM MAP</div><canvas id="landmapcanvas" width="132" height="132"></canvas></div>
@@ -51,6 +55,7 @@
 <div id="locationhud" class="hidden"><div class="zone" id="zonename">Town of Beginnings</div><div class="meta" id="zonemeta">Safe town</div></div>
 <div id="coords" class="hidden"></div>
 <div id="currentquest" class="hidden"></div>
+<div id="activitytracker" class="hidden"></div>
 <div id="townchoices" class="hidden"></div>
 <div id="tutorialhud" class="hidden"></div>
 <div id="pathselect" class="hidden"><div id="pathpanel"></div></div>
@@ -145,6 +150,7 @@
 <script src="/three.js"></script>
 <script src="/colyseus.js"></script>
 <script src="/shared/dimension-grid.js"></script>
+<script src="/shared/comms-rules.js"></script>
 <script src="/shared/dungeon-generation.js"></script>
 <script>
 (async()=>{

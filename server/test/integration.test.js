@@ -98,6 +98,9 @@ async function main() {
     A.send('chat', { text: 'hello bravo' });
     const rejection = await waitFor(() => (aBox.commsReject || []).find(m => m.reason === 'custom'), 'A custom chat rejection');
     assert.equal(rejection.reason, 'custom');
+    A.send('comms', { mode: 'local', phrase: '<script>alert(1)</script>' });
+    const invalid = await waitFor(() => (aBox.commsReject || []).find(m => m.reason === 'phrase'), 'invalid phrase-id rejection');
+    assert.equal(invalid.reason, 'phrase');
   });
 
   await test('localized comms support proximity chat and direct whispers', async () => {
@@ -122,6 +125,59 @@ async function main() {
     B.send('comms', { mode: 'whisper', target: A.sessionId, phrase: 'hello' });
     const muted = await waitFor(() => (bBox.commsReject || []).find(m => m.reason === 'muted'), 'muted whisper rejection');
     assert.equal(muted.reason, 'muted');
+
+    const reportFile = path.join(process.env.DATA_DIR, 'moderation-reports.jsonl');
+    await waitFor(() => fs.existsSync(reportFile) && fs.readFileSync(reportFile, 'utf8').trim(), 'durable moderation report');
+    const record = JSON.parse(fs.readFileSync(reportFile, 'utf8').trim().split(/\r?\n/).at(-1));
+    assert.ok(record.history.length >= 1);
+    assert.equal(record.history.every(entry => Object.keys(entry).sort().join(',') === 'at,mode,phrase'), true, 'report history leaked fields beyond approved phrase metadata');
+    assert.equal(JSON.stringify(record).includes('quiet reply'), false, 'report persisted custom text');
+
+    const clientA2 = new Client(ENDPOINT, { headers: { Cookie: cookieA } });
+    const A2 = await clientA2.joinOrCreate('blockcraft', { name: 'Alpha' });
+    const a2Box = inbox(A2);
+    await waitFor(() => A2.state.players.get(A2.sessionId), 'second account session');
+    await wait(300);
+    B.send('comms', { mode: 'whisper', target: A2.sessionId, phrase: 'follow' });
+    const persistedMute = await waitFor(() => (bBox.commsReject || []).filter(m => m.reason === 'muted').length >= 2, 'account block on second session');
+    assert.ok(persistedMute);
+    assert.equal((a2Box.comms || []).some(m => m.fromSid === B.sessionId), false);
+    await A2.leave();
+  });
+
+  await test('local chat respects range while party chat crosses distance', async () => {
+    for (let i = 0; i < 22; i++) {
+      const self = B.state.players.get(B.sessionId);
+      B.send('move', { x: self.x + 7, y: self.y, z: self.z, yaw: 0 });
+      await wait(180);
+    }
+    const separation = Math.hypot(B.state.players.get(B.sessionId).x - me().x, B.state.players.get(B.sessionId).z - me().z);
+    assert.ok(separation > 48, 'could not establish out-of-range players: ' + separation.toFixed(1));
+    const before = (bBox.comms || []).length;
+    A.send('comms', { mode: 'local', phrase: 'follow' });
+    await wait(450);
+    assert.equal((bBox.comms || []).length, before, 'out-of-range local message leaked');
+
+    A.send('teamCreate', { name: 'Comms Matrix' });
+    const teamId = await waitFor(() => A.state.players.get(A.sessionId).team, 'A team creation');
+    B.send('teamJoin', { key: teamId });
+    await waitFor(() => B.state.players.get(B.sessionId).team === teamId, 'B team join');
+    await wait(300);
+    A.send('comms', { mode: 'party', phrase: 'dungeon_group' });
+    const party = await waitFor(() => (bBox.comms || []).find(m => m.mode === 'party' && m.text === 'Group up.'), 'distant party message');
+    assert.equal(party.fromSid, A.sessionId);
+  });
+
+  await test('local chat does not cross dimension boundaries', async () => {
+    B.send('tutorialEnter', { kind: 'onboarding' });
+    await waitFor(() => B.state.players.get(B.sessionId).dim === 'tutorial', 'B tutorial dimension');
+    const before = (bBox.comms || []).length;
+    await wait(300);
+    A.send('comms', { mode: 'local', phrase: 'thanks' });
+    await wait(450);
+    assert.equal((bBox.comms || []).length, before, 'cross-dimension local message leaked');
+    B.send('tutorialExit', {});
+    await waitFor(() => B.state.players.get(B.sessionId).dim === 'overworld', 'B tutorial exit');
   });
 
   await test('in-town block edit is rejected and not applied', async () => {
@@ -142,7 +198,7 @@ async function main() {
   });
 
   await test('meta change propagates through shared state to other player', async () => {
-    A.send('meta', { name: 'AlphaPrime', heldId: 110 });
+    A.send('meta', { name: '<Alpha!Prime>✨', heldId: 110 });
     await waitFor(() => { const p = B.state.players.get(A.sessionId); return p && p.name === 'AlphaPrime'; }, 'B to see renamed Alpha');
     assert.equal(B.state.players.get(A.sessionId).name, 'AlphaPrime');
   });

@@ -90,10 +90,10 @@ function buildTrainingMeadow(setBlock) {
   }
 }
 
-const MINOR_LANDMARK_TYPES = ['ruins', 'shrine', 'hunter_camp', 'graveyard'];
+const MINOR_LANDMARK_TYPES = ['ruins', 'shrine', 'hunter_camp', 'bandit_camp', 'graveyard'];
 const MAJOR_LANDMARK_TYPES = ['abandoned_tower', 'cave', 'giant_tree', 'crashed_airship'];
 const LANDMARK_NAMES = {
-  ruins: 'Weathered Ruins', shrine: 'Wayside Shrine', hunter_camp: 'Hunter Camp', graveyard: 'Forgotten Graveyard',
+  ruins: 'Weathered Ruins', shrine: 'Wayside Shrine', hunter_camp: 'Hunter Camp', bandit_camp: 'Bandit Camp', graveyard: 'Forgotten Graveyard',
   abandoned_tower: 'Abandoned Watchtower', cave: 'Deepmouth Cave', giant_tree: 'Elderheart Tree', crashed_airship: 'Fallen Airship',
 };
 function regionalLandmarkSpecs() {
@@ -248,6 +248,13 @@ function buildRegionalLandmarks(setBlock) {
       prep(s,5,B.GRASS); setBlock(x,y+1,z,B.CAMPFIRE); for(const ox of [-3,3]){ box(x+ox-1,y+1,z-2,x+ox+1,y+1,z+2,B.PLANKS); box(x+ox,y+2,z-1,x+ox,y+3,z+1,B.LOG); }
       for(const [ox,oz] of [[-4,-4],[4,-4],[-4,4],[4,4]]){ setBlock(x+ox,y+1,z+oz,B.LOG); setBlock(x+ox,y+2,z+oz,B.TORCH); }
       setBlock(x,y+1,z+3,B.CHEST);
+    } else if(s.type==='bandit_camp'){
+      prep(s,4,B.DIRT); setBlock(x,y+1,z,B.CAMPFIRE); setBlock(x,y+1,z+2,B.CHEST);
+      for(const ox of [-3,3]){ setBlock(x+ox,y+1,z-2,B.LOG); setBlock(x+ox,y+2,z-2,B.LOG); setBlock(x+ox,y+3,z-2,B.TERRACOTTA); }
+      for(const [ox,oz] of [[-4,-3],[4,-3]]){ setBlock(x+ox,y+1,z+oz,B.LOG); setBlock(x+ox,y+2,z+oz,B.TORCH); }
+      for(let h=1;h<=5;h++) setBlock(x-5,y+h,z+3,B.LOG);
+      setBlock(x-4,y+4,z+3,B.TERRACOTTA); setBlock(x-4,y+5,z+3,B.TERRACOTTA);
+      for(const [ox,oz] of [[-5,-5],[5,-5],[-5,5],[5,5]]){ setBlock(x+ox,y+1,z+oz,B.COBBLE); setBlock(x+ox,y+2,z+oz,B.LOG); }
     } else if(s.type==='graveyard'){
       prep(s,5,B.GRASS); for(let gx=-3;gx<=3;gx+=3) for(let gz=-3;gz<=3;gz+=3){ setBlock(x+gx,y+1,z+gz,B.COBBLE); setBlock(x+gx,y+2,z+gz,B.BRICK); }
       for(let i=-5;i<=5;i++){ setBlock(x+i,y+1,z-5,B.LOG); setBlock(x+i,y+1,z+5,B.LOG); setBlock(x-5,y+1,z+i,B.LOG); setBlock(x+5,y+1,z+i,B.LOG); } setBlock(x,y+1,z,B.LANTERN);

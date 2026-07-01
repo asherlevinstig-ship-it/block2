@@ -870,9 +870,9 @@ function dangerRingAtClient(x,z){
   for(let i=1;i<DANGER_RINGS.length;i++) if(d>=DANGER_RINGS[i].min) ring=i;
   return ring;
 }
-const MINOR_LANDMARK_TYPES=['ruins','shrine','hunter_camp','graveyard'];
+const MINOR_LANDMARK_TYPES=['ruins','shrine','hunter_camp','bandit_camp','graveyard'];
 const MAJOR_LANDMARK_TYPES=['abandoned_tower','cave','giant_tree','crashed_airship'];
-const LANDMARK_NAMES={ruins:'Weathered Ruins',shrine:'Wayside Shrine',hunter_camp:'Hunter Camp',graveyard:'Forgotten Graveyard',abandoned_tower:'Abandoned Watchtower',cave:'Deepmouth Cave',giant_tree:'Elderheart Tree',crashed_airship:'Fallen Airship'};
+const LANDMARK_NAMES={ruins:'Weathered Ruins',shrine:'Wayside Shrine',hunter_camp:'Hunter Camp',bandit_camp:'Bandit Camp',graveyard:'Forgotten Graveyard',abandoned_tower:'Abandoned Watchtower',cave:'Deepmouth Cave',giant_tree:'Elderheart Tree',crashed_airship:'Fallen Airship'};
 function regionalLandmarkSpecs(){
   const majors=[],minors=[],tc0=WX/2,hs0=42; let n=0;
   for(let gx=125;gx<WX-100;gx+=250)for(let gz=125;gz<WX-100;gz+=250){
@@ -939,6 +939,7 @@ function buildRegionalLandmarks(setBlock){
     if(s.type==='ruins'){prep(s,5);for(let i=-4;i<=4;i++){if(i!==1)setBlock(x+i,y+1,z-4,B.BRICK);if(i!==-2)setBlock(x-4,y+1,z+i,B.COBBLE);}for(const [ox,oz,h] of [[-4,-4,4],[4,-4,3],[-4,4,2],[4,4,4]])for(let k=1;k<=h;k++)setBlock(x+ox,y+k,z+oz,k===h?B.COBBLE:B.BRICK);setBlock(x,y+1,z,B.LANTERN);
     }else if(s.type==='shrine'){prep(s,4,B.BRICK);for(const [ox,oz] of [[-3,-3],[3,-3],[-3,3],[3,3]])for(let k=1;k<=4;k++)setBlock(x+ox,y+k,z+oz,B.LOG);box(x-3,y+4,z-3,x+3,y+4,z+3,B.PLANKS);box(x-1,y+1,z-1,x+1,y+1,z+1,B.COBBLE);setBlock(x,y+2,z,B.LANTERN);
     }else if(s.type==='hunter_camp'){prep(s,5,B.GRASS);setBlock(x,y+1,z,B.CAMPFIRE);for(const ox of [-3,3]){box(x+ox-1,y+1,z-2,x+ox+1,y+1,z+2,B.PLANKS);box(x+ox,y+2,z-1,x+ox,y+3,z+1,B.LOG);}for(const [ox,oz] of [[-4,-4],[4,-4],[-4,4],[4,4]]){setBlock(x+ox,y+1,z+oz,B.LOG);setBlock(x+ox,y+2,z+oz,B.TORCH);}setBlock(x,y+1,z+3,B.CHEST);
+    }else if(s.type==='bandit_camp'){prep(s,4,B.DIRT);setBlock(x,y+1,z,B.CAMPFIRE);setBlock(x,y+1,z+2,B.CHEST);for(const ox of [-3,3]){setBlock(x+ox,y+1,z-2,B.LOG);setBlock(x+ox,y+2,z-2,B.LOG);setBlock(x+ox,y+3,z-2,B.TERRACOTTA);}for(const [ox,oz] of [[-4,-3],[4,-3]]){setBlock(x+ox,y+1,z+oz,B.LOG);setBlock(x+ox,y+2,z+oz,B.TORCH);}for(let h=1;h<=5;h++)setBlock(x-5,y+h,z+3,B.LOG);setBlock(x-4,y+4,z+3,B.TERRACOTTA);setBlock(x-4,y+5,z+3,B.TERRACOTTA);for(const [ox,oz] of [[-5,-5],[5,-5],[-5,5],[5,5]]){setBlock(x+ox,y+1,z+oz,B.COBBLE);setBlock(x+ox,y+2,z+oz,B.LOG);}
     }else if(s.type==='graveyard'){prep(s,5,B.GRASS);for(let gx=-3;gx<=3;gx+=3)for(let gz=-3;gz<=3;gz+=3){setBlock(x+gx,y+1,z+gz,B.COBBLE);setBlock(x+gx,y+2,z+gz,B.BRICK);}for(let i=-5;i<=5;i++){setBlock(x+i,y+1,z-5,B.LOG);setBlock(x+i,y+1,z+5,B.LOG);setBlock(x-5,y+1,z+i,B.LOG);setBlock(x+5,y+1,z+i,B.LOG);}setBlock(x,y+1,z,B.LANTERN);
     }else if(s.type==='abandoned_tower'){prep(s,8,B.COBBLE);for(let k=1;k<=12;k++)for(let ox=-5;ox<=5;ox++)for(let oz=-5;oz<=5;oz++)if(Math.abs(ox)===5||Math.abs(oz)===5){if(!(oz===5&&Math.abs(ox)<=1&&k<=3)&&hash2(x+ox+k,z+oz-k)>.08)setBlock(x+ox,y+k,z+oz,k%3?B.COBBLE:B.BRICK);}box(x-6,y+12,z-6,x+6,y+12,z+6,B.PLANKS);for(const [ox,oz] of [[-6,-6],[6,-6],[-6,6],[6,6]])setBlock(x+ox,y+13,z+oz,B.LANTERN);
     }else if(s.type==='cave'){prep(s,7,B.STONE);for(let dz=-6;dz<=8;dz++){const fy=y-Math.floor((dz+6)/4);for(let ox=-2;ox<=2;ox++)for(let oy=1;oy<=4;oy++)setBlock(x+ox,fy+oy,z+dz,B.AIR);for(let ox=-2;ox<=2;ox++)setBlock(x+ox,fy,z+dz,B.COBBLE);}for(let ox=-5;ox<=5;ox++)for(let oz=7;oz<=15;oz++)for(let oy=-4;oy<=3;oy++)if((ox*ox)/25+(oz-11)*(oz-11)/20+(oy*oy)/16<1)setBlock(x+ox,y-3+oy,z+oz,B.AIR);for(const ox of [-3,3])for(let k=1;k<=5;k++)setBlock(x+ox,y+k,z-6,B.COBBLE);box(x-3,y+5,z-6,x+3,y+5,z-6,B.BRICK);setBlock(x,y+3,z-5,B.TORCH);
@@ -1939,6 +1940,11 @@ function updateLandMinimap(){
   for(const s of regionalLandmarks)marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
+  if(mapUtility&&overworldActivity){
+    const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
+    dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
+    dynamic(overworldActivity.patrol,'#e85b4d',3);dynamic(overworldActivity.camp,'#ff8b52',3);
+  }
   const px=Math.floor(player.pos.x/WX*landMapCanvas.width);
   const pz=Math.floor(player.pos.z/WX*landMapCanvas.height);
   landMapCtx.strokeStyle='#4fd8ff';
@@ -2301,6 +2307,10 @@ const NPC_ROLES=[
    accept:'I will prepare the charter and record you as guild leader.',
    done:'Your banner has a place in this hall now.',
    focus:'guild'},
+  {name:'Tamsin Rook',shortName:'Tamsin',role:'road_warden',title:'Road Warden',personality:'watchful, practical, unimpressed by excuses',
+   work:[HUB.jobs.x+2,HUB.jobs.z],home:[tc(46),tc(75)],static:true,
+   line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts.',
+   accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
 ];
 function npcSpotFree(x,z){
   const bx=Math.floor(x), bz=Math.floor(z), G=TOWN.G;
@@ -3452,8 +3462,9 @@ const UTILITY_DEFS={
   world_map:{name:'World Map', icon:'W', slot:'passive', unlock:'Map 5 landmarks or small discoveries.', desc:'Expands the exploration map into a larger cartographer view for longer routes.'},
   feather_step:{name:'Feather Step', icon:'F', slot:'passive', unlock:'Finish a Parkour event.', desc:'Prevents hard landing shock and acts as the no-fall-damage utility hook for future server damage.'},
   party_compass:{name:'Party Compass', icon:'P', slot:'passive', unlock:'Create or join a team.', desc:'Shows a bearing and distance to your nearest teammate.'},
+  trail_sense:{name:'Trail Sense', icon:'T', slot:'passive', unlock:'Reach Road Warden reputation III.', desc:'Reads bandit tracks and gives exact patrol bearings without revealing the full map.'},
 };
-const UTILITY_ORDER=['compass','minimap','world_map','feather_step','party_compass'];
+const UTILITY_ORDER=['compass','minimap','world_map','feather_step','party_compass','trail_sense'];
 const JOBS={
   adventurer:{name:'Adventurer', icon:'A', col:'#d8f2ff', role:'Quests, gates, monsters', desc:'Progress by completing town quests, clearing gates, joining events, and defeating threats.', perk:'Future perk: better quest and gate rewards.'},
   miner:{name:'Miner', icon:'⛏', col:'#9ca3af', role:'Ore, stone, gems', desc:'Progress by mining stone, coal, iron, diamonds, and dungeon walls.', perk:'Future perk: better ore yields and tool endurance.'},
@@ -3462,9 +3473,9 @@ const JOBS={
   blacksmith:{name:'Blacksmith', icon:'⚒', col:'#fb923c', role:'Gear, tools, repair', desc:'Progress by crafting equipment, smelting ingots, and repairing gear.', perk:'Future perk: higher durability crafted gear and cheaper repairs.'},
   monk:{name:'Monk', icon:'◇', col:'#7dd3fc', role:'Meditation and support', desc:'Progress by meditating in the Town Shrine.', perk:'Future perk: shrine focus buffs and group recovery.'},
 };
-let playerJob='', jobXp=0, meditateJobAcc=0, jobContract=null, regionalContract=null, regionalContractOffers=[];
+let playerJob='', jobXp=0, meditateJobAcc=0, jobContract=null, regionalContract=null, regionalContractOffers=[],roadWardenRep=0;
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
-let utilityUnlocks=[], utilityLoadout={active:'', passive:[]};
+let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
 let highestGateRankCleared=-1;
 let armorSlot=null;
 const maxHp=()=>20+(S.vit-1)*2;
@@ -3548,7 +3559,10 @@ function jobTitleFor(jobId, lvl){
 const clampJobContract=c=>questJobModule.clampJobContract(c,JOBS);
 function clampRegionalContract(c){
   if(!c || typeof c!=='object') return null;
-  const types=['scout_landmark','clear_elite_camp','collect_biome','recover_buried_cache','solve_puzzle_shrine','visit_road_merchant'];
+  const types=[
+    'scout_landmark','clear_elite_camp','collect_biome','recover_buried_cache','solve_puzzle_shrine','visit_road_merchant',
+    'road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'
+  ];
   const type=String(c.type||'');
   if(!types.includes(type)) return null;
   const need=Math.max(1,Math.min(999,c.need|0));
@@ -3577,7 +3591,8 @@ function regionalContractTypeLabel(type){
     type==='collect_biome'?'Collect Regional Material':
     type==='recover_buried_cache'?'Recover Buried Cache':
     type==='solve_puzzle_shrine'?'Solve Puzzle Shrine':
-    type==='visit_road_merchant'?'Visit Road Merchant':'Guild Work';
+    type==='visit_road_merchant'?'Visit Road Merchant':
+    type.startsWith('road_')?'Road Warden Contract':'Guild Work';
 }
 function clampUtilityUnlocks(list){
   const out=[];
@@ -3759,6 +3774,31 @@ const eventHud=document.getElementById('eventhud');
 const eventTitle=document.getElementById('eventtitle');
 const eventSub=document.getElementById('eventsub');
 const eventJoinBtn=document.getElementById('eventjoin');
+const eventBar=document.getElementById('eventbar');
+const eventQueuePill=document.getElementById('eventqueuepill');
+const eventRewardPill=document.getElementById('eventrewardpill');
+const eventTimePill=document.getElementById('eventtimepill');
+const kingHud=document.getElementById('kinghud');
+const kingTime=document.getElementById('kingtime');
+const kingTeam=document.getElementById('kingteam');
+const kingCrown=document.getElementById('kingcrown');
+const kingRoster=document.getElementById('kingroster');
+const kingScores=document.getElementById('kingscores');
+const kingAnnounce=document.getElementById('kingannounce');
+const eventStartWin=document.getElementById('eventstart');
+const eventStartName=document.getElementById('eventstartname');
+const eventStartObjective=document.getElementById('eventstartobjective');
+const eventStartRules=document.getElementById('eventstartrules');
+const eventStartReward=document.getElementById('eventstartreward');
+const eventStartCount=document.getElementById('eventstartcount');
+const eventResultWin=document.getElementById('eventresult');
+const eventResultTitle=document.getElementById('eventresulttitle');
+const eventResultName=document.getElementById('eventresultname');
+const eventResultStats=document.getElementById('eventresultstats');
+const eventResultRewards=document.getElementById('eventresultrewards');
+const eventResultReturn=document.getElementById('eventresultreturn');
+const eventResultTime=document.getElementById('eventresulttime');
+const eventResultBar=document.getElementById('eventresultbar');
 const coachHud=document.getElementById('coachhud');
 const coachTitle=document.getElementById('coachtitle');
 const coachSub=document.getElementById('coachsub');
@@ -3766,17 +3806,26 @@ const coachLearnBtn=document.getElementById('coachlearn');
 const coachDismissBtn=document.getElementById('coachdismiss');
 let serverEvent=null;
 let eventWorld=null, eventReturnWorld=null, eventMode=false, eventId='';
+let lastEventAlertId='';
+let pendingEventResult=null;
+let eventStageAnchor=null;
+let kingAnnouncement=null, lastKingMinuteWarnId='';
+let kingObjectiveVisual=null, kingHolderAura=null, kingCrownOverride=null;
+const EVENT_QUEUE_CLIENT_MS=15*60*1000, EVENT_ACTIVE_CLIENT_MS={parkour:10*60*1000,king:15*60*1000};
 function fmtClock(ms){
   ms=Math.max(0,ms|0);
   const s=Math.ceil(ms/1000), m=Math.floor(s/60), r=s%60;
   return m+':'+String(r).padStart(2,'0');
 }
 function renderEventHud(){
+  renderEventResult();
+  renderEventStart();
+  renderKingHud();
   if(calmTownHud()){
     if(eventHud) eventHud.classList.add('hidden');
     return;
   }
-  if(!eventHud||!serverEvent || serverEvent.phase==='idle' && !(serverEvent.nextAt>0)){
+  if(!eventHud||!serverEvent || serverEvent.phase==='idle'||serverEvent.phase==='ended'){
     if(eventHud) eventHud.classList.add('hidden');
     return;
   }
@@ -3784,31 +3833,49 @@ function renderEventHud(){
   eventHud.classList.remove('hidden');
   const name=serverEvent.name||'Parkour';
   const isKing=serverEvent.kind==='king';
-  const reward=serverEvent.reward||2;
+  const reward=Math.max(0,serverEvent.reward||2);
   const rewardXp=Math.max(0,serverEvent.rewardXp|0);
   const rewardText=reward+' legendary tokens'+(rewardXp?' + '+rewardXp.toLocaleString('en-US')+' Hunter XP':'');
   let sub='Waiting for event';
-  let btn='JOIN QUEUE', disabled=true;
-  if(serverEvent.phase==='idle'){
-    sub='Next '+name+' event in '+fmtClock((serverEvent.nextAt||0)-now)+' - reward '+rewardText;
-    btn='TEST EVENT';
+  let btn='JOIN QUEUE', disabled=true, timeLeft=0, barPct=0;
+  eventHud.classList.toggle('queue',serverEvent.phase==='queue');
+  eventHud.classList.toggle('joined',serverEvent.phase==='queue'&&!!serverEvent.joined);
+  eventHud.classList.toggle('active',serverEvent.phase==='active');
+  eventHud.classList.toggle('king',isKing);
+  if(serverEvent.phase==='queue'){
+    timeLeft=Math.max(0,(serverEvent.startsAt||0)-now);
+    barPct=1-Math.min(1,timeLeft/EVENT_QUEUE_CLIENT_MS);
+    if(serverEvent.waitingForPlayers){
+      sub=serverEvent.waitingReason==='teams'
+        ?'Waiting for an opposing squad - teams hold up to 5 hunters'
+        :'Waiting for more hunters - '+(serverEvent.queueSize||0)+' / '+(serverEvent.minParticipants||1)+' minimum';
+    }else if(serverEvent.queueExtended){
+      sub='Final call - queue extended '+fmtClock(timeLeft)+' - '+(serverEvent.queueSize||0)+' / '+(serverEvent.queueCapacity||8);
+    }else{
+      sub=(serverEvent.joined?'Signed up':'Event alert')+' - starts in '+fmtClock(timeLeft)+' - queued '+(serverEvent.queueSize||0)+' - reward '+rewardText;
+    }
+    btn=serverEvent.joined?'LEAVE QUEUE':'JOIN QUEUE';
     disabled=false;
-  } else if(serverEvent.phase==='queue'){
-    sub='Starts in '+fmtClock((serverEvent.startsAt||0)-now)+' · queued '+(serverEvent.queueSize||0)+' · reward '+reward+' legendary tokens';
-    if(rewardXp) sub+=' + '+rewardXp.toLocaleString('en-US')+' Hunter XP';
-    btn=serverEvent.joined?'SIGNED UP':'JOIN QUEUE';
-    disabled=false;
+  } else if(serverEvent.phase==='starting'){
+    timeLeft=serverEvent.goAt?Math.max(0,serverEvent.goAt-now):0;
+    barPct=serverEvent.goAt?1-Math.min(1,timeLeft/4000):(serverEvent.readyCount||0)/Math.max(1,serverEvent.participantCount||1);
+    sub=serverEvent.goAt
+      ?'All hunters ready - begins in '+Math.max(1,Math.ceil(timeLeft/1000))
+      :(serverEvent.ready?'Ready - waiting for hunters':'Press a movement key to confirm you are ready')+' - '+(serverEvent.readyCount||0)+' / '+(serverEvent.participantCount||0);
+    btn='GET READY';
   } else if(serverEvent.phase==='active'){
-    sub=(serverEvent.participating?'Complete the course':'Event running')+' · '+fmtClock((serverEvent.endsAt||0)-now)+' left';
+    timeLeft=Math.max(0,(serverEvent.endsAt||0)-now);
+    barPct=Math.min(1,timeLeft/(EVENT_ACTIVE_CLIENT_MS[serverEvent.kind]||EVENT_ACTIVE_CLIENT_MS.parkour));
+    sub=(serverEvent.participating?(isKing?'Hold the crown':'Complete the course'):'Event running')+' - '+fmtClock(timeLeft)+' left';
     if(serverEvent.leaderboard && serverEvent.leaderboard.length){
       const best=serverEvent.leaderboard[0];
-      sub+=' - best '+(best.name||'Hunter')+' '+fmtClock(best.ms||0);
+      sub+=' - '+(isKing?'leader ':'best ')+(best.name||'Hunter')+' '+fmtClock(best.ms||0);
     }
     btn=serverEvent.completed?'COMPLETE':'ACTIVE';
   }
   if(isKing && serverEvent.phase==='active'){
     const crown=serverEvent.crown||{};
-    sub=(serverEvent.participating?'Fight for the crown':'Event running')+' - '+fmtClock((serverEvent.endsAt||0)-now)+' left';
+    sub=(serverEvent.participating?'Fight for the crown':'Event running')+' - '+fmtClock(timeLeft)+' left';
     if(crown.holderName) sub+=' - crown '+crown.holderName;
     if(serverEvent.leaderboard && serverEvent.leaderboard.length){
       const best=serverEvent.leaderboard[0];
@@ -3819,21 +3886,223 @@ function renderEventHud(){
   eventSub.textContent=sub;
   eventJoinBtn.textContent=btn;
   eventJoinBtn.disabled=disabled;
+  if(eventQueuePill)eventQueuePill.textContent=(serverEvent.joined?'SIGNED UP':'QUEUE')+' '+(serverEvent.queueSize|0)+'/'+(serverEvent.queueCapacity||8);
+  if(eventRewardPill)eventRewardPill.textContent=rewardText.toUpperCase();
+  if(eventTimePill)eventTimePill.textContent=serverEvent.phase==='queue'&&serverEvent.waitingForPlayers?'WAITING':fmtClock(timeLeft);
+  if(eventBar)eventBar.style.width=Math.max(0,Math.min(100,Math.round(barPct*100)))+'%';
+}
+function clearKingWorldMarkers(){
+  if(!NET||!NET.remotes)return;
+  for(const sid in NET.remotes){
+    const remote=NET.remotes[sid];
+    if(remote.kingMarker&&remote.kingMarker.parent===remote.grp)remote.grp.remove(remote.kingMarker);
+    remote.kingMarker=null;remote.kingMarkerText='';
+  }
+}
+function crownMesh(scale=1){
+  const root=new THREE.Group(), gold=0xffc933, pale=0xffef9a;
+  const solid=(color)=>new THREE.MeshBasicMaterial({color,transparent:true,opacity:.96,depthTest:false,depthWrite:false});
+  const band=new THREE.Mesh(new THREE.CylinderGeometry(.46,.5,.28,8),solid(gold));
+  band.scale.set(scale,scale,scale);band.renderOrder=31;root.add(band);
+  for(let i=0;i<5;i++){
+    const a=i/5*Math.PI*2;
+    const prong=new THREE.Mesh(new THREE.ConeGeometry(.12,.58,4),solid(i===2?pale:gold));
+    prong.position.set(Math.cos(a)*.34,.34,Math.sin(a)*.34);
+    prong.rotation.y=-a;prong.scale.set(scale,scale,scale);prong.renderOrder=31;root.add(prong);
+  }
+  const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.13),solid(0x7dd3fc));
+  gem.position.y=.22;gem.scale.setScalar(scale);gem.renderOrder=32;root.add(gem);
+  return root;
+}
+function disposeKingVisual(root){
+  if(!root)return;
+  if(root.parent)root.parent.remove(root);
+  root.traverse(node=>{
+    if(node.geometry)node.geometry.dispose();
+    if(node.material){
+      const materials=Array.isArray(node.material)?node.material:[node.material];
+      for(const mat of materials){if(mat.map)mat.map.dispose();mat.dispose();}
+    }
+  });
+}
+function ensureKingObjectiveVisual(){
+  if(kingObjectiveVisual)return kingObjectiveVisual;
+  const root=new THREE.Group(), crown=crownMesh(1), glow=new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(glowTexCanvas),color:0xffd24a,transparent:true,opacity:.8,
+    depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending
+  }));
+  glow.scale.set(3.4,3.4,1);glow.renderOrder=29;root.add(glow);
+  crown.position.y=.1;root.add(crown);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(2.75,3.05,64),new THREE.MeshBasicMaterial({
+    color:0xffd24a,transparent:true,opacity:.7,side:THREE.DoubleSide,depthWrite:false,depthTest:false,
+    blending:THREE.AdditiveBlending
+  }));
+  ring.rotation.x=-Math.PI/2;ring.position.y=-1.15;ring.renderOrder=28;root.add(ring);
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.09,.34,12,12,1,true),new THREE.MeshBasicMaterial({
+    color:0xffd24a,transparent:true,opacity:.24,side:THREE.DoubleSide,depthWrite:false,depthTest:false,
+    blending:THREE.AdditiveBlending
+  }));
+  beam.position.y=4.85;beam.renderOrder=27;root.add(beam);
+  const label=makeTextSprite('CLAIM THE CROWN','#ffd24a');
+  label.position.y=2.15;label.scale.set(3.25,1.62,1);label.renderOrder=32;root.add(label);
+  root.userData={crown,glow,ring,beam,label};
+  scene.add(root);kingObjectiveVisual=root;
+  return root;
+}
+function ensureKingHolderAura(holderSid){
+  const remote=NET&&NET.remotes&&NET.remotes[holderSid];
+  const local=NET&&NET.room&&holderSid===NET.room.sessionId;
+  const parent=local?scene:remote&&remote.grp;
+  if(!parent)return null;
+  if(kingHolderAura&&(kingHolderAura.userData.holderSid!==holderSid||kingHolderAura.parent!==parent)){
+    disposeKingVisual(kingHolderAura);kingHolderAura=null;
+  }
+  if(kingHolderAura)return kingHolderAura;
+  const aura=new THREE.Group(), crown=crownMesh(.66);
+  crown.position.y=.2;aura.add(crown);
+  const halo=new THREE.Mesh(new THREE.TorusGeometry(.62,.07,8,36),new THREE.MeshBasicMaterial({
+    color:0xffe27a,transparent:true,opacity:.92,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending
+  }));
+  halo.rotation.x=Math.PI/2;halo.position.y=-.12;halo.renderOrder=35;aura.add(halo);
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xffd24a,
+    transparent:true,opacity:.72,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  glow.scale.set(2.4,2.4,1);glow.renderOrder=34;aura.add(glow);
+  aura.userData={holderSid,local,crown,halo,glow};aura.renderOrder=35;
+  if(!local)aura.position.y=3.15;
+  parent.add(aura);kingHolderAura=aura;
+  return aura;
+}
+function clearKingObjectiveVisuals(){
+  disposeKingVisual(kingObjectiveVisual);kingObjectiveVisual=null;
+  disposeKingVisual(kingHolderAura);kingHolderAura=null;
+  kingCrownOverride=null;
+}
+function renderKingObjectiveVisuals(){
+  const live=!!(serverEvent&&serverEvent.kind==='king'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&dim==='event');
+  if(!live){clearKingObjectiveVisuals();return;}
+  const crown=serverEvent.crown||{};
+  const override=kingCrownOverride&&Date.now()<kingCrownOverride.until?kingCrownOverride:null;
+  const holderSid=override&&override.holderSid||crown.holderSid||'';
+  if(!holderSid){
+    if(kingHolderAura){disposeKingVisual(kingHolderAura);kingHolderAura=null;}
+    const objective=ensureKingObjectiveVisual(),t=performance.now()*.001;
+    objective.visible=true;
+    objective.position.set(Number(crown.x)||0,Number(crown.y)||TOWN.G+2,Number(crown.z)||0);
+    objective.userData.crown.position.y=.12+Math.sin(t*2.5)*.16;
+    objective.userData.crown.rotation.y=t*.9;
+    objective.userData.ring.material.opacity=.48+Math.sin(t*3)*.18;
+    objective.userData.beam.material.opacity=.18+Math.sin(t*2)*.08;
+    return;
+  }
+  if(kingObjectiveVisual)kingObjectiveVisual.visible=false;
+  const aura=ensureKingHolderAura(holderSid);
+  if(!aura)return;
+  const t=performance.now()*.001;
+  if(aura.userData.local)aura.position.set(player.pos.x,player.pos.y+3.15,player.pos.z);
+  aura.userData.crown.rotation.y=t*1.5;
+  aura.userData.crown.position.y=.2+Math.sin(t*3)*.1;
+  aura.userData.halo.rotation.z=t*.8;
+  aura.userData.glow.material.opacity=.58+Math.sin(t*4)*.16;
+}
+function renderKingWorldMarkers(){
+  if(!NET||!NET.remotes)return;
+  const live=!!(serverEvent&&serverEvent.kind==='king'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&serverEvent.eventSquad);
+  const members=new Set(live?(serverEvent.eventSquad.members||[]).map(member=>member.sid):[]);
+  const crownSid=live&&serverEvent.crown&&serverEvent.crown.holderSid||'';
+  for(const sid in NET.remotes){
+    const remote=NET.remotes[sid],wanted=members.has(sid);
+    if(!wanted){
+      if(remote.kingMarker&&remote.kingMarker.parent===remote.grp)remote.grp.remove(remote.kingMarker);
+      remote.kingMarker=null;remote.kingMarkerText='';
+      continue;
+    }
+    const text=sid===crownSid?'CROWN · SQUAD':'SQUAD';
+    if(remote.kingMarker&&remote.kingMarker.parent!==remote.grp){remote.kingMarker=null;remote.kingMarkerText='';}
+    if(!remote.kingMarker||remote.kingMarkerText!==text){
+      if(remote.kingMarker&&remote.kingMarker.parent===remote.grp)remote.grp.remove(remote.kingMarker);
+      remote.kingMarker=makeTextSprite(text,sid===crownSid?'#ffd24a':'#7dd3fc');
+      remote.kingMarker.scale.set(1.75,.88,1);
+      remote.kingMarker.position.y=3.2;
+      remote.kingMarker.renderOrder=24;
+      remote.grp.add(remote.kingMarker);
+      remote.kingMarkerText=text;
+    }
+  }
+}
+function renderKingHud(){
+  if(!kingHud)return;
+  const live=!!(serverEvent&&serverEvent.kind==='king'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&serverEvent.eventSquad);
+  kingHud.classList.toggle('hidden',!live);
+  if(!live){clearKingWorldMarkers();clearKingObjectiveVisuals();return;}
+  renderKingObjectiveVisuals();
+  renderKingWorldMarkers();
+  const squad=serverEvent.eventSquad||{},crown=serverEvent.crown||{},left=Math.max(0,(serverEvent.endsAt||serverEvent.goAt||Date.now())-Date.now());
+  if(kingTime)kingTime.textContent=serverEvent.phase==='starting'?'STAGING':fmtClock(left);
+  if(kingTeam)kingTeam.textContent=(squad.name||'Event Squad').toUpperCase()+' · '+(squad.members||[]).length+'/5';
+  const ownCrown=!!(crown.holderTeamId&&crown.holderTeamId===squad.id);
+  if(kingCrown)kingCrown.textContent=crown.holderName?(ownCrown?'YOUR SQUAD HOLDS THE CROWN · ':'CROWN · ')+crown.holderName:'Crown unclaimed';
+  if(kingRoster)kingRoster.innerHTML=(squad.members||[]).map(member=>'<span class="'+(NET.room&&member.sid===NET.room.sessionId?'me':'')+'">'+escHTML(member.name)+(member.path?' · '+escHTML(member.path):'')+'</span>').join('');
+  const rows=serverEvent.leaderboard||[],best=Math.max(1,...rows.map(row=>row.ms||0));
+  if(kingScores)kingScores.innerHTML=rows.map((row,index)=>{
+    const own=row.teamId===squad.id,pct=Math.max(2,Math.round((row.ms||0)/best*100));
+    return '<div class="khscore '+(own?'own ':'')+(row.holder?'holder':'')+'"><b>'+(index+1)+'</b><span class="khn">'+escHTML(row.name)+(row.holder?' · CROWN':'')+'</span><span>'+fmtClock(row.ms||0)+'</span><span class="khbar"><i style="width:'+pct+'%"></i></span></div>';
+  }).join('');
+  const urgent=serverEvent.phase==='active'&&left>0&&left<=60000;
+  kingHud.classList.toggle('finalminute',urgent);
+  if(urgent&&lastKingMinuteWarnId!==serverEvent.id){
+    lastKingMinuteWarnId=serverEvent.id;
+    sysMsg('<b>Final minute!</b> Every second of crown control matters.');
+  }
+  if(kingAnnounce){
+    const show=kingAnnouncement&&kingAnnouncement.id===serverEvent.id&&Date.now()<kingAnnouncement.until;
+    kingAnnounce.classList.toggle('hidden',!show);
+    if(show)kingAnnounce.textContent=kingAnnouncement.text;
+  }
+}
+function kingCrownTransferFx(m){
+  if(!m||dim!=='event')return;
+  let x=serverEvent&&serverEvent.crown&&serverEvent.crown.x||player.pos.x;
+  let y=serverEvent&&serverEvent.crown&&serverEvent.crown.y||player.pos.y+1.5;
+  let z=serverEvent&&serverEvent.crown&&serverEvent.crown.z||player.pos.z;
+  if(NET&&NET.room&&m.holderSid===NET.room.sessionId){x=player.pos.x;y=player.pos.y+1.3;z=player.pos.z;}
+  else{
+    const remote=NET&&NET.remotes&&NET.remotes[m.holderSid];
+    if(remote&&remote.grp){x=remote.grp.position.x;y=remote.grp.position.y+1.3;z=remote.grp.position.z;}
+  }
+  burst(x,y,z,[1,.72,.12],42,4.2,3.4,.85);
+  ringPulse(x,y-.9,z,1.2,0xffd24a,.65);
+  ringPulse(x,y+.15,z,.78,0xffef9a,.5);
+  glowFlash(x,y+.3,z,0xffd24a,4.2,.42);
+  SFX.boom();SFX.coin();camShake=Math.max(camShake,.38);
+}
+function kingCrownChanged(m){
+  if(!m)return;
+  kingCrownOverride={holderSid:m.holderSid||'',until:Date.now()+2200};
+  const own=!!(serverEvent&&serverEvent.eventSquad&&m.teamId===serverEvent.eventSquad.id);
+  const action=m.reason==='kill'?'CROWN STOLEN':m.reason==='pickup'?'CROWN CLAIMED':'FIRST HOLDER';
+  kingAnnouncement={id:serverEvent&&serverEvent.id||'',until:Date.now()+3500,text:action+' · '+(m.holderName||'A hunter')+(m.teamName?' · '+m.teamName:'')};
+  sysMsg((own?'<b>Your squad</b>':'<b>'+escHTML(m.holderName||'A hunter')+'</b>')+' '+(m.reason==='kill'?'stole':m.reason==='pickup'?'claimed':'starts with')+' the crown'+(m.teamName?' for <b>'+escHTML(m.teamName)+'</b>':'')+'.');
+  kingCrownTransferFx(m);
+  renderKingHud();
 }
 if(eventJoinBtn) eventJoinBtn.onclick=()=>{
   if(!NET.on||!NET.room||!serverEvent) return;
-  if(serverEvent.phase==='idle') NET.room.send('eventDebugStart', {});
-  else if(serverEvent.phase==='queue') NET.room.send(serverEvent.joined?'eventDebugStart':'eventJoin', {});
+  if(serverEvent.phase==='queue') NET.room.send(serverEvent.joined?'eventLeave':'eventJoin', {});
 };
 function applyEventStatus(m){
   serverEvent=m||null;
+  if(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id!==lastEventAlertId){
+    lastEventAlertId=serverEvent.id;
+    sysMsg('<b>Event Alert:</b> '+escHTML(serverEvent.name||'Server Event')+' queue is open. Join from the event banner before the countdown ends. <b>Reward:</b> '+Math.max(0,serverEvent.reward||2)+' Legendary Tokens'+(serverEvent.rewardXp?' + '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' Hunter XP':'')+'.');
+    if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}
+  }
   renderEventHud();
-  const activeHere=!!(serverEvent&&serverEvent.phase==='active'&&serverEvent.participating&&!serverEvent.completed&&serverEvent.id===eventId);
-  if(!activeHere&&dim==='event'){
+  const activeHere=!!(serverEvent&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&!serverEvent.completed&&serverEvent.id===eventId);
+  if(!activeHere&&dim==='event'&&!(pendingEventResult&&Date.now()<(pendingEventResult.returnAt||0))){
     leaveEventDimension(null);
     return;
   }
-  if(serverEvent && serverEvent.kind==='parkour' && serverEvent.phase==='active' && serverEvent.participating && !serverEvent.completed && serverEvent.course && dim!=='event'){
+  if(serverEvent && serverEvent.kind==='parkour' && (serverEvent.phase==='starting'||serverEvent.phase==='active') && serverEvent.participating && !serverEvent.completed && serverEvent.course && dim!=='event'){
     enterParkourEvent({eventId:serverEvent.id, course:serverEvent.course, x:serverEvent.course.start.x, y:serverEvent.course.start.y, z:serverEvent.course.start.z, reason:'status'});
   }
 }
@@ -3841,21 +4110,27 @@ function eventRejected(m){
   const r=(m&&m.reason)||'closed';
   if(r==='active') sysMsg('The event already started. Wait for the next queue.');
   else if(r==='dungeon') sysMsg('Exit the dungeon before joining an event queue.');
+  else if(r==='full') sysMsg('That event queue is full. Watch for the next event.');
   else sysMsg('No event queue is open right now.');
 }
 function applyEventTeleport(m){
   if(!m) return;
+  if(m.reason==='return'){
+    pendingEventResult=null;
+    if(eventResultWin) eventResultWin.classList.add('hidden');
+  }
+  if(m.reason==='start') eventStageAnchor={x:Number(m.x)||0,y:Number(m.y)||0,z:Number(m.z)||0};
   if(m.kind==='king'){
     if(m.eventId&&m.arena) enterKingEvent(m);
     else leaveEventDimension(m);
-    if(m.reason==='start') sysMsg('<b>King of the Hill started!</b> Hold the crown longest.');
+    if(m.reason==='start'){ if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');} sysMsg('<b>King of the Hill started!</b> Hold the crown longest.'); }
     else if(m.reason==='respawn') sysMsg('You were defeated. Respawning in the arena.');
     else if(m.reason==='arena') sysMsg('Stay inside the King of the Hill arena.');
     return;
   }
   if(m.eventId && m.course) enterParkourEvent(m);
   else leaveParkourEvent(m);
-  if(m.reason==='start') sysMsg('<b>Parkour started!</b> Reach the finish before time runs out.');
+  if(m.reason==='start'){ if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');} sysMsg('<b>Parkour started!</b> Reach the finish before time runs out.'); }
   else if(m.reason==='reset') sysMsg('You fell out of the event course. Resetting to the start.');
 }
 function buildParkourWorld(course){
@@ -3914,6 +4189,7 @@ function enterKingEvent(m){
   player.vel.set(0,0,0);
 }
 function leaveEventDimension(m){
+  clearKingObjectiveVisuals();
   if(dim==='event'){
     world=eventReturnWorld||owWorld||world;
     dim='overworld'; eventMode=false; eventId=''; NET.dgn='';
@@ -3931,7 +4207,6 @@ function eventCompleted(m){
   sysMsg('<b>'+escHTML(serverEvent&&serverEvent.name||'Event')+' complete!</b> You earned <b>2 Legendary Weapon Tokens</b>.');
 }
 function eventFailed(m){
-  if(dim==='event') leaveEventDimension(null);
   const nm=(m&&m.name)||serverEvent&&serverEvent.name||'Event';
   if(m&&m.winner) sysMsg('<b>'+escHTML(nm)+' ended.</b> Winner: <b>'+escHTML(m.winner)+'</b>.');
   else sysMsg('<b>'+escHTML(nm)+' ended.</b> No event reward this time.');
@@ -4061,6 +4336,96 @@ function showDungeonReward(m, earned){
   };
   clearTimeout(rewardHideTimer);
   if(!milestone) rewardHideTimer=setTimeout(()=>rewardWin.classList.add('hidden'), 12000);
+}
+function eventStartLocked(){
+  return !!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);
+}
+function holdEventStartPosition(){
+  if(!eventStartLocked()||!eventStageAnchor)return;
+  player.pos.set(eventStageAnchor.x,eventStageAnchor.y,eventStageAnchor.z);
+  player.vel.set(0,0,0);
+  playerKb.set(0,0,0);
+}
+function renderEventStart(){
+  if(!eventStartWin)return;
+  const showing=!!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);
+  eventStartWin.classList.toggle('hidden',!showing);
+  if(!showing)return;
+  const king=serverEvent.kind==='king';
+  const side=serverEvent.eventTeam||{};
+  const source=side.source==='party'?'party kept together':side.source==='fellowship'?'fellowship kept together':'ability-balanced assignment';
+  eventStartWin.classList.toggle('king',king);
+  eventStartName.textContent=(serverEvent.name||'Server Event').toUpperCase();
+  eventStartObjective.textContent=king?'Hold the crown longer than every rival':'Reach the finish platform before time expires';
+  eventStartRules.textContent=king
+    ?(side.name?side.name+' · '+source+' · ':'')+'Defeat the holder to take the crown · Team crown time decides the winner'
+    :'Falls reset you to the start · Fastest clean finish takes first place';
+  eventStartReward.textContent=Math.max(0,serverEvent.reward||2)+' LEGENDARY TOKENS'+(serverEvent.rewardXp?' · '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' HUNTER XP':'');
+  if(!serverEvent.goAt){
+    eventStartCount.textContent=serverEvent.ready?'WAITING '+(serverEvent.readyCount||0)+'/'+(serverEvent.participantCount||0):'PRESS A MOVEMENT KEY';
+    eventStartCount.classList.add('ready');
+    return;
+  }
+  const left=Math.max(0,serverEvent.goAt-Date.now());
+  const n=Math.ceil(left/1000);
+  const ready=n>3;
+  eventStartCount.textContent=ready?'GET READY':String(Math.max(1,n));
+  eventStartCount.classList.toggle('ready',ready);
+}
+function confirmEventReady(){
+  if(!eventStartLocked()||!serverEvent||serverEvent.ready||!NET.on||!NET.room)return;
+  NET.room.send('eventReady',{});
+}
+function eventGo(m){
+  applyEventStatus(m);
+  eventStageAnchor=null;
+  if(eventStartWin)eventStartWin.classList.add('hidden');
+  if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}
+  sysMsg('<b>GO!</b> '+(m&&m.kind==='king'?'Take and hold the crown.':'Reach the finish platform.'));
+}
+function eventAfk(m){
+  eventStageAnchor=null;
+  if(eventStartWin)eventStartWin.classList.add('hidden');
+  sysMsg('Removed from <b>'+escHTML(m&&m.name||'the event')+'</b>: no ready input was received during staging.');
+}
+function eventCancelled(m){
+  eventStageAnchor=null;
+  if(eventStartWin)eventStartWin.classList.add('hidden');
+  sysMsg('<b>'+escHTML(m&&m.name||'Event')+' cancelled.</b> Not enough ready hunters remained. You have been returned safely.');
+}
+function eventResultCell(label,value){
+  return '<div><span>'+escHTML(label)+'</span><b>'+escHTML(value)+'</b></div>';
+}
+function showEventResult(m){
+  if(!m||!eventResultWin) return;
+  pendingEventResult=m;
+  const outcome=m.outcome||'failed';
+  eventResultWin.className=outcome;
+  const won=outcome==='win'||outcome==='complete';
+  eventResultTitle.textContent=outcome==='complete'?'COURSE COMPLETE':outcome==='win'?'VICTORY':'EVENT ENDED';
+  eventResultName.textContent=(m.name||'Server Event').toUpperCase();
+  const contribution=m.contribution||{};
+  const placement=m.placement>0?'#'+m.placement+(m.participantCount?' / '+m.participantCount:''):'—';
+  const contributionValue=contribution.valueMs>0?fmtClock(contribution.valueMs):'No score';
+  eventResultStats.innerHTML=eventResultCell('Placement',placement)+eventResultCell(contribution.label||'Contribution',contributionValue)
+    +(Number.isFinite(contribution.resets)?eventResultCell('Course resets',String(contribution.resets|0)):'')
+    +(m.winner?eventResultCell('Winner',m.winner):'');
+  const reward=m.reward||{};
+  let rewards='';
+  if(reward.xp) rewards+=eventResultCell('Hunter XP','+'+(reward.xp|0).toLocaleString('en-US'));
+  if(reward.tokens) rewards+=eventResultCell('Legendary Tokens','+'+(reward.tokens|0));
+  if(reward.unlock) rewards+=eventResultCell('Utility Unlocked',reward.unlock);
+  if(!rewards) rewards=eventResultCell('Rewards',won?'Reward delivered':'No reward this time');
+  eventResultRewards.innerHTML=rewards;
+  renderEventResult();
+}
+function renderEventResult(){
+  if(!pendingEventResult||!eventResultWin) return;
+  const total=7000;
+  const left=Math.max(0,(pendingEventResult.returnAt||Date.now())-Date.now());
+  eventResultReturn.textContent=left>0?'Returning to the overworld…':'Returning now…';
+  eventResultTime.textContent=String(Math.max(0,Math.ceil(left/1000)));
+  eventResultBar.style.width=Math.max(0,Math.min(100,left/total*100))+'%';
 }
 // First-promotion / field-work-graduation modals and the D-rank prep objective +
 // checklist now live in client/js/onboarding.mjs, wired up as ONBOARD below.
@@ -5256,6 +5621,7 @@ const emitters=[
   {x:tp(64.5), y:TG+4.9,  z:tp(64.5),  type:'splash', rate:20}, // fountain
 ];
 for(const b of roadBreadcrumbs) if(b.type==='campfire') emitters.push({x:b.x+.5,y:b.y+1.45,z:b.z+.5,type:'roadSmoke',rate:3.2});
+for(const s of regionalLandmarks) if(s.type==='bandit_camp') emitters.push({x:s.x+.5,y:s.y+1.6,z:s.z+.5,type:'banditSmoke',rate:5.5});
 const roadBirds=[];
 const birdMat=new THREE.MeshBasicMaterial({color:0x242631});
 for(let i=0;i<roadBreadcrumbs.length;i+=3){
@@ -5283,6 +5649,11 @@ function emitOne(e){
     spawnParticle({x:e.x+(Math.random()-.5)*.45,y:e.y,z:e.z+(Math.random()-.5)*.45,
       vx:.12+Math.random()*.22,vy:.8+Math.random()*.55,vz:(Math.random()-.5)*.28,
       life:4+Math.random()*2.5,grav:-.08,r:g,g:g,b:g+.025});
+  } else if(e.type==='banditSmoke'){
+    const g=.2+Math.random()*.12;
+    spawnParticle({x:e.x+(Math.random()-.5)*.55,y:e.y,z:e.z+(Math.random()-.5)*.55,
+      vx:.1+Math.random()*.22,vy:1+Math.random()*.75,vz:(Math.random()-.5)*.35,
+      life:5.2+Math.random()*2.8,grav:-.06,r:g+.1,g:g*.75,b:g*.55});
   } else if(e.type==='splash'){
     const a=Math.random()*Math.PI*2, sp=.3+Math.random()*.8;
     spawnParticle({x:e.x, y:e.y, z:e.z,
@@ -5631,6 +6002,14 @@ const legacyWorldBindings={
   "escHTML":{get:()=>escHTML},
   "eventCompleted":{get:()=>eventCompleted},
   "eventFailed":{get:()=>eventFailed},
+  "eventGo":{get:()=>eventGo},
+  "eventAfk":{get:()=>eventAfk},
+  "eventCancelled":{get:()=>eventCancelled},
+  "confirmEventReady":{get:()=>confirmEventReady},
+  "eventStartLocked":{get:()=>eventStartLocked},
+  "holdEventStartPosition":{get:()=>holdEventStartPosition},
+  "kingCrownChanged":{get:()=>kingCrownChanged},
+  "showEventResult":{get:()=>showEventResult},
   "eventLog":{get:()=>eventLog},
   "eventRejected":{get:()=>eventRejected},
   "fireballExplodeVfx":{get:()=>fireballExplodeVfx},
@@ -5735,6 +6114,7 @@ const legacyWorldBindings={
   "regionalContract":{get:()=>regionalContract,set:value=>{regionalContract=value;}},
   "regionalContractOffers":{get:()=>regionalContractOffers,set:value=>{regionalContractOffers=value;}},
   "regionalContractTypeLabel":{get:()=>regionalContractTypeLabel},
+  "roadWardenRep":{get:()=>roadWardenRep,set:value=>{roadWardenRep=value;}},
   "regionalLandmarks":{get:()=>regionalLandmarks,set:value=>{regionalLandmarks=value;}},
   "remoteUnderCrosshair":{get:()=>remoteUnderCrosshair},
   "removeCropMesh":{get:()=>removeCropMesh},
@@ -5850,6 +6230,7 @@ const legacyWorldBindings={
   "utilityLoadout":{get:()=>utilityLoadout,set:value=>{utilityLoadout=value;}},
   "utilityUnlocked":{get:()=>utilityUnlocked},
   "utilityUnlocks":{get:()=>utilityUnlocks,set:value=>{utilityUnlocks=value;}},
+  "overworldActivity":{get:()=>overworldActivity,set:value=>{overworldActivity=value;}},
   "villagers":{get:()=>villagers},
   "WH":{get:()=>WH},
   "world":{get:()=>world,set:value=>{world=value;}},

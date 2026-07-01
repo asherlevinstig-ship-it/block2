@@ -80,8 +80,10 @@ class EconomyMixin {
     if (!info || info.space !== 'overworld') return null;
     if (!this.landmarkCampChests) {
       this.landmarkCampChests = new Map();
-      for (const s of W.regionalLandmarkSpecs()) if (s.type === 'hunter_camp')
-        this.landmarkCampChests.set(s.x + ',' + (s.y + 1) + ',' + (s.z + 3), s);
+      for (const s of W.regionalLandmarkSpecs()) {
+        if (s.type === 'hunter_camp') this.landmarkCampChests.set(s.x + ',' + (s.y + 1) + ',' + (s.z + 3), s);
+        if (s.type === 'bandit_camp') this.landmarkCampChests.set(s.x + ',' + (s.y + 1) + ',' + (s.z + 2), s);
+      }
     }
     let site = this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z), discovery = false;
     if (!site) {
@@ -95,6 +97,7 @@ class EconomyMixin {
     const roll = W.hash2(site.x * 7717, site.z * 3571), slots = new Array(18).fill(null);
     let i = 0;
     slots[i++] = { id: I.COAL, count: (discovery ? 1 : 2) + ring * 3 };
+    if (site.type === 'bandit_camp') slots[i++] = { id: I.IRON_INGOT, count: 2 + ring * 2 };
     if (ring >= 1) slots[i++] = { id: I.IRON_INGOT, count: ring + 1 };
     if (ring >= 2) slots[i++] = { id: I.DIAMOND, count: ring - 1 + (roll > .55 ? 1 : 0) };
     if (regional) slots[i++] = { id: regional.item, count: 1 + ring };
@@ -137,6 +140,11 @@ class EconomyMixin {
     const info = this.parseChestKey(key);
     if (!info) return false;
     const rec = this.getChestRecord(key);
+    const camp = this.landmarkCampChests && this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z);
+    if (camp && camp.type === 'bandit_camp') {
+      const state = this.banditCampStates && this.banditCampStates.get(camp.id);
+      if (!state || state.phase !== 'cleared' || Date.now() >= state.respawnAt) return false;
+    }
     if (rec.scope === 'town') return false;
     if (rec.scope === 'public') return info.space === 'overworld';
     if (rec.scope === 'dungeon') return info.space !== 'overworld' && (p.dgn || '') === info.space;
@@ -392,11 +400,15 @@ class EconomyMixin {
       if (!guild || !(guild.floor > 0)) return reject('guild_floor');
       if (action !== 'buy') return reject('invalid');
     }
-    const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : ROAD_MERCHANT_BUY) : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
+    const wardenStock=ROAD_MERCHANT_BUY.concat((rec.prof.roadWardenRep|0)>=3?[[I.IRON_INGOT,1,18]]:[],(rec.prof.roadWardenRep|0)>=6?[[I.COOKED_MEAT,2,16]]:[]);
+    const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : wardenStock) : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
     const id = m.id | 0;
     const entry = this.findCatalogEntry(catalog, id);
     if (!entry) return reject('invalid');
     let [, count, price] = entry;
+    if(action==='buy'&&isRoad)price=Math.max(1,Math.ceil(price*(1-Math.min(.15,Math.floor((rec.prof.roadWardenRep|0)/3)*.05))));
+    const discountUntil = this.caravanDiscounts && this.caravanDiscounts.get(rec.token);
+    if (action === 'buy' && isRoad && discountUntil > Date.now()) price = Math.max(1, Math.ceil(price * .8));
     if (action === 'buy' && isTavern && id === I.COOKED_MEAT) {
       const bundles = Math.max(1, Math.min(3, m.count | 0 || 1));
       count *= bundles;

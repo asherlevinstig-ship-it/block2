@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url');
 const W = require('../world');
 const serverDungeon = require('../dungeon');
 const { DimensionGrid, isDimensionGrid } = require('../../shared/dimension-grid');
+const serverCommsRules = require('../../shared/comms-rules');
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
 
@@ -59,8 +60,10 @@ test('client dimensions and server consume the shared grid contract', () => {
     fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', name), 'utf8')
   ).join('\n');
   const dimensionScript = html.indexOf('<script src="/shared/dimension-grid.js"></script>');
+  const commsScript = html.indexOf('<script src="/shared/comms-rules.js"></script>');
   const dungeonScript = html.indexOf('<script src="/shared/dungeon-generation.js"></script>');
-  assert.equal(dimensionScript >= 0 && dungeonScript > dimensionScript, true);
+  assert.equal(dimensionScript >= 0 && commsScript > dimensionScript && dungeonScript > commsScript, true);
+  assert.match(html, /<script src="\/shared\/comms-rules\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/dungeon-generation\.js"><\/script>/);
   assert.match(html, /import\('\.\/js\/game-context\.mjs'\)/);
   assert.match(html, /createGameContext\(\{\s*services:/);
@@ -102,6 +105,21 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.ok(compatibilityBindings <= 89, 'networking compatibility surface must not grow');
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /main loop/);
   assert.match(runtimeSource, /BlockcraftDungeonGeneration\.createDungeonGeneration/);
+  assert.match(runtimeSource, /bandit_camp/);
+  assert.match(html, /id="activitytracker"/);
+  assert.match(runtimeSource, /Caravan Under Attack/);
+  assert.match(runtimeSource, /utilityEquipped\('compass'\)/);
+  assert.match(runtimeSource, /mapUtility&&overworldActivity/);
+  assert.match(runtimeSource, /Escort Caravan/);
+  assert.match(html, /id="kinghud"/);
+  assert.match(runtimeSource, /CROWN · SQUAD/);
+  assert.match(runtimeSource, /Final minute!/);
+  assert.match(runtimeSource, /CLAIM THE CROWN/);
+  assert.match(runtimeSource, /new THREE\.RingGeometry\(2\.75,3\.05,64\)/);
+  assert.match(runtimeSource, /function kingCrownTransferFx\(m\)/);
+  assert.match(networkingSource, /kingCrownChanged\(m\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'replication-visuals.mjs'), 'utf8'), /Bandit Captain[\s\S]*Merchant Wagon/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'replication-visuals.mjs'), 'utf8'), /bandit_archer/);
   assert.doesNotMatch(runtimeSource, /function generateDungeon\(ri, seed\)/);
   for (const kind of ['overworld','tutorial','event']) assert.match(runtimeSource, new RegExp("new DimensionGrid\\(\\{kind:'"+kind));
   assert.doesNotMatch(runtimeSource, /new Uint8Array\(WX\*WH\*WX\)/);
@@ -161,6 +179,19 @@ test('onboarding resource manifest restores every tutorial log and mature crop',
   assert.deepEqual(cells.filter(cell => cell.id === 25).map(cell => [cell.x, cell.y, cell.z]), [
     [108, 13, 172], [110, 13, 172], [112, 13, 172],
   ]);
+});
+
+test('browser and server consume one shared safeguarded comms ruleset', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'comms-rules.js'), 'utf8');
+  const context = vm.createContext({});
+  vm.runInContext(source, context);
+  const browserRules = JSON.parse(JSON.stringify(context.BlockcraftCommsRules));
+  assert.deepEqual(browserRules.PHRASES, serverCommsRules.PHRASES);
+  assert.deepEqual(browserRules.CONTEXTS, serverCommsRules.CONTEXTS);
+  assert.deepEqual(browserRules.CHANNELS, serverCommsRules.CHANNELS);
+  assert.deepEqual(browserRules.RULES, serverCommsRules.RULES);
+  assert.equal(serverCommsRules.phrase('dungeon_boss'), 'Focus the boss!');
+  assert.deepEqual(serverCommsRules.phraseIdsFor('gate').slice(0, 3), ['gate_ready','gate_need_one','gate_enter']);
 });
 
 test('first D-rank clear produces a one-time repeatable-loop handoff', async () => {

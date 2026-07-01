@@ -2133,16 +2133,66 @@ function requestRegionalContracts(){
   sysMsg('Guild contracts require the multiplayer server.');
   return false;
 }
+function isRoadWardenContract(c){
+  return !!(c && String(c.type||'').startsWith('road_'));
+}
+const ROAD_WARDEN_TIERS=[
+  {rep:0,name:'Unproven',reward:'Road Warden contracts become available.'},
+  {rep:1,name:'Roadhand',reward:'Tamsin starts trusting you with camp, escort, rescue, recovery, and mercy work.'},
+  {rep:3,name:'Trail Reader',reward:'Unlock Trail Sense and add iron ingots to road merchant stock.'},
+  {rep:6,name:'Road Warden',reward:'Road merchants stock cooked meat and your permanent road discount improves.'},
+  {rep:9,name:'Highway Shield',reward:'Maximum permanent road discount for safer long-distance travel.'},
+];
+function roadWardenTierInfo(repRaw){
+  const rep=Math.max(0,repRaw|0);
+  let current=ROAD_WARDEN_TIERS[0], next=null;
+  for(const tier of ROAD_WARDEN_TIERS){
+    if(rep>=tier.rep) current=tier;
+    else { next=tier; break; }
+  }
+  const base=current.rep|0, cap=next?next.rep:Math.max(base+1,rep);
+  const progress=next?Math.max(0,Math.min(1,(rep-base)/Math.max(1,cap-base))):1;
+  return {rep,current,next,progress};
+}
+function appendRoadWardenPanel(){
+  const info=roadWardenTierInfo(roadWardenRep);
+  const panel=document.createElement('div'); panel.className='roadwarden-panel';
+  const top=document.createElement('div'); top.className='roadwarden-top';
+  top.innerHTML='<span><b>Road Warden Reputation</b><br><small>Tamsin Rook tracks road-safety work separately from Guild scouting.</small></span>'+
+    '<b class="roadwarden-rank">Rep '+info.rep+' · '+escHTML(info.current.name)+'</b>';
+  panel.appendChild(top);
+  const bar=document.createElement('div'); bar.className='roadwarden-bar'; bar.innerHTML='<i style="width:'+Math.round(info.progress*100)+'%"></i>'; panel.appendChild(bar);
+  const next=document.createElement('p'); next.className='qtext roadwarden-next';
+  next.innerHTML=info.next
+    ? '<b>Next reward at Rep '+info.next.rep+':</b> '+escHTML(info.next.name)+' - '+escHTML(info.next.reward)
+    : '<b>Road network secured:</b> '+escHTML(info.current.reward);
+  panel.appendChild(next);
+  const grid=document.createElement('div'); grid.className='roadwarden-rewards';
+  for(const tier of ROAD_WARDEN_TIERS.slice(1)){
+    const owned=info.rep>=tier.rep;
+    const card=document.createElement('div'); card.className='roadwarden-reward'+(owned?' owned':'');
+    card.innerHTML='<b>'+(owned?'✓':'Rep '+tier.rep)+'</b><span>'+escHTML(tier.name)+'<br><small>'+escHTML(tier.reward)+'</small></span>';
+    grid.appendChild(card);
+  }
+  panel.appendChild(grid);
+  const how=document.createElement('p'); how.className='qtext roadwarden-how';
+  how.innerHTML='<b>Earn reputation:</b> clear bandit camps, escort caravans, rescue attacked merchants, recover stolen cargo, spare surrendered bandits, or defeat specialist bandits.';
+  panel.appendChild(how);
+  const old=qpanelEl.querySelector('.roadwarden-panel');
+  if(old) old.replaceWith(panel);
+  else qpanelEl.appendChild(panel);
+}
 function openRegionalContractsUI(){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   openQWin('management');
   regionalContractsOpen=true;
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent='HUNTER GUILD CONTRACTS'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='REGIONAL CONTRACTS - EXPLORATION WORK'; qpanelEl.appendChild(sub);
+  const h=document.createElement('h2'); h.textContent='REGIONAL CONTRACTS'; qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='HUNTER GUILD + ROAD WARDEN WORK'; qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  info.innerHTML='Take one server-backed regional contract at a time. These point you toward landmarks, elite camps, buried caches, puzzle shrines, road merchants, and biome materials.';
+  info.innerHTML='Take one server-backed regional contract at a time. Guild contracts point you toward landmarks, caches, shrines, merchants, and biome materials. Road Warden contracts make the roads safer through camps, caravans, rescues, recoveries, and mercy calls.';
   qpanelEl.appendChild(info);
+  appendRoadWardenPanel();
   if(!NET.on || !NET.room){
     const p=document.createElement('p'); p.className='qtext'; p.innerHTML='Connect to the multiplayer server to receive rotating guild contracts.'; qpanelEl.appendChild(p);
   } else {
@@ -2158,9 +2208,13 @@ function regionalRewardText(c){
   return bits.length?bits.join(', '):'Guild favor';
 }
 function appendRegionalContractCard(c, active=false){
+  const road=isRoadWardenContract(c);
   const row=document.createElement('div'); row.className='shoprow';
+  row.className='shoprow '+(road?'road-contract':'guild-contract');
   const badge=document.createElement('b'); badge.style.color=active?(c.ready?'#9ad26b':'#ffd24a'):'#d8f2ff'; badge.style.fontSize='22px'; badge.textContent=active?'★':'!';
   row.appendChild(badge);
+  badge.style.color=active?(c.ready?'#9ad26b':'#ffd24a'):(road?'#ffd36b':'#9fd7ff');
+  badge.textContent=active?'*':road?'W':'G';
   const txt=document.createElement('span');
   const pct=Math.round((Math.min(c.need,c.have)/Math.max(1,c.need))*100);
   txt.innerHTML='<b>'+escHTML(c.title)+'</b> <small style="color:#9fd7ff">'+escHTML(regionalContractTypeLabel(c.type))+'</small><br>'+
@@ -2177,8 +2231,17 @@ function appendRegionalContractCard(c, active=false){
   }
   qpanelEl.appendChild(row);
 }
+function appendRegionalContractSection(title, contracts, emptyText){
+  const label=document.createElement('p'); label.className='qtext regional-section-title'; label.innerHTML='<b>'+escHTML(title)+'</b>'; qpanelEl.appendChild(label);
+  if(!contracts.length){
+    const empty=document.createElement('p'); empty.className='qtext regional-section-empty'; empty.textContent=emptyText; qpanelEl.appendChild(empty);
+    return;
+  }
+  for(const c of contracts) appendRegionalContractCard(c,false);
+}
 function renderRegionalContractsUI(){
   if(!qOpen || !regionalContractsOpen || qpanelEl.className!=='management') return;
+  appendRoadWardenPanel();
   const old=[...qpanelEl.querySelectorAll('.regional-contract-dynamic')];
   for(const el of old) el.remove();
   const wrap=document.createElement('div'); wrap.className='regional-contract-dynamic';
@@ -2187,15 +2250,17 @@ function renderRegionalContractsUI(){
   const oldAppend=qpanelEl.appendChild.bind(qpanelEl);
   qpanelEl.appendChild=(node)=>wrap.appendChild(node);
   if(regionalContract){
-    const label=document.createElement('p'); label.className='qtext'; label.innerHTML='<b>Active guild work</b>'; qpanelEl.appendChild(label);
+    const label=document.createElement('p'); label.className='qtext'; label.innerHTML='<b>Active '+(isRoadWardenContract(regionalContract)?'Road Warden':'Guild')+' work</b>'; qpanelEl.appendChild(label);
     appendRegionalContractCard(regionalContract,true);
   }else{
-    const label=document.createElement('p'); label.className='qtext'; label.innerHTML='<b>No active guild contract.</b> Choose one below.'; qpanelEl.appendChild(label);
+    const label=document.createElement('p'); label.className='qtext'; label.innerHTML='<b>No active regional contract.</b> Choose one Guild or Road Warden contract below.'; qpanelEl.appendChild(label);
   }
   const offers=regionalContractOffers.map(clampRegionalContract).filter(Boolean);
   if(offers.length){
-    const label=document.createElement('p'); label.className='qtext'; label.innerHTML='<b>Rotating offers</b>'; qpanelEl.appendChild(label);
-    for(const c of offers) appendRegionalContractCard(c,false);
+    const roadOffers=offers.filter(isRoadWardenContract);
+    const guildOffers=offers.filter(c=>!isRoadWardenContract(c));
+    appendRegionalContractSection('Road Warden offers', roadOffers, 'No road-safety work is posted in this rotation.');
+    appendRegionalContractSection('Hunter Guild offers', guildOffers, 'No Guild exploration work is posted in this rotation.');
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('REFRESH', ()=>requestRegionalContracts()));
@@ -2701,7 +2766,9 @@ function openShopUI(vendor='market'){
       qpanelEl.appendChild(r);
     }
   };
-  mk('\u2014 BUY \u2014', vendor==='road'?ROAD_MERCHANT_BUY:SHOP_BUY, true);
+  const roadDiscount=1-Math.min(.15,Math.floor(roadWardenRep/3)*.05);
+  const roadStock=ROAD_MERCHANT_BUY.concat(roadWardenRep>=3?[[I.IRON_INGOT,1,18]]:[],roadWardenRep>=6?[[I.COOKED_MEAT,2,16]]:[]).map(e=>[e[0],e[1],Math.max(1,Math.ceil(e[2]*roadDiscount))]);
+  mk('\u2014 BUY \u2014', vendor==='road'?roadStock:SHOP_BUY, true);
   mk('\u2014 SELL \u2014', SHOP_SELL, false);
   qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }

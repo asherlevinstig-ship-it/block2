@@ -1406,6 +1406,7 @@ document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !
 let hintDone=false;
 addEventListener('keydown', e=>{
   if(chatTyping) return;
+  if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
   if(pathChoiceOpen){
     e.preventDefault();
     return;
@@ -1756,6 +1757,11 @@ function secondaryAction(){
     return;
   }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
+  const spared=mobUnderCrosshair(5);
+  if(spared&&spared.net&&spared.ref&&spared.ref.state==='surrender'){
+    if(NET.on&&NET.room)NET.room.send('banditSpare',{id:spared.netId});
+    return;
+  }
   const hit=raycast(6);
   if(!hit) return;
   if(interactSmallDiscovery(nearbySmallDiscovery(7),hit))return;
@@ -1822,7 +1828,14 @@ function secondaryAction(){
 }
 function interactWithVillager(vill){
   if(!vill) return false;
-  if(vill.role==='guild_receptionist') openGuildHallUI();
+  if(vill.role==='road_warden'){
+    let first=false;try{first=!localStorage.getItem('bc_tamsin_intro_seen');if(first)localStorage.setItem('bc_tamsin_intro_seen','1');}catch(e){}
+    sysMsg(first
+      ? '<b>Tamsin Rook:</b> "Take one Road Warden contract, follow the road tracker, then come back for reputation. Camps, caravans, stolen cargo, mercy calls — that is how we make roads boring again."'
+      : '<b>Road Warden reputation:</b> '+(roadWardenRep|0));
+    openRegionalContractsUI();
+  }
+  else if(vill.role==='guild_receptionist') openGuildHallUI();
   else if(vill.role==='bartender') openTavernUI();
   else if(vill.role==='traveling_merchant'){
     sysMsg('<b>Road Merchant:</b> "What the town lacks, the road provides."');
