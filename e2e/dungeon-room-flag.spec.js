@@ -74,14 +74,12 @@ test('the ?dungeonRoom-flagged path enters and exits a real DungeonRoom via swit
   const afterExit = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status());
   expect(afterExit.dungeonId).toBe('');
 
-  // The flag-gated entry never told the overworld room a gate was used (a known 2c-i gap), so
-  // the gate is still active in the shared world; expire it so it can't leak into another spec's
-  // "find the first gate" query against this same shared server process.
-  await page.evaluate(
-    id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'expireOwnedGate', gateId: id }),
-    gate.id,
-  );
+  // The flag-gated entry never routed through the overworld enterGate handler, so the DungeonRoom
+  // disposal (which fires once the fleeing hunter is the last to leave) is the only thing that
+  // retires the gate in the shared world. Assert it's gone on its own — no manual expiry — so it
+  // can't leak into another spec's "find the first gate" query against this same server process.
   await expect.poll(
-    () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult),
-  ).toMatchObject({ action: 'expireOwnedGate', ok: true });
+    () => page.evaluate(id => !!window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === id), gate.id),
+    { timeout: 15_000 },
+  ).toBe(false);
 });

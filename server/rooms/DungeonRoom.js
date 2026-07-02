@@ -2,7 +2,7 @@ const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
-const { handOff } = require('./dungeon-handoff');
+const { handOff, consumeGate } = require('./dungeon-handoff');
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -164,6 +164,14 @@ class DungeonRoom extends GameRoom {
     // those before tearing the instance down. Colyseus only calls onDispose after every
     // client's onLeave has resolved, so in the common case this is a cheap no-op.
     try { await this.flush(); } catch (e) { console.warn('[persist] dungeon dispose flush failed:', e.message); }
+    // The raid is over (party cleared it or everyone left). The flag-gated entry
+    // reached this room via a client-side switchRoom that never told the overworld
+    // GameRoom its gate was used, so retire that gate now instead of letting it
+    // linger active until its TTL. Keyed by the overworld gate id the client
+    // passed in as gateId (== this.instance.id); the overworld room drains this on
+    // its next gate-lifecycle tick. Public gates stay walk-up-joinable for the
+    // rest of the party while this room lives — only its disposal retires them.
+    if (this.instance) consumeGate(this.instance.id);
     if (this.instance) { try { this.instance.dispose(); } catch (_) {} }
   }
 

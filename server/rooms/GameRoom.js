@@ -9,7 +9,7 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
-const { takeHandoff } = require('./dungeon-handoff');
+const { takeHandoff, drainConsumedGates } = require('./dungeon-handoff');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -1033,18 +1033,6 @@ class GameRoom extends Room {
       this.finishMobKill(client, bossId, boss);
       client.send('e2eJourneyResult', { action, requestId, ok: true });
       return true;
-    }
-    if (action === 'expireOwnedGate') {
-      // Test-only cleanup: the DungeonRoom 2c-i flag-gated entry path (client-side switchRoom)
-      // never notifies this room, so a gate entered that way is never consumed/expired like a
-      // normal enterGate would — it otherwise lingers active (up to its TTL) and can leak into
-      // an unrelated test's "find the first gate" query against this shared world.
-      const requestId = m && String(m.requestId || '').slice(0, 32);
-      const g = this.state.gates.get(String(m && m.gateId || ''));
-      const ok = !!(g && g.owner === rec.token);
-      if (ok) this.expireGate(g.id);
-      client.send('e2eJourneyResult', { action, requestId, ok });
-      return ok;
     }
     const q = rec.prof.activeNpcQuest;
     if (!rec || !q || q.giver !== 'Mara Vale') return false;
@@ -2880,6 +2868,11 @@ class GameRoom extends Room {
       if (expiresAt <= nowMs) expiredGates.push(id);
     });
     for (const id of expiredGates) this.expireGate(id);
+    // Retire gates whose DungeonRoom (flag-gated switchRoom entry) has disposed —
+    // the entry never routed through enterGate, so this is the only signal the
+    // overworld gets that the gate has been spent. expireGate no-ops on ids that
+    // were already TTL-expired or never existed here (public gates keyed by roomId).
+    for (const id of drainConsumedGates()) this.expireGate(id);
     const publicRanks = new Set();
     this.state.gates.forEach(g => { if (g.active && g.kind === 'public') publicRanks.add(g.rank | 0); });
     if (surface.length && this.publicGateSpawningUnlocked(surface)) {

@@ -34,4 +34,37 @@ function takeHandoff(token) {
   return entry.prof;
 }
 
-module.exports = { handOff, takeHandoff };
+// The other direction of the same in-process seam: a DungeonRoom that has run
+// its course (raid cleared or the party has all left) records the overworld
+// gate id it was hosting so the overworld GameRoom can retire that gate. The
+// flag-gated client entry (dimensions.mjs enterDungeon -> NETWORK.switchRoom)
+// bypasses the overworld 'enterGate' handler entirely, so without this the gate
+// the hunter walked into stays active in the shared world until its TTL lapses.
+//
+// expireGate() is overworld-room machinery (it touches gate lobbies, the mirror
+// of the primary gate, and dirty-gate persistence a DungeonRoom structurally
+// lacks), so the DungeonRoom cannot call it directly. It only leaves the id
+// here; the overworld room drains and expires on its own gate-lifecycle tick,
+// keeping every mutation of overworld state inside the overworld room.
+//
+// This registry deliberately outlives any single overworld room. A solo hunter's
+// dungeon trip empties and disposes the overworld room, and fleeing back creates
+// a fresh one — the consume notice the DungeonRoom leaves on disposal has to
+// survive that recreation to be drained. It's safe to persist because gate ids
+// never recycle within a process: gateSeq is seeded from the highest restored id
+// and only increments, so a drained id can only ever match the same gate. Across
+// a real process restart this module starts empty, so no stale ids carry over.
+const consumedGates = new Set(); // overworld gate ids awaiting expiry
+
+function consumeGate(gateId) {
+  if (gateId) consumedGates.add(String(gateId));
+}
+
+function drainConsumedGates() {
+  if (!consumedGates.size) return [];
+  const ids = [...consumedGates];
+  consumedGates.clear();
+  return ids;
+}
+
+module.exports = { handOff, takeHandoff, consumeGate, drainConsumedGates };
