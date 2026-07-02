@@ -2046,6 +2046,44 @@ test('two hunters leaving the same DungeonRoom instance together are both flushe
   assert.equal(h2.gold, 9);
 });
 
+test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld gate', async () => {
+  const room = makeDungeonRoom();
+  room.bootId = 'dr-boot';
+  const token = 'recovery_token_123';
+  const prof = defaultProfile('RoomHopper');
+  room.profiles.set(token, prof);
+  room.instance = {
+    id: 'dr-recovery', gateX: 30, gateY: 16, gateZ: 31,
+    entrance: { x: 20, z: 20, r: 3 }, world: new D.DungeonGrid(),
+    addPlayer() {},
+  };
+  const client = makeClient('recovery');
+
+  await room.onJoin(client, { name: 'RoomHopper' }, { id: token });
+
+  assert.ok(prof.dungeonRecovery, 'the switchRoom entry armed recovery like the overworld enterGate path does');
+  assert.equal(prof.dungeonRecovery.gateId, 'dr-recovery', 'keyed to the overworld gate id, not the dungeon-internal state');
+  assert.equal(prof.dungeonRecovery.bootId, 'dr-boot', 'stamped with this room process boot');
+  assert.deepEqual(prof.dungeonRecovery.pos, [31.5, 16.5, 31], 'return position is the overworld gate mouth');
+  assert.ok(room.dirtyPlayers.has(token), 'the armed marker is queued for persistence');
+});
+
+test('a clean DungeonRoom leave retires the crash-recovery marker it armed on entry', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-recovery-clear');
+  const { token, prof } = seedPlayer(room, client, { dgn: 'dr-clear' });
+  prof.dungeonRecovery = { gateId: 'dr-clear', bootId: 'dr-boot', pos: [31.5, 16.5, 31], enteredAt: Date.now() };
+  room.instance = { removePlayer() {} };
+  const saved = [];
+  room.store = { savePlayer: async (t, p) => { saved.push([t, { ...p }]); } };
+
+  await room.onLeave(client);
+
+  assert.deepEqual(saved.map(s => s[0]), [token], 'the clean leave flushed the profile');
+  assert.equal(saved[0][1].dungeonRecovery, null,
+    'so a later overworld join is not mistaken for a restart and does not wrongly refund/teleport');
+});
+
 test('King of the Hill scores time only for the crown-holding team', () => {
   const T = 1_000_000;
   const room = makeRoom();

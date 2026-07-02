@@ -1,3 +1,4 @@
+const { matchMaker } = require('colyseus');
 const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
 const D = require('../dungeon');
@@ -25,6 +26,10 @@ class DungeonRoom extends GameRoom {
   async onCreate(options) {
     this.isDungeonRoom = true;
     this.maxClients = 8;                 // a raid party, not the 16-player overworld
+    // Same shape as GameRoom.bootId — a per-process stamp for the crash-recovery marker
+    // armDungeonRecovery writes. A future overworld room (this or the next boot) compares
+    // it against its own bootId to tell a genuine restart from a same-boot rejoin.
+    this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
     this.store = createStore();
 
@@ -128,6 +133,13 @@ class DungeonRoom extends GameRoom {
     this.state.players.set(client.sessionId, p);
     this.ensurePlayerHp(client);
     inst.addPlayer(client.sessionId);
+    // Crash-recovery parity with the overworld enterGate path (which arms this in
+    // enterGateInstance): the flag-gated switchRoom entry never touched that handler, so
+    // without this a server restart mid-raid would strand the hunter with no return
+    // position and no refund of an unused private key. The marker is keyed by the overworld
+    // gate (inst.id / inst.gateX..Z); the overworld room's recoverDungeonAfterRestart
+    // consumes it on the next boot, and onLeave clears it on a clean exit.
+    this.armDungeonRecovery(client, { id: inst.id, x: inst.gateX, y: inst.gateY, z: inst.gateZ });
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
   }
 
@@ -146,6 +158,16 @@ class DungeonRoom extends GameRoom {
     // looks it up by token to know what to save, and a concurrent leave from another client in
     // this same instance may piggyback its own dirty token onto this flush() call.
     const prof = this.profiles.get(token);
+    // A clean exit — fled/cleared and switched back, or a plain disconnect — retires the
+    // crash-recovery marker armed on join. Leaving it set would make the overworld room's
+    // recoverDungeonAfterRestart treat this hunter's very next return as a server restart
+    // and wrongly refund the key / teleport them to the gate mouth. A graceful shutdown is
+    // NOT a clean exit: preserve the marker (as GameRoom.onLeave does) so next boot recovers.
+    const shuttingDown = matchMaker && matchMaker.isGracefullyShuttingDown;
+    if (prof && !shuttingDown && prof.dungeonRecovery) {
+      prof.dungeonRecovery = null;
+      this.dirtyPlayers.add(token);
+    }
     // The in-memory handoff — not the store write — is what actually protects this hunter's
     // progress from GameRoom's stale cache, so it must still happen even if flush() throws.
     try {
