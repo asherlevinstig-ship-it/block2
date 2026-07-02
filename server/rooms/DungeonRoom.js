@@ -143,10 +143,40 @@ class DungeonRoom extends GameRoom {
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
   }
 
-  async onLeave(client) {
-    // Synchronous teardown first and only — if this were deferred behind the persistence
-    // await below, the departing hunter's schema entity (and mob aggro against them) would
-    // stay live for the rest of the raid party for the duration of the store write.
+  async onLeave(client, consented) {
+    // A graceful server shutdown is not a voluntary exit: leave the seat, entity, profile, and
+    // crash-recovery marker intact for onDispose to flush and next boot to recover (mirrors
+    // GameRoom.onLeave). Tearing down here would retire the recovery marker, and there's no live
+    // GameRoom left in the dying process to hand the profile off to anyway.
+    if (matchMaker && matchMaker.isGracefullyShuttingDown) return;
+    // An unclean disconnect (a network blip, not a flee/switch) shouldn't eject a hunter from the
+    // raid. Hold their seat + live entity briefly; if they reconnect within the window, resume
+    // them into the instance and keep everything as it was. Only a timed-out window falls through
+    // to the durable teardown. Mirrors GameRoom.onLeave's reconnection path, minus the tutorial/
+    // event resumes a single-instance raid room can't have. Holding the seat also keeps the room
+    // alive across the window (Colyseus counts the reservation against autoDispose).
+    if (consented === false) {
+      try {
+        await this.allowReconnection(client, 15);
+        const token = this.tokens.get(client.sessionId);
+        const profile = token && this.profiles.get(token);
+        if (profile) client.send('profile', profile);
+        const hunger = this.playerHunger.get(client.sessionId);
+        if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
+        this.resumeDungeonInstance(client);
+        return;
+      } catch (_) {
+        // The reconnect window elapsed — perform the durable teardown below.
+      }
+    }
+    await this.finalizeDungeonLeave(client);
+  }
+
+  async finalizeDungeonLeave(client) {
+    // Teardown runs synchronously (an async fn executes up to its first await synchronously) —
+    // if the departing hunter's schema entity and its mob aggro were instead cleared only after
+    // the persistence await below, they'd stay live for the rest of the raid party for the
+    // duration of the store write.
     const token = this.tokens.get(client.sessionId);
     if (this.instance) this.instance.removePlayer(client.sessionId);
     this.state.players.delete(client.sessionId);
@@ -158,13 +188,12 @@ class DungeonRoom extends GameRoom {
     // looks it up by token to know what to save, and a concurrent leave from another client in
     // this same instance may piggyback its own dirty token onto this flush() call.
     const prof = this.profiles.get(token);
-    // A clean exit — fled/cleared and switched back, or a plain disconnect — retires the
-    // crash-recovery marker armed on join. Leaving it set would make the overworld room's
-    // recoverDungeonAfterRestart treat this hunter's very next return as a server restart
-    // and wrongly refund the key / teleport them to the gate mouth. A graceful shutdown is
-    // NOT a clean exit: preserve the marker (as GameRoom.onLeave does) so next boot recovers.
-    const shuttingDown = matchMaker && matchMaker.isGracefullyShuttingDown;
-    if (prof && !shuttingDown && prof.dungeonRecovery) {
+    // A real exit — fled/cleared and switched back, or a disconnect whose reconnect window
+    // elapsed — retires the crash-recovery marker armed on join. Leaving it set would make the
+    // overworld room's recoverDungeonAfterRestart treat this hunter's very next return as a
+    // server restart and wrongly refund the key / teleport them to the gate mouth. (Graceful
+    // shutdown never reaches here — onLeave returns early above so the marker survives.)
+    if (prof && prof.dungeonRecovery) {
       prof.dungeonRecovery = null;
       this.dirtyPlayers.add(token);
     }

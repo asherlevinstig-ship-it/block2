@@ -2084,6 +2084,68 @@ test('a clean DungeonRoom leave retires the crash-recovery marker it armed on en
     'so a later overworld join is not mistaken for a restart and does not wrongly refund/teleport');
 });
 
+test('an unclean DungeonRoom disconnect that reconnects in time resumes the hunter, no handoff', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-reconnect-ok');
+  const { token, prof } = seedPlayer(room, client, { dgn: 'dr-recon' });
+  room.clients.push(client);
+  const inst = new DungeonInstance(
+    { world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } },
+    { id: 'dr-recon', seed: 1, rank: 0, kind: 'public', x: 30, y: 16, z: 31 }, room);
+  room.instances['dr-recon'] = inst;
+  room.instance = inst;
+  inst.addPlayer(client.sessionId);
+  prof.dungeonRecovery = { gateId: 'dr-recon', bootId: 'dr-boot', pos: [31.5, 16.5, 31], enteredAt: Date.now() };
+  room.store = { savePlayer: async () => { throw new Error('the resume path must not flush'); } };
+  room.allowReconnection = async () => {};   // the client returned inside the window
+
+  await room.onLeave(client, false);
+
+  assert.ok(room.state.players.get(client.sessionId), 'the hunter entity was held live through the reconnect window');
+  assert.ok(inst.hasPlayer(client.sessionId), 'and kept in the instance roster');
+  assert.ok(prof.dungeonRecovery, 'crash-recovery stays armed while the hunter is still in the raid');
+  assert.equal(takeHandoff(token), null, 'a resumed hunter is not handed off to the overworld room');
+  assert.ok(client.sent.some(e => e.type === 'enterDungeon'), 'resumeDungeonInstance re-sent them into the dungeon');
+});
+
+test('an unclean DungeonRoom disconnect whose reconnect window elapses tears down and hands off', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-reconnect-timeout');
+  const { token, prof } = seedPlayer(room, client, { dgn: 'dr-recon-to' });
+  room.instance = { removePlayer() {} };
+  prof.dungeonRecovery = { gateId: 'dr-recon-to', bootId: 'dr-boot', pos: [1, 2, 3], enteredAt: Date.now() };
+  room.awardLoot(client, { xp: 15, gold: 7, source: 'test' });
+  const saved = [];
+  room.store = { savePlayer: async (t, p) => { saved.push([t, { ...p }]); } };
+  room.allowReconnection = async () => { throw new Error('window elapsed'); };
+
+  await room.onLeave(client, false);
+
+  assert.equal(room.state.players.get(client.sessionId), undefined, 'the entity is torn down once the window lapses');
+  assert.deepEqual(saved.map(s => s[0]), [token], 'the profile was flushed on the durable leave');
+  assert.equal(saved[0][1].dungeonRecovery, null, 'and its crash-recovery marker retired');
+  const handedOff = takeHandoff(token);
+  assert.ok(handedOff && handedOff.gold === 7, 'the dungeon-earned progress was handed off to the overworld room');
+});
+
+test('a consented DungeonRoom leave tears down immediately without a reconnect window', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-clean-leave');
+  const { token } = seedPlayer(room, client, { dgn: 'dr-clean' });
+  room.instance = { removePlayer() {} };
+  let waited = false;
+  room.allowReconnection = async () => { waited = true; };
+  room.awardLoot(client, { xp: 5, gold: 3, source: 'test' });
+  const saved = [];
+  room.store = { savePlayer: async (t) => { saved.push(t); } };
+
+  await room.onLeave(client, true);
+
+  assert.equal(waited, false, 'a voluntary leave does not hold a reconnect seat');
+  assert.deepEqual(saved, [token], 'it flushes immediately');
+  assert.ok(takeHandoff(token), 'and hands off to the overworld room');
+});
+
 test('King of the Hill scores time only for the crown-holding team', () => {
   const T = 1_000_000;
   const room = makeRoom();
