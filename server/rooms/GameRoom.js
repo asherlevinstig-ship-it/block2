@@ -9,6 +9,7 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
+const { takeHandoff } = require('./dungeon-handoff');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -464,7 +465,14 @@ class GameRoom extends Room {
     if (token) this.tokens.set(client.sessionId, token);
     let prof = null;
     if (token) {
-      prof = this.profiles.get(token);
+      // A DungeonRoom (Phase 2c) may have just saved fresher progress for this
+      // token than our own in-memory cache — which we otherwise trust forever
+      // once populated (see flushDirtyPlayers/finalizeLeave). Prefer that
+      // handoff over our stale copy; takeHandoff() is a no-op for every token
+      // that never went through a DungeonRoom.
+      const handedOff = takeHandoff(token);
+      if (handedOff) prof = handedOff;
+      else prof = this.profiles.get(token);
       let loadFailed = false;
       if (!prof) {
         try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
@@ -778,15 +786,21 @@ class GameRoom extends Room {
       try { await this.store.saveGuilds(obj); }
       catch (e) { console.warn('[persist] guild save failed:', e.message); this.dirtyGuilds = true; }
     }
-    if (this.dirtyPlayers.size) {
-      const toks = [...this.dirtyPlayers];
-      this.dirtyPlayers.clear();
-      for (const t of toks) {
-        const prof = this.profiles.get(t);
-        if (!prof || prof.noPersist) continue;   // never overwrite a save we couldn't load
-        try { await this.store.savePlayer(t, prof); }
-        catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
-      }
+    await this.flushDirtyPlayers();
+  }
+
+  // Split out of flush() so DungeonRoom (which has no world/chests/furnaces/
+  // gates/teams/guilds to persist) can reuse just the player-save loop
+  // without inheriting flush()'s other, overworld-only side effects.
+  async flushDirtyPlayers() {
+    if (!this.dirtyPlayers.size) return;
+    const toks = [...this.dirtyPlayers];
+    this.dirtyPlayers.clear();
+    for (const t of toks) {
+      const prof = this.profiles.get(t);
+      if (!prof || prof.noPersist) continue;   // never overwrite a save we couldn't load
+      try { await this.store.savePlayer(t, prof); }
+      catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
     }
   }
 

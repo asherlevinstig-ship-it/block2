@@ -2,20 +2,23 @@ const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
+const { handOff } = require('./dungeon-handoff');
 
-// One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2b).
+// One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
 // Extends GameRoom to inherit the shared per-mob simulation (simulateMob), projectile stepping
 // (stepProjectiles), movement (handleMove), all room mixins, and every core helper
 // (createInstance, spaceSolid, hurtPlayer, ensurePlayerHp, the init*State cluster). It overrides
 // only the lifecycle for single-instance, no-overworld operation: no global world lease, no
-// overworld generation/spawning/persistence, no gate lifecycle.
+// overworld generation/spawning, no gate lifecycle.
 //
 // 2b makes the room independently joinable and playable: a client can join the `dungeon` room
 // for a gate id, spawn inside, fight/mine/cast, and leave, and the room simulates a full raid
-// on its own. NOT yet wired into the live client or the `enterGate` flow (2c), and it loads the
-// profile READ-ONLY — exclusive ownership coordination with GameRoom (the store-mediated handoff
-// that prevents two writers) is 2c.
+// on its own. 2c makes it the profile's owner for the raid's duration: mutations from the
+// inherited mixins flow into this room's own dirtyPlayers/profiles (same mechanism GameRoom
+// uses), get flushed to the store on leave/dispose, and get handed off (server/rooms/
+// dungeon-handoff.js) to GameRoom so a returning hunter's cached copy there — which GameRoom
+// otherwise trusts forever once populated — doesn't silently revert what was earned here.
 class DungeonRoom extends GameRoom {
   // Account auth is identical to the overworld room — GameRoom.onAuth is static and inherited.
 
@@ -50,6 +53,15 @@ class DungeonRoom extends GameRoom {
 
     this.registerRaidHandlers();
     this.setSimulationInterval(dt => this.update(dt / 1000), 100);   // 10 Hz, like GameRoom
+    this.clock.setInterval(() => this.flush(), 30000);   // periodic save for long raids, like GameRoom
+  }
+
+  // GameRoom.flush() unconditionally runs completeFurnaces() first, which iterates
+  // this.furnaces — a collection a DungeonRoom never has (furnace/chest/gate/team/guild setup
+  // is part of the overworld slice this room skips). Override with just the player-save loop
+  // instead of guarding the shared flush() for subsystems this room structurally lacks.
+  async flush() {
+    await this.flushDirtyPlayers();
   }
 
   // Translate matchmaking options into the gate descriptor createInstance() (dungeon.mixin) wants.
@@ -99,7 +111,7 @@ class DungeonRoom extends GameRoom {
       try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
       catch (e) { prof = null; }
       if (!prof) { prof = defaultProfile((options && options.name) || (auth && auth.displayName)); prof.noPersist = true; }
-      this.profiles.set(token, prof);   // read-only for 2b; exclusive ownership vs GameRoom is 2c
+      this.profiles.set(token, prof);
     }
     this.tokens.set(client.sessionId, token);
 
@@ -119,23 +131,39 @@ class DungeonRoom extends GameRoom {
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
   }
 
-  onLeave(client) {
+  async onLeave(client) {
+    // Synchronous teardown first and only — if this were deferred behind the persistence
+    // await below, the departing hunter's schema entity (and mob aggro against them) would
+    // stay live for the rest of the raid party for the duration of the store write.
     const token = this.tokens.get(client.sessionId);
     if (this.instance) this.instance.removePlayer(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);
     this.tokens.delete(client.sessionId);
-    // 2b loads the profile READ-ONLY, so drop the in-memory copy without persisting — the room
-    // is not the profile's owner. Persisting a hunter's dungeon progress back to the store is the
-    // store-mediated ownership handoff in 2c; doing it here would risk a second writer vs GameRoom.
-    if (token) this.profiles.delete(token);
+    if (!token) return;
+    // Keep this token's profile in this.profiles until AFTER flush() runs — flushDirtyPlayers()
+    // looks it up by token to know what to save, and a concurrent leave from another client in
+    // this same instance may piggyback its own dirty token onto this flush() call.
+    const prof = this.profiles.get(token);
+    // The in-memory handoff — not the store write — is what actually protects this hunter's
+    // progress from GameRoom's stale cache, so it must still happen even if flush() throws.
+    try {
+      await this.flush();
+    } catch (e) {
+      console.warn('[persist] dungeon leave flush failed:', e.message);
+    }
+    this.profiles.delete(token);
+    if (prof && !prof.noPersist) handOff(token, prof);
     // empty room disposes via Colyseus autoDispose; the instance goes with it.
   }
 
-  onDispose() {
-    // Unlike GameRoom, a DungeonRoom holds no world lease and persists no world state, so there
-    // is nothing to flush or release — just tear the instance's mobs/projectiles down.
+  async onDispose() {
+    // Unlike GameRoom, a DungeonRoom holds no world lease, but it does own in-memory profile
+    // mutations from any client whose onLeave hasn't run yet (e.g. an abrupt shutdown) — flush
+    // those before tearing the instance down. Colyseus only calls onDispose after every
+    // client's onLeave has resolved, so in the common case this is a cheap no-op.
+    try { await this.flush(); } catch (e) { console.warn('[persist] dungeon dispose flush failed:', e.message); }
     if (this.instance) { try { this.instance.dispose(); } catch (_) {} }
   }
 

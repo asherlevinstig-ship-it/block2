@@ -275,9 +275,47 @@ async function main() {
     assert.ok(damaged, 'an attack reduced an instance mob\'s HP over the wire');
   });
 
+  await test('killing a DungeonRoom trash mob awards XP into the hunter\'s profile', async () => {
+    let killed = false;
+    for (let i = 0; i < 60 && !killed; i++) {
+      let best = null, bd = Infinity;
+      Dn.state.mobs.forEach((mb, id) => {
+        if (mb.kind === 'boss' || mb.hp <= 0) return;
+        const d = Math.hypot(mb.x - meD().x, mb.z - meD().z);
+        if (d < bd) { bd = d; best = { id, mb }; }
+      });
+      if (!best) break;
+      Dn.send('move', { x: best.mb.x, y: best.mb.y, z: best.mb.z, yaw: 0 });
+      await wait(360);
+      Dn.send('attack', { id: best.id });
+      await wait(140);
+      const cur = Dn.state.mobs.get(best.id);
+      if (!cur) killed = true;
+    }
+    assert.ok(killed, 'a trash mob was actually killed (not just damaged), which is what triggers awardGrant/dirtyPlayers');
+  });
+
   await test('a leaving hunter is removed and the DungeonRoom can dispose', async () => {
     await Dn.leave();
-    await wait(200);
+    await wait(300);   // let onLeave's flush() + handOff() settle before we rejoin as the same hunter
+  });
+
+  // ---- DungeonRoom persistence handoff (Phase 2c): the XP earned above must survive the trip
+  // back to the overworld room, not be silently discarded (2b) or overwritten by GameRoom's own
+  // stale in-memory cache from before Charlie ever left for the dungeon ----
+  await test('XP earned in the DungeonRoom is visible in the profile GameRoom serves on rejoin', async () => {
+    const D2 = await clientC.joinOrCreate('blockcraft', { name: 'Charlie' });
+    try {
+      const profileMsgs = [];
+      D2.onMessage('profile', m => profileMsgs.push(m));
+      D2.onMessage('*', () => {});
+      const prof = await waitFor(() => profileMsgs[0], 'a profile message from the overworld room on rejoin');
+      const earnedXp = (prof.S && prof.S.xp | 0) || 0;
+      const earnedLevels = (prof.S && prof.S.lvl | 0) || 1;
+      assert.ok(earnedXp > 0 || earnedLevels > 1, 'the DungeonRoom-earned XP (or a level-up from it) reached GameRoom, not GameRoom\'s pre-dungeon cache');
+    } finally {
+      await D2.leave().catch(() => {});
+    }
   });
 
   console.log('\nMultiplayer integration test\n' + results.join('\n'));

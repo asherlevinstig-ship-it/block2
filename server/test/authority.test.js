@@ -39,6 +39,7 @@ const AI = require('../ai');
 const D = require('../dungeon');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
 const { DungeonRoom } = require('../rooms/DungeonRoom');
+const { handOff, takeHandoff } = require('../rooms/dungeon-handoff');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS } = require('../store');
@@ -1948,6 +1949,101 @@ test('DungeonRoom.update runs its instance hazards (Sanguine heals wounded trash
   room.update(1.0);
 
   assert.equal(room.state.mobs.get('w1').hp, 16, 'update ran inst.tick -> hazards, healing the wounded mob 6/s');
+});
+
+test('dungeon-handoff hands off a profile exactly once (delete-on-read)', () => {
+  const token = 'dungeon-handoff-roundtrip-token';
+  handOff(token, { gold: 42 });
+  assert.equal(takeHandoff(token).gold, 42, 'the handed-off profile round-trips');
+  assert.equal(takeHandoff(token), null, 'a second read finds nothing left to hand off');
+  assert.equal(takeHandoff('dungeon-handoff-never-token'), null, 'a token that was never handed off yields null');
+});
+
+test('a stale dungeon handoff past its TTL is discarded rather than clobbering a fresher GameRoom cache', () => {
+  const token = 'dungeon-handoff-stale-token';
+  const realNow = Date.now;
+  try {
+    Date.now = () => 1_000_000;
+    handOff(token, { gold: 999 });
+    Date.now = () => 1_000_000 + 121000;   // just past the 120s TTL
+    assert.equal(takeHandoff(token), null, 'an orphaned handoff older than the TTL is discarded, not applied');
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('DungeonRoom.flush overrides GameRoom.flush and never touches furnaces (which it never initializes)', async () => {
+  // Deliberately bare — no this.furnaces/this.chests/this.state.gates, matching a real
+  // DungeonRoom instance. GameRoom.flush() unconditionally calls completeFurnaces() first,
+  // which would throw here; DungeonRoom's own flush() override must not reach it.
+  const room = Object.create(DungeonRoom.prototype);
+  room.profiles = new Map([['tok1', { gold: 7 }]]);
+  room.tokens = new Map();
+  room.dirtyPlayers = new Set(['tok1']);
+  const saved = [];
+  room.store = { savePlayer: async (t, p) => { saved.push([t, p]); } };
+
+  await assert.doesNotReject(() => room.flush(), 'flush() must not reach completeFurnaces()/this.furnaces');
+  assert.deepEqual(saved.map(s => s[0]), ['tok1'], 'the dirty player was still saved via flushDirtyPlayers()');
+});
+
+test("a hunter's DungeonRoom progress is flushed to the store and handed off to GameRoom on leave", async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-handoff-earn');
+  const { token } = seedPlayer(room, client, { dgn: 'dr-handoff' });
+  room.instance = { removePlayer() {} };
+  const saved = [];
+  room.store = { savePlayer: async (t, p) => { saved.push([t, { ...p }]); } };
+
+  room.awardLoot(client, { xp: 50, gold: 20, source: 'test' });
+  assert.ok(room.dirtyPlayers.has(token), 'awardLoot marked the profile dirty');
+
+  await room.onLeave(client);
+
+  assert.deepEqual(saved.map(s => s[0]), [token], 'onLeave flushed the dirty profile to the store');
+  assert.equal(saved[0][1].gold, 20, 'the saved profile reflects the dungeon-earned gold');
+  assert.equal(room.profiles.has(token), false, 'the room drops its own copy once it hands off ownership');
+
+  const handedOff = takeHandoff(token);
+  assert.ok(handedOff, 'the profile was handed off for GameRoom to pick up');
+  assert.equal(handedOff.gold, 20, 'GameRoom receives the exact dungeon-earned state');
+});
+
+test('a noPersist DungeonRoom profile is never saved or handed off on leave', async () => {
+  const room = makeDungeonRoom();
+  const client = makeClient('dungeon-handoff-nopersist');
+  const { token, prof } = seedPlayer(room, client, { dgn: 'dr-nopersist' });
+  prof.noPersist = true;
+  room.instance = { removePlayer() {} };
+  room.dirtyPlayers.add(token);
+  const saved = [];
+  room.store = { savePlayer: async (t) => { saved.push(t); } };
+
+  await room.onLeave(client);
+
+  assert.deepEqual(saved, [], 'a non-persistable profile is never written to the store');
+  assert.equal(takeHandoff(token), null, 'a non-persistable profile is never handed off to GameRoom either');
+});
+
+test('two hunters leaving the same DungeonRoom instance together are both flushed and handed off', async () => {
+  const room = makeDungeonRoom();
+  const c1 = makeClient('dungeon-handoff-c1');
+  const c2 = makeClient('dungeon-handoff-c2');
+  const { token: t1 } = seedPlayer(room, c1, { dgn: 'dr-dual' });
+  const { token: t2 } = seedPlayer(room, c2, { dgn: 'dr-dual' });
+  room.instance = { removePlayer() {} };
+  room.awardLoot(c1, { xp: 10, gold: 5, source: 'test' });
+  room.awardLoot(c2, { xp: 10, gold: 9, source: 'test' });
+  const saved = [];
+  room.store = { savePlayer: async (t) => { saved.push(t); } };
+
+  await Promise.all([room.onLeave(c1), room.onLeave(c2)]);
+
+  assert.deepEqual(saved.slice().sort(), [t1, t2].sort(), 'both dirty profiles were saved');
+  const h1 = takeHandoff(t1), h2 = takeHandoff(t2);
+  assert.ok(h1 && h2, 'both hunters were handed off to GameRoom');
+  assert.equal(h1.gold, 5);
+  assert.equal(h2.gold, 9);
 });
 
 test('King of the Hill scores time only for the crown-holding team', () => {
