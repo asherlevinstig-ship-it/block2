@@ -5027,6 +5027,8 @@ function tickMobs(dt,t){
         sysMsg('The boss <b>enrages</b>!');
       }
       const haste=m.enraged?.65:1;
+      if(m.cape) m.cape.rotation.x=.16+Math.sin(t*1.6+m.phase)*.05;
+      if(m.coreMat){ const k=.8+Math.sin(t*(m.enraged?6.5:3.2)+m.phase)*.2; m.coreMat.color.setRGB(1,.63*k,.24*k); }
       if(Math.random()<dt*(m.enraged?14:6))
         spawnParticle({x:p.x+(Math.random()-.5)*1.6, y:p.y+.3+Math.random()*2, z:p.z+(Math.random()-.5)*1.6,
           vx:0, vy:.8, vz:0, life:.5, grav:0, r:.6, g:.12, b:.12});

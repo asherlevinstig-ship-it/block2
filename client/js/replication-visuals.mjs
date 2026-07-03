@@ -118,15 +118,14 @@ function netAddMob(id, ref){
     return;
   }
   const skel=RANGED_ENEMY_KINDS.has(ref.kind);
-  const m={...(skel?makeSkeleton():makeZombie()), net:true, netId:id, ref, hp:ref.hp,
+  const boss=ref.kind==='boss';
+  const m={...(boss?makeGateBoss():skel?makeSkeleton():makeZombie()), net:true, netId:id, ref, hp:ref.hp,
     kind:ref.kind, kb:new THREE.Vector3(), phase:Math.random()*10, hitT:0, slowT:0,
     aT:0, lastState:'', cdx:0, cdz:0,
-    boss: ref.kind==='boss'};
+    boss};
   if(m.boss){
     m.grp.scale.setScalar(1.6);
-    m.baseCol=[1,.55,.5];
-    m.mats.forEach(mm=>mm.color.setRGB(1,.55,.5));
-    decorateBoss(m);
+    m.baseCol=[1,1,1];                          // the Gate Monarch model carries its own palette
   } else if(ref.kind==='ghost'){
     m.grp.scale.setScalar(.8);
     m.baseCol=[.6,.95,1];
@@ -254,9 +253,13 @@ function netMobTick(m, dt, t){
       m.arms[0].rotation.x*= .9; m.arms[1].rotation.x*=.9;
     }
   }
-  if(m.boss && m.grp.visible && Math.random()<dt*6)
-    spawnParticle({x:p.x+(Math.random()-.5)*1.6, y:p.y+.3+Math.random()*2, z:p.z+(Math.random()-.5)*1.6,
-      vx:0, vy:.8, vz:0, life:.5, grav:0, r:.6, g:.12, b:.12});
+  if(m.boss){
+    if(m.cape) m.cape.rotation.x=.16+Math.sin(t*1.6+m.phase)*.05+(moving?.22:0);
+    if(m.coreMat){ const k=.8+Math.sin(t*3.2+m.phase)*.2; m.coreMat.color.setRGB(1,.63*k,.24*k); }
+    if(m.grp.visible && Math.random()<dt*6)
+      spawnParticle({x:p.x+(Math.random()-.5)*1.6, y:p.y+.3+Math.random()*2, z:p.z+(Math.random()-.5)*1.6,
+        vx:0, vy:.8, vz:0, life:.5, grav:0, r:.6, g:.12, b:.12});
+  }
   if(m.hitT>0){
     m.hitT-=dt;
     if(m.hitT<=0 && st!=='stun' && st!=='frozen'){ const bc=m.baseCol||[1,1,1]; m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2])); }

@@ -1594,7 +1594,7 @@ function spawnDungeonMob(x,z,boss,ri){
     if(boss && sh2.mods.includes('Tyrannical')){ hpMul2*=1.6; dmgMul2*=1.3; }
   }
   const hpv=Math.round((boss ? 50*mul : (skel?6:8)+8*mul)*hpMul2);
-  const m=tintMob({...(skel?makeSkeleton():makeZombie()), dungeon:true, boss,
+  const m=tintMob({...(boss?makeGateBoss():skel?makeSkeleton():makeZombie()), dungeon:true, boss,
     kind: boss?'boss':skel?'skeleton':'zombie',
     hp:hpv, maxHp:hpv,
     dmg: Math.round((boss ? 5+ri*2 : 3+ri)*dmgMul2),
@@ -1608,10 +1608,8 @@ function spawnDungeonMob(x,z,boss,ri){
     speed: boss?1.3:(skel?1.3:1.6)+Math.random()*.5, phase:Math.random()*10, hitT:0, atkCd:0, slowT:0});
   if(boss){
     m.grp.scale.setScalar(1.6);
-    m.baseCol=[1,.55,.5];
-    m.mats.forEach(mm=>mm.color.setRGB(1,.55,.5));
+    m.baseCol=[1,1,1];                          // the Gate Monarch model carries its own palette
     m.slamCd=5; m.slamT=0; m.sum1=false; m.sum2=false; m.enraged=false; m.slamDmg=Math.round((6+ri*2)*dmgMul2);
-    decorateBoss(m);
   }
   const gy=standHeight(x,z,12);  // scan inside the room, below the bedrock cap
   m.grp.position.set(x, gy>0?gy:9, z);

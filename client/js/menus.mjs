@@ -79,6 +79,7 @@ const legacyMenuBindings={
   "lastGroundT":{get:()=>lastGroundT,set:value=>{lastGroundT=value;}},
   "legendaryCraftRejected":{get:()=>legendaryCraftRejected},
   "losClear":{get:()=>losClear},
+  "makeGateBoss":{get:()=>makeGateBoss},
   "makeSkeleton":{get:()=>makeSkeleton},
   "maraQuestCue":{get:()=>maraQuestCue},
   "maybeFall":{get:()=>maybeFall},
@@ -4193,7 +4194,110 @@ function spawnBolt(x,y,z,dx,dy,dz,dmg){
   const v=new THREE.Vector3(dx,dy,dz).normalize().multiplyScalar(10);
   arrows.push({grp, vel:v, life:2.4, stuck:false, dmg, bolt:true});
 }
-// the boss gets horns and pauldrons
+// Dedicated dungeon-boss model: the Gate Monarch, an obsidian-armored demon knight with a
+// molten core, horned crown, tattered war cape, and an ember-edged greatcleaver. Returns the
+// same contract as makeZombie/makeSkeleton ({grp,mats,legs,arms,head} with hip/shoulder pivot
+// groups), so every existing state telegraph (slamWind, chargeWind, volleyWind, stun, draw, …)
+// animates it unchanged. Glow parts use MeshBasicMaterial and stay out of `mats` so hit/stun
+// tints never dim them; `cape`/`coreMat` are optional extras the mob ticks animate when present.
+function makeGateBoss(){
+  const grp=new THREE.Group(), mats=[], legs=[], arms=[];
+  const reg=m=>{mats.push(m);return m;};
+  const plateM=reg(lam(solidTex('#352a40','#261e30')));               // obsidian plate
+  const plateDkM=reg(lam(solidTex('#211a2c','#161020')));             // recessed plate
+  const trimM=reg(lam(solidTex('#5a5170','#443c58')));                // blackened steel trim
+  const goldM=reg(lam(solidTex('#c9a13b','#96742a')));                // royal gold
+  const hornM=reg(lam(solidTex('#1a1216','#0f0a0d')));                // horn/claw keratin
+  const capeM=reg(lam(solidTex('#4a1620','#36101a')));                // war-torn crimson cape
+  const boneM=reg(lam(solidTex('#d8d2bc','#b3ac93')));                // trophy skull
+  const emberM=new THREE.MeshBasicMaterial({color:0xff5a1e});         // molten glow
+  const coreM=new THREE.MeshBasicMaterial({color:0xffa23c});          // chest core (pulsed)
+  const faceM=reg(lam(npcTex(g=>{
+    g.fillStyle='#352a40'; g.fillRect(0,0,16,16);                     // helm front
+    g.fillStyle='#261e30'; g.fillRect(0,0,16,3); g.fillRect(0,13,16,3);
+    g.fillStyle='#161020'; g.fillRect(2,5,12,3);                      // visor slit
+    g.fillStyle='#5a5170'; g.fillRect(7,3,2,10);                      // nasal ridge
+    g.fillStyle='#0f0a0d'; g.fillRect(4,11,2,2); g.fillRect(7,11,2,2); g.fillRect(10,11,2,2); // breath vents
+    g.fillStyle='#c9a13b'; g.fillRect(1,1,2,2); g.fillRect(13,1,2,2); // gold rivets
+  })));
+  // horned helm (front = +z): crown prongs, brow gem, molten eyes burning through the visor
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.56,.54,.56),[plateM,plateM,plateM,plateM,faceM,plateM]);
+  head.position.set(0,1.66,.02); grp.add(head);
+  addBox(head,[.6,.09,.6],[0,.28,0],plateDkM);                        // crown plate
+  for(const cx of [-.16,0,.16]) addBox(head,[.07,cx?.14:.2,.07],[cx,.4,.12],goldM);
+  addBox(head,[.1,.09,.05],[0,.2,.29],emberM);                        // brow gem
+  for(const ex of [-.12,.12]){
+    const eye=new THREE.Mesh(new THREE.BoxGeometry(.1,.05,.03), emberM);
+    eye.position.set(ex,.03,.29); head.add(eye);
+  }
+  for(const sx of [-1,1]){                                            // swept three-segment horns
+    addBox(head,[.14,.14,.14],[sx*.32,.18,0],hornM);
+    addBox(head,[.1,.24,.1],[sx*.44,.34,.02],hornM,[0,0,sx*-.55]);
+    addBox(head,[.07,.18,.07],[sx*.53,.47,.05],hornM,[.3,0,sx*-1.0]);
+  }
+  addBox(head,[.4,.1,.1],[0,-.3,.22],trimM);                          // jaw guard
+  addBox(grp,[.5,.12,.34],[0,1.44,.02],trimM);                        // gorget
+  // cuirass: layered chest plating, gold band, molten core, waist guard with a trophy skull
+  const torso=new THREE.Mesh(new THREE.BoxGeometry(.6,.74,.34), plateM);
+  torso.position.set(0,1.04,.02); grp.add(torso);
+  addBox(torso,[.64,.2,.38],[0,.3,0],plateDkM);                       // upper chest plating
+  addBox(torso,[.5,.05,.37],[0,.14,0],goldM);                         // gold band
+  addBox(torso,[.22,.22,.06],[0,-.02,.16],plateDkM);                  // core housing
+  const core=new THREE.Mesh(new THREE.BoxGeometry(.13,.13,.05), coreM);
+  core.position.set(0,-.02,.21); torso.add(core);
+  addBox(torso,[.62,.14,.36],[0,-.3,0],trimM);                        // waist guard
+  addBox(torso,[.15,.15,.05],[0,-.3,.17],goldM);                      // belt plate
+  addBox(torso,[.1,.11,.05],[0,-.3,.2],boneM);                        // trophy skull
+  for(const sx of [-.27,.27]) addBox(torso,[.16,.22,.36],[sx,-.44,0],plateDkM); // tassets
+  for(let i=0;i<5;i++)                                                 // jagged spine ridge
+    addBox(torso,[.09,.2-i*.025,.09],[0,.34-i*.16,-.2],hornM,[.4,0,0]);
+  const cape=new THREE.Group(); cape.position.set(0,1.38,-.18); grp.add(cape);
+  addBox(cape,[.58,.9,.05],[0,-.42,-.06],capeM);                      // war cape
+  addBox(cape,[.2,.24,.05],[-.17,-.94,-.06],capeM);                   // ragged tails
+  addBox(cape,[.16,.18,.05],[.14,-.9,-.06],capeM);
+  addBox(cape,[.62,.1,.08],[0,.02,-.02],goldM);                       // mantle clasp bar
+  cape.rotation.x=.16;
+  for(const sx of [-1,1]){                                            // layered spiked pauldrons
+    addBox(grp,[.36,.2,.44],[sx*.44,1.5,.02],plateM);
+    addBox(grp,[.28,.12,.36],[sx*.5,1.62,.02],plateDkM);
+    addBox(grp,[.3,.05,.4],[sx*.46,1.4,.02],goldM);                   // gold rim
+    addBox(grp,[.09,.3,.09],[sx*.5,1.76,.02],hornM,[0,0,sx*-.5]);
+    addBox(grp,[.07,.22,.07],[sx*.62,1.66,.02],hornM,[0,0,sx*-.95]);
+  }
+  // arms (groups, pivot at shoulder, reaching +z): plate sleeves, clawed gauntlets
+  for(const sx of [-.3,.3]){
+    const arm=new THREE.Group(); arm.position.set(sx,1.3,.06);
+    addBox(arm,[.2,.2,.34],[0,0,.14],plateM);                         // armored upper
+    addBox(arm,[.22,.22,.1],[0,0,.34],trimM);                         // elbow cop
+    addBox(arm,[.17,.17,.3],[0,-.01,.52],plateDkM);                   // bracer
+    addBox(arm,[.19,.05,.26],[0,.08,.52],goldM);                      // bracer rim
+    addBox(arm,[.18,.16,.14],[0,-.02,.72],trimM);                     // gauntlet
+    for(const fx of [-.05,0,.05]) addBox(arm,[.035,.035,.14],[fx,-.05,.82],hornM); // claws
+    grp.add(arm); arms.push(arm);
+  }
+  const focus=new THREE.Mesh(new THREE.BoxGeometry(.09,.09,.04), emberM); // casting focus gem
+  focus.position.set(0,-.11,.76); arms[0].add(focus);                 // (left palm — volley hand)
+  const blade=new THREE.Group(); blade.position.set(.04,-.06,.78); arms[1].add(blade);
+  addBox(blade,[.06,.09,.9],[0,0,.2],trimM);                          // reinforced haft
+  addBox(blade,[.1,.12,.1],[0,0,-.16],goldM);                         // pommel
+  addBox(blade,[.05,.42,.6],[0,.12,.42],plateDkM);                    // cleaver slab
+  addBox(blade,[.06,.09,.62],[0,-.12,.42],emberM);                    // molten edge
+  addBox(blade,[.05,.24,.16],[0,.06,.76],plateDkM);                   // tip
+  // legs (groups, pivot at hip): full greaves, molten shin seams, clawed sabatons
+  for(const sx of [-.16,.16]){
+    const leg=new THREE.Group(); leg.position.set(sx,.72,0);
+    addBox(leg,[.22,.34,.24],[0,-.14,0],plateM);                      // cuisse
+    addBox(leg,[.24,.12,.26],[0,-.34,.02],trimM);                     // poleyn
+    addBox(leg,[.19,.3,.21],[0,-.52,0],plateDkM);                     // greave
+    addBox(leg,[.05,.16,.03],[0,-.52,.115],emberM);                   // molten shin seam
+    addBox(leg,[.24,.1,.32],[0,-.68,.05],plateM);                     // sabaton
+    for(const fx of [-.08,0,.08]) addBox(leg,[.05,.05,.1],[fx,-.7,.22],hornM); // toe claws
+    grp.add(leg); legs.push(leg);
+  }
+  grp.add(blobShadow(1.2));
+  return {grp, mats, legs, arms, head, cape, coreMat:coreM};
+}
+// elites get horns and pauldrons bolted onto the base body
 function decorateBoss(m){
   const dark=new THREE.MeshLambertMaterial({color:0x241616});
   const horn=new THREE.MeshLambertMaterial({color:0x1a1012});
