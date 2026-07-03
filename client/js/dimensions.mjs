@@ -1083,6 +1083,8 @@ const AFFIX_STYLE={
 };
 function dungeonMods(dgn){ return dgn&&dgn.shard&&Array.isArray(dgn.shard.mods) ? dgn.shard.mods : []; }
 function hasAffix(dgn,name){ return dungeonMods(dgn).includes(name); }
+// dark, desaturated cousins of the rank gate colors — every rank gets its own base atmosphere
+const DUNGEON_RANK_MOOD=[0x081006,0x060e15,0x130d04,0x130704,0x120510];
 function dungeonMoodColor(dgn){
   const mods=dungeonMods(dgn);
   if(mods.includes('Sanguine')||mods.includes('Grievous')||mods.includes('Bursting')) return 0x16070c;
@@ -1090,7 +1092,7 @@ function dungeonMoodColor(dgn){
   if(mods.includes('Volatile')||mods.includes('Explosive')||mods.includes('Bolstering')) return 0x190b05;
   if(mods.includes('Quaking')||mods.includes('Fortified')) return 0x100d09;
   if(mods.includes('Empowered')||mods.includes('Tyrannical')||mods.includes('Frenzied')) return 0x120817;
-  return 0x070811;
+  return DUNGEON_RANK_MOOD[(dgn&&dgn.rank)|0]||0x070811;
 }
 function affixMat(col,opacity){
   return new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:opacity==null?.5:opacity,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
@@ -1143,6 +1145,44 @@ function addWallBanner(x,y,z,w,h,col,rot){
   m.userData.banner={baseY:y,phase:hash2(x*13,z*17)*Math.PI*2};
   return dDecor(m);
 }
+function addHallLantern(x,ceilY,z){
+  const grp=new THREE.Group();
+  const chain=new THREE.Mesh(new THREE.BoxGeometry(.05,.7,.05),new THREE.MeshLambertMaterial({color:0x2f343a}));
+  chain.position.y=-.35; grp.add(chain);
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.24,.3,.24),new THREE.MeshLambertMaterial({color:0x26262e}));
+  body.position.y=-.85; grp.add(body);
+  const flame=new THREE.Mesh(new THREE.BoxGeometry(.14,.18,.14),torchFlameMat);
+  flame.position.y=-.84; grp.add(flame);
+  grp.position.set(x,ceilY,z); dDecor(grp);
+  const gl=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xffa64d,transparent:true,opacity:.26,blending:THREE.AdditiveBlending,depthWrite:false}));
+  gl.scale.set(3,3,1); gl.position.set(x,ceilY-.85,z);
+  gl.userData.pulse={base:.26,phase:hash2(x*7,z*11)*6.28};
+  return dDecor(gl);
+}
+// Reconstruct the L-shaped corridors carved between consecutive *main* rooms (x-leg at the
+// previous room's z, then z-leg at the current room's x — mirrors carveDungeonHall exactly)
+// and hang warm lanterns down their centerlines so the halls read as travelled arteries.
+function placeHallLanterns(dgn){
+  const seed=(dgn.seed||0)>>>0, mains=dgn.rooms.filter(rm=>rm.main);
+  const insideRoom=(x,z)=>mains.some(rm=>Math.abs(x-rm.x)<=rm.rx+1.2&&Math.abs(z-rm.z)<=rm.rz+1.2);
+  for(let i=1;i<mains.length;i++){
+    const a=mains[i-1], b=mains[i];
+    const ceilY=9+(hash2(i*23+seed,31)<.38?4:3);     // wide halls are carved one block taller
+    const legs=[
+      {fx:Math.min(a.x,b.x),tx:Math.max(a.x,b.x),z:a.z,alongX:true},
+      {fz:Math.min(a.z,b.z),tz:Math.max(a.z,b.z),x:b.x,alongX:false},
+    ];
+    for(const leg of legs){
+      const from=leg.alongX?leg.fx:leg.fz, to=leg.alongX?leg.tx:leg.tz;
+      for(let d=from+3;d<=to-3;d+=6){
+        if(hash2(d*13+i,seed%997)<.22) continue;      // occasional dark gaps
+        const x=leg.alongX?d:leg.x, z=leg.alongX?leg.z:d;
+        if(insideRoom(x,z)) continue;
+        addHallLantern(x+.5,ceilY,z+.5);
+      }
+    }
+  }
+}
 function placeDungeonDecor(dgn){
   clearDungeonDecor();
   if(!dgn || !dgn.rooms) return;
@@ -1156,6 +1196,8 @@ function placeDungeonDecor(dgn){
   const shrineMat=new THREE.MeshBasicMaterial({color:0x58d7ff,transparent:true,opacity:.72,blending:THREE.AdditiveBlending,depthWrite:false});
   const moodCol=dungeonMoodColor(dgn);
   const mistCol=mods.includes('Sanguine')?0x7f1d1d:mods.includes('Spiteful')?0x6bdcff:mods.includes('Explosive')?0xff8a1a:0x596275;
+  const rankCol=(RANKS[dgn.rank|0]||RANKS[0]).col;
+  placeHallLanterns(dgn);
   if(mods.length && dgn.entrance){
     const banner=makeTextSprite(mods.join('  '),'#ffd24a');
     banner.position.set(dgn.entrance.x,FLOOR+3.3,dgn.entrance.z-2.2);
@@ -1163,12 +1205,31 @@ function placeDungeonDecor(dgn){
     dDecor(banner);
     mods.forEach((mod,i)=>addAffixObelisk(dgn.entrance.x,dgn.entrance.z,mod,i,mods.length));
   }
+  if(dgn.entrance){
+    // rank-lit waystone in a corner of the entrance room: marks the way home from anywhere
+    const e=dgn.entrance, erx=e.rx||e.r||3, erz=e.rz||e.r||3;
+    const side=hash2(e.x,e.z)<.5?-1:1;
+    const wx=e.x+side*(erx-1.2), wz=e.z-(erz-1.2);
+    const base=new THREE.Mesh(new THREE.BoxGeometry(1.05,.3,1.05),new THREE.MeshLambertMaterial({color:0x2c2c34}));
+    base.position.set(wx,FLOOR+.15,wz); dDecor(base);
+    const mono=new THREE.Mesh(new THREE.BoxGeometry(.5,1.9,.5),new THREE.MeshLambertMaterial({color:0x232329}));
+    mono.position.set(wx,FLOOR+1.25,wz); dDecor(mono);
+    const rune=new THREE.Mesh(new THREE.BoxGeometry(.2,1.2,.04),affixMat(rankCol,.85));
+    rune.position.set(wx,FLOOR+1.3,wz+.26); dDecor(rune);
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.24,.24,5.4,8),affixMat(rankCol,.1));
+    beam.position.set(wx,FLOOR+2.9,wz); dDecor(beam);
+    addFloorCircle(wx,wz,.85,rankCol,.26);
+    const gl=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:rankCol,transparent:true,opacity:.3,blending:THREE.AdditiveBlending,depthWrite:false}));
+    gl.position.set(wx,FLOOR+2.2,wz); gl.scale.set(3.4,3.4,1);
+    gl.userData.pulse={base:.3,phase:hash2(wx,wz)*6.28};
+    dDecor(gl);
+  }
   dgn.rooms.forEach((rm,ri2)=>{
     const isBoss=rm.type==='boss', x0=rm.x, z0=rm.z, rx=rm.rx||rm.r, rz=rm.rz||rm.r, r=rm.r||Math.max(rx,rz), top=FLOOR+(rm.h||(isBoss?5:4));
     addDungeonMist(x0,z0,rx,rz,mistCol,isBoss?.15:.09);
     if(ri2%2===0 || isBoss){
-      const gl=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:isBoss?0xff5a3a:0x6b7280, transparent:true,
-        opacity:isBoss?.22:.11, blending:THREE.AdditiveBlending, depthWrite:false}));
+      const gl=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:isBoss?0xff5a3a:rankCol, transparent:true,
+        opacity:isBoss?.22:.1, blending:THREE.AdditiveBlending, depthWrite:false}));
       gl.position.set(x0,top-.35,z0); gl.scale.set(Math.max(rx,rz)*2.1,Math.max(rx,rz)*2.1,1);
       gl.userData.pulse={base:gl.material.opacity,phase:hash2(x0,z0)*6.28};
       dDecor(gl);
@@ -1211,6 +1272,22 @@ function placeDungeonDecor(dgn){
         sarc.position.set(x0+sx*(1.2+hash2(k+x0,z0)*Math.max(1,rx-2)),FLOOR+.19,zz); sarc.rotation.y=Math.PI/2; dDecor(sarc);
       }
     }
+    if(rm.type==='guard'){
+      // abandoned weapon rack against a wall: two posts, a crossbar, and leaning blades
+      const side=hash2(x0*9,z0*3)<.5?-1:1, rackX=x0+side*(rx-.55), rackZ=z0+(hash2(x0,z0*7)-.5)*(rz-2);
+      const postMat=new THREE.MeshLambertMaterial({color:0x3d2f1e}), steelMat=new THREE.MeshLambertMaterial({color:0x9aa2ad});
+      for(const dz of [-.55,.55]){
+        const post=new THREE.Mesh(new THREE.BoxGeometry(.12,1.15,.12),postMat);
+        post.position.set(rackX,FLOOR+.57,rackZ+dz); dDecor(post);
+      }
+      const bar=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,1.28),postMat);
+      bar.position.set(rackX,FLOOR+1.05,rackZ); dDecor(bar);
+      for(let k=0;k<2;k++){
+        const blade=new THREE.Mesh(new THREE.BoxGeometry(.06,1,.14),steelMat);
+        blade.position.set(rackX-side*.16,FLOOR+.55,rackZ-.3+k*.6);
+        blade.rotation.z=side*.28; blade.rotation.y=hash2(k,x0)*.4; dDecor(blade);
+      }
+    }
     if(rm.type==='shrine'){
       const base=new THREE.Mesh(new THREE.BoxGeometry(1.2,.35,1.2),new THREE.MeshLambertMaterial({color:0x56515c}));
       base.position.set(x0,FLOOR+.18,z0); dDecor(base);
@@ -1225,6 +1302,10 @@ function placeDungeonDecor(dgn){
         const m=new THREE.Mesh(new THREE.BoxGeometry(.42,.18,.42),mossMat);
         m.position.set(x0+(hash2(k+x0,z0)-.5)*(rx*1.4),FLOOR+.09,z0+(hash2(k+z0,x0)-.5)*(rz*1.4)); dDecor(m);
       }
+      const glint=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xffd24a,transparent:true,opacity:.22,blending:THREE.AdditiveBlending,depthWrite:false}));
+      glint.position.set(x0,FLOOR+.7,z0); glint.scale.set(2.4,2.4,1);
+      glint.userData.pulse={base:.22,phase:hash2(x0*3,z0*5)*6.28};
+      dDecor(glint);
     }
     if(hash2(x0*5+ri2,z0*7)<.35){
       const chain=new THREE.Mesh(new THREE.BoxGeometry(.08,top-FLOOR-.7,.08),chainMat);
@@ -1301,6 +1382,22 @@ function placeDungeonDecor(dgn){
         const pil=new THREE.Mesh(new THREE.BoxGeometry(.8,top-FLOOR,.8),new THREE.MeshLambertMaterial({color:0x6a6a72}));
         pil.position.set(x0+sx*(rx-0.5), FLOOR+(top-FLOOR)/2, z0+sz*(rz-0.5)); dDecor(pil);
       }
+      // iron chandelier over the arena: chain, ring, and four guttering flames
+      const ch=new THREE.Group();
+      const chChain=new THREE.Mesh(new THREE.BoxGeometry(.07,1.3,.07),new THREE.MeshLambertMaterial({color:0x2f343a}));
+      chChain.position.y=.65; ch.add(chChain);
+      const hoop=new THREE.Mesh(new THREE.TorusGeometry(.85,.06,6,20),new THREE.MeshLambertMaterial({color:0x26262e}));
+      hoop.rotation.x=Math.PI/2; ch.add(hoop);
+      for(let k=0;k<4;k++){
+        const a=k/4*Math.PI*2;
+        const fl=new THREE.Mesh(new THREE.BoxGeometry(.16,.22,.16),torchFlameMat);
+        fl.position.set(Math.cos(a)*.85,.16,Math.sin(a)*.85); ch.add(fl);
+      }
+      ch.position.set(x0,top-1.55,z0); dDecor(ch);
+      const chGlow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xffa64d,transparent:true,opacity:.24,blending:THREE.AdditiveBlending,depthWrite:false}));
+      chGlow.position.set(x0,top-1.4,z0); chGlow.scale.set(4.6,4.6,1);
+      chGlow.userData.pulse={base:.24,phase:hash2(x0*17,z0*19)*6.28};
+      dDecor(chGlow);
       // glowing floor sigil + a tall locator beacon so you can find the boss
       const ring=new THREE.Mesh(new THREE.TorusGeometry(r*0.5,0.12,8,44),new THREE.MeshBasicMaterial({color:0xc23838,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false}));
       ring.rotation.x=Math.PI/2; ring.position.set(x0,FLOOR+.06,z0); dDecor(ring);
