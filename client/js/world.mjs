@@ -3277,16 +3277,63 @@ function shrineInteriorFactor(){
 }
 // ---------------- weather: server-owned in multiplayer, local machine in solo ----------------
 let weather='clear', weatherLerp=0, lightningFlashT=0;
-let soloWeatherUntil=0, soloBoltAt=0;
+let soloWeatherUntil=0, soloBoltAt=0, windX=0, windZ=0;
 function applyWeather(m){ setLocalWeather((m&&m.kind)||'clear', true); }
 function setLocalWeather(kind, announce){
   if(kind!=='rain'&&kind!=='storm')kind='clear';
   if(kind===weather)return;
   const prev=weather; weather=kind;
+  const wa=Math.random()*6.283, ws=kind==='storm'?3.6:kind==='rain'?1.2:0;   // fresh wind each front
+  windX=Math.cos(wa)*ws; windZ=Math.sin(wa)*ws;
   if(announce&&dim!=='tutorial')sysMsg(
     kind==='storm'?'A <b>storm</b> rolls in — beware the open ground':
     kind==='rain'?'Rain begins to fall across the region':
     prev==='storm'?'The storm passes':'The skies clear');
+}
+// Dedicated rain mesh: motion-stretched line segments slanted by the wind read as real
+// rainfall (the shared particle system stays for snow and splashes). Drops live in a ring
+// around the camera, fall to the sampled ground height, and splash where they land.
+const RAIN_N=420;
+let rainMesh=null, rainPos=null, rainState=null;
+function ensureRainMesh(){
+  if(rainMesh)return;
+  rainPos=new Float32Array(RAIN_N*6);
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(rainPos,3));
+  geo.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  rainMesh=new THREE.LineSegments(geo,new THREE.LineBasicMaterial({color:0xa9c2ec,transparent:true,opacity:.4,depthWrite:false}));
+  rainMesh.frustumCulled=false;
+  rainMesh.visible=false;
+  scene.add(rainMesh);
+  rainState=[];
+  for(let i=0;i<RAIN_N;i++)rainState.push({x:0,y:-999,z:0,v:18,gy:0});
+}
+function tickRain(dt,intensity){
+  ensureRainMesh();
+  const active=Math.floor(RAIN_N*Math.min(1,intensity*1.15));
+  rainMesh.visible=active>0;
+  rainMesh.material.opacity=.26+.22*intensity;
+  if(!active)return;
+  const k=.032;                                             // streak length along the fall vector
+  for(let i=0;i<RAIN_N;i++){
+    const d=rainState[i],o=i*6;
+    if(i>=active){ rainPos.fill(0,o,o+6); continue; }
+    if(d.y<d.gy){
+      if(d.y>-500&&Math.random()<.3)                        // landing splash
+        spawnParticle({x:d.x,y:d.gy+.06,z:d.z,vx:(Math.random()-.5)*.8,vy:.9+Math.random()*.6,vz:(Math.random()-.5)*.8,life:.22,grav:3,r:.62,g:.74,b:.95});
+      const a=Math.random()*6.283,r=2+Math.random()*12;
+      d.x=player.pos.x+Math.cos(a)*r; d.z=player.pos.z+Math.sin(a)*r;
+      d.y=player.pos.y+5+Math.random()*7;
+      d.v=15+Math.random()*7;
+      const gy=standHeight(d.x,d.z,Math.min(WH-2,d.y));
+      d.gy=gy>0?gy:0;
+      if(d.y<=d.gy)d.y=d.gy+6;
+    }
+    d.x+=windX*dt; d.z+=windZ*dt; d.y-=d.v*dt;
+    rainPos[o]=d.x;               rainPos[o+1]=d.y;         rainPos[o+2]=d.z;
+    rainPos[o+3]=d.x-windX*k*d.v/18; rainPos[o+4]=d.y+d.v*k; rainPos[o+5]=d.z-windZ*k*d.v/18;
+  }
+  rainMesh.geometry.attributes.position.needsUpdate=true;
 }
 function weatherBoltFx(m){
   if(!m||dim!=='overworld')return;
@@ -3299,6 +3346,13 @@ function weatherBoltFx(m){
     const h=2.6+Math.random()*3;
     const seg=new THREE.Mesh(new THREE.BoxGeometry(.16,h,.16),boltMat);
     seg.position.set(bx,by+h/2,bz); grp.add(seg);
+    if(s===1||s===3){                                      // forked side branches
+      const bl=1.4+Math.random()*1.2, sgn=Math.random()<.5?-1:1;
+      const br=new THREE.Mesh(new THREE.BoxGeometry(.09,bl,.09),boltMat);
+      br.position.set(bx+sgn*bl*.42,by+h*.5,bz+(Math.random()-.5)*.8);
+      br.rotation.z=sgn*(0.7+Math.random()*.4);
+      grp.add(br);
+    }
     by+=h; bx+=(Math.random()-.5)*1.7; bz+=(Math.random()-.5)*1.7;
   }
   scene.add(grp);
@@ -3331,15 +3385,18 @@ function tickWeatherFx(dt){
   const target=dim==='overworld'?(weather==='storm'?1:weather==='rain'?.55:0):0;
   weatherLerp+=(target-weatherLerp)*Math.min(1,dt*1.1);
   if(lightningFlashT>0)lightningFlashT-=dt;
-  if(weatherLerp<.04||dim!=='overworld')return;
+  if(weatherLerp<.04||dim!=='overworld'){ if(rainMesh)rainMesh.visible=false; return; }
   const snowy=biomeAt(Math.floor(player.pos.x),Math.floor(player.pos.z))===BIO.SNOWY;
-  const n=Math.min(30,Math.round(dt*(snowy?60:240)*weatherLerp));
-  for(let i=0;i<n;i++){                                     // precipitation around the camera
-    const a=Math.random()*6.283,r=2+Math.random()*10;
-    const x=player.pos.x+Math.cos(a)*r,z=player.pos.z+Math.sin(a)*r;
-    if(snowy)spawnParticle({x,y:player.pos.y+4.5+Math.random()*3,z,vx:(Math.random()-.5)*.6,vy:-1.5-Math.random(),vz:(Math.random()-.5)*.6,life:3.2,grav:0,r:.95,g:.97,b:1});
-    else spawnParticle({x,y:player.pos.y+4+Math.random()*4.5,z,vx:0,vy:-15-Math.random()*4,vz:0,life:.7,grav:0,r:.6,g:.72,b:.97});
+  if(snowy){
+    if(rainMesh)rainMesh.visible=false;
+    const n=Math.min(14,Math.round(dt*60*weatherLerp));
+    for(let i=0;i<n;i++){                                   // drifting flakes suit the chunky particles
+      const a=Math.random()*6.283,r=2+Math.random()*10;
+      spawnParticle({x:player.pos.x+Math.cos(a)*r,y:player.pos.y+4.5+Math.random()*3,z:player.pos.z+Math.sin(a)*r,
+        vx:windX*.25+(Math.random()-.5)*.6,vy:-1.5-Math.random(),vz:windZ*.25+(Math.random()-.5)*.6,life:3.2,grav:0,r:.95,g:.97,b:1});
+    }
   }
+  else tickRain(dt,weatherLerp*(weather==='storm'?1:.8));
 }
 function updateDayNight(dt){
   tickWeatherFx(dt);
