@@ -3361,6 +3361,41 @@ function weatherBoltFx(m){
   setTimeout(()=>{ if(SFX&&SFX.boom)SFX.boom(); },Math.min(1500,Math.max(60,d*16)));   // thunder trails the flash
   camShake=Math.max(camShake,Math.max(.12,.55-d*.012));
 }
+// Puddle sheen: a pool of faint additive discs seated on flat open ground near the player.
+// Opacity rides the weather intensity, so puddles gather in the rain and dry as it clears.
+const PUDDLE_N=18;
+let puddles=null;
+function ensurePuddles(){
+  if(puddles)return;
+  puddles=[];
+  const geo=new THREE.CircleGeometry(1,10);
+  for(let i=0;i<PUDDLE_N;i++){
+    const m=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:0x8fb4e6,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+    m.rotation.x=-Math.PI/2; m.visible=false;
+    m.userData.p={live:false,phase:Math.random()*6.28,s:.4+Math.random()*.55};
+    scene.add(m); puddles.push(m);
+  }
+}
+function hidePuddles(){ if(puddles)for(const m of puddles){m.visible=false;m.userData.p.live=false;} }
+function tickPuddles(t,intensity){
+  ensurePuddles();
+  for(const m of puddles){
+    const u=m.userData.p;
+    if(!u.live||Math.hypot(m.position.x-player.pos.x,m.position.z-player.pos.z)>17){
+      const a=Math.random()*6.283,r=3+Math.random()*11;
+      const x=player.pos.x+Math.cos(a)*r,z=player.pos.z+Math.sin(a)*r;
+      const gy=standHeight(x,z,WH-2);
+      if(gy>1&&standHeight(x+.7,z,WH-2)===gy&&standHeight(x-.7,z,WH-2)===gy
+        &&standHeight(x,z+.7,WH-2)===gy&&standHeight(x,z-.7,WH-2)===gy
+        &&getB(Math.floor(x),gy,Math.floor(z))===B.AIR){                  // flat, dry, open ground
+        m.position.set(x,gy+.03,z); u.live=true;
+      } else { u.live=false; m.visible=false; continue; }
+    }
+    m.material.opacity=intensity*.14*(.75+.25*Math.sin(t*1.3+u.phase));  // wet shimmer
+    m.scale.setScalar(u.s*(.8+intensity*.4));
+    m.visible=m.material.opacity>.015;
+  }
+}
 function tickWeatherFx(dt){
   if(!NET.on&&dim==='overworld'&&!tutorialSafe()){          // solo weather machine mirrors the server's
     const now=Date.now();
@@ -3385,10 +3420,11 @@ function tickWeatherFx(dt){
   const target=dim==='overworld'?(weather==='storm'?1:weather==='rain'?.55:0):0;
   weatherLerp+=(target-weatherLerp)*Math.min(1,dt*1.1);
   if(lightningFlashT>0)lightningFlashT-=dt;
-  if(weatherLerp<.04||dim!=='overworld'){ if(rainMesh)rainMesh.visible=false; return; }
+  if(weatherLerp<.04||dim!=='overworld'){ if(rainMesh)rainMesh.visible=false; hidePuddles(); return; }
   const snowy=biomeAt(Math.floor(player.pos.x),Math.floor(player.pos.z))===BIO.SNOWY;
   if(snowy){
     if(rainMesh)rainMesh.visible=false;
+    hidePuddles();
     const n=Math.min(14,Math.round(dt*60*weatherLerp));
     for(let i=0;i<n;i++){                                   // drifting flakes suit the chunky particles
       const a=Math.random()*6.283,r=2+Math.random()*10;
@@ -3396,7 +3432,10 @@ function tickWeatherFx(dt){
         vx:windX*.25+(Math.random()-.5)*.6,vy:-1.5-Math.random(),vz:windZ*.25+(Math.random()-.5)*.6,life:3.2,grav:0,r:.95,g:.97,b:1});
     }
   }
-  else tickRain(dt,weatherLerp*(weather==='storm'?1:.8));
+  else{
+    tickRain(dt,weatherLerp*(weather==='storm'?1:.8));
+    tickPuddles(Date.now()*.001,weatherLerp);
+  }
 }
 function updateDayNight(dt){
   tickWeatherFx(dt);
@@ -6747,6 +6786,7 @@ const legacyWorldBindings={
   "villagers":{get:()=>villagers},
   "weather":{get:()=>weather},
   "weatherBoltFx":{get:()=>weatherBoltFx},
+  "weatherLerp":{get:()=>weatherLerp},
   "WH":{get:()=>WH},
   "world":{get:()=>world,set:value=>{world=value;}},
   "WX":{get:()=>WX},

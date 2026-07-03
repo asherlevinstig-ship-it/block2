@@ -663,7 +663,7 @@ function renderUI(){
 const SFX=(()=>{
   const MASTER_VOLUME=.18;
   const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08;
-  let ctx=null, master=null, nbuf=null, windGain=null, menuMusic=null, townMusic=null, tavernMusic=null;
+  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null;
   let muted=false, cricketT=0, popT=0, fireVol=0;
   function init(){
     if(ctx) return;
@@ -677,6 +677,11 @@ const SFX=(()=>{
     const wf=ctx.createBiquadFilter(); wf.type='lowpass'; wf.frequency.value=240;
     windGain=ctx.createGain(); windGain.gain.value=0;
     ws.connect(wf); wf.connect(windGain); windGain.connect(master); ws.start();
+    // looping rain bed: broadband hiss, gain driven each frame from the weather intensity
+    const rs=ctx.createBufferSource(); rs.buffer=nbuf; rs.loop=true;
+    const rf=ctx.createBiquadFilter(); rf.type='bandpass'; rf.frequency.value=1500; rf.Q.value=.6;
+    rainGain=ctx.createGain(); rainGain.gain.value=0;
+    rs.connect(rf); rf.connect(rainGain); rainGain.connect(master); rs.start();
     menuMusic=new Audio('audio/menu.mp3');
     menuMusic.loop=true;
     menuMusic.preload='auto';
@@ -777,7 +782,9 @@ function noise(dur,vol,fc,q,delay,type){
       if(!ctx) return;
       const ft=Math.max(0, 1-fireD/9)*.4;
       fireVol+= (ft-fireVol)*Math.min(1,dt*4);
-      windGain.gain.value=muted?0:(outdoor? .014+gDayF*.008 : .003);
+      const rl=typeof weatherLerp==='number'?weatherLerp:0;                 // world.mjs weather intensity
+      windGain.gain.value=muted?0:(outdoor? .014+gDayF*.008+rl*.02 : .003); // storms gust harder
+      if(rainGain)rainGain.gain.value=muted||!outdoor?0:rl*.05;
       if(menuMusic){
         const target=!muted&&inMenu&&!inCutscene ? MENU_MUSIC_VOLUME : 0;
         menuMusic.volume+= (target-menuMusic.volume)*Math.min(1,dt*1.8);
