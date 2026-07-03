@@ -81,6 +81,7 @@ no bedrock, and a 10-block reach check from the editing player.
 | Overworld mobs    | server    | 10 Hz AI: local-density spawning by danger ring, chase/attack (`hurt` msg), die (`xp` msg to killer) |
 | Animals           | server    | biome-flavored passive spawns; hunting drops meat + biome collectibles |
 | Time of day       | server    | clients render sun/moon/fog from the shared clock (`tod`); sleeping skips the night |
+| Weather           | server    | clear/rain/storm rotates on the server clock (`state.weather`); rain waters crops, storms embolden hostiles, shelter animals, pause caravans, and hurl damaging lightning (town is a sanctuary) |
 | Gates             | server    | id + seed + rank broadcast; public gates open on a timer, keyed/shard gates on demand |
 | Dungeons          | server    | **party instances**: everyone entering the same gate shares one instance, mobs/boss/hazards simulated |
 | Inventory / gold / crafting / shops | server | validated server-side; the `save` message ignores client-sent inventory, gold, level, XP and stats |
@@ -187,6 +188,8 @@ Nearly all tunables live in [`server/rooms/constants.js`](server/rooms/constants
 and the sim rate live in `GameRoom.js`.
 
 - **Day length:** `DAY_LEN` (600s) — must match the client's copy.
+- **Weather:** `WEATHER_DURATION_MS` / `WEATHER_NEXT` (rotation), `LIGHTNING_INTERVAL_MS`,
+  `LIGHTNING_RADIUS`, `LIGHTNING_PLAYER_DMG` / `LIGHTNING_MOB_DMG`, `weatherSpawnMods`.
 - **Overworld spawning:** `hostileBudgetFor` / `animalBudgetFor` (per-player, per-ring budgets),
   `LOCAL_HOSTILE_COUNT_RADIUS`, `HOSTILE_DESPAWN_RADIUS`, `HOSTILE_SPAWN_INTERVAL`; `MOB_CAP`/`ANIMAL_CAP`
   remain as fallbacks.

@@ -5,8 +5,10 @@ const {
   EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS,
   EVENT_TEST_QUEUE_MS, GUILD_DECOR_BLOCKS, GUILD_FLOOR_MAX, GUILD_HALL, I, KING_ACTIVE_MS, KING_ARENA_SIZE,
   KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD,
-  SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, dayTimeAt, guildFloorPrice,
-  skyshipSnapshot, sstep,
+  SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, WEATHER_KINDS,
+  LIGHTNING_INTERVAL_MS, LIGHTNING_RADIUS, LIGHTNING_PLAYER_DMG, LIGHTNING_MOB_DMG,
+  rollWeatherNext, rollWeatherDurationMs, dayTimeAt, guildFloorPrice,
+  skyshipSnapshot, sstep, clampN,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -37,6 +39,68 @@ class EventsMixin {
     this.activeEventInstanceId = '';
     this.eventCourseBlocks = new Set();
     this.eventTransientEditKeys = new Set();
+    this.weatherUntil = 0;
+    this.nextLightningAt = 0;
+  }
+
+  // ---- weather: server-owned like the day cycle; clients render, the server decides ----
+  weatherPayload() {
+    return { kind: (this.state && this.state.weather) || 'clear', until: this.weatherUntil | 0, serverNow: Date.now() };
+  }
+  sendWeather(client) {
+    if (client && typeof client.send === 'function') client.send('weather', this.weatherPayload());
+  }
+  setWeather(kind, now = Date.now()) {
+    if (!WEATHER_KINDS.includes(kind)) kind = 'clear';
+    const prev = this.state.weather;
+    this.state.weather = kind;
+    this.weatherUntil = now + rollWeatherDurationMs(kind);
+    if (kind === 'storm') this.nextLightningAt = now + 2500;
+    if (prev !== kind) this.broadcast('weather', this.weatherPayload());
+    return kind;
+  }
+  tickWeather(now) {
+    if (!this.state || typeof this.state.weather !== 'string') return;
+    if (!this.weatherUntil) { this.weatherUntil = now + rollWeatherDurationMs(this.state.weather); return; }
+    if (now >= this.weatherUntil) this.setWeather(rollWeatherNext(this.state.weather), now);
+    if (this.state.weather === 'storm' && now >= (this.nextLightningAt || 0)) {
+      this.nextLightningAt = now + LIGHTNING_INTERVAL_MS[0] + Math.random() * (LIGHTNING_INTERVAL_MS[1] - LIGHTNING_INTERVAL_MS[0]);
+      this.strikeLightning();
+    }
+  }
+  // Pick a strike point near a random surface hunter; the town stays a sanctuary.
+  strikeLightning() {
+    const surface = [];
+    this.state.players.forEach((p, sid) => { if (!p.dgn && (p.dim || 'overworld') === 'overworld') surface.push({ p, sid }); });
+    if (!surface.length) return null;
+    const anchor = surface[(Math.random() * surface.length) | 0];
+    const ang = Math.random() * Math.PI * 2, dist = 4 + Math.random() * 12;
+    const x = clampN(anchor.p.x + Math.cos(ang) * dist, 2, W.WX - 2);
+    const z = clampN(anchor.p.z + Math.sin(ang) * dist, 2, W.WX - 2);
+    if (this.isTownProtected(x, z)) return null;
+    const gy = this.world.standHeight(x, z, W.WH - 2);
+    return this.applyLightningStrike(x, gy > 0 ? gy : anchor.p.y, z);
+  }
+  // Deterministic damage step, split out so it is directly testable: broadcast the bolt,
+  // shock unsheltered hunters, and fry overworld mobs in the blast radius (friendlies immune).
+  applyLightningStrike(x, y, z) {
+    this.broadcast('weatherBolt', { x, y, z });
+    this.state.players.forEach((p, sid) => {
+      if (p.dgn || (p.dim || 'overworld') !== 'overworld') return;
+      if (Math.hypot(p.x - x, p.z - z) > LIGHTNING_RADIUS || this.isTownProtected(p.x, p.z)) return;
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (client) this.hurtPlayer(client, LIGHTNING_PLAYER_DMG, 'lightning');
+    });
+    const dead = [];
+    this.state.mobs.forEach((m, id) => {
+      const meta = this.mobMeta[id];
+      if (m.dgn || !meta || meta.friendly) return;
+      if (Math.hypot(m.x - x, m.z - z) > LIGHTNING_RADIUS) return;
+      m.hp -= LIGHTNING_MOB_DMG;
+      if (m.hp <= 0) dead.push(id);
+    });
+    for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
+    return { x, y, z, killed: dead.length };
   }
 
   skyshipSyncPayload() {

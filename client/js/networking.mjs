@@ -593,6 +593,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('fx', m=>netFx(m));
     room.onMessage('dmgnum', m=>spawnDamageNumber(m));
     room.onMessage('arrow', m=>netSpawnProjectile(m));
+    room.onMessage('weather', m=>applyWeather(m));
+    room.onMessage('weatherBolt', m=>weatherBoltFx(m));
     room.onMessage('hurt', m=>{
       if(tutorialSafe() && (!m || m.n>=0)){ hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
       damagePlayer(m.n,'server:'+((m&&m.reason)||'combat'));

@@ -90,6 +90,7 @@ class State extends Schema {
     this.gate = new Gate();         // legacy mirror of first public gate for old clients
     this.gates = new MapSchema();   // gate id -> Gate
     this.tod = 0.35;                // time of day: 0 midnight, .25 sunrise, .5 noon, .75 sunset
+    this.weather = 'clear';         // server-owned weather: clear | rain | storm
   }
 }
 defineTypes(State, {
@@ -100,6 +101,7 @@ defineTypes(State, {
   gate: Gate,
   gates: { map: Gate },
   tod: 'number',
+  weather: 'string',
 });
 
 module.exports = { State, Player, Mob, Gate, Team };

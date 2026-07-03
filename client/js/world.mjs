@@ -3275,7 +3275,74 @@ function shrineInteriorFactor(){
   const approach=Math.hypot(x-HUB.shrine.x,z-HUB.shrine.z);
   return approach<10 ? Math.max(0,1-approach/10)*.35 : 0;
 }
+// ---------------- weather: server-owned in multiplayer, local machine in solo ----------------
+let weather='clear', weatherLerp=0, lightningFlashT=0;
+let soloWeatherUntil=0, soloBoltAt=0;
+function applyWeather(m){ setLocalWeather((m&&m.kind)||'clear', true); }
+function setLocalWeather(kind, announce){
+  if(kind!=='rain'&&kind!=='storm')kind='clear';
+  if(kind===weather)return;
+  const prev=weather; weather=kind;
+  if(announce&&dim!=='tutorial')sysMsg(
+    kind==='storm'?'A <b>storm</b> rolls in — beware the open ground':
+    kind==='rain'?'Rain begins to fall across the region':
+    prev==='storm'?'The storm passes':'The skies clear');
+}
+function weatherBoltFx(m){
+  if(!m||dim!=='overworld')return;
+  lightningFlashT=.3;
+  const d=Math.hypot(m.x-player.pos.x,m.z-player.pos.z);
+  const boltMat=new THREE.MeshBasicMaterial({color:0xeaf2ff,transparent:true,opacity:.95,blending:THREE.AdditiveBlending,depthWrite:false});
+  const grp=new THREE.Group();
+  let bx=m.x,by=m.y,bz=m.z;
+  for(let s=0;s<6;s++){                                    // jagged column up into the clouds
+    const h=2.6+Math.random()*3;
+    const seg=new THREE.Mesh(new THREE.BoxGeometry(.16,h,.16),boltMat);
+    seg.position.set(bx,by+h/2,bz); grp.add(seg);
+    by+=h; bx+=(Math.random()-.5)*1.7; bz+=(Math.random()-.5)*1.7;
+  }
+  scene.add(grp);
+  burst(m.x,m.y+.4,m.z,[1,1,.72],16,2.6,2.4,.5);
+  setTimeout(()=>scene.remove(grp),140);
+  setTimeout(()=>{ if(SFX&&SFX.boom)SFX.boom(); },Math.min(1500,Math.max(60,d*16)));   // thunder trails the flash
+  camShake=Math.max(camShake,Math.max(.12,.55-d*.012));
+}
+function tickWeatherFx(dt){
+  if(!NET.on&&dim==='overworld'&&!tutorialSafe()){          // solo weather machine mirrors the server's
+    const now=Date.now();
+    if(!soloWeatherUntil)soloWeatherUntil=now+120000+Math.random()*240000;
+    else if(now>=soloWeatherUntil){
+      const r=Math.random();
+      const next=weather==='clear'?(r<.72?'rain':'storm'):weather==='rain'?(r<.62?'clear':'storm'):(r<.7?'clear':'rain');
+      setLocalWeather(next,true);
+      soloWeatherUntil=now+(next==='clear'?480000+Math.random()*480000:150000+Math.random()*180000);
+    }
+    if(weather==='storm'&&now>=(soloBoltAt||0)){
+      soloBoltAt=now+6000+Math.random()*7000;
+      const a=Math.random()*6.283,r2=5+Math.random()*12;
+      const bx=player.pos.x+Math.cos(a)*r2,bz=player.pos.z+Math.sin(a)*r2;
+      if(!isTownLand(bx,bz)){
+        const by=standHeight(bx,bz,WH-2);
+        weatherBoltFx({x:bx,y:by>0?by:player.pos.y,z:bz});
+        if(Math.hypot(bx-player.pos.x,bz-player.pos.z)<2.6&&!isTownLand(player.pos.x,player.pos.z))damagePlayer(6,'lightning');
+      }
+    }
+  }
+  const target=dim==='overworld'?(weather==='storm'?1:weather==='rain'?.55:0):0;
+  weatherLerp+=(target-weatherLerp)*Math.min(1,dt*1.1);
+  if(lightningFlashT>0)lightningFlashT-=dt;
+  if(weatherLerp<.04||dim!=='overworld')return;
+  const snowy=biomeAt(Math.floor(player.pos.x),Math.floor(player.pos.z))===BIO.SNOWY;
+  const n=Math.min(30,Math.round(dt*(snowy?60:240)*weatherLerp));
+  for(let i=0;i<n;i++){                                     // precipitation around the camera
+    const a=Math.random()*6.283,r=2+Math.random()*10;
+    const x=player.pos.x+Math.cos(a)*r,z=player.pos.z+Math.sin(a)*r;
+    if(snowy)spawnParticle({x,y:player.pos.y+4.5+Math.random()*3,z,vx:(Math.random()-.5)*.6,vy:-1.5-Math.random(),vz:(Math.random()-.5)*.6,life:3.2,grav:0,r:.95,g:.97,b:1});
+    else spawnParticle({x,y:player.pos.y+4+Math.random()*4.5,z,vx:0,vy:-15-Math.random()*4,vz:0,life:.7,grav:0,r:.6,g:.72,b:.97});
+  }
+}
 function updateDayNight(dt){
+  tickWeatherFx(dt);
   if(tutorialSafe()){
     tod=.38;
   }
@@ -3317,6 +3384,30 @@ function updateDayNight(dt){
   hemi.intensity=0.16+dayF*0.84;
   hemi.color.copy(_tmpC.setRGB(0.42,0.52,0.74)).lerp(new THREE.Color(0.81,0.91,1), dayF);
 
+  // weather dims and closes in the overworld; lightning briefly floods it with light
+  if(dim==='overworld'){
+    scene.fog.near=40-weatherLerp*22;
+    scene.fog.far=110-weatherLerp*52;
+    if(weatherLerp>.02){
+      _tmpC.setRGB(.34,.38,.45);
+      matOpaque.color.lerp(_tmpC,weatherLerp*.58);
+      matTrans.color.lerp(_tmpC,weatherLerp*.58);
+      _tmpC.setRGB(.3,.34,.4);
+      scene.fog.color.lerp(_tmpC,weatherLerp*.8);
+      SKY.lerp(_tmpC,weatherLerp*.8);
+      cloudMat.opacity=Math.min(.95,cloudMat.opacity+weatherLerp*.65);
+      sun.intensity*=1-weatherLerp*.75;
+      hemi.intensity*=1-weatherLerp*.3;
+      starMat.opacity*=1-weatherLerp*.8;
+    }
+    if(lightningFlashT>0){
+      const f=Math.min(1,lightningFlashT*3.3);
+      _tmpC.setRGB(.82,.88,1);
+      scene.fog.color.lerp(_tmpC,f*.7);
+      SKY.lerp(_tmpC,f*.75);
+      hemi.intensity+=f*1.2;
+    }
+  }
   const shrineDark=shrineInteriorFactor();
   if(shrineDark>0.01){
     const shrineTint=new THREE.Color(0x2a1b16);
@@ -6293,6 +6384,7 @@ const legacyWorldBindings={
   "attachNpcNameplate":{get:()=>attachNpcNameplate},
   "attackCd":{get:()=>attackCd,set:value=>{attackCd=value;}},
   "attackMob":{get:()=>attackMob},
+  "applyWeather":{get:()=>applyWeather},
   "awardJobForBlock":{get:()=>awardJobForBlock},
   "awardJobForCraft":{get:()=>awardJobForCraft},
   "B":{get:()=>B},
@@ -6596,6 +6688,8 @@ const legacyWorldBindings={
   "utilityUnlocks":{get:()=>utilityUnlocks,set:value=>{utilityUnlocks=value;}},
   "overworldActivity":{get:()=>overworldActivity,set:value=>{overworldActivity=value;}},
   "villagers":{get:()=>villagers},
+  "weather":{get:()=>weather},
+  "weatherBoltFx":{get:()=>weatherBoltFx},
   "WH":{get:()=>WH},
   "world":{get:()=>world,set:value=>{world=value;}},
   "WX":{get:()=>WX},

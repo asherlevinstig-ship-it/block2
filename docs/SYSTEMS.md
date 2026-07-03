@@ -205,6 +205,23 @@ bands (`SHADE_RANK_LVLS`, `famTier`):
 
 ---
 
+## Weather
+
+Server-owned like the day cycle (`state.weather`, driven in [`events.mixin.js`](../server/rooms/events.mixin.js)):
+**clear → rain → storm** rotate on randomized timers (`WEATHER_DURATION_MS`, `WEATHER_NEXT`),
+broadcast to every client and sent on join; solo mode runs a local machine with the same feel.
+
+- **Rain** waters the fields — crop stage timers halve (`cropGrowMs`) — and animals shelter
+  (reduced animal spawn budget). The world dims, fog closes in, and rain falls around the camera.
+- **Storms** embolden hostiles away from town (+spawn budget), pause road caravans and
+  roadside encounters, and hurl **lightning**: every 6–13s a bolt lands near a random surface
+  hunter (`LIGHTNING_RADIUS`, damages hunters and fries mobs — friendlies immune, dungeons
+  untouched, and the town is a sanctuary). Clients render the jagged bolt, a sky-flood flash,
+  camera shake, and distance-delayed thunder.
+- **Snowy biomes** render drifting snow instead of rain.
+
+---
+
 ## Server events & the skyship
 
 Driven by the room clock in [`events.mixin.js`](../server/rooms/events.mixin.js):

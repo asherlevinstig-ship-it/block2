@@ -4194,6 +4194,115 @@ test('caravan bandit archers fire dodgeable server arrows while melee bandits st
     'melee bandits still strike adjacent hunters directly');
 });
 
+test('weather transition tables and spawn modifiers are well-formed and deterministic', () => {
+  const C = require('../rooms/constants');
+  assert.equal(C.rollWeatherNext('clear', 0), 'rain');
+  assert.equal(C.rollWeatherNext('clear', .99), 'storm');
+  assert.equal(C.rollWeatherNext('rain', 0), 'clear');
+  assert.equal(C.rollWeatherNext('rain', .99), 'storm');
+  assert.equal(C.rollWeatherNext('storm', 0), 'clear');
+  assert.equal(C.rollWeatherNext('storm', .99), 'rain');
+  for (const kind of C.WEATHER_KINDS) {
+    const [lo, hi] = C.WEATHER_DURATION_MS[kind];
+    assert.equal(C.rollWeatherDurationMs(kind, 0), lo);
+    assert.equal(C.rollWeatherDurationMs(kind, 1), hi);
+    assert.equal(lo > 0 && hi >= lo, true);
+  }
+  assert.deepEqual(C.weatherSpawnMods('clear'), { animalMul: 1, hostileBonus: 0 });
+  assert.equal(C.weatherSpawnMods('storm').hostileBonus > C.weatherSpawnMods('rain').hostileBonus, true);
+  assert.equal(C.weatherSpawnMods('rain').animalMul < 1, true);
+  assert.equal(C.weatherSpawnMods('storm').animalMul < C.weatherSpawnMods('rain').animalMul, true);
+});
+
+test('weather engine rotates on schedule, broadcasts changes, and arms lightning only in storms', () => {
+  const room = makeRoom();
+  const alpha = makeClient('weather-alpha');
+  room.clients = [alpha];
+  seedPlayer(room, alpha, { token: 'weather_alpha_tok', name: 'Alpha' });
+  const sent = [];
+  room.broadcast = (type, msg) => sent.push({ type, msg });
+  room.state.weather = 'clear';
+  room.weatherUntil = 0;
+  room.nextLightningAt = 0;
+  const now = Date.now();
+  room.tickWeather(now);
+  assert.equal(room.state.weather, 'clear', 'the first tick only arms the rotation timer');
+  assert.equal(room.weatherUntil > now, true);
+  room.weatherUntil = now - 1;
+  room.tickWeather(now);
+  assert.equal(['rain', 'storm'].includes(room.state.weather), true, 'clear skies rotate into weather');
+  assert.equal(sent.some(e => e.type === 'weather' && e.msg.kind === room.state.weather), true,
+    'the change is broadcast to every client');
+  room.setWeather('storm', now);
+  assert.equal(room.nextLightningAt > now, true, 'storms arm the lightning timer');
+  const armed = room.nextLightningAt;
+  room.setWeather('clear', now);
+  room.weatherUntil = now + 60000;
+  room.tickWeather(now);
+  assert.equal(room.nextLightningAt, armed, 'clear weather never schedules a strike');
+  assert.equal(room.weatherPayload().kind, 'clear');
+});
+
+test('lightning shocks unsheltered hunters and fries mobs, but spares the town, dungeons, and friendlies', () => {
+  const room = makeRoom();
+  const outdoor = makeClient('bolt-outdoor');
+  const sheltered = makeClient('bolt-town');
+  room.clients = [outdoor, sheltered];
+  seedPlayer(room, outdoor, { token: 'bolt_outdoor_tok', name: 'Out', x: 300.5, z: 300.5 });
+  seedPlayer(room, sheltered, { token: 'bolt_town_tok', name: 'Town', x: W.TOWN.TC + .5, z: W.TOWN.TC + .5 });
+  room.broadcast = () => {};
+  const mkMob = (id, x, z, opts = {}) => {
+    room.state.mobs.set(id, { x, y: 10, z, hp: opts.hp ?? 10, maxHp: 20, kind: opts.kind || 'zombie', dgn: opts.dgn || '' });
+    room.mobMeta[id] = { friendly: !!opts.friendly };
+  };
+  mkMob('m1', 301, 300.5);
+  mkMob('m2', 301, 300.5, { friendly: true });
+  mkMob('m3', 301, 300.5, { dgn: 'dg1' });
+  mkMob('m4', 330, 300.5);
+  const res = room.applyLightningStrike(300.5, 10, 300.5);
+  assert.equal(res.killed, 1, 'the hostile inside the blast radius died');
+  assert.equal(room.state.mobs.has('m1'), false);
+  assert.equal(room.state.mobs.get('m2').hp, 10, 'friendlies are immune');
+  assert.equal(room.state.mobs.get('m3').hp, 10, 'dungeon mobs are untouched');
+  assert.equal(room.state.mobs.get('m4').hp, 10, 'out-of-range mobs are untouched');
+  assert.equal(outdoor.sent.some(e => e.type === 'hurt' && e.msg.reason === 'lightning'), true,
+    'the unsheltered hunter is shocked');
+  room.applyLightningStrike(W.TOWN.TC + .5, 10, W.TOWN.TC + .5);
+  assert.equal(sheltered.sent.some(e => e.type === 'hurt' && e.msg.reason === 'lightning'), false,
+    'the town is a sanctuary from the storm');
+});
+
+test('storms pause road caravans until the skies clear', () => {
+  const room = makeRoom();
+  room.mobSeq = 0;
+  const alpha = makeClient('storm-roads');
+  room.clients = [alpha];
+  const road = W.roadNetworkSpecs()[0];
+  seedPlayer(room, alpha, { token: 'storm_roads_tok', name: 'Alpha', x: road.a.x, z: road.a.z });
+  room.broadcast = () => {};
+  room.state.weather = 'storm';
+  room.nextCaravanAt = 0;
+  room.nextRoadsideEncounterAt = 0;
+  room.tickRoadCaravans(2, true);
+  assert.equal((room.roadCaravans || new Map()).size, 0, 'no caravan departs in a storm');
+  assert.equal((room.roadsideEncounters || new Map()).size, 0, 'no roadside encounter spawns in a storm');
+  room.state.weather = 'clear';
+  room.tickRoadCaravans(2, true);
+  assert.equal(room.roadCaravans.size, 1, 'caravans resume when the storm ends');
+});
+
+test('rain waters the fields: crop stage timers halve while weather is active', () => {
+  const room = makeRoom();
+  room.state.weather = 'clear';
+  const base = room.cropGrowMs();
+  room.state.weather = 'rain';
+  assert.equal(room.cropGrowMs(), Math.round(base / 2));
+  room.state.weather = 'storm';
+  assert.equal(room.cropGrowMs(), Math.round(base / 2));
+  room.state.weather = 'clear';
+  assert.equal(room.cropGrowMs(), base);
+});
+
 test('event queues wait for minimum players and grant one near-capacity final-call extension', () => {
   const room = makeRoom();
   const alpha = makeClient('alpha');

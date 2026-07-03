@@ -557,6 +557,7 @@ class GameRoom extends Room {
     this.sendEventStatus(client);
     this.sendSkyshipSync(client);
     this.sendDayCycleSync(client);
+    this.sendWeather(client);
     this.sendGuildHallSync(client);
     this.broadcast('chat', { name: '[System]', text: p.name + (prof ? ' has returned' : ' has entered the world') });
   }
@@ -2234,7 +2235,7 @@ class GameRoom extends Room {
       if (!this.consumeSlotItem(rec.prof, slot, I.WHEAT_SEEDS, 1)) return client.send('farmReject', { reason: 'seeds' });
       this.dirtyPlayers.add(rec.token);
       this.setWorldBlock(x, y, z, W.B.WHEAT_1);
-      this.cropTimers.set(x + ',' + y + ',' + z, Date.now() + CROP_GROW_MS);
+      this.cropTimers.set(x + ',' + y + ',' + z, Date.now() + this.cropGrowMs());
       this.recordFarmProgress(client, action);
       return client.send('farmResult', { action, x, y, z, slot });
     }
@@ -2249,12 +2250,17 @@ class GameRoom extends Room {
     }
     client.send('farmReject', { reason: 'invalid' });
   }
+  // rain (and storms) water the fields: crops advance twice as fast until the skies clear
+  cropGrowMs() {
+    return this.state && this.state.weather && this.state.weather !== 'clear' ? Math.round(CROP_GROW_MS / 2) : CROP_GROW_MS;
+  }
   growCrops(dt) {
     this.cropGrowAcc = (this.cropGrowAcc || 0) + dt;
     if (this.cropGrowAcc < 1) return;
     this.cropGrowAcc = 0;
     if (!this.cropTimers) this.cropTimers = new Map();
     const now = Date.now();
+    const growMs = this.cropGrowMs();
     const grow = [];
     this.state.edits.forEach((id, key) => {
       if (id !== W.B.WHEAT_1 && id !== W.B.WHEAT_2) return;
@@ -2266,13 +2272,13 @@ class GameRoom extends Room {
       }
       let due = this.cropTimers.get(key);
       if (!due) {
-        this.cropTimers.set(key, now + CROP_GROW_MS);
+        this.cropTimers.set(key, now + growMs);
         return;
       }
       if (due > now) return;
       const next = id === W.B.WHEAT_1 ? W.B.WHEAT_2 : W.B.WHEAT_3;
       if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
-      else this.cropTimers.set(key, now + CROP_GROW_MS);
+      else this.cropTimers.set(key, now + growMs);
       grow.push({ x, y, z, id: next });
     });
     for (const g of grow.slice(0, 32)) this.setWorldBlock(g.x, g.y, g.z, g.id);
@@ -2441,6 +2447,7 @@ class GameRoom extends Room {
   // ---------------- simulation ----------------
   update(dt) {
     this.state.tod = dayTimeAt(this.dayEpoch, Date.now());
+    this.tickWeather(Date.now());
     this.growCrops(dt);
     this.completeDragonIncubations();
     this.tickNestBreeding();

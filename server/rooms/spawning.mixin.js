@@ -5,6 +5,7 @@ const {
   ANIMAL_BASE_KIND, ANIMAL_DESPAWN_RADIUS, ANIMAL_SPAWN_INTERVAL, BIOME_ANIMAL, DANGER_RINGS, ELITE_FAMILIES,
   GATE_DISTANCE_BANDS, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, I, LOCAL_ANIMAL_COUNT_RADIUS,
   LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, animalBudgetFor, dangerRingAt, hostileBudgetFor, townDistance,
+  weatherSpawnMods,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -212,11 +213,13 @@ class SpawningMixin {
         clusters.push({ x: p.x, z: p.z, players: [entry], hostileAcc: 0, animalAcc: 0 });
       }
     }
+    const wmods = weatherSpawnMods((this.state && this.state.weather) || 'clear');
     for (const c of clusters) {
       c.ring = c.players.reduce((r, e) => Math.max(r, dangerRingAt(e.p.x, e.p.z)), dangerRingAt(c.x, c.z));
       c.key = Math.round(c.x / 80) + ',' + Math.round(c.z / 80);
-      c.hostileBudget = hostileBudgetFor(c.players.length, c.ring);
-      c.animalBudget = animalBudgetFor(c.players.length);
+      // foul weather emboldens hostiles away from town while animals shelter from the rain
+      c.hostileBudget = hostileBudgetFor(c.players.length, c.ring) + (c.ring > 0 ? wmods.hostileBonus : 0);
+      c.animalBudget = Math.round(animalBudgetFor(c.players.length) * wmods.animalMul);
     }
     return clusters;
   }
@@ -381,7 +384,8 @@ class SpawningMixin {
     if (!this.roadCaravans) this.roadCaravans = new Map();
     const now = Date.now(), roads = W.roadNetworkSpecs();
     this.tickRoadsideEncounters(dt, daytime, roads, now);
-    if (daytime && !this.roadCaravans.size && now >= (this.nextCaravanAt || 0) && roads.length) {
+    const storming = this.state && this.state.weather === 'storm';   // merchants wait out storms
+    if (daytime && !storming && !this.roadCaravans.size && now >= (this.nextCaravanAt || 0) && roads.length) {
       let hasSurface = false; this.state.players.forEach(p => { if (!p.dgn) hasSurface = true; });
       if (hasSurface) this.spawnRoadCaravan(roads[Math.floor(now / 600000) % roads.length]);
     }
@@ -568,7 +572,7 @@ class SpawningMixin {
       for (const encounter of [...this.roadsideEncounters.values()]) this.failRoadsideEncounter(encounter, 'night');
       return;
     }
-    if (!this.roadsideEncounters.size && now >= (this.nextRoadsideEncounterAt || 0)) {
+    if (!this.roadsideEncounters.size && now >= (this.nextRoadsideEncounterAt || 0) && !(this.state && this.state.weather === 'storm')) {
       const point = this.roadsideEncounterPoint(roads);
       const safety = this.roadSafetySnapshot(now).score;
       const types = safety >= 70 ? ['wounded_hunter', 'merchant_rescue', 'wounded_hunter'] : safety < 35 ? ['pursuit', 'merchant_rescue', 'pursuit'] : ['wounded_hunter', 'merchant_rescue', 'pursuit'];

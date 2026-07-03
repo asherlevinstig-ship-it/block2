@@ -62,5 +62,6 @@ test('initEventsState initializes exactly its field cluster', () => {
   assert.deepEqual(fields.sort(), [
     'eventSeq', 'skyshipEpoch', 'dayEpoch', 'sleepingPlayers', 'serverEvent',
     'eventInstances', 'activeEventInstanceId', 'eventCourseBlocks', 'eventTransientEditKeys',
+    'weatherUntil', 'nextLightningAt',
   ].sort());
 });

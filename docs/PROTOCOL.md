@@ -158,6 +158,8 @@ Grouped by intent. `*Result` = success, `*Reject` = rejected/invalid.
   `sleepComplete`/`sleepWait`/`sleepReject`.
 - **Roads & overworld activity:** `overworldActivity`, `roadsideEncounter`,
   `roadsideEncounterResult`/`roadsideEncounterReject`, `roadSafetyChanged`.
+- **Weather:** `weather` (kind + rotation deadline, sent on join and on change),
+  `weatherBolt` (lightning strike position for the client flash/bolt/thunder).
 - **Contracts & discoveries:** `regionalContracts`, `regionalContractUpdate`,
   `regionalContractReady`, `regionalContractClaimed`, `regionalContractReject`,
   `discoveryResult`/`discoveryReject`, `discoverySighted`, `biomeFind`.
