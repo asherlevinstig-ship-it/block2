@@ -430,6 +430,23 @@ class DungeonMixin {
       shardPlus: inst.shardPlus || 0, shardName: inst.shardName || '', shardMods: inst.shardMods || '',
     };
   }
+  // The dungeonLobbyStart signal a flag-on hunter receives: the overworld gate descriptor the
+  // client passes straight to NETWORK.switchRoom('dungeon', ...). `mode:'room'` disambiguates it
+  // from the bare legacy start (which is followed by an in-room enterDungeon instead). Field names
+  // match DungeonRoom.gateFromOptions so the whole payload is forwarded as the room's join options.
+  dungeonRoomEntryPayload(g) {
+    return {
+      mode: 'room',
+      gateId: g.id,
+      seed: (g.seed >>> 0) || 0,
+      rank: g.rank | 0,
+      kind: g.kind || 'public',
+      gateX: g.x, gateY: g.y, gateZ: g.z,
+      shardPlus: g.shardPlus | 0,
+      shardName: g.shardName || '',
+      shardMods: g.shardMods || '',
+    };
+  }
   armDungeonRecovery(client, g) {
     const rec = this.profileFor(client);
     if (!rec || !g) return;
@@ -509,10 +526,12 @@ class DungeonMixin {
   startDungeonLobby(lobby) {
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
-    let inst = this.instances[g.id];
-    if (!inst) inst = this.createInstance(g);
+    const roomEntry = lobby.roomEntry || new Set();
     const members = [...lobby.members];
     this.dungeonLobbies.delete(lobby.gateId);
+    // Legacy in-room instance is created lazily and only if a flag-off member actually needs it —
+    // a fully flag-on party enters the dedicated DungeonRoom and leaves no instance in the overworld.
+    let inst = null;
     for (const sid of members) {
       const c = this.clients.find(cl => cl.sessionId === sid);
       const p = this.state.players.get(sid);
@@ -520,10 +539,18 @@ class DungeonMixin {
         if (c) c.send('dungeonLobbyClosed', { gateId: g.id, reason: 'range' });
         continue;
       }
-      c.send('dungeonLobbyStart', { gateId: g.id });
-      this.enterGateInstance(c, g, inst);
+      if (roomEntry.has(sid)) {
+        // Flag-on: the ready hunter switches into the dedicated DungeonRoom for this gate.
+        // filterBy(gateId) lands the whole ready party in one room; the overworld gate is
+        // retired when that room disposes (dungeon-handoff consumeGate), not here.
+        c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g));
+      } else {
+        if (!inst) inst = this.instances[g.id] || this.createInstance(g);
+        c.send('dungeonLobbyStart', { gateId: g.id });
+        this.enterGateInstance(c, g, inst);
+      }
     }
-    this.sendDungeonStatus(g.id);
+    this.sendDungeonStatus(g.id);   // no-op when no in-room instance was created
   }
   maybeStartDungeonLobby(lobby) {
     if (!lobby || !lobby.members.size) return;
@@ -578,8 +605,17 @@ class DungeonMixin {
       this.leaveDungeonLobby(client.sessionId, true);
       return client.send('gateReject', { reason: 'range' });
     }
-    if (m && m.ready === false) lobby.ready.delete(client.sessionId);
-    else lobby.ready.add(client.sessionId);
+    if (m && m.ready === false) {
+      lobby.ready.delete(client.sessionId);
+      if (lobby.roomEntry) lobby.roomEntry.delete(client.sessionId);
+    } else {
+      lobby.ready.add(client.sessionId);
+      // Remember whether this hunter wants the dedicated DungeonRoom (flag on) so startDungeonLobby
+      // routes them there instead of an overworld in-room instance. Per-member so a mixed party
+      // during the opt-in phase degrades gracefully rather than forcing one path on everyone.
+      if (m && m.useDungeonRoom) (lobby.roomEntry || (lobby.roomEntry = new Set())).add(client.sessionId);
+      else if (lobby.roomEntry) lobby.roomEntry.delete(client.sessionId);
+    }
     this.sendDungeonLobby(lobby);
     this.maybeStartDungeonLobby(lobby);
   }

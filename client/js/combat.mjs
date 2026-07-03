@@ -1758,6 +1758,11 @@ function secondaryAction(){
   }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
   const spared=mobUnderCrosshair(5);
+  if(spared&&spared.net&&spared.ref&&spared.ref.kind==='wounded_hunter'){
+    const encounter=worldState.overworldActivity&&worldState.overworldActivity.encounter;
+    if(NET.on&&NET.room&&encounter)NET.room.send('roadsideInteract',{id:encounter.id});
+    return;
+  }
   if(spared&&spared.net&&spared.ref&&spared.ref.state==='surrender'){
     if(NET.on&&NET.room)NET.room.send('banditSpare',{id:spared.netId});
     return;

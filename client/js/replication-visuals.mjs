@@ -11,15 +11,16 @@ const ENEMY_FAMILY_COLORS={
   bandit:[.42,.29,.18],bandit_archer:[.31,.4,.22],bandit_captain:[.55,.16,.12],
   bandit_shield:[.22,.31,.42],bandit_scout:[.48,.39,.16],bandit_brute:[.5,.2,.16],
   caravan_guard:[.2,.38,.62],caravan_merchant:[.48,.27,.6],
+  wounded_hunter:[.32,.46,.58],
 };
-const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon'};
+const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',wounded_hunter:'Wounded Hunter',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon'};
 function textSprite(text,color='#ffffff',scale=1){
   const cv=document.createElement('canvas');cv.width=256;cv.height=64;const cx=cv.getContext('2d');cx.font='bold 26px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.strokeStyle='rgba(0,0,0,.9)';cx.lineWidth=7;cx.strokeText(text,128,32);cx.fillStyle=color;cx.fillText(text,128,32);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));sp.scale.set(2.8*scale,.7*scale,1);return sp;
 }
 function decorateEncounter(m,ref){
   const name=ENCOUNTER_NAMES[ref.kind];if(!name)return;
-  const friendly=ref.kind.indexOf('caravan_')===0||ref.kind==='pack_mule',hostile=ref.kind.indexOf('bandit')===0;
+  const friendly=ref.kind.indexOf('caravan_')===0||ref.kind==='pack_mule'||ref.kind==='wounded_hunter',hostile=ref.kind.indexOf('bandit')===0;
   const label=textSprite(name,friendly?'#8edcff':hostile?'#ff9b82':'#fff');label.position.y=m.wagon?2.35:2.65;m.grp.add(label);
   const bg=new THREE.Sprite(new THREE.SpriteMaterial({color:0x120f0e,transparent:true,opacity:.9,depthTest:false})),fill=new THREE.Sprite(new THREE.SpriteMaterial({color:friendly?0x55c9ff:0xf05242,depthTest:false}));
   bg.scale.set(1.35,.13,1);fill.scale.set(1.29,.075,1);bg.position.y=label.position.y-.42;fill.position.set(0,bg.position.y,.01);m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile};
@@ -136,6 +137,7 @@ function netAddMob(id, ref){
     if(col){m.baseCol=col;m.mats.forEach(mm=>mm.color.setRGB(col[0],col[1],col[2]));}
     if(ref.kind==='bandit_captain')m.grp.scale.setScalar(1.25);
     if(ref.kind==='bandit_brute')m.grp.scale.setScalar(1.18);
+    if(ref.kind==='wounded_hunter')m.grp.scale.y=.65;
     if(ref.kind==='bandit_shield'){const shield=new THREE.Mesh(new THREE.BoxGeometry(.5,.72,.1),new THREE.MeshLambertMaterial({color:0x33485d}));shield.position.set(-.48,1.05,-.08);shield.rotation.y=.25;m.grp.add(shield);}
     if(ref.kind.indexOf('elite_')===0){m.grp.scale.setScalar(1.28);decorateBoss(m);}
     if(ref.elite){                                          // synced dungeon elite: larger, horned, violet-tinted

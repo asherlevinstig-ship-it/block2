@@ -209,10 +209,17 @@ bands (`SHADE_RANK_LVLS`, `famTier`):
 
 Driven by the room clock in [`events.mixin.js`](../server/rooms/events.mixin.js):
 
-- **Parkour** (`EVENT_PARKOUR`): a generated course; finishing teleports the player back
-  and awards tokens (`EVENT_REWARD_TOKENS`).
+- **Parkour** (`EVENT_PARKOUR`): a generated course with three checkpoints; falls respawn
+  at the last checkpoint, split times are tracked per checkpoint, finishing teleports the
+  player back and awards tokens (`EVENT_REWARD_TOKENS`). The best finish persists on the
+  profile (`parkourBestMs`) and new personal bests are called out in the results.
 - **King of the Hill** (`EVENT_KING`, `KING_ACTIVE_MS` = 15m): an arena objective with
   crown-holder scoring per team.
+- **Caravan Defence** (`EVENT_CARAVAN`, `CARAVAN_ACTIVE_MS` = 10m): a co-op escort (min 2
+  hunters) through four bandit waves plus a captain. The wagon's HP scales with party size;
+  bandit archers fire genuine dodgeable server arrows. Downed hunters are revived by a
+  teammate standing close for 2s (or respawn at the wagon after 10s). Success pays 1–3
+  Legendary Tokens by remaining wagon health (≥80% → 3, ≥50% → 2).
 
 Events queue and run on `EVENT_QUEUE_MS` / `EVENT_ACTIVE_MS` cycles with an idle gap
 (`EVENT_IDLE_MIN_MS` + jitter). The **skyship** is a roaming structure on a fixed
@@ -227,7 +234,29 @@ gold fee (`SKYSHIP_BOARD_RANK`, `SKYSHIP_BOARD_GOLD`). **Sleeping** in a bed
 Repeatable objectives from the guild board (`REGIONAL_CONTRACT_TYPES`): scout a landmark,
 clear an elite camp, collect a biome resource, recover a buried cache, solve a puzzle
 shrine, or visit the road merchant. Contracts are validated and credited server-side and
-persist only for the player's active job.
+persist only for the player's active job. Road-flavored contracts (`road_*`) additionally
+build **Road Warden reputation** with milestones at 3 (Trail Sense + iron in the road
+merchant's stock), 6 (cooked provisions + permanent price cuts), and 9 (maximum discount).
+
+---
+
+## Roads: caravans, bandits & road safety
+
+Daytime overworld life along the road network ([`spawning.mixin.js`](../server/rooms/spawning.mixin.js)):
+
+- **Road caravans** are friendly convoys (wagon, merchant, mule, guards) that travel the
+  roads and can be ambushed by bandit patrols; escorting one earns credit and a temporary
+  road-merchant discount. Friendly actors can never be damaged by players.
+- **Roadside encounters** spawn near travelling players: a *wounded hunter* to aid (aim +
+  secondary action), a *merchant rescue* (kill the attackers before the merchant falls),
+  or a *supply pursuit* (catch fleeing scouts before they escape). All expire on a timer
+  and at nightfall.
+- **Road safety** is a persisted 0–100 world meter (`worldProgress.roadSafety`) that
+  drifts back toward 50 by one point per 20 minutes. Warden contracts and encounter
+  successes raise it; failures lower it. It tunes bandit camp garrisons and patrol
+  sizes, the encounter mix, and grants regional road-merchant discounts (5% at 60+,
+  10% plus bonus stock at 80+). Tiers: overrun / dangerous / contested / patrolled /
+  secure, surfaced in the client's activity tracker.
 
 ---
 

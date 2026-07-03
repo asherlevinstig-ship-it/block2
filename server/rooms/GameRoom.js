@@ -87,7 +87,7 @@ class GameRoom extends Room {
     // ---- server events / day cycle (events.mixin.js) ----
     this.initEventsState();
     const saved = await this.store.loadWorldEdits();
-    this.worldProgress = { highestGateRankCleared: -1 };
+    this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now() };
     let applied = 0;
     for (const k in saved) {
       const [x, y, z] = k.split(',').map(Number);
@@ -246,6 +246,7 @@ class GameRoom extends Room {
 
     this.onMessage('attack', (client, m) => this.handleAttack(client, m));
     this.onMessage('banditSpare', (client, m) => this.handleBanditSpare(client, m));
+    this.onMessage('roadsideInteract', (client, m) => this.handleRoadsideInteract(client, m));
     this.onMessage('eventHit', (client, m) => this.handleEventHit(client, m));
     this.onMessage('requestAegisBounty', (client) => this.handleRequestAegisBounty(client));
     this.onMessage('pvpBountyHit', (client, m) => this.handlePvpBountyHit(client, m));
@@ -1166,6 +1167,10 @@ class GameRoom extends Room {
     }
   }
   spaceSolid(dgn) {
+    if (dgn && typeof this.eventSpaceSolid === 'function') {
+      const eventSolid = this.eventSpaceSolid(dgn);
+      if (eventSolid) return eventSolid;
+    }
     const inst = dgn ? this.instances[dgn] : null;
     return AI.makeSolid(inst ? inst.world : null, this.world);
   }
@@ -2020,14 +2025,23 @@ class GameRoom extends Room {
     for (const it of rewardItems) this.addRewardItem(rec.prof, it.id, it.count);
     const done = this.publicRegionalContract(c);
     rec.prof.regionalContract = null;
+    let roadWardenMilestone = null;
     if(String(c.type||'').startsWith('road_')){
+      const beforeRep=rec.prof.roadWardenRep|0;
       rec.prof.roadWardenRep=Math.min(9999,(rec.prof.roadWardenRep|0)+1);
       if(rec.prof.roadWardenRep>=3)this.unlockUtility(client,'trail_sense','Road Warden reputation III');
+      const milestone=[
+        {rep:3,name:'Trail Reader',reward:'Trail Sense unlocked and iron added to road merchant stock.'},
+        {rep:6,name:'Road Warden',reward:'Cooked provisions unlocked and permanent merchant prices improved.'},
+        {rep:9,name:'Highway Shield',reward:'Maximum permanent Road Warden discount unlocked.'},
+      ].find(row=>beforeRep<row.rep&&rec.prof.roadWardenRep>=row.rep);
+      if(milestone)roadWardenMilestone=milestone;
+      this.adjustRoadSafety(2, 'warden_contract');
     }
     this.unlockUtility(client, 'compass', 'Guild contract complete');
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
-    client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems, roadWardenRep: rec.prof.roadWardenRep | 0 });
+    client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems, roadWardenRep: rec.prof.roadWardenRep | 0, roadWardenMilestone });
     client.send('profile', rec.prof);
     this.sendRegionalContracts(client);
   }
@@ -2637,6 +2651,10 @@ class GameRoom extends Room {
         if (meta.stateT <= 0) m.state = meta.slowT > 0 ? 'frozen' : 'chase';
         return;
       }
+
+      // Friendly replicated encounter actors are positioned by their owning
+      // road system and must never acquire or attack a player target.
+      if (meta.friendly) return;
 
       let best = null, bd = meta.scout ? 42 : 26;
       for (const s of candidates) {

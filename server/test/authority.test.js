@@ -175,7 +175,7 @@ function makeRoom() {
   room.activeEventInstanceId = '';
   room.tutorialReturns = new Map();
   room.animalSpawnAcc = 0;
-  room.worldProgress = { highestGateRankCleared: -1 };
+  room.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now() };
   room.teamMgr = new (require('../teams').TeamManager)(5);
   room.teamRecords = new Map();
   room.guilds = new Map();
@@ -1329,7 +1329,9 @@ test('stored profiles persist and clamp highest cleared gate rank', () => {
   assert.equal(defaultProfile().highestGateRankCleared, -1);
   assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: 99 }).highestGateRankCleared, 4);
   assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: -9 }).highestGateRankCleared, -1);
-  assert.deepEqual(sanitizeWorldProgress({ highestGateRankCleared: 99 }), { highestGateRankCleared: 4 });
+  assert.deepEqual(sanitizeWorldProgress({ highestGateRankCleared: 99, roadSafety: 140, roadSafetyUpdatedAt: -4 }), {
+    highestGateRankCleared: 4, roadSafety: 100, roadSafetyUpdatedAt: 0,
+  });
 });
 
 test('chest persistence sanitizes metadata and old slot-array saves', () => {
@@ -2951,6 +2953,59 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   assert.equal(resumedStatus.cleared, false);
 });
 
+test('a flag-on hunter readying in the lobby is launched into the DungeonRoom, not an in-room instance', () => {
+  const room = makeRoom();
+  room.state.gate = makeGate('legacy', 20.5, 20.5);
+  room.state.gates = new Map([['g1', makeGate('g1', 20.5, 20.5, 1)]]);
+  const client = makeClient('roomer');
+  room.clients.push(client);
+  seedPlayer(room, client, { x: 20.5, z: 20.5, lvl: 13 });
+  room.createInstance = () => { throw new Error('a fully flag-on party must not create an overworld in-room instance'); };
+
+  room.enterGate(client, { id: 'g1' });
+  room.handleDungeonLobbyReady(client, { gateId: 'g1', ready: true, useDungeonRoom: true });
+
+  const start = client.sent.find(e => e.type === 'dungeonLobbyStart');
+  assert.ok(start, 'the ready hunter received a lobby start');
+  assert.equal(start.msg.mode, 'room', 'routed to the dedicated DungeonRoom');
+  assert.deepEqual(
+    { gateId: start.msg.gateId, seed: start.msg.seed, rank: start.msg.rank, kind: start.msg.kind, gateX: start.msg.gateX, gateY: start.msg.gateY, gateZ: start.msg.gateZ },
+    { gateId: 'g1', seed: 12345, rank: 1, kind: 'public', gateX: 20.5, gateY: 16, gateZ: 20.5 },
+    'the descriptor carries the overworld gate the client hands to switchRoom',
+  );
+  assert.equal(room.state.players.get(client.sessionId).dgn, '', 'no overworld in-room entry — the client switchRooms instead');
+  assert.equal(client.sent.some(e => e.type === 'enterDungeon'), false, 'no in-room enterDungeon was sent to a switchRoom hunter');
+});
+
+test('a mixed lobby routes each hunter by their own flag: switchRoom for one, in-room for the other', () => {
+  const room = makeRoom();
+  room.state.gate = makeGate('legacy', 20.5, 20.5);
+  room.state.gates = new Map([['g1', makeGate('g1', 20.5, 20.5, 1)]]);
+  const roomer = makeClient('mixed-roomer');
+  const legacy = makeClient('mixed-legacy');
+  room.clients.push(roomer, legacy);
+  seedPlayer(room, roomer, { x: 20.5, z: 20.5, lvl: 13 });
+  seedPlayer(room, legacy, { x: 20.5, z: 20.5, lvl: 13 });
+  let instances = 0;
+  room.createInstance = g => {
+    instances++;
+    const inst = new DungeonInstance({ world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } }, g, room);
+    room.instances[g.id] = inst;
+    return inst;
+  };
+
+  room.enterGate(roomer, { id: 'g1' });                                          // roomer opens the lobby
+  room.dungeonLobbies.get('g1').members.add(legacy.sessionId);                   // legacy joins via matchmaking (modelled directly)
+  room.handleDungeonLobbyReady(roomer, { gateId: 'g1', ready: true, useDungeonRoom: true });  // ready, but legacy isn't — no start yet
+  room.handleDungeonLobbyReady(legacy, { gateId: 'g1', ready: true });           // both ready now -> start; no flag -> legacy in-room
+
+  assert.equal(instances, 1, 'exactly one in-room instance, created only for the flag-off member');
+  assert.equal(room.state.players.get(roomer.sessionId).dgn, '', 'the flag-on hunter switchRooms out, no in-room entry');
+  assert.equal(room.state.players.get(legacy.sessionId).dgn, 'g1', 'the flag-off hunter entered the in-room instance');
+  assert.equal(roomer.sent.find(e => e.type === 'dungeonLobbyStart').msg.mode, 'room');
+  assert.notEqual(legacy.sent.find(e => e.type === 'dungeonLobbyStart').msg.mode, 'room');
+});
+
 test('communication safety data sanitizes display names and persists account blocks', () => {
   const profile = sanitizeProfile({ name: '<Bad! Name>✨', mutedPlayers: ['target_token_123', 'target_token_123', '../bad'] });
   assert.equal(profile.name, 'Bad Name');
@@ -3894,8 +3949,37 @@ test('parkour server event queues teleports protects course and grants completio
   assert.equal(client.sent.some(e => e.type === 'eventTeleport' && e.msg.eventId === room.serverEvent.id && e.msg.course && e.msg.course.blocks.length > 0), true);
   assert.equal(client.sent.some(e => e.type === 'eventStarted' && e.msg.course && e.msg.course.blocks.length > 0), true);
 
-  const finish = room.serverEvent.course.finish;
+  const course = room.serverEvent.course;
+  const finish = course.finish;
   const player = room.state.players.get(client.sessionId);
+  assert.equal(course.checkpoints.length, 3);
+  player.x = finish.x;
+  player.y = finish.y;
+  player.z = finish.z;
+  room.tickServerEvent(Date.now());
+  assert.equal(client.sent.some(e => e.type === 'eventComplete'), false, 'finish is locked until ordered checkpoints are reached');
+
+  const firstCheckpoint = course.checkpoints[0];
+  player.x = firstCheckpoint.x;
+  player.y = firstCheckpoint.y;
+  player.z = firstCheckpoint.z;
+  room.tickServerEvent(Date.now());
+  assert.equal(client.sent.some(e => e.type === 'eventCheckpoint' && e.msg.index === 1 && e.msg.total === 3), true);
+
+  player.y = course.fallY - 1;
+  room.tickServerEvent(Date.now());
+  const reset = client.sent.filter(e => e.type === 'eventTeleport' && e.msg.reason === 'reset').at(-1);
+  assert.equal(reset.msg.x, firstCheckpoint.x);
+  assert.equal(reset.msg.y, firstCheckpoint.y);
+  assert.equal(reset.msg.z, firstCheckpoint.z);
+
+  for (const checkpoint of course.checkpoints.slice(1)) {
+    player.x = checkpoint.x;
+    player.y = checkpoint.y;
+    player.z = checkpoint.z;
+    room.tickServerEvent(Date.now());
+  }
+  room.serverEvent.participants.get(client.sessionId).startedAt = Date.now() - 5000;
   player.x = finish.x;
   player.y = finish.y;
   player.z = finish.z;
@@ -3912,6 +3996,9 @@ test('parkour server event queues teleports protects course and grants completio
   assert.equal(resultMsg.msg.placement, 1);
   assert.equal(resultMsg.msg.reward.xp, 70);
   assert.equal(resultMsg.msg.reward.tokens, 2);
+  assert.equal(resultMsg.msg.reward.newBest, true);
+  assert.ok(resultMsg.msg.reward.personalBestMs >= 4900);
+  assert.equal(prof.parkourBestMs, resultMsg.msg.reward.personalBestMs);
   assert.equal(room.state.players.get(client.sessionId).dim, 'event', 'results remain visible before the return countdown ends');
 
   const finishedEvent = room.serverEvent;
@@ -3978,6 +4065,133 @@ test('king of the hill queues participants scores crown time and transfers crown
   assert.equal(room.playerHp.get(alpha.sessionId).hp, 20);
   assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.kind === 'king' && e.msg.reason === 'respawn'), true);
   assert.equal(broadcasts.some(e => e.type === 'eventCrown' && e.msg.holderSid === bravo.sessionId), true);
+});
+
+test('Caravan Defence stages a co-op escort, runs waves, revives allies, and rewards a surviving wagon', () => {
+  const room = makeRoom();
+  room.mobSeq = 0;
+  const alpha = makeClient('caravan-alpha');
+  const bravo = makeClient('caravan-bravo');
+  room.clients = [alpha, bravo];
+  const { prof: alphaProf } = seedPlayer(room, alpha, { token: 'caravan_alpha_token', name: 'Alpha', lvl: 5 });
+  seedPlayer(room, bravo, { token: 'caravan_bravo_token', name: 'Bravo', lvl: 5 });
+  const now = Date.now();
+  const ev = room.createCaravanInstance(now, now - 1);
+  room.eventInstances.set(ev.id, ev);
+  room.setServerEventFromInstance(ev);
+  assert.equal(room.eventPayload(alpha).rewardMin, 1);
+  assert.equal(room.eventPayload(alpha).rewardMax, 3);
+
+  room.handleEventJoin(alpha);
+  room.handleEventJoin(bravo);
+  room.tickServerEvent(now);
+  assert.equal(ev.phase, 'starting');
+  assert.equal(ev.participants.size, 2);
+  assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.kind === 'caravan' && e.msg.reason === 'start'), true);
+
+  room.handleEventReady(alpha);
+  room.handleEventReady(bravo);
+  room.tickServerEvent(now + 1);
+  room.tickServerEvent(ev.goAt);
+  assert.equal(ev.phase, 'active');
+  assert.ok(ev.caravan.wagonId);
+  assert.equal(ev.caravan.wave, 1);
+  assert.ok(ev.enemyIds.size >= 5);
+  assert.equal(alpha.sent.some(e => e.type === 'eventCaravanWave' && e.msg.wave === 1), true);
+
+  const alphaPlayer = room.state.players.get(alpha.sessionId);
+  const bravoPlayer = room.state.players.get(bravo.sessionId);
+  alphaPlayer.x = bravoPlayer.x;
+  alphaPlayer.z = bravoPlayer.z;
+  const bravoHp = room.ensurePlayerHp(bravo);
+  bravoHp.hp = 0;
+  assert.equal(room.handleKingPlayerDeath(bravo, bravoPlayer, bravoHp), true);
+  assert.equal(ev.participants.get(bravo.sessionId).downed, true);
+  ev.lastCaravanTickAt = now;
+  room.tickCaravanEvent(ev, now + 1000);
+  room.tickCaravanEvent(ev, now + 2000);
+  assert.equal(ev.participants.get(bravo.sessionId).downed, false);
+  assert.equal(ev.participants.get(alpha.sessionId).revives, 1);
+
+  const firstEnemyId = [...ev.enemyIds][0];
+  const firstEnemy = room.state.mobs.get(firstEnemyId);
+  room.finishMobKill(alpha, firstEnemyId, firstEnemy);
+  assert.equal(ev.participants.get(alpha.sessionId).kills, 1);
+
+  for (const id of [...ev.enemyIds]) {
+    const mob = room.state.mobs.get(id);
+    if (mob) room.finishMobKill(alpha, id, mob);
+  }
+  ev.caravan.wave = ev.caravan.totalWaves;
+  ev.caravan.progress = 1;
+  const wagon = room.state.mobs.get(ev.caravan.wagonId);
+  wagon.hp = Math.round(wagon.maxHp * .85);
+  room.tickCaravanEvent(ev, now + 3000);
+
+  assert.equal(ev.phase, 'ended');
+  assert.equal(ev.caravan.state, 'secured');
+  assert.equal(itemCount(alphaProf, I.LEGEND_TOKEN), 3);
+  const result = alpha.sent.find(e => e.type === 'eventResult' && e.msg.kind === 'caravan');
+  assert.equal(result.msg.outcome, 'complete');
+  assert.equal(result.msg.reward.tokens, 3);
+  assert.equal(result.msg.contribution.value >= 1, true);
+  assert.equal(result.msg.caravanHealthPct >= 80, true);
+});
+
+test('caravan bandit archers fire dodgeable server arrows while melee bandits strike directly', () => {
+  const room = makeRoom();
+  room.mobSeq = 0;
+  const alpha = makeClient('caravan-arrow-alpha');
+  const bravo = makeClient('caravan-arrow-bravo');
+  room.clients = [alpha, bravo];
+  seedPlayer(room, alpha, { token: 'caravan_arrow_alpha', name: 'Alpha', lvl: 5 });
+  seedPlayer(room, bravo, { token: 'caravan_arrow_bravo', name: 'Bravo', lvl: 5 });
+  const now = Date.now();
+  const ev = room.createCaravanInstance(now, now - 1);
+  room.eventInstances.set(ev.id, ev);
+  room.setServerEventFromInstance(ev);
+  room.handleEventJoin(alpha);
+  room.handleEventJoin(bravo);
+  room.tickServerEvent(now);
+  room.handleEventReady(alpha);
+  room.handleEventReady(bravo);
+  room.tickServerEvent(now + 1);
+  room.tickServerEvent(ev.goAt);
+  assert.equal(ev.phase, 'active');
+
+  // Reduce the wave to exactly one archer near Alpha and one melee bandit near Bravo.
+  const alphaPlayer = room.state.players.get(alpha.sessionId);
+  const bravoPlayer = room.state.players.get(bravo.sessionId);
+  bravoPlayer.x = alphaPlayer.x + 30;
+  bravoPlayer.z = alphaPlayer.z;
+  let archerId = '', meleeId = '';
+  for (const id of [...ev.enemyIds]) {
+    const mob = room.state.mobs.get(id);
+    if (!archerId && mob.kind === 'bandit_archer') { archerId = id; continue; }
+    if (!meleeId && mob.kind === 'bandit') { meleeId = id; continue; }
+    room.state.mobs.delete(id);
+    delete room.mobMeta[id];
+    ev.enemyIds.delete(id);
+  }
+  assert.ok(archerId && meleeId, 'wave 1 contains both an archer and a melee bandit');
+  const archer = room.state.mobs.get(archerId);
+  archer.x = alphaPlayer.x + 8; archer.z = alphaPlayer.z;
+  room.mobMeta[archerId].eventAttackAt = 0;
+  const melee = room.state.mobs.get(meleeId);
+  melee.x = bravoPlayer.x + 1.2; melee.z = bravoPlayer.z;
+  room.mobMeta[meleeId].eventAttackAt = 0;
+
+  ev.lastCaravanTickAt = now;
+  room.tickCaravanEvent(ev, now + 1000);
+
+  assert.equal(room.sArrows.length, 1, 'the archer shot is a queued server-simulated projectile');
+  assert.equal(room.sArrows[0].dgn, ev.id, 'the arrow is scoped to the event space');
+  assert.equal(room.sArrows[0].dmg >= 2, true);
+  assert.equal(alpha.sent.some(e => e.type === 'arrow' && e.msg.dgn === ev.id), true, 'participants see the arrow');
+  assert.equal(alpha.sent.some(e => e.type === 'hurt' && e.msg.reason === 'caravan_bandit'), false,
+    'the archer deals no instant damage — the arrow must land first');
+  assert.equal(bravo.sent.some(e => e.type === 'hurt' && e.msg.reason === 'caravan_bandit'), true,
+    'melee bandits still strike adjacent hunters directly');
 });
 
 test('event queues wait for minimum players and grant one near-capacity final-call extension', () => {
@@ -4245,7 +4459,9 @@ test('gates restore from persistence and flush only active unexpired gates', asy
 
   assert.equal(room.dirtyGates, false);
   assert.equal(room.dirtyWorldProgress, false);
-  assert.deepEqual(savedProgress, { highestGateRankCleared: 2 });
+  assert.equal(savedProgress.highestGateRankCleared, 2);
+  assert.equal(savedProgress.roadSafety, 50);
+  assert.ok(savedProgress.roadSafetyUpdatedAt > 0);
   assert.equal(saved.g2.kind, 'solo');
   assert.equal(saved.g2.owner, 'owner_token_123');
   assert.deepEqual(saved.g2.lootedChests, ['12,9,10']);
@@ -4540,6 +4756,69 @@ test('road caravans spawn visible friendly formations, halt for bandits, and can
   assert.ok(guard.hp < before, 'bandits damage the caravan guard while the convoy is halted');
 });
 
+test('roadside encounters support wounded-hunter aid and publish proximity activity', () => {
+  const room = makeRoom(), client = makeClient('road-aid');
+  room.clients = [client];
+  const { prof } = seedPlayer(room, client, { token: 'road_aid_token', name: 'Medic' });
+  const road = W.roadNetworkSpecs()[0], point = { road, t: .5, x: (road.a.x + road.b.x) / 2, z: (road.a.z + road.b.z) / 2 };
+  const encounter = room.spawnRoadsideEncounter('wounded_hunter', point, Date.now());
+  const actor = room.state.mobs.get(encounter.actorId), player = room.state.players.get(client.sessionId);
+  player.x = actor.x; player.z = actor.z;
+
+  room.sendOverworldActivities();
+  const activity = client.sent.filter(e => e.type === 'overworldActivity').at(-1).msg;
+  assert.equal(activity.encounter.type, 'wounded_hunter');
+  room.handleRoadsideInteract(client, { id: encounter.id });
+
+  assert.equal(room.roadsideEncounters.has(encounter.id), false);
+  assert.equal(client.sent.some(e => e.type === 'roadsideEncounterResult' && e.msg.outcome === 'complete'), true);
+  assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'roadside_aid' && e.msg.xp > 0), true);
+  assert.ok(itemCount(prof, I.COOKED_MEAT) >= 1);
+});
+
+test('merchant rescues and supply pursuits complete from authoritative bandit kills', () => {
+  const room = makeRoom(), client = makeClient('road-fighter');
+  room.clients = [client];
+  seedPlayer(room, client, { token: 'road_fighter_token', name: 'Warden' });
+  const road = W.roadNetworkSpecs()[0], point = { road, t: .45, x: road.a.x + (road.b.x - road.a.x) * .45, z: road.a.z + (road.b.z - road.a.z) * .45 };
+  const player = room.state.players.get(client.sessionId); player.x = point.x; player.z = point.z;
+
+  for (const type of ['merchant_rescue', 'pursuit']) {
+    const encounter = room.spawnRoadsideEncounter(type, point, Date.now());
+    for (const id of [...encounter.hostileIds]) {
+      const mob = room.state.mobs.get(id);
+      room.finishMobKill(client, id, mob);
+    }
+    assert.equal(room.roadsideEncounters.has(encounter.id), false);
+    assert.equal(client.sent.some(e => e.type === 'roadsideEncounterResult' && e.msg.type === type), true);
+  }
+  assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'roadside_rescue'), true);
+  assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'roadside_recovery'), true);
+});
+
+test('expired roadside pursuits clean up safely without granting rewards', () => {
+  const room = makeRoom(), client = makeClient('road-late');
+  room.clients = [client]; seedPlayer(room, client, { token: 'road_late_token', name: 'Latecomer' });
+  const road = W.roadNetworkSpecs()[0], point = { road, t: .5, x: (road.a.x + road.b.x) / 2, z: (road.a.z + road.b.z) / 2 };
+  const encounter = room.spawnRoadsideEncounter('pursuit', point, Date.now() - 80000);
+  room.tickRoadsideEncounters(.1, true, [road], Date.now());
+  assert.equal(room.roadsideEncounters.has(encounter.id), false);
+  assert.equal([...encounter.entityIds].some(id => room.state.mobs.has(id)), false);
+  assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'roadside_recovery'), false);
+});
+
+test('regional road safety persists, decays toward contested, and broadcasts changes', () => {
+  const room = makeRoom(), client = makeClient('road-safety');
+  room.clients = [client]; seedPlayer(room, client, { token: 'road_safety_token', name: 'Warden' });
+  const now = Date.now();
+  room.worldProgress.roadSafety = 80; room.worldProgress.roadSafetyUpdatedAt = now - 40 * 60 * 1000;
+  assert.deepEqual(room.roadSafetySnapshot(now), { score: 78, tier: 'patrolled' });
+  const improved = room.adjustRoadSafety(6, 'test');
+  assert.equal(improved.score, 84);
+  assert.equal(room.dirtyWorldProgress, true);
+  assert.equal(client.sent.some(e => e.type === 'roadSafetyChanged' && e.msg.score === 84 && e.msg.delta === 6), true);
+});
+
 test('major landmarks are connected by deterministic roads with frequent mixed breadcrumbs', () => {
   const roadsA = W.roadNetworkSpecs(), roadsB = W.roadNetworkSpecs();
   const crumbs = W.roadBreadcrumbSpecs(), majors = W.regionalLandmarkSpecs().filter(s => s.major);
@@ -4626,6 +4905,15 @@ test('road merchants enforce proximity and sell their distinct stock', () => {
   assert.equal(client.sent.at(-1).msg.reason,'range');
 });
 
+test('secure regional roads improve merchant stock and prices', () => {
+  const room=makeRoom(),client=makeClient('safe-trader'),site=W.smallDiscoverySpecs().find(s=>s.type==='traveling_merchant');
+  const {prof}=seedPlayer(room,client,{x:site.x,z:site.z,gold:100});
+  room.worldProgress.roadSafety=85;room.worldProgress.roadSafetyUpdatedAt=Date.now();
+  room.handleShop(client,{action:'buy',vendor:'road',id:I.BREAD});
+  assert.equal(itemCount(prof,I.BREAD),2);
+  assert.equal(prof.gold,89,'secure-road regional discount reduces the 12-gold bread bundle to 11');
+});
+
 test('regional guild contracts rotate through the requested exploration archetypes', () => {
   const room = makeRoom();
   const offers = room.regionalContractOffers(0);
@@ -4671,6 +4959,19 @@ test('regional contract acceptance progress and claim are server-owned', () => {
   assert.equal(prof.gold > beforeGold, true);
   assert.equal(prof.utilityUnlocks.includes('compass'), true);
   assert.equal(client.sent.some(e => e.type === 'regionalContractClaimed'), true);
+});
+
+test('Road Warden reputation milestones unlock utilities and report their reward', () => {
+  const room=makeRoom(),client=makeClient('warden-milestone');
+  const {prof}=seedPlayer(room,client,{x:W.TOWN.TC+4.5,y:W.TOWN.G+1,z:W.TOWN.TC-8.5});
+  prof.roadWardenRep=2;
+  prof.regionalContract={id:'road-test',type:'road_escort',targetId:'',targetType:'road_warden',targetName:'Roads',need:1,have:1,title:'Safe Arrival',desc:'',rewardGold:10,rewardXp:10,rewardItems:[]};
+  room.handleRegionalContractClaim(client);
+  const claimed=client.sent.find(e=>e.type==='regionalContractClaimed');
+  assert.equal(prof.roadWardenRep,3);
+  assert.equal(prof.utilityUnlocks.includes('trail_sense'),true);
+  assert.equal(claimed.msg.roadWardenMilestone.name,'Trail Reader');
+  assert.equal(room.worldProgress.roadSafety,52);
 });
 
 test('mapping discoveries unlocks navigation utilities server side', () => {

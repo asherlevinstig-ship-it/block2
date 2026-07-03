@@ -325,9 +325,14 @@ function netAttachRoom(room,name,client){
       dungeonMatchmakingState=m&&Array.isArray(m.listings)?m:{listings:[]};
       if(dungeonLobbyOpen&&dungeonLobbyState)openDungeonLobbyUI();
     });
-    room.onMessage('dungeonLobbyStart', ()=>{
+    room.onMessage('dungeonLobbyStart', m=>{
       if(dungeonLobbyOpen) closeQWin();
+      dungeonLobbyState=null;
       sysMsg('The party is ready. <b>The Gate opens.</b>');
+      // Flag-on members get the gate descriptor (mode:'room') and switch into the dedicated
+      // DungeonRoom; flag-off members instead receive a follow-up 'enterDungeon' (legacy in-room)
+      // and just close the lobby here.
+      if(m && m.mode==='room' && globalThis.enterDungeonRoomWith) globalThis.enterDungeonRoomWith(m);
     });
     room.onMessage('dungeonLobbyClosed', m=>{
       const r=m&&m.reason;
@@ -424,7 +429,25 @@ function netAttachRoom(room,name,client){
       else if(m.state==='wrecked')sysMsg('<b>Caravan lost.</b> Bandits carried its supplies toward a nearby camp.');
       else if(m.state==='recovered')sysMsg('<b>Stolen caravan supplies recovered!</b>');
     });
-    room.onMessage('overworldActivity',m=>{overworldActivity=m||null;updateLandMinimap();});
+    room.onMessage('roadsideEncounter',m=>{
+      if(!m)return;
+      const names={wounded_hunter:'Wounded hunter',merchant_rescue:'Merchant rescue',pursuit:'Stolen supply pursuit'},name=names[m.type]||'Roadside encounter';
+      if(m.state==='started')sysMsg('<b>'+name+':</b> a nearby road needs your help.');
+      else if(m.state==='failed')sysMsg('<b>'+name+' failed.</b> '+(m.reason==='merchant'?'The merchant was overwhelmed.':m.reason==='night'?'The trail went cold after dark.':'The bandits escaped with the supplies.'));
+    });
+    room.onMessage('roadsideEncounterResult',m=>{
+      if(!m)return;
+      const text=m.type==='wounded_hunter'?'The hunter is stable and shares supplies in thanks.':m.type==='merchant_rescue'?'The merchant is safe.':'The stolen supplies are secured.';
+      sysMsg('<b>Roadside encounter complete!</b> '+text);
+    });
+    room.onMessage('roadsideEncounterReject',()=>sysMsg('Move closer and aim at the wounded hunter to provide aid.'));
+    room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
+    room.onMessage('roadSafetyChanged',m=>{
+      if(!m)return;roadSafety=Math.max(0,Math.min(100,m.score|0));
+      refreshRoadSafetyScenes();
+      const direction=(m.delta|0)>0?'improved':'worsened';sysMsg('Regional road safety <b>'+direction+'</b> · '+roadSafety+'/100 · '+escHTML(String(m.tier||'contested').toUpperCase()));
+      renderRegionalContractsUI();
+    });
     room.onMessage('regionalContracts',m=>{
       regionalContractOffers=Array.isArray(m&&m.offers)?m.offers.map(clampRegionalContract).filter(Boolean):[];
       regionalContract=clampRegionalContract(m&&m.active);
@@ -448,6 +471,7 @@ function netAttachRoom(room,name,client){
       regionalContract=null;
       renderRegionalContractsUI();
       sysMsg((c&&String(c.type||'').startsWith('road_')?'Road Warden':'Guild')+' contract claimed'+(c?': <b>'+escHTML(c.title)+'</b>':'')+' - <b>+'+((m&&m.rewardGold)|0)+' gold</b>');
+      if(m&&m.roadWardenMilestone)sysMsg('<b>Road Warden milestone · '+escHTML(m.roadWardenMilestone.name)+'</b> — '+escHTML(m.roadWardenMilestone.reward||''));
     });
     room.onMessage('regionalContractReject',m=>{
       const r=m&&m.reason;
@@ -468,6 +492,10 @@ function netAttachRoom(room,name,client){
     room.onMessage('eventComplete', m=>eventCompleted(m));
     room.onMessage('eventFailed', m=>eventFailed(m));
     room.onMessage('eventResult', m=>showEventResult(m));
+    room.onMessage('eventCheckpoint', m=>parkourCheckpointReached(m));
+    room.onMessage('eventCaravanWave', m=>caravanWaveChanged(m));
+    room.onMessage('eventCaravanDowned', m=>caravanHunterDowned(m));
+    room.onMessage('eventCaravanRevived', m=>caravanHunterRevived(m));
     room.onMessage('pvpBountyAssigned', m=>acceptAegisBounty(m));
     room.onMessage('pvpBountyComplete', m=>completeAegisBounty(m));
     room.onMessage('pvpBountyFail', m=>failAegisBounty(m&&m.reason));

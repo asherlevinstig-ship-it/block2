@@ -100,7 +100,11 @@ handler — they're short and grouped by system in `rooms/*.mixin.js`.
 | Message | Purpose |
 |---------|---------|
 | `eventJoin` / `eventLeave` | join/leave the active server event |
+| `eventReady` | ready-check answer while an event is staging |
+| `eventHit` | King-of-the-Hill crown strike |
 | `eventDebugStart` | (beta) start an event immediately |
+| `banditSpare` | spare a surrendered bandit for bonus standing |
+| `roadsideInteract` | resolve a roadside encounter (aid the wounded hunter) |
 | `skyshipBoard` / `skyshipSyncRequest` | board the skyship / resync its position |
 | `dayCycleSyncRequest` | resync the day/night clock |
 | `regionalContracts` / `regionalContractAccept` / `regionalContractAbandon` | contract board |
@@ -147,9 +151,13 @@ Grouped by intent. `*Result` = success, `*Reject` = rejected/invalid.
   `guildJoined`, `guildLeft`, `guildInvite`, `guildResult`/`guildReject`,
   `guildFloorResult`, `guildHallSync`.
 - **Events, skyship & world clock:** `eventStatus`, `eventStarted`, `eventJoined`,
-  `eventLeft`, `eventComplete`, `eventFailed`, `eventCrown`, `eventTeleport`,
-  `eventReject`, `skyshipSync`, `skyshipBoardResult`/`skyshipBoardReject`, `dayCycleSync`,
+  `eventLeft`, `eventComplete`, `eventFailed`, `eventResult`, `eventCancelled`,
+  `eventAfk`, `eventCrown`, `eventTeleport`, `eventCheckpoint`, `eventCaravanWave`/
+  `eventCaravanDowned`/`eventCaravanRevived`, `eventReject`, `skyshipSync`,
+  `skyshipBoardResult`/`skyshipBoardReject`, `dayCycleSync`,
   `sleepComplete`/`sleepWait`/`sleepReject`.
+- **Roads & overworld activity:** `overworldActivity`, `roadsideEncounter`,
+  `roadsideEncounterResult`/`roadsideEncounterReject`, `roadSafetyChanged`.
 - **Contracts & discoveries:** `regionalContracts`, `regionalContractUpdate`,
   `regionalContractReady`, `regionalContractClaimed`, `regionalContractReject`,
   `discoveryResult`/`discoveryReject`, `discoverySighted`, `biomeFind`.

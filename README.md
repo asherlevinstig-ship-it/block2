@@ -37,7 +37,7 @@ server/
     dungeonInstance.js  DungeonInstance class — per-instance state (world/edits/roster/hazards)
     economy.mixin.js    crafting, smelting, shops, chests, furnaces, inventory mutation
     spawning.mixin.js   overworld density spawning, elite camps, boss brain, gate placement
-    events.mixin.js     server events (parkour, King of the Hill), skyship, day cycle, sleep
+    events.mixin.js     server events (parkour, King of the Hill, Caravan Defence), skyship, day cycle, sleep
     teams.mixin.js      persistent teams: create/join/invite/kick/transfer/LFG
     metrics.mixin.js    behaviour-free load metrics (instances, dungeon mob-sync waste, tick ms)
     dragons.mixin.js    dragons (hatch/incubate/breed/perch/mount/breath) and familiars
@@ -89,7 +89,8 @@ no bedrock, and a 10-block reach check from the editing player.
 | Dragons & familiars | server  | hatching, breeding, mounts, breath, and familiar binds are all server-gated per species/item |
 | Profession XP     | server    | `jobXp` is server-owned: the save channel ignores client-sent profession XP entirely, and only validated server handlers (mining, kills, quests, contracts, meditation…) grant it, each clamped per event, so a forged save can't claim an instant max profession |
 | Land / guilds / teams | server | claims, guild-hall floors, and persistent parties are owned and persisted server-side |
-| Server events     | server    | parkour and King of the Hill instances, scoring, and the roaming skyship run on the server clock |
+| Server events     | server    | parkour, King of the Hill, and Caravan Defence instances, scoring, and the roaming skyship run on the server clock |
+| Roads & road safety | server  | road caravans, roadside encounters, and the persisted road-safety meter are simulated and rewarded server-side |
 
 See [docs/SYSTEMS.md](docs/SYSTEMS.md) for the full gameplay-system reference (professions,
 classes & abilities, biomes, economy, dragons, familiars, events…) and
@@ -196,7 +197,7 @@ and the sim rate live in `GameRoom.js`.
 - **Dragons:** `DRAGON_TYPES`, `DRAGON_BREEDING`, `DRAGON_INCUBATION_MS_BY_TYPE`,
   `DRAGON_EGG_CHEST_CHANCE` / `DRAGON_EGG_BOSS_CHANCE`, `DRAGON_BREATH`.
 - **Server events:** `EVENT_QUEUE_MS`, `EVENT_ACTIVE_MS`, `EVENT_IDLE_MIN_MS`, `EVENT_REWARD_TOKENS`,
-  `KING_ACTIVE_MS`, skyship `SKYSHIP_*`.
+  `KING_ACTIVE_MS`, `CARAVAN_ACTIVE_MS`, skyship `SKYSHIP_*`.
 - **Economy:** `SHOP_BUY` / `SHOP_SELL`, `TAVERN_BUY` / `TAVERN_SELL`, `LAND_BASE_PRICE`,
   `guildFloorPrice`, `RECIPES`, `SMELT`, `TOOL_INFO` (durability).
 - **Room size & sim rate:** the single global room has a hard `maxClients` of

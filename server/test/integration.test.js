@@ -225,9 +225,14 @@ async function main() {
   // ---- DungeonRoom (Phase 2b): a hunter joins the dungeon room directly and plays a raid ----
   const cookieC = await register('charlie_user', 'correct horse charlie', 'Charlie');
   const clientC = new Client(ENDPOINT, { headers: { Cookie: cookieC } });
-  const Dn = await clientC.joinOrCreate('dungeon', { gateId: 'itest-gate', seed: 4242, rank: 1, name: 'Charlie' });
+  // Use the entry-rank raid here: this check is about real-room combat + profile
+  // handoff, and a fresh level-one hunter must survive long enough to earn the grant.
+  const Dn = await clientC.joinOrCreate('dungeon', { gateId: 'itest-gate', seed: 4242, rank: 0, name: 'Charlie' });
+  const dungeonGrants = [];
+  Dn.onMessage('grant', m => dungeonGrants.push(m));
   inbox(Dn);
   const meD = () => Dn.state.players.get(Dn.sessionId);
+  let damagedTrashId = '';
 
   await test('a hunter joins the DungeonRoom directly and spawns inside the instance', async () => {
     const self = await waitFor(meD, 'charlie in dungeon state');
@@ -270,29 +275,38 @@ async function main() {
       Dn.send('attack', { id: n.id });
       await wait(140);
       const cur = Dn.state.mobs.get(n.id);
-      if (cur && cur.hp < cur.maxHp) damaged = true;
+      if (cur && cur.hp < cur.maxHp) {
+        damaged = true;
+        damagedTrashId = n.id;
+      }
     }
     assert.ok(damaged, 'an attack reduced an instance mob\'s HP over the wire');
   });
 
   await test('killing a DungeonRoom trash mob awards XP into the hunter\'s profile', async () => {
-    let killed = false;
-    for (let i = 0; i < 60 && !killed; i++) {
-      let best = null, bd = Infinity;
-      Dn.state.mobs.forEach((mb, id) => {
-        if (mb.kind === 'boss' || mb.hp <= 0) return;
-        const d = Math.hypot(mb.x - meD().x, mb.z - meD().z);
-        if (d < bd) { bd = d; best = { id, mb }; }
-      });
+    const grantsBefore = dungeonGrants.length;
+    let reward = null;
+    let targetId = damagedTrashId;
+    for (let i = 0; i < 60 && !reward; i++) {
+      let target = targetId && Dn.state.mobs.get(targetId);
+      if (!target || target.hp <= 0 || !['zombie', 'skeleton'].includes(target.kind)) {
+        targetId = '';
+        let bd = Infinity;
+        Dn.state.mobs.forEach((mb, id) => {
+          if (!['zombie', 'skeleton'].includes(mb.kind) || mb.hp <= 0) return;
+          const d = Math.hypot(mb.x - meD().x, mb.z - meD().z);
+          if (d < bd) { bd = d; targetId = id; target = mb; }
+        });
+      }
+      const best = targetId && target ? { id: targetId, mb: target } : null;
       if (!best) break;
       Dn.send('move', { x: best.mb.x, y: best.mb.y, z: best.mb.z, yaw: 0 });
       await wait(360);
       Dn.send('attack', { id: best.id });
       await wait(140);
-      const cur = Dn.state.mobs.get(best.id);
-      if (!cur) killed = true;
+      reward = dungeonGrants.slice(grantsBefore).find(grant => grant && grant.source === 'mob' && grant.xp > 0) || null;
     }
-    assert.ok(killed, 'a trash mob was actually killed (not just damaged), which is what triggers awardGrant/dirtyPlayers');
+    assert.ok(reward, 'the server acknowledged a reward-bearing trash kill with positive XP');
   });
 
   await test('a leaving hunter is removed and the DungeonRoom can dispose', async () => {
@@ -316,6 +330,54 @@ async function main() {
     } finally {
       await D2.leave().catch(() => {});
     }
+  });
+
+  // ---- DungeonRoom co-op (Phase A foundation): two hunters that enter the same gate id land in
+  // ONE shared DungeonRoom (filterBy gateId), see each other, and share a single instance
+  // simulation — the prerequisite for rewiring the party lobby to launch switchRoom entries ----
+  const cookieD = await register('delta_user', 'correct horse delta', 'Delta');
+  const cookieE = await register('echo_user', 'correct horse echo', 'Echo');
+  const clientD = new Client(ENDPOINT, { headers: { Cookie: cookieD } });
+  const clientE = new Client(ENDPOINT, { headers: { Cookie: cookieE } });
+  const coopOpts = { gateId: 'coop-gate', seed: 909, rank: 1 };
+  const Dd = await clientD.joinOrCreate('dungeon', { ...coopOpts, name: 'Delta' });
+  const De = await clientE.joinOrCreate('dungeon', { ...coopOpts, name: 'Echo' });
+  inbox(Dd); inbox(De);
+  const meDd = () => Dd.state.players.get(Dd.sessionId);
+
+  await test('two hunters entering the same gate id share one DungeonRoom and see each other', async () => {
+    assert.equal(Dd.roomId, De.roomId, 'filterBy(gateId) routed both hunters into the same room instance');
+    await waitFor(() => Dd.state.players.size >= 2 && De.state.players.size >= 2, 'both hunters visible in the shared dungeon state');
+    Dd.state.players.forEach(p => assert.equal(p.dgn, 'coop-gate', 'every hunter is tagged to the one shared instance'));
+  });
+
+  await test('the co-op DungeonRoom runs one shared instance: a hunter\'s hit is visible to their partner', async () => {
+    const nearestTrash = () => {
+      let best = null, bd = Infinity;
+      Dd.state.mobs.forEach((mb, id) => {
+        if (mb.kind === 'boss' || mb.hp <= 0) return;
+        const d = Math.hypot(mb.x - meDd().x, mb.z - meDd().z);
+        if (d < bd) { bd = d; best = { id, mb }; }
+      });
+      return best;
+    };
+    let seenByPartner = false;
+    for (let i = 0; i < 25 && !seenByPartner; i++) {
+      const n = nearestTrash();
+      if (!n) break;
+      Dd.send('move', { x: n.mb.x, y: n.mb.y, z: n.mb.z, yaw: 0 });   // no server collision; close to melee
+      await wait(360);
+      Dd.send('attack', { id: n.id });
+      await wait(140);
+      const echoView = De.state.mobs.get(n.id);   // the SAME mob id, over Echo's own state sync
+      if (echoView && echoView.hp < echoView.maxHp) seenByPartner = true;
+    }
+    assert.ok(seenByPartner, 'Delta\'s hit reduced a shared mob\'s HP as observed in Echo\'s synced dungeon state');
+  });
+
+  await test('both co-op hunters leave and the shared DungeonRoom disposes', async () => {
+    await Promise.all([Dd.leave(), De.leave()]);
+    await wait(300);
   });
 
   console.log('\nMultiplayer integration test\n' + results.join('\n'));

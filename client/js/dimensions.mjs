@@ -1467,6 +1467,7 @@ function refreshTorchMeshes(){
 }
 function applyDim(){
   townGroup.visible = dim==='overworld';
+  if(roadSafetySceneGroup)roadSafetySceneGroup.visible=dim==='overworld';
   cropGroup.visible = dim==='overworld' || dim==='tutorial';
   const underground = dim==='dungeon' || dim==='gatecutscene';
   cloudGroup.visible = !underground;
@@ -1627,12 +1628,24 @@ function clearRoomEntitiesForSwitch(){
   for(const sid in NET.remotes) netRemoveRemote(sid);
   for(let i=mobs.length-1;i>=0;i--) if(mobs[i].net) removeMob(i);
 }
+// Switch into the dedicated DungeonRoom for a gate. Takes an explicit descriptor so it works both
+// for a walk-up entry (built from the local `gate`) and for a lobby-driven entry (the server's
+// dungeonLobbyStart payload for a ready party). Field names match DungeonRoom.gateFromOptions.
+function enterDungeonRoomWith(desc){
+  if(!(NET.on && desc && desc.gateId && NETWORK.switchRoom)) return false;
+  clearRoomEntitiesForSwitch();
+  NETWORK.switchRoom('dungeon', {
+    gateId:desc.gateId, seed:(desc.seed>>>0)||0, rank:desc.rank|0, kind:desc.kind||'public',
+    gateX:desc.gateX, gateY:desc.gateY, gateZ:desc.gateZ,
+    shardPlus:desc.shardPlus|0, shardName:desc.shardName||'', shardMods:desc.shardMods||'',
+  });
+  return true;
+}
 function enterDungeon(){
   if(NET.on){
     if(USE_DUNGEON_ROOM && gate && gate.id && NETWORK.switchRoom){
-      clearRoomEntitiesForSwitch();
-      NETWORK.switchRoom('dungeon', {
-        gateId:gate.id, seed:(gate.seed>>>0)||0, rank:gate.rank|0, kind:gate.kind||'public',
+      enterDungeonRoomWith({
+        gateId:gate.id, seed:gate.seed, rank:gate.rank, kind:gate.kind,
         gateX:gate.x, gateY:gate.y, gateZ:gate.z,
         shardPlus:(gate.shard&&gate.shard.plus)|0, shardName:(gate.shard&&gate.shard.name)||'',
         shardMods:(gate.shard&&gate.shard.mods&&gate.shard.mods.join(','))||'',
@@ -1798,7 +1811,9 @@ const legacyDimensionsBindings={
   "dungeonMoodColor":{get:()=>dungeonMoodColor},
   "eclipseDashVfx":{get:()=>eclipseDashVfx},
   "enterAbilityRoom":{get:()=>enterAbilityRoom},
+  "USE_DUNGEON_ROOM":{get:()=>USE_DUNGEON_ROOM},
   "enterDungeon":{get:()=>enterDungeon},
+  "enterDungeonRoomWith":{get:()=>enterDungeonRoomWith},
   "enterOnboardingRoom":{get:()=>enterOnboardingRoom},
   "equippedArmor":{get:()=>equippedArmor},
   "exitAbilityRoom":{get:()=>exitAbilityRoom},

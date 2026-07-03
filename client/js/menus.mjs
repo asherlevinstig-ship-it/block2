@@ -1740,7 +1740,9 @@ function requestGuildKick(sid){ if(NET.on&&NET.room) NET.room.send('guildKick',{
 function requestGuildRole(sid,role){ if(NET.on&&NET.room) NET.room.send('guildRole',{sid,role}); }
 function requestDungeonReady(ready=true){
   if(!NET.on||!NET.room||!dungeonLobbyState) return;
-  NET.room.send('dungeonLobbyReady',{gateId:dungeonLobbyState.gateId, ready:!!ready});
+  // Tell the server which entry path this client wants so it routes us to the dedicated
+  // DungeonRoom (flag on) or the legacy in-room instance on lobby start.
+  NET.room.send('dungeonLobbyReady',{gateId:dungeonLobbyState.gateId, ready:!!ready, useDungeonRoom:!!globalThis.USE_DUNGEON_ROOM});
 }
 function requestDungeonLobbyLeave(){
   if(!NET.on||!NET.room) return;
@@ -2161,6 +2163,10 @@ function appendRoadWardenPanel(){
   top.innerHTML='<span><b>Road Warden Reputation</b><br><small>Tamsin Rook tracks road-safety work separately from Guild scouting.</small></span>'+
     '<b class="roadwarden-rank">Rep '+info.rep+' · '+escHTML(info.current.name)+'</b>';
   panel.appendChild(top);
+  const safety=document.createElement('p');safety.className='qtext roadwarden-safety';
+  const safetyTier=roadSafety>=80?'SECURE':roadSafety>=60?'PATROLLED':roadSafety>=40?'CONTESTED':roadSafety>=20?'DANGEROUS':'OVERRUN';
+  safety.innerHTML='<b>Shared regional safety: '+roadSafety+'/100 · '+safetyTier+'</b><br><small>Successful road work suppresses patrols, improves merchant prices, and brings caravans back. Safety slowly returns toward contested.</small>';
+  panel.appendChild(safety);
   const bar=document.createElement('div'); bar.className='roadwarden-bar'; bar.innerHTML='<i style="width:'+Math.round(info.progress*100)+'%"></i>'; panel.appendChild(bar);
   const next=document.createElement('p'); next.className='qtext roadwarden-next';
   next.innerHTML=info.next
@@ -2766,8 +2772,8 @@ function openShopUI(vendor='market'){
       qpanelEl.appendChild(r);
     }
   };
-  const roadDiscount=1-Math.min(.15,Math.floor(roadWardenRep/3)*.05);
-  const roadStock=ROAD_MERCHANT_BUY.concat(roadWardenRep>=3?[[I.IRON_INGOT,1,18]]:[],roadWardenRep>=6?[[I.COOKED_MEAT,2,16]]:[]).map(e=>[e[0],e[1],Math.max(1,Math.ceil(e[2]*roadDiscount))]);
+  const roadDiscount=1-Math.min(.15,Math.floor(roadWardenRep/3)*.05)-(roadSafety>=80?.10:roadSafety>=60?.05:0);
+  const roadStock=ROAD_MERCHANT_BUY.concat(roadWardenRep>=3?[[I.IRON_INGOT,1,18]]:[],roadWardenRep>=6?[[I.COOKED_MEAT,2,16]]:[],roadSafety>=80?[[I.BREAD,2,12]]:[]).map(e=>[e[0],e[1],Math.max(1,Math.ceil(e[2]*roadDiscount))]);
   mk('\u2014 BUY \u2014', vendor==='road'?roadStock:SHOP_BUY, true);
   mk('\u2014 SELL \u2014', SHOP_SELL, false);
   qpanelEl.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));

@@ -644,6 +644,8 @@ class CombatMixin {
       const animal = this.isAnimalKind(kind);
       this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp: threatXpForRing(ring, { elite: !!killedMeta.elite, animal }), items, dangerRing: ring, elite: !!killedMeta.elite });
       this.recordKillProgress(client, !this.isAnimalKind(kind));
+      if (killedMeta.eventCaravan && typeof this.onCaravanEventMobKilled === 'function')
+        this.onCaravanEventMobKilled(client, mobId, killedMeta);
       if(!dgn&&killedMeta.bandit&&['shield','scout','brute'].includes(killedMeta.banditRole))this.progressRegionalContract(client,'road_roles',{});
       if (!dgn && killedMeta.elite && killedMeta.campId)
         this.progressRegionalContract(client, 'clear_elite_camp', { targetId: killedMeta.campId });

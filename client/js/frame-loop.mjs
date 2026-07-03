@@ -338,15 +338,22 @@ function updateDungeonCoordination(now){
 function updateOverworldActivityTracker(){
   if(!activityTrackerEl)return;
   if(dim!=='overworld'||!overworldActivity||onboardingActive){activityTrackerEl.classList.add('hidden');return;}
-  const a=overworldActivity,c=a.caravan,camp=a.camp,patrol=a.patrol;
+  const a=overworldActivity,c=a.caravan,camp=a.camp,patrol=a.patrol,encounter=a.encounter;
   let title='',text='',target=null,danger=false;
-  if(c&&c.state==='ambushed'){title='Caravan Under Attack';text='Defend the wagon and its remaining guards.';target=c;danger=true;}
+  if(encounter&&encounter.type==='wounded_hunter'){title='Wounded Hunter';text='Reach the hunter and provide aid before nightfall.';target=encounter;}
+  else if(encounter&&encounter.type==='merchant_rescue'){title='Merchant Rescue';text='Defeat '+(encounter.remaining|0)+' attackers before the merchant falls.';target=encounter;danger=true;}
+  else if(encounter&&encounter.type==='pursuit'){title='Stolen Supply Pursuit';text='Catch '+(encounter.remaining|0)+' fleeing bandits before they escape.';target=encounter;danger=true;}
+  else if(c&&c.state==='ambushed'){title='Caravan Under Attack';text='Defend the wagon and its remaining guards.';target=c;danger=true;}
   else if(a.recoveryCamp){title='Stolen Supplies';text='Clear the marked bandit camp to recover the caravan cargo.';target=a.recoveryCamp;danger=true;}
   else if(c){title='Road Caravan';text='Escort the convoy · '+Math.round((c.progress||0)*100)+'% · wagon '+Math.max(0,Math.ceil(c.hp||0))+'/'+Math.max(1,Math.ceil(c.maxHp||1));target=c;}
   else if(camp&&camp.phase==='captain'){title='Bandit Captain';text='Defeat the leader to unlock the camp chest.';target=camp;danger=true;}
   else if(camp&&camp.phase==='guards'){title='Bandit Camp';text='Guards remaining: '+(camp.guards|0)+'. Clear them to draw out the captain.';target=camp;danger=true;}
   else if(patrol){title='Bandit Tracks';text='A roaming patrol is active nearby.';target=patrol;danger=true;}
   else if((a.discountUntil||0)>Date.now()){title='Merchant Favour';text='Road merchant discount active for '+Math.max(1,Math.ceil((a.discountUntil-Date.now())/60000))+' min.';}
+  else if(a.roadSafety){
+    const safety=a.roadSafety;title='Regional Roads · '+String(safety.tier||'contested').toUpperCase();
+    text=(safety.score|0)+'/100 safety · '+((safety.score|0)>=70?'fewer patrols and more caravans':(safety.score|0)<35?'heavy patrol pressure and scarce caravans':'roads remain contested');danger=(safety.score|0)<35;
+  }
   if(!title){activityTrackerEl.classList.add('hidden');return;}
   let nav='';
   if(target){const d=Math.hypot(target.x-player.pos.x,target.z-player.pos.z);nav=d<35?'Nearby':d<90?'In the surrounding region':'Far away';if(utilityEquipped('compass')||(target===patrol&&utilityEquipped('trail_sense')))nav=bearingLabelTo(target.x,target.z)+' · '+Math.round(d)+'m';}
@@ -355,8 +362,19 @@ function updateOverworldActivityTracker(){
   activityTrackerEl.innerHTML='<div class="at">'+escHTML(title)+'</div><div class="av">'+escHTML(text)+'</div>'+(nav?'<div class="am">'+escHTML(nav)+'</div>':'');
 }
 function updateEncounterPrompt(){
-  if(!encounterPromptEl||dim!=='overworld'||!overworldActivity||!overworldActivity.caravan){if(encounterPromptEl)encounterPromptEl.classList.add('hidden');return;}
-  const c=overworldActivity.caravan,d=Math.hypot(c.x-player.pos.x,c.z-player.pos.z);
+  if(!encounterPromptEl||dim!=='overworld'||!overworldActivity){if(encounterPromptEl)encounterPromptEl.classList.add('hidden');return;}
+  const encounter=overworldActivity.encounter;
+  if(encounter){
+    const distance=Math.hypot(encounter.x-player.pos.x,encounter.z-player.pos.z),range=encounter.type==='wounded_hunter'?8:24;
+    if(distance<=range){
+      const danger=encounter.type!=='wounded_hunter';encounterPromptEl.classList.toggle('danger',danger);
+      encounterPromptEl.textContent=encounter.type==='wounded_hunter'?'Aid Wounded Hunter · aim and use secondary action':encounter.type==='merchant_rescue'?'Merchant Rescue · defeat every attacker':'Supply Pursuit · catch the fleeing bandits';
+      encounterPromptEl.classList.remove('hidden');return;
+    }
+  }
+  const c=overworldActivity.caravan;
+  if(!c){encounterPromptEl.classList.add('hidden');return;}
+  const d=Math.hypot(c.x-player.pos.x,c.z-player.pos.z);
   if(d>18){encounterPromptEl.classList.add('hidden');return;}
   const danger=c.state==='ambushed';encounterPromptEl.classList.toggle('danger',danger);
   encounterPromptEl.textContent=danger?'Defend Wagon · defeat the attacking bandits':'Escort Caravan · remain nearby to earn escort credit';

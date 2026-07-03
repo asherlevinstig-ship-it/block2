@@ -400,13 +400,17 @@ class EconomyMixin {
       if (!guild || !(guild.floor > 0)) return reject('guild_floor');
       if (action !== 'buy') return reject('invalid');
     }
-    const wardenStock=ROAD_MERCHANT_BUY.concat((rec.prof.roadWardenRep|0)>=3?[[I.IRON_INGOT,1,18]]:[],(rec.prof.roadWardenRep|0)>=6?[[I.COOKED_MEAT,2,16]]:[]);
+    const roadSafety=this.roadSafetySnapshot?this.roadSafetySnapshot().score:50;
+    const wardenStock=ROAD_MERCHANT_BUY.concat((rec.prof.roadWardenRep|0)>=3?[[I.IRON_INGOT,1,18]]:[],(rec.prof.roadWardenRep|0)>=6?[[I.COOKED_MEAT,2,16]]:[],roadSafety>=80?[[I.BREAD,2,12]]:[]);
     const catalog = isGuild ? GUILD_DECOR_BUY : isTavern ? (action === 'sell' ? TAVERN_SELL : TAVERN_BUY) : isRoad ? (action === 'sell' ? SHOP_SELL : wardenStock) : (action === 'sell' ? SHOP_SELL : SHOP_BUY);
     const id = m.id | 0;
     const entry = this.findCatalogEntry(catalog, id);
     if (!entry) return reject('invalid');
     let [, count, price] = entry;
-    if(action==='buy'&&isRoad)price=Math.max(1,Math.ceil(price*(1-Math.min(.15,Math.floor((rec.prof.roadWardenRep|0)/3)*.05))));
+    if(action==='buy'&&isRoad){
+      const personal=Math.min(.15,Math.floor((rec.prof.roadWardenRep|0)/3)*.05),regional=roadSafety>=80?.10:roadSafety>=60?.05:0;
+      price=Math.max(1,Math.ceil(price*(1-personal-regional)));
+    }
     const discountUntil = this.caravanDiscounts && this.caravanDiscounts.get(rec.token);
     if (action === 'buy' && isRoad && discountUntil > Date.now()) price = Math.max(1, Math.ceil(price * .8));
     if (action === 'buy' && isTavern && id === I.COOKED_MEAT) {

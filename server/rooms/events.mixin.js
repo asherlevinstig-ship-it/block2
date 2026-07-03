@@ -1,7 +1,7 @@
 // Server events (skyship, day cycle, parkour, king-of-the-hill, PvP bounty) and the
 // guild hall. Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
-  AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, BETA_EVENT_TEST, DAY_MS, EVENT_ACTIVE_MS, EVENT_FIRST_DELAY_MS,
+  AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, BETA_EVENT_TEST, CARAVAN_ACTIVE_MS, DAY_MS, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS,
   EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS,
   EVENT_TEST_QUEUE_MS, GUILD_DECOR_BLOCKS, GUILD_FLOOR_MAX, GUILD_HALL, I, KING_ACTIVE_MS, KING_ARENA_SIZE,
   KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD,
@@ -112,10 +112,13 @@ class EventsMixin {
     return EVENT_IDLE_MIN_MS + Math.floor(Math.random() * EVENT_IDLE_JITTER_MS);
   }
   pickNextServerEvent() {
-    return Math.random() < 0.5 ? EVENT_PARKOUR : EVENT_KING;
+    const roll = Math.random();
+    return roll < 1 / 3 ? EVENT_PARKOUR : roll < 2 / 3 ? EVENT_KING : EVENT_CARAVAN;
   }
   createIdleEvent(nextAt, forcedKind) {
-    const def = forcedKind === EVENT_KING.kind ? EVENT_KING : EVENT_PARKOUR;
+    const def = forcedKind === EVENT_KING.kind ? EVENT_KING
+      : forcedKind === EVENT_CARAVAN.kind ? EVENT_CARAVAN
+      : EVENT_PARKOUR;
     return {
       kind: def.kind,
       name: def.name,
@@ -133,7 +136,7 @@ class EventsMixin {
     };
   }
   minParticipantsForEvent(ev) {
-    return ev && ev.kind === EVENT_KING.kind ? 2 : 1;
+    return ev && (ev.kind === EVENT_KING.kind || ev.kind === EVENT_CARAVAN.kind) ? 2 : 1;
   }
   createParkourInstance(now, startsAt) {
     const seed = (Math.random() * 1000000) | 0;
@@ -199,6 +202,16 @@ class EventsMixin {
     this.activeEventInstanceId = inst.id;
   }
   eventLeaderboardPayload(inst) {
+    if (inst && inst.kind === EVENT_CARAVAN.kind) {
+      return [...(inst.participants || new Map()).entries()]
+        .map(([sid, part]) => ({
+          name: this.playerName(sid) || 'Hunter',
+          kills: part.kills | 0,
+          revives: part.revives | 0,
+        }))
+        .sort((a, b) => (b.kills - a.kills) || (b.revives - a.revives) || a.name.localeCompare(b.name))
+        .slice(0, 8);
+    }
     if (inst && inst.kind === EVENT_KING.kind) {
       return [...(inst.scores || new Map()).values()]
         .sort((a, b) => (b.ms - a.ms) || String(a.name).localeCompare(String(b.name)))
@@ -236,11 +249,47 @@ class EventsMixin {
       participantCount: ev && ev.participants ? ev.participants.size : 0,
       contribution: ev && ev.kind === EVENT_KING.kind
         ? { label: 'Crown time', valueMs: part && ev.scores.get(part.teamId) ? ev.scores.get(part.teamId).ms | 0 : 0 }
-        : { label: 'Finish time', valueMs: part && part.finishedAt ? Math.max(0, part.finishedAt - (part.startedAt || ev.startsAt || part.finishedAt)) : 0, resets: part && part.resets | 0 },
+        : ev && ev.kind === EVENT_CARAVAN.kind
+          ? { label: 'Bandits defeated', value: part ? part.kills | 0 : 0, revives: part ? part.revives | 0 : 0 }
+          : { label: 'Finish time', valueMs: part && part.finishedAt ? Math.max(0, part.finishedAt - (part.startedAt || ev.startsAt || part.finishedAt)) : 0, resets: part && part.resets | 0 },
       reward: reward || { xp: 0, tokens: 0 },
       leaderboard,
       returnAt: part && part.returnAt || Date.now() + EVENT_RESULTS_MS,
       ...extra,
+    };
+  }
+  createCaravanInstance(now, startsAt) {
+    const x = EVENT_CARAVAN.x, z = EVENT_CARAVAN.z, half = EVENT_CARAVAN.size / 2;
+    return {
+      id: 'event-' + (++this.eventSeq),
+      kind: EVENT_CARAVAN.kind,
+      name: EVENT_CARAVAN.name,
+      phase: 'queue',
+      createdAt: now,
+      startsAt,
+      endsAt: 0,
+      queue: new Set(),
+      participants: new Map(),
+      completed: new Set(),
+      leaderboard: [],
+      arena: {
+        x, z, size: EVENT_CARAVAN.size,
+        minX: x - half, maxX: x + half,
+        minZ: z - 28, maxZ: z + 28,
+        startX: x - half + 12, endX: x + half - 12,
+      },
+      caravan: {
+        x: x - half + 12, y: W.TOWN.G + 1.05, z,
+        hp: 0, maxHp: 0, progress: 0,
+        wave: 0, totalWaves: 4, enemiesRemaining: 0,
+        state: 'staging', wagonId: '',
+      },
+      enemyIds: new Set(),
+      lastCaravanTickAt: 0,
+      cleanupAt: 0,
+      queueExtended: false,
+      waitingForPlayers: false,
+      lastJoinAt: 0,
     };
   }
   eventPayload(client) {
@@ -251,10 +300,12 @@ class EventsMixin {
       seed: ev.course.seed,
       start: ev.course.start,
       finish: ev.course.finish,
+      checkpoints: ev.course.checkpoints || [],
       fallY: ev.course.fallY,
       blocks: ev.course.blocks,
     } : null;
     const rec = client && this.profileFor(client);
+    const part = participating ? ev.participants.get(sid) : null;
     const rewardXp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
     return {
       kind: ev.kind,
@@ -281,7 +332,7 @@ class EventsMixin {
         name: ev.participants.get(sid).teamName || '',
         source: ev.participants.get(sid).groupSource || '',
       } : null,
-      eventSquad: participating && ev.kind === EVENT_KING.kind ? {
+      eventSquad: participating && (ev.kind === EVENT_KING.kind || ev.kind === EVENT_CARAVAN.kind) ? {
         id: ev.participants.get(sid).teamId || '',
         name: ev.participants.get(sid).teamName || '',
         source: ev.participants.get(sid).groupSource || '',
@@ -293,8 +344,36 @@ class EventsMixin {
           }),
       } : null,
       completed: !!(sid && ev.completed && ev.completed.has(sid)),
+      checkpointProgress: participating && ev.kind === EVENT_PARKOUR.kind ? {
+        passed: part.checkpointsPassed | 0,
+        total: ev.course && ev.course.checkpoints ? ev.course.checkpoints.length : 0,
+        splitTimes: Array.isArray(part.splitTimes) ? part.splitTimes : [],
+        startedAt: part.startedAt || 0,
+      } : null,
+      personalBestMs: rec && rec.prof ? rec.prof.parkourBestMs | 0 : 0,
       course: coursePayload,
       arena: ev.arena || null,
+      caravan: ev.caravan ? {
+        x: ev.caravan.x,
+        y: ev.caravan.y,
+        z: ev.caravan.z,
+        hp: Math.max(0, ev.caravan.hp | 0),
+        maxHp: Math.max(1, ev.caravan.maxHp | 0),
+        progress: Math.max(0, Math.min(1, Number(ev.caravan.progress) || 0)),
+        wave: ev.caravan.wave | 0,
+        totalWaves: ev.caravan.totalWaves | 0,
+        enemiesRemaining: ev.caravan.enemiesRemaining | 0,
+        state: ev.caravan.state || 'staging',
+        downed: participating ? [...ev.participants.entries()]
+          .filter(([, member]) => member.downed)
+          .map(([memberSid, member]) => ({
+            sid: memberSid,
+            name: this.playerName(memberSid) || 'Hunter',
+            reviveProgress: Math.max(0, Math.min(1, (member.reviveMs || 0) / 2000)),
+          })) : [],
+        kills: part ? part.kills | 0 : 0,
+        revives: part ? part.revives | 0 : 0,
+      } : null,
       crown: ev.crown ? {
         holderSid: ev.crown.holderSid || '',
         holderTeamId: ev.crown.holderTeamId || '',
@@ -305,6 +384,8 @@ class EventsMixin {
       } : null,
       leaderboard: this.eventLeaderboardPayload(ev),
       reward: EVENT_REWARD_TOKENS,
+      rewardMin: ev.kind === EVENT_CARAVAN.kind ? 1 : EVENT_REWARD_TOKENS,
+      rewardMax: ev.kind === EVENT_CARAVAN.kind ? 3 : EVENT_REWARD_TOKENS,
       rewardXp,
     };
   }
@@ -380,9 +461,10 @@ class EventsMixin {
     const arg = String(text || '').split(/\s+/)[1] || '';
     const kind = arg.toLowerCase();
     const forcedKind = kind === 'king' || kind === 'koth' ? EVENT_KING.kind
+      : kind === 'caravan' || kind === 'defence' || kind === 'defense' ? EVENT_CARAVAN.kind
       : kind === 'parkour' ? EVENT_PARKOUR.kind
       : '';
-    if (!forcedKind) return client.send('chat', { name: '[Event]', text: 'use /event king or /event parkour' });
+    if (!forcedKind) return client.send('chat', { name: '[Event]', text: 'use /event parkour, /event king, or /event caravan' });
     const cur = this.currentEventInstance() || this.serverEvent;
     if (cur && cur.phase === 'active') return client.send('eventReject', { reason: 'active' });
     if (cur && cur.phase === 'queue') {
@@ -413,6 +495,7 @@ class EventsMixin {
   }
   generateParkourCourse(seed) {
     const blocks = [];
+    const checkpoints = [];
     const addBlock = (x, y, z, id) => {
       if (W.inWorld(x, y, z)) blocks.push(x + ',' + y + ',' + z + ',' + id);
     };
@@ -432,6 +515,12 @@ class EventsMixin {
       const mat = i % 5 === 0 ? W.B.GLASS : i % 3 === 0 ? W.B.BRICK : W.B.COBBLE;
       platform(x, y, z, i % 4 === 0 ? 1 : 0, i % 4 === 0 ? 1 : 0, mat);
       if (i % 4 === 1) addBlock(x, y + 1, z, W.B.TORCH);
+      if (i === 3 || i === 7 || i === 11) checkpoints.push({
+        index: checkpoints.length,
+        x: x + .5,
+        y: y + 1.05,
+        z: z + .5,
+      });
     }
     x += 5;
     platform(x, y, z, 3, 2, W.B.CONCRETE);
@@ -441,6 +530,7 @@ class EventsMixin {
       seed,
       start: { x: sx + .5, y: sy + 1.05, z: sz + .5 },
       finish: { x: x + .5, y: y + 1.05, z: z + .5 },
+      checkpoints,
       fallY: sy - 12,
       minX: Math.min(sx, x) - 8,
       maxX: Math.max(sx, x) + 8,
@@ -474,8 +564,18 @@ class EventsMixin {
     this.broadcastEventStatus(true);
     return ev;
   }
+  announceCaravanEvent(now) {
+    const ev = this.createCaravanInstance(now, now + EVENT_QUEUE_MS);
+    this.eventInstances.set(ev.id, ev);
+    this.setServerEventFromInstance(ev);
+    this.broadcast('chat', { name: '[Event]', text: 'Caravan Defence opened. Rally a team to escort the merchants through the bandit ambush.' });
+    this.broadcastEventStatus(true);
+    return ev;
+  }
   announceServerEvent(now, forcedKind) {
-    return forcedKind === EVENT_KING.kind ? this.announceKingEvent(now) : this.announceParkourEvent(now);
+    return forcedKind === EVENT_KING.kind ? this.announceKingEvent(now)
+      : forcedKind === EVENT_CARAVAN.kind ? this.announceCaravanEvent(now)
+      : this.announceParkourEvent(now);
   }
   eventReturnPos(p) {
     if (!p) return { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 7.5 };
@@ -506,7 +606,8 @@ class EventsMixin {
       z: p.z,
       reason: 'reconnect',
       course: ev.kind === EVENT_PARKOUR.kind ? ev.course : null,
-      arena: ev.kind === EVENT_KING.kind ? ev.arena : null,
+      arena: ev.kind === EVENT_KING.kind || ev.kind === EVENT_CARAVAN.kind ? ev.arena : null,
+      caravan: ev.kind === EVENT_CARAVAN.kind ? ev.caravan : null,
     });
     client.send('eventStarted', this.eventPayload(client));
     return true;
@@ -523,7 +624,16 @@ class EventsMixin {
       const client = this.clients.find(c => c.sessionId === sid);
       const p = this.state.players.get(sid);
       if (!client || !p || p.dgn) continue;
-      ev.participants.set(sid, { returnPos: this.eventReturnPos(p), resets: 0, startedAt: 0, finishedAt: 0, ready: false, readyAt: 0 });
+      ev.participants.set(sid, {
+        returnPos: this.eventReturnPos(p),
+        resets: 0,
+        startedAt: 0,
+        finishedAt: 0,
+        ready: false,
+        readyAt: 0,
+        checkpointsPassed: 0,
+        splitTimes: [],
+      });
       this.teleportEventPlayer(client, ev.course.start, 'start', ev);
       client.send('eventStarted', this.eventPayload(client));
     }
@@ -543,6 +653,12 @@ class EventsMixin {
     ev.leaderboard.push({ sid: client.sessionId, name: p && p.name || 'Hunter', ms, resets: part.resets | 0 });
     ev.leaderboard.sort((a, b) => (a.ms - b.ms) || (a.resets - b.resets));
     const rec = this.profileFor(client);
+    const previousBestMs = rec && rec.prof ? rec.prof.parkourBestMs | 0 : 0;
+    const newBest = !!(rec && rec.prof && (!previousBestMs || ms < previousBestMs));
+    if (newBest) {
+      rec.prof.parkourBestMs = ms;
+      this.dirtyPlayers.add(rec.token);
+    }
     const xp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
     this.awardGrant(client, { source: 'event', event: EVENT_PARKOUR.name, xp, items: [{ id: I.LEGEND_TOKEN, count: EVENT_REWARD_TOKENS }] });
     this.recordEventProgress(client);
@@ -553,6 +669,9 @@ class EventsMixin {
       xp,
       tokens: EVENT_REWARD_TOKENS,
       unlock: unlocked ? 'Feather Step' : '',
+      personalBestMs: rec && rec.prof ? rec.prof.parkourBestMs | 0 : ms,
+      previousBestMs,
+      newBest,
     }));
     this.broadcastEventStatus(true);
   }
@@ -760,11 +879,329 @@ class EventsMixin {
     }
     this.broadcastEventStatus(true);
   }
+  caravanSpawnPos(ev, sid) {
+    const i = Math.max(0, [...(ev.participants || new Map()).keys()].indexOf(sid));
+    const row = Math.floor(i / 4), side = i % 4;
+    return {
+      x: ev.arena.startX - 4 - row * 2,
+      y: W.TOWN.G + 1.05,
+      z: ev.arena.z + (side - 1.5) * 2.3,
+    };
+  }
+  teleportCaravanPlayer(client, pos, reason, evArg) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || !pos) return;
+    const ev = evArg || this.currentEventInstance() || this.serverEvent;
+    const inEvent = !!(ev && (ev.phase === 'starting' || ev.phase === 'active')
+      && reason !== 'complete' && reason !== 'failed' && reason !== 'return' && reason !== 'afk' && reason !== 'cancel');
+    p.dim = inEvent ? 'event' : 'overworld';
+    p.dgn = inEvent ? ev.id : '';
+    if (inEvent) p.mount = '';
+    p.x = pos.x; p.y = pos.y; p.z = pos.z;
+    client.send('eventTeleport', {
+      kind: EVENT_CARAVAN.kind,
+      x: pos.x, y: pos.y, z: pos.z,
+      reason: reason || 'caravan',
+      eventId: inEvent ? ev.id : '',
+      arena: inEvent ? ev.arena : null,
+      caravan: inEvent ? ev.caravan : null,
+    });
+  }
+  startCaravanEvent(now) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    if (!ev || ev.kind !== EVENT_CARAVAN.kind || ev.phase !== 'queue') return;
+    ev.phase = 'starting';
+    ev.goAt = 0;
+    ev.readyDeadline = now + EVENT_READY_MS;
+    ev.startsAt = 0;
+    ev.endsAt = 0;
+    for (const sid of ev.queue) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      const p = this.state.players.get(sid);
+      if (!client || !p || p.dgn) continue;
+      ev.participants.set(sid, {
+        returnPos: this.eventReturnPos(p),
+        teamId: 'escort',
+        teamName: 'Caravan Guard',
+        groupSource: 'cooperative',
+        ready: false,
+        readyAt: 0,
+        kills: 0,
+        revives: 0,
+        deaths: 0,
+        downed: false,
+        downedUntil: 0,
+        reviveMs: 0,
+      });
+    }
+    if (ev.participants.size < this.minParticipantsForEvent(ev)) return this.cancelStagedEvent(ev, 'players', now);
+    for (const sid of ev.participants.keys()) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (!client) continue;
+      this.teleportCaravanPlayer(client, this.caravanSpawnPos(ev, sid), 'start', ev);
+      client.send('eventStarted', this.eventPayload(client));
+    }
+    this.broadcastEventStatus(true);
+  }
+  spawnCaravanWagon(ev) {
+    if (!ev || !ev.caravan || ev.caravan.wagonId) return;
+    const maxHp = 120 + ev.participants.size * 30;
+    const id = String(++this.mobSeq), mob = new Mob();
+    mob.kind = 'caravan_wagon';
+    mob.dgn = ev.id;
+    mob.x = ev.caravan.x; mob.y = ev.caravan.y; mob.z = ev.caravan.z;
+    mob.hp = mob.maxHp = maxHp;
+    this.state.mobs.set(id, mob);
+    const meta = this.freshMeta(mob.x, mob.z, 0, 0, mob.kind, 0, false);
+    meta.friendly = true;
+    meta.eventCaravan = ev.id;
+    this.mobMeta[id] = meta;
+    ev.caravan.wagonId = id;
+    ev.caravan.hp = ev.caravan.maxHp = maxHp;
+  }
+  spawnCaravanWave(ev, wave) {
+    if (!ev || ev.kind !== EVENT_CARAVAN.kind || ev.phase !== 'active') return;
+    ev.caravan.wave = wave;
+    ev.caravan.state = wave >= ev.caravan.totalWaves ? 'captain' : 'ambushed';
+    const count = Math.min(12, 2 + ev.participants.size + wave);
+    const roles = ['bandit', 'bandit_archer', 'bandit_shield', 'bandit_scout', 'bandit_brute'];
+    for (let i = 0; i < count; i++) {
+      const captain = wave >= ev.caravan.totalWaves && i === 0;
+      const kind = captain ? 'bandit_captain' : roles[(i + wave) % roles.length];
+      const side = i % 2 ? -1 : 1, lane = Math.floor(i / 2);
+      const id = String(++this.mobSeq), mob = new Mob();
+      mob.kind = kind;
+      mob.dgn = ev.id;
+      mob.x = Math.max(ev.arena.minX + 3, Math.min(ev.arena.maxX - 3, ev.caravan.x + 10 + lane * 1.7));
+      mob.z = ev.caravan.z + side * (8 + (lane % 3) * 3);
+      mob.y = W.TOWN.G + 1.05;
+      const baseHp = captain ? 65 + ev.participants.size * 16 : kind === 'bandit_brute' ? 30 : kind === 'bandit_shield' ? 24 : 17;
+      mob.hp = mob.maxHp = Math.round(baseHp * (1 + (wave - 1) * .16));
+      this.state.mobs.set(id, mob);
+      const ranged = kind === 'bandit_archer';
+      const meta = this.freshMeta(mob.x, mob.z, captain ? 8 : kind === 'bandit_brute' ? 6 : ranged ? 4 : 5, captain ? 1.3 : ranged ? 1.35 : 1.7, kind, wave - 1, captain);
+      meta.bandit = true;
+      meta.banditCaptain = captain;
+      meta.banditRole = captain ? 'captain' : kind.replace('bandit_', '');
+      meta.eventCaravan = ev.id;
+      meta.alert = true;
+      meta.eventAttackAt = 0;
+      this.mobMeta[id] = meta;
+      ev.enemyIds.add(id);
+    }
+    ev.caravan.enemiesRemaining = ev.enemyIds.size;
+    this.sendSpace(ev.id, 'eventCaravanWave', {
+      wave,
+      totalWaves: ev.caravan.totalWaves,
+      enemies: ev.caravan.enemiesRemaining,
+      captain: wave >= ev.caravan.totalWaves,
+    });
+    this.broadcastEventStatus(true);
+  }
+  onCaravanEventMobKilled(client, mobId, meta) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    if (!ev || ev.kind !== EVENT_CARAVAN.kind || ev.phase !== 'active' || !meta || meta.eventCaravan !== ev.id) return;
+    ev.enemyIds.delete(String(mobId));
+    ev.caravan.enemiesRemaining = ev.enemyIds.size;
+    const part = client && ev.participants.get(client.sessionId);
+    if (part) part.kills = (part.kills | 0) + 1;
+    this.broadcastEventStatus(true);
+  }
+  clearCaravanDowned(ev, sid, rescued, helperSid) {
+    const part = ev && ev.participants.get(sid);
+    const client = this.clients.find(c => c.sessionId === sid);
+    if (!part || !client) return;
+    part.downed = false;
+    part.downedUntil = 0;
+    part.reviveMs = 0;
+    const hp = this.ensurePlayerHp(client);
+    hp.hp = hp.max;
+    client.send('hurt', { n: -hp.max, reason: rescued ? 'event_revive' : 'event_respawn' });
+    if (!rescued) {
+      part.deaths = (part.deaths | 0) + 1;
+      this.teleportCaravanPlayer(client, {
+        x: ev.caravan.x - 3,
+        y: W.TOWN.G + 1.05,
+        z: ev.caravan.z,
+      }, 'respawn', ev);
+    }
+    if (rescued && helperSid) {
+      const helper = ev.participants.get(helperSid);
+      if (helper) helper.revives = (helper.revives | 0) + 1;
+    }
+    this.sendSpace(ev.id, 'eventCaravanRevived', {
+      sid,
+      name: this.playerName(sid),
+      helperSid: helperSid || '',
+      helperName: this.playerName(helperSid),
+      rescued: !!rescued,
+    });
+  }
+  tickCaravanEvent(ev, now) {
+    if (!ev || ev.kind !== EVENT_CARAVAN.kind || ev.phase !== 'active') return;
+    const dt = Math.max(0, Math.min(1, (now - (ev.lastCaravanTickAt || now)) / 1000));
+    ev.lastCaravanTickAt = now;
+    const wagon = this.state.mobs.get(ev.caravan.wagonId);
+    if (!wagon) return this.endCaravanEvent(false, 'wagon');
+    ev.caravan.hp = Math.max(0, Math.round(wagon.hp));
+    ev.caravan.maxHp = Math.max(1, Math.round(wagon.maxHp));
+    ev.enemyIds = new Set([...ev.enemyIds].filter(id => {
+      const mob = this.state.mobs.get(id);
+      return !!(mob && mob.hp > 0);
+    }));
+    ev.caravan.enemiesRemaining = ev.enemyIds.size;
+
+    for (const [sid, part] of ev.participants) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      const p = this.state.players.get(sid);
+      if (!client || !p) continue;
+      if (part.downed) {
+        let helperSid = '';
+        for (const [otherSid, otherPart] of ev.participants) {
+          if (otherSid === sid || otherPart.downed) continue;
+          const other = this.state.players.get(otherSid);
+          if (other && Math.hypot(other.x - p.x, other.z - p.z) <= 3.2) { helperSid = otherSid; break; }
+        }
+        part.reviveMs = helperSid ? Math.min(2000, (part.reviveMs || 0) + dt * 1000) : Math.max(0, (part.reviveMs || 0) - dt * 500);
+        if (part.reviveMs >= 2000) this.clearCaravanDowned(ev, sid, true, helperSid);
+        else if (now >= (part.downedUntil || 0)) this.clearCaravanDowned(ev, sid, false, '');
+        continue;
+      }
+      if (p.x < ev.arena.minX || p.x > ev.arena.maxX || p.z < ev.arena.minZ || p.z > ev.arena.maxZ || p.y < W.TOWN.G - 6) {
+        this.teleportCaravanPlayer(client, { x: ev.caravan.x - 4, y: W.TOWN.G + 1.05, z: ev.caravan.z }, 'arena', ev);
+      }
+    }
+
+    for (const id of ev.enemyIds) {
+      const mob = this.state.mobs.get(id), meta = this.mobMeta[id];
+      if (!mob || !meta) continue;
+      const ranged = mob.kind === 'bandit_archer';
+      let target = null, targetSid = '', best = ranged ? 14 : 8;
+      for (const [sid, part] of ev.participants) {
+        if (part.downed) continue;
+        const p = this.state.players.get(sid);
+        if (!p) continue;
+        const distance = Math.hypot(p.x - mob.x, p.z - mob.z);
+        if (distance < best) { best = distance; target = p; targetSid = sid; }
+      }
+      const tx = target ? target.x : wagon.x, tz = target ? target.z : wagon.z;
+      const distance = Math.hypot(tx - mob.x, tz - mob.z) || 1;
+      const attackRange = ranged ? 9 : meta.banditCaptain ? 2.5 : 1.7;
+      if (distance > attackRange) {
+        const step = Math.min(distance, (meta.speed || 1.5) * dt);
+        mob.x += (tx - mob.x) / distance * step;
+        mob.z += (tz - mob.z) / distance * step;
+        mob.y = W.TOWN.G + 1.05;
+        mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
+        mob.state = ranged && distance < 13 ? 'draw' : 'chase';
+      } else if (now >= (meta.eventAttackAt || 0)) {
+        meta.eventAttackAt = now + (ranged ? 2200 : 1500);
+        mob.state = meta.banditCaptain ? 'bruteWind' : ranged ? 'draw' : 'attack';
+        if (target && targetSid && ranged) {
+          // Archers loose a genuine server-simulated arrow (dodgeable, like every other
+          // ranged enemy) instead of instant damage; lead the shot with tracked velocity.
+          const v = this.pvel.get(targetSid) || { x: 0, z: 0 };
+          const lead = distance / 16 * .5;
+          mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
+          this.fireArrow(mob, ev.id, target.x + v.x * lead, target.y + 1.4, target.z + v.z * lead,
+            Math.max(2, Math.round((meta.dmg || 4) * .65)), false);
+        } else if (target && targetSid) {
+          const targetClient = this.clients.find(c => c.sessionId === targetSid);
+          if (targetClient) this.hurtPlayer(targetClient, Math.max(2, Math.round((meta.dmg || 4) * .65)), 'caravan_bandit');
+        } else {
+          wagon.hp = Math.max(0, wagon.hp - Math.max(2, Math.round(meta.dmg || 4)));
+          ev.caravan.hp = Math.round(wagon.hp);
+        }
+      }
+    }
+
+    if (wagon.hp <= 0) return this.endCaravanEvent(false, 'wagon');
+    if (ev.enemyIds.size) {
+      ev.caravan.state = ev.caravan.wave >= ev.caravan.totalWaves ? 'captain' : 'ambushed';
+      return;
+    }
+    ev.caravan.state = 'moving';
+    const targetProgress = Math.min(1, ev.caravan.wave / ev.caravan.totalWaves);
+    ev.caravan.progress = Math.min(targetProgress, ev.caravan.progress + dt * .045);
+    ev.caravan.x = ev.arena.startX + (ev.arena.endX - ev.arena.startX) * ev.caravan.progress;
+    wagon.x = ev.caravan.x; wagon.y = ev.caravan.y; wagon.z = ev.caravan.z; wagon.state = 'moving';
+    if (ev.caravan.progress + .0001 < targetProgress) return;
+    if (ev.caravan.wave >= ev.caravan.totalWaves) return this.endCaravanEvent(true, 'secured');
+    this.spawnCaravanWave(ev, ev.caravan.wave + 1);
+  }
+  eventSpaceSolid(dgn) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    if (!dgn || !ev || ev.id !== dgn || ev.kind !== EVENT_CARAVAN.kind || !ev.arena) return null;
+    return (x, y, z) => y <= W.TOWN.G
+      || x <= ev.arena.minX || x >= ev.arena.maxX
+      || z <= ev.arena.minZ || z >= ev.arena.maxZ;
+  }
+  cleanupCaravanMobs(ev, keepWagon) {
+    if (!ev) return;
+    for (const id of ev.enemyIds || []) {
+      this.state.mobs.delete(id);
+      delete this.mobMeta[id];
+    }
+    if (!keepWagon && ev.caravan && ev.caravan.wagonId) {
+      this.state.mobs.delete(ev.caravan.wagonId);
+      delete this.mobMeta[ev.caravan.wagonId];
+      ev.caravan.wagonId = '';
+    }
+    if (ev.enemyIds) ev.enemyIds.clear();
+    if (ev.caravan) ev.caravan.enemiesRemaining = 0;
+  }
+  endCaravanEvent(success, reason) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    if (!ev || ev.kind !== EVENT_CARAVAN.kind || ev.phase === 'ended') return;
+    ev.phase = 'ended';
+    ev.cleanupAt = Date.now() + 60000;
+    ev.returnAt = Date.now() + EVENT_RESULTS_MS;
+    ev.caravan.state = success ? 'secured' : 'wrecked';
+    const healthPct = Math.max(0, Math.min(1, ev.caravan.hp / Math.max(1, ev.caravan.maxHp)));
+    const tokens = success ? (healthPct >= .8 ? 3 : healthPct >= .5 ? 2 : 1) : 0;
+    this.cleanupCaravanMobs(ev, true);
+    const wagon = this.state.mobs.get(ev.caravan.wagonId);
+    if (wagon) {
+      wagon.kind = success ? 'caravan_wagon' : 'caravan_wreck';
+      wagon.hp = wagon.maxHp = Math.max(1, ev.caravan.hp);
+    }
+    for (const [sid, part] of ev.participants) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (!client) continue;
+      part.returnAt = ev.returnAt;
+      let xp = 0;
+      if (success) {
+        const rec = this.profileFor(client);
+        xp = rec ? hunterXpForActivity(rec.prof.S.lvl, 'event') : 0;
+        this.awardGrant(client, { source: 'event', event: EVENT_CARAVAN.name, xp, items: [{ id: I.LEGEND_TOKEN, count: tokens }] });
+        this.recordEventProgress(client);
+        ev.completed.add(sid);
+        client.send('eventComplete', this.eventPayload(client));
+      } else {
+        client.send('eventFailed', { reason: reason || 'wagon', name: ev.name, id: ev.id });
+      }
+      client.send('eventResult', this.eventResultPayload(ev, sid, success ? 'complete' : 'failed', {
+        xp,
+        tokens,
+      }, {
+        reason: reason || '',
+        caravanHealthPct: Math.round(healthPct * 100),
+        revives: part.revives | 0,
+      }));
+    }
+    this.broadcast('chat', {
+      name: '[Event]',
+      text: success
+        ? 'Caravan Defence complete. The merchants reached safety with ' + Math.round(healthPct * 100) + '% wagon health.'
+        : 'Caravan Defence failed. The wagon was lost to the bandits.',
+    });
+    this.broadcastEventStatus(true);
+  }
   armEventCountdown(ev, now) {
     if (!ev || ev.phase !== 'starting' || ev.goAt) return;
     ev.goAt = now + EVENT_START_MS;
     ev.startsAt = ev.goAt;
-    ev.endsAt = ev.goAt + (ev.kind === EVENT_KING.kind ? KING_ACTIVE_MS : EVENT_ACTIVE_MS);
+    ev.endsAt = ev.goAt + (ev.kind === EVENT_KING.kind ? KING_ACTIVE_MS : ev.kind === EVENT_CARAVAN.kind ? CARAVAN_ACTIVE_MS : EVENT_ACTIVE_MS);
     this.broadcastEventStatus(true);
   }
   cancelStagedEvent(ev, reason, now = Date.now()) {
@@ -775,6 +1212,7 @@ class EventsMixin {
       if (!client) continue;
       client.send('eventCancelled', { id: ev.id, name: ev.name, reason: reason || 'players' });
       if (ev.kind === EVENT_KING.kind) this.teleportKingPlayer(client, part.returnPos, 'cancel', ev);
+      else if (ev.kind === EVENT_CARAVAN.kind) this.teleportCaravanPlayer(client, part.returnPos, 'cancel', ev);
       else this.teleportEventPlayer(client, part.returnPos, 'cancel', ev);
     }
     ev.cleanupAt = now + 60000;
@@ -803,6 +1241,7 @@ class EventsMixin {
       if (client) {
         client.send('eventAfk', { id: ev.id, name: ev.name });
         if (ev.kind === EVENT_KING.kind) this.teleportKingPlayer(client, part.returnPos, 'afk', ev);
+        else if (ev.kind === EVENT_CARAVAN.kind) this.teleportCaravanPlayer(client, part.returnPos, 'afk', ev);
         else this.teleportEventPlayer(client, part.returnPos, 'afk', ev);
       }
       ev.participants.delete(sid);
@@ -818,11 +1257,15 @@ class EventsMixin {
     if (!ev || ev.phase !== 'starting') return;
     ev.phase = 'active';
     ev.startedAt = now;
-    ev.endsAt = now + (ev.kind === EVENT_KING.kind ? KING_ACTIVE_MS : EVENT_ACTIVE_MS);
+    ev.endsAt = now + (ev.kind === EVENT_KING.kind ? KING_ACTIVE_MS : ev.kind === EVENT_CARAVAN.kind ? CARAVAN_ACTIVE_MS : EVENT_ACTIVE_MS);
     if (ev.kind === EVENT_KING.kind) {
       ev.lastScoreAt = now;
       const firstSid = [...ev.participants.keys()][(Math.random() * ev.participants.size) | 0];
       if (firstSid) this.setKingCrownHolder(ev, firstSid, 'start');
+    } else if (ev.kind === EVENT_CARAVAN.kind) {
+      ev.lastCaravanTickAt = now;
+      this.spawnCaravanWagon(ev);
+      this.spawnCaravanWave(ev, 1);
     } else {
       for (const part of ev.participants.values()) part.startedAt = now;
     }
@@ -834,13 +1277,17 @@ class EventsMixin {
       name: '[Event]',
       text: ev.kind === EVENT_KING.kind
         ? 'King of the Hill has begun. Hold the crown for the longest time.'
-        : 'Parkour has begun. Reach the finish before the timer ends.',
+        : ev.kind === EVENT_CARAVAN.kind
+          ? 'Caravan Defence has begun. Protect the wagon through every ambush.'
+          : 'Parkour has begun. Reach the finish before the timer ends.',
     });
     this.broadcastEventStatus(true);
   }
   eventMovementLocked(sid, now = Date.now()) {
     const ev = this.currentEventInstance() || this.serverEvent;
-    return !!(ev && ev.phase === 'starting' && ev.participants && ev.participants.has(sid));
+    if (!ev || !ev.participants || !ev.participants.has(sid)) return false;
+    if (ev.phase === 'starting') return true;
+    return !!(ev.kind === EVENT_CARAVAN.kind && ev.phase === 'active' && ev.participants.get(sid).downed);
   }
   setKingCrownHolder(ev, sid, reason) {
     if (!ev || ev.kind !== EVENT_KING.kind) return;
@@ -966,7 +1413,24 @@ class EventsMixin {
   }
   handleKingPlayerDeath(client, p, hp) {
     const ev = this.currentEventInstance() || this.serverEvent;
-    if (!ev || ev.kind !== EVENT_KING.kind || ev.phase !== 'active' || !ev.participants.has(client.sessionId)) return false;
+    if (!ev || ev.phase !== 'active' || !ev.participants.has(client.sessionId)) return false;
+    if (ev.kind === EVENT_CARAVAN.kind) {
+      const part = ev.participants.get(client.sessionId);
+      if (part.downed) return true;
+      part.downed = true;
+      part.downedUntil = Date.now() + 10000;
+      part.reviveMs = 0;
+      hp.hp = hp.max;
+      client.send('hurt', { n: -hp.max, reason: 'event_downed' });
+      this.sendSpace(ev.id, 'eventCaravanDowned', {
+        sid: client.sessionId,
+        name: p.name || 'Hunter',
+        reviveBy: part.downedUntil,
+      });
+      this.broadcastEventStatus(true);
+      return true;
+    }
+    if (ev.kind !== EVENT_KING.kind) return false;
     const sid = client.sessionId;
     const hit = this.playerLastHit && this.playerLastHit.get(sid);
     const killerSid = hit && Date.now() - hit.at < 8000 ? hit.attackerSid : '';
@@ -1050,6 +1514,7 @@ class EventsMixin {
       const client = this.clients.find(c => c.sessionId === sid);
       if (client) {
         if (ev.kind === EVENT_KING.kind) this.teleportKingPlayer(client, part.returnPos, 'return', ev);
+        else if (ev.kind === EVENT_CARAVAN.kind) this.teleportCaravanPlayer(client, part.returnPos, 'return', ev);
         else this.teleportEventPlayer(client, part.returnPos, 'return', ev);
       }
       part.returned = true;
@@ -1057,6 +1522,7 @@ class EventsMixin {
     if (ev.phase !== 'ended') return;
     const waiting = [...ev.participants.values()].some(part => !part.returned && part.returnAt && now < part.returnAt);
     if (waiting) return;
+    if (ev.kind === EVENT_CARAVAN.kind) this.cleanupCaravanMobs(ev, false);
     this.activeEventInstanceId = '';
     this.serverEvent = this.createIdleEvent(now + this.randomEventDelay(), this.pickNextServerEvent().kind);
     this.broadcastEventStatus(true);
@@ -1065,7 +1531,10 @@ class EventsMixin {
     if (!this.serverEvent) this.serverEvent = this.createIdleEvent(now + EVENT_FIRST_DELAY_MS);
     if (this.eventInstances) {
       for (const [id, inst] of this.eventInstances) {
-        if (inst.phase === 'ended' && inst.cleanupAt && inst.cleanupAt <= now) this.eventInstances.delete(id);
+        if (inst.phase === 'ended' && inst.cleanupAt && inst.cleanupAt <= now) {
+          if (inst.kind === EVENT_CARAVAN.kind) this.cleanupCaravanMobs(inst, false);
+          this.eventInstances.delete(id);
+        }
       }
     }
     const ev = this.currentEventInstance() || this.serverEvent;
@@ -1090,30 +1559,51 @@ class EventsMixin {
         this.broadcast('chat', { name: '[Event]', text: ev.name + ' queue extended for a final call.' });
         this.broadcastEventStatus(true);
       } else if (ev.kind === EVENT_KING.kind) this.startKingEvent(now);
+      else if (ev.kind === EVENT_CARAVAN.kind) this.startCaravanEvent(now);
       else this.startParkourEvent(now);
     }
     else if (ev.phase === 'starting') this.tickStartingEvent(ev, now);
     else if (ev.phase === 'active') {
       if (now >= ev.endsAt) {
         if (ev.kind === EVENT_KING.kind) this.endKingEvent('timeout');
+        else if (ev.kind === EVENT_CARAVAN.kind) this.endCaravanEvent(false, 'timeout');
         else this.endParkourEvent('timeout');
       }
       else if (ev.kind === EVENT_KING.kind) this.tickKingEvent(ev, now);
+      else if (ev.kind === EVENT_CARAVAN.kind) this.tickCaravanEvent(ev, now);
       else if (ev.course) {
         for (const [sid, part] of ev.participants) {
           if (ev.completed.has(sid)) continue;
           const client = this.clients.find(c => c.sessionId === sid);
           const p = this.state.players.get(sid);
           if (!client || !p) continue;
+          const checkpoints = ev.course.checkpoints || [];
+          const nextCheckpoint = checkpoints[part.checkpointsPassed | 0];
+          if (nextCheckpoint && Math.hypot(p.x - nextCheckpoint.x, p.z - nextCheckpoint.z) < 2.5 && Math.abs(p.y - nextCheckpoint.y) < 3) {
+            part.checkpointsPassed = (part.checkpointsPassed | 0) + 1;
+            if (!Array.isArray(part.splitTimes)) part.splitTimes = [];
+            const splitMs = Math.max(0, now - (part.startedAt || ev.startsAt || now));
+            part.splitTimes.push(splitMs);
+            client.send('eventCheckpoint', {
+              index: part.checkpointsPassed,
+              total: checkpoints.length,
+              ms: splitMs,
+              x: nextCheckpoint.x,
+              y: nextCheckpoint.y,
+              z: nextCheckpoint.z,
+            });
+            this.sendEventStatus(client);
+          }
           const f = ev.course.finish;
-          if (Math.hypot(p.x - f.x, p.z - f.z) < 2.2 && Math.abs(p.y - f.y) < 3) {
+          if ((part.checkpointsPassed | 0) >= checkpoints.length && Math.hypot(p.x - f.x, p.z - f.z) < 2.2 && Math.abs(p.y - f.y) < 3) {
             this.completeParkourPlayer(client);
             continue;
           }
           const outside = p.x < ev.course.minX || p.x > ev.course.maxX || p.z < ev.course.minZ || p.z > ev.course.maxZ;
           if (p.y < ev.course.fallY || outside) {
             part.resets = (part.resets | 0) + 1;
-            this.teleportEventPlayer(client, ev.course.start, 'reset');
+            const respawn = part.checkpointsPassed > 0 ? checkpoints[part.checkpointsPassed - 1] : ev.course.start;
+            this.teleportEventPlayer(client, respawn, 'reset', ev);
           }
         }
         if (ev.participants.size > 0 && ev.completed.size >= ev.participants.size) this.endParkourEvent('complete');

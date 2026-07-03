@@ -331,6 +331,7 @@ class SpawningMixin {
     if (this.banditCampAcc < 7) return;
     this.banditCampAcc = 0;
     const players = []; this.state.players.forEach(p => { if (!p.dgn && (p.dim || 'overworld') === 'overworld') players.push(p); });
+    const roadSafety = this.roadSafetySnapshot().score;
     if (!this.banditCampStates) this.banditCampStates = new Map();
     for (const camp of W.regionalLandmarkSpecs().filter(s => s.type === 'bandit_camp')) {
       if (!players.some(p => Math.hypot(p.x - camp.x, p.z - camp.z) < 105)) continue;
@@ -346,7 +347,8 @@ class SpawningMixin {
         if (!captainAlive) this.spawnBanditCaptain(camp.id);
         continue;
       }
-      const ring = dangerRingAt(camp.x, camp.z), desired = Math.min(5, 3 + ring); let living = 0;
+      const ring = dangerRingAt(camp.x, camp.z), baseDesired = Math.min(5, 3 + ring);
+      const desired = Math.max(2, Math.min(6, baseDesired + (roadSafety < 30 ? 1 : roadSafety >= 70 ? -1 : 0))); let living = 0;
       this.state.mobs.forEach((m, id) => { if (!m.dgn && this.mobMeta[id] && this.mobMeta[id].banditCampId === camp.id) living++; });
       let attempts = 0;
       while (living < desired && attempts < desired * 4) {
@@ -362,7 +364,8 @@ class SpawningMixin {
         meta.bandit = true; meta.banditCampId = camp.id; meta.dangerRing = ring; meta.groupIndex = living;
         meta.banditRole = kind.slice(8); meta.brute = kind==='bandit_brute'; meta.scout = kind==='bandit_scout'; meta.shield = kind==='bandit_shield';
         meta.sx = camp.x; meta.sz = camp.z; meta.tx = camp.x + Math.cos(angle) * 18; meta.tz = camp.z + Math.sin(angle) * 18;
-        if (living < 2) {
+        const patrolSize = roadSafety >= 70 ? 1 : roadSafety < 30 ? 3 : 2;
+        if (living < patrolSize) {
           const route = this.banditPatrolRoute(camp);
           meta.banditPatrol = true; meta.patrolId = camp.id + ':road'; meta.patrolRoute = route.points; meta.patrolStep = 0;
           meta.caravanId = route.caravanId; meta.formationSide = living ? 1 : -1;
@@ -377,6 +380,7 @@ class SpawningMixin {
   tickRoadCaravans(dt, daytime) {
     if (!this.roadCaravans) this.roadCaravans = new Map();
     const now = Date.now(), roads = W.roadNetworkSpecs();
+    this.tickRoadsideEncounters(dt, daytime, roads, now);
     if (daytime && !this.roadCaravans.size && now >= (this.nextCaravanAt || 0) && roads.length) {
       let hasSurface = false; this.state.players.forEach(p => { if (!p.dgn) hasSurface = true; });
       if (hasSurface) this.spawnRoadCaravan(roads[Math.floor(now / 600000) % roads.length]);
@@ -422,7 +426,200 @@ class SpawningMixin {
     if (this.activitySyncAcc >= 1) { this.activitySyncAcc = 0; this.sendOverworldActivities(); }
   }
 
+  roadSafetySnapshot(now = Date.now()) {
+    if (!this.worldProgress) this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: now };
+    let score = Math.max(0, Math.min(100, this.worldProgress.roadSafety == null ? 50 : this.worldProgress.roadSafety | 0));
+    const updatedAt = Math.max(0, Number(this.worldProgress.roadSafetyUpdatedAt) || 0) || now;
+    const steps = Math.floor(Math.max(0, now - updatedAt) / (20 * 60 * 1000));
+    if (steps > 0 && score !== 50) {
+      score += score > 50 ? -Math.min(steps, score - 50) : Math.min(steps, 50 - score);
+      this.worldProgress.roadSafety = score;
+      this.worldProgress.roadSafetyUpdatedAt = updatedAt + steps * 20 * 60 * 1000;
+      this.dirtyWorldProgress = true;
+    } else {
+      this.worldProgress.roadSafety = score;
+      if (!this.worldProgress.roadSafetyUpdatedAt) this.worldProgress.roadSafetyUpdatedAt = now;
+    }
+    const tier = score >= 80 ? 'secure' : score >= 60 ? 'patrolled' : score >= 40 ? 'contested' : score >= 20 ? 'dangerous' : 'overrun';
+    return { score, tier };
+  }
+
+  adjustRoadSafety(delta, reason = '') {
+    const now = Date.now(), before = this.roadSafetySnapshot(now).score;
+    const score = Math.max(0, Math.min(100, before + Math.round(Number(delta) || 0)));
+    if (score === before) return this.roadSafetySnapshot(now);
+    this.worldProgress.roadSafety = score; this.worldProgress.roadSafetyUpdatedAt = now; this.dirtyWorldProgress = true;
+    const snapshot = this.roadSafetySnapshot(now);
+    for (const client of this.clients) {
+      const p = this.state.players.get(client.sessionId); if (p && !p.dgn) client.send('roadSafetyChanged', { ...snapshot, delta: score - before, reason });
+    }
+    return snapshot;
+  }
+
+  roadsideEncounterPoint(roads) {
+    let best = null, bestDistance = Infinity;
+    this.state.players.forEach(p => {
+      if (p.dgn || this.isTownProtected(p.x, p.z)) return;
+      for (const road of roads) {
+        const vx = road.b.x - road.a.x, vz = road.b.z - road.a.z, len2 = vx * vx + vz * vz || 1;
+        const raw = ((p.x - road.a.x) * vx + (p.z - road.a.z) * vz) / len2;
+        const t = Math.max(.12, Math.min(.88, raw + .08));
+        const x = road.a.x + vx * t, z = road.a.z + vz * t;
+        const distance = Math.hypot(x - p.x, z - p.z);
+        if (distance < bestDistance) { bestDistance = distance; best = { road, t, x, z }; }
+      }
+    });
+    return best;
+  }
+
+  spawnRoadsideEncounter(type, point, now = Date.now()) {
+    if (!point || !point.road) return null;
+    if (!this.roadsideEncounters) this.roadsideEncounters = new Map();
+    const id = 'roadside-' + (++this.mobSeq) + '-' + now.toString(36), ring = dangerRingAt(point.x, point.z);
+    const encounter = {
+      id, type, x: point.x, z: point.z, roadId: point.road.id, ring,
+      state: type === 'pursuit' ? 'escaping' : type === 'merchant_rescue' ? 'attacked' : 'waiting',
+      entityIds: new Set(), hostileIds: new Set(), contributors: new Set(), actorId: '',
+      expiresAt: now + (type === 'pursuit' ? 75 : 120) * 1000, attackAt: now + 2000,
+    };
+    const add = (kind, hp, x, z, friendly = false) => {
+      const mobId = String(++this.mobSeq), mob = new Mob(), y = this.world.standHeight(x, z, W.WH - 2);
+      mob.kind = kind; mob.x = x; mob.y = y > 0 ? y : point.road.a.y; mob.z = z; mob.hp = mob.maxHp = hp;
+      this.state.mobs.set(mobId, mob);
+      const meta = this.freshMeta(x, z, friendly ? 0 : 3 + ring, friendly ? 0 : 1.75 + ring * .08, kind, ring, false);
+      meta.friendly = friendly; meta.roadEncounterId = id; meta.dangerRing = ring;
+      if (!friendly) { meta.bandit = true; meta.banditRole = kind.replace('bandit_', ''); }
+      this.mobMeta[mobId] = meta; encounter.entityIds.add(mobId); if (!friendly) encounter.hostileIds.add(mobId);
+      return mobId;
+    };
+    if (type === 'wounded_hunter') {
+      encounter.actorId = add('wounded_hunter', 20, point.x, point.z, true);
+      this.state.mobs.get(encounter.actorId).state = 'downed';
+    } else if (type === 'merchant_rescue') {
+      encounter.actorId = add('caravan_merchant', 20, point.x, point.z, true);
+      for (let i = 0; i < 3 + Math.min(1, ring); i++) {
+        const angle = i / (3 + Math.min(1, ring)) * Math.PI * 2;
+        add(i === 1 ? 'bandit_archer' : i === 2 ? 'bandit_shield' : 'bandit', 14 + ring * 4,
+          point.x + Math.cos(angle) * 6, point.z + Math.sin(angle) * 6);
+      }
+    } else {
+      encounter.actorId = add('caravan_wagon', 30, point.x, point.z, true);
+      const vx = point.road.b.x - point.road.a.x, vz = point.road.b.z - point.road.a.z, len = Math.hypot(vx, vz) || 1;
+      for (const side of [-1, 1]) {
+        const mobId = add('bandit_scout', 13 + ring * 3, point.x + vx / len * 7 - vz / len * side * 2, point.z + vz / len * 7 + vx / len * side * 2);
+        const meta = this.mobMeta[mobId]; meta.retreating = true; meta.alert = false; meta.sx = point.road.b.x; meta.sz = point.road.b.z;
+      }
+    }
+    this.roadsideEncounters.set(id, encounter);
+    this.notifyRoadsideEncounter(encounter, 'started');
+    return encounter;
+  }
+
+  notifyRoadsideEncounter(encounter, state, extra = {}) {
+    if (!encounter) return;
+    for (const client of this.clients) {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || p.dgn || Math.hypot(p.x - encounter.x, p.z - encounter.z) > 150) continue;
+      client.send('roadsideEncounter', { id: encounter.id, type: encounter.type, state, x: encounter.x, z: encounter.z, ...extra });
+    }
+  }
+
+  roadsideEncounterReward(encounter) {
+    if (encounter.type === 'wounded_hunter') return { source: 'roadside_aid', xp: 18 + encounter.ring * 6, items: [{ id: I.COOKED_MEAT, count: 1 + encounter.ring }] };
+    if (encounter.type === 'merchant_rescue') return { source: 'roadside_rescue', xp: 25 + encounter.ring * 10, items: [{ id: I.IRON_INGOT, count: 1 + encounter.ring }] };
+    return { source: 'roadside_recovery', xp: 30 + encounter.ring * 12, items: [{ id: I.IRON_INGOT, count: 2 + encounter.ring }, { id: I.COAL, count: 3 + encounter.ring }] };
+  }
+
+  completeRoadsideEncounter(encounter, finisherSid = '') {
+    if (!encounter || encounter.state === 'complete' || encounter.state === 'failed') return;
+    encounter.state = 'complete'; if (finisherSid) encounter.contributors.add(finisherSid);
+    for (const client of this.clients) {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || p.dgn || Math.hypot(p.x - encounter.x, p.z - encounter.z) > 32) continue;
+      encounter.contributors.add(client.sessionId);
+    }
+    for (const sid of encounter.contributors) {
+      const client = this.clients.find(c => c.sessionId === sid); if (!client) continue;
+      this.awardGrant(client, this.roadsideEncounterReward(encounter));
+      if (encounter.type === 'merchant_rescue') this.progressRegionalContract(client, 'road_rescue', {});
+      else if (encounter.type === 'pursuit') this.progressRegionalContract(client, 'road_recover', {});
+      client.send('roadsideEncounterResult', { id: encounter.id, type: encounter.type, outcome: 'complete' });
+    }
+    this.notifyRoadsideEncounter(encounter, 'complete');
+    this.adjustRoadSafety(encounter.type === 'wounded_hunter' ? 3 : encounter.type === 'merchant_rescue' ? 6 : 5, encounter.type);
+    this.removeRoadsideEncounter(encounter); this.nextRoadsideEncounterAt = Date.now() + 90 * 1000;
+  }
+
+  failRoadsideEncounter(encounter, reason = 'expired') {
+    if (!encounter || encounter.state === 'complete' || encounter.state === 'failed') return;
+    encounter.state = 'failed'; this.notifyRoadsideEncounter(encounter, 'failed', { reason });
+    this.adjustRoadSafety(encounter.type === 'merchant_rescue' ? -6 : encounter.type === 'pursuit' ? -5 : -2, reason);
+    this.removeRoadsideEncounter(encounter); this.nextRoadsideEncounterAt = Date.now() + 60 * 1000;
+  }
+
+  removeRoadsideEncounter(encounter) {
+    for (const id of encounter.entityIds || []) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
+    if (this.roadsideEncounters) this.roadsideEncounters.delete(encounter.id);
+  }
+
+  tickRoadsideEncounters(dt, daytime, roads, now = Date.now()) {
+    if (!this.roadsideEncounters) this.roadsideEncounters = new Map();
+    if (!daytime) {
+      for (const encounter of [...this.roadsideEncounters.values()]) this.failRoadsideEncounter(encounter, 'night');
+      return;
+    }
+    if (!this.roadsideEncounters.size && now >= (this.nextRoadsideEncounterAt || 0)) {
+      const point = this.roadsideEncounterPoint(roads);
+      const safety = this.roadSafetySnapshot(now).score;
+      const types = safety >= 70 ? ['wounded_hunter', 'merchant_rescue', 'wounded_hunter'] : safety < 35 ? ['pursuit', 'merchant_rescue', 'pursuit'] : ['wounded_hunter', 'merchant_rescue', 'pursuit'];
+      if (point) this.spawnRoadsideEncounter(types[Math.floor(now / 90000) % types.length], point, now);
+      this.nextRoadsideEncounterAt = now + (point ? 2 * 60 * 1000 : 10 * 1000);
+    }
+    for (const encounter of [...this.roadsideEncounters.values()]) {
+      if (now >= encounter.expiresAt) { this.failRoadsideEncounter(encounter, 'escaped'); continue; }
+      encounter.hostileIds = new Set([...encounter.hostileIds].filter(id => this.state.mobs.has(id)));
+      if (encounter.type === 'wounded_hunter') continue;
+      if (!encounter.hostileIds.size) {
+        if (encounter.contributors.size) this.completeRoadsideEncounter(encounter);
+        else this.failRoadsideEncounter(encounter, 'escaped');
+        continue;
+      }
+      if (encounter.type === 'merchant_rescue' && now >= encounter.attackAt) {
+        encounter.attackAt = now + 2000;
+        const merchant = this.state.mobs.get(encounter.actorId);
+        if (!merchant || (merchant.hp = Math.max(0, merchant.hp - 2 - encounter.ring)) <= 0) { this.failRoadsideEncounter(encounter, 'merchant'); continue; }
+      }
+      if (encounter.type === 'pursuit') {
+        let escaped = false;
+        for (const id of encounter.hostileIds) {
+          const mob = this.state.mobs.get(id), meta = this.mobMeta[id];
+          if (mob && meta && Math.hypot(mob.x - meta.sx, mob.z - meta.sz) < 4) escaped = true;
+        }
+        if (escaped) this.failRoadsideEncounter(encounter, 'escaped');
+      }
+    }
+  }
+
+  onRoadsideBanditKilled(meta, client) {
+    const encounter = meta && this.roadsideEncounters && this.roadsideEncounters.get(meta.roadEncounterId);
+    if (!encounter) return false;
+    if (client) encounter.contributors.add(client.sessionId);
+    encounter.hostileIds = new Set([...encounter.hostileIds].filter(id => this.state.mobs.has(id)));
+    if (!encounter.hostileIds.size) this.completeRoadsideEncounter(encounter, client && client.sessionId);
+    return true;
+  }
+
+  handleRoadsideInteract(client, m) {
+    const encounter = this.roadsideEncounters && this.roadsideEncounters.get(String(m && m.id || ''));
+    const p = this.state.players.get(client.sessionId), actor = encounter && this.state.mobs.get(encounter.actorId);
+    if (!encounter || encounter.type !== 'wounded_hunter' || encounter.state !== 'waiting' || !p || p.dgn || !actor || Math.hypot(p.x - actor.x, p.z - actor.z) > 5)
+      return client.send('roadsideEncounterReject', { reason: 'range' });
+    this.completeRoadsideEncounter(encounter, client.sessionId);
+  }
+
   sendOverworldActivities() {
+    if (!this.roadCaravans) this.roadCaravans = new Map();
+    if (!this.roadsideEncounters) this.roadsideEncounters = new Map();
     const camps = W.regionalLandmarkSpecs().filter(s => s.type === 'bandit_camp');
     for (const client of this.clients) {
       const p = this.state.players.get(client.sessionId); if (!p || p.dgn) continue;
@@ -444,8 +641,17 @@ class SpawningMixin {
       if (this.caravanRecoveryByCamp && this.caravanRecoveryByCamp.size) {
         const id = [...this.caravanRecoveryByCamp.keys()][0], camp = camps.find(s => s.id === id); if (camp) recoveryCamp = { id, x: camp.x, z: camp.z };
       }
+      let encounterPayload = null, encounterBest = 180;
+      for (const encounter of (this.roadsideEncounters || new Map()).values()) {
+        const d = Math.hypot(encounter.x - p.x, encounter.z - p.z); if (d >= encounterBest) continue;
+        encounterBest = d;
+        encounterPayload = {
+          id: encounter.id, type: encounter.type, state: encounter.state, x: encounter.x, z: encounter.z,
+          remaining: encounter.hostileIds ? encounter.hostileIds.size : 0, expiresAt: encounter.expiresAt,
+        };
+      }
       const rec = this.profileFor(client), discountUntil = rec && this.caravanDiscounts && (this.caravanDiscounts.get(rec.token) || 0) || 0;
-      client.send('overworldActivity', { caravan: caravanPayload, camp: campPayload, patrol: patrolPayload, recoveryCamp, discountUntil, now: Date.now() });
+      client.send('overworldActivity', { caravan: caravanPayload, camp: campPayload, patrol: patrolPayload, recoveryCamp, encounter: encounterPayload, roadSafety: this.roadSafetySnapshot(), discountUntil, now: Date.now() });
     }
   }
 
@@ -471,7 +677,8 @@ class SpawningMixin {
       this.progressRegionalContract(client,'road_escort',{});
       client.send('caravanState', { state: 'arrived', discountUntil: Date.now() + 10 * 60 * 1000 });
     }
-    this.removeRoadCaravan(caravan); this.nextCaravanAt = Date.now() + 3 * 60 * 1000;
+    const safety = this.adjustRoadSafety(5, 'caravan_arrived').score;
+    this.removeRoadCaravan(caravan); this.nextCaravanAt = Date.now() + (safety >= 70 ? 2 : safety < 30 ? 5 : 3) * 60 * 1000;
   }
 
   failRoadCaravan(caravan) {
@@ -482,7 +689,8 @@ class SpawningMixin {
     if (camps[0]) this.caravanRecoveryByCamp.set(camps[0].id, (this.caravanRecoveryByCamp.get(camps[0].id) || 0) + 1);
     this.sendSpace('', 'caravanState', { state: 'wrecked', campId: camps[0]?.id || '' });
     const keep = caravan.wagonId; for (const id of [caravan.merchantId, caravan.muleId, ...caravan.guardIds]) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
-    this.roadCaravans.delete(caravan.id); this.nextCaravanAt = Date.now() + 5 * 60 * 1000;
+    const safety = this.adjustRoadSafety(-7, 'caravan_lost').score;
+    this.roadCaravans.delete(caravan.id); this.nextCaravanAt = Date.now() + (safety >= 70 ? 3 : safety < 30 ? 7 : 5) * 60 * 1000;
   }
 
   removeRoadCaravan(caravan) {
@@ -547,6 +755,7 @@ class SpawningMixin {
   }
 
   onBanditKilled(meta, client) {
+    if (meta && meta.roadEncounterId && this.onRoadsideBanditKilled(meta, client)) return;
     if (!meta || !meta.banditCampId) return;
     if (!this.banditCampStates) this.banditCampStates = new Map();
     const campId = meta.banditCampId;
@@ -564,12 +773,14 @@ class SpawningMixin {
             this.progressRegionalContract(client,'road_rescue',{});
             client.send('banditCaravanRescued', { campId, caravanId: meta.caravanId });
           }
+          this.adjustRoadSafety(4, 'patrol_rescue');
         }
       }
     }
     if (meta.banditCaptain) {
       this.banditCampStates.set(campId, { phase: 'cleared', respawnAt: Date.now() + 5 * 60 * 1000 });
       if(client)this.progressRegionalContract(client,'road_clear_camp',{targetId:campId});
+      this.adjustRoadSafety(8, 'camp_cleared');
       this.state.mobs.forEach((m,id)=>{const other=this.mobMeta[id];if(!other||other.banditCampId!==campId||other.banditCaptain)return;if(Math.random()<.6){other.surrendered=true;other.friendly=true;other.alert=false;m.state='surrender';}else{other.retreating=true;other.alert=false;m.state='retreat';}});
       for (const c of this.clients) {
         const p = this.state.players.get(c.sessionId);

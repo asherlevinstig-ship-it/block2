@@ -1943,6 +1943,7 @@ function updateLandMinimap(){
   if(mapUtility&&overworldActivity){
     const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
+    dynamic(overworldActivity.encounter,overworldActivity.encounter&&overworldActivity.encounter.type==='wounded_hunter'?'#7edc9a':'#ff7b57',4);
     dynamic(overworldActivity.patrol,'#e85b4d',3);dynamic(overworldActivity.camp,'#ff8b52',3);
   }
   const px=Math.floor(player.pos.x/WX*landMapCanvas.width);
@@ -3473,7 +3474,7 @@ const JOBS={
   blacksmith:{name:'Blacksmith', icon:'⚒', col:'#fb923c', role:'Gear, tools, repair', desc:'Progress by crafting equipment, smelting ingots, and repairing gear.', perk:'Future perk: higher durability crafted gear and cheaper repairs.'},
   monk:{name:'Monk', icon:'◇', col:'#7dd3fc', role:'Meditation and support', desc:'Progress by meditating in the Town Shrine.', perk:'Future perk: shrine focus buffs and group recovery.'},
 };
-let playerJob='', jobXp=0, meditateJobAcc=0, jobContract=null, regionalContract=null, regionalContractOffers=[],roadWardenRep=0;
+let playerJob='', jobXp=0, meditateJobAcc=0, jobContract=null, regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
 let highestGateRankCleared=-1;
@@ -3785,6 +3786,25 @@ const kingCrown=document.getElementById('kingcrown');
 const kingRoster=document.getElementById('kingroster');
 const kingScores=document.getElementById('kingscores');
 const kingAnnounce=document.getElementById('kingannounce');
+const parkourHud=document.getElementById('parkourhud');
+const parkourTime=document.getElementById('parkourtime');
+const parkourCheckpoint=document.getElementById('parkourcheckpoint');
+const parkourBar=document.getElementById('parkourbar');
+const parkourSplit=document.getElementById('parkoursplit');
+const parkourBest=document.getElementById('parkourbest');
+const parkourLeader=document.getElementById('parkourleader');
+const parkourAnnounce=document.getElementById('parkourannounce');
+const caravanHud=document.getElementById('caravanhud');
+const caravanTime=document.getElementById('caravantime');
+const caravanState=document.getElementById('caravanstate');
+const caravanHp=document.getElementById('caravanhp');
+const caravanHpBar=document.getElementById('caravanhpbar');
+const caravanWave=document.getElementById('caravanwave');
+const caravanEnemies=document.getElementById('caravanenemies');
+const caravanProgress=document.getElementById('caravanprogress');
+const caravanKills=document.getElementById('caravankills');
+const caravanRevives=document.getElementById('caravanrevives');
+const caravanDowned=document.getElementById('caravandowned');
 const eventStartWin=document.getElementById('eventstart');
 const eventStartName=document.getElementById('eventstartname');
 const eventStartObjective=document.getElementById('eventstartobjective');
@@ -3811,16 +3831,25 @@ let pendingEventResult=null;
 let eventStageAnchor=null;
 let kingAnnouncement=null, lastKingMinuteWarnId='';
 let kingObjectiveVisual=null, kingHolderAura=null, kingCrownOverride=null;
-const EVENT_QUEUE_CLIENT_MS=15*60*1000, EVENT_ACTIVE_CLIENT_MS={parkour:10*60*1000,king:15*60*1000};
+let parkourObjectiveVisual=null, parkourAnnouncement=null;
+let lastCaravanRewardTier=null;
+const EVENT_QUEUE_CLIENT_MS=15*60*1000, EVENT_ACTIVE_CLIENT_MS={parkour:10*60*1000,king:15*60*1000,caravan:10*60*1000};
 function fmtClock(ms){
   ms=Math.max(0,ms|0);
   const s=Math.ceil(ms/1000), m=Math.floor(s/60), r=s%60;
   return m+':'+String(r).padStart(2,'0');
 }
+function fmtRace(ms){
+  ms=Math.max(0,Number(ms)||0);
+  const total=Math.floor(ms/100),tenths=total%10,seconds=Math.floor(total/10)%60,minutes=Math.floor(total/600);
+  return minutes+':'+String(seconds).padStart(2,'0')+'.'+tenths;
+}
 function renderEventHud(){
   renderEventResult();
   renderEventStart();
   renderKingHud();
+  renderParkourHud();
+  renderCaravanHud();
   if(calmTownHud()){
     if(eventHud) eventHud.classList.add('hidden');
     return;
@@ -3833,9 +3862,13 @@ function renderEventHud(){
   eventHud.classList.remove('hidden');
   const name=serverEvent.name||'Parkour';
   const isKing=serverEvent.kind==='king';
+  const isCaravan=serverEvent.kind==='caravan';
   const reward=Math.max(0,serverEvent.reward||2);
   const rewardXp=Math.max(0,serverEvent.rewardXp|0);
-  const rewardText=reward+' legendary tokens'+(rewardXp?' + '+rewardXp.toLocaleString('en-US')+' Hunter XP':'');
+  const rewardTokens=serverEvent.kind==='caravan'
+    ?Math.max(1,serverEvent.rewardMin|0)+'-'+Math.max(1,serverEvent.rewardMax|0)+' legendary tokens'
+    :reward+' legendary tokens';
+  const rewardText=rewardTokens+(rewardXp?' + '+rewardXp.toLocaleString('en-US')+' Hunter XP':'');
   let sub='Waiting for event';
   let btn='JOIN QUEUE', disabled=true, timeLeft=0, barPct=0;
   eventHud.classList.toggle('queue',serverEvent.phase==='queue');
@@ -3866,7 +3899,7 @@ function renderEventHud(){
   } else if(serverEvent.phase==='active'){
     timeLeft=Math.max(0,(serverEvent.endsAt||0)-now);
     barPct=Math.min(1,timeLeft/(EVENT_ACTIVE_CLIENT_MS[serverEvent.kind]||EVENT_ACTIVE_CLIENT_MS.parkour));
-    sub=(serverEvent.participating?(isKing?'Hold the crown':'Complete the course'):'Event running')+' - '+fmtClock(timeLeft)+' left';
+    sub=(serverEvent.participating?(isKing?'Hold the crown':isCaravan?'Protect the caravan':'Complete the course'):'Event running')+' - '+fmtClock(timeLeft)+' left';
     if(serverEvent.leaderboard && serverEvent.leaderboard.length){
       const best=serverEvent.leaderboard[0];
       sub+=' - '+(isKing?'leader ':'best ')+(best.name||'Hunter')+' '+fmtClock(best.ms||0);
@@ -3882,6 +3915,10 @@ function renderEventHud(){
       sub+=' - leader '+(best.name||'Hunters')+' '+fmtClock(best.ms||0);
     }
   }
+  if(isCaravan && serverEvent.phase==='active'){
+    const escort=serverEvent.caravan||{};
+    sub=(serverEvent.participating?'Protect the wagon':'Event running')+' - wave '+(escort.wave||0)+'/'+(escort.totalWaves||4)+' - '+fmtClock(timeLeft)+' left';
+  }
   eventTitle.innerHTML='<b>'+escHTML(name.toUpperCase())+'</b> SERVER EVENT';
   eventSub.textContent=sub;
   eventJoinBtn.textContent=btn;
@@ -3890,6 +3927,192 @@ function renderEventHud(){
   if(eventRewardPill)eventRewardPill.textContent=rewardText.toUpperCase();
   if(eventTimePill)eventTimePill.textContent=serverEvent.phase==='queue'&&serverEvent.waitingForPlayers?'WAITING':fmtClock(timeLeft);
   if(eventBar)eventBar.style.width=Math.max(0,Math.min(100,Math.round(barPct*100)))+'%';
+}
+function clearParkourObjectiveVisuals(){
+  disposeKingVisual(parkourObjectiveVisual);
+  parkourObjectiveVisual=null;
+}
+function ensureParkourObjectiveVisuals(course){
+  if(parkourObjectiveVisual&&parkourObjectiveVisual.userData.seed===course.seed)return parkourObjectiveVisual;
+  clearParkourObjectiveVisuals();
+  const root=new THREE.Group(),points=[...(course.checkpoints||[]),course.finish].filter(Boolean);
+  const route=[course.start,...points].filter(Boolean),markers=[],arrows=[];
+  for(let i=0;i<points.length;i++){
+    const point=points[i],finish=i===points.length-1,marker=new THREE.Group();
+    const color=finish?0xffd24a:0x4fd8ff;
+    const ring=new THREE.Mesh(new THREE.RingGeometry(.82,1.08,40),new THREE.MeshBasicMaterial({
+      color,transparent:true,opacity:.35,side:THREE.DoubleSide,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending
+    }));
+    ring.rotation.x=-Math.PI/2;ring.position.y=-.03;ring.renderOrder=27;marker.add(ring);
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.22,7,10,1,true),new THREE.MeshBasicMaterial({
+      color,transparent:true,opacity:.16,side:THREE.DoubleSide,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending
+    }));
+    beam.position.y=3.45;beam.renderOrder=26;marker.add(beam);
+    const label=makeTextSprite(finish?'FINISH':'CHECKPOINT '+(i+1),finish?'#ffd24a':'#7de7ff');
+    label.position.y=1.75;label.scale.set(2.8,1.4,1);label.renderOrder=29;marker.add(label);
+    marker.position.set(point.x,point.y,point.z);marker.userData={ring,beam,label,index:i,finish};
+    root.add(marker);markers.push(marker);
+  }
+  for(let i=1;i<route.length;i++){
+    const from=new THREE.Vector3(route[i-1].x,route[i-1].y+.35,route[i-1].z);
+    const to=new THREE.Vector3(route[i].x,route[i].y+.35,route[i].z);
+    const direction=to.clone().sub(from),length=direction.length();
+    for(const amount of [.34,.68]){
+      const arrow=new THREE.Mesh(new THREE.ConeGeometry(.18,.62,5),new THREE.MeshBasicMaterial({
+        color:0x7de7ff,transparent:true,opacity:.32,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending
+      }));
+      arrow.position.copy(from).add(direction.clone().multiplyScalar(amount));
+      arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.clone().normalize());
+      arrow.renderOrder=25;arrow.userData.segment=i-1;root.add(arrow);arrows.push(arrow);
+    }
+  }
+  root.userData={seed:course.seed,markers,arrows};
+  scene.add(root);parkourObjectiveVisual=root;
+  return root;
+}
+function renderParkourObjectiveVisuals(){
+  const live=!!(serverEvent&&serverEvent.kind==='parkour'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&serverEvent.course&&dim==='event');
+  if(!live){clearParkourObjectiveVisuals();return;}
+  const root=ensureParkourObjectiveVisuals(serverEvent.course),progress=serverEvent.checkpointProgress||{};
+  const passed=Math.max(0,progress.passed|0),t=performance.now()*.001;
+  for(const marker of root.userData.markers){
+    const current=marker.userData.index===passed,done=marker.userData.index<passed;
+    marker.userData.ring.material.opacity=current ? .72 : done ? .12 : .25;
+    marker.userData.beam.material.opacity=current ? .3 : done ? .04 : .1;
+    marker.userData.label.visible=current;
+    const pulse=current?1+Math.sin(t*4)*.12:1;
+    marker.userData.ring.scale.setScalar(pulse);
+    marker.userData.ring.rotation.z=t*(current?1:.2);
+  }
+  for(const arrow of root.userData.arrows){
+    const current=arrow.userData.segment===passed;
+    arrow.visible=arrow.userData.segment>=passed;
+    arrow.material.opacity=current ? .68 : .18;
+    if(current)arrow.scale.setScalar(1+Math.sin(t*5)*.1);
+  }
+}
+function renderParkourHud(){
+  if(!parkourHud)return;
+  const live=!!(serverEvent&&serverEvent.kind==='parkour'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&serverEvent.course);
+  parkourHud.classList.toggle('hidden',!live);
+  if(!live){clearParkourObjectiveVisuals();return;}
+  renderParkourObjectiveVisuals();
+  const progress=serverEvent.checkpointProgress||{},passed=Math.max(0,progress.passed|0),total=Math.max(0,progress.total|0);
+  const elapsed=serverEvent.phase==='active'&&progress.startedAt?Date.now()-progress.startedAt:0;
+  if(parkourTime)parkourTime.textContent=serverEvent.phase==='starting'?'STAGING':fmtRace(elapsed);
+  if(parkourCheckpoint)parkourCheckpoint.textContent=passed>=total?'FINISH OPEN':'CHECKPOINT '+passed+' / '+total;
+  if(parkourBar)parkourBar.style.width=Math.round((passed+(passed>=total?1:0))/Math.max(1,total+1)*100)+'%';
+  const splits=Array.isArray(progress.splitTimes)?progress.splitTimes:[];
+  if(parkourSplit)parkourSplit.textContent=splits.length?fmtRace(splits[splits.length-1]):'—';
+  if(parkourBest)parkourBest.textContent=serverEvent.personalBestMs?fmtRace(serverEvent.personalBestMs):'—';
+  const leader=serverEvent.leaderboard&&serverEvent.leaderboard[0];
+  if(parkourLeader)parkourLeader.textContent=leader?'LEADER · '+(leader.name||'Hunter')+' · '+fmtRace(leader.ms||0):'Set the first course time';
+  if(parkourAnnounce){
+    const show=parkourAnnouncement&&parkourAnnouncement.id===serverEvent.id&&Date.now()<parkourAnnouncement.until;
+    parkourAnnounce.classList.toggle('hidden',!show);
+    if(show)parkourAnnounce.textContent=parkourAnnouncement.text;
+  }
+}
+function parkourCheckpointReached(m){
+  if(!m||!serverEvent||serverEvent.kind!=='parkour')return;
+  const progress=serverEvent.checkpointProgress||(serverEvent.checkpointProgress={passed:0,total:m.total|0,splitTimes:[],startedAt:Date.now()});
+  progress.passed=Math.max(progress.passed|0,m.index|0);
+  progress.total=Math.max(progress.total|0,m.total|0);
+  if(!Array.isArray(progress.splitTimes))progress.splitTimes=[];
+  if(Number.isFinite(m.ms))progress.splitTimes[progress.passed-1]=Math.max(0,m.ms|0);
+  parkourAnnouncement={id:serverEvent.id,until:Date.now()+2600,text:'CHECKPOINT '+progress.passed+' / '+progress.total+' · '+fmtRace(m.ms)};
+  const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+  burst(x,y+.35,z,[.25,.85,1],28,3,2.7,.7);
+  ringPulse(x,y+.04,z,1.05,0x4fd8ff,.55);
+  glowFlash(x,y+1,z,0x4fd8ff,3,.35);
+  SFX.coin();
+  renderParkourHud();
+}
+function parkourFinishFx(){
+  const finish=serverEvent&&serverEvent.course&&serverEvent.course.finish;
+  const x=finish&&finish.x||player.pos.x,y=finish&&finish.y||player.pos.y,z=finish&&finish.z||player.pos.z;
+  burst(x,y+.6,z,[1,.82,.2],58,5.2,4.5,1.05);
+  ringPulse(x,y+.05,z,1.35,0xffd24a,.8);
+  ringPulse(x,y+.8,z,.95,0x9ad26b,.7);
+  glowFlash(x,y+1.2,z,0xffd24a,5.5,.6);
+  SFX.level();camShake=Math.max(camShake,.34);
+}
+function renderCaravanHud(){
+  if(!caravanHud)return;
+  const live=!!(serverEvent&&serverEvent.kind==='caravan'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&serverEvent.caravan);
+  caravanHud.classList.toggle('hidden',!live);
+  if(!live)return;
+  const escort=serverEvent.caravan||{},left=Math.max(0,(serverEvent.endsAt||serverEvent.goAt||Date.now())-Date.now());
+  const hpRatio=Math.max(0,Math.min(1,(escort.hp||0)/Math.max(1,escort.maxHp||1)));
+  const hpPct=Math.round(hpRatio*100),rewardTier=hpRatio>=.8?3:hpRatio>=.5?2:1;
+  caravanHud.classList.toggle('critical',serverEvent.phase==='active'&&hpRatio<.5);
+  if(serverEvent.phase==='active'&&escort.maxHp>1){
+    if(lastCaravanRewardTier==null)lastCaravanRewardTier=rewardTier;
+    else if(rewardTier<lastCaravanRewardTier){
+      lastCaravanRewardTier=rewardTier;
+      sysMsg('<b>Wagon damaged!</b> Maximum event reward is now <b>'+rewardTier+' Legendary Token'+(rewardTier===1?'':'s')+'</b>.');
+    }
+  }
+  const labels={staging:'FORMING ESCORT',ambushed:'BANDIT AMBUSH',captain:'CAPTAIN ATTACK',moving:'CARAVAN MOVING',secured:'ROUTE SECURED',wrecked:'WAGON LOST'};
+  if(caravanTime)caravanTime.textContent=serverEvent.phase==='starting'?'STAGING':fmtClock(left);
+  if(caravanState)caravanState.textContent=labels[escort.state]||String(escort.state||'ESCORT').toUpperCase();
+  if(caravanHp)caravanHp.textContent=hpPct+'%';
+  if(caravanHpBar)caravanHpBar.style.width=hpPct+'%';
+  if(caravanWave)caravanWave.textContent='WAVE '+(escort.wave||0)+' / '+(escort.totalWaves||4);
+  if(caravanEnemies)caravanEnemies.textContent=(escort.enemiesRemaining||0)+' BANDIT'+((escort.enemiesRemaining||0)===1?'':'S');
+  if(caravanProgress)caravanProgress.style.width=Math.round(Math.max(0,Math.min(1,escort.progress||0))*100)+'%';
+  if(caravanKills)caravanKills.textContent=String(escort.kills||0);
+  if(caravanRevives)caravanRevives.textContent=String(escort.revives||0);
+  if(caravanDowned){
+    const downed=Array.isArray(escort.downed)?escort.downed:[];
+    caravanDowned.classList.toggle('hidden',!downed.length);
+    if(downed.length){
+      const target=downed[0],pct=Math.round((target.reviveProgress||0)*100);
+      caravanDowned.textContent=(target.sid===NET.room?.sessionId?'YOU ARE DOWN - AN ALLY MUST STAND NEARBY':'STAND NEAR '+String(target.name||'ALLY').toUpperCase()+' TO REVIVE')+(pct?' · '+pct+'%':'');
+    }
+  }
+}
+function caravanWaveChanged(m){
+  if(!m)return;
+  const captain=!!m.captain;
+  sysMsg(captain?'<b>Bandit Captain incoming!</b> Protect the wagon and bring them down.':'<b>Wave '+(m.wave|0)+'!</b> '+(m.enemies|0)+' bandits are attacking the caravan.');
+  if(serverEvent&&serverEvent.caravan){
+    serverEvent.caravan.wave=m.wave|0;
+    serverEvent.caravan.totalWaves=m.totalWaves|0;
+    serverEvent.caravan.enemiesRemaining=m.enemies|0;
+    serverEvent.caravan.state=captain?'captain':'ambushed';
+  }
+  const escort=serverEvent&&serverEvent.caravan;
+  if(escort){
+    burst(escort.x,escort.y+.5,escort.z,[1,.36,.18],captain?48:28,captain?4.5:3,3,.8);
+    ringPulse(escort.x,escort.y+.04,escort.z,captain?1.8:1.2,captain?0xff583d:0xffb347,.65);
+  }
+  SFX.boom();camShake=Math.max(camShake,captain ? .38 : .2);
+  renderCaravanHud();
+}
+function caravanHunterDowned(m){
+  if(!m)return;
+  const own=NET.room&&m.sid===NET.room.sessionId;
+  sysMsg(own?'<b>You are down!</b> An ally can revive you by standing nearby.':'<b>'+escHTML(m.name||'A hunter')+' is down!</b> Stand close to revive them.');
+  renderCaravanHud();
+}
+function caravanHunterRevived(m){
+  if(!m)return;
+  const text=m.rescued
+    ?'<b>'+escHTML(m.name||'Hunter')+' revived</b>'+(m.helperName?' by '+escHTML(m.helperName):'')+'.'
+    :'<b>'+escHTML(m.name||'Hunter')+'</b> has rejoined the escort.';
+  sysMsg(text);
+  if(serverEvent&&serverEvent.caravan&&Array.isArray(serverEvent.caravan.downed))
+    serverEvent.caravan.downed=serverEvent.caravan.downed.filter(row=>row.sid!==m.sid);
+  renderCaravanHud();
+}
+function caravanFinishFx(){
+  const escort=serverEvent&&serverEvent.caravan||{};
+  const x=escort.x||player.pos.x,y=escort.y||player.pos.y,z=escort.z||player.pos.z;
+  burst(x,y+.8,z,[1,.76,.22],64,5.5,4.8,1.1);
+  ringPulse(x,y+.05,z,1.8,0xffd24a,.9);
+  glowFlash(x,y+1.5,z,0xffd24a,6,.7);
+  SFX.level();camShake=Math.max(camShake,.35);
 }
 function clearKingWorldMarkers(){
   if(!NET||!NET.remotes)return;
@@ -4090,7 +4313,9 @@ if(eventJoinBtn) eventJoinBtn.onclick=()=>{
   if(serverEvent.phase==='queue') NET.room.send(serverEvent.joined?'eventLeave':'eventJoin', {});
 };
 function applyEventStatus(m){
+  const previousEventId=serverEvent&&serverEvent.id||'';
   serverEvent=m||null;
+  if(!serverEvent||serverEvent.id!==previousEventId||serverEvent.kind!=='caravan'||serverEvent.phase==='ended')lastCaravanRewardTier=null;
   if(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id!==lastEventAlertId){
     lastEventAlertId=serverEvent.id;
     sysMsg('<b>Event Alert:</b> '+escHTML(serverEvent.name||'Server Event')+' queue is open. Join from the event banner before the countdown ends. <b>Reward:</b> '+Math.max(0,serverEvent.reward||2)+' Legendary Tokens'+(serverEvent.rewardXp?' + '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' Hunter XP':'')+'.');
@@ -4104,6 +4329,9 @@ function applyEventStatus(m){
   }
   if(serverEvent && serverEvent.kind==='parkour' && (serverEvent.phase==='starting'||serverEvent.phase==='active') && serverEvent.participating && !serverEvent.completed && serverEvent.course && dim!=='event'){
     enterParkourEvent({eventId:serverEvent.id, course:serverEvent.course, x:serverEvent.course.start.x, y:serverEvent.course.start.y, z:serverEvent.course.start.z, reason:'status'});
+  }
+  if(serverEvent && serverEvent.kind==='caravan' && (serverEvent.phase==='starting'||serverEvent.phase==='active') && serverEvent.participating && !serverEvent.completed && serverEvent.arena && dim!=='event'){
+    enterCaravanEvent({eventId:serverEvent.id, arena:serverEvent.arena, caravan:serverEvent.caravan, x:serverEvent.arena.startX-4, y:TOWN.G+1.05, z:serverEvent.arena.z, reason:'status'});
   }
 }
 function eventRejected(m){
@@ -4120,6 +4348,14 @@ function applyEventTeleport(m){
     if(eventResultWin) eventResultWin.classList.add('hidden');
   }
   if(m.reason==='start') eventStageAnchor={x:Number(m.x)||0,y:Number(m.y)||0,z:Number(m.z)||0};
+  if(m.kind==='caravan'){
+    if(m.eventId&&m.arena)enterCaravanEvent(m);
+    else leaveEventDimension(m);
+    if(m.reason==='start'){if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}sysMsg('<b>Caravan Defence staging!</b> Ready your escort.');}
+    else if(m.reason==='respawn')sysMsg('You were overwhelmed and have rejoined beside the wagon.');
+    else if(m.reason==='arena')sysMsg('Stay with the caravan escort.');
+    return;
+  }
   if(m.kind==='king'){
     if(m.eventId&&m.arena) enterKingEvent(m);
     else leaveEventDimension(m);
@@ -4131,7 +4367,7 @@ function applyEventTeleport(m){
   if(m.eventId && m.course) enterParkourEvent(m);
   else leaveParkourEvent(m);
   if(m.reason==='start'){ if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');} sysMsg('<b>Parkour started!</b> Reach the finish before time runs out.'); }
-  else if(m.reason==='reset') sysMsg('You fell out of the event course. Resetting to the start.');
+  else if(m.reason==='reset') sysMsg('You fell out of the event course. Returning to your latest checkpoint.');
 }
 function buildParkourWorld(course){
   const cells=[];
@@ -4165,6 +4401,27 @@ function buildKingWorld(arena){
   for(const [x,z] of [[cx-7,cz],[cx+7,cz],[cx,cz-7],[cx,cz+7]]){w.setB(x,G+1,z,B.LOG);w.setB(x,G+2,z,B.TORCH);}
   return w;
 }
+function buildCaravanWorld(arena){
+  const minX=Math.max(2,Math.floor(arena.minX)),maxX=Math.min(WX-3,Math.ceil(arena.maxX));
+  const minZ=Math.max(2,Math.floor(arena.minZ)),maxZ=Math.min(WX-3,Math.ceil(arena.maxZ));
+  const G=TOWN.G,roadZ=Math.round(arena.z);
+  const w=new DimensionGrid({kind:'event',id:'caravan',originX:minX,originY:G-2,originZ:minZ,
+    width:maxX-minX+1,height:8,depth:maxZ-minZ+1,empty:B.AIR,outside:B.AIR});
+  for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){
+    w.setB(x,G-2,z,B.STONE);w.setB(x,G-1,z,B.DIRT);w.setB(x,G,z,Math.abs(z-roadZ)<=3?B.COBBLE:B.GRASS);
+  }
+  for(let x=minX;x<=maxX;x+=8){w.setB(x,G,roadZ-4,B.LOG);w.setB(x,G,roadZ+4,B.LOG);}
+  const stops=[.25,.5,.75,1].map(f=>Math.round(arena.startX+(arena.endX-arena.startX)*f));
+  for(const [index,x] of stops.entries()){
+    for(const z of [roadZ-10,roadZ+10]){
+      w.setB(x,G+1,z,B.LOG);w.setB(x,G+2,z,B.LOG);w.setB(x,G+3,z,index===3?B.TERRACOTTA:B.PLANKS);
+      w.setB(x+2,G+1,z,B.CAMPFIRE);
+    }
+  }
+  for(const x of [minX,maxX])for(let z=minZ;z<=maxZ;z++)w.setB(x,G+1,z,B.BRICK);
+  for(const z of [minZ,maxZ])for(let x=minX;x<=maxX;x++)w.setB(x,G+1,z,B.BRICK);
+  return w;
+}
 function prepareEventDimension(id,build){
   if(dim==='dungeon') exitDungeon(true);
   if(dim!=='event'){
@@ -4178,7 +4435,8 @@ function prepareEventDimension(id,build){
 }
 function enterParkourEvent(m){
   if(!m||!m.course) return;
-  prepareEventDimension(m.eventId||m.id||serverEvent&&serverEvent.id||'event',buildParkourWorld(m.course));
+  const id=m.eventId||m.id||serverEvent&&serverEvent.id||'event';
+  if(dim!=='event'||eventId!==id)prepareEventDimension(id,buildParkourWorld(m.course));
   player.pos.set(Number(m.x)||m.course.start.x, Number(m.y)||m.course.start.y, Number(m.z)||m.course.start.z);
   player.vel.set(0,0,0);
 }
@@ -4188,8 +4446,16 @@ function enterKingEvent(m){
   player.pos.set(Number(m.x)||m.arena.x,Number(m.y)||TOWN.G+1.05,Number(m.z)||m.arena.z);
   player.vel.set(0,0,0);
 }
+function enterCaravanEvent(m){
+  if(!m||!m.arena)return;
+  const id=m.eventId||m.id||'event';
+  if(dim!=='event'||eventId!==id)prepareEventDimension(id,buildCaravanWorld(m.arena));
+  player.pos.set(Number(m.x)||m.arena.startX-4,Number(m.y)||TOWN.G+1.05,Number(m.z)||m.arena.z);
+  player.vel.set(0,0,0);
+}
 function leaveEventDimension(m){
   clearKingObjectiveVisuals();
+  clearParkourObjectiveVisuals();
   if(dim==='event'){
     world=eventReturnWorld||owWorld||world;
     dim='overworld'; eventMode=false; eventId=''; NET.dgn='';
@@ -4204,11 +4470,17 @@ function leaveParkourEvent(m){leaveEventDimension(m);}
 function eventCompleted(m){
   serverEvent=m||serverEvent;
   renderEventHud();
-  sysMsg('<b>'+escHTML(serverEvent&&serverEvent.name||'Event')+' complete!</b> You earned <b>2 Legendary Weapon Tokens</b>.');
+  if(serverEvent&&serverEvent.kind==='parkour')parkourFinishFx();
+  if(serverEvent&&serverEvent.kind==='caravan')caravanFinishFx();
+  if(serverEvent&&serverEvent.kind==='caravan')sysMsg('<b>Route secured!</b> Your reward scales with the wagon health that remained.');
+  else sysMsg('<b>'+escHTML(serverEvent&&serverEvent.name||'Event')+' complete!</b> You earned <b>2 Legendary Weapon Tokens</b>.');
 }
 function eventFailed(m){
   const nm=(m&&m.name)||serverEvent&&serverEvent.name||'Event';
-  if(m&&m.winner) sysMsg('<b>'+escHTML(nm)+' ended.</b> Winner: <b>'+escHTML(m.winner)+'</b>.');
+  if((m&&m.kind)==='caravan'||(serverEvent&&serverEvent.kind)==='caravan'){
+    const reason=m&&m.reason==='timeout'?'The route was not secured before time ran out.':'The wagon was destroyed by the bandits.';
+    sysMsg('<b>Caravan lost.</b> '+reason+' No event reward was awarded.');
+  } else if(m&&m.winner) sysMsg('<b>'+escHTML(nm)+' ended.</b> Winner: <b>'+escHTML(m.winner)+'</b>.');
   else sysMsg('<b>'+escHTML(nm)+' ended.</b> No event reward this time.');
 }
 function escHTML(v){
@@ -4352,15 +4624,21 @@ function renderEventStart(){
   eventStartWin.classList.toggle('hidden',!showing);
   if(!showing)return;
   const king=serverEvent.kind==='king';
+  const caravan=serverEvent.kind==='caravan';
   const side=serverEvent.eventTeam||{};
   const source=side.source==='party'?'party kept together':side.source==='fellowship'?'fellowship kept together':'ability-balanced assignment';
   eventStartWin.classList.toggle('king',king);
   eventStartName.textContent=(serverEvent.name||'Server Event').toUpperCase();
-  eventStartObjective.textContent=king?'Hold the crown longer than every rival':'Reach the finish platform before time expires';
+  eventStartObjective.textContent=king?'Hold the crown longer than every rival':caravan?'Protect the wagon through four bandit ambushes':'Reach every checkpoint, then cross the finish';
   eventStartRules.textContent=king
     ?(side.name?side.name+' · '+source+' · ':'')+'Defeat the holder to take the crown · Team crown time decides the winner'
-    :'Falls reset you to the start · Fastest clean finish takes first place';
-  eventStartReward.textContent=Math.max(0,serverEvent.reward||2)+' LEGENDARY TOKENS'+(serverEvent.rewardXp?' · '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' HUNTER XP':'');
+    :caravan
+      ?'Stay near downed allies to revive them · Wagon health determines the reward'
+      :'Falls return you to your latest checkpoint · Ordered checkpoints prevent course skipping';
+  const rewardLabel=caravan
+    ?Math.max(1,serverEvent.rewardMin|0)+'-'+Math.max(1,serverEvent.rewardMax|0)+' LEGENDARY TOKENS - BASED ON WAGON HEALTH'
+    :Math.max(0,serverEvent.reward||2)+' LEGENDARY TOKENS';
+  eventStartReward.textContent=rewardLabel+(serverEvent.rewardXp?' · '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' HUNTER XP':'');
   if(!serverEvent.goAt){
     eventStartCount.textContent=serverEvent.ready?'WAITING '+(serverEvent.readyCount||0)+'/'+(serverEvent.participantCount||0):'PRESS A MOVEMENT KEY';
     eventStartCount.classList.add('ready');
@@ -4381,7 +4659,7 @@ function eventGo(m){
   eventStageAnchor=null;
   if(eventStartWin)eventStartWin.classList.add('hidden');
   if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}
-  sysMsg('<b>GO!</b> '+(m&&m.kind==='king'?'Take and hold the crown.':'Reach the finish platform.'));
+  sysMsg('<b>GO!</b> '+(m&&m.kind==='king'?'Take and hold the crown.':m&&m.kind==='caravan'?'Defend the wagon through every ambush.':'Follow the checkpoint beacons to the finish.'));
 }
 function eventAfk(m){
   eventStageAnchor=null;
@@ -4402,15 +4680,19 @@ function showEventResult(m){
   const outcome=m.outcome||'failed';
   eventResultWin.className=outcome;
   const won=outcome==='win'||outcome==='complete';
-  eventResultTitle.textContent=outcome==='complete'?'COURSE COMPLETE':outcome==='win'?'VICTORY':'EVENT ENDED';
+  eventResultTitle.textContent=outcome==='complete'?(m.kind==='caravan'?'CARAVAN SECURED':'COURSE COMPLETE'):outcome==='win'?'VICTORY':m.kind==='caravan'?'CARAVAN LOST':'EVENT ENDED';
   eventResultName.textContent=(m.name||'Server Event').toUpperCase();
   const contribution=m.contribution||{};
+  const reward=m.reward||{};
   const placement=m.placement>0?'#'+m.placement+(m.participantCount?' / '+m.participantCount:''):'—';
-  const contributionValue=contribution.valueMs>0?fmtClock(contribution.valueMs):'No score';
+  const contributionValue=Number.isFinite(contribution.value)?String(contribution.value|0):contribution.valueMs>0?fmtClock(contribution.valueMs):'No score';
+  if(m.kind==='parkour'&&reward.newBest)eventResultTitle.textContent='NEW PERSONAL BEST';
   eventResultStats.innerHTML=eventResultCell('Placement',placement)+eventResultCell(contribution.label||'Contribution',contributionValue)
     +(Number.isFinite(contribution.resets)?eventResultCell('Course resets',String(contribution.resets|0)):'')
+    +(Number.isFinite(contribution.revives)?eventResultCell('Allies revived',String(contribution.revives|0)):'')
+    +(m.kind==='caravan'&&Number.isFinite(m.caravanHealthPct)?eventResultCell('Wagon health',String(m.caravanHealthPct|0)+'%'):'')
+    +(m.kind==='parkour'&&reward.personalBestMs?eventResultCell('Personal best',fmtRace(reward.personalBestMs)):'')
     +(m.winner?eventResultCell('Winner',m.winner):'');
-  const reward=m.reward||{};
   let rewards='';
   if(reward.xp) rewards+=eventResultCell('Hunter XP','+'+(reward.xp|0).toLocaleString('en-US'));
   if(reward.tokens) rewards+=eventResultCell('Legendary Tokens','+'+(reward.tokens|0));
@@ -5901,10 +6183,83 @@ function buildProps(){
 }
 buildProps();
 
+// Road safety is server-owned, but its consequences should be visible before a player opens a menu.
+// These lightweight scenes are deterministic decoration only: they never alter blocks or collision.
+let roadSafetySceneGroup=null,roadSafetySceneTier='';
+function roadSafetyVisualTier(score=roadSafety){return score>=70?'secure':score<35?'dangerous':'contested';}
+function disposeRoadSafetyScenes(){
+  if(!roadSafetySceneGroup)return;
+  const geometries=new Set(),materials=new Set(),textures=new Set();
+  roadSafetySceneGroup.traverse(o=>{
+    if(o.geometry)geometries.add(o.geometry);
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of mats)if(m){materials.add(m);if(m.map)textures.add(m.map);}
+  });
+  scene.remove(roadSafetySceneGroup);geometries.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());
+  roadSafetySceneGroup=null;
+}
+function roadSafetyAnchors(){
+  const out=[];
+  for(const road of roadNetworkSpecs()){
+    const dx=(road.b.x-road.a.x)/road.length,dz=(road.b.z-road.a.z)/road.length;
+    for(const t of [.32,.7]){
+      const side=out.length%2?1:-1,x=road.a.x+(road.b.x-road.a.x)*t-dz*6*side,z=road.a.z+(road.b.z-road.a.z)*t+dx*6*side;
+      out.push({x,y:terrainHeight(x,z)+.08,z,dx,dz,index:out.length});
+    }
+  }
+  return out;
+}
+function rebuildRoadSafetyScenes(force=false){
+  const tier=roadSafetyVisualTier();
+  if(!force&&roadSafetySceneGroup&&tier===roadSafetySceneTier)return;
+  disposeRoadSafetyScenes();roadSafetySceneTier=tier;
+  const root=new THREE.Group();root.name='road-safety-'+tier;scene.add(root);roadSafetySceneGroup=root;
+  const wood=new THREE.MeshLambertMaterial({color:0x6f4828}),darkWood=new THREE.MeshLambertMaterial({color:0x30251f});
+  const stone=new THREE.MeshLambertMaterial({color:0x77746c}),blue=new THREE.MeshLambertMaterial({color:0x3f7397}),gold=new THREE.MeshLambertMaterial({color:0xd6a946});
+  const canvas=new THREE.MeshLambertMaterial({color:0xb98a58,side:THREE.DoubleSide}),charred=new THREE.MeshLambertMaterial({color:0x1e1b1a});
+  const warning=new THREE.MeshLambertMaterial({color:0x8f3028}),grass=new THREE.MeshLambertMaterial({color:0x66734c});
+  const box=(g,s,p,m,r)=>addBox(g,s,p,m,r),label=(g,text,col,y=4)=>{const s=makeTextSprite(text,col);s.position.set(0,y,0);g.add(s);};
+  const traveller=(g,x,z,coat)=>{const person=new THREE.Group(),skin=new THREE.MeshLambertMaterial({color:0xc89569}),cloth=new THREE.MeshLambertMaterial({color:coat});box(person,[.42,.65,.28],[0,1.05,0],cloth);box(person,[.38,.38,.38],[0,1.58,0],skin);box(person,[.16,.58,.18],[-.13,.48,0],darkWood);box(person,[.16,.58,.18],[.13,.48,0],darkWood);person.position.set(x,0,z);g.add(person);};
+  for(const a of roadSafetyAnchors()){
+    const g=new THREE.Group();g.position.set(a.x,a.y,a.z);g.rotation.y=Math.atan2(a.dx,a.dz);root.add(g);
+    if(tier==='secure'){
+      if(a.index%2===0){
+        for(const x of [-2.25,2.25]){box(g,[.28,3,.28],[x,1.5,0],wood);box(g,[.52,.28,.52],[x,3.05,0],gold);}
+        box(g,[4.8,.3,.3],[0,2.65,0],wood);box(g,[3.2,.68,.15],[0,2.1,0],blue);label(g,'ROAD PATROL','#9ed9ff',3.75);
+        traveller(g,-1.15,1.2,0x486c86);traveller(g,1.15,1.35,0x846c45);
+      }else{
+        for(const x of [-2,2])for(const z of [-1.4,1.4])box(g,[.18,2.2,.18],[x,1.1,z],wood);
+        const canopy=new THREE.Mesh(new THREE.ConeGeometry(2.9,1.15,4),canvas);canopy.position.y=2.3;canopy.rotation.y=Math.PI/4;g.add(canopy);
+        box(g,[2.4,.65,.8],[0,.35,0],wood);box(g,[.75,.75,.75],[-1.6,.38,1.65],gold);traveller(g,1.4,1.8,0x6d4779);label(g,'SAFE MARKET','#f6d67a',3.7);
+      }
+    }else if(tier==='dangerous'){
+      if(a.index%2===0){
+        box(g,[3.1,.55,1.45],[0,.65,0],charred,[0,0,.12]);
+        for(const x of [-1.2,1.2]){const wheel=new THREE.Mesh(new THREE.TorusGeometry(.55,.12,6,10),darkWood);wheel.position.set(x,.55,.78);wheel.rotation.y=Math.PI/2;g.add(wheel);}
+        box(g,[.2,2.5,.2],[-2.4,1.25,0],charred,[0,0,.15]);box(g,[1.6,.7,.15],[-1.85,2.05,0],warning,[0,0,-.12]);label(g,'ROAD LOST','#ff7668',3.25);
+      }else{
+        for(const x of [-2,0,2]){box(g,[.28,1.6,.28],[x,.8,0],darkWood,[0,0,x===0?.1:-.18]);box(g,[1.45,.22,.22],[x,1.1,0],wood,[0,0,Math.PI/4]);}
+        for(const x of [-1.2,1.2])for(const z of [1.1,2]){const spike=new THREE.Mesh(new THREE.ConeGeometry(.13,.9,4),stone);spike.position.set(x,.45,z);g.add(spike);}
+        box(g,[1.8,1.05,.14],[0,2.2,-.15],warning);box(g,[.18,3.2,.18],[-1,1.6,-.1],darkWood);label(g,'BANDIT ROAD','#ff7668',3.45);
+      }
+    }else{
+      box(g,[.26,2.7,.26],[-1.75,1.35,0],wood,[0,0,.08]);box(g,[2.5,.65,.16],[-.65,2.05,0],grass,[0,0,-.08]);
+      box(g,[1.2,.55,.8],[1.45,.28,.4],wood);box(g,[.65,.45,.65],[2.05,.23,-.45],stone);label(g,'ROAD WATCH','#e8c57a',3.15);
+    }
+  }
+  // globalThis.dim (not bare dim): this runs once at module top-level, before dimensions.mjs
+  // binds the `dim` global, so a bare read would throw ReferenceError and abort client bootstrap.
+  // A later refreshRoadSafetyScenes() corrects visibility once dim is bound.
+  root.visible=globalThis.dim==='overworld';
+}
+function refreshRoadSafetyScenes(){rebuildRoadSafetyScenes(false);}
+rebuildRoadSafetyScenes(true);
+
 gameContext.registerState('world', Object.freeze({
   get grid(){ return world; },
   set grid(next){ world=next; },
   stats:S,
+  get overworldActivity(){ return overworldActivity; },
   get event(){ return Object.freeze({id:eventId,active:eventMode,grid:eventWorld}); },
 }));
 gameContext.registerModule('world', Object.freeze({
@@ -6009,6 +6364,10 @@ const legacyWorldBindings={
   "eventStartLocked":{get:()=>eventStartLocked},
   "holdEventStartPosition":{get:()=>holdEventStartPosition},
   "kingCrownChanged":{get:()=>kingCrownChanged},
+  "parkourCheckpointReached":{get:()=>parkourCheckpointReached},
+  "caravanWaveChanged":{get:()=>caravanWaveChanged},
+  "caravanHunterDowned":{get:()=>caravanHunterDowned},
+  "caravanHunterRevived":{get:()=>caravanHunterRevived},
   "showEventResult":{get:()=>showEventResult},
   "eventLog":{get:()=>eventLog},
   "eventRejected":{get:()=>eventRejected},
@@ -6115,6 +6474,7 @@ const legacyWorldBindings={
   "regionalContractOffers":{get:()=>regionalContractOffers,set:value=>{regionalContractOffers=value;}},
   "regionalContractTypeLabel":{get:()=>regionalContractTypeLabel},
   "roadWardenRep":{get:()=>roadWardenRep,set:value=>{roadWardenRep=value;}},
+  "roadSafety":{get:()=>roadSafety,set:value=>{roadSafety=value;}},
   "regionalLandmarks":{get:()=>regionalLandmarks,set:value=>{regionalLandmarks=value;}},
   "remoteUnderCrosshair":{get:()=>remoteUnderCrosshair},
   "removeCropMesh":{get:()=>removeCropMesh},
@@ -6219,6 +6579,8 @@ const legacyWorldBindings={
   "updateLandMinimap":{get:()=>updateLandMinimap},
   "updateParticles":{get:()=>updateParticles},
   "updateRoadBirds":{get:()=>updateRoadBirds},
+  "refreshRoadSafetyScenes":{get:()=>refreshRoadSafetyScenes},
+  "roadSafetySceneGroup":{get:()=>roadSafetySceneGroup},
   "updateTavernNightEffects":{get:()=>updateTavernNightEffects},
   "updateVisibleChunks":{get:()=>updateVisibleChunks},
   "matCol":{get:()=>matCol},

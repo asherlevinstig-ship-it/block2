@@ -118,6 +118,7 @@ function defaultProfile(name) {
     claimedDiscoveries: [],
     regionalContract: null,
     roadWardenRep: 0,
+    parkourBestMs: 0,
     utilityUnlocks: [],
     utilityLoadout: { active: '', passive: [] },
     mutedPlayers: [],
@@ -275,7 +276,11 @@ function sanitizeTutorials(raw, profile) {
 
 function sanitizeWorldProgress(p) {
   const raw = p && typeof p === 'object' ? p : {};
-  return { highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 4) };
+  return {
+    highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 4),
+    roadSafety: clampI(raw.roadSafety == null ? 50 : raw.roadSafety, 0, 100),
+    roadSafetyUpdatedAt: clampI(raw.roadSafetyUpdatedAt || 0, 0, 4102444800000),
+  };
 }
 
 function sanitizeLandClaims(claims) {
@@ -347,6 +352,7 @@ function sanitizeProfile(p) {
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
   out.roadWardenRep = clampI(p.roadWardenRep, 0, 9999);
+  out.parkourBestMs = clampI(p.parkourBestMs, 0, 24 * 60 * 60 * 1000);
   out.utilityUnlocks = sanitizeUtilityUnlocks(p.utilityUnlocks);
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
   out.mutedPlayers = Array.isArray(p.mutedPlayers) ? [...new Set(p.mutedPlayers.map(cleanToken).filter(Boolean))].slice(0, 256) : [];
