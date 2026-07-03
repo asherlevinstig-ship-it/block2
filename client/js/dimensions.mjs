@@ -1117,7 +1117,7 @@ function addAffixObelisk(x,z,mod,i,total){
   const label=makeTextSprite(st.label,'#'+st.col.toString(16).padStart(6,'0'));
   label.position.set(0,2.18,0); label.scale.set(1.45,.72,1); grp.add(label);
   const a=(i/Math.max(1,total))*Math.PI*2;
-  grp.position.set(x+Math.cos(a)*2.2,9,z+Math.sin(a)*2.2);
+  grp.position.set(x+Math.cos(a)*3.1,9,z+Math.sin(a)*3.1);
   grp.rotation.y=a+Math.PI;
   return dDecor(grp);
 }
@@ -1206,10 +1206,11 @@ function placeDungeonDecor(dgn){
     mods.forEach((mod,i)=>addAffixObelisk(dgn.entrance.x,dgn.entrance.z,mod,i,mods.length));
   }
   if(dgn.entrance){
-    // rank-lit waystone in a corner of the entrance room: marks the way home from anywhere
+    // rank-lit waystone marking the way home: kept on the +z wall, opposite the exit portal,
+    // so the entrance room's landmarks don't pile up in one corner
     const e=dgn.entrance, erx=e.rx||e.r||3, erz=e.rz||e.r||3;
     const side=hash2(e.x,e.z)<.5?-1:1;
-    const wx=e.x+side*(erx-1.2), wz=e.z-(erz-1.2);
+    const wx=e.x+side*(erx-1.2), wz=e.z+(erz-1.2);
     const base=new THREE.Mesh(new THREE.BoxGeometry(1.05,.3,1.05),new THREE.MeshLambertMaterial({color:0x2c2c34}));
     base.position.set(wx,FLOOR+.15,wz); dDecor(base);
     const mono=new THREE.Mesh(new THREE.BoxGeometry(.5,1.9,.5),new THREE.MeshLambertMaterial({color:0x232329}));
