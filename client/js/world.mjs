@@ -3288,7 +3288,7 @@ function setLocalWeather(kind, announce){
   if(announce&&dim!=='tutorial')sysMsg(
     kind==='storm'?'A <b>storm</b> rolls in — beware the open ground':
     kind==='rain'?'Rain begins to fall across the region':
-    prev==='storm'?'The storm passes':'The skies clear');
+    prev==='storm'?'The storm passes':'The skies clear','minor');
 }
 // Dedicated rain mesh: motion-stretched line segments slanted by the wind read as real
 // rainfall (the shared particle system stays for snow and splashes). Drops live in a ring
@@ -4540,7 +4540,7 @@ function applyEventTeleport(m){
     else leaveEventDimension(m);
     if(m.reason==='start'){if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}sysMsg('<b>Caravan Defence staging!</b> Ready your escort.');}
     else if(m.reason==='respawn')sysMsg('You were overwhelmed and have rejoined beside the wagon.');
-    else if(m.reason==='arena')sysMsg('Stay with the caravan escort.');
+    else if(m.reason==='arena')sysMsg('Stay with the caravan escort.','minor');
     return;
   }
   if(m.kind==='king'){
@@ -4673,20 +4673,59 @@ function eventFailed(m){
 function escHTML(v){
   return String(v).replace(/[&<>"']/g, ch=>({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
 }
-function sysMsg(html){
-  const d=document.createElement('div'); d.className='sysmsg';
-  d.innerHTML='<span class="noticecrest" aria-hidden="true">&#10022;</span><span><b class="noticetitle">Hunter Notice</b><span class="noticecopy">'+html+'</span></span>';
+// Tiered notice channel: 'minor' (compact ambient line), 'notice' (default), 'major'
+// (gold alert). At most SYS_MAX_VISIBLE toasts show at once — repeats coalesce into an
+// xN counter, overflow queues (majors and notices only; ambient lines just drop).
+const SYS_MAX_VISIBLE=4, SYS_QUEUE_MAX=8;
+const sysActive=[], sysPending=[];
+sysEl.setAttribute('aria-live','polite');
+function sysMsg(html, opts){
+  opts=typeof opts==='string'?{tier:opts}:(opts||{});
+  const tier=opts.tier==='minor'||opts.tier==='major'?opts.tier:'notice';
+  const key=tier+'|'+html;
+  const dup=sysActive.find(t=>t.key===key);
+  if(dup){
+    dup.count++;
+    const c=dup.el.querySelector('.noticecount');
+    if(c){ c.textContent='x'+dup.count; c.style.display=''; }
+    clearTimeout(dup.hideTimer);
+    armSysHide(dup);
+    return;
+  }
+  if(sysActive.length>=SYS_MAX_VISIBLE){
+    if(tier==='minor') return;
+    if(sysPending.length<SYS_QUEUE_MAX) sysPending.push({html,tier,title:opts.title});
+    return;
+  }
+  spawnSysToast(html,tier,opts.title);
+}
+function spawnSysToast(html,tier,title){
+  const d=document.createElement('div'); d.className='sysmsg '+tier;
+  d.innerHTML=tier==='minor'
+    ? '<span class="noticecopy">'+html+'</span><span class="noticecount" style="display:none"></span>'
+    : '<span class="noticecrest" aria-hidden="true">'+(tier==='major'?'&#9733;':'&#10022;')+'</span>'
+      +'<span><b class="noticetitle">'+escHTML(title||(tier==='major'?'Major Notice':'Hunter Notice'))+'</b>'
+      +'<span class="noticecopy">'+html+'</span></span><span class="noticecount" style="display:none"></span>';
   sysEl.appendChild(d);
   document.body.classList.add('system-notice-active');
+  const t={el:d,key:tier+'|'+html,count:1,tier,hideTimer:0};
+  sysActive.push(t);
   requestAnimationFrame(()=>{ d.style.opacity=1; d.style.transform='translateY(0)'; });
-  setTimeout(()=>{
-    d.style.opacity=0;
-    d.style.transform='translateY(-4px)';
+  armSysHide(t);
+}
+function armSysHide(t){
+  const dur=t.tier==='major'?6000:t.tier==='minor'?3200:4200;
+  t.hideTimer=setTimeout(()=>{
+    t.el.style.opacity=0;
+    t.el.style.transform='translateY(-4px)';
     setTimeout(()=>{
-      d.remove();
+      t.el.remove();
+      const i=sysActive.indexOf(t); if(i>=0) sysActive.splice(i,1);
       if(!sysEl.children.length) document.body.classList.remove('system-notice-active');
+      const next=sysPending.shift();
+      if(next) spawnSysToast(next.html,next.tier,next.title);
     },500);
-  },4200);
+  },dur);
 }
 function eventLog(text, name='[Event]'){
   chatLine(name, text);
@@ -4731,14 +4770,19 @@ function rewardClass(label, id){
 }
 function rewardLineHTML(r){
   const cls=rewardClass(r.label, r.id);
-  return '<div class="rline '+cls+'"><i class="ricon">'+escHTML(rewardIcon(r.label,r.id))+'</i><span>'+escHTML(r.label)+'</span><b>'+escHTML(r.value)+'</b></div>';
+  const item=r.id!=null&&ITEMS[r.id];
+  let icon='<i class="ricon">'+escHTML(rewardIcon(r.label,r.id))+'</i>';
+  if(item&&item.icon&&item.icon.toDataURL){
+    try{ icon='<i class="ricon"><img src="'+item.icon.toDataURL()+'" alt=""></i>'; }catch(e){}
+  }
+  return '<div class="rline '+cls+'">'+icon+'<span>'+escHTML(r.label)+'</span><b>'+escHTML(r.value)+'</b></div>';
 }
 function applyGateProgress(p){
   if(!p || typeof p.highestGateRankCleared!=='number') return;
   const before=localPlayerRankIndex();
   highestGateRankCleared=Math.max(-1,Math.min(4,p.highestGateRankCleared|0));
   const after=localPlayerRankIndex();
-  if(after>before) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(after)+'-Rank gates are now available.');
+  if(after>before) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(after)+'-Rank gates are now available.',{tier:'major',title:'Rank Advanced'});
   refreshAppearanceDummy();
 }
 function showDungeonReward(m, earned){
@@ -4951,8 +4995,10 @@ function gainXP(n){
   }
   renderBars();
 }
+let lastDamageSource='';
 function damagePlayer(n,source='unknown'){
   if(hp<=0 || sleeping) return;
+  if(n>0) lastDamageSource=source;
   if(n<0){
     hp=Math.min(maxHp(), hp-n);
     burst(player.pos.x, player.pos.y+1, player.pos.z, [.45,1,.55], 10, 1.5, 1.8, .45);
@@ -5006,12 +5052,38 @@ function die(){
     return;
   }
   if(dim==='dungeon') exitDungeon(true);
-  showName('You died!');
-  sysMsg('You have <b>died</b>. Returning to the plaza');
+  showDeathScreen(deathCauseText(lastDamageSource),'Returning to the Town of Beginnings');
   player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+7.5);
   player.vel.set(0,0,0);
   hp=maxHp(); sp=maxSp(); hunger=maxHunger();
   renderBars();
+}
+// ---------------- death screen: a real moment instead of a 1-second toast ----------------
+let deathEl=null, deathHideTimer=0;
+function deathCauseText(source){
+  const s=String(source||'').replace(/^server:/,'').toLowerCase();
+  if(s.indexOf('lightning')>=0) return 'Struck down by lightning';
+  if(s.indexOf('bandit')>=0) return 'Cut down by bandits';
+  if(s.indexOf('fall')>=0) return 'The fall was too far';
+  if(s.indexOf('lava')>=0||s.indexOf('burn')>=0) return 'Consumed by the flames';
+  if(s.indexOf('hunger')>=0||s.indexOf('starv')>=0) return 'Collapsed from starvation';
+  if(s.indexOf('drown')>=0||s.indexOf('water')>=0) return 'The depths claimed you';
+  if(s.indexOf('hazard')>=0||s.indexOf('shard')>=0) return 'The gate’s curse proved fatal';
+  if(s.indexOf('pvp')>=0||s.indexOf('bounty')>=0) return 'Slain by a rival hunter';
+  return 'Slain in the field';
+}
+function showDeathScreen(cause,sub){
+  if(!deathEl){
+    deathEl=document.createElement('div'); deathEl.id='deathscreen';
+    deathEl.innerHTML='<div id="deathtitle">YOU DIED</div><div id="deathcause"></div><div id="deathsub"></div>';
+    document.body.appendChild(deathEl);
+  }
+  deathEl.querySelector('#deathcause').textContent=cause||'';
+  deathEl.querySelector('#deathsub').textContent=sub||'';
+  deathEl.classList.add('show');
+  camShake=Math.max(camShake,.4);
+  clearTimeout(deathHideTimer);
+  deathHideTimer=setTimeout(()=>deathEl.classList.remove('show'),2600);
 }
 
 // ---------------- hostile mobs (zombies, night only, outside the walls) ----------------
@@ -5211,7 +5283,7 @@ function tickMobs(dt,t){
       if(!m.enraged && m.hp<=m.maxHp*.2){
         m.enraged=true; m.speed*=1.4;
         m.baseCol=[1,.35,.3]; m.mats.forEach(mm=>mm.color.setRGB(1,.35,.3));
-        sysMsg('The boss <b>enrages</b>!');
+        sysMsg('The boss <b>enrages</b>!',{tier:'major',title:'Boss Enraged'});
       }
       const haste=m.enraged?.65:1;
       if(m.cape) m.cape.rotation.x=.16+Math.sin(t*1.6+m.phase)*.05;
@@ -6783,6 +6855,7 @@ const legacyWorldBindings={
   "utilityUnlocked":{get:()=>utilityUnlocked},
   "utilityUnlocks":{get:()=>utilityUnlocks,set:value=>{utilityUnlocks=value;}},
   "overworldActivity":{get:()=>overworldActivity,set:value=>{overworldActivity=value;}},
+  "showDeathScreen":{get:()=>showDeathScreen},
   "villagers":{get:()=>villagers},
   "weather":{get:()=>weather},
   "weatherBoltFx":{get:()=>weatherBoltFx},

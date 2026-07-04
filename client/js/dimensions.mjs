@@ -1046,7 +1046,7 @@ function spawnGate(){
     setGateLabel(gate);
     gate.grp.position.set(gate.x, gy, gate.z);
     scene.add(gate.grp);
-    sysMsg('A <b>'+RANKS[ri].n+'-Rank Gate</b> has opened in the wilderness');
+    sysMsg('A <b>'+RANKS[ri].n+'-Rank Gate</b> has opened in the wilderness',{tier:'major',title:'Gate Alert'});
     burst(gate.x, gy+1.5, gate.z, gate.colArr, 30, 3, 3, .9);
     return;
   }

@@ -349,7 +349,7 @@ function netAttachRoom(room,name,client){
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
-      sysMsg('You were defeated. The dungeon attempt failed.');
+      showDeathScreen('The dungeon overwhelmed you','The attempt has failed — returning to the gate');
     });
     room.onMessage('dungeonFailed', m=>{
       if(dim==='dungeon') exitDungeon(true);
@@ -392,7 +392,7 @@ function netAttachRoom(room,name,client){
       if(m.source==='hunt'){
         const meat=(m.items||[]).find(it=>it&&it.id===I.MONSTER_MEAT);
         if(meat){
-          sysMsg('Hunted food acquired: <b>Monster Meat x'+(meat.count||1)+'</b>');
+          sysMsg('Hunted food acquired: <b>Monster Meat x'+(meat.count||1)+'</b>','minor');
           if(quest && quest.type==='sell' && quest.item===I.MONSTER_MEAT && !questDone()) showName('Now sell the Monster Meat to Greta');
         }
       } else if(m.source==='event'){
