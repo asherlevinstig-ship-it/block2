@@ -35,6 +35,8 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 const W = require('../world');
+const JOB_SYSTEM = require('../../shared/job-system');
+const GEAR_SYSTEM = require('../../shared/gear-system');
 const AI = require('../ai');
 const D = require('../dungeon');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
@@ -50,8 +52,13 @@ const I = {
   IRON_INGOT: 102,
   DIAMOND: 103,
   IRON_PICK: 112,
+  WOOD_AXE: 114,
+  IRON_AXE: 116,
+  DIA_AXE: 117,
   WOOD_SWORD: 122,
+  STONE_SWORD: 123,
   IRON_SWORD: 124,
+  DIA_SWORD: 125,
   WOOD_HOE: 172,
   STONE_HOE: 173,
   IRON_HOE: 174,
@@ -65,7 +72,14 @@ const I = {
   DRAGON_TREAT: 190,
   SHADOW_SIGIL: 191,
   FANG_TOTEM: 192,
+  WINDSEED: 193,
   MOTE_CHARM: 200,
+  COMPOST: 202,
+  GOLDEN_WHEAT: 203,
+  GOLDEN_BROTH: 204,
+  TRAIL_RATION: 205,
+  FEAST_PLATTER: 206,
+  GEODE: 207,
   FORAGE_CHARM: 201,
   RIVER_FISH: 199,
   SHARD_MINOR: 130,
@@ -148,6 +162,8 @@ function makeRoom() {
   room.pvel = new Map();
   room.abilityState = new Map();
   room.abilityBuffs = new Map();
+  room.monkAuraAt = new Map();
+  room.prospectAt = new Map();
   room.bossContrib = new Map();
   room.dungeonLobbies = new Map();
   room.blackholeCd = new Map();
@@ -170,12 +186,13 @@ function makeRoom() {
   room.gateLootedChests = new Map();
   room.landClaims = new Map();
   room.cropTimers = new Map();
+  room.cropMeta = new Map();
   room.cropGrowAcc = 0;
   room.eventInstances = new Map();
   room.activeEventInstanceId = '';
   room.tutorialReturns = new Map();
   room.animalSpawnAcc = 0;
-  room.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now() };
+  room.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
   room.teamMgr = new (require('../teams').TeamManager)(5);
   room.teamRecords = new Map();
   room.guilds = new Map();
@@ -417,6 +434,210 @@ test('jobs and repeatable contracts are created progressed and claimed only by t
   assert.equal(prof.jobXp, 20);
   assert.equal(prof.S.lvl, 2);
   assert.equal(prof.S.xp, 10, 'contract Hunter XP uses the shared level-up transaction');
+});
+
+test('Hunter career and trade professions keep independent XP while one profession is equipped', () => {
+  const room = makeRoom(), client = makeClient('dual_track_worker');
+  const { prof } = seedPlayer(room, client);
+  room.handleSetJob(client, { job: 'miner' });
+  room.recordMineProgress(client, W.B.STONE);
+  room.recordKillProgress(client, true);
+  assert.equal(prof.job, 'miner');
+  assert.equal(prof.jobXpByJob.miner, 2);
+  assert.equal(prof.jobXpByJob.adventurer, 3);
+  room.handleSetJob(client, { job: 'cook' });
+  assert.equal(prof.jobXpByJob.miner, 2, 'switching professions preserves Miner progress');
+  assert.equal(prof.jobXpByJob.cook, 0, 'Cook does not inherit the Miner level');
+  room.handleJobContract(client, { action: 'take', job: 'adventurer' });
+  assert.equal(prof.jobContract.job, 'adventurer', 'career contracts remain available with a profession equipped');
+});
+
+test('switching professions pauses rather than deletes active trade work', () => {
+  const room=makeRoom(),client=makeClient('job_switcher');const {prof}=seedPlayer(room,client);
+  room.handleSetJob(client,{job:'miner'});
+  prof.jobContract={job:'miner',type:'mine',target:W.B.STONE,need:2,have:1,rewardGold:20,rewardJobXp:20,rewardXp:20,title:'Stone Quota',desc:'Mine stone.'};
+  room.handleSetJob(client,{job:'cook'});
+  assert.equal(prof.job,'cook');
+  assert.equal(prof.jobContract.job,'miner');
+  assert.equal(prof.jobContract.have,1);
+  room.recordMineProgress(client,W.B.STONE);
+  assert.equal(prof.jobContract.have,1,'paused work cannot progress under another profession');
+  room.handleSetJob(client,{job:'miner'});room.recordMineProgress(client,W.B.STONE);
+  assert.equal(prof.jobContract.have,2);
+});
+
+test('paused profession work survives profile sanitization',()=>{
+  const clean=sanitizeProfile({job:'cook',jobContract:{job:'miner',type:'mine',target:W.B.STONE,need:4,have:2,rewardGold:20,rewardJobXp:20,rewardXp:20,title:'Stone Quota',desc:'Mine stone.'}});
+  assert.equal(clean.job,'cook');
+  assert.equal(clean.jobContract.job,'miner');
+  assert.equal(clean.jobContract.have,2);
+});
+
+test('contract claims report every profession milestone crossed by the reward', () => {
+  const room=makeRoom(),client=makeClient('milestone_worker');const {prof}=seedPlayer(room,client);
+  room.handleSetJob(client,{job:'miner'});
+  prof.jobXpByJob.miner=25;prof.jobXp=25;
+  prof.jobContract={job:'miner',type:'mine',need:1,have:1,rewardGold:10,rewardJobXp:500,rewardXp:0,title:'Milestone Push',desc:'Test.'};
+  room.handleJobContract(client,{action:'claim'});
+  const result=client.sent.findLast(e=>e.type==='progressionResult');
+  assert.equal(result.msg.jobLevelBefore,1);
+  assert.equal(result.msg.jobLevelAfter>=5,true);
+  assert.deepEqual(result.msg.milestones.map(m=>m.level),[2,5]);
+});
+
+test('legacy single-job XP migrates only to the job that earned it', () => {
+  const miner = sanitizeProfile({ job: 'miner', jobXp: 77 });
+  assert.equal(miner.job, 'miner');
+  assert.equal(miner.jobXpByJob.miner, 77);
+  assert.equal(miner.jobXpByJob.cook, 0);
+  assert.equal(miner.jobXpByJob.adventurer, 0);
+  const adventurer = sanitizeProfile({ job: 'adventurer', jobXp: 55 });
+  assert.equal(adventurer.job, '', 'Adventurer migrates to the permanent career rather than an equipped trade');
+  assert.equal(adventurer.jobXpByJob.adventurer, 55);
+});
+
+test('Blacksmith reforging is level-gated, server-priced, persistent, and affects weapon damage', () => {
+  const room=makeRoom(),client=makeClient('reforge_smith'),{prof}=seedPlayer(room,client,{gold:100});
+  const p=room.state.players.get(client.sessionId);p.x=W.TOWN.TC+14.5;p.z=W.TOWN.TC-14;p.heldId=I.IRON_SWORD;
+  prof.job='blacksmith';prof.inv=[{id:I.IRON_SWORD,count:1,dur:251},{id:I.IRON_INGOT,count:4}];
+  room.handleBlacksmithReforge(client,{slot:0,action:'choose',modifier:'keen'});
+  assert.equal(client.sent.at(-1).msg.reason,'level');
+  prof.jobXpByJob.blacksmith=[1,2,3,4].reduce((xp,lvl)=>xp+JOB_SYSTEM.jobXpNeed(lvl),0);
+  const before=room.meleeProfile(p,client.sessionId).bonus;
+  room.handleBlacksmithReforge(client,{slot:0,action:'choose',modifier:'keen'});
+  assert.equal(prof.inv[0].forge,'keen');
+  assert.equal(prof.gold,30);
+  assert.equal(itemCount(prof,I.IRON_INGOT),0);
+  assert.equal(room.meleeProfile(p,client.sessionId).bonus>before+2,true,'Keen also promotes legacy gear into Rare quality');
+  assert.equal(client.sent.at(-1).type,'blacksmithReforgeResult');
+  const stored=sanitizeProfile(prof);
+  assert.equal(stored.inv[0].forge,'keen');
+  room.handleBlacksmithReforge(client,{slot:0,action:'choose',modifier:'hacked'});
+  assert.equal(client.sent.at(-1).msg.reason,'modifier');
+});
+
+test('Masterwork and sturdy metadata increase maximum durability and sanitize safely', () => {
+  const room=makeRoom(),base={id:I.IRON_PICK,count:1,plus:1},forged={...base,forge:'sturdy',masterwork:true};
+  const info={dur:251};
+  assert.ok(room.toolMaxDur(forged,info)>room.toolMaxDur(base,info));
+  const clean=sanitizeProfile({inv:[forged,{...base,forge:'forged_by_client',masterwork:true}]});
+  assert.equal(clean.inv[0].forge,'sturdy');assert.equal(clean.inv[0].masterwork,true);
+  assert.equal(clean.inv[1].forge,undefined);assert.equal(clean.inv[1].masterwork,undefined);
+});
+
+test('explicit weapon rarity persists and authoritatively improves combat stats',()=>{
+  const room=makeRoom(),client=makeClient('rare_blade'),{prof}=seedPlayer(room,client,{lvl:1});
+  const p=room.state.players.get(client.sessionId);p.heldId=I.IRON_SWORD;
+  prof.inv=[{id:I.IRON_SWORD,count:1,dur:251,rarity:'rare'}];
+  assert.equal(room.serverDamageFor(p,client.sessionId)>14,true);
+  assert.equal(room.toolMaxDur(prof.inv[0],require('../rooms/constants').TOOL_INFO[I.IRON_SWORD])>251,true);
+  const clean=sanitizeProfile(prof);assert.equal(clean.inv[0].rarity,'rare');
+});
+
+test('Blacksmith salvage converts non-Legendary weapons into materials',()=>{
+  const room=makeRoom(),client=makeClient('salvager');
+  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,gold:0,inv:[{id:I.IRON_SWORD,count:1,dur:251,rarity:'epic'}]});
+  room.handleBlacksmithSalvage(client,{slot:0});
+  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD),false);
+  assert.equal(itemCount(prof,I.IRON_INGOT)>0,true);
+  assert.equal(prof.gold>0,true);
+  assert.equal(client.sent.some(e=>e.type==='blacksmithSalvageResult'&&e.msg.rarity==='epic'),true);
+});
+
+test('ranked armor keeps metadata through equip, damage, repair, locking, and salvage',()=>{
+  const room=makeRoom(),client=makeClient('armor_loop');
+  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,gold:999,inv:[
+    {id:I.IRON_ARMOR,count:1,dur:400,gearRank:'C',rarity:'rare'},
+  ]});
+  room.handleEquipArmor(client,{id:I.IRON_ARMOR,gearRank:'C',rarity:'rare'});
+  assert.equal(prof.armor.gearRank,'C');assert.equal(prof.armor.rarity,'rare');
+  const before=prof.armor.dur;room.hurtPlayer(client,10,'armor_test');
+  assert.equal(prof.armor.dur,before-1);
+  room.handleEquipArmor(client,{id:0});
+  const slot=prof.inv.findIndex(s=>s&&s.id===I.IRON_ARMOR);
+  room.handleBlacksmithRepair(client,{slot});
+  assert.equal(prof.inv[slot].dur,GEAR_SYSTEM.armorProfile(require('../rooms/constants').ARMOR_INFO[I.IRON_ARMOR],prof.inv[slot]).maxDur);
+  room.handleGearLock(client,{slot,locked:true});room.handleBlacksmithSalvage(client,{slot});
+  assert.equal(prof.inv[slot].locked,true);
+  room.handleGearLock(client,{slot,locked:false});room.handleBlacksmithSalvage(client,{slot});
+  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_ARMOR),false);
+});
+
+test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is protected',()=>{
+  const room=makeRoom(),client=makeClient('recovery_hunter');
+  const full=Array.from({length:36},()=>({id:I.COAL,count:64}));
+  const {prof}=seedPlayer(room,client,{inv:full});
+  room.awardGrant(client,{source:'boss',items:[{id:I.IRON_SWORD,count:1,rarity:'mythic',gear:true}]});
+  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD),false);
+  assert.equal(prof.lootRecovery.length,1);
+  assert.equal(prof.lootRecovery[0].rarity,'mythic');
+  assert.equal(prof.lootRecovery[0].locked,true);
+  assert.equal(prof.lootRecovery[0].expiresAt,0);
+  assert.equal(client.sent.some(e=>e.type==='lootRecoveryState'&&e.msg.queued),true);
+  const stored=sanitizeProfile(prof);
+  assert.equal(stored.lootRecovery.length,1);
+  assert.equal(stored.lootRecovery[0].locked,true);
+});
+
+test('Tobin claims recovered weapons only into real free inventory slots',()=>{
+  const room=makeRoom(),client=makeClient('recovery_claim');
+  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),full=Array.from({length:36},()=>({id:I.COAL,count:64}));
+  const {prof}=seedPlayer(room,client,{x,z,inv:full});
+  prof.lootRecovery=[{id:I.IRON_SWORD,count:1,dur:251,rarity:'rare',source:'boss',acquiredAt:Date.now(),expiresAt:Date.now()+86400000}];
+  room.handleLootRecovery(client,{action:'claim',index:0});
+  assert.equal(client.sent.at(-1).msg.reason,'full');
+  prof.inv[7]=null;
+  room.handleLootRecovery(client,{action:'claim',index:0});
+  assert.equal(prof.lootRecovery.length,0);
+  assert.equal(prof.inv[7].id,I.IRON_SWORD);
+  assert.equal(prof.inv[7].rarity,'rare');
+  assert.equal(client.sent.at(-1).type,'lootRecoveryResult');
+  assert.equal(client.sent.at(-1).msg.ok,true);
+});
+
+test('server-owned gear locks block salvage until explicitly removed',()=>{
+  const room=makeRoom(),client=makeClient('locked_salvage');
+  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,inv:[{id:I.IRON_SWORD,count:1,dur:251,rarity:'mythic',locked:true}]});
+  room.handleBlacksmithSalvage(client,{slot:0});
+  assert.equal(prof.inv[0].id,I.IRON_SWORD);
+  assert.equal(client.sent.at(-1).msg.reason,'locked');
+  room.handleGearLock(client,{slot:0,locked:false});
+  assert.equal(prof.inv[0].locked,false);
+  room.handleBlacksmithSalvage(client,{slot:0});
+  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD),false);
+});
+
+test('job board offers three timed tiers and accepts only an authoritative offer id', () => {
+  const room=makeRoom(),client=makeClient('offer_hunter');
+  const {prof}=seedPlayer(room,client,{lvl:3});prof.adventurerContractsCompleted=1;
+  room.handleJobContract(client,{action:'offers',job:'adventurer'});
+  const payload=client.sent.at(-1).msg;
+  assert.equal(client.sent.at(-1).type,'jobContractOffers');
+  assert.deepEqual(payload.offers.map(o=>o.difficulty),['quick','balanced','demanding']);
+  assert.equal(new Set(payload.offers.map(o=>o.id)).size,3);
+  assert.equal(payload.offers.every(o=>o.estimate&&o.location&&o.expiresAt>o.offeredAt),true);
+  const firstIds=payload.offers.map(o=>o.id);
+  room.handleJobContract(client,{action:'take',job:'adventurer',offerId:'forged_reward'});
+  assert.equal(prof.jobContract,null);
+  assert.equal(client.sent.at(-1).msg.reason,'offer');
+  room.handleJobContract(client,{action:'take',job:'adventurer',offerId:firstIds[1]});
+  assert.equal(prof.jobContract.id,firstIds[1]);
+  assert.equal(prof.jobContract.difficulty,'balanced');
+  room.handleJobContract(client,{action:'abandon'});
+  room.handleJobContract(client,{action:'offers',job:'adventurer'});
+  assert.deepEqual(client.sent.at(-1).msg.offers,[],'abandoning does not reroll or restore the chosen offer');
+});
+
+test('job offers omit locked objectives and refresh only after their timer', () => {
+  const room=makeRoom(),client=makeClient('offer_timer');
+  const {prof}=seedPlayer(room,client,{lvl:2});prof.adventurerContractsCompleted=1;
+  const first=room.jobContractOffers({prof,token:'offer_timer'},'adventurer');
+  assert.equal(first.some(o=>o.type==='gate'),false,'Gate work stays hidden before Gate unlock');
+  const ids=first.map(o=>o.id);
+  assert.deepEqual(room.jobContractOffers({prof,token:'offer_timer'},'adventurer').map(o=>o.id),ids);
+  prof.jobContractOfferBoards.adventurer.at=Date.now()-JOB_SYSTEM.OFFER_REFRESH_MS-1;
+  const refreshed=room.jobContractOffers({prof,token:'offer_timer'},'adventurer');
+  assert.notDeepEqual(refreshed.map(o=>o.id),ids);
 });
 
 test('new adventurers receive Mara field work first, then level-gated random contracts', () => {
@@ -669,6 +890,8 @@ test('profile merge rejects client armor and inventory changes', () => {
   assert.equal(merged.armor, null);
   assert.deepEqual(merged.inv, []);
   assert.deepEqual(sanitizeProfile({ armor: { id: I.LEGEND_ARMOR, count: 99 } }).armor, { id: I.LEGEND_ARMOR, count: 1 });
+  assert.deepEqual(sanitizeProfile({armor:{id:I.IRON_ARMOR,count:1,dur:321,gearRank:'D',rarity:'epic',locked:true}}).armor,
+    {id:I.IRON_ARMOR,count:1,dur:321,gearRank:'D',rarity:'epic',locked:true});
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.LEGEND_ARMOR, count: 1 },
     inv: [{ id: I.LEGEND_ARMOR, count: 1 }, { id: W.B.LOG, count: 3 }],
@@ -1330,7 +1553,7 @@ test('stored profiles persist and clamp highest cleared gate rank', () => {
   assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: 99 }).highestGateRankCleared, 4);
   assert.equal(sanitizeProfile({ name: 'A', highestGateRankCleared: -9 }).highestGateRankCleared, -1);
   assert.deepEqual(sanitizeWorldProgress({ highestGateRankCleared: 99, roadSafety: 140, roadSafetyUpdatedAt: -4 }), {
-    highestGateRankCleared: 4, roadSafety: 100, roadSafetyUpdatedAt: 0,
+    highestGateRankCleared: 4, roadSafety: 100, roadSafetyUpdatedAt: 0, cropKinds: {},
   });
 });
 
@@ -1606,6 +1829,55 @@ test('axes hit harder but swing slower than swords (per-weapon feel)', () => {
   room.lastAttackMsg.set(client.sessionId, Date.now() - 300);   // 300ms < the 480ms axe cooldown
   room.handleAttack(client, { id: 'z2' });
   assert.equal(room.state.mobs.get('z2').hp, afterFirst, 'a too-soon axe swing is rejected');
+});
+
+test('weapon equip is an authoritative hotbar swap that preserves ranked metadata',()=>{
+  const room=makeRoom(),client=makeClient('weapon_equip_owner');
+  const {prof}=seedPlayer(room,client,{inv:[
+    {id:I.WOOD_SWORD,count:1,dur:59},
+    null,null,null,null,null,null,null,null,null,
+    {id:I.IRON_AXE,count:1,dur:251,rarity:'rare',source:'captain'},
+  ]});
+  room.handleEquipWeapon(client,{slot:10,hotbar:2});
+  assert.equal(prof.inv[2].id,I.IRON_AXE);
+  assert.equal(prof.inv[2].rarity,'rare');
+  assert.equal(prof.inv[2].source,'captain');
+  assert.equal(prof.inv[10],null);
+  assert.equal(client.sent.some(e=>e.type==='weaponEquipResult'&&e.msg.slot===2),true);
+  const stored=sanitizeProfile(prof);
+  assert.equal(stored.inv[2].source,'captain');
+});
+
+test('sword Momentum rewards consecutive server-validated hits on one target',()=>{
+  const room=makeRoom(),client=makeClient('momentum_hunter'),{prof}=seedPlayer(room,client,{x:20.5,y:10,z:20.5,lvl:1});
+  const p=room.state.players.get(client.sessionId);prof.inv=[{id:I.IRON_SWORD,count:1,dur:251}];p.heldId=I.IRON_SWORD;
+  room.state.mobs.set('combo',{x:21,y:10,z:20.5,yaw:0,hp:500,maxHp:500,kind:'zombie',dgn:'',state:''});
+  room.mobMeta.combo=room.freshMeta(21,20.5,3,1.5,'zombie',0,true);
+  const damages=[];
+  for(let i=0;i<3;i++){
+    const before=room.state.mobs.get('combo').hp;if(i)room.lastAttackMsg.set(client.sessionId,0);
+    room.handleAttack(client,{id:'combo'});damages.push(before-room.state.mobs.get('combo').hp);
+  }
+  assert.ok(damages[1]>damages[0]&&damages[2]>damages[1]);
+  const states=client.sent.filter(e=>e.type==='weaponIdentity').map(e=>e.msg.stacks);
+  assert.deepEqual(states,[1,2,3]);
+  assert.equal(room.weaponMomentum.get(client.sessionId).stacks,3);
+});
+
+test('axe Stagger interrupts normal mobs but only slows bosses',()=>{
+  const room=makeRoom(),client=makeClient('stagger_hunter'),{prof}=seedPlayer(room,client,{x:20.5,y:10,z:20.5,lvl:1});
+  const p=room.state.players.get(client.sessionId);prof.inv=[{id:I.IRON_AXE,count:1,dur:251}];p.heldId=I.IRON_AXE;
+  room.state.mobs.set('normal',{x:21,y:10,z:20.5,yaw:0,hp:200,maxHp:200,kind:'zombie',dgn:'',state:''});
+  room.mobMeta.normal=room.freshMeta(21,20.5,3,1.5,'zombie',0,true);
+  room.handleAttack(client,{id:'normal'});
+  assert.equal(room.state.mobs.get('normal').state,'stun');
+  assert.equal(room.mobMeta.normal.stateT,GEAR_SYSTEM.WEAPON_IDENTITY.stagger.normalSeconds);
+  room.state.mobs.set('boss_target',{x:21,y:10,z:20.5,yaw:0,hp:500,maxHp:500,kind:'boss',dgn:'',state:'slamWind'});
+  room.mobMeta.boss_target=room.freshMeta(21,20.5,8,1.5,'boss',1,true);
+  room.lastAttackMsg.set(client.sessionId,0);room.handleAttack(client,{id:'boss_target'});
+  assert.equal(room.state.mobs.get('boss_target').state,'slamWind','boss telegraph is not cancelled');
+  assert.equal(room.mobMeta.boss_target.weaponStaggerT,GEAR_SYSTEM.WEAPON_IDENTITY.stagger.bossSeconds);
+  assert.equal(client.sent.filter(e=>e.type==='weaponIdentity').at(-1).msg.boss,true);
 });
 
 test('melee requires line of sight — no hitting a mob through a wall', () => {
@@ -2634,7 +2906,7 @@ test('food use consumes edible items and heals server HP', () => {
   assert.equal(room.playerHp.get(client.sessionId).hp, 12);
   assert.equal(room.playerHunger.get(client.sessionId).hunger, 70);
   assert.equal(itemCount(prof, I.BREAD), 1);
-  assert.deepEqual(client.sent.at(-1), { type: 'foodResult', msg: { slot: 0, id: I.BREAD, heal: 2, hungerGain: 30, hunger: 70, maxHunger: 100, hp: 12, maxHp: 20 } });
+  assert.deepEqual(client.sent.at(-1), { type: 'foodResult', msg: { slot: 0, id: I.BREAD, heal: 2, hungerGain: 30, hunger: 70, maxHunger: 100, hp: 12, maxHp: 20, buff: '', durationMs: 0, partyCount: 1 } });
 
   room.handleUseFood(client, { slot: 2 });
   assert.equal(client.sent.at(-1).type, 'foodReject');
@@ -2848,6 +3120,116 @@ test('farming tills plants grows and harvests through server transactions', () =
   assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'farm'), true);
 });
 
+test('Cook recipes are profession-level gated and batch through the authoritative craft transaction', () => {
+  const room = makeRoom(), client = makeClient('cook-craft');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: I.WHEAT, count: 2 }, { id: I.BREAD, count: 2 }, { id: I.COOKED_MEAT, count: 2 }] });
+  const cells = [{ id: I.WHEAT, count: 1 }, { id: I.BREAD, count: 1 }, { id: I.COOKED_MEAT, count: 1 }, null];
+  room.handleCraft(client, { w: 2, cells });
+  assert.equal(client.sent.at(-1).type, 'craftReject');
+  assert.equal(client.sent.at(-1).msg.reason, 'profession');
+  assert.equal(itemCount(prof, I.WHEAT), 2, 'a rejected recipe consumes nothing');
+
+  prof.job = 'cook';
+  prof.jobXpByJob.cook = [1, 2, 3, 4].reduce((xp, level) => xp + JOB_SYSTEM.jobXpNeed(level), 0);
+  const oldRandom = Math.random; Math.random = () => 1;
+  try { room.handleCraft(client, { w: 2, cells }); } finally { Math.random = oldRandom; }
+  assert.equal(itemCount(prof, I.GOLDEN_BROTH), 1);
+  assert.equal(itemCount(prof, I.WHEAT), 1);
+  assert.equal(client.sent.at(-1).type, 'craftResult');
+});
+
+test('Master Feast feeds only nearby teammates and grants authoritative combat buffs', () => {
+  const room = makeRoom(), cook = makeClient('feast-cook'), near = makeClient('feast-near'), far = makeClient('feast-far');
+  room.clients = [cook, near, far];
+  const { prof } = seedPlayer(room, cook, { x: 20, z: 20, team: 'T1', inv: [{ id: I.FEAST_PLATTER, count: 1 }] });
+  seedPlayer(room, near, { x: 24, z: 20, team: 'T1', hp: 8, hunger: 20 });
+  seedPlayer(room, far, { x: 80, z: 80, team: 'T1', hp: 8, hunger: 20 });
+  const p = room.state.players.get(cook.sessionId), baseline = room.serverDamageFor(p, cook.sessionId);
+  room.handleUseFood(cook, { slot: 0 });
+  assert.equal(itemCount(prof, I.FEAST_PLATTER), 0);
+  assert.equal(room.abilityBuffs.get(cook.sessionId).mealMightUntil > Date.now(), true);
+  assert.equal(room.abilityBuffs.get(near.sessionId).mealGatherUntil > Date.now(), true);
+  assert.equal(room.abilityBuffs.has(far.sessionId), false, 'distant teammates are outside the platter range');
+  assert.equal(room.serverDamageFor(p, cook.sessionId) > baseline, true);
+  assert.equal(near.sent.some(e => e.type === 'foodBuff' && e.msg.buff === 'feast'), true);
+  assert.equal(far.sent.some(e => e.type === 'foodBuff'), false);
+  assert.equal(cook.sent.at(-1).msg.partyCount, 2);
+});
+
+test('Monk shrine focus regenerates and mitigates damage according to profession level', () => {
+  const room = makeRoom(), monk = makeClient('focus-monk');
+  room.clients = [monk];
+  const sx = W.TOWN.TC - 16.5, sz = W.TOWN.TC - 16;
+  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10 });
+  prof.job = 'monk';
+  prof.jobXpByJob.monk = Array.from({ length: 9 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
+  room.handleMeditateTick(monk);
+  const focus = room.abilityBuffs.get(monk.sessionId);
+  assert.equal(focus.monkRegenUntil > Date.now(), true);
+  assert.equal(focus.monkSpeedUntil > Date.now(), true);
+  assert.equal(focus.monkStoneUntil > Date.now(), true);
+  room.hurtPlayer(monk, 10, 'focus_test');
+  assert.equal(room.playerHp.get(monk.sessionId).hp, 3, 'Stone Focus reduces a 10-damage hit to 7');
+  room.updatePlayerHunger(1);
+  assert.equal(room.playerHp.get(monk.sessionId).hp, 5, 'Restoring Focus heals authoritatively over time');
+  const msg = monk.sent.find(e => e.type === 'meditateFocus');
+  assert.equal(msg.msg.durationMs, JOB_SYSTEM.MONK_RULES.durationByTier[3] * 1000);
+});
+
+test('Zen Master meditation shares focus only with nearby party members', () => {
+  const room = makeRoom(), monk = makeClient('aura-monk'), near = makeClient('aura-near'), far = makeClient('aura-far');
+  room.clients = [monk, near, far];
+  const sx = W.TOWN.TC - 16.5, sz = W.TOWN.TC - 16;
+  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1' });
+  seedPlayer(room, near, { x: sx + 4, z: sz, team: 'T1' });
+  seedPlayer(room, far, { x: sx + 30, z: sz, team: 'T1' });
+  prof.job = 'monk';
+  prof.jobXpByJob.monk = Array.from({ length: 19 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
+  room.handleMeditateTick(monk);
+  assert.equal(room.abilityBuffs.get(near.sessionId).monkStoneUntil > Date.now(), true);
+  assert.equal(room.abilityBuffs.has(far.sessionId), false);
+  assert.equal(near.sent.some(e => e.type === 'meditateFocus' && e.msg.shared), true);
+  assert.equal(far.sent.some(e => e.type === 'meditateFocus'), false);
+  assert.equal(room.monkAuraAt.get(monk.sessionId) > 0, true);
+});
+
+test('Farmer milestones gate Windseeds and compost while Golden Harvest persists and rewards', () => {
+  const room = makeRoom();
+  const client = makeClient('fieldcraft-farmer');
+  const { prof } = seedPlayer(room, client, {
+    token: 'fieldcraft_farmer_token', x: 24.5, z: 24.5,
+    inv: [{ id: I.WINDSEED, count: 2 }, { id: I.COMPOST, count: 1 }],
+  });
+  prof.job = 'farmer';
+  const xpForLevel = level => Array.from({ length: level - 1 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
+  prof.jobXpByJob.farmer = xpForLevel(4);
+  room.world.setB(24, 10, 24, W.B.FARMLAND);
+
+  room.handleFarm(client, { action: 'plant', x: 24, y: 11, z: 24, slot: 0 });
+  assert.equal(client.sent.at(-1).msg.reason, 'farmer_level');
+  assert.equal(prof.inv[0].count, 2, 'locked seeds are not consumed');
+
+  prof.jobXpByJob.farmer = xpForLevel(20);
+  room.handleFarm(client, { action: 'plant', x: 24, y: 11, z: 24, slot: 0 });
+  assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_1);
+  assert.equal(room.cropMeta.get('24,11,24').kind, 'windseed');
+  assert.equal(room.worldProgress.cropKinds['24,11,24'], 'windseed', 'special crop identity is queued for persistence');
+  assert.equal(room.cropGrowMs(20), Math.round(room.cropGrowMs(0) * JOB_SYSTEM.FARMER_RULES.goldenGrowthMultiplier));
+
+  room.handleFarm(client, { action: 'fertilize', x: 24, y: 11, z: 24, slot: 1 });
+  assert.equal(room.world.getB(24, 11, 24), W.B.WHEAT_2);
+  assert.equal(itemCount(prof, I.COMPOST), 0);
+  room.world.setB(24, 11, 24, W.B.WHEAT_3);
+  const oldRandom = Math.random;
+  Math.random = () => 0;
+  try { room.handleFarm(client, { action: 'harvest', x: 24, y: 11, z: 24, slot: 0 }); }
+  finally { Math.random = oldRandom; }
+  assert.equal(itemCount(prof, I.GOLDEN_WHEAT), 1);
+  assert.equal(itemCount(prof, I.WHEAT) >= 3, true, 'Windseed and yield perks stack into a richer harvest');
+  assert.equal(room.worldProgress.cropKinds['24,11,24'], undefined, 'harvest removes persisted crop identity');
+  assert.equal(client.sent.some(e => e.type === 'farmResult' && e.msg.golden), true);
+});
+
 test('farming respects town and claimed land protection', () => {
   const room = makeRoom();
   const client = makeClient('farmer');
@@ -2895,6 +3277,40 @@ test('mining requires server-known tool tier and damages the persisted tool', ()
 
   assert.equal(itemCount(weakProf, I.DIAMOND), 0);
   assert.equal(weak.sent.some(e => e.type === 'mineNoDrop' && e.msg.reason === 'tool'), true);
+});
+
+test('Miner surveys reveal nearby ore with level-based range and cooldown', () => {
+  const room=makeRoom(),client=makeClient('prospector');
+  const {prof}=seedPlayer(room,client,{x:30.5,y:10,z:30.5});
+  prof.job='miner';prof.jobXpByJob.miner=Array.from({length:9},(_,i)=>JOB_SYSTEM.jobXpNeed(i+1)).reduce((a,b)=>a+b,0);
+  room.world.setB(34,9,30,W.B.COAL_ORE);
+  room.world.setB(47,12,30,W.B.DIAMOND_ORE);
+  room.world.setB(50,10,30,W.B.IRON_ORE);
+
+  room.handleProspect(client);
+  const result=client.sent.at(-1);
+  assert.equal(result.type,'prospectResult');
+  assert.equal(result.msg.radius,JOB_SYSTEM.MINER_RULES.deepSurveyRadius);
+  assert.deepEqual(result.msg.ores.map(o=>o.id),[W.B.COAL_ORE,W.B.DIAMOND_ORE]);
+
+  room.handleProspect(client);
+  assert.equal(client.sent.at(-1).type,'prospectReject');
+  assert.equal(client.sent.at(-1).msg.reason,'cooldown');
+
+  prof.job='farmer';room.handleProspect(client);
+  assert.equal(client.sent.at(-1).msg.reason,'profession');
+});
+
+test('high-level Miners can preserve pick durability and uncover geodes', () => {
+  const room=makeRoom(),client=makeClient('stonehand');
+  const {prof}=seedPlayer(room,client,{inv:[{id:I.IRON_PICK,count:1,dur:7}]});
+  prof.job='miner';prof.jobXpByJob.miner=Array.from({length:19},(_,i)=>JOB_SYSTEM.jobXpNeed(i+1)).reduce((a,b)=>a+b,0);
+  const random=Math.random;Math.random=()=>0;
+  try{room.awardMine(client,W.B.DIAMOND_ORE,0,30,10,30);}finally{Math.random=random;}
+  assert.equal(prof.inv[0].dur,7);
+  assert.equal(client.sent.some(e=>e.type==='toolSync'&&e.msg.spared),true);
+  assert.equal(itemCount(prof,I.GEODE),1);
+  assert.equal(itemCount(prof,I.DIAMOND)>=1,true);
 });
 
 test('gate lobby uses the requested gate id and enters after ready', () => {
@@ -3618,6 +4034,10 @@ test('dungeon boss loot grants progression gate keys', () => {
   assert.equal(client.sent.some(e => e.type === 'profile' && e.msg.highestGateRankCleared === 0), true);
   assert.equal(client.sent.some(e => e.type === 'loot' && e.msg.items?.some(it => it.id === I.SOLO_KEY_D)), true);
   const lootMsg = client.sent.find(e => e.type === 'loot');
+  const weapon=lootMsg.msg.items.find(it=>it.gear);
+  assert.equal(weapon.id,I.STONE_SWORD);
+  assert.equal(weapon.rarity,'mythic');
+  assert.equal(prof.inv.some(s=>s&&s.id===I.STONE_SWORD&&s.rarity==='mythic'),true);
   assert.equal(lootMsg.msg.rank, 0);
   assert.equal(lootMsg.msg.progress.newClear, true);
   assert.equal(lootMsg.msg.progress.nextRank, 1);
@@ -4844,6 +5264,59 @@ test('shield bandits reduce damage dealt to nearby squad members',()=>{
   assert.equal(room.banditProtectionMultiplier('shield',shield),.72);
   assert.equal(room.banditProtectionMultiplier('ally',ally),.58);
   shield.x=30;assert.equal(room.banditProtectionMultiplier('ally',ally),1);
+});
+
+test('bandit captains telegraph an avoidable cleave before dealing area damage',()=>{
+  const room=makeRoom(),hunter=makeClient('cleave_hunter');room.clients=[hunter];room.mobSeq=0;
+  const camp=W.regionalLandmarkSpecs().find(s=>s.type==='bandit_camp');
+  seedPlayer(room,hunter,{x:camp.x+2,z:camp.z-3});
+  assert.equal(room.spawnBanditCaptain(camp.id),true);
+  const id=[...room.state.mobs.keys()].find(mid=>room.mobMeta[mid]&&room.mobMeta[mid].banditCaptain),mob=room.state.mobs.get(id),meta=room.mobMeta[id],p=room.state.players.get(hunter.sessionId);
+  p.x=mob.x+2;p.y=mob.y;p.z=mob.z;meta.alert=true;meta.commandT=99;meta.atkCd=0;
+  const spaces={'':[{p,sid:hunter.sessionId}]},before=room.playerHp.get(hunter.sessionId).hp;
+  room.simulateMob(mob,id,meta,.1,spaces);
+  assert.equal(mob.state,'captainCleave');
+  assert.equal(room.playerHp.get(hunter.sessionId).hp,before,'the warning phase deals no damage');
+  p.x=mob.x+5;room.simulateMob(mob,id,meta,1,spaces);
+  assert.equal(room.playerHp.get(hunter.sessionId).hp,before,'stepping outside the ring avoids the cleave');
+  p.x=mob.x+2;meta.cleaveT=.05;room.simulateMob(mob,id,meta,.1,spaces);
+  assert.equal(room.playerHp.get(hunter.sessionId).hp<before,true);
+  assert.equal(hunter.sent.some(e=>e.type==='fx'&&e.msg.t==='banditCleave'),true);
+});
+
+test('bandit captains drop E-to-C ranked weapons with rolled rarity',()=>{
+  const room=makeRoom(),client=makeClient('captain_looter'),{prof}=seedPlayer(room,client);
+  const mob={x:30,y:16,z:30,hp:0,maxHp:40,kind:'bandit_captain',dgn:'',state:''};
+  room.state.mobs.set('captain_loot',mob);room.mobMeta.captain_loot=room.freshMeta(30,30,7,1.5,'bandit_captain',2,true);
+  Object.assign(room.mobMeta.captain_loot,{bandit:true,banditCaptain:true,dangerRing:2});
+  const random=Math.random;Math.random=()=>.95;
+  try{room.finishMobKill(client,'captain_loot',mob);}finally{Math.random=random;}
+  const grant=client.sent.find(e=>e.type==='grant'),weapon=grant.msg.items.find(it=>it.gear);
+  assert.equal(weapon.id,I.IRON_SWORD);
+  assert.equal(weapon.rarity,'epic');
+  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD&&s.rarity==='epic'),true);
+});
+
+test('ranked loot maps axe archetypes onto the same E-to-S progression',()=>{
+  const room=makeRoom(),random=Math.random;Math.random=()=>.5;
+  try{
+    const c=room.rollWeaponDrop(2,0,'axe'),s=room.rollWeaponDrop(5,0,'axe');
+    assert.equal(c.id,I.IRON_AXE);assert.equal(c.plus,0);assert.equal(c.archetype,'axe');
+    assert.equal(s.id,I.DIA_AXE);assert.equal(s.plus,2);assert.equal(s.archetype,'axe');
+  }finally{Math.random=random;}
+});
+
+test('Gate smart loot favours the player weapon archetype that is behind',()=>{
+  const room=makeRoom(),client=makeClient('smart_gate_loot'),{prof}=seedPlayer(room,client,{inv:[
+    {id:I.DIA_SWORD,count:1,plus:2,rarity:'rare'},
+    {id:I.WOOD_AXE,count:1},
+  ]});
+  const random=Math.random;Math.random=()=>.99;
+  try{
+    const drop=room.rollWeaponDropForSource('gate',3,0,prof);
+    assert.equal(drop.id,I.DIA_AXE);
+    assert.equal(drop.archetype,'axe');
+  }finally{Math.random=random;}
 });
 
 test('road caravans spawn visible friendly formations, halt for bandits, and cannot be damaged by players', () => {

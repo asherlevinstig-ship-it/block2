@@ -91,7 +91,9 @@ const I = {
   DRAGON_EGG: 185, EGG_VERDANT: 186, EGG_FROST: 187, EGG_STORM: 188, EGG_VOID: 189,
   DRAGON_TREAT: 190, SHADOW_SIGIL: 191, FANG_TOTEM: 192,
   WINDSEED: 193, HEARTWOOD_RESIN: 194, SUNSHARD: 195, MESA_AMBER: 196, FROST_CRYSTAL: 197, MIRE_BLOOM: 198,
-  RIVER_FISH: 199, MOTE_CHARM: 200, FORAGE_CHARM: 201,
+  RIVER_FISH: 199, MOTE_CHARM: 200, FORAGE_CHARM: 201, COMPOST: 202, GOLDEN_WHEAT: 203,
+  GOLDEN_BROTH: 204, TRAIL_RATION: 205, FEAST_PLATTER: 206,
+  GEODE: 207,
 };
 // Familiars. Shade: defense, Fang: offense, Mote: restoration, Sprite: forage (bonus yield).
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite']);
@@ -123,9 +125,9 @@ const LEGENDARY_CRAFTS = {
   [I.VOID_ANCHOR]: { cost: 3, name: 'Void Anchor' },
 };
 const ARMOR_INFO = {
-  [I.IRON_ARMOR]: { mitigation: .12 },
-  [I.DIA_ARMOR]: { mitigation: .16 },
-  [I.LEGEND_ARMOR]: { mitigation: .20 },
+  [I.IRON_ARMOR]: { tier: 3, mitigation: .12, dur: 480 },
+  [I.DIA_ARMOR]: { tier: 4, mitigation: .16, dur: 900 },
+  [I.LEGEND_ARMOR]: { tier: 5, legendary: true, mitigation: .20, dur: 1800 },
 };
 const SOLO_KEYS = [I.SOLO_KEY_E, I.SOLO_KEY_D, I.SOLO_KEY_C, I.SOLO_KEY_B, I.SOLO_KEY_A];
 const TEAM_KEYS = [I.TEAM_KEY_E, I.TEAM_KEY_D, I.TEAM_KEY_C, I.TEAM_KEY_B, I.TEAM_KEY_A];
@@ -401,28 +403,23 @@ const ABILITY_PATHS = {
   ],
 };
 const ABILITY_UNLOCK = [2, 5, 8];
-const JOB_IDS = new Set(['', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk']);
+const JOB_SYSTEM = require('../../shared/job-system');
+const JOB_IDS = new Set(['', ...JOB_SYSTEM.JOB_IDS]);
 function jobLevelFromXp(xp) {
-  xp = Math.max(0, xp | 0);
-  let lvl = 1, left = xp;
-  while (lvl < 99) {
-    const need = Math.round(30 * Math.pow(lvl, 1.45));
-    if (left < need) break;
-    left -= need;
-    lvl++;
-  }
-  return lvl;
+  return JOB_SYSTEM.jobLevelFromXp(xp);
 }
 function jobLevelFor(prof, job) {
-  return prof && prof.job === job ? jobLevelFromXp(prof.jobXp) : 0;
+  if (!prof || (job !== 'adventurer' && prof.job !== job)) return 0;
+  const xp = prof.jobXpByJob && prof.jobXpByJob[job] != null ? prof.jobXpByJob[job] : prof.jobXp;
+  return jobLevelFromXp(xp);
 }
 function jobPerkTier(prof, job) {
   const lvl = jobLevelFor(prof, job);
-  return lvl >= 20 ? 4 : lvl >= 10 ? 3 : lvl >= 5 ? 2 : lvl >= 2 ? 1 : 0;
+  return JOB_SYSTEM.perkTierFromLevel(lvl);
 }
 function jobPerkChance(prof, job, base) {
   const tier = jobPerkTier(prof, job);
-  return tier ? (base || 0.08) + tier * 0.05 : 0;
+  return JOB_SYSTEM.perkChance(tier, base || 0.08);
 }
 const ABILITY_BREAKABLE = new Set([
   W.B.GRASS, W.B.DIRT, W.B.STONE, W.B.SAND, W.B.LOG, W.B.LEAVES, W.B.PLANKS,
@@ -441,11 +438,14 @@ const ROAD_MERCHANT_BUY = [[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[W.B.TORCH,12
 const GUILD_DECOR_BUY = [[W.B.TORCH,8,10],[W.B.LANTERN,2,18],[W.B.CAMPFIRE,1,18],[W.B.TABLE,1,18],[W.B.BED,1,24],[W.B.CHEST,1,28],[W.B.FURNACE,1,30]];
 const GUILD_DECOR_BLOCKS = new Set(GUILD_DECOR_BUY.map(e => e[0]));
 const TAVERN_BUY = [[I.COOKED_MEAT, 1, 8], [I.POT_ALE, 1, 5], [I.POT_STEW, 1, 12], [I.POT_MANA, 1, 15], [I.POT_SWIFT, 1, 20], [I.POT_STONE, 1, 25]];
-const TAVERN_SELL = [[I.WHEAT, 4, 6], [I.BREAD, 1, 7], [I.POT_STEW, 1, 8], [I.MONSTER_MEAT, 1, 5], [I.COOKED_MEAT, 1, 8]];
+const TAVERN_SELL = [[I.WHEAT, 4, 6], [I.GOLDEN_WHEAT, 1, 18], [I.BREAD, 1, 7], [I.POT_STEW, 1, 8], [I.MONSTER_MEAT, 1, 5], [I.COOKED_MEAT, 1, 8]];
 const ITEM_NAMES = {
   [I.WINDSEED]: 'Prairie Windseed', [I.HEARTWOOD_RESIN]: 'Heartwood Resin', [I.SUNSHARD]: 'Sunshard',
   [I.MESA_AMBER]: 'Mesa Amber', [I.FROST_CRYSTAL]: 'Frost Crystal', [I.MIRE_BLOOM]: 'Mire Bloom',
   [I.RIVER_FISH]: 'Silverfin', [I.IRON_INGOT]: 'Iron Ingot', [I.DIAMOND]: 'Diamond',
+  [I.COMPOST]: 'Compost', [I.GOLDEN_WHEAT]: 'Golden Wheat',
+  [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
+  [I.GEODE]: 'Prismatic Geode',
 };
 const GUILD_BOARD_POS = { x: W.TOWN.TC + 4.5, z: W.TOWN.TC - 8.5 };
 const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
@@ -454,6 +454,9 @@ const FOOD_VALUES = {
   [I.MONSTER_MEAT]: { hunger: 22, heal: 1 },
   [I.COOKED_MEAT]: { hunger: 36, heal: 3 },
   [I.HEARTY_SANDWICH]: { hunger: 58, heal: 6 },
+  [I.GOLDEN_BROTH]: { hunger: 52, heal: 12, buff: 'restore' },
+  [I.TRAIL_RATION]: { hunger: 70, heal: 7, buff: 'ration' },
+  [I.FEAST_PLATTER]: { hunger: 100, heal: 12, buff: 'feast' },
 };
 const MAX_HUNGER = 100;
 const SMELT = { [W.B.SAND]: [W.B.GLASS, 1], [W.B.RED_SAND]: [W.B.GLASS, 1], [W.B.COBBLE]: [W.B.STONE, 1], [W.B.IRON_ORE]: [I.IRON_INGOT, 1], [W.B.LOG]: [I.CHARCOAL, 1], [I.MONSTER_MEAT]: [I.COOKED_MEAT, 1], [I.RIVER_FISH]: [I.COOKED_MEAT, 1] };
@@ -486,6 +489,12 @@ const RECIPES = [
   { shapeless: [I.MESA_AMBER, I.IRON_INGOT, I.STICK], out: [I.REPAIR_KIT, 2] },
   { shapeless: [I.FROST_CRYSTAL, W.B.SNOW, W.B.SNOW], out: [W.B.ICE, 4] },
   { shapeless: [I.MIRE_BLOOM, I.COOKED_MEAT, I.CHARCOAL], out: [I.DRAGON_TREAT, 2] },
+  { shapeless: [W.B.LEAVES, I.WHEAT, I.CHARCOAL], out: [I.COMPOST, 2] },
+  { shapeless: [I.GOLDEN_WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 3] },
+  { shapeless: [I.WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 1], job: 'cook', level: 5 },
+  { shapeless: [I.WINDSEED, I.HEARTY_SANDWICH, I.COOKED_MEAT], out: [I.TRAIL_RATION, 2], job: 'cook', level: 10 },
+  { shapeless: [I.GOLDEN_WHEAT, I.GOLDEN_BROTH, I.TRAIL_RATION, I.HEARTY_SANDWICH], out: [I.FEAST_PLATTER, 1], job: 'cook', level: 20 },
+  { shapeless: [I.GEODE], out: [I.DIAMOND, 1] },
 ];
 const TOOL_MAT_ITEMS = { WOOD: W.B.PLANKS, STONE: W.B.COBBLE, IRON: I.IRON_INGOT, DIA: I.DIAMOND };
 for (const m in TOOL_MAT_ITEMS) {

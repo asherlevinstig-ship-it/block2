@@ -126,7 +126,7 @@ function compactQuestHud(){
 }
 function compactJobContractHud(){
   const c=clampJobContract(jobContract);
-  if(!c || !playerJob || c.job!==playerJob) return '';
+  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return '';
   return escHTML('Job Board: '+c.title+' '+Math.min(c.need,c.have)+'/'+c.need+(jobContractReady()?' claim':''));
 }
 function compactRegionalContractHud(){
@@ -174,7 +174,7 @@ function guildContractObjective(){
 }
 function jobContractObjective(){
   const c=clampJobContract(jobContract);
-  if(!c || !playerJob || c.job!==playerJob) return null;
+  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return null;
   if(jobContractReady()) return {label:'Job Contract', text:'Claim reward: '+c.title};
   return {label:'Job Contract', text:c.title+' '+Math.min(c.need,c.have)+'/'+c.need};
 }
@@ -505,12 +505,9 @@ function tick(now){
         meditateJobAcc-=5;
         if(NET.on&&NET.room) NET.room.send('meditateTick',{});
         else { gainJobXP('monk', 2, 'meditate'); jobContractProgress('meditate', 5, 0); }
-        const mt=jobPerkTier('monk');
-        if(mt){
-          buffs.regen=Math.max(buffs.regen, 4+mt*2);
-          if(mt>=2) buffs.spd=Math.max(buffs.spd, 4+mt*2);
-          if(mt>=3) buffs.stone=Math.max(buffs.stone, 4+mt*2);
-          showJobPerk('monk','focus buff');
+        if(!NET.on){
+          const mt=jobPerkTier('monk'),seconds=(JOB_SYSTEM.MONK_RULES.durationByTier[mt]||0);
+          if(mt){buffs.regen=Math.max(buffs.regen,seconds);if(mt>=2)buffs.spd=Math.max(buffs.spd,seconds);if(mt>=3)buffs.stone=Math.max(buffs.stone,seconds);showJobPerk('monk','focus buff');}
         }
       }
     }

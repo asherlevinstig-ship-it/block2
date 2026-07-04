@@ -9,6 +9,9 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
+const JOB_SYSTEM = require('../../shared/job-system');
+const GEAR_SYSTEM = require('../../shared/gear-system');
+const LOOT_ECONOMY = require('../../shared/loot-economy');
 const { takeHandoff, drainConsumedGates } = require('./dungeon-handoff');
 
 // Blockcraft is one persistent global world, not a set of independent room
@@ -79,6 +82,7 @@ class GameRoom extends Room {
     // ---- land claims & farming (handled inline in GameRoom; no mixin) ----
     this.landClaims = new Map();
     this.cropTimers = new Map();
+    this.cropMeta = new Map();
     this.cropGrowAcc = 0;
 
     // ---- dragon incubation / nesting (dragons.mixin.js) ----
@@ -87,7 +91,7 @@ class GameRoom extends Room {
     // ---- server events / day cycle (events.mixin.js) ----
     this.initEventsState();
     const saved = await this.store.loadWorldEdits();
-    this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now() };
+    this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
     let applied = 0;
     for (const k in saved) {
       const [x, y, z] = k.split(',').map(Number);
@@ -99,6 +103,7 @@ class GameRoom extends Room {
     }
     try {
       this.worldProgress = await this.store.loadWorldProgress();
+      for (const [key, kind] of Object.entries(this.worldProgress.cropKinds || {})) this.cropMeta.set(key, { kind, level: 1 });
       if ((this.worldProgress.highestGateRankCleared | 0) >= 0) console.log('[persist] world gate progress rank ' + 'EDCBA'[this.worldProgress.highestGateRankCleared | 0]);
     } catch (e) { console.warn('[persist] world progress load failed:', e.message); }
     try {
@@ -229,6 +234,7 @@ class GameRoom extends Room {
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
     this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
     this.onMessage('equipArmor', (client, m) => this.handleEquipArmor(client, m));
+    this.onMessage('equipWeapon', (client, m) => this.handleEquipWeapon(client, m));
     this.onMessage('npcQuest', (client, m) => this.handleNpcQuest(client, m));
     this.onMessage('claimAegisTrial', (client) => this.handleClaimAegisTrial(client));
 
@@ -241,6 +247,10 @@ class GameRoom extends Room {
     this.onMessage('useRepairKit', (client, m) => this.handleUseRepairKit(client, m));
     this.onMessage('blacksmithRepair', (client, m) => this.handleBlacksmithRepair(client, m));
     this.onMessage('blacksmithUpgrade', (client, m) => this.handleBlacksmithUpgrade(client, m));
+    this.onMessage('blacksmithReforge', (client, m) => this.handleBlacksmithReforge(client, m));
+    this.onMessage('blacksmithSalvage', (client, m) => this.handleBlacksmithSalvage(client, m));
+    this.onMessage('lootRecovery', (client, m) => this.handleLootRecovery(client, m));
+    this.onMessage('gearLock', (client, m) => this.handleGearLock(client, m));
 
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
@@ -275,7 +285,7 @@ class GameRoom extends Room {
         p.lvl = prof.S.lvl;
         p.path = prof.S.path;
         p.job = JOB_IDS.has(prof.job) ? prof.job : '';
-        p.jobLvl = p.job ? jobLevelFromXp(prof.jobXp) : 0;
+        p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
         if (!p.dgn) prof.pos = [p.x, p.y, p.z];
         else {
           const prev = this.profiles.get(token);
@@ -420,6 +430,7 @@ class GameRoom extends Room {
     this.onMessage('craft', (client, m) => this.handleCraft(client, m));
     this.onMessage('shop', (client, m) => this.handleShop(client, m));
     this.onMessage('farm', (client, m) => this.handleFarm(client, m));
+    this.onMessage('prospect', client => this.handleProspect(client));
     this.onMessage('eventJoin', (client) => this.handleEventJoin(client));
     this.onMessage('eventLeave', (client) => this.handleEventLeave(client));
     this.onMessage('eventReady', (client) => this.handleEventReady(client));
@@ -522,7 +533,7 @@ class GameRoom extends Room {
       p.lvl = prof.S.lvl;
       p.path = prof.S.path;
       p.job = JOB_IDS.has(prof.job) ? prof.job : '';
-      p.jobLvl = p.job ? jobLevelFromXp(prof.jobXp) : 0;
+      p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
       p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
       p.dragons = Array.isArray(prof.mountUnlocks)
         ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
@@ -625,6 +636,9 @@ class GameRoom extends Room {
     this.playerHunger.delete(client.sessionId);
     this.abilityState.delete(client.sessionId);
     this.abilityBuffs.delete(client.sessionId);
+    if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
+    if (this.monkAuraAt) this.monkAuraAt.delete(client.sessionId);
+    if (this.prospectAt) this.prospectAt.delete(client.sessionId);
     if (this.serverEvent) {
       if (this.serverEvent.queue) this.serverEvent.queue.delete(client.sessionId);
       if (this.serverEvent.kind === EVENT_KING.kind && this.serverEvent.crown && this.serverEvent.crown.holderSid === client.sessionId && p) {
@@ -1181,6 +1195,7 @@ class GameRoom extends Room {
     dmg += this.meleeProfile(p, sid).bonus;     // equipped weapon, validated server-side
     const buffs = this.abilityBuffs.get(sid);
     if (buffs && buffs.umbralUntil > Date.now()) dmg *= 1.6;
+    if (buffs && buffs.mealMightUntil > Date.now()) dmg *= JOB_SYSTEM.COOK_RULES.mightMultiplier;
     return dmg;
   }
   // Per-class melee profile from the held weapon: swing cooldown (ms) + damage bonus by
@@ -1195,13 +1210,12 @@ class GameRoom extends Room {
       const prof = token && this.profiles.get(token);
       const heldStacks = prof && Array.isArray(prof.inv) ? prof.inv.filter(s => s && s.id === heldId) : [];
       if (heldStacks.length) {
-        const plus = heldStacks.reduce((n, s) => Math.max(n, this.toolPlus(s)), 0);
-        return info.cls === 'sword'
-          ? { cd: 250, bonus: ([0, 3, 6, 10, 15][info.tier] || 0) + plus * 2 }
-          : { cd: 480, bonus: ([0, 5, 9, 15, 22][info.tier] || 0) + plus * 2 };
+        const stack=heldStacks.reduce((best,s)=>!best||GEAR_SYSTEM.profile(info,s).powerScore>GEAR_SYSTEM.profile(info,best).powerScore?s:best,null);
+        const weapon=GEAR_SYSTEM.weaponCombatProfile(info,stack);
+        return {cd:weapon.cooldownMs,bonus:weapon.damage,archetype:weapon.archetype};
       }
     }
-    return { cd: 250, bonus: 0 };
+    return { cd: 250, bonus: 0, archetype: '' };
   }
   xpNeed(lvl) {
     return xpNeedForLevel(lvl);
@@ -1476,7 +1490,7 @@ class GameRoom extends Room {
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
     p.job = JOB_IDS.has(prof.job) ? prof.job : '';
-    p.jobLvl = p.job ? jobLevelFromXp(prof.jobXp) : 0;
+    p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
     p.name = prof.name || p.name;
     p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
     p.dragons = Array.isArray(prof.mountUnlocks)
@@ -1597,9 +1611,20 @@ class GameRoom extends Room {
     }
     const buffs = this.abilityBuffs.get(client.sessionId);
     if (buffs && buffs.ironUntil > Date.now()) amount *= .5;
+    if (buffs && buffs.monkStoneUntil > Date.now()) amount *= (1 - JOB_SYSTEM.MONK_RULES.stoneMitigation);
     const rec = this.profileFor(client);
-    const armor = rec && rec.prof && rec.prof.armor ? ARMOR_INFO[rec.prof.armor.id] : null;
-    if (armor) amount *= (1 - armor.mitigation);
+    const armorStack = rec && rec.prof && rec.prof.armor;
+    const armor = armorStack ? ARMOR_INFO[armorStack.id] : null;
+    if (armor) {
+      const profile=GEAR_SYSTEM.armorProfile(armor,armorStack);
+      amount *= (1 - profile.mitigation);
+      const current=armorStack.dur==null?profile.maxDur:Math.max(0,armorStack.dur|0);
+      armorStack.dur=Math.max(0,current-1);
+      if(armorStack.dur<=0){rec.prof.armor=null;client.send('armorSync',{armor:null,broke:true});}
+      else client.send('armorSync',{armor:{...armorStack,count:1}});
+      this.dirtyPlayers.add(rec.token);
+      this.syncPlayerProfile(client,rec.prof);
+    }
     const p = this.state.players.get(client.sessionId);
     if (p && p.familiar === 'shade') amount *= (1 - shadeMitigation(p.lvl));   // Guarding Shade: shadows soak part of the blow
     const hp = this.ensurePlayerHp(client);
@@ -1619,19 +1644,42 @@ class GameRoom extends Room {
     if (!food) return client.send('foodReject', { reason: 'item' });
     const hp = this.ensurePlayerHp(client);
     const hunger = this.ensurePlayerHunger(client);
-    if (hp.hp >= hp.max && hunger.hunger >= hunger.max) return client.send('foodReject', { reason: 'full', hp: Math.ceil(hp.hp), maxHp: hp.max, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
+    const timedMeal = food.buff === 'ration' || food.buff === 'feast';
+    if (!timedMeal && hp.hp >= hp.max && hunger.hunger >= hunger.max) return client.send('foodReject', { reason: 'full', hp: Math.ceil(hp.hp), maxHp: hp.max, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
     if (!this.consumeSlotItem(rec.prof, slot, id, 1)) return client.send('foodReject', { reason: 'item' });
-    hunger.hunger = Math.min(hunger.max, hunger.hunger + food.hunger);
-    hp.hp = Math.min(hp.max, hp.hp + food.heal);
+    const eater = this.state.players.get(client.sessionId);
+    const targets = [client];
+    if (food.buff === 'feast' && eater && eater.team) {
+      for (const other of this.clients) {
+        if (other === client) continue;
+        const p = this.state.players.get(other.sessionId);
+        if (p && p.team === eater.team && (p.dgn || '') === (eater.dgn || '') && Math.hypot(p.x - eater.x, p.z - eater.z) <= JOB_SYSTEM.COOK_RULES.feastRange) targets.push(other);
+      }
+    }
+    const now = Date.now(), duration = food.buff === 'feast' ? JOB_SYSTEM.COOK_RULES.feastDurationMs : JOB_SYSTEM.COOK_RULES.rationDurationMs;
+    for (const target of targets) {
+      const thp = this.ensurePlayerHp(target), thunger = this.ensurePlayerHunger(target);
+      thunger.hunger = Math.min(thunger.max, thunger.hunger + food.hunger);
+      thp.hp = Math.min(thp.max, thp.hp + food.heal);
+      if (timedMeal) {
+        const buffs = this.abilityBuffs.get(target.sessionId) || {};
+        buffs.mealMightUntil = Math.max(buffs.mealMightUntil || 0, now + duration);
+        buffs.mealGatherUntil = Math.max(buffs.mealGatherUntil || 0, now + duration);
+        this.abilityBuffs.set(target.sessionId, buffs);
+      }
+      if (target !== client) target.send('foodBuff', { id, buff: food.buff, durationMs: duration, by: eater && eater.name || 'your cook', hp: Math.ceil(thp.hp), maxHp: thp.max, hunger: Math.ceil(thunger.hunger), maxHunger: thunger.max });
+    }
     this.dirtyPlayers.add(rec.token);
-    client.send('foodResult', { slot, id, heal: food.heal, hungerGain: food.hunger, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max, hp: Math.ceil(hp.hp), maxHp: hp.max });
+    client.send('foodResult', { slot, id, heal: food.heal, hungerGain: food.hunger, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max, hp: Math.ceil(hp.hp), maxHp: hp.max, buff: food.buff || '', durationMs: timedMeal ? duration : 0, partyCount: targets.length });
   }
   toolPlus(slot) {
     return Math.max(0, Math.min(3, slot && slot.plus ? slot.plus | 0 : 0));
   }
   toolMaxDur(slot, info) {
     const base = info && info.dur ? info.dur | 0 : 1;
-    return Math.min(99999, Math.round(base * (1 + this.toolPlus(slot) * 0.15)));
+    const forge=slot&&slot.forge==='sturdy'?.2:0,master=slot&&slot.masterwork?.25:0;
+    const rarity=GEAR_SYSTEM.profile(info||{},slot||{}).rarity.durability;
+    return Math.min(99999, Math.round(base * (1 + this.toolPlus(slot) * 0.15 + forge + master)*rarity));
   }
   blacksmithNear(client) {
     const p = this.state.players.get(client.sessionId);
@@ -1646,7 +1694,7 @@ class GameRoom extends Room {
   findDamagedTool(prof, slot = -1) {
     const inv = prof && Array.isArray(prof.inv) ? prof.inv : [];
     const scanOne = i => {
-      const s = inv[i], info = s && TOOL_INFO[s.id];
+      const s = inv[i], info = s && (TOOL_INFO[s.id]||ARMOR_INFO[s.id]);
       if (!info) return null;
       const max = this.toolMaxDur(s, info);
       const cur = s.dur == null ? max : Math.max(0, s.dur | 0);
@@ -1676,7 +1724,7 @@ class GameRoom extends Room {
     this.recordRepairProgress(client, false);
     client.send('blacksmithRepairResult', {
       toolSlot: target.i,
-      tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s) },
+      tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s), gearRank:target.s.gearRank||'', rarity:target.s.rarity||'', forge:target.s.forge||'', masterwork:!!target.s.masterwork, locked:!!target.s.locked, source:target.s.source||'' },
       repaired: target.max - target.cur,
       gold: -cost,
     });
@@ -1719,11 +1767,74 @@ class GameRoom extends Room {
     this.recordRepairProgress(client, true);
     client.send('blacksmithUpgradeResult', {
       slot,
-      tool: { id: s.id, count: s.count || 1, dur: s.dur, plus: s.plus },
+      tool: { id: s.id, count: s.count || 1, dur: s.dur, plus: s.plus, rarity:s.rarity||'', forge:s.forge||'', masterwork:!!s.masterwork, locked:!!s.locked, source:s.source||'' },
       mat: { id: cost.matId, count: cost.matCount },
       gold: -cost.goldCost,
     });
     this.sendSpace('', 'fx', { t: 'blacksmith', action: 'upgrade', id: s.id, plus: s.plus, name: rec.prof.name || 'Hunter', dgn: '' });
+  }
+  handleBlacksmithReforge(client,m){
+    const rec=this.profileFor(client),action=m&&String(m.action||''),cost=JOB_SYSTEM.reforgeCost(action);
+    if(!rec||!this.isPlayerAlive(client))return client.send('blacksmithReject',{reason:'invalid'});
+    if(!this.blacksmithNear(client))return client.send('blacksmithReject',{reason:'range'});
+    if(this.rateLimited(client,'blacksmith',8,16))return client.send('blacksmithReject',{reason:'rate'});
+    if(rec.prof.job!=='blacksmith')return client.send('blacksmithReject',{reason:'profession'});
+    const level=JOB_SYSTEM.jobLevelFromXp(rec.prof.jobXpByJob&&rec.prof.jobXpByJob.blacksmith||0);
+    if(!cost||level<cost.level)return client.send('blacksmithReject',{reason:'level',level:cost&&cost.level||2});
+    const slot=Math.max(0,Math.min(35,m&&m.slot|0)),s=rec.prof.inv&&rec.prof.inv[slot],info=s&&TOOL_INFO[s.id];
+    if(!s||!info||!['sword','axe','pick'].includes(info.cls))return client.send('blacksmithReject',{reason:'tool'});
+    if(action==='basic'&&s.forge)return client.send('blacksmithReject',{reason:'forged'});
+    if(action==='reroll'&&!s.forge)return client.send('blacksmithReject',{reason:'unforged'});
+    if(action==='masterwork'&&(!s.forge||s.masterwork))return client.send('blacksmithReject',{reason:s.masterwork?'masterwork':'unforged'});
+    const requested=String(m&&m.modifier||''),ids=Object.keys(JOB_SYSTEM.REFORGE_MODIFIERS);let modifier=s.forge||'';
+    if(action==='choose'){if(!JOB_SYSTEM.reforgeModifier(requested))return client.send('blacksmithReject',{reason:'modifier'});modifier=requested;}
+    if(action==='basic')modifier=ids[(Math.random()*ids.length)|0];
+    if(action==='reroll'){const choices=ids.filter(id=>id!==s.forge);modifier=choices[(Math.random()*choices.length)|0];}
+    if((rec.prof.gold|0)<cost.gold)return client.send('blacksmithReject',{reason:'gold'});
+    if(cost.iron&&this.countItem(rec.prof,I.IRON_INGOT)<cost.iron)return client.send('blacksmithReject',{reason:'materials'});
+    if(cost.diamond&&this.countItem(rec.prof,I.DIAMOND)<cost.diamond)return client.send('blacksmithReject',{reason:'materials'});
+    if(cost.iron)this.consumeItem(rec.prof,I.IRON_INGOT,cost.iron);if(cost.diamond)this.consumeItem(rec.prof,I.DIAMOND,cost.diamond);
+    rec.prof.gold=(rec.prof.gold|0)-cost.gold;if(action==='masterwork')s.masterwork=true;else s.forge=modifier;
+    s.dur=this.toolMaxDur(s,info);this.dirtyPlayers.add(rec.token);this.recordRepairProgress(client,true);
+    client.send('blacksmithReforgeResult',{slot,tool:{id:s.id,count:s.count||1,dur:s.dur,plus:this.toolPlus(s),rarity:s.rarity||'',forge:s.forge||'',masterwork:!!s.masterwork,locked:!!s.locked,source:s.source||''},gold:-cost.gold,materials:{iron:cost.iron,diamond:cost.diamond},action});
+    this.sendSpace('','fx',{t:'blacksmith',action:'reforge',id:s.id,plus:this.toolPlus(s),name:rec.prof.name||'Hunter',dgn:''});
+  }
+  handleBlacksmithSalvage(client,m){
+    const rec=this.profileFor(client);if(!rec||!this.isPlayerAlive(client))return client.send('blacksmithReject',{reason:'invalid'});
+    if(!this.blacksmithNear(client))return client.send('blacksmithReject',{reason:'range'});
+    if(this.rateLimited(client,'blacksmith',8,16))return client.send('blacksmithReject',{reason:'rate'});
+    const slot=Math.max(0,Math.min(35,m&&m.slot|0)),stack=rec.prof.inv&&rec.prof.inv[slot],info=stack&&(TOOL_INFO[stack.id]||ARMOR_INFO[stack.id]);
+    const salvageable=info&&(ARMOR_INFO[stack.id]||['sword','axe'].includes(info.cls));
+    if(!stack||!salvageable)return client.send('blacksmithReject',{reason:'tool'});
+    if((info.tier|0)>=5||info.legendary)return client.send('blacksmithReject',{reason:'legendary'});
+    if(stack.locked)return client.send('blacksmithReject',{reason:'locked'});
+    const gear=GEAR_SYSTEM.profile(info,stack),salvage=LOOT_ECONOMY.salvageYield(gear.rankIndex,gear.rarityIndex,info.tier),iron=salvage.iron,gold=salvage.gold;
+    rec.prof.inv[slot]=null;this.addRewardItem(rec.prof,I.IRON_INGOT,iron);rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+gold);
+    this.dirtyPlayers.add(rec.token);client.send('blacksmithSalvageResult',{slot,iron,gold,rank:gear.rank.id,rarity:gear.rarity.id});
+    this.sendSpace('','fx',{t:'blacksmith',action:'salvage',id:stack.id,plus:this.toolPlus(stack),name:rec.prof.name||'Hunter',dgn:''});
+  }
+  handleGearLock(client,m){
+    const rec=this.profileFor(client);if(!rec||this.rateLimited(client,'gearLock',8,16))return;
+    const slot=Math.max(0,Math.min(35,m&&m.slot|0)),stack=rec.prof.inv&&rec.prof.inv[slot],info=stack&&(TOOL_INFO[stack.id]||ARMOR_INFO[stack.id]);
+    if(!stack||!info)return client.send('gearLockResult',{ok:false,reason:'tool',slot});
+    stack.locked=m&&typeof m.locked==='boolean'?m.locked:!stack.locked;
+    this.dirtyPlayers.add(rec.token);client.send('gearLockResult',{ok:true,slot,locked:!!stack.locked});
+  }
+  handleLootRecovery(client,m){
+    const rec=this.profileFor(client);if(!rec||!this.isPlayerAlive(client))return;
+    if(!this.blacksmithNear(client))return client.send('lootRecoveryResult',{ok:false,reason:'range'});
+    if(this.rateLimited(client,'lootRecovery',8,16))return client.send('lootRecoveryResult',{ok:false,reason:'rate'});
+    const queue=this.pruneLootRecovery(rec.prof);
+    if(!m||m.action==='list')return client.send('lootRecoveryState',{items:queue});
+    if(m.action!=='claim')return;
+    const index=Math.max(0,Math.min(11,m.index|0)),item=queue[index];
+    if(!item)return client.send('lootRecoveryResult',{ok:false,reason:'item',items:queue});
+    const slot=(rec.prof.inv||[]).findIndex(s=>!s);
+    const target=slot>=0?slot:(rec.prof.inv||[]).length<36?(rec.prof.inv||[]).length:-1;
+    if(target<0)return client.send('lootRecoveryResult',{ok:false,reason:'full',items:queue});
+    if(this.addGearRewardItem(rec.prof,item))return client.send('lootRecoveryResult',{ok:false,reason:'full',items:queue});
+    queue.splice(index,1);this.dirtyPlayers.add(rec.token);this.syncPlayerProfile(client,rec.prof);
+    client.send('lootRecoveryResult',{ok:true,slot:target,item:{...rec.prof.inv[target],gear:true},items:queue});
   }
   handleUseRepairKit(client, m) {
     const rec = this.profileFor(client);
@@ -1736,7 +1847,7 @@ class GameRoom extends Room {
     for (let i = 0; i < inv.length; i++) {
       if (i === kitSlot) continue;
       const s = inv[i];
-      const info = s && TOOL_INFO[s.id];
+      const info = s && (TOOL_INFO[s.id]||ARMOR_INFO[s.id]);
       if (!info) continue;
       const max = this.toolMaxDur(s, info);
       const cur = s.dur == null ? max : Math.max(0, s.dur | 0);
@@ -1755,7 +1866,7 @@ class GameRoom extends Room {
     client.send('repairResult', {
       kitSlot,
       toolSlot: best.i,
-      tool: { id: best.s.id, count: best.s.count || 1, dur: best.s.dur, plus: this.toolPlus(best.s) },
+      tool: { id: best.s.id, count: best.s.count || 1, dur: best.s.dur, plus: this.toolPlus(best.s), gearRank:best.s.gearRank||'', rarity:best.s.rarity||'', forge:best.s.forge||'', masterwork:!!best.s.masterwork, locked:!!best.s.locked, source:best.s.source||'' },
       repaired: best.s.dur - best.cur,
     });
   }
@@ -1811,6 +1922,8 @@ class GameRoom extends Room {
         continue;
       }
       if (hp.hp <= 0) continue;
+      const focus = this.abilityBuffs.get(client.sessionId);
+      if (focus && focus.monkRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + JOB_SYSTEM.MONK_RULES.regenPerSecond * dt);
       const before = Math.ceil(h.hunger);
       const moving = (this.pvel.get(client.sessionId) || { x: 0, z: 0 });
       const moveRate = Math.min(1, Math.hypot(moving.x || 0, moving.z || 0) / 6);
@@ -2161,10 +2274,17 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     if (rec) {
       this.grantHunterXp(rec.prof, grant.xp, client, grant.source || 'grant');
+      const delivered=[];
       for (const item of grant.items || []) {
-        this.addRewardItem(rec.prof, item.id, item.count);
+        const left=item&&item.gear?this.addGearRewardItem(rec.prof,item):this.addRewardItem(rec.prof,item.id,item.count);
+        if(!item.gear||!left)delivered.push(item&&item.gear?{...item,locked:!!(item.locked||item.rarity==='mythic')}:item);
+        else {
+          const recovered=this.queueGearRecovery(rec.prof,item,grant.source||'grant');
+          if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
+        }
         if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });
       }
+      grant={...grant,items:delivered};
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
     }
@@ -2189,8 +2309,9 @@ class GameRoom extends Room {
     const tool = this.equippedTool(rec.prof, slot);
     if (!tool || tool.cls !== req.cls) return;
     if (tool.slot.dur == null) tool.slot.dur = this.toolMaxDur(tool.slot, tool);
-    if (Math.random() < jobPerkChance(rec.prof, 'miner', 0.06)) {
-      client.send('toolSync', { slot: tool.index, item: { id: tool.slot.id, count: tool.slot.count || 1, dur: tool.slot.dur, plus: this.toolPlus(tool.slot) }, spared: true });
+    const minerLevel=rec.prof.job==='miner'?JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob&&rec.prof.jobXpByJob.miner)||0):0;
+    if (minerLevel>=JOB_SYSTEM.MINER_RULES.stonehandLevel && Math.random() < JOB_SYSTEM.MINER_RULES.durabilitySaveChance) {
+      client.send('toolSync', { slot: tool.index, item: { id: tool.slot.id, count: tool.slot.count || 1, dur: tool.slot.dur, plus: this.toolPlus(tool.slot),rarity:tool.slot.rarity||'',forge:tool.slot.forge||'',masterwork:!!tool.slot.masterwork,locked:!!tool.slot.locked }, spared: true });
       return;
     }
     tool.slot.dur--;
@@ -2198,11 +2319,19 @@ class GameRoom extends Room {
       rec.prof.inv[tool.index] = null;
       client.send('toolSync', { slot: tool.index, item: null, broke: true });
     } else {
-      client.send('toolSync', { slot: tool.index, item: { id: tool.slot.id, count: tool.slot.count || 1, dur: tool.slot.dur, plus: this.toolPlus(tool.slot) } });
+      client.send('toolSync', { slot: tool.index, item: { id: tool.slot.id, count: tool.slot.count || 1, dur: tool.slot.dur, plus: this.toolPlus(tool.slot),rarity:tool.slot.rarity||'',forge:tool.slot.forge||'',masterwork:!!tool.slot.masterwork,locked:!!tool.slot.locked } });
     }
     this.dirtyPlayers.add(rec.token);
   }
   setWorldBlock(x, y, z, id) {
+    if (id !== W.B.WHEAT_1 && id !== W.B.WHEAT_2 && id !== W.B.WHEAT_3) {
+      const key = x + ',' + y + ',' + z;
+      if (this.cropMeta) this.cropMeta.delete(key);
+      if (this.worldProgress && this.worldProgress.cropKinds && this.worldProgress.cropKinds[key]) {
+        delete this.worldProgress.cropKinds[key];
+        this.dirtyWorldProgress = true;
+      }
+    }
     this.world.setB(x, y, z, id);
     this.state.edits.set(x + ',' + y + ',' + z, id);
     this.dirtyWorld = true;
@@ -2211,10 +2340,14 @@ class GameRoom extends Room {
     const p = this.state.players.get(client.sessionId);
     const rec = this.profileFor(client);
     if (!p || !rec || !m || p.dgn) return client.send('farmReject', { reason: 'invalid' });
+    if (!this.cropMeta) this.cropMeta = new Map();
+    if (!this.worldProgress.cropKinds) this.worldProgress.cropKinds = {};
     if (this.rateLimited(client, 'farm', 10, 20)) return client.send('farmReject', { reason: 'rate' });
     const action = String(m.action || '');
     const x = m.x | 0, y = m.y | 0, z = m.z | 0;
     const slot = Math.max(0, Math.min(35, m.slot | 0));
+    const farmerLevel = rec.prof.job === 'farmer' ? JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob && rec.prof.jobXpByJob.farmer) || 0) : 0;
+    const farmerRules = JOB_SYSTEM.FARMER_RULES;
     if (!W.inWorld(x, y, z)) return client.send('farmReject', { reason: 'bounds' });
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 8) return client.send('farmReject', { reason: 'range' });
     if (W.isLavaBorderLand(x, z)) return client.send('farmReject', { reason: 'protected' });
@@ -2232,27 +2365,60 @@ class GameRoom extends Room {
     }
     if (action === 'plant') {
       if (id !== W.B.AIR || this.world.getB(x, y - 1, z) !== W.B.FARMLAND) return client.send('farmReject', { reason: 'soil' });
-      if (!this.consumeSlotItem(rec.prof, slot, I.WHEAT_SEEDS, 1)) return client.send('farmReject', { reason: 'seeds' });
+      const seedId = rec.prof.inv[slot] && (rec.prof.inv[slot].id | 0);
+      const windseed = seedId === I.WINDSEED;
+      if (windseed && farmerLevel < farmerRules.windseedLevel) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.windseedLevel });
+      if (!windseed && seedId !== I.WHEAT_SEEDS) return client.send('farmReject', { reason: 'seeds' });
+      if (!this.consumeSlotItem(rec.prof, slot, seedId, 1)) return client.send('farmReject', { reason: 'seeds' });
       this.dirtyPlayers.add(rec.token);
       this.setWorldBlock(x, y, z, W.B.WHEAT_1);
-      this.cropTimers.set(x + ',' + y + ',' + z, Date.now() + this.cropGrowMs());
+      const key = x + ',' + y + ',' + z;
+      const kind = windseed ? 'windseed' : 'wheat';
+      this.cropMeta.set(key, { kind, level: farmerLevel });
+      if (!this.worldProgress.cropKinds) this.worldProgress.cropKinds = {};
+      if (windseed) this.worldProgress.cropKinds[key] = kind;
+      else delete this.worldProgress.cropKinds[key];
+      this.dirtyWorldProgress = true;
+      this.cropTimers.set(key, Date.now() + this.cropGrowMs(farmerLevel));
       this.recordFarmProgress(client, action);
-      return client.send('farmResult', { action, x, y, z, slot });
+      return client.send('farmResult', { action, x, y, z, slot, seedId, kind });
+    }
+    if (action === 'fertilize') {
+      if (farmerLevel < farmerRules.fieldcraftLevel) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.fieldcraftLevel });
+      if (id !== W.B.WHEAT_1 && id !== W.B.WHEAT_2) return client.send('farmReject', { reason: 'growing' });
+      if (!this.consumeSlotItem(rec.prof, slot, I.COMPOST, 1)) return client.send('farmReject', { reason: 'compost' });
+      this.dirtyPlayers.add(rec.token);
+      const next = id === W.B.WHEAT_1 ? W.B.WHEAT_2 : W.B.WHEAT_3;
+      this.setWorldBlock(x, y, z, next);
+      const key = x + ',' + y + ',' + z;
+      if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
+      else this.cropTimers.set(key, Date.now() + this.cropGrowMs(farmerLevel));
+      this.grantJobXp(client, 'farmer', 2);
+      return client.send('farmResult', { action, x, y, z, slot, id: next });
     }
     if (action === 'harvest') {
       if (id !== W.B.WHEAT_3) return client.send('farmReject', { reason: 'ripe' });
-      this.cropTimers.delete(x + ',' + y + ',' + z);
+      const key = x + ',' + y + ',' + z;
+      this.cropTimers.delete(key);
+      const meta = this.cropMeta.get(key) || { kind: (this.worldProgress.cropKinds || {})[key] || 'wheat', level: farmerLevel };
       this.setWorldBlock(x, y, z, W.B.AIR);
       const wheat = 1 + (Math.random() < jobPerkChance(rec.prof, 'farmer', 0.10) ? 1 : 0);
-      this.awardGrant(client, { source: 'farm', xp: 1, items: [{ id: I.WHEAT, count: wheat }, { id: I.WHEAT_SEEDS, count: 1 + ((Math.random() * 3) | 0) }] });
+      const rich = meta.kind === 'windseed';
+      const golden = rich && farmerLevel >= farmerRules.goldenHarvestLevel && Math.random() < farmerRules.goldenWheatChance;
+      const items = [{ id: I.WHEAT, count: wheat + (rich ? 1 : 0) }, { id: rich ? I.WINDSEED : I.WHEAT_SEEDS, count: 1 + ((Math.random() * (rich ? 2 : 3)) | 0) }];
+      if (golden) items.push({ id: I.GOLDEN_WHEAT, count: 1 });
+      this.awardGrant(client, { source: 'farm', xp: rich ? 2 : 1, items });
       this.recordFarmProgress(client, action);
-      return client.send('farmResult', { action, x, y, z, slot });
+      return client.send('farmResult', { action, x, y, z, slot, kind: meta.kind, bonus: wheat > 1, golden });
     }
     client.send('farmReject', { reason: 'invalid' });
   }
   // rain (and storms) water the fields: crops advance twice as fast until the skies clear
-  cropGrowMs() {
-    return this.state && this.state.weather && this.state.weather !== 'clear' ? Math.round(CROP_GROW_MS / 2) : CROP_GROW_MS;
+  cropGrowMs(farmerLevel = 0) {
+    let mult = this.state && this.state.weather && this.state.weather !== 'clear' ? .5 : 1;
+    if (farmerLevel >= JOB_SYSTEM.FARMER_RULES.goldenHarvestLevel) mult *= JOB_SYSTEM.FARMER_RULES.goldenGrowthMultiplier;
+    else if (farmerLevel >= JOB_SYSTEM.FARMER_RULES.fieldcraftLevel) mult *= JOB_SYSTEM.FARMER_RULES.fieldcraftGrowthMultiplier;
+    return Math.round(CROP_GROW_MS * mult);
   }
   growCrops(dt) {
     this.cropGrowAcc = (this.cropGrowAcc || 0) + dt;
@@ -2277,8 +2443,9 @@ class GameRoom extends Room {
       }
       if (due > now) return;
       const next = id === W.B.WHEAT_1 ? W.B.WHEAT_2 : W.B.WHEAT_3;
+      const meta = this.cropMeta.get(key);
       if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
-      else this.cropTimers.set(key, now + growMs);
+      else this.cropTimers.set(key, now + this.cropGrowMs(meta && meta.level));
       grow.push({ x, y, z, id: next });
     });
     for (const g of grow.slice(0, 32)) this.setWorldBlock(g.x, g.y, g.z, g.id);
@@ -2472,7 +2639,7 @@ class GameRoom extends Room {
       if (c) this.regenAbilityState(c, abilityNow);
     });
     this.abilityBuffs.forEach((b, sid) => {
-      if ((b.umbralUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
+      if ((b.umbralUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
     });
     this.updatePlayerHunger(dt);
 
@@ -2628,7 +2795,9 @@ class GameRoom extends Room {
       const frenzyMove = frenzied ? 1.4 : 1;
       const frenzyDmg = frenzied ? 1.35 : 1;
       meta.slowT = Math.max(0, (meta.slowT || 0) - dt);
-      const slowMove = meta.slowT > 0 ? .4 : 1;
+      meta.weaponStaggerT=Math.max(0,(meta.weaponStaggerT||0)-dt);
+      const weaponStaggerMove=meta.weaponStaggerT>0&&m.kind==='boss'?GEAR_SYSTEM.WEAPON_IDENTITY.stagger.bossMoveMultiplier:1;
+      const slowMove = (meta.slowT > 0 ? .4 : 1)*weaponStaggerMove;
       if (meta.slowT > 0 && !meta.blackhole && m.state !== 'stun') m.state = 'frozen';
       else if (m.state === 'frozen') m.state = 'chase';
 
@@ -2732,7 +2901,10 @@ class GameRoom extends Room {
           meta.ralliedT=Math.max(0,(meta.ralliedT||0)-dt);
           if (meta.banditCaptain && best) {
             meta.commandT=(meta.commandT||0)-dt;
-            if(meta.commandT<=0){meta.commandT=6;m.state='rally';this.state.mobs.forEach((o,oid)=>{const om=this.mobMeta[oid];if(om&&om.banditCampId===meta.banditCampId&&!om.surrendered){om.alert=true;om.ralliedT=5;if(m.hp<m.maxHp*.3&&!om.banditCaptain)om.retreating=true;}});}
+            if(meta.commandT<=0){meta.commandT=6;meta.rallyT=.8;this.state.mobs.forEach((o,oid)=>{const om=this.mobMeta[oid];if(om&&om.banditCampId===meta.banditCampId&&!om.surrendered){om.alert=true;om.ralliedT=5;if(m.hp<m.maxHp*.3&&!om.banditCaptain)om.retreating=true;}});}
+            if(meta.rallyT>0){meta.rallyT-=dt;m.state='rally';rooted=true;}
+            else if(meta.cleaveT>0){meta.cleaveT-=dt;m.state='captainCleave';rooted=true;if(meta.cleaveT<=0){m.state='';this.sendSpace('', 'fx',{t:'banditCleave',x:m.x,y:m.y,z:m.z,dgn:''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<=4.2&&Math.abs(target.p.y-m.y)<2.5){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.15),'bandit_captain');}}}}
+            else if(meta.alert&&bd<4.2&&meta.atkCd<=0){meta.cleaveT=.9;meta.atkCd=4;m.state='captainCleave';rooted=true;}
           }
           if (meta.banditPatrol && !meta.banditCaptain && m.hp <= m.maxHp * .3) {
             meta.retreating = true; meta.alert = false; meta.tx = meta.sx; meta.tz = meta.sz;
@@ -2758,7 +2930,7 @@ class GameRoom extends Room {
           }
         } else if (!m.dgn) meta.alert = true;                // the overworld horde hunts
 
-        if (meta.alert && best) {
+        if (meta.alert && best && !rooted) {
           if (meta.brute && ((meta.bruteT||0)>0 || (bd<3.8&&meta.atkCd<=0))) {
             if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;}meta.bruteT-=dt;m.state='bruteWind';rooted=true;
             if(meta.bruteT<=0){m.state='';for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35));}}}

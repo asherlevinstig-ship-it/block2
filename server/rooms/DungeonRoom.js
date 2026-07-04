@@ -104,6 +104,7 @@ class DungeonRoom extends GameRoom {
     this.onMessage('spendStat', (c, m) => this.handleSpendStat(c, m));
     this.onMessage('equipArmor', (c, m) => this.handleEquipArmor(c, m));
     this.onMessage('useFood', (c, m) => this.handleUseFood(c, m));
+    this.onMessage('prospect', c => this.handleProspect(c));
     this.onMessage('useRepairKit', (c, m) => this.handleUseRepairKit(c, m));
     this.onMessage('dedit', (c, m) => this.handleDungeonEdit(c, m));   // mining inside the dungeon
   }
@@ -182,6 +183,7 @@ class DungeonRoom extends GameRoom {
     this.state.players.delete(client.sessionId);
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);
+    if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
     this.tokens.delete(client.sessionId);
     if (!token) return;
     // Keep this token's profile in this.profiles until AFTER flush() runs — flushDirtyPlayers()

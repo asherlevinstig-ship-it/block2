@@ -8,6 +8,8 @@ const W = require('../world');
 const serverDungeon = require('../dungeon');
 const { DimensionGrid, isDimensionGrid } = require('../../shared/dimension-grid');
 const serverCommsRules = require('../../shared/comms-rules');
+const sharedJobs = require('../../shared/job-system');
+const sharedGear = require('../../shared/gear-system');
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
 
@@ -61,9 +63,12 @@ test('client dimensions and server consume the shared grid contract', () => {
   ).join('\n');
   const dimensionScript = html.indexOf('<script src="/shared/dimension-grid.js"></script>');
   const commsScript = html.indexOf('<script src="/shared/comms-rules.js"></script>');
+  const jobsScript = html.indexOf('<script src="/shared/job-system.js"></script>');
   const dungeonScript = html.indexOf('<script src="/shared/dungeon-generation.js"></script>');
-  assert.equal(dimensionScript >= 0 && commsScript > dimensionScript && dungeonScript > commsScript, true);
+  assert.equal(dimensionScript >= 0 && commsScript > dimensionScript && jobsScript > commsScript && dungeonScript > jobsScript, true);
   assert.match(html, /<script src="\/shared\/comms-rules\.js"><\/script>/);
+  assert.match(html, /<script src="\/shared\/job-system\.js"><\/script>/);
+  assert.match(html, /<script src="\/shared\/gear-system\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/dungeon-generation\.js"><\/script>/);
   assert.match(html, /import\('\.\/js\/game-context\.mjs'\)/);
   assert.match(html, /createGameContext\(\{\s*services:/);
@@ -83,6 +88,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /inventory \/ crafting UI/);
   assert.match(menusSource, /registerModule\('menus'/);
   assert.match(menusSource, /export const api=gameContext\.requireModule\('menus'\)/);
+  assert.match(menusSource, /function renderGearComparison/);
+  assert.match(menusSource, /SELECTED GEAR/);
+  assert.match(menusSource, /UPGRADE/);
+  assert.match(menusSource, /REPAIR AT TOBIN/);
   const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(networkingSource, /registerState\('networking'/);
   assert.match(networkingSource, /registerModule\('networking'/);
@@ -197,6 +206,87 @@ test('onboarding resource manifest restores every tutorial log and mature crop',
   assert.deepEqual(cells.filter(cell => cell.id === 25).map(cell => [cell.x, cell.y, cell.z]), [
     [108, 13, 172], [110, 13, 172], [112, 13, 172],
   ]);
+});
+
+test('browser and server consume one shared profession and contract ruleset', () => {
+  assert.deepEqual(sharedJobs.PROFESSION_IDS, ['miner','farmer','cook','blacksmith','monk']);
+  assert.equal(sharedJobs.jobLevelFromXp(sharedJobs.jobXpNeed(1)), 2);
+  assert.equal(sharedJobs.titleFor('miner', 10), 'Prospector');
+  assert.equal(sharedJobs.perkTierFromLevel(20), 4);
+  for(const id of sharedJobs.JOB_IDS){
+    const milestones=sharedJobs.milestonesFor(id);
+    assert.deepEqual(milestones.map(m=>m.level),[2,5,10,20],`${id} has the shared milestone ladder`);
+    assert.equal(sharedJobs.milestoneState(id,1).next.level,2);
+    assert.equal(sharedJobs.milestoneState(id,10).earned.length,3);
+    assert.equal(sharedJobs.milestoneAt(id,5).title.length>0,true);
+  }
+  assert.deepEqual(Object.keys(sharedJobs.REFORGE_MODIFIERS),['keen','swift','sturdy']);
+  assert.deepEqual(Object.values(sharedJobs.REFORGE_ACTIONS).map(a=>a.level),[2,5,10,20]);
+  assert.equal(sharedJobs.reforgeCost('masterwork').diamond,3);
+  assert.equal(sharedJobs.FARMER_RULES.windseedLevel,5);
+  assert.equal(sharedJobs.FARMER_RULES.fieldcraftGrowthMultiplier,.75);
+  assert.equal(sharedJobs.FARMER_RULES.goldenWheatChance,.25);
+  assert.equal(sharedJobs.COOK_RULES.brothLevel,5);
+  assert.equal(sharedJobs.COOK_RULES.feastLevel,20);
+  assert.equal(sharedJobs.COOK_RULES.feastRange,20);
+  assert.equal(sharedJobs.MONK_RULES.regenLevel,2);
+  assert.equal(sharedJobs.MONK_RULES.stoneMitigation,.35);
+  assert.equal(sharedJobs.MONK_RULES.auraCooldownMs,15000);
+  assert.equal(sharedJobs.MINER_RULES.oreSenseLevel,2);
+  assert.equal(sharedJobs.MINER_RULES.deepSurveyRadius,18);
+  assert.equal(sharedJobs.MINER_RULES.geodeChance,.08);
+  assert.deepEqual(sharedJobs.PROFESSION_REWARD_MULTIPLIER,{miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1});
+  const objectiveXp={miner:c=>c.need*(c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:6),monk:c=>c.need*.4};
+  const runway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<20&&contracts<200){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),20,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3});xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
+  assert.equal(Math.max(...runway)/Math.min(...runway)<1.2,true,'profession Lv20 runways remain within 20% of each other');
+  const targets = {STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3};
+  const miner = sharedJobs.contractPool('miner', 2, 5, targets);
+  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Iron Survey']);
+  assert.equal(miner[0].target, W.B.STONE);
+  assert.equal(miner[0].need, 28);
+  assert.match(sharedJobs.guideSteps('mine').join(' '), /stone or cobble/i);
+  const offers=sharedJobs.contractOffers('miner',2,5,targets,100,0);
+  assert.deepEqual(offers.map(o=>o.difficulty),['quick','balanced','demanding']);
+  assert.ok(offers[0].rewardXp<offers[1].rewardXp&&offers[1].rewardXp<offers[2].rewardXp);
+  assert.deepEqual(offers.map(o=>o.estimate),['About 5 minutes','About 10 minutes','About 15–20 minutes']);
+  const worldSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const progressionSource = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
+  assert.match(worldSource, /BlockcraftJobSystem/);
+  assert.match(progressionSource, /shared\/job-system/);
+  assert.doesNotMatch(worldSource, /const pools=\{[\s\S]*Stone Order/);
+  const menusSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  assert.match(menusSource,/HUNTER OFFERS/);
+  assert.match(menusSource,/offerId:offer\.id/);
+  assert.match(menusSource,/function jobMilestoneHTML/);
+  assert.match(menusSource,/Next at Lv/);
+  assert.match(menusSource,/requestBlacksmithReforge/);
+  assert.match(menusSource,/Temper Reroll/);
+});
+
+test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () => {
+  assert.deepEqual(sharedGear.RANKS.map(r=>r.id),['E','D','C','B','A','S','LEGENDARY']);
+  assert.deepEqual(sharedGear.RARITIES.map(r=>r.id),['common','uncommon','rare','epic','mythic']);
+  assert.equal(sharedGear.profile({tier:1},{}).rank.id,'E');
+  assert.equal(sharedGear.profile({tier:3},{plus:2}).rank.id,'A');
+  assert.equal(sharedGear.profile({tier:4},{plus:2,forge:'keen'}).rank.id,'S');
+  assert.equal(sharedGear.profile({tier:3},{forge:'keen'}).rarity.id,'rare');
+  assert.equal(sharedGear.profile({tier:4},{masterwork:true}).rarity.id,'mythic');
+  assert.equal(sharedGear.profile({tier:5,legendary:true},{}).rank.id,'LEGENDARY');
+  assert.equal(sharedGear.profile({tier:5},{}).rarity.id,'mythic');
+  assert.equal(sharedGear.profile({tier:3},{rarity:'rare'}).rarity.damage,1.08);
+  assert.equal(sharedGear.rollRarity(.95).id,'epic');
+  assert.equal(sharedGear.rollRarity(.95,.06).id,'epic');
+  const sword=sharedGear.weaponCombatProfile({tier:3,cls:'sword'},{});
+  const axe=sharedGear.weaponCombatProfile({tier:3,cls:'axe'},{});
+  assert.equal(sword.damage,10);assert.equal(sword.cooldownMs,250);assert.equal(sword.dps,40);
+  assert.equal(axe.damage,15);assert.equal(axe.cooldownMs,480);assert.equal(axe.dps,31.3);
+  assert.ok(axe.damage>sword.damage&&axe.dps<sword.dps);
+  const first=sharedGear.nextMomentum({},1000,'mob-a'),second=sharedGear.nextMomentum(first,1100,'mob-a');
+  assert.equal(first.stacks,1);assert.equal(second.stacks,2);
+  assert.equal(sharedGear.nextMomentum(second,1200,'mob-b').stacks,1);
+  assert.equal(sharedGear.nextMomentum(second,second.expiresAt,'mob-a').stacks,1);
+  assert.equal(sharedGear.momentumMultiplier(3),1.12);
+  assert.equal(sharedGear.WEAPON_IDENTITY.stagger.bossMoveMultiplier,.75);
 });
 
 test('browser and server consume one shared safeguarded comms ruleset', () => {

@@ -18,6 +18,7 @@ export function clampJobContract(contract, knownJobs) {
   const type = String(contract.type || '').slice(0, 20);
   if (!['mine','farm','cook','smith','repair','meditate','sell','kill','gate','quest','event'].includes(type)) return null;
   const out = {
+    id: String(contract.id || '').slice(0, 80),
     job: contract.job, type, target: contract.target == null ? 0 : contract.target | 0,
     need: Math.max(1, Math.min(999, contract.need | 0)),
     have: Math.max(0, Math.min(999, contract.have | 0)),
@@ -26,6 +27,12 @@ export function clampJobContract(contract, knownJobs) {
     rewardXp: Math.max(0, Math.min(99999, contract.rewardXp | 0)),
     title: String(contract.title || 'Job Contract').slice(0, 48),
     desc: String(contract.desc || 'Complete the work order.').slice(0, 140),
+    difficulty: ['quick','balanced','demanding'].includes(contract.difficulty) ? contract.difficulty : '',
+    difficultyLabel: String(contract.difficultyLabel || '').slice(0, 20),
+    estimate: String(contract.estimate || '').slice(0, 40),
+    location: String(contract.location || '').slice(0, 64),
+    offeredAt: Math.max(0, Number(contract.offeredAt) || 0),
+    expiresAt: Math.max(0, Number(contract.expiresAt) || 0),
   };
   out.have = Math.min(out.have, out.need);
   return out;

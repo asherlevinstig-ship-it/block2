@@ -13,6 +13,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const JOB_SYSTEM = require('../shared/job-system');
+const GEAR_SYSTEM = require('../shared/gear-system');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
@@ -67,7 +69,9 @@ function sanitizeDragonNames(names) {
   }
   return out;
 }
-const JOB_IDS = new Set(['', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk']);
+const JOB_IDS = new Set(['', ...JOB_SYSTEM.JOB_IDS]);
+const PROFESSION_IDS = JOB_SYSTEM.PROFESSION_IDS;
+const JOB_XP_IDS = JOB_SYSTEM.JOB_IDS;
 const JOB_CONTRACT_TYPES = new Set(['mine', 'farm', 'cook', 'smith', 'repair', 'meditate', 'sell', 'kill', 'gate', 'quest', 'event']);
 const REGIONAL_CONTRACT_TYPES = new Set(['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles']);
 const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense']);
@@ -99,7 +103,12 @@ function defaultProfile(name) {
     S: { lvl: 1, xp: 0, pts: 0, str: 1, agi: 1, vit: 1, int: 1, path: '' },
     job: '',
     jobXp: 0,
+    jobXpByJob: { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0 },
     jobContract: null,
+    jobContractOffers: [],
+    jobContractOffersAt: 0,
+    jobContractOfferJob: '',
+    jobContractOfferBoards: {},
     adventurerContractsCompleted: 0,
     highestGateRankCleared: -1,
     gold: 0,
@@ -109,6 +118,7 @@ function defaultProfile(name) {
     activeNpcQuest: null,
     aegisTrialReady: false,
     inv: [],
+    lootRecovery: [],
     armor: null,
     mountUnlocks: [],
     familiarUnlocks: [],
@@ -145,6 +155,7 @@ function sanitizeJobContract(c) {
   if (!job || !type) return null;
   const need = clampI(c.need, 1, 999);
   return {
+    id: cleanShortText(c.id, '', 80),
     job,
     type,
     target: clampI(c.target, 0, 999),
@@ -155,6 +166,12 @@ function sanitizeJobContract(c) {
     rewardXp: clampI(c.rewardXp, 0, 99999),
     title: cleanShortText(c.title, 'Job Contract', 48),
     desc: cleanShortText(c.desc, 'Complete the work order.', 140),
+    difficulty: ['quick','balanced','demanding'].includes(c.difficulty) ? c.difficulty : '',
+    difficultyLabel: cleanShortText(c.difficultyLabel, '', 20),
+    estimate: cleanShortText(c.estimate, '', 40),
+    location: cleanShortText(c.location, '', 64),
+    offeredAt: clampI(c.offeredAt, 0, Number.MAX_SAFE_INTEGER),
+    expiresAt: clampI(c.expiresAt, 0, Number.MAX_SAFE_INTEGER),
   };
 }
 
@@ -276,10 +293,17 @@ function sanitizeTutorials(raw, profile) {
 
 function sanitizeWorldProgress(p) {
   const raw = p && typeof p === 'object' ? p : {};
+  const cropKinds = {};
+  if (raw.cropKinds && typeof raw.cropKinds === 'object') {
+    for (const key of Object.keys(raw.cropKinds).slice(0, 4096)) {
+      if (/^\d+,\d+,\d+$/.test(key) && raw.cropKinds[key] === 'windseed') cropKinds[key] = 'windseed';
+    }
+  }
   return {
     highestGateRankCleared: clampI(raw.highestGateRankCleared, -1, 4),
     roadSafety: clampI(raw.roadSafety == null ? 50 : raw.roadSafety, 0, 100),
     roadSafetyUpdatedAt: clampI(raw.roadSafetyUpdatedAt || 0, 0, 4102444800000),
+    cropKinds,
   };
 }
 
@@ -319,13 +343,27 @@ function sanitizeProfile(p) {
     int: clampI(S.int, 1, 999),
     path: ['', 'shadow', 'mage', 'guardian'].includes(S.path) ? S.path : '',
   };
-  out.job = cleanJob(p.job);
-  out.jobXp = clampI(p.jobXp, 0, 1e9);
+  const legacyJob = cleanJob(p.job);
+  out.job = PROFESSION_IDS.includes(legacyJob) ? legacyJob : '';
+  out.jobXpByJob = {};
+  for (const id of JOB_XP_IDS) out.jobXpByJob[id] = clampI(p.jobXpByJob && p.jobXpByJob[id], 0, 1e9);
+  if (!p.jobXpByJob || typeof p.jobXpByJob !== 'object') out.jobXpByJob[legacyJob || 'adventurer'] = clampI(p.jobXp, 0, 1e9);
+  out.jobXp = out.jobXpByJob[out.job || 'adventurer']; // compatibility snapshot for older clients
   out.jobContract = sanitizeJobContract(p.jobContract);
+  out.jobContractOffers = (Array.isArray(p.jobContractOffers) ? p.jobContractOffers : []).slice(0,3).map(sanitizeJobContract).filter(Boolean);
+  out.jobContractOffersAt = clampI(p.jobContractOffersAt, 0, Number.MAX_SAFE_INTEGER);
+  out.jobContractOfferJob = JOB_XP_IDS.includes(p.jobContractOfferJob) ? p.jobContractOfferJob : '';
+  out.jobContractOfferBoards = {};
+  if(p.jobContractOfferBoards&&typeof p.jobContractOfferBoards==='object')for(const id of JOB_XP_IDS){
+    const board=p.jobContractOfferBoards[id];if(!board||typeof board!=='object')continue;
+    out.jobContractOfferBoards[id]={at:clampI(board.at,0,Number.MAX_SAFE_INTEGER),offers:(Array.isArray(board.offers)?board.offers:[]).slice(0,3).map(sanitizeJobContract).filter(c=>c&&c.job===id)};
+  }
   out.adventurerContractsCompleted = p.adventurerContractsCompleted == null
-    ? (out.job === 'adventurer' && out.jobXp > 0 ? 1 : 0)
+    ? (legacyJob === 'adventurer' && out.jobXpByJob.adventurer > 0 ? 1 : 0)
     : clampI(p.adventurerContractsCompleted, 0, 1e9);
-  if (out.jobContract && out.jobContract.job !== out.job) out.jobContract = null;
+  // Trade work pauses while another profession is equipped and resumes when the
+  // player switches back, so persistence must not discard the paused contract.
+  out.jobContractOffers = out.jobContractOffers.filter(c=>c.job==='adventurer'||c.job===out.job);
   out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
   out.firstQuestRewardClaimed = p.firstQuestRewardClaimed === true;
@@ -340,7 +378,37 @@ function sanitizeProfile(p) {
       const slot = { id: clampI(s.id, 0, 999), count: clampI(s.count, 1, 64) };
       if (s.dur != null) slot.dur = clampI(s.dur, 0, 99999);
       if (s.plus != null) slot.plus = clampI(s.plus, 0, 3);
+      if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) slot.gearRank=s.gearRank;
+      if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) slot.rarity=s.rarity;
+      if (typeof s.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[s.forge]) slot.forge = s.forge;
+      if (s.masterwork === true && slot.forge) slot.masterwork = true;
+      if (s.locked === true) slot.locked = true;
+      if (typeof s.source === 'string' && s.source) slot.source=cleanShortText(s.source, 'loot', 32);
       out.inv.push(slot);
+    }
+  }
+  out.lootRecovery = [];
+  const now = Date.now();
+  if (Array.isArray(p.lootRecovery)) {
+    for (const s of p.lootRecovery.slice(0, 12)) {
+      if (!s || typeof s !== 'object') continue;
+      const expiresAt = clampI(s.expiresAt, 0, 4102444800000);
+      if (expiresAt && expiresAt <= now) continue;
+      const item = {
+        id: clampI(s.id, 0, 999),
+        count: 1,
+        plus: clampI(s.plus, 0, 3),
+        acquiredAt: clampI(s.acquiredAt, 0, 4102444800000),
+        expiresAt,
+        source: cleanShortText(s.source, 'loot', 32),
+      };
+      if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) item.gearRank=s.gearRank;
+      if (s.dur != null) item.dur = clampI(s.dur, 0, 99999);
+      if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) item.rarity=s.rarity;
+      if (typeof s.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[s.forge]) item.forge=s.forge;
+      if (s.masterwork === true && item.forge) item.masterwork=true;
+      if (s.locked === true) item.locked=true;
+      out.lootRecovery.push(item);
     }
   }
   out.mountUnlocks = sanitizeMountUnlocks(p.mountUnlocks);
@@ -363,9 +431,11 @@ function sanitizeProfile(p) {
   out.tutorials = sanitizeTutorials(p.tutorials, out);
   out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
   const armor = cleanSlot(p.armor);
-  out.armor = armor && ARMOR_IDS.has(armor.id) ? { id: armor.id, count: 1 } : null;
-  if (out.armor) {
-    out.inv = out.inv.map(s => (s && s.id === out.armor.id) ? null : s);
+  out.armor = armor && ARMOR_IDS.has(armor.id) ? armor : null;
+  if(out.armor)out.armor.count=1;
+  if(out.armor){
+    const duplicate=out.inv.findIndex(s=>s&&s.id===out.armor.id&&(s.gearRank||'')===(out.armor.gearRank||'')&&(s.rarity||'')===(out.armor.rarity||'')&&(s.dur==null||out.armor.dur==null||s.dur===out.armor.dur));
+    if(duplicate>=0)out.inv[duplicate]=null;
   }
   let pos = Array.isArray(p.pos) ? p.pos : [];
   if (pos.length !== 3 || pos.some(v => !isFinite(+v))) pos = [64.5, 20, 71.5];  // bad data -> plaza spawn
@@ -417,6 +487,11 @@ function cleanSlot(s) {
   if (!s || typeof s !== 'object') return null;
   const out = { id: clampI(s.id, 0, 999), count: clampI(s.count, 1, 64) };
   if (s.plus != null) out.plus = clampI(s.plus, 0, 3);
+  if (s.dur != null) out.dur = clampI(s.dur, 0, 99999);
+  if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) out.gearRank=s.gearRank;
+  if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) out.rarity=s.rarity;
+  if (s.locked === true) out.locked=true;
+  if (typeof s.source === 'string' && s.source) out.source=cleanShortText(s.source, 'loot', 32);
   return out;
 }
 

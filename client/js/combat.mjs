@@ -97,9 +97,13 @@ const legacyCombatBindings={
   "tickOnboarding":{get:()=>tickOnboarding},
   "tickTownGuidance":{get:()=>tickTownGuidance},
   "toolDamageFor":{get:()=>toolDamageFor},
+  "armorMaxDur":{get:()=>armorMaxDur},
+  "armorProfileFor":{get:()=>armorProfileFor},
   "toolMaxDur":{get:()=>toolMaxDur},
   "toolPlus":{get:()=>toolPlus},
   "toolSpeedFor":{get:()=>toolSpeedFor},
+  "weaponCombatFor":{get:()=>weaponCombatFor},
+  "weaponDpsFor":{get:()=>weaponDpsFor},
   "townGuidanceActive":{get:()=>townGuidanceActive,set:value=>{townGuidanceActive=value;}},
   "townGuidanceStep":{get:()=>townGuidanceStep,set:value=>{townGuidanceStep=value;}},
   "townTutorialChoice":{get:()=>townTutorialChoice},
@@ -205,6 +209,7 @@ function raycast(maxDist){
 // ---------------- inventory ----------------
 // slots: 0-8 hotbar, 9-35 backpack. stack: {id, count, dur?} or null
 const inv = new Array(36).fill(null);
+const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 let selected = 0;
 let inventoryModel=null,equipmentModel=null;
 const stackMax=id=>inventoryModel.stackMax(id);
@@ -215,22 +220,46 @@ function toolMaxDur(stackOrId){
   const info=ITEMS[id]&&ITEMS[id].tool;
   if(!info) return 0;
   const plus=typeof stackOrId==='number'?0:toolPlus(stackOrId);
-  return Math.min(99999, Math.round(info.dur*(1+plus*.15)));
+  const forge=typeof stackOrId==='number'?0:(stackOrId&&stackOrId.forge==='sturdy'?.2:0),master=typeof stackOrId==='number'?0:(stackOrId&&stackOrId.masterwork?.25:0);
+  const rarity=GEAR_SYSTEM.profile(info,typeof stackOrId==='number'?{}:stackOrId||{}).rarity.durability;
+  return Math.min(99999, Math.round(info.dur*(1+plus*.15+forge+master)*rarity));
 }
 function toolSpeedFor(stack){
   const info=stack&&ITEMS[stack.id]&&ITEMS[stack.id].tool;
   if(!info) return 0;
-  return info.speed*(1+toolPlus(stack)*.08);
+  return info.speed*(1+toolPlus(stack)*.08)*(stack.forge==='swift'?1.08:1)*(stack.masterwork?1.06:1);
 }
 function toolDamageFor(stack){
   const info=stack&&ITEMS[stack.id]&&ITEMS[stack.id].tool;
   if(!info) return 1;
-  return (info.dmg||1)+toolPlus(stack)*2;
+  const weapon=GEAR_SYSTEM.weaponCombatProfile(info,stack);
+  if(weapon)return weapon.damage;
+  const raw=(info.dmg||1)+toolPlus(stack)*2+(stack.forge==='keen'?2:0)+(stack.masterwork?2:0);
+  return Math.round(raw*GEAR_SYSTEM.profile(info,stack).rarity.damage*10)/10;
+}
+function armorProfileFor(stack){
+  const armor=stack&&ITEMS[stack.id]&&ITEMS[stack.id].armor;
+  return armor?GEAR_SYSTEM.armorProfile(armor,stack):null;
+}
+function armorMaxDur(stack){const profile=armorProfileFor(stack);return profile?profile.maxDur:0;}
+function weaponCombatFor(stack){
+  const info=stack&&ITEMS[stack.id]&&ITEMS[stack.id].tool;
+  return info?GEAR_SYSTEM.weaponCombatProfile(info,stack):null;
+}
+function weaponDpsFor(stack){
+  const weapon=weaponCombatFor(stack);
+  return weapon?weapon.dps:0;
 }
 function itemNameWithPlus(stack){
   if(!stack||!ITEMS[stack.id]) return '';
   const p=toolPlus(stack);
-  return ITEMS[stack.id].name+(p?' +'+p:'');
+  const mod=JOB_SYSTEM.reforgeModifier(stack.forge),prefix=(stack.masterwork?'Masterwork ':'')+(mod?mod.name+' ':'');
+  return prefix+ITEMS[stack.id].name+(p?' +'+p:'');
+}
+function gearProfileFor(stack){
+  const item=stack&&ITEMS[stack.id],info=item&&(item.tool||item.armor);
+  if(!info)return null;
+  return GEAR_SYSTEM.profile({tier:info.tier,legendary:!!item.legendary},stack);
 }
 function applyBlacksmithCraftPerk(stack){
   if(!stack || playerJob!=='blacksmith') return stack;
@@ -270,12 +299,13 @@ function addItem(id, count){
   return inventoryModel.add(id,count);
 }
 function addCraftedItem(id, count){
-  if(ITEMS[id] && ITEMS[id].tool && playerJob==='blacksmith'){
+  if(ITEMS[id] && (ITEMS[id].tool||ITEMS[id].armor)){
     noteRecipeSeen(id);
     let left=Math.max(1,count||1);
     for(let i=0;i<36 && left>0;i++){
       if(!inv[i]){
         inv[i]=applyBlacksmithCraftPerk(newStack(id,1));
+        if(ITEMS[id]&&(ITEMS[id].tool||ITEMS[id].armor))inv[i].source='crafted';
         left--;
       }
     }
@@ -285,7 +315,7 @@ function addCraftedItem(id, count){
   return addItem(id,count);
 }
 function cookingOutputCount(id, n){
-  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT].includes(id) || playerJob!=='cook') return n;
+  if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION].includes(id) || playerJob!=='cook') return n;
   const extra=Math.random()<jobPerkChance('cook', .08) ? Math.max(1, Math.floor(n*.25)) : 0;
   if(extra) showJobPerk('cook','+'+extra+' food');
   return n+extra;
@@ -373,10 +403,12 @@ function finishMine(){
     if(info.drop===null){} // no drop (glass)
     else if(info.drop){ droppedId=info.drop[0]; droppedCount=info.drop[1]; addItem(droppedId, droppedCount); }
     else { droppedId=m.id; droppedCount=1; addItem(m.id,1); }
-    if(droppedId && playerJob==='miner' && Math.random()<jobPerkChance('miner', .08)){
+    const minerLevel=playerJob==='miner'?jobLevelFromXp(jobXpFor('miner')):0;
+    if(droppedId && minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random()<jobPerkChance('miner', .08)){
       addItem(droppedId, 1);
       showJobPerk('miner','bonus '+itemLabel(droppedId));
     }
+    if(minerLevel>=JOB_SYSTEM.MINER_RULES.geodeLevel && [B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE].includes(m.id) && Math.random()<JOB_SYSTEM.MINER_RULES.geodeChance){addItem(I.GEODE,1);showJobPerk('miner','Prismatic Geode');}
     if(droppedId && activeFamiliar==='sprite' && Math.random()<spriteForageChance((S&&S.lvl)||1)) addItem(droppedId, 1);   // Sprite foraging bonus
     if(m.id===B.GRASS && Math.random()<.35) addItem(I.WHEAT_SEEDS,1);
   }
@@ -391,7 +423,8 @@ function finishMine(){
   // tool durability
   const tool=toolFor(m.id);
   if(!NET.on && tool && m.effective){
-    const save=playerJob==='miner' && Math.random()<jobPerkChance('miner', .06);
+    const minerLevel=playerJob==='miner'?jobLevelFromXp(jobXpFor('miner')):0;
+    const save=minerLevel>=JOB_SYSTEM.MINER_RULES.stonehandLevel && Math.random()<JOB_SYSTEM.MINER_RULES.durabilitySaveChance;
     if(!save) tool.stack.dur--;
     else showJobPerk('miner','tool spared');
     if(tool.stack.dur<=0){ inv[selected]=null; showName('Tool broke!'); }
@@ -1628,11 +1661,17 @@ function farmAction(hit){
     if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.breakBlk(null); vmSwing(); return true;
   }
-  if(s && s.id===I.WHEAT_SEEDS && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
+  if(s && s.id===I.COMPOST && (hit.id===B.WHEAT_1 || hit.id===B.WHEAT_2)){
+    if(NET.on) NET.room.send('farm',{action:'fertilize',x:hit.x,y:hit.y,z:hit.z,slot:selected});
+    else sysMsg('Compost requires the authoritative farming server');
+    SFX.place(); vmSwing(); return true;
+  }
+  if(s && (s.id===I.WHEAT_SEEDS || s.id===I.WINDSEED) && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
     if(!canBuildHere(hit.x,hit.z)){
       sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That land is protected by another claim');
       return true;
     }
+    if(s.id===I.WINDSEED && jobLevelFromXp(jobXpFor('farmer'))<JOB_SYSTEM.FARMER_RULES.windseedLevel){sysMsg('Farmer Lv 5 is required to cultivate <b>Prairie Windseeds</b>');return true;}
     if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'plant',x:hit.x,y:hit.y+1,z:hit.z,slot:selected});
     else {
       setB(hit.x,hit.y+1,hit.z,B.WHEAT_1); syncCropMesh(hit.x,hit.y+1,hit.z,B.WHEAT_1);
@@ -1663,9 +1702,9 @@ function mostDamagedToolSlot(exceptSlot=-1){
   let best=null;
   for(let i=0;i<36;i++){
     if(i===exceptSlot) continue;
-    const s=inv[i], info=s&&ITEMS[s.id]&&ITEMS[s.id].tool;
+    const s=inv[i], item=s&&ITEMS[s.id],info=item&&(item.tool||item.armor);
     if(!info) continue;
-    const max=toolMaxDur(s);
+    const max=item.armor?armorMaxDur(s):toolMaxDur(s);
     const cur=s.dur==null?max:s.dur;
     if(cur>=max) continue;
     const missing=max-cur;

@@ -1,10 +1,23 @@
 const W = require('../world');
+const JOB_SYSTEM = require('../../shared/job-system');
+const GEAR_SYSTEM = require('../../shared/gear-system');
 const { hunterXpForActivity } = require('./xp-economy');
 const {
   ARMOR_INFO, I, JOB_IDS, TOOL_INFO, hunterActivityXpForLevel, jobLevelFromXp, jobPerkTier,
 } = require('./constants');
 
 const STAT_KEYS = new Set(['str', 'agi', 'vit', 'int']);
+const PROFESSION_IDS = new Set(['', ...JOB_SYSTEM.PROFESSION_IDS]);
+const JOB_XP_IDS = JOB_SYSTEM.JOB_IDS;
+function ensureJobXpMap(prof) {
+  if (!prof.jobXpByJob || typeof prof.jobXpByJob !== 'object') {
+    prof.jobXpByJob = Object.fromEntries(JOB_XP_IDS.map(id => [id, 0]));
+    prof.jobXpByJob[prof.job || 'adventurer'] = Math.max(0, prof.jobXp | 0);
+  }
+  for (const id of JOB_XP_IDS) prof.jobXpByJob[id] = Math.max(0, prof.jobXpByJob[id] | 0);
+  prof.jobXp = prof.jobXpByJob[prof.job || 'adventurer'] | 0;
+  return prof.jobXpByJob;
+}
 
 // One-time starter kit handed out when the first Adventurer contract graduates.
 // Declared once so placement and the client manifest can't drift. `crafted` items
@@ -39,34 +52,8 @@ const NPC_QUEST_CHAINS = {
   'Rook Emberstall': [Q('Roost Manners','fetch',I.WHEAT,6,34,44),Q('Treat Training','fetch',I.DRAGON_TREAT,1,70,82),Q('Sky Stock','fetch',W.B.PLANKS,24,50,62)],
 };
 
-function contractPools(job, scale) {
-  return {
-    adventurer: [
-      { type: 'kill', need: 8 + scale * 2, title: 'Road Patrol', desc: 'Defeat hostile creatures beyond town.', rewardGold: 30 + scale * 5, rewardJobXp: 18 + scale * 4 },
-      { type: 'gate', need: 1 + Math.min(2, (scale / 3) | 0), title: 'Gate Watch', desc: 'Clear active gates for the Hunter Guild.', rewardGold: 48 + scale * 6, rewardJobXp: 28 + scale * 5 },
-      { type: 'event', need: 1, title: 'Server Duty', desc: 'Complete a server event.', rewardGold: 44 + scale * 5, rewardJobXp: 24 + scale * 5 },
-    ],
-    miner: [
-      { type: 'mine', target: W.B.STONE, need: 20 + scale * 4, title: 'Stone Quota', desc: 'Mine stone or cobblestone for town repairs.', rewardGold: 24 + scale * 4, rewardJobXp: 16 + scale * 4 },
-      { type: 'mine', target: W.B.IRON_ORE, need: 5 + scale, title: 'Iron Survey', desc: 'Mine iron ore for the forge.', rewardGold: 38 + scale * 5, rewardJobXp: 22 + scale * 5 },
-    ],
-    farmer: [
-      { type: 'farm', need: 14 + scale * 3, title: 'Field Hand', desc: 'Till, plant, and harvest crops for town stores.', rewardGold: 26 + scale * 4, rewardJobXp: 16 + scale * 4 },
-      { type: 'farm', target: W.B.WHEAT_3, need: 5 + scale, title: 'Harvest Basket', desc: 'Harvest ripe wheat for the tavern kitchen.', rewardGold: 34 + scale * 4, rewardJobXp: 20 + scale * 4 },
-    ],
-    cook: [
-      { type: 'cook', need: 5 + scale, title: 'Kitchen Shift', desc: 'Cook, bake, or prepare meals for hungry townsfolk.', rewardGold: 34 + scale * 5, rewardJobXp: 20 + scale * 4 },
-      { type: 'sell', need: 6 + scale * 2, title: 'Tavern Supplier', desc: 'Sell food to the tavern counter.', rewardGold: 30 + scale * 4, rewardJobXp: 18 + scale * 4 },
-    ],
-    blacksmith: [
-      { type: 'smith', need: 5 + scale, title: 'Forge Work', desc: 'Smelt, craft tools, make armor, or build repair kits.', rewardGold: 38 + scale * 5, rewardJobXp: 22 + scale * 5 },
-      { type: 'repair', need: 2 + Math.min(3, scale), title: 'Tool Doctor', desc: 'Repair worn tools.', rewardGold: 42 + scale * 5, rewardJobXp: 24 + scale * 5 },
-    ],
-    monk: [
-      { type: 'meditate', need: 60 + scale * 15, title: 'Quiet Vigil', desc: 'Meditate inside the Town Shrine and hold focus.', rewardGold: 24 + scale * 4, rewardJobXp: 22 + scale * 5 },
-      { type: 'meditate', need: 90 + scale * 20, title: 'Deep Stillness', desc: 'Keep a longer meditation so the shrine can settle around you.', rewardGold: 36 + scale * 5, rewardJobXp: 30 + scale * 6 },
-    ],
-  }[job] || [];
+function contractPools(job, scale, level) {
+  return JOB_SYSTEM.contractPool(job, scale, level, { STONE: W.B.STONE, IRON_ORE: W.B.IRON_ORE, WHEAT_3: W.B.WHEAT_3 });
 }
 
 class ProgressionMixin {
@@ -111,49 +98,94 @@ class ProgressionMixin {
 
   handleSetJob(client, m) {
     const rec = this.profileFor(client);
-    const job = m && typeof m.job === 'string' ? m.job : '';
-    if (!rec || !JOB_IDS.has(job)) return this.progressionReject(client, 'job', 'invalid');
+    const requestedJob = m && typeof m.job === 'string' ? m.job : '';
+    const job = requestedJob === 'adventurer' ? '' : requestedJob;
+    if (!rec || !PROFESSION_IDS.has(job)) return this.progressionReject(client, 'job', 'invalid');
     if (this.rateLimited(client, 'progression', 8, 16)) return this.progressionReject(client, 'job', 'rate');
     if (rec.prof.job !== job) {
       rec.prof.job = job;
-      rec.prof.jobContract = null;
+      rec.prof.jobContractOffers = [];
+      rec.prof.jobContractOffersAt = 0;
+      rec.prof.jobContractOfferJob = '';
     }
-    if (rec.prof.progressionFocus === 'first_promotion_job' && job === 'adventurer') {
+    ensureJobXpMap(rec.prof);
+    rec.prof.jobXp = rec.prof.jobXpByJob[job || 'adventurer'] | 0;
+    if (rec.prof.progressionFocus === 'first_promotion_job') {
       rec.prof.progressionFocus = 'first_promotion_contract';
     }
     return this.progressionChanged(client, 'job', { job });
   }
 
-  makeServerJobContract(prof) {
-    const job = prof && prof.job;
+  makeServerJobContract(prof, requested = '') {
+    const job = requested === 'adventurer' ? 'adventurer' : ((prof && prof.job) || 'adventurer');
     if (!job) return null;
-    const scale = Math.max(0, jobLevelFromXp(prof.jobXp) - 1);
+    const xpMap = ensureJobXpMap(prof);
+    const scale = JOB_SYSTEM.contractScaleFromXp(xpMap[job]);
     const level = Math.max(1, prof && prof.S ? prof.S.lvl | 0 : 1);
     if (job === 'adventurer' && !(prof.adventurerContractsCompleted | 0)) {
-      return {
-        job, type: 'kill', need: 3, have: 0,
-        title: "Mara's Field Work", desc: 'Defeat 3 hostile creatures beyond the town walls.',
-        rewardGold: 34, rewardJobXp: 20, rewardXp: hunterXpForActivity(level, 'job_contract'),
-      };
+      return { ...JOB_SYSTEM.firstHunterContract(), rewardXp: hunterXpForActivity(level, 'job_contract') };
     }
-    const pool = contractPools(job, scale).filter(contract => contract.type !== 'gate' || level >= 3);
+    const pool = contractPools(job, scale, level);
     if (!pool.length) return null;
     return { ...pool[(Math.random() * pool.length) | 0], job, have: 0, rewardXp: hunterXpForActivity(level, 'job_contract') };
+  }
+
+  jobContractOffers(rec, requested = '') {
+    const prof=rec.prof,job=requested==='adventurer'?'adventurer':(prof.job||'adventurer'),actualNow=Date.now();
+    if(job!=='adventurer'&&job!==prof.job)return [];
+    if(!prof.jobContractOfferBoards||typeof prof.jobContractOfferBoards!=='object')prof.jobContractOfferBoards={};
+    const board=prof.jobContractOfferBoards[job]||{at:0,offers:[]},current=Array.isArray(board.offers)?board.offers:[];
+    if(Number(board.at||0)>0&&actualNow<Number(board.at||0)+JOB_SYSTEM.OFFER_REFRESH_MS){prof.jobContractOffers=current;prof.jobContractOffersAt=board.at;prof.jobContractOfferJob=job;return current;}
+    const previousOfferAt=current.reduce((max,c)=>Math.max(max,Number(c&&c.offeredAt)||0),0);
+    const now=Math.max(actualNow,Number(board.at||0)+1,previousOfferAt+1);
+    const level=Math.max(1,prof.S&&prof.S.lvl|0),xpMap=ensureJobXpMap(prof),hunterXp=hunterXpForActivity(level,'job_contract');
+    let offers;
+    if(job==='adventurer'&&!(prof.adventurerContractsCompleted|0))offers=[{...JOB_SYSTEM.firstHunterContract(),difficulty:'balanced',difficultyLabel:'First Assignment',estimate:'About 5 minutes',location:'Beyond the town walls',rewardXp:hunterXp}];
+    else{
+      let rotation=0;for(const ch of String(rec.token||'hunter')+job)rotation=(rotation*31+ch.charCodeAt(0))>>>0;
+      rotation+=Math.floor(now/JOB_SYSTEM.OFFER_REFRESH_MS);
+      offers=JOB_SYSTEM.contractOffers(job,JOB_SYSTEM.contractScaleFromXp(xpMap[job]),level,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3},hunterXp,rotation);
+    }
+    const expiresAt=now+JOB_SYSTEM.OFFER_REFRESH_MS;
+    prof.jobContractOffers=offers.map((c,i)=>({...c,id:['job',job,now,i,c.type].join('_'),offeredAt:now,expiresAt}));
+    prof.jobContractOffersAt=now;prof.jobContractOfferJob=job;this.dirtyPlayers.add(rec.token);
+    prof.jobContractOfferBoards[job]={at:now,offers:prof.jobContractOffers};
+    return prof.jobContractOffers;
+  }
+
+  sendJobContractOffers(client,requested=''){
+    const rec=this.profileFor(client);if(!rec)return false;
+    const offers=this.jobContractOffers(rec,requested);
+    client.send('jobContractOffers',{job:requested==='adventurer'?'adventurer':(rec.prof.job||'adventurer'),offers,refreshAt:(rec.prof.jobContractOffersAt||0)+JOB_SYSTEM.OFFER_REFRESH_MS});
+    return true;
   }
 
   handleJobContract(client, m) {
     const rec = this.profileFor(client);
     const action = m && typeof m.action === 'string' ? m.action : '';
-    if (!rec || !rec.prof.job) return this.progressionReject(client, 'jobContract', 'job');
+    if (!rec) return this.progressionReject(client, 'jobContract', 'job');
     if (this.rateLimited(client, 'progression', 8, 16)) return this.progressionReject(client, 'jobContract', 'rate');
+    if(action==='offers')return this.sendJobContractOffers(client,m&&m.job);
     if (action === 'take') {
       if (rec.prof.jobContract) return this.progressionReject(client, 'jobContract', 'active');
-      rec.prof.jobContract = this.makeServerJobContract(rec.prof);
+      const requestedJob = m && typeof m.job === 'string' ? m.job : '';
+      const contractJob = requestedJob === 'adventurer' ? 'adventurer' : (rec.prof.job || 'adventurer');
+      if (!contractJob) return this.progressionReject(client, 'jobContract', 'job');
+      if (contractJob !== 'adventurer' && contractJob !== rec.prof.job) return this.progressionReject(client, 'jobContract', 'job');
+      const offerId=m&&typeof m.offerId==='string'?m.offerId:'';
+      if(offerId){
+        const offers=this.jobContractOffers(rec,contractJob),offer=offers.find(c=>c.id===offerId&&Date.now()<(c.expiresAt||0));
+        if(!offer)return this.progressionReject(client,'jobContract','offer');
+        rec.prof.jobContract={...offer,have:0};
+        rec.prof.jobContractOffers=[]; // one choice per rotation; abandon cannot become a free reroll
+        if(rec.prof.jobContractOfferBoards&&rec.prof.jobContractOfferBoards[contractJob])rec.prof.jobContractOfferBoards[contractJob].offers=[];
+      }else rec.prof.jobContract = this.makeServerJobContract(rec.prof, contractJob); // legacy/test compatibility
+      if (rec.prof.progressionFocus === 'first_promotion_job' && contractJob === 'adventurer') rec.prof.progressionFocus = 'first_promotion_contract';
       // 'first_promotion_contract' specifically guides taking the first adventurer
       // contract; 'next_adventurer_contract' just nudges back to the board, so any
       // contract take clears it (otherwise a job switch could strand the objective).
       if (rec.prof.progressionFocus === 'next_adventurer_contract' ||
-          (rec.prof.progressionFocus === 'first_promotion_contract' && rec.prof.job === 'adventurer')) {
+          rec.prof.progressionFocus === 'first_promotion_contract') {
         rec.prof.progressionFocus = '';
       }
     } else if (action === 'abandon') {
@@ -178,7 +210,12 @@ class ProgressionMixin {
       rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
       const rewardXp = Math.max(0, c.rewardXp | 0);
       this.grantHunterXp(rec.prof, rewardXp, client, 'job_contract');
-      rec.prof.jobXp = Math.max(0, (rec.prof.jobXp | 0) + Math.max(0, c.rewardJobXp | 0));
+      const xpMap = ensureJobXpMap(rec.prof);
+      const jobLevelBefore = JOB_SYSTEM.jobLevelFromXp(xpMap[c.job] | 0);
+      xpMap[c.job] = Math.max(0, (xpMap[c.job] | 0) + Math.max(0, c.rewardJobXp | 0));
+      const jobLevelAfter = JOB_SYSTEM.jobLevelFromXp(xpMap[c.job] | 0);
+      const milestones = JOB_SYSTEM.milestonesFor(c.job).filter(m => m.level > jobLevelBefore && m.level <= jobLevelAfter);
+      rec.prof.jobXp = xpMap[rec.prof.job || 'adventurer'] | 0;
       if (c.job === 'adventurer') rec.prof.adventurerContractsCompleted = Math.max(0, (rec.prof.adventurerContractsCompleted | 0) + 1);
       if (graduation) {
         rec.prof.inv = graduationInventory;
@@ -188,7 +225,7 @@ class ProgressionMixin {
       }
       rec.prof.jobContract = null;
       return this.progressionChanged(client, 'jobContract', {
-        action, rewardGold, rewardXp, graduation,
+        action, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, graduation,
         rewardItems: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
       });
     } else return this.progressionReject(client, 'jobContract', 'action');
@@ -198,18 +235,20 @@ class ProgressionMixin {
   grantJobXp(client, job, amount) {
     const rec = this.profileFor(client);
     amount = Math.max(0, Math.min(1000, Math.round(Number(amount) || 0)));
-    if (!rec || !amount || rec.prof.job !== job) return false;
-    rec.prof.jobXp = Math.max(0, (rec.prof.jobXp | 0) + amount);
+    if (!rec || !amount || (job !== 'adventurer' && rec.prof.job !== job)) return false;
+    const xpMap = ensureJobXpMap(rec.prof);
+    xpMap[job] = Math.max(0, (xpMap[job] | 0) + amount);
+    rec.prof.jobXp = xpMap[rec.prof.job || 'adventurer'] | 0;
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
-    client.send('jobProgress', { job, jobXp: rec.prof.jobXp | 0, contract: rec.prof.jobContract || null });
+    client.send('jobProgress', { job, jobXp: xpMap[job] | 0, jobXpByJob: xpMap, contract: rec.prof.jobContract || null });
     return true;
   }
 
   progressJobContract(client, type, count = 1, target = 0) {
     const rec = this.profileFor(client);
     const c = rec && rec.prof.jobContract;
-    if (!c || c.job !== rec.prof.job || c.type !== type || (c.have | 0) >= (c.need | 0)) return false;
+    if (!c || (c.job !== 'adventurer' && c.job !== rec.prof.job) || c.type !== type || (c.have | 0) >= (c.need | 0)) return false;
     if (c.target && target && (c.target | 0) !== (target | 0)) {
       const stonePair = type === 'mine' && [W.B.STONE, W.B.COBBLE].includes(c.target | 0) && [W.B.STONE, W.B.COBBLE].includes(target | 0);
       if (!stonePair) return false;
@@ -230,6 +269,32 @@ class ProgressionMixin {
     if (Math.hypot(p.x - sx, p.z - sz) > 9) return this.progressionReject(client, 'meditate', 'range');
     this.grantJobXp(client, 'monk', 2);
     this.progressJobContract(client, 'meditate', 5, 0);
+    const rules = JOB_SYSTEM.MONK_RULES;
+    const level = JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob && rec.prof.jobXpByJob.monk) || 0);
+    const tier = JOB_SYSTEM.perkTierFromLevel(level);
+    if (!tier) return true;
+    const now = Date.now(), duration = (rules.durationByTier[tier] || 0) * 1000;
+    const applyFocus = (target, shared) => {
+      const buffs = this.abilityBuffs.get(target.sessionId) || {};
+      if (level >= rules.regenLevel) buffs.monkRegenUntil = Math.max(buffs.monkRegenUntil || 0, now + duration);
+      if (level >= rules.speedLevel) buffs.monkSpeedUntil = Math.max(buffs.monkSpeedUntil || 0, now + duration);
+      if (level >= rules.stoneLevel) buffs.monkStoneUntil = Math.max(buffs.monkStoneUntil || 0, now + duration);
+      this.abilityBuffs.set(target.sessionId, buffs);
+      target.send('meditateFocus', { level, tier, durationMs: duration, regen: level >= rules.regenLevel, speed: level >= rules.speedLevel, stone: level >= rules.stoneLevel, shared: !!shared, by: p.name || 'a monk' });
+    };
+    applyFocus(client, false);
+    if (level >= rules.auraLevel) {
+      if (!this.monkAuraAt) this.monkAuraAt = new Map();
+      const last = this.monkAuraAt.get(client.sessionId) || 0;
+      if (now - last >= rules.auraCooldownMs) {
+        this.monkAuraAt.set(client.sessionId, now);
+        for (const other of this.clients || []) {
+          if (other === client) continue;
+          const q = this.state.players.get(other.sessionId);
+          if (q && p.team && q.team === p.team && !q.dgn && Math.hypot(q.x - p.x, q.z - p.z) <= rules.auraRange) applyFocus(other, true);
+        }
+      }
+    }
     return true;
   }
 
@@ -378,21 +443,39 @@ class ProgressionMixin {
       if (equipped) {
         if (this.inventorySpaceFor(rec.prof, equipped.id, 1) < 1) return this.progressionReject(client, 'armor', 'full');
         rec.prof.armor = null;
-        this.addRewardItem(rec.prof, equipped.id, 1);
+        const target=rec.prof.inv.findIndex(s=>!s);
+        const index=target>=0?target:rec.prof.inv.length;
+        rec.prof.inv[index]={...equipped,count:1};
       }
       rec.prof.armor = null;
     } else {
       if (!ARMOR_INFO[id]) return this.progressionReject(client, 'armor', 'item');
-      if (equipped && equipped.id === id) return this.progressionChanged(client, 'armor', { id });
-      const slot = rec.prof.inv.findIndex(s => s && (s.id | 0) === id && (s.count | 0) > 0);
+      const requestedRank=GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.gearRank)?m.gearRank:'';
+      const requestedRarity=GEAR_SYSTEM.RARITIES.some(r=>r.id===m.rarity)?m.rarity:'';
+      const hinted=Math.max(0,Math.min(35,m&&m.slot|0));
+      const matches=s=>s&&(s.id|0)===id&&(s.count|0)>0&&(!requestedRank||s.gearRank===requestedRank)&&(!requestedRarity||(s.rarity||'common')===requestedRarity);
+      const slot=matches(rec.prof.inv[hinted])?hinted:rec.prof.inv.findIndex(matches);
       if (slot < 0) return this.progressionReject(client, 'armor', 'unowned');
       const incoming = rec.prof.inv[slot];
-      if (equipped) rec.prof.inv[slot] = { id: equipped.id, count: 1 };
+      const equippedStack={...incoming,count:1};
+      if (equipped) rec.prof.inv[slot] = {...equipped,count:1};
       else if ((incoming.count | 0) > 1) incoming.count--;
       else rec.prof.inv[slot] = null;
-      rec.prof.armor = { id, count: 1 };
+      rec.prof.armor = equippedStack;
     }
     return this.progressionChanged(client, 'armor', { id });
+  }
+
+  handleEquipWeapon(client,m){
+    const rec=this.profileFor(client);
+    if(!rec||!Array.isArray(rec.prof.inv))return this.progressionReject(client,'weaponEquip','invalid');
+    const slot=Math.max(0,Math.min(35,m&&m.slot|0)),hotbar=Math.max(0,Math.min(8,m&&m.hotbar|0));
+    const stack=rec.prof.inv[slot],info=stack&&TOOL_INFO[stack.id];
+    if(!info||!['sword','axe'].includes(info.cls))return this.progressionReject(client,'weaponEquip','item');
+    if(slot!==hotbar)[rec.prof.inv[slot],rec.prof.inv[hotbar]]=[rec.prof.inv[hotbar]||null,stack];
+    this.progressionChanged(client,'weaponEquip',{slot:hotbar,id:stack.id});
+    client.send('weaponEquipResult',{ok:true,slot:hotbar,id:stack.id});
+    return true;
   }
 
   recordMineProgress(client, blockId) {
@@ -410,8 +493,9 @@ class ProgressionMixin {
 
   recordCraftProgress(client, id, count) {
     count = Math.max(1, count | 0);
-    if ([I.BREAD, I.HEARTY_SANDWICH, I.DRAGON_TREAT, I.COOKED_MEAT].includes(id)) {
-      this.grantJobXp(client, 'cook', (id === I.DRAGON_TREAT ? 6 : id === I.COOKED_MEAT ? 4 : 5) * count);
+    if ([I.BREAD, I.HEARTY_SANDWICH, I.DRAGON_TREAT, I.COOKED_MEAT, I.GOLDEN_BROTH, I.TRAIL_RATION, I.FEAST_PLATTER].includes(id)) {
+      const xp = id === I.FEAST_PLATTER ? 20 : id === I.TRAIL_RATION ? 10 : id === I.GOLDEN_BROTH ? 8 : id === I.DRAGON_TREAT ? 6 : id === I.COOKED_MEAT ? 4 : 5;
+      this.grantJobXp(client, 'cook', xp * count);
       this.progressJobContract(client, 'cook', count, id);
     }
     if (TOOL_INFO[id] || ARMOR_INFO[id] || id === I.REPAIR_KIT || id === I.IRON_INGOT) {
@@ -427,10 +511,10 @@ class ProgressionMixin {
   }
 
   recordKillProgress(client, hostile = true) {
-    this.grantJobXp(client, 'adventurer', 3);
     // Kill objectives ("defeat hostile creatures") must not be satisfied by
     // slaughtering passive animals, which have their own 'hunt' reward path.
     if (!hostile) return;
+    this.grantJobXp(client, 'adventurer', 3);
     this.progressJobContract(client, 'kill', 1, 0);
     this.progressNpcQuest(client, 'kill', 1, 0);
   }
@@ -453,7 +537,7 @@ class ProgressionMixin {
   }
 
   recordTavernSaleProgress(client, id, count) {
-    if (![I.WHEAT, I.BREAD, I.POT_STEW, I.MONSTER_MEAT, I.COOKED_MEAT].includes(id)) return;
+    if (![I.WHEAT, I.GOLDEN_WHEAT, I.BREAD, I.POT_STEW, I.MONSTER_MEAT, I.COOKED_MEAT, I.GOLDEN_BROTH, I.TRAIL_RATION].includes(id)) return;
     this.grantJobXp(client, 'cook', 3 * Math.max(1, count | 0));
     this.progressJobContract(client, 'sell', Math.max(1, count | 0), id);
     this.progressNpcQuest(client, 'sell', Math.max(1, count | 0), id);

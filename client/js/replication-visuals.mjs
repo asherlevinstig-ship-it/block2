@@ -26,14 +26,14 @@ function decorateEncounter(m,ref){
   bg.scale.set(1.35,.13,1);fill.scale.set(1.29,.075,1);bg.position.y=label.position.y-.42;fill.position.set(0,bg.position.y,.01);m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile};
   const ring=new THREE.Mesh(new THREE.TorusGeometry(m.wagon?1.25:.58,.035,6,30),new THREE.MeshBasicMaterial({color:friendly?0x5dd5ff:0xff5c46,transparent:true,opacity:.7,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.y=.06;m.grp.add(ring);m.encounterUi.ring=ring;
   if(hostile){const alert=textSprite('?', '#ffd45c',.55),engaged=textSprite('!', '#ff6048',.62);alert.position.y=engaged.position.y=label.position.y+.48;m.grp.add(alert,engaged);m.encounterUi.alert=alert;m.encounterUi.engaged=engaged;}
-  if(ref.kind==='bandit_captain'){const tell=new THREE.Mesh(new THREE.RingGeometry(1.7,1.82,40),new THREE.MeshBasicMaterial({color:0xff4f32,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));tell.rotation.x=-Math.PI/2;tell.position.y=.08;m.grp.add(tell);m.encounterUi.tell=tell;m.spawnT=2.2;}
+  if(hostile){const radius=ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:ref.kind==='bandit_captain'?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;if(ref.kind==='bandit_captain')m.spawnT=2.2;}
 }
 function tickEncounterReadability(m,dt,t){
   const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1)));u.fill.scale.x=1.29*pct;u.fill.position.x=-(1.29-u.fill.scale.x)/2;
   if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
   if(r.state==='retreat'){u.label.material.color.set(0xffd26b);u.ring.material.color.set(0xffc34d);}else u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
   if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
-  else if(u.tell){u.tell.visible=r.state==='windup';if(u.tell.visible){u.tell.scale.setScalar(1+Math.sin(t*8)*.12);u.tell.material.opacity=.85;}}
+  else if(u.tell){u.tell.visible=['windup','bruteWind','captainCleave'].includes(r.state);if(u.tell.visible){const charge=r.state==='captainCleave'?Math.min(1,(m.aT||0)/.9):Math.min(1,(m.aT||0)/.7);u.tell.scale.setScalar(.72+charge*.28);u.tell.material.opacity=.45+charge*.45;}}
   if(m.wagon){const wreck=r.kind==='caravan_wreck',damaged=pct<.65,critical=pct<.3;m.grp.rotation.z=wreck?.22:0;if(m.mats[0])m.mats[0].color.set(wreck?0x34271f:critical?0x49301f:damaged?0x5b3822:0x704321);if((damaged||wreck)&&m.grp.visible&&Math.random()<dt*(wreck?18:critical?14:6))spawnParticle({x:m.grp.position.x+(Math.random()-.5),y:m.grp.position.y+1.2,z:m.grp.position.z+(Math.random()-.5),vx:(Math.random()-.5)*.25,vy:.8,vz:(Math.random()-.5)*.25,life:1,grav:-.1,r:.28,g:.28,b:.28});}
 }
 function makeCaravanWagon(wrecked){
@@ -163,6 +163,7 @@ function netRemoveMob(id){
 }
 function netMobTick(m, dt, t){
   const r=m.ref, p=m.grp.position;
+  if((r.hp||0)<(m.hp||0)){m.hitT=.16;const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible)burst(p.x,p.y+1,p.z,flash,6,1.5,1.4,.25);}m.hp=r.hp;
   m.grp.visible = (r.dgn||'')===NET.dgn;
   if(m.orb){
     p.x+=(r.x-p.x)*Math.min(1,dt*10); p.y+=(r.y-p.y)*Math.min(1,dt*10); p.z+=(r.z-p.z)*Math.min(1,dt*10);
@@ -242,6 +243,10 @@ function netMobTick(m, dt, t){
         life:.45, grav:0, r:.6, g:.9, b:1});
   } else if(st==='draw'){
     m.arms[1].rotation.x=-.55;
+  } else if(st==='rally'){
+    m.arms[0].rotation.x=m.arms[1].rotation.x=-1.7;m.grp.rotation.z=Math.sin(t*14)*.025;
+  } else if(st==='captainCleave'){
+    const wind=Math.min(1,m.aT/.9);m.arms[0].rotation.x=-.4-wind*1.6;m.arms[1].rotation.x=-1.1-wind*.5;m.grp.rotation.y+=dt*1.8;
   } else if(st==='windup'){
     m.arms[0].rotation.x=m.arms[1].rotation.x=-1.25;
   } else {
@@ -271,6 +276,13 @@ function netFx(m){
   if((m.dgn||'')!==NET.dgn) return;
   if(m.t==='fangBite'){ burst(m.x, m.y, m.z, [.7,.6,.5], 5, 1.6, 1.1, .25); fangSnap(m.x, m.z); return; }
   if(m.t==='moteBurst'){ burst(m.x, m.y, m.z, [.6,1,.5], 18, 2.2, 2.4, .55); return; }
+  if(m.t==='banditCleave'){burst(m.x,m.y+.25,m.z,[1,.18,.08],34,5.2,2.2,.65);camShake=Math.max(camShake,.65);return;}
+  if(m.t==='weaponStagger'){
+    const color=m.boss?[1,.55,.18]:[1,.85,.35];
+    burst(m.x,m.y+.8,m.z,color,m.boss?18:11,m.boss?2.8:2.0,1.8,.35);
+    ringPulse(m.x,m.y+.08,m.z,m.boss?2.2:1.35,m.boss?0xff7a24:0xffd75e,.28);
+    return;
+  }
   if(m.t==='dragonBreath'){
     const col=dragonTrailColor(m.element||'ember');
     burst(m.x, m.y, m.z, col, 22, 3.0, 2.2, .5);

@@ -1,5 +1,6 @@
 import {api as worldApi,state as worldState} from './world.mjs';
 const gameContext=window.BlockcraftGameContext;
+const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 /* Blockcraft dimensions runtime module. Ability spaces, dungeon dimensions, gates, decoration, and dimension HUD state.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
@@ -87,14 +88,14 @@ function equippedAegisArmor(){
 function removeEquippedArmorCopies(){
   const armor=equippedArmor();
   if(!armor) return false;
-  let changed=false;
   for(let i=0;i<inv.length;i++){
-    if(inv[i] && inv[i].id===armor.id){
+    const stack=inv[i];
+    if(stack&&stack.id===armor.id&&(stack.gearRank||'')===(armor.gearRank||'')&&(stack.rarity||'')===(armor.rarity||'')&&(stack.dur==null||armor.dur==null||stack.dur===armor.dur)){
       inv[i]=null;
-      changed=true;
+      return true;
     }
   }
-  return changed;
+  return false;
 }
 function selectedBlackholeStaff(){
   const testId=currentTestLegendaryId();
@@ -692,6 +693,7 @@ function tickAbilities(dt,t){
   blackholeCd=Math.max(0,blackholeCd-dt);
   buffs.spd=Math.max(0,buffs.spd-dt);
   buffs.stone=Math.max(0,buffs.stone-dt);
+  buffs.gather=Math.max(0,(buffs.gather||0)-dt);
   if(buffs.regen>0){ buffs.regen=Math.max(0,buffs.regen-dt); hp=Math.min(maxHp(),hp+2*dt); }
   if(buffs.dmg>0 && Math.random()<dt*2.2) umbralEdgeVfx(player.pos.x,player.pos.y,player.pos.z,.34,player.yaw);
   if(buffs.armor>0 && Math.random()<dt*3.5) guardShellVfx(player.pos.x,player.pos.y,player.pos.z,.32);
@@ -913,7 +915,8 @@ function renderStat(){
   }
   h+='<div class="srow"><span>HP / MP / SP / Food</span><b>'+Math.ceil(hp)+'/'+maxHp()+' &middot; '+Math.floor(mp)+'/'+maxMp()+' &middot; '+Math.floor(sp)+'/'+maxSp()+' &middot; '+Math.floor(hunger)+'/'+maxHunger()+'</b></div>';
   const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
-  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?ITEMS[armor.id].name+' &middot; -'+Math.round((armorInfo.mitigation||0)*100)+'% damage'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
+  const armorProfile=armor?GEAR_SYSTEM.armorProfile(armorInfo,armor):null;
+  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+ITEMS[armor.id].name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
   h+='<div class="srow"><span>STAT POINTS</span><b>'+S.pts+'</b></div>';
   for(const [k,nm,fx] of ATTRS)
     h+='<div class="attr"><span class="nm">'+nm+' &middot; '+S[k]+'</span><span class="fx">'+fx+'</span><button data-attr="'+k+'" '+(S.pts<=0?'disabled':'')+'>+</button></div>';

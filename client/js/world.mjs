@@ -274,7 +274,9 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   IRON_ARMOR:183, DIA_ARMOR:184,
   DRAGON_EGG:185, EGG_VERDANT:186, EGG_FROST:187, EGG_STORM:188, EGG_VOID:189, DRAGON_TREAT:190, SHADOW_SIGIL:191, FANG_TOTEM:192,
   WINDSEED:193, HEARTWOOD_RESIN:194, SUNSHARD:195, MESA_AMBER:196, FROST_CRYSTAL:197, MIRE_BLOOM:198,
-  RIVER_FISH:199, MOTE_CHARM:200, FORAGE_CHARM:201,
+  RIVER_FISH:199, MOTE_CHARM:200, FORAGE_CHARM:201, COMPOST:202, GOLDEN_WHEAT:203,
+  GOLDEN_BROTH:204, TRAIL_RATION:205, FEAST_PLATTER:206,
+  GEODE:207,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -527,6 +529,24 @@ ITEMS[I.WHEAT]={name:'Wheat',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 ".....s..........",
 "....s...........",
 "................"],{w:'#d8a84a',W:'#ffe08a',s:'#8a6a2a'}))};
+ITEMS[I.COMPOST]={name:'Compost',stack:32,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................","....gggggg......","...gGGGGGGg.....","..gGGdGGGGGg....","..gGGGGGdGGg....","...gggggggg.....","................"
+],{g:'#4b3824',G:'#76613b',d:'#9aae58'}))};
+ITEMS[I.GOLDEN_WHEAT]={name:'Golden Wheat',stack:32,icon:iconCanvas(ctx=>drawPattern(ctx,[
+".....yyyy.......","....yYYYYy......",".....yyyy.......","......s.........","...yyyy.........","..yYYYYy........","...yyyy.........","......s.........",".....s..........","....s..........."
+],{y:'#f2c94c',Y:'#fff0a0',s:'#b88621'}))};
+ITEMS[I.GOLDEN_BROTH]={name:'Golden Broth',stack:16,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................","...bbbbbbbb.....","..bYYYYYYYYb....","..bYyyyyyyYb....","...bbbbbbbb.....","....b....b......","................"
+],{b:'#754424',Y:'#ffe58a',y:'#d99b35'}))};
+ITEMS[I.TRAIL_RATION]={name:'Trail Ration',stack:16,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................","...rrrrrrrr.....","..rBBBBBBBBr....","..rBGGGBBBBr....","..rBBBBGGGBr....","...rrrrrrrr.....","................"
+],{r:'#6c3d25',B:'#d79748',G:'#7ea34f'}))};
+ITEMS[I.FEAST_PLATTER]={name:'Feast Platter',stack:8,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................","....mmmmmm......","...mMMMMMMm.....","..pMMYYGGMMp....","..pppppppppp....","...pppppppp.....","................"
+],{m:'#8c432f',M:'#d66c45',Y:'#ffd86a',G:'#79ad54',p:'#a9afb5'}))};
+ITEMS[I.GEODE]={name:'Prismatic Geode',stack:16,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................",".....gggg.......","...ggGGGGgg.....","..gGGccCCGGg....","..gGccDDCCGg....","...gGGCCGGg.....","....gggggg......","................"
+],{g:'#565267',G:'#878197',c:'#50cfd0',C:'#86eff0',D:'#f8ffff'}))};
 ITEMS[I.BREAD]={name:'Bread',stack:16,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................",
 "................",
@@ -644,7 +664,7 @@ ITEMS[I.FROST_CRYSTAL]={name:'Frost Crystal',stack:64,icon:regionalIcon('#357b9b
 ITEMS[I.MIRE_BLOOM]={name:'Mire Bloom',stack:64,icon:regionalIcon('#325328','#8ebd42','#d9f77a')};
 ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
-const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6} };
+const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
 
 const TOOL_DEFS = [
   ['PICK',  PICK_ROWS,  'pick',  'Pickaxe'],
@@ -736,6 +756,12 @@ RECIPES.push({shapeless:[I.BREAD,I.WHEAT,I.WHEAT,I.DIAMOND], out:[I.MOTE_CHARM,1
 RECIPES.push({shapeless:[I.WHEAT,I.WHEAT,I.COAL,I.IRON_INGOT], out:[I.FORAGE_CHARM,1]});               // binds the familiar Sprite
 RECIPES.push({shapeless:[I.WHEAT,I.WHEAT,I.COOKED_MEAT,I.CHARCOAL], out:[I.DRAGON_TREAT,3]});  // farmer/cook care loop treat
 RECIPES.push({shapeless:[I.WINDSEED,I.WHEAT,I.WHEAT], out:[I.BREAD,2]});
+RECIPES.push({shapeless:[B.LEAVES,I.WHEAT,I.CHARCOAL], out:[I.COMPOST,2]});
+RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,3]});
+RECIPES.push({shapeless:[I.WHEAT,I.BREAD,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,1], job:'cook', level:5});
+RECIPES.push({shapeless:[I.WINDSEED,I.HEARTY_SANDWICH,I.COOKED_MEAT], out:[I.TRAIL_RATION,2], job:'cook', level:10});
+RECIPES.push({shapeless:[I.GOLDEN_WHEAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.HEARTY_SANDWICH], out:[I.FEAST_PLATTER,1], job:'cook', level:20});
+RECIPES.push({shapeless:[I.GEODE], out:[I.DIAMOND,1]});
 RECIPES.push({shapeless:[I.HEARTWOOD_RESIN,I.BREAD,I.COOKED_MEAT], out:[I.HEARTY_SANDWICH,2]});
 RECIPES.push({shapeless:[I.SUNSHARD,B.SAND,B.SAND], out:[B.GLASS,4]});
 RECIPES.push({shapeless:[I.MESA_AMBER,I.IRON_INGOT,I.STICK], out:[I.REPAIR_KIT,2]});
@@ -3653,15 +3679,10 @@ const UTILITY_DEFS={
   trail_sense:{name:'Trail Sense', icon:'T', slot:'passive', unlock:'Reach Road Warden reputation III.', desc:'Reads bandit tracks and gives exact patrol bearings without revealing the full map.'},
 };
 const UTILITY_ORDER=['compass','minimap','world_map','feather_step','party_compass','trail_sense'];
-const JOBS={
-  adventurer:{name:'Adventurer', icon:'A', col:'#d8f2ff', role:'Quests, gates, monsters', desc:'Progress by completing town quests, clearing gates, joining events, and defeating threats.', perk:'Future perk: better quest and gate rewards.'},
-  miner:{name:'Miner', icon:'⛏', col:'#9ca3af', role:'Ore, stone, gems', desc:'Progress by mining stone, coal, iron, diamonds, and dungeon walls.', perk:'Future perk: better ore yields and tool endurance.'},
-  farmer:{name:'Farmer', icon:'☘', col:'#86efac', role:'Crops and food supply', desc:'Progress by tilling, planting, and harvesting crops.', perk:'Future perk: faster growth, seed returns, rare crop mutations.'},
-  cook:{name:'Cook', icon:'♨', col:'#fbbf24', role:'Meals and tavern goods', desc:'Progress by cooking, baking, preparing meals, and selling food.', perk:'Future perk: stronger food buffs and feast recipes.'},
-  blacksmith:{name:'Blacksmith', icon:'⚒', col:'#fb923c', role:'Gear, tools, repair', desc:'Progress by crafting equipment, smelting ingots, and repairing gear.', perk:'Future perk: higher durability crafted gear and cheaper repairs.'},
-  monk:{name:'Monk', icon:'◇', col:'#7dd3fc', role:'Meditation and support', desc:'Progress by meditating in the Town Shrine.', perk:'Future perk: shrine focus buffs and group recovery.'},
-};
-let playerJob='', jobXp=0, meditateJobAcc=0, jobContract=null, regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
+if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
+const JOBS=JOB_SYSTEM.JOBS;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, jobContract=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
 let highestGateRankCleared=-1;
@@ -3690,59 +3711,37 @@ function gateSystemUnlocked(){ return ((S&&S.lvl)|0) >= 3; }
 function gateCutsceneSeen(){ try{ return serverTutorials.gate>=1||localStorage.getItem('bc_gatecut_v1')==='1'; }catch(e){ return serverTutorials.gate>=1; } }
 function markGateCutsceneSeen(){ try{ localStorage.setItem('bc_gatecut_v1','1'); }catch(e){} markTutorialComplete('gate',1); }
 function resetGateCutsceneSeen(){ try{ localStorage.removeItem('bc_gatecut_v1'); }catch(e){} }
-const jobXpNeed=questJobModule.jobXpNeed;
-const jobLevelFromXp=questJobModule.jobLevelFromXp;
-const jobXpIntoLevel=questJobModule.jobXpIntoLevel;
+const jobXpNeed=JOB_SYSTEM.jobXpNeed;
+const jobLevelFromXp=JOB_SYSTEM.jobLevelFromXp;
+const jobXpIntoLevel=JOB_SYSTEM.jobXpIntoLevel;
 function activeJob(){ return JOBS[playerJob]||null; }
 function activeJobName(){ const j=activeJob(); return j?j.name:'None'; }
-function jobLvl(jobId=playerJob){ return playerJob===jobId ? jobLevelFromXp(jobXp) : 0; }
+function jobXpFor(jobId){return Math.max(0,(jobXpByJob&&jobXpByJob[jobId])|0);}
+function jobLvl(jobId=playerJob||'adventurer'){ return jobId==='adventurer'||playerJob===jobId ? jobLevelFromXp(jobXpFor(jobId)) : 0; }
 function jobPerkTier(jobId=playerJob){
   const l=jobLvl(jobId);
-  return l>=20?4:l>=10?3:l>=5?2:l>=2?1:0;
+  return JOB_SYSTEM.perkTierFromLevel(l);
 }
 function jobPerkChance(jobId=playerJob, base=.08){
   const t=jobPerkTier(jobId);
-  return t ? base + t*.05 : 0;
+  return JOB_SYSTEM.perkChance(t,base);
 }
 function perkName(jobId){
-  return jobId==='adventurer'?'Trail Sense':
-    jobId==='miner'?'Prospector':
-    jobId==='farmer'?'Green Thumb':
-    jobId==='cook'?'Batch Cooking':
-    jobId==='blacksmith'?'Tempered Craft':
-    jobId==='monk'?'Shrine Focus':'Job Perk';
+  return JOBS[jobId]?JOBS[jobId].perkName:'Job Perk';
 }
 function showJobPerk(jobId, text){
   if(!jobId || playerJob!==jobId) return;
   showName(perkName(jobId)+(text?': '+text:''));
 }
 function jobPerkText(jobId){
-  const t=playerJob===jobId?jobPerkTier(jobId):0;
+  const t=(jobId==='adventurer'||playerJob===jobId)?jobPerkTier(jobId):0;
   const locked='<span style="color:#7f93aa">Unlocks at Lv 2, improves at 5 / 10 / 20.</span>';
   const active='<span style="color:#d8f8c8">Tier '+t+' active.</span>';
   const suffix=' '+(t?active:locked);
-  if(jobId==='adventurer') return 'Perk: better quest turn-ins and gate/event payouts.'+suffix;
-  if(jobId==='miner') return 'Perk: chance for bonus block drops and spared pick durability.'+suffix;
-  if(jobId==='farmer') return 'Perk: chance for bonus wheat on harvest.'+suffix;
-  if(jobId==='cook') return 'Perk: chance to create extra meals while cooking.'+suffix;
-  if(jobId==='blacksmith') return 'Perk: crafted tools gain durability; repair kits restore more.'+suffix;
-  if(jobId==='monk') return 'Perk: meditation grants short focus buffs.'+suffix;
-  return '';
+  return JOBS[jobId]?'Perk: '+JOBS[jobId].perk+suffix:'';
 }
 function jobTitleFor(jobId, lvl){
-  if(!jobId) return 'Adventurer';
-  lvl=Math.max(1,lvl|0);
-  const tiers={
-    adventurer:[[20,'Legendary Adventurer'],[10,'Gatebreaker'],[5,'Pathfinder'],[2,'Wayfarer'],[1,'Adventurer']],
-    miner:[[20,'Master Miner'],[10,'Prospector'],[5,'Stonehand'],[2,'Apprentice Miner'],[1,'Miner']],
-    farmer:[[20,'Harvest Master'],[10,'Greenwarden'],[5,'Cropkeeper'],[2,'Apprentice Farmer'],[1,'Farmer']],
-    cook:[[20,'Master Chef'],[10,'Feastmaker'],[5,'Tavern Cook'],[2,'Kitchen Hand'],[1,'Cook']],
-    blacksmith:[[20,'Master Smith'],[10,'Forgekeeper'],[5,'Ironhand'],[2,'Apprentice Smith'],[1,'Blacksmith']],
-    monk:[[20,'Zen Master'],[10,'Runeseer'],[5,'Shrine Adept'],[2,'Acolyte'],[1,'Monk']],
-  };
-  const list=tiers[jobId]||[];
-  for(const [need,title] of list) if(lvl>=need) return title;
-  return JOBS[jobId]?JOBS[jobId].name:'';
+  return JOB_SYSTEM.titleFor(jobId||'adventurer',Math.max(1,lvl|0));
 }
 const clampJobContract=c=>questJobModule.clampJobContract(c,JOBS);
 function clampRegionalContract(c){
@@ -3831,46 +3830,17 @@ function toggleUtilityEquip(id){
 }
 function makeJobContract(jobId){
   if(!JOBS[jobId]) return null;
-  const lvl=playerJob===jobId?jobLevelFromXp(jobXp):1;
-  const scale=Math.min(5,Math.max(0,lvl-1));
-  if(jobId==='adventurer' && jobXp<=0) return clampJobContract({
-    job:jobId, type:'kill', need:3, have:0, title:"Mara's Field Work",
-    desc:'Defeat 3 hostile creatures beyond the town walls.', rewardGold:34, rewardJobXp:20, rewardXp:hunterXpForActivity(S.lvl,'job_contract')
+  const scale=JOB_SYSTEM.contractScaleFromXp(jobXpFor(jobId));
+  if(jobId==='adventurer' && jobXpFor('adventurer')<=0) return clampJobContract({
+    ...JOB_SYSTEM.firstHunterContract(), rewardXp:hunterXpForActivity(S.lvl,'job_contract')
   });
-  const pools={
-    adventurer:[
-      {type:'quest', need:1, title:'Town Errand', desc:'Complete any town quest for a resident.', rewardGold:34+scale*5, rewardJobXp:20+scale*5},
-      {type:'kill', need:5+scale*2, title:'Road Patrol', desc:'Defeat monsters or hostile creatures beyond the walls.', rewardGold:36+scale*5, rewardJobXp:22+scale*5},
-      {type:'gate', need:1, title:'Gate Scout', desc:'Enter and clear a Gate for the town.', rewardGold:70+scale*8, rewardJobXp:38+scale*7},
-    ],
-    miner:[
-      {type:'mine', target:B.STONE, need:12+scale*3, title:'Stone Order', desc:'Mine stone or cobble for the town builders.', rewardGold:28+scale*4, rewardJobXp:16+scale*4},
-      {type:'mine', target:B.IRON_ORE, need:4+scale, title:'Ore Survey', desc:'Bring up useful ore from the wilds or dungeon walls.', rewardGold:36+scale*5, rewardJobXp:20+scale*5},
-    ],
-    farmer:[
-      {type:'farm', need:14+scale*3, title:'Field Hand', desc:'Till, plant, and harvest crops for town stores.', rewardGold:26+scale*4, rewardJobXp:16+scale*4},
-      {type:'farm', target:B.WHEAT_3, need:5+scale, title:'Harvest Basket', desc:'Harvest ripe wheat for the tavern kitchen.', rewardGold:34+scale*4, rewardJobXp:20+scale*4},
-    ],
-    cook:[
-      {type:'cook', need:5+scale, title:'Kitchen Shift', desc:'Cook, bake, or prepare meals for hungry townsfolk.', rewardGold:34+scale*5, rewardJobXp:20+scale*4},
-      {type:'sell', need:6+scale*2, title:'Tavern Supplier', desc:'Sell food to the tavern counter.', rewardGold:30+scale*4, rewardJobXp:18+scale*4},
-    ],
-    blacksmith:[
-      {type:'smith', need:5+scale, title:'Forge Work', desc:'Smelt, craft tools, make armor, or build repair kits.', rewardGold:38+scale*5, rewardJobXp:22+scale*5},
-      {type:'repair', need:2+Math.min(3,scale), title:'Tool Doctor', desc:'Use repair kits to restore worn tools.', rewardGold:42+scale*5, rewardJobXp:24+scale*5},
-    ],
-    monk:[
-      {type:'meditate', need:60+scale*15, title:'Quiet Vigil', desc:'Meditate inside the Town Shrine and hold focus.', rewardGold:24+scale*4, rewardJobXp:22+scale*5},
-      {type:'meditate', need:90+scale*20, title:'Deep Stillness', desc:'Keep a longer meditation so the shrine can settle around you.', rewardGold:36+scale*5, rewardJobXp:30+scale*6},
-    ],
-  };
-  const pool=pools[jobId]||[];
-  return clampJobContract({...pool[(Math.random()*pool.length)|0], job:jobId, have:0, rewardXp:hunterXpForActivity(S.lvl,'job_contract')});
+  const pool=JOB_SYSTEM.contractPool(jobId,scale,S.lvl,{STONE:B.STONE,IRON_ORE:B.IRON_ORE,WHEAT_3:B.WHEAT_3});
+  return clampJobContract({...pool[(Math.random()*pool.length)|0],rewardXp:hunterXpForActivity(S.lvl,'job_contract')});
 }
 function jobContractReady(){ return !!(jobContract && jobContract.have>=jobContract.need); }
 function jobContractProgress(kind, n=1, target=0){
   if(NET.on) return; // authoritative progress arrives from validated server actions
-  if(!jobContract || !playerJob || jobContract.job!==playerJob || !JOBS[jobContract.job]) return;
+  if(!jobContract || (jobContract.job!=='adventurer'&&jobContract.job!==playerJob) || !JOBS[jobContract.job]) return;
   if(jobContractReady()) return;
   const type=jobContract.type;
   if(type!==kind){
@@ -3910,15 +3880,18 @@ function jobColorArr(jobId){
 }
 function gainJobXP(jobId, n, reason){
   if(NET.on) return; // the server owns persistent profession XP
-  if(!jobId || playerJob!==jobId || !JOBS[jobId]) return;
+  if(!jobId || (jobId!=='adventurer'&&playerJob!==jobId) || !JOBS[jobId]) return;
   n=Math.max(0,Math.round(n||0));
   if(!n) return;
-  const before=jobLevelFromXp(jobXp);
-  jobXp+=n;
-  const after=jobLevelFromXp(jobXp);
+  if(jobId!=='adventurer'&&playerJob!==jobId)return;
+  const before=jobLevelFromXp(jobXpFor(jobId));
+  jobXpByJob[jobId]=jobXpFor(jobId)+n;
+  jobXp=jobXpFor(playerJob||'adventurer');
+  const after=jobLevelFromXp(jobXpFor(jobId));
   if(after>before){
+    const milestone=JOB_SYSTEM.milestoneAt(jobId,after);
     SFX.level();
-    sysMsg('<b>'+JOBS[jobId].name+' Job Level '+after+'</b> reached');
+    sysMsg('<b>'+JOBS[jobId].name+' Job Level '+after+'</b> reached'+(milestone?'<br><b>'+escHTML(milestone.title)+' unlocked:</b> '+escHTML(milestone.desc):''));
     burst(player.pos.x, player.pos.y+1, player.pos.z, jobColorArr(jobId), 24, 2.5, 2.6, .7);
   } else if(reason && Math.random()<.18){
     showName('+'+n+' '+JOBS[jobId].name+' XP');
@@ -3933,8 +3906,9 @@ function awardJobForBlock(id){
 }
 function awardJobForCraft(id, count){
   count=Math.max(1,count||1);
-  if([I.BREAD,I.HEARTY_SANDWICH,I.DRAGON_TREAT].includes(id)){
-    gainJobXP('cook', (id===I.DRAGON_TREAT?6:5)*count, 'cook');
+  if([I.BREAD,I.HEARTY_SANDWICH,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id)){
+    const xp=id===I.FEAST_PLATTER?20:id===I.TRAIL_RATION?10:id===I.GOLDEN_BROTH?8:id===I.DRAGON_TREAT?6:5;
+    gainJobXP('cook', xp*count, 'cook');
     jobContractProgress('cook', count, id);
   }
   if([I.COOKED_MEAT,I.CHARCOAL].includes(id)){
@@ -3950,7 +3924,7 @@ const stCost=n=>n*Math.max(.5,1-0.02*(S.agi-1));
 const XP_MINE={[B.COAL_ORE]:4,[B.IRON_ORE]:6,[B.DIAMOND_ORE]:15,[B.LOG]:1,[B.STONE]:.4};
 let hp=maxHp(), mp=maxMp(), sp=maxSp(), hunger=maxHunger();
 let lastHurt=-99, lastLavaHurt=-99, regenAcc=0, attackCd=0, blackholeCd=0, suppressMine=false, sleeping=false, swCd=0, sprintingNow=false, hungerAcc=0, starvationAcc=0;
-const buffs={dmg:0, armor:0, spd:0, stone:0, regen:0, aegis:0};
+const buffs={dmg:0, armor:0, spd:0, stone:0, regen:0, aegis:0, gather:0};
 
 const dmgEl=document.getElementById('dmgflash');
 const sleepEl=document.getElementById('sleepfade');
@@ -4800,7 +4774,7 @@ function showDungeonReward(m, earned){
     if(m.coal) rows.push({label:itemLabel(I.COAL), value:'x'+(m.coal|0), id:I.COAL});
     if(m.iron) rows.push({label:itemLabel(I.IRON_INGOT), value:'x'+(m.iron|0), id:I.IRON_INGOT});
     if(m.dia) rows.push({label:itemLabel(I.DIAMOND), value:'x'+(m.dia|0), id:I.DIAMOND});
-    if(Array.isArray(m.items)) for(const it of m.items) if(it&&ITEMS[it.id]) rows.push({label:itemLabel(it.id), value:'x'+(it.count||1), id:it.id});
+    if(Array.isArray(m.items)) for(const it of m.items) if(it&&ITEMS[it.id]){const gear=it.gear&&ITEMS[it.id].tool?GEAR_SYSTEM.profile({tier:ITEMS[it.id].tool.tier,legendary:!!ITEMS[it.id].legendary},it):null;rows.push({label:(gear?gear.rank.name+' '+gear.rarity.name+' ':'')+itemLabel(it.id),value:'x'+(it.count||1),id:it.id});}
   }
   rewardPanel.className=earned?'earned':'missed';
   const shardLine=earned&&m.shard ? '<div class="rbonus"><b>Shard bonus:</b> '+escHTML((m.shard.name||'Sharded')+' +'+(m.shard.plus||0))+' increased boss gold, XP, and legendary token drops.</div>' : '';
@@ -5015,7 +4989,7 @@ function damagePlayer(n,source='unknown'){
   }
   const rawDamage=Number(n)||0;
   const hpBefore=hp;
-  if(equippedArmor()) n*=1-(ITEMS[armorSlot.id].armor.mitigation||0);
+  if(equippedArmor()&&!String(source).startsWith('server:')) n*=1-armorProfileFor(armorSlot).mitigation;
   if(buffs.armor>0) n*=0.5;
   if(buffs.aegis>0) n*=0.65;
   if(buffs.stone>0) n*=0.65;
@@ -6682,6 +6656,9 @@ const legacyWorldBindings={
   "itemLabel":{get:()=>itemLabel},
   "ITEMS":{get:()=>ITEMS},
   "jobContract":{get:()=>jobContract,set:value=>{jobContract=value;}},
+  "jobContractOffers":{get:()=>jobContractOffers,set:value=>{jobContractOffers=value;}},
+  "jobContractOffersJob":{get:()=>jobContractOffersJob,set:value=>{jobContractOffersJob=value;}},
+  "jobContractRefreshAt":{get:()=>jobContractRefreshAt,set:value=>{jobContractRefreshAt=value;}},
   "jobContractProgress":{get:()=>jobContractProgress},
   "jobContractReady":{get:()=>jobContractReady},
   "jobLevelFromXp":{get:()=>jobLevelFromXp},
@@ -6692,6 +6669,8 @@ const legacyWorldBindings={
   "JOBS":{get:()=>JOBS},
   "jobTitleFor":{get:()=>jobTitleFor},
   "jobXp":{get:()=>jobXp,set:value=>{jobXp=value;}},
+  "jobXpByJob":{get:()=>jobXpByJob,set:value=>{jobXpByJob=value;}},
+  "jobXpFor":{get:()=>jobXpFor},
   "jobXpIntoLevel":{get:()=>jobXpIntoLevel},
   "lam":{get:()=>lam},
   "landClaims":{get:()=>landClaims},

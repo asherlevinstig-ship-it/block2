@@ -74,7 +74,7 @@ export function createOnboardingUI(deps) {
 
   function firstPromotionObjective() {
     const focus = getFocus();
-    if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and choose Adventurer', target: HUB.jobs };
+    if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract', target: HUB.jobs };
     if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board", target: HUB.jobs };
     if (focus === 'first_d_gate') {
       const prep = dRankPrepStatus();

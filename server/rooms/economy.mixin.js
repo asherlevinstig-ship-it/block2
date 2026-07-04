@@ -4,16 +4,88 @@ const {
   ARMOR_INFO, BIOME_COLLECTIBLE, CHEST_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_CHEST_CHANCE,
   DRAGON_EGG_OF, FUEL, GUARDIAN_POS, GUILD_DECOR_BUY, I, KEY_LOOT, LEGENDARY_CRAFTS, RECIPES, REWARD_ITEMS,
   ROAD_MERCHANT_BUY, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
-  dangerRingAt, jobPerkChance, jobPerkTier, keyForRank,
+  dangerRingAt, jobLevelFor, jobPerkChance, jobPerkTier, keyForRank,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
+const GEAR_SYSTEM = require('../../shared/gear-system');
+const LOOT_ECONOMY = require('../../shared/loot-economy');
+const JOB_SYSTEM = require('../../shared/job-system');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class EconomyMixin {
+  rollWeaponDrop(rank=0,rarityBonus=0,archetype='sword'){
+    const ri=Math.max(0,Math.min(5,rank|0));
+    const swords=[I.WOOD_SWORD,I.STONE_SWORD,I.IRON_SWORD,I.DIA_SWORD,I.DIA_SWORD,I.DIA_SWORD];
+    const axes=[I.WOOD_AXE,I.STONE_AXE,I.IRON_AXE,I.DIA_AXE,I.DIA_AXE,I.DIA_AXE];
+    const kind=archetype==='axe'?'axe':'sword',ids=kind==='axe'?axes:swords;
+    return {id:ids[ri],count:1,plus:ri<=3?0:ri-3,rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,archetype:kind,gear:true};
+  }
+  gateWeaponArchetype(prof,fallback='sword'){
+    const best={sword:-1,axe:-1},stacks=[...(prof&&Array.isArray(prof.inv)?prof.inv:[]),...(prof&&Array.isArray(prof.lootRecovery)?prof.lootRecovery:[])];
+    for(const stack of stacks){
+      const info=stack&&TOOL_INFO[stack.id];if(!info||!(info.cls in best))continue;
+      best[info.cls]=Math.max(best[info.cls],GEAR_SYSTEM.profile(info,stack).powerScore);
+    }
+    if(best.sword===best.axe)return fallback==='axe'?'axe':'sword';
+    return best.axe<best.sword?'axe':'sword';
+  }
+  rollWeaponDropForSource(source,tier=0,plus=0,prof=null){
+    const spec=LOOT_ECONOMY.weaponSpec(source,tier,plus,Math.random());
+    if(!spec)return null;
+    const archetype=source==='gate'&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
+    return {...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype),source};
+  }
+  rollArmorDrop(rank=0,rarityBonus=0){
+    const ri=Math.max(0,Math.min(5,rank|0));
+    return {
+      id:ri<=2?I.IRON_ARMOR:I.DIA_ARMOR,count:1,gearRank:GEAR_SYSTEM.RANKS[ri].id,
+      rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,gear:true,
+    };
+  }
+  rollArmorDropForSource(source,tier=0,plus=0){
+    const spec=LOOT_ECONOMY.armorSpec(source,tier,plus,Math.random());
+    return spec?{...this.rollArmorDrop(spec.rank,spec.rarityBonus),source}:null;
+  }
+  gearRewardStack(item,info){
+    if(!item||!info)return null;
+    const stack={id:item.id,count:1,plus:Math.max(0,Math.min(3,item.plus|0))};
+    if(GEAR_SYSTEM.RARITIES.some(r=>r.id===item.rarity))stack.rarity=item.rarity;
+    if(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===item.gearRank))stack.gearRank=item.gearRank;
+    if(JOB_SYSTEM.reforgeModifier(item.forge))stack.forge=item.forge;
+    if(item.masterwork&&stack.forge)stack.masterwork=true;
+    if(item.locked||stack.rarity==='mythic'||(info.tier|0)>=5)stack.locked=true;
+    if(typeof item.source==='string'&&item.source)stack.source=item.source.slice(0,32);
+    stack.dur=Number.isFinite(item.dur)?Math.max(0,item.dur|0):(ARMOR_INFO[item.id]?GEAR_SYSTEM.armorProfile(info,stack).maxDur:this.toolMaxDur(stack,info));
+    return stack;
+  }
+  addGearRewardItem(prof,item){
+    const info=item&&(TOOL_INFO[item.id]||ARMOR_INFO[item.id]);if(!prof||!info)return 1;
+    prof.inv=Array.isArray(prof.inv)?prof.inv:[];
+    let index=prof.inv.findIndex(s=>!s);if(index<0&&prof.inv.length<36)index=prof.inv.length;
+    if(index<0)return 1;
+    prof.inv[index]=this.gearRewardStack(item,info);return 0;
+  }
+  pruneLootRecovery(prof,now=Date.now()){
+    if(!prof)return [];
+    prof.lootRecovery=(Array.isArray(prof.lootRecovery)?prof.lootRecovery:[])
+      .filter(item=>item&&(!item.expiresAt||item.expiresAt>now)).slice(0,12);
+    return prof.lootRecovery;
+  }
+  queueGearRecovery(prof,item,source='loot'){
+    const info=item&&(TOOL_INFO[item.id]||ARMOR_INFO[item.id]),stack=this.gearRewardStack(item,info);if(!prof||!stack)return null;
+    const queue=this.pruneLootRecovery(prof),now=Date.now(),protectedItem=stack.locked||stack.rarity==='mythic'||(info.tier|0)>=5;
+    const entry={...stack,source:String(source||'loot').slice(0,32),acquiredAt:now,expiresAt:protectedItem?0:now+7*24*60*60*1000};
+    if(queue.length<12){queue.push(entry);return entry;}
+    const score=s=>GEAR_SYSTEM.profile(TOOL_INFO[s.id]||ARMOR_INFO[s.id]||{},s).powerScore;
+    let weakest=-1;
+    for(let i=0;i<queue.length;i++)if(!queue[i].locked&&(weakest<0||score(queue[i])<score(queue[weakest])))weakest=i;
+    if(weakest>=0&&score(entry)>score(queue[weakest])){queue[weakest]=entry;return entry;}
+    return null;
+  }
   parseChestKey(key) {
     if (typeof key !== 'string') return null;
     const m = key.match(/^(overworld|g\d+):(\d+),(\d+),(\d+)$/);
@@ -196,7 +268,7 @@ class EconomyMixin {
   }
   craftedOutputCount(prof, id, count) {
     let out = Math.max(1, count | 0);
-    if ((id === I.BREAD || id === I.HEARTY_SANDWICH || id === I.COOKED_MEAT || id === I.DRAGON_TREAT) && Math.random() < jobPerkChance(prof, 'cook', 0.08)) {
+    if ((id === I.BREAD || id === I.HEARTY_SANDWICH || id === I.COOKED_MEAT || id === I.DRAGON_TREAT || id === I.GOLDEN_BROTH || id === I.TRAIL_RATION) && prof.job === 'cook' && Math.random() < jobPerkChance(prof, 'cook', 0.08)) {
       out += Math.max(1, Math.floor(out * 0.25));
     }
     return out;
@@ -204,7 +276,7 @@ class EconomyMixin {
   // Returns the count that could NOT be placed (0 = all placed). durOverride, when
   // given, pins the durability instead of the default/blacksmith-perk value.
   addCraftedRewardItem(prof, id, count, durOverride) {
-    const info = TOOL_INFO[id];
+    const info = TOOL_INFO[id]||ARMOR_INFO[id];
     if (!info) return this.addRewardItem(prof, id, count);
     let left = Math.max(0, Math.min(64, count | 0));
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
@@ -214,11 +286,11 @@ class EconomyMixin {
       : (tier ? Math.min(99999, info.dur + Math.max(1, Math.round(info.dur * (0.08 + tier * 0.04)))) : info.dur);
     for (let i = 0; i < prof.inv.length && left > 0; i++) {   // reuse freed holes before growing
       if (prof.inv[i]) continue;
-      prof.inv[i] = { id, count: 1, dur };
+      prof.inv[i] = { id, count: 1, dur, source:'crafted' };
       left--;
     }
     while (left > 0 && prof.inv.length < 36) {
-      prof.inv.push({ id, count: 1, dur });
+      prof.inv.push({ id, count: 1, dur, source:'crafted' });
       left--;
     }
     return left;
@@ -240,7 +312,8 @@ class EconomyMixin {
     if (!this.consumeItem(rec.prof, I.LEGEND_TOKEN, craft.cost)) {
       return client.send('craftLegendaryReject', { reason: 'tokens', id, cost: craft.cost });
     }
-    this.addRewardItem(rec.prof, id, 1);
+    if(ARMOR_INFO[id])this.addGearRewardItem(rec.prof,{id,count:1,rarity:'mythic',locked:true,gear:true});
+    else this.addRewardItem(rec.prof, id, 1);
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
     client.send('craftLegendaryResult', { id, count: 1, cost: craft.cost, name: craft.name });
@@ -362,6 +435,9 @@ class EconomyMixin {
     });
     const recipe = this.matchRecipe(cells, w);
     if (!recipe) return client.send('craftReject', {});
+    if (recipe.job && (rec.prof.job !== recipe.job || jobLevelFor(rec.prof, recipe.job) < (recipe.level | 0))) {
+      return client.send('craftReject', { reason: 'profession', job: recipe.job, level: recipe.level | 0 });
+    }
     const needs = this.recipeNeeds(cells);
     let times = m.shift ? 64 : 1;
     for (let i = 0; i < cells.length; i++) if (cells[i]) times = Math.min(times, stackCounts[i]);

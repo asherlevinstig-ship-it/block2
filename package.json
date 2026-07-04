@@ -7,7 +7,8 @@
     "start": "node server/index.js",
     "test": "node --test server/test/authority.test.js server/test/auth.test.js server/test/client-modules.test.js server/test/progression-balance.test.js server/test/state-clusters.test.js",
     "test:integration": "node server/test/integration.test.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "balance:loot": "node tools/loot-progression-sim.js"
   },
   "dependencies": {
     "@colyseus/schema": "^2.0.0",

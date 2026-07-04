@@ -5,6 +5,7 @@ export const PROGRESSION_ERRORS = Object.freeze({
   active: 'You already have an active contract',
   full: 'Free up inventory space before claiming this reward',
   range: 'Meditate inside the Town Shrine',
+  offer: 'That contract offer is no longer available',
 });
 
 export const PROGRESSION_FOCUS_STATES = Object.freeze(['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
@@ -90,12 +91,13 @@ export function rankProgressForLevel(level, currentXp = 0) {
 export function bindProgressionMessages(room, api) {
   room.onMessage('jobProgress', message => {
     if (!message) return;
-    const before = api.jobLevel(api.getJobXp());
+    const before = api.jobLevel(api.getJobXp(message.job));
     const wasReady = api.contractReady();
-    if (typeof message.jobXp === 'number') api.setJobXp(Math.max(0, message.jobXp | 0));
+    if (message.jobXpByJob) api.setJobXpMap(message.jobXpByJob);
+    if (typeof message.jobXp === 'number') api.setJobXp(Math.max(0, message.jobXp | 0), message.job);
     api.setContract(api.clampContract(message.contract));
-    const after = api.jobLevel(api.getJobXp());
-    if (after > before) api.onJobLevel(after);
+    const after = api.jobLevel(api.getJobXp(message.job));
+    if (after > before) api.onJobLevel(after, message.job);
     if (!wasReady && api.contractReady()) api.onContractReady();
     api.refresh();
   });

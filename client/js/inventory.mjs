@@ -5,6 +5,7 @@ export function createInventoryModel({ slots, items, size = 36, getEquippedArmor
   const newStack = (id, count) => {
     const stack = { id, count };
     if (items[id] && items[id].tool) stack.dur = items[id].tool.dur;
+    if (items[id] && items[id].armor) stack.dur = items[id].armor.dur;
     return stack;
   };
   const count = id => slots.reduce((total, stack) => total + (stack && stack.id === id ? stack.count : 0), 0);
@@ -31,7 +32,7 @@ export function createInventoryModel({ slots, items, size = 36, getEquippedArmor
     if (equipped && equipped.id === id) return 0;
     for (let i = 0; i < size && remaining > 0; i++) {
       const stack = slots[i];
-      if (stack && stack.id === id && !items[id].tool && stack.count < stackMax(id)) {
+      if (stack && stack.id === id && !items[id].tool && !items[id].armor && stack.count < stackMax(id)) {
         const inserted = Math.min(remaining, stackMax(id) - stack.count);
         stack.count += inserted;
         remaining -= inserted;
@@ -52,7 +53,7 @@ export function createInventoryModel({ slots, items, size = 36, getEquippedArmor
 
 export function createEquipmentModel({ items, getArmor, setArmor, inventory, onChange = () => {} }) {
   function restore(value) {
-    const armor = value && items[value.id] && items[value.id].armor ? { id: value.id, count: 1 } : null;
+    const armor = value && items[value.id] && items[value.id].armor ? { ...value, id: value.id, count: 1 } : null;
     setArmor(armor);
     onChange(armor);
     return armor;

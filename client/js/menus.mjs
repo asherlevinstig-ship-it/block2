@@ -3,6 +3,7 @@ import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {api as combatApi,state as combatState} from './combat.mjs';
 import {api as hudApi,state as hudState} from './hud.mjs';
 const gameContext=window.BlockcraftGameContext;
+const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const uiShellState=gameContext.requireState('uiShell');
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -25,6 +26,9 @@ const legacyMenuBindings={
   "applyFurnaceState":{get:()=>applyFurnaceState},
   "applyGateKeyResult":{get:()=>applyGateKeyResult},
   "applyLegendaryCraftResult":{get:()=>applyLegendaryCraftResult},
+  "applyLootRecoveryResult":{get:()=>applyLootRecoveryResult},
+  "applyLootRecoveryState":{get:()=>applyLootRecoveryState},
+  "applyGearLockResult":{get:()=>applyGearLockResult},
   "applyRepairResult":{get:()=>applyRepairResult},
   "applyServerCraft":{get:()=>applyServerCraft},
   "applyServerNpcQuestChains":{get:()=>applyServerNpcQuestChains},
@@ -69,6 +73,7 @@ const legacyMenuBindings={
   "gateReadinessLocal":{get:()=>gateReadinessLocal},
   "gateRejected":{get:()=>gateRejected},
   "gold":{get:()=>gold,set:value=>{gold=value;}},
+  "gearInspectSlot":{get:()=>gearInspectSlot,set:value=>{gearInspectSlot=value;}},
   "guardianUnderCrosshair":{get:()=>guardianUnderCrosshair},
   "guildHallOpen":{get:()=>guildHallOpen,set:value=>{guildHallOpen=value;}},
   "hazards":{get:()=>hazards},
@@ -161,6 +166,7 @@ for(const [bindingName,binding] of Object.entries(legacyMenuBindings)){
 // ---------------- inventory / crafting UI ----------------
 const cursorEl=document.getElementById('cursoritem');
 let cursorStack=null;
+let gearInspectSlot=-1; // -2 is the equipped armour slot
 function renderCursor(){
   cursorEl.innerHTML='';
   if(!cursorStack){ cursorEl.style.display='none'; return; }
@@ -183,6 +189,11 @@ function openUI(mode, furnaceKey){
   lockFallback=false; locked=false;
   uiEl.classList.add('open');
   refreshPlayUi();
+  if(mode==='inv'&&gearInspectSlot<0){
+    const held=inv[combatState.selectedSlot],heldItem=held&&ITEMS[held.id];
+    if(heldItem&&(heldItem.armor||(heldItem.tool&&['sword','axe'].includes(heldItem.tool.cls))))gearInspectSlot=combatState.selectedSlot;
+    else gearInspectSlot=inv.findIndex(s=>{const item=s&&ITEMS[s.id];return item&&(item.armor||(item.tool&&['sword','axe'].includes(item.tool.cls)));});
+  }
   renderUI();
   if(mode==='chest') requestChestOpen();
   if(mode==='furnace') requestFurnaceOpen();
@@ -255,6 +266,7 @@ function takeOneFromInventory(id){
   return false;
 }
 function stageRecipe(recipe){
+  if(recipe.job && (playerJob!==recipe.job || jobLevelFromXp(jobXpFor(recipe.job))<(recipe.level||1))){sysMsg('Equip <b>'+JOBS[recipe.job].name+'</b> and reach Lv '+recipe.level+' to cook that recipe');return;}
   if(!recipe || recipe.shapeless && recipe.shapeless.length>craftCells.length) return;
   if(cursorStack){ sysMsg('Place the held item before choosing a recipe'); return; }
   if(craftCells.some(Boolean)){ sysMsg('Clear the crafting grid before choosing a recipe'); return; }
@@ -299,6 +311,7 @@ function toolMaterialFromId(id){
   return '';
 }
 function recipeUnlocked(recipe){
+  if(recipe.job) return true;
   scanRecipeInventory();
   const out=recipe.out[0];
   const mat=toolMaterialFromId(out);
@@ -338,13 +351,14 @@ function missingForCounts(counts){
   return missing;
 }
 function craftStateForRecipe(recipe){
+  const locked=!!(recipe.job && (playerJob!==recipe.job || jobLevelFromXp(jobXpFor(recipe.job))<(recipe.level||1)));
   const current=craftResult();
   if(current && current.out && recipe.out && current.out[0]===recipe.out[0]){
-    return { missing:[], needsTable:false, ready:true, current:true };
+    return { missing:[], needsTable:false, ready:!locked, current:true, locked };
   }
   const missing=missingForCounts(recipeNeedCounts(recipe));
   const needsTable=recipeFootprint(recipe)>craftW;
-  return { missing, needsTable, ready: missing.length===0 && !needsTable };
+  return { missing, needsTable, ready: !locked && missing.length===0 && !needsTable, locked };
 }
 function hasFurnaceFuel(){
   return Object.keys(FUEL).some(id=>countItem(+id)>0);
@@ -380,7 +394,7 @@ function renderRecipeBook(kind='craft'){
     const state=entry.smelt
       ? { missing:[...(countItem(entry.input)>0?[]:[itemLabel(entry.input)+' x1']), ...(hasFurnaceFuel()?[]:['fuel x1'])], needsTable:false }
       : craftStateForRecipe(entry.recipe);
-    state.ready = state.missing.length===0 && !state.needsTable;
+    state.ready = !state.locked && state.missing.length===0 && !state.needsTable;
     const needTable=!entry.smelt && state.needsTable;
     const row=document.createElement('div');
     row.className='recipeitem '+(state.ready?'ready':'missing')+(needTable?' dim':'');
@@ -393,11 +407,11 @@ function renderRecipeBook(kind='craft'){
     const title=document.createElement('div'); title.className='recipeout';
     title.textContent=itemLabel(outId)+(outCount>1?' x'+outCount:'');
     const hint=document.createElement('span'); hint.className='recipehint';
-    hint.textContent=state.missing.length ? 'Need '+state.missing.join(', ') : (entry.smelt ? itemLabel(entry.input)+' + fuel' : recipeIngredients(entry.recipe));
+    hint.textContent=state.locked ? 'Requires '+JOBS[entry.recipe.job].name+' Lv '+entry.recipe.level : state.missing.length ? 'Need '+state.missing.join(', ') : (entry.smelt ? itemLabel(entry.input)+' + fuel' : recipeIngredients(entry.recipe));
     text.appendChild(title); text.appendChild(hint); row.appendChild(text);
     const badge=document.createElement('div'); badge.className='recipebadge';
     badge.className='recipebadge '+(state.ready?'ready':'missing');
-    badge.textContent=entry.smelt ? (state.ready?'READY':'SMELT') : needTable ? 'TABLE' : state.ready ? 'READY' : 'MISS';
+    badge.textContent=entry.smelt ? (state.ready?'READY':'SMELT') : state.locked ? 'LV '+entry.recipe.level : needTable ? 'TABLE' : state.ready ? 'READY' : 'MISS';
     row.appendChild(badge);
     box.appendChild(row);
   }
@@ -434,6 +448,7 @@ function slotInteract(acc, e, opts={}){
   if(opts.result){
     const r=craftResult();
     if(!r) return;
+    if(r.job && (playerJob!==r.job || jobLevelFromXp(jobXpFor(r.job))<(r.level||1))){sysMsg('Equip <b>'+JOBS[r.job].name+'</b> and reach Lv '+r.level+' to cook that recipe');return;}
     if(NET.on && !tutorialLocalCrafting()){
       requestServerCraft(e.shiftKey);
       return;
@@ -467,6 +482,11 @@ function slotInteract(acc, e, opts={}){
     renderUI(); renderCursor(); return;
   }
   const s=acc.get();
+  const inspectable=s&&ITEMS[s.id]&&(ITEMS[s.id].armor||(ITEMS[s.id].tool&&['sword','axe'].includes(ITEMS[s.id].tool.cls)));
+  const inspectSlot=opts.armor?-2:opts.inventorySlot;
+  if(e.button===0&&!cursorStack&&inspectable&&inspectSlot!=null&&gearInspectSlot!==inspectSlot){
+    gearInspectSlot=inspectSlot;renderUI();renderCursor();return;
+  }
   if(opts.armor){
     const canPlace = st => !st || (ITEMS[st.id] && ITEMS[st.id].armor);
     if(e.button===0){
@@ -475,7 +495,7 @@ function slotInteract(acc, e, opts={}){
       acc.set(cursorStack||null);
       cursorStack=cur||null;
       removeEquippedArmorCopies();
-      if(NET.on&&NET.room) NET.room.send('equipArmor',{id:armorSlot?armorSlot.id:0});
+      if(NET.on&&NET.room) NET.room.send('equipArmor',armorSlot?{id:armorSlot.id,gearRank:armorSlot.gearRank||'',rarity:armorSlot.rarity||'common',dur:armorSlot.dur}:{id:0});
       SFX.equip();
     } else if(e.button===2 && !cursorStack && s){
       cursorStack=s; acc.set(null);
@@ -528,7 +548,7 @@ function slotInteract(acc, e, opts={}){
     }
   } else if(e.button===2){
     if(cursorStack){
-      if(!s){ acc.set(newStack(cursorStack.id,1)); if(cursorStack.dur!==undefined) acc.get().dur=cursorStack.dur; if(cursorStack.plus) acc.get().plus=cursorStack.plus|0; cursorStack.count--; if(cursorStack.count<=0) cursorStack=null; }
+      if(!s){ acc.set({...cursorStack,count:1}); cursorStack.count--; if(cursorStack.count<=0) cursorStack=null; }
       else if(s.id===cursorStack.id && !ITEMS[s.id].tool && s.count<stackMax(s.id)){ s.count++; cursorStack.count--; if(cursorStack.count<=0) cursorStack=null; }
     } else if(s && s.count>1){
       const half=Math.ceil(s.count/2);
@@ -541,6 +561,7 @@ function slotInteract(acc, e, opts={}){
 function makeSlotEl(acc, opts={}){
   const el=document.createElement('div'); el.className='slot';
   fillSlotEl(el, acc.get());
+  if((opts.armor&&gearInspectSlot===-2)||(opts.inventorySlot!=null&&gearInspectSlot===opts.inventorySlot))el.classList.add('gear-inspected');
   el.addEventListener('mousedown', e=>{ e.preventDefault(); slotInteract(acc, e, opts); });
   return el;
 }
@@ -561,6 +582,80 @@ function updateFurnaceBars(structureChanged){
   if(structureChanged) renderUI();
 }
 
+function inspectedGear(){
+  const stack=gearInspectSlot===-2?equippedArmor():gearInspectSlot>=0?inv[gearInspectSlot]:null;
+  const item=stack&&ITEMS[stack.id],info=item&&(item.armor||item.tool);
+  if(!stack||!info||(!item.armor&&!['sword','axe'].includes(info.cls)))return null;
+  return {stack,item,info,slot:gearInspectSlot,armor:!!item.armor};
+}
+function gearSourceLabel(stack,item){
+  const source=String(stack&&stack.source||'').toLowerCase();
+  if(source==='gate')return 'Gate clear';
+  if(source==='captain')return 'Bandit captain';
+  if(source==='bandit')return 'Bandit';
+  if(source==='boss')return 'Boss reward';
+  if(source==='crafted')return 'Crafted';
+  if(item&&item.legendary)return 'Guardian forge';
+  return 'Crafted / legacy';
+}
+function comparisonDelta(value,base,suffix='',digits=1){
+  const delta=value-base,rounded=digits?Math.round(delta*Math.pow(10,digits))/Math.pow(10,digits):Math.round(delta);
+  return '<span class="'+(delta>0?'gain':delta<0?'loss':'same')+'">'+(delta>0?'+':'')+rounded+suffix+'</span>';
+}
+function renderGearComparison(){
+  const panel=document.createElement('section');panel.className='gear-compare';
+  const selectedGear=inspectedGear();
+  if(!selectedGear){
+    panel.innerHTML='<div class="gear-empty"><b>GEAR INSPECTION</b><span>Click gear once to inspect it; click it again to pick it up.</span></div>';
+    return panel;
+  }
+  const {stack,item,info,slot,armor}=selectedGear;
+  const profile=armor?GEAR_SYSTEM.armorProfile(info,stack):GEAR_SYSTEM.profile(info,stack);
+  const held=inv[combatState.selectedSlot],heldInfo=held&&ITEMS[held.id]&&ITEMS[held.id].tool;
+  const baseline=armor?equippedArmor():(heldInfo&&['sword','axe'].includes(heldInfo.cls)?held:null);
+  const baseInfo=baseline&&(armor?ITEMS[baseline.id].armor:ITEMS[baseline.id].tool);
+  const baseProfile=baseline&&(armor?GEAR_SYSTEM.armorProfile(baseInfo,baseline):GEAR_SYSTEM.weaponCombatProfile(baseInfo,baseline));
+  const combat=armor?null:GEAR_SYSTEM.weaponCombatProfile(info,stack);
+  const maxDur=armor?profile.maxDur:toolMaxDur(stack),curDur=stack.dur==null?maxDur:stack.dur;
+  const equipped=armor?slot===-2:slot===combatState.selectedSlot;
+  let verdict='NEW SLOT',verdictClass='upgrade';
+  if(equipped){verdict='EQUIPPED';verdictClass='equipped';}
+  else if(baseline){
+    const better=armor?(profile.mitigation>baseProfile.mitigation||profile.mitigation===baseProfile.mitigation&&maxDur>baseProfile.maxDur):(combat.dps>baseProfile.dps||combat.dps===baseProfile.dps&&maxDur>toolMaxDur(baseline));
+    const equal=armor?profile.mitigation===baseProfile.mitigation&&maxDur===baseProfile.maxDur:combat.dps===baseProfile.dps&&maxDur===toolMaxDur(baseline);
+    verdict=equal?'SIDEGRADE':better?'UPGRADE':'DOWNGRADE';verdictClass=equal?'sidegrade':better?'upgrade':'downgrade';
+  }
+  const special=armor?(info.power==='aegis'?'Aegis Pulse · J':'Steady protection'):(info.cls==='sword'?'Momentum · consecutive hits gain damage':'Stagger · interrupts and slows');
+  const rows=armor
+    ?[
+      ['MITIGATION',Math.round(profile.mitigation*100)+'%',baseProfile?comparisonDelta(profile.mitigation*100,baseProfile.mitigation*100,'%',0):'—'],
+      ['DURABILITY',curDur+' / '+maxDur,baseProfile?comparisonDelta(maxDur,baseProfile.maxDur,'',0):'—'],
+    ]
+    :[
+      ['DAMAGE',combat.damage,baseProfile?comparisonDelta(combat.damage,baseProfile.damage):'—'],
+      ['ATTACK SPEED',combat.attacksPerSecond+'/s',baseProfile?comparisonDelta(combat.attacksPerSecond,baseProfile.attacksPerSecond,'/s'):'—'],
+      ['DPS',combat.dps,baseProfile?comparisonDelta(combat.dps,baseProfile.dps):'—'],
+      ['DURABILITY',curDur+' / '+maxDur,baseline?comparisonDelta(maxDur,toolMaxDur(baseline),'',0):'—'],
+    ];
+  panel.innerHTML='<header><div><small>SELECTED GEAR</small><h3 style="color:'+profile.rarity.color+'">'+escHTML(profile.rank.name+' '+profile.rarity.name)+'</h3><b>'+escHTML(itemNameWithPlus(stack))+'</b></div><strong class="'+verdictClass+'">'+verdict+'</strong></header>'+
+    '<div class="gear-stat-grid">'+rows.map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b>'+r[2]+'</div>').join('')+'</div>'+
+    '<div class="gear-traits"><span><b>IDENTITY</b>'+escHTML(special)+'</span><span><b>SOURCE</b>'+escHTML(gearSourceLabel(stack,item))+'</span><span><b>STATUS</b>'+(stack.locked?'Protected':'Unprotected')+'</span></div>';
+  const actions=document.createElement('div');actions.className='gear-actions';
+  const action=(label,handler,disabled=false,title='')=>{const b=qBtn(label,handler,disabled);b.disabled=disabled;if(title)b.title=title;actions.appendChild(b);};
+  if(armor){
+    if(slot===-2)action('UNEQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:0});});
+    else action('EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:stack.id,slot,gearRank:stack.gearRank||'',rarity:stack.rarity||'common'});},false);
+  }else action(equipped?'EQUIPPED':'EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipWeapon',{slot,hotbar:combatState.selectedSlot});},equipped);
+  const nearSmith=dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-(TOWN.TC+14.5),player.pos.z-(TOWN.TC-14))<=10;
+  const missing=Math.max(0,maxDur-curDur);
+  action(stack.locked?'UNLOCK':'LOCK',()=>requestGearLock(slot,!stack.locked),slot<0,'Unequip armour before changing protection');
+  action(nearSmith?'REPAIR':'REPAIR AT TOBIN',()=>requestBlacksmithRepair(slot),slot<0||!nearSmith||!missing);
+  const salvageable=slot>=0&&(info.tier|0)<5&&!stack.locked;
+  action(nearSmith?'SALVAGE':'SALVAGE AT TOBIN',()=>requestBlacksmithSalvage(slot),!nearSmith||!salvageable);
+  panel.appendChild(actions);
+  return panel;
+}
+
 function renderUI(){
   uipanel.innerHTML='';
   const title=document.createElement('h2');
@@ -572,12 +667,19 @@ function renderUI(){
     equip.appendChild(makeSlotEl({get:()=>armorSlot,set:v=>{armorSlot=v;}}, {armor:true}));
     const label=document.createElement('div');
     const armor=equippedArmor();
-    label.innerHTML='<b>ARMOR</b><div class="hint">'+(armor?'Legendary power: J - Aegis Pulse':'Equip legendary armor here')+'</div>';
+    label.innerHTML='<b>ARMOR</b><div class="hint">'+(armor?'Click once to inspect equipped armour':'Equip any armour here')+'</div>';
     equip.appendChild(label);
     const bond=qBtn('DRAGON BONDS', ()=>openDragonBondUI(), !dragonUnlocks.length);
     bond.style.marginLeft='auto';
     equip.appendChild(bond);
     uipanel.appendChild(equip);
+    try{uipanel.appendChild(renderGearComparison());}
+    catch(error){
+      console.error('[gear comparison]',error);
+      const fallback=document.createElement('section');fallback.className='gear-compare';
+      fallback.innerHTML='<div class="gear-empty"><b>GEAR INSPECTION</b><span>Comparison data is temporarily unavailable.</span></div>';
+      uipanel.appendChild(fallback);
+    }
   }
 
   if(uiMode==='chest'){
@@ -651,11 +753,11 @@ function renderUI(){
   const bagSec=document.createElement('div'); bagSec.className='uisec';
   const bag=document.createElement('div'); bag.className='grid';
   bag.style.gridTemplateColumns='repeat(9, 48px)';
-  for(let i=9;i<36;i++) bag.appendChild(makeSlotEl(makeAccessor(()=>inv,i), {section:'bag'}));
+  for(let i=9;i<36;i++) bag.appendChild(makeSlotEl(makeAccessor(()=>inv,i), {section:'bag',inventorySlot:i}));
   bagSec.appendChild(bag); uipanel.appendChild(bagSec);
   // hotbar row
   const hotRow=document.createElement('div'); hotRow.className='row';
-  for(let i=0;i<9;i++) hotRow.appendChild(makeSlotEl(makeAccessor(()=>inv,i), {section:'hot'}));
+  for(let i=0;i<9;i++) hotRow.appendChild(makeSlotEl(makeAccessor(()=>inv,i), {section:'hot',inventorySlot:i}));
   uipanel.appendChild(hotRow);
 }
 
@@ -1116,7 +1218,7 @@ function applyFurnaceResult(m){
 function applyToolSync(m){
   if(!m) return;
   const i=Math.max(0, Math.min(35, m.slot|0));
-  inv[i]=m.item?{id:m.item.id, count:m.item.count||1, ...(m.item.dur!=null?{dur:m.item.dur}:{}), ...(m.item.plus?{plus:m.item.plus|0}:{})}:null;
+  inv[i]=m.item?{id:m.item.id, count:m.item.count||1, ...(m.item.dur!=null?{dur:m.item.dur}:{}), ...(m.item.plus?{plus:m.item.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.item.rarity)?{rarity:m.item.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.item.forge)?{forge:m.item.forge}:{}),...(m.item.masterwork?{masterwork:true}:{}),...(m.item.locked?{locked:true}:{})}:null;
   if(m.broke) showName('Tool broke!');
   if(m.spared) showJobPerk('miner','tool spared');
   refreshHUD();
@@ -1128,7 +1230,7 @@ function applyRepairResult(m){
   const kit=inv[kitSlot];
   if(kit&&kit.id===I.REPAIR_KIT){ kit.count--; if(kit.count<=0) inv[kitSlot]=null; }
   const toolSlot=Math.max(0,Math.min(35,m.toolSlot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair');
   jobContractProgress('repair', 1, I.REPAIR_KIT);
@@ -1137,7 +1239,7 @@ function applyRepairResult(m){
 function applyBlacksmithRepairResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id]) return;
   const toolSlot=Math.max(0,Math.min(35,m.toolSlot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
   if(typeof m.gold==='number') gold=Math.max(0,gold+(m.gold|0));
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair');
@@ -1148,7 +1250,7 @@ function applyBlacksmithRepairResult(m){
 function applyBlacksmithUpgradeResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id]) return;
   const toolSlot=Math.max(0,Math.min(35,m.slot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{})};
   if(typeof m.gold==='number') gold=Math.max(0,gold+(m.gold|0));
   if(m.mat && m.mat.id) removeItems(m.mat.id, m.mat.count||1);
   refreshHUD(); if(uiOpen) renderUI();
@@ -1157,9 +1259,17 @@ function applyBlacksmithUpgradeResult(m){
   sysMsg('Tobin upgrades <b>'+escHTML(itemNameWithPlus(inv[toolSlot]))+'</b>.');
   if(qOpen) openBlacksmithServicesUI();
 }
+function applyBlacksmithReforgeResult(m){
+  if(!m||!m.tool||!ITEMS[m.tool.id])return;
+  const slot=Math.max(0,Math.min(35,m.slot|0)),t=m.tool;
+  inv[slot]={id:t.id,count:t.count||1,dur:t.dur,...(t.plus?{plus:t.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===t.rarity)?{rarity:t.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(t.forge)?{forge:t.forge}:{}),...(t.masterwork?{masterwork:true}:{}),...(t.locked?{locked:true}:{})};
+  if(typeof m.gold==='number')gold=Math.max(0,gold+(m.gold|0));
+  if(m.materials){if(m.materials.iron)removeItems(I.IRON_INGOT,m.materials.iron);if(m.materials.diamond)removeItems(I.DIAMOND,m.materials.diamond);}
+  refreshHUD();if(uiOpen)renderUI();SFX.level();sysMsg('Tobin completes <b>'+escHTML(itemNameWithPlus(inv[slot]))+'</b>.');if(qOpen)openBlacksmithServicesUI();
+}
 function repairRejected(m){
   const r=m&&m.reason;
-  if(r==='tool') sysMsg('No damaged <b>tool</b> to repair');
+  if(r==='tool') sysMsg('No damaged <b>gear</b> to repair');
   else if(r==='kit') sysMsg('You need a <b>Repair Kit</b>');
   else sysMsg('Repair failed');
 }
@@ -1170,7 +1280,14 @@ function blacksmithServiceRejected(m){
   else if(r==='materials') sysMsg('Missing required <b>materials</b>');
   else if(r==='range') sysMsg('Stand closer to <b>Tobin</b>');
   else if(r==='max') sysMsg('That item is already at the current upgrade limit');
-  else if(r==='tool') sysMsg('Select an eligible <b>sword or pickaxe</b>');
+  else if(r==='tool') sysMsg('Select eligible <b>gear</b>');
+  else if(r==='profession') sysMsg('Equip <b>Blacksmith</b> as your profession first');
+  else if(r==='level') sysMsg('Requires <b>Blacksmith Level '+((m&&m.level)||2)+'</b>');
+  else if(r==='forged') sysMsg('That item is already reforged');
+  else if(r==='unforged') sysMsg('Reforge the item before using this service');
+  else if(r==='masterwork') sysMsg('That item is already a Masterwork');
+  else if(r==='legendary') sysMsg('Legendary relics cannot be salvaged');
+  else if(r==='locked') sysMsg('That gear is <b>protected</b>. Unlock it before salvaging.');
   else sysMsg('Tobin cannot work that item.');
   if(qOpen) openBlacksmithServicesUI();
 }
@@ -1948,7 +2065,7 @@ function aegisQuestLogCard(){
 }
 function jobQuestLogCard(){
   const c=clampJobContract(jobContract);
-  if(!c || !playerJob || c.job!==playerJob) return questLogCardHTML('Job Contract','No active job contract','Choose work from the Job Board.','Job Board',false);
+  if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return questLogCardHTML('Job Contract','No active job contract','Choose Hunter or profession work from the Job Board.','Job Board',false);
   return questLogCardHTML('Job Contract', c.title,
     jobContractReady() ? 'Complete — claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' — '+c.desc,
     jobContractReady() ? 'Job Board' : 'Follow the contract description');
@@ -2128,11 +2245,11 @@ function openDragonBondUI(){
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
 function chooseJob(id, reopenFocus=''){
-  if(!JOBS[id]) return;
+  if(!JOBS[id]||id==='adventurer') return;
   if(NET.on&&NET.room){ NET.room.send('setJob',{job:id}); return; }
   const old=playerJob;
   playerJob=id;
-  if(old!==id) jobContract=null;
+  if(old!==id&&jobContract&&jobContract.job!=='adventurer') jobContract=null;
   if(old!==id) sysMsg('You are now working as a <b>'+JOBS[id].name+'</b>');
   renderStat();
   openJobsUI(reopenFocus||id);
@@ -2318,65 +2435,7 @@ function renderUtilitiesUI(){
 }
 function jobContractGuideLines(c){
   if(!c) return ['Choose a job contract first, then this panel will explain how to progress it.'];
-  const jobName=JOBS[c.job]&&JOBS[c.job].name||'Job';
-  const target=c.target&&ITEMS[c.target]?ITEMS[c.target].name:'the listed target';
-  const lines={
-    quest:[
-      'Accept any town NPC quest, such as Mara Vale at the Quest Giver.',
-      'Complete the quest objective shown on the right-side HUD.',
-      'Turn that quest in to its giver. This job contract will advance when the quest is completed.'
-    ],
-    kill:[
-      'Leave town through a wilderness gate or follow roads beyond the wall.',
-      'Fight hostile creatures with Left Click or F.',
-      'Kills outside town count toward this contract. Return to the Job Board when it says claim.'
-    ],
-    gate:[
-      'Find or use a Gate outside town.',
-      'Enter with G or right-click, defeat the dungeon boss, then return through the portal.',
-      'Clearing one gate completes this contract.'
-    ],
-    mine:[
-      'Equip a pickaxe from your hotbar.',
-      'Mine '+target+' with Left Click or F. Stone Order accepts stone or cobble.',
-      'Useful stone and ore are found outside town, in caves, and inside gates.'
-    ],
-    farm:[
-      'Go to the Town Farm or prepare soil with a hoe.',
-      'Use G or right-click to till soil, plant seeds, and harvest mature wheat.',
-      'Harvesting, planting, and tilling can all progress general farm contracts.'
-    ],
-    cook:[
-      'Gather ingredients such as wheat, bread, meat, or fish.',
-      'Use E to open crafting, or use a furnace/cooking station where needed.',
-      'Cooking, baking, or preparing meals advances this contract.'
-    ],
-    sell:[
-      'Prepare or collect food items first.',
-      'Visit the tavern or food seller and sell food from the shop interface.',
-      'Each food sale advances this supplier contract.'
-    ],
-    smith:[
-      'Smelt ore, craft tools, craft armor, or make repair kits.',
-      'Use E for crafting recipes, or a furnace for smelting.',
-      'Blacksmith work advances when the crafted or smelted item is completed.'
-    ],
-    repair:[
-      'Craft or obtain Repair Kits.',
-      'Select a Repair Kit, then use it on a damaged tool.',
-      'Each successful repair advances this contract.'
-    ],
-    meditate:[
-      'Go to the Town Shrine.',
-      'Stand inside the shrine circle and press G or right-click to meditate.',
-      'Hold the meditation until enough focus time has accumulated.'
-    ],
-  };
-  return lines[c.type] || [
-    'Follow the contract description: '+(c.desc||jobName+' work'),
-    'Watch the right-side HUD for progress.',
-    'Return to the Job Board when the contract is complete.'
-  ];
+  return JOB_SYSTEM.guideSteps(c.type);
 }
 function openJobContractGuide(c=jobContract){
   c=clampJobContract(c);
@@ -2395,6 +2454,48 @@ function openJobContractGuide(c=jobContract){
   row.appendChild(qBtn('JOB BOARD', ()=>openJobsUI()));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
+function jobMilestoneHTML(jobId,level){
+  const state=JOB_SYSTEM.milestoneState(jobId,level),latest=state.earned[state.earned.length-1];
+  const earned=latest?'<span style="color:#8fbcae">Earned: '+escHTML(latest.title)+' — '+escHTML(latest.desc)+'</span>':'<span style="color:#7f93aa">No milestone earned yet.</span>';
+  const next=state.next?'<br><span style="color:#d9b66f">Next at Lv '+state.next.level+': '+escHTML(state.next.title)+' — '+escHTML(state.next.desc)+'</span>':'<br><span style="color:#d8f8c8">All milestones earned.</span>';
+  return '<small>'+earned+next+'</small>';
+}
+function openFarmerServicesUI(){
+  openQWin('management'); qpanelEl.innerHTML='';
+  const level=jobLevelFromXp(jobXpFor('farmer')),rules=JOB_SYSTEM.FARMER_RULES;
+  const h=document.createElement('h2');h.textContent='FARMER FIELDCRAFT';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='FARMER LV '+level+' · LISS BARLEY';qpanelEl.appendChild(sub);
+  const p=document.createElement('p');p.className='qtext';
+  const line=(need,title,text)=>'<b style="color:'+(level>=need?'#86efac':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
+  p.innerHTML=[line(rules.bonusYieldLevel,'Bountiful Harvest','Harvests can produce bonus wheat.'),line(rules.windseedLevel,'Windseed Cultivation','Hold a Prairie Windseed and use it on empty farmland.'),line(rules.fieldcraftLevel,'Fieldcraft','Crops grow faster. Craft Compost from leaves, wheat, and charcoal; use it on growing crops.'),line(rules.goldenHarvestLevel,'Golden Harvest','Windseed crops can yield Golden Wheat for valuable recipes and tavern sales.')].join('<br><br>');qpanelEl.appendChild(p);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('OPEN CRAFTING',()=>openCraftingFromNpc()));
+  row.appendChild(qBtn('FARMER WORK',()=>openJobsUI('farmer','Farmer')));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
+function openMonkRitualUI(){
+  openQWin('management');qpanelEl.innerHTML='';
+  const level=jobLevelFromXp(jobXpFor('monk')),rules=JOB_SYSTEM.MONK_RULES;
+  const h=document.createElement('h2');h.textContent='SHRINE RITUALS';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='MONK LV '+level+' · SABLE VENN';qpanelEl.appendChild(sub);
+  const p=document.createElement('p');p.className='qtext';
+  const line=(need,title,text)=>'<b style="color:'+(level>=need?'#7dd3fc':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
+  p.innerHTML=[line(rules.regenLevel,'Restoring Focus','Meditation renews a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus.')].join('<br><br>')+'<br><br><small>Stand inside the shrine and press <b>G</b> or right-click to meditate. Moving ends meditation, but earned focus remains for its duration.</small>';qpanelEl.appendChild(p);
+  const active=document.createElement('p');active.className='qtext';const activeText=[buffs.regen>0?'Restoration '+Math.ceil(buffs.regen)+'s':'',buffs.spd>0?'Flow '+Math.ceil(buffs.spd)+'s':'',buffs.stone>0?'Stone '+Math.ceil(buffs.stone)+'s':''].filter(Boolean).join(' · ');active.innerHTML='<b>Active focus:</b> '+(activeText||'None');qpanelEl.appendChild(active);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('MONK WORK',()=>openJobsUI('monk','Shrine')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
+function openMinerSurveyUI(){
+  openQWin('management');qpanelEl.innerHTML='';
+  const level=jobLevelFromXp(jobXpFor('miner')),rules=JOB_SYSTEM.MINER_RULES;
+  const h=document.createElement('h2');h.textContent='MINER SURVEY';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='MINER LV '+level+' · BROKK STONEHAND';qpanelEl.appendChild(sub);
+  const p=document.createElement('p');p.className='qtext';
+  const line=(need,title,text)=>'<b style="color:'+(level>=need?'#fbbf24':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
+  p.innerHTML=[line(rules.oreSenseLevel,'Ore Sense','Survey nearby rock and reveal ore veins for a short time.'),line(rules.stonehandLevel,'Stonehand','Each tool use has a chance to preserve durability.'),line(rules.deepProspectLevel,'Deep Prospecting','Surveys reach farther and recharge twice as quickly.'),line(rules.geodeLevel,'Geode Mastery','Ore can contain a Prismatic Geode, craftable into a diamond.')].join('<br><br>');qpanelEl.appendChild(p);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  if(level>=rules.oreSenseLevel)row.appendChild(qBtn('SURVEY NOW',()=>{if(NET.on&&NET.room){NET.room.send('prospect',{});closeQWin();}else sysMsg('Ore surveys require a live world connection.');}));
+  row.appendChild(qBtn('MINER WORK',()=>openJobsUI('miner','Mine')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
 function openJobsUI(focusJob='', sourceTitle=''){
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
@@ -2404,16 +2505,29 @@ function openJobsUI(focusJob='', sourceTitle=''){
   const h=document.createElement('h2'); h.textContent=focusJob ? JOBS[focusJob].name.toUpperCase()+' CONTRACTS' : 'JOB BOARD'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent=sourceTitle ? sourceTitle.toUpperCase()+' - JOB BOARD CONTRACTS' : 'JOB BOARD CONTRACTS - PROFESSION PROGRESSION'; qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  const ji=jobXpIntoLevel(jobXp);
-  info.innerHTML=playerJob
-    ? 'Active job: <b style="color:'+JOBS[playerJob].col+'">'+jobTitleFor(playerJob,ji.lvl)+'</b> <small style="color:#d8f8c8">'+JOBS[playerJob].name+' Lv '+ji.lvl+'</small>. Job board contracts are repeatable work for gold and job XP.'
-    : (focusJob ? 'This station trains <b style="color:'+JOBS[focusJob].col+'">'+JOBS[focusJob].name+'</b>. Choose it to unlock matching contracts and perks.' : 'Choose an active job to unlock profession contracts.');
+  const ji=jobXpIntoLevel(jobXpFor(playerJob||'adventurer')),career=jobXpIntoLevel(jobXpFor('adventurer'));
+  info.innerHTML='Permanent career: <b style="color:'+JOBS.adventurer.col+'">'+jobTitleFor('adventurer',career.lvl)+'</b> <small style="color:#d8f8c8">Lv '+career.lvl+'</small>. '+
+    (playerJob?'Equipped profession: <b style="color:'+JOBS[playerJob].col+'">'+jobTitleFor(playerJob,ji.lvl)+'</b> <small style="color:#d8f8c8">Lv '+ji.lvl+'</small>.':'Choose one trade profession to equip; every profession keeps its own XP when switched.')+'<br><br>'+jobMilestoneHTML('adventurer',career.lvl);
   qpanelEl.appendChild(info);
-  if(playerJob){
+  const offerJob=focusJob&&JOBS[focusJob]?focusJob:'adventurer';
+  if(!jobContract){
+    const tabs=document.createElement('div');tabs.className='qrow';
+    tabs.appendChild(qBtn('HUNTER OFFERS',()=>openJobsUI('adventurer'),offerJob==='adventurer'));
+    if(playerJob)tabs.appendChild(qBtn(JOBS[playerJob].name.toUpperCase()+' OFFERS',()=>openJobsUI(playerJob),offerJob===playerJob));
+    qpanelEl.appendChild(tabs);
+    if(NET.on&&NET.room&&(jobContractOffersJob!==offerJob||Date.now()>=jobContractRefreshAt))NET.room.send('jobContract',{action:'offers',job:offerJob});
+    else if(!NET.on&&(jobContractOffersJob!==offerJob||!jobContractOffers.length)){
+      const scale=JOB_SYSTEM.contractScaleFromXp(jobXpFor(offerJob)),baseXp=hunterXpForActivity(S.lvl,'job_contract');
+      jobContractOffers=offerJob==='adventurer'&&jobXpFor('adventurer')<=0?[{...JOB_SYSTEM.firstHunterContract(),id:'local_first',difficulty:'balanced',difficultyLabel:'First Assignment',estimate:'About 5 minutes',location:'Beyond the town walls',rewardXp:baseXp}]:JOB_SYSTEM.contractOffers(offerJob,scale,S.lvl,{STONE:B.STONE,IRON_ORE:B.IRON_ORE,WHEAT_3:B.WHEAT_3},baseXp,0).map((o,i)=>({...o,id:'local_'+offerJob+'_'+i}));
+      jobContractOffersJob=offerJob;jobContractRefreshAt=Date.now()+JOB_SYSTEM.OFFER_REFRESH_MS;
+    }
+  }
+  {
     jobContract=clampJobContract(jobContract);
     const c=jobContract;
     const box=document.createElement('div'); box.className='shoprow';
-    const mark=document.createElement('b'); mark.style.color=JOBS[playerJob].col; mark.style.fontSize='20px'; mark.textContent='JOB'; box.appendChild(mark);
+    const contractJob=c?c.job:(playerJob||'adventurer'),contractDef=JOBS[contractJob]||JOBS.adventurer;
+    const mark=document.createElement('b'); mark.style.color=contractDef.col; mark.style.fontSize='20px'; mark.textContent=c&&c.job==='adventurer'?'HUNTER':'WORK'; box.appendChild(mark);
     const txt=document.createElement('span');
     if(c){
       const pct=Math.round((Math.min(c.need,c.have)/Math.max(1,c.need))*100);
@@ -2430,14 +2544,7 @@ function openJobsUI(focusJob='', sourceTitle=''){
         jobContract=null; sysMsg('Job contract abandoned'); refreshHUD(); openJobsUI();
       }, false));
     }
-    else box.appendChild(qBtn('TAKE CONTRACT', ()=>{
-      if(NET.on&&NET.room){ NET.room.send('jobContract',{action:'take'}); return; }
-      jobContract=makeJobContract(playerJob);
-      sysMsg('New contract: <b>'+escHTML(jobContract.title)+'</b>');
-      clearTownJobGuidance();
-      refreshHUD();
-      openJobsUI();
-    }));
+    else txt.innerHTML=jobContractOffersJob===offerJob&&!jobContractOffers.length&&Date.now()<jobContractRefreshAt?'<b>This rotation has been used</b><br><small>New '+escHTML(JOBS[offerJob].name)+' offers arrive when the board refreshes.</small>':'<b>Choose one '+escHTML(JOBS[offerJob].name)+' contract below</b><br><small>Offers refresh together; abandoning work does not reroll the board.</small>';
     qpanelEl.appendChild(box);
     if(c){
       const help=document.createElement('p'); help.className='qtext';
@@ -2445,16 +2552,29 @@ function openJobsUI(focusJob='', sourceTitle=''){
       qpanelEl.appendChild(help);
     }
   }
-  const jobOrder=Object.keys(JOBS);
+  if(!jobContract&&jobContractOffersJob===offerJob){
+    for(const offer of jobContractOffers){
+      const card=document.createElement('div');card.className='shoprow';
+      const badge=document.createElement('b');badge.style.color=offer.difficulty==='quick'?'#86efac':offer.difficulty==='demanding'?'#fb923c':'#9fd7ff';badge.textContent=(offer.difficultyLabel||offer.difficulty||'Offer').toUpperCase();card.appendChild(badge);
+      const text=document.createElement('span');text.innerHTML='<b>'+escHTML(offer.title)+'</b> · '+offer.need+' required<br><small>'+escHTML(offer.desc)+'</small><br><small style="color:#9fb0c6">'+escHTML(offer.estimate||'Flexible duration')+' · '+escHTML(offer.location||'Job objective')+'</small><br><small style="color:#d9b66f">Reward: '+offer.rewardGold+' gold, '+offer.rewardXp+' Hunter XP, '+offer.rewardJobXp+' job XP</small>';card.appendChild(text);
+      card.appendChild(qBtn('ACCEPT',()=>{
+        if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:offer.id});return;}
+        jobContract={...offer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
+      }));qpanelEl.appendChild(card);
+    }
+    const remaining=Math.max(0,jobContractRefreshAt-Date.now()),mins=Math.max(1,Math.ceil(remaining/60000));
+    const refresh=document.createElement('p');refresh.className='qtext';refresh.innerHTML='<small style="color:#7f93aa">New offers in about '+mins+' minute'+(mins===1?'':'s')+'.</small>';qpanelEl.appendChild(refresh);
+  }
+  const jobOrder=Object.keys(JOBS).filter(id=>id!=='adventurer');
   if(focusJob) jobOrder.sort((a,b)=>(a===focusJob?-1:b===focusJob?1:0));
   for(const id of jobOrder){
-    const j=JOBS[id], cur=id===playerJob, prog=cur?jobXpIntoLevel(jobXp):null;
+    const j=JOBS[id], cur=id===playerJob, prog=jobXpIntoLevel(jobXpFor(id));
     const r=document.createElement('div'); r.className='shoprow';
     const badge=document.createElement('b'); badge.style.color=j.col; badge.style.fontSize='22px'; badge.textContent=j.icon; r.appendChild(badge);
     const nm=document.createElement('span');
-    const title=cur?jobTitleFor(id,prog.lvl):j.name;
+    const title=jobTitleFor(id,prog.lvl);
     nm.innerHTML='<b style="color:'+j.col+'">'+title+'</b>'+(cur?' <small style="color:#d8f8c8">ACTIVE - '+j.name+' Lv '+prog.lvl+'</small>':'')+
-      '<br><small style="color:#b8985e">'+escHTML(j.role)+'</small><br><small>'+escHTML(j.desc)+'</small><br><small style="color:#8fbcae">'+jobPerkText(id)+'</small>';
+      '<br><small style="color:#b8985e">'+escHTML(j.role)+' · Saved Lv '+prog.lvl+'</small><br><small>'+escHTML(j.desc)+'</small><br><small style="color:#8fbcae">'+jobPerkText(id)+'</small><br>'+jobMilestoneHTML(id,prog.lvl);
     r.appendChild(nm);
     r.appendChild(qBtn(cur?'ACTIVE':(id===focusJob?'WORK THIS JOB':'CHOOSE'), ()=>{ if(!cur) chooseJob(id, focusJob); }, cur));
     qpanelEl.appendChild(r);
@@ -2503,16 +2623,16 @@ function blacksmithUpgradeCost(stack){
 }
 function localBlacksmithRepair(slot){
   const target=slot==null ? mostDamagedToolSlot(-1) : (()=>{
-    const s=inv[slot], info=s&&ITEMS[s.id]&&ITEMS[s.id].tool;
+    const s=inv[slot], item=s&&ITEMS[s.id],info=item&&(item.tool||item.armor);
     if(!info) return null;
-    const max=toolMaxDur(s), cur=s.dur==null?max:s.dur;
+    const max=item.armor?armorMaxDur(s):toolMaxDur(s), cur=s.dur==null?max:s.dur;
     return cur<max ? {slot,stack:s,info,cur,missing:max-cur} : null;
   })();
-  if(!target){ sysMsg('No damaged <b>tool</b> to repair'); return false; }
+  if(!target){ sysMsg('No damaged <b>gear</b> to repair'); return false; }
   const cost=blacksmithRepairCost(target);
   if(gold<cost){ sysMsg('Not enough <b>gold</b>'); return false; }
   gold-=cost;
-  target.stack.dur=toolMaxDur(target.stack);
+  target.stack.dur=ITEMS[target.stack.id].armor?armorMaxDur(target.stack):toolMaxDur(target.stack);
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair'); jobContractProgress('repair',1,0);
   blacksmithRitualVfx('repair',target.stack.id,toolPlus(target.stack),localDisplayName());
@@ -2544,6 +2664,68 @@ function requestBlacksmithUpgrade(slot=combatState.selectedSlot){
   if(NET.on&&NET.room){ NET.room.send('blacksmithUpgrade', {slot}); return true; }
   return localBlacksmithUpgrade(slot);
 }
+function requestBlacksmithReforge(action,modifier=''){
+  if(!NET.on||!NET.room){sysMsg('Reforging requires the authoritative game server.');return false;}
+  NET.room.send('blacksmithReforge',{slot:combatState.selectedSlot,action,modifier});return true;
+}
+function requestBlacksmithSalvage(slot=combatState.selectedSlot){
+  if(!NET.on||!NET.room){sysMsg('Salvaging requires the authoritative game server.');return false;}
+  NET.room.send('blacksmithSalvage',{slot});return true;
+}
+let lootRecovery=[];
+function cleanRecoveredGear(item){
+  if(!item||!ITEMS[item.id]||(!ITEMS[item.id].tool&&!ITEMS[item.id].armor))return null;
+  return {id:item.id,count:1,dur:item.dur,plus:Math.max(0,Math.min(3,item.plus|0)),
+    ...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===item.gearRank)?{gearRank:item.gearRank}:{}),
+    ...(GEAR_SYSTEM.RARITIES.some(r=>r.id===item.rarity)?{rarity:item.rarity}:{}),
+    ...(JOB_SYSTEM.reforgeModifier(item.forge)?{forge:item.forge}:{}),
+    ...(item.masterwork?{masterwork:true}:{}),...(item.locked?{locked:true}:{}),
+    source:String(item.source||'loot'),acquiredAt:Number(item.acquiredAt)||0,expiresAt:Number(item.expiresAt)||0};
+}
+function applyLootRecoveryState(m,silent=false){
+  const raw=Array.isArray(m)?m:Array.isArray(m&&m.items)?m.items:[];
+  lootRecovery=raw.map(cleanRecoveredGear).filter(Boolean);
+  if(m&&m.queued&&!silent){
+    const item=cleanRecoveredGear(m.queued),gear=item&&GEAR_SYSTEM.profile(ITEMS[item.id].tool||ITEMS[item.id].armor,item);
+    if(item&&gear)sysMsg('Inventory full: <b style="color:'+gear.rarity.color+'">'+escHTML(gear.rank.name+' '+gear.rarity.name+' '+itemNameWithPlus(item))+'</b> was secured by Tobin.');
+  }
+  if(qOpen&&qMode==='commerce')openBlacksmithServicesUI();
+}
+function requestLootRecoveryClaim(index){
+  if(!NET.on||!NET.room)return false;
+  NET.room.send('lootRecovery',{action:'claim',index});return true;
+}
+function applyLootRecoveryResult(m){
+  if(!m||!m.ok){
+    if(m&&m.reason==='full')sysMsg('Make room in your <b>inventory</b> before claiming recovered gear.');
+    else if(m&&m.reason==='range')sysMsg('Stand closer to <b>Tobin</b>.');
+    else sysMsg('That recovered item is no longer available.');
+    if(m&&Array.isArray(m.items))applyLootRecoveryState(m,true);
+    return;
+  }
+  const slot=Math.max(0,Math.min(35,m.slot|0)),item=cleanRecoveredGear(m.item);
+  if(item){delete item.acquiredAt;delete item.expiresAt;inv[slot]=item;}
+  applyLootRecoveryState(m,true);refreshHUD();if(uiOpen)renderUI();SFX.level();
+  if(item)sysMsg('<b>'+escHTML(itemNameWithPlus(item))+'</b> claimed from Loot Recovery.');
+}
+function requestGearLock(slot=combatState.selectedSlot,locked=true){
+  if(!NET.on||!NET.room)return false;
+  NET.room.send('gearLock',{slot,locked});return true;
+}
+function applyGearLockResult(m){
+  const slot=Math.max(0,Math.min(35,m&&m.slot|0)),item=inv[slot];
+  if(m&&m.ok&&item){if(m.locked)item.locked=true;else delete item.locked;refreshHUD();if(uiOpen)renderUI();sysMsg(m.locked?'Gear protected from salvage.':'Gear protection removed.');}
+  if(qOpen&&qMode==='commerce')openBlacksmithServicesUI();
+}
+function applyBlacksmithSalvageResult(m){
+  const slot=Math.max(0,Math.min(35,m&&m.slot|0));inv[slot]=null;
+  if(m&&m.iron)addItem(I.IRON_INGOT,m.iron|0);if(m&&m.gold)addGold(m.gold|0);
+  refreshHUD();if(uiOpen)renderUI();SFX.forge();sysMsg('Gear salvaged: <b>+'+(m.iron|0)+' Iron Ingots</b> and <b>+'+(m.gold|0)+' gold</b>.');if(qOpen)openBlacksmithServicesUI();
+}
+function blacksmithReforgeCostText(action){
+  const c=JOB_SYSTEM.reforgeCost(action);if(!c)return '';
+  return c.gold+'g'+(c.iron?' · Iron Ingot x'+c.iron:'')+(c.diamond?' · Diamond x'+c.diamond:'');
+}
 function openBlacksmithServicesUI(){
   openQWin('commerce');
   qpanelEl.innerHTML='';
@@ -2554,9 +2736,9 @@ function openBlacksmithServicesUI(){
   const body=document.createElement('p'); body.className='qtext';
   body.innerHTML='"Good steel hates rushing. Pick what needs work, and keep your fingers away from the anvil."';
   qpanelEl.appendChild(body);
-  const sel=inv[combatState.selectedSlot], selInfo=sel&&ITEMS[sel.id]&&ITEMS[sel.id].tool;
+  const sel=inv[combatState.selectedSlot], selItem=sel&&ITEMS[sel.id],selInfo=selItem&&(selItem.tool||selItem.armor);
   const selectedRepair=selInfo ? (()=>{
-    const max=toolMaxDur(sel), cur=sel.dur==null?max:sel.dur;
+    const max=selItem.armor?armorMaxDur(sel):toolMaxDur(sel), cur=sel.dur==null?max:sel.dur;
     return cur<max ? {slot:combatState.selectedSlot,stack:sel,info:selInfo,cur,missing:max-cur} : null;
   })() : null;
   const most=mostDamagedToolSlot(-1);
@@ -2576,7 +2758,27 @@ function openBlacksmithServicesUI(){
   addService('★','Upgrade combatState.selectedSlot',
     up ? (up.max ? escHTML(itemNameWithPlus(sel))+' is already at +3.' : escHTML(itemNameWithPlus(sel))+' → +'+up.next+' costs '+up.goldCost+'g and '+ITEMS[up.matId].name+' x'+up.matCount) : 'Select an iron/diamond sword or pickaxe.',
     up&&!up.max?'UPGRADE':'NO UPGRADE', ()=>requestBlacksmithUpgrade(combatState.selectedSlot), !up || up.max || gold<up.goldCost || countItem(up.matId)<up.matCount);
+  const blacksmithLevel=jobLevelFromXp(jobXpFor('blacksmith')),reforgeTool=selInfo&&['sword','axe','pick'].includes(selInfo.cls),forgeMod=sel&&JOB_SYSTEM.reforgeModifier(sel.forge);
+  const afford=action=>{const c=JOB_SYSTEM.reforgeCost(action);return c&&gold>=c.gold&&countItem(I.IRON_INGOT)>=c.iron&&countItem(I.DIAMOND)>=c.diamond;};
+  addService('R1','Basic Reforge',reforgeTool?(forgeMod?escHTML(itemNameWithPlus(sel))+' is already reforged.':'Apply a random minor modifier · '+blacksmithReforgeCostText('basic')):'Select a sword, axe, or pickaxe.',blacksmithLevel>=2?'REFORGE':'LV 2',()=>requestBlacksmithReforge('basic'),!reforgeTool||!!forgeMod||blacksmithLevel<2||!afford('basic'));
+  for(const modifier of Object.keys(JOB_SYSTEM.REFORGE_MODIFIERS)){
+    const def=JOB_SYSTEM.REFORGE_MODIFIERS[modifier];
+    addService('R5','Choose '+def.name,def.desc+' · '+blacksmithReforgeCostText('choose'),blacksmithLevel>=5?'APPLY':'LV 5',()=>requestBlacksmithReforge('choose',modifier),!reforgeTool||blacksmithLevel<5||!afford('choose'));
+  }
+  addService('R10','Temper Reroll',forgeMod?'Replace '+forgeMod.name+' with a different random modifier · '+blacksmithReforgeCostText('reroll'):'The selected item must already be reforged.',blacksmithLevel>=10?'REROLL':'LV 10',()=>requestBlacksmithReforge('reroll'),!reforgeTool||!forgeMod||blacksmithLevel<10||!afford('reroll'));
+  addService('R20','Masterwork',sel&&sel.masterwork?'This item is already a Masterwork.':forgeMod?'Perfect every forged property · '+blacksmithReforgeCostText('masterwork'):'Reforge the selected item first.',blacksmithLevel>=20?'MASTERWORK':'LV 20',()=>requestBlacksmithReforge('masterwork'),!reforgeTool||!forgeMod||!!(sel&&sel.masterwork)||blacksmithLevel<20||!afford('masterwork'));
   addService('▦','Craft equipment','Open the crafting table for tools, armor, furnaces, and repair kits.','CRAFT',()=>openCraftingFromNpc());
+  const salvageGear=selInfo&&((selItem&&selItem.armor)||['sword','axe'].includes(selInfo.cls))&&selInfo.tier<5?GEAR_SYSTEM.profile(selInfo,sel):null;
+  if(selInfo)addService(sel&&sel.locked?'LOCK':'SAFE','Gear protection',sel&&sel.locked?'This item cannot be salvaged until you unlock it.':'Lock this item against accidental salvage.',sel&&sel.locked?'UNLOCK':'LOCK',()=>requestGearLock(combatState.selectedSlot,!(sel&&sel.locked)));
+  addService('S','Salvage gear',salvageGear?(sel.locked?'<b>Protected:</b> unlock this item before salvaging.':escHTML(salvageGear.rank.name+' '+salvageGear.rarity.name+' '+itemNameWithPlus(sel))+' into forge materials. Legendary relics cannot be salvaged.'):'Select non-Legendary armour, sword, or axe.','SALVAGE',()=>requestBlacksmithSalvage(combatState.selectedSlot),!salvageGear||!!(sel&&sel.locked));
+  const recoveryTitle=document.createElement('h3');recoveryTitle.textContent='LOOT RECOVERY ('+lootRecovery.length+'/12)';qpanelEl.appendChild(recoveryTitle);
+  if(!lootRecovery.length){
+    const empty=document.createElement('p');empty.className='qtext';empty.textContent='No recovered weapons. Gear found with a full inventory will be secured here.';qpanelEl.appendChild(empty);
+  }else lootRecovery.forEach((item,index)=>{
+    const info=ITEMS[item.id].tool||ITEMS[item.id].armor,gear=GEAR_SYSTEM.profile(info,item);
+    const expiry=item.expiresAt?Math.max(1,Math.ceil((item.expiresAt-Date.now())/86400000))+'d remaining':'Never expires';
+    addService(item.locked?'LOCK':'DROP','Recovered '+gear.rank.name,`<span style="color:${gear.rarity.color}">${escHTML(gear.rarity.name+' '+itemNameWithPlus(item))}</span> · ${expiry}`,'CLAIM',()=>requestLootRecoveryClaim(index),!inv.some(s=>!s));
+  });
   addService('JOB','Blacksmith work','Take or manage blacksmith contracts for gold and profession XP.','WORK',()=>openJobsUI('blacksmith','Blacksmith'));
   const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
   row.appendChild(qBtn('BACK', ()=>openQuestUI(villagers.find(v=>v.role==='smith')||NPC_ROLES.find(v=>v.role==='smith')), true));
@@ -2736,6 +2938,9 @@ function openQuestUI(v){
     row.appendChild(qBtn('DECLINE', ()=>closeQWin(), true));
   }
   if(v.role==='smith') row.appendChild(qBtn('SERVICES', ()=>openBlacksmithServicesUI()));
+  if(v.role==='farmer') row.appendChild(qBtn('FIELDCRAFT', ()=>openFarmerServicesUI()));
+  if(v.role==='miner') row.appendChild(qBtn('SURVEY', ()=>openMinerSurveyUI()));
+  if(v.role==='monk') row.appendChild(qBtn('RITUALS', ()=>openMonkRitualUI()));
   if(v.role==='scholar') row.appendChild(qBtn('SHARDS', ()=>openShardUI()));
   if(v.role==='quartermaster') row.appendChild(qBtn('MARKET', ()=>openShopUI()));
   const npcJob=v.job || (v.role==='bartender'?'cook':v.role==='smith'?'blacksmith':v.role==='farmer'?'farmer':v.role==='miner'?'miner':v.role==='monk'?'monk':'');
@@ -3263,13 +3468,13 @@ const IRON_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'i').replace(/Y/g,'I').re
 const DIA_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'d').replace(/Y/g,'D').replace(/P/g,'c'));
 ITEMS[I.IRON_ARMOR]={name:'Iron Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, IRON_ARMOR_ROWS, {i:'#6b7280', I:'#e5e7eb', s:'#9ca3af'})),
-  armor:{mitigation:.12, power:null}};
+  armor:{tier:3,mitigation:.12,dur:480,power:null}};
 ITEMS[I.DIA_ARMOR]={name:'Diamond Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, DIA_ARMOR_ROWS, {d:'#0e7490', D:'#67e8f9', c:'#22d3ee'})),
-  armor:{mitigation:.16, power:null}};
+  armor:{tier:4,mitigation:.16,dur:900,power:null}};
 ITEMS[I.LEGEND_ARMOR]={name:'Legendary Aegis Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, ARMOR_ROWS, {G:'#8a6424', Y:'#ffd24a', P:'#9b6be8'})),
-  armor:{mitigation:.2, power:'aegis'}};
+  armor:{tier:5,legendary:true,mitigation:.2,dur:1800,power:'aegis'}};
 const LEGENDARY_CRAFTS=[
   {id:I.LEGEND_SWORD, cost:1, hint:'Reliable legendary melee damage.'},
   {id:I.LEGEND_ARMOR, cost:2, hint:'Equippable armor: -20% damage and J Aegis Pulse.'},
@@ -3922,7 +4127,10 @@ function applyFoodResult(m){
   vmSwing();
   eatingVfx(m.id, FOOD_VALUES[m.id]);
   showName('Yum!');
-  sysMsg('You eat <b>'+ITEMS[m.id].name+'</b> and restore <b>'+((m.hungerGain||0)|0)+' food</b>');
+  if(m.buff==='ration'||m.buff==='feast'){
+    const secs=Math.max(1,Math.round((m.durationMs||0)/1000));buffs.dmg=Math.max(buffs.dmg,secs);buffs.gather=Math.max(buffs.gather||0,secs);
+    sysMsg('You eat <b>'+ITEMS[m.id].name+'</b>: <b>Well Fed</b> boosts combat and gathering for '+Math.ceil(secs/60)+' min'+(m.partyCount>1?' and feeds '+m.partyCount+' party members':'')+'.');
+  } else sysMsg('You eat <b>'+ITEMS[m.id].name+'</b> and restore <b>'+((m.hungerGain||0)|0)+' food</b>');
   if(onboardingActive&&onboardingArrived&&onboardingKind()==='eat') onboardingFlags.ate=true;
 }
 function foodRejected(m){
@@ -3936,11 +4144,23 @@ function foodRejected(m){
 // ---- the bartender of the Gilded Mug ----
 const TAVERN_SELL=[
   [I.WHEAT,4,6,'Grain for the kitchen'],
+  [I.GOLDEN_WHEAT,1,18,'Rare grain for master cuisine'],
   [I.BREAD,1,7,'Fresh loaves for travelers'],
   [I.POT_STEW,1,8,'Prepared meals for hungry patrons'],
   [I.MONSTER_MEAT,1,5,'Wild cuts for the tavern stewpot'],
   [I.COOKED_MEAT,1,8,'Seared cuts ready for the road'],
 ];
+function openCookServicesUI(){
+  openQWin('management');qpanelEl.innerHTML='';
+  const level=jobLevelFromXp(jobXpFor('cook')),rules=JOB_SYSTEM.COOK_RULES;
+  const h=document.createElement('h2');h.textContent='TAVERN KITCHEN';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='COOK LV '+level+' · GRETA WARMUG';qpanelEl.appendChild(sub);
+  const p=document.createElement('p');p.className='qtext';
+  const line=(need,title,text)=>'<b style="color:'+(level>=need?'#fbbf24':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
+  p.innerHTML=[line(rules.batchLevel,'Batch Cooking','A chance to produce an extra portion when cooking food.'),line(rules.brothLevel,'Golden Broth','A deeply restorative meal made from wheat, bread, and cooked meat.'),line(rules.rationLevel,'Trail Ration','Grants Well Fed: increased combat damage and bonus gathering yields for 2 minutes.'),line(rules.feastLevel,'Feast Platter','Feeds and empowers nearby party members for 3 minutes.')].join('<br><br>');qpanelEl.appendChild(p);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('OPEN CRAFTING',()=>openCraftingFromNpc()));row.appendChild(qBtn('COOK WORK',()=>openJobsUI('cook','Tavern')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
 const bartender={...makeVillager('#7a3b2e','#5e2c22',false),
   role:'bartender', name:'Greta Warmug', shortName:'Greta', title:'Tavern Keeper',
   personality:'big-hearted, teasing, remembers every tab',
@@ -4024,6 +4244,7 @@ function openTavernUI(){
     qpanelEl.appendChild(r);
   }
   const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px'; qpanelEl.appendChild(row);
+  row.appendChild(qBtn('KITCHEN', ()=>openCookServicesUI()));
   row.appendChild(qBtn('TAVERN QUEST', ()=>openQuestUI({...bartender, role:'bartender', questSource:'npc'})));
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }

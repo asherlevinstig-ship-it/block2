@@ -13,6 +13,8 @@ const W = require('../world');
 const { threatXpForRing } = require('./xp-economy');
 const D = require('../dungeon');
 const AI = require('../ai');
+const JOB_SYSTEM = require('../../shared/job-system');
+const GEAR_SYSTEM = require('../../shared/gear-system');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class CombatMixin {
@@ -32,7 +34,24 @@ class CombatMixin {
     this.phoenixUsed = new Set();
     this.abilityState = new Map();
     this.abilityBuffs = new Map();
+    this.weaponMomentum = new Map();
+    this.monkAuraAt = new Map();
+    this.prospectAt = new Map();
     this.pvel = new Map();      // sessionId -> {x,z} horizontal velocity estimate (written by the move handler)
+  }
+
+  handleProspect(client) {
+    const rec=this.profileFor(client),p=this.state.players.get(client.sessionId),rules=JOB_SYSTEM.MINER_RULES;
+    if(!rec||!p||rec.prof.job!=='miner')return client.send('prospectReject',{reason:'profession'});
+    const level=JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob&&rec.prof.jobXpByJob.miner)||0);
+    if(level<rules.oreSenseLevel)return client.send('prospectReject',{reason:'level',level:rules.oreSenseLevel});
+    const now=Date.now(),cooldown=level>=rules.deepProspectLevel?rules.deepSurveyCooldownMs:rules.surveyCooldownMs,last=this.prospectAt.get(client.sessionId)||0;
+    if(now-last<cooldown)return client.send('prospectReject',{reason:'cooldown',remainingMs:cooldown-(now-last)});
+    const radius=level>=rules.deepProspectLevel?rules.deepSurveyRadius:rules.surveyRadius,grid=p.dgn&&this.instances[p.dgn]?this.instances[p.dgn].world:this.world;
+    const cx=Math.floor(p.x),cy=Math.floor(p.y),cz=Math.floor(p.z),ores=[];
+    for(let x=cx-radius;x<=cx+radius;x++)for(let z=cz-radius;z<=cz+radius;z++){if(Math.hypot(x-cx,z-cz)>radius)continue;for(let y=Math.max(1,cy-8);y<=Math.min(W.WH-1,cy+8);y++){const id=grid.getB(x,y,z);if(id===W.B.COAL_ORE||id===W.B.IRON_ORE||id===W.B.DIAMOND_ORE)ores.push({x,y,z,id,d:Math.hypot(x-cx,y-cy,z-cz)});}}
+    ores.sort((a,b)=>a.d-b.d);this.prospectAt.set(client.sessionId,now);
+    client.send('prospectResult',{ores:ores.slice(0,32).map(({x,y,z,id})=>({x,y,z,id})),radius,durationMs:rules.markerDurationMs,cooldownMs:cooldown});
   }
 
   handleBlackholeStaff(client, m) {
@@ -572,11 +591,26 @@ class CombatMixin {
     const crit = mob.state === 'stun';
     let dmg = this.serverDamageFor(p, client.sessionId);
     if (crit) dmg *= 1.5;
+    if(!this.weaponMomentum)this.weaponMomentum=new Map();
+    if(profile.archetype==='sword'){
+      const momentum=GEAR_SYSTEM.nextMomentum(this.weaponMomentum.get(client.sessionId),now,mobId);
+      this.weaponMomentum.set(client.sessionId,momentum);
+      const multiplier=GEAR_SYSTEM.momentumMultiplier(momentum.stacks);dmg*=multiplier;
+      client.send('weaponIdentity',{kind:'momentum',stacks:momentum.stacks,max:GEAR_SYSTEM.WEAPON_IDENTITY.momentum.maxStacks,multiplier,windowMs:GEAR_SYSTEM.WEAPON_IDENTITY.momentum.windowMs});
+    }else this.weaponMomentum.delete(client.sessionId);
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
     this.emitDamageNumber(client, mob, dmg, crit);
     mob.hp -= dmg * this.banditProtectionMultiplier(mobId, mob);
-    if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
+    if(mob.hp<=0)this.finishMobKill(client,mobId,mob);
+    else if(profile.archetype==='axe'){
+      const rule=GEAR_SYSTEM.WEAPON_IDENTITY.stagger,meta=this.mobMeta[mobId];
+      if(mob.kind==='boss'){
+        if(meta)meta.weaponStaggerT=Math.max(meta.weaponStaggerT||0,rule.bossSeconds);
+      }else this.stunMobByAbility(mobId,mob,rule.normalSeconds);
+      client.send('weaponIdentity',{kind:'stagger',boss:mob.kind==='boss',durationMs:Math.round((mob.kind==='boss'?rule.bossSeconds:rule.normalSeconds)*1000)});
+      this.sendSpace(mob.dgn||'','fx',{t:'weaponStagger',x:mob.x,y:mob.y,z:mob.z,boss:mob.kind==='boss',dgn:mob.dgn||''});
+    }
   }
   breakBlocksInRadius(client, x, y, z, radius, maxBreaks) {
     const p = this.state.players.get(client.sessionId);
@@ -631,7 +665,14 @@ class CombatMixin {
       else if (!dgn && killedMeta.bandit) {
         items.push({ id: I.COAL, count: 1 + Math.floor(ring / 2) });
         if (ring >= 1 || Math.random() < .3) items.push({ id: I.IRON_INGOT, count: 1 });
-        if (killedMeta.banditCaptain) items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + ring });
+        if (killedMeta.banditCaptain) {
+          items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + ring });
+          const regional=BIOME_COLLECTIBLE[W.biomeAt(dx,dz)];if(regional)items.push({id:regional.item,count:1+Math.floor(ring/2)});
+          const weapon=this.rollWeaponDropForSource('captain',ring);if(weapon)items.push(weapon);
+          const armor=this.rollArmorDropForSource('captain',ring);if(armor)items.push(armor);
+        } else {
+          const weapon=this.rollWeaponDropForSource('bandit',ring);if(weapon)items.push(weapon);
+        }
       }
       else if (!dgn) {
         items.push({ id: I.MONSTER_MEAT, count: 1 + Math.floor(ring / 2) });
@@ -642,7 +683,8 @@ class CombatMixin {
         }
       }
       const animal = this.isAnimalKind(kind);
-      this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp: threatXpForRing(ring, { elite: !!killedMeta.elite, animal }), items, dangerRing: ring, elite: !!killedMeta.elite });
+      const elite=!!killedMeta.elite||!!killedMeta.banditCaptain;
+      this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp: threatXpForRing(ring, { elite, animal }), items, dangerRing: ring, elite });
       this.recordKillProgress(client, !this.isAnimalKind(kind));
       if (killedMeta.eventCaravan && typeof this.onCaravanEventMobKilled === 'function')
         this.onCaravanEventMobKilled(client, mobId, killedMeta);
@@ -664,7 +706,11 @@ class CombatMixin {
     if (drop === undefined) drop = { item: blockId, count: 1 };
     if (drop === null) return;
     const items = [{ id: drop.item, count: drop.count || 1 }];
-    if (rec && Math.random() < jobPerkChance(rec.prof, 'miner', 0.08)) items[0].count += 1;
+    const mealBuff = this.abilityBuffs.get(client.sessionId);
+    if (mealBuff && mealBuff.mealGatherUntil > Date.now() && Math.random() < JOB_SYSTEM.COOK_RULES.gatherBonusChance) items[0].count += 1;
+    const minerLevel=rec&&rec.prof.job==='miner'?JOB_SYSTEM.jobLevelFromXp((rec.prof.jobXpByJob&&rec.prof.jobXpByJob.miner)||0):0;
+    if (minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random() < jobPerkChance(rec.prof, 'miner', 0.08)) items[0].count += 1;
+    if (minerLevel>=JOB_SYSTEM.MINER_RULES.geodeLevel && [W.B.COAL_ORE,W.B.IRON_ORE,W.B.DIAMOND_ORE].includes(blockId) && Math.random()<JOB_SYSTEM.MINER_RULES.geodeChance) items.push({id:I.GEODE,count:1});
     const fp = this.state.players.get(client.sessionId);
     if (fp && fp.familiar === 'sprite' && Math.random() < spriteForageChance(fp.lvl)) items[0].count += 1;   // Sprite foraging bonus
 
@@ -709,7 +755,16 @@ class CombatMixin {
       if (loot.coal) this.addRewardItem(rec.prof, REWARD_ITEMS.coal, loot.coal);
       if (loot.iron) this.addRewardItem(rec.prof, REWARD_ITEMS.iron, loot.iron);
       if (loot.dia) this.addRewardItem(rec.prof, REWARD_ITEMS.dia, loot.dia);
-      for (const item of loot.items || []) this.addRewardItem(rec.prof, item.id, item.count);
+      const delivered=[];
+      for (const item of loot.items || []) {
+        const left=item&&item.gear?this.addGearRewardItem(rec.prof,item):this.addRewardItem(rec.prof,item.id,item.count);
+        if(!item.gear||!left)delivered.push(item&&item.gear?{...item,locked:!!(item.locked||item.rarity==='mythic')}:item);
+        else {
+          const recovered=this.queueGearRecovery(rec.prof,item,loot.source||'loot');
+          if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
+        }
+      }
+      loot={...loot,items:delivered};
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
     }

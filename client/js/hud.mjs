@@ -1,6 +1,7 @@
 import {api as combatApi,state as combatState} from './combat.mjs';
 const gameContext=window.BlockcraftGameContext;
 const inv=combatState.inventory;
+const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const legacyHudBindings={
   hudSlots:{get:()=>hudSlots},
   fillSlotEl:{get:()=>fillSlotEl},
@@ -32,13 +33,28 @@ function itemTooltipText(stack){
   if(stack.count>1) lines.push('Count: '+stack.count);
   if(info.place) lines.push('Placeable block');
   if(info.tool){
+    const gear=GEAR_SYSTEM.profile({tier:info.tool.tier,legendary:!!info.legendary},stack);
+    lines.push(gear.rank.name+' · '+gear.rarity.name);
+    if(stack.locked) lines.push('Protected from salvage');
     if(toolPlus(stack)) lines.push('Upgrade: +'+toolPlus(stack));
     lines.push('Tool tier: '+(info.tool.tier||0));
     lines.push('Durability: '+(stack.dur==null?toolMaxDur(stack):stack.dur)+' / '+toolMaxDur(stack));
-    if(info.tool.cls==='sword' || info.tool.cls==='axe') lines.push('Damage: '+toolDamageFor(stack));
-    else lines.push('Speed: '+toolSpeedFor(stack).toFixed(1));
+    if(info.tool.cls==='sword' || info.tool.cls==='axe'){
+      const weapon=GEAR_SYSTEM.weaponCombatProfile(info.tool,stack);
+      lines.push('Damage: '+weapon.damage);
+      lines.push('Attack speed: '+weapon.attacksPerSecond+'/s');
+      lines.push('DPS: '+weapon.dps);
+      if(info.tool.cls==='sword')lines.push('Momentum: consecutive hits gain +6% damage, up to +12%');
+      else lines.push('Stagger: briefly interrupts normal enemies; bosses are slowed');
+    }else lines.push('Speed: '+toolSpeedFor(stack).toFixed(1));
   }
-  if(info.armor) lines.push('Armor: -'+Math.round((info.armor.mitigation||0)*100)+'% damage');
+  if(info.armor){
+    const armor=GEAR_SYSTEM.armorProfile(info.armor,stack);
+    lines.push(armor.rank.name+' Â· '+armor.rarity.name);
+    if(stack.locked)lines.push('Protected from salvage');
+    lines.push('Armor: -'+Math.round(armor.mitigation*100)+'% damage');
+    lines.push('Durability: '+(stack.dur==null?armor.maxDur:stack.dur)+' / '+armor.maxDur);
+  }
   if(info.legendary) lines.push('Legendary ability: '+info.legendary.kind+' · '+(info.legendary.cd||0)+'s cooldown');
   const food=FOOD_VALUES[stack.id];
   if(food) lines.push('Food: +'+food.hunger+' hunger, +'+food.heal+' HP');
@@ -53,19 +69,21 @@ function itemTooltipText(stack){
   return lines.join('\n');
 }
 function fillSlotEl(el, stack, keepKey){
-  [...el.querySelectorAll('canvas,.cnt,.upg,.dur')].forEach(n=>n.remove());
+  [...el.querySelectorAll('canvas,.cnt,.upg,.dur,.gear-rank,.gear-lock')].forEach(n=>n.remove());
+  for(const rarity of GEAR_SYSTEM.RARITIES)el.classList.remove('gear-'+rarity.id);
   const tip=itemTooltipText(stack);
   if(tip){ el.dataset.tip=tip; el.title=tip; }
   else { delete el.dataset.tip; el.removeAttribute('title'); }
   if(!stack) return;
+  if(ITEMS[stack.id].tool||ITEMS[stack.id].armor){const info=ITEMS[stack.id].tool||ITEMS[stack.id].armor,gear=GEAR_SYSTEM.profile({tier:info.tier,legendary:!!ITEMS[stack.id].legendary||!!info.legendary},stack);el.classList.add('gear-'+gear.rarity.id);el.style.setProperty('--gear-color',gear.rarity.color);const badge=document.createElement('span');badge.className='gear-rank';badge.textContent=gear.rank.id==='LEGENDARY'?'L':gear.rank.id;badge.style.color=gear.rank.color;el.appendChild(badge);if(stack.locked){const lock=document.createElement('span');lock.className='gear-lock';lock.textContent='LOCK';el.appendChild(lock);}}
   const c=document.createElement('canvas'); c.width=TS; c.height=TS;
   c.getContext('2d').drawImage(ITEMS[stack.id].icon,0,0);
   el.appendChild(c);
   if(stack.count>1){ const s=document.createElement('span'); s.className='cnt'; s.textContent=stack.count; el.appendChild(s); }
   if(toolPlus(stack)){ const u=document.createElement('span'); u.className='upg'; u.textContent='+'+toolPlus(stack); el.appendChild(u); }
-  const t=ITEMS[stack.id].tool;
-  const max=t?toolMaxDur(stack):0;
-  if(t && stack.dur<max){
+  const t=ITEMS[stack.id].tool,a=ITEMS[stack.id].armor;
+  const max=t?toolMaxDur(stack):a?GEAR_SYSTEM.armorProfile(a,stack).maxDur:0;
+  if((t||a) && stack.dur<max){
     const d=document.createElement('div'); d.className='dur';
     const i=document.createElement('i'); const p=stack.dur/max;
     i.style.width=(p*100)+'%'; i.style.background = p>.5?'#4cd14c':p>.25?'#d1b34c':'#d14c4c';
