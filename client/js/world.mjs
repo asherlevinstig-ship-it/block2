@@ -4754,8 +4754,9 @@ function rewardUnlockText(m, earned){
   return 'No clear reward. Earn XP to reach '+RANKS[nr].n+'-Rank; gate clears do not promote you directly.';
 }
 function rewardIcon(label, id){
-  if(label==='XP') return 'XP';
+  if(label==='XP'||label==='Hunter XP') return 'XP';
   if(label==='Gold') return 'G';
+  if(label.indexOf('Unlock')>=0) return '★';
   if(id===I.LEGEND_TOKEN) return 'LT';
   if(id===I.DIAMOND || label.indexOf('Diamond')>=0) return 'D';
   if(label.indexOf('Key')>=0) return 'K';
@@ -4924,12 +4925,14 @@ function showEventResult(m){
     +(m.kind==='caravan'&&Number.isFinite(m.caravanHealthPct)?eventResultCell('Wagon health',String(m.caravanHealthPct|0)+'%'):'')
     +(m.kind==='parkour'&&reward.personalBestMs?eventResultCell('Personal best',fmtRace(reward.personalBestMs)):'')
     +(m.winner?eventResultCell('Winner',m.winner):'');
-  let rewards='';
-  if(reward.xp) rewards+=eventResultCell('Hunter XP','+'+(reward.xp|0).toLocaleString('en-US'));
-  if(reward.tokens) rewards+=eventResultCell('Legendary Tokens','+'+(reward.tokens|0));
-  if(reward.unlock) rewards+=eventResultCell('Utility Unlocked',reward.unlock);
-  if(!rewards) rewards=eventResultCell('Rewards',won?'Reward delivered':'No reward this time');
-  eventResultRewards.innerHTML=rewards;
+  // rewards render as the same loot lines the dungeon reward panel uses (icons and all)
+  const rewardRows=[];
+  if(reward.xp) rewardRows.push({label:'Hunter XP', value:'+'+(reward.xp|0).toLocaleString('en-US')});
+  if(reward.tokens) rewardRows.push({label:itemLabel(I.LEGEND_TOKEN), value:'+'+(reward.tokens|0), id:I.LEGEND_TOKEN});
+  if(reward.unlock) rewardRows.push({label:'Utility Unlocked', value:reward.unlock});
+  eventResultRewards.innerHTML=rewardRows.length
+    ? '<div class="rewardloot">'+rewardRows.map(rewardLineHTML).join('')+'</div>'
+    : '<div class="rnote">'+(won?'Reward delivered':'No reward this time')+'</div>';
   renderEventResult();
 }
 function renderEventResult(){

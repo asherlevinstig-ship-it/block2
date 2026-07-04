@@ -216,11 +216,12 @@
   #eventresult h1{font-size:31px;letter-spacing:8px;margin:8px 0 4px;color:#fff5c4;text-shadow:0 0 20px rgba(255,210,74,.55)}
   #eventresult.loss h1,#eventresult.failed h1{color:#d4dfeb;text-shadow:0 0 18px rgba(143,184,216,.4)}
   #eventresultname{font-size:12px;letter-spacing:2px;color:#b9cbe0;margin-bottom:18px}
-  #eventresultstats,#eventresultrewards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
-  #eventresultstats>div,#eventresultrewards>div{padding:10px 8px;border:1px solid rgba(79,216,255,.2);border-radius:7px;background:rgba(4,12,24,.58)}
-  #eventresultstats span,#eventresultrewards span{display:block;font-size:8px;letter-spacing:1.7px;color:#7896b8;margin-bottom:5px;text-transform:uppercase}
-  #eventresultstats b,#eventresultrewards b{font-size:13px;color:#e6f4ff;font-weight:normal}
-  #eventresultrewards b{color:#ffd24a}
+  #eventresultstats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+  #eventresultstats>div{padding:10px 8px;border:1px solid rgba(79,216,255,.2);border-radius:7px;background:rgba(4,12,24,.58)}
+  #eventresultstats span{display:block;font-size:8px;letter-spacing:1.7px;color:#7896b8;margin-bottom:5px;text-transform:uppercase}
+  #eventresultstats b{font-size:13px;color:#e6f4ff;font-weight:normal}
+  #eventresultrewards{margin-top:2px;text-align:left}
+  #eventresultrewards .rnote{text-align:center}
   #eventresultrewards:empty{display:none}
   #eventresult .erreturn{display:flex;justify-content:center;align-items:center;gap:12px;margin-top:19px;font-size:11px;letter-spacing:1.5px;color:#9fb8d8}
   #eventresult .erreturn b{font-size:18px;color:#4fd8ff}
