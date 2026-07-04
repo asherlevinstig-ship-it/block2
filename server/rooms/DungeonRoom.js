@@ -240,6 +240,7 @@ class DungeonRoom extends GameRoom {
     this.state.mobs.forEach((m, id) => { if (m.dgn === inst.id) mobIds.push(id); });
     const spaces = { [inst.id]: players };
     this.stepProjectiles(dt, spaces);
+    this.tickShadowSoldiers(Date.now(), dt);
     inst.tick(this, dt, spaces, mobIds);
   }
 }

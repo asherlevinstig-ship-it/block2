@@ -31,7 +31,8 @@ const { GameRoom } = require('../rooms/GameRoom');
 const CLUSTERS = {
   initCombatState: [
     'sArrows', 'sFireballs', 'sMeteors', 'dragonBreathCd', 'blackholeCd', 'legendaryCd',
-    'dragonAbilityCd', 'phoenixUsed', 'abilityState', 'abilityBuffs', 'weaponMomentum', 'monkAuraAt', 'prospectAt', 'pvel',
+    'dragonAbilityCd', 'phoenixUsed', 'abilityState', 'abilityBuffs', 'weaponMomentum', 'monkAuraAt', 'prospectAt',
+    'shadowSoldiers', 'secondWindAt', 'pvel',
   ],
   initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
   initPersistenceState: [

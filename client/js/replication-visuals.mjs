@@ -97,6 +97,14 @@ function netAddMob(id, ref){
     const m={...makeCaravanWagon(ref.kind==='caravan_wreck'),net:true,netId:id,ref,hp:ref.hp,kind:ref.kind,kb:new THREE.Vector3(),phase:0,hitT:0,slowT:0,aT:0,lastState:''};
     decorateEncounter(m,ref);m.grp.position.set(ref.x,ref.y,ref.z);scene.add(m.grp);mobs.push(m);return;
   }
+  if(ref.kind==='shadow_soldier'){
+    const m={...makeShadow(), net:true, netId:id, ref, hp:ref.hp, kind:ref.kind,
+      kb:new THREE.Vector3(), phase:Math.random()*10, hitT:0, slowT:0, aT:0, lastState:'', baseCol:[1,1,1]};
+    m.grp.position.set(ref.x,ref.y,ref.z);
+    scene.add(m.grp); mobs.push(m);
+    burst(ref.x,ref.y+1,ref.z,[.45,.3,.9],20,2.2,2.2,.6);
+    return;
+  }
   if(ref.kind==='orb'){
     const grp=new THREE.Group();
     const mat=new THREE.MeshBasicMaterial({color:0xffaa33});
@@ -275,6 +283,8 @@ function netMobTick(m, dt, t){
 function netFx(m){
   if((m.dgn||'')!==NET.dgn) return;
   if(m.t==='fangBite'){ burst(m.x, m.y, m.z, [.7,.6,.5], 5, 1.6, 1.1, .25); fangSnap(m.x, m.z); return; }
+  if(m.t==='soldierStrike'){ shadowSoldierStrikeVfx(m.x, m.y, m.z, m.yaw||0); return; }
+  if(m.t==='secondWind'){ healingPlusVfx(m.x, m.y, m.z, 1.05, 1.15); return; }
   if(m.t==='moteBurst'){ burst(m.x, m.y, m.z, [.6,1,.5], 18, 2.2, 2.4, .55); return; }
   if(m.t==='banditCleave'){burst(m.x,m.y+.25,m.z,[1,.18,.08],34,5.2,2.2,.65);camShake=Math.max(camShake,.65);return;}
   if(m.t==='weaponStagger'){
@@ -425,14 +435,22 @@ function netAbilityFx(m){
   } else if(m.kind==='shockwave'){
     shockwaveEarthVfx(x,y,z,true);
     showName('Shockwave');
-  } else if(m.kind==='buff'){
-    burst(x,y+1,z,[.55,.35,1],26,2.8,2.4,.65);
-  } else if(m.kind==='armor'){
-    burst(x,y+1,z,[.95,.78,.3],26,2.6,2.2,.65);
-  } else if(m.kind==='dash'){
-    burst(x,y+.7,z,[.45,.24,.9],18,2.2,2.2,.55);
-  } else if(m.kind==='summon'){
-    burst(x,y+1,z,[.45,.3,.9],24,2.5,2.4,.6);
+  } else if(m.kind==='buff'||m.kind==='armor'||m.kind==='dash'||m.kind==='summon'){
+    // the caster already played these locally as prediction — this echo is for spectators
+    if(m.sid&&NET.room&&m.sid===NET.room.sessionId)return;
+    if(m.kind==='buff'){
+      ringPulse(x,y+.1,z,1.5,0x8b5cf6,.5);
+      burst(x,y+1,z,[.55,.35,1],26,2.8,2.4,.65);
+    } else if(m.kind==='armor'){
+      ringPulse(x,y+.1,z,1.5,0xf59e0b,.5);
+      burst(x,y+1,z,[.95,.78,.3],26,2.6,2.2,.65);
+    } else if(m.kind==='dash'){
+      const ddx=-Math.sin(m.yaw||0), ddz=-Math.cos(m.yaw||0);
+      shadowDashVfx({x,y,z},{x:x+ddx*5.5,y,z:z+ddz*5.5});
+      burst(x,y+.7,z,[.45,.24,.9],18,2.2,2.2,.55);
+    } else {
+      burst(x,y+1,z,[.45,.3,.9],24,2.5,2.4,.6);
+    }
   }
 }
 function netDragonAbilityFx(m){

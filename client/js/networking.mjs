@@ -698,6 +698,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('weatherBolt', m=>weatherBoltFx(m));
     room.onMessage('hurt', m=>{
       if(tutorialSafe() && (!m || m.n>=0)){ hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
+      if(m&&m.reason==='second_wind'){
+        swCd=60;                                   // drive the passive's HUD cooldown
+        sysMsg('<b>Second Wind</b> restores your strength');
+        healingPlusVfx(player.pos.x, player.pos.y, player.pos.z, 1.05, 1.15);
+      }
       damagePlayer(m.n,'server:'+((m&&m.reason)||'combat'));
     });
     room.onMessage('xp',   m=>gainXP(m.n));

@@ -2,7 +2,7 @@
 // area damage helpers, and kill / mine / loot rewards. Lifted verbatim out of
 // GameRoom.js and mixed into its prototype.
 const {
-  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_UNLOCK, ANIMAL_LOOT, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
+  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_LOOT, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
   DANGER_RINGS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_TYPE_SET,
   I, KEY_LOOT, MINE_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
   keyForRank, spriteForageChance,
@@ -37,6 +37,8 @@ class CombatMixin {
     this.weaponMomentum = new Map();
     this.monkAuraAt = new Map();
     this.prospectAt = new Map();
+    this.shadowSoldiers = new Map();   // sessionId -> summoned soldier mob id
+    this.secondWindAt = new Map();     // sessionId -> next Second Wind proc time
     this.pvel = new Map();      // sessionId -> {x,z} horizontal velocity estimate (written by the move handler)
   }
 
@@ -289,7 +291,7 @@ class CombatMixin {
     st.cds[cdKey] = now + def.cd;
     this.sendAbilitySync(client, st);
 
-    const fx = { t: 'ability', path, slot, kind: def.kind, x: p.x, y: p.y, z: p.z, dgn: p.dgn || '' };
+    const fx = { t: 'ability', path, slot, kind: def.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0, sid: client.sessionId, dgn: p.dgn || '' };
     let target = null, targetId = String(m.targetId || '');
     if (targetId) {
       const mob = this.state.mobs.get(targetId);
@@ -304,12 +306,14 @@ class CombatMixin {
       const buffs = this.abilityBuffs.get(client.sessionId) || {};
       buffs.ironUntil = now + 15000;
       this.abilityBuffs.set(client.sessionId, buffs);
+    } else if (def.kind === 'summon') {
+      this.spawnShadowSoldier(client, p, rec.prof, now);
     } else if (def.kind === 'fireball') {
       this.spawnAbilityFireball(client, p, m, def, rec.prof);
       client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp });
       return;
     } else if (def.kind === 'frost') {
-      this.damageMobsInRadius(client, p.x, p.y + .7, p.z, def.radius, 6 + Math.max(0, rec.prof.S.int - 1) * .4, { slow: 4 });
+      this.damageMobsInRadius(client, p.x, p.y + .7, p.z, def.radius, ABILITY_SYSTEM.abilityDamage('frost', rec.prof.S), { slow: 4 });
       this.breakBlocksInRadius(client, p.x, p.y + .4, p.z, 2.0, 8);
     } else if (def.kind === 'lightning') {
       if (!target || !target.meta || Math.hypot(target.mob.x - p.x, target.mob.z - p.z) > def.range ||
@@ -324,7 +328,7 @@ class CombatMixin {
       fx.jumps = jumps;
       this.breakBlocksInRadius(client, target.mob.x, target.mob.y + .5, target.mob.z, 1.2, 4);
     } else if (def.kind === 'shockwave') {
-      this.damageMobsInRadius(client, p.x, p.y + .4, p.z, def.radius, 5 + Math.max(0, rec.prof.S.str - 1) * .3, { knock: 3.8 });
+      this.damageMobsInRadius(client, p.x, p.y + .4, p.z, def.radius, ABILITY_SYSTEM.abilityDamage('shockwave', rec.prof.S), { knock: 3.8 });
       this.breakBlocksInRadius(client, p.x, p.y + .2, p.z, 2.8, 16);
     }
     this.sendSpace(p.dgn || '', 'fx', fx);
@@ -463,7 +467,7 @@ class CombatMixin {
       life: Math.max(.5, (def.range || 24) / speed),
       dgn: p.dgn || '',
       caster: client.sessionId,
-      damage: 8 + Math.max(0, ((prof && prof.S && prof.S.int) | 0) - 1) * .6,
+      damage: ABILITY_SYSTEM.abilityDamage('fireball', prof && prof.S),
       radius: def.radius || 3,
     };
     this.sFireballs.push(fb);
@@ -506,10 +510,89 @@ class CombatMixin {
     meta.stateT = Math.max(meta.stateT || 0, seconds);
     mob.state = 'stun';
   }
+  // ---- Shadow Soldier: a server-simulated summoned ally (replicates like any mob) ----
+  spawnShadowSoldier(client, p, prof, now = Date.now()) {
+    if (!this.shadowSoldiers) this.shadowSoldiers = new Map();
+    if (!Number.isFinite(this.mobSeq)) this.mobSeq = 0;
+    this.despawnShadowSoldier(client.sessionId);
+    const cfg = ABILITY_SYSTEM.SOLDIER;
+    const id = String(++this.mobSeq), mob = new Mob();
+    mob.kind = 'shadow_soldier';
+    mob.dgn = p.dgn || '';
+    const fwdX = -Math.sin(p.yaw || 0), fwdZ = -Math.cos(p.yaw || 0);
+    mob.x = p.x - fwdX * .45 + fwdZ * .95;
+    mob.z = p.z - fwdZ * .45 - fwdX * .95;
+    mob.y = p.y;
+    mob.hp = mob.maxHp = cfg.hp;
+    this.state.mobs.set(id, mob);
+    const meta = this.freshMeta(mob.x, mob.z, 0, cfg.speed, mob.kind, 0, false);
+    meta.friendly = true;
+    meta.soldier = {
+      owner: client.sessionId,
+      until: now + cfg.lifeMs,
+      atkAt: 0,
+      dmg: ABILITY_SYSTEM.abilityDamage('soldier', prof && prof.S),
+    };
+    this.mobMeta[id] = meta;
+    this.shadowSoldiers.set(client.sessionId, id);
+    return id;
+  }
+  despawnShadowSoldier(sid) {
+    if (!this.shadowSoldiers) return;
+    const id = this.shadowSoldiers.get(sid);
+    if (!id) return;
+    this.state.mobs.delete(id);
+    delete this.mobMeta[id];
+    this.shadowSoldiers.delete(sid);
+  }
+  tickShadowSoldiers(now, dt) {
+    if (!this.shadowSoldiers || !this.shadowSoldiers.size) return;
+    const cfg = ABILITY_SYSTEM.SOLDIER;
+    for (const [sid, id] of [...this.shadowSoldiers]) {
+      const mob = this.state.mobs.get(id), meta = this.mobMeta[id];
+      const owner = this.state.players.get(sid);
+      const info = meta && meta.soldier;
+      // the soldier fades on expiry, when its hunter leaves, or across a dimension change
+      if (!mob || !info || !owner || now >= info.until || (owner.dgn || '') !== (mob.dgn || '')) {
+        this.despawnShadowSoldier(sid);
+        continue;
+      }
+      let target = null, targetId = '', best = cfg.acquireRange;
+      this.state.mobs.forEach((m2, id2) => {
+        const meta2 = this.mobMeta[id2];
+        if (id2 === id || !meta2 || meta2.friendly || m2.hp <= 0) return;
+        if ((m2.dgn || '') !== (mob.dgn || '')) return;
+        const d = Math.hypot(m2.x - mob.x, m2.z - mob.z);
+        if (d < best) { best = d; target = m2; targetId = id2; }
+      });
+      const tx = target ? target.x : owner.x, tz = target ? target.z : owner.z;
+      const dist = Math.hypot(tx - mob.x, tz - mob.z) || 1;
+      if (target && dist <= cfg.attackRange) {
+        mob.state = 'attack';
+        if (now >= (info.atkAt || 0)) {
+          info.atkAt = now + cfg.attackCdMs;
+          const ownerClient = this.clients.find(c => c.sessionId === sid);
+          if (ownerClient) this.damageMobByAbility(ownerClient, targetId, target, info.dmg);
+          this.sendSpace(mob.dgn || '', 'fx', { t: 'soldierStrike', x: target.x, y: target.y, z: target.z, yaw: mob.yaw, dgn: mob.dgn || '' });
+        }
+      } else if (target || dist > cfg.followRange) {
+        const step = Math.min(dist, cfg.speed * dt);
+        mob.x += (tx - mob.x) / dist * step;
+        mob.z += (tz - mob.z) / dist * step;
+        const inst = mob.dgn ? this.instances[mob.dgn] : null;
+        const gy = inst ? D.standHeightIn(inst.world, mob.x, mob.z, mob.y + 2) : this.world.standHeight(mob.x, mob.z, mob.y + 2);
+        if (gy > 0 && Math.abs(gy - mob.y) <= 2.2) mob.y = gy;
+        mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
+        mob.state = 'chase';
+      } else {
+        mob.state = '';
+      }
+    }
+  }
   resolveChainLightning(client, firstId, firstMob, prof) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !firstMob) return [];
-    const base = 18 + Math.max(0, ((prof && prof.S && prof.S.int) | 0) - 1) * .8;
+    const base = ABILITY_SYSTEM.abilityDamage('lightning', prof && prof.S);
     const dgn = firstMob.dgn || '';
     const jumps = [];
     const hit = new Set();

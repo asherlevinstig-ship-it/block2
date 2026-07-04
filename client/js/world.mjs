@@ -5007,8 +5007,8 @@ function damagePlayer(n,source='unknown'){
   console.warn('[DamageAudit]',{source,rawDamage,applied,hpBefore,hpAfter:hp,dim,pos:[px,py,pz],town:isTownLand(px,pz),dungeon:!!dungeon,mounted:!!mountKind});
   SFX.hurt();
   dmgEl.style.opacity=.55; setTimeout(()=>dmgEl.style.opacity=0, 130);
-  // Second Wind — Iron Guardian passive
-  if(hp>0 && hp<maxHp()*.25 && S.path==='guardian' && S.lvl>=8 && swCd<=0){
+  // Second Wind — Iron Guardian passive (solo only: the server simulates it in multiplayer)
+  if(!NET.on && hp>0 && hp<maxHp()*.25 && S.path==='guardian' && S.lvl>=8 && swCd<=0){
     swCd=60;
     hp=Math.min(maxHp(), hp+Math.round(maxHp()*.4));
     sysMsg('<b>Second Wind</b> restores your strength');

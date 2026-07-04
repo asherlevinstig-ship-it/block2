@@ -1521,6 +1521,98 @@ test('server frost nova applies a visible slow state to affected mobs', () => {
   assert.equal(room.state.mobs.get('m1').state, 'frozen');
 });
 
+test('shared ability system: one tuning table serves both sides, with level-scaled damage', () => {
+  const ABILITY = require('../../shared/ability-system');
+  const { ABILITY_PATHS, ABILITY_UNLOCK } = require('../rooms/constants');
+  for (const pathId of ['shadow', 'mage', 'guardian']) {
+    assert.equal(ABILITY_PATHS[pathId].length, 3);
+    ABILITY_PATHS[pathId].forEach((def, i) => {
+      const src = ABILITY.PATHS[pathId].abilities[i];
+      assert.equal(def.name, src.name);
+      assert.equal(def.mp, src.mp);
+      assert.equal(def.cd, src.cdMs, 'server cooldowns stay in milliseconds');
+      assert.equal(def.kind, src.kind);
+    });
+  }
+  assert.deepEqual([...ABILITY_UNLOCK], [2, 5, 8]);
+  assert.equal(ABILITY.abilityDamage('fireball', { lvl: 1, int: 1 }), 8, 'level 1 matches the historical tuning');
+  assert.equal(ABILITY.abilityDamage('lightning', { lvl: 1, int: 1 }), 18);
+  assert.equal(ABILITY.abilityDamage('shockwave', { lvl: 1, str: 1 }), 5);
+  const early = ABILITY.abilityDamage('fireball', { lvl: 1, int: 10 });
+  const late = ABILITY.abilityDamage('fireball', { lvl: 20, int: 10 });
+  assert.equal(Math.abs(late / early - ABILITY.levelPower(20)) < 1e-9, true, 'damage rises with hunter level');
+  assert.equal(ABILITY.abilityDamage('soldier', { lvl: 10 }), 7, 'soldier keeps its own 4 + 0.3/level curve');
+});
+
+test('Shadow Soldier is server-simulated: it spawns as a friendly mob, hunts, strikes, and expires', () => {
+  const room = makeRoom();
+  room.mobSeq = 0;
+  const client = makeClient('summoner');
+  const { prof } = seedPlayer(room, client, { lvl: 8, x: 20.5, z: 20.5 });
+  prof.S.path = 'shadow';
+  prof.S.int = 28;
+  room.clients = [client];
+  room.sendSpace = (dgn, type, msg) => client.send(type, msg);
+
+  room.handleAbility(client, { path: 'shadow', slot: 2 });
+  assert.equal(room.shadowSoldiers.size, 1, 'the summon creates a server soldier');
+  const id = room.shadowSoldiers.get(client.sessionId);
+  const soldier = room.state.mobs.get(id);
+  assert.equal(soldier.kind, 'shadow_soldier');
+  assert.equal(room.mobMeta[id].friendly, true, 'players and hostiles cannot target it');
+  assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.kind === 'summon'), true);
+
+  // a hostile several blocks away: the soldier closes the distance on its own
+  room.state.mobs.set('prey', { x: soldier.x + 6, y: 10, z: soldier.z, yaw: 0, hp: 30, maxHp: 30, kind: 'zombie', dgn: '', state: '' });
+  room.mobMeta.prey = room.freshMeta(soldier.x + 6, soldier.z, 3, 1.5, 'zombie', 0, true);
+  const startX = soldier.x;
+  room.tickShadowSoldiers(Date.now(), 0.5);
+  assert.equal(soldier.x > startX, true, 'the soldier chases the hostile');
+  assert.equal(soldier.state, 'chase');
+
+  // adjacent: it strikes with its own damage on its own cadence
+  soldier.x = room.state.mobs.get('prey').x - 1; soldier.z = room.state.mobs.get('prey').z;
+  room.tickShadowSoldiers(Date.now(), 0.1);
+  assert.equal(room.state.mobs.get('prey').hp < 30, true, 'the strike lands server-side');
+  assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.t === 'soldierStrike'), true);
+
+  // recasting replaces the old soldier; expiry cleans up
+  const st = room.abilityState.get(client.sessionId);
+  st.cds['shadow:2'] = 0; st.mp = st.maxMp;
+  room.handleAbility(client, { path: 'shadow', slot: 2 });
+  assert.equal(room.state.mobs.has(id), false, 'recast replaces the previous soldier');
+  const id2 = room.shadowSoldiers.get(client.sessionId);
+  room.mobMeta[id2].soldier.until = Date.now() - 1;
+  room.tickShadowSoldiers(Date.now(), 0.1);
+  assert.equal(room.state.mobs.has(id2), false, 'the soldier fades when its time ends');
+  assert.equal(room.shadowSoldiers.size, 0);
+});
+
+test('Second Wind is server-authoritative: guardians heal at the brink, on a real cooldown', () => {
+  const room = makeRoom();
+  const guardian = makeClient('guardian');
+  const { prof } = seedPlayer(room, guardian, { lvl: 8, hp: 20 });
+  prof.S.path = 'guardian';
+  room.clients = [guardian];
+  room.sendSpace = () => {};
+
+  room.hurtPlayer(guardian, 17, 'test');                       // 20 -> 3 (below 25% of 20)
+  const hp = room.playerHp.get(guardian.sessionId);
+  assert.equal(hp.hp > 3, true, 'Second Wind healed the guardian');
+  assert.equal(guardian.sent.some(e => e.type === 'hurt' && e.msg.reason === 'second_wind' && e.msg.n < 0), true);
+
+  hp.hp = 20;
+  room.hurtPlayer(guardian, 17, 'test');                       // still on cooldown: no second proc
+  assert.equal(room.playerHp.get(guardian.sessionId).hp, 3, 'the passive stays on cooldown');
+
+  const civilian = makeClient('civilian');
+  seedPlayer(room, civilian, { lvl: 8, hp: 20 });
+  room.clients.push(civilian);
+  room.hurtPlayer(civilian, 17, 'test');
+  assert.equal(room.playerHp.get(civilian.sessionId).hp, 3, 'non-guardians never proc it');
+  assert.equal(civilian.sent.some(e => e.type === 'hurt' && e.msg.reason === 'second_wind'), false);
+});
+
 test('server lightning chains to nearby mobs and roots them with stun', () => {
   const room = makeRoom();
   const client = makeClient('mage');

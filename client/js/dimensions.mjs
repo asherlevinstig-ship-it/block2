@@ -6,24 +6,20 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
  */
 // ---------------- ability pathways ----------------
-const PATHS={
-  shadow:{name:'Shadow Monarch', col:'#8b5cf6',
-    desc:'Strike from darkness. Speed, lethality, and an army of shadows.',
-    ab:[{n:'Shadow Dash',    g:'\u00bb',   mp:8,  sp:10, cd:4,  txt:'Rift forward to dodge, escape, or close distance'},
-        {n:'Umbral Edge',    g:'\u25c8',   mp:15, sp:0,  cd:18, txt:'Empower melee hits with shadow damage for 10s'},
-        {n:'Shadow Soldier', g:'\u265e',   mp:30, sp:0,  cd:40, txt:'Summon an ally that chases enemies and strikes for 30s'}]},
-  mage:{name:'Arcane Magus', col:'#38bdf8',
-    desc:'Bend fire, frost and storm to your will.',
-    ab:[{n:'Fireball',   g:'\u2738', mp:10, sp:0, cd:2.5, txt:'Explosive bolt of flame'},
-        {n:'Frost Nova', g:'\u2746', mp:22, sp:0, cd:14,  txt:'Chill and slow nearby foes'},
-        {n:'Lightning',  g:'\u21af', mp:30, sp:0, cd:20,  txt:'Smite the target under your crosshair'}]},
-  guardian:{name:'Iron Guardian', col:'#f59e0b',
-    desc:'Endure all. Protect the town. Never fall.',
-    ab:[{n:'Iron Skin',   g:'\u25a3', mp:12, sp:0,  cd:25, txt:'Halve damage taken for 15s'},
-        {n:'Shockwave',   g:'\u25ce', mp:18, sp:15, cd:12, txt:'Slam the ground to blast nearby foes away'},
-        {n:'Second Wind', g:'\u271a', mp:0,  sp:0,  cd:60, passive:true, txt:'Auto-heal when near death'}]},
-};
-const AB_UNLOCK=[2,5,8];
+// Ability tuning comes from the shared module (one file for server and client);
+// this adapter keeps the historical client shape (cd in seconds, n/g/txt fields).
+const ABILITY_SYS=window.BlockcraftAbilitySystem;
+const PATHS=(()=>{
+  const out={};
+  for(const pathId in ABILITY_SYS.PATHS){
+    const p=ABILITY_SYS.PATHS[pathId];
+    out[pathId]={name:p.name, col:p.color, desc:p.desc,
+      ab:p.abilities.map(a=>({n:a.name, g:a.glyph, mp:a.mp, sp:a.sp||0, cd:a.cdMs/1000,
+        passive:a.kind==='passive'||undefined, txt:a.txt}))};
+  }
+  return out;
+})();
+const AB_UNLOCK=ABILITY_SYS.UNLOCK_LEVELS;
 const abCd=[0,0,0];
 let armorCd=0;
 const projectiles=[], beams=[], allies=[], blackHoles=[];
@@ -548,14 +544,16 @@ function sendAbilityRequest(path,i,a){
     dx:d.x, dy:d.y, dz:d.z
   });
   mp-=a.mp; sp=Math.max(0,sp-a.sp); abCd[i]=a.cd;
-  if((path==='shadow' && (i===0||i===1||i===2)) || (path==='guardian' && i===0)){
+  // predict movement/buff feedback locally; the Shadow Soldier is server-simulated
+  // in multiplayer (a real replicated mob), so slot 2 no longer spawns a local ghost
+  if((path==='shadow' && (i===0||i===1)) || (path==='guardian' && i===0)){
     doAbility(path,i);
   }
   SFX.cast();
   renderBars(); updateAbilityHUD();
 }
 // solo block destruction on ability impact (mirrors the server's breakBlocksInRadius)
-const ABILITY_BREAKABLE_C=new Set([B.GRASS,B.DIRT,B.STONE,B.SAND,B.LOG,B.LEAVES,B.PLANKS,B.COBBLE,B.GLASS,B.BRICK,B.TABLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.CONCRETE,B.TORCH,B.BED,B.SNOW,B.ICE,B.RED_SAND,B.TERRACOTTA,B.CACTUS,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR]);
+const ABILITY_BREAKABLE_C=new Set([B.GRASS,B.DIRT,B.STONE,B.SAND,B.LOG,B.LEAVES,B.PLANKS,B.COBBLE,B.GLASS,B.BRICK,B.TABLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.CONCRETE,B.TORCH,B.BED,B.FARMLAND,B.WHEAT_1,B.WHEAT_2,B.WHEAT_3,B.SNOW,B.ICE,B.RED_SAND,B.TERRACOTTA,B.CACTUS,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR]);
 function breakAbilityBlocks(x,y,z,radius,maxBreaks){
   if(NET.on) return 0;                                   // server breaks blocks authoritatively in multiplayer
   const cands=[];
@@ -1929,6 +1927,7 @@ const legacyDimensionsBindings={
   "leviathanStormVfx":{get:()=>leviathanStormVfx},
   "makeBlackholeVisual":{get:()=>makeBlackholeVisual},
   "makeGateMesh":{get:()=>makeGateMesh},
+  "makeShadow":{get:()=>makeShadow},
   "makeShadow":{get:()=>makeShadow},
   "meteorImpactVfx":{get:()=>meteorImpactVfx},
   "meteorMarkVfx":{get:()=>meteorMarkVfx},

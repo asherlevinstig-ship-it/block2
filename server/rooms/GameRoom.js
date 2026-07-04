@@ -1631,6 +1631,19 @@ class GameRoom extends Room {
     const dmg = Math.max(0, Math.round(amount));
     hp.hp = Math.max(0, hp.hp - dmg);
     client.send('hurt', { n: dmg, reason });
+    // Second Wind — Iron Guardian passive, simulated where the authoritative HP lives
+    if (hp.hp > 0 && hp.hp < hp.max * .25 && rec && rec.prof && rec.prof.S
+        && rec.prof.S.path === 'guardian' && rec.prof.S.lvl >= 8) {
+      const now = Date.now();
+      if (!this.secondWindAt) this.secondWindAt = new Map();
+      if (now >= (this.secondWindAt.get(client.sessionId) || 0)) {
+        this.secondWindAt.set(client.sessionId, now + 60000);
+        const heal = Math.round(hp.max * .4);
+        hp.hp = Math.min(hp.max, hp.hp + heal);
+        client.send('hurt', { n: -heal, reason: 'second_wind' });
+        if (p) this.sendSpace(p.dgn || '', 'fx', { t: 'secondWind', x: p.x, y: p.y, z: p.z, dgn: p.dgn || '' });
+      }
+    }
     if (p && p.dgn) this.sendDungeonStatus(p.dgn);
     if (hp.hp <= 0) this.handlePlayerDeath(client);
   }
@@ -2619,6 +2632,7 @@ class GameRoom extends Room {
     this.completeDragonIncubations();
     this.tickNestBreeding();
     this.tickFangCombat(Date.now());
+    this.tickShadowSoldiers(Date.now(), dt);
     this.tickMote(dt);
     this.tickServerEvent(Date.now());
     const th = this.state.tod * Math.PI * 2;
