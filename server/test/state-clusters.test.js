@@ -61,7 +61,7 @@ test('initEventsState initializes exactly its field cluster', () => {
   room.initEventsState();
   const fields = Object.keys(room).filter(k => !stubs.includes(k));
   assert.deepEqual(fields.sort(), [
-    'eventSeq', 'skyshipEpoch', 'dayEpoch', 'sleepingPlayers', 'serverEvent',
+    'eventSeq', 'skyshipEpoch', 'skyshipPassengers', 'dayEpoch', 'sleepingPlayers', 'serverEvent',
     'eventInstances', 'activeEventInstanceId', 'eventCourseBlocks', 'eventTransientEditKeys',
     'weatherUntil', 'nextLightningAt',
   ].sort());

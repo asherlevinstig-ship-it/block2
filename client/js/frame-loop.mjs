@@ -299,6 +299,14 @@ function rankHudProgress(){
 }
 function updateGatePrompt(){
   if(!gatePromptEl)return;
+  const journey=worldState.skyshipJourney;
+  if(journey&&journey.boarded){
+    const waiting=journey.phase==='boarding', seconds=Math.max(0,Math.ceil(((waiting?journey.departAt:journey.arriveAt)-Date.now())/1000));
+    gatePromptEl.innerHTML=waiting
+      ?'<span class="key">G</span>Leave Westwind <span class="gate-status ready">BOARDED</span><span class="gate-preview">Departs in '+seconds+'s · 1,000 gold paid</span>'
+      :'<span class="gate-status ready">WESTWIND UNDERWAY</span><span class="gate-preview">Western Frontier · arriving in '+seconds+'s · movement locked</span>';
+    gatePromptEl.classList.remove('hidden');return;
+  }
   const visible=locked&&dim==='overworld'&&gate&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&!document.body.classList.contains('cutscene');
   const distance=visible?Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z):Infinity;
   if(distance>6){gatePromptEl.classList.add('hidden');gatePromptEl.innerHTML='';return;}
@@ -501,7 +509,7 @@ function tick(now){
     let f=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
     let s=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
     if(biomeStatus.rooted(now)){f=0;s=0;}
-    if(cutscene||eventStartLocked()){ f=0; s=0; }
+    if(cutscene||eventStartLocked()||(worldState.skyshipJourney&&worldState.skyshipJourney.boarded)){ f=0; s=0; player.vel.set(0,0,0); }
     if(isMeditating && (f!==0 || s!==0 || keys['Space'])){
       stopMeditation();
     }
@@ -617,7 +625,11 @@ function tick(now){
     tickLocalMount(now, dt);
     tickDragonRoost(now, dt);
 
-    if(cutscene){
+    if(worldState.skyshipJourney&&worldState.skyshipJourney.boarded&&worldState.skyshipJourney.phase==='flight'&&skyShip){
+      const a=now*.00016, focus=skyShip.grp.position;
+      camera.position.set(focus.x+Math.cos(a)*25,focus.y+12,focus.z+Math.sin(a)*25);
+      camera.lookAt(focus.x,focus.y+5,focus.z);
+    } else if(cutscene){
       /* camera is driven by tickCutscene at the top of the frame */
     } else {
     camera.position.set(player.pos.x, player.pos.y+player.eye+(mounted?mountEye(mountKind):0), player.pos.z);

@@ -548,6 +548,21 @@ class GameRoom extends Room {
       p.z = W.TOWN.TC + 7.5 + (Math.random() * 2 - 1);
     }
     this.state.players.set(client.sessionId, p);
+    if (prof && prof.skyshipTransit) {
+      const tr = prof.skyshipTransit, now = Date.now();
+      if (tr.arriveAt > now && tr.departAt <= now) {
+        this.skyshipPassengers.set(client.sessionId, { ...tr, token });
+        this.placeSkyshipPassenger(client.sessionId, now);
+      } else if (tr.departAt > now && skyshipSnapshot(this.skyshipEpoch, now).state === 'docked') {
+        this.skyshipPassengers.set(client.sessionId, { ...tr, token });
+        this.placeSkyshipPassenger(client.sessionId, now);
+      } else {
+        const ax = W.LAVA_BORDER_WIDTH + 32, az = W.TOWN.TC;
+        p.x = ax; p.y = W.terrainHeight(ax, az) + 1.05; p.z = az;
+        prof.pos = [p.x, p.y, p.z]; prof.skyshipTransit = null; this.dirtyPlayers.add(token);
+        client._skyshipRecovered = true;
+      }
+    }
     if (prof && prof.activeNpcQuest && prof.activeNpcQuest.type === 'gate' && prof.activeNpcQuest.gateRank >= 0) {
       this.ensurePublicGateRank(prof.activeNpcQuest.gateRank);
     }
@@ -569,6 +584,8 @@ class GameRoom extends Room {
     this.sendNestDragons(client);
     this.sendEventStatus(client);
     this.sendSkyshipSync(client);
+    if (this.skyshipPassengers.has(client.sessionId)) client.send('skyshipBoardResult', { ok: true, recovered: true, ...this.skyshipPassengerPayload(client.sessionId), gold: prof.gold | 0 });
+    else if (client._skyshipRecovered) client.send('skyshipArrived', { route: 'western', recovered: true, x: p.x, y: p.y, z: p.z });
     this.sendDayCycleSync(client);
     this.sendWeather(client);
     this.sendGuildHallSync(client);
@@ -2665,6 +2682,7 @@ class GameRoom extends Room {
     this.tickShadowSoldiers(Date.now(), dt);
     this.tickMote(dt);
     this.tickServerEvent(Date.now());
+    this.tickSkyship(Date.now());
     const th = this.state.tod * Math.PI * 2;
     const sy = -Math.cos(th);
     const sunE = sy / Math.hypot(Math.sin(th), sy, .22);
@@ -2731,6 +2749,9 @@ class GameRoom extends Room {
   handleMove(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return;
+    if (this.skyshipPassengers && this.skyshipPassengers.has(client.sessionId)) {
+      p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
+    }
     if (typeof this.eventMovementLocked === 'function' && this.eventMovementLocked(client.sessionId)) {
       p.yaw = clampN(m.yaw, -10, 10);
       this.pvel.set(client.sessionId, { x: 0, z: 0 });

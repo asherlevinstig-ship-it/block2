@@ -3104,6 +3104,7 @@ function tickTownInteractLabels(dt){
 
 // ---------------- sky pirate ship ----------------
 let skyShip=null;
+let skyshipJourney={boarded:false,phase:'',departAt:0,arriveAt:0,route:'',fare:0,slot:0,party:false};
 let skyShipClockOffset=0, skyShipEpoch=Date.now();
 let skyShipDockMs=22000, skyShipAwayMs=16000;
 const SKYSHIP_SPEED=19;
@@ -5183,6 +5184,10 @@ function removeMob(i){
   disposeObjectTree(mob.grp);
   mobs.splice(i,1);
 }
+function applySkyshipJourney(m){
+  skyshipJourney={boarded:!!(m&&m.boarded),phase:m&&m.phase||'',departAt:+(m&&m.departAt)||0,
+    arriveAt:+(m&&m.arriveAt)||0,route:m&&m.route||'',fare:+(m&&m.fare)||0,slot:+(m&&m.slot)||0,party:!!(m&&m.party)};
+}
 function killAllMobs(){ for(let i=mobs.length-1;i>=0;i--) removeMob(i); }
 function tickMobs(dt,t){
   mobSpawnT-=dt;
@@ -6521,6 +6526,7 @@ gameContext.registerState('world', Object.freeze({
   stats:S,
   get overworldActivity(){ return overworldActivity; },
   get event(){ return Object.freeze({id:eventId,active:eventMode,grid:eventWorld}); },
+  get skyshipJourney(){ return skyshipJourney; },
 }));
 gameContext.registerModule('world', Object.freeze({
   getBlock:getB,
@@ -6531,6 +6537,7 @@ gameContext.registerModule('world', Object.freeze({
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,
   message:sysMsg,
+  applySkyshipJourney,
 }));
 
 
@@ -6778,6 +6785,7 @@ const legacyWorldBindings={
   "showJobPerk":{get:()=>showJobPerk},
   "sky":{get:()=>sky},
   "skyShip":{get:()=>skyShip,set:value=>{skyShip=value;}},
+  "skyshipJourney":{get:()=>skyshipJourney,set:value=>{skyshipJourney=value;}},
   "sleepEl":{get:()=>sleepEl},
   "sleeping":{get:()=>sleeping,set:value=>{sleeping=value;}},
   "smallDiscoveries":{get:()=>smallDiscoveries,set:value=>{smallDiscoveries=value;}},

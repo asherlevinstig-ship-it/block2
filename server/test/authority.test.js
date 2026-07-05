@@ -5282,6 +5282,11 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   seeded.prof.gold = SKYSHIP_BOARD_GOLD;
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).type, 'skyshipBoardResult');
+  assert.equal(seeded.prof.gold, 0);
+  assert.equal(room.skyshipPassengers.has(client.sessionId), true);
+
+  room.handleSkyshipBoard(client);
+  assert.equal(client.sent.at(-1).type, 'skyshipLeft');
   assert.equal(seeded.prof.gold, SKYSHIP_BOARD_GOLD);
 
   room.skyshipEpoch = Date.now() - SKYSHIP_DOCK_MS - SKYSHIP_TRAVEL_MS - 1;

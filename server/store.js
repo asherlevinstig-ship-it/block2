@@ -136,6 +136,7 @@ function defaultProfile(name) {
     firstPromotionSeen: false,
     tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0 },
     dungeonRecovery: null,
+    skyshipTransit: null,
     pos: [64.5, 20, 71.5],
   };
 }
@@ -366,6 +367,14 @@ function sanitizeProfile(p) {
   out.jobContractOffers = out.jobContractOffers.filter(c=>c.job==='adventurer'||c.job===out.job);
   out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
+  if (p.skyshipTransit && typeof p.skyshipTransit === 'object') {
+    out.skyshipTransit = {
+      route: p.skyshipTransit.route === 'western' ? 'western' : 'western',
+      departAt: clampI(p.skyshipTransit.departAt, 0, Number.MAX_SAFE_INTEGER),
+      arriveAt: clampI(p.skyshipTransit.arriveAt, 0, Number.MAX_SAFE_INTEGER),
+      paid: clampI(p.skyshipTransit.paid, 0, 1000000), slot: clampI(p.skyshipTransit.slot, 0, 29), party: p.skyshipTransit.party === true,
+    };
+  } else out.skyshipTransit = null;
   out.firstQuestRewardClaimed = p.firstQuestRewardClaimed === true;
   out.maraRoadReadySwordGranted = p.maraRoadReadySwordGranted === true;
   out.npcQuestChains = sanitizeNpcQuestChains(p.npcQuestChains);

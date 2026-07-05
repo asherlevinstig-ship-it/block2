@@ -1750,12 +1750,17 @@ function nearSkyshipGangway(){
     Math.abs(player.pos.z-HUB.skyport.z)<=3.25 && player.pos.y>=HUB.skyport.y+.25 && player.pos.y<=HUB.skyport.y+4;
 }
 function tryBoardSkyship(){
+  if(skyshipJourney&&skyshipJourney.boarded){
+    if(NET.on&&NET.room) NET.room.send('skyshipBoard',{});
+    return true;
+  }
   if(!nearSkyshipGangway()) return false;
   if(NET.on&&NET.room){ NET.room.send('skyshipBoard',{}); return true; }
   if(!skyShip||skyShip.state!=='docked'){ sysMsg('The airship is not currently docked'); return true; }
   if(localPlayerHunterRankIndex()<5){ sysMsg('Boarding requires an <b>S-Rank Hunter</b>'); return true; }
-  if(gold<1000){ sysMsg('Boarding requires <b>1,000 gold</b> in your possession'); return true; }
-  sysMsg('<b>Boarding approved.</b> Westwind crew has cleared you for the western route.');
+  if(gold<1000){ sysMsg('The western journey costs <b>1,000 gold</b>'); return true; }
+  gold-=1000; skyshipJourney={boarded:true,phase:'boarding',departAt:Date.now()+18000,arriveAt:Date.now()+18000+skyShipTravelMs,route:'western',fare:1000,slot:0,party:false};
+  sysMsg('<b>Boarded the Westwind.</b> 1,000 gold fare paid. Press G to leave before departure.');
   return true;
 }
 function nearbySmallDiscovery(range=6){

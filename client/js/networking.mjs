@@ -396,9 +396,27 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('skyshipSync', m=>applySkyShipSync(m));
     if(isOverworldRoom) room.send('skyshipSyncRequest', {});
-    room.onMessage('skyshipBoardResult', ()=>{
+    room.onMessage('skyshipBoardResult', m=>{
+      worldApi.applySkyshipJourney(m);
+      if(typeof (m&&m.gold)==='number') gold=Math.max(0,m.gold|0);
       SFX.uiOpen();
-      sysMsg('<b>Boarding approved.</b> S-Rank and 1,000 gold verified for the western route.');
+      sysMsg((m&&m.recovered?'<b>Westwind journey restored.</b>':'<b>Boarded the Westwind.</b> 1,000 gold fare paid.')+' Press <b>G</b> to leave before departure.');
+    });
+    room.onMessage('skyshipLeft', m=>{
+      worldApi.applySkyshipJourney({boarded:false});
+      if(typeof (m&&m.gold)==='number') gold=Math.max(0,m.gold|0);
+      SFX.uiClose(); sysMsg('You left the Westwind. <b>1,000 gold refunded.</b>');
+    });
+    room.onMessage('skyshipDeparted', m=>{
+      worldApi.applySkyshipJourney({...m,boarded:true,phase:'flight'});
+      player.vel.set(0,0,0); SFX.success();
+      sysMsg('<b>Westwind is underway.</b> Movement locked until the Western Frontier.');
+    });
+    room.onMessage('skyshipArrived', m=>{
+      worldApi.applySkyshipJourney({boarded:false});
+      if(m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)) player.pos.set(+m.x,+m.y,+m.z);
+      player.vel.set(0,0,0); SFX.level();
+      sysMsg('<b>Westwind has arrived at the Western Frontier.</b>'+(m&&m.recovered?' Your interrupted journey was completed safely.':''));
     });
     room.onMessage('skyshipBoardReject', m=>{
       const r=m&&m.reason;
@@ -406,6 +424,7 @@ function netAttachRoom(room,name,client){
       sysMsg(r==='rank'?'Boarding requires an <b>S-Rank Hunter</b>':
              r==='gold'?'Boarding requires <b>1,000 gold</b> in your possession':
              r==='away'?'The airship is not currently docked':
+             r==='moving'?'The Westwind is underway. You cannot leave until arrival':
              r==='range'?'Stand on the ship gangway to board':'Boarding is unavailable');
     });
     room.onMessage('sleepWait', m=>sysMsg('Waiting for sleepers: <b>'+((m&&m.sleeping)||1)+'/'+((m&&m.needed)||1)+'</b>'));
