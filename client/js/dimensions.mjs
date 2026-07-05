@@ -738,7 +738,7 @@ function tickAbilities(dt,t){
     if(b.vel){ b.mesh.position.addScaledVector(b.vel,dt); if(b.grav) b.vel.y-=b.grav*dt; }
     if(b.spin){ b.mesh.rotation.x+=b.spin*dt; b.mesh.rotation.z+=b.spin*dt; }
     b.mesh.material.opacity=Math.max(0,b.life/.2);
-    if(b.life<=0){ scene.remove(b.mesh); beams.splice(i,1); }
+    if(b.life<=0){ scene.remove(b.mesh);if(b.dispose){if(b.mesh.geometry)b.mesh.geometry.dispose();if(b.mesh.material)b.mesh.material.dispose();}beams.splice(i,1); }
   }
   // shadow soldier
   for(let i=allies.length-1;i>=0;i--){

@@ -1,3 +1,5 @@
+import {disposeObjectTree} from './three-disposal.mjs';
+
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
  */
@@ -5174,7 +5176,12 @@ function trySpawnMob(){
     return;
   }
 }
-function removeMob(i){ scene.remove(mobs[i].grp); mobs.splice(i,1); }
+function removeMob(i){
+  const mob=mobs[i];
+  if(!mob)return;
+  disposeObjectTree(mob.grp);
+  mobs.splice(i,1);
+}
 function killAllMobs(){ for(let i=mobs.length-1;i>=0;i--) removeMob(i); }
 function tickMobs(dt,t){
   mobSpawnT-=dt;
@@ -5685,7 +5692,11 @@ const pMat=new THREE.PointsMaterial({size:.13, vertexColors:true, transparent:tr
 const pPoints=new THREE.Points(pGeo,pMat);
 pPoints.frustumCulled=false; scene.add(pPoints);
 const particles=[];
-function spawnParticle(o){ if(particles.length>=P_CAP) particles.shift(); particles.push(o); }
+let particleReplace=0;
+function spawnParticle(o){
+  if(particles.length<P_CAP)particles.push(o);
+  else {particles[particleReplace]=o;particleReplace=(particleReplace+1)%P_CAP;}
+}
 function burst(x,y,z,col,n,pow,up,life){
   for(let i=0;i<n;i++){
     const f=.8+Math.random()*.4;
@@ -5718,14 +5729,22 @@ function updateParticles(dt){
 // Server-authoritative: the server sends the actual damage on each hit ('dmgnum'),
 // and we float a short-lived billboard sprite over the mob. No client prediction.
 const dmgNums=[];
-function makeDamageNumber(n, crit){
-  const c=document.createElement('canvas'); c.width=128; c.height=64;
+const dmgNumPool=[];
+function paintDamageNumber(sp,n,crit){
+  const c=sp.userData.canvas;
   const g=c.getContext('2d');
+  g.clearRect(0,0,c.width,c.height);
   g.font='bold '+(crit?52:42)+'px system-ui, Arial, sans-serif';
   g.textAlign='center'; g.textBaseline='middle';
   const txt=String(n);
   g.lineWidth=7; g.strokeStyle='rgba(0,0,0,.85)'; g.strokeText(txt,64,34);
   g.fillStyle=crit?'#ffd24a':'#ffffff'; g.fillText(txt,64,34);
+  sp.material.map.needsUpdate=true;
+  const s=crit?1.35:1.0;sp.scale.set(s,s*.5,1);sp.material.opacity=1;
+  return sp;
+}
+function makeDamageNumber(n, crit){
+  const c=document.createElement('canvas'); c.width=128; c.height=64;
   const tex=new THREE.CanvasTexture(c);
   tex.magFilter=THREE.LinearFilter; tex.minFilter=THREE.LinearFilter;
   const mat=new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false, depthTest:false});
@@ -5733,13 +5752,14 @@ function makeDamageNumber(n, crit){
   const s=crit?1.35:1.0;
   sp.scale.set(s, s*.5, 1);
   sp.renderOrder=999;
-  return sp;
+  sp.userData.canvas=c;
+  return paintDamageNumber(sp,n,crit);
 }
-function disposeDmgNum(d){ scene.remove(d.sprite); d.sprite.material.map.dispose(); d.sprite.material.dispose(); }
+function recycleDmgNum(d){scene.remove(d.sprite);dmgNumPool.push(d.sprite);}
 function spawnDamageNumber(m){
   if(!m || !scene) return;
-  while(dmgNums.length>=40) disposeDmgNum(dmgNums.shift());
-  const sp=makeDamageNumber(m.n|0, !!m.crit);
+  while(dmgNums.length>=32) recycleDmgNum(dmgNums.shift());
+  const sp=dmgNumPool.length?paintDamageNumber(dmgNumPool.pop(),m.n|0,!!m.crit):makeDamageNumber(m.n|0,!!m.crit);
   sp.position.set((+m.x||0)+(Math.random()-.5)*.5, (+m.y||0)+1.5, (+m.z||0)+(Math.random()-.5)*.5);
   scene.add(sp);
   dmgNums.push({sprite:sp, t:0, life:.85, vy:1.8, base:sp.scale.x});
@@ -5748,7 +5768,7 @@ function updateDamageNumbers(dt){
   for(let i=dmgNums.length-1;i>=0;i--){
     const d=dmgNums[i];
     d.t+=dt;
-    if(d.t>=d.life){ disposeDmgNum(d); dmgNums.splice(i,1); continue; }
+    if(d.t>=d.life){ recycleDmgNum(d); dmgNums.splice(i,1); continue; }
     const u=d.t/d.life;
     d.sprite.position.y+=d.vy*dt; d.vy*=(1-dt*1.6);                       // rise, decelerating
     d.sprite.material.opacity = u<.12 ? u/.12 : 1-(u-.12)/.88;           // quick in, slow fade

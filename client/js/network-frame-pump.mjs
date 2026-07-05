@@ -1,3 +1,5 @@
+import {distanceTierSq,consumeEntityStep,PERFORMANCE_BUDGETS} from './performance-budget.mjs';
+
 export function createNetworkFramePump({
   connection:NET,
   snapshot:netSnapshot,
@@ -42,19 +44,23 @@ export function createNetworkFramePump({
       const r=NET.remotes[sid];
       netRefreshRemoteAvatar(sid,r);
       const ref=r.ref,p=r.grp.position;
-      r.grp.visible=dim!=='ability'&&(ref.dgn||'')===NET.dgn;
+      const dx=(ref.x||0)-player.pos.x,dz=(ref.z||0)-player.pos.z,distSq=dx*dx+dz*dz;
+      r.grp.visible=dim!=='ability'&&(ref.dgn||'')===NET.dgn&&distSq<=PERFORMANCE_BUDGETS.playerCullSq;
+      if(!r.grp.visible)continue;
+      const stepDt=consumeEntityStep(r,dt,distanceTierSq(distSq));
+      if(!stepDt)continue;
       const lift=ref.mount?mountLift(ref.mount):0;
       const mvx=ref.x-p.x,mvz=ref.z-p.z;
-      p.x+=mvx*Math.min(1,dt*12);
-      p.z+=mvz*Math.min(1,dt*12);
-      p.y+=((ref.y+lift)-p.y)*Math.min(1,dt*12);
-      r.grp.rotation.y+=angDiff(ref.yaw+Math.PI,r.grp.rotation.y)*Math.min(1,dt*10);
+      p.x+=mvx*Math.min(1,stepDt*12);
+      p.z+=mvz*Math.min(1,stepDt*12);
+      p.y+=((ref.y+lift)-p.y)*Math.min(1,stepDt*12);
+      r.grp.rotation.y+=angDiff(ref.yaw+Math.PI,r.grp.rotation.y)*Math.min(1,stepDt*10);
       ensureRemoteMount(r,ref.mount||'');
       const moving=Math.hypot(mvx,mvz)>.08;
       if(r.mountObj&&isDragon(ref.mount)){
         animateMountWings(r.mountObj,now);
-        emitDragonAura({x:p.x,y:p.y-lift,z:p.z},dragonType(ref.mount),dt,r);
-        if(moving) emitDragonTrail({x:p.x,y:p.y-lift,z:p.z},r.grp.rotation.y,dragonType(ref.mount),dt,r);
+        emitDragonAura({x:p.x,y:p.y-lift,z:p.z},dragonType(ref.mount),stepDt,r);
+        if(moving) emitDragonTrail({x:p.x,y:p.y-lift,z:p.z},r.grp.rotation.y,dragonType(ref.mount),stepDt,r);
       }
       if(ref.mount){
         r.legs[0].rotation.x=-.95;
@@ -69,4 +75,3 @@ export function createNetworkFramePump({
     }
   };
 }
-

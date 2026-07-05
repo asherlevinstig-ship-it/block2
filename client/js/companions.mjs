@@ -1,3 +1,5 @@
+import {disposeObjectTree} from './three-disposal.mjs';
+
 export function createCompanionSystem({
   NET,
   player,
@@ -1444,7 +1446,7 @@ function netUpdateTag(r){
   const text=r.ref.name+'|'+r.ref.lvl+'|'+rank+'|'+team+'|'+job+'|'+jobLvl+'|'+jobTitle;
   if(text===r.tagText) return;
   r.tagText=text;
-  if(r.tag) r.grp.remove(r.tag);
+  if(r.tag) disposeObjectTree(r.tag);
   r.tag=makeNameTag(r.ref.name, pathCol, team, teamCol(r.ref.team||''), { lvl:r.ref.lvl, rank, job, jobLvl, jobTitle });
   r.grp.add(r.tag);
 }
@@ -1462,7 +1464,7 @@ function pulseAegisGlow(model, now){
 }
 function netRemoveRemote(sid){
   const r=NET.remotes[sid];
-  if(r){ scene.remove(r.grp); delete NET.remotes[sid]; }
+  if(r){ disposeObjectTree(r.grp); delete NET.remotes[sid]; }
 }
 
 

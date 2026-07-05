@@ -1,8 +1,11 @@
+import {distanceTierSq,consumeEntityStep} from './performance-budget.mjs';
+import {disposeObjectTree} from './three-disposal.mjs';
+
 export function createReplicationVisuals({NET,player}){
 // ---- server mobs: kind-aware models, state-driven telegraph animation ----
 const ANIMAL_BASE_KIND={prairie_hare:'rabbit',forest_stag:'deer',dune_hare:'rabbit',ridge_boar:'boar',frost_stag:'deer',mire_boar:'boar',pack_mule:'deer'};
 function isAnimalKind(kind){ return kind==='deer'||kind==='boar'||kind==='rabbit'||!!ANIMAL_BASE_KIND[kind]; }
-const RANGED_ENEMY_KINDS=new Set(['skeleton','bone_archer','ash_archer','void_archer','bandit_archer']);
+const RANGED_ENEMY_KINDS=new Set(['skeleton','bone_archer','ash_archer','void_archer','bandit_archer','wind_archer','briar_archer','sun_archer','amber_archer','ice_archer','bog_archer']);
 const ENEMY_FAMILY_COLORS={
   husk:[.72,.48,.24],bone_archer:[.78,.67,.48],
   raider:[.64,.25,.18],ash_archer:[.58,.34,.3],
@@ -166,13 +169,19 @@ function netRemoveMob(id){
   const p=mobs[i].grp.position;
   burst(p.x, p.y+1, p.z, [.34,.52,.28], 18, 2.6, 2.2, .7);
   SFX.kill();
-  scene.remove(mobs[i].grp);
+  disposeObjectTree(mobs[i].grp);
   mobs.splice(i,1);
 }
 function netMobTick(m, dt, t){
   const r=m.ref, p=m.grp.position;
   if((r.hp||0)<(m.hp||0)){m.hitT=.16;const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible)burst(p.x,p.y+1,p.z,flash,6,1.5,1.4,.25);}m.hp=r.hp;
-  m.grp.visible = (r.dgn||'')===NET.dgn;
+  const dx=p.x-player.pos.x,dz=p.z-player.pos.z,important=!!(m.boss||m.elite||m.kind==='bandit_captain');
+  const tier=distanceTierSq(dx*dx+dz*dz,important);
+  m.grp.visible = (r.dgn||'')===NET.dgn&&tier<3;
+  if(!m.grp.visible)return;
+  const stepDt=consumeEntityStep(m,dt,tier);
+  if(!stepDt)return;
+  dt=stepDt;
   if(m.orb){
     p.x+=(r.x-p.x)*Math.min(1,dt*10); p.y+=(r.y-p.y)*Math.min(1,dt*10); p.z+=(r.z-p.z)*Math.min(1,dt*10);
     const k=1+Math.sin(t*10+m.phase)*.16;

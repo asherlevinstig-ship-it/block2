@@ -4,6 +4,7 @@ import {api as combatApi,state as combatState} from './combat.mjs';
 import {api as hudApi,state as hudState} from './hud.mjs';
 import {api as menusApi,state as menusState} from './menus.mjs';
 import {api as networkingApi,state as networkingState} from './networking.mjs';
+import {createPerformanceDiagnostics} from './performance-budget.mjs';
 const gameContext=window.BlockcraftGameContext;
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -441,10 +442,11 @@ function updateInfoHud(held){
   }
 }
 let last=performance.now();
+const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length})});
 function tick(now){
   requestAnimationFrame(tick);
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
-
+  perfDiagnostics.sample(now);
   tickFurnaces(dt);
   tickOnboarding(now);
   tickAbilityTraining(now);
