@@ -38,8 +38,10 @@ sandbox whose edits are never persisted into the shared world.
 ## Classes, paths & abilities
 
 A hunter picks one **path** (`Player.path`): `shadow`, `mage`, or `guardian`. Each path
-has three abilities unlocked at levels **2 / 5 / 8** (`ABILITY_UNLOCK`), costing mana and
-on cooldown (`ABILITY_PATHS`):
+has three abilities unlocked at levels **2 / 5 / 8**, costing mana and on cooldown. All
+tuning (names, costs, cooldowns, unlock levels) and the damage formulas live in one shared
+module, [`shared/ability-system.js`](../shared/ability-system.js), loaded by both the
+server and the browser client:
 
 | Path | Ability 1 (Lv2) | Ability 2 (Lv5) | Ability 3 (Lv8) |
 |------|-----------------|-----------------|-----------------|
@@ -50,18 +52,31 @@ on cooldown (`ABILITY_PATHS`):
 Abilities are resolved server-side in [`combat.mixin.js`](../server/rooms/combat.mixin.js):
 fireballs are simulated projectiles, frost applies a visible slow `state`, lightning
 chains to nearby mobs and roots them, and target-snapped casts still require line of sight.
+Damage scales with INT/STR **and** hunter level (`abilityDamage`: ×1.0 at level 1 rising
+~5%/level to ~×1.95 at 20) so casters keep pace with ranked gates. The **Shadow Soldier**
+is a real server-simulated ally: it replicates to every client as a `shadow_soldier` mob,
+hunts the nearest hostile within 16 blocks, strikes on its own cadence with kill credit to
+its hunter, and fades after 30s. **Second Wind** procs inside the server's `hurtPlayer`
+(40% heal below 25% HP, 60s cooldown), so event and dungeon death rules respect it.
 
 ---
 
 ## Professions
 
-A hunter also has one **job** (`Player.job`): `adventurer`, `miner`, `farmer`, `cook`,
-`blacksmith`, or `monk`. Profession level is derived from `jobXp` on a rising curve
-(`jobLevelFromXp`: `30 × lvl^1.45` per level, cap 99). Perk strength steps at levels
-**2 / 5 / 10 / 20** (`jobPerkTier` → tiers 1–4); `jobPerkChance` turns a tier into a bonus
-proc chance (`base + tier × 0.05`).
+A hunter also has one active **job** (`Player.job`), with **Adventurer** as the always-on
+baseline. Definitions, level titles, and perk rules live in
+[`shared/job-system.js`](../shared/job-system.js); XP is tracked **per job**
+(`jobXpByJob`) so switching professions never loses progress. Profession level rises on
+`30 × lvl^1.45` (cap 99); perk strength steps at levels **2 / 5 / 10 / 20**.
 
-Because some XP sources never reach the server, `jobXp` is **rate-capped on save**
+Each profession has signature server-validated perks: **miners** run prospect surveys
+(ore sense → deep prospecting, geode finds, durability saves), **farmers** craft compost
+fertilizer and cultivate windseed, **cooks** serve timed meal buffs (might/gathering),
+**blacksmiths** reforge and eventually Masterwork gear, and **monks** channel auras
+(stone skin, regeneration, speed). Job contracts come as refreshing **offer boards** with
+quick/balanced/demanding difficulties.
+
+Because some XP sources never reach the server, job XP is **rate-capped on save**
 (`clampJobXpGain` in [`store.js`](../server/store.js)) — a forged save can't claim an
 instant max profession. Job level shows on nameplates (`Player.jobLvl`).
 
@@ -84,6 +99,31 @@ instant max profession. Job level shows on nameplates (`Player.jobLvl`).
   hold a timer per furnace. Sand→glass, cobble→stone, iron ore→ingot, meat/fish→cooked.
 - **Food & hunger** (`FOOD_VALUES`, `MAX_HUNGER` = 100): eating restores hunger and a
   little HP; hunger drains over time and starvation damages the player.
+
+---
+
+## Gear & loot economy
+
+Weapons and armor carry a **gear rank** (E→S) and **rarity** (Common→Mythic), combined
+into a power score (`rank×10 + rarity`). The tables and profiles live in
+[`shared/gear-system.js`](../shared/gear-system.js) / [`shared/loot-economy.js`](../shared/loot-economy.js)
+(one file for server and client); the server rolls all drops authoritatively in
+[`loot-progression.js`](../server/loot-progression.js):
+
+- **Sources:** bandits drop gear rarely (≈4%, low ranks), bandit captains always drop a
+  ranked weapon (12% armor chance), and gate clears always pay out (35% armor chance,
+  rank scales with gate tier and shard `+N`).
+- **Weapon identity:** swords build **momentum** stacks on repeated hits for a damage
+  multiplier; axes hit slower and harder.
+- **Blacksmith services:** classic repair/upgrade plus **reforging** (e.g. Keen = +damage,
+  Swift = faster swings) and, at blacksmith level 20, **Masterwork** perfection — which
+  also lifts the piece to S-rank. Items can be **locked** against accidental salvage.
+- **Loot recovery:** gear that would drop into a full inventory is banked server-side and
+  reclaimable later — nothing is ever lost (`lootRecovery*` messages).
+- **Balance harness:** `npm run balance:loot` runs a deterministic simulator
+  ([`tools/loot-progression-sim.js`](../tools/loot-progression-sim.js)) reporting the
+  rarity distribution, weapon mix, and full-inventory recovery safety; the
+  `progression-balance` test suite pins the same expectations in CI.
 
 ---
 

@@ -118,6 +118,16 @@ handler — they're short and grouped by system in `rooms/*.mixin.js`.
 | `utilityLoadout` | equip server-earned utilities (compass, minimap, …) |
 | `claimFirstQuestReward` | first-quest reward |
 
+### Gear & professions
+| Message | Purpose |
+|---------|---------|
+| `equipWeapon` / `equipArmor` | validated gear equips |
+| `gearLock` | lock/unlock an item against salvage |
+| `blacksmithReforge` / `blacksmithSalvage` | reforge modifiers and salvage returns |
+| `prospect` | miner ore survey (level-gated, on cooldown) |
+| `jobContract` | take/claim/abandon contracts from the offer boards |
+| `lootRecovery` | reclaim gear banked when the inventory was full |
+
 ---
 
 ## Server → client
@@ -160,6 +170,10 @@ Grouped by intent. `*Result` = success, `*Reject` = rejected/invalid.
   `roadsideEncounterResult`/`roadsideEncounterReject`, `roadSafetyChanged`.
 - **Weather:** `weather` (kind + rotation deadline, sent on join and on change),
   `weatherBolt` (lightning strike position for the client flash/bolt/thunder).
+- **Gear & professions:** `weaponIdentity` (momentum stacks), `armorSync`,
+  `gearLockResult`, `blacksmithReforgeResult`/`blacksmithSalvageResult`,
+  `prospectResult`/`prospectReject`, `foodBuff`,
+  `lootRecoveryState`/`lootRecoveryResult`.
 - **Contracts & discoveries:** `regionalContracts`, `regionalContractUpdate`,
   `regionalContractReady`, `regionalContractClaimed`, `regionalContractReject`,
   `discoveryResult`/`discoveryReject`, `discoverySighted`, `biomeFind`.

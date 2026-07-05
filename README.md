@@ -55,6 +55,9 @@ client/
   js/rendering.mjs      Three.js renderer/camera lifecycle
   styles.css            UI/HUD stylesheet (extracted from index.html, linked + served statically)
   vendor/colyseus.browser.js   prebuilt standalone Colyseus browser SDK (served at /colyseus.js)
+shared/                 modules loaded by BOTH the server (require) and browser (script tag):
+                        gear-system, loot-economy, job-system, ability-system, dungeon-generation, …
+tools/                  balance harnesses (loot-progression-sim → `npm run balance:loot`)
 data/                   default JsonStore output (world.json, players/, chests, furnaces, gates, …)
 ```
 
@@ -85,7 +88,8 @@ no bedrock, and a 10-block reach check from the editing player.
 | Gates             | server    | id + seed + rank broadcast; public gates open on a timer, keyed/shard gates on demand |
 | Dungeons          | server    | **party instances**: everyone entering the same gate shares one instance, mobs/boss/hazards simulated |
 | Inventory / gold / crafting / shops | server | validated server-side; the `save` message ignores client-sent inventory, gold, level, XP and stats |
-| Melee & abilities | server    | damage derived from the *server* inventory (not the cosmetic `heldId`), line-of-sight + range + rate checked |
+| Melee & abilities | server    | damage derived from the *server* inventory (not the cosmetic `heldId`), line-of-sight + range + rate checked; ability tuning shared via `shared/ability-system.js`, the Shadow Soldier is a server-simulated ally |
+| Gear & loot       | server    | ranked/rarity drops, reforging, masterwork, equips, and full-inventory loot recovery are rolled and validated server-side (`shared/gear-system.js` + `server/loot-progression.js`) |
 | Legendary weapons | server    | each weapon's effect (meteors, chains, blackholes, revives…) is fully simulated server-side |
 | Dragons & familiars | server  | hatching, breeding, mounts, breath, and familiar binds are all server-gated per species/item |
 | Profession XP     | server    | `jobXp` is server-owned: the save channel ignores client-sent profession XP entirely, and only validated server handlers (mining, kills, quests, contracts, meditation…) grant it, each clamped per event, so a forged save can't claim an instant max profession |
@@ -190,6 +194,11 @@ and the sim rate live in `GameRoom.js`.
 - **Day length:** `DAY_LEN` (600s) — must match the client's copy.
 - **Weather:** `WEATHER_DURATION_MS` / `WEATHER_NEXT` (rotation), `LIGHTNING_INTERVAL_MS`,
   `LIGHTNING_RADIUS`, `LIGHTNING_PLAYER_DMG` / `LIGHTNING_MOB_DMG`, `weatherSpawnMods`.
+- **Abilities:** `shared/ability-system.js` (paths, costs, cooldowns, unlock levels, damage
+  formulas + level curve, Shadow Soldier stats).
+- **Gear & loot:** `shared/gear-system.js` (ranks/rarities/identity), `shared/loot-economy.js`
+  (drop tables), `shared/job-system.js` (professions/perks); audit the whole economy with
+  `npm run balance:loot`.
 - **Overworld spawning:** `hostileBudgetFor` / `animalBudgetFor` (per-player, per-ring budgets),
   `LOCAL_HOSTILE_COUNT_RADIUS`, `HOSTILE_DESPAWN_RADIUS`, `HOSTILE_SPAWN_INTERVAL`; `MOB_CAP`/`ANIMAL_CAP`
   remain as fallbacks.
@@ -215,7 +224,7 @@ and the sim rate live in `GameRoom.js`.
 ## Tests
 
 ```bash
-npm test               # authority, authentication, and client-module unit tests
+npm test               # authority, authentication, client-module, progression-balance, and state-cluster unit tests
 npm run test:e2e       # browser progression, socket reconnect, and reload restoration
 npm run test:integration   # boots a room and runs the join → play → save round-trip
 ```
