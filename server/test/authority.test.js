@@ -547,12 +547,17 @@ test('Blacksmith salvage converts non-Legendary weapons into materials',()=>{
 test('ranked armor keeps metadata through equip, damage, repair, locking, and salvage',()=>{
   const room=makeRoom(),client=makeClient('armor_loop');
   const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,gold:999,inv:[
-    {id:I.IRON_ARMOR,count:1,dur:400,gearRank:'C',rarity:'rare'},
+    {id:I.IRON_ARMOR,count:1,dur:400,gearRank:'C',rarity:'rare',armorType:'scout'},
   ]});
-  room.handleEquipArmor(client,{id:I.IRON_ARMOR,gearRank:'C',rarity:'rare'});
+  room.handleEquipArmor(client,{id:I.IRON_ARMOR,gearRank:'C',rarity:'rare',armorType:'scout'});
   assert.equal(prof.armor.gearRank,'C');assert.equal(prof.armor.rarity,'rare');
+  assert.equal(prof.armor.armorType,'scout');
   const before=prof.armor.dur;room.hurtPlayer(client,10,'armor_test');
   assert.equal(prof.armor.dur,before-1);
+  const hurt=client.sent.filter(e=>e.type==='hurt').at(-1).msg;
+  assert.equal(hurt.raw,10);assert.equal(hurt.reason,'armor_test');
+  assert.equal(hurt.absorbed>0,true);assert.equal(hurt.armor.type,'scout');
+  assert.equal(hurt.armor.dur,before-1);assert.equal(hurt.hp<hurt.maxHp,true);
   room.handleEquipArmor(client,{id:0});
   const slot=prof.inv.findIndex(s=>s&&s.id===I.IRON_ARMOR);
   room.handleBlacksmithRepair(client,{slot});
@@ -561,6 +566,18 @@ test('ranked armor keeps metadata through equip, damage, repair, locking, and sa
   assert.equal(prof.inv[slot].locked,true);
   room.handleGearLock(client,{slot,locked:false});room.handleBlacksmithSalvage(client,{slot});
   assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_ARMOR),false);
+});
+
+test('armor archetypes authoritatively alter the allowed movement envelope',()=>{
+  const room=makeRoom(),scoutClient=makeClient('scout_move'),bulwarkClient=makeClient('bulwark_move');
+  room.lastMoveMsg=new Map();
+  const scoutRec=seedPlayer(room,scoutClient,{x:100,z:100}),bulwarkRec=seedPlayer(room,bulwarkClient,{x:100,z:120});
+  scoutRec.prof.armor={id:I.IRON_ARMOR,count:1,armorType:'scout'};bulwarkRec.prof.armor={id:I.IRON_ARMOR,count:1,armorType:'bulwark'};
+  const scout=room.state.players.get(scoutClient.sessionId),bulwark=room.state.players.get(bulwarkClient.sessionId);
+  const now=Date.now();room.lastMoveMsg.set(scoutClient.sessionId,now-100);room.lastMoveMsg.set(bulwarkClient.sessionId,now-100);
+  room.handleMove(scoutClient,{x:150,y:scout.y,z:100,yaw:0});
+  room.handleMove(bulwarkClient,{x:150,y:bulwark.y,z:120,yaw:0});
+  assert.ok(scout.x-100>bulwark.x-100);
 });
 
 test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is protected',()=>{
@@ -718,13 +735,16 @@ test('armor equip validates ownership in the server inventory', () => {
   assert.deepEqual(prof.armor, { id: I.IRON_ARMOR, count: 1 });
   assert.equal(itemCount(prof, I.IRON_ARMOR), 0, 'equipping atomically removes the inventory item');
   assert.equal(room.state.players.get(client.sessionId).armorId, I.IRON_ARMOR);
+  assert.equal(room.state.players.get(client.sessionId).armorType, 'vanguard');
   prof.inv[0] = { id: I.DIA_ARMOR, count: 1 };
   room.handleEquipArmor(client, { id: I.DIA_ARMOR });
   assert.deepEqual(prof.armor, { id: I.DIA_ARMOR, count: 1 });
+  assert.equal(room.state.players.get(client.sessionId).armorType, 'bulwark');
   assert.equal(itemCount(prof, I.IRON_ARMOR), 1, 'swapping armor returns the previous piece in the consumed slot');
   assert.equal(itemCount(prof, I.DIA_ARMOR), 0);
   room.handleEquipArmor(client, { id: 0 });
   assert.equal(prof.armor, null);
+  assert.equal(room.state.players.get(client.sessionId).armorType, '');
   assert.equal(itemCount(prof, I.DIA_ARMOR), 1, 'unequipping returns the item to inventory');
 });
 
@@ -892,6 +912,7 @@ test('profile merge rejects client armor and inventory changes', () => {
   assert.deepEqual(sanitizeProfile({ armor: { id: I.LEGEND_ARMOR, count: 99 } }).armor, { id: I.LEGEND_ARMOR, count: 1 });
   assert.deepEqual(sanitizeProfile({armor:{id:I.IRON_ARMOR,count:1,dur:321,gearRank:'D',rarity:'epic',locked:true}}).armor,
     {id:I.IRON_ARMOR,count:1,dur:321,gearRank:'D',rarity:'epic',locked:true});
+  assert.equal(sanitizeProfile({armor:{id:I.IRON_ARMOR,count:1,armorType:'bulwark'}}).armor.armorType,'bulwark');
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.LEGEND_ARMOR, count: 1 },
     inv: [{ id: I.LEGEND_ARMOR, count: 1 }, { id: W.B.LOG, count: 3 }],
@@ -5386,7 +5407,8 @@ test('bandit captains drop E-to-C ranked weapons with rolled rarity',()=>{
   const grant=client.sent.find(e=>e.type==='grant'),weapon=grant.msg.items.find(it=>it.gear);
   assert.equal(weapon.id,I.IRON_SWORD);
   assert.equal(weapon.rarity,'epic');
-  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD&&s.rarity==='epic'),true);
+  assert.equal(weapon.source,'captain');
+  assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD&&s.rarity==='epic'&&s.source==='captain'),true);
 });
 
 test('ranked loot maps axe archetypes onto the same E-to-S progression',()=>{

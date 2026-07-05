@@ -39,22 +39,25 @@ class EconomyMixin {
     const archetype=source==='gate'&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
     return {...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype),source};
   }
-  rollArmorDrop(rank=0,rarityBonus=0){
+  rollArmorDrop(rank=0,rarityBonus=0,armorType='vanguard'){
     const ri=Math.max(0,Math.min(5,rank|0));
     return {
       id:ri<=2?I.IRON_ARMOR:I.DIA_ARMOR,count:1,gearRank:GEAR_SYSTEM.RANKS[ri].id,
-      rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,gear:true,
+      rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,
+      armorType:GEAR_SYSTEM.ARMOR_ARCHETYPES[armorType]?armorType:'vanguard',gear:true,
     };
   }
   rollArmorDropForSource(source,tier=0,plus=0){
     const spec=LOOT_ECONOMY.armorSpec(source,tier,plus,Math.random());
-    return spec?{...this.rollArmorDrop(spec.rank,spec.rarityBonus),source}:null;
+    return spec?{...this.rollArmorDrop(spec.rank,spec.rarityBonus,spec.armorType),source}:null;
   }
   gearRewardStack(item,info){
     if(!item||!info)return null;
     const stack={id:item.id,count:1,plus:Math.max(0,Math.min(3,item.plus|0))};
     if(GEAR_SYSTEM.RARITIES.some(r=>r.id===item.rarity))stack.rarity=item.rarity;
     if(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===item.gearRank))stack.gearRank=item.gearRank;
+    if(ARMOR_INFO[item.id]&&GEAR_SYSTEM.ARMOR_ARCHETYPES[item.armorType])stack.armorType=item.armorType;
+    else if(ARMOR_INFO[item.id])stack.armorType=info.armorType||'vanguard';
     if(JOB_SYSTEM.reforgeModifier(item.forge))stack.forge=item.forge;
     if(item.masterwork&&stack.forge)stack.masterwork=true;
     if(item.locked||stack.rarity==='mythic'||(info.tier|0)>=5)stack.locked=true;
@@ -286,11 +289,11 @@ class EconomyMixin {
       : (tier ? Math.min(99999, info.dur + Math.max(1, Math.round(info.dur * (0.08 + tier * 0.04)))) : info.dur);
     for (let i = 0; i < prof.inv.length && left > 0; i++) {   // reuse freed holes before growing
       if (prof.inv[i]) continue;
-      prof.inv[i] = { id, count: 1, dur, source:'crafted' };
+      prof.inv[i] = { id, count: 1, dur, source:'crafted', ...(ARMOR_INFO[id]?{armorType:info.armorType||'vanguard'}:{}) };
       left--;
     }
     while (left > 0 && prof.inv.length < 36) {
-      prof.inv.push({ id, count: 1, dur, source:'crafted' });
+      prof.inv.push({ id, count: 1, dur, source:'crafted', ...(ARMOR_INFO[id]?{armorType:info.armorType||'vanguard'}:{}) });
       left--;
     }
     return left;

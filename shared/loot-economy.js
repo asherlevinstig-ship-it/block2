@@ -25,12 +25,14 @@
       rarityBonus:ti*rule.rarityPerTier+(source==='gate'?pi*rule.rarityPerPlus:0),
     });
   }
-  function armorSpec(source,tier=0,plus=0,roll=Math.random()){
+  function armorSpec(source,tier=0,plus=0,roll=Math.random(),archetypeRoll=Math.random()){
     const rule=SOURCES[source];if(!rule||!rule.armorChance)return null;
     if(Math.max(0,Math.min(.999999,Number(roll)||0))>=rule.armorChance)return null;
     const ti=clamp(tier,0,4),pi=clamp(plus,0,5);
     const rank=source==='gate'?Math.min(rule.maxRank,ti+rule.rankOffset):Math.min(rule.maxRank,Math.floor(ti/rule.rankDivisor));
-    return Object.freeze({source,rank,rarityBonus:ti*rule.rarityPerTier+(source==='gate'?pi*rule.rarityPerPlus:0)});
+    const ar=Math.max(0,Math.min(.999999,Number(archetypeRoll)||0));
+    const armorType=source==='captain'?(ar<.55?'scout':ar<.90?'vanguard':'bulwark'):(ar<.30?'scout':ar<.70?'vanguard':'bulwark');
+    return Object.freeze({source,rank,armorType,rarityBonus:ti*rule.rarityPerTier+(source==='gate'?pi*rule.rarityPerPlus:0)});
   }
   function salvageYield(rankIndex=0,rarityIndex=0,tier=1){
     const salvage=[1,2,4,7,12][clamp(rarityIndex,0,4)];

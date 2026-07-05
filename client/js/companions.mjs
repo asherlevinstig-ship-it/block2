@@ -4,6 +4,7 @@ export function createCompanionSystem({
   NET,
   player,
   inv,
+  gearSystem,
   refreshHUD,
   equipmentKind,
   faceTexture,
@@ -1106,8 +1107,14 @@ function familiarBoundLocal(kind){
 function makeRemoteAvatar(look){
   look=look||playerAppearance();
   const grp=new THREE.Group(), legs=[], arms=[], hair=[], blink=[], idle=[], aegisGlow=[];
-  const hasAegis=(look.armorId|0)===137;
-  const hasIronArmor=(look.armorId|0)===183;
+  const armorId=look.armorId|0;
+  const armorType=gearSystem.ARMOR_ARCHETYPES[look.armorType]
+    ?look.armorType:(armorId===137?'aegis':armorId===184?'bulwark':armorId?'vanguard':'');
+  const hasArmor=armorId>0;
+  const isScout=hasArmor&&armorType==='scout';
+  const isVanguard=hasArmor&&armorType==='vanguard';
+  const isBulwark=hasArmor&&armorType==='bulwark';
+  const hasAegis=hasArmor&&armorType==='aegis';
   const hasDiaArmor=(look.armorId|0)===184;
   const heldKind=equipmentKind(look.heldId);
   const skinM=voxelMats(look.skin, shadeHex(look.skin,18), look.skinDark, look.skinShadow);
@@ -1129,6 +1136,8 @@ function makeRemoteAvatar(look){
   const metalM=voxelMats(look.beltBuckle,'#f0c96a','#8a6424','#6e4a14');
   const ironArmorM=voxelMats('#8b95a5','#e5e7eb','#586170','#38404c');
   const diaArmorM=voxelMats('#0e7490','#67e8f9','#155e75','#083344');
+  const scoutArmorM=voxelMats('#3b805d','#91e0ae','#24513b','#173528');
+  const bulwarkArmorM=hasDiaArmor?diaArmorM:voxelMats('#536176','#aebdd0','#303948','#202733');
   const aegisM=voxelMats('#d0a348','#fff099','#8a6424','#5a3c12');
   const aegisTrimM=voxelMats('#9b6be8','#c8a8ff','#5b3a90','#342050');
   const aegisGlowM=glowVoxelMats('#ffd24a','#fff4a8','#b8862d','#ffd24a',.85);
@@ -1212,12 +1221,29 @@ function makeRemoteAvatar(look){
   addBox(torso,[.09,.14,.38],[.28,.36,.04],packDarkM,[.18,0,0]);
   addBox(torso,[.12,.08,.35],[-.37,.3,0],guardM);             // tiny shoulder clip
   addBox(torso,[.12,.08,.35],[.37,.3,0],guardM);
-  if(hasIronArmor||hasDiaArmor){
+  if(isScout){
+    addBox(torso,[.36,.35,.045],[0,.07,-.2],scoutArmorM);
+    addBox(torso,[.54,.07,.3],[0,.34,0],scoutArmorM);
+    addBox(torso,[.09,.065,.29],[-.34,.35,0],scoutArmorM);
+    addBox(torso,[.09,.065,.29],[.34,.35,0],scoutArmorM);
+    addBox(torso,[.05,.29,.065],[-.15,.06,-.23],trimM,[0,0,-.18]);
+    addBox(torso,[.05,.29,.065],[.15,.06,-.23],trimM,[0,0,.18]);
+  } else if(isVanguard){
     const armorM=hasDiaArmor?diaArmorM:ironArmorM;
-    addBox(torso,[.42,.46,.055],[0,.03,-.2],armorM);
-    addBox(torso,[.72,.13,.34],[0,.34,0],armorM);
-    addBox(torso,[.14,.09,.36],[-.42,.35,0],armorM);
-    addBox(torso,[.14,.09,.36],[.42,.35,0],armorM);
+    addBox(torso,[.44,.48,.065],[0,.03,-.205],armorM);
+    addBox(torso,[.7,.13,.34],[0,.34,0],armorM);
+    addBox(torso,[.14,.1,.36],[-.42,.35,0],armorM);
+    addBox(torso,[.14,.1,.36],[.42,.35,0],armorM);
+    addBox(torso,[.18,.09,.075],[0,.09,-.25],metalM,[0,0,.785]);
+  } else if(isBulwark){
+    addBox(torso,[.58,.61,.1],[0,.01,-.22],bulwarkArmorM);
+    addBox(torso,[.9,.2,.43],[0,.39,0],bulwarkArmorM);
+    addBox(torso,[.24,.18,.45],[-.5,.4,0],bulwarkArmorM);
+    addBox(torso,[.24,.18,.45],[.5,.4,0],bulwarkArmorM);
+    addBox(torso,[.38,.12,.35],[0,.42,-.01],ironArmorM);
+    addBox(torso,[.48,.08,.08],[0,-.25,-.29],ironArmorM);
+    addBox(torso,[.2,.18,.1],[-.19,-.4,-.18],bulwarkArmorM);
+    addBox(torso,[.2,.18,.1],[.19,-.4,-.18],bulwarkArmorM);
   }
   if(hasAegis){
     addBox(torso,[.34,.44,.055],[0,.04,-.19],aegisM);          // visible front breastplate
@@ -1269,17 +1295,25 @@ function makeRemoteAvatar(look){
   }
   // flowing cape/cloak — cloth for hunters, a gilded royal mantle with legendary armor
   const cape=new THREE.Group(); cape.position.set(0,.22,.15); torso.add(cape); idle.push(cape);
-  addBox(cape,[.62,.17,.1],[0,.1,.0],hasAegis?capeTrimM:capeM);    // shoulder mantle
+  addBox(cape,[isBulwark?.78:.62,isBulwark?.22:.17,isBulwark?.13:.1],[0,.1,.0],hasAegis?capeTrimM:(isBulwark?bulwarkArmorM:capeM)); // shoulder mantle
   addBox(cape,[.5,.42,.05],[0,-.2,.04],capeM,[.07,0,0]);            // upper drape
-  addBox(cape,[.54,.42,.05],[0,-.6,.1],capeM,[.13,0,0]);           // mid drape
-  addBox(cape,[.58,.42,.05],[0,-1.0,.18],capeM,[.19,0,0]);         // lower drape
-  addBox(cape,[.52,.2,.05],[0,-1.26,.26],capeM,[.24,0,0]);         // flared hem
+  if(!isScout){
+    addBox(cape,[.54,.42,.05],[0,-.6,.1],capeM,[.13,0,0]);         // mid drape
+    addBox(cape,[.58,.42,.05],[0,-1.0,.18],capeM,[.19,0,0]);       // lower drape
+    addBox(cape,[.52,.2,.05],[0,-1.26,.26],capeM,[.24,0,0]);       // flared hem
+  } else {
+    addBox(cape,[.46,.22,.045],[0,-.48,.09],capeM,[.12,0,0]);     // short mobile cloak
+  }
   if(hasAegis){
     addBox(cape,[.05,1.9,.06],[-.27,-.5,.13],capeTrimM,[.13,0,0]); // gold trim rails
     addBox(cape,[.05,1.9,.06],[.27,-.5,.13],capeTrimM,[.13,0,0]);
     addBox(cape,[.5,.06,.06],[0,-1.32,.27],capeTrimM,[.24,0,0]);   // gold hem band
     addBox(cape,[.22,.22,.05],[0,-.08,.03],gemM);                  // Aegis sigil clasp
     addBox(cape,[.15,.06,.08],[0,.15,-.02],gemM);                  // collar gem
+  } else if(isScout) {
+    addBox(cape,[.04,.72,.05],[-.23,-.17,.07],scoutArmorM,[.1,0,0]);
+    addBox(cape,[.04,.72,.05],[.23,-.17,.07],scoutArmorM,[.1,0,0]);
+    addBox(cape,[.16,.08,.07],[0,.12,-.01],metalM);
   } else {
     addBox(cape,[.05,1.7,.06],[-.25,-.42,.1],scarfM,[.13,0,0]);    // cloth edge stitching
     addBox(cape,[.05,1.7,.06],[.25,-.42,.1],scarfM,[.13,0,0]);
@@ -1291,6 +1325,8 @@ function makeRemoteAvatar(look){
     addBox(leg,[.2,.62,.2],[0,.1,0],pantsM);
     addBox(leg,[.2,.07,.21],[0,-.22,-.01],trimM);             // knee/hem wrap
     if(hasAegis) addBox(leg,[.22,.11,.23],[0,-.12,-.01],aegisTrimM);
+    if(isBulwark) addBox(leg,[.23,.26,.12],[0,-.15,-.12],bulwarkArmorM);
+    if(isScout) addBox(leg,[.21,.07,.22],[0,-.12,-.02],scoutArmorM);
     addBox(leg,[.22,.085,.22],[0,-.405,0],bootM);             // shorter ankle boot
     if(hasAegis) addBox(leg,[.24,.06,.24],[0,-.35,-.02],aegisM);
     addBox(leg,[.25,.07,.32],[0,-.49,-.08],bootM);            // foot block
@@ -1313,6 +1349,13 @@ function makeRemoteAvatar(look){
     if(hasAegis){
       addBox(arm,[.22,.24,.22],[0,-.15,0],aegisM);             // chunky armor bracer
       addBox(arm,[.16,.11,.24],[0,-.17,-.03],aegisRuneM);
+    } else if(isBulwark){
+      addBox(arm,[.23,.3,.24],[0,-.12,0],bulwarkArmorM);
+      addBox(arm,[.18,.08,.25],[0,-.2,-.04],ironArmorM);
+    } else if(isVanguard){
+      addBox(arm,[.19,.18,.2],[0,-.15,0],hasDiaArmor?diaArmorM:ironArmorM);
+    } else if(isScout){
+      addBox(arm,[.18,.08,.19],[0,-.2,0],scoutArmorM);
     }
     addBox(arm,[.18,.16,.18],[0,-.34,0],skinM);               // hand
     addBox(arm,[.06,.08,.08],[sx<0?.1:-.1,-.34,-.02],skinM);  // thumb
@@ -1412,7 +1455,7 @@ function makeRemoteAvatar(look){
   return {grp, legs, arms, head, look, hair, blink, idle, sword, aegisGlow};
 }
 function equipmentSignatureFrom(ref){
-  return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0].join('|');
+  return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, (ref&&ref.armorType)||'', ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0].join('|');
 }
 function netAddRemote(sid, ref){
   const r={...makeRemoteAvatar(remoteAppearance(ref)), ref, phase:Math.random()*10, tagText:'', equipSig:equipmentSignatureFrom(ref)};

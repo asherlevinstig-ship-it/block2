@@ -81,6 +81,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" type="button" disabled/);
+  assert.match(html, /id="gearrewardwin"/);
   assert.match(html, /dataset\.gamePhase='ready'[\s\S]*button\.disabled=false/);
   assert.doesNotMatch(html, /\.\/js\/ui\.js/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /HUD hotbar/);
@@ -92,6 +93,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /SELECTED GEAR/);
   assert.match(menusSource, /UPGRADE/);
   assert.match(menusSource, /REPAIR AT TOBIN/);
+  assert.match(menusSource, /STAMINA COST/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /armorMovement[\s\S]*staminaCostMultiplier[\s\S]*moveMultiplier/);
   const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(networkingSource, /registerState\('networking'/);
   assert.match(networkingSource, /registerModule\('networking'/);
@@ -105,6 +108,8 @@ test('client dimensions and server consume the shared grid contract', () => {
     ['network-frame-pump.mjs', 'createNetworkFramePump'],
     ['companions.mjs', 'createCompanionSystem'],
     ['replication-visuals.mjs', 'createReplicationVisuals'],
+    ['gear-rewards.mjs', 'createGearRewardPresenter'],
+    ['combat-feedback.mjs', 'createCombatFeedback'],
   ]) {
     const extractedSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', file), 'utf8');
     assert.match(extractedSource, new RegExp(`export function ${factory}\\(`));
@@ -287,6 +292,28 @@ test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () 
   assert.equal(sharedGear.nextMomentum(second,second.expiresAt,'mob-a').stacks,1);
   assert.equal(sharedGear.momentumMultiplier(3),1.12);
   assert.equal(sharedGear.WEAPON_IDENTITY.stagger.bossMoveMultiplier,.75);
+});
+
+test('gear reward presentation compares authoritative drops and labels their source', async()=>{
+  const {compareGearReward,gearRewardSource}=await clientModule('gear-rewards.mjs');
+  const item={tool:{tier:3,cls:'sword',dur:480}};
+  const baseline={stack:{id:1,gearRank:'D',rarity:'common'},item};
+  const result=compareGearReward({
+    stack:{id:1,gearRank:'C',rarity:'rare'},item,baseline,gearSystem:sharedGear,
+    toolMaxDur:stack=>480+(stack.plus|0)*20,
+  });
+  assert.equal(result.verdict,'UPGRADE');
+  assert.equal(result.rows.some(row=>row[0]==='DPS'&&parseFloat(row[2])>0),true);
+  assert.equal(gearRewardSource('captain'),'Bandit captain');
+  assert.equal(gearRewardSource('aegis_trial'),'Aegis trial');
+});
+
+test('combat feedback classifies escalating armor durability warnings',async()=>{
+  const {armorCondition}=await clientModule('combat-feedback.mjs');
+  assert.deepEqual(armorCondition(100,100),{ratio:1,band:'sound'});
+  assert.equal(armorCondition(25,100).band,'low');
+  assert.equal(armorCondition(10,100).band,'critical');
+  assert.equal(armorCondition(0,100).band,'broken');
 });
 
 test('browser and server consume one shared safeguarded comms ruleset', () => {

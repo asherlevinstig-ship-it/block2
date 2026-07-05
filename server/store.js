@@ -379,6 +379,7 @@ function sanitizeProfile(p) {
       if (s.dur != null) slot.dur = clampI(s.dur, 0, 99999);
       if (s.plus != null) slot.plus = clampI(s.plus, 0, 3);
       if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) slot.gearRank=s.gearRank;
+      if (GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType]) slot.armorType=s.armorType;
       if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) slot.rarity=s.rarity;
       if (typeof s.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[s.forge]) slot.forge = s.forge;
       if (s.masterwork === true && slot.forge) slot.masterwork = true;
@@ -403,6 +404,7 @@ function sanitizeProfile(p) {
         source: cleanShortText(s.source, 'loot', 32),
       };
       if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) item.gearRank=s.gearRank;
+      if (GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType]) item.armorType=s.armorType;
       if (s.dur != null) item.dur = clampI(s.dur, 0, 99999);
       if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) item.rarity=s.rarity;
       if (typeof s.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[s.forge]) item.forge=s.forge;
@@ -434,7 +436,7 @@ function sanitizeProfile(p) {
   out.armor = armor && ARMOR_IDS.has(armor.id) ? armor : null;
   if(out.armor)out.armor.count=1;
   if(out.armor){
-    const duplicate=out.inv.findIndex(s=>s&&s.id===out.armor.id&&(s.gearRank||'')===(out.armor.gearRank||'')&&(s.rarity||'')===(out.armor.rarity||'')&&(s.dur==null||out.armor.dur==null||s.dur===out.armor.dur));
+    const duplicate=out.inv.findIndex(s=>s&&s.id===out.armor.id&&(s.gearRank||'')===(out.armor.gearRank||'')&&(s.rarity||'')===(out.armor.rarity||'')&&(s.armorType||'')===(out.armor.armorType||'')&&(s.dur==null||out.armor.dur==null||s.dur===out.armor.dur));
     if(duplicate>=0)out.inv[duplicate]=null;
   }
   let pos = Array.isArray(p.pos) ? p.pos : [];
@@ -489,6 +491,7 @@ function cleanSlot(s) {
   if (s.plus != null) out.plus = clampI(s.plus, 0, 3);
   if (s.dur != null) out.dur = clampI(s.dur, 0, 99999);
   if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) out.gearRank=s.gearRank;
+  if (GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType]) out.armorType=s.armorType;
   if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) out.rarity=s.rarity;
   if (s.locked === true) out.locked=true;
   if (typeof s.source === 'string' && s.source) out.source=cleanShortText(s.source, 'loot', 32);

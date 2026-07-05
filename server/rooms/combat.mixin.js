@@ -840,10 +840,11 @@ class CombatMixin {
       if (loot.dia) this.addRewardItem(rec.prof, REWARD_ITEMS.dia, loot.dia);
       const delivered=[];
       for (const item of loot.items || []) {
-        const left=item&&item.gear?this.addGearRewardItem(rec.prof,item):this.addRewardItem(rec.prof,item.id,item.count);
-        if(!item.gear||!left)delivered.push(item&&item.gear?{...item,locked:!!(item.locked||item.rarity==='mythic')}:item);
+        const rewardItem=item&&item.gear?{...item,source:item.source||loot.source||'gate'}:item;
+        const left=rewardItem&&rewardItem.gear?this.addGearRewardItem(rec.prof,rewardItem):this.addRewardItem(rec.prof,rewardItem.id,rewardItem.count);
+        if(!rewardItem.gear||!left)delivered.push(rewardItem&&rewardItem.gear?{...rewardItem,locked:!!(rewardItem.locked||rewardItem.rarity==='mythic')}:rewardItem);
         else {
-          const recovered=this.queueGearRecovery(rec.prof,item,loot.source||'loot');
+          const recovered=this.queueGearRecovery(rec.prof,rewardItem,loot.source||'loot');
           if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
         }
       }

@@ -4976,7 +4976,7 @@ function gainXP(n){
   renderBars();
 }
 let lastDamageSource='';
-function damagePlayer(n,source='unknown'){
+function damagePlayer(n,source='unknown',detail=null){
   if(hp<=0 || sleeping) return;
   if(n>0) lastDamageSource=source;
   if(n<0){
@@ -4996,7 +4996,8 @@ function damagePlayer(n,source='unknown'){
   if(buffs.armor>0) n*=0.5;
   if(buffs.aegis>0) n*=0.65;
   if(buffs.stone>0) n*=0.65;
-  hp=Math.max(0,hp-n); lastHurt=performance.now();
+  const authoritativeHp=detail&&Number.isFinite(detail.hp)?Math.max(0,Math.min(maxHp(),Number(detail.hp))):null;
+  hp=authoritativeHp==null?Math.max(0,hp-n):authoritativeHp; lastHurt=performance.now();
   const applied=Math.max(0,hpBefore-hp);
   const px=player?player.pos.x:0,py=player?player.pos.y:0,pz=player?player.pos.z:0;
   const audit='-'+applied.toFixed(1)+' HP from '+source+' (raw '+rawDamage.toFixed(1)+') · HP '+hpBefore.toFixed(1)+'→'+hp.toFixed(1)+' · '+dim+' @ '+px.toFixed(1)+','+py.toFixed(1)+','+pz.toFixed(1);

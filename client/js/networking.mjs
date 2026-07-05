@@ -8,18 +8,21 @@ import {createSocialSystem} from './social.mjs';
 import {createNetworkFramePump} from './network-frame-pump.mjs';
 import {createCompanionSystem} from './companions.mjs';
 import {createReplicationVisuals} from './replication-visuals.mjs';
+import {createGearRewardPresenter} from './gear-rewards.mjs';
+import {createCombatFeedback} from './combat-feedback.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
-function receiveRewardItem(it){
+function receiveRewardItemLegacy(it){
   if(!it||!ITEMS[it.id])return;
   const itemInfo=ITEMS[it.id],info=itemInfo.tool||itemInfo.armor;
   if(!it.gear||!info){addItem(it.id,it.count||1);return;}
   const stack={id:it.id,count:1,plus:Math.max(0,Math.min(3,it.plus|0))};
   if(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===it.gearRank))stack.gearRank=it.gearRank;
+  if(itemInfo.armor&&GEAR_SYSTEM.ARMOR_ARCHETYPES[it.armorType])stack.armorType=it.armorType;
   if(GEAR_SYSTEM.RARITIES.some(r=>r.id===it.rarity))stack.rarity=it.rarity;
   if(JOB_SYSTEM.reforgeModifier(it.forge))stack.forge=it.forge;
   if(it.masterwork&&stack.forge)stack.masterwork=true;
@@ -47,6 +50,55 @@ function receiveRewardItem(it){
   const col=gear.rarity.color;sysMsg('<b style="color:'+col+'">'+escHTML(gear.rank.name+' '+gear.rarity.name+' '+itemNameWithPlus(stack))+'</b> acquired'+(better?' <b>· UPGRADE</b>':'')+escHTML(comparison)+'.');
   const beam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.14,5,8),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.72,depthWrite:false}));beam.position.set(player.pos.x,player.pos.y+2.5,player.pos.z);scene.add(beam);setTimeout(()=>{scene.remove(beam);beam.geometry.dispose();beam.material.dispose();},1800);
 }
+
+function rewardGearStack(it){
+  if(!it||!ITEMS[it.id])return null;
+  const itemInfo=ITEMS[it.id],info=itemInfo.tool||itemInfo.armor;
+  if(!info)return null;
+  const stack={id:it.id,count:1,plus:Math.max(0,Math.min(3,it.plus|0))};
+  if(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===it.gearRank))stack.gearRank=it.gearRank;
+  if(itemInfo.armor&&GEAR_SYSTEM.ARMOR_ARCHETYPES[it.armorType])stack.armorType=it.armorType;
+  if(GEAR_SYSTEM.RARITIES.some(r=>r.id===it.rarity))stack.rarity=it.rarity;
+  if(JOB_SYSTEM.reforgeModifier(it.forge))stack.forge=it.forge;
+  if(it.masterwork&&stack.forge)stack.masterwork=true;
+  if(it.locked)stack.locked=true;
+  if(typeof it.source==='string'&&it.source)stack.source=it.source;
+  stack.dur=Number.isFinite(it.dur)?it.dur:(itemInfo.armor?armorMaxDur(stack):toolMaxDur(stack));
+  return stack;
+}
+function receiveRewardItem(it){
+  if(!it||!ITEMS[it.id])return null;
+  const itemInfo=ITEMS[it.id],info=itemInfo.tool||itemInfo.armor;
+  if(!it.gear||!info){addItem(it.id,it.count||1);return null;}
+  const baseline=itemInfo.armor?armorSlot:(()=>{
+    const selected=inv[combatState.selectedSlot],selectedItem=selected&&ITEMS[selected.id];
+    return selectedItem&&selectedItem.tool&&['sword','axe'].includes(selectedItem.tool.cls)?selected:null;
+  })();
+  const stack=rewardGearStack(it),slot=inv.findIndex(s=>!s);
+  if(!stack||slot<0)return null;
+  inv[slot]=stack;refreshHUD();
+  return {stack,slot,baseline};
+}
+
+const GEAR_REWARDS=createGearRewardPresenter({
+  document,items:ITEMS,gearSystem:GEAR_SYSTEM,itemName:itemNameWithPlus,toolMaxDur,
+  getArmor:()=>armorSlot,
+  getWeapon:()=>{
+    const stack=inv[combatState.selectedSlot],item=stack&&ITEMS[stack.id];
+    return item&&item.tool&&['sword','axe'].includes(item.tool.cls)?stack:null;
+  },
+  getSelectedSlot:()=>combatState.selectedSlot,
+  send:(type,payload)=>{if(NET.on&&NET.room)NET.room.send(type,payload);},
+  nearBlacksmith:()=>dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-(TOWN.TC+14.5),player.pos.z-(TOWN.TC-14))<=10,
+  onReveal:({summary,recovered})=>{
+    const color=summary.profile.rarity.color;
+    if(summary.profile.rarityIndex>=3||summary.profile.rankIndex>=5)SFX.level();else SFX.success();
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.15,recovered?3.5:5,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:recovered?.42:.72,depthWrite:false}));
+    beam.position.set(player.pos.x,player.pos.y+(recovered?1.75:2.5),player.pos.z);scene.add(beam);
+    setTimeout(()=>{scene.remove(beam);beam.geometry.dispose();beam.material.dispose();},1800);
+  },
+});
+const COMBAT_FEEDBACK=createCombatFeedback({document,showName,sysMsg,sound:SFX});
 
 let prospectMarkers=null,prospectMarkerTimer=0;
 function clearProspectMarkers(){
@@ -414,6 +466,9 @@ function netAttachRoom(room,name,client){
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
       showDeathScreen('The dungeon overwhelmed you','The attempt has failed — returning to the gate');
     });
+    room.onMessage('worldDeath',m=>{
+      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Returning to the Town of Beginnings');
+    });
     room.onMessage('dungeonFailed', m=>{
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
@@ -428,7 +483,7 @@ function netAttachRoom(room,name,client){
       if(m.dia)  addItem(I.DIAMOND, m.dia);
       let keyCount=0;
       if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]){
-        receiveRewardItem(it);
+        const received=receiveRewardItem(it);if(received)GEAR_REWARDS.present(received);
         if(SOLO_KEY_IDS.includes(it.id)||TEAM_KEY_IDS.includes(it.id)) keyCount+=it.count||1;
       }
       showDungeonReward(m, true);
@@ -441,7 +496,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('firstQuestReward', m=>applyFirstQuestRewardResult(m));
     room.onMessage('grant', m=>{
       if(m.xp) gainXP(m.xp);
-      if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]) receiveRewardItem(it);
+      if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]){
+        const received=receiveRewardItem(it);if(received)GEAR_REWARDS.present(received);
+      }
       if(m.source==='mob'){
         gainJobXP('adventurer', 3, 'hunt');
         jobContractProgress('kill', 1, 0);
@@ -579,7 +636,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('toolSync', m=>applyToolSync(m));
     room.onMessage('armorSync',m=>{
       equipmentModel.restore(m&&m.armor);
-      if(m&&m.broke)showName('Armor broke!');
+      const stack=m&&m.armor,item=stack&&ITEMS[stack.id];
+      const profile=item&&item.armor?GEAR_SYSTEM.armorProfile(item.armor,stack):null;
+      COMBAT_FEEDBACK.syncArmor(profile?{...stack,maxDur:profile.maxDur}:null,!!(m&&m.broke));
       refreshHUD();if(uiOpen)renderUI();
     });
     room.onMessage('weaponEquipResult',m=>{
@@ -591,7 +650,16 @@ function netAttachRoom(room,name,client){
     room.onMessage('blacksmithUpgradeResult', m=>applyBlacksmithUpgradeResult(m));
     room.onMessage('blacksmithReforgeResult', m=>applyBlacksmithReforgeResult(m));
     room.onMessage('blacksmithSalvageResult',m=>applyBlacksmithSalvageResult(m));
-    room.onMessage('lootRecoveryState',m=>applyLootRecoveryState(m));
+    room.onMessage('lootRecoveryState',m=>{
+      applyLootRecoveryState(m);
+      if(m&&m.queued){
+        const stack=rewardGearStack(m.queued);
+        if(stack)GEAR_REWARDS.present({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:(()=>{
+          const selected=inv[combatState.selectedSlot],selectedItem=selected&&ITEMS[selected.id];
+          return selectedItem&&selectedItem.tool&&['sword','axe'].includes(selectedItem.tool.cls)?selected:null;
+        })()});
+      }
+    });
     room.onMessage('lootRecoveryResult',m=>applyLootRecoveryResult(m));
     room.onMessage('gearLockResult',m=>applyGearLockResult(m));
     room.onMessage('blacksmithReject', m=>blacksmithServiceRejected(m));
@@ -704,7 +772,8 @@ function netAttachRoom(room,name,client){
         sysMsg('<b>Second Wind</b> restores your strength');
         healingPlusVfx(player.pos.x, player.pos.y, player.pos.z, 1.05, 1.15);
       }
-      damagePlayer(m.n,'server:'+((m&&m.reason)||'combat'));
+      if(m&&m.n>0){COMBAT_FEEDBACK.showImpact(m);if(m.armor)COMBAT_FEEDBACK.syncArmor(m.armor);}
+      damagePlayer(m.n,'server:'+((m&&m.reason)||'combat'),m);
     });
     room.onMessage('xp',   m=>gainXP(m.n));
     room.onMessage('chat', m=>{
@@ -792,6 +861,7 @@ function netRestoreProfile(m){
           if(ITEMS[s.id].armor)inv[i].dur=(s.dur!=null)?s.dur:armorMaxDur(inv[i]);
           if((ITEMS[s.id].tool||ITEMS[s.id].armor) && s.plus) inv[i].plus=Math.max(0,Math.min(3,s.plus|0));
           if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RANKS.some((r,j)=>j<6&&r.id===s.gearRank))inv[i].gearRank=s.gearRank;
+          if(ITEMS[s.id].armor&&GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType])inv[i].armorType=s.armorType;
           if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity))inv[i].rarity=s.rarity;
           if(ITEMS[s.id].tool&&JOB_SYSTEM.reforgeModifier(s.forge))inv[i].forge=s.forge;
           if(ITEMS[s.id].tool&&s.masterwork&&inv[i].forge)inv[i].masterwork=true;
@@ -1110,12 +1180,14 @@ function appearanceForPath(path){
 function playerAppearance(){
   const look=appearanceForPath(S.path);
   look.armorId=armorSlot?armorSlot.id:0;
+  look.armorType=armorSlot?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
   look.heldId=displayHeldId();
   return look;
 }
 function remoteAppearance(ref){
   const look=appearanceForPath(ref&&ref.path);
   look.armorId=ref?(ref.armorId|0):0;
+  look.armorType=ref&&GEAR_SYSTEM.ARMOR_ARCHETYPES[ref.armorType]?ref.armorType:'';
   look.heldId=ref?(ref.heldId|0):0;
   return look;
 }
@@ -1160,6 +1232,7 @@ const COMPANIONS=createCompanionSystem({
   NET,
   player,
   inv,
+  gearSystem:GEAR_SYSTEM,
   refreshHUD,
   equipmentKind,
   faceTexture,
@@ -1185,7 +1258,8 @@ function localDisplayName(){
 function appearanceSignature(){
   const held=inv[selected]?inv[selected].id:0;
   const armor=armorSlot?armorSlot.id:0;
-  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, held, playerJob||'', jobLevelFromXp(jobXp)].join('|');
+  const armorType=armorSlot&&ITEMS[armorSlot.id]&&ITEMS[armorSlot.id].armor?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
+  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp)].join('|');
 }
 function buildAppearanceDummy(){
   const d={...makeRemoteAvatar(playerAppearance()), phase:Math.random()*10, sig:'', tag:null};
@@ -1375,10 +1449,11 @@ const DEMO_STEPS=[
   {path:'mage', slot:8, name:'Leviathan Trident'},
   {path:'guardian', slot:8, name:'Void Anchor'},
 ];
-function demoLook(path, heldId, armorId){
+function demoLook(path, heldId, armorId, armorType){
   const look=appearanceForPath(path);
   look.heldId=heldId||0;
   look.armorId=armorId||0;
+  look.armorType=armorType||(armorId===137?'aegis':armorId===184?'bulwark':armorId?'vanguard':'');
   return look;
 }
 function avatarFacingYaw(dx,dz){

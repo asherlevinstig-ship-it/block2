@@ -21,6 +21,12 @@
     Object.freeze({id:'mythic',name:'Mythic',color:'#ff9f43',salvage:12,damage:1.22,durability:1.42,armor:.04}),
   ]);
   const ARMOR_MITIGATION=Object.freeze([.06,.09,.12,.16,.18,.20,.20]);
+  const ARMOR_ARCHETYPES=Object.freeze({
+    scout:Object.freeze({id:'scout',name:'Scout',glyph:'S',color:'#6fd69a',accent:'#c1f4d3',mitigation:-.02,durability:.90,moveMultiplier:1.08,staminaCostMultiplier:.80,desc:'Fast and stamina-efficient, with lighter protection'}),
+    vanguard:Object.freeze({id:'vanguard',name:'Vanguard',glyph:'V',color:'#b7c1ce',accent:'#eef3f8',mitigation:0,durability:1,moveMultiplier:1,staminaCostMultiplier:1,desc:'Balanced protection with no movement trade-off'}),
+    bulwark:Object.freeze({id:'bulwark',name:'Bulwark',glyph:'B',color:'#71809a',accent:'#b6c4d8',mitigation:.03,durability:1.15,moveMultiplier:.92,staminaCostMultiplier:1.25,desc:'Heavy protection and durability at the cost of mobility'}),
+    aegis:Object.freeze({id:'aegis',name:'Aegis',glyph:'A',color:'#ffd75e',accent:'#c9a5ff',mitigation:.02,durability:1.25,moveMultiplier:1,staminaCostMultiplier:.90,desc:'Legendary protection with efficient stamina use'}),
+  });
   const WEAPON_IDENTITY=Object.freeze({
     momentum:Object.freeze({maxStacks:3,windowMs:1400,damagePerExtraStack:.06}),
     stagger:Object.freeze({normalSeconds:.32,bossSeconds:.8,bossMoveMultiplier:.75}),
@@ -71,11 +77,15 @@
     const dps=Math.round(damage*1000/cooldownMs*10)/10;
     return Object.freeze({archetype:info.cls,damage,cooldownMs,attacksPerSecond,dps});
   }
+  function armorArchetypeFor(info={},stack={}){
+    if(info.legendary||stack.legendary||(info.tier|0)>=5)return ARMOR_ARCHETYPES.aegis;
+    return ARMOR_ARCHETYPES[stack.armorType]||ARMOR_ARCHETYPES[info.armorType]||ARMOR_ARCHETYPES.vanguard;
+  }
   function armorProfile(info={},stack={}){
-    const gear=profile(info,stack),baseDur=Math.max(1,info.dur|0||1);
-    const mitigation=Math.min(.30,Math.round((ARMOR_MITIGATION[gear.rankIndex]+gear.rarity.armor)*1000)/1000);
-    const maxDur=Math.min(99999,Math.round(baseDur*(1+clamp(stack.plus,0,3)*.15)*gear.rarity.durability));
-    return Object.freeze({...gear,mitigation,maxDur});
+    const gear=profile(info,stack),type=armorArchetypeFor(info,stack),baseDur=Math.max(1,info.dur|0||1);
+    const mitigation=Math.max(.02,Math.min(.30,Math.round((ARMOR_MITIGATION[gear.rankIndex]+gear.rarity.armor+type.mitigation)*1000)/1000));
+    const maxDur=Math.min(99999,Math.round(baseDur*(1+clamp(stack.plus,0,3)*.15)*gear.rarity.durability*type.durability));
+    return Object.freeze({...gear,type,mitigation,maxDur,moveMultiplier:type.moveMultiplier,staminaCostMultiplier:type.staminaCostMultiplier});
   }
   function nextMomentum(previous={},now=Date.now(),targetId=''){
     const same=String(previous.targetId||'')===String(targetId||'')&&Number(previous.expiresAt)>now;
@@ -85,5 +95,5 @@
   function momentumMultiplier(stacks=0){
     return 1+Math.max(0,Math.min(WEAPON_IDENTITY.momentum.maxStacks,stacks|0)-1)*WEAPON_IDENTITY.momentum.damagePerExtraStack;
   }
-  return Object.freeze({RANKS,RARITIES,ARMOR_MITIGATION,WEAPON_IDENTITY,rankIndexFor,rarityIndexFor,rarityIndexFromRoll,rollRarity,profile,weaponCombatProfile,armorProfile,nextMomentum,momentumMultiplier});
+  return Object.freeze({RANKS,RARITIES,ARMOR_MITIGATION,ARMOR_ARCHETYPES,WEAPON_IDENTITY,rankIndexFor,rarityIndexFor,rarityIndexFromRoll,rollRarity,profile,weaponCombatProfile,armorArchetypeFor,armorProfile,nextMomentum,momentumMultiplier});
 });

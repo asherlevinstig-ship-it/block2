@@ -125,9 +125,9 @@ const LEGENDARY_CRAFTS = {
   [I.VOID_ANCHOR]: { cost: 3, name: 'Void Anchor' },
 };
 const ARMOR_INFO = {
-  [I.IRON_ARMOR]: { tier: 3, mitigation: .12, dur: 480 },
-  [I.DIA_ARMOR]: { tier: 4, mitigation: .16, dur: 900 },
-  [I.LEGEND_ARMOR]: { tier: 5, legendary: true, mitigation: .20, dur: 1800 },
+  [I.IRON_ARMOR]: { tier: 3, armorType:'vanguard', mitigation: .12, dur: 480 },
+  [I.DIA_ARMOR]: { tier: 4, armorType:'bulwark', mitigation: .16, dur: 900 },
+  [I.LEGEND_ARMOR]: { tier: 5, armorType:'aegis', legendary: true, mitigation: .20, dur: 1800 },
 };
 const SOLO_KEYS = [I.SOLO_KEY_E, I.SOLO_KEY_D, I.SOLO_KEY_C, I.SOLO_KEY_B, I.SOLO_KEY_A];
 const TEAM_KEYS = [I.TEAM_KEY_E, I.TEAM_KEY_D, I.TEAM_KEY_C, I.TEAM_KEY_B, I.TEAM_KEY_A];

@@ -496,7 +496,7 @@ function slotInteract(acc, e, opts={}){
       acc.set(cursorStack||null);
       cursorStack=cur||null;
       removeEquippedArmorCopies();
-      if(NET.on&&NET.room) NET.room.send('equipArmor',armorSlot?{id:armorSlot.id,gearRank:armorSlot.gearRank||'',rarity:armorSlot.rarity||'common',dur:armorSlot.dur}:{id:0});
+      if(NET.on&&NET.room) NET.room.send('equipArmor',armorSlot?{id:armorSlot.id,gearRank:armorSlot.gearRank||'',armorType:armorSlot.armorType||'',rarity:armorSlot.rarity||'common',dur:armorSlot.dur}:{id:0});
       SFX.equip();
     } else if(e.button===2 && !cursorStack && s){
       cursorStack=s; acc.set(null);
@@ -603,6 +603,10 @@ function comparisonDelta(value,base,suffix='',digits=1){
   const delta=value-base,rounded=digits?Math.round(delta*Math.pow(10,digits))/Math.pow(10,digits):Math.round(delta);
   return '<span class="'+(delta>0?'gain':delta<0?'loss':'same')+'">'+(delta>0?'+':'')+rounded+suffix+'</span>';
 }
+function comparisonInverseDelta(value,base,suffix='',digits=0){
+  const delta=value-base,rounded=digits?Math.round(delta*Math.pow(10,digits))/Math.pow(10,digits):Math.round(delta);
+  return '<span class="'+(delta<0?'gain':delta>0?'loss':'same')+'">'+(delta>0?'+':'')+rounded+suffix+'</span>';
+}
 function renderGearComparison(){
   const panel=document.createElement('section');panel.className='gear-compare';
   const selectedGear=inspectedGear();
@@ -622,14 +626,25 @@ function renderGearComparison(){
   let verdict='NEW SLOT',verdictClass='upgrade';
   if(equipped){verdict='EQUIPPED';verdictClass='equipped';}
   else if(baseline){
-    const better=armor?(profile.mitigation>baseProfile.mitigation||profile.mitigation===baseProfile.mitigation&&maxDur>baseProfile.maxDur):(combat.dps>baseProfile.dps||combat.dps===baseProfile.dps&&maxDur>toolMaxDur(baseline));
-    const equal=armor?profile.mitigation===baseProfile.mitigation&&maxDur===baseProfile.maxDur:combat.dps===baseProfile.dps&&maxDur===toolMaxDur(baseline);
-    verdict=equal?'SIDEGRADE':better?'UPGRADE':'DOWNGRADE';verdictClass=equal?'sidegrade':better?'upgrade':'downgrade';
+    let better,equal,tradeoff=false;
+    if(armor){
+      const dominates=profile.mitigation>=baseProfile.mitigation&&profile.moveMultiplier>=baseProfile.moveMultiplier&&profile.staminaCostMultiplier<=baseProfile.staminaCostMultiplier&&maxDur>=baseProfile.maxDur;
+      const dominated=profile.mitigation<=baseProfile.mitigation&&profile.moveMultiplier<=baseProfile.moveMultiplier&&profile.staminaCostMultiplier>=baseProfile.staminaCostMultiplier&&maxDur<=baseProfile.maxDur;
+      equal=profile.powerScore===baseProfile.powerScore&&profile.mitigation===baseProfile.mitigation&&profile.moveMultiplier===baseProfile.moveMultiplier&&profile.staminaCostMultiplier===baseProfile.staminaCostMultiplier&&maxDur===baseProfile.maxDur;
+      better=profile.powerScore!==baseProfile.powerScore?profile.powerScore>baseProfile.powerScore:dominates&&!dominated;
+      tradeoff=profile.powerScore===baseProfile.powerScore&&!equal&&!dominates&&!dominated;
+    }else{
+      better=combat.dps>baseProfile.dps||combat.dps===baseProfile.dps&&maxDur>toolMaxDur(baseline);
+      equal=combat.dps===baseProfile.dps&&maxDur===toolMaxDur(baseline);
+    }
+    verdict=tradeoff||equal?'SIDEGRADE':better?'UPGRADE':'DOWNGRADE';verdictClass=tradeoff||equal?'sidegrade':better?'upgrade':'downgrade';
   }
-  const special=armor?(info.power==='aegis'?'Aegis Pulse · J':'Steady protection'):(info.cls==='sword'?'Momentum · consecutive hits gain damage':'Stagger · interrupts and slows');
+  const special=armor?(profile.type.name+' · '+profile.type.desc+(info.power==='aegis'?' · J: Aegis Pulse':'')):(info.cls==='sword'?'Momentum · consecutive hits gain damage':'Stagger · interrupts and slows');
   const rows=armor
     ?[
       ['MITIGATION',Math.round(profile.mitigation*100)+'%',baseProfile?comparisonDelta(profile.mitigation*100,baseProfile.mitigation*100,'%',0):'—'],
+      ['MOVEMENT',Math.round(profile.moveMultiplier*100)+'%',baseProfile?comparisonDelta(profile.moveMultiplier*100,baseProfile.moveMultiplier*100,'%',0):'—'],
+      ['STAMINA COST',Math.round(profile.staminaCostMultiplier*100)+'%',baseProfile?comparisonInverseDelta(profile.staminaCostMultiplier*100,baseProfile.staminaCostMultiplier*100,'%',0):'—'],
       ['DURABILITY',curDur+' / '+maxDur,baseProfile?comparisonDelta(maxDur,baseProfile.maxDur,'',0):'—'],
     ]
     :[
@@ -645,7 +660,7 @@ function renderGearComparison(){
   const action=(label,handler,disabled=false,title='')=>{const b=qBtn(label,handler,disabled);b.disabled=disabled;if(title)b.title=title;actions.appendChild(b);};
   if(armor){
     if(slot===-2)action('UNEQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:0});});
-    else action('EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:stack.id,slot,gearRank:stack.gearRank||'',rarity:stack.rarity||'common'});},false);
+    else action('EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:stack.id,slot,gearRank:stack.gearRank||'',armorType:stack.armorType||'',rarity:stack.rarity||'common'});},false);
   }else action(equipped?'EQUIPPED':'EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipWeapon',{slot,hotbar:combatState.selectedSlot});},equipped);
   const nearSmith=dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-(TOWN.TC+14.5),player.pos.z-(TOWN.TC-14))<=10;
   const missing=Math.max(0,maxDur-curDur);
@@ -1231,7 +1246,7 @@ function applyRepairResult(m){
   const kit=inv[kitSlot];
   if(kit&&kit.id===I.REPAIR_KIT){ kit.count--; if(kit.count<=0) inv[kitSlot]=null; }
   const toolSlot=Math.max(0,Math.min(35,m.toolSlot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.ARMOR_ARCHETYPES[m.tool.armorType]?{armorType:m.tool.armorType}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair');
   jobContractProgress('repair', 1, I.REPAIR_KIT);
@@ -1240,7 +1255,7 @@ function applyRepairResult(m){
 function applyBlacksmithRepairResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id]) return;
   const toolSlot=Math.max(0,Math.min(35,m.toolSlot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.ARMOR_ARCHETYPES[m.tool.armorType]?{armorType:m.tool.armorType}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
   if(typeof m.gold==='number') gold=Math.max(0,gold+(m.gold|0));
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair');
@@ -2678,6 +2693,7 @@ function cleanRecoveredGear(item){
   if(!item||!ITEMS[item.id]||(!ITEMS[item.id].tool&&!ITEMS[item.id].armor))return null;
   return {id:item.id,count:1,dur:item.dur,plus:Math.max(0,Math.min(3,item.plus|0)),
     ...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===item.gearRank)?{gearRank:item.gearRank}:{}),
+    ...(GEAR_SYSTEM.ARMOR_ARCHETYPES[item.armorType]?{armorType:item.armorType}:{}),
     ...(GEAR_SYSTEM.RARITIES.some(r=>r.id===item.rarity)?{rarity:item.rarity}:{}),
     ...(JOB_SYSTEM.reforgeModifier(item.forge)?{forge:item.forge}:{}),
     ...(item.masterwork?{masterwork:true}:{}),...(item.locked?{locked:true}:{}),
@@ -3469,13 +3485,13 @@ const IRON_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'i').replace(/Y/g,'I').re
 const DIA_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'d').replace(/Y/g,'D').replace(/P/g,'c'));
 ITEMS[I.IRON_ARMOR]={name:'Iron Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, IRON_ARMOR_ROWS, {i:'#6b7280', I:'#e5e7eb', s:'#9ca3af'})),
-  armor:{tier:3,mitigation:.12,dur:480,power:null}};
+  armor:{tier:3,armorType:'vanguard',mitigation:.12,dur:480,power:null}};
 ITEMS[I.DIA_ARMOR]={name:'Diamond Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, DIA_ARMOR_ROWS, {d:'#0e7490', D:'#67e8f9', c:'#22d3ee'})),
-  armor:{tier:4,mitigation:.16,dur:900,power:null}};
+  armor:{tier:4,armorType:'bulwark',mitigation:.16,dur:900,power:null}};
 ITEMS[I.LEGEND_ARMOR]={name:'Legendary Aegis Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, ARMOR_ROWS, {G:'#8a6424', Y:'#ffd24a', P:'#9b6be8'})),
-  armor:{tier:5,legendary:true,mitigation:.2,dur:1800,power:'aegis'}};
+  armor:{tier:5,armorType:'aegis',legendary:true,mitigation:.2,dur:1800,power:'aegis'}};
 const LEGENDARY_CRAFTS=[
   {id:I.LEGEND_SWORD, cost:1, hint:'Reliable legendary melee damage.'},
   {id:I.LEGEND_ARMOR, cost:2, hint:'Equippable armor: -20% damage and J Aegis Pulse.'},

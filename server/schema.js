@@ -15,6 +15,7 @@ class Player extends Schema {
     this.team = '';          // team id ('' = none)
     this.heldId = 0;         // cosmetic render id for currently selected item
     this.armorId = 0;        // cosmetic render id for equipped armor
+    this.armorType = '';      // scout | vanguard | bulwark | aegis
     this.mount = '';         // active mount kind ('' = on foot); overworld only
     this.dragons = '';       // CSV of bonded dragon type ids for public roost displays
     this.dragonNames = '';   // JSON map type -> custom dragon name for public roost plates
@@ -24,7 +25,7 @@ class Player extends Schema {
 defineTypes(Player, {
   x: 'number', y: 'number', z: 'number', yaw: 'number',
   name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
-  heldId: 'uint16', armorId: 'uint16', mount: 'string', dragons: 'string', dragonNames: 'string', familiar: 'string',
+  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', familiar: 'string',
 });
 
 class Team extends Schema {

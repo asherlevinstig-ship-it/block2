@@ -50,9 +50,11 @@ function itemTooltipText(stack){
   }
   if(info.armor){
     const armor=GEAR_SYSTEM.armorProfile(info.armor,stack);
-    lines.push(armor.rank.name+' Â· '+armor.rarity.name);
+    lines.push(armor.rank.name+' Â· '+armor.rarity.name+' Â· '+armor.type.name);
     if(stack.locked)lines.push('Protected from salvage');
     lines.push('Armor: -'+Math.round(armor.mitigation*100)+'% damage');
+    lines.push('Movement: '+Math.round(armor.moveMultiplier*100)+'%');
+    lines.push('Sprint/jump stamina: '+Math.round(armor.staminaCostMultiplier*100)+'%');
     lines.push('Durability: '+(stack.dur==null?armor.maxDur:stack.dur)+' / '+armor.maxDur);
   }
   if(info.legendary) lines.push('Legendary ability: '+info.legendary.kind+' · '+(info.legendary.cd||0)+'s cooldown');
@@ -69,13 +71,14 @@ function itemTooltipText(stack){
   return lines.join('\n');
 }
 function fillSlotEl(el, stack, keepKey){
-  [...el.querySelectorAll('canvas,.cnt,.upg,.dur,.gear-rank,.gear-lock')].forEach(n=>n.remove());
+  [...el.querySelectorAll('canvas,.cnt,.upg,.dur,.gear-rank,.gear-lock,.armor-kind')].forEach(n=>n.remove());
   for(const rarity of GEAR_SYSTEM.RARITIES)el.classList.remove('gear-'+rarity.id);
   const tip=itemTooltipText(stack);
   if(tip){ el.dataset.tip=tip; el.title=tip; }
   else { delete el.dataset.tip; el.removeAttribute('title'); }
   if(!stack) return;
   if(ITEMS[stack.id].tool||ITEMS[stack.id].armor){const info=ITEMS[stack.id].tool||ITEMS[stack.id].armor,gear=GEAR_SYSTEM.profile({tier:info.tier,legendary:!!ITEMS[stack.id].legendary||!!info.legendary},stack);el.classList.add('gear-'+gear.rarity.id);el.style.setProperty('--gear-color',gear.rarity.color);const badge=document.createElement('span');badge.className='gear-rank';badge.textContent=gear.rank.id==='LEGENDARY'?'L':gear.rank.id;badge.style.color=gear.rank.color;el.appendChild(badge);if(stack.locked){const lock=document.createElement('span');lock.className='gear-lock';lock.textContent='LOCK';el.appendChild(lock);}}
+  if(ITEMS[stack.id].armor){const type=GEAR_SYSTEM.armorProfile(ITEMS[stack.id].armor,stack).type,badge=document.createElement('span');badge.className='armor-kind';badge.textContent=type.glyph;badge.title=type.name;badge.style.color=type.color;badge.style.borderColor=type.color;el.appendChild(badge);}
   const c=document.createElement('canvas'); c.width=TS; c.height=TS;
   c.getContext('2d').drawImage(ITEMS[stack.id].icon,0,0);
   el.appendChild(c);

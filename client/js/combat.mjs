@@ -256,7 +256,9 @@ function itemNameWithPlus(stack){
   if(!stack||!ITEMS[stack.id]) return '';
   const p=toolPlus(stack);
   const mod=JOB_SYSTEM.reforgeModifier(stack.forge),prefix=(stack.masterwork?'Masterwork ':'')+(mod?mod.name+' ':'');
-  return prefix+ITEMS[stack.id].name+(p?' +'+p:'');
+  const armor=ITEMS[stack.id].armor,armorType=armor&&GEAR_SYSTEM.armorProfile(armor,stack).type;
+  const armorPrefix=armorType&&armorType.id!=='aegis'?armorType.name+' ':'';
+  return prefix+armorPrefix+ITEMS[stack.id].name+(p?' +'+p:'');
 }
 function gearProfileFor(stack){
   const item=stack&&ITEMS[stack.id],info=item&&(item.tool||item.armor);

@@ -102,12 +102,23 @@ test('armor sources use the same E-to-S path with deliberately rarer drops',()=>
   assert.equal(LOOT_ECONOMY.armorSpec('captain',2,0,.12),null);
   assert.equal(LOOT_ECONOMY.armorSpec('gate',4,0,.349).rank,5);
   assert.equal(LOOT_ECONOMY.armorSpec('gate',4,0,.35),null);
+  assert.equal(LOOT_ECONOMY.armorSpec('captain',2,0,0,.20).armorType,'scout');
+  assert.equal(LOOT_ECONOMY.armorSpec('captain',2,0,0,.70).armorType,'vanguard');
+  assert.equal(LOOT_ECONOMY.armorSpec('captain',2,0,0,.95).armorType,'bulwark');
+  assert.equal(LOOT_ECONOMY.armorSpec('gate',2,0,0,.20).armorType,'scout');
+  assert.equal(LOOT_ECONOMY.armorSpec('gate',2,0,0,.50).armorType,'vanguard');
+  assert.equal(LOOT_ECONOMY.armorSpec('gate',2,0,0,.90).armorType,'bulwark');
   const rare=GEAR_SYSTEM.armorProfile({tier:3,dur:480},{gearRank:'C',rarity:'rare'});
   const common=GEAR_SYSTEM.armorProfile({tier:3,dur:480},{gearRank:'C',rarity:'common'});
   assert.equal(rare.rank.id,'C');
   assert.equal(rare.mitigation,.14);
   assert.ok(rare.maxDur>common.maxDur);
   assert.equal(GEAR_SYSTEM.armorProfile({tier:5,legendary:true,dur:1800},{}).rank.id,'LEGENDARY');
+  const scout=GEAR_SYSTEM.armorProfile({tier:3,dur:480},{gearRank:'C',rarity:'rare',armorType:'scout'});
+  const bulwark=GEAR_SYSTEM.armorProfile({tier:3,dur:480},{gearRank:'C',rarity:'rare',armorType:'bulwark'});
+  assert.deepEqual([scout.mitigation,scout.moveMultiplier,scout.staminaCostMultiplier],[.12,1.08,.8]);
+  assert.deepEqual([bulwark.mitigation,bulwark.moveMultiplier,bulwark.staminaCostMultiplier],[.17,.92,1.25]);
+  assert.ok(bulwark.maxDur>rare.maxDur&&rare.maxDur>scout.maxDur);
 });
 
 test('loot simulation keeps upgrades useful without flooding Mythic gear or rank skips', () => {

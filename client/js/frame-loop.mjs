@@ -516,10 +516,12 @@ function tick(now){
     const flying = mounted && isDragon(mountKind);
     const sprint=sprintKey && (f!==0||s!==0) && sp>1 && !mounted;
     sprintingNow=sprint;
-    if(sprint) sp=Math.max(0,sp-stCost(8)*dt);
+    const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
+    const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
+    if(sprint) sp=Math.max(0,sp-stCost(8)*armorStamina*dt);
     const dragFly=flying?((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13):0;
     const baseSpd=flying?dragFly:(mounted?9.6:(sprint?6.2:4.3));
-    const speed=baseSpd*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1);
+    const speed=baseSpd*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
     const sin=Math.sin(player.yaw), cos=Math.cos(player.yaw);
     let vx=(-sin*f + cos*s), vz=(-cos*f - sin*s);
     const len=Math.hypot(vx,vz)||1;
@@ -551,7 +553,7 @@ function tick(now){
       if(canJump && (mounted || sp>=5)){
         player.vel.y=mounted?9.4:8.2; player.onGround=false;
         lastGroundT=-1e9; jumpPressT=-1e9;
-        if(!mounted) sp=Math.max(0,sp-stCost(5));
+        if(!mounted) sp=Math.max(0,sp-stCost(5)*armorStamina);
       } else if(feetWater && !player.onGround){
         // swim up: accelerate, and keep thrusting while breaching the surface
         player.vel.y=Math.min(player.vel.y+30*dt, waistWater?3.6:4.6);

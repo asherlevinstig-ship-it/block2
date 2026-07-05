@@ -5,7 +5,10 @@ export function createInventoryModel({ slots, items, size = 36, getEquippedArmor
   const newStack = (id, count) => {
     const stack = { id, count };
     if (items[id] && items[id].tool) stack.dur = items[id].tool.dur;
-    if (items[id] && items[id].armor) stack.dur = items[id].armor.dur;
+    if (items[id] && items[id].armor) {
+      stack.dur = items[id].armor.dur;
+      stack.armorType=items[id].armor.armorType||'vanguard';
+    }
     return stack;
   };
   const count = id => slots.reduce((total, stack) => total + (stack && stack.id === id ? stack.count : 0), 0);

@@ -425,7 +425,13 @@ class ProgressionMixin {
       rec.prof.familiarUnlocks.push('shade');
       reward = { kind: 'Shade Familiar', id: I.SHADOW_SIGIL, unlocked: true };
     } else reward = { kind: 'Shade Sigil', id: I.SHADOW_SIGIL };
-    if (!reward.unlocked) this.addRewardItem(rec.prof, reward.id, 1);
+    if (!reward.unlocked) {
+      if(ARMOR_INFO[reward.id]){
+        const types=['scout','vanguard','bulwark'],armorType=types[(Math.random()*types.length)|0];
+        this.addGearRewardItem(rec.prof,{id:reward.id,count:1,rarity:'rare',armorType,source:'aegis_trial',gear:true});
+        reward.armorType=armorType;reward.rarity='rare';
+      }else this.addRewardItem(rec.prof, reward.id, 1);
+    }
     this.grantJobXp(client, 'adventurer', 12);
     this.progressJobContract(client, 'quest', 1, 0);
     this.progressionChanged(client, 'aegisTrial', { rewardGold, rewardXp });
@@ -452,8 +458,9 @@ class ProgressionMixin {
       if (!ARMOR_INFO[id]) return this.progressionReject(client, 'armor', 'item');
       const requestedRank=GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.gearRank)?m.gearRank:'';
       const requestedRarity=GEAR_SYSTEM.RARITIES.some(r=>r.id===m.rarity)?m.rarity:'';
+      const requestedType=GEAR_SYSTEM.ARMOR_ARCHETYPES[m.armorType]?m.armorType:'';
       const hinted=Math.max(0,Math.min(35,m&&m.slot|0));
-      const matches=s=>s&&(s.id|0)===id&&(s.count|0)>0&&(!requestedRank||s.gearRank===requestedRank)&&(!requestedRarity||(s.rarity||'common')===requestedRarity);
+      const matches=s=>s&&(s.id|0)===id&&(s.count|0)>0&&(!requestedRank||s.gearRank===requestedRank)&&(!requestedRarity||(s.rarity||'common')===requestedRarity)&&(!requestedType||(s.armorType||ARMOR_INFO[id].armorType||'vanguard')===requestedType);
       const slot=matches(rec.prof.inv[hinted])?hinted:rec.prof.inv.findIndex(matches);
       if (slot < 0) return this.progressionReject(client, 'armor', 'unowned');
       const incoming = rec.prof.inv[slot];

@@ -86,7 +86,7 @@ function removeEquippedArmorCopies(){
   if(!armor) return false;
   for(let i=0;i<inv.length;i++){
     const stack=inv[i];
-    if(stack&&stack.id===armor.id&&(stack.gearRank||'')===(armor.gearRank||'')&&(stack.rarity||'')===(armor.rarity||'')&&(stack.dur==null||armor.dur==null||stack.dur===armor.dur)){
+    if(stack&&stack.id===armor.id&&(stack.gearRank||'')===(armor.gearRank||'')&&(stack.rarity||'')===(armor.rarity||'')&&(stack.armorType||'')===(armor.armorType||'')&&(stack.dur==null||armor.dur==null||stack.dur===armor.dur)){
       inv[i]=null;
       return true;
     }
@@ -914,7 +914,7 @@ function renderStat(){
   h+='<div class="srow"><span>HP / MP / SP / Food</span><b>'+Math.ceil(hp)+'/'+maxHp()+' &middot; '+Math.floor(mp)+'/'+maxMp()+' &middot; '+Math.floor(sp)+'/'+maxSp()+' &middot; '+Math.floor(hunger)+'/'+maxHunger()+'</b></div>';
   const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
   const armorProfile=armor?GEAR_SYSTEM.armorProfile(armorInfo,armor):null;
-  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+ITEMS[armor.id].name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
+  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
   h+='<div class="srow"><span>STAT POINTS</span><b>'+S.pts+'</b></div>';
   for(const [k,nm,fx] of ATTRS)
     h+='<div class="attr"><span class="nm">'+nm+' &middot; '+S[k]+'</span><span class="fx">'+fx+'</span><button data-attr="'+k+'" '+(S.pts<=0?'disabled':'')+'>+</button></div>';

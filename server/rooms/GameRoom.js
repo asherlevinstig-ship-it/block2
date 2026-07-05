@@ -535,6 +535,7 @@ class GameRoom extends Room {
       p.job = JOB_IDS.has(prof.job) ? prof.job : '';
       p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
       p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
+      p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], prof.armor).type.id : '';
       p.dragons = Array.isArray(prof.mountUnlocks)
         ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
         : '';
@@ -1295,7 +1296,7 @@ class GameRoom extends Room {
       if (prof.inv.length >= 36) return false;
       slot = prof.inv.length;
     }
-    prof.inv[slot] = { id: I.IRON_ARMOR, count: 1 };
+    prof.inv[slot] = { id: I.IRON_ARMOR, count: 1, armorType:'vanguard', dur:ARMOR_INFO[I.IRON_ARMOR].dur, source:'starter' };
     return true;
   }
   ensureStarterLegendaryWeapon(prof) {
@@ -1493,6 +1494,7 @@ class GameRoom extends Room {
     p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
     p.name = prof.name || p.name;
     p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
+    p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], prof.armor).type.id : '';
     p.dragons = Array.isArray(prof.mountUnlocks)
       ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
       : '';
@@ -1609,17 +1611,20 @@ class GameRoom extends Room {
       client.send('hurt', { n: -hp.max, reason: 'training' });
       return;
     }
+    const incoming=Math.max(0,Number(amount)||0);
     const buffs = this.abilityBuffs.get(client.sessionId);
     if (buffs && buffs.ironUntil > Date.now()) amount *= .5;
     if (buffs && buffs.monkStoneUntil > Date.now()) amount *= (1 - JOB_SYSTEM.MONK_RULES.stoneMitigation);
     const rec = this.profileFor(client);
     const armorStack = rec && rec.prof && rec.prof.armor;
     const armor = armorStack ? ARMOR_INFO[armorStack.id] : null;
+    let armorFeedback=null;
     if (armor) {
       const profile=GEAR_SYSTEM.armorProfile(armor,armorStack);
       amount *= (1 - profile.mitigation);
       const current=armorStack.dur==null?profile.maxDur:Math.max(0,armorStack.dur|0);
       armorStack.dur=Math.max(0,current-1);
+      armorFeedback={id:armorStack.id,type:profile.type.id,dur:armorStack.dur,maxDur:profile.maxDur,mitigation:profile.mitigation};
       if(armorStack.dur<=0){rec.prof.armor=null;client.send('armorSync',{armor:null,broke:true});}
       else client.send('armorSync',{armor:{...armorStack,count:1}});
       this.dirtyPlayers.add(rec.token);
@@ -1630,7 +1635,10 @@ class GameRoom extends Room {
     const hp = this.ensurePlayerHp(client);
     const dmg = Math.max(0, Math.round(amount));
     hp.hp = Math.max(0, hp.hp - dmg);
-    client.send('hurt', { n: dmg, reason });
+    client.send('hurt', {
+      n:dmg,reason,raw:Math.round(incoming),absorbed:Math.max(0,Math.round(incoming)-dmg),
+      hp:hp.hp,maxHp:hp.max,lethal:hp.hp<=0,armor:armorFeedback,
+    });
     // Second Wind — Iron Guardian passive, simulated where the authoritative HP lives
     if (hp.hp > 0 && hp.hp < hp.max * .25 && rec && rec.prof && rec.prof.S
         && rec.prof.S.path === 'guardian' && rec.prof.S.lvl >= 8) {
@@ -1640,12 +1648,12 @@ class GameRoom extends Room {
         this.secondWindAt.set(client.sessionId, now + 60000);
         const heal = Math.round(hp.max * .4);
         hp.hp = Math.min(hp.max, hp.hp + heal);
-        client.send('hurt', { n: -heal, reason: 'second_wind' });
+        client.send('hurt', { n:-heal,reason:'second_wind',hp:hp.hp,maxHp:hp.max });
         if (p) this.sendSpace(p.dgn || '', 'fx', { t: 'secondWind', x: p.x, y: p.y, z: p.z, dgn: p.dgn || '' });
       }
     }
     if (p && p.dgn) this.sendDungeonStatus(p.dgn);
-    if (hp.hp <= 0) this.handlePlayerDeath(client);
+    if (hp.hp <= 0) this.handlePlayerDeath(client,reason);
   }
   handleUseFood(client, m) {
     const rec = this.profileFor(client);
@@ -1689,6 +1697,7 @@ class GameRoom extends Room {
     return Math.max(0, Math.min(3, slot && slot.plus ? slot.plus | 0 : 0));
   }
   toolMaxDur(slot, info) {
+    if(slot&&ARMOR_INFO[slot.id])return GEAR_SYSTEM.armorProfile(info||ARMOR_INFO[slot.id],slot).maxDur;
     const base = info && info.dur ? info.dur | 0 : 1;
     const forge=slot&&slot.forge==='sturdy'?.2:0,master=slot&&slot.masterwork?.25:0;
     const rarity=GEAR_SYSTEM.profile(info||{},slot||{}).rarity.durability;
@@ -1737,7 +1746,7 @@ class GameRoom extends Room {
     this.recordRepairProgress(client, false);
     client.send('blacksmithRepairResult', {
       toolSlot: target.i,
-      tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s), gearRank:target.s.gearRank||'', rarity:target.s.rarity||'', forge:target.s.forge||'', masterwork:!!target.s.masterwork, locked:!!target.s.locked, source:target.s.source||'' },
+      tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s), gearRank:target.s.gearRank||'', armorType:target.s.armorType||'', rarity:target.s.rarity||'', forge:target.s.forge||'', masterwork:!!target.s.masterwork, locked:!!target.s.locked, source:target.s.source||'' },
       repaired: target.max - target.cur,
       gold: -cost,
     });
@@ -1879,11 +1888,11 @@ class GameRoom extends Room {
     client.send('repairResult', {
       kitSlot,
       toolSlot: best.i,
-      tool: { id: best.s.id, count: best.s.count || 1, dur: best.s.dur, plus: this.toolPlus(best.s), gearRank:best.s.gearRank||'', rarity:best.s.rarity||'', forge:best.s.forge||'', masterwork:!!best.s.masterwork, locked:!!best.s.locked, source:best.s.source||'' },
+      tool: { id: best.s.id, count: best.s.count || 1, dur: best.s.dur, plus: this.toolPlus(best.s), gearRank:best.s.gearRank||'', armorType:best.s.armorType||'', rarity:best.s.rarity||'', forge:best.s.forge||'', masterwork:!!best.s.masterwork, locked:!!best.s.locked, source:best.s.source||'' },
       repaired: best.s.dur - best.cur,
     });
   }
-  handlePlayerDeath(client) {
+  handlePlayerDeath(client,reason='combat') {
     const p = this.state.players.get(client.sessionId);
     const hp = this.ensurePlayerHp(client);
     const rec = this.profileFor(client);
@@ -1891,7 +1900,7 @@ class GameRoom extends Room {
     if (hasPhoenix && !this.phoenixUsed.has(client.sessionId)) {
       this.phoenixUsed.add(client.sessionId);
       hp.hp = Math.max(1, Math.ceil(hp.max * .35));
-      client.send('hurt', { n: -hp.hp });
+      client.send('hurt', { n:-hp.hp,reason:'phoenix_rebirth',hp:hp.hp,maxHp:hp.max });
       if (p) {
         this.damageMobsInRadius(client, p.x, p.y + .7, p.z, 4.2, 18, { knock: 3.5, stun: .7 });
         this.sendSpace(p.dgn || '', 'fx', { t: 'legendary', kind: 'phoenix', rebirth: true, x: p.x, y: p.y, z: p.z, dgn: p.dgn || '' });
@@ -1905,7 +1914,7 @@ class GameRoom extends Room {
       const inst = this.instances[dgn];
       const reason = inst && inst.players.size <= 1 ? 'solo' : 'wipe';
       this.ejectFromDungeon(client.sessionId);
-      client.send('dungeonDeath', { reason: 'death', x: p.x, y: p.y, z: p.z });
+      client.send('dungeonDeath', { reason:'death',cause:reason,x:p.x,y:p.y,z:p.z });
       if (inst && !inst.hasLivingPlayers()) {
         this.failDungeon(dgn, reason);
         const quest = rec && rec.prof && rec.prof.activeNpcQuest;
@@ -1917,7 +1926,7 @@ class GameRoom extends Room {
       }
     } else {
       hp.hp = hp.max;
-      client.send('worldDeath', {});
+      client.send('worldDeath', {reason:'death',cause:reason});
     }
   }
   updatePlayerHunger(dt) {
@@ -2289,10 +2298,11 @@ class GameRoom extends Room {
       this.grantHunterXp(rec.prof, grant.xp, client, grant.source || 'grant');
       const delivered=[];
       for (const item of grant.items || []) {
-        const left=item&&item.gear?this.addGearRewardItem(rec.prof,item):this.addRewardItem(rec.prof,item.id,item.count);
-        if(!item.gear||!left)delivered.push(item&&item.gear?{...item,locked:!!(item.locked||item.rarity==='mythic')}:item);
+        const rewardItem=item&&item.gear?{...item,source:item.source||grant.source||'grant'}:item;
+        const left=rewardItem&&rewardItem.gear?this.addGearRewardItem(rec.prof,rewardItem):this.addRewardItem(rec.prof,rewardItem.id,rewardItem.count);
+        if(!rewardItem.gear||!left)delivered.push(rewardItem&&rewardItem.gear?{...rewardItem,locked:!!(rewardItem.locked||rewardItem.rarity==='mythic')}:rewardItem);
         else {
-          const recovered=this.queueGearRecovery(rec.prof,item,grant.source||'grant');
+          const recovered=this.queueGearRecovery(rec.prof,rewardItem,grant.source||'grant');
           if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
         }
         if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });
@@ -2485,7 +2495,7 @@ class GameRoom extends Room {
       return dm('Granted ' + count + 'x Legendary Weapon Token.');
     }
     if (what === 'armor') {
-      this.awardGrant(client, { source: 'dev', items: [{ id: I.LEGEND_ARMOR, count: 1 }] });
+      this.awardGrant(client, { source: 'dev', items: [{ id: I.LEGEND_ARMOR, count: 1, armorType:'aegis',rarity:'mythic',gear:true }] });
       return dm('Granted Legendary Aegis Armor.');
     }
     if (what === 'staff' || what === 'blackhole') {
@@ -2713,8 +2723,10 @@ class GameRoom extends Room {
     const hd = Math.hypot(dx, dz);
     // mounted players move faster, so the anti-teleport clamp is loosened to match
     const mounted = !!p.mount;
-    const maxStep = (mounted ? 20 : 12) * dt + 1.25;
-    const velCap = mounted ? 16 : 9;
+    const rec=this.profileFor(client),armorStack=rec&&rec.prof&&rec.prof.armor,armorInfo=armorStack&&ARMOR_INFO[armorStack.id];
+    const armorMove=!mounted&&armorInfo?GEAR_SYSTEM.armorProfile(armorInfo,armorStack).moveMultiplier:1;
+    const maxStep = (mounted ? 20 : 12*armorMove) * dt + 1.25;
+    const velCap = mounted ? 16 : 9*armorMove;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
     const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
