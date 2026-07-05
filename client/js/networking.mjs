@@ -10,10 +10,12 @@ import {createCompanionSystem} from './companions.mjs';
 import {createReplicationVisuals} from './replication-visuals.mjs';
 import {createGearRewardPresenter} from './gear-rewards.mjs';
 import {createCombatFeedback} from './combat-feedback.mjs';
+import {biomeStatus} from './biome-status.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const player=combatState.player,inv=combatState.inventory;
+biomeStatus.init(document);
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
 function receiveRewardItemLegacy(it){
@@ -772,9 +774,11 @@ function netAttachRoom(room,name,client){
         sysMsg('<b>Second Wind</b> restores your strength');
         healingPlusVfx(player.pos.x, player.pos.y, player.pos.z, 1.05, 1.15);
       }
-      if(m&&m.n>0){COMBAT_FEEDBACK.showImpact(m);if(m.armor)COMBAT_FEEDBACK.syncArmor(m.armor);}
+      if(m&&m.n>0){COMBAT_FEEDBACK.showImpact(m);if(m.armor)COMBAT_FEEDBACK.syncArmor(m.armor);if(/^(flanker|quickshot|brute)(_arrow)?$/.test(m.reason||''))netBiomeHitFx(m.reason);}
+      if(m&&m.reason==='mire_poison')biomeStatus.pulseVenom();
       damagePlayer(m.n,'server:'+((m&&m.reason)||'combat'),m);
     });
+    room.onMessage('biomeStatus',m=>{biomeStatus.apply(m);netBiomeStatusFx(m);});
     room.onMessage('xp',   m=>gainXP(m.n));
     room.onMessage('chat', m=>{
       if(!gateSystemUnlocked() && (m&&m.name)==='[System]' && /Gate has opened/i.test((m&&m.text)||'')) return;
@@ -1226,7 +1230,7 @@ function faceTexture(look){
   });
 }
 const REPLICATION_VISUALS=createReplicationVisuals({NET,player});
-const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,addLightningBeam,netSpawnProjectile,netMirrorGate}=REPLICATION_VISUALS;
+const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate}=REPLICATION_VISUALS;
 
 const COMPANIONS=createCompanionSystem({
   NET,

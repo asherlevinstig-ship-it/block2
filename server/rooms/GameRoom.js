@@ -70,6 +70,7 @@ class GameRoom extends Room {
     this.aegisBounties = new Map();
     this.playerHp = new Map();
     this.playerHunger = new Map();
+    this.biomeStatuses = new Map();
     this.bossContrib = new Map();
     this.recentApprovedComms = [];
     this.moderationReports = [];
@@ -635,6 +636,7 @@ class GameRoom extends Room {
     }
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);
+    this.biomeStatuses.delete(client.sessionId);
     this.abilityState.delete(client.sessionId);
     this.abilityBuffs.delete(client.sessionId);
     if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
@@ -2633,6 +2635,24 @@ class GameRoom extends Room {
   isAnimalKind(kind) {
     return ANIMAL_KINDS.has(String(kind || ''));
   }
+  applyBiomeStatus(client,behavior){
+    if(!client||!['frost','venom','sturdy'].includes(behavior))return;
+    const now=Date.now(),kind=behavior==='sturdy'?'root':behavior,durationMs=kind==='root'?1100:kind==='frost'?4200:5000;
+    let state=this.biomeStatuses.get(client.sessionId);if(!state)state={};
+    state[kind+'Until']=Math.max(state[kind+'Until']||0,now+durationMs);
+    if(kind==='venom')state.venomAcc=0;
+    this.biomeStatuses.set(client.sessionId,state);
+    client.send('biomeStatus',{kind,durationMs,counter:kind==='frost'?'Stop sprinting to preserve stamina':kind==='venom'?'Use food or finish the fight quickly':'Break line of sight while the roots fade'});
+  }
+  tickBiomeStatuses(dt){
+    const now=Date.now();
+    for(const [sid,state] of this.biomeStatuses){
+      const client=this.clients.find(c=>c.sessionId===sid);
+      if(!client){this.biomeStatuses.delete(sid);continue;}
+      if((state.venomUntil||0)>now){state.venomAcc=(state.venomAcc||0)+dt;if(state.venomAcc>=1){state.venomAcc-=1;this.hurtPlayer(client,1,'mire_poison');}}
+      if((state.venomUntil||0)<=now&&(state.frostUntil||0)<=now&&(state.rootUntil||0)<=now)this.biomeStatuses.delete(sid);
+    }
+  }
 
   // ---------------- simulation ----------------
   update(dt) {
@@ -2666,10 +2686,11 @@ class GameRoom extends Room {
       if ((b.umbralUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
     });
     this.updatePlayerHunger(dt);
+    this.tickBiomeStatuses(dt);
 
     if (dayF > 0.5) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
     }
     const surfaceClusters = this.surfaceDensityClusters(surface);
@@ -2683,7 +2704,8 @@ class GameRoom extends Room {
     }
     this.tickRoadCaravans(dt, dayF > .35);
     this.tickLocalAnimalSpawns(dt, surfaceClusters);
-    if (night) this.tickLocalHostileSpawns(dt, surfaceClusters);
+    if (night) this.tickLocalHostileSpawns(dt, surfaceClusters,'night');
+    else if(dayF>.5)this.tickLocalHostileSpawns(dt,surfaceClusters,'day');
 
     // ---- projectiles (3 substeps for dodgeable flight) ----
     this.stepProjectiles(dt, spaces);
@@ -2797,7 +2819,7 @@ class GameRoom extends Room {
         else if (r !== 'fly') {
           const c = this.clients.find(c => c.sessionId === r.hit.sid);
           const target = this.state.players.get(r.hit.sid);
-          if (c && (a.dgn || !target || !this.isTownProtected(target.x, target.z))) this.hurtPlayer(c, a.dmg);
+          if (c && (a.dgn || !target || !this.isTownProtected(target.x, target.z))){this.hurtPlayer(c,a.dmg,a.effect?a.effect+'_arrow':'arrow');if(a.effect)this.applyBiomeStatus(c,a.effect);}
           done = true;
         }
       }
@@ -2959,7 +2981,7 @@ class GameRoom extends Room {
         if (meta.alert && best && !rooted) {
           if (meta.brute && ((meta.bruteT||0)>0 || (bd<3.8&&meta.atkCd<=0))) {
             if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;}meta.bruteT-=dt;m.state='bruteWind';rooted=true;
-            if(meta.bruteT<=0){m.state='';for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35));}}}
+            if(meta.bruteT<=0){m.state='';this.sendSpace(m.dgn||'','fx',{t:'biomeSlam',x:m.x,y:m.y,z:m.z,effect:'brute',dgn:m.dgn||''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35),meta.biomeBehavior||'brute');}}}
           } else if (RANGED_ENEMY_KINDS.has(m.kind)) {
             if (meta.drawT > 0) {
               meta.drawT -= dt;
@@ -2970,8 +2992,8 @@ class GameRoom extends Room {
                 m.state = '';
                 const v = this.pvel.get(best.sid) || { x: 0, z: 0 };
                 const lead = bd / 16 * .5;
-                this.fireArrow(m, m.dgn, best.p.x + v.x * lead, best.p.y + 1.4, best.p.z + v.z * lead, meta.arrowDmg*(meta.ralliedT>0?1.25:1), false);
-                meta.shootCd = 1.8 + Math.random() * .8;
+                this.fireArrow(m, m.dgn, best.p.x + v.x * lead, best.p.y + 1.4, best.p.z + v.z * lead, meta.arrowDmg*(meta.ralliedT>0?1.25:1), false,meta.biomeBehavior||'');
+                meta.shootCd = meta.quickShot ? .95+Math.random()*.45 : 1.8+Math.random()*.8;
               }
             } else {
               meta.shootCd = (meta.shootCd || 1) - dt;
@@ -2986,12 +3008,12 @@ class GameRoom extends Room {
               }
               if (bd > 4 && bd < 18 && meta.shootCd <= 0 &&
                   AI.losClear(solid, m.x, m.y + 1.4, m.z, best.p.x, best.p.y + 1.2, best.p.z))
-                meta.drawT = .5;
+                meta.drawT = meta.quickShot ? .3 : .5;
             }
           } else {                                           // zombie
             if (meta.lungeT > 0) {
               meta.lungeT -= dt;
-              m.state = 'windup';
+              m.state = meta.biomeBehavior==='flanker'?'packWind':'windup';
               rooted = true;
               if (meta.lungeT <= 0) {
                 meta.lunging = .45;
@@ -3006,7 +3028,7 @@ class GameRoom extends Room {
               if (bd < 1.5 && Math.abs(best.p.y - m.y) < 2.1 && meta.atkCd <= 0) {
                 meta.atkCd = 1.1;
                 const c = this.clients.find(c => c.sessionId === best.sid);
-                if (c) this.hurtPlayer(c, Math.round(meta.dmg * frenzyDmg * (meta.ralliedT>0?1.25:1)));
+                if (c){this.hurtPlayer(c,Math.round(meta.dmg*frenzyDmg*(meta.ralliedT>0?1.25:1)),meta.biomeBehavior||'combat');if(meta.biomeBehavior)this.applyBiomeStatus(c,meta.biomeBehavior);}
                 meta.lunging = 0;
               }
             } else {
@@ -3015,8 +3037,10 @@ class GameRoom extends Room {
               const off = meta.flank * Math.min(3, bd * .4);
               tx = best.p.x + px2 * off; tz = best.p.z + pz2 * off;
               if (bd < 2.4 && Math.abs(best.p.y - m.y) < 2.6 && meta.atkCd <= 0 &&
-                  AI.losClear(solid, m.x, m.y + 1.2, m.z, best.p.x, best.p.y + 1.2, best.p.z))
-                meta.lungeT = .35;
+                  AI.losClear(solid, m.x, m.y + 1.2, m.z, best.p.x, best.p.y + 1.2, best.p.z)){
+                meta.lungeT = meta.biomeBehavior==='flanker'?.45:.35;
+                if(meta.biomeBehavior==='flanker')this.state.mobs.forEach((ally,aid)=>{const am=this.mobMeta[aid];if(aid!==id&&am&&am.biomeBehavior==='flanker'&&Math.hypot(ally.x-m.x,ally.z-m.z)<7&&!(am.lungeT>0)&&!(am.lunging>0))am.lungeT=.52;});
+              }
             }
           }
         } else if (meta.alert && !best && !m.dgn) {

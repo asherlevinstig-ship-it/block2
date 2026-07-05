@@ -44,6 +44,7 @@ const { DungeonRoom } = require('../rooms/DungeonRoom');
 const { handOff, takeHandoff } = require('../rooms/dungeon-handoff');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
+const { BIOME_HOSTILE, RANGED_ENEMY_KINDS } = require('../rooms/constants');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 
@@ -158,6 +159,7 @@ function makeRoom() {
   room.playerHp = new Map();
   room.playerLastHit = new Map();
   room.playerHunger = new Map();
+  room.biomeStatuses = new Map();
   room.rateBuckets = new Map();
   room.pvel = new Map();
   room.abilityState = new Map();
@@ -2763,7 +2765,7 @@ test('a mob fires a bolt aimed at its target at the correct speed', () => {
   const room = makeRoom();
   room.sArrows = [];
   const mob = { x: 0, y: 9, z: 0 };
-  room.fireArrow(mob, '', 20, 10.4, 0, 5, true);   // bolt toward (20, 10.4, 0); no spread
+  room.fireArrow(mob, '', 20, 10.4, 0, 5, true, 'frost');   // bolt toward (20, 10.4, 0); no spread
 
   assert.equal(room.sArrows.length, 1, 'the shot is queued as a server-simulated projectile');
   const a = room.sArrows[0];
@@ -2771,6 +2773,7 @@ test('a mob fires a bolt aimed at its target at the correct speed', () => {
   assert.ok(a.vx > 9 && Math.abs(a.vz) < 1e-9, 'it travels toward the target, mostly +x');
   assert.equal(a.dmg, 5);
   assert.equal(a.bolt, true);
+  assert.equal(a.effect,'frost','projectiles retain their biome VFX/status identity');
 });
 
 test('DungeonInstance encapsulates instance state plus world and edit access', () => {
@@ -5734,6 +5737,28 @@ test('regional contracts progress from biome collection and road merchant visits
   room.state.players.get(road.sessionId).z = merchant.z + .5;
   room.handleRegionalContractVisit(road, { id: merchant.id });
   assert.equal(roadProf.regionalContract.have, 1);
+});
+
+test('every biome owns a distinct hostile family, ranged identity, schedule, and regional drop',()=>{
+  const families=Object.values(BIOME_HOSTILE);
+  assert.equal(families.length,6);
+  assert.equal(new Set(families.flatMap(f=>[f.melee,f.ranged])).size,12);
+  assert.equal(families.every(f=>RANGED_ENEMY_KINDS.has(f.ranged)&&f.drop>0&&typeof f.day==='boolean'),true);
+  assert.deepEqual(families.filter(f=>f.day).map(f=>f.behavior).sort(),['brute','quickshot']);
+});
+
+test('biome attacks apply visible timed statuses and mire venom damages authoritatively',()=>{
+  const room=makeRoom(),client=makeClient('biome-status');room.clients=[client];
+  seedPlayer(room,client,{x:220,y:10,z:220});
+  const before=room.ensurePlayerHp(client).hp;
+  room.applyBiomeStatus(client,'frost');
+  room.applyBiomeStatus(client,'sturdy');
+  room.applyBiomeStatus(client,'venom');
+  assert.deepEqual(client.sent.filter(e=>e.type==='biomeStatus').map(e=>e.msg.kind),['frost','root','venom']);
+  room.biomeStatuses.get(client.sessionId).venomAcc=.95;
+  room.tickBiomeStatuses(.1);
+  assert.equal(room.ensurePlayerHp(client).hp,before-1);
+  assert.equal(client.sent.some(e=>e.type==='hurt'&&e.msg.reason==='mire_poison'),true);
 });
 
 test('surface mob density clusters nearby players and separates distant explorers', () => {

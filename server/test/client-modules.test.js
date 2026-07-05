@@ -633,3 +633,13 @@ test('network controller bounds a hung live reconnect and falls back to a fresh 
   assert.equal(controller.state.room, fresh);
   assert.equal(controller.state.on, true);
 });
+
+test('Mesa slams and Plains pack lunges have explicit replicated telegraphs',()=>{
+  const server=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
+  assert.match(server,/biomeBehavior==='flanker'\?'packWind'/);
+  assert.match(server,/t:'biomeSlam'/);
+  assert.match(visuals,/st==='bruteWind'.*redclaw/);
+  assert.match(visuals,/st==='packWind'.*gale_stalker/);
+  assert.match(visuals,/RingGeometry\(radius-.11,radius,48\)/);
+});

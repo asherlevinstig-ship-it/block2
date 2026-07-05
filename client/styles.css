@@ -443,6 +443,14 @@
   #activitytracker .am{margin-top:4px;font-size:10px;color:#9cb1c5;text-transform:uppercase;letter-spacing:.8px}
   #activitytracker.danger{border-color:rgba(255,93,70,.65);box-shadow:0 0 18px rgba(255,65,35,.2)}
   #activitytracker.danger .at{color:#ff9b7f}
+  #biomestatus{position:fixed;left:14px;top:245px;z-index:18;display:grid;gap:5px;pointer-events:none}#biomestatus.hidden{display:none}#biomestatus>div{display:grid;grid-template-columns:auto auto;gap:1px 9px;width:220px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--status),transparent 42%);border-left:3px solid var(--status);border-radius:5px;background:rgba(6,12,17,.9);box-shadow:0 6px 18px rgba(0,0,0,.35)}#biomestatus b{color:var(--status);font-size:11px;letter-spacing:1px}#biomestatus span{justify-self:end;color:#fff;font-size:11px}#biomestatus small{grid-column:1/3;color:#b9c8d2;font-size:9px}
+  #biomefx{position:fixed;inset:0;z-index:13;pointer-events:none;overflow:hidden}#biomefx:before,#biomefx:after{content:"";position:absolute;inset:0;opacity:0;transition:opacity .25s}
+  body.status-frost #biomefx:before{opacity:.62;background:radial-gradient(ellipse at center,transparent 48%,rgba(130,232,255,.12) 70%,rgba(180,245,255,.42) 100%);box-shadow:inset 0 0 48px rgba(170,242,255,.55);animation:frostBreathe 1.8s ease-in-out infinite}
+  body.status-venom #biomefx:after{opacity:.22;background:radial-gradient(circle at 50% 65%,rgba(111,160,53,.05),rgba(70,112,35,.42));animation:venomBreathe 1.1s ease-in-out infinite}body.venom-damage #biomefx:after{opacity:.65}
+  body.status-root #biomefx:after{opacity:.2;background:linear-gradient(to top,rgba(87,112,43,.6),transparent 32%)}
+  body.status-frost #stats .spb{box-shadow:0 0 10px rgba(142,234,255,.9),inset 0 0 7px rgba(185,244,255,.5)}body.status-frost #stats .spb i{filter:hue-rotate(155deg) brightness(1.35);animation:chilledStamina .8s ease-in-out infinite alternate}
+  body.venom-damage #stats .hpb{animation:venomHealth .42s ease-out}
+  @keyframes frostBreathe{50%{filter:brightness(1.18);opacity:.78}}@keyframes venomBreathe{50%{opacity:.34}}@keyframes chilledStamina{to{opacity:.58}}@keyframes venomHealth{30%{box-shadow:0 0 18px #8fbd42;filter:hue-rotate(70deg)}100%{box-shadow:none;filter:none}}
   #townchoices{position:fixed;right:14px;top:390px;width:330px;max-width:calc(100vw - 28px);z-index:7;color:#d8e8ff;background:linear-gradient(155deg,rgba(11,25,40,.94),rgba(7,13,23,.94));border:1px solid rgba(79,216,255,.55);box-shadow:0 0 20px rgba(79,216,255,.18);border-radius:8px;padding:11px;pointer-events:auto}
   #townchoices .tct{font-size:11px;letter-spacing:2px;color:#4fd8ff;margin-bottom:3px}
   #townchoices .tcs{font-size:9px;letter-spacing:1.5px;color:#8fb8d8;margin-bottom:8px}

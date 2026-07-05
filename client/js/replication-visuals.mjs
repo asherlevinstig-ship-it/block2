@@ -15,26 +15,91 @@ const ENEMY_FAMILY_COLORS={
   bandit_shield:[.22,.31,.42],bandit_scout:[.48,.39,.16],bandit_brute:[.5,.2,.16],
   caravan_guard:[.2,.38,.62],caravan_merchant:[.48,.27,.6],
   wounded_hunter:[.32,.46,.58],
+  gale_stalker:[.48,.68,.38],wind_archer:[.7,.86,.54],rootbound:[.25,.43,.2],briar_archer:[.38,.55,.27],
+  dune_husk:[.76,.58,.29],sun_archer:[.95,.72,.28],redclaw:[.62,.25,.16],amber_archer:[.82,.43,.18],
+  frost_wight:[.52,.75,.82],ice_archer:[.7,.92,1],mirewalker:[.28,.39,.22],bog_archer:[.43,.56,.3],
 };
-const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',wounded_hunter:'Wounded Hunter',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon'};
+const BIOME_HOSTILE_KIND={gale_stalker:'plains',wind_archer:'plains',rootbound:'forest',briar_archer:'forest',dune_husk:'desert',sun_archer:'desert',redclaw:'mesa',amber_archer:'mesa',frost_wight:'snowy',ice_archer:'snowy',mirewalker:'swamp',bog_archer:'swamp'};
+const BIOME_VFX={plains:{hex:0xc9f56a,col:[.79,.96,.42]},forest:{hex:0x5ca63c,col:[.36,.65,.24]},desert:{hex:0xffc447,col:[1,.77,.28]},mesa:{hex:0xe0522d,col:[.88,.32,.18]},snowy:{hex:0x8eeaff,col:[.56,.92,1]},swamp:{hex:0x83a94b,col:[.51,.66,.29]}};
+const EFFECT_BIOME={flanker:'plains',sturdy:'forest',quickshot:'desert',brute:'mesa',frost:'snowy',venom:'swamp',root:'forest'};
+function decorateBiomeHostile(m,kind){
+  const biome=BIOME_HOSTILE_KIND[kind];if(!biome)return;
+  const colors={plains:0xd8ef8a,forest:0x4d6e2e,desert:0xffcb55,mesa:0xb84a28,snowy:0xb9f2ff,swamp:0x71864b};
+  const mat=new THREE.MeshLambertMaterial({color:colors[biome]}),dark=new THREE.MeshLambertMaterial({color:{plains:0x496b31,forest:0x2c351f,desert:0x765029,mesa:0x53251d,snowy:0x426879,swamp:0x33402a}[biome]});
+  const proportions={gale_stalker:[.94,1.16,.9],wind_archer:[.82,1.14,.82],rootbound:[1.22,1.08,1.16],briar_archer:[.88,1.18,.86],dune_husk:[1.12,.92,1.08],sun_archer:[.84,1.12,.84],redclaw:[1.25,1.12,1.18],amber_archer:[.86,1.14,.84],frost_wight:[1.12,1.2,1.08],ice_archer:[.82,1.22,.82],mirewalker:[1.24,.88,1.18],bog_archer:[.9,1.12,.86]}[kind]||[1,1,1];
+  m.grp.scale.set(proportions[0],proportions[1],proportions[2]);m.silhouetteScale={x:proportions[0],y:proportions[1],z:proportions[2]};
+  if(biome==='forest'){
+    for(const side of [-1,1]){const branch=new THREE.Mesh(new THREE.CylinderGeometry(.035,.055,.72,5),mat);branch.position.set(side*.2,1.95,0);branch.rotation.z=side*.45;m.grp.add(branch);}
+  }else if(biome==='desert'){
+    const veil=new THREE.Mesh(new THREE.BoxGeometry(.62,.16,.56),mat);veil.position.set(0,1.68,0);veil.rotation.y=.12;m.grp.add(veil);
+  }else if(biome==='mesa'){
+    for(const side of [-1,1]){const plate=new THREE.Mesh(new THREE.BoxGeometry(.28,.22,.42),mat);plate.position.set(side*.36,1.28,0);plate.rotation.z=side*.22;m.grp.add(plate);}
+  }else if(biome==='snowy'){
+    for(const side of [-1,0,1]){const spike=new THREE.Mesh(new THREE.ConeGeometry(.08,.5,5),mat);spike.position.set(side*.18,1.84,-.12);spike.rotation.x=-.25;m.grp.add(spike);}
+  }else if(biome==='swamp'){
+    for(const side of [-1,1]){const cap=new THREE.Mesh(new THREE.SphereGeometry(.16,6,4,0,Math.PI*2,0,Math.PI/2),mat);cap.position.set(side*.2,1.93,0);m.grp.add(cap);}
+  }else{
+    const crest=new THREE.Mesh(new THREE.ConeGeometry(.11,.5,5),mat);crest.position.set(0,1.98,0);crest.rotation.z=Math.PI;m.grp.add(crest);
+  }
+  const armItem=(arm,shape,material,pos=[0,-.05,.72],rot=[0,0,0])=>{if(!arm)return;const mesh=new THREE.Mesh(shape,material);mesh.position.set(...pos);mesh.rotation.set(...rot);arm.add(mesh);return mesh;};
+  const backItem=(shape,material,pos,rot=[0,0,0])=>{const mesh=new THREE.Mesh(shape,material);mesh.position.set(...pos);mesh.rotation.set(...rot);m.grp.add(mesh);return mesh;};
+  if(kind==='gale_stalker'){
+    armItem(m.arms[0],new THREE.BoxGeometry(.11,.08,.72),mat,[0,-.04,.82],[0,.35,0]);armItem(m.arms[1],new THREE.BoxGeometry(.11,.08,.72),mat,[0,-.04,.82],[0,-.35,0]);
+  }else if(kind==='wind_archer'){
+    for(const side of [-1,1])backItem(new THREE.ConeGeometry(.09,.72,4),mat,[side*.22,1.25,-.22],[.35,0,side*.18]);
+  }else if(kind==='rootbound'){
+    armItem(m.arms[0],new THREE.BoxGeometry(.18,.18,.85),dark,[0,-.03,.82]);armItem(m.arms[1],new THREE.BoxGeometry(.58,.72,.12),mat,[0,0,.62],[0,0,.1]);
+  }else if(kind==='briar_archer'){
+    for(const side of [-1,0,1])backItem(new THREE.ConeGeometry(.055,.7,5),mat,[.18+side*.07,1.28,-.24],[-.28,0,side*.08]);
+  }else if(kind==='dune_husk'){
+    const blade=armItem(m.arms[0],new THREE.BoxGeometry(.13,.55,.12),mat,[0,-.2,.78],[.25,0,-.28]);if(blade)blade.geometry.translate(0,-.2,0);
+  }else if(kind==='sun_archer'){
+    const disk=backItem(new THREE.TorusGeometry(.3,.075,6,16),mat,[0,1.35,-.25],[Math.PI/2,0,0]);disk.rotation.z=.2;
+  }else if(kind==='redclaw'){
+    armItem(m.arms[0],new THREE.CylinderGeometry(.055,.07,.9,6),dark,[0,-.2,.78],[0,0,.25]);armItem(m.arms[0],new THREE.BoxGeometry(.56,.28,.3),mat,[0,-.58,.82],[0,0,.18]);
+  }else if(kind==='amber_archer'){
+    backItem(new THREE.BoxGeometry(.28,.72,.2),mat,[.18,1.2,-.25],[-.18,0,-.1]);
+  }else if(kind==='frost_wight'){
+    for(const arm of m.arms)for(const side of [-.05,.05])armItem(arm,new THREE.ConeGeometry(.035,.42,5),mat,[side,-.05,.85],[Math.PI/2,0,0]);
+  }else if(kind==='ice_archer'){
+    for(const side of [-1,0,1])backItem(new THREE.ConeGeometry(.065,.82,5),mat,[.17+side*.08,1.3,-.24],[-.22,0,side*.08]);
+  }else if(kind==='mirewalker'){
+    armItem(m.arms[1],new THREE.CylinderGeometry(.38,.42,.12,10),mat,[0,0,.66],[Math.PI/2,0,0]);armItem(m.arms[0],new THREE.BoxGeometry(.2,.2,.7),dark,[0,-.04,.78]);
+  }else if(kind==='bog_archer'){
+    for(const side of [-1,0,1])backItem(new THREE.CylinderGeometry(.025,.035,.68,5),side?dark:mat,[.17+side*.08,1.25,-.24],[-.2,0,side*.05]);
+  }
+  if(biome==='mesa'||biome==='plains'){
+    const radius=biome==='mesa'?3.8:1.15,vfx=BIOME_VFX[biome];
+    const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.11,radius,48),new THREE.MeshBasicMaterial({color:vfx.hex,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));
+    tell.rotation.x=-Math.PI/2;tell.position.y=.07;tell.visible=false;tell.userData.inverseScale={x:1/proportions[0],y:1/proportions[2],z:1/proportions[1]};tell.scale.set(tell.userData.inverseScale.x,tell.userData.inverseScale.y,tell.userData.inverseScale.z);m.grp.add(tell);m.biomeTell=tell;
+  }
+}
+const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',wounded_hunter:'Wounded Hunter',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon',gale_stalker:'Gale Stalker',wind_archer:'Wind Archer',rootbound:'Rootbound',briar_archer:'Briar Archer',dune_husk:'Dune Husk',sun_archer:'Sun Archer',redclaw:'Redclaw',amber_archer:'Amber Archer',frost_wight:'Frost Wight',ice_archer:'Ice Archer',mirewalker:'Mirewalker',bog_archer:'Bog Archer'};
+const BIOME_NAME_COLOR={plains:'#d8f58c',forest:'#8fcf69',desert:'#ffd36a',mesa:'#ff8968',snowy:'#b9f4ff',swamp:'#a8ca72'};
 function textSprite(text,color='#ffffff',scale=1){
   const cv=document.createElement('canvas');cv.width=256;cv.height=64;const cx=cv.getContext('2d');cx.font='bold 26px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.strokeStyle='rgba(0,0,0,.9)';cx.lineWidth=7;cx.strokeText(text,128,32);cx.fillStyle=color;cx.fillText(text,128,32);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));sp.scale.set(2.8*scale,.7*scale,1);return sp;
 }
 function decorateEncounter(m,ref){
   const name=ENCOUNTER_NAMES[ref.kind];if(!name)return;
-  const friendly=ref.kind.indexOf('caravan_')===0||ref.kind==='pack_mule'||ref.kind==='wounded_hunter',hostile=ref.kind.indexOf('bandit')===0;
-  const label=textSprite(name,friendly?'#8edcff':hostile?'#ff9b82':'#fff');label.position.y=m.wagon?2.35:2.65;m.grp.add(label);
+  const biome=BIOME_HOSTILE_KIND[ref.kind],biomeHostile=!!biome,banditHostile=ref.kind.indexOf('bandit')===0;
+  const friendly=ref.kind.indexOf('caravan_')===0||ref.kind==='pack_mule'||ref.kind==='wounded_hunter',hostile=banditHostile||biomeHostile;
+  const bodyScale=m.silhouetteScale||{x:1,y:1,z:1},width=biomeHostile?.96:1.29,labelScale=biomeHostile?.78:1;
+  const label=textSprite(name,biomeHostile?BIOME_NAME_COLOR[biome]:friendly?'#8edcff':hostile?'#ff9b82':'#fff',labelScale);
+  label.position.y=(m.wagon?2.35:biomeHostile?2.38:2.65)/bodyScale.y;
+  if(biomeHostile)label.scale.set(label.scale.x/bodyScale.x,label.scale.y/bodyScale.y,1/bodyScale.z);
+  label.renderOrder=22;m.grp.add(label);
   const bg=new THREE.Sprite(new THREE.SpriteMaterial({color:0x120f0e,transparent:true,opacity:.9,depthTest:false})),fill=new THREE.Sprite(new THREE.SpriteMaterial({color:friendly?0x55c9ff:0xf05242,depthTest:false}));
-  bg.scale.set(1.35,.13,1);fill.scale.set(1.29,.075,1);bg.position.y=label.position.y-.42;fill.position.set(0,bg.position.y,.01);m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile};
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(m.wagon?1.25:.58,.035,6,30),new THREE.MeshBasicMaterial({color:friendly?0x5dd5ff:0xff5c46,transparent:true,opacity:.7,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.y=.06;m.grp.add(ring);m.encounterUi.ring=ring;
-  if(hostile){const alert=textSprite('?', '#ffd45c',.55),engaged=textSprite('!', '#ff6048',.62);alert.position.y=engaged.position.y=label.position.y+.48;m.grp.add(alert,engaged);m.encounterUi.alert=alert;m.encounterUi.engaged=engaged;}
-  if(hostile){const radius=ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:ref.kind==='bandit_captain'?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;if(ref.kind==='bandit_captain')m.spawnT=2.2;}
+  const barH=biomeHostile?.055:.075,bgW=width+.06;
+  bg.scale.set(bgW/bodyScale.x,(biomeHostile?.095:.13)/bodyScale.y,1/bodyScale.z);fill.scale.set(width/bodyScale.x,barH/bodyScale.y,1/bodyScale.z);bg.position.y=label.position.y-(biomeHostile?.3:.42)/bodyScale.y;fill.position.set(0,bg.position.y,.01);bg.renderOrder=21;fill.renderOrder=22;m.grp.add(bg,fill);m.encounterUi={label,bg,fill,friendly,hostile,width,bodyScale};
+  if(!biomeHostile){const ring=new THREE.Mesh(new THREE.TorusGeometry(m.wagon?1.25:.58,.035,6,30),new THREE.MeshBasicMaterial({color:friendly?0x5dd5ff:0xff5c46,transparent:true,opacity:.7,depthWrite:false}));ring.rotation.x=Math.PI/2;ring.position.y=.06;m.grp.add(ring);m.encounterUi.ring=ring;}
+  if(banditHostile){const alert=textSprite('?', '#ffd45c',.55),engaged=textSprite('!', '#ff6048',.62);alert.position.y=engaged.position.y=label.position.y+.48;m.grp.add(alert,engaged);m.encounterUi.alert=alert;m.encounterUi.engaged=engaged;}
+  if(banditHostile){const radius=ref.kind==='bandit_captain'?4.05:ref.kind==='bandit_brute'?3.65:1.35;const tell=new THREE.Mesh(new THREE.RingGeometry(radius-.1,radius,48),new THREE.MeshBasicMaterial({color:ref.kind==='bandit_captain'?0xff3429:0xff8a45,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false,depthTest:false}));tell.rotation.x=-Math.PI/2;tell.position.y=.08;tell.visible=false;m.grp.add(tell);m.encounterUi.tell=tell;if(ref.kind==='bandit_captain')m.spawnT=2.2;}
 }
 function tickEncounterReadability(m,dt,t){
-  const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1)));u.fill.scale.x=1.29*pct;u.fill.position.x=-(1.29-u.fill.scale.x)/2;
+  const u=m.encounterUi;if(!u)return;const r=m.ref,pct=Math.max(0,Math.min(1,(r.hp||0)/(r.maxHp||1))),scaledWidth=u.width/(u.bodyScale&&u.bodyScale.x||1);u.fill.scale.x=scaledWidth*pct;u.fill.position.x=-(scaledWidth-u.fill.scale.x)/2;
   if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
-  if(r.state==='retreat'){u.label.material.color.set(0xffd26b);u.ring.material.color.set(0xffc34d);}else u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
+  if(r.state==='retreat'){u.label.material.color.set(0xffd26b);if(u.ring)u.ring.material.color.set(0xffc34d);}else if(u.ring)u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
   if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
   else if(u.tell){u.tell.visible=['windup','bruteWind','captainCleave'].includes(r.state);if(u.tell.visible){const charge=r.state==='captainCleave'?Math.min(1,(m.aT||0)/.9):Math.min(1,(m.aT||0)/.7);u.tell.scale.setScalar(.72+charge*.28);u.tell.material.opacity=.45+charge*.45;}}
   if(m.wagon){const wreck=r.kind==='caravan_wreck',damaged=pct<.65,critical=pct<.3;m.grp.rotation.z=wreck?.22:0;if(m.mats[0])m.mats[0].color.set(wreck?0x34271f:critical?0x49301f:damaged?0x5b3822:0x704321);if((damaged||wreck)&&m.grp.visible&&Math.random()<dt*(wreck?18:critical?14:6))spawnParticle({x:m.grp.position.x+(Math.random()-.5),y:m.grp.position.y+1.2,z:m.grp.position.z+(Math.random()-.5),vx:(Math.random()-.5)*.25,vy:.8,vz:(Math.random()-.5)*.25,life:1,grav:-.1,r:.28,g:.28,b:.28});}
@@ -145,6 +210,7 @@ function netAddMob(id, ref){
     tintMob(m);
     const col=ENEMY_FAMILY_COLORS[ref.kind];
     if(col){m.baseCol=col;m.mats.forEach(mm=>mm.color.setRGB(col[0],col[1],col[2]));}
+    decorateBiomeHostile(m,ref.kind);
     if(ref.kind==='bandit_captain')m.grp.scale.setScalar(1.25);
     if(ref.kind==='bandit_brute')m.grp.scale.setScalar(1.18);
     if(ref.kind==='wounded_hunter')m.grp.scale.y=.65;
@@ -167,14 +233,16 @@ function netRemoveMob(id){
   const i=mobs.findIndex(m=>m.net && m.netId===id);
   if(i<0) return;
   const p=mobs[i].grp.position;
-  burst(p.x, p.y+1, p.z, [.34,.52,.28], 18, 2.6, 2.2, .7);
+  const dead=mobs[i],color=dead.baseCol||[.34,.52,.28],major=!!(dead.boss||dead.elite||dead.kind==='bandit_captain');
+  burst(p.x,p.y+1,p.z,color,major?34:18,major?4.2:2.6,major?3:2.2,major?.9:.7);
+  if(major)ringPulse(p.x,p.y+.08,p.z,dead.boss?3.2:1.9,dead.boss?0xff4938:0xffa34f,.4);
   SFX.kill();
   disposeObjectTree(mobs[i].grp);
   mobs.splice(i,1);
 }
 function netMobTick(m, dt, t){
   const r=m.ref, p=m.grp.position;
-  if((r.hp||0)<(m.hp||0)){m.hitT=.16;const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible)burst(p.x,p.y+1,p.z,flash,6,1.5,1.4,.25);}m.hp=r.hp;
+  if((r.hp||0)<(m.hp||0)){const lost=(m.hp||0)-(r.hp||0),ratio=lost/Math.max(1,r.maxHp||m.hp||1);m.hitT=.18+Math.min(.14,ratio*.5);m.hitLean=(Math.random()<.5?-1:1)*(.08+Math.min(.14,ratio));const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible){burst(p.x,p.y+1,p.z,flash,ratio>.2?12:7,ratio>.2?2.2:1.5,1.6,.28);if(ratio>.2)ringPulse(p.x,p.y+.08,p.z,1.15,0xffffff,.18);}}m.hp=r.hp;
   const dx=p.x-player.pos.x,dz=p.z-player.pos.z,important=!!(m.boss||m.elite||m.kind==='bandit_captain');
   const tier=distanceTierSq(dx*dx+dz*dz,important);
   m.grp.visible = (r.dgn||'')===NET.dgn&&tier<3;
@@ -182,6 +250,8 @@ function netMobTick(m, dt, t){
   const stepDt=consumeEntityStep(m,dt,tier);
   if(!stepDt)return;
   dt=stepDt;
+  const aura=BIOME_VFX[BIOME_HOSTILE_KIND[m.kind]];
+  if(aura&&tier===0&&Math.random()<dt*4)spawnParticle({x:p.x+(Math.random()-.5)*.7,y:p.y+.15+Math.random()*1.55,z:p.z+(Math.random()-.5)*.7,vx:0,vy:.22+Math.random()*.28,vz:0,life:.45,grav:0,r:aura.col[0],g:aura.col[1],b:aura.col[2]});
   if(m.orb){
     p.x+=(r.x-p.x)*Math.min(1,dt*10); p.y+=(r.y-p.y)*Math.min(1,dt*10); p.z+=(r.z-p.z)*Math.min(1,dt*10);
     const k=1+Math.sin(t*10+m.phase)*.16;
@@ -215,15 +285,30 @@ function netMobTick(m, dt, t){
   const st=r.state||'';
   if(st!==m.lastState){
     m.lastState=st; m.aT=0;
+    if(['bruteWind','packWind','captainCleave','slamWind','chargeWind','volleyWind','spikeWind'].includes(st)&&
+       m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<11&&
+       (m.boss||m.elite||m.kind==='bandit_captain'||m.kind==='bandit_brute'||m.kind==='redclaw'||m.kind==='gale_stalker'))SFX.slamWarn();
+    if(st==='draw'&&m.kind==='sun_archer'&&m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<14)ringPulse(p.x,p.y+.08,p.z,.72,0xffd34f,.22);
     if(st==='stun'){ m.mats.forEach(mm=>mm.color.setRGB(.55,.7,1)); }
     else if(st==='frozen'){ m.mats.forEach(mm=>mm.color.setRGB(.55,.78,1)); }
     else if(st==='blackhole'){ startBlackholeMob(m, true); }
     else if(m.hitT<=0){ const bc=m.baseCol||[1,1,1]; m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2])); }
   }
   m.aT+=dt;
+  if(m.biomeTell){
+    const mesa=st==='bruteWind'&&m.kind==='redclaw',pack=st==='packWind'&&m.kind==='gale_stalker',active=mesa||pack;
+    m.biomeTell.visible=active;
+    if(active){const duration=mesa?1.05:.52,charge=Math.min(1,m.aT/duration),pulse=.78+charge*.22,inv=m.biomeTell.userData.inverseScale||{x:1,y:1,z:1};m.biomeTell.material.opacity=.28+charge*.62;m.biomeTell.scale.set(inv.x*pulse,inv.y*pulse,inv.z);m.biomeTell.rotation.z+=dt*(mesa?1.2:3.4);}
+  }
   if(st==='blackhole' && m.blackhole){ tickBlackholedMob(m, dt); return; }
   if(!m.grp.visible){ /* skip particle work offscreen-space */ }
-  else if(st==='slamWind'){
+  else if(st==='bruteWind'&&m.kind==='redclaw'){
+    const charge=Math.min(1,m.aT/1.05);m.arms[0].rotation.x=m.arms[1].rotation.x=-.7-charge*1.5;m.legs[0].rotation.x=.2;m.legs[1].rotation.x=-.2;m.grp.rotation.z=Math.sin(t*22)*.018*charge;
+    if(Math.random()<dt*38){const a2=Math.random()*Math.PI*2,r2=1+Math.random()*2.7;spawnParticle({x:p.x+Math.cos(a2)*r2,y:p.y+.1,z:p.z+Math.sin(a2)*r2,vx:-Math.cos(a2)*1.2,vy:.35,vz:-Math.sin(a2)*1.2,life:.35,grav:0,r:.88,g:.32,b:.18});}
+  } else if(st==='packWind'&&m.kind==='gale_stalker'){
+    const charge=Math.min(1,m.aT/.52);m.arms[0].rotation.x=m.arms[1].rotation.x=-1.35;m.legs[0].rotation.x=m.legs[1].rotation.x=.35;m.grp.rotation.z=Math.sin(t*25+m.phase)*.025;
+    if(Math.random()<dt*28){const a2=Math.random()*Math.PI*2,r2=.8+Math.random()*.8;spawnParticle({x:p.x+Math.cos(a2)*r2,y:p.y+.25+Math.random()*.5,z:p.z+Math.sin(a2)*r2,vx:-Math.cos(a2)*1.8,vy:.1,vz:-Math.sin(a2)*1.8,life:.28,grav:0,r:.79,g:.96,b:.42});}
+  } else if(st==='slamWind'){
     m.arms[0].rotation.x=m.arms[1].rotation.x=-Math.min(1,m.aT/1.0)*1.4;
     if(Math.random()<dt*34){
       const a2=Math.random()*6.283;
@@ -284,7 +369,8 @@ function netMobTick(m, dt, t){
   }
   if(m.hitT>0){
     m.hitT-=dt;
-    if(m.hitT<=0 && st!=='stun' && st!=='frozen'){ const bc=m.baseCol||[1,1,1]; m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2])); }
+    if(st!=='stun')m.grp.rotation.z=(m.hitLean||.1)*Math.sin(Math.max(0,m.hitT)*18);
+    if(m.hitT<=0 && st!=='stun' && st!=='frozen'){m.grp.rotation.z=0;const bc=m.baseCol||[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2]));}
   }
 }
 
@@ -292,6 +378,7 @@ function netMobTick(m, dt, t){
 function netFx(m){
   if((m.dgn||'')!==NET.dgn) return;
   if(m.t==='fangBite'){ burst(m.x, m.y, m.z, [.7,.6,.5], 5, 1.6, 1.1, .25); fangSnap(m.x, m.z); return; }
+  if(m.t==='biomeSlam'){burst(m.x,m.y+.15,m.z,BIOME_VFX.mesa.col,30,4.8,2.2,.55);ringPulse(m.x,m.y+.08,m.z,3.8,BIOME_VFX.mesa.hex,.34);SFX.boom();return;}
   if(m.t==='soldierStrike'){ shadowSoldierStrikeVfx(m.x, m.y, m.z, m.yaw||0); return; }
   if(m.t==='secondWind'){ healingPlusVfx(m.x, m.y, m.z, 1.05, 1.15); return; }
   if(m.t==='moteBurst'){ burst(m.x, m.y, m.z, [.6,1,.5], 18, 2.2, 2.4, .55); return; }
@@ -580,8 +667,26 @@ function netSpawnProjectile(m){
     const a=arrows[arrows.length-1];
     a.vel.set(m.vx,m.vy,m.vz);
     a.visual=true;
+    const vfx=BIOME_VFX[EFFECT_BIOME[m.effect]];
+    if(vfx){a.trailCol=vfx.col;for(const child of a.grp.children)if(child.material){child.material=child.material.clone();child.material.color.setHex(vfx.hex);}}
     SFX.bow();
   }
+}
+function netBiomeStatusFx(m){
+  const vfx=BIOME_VFX[EFFECT_BIOME[m&&m.kind]];if(!vfx)return;
+  const x=player.pos.x,y=player.pos.y,z=player.pos.z;
+  burst(x,y+1,z,vfx.col,m.kind==='venom'?22:16,m.kind==='root'?1.2:2.2,m.kind==='root'?.8:2,.55);
+  ringPulse(x,y+.08,z,m.kind==='root'?1.15:1.8,vfx.hex,.42);
+  if(m.kind==='root'){
+    for(let i=0;i<9;i++){const a=i/9*Math.PI*2,h=.65+(i%3)*.16;const rootMesh=new THREE.Mesh(new THREE.CylinderGeometry(.035,.09,h,5),new THREE.MeshLambertMaterial({color:i%2?0x4f6b31:0x6f843e,transparent:true}));rootMesh.position.set(x+Math.cos(a)*(.48+(i%2)*.18),y+h*.45,z+Math.sin(a)*(.48+(i%2)*.18));rootMesh.rotation.z=Math.cos(a)*.32;rootMesh.rotation.x=Math.sin(a)*.32;scene.add(rootMesh);beams.push({mesh:rootMesh,life:1.08,dispose:true});}
+    setTimeout(()=>burst(player.pos.x,player.pos.y+.18,player.pos.z,[.42,.55,.24],18,2.1,1.2,.38),850);
+  }
+}
+function netBiomeHitFx(reason){
+  const effect=String(reason||'').replace(/_arrow$/,'');
+  const vfx=BIOME_VFX[EFFECT_BIOME[effect]];if(!vfx)return;
+  burst(player.pos.x,player.pos.y+1,player.pos.z,vfx.col,12,2,1.7,.38);
+  ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,1.35,vfx.hex,.28);
 }
 
 // ---- gate mirroring ----
@@ -662,6 +767,8 @@ function netMirrorGate(){
     netDragonCareFx,
     addLightningBeam,
     netSpawnProjectile,
+    netBiomeStatusFx,
+    netBiomeHitFx,
     netMirrorGate,
   });
 }

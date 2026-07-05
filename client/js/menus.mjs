@@ -950,12 +950,14 @@ function spawnArrow(x,y,z,dmg,lx,ly,lz){
   arrows.push({grp, vel:dir.multiplyScalar(16), life:3, stuck:false, dmg});
 }
 const _arrowAim=new THREE.Vector3();
+function removeArrowVisual(i){const a=arrows[i];scene.remove(a.grp);if(a.trailCol)a.grp.traverse(o=>{if(o.material)o.material.dispose();});arrows.splice(i,1);}
 function tickArrows(dt){
   for(let i=arrows.length-1;i>=0;i--){
     const a=arrows[i], p=a.grp.position;
     a.life-=dt;
-    if(a.life<=0){ scene.remove(a.grp); arrows.splice(i,1); continue; }
+    if(a.life<=0){removeArrowVisual(i);continue;}
     if(a.stuck) continue;
+    if(a.trailCol&&Math.random()<dt*30)spawnParticle({x:p.x,y:p.y,z:p.z,vx:0,vy:.15,vz:0,life:.26,grav:0,r:a.trailCol[0],g:a.trailCol[1],b:a.trailCol[2]});
     if(!a.bolt) a.vel.y-=4.5*dt;
     else if(Math.random()<dt*42){
       if(a.breathCol) spawnParticle({x:p.x, y:p.y, z:p.z, vx:0, vy:.25, vz:0, life:.32, grav:-.6, r:a.breathCol[0], g:a.breathCol[1], b:a.breathCol[2]});
@@ -965,15 +967,15 @@ function tickArrows(dt){
     p.addScaledVector(a.vel,dt);
     a.grp.lookAt(_arrowAim.copy(p).sub(a.vel));
     if(isSolid(getB(Math.floor(p.x),Math.floor(p.y),Math.floor(p.z)))){
-      if(a.bolt){ burst(p.x,p.y,p.z,a.breathCol||(a.fireball?[1,.5,.12]:[.6,.3,.9]),a.fireball?14:8,2,1.6,.35); scene.remove(a.grp); arrows.splice(i,1); }
-      else { a.stuck=true; a.life=.7; }
+      if(a.bolt){ burst(p.x,p.y,p.z,a.breathCol||(a.fireball?[1,.5,.12]:[.6,.3,.9]),a.fireball?14:8,2,1.6,.35); removeArrowVisual(i); }
+      else { if(a.trailCol)burst(p.x,p.y,p.z,a.trailCol,8,1.4,1.2,.3);a.stuck=true; a.life=.7; }
       continue;
     }
     if(a.visual) continue;                                  // server owns the damage
     const hx=p.x-player.pos.x, hz=p.z-player.pos.z;
     if(Math.hypot(hx,hz)<.5 && p.y>player.pos.y && p.y<player.pos.y+1.8){
       if(!isTownLand(player.pos.x, player.pos.z)) damagePlayer(a.dmg,'local:projectile');
-      scene.remove(a.grp); arrows.splice(i,1);
+      removeArrowVisual(i);
     }
   }
 }

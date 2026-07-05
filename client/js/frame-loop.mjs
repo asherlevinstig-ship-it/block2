@@ -5,6 +5,7 @@ import {api as hudApi,state as hudState} from './hud.mjs';
 import {api as menusApi,state as menusState} from './menus.mjs';
 import {api as networkingApi,state as networkingState} from './networking.mjs';
 import {createPerformanceDiagnostics} from './performance-budget.mjs';
+import {biomeStatus} from './biome-status.mjs';
 const gameContext=window.BlockcraftGameContext;
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -447,6 +448,9 @@ function tick(now){
   requestAnimationFrame(tick);
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
   perfDiagnostics.sample(now);
+  biomeStatus.tick(now);
+  if(biomeStatus.active('frost',now)&&Math.random()<dt*14)spawnParticle({x:player.pos.x+(Math.random()-.5)*1.5,y:player.pos.y+.15+Math.random()*1.8,z:player.pos.z+(Math.random()-.5)*1.5,vx:(Math.random()-.5)*.18,vy:.12,vz:(Math.random()-.5)*.18,life:.7,grav:0,r:.56,g:.92,b:1});
+  if(biomeStatus.active('venom',now)&&Math.random()<dt*9)spawnParticle({x:player.pos.x+(Math.random()-.5)*1.1,y:player.pos.y+.1+Math.random()*1.4,z:player.pos.z+(Math.random()-.5)*1.1,vx:0,vy:.28,vz:0,life:.6,grav:0,r:.51,g:.66,b:.29});
   tickFurnaces(dt);
   tickOnboarding(now);
   tickAbilityTraining(now);
@@ -496,6 +500,7 @@ function tick(now){
     const sprintKey=keys['ShiftLeft']||keys['ShiftRight'];
     let f=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
     let s=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
+    if(biomeStatus.rooted(now)){f=0;s=0;}
     if(cutscene||eventStartLocked()){ f=0; s=0; }
     if(isMeditating && (f!==0 || s!==0 || keys['Space'])){
       stopMeditation();
@@ -757,7 +762,7 @@ function tick(now){
   updateAbilityHUD();
   if(hp>0){
     mp=Math.min(maxMp(), mp+1.2*(1+0.04*(S.int-1))*dt);
-    if(!sprintingNow) sp=Math.min(maxSp(), sp+14*dt);
+    if(!sprintingNow) sp=Math.min(maxSp(), sp+14*biomeStatus.staminaMultiplier(now)*dt);
     if(hp<maxHp() && performance.now()-lastHurt>8000){
       regenAcc+=dt;
       if(regenAcc>=3){ regenAcc=0; hp=Math.min(maxHp(), hp+1+Math.floor((S.vit-1)/5)); }

@@ -2,7 +2,7 @@
 // public gate spawning, and the boss pattern machine. Lifted verbatim out of
 // GameRoom.js and mixed into its prototype; update() stays as the orchestrator.
 const {
-  ANIMAL_BASE_KIND, ANIMAL_DESPAWN_RADIUS, ANIMAL_SPAWN_INTERVAL, BIOME_ANIMAL, DANGER_RINGS, ELITE_FAMILIES,
+  ANIMAL_BASE_KIND, ANIMAL_DESPAWN_RADIUS, ANIMAL_SPAWN_INTERVAL, BIOME_ANIMAL, BIOME_HOSTILE, DANGER_RINGS, ELITE_FAMILIES,
   GATE_DISTANCE_BANDS, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, I, LOCAL_ANIMAL_COUNT_RADIUS,
   LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, animalBudgetFor, dangerRingAt, hostileBudgetFor, townDistance,
   weatherSpawnMods,
@@ -268,18 +268,20 @@ class SpawningMixin {
     });
     for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
   }
-  tickLocalHostileSpawns(dt, clusters) {
+  tickLocalHostileSpawns(dt, clusters, phase='night') {
     if (!clusters || !clusters.length) return;
     if (!this.hostileSpawnAccByCluster) this.hostileSpawnAccByCluster = new Map();
-    const liveKeys = new Set(clusters.map(c => c.key));
+    const liveKeys = new Set(clusters.map(c => phase+':'+c.key));
     for (const key of [...this.hostileSpawnAccByCluster.keys()]) if (!liveKeys.has(key)) this.hostileSpawnAccByCluster.delete(key);
     for (const c of clusters) {
-      const count = this.localHostileCount(c.x, c.z);
-      if (count >= c.hostileBudget) { this.hostileSpawnAccByCluster.set(c.key, 0); continue; }
-      const acc = (this.hostileSpawnAccByCluster.get(c.key) || 0) + dt;
-      if (acc < HOSTILE_SPAWN_INTERVAL) { this.hostileSpawnAccByCluster.set(c.key, acc); continue; }
-      this.hostileSpawnAccByCluster.set(c.key, 0);
-      this.trySpawnMob({ x: c.x, z: c.z }, c);
+      const key=phase+':'+c.key;
+      const count=phase==='day'?this.countOverworldMobsNear(c.x,c.z,LOCAL_HOSTILE_COUNT_RADIUS,(m,meta)=>!!meta.dayActive):this.localHostileCount(c.x,c.z);
+      const budget=phase==='day'?Math.min(2,c.hostileBudget):c.hostileBudget;
+      if (count >= budget) { this.hostileSpawnAccByCluster.set(key, 0); continue; }
+      const acc = (this.hostileSpawnAccByCluster.get(key) || 0) + dt;
+      if (acc < HOSTILE_SPAWN_INTERVAL) { this.hostileSpawnAccByCluster.set(key, acc); continue; }
+      this.hostileSpawnAccByCluster.set(key, 0);
+      this.trySpawnMob({ x: c.x, z: c.z }, c, phase);
     }
   }
   tickLocalAnimalSpawns(dt, clusters) {
@@ -827,7 +829,7 @@ class SpawningMixin {
     }
   }
 
-  trySpawnMob(near, cluster = null) {
+  trySpawnMob(near, cluster = null, phase='night') {
     for (let i = 0; i < 10; i++) {
       const a = Math.random() * Math.PI * 2, d = 26 + Math.random() * 22;
       const x = near.x + Math.cos(a) * d, z = near.z + Math.sin(a) * d;
@@ -838,18 +840,22 @@ class SpawningMixin {
       if (gy < 2) continue;
       let lvl = 1;
       this.state.players.forEach(p => { lvl = Math.max(lvl, p.lvl); });
-      const ring = dangerRingAt(x, z), cfg = DANGER_RINGS[ring];
+      const ring = dangerRingAt(x, z), cfg = DANGER_RINGS[ring],biome=W.biomeAt(x,z),family=BIOME_HOSTILE[biome];
+      if(!family||family.day!==(phase==='day'))continue;
       const ranged = Math.random() < .35;
-      const kind = cfg.family[ranged ? 1 : 0];
+      const kind = ranged?family.ranged:family.melee;
       const id = String(++this.mobSeq);
       const mob = new Mob();
       mob.x = x; mob.y = gy; mob.z = z;
       mob.kind = kind;
-      mob.maxHp = mob.hp = Math.round(((ranged ? 8 : 10) + Math.floor((lvl - 1) * 1.5)) * cfg.hp);
+      mob.maxHp = mob.hp = Math.round(((ranged ? 8 : 10) + Math.floor((lvl - 1) * 1.5)) * cfg.hp*family.hp);
       this.state.mobs.set(id, mob);
-      const meta = this.freshMeta(x, z, Math.round((3 + Math.floor(lvl / 4)) * cfg.dmg), (ranged ? 1.35 : 1.6) + Math.random() * .5, mob.kind, ring, true);
-      meta.arrowDmg = Math.round((2 + Math.floor(lvl / 3)) * cfg.dmg);
-      meta.dangerRing = ring;
+      const meta = this.freshMeta(x, z, Math.round((3 + Math.floor(lvl / 4)) * cfg.dmg*family.dmg), ((ranged ? 1.35 : 1.6) + Math.random() * .5)*family.speed, mob.kind, ring, true);
+      meta.arrowDmg = Math.round((2 + Math.floor(lvl / 3)) * cfg.dmg*family.dmg);
+      meta.dangerRing=ring;meta.biome=biome;meta.biomeDrop=family.drop;meta.biomeBehavior=family.behavior;meta.dayActive=!!family.day;
+      if(family.behavior==='brute'&&!ranged)meta.brute=true;
+      if(family.behavior==='quickshot'&&ranged)meta.quickShot=true;
+      if(family.behavior==='flanker')meta.flank*=1.6;
       this.mobMeta[id] = meta;
       return true;
     }

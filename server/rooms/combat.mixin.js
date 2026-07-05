@@ -759,6 +759,7 @@ class CombatMixin {
       }
       else if (!dgn) {
         items.push({ id: I.MONSTER_MEAT, count: 1 + Math.floor(ring / 2) });
+        if(killedMeta.biomeDrop&&Math.random()<.45)items.push({id:killedMeta.biomeDrop,count:1+Math.floor(ring/2)});
         if (killedMeta.elite) {
           items.push({ id: ring >= 3 ? I.DIAMOND : I.IRON_INGOT, count: ring >= 3 ? 2 : 1 + ring });
           const regional = BIOME_COLLECTIBLE[W.biomeAt(dx, dz)];
@@ -931,18 +932,18 @@ class CombatMixin {
     this.progressRegionalContract(client,'road_spare',{});
     client.send('banditSpared',{campId:meta.banditCampId});
   }
-  fireArrow(mob, dgn, tx, ty, tz, dmg, bolt) {
+  fireArrow(mob, dgn, tx, ty, tz, dmg, bolt, effect='') {
     const sx = mob.x, sy = mob.y + (bolt ? 1.6 : 1.35), sz = mob.z;
     const d = Math.hypot(tx - sx, ty - sy, tz - sz) || 1;
     const spd = bolt ? 10 : 16;
     const a = {
       x: sx, y: sy, z: sz,
       vx: (tx - sx) / d * spd, vy: (ty - sy) / d * spd, vz: (tz - sz) / d * spd,
-      dgn: dgn || '', dmg, bolt: !!bolt, life: bolt ? 2.4 : 3,
+      dgn: dgn || '', dmg, bolt: !!bolt, effect:String(effect||''), life: bolt ? 2.4 : 3,
     };
     if (!bolt) { a.vx += (Math.random() - .5) * 1.1; a.vz += (Math.random() - .5) * 1.1; }   // slight spread
     this.sArrows.push(a);
-    this.sendSpace(dgn, 'arrow', { x: a.x, y: a.y, z: a.z, vx: a.vx, vy: a.vy, vz: a.vz, bolt: !!bolt, dgn: dgn || '' });
+    this.sendSpace(dgn, 'arrow', { x: a.x, y: a.y, z: a.z, vx: a.vx, vy: a.vy, vz: a.vz, bolt: !!bolt, effect:a.effect, dgn: dgn || '' });
   }
 }
 
