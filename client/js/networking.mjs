@@ -10,6 +10,7 @@ import {createCompanionSystem} from './companions.mjs';
 import {createReplicationVisuals} from './replication-visuals.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
+const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;

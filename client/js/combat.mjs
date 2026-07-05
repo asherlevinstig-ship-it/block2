@@ -210,6 +210,8 @@ function raycast(maxDist){
 // slots: 0-8 hotbar, 9-35 backpack. stack: {id, count, dur?} or null
 const inv = new Array(36).fill(null);
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
+const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
+if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 let selected = 0;
 let inventoryModel=null,equipmentModel=null;
 const stackMax=id=>inventoryModel.stackMax(id);

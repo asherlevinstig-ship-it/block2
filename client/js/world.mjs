@@ -3680,6 +3680,7 @@ const UTILITY_DEFS={
 };
 const UTILITY_ORDER=['compass','minimap','world_map','feather_step','party_compass','trail_sense'];
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
+const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
 let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, jobContract=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;

@@ -4,6 +4,7 @@ import {api as combatApi,state as combatState} from './combat.mjs';
 import {api as hudApi,state as hudState} from './hud.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
+const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const uiShellState=gameContext.requireState('uiShell');
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
