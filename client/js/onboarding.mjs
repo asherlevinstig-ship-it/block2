@@ -94,7 +94,8 @@ export function createOnboardingUI(deps) {
     const food = [I.BREAD, I.MONSTER_MEAT, I.COOKED_MEAT, I.HEARTY_SANDWICH].reduce((n, id) => n + countItem(id), 0) >= 3;
     const tool = inv.some(s => {
       const info = s && ITEMS[s.id] && ITEMS[s.id].tool;
-      if (!info || info.cls === 'sword') return false;
+      // swords AND axes are weapons in the gear economy; utility tools are pick/shovel/hoe
+      if (!info || info.cls === 'sword' || info.cls === 'axe') return false;
       const max = toolMaxDur(s), cur = s.dur == null ? max : s.dur;
       return max > 0 && cur / max >= .75;
     });

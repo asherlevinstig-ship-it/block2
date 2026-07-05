@@ -207,11 +207,11 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_promotion_job');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
-    label: 'First Promotion', text: 'Visit the Job Board and choose Adventurer',
+    label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract',
   });
   await expect(page.locator('#rankupwin')).toBeHidden();
   await expect(page.locator('#rewardwin')).toBeHidden();
-  await expect(page.locator('#currentquest')).toContainText('choose Adventurer');
+  await expect(page.locator('#currentquest')).toContainText('take your first Hunter contract');
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('setJob', { job: 'adventurer' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_promotion_contract');
@@ -233,7 +233,8 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect(page.locator('#rewardpanel')).toContainText('WORN IRON PICK');
   await expect(page.locator('#rewardpanel')).toContainText('REPAIR KIT');
   await expect(page.locator('#rewardpanel')).toContainText('COMPASS SENSE');
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(124))).toBe(1);
+  // >=1: the loot economy can roll bonus weapon/armor drops during the journey's combat
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(124))).toBeGreaterThanOrEqual(1);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(102))).toBeGreaterThanOrEqual(8);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(182))).toBe(1);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityUnlocks)).toContain('compass');
@@ -264,8 +265,8 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_d_gate');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('D-Rank Preparation');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(124))).toBe(1);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(183))).toBe(1);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(124))).toBeGreaterThanOrEqual(1);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(183))).toBeGreaterThanOrEqual(1);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(180))).toBe(3);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep?.ready)).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityUnlocks)).toContain('compass');

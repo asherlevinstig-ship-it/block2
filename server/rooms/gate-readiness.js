@@ -22,13 +22,14 @@ function maxDurability(stack, info) {
 function gateReadinessForProfile(profile, rank) {
   rank = Math.max(0, Math.min(4, rank | 0));
   const req = REQUIREMENTS[rank], items = stacks(profile);
-  const weapons = items.filter(s => (TOOL_INFO[s.id] && TOOL_INFO[s.id].cls === 'sword') || LEGENDARY_WEAPONS.has(s.id));
+  const weapons = items.filter(s => (TOOL_INFO[s.id] && (TOOL_INFO[s.id].cls === 'sword' || TOOL_INFO[s.id].cls === 'axe')) || LEGENDARY_WEAPONS.has(s.id));
   const weaponOk = weapons.some(s => LEGENDARY_WEAPONS.has(s.id) || (TOOL_INFO[s.id].tier >= req.weapon && (s.plus | 0) >= (req.weaponPlus || 0)));
   const armorTier = ARMOR_TIER[profile && profile.armor && profile.armor.id] || 0;
   const foodCount = items.reduce((n, s) => n + (FOOD_VALUES[s.id] ? Math.max(0, s.count | 0) : 0), 0);
   const toolOk = items.some(s => {
     const info = TOOL_INFO[s.id];
-    if (!info || info.cls === 'sword' || info.tier < req.tool) return false;
+    // swords AND axes are weapons in the gear economy; utility tools are pick/shovel/hoe
+    if (!info || info.cls === 'sword' || info.cls === 'axe' || info.tier < req.tool) return false;
     const max = maxDurability(s, info), current = s.dur == null ? max : Math.max(0, s.dur | 0);
     return current / max >= req.health;
   });
