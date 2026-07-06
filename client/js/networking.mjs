@@ -15,6 +15,7 @@ import {biomeStatus} from './biome-status.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
+if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const player=combatState.player,inv=combatState.inventory;
 const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
 biomeStatus.init(document);
@@ -2573,6 +2574,7 @@ const {chatLine,openChat,closeChat,pendingTeamInvites,teamCol,teamName,myTeamId,
 const SMART_SUGGESTION_KEY='bc_smart_suggestions_v1';
 const SMART_SUGGESTION_COOLDOWN=42000;
 const SMART_SUGGESTION_CHECK_MS=1600;
+const SMART_SUGGESTION_VISIBLE_MS=30000;
 let smartSuggestionState={dismissed:{}, lastActionAt:0};
 let smartSuggestion=null, smartSuggestionNextCheck=0;
 function loadSmartSuggestionState(){
@@ -2703,7 +2705,7 @@ function smartSuggestionsAllowed(){
 }
 function showSmartSuggestion(s){
   if(!s || !coachHud) return;
-  smartSuggestion=s;
+  smartSuggestion={...s,expiresAt:performance.now()+SMART_SUGGESTION_VISIBLE_MS};
   coachTitle.textContent=s.title||'Next Step';
   coachSub.textContent=s.text||'There is something useful you can do next.';
   coachLearnBtn.textContent=s.key?('PRESS '+s.key):'FOLLOW LIGHT';
@@ -2713,6 +2715,12 @@ function showSmartSuggestion(s){
 }
 function tickSmartSuggestions(now){
   if(!coachHud) return;
+  if(smartSuggestion&&now>=smartSuggestion.expiresAt){
+    markSmartSuggestionDone(smartSuggestion.id);
+    coachTrail=null;
+    hideSmartSuggestion();
+    return;
+  }
   if(!smartSuggestionsAllowed()){
     coachHud.classList.add('hidden');
     return;

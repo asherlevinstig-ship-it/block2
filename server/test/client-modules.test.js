@@ -402,6 +402,15 @@ test('Hunter XP curve has explicit rank thresholds and steepens at high rank', a
   }
 });
 
+test('restored Mara progress clears provisional first-quest town guidance', async () => {
+  const combatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(networkingSource, /const JOB_SYSTEM=globalThis\.BlockcraftJobSystem/);
+  assert.match(combatSource, /const JOB_SYSTEM=globalThis\.BlockcraftJobSystem/);
+  assert.match(combatSource, /townGuidanceStep==='quest'\s*&&\s*\(quest\s*\|\|\s*firstQuestMilestoneComplete\(\)\)/);
+  assert.match(combatSource, /townGuidanceActive=false;[\s\S]*tutorialPillarGroup\.visible=false;[\s\S]*tutorialEl\.classList\.add\('hidden'\)/);
+});
+
 test('caravan escort tracking begins only after accepting work from a caravan NPC',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
@@ -414,6 +423,13 @@ test('caravan escort tracking begins only after accepting work from a caravan NP
   assert.doesNotMatch(room,/\['road_escort','road_rescue'/);
   assert.match(spawning,/id: caravan\.id/);
   assert.match(spawning,/road_escort',\{targetId:caravan\.id\}/);
+});
+
+test('top-screen smart hints dismiss themselves after thirty seconds',()=>{
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(networking,/SMART_SUGGESTION_VISIBLE_MS=30000/);
+  assert.match(networking,/expiresAt:performance\.now\(\)\+SMART_SUGGESTION_VISIBLE_MS/);
+  assert.match(networking,/now>=smartSuggestion\.expiresAt[\s\S]*markSmartSuggestionDone\(smartSuggestion\.id\)[\s\S]*hideSmartSuggestion\(\)/);
 });
 
 test('regional road safety stays in the bottom-left event log instead of the side tracker',()=>{
