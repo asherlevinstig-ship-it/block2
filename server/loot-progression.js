@@ -17,13 +17,16 @@ function seededRandom(seed=0x51f15e){
 
 function gearTierForRank(rank){return Math.min(4,Math.max(1,(rank|0)+1));}
 
-function rollSource(source,tier,plus,random){
+function rollSource(source,tier,plus,random,bestByArchetype){
   const spec=LOOT_ECONOMY.weaponSpec(source,tier,plus,random(),random());
   if(!spec)return null;
   const rarity=GEAR_SYSTEM.rollRarity(random(),spec.rarityBonus);
+  // Guaranteed sources (gates, captains) mirror gateWeaponArchetype: they gear the
+  // archetype whose best power score is behind; ties fall back to the table roll.
+  const personalized=(source==='gate'||source==='captain')&&bestByArchetype&&bestByArchetype.sword!==bestByArchetype.axe;
   return {
     source,
-    archetype:spec.archetype,
+    archetype:personalized?(bestByArchetype.axe<bestByArchetype.sword?'axe':'sword'):spec.archetype,
     rankIndex:spec.rank,
     rarityIndex:GEAR_SYSTEM.RARITIES.findIndex(row=>row.id===rarity.id),
     powerScore:spec.rank*10+GEAR_SYSTEM.RARITIES.findIndex(row=>row.id===rarity.id),
@@ -42,6 +45,7 @@ function simulateLootProgression(options={}){
   let drops=0,delivered=0,recovered=0,upgrades=0,rankSkips=0,salvageIron=0,salvageGold=0,lost=0;
   for(let trial=0;trial<trials;trial++){
     let best=tier*10,slots=freeSlots,recoveryOpen=recoverySlots;
+    const bestByArchetype={sword:tier*10,axe:tier*10};
     const attempts=[
       ['bandit',activity.banditsPerHour],
       ['captain',activity.captainsPerHour],
@@ -49,7 +53,7 @@ function simulateLootProgression(options={}){
     ];
     for(const [source,count] of attempts){
       for(let n=0;n<count;n++){
-        const item=rollSource(source,tier,options.shardPlus|0,random);
+        const item=rollSource(source,tier,options.shardPlus|0,random,bestByArchetype);
         if(!item)continue;
         drops++;distribution[item.rankIndex][item.rarityIndex]++;archetypes[item.archetype]++;sourceArchetypes[source][item.archetype]++;
         if(slots<=0){
@@ -58,6 +62,7 @@ function simulateLootProgression(options={}){
           continue;
         }
         slots--;delivered++;
+        if(item.powerScore>bestByArchetype[item.archetype])bestByArchetype[item.archetype]=item.powerScore;
         if(item.powerScore>best){
           upgrades++;if(item.rankIndex>tier+1)rankSkips++;
           best=item.powerScore;

@@ -36,7 +36,9 @@ class EconomyMixin {
   rollWeaponDropForSource(source,tier=0,plus=0,prof=null){
     const spec=LOOT_ECONOMY.weaponSpec(source,tier,plus,Math.random());
     if(!spec)return null;
-    const archetype=source==='gate'&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
+    // Gates and captains are the guaranteed progression sources, so they gear the
+    // player's lagging archetype; bandit trash keeps its thematic axe bias.
+    const archetype=(source==='gate'||source==='captain')&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
     return {...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype),source};
   }
   rollArmorDrop(rank=0,rarityBonus=0,armorType='vanguard'){

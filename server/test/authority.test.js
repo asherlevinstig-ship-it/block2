@@ -5441,6 +5441,21 @@ test('Gate smart loot favours the player weapon archetype that is behind',()=>{
   }finally{Math.random=random;}
 });
 
+test('Captain drops personalize to the lagging archetype instead of the axe table bias',()=>{
+  const room=makeRoom(),client=makeClient('smart_captain_loot'),{prof}=seedPlayer(room,client,{inv:[
+    {id:I.DIA_SWORD,count:1,plus:2,rarity:'rare'},
+    {id:I.WOOD_AXE,count:1},
+  ]});
+  const random=Math.random;Math.random=()=>.99;   // table roll .99 would say sword; the lagging axe must win
+  try{
+    const drop=room.rollWeaponDropForSource('captain',2,0,prof);
+    assert.equal(drop.archetype,'axe');
+    assert.equal(drop.source,'captain');
+    const anonymous=room.rollWeaponDropForSource('captain',2,0,null);
+    assert.equal(anonymous.archetype,'sword','without a profile the thematic table still decides');
+  }finally{Math.random=random;}
+});
+
 test('road caravans spawn visible friendly formations, halt for bandits, and cannot be damaged by players', () => {
   const room = makeRoom(); room.mobSeq = 0;
   const road = W.roadNetworkSpecs()[0]; room.spawnRoadCaravan(road);

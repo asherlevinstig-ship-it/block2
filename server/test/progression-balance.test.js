@@ -134,9 +134,11 @@ test('loot simulation keeps upgrades useful without flooding Mythic gear or rank
   const source={bandit:{sword:0,axe:0},captain:{sword:0,axe:0},gate:{sword:0,axe:0}};
   for(const row of rows)for(const id of Object.keys(source))for(const kind of ['sword','axe'])source[id][kind]+=row.sourceArchetypes[id][kind];
   const axeShare=id=>source[id].axe/(source[id].axe+source[id].sword);
-  assert.ok(axeShare('bandit')>.62&&axeShare('bandit')<.68);
-  assert.ok(axeShare('captain')>.68&&axeShare('captain')<.72);
-  assert.ok(axeShare('gate')>.47&&axeShare('gate')<.53);
+  assert.ok(axeShare('bandit')>.62&&axeShare('bandit')<.68,'bandit trash keeps its thematic axe bias');
+  assert.ok(axeShare('captain')>.55&&axeShare('captain')<.66,'captains personalize toward the lagging archetype after the first drop');
+  assert.ok(axeShare('gate')>.40&&axeShare('gate')<.50,'gates personalize toward the lagging archetype');
+  const overall=Object.values(source).reduce((sum,mix)=>sum+mix.axe,0)/Object.values(source).reduce((sum,mix)=>sum+mix.axe+mix.sword,0);
+  assert.ok(overall<.62,`overall axe share ${(overall*100).toFixed(1)}% stays below the old 65% flood`);
 });
 
 test('full inventories recover gear atomically instead of losing or duplicating rewards', () => {

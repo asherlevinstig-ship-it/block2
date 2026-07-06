@@ -110,9 +110,12 @@ into a power score (`rank×10 + rarity`). The tables and profiles live in
 (one file for server and client); the server rolls all drops authoritatively in
 [`loot-progression.js`](../server/loot-progression.js):
 
-- **Sources:** bandits drop gear rarely (≈4%, low ranks), bandit captains always drop a
-  ranked weapon (12% armor chance), and gate clears always pay out (35% armor chance,
-  rank scales with gate tier and shard `+N`).
+- **Sources:** bandits drop gear rarely (≈4%, low ranks, thematically axe-biased), bandit
+  captains always drop a ranked weapon (12% armor chance), and gate clears always pay out
+  (35% armor chance, rank scales with gate tier and shard `+N`). The guaranteed sources —
+  gates and captains — personalize the weapon archetype to whichever of the killer's
+  sword/axe power scores is behind (`gateWeaponArchetype`); only anonymous rolls fall back
+  to the thematic table bias.
 - **Weapon identity:** swords build **momentum** stacks on repeated hits for a damage
   multiplier; axes hit slower and harder.
 - **Blacksmith services:** classic repair/upgrade plus **reforging** (e.g. Keen = +damage,

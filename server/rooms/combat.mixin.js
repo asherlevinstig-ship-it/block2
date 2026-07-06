@@ -751,7 +751,8 @@ class CombatMixin {
         if (killedMeta.banditCaptain) {
           items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + ring });
           const regional=BIOME_COLLECTIBLE[W.biomeAt(dx,dz)];if(regional)items.push({id:regional.item,count:1+Math.floor(ring/2)});
-          const weapon=this.rollWeaponDropForSource('captain',ring);if(weapon)items.push(weapon);
+          const killerRec=this.profileFor(client);
+          const weapon=this.rollWeaponDropForSource('captain',ring,0,killerRec&&killerRec.prof);if(weapon)items.push(weapon);
           const armor=this.rollArmorDropForSource('captain',ring);if(armor)items.push(armor);
         } else {
           const weapon=this.rollWeaponDropForSource('bandit',ring);if(weapon)items.push(weapon);
