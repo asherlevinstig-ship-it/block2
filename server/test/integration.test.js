@@ -148,7 +148,9 @@ async function main() {
   await test('local chat respects range while party chat crosses distance', async () => {
     for (let i = 0; i < 22; i++) {
       const self = B.state.players.get(B.sessionId);
-      B.send('move', { x: self.x + 7, y: self.y, z: self.z, yaw: 0 });
+      // this harness client has no collision physics, so it flies above the terrain:
+      // sliding at spawn height would clip into hills and trip the anti-noclip guard
+      B.send('move', { x: self.x + 7, y: 60, z: self.z, yaw: 0 });
       await wait(180);
     }
     const separation = Math.hypot(B.state.players.get(B.sessionId).x - me().x, B.state.players.get(B.sessionId).z - me().z);
