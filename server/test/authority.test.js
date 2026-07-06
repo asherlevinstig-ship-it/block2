@@ -5299,6 +5299,24 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   assert.equal(client.sent.at(-1).msg.reason, 'range');
 });
 
+test('skyship arrival lands the passenger on Western Frontier terrain (terrainHeight is exported)', () => {
+  const room = makeRoom(), client = makeClient('westwind_rider');
+  room.clients.push(client);
+  room.skyshipEpoch = Date.now();
+  room.dirtyPlayers = room.dirtyPlayers || new Set();
+  seedPlayer(room, client, { x: W.TOWN.TC - 42, y: W.TOWN.G + 25, z: W.TOWN.TC });
+  room.skyshipPassengers = new Map([[client.sessionId, {
+    slot: 0, party: false, paid: SKYSHIP_BOARD_GOLD, departed: true,
+    departAt: Date.now() - 60000, arriveAt: Date.now() - 1, token: room.tokens.get(client.sessionId),
+  }]]);
+  room.tickSkyship(Date.now());
+  const p = room.state.players.get(client.sessionId);
+  assert.equal(room.skyshipPassengers.size, 0, 'the seat is released on arrival');
+  assert.equal(p.x, W.LAVA_BORDER_WIDTH + 32);
+  assert.equal(p.y, W.terrainHeight(p.x, p.z) + 1.05, 'the passenger stands on real terrain, not inside it');
+  assert.equal(client.sent.at(-1).type, 'skyshipArrived');
+});
+
 test('danger rings increase with radial distance and far camp treasure scales up', () => {
   assert.equal(DANGER_RINGS.length, 4);
   assert.equal(dangerRingAt(W.TOWN.TC, W.TOWN.TC), 0);

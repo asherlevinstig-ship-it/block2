@@ -637,7 +637,7 @@ function createWorld() {
 
 module.exports = {
   WX, WH, TOWN, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
-  generate, getB, setB, idx, inWorld, isSolid, standHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
+  generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, isTrainingMeadowLand, buildTrainingMeadow,
   buildGuildHallBase,
