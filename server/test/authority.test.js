@@ -582,6 +582,28 @@ test('armor archetypes authoritatively alter the allowed movement envelope',()=>
   assert.ok(scout.x-100>bulwark.x-100);
 });
 
+test('movement into solid terrain is rejected server-side (anti-noclip)',()=>{
+  const room=makeRoom(),client=makeClient('noclip_hunter');
+  room.lastMoveMsg=new Map();
+  // build a stone slab in the harness world: solid ground at y 10..13, open air above
+  for(let x=148;x<=153;x++)for(let z=148;z<=153;z++)for(let y=10;y<=13;y++)room.world.setB(x,y,z,W.B.STONE);
+  const gx=150.5,gz=150.5,gy=14.05;
+  seedPlayer(room,client,{x:gx,z:gz,y:gy});
+  const p=room.state.players.get(client.sessionId);
+  const step=()=>room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  // burying yourself in the ground is never accepted, no matter how often it is retried
+  for(let i=0;i<5;i++){step();room.handleMove(client,{x:gx,y:gy-4,z:gz,yaw:0});}
+  assert.equal(p.y,gy,'a body inside solid terrain is rejected every time');
+  assert.deepEqual(room.pvel.get(client.sessionId),{x:0,z:0},'rejected packets zero the tracked velocity');
+  // normal movement through air still flows
+  step();room.handleMove(client,{x:gx+1.5,y:gy,z:gz,yaw:0});
+  assert.equal(p.x,gx+1.5,'valid air destinations are unaffected');
+  // a player who is already embedded (block dropped on them) may move out freely
+  p.y=gy-4;
+  step();room.handleMove(client,{x:p.x,y:gy,z:gz,yaw:0});
+  assert.equal(p.y,gy,'an embedded player can escape to valid air');
+});
+
 test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is protected',()=>{
   const room=makeRoom(),client=makeClient('recovery_hunter');
   const full=Array.from({length:36},()=>({id:I.COAL,count:64}));

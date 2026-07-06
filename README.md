@@ -79,7 +79,7 @@ no bedrock, and a 10-block reach check from the editing player.
 
 | System            | Authority | Notes |
 |-------------------|-----------|-------|
-| Movement          | client    | position relayed at ~12 Hz, speed-clamped server-side (mounted clamp is looser); no anti-noclip |
+| Movement          | client    | position relayed at ~12 Hz, speed-clamped server-side (mounted clamp is looser, armor archetype scales it); destinations that bury the body in solid blocks are rejected (no terrain camping), with an escape rule for embedded players and a lag-resync valve — thin-wall tunneling into open air is still possible |
 | Block edits       | server    | validated (bounds, block id, reach, town/land/event protection), then synced to everyone |
 | Overworld mobs    | server    | 10 Hz AI: local-density spawning by danger ring, chase/attack (`hurt` msg), die (`xp` msg to killer) |
 | Animals           | server    | biome-flavored passive spawns; hunting drops meat + biome collectibles |

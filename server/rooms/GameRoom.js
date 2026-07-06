@@ -658,6 +658,7 @@ class GameRoom extends Room {
     this.abilityState.delete(client.sessionId);
     this.abilityBuffs.delete(client.sessionId);
     if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
+    if (this.moveRejects) this.moveRejects.delete(client.sessionId);
     if (this.monkAuraAt) this.monkAuraAt.delete(client.sessionId);
     if (this.prospectAt) this.prospectAt.delete(client.sessionId);
     if (this.serverEvent) {
@@ -2807,7 +2808,31 @@ class GameRoom extends Room {
     sz = clampN(sz, borderMin, borderMax);
     const dy = ny - p.y;
     const maxYStep = 18 * dt + 2.5;
-    const sy = Math.abs(dy) > maxYStep ? p.y + Math.sign(dy) * maxYStep : ny;
+    let sy = Math.abs(dy) > maxYStep ? p.y + Math.sign(dy) * maxYStep : ny;
+    // No-clip guard: a destination that buries the player's body in solid blocks is
+    // rejected, so nobody can camp inside terrain or under the map where melee, mobs,
+    // and line-of-sight checks can't reach them. Two safety valves keep honest-but-
+    // desynced clients from being pinned: a player who is ALREADY embedded (sand or a
+    // rival's block dropped on them) may move freely to dig out, and after three
+    // consecutive rejections a destination in valid air is accepted as a lag resync.
+    // A buried destination is never accepted, no matter how often it is retried.
+    if (!this.moveRejects) this.moveRejects = new Map();
+    const solid = this.spaceSolid(p.dgn || '');
+    const buried = (x, y, z) => solid(Math.floor(x), Math.floor(y + .2), Math.floor(z))
+      || solid(Math.floor(x), Math.floor(y + 1.5), Math.floor(z));
+    if (!buried(p.x, p.y, p.z) && buried(sx, sy, sz)) {
+      const rejects = (this.moveRejects.get(client.sessionId) || 0) + 1;
+      const rx = clampN(nx, borderMin, borderMax), rz = clampN(nz, borderMin, borderMax);
+      if (rejects >= 3 && !buried(rx, ny, rz)) {
+        this.moveRejects.delete(client.sessionId);
+        sx = rx; sy = ny; sz = rz;
+      } else {
+        this.moveRejects.set(client.sessionId, rejects);
+        this.pvel.set(client.sessionId, { x: 0, z: 0 });
+        p.yaw = clampN(m.yaw, -10, 10);
+        return;
+      }
+    } else this.moveRejects.delete(client.sessionId);
     this.pvel.set(client.sessionId, {
       x: Math.max(-velCap, Math.min(velCap, (sx - p.x) / dt)),
       z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
