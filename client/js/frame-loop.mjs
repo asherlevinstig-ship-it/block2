@@ -252,6 +252,45 @@ function bearingLabelTo(x,z){
 function findKnownSite(id){
   return [...regionalLandmarks,...smallDiscoveries].find(s=>s.id===id)||null;
 }
+let trackedRegionalOpportunity=null;
+let displayedRegionalOpportunity=null;
+function nearbyRegionalOpportunity(){
+  if(dim!=='overworld')return null;
+  const a=overworldActivity||{},choices=[];
+  const add=(target,title,kind,danger=true)=>{if(target&&Number.isFinite(target.x)&&Number.isFinite(target.z))choices.push({target,title,kind,danger});};
+  const encounter=a.encounter;
+  if(encounter&&encounter.type==='wounded_hunter')add(encounter,'Wounded Hunter','Road Warden rescue',false);
+  else if(encounter&&encounter.type==='merchant_rescue')add(encounter,'Merchant Under Attack','Road Warden rescue');
+  else if(encounter&&encounter.type==='pursuit')add(encounter,'Stolen Supply Pursuit','Road Warden recovery');
+  const activeCaravanContract=clampRegionalContract(regionalContract);
+  if(a.caravan&&activeCaravanContract&&activeCaravanContract.type==='road_escort'&&(!activeCaravanContract.targetId||activeCaravanContract.targetId===a.caravan.id))
+    add(a.caravan,a.caravan.state==='ambushed'?'Caravan Under Attack':'Road Caravan','Active caravan escort',a.caravan.state==='ambushed');
+  if(a.recoveryCamp)add(a.recoveryCamp,'Stolen Supplies Camp','Road Warden recovery');
+  if(a.camp&&a.camp.phase!=='cleared')add(a.camp,a.camp.phase==='captain'?'Bandit Captain':'Bandit Camp','Road Warden camp');
+  if(a.patrol)add(a.patrol,'Roaming Bandit Patrol','Road Warden patrol');
+  for(const site of regionalLandmarks){
+    if(!['bandit_camp','hunter_camp'].includes(site.type))continue;
+    add(site,site.name||(site.type==='bandit_camp'?'Bandit Camp':'Hunter Camp'),'Regional contract',site.type==='bandit_camp');
+  }
+  let best=null,bestDistance=181;
+  for(const choice of choices){const d=Math.hypot(choice.target.x-player.pos.x,choice.target.z-player.pos.z);if(d<bestDistance){best={...choice,distance:d};bestDistance=d;}}
+  if(!best)return null;
+  const ring=dangerRingAtClient(best.target.x,best.target.z),rank=RANKS[Math.max(0,Math.min(4,ring))].n;
+  return {...best,x:best.target.x,z:best.target.z,rank,tracked:!!(trackedRegionalOpportunity&&trackedRegionalOpportunity.x===best.target.x&&trackedRegionalOpportunity.z===best.target.z)};
+}
+globalThis.toggleRegionalOpportunityTracking=()=>{
+  const opportunity=displayedRegionalOpportunity||nearbyRegionalOpportunity();
+  if(!opportunity){showName('No regional trouble nearby');return false;}
+  if(opportunity.tracked){trackedRegionalOpportunity=null;showName('Regional tracking cleared');return true;}
+  trackedRegionalOpportunity={x:opportunity.x,z:opportunity.z,label:opportunity.title};
+  showName('Tracking '+opportunity.title);return true;
+};
+globalThis.resolveRegionalOpportunity=(id='')=>{
+  if(!trackedRegionalOpportunity)return false;
+  const trackedId=trackedRegionalOpportunity.target&&trackedRegionalOpportunity.target.id||'';
+  if(id&&trackedId&&id!==trackedId)return false;
+  trackedRegionalOpportunity=null;displayedRegionalOpportunity=null;return true;
+};
 function utilityCompassTarget(){
   if(progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
@@ -273,6 +312,7 @@ function utilityCompassTarget(){
     if(s) return {label:'Guild', x:s.x, z:s.z};
   }
   if(rc && rc.ready) return {label:'Board', x:HUB.jobs.x, z:HUB.jobs.z};
+  if(trackedRegionalOpportunity)return {label:trackedRegionalOpportunity.label,x:trackedRegionalOpportunity.x,z:trackedRegionalOpportunity.z};
   if(gate) return {label:'Gate', x:gate.x||TOWN.TC, z:gate.z||TOWN.TC};
   if(dim==='overworld') return {label:'Town', x:TOWN.TC, z:TOWN.TC};
   return null;
@@ -347,8 +387,10 @@ function updateDungeonCoordination(now){
 }
 function updateOverworldActivityTracker(){
   if(!activityTrackerEl)return;
-  if(dim!=='overworld'||!overworldActivity||onboardingActive){activityTrackerEl.classList.add('hidden');return;}
-  const a=overworldActivity,c=a.caravan,camp=a.camp,patrol=a.patrol,encounter=a.encounter;
+  if(dim!=='overworld'||onboardingActive){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
+  const acceptedRegionalContract=clampRegionalContract(regionalContract);
+  if(!acceptedRegionalContract){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
+  const a=overworldActivity||{},rawCaravan=a.caravan,caravanContract=clampRegionalContract(regionalContract),c=rawCaravan&&caravanContract&&caravanContract.type==='road_escort'&&(!caravanContract.targetId||caravanContract.targetId===rawCaravan.id)?rawCaravan:null,camp=a.camp,patrol=a.patrol,encounter=a.encounter;
   let title='',text='',target=null,danger=false;
   if(encounter&&encounter.type==='wounded_hunter'){title='Wounded Hunter';text='Reach the hunter and provide aid before nightfall.';target=encounter;}
   else if(encounter&&encounter.type==='merchant_rescue'){title='Merchant Rescue';text='Defeat '+(encounter.remaining|0)+' attackers before the merchant falls.';target=encounter;danger=true;}
@@ -360,16 +402,24 @@ function updateOverworldActivityTracker(){
   else if(camp&&camp.phase==='guards'){title='Bandit Camp';text='Guards remaining: '+(camp.guards|0)+'. Clear them to draw out the captain.';target=camp;danger=true;}
   else if(patrol){title='Bandit Tracks';text='A roaming patrol is active nearby.';target=patrol;danger=true;}
   else if((a.discountUntil||0)>Date.now()){title='Merchant Favour';text='Road merchant discount active for '+Math.max(1,Math.ceil((a.discountUntil-Date.now())/60000))+' min.';}
-  else if(a.roadSafety){
-    const safety=a.roadSafety;title='Regional Roads · '+String(safety.tier||'contested').toUpperCase();
-    text=(safety.score|0)+'/100 safety · '+((safety.score|0)>=70?'fewer patrols and more caravans':(safety.score|0)<35?'heavy patrol pressure and scarce caravans':'roads remain contested');danger=(safety.score|0)<35;
+  if(!title){
+    const opportunity=nearbyRegionalOpportunity();
+    if(opportunity){title=opportunity.title;text=opportunity.kind;target=opportunity.target;danger=opportunity.danger;}
+    else {displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
   }
-  if(!title){activityTrackerEl.classList.add('hidden');return;}
   let nav='';
   if(target){const d=Math.hypot(target.x-player.pos.x,target.z-player.pos.z);nav=d<35?'Nearby':d<90?'In the surrounding region':'Far away';if(utilityEquipped('compass')||(target===patrol&&utilityEquipped('trail_sense')))nav=bearingLabelTo(target.x,target.z)+' · '+Math.round(d)+'m';}
   const mapOn=utilityEquipped('minimap')||utilityEquipped('world_map');if(target)nav+=(nav?' · ':'')+(mapOn?'shown on map':'equip Mini Map to plot');
   activityTrackerEl.classList.remove('hidden');activityTrackerEl.classList.toggle('danger',danger);
-  activityTrackerEl.innerHTML='<div class="at">'+escHTML(title)+'</div><div class="av">'+escHTML(text)+'</div>'+(nav?'<div class="am">'+escHTML(nav)+'</div>':'');
+  let detail='';displayedRegionalOpportunity=null;
+  if(target){
+    const ring=dangerRingAtClient(target.x,target.z),rank=RANKS[Math.max(0,Math.min(4,ring))].n;
+    const rc=clampRegionalContract(regionalContract),relevant=rc&&(!rc.targetId||rc.targetId===target.id)?'ACTIVE CONTRACT':'ROAD WARDEN WORK';
+    const tracked=!!(trackedRegionalOpportunity&&trackedRegionalOpportunity.x===target.x&&trackedRegionalOpportunity.z===target.z);
+    displayedRegionalOpportunity={target,x:target.x,z:target.z,title,kind:relevant,rank,tracked,danger};
+    detail='<div class="ar"><b>'+escHTML(rank)+'-RANK AREA</b><span>'+escHTML(relevant)+'</span><kbd>P</kbd> '+(tracked?'UNTRACK':'TRACK')+'</div>';
+  }
+  activityTrackerEl.innerHTML='<div class="at">'+escHTML(title)+'</div><div class="av">'+escHTML(text)+'</div>'+(nav?'<div class="am">'+escHTML(nav)+'</div>':'')+detail;
 }
 function updateEncounterPrompt(){
   if(!encounterPromptEl||dim!=='overworld'||!overworldActivity){if(encounterPromptEl)encounterPromptEl.classList.add('hidden');return;}
@@ -387,7 +437,8 @@ function updateEncounterPrompt(){
   const d=Math.hypot(c.x-player.pos.x,c.z-player.pos.z);
   if(d>18){encounterPromptEl.classList.add('hidden');return;}
   const danger=c.state==='ambushed';encounterPromptEl.classList.toggle('danger',danger);
-  encounterPromptEl.textContent=danger?'Defend Wagon · defeat the attacking bandits':'Escort Caravan · remain nearby to earn escort credit';
+  const rc=clampRegionalContract(regionalContract),accepted=rc&&rc.type==='road_escort'&&(!rc.targetId||rc.targetId===c.id);
+  encounterPromptEl.textContent=danger?'Caravan Under Attack · defeat the attacking bandits':accepted?'Escort Accepted · remain near the convoy':'G · Talk to Caravan Merchant · escort work available';
   encounterPromptEl.classList.remove('hidden');
 }
 function updateInfoHud(held){

@@ -443,6 +443,7 @@ class GameRoom extends Room {
     this.onMessage('discoverySight', (client, m) => this.handleDiscoverySight(client, m));
     this.onMessage('regionalContracts', (client) => this.sendRegionalContracts(client));
     this.onMessage('regionalContractAccept', (client, m) => this.handleRegionalContractAccept(client, m));
+    this.onMessage('caravanContractAccept', (client, m) => this.handleCaravanContractAccept(client, m));
     this.onMessage('regionalContractAbandon', (client) => this.handleRegionalContractAbandon(client));
     this.onMessage('regionalContractClaim', (client) => this.handleRegionalContractClaim(client));
     this.onMessage('regionalContractVisit', (client, m) => this.handleRegionalContractVisit(client, m));
@@ -2110,7 +2111,7 @@ class GameRoom extends Room {
     });
     const banditCamp=this.pickContractTarget(landmarks.filter(s=>s.type==='bandit_camp'),bucket,79);
     if(banditCamp)offers.push({id:'regional_'+bucket+'_roadcamp_'+banditCamp.id,type:'road_clear_camp',targetId:banditCamp.id,targetType:'bandit_camp',targetName:banditCamp.name,need:1,have:0,title:'Road Warden: Break the Camp',desc:'Clear the named bandit camp and defeat its captain.',...mkReward(banditCamp,78,54),acceptedAt:0,seed:bucket});
-    const roadType=['road_escort','road_rescue','road_recover','road_spare','road_roles'][bucket%5];
+    const roadType=['road_rescue','road_recover','road_spare','road_roles'][bucket%4];
     const roadText={road_escort:['Safe Arrival','Escort a caravan safely to its destination.'],road_rescue:['Roadside Rescue','Defeat a patrol threatening a merchant caravan.'],road_recover:['Stolen Manifest','Recover supplies carried to a bandit camp.'],road_spare:['Mercy with Teeth','Spare one surrendered bandit and recover their stolen goods.'],road_roles:['Know the Enemy','Defeat three specialist bandits.']}[roadType];
     offers.push({id:'regional_'+bucket+'_'+roadType,type:roadType,targetId:'',targetType:'road_warden',targetName:'Regional Roads',need:roadType==='road_roles'?2:1,have:0,title:'Road Warden: '+roadText[0],desc:roadText[1],rewardGold:72,rewardXp:Math.max(48,hunterXpForActivity(level,'guild_contract')),rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:0,seed:bucket});
     return offers;
@@ -2160,6 +2161,22 @@ class GameRoom extends Room {
     }
     this.sendRegionalContracts(client);
   }
+  handleCaravanContractAccept(client, m) {
+    const rec=this.profileFor(client),p=this.state.players.get(client.sessionId),id=String(m&&m.id||'');
+    const caravan=this.roadCaravans&&this.roadCaravans.get(id),merchant=caravan&&this.state.mobs.get(caravan.merchantId);
+    if(!rec||!p||p.dgn||!caravan||!merchant||Math.hypot(p.x-merchant.x,p.z-merchant.z)>7)
+      return client.send('regionalContractReject',{reason:'range'});
+    if(rec.prof.regionalContract)return client.send('regionalContractReject',{reason:'active'});
+    const ring=dangerRingAt(merchant.x,merchant.z),contract={
+      id:'caravan_escort_'+caravan.id+'_'+Date.now(),type:'road_escort',targetId:caravan.id,targetType:'caravan',targetName:'Road Caravan',
+      need:1,have:0,title:'Safe Arrival',desc:'Stay with this caravan until it reaches its destination.',
+      rewardGold:Math.round(72*DANGER_RINGS[ring].loot),rewardXp:Math.max(48,hunterXpForActivity(rec.prof.S.lvl,'guild_contract')),
+      rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:Date.now(),seed:Date.now(),
+    };
+    rec.prof.regionalContract=contract;caravan.escorts.add(client.sessionId);this.dirtyPlayers.add(rec.token);
+    client.send('regionalContractUpdate',{active:this.publicRegionalContract(contract),caravan:true});
+    client.send('chat',{name:'[Caravan]',text:'Escort accepted. Stay near the convoy until it reaches safety.'});
+  }
   handleRegionalContractAbandon(client) {
     const rec = this.profileFor(client);
     if (!rec) return;
@@ -2180,23 +2197,35 @@ class GameRoom extends Room {
     for (const it of rewardItems) this.addRewardItem(rec.prof, it.id, it.count);
     const done = this.publicRegionalContract(c);
     rec.prof.regionalContract = null;
-    let roadWardenMilestone = null;
+    let roadWardenMilestone = null, rewardGear = null, rewardGearRecovered = false;
     if(String(c.type||'').startsWith('road_')){
       const beforeRep=rec.prof.roadWardenRep|0;
       rec.prof.roadWardenRep=Math.min(9999,(rec.prof.roadWardenRep|0)+1);
       if(rec.prof.roadWardenRep>=3)this.unlockUtility(client,'trail_sense','Road Warden reputation III');
       const milestone=[
+        {rep:1,name:'Roadhand',reward:'A Road Warden field cache awarded.'},
         {rep:3,name:'Trail Reader',reward:'Trail Sense unlocked and iron added to road merchant stock.'},
         {rep:6,name:'Road Warden',reward:'Cooked provisions unlocked and permanent merchant prices improved.'},
         {rep:9,name:'Highway Shield',reward:'Maximum permanent Road Warden discount unlocked.'},
       ].find(row=>beforeRep<row.rep&&rec.prof.roadWardenRep>=row.rep);
-      if(milestone)roadWardenMilestone=milestone;
+      if(milestone){
+        roadWardenMilestone=milestone;
+        const rank=Math.max(0,Math.min(4,hunterRankIndexForLevel(rec.prof.S.lvl)));
+        rewardGear=milestone.rep===6
+          ?{...this.rollArmorDrop(rank,.08+milestone.rep*.01,rank>=3?'bulwark':'vanguard'),source:'road_warden'}
+          :{...this.rollWeaponDrop(rank,.08+milestone.rep*.01,this.gateWeaponArchetype(rec.prof)),source:'road_warden'};
+        if(this.addGearRewardItem(rec.prof,rewardGear)){
+          const queued=this.queueGearRecovery(rec.prof,rewardGear,'road_warden');
+          rewardGearRecovered=!!queued;
+          if(!queued)rewardGear=null;
+        }
+      }
       this.adjustRoadSafety(2, 'warden_contract');
     }
     this.unlockUtility(client, 'compass', 'Guild contract complete');
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
-    client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems, roadWardenRep: rec.prof.roadWardenRep | 0, roadWardenMilestone });
+    client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems, rewardGear, rewardGearRecovered, roadWardenRep: rec.prof.roadWardenRep | 0, roadWardenMilestone });
     client.send('profile', rec.prof);
     this.sendRegionalContracts(client);
   }

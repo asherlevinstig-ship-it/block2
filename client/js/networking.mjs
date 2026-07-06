@@ -10,11 +10,13 @@ import {createCompanionSystem} from './companions.mjs';
 import {createReplicationVisuals} from './replication-visuals.mjs';
 import {createGearRewardPresenter} from './gear-rewards.mjs';
 import {createCombatFeedback} from './combat-feedback.mjs';
+import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const player=combatState.player,inv=combatState.inventory;
+const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
 biomeStatus.init(document);
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
@@ -516,6 +518,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('firstQuestReward', m=>applyFirstQuestRewardResult(m));
     room.onMessage('grant', m=>{
+      if(m&&['discovery','bandit_rescue','caravan_recovery'].includes(m.source))OVERWORLD_RESULTS.recordGrant(m);
       if(m.xp) gainXP(m.xp);
       if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]){
         const received=receiveRewardItem(it);if(received)GEAR_REWARDS.present(received);
@@ -547,6 +550,8 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('discoveryResult',m=>{
       if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired'));
+      if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');
+      OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Job Board if your contract is ready.'});
     });
     room.onMessage('discoverySighted',m=>{
       if(!m||!m.id)return;const fresh=!discoveredIds.has(m.id);discoveredIds.add(m.id);updateLandMinimap();
@@ -558,11 +563,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('banditCampState',m=>{
       if(!m)return;
       if(m.phase==='captain')sysMsg('<b>Bandit Captain!</b> The camp leader has entered the fight.');
-      else if(m.phase==='cleared'){discoveredIds.add(m.id);updateLandMinimap();sysMsg('<b>Bandit Camp Cleared!</b> The camp chest is unlocked for a short time.');}
+      else if(m.phase==='cleared'){discoveredIds.add(m.id);updateLandMinimap();sysMsg('<b>Bandit Camp Cleared!</b> The camp chest is unlocked for a short time.');if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');OVERWORLD_RESULTS.show({title:'BANDIT CAMP CLEARED',summary:m.name||'The captain has fallen.',contract:regionalContract&&regionalContract.ready?'READY':'UPDATED',next:'Open the camp chest before it locks again.'});}
     });
     room.onMessage('banditPatrolSighted',m=>{if(m)sysMsg('<b>Bandit tracks:</b> '+escHTML(m.text||'A patrol has passed nearby.'));});
-    room.onMessage('banditCaravanRescued',()=>sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.'));
-    room.onMessage('banditSpared',()=>sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.'));
+    room.onMessage('banditCaravanRescued',m=>{sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.');if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'CARAVAN RESCUED',summary:'The merchant convoy can continue safely.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue along the road.'});});
+    room.onMessage('banditSpared',m=>{sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.');if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'SURRENDER ACCEPTED',summary:'The stolen supplies were returned without another kill.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue Road Warden work.'});});
     room.onMessage('caravanState',m=>{
       if(!m)return;
       if(m.state==='departed')sysMsg('A merchant caravan has departed along the regional road.');
@@ -585,8 +590,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
     room.onMessage('roadSafetyChanged',m=>{
       if(!m)return;roadSafety=Math.max(0,Math.min(100,m.score|0));
+      OVERWORLD_RESULTS.recordSafety(m);
       refreshRoadSafetyScenes();
-      const direction=(m.delta|0)>0?'improved':'worsened';sysMsg('Regional road safety <b>'+direction+'</b> · '+roadSafety+'/100 · '+escHTML(String(m.tier||'contested').toUpperCase()));
+      const direction=(m.delta|0)>0?'improved':'worsened';eventLog('Regional road safety '+direction+' · '+roadSafety+'/100 · '+String(m.tier||'contested').toUpperCase(),'[Roads]');
       renderRegionalContractsUI();
     });
     room.onMessage('regionalContracts',m=>{
@@ -601,13 +607,21 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('regionalContractReady',m=>{
       const c=clampRegionalContract(m&&m.active);
-      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Job Board'); }
+      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Job Board');OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Job Board to claim your rewards.'}); }
     });
     room.onMessage('regionalContractClaimed',m=>{
       const c=clampRegionalContract(m&&m.contract);
       if(m&&m.rewardXp) gainXP(m.rewardXp|0);
       if(m&&m.rewardGold) addGold(m.rewardGold|0);
       if(Array.isArray(m&&m.rewardItems)) for(const it of m.rewardItems) if(ITEMS[it.id]) addItem(it.id,it.count||1);
+      if(m&&m.rewardGear){
+        if(m.rewardGearRecovered){
+          const stack=rewardGearStack(m.rewardGear);
+          if(stack)GEAR_REWARDS.present({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:null});
+        }else{
+          const received=receiveRewardItem(m.rewardGear);if(received)GEAR_REWARDS.present(received);
+        }
+      }
       if(typeof (m&&m.roadWardenRep)==='number') roadWardenRep=Math.max(0,m.roadWardenRep|0);
       regionalContract=null;
       renderRegionalContractsUI();

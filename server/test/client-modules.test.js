@@ -124,7 +124,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(runtimeSource, /Caravan Under Attack/);
   assert.match(runtimeSource, /utilityEquipped\('compass'\)/);
   assert.match(runtimeSource, /mapUtility&&overworldActivity/);
-  assert.match(runtimeSource, /Escort Caravan/);
+  assert.match(runtimeSource, /Talk to Caravan Merchant/);
   assert.match(html, /id="kinghud"/);
   assert.match(runtimeSource, /CROWN · SQUAD/);
   assert.match(runtimeSource, /Final minute!/);
@@ -400,6 +400,34 @@ test('Hunter XP curve has explicit rank thresholds and steepens at high rank', a
     assert.equal(hunterRankIndexForLevel(level), serverProgression.hunterRankIndexForLevel(level), `client/server rank parity at Level ${level}`);
     assert.equal(hunterActivityXpForLevel(level, .75), serverProgression.hunterActivityXpForLevel(level, .75), `client/server reward parity at Level ${level}`);
   }
+});
+
+test('caravan escort tracking begins only after accepting work from a caravan NPC',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  const spawning=fs.readFileSync(path.join(__dirname,'..','rooms','spawning.mixin.js'),'utf8');
+  assert.match(frame,/caravanContract&&caravanContract\.type==='road_escort'/);
+  assert.match(frame,/Talk to Caravan Merchant/);
+  assert.match(combat,/caravanContractAccept/);
+  assert.match(room,/handleCaravanContractAccept/);
+  assert.doesNotMatch(room,/\['road_escort','road_rescue'/);
+  assert.match(spawning,/id: caravan\.id/);
+  assert.match(spawning,/road_escort',\{targetId:caravan\.id\}/);
+});
+
+test('regional road safety stays in the bottom-left event log instead of the side tracker',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.doesNotMatch(frame,/title='Regional Roads/);
+  assert.match(networking,/eventLog\('Regional road safety '[\s\S]*'\[Roads\]'\)/);
+  assert.doesNotMatch(networking,/sysMsg\('Regional road safety/);
+});
+
+test('the regional side tracker requires an explicitly accepted regional contract',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/acceptedRegionalContract=clampRegionalContract\(regionalContract\)/);
+  assert.match(frame,/if\(!acceptedRegionalContract\)\{displayedRegionalOpportunity=null;activityTrackerEl\.classList\.add\('hidden'\);return;\}/);
 });
 
 test('client XP previews match the authoritative activity economy', async () => {

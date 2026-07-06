@@ -1516,6 +1516,9 @@ addEventListener('keydown', e=>{
       return;
     }
     if(e.code==='KeyQ') cast(0);
+    if(e.code==='KeyP'&&!e.repeat&&typeof globalThis.toggleRegionalOpportunityTracking==='function'){
+      e.preventDefault();globalThis.toggleRegionalOpportunityTracking();
+    }
     if(e.code==='KeyR') cast(1);
     if(e.code==='KeyH') cast(2);
     if(e.code==='KeyF' && !e.repeat) primaryAction();
@@ -1806,6 +1809,11 @@ function secondaryAction(){
   }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
   const spared=mobUnderCrosshair(5);
+  if(spared&&spared.net&&spared.ref&&['caravan_merchant','caravan_guard'].includes(spared.ref.kind)){
+    const caravan=worldState.overworldActivity&&worldState.overworldActivity.caravan;
+    if(NET.on&&NET.room&&caravan)NET.room.send('caravanContractAccept',{id:caravan.id||''});
+    return;
+  }
   if(spared&&spared.net&&spared.ref&&spared.ref.kind==='wounded_hunter'){
     const encounter=worldState.overworldActivity&&worldState.overworldActivity.encounter;
     if(NET.on&&NET.room&&encounter)NET.room.send('roadsideInteract',{id:encounter.id});

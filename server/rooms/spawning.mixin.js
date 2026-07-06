@@ -632,7 +632,7 @@ class SpawningMixin {
       let caravanPayload = null, caravanBest = Infinity;
       for (const caravan of this.roadCaravans.values()) {
         const wagon = this.state.mobs.get(caravan.wagonId); if (!wagon) continue;
-        const d = Math.hypot(wagon.x - p.x, wagon.z - p.z); if (d < caravanBest) { caravanBest = d; caravanPayload = { x: wagon.x, z: wagon.z, hp: wagon.hp, maxHp: wagon.maxHp, progress: caravan.progress, state: caravan.state, guards: caravan.guardIds.filter(id => this.state.mobs.has(id)).length }; }
+        const d = Math.hypot(wagon.x - p.x, wagon.z - p.z); if (d < caravanBest) { caravanBest = d; caravanPayload = { id: caravan.id, x: wagon.x, z: wagon.z, hp: wagon.hp, maxHp: wagon.maxHp, progress: caravan.progress, state: caravan.state, guards: caravan.guardIds.filter(id => this.state.mobs.has(id)).length }; }
       }
       let campPayload = null, campBest = 180;
       for (const camp of camps) {
@@ -680,7 +680,7 @@ class SpawningMixin {
       const rec = this.profileFor(client); if (!rec) continue;
       this.caravanDiscounts.set(rec.token, Date.now() + 10 * 60 * 1000);
       this.awardGrant(client, { source: 'caravan_escort', xp: 50, items: [{ id: I.IRON_INGOT, count: 2 }] });
-      this.progressRegionalContract(client,'road_escort',{});
+      this.progressRegionalContract(client,'road_escort',{targetId:caravan.id});
       client.send('caravanState', { state: 'arrived', discountUntil: Date.now() + 10 * 60 * 1000 });
     }
     const safety = this.adjustRoadSafety(5, 'caravan_arrived').score;

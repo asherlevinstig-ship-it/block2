@@ -5628,7 +5628,7 @@ test('regional guild contracts rotate through the requested exploration archetyp
     'collect_biome',
     'recover_buried_cache',
     'solve_puzzle_shrine',
-    'visit_road_merchant','road_clear_camp','road_escort',
+    'visit_road_merchant','road_clear_camp','road_rescue',
   ])assert.ok(types.has(type),type+' offer is present');
   for (const offer of offers) {
     assert.ok(offer.id && offer.title && offer.desc);
@@ -5675,7 +5675,23 @@ test('Road Warden reputation milestones unlock utilities and report their reward
   assert.equal(prof.roadWardenRep,3);
   assert.equal(prof.utilityUnlocks.includes('trail_sense'),true);
   assert.equal(claimed.msg.roadWardenMilestone.name,'Trail Reader');
+  assert.equal(claimed.msg.rewardGear.gear,true);
+  assert.equal(claimed.msg.rewardGear.source,'road_warden');
+  assert.equal(prof.inv.some(s=>s&&s.source==='road_warden'),true);
   assert.equal(room.worldProgress.roadSafety,52);
+});
+
+test('Road Warden milestone gear is secured in Loot Recovery when inventory is full',()=>{
+  const room=makeRoom(),client=makeClient('warden-recovery');
+  const {prof}=seedPlayer(room,client,{x:W.TOWN.TC+4.5,y:W.TOWN.G+1,z:W.TOWN.TC-8.5});
+  prof.inv=Array.from({length:36},()=>({id:I.COAL,count:64}));
+  prof.roadWardenRep=0;
+  prof.regionalContract={id:'road-full',type:'road_rescue',targetId:'',targetType:'road_warden',targetName:'Roads',need:1,have:1,title:'Roadside Rescue',desc:'',rewardGold:10,rewardXp:10,rewardItems:[]};
+  room.handleRegionalContractClaim(client);
+  const claimed=client.sent.find(e=>e.type==='regionalContractClaimed');
+  assert.equal(claimed.msg.rewardGearRecovered,true);
+  assert.equal(prof.lootRecovery.length,1);
+  assert.equal(prof.lootRecovery[0].source,'road_warden');
 });
 
 test('mapping discoveries unlocks navigation utilities server side', () => {
