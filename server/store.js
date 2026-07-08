@@ -15,12 +15,15 @@ const fs = require('fs');
 const path = require('path');
 const JOB_SYSTEM = require('../shared/job-system');
 const GEAR_SYSTEM = require('../shared/gear-system');
+const SHADOW_ARMY = require('../shared/shadow-army');
+const ABILITY_PROGRESSION = require('../shared/ability-progression');
+const FAMILIAR_SYSTEM = require('../shared/familiar-system');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
 const TUTORIAL_VERSIONS = Object.freeze({
   onboarding: 7, ability: 2, intro: 1, gate: 1,
-  townJob: 1, townTavern: 1, townLand: 1,
+  townJob: 1, townTavern: 1, townLand: 1, familiar: 1,
 });
 const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, Math.round(v))) : a; };
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
@@ -29,7 +32,7 @@ const ARMOR_IDS = new Set([137, 183, 184]);
 // Guided-onboarding focus states the persistence layer will accept. Kept local
 // (like ARMOR_IDS/TUTORIAL_VERSIONS) to keep store.js free of game-code requires;
 // must stay in lockstep with PROGRESSION_FOCUS_STATES in rooms/constants.js.
-const PROGRESSION_FOCUS_STATES = new Set(['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
+const PROGRESSION_FOCUS_STATES = new Set(['e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
 const DRAGON_SPECIES = new Set(['ember', 'verdant', 'frost', 'storm', 'void']);
@@ -45,6 +48,22 @@ function sanitizeMountUnlocks(list) {
 function sanitizeFamiliarUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (const k of list) if (FAMILIAR_UNLOCK_IDS.has(k) && !out.includes(k)) out.push(k);
+  return out;
+}
+function sanitizeShadowArmy(list,level=1) {
+  const out=[];
+  const max=SHADOW_ARMY.limits(level).storage;
+  if(Array.isArray(list))for(const raw of list.slice(0,max)){
+    if(!raw||typeof raw!=='object')continue;
+    const kind=cleanShortText(raw.kind,'',32).replace(/[^a-z0-9_:-]/gi,'');
+    if(!kind)continue;
+    out.push({
+      id:cleanShortText(raw.id,'spirit_'+out.length,64),kind,
+      name:cleanShortText(raw.name,raw.boss?'Boss Shadow':'Shadow Soldier',40),
+      rank:clampI(raw.rank,0,5),boss:raw.boss===true,elite:raw.elite===true,
+      level:clampI(raw.level,1,999),capturedAt:clampI(raw.capturedAt,0,4102444800000),
+    });
+  }
   return out;
 }
 function sanitizeDragonCare(care) {
@@ -111,7 +130,11 @@ function defaultProfile(name) {
     jobContractOfferBoards: {},
     adventurerContractsCompleted: 0,
     highestGateRankCleared: -1,
-    gold: 0,
+    gold: 100,
+    starterGoldGranted: true,
+    tavernTokens: 0,
+    tavernTokenDay: '',
+    tavernTokenBoughtToday: 0,
     firstQuestRewardClaimed: false,
     maraRoadReadySwordGranted: false,
     npcQuestChains: {},
@@ -122,19 +145,33 @@ function defaultProfile(name) {
     armor: null,
     mountUnlocks: [],
     familiarUnlocks: [],
+    familiarXp: { shade: 0, fang: 0, mote: 0, sprite: 0 },
+    familiarChallenges: {},
+    shadowArmy: [],
+    abilitySpec: '',
     dragonCare: {},
     dragonNames: {},
     discoveries: [],
     claimedDiscoveries: [],
+    explorationMilestones: [],
+    cartographerRegionClaims: [],
+    cartographerHints: [],
+    cartographerContract: null,
+    treasureMap: null,
+    cartographerIntroSeen: false,
+    cosmeticUnlocks: [],
     regionalContract: null,
     roadWardenRep: 0,
     parkourBestMs: 0,
     utilityUnlocks: [],
     utilityLoadout: { active: '', passive: [] },
     mutedPlayers: [],
+    recallSubject: 'English',
+    recallMastery: { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 },
     progressionFocus: '',
+    systemIntroductions: [],
     firstPromotionSeen: false,
-    tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0 },
+    tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 },
     dungeonRecovery: null,
     skyshipTransit: null,
     pos: [64.5, 20, 71.5],
@@ -255,7 +292,7 @@ function sanitizeDungeonRecovery(raw) {
 }
 
 function sanitizeTutorials(raw, profile) {
-  const out = { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0 };
+  const out = { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 };
   const S = profile && profile.S || {};
   const chains = profile && profile.npcQuestChains || {};
   const legacyTownDone = (S.lvl | 0) >= 3 || (chains['Mara Vale'] | 0) >= 2;
@@ -288,6 +325,9 @@ function sanitizeTutorials(raw, profile) {
     out.townJob = TUTORIAL_VERSIONS.townJob;
     out.townTavern = TUTORIAL_VERSIONS.townTavern;
     out.townLand = TUTORIAL_VERSIONS.townLand;
+  }
+  if (Array.isArray(profile.familiarUnlocks) && profile.familiarUnlocks.length) {
+    out.familiar = TUTORIAL_VERSIONS.familiar;
   }
   return out;
 }
@@ -367,6 +407,13 @@ function sanitizeProfile(p) {
   out.jobContractOffers = out.jobContractOffers.filter(c=>c.job==='adventurer'||c.job===out.job);
   out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
+  // One-time migration: existing profiles created before starter gold receive enough
+  // to reach 100, without refilling players who spend it afterward.
+  out.starterGoldGranted = true;
+  if (p.starterGoldGranted !== true) out.gold = Math.max(100, out.gold);
+  out.tavernTokens = clampI(p.tavernTokens, 0, 1000000);
+  out.tavernTokenDay = typeof p.tavernTokenDay === 'string' ? p.tavernTokenDay.slice(0, 10) : '';
+  out.tavernTokenBoughtToday = clampI(p.tavernTokenBoughtToday, 0, 100);
   if (p.skyshipTransit && typeof p.skyshipTransit === 'object') {
     out.skyshipTransit = {
       route: p.skyshipTransit.route === 'western' ? 'western' : 'western',
@@ -424,19 +471,60 @@ function sanitizeProfile(p) {
   }
   out.mountUnlocks = sanitizeMountUnlocks(p.mountUnlocks);
   out.familiarUnlocks = sanitizeFamiliarUnlocks(p.familiarUnlocks);
+  out.familiarXp = {};
+  const legacyFamiliarXp=!(p.familiarXp&&typeof p.familiarXp==='object');
+  const legacyBond=FAMILIAR_SYSTEM.BOND_XP_THRESHOLDS[FAMILIAR_SYSTEM.tier(out.S.lvl)];
+  for (const kind of FAMILIAR_UNLOCK_IDS) out.familiarXp[kind] = legacyFamiliarXp&&out.familiarUnlocks.includes(kind)
+    ?legacyBond:clampI(p.familiarXp&&p.familiarXp[kind],0,1000000);
+  out.familiarChallenges={};
+  for(const kind of FAMILIAR_UNLOCK_IDS){const raw=p.familiarChallenges&&p.familiarChallenges[kind];if(raw&&typeof raw==='object')out.familiarChallenges[kind]={day:clampI(raw.day,0,100000),progress:clampI(raw.progress,0,1000000),claimed:raw.claimed===true};}
+  out.shadowArmy = sanitizeShadowArmy(p.shadowArmy,out.S.lvl);
+  out.abilitySpec = ABILITY_PROGRESSION.validSpecialization(out.S.path,p.abilitySpec)?p.abilitySpec:'';
   out.dragonCare = sanitizeDragonCare(p.dragonCare);
   out.dragonNames = sanitizeDragonNames(p.dragonNames);
   const cleanDiscoveryList = list => Array.isArray(list) ? [...new Set(list.filter(v => typeof v === 'string' && /^(discovery|major|minor)_[A-Za-z0-9_]+$/.test(v)).slice(0, 512))] : [];
   out.discoveries = cleanDiscoveryList(p.discoveries);
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);
+  out.explorationMilestones = Array.isArray(p.explorationMilestones)
+    ? [...new Set(p.explorationMilestones.map(v => clampI(v, 0, 999)).filter(v => v > 0))].slice(0, 32) : [];
+  out.cartographerRegionClaims = Array.isArray(p.cartographerRegionClaims)
+    ? [...new Set(p.cartographerRegionClaims.map(v => clampI(v, 0, 3)))].slice(0, 4) : [];
+  out.cartographerHints = cleanDiscoveryList(p.cartographerHints);
+  out.cartographerContract = p.cartographerContract && typeof p.cartographerContract === 'object' ? {
+    id: cleanShortText(p.cartographerContract.id, '', 48), region: clampI(p.cartographerContract.region, 0, 3),
+    need: clampI(p.cartographerContract.need, 1, 10), have: clampI(p.cartographerContract.have, 0, 10),
+    rewardGold: clampI(p.cartographerContract.rewardGold, 0, 9999), day: clampI(p.cartographerContract.day, 0, 100000),
+  } : null;
+  out.treasureMap = p.treasureMap && typeof p.treasureMap === 'object' ? {
+    id: cleanShortText(p.treasureMap.id, '', 48), stage: clampI(p.treasureMap.stage, 0, 3),
+    targets: cleanDiscoveryList(p.treasureMap.targets).slice(0, 3), rewardGold: clampI(p.treasureMap.rewardGold, 0, 9999),
+  } : null;
+  out.cartographerIntroSeen = !!p.cartographerIntroSeen;
+  out.cosmeticUnlocks = Array.isArray(p.cosmeticUnlocks)
+    ? [...new Set(p.cosmeticUnlocks.filter(v => v === 'cartographers_mantle'))] : [];
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
   out.roadWardenRep = clampI(p.roadWardenRep, 0, 9999);
   out.parkourBestMs = clampI(p.parkourBestMs, 0, 24 * 60 * 60 * 1000);
   out.utilityUnlocks = sanitizeUtilityUnlocks(p.utilityUnlocks);
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
   out.mutedPlayers = Array.isArray(p.mutedPlayers) ? [...new Set(p.mutedPlayers.map(cleanToken).filter(Boolean))].slice(0, 256) : [];
+  out.recallSubject = ['Computer Science','Information Technology','Religious Education','English'].includes(p.recallSubject) ? p.recallSubject : 'English';
+  out.recallMastery = { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 };
+  const recall = p.recallMastery && typeof p.recallMastery === 'object' ? p.recallMastery : {};
+  out.recallMastery.lastQuestionId = typeof recall.lastQuestionId === 'string' ? recall.lastQuestionId.slice(0,16) : '';
+  out.recallMastery.lastTopic = typeof recall.lastTopic === 'string' ? recall.lastTopic.replace(/[<>]/g,'').slice(0,48) : '';
+  out.recallMastery.totalAttempts = clampI(recall.totalAttempts,0,1000000);
+  out.recallMastery.totalCorrect = Math.min(out.recallMastery.totalAttempts,clampI(recall.totalCorrect,0,1000000));
+  if(recall.items&&typeof recall.items==='object')for(const [id,raw] of Object.entries(recall.items).slice(0,256)){
+    if(!/^(?:q\d{3}|[a-z]{2,4}_[a-z0-9_]{3,40})$/.test(id)||!raw||typeof raw!=='object')continue;
+    const attempts=clampI(raw.attempts,0,1000000);
+    out.recallMastery.items[id]={attempts,correct:Math.min(attempts,clampI(raw.correct,0,1000000)),streak:clampI(raw.streak,0,10000),stage:clampI(raw.stage,0,6),lastAt:clampI(raw.lastAt,0,4102444800000),nextDue:clampI(raw.nextDue,0,4102444800000),lastCorrect:raw.lastCorrect===true};
+  }
   out.progressionFocus = PROGRESSION_FOCUS_STATES.has(p.progressionFocus) ? p.progressionFocus : '';
+  out.systemIntroductions = [...new Set((Array.isArray(p.systemIntroductions) ? p.systemIntroductions : [])
+    .filter(v => typeof v === 'string' && /^[a-z_]{2,32}$/.test(v)).slice(0, 32))];
   if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'next_adventurer_contract';
+  if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job';
   if (out.progressionFocus === 'next_adventurer_contract' && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;
   out.tutorials = sanitizeTutorials(p.tutorials, out);
@@ -708,88 +796,104 @@ class JsonStore {
   constructor(dir) {
     this.dir = dir || path.join(process.cwd(), 'data');
     fs.mkdirSync(path.join(this.dir, 'players'), { recursive: true });
+    this.writeQueue = Promise.resolve();
   }
-  _write(file, obj) {                          // atomic: tmp + rename
+  _enqueue(operation) {
+    this.writeQueue = this.writeQueue.catch(() => {}).then(operation);
+    return this.writeQueue;
+  }
+  async _writeNow(file, obj) {                 // atomic: tmp + rename
     const tmp = file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(obj));
-    fs.renameSync(tmp, file);
+    await fs.promises.writeFile(tmp, JSON.stringify(obj));
+    await fs.promises.rename(tmp, file);
   }
-  _read(file) {
-    try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+  _write(file, obj) {
+    return this._enqueue(() => this._writeNow(file, obj));
+  }
+  async _readNow(file) {
+    try { return JSON.parse(await fs.promises.readFile(file, 'utf8')); }
     catch (e) { return null; }
   }
+  async _read(file) {
+    await this.writeQueue.catch(() => {});
+    return this._readNow(file);
+  }
+  _updateWorld(update) {
+    const file = path.join(this.dir, 'world.json');
+    return this._enqueue(async () => {
+      const current = await this._readNow(file) || {};
+      await this._writeNow(file, update(current));
+    });
+  }
   async loadWorldEdits() {
-    const d = this._read(path.join(this.dir, 'world.json'));
+    const d = await this._read(path.join(this.dir, 'world.json'));
     return (d && d.edits) || {};
   }
   async saveWorldEdits(edits) {
-    const d = this._read(path.join(this.dir, 'world.json')) || {};
-    this._write(path.join(this.dir, 'world.json'), { edits, progress: sanitizeWorldProgress(d.progress), claims: sanitizeLandClaims(d.claims), savedAt: Date.now() });
+    await this._updateWorld(d => ({ edits, progress: sanitizeWorldProgress(d.progress), claims: sanitizeLandClaims(d.claims), savedAt: Date.now() }));
   }
   async loadWorldProgress() {
-    const d = this._read(path.join(this.dir, 'world.json'));
+    const d = await this._read(path.join(this.dir, 'world.json'));
     return sanitizeWorldProgress(d && d.progress);
   }
   async saveWorldProgress(progress) {
-    const d = this._read(path.join(this.dir, 'world.json')) || {};
-    this._write(path.join(this.dir, 'world.json'), { edits: d.edits || {}, progress: sanitizeWorldProgress(progress), claims: sanitizeLandClaims(d.claims), savedAt: Date.now() });
+    await this._updateWorld(d => ({ edits: d.edits || {}, progress: sanitizeWorldProgress(progress), claims: sanitizeLandClaims(d.claims), savedAt: Date.now() }));
   }
   async loadLandClaims() {
-    const d = this._read(path.join(this.dir, 'world.json'));
+    const d = await this._read(path.join(this.dir, 'world.json'));
     return sanitizeLandClaims(d && d.claims);
   }
   async saveLandClaims(claims) {
-    const d = this._read(path.join(this.dir, 'world.json')) || {};
-    this._write(path.join(this.dir, 'world.json'), { edits: d.edits || {}, progress: sanitizeWorldProgress(d.progress), claims: sanitizeLandClaims(claims), savedAt: Date.now() });
+    await this._updateWorld(d => ({ edits: d.edits || {}, progress: sanitizeWorldProgress(d.progress), claims: sanitizeLandClaims(claims), savedAt: Date.now() }));
   }
   async loadChests() {
-    const d = this._read(path.join(this.dir, 'chests.json'));
+    const d = await this._read(path.join(this.dir, 'chests.json'));
     return sanitizeChests((d && d.chests) || {});
   }
   async saveChests(chests) {
-    this._write(path.join(this.dir, 'chests.json'), { chests: sanitizeChests(chests), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'chests.json'), { chests: sanitizeChests(chests), savedAt: Date.now() });
   }
   async loadFurnaces() {
-    const d = this._read(path.join(this.dir, 'furnaces.json'));
+    const d = await this._read(path.join(this.dir, 'furnaces.json'));
     return sanitizeFurnaces((d && d.furnaces) || {});
   }
   async saveFurnaces(furnaces) {
-    this._write(path.join(this.dir, 'furnaces.json'), { furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'furnaces.json'), { furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
   }
   async loadIncubations() {
-    const d = this._read(path.join(this.dir, 'incubations.json'));
+    const d = await this._read(path.join(this.dir, 'incubations.json'));
     return sanitizeIncubations((d && d.incubations) || {});
   }
   async saveIncubations(incubations) {
-    this._write(path.join(this.dir, 'incubations.json'), { incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'incubations.json'), { incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
   }
   async loadNestDragons() {
-    const d = this._read(path.join(this.dir, 'nests.json'));
+    const d = await this._read(path.join(this.dir, 'nests.json'));
     return sanitizeNestDragons((d && d.nests) || {});
   }
   async saveNestDragons(nests) {
-    this._write(path.join(this.dir, 'nests.json'), { nests: sanitizeNestDragons(nests), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'nests.json'), { nests: sanitizeNestDragons(nests), savedAt: Date.now() });
   }
   async loadGates() {
-    const d = this._read(path.join(this.dir, 'gates.json'));
+    const d = await this._read(path.join(this.dir, 'gates.json'));
     return sanitizeGates((d && d.gates) || {});
   }
   async saveGates(gates) {
-    this._write(path.join(this.dir, 'gates.json'), { gates: sanitizeGates(gates), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'gates.json'), { gates: sanitizeGates(gates), savedAt: Date.now() });
   }
   async loadTeams() {
-    const d = this._read(path.join(this.dir, 'teams.json'));
+    const d = await this._read(path.join(this.dir, 'teams.json'));
     return sanitizeTeams((d && d.teams) || {});
   }
   async saveTeams(teams) {
-    this._write(path.join(this.dir, 'teams.json'), { teams: sanitizeTeams(teams), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'teams.json'), { teams: sanitizeTeams(teams), savedAt: Date.now() });
   }
   async loadGuilds() {
-    const d = this._read(path.join(this.dir, 'guilds.json'));
+    const d = await this._read(path.join(this.dir, 'guilds.json'));
     return sanitizeGuilds((d && d.guilds) || {});
   }
   async saveGuilds(guilds) {
-    this._write(path.join(this.dir, 'guilds.json'), { guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
+    await this._write(path.join(this.dir, 'guilds.json'), { guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
   }
   _pfile(token) {
     return path.join(this.dir, 'players', token.replace(/[^A-Za-z0-9_-]/g, '') + '.json');
@@ -799,15 +903,18 @@ class JsonStore {
     // overwrites an existing-but-unreadable profile with a default. (_read swallows both.)
     const file = this._pfile(token);
     let txt;
-    try { txt = fs.readFileSync(file, 'utf8'); }
+    await this.writeQueue.catch(() => {});
+    try { txt = await fs.promises.readFile(file, 'utf8'); }
     catch (e) { if (e.code === 'ENOENT') return null; throw e; }
     try { return JSON.parse(txt); }
     catch (e) { throw new Error('corrupt profile file ' + file + ': ' + e.message); }
   }
-  async savePlayer(token, profile) { this._write(this._pfile(token), { ...profile, savedAt: Date.now() }); }
+  async savePlayer(token, profile) { await this._write(this._pfile(token), { ...profile, savedAt: Date.now() }); }
   async saveModerationReport(report) {
-    fs.mkdirSync(this.dir, { recursive: true });
-    fs.appendFileSync(path.join(this.dir, 'moderation-reports.jsonl'), JSON.stringify(report) + '\n', 'utf8');
+    await this._enqueue(async () => {
+      await fs.promises.mkdir(this.dir, { recursive: true });
+      await fs.promises.appendFile(path.join(this.dir, 'moderation-reports.jsonl'), JSON.stringify(report) + '\n', 'utf8');
+    });
   }
 }
 
@@ -940,12 +1047,20 @@ class FirebaseStore {
   }
 }
 
-function createStore() {
-  if ((process.env.STORE || '').toLowerCase() === 'firebase') {
-    try { return new FirebaseStore(); }
-    catch (e) { console.warn('[store] firebase unavailable (' + e.message + '), falling back to JSON'); }
+function createStore(options = {}) {
+  const env = options.env || process.env;
+  const Firebase = options.FirebaseStoreClass || FirebaseStore;
+  const Json = options.JsonStoreClass || JsonStore;
+  if ((env.STORE || '').toLowerCase() === 'firebase') {
+    try { return new Firebase(); }
+    catch (e) {
+      if ((env.NODE_ENV || '').toLowerCase() === 'production') {
+        throw new Error('Firebase storage was requested but could not initialize: ' + e.message, { cause: e });
+      }
+      console.warn('[store] firebase unavailable (' + e.message + '), falling back to JSON outside production');
+    }
   }
-  return new JsonStore(process.env.DATA_DIR);
+  return new Json(env.DATA_DIR);
 }
 
 module.exports = { createStore, JsonStore, FirebaseStore, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken, TUTORIAL_VERSIONS };

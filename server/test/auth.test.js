@@ -20,7 +20,7 @@ test('accounts use scrypt hashes and verified server sessions', async () => {
   const verified = await auth.login('TEST_HUNTER', 'correct horse battery');
   assert.equal(verified.id, account.id);
 
-  const sid = auth.issueSession(verified);
+  const sid = await auth.issueSession(verified);
   const req = { headers: { cookie: 'other=x; bc_session=' + encodeURIComponent(sid) } };
   assert.deepEqual(auth.authenticateRequest(req), { id: account.id, username: 'test_hunter', displayName: 'Test Hunter' });
   assert.equal(auth.authenticateRequest({ headers: { cookie: 'bc_session=tampered' } }), false);
@@ -40,5 +40,18 @@ test('registration rejects weak credentials and duplicate usernames', async () =
   await assert.rejects(() => auth.register('valid_user', 'short', 'X'), /Password/);
   await auth.register('valid_user', 'long enough password', 'X');
   await assert.rejects(() => auth.register('VALID_USER', 'another good password', 'Y'), /already registered/);
+  auth.stop();
+});
+
+test('concurrent auth saves are serialized without losing sessions', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-'));
+  const auth = new AuthService(dir);
+  const account = await auth.register('queue_test', 'long enough password', 'Queue Test');
+  const sessions = await Promise.all(Array.from({ length: 8 }, () => auth.issueSession(account)));
+  const restarted = new AuthService(dir);
+  for (const sid of sessions) {
+    assert.equal(restarted.authenticateRequest({ headers: { cookie: 'bc_session=' + sid } }).id, account.id);
+  }
+  restarted.stop();
   auth.stop();
 });

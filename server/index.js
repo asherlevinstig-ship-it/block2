@@ -1,50 +1,58 @@
 const path = require('path');
 const http = require('http');
 const express = require('express');
-const { Server } = require('colyseus');
+const { Server } = require('@colyseus/core');
 const { WebSocketTransport } = require('@colyseus/ws-transport');
-const { GameRoom } = require('./rooms/GameRoom');
-const { DungeonRoom } = require('./rooms/DungeonRoom');
-const { getAuthService } = require('./auth');
+const { Encoder } = require('@colyseus/schema');
+const { validateStartup } = require('./startup-config');
+const { securityHeaders } = require('./security-headers');
 
-const app = express();
-app.set('trust proxy', 1);
-getAuthService().attach(app);
-let gameServer;
+Encoder.BUFFER_SIZE = 256 * 1024;
 
-if (process.env.BLOCKCRAFT_E2E === '1') {
-  app.post('/__e2e/shutdown', (_req, res) => {
-    res.status(202).json({ ok: true });
-    setTimeout(() => gameServer.gracefullyShutdown(true), 25);
+async function main() {
+  const config = await validateStartup();
+  process.env.DATA_DIR = config.dataDir;
+
+  // Load stateful services only after configuration and storage preflight pass.
+  const { GameRoom } = require('./rooms/GameRoom');
+  const { DungeonRoom } = require('./rooms/DungeonRoom');
+  const { getAuthService } = require('./auth');
+
+  const app = express();
+  app.set('trust proxy', config.trustProxy);
+  app.use(securityHeaders({ production: config.production }));
+  getAuthService().attach(app);
+  let gameServer;
+
+  if (process.env.BLOCKCRAFT_E2E === '1') {
+    app.post('/__e2e/shutdown', (_req, res) => {
+      res.status(202).json({ ok: true });
+      setTimeout(() => gameServer.gracefullyShutdown(true), 25);
+    });
+  }
+
+  app.use('/shared', express.static(path.join(__dirname, '..', 'shared')));
+  app.use(express.static(path.join(__dirname, '..', 'client')));
+
+  const colyseusBrowserSdk = path.join(path.dirname(require.resolve('@colyseus/sdk/package.json')), 'dist', 'colyseus.js');
+  app.get('/colyseus.js', (_req, res) => res.sendFile(colyseusBrowserSdk));
+  app.get('/three.js', (_req, res) => res.sendFile(require.resolve('three/build/three.min.js')));
+
+  const server = http.createServer(app);
+  gameServer = new Server({
+    transport: new WebSocketTransport({ server }),
+    gracefullyShutdown: process.env.BLOCKCRAFT_E2E !== '1',
   });
+
+  gameServer.define('blockcraft', GameRoom);
+  gameServer.define('dungeon', DungeonRoom).filterBy(['gateId']);
+
+  const PORT = process.env.PORT || 2567;
+  await gameServer.listen(PORT);
+  console.log('Blockcraft server running — open http://localhost:' + PORT);
 }
 
-// runtime-neutral rules consumed by both the Node server and browser client
-app.use('/shared', express.static(path.join(__dirname, '..', 'shared')));
-
-// the game client
-app.use(express.static(path.join(__dirname, '..', 'client')));
-
-// serve the colyseus.js browser SDK (no CDN needed). The npm package's
-// dist/colyseus.js is a Node bundle that references Buffer/ws at init and breaks
-// in browsers, so we serve a prebuilt standalone browser IIFE vendored under
-// client/vendor (regenerate with: npx esbuild colyseus.js --bundle --format=iife
-// --global-name=Colyseus --platform=browser --outfile=client/vendor/colyseus.browser.js).
-const colyseusBrowserSdk = path.join(__dirname, '..', 'client', 'vendor', 'colyseus.browser.js');
-app.get('/colyseus.js', (req, res) => res.sendFile(colyseusBrowserSdk));
-app.get('/three.js', (req, res) => res.sendFile(require.resolve('three/build/three.min.js')));
-
-const server = http.createServer(app);
-gameServer = new Server({
-  transport: new WebSocketTransport({ server }),
-  gracefullyShutdown: process.env.BLOCKCRAFT_E2E !== '1',
+main().catch(error => {
+  console.error('[startup] ' + error.message);
+  process.exitCode = 1;
 });
-
-gameServer.define('blockcraft', GameRoom);
-// One DungeonRoom per gate instance (sub-phase 2a). Registered but not yet joined by the
-// client — the live game still runs dungeons as in-room instances until 2b wires the handoff.
-gameServer.define('dungeon', DungeonRoom).filterBy(['gateId']);
-
-const PORT = process.env.PORT || 2567;
-server.listen(PORT, () =>
-  console.log('Blockcraft server running — open http://localhost:' + PORT));

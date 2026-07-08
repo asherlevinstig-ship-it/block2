@@ -36,6 +36,7 @@ class AuthService {
     this.sessions = new Map();
     this.attempts = new Map();
     this.pendingRegistrations = new Set();
+    this.writeQueue = Promise.resolve();
     fs.mkdirSync(this.dir, { recursive: true });
     this.load();
     // Expired sessions and rate-limit rows are otherwise only reclaimed lazily on
@@ -77,9 +78,14 @@ class AuthService {
   save() {
     const tmp = this.file + '.tmp';
     const sessions = [...this.sessions].map(([id, session]) => ({ id, ...session }));
-    fs.writeFileSync(tmp, JSON.stringify({ accounts: [...this.accounts.values()], sessions }));
-    fs.renameSync(tmp, this.file);
-    try { fs.chmodSync(this.file, 0o600); } catch (_) {}
+    const contents = JSON.stringify({ accounts: [...this.accounts.values()], sessions });
+    const write = async () => {
+      await fs.promises.writeFile(tmp, contents);
+      await fs.promises.rename(tmp, this.file);
+      try { await fs.promises.chmod(this.file, 0o600); } catch (_) {}
+    };
+    this.writeQueue = this.writeQueue.catch(() => {}).then(write);
+    return this.writeQueue;
   }
 
   publicAccount(account) {
@@ -98,7 +104,7 @@ class AuthService {
       const account = { id: 'u_' + crypto.randomBytes(16).toString('hex'), username, displayName: cleanDisplayName(displayName), salt, hash, createdAt: Date.now() };
       this.accounts.set(username, account);
       this.byId.set(account.id, account);
-      this.save();
+      await this.save();
       return account;
     } finally { this.pendingRegistrations.delete(username); }
   }
@@ -114,10 +120,10 @@ class AuthService {
     return account;
   }
 
-  issueSession(account) {
+  async issueSession(account) {
     const sid = b64url(crypto.randomBytes(32));
     this.sessions.set(this.sessionKey(sid), { accountId: account.id, expiresAt: Date.now() + SESSION_MS });
-    this.save();
+    await this.save();
     return sid;
   }
 
@@ -145,13 +151,21 @@ class AuthService {
     return `${COOKIE}=${clear ? '' : encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear ? 0 : Math.floor(SESSION_MS / 1000)}${secure ? '; Secure' : ''}`;
   }
 
-  allowAttempt(req) {
-    const ip = String(req.ip || req.socket && req.socket.remoteAddress || 'unknown');
-    const now = Date.now(), row = this.attempts.get(ip) || { count: 0, resetAt: now + 60000 };
+  consumeAttempt(key, now) {
+    const row = this.attempts.get(key) || { count: 0, resetAt: now + 60000 };
     if (row.resetAt <= now) { row.count = 0; row.resetAt = now + 60000; }
     row.count++;
-    this.attempts.set(ip, row);
+    this.attempts.set(key, row);
     return row.count <= 12;
+  }
+
+  allowAttempt(req, username) {
+    const now = Date.now();
+    const ip = String(req.ip || req.socket && req.socket.remoteAddress || 'unknown');
+    const account = cleanUsername(username);
+    const ipAllowed = this.consumeAttempt('ip:' + ip, now);
+    const accountAllowed = !account || this.consumeAttempt('account:' + account, now);
+    return ipAllowed && accountAllowed;
   }
 
   attach(app) {
@@ -163,12 +177,12 @@ class AuthService {
     });
     app.use('/auth', require('express').json({ limit: '8kb' }));
     const complete = async (req, res, create) => {
-      if (!this.allowAttempt(req)) return res.status(429).json({ ok: false, error: 'Too many authentication attempts.' });
+      if (!this.allowAttempt(req, req.body && req.body.username)) return res.status(429).json({ ok: false, error: 'Too many authentication attempts.' });
       try {
         const account = create
           ? await this.register(req.body && req.body.username, req.body && req.body.password, req.body && req.body.displayName)
           : await this.login(req.body && req.body.username, req.body && req.body.password);
-        const sid = this.issueSession(account);
+        const sid = await this.issueSession(account);
         res.setHeader('Set-Cookie', this.cookie(sid, req));
         res.json({ ok: true, account: this.publicAccount(account) });
       } catch (e) { res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Authentication failed.' }); }
@@ -180,11 +194,11 @@ class AuthService {
       if (!account) return res.status(401).json({ ok: false });
       res.json({ ok: true, account });
     });
-    app.post('/auth/logout', (req, res) => {
+    app.post('/auth/logout', async (req, res) => {
       const sid = parseCookies(req.headers.cookie)[COOKIE];
       if (sid) {
         this.sessions.delete(this.sessionKey(sid));
-        this.save();
+        await this.save();
       }
       res.setHeader('Set-Cookie', this.cookie('', req, true));
       res.json({ ok: true });
