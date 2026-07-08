@@ -1,4 +1,5 @@
 import {disposeObjectTree} from './three-disposal.mjs';
+import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
 
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
@@ -32,19 +33,8 @@ const atlasCanvas = document.createElement('canvas');
 atlasCanvas.width = ATLAS_COLS*TS; atlasCanvas.height = ATLAS_ROWS*TS;
 const actx = atlasCanvas.getContext('2d');
 
-function prng(seed){ let s = seed>>>0; return ()=>{ s = (s*1664525 + 1013904223)>>>0; return s/4294967296; }; }
-const vary=(c,a,rnd)=>{const d=(rnd()*2-1)*a;return [c[0]+d,c[1]+d,c[2]+d];};
-
-function paintTile(tx, ty, fn){
-  const img = actx.createImageData(TS, TS);
-  const r = prng(tx*977 + ty*4127 + 7);
-  for(let y=0;y<TS;y++)for(let x=0;x<TS;x++){
-    const c = fn(x,y,r);
-    const i = (y*TS+x)*4;
-    img.data[i]=c[0]; img.data[i+1]=c[1]; img.data[i+2]=c[2]; img.data[i+3]=c.length>3?c[3]:255;
-  }
-  actx.putImageData(img, tx*TS, ty*TS);
-}
+const prng=createPrng,vary=varyColor;
+const paintTile=(tx,ty,fn)=>paintAtlasTile(actx,TS,tx,ty,fn);
 
 function stonePixel(x,y,r){ const v=r(); let c=[128,128,130]; if(v<.18)c=[104,104,108]; else if(v>.87)c=[148,148,150]; if(((x*7+y*13)%23)<2)c=[112,112,116]; return vary(c,7,r); }
 function planksPixel(x,y,r){ const board=Math.floor(y/4); let c=[178,142,88]; if(y%4===3)c=[128,98,58]; else if((x===15&&board%2===0)||(x===7&&board%2===1))c=[136,104,62]; else { const v=r(); if(v<.15)c=[166,130,78]; else if(v>.88)c=[190,154,98]; } return vary(c,6,r); }
@@ -278,7 +268,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   WINDSEED:193, HEARTWOOD_RESIN:194, SUNSHARD:195, MESA_AMBER:196, FROST_CRYSTAL:197, MIRE_BLOOM:198,
   RIVER_FISH:199, MOTE_CHARM:200, FORAGE_CHARM:201, COMPOST:202, GOLDEN_WHEAT:203,
   GOLDEN_BROTH:204, TRAIL_RATION:205, FEAST_PLATTER:206,
-  GEODE:207,
+  GEODE:207, RAINWAKE_PETAL:208, STORMGLASS:209, SOLAR_GLYPH:210,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -664,6 +654,9 @@ ITEMS[I.SUNSHARD]={name:'Sunshard',stack:64,icon:regionalIcon('#a75c16','#ffc43b
 ITEMS[I.MESA_AMBER]={name:'Mesa Amber',stack:64,icon:regionalIcon('#71301d','#d95b2d','#ffae55')};
 ITEMS[I.FROST_CRYSTAL]={name:'Frost Crystal',stack:64,icon:regionalIcon('#357b9b','#7fe7ff','#e8ffff')};
 ITEMS[I.MIRE_BLOOM]={name:'Mire Bloom',stack:64,icon:regionalIcon('#325328','#8ebd42','#d9f77a')};
+ITEMS[I.RAINWAKE_PETAL]={name:'Rainwake Petal',stack:64,icon:regionalIcon('#246b7d','#67d6ff','#e6fbff')};
+ITEMS[I.STORMGLASS]={name:'Stormglass Shard',stack:64,icon:regionalIcon('#4f3d83','#b79cff','#f4e7ff')};
+ITEMS[I.SOLAR_GLYPH]={name:'Solar Glyph',stack:64,icon:regionalIcon('#8a5b12','#ffd24a','#fff4b8')};
 ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
 const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
@@ -769,6 +762,9 @@ RECIPES.push({shapeless:[I.SUNSHARD,B.SAND,B.SAND], out:[B.GLASS,4]});
 RECIPES.push({shapeless:[I.MESA_AMBER,I.IRON_INGOT,I.STICK], out:[I.REPAIR_KIT,2]});
 RECIPES.push({shapeless:[I.FROST_CRYSTAL,B.SNOW,B.SNOW], out:[B.ICE,4]});
 RECIPES.push({shapeless:[I.MIRE_BLOOM,I.COOKED_MEAT,I.CHARCOAL], out:[I.DRAGON_TREAT,2]});
+RECIPES.push({shapeless:[I.RAINWAKE_PETAL,I.WHEAT,I.COOKED_MEAT], out:[I.GOLDEN_BROTH,2]});
+RECIPES.push({shapeless:[I.STORMGLASS,I.IRON_INGOT,I.COAL], out:[I.REPAIR_KIT,3]});
+RECIPES.push({shapeless:[I.SOLAR_GLYPH,I.SUNSHARD,B.GLASS], out:[I.SUNSHARD,3]});
 const SMELT = { [B.SAND]:[B.GLASS,1], [B.RED_SAND]:[B.GLASS,1], [B.COBBLE]:[B.STONE,1], [B.IRON_ORE]:[I.IRON_INGOT,1], [B.LOG]:[I.CHARCOAL,1], [I.MONSTER_MEAT]:[I.COOKED_MEAT,1], [I.RIVER_FISH]:[I.COOKED_MEAT,1] };
 const FUEL  = { [I.COAL]:8, [I.CHARCOAL]:8, [B.PLANKS]:1.5, [B.LOG]:1.5, [I.STICK]:0.5, [B.TABLE]:1.5, [B.LEAVES]:0.25 };
 const SMELT_TIME = 5; // seconds per item
@@ -936,7 +932,7 @@ function buildRoadNetwork(setBlock){
   for(const s of roadBreadcrumbSpecs()){const x=s.x,y=s.y,z=s.z;for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++)setBlock(x+ox,y,z+oz,B.COBBLE);for(let h=1;h<=5;h++)setBlock(x,y+h,z,B.AIR);if(s.type==='broken_signpost'){setBlock(x,y+1,z,B.LOG);setBlock(x,y+2,z,B.LOG);setBlock(x+Math.round(s.dx),y+2,z+Math.round(s.dz),B.PLANKS);setBlock(x-Math.round(s.dx),y+2,z-Math.round(s.dz),B.PLANKS);}else if(s.type==='campfire'){setBlock(x,y+1,z,B.CAMPFIRE);}else if(s.type==='banner'){for(let h=1;h<=4;h++)setBlock(x,y+h,z,B.LOG);setBlock(x+Math.round(s.dx),y+3,z+Math.round(s.dz),B.TERRACOTTA);setBlock(x+Math.round(s.dx),y+4,z+Math.round(s.dz),B.TERRACOTTA);}else{for(let h=1;h<=3;h++)setBlock(x,y+h,z,B.LOG);setBlock(x,y+4,z,B.LANTERN);}}
   return roadBreadcrumbSpecs();
 }
-const SMALL_DISCOVERY_TYPES=['rare_plant','buried_chest','lore_tablet','monster_nest','fishing_pool','ore_outcrop','traveling_merchant','puzzle_shrine'];
+const SMALL_DISCOVERY_TYPES=['rare_plant','buried_chest','lore_tablet','monster_nest','fishing_pool','ore_outcrop','traveling_merchant','puzzle_shrine','rain_bloom','storm_crystal','sun_dial'];
 function smallDiscoverySpecs(){
   const out=[],landmarks=regionalLandmarkSpecs(),roads=roadNetworkSpecs();let n=0;
   const segDist=(px,pz,r)=>{const vx=r.b.x-r.a.x,vz=r.b.z-r.a.z,l2=vx*vx+vz*vz,t=Math.max(0,Math.min(1,((px-r.a.x)*vx+(pz-r.a.z)*vz)/l2));return Math.hypot(px-(r.a.x+vx*t),pz-(r.a.z+vz*t));};
@@ -952,6 +948,9 @@ function buildSmallDiscoveries(setBlock){
     }else if(s.type==='fishing_pool'){for(let ox=-3;ox<=3;ox++)for(let oz=-3;oz<=3;oz++)if(ox*ox+oz*oz<=10){setBlock(x+ox,y-1,z+oz,B.SAND);setBlock(x+ox,y,z+oz,B.WATER);setBlock(x+ox,y+1,z+oz,B.AIR);}setBlock(x+4,y+1,z,B.LANTERN);
     }else if(s.type==='ore_outcrop'){for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){const h=3-Math.min(2,Math.abs(ox)+Math.abs(oz));for(let k=1;k<=h;k++){const ring=Math.min(3,Math.floor(Math.hypot(x-WORLD_TC,z-WORLD_TC)/100)),roll=hash2(x+ox*31+k,z+oz*47);setBlock(x+ox,y+k,z+oz,roll>.88?(ring>=3?B.DIAMOND_ORE:ring>=2?B.IRON_ORE:B.COAL_ORE):B.STONE);}}
     }else if(s.type==='traveling_merchant'){setBlock(x,y+1,z,B.CAMPFIRE);for(const ox of [-2,2]){setBlock(x+ox,y+1,z-2,B.LOG);setBlock(x+ox,y+2,z-2,B.LOG);}for(let ox=-2;ox<=2;ox++)setBlock(x+ox,y+3,z-2,B.PLANKS);setBlock(x,y+1,z-2,B.CHEST);
+    }else if(s.type==='rain_bloom'){setBlock(x,y+1,z,B.LEAVES);setBlock(x,y+2,z,B.WATER);for(const [ox,oz] of [[1,0],[-1,0],[0,1],[0,-1]])setBlock(x+ox,y+1,z+oz,B.LEAVES);
+    }else if(s.type==='storm_crystal'){for(let h=1;h<=4;h++)setBlock(x,y+h,z,h===4?B.DIAMOND_ORE:B.GLASS);for(const [ox,oz] of [[1,0],[-1,0],[0,1],[0,-1]])setBlock(x+ox,y+1,z+oz,B.IRON_ORE);
+    }else if(s.type==='sun_dial'){for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)setBlock(x+ox,y,z+oz,B.SAND);setBlock(x,y+1,z,B.BRICK);setBlock(x,y+2,z,B.LOG);setBlock(x+1,y+1,z,B.TORCH);
     }else{for(const ox of [-2,0,2]){setBlock(x+ox,y,z,B.BRICK);setBlock(x+ox,y+1,z,B.BRICK);setBlock(x+ox,y+2,z,x+ox===s.target.x?B.TORCH:B.LANTERN);}setBlock(x,y,z+2,B.BRICK);}}
   return smallDiscoverySpecs();
 }
@@ -959,6 +958,8 @@ let smallDiscoveries=[];
 let roadBreadcrumbs=[];
 let regionalLandmarks=[];
 const discoveredIds=new Set();
+const claimedDiscoveryIds=new Set();
+const hintedDiscoveryIds=new Set();
 function buildRegionalLandmarks(setBlock){
   const specs=regionalLandmarkSpecs();
   const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=x1;x<=x2;x++)for(let y=y1;y<=y2;y++)for(let z=z1;z<=z2;z++)setBlock(x,y,z,id);};
@@ -1048,6 +1049,7 @@ const tp = v => TOWN.TC + (v - OLD_TOWN_TC);
 const HUB = {
   guide: { x: TOWN.TC + 8.5, z: TOWN.TC - 4.5 },
   jobs: { x: TOWN.TC + 4.5, z: TOWN.TC - 8.5 },
+  cartographer: { x: TOWN.TC - 10.5, z: TOWN.TC - 8.5 },
   quarry: { x: TOWN.TC + 20.5, z: TOWN.TC - 15.5 },
   farm: { x: tp(56), z: tp(79) },
   roost: { x: tp(96), z: tp(65) },
@@ -1311,6 +1313,18 @@ function buildTown(){
   fillBox(tx1+7,G+3,tz2-1, tx1+10,G+3,tz2-1, B.BRICK);              // lintel
   fillBox(tx1+8,G+4,tz2, tx1+9,G+12,tz2, B.BRICK);                  // chimney stack
   fillBox(tx2-1,G+8,tz1+1, tx2-1,G+10,tz1+1, B.BRICK);              // kitchen chimney
+  // South games-room annex. The original hearth remains as a central divider,
+  // with two broad openings connecting food service to the quieter games room.
+  const gamesZ2=TC+30;
+  fillBox(tx1,G,tz2+1,tx2,G,gamesZ2,B.PLANKS);
+  for(let z=tz2+1;z<=gamesZ2;z++)for(const x of [tx1,tx2])for(let y=G+1;y<=G+4;y++)setB(x,y,z,(z===gamesZ2?B.LOG:B.PLANKS));
+  for(let x=tx1;x<=tx2;x++)for(let y=G+1;y<=G+4;y++)setB(x,y,gamesZ2,(x===tx1||x===tx2)?B.LOG:B.PLANKS);
+  fillBox(tx1+1,G+1,tz2,tx1+6,G+3,tz2,B.AIR);
+  fillBox(tx1+11,G+1,tz2,tx2-1,G+3,tz2,B.AIR);
+  for(const x of [tx1+3,tx1+8,tx1+13])for(let y=G+2;y<=G+3;y++)setB(x,y,gamesZ2,B.GLASS);
+  fillBox(tx1-1,G+5,tz2,tx2+1,G+5,gamesZ2+1,B.PLANKS);
+  for(const x of [tx1,tx1+5,tx1+10,tx1+15,tx2])fillBox(x,G+4,tz2+1,x,G+4,gamesZ2-1,B.LOG);
+  for(const [x,z] of [[TC+10,TC+25],[TC+15,TC+25],[TC+20,TC+25]])setB(x,G+1,z,B.LOG);
 
   // --- the meditation hall (north-west, dark timber shrine with steeple, door facing the road) ---
   const cx1=tc(42), cz1=tc(40), cx2=tc(52), cz2=tc(56);
@@ -1964,9 +1978,9 @@ function updateLandMinimap(){
     landMapCtx.fillStyle='rgba(255,210,74,.7)';
     landMapCtx.fillRect(px,pz,1,1);
   });
-  const marker=(s,col,size)=>{if(!discoveredIds.has(s.id))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=col;landMapCtx.fillRect(x,z,size,size);};
+  const marker=(s,col,size)=>{if(!discoveredIds.has(s.id)&&!hintedDiscoveryIds.has(s.id))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=hintedDiscoveryIds.has(s.id)&&!discoveredIds.has(s.id)?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);};
   for(const s of regionalLandmarks)marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);
-  const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8'};
+  const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
   if(mapUtility&&overworldActivity){
     const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
@@ -2193,10 +2207,10 @@ function makeTextSprite(text,color){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
   sp.scale.set(2.6,1.3,1); return sp;
 }
-function makeVillager(robe, robeDark, hat){
+function makeVillager(robe, robeDark, hat, profile={}){
   const grp=new THREE.Group(), legs=[], arms=[];
-  const [skin,skinD]=VILL_SKIN[(Math.random()*VILL_SKIN.length)|0];
-  const hair=VILL_HAIR[(Math.random()*VILL_HAIR.length)|0];
+  const [skin,skinD]=profile.skinPair||VILL_SKIN[(Math.random()*VILL_SKIN.length)|0];
+  const hair=profile.hair||VILL_HAIR[(Math.random()*VILL_HAIR.length)|0];
   const skinM=voxelMats(skin, shadeHex(skin,16), skinD, shadeHex(skinD,-18));
   const hairM=voxelMats(hair, shadeHex(hair,22), shadeHex(hair,-26), shadeHex(hair,-42));
   const tunicM=voxelMats(robe, shadeHex(robe,20), robeDark, shadeHex(robeDark,-22));
@@ -2266,8 +2280,8 @@ const HOMES=[[tc(74),tc(76)],[tc(46),tc(75)],[tc(56),tc(85)],[tc(85),tc(40)],[tc
 const NPC_ROLES=[
   {name:'Mara Vale', shortName:'Mara', role:'guide', title:'Town Guide', personality:'warm, bossy, impossible to discourage',
    work:[HUB.guide.x,HUB.guide.z], home:[tc(56),tc(85)], static:true,
-   line:'I meet new hunters at the fountain. Smile first, panic later. Take a town errand, then follow the cobble to the smithy.',
-   accept:'Good. Small tasks make steady hands.',
+   line:'I meet new hunters at the fountain. Smile first, panic later. The first job is not glamorous; it is how the town learns you come back.',
+   accept:'Good. No grand speech yet — first we make sure your hands know the road.',
    done:'Look at that. Still breathing, already useful.',
    focus:'starter', job:'adventurer'},
   {name:'Garrik Flint', shortName:'Garrik', role:'miner', title:'Quarry Foreman', personality:'blunt, cheerful, judges people by their boots',
@@ -2340,6 +2354,10 @@ const NPC_ROLES=[
    work:[HUB.jobs.x+2,HUB.jobs.z],home:[tc(46),tc(75)],static:true,
    line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts.',
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
+  {name:'Orin Mapwell',shortName:'Orin',role:'cartographer',title:'Royal Cartographer',personality:'curious, ink-stained, delighted by blank spaces',
+   work:[HUB.cartographer.x,HUB.cartographer.z],home:[tc(46),tc(75)],static:true,
+   line:'A blank map is not empty. It is asking you a question. Bring me honest roads and I will make them remembered.',
+   accept:'Walk until the ink has something new to say.',done:'There. One less mystery pretending to be nowhere.',focus:'explore'},
 ];
 function npcSpotFree(x,z){
   const bx=Math.floor(x), bz=Math.floor(z), G=TOWN.G;
@@ -2414,6 +2432,16 @@ function tickVillagers(dt, t){
       const target=dim==='overworld' && !v.inside && !qOpen && d<8 ? Math.min(.95,(8-d)/2.5) : 0;
       v.nameplate.material.opacity += (target-v.nameplate.material.opacity)*Math.min(1,dt*8);
       v.nameplate.visible=v.nameplate.material.opacity>.04;
+    }
+    updateNpcQuestMarker(v,dt,t,Math.hypot(player.pos.x-p.x, player.pos.z-p.z));
+    if(v.role==='game_dealer'&&v.gameActiveUntil>t&&v.arms){
+      const pulse=Math.sin(t*11+v.phase),strength=v.gamePhase==='win'?1.05:v.gamePhase==='lose'?.35:.72;
+      v.arms[0].rotation.x=-.55-strength*Math.max(0,pulse);v.arms[1].rotation.x=-.55-strength*Math.max(0,-pulse);
+      v.head.rotation.x=v.gamePhase==='lose'?.16:-.08;p.y=TOWN.G+1+Math.abs(Math.sin(t*7))*.035;
+    }
+    if(v.role==='patron'&&v.gameWatchUntil>t&&v.gameWatchTarget){
+      const want=Math.atan2(v.gameWatchTarget.x-p.x,v.gameWatchTarget.z-p.z);
+      v.grp.rotation.y+=angDiff(want,v.grp.rotation.y)*Math.min(1,dt*5);v.head.rotation.y=0;
     }
     if(v.static){ p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012; continue; }   // static NPC breathes in place
     // indoors at night; step back out at dawn
@@ -2602,6 +2630,9 @@ function tavernGuidanceTarget(){
 function dragonPracticeTarget(){
   return {x:HUB.roost.x-8, z:HUB.roost.z+7};
 }
+function firstHandsLoggingTarget(){
+  return {x:HUB.northGate.x, z:HUB.northGate.z-15};
+}
 function townRouteTo(target, mid='north'){
   const midZ=mid==='south'?TOWN.TC+7:TOWN.TC-5;
   return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:midZ},target];
@@ -2609,6 +2640,12 @@ function townRouteTo(target, mid='north'){
 function maraQuestGuidanceTarget(q){
   if(!q || q.source==='guardian') return null;
   const northGate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(q.giver==='Mara Vale'&&q.title==='First Hands'){
+    const have=Math.min(q.need||6,countItem(q.item||B.LOG));
+    if(have>=(q.need||6)) return {kind:'mara-first-hands-return', color:0xffd24a, target:HUB.guide, route:[{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
+    const target=firstHandsLoggingTarget();
+    return {kind:'mara-first-hands', color:0x9ad26b, target, route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},northGate,target]};
+  }
   if(q.type==='utility'){
     return {kind:'mara-utility', color:0x8bbf5a, target:HUB.jobs, route:townRouteTo(HUB.jobs,'south')};
   }
@@ -2639,12 +2676,27 @@ function guidanceTargetInfo(){
       return {kind:'coach',color:coachTrail.color,target:coachTrail.target,route:[{x:player.pos.x,z:player.pos.z},coachTrail.target]};
     }
   }
-  if(!isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z))) return null;
   if(quest){
     if(questDone()){
       const p=(quest.source==='guardian') ? HUB.guardian : guidanceNpcPosition(quest.giver);
-      return {kind:'turnin', color:0xffd24a, target:p, route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},p]};
+      const outside=!isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z));
+      const route=outside
+        ? [{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},p]
+        : [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},p];
+      return {kind:'turnin', color:0xffd24a, target:p, route};
     }
+    if(quest.giver==='Mara Vale'&&quest.title==='First Hands'){
+      const maraTarget=maraQuestGuidanceTarget(quest);
+      if(maraTarget) return maraTarget;
+    }
+  }
+  if(!isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z))) return null;
+  const directed=typeof progressionDirectorGuidanceInfo==='function'?progressionDirectorGuidanceInfo():null;
+  if(directed){
+    const target=directed.target==='jobs'?HUB.jobs:directed.target==='roost'?HUB.roost:directed.target==='guild'?HUB.guild:directed.target==='roads'?guidanceNpcPosition('Tamsin Rook'):directed.target==='skyport'?HUB.skyport:HUB.guide;
+    return {kind:'system-'+directed.id,color:0xc79cff,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target]};
+  }
+  if(quest){
     const maraTarget=maraQuestGuidanceTarget(quest);
     if(maraTarget) return maraTarget;
     if(quest.type==='fetch' || quest.type==='mine' || quest.type==='kill' || quest.type==='gate' || quest.type==='pvp_bounty'){
@@ -3043,9 +3095,75 @@ function npcRoleColor(role){
 function attachNpcNameplate(v, y){
   if(!v||!v.grp) return;
   if(v.nameplate) v.grp.remove(v.nameplate);
+  if(v.questMarker) v.grp.remove(v.questMarker);
   v.nameplate=makeNpcNameplate(v.name||'Villager', v.title||'Townsfolk', npcRoleColor(v.role));
   if(y!=null) v.nameplate.position.y=y;
   v.grp.add(v.nameplate);
+  v.questMarker=makeNpcQuestMarker();
+  v.questMarker.position.y=(y!=null?y+.78:3.55);
+  v.grp.add(v.questMarker);
+}
+function makeNpcQuestMarker(){
+  const c=document.createElement('canvas'); c.width=96; c.height=96;
+  const g=c.getContext('2d');
+  g.fillStyle='rgba(7,12,20,.88)';
+  roundedRect(g,18,12,60,66,12); g.fill();
+  g.strokeStyle='#9ad26b'; g.lineWidth=5; roundedRect(g,18,12,60,66,12); g.stroke();
+  g.fillStyle='#9ad26b'; g.textAlign='center'; g.textBaseline='middle'; g.font='bold 54px "Courier New",monospace'; g.fillText('!',48,47);
+  const tex=new THREE.CanvasTexture(c); tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0,depthWrite:false,depthTest:false}));
+  sp.scale.set(.85,.85,1);
+  sp.visible=false;
+  sp.userData.markerCanvas=c;
+  sp.userData.markerTexture=tex;
+  sp.userData.markerState='';
+  return sp;
+}
+function paintNpcQuestMarker(sp,state){
+  if(!sp||sp.userData.markerState===state) return;
+  const map={
+    offer:['!','#9ad26b','rgba(7,20,12,.9)'],
+    turnin:['?','#ffd24a','rgba(24,18,7,.9)'],
+    active:['...','#7dd3fc','rgba(7,14,24,.9)'],
+    unavailable:['-','#8090a4','rgba(10,12,18,.78)']
+  }[state]||['','#8090a4','rgba(10,12,18,.78)'];
+  const c=sp.userData.markerCanvas,g=c&&c.getContext('2d');
+  if(!g) return;
+  g.clearRect(0,0,c.width,c.height);
+  g.fillStyle=map[2]; roundedRect(g,18,12,60,66,12); g.fill();
+  g.strokeStyle=map[1]; g.lineWidth=5; roundedRect(g,18,12,60,66,12); g.stroke();
+  g.fillStyle=map[1]; g.textAlign='center'; g.textBaseline='middle';
+  g.font=map[0]==='...'?'bold 34px "Courier New",monospace':'bold 54px "Courier New",monospace';
+  g.fillText(map[0],48,map[0]==='...'?43:47);
+  if(sp.userData.markerTexture) sp.userData.markerTexture.needsUpdate=true;
+  sp.userData.markerState=state;
+}
+function npcQuestMarkerState(v){
+  if(!v||!v.role||v.role==='traveling_merchant') return '';
+  const questCapable=!!(v.focus || ['guide','miner','smith','scholar','quartermaster','farmer','cook','mason','monk','warden','stablemaster','guild_receptionist','road_warden'].includes(v.role));
+  if(!questCapable) return '';
+  const directed=typeof progressionDirectorGuidanceInfo==='function'?progressionDirectorGuidanceInfo():null;
+  if(directed&&directed.npc&&(v.name===directed.npc||v.shortName===directed.npc))return 'offer';
+  const giver=v.name||v.shortName||'';
+  if(quest){
+    const source=(quest.source||'npc');
+    if(source==='npc' && quest.giver===giver) return questDone()?'turnin':'active';
+    return 'unavailable';
+  }
+  if(v.role==='guide' && !(typeof firstQuestMilestoneComplete==='function'&&firstQuestMilestoneComplete())) return 'offer';
+  return v.role==='guide'||S.lvl>1?'offer':'';
+}
+function updateNpcQuestMarker(v,dt,t,d){
+  const sp=v&&v.questMarker;
+  if(!sp||!sp.material) return;
+  const state=npcQuestMarkerState(v);
+  paintNpcQuestMarker(sp,state);
+  const near=dim==='overworld' && !v.inside && !qOpen && d<14 && !!state;
+  const base=state==='unavailable'?0.34:state==='active'?0.72:.95;
+  const target=near ? Math.min(base,(14-d)/3.5) : 0;
+  sp.material.opacity+=(target-sp.material.opacity)*Math.min(1,dt*8);
+  sp.position.y=3.52+Math.sin(t*2.2+(v.phase||0))*.08;
+  sp.visible=sp.material.opacity>.04;
 }
 function addTownInteractLabel(text, x, y, z, color, radius){
   const sp=makeTownInteractLabel(text, color);
@@ -3062,6 +3180,9 @@ addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bb
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);
 addTownInteractLabel('Farm Work', HUB.farm.x, TOWN.G+3.45, HUB.farm.z, '#86efac', 9);
 addTownInteractLabel('Cook Work', tp(81), TOWN.G+3.5, tp(75), '#ffd24a', 8);
+addTownInteractLabel('Dice Table · G', tp(74.5), TOWN.G+3.65, tp(89.5), '#ffd24a', 6);
+addTownInteractLabel('Blackjack Table · G', tp(79.5), TOWN.G+3.65, tp(89.5), '#9ad7ff', 5);
+addTownInteractLabel('Roulette Table · G', tp(84.5), TOWN.G+3.65, tp(89.5), '#ff8aa8', 5);
 addTownInteractLabel('2 Smithy / Crafting', tp(78.5), TOWN.G+4.7, tp(50), '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, tc(36)+.4, '#f2c75c', 14);
@@ -3868,7 +3989,7 @@ function claimJobContract(){
   const c=jobContract;
   let rewardGold=c.rewardGold|0;
   if(c.job==='adventurer' && jobPerkTier('adventurer')) rewardGold=Math.round(rewardGold*(1+jobPerkTier('adventurer')*.06));
-  gold+=rewardGold;
+  addGold(rewardGold);
   gainXP(c.rewardXp|0);
   gainJobXP(c.job, c.rewardJobXp, 'contract');
   SFX.coin();
@@ -4628,7 +4749,7 @@ function leaveEventDimension(m){
     netFlushPending();
     rebuildAllChunks(); refreshTorchMeshes(); applyDim();
   }
-  player.pos.set(Number(m&&m.x)||TOWN.TC+.5, Number(m&&m.y)||TOWN.G+2, Number(m&&m.z)||TOWN.TC+7.5);
+  player.pos.set(Number(m&&m.x)||TOWN.TC+.5, Number(m&&m.y)||TOWN.G+2, Number(m&&m.z)||TOWN.TC+14.5);
   player.vel.set(0,0,0);
 }
 function leaveParkourEvent(m){leaveEventDimension(m);}
@@ -4657,6 +4778,44 @@ function escHTML(v){
 const SYS_MAX_VISIBLE=4, SYS_QUEUE_MAX=8;
 const sysActive=[], sysPending=[];
 sysEl.setAttribute('aria-live','polite');
+const rewardFeedEl=document.getElementById('rewardfeed');
+const rewardGainActive=new Map();
+function rewardGain(kind, amount, label, opts={}){
+  amount=Math.max(0,Math.round(Number(amount)||0));
+  if(!rewardFeedEl||!amount)return;
+  kind=['xp','gold','item','rare','legendary'].includes(kind)?kind:'item';
+  label=String(label||kind.toUpperCase()).slice(0,48);
+  const key=kind+'|'+label;
+  const old=rewardGainActive.get(key);
+  if(old){
+    old.amount+=amount;
+    old.value.textContent='+'+old.amount.toLocaleString('en-US')+' '+label;
+    clearTimeout(old.timer);old.timer=setTimeout(()=>removeRewardGain(old),opts.duration||2100);
+    old.el.classList.remove('reward-bump');void old.el.offsetWidth;old.el.classList.add('reward-bump');
+    return;
+  }
+  const el=document.createElement('div');el.className='rewardgain '+kind;
+  const icon=kind==='xp'?'XP':kind==='gold'?'G':opts.icon||'+';
+  el.innerHTML='<i class="gainicon">'+escHTML(icon)+'</i><span></span>';
+  const entry={el,amount,value:el.querySelector('span'),timer:0};
+  entry.value.textContent='+'+amount.toLocaleString('en-US')+' '+label;
+  rewardGainActive.set(key,entry);rewardFeedEl.appendChild(el);
+  while(rewardFeedEl.children.length>4){
+    const first=rewardFeedEl.firstElementChild;
+    const found=[...rewardGainActive.entries()].find(([,v])=>v.el===first);
+    if(found){clearTimeout(found[1].timer);rewardGainActive.delete(found[0]);}
+    first.remove();
+  }
+  entry.timer=setTimeout(()=>removeRewardGain(entry),opts.duration||2100);
+}
+function removeRewardGain(entry){
+  if(!entry||!entry.el.isConnected)return;
+  entry.el.classList.add('leaving');
+  setTimeout(()=>{
+    for(const [key,value] of rewardGainActive)if(value===entry)rewardGainActive.delete(key);
+    entry.el.remove();
+  },340);
+}
 function sysMsg(html, opts){
   opts=typeof opts==='string'?{tier:opts}:(opts||{});
   const tier=opts.tier==='minor'||opts.tier==='major'?opts.tier:'notice';
@@ -4929,7 +5088,7 @@ const barEls={
   mp:document.querySelector('#stats .mpb i'), mpT:document.querySelector('#stats .mpb span'),
   sp:document.querySelector('#stats .spb i'), spT:document.querySelector('#stats .spb span'),
   hu:document.querySelector('#stats .hub i'), huT:document.querySelector('#stats .hub span'),
-  xp:document.querySelector('#stats .xpb i'),
+  xp:document.querySelector('#stats .xpb i'), xpT:document.getElementById('xptext'),
 };
 function renderBars(){
   document.body.classList.toggle('level-two-hud',S.lvl>=2);
@@ -4943,6 +5102,7 @@ function renderBars(){
   barEls.hu.style.width=Math.max(0,hunger/maxHunger()*100)+'%';
   barEls.huT.textContent='FOOD '+Math.floor(hunger)+'/'+maxHunger();
   barEls.xp.style.width=Math.min(100,S.xp/xpNeed()*100)+'%';
+  if(barEls.xpT)barEls.xpT.textContent=Math.floor(S.xp).toLocaleString('en-US')+' / '+xpNeed().toLocaleString('en-US')+' XP';
   const rankProgress=currentRankProgress();
   barEls.xp.parentElement.title=rankProgress.maxRank
     ? 'S-Rank Hunter · '+Math.floor(S.xp)+' / '+xpNeed()+' XP to next level'
@@ -4950,16 +5110,22 @@ function renderBars(){
 }
 renderBars();
 function gainXP(n){
+  n=Math.max(0,Math.round(Number(n)||0));
+  if(!n)return;
   const beforeRank=localPlayerRankIndex();
+  const beforeLevel=S.lvl;
   const hadGateSystem=gateSystemUnlocked();
   S.xp+=n;
+  rewardGain('xp',n,'Hunter XP');
+  const xpBar=barEls.xp&&barEls.xp.parentElement;
+  if(xpBar){xpBar.classList.remove('xp-gain');void xpBar.offsetWidth;xpBar.classList.add('xp-gain');setTimeout(()=>xpBar.classList.remove('xp-gain'),650);}
   let leveled=false;
   while(S.xp>=xpNeed()){ S.xp-=xpNeed(); S.lvl++; S.pts+=3; leveled=true; }
   if(leveled){
     hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
     const shouldRunLevel2Cutscene=S.lvl>=2 && S.path && dim==='overworld' && !cutsceneSeen();
     if(S.lvl>=2 && S.path && !abilityTutorialDone() && !shouldRunLevel2Cutscene) showAbilityAwakening();
-    else sysMsg('You have reached <b>Level '+S.lvl+'</b>. +3 stat points');
+    else sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>+'+((S.lvl-beforeLevel)*3)+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
     const afterRank=localPlayerRankIndex();
     if(afterRank>beforeRank && !NET.on) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(afterRank)+'-Rank gates can now appear.');
     SFX.level();
@@ -4968,8 +5134,11 @@ function gainXP(n){
     if(!hadGateSystem && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     if(S.lvl>=2 && !S.path) sysMsg('You have <b>awakened</b>. Press <b>C</b> to choose your path');
     if(S.path){
-      const ul=[2,5,8].indexOf(S.lvl);
-      if(ul>=0) sysMsg('Ability unlocked: <b>'+PATHS[S.path].ab[ul].n+'</b>');
+      for(const unlockedLevel of [2,4,8]){
+        if(unlockedLevel<=beforeLevel||unlockedLevel>S.lvl)continue;
+        const ul=[2,4,8].indexOf(unlockedLevel);
+        if(PATHS[S.path].ab[ul])sysMsg('Ability unlocked: <b>'+PATHS[S.path].ab[ul].n+'</b>',{tier:'major',title:'New Power'});
+      }
     }
     renderAbilities();
     refreshPlayUi();
@@ -5035,7 +5204,7 @@ function die(){
   }
   if(dim==='dungeon') exitDungeon(true);
   showDeathScreen(deathCauseText(lastDamageSource),'Returning to the Town of Beginnings');
-  player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+7.5);
+  player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+14.5);
   player.vel.set(0,0,0);
   hp=maxHp(); sp=maxSp(); hunger=maxHunger();
   renderBars();
@@ -5582,6 +5751,7 @@ function mobUnderCrosshair(range=3.5){
   let best=null, bd=range;
   const v=new THREE.Vector3();
   for(const m of mobs){
+    if(m.kind==='shadow_soldier')continue;
     v.set(m.grp.position.x-o.x, m.grp.position.y+(m.boss?1.6:1.0)-o.y, m.grp.position.z-o.z);
     const t=v.dot(dir);
     if(t<0||t>range) continue;
@@ -6154,7 +6324,7 @@ function tavernNightLevel(){
 function isInsideTavern(){
   return dim==='overworld' && player.pos.y>=TOWN.G && player.pos.y<TOWN.G+5 &&
     player.pos.x>tp(71) && player.pos.x<tp(87) &&
-    player.pos.z>tp(69) && player.pos.z<tp(86);
+    player.pos.z>tp(69) && player.pos.z<tp(94);
 }
 const tavernNightObjects=[], tavernNightLights=[], shrineCandleLights=[];
 
@@ -6288,6 +6458,15 @@ const propWhite=new THREE.MeshLambertMaterial({color:0xeae6da});
 const propBrass=new THREE.MeshLambertMaterial({color:0xd2a43f});
 const propCloth=new THREE.MeshLambertMaterial({color:0x7a2430, side:THREE.DoubleSide});
 const potionVapors=[];
+const tavernGameDealers=[];
+function tavernGameAction(game,phase='play'){
+  const now=performance.now()/1000,dealer=tavernGameDealers.find(v=>v.game===game);
+  if(dealer){dealer.gamePhase=phase;dealer.gameActiveUntil=now+(phase==='play'?2.4:1.3);}
+  for(const v of villagers){
+    if(v.role!=='patron'||!dealer||Math.hypot(v.grp.position.x-dealer.grp.position.x,v.grp.position.z-dealer.grp.position.z)>9)continue;
+    v.gameWatchUntil=now+2.8;v.gameWatchTarget=dealer.grp.position;
+  }
+}
 function addProp(geo,mat,x,y,z,ry){
   const m=new THREE.Mesh(geo,mat);
   m.position.set(x,y,z); if(ry) m.rotation.y=ry;
@@ -6337,6 +6516,28 @@ function buildProps(){
     chunkyMug(x+.18,TG+2.25,z-.12);
     plateMeal(x-.14,TG+2.23,z+.12);
   }
+  function diceCube(x,z,n){
+    const g=new THREE.Group();
+    const cube=new THREE.Mesh(new THREE.BoxGeometry(.22,.22,.22), propWhite);
+    g.add(cube);
+    const pipGeo=new THREE.BoxGeometry(.035,.012,.035);
+    const pipMat=new THREE.MeshLambertMaterial({color:0x10151f});
+    const spots={1:[[0,0]],2:[[-.055,-.055],[.055,.055]],3:[[-.06,-.06],[0,0],[.06,.06]],4:[[-.06,-.06],[.06,-.06],[-.06,.06],[.06,.06]],5:[[-.06,-.06],[.06,-.06],[0,0],[-.06,.06],[.06,.06]],6:[[-.065,-.06],[.065,-.06],[-.065,0],[.065,0],[-.065,.06],[.065,.06]]};
+    for(const [px,pz] of spots[n]||spots[1]){
+      const pip=new THREE.Mesh(pipGeo,pipMat);
+      pip.position.set(px,.116,pz);
+      g.add(pip);
+    }
+    g.position.set(tp(x),TG+2.31,tp(z));
+    g.rotation.y=Math.random()*Math.PI;
+    townGroup.add(g);
+    return g;
+  }
+  for(const [x,z] of [[74.5,89.5],[79.5,89.5],[84.5,89.5]])addProp(topGeo,propWoodL,tp(x),TG+2.16,tp(z));
+  diceCube(74.35,89.35,5); diceCube(74.66,89.58,2);
+  addProp(new THREE.CylinderGeometry(.26,.26,.025,16), new THREE.MeshLambertMaterial({color:0x10151f}), tp(84.5), TG+2.285, tp(89.5));
+  addProp(new THREE.CylinderGeometry(.18,.18,.03,16), new THREE.MeshLambertMaterial({color:0x8a2020}), tp(84.5), TG+2.32, tp(89.5));
+  addProp(new THREE.BoxGeometry(.58,.035,.32), new THREE.MeshLambertMaterial({color:0x1a2634}), tp(79.5), TG+2.285, tp(89.5), .08);
   // inn sleeping alcoves
   curtain(74.4,70.8,1.2,Math.PI/2); curtain(77.4,70.8,1.2,Math.PI/2);
   curtain(72.5,72.1,2.0,0); curtain(76.0,72.1,2.0,0); curtain(79.5,72.1,2.0,0);
@@ -6392,7 +6593,8 @@ function buildProps(){
     [43.2,49.5],[51.8,49.5],
     [43.2,53.8],[47.5,53.8],[51.8,53.8]
   ]) candle(p[0],TG+1.05,p[1]);
-  candle(74.5,TG+2.2,74.5); candle(74.5,TG+2.2,80.5); candle(78.5,TG+2.2,82.5); // tavern tables
+  candle(74.5,TG+2.2,74.5); candle(74.5,TG+2.2,80.5); // dining tables
+  candle(74.5,TG+2.2,89.5); candle(79.5,TG+2.2,89.5); candle(84.5,TG+2.2,89.5); // games room
   tavernNightLight(79.5,TG+2.25,85.25,0xff6b25,1.8,9.5);
   tavernNightLight(82.7,TG+2.3,77.5,0xffb35c,.75,6.5);
   // smithy: anvil on the stone block, ingot pile, wall tool rack
@@ -6429,6 +6631,27 @@ function buildProps(){
   facade.position.set(tp(70.86), TG+4.45, tp(76));
   facade.rotation.y=-Math.PI/2;
   townGroup.add(facade);
+  function rulesBoard(title,lines,x,z,rot,color='#ffd24a'){
+    const c=document.createElement('canvas');c.width=384;c.height=240;const g=c.getContext('2d');
+    g.fillStyle='#111827';g.fillRect(0,0,c.width,c.height);g.strokeStyle='#9a6b32';g.lineWidth=14;g.strokeRect(7,7,c.width-14,c.height-14);
+    g.fillStyle=color;g.font='bold 30px Courier New';g.textAlign='center';g.fillText(title,192,48);
+    g.fillStyle='#eadfc9';g.font='20px Courier New';lines.forEach((line,i)=>g.fillText(line,192,92+i*32));
+    const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+    const board=new THREE.Mesh(new THREE.PlaneGeometry(2.25,1.4),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+    board.position.set(tp(x),TG+2.55,tp(z));board.rotation.y=rot;townGroup.add(board);
+  }
+  function gameDealer(game,name,title,x,z,rot,robe,trim){
+    const d={...makeVillager(robe,trim,true),role:'game_dealer',game,name,shortName:name.split(' ')[0],title,
+      personality:'tavern dealer',line:'Place your call. The table settles every wager fairly.',static:true,inside:false,
+      wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[tc(74),tc(76)],stuck:0,gameActiveUntil:0,gamePhase:''};
+    d.grp.position.set(tp(x),TG+1,tp(z));d.grp.rotation.y=rot;attachNpcNameplate(d);townGroup.add(d.grp);villagers.push(d);tavernGameDealers.push(d);
+  }
+  gameDealer('dice','Rook Tallow','Dice Caller',74.5,92.0,Math.PI,'#70462b','#4b2d1d');
+  gameDealer('blackjack','Vera Slate','Card Dealer',79.5,92.0,Math.PI,'#294a63','#182f43');
+  gameDealer('roulette','Orrin Vale','Wheel Keeper',84.5,92.0,Math.PI,'#6b263d','#441727');
+  rulesBoard('DICE',['LOW / SEVEN / HIGH','2x / 4x / 2x','MAX 25 TOKENS'],74.5,93.82,Math.PI);
+  rulesBoard('BLACKJACK',['BEAT 21','DEALER STANDS 17','MAX 25 TOKENS'],79.5,93.82,Math.PI,'#9ad7ff');
+  rulesBoard('ROULETTE',['COLOUR 2x / DOZEN 3x','ZERO 20x','MAX 25 TOKENS'],84.5,93.82,Math.PI,'#ff8aa8');
   function tavernPatron(name,title,x,z,rot,robe,trim,line){
     const p={...makeVillager(robe,trim,false), role:'patron', name, shortName:name.split(' ')[0], title,
       personality:'tavern regular', line, static:true, inside:false, wait:0, tx:0, tz:0, speed:0,
@@ -6439,9 +6662,9 @@ function buildProps(){
     townGroup.add(p.grp);
     villagers.push(p);
   }
-  tavernPatron('Hale Korr','Off-Duty Guard',76.5,79.2,Math.PI*.72,'#5a6e8a','#44546a',
+  tavernPatron('Hale Korr','Off-Duty Guard',73.0,86.5,Math.PI,'#5a6e8a','#44546a',
     'Greta waters the ale and overfeeds the stew. Somehow both help.');
-  tavernPatron('Mira Penn','Courier',80.4,83.4,-Math.PI*.15,'#8a6e8a','#6a5266',
+  tavernPatron('Mira Penn','Courier',85.5,86.5,Math.PI,'#8a6e8a','#6a5266',
     'Road north is quiet today. I never trust quiet.');
   tavernPatron('Noll Brisk','Miner',80.4,74.4,-Math.PI*.8,'#8a5a32','#6b4524',
     'If Tobin asks, I was never here before noon.');
@@ -6450,7 +6673,7 @@ buildProps();
 
 // Road safety is server-owned, but its consequences should be visible before a player opens a menu.
 // These lightweight scenes are deterministic decoration only: they never alter blocks or collision.
-let roadSafetySceneGroup=null,roadSafetySceneTier='';
+let roadSafetySceneGroup=null,roadSafetySceneTier='',roadSafetyActors=[];
 function roadSafetyVisualTier(score=roadSafety){return score>=70?'secure':score<35?'dangerous':'contested';}
 function disposeRoadSafetyScenes(){
   if(!roadSafetySceneGroup)return;
@@ -6461,18 +6684,38 @@ function disposeRoadSafetyScenes(){
     for(const m of mats)if(m){materials.add(m);if(m.map)textures.add(m.map);}
   });
   scene.remove(roadSafetySceneGroup);geometries.forEach(g=>g.dispose());textures.forEach(t=>t.dispose());materials.forEach(m=>m.dispose());
-  roadSafetySceneGroup=null;
+  roadSafetySceneGroup=null;roadSafetyActors=[];
 }
 function roadSafetyAnchors(){
   const out=[];
+  // Always keep the first safety scene visible at the north gate.
+  // It sits on the town floor facing inward, instead of being sampled onto the wall/terrain.
+  out.push({x:HUB.northGate.x,y:TOWN.G+1.02,z:HUB.northGate.z+6.5,dx:0,dz:1,index:0,fixed:true});
   for(const road of roadNetworkSpecs()){
     const dx=(road.b.x-road.a.x)/road.length,dz=(road.b.z-road.a.z)/road.length;
     for(const t of [.32,.7]){
-      const side=out.length%2?1:-1,x=road.a.x+(road.b.x-road.a.x)*t-dz*6*side,z=road.a.z+(road.b.z-road.a.z)*t+dx*6*side;
-      out.push({x,y:terrainHeight(x,z)+.08,z,dx,dz,index:out.length});
+      const side=out.length%2?1:-1,cx=road.a.x+(road.b.x-road.a.x)*t,cz=road.a.z+(road.b.z-road.a.z)*t;
+      for(const offset of [4.5,-4.5,7,-7,2.5,-2.5]){
+        const x=cx-dz*offset*side,z=cz+dx*offset*side,anchor=roadSafetyAnchorAt(x,z,dx,dz,out.length);
+        if(anchor){out.push(anchor);break;}
+      }
     }
   }
   return out;
+}
+function roadSafetyAnchorAt(x,z,dx,dz,index){
+  if(isTownLand(x,z))return null;
+  const y=standHeight(x,z,WH-2);
+  if(y<=0||y>42)return null;
+  const samples=[[0,0],[1.6,0],[-1.6,0],[0,1.6],[0,-1.6]];
+  for(const [sx,sz] of samples){
+    const sy=standHeight(x+sx,z+sz,WH-2);
+    if(sy<=0||Math.abs(sy-y)>.75)return null;
+  }
+  for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){
+    for(let yy=0;yy<=4;yy++)if(isSolid(getB(Math.floor(x+ox),Math.floor(y+yy),Math.floor(z+oz))))return null;
+  }
+  return {x,y:y+.02,z,dx,dz,index};
 }
 function rebuildRoadSafetyScenes(force=false){
   const tier=roadSafetyVisualTier();
@@ -6483,33 +6726,69 @@ function rebuildRoadSafetyScenes(force=false){
   const stone=new THREE.MeshLambertMaterial({color:0x77746c}),blue=new THREE.MeshLambertMaterial({color:0x3f7397}),gold=new THREE.MeshLambertMaterial({color:0xd6a946});
   const canvas=new THREE.MeshLambertMaterial({color:0xb98a58,side:THREE.DoubleSide}),charred=new THREE.MeshLambertMaterial({color:0x1e1b1a});
   const warning=new THREE.MeshLambertMaterial({color:0x8f3028}),grass=new THREE.MeshLambertMaterial({color:0x66734c});
-  const box=(g,s,p,m,r)=>addBox(g,s,p,m,r),label=(g,text,col,y=4)=>{const s=makeTextSprite(text,col);s.position.set(0,y,0);g.add(s);};
-  const traveller=(g,x,z,coat)=>{const person=new THREE.Group(),skin=new THREE.MeshLambertMaterial({color:0xc89569}),cloth=new THREE.MeshLambertMaterial({color:coat});box(person,[.42,.65,.28],[0,1.05,0],cloth);box(person,[.38,.38,.38],[0,1.58,0],skin);box(person,[.16,.58,.18],[-.13,.48,0],darkWood);box(person,[.16,.58,.18],[.13,.48,0],darkWood);person.position.set(x,0,z);g.add(person);};
+  const box=(g,s,p,m,r)=>addBox(g,s,p,m,r);
+  const signTexture=(text,col,mirror=false)=>{
+    const c=document.createElement('canvas');c.width=256;c.height=80;const x=c.getContext('2d');
+    if(mirror){x.translate(c.width,0);x.scale(-1,1);}
+    x.fillStyle='rgba(16,34,42,.96)';x.fillRect(0,0,c.width,c.height);
+    x.strokeStyle=col;x.lineWidth=5;x.strokeRect(6,6,c.width-12,c.height-12);
+    x.fillStyle=col;x.font='900 24px Georgia,serif';x.textAlign='center';x.textBaseline='middle';x.letterSpacing='2px';
+    x.fillText(text,c.width/2,c.height/2+2);
+    const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+    return tex;
+  };
+  const roadSign=(g,text,col,y=2.15,w=3.35,h=.72)=>{
+    const topY=y+h/2;
+    for(const x of [-w*.34,w*.34])box(g,[.08,.42,.08],[x,topY+.18,-.08],darkWood);
+    box(g,[w+.22,h+.18,.18],[0,y,-.08],darkWood);
+    const mat=new THREE.MeshLambertMaterial({map:signTexture(text,col),transparent:true});
+    const front=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);front.position.set(0,y,.016);g.add(front);
+    const back=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshLambertMaterial({map:signTexture(text,col,true),transparent:true}));back.rotation.y=Math.PI;back.position.set(0,y,-.176);g.add(back);
+    return front;
+  };
+  const roadNpc=(g,x,z,robe,robeDark,hat,profile={})=>{
+    const actor=makeVillager(robe,robeDark,hat,profile),person=actor.grp;
+    person.position.set(x,0,z);person.scale.setScalar(.96);
+    if(profile.guard){
+      const spearM=new THREE.MeshLambertMaterial({color:0x8f744a}),tipM=new THREE.MeshLambertMaterial({color:0xd8d8d0});
+      const spear=new THREE.Group();spear.name='road-guard-spear';
+      box(spear,[.06,1.65,.06],[0,.55,0],spearM);
+      const tip=new THREE.Mesh(new THREE.ConeGeometry(.11,.28,4),tipM);tip.position.y=1.48;tip.rotation.y=Math.PI/4;spear.add(tip);
+      spear.position.set(.47,.62,.08);spear.rotation.z=-.08;person.add(spear);actor.spear=spear;
+      actor.arms[1].rotation.x=-.45;actor.arms[1].rotation.z=-.18;
+    }
+    g.add(person);
+    roadSafetyActors.push({...actor,phase:profile.phase||0,guard:!!profile.guard,baseRot:0});
+    return person;
+  };
   for(const a of roadSafetyAnchors()){
     const g=new THREE.Group();g.position.set(a.x,a.y,a.z);g.rotation.y=Math.atan2(a.dx,a.dz);root.add(g);
     if(tier==='secure'){
       if(a.index%2===0){
         for(const x of [-2.25,2.25]){box(g,[.28,3,.28],[x,1.5,0],wood);box(g,[.52,.28,.52],[x,3.05,0],gold);}
-        box(g,[4.8,.3,.3],[0,2.65,0],wood);box(g,[3.2,.68,.15],[0,2.1,0],blue);label(g,'ROAD PATROL','#9ed9ff',3.75);
-        traveller(g,-1.15,1.2,0x486c86);traveller(g,1.15,1.35,0x846c45);
+        box(g,[4.8,.3,.3],[0,2.65,0],wood);roadSign(g,'ROAD PATROL','#9ed9ff',2.12,3.35,.72);
+        roadNpc(g,-1.15,1.2,'#486c86','#2e4558',true,{skinPair:VILL_SKIN[0],hair:'#3a2718',guard:true,phase:.4});
+        roadNpc(g,1.15,1.35,'#846c45','#5f4d31',true,{skinPair:VILL_SKIN[2],hair:'#7a5a36',guard:true,phase:2.1});
       }else{
         for(const x of [-2,2])for(const z of [-1.4,1.4])box(g,[.18,2.2,.18],[x,1.1,z],wood);
         const canopy=new THREE.Mesh(new THREE.ConeGeometry(2.9,1.15,4),canvas);canopy.position.y=2.3;canopy.rotation.y=Math.PI/4;g.add(canopy);
-        box(g,[2.4,.65,.8],[0,.35,0],wood);box(g,[.75,.75,.75],[-1.6,.38,1.65],gold);traveller(g,1.4,1.8,0x6d4779);label(g,'SAFE MARKET','#f6d67a',3.7);
+        box(g,[2.4,.65,.8],[0,.35,0],wood);box(g,[.75,.75,.75],[-1.6,.38,1.65],gold);
+        roadNpc(g,1.4,1.8,'#6d4779','#4f3158',false,{skinPair:VILL_SKIN[1],hair:'#5a3d22',phase:1.2});
+        roadSign(g,'SAFE MARKET','#f6d67a',3.1,2.95,.62);
       }
     }else if(tier==='dangerous'){
       if(a.index%2===0){
         box(g,[3.1,.55,1.45],[0,.65,0],charred,[0,0,.12]);
         for(const x of [-1.2,1.2]){const wheel=new THREE.Mesh(new THREE.TorusGeometry(.55,.12,6,10),darkWood);wheel.position.set(x,.55,.78);wheel.rotation.y=Math.PI/2;g.add(wheel);}
-        box(g,[.2,2.5,.2],[-2.4,1.25,0],charred,[0,0,.15]);box(g,[1.6,.7,.15],[-1.85,2.05,0],warning,[0,0,-.12]);label(g,'ROAD LOST','#ff7668',3.25);
+        box(g,[.2,2.5,.2],[-2.4,1.25,0],charred,[0,0,.15]);roadSign(g,'ROAD LOST','#ff7668',2.05,1.75,.62).rotation.z=-.12;
       }else{
         for(const x of [-2,0,2]){box(g,[.28,1.6,.28],[x,.8,0],darkWood,[0,0,x===0?.1:-.18]);box(g,[1.45,.22,.22],[x,1.1,0],wood,[0,0,Math.PI/4]);}
         for(const x of [-1.2,1.2])for(const z of [1.1,2]){const spike=new THREE.Mesh(new THREE.ConeGeometry(.13,.9,4),stone);spike.position.set(x,.45,z);g.add(spike);}
-        box(g,[1.8,1.05,.14],[0,2.2,-.15],warning);box(g,[.18,3.2,.18],[-1,1.6,-.1],darkWood);label(g,'BANDIT ROAD','#ff7668',3.45);
+        roadSign(g,'BANDIT ROAD','#ff7668',2.2,2.25,.72);box(g,[.18,3.2,.18],[-1,1.6,-.1],darkWood);
       }
     }else{
-      box(g,[.26,2.7,.26],[-1.75,1.35,0],wood,[0,0,.08]);box(g,[2.5,.65,.16],[-.65,2.05,0],grass,[0,0,-.08]);
-      box(g,[1.2,.55,.8],[1.45,.28,.4],wood);box(g,[.65,.45,.65],[2.05,.23,-.45],stone);label(g,'ROAD WATCH','#e8c57a',3.15);
+      box(g,[.26,2.7,.26],[-1.75,1.35,0],wood,[0,0,.08]);roadSign(g,'ROAD WATCH','#e8c57a',2.05,2.55,.62).rotation.z=-.08;
+      box(g,[1.2,.55,.8],[1.45,.28,.4],wood);box(g,[.65,.45,.65],[2.05,.23,-.45],stone);
     }
   }
   // globalThis.dim (not bare dim): this runs once at module top-level, before dimensions.mjs
@@ -6518,6 +6797,22 @@ function rebuildRoadSafetyScenes(force=false){
   root.visible=globalThis.dim==='overworld';
 }
 function refreshRoadSafetyScenes(){rebuildRoadSafetyScenes(false);}
+function tickRoadSafetyScenes(dt,t){
+  if(!roadSafetySceneGroup||!roadSafetySceneGroup.visible||!roadSafetyActors.length)return;
+  for(const a of roadSafetyActors){
+    const p=a.phase||0,scan=Math.sin(t*.85+p),shift=Math.sin(t*1.7+p);
+    if(a.head){a.head.rotation.y=scan*.32;a.head.rotation.x=Math.sin(t*.55+p)*.04;}
+    if(a.grp){a.grp.rotation.y=(a.baseRot||0)+Math.sin(t*.35+p)*.08;a.grp.position.y=Math.max(0,Math.sin(t*1.25+p)*.018);}
+    if(a.arms){
+      const idle=.08*Math.sin(t*1.3+p);
+      a.arms[0].rotation.x=idle;
+      if(a.guard){a.arms[1].rotation.x=-.45+idle*.4;a.arms[1].rotation.z=-.18+shift*.04;}
+      else a.arms[1].rotation.x=-idle;
+    }
+    if(a.legs){a.legs[0].rotation.x=shift*.045;a.legs[1].rotation.x=-shift*.045;}
+    if(a.spear){a.spear.rotation.z=-.08+Math.sin(t*1.1+p)*.025;}
+  }
+}
 rebuildRoadSafetyScenes(true);
 
 gameContext.registerState('world', Object.freeze({
@@ -6538,6 +6833,8 @@ gameContext.registerModule('world', Object.freeze({
   leaveEvent:leaveEventDimension,
   message:sysMsg,
   applySkyshipJourney,
+  tickRoadSafetyScenes,
+  tavernGameAction,
 }));
 
 
@@ -6616,6 +6913,8 @@ const legacyWorldBindings={
   "die":{get:()=>die},
   "DimensionGrid":{get:()=>DimensionGrid},
   "discoveredIds":{get:()=>discoveredIds},
+  "claimedDiscoveryIds":{get:()=>claimedDiscoveryIds},
+  "hintedDiscoveryIds":{get:()=>hintedDiscoveryIds},
   "dragonIncubationMeshes":{get:()=>dragonIncubationMeshes},
   "dragonIncubationMs":{get:()=>dragonIncubationMs},
   "drawPattern":{get:()=>drawPattern},
@@ -6741,6 +7040,7 @@ const legacyWorldBindings={
   "progressionFocus":{get:()=>progressionFocus,set:value=>{progressionFocus=value;}},
   "rebuildAround":{get:()=>rebuildAround},
   "rebuildChunk":{get:()=>rebuildChunk},
+  "rewardGain":{get:()=>rewardGain},
   "RECIPES":{get:()=>RECIPES},
   "regenAcc":{get:()=>regenAcc,set:value=>{regenAcc=value;}},
   "regionalContract":{get:()=>regionalContract,set:value=>{regionalContract=value;}},

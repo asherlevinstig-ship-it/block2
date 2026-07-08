@@ -1,4 +1,5 @@
 import {disposeObjectTree} from './three-disposal.mjs';
+const FAMILIAR_SYSTEM=globalThis.BlockcraftFamiliarSystem;
 
 export function createCompanionSystem({
   NET,
@@ -17,6 +18,8 @@ export function createCompanionSystem({
   netSpawnProjectile,
   playerAppearance,
   remoteAppearance,
+  teamCol,
+  teamName,
 }){
 // ---------------- mounts ----------------
 // Voxel mounts, built feet-at-y=0 with the saddle near the per-kind lift height and the
@@ -722,18 +725,21 @@ function soloBreathDamage(ox,oy,oz,dir,type){
 
 // ---------------- familiar: Shade (utility + defense shadow companion) ----------------
 let familiarUnlocks=[];          // bound familiar kinds (persisted in the profile)
+let familiarXp={shade:0,fang:0,mote:0,sprite:0};
+let familiarChallenges={};
 let activeFamiliar='';           // currently summoned familiar kind ('' = none)
-function famTier(lvl){ const L=[1,6,11,16,21]; let t=0; for(let i=0;i<L.length;i++) if((lvl|0)>=L[i]) t=i; return t; }
+function familiarPowerLevel(kind){return FAMILIAR_SYSTEM.bondLevel(familiarXp[kind]||0);}
+function applyFamiliarBond(m){if(!m||!FAMILIARS[m.kind])return;familiarXp[m.kind]=Math.max(0,m.xp|0);if(m.challenge)familiarChallenges[m.kind]=m.challenge;famHudSig='';if(m.challenge&&m.challenge.justCompleted)sysMsg('<b>Bond Challenge complete:</b> '+m.challenge.title+' · +'+FAMILIAR_SYSTEM.DAILY_CHALLENGE_REWARD+' Bond XP');}
+const famTier=FAMILIAR_SYSTEM.tier;
 // Shade's rank follows the lore tiers (Iron..Gold); visible bodies are capped for the engine.
 const SHADE_RANK_N=[1,3,7,31,211], SHADE_VISIBLE_CAP=7;
 function shadeTier(lvl){ return famTier(lvl); }
 function shadeRankCount(lvl){ return SHADE_RANK_N[shadeTier(lvl)]; }
 function shadeBodyCount(lvl){ return Math.min(SHADE_VISIBLE_CAP, shadeRankCount(lvl)); }
-const SHADE_STEP_MIN_RANK=7;   // Dark Passage (shadow-step) opens at rank 7
 function fangBodyCount(lvl){ return Math.min(3, 1+Math.floor(famTier(lvl)/2)); }   // 1..3 hounds
-function fangDamage(lvl){ return 3 + famTier(lvl)*2.5; }
+const fangDamage=FAMILIAR_SYSTEM.fangDamage;
 function spriteBodyCount(lvl){ return Math.min(3, 1+Math.floor(famTier(lvl)/2)); }   // 1..3 sprites
-function spriteForageChance(lvl){ return 0.12 + 0.05*famTier(lvl); }                  // mirrors server
+const spriteForageChance=FAMILIAR_SYSTEM.spriteForageChance;
 function makeSpriteBody(){
   const grp=new THREE.Group();
   const core=new THREE.MeshBasicMaterial({color:0xfff6c8, transparent:true, opacity:.95, depthWrite:false});
@@ -840,10 +846,10 @@ function nearestHostile(x,z,range){
 }
 function tickFamiliars(now, dt){
   const want={};
-  if(activeFamiliar) want.local={kind:activeFamiliar, x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw, lvl:(S&&S.lvl)||1};
+  if(activeFamiliar) want.local={kind:activeFamiliar, x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw, lvl:familiarPowerLevel(activeFamiliar)};
   for(const sid in NET.remotes){
     const r=NET.remotes[sid], ref=r.ref;
-    if(ref && FAMILIARS[ref.familiar] && (ref.dgn||'')===NET.dgn) want[sid]={kind:ref.familiar, x:r.grp.position.x, y:r.grp.position.y, z:r.grp.position.z, yaw:ref.yaw||0, lvl:ref.lvl||1};
+    if(ref && FAMILIARS[ref.familiar] && (ref.dgn||'')===NET.dgn) want[sid]={kind:ref.familiar, x:r.grp.position.x, y:r.grp.position.y, z:r.grp.position.z, yaw:ref.yaw||0, lvl:FAMILIAR_SYSTEM.TIER_LEVELS[Math.max(0,Math.min(4,ref.familiarTier|0))]};
   }
   for(const k in familiarRender) if(!want[k]) clearFamiliarRender(k);
   const t=now/1000, sdt=Math.min(0.05, dt||0.016);
@@ -852,20 +858,54 @@ function tickFamiliars(now, dt){
     if(o.kind==='fang') tickFangPack(s,o,n,sdt,t,k==='local');
     else if(o.kind==='mote') tickMoteSwarm(s,o,n,sdt,t);
     else if(o.kind==='sprite') tickSpriteSwarm(s,o,n,sdt,t);
-    else tickShadeSwarm(s,o,n,sdt,t);
+    else tickShadeSwarm(s,o,n,sdt,t,k==='local');
   }
   if(!NET.on && activeFamiliar==='fang') tickSoloFang(now);
   if(!NET.on && activeFamiliar==='mote') tickSoloMote(now);
+  tickFamiliarTierEvolution();
+  tickFamiliarPersonality(now);
+}
+let familiarTierSeen=-1;
+function tickFamiliarTierEvolution(){
+  const tier=activeFamiliar?famTier(familiarPowerLevel(activeFamiliar)):0;
+  if(familiarTierSeen<0){familiarTierSeen=tier;return;}
+  if(tier<=familiarTierSeen){familiarTierSeen=tier;return;}
+  familiarTierSeen=tier;
+  if(!activeFamiliar)return;
+  const ability=FAMILIAR_SYSTEM.TIER_ABILITIES[activeFamiliar][tier];
+  const col=activeFamiliar==='shade'?[.55,.25,.9]:activeFamiliar==='fang'?[1,.75,.25]:activeFamiliar==='mote'?[.55,1,.35]:[1,.9,.35];
+  burst(player.pos.x,player.pos.y+1,player.pos.z,col,36,3.5,3,.8);
+  if(typeof SFX!=='undefined'&&SFX.boom)SFX.boom();
+  sysMsg('<b>'+FAMILIARS[activeFamiliar].name+' evolved — Tier '+(tier+1)+':</b> '+ability);
+}
+let familiarIdleAt=0, familiarReactionAt=0;
+const FAMILIAR_IDLE_LINES={
+  mote:['Mote hums softly, warming the air around you.','Mote circles once, checking old wounds that are no longer there.'],
+  sprite:['Sprite counts your supplies. Twice.','Sprite flits toward the road, then remembers it is supposed to wait for you.'],
+};
+function tickFamiliarPersonality(now){
+  const lines=FAMILIAR_IDLE_LINES[activeFamiliar];
+  if(!lines){ familiarIdleAt=0; return; }
+  if(!familiarIdleAt){ familiarIdleAt=now+90000+Math.random()*45000; return; }
+  if(now>=familiarIdleAt){ familiarIdleAt=now+110000+Math.random()*50000; sysMsg(lines[(Math.random()*lines.length)|0]); }
+}
+let moteBloomReadyAt=0;
+function familiarReaction(kind,count=1){
+  const now=performance.now(); if(now<familiarReactionAt) return;
+  familiarReactionAt=now+12000;
+  if(kind==='mote'){ moteBloomReadyAt=now+FAMILIAR_SYSTEM.moteBurstCooldown(familiarPowerLevel('mote')); sysMsg('Mote brightens as your strength returns.'); }
+  else if(kind==='sprite') sysMsg(count>1?'Sprite trills: <i>"A whole hidden cache!"</i>':'Sprite chirps: <i>"Found one more!"</i>');
 }
 // Mote: gentle restoration wisps that hover and bob close around the owner (not a swarm, not a pet).
 function tickMoteSwarm(s,o,n,dt,t){
+  const bloomReady=t*1000>=moteBloomReadyAt;
   for(let i=0;i<s.bodies.length;i++){
-    const b=s.bodies[i], a=t*0.6+b.phase+i*(Math.PI*2/Math.max(1,n)), rad=0.9+0.12*Math.sin(t*1.1+b.phase);
+    const b=s.bodies[i], a=t*(bloomReady?.8:.45)+b.phase+i*(Math.PI*2/Math.max(1,n)), rad=(bloomReady?.9:.55)+0.12*Math.sin(t*1.1+b.phase);
     const tx=o.x+Math.cos(a)*rad, tz=o.z+Math.sin(a)*rad, ty=o.y+1.1+Math.sin(t*1.6+b.phase)*0.22, p=b.mesh.position;
     if(Math.hypot(tx-p.x,tz-p.z)>14){ p.set(tx,ty,tz); }
     p.x+=(tx-p.x)*Math.min(1,dt*5); p.y+=(ty-p.y)*Math.min(1,dt*5); p.z+=(tz-p.z)*Math.min(1,dt*5);
     const u=b.mesh.userData;
-    if(u.orb){ const pul=1+0.18*Math.sin(t*3+b.phase); u.orb.scale.set(pul,pul,pul); u.orb.rotation.y=t*0.8+b.phase; }
+    if(u.orb){ const pul=1+(bloomReady?.22:.08)*Math.sin(t*(bloomReady?4:2)+b.phase); u.orb.scale.set(pul,pul,pul); u.orb.rotation.y=t*(bloomReady?.8:.35)+b.phase; }
     if(u.petals) for(let w=0;w<u.petals.length;w++) u.petals[w].rotation.x=Math.sin(t*4+w+b.phase)*0.5;
   }
 }
@@ -897,10 +937,11 @@ let moteAccLocal=0, moteBurstCdLocal=0;
 function tickSoloMote(now){
   if(typeof hp==='undefined') return;
   const mx=maxHp(), dtS=Math.min(0.1,(now-(tickSoloMote._last||now))/1000); tickSoloMote._last=now;
-  if(hp<mx){ moteAccLocal+=dtS*(0.6+0.4*famTier((S&&S.lvl)||1)); const whole=Math.floor(moteAccLocal);
+  const lvl=familiarPowerLevel('mote');
+  if(hp<mx){ moteAccLocal+=dtS*FAMILIAR_SYSTEM.moteRegen(lvl); const whole=Math.floor(moteAccLocal);
     if(whole>0){ moteAccLocal-=whole; hp=Math.min(mx,hp+whole); refreshHUD&&refreshHUD(); } }
-  if(famTier((S&&S.lvl)||1)>=2 && hp<mx && now>=moteBurstCdLocal && nearestHostile(player.pos.x,player.pos.z,10)){
-    moteBurstCdLocal=now+20000; hp=Math.min(mx, hp+(4+2*famTier((S&&S.lvl)||1))); refreshHUD&&refreshHUD();
+  if(famTier(lvl)>=FAMILIAR_SYSTEM.MOTE_BURST_MIN_TIER && hp<mx && now>=moteBurstCdLocal && nearestHostile(player.pos.x,player.pos.z,FAMILIAR_SYSTEM.MOTE_BURST_RANGE)){
+    moteBurstCdLocal=now+FAMILIAR_SYSTEM.moteBurstCooldown(lvl); moteBloomReadyAt=moteBurstCdLocal; hp=Math.min(mx, hp+FAMILIAR_SYSTEM.moteBurst(lvl)); refreshHUD&&refreshHUD();
     burst(player.pos.x,player.pos.y+1,player.pos.z,[.6,1,.5],18,2.2,2.4,.55);
   }
 }
@@ -953,14 +994,16 @@ function animateFang(b, run, t, chase, dt){
   if(u.head) u.head.rotation.x = -0.04 + Math.sin(b.gait*0.5)*0.05*run - snap*0.5 + b.sit*0.12 - b.lie*0.22;
 }
 // snap the nearest Fang body forward and bark when it bites
-function fangSnap(x,z){
-  let best=null,bd=1e9;
+function fangSnap(x,z,count=1){
+  const nearby=[];
   for(const k in familiarRender){ const r=familiarRender[k]; if(r.kind!=='fang') continue;
-    for(const b of r.bodies){ const dd=Math.hypot(b.mesh.position.x-x,b.mesh.position.z-z); if(dd<bd){bd=dd;best=b;} } }
-  if(best && bd<6){ best.snap=0.28; best.idle=0; if(typeof SFX!=='undefined'&&SFX.bark) SFX.bark(); }
+    for(const b of r.bodies)nearby.push({b,d:Math.hypot(b.mesh.position.x-x,b.mesh.position.z-z)}); }
+  nearby.sort((a,b)=>a.d-b.d);
+  let snapped=0; for(const entry of nearby){if(entry.d>=6||snapped>=count)break;entry.b.snap=.28+snapped*.05;entry.b.idle=0;snapped++;}
+  if(snapped&&typeof SFX!=='undefined'&&SFX.bark)SFX.bark();
 }
 // Shade swarms in a loose, weaving orbit of wraiths with pulsing eyes and swaying tatters.
-function tickShadeSwarm(s,o,n,dt,t){
+function tickShadeSwarm(s,o,n,dt,t,local){
   for(let i=0;i<s.bodies.length;i++){
     const b=s.bodies[i], a=t*0.45+b.phase+i*(Math.PI*2/Math.max(1,n));
     const rad=1.45+0.35*Math.sin(t*0.7+b.phase*1.3);
@@ -973,16 +1016,32 @@ function tickShadeSwarm(s,o,n,dt,t){
     if(u.wisps) for(let w=0;w<u.wisps.length;w++) u.wisps[w].rotation.z=Math.sin(t*3+w*1.3+b.phase)*0.28;
     const br=1+0.04*Math.sin(t*1.7+b.phase); b.mesh.scale.set(br,br,br);
   }
+  if(local)tickShadeChargeMarkers(s,o,t);
+}
+function tickShadeChargeMarkers(s,o,t){
+  const max=FAMILIAR_SYSTEM.shadeStepCharges(o.lvl); if(!s.chargeMarkers)s.chargeMarkers=[];
+  while(s.chargeMarkers.length<max){
+    const marker=new THREE.Mesh(new THREE.TorusGeometry(.22,.035,6,18),new THREE.MeshBasicMaterial({color:0xb86cff,transparent:true,opacity:.8,depthWrite:false}));
+    marker.rotation.x=Math.PI/2;s.grp.add(marker);s.chargeMarkers.push(marker);
+  }
+  while(s.chargeMarkers.length>max){const marker=s.chargeMarkers.pop();s.grp.remove(marker);}
+  const available=shadeAvailableCharges();
+  for(let i=0;i<s.chargeMarkers.length;i++){
+    const marker=s.chargeMarkers[i],a=t*.7+i*Math.PI*2/Math.max(1,max);
+    marker.position.set(o.x+Math.cos(a)*.72,o.y+.08,o.z+Math.sin(a)*.72);
+    marker.material.opacity=i<available?.85:.12; marker.scale.setScalar(1+.12*Math.sin(t*3+i));
+  }
 }
 let fangCdLocal=0;
 function tickSoloFang(now){
   if(now<fangCdLocal) return;
-  const tgt=nearestHostile(player.pos.x,player.pos.z,9);
+  const tgt=nearestHostile(player.pos.x,player.pos.z,FAMILIAR_SYSTEM.FANG_RANGE);
   if(!tgt) return;
-  fangCdLocal=now+850;
-  damageMob(tgt, fangDamage((S&&S.lvl)||1));
+  const lvl=familiarPowerLevel('fang'), strikes=FAMILIAR_SYSTEM.fangStrikes(lvl);
+  fangCdLocal=now+FAMILIAR_SYSTEM.fangCooldown(lvl);
+  damageMob(tgt, fangDamage(lvl)*strikes);
   burst(tgt.grp.position.x, tgt.grp.position.y+0.8, tgt.grp.position.z, [.7,.6,.5], 5, 1.6, 1.1, .25);
-  fangSnap(tgt.grp.position.x, tgt.grp.position.z);
+  fangSnap(tgt.grp.position.x, tgt.grp.position.z,strikes);
 }
 const SHADE_THREAT_LINES=[
   'Shade murmurs: something hunts nearby.',
@@ -1034,17 +1093,54 @@ function familiarSummonFx(kind){
   } else if(kind==='fang'){
     burst(player.pos.x, player.pos.y+0.6, player.pos.z, [.55,.4,.3], 14, 2.0, 1.6, .45);
     sysMsg('<b>Fang</b> pads to your side, hackles raised.');
+  } else if(kind==='mote'){
+    burst(player.pos.x, player.pos.y+1, player.pos.z, [.55,1,.38], 22, 2.2, 2.1, .65);
+    healingPlusVfx(player.pos.x,player.pos.y+.1,player.pos.z,.75,.75);
+    if(typeof SFX!=='undefined'&&SFX.cast) SFX.cast();
+    sysMsg('<b>Mote</b> blooms into a warm orbit around you.');
+  } else if(kind==='sprite'){
+    burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 24, 2.8, 2.5, .55);
+    if(typeof SFX!=='undefined'&&SFX.coin) SFX.coin();
+    sysMsg('<b>Sprite</b> darts from the charm, already searching for overlooked treasure.');
   }
+  familiarIdleAt=performance.now()+90000+Math.random()*45000;
+}
+function familiarDismissFx(kind){
+  const col=kind==='shade'?[.45,.2,.7]:kind==='fang'?[.55,.4,.3]:kind==='mote'?[.55,1,.38]:[1,.85,.3];
+  burst(player.pos.x,player.pos.y+.8,player.pos.z,col,12,1.5,1.4,.35);
+}
+let familiarTutorialKind='';
+function familiarTutorialDone(){
+  try{return localStorage.getItem('bc_familiar_tutorial_v1')==='1';}catch(e){return false;}
+}
+function showFamiliarTutorial(kind){
+  if(familiarTutorialDone()||typeof onboardingActive!=='undefined'&&onboardingActive)return;
+  familiarTutorialKind=kind;
+  const el=document.getElementById('tutorialhud'); if(!el)return;
+  el.innerHTML='<div class="tutpill">Familiar bond</div><div class="tutkey">K</div><div class="tuttext">Call '+FAMILIARS[kind].name+' to your side</div><div class="tutsub">K also cycles your bound familiars and dismisses the last one.</div>';
+  el.classList.remove('hidden');
+}
+function finishFamiliarTutorial(kind){
+  if(!familiarTutorialKind||kind!==familiarTutorialKind)return;
+  familiarTutorialKind='';
+  const el=document.getElementById('tutorialhud'); if(el)el.classList.add('hidden');
+  try{localStorage.setItem('bc_familiar_tutorial_v1','1');}catch(e){}
+  if(NET.on&&NET.room)NET.room.send('tutorialComplete',{tutorial:'familiar',version:1});
+  const extra=kind==='shade'?' At bond tier II, press <b>N</b> for Dark Passage.':'';
+  sysMsg('<b>Familiar ready.</b> Its live effect appears in the lower-right bond panel.'+extra);
 }
 function setFamiliar(kind){
   if(kind===activeFamiliar) return;
   if(kind && !familiarUnlocks.includes(kind)){ sysMsg('You have not bound that familiar'); return; }
+  const previous=activeFamiliar;
   activeFamiliar=kind||'';
   if(NET.on&&NET.room) NET.room.send(kind?'summonFamiliar':'dismissFamiliar', kind?{kind}:{});
   if(kind) familiarSummonFx(kind);
-  else sysMsg('Your familiar fades away.');
+  else { familiarDismissFx(previous); sysMsg('Your familiar fades away.'); }
+  if(kind)finishFamiliarTutorial(kind);
 }
-function cycleFamiliar(){                        // K: cycle bound familiars, then dismiss
+function cycleFamiliar(target){                  // K cycles; menus may request one bound familiar directly
+  if(typeof target==='string') return setFamiliar(target);
   const order=familiarUnlocks.filter(k=>FAMILIARS[k]);
   if(!order.length){ sysMsg('Bind a familiar first — e.g. a <b>Shadow Sigil</b> or <b>Fang Totem</b>'); return; }
   if(!activeFamiliar) return setFamiliar(order[0]);
@@ -1052,35 +1148,67 @@ function cycleFamiliar(){                        // K: cycle bound familiars, th
   setFamiliar(next>=order.length ? '' : order[next]);
 }
 const FAMILIAR_HUD={ shade:{color:'#b86cff',role:'Guardian'}, fang:{color:'#ffcf4a',role:'Hound'}, mote:{color:'#8fe06a',role:'Healer'}, sprite:{color:'#ffe27a',role:'Forager'} };
-let famHudSig='';
+let famHudSig='', shadeStepPendingUntil=0, shadeStepCharges=0, shadeStepMaxCharges=0, shadeStepChargeUpdatedAt=0;
+function shadeAvailableCharges(){
+  const max=shadeStepMaxCharges||FAMILIAR_SYSTEM.shadeStepCharges((S&&S.lvl)||1);
+  if(!shadeStepChargeUpdatedAt)return max;
+  return Math.min(max,shadeStepCharges+Math.floor((performance.now()-shadeStepChargeUpdatedAt)/FAMILIAR_SYSTEM.SHADE_STEP_CD_MS));
+}
 function updateFamiliarHUD(){
   const el=document.getElementById('familiarhud'); if(!el) return;
   const def=FAMILIAR_HUD[activeFamiliar];
   if(!def){ if(!el.classList.contains('hidden')){ el.classList.add('hidden'); famHudSig=''; } return; }
-  const k=activeFamiliar, lvl=(S&&S.lvl)||1, tier=famTier(lvl);
+  const k=activeFamiliar, lvl=familiarPowerLevel(k), tier=famTier(lvl), xp=familiarXp[k]||0;
   let rank, stat;
-  if(k==='shade'){ const rc=shadeRankCount(lvl); rank='×'+rc; stat='Guarding −'+(10+3*tier)+'% dmg'+(rc>=SHADE_STEP_MIN_RANK?' · step ready':''); }
-  else if(k==='fang'){ const c=fangBodyCount(lvl); rank=c+(c>1?' hounds':' hound'); stat='Bite '+fangDamage(lvl); }
-  else if(k==='mote'){ rank='×'+moteBodyCount(lvl); stat='Regen +'+(0.6+0.4*tier).toFixed(1)+'/s'+(tier>=2?' · burst':''); }
-  else { rank='×'+spriteBodyCount(lvl); stat='Forage +'+Math.round(spriteForageChance(lvl)*100)+'% loot'; }
+  if(k==='shade'){ const rc=shadeRankCount(lvl); rank='×'+rc; stat='Guarding −'+Math.round(FAMILIAR_SYSTEM.shadeMitigation(lvl)*100)+'% dmg'; }
+  else if(k==='fang'){ const c=fangBodyCount(lvl); rank=c+(c>1?' hounds':' hound'); stat=FAMILIAR_SYSTEM.fangStrikes(lvl)+'× bite '+fangDamage(lvl); }
+  else if(k==='mote'){ rank='×'+moteBodyCount(lvl); stat='Regen +'+FAMILIAR_SYSTEM.moteRegen(lvl).toFixed(1)+'/s'+(tier>=FAMILIAR_SYSTEM.MOTE_BURST_MIN_TIER?' · burst':''); }
+  else { rank='×'+spriteBodyCount(lvl); stat='Forage '+Math.round(spriteForageChance(lvl)*100)+'% · +'+FAMILIAR_SYSTEM.spriteBonusDrops(lvl); }
   const multi=familiarUnlocks.filter(x=>FAMILIARS[x]).length>1;
-  const sig=k+'|'+rank+'|'+stat+'|'+multi;
+  const sig=k+'|'+rank+'|'+stat+'|'+multi+'|'+xp;
   el.classList.remove('hidden');
-  if(sig===famHudSig) return;
+  if(sig===famHudSig){ updateShadeStepHud(el); return; }
   famHudSig=sig;
   el.style.borderColor=def.color+'88';
+  const shadeCanStep=k==='shade'&&famTier(lvl)>=FAMILIAR_SYSTEM.SHADE_STEP_MIN_TIER;
   el.innerHTML='<div class="fhead"><span class="fdot" style="background:'+def.color+';color:'+def.color+'"></span>'+FAMILIARS[k].name+
-    '<span class="frole">'+def.role+'</span></div><div class="fstat">'+stat+' · '+rank+'</div>'+(multi?'<div class="fhint">K — cycle</div>':'');
+    '<span class="frole">'+def.role+'</span></div><div class="fstat">'+stat+' · '+rank+'</div>'+
+    '<div class="fstat">Bond XP '+xp+(tier<4?' / '+FAMILIAR_SYSTEM.BOND_XP_THRESHOLDS[tier+1]:' · MAX TIER')+'</div>'+(
+    shadeCanStep?'<div class="fcd"><i></i></div><div class="fcdlabel"></div>':'')+(multi?'<div class="fhint">K — cycle</div>':'');
+  updateShadeStepHud(el);
 }
 let shadeStepCd=0;
+function updateShadeStepHud(el){
+  const fill=el&&el.querySelector('.fcd i'), label=el&&el.querySelector('.fcdlabel');
+  if(!fill||!label) return;
+  const now=performance.now(), pending=now<shadeStepPendingUntil, remain=Math.max(0,shadeStepCd-now);
+  fill.style.width=(pending?100:Math.min(100,remain/FAMILIAR_SYSTEM.SHADE_STEP_CD_MS*100))+'%';
+  const max=shadeStepMaxCharges||FAMILIAR_SYSTEM.shadeStepCharges(familiarPowerLevel('shade'));
+  const charges=shadeAvailableCharges();
+  label.textContent=pending?'N · CONTACTING SHADE':remain>0?'N · '+charges+'/'+max+' · '+(remain/1000).toFixed(1)+'s':'N · '+charges+'/'+max+' SHADOW JUMPS';
+}
+function applyShadeStepResult(m){
+  if(!m) return;
+  player.pos.x=Number(m.x)||0; player.pos.y=Number(m.y)||0; player.pos.z=Number(m.z)||0;
+  shadeStepPendingUntil=0;
+  shadeStepCharges=Math.max(0,Number(m.charges)||0); shadeStepMaxCharges=Math.max(0,Number(m.maxCharges)||0); shadeStepChargeUpdatedAt=performance.now()-Math.max(0,FAMILIAR_SYSTEM.SHADE_STEP_CD_MS-(Number(m.rechargeCd)||FAMILIAR_SYSTEM.SHADE_STEP_CD_MS));
+  shadeStepCd=performance.now()+Math.max(0,Number(m.cd)||0);
+}
+function applyShadeStepReject(m){
+  shadeStepPendingUntil=0;
+  if(m&&m.reason==='cooldown'){ shadeStepCharges=Math.max(0,Number(m.charges)||0); shadeStepMaxCharges=Math.max(0,Number(m.maxCharges)||shadeStepMaxCharges); shadeStepChargeUpdatedAt=performance.now(); shadeStepCd=performance.now()+Math.max(0,Number(m.cd)||0); }
+}
 function shadowStep(){                          // Dark Passage: blink through shadow in your facing direction
   if(activeFamiliar!=='shade'){ sysMsg('Call <b>Shade</b> first (K)'); return; }
-  if(shadeRankCount((S&&S.lvl)||1) < SHADE_STEP_MIN_RANK){ sysMsg('Shade murmurs: "I am not yet numerous enough to carry you."'); return; }
+  if(famTier(familiarPowerLevel('shade')) < FAMILIAR_SYSTEM.SHADE_STEP_MIN_TIER){ sysMsg('Shade murmurs: "Our bond is not yet deep enough to carry you."'); return; }
   const now=performance.now();
   if(now<shadeStepCd){ return; }
-  shadeStepCd=now+5000;
-  const d=viewDir(false), start={x:player.pos.x,y:player.pos.y,z:player.pos.z};
-  for(let st=0;st<28;st++){ moveAxis('x', d.x*.24); moveAxis('z', d.z*.24); }   // client glide w/ collision, like Shadow Dash
+  const d=viewDir(false);
+  if(NET.on&&NET.room){ shadeStepPendingUntil=now+1200; NET.room.send('shadeStep',{x:d.x,z:d.z}); return; }
+  shadeStepCd=now+FAMILIAR_SYSTEM.SHADE_STEP_CD_MS;
+  const start={x:player.pos.x,y:player.pos.y,z:player.pos.z};
+  const steps=Math.ceil(FAMILIAR_SYSTEM.shadeStepDistance(familiarPowerLevel('shade'))/.24);
+  for(let st=0;st<steps;st++){ moveAxis('x', d.x*.24); moveAxis('z', d.z*.24); }
   shadowDashVfx(start,{x:player.pos.x,y:player.pos.y,z:player.pos.z});
   camShake=Math.max(camShake,.16);
   if(typeof SFX!=='undefined' && SFX.cast) SFX.cast();
@@ -1100,7 +1228,7 @@ function familiarBoundLocal(kind){
   burst(player.pos.x, player.pos.y+1, player.pos.z, [.55,.25,.85], 28, 2.8, 3.0, .7);
   if(typeof SFX!=='undefined' && SFX.boom) SFX.boom();
   sysMsg('<b>'+FAMILIARS[kind].name+'</b> is bound to you. Press <b>K</b> to call'+(familiarUnlocks.length>1?' / cycle familiars':'')+'.');
-  setFamiliar(kind);
+  showFamiliarTutorial(kind);
   questSystemCheck();
 }
 
@@ -1117,6 +1245,7 @@ function makeRemoteAvatar(look){
   const hasAegis=hasArmor&&armorType==='aegis';
   const hasDiaArmor=(look.armorId|0)===184;
   const heldKind=equipmentKind(look.heldId);
+  const hasCartographerMantle=Array.isArray(look.cosmetics)&&look.cosmetics.includes('cartographers_mantle');
   const skinM=voxelMats(look.skin, shadeHex(look.skin,18), look.skinDark, look.skinShadow);
   const faceM=lam(faceTexture(look));
   const hairM=voxelMats(look.hair, look.hairLight, look.hairDark, look.hairDark);
@@ -1165,6 +1294,10 @@ function makeRemoteAvatar(look){
                       :voxelMats(look.scarf, shadeHex(look.scarf,16), shadeHex(look.scarf,-44), shadeHex(look.scarf,-58));
   const capeTrimM=voxelMats('#caa23e','#f4d27a','#8a6a1e','#5e4712');
   const gemM=glowVoxelMats('#33dcff','#c4f6ff','#1888ad','#33dcff',1.2);
+  const cartoClothM=voxelMats('#1f5f78','#55c7d8','#123949','#0b2530');
+  const cartoLightM=voxelMats('#72d7c7','#d8fff4','#2a8b84','#14545a');
+  const cartoGoldM=glowVoxelMats('#d6a642','#fff0a8','#8a6424','#ffd24a',.65);
+  const cartoInkM=voxelMats('#173044','#2f5f7a','#071722','#050d14');
 
   const head=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),[skinM[0],skinM[1],skinM[2],skinM[3],faceM,skinM[5]]);
   head.position.y=1.72; grp.add(head);
@@ -1319,6 +1452,25 @@ function makeRemoteAvatar(look){
     addBox(cape,[.05,1.7,.06],[.25,-.42,.1],scarfM,[.13,0,0]);
     addBox(cape,[.16,.1,.07],[0,.12,-.01],metalM);                 // cloak clasp
   }
+  if(hasCartographerMantle){
+    addBox(cape,[.9,.18,.13],[0,.2,-.02],cartoGoldM);              // royal cartographer shoulder yoke
+    addBox(cape,[.58,.08,.08],[0,.3,-.08],cartoLightM);            // sky-blue collar inlay
+    addBox(cape,[.72,.5,.055],[0,-.2,.02],cartoClothM,[.06,0,0]);
+    addBox(cape,[.82,.62,.055],[0,-.7,.1],cartoClothM,[.13,0,0]);
+    addBox(cape,[.76,.34,.055],[0,-1.18,.22],cartoClothM,[.2,0,0]);
+    addBox(cape,[.06,1.55,.065],[-.38,-.48,.12],cartoGoldM,[.12,0,0]);
+    addBox(cape,[.06,1.55,.065],[.38,-.48,.12],cartoGoldM,[.12,0,0]);
+    addBox(cape,[.66,.06,.065],[0,-1.38,.3],cartoGoldM,[.22,0,0]);
+    addBox(cape,[.28,.2,.07],[0,-.52,.165],cartoLightM,[.13,0,0]); // map patch
+    addBox(cape,[.2,.04,.08],[0,-.52,.205],cartoInkM,[.13,0,.15]);
+    addBox(cape,[.04,.16,.08],[-.06,-.52,.21],cartoInkM,[.13,0,0]);
+    addBox(cape,[.16,.16,.08],[0,-.86,.23],cartoGoldM,[.18,0,.785]); // compass diamond
+    addBox(cape,[.04,.26,.085],[0,-.86,.26],cartoLightM,[.18,0,0]);
+    addBox(cape,[.26,.04,.085],[0,-.86,.26],cartoLightM,[.18,0,0]);
+    addBox(cape,[.16,.12,.08],[-.23,.18,-.04],cartoGoldM);        // shoulder clasps
+    addBox(cape,[.16,.12,.08],[.23,.18,-.04],cartoGoldM);
+    addBox(cape,[.08,.08,.09],[0,.23,-.1],cartoLightM,[0,0,.785]);
+  }
 
   for(const sx of [-.13,.13]){
     const leg=new THREE.Group(); leg.position.set(sx,.72,0);
@@ -1455,7 +1607,7 @@ function makeRemoteAvatar(look){
   return {grp, legs, arms, head, look, hair, blink, idle, sword, aegisGlow};
 }
 function equipmentSignatureFrom(ref){
-  return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, (ref&&ref.armorType)||'', ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0].join('|');
+  return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, (ref&&ref.armorType)||'', ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0, (ref&&ref.cosmetics)||''].join('|');
 }
 function netAddRemote(sid, ref){
   const r={...makeRemoteAvatar(remoteAppearance(ref)), ref, phase:Math.random()*10, tagText:'', equipSig:equipmentSignatureFrom(ref)};
@@ -1561,9 +1713,14 @@ function netRemoveRemote(sid){
     spriteForage,
     fangSnap,
     tickWatchfulShade,
+    setFamiliar,
     cycleFamiliar,
     updateFamiliarHUD,
     shadowStep,
+    applyShadeStepResult,
+    applyShadeStepReject,
+    familiarReaction,
+    applyFamiliarBond,
     bindFamiliarItem,
     familiarBoundLocal,
     makeRemoteAvatar,
@@ -1580,6 +1737,10 @@ function netRemoveRemote(sid){
     set localMountObj(value){ localMountObj=value; },
     get dragonUnlocks(){ return dragonUnlocks; },
     set dragonUnlocks(value){ dragonUnlocks=value; },
+    get familiarXp(){ return familiarXp; },
+    set familiarXp(value){ familiarXp=value&&typeof value==='object'?{shade:value.shade|0,fang:value.fang|0,mote:value.mote|0,sprite:value.sprite|0}:{shade:0,fang:0,mote:0,sprite:0}; },
+    get familiarChallenges(){ return familiarChallenges; },
+    set familiarChallenges(value){ familiarChallenges=value&&typeof value==='object'?value:{}; },
     get dragonCare(){ return dragonCare; },
     set dragonCare(value){ dragonCare=value; },
     get dragonNames(){ return dragonNames; },

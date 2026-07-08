@@ -72,6 +72,10 @@ export function createNetworkController(options) {
     state.room = room;
     state.reconnecting = false;
     state.attachCount++;
+    // Colyseus 0.17 added automatic Room reconnection. Blockcraft already owns a
+    // bounded reconnect/fresh-join policy here, including UI state and room-switch
+    // recovery, so running both layers prevents our attach hooks from firing.
+    if (room.reconnection) room.reconnection.enabled = false;
     try { if (room.reconnectionToken) options.sessionStorage.setItem(options.tokenKey, room.reconnectionToken); } catch (_) {}
     room.onLeave(() => reconnect(room, name, client));
     options.onAttach(room, name, client);

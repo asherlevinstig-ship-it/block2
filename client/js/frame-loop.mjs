@@ -33,6 +33,105 @@ const dungeonPingBeam=new THREE.Mesh(new THREE.CylinderGeometry(.12,.34,7,10,1,t
 const dungeonPingRing=new THREE.Mesh(new THREE.TorusGeometry(1.15,.07,8,36),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.9,depthWrite:false,blending:THREE.AdditiveBlending}));
 dungeonPingBeam.position.y=3.5;dungeonPingRing.rotation.x=Math.PI/2;dungeonPingRing.position.y=.12;dungeonPingGroup.add(dungeonPingBeam,dungeonPingRing);dungeonPingGroup.visible=false;scene.add(dungeonPingGroup);
 let activeDungeonPing=null;
+const treasureClueGroup=new THREE.Group();
+const treasureBeamMat=new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.24,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+const treasureCoreMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+const treasureBeam=new THREE.Mesh(new THREE.CylinderGeometry(.42,.9,18,18,1,true),treasureBeamMat);
+const treasureCore=new THREE.Mesh(new THREE.CylinderGeometry(.08,.18,20,12,1,true),treasureCoreMat);
+const treasureRing=new THREE.Mesh(new THREE.TorusGeometry(2.2,.08,8,54),new THREE.MeshBasicMaterial({color:0xfff0a8,transparent:true,opacity:.82,depthWrite:false,blending:THREE.AdditiveBlending}));
+const treasureCache=new THREE.Group();
+function makeHudSprite(text,color='#ffd24a',bg='rgba(7,10,16,.74)'){
+  const c=document.createElement('canvas');c.width=256;c.height=72;const g=c.getContext('2d');
+  g.clearRect(0,0,c.width,c.height);g.fillStyle=bg;roundedRect(g,8,14,240,42,8);g.fill();g.strokeStyle=color;g.lineWidth=2;g.stroke();
+  g.font='bold 19px Courier New';g.textAlign='center';g.fillStyle=color;g.fillText(text,128,43);
+  const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.LinearFilter;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
+  sp.scale.set(4.2,1.18,1);sp.userData={canvas:c,tex,text,color,bg};return sp;
+}
+function retitleSprite(sp,text,color){
+  if(!sp||!sp.userData||sp.userData.text===text&&(!color||sp.userData.color===color))return;
+  const d=sp.userData,c=d.canvas,g=c.getContext('2d'),col=color||d.color;d.text=text;d.color=col;
+  g.clearRect(0,0,c.width,c.height);g.fillStyle=d.bg||'rgba(7,10,16,.74)';roundedRect(g,8,14,240,42,8);g.fill();g.strokeStyle=col;g.lineWidth=2;g.stroke();
+  g.font='bold 19px Courier New';g.textAlign='center';g.fillStyle=col;g.fillText(text,128,43);d.tex.needsUpdate=true;
+}
+{
+  const base=new THREE.Mesh(new THREE.BoxGeometry(1.25,.65,.85),new THREE.MeshLambertMaterial({color:0x6d411f}));
+  const lid=new THREE.Mesh(new THREE.BoxGeometry(1.35,.26,.95),new THREE.MeshLambertMaterial({color:0x8f5f2c}));
+  const trim=new THREE.Mesh(new THREE.BoxGeometry(1.45,.1,1.02),new THREE.MeshLambertMaterial({color:0xd8ad48}));
+  const lock=new THREE.Mesh(new THREE.BoxGeometry(.18,.22,.08),new THREE.MeshLambertMaterial({color:0xffe083}));
+  base.position.y=.34;lid.position.y=.8;trim.position.y=.98;lock.position.set(0,.72,.47);
+  treasureCache.add(base,lid,trim,lock);
+}
+const treasureLabel=makeHudSprite('TREASURE CLUE','#ffd24a');
+treasureBeam.position.y=9;treasureCore.position.y=10;treasureRing.rotation.x=Math.PI/2;treasureRing.position.y=.16;treasureLabel.position.y=3.2;treasureCache.position.y=.18;
+treasureClueGroup.add(treasureBeam,treasureCore,treasureRing,treasureCache,treasureLabel);treasureClueGroup.visible=false;scene.add(treasureClueGroup);
+const weatherDiscoveryFx=new Map();
+const weatherDiscoveryReq={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'};
+const weatherDiscoveryName={rain_bloom:'RAINWAKE BLOOM',storm_crystal:'STORMGLASS',sun_dial:'SUN DIAL'};
+const weatherDiscoveryItem={rain_bloom:'Rainwake Petals',storm_crystal:'Stormglass Shards',sun_dial:'Solar Glyphs'};
+const weatherDiscoveryAction={rain_bloom:'gather',storm_crystal:'harvest',sun_dial:'read'};
+function weatherLabelFor(kind,active){return active?weatherDiscoveryName[kind]:'DORMANT: '+weatherDiscoveryReq[kind].toUpperCase();}
+function makeWeatherDiscoveryFx(s){
+  const color={rain_bloom:0x67d6ff,storm_crystal:0xb79cff,sun_dial:0xffd24a}[s.type]||0xffffff;
+  const group=new THREE.Group();
+  const halo=new THREE.Mesh(new THREE.TorusGeometry(1.3,.065,8,44),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.52,depthWrite:false,blending:THREE.AdditiveBlending}));
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.44,4.6,12,1,true),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.16,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+  const label=makeHudSprite(weatherLabelFor(s.type,false),'#8fa1b2','rgba(5,8,13,.66)');
+  halo.rotation.x=Math.PI/2;halo.position.y=.2;beam.position.y=2.35;label.position.y=3.05;
+  group.add(halo,beam,label);group.position.set(s.x+.5,s.y+1.05,s.z+.5);group.userData={halo,beam,label,type:s.type,phase:Math.random()*10};
+  scene.add(group);weatherDiscoveryFx.set(s.id,group);return group;
+}
+function tickExplorationPresentation(now,dt){
+  const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===map.targetId):null;
+  treasureClueGroup.visible=!!(dim==='overworld'&&site);
+  if(site){
+    const y=surfaceY(site.x,site.z),dist=Math.hypot(player.pos.x-site.x,player.pos.z-site.z),pulse=.5+.5*Math.sin(now*.0048);
+    treasureClueGroup.position.set(site.x+.5,y+.03,site.z+.5);
+    treasureRing.rotation.z+=dt*1.9;treasureRing.scale.setScalar(1+pulse*.12);
+    treasureBeam.material.opacity=.16+pulse*.13;treasureCore.material.opacity=.18+pulse*.22;
+    treasureCache.visible=((map.stage|0)+1)>=(map.total|0)||dist<(site.radius||8)+6;
+    treasureCache.rotation.y+=dt*.65;
+    retitleSprite(treasureLabel,dist<(site.radius||8)+5?'PRESS G TO SOLVE':'TREASURE CLUE','#ffd24a');
+    if(dist<70&&Math.random()<dt*13)spawnParticle({x:site.x+.5+(Math.random()-.5)*2.8,y:y+.4+Math.random()*7,z:site.z+.5+(Math.random()-.5)*2.8,vx:(Math.random()-.5)*.25,vy:.6+Math.random()*.6,vz:(Math.random()-.5)*.25,life:.8,grav:-.15,r:1,g:.78,b:.22});
+  }
+  if(dim!=='overworld'){
+    weatherDiscoveryFx.forEach(g=>g.visible=false);
+    return;
+  }
+  const currentWeather=weather||'clear';
+  for(const s of smallDiscoveries){
+    const req=weatherDiscoveryReq[s.type];if(!req)continue;
+    const dist=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);
+    const g=weatherDiscoveryFx.get(s.id)||makeWeatherDiscoveryFx(s),ud=g.userData,active=currentWeather===req;
+    g.visible=dist<85;
+    if(!g.visible)continue;
+    const pulse=.5+.5*Math.sin(now*.004+ud.phase);
+    ud.halo.visible=active||dist<12;ud.beam.visible=active;ud.label.visible=dist<13;
+    ud.halo.rotation.z+=dt*(active?1.8:.55);ud.halo.scale.setScalar(active?1.08+pulse*.32:.86+pulse*.05);
+    ud.halo.material.opacity=active?.36+pulse*.42:.18;ud.beam.material.opacity=active?.12+pulse*.2:0;
+    retitleSprite(ud.label,weatherLabelFor(s.type,active),active?'#eafcff':'#8fa1b2');
+    if(active&&dist<60&&Math.random()<dt*(s.type==='storm_crystal'?18:10)){
+      const col=s.type==='rain_bloom'?[.38,.86,1]:s.type==='storm_crystal'?[.78,.58,1]:[1,.82,.22];
+      spawnParticle({x:s.x+.5+(Math.random()-.5)*1.7,y:s.y+1.3+Math.random()*2.3,z:s.z+.5+(Math.random()-.5)*1.7,vx:(Math.random()-.5)*.2,vy:.35+Math.random()*.7,vz:(Math.random()-.5)*.2,life:.65,grav:-.1,r:col[0],g:col[1],b:col[2]});
+    }
+  }
+}
+globalThis.BlockcraftExplorationFx={
+  treasureSolved(site){
+    if(!site)return;const y=surfaceY(site.x,site.z);
+    burst(site.x+.5,y+.8,site.z+.5,[1,.82,.22],28,4.2,3.6,.8);
+    for(let i=0;i<24;i++)spawnParticle({x:site.x+.5+(Math.random()-.5)*2.6,y:y+.4+Math.random()*2.2,z:site.z+.5+(Math.random()-.5)*2.6,vx:(Math.random()-.5)*1.4,vy:1+Math.random()*2.2,vz:(Math.random()-.5)*1.4,life:1.1,grav:.55,r:1,g:.78,b:.22});
+  },
+  treasureComplete(){
+    const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===map.targetId):null;
+    if(site)this.treasureSolved(site);
+  },
+  dormantWeather(type){
+    const site=nearbySmallDiscovery(10);if(!site)return;
+    const y=surfaceY(site.x,site.z),col=type==='rain_bloom'?[.38,.72,1]:type==='storm_crystal'?[.75,.55,1]:[1,.82,.24];
+    burst(site.x+.5,y+1.1,site.z+.5,col,10,1.5,1.6,.38);
+  }
+};
 function applyDungeonPing(message){
   if(!message||!['group','boss','loot'].includes(message.kind))return;
   activeDungeonPing={...message,expires:performance.now()+5000};
@@ -42,6 +141,60 @@ function applyDungeonPing(message){
 globalThis.applyDungeonPing=applyDungeonPing;
 refreshHUD();
 hudState.slots[0].classList.add('sel');
+let nextRecallRechargeHintAt=0;
+let nextTreasureMapHintAt=0;
+let nextFirstHandsProtectedHintAt=0;
+let nextWeatherDiscoveryHintAt=0;
+let lastWeatherDiscoveryPromptWeather=null;
+const weatherDiscoveryHintCooldowns=new Map();
+function firstHandsQuestActive(){
+  return !!(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands'&&!questDone());
+}
+function maybePromptRecallRecharge(now){
+  if(!NET.on||!NET.room||!locked||cutscene)return;
+  if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active)return;
+  if(now<nextRecallRechargeHintAt)return;
+  const manaMax=Math.max(1,maxMp()),staminaMax=Math.max(1,maxSp());
+  const manaLow=mp/manaMax<=.28,staminaLow=sp/staminaMax<=.24;
+  if(!manaLow&&!staminaLow)return;
+  nextRecallRechargeHintAt=now+18000;
+  const what=manaLow&&staminaLow?'mana and stamina':manaLow?'mana':'stamina';
+  sysMsg('Low <b>'+what+'</b> — press <b>P</b> for a Recall recharge question.','minor');
+}
+function maybePromptTreasureMap(now){
+  const map=globalThis.BlockcraftTreasureMap;
+  if(!map||!map.targetId||dim!=='overworld'||!locked||cutscene)return;
+  if(now<nextTreasureMapHintAt)return;
+  const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===map.targetId);
+  if(!site)return;
+  const near=Math.hypot(player.pos.x-site.x,player.pos.z-site.z)<(site.radius||8)+12;
+  nextTreasureMapHintAt=now+(near?18000:30000);
+  sysMsg(near?'<b>Treasure clue nearby.</b> Search the gold beam and press <b>G</b>.':'<b>Treasure clue active.</b> Follow the gold mark on your map.','minor');
+}
+function maybePromptWeatherDiscovery(now){
+  if(dim!=='overworld'||!locked||cutscene)return;
+  const currentWeather=weather||'clear';
+  if(lastWeatherDiscoveryPromptWeather!==currentWeather){
+    lastWeatherDiscoveryPromptWeather=currentWeather;
+    nextWeatherDiscoveryHintAt=now+2400;
+  }
+  if(now<nextWeatherDiscoveryHintAt)return;
+  let best=null,bestDist=Infinity;
+  const maxDist=currentWeather==='clear'?58:96;
+  for(const s of smallDiscoveries){
+    if(!s||discoveredIds.has(s.id)||weatherDiscoveryReq[s.type]!==currentWeather)continue;
+    const key=s.id+'|'+currentWeather;
+    if((weatherDiscoveryHintCooldowns.get(key)||0)>now)continue;
+    const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);
+    if(d<maxDist&&d<bestDist){best=s;bestDist=d;}
+  }
+  if(!best)return;
+  const key=best.id+'|'+currentWeather,near=bestDist<18,name=weatherDiscoveryName[best.type]||'WEATHER DISCOVERY';
+  weatherDiscoveryHintCooldowns.set(key,now+90000);
+  nextWeatherDiscoveryHintAt=now+(near?18000:32000);
+  if(near)sysMsg('<b>'+name+'</b> is active now - press <b>G</b> to '+escHTML(weatherDiscoveryAction[best.type]||'investigate')+' <b>'+escHTML(weatherDiscoveryItem[best.type]||'weather materials')+'</b>.','minor');
+  else sysMsg('<b>'+escHTML(currentWeather==='storm'?'The storm':currentWeather==='rain'?'The rain':'Clear sunlight')+'</b> has woken a <b>'+name+'</b> nearby. Look for its beam before the weather changes.','minor');
+}
 function currentLocationInfo(){
   if(dim==='dungeon'){
     const st=dungeon&&dungeon.status;
@@ -68,21 +221,27 @@ function currentLocationInfo(){
   }
   if(dim==='overworld'){
     const ring=dangerRingAtClient(player.pos.x,player.pos.z), danger=DANGER_RINGS[ring];
+    const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===treasure.targetId);
+    if(treasureSite&&Math.hypot(player.pos.x-treasureSite.x,player.pos.z-treasureSite.z)<(treasureSite.radius||8)+5)return {cls:'event',name:'Treasure Clue',meta:'Search this landmark and press G to investigate'};
     const discovery=nearbySmallDiscovery(8);
     if(discovery){
-      const names={rare_plant:'Rare Wildgrowth',buried_chest:'Disturbed Earth',lore_tablet:'Weathered Lore Tablet',monster_nest:'Monster Nest',fishing_pool:'Hidden Fishing Pool',ore_outcrop:'Ore Outcrop',traveling_merchant:'Road Merchant Camp',puzzle_shrine:'Odd-Flame Shrine'};
-      const hints={rare_plant:'Right-click to gather',buried_chest:'A torch marks soil worth digging',lore_tablet:'Right-click to read',monster_nest:'Hostile activity nearby',fishing_pool:'Right-click the water to fish',ore_outcrop:'Valuable exposed ore',traveling_merchant:'Right-click the merchant to trade',puzzle_shrine:'Two flames agree; touch the odd one'};
-      return {cls:'wild danger'+ring,name:names[discovery.type],meta:hints[discovery.type]+' - '+danger.name};
+      const names={rare_plant:'Rare Wildgrowth',buried_chest:'Disturbed Earth',lore_tablet:'Weathered Lore Tablet',monster_nest:'Monster Nest',fishing_pool:'Hidden Fishing Pool',ore_outcrop:'Ore Outcrop',traveling_merchant:'Road Merchant Camp',puzzle_shrine:'Odd-Flame Shrine',rain_bloom:'Rainwake Bloom',storm_crystal:'Stormglass Crystal',sun_dial:'Ancient Sun Dial'};
+      const hints={rare_plant:'Right-click to gather',buried_chest:'A torch marks soil worth digging',lore_tablet:'Right-click to read',monster_nest:'Hostile activity nearby',fishing_pool:'Right-click the water to fish',ore_outcrop:'Valuable exposed ore',traveling_merchant:'Right-click the merchant to trade',puzzle_shrine:'Two flames agree; touch the odd one',rain_bloom:'Awakens in rain · G to gather',storm_crystal:'Charges in storms · G to harvest',sun_dial:'Aligns under clear skies · G to read'};
+      const req=weatherDiscoveryReq[discovery.type],weatherHint=req&&weather!==req?('Dormant until '+req+' weather'):hints[discovery.type];
+      return {cls:'wild danger'+ring,name:names[discovery.type],meta:(weatherHint||hints[discovery.type])+' - '+danger.name};
     }
     let found=null, best=Infinity;
     for(const lm of regionalLandmarks){ const d=Math.hypot(player.pos.x-lm.x,player.pos.z-lm.z); if(d<(lm.radius||12)&&d<best){found=lm;best=d;} }
-    if(found) return {cls:(found.major?'event':'wild')+' danger'+ring,name:found.name,meta:(found.major?'Major landmark':'Discovery')+' - '+danger.name+' / '+danger.threat};
+    if(found) return {cls:(found.major?'event':'wild')+' danger'+ring,name:found.name,meta:(found.type==='ruins'?'Press G to decipher the ruins for a knowledge bonus':(found.major?'Major landmark':'Discovery')+' - '+danger.name+' / '+danger.threat)};
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.skyport.x, player.pos.z-HUB.skyport.z)<12){
     return { cls:'town', name:'Westwind Skyport', meta:'G to board - requires S-Rank and 1,000 gold' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6){
     return { cls:'town', name:'Job Board', meta:'Profession contracts and non-combat work' };
+  }
+  if(dim==='overworld' && Math.hypot(player.pos.x-HUB.cartographer.x, player.pos.z-HUB.cartographer.z)<7){
+    return { cls:'town', name:'Royal Cartographer', meta:'Speak to Orin for map leads, surveys and regional rewards' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.quarry.x, player.pos.z-HUB.quarry.z)<7){
     return { cls:'town', name:'Quarry Worksite', meta:'Miner contracts and stone orders' };
@@ -122,6 +281,10 @@ function compactQuestHud(){
     const done=questDone();
     return escHTML('Aegis Trial: Silent Bounty '+(quest.targetName||'Unknown')+' '+(done?'turn in':fmtTimeLeft((quest.expiresAt||0)-Date.now())));
   }
+  if(quest.giver==='Mara Vale'&&quest.title==='First Hands'){
+    const have=Math.min(quest.need,countItem(quest.item||B.LOG));
+    return escHTML(have>=quest.need?'Story Quest: First Hands return to Mara':'Story Quest: First Hands leave town, gather logs '+have+'/'+quest.need);
+  }
   const done=questDone();
   const label=quest.source==='guardian'?'Aegis Trial':'Story Quest';
   return escHTML(label+': '+questTypeLabel(quest)+' '+quest.giver+' '+questProgressText(quest)+(done?' turn in':''));
@@ -142,13 +305,13 @@ function tutorialObjective(){
   if(townGuidanceStep==='tavern') return {label:'Tutorial Guide', text:'Go to the tavern and buy an item'};
   if(townGuidanceStep==='land') return {label:'Tutorial Guide', text:'Leave town, press L, and buy land'};
   if(townGuidanceStep==='menu') return {label:'Tutorial Guide', text:'Choose a town tutorial'};
-  if(townGuidanceStep==='quest') return {label:'Tutorial Guide', text:'Follow the lit path to the Quest Giver'};
+  if(townGuidanceStep==='quest') return {label:'Tutorial Guide', text:'Accept Mara’s first quest'};
   return {label:'Tutorial Guide', text:'Follow the glowing pillar'};
 }
 function questObjective(){
   if(!quest) return null;
   if(questExpired()){ failAegisBounty('time'); return null; }
-  const qLabel=quest.source==='guardian'?'Aegis Trial':'Story Quest';
+  const qLabel=quest.title||(quest.source==='guardian'?'Aegis Trial':'Story Quest');
   if(questDone()) return {label:qLabel, text:'Turn in '+questTypeLabel(quest)+' to '+quest.giver};
   if(quest.type==='pvp_bounty') return {label:qLabel, text:'Assassinate '+(quest.targetName||'target')+' - '+fmtTimeLeft((quest.expiresAt||0)-Date.now())};
   if(quest.type==='gate'){
@@ -157,6 +320,11 @@ function questObjective(){
   }
   if(quest.type==='kill') return {label:qLabel, text:'Defeat enemies for '+quest.giver+' '+quest.have+'/'+quest.need};
   if(quest.type==='mine') return {label:qLabel, text:'Mine '+quest.have+'/'+quest.need+' for '+quest.giver};
+  if(quest.giver==='Mara Vale'&&quest.title==='First Hands'){
+    const have=Math.min(quest.need,countItem(quest.item||B.LOG));
+    if(have>=quest.need) return {label:'First Hands', text:'Return to Mara with '+have+'/'+quest.need+' logs'};
+    return {label:'First Hands', text:(isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))?'Leave through the north gate and gather logs ':'Gather logs beyond town ')+have+'/'+quest.need};
+  }
   if(quest.type==='fetch') return {label:qLabel, text:'Bring '+Math.min(quest.need,countItem(quest.item))+'/'+quest.need+' to '+quest.giver};
   if(quest.type==='sell'){
     const has=countItem(quest.item||I.MONSTER_MEAT)>0;
@@ -292,7 +460,7 @@ globalThis.resolveRegionalOpportunity=(id='')=>{
   trackedRegionalOpportunity=null;displayedRegionalOpportunity=null;return true;
 };
 function utilityCompassTarget(){
-  if(progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
@@ -422,7 +590,14 @@ function updateOverworldActivityTracker(){
   activityTrackerEl.innerHTML='<div class="at">'+escHTML(title)+'</div><div class="av">'+escHTML(text)+'</div>'+(nav?'<div class="am">'+escHTML(nav)+'</div>':'')+detail;
 }
 function updateEncounterPrompt(){
-  if(!encounterPromptEl||dim!=='overworld'||!overworldActivity){if(encounterPromptEl)encounterPromptEl.classList.add('hidden');return;}
+  if(!encounterPromptEl)return;
+  const table=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive?combatApi.nearbyTavernGameTable():null;
+  if(table){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(table.label)+'</b><small>Press G to interact</small>';
+    return;
+  }
+  if(dim!=='overworld'||!overworldActivity){encounterPromptEl.classList.add('hidden');encounterPromptEl.innerHTML='';return;}
   const encounter=overworldActivity.encounter;
   if(encounter){
     const distance=Math.hypot(encounter.x-player.pos.x,encounter.z-player.pos.z),range=encounter.type==='wounded_hunter'?8:24;
@@ -508,6 +683,8 @@ function tick(now){
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
   perfDiagnostics.sample(now);
   biomeStatus.tick(now);
+  globalThis.BlockcraftRecall.tick(now);
+  if(globalThis.BlockcraftDeathDrops)globalThis.BlockcraftDeathDrops.tick(now);
   if(biomeStatus.active('frost',now)&&Math.random()<dt*14)spawnParticle({x:player.pos.x+(Math.random()-.5)*1.5,y:player.pos.y+.15+Math.random()*1.8,z:player.pos.z+(Math.random()-.5)*1.5,vx:(Math.random()-.5)*.18,vy:.12,vz:(Math.random()-.5)*.18,life:.7,grav:0,r:.56,g:.92,b:1});
   if(biomeStatus.active('venom',now)&&Math.random()<dt*9)spawnParticle({x:player.pos.x+(Math.random()-.5)*1.1,y:player.pos.y+.1+Math.random()*1.4,z:player.pos.z+(Math.random()-.5)*1.1,vx:0,vy:.28,vz:0,life:.6,grav:0,r:.51,g:.66,b:.29});
   tickFurnaces(dt);
@@ -580,6 +757,7 @@ function tick(now){
     const flying = mounted && isDragon(mountKind);
     const sprint=sprintKey && (f!==0||s!==0) && sp>1 && !mounted;
     sprintingNow=sprint;
+    if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,f!==0||s!==0,dt);
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
     if(sprint) sp=Math.max(0,sp-stCost(8)*armorStamina*dt);
@@ -671,7 +849,7 @@ function tick(now){
     } else if(!player.onGround) stepAcc=1.6;
     // --- end water & jump physics ---
     tickLavaBorder(now);
-    if(player.pos.y<-12){ player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+7.5); player.vel.set(0,0,0); }
+    if(player.pos.y<-12){ player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+14.5); player.vel.set(0,0,0); }
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
     tickDragonRoost(now, dt);
@@ -744,7 +922,14 @@ function tick(now){
           if(!hintDone){ hintDone=true; hintEl.style.opacity=0; setTimeout(()=>hintEl.classList.add('hidden'),1100); }
         }
       }
-    } else { mining=null; crack.visible=false; crack.userData.st=-1; hideMineUI(); }
+    } else {
+      if(mouseL && hit && BREAK[hit.id] && dim==='overworld' && !canBreakHere(hit.x,hit.z,hit.y,hit.id)
+        && firstHandsQuestActive() && hit.id===B.LOG && isTownLand(hit.x,hit.z) && now>=nextFirstHandsProtectedHintAt){
+        nextFirstHandsProtectedHintAt=now+4500;
+        sysMsg('Mara: town trees are protected. Follow the north gate trail and gather logs <b>outside the wall</b>.','minor');
+      }
+      mining=null; crack.visible=false; crack.userData.st=-1; hideMineUI();
+    }
 
     const held=inv[combatState.selectedSlot];
     let gateLine='';
@@ -785,6 +970,7 @@ function tick(now){
   updateEmitters(dt);
   updateRoadBirds(dt,now/1000);
   updateTavernNightEffects(dt, now);
+  tickExplorationPresentation(now,dt);
   { // flame flicker
     const tt=now/1000;
     torchGlowMat.opacity=.5+Math.sin(tt*11)*.05+Math.sin(tt*23.7)*.04;
@@ -821,15 +1007,17 @@ function tick(now){
   }
   tickGates(dt, now);
   tickAbilities(dt, now/1000);
+  worldApi.tickRoadSafetyScenes(dt, now/1000);
   tickCropTimers(now);
   updateAbilityHUD();
   if(hp>0){
-    mp=Math.min(maxMp(), mp+1.2*(1+0.04*(S.int-1))*dt);
-    if(!sprintingNow) sp=Math.min(maxSp(), sp+14*biomeStatus.staminaMultiplier(now)*dt);
     if(hp<maxHp() && performance.now()-lastHurt>8000){
       regenAcc+=dt;
       if(regenAcc>=3){ regenAcc=0; hp=Math.min(maxHp(), hp+1+Math.floor((S.vit-1)/5)); }
     }
+    maybePromptRecallRecharge(now);
+    maybePromptTreasureMap(now);
+    maybePromptWeatherDiscovery(now);
     renderBars();
   }
   cloudGroup.children.forEach((c,i)=>{ c.position.x += dt*(.6+ i*.04); if(c.position.x>WX+20) c.position.x=-20; });
@@ -863,6 +1051,8 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     else if(kind==='farm')onboardingFlags.farmed=true;
     else if(kind==='eat')onboardingFlags.ate=true;
     else if(kind==='combat')onboardingFlags.dummy=true;
+    else if(kind==='subject')onboardingFlags.subject=true;
+    else if(kind==='recall')onboardingFlags.recall=true;
     onboardingNextAt=performance.now()-1;
     tickOnboarding(performance.now());
     return true;
@@ -888,12 +1078,14 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     if(!target||!NET.on||!NET.room) return false;
     const sx=player.pos.x,sy=player.pos.y,sz=player.pos.z;
     const tx=target.x,ty=target.y,tz=target.z;
-    const steps=Math.max(1,Math.ceil(Math.hypot(tx-sx,tz-sz)/1.8));
+    const steps=Math.max(1,Math.ceil(Math.hypot(tx-sx,tz-sz)/.6));
     for(let step=1;step<=steps;step++){
       const t=step/steps;
-      player.pos.set(sx+(tx-sx)*t,sy+(ty-sy)*t,sz+(tz-sz)*t);
+      const x=sx+(tx-sx)*t,z=sz+(tz-sz)*t;
+      const y=dim==='overworld'?surfaceY(x,z)+1.01:sy+(ty-sy)*t;
+      player.pos.set(x,y,z);
       NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw});
-      await new Promise(resolve=>setTimeout(resolve,80));
+      await new Promise(resolve=>setTimeout(resolve,75));
     }
     if(arrivalRadius==null) return true;
     // Range checks use the server position, so finish only after an ordered
@@ -912,12 +1104,21 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
   const e2eWalkToFirstGate=async()=>{
     const target=e2eFirstGate();
     if(!target) return false;
+    if(isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))
+      await e2eWalkTo({x:HUB.northGate.x,y:TOWN.G+1,z:HUB.northGate.z+2});
     return await e2eWalkTo({x:target.x+1.5,y:target.y+.5,z:target.z},3)&&target.id;
   };
   const e2eWalkToGate=async(id)=>{
     const target=e2eGates().find(g=>g.id===id);
     if(!target) return false;
-    return await e2eWalkTo({x:target.x+1.5,y:target.y+.5,z:target.z},3)&&target.id;
+    const requestId='gate-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+    NET.room.send('e2eJourney',{action:'positionAtGate',requestId,id});
+    for(let settle=0;settle<50;settle++){
+      await new Promise(resolve=>setTimeout(resolve,100));
+      const ack=networkingState.journeyResult;
+      if(ack&&ack.requestId===requestId&&ack.ok&&ack.id===id){player.pos.set(target.x+1.5,target.y+.5,target.z);return id;}
+    }
+    return false;
   };
   const e2eUseDungeonExit=()=>{
     if(dim!=='dungeon'||!dungeon||!dungeon.cleared||!exitPortal) return false;
@@ -949,7 +1150,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     return count;
   };
   window.__BLOCKCRAFT_E2E__={
-    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return {connected:NET.on,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,progressionFocus,firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
+    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,progressionFocus,firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
     inventoryCount:id=>inventoryModel.count(id),
     inventorySlot:id=>inventoryModel.slots.findIndex(stack=>stack&&stack.id===id),
     trackedGate:()=>gate?{id:gate.id||'',rank:gate.rank|0,kind:gate.kind||'public'}:null,

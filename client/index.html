@@ -17,15 +17,17 @@
     <div class="bar mpb"><i></i><span></span></div>
     <div class="bar spb"><i></i><span></span></div>
     <div class="bar hub"><i></i><span></span></div>
-    <div class="bar xpb"><i></i></div>
+    <div class="bar xpb"><i></i><span id="xptext"></span></div>
   </div>
 </div>
 <div id="abilities" class="hidden"></div>
 <div id="familiarhud" class="hidden"></div>
+<div id="familiartelemetry" class="hidden"></div>
 <div id="dungeonparty" class="hidden"></div>
 <div id="dungeonping" class="hidden"></div>
 <div id="encounterprompt" class="hidden"></div>
 <div id="sysmsgs"></div>
+<div id="rewardfeed" aria-live="polite" aria-label="Rewards earned"></div>
 <div id="kinghud" class="hidden"><div class="khhead"><span>KING OF THE HILL</span><b id="kingtime">0:00</b></div><div class="khteam" id="kingteam">EVENT SQUAD</div><div class="khcrown" id="kingcrown">Crown unclaimed</div><div class="khroster" id="kingroster"></div><div class="khscores" id="kingscores"></div><div class="khannounce hidden" id="kingannounce"></div></div>
 <div id="parkourhud" class="hidden"><div class="phhead"><span>PARKOUR</span><b id="parkourtime">0:00.0</b></div><div class="phprogress"><span id="parkourcheckpoint">CHECKPOINT 0 / 3</span><i><b id="parkourbar"></b></i></div><div class="phstats"><span>LAST SPLIT <b id="parkoursplit">—</b></span><span>PERSONAL BEST <b id="parkourbest">—</b></span></div><div class="phleader" id="parkourleader">Set the first course time</div><div class="phannounce hidden" id="parkourannounce"></div></div>
 <div id="caravanhud" class="hidden"><div class="cvhead"><span>CARAVAN DEFENCE</span><b id="caravantime">0:00</b></div><div class="cvstate" id="caravanstate">FORMING ESCORT</div><div class="cvhealth"><span>WAGON <b id="caravanhp">100%</b></span><i><b id="caravanhpbar"></b></i></div><div class="cvroute"><span id="caravanwave">WAVE 0 / 4</span><span id="caravanenemies">0 BANDITS</span></div><div class="cvprogress"><i><b id="caravanprogress"></b></i></div><div class="cvstats"><span>KILLS <b id="caravankills">0</b></span><span>REVIVES <b id="caravanrevives">0</b></span></div><div class="cvdowned hidden" id="caravandowned"></div></div>
@@ -40,7 +42,7 @@
 <div id="rankupwin" class="hidden"><div id="rankuppanel"></div></div>
 <div id="chatlog"></div>
 <div id="chatbar"><button id="chatmode" type="button">LOCAL</button><select id="chattarget" aria-label="Whisper target"></select><button id="chatmute" type="button">MUTE</button><button id="chatreport" type="button">REPORT</button><select id="chatin" aria-label="Quick chat phrase"><option value="hello">Hello!</option></select><button id="chatblocked" type="button">BLOCKED</button><button id="chatsound" type="button" aria-label="Toggle communication sounds">SOUND</button></div>
-<div id="chatwheel" class="hidden"><div id="chatwheelitems"></div><div class="wheelcenter"><b id="chatwheelmode">LOCAL</b><span>Release Tab to send</span></div></div>
+<div id="chatwheel" class="hidden"><div id="chatwheelitems"></div><div class="wheelcenter"><b id="chatwheelmode">LOCAL</b><span>Click a phrase to send</span></div></div>
 <div id="mineprog"><span id="minelbl"></span><div id="minebarw"><i id="minebar"></i></div></div>
 <div id="combochip"></div>
 <div id="statwin" class="hidden"><div id="statpanel"></div></div>
@@ -48,6 +50,11 @@
 <div id="dmgflash"></div>
 <div id="biomefx" aria-hidden="true"></div>
 <div id="combatimpact" class="hidden" aria-live="polite"></div>
+<div id="hitconfirm" class="hidden" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div id="enemytelegraph" class="hidden" aria-live="assertive"></div>
+<div id="abilitypulse" class="hidden" aria-live="polite"></div>
+<div id="recallhud" class="hidden" aria-live="polite"><div class="recallmeta"><span id="recallsubject">RECALL CAST</span><b id="recalltime">GO</b></div><div id="recallquestion"></div><div id="recallfallback" class="hidden"></div><div id="recallfeedback" class="hidden"></div></div>
+<div id="shadowcastfx" aria-hidden="true"></div>
 <div id="armorwarning" class="hidden" aria-live="polite"></div>
 <div id="biomestatus" class="hidden" aria-live="polite"></div>
 <div id="sleepfade"></div>
@@ -90,6 +97,7 @@
       <div class="key-card"><div class="keys"><kbd>Right</kbd><kbd>G</kbd></div><b>Secondary Action</b><span>Place blocks, interact, or use the item in hand.</span></div>
       <div class="key-card"><div class="keys"><kbd>E</kbd><kbd>1-9</kbd><kbd>Wheel</kbd></div><b>Inventory</b><span>Craft, manage items, and select hotbar slots.</span></div>
       <div class="key-card"><div class="keys"><kbd>C</kbd><kbd>Q</kbd><kbd>R</kbd><kbd>H</kbd></div><b>Class</b><span>Open stats and cast unlocked beta abilities.</span></div>
+      <div class="key-card"><div class="keys"><kbd>P</kbd></div><b>Recall Cast</b><span>Summon a knowledge challenge to restore mana and stamina.</span></div>
       <div class="key-card"><div class="keys"><kbd>T</kbd><kbd>/</kbd><kbd>Esc</kbd></div><b>Social</b><span>Teams, chat commands, and closing open panels.</span></div>
       <div class="key-card"><div class="keys"><kbd>B</kbd><kbd>X</kbd><kbd>J</kbd></div><b>Dragons</b><span>Open bonds, summon dragons, and use mounted abilities.</span></div>
       <div class="key-card"><div class="keys"><kbd>L</kbd><kbd>M</kbd></div><b>World Tools</b><span>Claim land and toggle sound.</span></div>
@@ -119,12 +127,13 @@
       <tr><td>C</td><td>status window &middot; stats &amp; class paths</td></tr>
       <tr><td>O</td><td>quest log: Story, Job, Guild, Aegis, Tutorial</td></tr>
       <tr><td>Q / R / H</td><td>cast beta abilities &middot; Y cycles ability path</td></tr>
+      <tr><td>P</td><td>recall cast &middot; enter the correct answer pillar to restore mana and stamina</td></tr>
       <tr><td>L</td><td>top-down land claim view around you</td></tr>
       <tr><td>;</td><td>cycle beta legendary test weapon</td></tr>
       <tr><td>U</td><td>toggle third-person ability demo bot</td></tr>
       <tr><td>1 – 9 / wheel</td><td>select hotbar slot</td></tr>
       <tr><td>Enter</td><td>show this controls screen</td></tr>
-      <tr><td>Tab</td><td>open comms bar &middot; Tab cycles Local / Party / Whisper</td></tr>
+      <tr><td>Tab</td><td>open quick chat &middot; click a phrase to send</td></tr>
       <tr><td>Esc</td><td>close open panels</td></tr>
     </table>
     <table>
@@ -162,60 +171,9 @@
 <script src="/shared/job-system.js"></script>
 <script src="/shared/gear-system.js"></script>
 <script src="/shared/ability-system.js"></script>
+<script src="/shared/familiar-system.js"></script>
+<script src="/shared/ability-progression.js"></script>
 <script src="/shared/dungeon-generation.js"></script>
-<script>
-(async()=>{
-  try{
-    const [gameContextModule,authModule,progressionModule,inventoryModule,questJobModule,networkModule,renderingModule,onboardingModule]=await Promise.all([
-      import('./js/game-context.mjs'),
-      import('./js/auth.mjs'),
-      import('./js/progression.mjs'),
-      import('./js/inventory.mjs'),
-      import('./js/quests-jobs.mjs'),
-      import('./js/network.mjs'),
-      import('./js/rendering.mjs'),
-      import('./js/onboarding.mjs?v=3'),
-    ]);
-    const gameContext=gameContextModule.createGameContext({
-      services:{
-        auth:authModule,
-        progression:progressionModule,
-        inventory:inventoryModule,
-        quests:questJobModule,
-        network:networkModule,
-        rendering:renderingModule,
-        onboarding:onboardingModule,
-      },
-      state:{uiShell:{qOpen:false}},
-    });
-    window.BlockcraftGameContext=gameContext;
-    const uiShellState=gameContext.requireState('uiShell');
-    Object.defineProperty(window,'qOpen',{
-      get:()=>uiShellState.qOpen,
-      set:value=>{uiShellState.qOpen=!!value;},
-      configurable:true,
-    });
-    for(const src of ['./js/world.mjs','./js/dimensions.mjs','./js/combat.mjs','./js/hud.mjs','./js/menus.mjs','./js/networking.mjs']){
-      await import(src);
-      gameContext.markModuleLoaded(src.slice(src.lastIndexOf('/')+1,src.lastIndexOf('.')));
-    }
-    await import('./js/frame-loop.mjs');
-    gameContext.markModuleLoaded('frame-loop');
-    gameContext.setPhase('ready');
-    document.documentElement.dataset.gamePhase='ready';
-    document.documentElement.dataset.gameModules=gameContext.snapshot().loadedModules.join(',');
-    for(const id of ['playbtn','registerbtn','logoutbtn']){
-      const button=document.getElementById(id);
-      if(button)button.disabled=false;
-    }
-    const authUser=document.getElementById('authuser');
-    if(authUser&&(document.activeElement===document.body||!document.activeElement))authUser.focus();
-  }catch(err){
-    if(window.BlockcraftGameContext) window.BlockcraftGameContext.setPhase('failed');
-    document.documentElement.dataset.gamePhase='failed';
-    console.error('Blockcraft client failed to load',err);
-  }
-})();
-</script>
+<script type="module" src="/js/boot.mjs"></script>
 </body>
 </html>

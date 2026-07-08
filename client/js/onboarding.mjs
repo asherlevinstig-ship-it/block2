@@ -39,7 +39,7 @@ export function gateMilestoneHandoff(message, earned = true) {
   if (!earned || !firstClear || (firstClear.rank | 0) !== 1) return null;
   return {
     label: 'ADVENTURER LOOP UNLOCKED',
-    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Exit through the return portal, then follow Compass Sense to the Job Board and work toward C-Rank at Level 8.',
+    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Each rank now contains 10 levels; higher ranks demand increasingly greater mastery.',
     action: 'TRACK NEXT CONTRACT',
   };
 }
@@ -74,6 +74,7 @@ export function createOnboardingUI(deps) {
 
   function firstPromotionObjective() {
     const focus = getFocus();
+    if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through contracts, quests, Gates, events, and hostile threats. D-Rank begins at Level 11.', target: HUB.jobs };
     if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract', target: HUB.jobs };
     if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board", target: HUB.jobs };
     if (focus === 'first_d_gate') {
@@ -213,6 +214,14 @@ export function createOnboardingUI(deps) {
   function showRankPromotion(message) {
     const details = rankPromotionDetails(message);
     if (!details || !rankUpWin || !rankUpPanel) return false;
+    const unlocks = [
+      [],
+      ['D-Rank Gates & keys', 'Familiars', 'Improved contract rewards'],
+      ['C-Rank Gates & keys', 'Combat specialisation', 'Mount progression'],
+      ['B-Rank Gates & keys', 'Road Warden region', 'Advanced contracts'],
+      ['A-Rank Gates & keys', 'Fellowships', 'High-rank equipment'],
+      ['Western Frontier', 'Dragon mastery', 'S-Rank endgame'],
+    ][details.rank] || [];
     rankUpPanel.innerHTML =
       '<div class="rupill">HUNTER PROMOTION</div>' +
       '<div class="rurank">' + escHTML(details.letter) + '</div>' +
@@ -223,6 +232,7 @@ export function createOnboardingUI(deps) {
         '<div class="rureward"><span>GATE ACCESS</span><b>' + escHTML(details.gateAccess) + '</b></div>' +
         '<div class="rureward"><span>STAT POINTS EARNED</span><b>+' + details.statPoints + '</b></div>' +
       '</div>' +
+      '<div class="ruunlocks"><span>NEWLY UNLOCKED</span>' + unlocks.map(item => '<b>◆ ' + escHTML(item) + '</b>').join('') + '</div>' +
       '<div class="runext"><b>Next target:</b> ' + escHTML(details.next) + '.<br>Keep earning Hunter XP from quests, contracts, Gates, events, and hostile threats.</div>' +
       '<button id="rankupcontinue">CONTINUE</button>';
     rankUpWin.classList.remove('hidden');

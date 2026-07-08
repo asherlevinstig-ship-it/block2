@@ -25,6 +25,10 @@ let chatMode='local';
 let chatWheel=null;
 const mutedPlayers=new Set();
 let commsSound=localStorage.getItem('bc_comms_sound')!=='0';
+function chatInputActive(){
+  if(chatTyping&&!document.body.classList.contains('chat-open')&&chatWheelEl.classList.contains('hidden'))chatTyping=false;
+  return chatTyping;
+}
 const {PHRASES:QUICK_CHAT_OPTIONS,CONTEXTS:QUICK_CHAT_CONTEXTS,CHANNELS:COMMS_CHANNELS,RULES:COMMS_RULES,phraseIdsFor}=globalThis.BlockcraftCommsRules;
 function chatLine(name, text, channel=''){
   const d=document.createElement('div'); d.className='chatline';
@@ -77,32 +81,23 @@ function renderQuickChatWheel(){
   chatWheelItemsEl.innerHTML='';
   const count=chatWheel.ids.length;
   chatWheel.ids.forEach((id,index)=>{
-    const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('div');
+    const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('button');item.type='button';
     item.className='wheelitem'+(index===chatWheel.selected?' selected':'');item.textContent=QUICK_CHAT_OPTIONS[id];
+    item.addEventListener('click',()=>{sendQuickPhrase(id);closeQuickChatWheel(true);});
     item.style.left=(215+Math.cos(angle)*155)+'px';item.style.top=(215+Math.sin(angle)*155)+'px';chatWheelItemsEl.appendChild(item);
   });
 }
 function startQuickChatWheel(){
   if(chatWheel)return;
   chatTyping=true;for(const k in keys)keys[k]=false;setChatMode(chatMode);
+  if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
   const ids=populateQuickChat().slice(0,COMMS_RULES.maxWheelPhrases);
-  chatWheel={started:performance.now(),ids,selected:0,x:0,y:-90};
+  chatWheel={ids,selected:0};
   chatWheelModeEl.textContent=chatMode.toUpperCase();chatWheelEl.classList.remove('hidden');renderQuickChatWheel();
 }
-addEventListener('mousemove',event=>{
-  if(!chatWheel)return;
-  chatWheel.x+=event.movementX||0;chatWheel.y+=event.movementY||0;
-  const length=Math.hypot(chatWheel.x,chatWheel.y);if(length>150){chatWheel.x=chatWheel.x/length*150;chatWheel.y=chatWheel.y/length*150;}
-  if(Math.hypot(chatWheel.x,chatWheel.y)<20)return;
-  const angle=Math.atan2(chatWheel.y,chatWheel.x),count=chatWheel.ids.length;
-  let selected=Math.round((angle+Math.PI/2)/(Math.PI*2/count));selected=((selected%count)+count)%count;
-  if(selected!==chatWheel.selected){chatWheel.selected=selected;renderQuickChatWheel();}
-});
-addEventListener('keyup',event=>{
-  if(event.code!=='Tab'||!chatWheel)return;
-  event.preventDefault();const wheel=chatWheel,held=performance.now()-wheel.started;chatWheel=null;chatWheelEl.classList.add('hidden');chatTyping=false;
-  if(held<220)openChat();else sendQuickPhrase(wheel.ids[wheel.selected]);
-});
+function closeQuickChatWheel(relock=false){if(!chatWheel)return;chatWheel=null;chatWheelEl.classList.add('hidden');chatTyping=false;if(relock)renderer.domElement.requestPointerLock();}
+addEventListener('keyup',event=>{if(event.code==='Tab'&&chatWheel)event.preventDefault();});
+addEventListener('keydown',event=>{if(event.code==='Escape'&&chatWheel){event.preventDefault();event.stopImmediatePropagation();closeQuickChatWheel(true);}});
 function openChat(mode){
   chatTyping=true;
   for(const k in keys) keys[k]=false;
@@ -363,7 +358,7 @@ function openTeamUI(){
 
 
   return Object.freeze({
-    get chatTyping(){ return chatTyping; },
+    get chatTyping(){ return chatInputActive(); },
     set chatTyping(value){ chatTyping=!!value; },
     chatLine,
     openChat,

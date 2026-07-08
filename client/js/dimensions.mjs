@@ -9,6 +9,9 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 // Ability tuning comes from the shared module (one file for server and client);
 // this adapter keeps the historical client shape (cd in seconds, n/g/txt fields).
 const ABILITY_SYS=window.BlockcraftAbilitySystem;
+const ABILITY_PROGRESSION=window.BlockcraftAbilityProgression;
+let abilitySpec='';
+Object.defineProperty(globalThis,'BlockcraftAbilityProgressionState',{value:Object.freeze({get:()=>abilitySpec,set:v=>{abilitySpec=String(v||'');}}),configurable:true});
 const PATHS=(()=>{
   const out={};
   for(const pathId in ABILITY_SYS.PATHS){
@@ -521,9 +524,10 @@ function cast(i){
   if(!path){ if(S.lvl>=2) sysMsg('Press <b>C</b> to choose your path first'); return; }
   if(!BETA_ABILITY_TEST && S.lvl<AB_UNLOCK[i]){ sysMsg('Unlocks at <b>Level '+AB_UNLOCK[i]+'</b>'); return; }
   const a=PATHS[path].ab[i];
+  const manaCost=abilityManaCost(a),cooldown=abilityCooldown(a);
   if(a.passive){ sysMsg('<b>'+a.n+'</b> is passive'); return; }
   if(abCd[i]>0) return;
-  if(mp<a.mp){ sysMsg('Not enough <b>mana</b>'); return; }
+  if(mp<manaCost){ sysMsg('Not enough <b>mana</b>'); return; }
   if(sp<a.sp){ sysMsg('Not enough <b>stamina</b>'); return; }
   if(abilityTrainingActive && i===0) noteAbilityTrainingCast();
   if(NET.on && NET.room){
@@ -531,19 +535,20 @@ function cast(i){
     return;
   }
   if(doAbility(path,i)===false) return;
-  mp-=a.mp; sp=Math.max(0,sp-a.sp); abCd[i]=a.cd;
+  mp-=manaCost; sp=Math.max(0,sp-a.sp); abCd[i]=cooldown;
   SFX.cast();
   renderBars();
 }
 function sendAbilityRequest(path,i,a){
   const d=viewDir();
   const target=mobUnderCrosshair(path==='mage'&&i===2?22:24);
+  if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.abilityPressed(i,a.n);
   NET.room.send('ability',{
     path, slot:i,
     targetId:target&&target.net?target.netId:'',
     dx:d.x, dy:d.y, dz:d.z
   });
-  mp-=a.mp; sp=Math.max(0,sp-a.sp); abCd[i]=a.cd;
+  mp-=abilityManaCost(a); sp=Math.max(0,sp-a.sp); abCd[i]=abilityCooldown(a);
   // predict movement/buff feedback locally; the Shadow Soldier is server-simulated
   // in multiplayer (a real replicated mob), so slot 2 no longer spawns a local ghost
   if((path==='shadow' && (i===0||i===1)) || (path==='guardian' && i===0)){
@@ -552,6 +557,8 @@ function sendAbilityRequest(path,i,a){
   SFX.cast();
   renderBars(); updateAbilityHUD();
 }
+function abilityManaCost(a){return a.mp*(abilitySpec==='arcanist'&&ABILITY_PROGRESSION.rankForLevel(S.lvl)>=2?.85:1);}
+function abilityCooldown(a){return a.cd*(abilitySpec==='arcanist'&&ABILITY_PROGRESSION.rankForLevel(S.lvl)>=2?.85:1);}
 // solo block destruction on ability impact (mirrors the server's breakBlocksInRadius)
 const ABILITY_BREAKABLE_C=new Set([B.GRASS,B.DIRT,B.STONE,B.SAND,B.LOG,B.LEAVES,B.PLANKS,B.COBBLE,B.GLASS,B.BRICK,B.TABLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.CONCRETE,B.TORCH,B.BED,B.FARMLAND,B.WHEAT_1,B.WHEAT_2,B.WHEAT_3,B.SNOW,B.ICE,B.RED_SAND,B.TERRACOTTA,B.CACTUS,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR]);
 function breakAbilityBlocks(x,y,z,radius,maxBreaks){
@@ -587,6 +594,8 @@ function doAbility(path,i){
   const px=player.pos.x, py=player.pos.y, pz=player.pos.z;
   if(path==='shadow'){
     if(i===0){
+      if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('dash');
+      shadowCastScreen('dash');
       const d=viewDir(false);
       const start={x:player.pos.x,y:player.pos.y,z:player.pos.z};
       for(let st=0;st<26;st++){
@@ -597,7 +606,9 @@ function doAbility(path,i){
       shadowDashVfx(start,{x:player.pos.x,y:player.pos.y,z:player.pos.z});
       camShake=Math.max(camShake,.16);
     } else if(i===1){
-      buffs.dmg=10;
+      if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('umbral');
+      shadowCastScreen('umbral');
+      buffs.dmg=abilitySpec==='assassin'?12:10;
       burst(px,py+1,pz,[.55,.35,1],22,2.6,2.4,.6);
       umbralEdgeVfx(px,py,pz,.95,player.yaw);
       sysMsg('<b>Umbral Edge</b>: your strikes are empowered');
@@ -617,7 +628,7 @@ function doAbility(path,i){
           m.slowT=4;
           m.mats.forEach(mm=>mm.color.setRGB(.55,.75,1));
           iceLockVfx(m.grp.position.x,m.grp.position.y,m.grp.position.z);
-          damageMob(m, 6+(S.int-1)*.4, null);
+      damageMob(m,(6+(S.int-1)*.4)*(abilitySpec==='elementalist'?1.15:1),null);
         }
       }
       breakAbilityBlocks(px,py+.4,pz,2.0,8);
@@ -626,28 +637,39 @@ function doAbility(path,i){
       if(!mob){ sysMsg('No target in sight'); return false; }
       lightningStrikeVfx(mob.grp.position.x, mob.grp.position.y, mob.grp.position.z, null);
       addLightningBeam(player.pos.x,player.pos.y+1.3,player.pos.z,mob.grp.position.x,mob.grp.position.y+1,mob.grp.position.z,1.45);
-      damageMob(mob, 18+(S.int-1)*.8, null);
+      damageMob(mob,(18+(S.int-1)*.8)*(abilitySpec==='elementalist'?1.15:1),null);
       breakAbilityBlocks(mob.grp.position.x,mob.grp.position.y+.5,mob.grp.position.z,1.4,5);
     }
   } else {
     if(i===0){
-      buffs.armor=15;
+      if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('iron');
+      shadowCastScreen('iron');
+      buffs.armor=abilitySpec==='warden'?18:15;
       burst(px,py+1,pz,[.95,.78,.3],20,2.2,2.4,.6);
       guardShellVfx(px,py,pz,1.1);
       sysMsg('<b>Iron Skin</b>: damage halved');
     } else if(i===1){
+      if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('shockwave');
+      shadowCastScreen('shockwave');
       shockwaveEarthVfx(px,py,pz,true);
       for(const m of [...mobs]){
         const dx=m.grp.position.x-px, dz=m.grp.position.z-pz, d2=Math.hypot(dx,dz);
         if(d2<5.5 && d2>0.01){
           ringPulse(m.grp.position.x,m.grp.position.y+.08,m.grp.position.z,.85,0xe0b15a,.35);
-          damageMob(m, 5+(S.str-1)*.3, new THREE.Vector3(dx/d2*3.5,0,dz/d2*3.5));
+          const jug=abilitySpec==='juggernaut';damageMob(m,(5+(S.str-1)*.3)*(jug?1.25:1),new THREE.Vector3(dx/d2*(jug?4.8:3.5),0,dz/d2*(jug?4.8:3.5)));
         }
       }
       breakAbilityBlocks(px,py+.2,pz,2.8,16);
     }
   }
 }
+function shadowCastScreen(kind){
+  const el=document.getElementById('shadowcastfx');if(!el)return;
+  el.className='';void el.offsetWidth;el.className=kind;
+  const durations={dash:360,umbral:850,iron:740,shockwave:500,secondwind:1080};
+  setTimeout(()=>{if(el.className===kind)el.className='';},durations[kind]||700);
+}
+Object.defineProperty(globalThis,'BlockcraftAbilityScreen',{value:Object.freeze({play:shadowCastScreen}),configurable:true});
 // the Shadow Soldier
 function makeShadow(){
   const grp=new THREE.Group(), mats=[], legs=[], arms=[];
@@ -697,11 +719,11 @@ function tickAbilities(dt,t){
   if(buffs.armor>0 && Math.random()<dt*3.5) guardShellVfx(player.pos.x,player.pos.y,player.pos.z,.32);
   if(!NET.on && locked && hp>0 && !sleeping && !tutorialSafe()){
     const moveRate=sprintingNow?1.8:(keys['KeyW']||keys['KeyA']||keys['KeyS']||keys['KeyD'])?1.25:.55;
-    hunger=Math.max(0,hunger-dt*.055*moveRate);
+    hunger=Math.max(0,hunger-dt*(.018+moveRate*.012));
     hungerAcc+=dt;
     if(hunger<=0){
       starvationAcc+=dt;
-      if(starvationAcc>=5){ starvationAcc=0; damagePlayer(1,'local:starvation'); sysMsg('You are <b>starving</b>'); }
+      if(starvationAcc>=60){ starvationAcc=0; damagePlayer(1,'local:starvation'); sysMsg('You are <b>starving</b>'); }
     } else starvationAcc=0;
     if(hungerAcc>=1){ hungerAcc=0; renderBars(); }
   }
@@ -839,7 +861,7 @@ function updateAbilityHUD(){
     const locked=!BETA_ABILITY_TEST&&S.lvl<AB_UNLOCK[i];
     d.classList.toggle('locked',locked);
     d.querySelector('.lk').textContent=locked?('Lv'+AB_UNLOCK[i]):'';
-    const cd=a.passive ? swCd/60 : abCd[i]/a.cd;
+    const cd=a.passive ? swCd/60 : abCd[i]/abilityCooldown(a);
     d.querySelector('.cdov').style.height=(Math.max(0,Math.min(1,cd))*100)+'%';
   });
   if(equippedAegisArmor()){
@@ -936,6 +958,14 @@ function renderStat(){
       h+='<div class="ablist"><span'+(got?'':' class="dim"')+'>'+['Q','R','F'][i]+' &middot; '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span>'
         +'<span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at Level '+AB_UNLOCK[i])+'</span></div>';
     });
+    const rank=ABILITY_PROGRESSION.rankForLevel(S.lvl),evolution=ABILITY_PROGRESSION.EVOLUTION[S.path];
+    h+='<div class="sub2" style="margin-top:14px;color:'+P.col+'">RANK EVOLUTION</div>';
+    evolution.forEach((text,i)=>{const live=ABILITY_PROGRESSION.IMPLEMENTED_RANKS[i],earned=i<=rank;h+='<div class="ablist"><span'+(earned&&live?'':' class="dim"')+'>'+ABILITY_PROGRESSION.RANKS[i]+'-RANK'+(!live?' · ROADMAP':'')+'</span><span class="dim">'+text+(!live?' · not yet available':'')+'</span></div>';});
+    const specs=ABILITY_PROGRESSION.SPECIALIZATIONS[S.path];
+    if(rank>=2){
+      h+='<div class="sub2" style="margin-top:14px">SPECIALIZATION'+(abilitySpec?' &mdash; PERMANENT':' &mdash; CHOOSE ONE PERMANENT PATH')+'</div>';
+      for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec'+(chosen?' selected':'')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+'</p></div>';}
+    }
   }
   h+='<div class="qrow"><button id="jobopen">JOBS</button><button id="statclose">CLOSE</button></div>';
   statPanel.innerHTML=h;
@@ -948,6 +978,7 @@ function renderStat(){
     renderBars(); renderStat();
   }));
   statPanel.querySelectorAll('.pathcard').forEach(c=>c.addEventListener('click',()=>{
+    if(c.dataset.spec){if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:c.dataset.spec});return;}
     setAbilityPath(c.dataset.path);
   }));
   document.getElementById('statclose').addEventListener('click',()=>closeStat());

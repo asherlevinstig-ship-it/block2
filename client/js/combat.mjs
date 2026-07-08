@@ -133,7 +133,7 @@ const player = {
   w:0.3, h:1.8, eye:1.62,
   onGround:false,
 };
-player.pos.set(TOWN.TC+.5, TOWN.G+1, TOWN.TC+7.5); // plaza, facing the fountain
+player.pos.set(TOWN.TC+.5, TOWN.G+1, TOWN.TC+14.5); // open plaza, facing the fountain and Mara trail
 updateVisibleChunks(true);
 
 function collides(p){
@@ -450,6 +450,7 @@ const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
 const uipanel=document.getElementById('uipanel');
+const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const pathSelectEl=document.getElementById('pathselect');
@@ -457,8 +458,8 @@ const pathPanelEl=document.getElementById('pathpanel');
 const awakeningWin=document.getElementById('awakeningwin');
 const awakeningPanel=document.getElementById('awakeningpanel');
 let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
-const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1};
-let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0};
+const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1,familiar:1};
+let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0,familiar:0};
 function applyServerTutorials(raw){
   raw=raw&&typeof raw==='object'?raw:{};
   for(const key of Object.keys(TUTORIAL_VERSIONS)){
@@ -469,6 +470,7 @@ function applyServerTutorials(raw){
     if(serverTutorials.ability>=2)localStorage.setItem('bc_ability_tutorial_done_v2','1');
     if(serverTutorials.intro>=1)localStorage.setItem('bc_introcut','1');
     if(serverTutorials.gate>=1)localStorage.setItem('bc_gatecut_v1','1');
+    if(serverTutorials.familiar>=1)localStorage.setItem('bc_familiar_tutorial_v1','1');
     const townDone=JSON.parse(localStorage.getItem('bc_town_tutorial_steps_v1')||'{}');
     if(serverTutorials.townJob>=1)townDone.job=true;
     if(serverTutorials.townTavern>=1)townDone.tavern=true;
@@ -502,7 +504,11 @@ function cancelOnboardingForProfileRestore(){
 }
 let pathChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
-const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:false,inventory:false,finish:false};
+const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:false,subject:false,recall:false,inventory:false,finish:false};
+Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
+  markSubjectFocus:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='subject')onboardingFlags.subject=true;},
+  markRecall:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='recall')onboardingFlags.recall=true;}
+}),configurable:true});
 const ONBOARDING_FULL_TURN=Math.PI*2;
 let onboardingArrowTurn=0,onboardingPreparedStep=-1;
 let townGuidanceActive=false,townGuidanceStep='quest';
@@ -534,25 +540,52 @@ function finishWorldLoading(reason){
 }
 const ONBOARDING_STEPS=[];
 ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
-  {kind:'move',pillar:'Lesson 1 / 10 — Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
-  {kind:'arrows',pillar:'Lesson 2 / 10 — Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
-  {kind:'jump',pillar:'Lesson 3 / 10 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
-  {kind:'tree',pillar:'Lesson 4 / 10 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
-  {kind:'craft',pillar:'Lesson 5 / 10 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
-  {kind:'build',pillar:'Lesson 6 / 10 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingArrived&&onboardingFlags.built>=3},
-  {kind:'farm',pillar:'Lesson 7 / 10 — Farming', key:'G / RIGHT CLICK', text:'Harvest one mature wheat crop.', sub:'Aim at the tall golden wheat and use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
-  {kind:'eat',pillar:'Lesson 8 / 10 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
-  {kind:'combat',pillar:'Lesson 9 / 10 — Combat', key:'LEFT CLICK / F', text:'Aim at the training dummy and strike it.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingArrived&&onboardingFlags.dummy},
-  {kind:'finish',pillar:'Lesson 10 / 10 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Training is complete. New systems will appear when they become relevant.', done:()=>onboardingArrived}
+  {kind:'move',pillar:'Lesson 1 / 11 — Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
+  {kind:'arrows',pillar:'Lesson 2 / 11 — Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
+  {kind:'jump',pillar:'Lesson 3 / 11 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
+  {kind:'tree',pillar:'Lesson 4 / 11 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
+  {kind:'craft',pillar:'Lesson 5 / 11 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
+  {kind:'build',pillar:'Lesson 6 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingArrived&&onboardingFlags.built>=3},
+  {kind:'farm',pillar:'Lesson 7 / 11 — Farming', key:'G / RIGHT CLICK', text:'Harvest one mature wheat crop.', sub:'Aim at the tall golden wheat and use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
+  {kind:'eat',pillar:'Lesson 8 / 11 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
+  {kind:'combat',pillar:'Lesson 9 / 11 — Combat', key:'LEFT CLICK / F', text:'Aim at the training dummy and strike it.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingArrived&&onboardingFlags.dummy},
+  {kind:'recall',pillar:'Lesson 10 / 11 — Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingArrived&&onboardingFlags.recall},
+  {kind:'finish',pillar:'Lesson 11 / 11 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
+for(const step of ONBOARDING_STEPS){
+  if(step.kind==='move') step.pillar='Lesson 1 / 12 - Movement';
+  else if(step.kind==='arrows') step.pillar='Lesson 2 / 12 - Arrow Camera';
+  else if(step.kind==='jump') step.pillar='Lesson 3 / 12 - Jumping';
+  else if(step.kind==='tree') step.pillar='Lesson 4 / 12 - Gathering';
+  else if(step.kind==='craft') step.pillar='Lesson 5 / 12 - Crafting';
+  else if(step.kind==='build') step.pillar='Lesson 6 / 12 - Building';
+  else if(step.kind==='farm') step.pillar='Lesson 7 / 12 - Farming';
+  else if(step.kind==='eat') step.pillar='Lesson 8 / 12 - Eating';
+  else if(step.kind==='combat') step.pillar='Lesson 9 / 12 - Combat';
+  else if(step.kind==='recall') step.pillar='Lesson 11 / 12 - Recall Cast';
+  else if(step.kind==='finish'){
+    step.pillar='Lesson 12 / 12 - Departure';
+    step.sub='Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot for everyone.';
+  }
+}
+ONBOARDING_STEPS.splice(9,0,{
+  kind:'subject',
+  pillar:'Lesson 10 / 12 - Subject Focus',
+  key:'ESC',
+  text:'Press Escape and choose your Recall subject.',
+  sub:'Recall Cast and death limbo questions use this subject. Pick Computer Science, IT, RE, or English.',
+  done:()=>onboardingArrived&&onboardingFlags.subject
+});
 
 function showStartHelp(){
   overlay.classList.remove('compact');
 }
 function onboardingDone(){
+  if(NET.on) return serverTutorials.onboarding>=7;
   try{return serverTutorials.onboarding>=7||localStorage.getItem('bc_onboarding_done_v7')==='1';}catch(e){return serverTutorials.onboarding>=7;}
 }
 function meadowTutorialDone(){
+  if(NET.on) return false;
   try{return localStorage.getItem('bc_meadow_tutorial_done_v1')==='1';}catch(e){return false;}
 }
 function setMeadowTutorialDone(){
@@ -781,6 +814,7 @@ function buildOnboardingRoute(){
     {x:sx+10, z:sz-28},
     {x:sx-8, z:sz-28},
     {x:sx-22, z:sz-20},
+    {x:sx-28, z:sz-14},
     {x:sx-32, z:sz-8},
   ];
 }
@@ -796,6 +830,7 @@ function resetForFreshOnboarding(){
   regionalContract=null; regionalContractOffers=[];
   utilityUnlocks=[]; utilityLoadout={active:'',passive:[]};
   discoveredIds.clear();
+  claimedDiscoveryIds.clear();
   if(typeof dragonUnlocks!=='undefined') dragonUnlocks=[];
   if(typeof familiarUnlocks!=='undefined') familiarUnlocks=[];
   refreshHUD();
@@ -846,7 +881,8 @@ function showAbilityAwakening(){
   const first=P.ab[0];
   awakeningPanel.innerHTML='<div class="awpill">Level 2 Reached</div>'
     +'<h1>ABILITY AWAKENED</h1>'
-    +'<div class="awtext">Your hunter path has awakened. You have unlocked your first combat ability, and the ability hotbar is now part of your HUD.</div>'
+    +'<h2 style="color:'+P.col+';margin:4px 0 10px">'+escHTML(P.name)+'</h2>'
+    +'<div class="awtext">Your permanent hunter path is now <b>'+escHTML(P.name)+'</b>. You have unlocked your first combat ability, and the ability hotbar is now part of your HUD.</div>'
     +'<div class="awability" style="color:'+P.col+'">'
       +'<div class="awicon">'+escHTML(first.g)+'</div>'
       +'<div class="awname">'+escHTML('Q - '+first.n)+'</div>'
@@ -876,7 +912,7 @@ function startAbilityTraining(){
   abilityTrainingActive=true;
   abilityTrainingUsed=false;
   abilityTrainingFinishAt=0;
-  abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+2,TOWN.TC+7.5));
+  abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5));
   if(player){
     player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+2,ABILITY_MEADOW.z+12);
     player.vel.set(0,0,0);
@@ -932,7 +968,7 @@ function completeAbilityTraining(){
   abilityTrainingReturn=null;
   hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
   renderBars();
-  sysMsg('<b>Ability training complete.</b> Your Lv2 ability is on <b>Q</b>. More unlock at <b>Lv5</b> and <b>Lv8</b>.');
+  sysMsg('<b>Ability training complete.</b> Your Lv2 ability is on <b>Q</b>. More unlock at <b>Lv4</b> and <b>Lv8</b>.');
   showName('Q ability unlocked');
   requestTownJobGuidance();
   refreshPlayUi();
@@ -1013,9 +1049,9 @@ function townTutorialInfo(step){
     farSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.', nearSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.'
   };
   return {
-    pill:'Town Step 1 - First Quest', target:HUB.guide, near:4.2, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
-    farText:'Follow the glowing pillar to the Quest Giver.', nearText:'Speak to the Quest Giver.',
-    farSub:'The town is safe. Your first goal is to meet the Quest Giver and pick up a task.', nearSub:'Accept your first quest so you have a clear reason to leave town.'
+    pill:'Town Step 1 - Accept First Quest', target:HUB.guide, near:4.2, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the glowing pillar to Mara Vale.', nearText:'Talk to Mara and press ACCEPT.',
+    farSub:'The green ! marks a quest offer. Nothing gives XP until you explicitly accept it.', nearSub:'Accept Mara’s first quest so your tracker shows a real objective before you leave town.'
   };
 }
 const townChoicesEl=document.getElementById('townchoices');
@@ -1214,7 +1250,7 @@ function finishOnboardingToTown(){
   tutorialDummyGroup.visible=false;
   if(dim==='tutorial') exitOnboardingRoom();
   if(player){
-    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+7.5);
+    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5);
     player.vel.set(0,0,0);
     player.yaw=Math.PI;
   }
@@ -1261,7 +1297,8 @@ function pathCardHTML(key){
 }
 function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
-  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  const firstQuestRewardPending=!!(npcQuestChains&&Number(npcQuestChains['Mara Vale']||0)>=1&&!serverFirstQuestComplete);
+  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
   pathChoiceOpen=true;
@@ -1450,6 +1487,7 @@ logoutbtn.addEventListener('click',async()=>{
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
   if(hasLock) lockFallback=false;
+  else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen)lockFallback=true;
   locked = hasLock || lockFallback;
   refreshPlayUi();
 });
@@ -1463,7 +1501,7 @@ addEventListener('keydown', e=>{
     e.preventDefault();
     return;
   }
-  if(e.code==='Tab'&&locked){e.preventDefault();startQuickChatWheel();return;}
+  if(e.code==='Tab'&&!e.repeat&&(locked||overlay.classList.contains('hidden'))){e.preventDefault();startQuickChatWheel();return;}
   if(e.code==='Enter' && !locked && !overlay.classList.contains('hidden')){
     e.preventDefault();
     showStartHelp();
@@ -1487,6 +1525,11 @@ addEventListener('keydown', e=>{
   keys[e.code]=true;
   acknowledgeSmartSuggestionKey(e.code);
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
+  if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&locked){
+    e.preventDefault();
+    globalThis.BlockcraftRecall.start();
+    return;
+  }
   if(e.code==='KeyE'){
     if(onboardingActive&&onboardingArrived) onboardingFlags.inventory=true;
     if(uiOpen) closeUI();
@@ -1522,6 +1565,8 @@ addEventListener('keydown', e=>{
     if(uiShellState.qOpen){ closeQWin(false); closed=true; }
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
     if(closed){ e.preventDefault(); return; }
+    const limboOpen=!!document.querySelector('#deathlimbo.show');
+    if(overlay.classList.contains('hidden')&&!limboOpen&&!globalThis.BlockcraftRecall.active){e.preventDefault();if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();return;}
   }
   if(locked){
     if(e.code.startsWith('Arrow')) e.preventDefault();
@@ -1531,9 +1576,6 @@ addEventListener('keydown', e=>{
       return;
     }
     if(e.code==='KeyQ') cast(0);
-    if(e.code==='KeyP'&&!e.repeat&&typeof globalThis.toggleRegionalOpportunityTracking==='function'){
-      e.preventDefault();globalThis.toggleRegionalOpportunityTracking();
-    }
     if(e.code==='KeyR') cast(1);
     if(e.code==='KeyH') cast(2);
     if(e.code==='KeyF' && !e.repeat) primaryAction();
@@ -1563,8 +1605,7 @@ addEventListener('keyup', e=>{
 });
 addEventListener('mousemove', e=>{
   claimMouse.x=e.clientX; claimMouse.y=e.clientY;
-  cursorEl.style.left=(e.clientX-18)+'px';
-  cursorEl.style.top =(e.clientY-18)+'px';
+  if(cursorEl){cursorEl.style.left=(e.clientX-18)+'px';cursorEl.style.top=(e.clientY-18)+'px';}
   if(claimMode) updateClaimHover();
 });
 function primaryAction(){
@@ -1763,6 +1804,26 @@ function nearJobBoard(){
 function nearDragonRoost(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<13;
 }
+function nearTavernDiceTable(){
+  return dim==='overworld' && Math.hypot(player.pos.x-(TOWN.TC+10.5), player.pos.z-(TOWN.TC+25.5))<3.2;
+}
+function nearTavernRouletteTable(){
+  return dim==='overworld' && Math.hypot(player.pos.x-(TOWN.TC+20.5), player.pos.z-(TOWN.TC+25.5))<3.2;
+}
+function nearTavernBlackjackTable(){
+  return dim==='overworld' && Math.hypot(player.pos.x-(TOWN.TC+15.5), player.pos.z-(TOWN.TC+25.5))<3.2;
+}
+function nearbyTavernGameTable(range=3.8){
+  if(dim!=='overworld')return null;
+  const tables=[
+    {id:'dice',label:'Dice Table',x:TOWN.TC+10.5,z:TOWN.TC+25.5},
+    {id:'blackjack',label:'Blackjack Table',x:TOWN.TC+15.5,z:TOWN.TC+25.5},
+    {id:'roulette',label:'Roulette Table',x:TOWN.TC+20.5,z:TOWN.TC+25.5},
+  ];
+  let nearest=null,best=range;
+  for(const table of tables){const distance=Math.hypot(player.pos.x-table.x,player.pos.z-table.z);if(distance<best){best=distance;nearest={...table,distance};}}
+  return nearest;
+}
 function nearSkyshipGangway(){
   return dim==='overworld' && player.pos.x>=HUB.skyport.x-15.5 && player.pos.x<=HUB.skyport.x-6.5 &&
     Math.abs(player.pos.z-HUB.skyport.z)<=3.25 && player.pos.y>=HUB.skyport.y+.25 && player.pos.y<=HUB.skyport.y+4;
@@ -1786,18 +1847,33 @@ function nearbySmallDiscovery(range=6){
   for(const s of smallDiscoveries){const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);if(d<bd){bd=d;best=s;}}
   return best;
 }
+function nearbyKnowledgeRuin(range=14){
+  if(dim!=='overworld')return null;let best=null,bd=range;
+  for(const s of regionalLandmarks)if(s.type==='ruins'){const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);if(d<bd){bd=d;best=s;}}
+  return best;
+}
+function nearbyTreasureClue(range=18){
+  const map=globalThis.BlockcraftTreasureMap;if(!map||!map.targetId||dim!=='overworld')return null;
+  const s=[...regionalLandmarks,...smallDiscoveries].find(v=>v.id===map.targetId);return s&&Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<Math.max(range,(s.radius||8)+4)?s:null;
+}
 const localDiscoveryClaims=new Set();
 function interactSmallDiscovery(s,hit){
-  if(!s||!['rare_plant','lore_tablet','fishing_pool','puzzle_shrine'].includes(s.type))return false;
+  if(!s||!['rare_plant','lore_tablet','fishing_pool','puzzle_shrine','rain_bloom','storm_crystal','sun_dial'].includes(s.type))return false;
   const msg={id:s.id,x:hit?hit.x:0,y:hit?hit.y:0,z:hit?hit.z:0};
   if(NET.on&&NET.room){NET.room.send('discoveryInteract',msg);return true;}
   const claimKey=s.type==='fishing_pool'?s.id+':'+Math.floor(Date.now()/600000):s.id;
   if(localDiscoveryClaims.has(claimKey)){sysMsg(s.type==='fishing_pool'?'The pool needs time to replenish.':'You have already searched this discovery');return true;}
   if(s.type==='puzzle_shrine'&&(!hit||hit.x!==s.target.x||hit.y!==s.target.y||hit.z!==s.target.z)){sysMsg('Two flames agree. Touch the one that does not.');return true;}
+  const required={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'}[s.type];
+  if(required&&weather!==required){discoveredIds.add(s.id);updateLandMinimap();sysMsg('This discovery is dormant. Return during <b>'+escHTML(required)+'</b>.');return true;}
   localDiscoveryClaims.add(claimKey);
+  if(s.type!=='fishing_pool')claimedDiscoveryIds.add(s.id);
   if(s.type==='fishing_pool'){addItem(I.RIVER_FISH,2);sysMsg('You catch <b>Silverfin x2</b>');}
   else if(s.type==='rare_plant'){const ids=[I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM];addItem(ids[biomeAt(s.x,s.z)]||I.WINDSEED,2);sysMsg('A rare regional plant yields useful material.');}
   else if(s.type==='lore_tablet'){gainXP(12);sysMsg('The weathered tablet preserves a fragment of old-road lore.');}
+  else if(s.type==='rain_bloom'){addItem(I.RAINWAKE_PETAL,1);gainXP(18);sysMsg('Rainwake petals can be cooked into strong restorative broth.');}
+  else if(s.type==='storm_crystal'){addItem(I.STORMGLASS,1);gainXP(24);sysMsg('Stormglass holds a charge that blacksmiths can turn into repair work.');}
+  else if(s.type==='sun_dial'){addItem(I.SOLAR_GLYPH,1);gainXP(16);sysMsg('The aligned light leaves a solar glyph used to focus sunshards.');}
   else{addItem(I.IRON_INGOT,2);gainXP(15);sysMsg('The odd flame yields. A hidden compartment opens.');}
   return true;
 }
@@ -1816,6 +1892,9 @@ function secondaryAction(){
   if(heldRC && POTIONS[heldRC.id]){ drinkPotion(heldRC.id); return; }
   if(heldRC && FOOD_VALUES[heldRC.id]){ eatFood(selected); return; }
   if(nearJobBoard()){ openJobsUI(); return; }
+  if(nearTavernDiceTable()){ openTavernDiceUI(); return; }
+  if(nearTavernRouletteTable()){ openTavernRouletteUI(); return; }
+  if(nearTavernBlackjackTable()){ openTavernBlackjackUI(); return; }
   if(guardianUnderCrosshair(8)){ openGuardianUI(); return; }
   const vill=villagerUnderCrosshair(4.5);
   if(vill){
@@ -1823,6 +1902,15 @@ function secondaryAction(){
     return;
   }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
+  const treasureClue=nearbyTreasureClue();
+  if(treasureClue){if(NET.on&&NET.room)NET.room.send('treasureMapAdvance',{id:treasureClue.id});return;}
+  const knowledgeRuin=nearbyKnowledgeRuin();
+  if(knowledgeRuin){
+    let subject='English';try{subject=localStorage.getItem('bc_recall_subject')||subject;}catch{}
+    if(NET.on&&NET.room)NET.room.send('recallStart',{yaw:player.yaw,subject,ruinId:knowledgeRuin.id});
+    else sysMsg('The inscription only answers while connected to the realm.');
+    return;
+  }
   const spared=mobUnderCrosshair(5);
   if(spared&&spared.net&&spared.ref&&['caravan_merchant','caravan_guard'].includes(spared.ref.kind)){
     const caravan=worldState.overworldActivity&&worldState.overworldActivity.caravan;
@@ -1911,8 +1999,13 @@ function interactWithVillager(vill){
       : '<b>Road Warden reputation:</b> '+(roadWardenRep|0));
     openRegionalContractsUI();
   }
+  else if(vill.role==='cartographer'){
+    if(NET.on&&NET.room)NET.room.send('cartographer',{action:'status'});
+    else openCartographerUI();
+  }
   else if(vill.role==='guild_receptionist') openGuildHallUI();
   else if(vill.role==='bartender') openTavernUI();
+  else if(vill.role==='token_cashier') openTavernCashierUI();
   else if(vill.role==='traveling_merchant'){
     sysMsg('<b>Road Merchant:</b> "What the town lacks, the road provides."');
     const s=nearbySmallDiscovery(8);
@@ -1956,6 +2049,7 @@ gameContext.registerModule('combat', Object.freeze({
   primaryAction,
   secondaryAction,
   stopPrimaryAction,
+  nearbyTavernGameTable,
 }));
 
 

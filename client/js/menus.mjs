@@ -2,6 +2,7 @@ import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {api as combatApi,state as combatState} from './combat.mjs';
 import {api as hudApi,state as hudState} from './hud.mjs';
+import {recipeFootprint,shapedIngredientIds,recipeNeedCounts} from './crafting-domain.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -34,9 +35,15 @@ const legacyMenuBindings={
   "applyServerCraft":{get:()=>applyServerCraft},
   "applyServerNpcQuestChains":{get:()=>applyServerNpcQuestChains},
   "applyShopResult":{get:()=>applyShopResult},
+  "applyTavernBlackjackState":{get:()=>applyTavernBlackjackState},
+  "applyTavernDiceResult":{get:()=>applyTavernDiceResult},
+  "applyTavernRouletteResult":{get:()=>applyTavernRouletteResult},
+  "applyTavernTokenResult":{get:()=>applyTavernTokenResult},
   "applyToolSync":{get:()=>applyToolSync},
   "arrows":{get:()=>arrows},
   "awardFirstVillagerQuestBonus":{get:()=>awardFirstVillagerQuestBonus},
+  "showFirstVillagerReward":{get:()=>showFirstVillagerReward},
+  "firstQuestRewardPresentationSeen":{get:()=>firstQuestRewardPresentationSeen},
   "bartender":{get:()=>bartender},
   "blacksmithServiceRejected":{get:()=>blacksmithServiceRejected},
   "bleedStacks":{get:()=>bleedStacks,set:value=>{bleedStacks=value;}},
@@ -74,6 +81,8 @@ const legacyMenuBindings={
   "gateReadinessLocal":{get:()=>gateReadinessLocal},
   "gateRejected":{get:()=>gateRejected},
   "gold":{get:()=>gold,set:value=>{gold=value;}},
+  "tavernTokens":{get:()=>tavernTokens,set:value=>{tavernTokens=value;}},
+  "tavernTokenRemaining":{get:()=>tavernTokenRemaining,set:value=>{tavernTokenRemaining=value;}},
   "gearInspectSlot":{get:()=>gearInspectSlot,set:value=>{gearInspectSlot=value;}},
   "guardianUnderCrosshair":{get:()=>guardianUnderCrosshair},
   "guildHallOpen":{get:()=>guildHallOpen,set:value=>{guildHallOpen=value;}},
@@ -90,10 +99,14 @@ const legacyMenuBindings={
   "maraQuestCue":{get:()=>maraQuestCue},
   "maybeFall":{get:()=>maybeFall},
   "npcQuestChains":{get:()=>npcQuestChains,set:value=>{npcQuestChains=value;}},
+  "systemIntroductions":{get:()=>systemIntroductions,set:value=>{systemIntroductions=value;}},
+  "progressionDirectorGuidanceInfo":{get:()=>progressionDirectorGuidanceInfo},
+  "refreshProgressionDirectorNotice":{get:()=>refreshProgressionDirectorNotice},
   "openDragonBondUI":{get:()=>openDragonBondUI},
   "openDungeonLobbyUI":{get:()=>openDungeonLobbyUI},
   "openGuardianUI":{get:()=>openGuardianUI},
   "openGuildHallUI":{get:()=>openGuildHallUI},
+  "openCartographerUI":{get:()=>openCartographerUI},
   "openJobsUI":{get:()=>openJobsUI},
   "openQuestLogUI":{get:()=>openQuestLogUI},
   "openQuestUI":{get:()=>openQuestUI},
@@ -101,6 +114,10 @@ const legacyMenuBindings={
   "openShardUI":{get:()=>openShardUI},
   "openShopUI":{get:()=>openShopUI},
   "openStablemasterUI":{get:()=>openStablemasterUI},
+  "openTavernBlackjackUI":{get:()=>openTavernBlackjackUI},
+  "openTavernCashierUI":{get:()=>openTavernCashierUI},
+  "openTavernDiceUI":{get:()=>openTavernDiceUI},
+  "openTavernRouletteUI":{get:()=>openTavernRouletteUI},
   "openTavernUI":{get:()=>openTavernUI},
   "openUI":{get:()=>openUI},
   "pendingGuildInvites":{get:()=>pendingGuildInvites},
@@ -229,10 +246,6 @@ function countCraftCellItem(id){
   for(const s of craftCells) if(s&&s.id===id) n+=s.count||1;
   return n;
 }
-function recipeFootprint(recipe){
-  if(recipe.shapeless) return recipe.shapeless.length <= 4 ? 2 : 3;
-  return Math.max(recipe.shape.length, ...recipe.shape.map(row=>row.length));
-}
 function ingredientSummary(ids){
   const counts=new Map();
   for(const id of ids) counts.set(id, (counts.get(id)||0)+1);
@@ -244,17 +257,7 @@ function recipeIngredients(recipe){
   for(const row of recipe.shape) for(const ch of row) if(ch!=='.' && ch!==' ') ids.push(recipe.keys[ch]);
   return ingredientSummary(ids);
 }
-function recipeNeedCounts(recipe){
-  const ids = recipe.shapeless ? recipe.shapeless : recipeIngredientsIds(recipe);
-  const counts=new Map();
-  for(const id of ids) counts.set(id, (counts.get(id)||0)+1);
-  return counts;
-}
-function recipeIngredientsIds(recipe){
-  const ids=[];
-  for(const row of recipe.shape) for(const ch of row) if(ch!=='.' && ch!==' ') ids.push(recipe.keys[ch]);
-  return ids;
-}
+const recipeIngredientsIds=shapedIngredientIds;
 function takeOneFromInventory(id){
   for(let i=0;i<36;i++){
     const s=inv[i];
@@ -860,6 +863,7 @@ function noise(dur,vol,fc,q,delay,type){
       else osc('sine',440,220,.3,.08);
     },
     hit(){ noise(.08,.45,1800); osc('sine',180,60,.12,.4); },
+    block(){ noise(.045,.22,2600,1.4); osc('triangle',760,310,.09,.22); },
     kill(){ osc('sine',150,40,.28,.5); noise(.18,.35,700); },
     hurt(){ osc('sine',115,55,.24,.55); noise(.14,.3,320); },
     breakBlk(cls){
@@ -1069,7 +1073,13 @@ const playerKb=new THREE.Vector3();
 
 // ---------------- gold, quests & the market ----------------
 let gold=0;
-function addGold(n){ gold+=n; }
+let tavernTokens=0;
+let tavernTokenRemaining=100;
+function addGold(n){
+  n=Math.round(Number(n)||0);
+  gold+=n;
+  if(n>0) rewardGain('gold',n,'Gold');
+}
 const countItem=id=>inventoryModel.count(id);
 const removeItems=(id,n)=>inventoryModel.remove(id,n);
 function requestShop(action, vendor, id, count=1){
@@ -1321,9 +1331,449 @@ function shopRejected(m){
   else if(reason==='rate') sysMsg('The merchant needs a moment - try that trade again');
   else sysMsg('Trade failed');
 }
+const TAVERN_DICE_WAGERS={
+  low:{label:'LOW', range:'2-6', desc:'Win 2x if the dice total is 2 to 6.', mult:2},
+  seven:{label:'LUCKY 7', range:'7', desc:'Win 4x if the dice land exactly on 7.', mult:4},
+  high:{label:'HIGH', range:'8-12', desc:'Win 2x if the dice total is 8 to 12.', mult:2}
+};
+function requestTavernTokens(amount=10){
+  amount=Math.max(1,Math.min(25,amount|0||10));
+  if(NET.on&&NET.room){NET.room.send('tavernTokenExchange',{amount});return;}
+  if(tavernTokenRemaining<amount){sysMsg('Today\'s Tavern Token exchange allowance is exhausted.');SFX.error();return;}
+  if(gold<amount){sysMsg('Not enough <b>gold</b> to buy Tavern Tokens.');SFX.error();return;}
+  gold-=amount;tavernTokens+=amount;applyTavernTokenResult({ok:true,amount,gold,tokens:tavernTokens,remaining:tavernTokenRemaining-amount});
+}
+function applyTavernTokenResult(m){
+  if(typeof (m&&m.remaining)==='number')tavernTokenRemaining=Math.max(0,Math.min(100,m.remaining|0));
+  if(!m||!m.ok){const r=m&&m.reason;sysMsg(r==='daily'?'Today\'s <b>100 Tavern Token</b> exchange limit is reached.':r==='gold'?'Not enough <b>gold</b> for that exchange.':'The token cashier cannot complete that exchange.');SFX.error();return;}
+  if(typeof m.gold==='number')gold=Math.max(0,m.gold|0);
+  if(typeof m.tokens==='number')tavernTokens=Math.max(0,m.tokens|0);
+  SFX.coin();sysMsg('Exchanged <b>'+((m.amount||0)|0)+' gold</b> for <b>'+((m.amount||0)|0)+' Tavern Tokens</b>.');
+  if(qOpen&&qpanelEl.querySelector('.tavern-cashier-marker'))openTavernCashierUI();
+  else if(qOpen)openTavernUI();
+}
+function tavernWalletNode(){
+  const row=document.createElement('div');row.className='dice-actions tavern-wallet';
+  const text=document.createElement('span');text.innerHTML='TOKENS: <b style="color:#c79cff">'+tavernTokens+'</b> · GOLD: <b style="color:#ffd24a">'+gold+'</b> · TODAY: <b>'+tavernTokenRemaining+'/100</b>';row.appendChild(text);
+  row.appendChild(qBtn('EXCHANGE 10 GOLD',()=>requestTavernTokens(10),true));return row;
+}
+let tavernDiceBet=5;
+let tavernDiceLast=null;
+let tavernDicePending=false;
+let tavernDiceRolling=false;
+let tavernDiceRollResult=null;
+let tavernDiceRollTimer=0;
+function validTavernDiceBet(value){
+  return Math.max(1,Math.min(25,Number(value)|0||1));
+}
+function tavernDiceLocalRoll(wager,bet){
+  const d1=1+Math.floor(Math.random()*6), d2=1+Math.floor(Math.random()*6), total=d1+d2;
+  const win=(wager==='low'&&total<=6)||(wager==='seven'&&total===7)||(wager==='high'&&total>=8);
+  const mult=(TAVERN_DICE_WAGERS[wager]&&TAVERN_DICE_WAGERS[wager].mult)||2;
+  const payout=win?bet*mult:0;
+  return {ok:true,wager,bet,dice:[d1,d2],total,win,payout,delta:payout-bet,tokens:tavernTokens+payout-bet,local:true};
+}
+function requestTavernDice(wager){
+  wager=TAVERN_DICE_WAGERS[wager]?wager:'high';
+  const bet=validTavernDiceBet(tavernDiceBet);
+  if(tavernDicePending){ sysMsg('Wait for the dice to settle.'); return; }
+  if(tavernTokens<bet){ sysMsg('Not enough <b>Tavern Tokens</b> for that wager.'); SFX.error(); return; }
+  tavernDicePending=true;
+  worldApi.tavernGameAction('dice','play');SFX.uiClick();
+  if(NET.on&&NET.room){ NET.room.send('tavernDice',{wager,bet}); return; }
+  applyTavernDiceResult(tavernDiceLocalRoll(wager,bet));
+}
+function applyTavernDiceResult(m){
+  if(!m){ tavernDicePending=false; SFX.error(); return; }
+  if(!m.ok){
+    tavernDicePending=false;
+    SFX.error();
+    const r=m.reason||'';
+    if(r==='tokens') sysMsg('Not enough <b>Tavern Tokens</b> for that dice wager.');
+    else if(r==='range') sysMsg('Stand beside the <b>Dice Table</b> in the tavern.');
+    else if(r==='rate') sysMsg('Let the dice settle before throwing again.');
+    else sysMsg('The dice table refused that wager.');
+    if(typeof m.gold==='number') gold=Math.max(0,m.gold|0);
+    if(qOpen) openTavernDiceUI(m);
+    return;
+  }
+  tavernDiceRolling=true;tavernDiceRollResult=m;
+  if(qOpen&&qpanelEl.querySelector('.dice-board:not(.roulette-board)'))openTavernDiceUI(null);
+  clearTimeout(tavernDiceRollTimer);
+  tavernDiceRollTimer=setTimeout(()=>finishTavernDiceRoll(),1450);
+}
+function finishTavernDiceRoll(){
+  const m=tavernDiceRollResult;
+  tavernDiceRollResult=null;tavernDiceRolling=false;tavernDicePending=false;
+  if(!m)return;
+  const delta=Number(m.delta)||0;
+  worldApi.tavernGameAction('dice',delta>0?'win':'lose');
+  if(typeof m.tokens==='number') tavernTokens=Math.max(0,m.tokens|0);
+  else tavernTokens=Math.max(0,tavernTokens+delta);
+  tavernDiceLast=m;
+  refreshHUD();
+  if(delta>0){ SFX.coin(); sysMsg('<b>Dice Table:</b> '+escHTML((m.dice||[]).join(' + '))+' = <b>'+((m.total||0)|0)+'</b>. You win <b>'+delta+' tokens</b>.'); }
+  else { SFX.error(); sysMsg('<b>Dice Table:</b> '+escHTML((m.dice||[]).join(' + '))+' = <b>'+((m.total||0)|0)+'</b>. You lose <b>'+Math.abs(delta)+' tokens</b>.'); }
+  if(qOpen&&qpanelEl.querySelector('.tavern-dice-stage')) openTavernDiceUI(m);
+}
+function tavernDieNode(value,rolling=false,index=0){
+  const face=document.createElement('span');face.className='tavern-die-face'+(rolling?' rolling':'');face.style.setProperty('--die-delay',(index*.12)+'s');
+  const pips={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]}[Math.max(1,Math.min(6,value|0))]||[];
+  for(let i=0;i<9;i++){const pip=document.createElement('i');if(pips.includes(i))pip.className='on';face.appendChild(pip);}
+  return face;
+}
+function tavernDiceStage(result,rolling=false){
+  const stage=document.createElement('div');stage.className='tavern-dice-stage'+(rolling?' rolling':'')+(result&&!rolling?(Number(result.delta)>0?' win':' lose'):'');
+  const dice=Array.isArray(result&&result.dice)?result.dice:[1,1];
+  stage.appendChild(tavernDieNode(dice[0],rolling,0));stage.appendChild(tavernDieNode(dice[1],rolling,1));
+  const status=document.createElement('strong');status.textContent=rolling?'ROLLING…':result&&result.ok?'TOTAL '+((result.total||0)|0):'MAKE YOUR CALL';stage.appendChild(status);
+  return stage;
+}
+function openTavernDiceUI(result=tavernDiceLast){
+  openQWin('commerce');
+  qpanelEl.innerHTML='';
+  const h=document.createElement('h2'); h.textContent='DICE TABLE'; qpanelEl.appendChild(h);
+  qpanelEl.appendChild(tavernWalletNode());
+  const intro=document.createElement('p'); intro.className='qtext';
+  intro.innerHTML='Pick a stake, then call where two six-sided dice will land. Simple, quick, and dangerous enough to feel like a tavern.';
+  qpanelEl.appendChild(intro);
+  qpanelEl.appendChild(tavernDiceStage(tavernDiceRollResult||result,tavernDiceRolling));
+  const board=document.createElement('div'); board.className='dice-board';
+  const betPanel=document.createElement('div'); betPanel.className='dice-panel';
+  betPanel.innerHTML='<b>STAKE</b><small>Max 25 tokens per throw.</small>';
+  const betRow=document.createElement('div'); betRow.className='dice-actions';
+  for(const n of [1,5,10,25]){
+    const b=qBtn(n+' TOKENS',()=>{tavernDiceBet=n;openTavernDiceUI(result);});
+    if(tavernDiceBet===n)b.classList.add('selected');
+    betRow.appendChild(b);
+  }
+  betPanel.appendChild(betRow);
+  board.appendChild(betPanel);
+  for(const key of ['low','seven','high']){
+    const wager=TAVERN_DICE_WAGERS[key];
+    const panel=document.createElement('div'); panel.className='dice-panel';
+    panel.innerHTML='<b>'+escHTML(wager.label)+'</b><strong>'+escHTML(wager.range)+'</strong><small>'+escHTML(wager.desc)+'</small>';
+    panel.appendChild(qBtn('THROW '+validTavernDiceBet(tavernDiceBet)+' TOKENS',()=>requestTavernDice(key),tavernDicePending));
+    board.appendChild(panel);
+  }
+  qpanelEl.appendChild(board);
+  const last=document.createElement('div'); last.className='dice-result';
+  if(tavernDiceRolling){
+    last.innerHTML='<small>The dice are tumbling. The wager is locked.</small>';
+  } else if(result&&result.ok){
+    const dice=Array.isArray(result.dice)?result.dice:[0,0];
+    last.innerHTML='<span class="dice-die">'+((dice[0]||0)|0)+'</span><span class="dice-die">'+((dice[1]||0)|0)+'</span><b>'+(((result.total||0)|0))+'</b><em class="'+((result.delta||0)>0?'win':'lose')+'">'+((result.delta||0)>0?'+':'')+((result.delta||0)|0)+' tokens</em>';
+  } else {
+    last.innerHTML='<small>Step up to the table, choose LOW, LUCKY 7, or HIGH, then throw.</small>';
+  }
+  qpanelEl.appendChild(last);
+  const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
+  row.appendChild(qBtn('BACK TO TAVERN',()=>openTavernUI(),true));
+  row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));
+  qpanelEl.appendChild(row);
+}
+const ROULETTE_RED_NUMBERS=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const TAVERN_ROULETTE_BETS={
+  red:{label:'RED', range:'18 numbers', desc:'Pays 2x when the ball lands red.', mult:2},
+  black:{label:'BLACK', range:'18 numbers', desc:'Pays 2x when the ball lands black.', mult:2},
+  odd:{label:'ODD', range:'1, 3, 5...', desc:'Pays 2x on odd non-zero numbers.', mult:2},
+  even:{label:'EVEN', range:'2, 4, 6...', desc:'Pays 2x on even non-zero numbers.', mult:2},
+  dozen1:{label:'1-12', range:'First dozen', desc:'Pays 3x if the number is 1 to 12.', mult:3},
+  dozen2:{label:'13-24', range:'Second dozen', desc:'Pays 3x if the number is 13 to 24.', mult:3},
+  dozen3:{label:'25-36', range:'Third dozen', desc:'Pays 3x if the number is 25 to 36.', mult:3},
+  zero:{label:'ZERO', range:'0', desc:'Pays 20x if the ball lands on zero.', mult:20}
+};
+let tavernRouletteBet=5;
+let tavernRouletteLast=null;
+let tavernRoulettePending=false;
+let tavernRouletteSpinning=false;
+let tavernRouletteSpinResult=null;
+let tavernRouletteSpinTimer=0;
+function validTavernRouletteBet(value){
+  return Math.max(1,Math.min(25,Number(value)|0||1));
+}
+function rouletteColor(number){
+  number=number|0;
+  if(number===0)return 'green';
+  return ROULETTE_RED_NUMBERS.has(number)?'red':'black';
+}
+function tavernRouletteWins(wager,number){
+  const color=rouletteColor(number);
+  if(wager==='red'||wager==='black')return color===wager;
+  if(wager==='odd')return number>0&&number%2===1;
+  if(wager==='even')return number>0&&number%2===0;
+  if(wager==='dozen1')return number>=1&&number<=12;
+  if(wager==='dozen2')return number>=13&&number<=24;
+  if(wager==='dozen3')return number>=25&&number<=36;
+  if(wager==='zero')return number===0;
+  return false;
+}
+function tavernRouletteLocalSpin(wager,bet){
+  const number=Math.floor(Math.random()*37);
+  const win=tavernRouletteWins(wager,number);
+  const mult=(TAVERN_ROULETTE_BETS[wager]&&TAVERN_ROULETTE_BETS[wager].mult)||2;
+  const payout=win?bet*mult:0;
+  return {ok:true,wager,bet,number,color:rouletteColor(number),win,payout,delta:payout-bet,tokens:tavernTokens+payout-bet,local:true};
+}
+function requestTavernRoulette(wager){
+  wager=TAVERN_ROULETTE_BETS[wager]?wager:'red';
+  const bet=validTavernRouletteBet(tavernRouletteBet);
+  if(tavernRoulettePending){ sysMsg('Wait for the wheel to stop.'); return; }
+  if(tavernTokens<bet){ sysMsg('Not enough <b>Tavern Tokens</b> for that roulette bet.'); SFX.error(); return; }
+  tavernRoulettePending=true;
+  worldApi.tavernGameAction('roulette','play');SFX.uiClick();
+  if(NET.on&&NET.room){ NET.room.send('tavernRoulette',{wager,bet}); return; }
+  applyTavernRouletteResult(tavernRouletteLocalSpin(wager,bet));
+}
+function applyTavernRouletteResult(m){
+  if(!m){ tavernRoulettePending=false; SFX.error(); return; }
+  if(!m.ok){
+    tavernRoulettePending=false;
+    SFX.error();
+    const r=m.reason||'';
+    if(r==='tokens') sysMsg('Not enough <b>Tavern Tokens</b> for that roulette bet.');
+    else if(r==='range') sysMsg('Stand beside the <b>Roulette Table</b> in the tavern.');
+    else if(r==='rate') sysMsg('Let the wheel stop before spinning again.');
+    else sysMsg('The roulette table refused that bet.');
+    if(typeof m.gold==='number') gold=Math.max(0,m.gold|0);
+    if(qOpen) openTavernRouletteUI(m);
+    return;
+  }
+  // The outcome is already server-authoritative; delay only its presentation so
+  // the wheel can visibly land on the number the server chose.
+  tavernRouletteSpinning=true;
+  tavernRouletteSpinResult=m;
+  if(qOpen&&qpanelEl.querySelector('.roulette-board'))openTavernRouletteUI(null);
+  clearTimeout(tavernRouletteSpinTimer);
+  tavernRouletteSpinTimer=setTimeout(()=>finishTavernRouletteSpin(),2200);
+}
+function finishTavernRouletteSpin(){
+  const m=tavernRouletteSpinResult;
+  tavernRouletteSpinResult=null;tavernRouletteSpinning=false;tavernRoulettePending=false;
+  if(!m)return;
+  const delta=Number(m.delta)||0;
+  worldApi.tavernGameAction('roulette',delta>0?'win':'lose');
+  if(typeof m.tokens==='number') tavernTokens=Math.max(0,m.tokens|0);
+  else tavernTokens=Math.max(0,tavernTokens+delta);
+  tavernRouletteLast=m;
+  refreshHUD();
+  const colour=m.color||rouletteColor(m.number);
+  if(delta>0){ SFX.coin(); sysMsg('<b>Roulette:</b> '+((m.number||0)|0)+' '+escHTML(colour)+'. You win <b>'+delta+' tokens</b>.'); }
+  else { SFX.error(); sysMsg('<b>Roulette:</b> '+((m.number||0)|0)+' '+escHTML(colour)+'. You lose <b>'+Math.abs(delta)+' tokens</b>.'); }
+  if(qOpen&&qpanelEl.querySelector('.roulette-wheel-stage')) openTavernRouletteUI(m);
+}
+function rouletteWheelNode(result,spinning=false){
+  const stage=document.createElement('div');stage.className='roulette-wheel-stage'+(spinning?' spinning':'');
+  const wheel=document.createElement('div');wheel.className='roulette-wheel-visual';
+  const target=Math.max(0,Math.min(36,Number(result&&result.number)||0));
+  wheel.style.setProperty('--roulette-turn',(1440+target*(360/37))+'deg');
+  const hub=document.createElement('span');hub.className='roulette-wheel-hub';hub.textContent=spinning?'SPIN':'GILDED';wheel.appendChild(hub);
+  const ball=document.createElement('span');ball.className='roulette-wheel-marble';stage.appendChild(wheel);stage.appendChild(ball);
+  const readout=document.createElement('strong');readout.className='roulette-wheel-readout';
+  readout.textContent=spinning?'Wheel spinning…':result&&result.ok?String(target):'PLACE YOUR BET';stage.appendChild(readout);
+  return stage;
+}
+function openTavernRouletteUI(result=tavernRouletteLast){
+  openQWin('commerce');
+  qpanelEl.innerHTML='';
+  const h=document.createElement('h2'); h.textContent='ROULETTE TABLE'; qpanelEl.appendChild(h);
+  qpanelEl.appendChild(tavernWalletNode());
+  const intro=document.createElement('p'); intro.className='qtext';
+  intro.innerHTML='Call the wheel before Greta spins it. Zero is brutal; the tavern approves.';
+  qpanelEl.appendChild(intro);
+  qpanelEl.appendChild(rouletteWheelNode(tavernRouletteSpinResult||result,tavernRouletteSpinning));
+  const board=document.createElement('div'); board.className='dice-board roulette-board';
+  const stake=document.createElement('div'); stake.className='dice-panel';
+  stake.innerHTML='<b>STAKE</b><small>Max 25 tokens per spin.</small>';
+  const stakeRow=document.createElement('div'); stakeRow.className='dice-actions';
+  for(const n of [1,5,10,25]){
+    const b=qBtn(n+' TOKENS',()=>{tavernRouletteBet=n;openTavernRouletteUI(result);});
+    if(tavernRouletteBet===n)b.classList.add('selected');
+    stakeRow.appendChild(b);
+  }
+  stake.appendChild(stakeRow);
+  board.appendChild(stake);
+  for(const key of ['red','black','odd','even','dozen1','dozen2','dozen3','zero']){
+    const bet=TAVERN_ROULETTE_BETS[key];
+    const panel=document.createElement('div'); panel.className='dice-panel roulette-panel '+key;
+    panel.innerHTML='<b>'+escHTML(bet.label)+'</b><strong>'+escHTML(bet.range)+'</strong><small>'+escHTML(bet.desc)+'</small>';
+    panel.appendChild(qBtn('SPIN '+validTavernRouletteBet(tavernRouletteBet)+' TOKENS',()=>requestTavernRoulette(key),tavernRoulettePending));
+    board.appendChild(panel);
+  }
+  qpanelEl.appendChild(board);
+  const last=document.createElement('div'); last.className='dice-result roulette-result';
+  if(tavernRouletteSpinning){
+    last.innerHTML='<small>The ball is circling. Bets are locked until it lands.</small>';
+  } else if(result&&result.ok){
+    const colour=result.color||rouletteColor(result.number);
+    last.innerHTML='<span class="roulette-ball '+escHTML(colour)+'">'+((result.number||0)|0)+'</span><b>'+escHTML(colour.toUpperCase())+'</b><em class="'+((result.delta||0)>0?'win':'lose')+'">'+((result.delta||0)>0?'+':'')+((result.delta||0)|0)+' tokens</em>';
+  } else {
+    last.innerHTML='<small>Choose a stake, choose a call, then spin the wheel.</small>';
+  }
+  qpanelEl.appendChild(last);
+  const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
+  row.appendChild(qBtn('BACK TO TAVERN',()=>openTavernUI(),true));
+  row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));
+  qpanelEl.appendChild(row);
+}
+let tavernBlackjackBet=5;
+let tavernBlackjackState={phase:'idle',player:[],dealer:[],dealerHidden:false,bet:0,tokens:0};
+let tavernBlackjackPending=false;
+let tavernBlackjackAnimating=false;
+let tavernBlackjackTimer=0;
+function validTavernBlackjackBet(value){
+  return Math.max(1,Math.min(25,Number(value)|0||1));
+}
+function blackjackRank(card){return String(card||'').slice(0,-1);}
+function blackjackTotal(cards){
+  let total=0,aces=0;
+  for(const card of Array.isArray(cards)?cards:[]){
+    const rank=blackjackRank(card);
+    if(rank==='A'){total+=11;aces++;}
+    else if(['K','Q','J'].includes(rank))total+=10;
+    else total+=Math.max(0,Math.min(10,rank|0));
+  }
+  while(total>21&&aces>0){total-=10;aces--;}
+  return total;
+}
+function blackjackCardLocal(){
+  const ranks=['A','2','3','4','5','6','7','8','9','10','J','Q','K'],suits=['♠','♥','♦','♣'];
+  return ranks[Math.floor(Math.random()*ranks.length)]+suits[Math.floor(Math.random()*suits.length)];
+}
+function applyTavernBlackjackState(m){
+  if(!m){tavernBlackjackPending=false;SFX.error();return;}
+  if(!m.ok){
+    tavernBlackjackPending=false;tavernBlackjackAnimating=false;
+    SFX.error();
+    const r=m.reason||'';
+    if(r==='tokens')sysMsg('Not enough <b>Tavern Tokens</b> for that blackjack stake.');
+    else if(r==='range')sysMsg('Stand beside the <b>Blackjack Table</b> in the tavern.');
+    else if(r==='hand')sysMsg('Deal a new blackjack hand first.');
+    else if(r==='rate')sysMsg('The dealer raises an eyebrow. Slow down.');
+    else sysMsg('The blackjack table refused that move.');
+    if(typeof m.gold==='number')gold=Math.max(0,m.gold|0);
+    if(qOpen)openTavernBlackjackUI();
+    return;
+  }
+  clearTimeout(tavernBlackjackTimer);
+  if(m.result){
+    tavernBlackjackAnimating=true;
+    const firstDealer=Array.isArray(m.dealer)&&m.dealer.length?[m.dealer[0]]:[];
+    tavernBlackjackState={...tavernBlackjackState,...m,phase:'playing',result:'',dealer:firstDealer,dealerHidden:true,dealerTotal:blackjackTotal(firstDealer)};
+    if(qOpen&&qpanelEl.querySelector('.blackjack-table'))openTavernBlackjackUI();
+    tavernBlackjackTimer=setTimeout(()=>{
+      tavernBlackjackState={...tavernBlackjackState,...m,dealerHidden:false};
+      if(qOpen&&qpanelEl.querySelector('.blackjack-table'))openTavernBlackjackUI();
+      tavernBlackjackTimer=setTimeout(()=>finishTavernBlackjackAnimation(m),850);
+    },550);
+    return;
+  }
+  tavernBlackjackState={...tavernBlackjackState,...m};
+  if(typeof m.tokens==='number')tavernTokens=Math.max(0,m.tokens|0);
+  refreshHUD();
+  tavernBlackjackAnimating=true;
+  if(qOpen&&qpanelEl.querySelector('.blackjack-table'))openTavernBlackjackUI();
+  tavernBlackjackTimer=setTimeout(()=>{tavernBlackjackAnimating=false;tavernBlackjackPending=false;if(qOpen&&qpanelEl.querySelector('.blackjack-table'))openTavernBlackjackUI();},650);
+}
+function finishTavernBlackjackAnimation(m){
+  tavernBlackjackState={...tavernBlackjackState,...m};
+  tavernBlackjackAnimating=false;tavernBlackjackPending=false;
+  if(typeof m.tokens==='number')tavernTokens=Math.max(0,m.tokens|0);
+  refreshHUD();
+  const delta=Number(m.delta)||0;
+  worldApi.tavernGameAction('blackjack',delta>0?'win':delta<0?'lose':'play');
+  if(delta>0){SFX.coin();sysMsg('<b>Blackjack:</b> '+(m.result==='blackjack'?'Natural blackjack!':'You win')+' <b>'+delta+' tokens</b>.');}
+  else if(delta===0){SFX.uiClick();sysMsg('<b>Blackjack:</b> Push. Your stake returns.');}
+  else {SFX.error();sysMsg('<b>Blackjack:</b> You lose <b>'+Math.abs(delta)+' tokens</b>.');}
+  if(qOpen&&qpanelEl.querySelector('.blackjack-table'))openTavernBlackjackUI();
+}
+function requestTavernBlackjack(action){
+  if(tavernBlackjackPending){sysMsg('Wait for the dealer.');return;}
+  tavernBlackjackPending=true;
+  worldApi.tavernGameAction('blackjack','play');SFX.uiClick();
+  if(NET.on&&NET.room){
+    NET.room.send('tavernBlackjack',{action,bet:validTavernBlackjackBet(tavernBlackjackBet)});
+    return;
+  }
+  // solo/local fallback
+  if(action==='deal'){
+    const bet=validTavernBlackjackBet(tavernBlackjackBet);
+    if(tavernTokens<bet){tavernBlackjackPending=false;sysMsg('Not enough <b>Tavern Tokens</b> for that blackjack stake.');SFX.error();return;}
+    tavernTokens-=bet;
+    const state={ok:true,phase:'playing',bet,player:[blackjackCardLocal(),blackjackCardLocal()],dealer:[blackjackCardLocal()],dealerHidden:true,tokens:tavernTokens,playerTotal:0,dealerTotal:0};
+    state.playerTotal=blackjackTotal(state.player);state.dealerTotal=blackjackTotal(state.dealer);
+    applyTavernBlackjackState(state);
+    return;
+  }
+  const state={...tavernBlackjackState,ok:true,dealer:[...(tavernBlackjackState.dealer||[])],player:[...(tavernBlackjackState.player||[])]};
+  if(action==='hit')state.player.push(blackjackCardLocal());
+  if(action==='stand'||blackjackTotal(state.player)>=21){
+    state.dealerHidden=false;
+    while(blackjackTotal(state.dealer)<17)state.dealer.push(blackjackCardLocal());
+    const pt=blackjackTotal(state.player),dt=blackjackTotal(state.dealer);
+    const result=pt>21?'lose':dt>21||pt>dt?'win':pt===dt?'push':'lose';
+    const payout=result==='win'?state.bet*2:result==='push'?state.bet:0;
+    state.phase='settled';state.result=result;state.payout=payout;state.delta=payout-state.bet;state.tokens=tavernTokens+payout;
+  }
+  state.playerTotal=blackjackTotal(state.player);state.dealerTotal=blackjackTotal(state.dealer);
+  applyTavernBlackjackState(state);
+}
+function blackjackCardNode(card,hidden=false){
+  const span=document.createElement('span');
+  span.className='blackjack-card'+(hidden?' hidden-card':'')+(/[♥♦]/.test(card||'')?' red':'');
+  span.textContent=hidden?'?':card;
+  return span;
+}
+function renderBlackjackHand(label,cards,total,hidden=false){
+  const box=document.createElement('div');box.className='blackjack-hand';
+  const head=document.createElement('b');head.textContent=label+' · '+(hidden?'?':total);box.appendChild(head);
+  const row=document.createElement('div');row.className='blackjack-cards';
+  for(const card of cards||[])row.appendChild(blackjackCardNode(card,false));
+  if(hidden)row.appendChild(blackjackCardNode('',true));
+  box.appendChild(row);
+  return box;
+}
+function openTavernBlackjackUI(){
+  openQWin('commerce');
+  qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='BLACKJACK TABLE';qpanelEl.appendChild(h);
+  qpanelEl.appendChild(tavernWalletNode());
+  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Beat the dealer without going over 21. Dealer stands on 17. Natural blackjack pays hard.';qpanelEl.appendChild(intro);
+  const state=tavernBlackjackState||{phase:'idle',player:[],dealer:[]};
+  const table=document.createElement('div');table.className='blackjack-table'+(tavernBlackjackAnimating?' dealing':'');
+  table.appendChild(renderBlackjackHand('DEALER',state.dealer||[],state.dealerTotal||blackjackTotal(state.dealer),!!state.dealerHidden));
+  table.appendChild(renderBlackjackHand('YOU',state.player||[],state.playerTotal||blackjackTotal(state.player),false));
+  qpanelEl.appendChild(table);
+  const result=document.createElement('div');result.className='dice-result blackjack-result';
+  if(state.result)result.innerHTML='<b>'+escHTML(String(state.result).toUpperCase())+'</b><em class="'+((state.delta||0)>0?'win':(state.delta||0)<0?'lose':'')+'">'+((state.delta||0)>0?'+':'')+((state.delta||0)|0)+' tokens</em>';
+  else if(tavernBlackjackAnimating&&state.dealerHidden)result.innerHTML='<small>The dealer checks the hidden card…</small>';
+  else if(state.phase==='playing')result.innerHTML='<small>Stake: <b>'+((state.bet||0)|0)+' tokens</b>. Hit for another card or stand to test the dealer.</small>';
+  else result.innerHTML='<small>Choose a stake and deal. The dealer is watching your coin purse with professional warmth.</small>';
+  qpanelEl.appendChild(result);
+  if(state.phase!=='playing'){
+    const stake=document.createElement('div');stake.className='dice-actions blackjack-stakes';
+    for(const n of [1,5,10,25]){
+      const b=qBtn(n+' TOKENS',()=>{tavernBlackjackBet=n;openTavernBlackjackUI();});
+      if(tavernBlackjackBet===n)b.classList.add('selected');
+      stake.appendChild(b);
+    }
+    qpanelEl.appendChild(stake);
+  }
+  const row=document.createElement('div');row.className='qrow';row.style.marginTop='10px';
+  if(state.phase==='playing'){
+    row.appendChild(qBtn('HIT',()=>requestTavernBlackjack('hit'),tavernBlackjackPending));
+    row.appendChild(qBtn('STAND',()=>requestTavernBlackjack('stand'),tavernBlackjackPending));
+  } else {
+    row.appendChild(qBtn('DEAL '+validTavernBlackjackBet(tavernBlackjackBet)+' TOKENS',()=>requestTavernBlackjack('deal'),tavernBlackjackPending));
+  }
+  row.appendChild(qBtn('BACK TO TAVERN',()=>openTavernUI(),true));
+  row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));
+  qpanelEl.appendChild(row);
+}
 let quest=null;
 let pendingAegisBountyOffer=null;
 let npcQuestChains={};
+let systemIntroductions=[];
 function sanitizeNpcQuestChainsClient(chains){
   const out={};
   if(!chains || typeof chains!=='object') return out;
@@ -1419,12 +1869,16 @@ const NPC_QUEST_CHAINS={
   'Liss Barley':[
     {title:'Field Hands', type:'fetch', item:I.WHEAT, need:8, desc:'Harvest {N} wheat so the tavern can feed workers and travelers.', gold:30, xp:42},
     {title:'Bread Line', type:'fetch', item:I.BREAD, need:3, desc:'Bake and deliver {N} loaves for the morning shift.', gold:42, xp:54},
-    {title:'Care Feed', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Craft {N} dragon treat. The roost depends on farmers and cooks.', gold:62, xp:74}
+    {title:'Care Feed', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Craft {N} dragon treat. The roost depends on farmers and cooks.', gold:62, xp:74},
+    {title:'The Bright Harvest', type:'fetch', item:I.GOLDEN_WHEAT, need:1, desc:'Bring Liss one Golden Wheat. She has seen a harvest-sprite following its light.', gold:74, xp:92, rewardItems:[{id:I.FORAGE_CHARM,count:1}]},
+    {title:'A Sprite in the Sheaves', type:'familiar', familiar:'sprite', need:1, desc:'Use the Forage Charm to bind Sprite, then return to Liss.', gold:82, xp:104}
   ],
   'Pippa Hearth':[
     {title:'Warm Meals', type:'fetch', item:I.COOKED_MEAT, need:3, desc:'Cook {N} cuts for workers coming in from the cold roads.', gold:36, xp:46},
     {title:'Travel Bread', type:'fetch', item:I.BREAD, need:3, desc:'Bring {N} loaves for travelers headed to the gates.', gold:40, xp:52},
-    {title:'Roost Treats', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Prepare {N} dragon treat for the stablemaster.', gold:64, xp:78}
+    {title:'Roost Treats', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Prepare {N} dragon treat for the stablemaster.', gold:64, xp:78},
+    {title:'A Light for the Wounded', type:'fetch', item:I.HEARTY_SANDWICH, need:1, desc:'Bring Pippa a Hearty Sandwich for the infirmary. She will entrust you with a restorative charm.', gold:76, xp:94, rewardItems:[{id:I.MOTE_CHARM,count:1}]},
+    {title:'The Gentle Mote', type:'familiar', familiar:'mote', need:1, desc:'Use the Mote Charm to bind Mote, then return to Pippa.', gold:84, xp:108}
   ],
   'Oren Mortar':[
     {title:'Foundation Check', type:'fetch', item:B.COBBLE, need:22, desc:'Bring {N} cobble for the next wall repair.', gold:32, xp:42},
@@ -1439,7 +1893,9 @@ const NPC_QUEST_CHAINS={
   'Pell Graywatch':[
     {title:'Wall Patrol', type:'kill', need:5, desc:'Cull {N} monsters beyond the wall before they learn the road.', gold:38, xp:54},
     {title:'Patrol Gear', type:'fetch', item:B.TORCH, need:10, desc:'Bring {N} torches for patrol routes and gate markers.', gold:42, xp:54},
-    {title:'Gate Duty', type:'gate', need:1, desc:'Clear {N} gate. A warden trusts action more than promises.', gold:82, xp:92}
+    {title:'Gate Duty', type:'gate', need:1, desc:'Clear {N} gate. A warden trusts action more than promises.', gold:82, xp:92},
+    {title:'Tracks Beyond the Wall', type:'kill', need:8, desc:'Cull 8 monsters beyond the wall. Pell says an old guardian hound answers proven hunters.', gold:78, xp:98, rewardItems:[{id:I.FANG_TOTEM,count:1}]},
+    {title:'The Fang Pact', type:'familiar', familiar:'fang', need:1, desc:'Use the Fang Totem to bind Fang, then report to Pell.', gold:86, xp:112}
   ],
   'Greta Warmug':[
     {title:'Cellar Supper', type:'fetch', item:I.COOKED_MEAT, need:3, desc:'Bring {N} cooked meat so the tavern can serve a proper supper.', gold:38, xp:48},
@@ -1487,6 +1943,8 @@ function completeNpcChainStep(q){
   else sysMsg('<b>'+escHTML(key)+'</b> chain step '+npcQuestChains[key]+'/'+chain.length+' complete.');
 }
 const FIRST_VILLAGER_BONUS_KEY='bc_first_villager_quest_bonus_v1';
+const FIRST_QUEST_REWARD_PRESENTED_KEY='bc_first_quest_reward_presented_v1';
+function firstQuestRewardPresentationSeen(){try{return localStorage.getItem(FIRST_QUEST_REWARD_PRESENTED_KEY)==='1';}catch{return false;}}
 function firstVillagerBonusClaimed(){
   try{ return localStorage.getItem(FIRST_VILLAGER_BONUS_KEY)==='1'; }catch(e){ return false; }
 }
@@ -1504,6 +1962,7 @@ function showFirstVillagerReward(onContinue){
   const continueSequence=()=>{
     if(continued) return;
     continued=true;
+    try{localStorage.setItem(FIRST_QUEST_REWARD_PRESENTED_KEY,'1');}catch{}
     rewardWin.classList.add('hidden');
     townGuidanceSequenceHold=false;
     if(typeof onContinue==='function') setTimeout(onContinue,100);
@@ -1519,7 +1978,6 @@ function showFirstVillagerReward(onContinue){
   const btn=document.getElementById('rewardclose');
   if(btn) btn.onclick=continueSequence;
   clearTimeout(rewardHideTimer);
-  rewardHideTimer=setTimeout(continueSequence,9000);
 }
 function awardFirstVillagerQuestBonus(onContinue){
   if(NET.on&&NET.room){
@@ -1549,6 +2007,7 @@ function applyFirstQuestRewardResult(m){
   refreshHUD();
   if(m.ok){
     SFX.coin();
+    rewardGain('gold',100,'Gold');
     eventLog('First villager quest complete — server reward: +100 gold.');
     const next=pendingFirstQuestRewardContinue;
     pendingFirstQuestRewardContinue=null;
@@ -1606,6 +2065,23 @@ function rollQuest(giver, role, source='npc'){
   q.role=role||'town';
   q.desc=q.desc.replace('{N}', q.need);
   return q;
+}
+function isMaraOpeningOffer(v,offer){
+  return !!(v&&offer&&v.role==='guide'&&offer.giver==='Mara Vale'&&(offer.chainStep|0)===0);
+}
+function maraOpeningOfferHTML(offer,rewardItemsText){
+  return '<div class="mara-start">'
+    +'<div class="mara-kicker">STORY START</div>'
+    +'<h3>Mara Vale needs your first field report</h3>'
+    +'<p>Training is over. This is the first real objective: leave town, gather <b>'+offer.need+' logs</b>, and return to Mara. Accepting starts your story tracker and makes the town guidance yours.</p>'
+    +'<div class="mara-steps">'
+      +'<span><b>1</b> Accept from Mara</span>'
+      +'<span><b>2</b> Gather logs outside the wall</span>'
+      +'<span><b>3</b> Return for Level 2</span>'
+    +'</div>'
+    +'<div class="mara-warning">Quest rewards are never passive: you only earn XP and gold after accepting, completing, and turning in.</div>'
+    +'<div class="mara-reward"><b>Reward preview</b><span>'+offer.gold+' gold</span><span>'+offer.xp+' XP</span>'+rewardItemsText(offer)+'</div>'
+  +'</div>';
 }
 function npcFlavor(v){
   const line=escHTML(v.line||'');
@@ -1694,7 +2170,10 @@ function awardAegisTrialLoot(){
   return {kind:entry.kind, id, label};
 }
 function questBump(){
-  if(questDone()) sysMsg(escHTML(questTypeLabel(quest))+' complete - return to <b>'+escHTML(quest.giver)+'</b>');
+  if(questDone()){
+    if(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands') sysMsg('<b>First Hands complete.</b> Follow the gold trail back to <b>Mara Vale</b>.');
+    else sysMsg(escHTML(questTypeLabel(quest))+' complete - return to <b>'+escHTML(quest.giver)+'</b>');
+  }
 }
 function questSell(id, count=1, vendor=''){
   if(!quest || quest.type!=='sell' || questDone()) return;
@@ -1715,7 +2194,7 @@ function questSystemCheck(){
 }
 function maraQuestCue(q){
   if(!q || q.giver!=='Mara Vale') return;
-  if(q.title==='First Hands') showName('Gather 6 logs beyond town');
+  if(q.title==='First Hands') showName('Quest accepted: leave through the north gate');
   else if(q.title==='Road Ready') showName('Wooden sword ready - defeat 3 enemies');
   else if(q.type==='gate') showName('Find and clear the E-rank Gate');
   else if(q.type==='utility') showName('Take a Guild Contract at the Job Board');
@@ -1861,6 +2340,19 @@ function qBtn(label, cb, dim2){
   b.addEventListener('click',e=>{ SFX.uiClick(); cb(e); });
   return b;
 }
+const RECALL_SUBJECTS=['Computer Science','Information Technology','Religious Education','English'];
+function selectedRecallSubject(){try{const value=localStorage.getItem('bc_recall_subject');return RECALL_SUBJECTS.includes(value)?value:'English';}catch{return 'English';}}
+function openSubjectFocusUI(){
+  if(uiOpen)closeUI(false);openQWin('subject-focus');qpanelEl.innerHTML='';
+  const title=document.createElement('h2');title.textContent='SUBJECT FOCUS';qpanelEl.appendChild(title);
+  const intro=document.createElement('p');intro.className='subject-intro';intro.textContent='Choose the subject used by Recall Cast and limbo knowledge challenges.';qpanelEl.appendChild(intro);
+  const mastery=globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.mastery;
+  if(mastery){const card=document.createElement('div');card.className='subject-mastery';const pct=mastery.attempts?Math.round(mastery.accuracy*100):0;card.innerHTML='<small>YOUR RETRIEVAL RECORD</small><b>'+pct+'% accuracy</b><span>'+mastery.mastered+'/'+mastery.total+' topics securely learned · '+mastery.due+' due now</span>';qpanelEl.appendChild(card);}
+  const grid=document.createElement('div');grid.className='subject-grid';const current=selectedRecallSubject();
+  for(const subject of RECALL_SUBJECTS){const button=qBtn(subject,()=>{try{localStorage.setItem('bc_recall_subject',subject);}catch{}if(globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markSubjectFocus();if(NET.on&&NET.room)NET.room.send('recallSubject',{subject});sysMsg('Recall subject set to <b>'+escHTML(subject)+'</b>.');closeQWin();});button.classList.toggle('selected',subject===current);button.innerHTML='<b>'+escHTML(subject)+'</b><span>'+(subject===current?'CURRENT FOCUS':'SELECT SUBJECT')+'</span>';grid.appendChild(button);}
+  qpanelEl.appendChild(grid);const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+}
+Object.defineProperty(globalThis,'BlockcraftSubjectFocus',{value:Object.freeze({open:openSubjectFocusUI}),configurable:true});
 function requestGuildCreate(name, isPrivate=false){
   if(!NET.on||!NET.room){sysMsg('Guild charters require the <b>multiplayer server</b>');return;}
   NET.room.send('guildCreate',{name, private:!!isPrivate});
@@ -1921,7 +2413,7 @@ function gateReadinessLocal(rank){
 }
 function gatePreviewLocal(rank,kind){
   rank=Math.max(0,Math.min(4,rank|0));
-  const levels=[[1,3],[4,7],[8,12],[13,18],[19,26]][rank];
+  const levels=[[1,10],[11,20],[21,30],[31,40],[41,50]][rank];
   const party=kind==='solo'?[1,1]:[[1,1],[1,2],[2,3],[3,4],[4,4]][rank];
   return {enemyLevels:levels,recommendedParty:party};
 }
@@ -2067,6 +2559,13 @@ function questLogCardHTML(source, title, status, where, active=true){
     +'<div class="qmeta"><b>Where:</b> '+escHTML(where)+'</div>'
     +'</div>';
 }
+function safeQuestLogCard(source, build){
+  try{return build();}
+  catch(err){
+    console.error('[Quest Log] '+source+' failed to render',err);
+    return questLogCardHTML(source,'Temporarily unavailable','This section could not be loaded. Other objectives remain usable.','Close and reopen the Quest Log',false);
+  }
+}
 function storyQuestLogCard(){
   if(!quest || (quest.source||'npc')!=='npc') return questLogCardHTML('Story Quests','No active story quest','Speak to a town NPC to accept one.','Mara Vale or another villager',false);
   const done=questDone();
@@ -2095,10 +2594,172 @@ function guildQuestLogCard(){
     c.ready ? 'Complete — claim your reward' : Math.min(c.need,c.have)+'/'+c.need+' — '+c.desc,
     c.ready ? 'Job Board' : (c.targetName||'Regional target'));
 }
+function menuTutorialObjective(){
+  if(!townGuidanceActive)return null;
+  const text={job:'Follow the lit path to the Job Board',tavern:'Go to the tavern and buy an item',land:'Leave town, press L, and buy land',menu:'Choose a town tutorial',quest:'Accept Mara\u2019s first quest'}[townGuidanceStep]||'Follow the glowing pillar';
+  return {label:'Tutorial Guide',text};
+}
 function tutorialQuestLogCard(){
-  const obj=tutorialObjective();
+  const obj=menuTutorialObjective();
   if(!obj) return questLogCardHTML('Tutorial Guide','No active tutorial guidance','Optional town/tutorial guidance is inactive.','Town Tutorials panel or Mara',false);
   return questLogCardHTML('Tutorial Guide', obj.label, obj.text, 'Follow the glowing pillar');
+}
+function progressionRoadmap(){
+  const rank=localPlayerHunterRankIndex(),maraStep=Math.max(0,(npcQuestChains&&npcQuestChains['Mara Vale'])|0),introduced=new Set(systemIntroductions||[]);
+  // Keep this overview safe on a brand-new profile. Companion, mount and guild
+  // state live in separately loaded modules; their server-recorded introduction
+  // flags are the authoritative cross-module signal here.
+  const has=id=>introduced.has(id)||id==='story'&&maraStep>0||id==='combat_path'&&!!S.path||id==='gates'&&highestGateRankCleared>=0||id==='jobs'&&(!!playerJob||!!jobContract)||id==='roads'&&(roadWardenRep>0||!!regionalContract);
+  return [
+    {id:'foundations',title:'Hunter Foundations',requirement:'Begin the training meadow',eligible:true,action:'Complete movement, combat, gathering and Recall training.',where:'Training Meadow'},
+    {id:'story',title:'Mara’s Story',requirement:'Finish initial training',eligible:!onboardingActive,action:'Accept and continue Mara’s current story quest.',where:'Mara Vale'},
+    {id:'combat_path',title:'Combat Path',requirement:'Reach Level 2',eligible:S.lvl>=2,action:S.lvl>=2?'Choose your first combat path.':'Continue Mara’s field work to reach Level 2.',where:'Character progression'},
+    {id:'gates',title:'Ranked Gates',requirement:'Reach Level 3',eligible:S.lvl>=3,action:S.lvl>=3?'Complete Mara’s First Gate quest.':'Complete Road Ready and reach Level 3.',where:'Mara → wilderness Gate'},
+    {id:'jobs',title:'Jobs and Contracts',requirement:'Clear an E-Rank Gate',eligible:highestGateRankCleared>=0,action:'Choose one profession and complete its introductory contract.',where:'Job Board'},
+    {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
+    {id:'mounts',title:'Mounts',requirement:'Reach C-Rank progression',eligible:rank>=2,action:'Complete the first bonded-mount lesson.',where:'Dragon Roost'},
+    {id:'specialisation',title:'Specialisation',requirement:'Reach C-Rank / Level 21',eligible:rank>=2&&S.lvl>=21,action:'Review and choose carefully: this combat-path specialisation is permanent.',where:'Mara Vale'},
+    {id:'roads',title:'Road Warden Region',requirement:'Reach B-Rank',eligible:rank>=3,action:'Accept one regional contract and follow its road tracker.',where:'Road Patrol'},
+    {id:'fellowships',title:'Fellowships',requirement:'Reach A-Rank',eligible:rank>=4,action:'Join or establish a fellowship.',where:'Fellowship Hall'},
+    {id:'dragon_mastery',title:'Dragon Mastery',requirement:'Reach S-Rank',eligible:rank>=5,action:'Learn incubation, care, mounted abilities and breeding.',where:'Rook Emberstall · Dragon Roost'},
+    {id:'frontier',title:'Western Frontier',requirement:'Reach S-Rank and hold 1,000 gold',eligible:rank>=5&&gold>=1000,action:'Board the Westwind for the Western Frontier.',where:'Skyport'},
+  ].map(entry=>({...entry,introduced:has(entry.id)}));
+}
+function whatNextQuestLogCard(){
+  const next=progressionRoadmap().find(entry=>!entry.introduced);
+  if(!next)return questLogCardHTML('What Next?','Core journey complete','Choose contracts, events, exploration or social goals.','Your choice',true);
+  return questLogCardHTML('What Next?',next.title,(next.eligible?'READY — ':'LOCKED — ')+next.action,next.eligible?next.where:next.requirement,next.eligible);
+}
+function progressionRoadmapHTML(){
+  return '<div class="progression-roadmap"><div class="sub2">SYSTEM JOURNEY · ONE INTRODUCTION AT A TIME</div>'+progressionRoadmap().map(entry=>'<div class="progression-step '+(entry.introduced?'done':entry.eligible?'ready':'locked')+'"><i>'+(entry.introduced?'✓':entry.eligible?'→':'🔒')+'</i><span><b>'+escHTML(entry.title)+'</b><small>'+(entry.introduced?'Introduced':entry.eligible?'Ready now · '+escHTML(entry.where):escHTML(entry.requirement))+'</small></span></div>').join('')+'<div class="progression-optional"><b>OPTIONAL · Tavern Games</b><small>Introduced contextually by entering the tavern; never required for Hunter progression.</small></div></div>';
+}
+const HUNTER_RANK_STARTS=[1,11,21,31,41,51];
+const HUNTER_RANK_UNLOCKS=[
+  ['Ranked Gates','Jobs and contracts','Combat path'],
+  ['D-Rank Gates and keys','Familiars','Stronger contract rewards'],
+  ['C-Rank Gates and keys','Combat specialisation','Mount progression'],
+  ['B-Rank Gates and keys','Road Warden region','Advanced regional contracts'],
+  ['A-Rank Gates and keys','Fellowships','High-rank equipment'],
+  ['Western Frontier','Dragon mastery','S-Rank endgame'],
+];
+function rankJourneyLevelText(rank){
+  const start=HUNTER_RANK_STARTS[rank]||1;
+  return rank>=5?'Mastery Level '+Math.max(1,S.lvl-start+1):'Rank Level '+Math.max(1,Math.min(10,S.lvl-start+1))+'/10';
+}
+function openRankJourneyUI(){
+  openQWin('management');qpanelEl.innerHTML='';
+  const progress=currentRankProgress(),rank=localPlayerHunterRankIndex(),letter=hunterRankLetter(rank),levelNeed=xpNeed();
+  const h=document.createElement('h2');h.textContent='RANK JOURNEY';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='HUNTER '+letter+'-RANK · '+rankJourneyLevelText(rank).toUpperCase();qpanelEl.appendChild(sub);
+  const hero=document.createElement('div');hero.className='rank-journey-hero rank-'+letter.toLowerCase();
+  const levelPct=Math.max(0,Math.min(100,Math.round((S.xp/Math.max(1,levelNeed))*100)));
+  hero.innerHTML='<div class="rj-emblem"><span>'+escHTML(letter)+'</span></div><div class="rj-hero-copy"><small>CURRENT STANDING</small><h3>'+escHTML(letter)+'-RANK · LEVEL '+S.lvl+'</h3><b>'+escHTML(rankJourneyLevelText(rank))+'</b><div class="rj-levelbar"><i style="width:'+levelPct+'%"></i></div><span>'+Math.floor(S.xp).toLocaleString('en-US')+' / '+levelNeed.toLocaleString('en-US')+' XP to Level '+(S.lvl+1)+'</span></div>';
+  qpanelEl.appendChild(hero);
+  const promotion=document.createElement('div');promotion.className='rank-promotion-track'+(progress.maxRank?' max':'');
+  if(progress.maxRank)promotion.innerHTML='<small>RANK PROGRESS</small><h3>S-RANK ACHIEVED</h3><p>Further levels award stat points and advance mastery.</p>';
+  else promotion.innerHTML='<small>PROMOTION TARGET</small><h3>'+hunterRankLetter(progress.nextRank)+'-RANK AT LEVEL '+progress.nextRankLevel+'</h3><div class="rj-promotionbar"><i style="width:'+Math.round(progress.progress*100)+'%"></i></div><div><b>'+progress.remaining.toLocaleString('en-US')+' XP remaining</b><span>'+Math.round(progress.progress*100)+'% complete</span></div>';
+  qpanelEl.appendChild(promotion);
+  const unlocks=document.createElement('div');unlocks.className='rank-unlocks';
+  const nextRank=progress.maxRank?rank:progress.nextRank;
+  unlocks.innerHTML='<div class="sub2">'+(progress.maxRank?'CURRENT S-RANK FEATURES':'UNLOCKS AT '+hunterRankLetter(nextRank)+'-RANK')+'</div>'+(HUNTER_RANK_UNLOCKS[nextRank]||[]).map(v=>'<div class="rank-unlock"><i>◆</i><span>'+escHTML(v)+'</span></div>').join('');qpanelEl.appendChild(unlocks);
+  const sources=document.createElement('p');sources.className='qtext rank-sources';sources.innerHTML='<b>Earn Hunter XP:</b> quests, contracts, Gates, events, and hostile threats. Higher-rank work pays more XP; low-risk starter enemies remain supplementary.';qpanelEl.appendChild(sources);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('QUEST LOG',()=>openQuestLogUI()));row.appendChild(qBtn('JOBS',()=>openJobsUI()));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+}
+const DIRECTED_SYSTEMS=new Set(['story','combat_path','gates','jobs','familiars','mounts','specialisation','roads','fellowships','dragon_mastery','frontier']);
+function progressionDirectorCandidate(){return progressionRoadmap().find(entry=>DIRECTED_SYSTEMS.has(entry.id)&&!entry.introduced&&entry.eligible)||null;}
+function progressionGuideStorage(key,value){
+  try{if(value===undefined)return localStorage.getItem(key)||'';if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);}catch{}return '';
+}
+function progressionDirectorGuidanceInfo(){
+  const candidate=progressionDirectorCandidate();if(!candidate)return null;
+  const dismissed=progressionGuideStorage('bc_progression_guide_dismissed_'+candidate.id);
+  const active=progressionGuideStorage('bc_progression_guide_active');
+  if(dismissed||active&&active!==candidate.id)return null;
+  const destinations={
+    story:['Mara Vale','mara'],combat_path:['Mara Vale','mara'],gates:['Mara Vale','mara'],jobs:['','jobs'],familiars:['Mara Vale','mara'],
+    mounts:['Rook Emberstall','roost'],specialisation:['Mara Vale','mara'],roads:['Tamsin Rook','roads'],fellowships:['Lyra Pennant','guild'],
+    dragon_mastery:['Rook Emberstall','roost'],frontier:['','skyport'],
+  };
+  const [npc,target]=destinations[candidate.id]||['','mara'];return {...candidate,npc,target};
+}
+function activateProgressionGuide(id){
+  const candidate=progressionDirectorCandidate();if(!candidate||candidate.id!==id)return;
+  progressionGuideStorage('bc_progression_guide_dismissed_'+id,null);progressionGuideStorage('bc_progression_guide_active',id);
+  sysMsg('<b>'+escHTML(candidate.title)+'</b> guidance activated. Follow the trail.');openQuestLogUI();
+}
+function dismissProgressionGuide(id){
+  progressionGuideStorage('bc_progression_guide_dismissed_'+id,'1');if(progressionGuideStorage('bc_progression_guide_active')===id)progressionGuideStorage('bc_progression_guide_active',null);
+  sysMsg('<b>'+escHTML((progressionDirectorCandidate()||{title:'System'}).title)+'</b> guidance dismissed. You can reactivate it from What Next.');openQuestLogUI();
+}
+function refreshProgressionDirectorNotice(){
+  const candidate=progressionDirectorCandidate();if(!candidate)return;
+  const key='bc_progression_notice_'+candidate.id;if(progressionGuideStorage(key))return;
+  progressionGuideStorage(key,'1');progressionGuideStorage('bc_progression_guide_active',candidate.id);
+  setTimeout(()=>sysMsg('<b>New system ready: '+escHTML(candidate.title)+'.</b> Open the Quest Log with <b>O</b> or follow the new trail.'),120);
+}
+const DISCOVERY_TYPE_NAMES={rare_plant:'Rare Plant',buried_chest:'Buried Cache',lore_tablet:'Lore Tablet',monster_nest:'Monster Nest',fishing_pool:'Hidden Fishing Pool',ore_outcrop:'Ore Outcrop',traveling_merchant:'Traveling Merchant',puzzle_shrine:'Odd-Flame Shrine',rain_bloom:'Rainwake Bloom',storm_crystal:'Stormglass Crystal',sun_dial:'Ancient Sun Dial'};
+const DISCOVERY_LORE={
+  ruins:'Broken masonry still carries the geometry of an older kingdom.',shrine:'Road-worn offerings show that someone still remembers this place.',hunter_camp:'Ash, tracks and careful knots mark a practiced wilderness camp.',bandit_camp:'Stolen banners make a warning of the road ahead.',graveyard:'The oldest names have weathered away, but the stones remain.',
+  abandoned_tower:'Its ruined crown once watched a road now swallowed by wilderness.',cave:'Cold air rises from passages deeper than the local maps admit.',giant_tree:'Generations of travelers have used the Elderheart as their compass.',crashed_airship:'Bent spars and silent bells remember the western fleet.',
+  rare_plant:'A hardy specimen shaped by the soil and weather of its region.',buried_chest:'Someone intended to return for this cache, but never did.',lore_tablet:'A surviving fragment from the builders of the old roads.',monster_nest:'The wilds reclaim abandoned ground quickly and violently.',fishing_pool:'Still water shelters life unseen from the main road.',ore_outcrop:'The exposed seam reveals what lies beneath this region.',traveling_merchant:'Independent traders keep the dangerous roads connected.',puzzle_shrine:'Its mismatched flames test observation before offering a reward.',rain_bloom:'Rainwake Petals become restorative cooking ingredients after living rain opens the bloom.',storm_crystal:'Stormglass Shards hold charge for efficient repair work after lightning wakes the crystal.',sun_dial:'Solar Glyphs focus sunshards when the inscription aligns beneath clear light.'
+};
+const DISCOVERY_BIOMES=['Plains','Forest','Desert','Mesa','Snowy Highlands','Swamp'];
+const WEATHER_CODEX=[
+  {type:'rain_bloom',weather:'Rain',reward:'Rainwake Petal',use:'Cook with wheat and meat for Golden Broth x2.'},
+  {type:'storm_crystal',weather:'Storm',reward:'Stormglass Shard',use:'Forge with iron and coal for Repair Kits x3.'},
+  {type:'sun_dial',weather:'Clear',reward:'Solar Glyph',use:'Combine with Sunshard and Glass to refine Sunshards x3.'},
+];
+const WEATHER_DISCOVERY_TYPES=new Set(WEATHER_CODEX.map(w=>w.type));
+let cartographerState=null;
+function showTreasureParchment(map,title='TREASURE MAP'){
+  if(!map)return;
+  let el=document.getElementById('treasureparchment');
+  if(!el){el=document.createElement('div');el.id='treasureparchment';document.body.appendChild(el);}
+  el.className='';
+  el.innerHTML='<div class="tpaper"><small>'+escHTML(title)+' - CLUE '+(((map.stage|0)+1)||1)+' / '+((map.total|0)||3)+'</small><h2>Follow the Ink</h2><p>'+escHTML(map.clue||'The ink points toward an uncharted landmark.')+'</p><b>Follow the gold mark on your map. At the landmark, press G.</b><button>GOT IT</button></div>';
+  const btn=el.querySelector('button');if(btn)btn.onclick=()=>el.classList.add('hidden');
+}
+globalThis.BlockcraftTreasureParchment=showTreasureParchment;
+function openCartographerUI(state=cartographerState){
+  if(state)cartographerState=state;state=cartographerState;
+  if(!state){sysMsg('Orin needs a realm connection to verify your maps.');return;}
+  openQWin('questlog');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='ORIN MAPWELL';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='ROYAL CARTOGRAPHER · '+(state.totalFound|0)+' / '+(state.total|0)+' LOCATIONS';qpanelEl.appendChild(sub);
+  const intro=document.createElement('div');intro.className='cartographer-briefing'+(state.introSeen?'':' fresh');intro.innerHTML='<small>'+(state.introSeen?'ORIN\'S NOTES':'FIRST BRIEFING')+'</small><p>"A blank map is not empty. It is asking you a question."</p><ul><li><b>Map Leads</b> mark one undiscovered place in gold.</li><li><b>Treasure Maps</b> give three clue stages and a visible gold beam.</li><li><b>Weather Sites</b> only wake in rain, storms, or clear skies.</li></ul>';qpanelEl.appendChild(intro);
+  const regions=document.createElement('div');regions.className='discovery-regions';
+  for(const r of state.regions||[]){const complete=r.total>0&&r.found>=r.total,card=document.createElement('div');card.className='discovery-region';card.innerHTML='<small>'+escHTML(r.name)+'</small><b>'+r.found+' / '+r.total+'</b><i><span style="width:'+(r.total?Math.round(r.found/r.total*100):0)+'%"></span></i><em>'+(r.claimed?'CLAIMED':complete?'READY':'SCOUTING')+'</em>';if(complete&&!r.claimed){const claim=qBtn('CLAIM '+(100*(r.index+1))+' GOLD',()=>NET.room.send('cartographer',{action:'claim_region',region:r.index}));card.appendChild(claim);}regions.appendChild(card);}qpanelEl.appendChild(regions);
+  const c=state.contract,contract=document.createElement('div');contract.className='quest-rank-summary';
+  if(c){const rn=(state.regions[c.region]||{}).name||'Unknown Region';contract.innerHTML='<span><small>DAILY SCOUTING COMMISSION</small><b>'+escHTML(rn)+' · '+(c.have|0)+' / '+(c.need|0)+' new discoveries</b></span><span>'+((c.have|0)>=(c.need|0)?'READY TO CLAIM':(c.rewardGold|0)+' GOLD')+'</span>';contract.onclick=()=>{if((c.have|0)>=(c.need|0))NET.room.send('cartographer',{action:'claim_contract'});};}
+  else{contract.innerHTML='<span><small>DAILY SCOUTING COMMISSION</small><b>Chart new ground in a region with blank spaces</b></span><span>ACCEPT</span>';contract.onclick=()=>NET.room.send('cartographer',{action:'accept_contract'});}qpanelEl.appendChild(contract);
+  if(c){const rn=(state.regions[c.region]||{}).name||'Unknown Region';contract.innerHTML='<span><small>SCOUTING COMMISSION</small><b>'+escHTML(rn)+' - '+(c.have|0)+' / '+(c.need|0)+' new discoveries</b></span><span>'+((c.have|0)>=(c.need|0)?'CLAIM REWARD':(c.rewardGold|0)+' GOLD')+'</span>';}
+  else contract.innerHTML='<span><small>SCOUTING COMMISSION</small><b>Accept a daily survey in a region with blank spaces</b></span><span>ACCEPT COMMISSION</span>';
+  const treasure=state.treasure,mapCard=document.createElement('div');mapCard.className='quest-rank-summary treasure-card';
+  if(treasure){mapCard.innerHTML='<span><small>TREASURE MAP · CLUE '+((treasure.stage|0)+1)+' / '+(treasure.total|0)+'</small><b>'+escHTML(treasure.clue||'Follow the ink.')+'</b></span><span>INVESTIGATE WITH G</span>';}
+  else{mapCard.innerHTML='<span><small>MULTI-STAGE TREASURE MAP</small><b>Three landmark clues lead to a hidden cache</b></span><span>TAKE MAP</span>';mapCard.onclick=()=>NET.room.send('cartographer',{action:'treasure_start'});}qpanelEl.appendChild(mapCard);
+  if(treasure){mapCard.innerHTML='<span><small>ACTIVE TREASURE MAP - CLUE '+((treasure.stage|0)+1)+' / '+(treasure.total|0)+'</small><b>'+escHTML(treasure.clue||'Follow the ink.')+'</b></span><span>VIEW CLUE</span>';mapCard.onclick=()=>showTreasureParchment(treasure);}
+  else{mapCard.innerHTML='<span><small>MULTI-STAGE TREASURE MAP</small><b>Start a three-clue hunt ending in gold and diamonds</b></span><span>START TREASURE MAP</span>';mapCard.onclick=()=>NET.room.send('cartographer',{action:'treasure_start'});}
+  const mantle=(state.cosmetics||[]).includes('cartographers_mantle'),worldComplete=(state.total|0)>0&&(state.totalFound|0)>=(state.total|0),prize=document.createElement('div');prize.className='quest-rank-summary';prize.innerHTML='<span><small>WORLD COMPLETION REWARD</small><b>Cartographer\'s Mantle</b></span><span>'+(mantle?'UNLOCKED':worldComplete?'READY TO CLAIM':'MAP EVERY LOCATION')+'</span>';if(worldComplete&&!mantle)prize.onclick=()=>NET.room.send('cartographer',{action:'claim_world'});qpanelEl.appendChild(prize);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('BUY MAP LEAD · 25 GOLD',()=>NET.room.send('cartographer',{action:'hint'}),gold<25));row.appendChild(qBtn('OPEN JOURNAL',()=>openDiscoveryJournalUI()));row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+}
+function discoveryJournalEntries(){
+  return [...regionalLandmarks,...smallDiscoveries].map(s=>({...s,region:dangerRingAtClient(s.x,s.z),biome:biomeAt(s.x,s.z),found:discoveredIds.has(s.id),claimed:claimedDiscoveryIds.has(s.id)}));
+}
+function openDiscoveryJournalUI(){
+  if(statOpen){statOpen=false;statEl.classList.add('hidden');}if(uiOpen)closeUI(false);openQWin('questlog');qpanelEl.innerHTML='';
+  const entries=discoveryJournalEntries(),found=entries.filter(e=>e.found),pct=entries.length?Math.round(found.length/entries.length*100):0;
+  const h=document.createElement('h2');h.textContent='DISCOVERY JOURNAL';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent=found.length+' / '+entries.length+' LOCATIONS MAPPED · '+pct+'% WORLD COMPLETION';qpanelEl.appendChild(sub);
+  const intro=document.createElement('p');intro.className='qtext';intro.textContent='Approach landmarks to record them. Dormant weather sites are logged as spotted, then harvested later when the right sky wakes them. At Weathered Ruins, press G to attempt an optional knowledge challenge for 50 gold.';qpanelEl.appendChild(intro);
+  const regions=document.createElement('div');regions.className='discovery-regions';
+  DANGER_RINGS.forEach((ring,i)=>{const all=entries.filter(e=>e.region===i),seen=all.filter(e=>e.found).length,pc=all.length?Math.round(seen/all.length*100):100;const card=document.createElement('div');card.className='discovery-region';card.innerHTML='<small>'+escHTML(ring.name)+'</small><b>'+seen+' / '+all.length+'</b><i><span style="width:'+pc+'%"></span></i><em>'+pc+'%</em>';regions.appendChild(card);});qpanelEl.appendChild(regions);
+  const biomes=[...new Set(found.map(e=>e.biome))];const bio=document.createElement('p');bio.className='qtext discovery-biomes';bio.innerHTML='<b>BIOMES RECORDED</b> '+(biomes.length?biomes.map(i=>escHTML(DISCOVERY_BIOMES[i]||'Unknown')).join(' · '):'None yet');qpanelEl.appendChild(bio);
+  const weatherBox=document.createElement('div');weatherBox.className='weather-codex';weatherBox.innerHTML='<div class="sub2">WEATHER CODEX</div>'+WEATHER_CODEX.map(w=>{const spotted=found.some(e=>e.type===w.type),harvested=found.some(e=>e.type===w.type&&e.claimed);return '<article class="'+(harvested?'harvested ':spotted?'seen ':'')+'"><small>'+escHTML(w.weather)+' WEATHER</small><b>'+escHTML(DISCOVERY_TYPE_NAMES[w.type])+'</b><p><em>'+escHTML(w.reward)+'</em> - '+escHTML(w.use)+'</p><span>'+(harvested?'HARVESTED':spotted?'SPOTTED - RETURN IN '+escHTML(w.weather).toUpperCase():'UNSEEN')+'</span></article>';}).join('');qpanelEl.appendChild(weatherBox);
+  const milestones=document.createElement('div');milestones.className='discovery-milestones';milestones.innerHTML=[{n:1,t:'Mini Map'},{n:5,t:'World Map'},{n:10,t:'Trailblazer · 75 gold + Trail Sense'},{n:20,t:'Regional Pathfinder · 150 gold'},{n:40,t:'Master Cartographer · 300 gold'}].map(m=>'<span class="'+(found.length>=m.n?'done':'')+'"><b>'+m.n+'</b>'+escHTML(m.t)+'</span>').join('');qpanelEl.appendChild(milestones);
+  const list=document.createElement('div');list.className='discovery-list';
+  if(!found.length)list.innerHTML='<p class="qtext">No entries yet. Leave town and follow a road into the wilds.</p>';
+  for(const e of found.sort((a,b)=>a.region-b.region||String(a.name||a.type).localeCompare(String(b.name||b.type)))){const item=document.createElement('article');const status=WEATHER_DISCOVERY_TYPES.has(e.type)?(e.claimed?'HARVESTED':'SPOTTED - DORMANT MATERIAL'):'RECORDED';item.innerHTML='<div><small>'+escHTML(DANGER_RINGS[e.region].name)+' · '+escHTML(DISCOVERY_BIOMES[e.biome]||'Unknown biome')+' · '+status+'</small><b>'+escHTML(e.name||DISCOVERY_TYPE_NAMES[e.type]||e.type.replace(/_/g,' '))+'</b></div><p>'+escHTML(DISCOVERY_LORE[e.type]||'A newly charted point in the wilds.')+'</p>';list.appendChild(item);}qpanelEl.appendChild(list);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('QUEST LOG',()=>openQuestLogUI()));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
 }
 function openQuestLogUI(){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
@@ -2109,18 +2770,28 @@ function openQuestLogUI(){
   const h=document.createElement('h2'); h.textContent='QUEST LOG'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='PRESS O TO OPEN · ESC TO CLOSE'; qpanelEl.appendChild(sub);
   const p=document.createElement('p'); p.className='qtext'; p.textContent='All active objectives are grouped by source so you know what kind of work you are doing and where to go next.'; qpanelEl.appendChild(p);
+  const journey=document.createElement('div');journey.className='quest-rank-summary';
+  const rankProgress=currentRankProgress(),rank=localPlayerHunterRankIndex();
+  journey.innerHTML='<span><small>HUNTER JOURNEY</small><b>'+hunterRankLetter(rank)+'-Rank · '+rankJourneyLevelText(rank)+'</b></span><span>'+(rankProgress.maxRank?'S-Rank achieved':rankProgress.remaining.toLocaleString('en-US')+' XP to '+hunterRankLetter(rankProgress.nextRank)+'-Rank')+'</span>';
+  journey.onclick=()=>openRankJourneyUI();qpanelEl.appendChild(journey);
   const grid=document.createElement('div'); grid.className='questgrid';
   grid.innerHTML=[
-    storyQuestLogCard(),
-    jobQuestLogCard(),
-    guildQuestLogCard(),
-    aegisQuestLogCard(),
-    tutorialQuestLogCard(),
+    safeQuestLogCard('What Next?',whatNextQuestLogCard),
+    safeQuestLogCard('Story Quests',storyQuestLogCard),
+    safeQuestLogCard('Job Contract',jobQuestLogCard),
+    safeQuestLogCard('Guild Contract',guildQuestLogCard),
+    safeQuestLogCard('Aegis Trial',aegisQuestLogCard),
+    safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard),
   ].join('');
   qpanelEl.appendChild(grid);
+  const directed=progressionDirectorCandidate();
+  if(directed){const controls=document.createElement('div');controls.className='qrow progression-guide-controls';controls.appendChild(qBtn('ACTIVATE '+directed.title.toUpperCase(),()=>activateProgressionGuide(directed.id)));controls.appendChild(qBtn('DISMISS GUIDE',()=>dismissProgressionGuide(directed.id),true));qpanelEl.appendChild(controls);}
+  const roadmap=document.createElement('div');roadmap.innerHTML=progressionRoadmapHTML();qpanelEl.appendChild(roadmap.firstElementChild);
   const row=document.createElement('div'); row.className='qrow';
   row.appendChild(qBtn('JOBS',()=>openJobsUI()));
   row.appendChild(qBtn('GUILD CONTRACTS',()=>openRegionalContractsUI()));
+  row.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
+  row.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
 }
@@ -2257,6 +2928,38 @@ function openDragonBondUI(){
       actions.appendChild(qBtn('NEEDS EGG', ()=>sysMsg('Hatch a <b>'+d.name+' Egg</b> on an Egg Insulator'), true));
     }
     grid.appendChild(card);
+  }
+  const fh=document.createElement('h2'); fh.textContent='FAMILIAR BONDS'; qpanelEl.appendChild(fh);
+  const fint=document.createElement('p'); fint.className='qtext';
+  fint.innerHTML='Choose one bound familiar to accompany you. Familiar power grows automatically with your Hunter level.';
+  qpanelEl.appendChild(fint);
+  const fgrid=document.createElement('div'); fgrid.className='bondgrid familiargrid'; qpanelEl.appendChild(fgrid);
+  const bondLevel=id=>BlockcraftFamiliarSystem.bondLevel(COMPANIONS.familiarXp[id]||0);
+  const familiarCards=[
+    {id:'shade',role:'GUARDIAN',color:'#b86cff'}, {id:'fang',role:'HOUND',color:'#ffcf4a'},
+    {id:'mote',role:'HEALER',color:'#8fe06a'}, {id:'sprite',role:'FORAGER',color:'#ffe27a'},
+  ].map(f=>{const lvl=bondLevel(f.id),tier=BlockcraftFamiliarSystem.tier(lvl);f.lvl=lvl;f.tier=tier;
+    if(f.id==='shade'){const n=BlockcraftFamiliarSystem.shadeStepCharges(lvl);f.effect='Reduces incoming damage by '+Math.round(BlockcraftFamiliarSystem.shadeMitigation(lvl)*100)+'%.';f.extra=n?n+' stored personal shadow jump'+(n>1?'s':'')+' (N).':'Dark Passage unlocks at Bond Tier 3.';}
+    if(f.id==='fang'){const n=BlockcraftFamiliarSystem.fangStrikes(lvl);f.effect=n+' strike'+(n>1?'s':'')+' for '+BlockcraftFamiliarSystem.fangDamage(lvl)+' damage.';f.extra='Pursuit cooldown: '+(BlockcraftFamiliarSystem.fangCooldown(lvl)/1000).toFixed(2)+' seconds.';}
+    if(f.id==='mote'){f.effect='Restores '+BlockcraftFamiliarSystem.moteRegen(lvl).toFixed(1)+' HP per second.';f.extra=tier>=BlockcraftFamiliarSystem.MOTE_BURST_MIN_TIER?'Emergency bloom every '+(BlockcraftFamiliarSystem.moteBurstCooldown(lvl)/1000)+' seconds.':'Emergency bloom unlocks at Bond Tier 3.';}
+    if(f.id==='sprite'){f.effect=Math.round(BlockcraftFamiliarSystem.spriteForageChance(lvl)*100)+'% chance for +'+BlockcraftFamiliarSystem.spriteBonusDrops(lvl)+' gathered drops.';f.extra='Applies to server-authoritative mining rewards.';}return f;});
+  for(const f of familiarCards){
+    const def=FAMILIARS[f.id], bound=familiarUnlocks.includes(f.id), active=activeFamiliar===f.id;
+    const card=document.createElement('div'); card.className='bondcard familiarcard'+(active?' active':'')+(!bound?' dim':'');
+    const icon=iconNode(def.sigil); icon.className='bondicon'; card.appendChild(icon);
+    const body=document.createElement('div'); card.appendChild(body);
+    const name=document.createElement('div'); name.className='bondname';
+    name.innerHTML='<b style="color:'+f.color+'">'+escHTML(def.name)+'</b><span>'+escHTML(bound?(active?'ACTIVE':'BOUND'):'LOCKED')+'</span>'; body.appendChild(name);
+    const meta=document.createElement('div'); meta.className='bondmeta';
+    const tiers=BlockcraftFamiliarSystem.TIER_ABILITIES[f.id].map((ability,i)=>(i===f.tier?'▶ ':'')+'T'+(i+1)+' '+ability).join('<br>');
+    const day=BlockcraftFamiliarSystem.dayKey(),daily=BlockcraftFamiliarSystem.dailyChallenge(f.id,day),saved=COMPANIONS.familiarChallenges[f.id];
+    const progress=saved&&saved.day===day?Math.min(daily.need,saved.progress|0):0,done=saved&&saved.day===day&&saved.claimed;
+    const challenge='<br><br><b>DAILY BOND · '+escHTML(daily.title)+'</b><br>'+(done?'COMPLETE':progress+' / '+daily.need)+' · +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' XP';
+    meta.innerHTML='Role: <b>'+f.role+'</b><br>'+escHTML(f.effect)+'<br>'+escHTML(f.extra)+challenge+'<br><br>'+tiers+(bound?'':'<br>Bind with: <b>'+escHTML((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>'); body.appendChild(meta);
+    const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
+    if(bound) actions.appendChild(qBtn(active?'DISMISS':'SUMMON',()=>{cycleFamiliar(active?'':f.id);openDragonBondUI();}));
+    else actions.appendChild(qBtn('VIEW RECIPE',()=>{closeQWin();openCraftingFromNpc();}));
+    fgrid.appendChild(card);
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('CRAFT TREATS', ()=>openCraftingFromNpc()));
@@ -2942,7 +3645,11 @@ function openQuestUI(v){
     const chainLine=offer.chainKey
       ? '<br><small style="color:#a6e77a">Quest chain step '+((offer.chainStep|0)+1)+'/'+offer.chainTotal+': '+escHTML(offer.chainTitle)+'</small><br>'
       : '';
-    body.innerHTML='"'+escHTML(v.accept||offer.desc)+'"<br><br>'+npcFlavor(v)+'<br><br>'+chainLine+offer.desc+'<br><br>Reward: <b>'+offer.gold+' gold</b> + '+offer.xp+' XP'+rewardItemsText(offer)+lootLine;
+    if(isMaraOpeningOffer(v,offer)){
+      body.innerHTML='"'+escHTML('Good. No grand speech yet — first we make sure your hands know the road.')+'"<br><br>'+npcFlavor(v)+'<br><br>'+maraOpeningOfferHTML(offer,rewardItemsText);
+    } else {
+      body.innerHTML='"'+escHTML(v.accept||offer.desc)+'"<br><br>'+npcFlavor(v)+'<br><br>'+chainLine+offer.desc+'<div class="quest-reward-preview"><small>REWARD PREVIEW</small><b>'+offer.xp+' HUNTER XP</b><span>'+offer.gold+' gold'+rewardItemsText(offer)+'</span></div>'+lootLine;
+    }
     row.appendChild(qBtn('ACCEPT', ()=>{
       if(source==='guardian' && offer.type==='pvp_bounty'){
         if(requestAegisBounty(offer)) return;
@@ -2950,7 +3657,8 @@ function openQuestUI(v){
       if(NET.on&&NET.room&&source==='npc'){NET.room.send('npcQuest',{action:'accept',giver,role:v.role||'town'});return;}
       quest=offer;
       SFX.quest();
-      sysMsg(escHTML(questTypeLabel(quest))+' accepted from <b>'+escHTML(giver)+'</b>');
+      if(quest.giver==='Mara Vale'&&quest.title==='First Hands') sysMsg('<b>Quest accepted: First Hands.</b> Leave through the <b>north gate</b> and gather 6 logs.');
+      else sysMsg(escHTML(questTypeLabel(quest))+' accepted from <b>'+escHTML(giver)+'</b>');
       maraQuestCue(quest);
       closeQWin();
     }));
@@ -2974,7 +3682,7 @@ const SHOP_BUY=[
   [I.TEAM_KEY_E,1,70],[I.TEAM_KEY_D,1,165],[I.TEAM_KEY_C,1,350],[I.TEAM_KEY_B,1,650],[I.TEAM_KEY_A,1,1100],
 ];
 const SHOP_SELL=[[I.COAL,1,2],[I.IRON_INGOT,1,8],[I.DIAMOND,1,35],[B.LOG,1,1],[B.IRON_ORE,1,5]];
-const ROAD_MERCHANT_BUY=[[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22]];
+const ROAD_MERCHANT_BUY=[[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22],[I.RAINWAKE_PETAL,1,18],[I.STORMGLASS,1,26],[I.SOLAR_GLYPH,1,24]];
 const GUILD_DECOR_BUY=[[B.TORCH,8,10],[B.LANTERN,2,18],[B.CAMPFIRE,1,18],[B.TABLE,1,18],[B.BED,1,24],[B.CHEST,1,28],[B.FURNACE,1,30]];
 function openShopUI(vendor='market'){
   openQWin('commerce');
@@ -3016,7 +3724,7 @@ var vmReady=false;
 scene.add(camera);
 const vm=new THREE.Group();
 camera.add(vm);
-let vmSwingT=0, vmDip=0, vmBob=0, vmAmp=0, vmLastId=-2, vmPX=0, vmPZ=0;
+let vmSwingT=0, vmDip=0, vmBob=0, vmAmp=0, vmLastId=-2, vmPX=0, vmPZ=0,vmAbilityKind='',vmAbilityT=0,vmAbilityDuration=0;
 const vmCache={};
 function vmBlockMesh(id){
   const tiles=BLOCKS[id].tiles;
@@ -3085,6 +3793,10 @@ function updateViewModel(){
   vmDip=.22;
 }
 function vmSwing(){ vmSwingT=1; }
+function vmAbility(kind){
+  vmAbilityKind=kind;vmAbilityT=0;vmAbilityDuration=kind==='dash'?.42:kind==='shockwave'?.68:kind==='secondwind'?1.0:.78;
+}
+Object.defineProperty(globalThis,'BlockcraftViewmodelFx',{value:Object.freeze({play:vmAbility}),configurable:true});
 function vmTick(dt, now){
   if(!vmReady) return;
   vm.visible=!isMeditating && !cutscene;
@@ -3102,6 +3814,32 @@ function vmTick(dt, now){
     -.42+Math.abs(Math.sin(vmBob))*.03*vmAmp - vmDip*.6,
     -.8);
   vm.rotation.set(-sw*1.1+mineRock*.5, sw*.35, -sw*.3+mineRock*.15);
+  vm.scale.set(1,1,1);
+  if(vmAbilityKind){
+    vmAbilityT+=dt;const u=Math.min(1,vmAbilityT/vmAbilityDuration);
+    if(vmAbilityKind==='dash'){
+      const wind=Math.min(1,u/.22),release=Math.max(0,(u-.22)/.78);
+      vm.position.z=-.8-.18*wind+.34*Math.sin(release*Math.PI);
+      vm.position.x=.5-.1*wind+.13*release;
+      vm.rotation.z+=.46*wind-.7*Math.sin(release*Math.PI);
+      vm.scale.set(1+.18*Math.sin(release*Math.PI),1-.2*Math.sin(release*Math.PI),1);
+    }else if(vmAbilityKind==='umbral'){
+      const gather=Math.sin(Math.min(1,u/.7)*Math.PI);
+      vm.position.y-=.12*gather;vm.position.z+=.12*gather;
+      vm.rotation.x-=.52*gather;vm.rotation.z+=.34*gather;
+      vm.scale.setScalar(1+.08*gather);
+    }else if(vmAbilityKind==='iron'){
+      const lock=Math.sin(u*Math.PI);vm.position.x-=.13*lock;vm.position.y+=.08*lock;
+      vm.rotation.x-=.28*lock;vm.rotation.z+=.5*lock;vm.scale.setScalar(1+.06*lock);
+    }else if(vmAbilityKind==='shockwave'){
+      const raise=Math.sin(Math.min(1,u/.58)*Math.PI),slam=u>.58?Math.sin((u-.58)/.42*Math.PI):0;
+      vm.position.y+=.2*raise-.28*slam;vm.rotation.x-=.8*raise;vm.rotation.z+=.42*raise-.55*slam;
+    }else{
+      const stagger=Math.sin(Math.min(1,u/.42)*Math.PI),rise=u>.35?Math.sin((u-.35)/.65*Math.PI):0;
+      vm.position.y-=.2*stagger;vm.rotation.z+=.32*stagger-.2*rise;vm.scale.setScalar(.94+.12*rise);
+    }
+    if(u>=1)vmAbilityKind='';
+  }
   if(buffs.dmg>0 && vm.children[0]){
     const pulse=.5+.5*Math.sin(now/90);
     if(!vm.userData.shadowGlow){
@@ -4197,6 +4935,24 @@ const bartender={...makeVillager('#7a3b2e','#5e2c22',false),
   townGroup.add(bartender.grp);
   villagers.push(bartender);
 })();
+const tokenCashier={...makeVillager('#5a3d78','#39264f',true),role:'token_cashier',name:'Tilda Mint',shortName:'Tilda',title:'Token Cashier',
+  personality:'precise, cheerful, unimpressed by lucky streaks',line:'Gold stays useful outside. Tokens stay fun inside. I keep the two ledgers separate.',
+  static:true,inside:false,wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[tc(74),tc(76)],stuck:0};
+(function(){tokenCashier.grp.position.set(tp(83.2),TOWN.G+1,tp(80.5));tokenCashier.grp.rotation.y=-Math.PI/2;attachNpcNameplate(tokenCashier);townGroup.add(tokenCashier.grp);villagers.push(tokenCashier);})();
+function tavernIntroSeen(){try{return localStorage.getItem('bc_tavern_games_intro')==='1';}catch{return false;}}
+function dismissTavernIntro(){try{localStorage.setItem('bc_tavern_games_intro','1');}catch{}openTavernCashierUI();}
+function openTavernCashierUI(){
+  openQWin('commerce');qpanelEl.innerHTML='';
+  const marker=document.createElement('i');marker.className='tavern-cashier-marker';marker.hidden=true;qpanelEl.appendChild(marker);
+  const h=document.createElement('h2');h.textContent='TILDA’S TOKEN DESK';qpanelEl.appendChild(h);qpanelEl.appendChild(tavernWalletNode());
+  if(!tavernIntroSeen()){
+    const intro=document.createElement('div');intro.className='tavern-first-visit';intro.innerHTML='<b>WELCOME TO THE GAMES ROOM</b><span>Exchange gold here for Tavern Tokens. Gambling is available only by walking to a game table and pressing <strong>G</strong>. Odds and maximum stakes are displayed beside each table.</span>';
+    intro.appendChild(qBtn('UNDERSTOOD',()=>dismissTavernIntro(),true));qpanelEl.appendChild(intro);
+  }
+  const p=document.createElement('p');p.className='qtext';p.innerHTML='“'+escHTML(tokenCashier.line)+'”<br><br><b>1 gold = 1 Tavern Token.</b> You may exchange up to <b>100 tokens each UTC day</b>. Winnings remain Tavern Tokens; adventuring gold is never wagered directly.';qpanelEl.appendChild(p);
+  const row=document.createElement('div');row.className='qrow';for(const n of [5,10,25])row.appendChild(qBtn('EXCHANGE '+n,()=>requestTavernTokens(n),tavernTokenRemaining<n));qpanelEl.appendChild(row);
+  const back=document.createElement('div');back.className='qrow';back.appendChild(qBtn('BACK TO TAVERN',()=>openTavernUI(),true));back.appendChild(qBtn('LEAVE',()=>closeQWin(),true));qpanelEl.appendChild(back);
+}
 function openTavernUI(){
   openQWin('commerce');
   qpanelEl.innerHTML='';

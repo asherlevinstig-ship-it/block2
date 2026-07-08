@@ -12,6 +12,7 @@ import {createGearRewardPresenter} from './gear-rewards.mjs';
 import {createCombatFeedback} from './combat-feedback.mjs';
 import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
+import {normalizeRewardGear} from './reward-items.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -57,19 +58,7 @@ function receiveRewardItemLegacy(it){
 }
 
 function rewardGearStack(it){
-  if(!it||!ITEMS[it.id])return null;
-  const itemInfo=ITEMS[it.id],info=itemInfo.tool||itemInfo.armor;
-  if(!info)return null;
-  const stack={id:it.id,count:1,plus:Math.max(0,Math.min(3,it.plus|0))};
-  if(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===it.gearRank))stack.gearRank=it.gearRank;
-  if(itemInfo.armor&&GEAR_SYSTEM.ARMOR_ARCHETYPES[it.armorType])stack.armorType=it.armorType;
-  if(GEAR_SYSTEM.RARITIES.some(r=>r.id===it.rarity))stack.rarity=it.rarity;
-  if(JOB_SYSTEM.reforgeModifier(it.forge))stack.forge=it.forge;
-  if(it.masterwork&&stack.forge)stack.masterwork=true;
-  if(it.locked)stack.locked=true;
-  if(typeof it.source==='string'&&it.source)stack.source=it.source;
-  stack.dur=Number.isFinite(it.dur)?it.dur:(itemInfo.armor?armorMaxDur(stack):toolMaxDur(stack));
-  return stack;
+  return normalizeRewardGear(it,{items:ITEMS,gearSystem:GEAR_SYSTEM,jobSystem:JOB_SYSTEM,armorMaxDur,toolMaxDur});
 }
 function receiveRewardItem(it){
   if(!it||!ITEMS[it.id])return null;
@@ -98,12 +87,93 @@ const GEAR_REWARDS=createGearRewardPresenter({
   onReveal:({summary,recovered})=>{
     const color=summary.profile.rarity.color;
     if(summary.profile.rarityIndex>=3||summary.profile.rankIndex>=5)SFX.level();else SFX.success();
+    const quality=summary.profile.rarityIndex>=4?'legendary':summary.profile.rarityIndex>=2?'rare':'item';
+    rewardGain(quality,1,summary.profile.rarity.name+' Gear',{icon:summary.armor?'AR':'WP'});
+    if(quality==='legendary')showName('LEGENDARY GEAR ACQUIRED');
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.15,recovered?3.5:5,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:recovered?.42:.72,depthWrite:false}));
     beam.position.set(player.pos.x,player.pos.y+(recovered?1.75:2.5),player.pos.z);scene.add(beam);
     setTimeout(()=>{scene.remove(beam);beam.geometry.dispose();beam.material.dispose();},1800);
   },
 });
+const majorPresentationQueue=[];
+let majorPresentationRunning=false;
+function majorPresentationBusy(){
+  return ['rewardwin','gearrewardwin','rankupwin'].some(id=>{
+    const el=document.getElementById(id);return el&&!el.classList.contains('hidden');
+  });
+}
+function runMajorPresentationQueue(){
+  if(majorPresentationRunning||!majorPresentationQueue.length)return;
+  if(majorPresentationBusy()){setTimeout(runMajorPresentationQueue,120);return;}
+  majorPresentationRunning=true;
+  const show=majorPresentationQueue.shift();show();
+  const watch=()=>{
+    if(majorPresentationBusy()){setTimeout(watch,120);return;}
+    majorPresentationRunning=false;runMajorPresentationQueue();
+  };
+  setTimeout(watch,120);
+}
+function presentMajor(show){
+  if(typeof show!=='function')return;
+  majorPresentationQueue.push(show);runMajorPresentationQueue();
+}
+function presentGear(entry){if(entry&&entry.stack)presentMajor(()=>GEAR_REWARDS.present(entry));}
+let deathLimboState=null,deathLimboEl=null;
+function ensureDeathLimboEl(){
+  if(deathLimboEl)return deathLimboEl;
+  deathLimboEl=document.createElement('div');deathLimboEl.id='deathlimbo';
+  deathLimboEl.innerHTML='<div class="deathlimbo-panel"><div class="deathlimbo-kicker">LIMBO RECOVERY</div><h2 id="deathlimbotitle">Recover your items</h2><div id="deathlimboitem"></div><div id="deathlimboq"></div><div id="deathlimboanswers"></div><div id="deathlimbofeedback"></div></div>';
+  document.body.appendChild(deathLimboEl);return deathLimboEl;
+}
+function hideDeathLimbo(){if(deathLimboEl)deathLimboEl.classList.remove('show');deathLimboState=null;}
+function renderDeathLimbo(m){
+  if(!m||!m.question||!m.item)return;
+  deathLimboState=m;
+  const el=ensureDeathLimboEl(),answers=el.querySelector('#deathlimboanswers'),feedback=el.querySelector('#deathlimbofeedback');
+  el.querySelector('#deathlimbotitle').textContent='Item '+((m.index|0)+1)+' / '+(m.total|0);
+  el.querySelector('#deathlimboitem').textContent='Protect: '+(m.item.count>1?m.item.count+' × ':'')+(m.item.label||'Item');
+  el.querySelector('#deathlimboq').textContent=m.question.prompt||'Answer to recover the item.';
+  answers.innerHTML='';feedback.textContent='';
+  (m.question.answers||[]).forEach((text,i)=>{
+    const b=document.createElement('button');b.type='button';b.innerHTML='<b>'+String.fromCharCode(65+i)+'</b> '+escHTML(text);
+    b.onclick=()=>{if(!deathLimboState||!NET.room)return;answers.querySelectorAll('button').forEach(x=>x.disabled=true);NET.room.send('deathLimboAnswer',{id:deathLimboState.id,answer:i});};
+    answers.appendChild(b);
+  });
+  if(Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
+  el.classList.add('show');
+}
+function applyDeathLimboResult(m){
+  const el=ensureDeathLimboEl(),feedback=el.querySelector('#deathlimbofeedback');
+  if(m&&m.mastery&&globalThis.BlockcraftRecall)globalThis.BlockcraftRecall.setMastery(m.mastery);
+  if(m&&m.correct){feedback.className='ok';feedback.textContent='Correct — recovered '+((m.item&&m.item.label)||'item')+'. '+(m.explanation||'')+' Scheduled for spaced review.';SFX.success();}
+  else{feedback.className='bad';feedback.textContent='Wrong — '+((m.item&&m.item.label)||'item')+' dropped where you died.'+(m&&m.explanation?' '+m.explanation:'')+' This topic will return soon.';SFX.error();}
+}
+const deathDropVisuals=new Map();
+function deathDropLabelCanvas(m){
+  const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;const ctx=canvas.getContext('2d');
+  ctx.fillStyle='rgba(12,5,8,.92)';ctx.fillRect(4,4,504,120);ctx.strokeStyle='#fb7185';ctx.lineWidth=6;ctx.strokeRect(5,5,502,118);
+  ctx.textAlign='center';ctx.fillStyle='#ffd4dc';ctx.font='800 25px system-ui';ctx.fillText('LOST: '+String(m.item&&m.item.label||'ITEM').toUpperCase()+(m.item&&m.item.count>1?' ×'+m.item.count:''),256,43);
+  ctx.fillStyle='#f9a8b8';ctx.font='700 18px system-ui';ctx.fillText('PUBLIC LOOT · '+Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000))+'s',256,76);
+  ctx.fillStyle='#cbd5e1';ctx.font='16px system-ui';ctx.fillText('Dropped by '+String(m.owner||'a hunter'),256,103);return canvas;
+}
+function removeDeathDropVisual(id){
+  const rec=deathDropVisuals.get(id);if(!rec)return;scene.remove(rec.group);rec.group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){if(o.material.map)o.material.map.dispose();o.material.dispose();}});deathDropVisuals.delete(id);
+}
+function showDeathDropVisual(m){
+  if(!m||!m.id||!m.item||!ITEMS[m.item.id])return;removeDeathDropVisual(m.id);
+  const group=new THREE.Group(),beam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.38,12,12,1,true),new THREE.MeshBasicMaterial({color:0xfb7185,transparent:true,opacity:.46,depthWrite:false,blending:THREE.AdditiveBlending}));
+  beam.position.y=6;const ring=new THREE.Mesh(new THREE.TorusGeometry(.85,.09,10,40),new THREE.MeshBasicMaterial({color:0xffd4dc,transparent:true,opacity:.95,depthTest:false}));ring.rotation.x=Math.PI/2;ring.position.y=.12;
+  const iconTex=new THREE.CanvasTexture(ITEMS[m.item.id].icon),icon=new THREE.Sprite(new THREE.SpriteMaterial({map:iconTex,transparent:true,depthTest:false}));icon.scale.set(1.35,1.35,1);icon.position.y=1.15;icon.renderOrder=21;
+  const labelCanvas=deathDropLabelCanvas(m),labelTex=new THREE.CanvasTexture(labelCanvas),label=new THREE.Sprite(new THREE.SpriteMaterial({map:labelTex,transparent:true,depthTest:false}));label.scale.set(6,1.5,1);label.position.y=3.05;label.renderOrder=22;
+  group.position.set(m.x,m.y+.05,m.z);group.add(beam,ring,icon,label);group.userData.drop=m;scene.add(group);deathDropVisuals.set(m.id,{group,ring,icon,label,labelCanvas,labelTex,lastSecond:-1});
+}
+function tickDeathDropVisuals(now=performance.now()){
+  for(const [id,rec] of deathDropVisuals){const m=rec.group.userData.drop,left=Math.max(0,Math.ceil((m.expiresAt-Date.now())/1000));if(!left){removeDeathDropVisual(id);continue;}rec.group.visible=m.dgn?dim==='dungeon':dim!=='dungeon';if(!rec.group.visible)continue;rec.ring.rotation.z+=.015;rec.icon.position.y=1.15+Math.sin(now*.003)*.16;rec.group.children[0].material.opacity=.35+Math.sin(now*.004)*.12;const second=Math.ceil(left/5)*5;if(second!==rec.lastSecond){rec.lastSecond=second;const fresh=deathDropLabelCanvas(m),ctx=rec.labelCanvas.getContext('2d');ctx.clearRect(0,0,512,128);ctx.drawImage(fresh,0,0);rec.labelTex.needsUpdate=true;}}
+}
+Object.defineProperty(globalThis,'BlockcraftDeathDrops',{value:Object.freeze({show:showDeathDropVisual,remove:removeDeathDropVisual,tick:tickDeathDropVisuals,clear:()=>[...deathDropVisuals.keys()].forEach(removeDeathDropVisual)}),configurable:true});
+Object.defineProperty(globalThis,'BlockcraftMajorPresentation',{value:Object.freeze({present:presentMajor}),configurable:true});
 const COMBAT_FEEDBACK=createCombatFeedback({document,showName,sysMsg,sound:SFX});
+Object.defineProperty(globalThis,'COMBAT_FEEDBACK',{value:COMBAT_FEEDBACK,configurable:true});
 
 let prospectMarkers=null,prospectMarkerTimer=0;
 function clearProspectMarkers(){
@@ -242,6 +312,15 @@ const SESSION=createNetworkSession({
 const NETWORK=SESSION.controller;
 const NET=SESSION.state;
 let e2eJourneyResult=null;
+const familiarTelemetryEl=document.getElementById('familiartelemetry');
+let familiarTelemetryOpen=false,familiarTelemetryTimer=0;
+function requestFamiliarTelemetry(){if(familiarTelemetryOpen&&NET.on&&NET.room)NET.room.send('familiarTelemetry',{});}
+function renderFamiliarTelemetry(m){
+  if(!familiarTelemetryEl||!m)return;const kinds=['shade','fang','mote','sprite'];
+  const rows=kinds.map(kind=>{const r=m.byKind&&m.byKind[kind]||{},tiers=m.tiers&&m.tiers[kind]||[];return '<tr><td>'+kind.toUpperCase()+'</td><td>'+Math.round(r.xp||0)+'</td><td>'+(r.actions||0)+'</td><td class="'+((r.diminished||0)?'warn':'ok')+'">'+(r.diminished||0)+'</td><td>'+tiers.join(' / ')+'</td></tr>';}).join('');
+  familiarTelemetryEl.innerHTML='<h3>FAMILIAR TELEMETRY · F8</h3><div>Rolling window: 60m · Loaded profiles: '+(m.profiles||0)+' · Daily completions: '+(m.dailyCompleted||0)+'</div><table><thead><tr><th>Bond</th><th>XP/h</th><th>Actions</th><th>Dim.</th><th>Tiers 1→5</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+if(location.hostname==='localhost'||location.hostname==='127.0.0.1')addEventListener('keydown',e=>{if(e.code!=='F8')return;e.preventDefault();familiarTelemetryOpen=!familiarTelemetryOpen;if(familiarTelemetryEl)familiarTelemetryEl.classList.toggle('hidden',!familiarTelemetryOpen);clearInterval(familiarTelemetryTimer);if(familiarTelemetryOpen){requestFamiliarTelemetry();familiarTelemetryTimer=setInterval(requestFamiliarTelemetry,5000);}});
 let dungeonRestartRecovery=null;
 const ONBOARD=createOnboardingUI({
   rewardWin, rewardPanel,
@@ -260,11 +339,13 @@ const ONBOARD=createOnboardingUI({
 const netConnect=SESSION.connect;
 
 function netAttachRoom(room,name,client){
+    NET.profileReady=room&&room.name==='dungeon';
     setWorldLoadingStatus('Syncing hunter profile...');
     let staleLocalMobs=0;
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net){ removeMob(i); staleLocalMobs++; }
     eventLog('Connected as '+name);
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
+    room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
     room.onMessage('dungeonRestartRecovery',m=>{
       dungeonRestartRecovery=m||null;
       if(m&&m.refunded)sysMsg('The server restarted during your Gate. You were returned safely and your entry item was refunded.');
@@ -278,15 +359,16 @@ function netAttachRoom(room,name,client){
     if(isOverworldRoom) room.send('dungeonRecoveryRequest',{});
     if(staleLocalMobs) eventLog('Cleared '+staleLocalMobs+' pre-connection local mob'+(staleLocalMobs===1?'':'s')+'.','[Damage Audit]');
 
-    room.state.listen('tod', v=>{ NET.tod=v; });
+    const $=Colyseus.getStateCallbacks(room);
+    $(room.state).listen('tod', v=>{ NET.tod=v; });
     room.onMessage('dayCycleSync', m=>applyDayCycleSync(m));
     if(isOverworldRoom) room.send('dayCycleSyncRequest', {});
-    room.state.edits.onAdd((id,key)=>netApplyEdit(key,id));
-    room.state.edits.onChange((id,key)=>netApplyEdit(key,id));
-    room.state.players.onAdd((p,sid)=>{ if(sid!==room.sessionId) netAddRemote(sid,p); });
-    room.state.players.onRemove((p,sid)=>netRemoveRemote(sid));
-    room.state.mobs.onAdd((mb,id)=>netAddMob(id,mb));
-    room.state.mobs.onRemove((mb,id)=>netRemoveMob(id));
+    $(room.state).edits.onAdd((id,key)=>netApplyEdit(key,id));
+    $(room.state).edits.onChange((id,key)=>netApplyEdit(key,id));
+    $(room.state).players.onAdd((p,sid)=>{ if(sid!==room.sessionId) netAddRemote(sid,p); });
+    $(room.state).players.onRemove((p,sid)=>netRemoveRemote(sid));
+    $(room.state).mobs.onAdd((mb,id)=>netAddMob(id,mb));
+    $(room.state).mobs.onRemove((mb,id)=>netRemoveMob(id));
 
     room.onMessage('trainingReset', ()=>{if(dim==='tutorial')resetTrainingMeadowLocal();});
     room.onMessage('tutorialDimension', m=>{
@@ -297,12 +379,12 @@ function netAttachRoom(room,name,client){
         NET.dgn='';
       }
     });
-    room.onMessage('profile', m=>netRestoreProfile(m));
+    room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
+    if(room&&room.name==='blockcraft')room.send('profileRequest',{});
     room.onMessage('tutorialProgress', m=>{if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);});
     room.onMessage('firstPromotionAck', m=>{if(m&&m.ok)ONBOARD.setSeen(true);});
     room.onMessage('rankUp', m=>{
-      SFX.level();
-      setTimeout(()=>ONBOARD.showRankPromotion(m),80);
+      presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
     });
     bindProgressionMessages(room,{
       getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},setContract:v=>{jobContract=v;},clampContract:clampJobContract,
@@ -314,6 +396,9 @@ function netAttachRoom(room,name,client){
       accept:m=>{
         if(m.type==='armor'){gearInspectSlot=m.id?-2:-1;if(uiOpen)renderUI();}
         if(m.type==='jobContract'&&m.action==='claim'){
+          if(m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
+          if(m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
+          if(m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
           SFX.coin();sysMsg('Contract claimed'+(m.rewardGold?' - <b>+'+m.rewardGold+' gold</b>':'')+(m.rewardXp?', <b>+'+m.rewardXp+' XP</b>':'')+'.');
           for(const milestone of Array.isArray(m.milestones)?m.milestones:[]){SFX.level();sysMsg('<b>'+escHTML((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' Level '+milestone.level+'</b> reached<br><b>'+escHTML(milestone.title)+' unlocked:</b> '+escHTML(milestone.desc));}
           if(m.graduation)setTimeout(()=>ONBOARD.showFieldWorkGraduation(),40);
@@ -332,10 +417,22 @@ function netAttachRoom(room,name,client){
     room.onMessage('npcQuest', m=>{
       if(!m)return;
       quest=m.quest||null;
-      if(m.completed){SFX.coin();SFX.level();sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.');}
+      if(m.completed){
+        const completedFirstHands=m.completed.giver==='Mara Vale'&&m.completed.title==='First Hands';
+        SFX.coin();SFX.level();
+        if(m.completed.gold)rewardGain('gold',m.completed.gold,'Gold');
+        if(m.completed.xp)rewardGain('xp',m.completed.xp,'Hunter XP');
+        for(const it of Array.isArray(m.completed.rewardItems)?m.completed.rewardItems:[])if(it&&ITEMS[it.id])rewardGain('item',it.count||1,ITEMS[it.id].name);
+        sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.',{tier:'major',title:'Quest Complete'});
+        // Multiplayer turn-in returns here before the local dialogue callback
+        // can run. Start the one-time milestone reward from the authoritative
+        // completion message so Level 2 never skips straight past its reward.
+        if(completedFirstHands) townGuidanceSequenceHold=true;
+      }
       else if(m.action==='accept'&&quest){
         SFX.quest();
-        sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> accepted from '+escHTML(quest.giver)+'.');
+        if(quest.giver==='Mara Vale'&&quest.title==='First Hands') sysMsg('<b>Quest accepted: First Hands.</b> Leave through the <b>north gate</b> and gather 6 logs.');
+        else sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> accepted from '+escHTML(quest.giver)+'.');
         if(Array.isArray(m.grantedItems)&&m.grantedItems.some(item=>item&&item.id===I.WOOD_SWORD)){
           sysMsg('Mara hands you a <b>Wooden Sword</b>. It is already in your inventory.');
           showName('Wooden Sword received');
@@ -343,12 +440,17 @@ function netAttachRoom(room,name,client){
         maraQuestCue(quest);
       }
       else if(m.action==='abandon')sysMsg('Quest abandoned.');
-      else if(m.action==='progress'&&quest&&questDone())sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> complete - return to '+escHTML(quest.giver)+'.');
+      else if(m.action==='progress'&&quest&&questDone())sysMsg(quest.giver==='Mara Vale'&&quest.title==='First Hands'
+        ? '<b>First Hands complete.</b> Follow the gold trail back to <b>Mara Vale</b>.'
+        : '<b>'+escHTML(quest.title||'Town quest')+'</b> complete - return to '+escHTML(quest.giver)+'.');
       refreshHUD();if(qOpen)closeQWin();
     });
     room.onMessage('aegisTrialReward', m=>{
       quest=null;SFX.coin();SFX.level();
       const reward=m&&m.reward||{},label=reward.kind||'Aegis Cache';
+      if(m&&m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
+      if(m&&m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
+      if(reward.id&&ITEMS[reward.id])rewardGain(reward.rarity==='rare'?'rare':'item',1,ITEMS[reward.id].name);
       sysMsg('<b>Aegis Trial complete</b> - +'+((m&&m.rewardGold)||0)+' gold, +'+((m&&m.rewardXp)||0)+' XP, <b>'+escHTML(label)+'</b>.');
       refreshHUD();if(qOpen)closeQWin();
     });
@@ -485,12 +587,43 @@ function netAttachRoom(room,name,client){
     room.onMessage('dedit', m=>{ if(dim==='dungeon') netWriteEdit(m.x, m.y, m.z, m.id); });
     room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); } });
     room.onMessage('dungeonDeath', m=>{
+      COMPANIONS.activeFamiliar='';
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
       showDeathScreen('The dungeon overwhelmed you','The attempt has failed — returning to the gate');
     });
+    room.onMessage('deathLimboStart',m=>{
+      COMPANIONS.activeFamiliar='';
+      if(dim==='dungeon') exitDungeon(true);
+      hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
+      showDeathScreen('You are in limbo','Answer to recover your carried items');
+      renderDeathLimbo(m);
+    });
+    room.onMessage('deathLimboQuestion',m=>setTimeout(()=>renderDeathLimbo(m),650));
+    room.onMessage('deathLimboResult',m=>applyDeathLimboResult(m));
+    room.onMessage('deathLimboComplete',m=>{
+      hideDeathLimbo();
+      if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
+      hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
+      sysMsg('<b>Returned from limbo.</b> Correct answers restored items; mistakes became public drops.');
+    });
+    room.onMessage('deathLimboReject',m=>sysMsg((m&&m.reason)==='rate'?'Slow down.':'That limbo answer was not accepted.'));
+    room.onMessage('deathDropCreated',m=>{
+      const label=m&&m.item&&m.item.label||'An item';
+      showDeathDropVisual(m);
+      sysMsg('<b>'+escHTML(label)+'</b> dropped where '+escHTML((m&&m.owner)||'a hunter')+' died. Anyone can loot it.');
+    });
+    room.onMessage('deathDropSnapshot',m=>{for(const drop of Array.isArray(m&&m.drops)?m.drops:[])showDeathDropVisual(drop);});
+    room.onMessage('deathDropTaken',m=>{
+      const label=m&&m.item&&m.item.label||'an item';
+      removeDeathDropVisual(m&&m.id);
+      sysMsg('<b>'+escHTML(m&&m.by||'A hunter')+'</b> looted '+escHTML(label)+'.');
+    });
+    room.onMessage('deathDropExpired',m=>removeDeathDropVisual(m&&m.id));
+    room.onMessage('deathDropReject',m=>{if((m&&m.reason)==='full')sysMsg('Make inventory room before looting that death drop.');});
     room.onMessage('worldDeath',m=>{
+      COMPANIONS.activeFamiliar='';
       showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Returning to the Town of Beginnings');
     });
     room.onMessage('dungeonFailed', m=>{
@@ -505,16 +638,17 @@ function netAttachRoom(room,name,client){
       if(m.coal) addItem(I.COAL, m.coal);
       if(m.iron) addItem(I.IRON_INGOT, m.iron);
       if(m.dia)  addItem(I.DIAMOND, m.dia);
-      let keyCount=0;
+      let keyCount=0;const gearRewards=[];
       if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]){
-        const received=receiveRewardItem(it);if(received)GEAR_REWARDS.present(received);
+        const received=receiveRewardItem(it);if(received)gearRewards.push(received);
         if(SOLO_KEY_IDS.includes(it.id)||TEAM_KEY_IDS.includes(it.id)) keyCount+=it.count||1;
       }
-      showDungeonReward(m, true);
+      presentMajor(()=>showDungeonReward(m, true));
+      for(const received of gearRewards)presentGear(received);
       sysMsg('<b>Boss defeated!</b> Party loot acquired'+(m.dia?' (diamonds!)':'')+(keyCount?' + key':''));
     });
     room.onMessage('lootReject', m=>{
-      showDungeonReward(m||{}, false);
+      presentMajor(()=>showDungeonReward(m||{}, false));
       sysMsg('No boss loot: '+escHTML(rewardReasonText(m&&m.reason)));
     });
     room.onMessage('firstQuestReward', m=>applyFirstQuestRewardResult(m));
@@ -522,7 +656,8 @@ function netAttachRoom(room,name,client){
       if(m&&['discovery','bandit_rescue','caravan_recovery'].includes(m.source))OVERWORLD_RESULTS.recordGrant(m);
       if(m.xp) gainXP(m.xp);
       if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]){
-        const received=receiveRewardItem(it);if(received)GEAR_REWARDS.present(received);
+        const received=receiveRewardItem(it);if(received)presentGear(received);
+        if(received&&!ITEMS[it.id].tool)rewardGain('item',it.count||1,ITEMS[it.id].name);
       }
       if(m.source==='mob'){
         gainJobXP('adventurer', 3, 'hunt');
@@ -551,15 +686,39 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('discoveryResult',m=>{
       if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired'));
+      if(m.id)claimedDiscoveryIds.add(m.id);
       if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');
       OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Job Board if your contract is ready.'});
     });
     room.onMessage('discoverySighted',m=>{
-      if(!m||!m.id)return;const fresh=!discoveredIds.has(m.id);discoveredIds.add(m.id);updateLandMinimap();
+      if(!m||!m.id)return;const fresh=!discoveredIds.has(m.id);discoveredIds.add(m.id);hintedDiscoveryIds.delete(m.id);updateLandMinimap();
       if(fresh)sysMsg((m.shared?'Team mapped':'Mapped')+': <b>'+escHTML(String(m.name||'new discovery').replace(/_/g,' '))+'</b>'+(m.shared&&m.by?' via '+escHTML(m.by):''));
     });
+    room.onMessage('explorationMilestone',m=>{
+      if(!m)return;if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();
+      sysMsg('<b>'+escHTML(m.title||'Exploration milestone')+'</b> reached at '+(m.count|0)+' discoveries. <b>+'+(m.gold|0)+' gold</b>.');
+      showName((m.title||'EXPLORATION MILESTONE').toUpperCase());
+    });
+    room.onMessage('cartographerIntro',()=>sysMsg('<b>Orin Mapwell:</b> I mark leads in gold, treasure in ink, and weather-sites by patience. Some discoveries only wake under the right sky.'));
+    room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);}refreshHUD();updateLandMinimap();openCartographerUI(m);});
+    room.onMessage('cartographerHint',m=>{
+      if(!m||!m.id)return;hintedDiscoveryIds.add(m.id);if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();
+      sysMsg('<b>Map lead purchased:</b> '+escHTML(m.name||'Uncharted site')+' is marked in gold on your map.');
+    });
+    room.onMessage('cartographerReward',m=>{
+      if(!m)return;if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();
+      if(m.kind==='world'&&m.cosmetic==='cartographers_mantle'&&!cosmeticUnlocks.includes('cartographers_mantle')){cosmeticUnlocks.push('cartographers_mantle');refreshAppearanceDummy();}
+      if(m.kind==='world')showName('CARTOGRAPHER\'S MANTLE UNLOCKED');else showName('+'+(m.reward|0)+' GOLD');
+      sysMsg(m.kind==='world'?'<b>World mapped!</b> Orin awards the unique Cartographer\'s Mantle.':'<b>Cartography reward:</b> +'+(m.reward|0)+' gold.');
+    });
+    room.onMessage('cartographerReject',m=>{const r=m&&m.reason;sysMsg(r==='range'?'Move closer to Orin Mapwell.':r==='gold'?'You need more gold for that map lead.':r==='no_hints'?'Orin has no undiscovered leads left.':r==='claimed'?'That reward is already claimed.':r==='active'?'Finish your current scouting commission first.':r==='treasure_active'?'Finish your current treasure map before taking another.':r==='complete'?'Every region is already mapped.':'That cartography reward is not ready yet.');});
+    room.onMessage('treasureMapStarted',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('TREASURE MAP STARTED');if(globalThis.BlockcraftTreasureParchment)globalThis.BlockcraftTreasureParchment(m,'NEW TREASURE MAP');sysMsg('<b>Treasure map started:</b> follow the gold mark, then press <b>G</b> at the clue site.');});
+    room.onMessage('treasureMapUpdate',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('CLUE SOLVED');sysMsg('<b>Treasure clue '+((m.stage|0)+1)+'/'+(m.total|0)+':</b> '+escHTML(m.clue||'Follow the ink.'));});
+    room.onMessage('treasureMapComplete',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=null;if(m&&Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();showName('TREASURE FOUND');sysMsg('<b>Treasure map complete!</b> +'+(m.rewardGold|0)+' gold and 2 diamonds.');});
+    room.onMessage('treasureMapReject',m=>sysMsg(m&&m.reason==='range'?'Search closer to the marked landmark.':'You do not have an active treasure clue.'));
     room.onMessage('discoveryReject',m=>{
-      const r=m&&m.reason;sysMsg(r==='pattern'?escHTML(m.hint||'The pattern does not respond.'):r==='claimed'?'You have already claimed this discovery.':r==='cooldown'?'The fishing pool needs time to replenish.':'Nothing happens.');
+      const r=m&&m.reason;if(r==='weather'&&globalThis.BlockcraftExplorationFx)globalThis.BlockcraftExplorationFx.dormantWeather(m.type);
+      sysMsg(r==='pattern'?escHTML(m.hint||'The pattern does not respond.'):r==='claimed'?'You have already claimed this discovery.':r==='cooldown'?'The fishing pool needs time to replenish.':r==='weather'?'This discovery is dormant. Return during <b>'+escHTML(m.required||'different weather')+'</b>.':'Nothing happens.');
     });
     room.onMessage('banditCampState',m=>{
       if(!m)return;
@@ -572,7 +731,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('caravanState',m=>{
       if(!m)return;
       if(m.state==='departed')sysMsg('A merchant caravan has departed along the regional road.');
-      else if(m.state==='arrived')sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes.');
+      else if(m.state==='arrived')sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes. Claim the contract reward at the Job Board.');
+      else if(m.state==='escort_failed')sysMsg('<b>Escort failed.</b> You did not remain with the caravan long enough to earn the reward.');
       else if(m.state==='wrecked')sysMsg('<b>Caravan lost.</b> Bandits carried its supplies toward a nearby camp.');
       else if(m.state==='recovered')sysMsg('<b>Stolen caravan supplies recovered!</b>');
     });
@@ -614,13 +774,13 @@ function netAttachRoom(room,name,client){
       const c=clampRegionalContract(m&&m.contract);
       if(m&&m.rewardXp) gainXP(m.rewardXp|0);
       if(m&&m.rewardGold) addGold(m.rewardGold|0);
-      if(Array.isArray(m&&m.rewardItems)) for(const it of m.rewardItems) if(ITEMS[it.id]) addItem(it.id,it.count||1);
+      if(Array.isArray(m&&m.rewardItems)) for(const it of m.rewardItems) if(ITEMS[it.id]){addItem(it.id,it.count||1);rewardGain(rewardClass(ITEMS[it.id].name,it.id)||'item',it.count||1,ITEMS[it.id].name);}
       if(m&&m.rewardGear){
         if(m.rewardGearRecovered){
           const stack=rewardGearStack(m.rewardGear);
-          if(stack)GEAR_REWARDS.present({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:null});
+          if(stack)presentGear({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:null});
         }else{
-          const received=receiveRewardItem(m.rewardGear);if(received)GEAR_REWARDS.present(received);
+          const received=receiveRewardItem(m.rewardGear);if(received)presentGear(received);
         }
       }
       if(typeof (m&&m.roadWardenRep)==='number') roadWardenRep=Math.max(0,m.roadWardenRep|0);
@@ -690,7 +850,7 @@ function netAttachRoom(room,name,client){
       applyLootRecoveryState(m);
       if(m&&m.queued){
         const stack=rewardGearStack(m.queued);
-        if(stack)GEAR_REWARDS.present({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:(()=>{
+        if(stack)presentGear({stack,slot:-1,recovered:true,baseline:ITEMS[stack.id].armor?armorSlot:(()=>{
           const selected=inv[combatState.selectedSlot],selectedItem=selected&&ITEMS[selected.id];
           return selectedItem&&selectedItem.tool&&['sword','axe'].includes(selectedItem.tool.cls)?selected:null;
         })()});
@@ -712,7 +872,23 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonPerchBreed', m=>{ if(m) dragonBreedFx(m.x|0, m.y|0, m.z|0, m.offspring); });
     room.onMessage('perchReject', m=>perchRejected(m));
     room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; const i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); });
-    room.onMessage('familiarReject', m=>{ const r=m&&m.reason; sysMsg(r==='owned'?'Shade is already bound to you':r==='item'?'You need a <b>Shadow Sigil</b>':'Shade will not answer that call'); });
+    room.onMessage('familiarBond', m=>COMPANIONS.applyFamiliarBond(m));
+    room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]) COMPANIONS.activeFamiliar=m.kind; });
+    room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; });
+    room.onMessage('familiarReject', m=>{
+      const kind=(m&&m.kind)||'shade', def=FAMILIARS[kind]||FAMILIARS.shade, r=m&&m.reason;
+      if(m&&m.action==='summon') COMPANIONS.activeFamiliar='';
+      sysMsg(r==='owned'?'<b>'+def.name+'</b> is already bound to you':r==='item'?'You need a <b>'+((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>':r==='locked'?'You have not bound <b>'+def.name+'</b> yet':'<b>'+def.name+'</b> will not answer that call');
+    });
+    room.onMessage('shadeStepResult', m=>applyShadeStepResult(m));
+    room.onMessage('shadeStepReject', m=>{
+      COMPANIONS.applyShadeStepReject(m);
+      const r=m&&m.reason;
+      if(r==='tier') sysMsg('Shade murmurs: "I am not yet numerous enough to carry you."');
+      else if(r==='familiar') sysMsg('Call <b>Shade</b> first (K)');
+      else if(r==='blocked') sysMsg('The shadows cannot find a path forward.');
+      else if(r==='locked') sysMsg('Dark Passage cannot open while your movement is restrained.');
+    });
     room.onMessage('blackholeReject', m=>{
       blackholeCd=0;
       const r=(m&&m.reason)||'invalid';
@@ -731,6 +907,10 @@ function netAttachRoom(room,name,client){
       else sysMsg('Legendary weapon failed');
     });
     room.onMessage('abilitySync', m=>applyAbilitySync(m));
+    room.onMessage('recallQuestion',m=>globalThis.BlockcraftRecall.showQuestion(m));
+    room.onMessage('recallResult',m=>globalThis.BlockcraftRecall.result(m));
+    room.onMessage('recallReject',m=>globalThis.BlockcraftRecall.reject(m));
+    room.onMessage('recallMastery',m=>globalThis.BlockcraftRecall.setMastery(m));
     room.onMessage('devMana', m=>{
       if(typeof m.int==='number') S.int=Math.max(S.int|0, m.int|0);   // raise client INT so maxMp/cast checks allow it
       if(typeof m.mp==='number') mp=Math.min(maxMp(), m.mp);
@@ -739,6 +919,14 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('abilityReject', m=>abilityRejected(m));
     room.onMessage('abilityResult', m=>abilityResolved(m));
+    room.onMessage('abilitySpecResult',m=>{if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m&&m.spec);showName('SPECIALIZATION AWAKENED');if(statOpen)renderStat();});
+    room.onMessage('abilitySpecReject',()=>sysMsg('That specialization cannot be changed.'));
+    room.onMessage('shadowSpirit',m=>{
+      if(!m)return;
+      showName((m.boss?'BOSS SPIRIT':'FALLEN SPIRIT')+' · '+(m.rankName||'E')+'-RANK');
+      sysMsg('A shadow remains. Stand near it and cast <b>Shadow Soldier</b> to command: <b>Arise</b>.');
+    });
+    room.onMessage('shadowRecall',m=>{showName('BOSS SHADOW RECALLED');sysMsg('Your mana could no longer sustain the boss shadow.');});
     room.onMessage('dragonAbilityReject', m=>dragonAbilityRejected(m));
     room.onMessage('dragonAbilityResult', m=>dragonAbilityResolved(m));
     room.onMessage('dragonCare', m=>applyDragonCare(m));
@@ -749,6 +937,10 @@ function netAttachRoom(room,name,client){
     room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='profession'?'Equip <b>'+((JOBS[m.job]&&JOBS[m.job].name)||'Cook')+'</b> and reach Lv '+(m.level||1)+' for that recipe':'Crafting failed: missing server-side ingredients'); });
     room.onMessage('shopResult', m=>applyShopResult(m));
     room.onMessage('shopReject', m=>shopRejected(m));
+    room.onMessage('tavernDiceResult', m=>applyTavernDiceResult(m));
+    room.onMessage('tavernRouletteResult', m=>applyTavernRouletteResult(m));
+    room.onMessage('tavernBlackjackState', m=>applyTavernBlackjackState(m));
+    room.onMessage('tavernTokenResult', m=>applyTavernTokenResult(m));
     room.onMessage('landClaims', m=>applyLandClaims(m));
     room.onMessage('landClaimUpdate', m=>applyLandClaimUpdate(m));
     room.onMessage('landClaimResult', m=>applyLandClaimResult(m));
@@ -789,8 +981,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('furnaceStarted', m=>applyFurnaceStarted(m));
     room.onMessage('furnaceResult', m=>applyFurnaceResult(m));
     room.onMessage('furnaceReject', ()=>{ SFX.error(); sysMsg('Furnace transaction failed'); });
-    room.onMessage('fx', m=>netFx(m));
-    room.onMessage('dmgnum', m=>spawnDamageNumber(m));
+    room.onMessage('fx', m=>{COMBAT_FEEDBACK.showTelegraph(m);netFx(m);});
+    room.onMessage('dmgnum', m=>{COMBAT_FEEDBACK.confirmHit(m);camShake=Math.max(camShake,m&&m.crit?.16:.08);spawnDamageNumber(m);});
     room.onMessage('weaponIdentity',m=>{
       if(!m)return;
       if(m.kind==='momentum'){
@@ -807,6 +999,13 @@ function netAttachRoom(room,name,client){
         swCd=60;                                   // drive the passive's HUD cooldown
         sysMsg('<b>Second Wind</b> restores your strength');
         healingPlusVfx(player.pos.x, player.pos.y, player.pos.z, 1.05, 1.15);
+        if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('secondwind');
+        if(globalThis.BlockcraftAbilityScreen)globalThis.BlockcraftAbilityScreen.play('secondwind');
+        camShake=Math.max(camShake,.2);
+      }
+      if(m&&m.n<0&&(m.reason==='mote_regen'||m.reason==='mote_burst')){
+        healingPlusVfx(player.pos.x,player.pos.y+.1,player.pos.z,m.reason==='mote_burst'?1:.45,m.reason==='mote_burst'?1:.55);
+        COMPANIONS.familiarReaction('mote');
       }
       if(m&&m.n>0){COMBAT_FEEDBACK.showImpact(m);if(m.armor)COMBAT_FEEDBACK.syncArmor(m.armor);if(/^(flanker|quickshot|brute)(_arrow)?$/.test(m.reason||''))netBiomeHitFx(m.reason);}
       if(m&&m.reason==='mire_poison')biomeStatus.pulseVenom();
@@ -890,6 +1089,7 @@ function netRestoreProfile(m){
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
       S.path=['shadow','mage','guardian'].includes(m.S.path)?m.S.path:'';
     }
+    if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
     if(Array.isArray(m.inv)){
       for(let i=0;i<36;i++){
         const s=m.inv[i];
@@ -916,6 +1116,8 @@ function netRestoreProfile(m){
       if(DRAGON_TYPES[t] && !COMPANIONS.dragonUnlocks.includes(t)) COMPANIONS.dragonUnlocks.push(t);
     }
     COMPANIONS.familiarUnlocks = Array.isArray(m.familiarUnlocks) ? m.familiarUnlocks.filter(k=>['shade','fang','mote','sprite'].includes(k)) : [];
+    COMPANIONS.familiarXp=m.familiarXp;
+    COMPANIONS.familiarChallenges=m.familiarChallenges;
     COMPANIONS.activeFamiliar='';   // summon state isn't persisted; recall with K
     COMPANIONS.dragonCare={};
     if(m.dragonCare && typeof m.dragonCare==='object'){
@@ -941,6 +1143,7 @@ function netRestoreProfile(m){
     progressionFocus=PROGRESSION_FOCUS_STATES.includes(m.progressionFocus)?m.progressionFocus:'';
     ONBOARD.setSeen(m.firstPromotionSeen===true);
     applyServerNpcQuestChains(m.npcQuestChains);
+    systemIntroductions=Array.isArray(m.systemIntroductions)?m.systemIntroductions.filter(v=>typeof v==='string').slice(0,32):[];
     if(!quest||quest.source!=='guardian')quest=m.activeNpcQuest||null;
     if(m.aegisTrialReady&&!quest)quest={source:'guardian',type:'pvp_bounty',have:1,need:1,giver:'Aegis Guardian',role:'guardian',title:'Silent Bounty',gold:135+(S.lvl||1)*8,xp:130+(S.lvl||1)*12};
     regionalContract=clampRegionalContract(m.regionalContract);
@@ -949,10 +1152,16 @@ function netRestoreProfile(m){
     utilityLoadout=clampUtilityLoadout(m.utilityLoadout);
     removeEquippedArmorCopies();
     if(typeof m.gold==='number') gold=Math.max(0,m.gold|0);
+    if(typeof m.tavernTokens==='number') tavernTokens=Math.max(0,m.tavernTokens|0);
+    {const today=new Date().toISOString().slice(0,10);tavernTokenRemaining=m.tavernTokenDay===today?Math.max(0,100-(m.tavernTokenBoughtToday|0)):100;}
     serverFirstQuestComplete=m.firstQuestRewardClaimed===true;
     firstQuestRewardRequestPending=false;
     if(typeof m.highestGateRankCleared==='number') highestGateRankCleared=Math.max(-1,Math.min(4,m.highestGateRankCleared|0));
     discoveredIds.clear();if(Array.isArray(m.discoveries))for(const id of m.discoveries)if(typeof id==='string')discoveredIds.add(id);
+    claimedDiscoveryIds.clear();if(Array.isArray(m.claimedDiscoveries))for(const id of m.claimedDiscoveries)if(typeof id==='string')claimedDiscoveryIds.add(id);
+    hintedDiscoveryIds.clear();if(Array.isArray(m.cartographerHints))for(const id of m.cartographerHints)if(typeof id==='string')hintedDiscoveryIds.add(id);
+    cosmeticUnlocks=Array.isArray(m.cosmeticUnlocks)?m.cosmeticUnlocks.filter(v=>v==='cartographers_mantle'):[];
+    globalThis.BlockcraftTreasureMap=null;if(m.treasureMap&&Array.isArray(m.treasureMap.targets)){const stage=Math.max(0,m.treasureMap.stage|0),targetId=m.treasureMap.targets[stage];if(targetId){globalThis.BlockcraftTreasureMap={id:m.treasureMap.id,stage,total:m.treasureMap.targets.length,targetId,clue:'Follow the current ink mark and investigate with G.',rewardGold:m.treasureMap.rewardGold|0};hintedDiscoveryIds.add(targetId);}}
     if(Array.isArray(m.pos) && !onboardingActive){
       player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2]);
       player.vel.set(0,0,0);
@@ -960,10 +1169,15 @@ function netRestoreProfile(m){
     hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
     if(onboardingActive) prepareOnboardingStep();
     refreshHUD(); renderBars(); refreshPlayUi(); updateLandMinimap();
-    if(Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0) awardFirstVillagerQuestBonus();
+    if(m.firstQuestRewardClaimed===true&&Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0&&!firstQuestRewardPresentationSeen()){
+      rewardGain('gold',100,'Gold');
+      eventLog('First villager quest complete — server reward: +100 gold.');
+      showFirstVillagerReward(requestTownJobGuidance);
+    } else if(Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0) awardFirstVillagerQuestBonus();
     if(gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     syncLocalTutorialsToServer();
     startTownGuidance();
+    if(typeof refreshProgressionDirectorNotice==='function')refreshProgressionDirectorNotice();
     if(progressionFocus&&!ONBOARD.isSeen())setTimeout(()=>ONBOARD.showFirstPromotion(),80);
     eventLog((m.name||'Hunter')+' returned — progress restored');
     finishWorldLoading('profile');
@@ -984,6 +1198,7 @@ function applyAbilitySync(m){
 function abilityRejected(m){
   SFX.error();
   const i=Math.max(0,Math.min(2,(m&&m.slot)|0));
+  COMBAT_FEEDBACK.abilitySettled(i,false);
   abCd[i]=0;
   const r=(m&&m.reason)||'invalid';
   if(r==='mana') sysMsg('Not enough <b>mana</b>');
@@ -995,6 +1210,17 @@ function abilityRejected(m){
 }
 function abilityResolved(m){
   if(!m) return;
+  COMBAT_FEEDBACK.abilitySettled(m.slot,true);
+  if(m.action==='capture'){
+    if(m.captured){showName('ARISE · '+String((m.spirit&&m.spirit.name)||'SHADOW').toUpperCase());SFX.level();sysMsg('<b>Spirit captured.</b> '+((m.shadowArmy&&m.shadowArmy.length)||0)+' / '+(m.storage||0)+' shadows stored.');}
+    else if(m.reason==='storage')sysMsg('Your <b>shadow storage is full</b>.');
+    else if(m.reason==='boss_rank')sysMsg('That boss spirit is too powerful for your Hunter rank.');
+    else showName('THE SPIRIT RESISTED');
+  }else if(m.action==='deploy'){
+    if(m.deployed)showName('SHADOW ARMY · '+m.deployed+' DEPLOYED');
+    else if(m.reason==='empty')sysMsg('You have no captured shadows. Defeat an enemy, then command its spirit to <b>Arise</b>.');
+    else if(m.reason==='mana')sysMsg('Not enough <b>mana</b> to deploy your shadows.');
+  }
   if(typeof m.mp==='number') mp=Math.max(0,Math.min(maxMp(),m.mp));
   renderBars(); updateAbilityHUD();
 }
@@ -1220,6 +1446,7 @@ function playerAppearance(){
   look.armorId=armorSlot?armorSlot.id:0;
   look.armorType=armorSlot?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
   look.heldId=displayHeldId();
+  look.cosmetics=[...cosmeticUnlocks];
   return look;
 }
 function remoteAppearance(ref){
@@ -1227,6 +1454,7 @@ function remoteAppearance(ref){
   look.armorId=ref?(ref.armorId|0):0;
   look.armorType=ref&&GEAR_SYSTEM.ARMOR_ARCHETYPES[ref.armorType]?ref.armorType:'';
   look.heldId=ref?(ref.heldId|0):0;
+  look.cosmetics=String(ref&&ref.cosmetics||'').split(',').filter(v=>v==='cartographers_mantle');
   return look;
 }
 function equipmentKind(id){
@@ -1263,7 +1491,7 @@ function faceTexture(look){
     g.fillStyle='rgba(255,180,160,.35)'; g.fillRect(2,10,2,1); g.fillRect(12,10,2,1);
   });
 }
-const REPLICATION_VISUALS=createReplicationVisuals({NET,player});
+const REPLICATION_VISUALS=createReplicationVisuals({NET,player,familiarReaction:kind=>COMPANIONS.familiarReaction(kind)});
 const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate}=REPLICATION_VISUALS;
 
 const COMPANIONS=createCompanionSystem({
@@ -1283,12 +1511,15 @@ const COMPANIONS=createCompanionSystem({
   netSpawnProjectile,
   playerAppearance,
   remoteAppearance,
+  teamCol:(...args)=>SOCIAL.teamCol(...args),
+  teamName:(...args)=>SOCIAL.teamName(...args),
 });
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
 let appearancePreviewActive=false, meditationOwnedAppearance=false;
+let cosmeticUnlocks=[];
 const APPEARANCE_DUMMY_GROUND_OFFSET=-0.12;
 function localDisplayName(){
   return (document.getElementById('playername').value||'Hunter').slice(0,16);
@@ -1297,7 +1528,7 @@ function appearanceSignature(){
   const held=inv[selected]?inv[selected].id:0;
   const armor=armorSlot?armorSlot.id:0;
   const armorType=armorSlot&&ITEMS[armorSlot.id]&&ITEMS[armorSlot.id].armor?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
-  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp)].join('|');
+  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), cosmeticUnlocks.join(',')].join('|');
 }
 function buildAppearanceDummy(){
   const d={...makeRemoteAvatar(playerAppearance()), phase:Math.random()*10, sig:'', tag:null};

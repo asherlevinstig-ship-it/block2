@@ -8,9 +8,9 @@ export const PROGRESSION_ERRORS = Object.freeze({
   offer: 'That contract offer is no longer available',
 });
 
-export const PROGRESSION_FOCUS_STATES = Object.freeze(['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
-export const HUNTER_RANK_LEVELS = Object.freeze([1, 4, 8, 13, 19, 27]);
-export const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.12, 1.35, 1.7, 2.2, 2.8]);
+export const PROGRESSION_FOCUS_STATES = Object.freeze(['e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
+export const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
+export const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 export const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
 export const HUNTER_ACTIVITY_XP_WEIGHTS = Object.freeze({
   job_contract: 0.60,
@@ -39,7 +39,7 @@ export function nextHunterRankLevel(rank) {
 export function xpNeedForLevel(level) {
   const lvl = Math.max(1, level | 0);
   const rank = hunterRankIndexForLevel(lvl);
-  return Math.round(25 * Math.pow(lvl, 1.5) * HUNTER_RANK_XP_MULTIPLIERS[rank]);
+  return Math.round(12 * Math.pow(lvl, 1.35) * HUNTER_RANK_XP_MULTIPLIERS[rank]);
 }
 
 export function hunterActivityXpForLevel(level, weight = 1) {
