@@ -9,7 +9,7 @@ test('modular client reaches ready with every runtime module loaded', async ({ p
   await expect(page.locator('#game canvas')).toHaveCount(1);
   await expect(page.locator('html')).toHaveAttribute(
     'data-game-modules',
-    'world,dimensions,combat,hud,menus,networking,frame-loop',
+    'world,dimensions,recall,combat,hud,menus,networking,frame-loop',
   );
   const rewardHitTarget = await page.evaluate(() => {
     const win = document.getElementById('rewardwin');

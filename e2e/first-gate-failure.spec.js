@@ -30,6 +30,12 @@ test('a failed first Gate preserves progression and immediately offers a success
   await page.locator('#playername').fill('RetryHunter');
   await page.locator('#registerbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  for(const kind of ['move','arrows','jump','tree','craft','build','farm','eat','combat','subject','recall','finish']){
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe(kind);
+    expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
+  }
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
+  await page.locator('#trainingcontinue').click();
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareFirstGateFailure' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('The First Gate');

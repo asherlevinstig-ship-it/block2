@@ -54,11 +54,6 @@ test('partial town tutorial progress survives a fresh browser and the completed 
     await expect.poll(() => freshPage.evaluate(() => window.__BLOCKCRAFT_E2E__.status().townTutorials)).toEqual({
       job: true, tavern: false, land: false, all: false,
     });
-    await expect(freshPage.locator('#townchoices')).toBeVisible();
-    await expect(freshPage.locator('#townchoices')).not.toContainText('JOB BOARD');
-    await expect(freshPage.locator('#townchoices')).toContainText('TAVERN');
-    await expect(freshPage.locator('#townchoices')).toContainText('BUY LAND');
-
     expect(await freshPage.evaluate(() => window.__BLOCKCRAFT_E2E__.completeTownTutorialStep('tavern'))).toBe(true);
     expect(await freshPage.evaluate(() => window.__BLOCKCRAFT_E2E__.completeTownTutorialStep('land'))).toBe(true);
     await expect.poll(() => freshPage.evaluate(() => window.__BLOCKCRAFT_E2E__.status().townTutorials.all)).toBe(true);

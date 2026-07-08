@@ -18,9 +18,9 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await page.locator('#registerbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
 
-  for(let step=0;step<10;step++){
+  for(let step=0;step<12;step++){
     expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
-    if(step<9) await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingStep)).toBe(step+1);
+    if(step<11) await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingStep)).toBe(step+1);
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
   await expect(page.locator('#rewardpanel')).toContainText('TRAINING COMPLETE');
@@ -28,16 +28,18 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await page.locator('#trainingcontinue').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
     label:'Tutorial Guide',
-    text:'Follow the lit path to the Quest Giver',
+    text:'Accept Mara’s first quest',
   });
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('First Hands');
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('/6 to Mara Vale');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('gather logs');
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney',{action:'prepareFirstQuest'}));
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'claim'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
 
+  await expect(page.locator('#rewardwin')).toBeVisible();
+  await page.getByRole('button',{name:'CONTINUE',exact:true}).click();
   await expect(page.locator('#pathselect')).toBeVisible();
   await page.locator('.pathselect-card[data-path="shadow"]').click();
   await expect(page.locator('#awakeningwin')).toBeVisible();

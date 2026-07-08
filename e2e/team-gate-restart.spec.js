@@ -40,6 +40,12 @@ test('team Gate reconnect and restart recovery refunds only the key owner', asyn
       register(page, 'team_owner_' + suffix, 'KeyOwner'),
       register(member, 'team_member_' + suffix, 'Teammate'),
     ]);
+    for (const kind of ['move','arrows','jump','tree','craft','build','farm','eat','combat','subject','recall','finish']) {
+      await expect.poll(() => member.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe(kind);
+      expect(await member.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
+    }
+    await expect.poll(() => member.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
+    await member.locator('#trainingcontinue').click();
 
     const teamName = 'Restart ' + suffix;
     await page.evaluate(name => window.__BLOCKCRAFT_E2E__.send('teamCreate', { name }), teamName);

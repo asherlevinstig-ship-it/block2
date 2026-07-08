@@ -369,3 +369,5 @@ gates, land claims, incubations, nests, teams, guilds, world progress). Two back
 **FirebaseStore** (`STORE=firebase`). Every persisted field is sanitized on the way in;
 the client `save` is rate-limited, size-capped, and never trusted for economy/identity.
 See the README's **Persistence** section for the full boot/join/save flow.
+Operational requirements and disaster recovery procedures live in
+[`docs/DEPLOYMENT.md`](DEPLOYMENT.md).

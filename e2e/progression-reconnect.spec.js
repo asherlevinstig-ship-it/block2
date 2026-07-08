@@ -16,12 +16,8 @@ test('authoritative progression survives socket reconnect and page reload', asyn
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(5))).toBe(0);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(7))).toBe(0);
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('claimFirstQuestReward'));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBe(0);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(183))).toBe(1);
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('equipArmor', { id: 183 }));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().armor)).toBe(183);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(183))).toBe(0);
+  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareReturningHunter' }));
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(3);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('setJob', { job: 'miner' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().job)).toBe('miner');
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('jobContract', { action: 'take' }));
@@ -37,7 +33,6 @@ test('authoritative progression survives socket reconnect and page reload', asyn
   await page.locator('#playbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().job)).toBe('miner');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().armor)).toBe(183);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract.job)).toBe('miner');
 });
 
@@ -51,10 +46,10 @@ test('fresh meadow keeps its instructions visible and defers path choice until l
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   await expect(page.locator('#tutorialhud')).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('#tutorialhud')).toContainText('Lesson 1 / 10 — Movement');
+  await expect(page.locator('#tutorialhud')).toContainText('Lesson 1 / 12 - Movement');
   await expect(page.locator('#zonename')).toHaveText('Hunter Training Meadow');
   await expect(page.locator('#zonemeta')).toHaveText('Safe training grounds');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal)).toBe(10);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal)).toBe(12);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe('move');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('');
 

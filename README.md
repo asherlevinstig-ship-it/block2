@@ -169,7 +169,9 @@ adapter (`server/store.js`) sits behind four calls — `loadWorldEdits`,
   and either `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account
   key or `FIREBASE_SERVICE_ACCOUNT` containing the JSON inline. World edits
   are sharded into `worlds/main/chunks/{cx_cz}` documents (never near the
-  1MB Firestore limit); profiles live at `players/{accountId}`.
+  1MB Firestore limit); profiles live at `players/{accountId}`. If Firebase
+  cannot initialize, production startup fails closed; the JSON fallback is
+  development-only.
 
 Identity uses first-party accounts with scrypt-hashed passwords. Successful
 login creates a random server-side session referenced by an HttpOnly,
@@ -177,6 +179,15 @@ login creates a random server-side session referenced by an HttpOnly,
 uses the server-issued account ID as the profile key; clients cannot select or
 forge profile ownership. Sessions last seven days and are invalidated by a
 server restart or explicit logout.
+
+Production startup requires an HTTPS `PUBLIC_URL`, an explicit `TRUST_PROXY`
+hop count/IP/subnet, and an explicit writable `DATA_DIR`. It rejects development
+cheats and test modes, unsupported storage backends, unreadable Firebase
+credentials, malformed service-account secrets, and data paths that cannot
+complete an atomic write/rename/delete probe.
+
+See [Deployment and recovery](docs/DEPLOYMENT.md) for the production topology,
+environment checklist, release procedure, and JSON/Firebase backup and restore runbooks.
 
 Flow: on boot the room replays saved edits into the deterministic world; on
 join the server loads your profile, spawns you at your last overworld
@@ -227,6 +238,7 @@ and the sim rate live in `GameRoom.js`.
 npm test               # authority, authentication, client-module, progression-balance, and state-cluster unit tests
 npm run test:e2e       # browser progression, socket reconnect, and reload restoration
 npm run test:integration   # boots a room and runs the join → play → save round-trip
+npm run test:load      # fills one room with 16 clients and stresses movement, combat, saves, and edits
 ```
 
 The unit suite is overwhelmingly **anti-cheat and authority** coverage: forged saves can't grant

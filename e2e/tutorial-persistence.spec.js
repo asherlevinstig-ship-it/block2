@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 
 const BASE_URL = 'http://127.0.0.1:2607';
 const TUTORIALS = {
-  onboarding: 7, ability: 2, intro: 1, gate: 1, townJob: 0, townTavern: 0, townLand: 0,
+  onboarding: 7, ability: 2, intro: 1, gate: 1, townJob: 0, townTavern: 0, townLand: 0, familiar: 0,
 };
 
 test.afterEach(async ({ page }) => {
@@ -61,7 +61,7 @@ test('server tutorial milestones restore a returning hunter in a fresh browser',
       tutorials: TUTORIALS,
     });
     expect(await freshPage.evaluate(() => document.body.classList.contains('onboarding'))).toBe(false);
-    await expect(freshPage.locator('#tutorialhud')).not.toContainText('Lesson 1 / 10');
+    await expect(freshPage.locator('#tutorialhud')).not.toContainText('Lesson 1 / 12');
     await expect(freshPage.locator('#zonename')).toHaveText('Town of Beginnings');
     await expect(freshPage.locator('#awakeningwin')).toBeHidden();
     expect(await freshPage.evaluate(() => ({

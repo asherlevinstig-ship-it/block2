@@ -85,6 +85,9 @@ handler — they're short and grouped by system in `rooms/*.mixin.js`.
 | `renameDragon` | rename a bonded dragon |
 | `mount` / `dismount` | mount a horse or unlocked dragon |
 | `bindFamiliar` / `summonFamiliar` / `dismissFamiliar` | familiar lifecycle |
+| `familiarBound` / `familiarSummoned` / `familiarDismissed` / `familiarReject` | authoritative familiar lifecycle results |
+| `shadeStep` | request Shade's server-authoritative Dark Passage movement |
+| `shadeStepResult` / `shadeStepReject` | authoritative Dark Passage position/cooldown result |
 
 ### Teams & guilds
 | Message | Purpose |
