@@ -187,7 +187,7 @@ function buildRoadNetwork(setBlock) {
   }
   return roadBreadcrumbSpecs();
 }
-const SMALL_DISCOVERY_TYPES = ['rare_plant','buried_chest','lore_tablet','monster_nest','fishing_pool','ore_outcrop','traveling_merchant','puzzle_shrine'];
+const SMALL_DISCOVERY_TYPES = ['rare_plant','buried_chest','lore_tablet','monster_nest','fishing_pool','ore_outcrop','traveling_merchant','puzzle_shrine','rain_bloom','storm_crystal','sun_dial'];
 function smallDiscoverySpecs() {
   const out = [], landmarks = regionalLandmarkSpecs(), roads = roadNetworkSpecs(); let n = 0;
   const segDist = (px,pz,r) => { const vx=r.b.x-r.a.x,vz=r.b.z-r.a.z,l2=vx*vx+vz*vz; const t=Math.max(0,Math.min(1,((px-r.a.x)*vx+(pz-r.a.z)*vz)/l2)); return Math.hypot(px-(r.a.x+vx*t),pz-(r.a.z+vz*t)); };
@@ -220,6 +220,12 @@ function buildSmallDiscoveries(setBlock){
       for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){const h=3-Math.min(2,Math.abs(ox)+Math.abs(oz));for(let k=1;k<=h;k++){const ring=Math.min(3,Math.floor(Math.hypot(x-TOWN.TC,z-TOWN.TC)/100));const roll=hash2(x+ox*31+k,z+oz*47);setBlock(x+ox,y+k,z+oz,roll>.88?(ring>=3?B.DIAMOND_ORE:ring>=2?B.IRON_ORE:B.COAL_ORE):B.STONE);}}
     }else if(s.type==='traveling_merchant'){
       setBlock(x,y+1,z,B.CAMPFIRE);for(const ox of [-2,2]){setBlock(x+ox,y+1,z-2,B.LOG);setBlock(x+ox,y+2,z-2,B.LOG);}for(let ox=-2;ox<=2;ox++)setBlock(x+ox,y+3,z-2,B.PLANKS);setBlock(x,y+1,z-2,B.CHEST);
+    }else if(s.type==='rain_bloom'){
+      setBlock(x,y+1,z,B.LEAVES);setBlock(x,y+2,z,B.WATER);for(const [ox,oz] of [[1,0],[-1,0],[0,1],[0,-1]])setBlock(x+ox,y+1,z+oz,B.LEAVES);
+    }else if(s.type==='storm_crystal'){
+      for(let h=1;h<=4;h++)setBlock(x,y+h,z,h===4?B.DIAMOND_ORE:B.GLASS);for(const [ox,oz] of [[1,0],[-1,0],[0,1],[0,-1]])setBlock(x+ox,y+1,z+oz,B.IRON_ORE);
+    }else if(s.type==='sun_dial'){
+      for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)setBlock(x+ox,y,z+oz,B.SAND);setBlock(x,y+1,z,B.BRICK);setBlock(x,y+2,z,B.LOG);setBlock(x+1,y+1,z,B.TORCH);
     }else{
       for(const ox of [-2,0,2]){setBlock(x+ox,y,z,B.BRICK);setBlock(x+ox,y+1,z,B.BRICK);setBlock(x+ox,y+2,z,x+ox===s.target.x?B.TORCH:B.LANTERN);}setBlock(x,y,z+2,B.BRICK);
     }

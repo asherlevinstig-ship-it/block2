@@ -14,7 +14,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
-const { Client } = require('colyseus.js');
+const { Client } = require('@colyseus/sdk');
 
 const PORT = 2599;
 const ENDPOINT = 'ws://localhost:' + PORT;
@@ -325,6 +325,7 @@ async function main() {
       const profileMsgs = [];
       D2.onMessage('profile', m => profileMsgs.push(m));
       D2.onMessage('*', () => {});
+      D2.send('profileRequest', {});
       const prof = await waitFor(() => profileMsgs[0], 'a profile message from the overworld room on rejoin');
       const earnedXp = (prof.S && prof.S.xp | 0) || 0;
       const earnedLevels = (prof.S && prof.S.lvl | 0) || 1;

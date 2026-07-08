@@ -664,6 +664,11 @@ class DungeonMixin {
         // vault / treasure rooms post a tougher elite standing guard over the loot
         const elite = (type === 'vault' || type === 'treasure') && i === 0;
         const id = this.addDungeonMob(g.id, s.x, s.z, kind, trashHp(kind, elite), trashDmg(elite), trashSpd(kind), d.world, g.rank);
+        // The first Gate teaches the undead family in readable pairs: skeletons
+        // hold range while alternating zombie roles pressure or punish greed.
+        if (g.rank === 0 && kind === 'zombie' && this.mobMeta[id]) {
+          this.mobMeta[id].undeadRole = i % 2 === 0 ? 'charger' : 'graveguard';
+        }
         if (elite) {
           if (this.mobMeta[id]) this.mobMeta[id].elite = true;
           const em = this.state.mobs.get(id);
@@ -907,7 +912,7 @@ class DungeonMixin {
     p.dim = 'overworld';
     p.x = W.TOWN.TC + .5;
     p.y = W.TOWN.G + 2;
-    p.z = W.TOWN.TC + 7.5;
+    p.z = W.TOWN.TC + 14.5;
     const token = this.tokens.get(sid);
     const prof = token && this.profiles.get(token);
     if (prof) {

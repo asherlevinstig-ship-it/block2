@@ -748,7 +748,7 @@ class EventsMixin {
       : this.announceParkourEvent(now);
   }
   eventReturnPos(p) {
-    if (!p) return { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 7.5 };
+    if (!p) return { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 };
     return { x: p.x, y: p.y, z: p.z };
   }
   teleportEventPlayer(client, pos, reason, evArg) {

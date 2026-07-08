@@ -9,7 +9,7 @@ const Module = require('module');
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
-  if (request === 'colyseus') {
+  if (request === '@colyseus/core') {
     return {
       Room: class {
         constructor() {
@@ -21,7 +21,8 @@ Module._load = function patchedLoad(request, parent, isMain) {
         onMessage(type, fn) { this._handlers.set(type, fn); }
         broadcast() {}
       },
-      matchMaker: { isGracefullyShuttingDown: false },
+      matchMaker: { state: 1, MatchMakerState: { SHUTTING_DOWN: 2 } },
+      CloseCode: { CONSENTED: 4000 },
     };
   }
   if (request === '@colyseus/schema') {
@@ -37,6 +38,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 const W = require('../world');
 const JOB_SYSTEM = require('../../shared/job-system');
 const GEAR_SYSTEM = require('../../shared/gear-system');
+const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
 const AI = require('../ai');
 const D = require('../dungeon');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
@@ -44,7 +46,7 @@ const { DungeonRoom } = require('../rooms/DungeonRoom');
 const { handOff, takeHandoff } = require('../rooms/dungeon-handoff');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
-const { BIOME_HOSTILE, RANGED_ENEMY_KINDS } = require('../rooms/constants');
+const { BIOME_HOSTILE, RANGED_ENEMY_KINDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 
@@ -81,6 +83,9 @@ const I = {
   TRAIL_RATION: 205,
   FEAST_PLATTER: 206,
   GEODE: 207,
+  RAINWAKE_PETAL: 208,
+  STORMGLASS: 209,
+  SOLAR_GLYPH: 210,
   FORAGE_CHARM: 201,
   RIVER_FISH: 199,
   SHARD_MINOR: 130,
@@ -193,6 +198,10 @@ function makeRoom() {
   room.eventInstances = new Map();
   room.activeEventInstanceId = '';
   room.tutorialReturns = new Map();
+  room.deathLimbo = new Map();
+  room.deathDrops = new Map();
+  room.recallSubjects = new Map();
+  room.deathDropSeq = 0;
   room.animalSpawnAcc = 0;
   room.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
   room.teamMgr = new (require('../teams').TeamManager)(5);
@@ -389,12 +398,12 @@ test('stat spending is an atomic server transaction', () => {
 
 test('crossing an XP rank threshold emits one authoritative promotion', () => {
   const room = makeRoom(), client = makeClient('rank_up_owner');
-  const { prof } = seedPlayer(room, client, { lvl: 3 });
-  prof.S.xp = room.xpNeed(3) - 10;
+  const { prof } = seedPlayer(room, client, { lvl: 10 });
+  prof.S.xp = room.xpNeed(10) - 10;
 
   const result = room.grantHunterXp(prof, 10, client, 'town_quest');
   assert.deepEqual(result, { granted: 10, levels: 1, rankUp: true, fromRank: 0, rank: 1 });
-  assert.equal(prof.S.lvl, 4);
+  assert.equal(prof.S.lvl, 11);
   assert.equal(prof.S.pts, 3);
   assert.deepEqual(client.sent.at(-1), {
     type: 'rankUp',
@@ -404,10 +413,10 @@ test('crossing an XP rank threshold emits one authoritative promotion', () => {
       rankName: 'D-Rank Hunter',
       gateRank: 1,
       gateRankName: 'D-Rank Gates',
-      level: 4,
+      level: 11,
       levels: 1,
       statPoints: 3,
-      nextRankLevel: 8,
+      nextRankLevel: 21,
       source: 'town_quest',
     },
   });
@@ -435,7 +444,7 @@ test('jobs and repeatable contracts are created progressed and claimed only by t
   assert.equal(prof.gold, 30);
   assert.equal(prof.jobXp, 20);
   assert.equal(prof.S.lvl, 2);
-  assert.equal(prof.S.xp, 10, 'contract Hunter XP uses the shared level-up transaction');
+  assert.equal(prof.S.xp, 23, 'contract Hunter XP uses the shared level-up transaction');
 });
 
 test('Hunter career and trade professions keep independent XP while one profession is equipped', () => {
@@ -788,6 +797,31 @@ test('NPC chain acceptance progress rewards and milestones are server-owned', ()
   assert.equal(forged.activeNpcQuest, null);
 });
 
+test('town quest chains award and verify Fang, Mote, and Sprite acquisition items', () => {
+  const paths = [
+    { giver:'Pell Graywatch', objective:'kill', reward:I.FANG_TOTEM, familiar:'fang' },
+    { giver:'Pippa Hearth', objective:'fetch', reward:I.MOTE_CHARM, familiar:'mote' },
+    { giver:'Liss Barley', objective:'fetch', reward:I.FORAGE_CHARM, familiar:'sprite' },
+  ];
+  for (const [index, path] of paths.entries()) {
+    const room = makeRoom(), client = makeClient('familiar_path_' + index);
+    const { prof } = seedPlayer(room, client);
+    prof.npcQuestChains[path.giver] = 3;
+    const quest = room.buildNpcQuest(prof, path.giver, 'town');
+    assert.equal(quest.type, path.objective);
+    assert.equal(quest.rewardItems.some(it => it.id === path.reward), true);
+    if (quest.type === 'kill') quest.have = quest.need;
+    else prof.inv = [{ id:quest.item, count:quest.need }];
+    prof.activeNpcQuest = quest;
+    assert.equal(room.npcQuestReady(client, quest), true, path.giver + ' objective is claimable');
+    assert.equal(room.handleNpcQuest(client, { action:'claim' }), true, path.giver + ' claim succeeds');
+    assert.equal(itemCount(prof, path.reward), 1, path.giver + ' awards the binding item');
+    const bondQuest = room.buildNpcQuest(prof, path.giver, 'town');
+    assert.equal(bondQuest.type, 'familiar');
+    assert.equal(bondQuest.familiar, path.familiar);
+  }
+});
+
 test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate', () => {
   const room = makeRoom(), client = makeClient('mara_path_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });
@@ -828,18 +862,8 @@ test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate'
   assert.equal(prof.activeNpcQuest.have, 1);
   room.awardLoot(client, { xp: 70, gold: 0, items: [] });
   room.handleNpcQuest(client, { action: 'claim' });
-  assert.equal(prof.S.lvl, 4, 'the E-rank dungeon and Mara claim earn D-Rank through XP');
-  assert.equal(prof.progressionFocus, 'first_promotion_job');
-  assert.equal(prof.firstPromotionSeen, false);
-  assert.equal(room.handleAckFirstPromotion(client), true);
-  assert.equal(prof.firstPromotionSeen, true);
-  room.handleSetJob(client, { job: 'adventurer' });
-  assert.equal(prof.progressionFocus, 'first_promotion_contract');
-  room.handleJobContract(client, { action: 'take' });
-  assert.equal(prof.progressionFocus, '');
-  assert.equal(prof.jobContract.title, "Mara's Field Work");
-  assert.equal(prof.jobContract.type, 'kill');
-  assert.equal(prof.jobContract.need, 3);
+  assert.equal(prof.S.lvl, 5, 'the first Gate advances E-rank without skipping its ten-level journey');
+  assert.equal(prof.progressionFocus, 'e_rank_climb');
 });
 
 test('first quest bonus requires authoritative Mara completion and is single-claim', () => {
@@ -869,6 +893,40 @@ test('combat path is chosen once only after the authoritative level 2 unlock', (
   assert.equal(prof.S.path, 'shadow');
   room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
+});
+
+test('C-rank specialization is server-owned, path-valid, and permanent',()=>{
+  const room=makeRoom(),client=makeClient('specialist');
+  const {prof}=seedPlayer(room,client,{lvl:21});prof.S.path='shadow';
+  room.setAbilitySpecialization(client,'warden');
+  assert.equal(prof.abilitySpec,'','a specialization from another path is rejected');
+  room.setAbilitySpecialization(client,'commander');
+  assert.equal(prof.abilitySpec,'commander');
+  assert.equal(client.sent.some(e=>e.type==='profile'),false,'choosing a specialization must not trigger a destructive full-profile restore');
+  room.setAbilitySpecialization(client,'assassin');
+  assert.equal(prof.abilitySpec,'commander','the permanent choice cannot be replaced');
+});
+
+test('failed Shadow Army casts preserve cooldown and ineligible spirits',()=>{
+  const room=makeRoom(),client=makeClient('shadow_fail');
+  const {prof}=seedPlayer(room,client,{lvl:8,x:20,z:20});prof.S.path='shadow';prof.S.int=20;prof.shadowArmy=[];room.clients=[client];
+  room.handleAbility(client,{path:'shadow',slot:2});
+  let st=room.abilityState.get(client.sessionId);
+  assert.equal(st.cds['shadow:2'],0,'an empty army does not consume the summon cooldown');
+  prof.shadowArmy=Array.from({length:10},(_,i)=>({id:'s'+i,kind:'zombie',name:'Zombie',rank:0,boss:false,elite:false,level:1,capturedAt:1}));
+  room.shadowSpirits.set(client.sessionId,{id:'offer',kind:'zombie',name:'Zombie',rank:0,boss:false,elite:false,level:1,x:20,y:10,z:20,dgn:'',expiresAt:Date.now()+10000});
+  room.handleAbility(client,{path:'shadow',slot:2});st=room.abilityState.get(client.sessionId);
+  assert.equal(room.shadowSpirits.has(client.sessionId),true,'full storage leaves the spirit available');
+  assert.equal(st.cds['shadow:2'],0,'a blocked capture does not consume cooldown');
+});
+
+test('Arcanist can cast using its discounted server mana and cooldown',()=>{
+  const room=makeRoom(),client=makeClient('arcanist');
+  const {prof}=seedPlayer(room,client,{lvl:21,x:20,z:20});prof.S.path='mage';prof.abilitySpec='arcanist';prof.S.int=20;room.clients=[client];
+  const st=room.ensureAbilityState(client);st.mp=20;st.last=Date.now();
+  room.handleAbility(client,{path:'mage',slot:1});
+  assert.ok(st.mp>1.2&&st.mp<1.4,'22 MP Frost Nova costs 18.7 MP without passive regeneration');
+  assert.ok(st.cds['mage:1']-Date.now()<=11900,'14s cooldown is reduced to about 11.9s');
 });
 
 test('utility loadout can equip only server-earned utilities', () => {
@@ -1190,6 +1248,7 @@ test('Shade familiar: a sigil binds it, summon is gated on the bind, and Guardin
   // now summon works
   room.handleSummonFamiliar(client, { kind: 'shade' });
   assert.equal(p.familiar, 'shade');
+  assert.equal(client.sent.some(e => e.type === 'familiarSummoned' && e.msg.kind === 'shade'), true);
 
   // Guarding Shade reduces incoming damage vs. no familiar (read the actual dealt damage from the 'hurt' msg)
   const hurtDmg = (raw) => {
@@ -1205,6 +1264,60 @@ test('Shade familiar: a sigil binds it, summon is gated on the bind, and Guardin
 
   // unlocks sanitize/persist; junk dropped
   assert.deepEqual(sanitizeProfile({ familiarUnlocks: ['shade', 'bogus', 'shade'] }).familiarUnlocks, ['shade']);
+});
+
+test('shared familiar tuning drives server values and reaches the advertised final tier', () => {
+  const levels = FAMILIAR_SYSTEM.TIER_LEVELS;
+  assert.deepEqual(levels.map(shadeMitigation), [...FAMILIAR_SYSTEM.SHADE_MITIGATION]);
+  assert.deepEqual(levels.map(fangDamage), [...FAMILIAR_SYSTEM.FANG_DAMAGE]);
+  assert.deepEqual(levels.map(moteRegen), [...FAMILIAR_SYSTEM.MOTE_REGEN]);
+  assert.deepEqual(levels.map(spriteForageChance), [...FAMILIAR_SYSTEM.SPRITE_CHANCE]);
+  assert.equal(shadeMitigation(21), .25);
+  assert.equal(fangDamage(21) / (FAMILIAR_SYSTEM.FANG_CD_MS / 1000) > 15, true, 'top Fang sustains about 15.3 DPS while in range');
+  assert.deepEqual(FAMILIAR_SYSTEM.SHADE_STEP_CHARGES, [0, 0, 1, 2, 3]);
+  assert.equal(FAMILIAR_SYSTEM.fangStrikes(21), 3);
+  assert.equal(FAMILIAR_SYSTEM.moteBurstCooldown(21), 12000);
+  assert.equal(FAMILIAR_SYSTEM.spriteBonusDrops(21), 2);
+});
+
+test('familiar Bond XP is independent, server-owned, and requires an active matching familiar', () => {
+  const room=makeRoom(), client=makeClient('bond_xp');
+  const {prof}=seedPlayer(room,client,{lvl:99}); room.clients=[client];
+  prof.familiarUnlocks=['shade','fang']; const p=room.state.players.get(client.sessionId);
+  assert.equal(room.familiarPowerLevel(client,'shade'),1,'Hunter level does not raise familiar tier');
+  assert.equal(room.awardFamiliarXp(client,'shade',100,'forged_idle'),0,'dismissed familiars earn nothing');
+  p.familiar='fang';
+  assert.equal(room.awardFamiliarXp(client,'shade',100,'wrong_action'),0,'inactive familiars earn nothing');
+  assert.equal(room.awardFamiliarXp(client,'fang',100,'pack_attack'),100);
+  assert.equal(room.familiarPowerLevel(client,'fang'),6);
+  assert.equal(p.familiarTier,1);
+  const merged=mergeClientSave(prof,{familiarXp:{fang:999999}});
+  assert.equal(merged.familiarXp.fang,100,'client profile saves cannot forge Bond XP');
+  assert.equal(client.sent.some(e=>e.type==='familiarBond'&&e.msg.xp===100),true);
+});
+
+test('daily Bond Challenges complete once and repetitive awards diminish', () => {
+  const room=makeRoom(),client=makeClient('bond_daily');const {prof}=seedPlayer(room,client);room.clients=[client];
+  prof.familiarUnlocks=['shade'];const p=room.state.players.get(client.sessionId);p.familiar='shade';
+  const day=FAMILIAR_SYSTEM.dayKey(),def=FAMILIAR_SYSTEM.dailyChallenge('shade',day);
+  const times=def.metric==='count'?def.need:1, value=def.metric==='count'?8:def.need;
+  for(let i=0;i<times;i++)room.awardFamiliarXp(client,'shade',value,def.reason);
+  assert.equal(prof.familiarChallenges.shade.claimed,true);
+  const completedXp=prof.familiarXp.shade;
+  room.awardFamiliarXp(client,'shade',value,def.reason);
+  assert.equal(prof.familiarXp.shade-completedXp<value+FAMILIAR_SYSTEM.DAILY_CHALLENGE_REWARD,true,'daily reward cannot repeat');
+  room.familiarXpPace.clear();const gains=[];
+  for(let i=0;i<41;i++)gains.push(room.awardFamiliarXp(client,'shade',8,'pacing_probe'));
+  assert.deepEqual([gains[0],gains[20],gains[40]],[8,4,2]);
+});
+
+test('familiar telemetry reports hourly pacing, diminishing pressure, and tier distribution', () => {
+  const room=makeRoom(),client=makeClient('bond_telemetry');const {prof}=seedPlayer(room,client);room.clients=[client];
+  prof.familiarUnlocks=['fang'];prof.familiarXp.fang=300;room.state.players.get(client.sessionId).familiar='fang';
+  room.awardFamiliarXp(client,'fang',2,'pack_attack');
+  const report=room.familiarTelemetrySnapshot(client);
+  assert.equal(report.byKind.fang.xp,2);assert.equal(report.byKind.fang.actions,1);
+  assert.equal(report.tiers.fang[2]>=1,true);assert.equal(report.windowMs,3600000);
 });
 
 test('Fang familiar: a totem binds it, summon is gated, and it bites the nearest hostile on cooldown', () => {
@@ -1279,6 +1392,131 @@ test('Sprite familiar: a charm binds it and summon is gated on the bind', () => 
   assert.equal(itemCount(prof, I.FORAGE_CHARM), 0);
   room.handleSummonFamiliar(client, { kind: 'sprite' });
   assert.equal(p.familiar, 'sprite');
+
+  // Sprite applies its advertised gathering bonus to server-authored mining rewards.
+  let grant = null;
+  room.awardGrant = (_client, value) => { grant = value; };
+  const random = Math.random; Math.random = () => 0;
+  try { room.awardMine(client, W.B.DIRT, 0, p.x, p.y, p.z); } finally { Math.random = random; }
+  assert.equal(grant.items[0].count, 2);
+
+  room.handleDismissFamiliar(client);
+  assert.equal(p.familiar, '');
+  assert.equal(client.sent.some(e => e.type === 'familiarDismissed'), true);
+});
+
+test('Shade shadow-step is server-authoritative, tier-gated, collision-aware, and cooldown-limited', () => {
+  const room = makeRoom();
+  const client = makeClient('shade_stepper');
+  const { prof } = seedPlayer(room, client, { lvl: 11 });
+  room.clients = [client]; room.sendSpace = () => {};
+  room.spaceSolid = () => () => false;
+  prof.familiarUnlocks = ['shade'];
+  prof.familiarXp.shade = 300;
+  const p = room.state.players.get(client.sessionId);
+  p.lvl = 11; p.familiar = 'shade'; p.x = 100; p.z = 100;
+
+  room.handleShadeStep(client, { x: 1, z: 0 });
+  assert.equal(p.x > 106 && p.x < 107, true);
+  assert.equal(client.sent.some(e => e.type === 'shadeStepResult'), true);
+  const steppedX = p.x;
+
+  room.handleShadeStep(client, { x: 1, z: 0 });
+  assert.equal(p.x, steppedX);
+  assert.equal(client.sent.some(e => e.type === 'shadeStepReject' && e.msg.reason === 'cooldown'), true);
+
+  room.shadeStepCd.clear(); prof.familiarXp.shade=0;
+  room.handleShadeStep(client, { x: 1, z: 0 });
+  assert.equal(p.x, steppedX);
+  assert.equal(client.sent.some(e => e.type === 'shadeStepReject' && e.msg.reason === 'tier'), true);
+});
+
+test('higher Shade tiers store multiple personal shadow jumps without ally targeting', () => {
+  const room=makeRoom(), client=makeClient('shade_charges');
+  const {prof}=seedPlayer(room,client,{lvl:21}); room.clients=[client]; room.sendSpace=()=>{}; room.spaceSolid=()=>()=>false;
+  prof.familiarUnlocks=['shade']; prof.familiarXp.shade=1400; const p=room.state.players.get(client.sessionId); p.lvl=21; p.familiar='shade'; p.x=100; p.z=100;
+  room.handleShadeStep(client,{x:1,z:0}); room.handleShadeStep(client,{x:1,z:0}); room.handleShadeStep(client,{x:1,z:0});
+  assert.equal(p.x>125, true, 'three tier-five jumps use the longer personal range');
+  assert.equal(client.sent.filter(e=>e.type==='shadeStepResult').length,3);
+  room.handleShadeStep(client,{x:1,z:0,ally:'forged-target'});
+  assert.equal(client.sent.some(e=>e.type==='shadeStepReject'&&e.msg.reason==='cooldown'),true);
+});
+
+test('familiar lifecycle dismisses on death, suspends during locked travel, and clears runtime state', () => {
+  const room = makeRoom();
+  const client = makeClient('familiar_lifecycle');
+  const { prof } = seedPlayer(room, client, { lvl: 11 });
+  room.clients = [client]; room.sendSpace = () => {};
+  prof.familiarUnlocks = ['shade', 'fang'];
+  const p = room.state.players.get(client.sessionId); p.lvl = 11; p.familiar = 'shade';
+  room.playerHunger.get(client.sessionId).hunger = 0;
+
+  room.hurtPlayer(client, 99999, 'test');
+  assert.equal(p.familiar, '', 'death dismisses the active familiar');
+  assert.equal(client.sent.some(e => e.type === 'familiarDismissed' && e.msg.reason === 'death'), true);
+  assert.equal(room.playerHunger.get(client.sessionId).hunger, 100, 'death restores hunger to full');
+  assert.equal(client.sent.some(e => e.type === 'hunger' && e.msg.hunger === 100), true);
+
+  p.familiar = 'fang';
+  room.state.mobs.set('travel_target', { x:p.x+2, y:p.y, z:p.z, yaw:0, hp:30, maxHp:30, kind:'zombie', dgn:p.dgn||'', state:'' });
+  room.mobMeta.travel_target = room.freshMeta(p.x+2, p.z, 3, 1.5, 'zombie', 0, true);
+  room.skyshipPassengers = new Map([[client.sessionId, { token: prof.token || 'test' }]]);
+  room.tickFangCombat(Date.now());
+  assert.equal(room.state.mobs.get('travel_target').hp, 30, 'travel suspension disables familiar mechanics');
+  room.skyshipPassengers.delete(client.sessionId);
+  room.tickFangCombat(Date.now());
+  assert.equal(room.state.mobs.get('travel_target').hp < 30, true);
+
+  room.moteAcc = new Map([[client.sessionId, .5]]); room.shadeStepCd = new Map([[client.sessionId, Date.now()+5000]]);
+  room.clearFamiliarRuntime(client.sessionId);
+  assert.equal(room.moteAcc.has(client.sessionId), false);
+  assert.equal(room.shadeStepCd.has(client.sessionId), false);
+});
+
+test('death limbo quizzes inventory and equipped armor, dropping failed answers publicly', () => {
+  const room = makeRoom();
+  const client = makeClient('limbo');
+  const { prof } = seedPlayer(room, client, {
+    hp: 4, x: 40, y: 16, z: 40,
+    inv: [{ id: I.BREAD, count: 2 }, { id: I.IRON_SWORD, count: 1, dur: 123, rarity: 'rare' }],
+  });
+  prof.armor = { id: I.IRON_ARMOR, count: 1, dur: 321, armorType: 'scout', rarity: 'epic' };
+  room.state.players.get(client.sessionId).armorId = I.IRON_ARMOR;
+  room.state.players.get(client.sessionId).armorType = 'scout';
+  room.clients = [client];
+  const broadcasts = [];
+  room.sendSpace = (dgn, type, msg) => broadcasts.push({ dgn, type, msg });
+
+  room.hurtPlayer(client, 99, 'zombie');
+
+  const start = client.sent.find(e => e.type === 'deathLimboStart').msg;
+  assert.equal(start.total, 3);
+  assert.equal(prof.inv[0], null);
+  assert.equal(prof.inv[1], null);
+  assert.equal(prof.armor, null);
+  assert.equal(room.state.players.get(client.sessionId).armorId, 0);
+
+  const first = room.deathLimbo.get(client.sessionId).items[0];
+  room.handleDeathLimboAnswer(client, { id: start.id, answer: first.question.correct });
+  assert.equal(prof.inv[0].id, I.BREAD);
+  assert.equal(prof.inv[0].count, 2);
+
+  const next = client.sent.findLast(e => e.type === 'deathLimboQuestion').msg;
+  const second = room.deathLimbo.get(client.sessionId).items[1];
+  room.handleDeathLimboAnswer(client, { id: next.id, answer: (second.question.correct + 1) % 4 });
+
+  assert.equal(prof.inv.some(s => s && s.id === I.IRON_SWORD), false);
+  assert.equal(room.deathDrops.size, 1);
+  assert.equal([...room.deathDrops.values()][0].item.rarity, 'rare');
+  assert.equal(broadcasts.some(e => e.type === 'deathDropCreated'), true);
+  const armor = room.deathLimbo.get(client.sessionId).items[2];
+  room.handleDeathLimboAnswer(client, { id: start.id, answer: armor.question.correct });
+  assert.equal(prof.armor.id, I.IRON_ARMOR);
+  assert.equal(prof.armor.dur, 320, 'the lethal hit damages armour before limbo preserves it');
+  assert.equal(prof.armor.armorType, 'scout');
+  assert.equal(prof.armor.rarity, 'epic');
+  assert.equal(room.state.players.get(client.sessionId).armorId, I.IRON_ARMOR);
+  assert.equal(client.sent.some(e => e.type === 'deathLimboComplete'), true);
 });
 
 test('boss dragon eggs favor species the player has not hatched yet', () => {
@@ -1579,7 +1817,7 @@ test('shared ability system: one tuning table serves both sides, with level-scal
       assert.equal(def.kind, src.kind);
     });
   }
-  assert.deepEqual([...ABILITY_UNLOCK], [2, 5, 8]);
+  assert.deepEqual([...ABILITY_UNLOCK], [2, 4, 8]);
   assert.equal(ABILITY.abilityDamage('fireball', { lvl: 1, int: 1 }), 8, 'level 1 matches the historical tuning');
   assert.equal(ABILITY.abilityDamage('lightning', { lvl: 1, int: 1 }), 18);
   assert.equal(ABILITY.abilityDamage('shockwave', { lvl: 1, str: 1 }), 5);
@@ -1596,14 +1834,17 @@ test('Shadow Soldier is server-simulated: it spawns as a friendly mob, hunts, st
   const { prof } = seedPlayer(room, client, { lvl: 8, x: 20.5, z: 20.5 });
   prof.S.path = 'shadow';
   prof.S.int = 28;
+  prof.shadowArmy = [{ id:'zombie-shadow', kind:'zombie', name:'Zombie', rank:0, boss:false, elite:false, level:1, capturedAt:Date.now() }];
   room.clients = [client];
   room.sendSpace = (dgn, type, msg) => client.send(type, msg);
 
   room.handleAbility(client, { path: 'shadow', slot: 2 });
   assert.equal(room.shadowSoldiers.size, 1, 'the summon creates a server soldier');
-  const id = room.shadowSoldiers.get(client.sessionId);
+  const id = room.shadowSoldiers.get(client.sessionId)[0];
   const soldier = room.state.mobs.get(id);
   assert.equal(soldier.kind, 'shadow_soldier');
+  assert.equal(soldier.shadowKind,'zombie','the replicated ally preserves its captured model identity');
+  assert.equal(soldier.shadowBoss,false);
   assert.equal(room.mobMeta[id].friendly, true, 'players and hostiles cannot target it');
   assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.kind === 'summon'), true);
 
@@ -1626,7 +1867,7 @@ test('Shadow Soldier is server-simulated: it spawns as a friendly mob, hunts, st
   st.cds['shadow:2'] = 0; st.mp = st.maxMp;
   room.handleAbility(client, { path: 'shadow', slot: 2 });
   assert.equal(room.state.mobs.has(id), false, 'recast replaces the previous soldier');
-  const id2 = room.shadowSoldiers.get(client.sessionId);
+  const id2 = room.shadowSoldiers.get(client.sessionId)[0];
   room.mobMeta[id2].soldier.until = Date.now() - 1;
   room.tickShadowSoldiers(Date.now(), 0.1);
   assert.equal(room.state.mobs.has(id2), false, 'the soldier fades when its time ends');
@@ -2712,6 +2953,29 @@ test('a charging boss that hits a wall crashes and is stunned', () => {
   assert.equal(m.x, 100, 'a crashing boss does not pass through the wall');
 });
 
+test('the E-rank boss grave ring telegraphs before damaging only its marked band', () => {
+  const room = makeRoom();
+  const inst = hazInstance(room, 'g1', [], 0);
+  const close = seedDungeonPlayer(room, 'close', inst, { x: 101, y: 9, z: 100 });
+  const ring = seedDungeonPlayer(room, 'ring', inst, { x: 104, y: 9, z: 100 });
+  const far = seedDungeonPlayer(room, 'far', inst, { x: 108, y: 9, z: 100 });
+  const m = { x: 100, y: 9, z: 100, yaw: 0, hp: 60, maxHp: 100, kind: 'boss', dgn: 'g1', state: 'graveRingWind' };
+  const meta = room.freshMeta(100, 100, 8, 1.2, 'boss', 0, true);
+  meta.woke = true; meta.sum1 = true; meta.stateT = .5;
+  room.mobMeta.boss1 = meta; room.state.mobs.set('boss1', m);
+  const candidates = room.instancePlayers(inst);
+
+  room.bossBrain(m, 'boss1', meta, .1, candidates[1], 4, candidates, () => 9, () => false);
+  assert.equal(room.playerHp.get(ring.sessionId).hp, 20, 'the telegraph itself deals no damage');
+
+  meta.stateT = .05;
+  room.bossBrain(m, 'boss1', meta, .1, candidates[1], 4, candidates, () => 9, () => false);
+  assert.equal(room.playerHp.get(close.sessionId).hp, 20, 'the inner pocket is safe');
+  assert.equal(room.playerHp.get(ring.sessionId).hp, 16, 'the marked ring takes damage');
+  assert.equal(room.playerHp.get(far.sessionId).hp, 20, 'space beyond the ring is safe');
+  assert.equal(m.state, 'recover');
+});
+
 test('a stunned boss takes extra (crit) melee damage — the wall-crash punish window', () => {
   const room = makeRoom();
   const client = makeClient('fighter');
@@ -2887,6 +3151,33 @@ test('metricsSnapshot reports room load and the dungeon mob-sync waste filtering
   assert.equal(s.wastedMobSyncs, 3);
   assert.equal(s.tickMaxMs, 8, 'tracks the worst tick');
   assert.ok(s.tickAvgMs > 0, 'tracks a rolling average tick time');
+});
+
+test('metrics track connected clients, rejected messages, and persistence latency/failures', async () => {
+  const room = makeRoom();
+  const client = makeClient('observed');
+  room.clients = [client];
+  room.monitorClient(client);
+  client.send('shopReject', { reason: 'gold' });
+  client.send('shopReject', { reason: 'gold' });
+  client.send('profile', {});
+
+  const store = room.monitorStore({
+    async savePlayer() {},
+    async saveWorldEdits() { throw new Error('offline'); },
+  });
+  await store.savePlayer('ok', {});
+  await assert.rejects(() => store.saveWorldEdits({}), /offline/);
+  room.recordTick(125);
+
+  const s = room.metricsSnapshot();
+  assert.equal(s.connectedClients, 1);
+  assert.equal(s.rejectedMessages, 2);
+  assert.equal(s.rejectedByType.shopReject, 2);
+  assert.equal(s.rejectedByReason.gold, 2);
+  assert.equal(s.persistenceOperations, 2);
+  assert.equal(s.persistenceFailures, 1);
+  assert.equal(s.tickOverBudget, 1);
 });
 
 test('addRewardItem reuses freed inventory slots instead of dropping the item', () => {
@@ -3069,17 +3360,22 @@ test('hunger drains and starvation damages players', () => {
   seedPlayer(room, client, { hp: 10, hunger: 0 });
   room.clients = [client];
 
-  room.updatePlayerHunger(5);
+  room.updatePlayerHunger(59);
+
+  assert.equal(room.playerHp.get(client.sessionId).hp, 10);
+  assert.equal(client.sent.some(e => e.type === 'hurt' && e.msg.reason === 'hunger'), false);
+
+  room.updatePlayerHunger(1);
 
   assert.equal(room.playerHp.get(client.sessionId).hp, 9);
-  assert.equal(client.sent.at(-1).type, 'hunger');
+  assert.equal(client.sent.at(-1).type, 'hurt');
   assert.equal(client.sent.some(e => e.type === 'hurt' && e.msg.reason === 'hunger'), true);
 });
 
 test('key shop catalog exposes tuned prices beyond starter ranks', () => {
   const room = makeRoom();
   const client = makeClient('buyer');
-  const { prof } = seedPlayer(room, client, { gold: 2000, lvl: 4, highestGateRankCleared: 4 });
+  const { prof } = seedPlayer(room, client, { gold: 2000, lvl: 11, highestGateRankCleared: 4 });
 
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
   assert.equal(client.sent.at(-1).msg.gold, -110);
@@ -3460,7 +3756,7 @@ test('gate lobby uses the requested gate id and enters after ready', () => {
   ]);
   const client = makeClient('runner');
   room.clients.push(client);
-  seedPlayer(room, client, { x: 20.5, z: 20.5, lvl: 13 });
+  seedPlayer(room, client, { x: 20.5, z: 20.5, lvl: 31 });
   room.createInstance = g => {
     const inst = new DungeonInstance({ world: new D.DungeonGrid(1, 1, 1), bossRoom: { x: 0, z: 0 } }, g, room);
     room.instances[g.id] = inst;
@@ -3615,16 +3911,130 @@ test('the tavern sells deterministic Gate food bundles only to nearby hunters', 
   });
 });
 
+test('tavern dice wagers are range checked and resolved on the server', () => {
+  const room = makeRoom(), client = makeClient('dice_player');
+  const { prof } = seedPlayer(room, client, { gold: 10 });
+  prof.tavernTokens = 10;
+  room.handleTavernDice(client, { wager: 'high', bet: 5 });
+  assert.equal(prof.gold, 10);
+  assert.equal(client.sent.at(-1).type, 'tavernDiceResult');
+  assert.equal(client.sent.at(-1).msg.reason, 'range');
+
+  const p = room.state.players.get(client.sessionId);
+  p.x = W.TOWN.TC + 10.5; p.z = W.TOWN.TC + 25.5;
+  const oldRandom = Math.random;
+  Math.random = () => .99;
+  try {
+    room.handleTavernDice(client, { wager: 'high', bet: 5 });
+  } finally {
+    Math.random = oldRandom;
+  }
+  const result = client.sent.at(-1).msg;
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.dice, [6, 6]);
+  assert.equal(result.delta, 5);
+  assert.equal(prof.gold, 10);
+  assert.equal(prof.tavernTokens, 15);
+});
+
+test('tavern roulette wagers are range checked and resolved on the server', () => {
+  const room = makeRoom(), client = makeClient('roulette_player');
+  const { prof } = seedPlayer(room, client, { gold: 10 });
+  prof.tavernTokens = 10;
+  room.handleTavernRoulette(client, { wager: 'red', bet: 5 });
+  assert.equal(prof.gold, 10);
+  assert.equal(client.sent.at(-1).type, 'tavernRouletteResult');
+  assert.equal(client.sent.at(-1).msg.reason, 'range');
+
+  const p = room.state.players.get(client.sessionId);
+  p.x = W.TOWN.TC + 20.5; p.z = W.TOWN.TC + 25.5;
+  const oldRandom = Math.random;
+  Math.random = () => 1 / 37;
+  try {
+    room.handleTavernRoulette(client, { wager: 'red', bet: 5 });
+  } finally {
+    Math.random = oldRandom;
+  }
+  const result = client.sent.at(-1).msg;
+  assert.equal(result.ok, true);
+  assert.equal(result.number, 1);
+  assert.equal(result.color, 'red');
+  assert.equal(result.delta, 5);
+  assert.equal(prof.gold, 10);
+  assert.equal(prof.tavernTokens, 15);
+});
+
+test('tavern blackjack deals a server-owned hand and resolves stand payout', () => {
+  const room = makeRoom(), client = makeClient('blackjack_player');
+  const { prof } = seedPlayer(room, client, { gold: 20 });
+  prof.tavernTokens = 20;
+  room.handleTavernBlackjack(client, { action: 'deal', bet: 5 });
+  assert.equal(prof.gold, 20);
+  assert.equal(client.sent.at(-1).type, 'tavernBlackjackState');
+  assert.equal(client.sent.at(-1).msg.reason, 'range');
+
+  const p = room.state.players.get(client.sessionId);
+  p.x = W.TOWN.TC + 15.5; p.z = W.TOWN.TC + 25.5;
+  const sequence = [
+    12 / 13, 0, 11 / 13, 0, // player K, Q
+    8 / 13, 0, 6 / 13, 0,   // dealer 9, 7
+    1 / 13, 0,              // dealer draws 2
+  ];
+  const oldRandom = Math.random;
+  Math.random = () => sequence.shift() ?? 0;
+  try {
+    room.handleTavernBlackjack(client, { action: 'deal', bet: 5 });
+    assert.equal(prof.gold, 20);
+    assert.equal(prof.tavernTokens, 15);
+    const dealt = client.sent.at(-1).msg;
+    assert.equal(dealt.phase, 'playing');
+    assert.equal(dealt.dealerHidden, true);
+    assert.deepEqual(dealt.player, ['K♠', 'Q♠']);
+    assert.deepEqual(dealt.dealer, ['9♠']);
+    room.handleTavernBlackjack(client, { action: 'stand' });
+  } finally {
+    Math.random = oldRandom;
+  }
+  const result = client.sent.at(-1).msg;
+  assert.equal(result.phase, 'settled');
+  assert.equal(result.result, 'win');
+  assert.equal(result.delta, 5);
+  assert.equal(prof.gold, 20);
+  assert.equal(prof.tavernTokens, 25);
+});
+
+test('tavern token exchange is capped and unfinished blackjack stakes refund', () => {
+  const room = makeRoom(), client = makeClient('safe_gambler');
+  const { prof } = seedPlayer(room, client, { gold: 150 });
+  const p = room.state.players.get(client.sessionId);
+  p.x = W.TOWN.TC + 12.5; p.z = W.TOWN.TC + 15.5;
+  room.handleTavernTokenExchange(client, { amount: 25 });
+  assert.equal(prof.gold, 125);
+  assert.equal(prof.tavernTokens, 25);
+  prof.tavernTokenBoughtToday = 100;
+  room.handleTavernTokenExchange(client, { amount: 1 });
+  assert.equal(client.sent.at(-1).msg.reason, 'daily');
+  p.x = W.TOWN.TC + 15.5; p.z = W.TOWN.TC + 25.5;
+  const oldRandom = Math.random;
+  Math.random = () => .5; // four sevens: a live, unsettled hand
+  try { room.handleTavernBlackjack(client, { action: 'deal', bet: 5 }); }
+  finally { Math.random = oldRandom; }
+  assert.equal(prof.tavernTokens, 20);
+  assert.equal(room.refundTavernBlackjack(client, 'disconnect'), 5);
+  assert.equal(prof.tavernTokens, 25);
+  assert.equal(room.blackjackHandFor(client), null);
+});
+
 test('tutorial milestones are server-owned and legacy progressed hunters migrate as complete', () => {
   assert.deepEqual(defaultProfile('New').tutorials, {
-    onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0,
+    onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0,
   });
   const legacy = sanitizeProfile({
     name: 'Legacy',
     S: { lvl: 3, path: 'mage' },
     highestGateRankCleared: -1,
   });
-  assert.deepEqual(legacy.tutorials, TUTORIAL_VERSIONS);
+  assert.deepEqual(legacy.tutorials, { ...TUTORIAL_VERSIONS, familiar: 0 });
 
   const current = defaultProfile('Trusted');
   current.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
@@ -3644,14 +4054,14 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   p.x = W.TRAINING_MEADOW.x; p.y = W.TRAINING_MEADOW.G + 1; p.z = W.TRAINING_MEADOW.z;
   prof.pos = [p.x, p.y, p.z];
   assert.equal(room.handleTutorialComplete(client, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding }), true);
-  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
   assert.deepEqual([p.x, p.y, p.z], prof.pos, 'completion moves both server state and the durable profile to town');
 
   const affected = defaultProfile('Already Complete');
   affected.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
   affected.pos = [W.TRAINING_MEADOW.x, W.TRAINING_MEADOW.G + 1, W.TRAINING_MEADOW.z];
   assert.equal(room.moveCompletedTutorialProfileToTown(affected), true);
-  assert.deepEqual(affected.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5]);
+  assert.deepEqual(affected.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
 });
 
 test('generated dungeons use compact instance-local grids', () => {
@@ -3689,7 +4099,7 @@ test('onboarding and ability tutorials use private server spaces and restore the
   onboardingRoom.handleTutorialComplete(newcomer, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding });
   assert.equal(p.dim, 'overworld');
   assert.equal(p.dgn, '');
-  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5]);
+  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
   assert.deepEqual(prof.pos, [p.x, p.y, p.z]);
 
   const abilityRoom = makeRoom(), awakened = makeClient('awakened');
@@ -4022,7 +4432,7 @@ test('key tiers require the matching Hunter rank earned through XP', () => {
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
   assert.deepEqual(client.sent.at(-1), { type: 'shopReject', msg: { reason: 'rank', vendor: 'market' } }, 'an E clear does not promote the player');
 
-  prof.S.lvl = 4;
+  prof.S.lvl = 11;
   room.handleShop(client, { action: 'buy', id: I.SOLO_KEY_D });
   assert.equal(client.sent.at(-1).type, 'shopResult');
 });
@@ -4041,7 +4451,7 @@ test('team key rank access uses the opener Hunter rank, not team clear progress'
   room.handleUseGateKey(opener, { slot: 0 });
   assert.deepEqual(opener.sent.at(-1), { type: 'gateKeyReject', msg: { reason: 'rank' } });
 
-  prof.S.lvl = 4;
+  prof.S.lvl = 11;
   room.handleUseGateKey(opener, { slot: 0 });
 
   const result = opener.sent.find(e => e.type === 'gateKeyResult').msg;
@@ -4236,7 +4646,7 @@ test('solo dungeon death fails the instance and closes the gate', () => {
 
   assert.equal(client.sent.some(e => e.type === 'dungeonDeath'), true);
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
-  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 2, W.TOWN.TC + 7.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 2, W.TOWN.TC + 14.5]);
   assert.equal(room.instances.g1, undefined);
   assert.equal(room.state.gates.has('g1'), false);
   assert.equal(room.state.mobs.has('m1'), false);
@@ -5297,7 +5707,7 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   assert.equal(client.sent.at(-1).type, 'skyshipBoardReject');
   assert.equal(client.sent.at(-1).msg.reason, 'rank');
 
-  seeded.prof.S.lvl = 27;
+  seeded.prof.S.lvl = 51;
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).msg.reason, 'gold');
 
@@ -5501,6 +5911,9 @@ test('road caravans spawn visible friendly formations, halt for bandits, and can
   const road = W.roadNetworkSpecs()[0]; room.spawnRoadCaravan(road);
   const caravan = [...room.roadCaravans.values()][0];
   assert.ok(caravan);
+  assert.ok(caravan.route.length>2,'caravan receives sampled navigation waypoints');
+  assert.ok(Math.hypot(caravan.route[0].x-road.a.x,caravan.route[0].z-road.a.z)>=W.TOWN.HS+6,'route starts outside town structures');
+  for(let i=1;i<caravan.route.length;i++)assert.ok(Math.abs(caravan.route[i].y-caravan.route[i-1].y)<=1.05,'route rejects roof-sized vertical jumps');
   assert.deepEqual([caravan.wagonId, caravan.merchantId, caravan.muleId, ...caravan.guardIds].map(id => room.state.mobs.get(id).kind),
     ['caravan_wagon', 'caravan_merchant', 'pack_mule', 'caravan_guard', 'caravan_guard']);
   assert.equal([caravan.wagonId, caravan.merchantId, caravan.muleId, ...caravan.guardIds].every(id => room.mobMeta[id].friendly), true);
@@ -5513,6 +5926,26 @@ test('road caravans spawn visible friendly formations, halt for bandits, and can
   room.tickRoadCaravans(2, true);
   assert.equal(caravan.state, 'ambushed');
   assert.ok(guard.hp < before, 'bandits damage the caravan guard while the convoy is halted');
+  assert.ok(Math.hypot(guard.x-bandit.x,guard.z-bandit.z)<2.2,'guards physically move to engage a nearby threat');
+});
+
+test('road caravan escort requires explicit acceptance and sustained presence before contract progress',()=>{
+  const room=makeRoom();room.mobSeq=0;const road=W.roadNetworkSpecs()[0];room.spawnRoadCaravan(road);
+  const caravan=[...room.roadCaravans.values()][0],merchant=room.state.mobs.get(caravan.merchantId);
+  const idle=makeClient('idle_escort'),accepted=makeClient('accepted_escort');room.clients=[idle,accepted];
+  const idleSeed=seedPlayer(room,idle,{token:'idle_escort_token',x:merchant.x,y:merchant.y,z:merchant.z});
+  const acceptedSeed=seedPlayer(room,accepted,{token:'accepted_escort_token',x:merchant.x,y:merchant.y,z:merchant.z});
+  room.tickRoadCaravans(1,true);
+  assert.equal(caravan.escorts.has(idle.sessionId),false,'proximity alone never enrols a player');
+  room.handleCaravanContractAccept(accepted,{id:caravan.id});
+  assert.equal(caravan.escorts.has(accepted.sessionId),true);
+  assert.equal(acceptedSeed.prof.regionalContract.type,'road_escort');
+  caravan.escortPresence.set(accepted.sessionId,15000);
+  room.completeRoadCaravan(caravan);
+  assert.equal(acceptedSeed.prof.regionalContract.have,1,'qualified escort completes the accepted contract');
+  assert.equal(acceptedSeed.prof.S.lvl,1,'arrival does not inject an immediate duplicate XP reward');
+  assert.equal(idleSeed.prof.S.xp,0);
+  assert.equal(accepted.sent.some(e=>e.type==='grant'&&e.msg.source==='caravan_escort'),false);
 });
 
 test('roadside encounters support wounded-hunter aid and publish proximity activity', () => {
@@ -5653,6 +6086,25 @@ test('exploration discoveries persist as server-owned profile progress', () => {
   assert.equal(publicChest['overworld:10,10,10'].scope,'public');
 });
 
+test('dormant weather discoveries are spotted before they are harvested', () => {
+  const room=makeRoom(),client=makeClient('weather-scout'),site=W.smallDiscoverySpecs().find(s=>s.type==='rain_bloom');
+  room.state.weather='clear';
+  const {prof}=seedPlayer(room,client,{x:site.x,z:site.z,y:site.y+1});
+  room.handleDiscoverySight(client,{id:site.id});
+  assert.equal(prof.discoveries.includes(site.id),true,'approaching a dormant weather site maps it');
+  assert.equal(prof.claimedDiscoveries.includes(site.id),false,'spotting does not harvest the reward');
+  assert.equal(client.sent.some(e=>e.type==='discoverySighted'&&e.msg.id===site.id),true);
+  room.handleDiscoveryInteract(client,{id:site.id});
+  assert.equal(client.sent.at(-1).type,'discoveryReject');
+  assert.equal(client.sent.at(-1).msg.reason,'weather');
+  assert.equal(prof.claimedDiscoveries.includes(site.id),false,'wrong weather still cannot claim the material');
+  room.state.weather='rain';
+  room.handleDiscoveryInteract(client,{id:site.id});
+  assert.equal(client.sent.at(-1).type,'discoveryResult');
+  assert.equal(prof.claimedDiscoveries.includes(site.id),true,'correct weather harvests the spotted site');
+  assert.equal(itemCount(prof,I.RAINWAKE_PETAL)>0,true);
+});
+
 test('road merchants enforce proximity and sell their distinct stock', () => {
   const room=makeRoom(),client=makeClient('trader'),site=W.smallDiscoverySpecs().find(s=>s.type==='traveling_merchant');
   const {prof}=seedPlayer(room,client,{x:site.x,z:site.z,gold:100});
@@ -5690,7 +6142,7 @@ test('regional guild contracts rotate through the requested exploration archetyp
     assert.ok(offer.rewardGold > 0);
     assert.ok(offer.rewardXp > 0);
   }
-  const aRankOffers = room.regionalContractOffers(0, 19);
+  const aRankOffers = room.regionalContractOffers(0, 41);
   assert.ok(aRankOffers.every(offer => offer.rewardXp >= 713), 'regional work remains meaningful at A-rank');
 });
 

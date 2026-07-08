@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Blockcraft Recall question bank",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["id", "subject", "stage", "topic", "difficulty", "spec", "prompt", "answers", "correct", "explanation", "reviewStatus"],
+    "properties": {
+      "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,48}$" },
+      "subject": { "enum": ["Computer Science", "Information Technology", "Religious Education", "English"] },
+      "stage": { "enum": ["KS3", "GCSE"] },
+      "topic": { "type": "string", "minLength": 2, "maxLength": 64 },
+      "difficulty": { "type": "integer", "minimum": 1, "maximum": 3 },
+      "spec": { "type": "string", "minLength": 3, "maxLength": 64 },
+      "prompt": { "type": "string", "minLength": 10, "maxLength": 240 },
+      "answers": { "type": "array", "minItems": 4, "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 } },
+      "correct": { "type": "integer", "minimum": 0, "maximum": 3 },
+      "explanation": { "type": "string", "minLength": 20, "maxLength": 400 },
+      "misconception": { "type": "string", "maxLength": 240 },
+      "reviewStatus": { "enum": ["draft", "teacher-reviewed", "approved"] },
+      "reviewedBy": { "type": "string", "maxLength": 80 },
+      "reviewedAt": { "type": "string", "format": "date" }
+    }
+  }
+}

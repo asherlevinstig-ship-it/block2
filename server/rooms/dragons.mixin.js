@@ -3,9 +3,11 @@
 // with the shared combat helpers for a later abilities mixin.)
 const {
   DRAGON_BREED_CD_MS, DRAGON_BREED_MS, DRAGON_EGG_OF, DRAGON_LOVE_MS, DRAGON_PERCH_SLOTS, DRAGON_TYPE_BY_EGG,
-  DRAGON_TYPE_SET, FAMILIAR_BIND_ITEM, FAMILIAR_KINDS, FANG_CD_MS, FANG_RANGE, I, MOTE_BURST_CD_MS,
+  DRAGON_TYPE_SET, FAMILIAR_BIND_ITEM, FAMILIAR_KINDS, FANG_RANGE, I,
   MOTE_BURST_MIN_TIER, MOTE_BURST_RANGE, dragonIncubationMs, dragonMountType, dragonOffspring, famTier,
   fangDamage, isDragonMount, isUnlockableMount, isValidMount, moteBurst, moteRegen, cleanDragonName,
+  SHADE_STEP_MIN_TIER, SHADE_STEP_CD_MS, fangCooldown, fangStrikes, moteBurstCooldown,
+  shadeStepCharges, shadeStepDistance,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -13,6 +15,7 @@ const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
 
 class DragonsMixin {
   // Dragon incubation and nesting state, co-located with the mixin that owns it.
@@ -30,6 +33,48 @@ class DragonsMixin {
     const rec = this.profileFor(client);
     return !!(rec && Array.isArray(rec.prof.familiarUnlocks) && rec.prof.familiarUnlocks.includes(kind));
   }
+  familiarPowerLevel(client, kind) {
+    const rec=this.profileFor(client), xp=rec&&rec.prof.familiarXp&&rec.prof.familiarXp[kind]||0;
+    return FAMILIAR_SYSTEM.bondLevel(xp);
+  }
+  awardFamiliarXp(client, kind, amount, reason) {
+    const rec=this.profileFor(client), p=client&&this.state.players.get(client.sessionId);
+    if(!rec||!p||p.familiar!==kind||!FAMILIAR_KINDS.has(kind))return 0;
+    if(!rec.prof.familiarXp)rec.prof.familiarXp={shade:0,fang:0,mote:0,sprite:0};
+    if(!this.familiarXpPace)this.familiarXpPace=new Map();
+    const paceKey=client.sessionId+':'+kind+':'+reason,now=Date.now();let pace=this.familiarXpPace.get(paceKey);
+    if(!pace||now-pace.since>=3600000)pace={since:now,count:0};pace.count++;this.familiarXpPace.set(paceKey,pace);
+    const scale=pace.count<=20?1:pace.count<=40?.5:.25;
+    const base=Math.max(1,Math.round(Math.max(0,amount|0)*scale));
+    const challenge=this.recordFamiliarChallenge(rec.prof,kind,reason,amount);
+    const reward=challenge&&challenge.justCompleted?FAMILIAR_SYSTEM.DAILY_CHALLENGE_REWARD:0;
+    const before=rec.prof.familiarXp[kind]|0, after=Math.min(1000000,before+base+reward);
+    if(after===before)return 0;
+    rec.prof.familiarXp[kind]=after;this.dirtyPlayers.add(rec.token);
+    if(!this.familiarTelemetryLog)this.familiarTelemetryLog=[];
+    this.familiarTelemetryLog.push({at:now,sid:client.sessionId,kind,gained:after-before,diminished:scale<1,challenge:!!(challenge&&challenge.justCompleted)});
+    if(this.familiarTelemetryLog.length>2000)this.familiarTelemetryLog.splice(0,this.familiarTelemetryLog.length-2000);
+    p.familiarTier=FAMILIAR_SYSTEM.bondTier(after);
+    client.send('familiarBond',{kind,xp:after,gained:after-before,reason,tier:FAMILIAR_SYSTEM.bondTier(after),challenge});
+    return after-before;
+  }
+  familiarTelemetrySnapshot(client){
+    const now=Date.now(),since=now-3600000,kinds=['shade','fang','mote','sprite'];
+    const recent=(this.familiarTelemetryLog||[]).filter(e=>e.at>=since),own=recent.filter(e=>e.sid===client.sessionId);
+    const byKind=Object.fromEntries(kinds.map(kind=>{const rows=own.filter(e=>e.kind===kind);return[kind,{xp:rows.reduce((n,e)=>n+e.gained,0),actions:rows.length,diminished:rows.filter(e=>e.diminished).length,challenges:rows.filter(e=>e.challenge).length}];}));
+    const tiers=Object.fromEntries(kinds.map(kind=>[kind,[0,0,0,0,0]]));let completed=0,profiles=0;
+    for(const prof of this.profiles.values()){profiles++;for(const kind of kinds){tiers[kind][FAMILIAR_SYSTEM.bondTier(prof.familiarXp&&prof.familiarXp[kind]||0)]++;const state=prof.familiarChallenges&&prof.familiarChallenges[kind];if(state&&state.day===FAMILIAR_SYSTEM.dayKey(now)&&state.claimed)completed++;}}
+    return {at:now,windowMs:3600000,profiles,byKind,tiers,dailyCompleted:completed};
+  }
+  recordFamiliarChallenge(prof,kind,reason,value){
+    if(!prof.familiarChallenges)prof.familiarChallenges={};
+    const day=FAMILIAR_SYSTEM.dayKey(),def=FAMILIAR_SYSTEM.dailyChallenge(kind,day);if(!def)return null;
+    let state=prof.familiarChallenges[kind];if(!state||state.day!==day)state={day,progress:0,claimed:false};
+    let justCompleted=false;
+    if(!state.claimed&&def.reason===reason){state.progress=Math.min(def.need,state.progress+(def.metric==='count'?1:Math.max(0,value|0)));if(state.progress>=def.need){state.claimed=true;justCompleted=true;}}
+    prof.familiarChallenges[kind]=state;
+    return {day,title:def.title,need:def.need,progress:state.progress,claimed:state.claimed,justCompleted};
+  }
   handleBindFamiliar(client, m) {
     const rec = this.profileFor(client);
     if (!rec) return client.send('familiarReject', { reason: 'invalid' });
@@ -39,16 +84,97 @@ class DragonsMixin {
     if (rec.prof.familiarUnlocks.includes(kind)) return client.send('familiarReject', { reason: 'owned' });
     if (!this.consumeItem(rec.prof, FAMILIAR_BIND_ITEM[kind], 1)) return client.send('familiarReject', { reason: 'item' });
     rec.prof.familiarUnlocks.push(kind);
+    if(!rec.prof.familiarXp)rec.prof.familiarXp={shade:0,fang:0,mote:0,sprite:0};
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
     client.send('familiarBound', { kind });
   }
   handleSummonFamiliar(client, m) {
     const p = this.state.players.get(client.sessionId);
-    if (!p) return;
+    if (!p) return client.send('familiarReject', { action: 'summon', reason: 'invalid' });
     const kind = m && typeof m.kind === 'string' ? m.kind : 'shade';
-    if (!FAMILIAR_KINDS.has(kind) || !this.hasFamiliarUnlock(client, kind)) return;
+    if (!FAMILIAR_KINDS.has(kind)) return client.send('familiarReject', { action: 'summon', kind, reason: 'kind' });
+    if (!this.hasFamiliarUnlock(client, kind)) return client.send('familiarReject', { action: 'summon', kind, reason: 'locked' });
+    if (p.familiar !== kind && this.moteAcc) this.moteAcc.delete(client.sessionId);
     p.familiar = kind;
+    p.familiarTier=FAMILIAR_SYSTEM.bondTier(this.profileFor(client).prof.familiarXp&&this.profileFor(client).prof.familiarXp[kind]||0);
+    client.send('familiarSummoned', { kind });
+    this.sendSpace(p.dgn || '', 'fx', { t:'familiarSummon', kind, x:p.x, y:p.y, z:p.z, sid:client.sessionId, dgn:p.dgn || '' });
+  }
+  handleDismissFamiliar(client) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const kind = p.familiar;
+    p.familiar = '';
+    p.familiarTier=0;
+    if (this.moteAcc) this.moteAcc.delete(client.sessionId);
+    client.send('familiarDismissed', {});
+    if (kind) this.sendSpace(p.dgn || '', 'fx', { t:'familiarDismiss', kind, x:p.x, y:p.y, z:p.z, sid:client.sessionId, dgn:p.dgn || '' });
+  }
+  dismissFamiliarFor(client, reason = 'dismissed') {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || !p.familiar) return false;
+    const kind = p.familiar;
+    p.familiar = '';
+    p.familiarTier=0;
+    if (this.moteAcc) this.moteAcc.delete(client.sessionId);
+    client.send('familiarDismissed', { reason });
+    this.sendSpace(p.dgn || '', 'fx', { t:'familiarDismiss', kind, x:p.x, y:p.y, z:p.z, sid:client.sessionId, dgn:p.dgn || '' });
+    return true;
+  }
+  clearFamiliarRuntime(sid) {
+    for (const map of [this.fangCd, this.moteAcc, this.moteBurstCd, this.shadeStepCd]) if (map) map.delete(sid);
+    if(this.familiarXpPace)for(const key of this.familiarXpPace.keys())if(key.startsWith(sid+':'))this.familiarXpPace.delete(key);
+  }
+  familiarMechanicsSuspended(sid) {
+    const hp = this.playerHp && this.playerHp.get(sid);
+    return !!((hp && hp.hp <= 0)
+      || (this.skyshipPassengers && this.skyshipPassengers.has(sid))
+      || (typeof this.eventMovementLocked === 'function' && this.eventMovementLocked(sid)));
+  }
+  handleShadeStep(client, m) {
+    const p = this.state.players.get(client.sessionId);
+    const reject = reason => client.send('shadeStepReject', { reason });
+    if (!p || p.familiar !== 'shade' || !this.hasFamiliarUnlock(client, 'shade')) return reject('familiar');
+    const powerLevel=this.familiarPowerLevel(client,'shade');
+    if (famTier(powerLevel) < SHADE_STEP_MIN_TIER) return reject('tier');
+    if ((this.skyshipPassengers && this.skyshipPassengers.has(client.sessionId))
+      || (typeof this.eventMovementLocked === 'function' && this.eventMovementLocked(client.sessionId))) return reject('locked');
+    const now = Date.now();
+    if (!this.shadeStepCd) this.shadeStepCd = new Map();
+    const maxCharges = shadeStepCharges(powerLevel);
+    let chargeState = this.shadeStepCd.get(client.sessionId) || { charges:maxCharges, updated:now };
+    const restored = Math.floor((now-chargeState.updated)/SHADE_STEP_CD_MS);
+    if(restored>0){ chargeState={charges:Math.min(maxCharges,chargeState.charges+restored),updated:chargeState.updated+restored*SHADE_STEP_CD_MS}; }
+    if(chargeState.charges<=0) return client.send('shadeStepReject', { reason:'cooldown', cd:Math.max(0,SHADE_STEP_CD_MS-(now-chargeState.updated)), charges:0, maxCharges });
+    let dx = Number(m && m.x), dz = Number(m && m.z);
+    const len = Math.hypot(dx, dz);
+    if (!Number.isFinite(len) || len < 0.5) return reject('direction');
+    dx /= len; dz /= len;
+    const start = { x: p.x, y: p.y, z: p.z };
+    const solid = this.spaceSolid(p.dgn || '');
+    const borderMin = W.LAVA_BORDER_WIDTH + 1.35, borderMax = W.WX - W.LAVA_BORDER_WIDTH - 1.35;
+    const distance = shadeStepDistance(powerLevel);
+    const steps = Math.ceil(distance / 0.24);
+    let x = p.x, z = p.z;
+    for (let i = 0; i < steps; i++) {
+      const step = Math.min(0.24, distance - i * 0.24);
+      const nx = Math.max(borderMin, Math.min(borderMax, x + dx * step));
+      const nz = Math.max(borderMin, Math.min(borderMax, z + dz * step));
+      if (solid(Math.floor(nx), Math.floor(p.y + .2), Math.floor(nz))
+        || solid(Math.floor(nx), Math.floor(p.y + 1.5), Math.floor(nz))) break;
+      x = nx; z = nz;
+    }
+    if (Math.hypot(x - p.x, z - p.z) < 0.2) return reject('blocked');
+    p.x = x; p.z = z;
+    this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    const wasFull=chargeState.charges>=maxCharges;
+    chargeState={charges:chargeState.charges-1,updated:wasFull?now:chargeState.updated};
+    this.shadeStepCd.set(client.sessionId, chargeState);
+    this.awardFamiliarXp(client,'shade',8,'shadow_jump');
+    const rechargeCd=Math.max(0,SHADE_STEP_CD_MS-(now-chargeState.updated));
+    client.send('shadeStepResult', { x, y: p.y, z, cd:chargeState.charges?0:rechargeCd, rechargeCd, charges:chargeState.charges, maxCharges });
+    this.sendSpace(p.dgn || '', 'fx', { t: 'shadeStep', sx: start.x, sy: start.y, sz: start.z, x, y: p.y, z, sid: client.sessionId, dgn: p.dgn || '' });
   }
   // pick a species from the rank pool, favoring ones this player hasn't hatched yet
   pickDragonEggForPlayer(client, pool) {
@@ -290,6 +416,7 @@ class DragonsMixin {
     if (!this.fangCd) this.fangCd = new Map();
     this.state.players.forEach((p, sid) => {
       if (p.familiar !== 'fang') return;
+      if (this.familiarMechanicsSuspended(sid)) return;
       const hp = this.playerHp.get(sid);
       if (!hp || hp.hp <= 0) return;
       if (now < (this.fangCd.get(sid) || 0)) return;
@@ -300,10 +427,13 @@ class DragonsMixin {
         if (d < bd) { bd = d; best = m; bestId = id; }
       });
       if (!best) return;
-      this.fangCd.set(sid, now + FANG_CD_MS);
       const c = this.clients.find(cl => cl.sessionId === sid);
-      if (c) this.damageMobByAbility(c, bestId, best, fangDamage(p.lvl));
-      this.sendSpace(p.dgn || '', 'fx', { t: 'fangBite', x: best.x, y: best.y + 0.6, z: best.z, dgn: p.dgn || '' });
+      if(!c)return;
+      const lvl=this.familiarPowerLevel(c,'fang'), strikes=fangStrikes(lvl), lethal=best.hp<=fangDamage(lvl)*strikes;
+      this.fangCd.set(sid, now + fangCooldown(lvl));
+      this.damageMobByAbility(c, bestId, best, fangDamage(lvl)*strikes);
+      this.awardFamiliarXp(c,'fang',lethal?12:2,lethal?'pack_kill':'pack_attack');
+      this.sendSpace(p.dgn || '', 'fx', { t: 'fangBite', x: best.x, y: best.y + 0.6, z: best.z, strikes, dgn: p.dgn || '' });
     });
   }
   // Mote familiar: passively regenerates the owner's HP, with an emergency heal-burst near threats at higher ranks.
@@ -312,28 +442,30 @@ class DragonsMixin {
     const now = Date.now();
     this.state.players.forEach((p, sid) => {
       if (p.familiar !== 'mote') { if (this.moteAcc.get(sid)) this.moteAcc.set(sid, 0); return; }
+      if (this.familiarMechanicsSuspended(sid)) return;
       const hp = this.playerHp.get(sid);
       if (!hp || hp.hp <= 0) return;
       const c = this.clients.find(cl => cl.sessionId === sid);
       if (!c) return;
+      const lvl=this.familiarPowerLevel(c,'mote');
       const token = this.tokens.get(sid);
       if (hp.hp < hp.max) {                                   // passive regen (fractional accumulator)
-        let acc = (this.moteAcc.get(sid) || 0) + dt * moteRegen(p.lvl);
+        let acc = (this.moteAcc.get(sid) || 0) + dt * moteRegen(lvl);
         const whole = Math.floor(acc);
         if (whole > 0) {
           acc -= whole;
           const heal = Math.min(whole, hp.max - hp.hp);
-          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal }); if (token) this.dirtyPlayers.add(token); }
+          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal, reason:'mote_regen' }); this.awardFamiliarXp(c,'mote',heal,'effective_heal'); if (token) this.dirtyPlayers.add(token); }
         }
         this.moteAcc.set(sid, acc);
       }
-      if (famTier(p.lvl) >= MOTE_BURST_MIN_TIER && hp.hp < hp.max && now >= (this.moteBurstCd.get(sid) || 0)) {
+      if (famTier(lvl) >= MOTE_BURST_MIN_TIER && hp.hp < hp.max && now >= (this.moteBurstCd.get(sid) || 0)) {
         let threat = false;
         this.state.mobs.forEach(m => { if (threat || (m.dgn || '') !== (p.dgn || '') || m.hp <= 0 || this.isAnimalKind(m.kind)) return; if (Math.hypot(m.x - p.x, m.z - p.z) < MOTE_BURST_RANGE) threat = true; });
         if (threat) {
-          this.moteBurstCd.set(sid, now + MOTE_BURST_CD_MS);
-          const heal = Math.min(moteBurst(p.lvl), hp.max - hp.hp);
-          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal }); if (token) this.dirtyPlayers.add(token); }
+          this.moteBurstCd.set(sid, now + moteBurstCooldown(lvl));
+          const heal = Math.min(moteBurst(lvl), hp.max - hp.hp);
+          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal, reason:'mote_burst' }); this.awardFamiliarXp(c,'mote',heal*2,'emergency_bloom'); if (token) this.dirtyPlayers.add(token); }
           this.sendSpace(p.dgn || '', 'fx', { t: 'moteBurst', x: p.x, y: p.y + 1, z: p.z, dgn: p.dgn || '' });
         }
       }

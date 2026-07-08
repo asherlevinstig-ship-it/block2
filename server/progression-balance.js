@@ -9,10 +9,10 @@ const { hunterXpForActivity, threatXpForRing } = require('./rooms/xp-economy');
 
 const RANK_PACING_TARGETS = Object.freeze([
   null,
-  Object.freeze({ rank: 'D', min: 4, max: 6 }),
-  Object.freeze({ rank: 'C', min: 10, max: 15 }),
-  Object.freeze({ rank: 'B', min: 20, max: 30 }),
-  Object.freeze({ rank: 'A', min: 40, max: 60 }),
+  Object.freeze({ rank: 'D', min: 20, max: 30 }),
+  Object.freeze({ rank: 'C', min: 38, max: 52 }),
+  Object.freeze({ rank: 'B', min: 58, max: 76 }),
+  Object.freeze({ rank: 'A', min: 78, max: 100 }),
 ]);
 
 function xpToNextRank(rank) {

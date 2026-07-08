@@ -1,4 +1,4 @@
-const { matchMaker } = require('colyseus');
+const { matchMaker, CloseCode } = require('@colyseus/core');
 const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
 const D = require('../dungeon');
@@ -31,7 +31,7 @@ class DungeonRoom extends GameRoom {
     // it against its own bootId to tell a genuine restart from a same-boot rejoin.
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
-    this.store = createStore();
+    this.store = this.monitorStore(createStore());
 
     // Per-session + sim bookkeeping the inherited mixins/tick read. The overworld slice of
     // GameRoom.onCreate (world gen, edits, chests, furnaces, gates, teams, events) is skipped.
@@ -52,12 +52,17 @@ class DungeonRoom extends GameRoom {
     this.initDungeonState();
     this.initDragonState();
     this.initCombatState();
+    this.initRecallState();
 
     // The single instance this room hosts, built from the gate options matchmaking carried in.
     this.instance = this.createInstance(this.gateFromOptions(options));
 
     this.registerRaidHandlers();
-    this.setSimulationInterval(dt => this.update(dt / 1000), 100);   // 10 Hz, like GameRoom
+    this.setSimulationInterval(dt => {
+      const started = performance.now();
+      this.update(dt / 1000);
+      this.recordTick(performance.now() - started);
+    }, 100);   // 10 Hz, like GameRoom
     this.clock.setInterval(() => this.flush(), 30000);   // periodic save for long raids, like GameRoom
   }
 
@@ -91,6 +96,9 @@ class DungeonRoom extends GameRoom {
   // overworld-only messages (shops, farming, gates, chests, furnaces, teams, events) are omitted.
   registerRaidHandlers() {
     this.onMessage('move', (c, m) => this.handleMove(c, m));
+    this.onMessage('recallStart', (c, m) => this.handleRecallStart(c, m));
+    this.onMessage('recallAnswer', (c, m) => this.handleRecallAnswer(c, m));
+    this.onMessage('recallSubject', (c, m) => this.handleRecallSubject(c, m));
     this.onMessage('attack', (c, m) => this.handleAttack(c, m));
     this.onMessage('ability', (c, m) => this.handleAbility(c, m));
     this.onMessage('dragonAbility', (c, m) => this.handleDragonAbility(c, m));
@@ -100,7 +108,8 @@ class DungeonRoom extends GameRoom {
     this.onMessage('craftLegendary', (c, m) => this.handleCraftLegendary(c, m));
     this.onMessage('bindFamiliar', (c, m) => this.handleBindFamiliar(c, m));
     this.onMessage('summonFamiliar', (c, m) => this.handleSummonFamiliar(c, m));
-    this.onMessage('dismissFamiliar', (c) => { const p = this.state.players.get(c.sessionId); if (p) p.familiar = ''; });
+    this.onMessage('dismissFamiliar', (c) => this.handleDismissFamiliar(c));
+    this.onMessage('shadeStep', (c, m) => this.handleShadeStep(c, m));
     this.onMessage('spendStat', (c, m) => this.handleSpendStat(c, m));
     this.onMessage('equipArmor', (c, m) => this.handleEquipArmor(c, m));
     this.onMessage('useFood', (c, m) => this.handleUseFood(c, m));
@@ -110,6 +119,7 @@ class DungeonRoom extends GameRoom {
   }
 
   async onJoin(client, options, auth) {
+    this.monitorClient(client);
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
     let prof = this.profiles.get(token);
@@ -144,19 +154,19 @@ class DungeonRoom extends GameRoom {
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
   }
 
-  async onLeave(client, consented) {
+  async onLeave(client, code) {
     // A graceful server shutdown is not a voluntary exit: leave the seat, entity, profile, and
     // crash-recovery marker intact for onDispose to flush and next boot to recover (mirrors
     // GameRoom.onLeave). Tearing down here would retire the recovery marker, and there's no live
     // GameRoom left in the dying process to hand the profile off to anyway.
-    if (matchMaker && matchMaker.isGracefullyShuttingDown) return;
+    if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
     // An unclean disconnect (a network blip, not a flee/switch) shouldn't eject a hunter from the
     // raid. Hold their seat + live entity briefly; if they reconnect within the window, resume
     // them into the instance and keep everything as it was. Only a timed-out window falls through
     // to the durable teardown. Mirrors GameRoom.onLeave's reconnection path, minus the tutorial/
     // event resumes a single-instance raid room can't have. Holding the seat also keeps the room
     // alive across the window (Colyseus counts the reservation against autoDispose).
-    if (consented === false) {
+    if (code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED)) {
       try {
         await this.allowReconnection(client, 15);
         const token = this.tokens.get(client.sessionId);
@@ -183,6 +193,8 @@ class DungeonRoom extends GameRoom {
     this.state.players.delete(client.sessionId);
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);
+    if(typeof this.clearRecallState==='function')this.clearRecallState(client.sessionId);
+    this.clearFamiliarRuntime(client.sessionId);
     if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
     this.tokens.delete(client.sessionId);
     if (!token) return;

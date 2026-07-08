@@ -15,11 +15,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('module');
 
-// Mock colyseus so requiring GameRoom only needs its prototype (mixins applied at
+// Mock Colyseus core so requiring GameRoom only needs its prototype (mixins applied at
 // load), matching authority.test.js. We never instantiate Room or run onCreate.
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
-  if (request === 'colyseus') return { Room: class {} };
+  if (request === '@colyseus/core') return { Room: class {}, CloseCode: { CONSENTED: 4000 } };
   if (request === '@colyseus/schema') return { Schema: class {}, MapSchema: class extends Map {}, defineTypes() {} };
   return originalLoad(request, parent, isMain);
 };
@@ -32,7 +32,7 @@ const CLUSTERS = {
   initCombatState: [
     'sArrows', 'sFireballs', 'sMeteors', 'dragonBreathCd', 'blackholeCd', 'legendaryCd',
     'dragonAbilityCd', 'phoenixUsed', 'abilityState', 'abilityBuffs', 'weaponMomentum', 'monkAuraAt', 'prospectAt',
-    'shadowSoldiers', 'secondWindAt', 'pvel',
+    'shadowSoldiers', 'shadowSpirits', 'secondWindAt', 'pvel',
   ],
   initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
   initPersistenceState: [

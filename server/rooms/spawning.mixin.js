@@ -60,6 +60,23 @@ class SpawningMixin {
       }
       return true;
     }
+    if (st === 'graveRingWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        this.sendSpace(m.dgn, 'fx', { t: 'graveRing', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+        // The inner pocket and the space beyond the ring are safe. This gives
+        // the starter boss a learnable movement check instead of unavoidable AoE.
+        for (const s of candidates) {
+          const dist = Math.hypot(s.p.x - m.x, s.p.z - m.z);
+          if (dist >= 2.2 && dist <= 6.2 && Math.abs(s.p.y - m.y) < 2.8) {
+            const c = this.clients.find(c => c.sessionId === s.sid);
+            if (c) this.hurtPlayer(c, Math.max(1, meta.slamDmg - 2), 'grave_ring');
+          }
+        }
+        m.state = 'recover'; meta.stateT = .8 * haste; meta.gcd = (3.1 + Math.random()) * haste;
+      }
+      return true;
+    }
     if (st === 'chargeWind') {
       faceBest();
       if (meta.stateT <= 0) {
@@ -144,6 +161,7 @@ class SpawningMixin {
     if (meta.gcd <= 0 && best) {
       const picks = [];
       if (bd < 6) { picks.push('slam', 'slam'); if (meta.rank >= 2) picks.push('spikes'); }
+      if (meta.rank === 0 && m.hp <= m.maxHp * .66 && bd < 9) picks.push('graveRing', 'graveRing');
       if (bd > 5 && bd < 16) picks.push('charge', 'charge');
       if (bd > 6 && bd < 18) picks.push('volley');
       if (picks.length) {
@@ -155,6 +173,9 @@ class SpawningMixin {
         if (pat === 'slam') {
           m.state = 'slamWind'; meta.stateT = 1.1 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'warn', dgn: m.dgn || '' });
+        } else if (pat === 'graveRing') {
+          m.state = 'graveRingWind'; meta.stateT = 1.35 * haste;
+          this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
         } else if (pat === 'charge') {
           m.state = 'chargeWind'; meta.stateT = .8 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
@@ -382,6 +403,35 @@ class SpawningMixin {
     }
   }
 
+  caravanFootprintClear(x,z,y,radius=1.25){
+    for(const ox of [-radius,0,radius])for(const oz of [-radius,0,radius])for(const h of [.15,1.15,2.15]){
+      if(W.isSolid(this.world.getB(Math.floor(x+ox),Math.floor(y+h),Math.floor(z+oz))))return false;
+    }
+    return true;
+  }
+  caravanRouteForRoad(road){
+    const vx=road.b.x-road.a.x,vz=road.b.z-road.a.z,length=Math.hypot(vx,vz)||1,dx=vx/length,dz=vz/length;
+    const clearance=node=>node.id==='town'?W.TOWN.HS+7:Math.max(8,(node.radius||18)+4);
+    const start=clearance(road.a),end=Math.max(start+4,length-clearance(road.b)),step=2;
+    const points=[];let lastY=null,lastSide=0;
+    for(let distance=start;distance<=end+.01;distance+=step){
+      const baseX=road.a.x+dx*Math.min(distance,end),baseZ=road.a.z+dz*Math.min(distance,end);
+      const sides=[lastSide,0,-1,1,-2,2,-3,3,-4,4,-5,5,-6,6].filter((v,i,a)=>a.indexOf(v)===i);
+      let chosen=null;
+      for(const side of sides){
+        const x=baseX-dz*side,z=baseZ+dx*side,y=this.world.standHeight(x,z,W.WH-2);
+        if(!Number.isFinite(y)||y<=0||lastY!=null&&Math.abs(y-lastY)>1.05||!this.caravanFootprintClear(x,z,y))continue;
+        chosen={x,y,z,side};break;
+      }
+      if(!chosen){
+        if(points.length)points[points.length-1].blocked=true;
+        continue;
+      }
+      points.push(chosen);lastY=chosen.y;lastSide=chosen.side;
+    }
+    if(points.length<2){const x=road.a.x+dx*start,z=road.a.z+dz*start,y=this.world.standHeight(x,z,W.WH-2);return [{x,y,z},{x:x+dx*2,y,z:z+dz*2,blocked:true}];}
+    return points;
+  }
   tickRoadCaravans(dt, daytime) {
     if (!this.roadCaravans) this.roadCaravans = new Map();
     const now = Date.now(), roads = W.roadNetworkSpecs();
@@ -415,18 +465,38 @@ class SpawningMixin {
             this.state.mobs.delete(id); delete this.mobMeta[id];
           }
         }
-      } else {
-        caravan.state = 'moving'; caravan.progress = Math.min(1, caravan.progress + dt * 1.35 / caravan.road.length);
+      } else if(caravan.routeIndex<caravan.route.length-1){
+        const target=caravan.route[caravan.routeIndex+1];
+        if(target.blocked||!this.caravanFootprintClear(target.x,target.z,target.y)){caravan.state='blocked';caravan.stuckMs=(caravan.stuckMs||0)+dt*1000;}
+        else{
+          caravan.state='moving';caravan.stuckMs=0;
+          const dist=Math.hypot(target.x-caravan.x,target.z-caravan.z),move=Math.min(dist,dt*1.35);
+          if(dist>.001){caravan.x+=(target.x-caravan.x)/dist*move;caravan.z+=(target.z-caravan.z)/dist*move;caravan.y+=(target.y-caravan.y)*Math.min(1,dt*4);}
+          if(dist<=.12||move>=dist)caravan.routeIndex++;
+        }
       }
-      const t = caravan.progress, x = caravan.road.a.x + (caravan.road.b.x - caravan.road.a.x) * t, z = caravan.road.a.z + (caravan.road.b.z - caravan.road.a.z) * t;
-      const dx = (caravan.road.b.x - caravan.road.a.x) / caravan.road.length, dz = (caravan.road.b.z - caravan.road.a.z) / caravan.road.length;
-      const formation = [[caravan.wagonId,0,0],[caravan.merchantId,-2,0],[caravan.muleId,2,0],[caravan.guardIds[0],-1,-2],[caravan.guardIds[1],-1,2]];
+      const current=caravan.route[Math.min(caravan.routeIndex,caravan.route.length-1)],next=caravan.route[Math.min(caravan.routeIndex+1,caravan.route.length-1)];
+      const dl=Math.hypot(next.x-current.x,next.z-current.z)||1,dx=(next.x-current.x)/dl,dz=(next.z-current.z)/dl,x=caravan.x,z=caravan.z;
+      caravan.progress=Math.min(1,caravan.routeIndex/Math.max(1,caravan.route.length-1));
+      const formation = [[caravan.wagonId,0,0],[caravan.merchantId,-1.8,0],[caravan.muleId,1.8,0],[caravan.guardIds[0],-.8,-.85],[caravan.guardIds[1],-.8,.85]];
       for (const [id, back, side] of formation) {
         const m = this.state.mobs.get(id); if (!m) continue;
-        m.x = x + dx * back - dz * side; m.z = z + dz * back + dx * side; m.y = this.world.standHeight(m.x, m.z, W.WH - 2); m.yaw = Math.atan2(dx, dz); m.state = caravan.state;
+        let tx=x+dx*back-dz*side,tz=z+dz*back+dx*side,yaw=Math.atan2(dx,dz);
+        if(threat&&caravan.guardIds.includes(id)){
+          const gx=threat.x-x,gz=threat.z-z,gd=Math.hypot(gx,gz)||1,ux=gx/gd,uz=gz/gd;
+          tx=threat.x-ux*1.25-uz*side*.45;tz=threat.z-uz*1.25+ux*side*.45;yaw=Math.atan2(threat.x-tx,threat.z-tz);
+          if(Math.hypot(tx-x,tz-z)>12||!this.caravanFootprintClear(tx,tz,this.world.standHeight(tx,tz,W.WH-2),.45)){tx=x+dx*back-dz*side;tz=z+dz*back+dx*side;}
+        }
+        const ground=this.world.standHeight(tx,tz,W.WH-2);
+        m.x=tx;m.z=tz;m.y=Number.isFinite(ground)&&Math.abs(ground-caravan.y)<=1.05?ground:caravan.y;m.yaw=yaw;m.state=caravan.state;
       }
-      this.state.players.forEach((p, sid) => { if (!p.dgn && caravan.state === 'moving' && Math.hypot(p.x - x, p.z - z) < 22) caravan.escorts.add(sid); });
-      if (caravan.progress >= 1) this.completeRoadCaravan(caravan);
+      for(const sid of caravan.escorts){
+        const p=this.state.players.get(sid);if(!p||p.dgn)continue;
+        const client=this.clients.find(c=>c.sessionId===sid),rec=client&&this.profileFor(client),contract=rec&&rec.prof.regionalContract;
+        if(!contract||contract.type!=='road_escort'||contract.targetId!==caravan.id)continue;
+        if(Math.hypot(p.x-x,p.z-z)<22)caravan.escortPresence.set(sid,(caravan.escortPresence.get(sid)||0)+dt*1000);
+      }
+      if (caravan.routeIndex>=caravan.route.length-1) this.completeRoadCaravan(caravan);
     }
     this.activitySyncAcc = (this.activitySyncAcc || 0) + dt;
     if (this.activitySyncAcc >= 1) { this.activitySyncAcc = 0; this.sendOverworldActivities(); }
@@ -663,9 +733,10 @@ class SpawningMixin {
 
   spawnRoadCaravan(road) {
     if (!this.roadCaravans) this.roadCaravans = new Map();
-    const caravan = { id: 'caravan_' + road.id, road, progress: .01, escorts: new Set(), guardIds: [], state: 'moving', attackT: 0 };
+    const route=this.caravanRouteForRoad(road),start=route[0];
+    const caravan = { id: 'caravan_' + road.id, road, route,routeIndex:0,x:start.x,y:start.y,z:start.z,progress:0, escorts: new Set(), escortPresence:new Map(), guardIds: [], state: route[1]&&route[1].blocked?'blocked':'moving', attackT: 0,stuckMs:0 };
     const add = (kind, hp, friendly = true) => {
-      const id = String(++this.mobSeq), m = new Mob(); m.kind = kind; m.hp = m.maxHp = hp; m.x = road.a.x; m.y = road.a.y; m.z = road.a.z; this.state.mobs.set(id, m);
+      const id = String(++this.mobSeq), m = new Mob(); m.kind = kind; m.hp = m.maxHp = hp; m.x = start.x; m.y = start.y; m.z = start.z; this.state.mobs.set(id, m);
       const meta = this.freshMeta(m.x, m.z, 0, 0, kind, 0, false); meta.friendly = friendly; meta.caravanId = caravan.id; this.mobMeta[id] = meta; return id;
     };
     caravan.wagonId = add('caravan_wagon', 45); caravan.merchantId = add('caravan_merchant', 18); caravan.muleId = add('pack_mule', 22);
@@ -678,8 +749,12 @@ class SpawningMixin {
     for (const sid of caravan.escorts) {
       const client = this.clients.find(c => c.sessionId === sid); if (!client) continue;
       const rec = this.profileFor(client); if (!rec) continue;
+      const contract=rec.prof.regionalContract,qualified=contract&&contract.type==='road_escort'&&contract.targetId===caravan.id&&(caravan.escortPresence.get(sid)||0)>=15000;
+      if(!qualified){
+        if(contract&&contract.type==='road_escort'&&contract.targetId===caravan.id){rec.prof.regionalContract=null;this.dirtyPlayers.add(rec.token);client.send('regionalContractUpdate',{active:null,failed:true,reason:'participation'});}
+        client.send('caravanState',{state:'escort_failed',reason:'participation'});continue;
+      }
       this.caravanDiscounts.set(rec.token, Date.now() + 10 * 60 * 1000);
-      this.awardGrant(client, { source: 'caravan_escort', xp: 50, items: [{ id: I.IRON_INGOT, count: 2 }] });
       this.progressRegionalContract(client,'road_escort',{targetId:caravan.id});
       client.send('caravanState', { state: 'arrived', discountUntil: Date.now() + 10 * 60 * 1000 });
     }

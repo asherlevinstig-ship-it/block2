@@ -515,6 +515,191 @@ class EconomyMixin {
     if (isTavern) this.recordTavernSaleProgress(client, id, count);
     client.send('shopResult', { action, vendor: isTavern ? 'tavern' : 'market', id, count, gold: price });
   }
+  handleTavernDice(client, m) {
+    const rec = this.profileFor(client);
+    const reject = reason => client.send('tavernDiceResult', { ok: false, reason, tokens: rec && rec.prof ? rec.prof.tavernTokens | 0 : 0 });
+    if (!rec || !m) return;
+    if (this.rateLimited(client, 'tavernDice', 4, 8)) return reject('rate');
+    const p = this.state.players.get(client.sessionId);
+    const tableX = W.TOWN.TC + 10.5, tableZ = W.TOWN.TC + 25.5;
+    if (!p || p.dgn || Math.hypot(p.x - tableX, p.z - tableZ) > 4.2) return reject('range');
+    const wager = ['low', 'seven', 'high'].includes(m.wager) ? m.wager : 'high';
+    const bet = Math.max(1, Math.min(25, m.bet | 0 || 1));
+    if ((rec.prof.tavernTokens | 0) < bet) return reject('tokens');
+    const d1 = 1 + Math.floor(Math.random() * 6);
+    const d2 = 1 + Math.floor(Math.random() * 6);
+    const total = d1 + d2;
+    const win = (wager === 'low' && total <= 6) || (wager === 'seven' && total === 7) || (wager === 'high' && total >= 8);
+    const mult = wager === 'seven' ? 4 : 2;
+    const payout = win ? bet * mult : 0;
+    const delta = payout - bet;
+    rec.prof.tavernTokens = Math.max(0, Math.min(1000000, (rec.prof.tavernTokens | 0) + delta));
+    this.dirtyPlayers.add(rec.token);
+    client.send('tavernDiceResult', { ok: true, wager, bet, dice: [d1, d2], total, win, payout, delta, tokens: rec.prof.tavernTokens | 0 });
+  }
+  rouletteColor(number) {
+    const reds = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+    number |= 0;
+    if (number === 0) return 'green';
+    return reds.has(number) ? 'red' : 'black';
+  }
+  rouletteWins(wager, number) {
+    const color = this.rouletteColor(number);
+    if (wager === 'red' || wager === 'black') return color === wager;
+    if (wager === 'odd') return number > 0 && number % 2 === 1;
+    if (wager === 'even') return number > 0 && number % 2 === 0;
+    if (wager === 'dozen1') return number >= 1 && number <= 12;
+    if (wager === 'dozen2') return number >= 13 && number <= 24;
+    if (wager === 'dozen3') return number >= 25 && number <= 36;
+    if (wager === 'zero') return number === 0;
+    return false;
+  }
+  handleTavernRoulette(client, m) {
+    const rec = this.profileFor(client);
+    const reject = reason => client.send('tavernRouletteResult', { ok: false, reason, tokens: rec && rec.prof ? rec.prof.tavernTokens | 0 : 0 });
+    if (!rec || !m) return;
+    if (this.rateLimited(client, 'tavernRoulette', 4, 8)) return reject('rate');
+    const p = this.state.players.get(client.sessionId);
+    const tableX = W.TOWN.TC + 20.5, tableZ = W.TOWN.TC + 25.5;
+    if (!p || p.dgn || Math.hypot(p.x - tableX, p.z - tableZ) > 4.2) return reject('range');
+    const valid = ['red', 'black', 'odd', 'even', 'dozen1', 'dozen2', 'dozen3', 'zero'];
+    const wager = valid.includes(m.wager) ? m.wager : 'red';
+    const bet = Math.max(1, Math.min(25, m.bet | 0 || 1));
+    if ((rec.prof.tavernTokens | 0) < bet) return reject('tokens');
+    const number = Math.floor(Math.random() * 37);
+    const color = this.rouletteColor(number);
+    const win = this.rouletteWins(wager, number);
+    const mult = wager === 'zero' ? 20 : wager.startsWith('dozen') ? 3 : 2;
+    const payout = win ? bet * mult : 0;
+    const delta = payout - bet;
+    rec.prof.tavernTokens = Math.max(0, Math.min(1000000, (rec.prof.tavernTokens | 0) + delta));
+    this.dirtyPlayers.add(rec.token);
+    client.send('tavernRouletteResult', { ok: true, wager, bet, number, color, win, payout, delta, tokens: rec.prof.tavernTokens | 0 });
+  }
+  blackjackCard() {
+    const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const suits = ['♠', '♥', '♦', '♣'];
+    return ranks[Math.floor(Math.random() * ranks.length)] + suits[Math.floor(Math.random() * suits.length)];
+  }
+  blackjackTotal(cards) {
+    let total = 0, aces = 0;
+    for (const card of Array.isArray(cards) ? cards : []) {
+      const rank = String(card || '').slice(0, -1);
+      if (rank === 'A') { total += 11; aces++; }
+      else if (['K', 'Q', 'J'].includes(rank)) total += 10;
+      else total += Math.max(0, Math.min(10, rank | 0));
+    }
+    while (total > 21 && aces > 0) { total -= 10; aces--; }
+    return total;
+  }
+  blackjackHandFor(client) {
+    if (!this.tavernBlackjackHands) this.tavernBlackjackHands = new Map();
+    return this.tavernBlackjackHands.get(client.sessionId) || null;
+  }
+  blackjackSend(client, rec, hand, extra = {}) {
+    const settled = hand && hand.phase === 'settled';
+    const dealer = settled ? hand.dealer : (hand && hand.dealer ? [hand.dealer[0]] : []);
+    client.send('tavernBlackjackState', {
+      ok: true,
+      phase: hand ? hand.phase : 'idle',
+      bet: hand ? hand.bet | 0 : 0,
+      player: hand ? hand.player.slice() : [],
+      dealer,
+      dealerHidden: !!(hand && !settled && hand.dealer && hand.dealer.length > 1),
+      playerTotal: hand ? this.blackjackTotal(hand.player) : 0,
+      dealerTotal: settled ? this.blackjackTotal(hand.dealer) : (hand && hand.dealer ? this.blackjackTotal([hand.dealer[0]]) : 0),
+      tokens: rec && rec.prof ? rec.prof.tavernTokens | 0 : 0,
+      ...extra,
+    });
+  }
+  blackjackSettle(client, rec, hand, result) {
+    const bet = hand.bet | 0;
+    let payout = 0, label = result;
+    if (result === 'blackjack') payout = bet * 3;
+    else if (result === 'win') payout = bet * 2;
+    else if (result === 'push') payout = bet;
+    else label = 'lose';
+    rec.prof.tavernTokens = Math.max(0, Math.min(1000000, (rec.prof.tavernTokens | 0) + payout));
+    hand.phase = 'settled';
+    const delta = payout - bet;
+    this.dirtyPlayers.add(rec.token);
+    this.blackjackSend(client, rec, hand, { result: label, payout, delta });
+  }
+  handleTavernBlackjack(client, m) {
+    const rec = this.profileFor(client);
+    const reject = reason => client.send('tavernBlackjackState', { ok: false, reason, tokens: rec && rec.prof ? rec.prof.tavernTokens | 0 : 0 });
+    if (!rec || !m) return;
+    if (this.rateLimited(client, 'tavernBlackjack', 6, 10)) return reject('rate');
+    const p = this.state.players.get(client.sessionId);
+    const tableX = W.TOWN.TC + 15.5, tableZ = W.TOWN.TC + 25.5;
+    if (!p || p.dgn || Math.hypot(p.x - tableX, p.z - tableZ) > 4.2) return reject('range');
+    if (!this.tavernBlackjackHands) this.tavernBlackjackHands = new Map();
+    const action = m.action === 'hit' || m.action === 'stand' || m.action === 'clear' ? m.action : 'deal';
+    let hand = this.blackjackHandFor(client);
+    if (hand && hand.phase === 'playing' && Date.now() - (hand.createdAt || 0) > 120000) {
+      this.refundTavernBlackjack(client, 'expired');
+      hand = null;
+    }
+    if (action === 'clear') {
+      if (hand && hand.phase === 'playing') this.refundTavernBlackjack(client, 'abandoned');
+      else this.tavernBlackjackHands.delete(client.sessionId);
+      return this.blackjackSend(client, rec, null);
+    }
+    if (action === 'deal') {
+      if (hand && hand.phase === 'playing') return this.blackjackSend(client, rec, hand);
+      const bet = Math.max(1, Math.min(25, m.bet | 0 || 1));
+      if ((rec.prof.tavernTokens | 0) < bet) return reject('tokens');
+      rec.prof.tavernTokens = Math.max(0, (rec.prof.tavernTokens | 0) - bet);
+      hand = { phase: 'playing', bet, createdAt: Date.now(), player: [this.blackjackCard(), this.blackjackCard()], dealer: [this.blackjackCard(), this.blackjackCard()] };
+      this.tavernBlackjackHands.set(client.sessionId, hand);
+      this.dirtyPlayers.add(rec.token);
+      const pt = this.blackjackTotal(hand.player), dt = this.blackjackTotal(hand.dealer);
+      if (pt === 21 || dt === 21) return this.blackjackSettle(client, rec, hand, pt === 21 && dt === 21 ? 'push' : pt === 21 ? 'blackjack' : 'lose');
+      return this.blackjackSend(client, rec, hand);
+    }
+    if (!hand || hand.phase !== 'playing') return reject('hand');
+    if (action === 'hit') {
+      hand.player.push(this.blackjackCard());
+      const total = this.blackjackTotal(hand.player);
+      if (total > 21) return this.blackjackSettle(client, rec, hand, 'lose');
+      if (total === 21) m = { action: 'stand' };
+      else return this.blackjackSend(client, rec, hand);
+    }
+    while (this.blackjackTotal(hand.dealer) < 17) hand.dealer.push(this.blackjackCard());
+    const pt = this.blackjackTotal(hand.player), dt = this.blackjackTotal(hand.dealer);
+    const result = dt > 21 || pt > dt ? 'win' : pt === dt ? 'push' : 'lose';
+    return this.blackjackSettle(client, rec, hand, result);
+  }
+  refundTavernBlackjack(client, reason = 'abandoned') {
+    if (!client || !this.tavernBlackjackHands) return 0;
+    const hand = this.tavernBlackjackHands.get(client.sessionId);
+    if (!hand || hand.phase !== 'playing') { this.tavernBlackjackHands.delete(client.sessionId); return 0; }
+    const rec = this.profileFor(client), refund = Math.max(0, hand.bet | 0);
+    if (rec && refund) {
+      rec.prof.tavernTokens = Math.min(1000000, (rec.prof.tavernTokens | 0) + refund);
+      this.dirtyPlayers.add(rec.token);
+    }
+    this.tavernBlackjackHands.delete(client.sessionId);
+    return refund;
+  }
+  handleTavernTokenExchange(client, m) {
+    const rec = this.profileFor(client);
+    const reject = reason => client.send('tavernTokenResult', { ok: false, reason, gold: rec && rec.prof ? rec.prof.gold | 0 : 0, tokens: rec && rec.prof ? rec.prof.tavernTokens | 0 : 0, remaining: rec && rec.prof ? Math.max(0, 100-(rec.prof.tavernTokenBoughtToday|0)) : 0 });
+    if (!rec || !m) return;
+    if (this.rateLimited(client, 'tavernTokenExchange', 3, 6)) return reject('rate');
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dgn || Math.hypot(p.x - (W.TOWN.TC + 12.5), p.z - (W.TOWN.TC + 15.5)) > 9) return reject('range');
+    const day = new Date().toISOString().slice(0, 10);
+    if (rec.prof.tavernTokenDay !== day) { rec.prof.tavernTokenDay = day; rec.prof.tavernTokenBoughtToday = 0; }
+    const amount = Math.max(1, Math.min(25, m.amount | 0 || 5));
+    if ((rec.prof.tavernTokenBoughtToday | 0) + amount > 100) return reject('daily');
+    if ((rec.prof.gold | 0) < amount) return reject('gold');
+    rec.prof.gold -= amount;
+    rec.prof.tavernTokens = Math.min(1000000, (rec.prof.tavernTokens | 0) + amount);
+    rec.prof.tavernTokenBoughtToday = (rec.prof.tavernTokenBoughtToday | 0) + amount;
+    this.dirtyPlayers.add(rec.token);
+    client.send('tavernTokenResult', { ok: true, amount, gold: rec.prof.gold | 0, tokens: rec.prof.tavernTokens | 0, remaining: 100 - rec.prof.tavernTokenBoughtToday });
+  }
   chestKeyForPlayer(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return null;

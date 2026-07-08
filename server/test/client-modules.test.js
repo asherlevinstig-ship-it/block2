@@ -57,6 +57,7 @@ test('DimensionGrid provides one origin-aware storage contract for every dimensi
 
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
   const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.mjs', 'hud.mjs', 'menus.mjs', 'networking.mjs', 'frame-loop.mjs'];
   const runtimeSource = runtimeFiles.map(name =>
     fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', name), 'utf8')
@@ -70,11 +71,12 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(html, /<script src="\/shared\/job-system\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/gear-system\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/dungeon-generation\.js"><\/script>/);
-  assert.match(html, /import\('\.\/js\/game-context\.mjs'\)/);
-  assert.match(html, /createGameContext\(\{\s*services:/);
+  assert.match(html, /<script type="module" src="\/js\/boot\.mjs"><\/script>/);
+  assert.match(boot, /import\('\.\/game-context\.mjs'\)/);
+  assert.match(boot, /createGameContext\(\{\s*services:/);
   let previousModule = -1;
   for (const name of runtimeFiles) {
-    const offset = html.indexOf(`'./js/${name}'`);
+    const offset = boot.indexOf(`'./${name}'`);
     assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
     previousModule = offset;
   }
@@ -82,7 +84,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" type="button" disabled/);
   assert.match(html, /id="gearrewardwin"/);
-  assert.match(html, /dataset\.gamePhase='ready'[\s\S]*button\.disabled=false/);
+  assert.match(boot, /dataset\.gamePhase\s*=\s*'ready'[\s\S]*button\.disabled\s*=\s*false/);
   assert.doesNotMatch(html, /\.\/js\/ui\.js/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /HUD hotbar/);
   const menusSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
@@ -121,6 +123,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(runtimeSource, /BlockcraftDungeonGeneration\.createDungeonGeneration/);
   assert.match(runtimeSource, /bandit_camp/);
   assert.match(html, /id="activitytracker"/);
+  assert.match(html, /shared\/familiar-system\.js/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8'), /BlockcraftFamiliarSystem/);
   assert.match(runtimeSource, /Caravan Under Attack/);
   assert.match(runtimeSource, /utilityEquipped\('compass'\)/);
   assert.match(runtimeSource, /mapUtility&&overworldActivity/);
@@ -316,6 +320,30 @@ test('combat feedback classifies escalating armor durability warnings',async()=>
   assert.equal(armorCondition(0,100).band,'broken');
 });
 
+test('shadow army progression scales storage, deployment, capture odds, and boss upkeep',()=>{
+  const shadow=require('../../shared/shadow-army');
+  assert.deepEqual(shadow.limits(1),{rank:0,storage:3,deployed:1});
+  assert.deepEqual(shadow.limits(51),{rank:5,storage:36,deployed:6});
+  assert.equal(shadow.captureChance(2,1),.5);
+  assert.equal(shadow.captureChance(2,2),.25);
+  assert.equal(shadow.captureChance(2,3),.08);
+  assert.equal(shadow.captureChance(2,1,{elite:true}),.25);
+  assert.equal(shadow.captureChance(2,1,{boss:true}),.1);
+  assert.equal(shadow.captureChance(1,1,{boss:true}),0);
+  assert.equal(shadow.bossUpkeep(5),8);
+  assert.equal(shadow.combatProfile('sun_archer',2).style,'ranged');
+  assert.equal(shadow.combatProfile('bandit_brute',2).style,'brute');
+  assert.equal(shadow.combatProfile('boss',3,true).style,'boss');
+  assert.ok(shadow.combatProfile('boss',3,true).radius>2);
+});
+
+test('client prediction applies Arcanist mana and cooldown discounts',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
+  assert.match(source,/mp-=abilityManaCost\(a\)/);
+  assert.match(source,/abCd\[i\]=abilityCooldown\(a\)/);
+  assert.match(source,/abCd\[i\]\/abilityCooldown\(a\)/);
+});
+
 test('browser and server consume one shared safeguarded comms ruleset', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'comms-rules.js'), 'utf8');
   const context = vm.createContext({});
@@ -333,22 +361,22 @@ test('first D-rank clear produces a one-time repeatable-loop handoff', async () 
   const { gateMilestoneHandoff, rankPromotionDetails } = await clientModule('onboarding.mjs');
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 1, nextRank: 2 } }, true), {
     label: 'ADVENTURER LOOP UNLOCKED',
-    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Exit through the return portal, then follow Compass Sense to the Job Board and work toward C-Rank at Level 8.',
+    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Each rank now contains 10 levels; higher ranks demand increasingly greater mastery.',
     action: 'TRACK NEXT CONTRACT',
   });
   assert.equal(gateMilestoneHandoff({ firstClear: { rank: 0 } }, true), null);
   assert.equal(gateMilestoneHandoff({ firstClear: { rank: 1 } }, false), null);
   assert.equal(gateMilestoneHandoff({}, true), null);
   assert.deepEqual(rankPromotionDetails({
-    fromRank: 1, rank: 2, gateRank: 2, level: 8, statPoints: 3, nextRankLevel: 13,
+    fromRank: 1, rank: 2, gateRank: 2, level: 21, statPoints: 3, nextRankLevel: 31,
   }), {
     rank: 2,
     letter: 'C',
     title: 'C-RANK HUNTER',
     gateAccess: 'C-RANK GATES',
-    level: 8,
+    level: 21,
     statPoints: 3,
-    next: 'B-Rank begins at Level 13',
+    next: 'B-Rank begins at Level 31',
   });
   assert.equal(rankPromotionDetails({ fromRank: 2, rank: 2 }), null);
 });
@@ -389,12 +417,12 @@ test('Hunter XP curve has explicit rank thresholds and steepens at high rank', a
   const progression = await clientModule('progression.mjs');
   const serverProgression = require('../rooms/constants');
   const { hunterActivityXpForLevel, hunterRankIndexForLevel, gateRankIndexForLevel, nextHunterRankLevel, xpNeedForLevel } = progression;
-  assert.deepEqual([1, 4, 8, 13, 19, 27].map(hunterRankIndexForLevel), [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual([1, 11, 21, 31, 41, 51].map(hunterRankIndexForLevel), [0, 1, 2, 3, 4, 5]);
   assert.equal(gateRankIndexForLevel(99), 4, 'gate tiers stop at A while Hunter rank reaches S');
-  assert.deepEqual([0, 1, 2, 3, 4, 5].map(nextHunterRankLevel), [4, 8, 13, 19, 27, 0]);
-  assert.equal(xpNeedForLevel(3), 130, 'the polished onboarding still reaches Level 3 on schedule');
-  assert.ok(xpNeedForLevel(18) > xpNeedForLevel(7) * 4);
-  assert.ok(xpNeedForLevel(26) > xpNeedForLevel(18) * 2);
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(nextHunterRankLevel), [11, 21, 31, 41, 51, 0]);
+  assert.equal(xpNeedForLevel(3), 53);
+  assert.ok(xpNeedForLevel(31) > xpNeedForLevel(10) * 10, 'post-E rank requirements rise sharply');
+  assert.ok(xpNeedForLevel(51) > xpNeedForLevel(31) * 2);
   for (let level = 1; level <= 40; level++) {
     assert.equal(xpNeedForLevel(level), serverProgression.xpNeedForLevel(level), `client/server XP parity at Level ${level}`);
     assert.equal(hunterRankIndexForLevel(level), serverProgression.hunterRankIndexForLevel(level), `client/server rank parity at Level ${level}`);
@@ -409,6 +437,193 @@ test('restored Mara progress clears provisional first-quest town guidance', asyn
   assert.match(combatSource, /const JOB_SYSTEM=globalThis\.BlockcraftJobSystem/);
   assert.match(combatSource, /townGuidanceStep==='quest'\s*&&\s*\(quest\s*\|\|\s*firstQuestMilestoneComplete\(\)\)/);
   assert.match(combatSource, /townGuidanceActive=false;[\s\S]*tutorialPillarGroup\.visible=false;[\s\S]*tutorialEl\.classList\.add\('hidden'\)/);
+});
+
+test('stale chat state cannot permanently swallow movement keys',()=>{
+  const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
+  assert.match(social,/chatTyping&&!document\.body\.classList\.contains\('chat-open'\)&&chatWheelEl\.classList\.contains\('hidden'\)/);
+  assert.match(social,/get chatTyping\(\)\{ return chatInputActive\(\); \}/);
+});
+
+test('remote player tags receive team helpers without crashing the frame loop',()=>{
+  const companions=fs.readFileSync(path.join(__dirname,'..','..','client','js','companions.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(companions,/remoteAppearance,\s*teamCol,\s*teamName,/);
+  assert.match(networking,/teamCol:\(\.\.\.args\)=>SOCIAL\.teamCol\(\.\.\.args\)/);
+  assert.match(networking,/teamName:\(\.\.\.args\)=>SOCIAL\.teamName\(\.\.\.args\)/);
+});
+
+test('Recall Cast uses the dedicated P practice hotkey',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
+  const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
+  assert.match(combat,/String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'&&!e\.repeat&&locked[\s\S]*BlockcraftRecall\.start\(\);\s*return;/);
+  assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
+  assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
+  assert.doesNotMatch(html,/id="recallanswers"/);
+  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\)\}/);
+  assert.doesNotMatch(room,/recallCooldowns|reason:'cooldown'/);
+});
+
+test('cursor item follows the mouse without relying on a leaked module global',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/const cursorEl=document\.getElementById\('cursoritem'\);/);
+  assert.match(combat,/if\(cursorEl\)\{cursorEl\.style\.left=.*cursorEl\.style\.top=/);
+});
+
+test('low mana or stamina prompts Recall recharge without interrupting active questions',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/function maybePromptRecallRecharge\(now\)/);
+  assert.match(frame,/BlockcraftRecall&&globalThis\.BlockcraftRecall\.active/);
+  assert.match(frame,/mp\/manaMax<=\.28/);
+  assert.match(frame,/sp\/staminaMax<=\.24/);
+  assert.match(frame,/press <b>P<\/b> for a Recall recharge question/);
+  assert.match(frame,/Recall recharge question\.',\s*'minor'\)/);
+  assert.match(frame,/maybePromptRecallRecharge\(now\)/);
+});
+
+test('narrow game HUD consolidates abilities, quest, status, and hotbar without clipping',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(css,/@media \(max-width:760px\)[\s\S]*#abilities\{left:50%;bottom:124px;transform:translateX\(-50%\)/);
+  assert.match(css,/@media \(max-width:760px\)[\s\S]*#currentquest\{top:8px;right:8px;width:min\(270px,58vw\)/);
+  assert.match(css,/@media \(max-width:760px\)[\s\S]*#coords\{top:48px;left:8px;right:auto;flex-direction:row/);
+  assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
+});
+
+test('death drops render as timed public world loot and onboarding teaches Recall and limbo',()=>{
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(networking,/function showDeathDropVisual\(m\)[\s\S]*CylinderGeometry\(\.18,\.38,12/);
+  assert.match(networking,/PUBLIC LOOT[\s\S]*expiresAt-Date\.now\(\)/);
+  assert.match(networking,/deathDropSnapshot[\s\S]*deathDropExpired/);
+  assert.match(frame,/BlockcraftDeathDrops\)globalThis\.BlockcraftDeathDrops\.tick\(now\)/);
+  assert.match(combat,/kind:'recall'[\s\S]*key:'P'/);
+  assert.match(combat,/Lesson 11 \/ 12 - Recall Cast/);
+  assert.match(combat,/Death sends carried items to limbo[\s\S]*mistakes become public loot/);
+});
+
+test('Escape opens subject focus only when gameplay has no open window',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  assert.match(combat,/if\(closed\)\{ e\.preventDefault\(\); return; \}[\s\S]*overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active[\s\S]*BlockcraftSubjectFocus\.open\(\)/);
+  assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
+  for(const subject of ['Computer Science','Information Technology','Religious Education','English'])assert.match(menus,new RegExp(subject));
+  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\)\}/);
+});
+
+test('ordinary combat exposes health, telegraphs, statuses, impact pause, and death motion',()=>{
+  const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
+  const feedback=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat-feedback.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(visuals,/if\(!name\)name=ref\.kind==='boss'/,'generic enemies receive readable names instead of special encounters only');
+  assert.match(visuals,/textSprite\('STUNNED'/);
+  assert.match(visuals,/textSprite\('FROZEN'/);
+  assert.match(visuals,/const deathTick=setInterval/);
+  assert.match(feedback,/sound\.crit/);
+  assert.match(feedback,/sound\.block/);
+  assert.match(styles,/body\.combat-hit #game canvas/);
+});
+
+test('first ten minute guidance teaches subject focus and explicit quest acceptance',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(combat,/Lesson 10 \/ 12 - Subject Focus/);
+  assert.match(combat,/Press Escape and choose your Recall subject/);
+  assert.match(menus,/BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markSubjectFocus\(\)/);
+  assert.match(combat,/Town Step 1 - Accept First Quest/);
+  assert.match(combat,/Nothing gives XP until you explicitly accept it/);
+  assert.match(frame,/Accept Mara’s first quest/);
+  assert.match(world,/function npcQuestMarkerState\(v\)/);
+  assert.match(world,/offer:\['!'/);
+  assert.match(world,/turnin:\['\?'/);
+  assert.match(world,/unavailable:\['-'/);
+});
+
+test('server profile tutorial state overrides stale browser onboarding flags',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/function onboardingDone\(\)\{\s*if\(NET\.on\) return serverTutorials\.onboarding>=7;/);
+  assert.match(combat,/function meadowTutorialDone\(\)\{\s*if\(NET\.on\) return false;/);
+});
+
+test('Mara opening quest is presented as the deliberate story start',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(menus,/function isMaraOpeningOffer\(v,offer\)/);
+  assert.match(menus,/STORY START/);
+  assert.match(menus,/Accepting starts your story tracker/);
+  assert.match(menus,/Quest rewards are never passive/);
+  assert.match(css,/\.mara-start/);
+  assert.match(css,/\.mara-steps/);
+  assert.match(world,/The first job is not glamorous/);
+});
+
+test('First Hands guides the player through the first real objective',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(frame,/First Hands leave town, gather logs/);
+  assert.match(frame,/Leave through the north gate and gather logs/);
+  assert.match(frame,/town trees are protected[\s\S]*outside the wall/);
+  assert.match(world,/function firstHandsLoggingTarget\(\)/);
+  assert.match(world,/mara-first-hands/);
+  assert.match(world,/HUB\.northGate\.z\+1\.2/);
+  assert.match(menus,/Quest accepted: First Hands[\s\S]*north gate/);
+  assert.match(menus,/First Hands complete[\s\S]*gold trail back/);
+  assert.match(networking,/Quest accepted: First Hands[\s\S]*north gate/);
+});
+
+test('quick chat uses Tab then click to send instead of hold and release',()=>{
+  const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
+  assert.match(html,/Click a phrase to send/);
+  assert.match(social,/createElement\('button'\)[\s\S]*addEventListener\('click',\(\)=>\{sendQuickPhrase\(id\);closeQuickChatWheel\(true\);\}\)/);
+  assert.doesNotMatch(social,/held<220|movementX|movementY|Release Tab/);
+});
+
+test('local quick chat remains visible in a Minecraft-style bottom-left feed',()=>{
+  const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.doesNotMatch(css,/body\.calm-town #chatlog/);
+  assert.match(css,/#chatlog\{position:fixed;left:10px;bottom:82px[\s\S]*align-items:flex-start/);
+  assert.match(css,/\.chatline\{[\s\S]*background:rgba\(0,0,0,\.48\)[\s\S]*'Courier New'/);
+  assert.match(networking,/room\.onMessage\('comms',[\s\S]*chatLine\(label\+[\s\S]*m\.mode\|\|'local'/);
+});
+
+test('road safety scenes use physical signs instead of floating text sprites',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(world,/const roadSign=\(g,text,col/);
+  assert.match(world,/roadSign\(g,'ROAD PATROL'/);
+  assert.match(world,/HUB\.northGate\.z\+6\.5,dx:0,dz:1,index:0,fixed:true/);
+  assert.match(world,/back\.rotation\.y=Math\.PI/);
+  assert.match(world,/signTexture\(text,col,true\)/);
+  assert.match(world,/topY\+\.18/);
+  assert.match(world,/function roadSafetyAnchorAt\(x,z,dx,dz,index\)/);
+  assert.match(world,/if\(isTownLand\(x,z\)\)return null/);
+  assert.match(world,/Math\.abs\(sy-y\)>\.75/);
+  assert.match(world,/const roadNpc=\(g,x,z,robe,robeDark,hat,profile=\{\}\)=>/);
+  assert.match(world,/const actor=makeVillager\(robe,robeDark,hat,profile\),person=actor\.grp/);
+  assert.match(world,/roadNpc\(g,-1\.15,1\.2,'#486c86','#2e4558',true/);
+  assert.match(world,/roadSafetyActors\.push/);
+  assert.match(world,/function tickRoadSafetyScenes\(dt,t\)/);
+  assert.match(world,/road-guard-spear/);
+  assert.match(world,/guard:true/);
+  assert.doesNotMatch(world,/side:THREE\.DoubleSide,transparent:true/);
+  assert.doesNotMatch(world,/label\(g,'ROAD PATROL'/);
+  assert.doesNotMatch(world,/const traveller=/);
+});
+
+test('frame loop animates road patrol guards every tick',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(world,/tickRoadSafetyScenes,/);
+  assert.match(frame,/worldApi\.tickRoadSafetyScenes\(dt, now\/1000\)/);
 });
 
 test('caravan escort tracking begins only after accepting work from a caravan NPC',()=>{
@@ -450,7 +665,7 @@ test('client XP previews match the authoritative activity economy', async () => 
   const client = await clientModule('progression.mjs');
   const server = require('../rooms/xp-economy');
   assert.deepEqual({ ...client.HUNTER_ACTIVITY_XP_WEIGHTS }, { ...server.XP_ACTIVITY_WEIGHTS });
-  for (const level of [1, 4, 8, 13, 19, 27]) {
+  for (const level of [1, 11, 21, 31, 41, 51]) {
     for (const type of Object.keys(server.XP_ACTIVITY_WEIGHTS)) {
       assert.equal(client.hunterXpForActivity(level, type), server.hunterXpForActivity(level, type));
     }
@@ -459,20 +674,20 @@ test('client XP previews match the authoritative activity economy', async () => 
 
 test('rank progress counts all level XP remaining to the next Hunter rank', async () => {
   const { HUNTER_RANK_LEVELS, rankProgressForLevel, xpNeedForLevel } = await clientModule('progression.mjs');
-  const freshD = rankProgressForLevel(4, 0);
-  const dRequired = [4, 5, 6, 7].reduce((sum, level) => sum + xpNeedForLevel(level), 0);
+  const freshD = rankProgressForLevel(11, 0);
+  const dRequired = Array.from({length:10},(_,i)=>11+i).reduce((sum, level) => sum + xpNeedForLevel(level), 0);
   assert.deepEqual(freshD, {
     rank: 1,
     nextRank: 2,
-    nextRankLevel: 8,
+    nextRankLevel: 21,
     earned: 0,
     required: dRequired,
     remaining: dRequired,
     progress: 0,
     maxRank: false,
   });
-  const midD = rankProgressForLevel(6, 25);
-  assert.equal(midD.earned, xpNeedForLevel(4) + xpNeedForLevel(5) + 25);
+  const midD = rankProgressForLevel(13, 25);
+  assert.equal(midD.earned, xpNeedForLevel(11) + xpNeedForLevel(12) + 25);
   assert.equal(midD.remaining, dRequired - midD.earned);
   assert.equal(rankProgressForLevel(HUNTER_RANK_LEVELS.at(-1), 999).maxRank, true);
 });
@@ -686,4 +901,71 @@ test('Mesa slams and Plains pack lunges have explicit replicated telegraphs',()=
   assert.match(visuals,/st==='bruteWind'.*redclaw/);
   assert.match(visuals,/st==='packWind'.*gale_stalker/);
   assert.match(visuals,/RingGeometry\(radius-.11,radius,48\)/);
+});
+
+test('Rank Journey presents ten-level bands, promotion unlocks, and reward previews', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const onboarding = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'onboarding.mjs'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(menus, /const HUNTER_RANK_STARTS=\[1,11,21,31,41,51\]/);
+  assert.match(menus, /function openRankJourneyUI\(\)/);
+  assert.match(menus, /RANK JOURNEY/);
+  assert.match(menus, /quest-reward-preview/);
+  assert.match(onboarding, /NEWLY UNLOCKED/);
+  assert.match(css, /\.rank-journey-hero/);
+});
+
+test('tavern gambling has server-backed dice roulette and blackjack table entry points',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  const economy=fs.readFileSync(path.join(__dirname,'..','rooms','economy.mixin.js'),'utf8');
+  assert.match(menus,/function openTavernDiceUI/);
+  assert.match(menus,/function openTavernRouletteUI/);
+  assert.match(menus,/function openTavernBlackjackUI/);
+  assert.match(menus,/NET\.room\.send\('tavernDice'/);
+  assert.match(menus,/NET\.room\.send\('tavernRoulette'/);
+  assert.match(menus,/NET\.room\.send\('tavernBlackjack'/);
+  assert.match(menus,/LOW/);
+  assert.match(menus,/LUCKY 7/);
+  assert.match(menus,/HIGH/);
+  assert.match(menus,/RED/);
+  assert.match(menus,/ZERO/);
+  assert.match(combat,/nearTavernDiceTable/);
+  assert.match(combat,/nearTavernRouletteTable/);
+  assert.match(combat,/nearTavernBlackjackTable/);
+  assert.match(combat,/openTavernDiceUI\(\)/);
+  assert.match(combat,/openTavernRouletteUI\(\)/);
+  assert.match(combat,/openTavernBlackjackUI\(\)/);
+  assert.match(networking,/room\.onMessage\('tavernDiceResult'/);
+  assert.match(networking,/room\.onMessage\('tavernRouletteResult'/);
+  assert.match(networking,/room\.onMessage\('tavernBlackjackState'/);
+  assert.match(world,/Dice Table/);
+  assert.match(world,/Blackjack Table · G/);
+  assert.match(world,/Roulette Table · G/);
+  assert.match(room,/onMessage\('tavernDice'/);
+  assert.match(room,/onMessage\('tavernRoulette'/);
+  assert.match(room,/onMessage\('tavernBlackjack'/);
+  assert.match(economy,/handleTavernDice/);
+  assert.match(economy,/handleTavernRoulette/);
+  assert.match(economy,/handleTavernBlackjack/);
+  assert.match(economy,/blackjackTotal/);
+  assert.match(economy,/Math\.max\(1, Math\.min\(25/);
+});
+
+test('quest log progression director introduces one system at a time',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const store=fs.readFileSync(path.join(__dirname,'..','store.js'),'utf8');
+  assert.match(menus,/function progressionRoadmap\(\)/);
+  assert.match(menus,/function whatNextQuestLogCard\(\)/);
+  assert.match(menus,/function progressionDirectorGuidanceInfo\(\)/);
+  assert.match(menus,/ACTIVATE /);
+  assert.match(menus,/DISMISS GUIDE/);
+  assert.match(menus,/SYSTEM JOURNEY · ONE INTRODUCTION AT A TIME/);
+  assert.match(menus,/OPTIONAL · Tavern Games/);
+  assert.match(networking,/m\.systemIntroductions/);
+  assert.match(store,/systemIntroductions/);
 });

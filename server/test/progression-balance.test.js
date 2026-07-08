@@ -9,7 +9,7 @@ const { lootEconomySnapshot, simulateLootProgression } = require('../loot-progre
 
 test('mixed quest and dungeon pacing grows from a short D climb to an aspirational S climb', () => {
   const snapshot = progressionPacingSnapshot();
-  assert.deepEqual(snapshot.map(row => row.activities), [5, 12, 25, 50]);
+  assert.deepEqual(snapshot.map(row => row.activities), [25, 45, 67, 88]);
   for (let rank = 1; rank <= 4; rank++) {
     const row = snapshot[rank - 1], target = RANK_PACING_TARGETS[rank];
     assert.ok(row.activities >= target.min && row.activities <= target.max, `${target.rank} pacing: ${row.activities} activities`);
@@ -67,7 +67,7 @@ test('Gate readiness scales loadout advice without becoming an entry lock', () =
 
 test('Gate encounter previews derive difficulty, boss stats, party size, and rewards from live tuning', () => {
   const base = gateEncounterPreview({ rank: 2, kind: 'public', shardPlus: 0 }, { spawns: [{}, {}, {}], rooms: [{ type: 'vault' }] });
-  assert.deepEqual(base.enemyLevels, [8, 12]);
+  assert.deepEqual(base.enemyLevels, [21, 30]);
   assert.deepEqual(base.recommendedParty, [2, 3]);
   assert.equal(base.enemyCount, 3);
   assert.equal(base.eliteCount, 1);

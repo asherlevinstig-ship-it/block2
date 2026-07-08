@@ -34,8 +34,8 @@ const GRADUATION_REWARD = Object.freeze([
 const Q = (title, type, item, need, gold, xp, rewardItems = [], extra = {}) => ({ title, type, item, need, gold, xp, rewardItems, ...extra });
 const NPC_QUEST_CHAINS = {
   'Mara Vale': [
-    Q('First Hands','fetch',W.B.LOG,6,16,28,[],{levelTarget:2,desc:'Gather 6 logs beyond the walls. This first field task will take you to Level 2.'}),
-    Q('Road Ready','kill',0,3,24,47,[],{levelTarget:3,desc:'Take this wooden sword and defeat 3 monsters beyond town. Return ready for Level 3 and your first Gate.'}),
+    Q('First Hands','fetch',W.B.LOG,6,16,12,[],{levelTarget:2,desc:'Gather 6 logs beyond the walls. This first field task will take you to Level 2.'}),
+    Q('Road Ready','kill',0,3,24,31,[],{levelTarget:3,desc:'Take this wooden sword and defeat 3 monsters beyond town. Return ready for Level 3 and your first Gate.'}),
     Q('The First Gate','gate',0,1,50,60,[],{gateRank:0,desc:'An E-rank Gate has opened for you. Find it, clear it, and return to Mara.'}),
     Q('A Better Sense','utility','compass',1,42,58),Q('Meat Becomes Gold','sell',I.MONSTER_MEAT,1,38,54,[{id:I.SHADOW_SIGIL,count:1}]),Q('A Shadow Companion','familiar','shade',1,52,72,[{id:W.B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]),Q('First Bonded Mount','mount','dragon',1,78,100),Q('Sky Legs','mount_use','dragon',1,64,88)
   ],
@@ -43,11 +43,11 @@ const NPC_QUEST_CHAINS = {
   'Tobin Ashhand': [Q('Forge Fuel','mine',W.B.COAL_ORE,5,30,42),Q('Smith Stock','fetch',I.IRON_INGOT,3,48,66),Q('A Practical Edge','fetch',I.REPAIR_KIT,1,64,84)],
   'Edda Quill': [Q('Gate Notes','gate',0,1,72,80),Q('Crystal Harmonics','mine',W.B.DIAMOND_ORE,2,90,100),Q('Scholar Supplies','fetch',W.B.GLASS,8,44,58)],
   'Bram Ledger': [Q('Crates And Claims','fetch',W.B.PLANKS,20,28,34),Q('Road Reserve','fetch',W.B.COBBLE,20,32,40),Q('Night Stock','fetch',W.B.TORCH,10,42,52)],
-  'Liss Barley': [Q('Field Hands','fetch',I.WHEAT,8,30,42),Q('Bread Line','fetch',I.BREAD,3,42,54),Q('Care Feed','fetch',I.DRAGON_TREAT,1,62,74)],
-  'Pippa Hearth': [Q('Warm Meals','fetch',I.COOKED_MEAT,3,36,46),Q('Travel Bread','fetch',I.BREAD,3,40,52),Q('Roost Treats','fetch',I.DRAGON_TREAT,1,64,78)],
+  'Liss Barley': [Q('Field Hands','fetch',I.WHEAT,8,30,42),Q('Bread Line','fetch',I.BREAD,3,42,54),Q('Care Feed','fetch',I.DRAGON_TREAT,1,62,74),Q('The Bright Harvest','fetch',I.GOLDEN_WHEAT,1,74,92,[{id:I.FORAGE_CHARM,count:1}],{desc:'Bring Liss one Golden Wheat. She has seen a harvest-sprite following its light.'}),Q('A Sprite in the Sheaves','familiar','sprite',1,82,104,[],{desc:'Use the Forage Charm to bind Sprite, then return to Liss.'})],
+  'Pippa Hearth': [Q('Warm Meals','fetch',I.COOKED_MEAT,3,36,46),Q('Travel Bread','fetch',I.BREAD,3,40,52),Q('Roost Treats','fetch',I.DRAGON_TREAT,1,64,78),Q('A Light for the Wounded','fetch',I.HEARTY_SANDWICH,1,76,94,[{id:I.MOTE_CHARM,count:1}],{desc:'Bring Pippa a Hearty Sandwich for the infirmary. She will entrust you with a restorative charm.'}),Q('The Gentle Mote','familiar','mote',1,84,108,[],{desc:'Use the Mote Charm to bind Mote, then return to Pippa.'})],
   'Oren Mortar': [Q('Foundation Check','fetch',W.B.COBBLE,22,32,42),Q('Pane Work','fetch',W.B.GLASS,8,40,50),Q('Brick Sense','fetch',W.B.BRICK,12,50,64)],
   'Sable Venn': [Q('Quiet Watch','kill',0,3,34,48),Q('Candle Reserve','fetch',W.B.TORCH,8,38,50),Q('Stillness After Storm','gate',0,1,76,86)],
-  'Pell Graywatch': [Q('Wall Patrol','kill',0,5,38,54),Q('Patrol Gear','fetch',W.B.TORCH,10,42,54),Q('Gate Duty','gate',0,1,82,92)],
+  'Pell Graywatch': [Q('Wall Patrol','kill',0,5,38,54),Q('Patrol Gear','fetch',W.B.TORCH,10,42,54),Q('Gate Duty','gate',0,1,82,92),Q('Tracks Beyond the Wall','kill',0,8,78,98,[{id:I.FANG_TOTEM,count:1}],{desc:'Cull 8 monsters beyond the wall. Pell says an old guardian hound answers proven hunters.'}),Q('The Fang Pact','familiar','fang',1,86,112,[],{desc:'Use the Fang Totem to bind Fang, then report to Pell.'})],
   'Greta Warmug': [Q('Cellar Supper','fetch',I.COOKED_MEAT,3,38,48),Q('Breakfast Rush','fetch',I.BREAD,4,46,56),Q('House Specialty','fetch',I.HEARTY_SANDWICH,1,68,82)],
   'Rook Emberstall': [Q('Roost Manners','fetch',I.WHEAT,6,34,44),Q('Treat Training','fetch',I.DRAGON_TREAT,1,70,82),Q('Sky Stock','fetch',W.B.PLANKS,24,50,62)],
 };
@@ -319,7 +319,9 @@ class ProgressionMixin {
         targetLvl++;
         carriedXp = 0;
       }
-      quest.xp = Math.max(quest.xp, targetXp);
+      // The two opening lessons are paced milestones, not scalable repeatables:
+      // land exactly on the advertised level even when the wider XP economy rises.
+      quest.xp = targetXp;
       quest.levelTarget = def.levelTarget | 0;
     }
     if (def.gateRank != null) quest.gateRank = Math.max(0, Math.min(4, def.gateRank | 0));
@@ -384,17 +386,23 @@ class ProgressionMixin {
     this.grantHunterXp(rec.prof, q.xp, client, 'town_quest');
     for (const it of q.rewardItems || []) this.addRewardItem(rec.prof, it.id, it.count);
     rec.prof.npcQuestChains[q.giver] = Math.max((rec.prof.npcQuestChains[q.giver] | 0), (q.chainStep | 0) + 1);
+    let firstQuestMilestone = null;
+    if (q.giver === 'Mara Vale' && q.title === 'First Hands' && !rec.prof.firstQuestRewardClaimed) {
+      rec.prof.firstQuestRewardClaimed = true;
+      rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + 100);
+      firstQuestMilestone = { gold: 100, totalGold: rec.prof.gold | 0 };
+    }
     if (q.giver === 'Mara Vale' && q.type === 'gate' && (q.gateRank | 0) === 0 && (q.chainStep | 0) === 2) {
-      rec.prof.progressionFocus = rec.prof.job === 'adventurer'
-        ? (rec.prof.jobContract ? '' : 'first_promotion_contract')
-        : 'first_promotion_job';
-      rec.prof.firstPromotionSeen = false;
+      rec.prof.progressionFocus = 'e_rank_climb';
     }
     rec.prof.activeNpcQuest = null;
     this.grantJobXp(client, 'adventurer', 12);
     this.progressJobContract(client, 'quest', 1, 0);
+    client.send('npcQuest', { action, quest: null, completed: q, firstQuestMilestone });
+    if (firstQuestMilestone) client.send('firstQuestReward', { ok: true, gold: 100, totalGold: firstQuestMilestone.totalGold });
+    // Present completion before the profile update that may cross a level
+    // threshold; the client can then hold path selection behind the reward.
     this.progressionChanged(client, 'npcQuest', { action, rewardGold: q.gold | 0, rewardXp: q.xp | 0, giver: q.giver });
-    client.send('npcQuest', { action, quest: null, completed: q });
     return true;
   }
 

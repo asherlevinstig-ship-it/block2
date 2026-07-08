@@ -5,7 +5,7 @@ const {
   ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_LOOT, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
   DANGER_RINGS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_TYPE_SET,
   I, KEY_LOOT, MINE_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
-  keyForRank, spriteForageChance,
+  keyForRank, spriteForageChance, spriteBonusDrops,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -15,6 +15,8 @@ const D = require('../dungeon');
 const AI = require('../ai');
 const JOB_SYSTEM = require('../../shared/job-system');
 const GEAR_SYSTEM = require('../../shared/gear-system');
+const SHADOW_ARMY = require('../../shared/shadow-army');
+const ABILITY_PROGRESSION = require('../../shared/ability-progression');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class CombatMixin {
@@ -37,7 +39,8 @@ class CombatMixin {
     this.weaponMomentum = new Map();
     this.monkAuraAt = new Map();
     this.prospectAt = new Map();
-    this.shadowSoldiers = new Map();   // sessionId -> summoned soldier mob id
+    this.shadowSoldiers = new Map();   // sessionId -> summoned soldier mob ids
+    this.shadowSpirits = new Map();    // sessionId -> short-lived capture offer
     this.secondWindAt = new Map();     // sessionId -> next Second Wind proc time
     this.pvel = new Map();      // sessionId -> {x,z} horizontal velocity estimate (written by the move handler)
   }
@@ -276,6 +279,9 @@ class CombatMixin {
     if (!def || def.kind === 'passive') return client.send('abilityReject', { slot, reason: 'invalid' });
     if (rec.prof.S.lvl < ABILITY_UNLOCK[slot]) return client.send('abilityReject', { slot, reason: 'level' });
     if (rec.prof.S.path && rec.prof.S.path !== path) return client.send('abilityReject', { slot, reason: 'path' });
+    const spec=rec.prof.abilitySpec||'',rank=ABILITY_PROGRESSION.rankForLevel(rec.prof.S.lvl);
+    const manaCost=def.mp*(spec==='arcanist'&&rank>=2?.85:1);
+    const cooldown=def.cd*(spec==='arcanist'&&rank>=2?.85:1);
     const now = Date.now();
     const st = this.regenAbilityState(client, now);
     const cdKey = path + ':' + slot;
@@ -283,12 +289,19 @@ class CombatMixin {
       this.sendAbilitySync(client, st);
       return client.send('abilityReject', { slot, reason: 'cooldown' });
     }
-    if (st.mp + .001 < def.mp) {
+    if(def.kind==='summon'){
+      const result=this.handleShadowArmyCast(client,p,rec,st,now,def);
+      st.cds[cdKey]=result.action==='capture'?(result.attempted?now+1500:0):(result.deployed>0?now+cooldown:0);
+      this.sendAbilitySync(client,st);
+      client.send('abilityResult',{path,slot,kind:def.kind,mp:Math.floor(st.mp),maxMp:st.maxMp,shadowArmy:rec.prof.shadowArmy||[],...result});
+      return;
+    }
+    if (st.mp + .001 < manaCost) {
       this.sendAbilitySync(client, st);
       return client.send('abilityReject', { slot, reason: 'mana' });
     }
-    st.mp -= def.mp;
-    st.cds[cdKey] = now + def.cd;
+    st.mp -= manaCost;
+    st.cds[cdKey] = now + cooldown;
     this.sendAbilitySync(client, st);
 
     const fx = { t: 'ability', path, slot, kind: def.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0, sid: client.sessionId, dgn: p.dgn || '' };
@@ -300,11 +313,11 @@ class CombatMixin {
 
     if (def.kind === 'buff') {
       const buffs = this.abilityBuffs.get(client.sessionId) || {};
-      buffs.umbralUntil = now + 10000;
+      buffs.umbralUntil = now + (spec==='assassin'&&rank>=2?12000:10000);
       this.abilityBuffs.set(client.sessionId, buffs);
     } else if (def.kind === 'armor') {
       const buffs = this.abilityBuffs.get(client.sessionId) || {};
-      buffs.ironUntil = now + 15000;
+      buffs.ironUntil = now + (spec==='warden'&&rank>=2?18000:15000);
       this.abilityBuffs.set(client.sessionId, buffs);
     } else if (def.kind === 'summon') {
       this.spawnShadowSoldier(client, p, rec.prof, now);
@@ -313,26 +326,62 @@ class CombatMixin {
       client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp });
       return;
     } else if (def.kind === 'frost') {
-      this.damageMobsInRadius(client, p.x, p.y + .7, p.z, def.radius, ABILITY_SYSTEM.abilityDamage('frost', rec.prof.S), { slow: 4 });
+      this.damageMobsInRadius(client,p.x,p.y+.7,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('frost',rec.prof.S)*(spec==='elementalist'&&rank>=2?1.15:1),{slow:4,stun:spec==='elementalist'&&rank>=2?.45:0});
       this.breakBlocksInRadius(client, p.x, p.y + .4, p.z, 2.0, 8);
     } else if (def.kind === 'lightning') {
       if (!target || !target.meta || Math.hypot(target.mob.x - p.x, target.mob.z - p.z) > def.range ||
           !AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, target.mob.x, target.mob.y + 0.9, target.mob.z)) {
-        st.mp = Math.min(st.maxMp, st.mp + def.mp);
+        st.mp = Math.min(st.maxMp, st.mp + manaCost);
         st.cds[cdKey] = 0;
         this.sendAbilitySync(client, st);
         return client.send('abilityReject', { slot, reason: 'target' });
       }
-      const jumps = this.resolveChainLightning(client, target.id, target.mob, rec.prof);
+      const jumps=this.resolveChainLightning(client,target.id,target.mob,rec.prof,3+(rank>=3?1:0)+(spec==='elementalist'&&rank>=2?1:0));
       fx.x = target.mob.x; fx.y = target.mob.y; fx.z = target.mob.z; fx.id = target.id;
       fx.jumps = jumps;
       this.breakBlocksInRadius(client, target.mob.x, target.mob.y + .5, target.mob.z, 1.2, 4);
     } else if (def.kind === 'shockwave') {
-      this.damageMobsInRadius(client, p.x, p.y + .4, p.z, def.radius, ABILITY_SYSTEM.abilityDamage('shockwave', rec.prof.S), { knock: 3.8 });
+      this.damageMobsInRadius(client,p.x,p.y+.4,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('shockwave',rec.prof.S)*(spec==='juggernaut'&&rank>=2?1.25:1),{knock:spec==='juggernaut'&&rank>=2?4.8:3.8});
       this.breakBlocksInRadius(client, p.x, p.y + .2, p.z, 2.8, 16);
     }
     this.sendSpace(p.dgn || '', 'fx', fx);
     client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp });
+  }
+  shadowSpiritRank(mob,meta={}){
+    if(mob&&mob.kind==='boss'&&mob.dgn&&this.instances&&this.instances[mob.dgn])return Math.max(0,Math.min(5,this.instances[mob.dgn].rank|0));
+    return Math.max(0,Math.min(5,meta.rank==null?(meta.dangerRing|0):(meta.rank|0)));
+  }
+  offerShadowSpirit(client,mob,meta={}){
+    const rec=client&&this.profileFor(client);
+    if(!rec||!mob||rec.prof.S.path!=='shadow'||this.isAnimalKind(mob.kind)||['orb','ghost','shadow_soldier'].includes(mob.kind))return;
+    const rank=this.shadowSpiritRank(mob,meta),boss=mob.kind==='boss',elite=!!meta.elite||!!meta.banditCaptain;
+    const offer={id:'spirit_'+Date.now().toString(36)+'_'+String(Math.random()).slice(2,8),kind:mob.kind,name:boss?'Gate Boss':String(mob.kind).replace(/_/g,' '),rank,boss,elite,level:Math.max(1,mob.level|0),x:mob.x,y:mob.y,z:mob.z,dgn:mob.dgn||'',expiresAt:Date.now()+12000};
+    this.shadowSpirits.set(client.sessionId,offer);
+    client.send('shadowSpirit',{...offer,rankName:SHADOW_ARMY.RANKS[rank]});
+  }
+  handleShadowArmyCast(client,p,rec,st,now,def){
+    if(!this.shadowSpirits)this.shadowSpirits=new Map();
+    const offer=this.shadowSpirits.get(client.sessionId);
+    if(offer&&now<=offer.expiresAt&&(offer.dgn||'')===(p.dgn||'')&&Math.hypot(offer.x-p.x,offer.z-p.z)<=7){
+      const limits=SHADOW_ARMY.limits(rec.prof.S.lvl),army=Array.isArray(rec.prof.shadowArmy)?rec.prof.shadowArmy:(rec.prof.shadowArmy=[]);
+      if(army.length>=limits.storage)return {action:'capture',captured:false,attempted:false,reason:'storage',storage:limits.storage};
+      const chance=SHADOW_ARMY.captureChance(limits.rank,offer.rank,{boss:offer.boss,elite:offer.elite});
+      if(chance<=0)return {action:'capture',captured:false,attempted:false,reason:offer.boss?'boss_rank':'rank',chance};
+      this.shadowSpirits.delete(client.sessionId);
+      if(Math.random()>=chance)return {action:'capture',captured:false,attempted:true,reason:'resisted',chance};
+      const spirit={id:offer.id,kind:offer.kind,name:offer.name,rank:offer.rank,boss:offer.boss,elite:offer.elite,level:offer.level,capturedAt:now};
+      army.push(spirit);this.dirtyPlayers.add(rec.token);
+      return {action:'capture',captured:true,attempted:true,spirit,storage:limits.storage,chance};
+    }
+    const army=Array.isArray(rec.prof.shadowArmy)?rec.prof.shadowArmy:[];
+    if(!army.length)return {action:'deploy',deployed:0,reason:'empty'};
+    if(st.mp+.001<def.mp)return {action:'deploy',deployed:0,reason:'mana'};
+    st.mp-=def.mp;
+    const limits=SHADOW_ARMY.limits(rec.prof.S.lvl),deployLimit=limits.deployed+(rec.prof.abilitySpec==='commander'?1:0),roster=army.slice(0,deployLimit);
+    this.despawnShadowSoldier(client.sessionId);
+    for(let i=0;i<roster.length;i++)this.spawnShadowSoldier(client,p,rec.prof,now,roster[i],i);
+    this.sendSpace(p.dgn||'','fx',{t:'ability',path:'shadow',slot:2,kind:'summon',x:p.x,y:p.y,z:p.z,yaw:p.yaw||0,sid:client.sessionId,dgn:p.dgn||''});
+    return {action:'deploy',deployed:roster.length,storage:limits.storage};
   }
   dragonAbilityDir(p, m) {
     let dx = Number(m && m.dx), dy = Number(m && m.dy), dz = Number(m && m.dz);
@@ -467,7 +516,7 @@ class CombatMixin {
       life: Math.max(.5, (def.range || 24) / speed),
       dgn: p.dgn || '',
       caster: client.sessionId,
-      damage: ABILITY_SYSTEM.abilityDamage('fireball', prof && prof.S),
+      damage: ABILITY_SYSTEM.abilityDamage('fireball',prof&&prof.S)*(prof&&prof.abilitySpec==='elementalist'?1.15:1),
       radius: def.radius || 3,
     };
     this.sFireballs.push(fb);
@@ -511,51 +560,64 @@ class CombatMixin {
     mob.state = 'stun';
   }
   // ---- Shadow Soldier: a server-simulated summoned ally (replicates like any mob) ----
-  spawnShadowSoldier(client, p, prof, now = Date.now()) {
+  spawnShadowSoldier(client, p, prof, now = Date.now(), spirit=null, index=0) {
     if (!this.shadowSoldiers) this.shadowSoldiers = new Map();
     if (!Number.isFinite(this.mobSeq)) this.mobSeq = 0;
-    this.despawnShadowSoldier(client.sessionId);
     const cfg = ABILITY_SYSTEM.SOLDIER;
     const id = String(++this.mobSeq), mob = new Mob();
     mob.kind = 'shadow_soldier';
+    mob.shadowKind=spirit&&spirit.kind||'zombie';
+    mob.shadowRank=spirit?Math.max(0,spirit.rank|0):0;
+    mob.shadowBoss=!!(spirit&&spirit.boss);
     mob.dgn = p.dgn || '';
     const fwdX = -Math.sin(p.yaw || 0), fwdZ = -Math.cos(p.yaw || 0);
-    mob.x = p.x - fwdX * .45 + fwdZ * .95;
-    mob.z = p.z - fwdZ * .45 - fwdX * .95;
+    const side=(index-(Math.max(0,index-1)/2))*.85;
+    mob.x = p.x - fwdX * (.45+index*.2) + fwdZ * (.95+side);
+    mob.z = p.z - fwdZ * (.45+index*.2) - fwdX * (.95+side);
     mob.y = p.y;
-    mob.hp = mob.maxHp = cfg.hp;
+    const rank=spirit?Math.max(0,spirit.rank|0):0;
+    mob.hp = mob.maxHp = Math.round(cfg.hp*(1+rank*.28)*(spirit&&spirit.boss?2.2:1));
     this.state.mobs.set(id, mob);
-    const meta = this.freshMeta(mob.x, mob.z, 0, cfg.speed, mob.kind, 0, false);
+    const identity=SHADOW_ARMY.combatProfile(mob.shadowKind,rank,mob.shadowBoss);
+    const meta = this.freshMeta(mob.x,mob.z,0,identity.speed,mob.kind,0,false);
     meta.friendly = true;
     meta.soldier = {
       owner: client.sessionId,
       until: now + cfg.lifeMs,
-      atkAt: 0,
-      dmg: ABILITY_SYSTEM.abilityDamage('soldier', prof && prof.S),
+      atkAt:0,
+      dmg:ABILITY_SYSTEM.abilityDamage('soldier',prof&&prof.S)*identity.damage,
+      style:identity.style,range:identity.range,speed:identity.speed,attackCdMs:identity.attackCdMs,radius:identity.radius,
+      spirit:spirit||{kind:'shadow_soldier',rank:0,boss:false},
+      upkeep:spirit&&spirit.boss?SHADOW_ARMY.bossUpkeep(rank)*(prof&&prof.abilitySpec==='commander'?.75:1):0,
     };
     this.mobMeta[id] = meta;
-    this.shadowSoldiers.set(client.sessionId, id);
+    const ids=this.shadowSoldiers.get(client.sessionId)||[];ids.push(id);this.shadowSoldiers.set(client.sessionId,ids);
     return id;
   }
   despawnShadowSoldier(sid) {
     if (!this.shadowSoldiers) return;
-    const id = this.shadowSoldiers.get(sid);
-    if (!id) return;
-    this.state.mobs.delete(id);
-    delete this.mobMeta[id];
+    const ids=this.shadowSoldiers.get(sid);
+    if (!ids) return;
+    for(const id of ids){this.state.mobs.delete(id);delete this.mobMeta[id];}
     this.shadowSoldiers.delete(sid);
   }
   tickShadowSoldiers(now, dt) {
     if (!this.shadowSoldiers || !this.shadowSoldiers.size) return;
     const cfg = ABILITY_SYSTEM.SOLDIER;
-    for (const [sid, id] of [...this.shadowSoldiers]) {
+    for (const [sid, ids] of [...this.shadowSoldiers]) {
+      for(const id of [...ids]){
       const mob = this.state.mobs.get(id), meta = this.mobMeta[id];
       const owner = this.state.players.get(sid);
       const info = meta && meta.soldier;
       // the soldier fades on expiry, when its hunter leaves, or across a dimension change
       if (!mob || !info || !owner || now >= info.until || (owner.dgn || '') !== (mob.dgn || '')) {
-        this.despawnShadowSoldier(sid);
+        if(mob){this.state.mobs.delete(id);delete this.mobMeta[id];}ids.splice(ids.indexOf(id),1);if(!ids.length)this.shadowSoldiers.delete(sid);
         continue;
+      }
+      if(info.upkeep){
+        const ownerClient=this.clients.find(c=>c.sessionId===sid),st=ownerClient&&this.regenAbilityState(ownerClient,now),cost=info.upkeep*dt;
+        if(!st||st.mp<cost){this.state.mobs.delete(id);delete this.mobMeta[id];ids.splice(ids.indexOf(id),1);if(!ids.length)this.shadowSoldiers.delete(sid);if(ownerClient){this.sendAbilitySync(ownerClient,st);ownerClient.send('shadowRecall',{reason:'mana',id:info.spirit.id});}continue;}
+        st.mp-=cost;
       }
       let target = null, targetId = '', best = cfg.acquireRange;
       this.state.mobs.forEach((m2, id2) => {
@@ -567,16 +629,20 @@ class CombatMixin {
       });
       const tx = target ? target.x : owner.x, tz = target ? target.z : owner.z;
       const dist = Math.hypot(tx - mob.x, tz - mob.z) || 1;
-      if (target && dist <= cfg.attackRange) {
+      if (target && dist <= info.range) {
         mob.state = 'attack';
         if (now >= (info.atkAt || 0)) {
-          info.atkAt = now + cfg.attackCdMs;
+          info.atkAt = now + info.attackCdMs;
           const ownerClient = this.clients.find(c => c.sessionId === sid);
-          if (ownerClient) this.damageMobByAbility(ownerClient, targetId, target, info.dmg);
-          this.sendSpace(mob.dgn || '', 'fx', { t: 'soldierStrike', x: target.x, y: target.y, z: target.z, yaw: mob.yaw, dgn: mob.dgn || '' });
+          if(ownerClient){
+            if(info.style==='boss')this.damageMobsInRadius(ownerClient,target.x,target.y+1,target.z,info.radius,info.dmg,{knock:2.8});
+            else this.damageMobByAbility(ownerClient,targetId,target,info.dmg);
+          }
+          const fxType=info.style==='boss'?'shadowBossSlam':info.style==='ranged'?'shadowVolley':info.style==='brute'?'shadowHeavy':'soldierStrike';
+          this.sendSpace(mob.dgn||'','fx',{t:fxType,x:target.x,y:target.y,z:target.z,fromX:mob.x,fromY:mob.y+1.2,fromZ:mob.z,yaw:mob.yaw,dgn:mob.dgn||''});
         }
       } else if (target || dist > cfg.followRange) {
-        const step = Math.min(dist, cfg.speed * dt);
+        const step = Math.min(dist,info.speed*dt);
         mob.x += (tx - mob.x) / dist * step;
         mob.z += (tz - mob.z) / dist * step;
         const inst = mob.dgn ? this.instances[mob.dgn] : null;
@@ -587,9 +653,10 @@ class CombatMixin {
       } else {
         mob.state = '';
       }
+      }
     }
   }
-  resolveChainLightning(client, firstId, firstMob, prof) {
+  resolveChainLightning(client, firstId, firstMob, prof, maxTargets=3) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !firstMob) return [];
     const base = ABILITY_SYSTEM.abilityDamage('lightning', prof && prof.S);
@@ -597,7 +664,7 @@ class CombatMixin {
     const jumps = [];
     const hit = new Set();
     let prevId = String(firstId), prev = firstMob;
-    for (let i = 0; i < 3 && prev; i++) {
+    for (let i = 0; i < maxTargets && prev; i++) {
       const dmg = base * Math.pow(.62, i);
       const stun = i === 0 ? 1.05 : .65;
       hit.add(prevId);
@@ -642,17 +709,18 @@ class CombatMixin {
     if (this.mobMeta[String(mobId)] && this.mobMeta[String(mobId)].friendly) return;
     if (!this.isAnimalKind(mob.kind)) this.alertPack(String(mobId));
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, damage);
-    this.emitDamageNumber(client, mob, damage, false);
-    mob.hp -= Math.max(0, damage) * this.banditProtectionMultiplier(String(mobId), mob);
+    const applied=Math.max(0,damage)*this.banditProtectionMultiplier(String(mobId),mob);
+    this.emitDamageNumber(client,mob,damage,false,mob.hp-applied<=0);
+    mob.hp -= applied;
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
   // Tell the attacker the actual damage their hit dealt, so the client can float a
   // number over the mob. Server-authoritative — no client-side damage prediction.
-  emitDamageNumber(client, mob, damage, crit) {
+  emitDamageNumber(client, mob, damage, crit, lethal=mob.hp-damage<=0) {
     if (!client || !mob) return;
     const n = Math.round(damage);
     if (n <= 0) return;
-    client.send('dmgnum', { x: mob.x, y: mob.y, z: mob.z, n, crit: !!crit });
+    client.send('dmgnum', { x: mob.x, y: mob.y, z: mob.z, n, crit: !!crit, lethal: !!lethal });
   }
   handleAttack(client, m) {
     if (!m) return;
@@ -683,8 +751,9 @@ class CombatMixin {
     }else this.weaponMomentum.delete(client.sessionId);
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
-    this.emitDamageNumber(client, mob, dmg, crit);
-    mob.hp -= dmg * this.banditProtectionMultiplier(mobId, mob);
+    const applied=dmg*this.banditProtectionMultiplier(mobId,mob);
+    this.emitDamageNumber(client,mob,dmg,crit,mob.hp-applied<=0);
+    mob.hp -= applied;
     if(mob.hp<=0)this.finishMobKill(client,mobId,mob);
     else if(profile.archetype==='axe'){
       const rule=GEAR_SYSTEM.WEAPON_IDENTITY.stagger,meta=this.mobMeta[mobId];
@@ -736,6 +805,7 @@ class CombatMixin {
     const wasBoss = mob.kind === 'boss', dgn = mob.dgn, kind = mob.kind;
     const killedMeta = this.mobMeta[mobId] || {};
     const dx = mob.x, dy = mob.y, dz = mob.z;
+    if(client)this.offerShadowSpirit(client,mob,killedMeta);
     this.state.mobs.delete(String(mobId));
     delete this.mobMeta[mobId];
     if (dgn) this.removeTransient(dgn, String(mobId));
@@ -797,7 +867,9 @@ class CombatMixin {
     if (minerLevel>=JOB_SYSTEM.MINER_RULES.oreSenseLevel && Math.random() < jobPerkChance(rec.prof, 'miner', 0.08)) items[0].count += 1;
     if (minerLevel>=JOB_SYSTEM.MINER_RULES.geodeLevel && [W.B.COAL_ORE,W.B.IRON_ORE,W.B.DIAMOND_ORE].includes(blockId) && Math.random()<JOB_SYSTEM.MINER_RULES.geodeChance) items.push({id:I.GEODE,count:1});
     const fp = this.state.players.get(client.sessionId);
-    if (fp && fp.familiar === 'sprite' && Math.random() < spriteForageChance(fp.lvl)) items[0].count += 1;   // Sprite foraging bonus
+    const spriteLevel=fp&&fp.familiar==='sprite'?this.familiarPowerLevel(client,'sprite'):1;
+    const spriteBonus = !!(fp && fp.familiar === 'sprite' && Math.random() < spriteForageChance(spriteLevel));
+    if (spriteBonus){items[0].count += spriteBonusDrops(spriteLevel);this.awardFamiliarXp(client,'sprite',12,'bonus_find');}
 
     if (blockId === W.B.GRASS && Math.random() < 0.35) items.push({ id: I.WHEAT_SEEDS, count: 1 });
     if (Number.isFinite(x) && Number.isFinite(z)) {
@@ -817,6 +889,7 @@ class CombatMixin {
       xp: Math.round((drop.xp || 0) * DANGER_RINGS[Number.isFinite(x) && Number.isFinite(z) ? dangerRingAt(x, z) : 0].loot),
       items,
     });
+    if (spriteBonus) this.sendSpace(fp.dgn || '', 'fx', { t:'spriteBonus', x:Number.isFinite(x)?x+.5:fp.x, y:Number.isFinite(y)?y+.6:fp.y+1, z:Number.isFinite(z)?z+.5:fp.z, count:spriteBonusDrops(spriteLevel), sid:client.sessionId, dgn:fp.dgn || '' });
     this.recordMineProgress(client, blockId);
   }
   rollBossKeyDrops(rank) {
@@ -855,6 +928,7 @@ class CombatMixin {
       this.dirtyPlayers.add(rec.token);
     }
     client.send('loot', loot);
+    if (rec) client.send('profile', rec.prof);
   }
   markGateCleared(client, rank) {
     const rec = this.profileFor(client);
@@ -907,6 +981,11 @@ class CombatMixin {
     rec.prof.S.path = path;
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
+  }
+  setAbilitySpecialization(client,spec){
+    const rec=this.profileFor(client);
+    if(!rec||rec.prof.abilitySpec||ABILITY_PROGRESSION.rankForLevel(rec.prof.S.lvl)<2||!ABILITY_PROGRESSION.validSpecialization(rec.prof.S.path,spec))return client.send('abilitySpecReject',{reason:'invalid'});
+    rec.prof.abilitySpec=spec;this.dirtyPlayers.add(rec.token);client.send('abilitySpecResult',{spec,path:rec.prof.S.path});
   }
   alertPack(mobId) {
     const meta = this.mobMeta[mobId];

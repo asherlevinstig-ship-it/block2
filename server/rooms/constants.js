@@ -2,6 +2,7 @@
 // system modules. Extracted verbatim from GameRoom.js so behaviour is unchanged;
 // methods can now be split into separate files without losing these constants.
 const W = require('../world');
+const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
 const DAY_LEN = 600;
 const DAY_MS = DAY_LEN * 1000;
 function dayTimeAt(epoch, now = Date.now()) {
@@ -46,9 +47,9 @@ const REWARD_ITEMS = { coal: 101, iron: 102, dia: 103 };
 // Valid states for the guided-onboarding focus pointer. Mirrored verbatim in
 // client/js/progression.mjs (pinned by the client-modules parity test) so the
 // client whitelist can't drift from the server.
-const PROGRESSION_FOCUS_STATES = Object.freeze(['first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
-const HUNTER_RANK_LEVELS = Object.freeze([1, 4, 8, 13, 19, 27]);
-const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.12, 1.35, 1.7, 2.2, 2.8]);
+const PROGRESSION_FOCUS_STATES = Object.freeze(['e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
+const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
+const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
 function hunterRankIndexForLevel(level) {
   const lvl = Math.max(1, level | 0);
@@ -63,7 +64,7 @@ function nextHunterRankLevel(rank) {
 }
 function xpNeedForLevel(level) {
   const lvl = Math.max(1, level | 0), rank = hunterRankIndexForLevel(lvl);
-  return Math.round(25 * Math.pow(lvl, 1.5) * HUNTER_RANK_XP_MULTIPLIERS[rank]);
+  return Math.round(12 * Math.pow(lvl, 1.35) * HUNTER_RANK_XP_MULTIPLIERS[rank]);
 }
 function hunterActivityXpForLevel(level, weight = 1) {
   const rank = hunterRankIndexForLevel(level);
@@ -93,20 +94,22 @@ const I = {
   WINDSEED: 193, HEARTWOOD_RESIN: 194, SUNSHARD: 195, MESA_AMBER: 196, FROST_CRYSTAL: 197, MIRE_BLOOM: 198,
   RIVER_FISH: 199, MOTE_CHARM: 200, FORAGE_CHARM: 201, COMPOST: 202, GOLDEN_WHEAT: 203,
   GOLDEN_BROTH: 204, TRAIL_RATION: 205, FEAST_PLATTER: 206,
-  GEODE: 207,
+  GEODE: 207, RAINWAKE_PETAL: 208, STORMGLASS: 209, SOLAR_GLYPH: 210,
 };
 // Familiars. Shade: defense, Fang: offense, Mote: restoration, Sprite: forage (bonus yield).
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite']);
 const FAMILIAR_BIND_ITEM = { shade: 191, fang: 192, mote: 200, sprite: 201 };   // item consumed to bind each familiar
-const SHADE_RANK_LVLS = [1, 6, 11, 16, 21];   // Iron..Gold bands (mirrors client)
-function famTier(lvl) { let t = 0; for (let i = 0; i < SHADE_RANK_LVLS.length; i++) if ((lvl | 0) >= SHADE_RANK_LVLS[i]) t = i; return t; }
-function shadeMitigation(lvl) { return Math.min(0.25, 0.10 + 0.03 * famTier(lvl)); }   // Guarding Shade: damage soak, scales with rank
-function fangDamage(lvl) { return 3 + famTier(lvl) * 2.5; }   // Fang bite: 3 .. 13 by rank
-const FANG_CD_MS = 850, FANG_RANGE = 9;
-function moteRegen(lvl) { return 0.6 + 0.4 * famTier(lvl); }   // Mote: HP per second, 0.6 .. 2.2
-function moteBurst(lvl) { return 4 + 2 * famTier(lvl); }       // emergency heal at higher ranks
-const MOTE_BURST_MIN_TIER = 2, MOTE_BURST_CD_MS = 20000, MOTE_BURST_RANGE = 10;
-function spriteForageChance(lvl) { return 0.12 + 0.05 * famTier(lvl); }   // Sprite: chance of a bonus drop, 0.12 .. 0.32
+const SHADE_RANK_LVLS = FAMILIAR_SYSTEM.TIER_LEVELS;
+const famTier = FAMILIAR_SYSTEM.tier, shadeMitigation = FAMILIAR_SYSTEM.shadeMitigation;
+const fangDamage = FAMILIAR_SYSTEM.fangDamage, { FANG_CD_MS, FANG_RANGE } = FAMILIAR_SYSTEM;
+const moteRegen = FAMILIAR_SYSTEM.moteRegen, moteBurst = FAMILIAR_SYSTEM.moteBurst;
+const { MOTE_BURST_MIN_TIER, MOTE_BURST_CD_MS, MOTE_BURST_RANGE } = FAMILIAR_SYSTEM;
+const spriteForageChance = FAMILIAR_SYSTEM.spriteForageChance;
+const spriteBonusDrops = FAMILIAR_SYSTEM.spriteBonusDrops;
+const fangCooldown = FAMILIAR_SYSTEM.fangCooldown, fangStrikes = FAMILIAR_SYSTEM.fangStrikes;
+const moteBurstCooldown = FAMILIAR_SYSTEM.moteBurstCooldown;
+const shadeStepCharges = FAMILIAR_SYSTEM.shadeStepCharges, shadeStepDistance = FAMILIAR_SYSTEM.shadeStepDistance;
+const { SHADE_STEP_MIN_TIER, SHADE_STEP_CD_MS, SHADE_STEP_DISTANCE } = FAMILIAR_SYSTEM;
 const LEGENDARY_CRAFTS = {
   [I.LEGEND_SWORD]: { cost: 1, name: 'Legendary Blade' },
   [I.LEGEND_ARMOR]: { cost: 2, name: 'Legendary Aegis Armor' },
@@ -434,7 +437,7 @@ const SHOP_BUY = [
   ...TEAM_KEYS.map((id, rank) => [id, 1, TEAM_KEY_PRICES[rank]]),
 ];
 const SHOP_SELL = [[I.COAL, 1, 2], [I.IRON_INGOT, 1, 8], [I.DIAMOND, 1, 35], [W.B.LOG, 1, 1], [W.B.IRON_ORE, 1, 5]];
-const ROAD_MERCHANT_BUY = [[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[W.B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22]];
+const ROAD_MERCHANT_BUY = [[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[W.B.TORCH,12,14],[I.WINDSEED,2,22],[I.HEARTWOOD_RESIN,2,22],[I.SUNSHARD,2,22],[I.MESA_AMBER,2,22],[I.FROST_CRYSTAL,2,22],[I.MIRE_BLOOM,2,22],[I.RAINWAKE_PETAL,1,18],[I.STORMGLASS,1,26],[I.SOLAR_GLYPH,1,24]];
 const GUILD_DECOR_BUY = [[W.B.TORCH,8,10],[W.B.LANTERN,2,18],[W.B.CAMPFIRE,1,18],[W.B.TABLE,1,18],[W.B.BED,1,24],[W.B.CHEST,1,28],[W.B.FURNACE,1,30]];
 const GUILD_DECOR_BLOCKS = new Set(GUILD_DECOR_BUY.map(e => e[0]));
 const TAVERN_BUY = [[I.COOKED_MEAT, 1, 8], [I.POT_ALE, 1, 5], [I.POT_STEW, 1, 12], [I.POT_MANA, 1, 15], [I.POT_SWIFT, 1, 20], [I.POT_STONE, 1, 25]];
@@ -445,7 +448,7 @@ const ITEM_NAMES = {
   [I.RIVER_FISH]: 'Silverfin', [I.IRON_INGOT]: 'Iron Ingot', [I.DIAMOND]: 'Diamond',
   [I.COMPOST]: 'Compost', [I.GOLDEN_WHEAT]: 'Golden Wheat',
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
-  [I.GEODE]: 'Prismatic Geode',
+  [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
 };
 const GUILD_BOARD_POS = { x: W.TOWN.TC + 4.5, z: W.TOWN.TC - 8.5 };
 const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
@@ -489,6 +492,9 @@ const RECIPES = [
   { shapeless: [I.MESA_AMBER, I.IRON_INGOT, I.STICK], out: [I.REPAIR_KIT, 2] },
   { shapeless: [I.FROST_CRYSTAL, W.B.SNOW, W.B.SNOW], out: [W.B.ICE, 4] },
   { shapeless: [I.MIRE_BLOOM, I.COOKED_MEAT, I.CHARCOAL], out: [I.DRAGON_TREAT, 2] },
+  { shapeless: [I.RAINWAKE_PETAL, I.WHEAT, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 2] },
+  { shapeless: [I.STORMGLASS, I.IRON_INGOT, I.COAL], out: [I.REPAIR_KIT, 3] },
+  { shapeless: [I.SOLAR_GLYPH, I.SUNSHARD, W.B.GLASS], out: [I.SUNSHARD, 3] },
   { shapeless: [W.B.LEAVES, I.WHEAT, I.CHARCOAL], out: [I.COMPOST, 2] },
   { shapeless: [I.GOLDEN_WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 3] },
   { shapeless: [I.WHEAT, I.BREAD, I.COOKED_MEAT], out: [I.GOLDEN_BROTH, 1], job: 'cook', level: 5 },
@@ -559,3 +565,12 @@ module.exports = {
   ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, ANIMAL_BASE_KIND, ANIMAL_CAP, ANIMAL_DESPAWN_RADIUS, ANIMAL_KINDS, ANIMAL_LOOT, ANIMAL_SPAWN_INTERVAL, ARMOR_INFO, BETA_EVENT_TEST, BETA_FARM_TEST, BETA_LEGENDARY_TEST, BIOME_ANIMAL, BIOME_COLLECTIBLE, BOLSTER_DMG, BOLSTER_HP, BOLSTER_MAX_STACKS, BOLSTER_RADIUS, BOSS_CONTRIB_MS, BOSS_REWARD_BY_RANK, BOSS_REWARD_RANGE, CARAVAN_ACTIVE_MS, CHEST_REWARD_BY_RANK, CROP_GROW_MS, DANGER_RINGS, DAY_LEN, DAY_MS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_BREEDING, DRAGON_BREED_CD_MS, DRAGON_BREED_MS, DRAGON_BREED_RESULT, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_CHEST_CHANCE, DRAGON_EGG_OF, DRAGON_INCUBATION_MS, DRAGON_INCUBATION_MS_BY_TYPE, DRAGON_LOVE_MS, DRAGON_PERCH_SLOTS, DRAGON_TYPES, DRAGON_TYPE_BY_EGG, DRAGON_TYPE_SET, ELITE_FAMILIES, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS, EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS, EVENT_TEST_QUEUE_MS, FAMILIAR_BIND_ITEM, FAMILIAR_KINDS, FANG_CD_MS, FANG_RANGE, FOOD_VALUES, FUEL, GATE_DISTANCE_BANDS, GUARDIAN_POS, GUILD_BOARD_POS, GUILD_DECOR_BLOCKS, GUILD_DECOR_BUY, GUILD_FLOOR_MAX, GUILD_HALL, HAZARD_MOD_SET, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, HUNTER_ACTIVITY_XP_BY_RANK, HUNTER_RANK_LEVELS, HUNTER_RANK_XP_MULTIPLIERS, I, ITEM_NAMES, JOB_IDS, KEY_LOOT, KING_ACTIVE_MS, KING_ARENA_SIZE, KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, LAND_BASE_PRICE, LAND_FREE_RADIUS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LEGENDARY_CRAFTS, LOCAL_ANIMAL_COUNT_RADIUS, LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, MAX_HUNGER, MINE_DROPS, MINE_REQUIRE, MOB_CAP, MOTE_BURST_CD_MS, MOTE_BURST_MIN_TIER, MOTE_BURST_RANGE, PROGRESSION_FOCUS_STATES, RANGED_ENEMY_KINDS, RECIPES, REGIONAL_CONTRACT_TYPES, REWARD_ITEMS, ROAD_MERCHANT_BUY, SHADE_RANK_LVLS, SHARD_ITEM_IDS, SHARD_MOD_KEYS, SHARD_TIERS, SHOP_BUY, SHOP_SELL, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS, SKYSHIP_DOCK_X, SKYSHIP_EDGE_X, SKYSHIP_SPEED, SKYSHIP_TRAVEL_MS, SMELT, SMELT_MS, SOLO_KEYS, SOLO_KEY_PRICES, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TEAM_KEY_PRICES, TOOL_INFO, TOOL_MAT_ITEMS, UTILITY_IDS, WEATHER_KINDS, WEATHER_DURATION_MS, WEATHER_NEXT, LIGHTNING_INTERVAL_MS, LIGHTNING_RADIUS, LIGHTNING_PLAYER_DMG, LIGHTNING_MOB_DMG, rollWeatherNext, rollWeatherDurationMs, weatherSpawnMods, animalBudgetFor, dangerRingAt, dayTimeAt, dragonIncubationMs, dragonMountType, dragonOffspring, famTier, fangDamage, gateRankIndexForLevel, guildFloorPrice, hostileBudgetFor, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, isUnlockableMount, isValidMount, jobLevelFor, jobLevelFromXp, jobPerkChance, jobPerkTier, keyForRank, mobTargetInRange, moteBurst, moteRegen, nextHunterRankLevel, rollShardMods, shadeMitigation, skyshipSnapshot, spriteForageChance, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 };
 module.exports.BIOME_HOSTILE = BIOME_HOSTILE;
+module.exports.SHADE_STEP_MIN_TIER = SHADE_STEP_MIN_TIER;
+module.exports.SHADE_STEP_CD_MS = SHADE_STEP_CD_MS;
+module.exports.SHADE_STEP_DISTANCE = SHADE_STEP_DISTANCE;
+module.exports.spriteBonusDrops = spriteBonusDrops;
+module.exports.fangCooldown = fangCooldown;
+module.exports.fangStrikes = fangStrikes;
+module.exports.moteBurstCooldown = moteBurstCooldown;
+module.exports.shadeStepCharges = shadeStepCharges;
+module.exports.shadeStepDistance = shadeStepDistance;

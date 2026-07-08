@@ -7,7 +7,7 @@
   // Single source of truth for hunter class abilities: the server reads mp/cdMs/kind/
   // range/radius for validation and simulation, the client additionally reads the UI
   // fields (glyph, color, descriptions, stamina). cdMs is milliseconds everywhere.
-  const UNLOCK_LEVELS=Object.freeze([2,5,8]);
+  const UNLOCK_LEVELS=Object.freeze([2,4,8]);
   const PATHS=Object.freeze({
     shadow:Object.freeze({name:'Shadow Monarch',color:'#8b5cf6',
       desc:'Strike from darkness. Speed, lethality, and an army of shadows.',

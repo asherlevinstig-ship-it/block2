@@ -1,5 +1,5 @@
 const { performance } = require('perf_hooks');
-const { Room, matchMaker } = require('colyseus');
+const { Room, matchMaker, CloseCode } = require('@colyseus/core');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
@@ -12,7 +12,9 @@ const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-
 const JOB_SYSTEM = require('../../shared/job-system');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
+const RECALL = require('../../shared/recall-system');
 const { takeHandoff, drainConsumedGates } = require('./dungeon-handoff');
+const { rateLimited: consumeRateLimit } = require('./rate-limit');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -33,8 +35,8 @@ function releaseGlobalWorld(room) {
 const {
   ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
   BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
-  EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
-  LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
+  EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
+  ITEM_NAMES, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
   SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, dangerRingAt, dayTimeAt, dragonMountType,
   gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
@@ -43,7 +45,9 @@ const {
 } = require('./constants');
 
 class GameRoom extends Room {
-  static async onAuth(_token, request) {
+  static async onAuth(_token, _options, context) {
+    const headers = context && context.headers;
+    const request = { headers: { cookie: headers && typeof headers.get === 'function' ? headers.get('cookie') : '' } };
     const account = getAuthService().authenticateRequest(request);
     if (!account) throw new Error('authentication required');
     return account;
@@ -59,7 +63,7 @@ class GameRoom extends Room {
     this.world.generate();
 
     // ---- persistence ----
-    this.store = createStore();
+    this.store = this.monitorStore(createStore());
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
@@ -76,6 +80,10 @@ class GameRoom extends Room {
     this.moderationReports = [];
     this.restartRecoveries = new Map();
     this.tutorialReturns = new Map();
+    this.deathLimbo = new Map();
+    this.deathDrops = new Map();
+    this.deathDropSeq = 0;
+    this.initRecallState();
 
     // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
     this.initDungeonState();        // must precede restoreSavedGates (populates gateSeq/gateTtls)
@@ -204,6 +212,20 @@ class GameRoom extends Room {
 
     // ---- message handlers ----
     this.onMessage('move', (client, m) => this.handleMove(client, m));
+    this.onMessage('recallStart', (client, m) => this.handleRecallStart(client, m));
+    this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
+    this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
+    this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
+    this.onMessage('profileRequest', client => {
+      const rec = this.profileFor(client);
+      if (!rec || !rec.prof) return;
+      this.refreshSystemIntroductions(rec.prof);
+      client.send('profile', rec.prof);
+      const hunger = this.playerHunger.get(client.sessionId);
+      if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
+      const recovery = this.restartRecoveries.get(rec.token);
+      if (recovery) client.send('dungeonRestartRecovery', recovery);
+    });
 
     this.onMessage('mount', (client, m) => this.handleMount(client, m));
     this.onMessage('dismount', (client) => this.handleDismount(client));
@@ -215,7 +237,8 @@ class GameRoom extends Room {
     this.onMessage('dragonBreath', (client, m) => this.handleDragonBreath(client, m));
     this.onMessage('bindFamiliar', (client, m) => this.handleBindFamiliar(client, m));
     this.onMessage('summonFamiliar', (client, m) => this.handleSummonFamiliar(client, m));
-    this.onMessage('dismissFamiliar', (client) => { const p = this.state.players.get(client.sessionId); if (p) p.familiar = ''; });
+    this.onMessage('dismissFamiliar', (client) => this.handleDismissFamiliar(client));
+    this.onMessage('shadeStep', (client, m) => this.handleShadeStep(client, m));
     this.onMessage('feedMountedDragon', (client, m) => this.handleFeedMountedDragon(client, m));
     this.onMessage('skyshipSyncRequest', (client) => this.sendSkyshipSync(client));
     this.onMessage('skyshipBoard', (client) => this.handleSkyshipBoard(client));
@@ -231,6 +254,7 @@ class GameRoom extends Room {
     });
 
     this.onMessage('spendStat', (client, m) => this.handleSpendStat(client, m));
+    this.onMessage('abilitySpec',(client,m)=>this.setAbilitySpecialization(client,String(m&&m.spec||'')));
     this.onMessage('setJob', (client, m) => this.handleSetJob(client, m));
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
     this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
@@ -300,6 +324,7 @@ class GameRoom extends Room {
     this.onMessage('claimFirstQuestReward', client => this.handleClaimFirstQuestReward(client));
     this.onMessage('ackFirstPromotion', client => this.handleAckFirstPromotion(client));
     this.onMessage('tutorialComplete', (client, m) => this.handleTutorialComplete(client, m));
+    if(process.env.NODE_ENV!=='production')this.onMessage('familiarTelemetry',client=>client.send('familiarTelemetry',this.familiarTelemetrySnapshot(client)));
     this.onMessage('dungeonRecoveryRequest', client => {
       const token = this.tokens.get(client.sessionId);
       const recovery = token && this.restartRecoveries.get(token);
@@ -430,6 +455,10 @@ class GameRoom extends Room {
     this.onMessage('attuneShard', (client, m) => this.handleAttuneShard(client, m));
     this.onMessage('craft', (client, m) => this.handleCraft(client, m));
     this.onMessage('shop', (client, m) => this.handleShop(client, m));
+    this.onMessage('tavernDice', (client, m) => this.handleTavernDice(client, m));
+    this.onMessage('tavernRoulette', (client, m) => this.handleTavernRoulette(client, m));
+    this.onMessage('tavernBlackjack', (client, m) => this.handleTavernBlackjack(client, m));
+    this.onMessage('tavernTokenExchange', (client, m) => this.handleTavernTokenExchange(client, m));
     this.onMessage('farm', (client, m) => this.handleFarm(client, m));
     this.onMessage('prospect', client => this.handleProspect(client));
     this.onMessage('eventJoin', (client) => this.handleEventJoin(client));
@@ -441,6 +470,8 @@ class GameRoom extends Room {
     this.onMessage('chestWithdraw', (client, m) => this.handleChestWithdraw(client, m));
     this.onMessage('discoveryInteract', (client, m) => this.handleDiscoveryInteract(client, m));
     this.onMessage('discoverySight', (client, m) => this.handleDiscoverySight(client, m));
+    this.onMessage('cartographer', (client, m) => this.handleCartographer(client, m));
+    this.onMessage('treasureMapAdvance', (client, m) => this.handleTreasureMapAdvance(client, m));
     this.onMessage('regionalContracts', (client) => this.sendRegionalContracts(client));
     this.onMessage('regionalContractAccept', (client, m) => this.handleRegionalContractAccept(client, m));
     this.onMessage('caravanContractAccept', (client, m) => this.handleCaravanContractAccept(client, m));
@@ -474,6 +505,7 @@ class GameRoom extends Room {
   }
 
   async onJoin(client, options, auth) {
+    this.monitorClient(client);
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
     if (token) this.tokens.set(client.sessionId, token);
@@ -514,7 +546,18 @@ class GameRoom extends Room {
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
       if (this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
       if (Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
-        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
+        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+        this.dirtyPlayers.add(token);
+      }
+      // Move profiles saved at the old cramped plaza spawn into the new open
+      // arrival point so returning players receive the same readable opening.
+      if (Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
+        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+        this.dirtyPlayers.add(token);
+      }
+      const openingMaraStep=prof.npcQuestChains&&(prof.npcQuestChains['Mara Vale']|0)||0;
+      if ((prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
+        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
       client._mutedComms = new Set(prof.mutedPlayers || []);
@@ -523,7 +566,7 @@ class GameRoom extends Room {
         const feetBlocked = W.isSolid(this.world.getB(bx, by, bz));
         const headBlocked = W.isSolid(this.world.getB(bx, by + 1, bz));
         if (feetBlocked || headBlocked) {
-          prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
+          prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
           this.dirtyPlayers.add(token);
         }
       }
@@ -542,11 +585,12 @@ class GameRoom extends Room {
         ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
         : '';
       p.dragonNames = this.publicDragonNames(prof);
+      p.cosmetics = this.publicCosmetics(prof);
       p.x = prof.pos[0]; p.y = prof.pos[1] + .01; p.z = prof.pos[2];
     } else {
       p.x = W.TOWN.TC + .5 + (Math.random() * 4 - 2);
       p.y = W.TOWN.G + 1;
-      p.z = W.TOWN.TC + 7.5 + (Math.random() * 2 - 1);
+      p.z = W.TOWN.TC + 14.5 + (Math.random() * 2 - 1);
     }
     this.state.players.set(client.sessionId, p);
     if (prof && prof.skyshipTransit) {
@@ -574,13 +618,18 @@ class GameRoom extends Room {
     }
     this.ensurePlayerHp(client);
     const hunger = this.ensurePlayerHunger(client);
+    // Every login begins fed. This also provisions currently cached/reconnecting
+    // profiles immediately instead of waiting for the hunger simulation to reset.
+    hunger.hunger = hunger.max;
+    hunger.acc = 0;
+    hunger.syncAcc = 0;
     client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
-    if (prof) client.send('profile', prof);
     if (restartRecovery) {
       this.restartRecoveries.set(token, restartRecovery);
-      client.send('dungeonRestartRecovery', restartRecovery);
     }
     this.sendLandClaims(client);
+    const visibleDeathDrops = [...this.deathDrops.values()].filter(drop => drop.expiresAt > Date.now() && (drop.dgn || '') === (p.dgn || '')).map(drop => this.publicDeathDrop(drop));
+    if (visibleDeathDrops.length) client.send('deathDropSnapshot', { drops: visibleDeathDrops });
     this.sendDragonIncubations(client);
     this.sendNestDragons(client);
     this.sendEventStatus(client);
@@ -594,16 +643,16 @@ class GameRoom extends Room {
   }
 
 
-  async onLeave(client, consented) {
+  async onLeave(client, code) {
     // A process shutdown is not a voluntary dungeon exit. Keep the live
     // attempt marker intact so onDispose can flush it for next-boot recovery.
-    if (matchMaker && matchMaker.isGracefullyShuttingDown) return;
-    if (consented === false) {
+    if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
+    if (code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED)) {
       try {
         await this.allowReconnection(client, 15);
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
-        if (profile) client.send('profile', profile);
+        if (profile) { this.refreshSystemIntroductions(profile); client.send('profile', profile); }
         const hunger = this.playerHunger.get(client.sessionId);
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
         if (!this.resumeTutorialDimension(client) && !this.resumeEventParticipant(client)) this.resumeDungeonInstance(client);
@@ -616,6 +665,7 @@ class GameRoom extends Room {
   }
 
   finalizeLeave(client) {
+    if (typeof this.refundTavernBlackjack === 'function') this.refundTavernBlackjack(client, 'disconnect');
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
     this.detachTeamSession(client.sessionId);
@@ -656,6 +706,7 @@ class GameRoom extends Room {
     this.playerHunger.delete(client.sessionId);
     this.biomeStatuses.delete(client.sessionId);
     this.abilityState.delete(client.sessionId);
+    if(typeof this.clearRecallState==='function')this.clearRecallState(client.sessionId);
     this.abilityBuffs.delete(client.sessionId);
     if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
     if (this.moveRejects) this.moveRejects.delete(client.sessionId);
@@ -680,6 +731,7 @@ class GameRoom extends Room {
       });
     }
     this.blackholeCd.delete(client.sessionId);
+    this.clearFamiliarRuntime(client.sessionId);
     if (this.dragonBreathCd) this.dragonBreathCd.delete(client.sessionId);
     if (this.dragonAbilityCd) for (const key of [...this.dragonAbilityCd.keys()]) if (key.startsWith(client.sessionId + ':')) this.dragonAbilityCd.delete(key);
     if (this.legendaryCd) for (const key of [...this.legendaryCd.keys()]) if (key.startsWith(client.sessionId + ':')) this.legendaryCd.delete(key);
@@ -713,7 +765,14 @@ class GameRoom extends Room {
     this.lastSaveMsg = new Map();
   }
 
-  async flush() {
+  flush() {
+    const prior = this.flushQueue || Promise.resolve();
+    const next = prior.catch(() => {}).then(() => this.flushOnce());
+    this.flushQueue = next;
+    return next;
+  }
+
+  async flushOnce() {
     this.completeFurnaces();
     if (this.dirtyWorld) {
       this.dirtyWorld = false;
@@ -881,7 +940,7 @@ class GameRoom extends Room {
     }
     rec.prof.tutorials[tutorial] = Math.max(rec.prof.tutorials[tutorial] | 0, expected);
     if (tutorial === 'onboarding') {
-      const spawn = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
+      const spawn = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
       rec.prof.pos = spawn;
       this.leaveTutorialDimension(client, spawn);
       const p = this.state.players.get(client.sessionId);
@@ -905,7 +964,7 @@ class GameRoom extends Room {
   moveCompletedTutorialProfileToTown(prof) {
     if (!prof || !prof.tutorials || (prof.tutorials.onboarding | 0) < TUTORIAL_VERSIONS.onboarding) return false;
     if (!Array.isArray(prof.pos) || !W.isTrainingMeadowLand(prof.pos[0], prof.pos[2], 4)) return false;
-    prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 7.5];
+    prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
     return true;
   }
 
@@ -944,7 +1003,7 @@ class GameRoom extends Room {
     const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
     const pos = forcedPos
       ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
-      : (ret || { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 7.5 });
+      : (ret || { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5 });
     p.dim = 'overworld';
     p.dgn = '';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
@@ -992,7 +1051,20 @@ class GameRoom extends Room {
       });
       return !!p;
     }
+    if (action === 'positionAtGate') {
+      const p = this.state.players.get(client.sessionId), id = String(m && m.id || '');
+      const gate = this.state.gates && this.state.gates.get(id);
+      if (!p || !gate || !gate.active) {
+        client.send('e2eJourneyResult', { action, requestId:String(m&&m.requestId||''), ok:false });
+        return false;
+      }
+      p.x=gate.x+1.5;p.y=gate.y+.5;p.z=gate.z;p.dim='overworld';p.dgn='';
+      rec.prof.pos=[p.x,p.y,p.z];this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId:String(m&&m.requestId||''), ok:true, id });
+      return true;
+    }
     if (action === 'preparePrivateGateRestart') {
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
       rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
       this.awardGrant(client, {
@@ -1005,6 +1077,7 @@ class GameRoom extends Room {
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
     if (action === 'prepareTeamGateRestart') {
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
       rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
       this.awardGrant(client, {
@@ -1022,16 +1095,28 @@ class GameRoom extends Room {
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
     if (action === 'prepareReturningHunter') {
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+      rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
+      rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
       rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
     if (action === 'prepareTownTutorialPersistence') {
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+      rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
+      rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
       rec.prof.S.lvl = Math.max(2, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
       rec.prof.firstQuestRewardClaimed = true;
       rec.prof.npcQuestChains['Mara Vale'] = Math.max(1, rec.prof.npcQuestChains['Mara Vale'] | 0);
       rec.prof.gold = Math.max(250, rec.prof.gold | 0);
+      return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'prepareDRankJourney') {
+      rec.prof.S.lvl = Math.max(HUNTER_RANK_LEVELS[1], rec.prof.S.lvl | 0);
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
     if (action === 'completeMaraFieldWork') {
@@ -1128,17 +1213,7 @@ class GameRoom extends Room {
   // (rapid building, fast clicking) while capping the sustained rate a scripted
   // client can drive validation/broadcast work at. Returns true when throttled.
   rateLimited(client, bucket, ratePerSec, burst) {
-    const sid = client.sessionId;
-    let buckets = this.rateBuckets.get(sid);
-    if (!buckets) { buckets = new Map(); this.rateBuckets.set(sid, buckets); }
-    const now = Date.now();
-    let b = buckets.get(bucket);
-    if (!b) { b = { tokens: burst, last: now }; buckets.set(bucket, b); }
-    b.tokens = Math.min(burst, b.tokens + (now - b.last) / 1000 * ratePerSec);
-    b.last = now;
-    if (b.tokens < 1) return true;   // throttled — caller should reject/drop
-    b.tokens -= 1;
-    return false;
+    return consumeRateLimit(this.rateBuckets, client.sessionId, bucket, ratePerSec, burst);
   }
   handleWorldEdit(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -1256,6 +1331,12 @@ class GameRoom extends Room {
     }
     const levels = Math.max(0, (S.lvl | 0) - before);
     const rank = hunterRankIndexForLevel(S.lvl);
+    if (rank > beforeRank && beforeRank === 0) {
+      prof.progressionFocus = prof.job === 'adventurer'
+        ? (prof.jobContract ? '' : 'first_promotion_contract')
+        : 'first_promotion_job';
+      prof.firstPromotionSeen = false;
+    }
     if (client && rank > beforeRank) {
       const gateRank = Math.min(4, rank);
       client.send('rankUp', {
@@ -1509,6 +1590,7 @@ class GameRoom extends Room {
   syncPlayerProfile(client, prof) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !prof) return;
+    this.refreshSystemIntroductions(prof);
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
     p.job = JOB_IDS.has(prof.job) ? prof.job : '';
@@ -1520,6 +1602,173 @@ class GameRoom extends Room {
       ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
       : '';
     p.dragonNames = this.publicDragonNames(prof);
+    p.cosmetics = this.publicCosmetics(prof);
+  }
+  refreshSystemIntroductions(prof) {
+    if (!prof) return [];
+    const introduced=new Set(Array.isArray(prof.systemIntroductions)?prof.systemIntroductions:[]);
+    const add=(id,condition)=>{if(condition)introduced.add(id);};
+    const tutorials=prof.tutorials||{},chains=prof.npcQuestChains||{},rank=prof.highestGateRankCleared|0;
+    add('foundations',(tutorials.onboarding|0)>0);
+    add('recall',(tutorials.ability|0)>0);
+    add('story',(chains['Mara Vale']|0)>0||!!prof.activeNpcQuest);
+    add('combat_path',!!(prof.S&&prof.S.path));
+    add('gates',rank>=0);
+    add('jobs',!!prof.job||(prof.adventurerContractsCompleted|0)>0);
+    add('familiars',Array.isArray(prof.familiarUnlocks)&&prof.familiarUnlocks.length>0);
+    add('mounts',Array.isArray(prof.mountUnlocks)&&prof.mountUnlocks.length>0);
+    add('specialisation',!!prof.abilitySpec);
+    add('roads',(prof.roadWardenRep|0)>0||!!prof.regionalContract);
+    add('gambling',(prof.tavernTokens|0)>0||(prof.tavernTokenBoughtToday|0)>0);
+    add('dragons',Array.isArray(prof.mountUnlocks)&&prof.mountUnlocks.some(v=>String(v).startsWith('dragon:')));
+    add('dragon_mastery',rank>=4&&Array.isArray(prof.mountUnlocks)&&prof.mountUnlocks.some(v=>String(v).startsWith('dragon:')));
+    add('frontier',Array.isArray(prof.pos)&&prof.pos[0]>=W.LAVA_BORDER_WIDTH+20);
+    prof.systemIntroductions=[...introduced].slice(0,32);
+    return prof.systemIntroductions;
+  }
+  cloneDeathItem(stack) {
+    if (!stack || !Number.isFinite(Number(stack.id)) || (stack.id | 0) <= 0) return null;
+    const out = { ...stack, id: stack.id | 0, count: Math.max(1, Math.min(64, stack.count | 0 || 1)) };
+    return out;
+  }
+  deathItemLabel(stack) {
+    return (stack && ITEM_NAMES[stack.id]) || ('Item #' + (stack && (stack.id | 0) || 0));
+  }
+  deathLimboQuestion(seq = 0, subject = 'English', history = {}) {
+    const q = RECALL.selectQuestion(subject, history, Date.now(), Math.random);
+    return { id:q.id, topic:q.topic, difficulty:q.difficulty, subject: q.subject, stage: q.stage, prompt: q.prompt, answers: q.answers, correct: q.correct, explanation: q.explanation };
+  }
+  beginDeathLimbo(client, rec, context = {}) {
+    const p = this.state.players.get(client.sessionId);
+    if (!this.deathLimbo) this.deathLimbo = new Map();
+    if (!this.deathDrops) this.deathDrops = new Map();
+    if (!this.deathDropSeq) this.deathDropSeq = 0;
+    if (!client || !rec || !rec.prof || !p || this.deathLimbo.has(client.sessionId)) return false;
+    const inv = Array.isArray(rec.prof.inv) ? rec.prof.inv : (rec.prof.inv = []);
+    const items = [];
+    const subject = this.recallSubjects && this.recallSubjects.get(client.sessionId) || rec.prof.recallSubject || 'English';
+    let selectionHistory = rec.prof.recallMastery || {};
+    for (let slot = 0; slot < Math.min(36, inv.length); slot++) {
+      const item = this.cloneDeathItem(inv[slot]);
+      if (!item) continue;
+      const question=this.deathLimboQuestion(items.length, subject, selectionHistory);
+      items.push({ source: 'inventory', slot, item, label: this.deathItemLabel(item), question });
+      selectionHistory={...selectionHistory,lastQuestionId:question.id,lastTopic:question.topic};
+      inv[slot] = null;
+    }
+    const equippedArmor = this.cloneDeathItem(rec.prof.armor);
+    if (equippedArmor) {
+      const question=this.deathLimboQuestion(items.length, subject, selectionHistory);
+      items.push({ source: 'armor', slot: -1, item: equippedArmor, label: this.deathItemLabel(equippedArmor), question });
+      rec.prof.armor = null;
+      p.armorId = 0;
+      p.armorType = '';
+      client.send('armorSync', { armor: null });
+    }
+    if (!items.length) return false;
+    const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    const death = {
+      x: Number.isFinite(context.x) ? context.x : p.x,
+      y: Number.isFinite(context.y) ? context.y : p.y,
+      z: Number.isFinite(context.z) ? context.z : p.z,
+      dgn: context.dgn || '',
+      cause: context.cause || 'death',
+    };
+    const limbo = { id, index: 0, items, death, startedAt: Date.now() };
+    this.deathLimbo.set(client.sessionId, limbo);
+    p.x = W.TOWN.TC + .5; p.y = W.TOWN.G + 72; p.z = W.TOWN.TC + .5; p.dgn = '';
+    this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    this.dirtyPlayers.add(rec.token);
+    client.send('profile', rec.prof);
+    client.send('deathLimboStart', this.publicDeathLimbo(limbo, p));
+    return true;
+  }
+  publicDeathLimbo(limbo, p) {
+    const entry = limbo.items[limbo.index];
+    return {
+      id: limbo.id, index: limbo.index, total: limbo.items.length,
+      item: entry && { slot: entry.slot, id: entry.item.id, count: entry.item.count, label: entry.label },
+      question: entry && { subject: entry.question.subject, stage: entry.question.stage, prompt: entry.question.prompt, answers: entry.question.answers },
+      x: p && p.x, y: p && p.y, z: p && p.z,
+    };
+  }
+  restoreDeathLimboItem(rec, entry, client) {
+    const item = this.cloneDeathItem(entry && entry.item);
+    if (!item) return false;
+    if (entry.source === 'armor' && !rec.prof.armor) {
+      rec.prof.armor = item;
+      const p = this.state.players.get(client && client.sessionId);
+      if (p) {
+        p.armorId = item.id;
+        p.armorType = ARMOR_INFO[item.id] ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[item.id], item).type.id : '';
+      }
+      if (client) client.send('armorSync', { armor: item });
+      return true;
+    }
+    const inv = Array.isArray(rec.prof.inv) ? rec.prof.inv : (rec.prof.inv = []);
+    if (entry.slot >= 0 && entry.slot < 36 && !inv[entry.slot]) { inv[entry.slot] = item; return true; }
+    return this.addDeathStackToInventory(rec.prof, item);
+  }
+  addDeathStackToInventory(prof, item) {
+    if (!prof || !item || !Number.isFinite(Number(item.id)) || (item.id | 0) <= 0) return false;
+    const inv = Array.isArray(prof.inv) ? prof.inv : (prof.inv = []);
+    const gearLike = !!(TOOL_INFO[item.id] || ARMOR_INFO[item.id] || item.dur != null || item.gearRank || item.rarity || item.forge || item.masterwork || item.armorType);
+    if (!gearLike) return this.addRewardItem(prof, item.id, item.count || 1) <= 0;
+    const slot = inv.findIndex(s => !s);
+    if (slot < 0 && inv.length >= 36) return false;
+    inv[slot >= 0 ? slot : inv.length] = this.cloneDeathItem(item);
+    return true;
+  }
+  createDeathDrop(entry, death, ownerName) {
+    const item = this.cloneDeathItem(entry && entry.item);
+    if (!item || !death) return null;
+    const id = 'death_' + (++this.deathDropSeq) + '_' + Date.now().toString(36);
+    const drop = { id, item, label: this.deathItemLabel(item), x: death.x, y: death.y, z: death.z, dgn: death.dgn || '', ownerName: ownerName || 'A hunter', expiresAt: Date.now() + 10 * 60 * 1000 };
+    this.deathDrops.set(id, drop);
+    this.sendSpace(drop.dgn || '', 'deathDropCreated', this.publicDeathDrop(drop));
+    return drop;
+  }
+  publicDeathDrop(drop) {
+    return { id: drop.id, item: { id: drop.item.id, count: drop.item.count || 1, label: drop.label }, x: drop.x, y: drop.y, z: drop.z, owner: drop.ownerName, dgn: drop.dgn || '', expiresAt: drop.expiresAt };
+  }
+  handleDeathLimboAnswer(client, m) {
+    const rec = this.profileFor(client), limbo = this.deathLimbo.get(client && client.sessionId);
+    if (!rec || !limbo || !m || m.id !== limbo.id) return client && client.send('deathLimboReject', { reason: 'invalid' });
+    if (this.rateLimited(client, 'deathLimbo', 12, 18)) return client.send('deathLimboReject', { reason: 'rate' });
+    const entry = limbo.items[limbo.index];
+    if (!entry) return;
+    const answer = Math.max(0, Math.min(3, m.answer | 0));
+    const correct = answer === entry.question.correct;
+    const sourceQuestion=RECALL.QUESTIONS.find(q=>q.id===entry.question.id)||entry.question;
+    const review=RECALL.reviewQuestion(rec.prof.recallMastery||{},sourceQuestion,correct,Date.now());
+    rec.prof.recallMastery=review.history;
+    if (correct) this.restoreDeathLimboItem(rec, entry, client);
+    else this.createDeathDrop(entry, limbo.death, rec.prof.name || 'A hunter');
+    limbo.index++;
+    this.dirtyPlayers.add(rec.token);
+    client.send('profile', rec.prof);
+    client.send('deathLimboResult', { id: limbo.id, correct, item: { id: entry.item.id, count: entry.item.count || 1, label: entry.label }, correctIndex: entry.question.correct, explanation: entry.question.explanation, nextDue:review.record.nextDue, mastery:RECALL.masterySummary(review.history,rec.prof.recallSubject||'English') });
+    const p = this.state.players.get(client.sessionId);
+    if (limbo.index >= limbo.items.length) {
+      this.deathLimbo.delete(client.sessionId);
+      if (p) { p.x = W.TOWN.TC + .5; p.y = W.TOWN.G + 2; p.z = W.TOWN.TC + 14.5; p.dgn = ''; }
+      client.send('deathLimboComplete', { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 });
+    } else client.send('deathLimboQuestion', this.publicDeathLimbo(limbo, p));
+  }
+  collectDeathDrops(client) {
+    const p = this.state.players.get(client.sessionId), rec = this.profileFor(client);
+    if (!p || !rec || !this.deathDrops || !this.deathDrops.size) return;
+    const now = Date.now();
+    for (const [id, drop] of [...this.deathDrops]) {
+      if (drop.expiresAt <= now) { this.deathDrops.delete(id); this.sendSpace(drop.dgn || '', 'deathDropExpired', { id, dgn: drop.dgn || '' }); continue; }
+      if ((drop.dgn || '') !== (p.dgn || '')) continue;
+      if (Math.hypot(p.x - drop.x, p.z - drop.z) > 2.2 || Math.abs(p.y - drop.y) > 4) continue;
+      const item = this.cloneDeathItem(drop.item);
+      if (!item) { this.deathDrops.delete(id); continue; }
+      if (!this.addDeathStackToInventory(rec.prof, item)) return client.send('deathDropReject', { reason: 'full', id });
+      this.deathDrops.delete(id); this.dirtyPlayers.add(rec.token); client.send('profile', rec.prof);
+      this.sendSpace(drop.dgn || '', 'deathDropTaken', { id, by: rec.prof.name || 'A hunter', item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '' });
+    }
   }
   publicDragonNames(prof) {
     const out = {};
@@ -1574,12 +1823,10 @@ class GameRoom extends Room {
     return st;
   }
   regenAbilityState(client, now = Date.now()) {
-    const rec = this.profileFor(client);
     const st = this.ensureAbilityState(client);
-    const intv = rec && rec.prof && rec.prof.S ? Math.max(1, rec.prof.S.int | 0) : 1;
-    const dt = Math.max(0, Math.min(5, (now - (st.last || now)) / 1000));
+    // Mana is restored by active game systems (primarily Recall questions), not
+    // by waiting. Keep this method as the shared max-MP reconciliation point.
     st.last = now;
-    st.mp = Math.min(st.maxMp, st.mp + 1.2 * (1 + 0.04 * (intv - 1)) * dt);
     return st;
   }
   sendAbilitySync(client, st) {
@@ -1652,7 +1899,10 @@ class GameRoom extends Room {
       this.syncPlayerProfile(client,rec.prof);
     }
     const p = this.state.players.get(client.sessionId);
-    if (p && p.familiar === 'shade') amount *= (1 - shadeMitigation(p.lvl));   // Guarding Shade: shadows soak part of the blow
+    if (p && p.familiar === 'shade' && !this.familiarMechanicsSuspended(client.sessionId)) {
+      const beforeShade=amount; amount *= (1-shadeMitigation(this.familiarPowerLevel(client,'shade')));
+      this.awardFamiliarXp(client,'shade',Math.min(5,Math.max(1,Math.round(beforeShade-amount))),'damage_prevented');
+    }
     const hp = this.ensurePlayerHp(client);
     const dmg = Math.max(0, Math.round(amount));
     hp.hp = Math.max(0, hp.hp - dmg);
@@ -1670,7 +1920,7 @@ class GameRoom extends Room {
         const heal = Math.round(hp.max * .4);
         hp.hp = Math.min(hp.max, hp.hp + heal);
         client.send('hurt', { n:-heal,reason:'second_wind',hp:hp.hp,maxHp:hp.max });
-        if (p) this.sendSpace(p.dgn || '', 'fx', { t: 'secondWind', x: p.x, y: p.y, z: p.z, dgn: p.dgn || '' });
+        if (p) this.sendSpace(p.dgn || '', 'fx', { t: 'secondWind', x: p.x, y: p.y, z: p.z, sid:client.sessionId, dgn: p.dgn || '' });
       }
     }
     if (p && p.dgn) this.sendDungeonStatus(p.dgn);
@@ -1928,14 +2178,20 @@ class GameRoom extends Room {
       }
       return;
     }
+    this.dismissFamiliarFor(client, 'death');
     if (p && this.handleKingPlayerDeath(client, p, hp)) return;
     if (p) this.handleAegisBountyPlayerDeath(client, p);
+    const hunger = this.ensurePlayerHunger(client);
+    hunger.hunger = hunger.max;
+    hunger.acc = 0;
+    hunger.syncAcc = 0;
+    this.sendHungerSync(client, hunger);
     if (p && p.dgn) {
       const dgn = p.dgn;
       const inst = this.instances[dgn];
       const reason = inst && inst.players.size <= 1 ? 'solo' : 'wipe';
+      const death = { x: p.x, y: p.y, z: p.z, dgn, cause: reason };
       this.ejectFromDungeon(client.sessionId);
-      client.send('dungeonDeath', { reason:'death',cause:reason,x:p.x,y:p.y,z:p.z });
       if (inst && !inst.hasLivingPlayers()) {
         this.failDungeon(dgn, reason);
         const quest = rec && rec.prof && rec.prof.activeNpcQuest;
@@ -1945,9 +2201,11 @@ class GameRoom extends Room {
           this.ensurePublicGateRank(1);
         }
       }
+      if (!this.beginDeathLimbo(client, rec, death)) client.send('dungeonDeath', { reason:'death',cause:reason,x:death.x,y:death.y,z:death.z });
     } else {
       hp.hp = hp.max;
-      client.send('worldDeath', {reason:'death',cause:reason});
+      const death = { x: p && p.x, y: p && p.y, z: p && p.z, dgn: '', cause: reason };
+      if (!this.beginDeathLimbo(client, rec, death)) client.send('worldDeath', {reason:'death',cause:reason});
     }
   }
   updatePlayerHunger(dt) {
@@ -1970,10 +2228,12 @@ class GameRoom extends Room {
       const before = Math.ceil(h.hunger);
       const moving = (this.pvel.get(client.sessionId) || { x: 0, z: 0 });
       const moveRate = Math.min(1, Math.hypot(moving.x || 0, moving.z || 0) / 6);
-      h.hunger = Math.max(0, h.hunger - dt * (0.055 + moveRate * 0.045));
+      // Food should create long-session pressure, not interrupt ordinary exploration.
+      // Roughly 55 minutes from full while continuously moving, 90+ while idle.
+      h.hunger = Math.max(0, h.hunger - dt * (0.018 + moveRate * 0.012));
       if (h.hunger <= 0) {
         h.acc = (h.acc || 0) + dt;
-        if (h.acc >= 5) {
+        if (h.acc >= 60) {
           h.acc = 0;
           hp.hp = Math.max(1, hp.hp - 1);
           client.send('hurt', { n: 1, reason: 'hunger' });
@@ -2270,9 +2530,117 @@ class GameRoom extends Room {
     rec.prof.discoveries.push(s.id); this.dirtyPlayers.add(rec.token);
     this.unlockUtility(client, 'minimap', 'First mapped discovery');
     if (rec.prof.discoveries.length >= 5) this.unlockUtility(client, 'world_map', 'Regional cartographer');
+    this.applyExplorationMilestones(client, rec);
+    const contract=rec.prof.cartographerContract;
+    if(contract&&dangerRingAt(s.x,s.z)===(contract.region|0)&&(contract.have|0)<(contract.need|0)){
+      contract.have=Math.min(contract.need|0,(contract.have|0)+1);
+      client.send('cartographerUpdate',this.cartographerPayload(rec.prof));
+    }
     client.send('discoverySighted', { id: s.id, type: s.type, name: s.name || s.type.replace(/_/g, ' ') });
     for (const mate of this.onlineTeamClients(client)) this.shareDiscoveryWithClient(mate, s, client);
     return true;
+  }
+  cartographerInRange(client) {
+    const p=client&&this.state.players.get(client.sessionId);
+    return !!(p&&!p.dgn&&Math.hypot(p.x-(W.TOWN.TC-10.5),p.z-(W.TOWN.TC-8.5))<11);
+  }
+  cartographerEntries(prof) {
+    const found=new Set(Array.isArray(prof.discoveries)?prof.discoveries:[]);
+    return [...W.regionalLandmarkSpecs(),...W.smallDiscoverySpecs()].map(s=>({s,found:found.has(s.id),region:dangerRingAt(s.x,s.z)}));
+  }
+  cartographerPayload(prof) {
+    const entries=this.cartographerEntries(prof),regions=DANGER_RINGS.map((r,i)=>{const all=entries.filter(e=>e.region===i);return {index:i,name:r.name,found:all.filter(e=>e.found).length,total:all.length,claimed:(prof.cartographerRegionClaims||[]).includes(i)};});
+    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap),cosmetics:prof.cosmeticUnlocks||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen};
+  }
+  publicCosmetics(prof) {
+    return Array.isArray(prof && prof.cosmeticUnlocks)
+      ? prof.cosmeticUnlocks.filter(v => v === 'cartographers_mantle').join(',')
+      : '';
+  }
+  publicTreasureMap(map) {
+    if(!map||!Array.isArray(map.targets)||!map.targets.length)return null;
+    const stage=Math.max(0,Math.min(map.targets.length-1,map.stage|0)),target=this.explorationSpec(map.targets[stage]);if(!target)return null;
+    const ring=dangerRingAt(target.x,target.z),clues=[
+      'Seek '+DANGER_RINGS[ring].name+', where '+(target.major?'a great landmark breaks the horizon':'an old roadside secret waits')+'.',
+      'The second mark lies near '+String(target.name||target.type).replace(/_/g,' ').toLowerCase()+'. Search the ground, not the sky.',
+      'Final clue: follow the ink to '+String(target.name||target.type).replace(/_/g,' ')+'. The cache is within a few strides.',
+    ];
+    return {id:map.id,stage,total:map.targets.length,targetId:target.id,clue:clues[stage]||clues[2],rewardGold:map.rewardGold|0};
+  }
+  handleCartographer(client,m={}) {
+    const rec=this.profileFor(client),action=typeof m.action==='string'?m.action:'status';
+    if(!rec||!this.cartographerInRange(client))return client.send('cartographerReject',{reason:'range'});
+    const prof=rec.prof,entries=this.cartographerEntries(prof);
+    if(!Array.isArray(prof.cartographerRegionClaims))prof.cartographerRegionClaims=[];
+    if(!Array.isArray(prof.cartographerHints))prof.cartographerHints=[];
+    if(!Array.isArray(prof.cosmeticUnlocks))prof.cosmeticUnlocks=[];
+    if(!prof.cartographerIntroSeen){prof.cartographerIntroSeen=true;this.dirtyPlayers.add(rec.token);client.send('cartographerIntro',{ok:true});}
+    if(action==='hint'){
+      const cost=25,candidates=entries.filter(e=>!e.found&&!prof.cartographerHints.includes(e.s.id));
+      if(!candidates.length)return client.send('cartographerReject',{reason:'no_hints'});
+      if((prof.gold|0)<cost)return client.send('cartographerReject',{reason:'gold',cost});
+      const pick=candidates[Math.floor(W.hash2(Date.now()%100000,prof.cartographerHints.length+17)*candidates.length)];
+      prof.gold-=cost;prof.cartographerHints.push(pick.s.id);this.dirtyPlayers.add(rec.token);
+      client.send('cartographerHint',{id:pick.s.id,name:pick.s.name||pick.s.type.replace(/_/g,' '),cost,gold:prof.gold|0});
+    }else if(action==='treasure_start'){
+      if(prof.treasureMap)return client.send('cartographerReject',{reason:'treasure_active'});
+      const pool=entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
+      if(pool.length<3)return client.send('cartographerReject',{reason:'complete'});
+      const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*7+i*13)%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
+      prof.treasureMap={id:'treasure_'+day+'_'+Date.now().toString(36),stage:0,targets,rewardGold:180};this.dirtyPlayers.add(rec.token);
+      client.send('treasureMapStarted',this.publicTreasureMap(prof.treasureMap));
+    }else if(action==='claim_region'){
+      const region=Math.max(0,Math.min(3,m.region|0)),all=entries.filter(e=>e.region===region);
+      if(!all.length||all.some(e=>!e.found))return client.send('cartographerReject',{reason:'incomplete'});
+      if(prof.cartographerRegionClaims.includes(region))return client.send('cartographerReject',{reason:'claimed'});
+      const reward=100*(region+1);prof.cartographerRegionClaims.push(region);prof.gold=Math.min(1e9,(prof.gold|0)+reward);this.dirtyPlayers.add(rec.token);
+      client.send('cartographerReward',{kind:'region',region,reward,gold:prof.gold|0});
+    }else if(action==='accept_contract'){
+      if(prof.cartographerContract)return client.send('cartographerReject',{reason:'active'});
+      const day=Math.floor(Date.now()/DAY_MS),available=[];for(let i=0;i<4;i++)if(entries.some(e=>e.region===i&&!e.found))available.push(i);
+      if(!available.length)return client.send('cartographerReject',{reason:'complete'});
+      const region=available[day%available.length],need=Math.min(3,entries.filter(e=>e.region===region&&!e.found).length);
+      prof.cartographerContract={id:'survey_'+day+'_'+region,region,need,have:0,rewardGold:70+region*35,day};this.dirtyPlayers.add(rec.token);
+    }else if(action==='claim_contract'){
+      const c=prof.cartographerContract;if(!c||(c.have|0)<(c.need|0))return client.send('cartographerReject',{reason:'incomplete'});
+      const reward=c.rewardGold|0;prof.gold=Math.min(1e9,(prof.gold|0)+reward);prof.cartographerContract=null;this.dirtyPlayers.add(rec.token);
+      client.send('cartographerReward',{kind:'contract',reward,gold:prof.gold|0});
+    }else if(action==='claim_world'){
+      if(entries.some(e=>!e.found))return client.send('cartographerReject',{reason:'incomplete'});
+      if(prof.cosmeticUnlocks.includes('cartographers_mantle'))return client.send('cartographerReject',{reason:'claimed'});
+      prof.cosmeticUnlocks.push('cartographers_mantle');this.dirtyPlayers.add(rec.token);
+      this.syncPlayerProfile(client,prof);
+      client.send('cartographerReward',{kind:'world',cosmetic:'cartographers_mantle',gold:prof.gold|0});
+    }
+    client.send('cartographerUpdate',this.cartographerPayload(prof));
+  }
+  handleTreasureMapAdvance(client,m={}) {
+    const rec=this.profileFor(client),p=client&&this.state.players.get(client.sessionId),map=rec&&rec.prof.treasureMap;
+    if(!rec||!p||p.dgn||!map||!Array.isArray(map.targets))return client&&client.send('treasureMapReject',{reason:'inactive'});
+    const target=this.explorationSpec(map.targets[map.stage|0]);
+    if(!target||m.id!==target.id||Math.hypot(p.x-target.x,p.z-target.z)>(target.radius||8)+4)return client.send('treasureMapReject',{reason:'range'});
+    map.stage=(map.stage|0)+1;this.dirtyPlayers.add(rec.token);
+    if(map.stage>=map.targets.length){
+      const rewardGold=map.rewardGold|0;rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);this.addRewardItem(rec.prof,I.DIAMOND,2);rec.prof.treasureMap=null;
+      this.syncPlayerProfile(client,rec.prof);client.send('treasureMapComplete',{rewardGold,gold:rec.prof.gold|0,items:[{id:I.DIAMOND,count:2}]});
+    }else client.send('treasureMapUpdate',this.publicTreasureMap(map));
+  }
+  applyExplorationMilestones(client, rec) {
+    if (!rec || !client) return;
+    if (!Array.isArray(rec.prof.explorationMilestones)) rec.prof.explorationMilestones = [];
+    const count = Array.isArray(rec.prof.discoveries) ? rec.prof.discoveries.length : 0;
+    for (const reward of [
+      { count: 10, gold: 75, title: 'Trailblazer', utility: 'trail_sense' },
+      { count: 20, gold: 150, title: 'Regional Pathfinder' },
+      { count: 40, gold: 300, title: 'Master Cartographer' },
+    ]) {
+      if (count < reward.count || rec.prof.explorationMilestones.includes(reward.count)) continue;
+      rec.prof.explorationMilestones.push(reward.count);
+      rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + reward.gold);
+      if (reward.utility) this.unlockUtility(client, reward.utility, reward.title + ' milestone');
+      this.dirtyPlayers.add(rec.token);
+      client.send('explorationMilestone', { ...reward, totalGold: rec.prof.gold | 0 });
+    }
   }
   shareDiscoveryWithClient(client, s, sourceClient) {
     const rec = this.profileFor(client); if (!rec || !s) return false;
@@ -2282,6 +2650,7 @@ class GameRoom extends Room {
     this.dirtyPlayers.add(rec.token);
     this.unlockUtility(client, 'minimap', 'Team map sharing');
     if (rec.prof.discoveries.length >= 5) this.unlockUtility(client, 'world_map', 'Team cartographer');
+    this.applyExplorationMilestones(client, rec);
     const src = sourceClient && this.state.players.get(sourceClient.sessionId);
     client.send('discoverySighted', {
       id: s.id,
@@ -2303,9 +2672,11 @@ class GameRoom extends Room {
     if (!p || p.dgn || !s || Math.hypot(p.x - s.x, p.z - s.z) > s.radius + 2) return client.send('discoveryReject', { reason: 'range' });
     if (s.type === 'puzzle_shrine' && (!s.target || (m.x | 0) !== s.target.x || (m.y | 0) !== s.target.y || (m.z | 0) !== s.target.z))
       return client.send('discoveryReject', { reason: 'pattern', hint: 'Two flames agree. Touch the one that does not.' });
-    if (!['rare_plant', 'lore_tablet', 'fishing_pool', 'puzzle_shrine', 'buried_chest'].includes(s.type)) return client.send('discoveryReject', { reason: 'inactive' });
+    if (!['rare_plant', 'lore_tablet', 'fishing_pool', 'puzzle_shrine', 'buried_chest','rain_bloom','storm_crystal','sun_dial'].includes(s.type)) return client.send('discoveryReject', { reason: 'inactive' });
+    const required={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'}[s.type];
     const rec=this.profileFor(client);if(!rec)return client.send('discoveryReject',{reason:'invalid'});
     this.markDiscovery(client,s);
+    if(required&&this.state.weather!==required)return client.send('discoveryReject',{reason:'weather',required,type:s.type});
     if(!Array.isArray(rec.prof.claimedDiscoveries))rec.prof.claimedDiscoveries=[];
     if (!this.discoveryClaims) this.discoveryClaims = new Map();
     const token = this.clientToken(client), claims = this.discoveryClaims.get(token) || new Set();
@@ -2333,6 +2704,12 @@ class GameRoom extends Room {
       name = 'Buried Cache'; text = 'You recover the cache before the wilds swallow it.'; xp = 8 + ring * 3;
       items.push({ id: ring >= 2 ? I.IRON_INGOT : I.COAL, count: 2 + ring });
       this.progressRegionalContract(client, 'recover_buried_cache', { targetId: s.id });
+    } else if(s.type==='rain_bloom'){
+      name='Rainwake Bloom';text='Rainwake petals can be cooked into strong restorative broth.';xp=18+ring*4;items.push({id:I.RAINWAKE_PETAL,count:1+ring});
+    } else if(s.type==='storm_crystal'){
+      name='Stormglass Crystal';text='Stormglass holds a charge that blacksmiths can turn into repair work.';xp=24+ring*6;items.push({id:I.STORMGLASS,count:1+ring});
+    } else if(s.type==='sun_dial'){
+      name='Sun Dial';text='The aligned light leaves a solar glyph used to focus sunshards.';xp=16+ring*4;items.push({id:I.SOLAR_GLYPH,count:1+ring});
     } else {
       name = 'Odd-Flame Shrine'; text = 'The mismatched flame sinks. A hidden compartment opens.'; xp = 15 + ring * 5;
       items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + Math.max(0, ring - 1) });
@@ -2779,6 +3156,12 @@ class GameRoom extends Room {
   handleMove(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return;
+    if (this.deathLimbo && this.deathLimbo.has(client.sessionId)) {
+      p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
+    }
+    if (typeof this.recallMovementLocked === 'function' && this.recallMovementLocked(client.sessionId)) {
+      p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
+    }
     if (this.skyshipPassengers && this.skyshipPassengers.has(client.sessionId)) {
       p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
     }
@@ -2839,6 +3222,7 @@ class GameRoom extends Room {
     });
     p.x = sx; p.y = sy; p.z = sz;
     p.yaw = clampN(m.yaw, -10, 10);
+    this.collectDeathDrops(client);
   }
 
   // Step all in-flight projectiles (ability fireballs, legendary meteors, skeleton/bolt arrows)
@@ -3088,10 +3472,10 @@ class GameRoom extends Room {
           } else {                                           // zombie
             if (meta.lungeT > 0) {
               meta.lungeT -= dt;
-              m.state = meta.biomeBehavior==='flanker'?'packWind':'windup';
+              m.state = meta.undeadRole === 'graveguard' ? 'graveWind' : (meta.biomeBehavior==='flanker'?'packWind':'windup');
               rooted = true;
               if (meta.lungeT <= 0) {
-                meta.lunging = .45;
+                meta.lunging = meta.undeadRole === 'graveguard' ? .32 : .45;
                 meta.ldx = (best.p.x - m.x) / (bd || 1);
                 meta.ldz = (best.p.z - m.z) / (bd || 1);
                 m.state = '';
@@ -3219,6 +3603,7 @@ applyMixin(GameRoom, require('./spawning.mixin'));
 applyMixin(GameRoom, require('./combat.mixin'));
 applyMixin(GameRoom, require('./teams.mixin'));
 applyMixin(GameRoom, require('./metrics.mixin'));
+applyMixin(GameRoom, require('./recall.mixin'));
 
 
 module.exports = {

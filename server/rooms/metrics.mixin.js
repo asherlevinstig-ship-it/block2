@@ -12,11 +12,63 @@
 class MetricsMixin {
   // Roll a tick-duration sample into an EMA + running max. Cheap; called every tick.
   recordTick(ms) {
-    const m = this.tickMetrics || (this.tickMetrics = { lastMs: 0, avgMs: 0, maxMs: 0, samples: 0 });
+    const m = this.tickMetrics || (this.tickMetrics = { lastMs: 0, avgMs: 0, maxMs: 0, samples: 0, overBudget: 0 });
     m.lastMs = ms;
     m.samples++;
     m.avgMs = m.avgMs ? m.avgMs * 0.95 + ms * 0.05 : ms;   // ~last-20-ticks weighting
     if (ms > m.maxMs) m.maxMs = ms;
+    if (ms > 100) m.overBudget = (m.overBudget || 0) + 1;
+  }
+
+  recordPersistence(ms, failed = false, operation = '') {
+    const m = this.persistenceMetrics || (this.persistenceMetrics = { operations: 0, failures: 0, lastMs: 0, avgMs: 0, maxMs: 0, byOperation: {} });
+    m.operations++;
+    if (failed) m.failures++;
+    m.lastMs = ms;
+    m.avgMs = m.avgMs ? m.avgMs * 0.9 + ms * 0.1 : ms;
+    m.maxMs = Math.max(m.maxMs, ms);
+    const op = m.byOperation[operation] || (m.byOperation[operation] = { operations: 0, failures: 0 });
+    op.operations++;
+    if (failed) op.failures++;
+  }
+
+  monitorStore(store) {
+    if (!store || store.__monitored) return store;
+    const room = this;
+    return new Proxy(store, {
+      get(target, key, receiver) {
+        if (key === '__monitored') return true;
+        const value = Reflect.get(target, key, receiver);
+        if (typeof value !== 'function' || !String(key).startsWith('save')) return value;
+        return async (...args) => {
+          const started = performance.now();
+          try {
+            const result = await value.apply(target, args);
+            room.recordPersistence(performance.now() - started, false, String(key));
+            return result;
+          } catch (error) {
+            room.recordPersistence(performance.now() - started, true, String(key));
+            throw error;
+          }
+        };
+      },
+    });
+  }
+
+  monitorClient(client) {
+    if (!client || client.__metricsSendWrapped) return;
+    const original = client.send.bind(client);
+    client.send = (type, payload) => {
+      if (/Reject$/.test(String(type))) {
+        const m = this.rejectionMetrics || (this.rejectionMetrics = { total: 0, byType: {}, byReason: {} });
+        const reason = payload && payload.reason || 'unspecified';
+        m.total++;
+        m.byType[type] = (m.byType[type] || 0) + 1;
+        m.byReason[reason] = (m.byReason[reason] || 0) + 1;
+      }
+      return original(type, payload);
+    };
+    client.__metricsSendWrapped = true;
   }
 
   // Pure snapshot of current room load (reads state only — no mutation).
@@ -29,32 +81,43 @@ class MetricsMixin {
       if (m.dgn) { dgnMobs++; perInst.set(m.dgn, (perInst.get(m.dgn) || 0) + 1); }
       else owMobs++;
     });
-    const clients = (this.clients && this.clients.length) || this.state.players.size;
+    const clients = this.clients ? this.clients.length : this.state.players.size;
     let wastedMobSyncs = 0;
     perInst.forEach((count, dgn) => {
       const inst = this.instances && this.instances[dgn];
       const inInst = inst ? inst.playerCount : 0;
       wastedMobSyncs += count * Math.max(0, clients - inInst);
     });
-    const tm = this.tickMetrics || {};
+    const tm = this.tickMetrics || {}, pm = this.persistenceMetrics || {}, rm = this.rejectionMetrics || {};
     return {
-      players: this.state.players.size, owPlayers, dgnPlayers,
+      players: this.state.players.size, connectedClients: clients, owPlayers, dgnPlayers,
       instances: Object.keys(this.instances || {}).length,
       mobs: owMobs + dgnMobs, owMobs, dgnMobs, wastedMobSyncs,
       tickAvgMs: Math.round((tm.avgMs || 0) * 100) / 100,
       tickMaxMs: Math.round((tm.maxMs || 0) * 100) / 100,
+      tickOverBudget: tm.overBudget || 0,
+      persistenceOperations: pm.operations || 0,
+      persistenceFailures: pm.failures || 0,
+      persistenceAvgMs: Math.round((pm.avgMs || 0) * 100) / 100,
+      persistenceMaxMs: Math.round((pm.maxMs || 0) * 100) / 100,
+      persistenceByOperation: { ...(pm.byOperation || {}) },
+      rejectedMessages: rm.total || 0,
+      rejectedByType: { ...(rm.byType || {}) },
+      rejectedByReason: { ...(rm.byReason || {}) },
     };
   }
 
   // Once-a-minute one-liner; stays quiet on an empty room.
   logMetrics() {
     const s = this.metricsSnapshot();
-    if (!s.players && !s.instances) return;
-    console.log('[metrics] players=' + s.players + ' (ow=' + s.owPlayers + ' dgn=' + s.dgnPlayers + ')'
+    if (!s.players && !s.instances && !s.persistenceFailures && !s.rejectedMessages) return;
+    console.log('[metrics] clients=' + s.connectedClients + ' players=' + s.players + ' (ow=' + s.owPlayers + ' dgn=' + s.dgnPlayers + ')'
       + ' instances=' + s.instances
       + ' mobs=' + s.mobs + ' (ow=' + s.owMobs + ' dgn=' + s.dgnMobs + ')'
       + ' wastedMobSyncs=' + s.wastedMobSyncs
-      + ' tick(ms) avg=' + s.tickAvgMs + ' max=' + s.tickMaxMs);
+      + ' tick(ms) avg=' + s.tickAvgMs + ' max=' + s.tickMaxMs + ' overBudget=' + s.tickOverBudget
+      + ' persistence ops=' + s.persistenceOperations + ' failures=' + s.persistenceFailures + ' avgMs=' + s.persistenceAvgMs + ' maxMs=' + s.persistenceMaxMs
+      + ' rejected=' + s.rejectedMessages);
   }
 }
 

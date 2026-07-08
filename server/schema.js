@@ -19,13 +19,15 @@ class Player extends Schema {
     this.mount = '';         // active mount kind ('' = on foot); overworld only
     this.dragons = '';       // CSV of bonded dragon type ids for public roost displays
     this.dragonNames = '';   // JSON map type -> custom dragon name for public roost plates
+    this.cosmetics = '';     // CSV of public cosmetic unlock ids
     this.familiar = '';      // active familiar ('' = none, 'shade' = Shade manifested)
+    this.familiarTier = 0;   // public visual tier of the active familiar
   }
 }
 defineTypes(Player, {
   x: 'number', y: 'number', z: 'number', yaw: 'number',
   name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
-  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', familiar: 'string',
+  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8',
 });
 
 class Team extends Schema {
@@ -49,11 +51,15 @@ class Mob extends Schema {
     this.dgn = '';           // dungeon instance this mob belongs to
     this.state = '';         // telegraph state for client animation
     this.elite = false;      // elite variant: client renders a larger, decorated, tinted model
+    this.shadowKind = '';    // captured creature identity for allied shadow rendering
+    this.shadowRank = 0;
+    this.shadowBoss = false;
   }
 }
 defineTypes(Mob, {
   x: 'number', y: 'number', z: 'number', yaw: 'number',
   hp: 'number', maxHp: 'number', kind: 'string', dgn: 'string', state: 'string', elite: 'boolean',
+  shadowKind:'string',shadowRank:'uint8',shadowBoss:'boolean',
 });
 
 class Gate extends Schema {
