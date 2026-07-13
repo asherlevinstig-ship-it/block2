@@ -12,10 +12,30 @@ export function createNetworkSession({
   getPlayerName,
   beforeConnect,
 }) {
+  const shardKey='bc_shard_id';
+  function cleanShardId(value){
+    const raw=String(value||'').trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(raw)?raw:'';
+  }
+  function shardIdForAttempt(attempt){
+    let saved='';
+    try{saved=cleanShardId(localStorage.getItem(shardKey));}catch(e){}
+    const ordered=[];
+    if(saved)ordered.push(saved);
+    ordered.push('main');
+    for(let i=2;i<=16;i++)ordered.push('shard-'+i);
+    const unique=ordered.filter((id,i,a)=>id&&a.indexOf(id)===i);
+    return unique[Math.max(0,attempt|0)]||('shard-'+(Math.max(0,attempt|0)+1));
+  }
   const controller=createController({
     Client,
     endpoint,
     roomName:'blockcraft',
+    shardAttempts:16,
+    primaryJoinOptions:({attempt})=>({shardId:shardIdForAttempt(attempt)}),
+    onPrimaryJoinOptions:(joinOptions)=>{
+      try{localStorage.setItem(shardKey,cleanShardId(joinOptions&&joinOptions.shardId)||'main');}catch(e){}
+    },
     sessionStorage,
     tokenKey:'bc_reconnect_token',
     onAttach:attachRoom,
@@ -39,4 +59,3 @@ export function createNetworkSession({
 
   return Object.freeze({controller,state,connect});
 }
-

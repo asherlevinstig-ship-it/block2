@@ -44,6 +44,7 @@ const D = require('../dungeon');
 const { DungeonInstance } = require('../rooms/dungeonInstance');
 const { DungeonRoom } = require('../rooms/DungeonRoom');
 const { handOff, takeHandoff } = require('../rooms/dungeon-handoff');
+const { issueDungeonAdmission } = require('../rooms/dungeon-admission');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate } = require('../schema');
 const { BIOME_HOSTILE, RANGED_ENEMY_KINDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
@@ -137,13 +138,18 @@ test('only one room may own the global world persistence lease', () => {
   const owner = {}, overflow = {};
   claimGlobalWorld(owner);
   try {
-    assert.throws(() => claimGlobalWorld(overflow), /global Blockcraft world is already active/);
+    assert.throws(() => claimGlobalWorld(overflow), /overworld shard "main" is already active/);
     releaseGlobalWorld(overflow);
-    assert.throws(() => claimGlobalWorld(overflow), /global Blockcraft world is already active/, 'a non-owner cannot release the lease');
+    assert.throws(() => claimGlobalWorld(overflow), /overworld shard "main" is already active/, 'a non-owner cannot release the lease');
   } finally {
     releaseGlobalWorld(owner);
   }
   assert.doesNotThrow(() => claimGlobalWorld(overflow), 'the next room can load the world after disposal');
+  releaseGlobalWorld(overflow);
+
+  assert.doesNotThrow(() => claimGlobalWorld(owner, 'main'));
+  assert.doesNotThrow(() => claimGlobalWorld(overflow, 'shard-2'));
+  releaseGlobalWorld(owner);
   releaseGlobalWorld(overflow);
 });
 
@@ -2710,8 +2716,9 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
     addPlayer() {},
   };
   const client = makeClient('recovery');
+  room.admissionTicket = issueDungeonAdmission({ id: 'dr-recovery' }, [token]);
 
-  await room.onJoin(client, { name: 'RoomHopper' }, { id: token });
+  await room.onJoin(client, { name: 'RoomHopper', ticket: room.admissionTicket }, { id: token });
 
   assert.ok(prof.dungeonRecovery, 'the switchRoom entry armed recovery like the overworld enterGate path does');
   assert.equal(prof.dungeonRecovery.gateId, 'dr-recovery', 'keyed to the overworld gate id, not the dungeon-internal state');

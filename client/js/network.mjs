@@ -1,7 +1,7 @@
 import { reconnectWithBackoff } from './reconnect.mjs';
 
 export function createNetworkController(options) {
-  const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, reconnecting: false, attachCount: 0, tried: false, roomName: options.roomName };
+  const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, reconnecting: false, attachCount: 0, tried: false, roomName: options.roomName, shardId: '' };
   let stopped = false;
   // Multi-room (DungeonRoom 2c): the live client and player name are retained so the controller
   // can leave the primary room and join a secondary one (the dungeon) and back, reusing the same
@@ -9,6 +9,7 @@ export function createNetworkController(options) {
   let activeClient = null;
   let currentName = '';
   const primaryRoomName = options.roomName;
+  let primaryJoinOptions = {};
   let switching = false;
   // These guard against a genuinely hung connection, not a slow-but-fine one. A fresh join can
   // legitimately take a few seconds when matchmaking recreates the room (cold onCreate:
@@ -52,15 +53,29 @@ export function createNetworkController(options) {
     });
   }
 
-  function joinFresh(client, name) {
-    return reconnectWithBackoff(
-      () => roomWithTimeout(
-        () => client.joinOrCreate(options.roomName, { name }),
-        joinTimeout,
-        'Room join timed out',
-      ),
-      { attempts: joinAttempts, baseDelay: 250 },
-    );
+  async function joinFresh(client, name) {
+    const shardAttempts = Math.max(1, options.shardAttempts | 0 || 8);
+    let lastError = null;
+    for (let shardAttempt = 0; shardAttempt < shardAttempts; shardAttempt++) {
+      const joinOptions = options.primaryJoinOptions ? options.primaryJoinOptions({ name, attempt: shardAttempt }) : {};
+      try {
+        const room = await reconnectWithBackoff(
+          () => roomWithTimeout(
+            () => client.joinOrCreate(options.roomName, { name, ...joinOptions }),
+            joinTimeout,
+            'Room join timed out',
+          ),
+          { attempts: joinAttempts, baseDelay: 250 },
+        );
+        primaryJoinOptions = { ...joinOptions };
+        state.shardId = String(joinOptions.shardId || 'main');
+        if (options.onPrimaryJoinOptions) options.onPrimaryJoinOptions(primaryJoinOptions);
+        return room;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error('No Blockcraft shard was available');
   }
 
   function attach(room, name, client) {
@@ -173,7 +188,7 @@ export function createNetworkController(options) {
   }
 
   function returnToPrimary() {
-    return switchRoom(primaryRoomName, {});
+    return switchRoom(primaryRoomName, { ...primaryJoinOptions, shardId: state.shardId || primaryJoinOptions.shardId || 'main' });
   }
 
   return { state, connect, reconnect, pauseReconnect, shutdown, switchRoom, returnToPrimary };

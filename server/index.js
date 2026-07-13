@@ -6,6 +6,7 @@ const { WebSocketTransport } = require('@colyseus/ws-transport');
 const { Encoder } = require('@colyseus/schema');
 const { validateStartup } = require('./startup-config');
 const { securityHeaders } = require('./security-headers');
+const { metricsHttpHandler } = require('./metrics-registry');
 
 Encoder.BUFFER_SIZE = 256 * 1024;
 
@@ -30,6 +31,13 @@ async function main() {
       setTimeout(() => gameServer.gracefullyShutdown(true), 25);
     });
   }
+  if (process.env.BLOCKCRAFT_METRICS === '1') {
+    app.get('/__metrics', metricsHttpHandler({
+      token: process.env.BLOCKCRAFT_METRICS_TOKEN || '',
+      production: config.production,
+      allowMissingToken: process.env.BLOCKCRAFT_E2E === '1',
+    }));
+  }
 
   app.use('/shared', express.static(path.join(__dirname, '..', 'shared')));
   app.use(express.static(path.join(__dirname, '..', 'client')));
@@ -44,7 +52,7 @@ async function main() {
     gracefullyShutdown: process.env.BLOCKCRAFT_E2E !== '1',
   });
 
-  gameServer.define('blockcraft', GameRoom);
+  gameServer.define('blockcraft', GameRoom).filterBy(['shardId']);
   gameServer.define('dungeon', DungeonRoom).filterBy(['gateId']);
 
   const PORT = process.env.PORT || 2567;

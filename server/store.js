@@ -4,15 +4,16 @@
 //   JsonStore  (default)        -> ./data/*.json on disk, atomic writes
 //   FirebaseStore (STORE=firebase) -> Firestore via firebase-admin
 //
-// World methods address the one global `main` world. Player methods are a
-// separate persistence domain keyed by verified account ID; room/session IDs
-// are never persistence keys.
+// World methods address one overworld shard. Player methods are a separate
+// persistence domain keyed by verified account ID; room/session IDs are never
+// persistence keys. The legacy/default shard is `main`.
 // Both implement: loadWorldEdits(), saveWorldEdits(obj), loadWorldProgress(), saveWorldProgress(obj), loadLandClaims(), saveLandClaims(obj), loadChests(), saveChests(obj),
 //                 loadFurnaces(), saveFurnaces(obj), loadIncubations(), saveIncubations(obj), loadNestDragons(), saveNestDragons(obj), loadGates(), saveGates(obj), loadTeams(), saveTeams(obj),
 //                 loadPlayer(token), savePlayer(token, profile)
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const JOB_SYSTEM = require('../shared/job-system');
 const GEAR_SYSTEM = require('../shared/gear-system');
 const SHADOW_ARMY = require('../shared/shadow-army');
@@ -27,6 +28,10 @@ const TUTORIAL_VERSIONS = Object.freeze({
 });
 const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, Math.round(v))) : a; };
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
+function cleanShardId(value) {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(raw) ? raw : 'main';
+}
 
 const ARMOR_IDS = new Set([137, 183, 184]);
 // Guided-onboarding focus states the persistence layer will accept. Kept local
@@ -792,20 +797,63 @@ function sanitizeGates(gates) {
 }
 
 // ---------------- JSON-on-disk store ----------------
+const fileWriteQueues = new Map();
+
 class JsonStore {
-  constructor(dir) {
+  constructor(dir, options = {}) {
     this.dir = dir || path.join(process.cwd(), 'data');
+    this.shardId = cleanShardId(options.shardId);
+    this.shardDir = this.shardId === 'main' ? this.dir : path.join(this.dir, 'shards', this.shardId);
     fs.mkdirSync(path.join(this.dir, 'players'), { recursive: true });
+    fs.mkdirSync(this.shardDir, { recursive: true });
     this.writeQueue = Promise.resolve();
   }
   _enqueue(operation) {
     this.writeQueue = this.writeQueue.catch(() => {}).then(operation);
     return this.writeQueue;
   }
+  _enqueueFile(file, operation) {
+    const key = path.resolve(file);
+    const next = (fileWriteQueues.get(key) || Promise.resolve()).catch(() => {}).then(operation);
+    const tracked = next.catch(() => {});
+    fileWriteQueues.set(key, tracked);
+    tracked.then(() => {
+      if (fileWriteQueues.get(key) === tracked) fileWriteQueues.delete(key);
+    });
+    return next;
+  }
   async _writeNow(file, obj) {                 // atomic: tmp + rename
-    const tmp = file + '.tmp';
-    await fs.promises.writeFile(tmp, JSON.stringify(obj));
-    await fs.promises.rename(tmp, file);
+    await this._enqueueFile(file, async () => {
+      const tmp = file + '.' + process.pid + '.' + Date.now().toString(36) + '.' + crypto.randomBytes(6).toString('hex') + '.tmp';
+      try {
+        await fs.promises.writeFile(tmp, JSON.stringify(obj));
+        await this._renameWithRetry(tmp, file);
+      } catch (error) {
+        await fs.promises.unlink(tmp).catch(() => {});
+        throw error;
+      }
+    });
+  }
+  _sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+  _renameFile(from, to) {
+    return fs.promises.rename(from, to);
+  }
+  _isTransientRenameError(error) {
+    return error && ['EPERM', 'EBUSY', 'EACCES'].includes(error.code);
+  }
+  async _renameWithRetry(from, to) {
+    const delays = [10, 25, 50, 100];
+    for (let attempt = 0;; attempt++) {
+      try {
+        await this._renameFile(from, to);
+        return;
+      } catch (error) {
+        if (!this._isTransientRenameError(error) || attempt >= delays.length) throw error;
+        await this._sleep(delays[attempt]);
+      }
+    }
   }
   _write(file, obj) {
     return this._enqueue(() => this._writeNow(file, obj));
@@ -815,85 +863,89 @@ class JsonStore {
     catch (e) { return null; }
   }
   async _read(file) {
+    await (fileWriteQueues.get(path.resolve(file)) || Promise.resolve()).catch(() => {});
     await this.writeQueue.catch(() => {});
     return this._readNow(file);
   }
+  _worldFile(name) {
+    return path.join(this.shardDir, name);
+  }
   _updateWorld(update) {
-    const file = path.join(this.dir, 'world.json');
+    const file = this._worldFile('world.json');
     return this._enqueue(async () => {
       const current = await this._readNow(file) || {};
       await this._writeNow(file, update(current));
     });
   }
   async loadWorldEdits() {
-    const d = await this._read(path.join(this.dir, 'world.json'));
+    const d = await this._read(this._worldFile('world.json'));
     return (d && d.edits) || {};
   }
   async saveWorldEdits(edits) {
     await this._updateWorld(d => ({ edits, progress: sanitizeWorldProgress(d.progress), claims: sanitizeLandClaims(d.claims), savedAt: Date.now() }));
   }
   async loadWorldProgress() {
-    const d = await this._read(path.join(this.dir, 'world.json'));
+    const d = await this._read(this._worldFile('world.json'));
     return sanitizeWorldProgress(d && d.progress);
   }
   async saveWorldProgress(progress) {
     await this._updateWorld(d => ({ edits: d.edits || {}, progress: sanitizeWorldProgress(progress), claims: sanitizeLandClaims(d.claims), savedAt: Date.now() }));
   }
   async loadLandClaims() {
-    const d = await this._read(path.join(this.dir, 'world.json'));
+    const d = await this._read(this._worldFile('world.json'));
     return sanitizeLandClaims(d && d.claims);
   }
   async saveLandClaims(claims) {
     await this._updateWorld(d => ({ edits: d.edits || {}, progress: sanitizeWorldProgress(d.progress), claims: sanitizeLandClaims(claims), savedAt: Date.now() }));
   }
   async loadChests() {
-    const d = await this._read(path.join(this.dir, 'chests.json'));
+    const d = await this._read(this._worldFile('chests.json'));
     return sanitizeChests((d && d.chests) || {});
   }
   async saveChests(chests) {
-    await this._write(path.join(this.dir, 'chests.json'), { chests: sanitizeChests(chests), savedAt: Date.now() });
+    await this._write(this._worldFile('chests.json'), { chests: sanitizeChests(chests), savedAt: Date.now() });
   }
   async loadFurnaces() {
-    const d = await this._read(path.join(this.dir, 'furnaces.json'));
+    const d = await this._read(this._worldFile('furnaces.json'));
     return sanitizeFurnaces((d && d.furnaces) || {});
   }
   async saveFurnaces(furnaces) {
-    await this._write(path.join(this.dir, 'furnaces.json'), { furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
+    await this._write(this._worldFile('furnaces.json'), { furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
   }
   async loadIncubations() {
-    const d = await this._read(path.join(this.dir, 'incubations.json'));
+    const d = await this._read(this._worldFile('incubations.json'));
     return sanitizeIncubations((d && d.incubations) || {});
   }
   async saveIncubations(incubations) {
-    await this._write(path.join(this.dir, 'incubations.json'), { incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
+    await this._write(this._worldFile('incubations.json'), { incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
   }
   async loadNestDragons() {
-    const d = await this._read(path.join(this.dir, 'nests.json'));
+    const d = await this._read(this._worldFile('nests.json'));
     return sanitizeNestDragons((d && d.nests) || {});
   }
   async saveNestDragons(nests) {
-    await this._write(path.join(this.dir, 'nests.json'), { nests: sanitizeNestDragons(nests), savedAt: Date.now() });
+    await this._write(this._worldFile('nests.json'), { nests: sanitizeNestDragons(nests), savedAt: Date.now() });
   }
   async loadGates() {
-    const d = await this._read(path.join(this.dir, 'gates.json'));
+    const d = await this._read(this._worldFile('gates.json'));
     return sanitizeGates((d && d.gates) || {});
   }
   async saveGates(gates) {
-    await this._write(path.join(this.dir, 'gates.json'), { gates: sanitizeGates(gates), savedAt: Date.now() });
+    await this._write(this._worldFile('gates.json'), { gates: sanitizeGates(gates), savedAt: Date.now() });
   }
   async loadTeams() {
-    const d = await this._read(path.join(this.dir, 'teams.json'));
+    const d = await this._read(this._worldFile('teams.json'));
     return sanitizeTeams((d && d.teams) || {});
   }
   async saveTeams(teams) {
-    await this._write(path.join(this.dir, 'teams.json'), { teams: sanitizeTeams(teams), savedAt: Date.now() });
+    await this._write(this._worldFile('teams.json'), { teams: sanitizeTeams(teams), savedAt: Date.now() });
   }
   async loadGuilds() {
-    const d = await this._read(path.join(this.dir, 'guilds.json'));
+    const d = await this._read(this._worldFile('guilds.json'));
     return sanitizeGuilds((d && d.guilds) || {});
   }
   async saveGuilds(guilds) {
-    await this._write(path.join(this.dir, 'guilds.json'), { guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
+    await this._write(this._worldFile('guilds.json'), { guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
   }
   _pfile(token) {
     return path.join(this.dir, 'players', token.replace(/[^A-Za-z0-9_-]/g, '') + '.json');
@@ -904,6 +956,7 @@ class JsonStore {
     const file = this._pfile(token);
     let txt;
     await this.writeQueue.catch(() => {});
+    await (fileWriteQueues.get(path.resolve(file)) || Promise.resolve()).catch(() => {});
     try { txt = await fs.promises.readFile(file, 'utf8'); }
     catch (e) { if (e.code === 'ENOENT') return null; throw e; }
     try { return JSON.parse(txt); }
@@ -932,7 +985,7 @@ class JsonStore {
 // Authentication is handled before this adapter; the verified account ID is
 // used as the player document key for both storage backends.
 class FirebaseStore {
-  constructor() {
+  constructor(options = {}) {
     const admin = require('firebase-admin');
     if (!admin.apps.length) {
       const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -941,13 +994,17 @@ class FirebaseStore {
         : {});                                  // falls back to application-default creds
     }
     this.db = admin.firestore();
+    this.shardId = cleanShardId(options.shardId);
+  }
+  _worldDoc() {
+    return this.db.collection('worlds').doc(this.shardId);
   }
   _chunkKey(editKey) {
     const [x, , z] = editKey.split(',').map(Number);
     return (x >> 4) + '_' + (z >> 4);
   }
   async loadWorldEdits() {
-    const snap = await this.db.collection('worlds').doc('main').collection('chunks').get();
+    const snap = await this._worldDoc().collection('chunks').get();
     const out = {};
     snap.forEach(doc => Object.assign(out, doc.data().edits || {}));
     return out;
@@ -958,81 +1015,81 @@ class FirebaseStore {
       const c = this._chunkKey(k);
       (byChunk[c] = byChunk[c] || {})[k] = edits[k];
     }
-    const col = this.db.collection('worlds').doc('main').collection('chunks');
+    const col = this._worldDoc().collection('chunks');
     const writer = this.db.bulkWriter();
     for (const c in byChunk) writer.set(col.doc(c), { edits: byChunk[c], savedAt: Date.now() });
     await writer.close();
   }
   async loadWorldProgress() {
-    const d = await this.db.collection('worlds').doc('main').collection('meta').doc('progress').get();
+    const d = await this._worldDoc().collection('meta').doc('progress').get();
     return d.exists ? sanitizeWorldProgress(d.data()) : sanitizeWorldProgress();
   }
   async saveWorldProgress(progress) {
-    await this.db.collection('worlds').doc('main').collection('meta').doc('progress')
+    await this._worldDoc().collection('meta').doc('progress')
       .set({ ...sanitizeWorldProgress(progress), savedAt: Date.now() });
   }
   async loadLandClaims() {
-    const d = await this.db.collection('worlds').doc('main').collection('meta').doc('landClaims').get();
+    const d = await this._worldDoc().collection('meta').doc('landClaims').get();
     return d.exists ? sanitizeLandClaims(d.data().claims || {}) : {};
   }
   async saveLandClaims(claims) {
-    await this.db.collection('worlds').doc('main').collection('meta').doc('landClaims')
+    await this._worldDoc().collection('meta').doc('landClaims')
       .set({ claims: sanitizeLandClaims(claims), savedAt: Date.now() });
   }
   async loadChests() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('chests').get();
+    const d = await this._worldDoc().collection('containers').doc('chests').get();
     return d.exists ? sanitizeChests(d.data().chests || {}) : {};
   }
   async saveChests(chests) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('chests')
+    await this._worldDoc().collection('containers').doc('chests')
       .set({ chests: sanitizeChests(chests), savedAt: Date.now() });
   }
   async loadFurnaces() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('furnaces').get();
+    const d = await this._worldDoc().collection('containers').doc('furnaces').get();
     return d.exists ? sanitizeFurnaces(d.data().furnaces || {}) : {};
   }
   async saveFurnaces(furnaces) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('furnaces')
+    await this._worldDoc().collection('containers').doc('furnaces')
       .set({ furnaces: sanitizeFurnaces(furnaces), savedAt: Date.now() });
   }
   async loadIncubations() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('incubations').get();
+    const d = await this._worldDoc().collection('containers').doc('incubations').get();
     return d.exists ? sanitizeIncubations(d.data().incubations || {}) : {};
   }
   async saveIncubations(incubations) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('incubations')
+    await this._worldDoc().collection('containers').doc('incubations')
       .set({ incubations: sanitizeIncubations(incubations), savedAt: Date.now() });
   }
   async loadNestDragons() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('nests').get();
+    const d = await this._worldDoc().collection('containers').doc('nests').get();
     return d.exists ? sanitizeNestDragons(d.data().nests || {}) : {};
   }
   async saveNestDragons(nests) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('nests')
+    await this._worldDoc().collection('containers').doc('nests')
       .set({ nests: sanitizeNestDragons(nests), savedAt: Date.now() });
   }
   async loadGates() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('gates').get();
+    const d = await this._worldDoc().collection('containers').doc('gates').get();
     return d.exists ? sanitizeGates(d.data().gates || {}) : {};
   }
   async saveGates(gates) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('gates')
+    await this._worldDoc().collection('containers').doc('gates')
       .set({ gates: sanitizeGates(gates), savedAt: Date.now() });
   }
   async loadTeams() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('teams').get();
+    const d = await this._worldDoc().collection('containers').doc('teams').get();
     return d.exists ? sanitizeTeams(d.data().teams || {}) : {};
   }
   async saveTeams(teams) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('teams')
+    await this._worldDoc().collection('containers').doc('teams')
       .set({ teams: sanitizeTeams(teams), savedAt: Date.now() });
   }
   async loadGuilds() {
-    const d = await this.db.collection('worlds').doc('main').collection('containers').doc('guilds').get();
+    const d = await this._worldDoc().collection('containers').doc('guilds').get();
     return d.exists ? sanitizeGuilds(d.data().guilds || {}) : {};
   }
   async saveGuilds(guilds) {
-    await this.db.collection('worlds').doc('main').collection('containers').doc('guilds')
+    await this._worldDoc().collection('containers').doc('guilds')
       .set({ guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
   }
   async loadPlayer(token) {
@@ -1052,7 +1109,7 @@ function createStore(options = {}) {
   const Firebase = options.FirebaseStoreClass || FirebaseStore;
   const Json = options.JsonStoreClass || JsonStore;
   if ((env.STORE || '').toLowerCase() === 'firebase') {
-    try { return new Firebase(); }
+    try { return new Firebase({ shardId: options.shardId }); }
     catch (e) {
       if ((env.NODE_ENV || '').toLowerCase() === 'production') {
         throw new Error('Firebase storage was requested but could not initialize: ' + e.message, { cause: e });
@@ -1060,7 +1117,7 @@ function createStore(options = {}) {
       console.warn('[store] firebase unavailable (' + e.message + '), falling back to JSON outside production');
     }
   }
-  return new Json(env.DATA_DIR);
+  return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken, TUTORIAL_VERSIONS };
+module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken, TUTORIAL_VERSIONS };

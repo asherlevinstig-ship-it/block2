@@ -13,6 +13,7 @@ const AI = require('../ai');
 const { DungeonInstance } = require('./dungeonInstance');
 const { GATE_INTERACT_RANGE, gateEncounterPreview, gateReadinessForProfile, gateRoleForProfile } = require('./gate-readiness');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { issueDungeonAdmission } = require('./dungeon-admission');
 
 class DungeonMixin {
   // Dungeon / gate lifecycle state, co-located with the mixin that owns it.
@@ -434,9 +435,10 @@ class DungeonMixin {
   // client passes straight to NETWORK.switchRoom('dungeon', ...). `mode:'room'` disambiguates it
   // from the bare legacy start (which is followed by an in-room enterDungeon instead). Field names
   // match DungeonRoom.gateFromOptions so the whole payload is forwarded as the room's join options.
-  dungeonRoomEntryPayload(g) {
+  dungeonRoomEntryPayload(g, members = []) {
     return {
       mode: 'room',
+      ticket: issueDungeonAdmission(g, members.map(sid => this.tokens && this.tokens.get(sid)).filter(Boolean)),
       gateId: g.id,
       seed: (g.seed >>> 0) || 0,
       rank: g.rank | 0,
@@ -543,7 +545,7 @@ class DungeonMixin {
         // Flag-on: the ready hunter switches into the dedicated DungeonRoom for this gate.
         // filterBy(gateId) lands the whole ready party in one room; the overworld gate is
         // retired when that room disposes (dungeon-handoff consumeGate), not here.
-        c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g));
+        c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, members));
       } else {
         if (!inst) inst = this.instances[g.id] || this.createInstance(g);
         c.send('dungeonLobbyStart', { gateId: g.id });

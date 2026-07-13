@@ -4,6 +4,8 @@ const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('..
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
 const { handOff, consumeGate } = require('./dungeon-handoff');
+const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
+const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -24,6 +26,9 @@ class DungeonRoom extends GameRoom {
   // Account auth is identical to the overworld room — GameRoom.onAuth is static and inherited.
 
   async onCreate(options) {
+    const admittedGate = peekDungeonAdmission(options && options.ticket);
+    if (!admittedGate || admittedGate.id !== (options && options.gateId)) throw new Error('invalid dungeon admission');
+    this.admissionTicket = options.ticket;
     this.isDungeonRoom = true;
     this.maxClients = 8;                 // a raid party, not the 16-player overworld
     // Same shape as GameRoom.bootId — a per-process stamp for the crash-recovery marker
@@ -64,6 +69,7 @@ class DungeonRoom extends GameRoom {
       this.recordTick(performance.now() - started);
     }, 100);   // 10 Hz, like GameRoom
     this.clock.setInterval(() => this.flush(), 30000);   // periodic save for long raids, like GameRoom
+    registerRoom(this, 'dungeon', { gateId: this.instance.id });
   }
 
   // GameRoom.flush() unconditionally runs completeFurnaces() first, which iterates
@@ -122,6 +128,8 @@ class DungeonRoom extends GameRoom {
     this.monitorClient(client);
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
+    const admittedGate = claimDungeonAdmission(options && options.ticket, token);
+    if (!admittedGate || options.ticket !== this.admissionTicket || admittedGate.id !== this.instance.id) throw new Error('invalid dungeon admission');
     let prof = this.profiles.get(token);
     if (!prof) {
       try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
@@ -224,6 +232,8 @@ class DungeonRoom extends GameRoom {
   }
 
   async onDispose() {
+    unregisterRoom(this);
+    revokeDungeonAdmission(this.admissionTicket);
     // Unlike GameRoom, a DungeonRoom holds no world lease, but it does own in-memory profile
     // mutations from any client whose onLeave hasn't run yet (e.g. an abrupt shutdown) — flush
     // those before tearing the instance down. Colyseus only calls onDispose after every

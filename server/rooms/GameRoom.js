@@ -5,7 +5,7 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
@@ -15,21 +15,24 @@ const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
 const { takeHandoff, drainConsumedGates } = require('./dungeon-handoff');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
+const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
 // maxClients; allowing that would give two simulations write access to the
 // same world persistence. Keep a process-local lease so overflow fails closed
 // instead of starting a second, divergent world writer.
-let activeGlobalRoom = null;
-function claimGlobalWorld(room) {
-  if (activeGlobalRoom && activeGlobalRoom !== room) {
-    throw new Error('the global Blockcraft world is already active; refusing a second persistence writer');
+const activeGlobalRooms = new Map();
+function claimGlobalWorld(room, shardId = 'main') {
+  const id = cleanShardId(shardId);
+  const active = activeGlobalRooms.get(id);
+  if (active && active !== room) {
+    throw new Error('the Blockcraft overworld shard "' + id + '" is already active; refusing a second persistence writer');
   }
-  activeGlobalRoom = room;
+  activeGlobalRooms.set(id, room);
 }
 function releaseGlobalWorld(room) {
-  if (activeGlobalRoom === room) activeGlobalRoom = null;
+  for (const [id, active] of activeGlobalRooms) if (active === room) activeGlobalRooms.delete(id);
 }
 
 const {
@@ -53,17 +56,19 @@ class GameRoom extends Room {
     return account;
   }
 
-  async onCreate() {
-    claimGlobalWorld(this);
+  async onCreate(options = {}) {
+    this.shardId = cleanShardId(options.shardId);
+    claimGlobalWorld(this, this.shardId);
     try {
-    this.maxClients = 16;
+    this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 16) | 0));
+    if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
     this.world = W.createWorld();
     this.world.generate();
 
     // ---- persistence ----
-    this.store = this.monitorStore(createStore());
+    this.store = this.monitorStore(createStore({ shardId: this.shardId }));
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
@@ -498,6 +503,7 @@ class GameRoom extends Room {
       this.update(dtMs / 1000);
       this.recordTick(performance.now() - t0);
     }, 100); // 10 Hz
+    registerRoom(this, 'overworld', { shardId: this.shardId || 'main' });
     } catch (e) {
       releaseGlobalWorld(this);
       throw e;
@@ -506,6 +512,7 @@ class GameRoom extends Room {
 
   async onJoin(client, options, auth) {
     this.monitorClient(client);
+    client.send('shard', { id: this.shardId || 'main', maxClients: this.maxClients });
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
     if (token) this.tokens.set(client.sessionId, token);
@@ -903,7 +910,10 @@ class GameRoom extends Room {
 
   async onDispose() {
     try { await this.flush(); }
-    finally { releaseGlobalWorld(this); }
+    finally {
+      unregisterRoom(this);
+      releaseGlobalWorld(this);
+    }
   }
 
   handleClaimFirstQuestReward(client) {
