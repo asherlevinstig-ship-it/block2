@@ -3289,20 +3289,41 @@ for(const [i,s] of smallDiscoveries.filter(d=>d.type==='traveling_merchant').ent
   v.grp.position.set(s.x+.5,s.y+1,s.z+.5);v.grp.rotation.y=Math.PI;attachNpcNameplate(v);scene.add(v.grp);villagers.push(v);
 }
 
+const OVERWORLD_NPC_ACTIVE_SQ=96*96;
+const OVERWORLD_TOWN_AMBIENT_SQ=150*150;
+function playerOverworldDistanceSq(x,z){
+  if(dim!=='overworld'||!player)return Infinity;
+  const dx=player.pos.x-x,dz=player.pos.z-z;
+  return dx*dx+dz*dz;
+}
+function nearTownAmbience(){
+  return playerOverworldDistanceSq(TOWN.TC,TOWN.TC)<=OVERWORLD_TOWN_AMBIENT_SQ;
+}
+function hideNpcOverlays(v){
+  if(v&&v.nameplate){v.nameplate.visible=false;if(v.nameplate.material)v.nameplate.material.opacity=0;}
+  if(v&&v.questMarker){v.questMarker.visible=false;if(v.questMarker.material)v.questMarker.material.opacity=0;}
+}
+
 function tickVillagers(dt, t){
   const night = gDayF<0.35;
   for(const v of villagers){
     const p=v.grp.position;
+    const dxp=player.pos.x-p.x,dzp=player.pos.z-p.z,pdSq=dxp*dxp+dzp*dzp;
+    if(dim!=='overworld'||pdSq>OVERWORLD_NPC_ACTIVE_SQ){
+      hideNpcOverlays(v);
+      continue;
+    }
+    const pd=Math.sqrt(pdSq);
     headTrack(v, dt);
     if(v.legs){ const k=Math.max(0,1-dt*9);                                 // ease limbs back to rest each tick
       v.legs[0].rotation.x*=k; v.legs[1].rotation.x*=k; v.arms[0].rotation.x*=k; v.arms[1].rotation.x*=k; }
     if(v.nameplate && v.nameplate.material){
-      const d=Math.hypot(player.pos.x-p.x, player.pos.z-p.z);
-      const target=dim==='overworld' && !v.inside && !qOpen && d<8 ? Math.min(.95,(8-d)/2.5) : 0;
+      const d=pd;
+      const target=!v.inside && !qOpen && d<8 ? Math.min(.95,(8-d)/2.5) : 0;
       v.nameplate.material.opacity += (target-v.nameplate.material.opacity)*Math.min(1,dt*8);
       v.nameplate.visible=v.nameplate.material.opacity>.04;
     }
-    updateNpcQuestMarker(v,dt,t,Math.hypot(player.pos.x-p.x, player.pos.z-p.z));
+    updateNpcQuestMarker(v,dt,t,pd);
     if(v.role==='game_dealer'&&v.gameActiveUntil>t&&v.arms){
       const pulse=Math.sin(t*11+v.phase),strength=v.gamePhase==='win'?1.05:v.gamePhase==='lose'?.35:.72;
       v.arms[0].rotation.x=-.55-strength*Math.max(0,pulse);v.arms[1].rotation.x=-.55-strength*Math.max(0,-pulse);
@@ -3331,7 +3352,6 @@ function tickVillagers(dt, t){
       v.targetRadius=v.role==='warden'?2.5:v.role==='farmer'?4.5:3.25;
     }
     // turn to greet the player when they come close
-    const pd=Math.hypot(player.pos.x-p.x, player.pos.z-p.z);
     if(pd<2.6 && !night){
       const want=Math.atan2(player.pos.x-p.x, player.pos.z-p.z);
       v.grp.rotation.y += angDiff(want, v.grp.rotation.y)*Math.min(1,dt*8);
@@ -4755,6 +4775,11 @@ function renderGuildHallFloors(){
   for(const floor of guildHallState.floors||[]){const sp=makeGuildFloorLabel(floor);townGroup.add(sp);guildFloorLabels.push(sp);}
 }
 function tickTownInteractLabels(dt){
+  if(!nearTownAmbience()){
+    for(const sp of townInteractLabels){sp.visible=false;if(sp.material)sp.material.opacity=0;}
+    for(const sp of townQuestMarkers){sp.visible=false;if(sp.material)sp.material.opacity=0;}
+    return;
+  }
   updateFellowshipNoticeBoardLabel();
   updateFellowshipProjectProps();
   tickFellowshipProjectProps(dt,performance.now()/1000);
@@ -8212,14 +8237,25 @@ function updateEmitters(dt){
   }
 }
 function updateRoadBirds(dt,tt){
+  if(dim!=='overworld'){for(const b of roadBirds)b.grp.visible=false;return;}
   for(const b of roadBirds){
-    const near=dim==='overworld'&&Math.hypot(player.pos.x-b.cx,player.pos.z-b.cz)<125;
+    const near=playerOverworldDistanceSq(b.cx,b.cz)<125*125;
     b.grp.visible=near;if(!near)continue;
     const a=tt*.22+b.phase;b.grp.position.set(b.cx+Math.cos(a)*b.r,b.cy+Math.sin(tt*.7+b.phase)*1.2,b.cz+Math.sin(a)*b.r);
     b.grp.rotation.y=-a;const flap=Math.sin(tt*7+b.phase)*.65;b.wings[0].rotation.z=flap;b.wings[1].rotation.z=-flap;
   }
 }
+let tavernNightEffectsSuspended=false;
+function suspendTavernNightEffects(){
+  if(tavernNightEffectsSuspended)return;
+  tavernNightEffectsSuspended=true;
+  for(const entry of tavernNightObjects)if(entry.obj)entry.obj.visible=false;
+  for(const l of tavernNightLights)l.visible=false;
+  for(const l of shrineCandleLights)l.visible=false;
+}
 function updateTavernNightEffects(dt, tt){
+  if(!nearTownAmbience()){suspendTavernNightEffects();return;}
+  tavernNightEffectsSuspended=false;
   const night=tavernNightLevel();
   const ease=night*night*(3-2*night);
   for(const entry of tavernNightObjects){
@@ -8604,7 +8640,10 @@ function rebuildRoadSafetyScenes(force=false){
 }
 function refreshRoadSafetyScenes(){rebuildRoadSafetyScenes(false);}
 function tickRoadSafetyScenes(dt,t){
-  if(!roadSafetySceneGroup||!roadSafetySceneGroup.visible||!roadSafetyActors.length)return;
+  if(!roadSafetySceneGroup||!roadSafetyActors.length)return;
+  const active=dim==='overworld'&&playerOverworldDistanceSq(TOWN.TC,TOWN.TC)<=220*220;
+  roadSafetySceneGroup.visible=active;
+  if(!active)return;
   for(const a of roadSafetyActors){
     const p=a.phase||0,scan=Math.sin(t*.85+p),shift=Math.sin(t*1.7+p);
     if(a.head){a.head.rotation.y=scan*.32;a.head.rotation.x=Math.sin(t*.55+p)*.04;}
