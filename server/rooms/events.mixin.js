@@ -497,6 +497,18 @@ class EventsMixin {
       participantCount: ev.participants ? ev.participants.size : 0,
       ready: !!(sid && ev.participants && ev.participants.get(sid) && ev.participants.get(sid).ready),
       readyCount: ev.participants ? [...ev.participants.values()].filter(part => part.ready).length : 0,
+      stagingRoster: ev.phase === 'starting' && ev.participants ? [...ev.participants.entries()]
+        .map(([memberSid, member]) => {
+          const player = this.state.players.get(memberSid);
+          return {
+            sid: memberSid,
+            name: player && player.name || this.playerName(memberSid) || 'Hunter',
+            path: player && player.path || '',
+            ready: !!member.ready,
+          };
+        })
+        .sort((a, b) => (b.ready - a.ready) || a.name.localeCompare(b.name))
+        .slice(0, EVENT_QUEUE_CAPACITY) : [],
       eventTeam: participating ? {
         id: ev.participants.get(sid).teamId || '',
         name: ev.participants.get(sid).teamName || '',
