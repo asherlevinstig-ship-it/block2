@@ -1936,6 +1936,10 @@ function beginDungeon(ri, seed, editLog, opts){
       const pending=NET.pendingDungeonStatus; NET.pendingDungeonStatus=null;
       setTimeout(()=>applyDungeonStatus(pending),0);
     }
+    if(NET.pendingDungeonPartyStatus && (!NET.dgn || NET.pendingDungeonPartyStatus.id===NET.dgn)){
+      const pending=NET.pendingDungeonPartyStatus; NET.pendingDungeonPartyStatus=null;
+      setTimeout(()=>applyDungeonPartyStatus(pending),0);
+    }
     if(dungeon.shard) sysMsg('<b>+'+dungeon.shard.plus+' '+dungeon.shard.name+'</b> shard active: '+dungeon.shard.mods.join(', '));
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
     owWorld=world; world=dungeon.world; dim='dungeon';
@@ -1980,6 +1984,7 @@ function exitDungeon(instant){
     player.vel.set(0,0,0);
     dungeon=null;
     NET.pendingDungeonStatus=null;
+    NET.pendingDungeonPartyStatus=null;
     gateTimer=120;
     if(!instant) sleepEl.style.opacity=0;
   };

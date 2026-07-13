@@ -35,7 +35,7 @@ class DungeonMixin {
   dungeonStatusPayload(inst) {
     if (!inst) return null;
     const party = [];
-    inst.players.forEach(sid => {
+    for (const sid of inst.players || []) {
       const p = this.state.players.get(sid);
       if (p && p.dgn === inst.id) {
         const hp = this.playerHp.get(sid) || { hp: 0, max: 1 };
@@ -45,7 +45,7 @@ class DungeonMixin {
         const downed = hp.hp <= 0;
         party.push({ sid, name: p.name, lvl: p.lvl, team: p.team || '', x: p.x, y: p.y, z: p.z, hp: Math.max(0, Math.ceil(hp.hp)), maxHp: Math.max(1, Math.ceil(hp.max)), downed, spirit, state: spirit ? 'spirit' : downed ? 'downed' : 'alive', role: gateRoleForProfile(profile || {}), contribution: Math.round((contribution.damage || 0) + (contribution.support || 0)) });
       }
-    });
+    }
     let bossAlive = false, boss = null;
     this.state.mobs.forEach(m => { if (m.dgn === inst.id && m.kind === 'boss' && m.hp > 0) { bossAlive = true; boss = m; } });
     const looted = this.gateLootedChests.get(inst.id)?.size || 0;

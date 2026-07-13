@@ -1193,7 +1193,11 @@ test('Party Compass prioritizes rally, dungeon pings, downed allies, and split t
   assert.match(frame,/activeDungeonPing&&performance\.now\(\)<activeDungeonPing\.expires/);
   assert.match(frame,/const labels=\{group:'Regroup',boss:'Boss Ping',loot:'Loot Ping'\}/);
   assert.match(frame,/party\.find\(m=>m\.downed\|\|m\.spirit\)/);
+  assert.match(frame,/ref\|\|member/);
   assert.match(frame,/dungeonObjectiveState\(status,me/);
+  assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8'), /dungeonPartyStatus/);
+  assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8'), /function applyDungeonPartyStatus\(m\)/);
+  assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8'), /pendingDungeonPartyStatus/);
   assert.match(frame,/dungeonLobbyState&&dungeonLobbyState\.rally/);
   assert.match(frame,/bd=-1/);
   assert.match(frame,/Split: /);

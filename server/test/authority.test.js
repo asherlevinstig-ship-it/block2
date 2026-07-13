@@ -3675,6 +3675,25 @@ test('DungeonRoom filters dungeon players by interest view', () => {
   assert.equal(viewer.view.removed.has(room.state.players.get(near.sessionId)), true, 'living players leave the view when the viewer moves away');
 });
 
+test('DungeonRoom status keeps hidden party members visible to lightweight UI', () => {
+  const room = makeDungeonRoom();
+  const inst = hazInstance(room, 'player-status-dgn', []);
+  const viewer = seedDungeonPlayer(room, 'status-viewer', inst, { x: 0, y: 10, z: 0 });
+  const far = seedDungeonPlayer(room, 'status-far', inst, { x: 140, y: 10, z: 0 });
+  viewer.view = makeTrackingView();
+  room.initDungeonInterestView(viewer);
+  room.updateClientDungeonInterestView(viewer);
+
+  assert.equal(viewer.view.added.has(room.state.players.get(far.sessionId)), false, 'far player is hidden from full state replication');
+  room.sendDungeonPartyStatus(inst.id);
+  const status = viewer.sent.findLast(entry => entry.type === 'dungeonPartyStatus').msg;
+  const farStatus = status.party.find(member => member.sid === far.sessionId);
+  assert.ok(farStatus, 'hidden player remains present in the roster status');
+  assert.equal(farStatus.hp, 20);
+  assert.equal(farStatus.state, 'alive');
+  assert.equal(farStatus.x, 140);
+});
+
 test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', () => {
   const priorE2E = process.env.BLOCKCRAFT_E2E;
   process.env.BLOCKCRAFT_E2E = '1';

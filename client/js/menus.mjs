@@ -23,6 +23,7 @@ const legacyMenuBindings={
   "applyChestBatchResult":{get:()=>applyChestBatchResult},
   "applyChestState":{get:()=>applyChestState},
   "applyChestTx":{get:()=>applyChestTx},
+  "applyDungeonPartyStatus":{get:()=>applyDungeonPartyStatus},
   "applyDungeonStatus":{get:()=>applyDungeonStatus},
   "applyFirstQuestRewardResult":{get:()=>applyFirstQuestRewardResult},
   "applyFoodResult":{get:()=>applyFoodResult},
@@ -1652,6 +1653,26 @@ function applyDungeonStatus(m){
   if(!m.wipe)dungeon.status.wipe=dungeon.status.party.length>0&&dungeon.status.aliveCount===0;
   dungeon.kind=dungeon.status.kind;
   dungeon.cleared=dungeon.status.cleared;
+}
+function applyDungeonPartyStatus(m){
+  if(!m) return;
+  if(!dungeon){ NET.pendingDungeonPartyStatus=m; return; }
+  if(NET.dgn && m.id!==NET.dgn) return;
+  if(!dungeon.status)dungeon.status={id:m.id||'',rank:Math.max(0,dungeon.rank|0),kind:dungeon.kind||'public',party:[],totalPlayers:0,activeCount:0,aliveCount:0,spiritCount:0,downedCount:0,returnedCount:0,wipe:false,bossAlive:false,boss:null,cleared:!!dungeon.cleared,roomsCleared:0,roomTotal:0,bossGateState:'open',bossRoom:null,exit:null,unopenedChests:[],remainingChests:0};
+  dungeon.status.party=Array.isArray(m.party)?m.party.slice(0,8):[];
+  dungeon.status.totalPlayers=Math.max(0,m.totalPlayers|0);
+  dungeon.status.activeCount=Math.max(0,m.activeCount|0);
+  dungeon.status.aliveCount=Math.max(0,m.aliveCount|0);
+  dungeon.status.spiritCount=Math.max(0,m.spiritCount|0);
+  dungeon.status.downedCount=Math.max(0,m.downedCount|0);
+  dungeon.status.returnedCount=Math.max(0,m.returnedCount|0);
+  dungeon.status.wipe=!!m.wipe;
+  if(!Number.isFinite(m.aliveCount))dungeon.status.aliveCount=dungeon.status.party.filter(p=>p&&!p.downed&&!p.spirit).length;
+  if(!Number.isFinite(m.spiritCount))dungeon.status.spiritCount=dungeon.status.party.filter(p=>p&&p.spirit).length;
+  if(!Number.isFinite(m.totalPlayers))dungeon.status.totalPlayers=dungeon.status.party.length;
+  if(!Number.isFinite(m.activeCount))dungeon.status.activeCount=dungeon.status.party.length;
+  if(!Number.isFinite(m.returnedCount))dungeon.status.returnedCount=Math.max(0,dungeon.status.totalPlayers-dungeon.status.activeCount);
+  if(!m.wipe)dungeon.status.wipe=dungeon.status.party.length>0&&dungeon.status.aliveCount===0;
 }
 function applyShopResult(m){
   if(!m || !ITEMS[m.id]) return;

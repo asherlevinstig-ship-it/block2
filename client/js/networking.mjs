@@ -1158,6 +1158,7 @@ function netAttachRoom(room,name,client){
              r==='item'?'You have no shard in that slot':'Could not attune that shard');
     });
     room.onMessage('dungeonStatus', m=>applyDungeonStatus(m));
+    room.onMessage('dungeonPartyStatus', m=>applyDungeonPartyStatus(m));
     room.onMessage('dungeonRoomCleared', m=>announceDungeonRoomCleared(m));
     room.onMessage('dungeonPing', m=>{if(globalThis.applyDungeonPing)globalThis.applyDungeonPing(m);});
     room.onMessage('dungeonLobby', m=>{

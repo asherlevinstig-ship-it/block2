@@ -1,7 +1,7 @@
 import { reconnectWithBackoff } from './reconnect.mjs';
 
 export function createNetworkController(options) {
-  const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, reconnecting: false, attachCount: 0, tried: false, roomName: options.roomName, shardId: '' };
+  const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, pendingDungeonPartyStatus: null, reconnecting: false, attachCount: 0, tried: false, roomName: options.roomName, shardId: '' };
   let stopped = false;
   // Multi-room (DungeonRoom 2c): the live client and player name are retained so the controller
   // can leave the primary room and join a secondary one (the dungeon) and back, reusing the same

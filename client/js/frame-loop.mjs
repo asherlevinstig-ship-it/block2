@@ -1156,7 +1156,7 @@ function updateDungeonCoordination(now){
     const returnedCard=returned?'<div class="partycard returned"><div class="partyline"><b>Returned to Town</b><small>'+returned+'/'+total+'</small></div><div class="partyline"><small>Left the dungeon instance</small><span class="partycontrib">Safe</span></div></div>':'';
     dungeonPartyEl.innerHTML='<div class="partytitle">GATE PARTY · F1 GROUP · F2 BOSS · F3 LOOT</div>'+summary+warning+status.party.map(member=>{
       let distance=0;
-      if(member.sid!==mine){const remote=NET.remotes[member.sid],ref=remote&&remote.ref;distance=ref?Math.round(Math.hypot((ref.x||0)-player.pos.x,(ref.z||0)-player.pos.z)):0;}
+      if(member.sid!==mine){const remote=NET.remotes[member.sid],ref=remote&&remote.ref,pos=ref||member;distance=Number.isFinite(pos.x)&&Number.isFinite(pos.z)?Math.round(Math.hypot((pos.x||0)-player.pos.x,(pos.z||0)-player.pos.z)):0;}
       const hp=Math.max(0,member.hp|0),max=Math.max(1,member.maxHp|0),pct=Math.max(0,Math.min(100,hp/max*100));
       const state=member.spirit?'SPIRIT':member.downed?'DOWNED':'ALIVE';
       const stateClass=member.spirit?' spirit':member.downed?' downed':'';

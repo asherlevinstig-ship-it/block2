@@ -14,6 +14,7 @@ const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADI
 const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40);
 const DUNGEON_PLAYER_INTEREST_RADIUS = Number(process.env.DUNGEON_PLAYER_INTEREST_RADIUS || 48);
 const DUNGEON_FX_INTEREST_RADIUS = Number(process.env.DUNGEON_FX_INTEREST_RADIUS || 44);
+const DUNGEON_STATUS_INTERVAL_MS = Math.max(250, Number(process.env.DUNGEON_STATUS_INTERVAL_MS || 3000));
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -82,6 +83,7 @@ class DungeonRoom extends GameRoom {
     this.initMetrics();
     this.registerRaidHandlers();
     this.clock.setInterval(() => this.updateDungeonInterestViews(), 250);
+    this.clock.setInterval(() => { if (this.instance) this.sendDungeonPartyStatus(this.instance.id); }, DUNGEON_STATUS_INTERVAL_MS);
     this.setSimulationInterval(dt => {
       const started = performance.now();
       this.update(dt / 1000);
@@ -185,6 +187,8 @@ class DungeonRoom extends GameRoom {
     this.initDungeonInterestView(client);
     this.updateClientDungeonInterestView(client);
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
+    const status = this.dungeonStatusPayload(inst);
+    if (status) client.send('dungeonStatus', status);
   }
 
   async onLeave(client, code) {
@@ -417,6 +421,32 @@ class DungeonRoom extends GameRoom {
 
   updateDungeonInterestViews() {
     for (const client of this.clients) this.updateClientDungeonInterestView(client);
+  }
+
+  dungeonPartyStatusPayload(inst) {
+    const status = this.dungeonStatusPayload(inst);
+    if (!status) return null;
+    return {
+      id: status.id,
+      party: status.party,
+      totalPlayers: status.totalPlayers,
+      activeCount: status.activeCount,
+      aliveCount: status.aliveCount,
+      spiritCount: status.spiritCount,
+      downedCount: status.downedCount,
+      returnedCount: status.returnedCount,
+      wipe: status.wipe,
+    };
+  }
+
+  sendDungeonPartyStatus(dgn) {
+    const inst = this.instances[dgn];
+    const payload = this.dungeonPartyStatusPayload(inst);
+    if (!payload) return;
+    for (const c of this.clients) {
+      const p = this.state.players.get(c.sessionId);
+      if (p && p.dgn === dgn) c.send('dungeonPartyStatus', payload);
+    }
   }
 
   dungeonFxPoints(msg) {
