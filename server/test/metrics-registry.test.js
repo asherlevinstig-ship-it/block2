@@ -42,6 +42,12 @@ function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gat
         hiddenMobLinksAvoided: type === 'dungeon' ? 120 : 0,
         bossVisibleLinks: type === 'dungeon' ? 8 : 0,
         bossMobs: type === 'dungeon' ? 1 : 0,
+        dungeonPlayers: type === 'dungeon' ? players : 0,
+        visiblePlayerLinks: type === 'dungeon' ? 36 : 0,
+        avgVisiblePlayersPerClient: type === 'dungeon' ? 4.5 : 0,
+        hiddenPlayerLinksAvoided: type === 'dungeon' ? 28 : 0,
+        selfPlayerLinks: type === 'dungeon' ? 8 : 0,
+        downedPlayerLinks: type === 'dungeon' ? 7 : 0,
         interestViewAdds: type === 'dungeon' ? 42 : 0,
         interestViewRemoves: type === 'dungeon' ? 2 : 0,
         interestViewAddsPerSecond: type === 'dungeon' ? 4 : 0,
@@ -91,11 +97,15 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.hiddenMobLinksAvoided, 120);
   assert.equal(snapshot.totals.dungeonClients, 8);
   assert.equal(snapshot.totals.avgVisibleMobsPerDungeonClient, 5);
+  assert.equal(snapshot.totals.dungeonPlayers, 8);
+  assert.equal(snapshot.totals.visiblePlayerLinks, 36);
+  assert.equal(snapshot.totals.hiddenPlayerLinksAvoided, 28);
+  assert.equal(snapshot.totals.avgVisiblePlayersPerDungeonClient, 4.5);
   assert.equal(snapshot.totals.dungeonFxSent, 12);
   assert.equal(snapshot.totals.dungeonFxSkipped, 20);
   assert.equal(snapshot.totals.persistenceFailures, 1);
   assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond, s.outboundBytesPerSecond, s.outboundBytesPerSecondByKind.statePatch]), [['main', 8, 5, 1000, 750], ['shard-2', 6, 5, 1000, 750]]);
-  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond, d.outboundBytesPerSecondByKind.statePatch]), [['gate-a', 8, 8, 1, 40, 120, 20, 2000, 1500]]);
+  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.visiblePlayerLinks, d.hiddenPlayerLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond, d.outboundBytesPerSecondByKind.statePatch]), [['gate-a', 8, 8, 1, 40, 120, 36, 28, 20, 2000, 1500]]);
 
   unregisterRoom(main);
   unregisterRoom(shard2);

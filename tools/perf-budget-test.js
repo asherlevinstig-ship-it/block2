@@ -44,6 +44,9 @@ function summarizeMetrics(snapshot) {
     + ' visibleMobLinks=' + (totals.visibleMobLinks || 0)
     + ' hiddenMobLinksAvoided=' + (totals.hiddenMobLinksAvoided || 0)
     + ' avgVisibleMobs=' + (totals.avgVisibleMobsPerDungeonClient || 0)
+    + ' visiblePlayerLinks=' + (totals.visiblePlayerLinks || 0)
+    + ' hiddenPlayerLinksAvoided=' + (totals.hiddenPlayerLinksAvoided || 0)
+    + ' avgVisiblePlayers=' + (totals.avgVisiblePlayersPerDungeonClient || 0)
     + ' viewChurn=' + ((totals.interestViewAdds || 0) + (totals.interestViewRemoves || 0))
     + ' fxSent=' + (totals.dungeonFxSent || 0)
     + ' fxSkipped=' + (totals.dungeonFxSkipped || 0)
@@ -63,6 +66,9 @@ function mergePeakMetrics(loadSnapshot, interestSnapshot, bandwidthSnapshot) {
       visibleMobLinks: interestTotals.visibleMobLinks || 0,
       hiddenMobLinksAvoided: interestTotals.hiddenMobLinksAvoided || 0,
       avgVisibleMobsPerDungeonClient: interestTotals.avgVisibleMobsPerDungeonClient || 0,
+      visiblePlayerLinks: interestTotals.visiblePlayerLinks || 0,
+      hiddenPlayerLinksAvoided: interestTotals.hiddenPlayerLinksAvoided || 0,
+      avgVisiblePlayersPerDungeonClient: interestTotals.avgVisiblePlayersPerDungeonClient || 0,
       interestViewAdds: interestTotals.interestViewAdds || 0,
       interestViewRemoves: interestTotals.interestViewRemoves || 0,
       dungeonFxSent: interestTotals.dungeonFxSent || 0,
@@ -86,8 +92,8 @@ function run(label, script, env, metricsPort, budgets) {
         const score = (snapshot.totals.clients || 0) * 1000 + (snapshot.totals.rooms || 0);
         const peakScore = peakMetrics ? (peakMetrics.totals.clients || 0) * 1000 + (peakMetrics.totals.rooms || 0) : -1;
         if (score >= peakScore) peakMetrics = snapshot;
-        const interestScore = (snapshot.totals.hiddenMobLinksAvoided || 0) + (snapshot.totals.visibleMobLinks || 0) + (snapshot.totals.dungeonFxSkipped || 0);
-        const peakInterestScore = peakInterestMetrics ? (peakInterestMetrics.totals.hiddenMobLinksAvoided || 0) + (peakInterestMetrics.totals.visibleMobLinks || 0) + (peakInterestMetrics.totals.dungeonFxSkipped || 0) : -1;
+        const interestScore = (snapshot.totals.hiddenMobLinksAvoided || 0) + (snapshot.totals.visibleMobLinks || 0) + (snapshot.totals.hiddenPlayerLinksAvoided || 0) + (snapshot.totals.visiblePlayerLinks || 0) + (snapshot.totals.dungeonFxSkipped || 0);
+        const peakInterestScore = peakInterestMetrics ? (peakInterestMetrics.totals.hiddenMobLinksAvoided || 0) + (peakInterestMetrics.totals.visibleMobLinks || 0) + (peakInterestMetrics.totals.hiddenPlayerLinksAvoided || 0) + (peakInterestMetrics.totals.visiblePlayerLinks || 0) + (peakInterestMetrics.totals.dungeonFxSkipped || 0) : -1;
         if (interestScore >= peakInterestScore) peakInterestMetrics = snapshot;
         const bandwidthScore = snapshot.totals.outboundBytesPerSecond || 0;
         const peakBandwidthScore = peakBandwidthMetrics ? peakBandwidthMetrics.totals.outboundBytesPerSecond || 0 : -1;

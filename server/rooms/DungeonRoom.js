@@ -12,6 +12,7 @@ const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
 const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 28);
 const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40);
+const DUNGEON_PLAYER_INTEREST_RADIUS = Number(process.env.DUNGEON_PLAYER_INTEREST_RADIUS || 48);
 const DUNGEON_FX_INTEREST_RADIUS = Number(process.env.DUNGEON_FX_INTEREST_RADIUS || 44);
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
@@ -444,6 +445,14 @@ class DungeonRoom extends GameRoom {
     this.recordDungeonFxFanout(sent, skipped);
   }
 
+  shouldSeeDungeonPlayer(viewerSid, viewer, targetSid, target) {
+    if (!viewer || !target || !viewer.dgn || viewer.dgn !== target.dgn) return false;
+    if (viewerSid === targetSid) return true;
+    const hp = this.playerHp && this.playerHp.get(targetSid);
+    if (hp && hp.hp <= 0) return true;
+    return Math.hypot((target.x || 0) - (viewer.x || 0), (target.z || 0) - (viewer.z || 0)) <= DUNGEON_PLAYER_INTEREST_RADIUS;
+  }
+
   dungeonInterestSnapshot() {
     const clients = this.clients ? this.clients.length : 0;
     let dungeonMobs = 0, bosses = 0, visibleMobLinks = 0, bossVisibleLinks = 0;
@@ -463,6 +472,22 @@ class DungeonRoom extends GameRoom {
     }
     const possibleMobLinks = dungeonMobs * clients;
     const hiddenMobLinksAvoided = Math.max(0, possibleMobLinks - visibleMobLinks);
+    const dungeonPlayers = [];
+    this.state.players.forEach((player, sid) => { if (player && player.dgn) dungeonPlayers.push({ sid, player }); });
+    let visiblePlayerLinks = 0, selfPlayerLinks = 0, downedPlayerLinks = 0;
+    for (const client of this.clients || []) {
+      const viewer = this.state.players.get(client.sessionId);
+      if (!viewer || !viewer.dgn) continue;
+      for (const target of dungeonPlayers) {
+        if (!this.shouldSeeDungeonPlayer(client.sessionId, viewer, target.sid, target.player)) continue;
+        visiblePlayerLinks++;
+        if (client.sessionId === target.sid) selfPlayerLinks++;
+        const hp = this.playerHp && this.playerHp.get(target.sid);
+        if (client.sessionId !== target.sid && hp && hp.hp <= 0) downedPlayerLinks++;
+      }
+    }
+    const possiblePlayerLinks = dungeonPlayers.length * clients;
+    const hiddenPlayerLinksAvoided = Math.max(0, possiblePlayerLinks - visiblePlayerLinks);
     const metrics = this.dungeonInterestMetrics || {};
     const fxMetrics = this.dungeonFxMetrics || {};
     const windowAgeSec = Math.max(1, (Date.now() - (metrics.windowStartedAt || Date.now())) / 1000);
@@ -473,6 +498,12 @@ class DungeonRoom extends GameRoom {
       hiddenMobLinksAvoided,
       bossVisibleLinks,
       bossMobs: bosses,
+      dungeonPlayers: dungeonPlayers.length,
+      visiblePlayerLinks,
+      avgVisiblePlayersPerClient: clients ? Math.round(visiblePlayerLinks / clients * 100) / 100 : 0,
+      hiddenPlayerLinksAvoided,
+      selfPlayerLinks,
+      downedPlayerLinks,
       interestViewAdds: metrics.added || 0,
       interestViewRemoves: metrics.removed || 0,
       interestViewAddsPerSecond: Math.round(((metrics.windowAdded || 0) / windowAgeSec) * 100) / 100,

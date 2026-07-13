@@ -3644,6 +3644,23 @@ test('DungeonRoom filters positioned dungeon fx to nearby players', () => {
   assert.equal(metrics.dungeonFxSkipped, 1, 'global dungeon fx do not count as skipped');
 });
 
+test('DungeonRoom estimates player interest visibility without filtering state yet', () => {
+  const room = makeDungeonRoom();
+  const inst = hazInstance(room, 'player-interest-dgn', []);
+  seedDungeonPlayer(room, 'player-viewer', inst, { x: 0, y: 10, z: 0 });
+  seedDungeonPlayer(room, 'player-near', inst, { x: 20, y: 10, z: 0 });
+  seedDungeonPlayer(room, 'player-far', inst, { x: 120, y: 10, z: 0 });
+  seedDungeonPlayer(room, 'player-downed', inst, { x: 140, y: 10, z: 0, hp: 0 });
+
+  const metrics = room.dungeonInterestSnapshot();
+  assert.equal(metrics.dungeonPlayers, 4);
+  assert.equal(metrics.selfPlayerLinks, 4, 'each client keeps its own player visible');
+  assert.equal(metrics.downedPlayerLinks, 3, 'downed teammates remain visible across the party');
+  assert.equal(metrics.visiblePlayerLinks, 10);
+  assert.equal(metrics.hiddenPlayerLinksAvoided, 6);
+  assert.equal(metrics.avgVisiblePlayersPerClient, 2.5);
+});
+
 test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', () => {
   const priorE2E = process.env.BLOCKCRAFT_E2E;
   process.env.BLOCKCRAFT_E2E = '1';

@@ -69,6 +69,11 @@ function summarizeRooms(rooms) {
     visibleMobLinks: 0,
     hiddenMobLinksAvoided: 0,
     bossVisibleLinks: 0,
+    dungeonPlayers: 0,
+    visiblePlayerLinks: 0,
+    hiddenPlayerLinksAvoided: 0,
+    selfPlayerLinks: 0,
+    downedPlayerLinks: 0,
     interestViewAdds: 0,
     interestViewRemoves: 0,
     dungeonClients: 0,
@@ -98,6 +103,11 @@ function summarizeRooms(rooms) {
     totals.visibleMobLinks += room.visibleMobLinks || 0;
     totals.hiddenMobLinksAvoided += room.hiddenMobLinksAvoided || 0;
     totals.bossVisibleLinks += room.bossVisibleLinks || 0;
+    totals.dungeonPlayers += room.dungeonPlayers || 0;
+    totals.visiblePlayerLinks += room.visiblePlayerLinks || 0;
+    totals.hiddenPlayerLinksAvoided += room.hiddenPlayerLinksAvoided || 0;
+    totals.selfPlayerLinks += room.selfPlayerLinks || 0;
+    totals.downedPlayerLinks += room.downedPlayerLinks || 0;
     totals.interestViewAdds += room.interestViewAdds || 0;
     totals.interestViewRemoves += room.interestViewRemoves || 0;
     if (room.type === 'dungeon') totals.dungeonClients += room.connectedClients || 0;
@@ -106,6 +116,7 @@ function summarizeRooms(rooms) {
     totals.dungeonFxFilteredEvents += room.dungeonFxFilteredEvents || 0;
   }
   totals.avgVisibleMobsPerDungeonClient = totals.dungeonClients ? round2(totals.visibleMobLinks / totals.dungeonClients) : 0;
+  totals.avgVisiblePlayersPerDungeonClient = totals.dungeonClients ? round2(totals.visiblePlayerLinks / totals.dungeonClients) : 0;
   totals.outboundBytesPerClientPerSecond = totals.clients ? round2(totals.outboundBytesPerSecond / totals.clients) : 0;
   return totals;
 }
@@ -159,6 +170,12 @@ function groupByDungeon(rooms) {
     hiddenMobLinksAvoided: room.hiddenMobLinksAvoided || 0,
     bossVisibleLinks: room.bossVisibleLinks || 0,
     bossMobs: room.bossMobs || 0,
+    dungeonPlayers: room.dungeonPlayers || 0,
+    visiblePlayerLinks: room.visiblePlayerLinks || 0,
+    avgVisiblePlayersPerClient: room.avgVisiblePlayersPerClient || 0,
+    hiddenPlayerLinksAvoided: room.hiddenPlayerLinksAvoided || 0,
+    selfPlayerLinks: room.selfPlayerLinks || 0,
+    downedPlayerLinks: room.downedPlayerLinks || 0,
     interestViewAdds: room.interestViewAdds || 0,
     interestViewRemoves: room.interestViewRemoves || 0,
     interestViewAddsPerSecond: room.interestViewAddsPerSecond || 0,
