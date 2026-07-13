@@ -1,5 +1,6 @@
 import {disposeObjectTree} from './three-disposal.mjs';
 import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
+import {createParticleBudget} from './performance-budget.mjs';
 
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
@@ -7668,11 +7669,16 @@ const pPoints=new THREE.Points(pGeo,pMat);
 pPoints.frustumCulled=false; scene.add(pPoints);
 const particles=[];
 let particleReplace=0;
+const particleBudget=createParticleBudget();
+function resetParticleBudget(){particleBudget.resetFrame();}
+function particleBudgetStats(){return {...particleBudget.stats(),particles:particles.length};}
 function spawnParticle(o){
+  if(!particleBudget.trySpawn(o&&o.priority||1))return false;
   if(particles.length<P_CAP)particles.push(o);
   else {particles[particleReplace]=o;particleReplace=(particleReplace+1)%P_CAP;}
+  return true;
 }
-function burst(x,y,z,col,n,pow,up,life){
+function burst(x,y,z,col,n,pow,up,life,priority=2){
   for(let i=0;i<n;i++){
     const f=.8+Math.random()*.4;
     spawnParticle({
@@ -7680,6 +7686,7 @@ function burst(x,y,z,col,n,pow,up,life){
       vx:(Math.random()-.5)*pow, vy:Math.random()*up+.4, vz:(Math.random()-.5)*pow,
       life:life*(.6+.8*Math.random()), grav:9,
       r:Math.min(1,col[0]*f), g:Math.min(1,col[1]*f), b:Math.min(1,col[2]*f),
+      priority,
     });
   }
 }
@@ -8644,6 +8651,8 @@ gameContext.registerModule('world', Object.freeze({
   openLandClaims:openLandClaimsUI,
   toggleLandClaims:toggleLandClaimOverlay,
   tavernGameAction,
+  resetParticleBudget,
+  particleBudgetStats,
 }));
 
 
@@ -8854,6 +8863,7 @@ const legacyWorldBindings={
   "npcTex":{get:()=>npcTex},
   "onboardingResourceCells":{get:()=>onboardingResourceCells},
   "paintLavaTile":{get:()=>paintLavaTile},
+  "particleBudgetStats":{get:()=>particleBudgetStats},
   "playerJob":{get:()=>playerJob,set:value=>{playerJob=value;}},
   "playerRankName":{get:()=>playerRankName},
   "potionVapors":{get:()=>potionVapors},
@@ -8879,6 +8889,7 @@ const legacyWorldBindings={
   "renderBars":{get:()=>renderBars},
   "renderer":{get:()=>renderer},
   "renderEventHud":{get:()=>renderEventHud},
+  "resetParticleBudget":{get:()=>resetParticleBudget},
   "renderGuildHallFloors":{get:()=>renderGuildHallFloors},
   "rendering":{get:()=>rendering},
   "requestLandClaim":{get:()=>requestLandClaim},

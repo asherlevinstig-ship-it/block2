@@ -1406,10 +1406,11 @@ function updateInfoHud(held){
   }
 }
 let last=performance.now();
-const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length})});
+const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,...worldApi.particleBudgetStats()})});
 function tick(now){
   requestAnimationFrame(tick);
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
+  worldApi.resetParticleBudget();
   perfDiagnostics.sample(now);
   biomeStatus.tick(now);
   globalThis.BlockcraftRecall.tick(now);

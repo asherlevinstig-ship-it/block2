@@ -43,7 +43,7 @@ test('GameContext owns shared services, state slices, module APIs, and runtime l
 });
 
 test('client mob performance tiers reduce ordinary dungeon visual update cost', async () => {
-  const { PERFORMANCE_BUDGETS, distanceTierSq, mobDistanceTierSq, consumeEntityStep } = await clientModule('performance-budget.mjs');
+  const { PERFORMANCE_BUDGETS, distanceTierSq, mobDistanceTierSq, consumeEntityStep, createParticleBudget } = await clientModule('performance-budget.mjs');
   assert.equal(distanceTierSq(24 * 24), 0, 'remote players keep the existing near tier');
   assert.equal(mobDistanceTierSq(17 * 17), 0, 'ordinary mobs stay smooth up close');
   assert.equal(mobDistanceTierSq(24 * 24), 1, 'ordinary mobs outside melee range use the medium cadence');
@@ -53,6 +53,16 @@ test('client mob performance tiers reduce ordinary dungeon visual update cost', 
   const mob = {};
   assert.equal(consumeEntityStep(mob, PERFORMANCE_BUDGETS.mediumStep / 2, 1), 0);
   assert.equal(consumeEntityStep(mob, PERFORMANCE_BUDGETS.mediumStep / 2, 1), PERFORMANCE_BUDGETS.mediumStep);
+
+  const particles = createParticleBudget({ frameCap: 3, cosmeticFrameCap: 2 });
+  assert.equal(particles.trySpawn(1), true);
+  assert.equal(particles.trySpawn(1), true);
+  assert.equal(particles.trySpawn(1), false, 'cosmetic particles yield before the hard frame cap');
+  assert.equal(particles.trySpawn(2), true, 'high-priority particles can use the reserve');
+  assert.equal(particles.trySpawn(2), false, 'all particles still obey the hard frame cap');
+  assert.deepEqual(particles.stats(), { particleAccepted: 0, particleDropped: 0, particleAcceptedTotal: 3, particleDroppedTotal: 2 });
+  particles.resetFrame();
+  assert.deepEqual(particles.stats(), { particleAccepted: 3, particleDropped: 2, particleAcceptedTotal: 3, particleDroppedTotal: 2 });
 });
 
 test('DimensionGrid provides one origin-aware storage contract for every dimension kind', () => {

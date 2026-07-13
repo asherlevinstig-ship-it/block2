@@ -8,6 +8,8 @@ export const PERFORMANCE_BUDGETS=Object.freeze({
   playerCullSq:120*120,
   mediumStep:1/15,
   farStep:1/6,
+  particleFrameCap:180,
+  cosmeticParticleFrameCap:120,
 });
 
 export function distanceTierSq(distanceSq,important=false){
@@ -30,6 +32,31 @@ export function consumeEntityStep(entity,dt,tier){
   entity._perfAcc=(entity._perfAcc||0)+dt;
   if(entity._perfAcc<step)return 0;
   const elapsed=Math.min(.25,entity._perfAcc);entity._perfAcc=0;return elapsed;
+}
+
+export function createParticleBudget({
+  frameCap=PERFORMANCE_BUDGETS.particleFrameCap,
+  cosmeticFrameCap=PERFORMANCE_BUDGETS.cosmeticParticleFrameCap,
+}={}){
+  let frameAccepted=0,frameCosmetic=0,frameDropped=0,lastAccepted=0,lastDropped=0,totalAccepted=0,totalDropped=0;
+  return {
+    resetFrame(){
+      lastAccepted=frameAccepted;lastDropped=frameDropped;
+      frameAccepted=0;frameCosmetic=0;frameDropped=0;
+    },
+    trySpawn(priority=1){
+      const highPriority=priority>=2;
+      if(frameAccepted>=frameCap||(!highPriority&&frameCosmetic>=cosmeticFrameCap)){
+        frameDropped++;totalDropped++;return false;
+      }
+      frameAccepted++;totalAccepted++;
+      if(!highPriority)frameCosmetic++;
+      return true;
+    },
+    stats(){
+      return {particleAccepted:lastAccepted,particleDropped:lastDropped,particleAcceptedTotal:totalAccepted,particleDroppedTotal:totalDropped};
+    },
+  };
 }
 
 export function createPerformanceDiagnostics({renderer,getCounts=()=>({})}){
