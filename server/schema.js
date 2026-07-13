@@ -115,7 +115,7 @@ class State extends Schema {
 defineTypes(State, {
   teams: { map: Team },
   players: { map: Player },
-  mobs: { map: Mob },
+  mobs: { map: Mob, view: true },
   edits: { map: 'uint8' },
   gate: Gate,
   gates: { map: Gate },

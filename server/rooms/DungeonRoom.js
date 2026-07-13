@@ -1,4 +1,5 @@
 const { matchMaker, CloseCode } = require('@colyseus/core');
+const { StateView } = require('@colyseus/schema');
 const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
 const D = require('../dungeon');
@@ -8,6 +9,9 @@ const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach } = require
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
+
+const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 48);
+const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 60);
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -75,6 +79,7 @@ class DungeonRoom extends GameRoom {
 
     this.initMetrics();
     this.registerRaidHandlers();
+    this.clock.setInterval(() => this.updateDungeonInterestViews(), 250);
     this.setSimulationInterval(dt => {
       const started = performance.now();
       this.update(dt / 1000);
@@ -175,6 +180,8 @@ class DungeonRoom extends GameRoom {
     // gate (inst.id / inst.gateX..Z); the overworld room's recoverDungeonAfterRestart
     // consumes it on the next boot, and onLeave clears it on a clean exit.
     this.armDungeonRecovery(client, { id: inst.id, x: inst.gateX, y: inst.gateY, z: inst.gateZ });
+    this.initDungeonInterestView(client);
+    this.updateClientDungeonInterestView(client);
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
   }
 
@@ -329,6 +336,43 @@ class DungeonRoom extends GameRoom {
       if (client) client.send('dungeonFailed', { reason: 'breach', result, x: tx, y: ty, z: tz });
     }
     return true;
+  }
+
+  initDungeonInterestView(client) {
+    if (!client.view) client.view = new StateView();
+    client.__visibleDungeonMobs = client.__visibleDungeonMobs || new Map();
+  }
+
+  shouldSeeDungeonMob(viewer, mob, alreadyVisible = false) {
+    if (!viewer || !mob || !viewer.dgn || mob.dgn !== viewer.dgn) return false;
+    if (mob.kind === 'boss') return true;
+    const radius = alreadyVisible ? DUNGEON_MOB_INTEREST_EXIT_RADIUS : DUNGEON_MOB_INTEREST_RADIUS;
+    return Math.hypot((mob.x || 0) - (viewer.x || 0), (mob.z || 0) - (viewer.z || 0)) <= radius;
+  }
+
+  updateClientDungeonInterestView(client) {
+    if (!client || !client.view) return;
+    const viewer = this.state.players.get(client.sessionId);
+    const visible = client.__visibleDungeonMobs || (client.__visibleDungeonMobs = new Map());
+
+    this.state.mobs.forEach((mob, id) => {
+      if (!this.shouldSeeDungeonMob(viewer, mob, visible.has(id))) return;
+      if (!visible.has(id)) {
+        client.view.add(mob);
+        visible.set(id, mob);
+      }
+    });
+
+    for (const [id, mob] of [...visible.entries()]) {
+      if (!this.state.mobs.has(id) || !this.shouldSeeDungeonMob(viewer, mob, true)) {
+        client.view.remove(mob);
+        visible.delete(id);
+      }
+    }
+  }
+
+  updateDungeonInterestViews() {
+    for (const client of this.clients) this.updateClientDungeonInterestView(client);
   }
 
   // Single-instance tick: the Phase-1 dispatch with no overworld passes and no gate lifecycle.

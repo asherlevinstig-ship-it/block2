@@ -29,6 +29,10 @@ Module._load = function patchedLoad(request, parent, isMain) {
     return {
       Schema: class {},
       MapSchema: class MapSchema extends Map {},
+      StateView: class StateView {
+        add() {}
+        remove() {}
+      },
       defineTypes() {},
     };
   }
@@ -51,7 +55,7 @@ const {
 } = require('../rooms/dungeon-handoff');
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
-const { Gate } = require('../schema');
+const { Gate, Mob } = require('../schema');
 const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
@@ -334,6 +338,26 @@ function seedDungeonPlayer(room, name, inst, pos) {
   inst.players.add(c.sessionId);
   room.clients.push(c);
   return c;
+}
+
+function makeTrackingView() {
+  return {
+    added: new Set(),
+    removed: new Set(),
+    add(obj) { this.added.add(obj); },
+    remove(obj) { this.removed.add(obj); },
+  };
+}
+
+function dungeonMob(id, dgn, x, z, kind = 'zombie') {
+  const mob = new Mob();
+  mob.id = id;
+  mob.dgn = dgn;
+  mob.x = x;
+  mob.y = 10;
+  mob.z = z;
+  mob.kind = kind;
+  return mob;
 }
 
 // Build an active King-of-the-Hill instance, stubbing the status-sync broadcast
@@ -3555,6 +3579,35 @@ test('dungeon mob targeting ignores a nearer downed hunter', () => {
   const boss = { x: 0, y: 9, z: 0, yaw: 0, hp: 50, maxHp: 50, kind: 'boss', dgn: inst.id, state: '' };
   room.simulateMob(boss, 'boss-target', room.freshMeta(0, 0, 5, 1.3, 'boss', 0, true), .1, { [inst.id]: [{ p: room.state.players.get(downed.sessionId), sid: downed.sessionId }, { p: room.state.players.get(alive.sessionId), sid: alive.sessionId }] });
   assert.equal(selected, alive.sessionId);
+});
+
+test('DungeonRoom interest view syncs nearby mobs and boss state only', () => {
+  const room = makeDungeonRoom();
+  const inst = hazInstance(room, 'interest-dgn', []);
+  const client = seedDungeonPlayer(room, 'viewer', inst, { x: 0, y: 10, z: 0 });
+  client.view = makeTrackingView();
+  client.__visibleDungeonMobs = new Map();
+  const near = dungeonMob('near', inst.id, 12, 0);
+  const far = dungeonMob('far', inst.id, 120, 0);
+  const boss = dungeonMob('boss', inst.id, 220, 0, 'boss');
+  room.state.mobs.set('near', near);
+  room.state.mobs.set('far', far);
+  room.state.mobs.set('boss', boss);
+
+  room.updateClientDungeonInterestView(client);
+  assert.equal(client.view.added.has(near), true, 'nearby mobs enter the client view');
+  assert.equal(client.view.added.has(far), false, 'far mobs stay hidden from the client view');
+  assert.equal(client.view.added.has(boss), true, 'boss state stays visible for phase/status awareness');
+
+  const viewer = room.state.players.get(client.sessionId);
+  viewer.x = 120;
+  room.updateClientDungeonInterestView(client);
+  assert.equal(client.view.added.has(far), true, 'mobs enter the view when the player moves near them');
+  assert.equal(client.view.removed.has(near), true, 'mobs leave the view after the player moves out of the exit radius');
+
+  room.state.mobs.delete('far');
+  room.updateClientDungeonInterestView(client);
+  assert.equal(client.view.removed.has(far), true, 'deleted mobs are removed from the client view');
 });
 
 test('E-rank boss style defers signatures while preserving deterministic combo and enrage sync', () => {
