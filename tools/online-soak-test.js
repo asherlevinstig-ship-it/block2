@@ -78,9 +78,27 @@ function gateFor(index) {
 }
 
 function firstMob(room) {
-  if (!room.state.mobs) return null;
+  if (!room || !room.state || !room.state.mobs) return null;
   for (const mob of room.state.mobs.values()) if (mob && mob.hp > 0) return mob;
   return null;
+}
+
+function statePlayers(room) {
+  return room && room.state && room.state.players && typeof room.state.players.get === 'function'
+    ? room.state.players
+    : null;
+}
+
+function stateMobs(room) {
+  return room && room.state && room.state.mobs && typeof room.state.mobs.values === 'function'
+    ? room.state.mobs
+    : null;
+}
+
+function sessionPlayer(session) {
+  const room = session && session.room;
+  const players = statePlayers(room);
+  return players && room.sessionId ? players.get(room.sessionId) : null;
 }
 
 function attachCounters(session, counters) {
@@ -107,31 +125,39 @@ function activeRoomGroups(sessions) {
 function summarizeShards(sessions) {
   const groups = new Map();
   for (const session of sessions.filter(s => s.mode === 'overworld')) {
+    const players = statePlayers(session.room);
+    if (!players) continue;
     const entry = groups.get(session.room.roomId) || { shardId: session.shardId, room: session.room, clients: 0 };
     entry.clients++;
+    entry.players = players;
     groups.set(session.room.roomId, entry);
   }
   return [...groups.values()].map(entry => ({
     shardId: entry.shardId,
     roomId: entry.room.roomId,
     clients: entry.clients,
-    statePlayers: entry.room.state.players.size,
+    statePlayers: entry.players.size,
   })).sort((a, b) => a.shardId.localeCompare(b.shardId));
 }
 
 function summarizeDungeons(sessions) {
   const groups = new Map();
   for (const session of sessions.filter(s => s.mode === 'dungeon')) {
+    const players = statePlayers(session.room);
+    if (!players) continue;
+    const mobs = stateMobs(session.room);
     const entry = groups.get(session.room.roomId) || { gateId: session.gate.id, room: session.room, clients: 0 };
     entry.clients++;
+    entry.players = players;
+    entry.mobs = mobs;
     groups.set(session.room.roomId, entry);
   }
   return [...groups.values()].map(entry => ({
     gateId: entry.gateId,
     roomId: entry.room.roomId,
     clients: entry.clients,
-    statePlayers: entry.room.state.players.size,
-    mobs: entry.room.state.mobs ? entry.room.state.mobs.size : 0,
+    statePlayers: entry.players.size,
+    mobs: entry.mobs ? entry.mobs.size : 0,
   })).sort((a, b) => a.gateId.localeCompare(b.gateId));
 }
 
@@ -196,7 +222,7 @@ async function main() {
   let tick = 0;
   while (performance.now() - started < DURATION_MS) {
     for (let i = 0; i < sessions.length; i++) {
-      const session = sessions[i], room = session.room, me = room && room.state.players.get(room.sessionId);
+      const session = sessions[i], room = session.room, me = sessionPlayer(session);
       if (!me) continue;
       const angle = tick * 0.08 + i * Math.PI * 2 / CLIENTS;
       room.send('move', { x: me.x + Math.cos(angle) * 0.55, y: me.y, z: me.z + Math.sin(angle) * 0.55, yaw: angle }); counters.messages++;
