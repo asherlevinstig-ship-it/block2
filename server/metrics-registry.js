@@ -47,6 +47,10 @@ function summarizeRooms(rooms) {
     mobs: 0,
     instances: 0,
     rejectedMessages: 0,
+    inboundMessages: 0,
+    outboundMessages: 0,
+    disconnects: 0,
+    unexpectedDisconnects: 0,
     persistenceOperations: 0,
     persistenceFailures: 0,
     tickOverBudget: 0,
@@ -57,6 +61,10 @@ function summarizeRooms(rooms) {
     totals.mobs += room.mobs || 0;
     totals.instances += room.instances || 0;
     totals.rejectedMessages += room.rejectedMessages || 0;
+    totals.inboundMessages += room.inboundMessages || 0;
+    totals.outboundMessages += room.outboundMessages || 0;
+    totals.disconnects += room.disconnects || 0;
+    totals.unexpectedDisconnects += room.unexpectedDisconnects || 0;
     totals.persistenceOperations += room.persistenceOperations || 0;
     totals.persistenceFailures += room.persistenceFailures || 0;
     totals.tickOverBudget += room.tickOverBudget || 0;
@@ -76,6 +84,10 @@ function groupByShard(rooms) {
     tickMaxMs: room.tickMaxMs || 0,
     persistenceFailures: room.persistenceFailures || 0,
     rejectedMessages: room.rejectedMessages || 0,
+    inboundMessagesPerSecond: room.inboundMessagesPerSecond || 0,
+    outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
+    disconnects: room.disconnects || 0,
+    unexpectedDisconnects: room.unexpectedDisconnects || 0,
   })).sort((a, b) => a.shardId.localeCompare(b.shardId));
 }
 
@@ -91,6 +103,10 @@ function groupByDungeon(rooms) {
     tickMaxMs: room.tickMaxMs || 0,
     persistenceFailures: room.persistenceFailures || 0,
     rejectedMessages: room.rejectedMessages || 0,
+    inboundMessagesPerSecond: room.inboundMessagesPerSecond || 0,
+    outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
+    disconnects: room.disconnects || 0,
+    unexpectedDisconnects: room.unexpectedDisconnects || 0,
   })).sort((a, b) => a.gateId.localeCompare(b.gateId));
 }
 

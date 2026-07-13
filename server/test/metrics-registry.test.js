@@ -24,6 +24,12 @@ function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gat
         persistenceOperations: 2,
         persistenceFailures: type === 'dungeon' ? 1 : 0,
         rejectedMessages: 4,
+        inboundMessages: 10,
+        outboundMessages: 20,
+        inboundMessagesPerSecond: 5,
+        outboundMessagesPerSecond: 7,
+        disconnects: type === 'dungeon' ? 1 : 0,
+        unexpectedDisconnects: 0,
       };
     },
   };
@@ -53,9 +59,12 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.rooms, 3);
   assert.equal(snapshot.totals.clients, 22);
   assert.equal(snapshot.totals.players, 22);
+  assert.equal(snapshot.totals.inboundMessages, 30);
+  assert.equal(snapshot.totals.outboundMessages, 60);
+  assert.equal(snapshot.totals.disconnects, 1);
   assert.equal(snapshot.totals.persistenceFailures, 1);
-  assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients]), [['main', 8], ['shard-2', 6]]);
-  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients]), [['gate-a', 8, 8]]);
+  assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond]), [['main', 8, 5], ['shard-2', 6, 5]]);
+  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects]), [['gate-a', 8, 8, 1]]);
 
   unregisterRoom(main);
   unregisterRoom(shard2);

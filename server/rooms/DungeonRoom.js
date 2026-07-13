@@ -73,6 +73,7 @@ class DungeonRoom extends GameRoom {
     this.instance = this.createInstance(this.gateFromOptions(admittedGate));
     hostGate(this.instance.id);
 
+    this.initMetrics();
     this.registerRaidHandlers();
     this.setSimulationInterval(dt => {
       const started = performance.now();
@@ -189,7 +190,8 @@ class DungeonRoom extends GameRoom {
     // to the durable teardown. Mirrors GameRoom.onLeave's reconnection path, minus the tutorial/
     // event resumes a single-instance raid room can't have. Holding the seat also keeps the room
     // alive across the window (Colyseus counts the reservation against autoDispose).
-    if (code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED)) {
+    const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
+    if (unexpected) {
       try {
         await this.allowReconnection(client, 15);
         const token = this.tokens.get(client.sessionId);
@@ -203,6 +205,7 @@ class DungeonRoom extends GameRoom {
         // The reconnect window elapsed — perform the durable teardown below.
       }
     }
+    this.recordClientLeave(code, unexpected);
     await this.finalizeDungeonLeave(client);
   }
 

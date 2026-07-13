@@ -236,6 +236,7 @@ class GameRoom extends Room {
     this.animalSpawnAcc = 0;
 
     // ---- message handlers ----
+    this.initMetrics();
     this.onMessage('move', (client, m) => this.handleMove(client, m));
     this.onMessage('recallStart', (client, m) => this.handleRecallStart(client, m));
     this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
@@ -694,7 +695,8 @@ class GameRoom extends Room {
     // A process shutdown is not a voluntary dungeon exit. Keep the live
     // attempt marker intact so onDispose can flush it for next-boot recovery.
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
-    if (code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED)) {
+    const unexpected = code === false || (typeof code === 'number' && code !== CloseCode.CONSENTED);
+    if (unexpected) {
       try {
         await this.allowReconnection(client, 15);
         const token = this.tokens.get(client.sessionId);
@@ -708,6 +710,7 @@ class GameRoom extends Room {
         // The reconnect window elapsed; perform the normal durable cleanup.
       }
     }
+    this.recordClientLeave(code, unexpected);
     this.finalizeLeave(client);
   }
 
