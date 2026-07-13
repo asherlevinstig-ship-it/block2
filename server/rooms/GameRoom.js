@@ -61,6 +61,9 @@ const OVERWORLD_MOVE_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.OVERWO
 const DUNGEON_MOVE_REPLICATION_POS_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_POS_EPS || 0.08));
 const DUNGEON_MOVE_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_Y_EPS || 0.04));
 const DUNGEON_MOVE_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_YAW_EPS || 0.16));
+const OVERWORLD_MOB_REPLICATION_POS_EPS = Math.max(0, Number(process.env.OVERWORLD_MOB_REPLICATION_POS_EPS || 0.22));
+const OVERWORLD_MOB_REPLICATION_Y_EPS = Math.max(0, Number(process.env.OVERWORLD_MOB_REPLICATION_Y_EPS || 0.08));
+const OVERWORLD_MOB_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.OVERWORLD_MOB_REPLICATION_YAW_EPS || 0.24));
 const DUNGEON_MOB_REPLICATION_POS_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_POS_EPS || 0.04));
 const DUNGEON_MOB_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_Y_EPS || 0.04));
 const DUNGEON_MOB_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_YAW_EPS || 0.16));
@@ -73,17 +76,19 @@ function angleDelta(a, b) {
 }
 
 function setReplicatedMobPose(m, x, y, z, yaw) {
-  if (!m || !m.dgn) {
-    m.x = x; m.y = y; m.z = z; m.yaw = yaw;
-    return;
-  }
-  if (Math.hypot(x - m.x, z - m.z) >= DUNGEON_MOB_REPLICATION_POS_EPS) { m.x = x; m.z = z; }
-  if (Math.abs(y - m.y) >= DUNGEON_MOB_REPLICATION_Y_EPS) m.y = y;
-  if (angleDelta(yaw, m.yaw) >= DUNGEON_MOB_REPLICATION_YAW_EPS) m.yaw = yaw;
+  if (!m) return;
+  const posEps = m.dgn ? DUNGEON_MOB_REPLICATION_POS_EPS : OVERWORLD_MOB_REPLICATION_POS_EPS;
+  const yEps = m.dgn ? DUNGEON_MOB_REPLICATION_Y_EPS : OVERWORLD_MOB_REPLICATION_Y_EPS;
+  const yawEps = m.dgn ? DUNGEON_MOB_REPLICATION_YAW_EPS : OVERWORLD_MOB_REPLICATION_YAW_EPS;
+  if (Math.hypot(x - m.x, z - m.z) >= posEps) { m.x = x; m.z = z; }
+  if (Math.abs(y - m.y) >= yEps) m.y = y;
+  if (angleDelta(yaw, m.yaw) >= yawEps) m.yaw = yaw;
 }
 
 function setReplicatedMobYaw(m, yaw) {
-  if (!m || !m.dgn || angleDelta(yaw, m.yaw) >= DUNGEON_MOB_REPLICATION_YAW_EPS) m.yaw = yaw;
+  if (!m) return;
+  const yawEps = m && m.dgn ? DUNGEON_MOB_REPLICATION_YAW_EPS : OVERWORLD_MOB_REPLICATION_YAW_EPS;
+  if (angleDelta(yaw, m.yaw) >= yawEps) m.yaw = yaw;
 }
 
 function setReplicatedPlayerPose(p, x, y, z, yaw) {

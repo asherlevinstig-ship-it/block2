@@ -181,7 +181,7 @@ async function main() {
       SHARD_LOAD_MIN_MOBS: envNumber('PERF_MOB_SHARD_MIN_MOBS', 8),
       SHARD_LOAD_MAX_P99_MS: envNumber('PERF_MOB_SHARD_MAX_P99_MS', maxP99Ms),
       SHARD_LOAD_MAX_HEAP_MB: envNumber('PERF_MOB_SHARD_MAX_HEAP_MB', maxHeapMb),
-    }, Number(mobShardPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_MOB_SHARD_STATE_PATCH_KBPS', 40)) }],
+    }, Number(mobShardPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_MOB_SHARD_STATE_PATCH_KBPS', 34)) }],
     ['Dungeon load budget', 'tools/dungeon-load-test.js', {
       DUNGEON_LOAD_PORT: dungeonPort,
       DUNGEON_LOAD_DURATION_MS: envNumber('PERF_DUNGEON_DURATION_MS', 8_000),
