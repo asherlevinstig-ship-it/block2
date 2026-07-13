@@ -242,10 +242,12 @@ class MetricsMixin {
     for (const [type, bytes] of Object.entries(mm.windowOutboundMessageBytesByType || {})) {
       outboundMessageBytesPerSecondByType[type] = Math.round(((bytes || 0) / windowAgeSec) * 100) / 100;
     }
+    const gameInterest = typeof this.gameInterestSnapshot === 'function' ? this.gameInterestSnapshot() : {};
     return {
       players: this.state.players.size, connectedClients: clients, owPlayers, dgnPlayers,
       instances: Object.keys(this.instances || {}).length,
       mobs: owMobs + dgnMobs, owMobs, dgnMobs, wastedMobSyncs,
+      ...gameInterest,
       tickAvgMs: Math.round((tm.avgMs || 0) * 100) / 100,
       tickMaxMs: Math.round((tm.maxMs || 0) * 100) / 100,
       tickOverBudget: tm.overBudget || 0,

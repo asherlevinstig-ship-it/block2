@@ -1,5 +1,6 @@
 const { performance } = require('perf_hooks');
 const { Room, matchMaker, CloseCode } = require('@colyseus/core');
+const { StateView } = require('@colyseus/schema');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
 const W = require('../world');
@@ -67,6 +68,10 @@ const OVERWORLD_MOB_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.OVERWOR
 const DUNGEON_MOB_REPLICATION_POS_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_POS_EPS || 0.04));
 const DUNGEON_MOB_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_Y_EPS || 0.04));
 const DUNGEON_MOB_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_YAW_EPS || 0.16));
+const OVERWORLD_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.OVERWORLD_MOB_INTEREST_RADIUS || 72));
+const OVERWORLD_MOB_INTEREST_EXIT_RADIUS = Math.max(OVERWORLD_MOB_INTEREST_RADIUS, Number(process.env.OVERWORLD_MOB_INTEREST_EXIT_RADIUS || 96));
+const GAME_DUNGEON_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.GAME_DUNGEON_MOB_INTEREST_RADIUS || 28));
+const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST_RADIUS, Number(process.env.GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40));
 
 function angleDelta(a, b) {
   let d = (Number(a) || 0) - (Number(b) || 0);
@@ -240,6 +245,7 @@ class GameRoom extends Room {
     this.clock.setInterval(() => this.completeFurnaces(true), 1000);
     this.clock.setInterval(() => this.broadcastSkyshipSync(), 30000);
     this.clock.setInterval(() => this.broadcastDayCycleSync(), 30000);
+    this.clock.setInterval(() => this.updateGameInterestViews(), 250);
 
     // ---- sim state ----
     this.mobSeq = 0;
@@ -591,8 +597,128 @@ class GameRoom extends Room {
     }
   }
 
+  initGameInterestView(client) {
+    if (!client.view) client.view = new StateView();
+    client.__visibleGameMobs = client.__visibleGameMobs || new Map();
+    client.__visibleGamePlayers = client.__visibleGamePlayers || new Map();
+  }
+
+  recordGameInterestChange(kind) {
+    const now = Date.now();
+    const metrics = this.gameInterestMetrics || (this.gameInterestMetrics = {
+      added: 0,
+      removed: 0,
+      windowStartedAt: now,
+      windowAdded: 0,
+      windowRemoved: 0,
+    });
+    if (now - metrics.windowStartedAt > 10000) {
+      metrics.windowStartedAt = now;
+      metrics.windowAdded = 0;
+      metrics.windowRemoved = 0;
+    }
+    if (kind === 'add') {
+      metrics.added++;
+      metrics.windowAdded++;
+    } else if (kind === 'remove') {
+      metrics.removed++;
+      metrics.windowRemoved++;
+    }
+  }
+
+  shouldSeeGameMob(viewer, mob, alreadyVisible = false) {
+    if (!viewer || !mob || mob.hp <= 0) return false;
+    const viewerDgn = viewer.dgn || '';
+    const mobDgn = mob.dgn || '';
+    if (viewerDgn !== mobDgn) return false;
+    if (mobDgn && mob.kind === 'boss') return true;
+    const radius = mobDgn
+      ? (alreadyVisible ? GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS : GAME_DUNGEON_MOB_INTEREST_RADIUS)
+      : (alreadyVisible ? OVERWORLD_MOB_INTEREST_EXIT_RADIUS : OVERWORLD_MOB_INTEREST_RADIUS);
+    return Math.hypot((mob.x || 0) - (viewer.x || 0), (mob.z || 0) - (viewer.z || 0)) <= radius;
+  }
+
+  updateClientGameInterestView(client) {
+    if (!client || !client.view) return;
+    const viewer = this.state.players.get(client.sessionId);
+    const visibleMobs = client.__visibleGameMobs || (client.__visibleGameMobs = new Map());
+    const visiblePlayers = client.__visibleGamePlayers || (client.__visibleGamePlayers = new Map());
+
+    this.state.players.forEach((player, sid) => {
+      if (!visiblePlayers.has(sid)) {
+        client.view.add(player);
+        visiblePlayers.set(sid, player);
+      }
+    });
+    for (const [sid, player] of [...visiblePlayers.entries()]) {
+      if (!this.state.players.has(sid)) {
+        client.view.remove(player);
+        visiblePlayers.delete(sid);
+      }
+    }
+
+    this.state.mobs.forEach((mob, id) => {
+      if (!this.shouldSeeGameMob(viewer, mob, visibleMobs.has(id))) return;
+      if (!visibleMobs.has(id)) {
+        client.view.add(mob);
+        visibleMobs.set(id, mob);
+        this.recordGameInterestChange('add');
+      }
+    });
+    for (const [id, mob] of [...visibleMobs.entries()]) {
+      if (!this.state.mobs.has(id) || !this.shouldSeeGameMob(viewer, mob, true)) {
+        client.view.remove(mob);
+        visibleMobs.delete(id);
+        this.recordGameInterestChange('remove');
+      }
+    }
+  }
+
+  updateGameInterestViews() {
+    for (const client of this.clients || []) this.updateClientGameInterestView(client);
+  }
+
+  gameInterestSnapshot() {
+    const clients = this.clients ? this.clients.length : 0;
+    let visibleMobLinks = 0, overworldVisibleMobLinks = 0, dungeonVisibleMobLinks = 0;
+    let overworldMobs = 0, dungeonMobs = 0;
+    this.state.mobs.forEach(mob => {
+      if (!mob || mob.hp <= 0) return;
+      if (mob.dgn) dungeonMobs++;
+      else overworldMobs++;
+    });
+    for (const client of this.clients || []) {
+      const visible = client.__visibleGameMobs;
+      if (!visible) continue;
+      visible.forEach(mob => {
+        if (!mob || mob.hp <= 0) return;
+        visibleMobLinks++;
+        if (mob.dgn) dungeonVisibleMobLinks++;
+        else overworldVisibleMobLinks++;
+      });
+    }
+    const possibleMobLinks = (overworldMobs + dungeonMobs) * clients;
+    const metrics = this.gameInterestMetrics || {};
+    const windowAgeSec = Math.max(1, (Date.now() - (metrics.windowStartedAt || Date.now())) / 1000);
+    return {
+      visibleMobLinks,
+      overworldVisibleMobLinks,
+      dungeonVisibleMobLinks,
+      avgVisibleMobsPerClient: clients ? Math.round(visibleMobLinks / clients * 100) / 100 : 0,
+      avgOverworldVisibleMobsPerClient: clients ? Math.round(overworldVisibleMobLinks / clients * 100) / 100 : 0,
+      hiddenMobLinksAvoided: Math.max(0, possibleMobLinks - visibleMobLinks),
+      overworldHiddenMobLinksAvoided: Math.max(0, overworldMobs * clients - overworldVisibleMobLinks),
+      dungeonHiddenMobLinksAvoided: Math.max(0, dungeonMobs * clients - dungeonVisibleMobLinks),
+      interestViewAdds: metrics.added || 0,
+      interestViewRemoves: metrics.removed || 0,
+      interestViewAddsPerSecond: Math.round(((metrics.windowAdded || 0) / windowAgeSec) * 100) / 100,
+      interestViewRemovesPerSecond: Math.round(((metrics.windowRemoved || 0) / windowAgeSec) * 100) / 100,
+    };
+  }
+
   async onJoin(client, options, auth) {
     this.monitorClient(client);
+    this.initGameInterestView(client);
     client.send('shard', { id: this.shardId || 'main', maxClients: this.maxClients });
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
@@ -686,6 +812,7 @@ class GameRoom extends Room {
       p.z = W.TOWN.TC + 14.5 + (Math.random() * 2 - 1);
     }
     this.state.players.set(client.sessionId, p);
+    this.updateClientGameInterestView(client);
     if (prof && prof.skyshipTransit) {
       const tr = prof.skyshipTransit, now = Date.now();
       if (tr.arriveAt > now && tr.departAt <= now) {

@@ -3582,6 +3582,45 @@ test('dungeon mob targeting ignores a nearer downed hunter', () => {
   assert.equal(selected, alive.sessionId);
 });
 
+test('GameRoom interest view keeps players visible and filters overworld mobs by distance', () => {
+  const room = makeRoom();
+  const viewer = makeClient('ow-viewer');
+  const remote = makeClient('ow-remote');
+  seedPlayer(room, viewer, { x: 0, y: 10, z: 0 });
+  seedPlayer(room, remote, { x: 220, y: 10, z: 0 });
+  room.clients.push(viewer, remote);
+  viewer.view = makeTrackingView();
+  viewer.__visibleGameMobs = new Map();
+  viewer.__visibleGamePlayers = new Map();
+
+  const near = dungeonMob('near', '', 24, 0);
+  const far = dungeonMob('far', '', 180, 0);
+  room.state.mobs.set('near', near);
+  room.state.mobs.set('far', far);
+
+  room.updateClientGameInterestView(viewer);
+  assert.equal(viewer.view.added.has(room.state.players.get(viewer.sessionId)), true, 'self remains visible through the game view');
+  assert.equal(viewer.view.added.has(room.state.players.get(remote.sessionId)), true, 'remote players remain visible in this pass');
+  assert.equal(viewer.view.added.has(near), true, 'near overworld mobs enter the client view');
+  assert.equal(viewer.view.added.has(far), false, 'far overworld mobs stay hidden from the client view');
+
+  let metrics = room.gameInterestSnapshot();
+  assert.equal(metrics.visibleMobLinks, 1);
+  assert.equal(metrics.overworldVisibleMobLinks, 1);
+  assert.equal(metrics.hiddenMobLinksAvoided, 3);
+  assert.equal(metrics.overworldHiddenMobLinksAvoided, 3);
+
+  const p = room.state.players.get(viewer.sessionId);
+  p.x = 180;
+  room.updateClientGameInterestView(viewer);
+  assert.equal(viewer.view.added.has(far), true, 'overworld mobs enter the view when the player moves near them');
+  assert.equal(viewer.view.removed.has(near), true, 'old overworld mobs leave after the exit radius');
+
+  room.state.mobs.delete('far');
+  room.updateClientGameInterestView(viewer);
+  assert.equal(viewer.view.removed.has(far), true, 'deleted overworld mobs are removed from the client view');
+});
+
 test('DungeonRoom interest view syncs nearby mobs and boss state only', () => {
   const room = makeDungeonRoom();
   const inst = hazInstance(room, 'interest-dgn', []);
