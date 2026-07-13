@@ -10,8 +10,8 @@ const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
-const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 48);
-const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 60);
+const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 28);
+const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40);
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
