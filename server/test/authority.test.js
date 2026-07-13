@@ -6,6 +6,7 @@ process.env.BLOCKCRAFT_BETA_TEST = '1';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('module');
+const { Protocol } = require('@colyseus/shared-types');
 
 const originalLoad = Module._load;
 Module._load = function patchedLoad(request, parent, isMain) {
@@ -4511,12 +4512,14 @@ test('metrics count raw encoded outbound bytes without inflating logical message
   room.clients = [client];
   room.monitorClient(client);
 
-  client.raw(Buffer.from([1, 2, 3, 4, 5, 6]));
+  client.raw(Buffer.from([Protocol.ROOM_STATE_PATCH, 2, 3, 4, 5, 6]));
   client.send('notice', { text: 'tracked as a logical send only' });
 
   const s = room.metricsSnapshot();
   assert.equal(s.outboundMessages, 1);
   assert.equal(s.outboundBytes, 6);
+  assert.equal(s.outboundBytesByKind.statePatch, 6);
+  assert.equal(s.outboundBytesPerSecondByKind.statePatch, 6);
   assert.equal(s.outboundPeakClientBytesPerSecond, 6);
 });
 

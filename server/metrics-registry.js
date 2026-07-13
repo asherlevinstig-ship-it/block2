@@ -24,6 +24,12 @@ function round2(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+function addKindTotals(target, source) {
+  for (const [kind, value] of Object.entries(source || {})) {
+    target[kind] = round2((target[kind] || 0) + (Number(value) || 0));
+  }
+}
+
 function roomSnapshot(room) {
   const registration = room.__metricsRegistry || {};
   const metrics = typeof room.metricsSnapshot === 'function' ? room.metricsSnapshot() : {};
@@ -51,6 +57,8 @@ function summarizeRooms(rooms) {
     outboundMessages: 0,
     outboundBytes: 0,
     outboundBytesPerSecond: 0,
+    outboundBytesByKind: {},
+    outboundBytesPerSecondByKind: {},
     outboundPeakClientBytesPerSecond: 0,
     disconnects: 0,
     unexpectedDisconnects: 0,
@@ -78,6 +86,8 @@ function summarizeRooms(rooms) {
     totals.outboundMessages += room.outboundMessages || 0;
     totals.outboundBytes += room.outboundBytes || 0;
     totals.outboundBytesPerSecond += room.outboundBytesPerSecond || 0;
+    addKindTotals(totals.outboundBytesByKind, room.outboundBytesByKind);
+    addKindTotals(totals.outboundBytesPerSecondByKind, room.outboundBytesPerSecondByKind);
     totals.outboundPeakClientBytesPerSecond = Math.max(totals.outboundPeakClientBytesPerSecond, room.outboundPeakClientBytesPerSecond || 0);
     totals.disconnects += room.disconnects || 0;
     totals.unexpectedDisconnects += room.unexpectedDisconnects || 0;
@@ -115,6 +125,7 @@ function groupByShard(rooms) {
     inboundMessagesPerSecond: room.inboundMessagesPerSecond || 0,
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
     outboundBytesPerSecond: room.outboundBytesPerSecond || 0,
+    outboundBytesPerSecondByKind: { ...(room.outboundBytesPerSecondByKind || {}) },
     outboundBytesPerClientPerSecond: room.outboundBytesPerClientPerSecond || 0,
     outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
@@ -137,6 +148,7 @@ function groupByDungeon(rooms) {
     inboundMessagesPerSecond: room.inboundMessagesPerSecond || 0,
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
     outboundBytesPerSecond: room.outboundBytesPerSecond || 0,
+    outboundBytesPerSecondByKind: { ...(room.outboundBytesPerSecondByKind || {}) },
     outboundBytesPerClientPerSecond: room.outboundBytesPerClientPerSecond || 0,
     outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,

@@ -28,6 +28,7 @@ function fetchMetrics(port) {
 function summarizeMetrics(snapshot) {
   if (!snapshot) return 'no metrics snapshot captured';
   const totals = snapshot.totals || {};
+  const outboundByKind = totals.outboundBytesPerSecondByKind || {};
   const eventLoop = snapshot.eventLoop || {};
   const memory = snapshot.memory || {};
   return 'rooms=' + (totals.rooms || 0)
@@ -35,6 +36,8 @@ function summarizeMetrics(snapshot) {
     + ' inbound=' + (totals.inboundMessages || 0)
     + ' outbound=' + (totals.outboundMessages || 0)
     + ' outboundKBps=' + Math.round(((totals.outboundBytesPerSecond || 0) / 1024) * 100) / 100
+    + ' statePatchKBps=' + Math.round(((outboundByKind.statePatch || 0) / 1024) * 100) / 100
+    + ' msgKBps=' + Math.round((((outboundByKind.message || 0) + (outboundByKind.messageBytes || 0) + (outboundByKind.estimatedMessage || 0)) / 1024) * 100) / 100
     + ' peakClientKBps=' + Math.round(((totals.outboundPeakClientBytesPerSecond || 0) / 1024) * 100) / 100
     + ' rejects=' + (totals.rejectedMessages || 0)
     + ' disconnects=' + (totals.disconnects || 0)
@@ -65,6 +68,7 @@ function mergePeakMetrics(loadSnapshot, interestSnapshot, bandwidthSnapshot) {
       dungeonFxSent: interestTotals.dungeonFxSent || 0,
       dungeonFxSkipped: interestTotals.dungeonFxSkipped || 0,
       outboundBytesPerSecond: bandwidthTotals.outboundBytesPerSecond || loadTotals.outboundBytesPerSecond || 0,
+      outboundBytesPerSecondByKind: bandwidthTotals.outboundBytesPerSecondByKind || loadTotals.outboundBytesPerSecondByKind || {},
       outboundPeakClientBytesPerSecond: bandwidthTotals.outboundPeakClientBytesPerSecond || loadTotals.outboundPeakClientBytesPerSecond || 0,
     },
   };
