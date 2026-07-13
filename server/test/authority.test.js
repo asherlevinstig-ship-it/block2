@@ -3694,6 +3694,27 @@ test('DungeonRoom status keeps hidden party members visible to lightweight UI', 
   assert.equal(farStatus.x, 140);
 });
 
+test('DungeonRoom party status is dirty-driven with a heartbeat', () => {
+  const room = makeDungeonRoom();
+  const inst = hazInstance(room, 'party-dirty-dgn', []);
+  const viewer = seedDungeonPlayer(room, 'party-dirty-viewer', inst, { x: 0, y: 10, z: 0 });
+  const other = seedDungeonPlayer(room, 'party-dirty-other', inst, { x: 15, y: 10, z: 0 });
+
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 1000 }), true, 'first send seeds party status');
+  assert.equal(viewer.sent.filter(entry => entry.type === 'dungeonPartyStatus').length, 1);
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 2000 }), false, 'unchanged status is suppressed before heartbeat');
+  assert.equal(viewer.sent.filter(entry => entry.type === 'dungeonPartyStatus').length, 1);
+  room.state.players.get(other.sessionId).x += 2;
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 3000 }), false, 'small movement inside the position bucket stays quiet');
+  room.playerHp.get(other.sessionId).hp = 12;
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 4000 }), false, 'ordinary HP changes are coalesced');
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 9000 }), true, 'material non-urgent changes send on the changed-state cadence');
+  assert.equal(viewer.sent.filter(entry => entry.type === 'dungeonPartyStatus').length, 2);
+  room.playerHp.get(other.sessionId).hp = 0;
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 9500 }), true, 'downed state changes send immediately');
+  assert.equal(room.sendDungeonPartyStatus(inst.id, { now: 20000 }), true, 'heartbeat resends unchanged status for recovery');
+});
+
 test('requestDungeonStatus sends a full status only to the requesting dungeon client', () => {
   const room = makeDungeonRoom();
   const inst = hazInstance(room, 'request-status-dgn', []);
@@ -3937,7 +3958,8 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
   room.instance = {
     id: 'dr-recovery', gateX: 30, gateY: 16, gateZ: 31,
     entrance: { x: 20, z: 20, r: 3 }, world: new D.DungeonGrid(),
-    addPlayer() {},
+    players: new Set(),
+    addPlayer(sid) { this.players.add(sid); },
   };
   const client = makeClient('recovery');
   const ticket = issueDungeonAdmission({ id: 'dr-recovery', seed: 1, rank: 0, x: 30, y: 16, z: 31 }, [token]);
@@ -3947,6 +3969,7 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
 
   assert.equal(client.sent.some(e => e.type === 'dungeonStatus'), false, 'joining does not push the full dungeon status burst');
   assert.equal(client.sent.some(e => e.type === 'dungeonPartyStatus'), true, 'joining still seeds the lightweight party HUD status');
+  assert.equal(client.sent.find(e => e.type === 'dungeonPartyStatus').msg.party.length, 1, 'join status is a compact self-only seed');
   assert.ok(prof.dungeonRecovery, 'the switchRoom entry armed recovery like the overworld enterGate path does');
   assert.equal(prof.dungeonRecovery.gateId, 'dr-recovery', 'keyed to the overworld gate id, not the dungeon-internal state');
   assert.equal(prof.dungeonRecovery.bootId, 'dr-boot', 'stamped with this room process boot');

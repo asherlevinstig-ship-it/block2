@@ -29,6 +29,7 @@ class DungeonMixin {
     this.gateBreachScars = new Map();
     this.dungeonPingAt = new Map();
     this.dungeonStatusRequestAt = new Map();
+    this.dungeonPartyStatusState = new Map();
     this.gateTimer = 40;       // countdown to the next public gate spawn (sim-loop driven)
     this.gateTtl = 0;
   }
@@ -180,14 +181,68 @@ class DungeonMixin {
       wipe: status.wipe,
     };
   }
-  sendDungeonPartyStatus(dgn) {
+  dungeonPartyStatusSignature(payload) {
+    if (!payload) return '';
+    const posBucket = Math.max(1, Number(process.env.DUNGEON_PARTY_STATUS_POS_BUCKET || 8));
+    const hpBucket = Math.max(1, Number(process.env.DUNGEON_PARTY_STATUS_HP_BUCKET || 5));
+    const party = (payload.party || []).map(member => [
+      member.sid,
+      Math.ceil((member.hp || 0) / hpBucket),
+      Math.ceil((member.maxHp || 0) / hpBucket),
+      member.state || '',
+      Math.round((member.contribution || 0) / 50),
+      Math.round((member.x || 0) / posBucket),
+      Math.round((member.z || 0) / posBucket),
+    ]);
+    return JSON.stringify([
+      payload.id,
+      payload.totalPlayers | 0,
+      payload.activeCount | 0,
+      payload.aliveCount | 0,
+      payload.spiritCount | 0,
+      payload.downedCount | 0,
+      payload.returnedCount | 0,
+      payload.wipe ? 1 : 0,
+      party,
+    ]);
+  }
+  dungeonPartyUrgentSignature(payload) {
+    if (!payload) return '';
+    const party = (payload.party || []).map(member => [member.sid, member.state || '']);
+    return JSON.stringify([
+      payload.id,
+      payload.totalPlayers | 0,
+      payload.activeCount | 0,
+      payload.aliveCount | 0,
+      payload.spiritCount | 0,
+      payload.downedCount | 0,
+      payload.returnedCount | 0,
+      payload.wipe ? 1 : 0,
+      party,
+    ]);
+  }
+  sendDungeonPartyStatus(dgn, options = {}) {
     const inst = this.instances[dgn];
     const payload = this.dungeonPartyStatusPayload(inst);
     if (!payload) return;
+    const now = Number(options.now) || Date.now();
+    const heartbeatMs = Math.max(1000, Number(process.env.DUNGEON_PARTY_STATUS_HEARTBEAT_MS || 10000));
+    const changedMs = Math.max(1000, Number(process.env.DUNGEON_PARTY_STATUS_CHANGED_MS || 8000));
+    const signature = this.dungeonPartyStatusSignature(payload);
+    const urgentSignature = this.dungeonPartyUrgentSignature(payload);
+    const state = this.dungeonPartyStatusState || (this.dungeonPartyStatusState = new Map());
+    const previous = state.get(dgn);
+    if (!options.force && previous) {
+      const age = now - previous.sentAt;
+      if (previous.urgentSignature === urgentSignature && previous.signature === signature && age < heartbeatMs) return false;
+      if (previous.urgentSignature === urgentSignature && previous.signature !== signature && age < changedMs) return false;
+    }
+    state.set(dgn, { signature, urgentSignature, sentAt: now });
     for (const c of this.clients) {
       const p = this.state.players.get(c.sessionId);
       if (p && p.dgn === dgn) c.send('dungeonPartyStatus', payload);
     }
+    return true;
   }
   sendDungeonStatusToClient(client, dgn) {
     const p = client && this.state.players.get(client.sessionId);

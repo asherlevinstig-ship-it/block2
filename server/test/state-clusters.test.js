@@ -34,7 +34,7 @@ const CLUSTERS = {
     'dragonAbilityCd', 'phoenixUsed', 'abilityState', 'abilityBuffs', 'weaponMomentum', 'monkAuraAt', 'prospectAt',
     'shadowSoldiers', 'shadowSpirits', 'secondWindAt', 'pvel',
   ],
-  initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'dungeonStatusRequestAt', 'gateBreaches', 'gateBreachScars', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
+  initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'dungeonPartyStatusState', 'dungeonStatusRequestAt', 'gateBreaches', 'gateBreachScars', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
   initPersistenceState: [
     'profiles', 'tokens', 'dirtyWorld', 'dirtyWorldProgress', 'dirtyLandClaims', 'dirtyChests',
     'dirtyFurnaces', 'dirtyIncubations', 'dirtyGates', 'dirtyTeams', 'dirtyGuilds', 'dirtyNests',

@@ -125,9 +125,11 @@ function run(label, script, env, metricsPort, budgets) {
       const peakClientKbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundPeakClientBytesPerSecond) || 0) / 1024;
       const peakTypeBytes = peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundMessageBytesPerSecondByType || {};
       const dungeonStatusKbps = ((peakTypeBytes.dungeonStatus || 0) + (peakTypeBytes.dungeonPartyStatus || 0)) / 1024;
+      const dungeonPartyStatusKbps = (peakTypeBytes.dungeonPartyStatus || 0) / 1024;
       if (kbps > budgets.maxOutboundKbps) return reject(new Error(label + ' outbound bandwidth ' + kbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundKbps + ' KB/s'));
       if (peakClientKbps > budgets.maxOutboundClientKbps) return reject(new Error(label + ' peak client bandwidth ' + peakClientKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundClientKbps + ' KB/s'));
       if (dungeonStatusKbps > budgets.maxDungeonStatusKbps) return reject(new Error(label + ' dungeon roster/status bandwidth ' + dungeonStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonStatusKbps + ' KB/s'));
+      if (dungeonPartyStatusKbps > budgets.maxDungeonPartyStatusKbps) return reject(new Error(label + ' dungeon party status bandwidth ' + dungeonPartyStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonPartyStatusKbps + ' KB/s'));
       if (budgets.minDungeonFxSkipped && (!merged.totals || (merged.totals.dungeonFxSkipped || 0) < budgets.minDungeonFxSkipped)) {
         return reject(new Error(label + ' skipped only ' + ((merged.totals && merged.totals.dungeonFxSkipped) || 0) + ' dungeon FX fanouts; expected at least ' + budgets.minDungeonFxSkipped));
       }
@@ -143,6 +145,7 @@ async function main() {
     maxOutboundKbps: Number(envNumber('PERF_MAX_OUTBOUND_KBPS', 2048)),
     maxOutboundClientKbps: Number(envNumber('PERF_MAX_OUTBOUND_CLIENT_KBPS', 96)),
     maxDungeonStatusKbps: Number(envNumber('PERF_MAX_DUNGEON_STATUS_KBPS', 32)),
+    maxDungeonPartyStatusKbps: Number(envNumber('PERF_MAX_DUNGEON_PARTY_STATUS_KBPS', 16)),
   };
   const shardPort = envNumber('PERF_SHARD_PORT', 2631);
   const dungeonPort = envNumber('PERF_DUNGEON_PORT', 2632);
