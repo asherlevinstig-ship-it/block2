@@ -3644,14 +3644,23 @@ test('DungeonRoom filters positioned dungeon fx to nearby players', () => {
   assert.equal(metrics.dungeonFxSkipped, 1, 'global dungeon fx do not count as skipped');
 });
 
-test('DungeonRoom estimates player interest visibility without filtering state yet', () => {
+test('DungeonRoom filters dungeon players by interest view', () => {
   const room = makeDungeonRoom();
   const inst = hazInstance(room, 'player-interest-dgn', []);
-  seedDungeonPlayer(room, 'player-viewer', inst, { x: 0, y: 10, z: 0 });
-  seedDungeonPlayer(room, 'player-near', inst, { x: 20, y: 10, z: 0 });
-  seedDungeonPlayer(room, 'player-far', inst, { x: 120, y: 10, z: 0 });
-  seedDungeonPlayer(room, 'player-downed', inst, { x: 140, y: 10, z: 0, hp: 0 });
+  const viewer = seedDungeonPlayer(room, 'player-viewer', inst, { x: 0, y: 10, z: 0 });
+  const near = seedDungeonPlayer(room, 'player-near', inst, { x: 20, y: 10, z: 0 });
+  const far = seedDungeonPlayer(room, 'player-far', inst, { x: 120, y: 10, z: 0 });
+  const downed = seedDungeonPlayer(room, 'player-downed', inst, { x: 140, y: 10, z: 0, hp: 0 });
+  for (const client of room.clients) {
+    client.view = makeTrackingView();
+    room.initDungeonInterestView(client);
+  }
 
+  room.updateDungeonInterestViews();
+  assert.equal(viewer.view.added.has(room.state.players.get(viewer.sessionId)), true, 'self always enters the client view');
+  assert.equal(viewer.view.added.has(room.state.players.get(near.sessionId)), true, 'nearby party members enter the client view');
+  assert.equal(viewer.view.added.has(room.state.players.get(far.sessionId)), false, 'far living party members stay hidden');
+  assert.equal(viewer.view.added.has(room.state.players.get(downed.sessionId)), true, 'downed teammates stay visible for rescue awareness');
   const metrics = room.dungeonInterestSnapshot();
   assert.equal(metrics.dungeonPlayers, 4);
   assert.equal(metrics.selfPlayerLinks, 4, 'each client keeps its own player visible');
@@ -3659,6 +3668,11 @@ test('DungeonRoom estimates player interest visibility without filtering state y
   assert.equal(metrics.visiblePlayerLinks, 10);
   assert.equal(metrics.hiddenPlayerLinksAvoided, 6);
   assert.equal(metrics.avgVisiblePlayersPerClient, 2.5);
+
+  room.state.players.get(viewer.sessionId).x = 120;
+  room.updateClientDungeonInterestView(viewer);
+  assert.equal(viewer.view.added.has(room.state.players.get(far.sessionId)), true, 'players enter the view when the viewer moves near them');
+  assert.equal(viewer.view.removed.has(room.state.players.get(near.sessionId)), true, 'living players leave the view when the viewer moves away');
 });
 
 test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', () => {

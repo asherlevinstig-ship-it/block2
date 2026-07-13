@@ -343,6 +343,7 @@ class DungeonRoom extends GameRoom {
   initDungeonInterestView(client) {
     if (!client.view) client.view = new StateView();
     client.__visibleDungeonMobs = client.__visibleDungeonMobs || new Map();
+    client.__visibleDungeonPlayers = client.__visibleDungeonPlayers || new Map();
   }
 
   recordDungeonInterestChange(kind) {
@@ -378,22 +379,38 @@ class DungeonRoom extends GameRoom {
   updateClientDungeonInterestView(client) {
     if (!client || !client.view) return;
     const viewer = this.state.players.get(client.sessionId);
-    const visible = client.__visibleDungeonMobs || (client.__visibleDungeonMobs = new Map());
+    const visibleMobs = client.__visibleDungeonMobs || (client.__visibleDungeonMobs = new Map());
+    const visiblePlayers = client.__visibleDungeonPlayers || (client.__visibleDungeonPlayers = new Map());
 
     this.state.mobs.forEach((mob, id) => {
-      if (!this.shouldSeeDungeonMob(viewer, mob, visible.has(id))) return;
-      if (!visible.has(id)) {
+      if (!this.shouldSeeDungeonMob(viewer, mob, visibleMobs.has(id))) return;
+      if (!visibleMobs.has(id)) {
         client.view.add(mob);
-        visible.set(id, mob);
+        visibleMobs.set(id, mob);
         this.recordDungeonInterestChange('add');
       }
     });
 
-    for (const [id, mob] of [...visible.entries()]) {
+    for (const [id, mob] of [...visibleMobs.entries()]) {
       if (!this.state.mobs.has(id) || !this.shouldSeeDungeonMob(viewer, mob, true)) {
         client.view.remove(mob);
-        visible.delete(id);
+        visibleMobs.delete(id);
         this.recordDungeonInterestChange('remove');
+      }
+    }
+
+    this.state.players.forEach((player, sid) => {
+      if (!this.shouldSeeDungeonPlayer(client.sessionId, viewer, sid, player)) return;
+      if (!visiblePlayers.has(sid)) {
+        client.view.add(player);
+        visiblePlayers.set(sid, player);
+      }
+    });
+
+    for (const [sid, player] of [...visiblePlayers.entries()]) {
+      if (!this.state.players.has(sid) || !this.shouldSeeDungeonPlayer(client.sessionId, viewer, sid, player)) {
+        client.view.remove(player);
+        visiblePlayers.delete(sid);
       }
     }
   }
@@ -476,15 +493,15 @@ class DungeonRoom extends GameRoom {
     this.state.players.forEach((player, sid) => { if (player && player.dgn) dungeonPlayers.push({ sid, player }); });
     let visiblePlayerLinks = 0, selfPlayerLinks = 0, downedPlayerLinks = 0;
     for (const client of this.clients || []) {
-      const viewer = this.state.players.get(client.sessionId);
-      if (!viewer || !viewer.dgn) continue;
-      for (const target of dungeonPlayers) {
-        if (!this.shouldSeeDungeonPlayer(client.sessionId, viewer, target.sid, target.player)) continue;
+      const visible = client.__visibleDungeonPlayers;
+      if (!visible) continue;
+      visible.forEach((player, sid) => {
+        if (!player || !player.dgn) return;
         visiblePlayerLinks++;
-        if (client.sessionId === target.sid) selfPlayerLinks++;
-        const hp = this.playerHp && this.playerHp.get(target.sid);
-        if (client.sessionId !== target.sid && hp && hp.hp <= 0) downedPlayerLinks++;
-      }
+        if (client.sessionId === sid) selfPlayerLinks++;
+        const hp = this.playerHp && this.playerHp.get(sid);
+        if (client.sessionId !== sid && hp && hp.hp <= 0) downedPlayerLinks++;
+      });
     }
     const possiblePlayerLinks = dungeonPlayers.length * clients;
     const hiddenPlayerLinksAvoided = Math.max(0, possiblePlayerLinks - visiblePlayerLinks);
