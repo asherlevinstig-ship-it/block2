@@ -123,11 +123,14 @@ function run(label, script, env, metricsPort, budgets) {
       if (!peakMetrics) return reject(new Error(label + ' did not expose performance metrics'));
       const kbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundBytesPerSecond) || 0) / 1024;
       const peakClientKbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundPeakClientBytesPerSecond) || 0) / 1024;
+      const peakKindBytes = peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundBytesPerSecondByKind || {};
+      const statePatchKbps = (peakKindBytes.statePatch || 0) / 1024;
       const peakTypeBytes = peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundMessageBytesPerSecondByType || {};
       const dungeonStatusKbps = ((peakTypeBytes.dungeonStatus || 0) + (peakTypeBytes.dungeonPartyStatus || 0)) / 1024;
       const dungeonPartyStatusKbps = (peakTypeBytes.dungeonPartyStatus || 0) / 1024;
       if (kbps > budgets.maxOutboundKbps) return reject(new Error(label + ' outbound bandwidth ' + kbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundKbps + ' KB/s'));
       if (peakClientKbps > budgets.maxOutboundClientKbps) return reject(new Error(label + ' peak client bandwidth ' + peakClientKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundClientKbps + ' KB/s'));
+      if (statePatchKbps > budgets.maxStatePatchKbps) return reject(new Error(label + ' state patch bandwidth ' + statePatchKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxStatePatchKbps + ' KB/s'));
       if (dungeonStatusKbps > budgets.maxDungeonStatusKbps) return reject(new Error(label + ' dungeon roster/status bandwidth ' + dungeonStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonStatusKbps + ' KB/s'));
       if (dungeonPartyStatusKbps > budgets.maxDungeonPartyStatusKbps) return reject(new Error(label + ' dungeon party status bandwidth ' + dungeonPartyStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonPartyStatusKbps + ' KB/s'));
       if (budgets.minDungeonFxSkipped && (!merged.totals || (merged.totals.dungeonFxSkipped || 0) < budgets.minDungeonFxSkipped)) {
@@ -144,6 +147,7 @@ async function main() {
   const bandwidthBudgets = {
     maxOutboundKbps: Number(envNumber('PERF_MAX_OUTBOUND_KBPS', 2048)),
     maxOutboundClientKbps: Number(envNumber('PERF_MAX_OUTBOUND_CLIENT_KBPS', 96)),
+    maxStatePatchKbps: Number(envNumber('PERF_MAX_STATE_PATCH_KBPS', 128)),
     maxDungeonStatusKbps: Number(envNumber('PERF_MAX_DUNGEON_STATUS_KBPS', 32)),
     maxDungeonPartyStatusKbps: Number(envNumber('PERF_MAX_DUNGEON_PARTY_STATUS_KBPS', 16)),
   };
@@ -157,13 +161,13 @@ async function main() {
       SHARD_LOAD_DURATION_MS: envNumber('PERF_SHARD_DURATION_MS', 8_000),
       SHARD_LOAD_MAX_P99_MS: envNumber('PERF_SHARD_MAX_P99_MS', maxP99Ms),
       SHARD_LOAD_MAX_HEAP_MB: envNumber('PERF_SHARD_MAX_HEAP_MB', maxHeapMb),
-    }, Number(shardPort)],
+    }, Number(shardPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_SHARD_STATE_PATCH_KBPS', 24)) }],
     ['Dungeon load budget', 'tools/dungeon-load-test.js', {
       DUNGEON_LOAD_PORT: dungeonPort,
       DUNGEON_LOAD_DURATION_MS: envNumber('PERF_DUNGEON_DURATION_MS', 8_000),
       DUNGEON_LOAD_MAX_P99_MS: envNumber('PERF_DUNGEON_MAX_P99_MS', maxP99Ms),
       DUNGEON_LOAD_MAX_HEAP_MB: envNumber('PERF_DUNGEON_MAX_HEAP_MB', maxHeapMb),
-    }, Number(dungeonPort), {}],
+    }, Number(dungeonPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_DUNGEON_STATE_PATCH_KBPS', 90)) }],
     ['Spread dungeon bandwidth budget', 'tools/dungeon-load-test.js', {
       DUNGEON_LOAD_PORT: spreadPort,
       DUNGEON_LOAD_DUNGEONS: envNumber('PERF_SPREAD_DUNGEONS', 1),
@@ -172,13 +176,13 @@ async function main() {
       DUNGEON_LOAD_REQUIRE_FX_SKIPS: '1',
       DUNGEON_LOAD_MAX_P99_MS: envNumber('PERF_SPREAD_MAX_P99_MS', maxP99Ms),
       DUNGEON_LOAD_MAX_HEAP_MB: envNumber('PERF_SPREAD_MAX_HEAP_MB', maxHeapMb),
-    }, Number(spreadPort), { minDungeonFxSkipped: 1 }],
+    }, Number(spreadPort), { minDungeonFxSkipped: 1, maxStatePatchKbps: Number(envNumber('PERF_MAX_SPREAD_STATE_PATCH_KBPS', 32)) }],
     ['Mixed online soak budget', 'tools/online-soak-test.js', {
       SOAK_PORT: soakPort,
       SOAK_DURATION_MS: envNumber('PERF_SOAK_DURATION_MS', 20_000),
       SOAK_MAX_P99_MS: envNumber('PERF_SOAK_MAX_P99_MS', maxP99Ms),
       SOAK_MAX_HEAP_MB: envNumber('PERF_SOAK_MAX_HEAP_MB', 160),
-    }, Number(soakPort), {}],
+    }, Number(soakPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_SOAK_STATE_PATCH_KBPS', 100)) }],
   ];
 
   for (const [label, script, env, metricsPort, extraBudgets] of checks) await run(label, script, env, metricsPort, { ...bandwidthBudgets, ...extraBudgets });

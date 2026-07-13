@@ -55,6 +55,16 @@ const TRAIL_SENSE_DURATION_MS = 22000;
 const TRAIL_SENSE_RANGE = 320;
 const FALL_SAFE_DROP = 5;
 const FEATHER_STEP_ABSORB_DROP = 16;
+const DUNGEON_MOVE_REPLICATION_POS_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_POS_EPS || 0.08));
+const DUNGEON_MOVE_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_Y_EPS || 0.04));
+const DUNGEON_MOVE_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_YAW_EPS || 0.16));
+
+function angleDelta(a, b) {
+  let d = (Number(a) || 0) - (Number(b) || 0);
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return Math.abs(d);
+}
 
 class GameRoom extends Room {
   static async onAuth(_token, _options, context) {
@@ -4746,8 +4756,15 @@ class GameRoom extends Room {
       z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
     });
     const fromY = p.y;
-    p.x = sx; p.y = sy; p.z = sz;
-    p.yaw = clampN(m.yaw, -10, 10);
+    const yaw = clampN(m.yaw, -10, 10);
+    if (p.dgn) {
+      if (Math.hypot(sx - p.x, sz - p.z) >= DUNGEON_MOVE_REPLICATION_POS_EPS) { p.x = sx; p.z = sz; }
+      if (Math.abs(sy - p.y) >= DUNGEON_MOVE_REPLICATION_Y_EPS) p.y = sy;
+      if (angleDelta(yaw, p.yaw) >= DUNGEON_MOVE_REPLICATION_YAW_EPS) p.yaw = yaw;
+    } else {
+      p.x = sx; p.y = sy; p.z = sz;
+      p.yaw = yaw;
+    }
     this.trackAcceptedMoveFall(client, fromY, p.y);
     if (!p.dgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
     this.collectDeathDrops(client);

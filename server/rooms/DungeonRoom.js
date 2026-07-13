@@ -15,6 +15,7 @@ const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST
 const DUNGEON_PLAYER_INTEREST_RADIUS = Number(process.env.DUNGEON_PLAYER_INTEREST_RADIUS || 48);
 const DUNGEON_FX_INTEREST_RADIUS = Number(process.env.DUNGEON_FX_INTEREST_RADIUS || 44);
 const DUNGEON_STATUS_INTERVAL_MS = Math.max(1000, Number(process.env.DUNGEON_STATUS_INTERVAL_MS || 10000));
+const DUNGEON_PATCH_RATE_MS = Math.max(50, Number(process.env.DUNGEON_PATCH_RATE_MS || 200));
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -45,6 +46,7 @@ class DungeonRoom extends GameRoom {
     // it against its own bootId to tell a genuine restart from a same-boot rejoin.
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
+    this.setPatchRate(DUNGEON_PATCH_RATE_MS);
     this.store = this.monitorStore(createStore());
 
     // Per-session + sim bookkeeping the inherited mixins/tick read. The overworld slice of
