@@ -167,7 +167,7 @@ async function main() {
       DUNGEON_LOAD_DURATION_MS: envNumber('PERF_DUNGEON_DURATION_MS', 8_000),
       DUNGEON_LOAD_MAX_P99_MS: envNumber('PERF_DUNGEON_MAX_P99_MS', maxP99Ms),
       DUNGEON_LOAD_MAX_HEAP_MB: envNumber('PERF_DUNGEON_MAX_HEAP_MB', maxHeapMb),
-    }, Number(dungeonPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_DUNGEON_STATE_PATCH_KBPS', 90)) }],
+    }, Number(dungeonPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_DUNGEON_STATE_PATCH_KBPS', 82)) }],
     ['Spread dungeon bandwidth budget', 'tools/dungeon-load-test.js', {
       DUNGEON_LOAD_PORT: spreadPort,
       DUNGEON_LOAD_DUNGEONS: envNumber('PERF_SPREAD_DUNGEONS', 1),
@@ -176,13 +176,13 @@ async function main() {
       DUNGEON_LOAD_REQUIRE_FX_SKIPS: '1',
       DUNGEON_LOAD_MAX_P99_MS: envNumber('PERF_SPREAD_MAX_P99_MS', maxP99Ms),
       DUNGEON_LOAD_MAX_HEAP_MB: envNumber('PERF_SPREAD_MAX_HEAP_MB', maxHeapMb),
-    }, Number(spreadPort), { minDungeonFxSkipped: 1, maxStatePatchKbps: Number(envNumber('PERF_MAX_SPREAD_STATE_PATCH_KBPS', 32)) }],
+    }, Number(spreadPort), { minDungeonFxSkipped: 1, maxStatePatchKbps: Number(envNumber('PERF_MAX_SPREAD_STATE_PATCH_KBPS', 28)) }],
     ['Mixed online soak budget', 'tools/online-soak-test.js', {
       SOAK_PORT: soakPort,
       SOAK_DURATION_MS: envNumber('PERF_SOAK_DURATION_MS', 20_000),
       SOAK_MAX_P99_MS: envNumber('PERF_SOAK_MAX_P99_MS', maxP99Ms),
       SOAK_MAX_HEAP_MB: envNumber('PERF_SOAK_MAX_HEAP_MB', 160),
-    }, Number(soakPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_SOAK_STATE_PATCH_KBPS', 100)) }],
+    }, Number(soakPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_SOAK_STATE_PATCH_KBPS', 90)) }],
   ];
 
   for (const [label, script, env, metricsPort, extraBudgets] of checks) await run(label, script, env, metricsPort, { ...bandwidthBudgets, ...extraBudgets });

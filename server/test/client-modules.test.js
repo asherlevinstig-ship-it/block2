@@ -42,6 +42,19 @@ test('GameContext owns shared services, state slices, module APIs, and runtime l
   assert.throws(() => context.registerState('bad', null), /must be an object/);
 });
 
+test('client mob performance tiers reduce ordinary dungeon visual update cost', async () => {
+  const { PERFORMANCE_BUDGETS, distanceTierSq, mobDistanceTierSq, consumeEntityStep } = await clientModule('performance-budget.mjs');
+  assert.equal(distanceTierSq(24 * 24), 0, 'remote players keep the existing near tier');
+  assert.equal(mobDistanceTierSq(17 * 17), 0, 'ordinary mobs stay smooth up close');
+  assert.equal(mobDistanceTierSq(24 * 24), 1, 'ordinary mobs outside melee range use the medium cadence');
+  assert.equal(mobDistanceTierSq(24 * 24, true), 0, 'important mobs keep the wider near tier');
+  assert.equal(PERFORMANCE_BUDGETS.mobNearSq < PERFORMANCE_BUDGETS.nearSq, true);
+
+  const mob = {};
+  assert.equal(consumeEntityStep(mob, PERFORMANCE_BUDGETS.mediumStep / 2, 1), 0);
+  assert.equal(consumeEntityStep(mob, PERFORMANCE_BUDGETS.mediumStep / 2, 1), PERFORMANCE_BUDGETS.mediumStep);
+});
+
 test('DimensionGrid provides one origin-aware storage contract for every dimension kind', () => {
   const grid = new DimensionGrid({kind:'tutorial',id:'training',originX:100,originY:5,originZ:200,width:4,height:3,depth:5,empty:0,outside:9});
   assert.equal(isDimensionGrid(grid), true);

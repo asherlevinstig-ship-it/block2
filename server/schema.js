@@ -31,7 +31,7 @@ class Player extends Schema {
   }
 }
 defineTypes(Player, {
-  x: 'number', y: 'number', z: 'number', yaw: 'number',
+  x: 'float32', y: 'float32', z: 'float32', yaw: 'float32',
   name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
   heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean',
 });
@@ -67,8 +67,8 @@ class Mob extends Schema {
   }
 }
 defineTypes(Mob, {
-  x: 'number', y: 'number', z: 'number', yaw: 'number',
-  hp: 'number', maxHp: 'number', kind: 'string', dgn: 'string', state: 'string', variant: 'string', bossStyle: 'string', displayName: 'string', elite: 'boolean', enraged: 'boolean',
+  x: 'float32', y: 'float32', z: 'float32', yaw: 'float32',
+  hp: 'float32', maxHp: 'float32', kind: 'string', dgn: 'string', state: 'string', variant: 'string', bossStyle: 'string', displayName: 'string', elite: 'boolean', enraged: 'boolean',
   shadowKind:'string',shadowRank:'uint8',shadowBoss:'boolean',
 });
 

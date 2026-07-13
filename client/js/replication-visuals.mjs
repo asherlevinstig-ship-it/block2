@@ -1,4 +1,4 @@
-import {distanceTierSq,consumeEntityStep} from './performance-budget.mjs';
+import {mobDistanceTierSq,consumeEntityStep} from './performance-budget.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
 
 export function createReplicationVisuals({NET,player,familiarReaction=()=>{}}){
@@ -326,7 +326,7 @@ function netMobTick(m, dt, t){
   const r=m.ref, p=m.grp.position;
   if((r.hp||0)<(m.hp||0)){const lost=(m.hp||0)-(r.hp||0),ratio=lost/Math.max(1,r.maxHp||m.hp||1);m.hitT=.18+Math.min(.14,ratio*.5);m.hitLean=(Math.random()<.5?-1:1)*(.08+Math.min(.14,ratio));const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible){burst(p.x,p.y+1,p.z,flash,ratio>.2?12:7,ratio>.2?2.2:1.5,1.6,.28);if(ratio>.2)ringPulse(p.x,p.y+.08,p.z,1.15,0xffffff,.18);}}m.hp=r.hp;
   const dx=p.x-player.pos.x,dz=p.z-player.pos.z,important=!!(m.boss||m.elite||m.kind==='bandit_captain');
-  const tier=distanceTierSq(dx*dx+dz*dz,important);
+  const tier=mobDistanceTierSq(dx*dx+dz*dz,important);
   m.grp.visible = (r.dgn||'')===NET.dgn&&tier<3;
   if(!m.grp.visible)return;
   const stepDt=consumeEntityStep(m,dt,tier);

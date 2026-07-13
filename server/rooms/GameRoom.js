@@ -58,12 +58,29 @@ const FEATHER_STEP_ABSORB_DROP = 16;
 const DUNGEON_MOVE_REPLICATION_POS_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_POS_EPS || 0.08));
 const DUNGEON_MOVE_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_Y_EPS || 0.04));
 const DUNGEON_MOVE_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOVE_REPLICATION_YAW_EPS || 0.16));
+const DUNGEON_MOB_REPLICATION_POS_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_POS_EPS || 0.04));
+const DUNGEON_MOB_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_Y_EPS || 0.04));
+const DUNGEON_MOB_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_YAW_EPS || 0.16));
 
 function angleDelta(a, b) {
   let d = (Number(a) || 0) - (Number(b) || 0);
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return Math.abs(d);
+}
+
+function setReplicatedMobPose(m, x, y, z, yaw) {
+  if (!m || !m.dgn) {
+    m.x = x; m.y = y; m.z = z; m.yaw = yaw;
+    return;
+  }
+  if (Math.hypot(x - m.x, z - m.z) >= DUNGEON_MOB_REPLICATION_POS_EPS) { m.x = x; m.z = z; }
+  if (Math.abs(y - m.y) >= DUNGEON_MOB_REPLICATION_Y_EPS) m.y = y;
+  if (angleDelta(yaw, m.yaw) >= DUNGEON_MOB_REPLICATION_YAW_EPS) m.yaw = yaw;
+}
+
+function setReplicatedMobYaw(m, yaw) {
+  if (!m || !m.dgn || angleDelta(yaw, m.yaw) >= DUNGEON_MOB_REPLICATION_YAW_EPS) m.yaw = yaw;
 }
 
 class GameRoom extends Room {
@@ -4862,10 +4879,13 @@ class GameRoom extends Room {
         const u = Math.min(1, bh.t / bh.total);
         const swirl = u * Math.PI * 8;
         const r = Math.max(0, (1 - u) * .95);
-        m.x = bh.cx + Math.cos(swirl) * r;
-        m.z = bh.cz + Math.sin(swirl) * r;
-        m.y = bh.sy + (bh.cy - bh.sy) * Math.sin(u * Math.PI * .85);
-        m.yaw += dt * 10;
+        setReplicatedMobPose(
+          m,
+          bh.cx + Math.cos(swirl) * r,
+          bh.sy + (bh.cy - bh.sy) * Math.sin(u * Math.PI * .85),
+          bh.cz + Math.sin(swirl) * r,
+          (m.yaw || 0) + dt * 10,
+        );
         m.state = 'blackhole';
         if (u >= 1) {
           const caster = this.clients.find(c => c.sessionId === bh.caster);
@@ -4919,8 +4939,7 @@ class GameRoom extends Room {
           const nx = m.x + dx / dist * step, nz = m.z + dz / dist * step;
           const gy = ground(nx, nz, m.y + 2);
           if (gy > 0 && gy - m.y <= 1.2 && !solid(Math.floor(nx), Math.floor(gy), Math.floor(nz))) {
-            m.x = nx; m.y = gy; m.z = nz;
-            m.yaw = Math.atan2(dx, dz);
+            setReplicatedMobPose(m, nx, gy, nz, Math.atan2(dx, dz));
           }
         }
         return;
@@ -4993,7 +5012,7 @@ class GameRoom extends Room {
             if (meta.drawT > 0) {
               meta.drawT -= dt;
               m.state = 'draw';
-              m.yaw = Math.atan2(best.p.x - m.x, best.p.z - m.z);
+              setReplicatedMobYaw(m, Math.atan2(best.p.x - m.x, best.p.z - m.z));
               rooted = true;
               if (meta.drawT <= 0) {
                 m.state = '';
@@ -5129,7 +5148,7 @@ class GameRoom extends Room {
           if (gy > 0 && gy - m.y <= 1.05) nz = m.z;
           else { gy = ground(m.x, nz, m.y + 1); if (gy > 0 && gy - m.y <= 1.05) nx = m.x; else gy = -1; }
         }
-        if (gy > 0) { m.x = nx; m.z = nz; m.y = gy; m.yaw = Math.atan2(dx, dz); }
+        if (gy > 0) setReplicatedMobPose(m, nx, gy, nz, Math.atan2(dx, dz));
         else if (!meta.alert) meta.patrolT = .5;
       }
   }

@@ -1,5 +1,7 @@
 export const PERFORMANCE_BUDGETS=Object.freeze({
   nearSq:30*30,
+  mobNearSq:18*18,
+  importantMobNearSq:30*30,
   mediumSq:58*58,
   mobCullSq:100*100,
   importantMobCullSq:130*130,
@@ -10,6 +12,13 @@ export const PERFORMANCE_BUDGETS=Object.freeze({
 
 export function distanceTierSq(distanceSq,important=false){
   if(distanceSq<=PERFORMANCE_BUDGETS.nearSq)return 0;
+  if(distanceSq<=PERFORMANCE_BUDGETS.mediumSq)return 1;
+  if(distanceSq<=(important?PERFORMANCE_BUDGETS.importantMobCullSq:PERFORMANCE_BUDGETS.mobCullSq))return 2;
+  return 3;
+}
+
+export function mobDistanceTierSq(distanceSq,important=false){
+  if(distanceSq<=(important?PERFORMANCE_BUDGETS.importantMobNearSq:PERFORMANCE_BUDGETS.mobNearSq))return 0;
   if(distanceSq<=PERFORMANCE_BUDGETS.mediumSq)return 1;
   if(distanceSq<=(important?PERFORMANCE_BUDGETS.importantMobCullSq:PERFORMANCE_BUDGETS.mobCullSq))return 2;
   return 3;
