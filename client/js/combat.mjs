@@ -1577,7 +1577,10 @@ addEventListener('keydown', e=>{
     if(e.code.startsWith('Arrow')) e.preventDefault();
     if(dim==='dungeon'&&!e.repeat&&['F1','F2','F3'].includes(e.code)){
       e.preventDefault();
-      if(NET.on&&NET.room)NET.room.send('dungeonPing',{kind:e.code==='F1'?'group':e.code==='F2'?'boss':'loot'});
+      if(NET.on&&NET.room){
+        NET.room.send('requestDungeonStatus',{reason:'coordination'});
+        NET.room.send('dungeonPing',{kind:e.code==='F1'?'group':e.code==='F2'?'boss':'loot'});
+      }
       return;
     }
     if(e.code==='KeyQ') cast(0);

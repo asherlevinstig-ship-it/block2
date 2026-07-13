@@ -3694,6 +3694,18 @@ test('DungeonRoom status keeps hidden party members visible to lightweight UI', 
   assert.equal(farStatus.x, 140);
 });
 
+test('requestDungeonStatus sends a full status only to the requesting dungeon client', () => {
+  const room = makeDungeonRoom();
+  const inst = hazInstance(room, 'request-status-dgn', []);
+  const viewer = seedDungeonPlayer(room, 'request-status-viewer', inst, { x: 0, y: 10, z: 0 });
+  const other = seedDungeonPlayer(room, 'request-status-other', inst, { x: 15, y: 10, z: 0 });
+
+  assert.equal(room.handleDungeonStatusRequest(viewer), true);
+  assert.equal(viewer.sent.some(entry => entry.type === 'dungeonStatus'), true, 'requester receives full status on demand');
+  assert.equal(other.sent.some(entry => entry.type === 'dungeonStatus'), false, 'request does not broadcast the full status to the party');
+  assert.equal(room.handleDungeonStatusRequest(viewer), false, 'rapid duplicate status requests are rate-limited');
+});
+
 test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', () => {
   const priorE2E = process.env.BLOCKCRAFT_E2E;
   process.env.BLOCKCRAFT_E2E = '1';
@@ -3933,6 +3945,8 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
 
   await room.onJoin(client, { name: 'RoomHopper', ticket }, { id: token });
 
+  assert.equal(client.sent.some(e => e.type === 'dungeonStatus'), false, 'joining does not push the full dungeon status burst');
+  assert.equal(client.sent.some(e => e.type === 'dungeonPartyStatus'), true, 'joining still seeds the lightweight party HUD status');
   assert.ok(prof.dungeonRecovery, 'the switchRoom entry armed recovery like the overworld enterGate path does');
   assert.equal(prof.dungeonRecovery.gateId, 'dr-recovery', 'keyed to the overworld gate id, not the dungeon-internal state');
   assert.equal(prof.dungeonRecovery.bootId, 'dr-boot', 'stamped with this room process boot');

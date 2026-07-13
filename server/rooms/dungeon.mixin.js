@@ -28,6 +28,7 @@ class DungeonMixin {
     this.gateBreaches = new Map();
     this.gateBreachScars = new Map();
     this.dungeonPingAt = new Map();
+    this.dungeonStatusRequestAt = new Map();
     this.gateTimer = 40;       // countdown to the next public gate spawn (sim-loop driven)
     this.gateTtl = 0;
   }
@@ -163,6 +164,47 @@ class DungeonMixin {
       const p = this.state.players.get(c.sessionId);
       if (p && p.dgn === dgn) c.send('dungeonStatus', payload);
     }
+  }
+  dungeonPartyStatusPayload(inst) {
+    const status = this.dungeonStatusPayload(inst);
+    if (!status) return null;
+    return {
+      id: status.id,
+      party: status.party,
+      totalPlayers: status.totalPlayers,
+      activeCount: status.activeCount,
+      aliveCount: status.aliveCount,
+      spiritCount: status.spiritCount,
+      downedCount: status.downedCount,
+      returnedCount: status.returnedCount,
+      wipe: status.wipe,
+    };
+  }
+  sendDungeonPartyStatus(dgn) {
+    const inst = this.instances[dgn];
+    const payload = this.dungeonPartyStatusPayload(inst);
+    if (!payload) return;
+    for (const c of this.clients) {
+      const p = this.state.players.get(c.sessionId);
+      if (p && p.dgn === dgn) c.send('dungeonPartyStatus', payload);
+    }
+  }
+  sendDungeonStatusToClient(client, dgn) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || !p.dgn || p.dgn !== dgn) return false;
+    const payload = this.dungeonStatusPayload(this.instances[dgn]);
+    if (!payload) return false;
+    client.send('dungeonStatus', payload);
+    return true;
+  }
+  handleDungeonStatusRequest(client) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || !p.dgn) return false;
+    if (!this.dungeonStatusRequestAt) this.dungeonStatusRequestAt = new Map();
+    const now = Date.now(), last = this.dungeonStatusRequestAt.get(client.sessionId) || 0;
+    if (now - last < 1000) return false;
+    this.dungeonStatusRequestAt.set(client.sessionId, now);
+    return this.sendDungeonStatusToClient(client, p.dgn);
   }
   dungeonResultPayload(inst, outcome = 'cleared', reason = '') {
     if (!inst) return null;
@@ -877,7 +919,7 @@ class DungeonMixin {
       return false;
     }
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
-    this.sendDungeonStatus(inst.id);
+    if (typeof this.sendDungeonPartyStatus === 'function') this.sendDungeonPartyStatus(inst.id);
     return true;
   }
   enterGateInstance(client, g, inst) {

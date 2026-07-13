@@ -487,6 +487,7 @@ class GameRoom extends Room {
     this.onMessage('dungeonMatchmakingAdvertise', (client, m) => this.handleDungeonMatchmakingAdvertise(client, m));
     this.onMessage('dungeonMatchmakingRequest', client => this.sendDungeonMatchmaking(client));
     this.onMessage('dungeonMatchmakingJoin', (client, m) => this.handleDungeonMatchmakingJoin(client, m));
+    this.onMessage('requestDungeonStatus', client => this.handleDungeonStatusRequest(client));
     this.onMessage('dungeonPing', (client, m) => this.handleDungeonPing(client, m));
     this.onMessage('exitGate', (client) => this.leaveInstance(client.sessionId));
     this.onMessage('quitDungeonSpirit', (client) => this.handleQuitDungeonSpirit(client));

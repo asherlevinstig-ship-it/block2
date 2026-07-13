@@ -146,6 +146,7 @@ class DungeonRoom extends GameRoom {
     this.onMessage('prospect', c => this.handleProspect(c));
     this.onMessage('useRepairKit', (c, m) => this.handleUseRepairKit(c, m));
     this.onMessage('dedit', (c, m) => this.handleDungeonEdit(c, m));   // mining inside the dungeon
+    this.onMessage('requestDungeonStatus', c => this.handleDungeonStatusRequest(c));
     if (process.env.BLOCKCRAFT_E2E === '1') this.onMessage('e2eJourney', (c, m) => this.handleE2EJourney(c, m));
   }
 
@@ -187,8 +188,8 @@ class DungeonRoom extends GameRoom {
     this.initDungeonInterestView(client);
     this.updateClientDungeonInterestView(client);
     client.send('enterDungeon', this.gateEntryPayload(null, inst));
-    const status = this.dungeonStatusPayload(inst);
-    if (status) client.send('dungeonStatus', status);
+    const status = this.dungeonPartyStatusPayload(inst);
+    if (status) client.send('dungeonPartyStatus', status);
   }
 
   async onLeave(client, code) {
@@ -229,7 +230,7 @@ class DungeonRoom extends GameRoom {
     // duration of the store write.
     const token = this.tokens.get(client.sessionId);
     if (this.instance) this.instance.removePlayer(client.sessionId);
-    if (this.instance && this.instance.playerCount > 0) this.sendDungeonStatus(this.instance.id);
+    if (this.instance && this.instance.playerCount > 0) this.sendDungeonPartyStatus(this.instance.id);
     this.state.players.delete(client.sessionId);
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);

@@ -30,7 +30,8 @@ function summarizeMetrics(snapshot) {
   const totals = snapshot.totals || {};
   const outboundByKind = totals.outboundBytesPerSecondByKind || {};
   const outboundByType = totals.outboundMessageBytesPerSecondByType || {};
-  const dungeonStatusBytes = (outboundByType.dungeonStatus || 0) + (outboundByType.dungeonPartyStatus || 0);
+  const dungeonStatusBytes = outboundByType.dungeonStatus || 0;
+  const dungeonRosterBytes = dungeonStatusBytes + (outboundByType.dungeonPartyStatus || 0);
   const eventLoop = snapshot.eventLoop || {};
   const memory = snapshot.memory || {};
   return 'rooms=' + (totals.rooms || 0)
@@ -42,6 +43,7 @@ function summarizeMetrics(snapshot) {
     + ' msgKBps=' + Math.round((((outboundByKind.message || 0) + (outboundByKind.messageBytes || 0) + (outboundByKind.estimatedMessage || 0)) / 1024) * 100) / 100
     + ' dungeonStatusKBps=' + Math.round((dungeonStatusBytes / 1024) * 100) / 100
     + ' dungeonPartyStatusKBps=' + Math.round(((outboundByType.dungeonPartyStatus || 0) / 1024) * 100) / 100
+    + ' dungeonRosterKBps=' + Math.round((dungeonRosterBytes / 1024) * 100) / 100
     + ' peakClientKBps=' + Math.round(((totals.outboundPeakClientBytesPerSecond || 0) / 1024) * 100) / 100
     + ' rejects=' + (totals.rejectedMessages || 0)
     + ' disconnects=' + (totals.disconnects || 0)
@@ -125,7 +127,7 @@ function run(label, script, env, metricsPort, budgets) {
       const dungeonStatusKbps = ((peakTypeBytes.dungeonStatus || 0) + (peakTypeBytes.dungeonPartyStatus || 0)) / 1024;
       if (kbps > budgets.maxOutboundKbps) return reject(new Error(label + ' outbound bandwidth ' + kbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundKbps + ' KB/s'));
       if (peakClientKbps > budgets.maxOutboundClientKbps) return reject(new Error(label + ' peak client bandwidth ' + peakClientKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundClientKbps + ' KB/s'));
-      if (dungeonStatusKbps > budgets.maxDungeonStatusKbps) return reject(new Error(label + ' dungeon status bandwidth ' + dungeonStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonStatusKbps + ' KB/s'));
+      if (dungeonStatusKbps > budgets.maxDungeonStatusKbps) return reject(new Error(label + ' dungeon roster/status bandwidth ' + dungeonStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonStatusKbps + ' KB/s'));
       if (budgets.minDungeonFxSkipped && (!merged.totals || (merged.totals.dungeonFxSkipped || 0) < budgets.minDungeonFxSkipped)) {
         return reject(new Error(label + ' skipped only ' + ((merged.totals && merged.totals.dungeonFxSkipped) || 0) + ' dungeon FX fanouts; expected at least ' + budgets.minDungeonFxSkipped));
       }
