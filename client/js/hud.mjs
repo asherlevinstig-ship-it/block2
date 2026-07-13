@@ -30,6 +30,12 @@ function itemTooltipText(stack){
   if(!stack || !ITEMS[stack.id]) return '';
   const info=ITEMS[stack.id];
   const lines=[itemNameWithPlus(stack)];
+  const tags=itemTriageTags(stack);
+  if(tags.length) lines.push('Tags: '+tags.join(' / '));
+  const storage=itemStorageTriageLine(stack);
+  if(storage) lines.push(storage);
+  const action=itemRecommendedActionLine(stack);
+  if(action) lines.push(action);
   if(stack.count>1) lines.push('Count: '+stack.count);
   if(info.place) lines.push('Placeable block');
   if(info.tool){
@@ -69,6 +75,41 @@ function itemTooltipText(stack){
   if(stack.id===I.FORAGE_CHARM) lines.push('Use to bind the familiar Sprite (then press K)');
   if(stack.id===B.EGG_INSULATOR) lines.push('Place down, then use a dragon egg on top');
   return lines.join('\n');
+}
+function itemTriageTags(stack){
+  const id=stack&&stack.id|0,item=stack&&ITEMS[id],tags=[];
+  if(!item)return tags;
+  if(item.tool||item.armor||stack.dur!=null){tags.push('Gear');if(stack.locked)tags.push('Protected');return tags;}
+  if(item.place!=null){tags.push('Placeable');tags.push('Material');}
+  if([I.STICK,I.COAL,I.CHARCOAL,I.IRON_INGOT,I.DIAMOND,I.WHEAT_SEEDS,I.WHEAT,I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM,I.RIVER_FISH,I.COMPOST,I.GOLDEN_WHEAT,I.GEODE,I.RAINWAKE_PETAL,I.STORMGLASS,I.SOLAR_GLYPH].includes(id))tags.push('Material');
+  if(FOOD_VALUES[id]||[I.BREAD,I.MONSTER_MEAT,I.COOKED_MEAT,I.HEARTY_SANDWICH,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id))tags.push('Food');
+  if([I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A,I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A].includes(id)){tags.push('Key');tags.push('Protected');}
+  if([I.SHARD_MINOR,I.SHARD_MAJOR,I.SHARD_GLIMMER,I.SHARD_EFFERV,I.SHARD_RADIANT].includes(id)){tags.push('Shard');tags.push('Protected');}
+  if(id===I.LEGEND_TOKEN){tags.push('Legendary');tags.push('Protected');}
+  if([I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT].includes(id)){tags.push('Dragon');tags.push('Protected');}
+  if([I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id)){tags.push('Familiar');tags.push('Protected');}
+  if([I.REPAIR_KIT,I.CHARCOAL,B.PLANKS,B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR].includes(id))tags.push('Crafting');
+  return [...new Set(tags)];
+}
+function itemStorageTriageLine(stack){
+  const tags=itemTriageTags(stack);
+  if(!tags.length)return '';
+  if(tags.includes('Protected'))return 'Storage: protected - bulk chest shortcuts leave this in your bag.';
+  if(tags.includes('Gear'))return 'Storage: gear - compare, equip, lock, or salvage at Tobin.';
+  if(tags.includes('Material'))return 'Storage: material - safe for Deposit Materials.';
+  if(tags.includes('Food'))return 'Storage: prep item - keep some on hotbar before Gates.';
+  return '';
+}
+function itemRecommendedActionLine(stack){
+  const id=stack&&stack.id|0,item=stack&&ITEMS[id],tags=itemTriageTags(stack);
+  if(!item)return '';
+  if(tags.includes('Protected'))return 'Action: keep - progression item; do not sell casually.';
+  if(tags.includes('Gear'))return stack.locked?'Action: keep or equip; unlock only if you mean to salvage.':'Action: compare first; lock good gear or salvage extras at Tobin.';
+  if(id===I.DIAMOND||id===I.IRON_INGOT)return 'Action: keep a reserve for upgrades, reforging, and crafting; sell extras only.';
+  if(tags.includes('Material'))return 'Action: deposit extras; keep enough for active recipes.';
+  if(tags.includes('Food'))return 'Action: keep Gate food on hotbar; sell extras at the tavern.';
+  if(id===I.REPAIR_KIT)return 'Action: keep for damaged gear before long Gate runs.';
+  return '';
 }
 function fillSlotEl(el, stack, keepKey){
   [...el.querySelectorAll('canvas,.cnt,.upg,.dur,.gear-rank,.gear-lock,.armor-kind')].forEach(n=>n.remove());

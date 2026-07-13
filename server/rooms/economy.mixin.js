@@ -3,7 +3,7 @@
 const {
   ARMOR_INFO, BIOME_COLLECTIBLE, CHEST_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_CHEST_CHANCE,
   DRAGON_EGG_OF, FUEL, GUARDIAN_POS, GUILD_DECOR_BUY, I, KEY_LOOT, LEGENDARY_CRAFTS, RECIPES, REWARD_ITEMS,
-  ROAD_MERCHANT_BUY, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
+  ROAD_MERCHANT_BUY, SHARD_ITEM_IDS, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, SOLO_KEYS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
   dangerRingAt, jobLevelFor, jobPerkChance, jobPerkTier, keyForRank,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
@@ -112,6 +112,7 @@ class EconomyMixin {
     const owner = isObj && typeof raw.owner === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(raw.owner) ? raw.owner : '';
     const team = this.cleanTeamId(isObj ? raw.team : '');
     const rec = { scope, owner, team, slots };
+    if (isObj && raw.supply === true && scope === 'personal') rec.supply = true;
     if (scope === 'dungeon') rec.owner = '';
     if (scope === 'town') { rec.owner = ''; rec.team = ''; }
     return rec;
@@ -226,7 +227,65 @@ class EconomyMixin {
     if (rec.scope === 'public') return info.space === 'overworld';
     if (rec.scope === 'dungeon') return info.space !== 'overworld' && (p.dgn || '') === info.space;
     if (rec.scope === 'team') return !!rec.team && rec.team === this.cleanTeamId(p.team);
+    if (rec.scope === 'personal' && rec.supply === true && this.canUseHomesteadSupplyChest(client, key, rec)) return true;
     return (!!rec.owner && rec.owner === this.clientToken(client)) || (!!rec.team && rec.team === this.cleanTeamId(p.team));
+  }
+  homesteadSupplyContext(client, key, rec = null) {
+    const p = client && this.state.players.get(client.sessionId);
+    const info = this.parseChestKey(key);
+    if (!p || !info || info.space !== 'overworld') return null;
+    const record = rec || this.getChestRecord(key);
+    if (!record || record.scope !== 'personal' || record.supply !== true || !record.owner) return null;
+    if (!this.world || this.world.getB(info.x, info.y, info.z) !== W.B.CHEST) return null;
+    const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
+    if (!claim || claim.owner !== record.owner || this.isLandClaimAbandoned(claim)) return null;
+    const group = this.connectedOwnedLandClaims ? this.connectedOwnedLandClaims(info.x, info.z, record.owner) : [];
+    if (!group || group.length < 3) return null;
+    return { info, rec: record, claim, group, own: record.owner === this.clientToken(client) };
+  }
+  canUseHomesteadSupplyChest(client, key, rec = null) {
+    const ctx = this.homesteadSupplyContext(client, key, rec);
+    return !!(ctx && (ctx.own || this.hasLandPermission(client, ctx.claim)));
+  }
+  canToggleChestSupply(client, key) {
+    const ctx = this.homesteadSupplyContext(client, key, this.getChestRecord(key));
+    if (ctx) return !!ctx.own;
+    const info = this.parseChestKey(key);
+    const rec = this.getChestRecord(key);
+    const token = this.clientToken(client);
+    if (!info || info.space !== 'overworld' || !rec || rec.scope !== 'personal' || rec.owner !== token) return false;
+    const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
+    if (!claim || claim.owner !== token || this.isLandClaimAbandoned(claim)) return false;
+    const group = this.connectedOwnedLandClaims ? this.connectedOwnedLandClaims(info.x, info.z, token) : [];
+    return !!(group && group.length >= 3);
+  }
+  chestSupplyModeReason(client, key) {
+    const info = this.parseChestKey(key);
+    if (!info || info.space !== 'overworld') return 'overworld';
+    const rec = this.getChestRecord(key);
+    const token = this.clientToken(client);
+    if (!rec || rec.scope !== 'personal') return 'personal';
+    if (!token || rec.owner !== token) return 'owner';
+    const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
+    if (!claim || claim.owner !== token) return 'claim';
+    if (this.isLandClaimAbandoned(claim)) return 'active';
+    const group = this.connectedOwnedLandClaims ? this.connectedOwnedLandClaims(info.x, info.z, token) : [];
+    if (!group || group.length < 3) return 'homestead';
+    return '';
+  }
+  chestAccessRejectReason(client, key) {
+    if (!key) return 'near';
+    const rec = this.getChestRecord(key);
+    if (rec && rec.scope === 'personal' && rec.supply === true) {
+      const ctx = this.homesteadSupplyContext(client, key, rec);
+      if (ctx && !this.hasLandPermission(client, ctx.claim)) return 'supply_trust';
+    }
+    return 'locked';
+  }
+  canWithdrawChest(client, key) {
+    const rec = this.getChestRecord(key);
+    if (rec && rec.scope === 'personal' && rec.supply === true) return rec.owner === this.clientToken(client);
+    return this.canAccessChest(client, key);
   }
   canBreakChest(client, key) {
     const rec = this.getChestRecord(key);
@@ -455,6 +514,7 @@ class EconomyMixin {
     this.addCraftedRewardItem(rec.prof, outId, finalCount);
     this.dirtyPlayers.add(rec.token);
     this.recordCraftProgress(client, outId, finalCount);
+    if ((outId | 0) === W.B.TABLE || (outId | 0) === W.B.FURNACE) this.advanceProgressionDirector(client, 'crafted_station', { profile: false });
     const msg = { out: { id: outId, count: outCount }, times };
     if (finalCount !== outCount * times) msg.finalCount = finalCount;
     client.send('craftResult', msg);
@@ -507,11 +567,13 @@ class EconomyMixin {
       rec.prof.gold -= price;
       this.addRewardItem(rec.prof, id, count);
       this.dirtyPlayers.add(rec.token);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, -price, 'shop_sink', vendor + '_buy', { id, count });
       return client.send('shopResult', { action, vendor: m.vendor || 'market', id, count, gold: -price });
     }
     if (!this.consumeItem(rec.prof, id, count)) return reject('item');
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + price));
     this.dirtyPlayers.add(rec.token);
+    if (this.recordEconomyGold) this.recordEconomyGold(client, price, 'shop_faucet', vendor + '_sell', { id, count });
     if (isTavern) this.recordTavernSaleProgress(client, id, count);
     client.send('shopResult', { action, vendor: isTavern ? 'tavern' : 'market', id, count, gold: price });
   }
@@ -698,6 +760,7 @@ class EconomyMixin {
     rec.prof.tavernTokens = Math.min(1000000, (rec.prof.tavernTokens | 0) + amount);
     rec.prof.tavernTokenBoughtToday = (rec.prof.tavernTokenBoughtToday | 0) + amount;
     this.dirtyPlayers.add(rec.token);
+    if (this.recordEconomyGold) this.recordEconomyGold(client, -amount, 'gambling_sink', 'tavern_tokens', { tokens: amount });
     client.send('tavernTokenResult', { ok: true, amount, gold: rec.prof.gold | 0, tokens: rec.prof.tavernTokens | 0, remaining: 100 - rec.prof.tavernTokenBoughtToday });
   }
   chestKeyForPlayer(client, m) {
@@ -716,7 +779,15 @@ class EconomyMixin {
   sendChest(client, key) {
     const rec = this.getChestRecord(key);
     const slots = rec.slots.map(s => s ? { ...s } : null);
-    client.send('chestState', { key, slots, scope: rec.scope });
+    client.send('chestState', {
+      key,
+      slots,
+      scope: rec.scope,
+      supply: rec.supply === true,
+      canToggleSupply: this.canToggleChestSupply(client, key),
+      supplyModeReason: this.chestSupplyModeReason(client, key),
+      canWithdraw: this.canWithdrawChest(client, key),
+    });
     const info = this.parseChestKey(key);
     if (info && info.space !== 'overworld') this.sendDungeonStatus(info.space);
   }
@@ -740,6 +811,66 @@ class EconomyMixin {
     }
     return want - left;
   }
+  isSimpleChestBulkStack(stack) {
+    if (!stack || !stack.id || stack.dur != null || stack.plus || stack.gearRank || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.locked || stack.source) return false;
+    return !TOOL_INFO[stack.id] && !ARMOR_INFO[stack.id];
+  }
+  isProtectedChestBulkItem(id) {
+    return SOLO_KEYS.includes(id) || TEAM_KEYS.includes(id) || SHARD_ITEM_IDS.includes(id) || [
+      I.LEGEND_TOKEN, I.LEGEND_SWORD, I.LEGEND_ARMOR, I.BLACKHOLE_STAFF,
+      I.DRAGON_EGG, I.EGG_VERDANT, I.EGG_FROST, I.EGG_STORM, I.EGG_VOID, I.DRAGON_TREAT,
+      I.SHADOW_SIGIL, I.FANG_TOTEM, I.MOTE_CHARM, I.FORAGE_CHARM,
+    ].includes(id);
+  }
+  isChestBulkMaterial(id) {
+    if (!id || this.isProtectedChestBulkItem(id) || TOOL_INFO[id] || ARMOR_INFO[id]) return false;
+    if (id < 100) return true;
+    return [
+      I.STICK, I.COAL, I.CHARCOAL, I.IRON_INGOT, I.DIAMOND,
+      I.WHEAT_SEEDS, I.WHEAT, I.WINDSEED, I.HEARTWOOD_RESIN, I.SUNSHARD,
+      I.MESA_AMBER, I.FROST_CRYSTAL, I.MIRE_BLOOM, I.RIVER_FISH,
+      I.COMPOST, I.GOLDEN_WHEAT, I.GEODE, I.RAINWAKE_PETAL,
+      I.STORMGLASS, I.SOLAR_GLYPH,
+    ].includes(id);
+  }
+  handleChestBatchDeposit(client, m) {
+    const key = this.chestKeyForPlayer(client, m);
+    const rec = this.profileFor(client);
+    if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
+    if (this.rateLimited(client, 'chestBatch', 3, 6)) return client.send('chestReject', { reason: 'rate' });
+    const mode = m.mode === 'materials' ? 'materials' : 'matching';
+    const slots = this.getChestState(key);
+    const chestIds = new Set(slots.filter(Boolean).map(s => s.id | 0));
+    const prof = rec.prof;
+    const moved = [];
+    let placedTotal = 0, stackTotal = 0, eligible = 0, protectedSkipped = 0;
+    for (let i = 9; i < 36; i++) {
+      const stack = prof.inv[i];
+      if (!stack) continue;
+      const id = stack.id | 0;
+      if (!this.isSimpleChestBulkStack(stack)) continue;
+      if (this.isProtectedChestBulkItem(id)) { protectedSkipped++; continue; }
+      const ok = mode === 'materials' ? this.isChestBulkMaterial(id) : chestIds.has(id);
+      if (!ok) continue;
+      eligible++;
+      const count = Math.max(1, Math.min(64, stack.count | 0 || 1));
+      const placed = this.addChestItem(slots, id, count);
+      if (placed <= 0) continue;
+      stack.count = count - placed;
+      if (stack.count <= 0) prof.inv[i] = null;
+      placedTotal += placed;
+      stackTotal++;
+      moved.push({ slot: i, id, count: placed });
+      chestIds.add(id);
+    }
+    if (placedTotal <= 0) {
+      return client.send('chestReject', { reason: eligible > 0 ? 'full' : (mode === 'materials' ? 'no_materials' : 'no_matching') });
+    }
+    this.dirtyPlayers.add(rec.token);
+    if (key.startsWith('overworld:')) this.dirtyChests = true;
+    this.sendChest(client, key);
+    client.send('chestBatchResult', { ok: true, mode, count: placedTotal, stacks: stackTotal, protectedSkipped, items: moved });
+  }
   removeChestItem(slots, slotIndex, count) {
     const i = Math.max(0, Math.min(slots.length - 1, slotIndex | 0));
     const slot = slots[i];
@@ -752,21 +883,21 @@ class EconomyMixin {
   }
   handleChestOpen(client, m) {
     const key = this.chestKeyForPlayer(client, m);
-    if (!key || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: 'locked' });
+    if (!key || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
     this.sendChest(client, key);
   }
   handleChestDeposit(client, m) {
     const key = this.chestKeyForPlayer(client, m);
     const rec = this.profileFor(client);
-    if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: 'locked' });
-    if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', {});
+    if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
+    if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
     const id = m.id | 0, count = Math.max(1, Math.min(64, m.count | 0 || 1));
     const slots = this.getChestState(key);
     // place into the chest first, then consume exactly what it accepted — never refund a
     // full count after a partial deposit (which would duplicate the overflow).
     const want = Math.min(count, this.countItem(rec.prof, id));
     const placed = want > 0 ? this.addChestItem(slots, id, want) : 0;
-    if (placed <= 0) return client.send('chestReject', {});
+    if (placed <= 0) return client.send('chestReject', { reason: 'full' });
     this.consumeItem(rec.prof, id, placed);
     this.dirtyPlayers.add(rec.token);
     if (key.startsWith('overworld:')) this.dirtyChests = true;
@@ -776,16 +907,35 @@ class EconomyMixin {
   handleChestWithdraw(client, m) {
     const key = this.chestKeyForPlayer(client, m);
     const rec = this.profileFor(client);
-    if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: 'locked' });
-    if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', {});
+    if (!key || !rec || !m || !this.canWithdrawChest(client, key)) {
+      const chest = key && this.getChestRecord(key);
+      return client.send('chestReject', { reason: chest && chest.supply === true ? 'supply_owner' : 'owner' });
+    }
+    if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
     const slots = this.getChestState(key);
     const item = this.removeChestItem(slots, m.slot, m.count);
-    if (!item) return client.send('chestReject', {});
+    if (!item) return client.send('chestReject', { reason: 'empty' });
     this.addRewardItem(rec.prof, item.id, item.count);
     this.dirtyPlayers.add(rec.token);
     if (key.startsWith('overworld:')) this.dirtyChests = true;
     this.sendChest(client, key);
     client.send('chestTx', { action: 'withdraw', id: item.id, count: item.count });
+  }
+  handleChestMode(client, m) {
+    const key = this.chestKeyForPlayer(client, m);
+    if (!key || !m) return client.send('chestReject', { reason: 'near' });
+    if (!this.canToggleChestSupply(client, key)) {
+      const reason = this.chestSupplyModeReason(client, key) || 'owner';
+      return client.send('chestReject', { reason: reason === 'owner' ? 'supply_toggle_owner' : 'supply_' + reason });
+    }
+    const rec = this.getChestRecord(key);
+    if (!rec) return client.send('chestReject', { reason: 'supply_toggle_owner' });
+    if (m.supply === true) rec.supply = true;
+    else delete rec.supply;
+    this.chests.set(key, rec);
+    if (key.startsWith('overworld:')) this.dirtyChests = true;
+    this.sendChest(client, key);
+    client.send('chestModeResult', { key, supply: rec.supply === true });
   }
   furnaceOkForPlayer(client, m) {
     const p = this.state.players.get(client.sessionId);

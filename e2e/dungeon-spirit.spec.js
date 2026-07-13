@@ -1,0 +1,50 @@
+const { test, expect } = require('@playwright/test');
+
+test.afterEach(async ({ page }) => {
+  await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
+});
+
+test('a defeated dungeon player remains immobile as a spirit until choosing town', async ({ page }) => {
+  test.setTimeout(120_000);
+  const suffix = Date.now().toString(36);
+  await page.addInitScript(() => {
+    localStorage.setItem('bc_onboarding_done_v7', '1');
+    localStorage.setItem('bc_ability_tutorial_done_v2', '1');
+    localStorage.setItem('bc_introcut', '1');
+    localStorage.setItem('bc_gatecut_v1', '1');
+  });
+  await page.goto('/?e2e=1');
+  await page.locator('#authuser').fill('dungeon_spirit_' + suffix);
+  await page.locator('#authpass').fill('correct horse dungeon spirit');
+  await page.locator('#playername').fill('SpiritTester');
+  await page.locator('#registerbtn').click();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+
+  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', {
+    action: 'prepareERankDungeon', dungeonId: 'mossbound_cellar', requestId: 'prepare',
+  }));
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === 'mossbound_cellar'))).toBeTruthy();
+  const gate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === 'mossbound_cellar'));
+  expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gate.id);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);
+  await page.getByRole('button', { name: 'READY', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
+
+  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'becomeDungeonSpirit', requestId: 'die' }));
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.isDungeonSpirit())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.hasLocalSpiritVisual())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.spiritCount)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.aliveCount)).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.wipe)).toBe(true);
+  await expect(page.getByRole('button', { name: 'RETURN TO TOWN' })).toBeVisible();
+  const deathPos = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.selfPosition());
+  await page.evaluate(pos => window.__BLOCKCRAFT_E2E__.send('move', { x: pos.x + 8, y: pos.y, z: pos.z + 8, yaw: 0 }), deathPos);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.selfPosition())).toEqual(deathPos);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
+
+  await page.locator('#dungeonspirit').click();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('blockcraft');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.hasLocalSpiritVisual())).toBe(false);
+});

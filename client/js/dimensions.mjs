@@ -1019,7 +1019,7 @@ function makeGateMesh(col){
   const beam=new THREE.Mesh(new THREE.CylinderGeometry(.25,.5,46,8,1,true),
     new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:.09, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide}));
   beam.position.y=23; g.add(beam);
-  g.userData={ring, disc};
+  g.userData={ring, disc, beam};
   return g;
 }
 function gateKindLabel(kind){
@@ -1052,15 +1052,71 @@ function makeGateLabel(rank, kind, shard){
   sp.scale.set(3.6,1.2,1);
   return sp;
 }
+function gateTimerText(expiresAt){
+  const ms=(expiresAt||0)-Date.now();
+  if(!expiresAt||ms>24*3600*1000) return '';
+  if(ms<=0) return 'Gate breaching';
+  const total=Math.ceil(ms/1000), m=Math.floor(total/60), s=total%60;
+  return 'Collapses in '+m+':'+String(s).padStart(2,'0');
+}
+function gateUrgency(expiresAt){
+  const ms=(expiresAt||0)-Date.now();
+  if(!expiresAt||ms>24*3600*1000)return 'stable';
+  if(ms<=0)return 'breach';
+  if(ms<=60000)return 'critical';
+  if(ms<=180000)return 'warning';
+  return 'stable';
+}
+function makeGateTimerLabel(text, urgency='stable'){
+  const c=document.createElement('canvas'); c.width=192; c.height=40;
+  const g=c.getContext('2d');
+  g.font='bold 18px Courier New';
+  g.textAlign='center';
+  const critical=urgency==='critical'||urgency==='breach', warning=urgency==='warning';
+  g.fillStyle=critical?'rgba(32,5,8,.84)':warning?'rgba(26,15,4,.78)':'rgba(16,8,8,.74)';
+  g.fillRect(12,7,168,26);
+  g.strokeStyle=critical?'rgba(255,54,54,.78)':warning?'rgba(255,190,74,.62)':'rgba(255,122,88,.38)';
+  g.lineWidth=2; g.strokeRect(12,7,168,26);
+  g.fillStyle=critical?'#ffe66b':warning?'#ffd68a':'#ffdfba';
+  g.fillText(text,96,27);
+  const tex=new THREE.CanvasTexture(c);
+  tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false}));
+  sp.position.y=5.05;
+  sp.scale.set(3.6,.75,1);
+  return sp;
+}
+function disposeSprite(sp){
+  if(!sp) return;
+  const mat=sp.material, map=mat&&mat.map;
+  if(map&&map.dispose) map.dispose();
+  if(mat&&mat.dispose) mat.dispose();
+}
+function setGateTimerLabel(local){
+  const text=gateTimerText(local.expiresAt);
+  if(!text){
+    if(local.timerLabel){ local.grp.remove(local.timerLabel); disposeSprite(local.timerLabel); local.timerLabel=null; local.timerLabelText=''; local.timerUrgency=''; }
+    return;
+  }
+  const urgency=gateUrgency(local.expiresAt);
+  if(local.timerLabel && local.timerLabelText===text && local.timerUrgency===urgency) return;
+  if(local.timerLabel){ local.grp.remove(local.timerLabel); disposeSprite(local.timerLabel); }
+  local.timerLabel=makeGateTimerLabel(text, urgency);
+  local.timerLabelText=text;
+  local.timerUrgency=urgency;
+  local.grp.add(local.timerLabel);
+}
 function setGateLabel(local){
   const kind=local.kind||'public';
   const shard=local.shard||null;
   const key=local.rank+':'+kind+':'+(shard?shard.plus+','+(shard.mods||[]).join(','):'');
-  if(local.label && local.labelKey===key) return;
-  if(local.label) local.grp.remove(local.label);
-  local.label=makeGateLabel(local.rank, kind, shard);
-  local.labelKey=key;
-  local.grp.add(local.label);
+  if(!(local.label && local.labelKey===key)){
+    if(local.label){ local.grp.remove(local.label); disposeSprite(local.label); }
+    local.label=makeGateLabel(local.rank, kind, shard);
+    local.labelKey=key;
+    local.grp.add(local.label);
+  }
+  setGateTimerLabel(local);
 }
 function spawnGate(){
   if(!gateSystemUnlocked()) return;
@@ -1117,6 +1173,7 @@ function dungeonMods(dgn){ return dgn&&dgn.shard&&Array.isArray(dgn.shard.mods) 
 function hasAffix(dgn,name){ return dungeonMods(dgn).includes(name); }
 // dark, desaturated cousins of the rank gate colors — every rank gets its own base atmosphere
 const DUNGEON_RANK_MOOD=[0x081006,0x060e15,0x130d04,0x130704,0x120510];
+const DUNGEON_THEME_MOOD={mine:0x100b05,crypt:0x050d13,overgrown:0x071108};
 function dungeonMoodColor(dgn){
   const mods=dungeonMods(dgn);
   if(mods.includes('Sanguine')||mods.includes('Grievous')||mods.includes('Bursting')) return 0x16070c;
@@ -1124,6 +1181,8 @@ function dungeonMoodColor(dgn){
   if(mods.includes('Volatile')||mods.includes('Explosive')||mods.includes('Bolstering')) return 0x190b05;
   if(mods.includes('Quaking')||mods.includes('Fortified')) return 0x100d09;
   if(mods.includes('Empowered')||mods.includes('Tyrannical')||mods.includes('Frenzied')) return 0x120817;
+  const theme=dgn&&dgn.definition&&dgn.definition.theme;
+  if(DUNGEON_THEME_MOOD[theme]) return DUNGEON_THEME_MOOD[theme];
   return DUNGEON_RANK_MOOD[(dgn&&dgn.rank)|0]||0x070811;
 }
 function affixMat(col,opacity){
@@ -1176,6 +1235,90 @@ function addWallBanner(x,y,z,w,h,col,rot){
   m.rotation.y=rot||0;
   m.userData.banner={baseY:y,phase:hash2(x*13,z*17)*Math.PI*2};
   return dDecor(m);
+}
+function addVariantRoomDecor(dgn,rm,index,floor,top){
+  const theme=dgn&&dgn.definition&&dgn.definition.theme;
+  if(!theme) return;
+  const x=rm.x,z=rm.z,rx=rm.rx||rm.r,rz=rm.rz||rm.r,isBoss=rm.type==='boss';
+  if(theme==='mine'){
+    const timber=new THREE.MeshLambertMaterial({color:0x4b2f18}),iron=new THREE.MeshLambertMaterial({color:0x555b63});
+    for(const side of [-1,1]){
+      const post=new THREE.Mesh(new THREE.BoxGeometry(.28,top-floor-.35,.28),timber);
+      post.position.set(x+side*(rx-.65),floor+(top-floor)/2,z);dDecor(post);
+    }
+    const lintel=new THREE.Mesh(new THREE.BoxGeometry(rx*2-1,.28,.3),timber);
+    lintel.position.set(x,top-.42,z);dDecor(lintel);
+    if(rm.main&&!isBoss){
+      for(let k=-2;k<=2;k++){
+        const sleeper=new THREE.Mesh(new THREE.BoxGeometry(2.2,.08,.18),timber);
+        sleeper.position.set(x,floor+.08,z+k*.72);dDecor(sleeper);
+      }
+      for(const sx of [-.72,.72]){
+        const rail=new THREE.Mesh(new THREE.BoxGeometry(.08,.09,3.4),iron);
+        rail.position.set(x+sx,floor+.14,z);dDecor(rail);
+      }
+    }
+    if(rm.type==='vault'||isBoss){
+      const cart=new THREE.Group();
+      const tub=new THREE.Mesh(new THREE.BoxGeometry(1.25,.55,.8),iron);tub.position.y=.55;cart.add(tub);
+      for(const sx of [-.42,.42])for(const sz of [-.32,.32]){const wheel=new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.1,8),iron);wheel.rotation.z=Math.PI/2;wheel.position.set(sx,.22,sz);cart.add(wheel);}
+      cart.position.set(x+Math.min(2,rx*.3),floor,z+Math.min(2,rz*.3));dDecor(cart);
+    }
+  }else if(theme==='crypt'){
+    const stone=new THREE.MeshLambertMaterial({color:0x404b56}),blue=0x65c7e8;
+    for(const side of [-1,1]){
+      const pillar=new THREE.Mesh(new THREE.BoxGeometry(.55,top-floor-.25,.55),stone);
+      pillar.position.set(x+side*(rx-.65),floor+(top-floor)/2,z);dDecor(pillar);
+      const cap=new THREE.Mesh(new THREE.BoxGeometry(.82,.24,.82),stone);cap.position.set(pillar.position.x,top-.25,z);dDecor(cap);
+    }
+    for(const side of [-1,1]){
+      const candle=new THREE.Group();
+      const wax=new THREE.Mesh(new THREE.CylinderGeometry(.09,.11,.42,8),new THREE.MeshLambertMaterial({color:0xd8d2bd}));wax.position.y=.21;candle.add(wax);
+      const flame=new THREE.Mesh(new THREE.BoxGeometry(.11,.18,.11),new THREE.MeshBasicMaterial({color:blue}));flame.position.y=.52;candle.add(flame);
+      candle.position.set(x+side*Math.min(rx-1,2.2),floor,z-rz+.8);dDecor(candle);
+    }
+    if(isBoss){addFloorCircle(x,z,Math.max(2,Math.min(rx,rz)*.58),blue,.22);for(let k=0;k<6;k++){const a=k/6*Math.PI*2;addFloorCircle(x+Math.cos(a)*3,z+Math.sin(a)*3,.22,blue,.38);}}
+  }else if(theme==='overgrown'){
+    const rootMat=new THREE.MeshLambertMaterial({color:0x273d20}),capCols=[0x9fddb0,0xd8b35d,0x7fbf90];
+    for(let k=0;k<(isBoss?9:5);k++){
+      const a=hash2(x+k*17,z+index)*Math.PI*2,len=.8+hash2(x*3+k,z)*1.7;
+      const root=new THREE.Mesh(new THREE.BoxGeometry(.16,.14,len),rootMat);
+      root.position.set(x+(hash2(k+x,z)-.5)*rx*1.55,floor+.1,z+(hash2(k+z,x)-.5)*rz*1.55);root.rotation.y=a;dDecor(root);
+    }
+    for(let k=0;k<(isBoss?7:3);k++){
+      const grp=new THREE.Group(),stem=new THREE.Mesh(new THREE.CylinderGeometry(.05,.08,.32,7),new THREE.MeshLambertMaterial({color:0xc7c2a5}));stem.position.y=.16;grp.add(stem);
+      const cap=new THREE.Mesh(new THREE.SphereGeometry(.18,8,5),new THREE.MeshBasicMaterial({color:capCols[k%capCols.length]}));cap.scale.y=.45;cap.position.y=.37;grp.add(cap);
+      grp.position.set(x+(hash2(k*13+x,z)-.5)*rx*1.55,floor,z+(hash2(k*19+z,x)-.5)*rz*1.55);dDecor(grp);
+    }
+    if(isBoss)addFloorCircle(x,z,Math.max(2,Math.min(rx,rz)*.6),0x65c878,.22);
+  }
+}
+function addBossArenaIdentityDecor(dgn,rm,floor,top){
+  const arena=rm&&rm.bossArena, rank=Math.max(0,Math.min(4,(dgn&&dgn.rank)|0));
+  if(!arena) return;
+  const x=rm.x,z=rm.z,rx=rm.rx||rm.r||6,rz=rm.rz||rm.r||6;
+  const colors=[0xff9b4a,0x8ed7ff,0xffd166,0x70e000,0xff4d8d], col=colors[rank]||0xff5a3a;
+  if(arena.id==='learnable_open'){
+    addFloorCircle(x,z,Math.max(3,Math.min(rx,rz)-2),col,.18);
+  }else if(arena.id==='volley_lanes'){
+    for(const lane of [-1,0,1]){
+      const strip=new THREE.Mesh(new THREE.BoxGeometry(rx*1.55,.025,.18),affixMat(col,.22));
+      strip.position.set(x,floor+.135,z+lane*1.15);dDecor(strip);
+    }
+    for(const sx of [-1,1])for(const sz of [-1,1])addFloorCircle(x+sx*Math.max(3,rx*.48),z+sz*Math.max(2,rz*.32),.55,col,.2);
+  }else if(arena.id==='positioning_checks'){
+    addFloorCircle(x,z,3,0x8ef6ff,.2);
+    addFloorCircle(x,z,Math.max(5,Math.min(rx,rz)-1),col,.2);
+  }else if(arena.id==='control_pressure'){
+    for(const sx of [-1,1])for(const sz of [-1,1])addFloorCircle(x+sx*Math.max(3,rx-4),z+sz*Math.max(3,rz-4),1.25,0xa7f3d0,.22);
+    addFloorCircle(x,z,Math.max(4,Math.min(rx,rz)-2),0x70e000,.14);
+  }else if(arena.id==='layered_mechanics'){
+    addFloorCircle(x,z,3,0x8ef6ff,.18);
+    addFloorCircle(x,z,Math.max(5,Math.min(rx,rz)-1),col,.18);
+    for(const sx of [-1,1])for(const sz of [-1,1])addFloorCircle(x+sx*Math.max(4,rx-4),z+sz*Math.max(4,rz-4),1.1,0xa7f3d0,.2);
+  }
+  const label=makeTextSprite(String(arena.label||'Boss arena').toUpperCase(),col);
+  label.position.set(x,top+.25,z-rz+.9);label.scale.set(4.2,1,1);dDecor(label);
 }
 function addHallLantern(x,ceilY,z){
   const grp=new THREE.Group();
@@ -1256,6 +1399,10 @@ function placeDungeonDecor(dgn){
     gl.position.set(wx,FLOOR+2.2,wz); gl.scale.set(3.4,3.4,1);
     gl.userData.pulse={base:.3,phase:hash2(wx,wz)*6.28};
     dDecor(gl);
+    if(dgn.definition&&dgn.definition.name){
+      const title=makeTextSprite(dgn.definition.name.toUpperCase(),rankCol);
+      title.position.set(e.x,FLOOR+3.45,e.z+(erz-.45));title.scale.set(4.4,1.05,1);dDecor(title);
+    }
   }
   dgn.rooms.forEach((rm,ri2)=>{
     const isBoss=rm.type==='boss', x0=rm.x, z0=rm.z, rx=rm.rx||rm.r, rz=rm.rz||rm.r, r=rm.r||Math.max(rx,rz), top=FLOOR+(rm.h||(isBoss?5:4));
@@ -1344,6 +1491,7 @@ function placeDungeonDecor(dgn){
       const chain=new THREE.Mesh(new THREE.BoxGeometry(.08,top-FLOOR-.7,.08),chainMat);
       chain.position.set(x0+(hash2(x0,ri2)-.5)*rx, FLOOR+(top-FLOOR)/2+.2, z0+(hash2(z0,ri2)-.5)*rz); dDecor(chain);
     }
+    addVariantRoomDecor(dgn,rm,ri2,FLOOR,top);
     if(hasAffix(dgn,'Volatile')){
       for(let k=0;k<2;k++){
         addFloorCrack(x0+(hash2(k+x0,z0)-.5)*rx*1.35,z0+(hash2(k+z0,x0)-.5)*rz*1.35,1.8+hash2(k,ri2)*1.4,0xff5a1f,hash2(k+x0,ri2)*Math.PI,.62);
@@ -1396,6 +1544,7 @@ function placeDungeonDecor(dgn){
       }
     }
     if(isBoss){
+      addBossArenaIdentityDecor(dgn,rm,FLOOR,top);
       if(hasAffix(dgn,'Tyrannical')){
         const tyr=new THREE.Mesh(new THREE.TorusGeometry(Math.max(2.2,Math.min(rx,rz)*.65),.08,8,44),affixMat(0xff264d,.68));
         tyr.rotation.x=Math.PI/2; tyr.position.set(x0,FLOOR+.12,z0); dDecor(tyr);
@@ -1467,7 +1616,8 @@ function updateBossUI(){
   if(!b || b.hp<=0){ if(bossBar.style.display!=='none'){bossBar.style.display='none'; bossMark.style.display='none';} return; }
   bossBar.style.display='block';
   bossFill.style.width=(Math.max(0,Math.min(1,b.hp/b.max))*100)+'%';
-  bossName.textContent=(dungeon.shard?(dungeon.shard.name+' +'+dungeon.shard.plus+' '):'')+((RANKS[dungeon.rank]?RANKS[dungeon.rank].n+'-RANK ':'')+'BOSS');
+  const namedBoss=dungeon.definition&&dungeon.definition.boss;
+  bossName.textContent=(dungeon.shard?(dungeon.shard.name+' +'+dungeon.shard.plus+' '):'')+(namedBoss||((RANKS[dungeon.rank]?RANKS[dungeon.rank].n+'-RANK ':'')+'BOSS'));
   // objective marker: project boss to screen, clamp to edge when off-screen
   _bossVec.set(b.x, b.y+2.2, b.z);
   const behind=_camTmp.copy(_bossVec).applyMatrix4(camera.matrixWorldInverse).z > 0;  // camera-space z>0 = behind
@@ -1746,9 +1896,6 @@ function spawnDungeonMob(x,z,boss,ri){
   scene.add(m.grp);
   mobs.push(m);
 }
-// DungeonRoom 2c-i: opt-in flag (off by default) to route gate entry through a real `dungeon`
-// Colyseus room instead of the in-room instance. Enable with ?dungeonRoom or bc_dungeon_room=1.
-const USE_DUNGEON_ROOM=(()=>{ try{ return new URLSearchParams(location.search).has('dungeonRoom')||localStorage.getItem('bc_dungeon_room')==='1'; }catch(e){ return false; } })();
 // Clear the room-specific synced entities (remote hunters + their net mobs) before swapping the
 // live connection between the overworld `blockcraft` room and a `dungeon` room, so the destination
 // room's state.onAdd rebuilds cleanly. beginDungeon handles gates + non-net mobs on arrival.
@@ -1756,30 +1903,17 @@ function clearRoomEntitiesForSwitch(){
   for(const sid in NET.remotes) netRemoveRemote(sid);
   for(let i=mobs.length-1;i>=0;i--) if(mobs[i].net) removeMob(i);
 }
-// Switch into the dedicated DungeonRoom for a gate. Takes an explicit descriptor so it works both
-// for a walk-up entry (built from the local `gate`) and for a lobby-driven entry (the server's
-// dungeonLobbyStart payload for a ready party). Field names match DungeonRoom.gateFromOptions.
+// Switch into the dedicated DungeonRoom using the opaque admission issued by the lobby server.
 function enterDungeonRoomWith(desc){
-  if(!(NET.on && desc && desc.gateId && NETWORK.switchRoom)) return false;
+  if(!(NET.on && desc && desc.gateId && desc.ticket && NETWORK.switchRoom)) return false;
   clearRoomEntitiesForSwitch();
   NETWORK.switchRoom('dungeon', {
-    gateId:desc.gateId, seed:(desc.seed>>>0)||0, rank:desc.rank|0, kind:desc.kind||'public',
-    gateX:desc.gateX, gateY:desc.gateY, gateZ:desc.gateZ,
-    shardPlus:desc.shardPlus|0, shardName:desc.shardName||'', shardMods:desc.shardMods||'',
+    gateId:desc.gateId, ticket:desc.ticket,
   });
   return true;
 }
 function enterDungeon(){
   if(NET.on){
-    if(USE_DUNGEON_ROOM && gate && gate.id && NETWORK.switchRoom){
-      enterDungeonRoomWith({
-        gateId:gate.id, seed:gate.seed, rank:gate.rank, kind:gate.kind,
-        gateX:gate.x, gateY:gate.y, gateZ:gate.z,
-        shardPlus:(gate.shard&&gate.shard.plus)|0, shardName:(gate.shard&&gate.shard.name)||'',
-        shardMods:(gate.shard&&gate.shard.mods&&gate.shard.mods.join(','))||'',
-      });
-      return;
-    }
     NET.room.send('enterGate', { id: gate && gate.id || '' });
     return;
   }
@@ -1791,7 +1925,7 @@ function beginDungeon(ri, seed, editLog, opts){
   setTimeout(()=>{
     if(gate){ scene.remove(gate.grp); gate=null; }
     clearNetGates();
-    dungeon=generateDungeon(ri, seed);
+    dungeon=generateDungeon(ri, seed, opts.dungeonId);
     dungeon.seed=seed>>>0;
     dungeon.back=opts.back;
     dungeon.shard=opts.shard||null;
@@ -1820,7 +1954,8 @@ function beginDungeon(ri, seed, editLog, opts){
       spawnDungeonMob(dungeon.bossRoom.x, dungeon.bossRoom.z, true, ri);
     }
     SFX.portal();
-    sysMsg('You have entered the <b>'+RANKS[ri].n+'-Rank Gate</b>. Slay the boss');
+    const dungeonName=dungeon.definition&&dungeon.definition.name;
+    sysMsg('You have entered <b>'+(dungeonName||RANKS[ri].n+'-Rank Gate')+'</b>. Slay the boss');
     sleepEl.style.opacity=0;
   }, 700);
 }
@@ -1833,7 +1968,7 @@ function exitDungeon(instant){
     if(!dungeon.cleared) sysMsg('You <b>fled</b> the gate');
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
     if(NET.on && NET.dgn){
-      if(USE_DUNGEON_ROOM && NET.roomName==='dungeon' && NETWORK.returnToPrimary){
+      if(NET.roomName==='dungeon' && NETWORK.returnToPrimary){
         clearRoomEntitiesForSwitch(); NETWORK.returnToPrimary(); NET.dgn='';
       } else { NET.room.send('exitGate'); NET.dgn=''; }
     }
@@ -1887,16 +2022,20 @@ function tickGates(dt, now){
     gateTimer-=dt;
     if(gateTimer<=0) spawnGate();
   }
-  for(const [g,col] of [[gate&&gate.grp, gate&&gate.colArr], [exitPortal, [.43,.88,.42]]]){
+  for(const [g,col,local] of [[gate&&gate.grp, gate&&gate.colArr, gate], [exitPortal, [.43,.88,.42], null]]){
     if(!g) continue;
     g.userData.disc.rotation.z+=dt*1.6;
-    const pl=1+Math.sin(now/280)*.05;
+    const urgency=local?gateUrgency(local.expiresAt):'stable';
+    const urgent=urgency==='critical'||urgency==='breach', warn=urgency==='warning';
+    const pl=1+Math.sin(now/(urgent?120:warn?190:280))*(urgent ? .14 : warn ? .09 : .05);
     g.userData.ring.scale.set(pl,pl,1);
-    if(Math.random()<dt*16){
+    if(g.userData.beam)g.userData.beam.material.opacity=urgent ? .22 : warn ? .14 : .09;
+    if(g.userData.ring&&g.userData.ring.material)g.userData.ring.material.color.setHex(urgent?0xff2f2f:warn?0xffb84a:new THREE.Color(col[0],col[1],col[2]).getHex());
+    if(Math.random()<dt*(urgent?42:warn?28:16)){
       const p=g.position;
       spawnParticle({x:p.x+(Math.random()-.5)*2.4, y:p.y+.3+Math.random()*3.2, z:p.z+(Math.random()-.5)*.7,
         vx:(Math.random()-.5)*.3, vy:.5+Math.random()*.5, vz:(Math.random()-.5)*.3,
-        life:.6, grav:0, r:col[0], g:col[1], b:col[2]});
+        life:urgent ? .38 : .6, grav:0, r:urgent?1:warn?1:col[0], g:urgent ? .22 : warn ? .62 : col[1], b:urgent ? .12 : warn ? .22 : col[2]});
     }
   }
 }
@@ -1939,7 +2078,6 @@ const legacyDimensionsBindings={
   "dungeonMoodColor":{get:()=>dungeonMoodColor},
   "eclipseDashVfx":{get:()=>eclipseDashVfx},
   "enterAbilityRoom":{get:()=>enterAbilityRoom},
-  "USE_DUNGEON_ROOM":{get:()=>USE_DUNGEON_ROOM},
   "enterDungeon":{get:()=>enterDungeon},
   "enterDungeonRoomWith":{get:()=>enterDungeonRoomWith},
   "enterOnboardingRoom":{get:()=>enterOnboardingRoom},

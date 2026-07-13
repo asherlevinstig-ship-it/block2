@@ -55,7 +55,14 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
   }
   function showTelegraph(fx={}){
     if(!telegraph)return;
-    const cues={warn:['SLAM — DODGE',true],cwind:['CHARGE — SIDESTEP',true],swind:['SPIKES — KEEP MOVING',true],quakewarn:['QUAKE — CLEAR THE RING',false],growl:['ATTACK INCOMING',false]};
+    const cues={
+      warn:['SLAM - DODGE',true],slamWarn:['SLAM - LEAVE THE CIRCLE',true],
+      cwind:['CHARGE - SIDESTEP',true],swind:['SPIKES - KEEP MOVING',true],
+      meleeWarn:[(fx.label||'MELEE')+' - DODGE OUT',true],
+      rangedWarn:[fx.quick?'QUICK SHOT - BREAK LINE':'ARROW DRAW - SIDESTEP',false],
+      volleyWarn:['VOLLEY - LEAVE THE LANES',true],
+      quakewarn:['QUAKE - CLEAR THE RING',false],growl:['ATTACK INCOMING',false],
+    };
     const cue=cues[fx.t];if(!cue)return;
     telegraph.textContent=cue[0];telegraph.className=cue[1]?'urgent':'';
     clearTimeout(telegraphTimer);telegraphTimer=setTimeout(()=>telegraph.classList.add('hidden'),cue[1]?730:920);

@@ -8,7 +8,11 @@ export const PROGRESSION_ERRORS = Object.freeze({
   offer: 'That contract offer is no longer available',
 });
 
-export const PROGRESSION_FOCUS_STATES = Object.freeze(['e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
+export const PROGRESSION_FOCUS_STATES = Object.freeze([
+  'first_road_ready', 'first_e_gate',
+  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
+]);
 export const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 export const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 export const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
@@ -97,7 +101,16 @@ export function bindProgressionMessages(room, api) {
     if (typeof message.jobXp === 'number') api.setJobXp(Math.max(0, message.jobXp | 0), message.job);
     api.setContract(api.clampContract(message.contract));
     const after = api.jobLevel(api.getJobXp(message.job));
-    if (after > before) api.onJobLevel(after, message.job);
+    const milestones = Array.isArray(message.milestones) ? message.milestones : [];
+    const presented = new Set();
+    for (const milestone of milestones) {
+      const level = milestone && (milestone.level | 0);
+      if (!level) continue;
+      presented.add(level);
+      if (api.onJobMilestone) api.onJobMilestone(message.job, milestone);
+      else api.onJobLevel(level, message.job);
+    }
+    if (after > before) for (let level = before + 1; level <= after; level++) if (!presented.has(level)) api.onJobLevel(level, message.job);
     if (!wasReady && api.contractReady()) api.onContractReady();
     api.refresh();
   });

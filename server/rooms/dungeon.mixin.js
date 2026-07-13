@@ -2,7 +2,7 @@
 // Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
   BOLSTER_DMG, BOLSTER_HP, BOLSTER_MAX_STACKS, BOLSTER_RADIUS,
-  BOSS_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_OF, GATE_DISTANCE_BANDS,
+  BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_OF, GATE_DISTANCE_BANDS,
   I, SHARD_ITEM_IDS, SHARD_TIERS, SOLO_KEYS, TEAM_KEYS, rollShardMods, townDistance,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
@@ -11,9 +11,11 @@ const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
 const { DungeonInstance } = require('./dungeonInstance');
-const { GATE_INTERACT_RANGE, gateEncounterPreview, gateReadinessForProfile, gateRoleForProfile } = require('./gate-readiness');
+const { GATE_INTERACT_RANGE, gateEncounterPreview, gateReadinessForProfile, gateRoleForProfile, gateProfileSignals, gatePartyReadinessSummary } = require('./gate-readiness');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { issueDungeonAdmission } = require('./dungeon-admission');
+const MAX_ACTIVE_GATE_BREACHES = 3;
 
 class DungeonMixin {
   // Dungeon / gate lifecycle state, co-located with the mixin that owns it.
@@ -23,6 +25,8 @@ class DungeonMixin {
     this.gateSeq = 0;
     this.gateTtls = new Map();
     this.gateLootedChests = new Map();
+    this.gateBreaches = new Map();
+    this.gateBreachScars = new Map();
     this.dungeonPingAt = new Map();
     this.gateTimer = 40;       // countdown to the next public gate spawn (sim-loop driven)
     this.gateTtl = 0;
@@ -37,21 +41,119 @@ class DungeonMixin {
         const hp = this.playerHp.get(sid) || { hp: 0, max: 1 };
         const token = this.tokens.get(sid), profile = token && this.profiles.get(token);
         const contribution = this.bossContrib.get(inst.id)?.get(sid) || { damage: 0, support: 0 };
-        party.push({ sid, name: p.name, lvl: p.lvl, team: p.team || '', hp: Math.max(0, Math.ceil(hp.hp)), maxHp: Math.max(1, Math.ceil(hp.max)), downed: hp.hp <= 0, role: gateRoleForProfile(profile || {}), contribution: Math.round((contribution.damage || 0) + (contribution.support || 0)) });
+        const spirit = !!p.spirit;
+        const downed = hp.hp <= 0;
+        party.push({ sid, name: p.name, lvl: p.lvl, team: p.team || '', x: p.x, y: p.y, z: p.z, hp: Math.max(0, Math.ceil(hp.hp)), maxHp: Math.max(1, Math.ceil(hp.max)), downed, spirit, state: spirit ? 'spirit' : downed ? 'downed' : 'alive', role: gateRoleForProfile(profile || {}), contribution: Math.round((contribution.damage || 0) + (contribution.support || 0)) });
       }
     });
-    let bossAlive = false;
-    this.state.mobs.forEach(m => { if (m.dgn === inst.id && m.kind === 'boss' && m.hp > 0) bossAlive = true; });
+    let bossAlive = false, boss = null;
+    this.state.mobs.forEach(m => { if (m.dgn === inst.id && m.kind === 'boss' && m.hp > 0) { bossAlive = true; boss = m; } });
     const looted = this.gateLootedChests.get(inst.id)?.size || 0;
+    const unopenedChests = this.unopenedDungeonChests(inst).slice(0, 8);
+    const roomProgress = inst.roomProgress || { total: 0, cleared: 0 };
+    const totalPlayers = Math.max(inst.originalPlayers ? inst.originalPlayers.size : 0, inst.players ? inst.players.size : 0, party.length);
+    const aliveCount = party.filter(m => m.state === 'alive').length;
+    const spiritCount = party.filter(m => m.state === 'spirit').length;
+    const downedCount = party.filter(m => m.state === 'downed').length;
+    const returnedCount = Math.max(0, totalPlayers - party.length);
     return {
       id: inst.id,
       rank: inst.rank,
       kind: inst.kind || 'public',
       party,
+      totalPlayers,
+      activeCount: party.length,
+      aliveCount,
+      spiritCount,
+      downedCount,
+      returnedCount,
+      wipe: party.length > 0 && aliveCount === 0,
       bossAlive,
+      boss: boss ? this.dungeonBossStatusPayload(boss) : null,
       cleared: !!inst.cleared,
+      roomsCleared: Math.max(0, roomProgress.cleared | 0),
+      roomTotal: Math.max(0, roomProgress.total | 0),
+      bossGateState: typeof inst.bossGateState === 'function' ? inst.bossGateState() : (inst.cleared ? 'defeated' : 'open'),
+      bossRoom: inst.bossRoom ? { x: inst.bossRoom.x, z: inst.bossRoom.z } : null,
+      exit: inst.entrance ? { x: inst.entrance.x, z: inst.entrance.z } : null,
+      unopenedChests,
       remainingChests: Math.max(0, (inst.lootChestTotal || 0) - looted),
     };
+  }
+  dungeonBossStatusPayload(boss) {
+    const hp = Math.max(0, Math.ceil(boss.hp || 0));
+    const maxHp = Math.max(1, Math.ceil(boss.maxHp || 1));
+    const pct = hp / maxHp;
+    const phase = boss.enraged || pct <= .2 ? 4 : pct <= .33 ? 3 : pct <= .66 ? 2 : 1;
+    return {
+      x: boss.x, y: boss.y, z: boss.z,
+      hp,
+      maxHp,
+      pct: Math.round(pct * 100),
+      phase,
+      phaseLabel: boss.enraged || phase === 4 ? 'Enraged' : 'Phase ' + phase,
+      state: boss.state || 'chase',
+      enraged: !!boss.enraged,
+      name: boss.displayName || 'Gate Boss',
+    };
+  }
+  bossMasterySpec(rank = 0) {
+    const specs = [
+      { tag: 'E-rank Fundamentals', focus: 'slam, charge, and safe-zone ring', reasons: ['boss_slam', 'boss_charge', 'grave_ring'] },
+      { tag: 'D-rank Volley Lesson', focus: 'first ranged pressure', reasons: ['arrow', 'boss_charge'] },
+      { tag: 'C-rank Positioning Lesson', focus: 'rings and ground spikes', reasons: ['grave_ring', 'boss_spikes'] },
+      { tag: 'B-rank Control Lesson', focus: 'roots and control pressure', reasons: ['boss_control_roots', 'keeper_roots', 'blighted_roots', 'drowned_tide'] },
+      { tag: 'A/S-rank Layered Lesson', focus: 'layered follow-up mechanics', reasons: ['boss_slam', 'boss_charge', 'grave_ring', 'boss_spikes', 'boss_control_roots', 'keeper_roots', 'blighted_roots', 'drowned_tide', 'ossuary_wave', 'falling_rock'] },
+    ];
+    return specs[Math.max(0, Math.min(4, rank | 0))] || specs[0];
+  }
+  isBossMasteryReason(reason = '') {
+    return ['boss_melee', 'boss_slam', 'boss_charge', 'boss_spikes', 'grave_ring', 'falling_rock', 'keeper_roots', 'boss_control_roots', 'drowned_tide', 'ossuary_wave', 'blighted_roots', 'arrow'].includes(String(reason || '').replace(/_arrow$/, ''));
+  }
+  rememberDungeonBossMechanicHit(client, damage, reason) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || !p.dgn || damage <= 0 || !this.isBossMasteryReason(reason)) return;
+    const inst = this.instances[p.dgn];
+    if (!inst || inst.cleared || !inst.bossMastery) return;
+    const key = String(reason || 'combat').replace(/_arrow$/, '');
+    const rec = inst.bossMastery.hitsBySid.get(client.sessionId) || { total: 0, damage: 0, byReason: {} };
+    rec.total += 1;
+    rec.damage += Math.max(0, damage | 0);
+    rec.byReason[key] = (rec.byReason[key] | 0) + 1;
+    inst.bossMastery.hitsBySid.set(client.sessionId, rec);
+    inst.bossMastery.partyHits = (inst.bossMastery.partyHits | 0) + 1;
+  }
+  recordDungeonBossDeathReason(client, reason = 'combat') {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || !p.dgn) return;
+    const inst = this.instances[p.dgn];
+    if (!inst || !inst.bossMastery) return;
+    const key = String(reason || 'combat').replace(/_arrow$/, '');
+    inst.bossMastery.deathsByReason.set(key, (inst.bossMastery.deathsByReason.get(key) || 0) + 1);
+  }
+  dungeonMasteryResult(inst, client = null) {
+    if (!inst) return null;
+    const spec = this.bossMasterySpec(inst.rank);
+    const sid = client && client.sessionId;
+    const rec = sid && inst.bossMastery && inst.bossMastery.hitsBySid.get(sid) || { total: 0, damage: 0, byReason: {} };
+    const lessonHits = spec.reasons.reduce((sum, r) => sum + (rec.byReason[r] | 0), 0);
+    const partyHits = inst.bossMastery ? inst.bossMastery.partyHits | 0 : 0;
+    let topReason = '', topDeaths = 0;
+    if (inst.bossMastery) for (const [reason, count] of inst.bossMastery.deathsByReason.entries()) if (count > topDeaths) { topDeaths = count; topReason = reason; }
+    const noDeaths = (inst.deathCount | 0) === 0;
+    const clean = lessonHits === 0 && noDeaths;
+    const bonus = clean ? { gold: 8 + (inst.rank | 0) * 4, iron: 1 + Math.max(0, inst.rank | 0) } : null;
+    const lines = [
+      clean ? 'Clean lesson: no deaths and no ' + spec.focus + ' hits.' : 'Lesson hits taken: ' + lessonHits + ' (' + spec.focus + ').',
+      partyHits ? 'Party avoidable boss hits: ' + partyHits + '.' : 'Party avoided every tracked boss mechanic hit.',
+    ];
+    if (topReason) lines.push('Wipe training: most lethal mechanic was ' + this.combatReasonLabel(topReason) + '.');
+    return { tag: spec.tag, focus: spec.focus, clean, bonus, hitCount: rec.total | 0, lessonHits, partyHits, deaths: inst.deathCount | 0, topDeath: topReason ? this.combatReasonLabel(topReason) : '', lines };
+  }
+  unopenedDungeonChests(inst) {
+    if (!inst) return [];
+    const looted = this.gateLootedChests.get(inst.id) || new Set();
+    return (inst.lootChestLocations || []).filter(ch => ch && !looted.has(ch.key)).map(ch => ({ x: ch.x, y: ch.y, z: ch.z }));
   }
   sendDungeonStatus(dgn) {
     const inst = this.instances[dgn];
@@ -61,6 +163,33 @@ class DungeonMixin {
       const p = this.state.players.get(c.sessionId);
       if (p && p.dgn === dgn) c.send('dungeonStatus', payload);
     }
+  }
+  dungeonResultPayload(inst, outcome = 'cleared', reason = '') {
+    if (!inst) return null;
+    const status = this.dungeonStatusPayload(inst) || {};
+    const looted = this.gateLootedChests.get(inst.id)?.size || 0;
+    const def = inst.definition || {};
+    const plus = inst.shardPlus | 0;
+    return {
+      outcome,
+      reason: reason || '',
+      id: inst.id,
+      rank: inst.rank | 0,
+      kind: inst.kind || 'public',
+      dungeonId: inst.dungeonId || '',
+      dungeonName: def.name || '',
+      bossName: def.boss || 'Gate Boss',
+      clearMs: Math.max(0, Date.now() - (inst.startedAt || Date.now())),
+      deaths: Math.max(0, inst.deathCount | 0),
+      spirits: status.spiritCount | 0,
+      returned: status.returnedCount | 0,
+      partySize: Math.max(status.totalPlayers | 0, status.party ? status.party.length : 0),
+      chestsOpened: looted,
+      chestTotal: inst.lootChestTotal | 0,
+      bossAlive: !!status.bossAlive,
+      mastery: this.dungeonMasteryResult(inst, null),
+      shard: plus > 0 ? { plus, name: inst.shardName || '', mods: (inst.shardMods || '').split(',').filter(Boolean) } : null,
+    };
   }
 
   // ---------------- party dungeon instances ----------------
@@ -133,6 +262,7 @@ class DungeonMixin {
       g.z = raw.z;
       g.rank = Math.max(0, Math.min(4, raw.rank | 0));
       g.seed = raw.seed >>> 0;
+      g.dungeonId = canonicalDungeonId(g.rank, g.seed, raw.dungeonId);
       g.kind = kind;
       g.owner = (g.kind === 'solo' || g.kind === 'team' || g.kind === 'shard') ? (cleanToken(raw.owner) || '') : '';
       g.team = (g.kind === 'team' || g.kind === 'shard') ? this.cleanTeamId(raw.team) : '';
@@ -143,6 +273,7 @@ class DungeonMixin {
       }
       g.refundItem = Math.max(0, raw.refundItem | 0);
       g.refundOwner = cleanToken(raw.refundOwner) || '';
+      g.expiresAt = raw.expiresAt;
       g.active = true;
       this.state.gates.set(g.id, g);
       this.gateTtls.set(g.id, raw.expiresAt);
@@ -154,12 +285,13 @@ class DungeonMixin {
     this.mirrorPrimaryGate();
     return count;
   }
-  createGate({ x, y, z, rank, kind, owner, team, ttl, shardPlus, shardName, shardMods, refundItem, refundOwner }) {
+  createGate({ x, y, z, rank, kind, owner, team, ttl, shardPlus, shardName, shardMods, refundItem, refundOwner, dungeonId }) {
     const g = new Gate();
     g.x = x; g.y = y; g.z = z;
     g.rank = Math.max(0, Math.min(4, rank | 0));
     g.id = 'g' + (++this.gateSeq);
     g.seed = (Math.random() * 4294967295) >>> 0;
+    g.dungeonId = canonicalDungeonId(g.rank, g.seed, dungeonId);
     g.kind = ['public', 'solo', 'team', 'shard'].includes(kind) ? kind : 'public';
     g.owner = owner || '';
     g.team = this.cleanTeamId(team || '');
@@ -168,9 +300,10 @@ class DungeonMixin {
     g.shardMods = Array.isArray(shardMods) ? shardMods.join(',') : (shardMods || '');
     g.refundItem = Math.max(0, refundItem | 0);
     g.refundOwner = cleanToken(refundOwner) || '';
+    g.expiresAt = Date.now() + Math.max(15, ttl || 75) * 1000;
     g.active = true;
     this.state.gates.set(g.id, g);
-    this.gateTtls.set(g.id, Date.now() + Math.max(15, ttl || 75) * 1000);
+    this.gateTtls.set(g.id, g.expiresAt);
     this.gateLootedChests.set(g.id, new Set());
     this.dirtyGates = true;
     this.mirrorPrimaryGate();
@@ -286,13 +419,214 @@ class DungeonMixin {
     this.dirtyGates = true;
     this.mirrorPrimaryGate();
   }
+  breachExpiredGate(id) {
+    const g = this.state.gates.get(id);
+    const inst = this.instances && this.instances[id];
+    if (!g || !inst || inst.cleared) return this.expireGate(id);
+    if (!this.gateBreaches) this.gateBreaches = new Map();
+    this.pruneGateBreachesForNew(g.rank | 0);
+    const breach = {
+      id, gateId: id, x: g.x, y: g.y, z: g.z, rank: g.rank | 0,
+      bossId: '', bossName: inst.definition && inst.definition.boss || 'Gate Boss',
+      mobIds: [], originalTokens: [], rewarded: false, startedAt: Date.now(), expiresAt: Date.now() + 15 * 60 * 1000,
+    };
+    for (const sid of [...inst.players]) {
+      const token = this.tokens && this.tokens.get(sid);
+      if (token) breach.originalTokens.push(token);
+    }
+    const breached = [];
+    this.state.mobs.forEach((m, mid) => {
+      if (!m || m.dgn !== id || m.hp <= 0) return;
+      const n = breached.length, ring = 3 + Math.floor(n / 8) * 2, a = n * 2.399;
+      const x = g.x + Math.cos(a) * ring, z = g.z + Math.sin(a) * ring;
+      const y = this.world && this.world.standHeight ? this.world.standHeight(x, z, W.WH - 2) : g.y;
+      m.x = x; m.y = y > 0 ? y : g.y; m.z = z; m.dgn = ''; m.state = m.kind === 'boss' ? 'chase' : '';
+      const meta = this.mobMeta[mid] || this.freshMeta(m.x, m.z, 4 + (inst.rank | 0), 1.4, m.kind, inst.rank, true);
+      meta.sx = meta.tx = m.x; meta.sz = meta.tz = m.z; meta.alert = true; meta.rank = inst.rank | 0; meta.gateBreach = id; meta.dayActive = true;
+      if (m.kind === 'boss') { meta.woke = true; meta.gcd = 1.2; meta.bossStyle = meta.bossStyle || inst.bossStyle || ''; meta.gateBreachBoss = true; breach.bossId = String(mid); m.displayName = 'Breached ' + breach.bossName; }
+      this.mobMeta[mid] = meta;
+      breach.mobIds.push(String(mid));
+      breached.push(m);
+    });
+    const result = this.dungeonResultPayload(inst, 'failed', 'breach');
+    for (const sid of [...inst.players]) {
+      const client = this.clients.find(c => c.sessionId === sid);
+      this.ejectFromDungeon(sid);
+      const p = this.state.players.get(sid);
+      if (client) client.send('dungeonFailed', {
+        reason: 'breach',
+        result,
+        x: p && p.x, y: p && p.y, z: p && p.z,
+      });
+    }
+    this.clearDungeonInstance(id);
+    this.expireGate(id);
+    if (breach.bossId) this.gateBreaches.set(id, breach);
+    this.broadcast('chat', { name: '[Gate]', text: 'A Gate collapsed before it was cleared. ' + breached.length + ' dungeon threat' + (breached.length === 1 ? '' : 's') + ' breached into the overworld!' });
+    this.sendSpace('', 'gateBreach', { gateId: id, x: g.x, y: g.y, z: g.z, rank: g.rank | 0, count: breached.length, bossName: breach.bossName, expiresAt: breach.expiresAt });
+  }
+  breachExternalDungeonGate(payload) {
+    if (!payload || !payload.gateId) return false;
+    const id = String(payload.gateId);
+    const g = this.state.gates.get(id);
+    if (!g) return false;
+    if (!this.gateBreaches) this.gateBreaches = new Map();
+    const rank = Math.max(0, Math.min(4, (payload.rank != null ? payload.rank : g.rank) | 0));
+    this.pruneGateBreachesForNew(rank);
+    const now = Date.now();
+    const breach = {
+      id, gateId: id, x: g.x, y: g.y, z: g.z, rank,
+      bossId: '', bossName: payload.bossName || 'Gate Boss',
+      mobIds: [], originalTokens: Array.isArray(payload.originalTokens) ? payload.originalTokens.filter(Boolean) : [],
+      rewarded: false, startedAt: now, expiresAt: now + 15 * 60 * 1000,
+    };
+    const specs = Array.isArray(payload.mobs) ? payload.mobs : [];
+    const spawned = [];
+    for (const spec of specs) {
+      if (!spec || spec.hp <= 0) continue;
+      const n = spawned.length, ring = 3 + Math.floor(n / 8) * 2, a = n * 2.399;
+      const x = g.x + Math.cos(a) * ring, z = g.z + Math.sin(a) * ring;
+      const y = this.world && this.world.standHeight ? this.world.standHeight(x, z, W.WH - 2) : g.y;
+      const m = new Mob();
+      m.x = x; m.y = y > 0 ? y : g.y; m.z = z; m.yaw = spec.yaw || 0;
+      m.hp = Math.max(1, spec.hp || 1);
+      m.maxHp = Math.max(m.hp, spec.maxHp || m.hp || 1);
+      m.kind = spec.kind || 'zombie';
+      m.dgn = '';
+      m.state = m.kind === 'boss' ? 'chase' : (spec.state || '');
+      m.variant = spec.variant || '';
+      m.bossStyle = spec.bossStyle || payload.bossStyle || '';
+      m.displayName = m.kind === 'boss' ? 'Breached ' + breach.bossName : (spec.displayName || '');
+      m.elite = !!spec.elite;
+      const mid = 'm' + (++this.mobSeq);
+      this.state.mobs.set(mid, m);
+      const meta = this.freshMeta(m.x, m.z, 4 + rank, 1.4, m.kind, rank, true);
+      meta.sx = meta.tx = m.x; meta.sz = meta.tz = m.z; meta.alert = true; meta.rank = rank; meta.gateBreach = id; meta.dayActive = true;
+      if (m.kind === 'boss') {
+        meta.woke = true; meta.gcd = 1.2; meta.bossStyle = m.bossStyle || payload.bossStyle || ''; meta.gateBreachBoss = true; breach.bossId = mid;
+      }
+      this.mobMeta[mid] = meta;
+      breach.mobIds.push(mid);
+      spawned.push(m);
+    }
+    this.expireGate(id);
+    if (breach.bossId) this.gateBreaches.set(id, breach);
+    this.broadcast('chat', { name: '[Gate]', text: 'A dedicated Gate collapsed before it was cleared. ' + spawned.length + ' dungeon threat' + (spawned.length === 1 ? '' : 's') + ' breached into the overworld!' });
+    this.sendSpace('', 'gateBreach', { gateId: id, x: g.x, y: g.y, z: g.z, rank, count: spawned.length, bossName: breach.bossName, expiresAt: breach.expiresAt });
+    return true;
+  }
+  gateBreachPayload(breach) {
+    if (!breach) return null;
+    const boss = breach.bossId ? this.state.mobs.get(breach.bossId) : null;
+    const remaining = (breach.mobIds || []).reduce((n, id) => n + (this.state.mobs.has(id) ? 1 : 0), 0);
+    return {
+      id: breach.id, gateId: breach.gateId, x: boss ? boss.x : breach.x, z: boss ? boss.z : breach.z,
+      rank: breach.rank | 0, bossId: breach.bossId || '', bossName: breach.bossName || 'Breached Gate Boss',
+      hp: boss ? boss.hp : 0, maxHp: boss ? boss.maxHp : 0, remaining, expiresAt: breach.expiresAt || 0,
+    };
+  }
+  resolveGateBreachBoss(client, mobId, mob, meta) {
+    const id = meta && meta.gateBreach;
+    const breach = id && this.gateBreaches && this.gateBreaches.get(id);
+    if (!breach) return false;
+    const rank = Math.max(0, Math.min(4, breach.rank | 0));
+    const rec = client && this.profileFor ? this.profileFor(client) : null;
+    const normal = BOSS_REWARD_BY_RANK[rank] || BOSS_REWARD_BY_RANK[0];
+    const cleanup = BREACH_CLEANUP_REWARD_BY_RANK[rank] || BREACH_CLEANUP_REWARD_BY_RANK[0];
+    const cleanupRatio = normal && normal.xp ? Math.round((cleanup.xp / normal.xp) * 100) : 0;
+    const originalParty = !!(rec && (breach.originalTokens || []).includes(rec.token));
+    if (client && !breach.rewarded && !originalParty) {
+      const items = (cleanup.items || []).map(it => ({ ...it }));
+      this.awardGrant(client, {
+        source: 'gate_breach', xp: cleanup.xp, items, rank, bossName: breach.bossName,
+        normalXp: normal.xp, cleanupRatio, noKeys: true,
+      });
+      this.recordKillProgress(client, true);
+      breach.rewarded = true;
+    } else if (client && originalParty) {
+      client.send('gateBreachRewardSkipped', { gateId: id, reason: 'original_party', bossName: breach.bossName, rank, normalXp: normal.xp, cleanupXp: cleanup.xp, cleanupRatio });
+    }
+    this.gateBreaches.delete(id);
+    if (typeof this.adjustRoadSafety === 'function') this.adjustRoadSafety(3 + rank, 'gate_breach_contained');
+    this.broadcast('chat', { name: '[Gate]', text: (client && this.state.players.get(client.sessionId) && this.state.players.get(client.sessionId).name || 'Hunters') + ' contained the breached Gate boss.' });
+    this.sendSpace('', 'gateBreachCleared', { gateId: id, x: mob.x, y: mob.y, z: mob.z, rank, bossName: breach.bossName, normalXp: normal.xp, cleanupXp: cleanup.xp, cleanupRatio, noKeys: true });
+    return true;
+  }
+  tickGateBreaches(now = Date.now()) {
+    this.pruneGateBreachScars(now);
+    if (!this.gateBreaches || !this.gateBreaches.size) return;
+    for (const [id, breach] of [...this.gateBreaches]) {
+      const bossAlive = breach.bossId && this.state.mobs.has(breach.bossId);
+      if (!bossAlive) { this.gateBreaches.delete(id); continue; }
+      if (!breach.expiresAt || breach.expiresAt > now) continue;
+      this.expireGateBreachRecord(id, breach, 'uncontained', now);
+    }
+  }
+  pruneGateBreachesForNew(rank = 0) {
+    if (!this.gateBreaches || !this.gateBreaches.size) return;
+    const active = [...this.gateBreaches.entries()].sort((a, b) => (a[1].startedAt || 0) - (b[1].startedAt || 0));
+    const sameRank = active.find(([, breach]) => (breach.rank | 0) === (rank | 0));
+    if (sameRank) this.expireGateBreachRecord(sameRank[0], sameRank[1], 'superseded', Date.now());
+    while (this.gateBreaches.size >= MAX_ACTIVE_GATE_BREACHES) {
+      const oldest = [...this.gateBreaches.entries()].sort((a, b) => (a[1].startedAt || 0) - (b[1].startedAt || 0))[0];
+      if (!oldest) break;
+      this.expireGateBreachRecord(oldest[0], oldest[1], 'overloaded', Date.now());
+    }
+  }
+  expireGateBreachRecord(id, breach, reason = 'uncontained', now = Date.now()) {
+    if (!breach) return 0;
+    let removed = 0;
+    for (const mobId of breach.mobIds || []) {
+      if (!this.state.mobs.has(mobId)) continue;
+      this.state.mobs.delete(mobId); delete this.mobMeta[mobId]; removed++;
+    }
+    if (this.gateBreaches) this.gateBreaches.delete(id);
+    const rank = Math.max(0, breach.rank | 0), ageMin = Math.max(0, Math.floor((now - (breach.startedAt || now)) / 60000));
+    const penalty = -Math.min(14, 5 + rank + Math.floor(ageMin / 3));
+    if (typeof this.adjustRoadSafety === 'function') this.adjustRoadSafety(penalty, reason === 'uncontained' ? 'gate_breach_uncontained' : 'gate_breach_' + reason);
+    this.recordGateBreachScar(id, breach, reason, penalty, now);
+    const text = reason === 'superseded'
+      ? 'A previous Gate breach was displaced by a new collapse. Road safety worsened.'
+      : reason === 'overloaded'
+        ? 'Too many Gate breaches destabilized the region. Road safety worsened.'
+        : 'An uncontained Gate breach scattered into the region. Road safety worsened.';
+    this.broadcast('chat', { name: '[Gate]', text });
+    this.sendSpace('', 'gateBreachExpired', { gateId: id, x: breach.x, y: breach.y, z: breach.z, rank, count: removed, bossName: breach.bossName, reason, penalty });
+    return removed;
+  }
+  recordGateBreachScar(id, breach, reason = 'uncontained', penalty = 0, now = Date.now()) {
+    if (!breach) return null;
+    if (!this.gateBreachScars) this.gateBreachScars = new Map();
+    const rank = Math.max(0, Math.min(4, breach.rank | 0));
+    const ttl = reason === 'uncontained' ? 12 * 60 * 1000 : 6 * 60 * 1000;
+    const scar = {
+      id: String(id), gateId: String(breach.gateId || id),
+      x: breach.x, y: breach.y, z: breach.z, rank,
+      bossName: breach.bossName || 'Escaped Gate Boss',
+      reason, penalty: penalty | 0, createdAt: now, expiresAt: now + ttl,
+    };
+    this.gateBreachScars.set(scar.id, scar);
+    return scar;
+  }
+  pruneGateBreachScars(now = Date.now()) {
+    if (!this.gateBreachScars || !this.gateBreachScars.size) return;
+    for (const [id, scar] of [...this.gateBreachScars]) if (!scar.expiresAt || scar.expiresAt <= now) this.gateBreachScars.delete(id);
+  }
+  gateBreachScarPayload(scar) {
+    if (!scar) return null;
+    return {
+      id: scar.id, gateId: scar.gateId, x: scar.x, y: scar.y, z: scar.z, rank: scar.rank | 0,
+      bossName: scar.bossName || 'Escaped Gate Boss', reason: scar.reason || 'uncontained',
+      penalty: scar.penalty | 0, expiresAt: scar.expiresAt || 0,
+    };
+  }
   dungeonLobbyPayload(lobby, viewerSid = '') {
     const g = this.state.gates.get(lobby.gateId);
     const rank = g ? (g.rank | 0) : (lobby.rank | 0);
     const shardPlus = g ? (g.shardPlus | 0) : 0;
     const baseReward = BOSS_REWARD_BY_RANK[Math.max(0, Math.min(4, rank))];
     if (!lobby.preview) {
-      const layout = g ? D.generateDungeon(rank, g.seed) : null;
+      const layout = g ? D.generateDungeon(rank, g.seed, g.dungeonId) : null;
       lobby.preview = gateEncounterPreview(g || { rank, kind: lobby.kind }, layout);
     }
     const preview = lobby.preview;
@@ -302,15 +636,22 @@ class DungeonMixin {
       if (!p) continue;
       const token = this.tokens.get(sid);
       const profile = token && this.profiles.get(token);
+      const signals = gateProfileSignals(profile || {}, rank);
       members.push({
         sid,
         name: p.name || 'Hunter',
         ready: lobby.ready.has(sid),
         leader: sid === lobby.leader,
-        readiness: gateReadinessForProfile(profile || {}, rank),
+        role: signals.role,
+        rankFit: signals.rankFit,
+        coverage: signals.coverage,
+        strengths: signals.strengths,
+        roleNote: signals.roleNote,
+        readiness: signals.readiness,
       });
     }
     const readyCount = members.reduce((n, m) => n + (m.ready ? 1 : 0), 0);
+    const partyReadiness = gatePartyReadinessSummary(members, rank, preview);
     return {
       id: lobby.id,
       gateId: lobby.gateId,
@@ -319,12 +660,36 @@ class DungeonMixin {
       rally: g ? { x: g.x, y: g.y, z: g.z } : null,
       rewardXp: Math.round(baseReward.xp * (1 + .25 * Math.max(0, shardPlus))),
       preview,
+      partyReadiness,
       members,
       readyCount,
       needed: members.length,
       leader: lobby.leader || '',
       advertised: !!lobby.advertised,
       canAdvertise: !viewerSid || viewerSid === lobby.leader,
+    };
+  }
+  dungeonLobbyFinalSummary(lobby) {
+    const payload = this.dungeonLobbyPayload(lobby, '');
+    const rankLetters = ['E', 'D', 'C', 'B', 'A'];
+    const rank = Math.max(0, Math.min(4, payload.rank | 0));
+    const focusByRank = ['basic boss tells', 'ranged pressure', 'positioning checks', 'control pressure', 'layered mechanics'];
+    const pr = payload.partyReadiness || {};
+    const warnings = Array.isArray(pr.warnings) ? pr.warnings : [];
+    const low = warnings.find(line => /crowd control/i.test(line)) ? 'low control'
+      : warnings.find(line => /sustain|healing|food/i.test(line)) ? 'low sustain'
+      : warnings.find(line => /ranged/i.test(line)) ? 'low ranged pressure'
+      : warnings.find(line => /damage/i.test(line)) ? 'low damage'
+      : warnings.find(line => /Recommended party/i.test(line)) ? 'small party'
+      : 'coverage ready';
+    const memberCount = Math.max(0, pr.memberCount | 0);
+    return {
+      line: 'Entering ' + rankLetters[rank] + '-rank Gate: ' + focusByRank[rank] + ', ' + memberCount + '/4 hunters, ' + low + '.',
+      responsibilities: [
+        'Stay together until first room.',
+        'Boss mastery starts on first boss hit.',
+        'Gate collapse timer continues outside.',
+      ],
     };
   }
   handleDungeonPing(client, m) {
@@ -368,7 +733,14 @@ class DungeonMixin {
       const leader = this.state.players.get(lobby.leader), preview = lobby.preview || gateEncounterPreview(g);
       const leaderToken = this.tokens.get(lobby.leader), leaderProfile = leaderToken && this.profiles.get(leaderToken);
       const leaderReadiness = gateReadinessForProfile(leaderProfile || {}, g.rank);
-      out.push({ gateId: g.id, rank: g.rank | 0, kind: g.kind || 'public', leaderName: leader && leader.name || 'Hunter', leaderRole: gateRoleForProfile(leaderProfile || {}), readiness: leaderReadiness.status, readinessScore: leaderReadiness.score, readinessTotal: leaderReadiness.total, members: lobby.members.size, capacity: 4, distance: Math.round(distance), difficulty: ['Initiate','Dangerous','Severe','Extreme','Cataclysmic'][g.rank | 0], recommendedParty: preview.recommendedParty });
+      const memberSignals = [...lobby.members].map(sid => {
+        const member = this.state.players.get(sid);
+        const token = this.tokens.get(sid);
+        const profile = token && this.profiles.get(token);
+        return { name: member && member.name || 'Hunter', ...gateProfileSignals(profile || {}, g.rank) };
+      });
+      const partyReadiness = gatePartyReadinessSummary(memberSignals, g.rank, preview);
+      out.push({ gateId: g.id, rank: g.rank | 0, kind: g.kind || 'public', leaderName: leader && leader.name || 'Hunter', leaderRole: gateRoleForProfile(leaderProfile || {}), readiness: leaderReadiness.status, readinessScore: leaderReadiness.score, readinessTotal: leaderReadiness.total, partyStatus: partyReadiness.status, partyWarnings: partyReadiness.warnings.slice(0, 2), partyStrengths: partyReadiness.strengths.slice(0, 3), members: lobby.members.size, capacity: 4, distance: Math.round(distance), difficulty: ['Initiate','Dangerous','Severe','Extreme','Cataclysmic'][g.rank | 0], recommendedParty: preview.recommendedParty });
     }
     return out.sort((a, b) => a.distance - b.distance).slice(0, 12);
   }
@@ -424,7 +796,7 @@ class DungeonMixin {
   }
   gateEntryPayload(g, inst) {
     return {
-      id: inst.id, seed: inst.seed, rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
+      id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
       edits: inst.edits,
       bx: g ? g.x : inst.gateX, by: g ? g.y : inst.gateY, bz: g ? g.z : inst.gateZ,
       cleared: inst.cleared,
@@ -435,18 +807,14 @@ class DungeonMixin {
   // client passes straight to NETWORK.switchRoom('dungeon', ...). `mode:'room'` disambiguates it
   // from the bare legacy start (which is followed by an in-room enterDungeon instead). Field names
   // match DungeonRoom.gateFromOptions so the whole payload is forwarded as the room's join options.
-  dungeonRoomEntryPayload(g, members = []) {
+  dungeonRoomEntryPayload(g, ticket, startInfo = null) {
     return {
       mode: 'room',
-      ticket: issueDungeonAdmission(g, members.map(sid => this.tokens && this.tokens.get(sid)).filter(Boolean)),
       gateId: g.id,
-      seed: (g.seed >>> 0) || 0,
-      rank: g.rank | 0,
-      kind: g.kind || 'public',
-      gateX: g.x, gateY: g.y, gateZ: g.z,
-      shardPlus: g.shardPlus | 0,
-      shardName: g.shardName || '',
-      shardMods: g.shardMods || '',
+      ticket,
+      startsAt: startInfo && startInfo.startsAt || 0,
+      countdownMs: startInfo && startInfo.countdownMs || 0,
+      finalSummary: startInfo && startInfo.finalSummary || null,
     };
   }
   armDungeonRecovery(client, g) {
@@ -528,12 +896,14 @@ class DungeonMixin {
   startDungeonLobby(lobby) {
     const g = this.state.gates.get(lobby.gateId);
     if (!g || !g.active) return this.disbandDungeonLobby(lobby.gateId, 'gone');
-    const roomEntry = lobby.roomEntry || new Set();
     const members = [...lobby.members];
+    const tokens = members.map(sid => this.tokens.get(sid)).filter(Boolean);
+    if (tokens.length !== members.length) return this.disbandDungeonLobby(lobby.gateId, 'auth');
+    const ticket = issueDungeonAdmission(g, tokens);
+    const startInfo = { countdownMs: 3000, startsAt: Date.now() + 3000, finalSummary: this.dungeonLobbyFinalSummary(lobby) };
     this.dungeonLobbies.delete(lobby.gateId);
     // Legacy in-room instance is created lazily and only if a flag-off member actually needs it —
     // a fully flag-on party enters the dedicated DungeonRoom and leaves no instance in the overworld.
-    let inst = null;
     for (const sid of members) {
       const c = this.clients.find(cl => cl.sessionId === sid);
       const p = this.state.players.get(sid);
@@ -541,23 +911,37 @@ class DungeonMixin {
         if (c) c.send('dungeonLobbyClosed', { gateId: g.id, reason: 'range' });
         continue;
       }
-      if (roomEntry.has(sid)) {
+      if (ticket) {
         // Flag-on: the ready hunter switches into the dedicated DungeonRoom for this gate.
         // filterBy(gateId) lands the whole ready party in one room; the overworld gate is
         // retired when that room disposes (dungeon-handoff consumeGate), not here.
-        c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, members));
-      } else {
-        if (!inst) inst = this.instances[g.id] || this.createInstance(g);
-        c.send('dungeonLobbyStart', { gateId: g.id });
-        this.enterGateInstance(c, g, inst);
+        c.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, ticket, startInfo));
       }
     }
-    this.sendDungeonStatus(g.id);   // no-op when no in-room instance was created
   }
   maybeStartDungeonLobby(lobby) {
     if (!lobby || !lobby.members.size) return;
     for (const sid of lobby.members) if (!lobby.ready.has(sid)) return;
     this.startDungeonLobby(lobby);
+  }
+  warnFirstDGatePrep(client, lobby, rank) {
+    if (!client || !lobby || (rank | 0) !== 1) return false;
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof || rec.prof.progressionFocus !== 'first_d_gate') return false;
+    if (!lobby.prepWarned) lobby.prepWarned = new Set();
+    if (lobby.prepWarned.has(client.sessionId)) return false;
+    const readiness = gateReadinessForProfile(rec.prof, rank);
+    if (readiness.ready) return false;
+    lobby.prepWarned.add(client.sessionId);
+    client.send('gatePrepWarning', {
+      rank,
+      status: readiness.status,
+      score: readiness.score,
+      total: readiness.total,
+      missing: readiness.missing.map(check => ({ id: check.id, label: check.label, hint: check.hint })),
+      next: readiness.next ? { id: readiness.next.id, label: readiness.next.label, hint: readiness.next.hint } : null,
+    });
+    return true;
   }
   enterGate(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -565,12 +949,6 @@ class DungeonMixin {
     const g = found.gate;
     if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked' });
     if (this.rateLimited(client, 'action', 5, 10)) return client.send('gateReject', { reason: 'rate' });
-    let inst = this.instances[g.id];
-    if (inst && !inst.cleared && inst.players && inst.players.size) {
-      this.enterGateInstance(client, g, inst);
-      this.sendDungeonStatus(g.id);
-      return;
-    }
     if (!this.dungeonLobbies) this.dungeonLobbies = new Map();
     this.leaveDungeonLobby(client.sessionId, false);
     let lobby = this.dungeonLobbies.get(g.id);
@@ -589,6 +967,7 @@ class DungeonMixin {
       this.dungeonLobbies.set(g.id, lobby);
     }
     lobby.members.add(client.sessionId);
+    this.warnFirstDGatePrep(client, lobby, g.rank | 0);
     this.sendDungeonLobby(lobby);
   }
   handleDungeonLobbyReady(client, m) {
@@ -609,25 +988,42 @@ class DungeonMixin {
     }
     if (m && m.ready === false) {
       lobby.ready.delete(client.sessionId);
-      if (lobby.roomEntry) lobby.roomEntry.delete(client.sessionId);
     } else {
+      this.warnFirstDGatePrep(client, lobby, lobby.rank | 0);
       lobby.ready.add(client.sessionId);
       // Remember whether this hunter wants the dedicated DungeonRoom (flag on) so startDungeonLobby
       // routes them there instead of an overworld in-room instance. Per-member so a mixed party
       // during the opt-in phase degrades gracefully rather than forcing one path on everyone.
-      if (m && m.useDungeonRoom) (lobby.roomEntry || (lobby.roomEntry = new Set())).add(client.sessionId);
-      else if (lobby.roomEntry) lobby.roomEntry.delete(client.sessionId);
     }
     this.sendDungeonLobby(lobby);
     this.maybeStartDungeonLobby(lobby);
   }
 
   createInstance(g) {
-    const d = D.generateDungeon(g.rank, g.seed);
+    const d = D.generateDungeon(g.rank, g.seed, g.dungeonId);
     const inst = new DungeonInstance(d, g, this);
     inst.lootChestTotal = this.countGeneratedDungeonChests(d.world);
+    inst.lootChestLocations = this.generatedDungeonChestLocations(d.world);
     this.instances[g.id] = inst;
     const plus = inst.shardPlus, modSet = inst.shardModSet;
+    const combat = d.definition && d.definition.combat || {};
+    const theme = d.definition && d.definition.theme || '';
+    const visualFor = (kind, role, type) => {
+      if (kind === 'skeleton') {
+        if (theme === 'crypt') return 'drowned';
+        if (theme === 'catacombs') return 'ossuary';
+        if (theme === 'vault') return 'watcher';
+        if (theme === 'blighted' || theme === 'overgrown') return 'blighted';
+        return type === 'pit' ? 'ledge' : '';
+      }
+      if (theme === 'mine') return role === 'graveguard' ? 'mine_guard' : 'miner';
+      if (theme === 'crypt') return 'drowned';
+      if (theme === 'overgrown') return 'mossbound';
+      if (theme === 'catacombs') return role === 'graveguard' ? 'ossuary_guard' : 'ossuary';
+      if (theme === 'blighted') return 'blighted';
+      if (theme === 'vault') return role === 'graveguard' ? 'vault_guard' : 'vault';
+      return role || '';
+    };
     // shard affix multipliers (Phase B): base +N scaling plus stat affixes
     const baseHp = 1 + 0.18 * plus, baseDmg = 1 + 0.12 * plus;
     let trashHpMul = baseHp, trashDmgMul = baseDmg, bossHpMul = baseHp, bossDmgMul = baseDmg;
@@ -652,24 +1048,34 @@ class DungeonMixin {
       const rm = roomOf(s.x, s.z);
       const key = rm ? rm.x + ',' + rm.z : 'loose';
       let group = byRoom.get(key);
-      if (!group) byRoom.set(key, group = { type: rm ? rm.type : 'guard', list: [] });
+      if (!group) byRoom.set(key, group = { key, type: rm ? rm.type : 'guard', x: rm ? rm.x : s.x, z: rm ? rm.z : s.z, list: [] });
       group.list.push(s);
     }
+    inst.configureRoomProgress(byRoom.values());
     for (const { type, list } of byRoom.values()) {
       list.forEach((s, i) => {
         // skeletons add ranged variety — now present from E-rank (was rank >= 1 only)
-        let skelChance = g.rank >= 1 ? .35 : .22;
-        if (type === 'guard') skelChance = i === 1 ? .85 : .12;   // a melee pack with one archer covering it
+        let skelChance = Number.isFinite(combat.skeletonChance) ? combat.skeletonChance : (g.rank >= 1 ? .35 : .22);
+        if (type === 'guard') skelChance = i === 1 ? Math.max(.72, skelChance) : Math.min(.18, skelChance);
         else if (type === 'pit') skelChance = .55;                // ledges favour ranged attackers
         else if (type === 'crypt') skelChance = .30;
+        else if (type === 'arena') skelChance = Math.max(.40, skelChance);
         const kind = Math.random() < skelChance ? 'skeleton' : 'zombie';
         // vault / treasure rooms post a tougher elite standing guard over the loot
-        const elite = (type === 'vault' || type === 'treasure') && i === 0;
+        const elite = (type === 'vault' || type === 'treasure' || (type === 'arena' && s.wave)) && i === 0;
         const id = this.addDungeonMob(g.id, s.x, s.z, kind, trashHp(kind, elite), trashDmg(elite), trashSpd(kind), d.world, g.rank);
         // The first Gate teaches the undead family in readable pairs: skeletons
         // hold range while alternating zombie roles pressure or punish greed.
-        if (g.rank === 0 && kind === 'zombie' && this.mobMeta[id]) {
-          this.mobMeta[id].undeadRole = i % 2 === 0 ? 'charger' : 'graveguard';
+        if (kind === 'zombie' && this.mobMeta[id]) {
+          const roles = combat.zombieRoles || ['charger', 'graveguard'];
+          const role = roles[i % roles.length];
+          this.mobMeta[id].undeadRole = role;
+          const mob = this.state.mobs.get(id);
+          if (mob) mob.variant = visualFor(kind, role, type);
+        }
+        if (kind === 'skeleton') {
+          const mob = this.state.mobs.get(id);
+          if (mob) mob.variant = visualFor(kind, '', type);
         }
         if (elite) {
           if (this.mobMeta[id]) this.mobMeta[id].elite = true;
@@ -678,9 +1084,15 @@ class DungeonMixin {
         }
       });
     }
-    this.addDungeonMob(g.id, d.bossRoom.x, d.bossRoom.z, 'boss',
+    const bossId = this.addDungeonMob(g.id, d.bossRoom.x, d.bossRoom.z, 'boss',
       Math.round(50 * mul * bossHpMul),
       Math.max(1, Math.round((5 + g.rank * 2) * bossDmgMul)), 1.3, d.world, g.rank);
+    if (this.mobMeta[bossId]) this.mobMeta[bossId].bossStyle = combat.bossStyle || '';
+    const boss = this.state.mobs.get(bossId);
+    if (boss) {
+      boss.bossStyle = combat.bossStyle || '';
+      boss.displayName = d.definition && d.definition.boss || '';
+    }
     return inst;
   }
 
@@ -739,7 +1151,13 @@ class DungeonMixin {
   }
   onDungeonTrashDeath(dgn, x, y, z) {
     const inst = this.instances[dgn];
-    if (!inst || !inst.hazMods || !inst.hazMods.size) return;
+    if (!inst) return;
+    const clear = typeof inst.markRoomMobKilled === 'function' ? inst.markRoomMobKilled(x, z) : null;
+    if (clear) {
+      this.sendSpace(dgn, 'dungeonRoomCleared', clear);
+      this.sendDungeonStatus(dgn);
+    }
+    if (!inst.hazMods || !inst.hazMods.size) return;
     const plus = inst.shardPlus | 0;
     if (inst.hazMods.has('Volatile')) inst.haz.vols.push({ x, y, z, t: 1.1, dmg: 4 + plus });
     if (inst.hazMods.has('Sanguine')) inst.haz.pools.push({ x, z, t: 6 });
@@ -934,12 +1352,14 @@ class DungeonMixin {
   failDungeon(dgn, reason) {
     const inst = this.instances[dgn];
     if (!inst) return;
+    const result = this.dungeonResultPayload(inst, 'failed', reason || 'wipe');
     for (const sid of [...inst.players]) {
       const client = this.clients.find(c => c.sessionId === sid);
       this.ejectFromDungeon(sid);
       const p = this.state.players.get(sid);
       if (client) client.send('dungeonFailed', {
         reason: reason || 'wipe',
+        result,
         x: p && p.x, y: p && p.y, z: p && p.z,
       });
     }
@@ -958,6 +1378,11 @@ class DungeonMixin {
       { id: I.DIAMOND, count: 1 + rank },
     ];
   }
+  bossShardDrop(rank, shardPlus = 0) {
+    if ((shardPlus | 0) > 0) return [];
+    const ri = Math.max(0, Math.min(SHARD_ITEM_IDS.length - 1, rank | 0));
+    return [{ id: SHARD_ITEM_IDS[ri], count: 1 }];
+  }
   onBossDown(dgn) {
     const inst = this.instances[dgn];
     if (!inst || inst.cleared) return;
@@ -967,6 +1392,7 @@ class DungeonMixin {
     // same gate during its remaining TTL.
     this.expireGate(dgn);
     const ri = inst.rank;
+    const result = this.dungeonResultPayload(inst, 'cleared', '');
     const reward = BOSS_REWARD_BY_RANK[ri];
     const baseLoot = {
       source: 'boss',
@@ -981,6 +1407,7 @@ class DungeonMixin {
       earned: true,
     };
     const plus = inst.shardPlus | 0;
+    baseLoot.items.push(...this.bossShardDrop(ri, plus));
     if (plus > 0) {
       baseLoot.gold = Math.round(baseLoot.gold * (1 + 0.4 * plus));
       baseLoot.xp = Math.round(baseLoot.xp * (1 + 0.25 * plus));
@@ -992,7 +1419,8 @@ class DungeonMixin {
       if (!q || q.dgn !== dgn) continue;
       const eligibility = this.bossRewardEligibility(c, inst);
       if (eligibility.ok) {
-        c.send('gateCleared', { rank: ri });
+        const mastery = this.dungeonMasteryResult(inst, c);
+        c.send('gateCleared', { rank: ri, result: { ...result, mastery } });
         const progress = this.markGateCleared(c, ri);
         const items = baseLoot.items.map(it => ({ ...it }));
         const rewardProfile=this.profileFor(c),weapon=this.rollWeaponDropForSource('gate',ri,plus,rewardProfile&&rewardProfile.prof);if(weapon)items.push(weapon);
@@ -1003,7 +1431,13 @@ class DungeonMixin {
         }
         const firstClear = this.firstClearBonusItems(ri, progress);
         for (const b of firstClear) items.push(b);
-        const loot = { ...baseLoot, items, progress: this.dungeonRewardProgress(ri, progress) };
+        const masteryBonus = mastery && mastery.bonus;
+        const loot = { ...baseLoot, items, progress: this.dungeonRewardProgress(ri, progress), result: { ...result, mastery }, mastery };
+        if (masteryBonus) {
+          loot.gold += masteryBonus.gold | 0;
+          loot.iron += masteryBonus.iron | 0;
+          loot.masteryBonus = masteryBonus;
+        }
         if (firstClear.length) {
           loot.firstClear = { rank: ri, nextRank: ri + 1 };
           this.broadcast('chat', { name: '[Gate]', text: (q.name || 'A hunter') + ' cleared their first ' + 'EDCBA'[ri] + '-Rank Gate — first-clear bonus awarded!' });
@@ -1015,6 +1449,7 @@ class DungeonMixin {
           rank: ri,
           kind: inst.kind || 'public',
           progress: this.dungeonRewardProgress(ri, null),
+          mastery: this.dungeonMasteryResult(inst, c),
         });
       }
     }

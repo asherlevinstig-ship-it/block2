@@ -1056,6 +1056,7 @@ const HUB = {
   skyport: { x: TOWN.TC - 32, z: TOWN.TC, y: TOWN.G + 24 },
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
   guild: { x: tp(54.5), z: tp(26.5) },
+  guildNoticeBoard: { x: tp(47), z: tp(26.7) },
   shrine: { x: tp(47.5), z: tp(48) },
   meditate: { x: tp(47.5), z: tp(46.5) },
   smith: { x: tp(78.5), z: tp(50) },
@@ -1693,7 +1694,7 @@ function syncDragonIncubationMesh(m){
   readyBeam.visible=!!m.ready;
   group.add(readyBeam);
   group.position.set(x+.5,y,z+.5);
-  group.userData={finishAt:m.finishAt||Date.now(), startedAt:m.startedAt||Date.now(), eggId, type:m.type||'', ready:!!m.ready, timer, readyBeam, readyFxAcc:0};
+  group.userData={finishAt:m.finishAt||Date.now(), startedAt:m.startedAt||Date.now(), eggId, type:m.type||'', gender:m.gender==='female'?'female':'male', ready:!!m.ready, timer, readyBeam, readyFxAcc:0};
   insulatorGroup.add(group);
   dragonIncubationMeshes[incubationKey(x,y,z)]=group;
 }
@@ -1887,10 +1888,15 @@ const crackMat = new THREE.MeshBasicMaterial({transparent:true, depthWrite:false
 const crack = new THREE.Mesh(new THREE.BoxGeometry(1.004,1.004,1.004), crackMat);
 crack.visible=false; crack.userData.st=-1; scene.add(crack);
 
-const LAND_BASE_PRICE = 8;
-const LAND_NEAR_TOWN_BONUS = 42;
+const LAND_BASE_PRICE = 16;
+const LAND_NEAR_TOWN_BONUS = 54;
 const LAND_FREE_RADIUS = TOWN.HS + 2;
 const LAND_PRICE_FADE = 44;
+const LAND_DORMANT_DAYS = 7;
+const LAND_ABANDONED_DAYS = 21;
+const LAND_REAL_DAY_MS = 24*60*60*1000;
+const LAND_DORMANT_MS = LAND_DORMANT_DAYS*LAND_REAL_DAY_MS;
+const LAND_ABANDONED_MS = LAND_ABANDONED_DAYS*LAND_REAL_DAY_MS;
 const claimHud = document.getElementById('claimhud');
 const landMapEl = document.getElementById('landmap');
 const landMapCanvas = document.getElementById('landmapcanvas');
@@ -1899,26 +1905,129 @@ const claimGroup = new THREE.Group();
 claimGroup.visible = false;
 scene.add(claimGroup);
 const claimOwnMat = new THREE.MeshBasicMaterial({color:0x65d46e, transparent:true, opacity:.34, depthWrite:false, side:THREE.DoubleSide});
+const claimSharedMat = new THREE.MeshBasicMaterial({color:0x58cfff, transparent:true, opacity:.30, depthWrite:false, side:THREE.DoubleSide});
 const claimOtherMat = new THREE.MeshBasicMaterial({color:0xff6868, transparent:true, opacity:.28, depthWrite:false, side:THREE.DoubleSide});
+const claimDormantMat = new THREE.MeshBasicMaterial({color:0xffb84a, transparent:true, opacity:.32, depthWrite:false, side:THREE.DoubleSide});
+const claimAbandonedMat = new THREE.MeshBasicMaterial({color:0xffd24a, transparent:true, opacity:.26, depthWrite:false, side:THREE.DoubleSide});
 const claimHoverOkMat = new THREE.MeshBasicMaterial({color:0xffd24a, transparent:true, opacity:.42, depthWrite:false, side:THREE.DoubleSide});
 const claimHoverBadMat = new THREE.MeshBasicMaterial({color:0xff4444, transparent:true, opacity:.42, depthWrite:false, side:THREE.DoubleSide});
+const claimRecommendMat = new THREE.MeshBasicMaterial({color:0x8fffd2, transparent:true, opacity:.22, depthWrite:false, side:THREE.DoubleSide});
 const claimTileGeo = new THREE.PlaneGeometry(1,1);
 claimTileGeo.rotateX(-Math.PI/2);
+const claimEdgeGeos = [
+  {dx:0,dz:-1,geo:new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-.5,.06,-.5),new THREE.Vector3(.5,.06,-.5)])},
+  {dx:1,dz:0,geo:new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(.5,.06,-.5),new THREE.Vector3(.5,.06,.5)])},
+  {dx:0,dz:1,geo:new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(.5,.06,.5),new THREE.Vector3(-.5,.06,.5)])},
+  {dx:-1,dz:0,geo:new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-.5,.06,.5),new THREE.Vector3(-.5,.06,-.5)])},
+];
+const claimOwnLineMat = new THREE.LineBasicMaterial({color:0xb9ff9f, transparent:true, opacity:.82, depthWrite:false});
+const claimSharedLineMat = new THREE.LineBasicMaterial({color:0xa6efff, transparent:true, opacity:.76, depthWrite:false});
+const claimOtherLineMat = new THREE.LineBasicMaterial({color:0xffa0a0, transparent:true, opacity:.68, depthWrite:false});
+const claimDormantLineMat = new THREE.LineBasicMaterial({color:0xffc06a, transparent:true, opacity:.88, depthWrite:false});
+const claimAbandonedLineMat = new THREE.LineBasicMaterial({color:0xffdf7a, transparent:true, opacity:.7, depthWrite:false});
+const claimOwnWeakLineMat = new THREE.LineBasicMaterial({color:0xb9ff9f, transparent:true, opacity:.22, depthWrite:false});
+const claimSharedWeakLineMat = new THREE.LineBasicMaterial({color:0xa6efff, transparent:true, opacity:.20, depthWrite:false});
+const claimOtherWeakLineMat = new THREE.LineBasicMaterial({color:0xffa0a0, transparent:true, opacity:.18, depthWrite:false});
+const claimAbandonedWeakLineMat = new THREE.LineBasicMaterial({color:0xffdf7a, transparent:true, opacity:.18, depthWrite:false});
 let claimMode = false;
+const LAND_CLAIM_OVERLAY_KEY = 'bc_land_claim_overlay_v1';
+let landClaimOverlay = false;
+try{ landClaimOverlay = localStorage.getItem(LAND_CLAIM_OVERLAY_KEY)==='1'; }catch(e){}
+const LAND_CLAIM_OVERLAY_RADIUS = 48;
 let claimHover = null;
 let claimMouse = {x: innerWidth/2, y: innerHeight/2};
 let claimCam = {x:TOWN.TC, z:TOWN.TC + TOWN.HS + 12, h:76};
 const landClaims = new Map();
+let landClaimPanelFocus = null;
 const claimHoverMesh = new THREE.Mesh(claimTileGeo, claimHoverOkMat);
 claimHoverMesh.visible = false;
 claimGroup.add(claimHoverMesh);
+const claimRecommendMesh = new THREE.Mesh(claimTileGeo.clone(), claimRecommendMat);
+claimRecommendMesh.visible = false;
+claimRecommendMesh.renderOrder = 4;
+claimGroup.add(claimRecommendMesh);
 function landKey(x,z){ return (x|0)+','+(z|0); }
 function isTownLand(x,z){ return Math.abs((x|0)-TOWN.TC)<=TOWN.HS+2 && Math.abs((z|0)-TOWN.TC)<=TOWN.HS+2; }
+function landClaimTitle(c){ return c&&c.title ? c.title : ''; }
+function landClaimOwner(c){ return c&&c.name ? c.name : 'Hunter'; }
+function landClaimPlace(c){ return landClaimTitle(c) || (landClaimOwner(c)+'\'s land'); }
+function landClaimAreaKind(size){ return (size|0)>=3 ? 'Homestead' : 'Claim'; }
+function landClaimAreaPlace(c,size=1){ return landClaimTitle(c) || (landClaimOwner(c)+'\'s '+(landClaimAreaKind(size).toLowerCase())); }
+function landClaimAccessRole(status){
+  if(!status) return 'Unknown';
+  if(status.kind==='own') return 'Owner';
+  if(status.kind==='shared') return 'Trusted';
+  if(status.kind==='other') return 'Visitor';
+  if(status.kind==='available') return 'Wilderness';
+  if(status.kind==='abandoned') return 'Reclaimable';
+  if(status.kind==='town') return 'Town';
+  if(status.kind==='border') return 'Blocked';
+  return 'Visitor';
+}
+function landClaimAccessHint(status){
+  if(!status) return '';
+  if(status.kind==='own') return 'You control permissions here.';
+  if(status.kind==='shared') return landClaimOwner(status.claim)+' trusts you to build here.';
+  if(status.kind==='other') return landClaimOwner(status.claim)+' must trust you before you can build here.';
+  if(status.kind==='available') return 'Anyone can build here until it is claimed.';
+  if(status.kind==='abandoned') return 'Protection has lapsed; anyone can build or reclaim it.';
+  return status.detail || '';
+}
+function landClaimPermissionPreview(status){
+  const build=!!(status&&status.canEdit);
+  const breakBlocks=!!(status&&status.canEdit);
+  let note='Permission required';
+  if(!status) note='Unknown land';
+  else if(status.kind==='available') note='Wilderness edits are allowed, but unprotected';
+  else if(status.kind==='abandoned') note='Protection has lapsed';
+  else if(status.kind==='own') note='Owner rights';
+  else if(status.kind==='shared') note='Trusted by '+landClaimOwner(status.claim);
+  else if(status.kind==='town') note=build?'Guild hall decor only':'Town protected';
+  else if(status.kind==='border') note='World border protected';
+  return {build,breakBlocks,note};
+}
+function landClaimPermissionPreviewHTML(status){
+  const p=landClaimPermissionPreview(status), ok=p.build&&p.breakBlocks;
+  return '<div class="land-permissions">'+
+    '<span class="'+(p.build?'ok':'bad')+'"><b>'+(p.build?'YES':'NO')+'</b> Build</span>'+
+    '<span class="'+(p.breakBlocks?'ok':'bad')+'"><b>'+(p.breakBlocks?'YES':'NO')+'</b> Break</span>'+
+    '<em>'+escHTML(p.note)+'</em>'+
+  '</div>';
+}
+function landClaimAreaKey(c){ return (c&&c.status==='abandoned'?'abandoned':c&&c.own?'own':c&&c.canEdit?'shared':'other')+':'+landClaimOwner(c)+':'+landClaimTitle(c); }
+function landClaimLifecycle(c){ return c&&c.status ? c.status : 'active'; }
+function landClaimLifecycleLabel(c){
+  const s=landClaimLifecycle(c);
+  return s==='abandoned'?'Abandoned':s==='dormant'?'Dormant':'Active';
+}
+function landClaimAgeMs(c,now=Date.now()){
+  const last=Number(c&&c.lastVisitedAt)||0;
+  return last>0?Math.max(0,now-last):0;
+}
+function landClaimTimeShort(ms){
+  ms=Math.max(0,Math.round(ms||0));
+  const day=24*60*60*1000,hour=60*60*1000,min=60*1000;
+  const d=Math.floor(ms/day), h=Math.floor((ms%day)/hour), m=Math.floor((ms%hour)/min);
+  if(d>0) return d+'d '+h+'h';
+  if(h>0) return h+'h '+m+'m';
+  return Math.max(1,m)+'m';
+}
+function landClaimUpkeepLine(c){
+  const status=landClaimLifecycle(c), age=landClaimAgeMs(c);
+  if(status==='abandoned') return 'Abandoned: reclaimable now';
+  if(status==='dormant') return 'Dormant: abandoned in '+landClaimTimeShort(LAND_ABANDONED_MS-age);
+  return 'Active: dormant in '+landClaimTimeShort(LAND_DORMANT_MS-age);
+}
 function landPrice(x,z){
   const dx=Math.abs((x|0)-TOWN.TC), dz=Math.abs((z|0)-TOWN.TC);
   const outside=Math.max(0, Math.max(dx,dz)-LAND_FREE_RADIUS);
   const near=Math.max(0, 1-outside/LAND_PRICE_FADE);
   return LAND_BASE_PRICE + Math.round(LAND_NEAR_TOWN_BONUS*near);
+}
+function landPriceForClaim(x,z){
+  const base=landPrice(x,z), adjacent=adjacentOwnClaims(x,z).length;
+  const discount=adjacent>0?Math.max(1,Math.round(base*.2)):0;
+  return {base, price:Math.max(1,base-discount), discount, adjacent};
 }
 function surfaceY(x,z){
   for(let y=WH-1;y>=0;y--){
@@ -1928,6 +2037,8 @@ function surfaceY(x,z){
   return TOWN.G+1.035;
 }
 const GUILD_DECOR_BLOCKS_C=new Set([B.TORCH,B.LANTERN,B.CAMPFIRE,B.TABLE,B.BED,B.CHEST,B.FURNACE]);
+const BASE_SETUP_BLOCKS_C=new Set([B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.TABLE,B.FURNACE]);
+let baseSetupPlacementNoticeAt=0;
 function guildFloorY0Client(floor){ return TOWN.G+6+(((floor|0)-1)*5); }
 function guildFloorInteriorForLocal(x,y,z){
   const mine=guildHallState&&guildHallState.guild;
@@ -1940,26 +2051,224 @@ function canBuildHere(x,z,y,placeId){
   if(isLavaBorderLand(x|0,z|0)) return false;
   if(isTownLand(x,z)) return guildFloorInteriorForLocal(x|0,y|0,z|0) && GUILD_DECOR_BLOCKS_C.has(placeId|0);
   const c=landClaims.get(landKey(x,z));
-  return !c || c.own;
+  return !c || c.status==='abandoned' || c.canEdit || c.own;
 }
 function canBreakHere(x,z,y,blockId){
   if(isLavaBorderLand(x|0,z|0)) return false;
   if(isTownLand(x,z)) return guildFloorInteriorForLocal(x|0,y|0,z|0) && GUILD_DECOR_BLOCKS_C.has(blockId|0);
   const c=landClaims.get(landKey(x,z));
-  return !c || c.own;
+  return !c || c.status==='abandoned' || c.canEdit || c.own;
+}
+function baseSetupStatus(){
+  const status={storage:false,light:false,station:false,claimed:false};
+  landClaims.forEach((c,key)=>{
+    if(!c||c.status==='abandoned'||(!c.own&&!c.canEdit)) return;
+    status.claimed=true;
+    const parts=key.split(',');
+    const x=parts[0]|0, z=parts[1]|0;
+    for(let y=0;y<WH;y++){
+      const id=getB(x,y,z);
+      if(id===B.CHEST) status.storage=true;
+      else if(id===B.TORCH||id===B.LANTERN||id===B.CAMPFIRE) status.light=true;
+      else if(id===B.TABLE||id===B.FURNACE) status.station=true;
+      if(status.storage&&status.light&&status.station) break;
+    }
+  });
+  status.ready=!!(status.storage&&status.light&&status.station);
+  status.checks=[
+    {id:'storage',label:'Storage',done:status.storage},
+    {id:'light',label:'Light',done:status.light},
+    {id:'station',label:'Station',done:status.station},
+  ];
+  return status;
+}
+function explainBaseSetupPlacement(x,z,y,blockId){
+  if(progressionFocus!=='first_base_setup'||!BASE_SETUP_BLOCKS_C.has(blockId|0)) return false;
+  const s=landClaimStatusAt(x,z,y,blockId);
+  if(!s||(s.kind!=='available'&&s.kind!=='abandoned')) return false;
+  const now=Date.now();
+  if(now-baseSetupPlacementNoticeAt<2500) return true;
+  baseSetupPlacementNoticeAt=now;
+  const name=ITEMS[blockId]&&ITEMS[blockId].name?ITEMS[blockId].name:'that block';
+  sysMsg('Base setup: place <b>'+escHTML(name)+'</b> inside your claimed land.');
+  eventLog('Base setup blocks only count inside editable claimed land. Press L to show your claims.','[Land]');
+  return true;
+}
+function landClaimStatusAt(x,z,y=player?player.pos.y:0,blockId=0){
+  x|=0; z|=0; y|=0; blockId|=0;
+  if(isLavaBorderLand(x,z)) return {kind:'border',x,z,label:'World border',canEdit:false,detail:'The world border cannot be claimed or edited.'};
+  if(isTownLand(x,z)){
+    const decor=guildFloorInteriorForLocal(x,y,z) && (!blockId || GUILD_DECOR_BLOCKS_C.has(blockId));
+    return {kind:'town',x,z,label:'Town protected',canEdit:decor,detail:decor?'Your guild hall floor allows decor placement here.':'Town land is protected. Only fellowship decor can be placed inside your claimed guild hall floor.'};
+  }
+  const c=landClaims.get(landKey(x,z));
+  if(!c) return {kind:'available',x,z,label:'Available',canEdit:true,price:landPriceForClaim(x,z).price,detail:'Unclaimed wilderness can be built on. Buying it protects it from other players.'};
+  if(c.status==='abandoned') return {kind:'abandoned',x,z,label:c.title||('Abandoned by '+c.name),canEdit:true,price:landPriceForClaim(x,z).price,claim:c,detail:'This claim has been abandoned. It can be built on or bought to reset ownership.'};
+  const group=c.own?connectedOwnedClaimGroup(x,z):null;
+  const dormant=c.status==='dormant';
+  if(c.own) return {kind:'own',x,z,label:(dormant?'Dormant: ':'')+(c.title||'Owned by you'),canEdit:true,claim:c,group,detail:'You own this '+(group&&group.size>1?group.size+' tile area':'claim')+'. '+(dormant?'Visit it to refresh protection activity.':'Trusted hunters can build and break here.')};
+  if(c.canEdit) return {kind:'shared',x,z,label:(dormant?'Dormant: ':'')+(c.title||('Shared by '+c.name)),canEdit:true,claim:c,detail:dormant?'This shared claim is dormant but still protected. Your visit refreshes it.':(c.title?c.title+' is shared by '+c.name+'.':'The owner has trusted you to build and break here.')};
+  return {kind:'other',x,z,label:(dormant?'Dormant: ':'')+(c.title||('Owned by '+c.name)),canEdit:false,claim:c,detail:(dormant?'This claim is dormant but still protected. ':'')+'You need permission from '+(c.name||'the owner')+' before building or breaking here.'};
+}
+function showLandEditDenied(x,z,action='edit',y=player?player.pos.y:0,blockId=0){
+  const s=landClaimStatusAt(x,z,y,blockId);
+  const verb=action==='break'?'break blocks':action==='farm'?'farm here':'build here';
+  if(s.kind==='border') sysMsg('The <b>world border</b> is protected');
+  else if(s.kind==='town') sysMsg(s.detail);
+  else if(s.kind==='other') sysMsg('Cannot '+verb+': <b>'+escHTML(landClaimOwner(s.claim))+'</b> must trust you before you can build here.');
+  else sysMsg('Cannot '+verb+' on this land.');
+  eventLog(s.detail+' Press L, then click owned land to inspect permissions.','[Land]');
+  return s;
 }
 function ownClaimCount(){
   let n=0;
   landClaims.forEach(c=>{ if(c.own) n++; });
   return n;
 }
+function editableClaimCount(){
+  let n=0;
+  landClaims.forEach(c=>{ if(c.own||c.canEdit) n++; });
+  return n;
+}
+const LAND_DIRS=[[1,0],[-1,0],[0,1],[0,-1]];
+function ownClaimAt(x,z){
+  const c=landClaims.get(landKey(x,z));
+  return !!(c&&c.own&&c.status!=='abandoned');
+}
+function adjacentOwnClaims(x,z){
+  const out=[];
+  for(const [dx,dz] of LAND_DIRS) if(ownClaimAt(x+dx,z+dz)) out.push({x:x+dx,z:z+dz});
+  return out;
+}
+function ownClaimComponentKey(x,z,seen){
+  const start=landKey(x,z);
+  if(seen.has(start)) return seen.get(start);
+  const stack=[{x,z}], cells=[];
+  while(stack.length){
+    const cur=stack.pop(), key=landKey(cur.x,cur.z);
+    if(seen.has(key)) continue;
+    seen.set(key,start); cells.push(key);
+    for(const [dx,dz] of LAND_DIRS){
+      const nx=cur.x+dx, nz=cur.z+dz, nk=landKey(nx,nz);
+      if(!seen.has(nk)&&ownClaimAt(nx,nz)) stack.push({x:nx,z:nz});
+    }
+  }
+  const id=cells.sort()[0]||start;
+  for(const key of cells) seen.set(key,id);
+  return id;
+}
+function connectedClaimGroup(x,z,predicate){
+  const start=landClaims.get(landKey(x,z));
+  if(!start || (predicate&&!predicate(start))) return null;
+  const stack=[{x,z,c:start}], seen=new Set(), entries=[];
+  const modeKey=start.own?'owned-area':landClaimAreaKey(start);
+  while(stack.length){
+    const cur=stack.pop(), key=landKey(cur.x,cur.z);
+    if(seen.has(key)) continue;
+    const c=landClaims.get(key);
+    if(!c || (predicate&&!predicate(c)) || (c.own?'owned-area':landClaimAreaKey(c))!==modeKey) continue;
+    seen.add(key); entries.push({x:cur.x,z:cur.z,c,key});
+    for(const [dx,dz] of LAND_DIRS) stack.push({x:cur.x+dx,z:cur.z+dz});
+  }
+  entries.sort((a,b)=>(a.x-b.x)||(a.z-b.z));
+  return entries.length ? {key:entries[0].key, entries, c:start, size:entries.length, title:landClaimPlace(start)} : null;
+}
+function connectedOwnedClaimGroup(x,z){
+  return connectedClaimGroup(x,z,c=>c.own);
+}
+function ownedClaimGroups(){
+  const groups=[], seen=new Set();
+  for(const entry of landClaimEntries(c=>c.own)){
+    const key=landKey(entry.x,entry.z);
+    if(seen.has(key)) continue;
+    const group=connectedOwnedClaimGroup(entry.x,entry.z);
+    if(!group) continue;
+    for(const item of group.entries) seen.add(item.key);
+    groups.push(group);
+  }
+  return groups;
+}
+function analyzeClaimPurchase(x,z){
+  x|=0; z|=0;
+  const pricing=landPriceForClaim(x,z), price=pricing.price, existing=landClaims.get(landKey(x,z));
+  let blocked='', blockedDetail='';
+  if(isLavaBorderLand(x,z)){ blocked='World border'; blockedDetail='The world border cannot be claimed.'; }
+  else if(isTownLand(x,z)){ blocked='Town protected'; blockedDetail='Town land cannot be claimed.'; }
+  else if(player&&Math.hypot(x+.5-player.pos.x,z+.5-player.pos.z)>64){ blocked='Too far away'; blockedDetail='Move closer before buying this tile.'; }
+  else if(existing&&existing.status!=='abandoned'){ blocked=existing.own?'Already yours':existing.canEdit?'Shared claim':'Already claimed'; blockedDetail=existing.own?'Click to manage access.':existing.canEdit?(existing.title||existing.name)+' is shared land.':'Owned by '+(existing.title||existing.name||'another hunter')+'.'; }
+  else if(gold<price){ blocked='Need more gold'; blockedDetail='You need '+price+' gold and have '+gold+'.'; }
+  const neighbors=adjacentOwnClaims(x,z);
+  const seen=new Map(), groups=new Set(), groupSizes=new Map();
+  for(const n of neighbors){
+    const key=ownClaimComponentKey(n.x,n.z,seen);
+    groups.add(key);
+    if(!groupSizes.has(key)){
+      const group=connectedOwnedClaimGroup(n.x,n.z);
+      groupSizes.set(key,group?group.size:1);
+    }
+  }
+  const relation=existing&&existing.status==='abandoned'?'Reclaims abandoned land':groups.size>=2?'Connects '+groups.size+' claim groups':groups.size===1?'Expands your land':'New claim';
+  let largestAfter=1;
+  if(!(existing&&existing.status==='abandoned')&&groups.size){
+    largestAfter=1;
+    for(const key of groups) largestAfter+=groupSizes.get(key)||0;
+  }
+  return {x,z,price,basePrice:pricing.base,discount:pricing.discount,existing,blocked,blockedDetail,canBuy:!blocked,neighbors:neighbors.length,groups:groups.size,relation,largestAfter,postGold:Math.max(0,gold-price)};
+}
+function recommendedClaimTile(){
+  let best=null;
+  const px=player?player.pos.x:claimCam.x, pz=player?player.pos.z:claimCam.z;
+  landClaims.forEach((c,key)=>{
+    if(!c.own) return;
+    const [x,z]=key.split(',').map(Number);
+    for(const [dx,dz] of LAND_DIRS){
+      const nx=x+dx, nz=z+dz, nk=landKey(nx,nz);
+      if(nx<0||nz<0||nx>=WX||nz>=WX||landClaims.has(nk)||isTownLand(nx,nz)||isLavaBorderLand(nx,nz)) continue;
+      const analysis=analyzeClaimPurchase(nx,nz);
+      const score=(analysis.canBuy?0:10000)+Math.hypot((nx+.5)-px,(nz+.5)-pz)+analysis.price*.05-(analysis.groups>=2?10:analysis.groups?4:0)-analysis.discount*.08;
+      if(!best||score<best.score) best={x:nx,z:nz,price:analysis.price,relation:analysis.relation,canBuy:analysis.canBuy,score};
+    }
+  });
+  if(best) return best;
+  const cx=Math.floor(player?player.pos.x:claimCam.x), cz=Math.floor(player?player.pos.z:claimCam.z);
+  let fallback=null;
+  for(let r=1;r<=96&&!fallback;r++) for(let dz=-r;dz<=r&&!fallback;dz++) for(let dx=-r;dx<=r;dx++){
+    if(Math.max(Math.abs(dx),Math.abs(dz))!==r) continue;
+    const x=cx+dx,z=cz+dz;
+    if(x<0||z<0||x>=WX||z>=WX||landClaims.has(landKey(x,z))||isTownLand(x,z)||isLavaBorderLand(x,z)) continue;
+    const analysis=analyzeClaimPurchase(x,z);
+    fallback={x,z,price:analysis.price,relation:analysis.relation,canBuy:analysis.canBuy,score:0};
+  }
+  return fallback;
+}
+function firstLandClaimGuidanceHTML(){
+  const rec=recommendedClaimTile();
+  if(!rec) return '<b>First claim route:</b> Leave town and choose a tile marked <b>Available</b>. Town tiles and border tiles cannot be claimed.';
+  const analysis=analyzeClaimPurchase(rec.x,rec.z);
+  const shortfall=Math.max(0,(analysis.price|0)-(gold|0));
+  const blocked=analysis.blockedDetail||analysis.blocked||'Choose a nearby available wilderness tile.';
+  let next='';
+  if(analysis.canBuy) next='Ready to buy now.';
+  else if((analysis.blocked||'')==='Need more gold') next='Shortfall: '+shortfall+' gold. Earn gold from Mara quests, hunting, contracts, or selling spare materials.';
+  else next=blocked+' Move outside town and pick a tile marked Available.';
+  return '<b>First claim route:</b> Recommended tile <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+'.<br>Price: <b>'+analysis.price+' gold</b> - You have <b>'+gold+'</b>.<br>'+escHTML(next);
+}
 function updateLandMinimap(){
-  const hasOwn = ownClaimCount()>0;
-  const mapUtility = utilityEquipped('minimap') || utilityEquipped('world_map');
-  const visible = !calmTownHud() && (hasOwn || discoveredIds.size>0 || mapUtility) && (locked || claimMode || uiOpen || statOpen || qOpen);
+  const hasOwn = editableClaimCount()>0;
+  const miniMap = utilityEquipped('minimap'), worldMap = utilityEquipped('world_map');
+  const mapUtility = miniMap || worldMap;
+  const weatherMapReq={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'},currentWeather=weather||'clear',now=Date.now();
+  const isWeatherDiscovery=s=>!!(s&&weatherMapReq[s.type]);
+  const weatherSites=smallDiscoveries.filter(isWeatherDiscovery);
+  const weatherMapped=weatherSites.filter(s=>discoveredIds.has(s.id)).length;
+  const weatherHarvested=weatherSites.filter(s=>claimedDiscoveryIds.has(s.id)).length;
+  const dragonMarkers = globalThis.BlockcraftDragonMap && typeof globalThis.BlockcraftDragonMap.stayMarkers === 'function'
+    ? globalThis.BlockcraftDragonMap.stayMarkers()
+    : [];
+  const visible = !calmTownHud() && (hasOwn || landClaimOverlay || discoveredIds.size>0 || mapUtility || (mapUtility && dragonMarkers.length>0)) && (locked || claimMode || uiOpen || statOpen || qOpen);
   landMapEl.classList.toggle('hidden', !visible);
-  landMapEl.classList.toggle('worldmap', utilityEquipped('world_map') && !claimMode);
-  const mt=landMapEl.querySelector('.mt');if(mt)mt.textContent=(utilityEquipped('world_map')?'WORLD MAP ':'EXPLORATION MAP ')+discoveredIds.size;
+  landMapEl.classList.toggle('worldmap', worldMap && !claimMode);
+  const mt=landMapEl.querySelector('.mt');if(mt)mt.textContent=(worldMap?'WORLD MAP ':miniMap?'MINI MAP ':'EXPLORATION MAP ')+discoveredIds.size+(weatherMapped?' · WEATHER '+weatherHarvested+'/'+weatherMapped:'')+(dragonMarkers.length?' · DRAGON '+dragonMarkers.length:'');
   landMapCtx.clearRect(0,0,landMapCanvas.width,landMapCanvas.height);
   landMapCtx.fillStyle='#020407';
   landMapCtx.fillRect(0,0,landMapCanvas.width,landMapCanvas.height);
@@ -1968,28 +2277,157 @@ function updateLandMinimap(){
     landMapCtx.fillRect(i,0,1,landMapCanvas.height);
     landMapCtx.fillRect(0,i,landMapCanvas.width,1);
   }
+  const mapPx=x=>Math.floor(x/WX*landMapCanvas.width), mapPz=z=>Math.floor(z/WX*landMapCanvas.height);
+  const localMapRange=170;
+  const weatherSenseRange=280;
+  const hasWeatherSense=utilityUnlocked('weather_sense');
+  const nearPlayer=s=>!!(s&&Number.isFinite(s.x)&&Number.isFinite(s.z)&&Math.hypot(s.x-player.pos.x,s.z-player.pos.z)<=localMapRange);
+  const nearMapMarker=s=>!!(s&&Number.isFinite(s.x)&&Number.isFinite(s.z)&&Math.hypot(s.x-player.pos.x,s.z-player.pos.z)<=(isWeatherDiscovery(s)&&hasWeatherSense?weatherSenseRange:localMapRange));
+  const discoveredOrHinted=s=>!!(s&&s.id&&(discoveredIds.has(s.id)||hintedDiscoveryIds.has(s.id)));
+  const cartographerMapTarget=(s,col='#7dd3fc',label='')=>{
+    if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z))return;
+    const x=mapPx(s.x),z=mapPz(s.z),pulse=1+Math.floor((now/300)%2);
+    landMapCtx.strokeStyle=col;landMapCtx.lineWidth=2;
+    landMapCtx.strokeRect(x-4-pulse,z-4-pulse,8+pulse*2,8+pulse*2);
+    landMapCtx.beginPath();landMapCtx.moveTo(x-6,z);landMapCtx.lineTo(x+6,z);landMapCtx.moveTo(x,z-6);landMapCtx.lineTo(x,z+6);landMapCtx.stroke();
+    if(label&&worldMap&&!claimMode){landMapCtx.font='bold 8px Courier New';landMapCtx.fillStyle=col;landMapCtx.fillText(label,x+6,z-5);}
+  };
+  const drawDangerRings=()=>{
+    if(!worldMap||claimMode)return;
+    const cx=mapPx(WORLD_TC),cz=mapPz(WORLD_TC);
+    landMapCtx.save();landMapCtx.lineWidth=1;
+    for(let i=1;i<DANGER_RINGS.length;i++){
+      const r=Math.round(DANGER_RINGS[i].min/WX*landMapCanvas.width);
+      landMapCtx.strokeStyle=i===1?'rgba(255,210,74,.25)':i===2?'rgba(255,139,82,.28)':'rgba(255,93,93,.3)';
+      landMapCtx.beginPath();landMapCtx.arc(cx+.5,cz+.5,r,0,Math.PI*2);landMapCtx.stroke();
+    }
+    landMapCtx.restore();
+  };
+  drawDangerRings();
   landClaims.forEach((c,key)=>{
-    if(!c.own) return;
+    if(!landClaimOverlay&&!c.own&&!c.canEdit&&c.status!=='abandoned') return;
     const [x,z]=key.split(',').map(Number);
-    const px=Math.floor(x/WX*landMapCanvas.width);
-    const pz=Math.floor(z/WX*landMapCanvas.height);
-    landMapCtx.fillStyle='#6ee06a';
+    const px=mapPx(x);
+    const pz=mapPz(z);
+    const dormant=c.status==='dormant'&&(c.own||c.canEdit);
+    landMapCtx.fillStyle=c.status==='abandoned'?'#ffd24a':dormant?'#ffb84a':c.own?'#6ee06a':(c.canEdit?'#58cfff':'#ff6868');
     landMapCtx.fillRect(px,pz,2,2);
-    landMapCtx.fillStyle='rgba(255,210,74,.7)';
+    if(dormant){
+      landMapCtx.strokeStyle='rgba(255,184,74,.9)';
+      landMapCtx.strokeRect(px-1,pz-1,4,4);
+    }
+    landMapCtx.fillStyle=dormant?'rgba(255,255,255,.8)':'rgba(255,210,74,.7)';
     landMapCtx.fillRect(px,pz,1,1);
   });
-  const marker=(s,col,size)=>{if(!discoveredIds.has(s.id)&&!hintedDiscoveryIds.has(s.id))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=hintedDiscoveryIds.has(s.id)&&!discoveredIds.has(s.id)?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);};
+  const drawWeatherMarker=(s,col,size,hinted)=>{
+    const x=mapPx(s.x),z=mapPz(s.z),active=weatherMapReq[s.type]===currentWeather,harvested=claimedDiscoveryIds.has(s.id),spotted=discoveredIds.has(s.id);
+    const pulse=active&&!harvested?1+Math.floor((now/260)%3):0;
+    landMapCtx.save();
+    if(hinted&&!spotted){
+      landMapCtx.fillStyle='#ffd24a';landMapCtx.fillRect(x,z,size,size);
+      landMapCtx.strokeStyle='rgba(255,210,74,.85)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);
+      landMapCtx.restore();return;
+    }
+    if(harvested){
+      landMapCtx.fillStyle=col;landMapCtx.fillRect(x-1,z-1,size+1,size+1);
+      landMapCtx.strokeStyle='rgba(154,210,107,.8)';landMapCtx.strokeRect(x-3,z-3,size+5,size+5);
+      landMapCtx.restore();return;
+    }
+    if(active){
+      landMapCtx.fillStyle=col;landMapCtx.fillRect(x-1,z-1,size+2,size+2);
+      landMapCtx.strokeStyle='rgba(255,255,255,.85)';landMapCtx.strokeRect(x-3-pulse,z-3-pulse,size+6+pulse*2,size+6+pulse*2);
+      landMapCtx.strokeStyle=col;landMapCtx.strokeRect(x-5-pulse,z-5-pulse,size+10+pulse*2,size+10+pulse*2);
+      landMapCtx.restore();return;
+    }
+    landMapCtx.globalAlpha=.36;
+    landMapCtx.fillStyle=col;landMapCtx.fillRect(x,z,size,size);
+    landMapCtx.globalAlpha=.55;
+    landMapCtx.strokeStyle='rgba(160,174,190,.9)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);
+    landMapCtx.restore();
+  };
+  const marker=(s,col,size)=>{
+    if(!discoveredOrHinted(s))return;
+    if(miniMap&&!worldMap&&!hintedDiscoveryIds.has(s.id)&&!nearMapMarker(s))return;
+    const x=mapPx(s.x),z=mapPz(s.z),hinted=hintedDiscoveryIds.has(s.id)&&!discoveredIds.has(s.id);
+    if(isWeatherDiscovery(s)){drawWeatherMarker(s,col,size,hinted);return;}
+    landMapCtx.fillStyle=hinted?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);
+    if(hinted){landMapCtx.strokeStyle='rgba(255,210,74,.85)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);}
+  };
   for(const s of regionalLandmarks)marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
+  if(miniMap&&!worldMap){
+    for(const s of smallDiscoveries){
+      if(discoveredIds.has(s.id)||claimedDiscoveryIds.has(s.id)||weatherMapReq[s.type]!==currentWeather||!nearMapMarker(s))continue;
+      const x=mapPx(s.x),z=mapPz(s.z);
+      landMapCtx.fillStyle=discoveryColors[s.type]||'#fff';landMapCtx.fillRect(x-1,z-1,3,3);
+      landMapCtx.strokeStyle='rgba(255,255,255,.55)';landMapCtx.strokeRect(x-3,z-3,7,7);
+    }
+  }
+  if(worldMap&&!claimMode){
+    const sites=[...regionalLandmarks,...smallDiscoveries];
+    const contractSite=regionalContract&&regionalContract.targetId?sites.find(s=>s.id===regionalContract.targetId):null;
+    if(contractSite)cartographerMapTarget(contractSite,'#7dd3fc','C');
+    const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&treasure.targetId?sites.find(s=>s.id===treasure.targetId):null;
+    if(treasureSite)cartographerMapTarget(treasureSite,'#ffd24a','T');
+  }
   if(mapUtility&&overworldActivity){
-    const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z))return;const x=Math.floor(s.x/WX*landMapCanvas.width),z=Math.floor(s.z/WX*landMapCanvas.height);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
+    const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z)||miniMap&&!worldMap&&!nearPlayer(s))return;const x=mapPx(s.x),z=mapPz(s.z);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
     dynamic(overworldActivity.encounter,overworldActivity.encounter&&overworldActivity.encounter.type==='wounded_hunter'?'#7edc9a':'#ff7b57',4);
+    dynamic(overworldActivity.gateBreach,'#ff2f2f',5);
+    if(overworldActivity.gateBreach&&Number.isFinite(overworldActivity.gateBreach.x)&&Number.isFinite(overworldActivity.gateBreach.z)&&(!miniMap||worldMap||nearPlayer(overworldActivity.gateBreach))){
+      const bx=mapPx(overworldActivity.gateBreach.x),bz=mapPz(overworldActivity.gateBreach.z);
+      const pulse=1+Math.floor((now/220)%2);
+      landMapCtx.strokeStyle='rgba(255,47,47,.95)';landMapCtx.lineWidth=2;landMapCtx.strokeRect(bx-5-pulse,bz-5-pulse,10+pulse*2,10+pulse*2);
+      landMapCtx.strokeStyle='rgba(255,226,90,.8)';landMapCtx.lineWidth=1;landMapCtx.strokeRect(bx-2,bz-2,4,4);
+    }
+    dynamic(overworldActivity.gateScar,'#ff9f2f',4);
+    if(overworldActivity.gateScar&&Number.isFinite(overworldActivity.gateScar.x)&&Number.isFinite(overworldActivity.gateScar.z)&&(!miniMap||worldMap||nearPlayer(overworldActivity.gateScar))){
+      const sx=mapPx(overworldActivity.gateScar.x),sz=mapPz(overworldActivity.gateScar.z);
+      landMapCtx.strokeStyle='rgba(255,159,47,.88)';landMapCtx.lineWidth=1;landMapCtx.strokeRect(sx-4,sz-4,8,8);
+      landMapCtx.beginPath();landMapCtx.moveTo(sx-5,sz);landMapCtx.lineTo(sx+5,sz);landMapCtx.moveTo(sx,sz-5);landMapCtx.lineTo(sx,sz+5);landMapCtx.stroke();
+    }
+    if(overworldActivity.trailSense&&(!overworldActivity.trailSense.expiresAt||overworldActivity.trailSense.expiresAt>Date.now())){
+      dynamic(overworldActivity.trailSense,'#8ff7c7',5);
+    }
     dynamic(overworldActivity.patrol,'#e85b4d',3);dynamic(overworldActivity.camp,'#ff8b52',3);
   }
-  const px=Math.floor(player.pos.x/WX*landMapCanvas.width);
-  const pz=Math.floor(player.pos.z/WX*landMapCanvas.height);
+  if(mapUtility && dragonMarkers.length){
+    for(const m of dragonMarkers){
+      if(!m||!Number.isFinite(m.x)||!Number.isFinite(m.z)) continue;
+      if(miniMap&&!worldMap&&!nearPlayer(m)) continue;
+      const x=mapPx(m.x), z=mapPz(m.z);
+      const pulse=m.pulse?1:0, focus=m.focus?1:0, active=m.active!==false;
+      if(worldMap && !claimMode){
+        const r=Math.max(2,Math.round(80/WX*landMapCanvas.width));
+        landMapCtx.strokeStyle=active?'rgba(184,108,255,.32)':'rgba(142,154,170,.18)';
+        landMapCtx.lineWidth=1;
+        landMapCtx.beginPath();
+        landMapCtx.arc(x+.5,z+.5,r,0,Math.PI*2);
+        landMapCtx.stroke();
+      }
+      if(focus){
+        landMapCtx.strokeStyle='rgba(255,242,168,.95)';
+        landMapCtx.lineWidth=2;
+        landMapCtx.beginPath();
+        landMapCtx.arc(x+.5,z+.5,7,0,Math.PI*2);
+        landMapCtx.stroke();
+      }
+      landMapCtx.fillStyle=pulse?'#fff2a8':(active?'#d8a8ff':'#8ea0aa');
+      landMapCtx.beginPath();
+      landMapCtx.moveTo(x+.5,z-3-pulse);
+      landMapCtx.lineTo(x+4+pulse,z+.5);
+      landMapCtx.lineTo(x+.5,z+4+pulse);
+      landMapCtx.lineTo(x-3-pulse,z+.5);
+      landMapCtx.closePath();
+      landMapCtx.fill();
+      landMapCtx.strokeStyle='#2a103f';
+      landMapCtx.stroke();
+    }
+  }
+  const px=mapPx(player.pos.x);
+  const pz=mapPz(player.pos.z);
   landMapCtx.strokeStyle='#4fd8ff';
   landMapCtx.lineWidth=1;
   landMapCtx.beginPath();
@@ -1998,27 +2436,106 @@ function updateLandMinimap(){
   landMapCtx.fillStyle='#ffffff';
   landMapCtx.fillRect(px,pz,1,1);
 }
+function disposeClaimVisual(c){
+  const root=c&&c.mesh;
+  if(!root) return;
+  claimGroup.remove(root);
+  if(root.traverse) root.traverse(obj=>{ if(obj.geometry) obj.geometry.dispose(); });
+  else if(root.geometry) root.geometry.dispose();
+  c.mesh=null;
+}
+function updateClaimGroupVisibility(){
+  claimGroup.visible = claimMode || landClaimOverlay;
+}
+function updateClaimOverlayVisuals(){
+  updateClaimGroupVisibility();
+  if(!landClaimOverlay || !player){
+    landClaims.forEach(c=>{ if(c.mesh) c.mesh.visible=true; });
+    return;
+  }
+  const px=player.pos.x, pz=player.pos.z;
+  landClaims.forEach((c,key)=>{
+    if(!c.mesh) return;
+    const [x,z]=key.split(',').map(Number);
+    c.mesh.visible = claimMode || Math.hypot((x+.5)-px,(z+.5)-pz) <= LAND_CLAIM_OVERLAY_RADIUS;
+    if(c.mesh.visible && c.status==='dormant' && (c.own||c.canEdit)){
+      const pulse=.5+.5*Math.sin(performance.now()*.006+x*1.7+z*.9);
+      c.mesh.scale.setScalar(1+pulse*.035);
+    }else c.mesh.scale.setScalar(1);
+  });
+}
+function claimLineMaterial(c,weak=false){
+  if(c.status==='abandoned') return weak?claimAbandonedWeakLineMat:claimAbandonedLineMat;
+  if(c.status==='dormant'&&(c.own||c.canEdit)) return claimDormantLineMat;
+  if(c.own) return weak?claimOwnWeakLineMat:claimOwnLineMat;
+  if(c.canEdit) return weak?claimSharedWeakLineMat:claimSharedLineMat;
+  return weak?claimOtherWeakLineMat:claimOtherLineMat;
+}
+function updateClaimVisualEdges(x,z,c){
+  if(!c||!c.mesh||!c.mesh.userData||!Array.isArray(c.mesh.userData.edges)) return;
+  const area=landClaimAreaKey(c);
+  for(const edge of c.mesh.userData.edges){
+    const n=landClaims.get(landKey(x+edge.dx,z+edge.dz));
+    const internal=!!(n&&((c.own&&n.own)||landClaimAreaKey(n)===area));
+    edge.line.material=claimLineMaterial(c,internal);
+  }
+}
+function refreshClaimVisualEdges(){
+  landClaims.forEach((c,key)=>{
+    const [x,z]=key.split(',').map(Number);
+    updateClaimVisualEdges(x,z,c);
+  });
+}
 function addClaimVisual(x,z,c){
-  if(c.mesh){ claimGroup.remove(c.mesh); c.mesh.geometry.dispose(); }
-  const mesh = new THREE.Mesh(claimTileGeo.clone(), c.own ? claimOwnMat : claimOtherMat);
-  mesh.position.set(x+.5, surfaceY(x,z), z+.5);
+  disposeClaimVisual(c);
+  const root = new THREE.Group();
+  const mesh = new THREE.Mesh(claimTileGeo.clone(), c.status==='abandoned' ? claimAbandonedMat : (c.status==='dormant'&&(c.own||c.canEdit)) ? claimDormantMat : c.own ? claimOwnMat : (c.canEdit ? claimSharedMat : claimOtherMat));
   mesh.renderOrder = 5;
-  c.mesh = mesh;
-  claimGroup.add(mesh);
+  const edges=claimEdgeGeos.map(e=>{
+    const line=new THREE.Line(e.geo.clone(), claimLineMaterial(c));
+    line.renderOrder=6;
+    root.add(line);
+    return {dx:e.dx,dz:e.dz,line};
+  });
+  root.add(mesh);
+  root.position.set(x+.5, surfaceY(x,z), z+.5);
+  root.userData.claimX=x; root.userData.claimZ=z;
+  root.userData.edges=edges;
+  c.mesh = root;
+  claimGroup.add(root);
+  updateClaimVisualEdges(x,z,c);
+  updateClaimOverlayVisuals();
 }
 function applyLandClaims(m){
-  landClaims.forEach(c=>{ if(c.mesh){ claimGroup.remove(c.mesh); c.mesh.geometry.dispose(); } });
+  landClaims.forEach(c=>disposeClaimVisual(c));
   landClaims.clear();
   if(m && Array.isArray(m.claims)) for(const raw of m.claims) applyLandClaimUpdate(raw, false);
+  refreshClaimVisualEdges();
   updateClaimHud();
   updateLandMinimap();
 }
 function applyLandClaimUpdate(raw, announce=true){
   if(!raw) return;
   const x=raw.x|0, z=raw.z|0;
-  const c={name:String(raw.name||'Hunter').slice(0,16), price:raw.price|0, own:!!raw.own};
+  const allowed=Array.isArray(raw.allowed)?raw.allowed.map(entry=>({
+    token:String(entry&&entry.token||'').slice(0,64),
+    sid:String(entry&&entry.sid||'').slice(0,64),
+    name:String(entry&&entry.name||'Hunter').slice(0,24),
+    online:!!(entry&&entry.online),
+  })).filter(entry=>entry.token):[];
+  const c={
+    name:String(raw.ownerName||raw.name||'Hunter').slice(0,24),
+    title:String(raw.title||'').slice(0,32),
+    price:raw.price|0,
+    status:String(raw.status||'active').slice(0,16),
+    lastVisitedAt:Number(raw.lastVisitedAt)||0,
+    own:!!raw.own,
+    canEdit:!!raw.canEdit,
+    allowed,
+  };
   landClaims.set(landKey(x,z), c);
   addClaimVisual(x,z,c);
+  refreshClaimVisualEdges();
   if(announce && c.own) sysMsg('Land claimed at <b>'+x+', '+z+'</b>');
   updateClaimHud();
   updateLandMinimap();
@@ -2035,33 +2552,66 @@ function claimTileFromMouse(){
   if(x<0||z<0||x>=WX||z>=WX) return null;
   return {x,z};
 }
+function landOverlayStatusLine(status){
+  if(!status) return '';
+  if(status.kind==='available') return 'Wilderness - unclaimed, buildable';
+  if(status.kind==='abandoned') return landClaimPlace(status.claim)+' - '+landClaimUpkeepLine(status.claim);
+  if(status.kind==='own') return landClaimAreaPlace(status.claim,status.group&&status.group.size||1)+' - your protected '+(status.group&&status.group.size>=3?'homestead':status.group&&status.group.size>1?status.group.size+' tile area':'claim')+' - '+landClaimUpkeepLine(status.claim);
+  if(status.kind==='shared') return landClaimPlace(status.claim)+' - shared by '+landClaimOwner(status.claim)+' - '+landClaimUpkeepLine(status.claim);
+  if(status.kind==='other') return landClaimPlace(status.claim)+' - owned by '+landClaimOwner(status.claim)+' - '+landClaimUpkeepLine(status.claim);
+  if(status.kind==='town') return 'Town protected';
+  if(status.kind==='border') return 'World border';
+  return status.label||'Land';
+}
 function updateClaimHud(){
-  if(!claimMode){ claimHud.classList.add('hidden'); return; }
-  const h=claimHover;
-  if(!h){
-    claimHud.innerHTML='<b>LAND CLAIM</b><br>Area around your current position<br>Click a wilderness tile to buy<br>Esc exits';
+  if(!claimMode){
+    if(!landClaimOverlay || !player || dim!=='overworld'){ claimHud.classList.add('hidden'); return; }
+    const x=Math.floor(player.pos.x), z=Math.floor(player.pos.z);
+    const status=landClaimStatusAt(x,z,Math.floor(player.pos.y));
+    const cls=status.canEdit?'ok':(status.kind==='available'?'ok':'bad');
+    const price=status.kind==='available'?'<br>Price: <b>'+status.price+' gold</b>':'';
+    claimHud.innerHTML='<b>CLAIM OVERLAY</b><br>Standing: '+x+', '+z+'<br>Access: <b>'+escHTML(landClaimAccessRole(status))+'</b><br><span class="'+cls+'">'+escHTML(landOverlayStatusLine(status))+'</span>'+price+'<br>'+escHTML(landClaimAccessHint(status))+'<br>Nearby claims are outlined - Land Manager toggles this view';
+    claimHud.classList.remove('hidden');
     return;
   }
-  const c=landClaims.get(landKey(h.x,h.z));
-  const border=isLavaBorderLand(h.x,h.z);
-  const town=isTownLand(h.x,h.z);
-  const price=landPrice(h.x,h.z);
-  let state = border ? '<span class="bad">World border</span>' :
-    town ? '<span class="bad">Town protected</span>' :
-    c ? (c.own ? '<span class="ok">Owned by you</span>' : '<span class="bad">Owned by '+escHTML(c.name)+'</span>') :
-    (gold>=price ? '<span class="ok">Available</span>' : '<span class="bad">Need more gold</span>');
+  claimHud.classList.remove('hidden');
+  const h=claimHover;
+  if(!h){
+    const rec=recommendedClaimTile();
+    claimHud.innerHTML='<b>LAND CLAIM</b><br>Area around your current position<br>Click a wilderness tile to buy<br>'+(rec?'<span class="ok">Recommended:</span> <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+' - '+rec.price+' gold<br>':'')+'Esc exits';
+    return;
+  }
+  const analysis=analyzeClaimPurchase(h.x,h.z), c=analysis.existing, rec=recommendedClaimTile();
+  let state = analysis.blocked
+    ? '<span class="'+(c&&c.own?'ok':'bad')+'">'+escHTML(analysis.blocked)+'</span>'
+    : '<span class="ok">Available</span>';
+  const detail=analysis.blocked
+    ? analysis.blockedDetail
+    : analysis.relation+' - '+(analysis.largestAfter>=3?'3-tile base goal ready':'connected size after purchase: '+analysis.largestAfter)+' - after purchase: '+analysis.postGold+' gold';
+  const goldLine=analysis.canBuy
+    ? 'Your gold: <b>'+gold+'</b> -> <b>'+analysis.postGold+'</b>'
+    : 'Your gold: <b>'+gold+'</b>';
+  const priceLine=analysis.discount>0
+    ? 'Price: <b>'+analysis.price+' gold</b> <span class="ok">-'+analysis.discount+' expansion discount</span> <small>(base '+analysis.basePrice+')</small>'
+    : 'Price: <b>'+analysis.price+' gold</b>';
+  const recommend=rec&&!c&&!(rec.x===h.x&&rec.z===h.z)
+    ? '<br><span class="ok">Recommended edge:</span> <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+' - '+rec.price+' gold'
+    : '';
   claimHud.innerHTML='<b>LAND CLAIM</b><br>Tile: '+h.x+', '+h.z+'<br>Status: '+state+
-    '<br>Price: <b>'+price+' gold</b><br>Your gold: <b>'+gold+'</b><br>Click to purchase - Esc exits';
+    '<br>Preview: <b>'+escHTML(analysis.relation)+'</b><br>'+priceLine+'<br>'+goldLine+'<br>'+escHTML(detail)+recommend+'<br>'+((c&&c.own)?'Click to manage access':analysis.canBuy?'Click to purchase':'Blocked')+' - Esc exits';
 }
 function updateClaimHover(){
   if(!claimMode) return;
   claimHover = claimTileFromMouse();
+  const rec=recommendedClaimTile();
+  claimRecommendMesh.visible=!!(rec&&(!claimHover||rec.x!==claimHover.x||rec.z!==claimHover.z));
+  if(rec) claimRecommendMesh.position.set(rec.x+.5, surfaceY(rec.x,rec.z)+.025, rec.z+.5);
   if(!claimHover){ claimHoverMesh.visible=false; updateClaimHud(); return; }
   const x=claimHover.x, z=claimHover.z;
   claimHoverMesh.visible=true;
   claimHoverMesh.position.set(x+.5, surfaceY(x,z)+.03, z+.5);
-  const blocked = isLavaBorderLand(x,z) || isTownLand(x,z) || landClaims.has(landKey(x,z)) || gold < landPrice(x,z);
-  claimHoverMesh.material = blocked ? claimHoverBadMat : claimHoverOkMat;
+  const analysis=analyzeClaimPurchase(x,z);
+  claimHoverMesh.material = analysis.canBuy || (analysis.existing&&analysis.existing.own) ? claimHoverOkMat : claimHoverBadMat;
   updateClaimHud();
 }
 function toggleClaimMode(force){
@@ -2069,8 +2619,9 @@ function toggleClaimMode(force){
   if(on && dim!=='overworld'){ sysMsg('Land can only be claimed in the overworld'); return; }
   const was = claimMode;
   claimMode=on;
-  claimGroup.visible=claimMode;
+  updateClaimGroupVisibility();
   claimHoverMesh.visible=false;
+  claimRecommendMesh.visible=false;
   if(claimMode){
     claimCam.x=player.pos.x; claimCam.z=player.pos.z; claimCam.h=76;
     try{ if(document.pointerLockElement===renderer.domElement) document.exitPointerLock(); }catch(e){}
@@ -2082,16 +2633,50 @@ function toggleClaimMode(force){
     try{ renderer.domElement.requestPointerLock(); }catch(e){}
   }
   refreshPlayUi();
+  updateClaimOverlayVisuals();
   updateClaimHover();
+}
+function toggleLandClaimOverlay(force){
+  landClaimOverlay = force==null ? !landClaimOverlay : !!force;
+  try{ localStorage.setItem(LAND_CLAIM_OVERLAY_KEY, landClaimOverlay?'1':'0'); }catch(e){}
+  updateClaimOverlayVisuals();
+  updateClaimHud();
+  updateLandMinimap();
+  sysMsg('Claim overlay '+(landClaimOverlay?'<b>shown</b>':'hidden'));
+}
+let landClaimSpotlightTimer=0;
+function spotlightLandClaim(x,z){
+  x|=0;z|=0;
+  const wasOverlay=landClaimOverlay;
+  landClaimPanelFocus=landKey(x,z);
+  if(!landClaimOverlay) toggleLandClaimOverlay(true);
+  updateClaimOverlayVisuals();
+  updateClaimHud();
+  if(landClaimSpotlightTimer) clearTimeout(landClaimSpotlightTimer);
+  landClaimSpotlightTimer=setTimeout(()=>{
+    landClaimSpotlightTimer=0;
+    if(!wasOverlay && !claimMode) toggleLandClaimOverlay(false);
+  },6500);
+}
+function tickLandClaimOverlay(){
+  if(!landClaimOverlay && !claimMode) return;
+  updateClaimOverlayVisuals();
+  updateClaimHud();
 }
 function requestLandClaim(){
   if(!claimMode || !claimHover) return;
-  const x=claimHover.x, z=claimHover.z;
-  if(isLavaBorderLand(x,z)){ sysMsg('The <b>world border</b> cannot be claimed'); return; }
-  if(isTownLand(x,z)){ sysMsg('The <b>Town of Beginnings</b> cannot be claimed'); return; }
-  if(landClaims.has(landKey(x,z))){ sysMsg('That tile is already claimed'); return; }
-  const price=landPrice(x,z);
-  if(gold<price){ sysMsg('Not enough <b>gold</b> for this claim'); return; }
+  const x=claimHover.x, z=claimHover.z, analysis=analyzeClaimPurchase(x,z);
+  if(analysis.blocked&&!(analysis.existing&&analysis.existing.own)){
+    sysMsg('<b>Cannot claim:</b> '+escHTML(analysis.blockedDetail||analysis.blocked));
+    return;
+  }
+  const existing=analysis.existing;
+  if(existing&&existing.status!=='abandoned'){
+    if(existing.own) openLandClaimsUI(x,z);
+    else sysMsg(existing.canEdit?'You can build here; <b>'+escHTML(existing.name)+'</b> owns this land':'That tile is already claimed');
+    return;
+  }
+  const price=analysis.price;
   if(NET.on) NET.room.send('landClaimBuy', {x,z});
   else {
     gold-=price;
@@ -2099,6 +2684,289 @@ function requestLandClaim(){
     clearTownTutorialStep('land');
     SFX.coin();
   }
+}
+function landClaimEntries(predicate){
+  const out=[];
+  landClaims.forEach((c,key)=>{
+    if(predicate && !predicate(c)) return;
+    const [x,z]=key.split(',').map(Number);
+    out.push({x,z,c});
+  });
+  out.sort((a,b)=>(a.x-b.x)||(a.z-b.z));
+  return out;
+}
+function currentOnlineHunters(){
+  const out=[];
+  const players=NET&&NET.room&&NET.room.state&&NET.room.state.players;
+  if(players && typeof players.forEach==='function'){
+    players.forEach((p,sid)=>{
+      if(!sid || sid===NET.room.sessionId) return;
+      const px=Number(p&&p.x), pz=Number(p&&p.z);
+      const distance=Number.isFinite(px)&&Number.isFinite(pz)&&player?Math.round(Math.hypot(px-player.pos.x,pz-player.pos.z)):null;
+      out.push({sid, name:String((p&&p.name)||'Hunter').slice(0,24), distance});
+    });
+  }
+  out.sort((a,b)=>(a.distance==null?9999:a.distance)-(b.distance==null?9999:b.distance)||a.name.localeCompare(b.name));
+  return out;
+}
+function sendLandTrust(x,z,payload){
+  if(!NET.on||!NET.room){ sysMsg('Land permissions require the <b>multiplayer server</b>'); return; }
+  NET.room.send('landClaimTrust', { x, z, ...payload });
+}
+function renameLandClaim(x,z,current='',applyGroup=false){
+  if(!NET.on||!NET.room){ sysMsg('Claim naming requires the <b>multiplayer server</b>'); return; }
+  const next=prompt(applyGroup?'Name this connected land area':'Name this land claim', current||'');
+  if(next===null) return;
+  NET.room.send('landClaimRename', { x, z, title:String(next).slice(0,32), applyGroup:!!applyGroup });
+}
+function clampHomesteadWorkOrder(order){
+  if(!order||typeof order!=='object') return null;
+  const need=Math.max(1,Math.min(999,order.need|0));
+  const job=JOBS[order.job]?order.job:'';
+  const storage=order.storage&&typeof order.storage==='object'?order.storage:null;
+  const contributors=[];
+  if(order.contributors&&typeof order.contributors==='object'){
+    for(const entry of Object.values(order.contributors).slice(0,12)){
+      if(!entry||typeof entry!=='object') continue;
+      contributors.push({name:String(entry.name||'Hunter').slice(0,24),count:Math.max(0,entry.count|0)});
+    }
+  }
+  return {
+    id:String(order.id||''),
+    type:['stock','craft'].includes(order.type)?order.type:'stock',
+    job,
+    target:Math.max(1,Math.min(999,order.target|0)),
+    need,
+    have:Math.max(0,Math.min(need,order.have|0)),
+    rewardGold:Math.max(0,order.rewardGold|0),
+    rewardJobXp:Math.max(0,order.rewardJobXp|0),
+    title:String(order.title||'Homestead Work Order').slice(0,80),
+    desc:String(order.desc||'Bring supplies to your homestead.').slice(0,180),
+    offeredAt:Math.max(0,Number(order.offeredAt)||0),
+    completedAt:Math.max(0,Number(order.completedAt)||0),
+    storage:storage?{
+      chests:Math.max(0,storage.chests|0),
+      have:Math.max(0,storage.have|0),
+      supplyChests:Math.max(0,storage.supplyChests|0),
+      supplyHave:Math.max(0,storage.supplyHave|0),
+    }:null,
+    contributors,
+  };
+}
+function sendHomesteadWorkOrder(action){
+  if(!NET.on||!NET.room){ sysMsg('Homestead work orders require the <b>multiplayer server</b>'); return; }
+  NET.room.send('homesteadWorkOrder',{action});
+}
+function appendHomesteadWorkOrderPanel(panel, btn, canCreate=true){
+  const title=document.createElement('div');
+  title.className='sub2';
+  title.style.marginTop='14px';
+  title.textContent='HOMESTEAD WORK ORDERS';
+  panel.appendChild(title);
+  const order=clampHomesteadWorkOrder(homesteadWorkOrder);
+  const row=document.createElement('div');
+  row.className='shoprow';
+  if(!order){
+    row.innerHTML='<span><b>No active order</b><br><small style="opacity:.72">'+(canCreate?'Draw one small supply request for this homestead.':'Check whether the owner has posted a supply request.')+'</small></span>';
+    row.appendChild(btn(canCreate?'GET WORK ORDER':'CHECK WORK ORDER',()=>sendHomesteadWorkOrder(canCreate?'request':'status')));
+    panel.appendChild(row);
+    return;
+  }
+  const stored=order.storage;
+  let storedLine='stored in Homestead chests unknown';
+  if(stored){
+    storedLine=stored.supplyChests>0
+      ? 'Supply Chests '+stored.supplyHave+' in '+stored.supplyChests+'; eligible '+stored.have+' in '+stored.chests
+      : 'eligible storage '+stored.have+' in '+stored.chests+' Homestead chest'+(stored.chests===1?'':'s');
+  }
+  const carrying=countItem(order.target);
+  const ready=order.have>=order.need;
+  const contributors=order.contributors&&order.contributors.length
+    ? '<br>Contributors: '+order.contributors.map(c=>escHTML(c.name)+' '+c.count).join(', ')
+    : '';
+  const helperLine=canCreate?'':'<br>Trusted helper: contributions grant assist XP; owner claims the final reward.';
+  row.innerHTML='<span><b>'+escHTML(order.title)+'</b><br><small style="opacity:.72">'+escHTML(order.desc)+'<br>'+escHTML(itemLabel(order.target))+' '+order.have+'/'+order.need+' - '+storedLine+' - carrying '+carrying+' - reward '+order.rewardGold+' gold, '+order.rewardJobXp+' '+escHTML((JOBS[order.job]&&JOBS[order.job].name)||'Job')+' XP'+helperLine+contributors+'</small></span>';
+  if(!ready){
+    const contribute=btn('CONTRIBUTE',()=>sendHomesteadWorkOrder('contribute'));
+    contribute.disabled=!!stored&&(stored.chests<=0||stored.have<=0);
+    row.appendChild(contribute);
+  }else if(canCreate) row.appendChild(btn('CLAIM',()=>sendHomesteadWorkOrder('claim')));
+  else row.appendChild(btn('CHECK',()=>sendHomesteadWorkOrder('status')));
+  panel.appendChild(row);
+}
+function landManagerMarker(){
+  const marker=document.createElement('i');
+  marker.className='land-claim-manager';
+  marker.hidden=true;
+  return marker;
+}
+function appendCurrentLandPanel(panel, btn, close){
+  const x=Math.floor(player.pos.x), z=Math.floor(player.pos.z), y=Math.floor(player.pos.y);
+  const status=landClaimStatusAt(x,z,y);
+  const box=document.createElement('div');
+  box.className='land-current-panel';
+  const statusClass=status.kind==='abandoned'?'neutral':status.canEdit?'ok':(status.kind==='available'?'neutral':'bad');
+  const extra=status.kind==='available'
+    ? 'Price: '+status.price+' gold'
+    : status.claim ? landClaimUpkeepLine(status.claim)+(status.claim.title?' - Place: '+escHTML(status.claim.title):'')+' - Owner: '+escHTML(landClaimOwner(status.claim)) : '';
+  box.innerHTML='<small>CURRENT TILE</small><b>'+x+', '+z+'</b><span class="'+statusClass+'">'+escHTML(status.label)+'</span><div class="land-role '+status.kind+'">'+escHTML(landClaimAccessRole(status))+'</div>'+landClaimPermissionPreviewHTML(status)+'<p>'+escHTML(landClaimAccessHint(status))+'</p>'+(extra?'<em>'+extra+'</em>':'');
+  const actions=document.createElement('div'); actions.className='qrow';
+  if(status.kind==='own') actions.appendChild(btn('MANAGE THIS TILE',()=>openLandClaimsUI(x,z)));
+  else if(status.kind==='available'||status.kind==='abandoned') actions.appendChild(btn('BUY LAND MODE',()=>{close();toggleClaimMode(true);}));
+  else if(status.kind==='shared') actions.appendChild(btn('VIEW MY CLAIMS',()=>{landClaimPanelFocus=null;openLandClaimsUI();}));
+  else if(status.kind==='other'){
+    const disabled=btn(landClaimOwner(status.claim)+' MUST TRUST YOU',()=>{});
+    disabled.disabled=true;
+    actions.appendChild(disabled);
+  }
+  if(actions.children.length) box.appendChild(actions);
+  if(status.kind==='own'&&status.claim){
+    const trusted=Array.isArray(status.claim.allowed)?status.claim.allowed:[];
+    const trustedSids=new Set(trusted.map(entry=>entry.sid).filter(Boolean));
+    const online=currentOnlineHunters();
+    const quick=document.createElement('div');
+    quick.className='land-quicktrust';
+    quick.innerHTML='<b>QUICK TRUST</b>';
+    let shown=false;
+    for(const entry of trusted.slice(0,4)){
+      shown=true;
+      const row=document.createElement('div'); row.className='landtrustrow trusted';
+      row.innerHTML='<span>'+escHTML(entry.name)+'<small>'+(entry.online?'online':'trusted')+'</small></span>';
+      row.appendChild(btn('REMOVE',()=>sendLandTrust(x,z,{targetToken:entry.token,trust:false})));
+      quick.appendChild(row);
+    }
+    let invited=0;
+    for(const hunter of online){
+      if(trustedSids.has(hunter.sid)) continue;
+      shown=true; invited++;
+      const row=document.createElement('div'); row.className='landtrustrow';
+      row.innerHTML='<span>'+escHTML(hunter.name)+'<small>'+(hunter.distance==null?'online now':hunter.distance+'m away')+'</small></span>';
+      row.appendChild(btn('TRUST',()=>sendLandTrust(x,z,{sid:hunter.sid,trust:true})));
+      quick.appendChild(row);
+      if(invited>=4) break;
+    }
+    if(!shown){
+      const empty=document.createElement('em');
+      empty.textContent=NET.on?'No other online hunters nearby.':'Trust shortcuts require the multiplayer server.';
+      quick.appendChild(empty);
+    }
+    box.appendChild(quick);
+  }
+  panel.appendChild(box);
+}
+function openLandClaimsUI(focusX=null, focusZ=null){
+  const open=globalThis.openQWin, panel=globalThis.qpanelEl, btn=globalThis.qBtn, close=globalThis.closeQWin;
+  if(typeof open!=='function'||!panel||typeof btn!=='function'||typeof close!=='function'){ sysMsg('Claim management is not ready yet'); return; }
+  if(focusX!=null&&focusZ!=null) landClaimPanelFocus=landKey(focusX|0,focusZ|0);
+  const owned=landClaimEntries(c=>c.own);
+  const shared=landClaimEntries(c=>!c.own&&c.canEdit&&c.status!=='abandoned');
+  const focus=landClaimPanelFocus&&landClaims.get(landClaimPanelFocus);
+  const focusOwn=focus&&focus.own;
+  open('management');
+  panel.innerHTML='';
+  panel.appendChild(landManagerMarker());
+  const h=document.createElement('h2'); h.textContent='LAND CLAIMS'; panel.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='OWNED '+owned.length+' - SHARED '+shared.length; panel.appendChild(sub);
+  const rule=document.createElement('p'); rule.className='qtext';
+  rule.textContent='Claim activity: owner or trusted visits keep land active. Dormant after '+LAND_DORMANT_DAYS+' days; abandoned and reclaimable after '+LAND_ABANDONED_DAYS+' days.';
+  panel.appendChild(rule);
+  const firstClaim=document.createElement('p'); firstClaim.className='qtext';
+  firstClaim.innerHTML=firstLandClaimGuidanceHTML();
+  panel.appendChild(firstClaim);
+  const overlayRow=document.createElement('div'); overlayRow.className='land-overlay-row';
+  const overlayBtn=btn(landClaimOverlay?'HIDE CLAIMS':'SHOW CLAIMS',()=>{toggleLandClaimOverlay();openLandClaimsUI(focusX,focusZ);});
+  overlayBtn.classList.toggle('selected',landClaimOverlay);
+  overlayRow.appendChild(overlayBtn);
+  const legend=document.createElement('span');
+  legend.innerHTML='<i class="own"></i>Yours <i class="shared"></i>Shared <i class="other"></i>Others';
+  overlayRow.appendChild(legend);
+  panel.appendChild(overlayRow);
+  appendCurrentLandPanel(panel, btn, close);
+  const currentStatus=landClaimStatusAt(Math.floor(player.pos.x),Math.floor(player.pos.z),Math.floor(player.pos.y));
+  if(!focusOwn&&currentStatus.kind==='shared'){
+    const sharedGroup=connectedClaimGroup(currentStatus.x,currentStatus.z,c=>!c.own&&c.canEdit&&c.status!=='abandoned');
+    if(sharedGroup&&sharedGroup.size>=3) appendHomesteadWorkOrderPanel(panel, btn, false);
+  }
+  if(focusOwn){
+    const [fx,fz]=landClaimPanelFocus.split(',').map(Number);
+    const group=connectedOwnedClaimGroup(fx,fz);
+    const groupSize=group?group.size:1;
+    const homesteadScope=groupSize>=3;
+    const groupTrustCount=token=>group&&token?group.entries.reduce((n,e)=>n+((Array.isArray(e.c.allowed)&&e.c.allowed.some(a=>a.token===token))?1:0),0):0;
+    const info=document.createElement('p'); info.className='qtext';
+    const focusStatus=landClaimStatusAt(fx,fz,Math.floor(player.pos.y));
+    info.innerHTML='<b>'+escHTML(landClaimAreaPlace(focus,groupSize))+'</b><br><small>'+landClaimAreaKind(groupSize)+' - '+fx+', '+fz+' - '+landClaimUpkeepLine(focus)+' - '+groupSize+' tile'+(groupSize===1?'':'s')+' connected - Trusted hunters can build, break, and place blocks here.</small>'+landClaimPermissionPreviewHTML(focusStatus);
+    panel.appendChild(info);
+    const nameRow=document.createElement('div'); nameRow.className='land-name-row';
+    nameRow.innerHTML='<span><b>CLAIM NAME</b><small>'+(focus.title?escHTML(focus.title):'Unnamed - shown as '+escHTML(landClaimOwner(focus)+'\'s land'))+'</small></span>';
+    nameRow.appendChild(btn(focus.title?'RENAME':'NAME',()=>renameLandClaim(fx,fz,focus.title||'')));
+    if(focus.title) nameRow.appendChild(btn('CLEAR',()=>renameLandClaim(fx,fz,'')));
+    panel.appendChild(nameRow);
+    if(groupSize>1){
+      const groupRow=document.createElement('div'); groupRow.className='land-name-row group';
+      groupRow.innerHTML='<span><b>'+landClaimAreaKind(groupSize).toUpperCase()+'</b><small>'+groupSize+' owned tiles. Apply the same name to every connected tile.</small></span>';
+      groupRow.appendChild(btn(groupSize>=3?'NAME HOMESTEAD':'RENAME AREA',()=>renameLandClaim(fx,fz,focus.title||'',true)));
+      groupRow.appendChild(btn('CLEAR AREA',()=>renameLandClaim(fx,fz,'',true)));
+      panel.appendChild(groupRow);
+    }
+    if(homesteadScope) appendHomesteadWorkOrderPanel(panel, btn);
+    const trustedTitle=document.createElement('div'); trustedTitle.className='sub2'; trustedTitle.textContent='TRUSTED HUNTERS'; panel.appendChild(trustedTitle);
+    if(!focus.allowed.length){ const empty=document.createElement('p'); empty.className='qtext'; empty.textContent='No one else can edit this claim yet.'; panel.appendChild(empty); }
+    for(const entry of focus.allowed){
+      const row=document.createElement('div'); row.className='shoprow';
+      const trustedTiles=groupTrustCount(entry.token);
+      const scope=homesteadScope?(trustedTiles>=groupSize?'Homestead '+trustedTiles+'/'+groupSize:'This tile - Homestead '+trustedTiles+'/'+groupSize):'This tile';
+      row.innerHTML='<span><b>'+escHTML(entry.name)+'</b><br><small style="opacity:.72">'+(entry.online?'online':'offline')+' - '+scope+'</small></span>';
+      row.appendChild(btn('REMOVE TILE',()=>sendLandTrust(fx,fz,{targetToken:entry.token,trust:false})));
+      if(groupSize>1) row.appendChild(btn(homesteadScope?'REMOVE HOMESTEAD':'REMOVE AREA',()=>sendLandTrust(fx,fz,{targetToken:entry.token,trust:false,applyGroup:true})));
+      panel.appendChild(row);
+    }
+    const inviteTitle=document.createElement('div'); inviteTitle.className='sub2'; inviteTitle.style.marginTop='14px'; inviteTitle.textContent='INVITE ONLINE HUNTERS'; panel.appendChild(inviteTitle);
+    let any=false;
+    const trustedSids=new Set(focus.allowed.map(entry=>entry.sid).filter(Boolean));
+    for(const hunter of currentOnlineHunters()){
+      if(trustedSids.has(hunter.sid)) continue;
+      any=true;
+      const row=document.createElement('div'); row.className='shoprow';
+      row.innerHTML='<span><b>'+escHTML(hunter.name)+'</b><br><small style="opacity:.72">online now'+(groupSize>1?' - area action applies to '+groupSize+' tiles':'')+'</small></span>';
+      row.appendChild(btn('TRUST TILE',()=>sendLandTrust(fx,fz,{sid:hunter.sid,trust:true})));
+      if(groupSize>1) row.appendChild(btn(homesteadScope?'TRUST HOMESTEAD':'TRUST AREA',()=>sendLandTrust(fx,fz,{sid:hunter.sid,trust:true,applyGroup:true})));
+      panel.appendChild(row);
+    }
+    if(!any){ const empty=document.createElement('p'); empty.className='qtext'; empty.textContent='No untrusted online hunters are visible right now.'; panel.appendChild(empty); }
+    const row=document.createElement('div'); row.className='qrow';
+    row.appendChild(btn('ALL CLAIMS',()=>{landClaimPanelFocus=null;openLandClaimsUI();}));
+    row.appendChild(btn('CLOSE',()=>close(),true));
+    panel.appendChild(row);
+    return;
+  }
+  if(!owned.length){ const empty=document.createElement('p'); empty.className='qtext'; empty.textContent='You do not own any claims yet. Open Land Claim Mode and buy a wilderness tile first.'; panel.appendChild(empty); }
+  else {
+    const title=document.createElement('div'); title.className='sub2'; title.textContent='YOUR AREAS'; panel.appendChild(title);
+    for(const group of ownedClaimGroups()){
+      const entry=group.entries[0];
+      const row=document.createElement('div'); row.className='shoprow';
+      const trusted=Math.max(...group.entries.map(e=>e.c.allowed.length));
+      const price=group.entries.reduce((sum,e)=>sum+(e.c.price|0),0);
+      const dormantCount=group.entries.filter(e=>e.c.status==='dormant').length;
+      const state=dormantCount===group.size?'Dormant':dormantCount?'Partly dormant':'Active';
+      const soonest=group.entries.reduce((best,e)=>!best||landClaimAgeMs(e.c)>landClaimAgeMs(best)?e.c:best,null);
+      row.innerHTML='<span><b>'+escHTML(landClaimAreaPlace(entry.c,group.size))+'</b><br><small style="opacity:.72">'+landClaimAreaKind(group.size)+' - '+state+' - '+landClaimUpkeepLine(soonest)+' - '+group.size+' tile'+(group.size===1?'':'s')+' - starts '+entry.x+', '+entry.z+' - '+trusted+' trusted - '+price+' gold claimed</small></span>';
+      row.appendChild(btn('MANAGE',()=>openLandClaimsUI(entry.x,entry.z)));
+      panel.appendChild(row);
+    }
+  }
+  if(shared.length){
+    const title=document.createElement('div'); title.className='sub2'; title.style.marginTop='14px'; title.textContent='SHARED WITH YOU'; panel.appendChild(title);
+    for(const entry of shared){
+      const row=document.createElement('div'); row.className='shoprow';
+      row.innerHTML='<span><b>'+escHTML(landClaimPlace(entry.c))+'</b><br><small style="opacity:.72">'+landClaimUpkeepLine(entry.c)+' - '+entry.x+', '+entry.z+' - Owner: '+escHTML(landClaimOwner(entry.c))+'</small></span>';
+      panel.appendChild(row);
+    }
+  }
+  const row=document.createElement('div'); row.className='qrow';
+  row.appendChild(btn('CLOSE',()=>close(),true));
+  panel.appendChild(row);
 }
 
 // clouds
@@ -2944,6 +3812,7 @@ function tickWingedGiant(dt,t){
 giantGuardian=makeWingedGiantNpc();
 giantGuardian.name='Aegis Guardian';
 giantGuardian.title='Legendary Forge';
+giantGuardian.role='guardian';
 attachNpcNameplate(giantGuardian, 4.55);
 townGroup.add(giantGuardian.grp);
 
@@ -3049,7 +3918,70 @@ function makeJobBoardDecor(){
 }
 makeJobBoardDecor();
 
+let guildNoticeBoardLabel=null,guildNoticeBoardLabelKey='';
+function makeFellowshipNoticeBoardDecor(){
+  const grp=new THREE.Group();
+  const post=new THREE.MeshLambertMaterial({color:0x4a2b13});
+  const wood=new THREE.MeshLambertMaterial({color:0x6b421f});
+  const trim=new THREE.MeshLambertMaterial({color:0x2b170b});
+  const paper=new THREE.MeshLambertMaterial({color:0xd9bb78});
+  const pin=new THREE.MeshLambertMaterial({color:0xf2c75c});
+  function part(geo,mat,x,y,z){
+    const m=new THREE.Mesh(geo,mat);
+    m.position.set(x,y,z);
+    grp.add(m);
+    return m;
+  }
+  part(new THREE.BoxGeometry(.16,2.15,.16), post, -1.05,1.07,0);
+  part(new THREE.BoxGeometry(.16,2.15,.16), post, 1.05,1.07,0);
+  part(new THREE.BoxGeometry(2.65,1.35,.14), wood, 0,1.55,0);
+  part(new THREE.BoxGeometry(2.9,.14,.2), trim, 0,2.28,.02);
+  part(new THREE.BoxGeometry(2.9,.14,.2), trim, 0,.82,.02);
+  for(const [x,y,w,h] of [[-.68,1.78,.62,.36],[.05,1.86,.54,.42],[.65,1.46,.48,.32],[-.28,1.28,.62,.3]])part(new THREE.BoxGeometry(w,h,.05), paper, x,y,-.1);
+  part(new THREE.BoxGeometry(.1,.1,.07), pin, -.95,1.98,-.14);
+  part(new THREE.BoxGeometry(.1,.1,.07), pin, .88,1.64,-.14);
+  const c=document.createElement('canvas');c.width=320;c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#28170a';g.fillRect(0,0,320,128);
+  g.strokeStyle='#c8a85a';g.lineWidth=8;g.strokeRect(10,10,300,108);
+  g.fillStyle='#f2c75c';g.textAlign='center';
+  fitCanvasText(g,'FELLOWSHIP',230,24,'bold');g.fillText('FELLOWSHIP',160,45);
+  fitCanvasText(g,'NOTICE BOARD',240,24,'bold');g.fillText('NOTICE BOARD',160,76);
+  fitCanvasText(g,'PRESS G',120,15,'bold');g.fillStyle='#e8dcc0';g.fillText('PRESS G',160,101);
+  const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+  const sign=new THREE.Mesh(new THREE.PlaneGeometry(2.05,.82),new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide}));
+  sign.position.set(0,2.55,.12);grp.add(sign);
+  grp.position.set(HUB.guildNoticeBoard.x,TOWN.G+1,HUB.guildNoticeBoard.z);
+  townGroup.add(grp);
+}
+function pinnedFellowshipNoticeText(){
+  const board=guildHallState&&guildHallState.guild&&guildHallState.guild.noticeBoard;
+  const pinned=board&&board.pinned;
+  if(!pinned)return 'Pinned: none';
+  const value=Math.max(0,pinned.value|0),target=Math.max(1,pinned.target|0);
+  return 'Pinned: '+String(pinned.title||'Shared Objective')+' · '+value+'/'+target+' '+String(pinned.unit||'');
+}
+function updateFellowshipNoticeBoardLabel(){
+  const text=pinnedFellowshipNoticeText();
+  if(guildNoticeBoardLabel&&guildNoticeBoardLabelKey===text)return;
+  if(guildNoticeBoardLabel){
+    townGroup.remove(guildNoticeBoardLabel);
+    const idx=townInteractLabels.indexOf(guildNoticeBoardLabel);
+    if(idx>=0)townInteractLabels.splice(idx,1);
+    if(guildNoticeBoardLabel.material&&guildNoticeBoardLabel.material.map)guildNoticeBoardLabel.material.map.dispose();
+    if(guildNoticeBoardLabel.material)guildNoticeBoardLabel.material.dispose();
+  }
+  guildNoticeBoardLabelKey=text;
+  guildNoticeBoardLabel=makeTownInteractLabel(text,'#f2c75c');
+  guildNoticeBoardLabel.position.set(HUB.guildNoticeBoard.x,TOWN.G+4.6,HUB.guildNoticeBoard.z+.25);
+  guildNoticeBoardLabel.userData.labelRadius=9;
+  townGroup.add(guildNoticeBoardLabel);
+  townInteractLabels.push(guildNoticeBoardLabel);
+}
+makeFellowshipNoticeBoardDecor();
+
 const townInteractLabels=[];
+const townQuestMarkers=[];
 function makeTownInteractLabel(text, color){
   const c=document.createElement('canvas'); c.width=192; c.height=64;
   const g=c.getContext('2d');
@@ -3119,39 +4051,105 @@ function makeNpcQuestMarker(){
   sp.userData.markerState='';
   return sp;
 }
+function npcQuestMarkerVisual(state){
+  const parts=String(state||'').split(':');
+  const kind=parts[0]||'',source=parts[1]||'story';
+  const palette={
+    story:'#9ad26b',
+    manhunt:'#ff8aa8',
+    job:'#8bbf5a',
+    guild:'#f2c75c',
+    aegis:'#a78bfa',
+    progression:'#7dd3fc',
+    tutorial:'#9ad26b',
+    event:'#ffb45e',
+  };
+  const bg={
+    story:'rgba(7,20,12,.9)',
+    manhunt:'rgba(28,8,16,.9)',
+    job:'rgba(9,20,10,.9)',
+    guild:'rgba(24,18,7,.9)',
+    aegis:'rgba(18,10,28,.9)',
+    progression:'rgba(7,14,24,.9)',
+    tutorial:'rgba(7,20,12,.9)',
+    event:'rgba(24,14,7,.9)',
+  };
+  const glyph=kind==='turnin'?'?':kind==='active'?'...':kind==='unavailable'?'-':'!';
+  return {
+    kind,
+    source,
+    glyph,
+    color:palette[source]||'#9ad26b',
+    bg:bg[source]||'rgba(7,12,20,.88)',
+    label:source==='manhunt'?'MANHUNT':source==='job'?'JOB':source==='guild'?'GUILD':source==='aegis'?'AEGIS':source==='progression'?'NEXT':source==='event'?'EVENT':'STORY',
+  };
+}
 function paintNpcQuestMarker(sp,state){
   if(!sp||sp.userData.markerState===state) return;
-  const map={
-    offer:['!','#9ad26b','rgba(7,20,12,.9)'],
-    turnin:['?','#ffd24a','rgba(24,18,7,.9)'],
-    active:['...','#7dd3fc','rgba(7,14,24,.9)'],
-    unavailable:['-','#8090a4','rgba(10,12,18,.78)']
-  }[state]||['','#8090a4','rgba(10,12,18,.78)'];
+  const visual=npcQuestMarkerVisual(state);
   const c=sp.userData.markerCanvas,g=c&&c.getContext('2d');
   if(!g) return;
   g.clearRect(0,0,c.width,c.height);
-  g.fillStyle=map[2]; roundedRect(g,18,12,60,66,12); g.fill();
-  g.strokeStyle=map[1]; g.lineWidth=5; roundedRect(g,18,12,60,66,12); g.stroke();
-  g.fillStyle=map[1]; g.textAlign='center'; g.textBaseline='middle';
-  g.font=map[0]==='...'?'bold 34px "Courier New",monospace':'bold 54px "Courier New",monospace';
-  g.fillText(map[0],48,map[0]==='...'?43:47);
+  g.fillStyle=visual.bg; roundedRect(g,18,10,60,70,12); g.fill();
+  g.strokeStyle=visual.kind==='unavailable'?'#8090a4':visual.color; g.lineWidth=5; roundedRect(g,18,10,60,70,12); g.stroke();
+  g.fillStyle=visual.kind==='unavailable'?'#8090a4':visual.color; g.textAlign='center'; g.textBaseline='middle';
+  g.font=visual.glyph==='...'?'bold 32px "Courier New",monospace':'bold 52px "Courier New",monospace';
+  g.fillText(visual.glyph,48,visual.glyph==='...'?39:42);
+  g.font='bold 10px "Courier New",monospace';
+  g.fillText(visual.label,48,68);
   if(sp.userData.markerTexture) sp.userData.markerTexture.needsUpdate=true;
   sp.userData.markerState=state;
 }
+function npcQuestMarkerSourceForObjective(o){
+  const src=String(o&&o.source||'story');
+  return ['story','manhunt','job','guild','aegis','progression','tutorial','event'].includes(src)?src:'story';
+}
+function claimableObjectiveForNpc(v){
+  if(!v||!Array.isArray(activeObjectives))return null;
+  const name=v.name||v.shortName||'',role=v.role||'';
+  return activeObjectives.find(o=>{
+    if(!o||!(o.status==='claimable'||o.status==='complete'))return false;
+    const loc=String(o.location||'');
+    if(o.action&&o.action.type==='claim_aegis'&&(role==='guardian'||name==='Aegis Guardian'))return true;
+    if(o.action&&o.action.type==='guild_contracts'&&role==='guild_receptionist')return true;
+    if(o.action&&o.action.type==='turn_in'&&(loc===name||loc===v.shortName))return true;
+    return false;
+  })||null;
+}
+function availableObjectiveForNpc(v){
+  if(!v||!Array.isArray(activeObjectives))return null;
+  const name=v.name||v.shortName||'',role=v.role||'';
+  return activeObjectives.find(o=>{
+    if(!o||o.status!=='offered')return false;
+    const loc=String(o.location||'');
+    if(o.action&&o.action.type==='guild_contracts'&&role==='guild_receptionist')return true;
+    if(o.action&&o.action.type==='claim_aegis'&&(role==='guardian'||name==='Aegis Guardian'))return true;
+    if(loc&&(loc===name||loc===v.shortName))return true;
+    return false;
+  })||null;
+}
 function npcQuestMarkerState(v){
   if(!v||!v.role||v.role==='traveling_merchant') return '';
-  const questCapable=!!(v.focus || ['guide','miner','smith','scholar','quartermaster','farmer','cook','mason','monk','warden','stablemaster','guild_receptionist','road_warden'].includes(v.role));
+  const questCapable=!!(v.focus || ['guide','miner','smith','scholar','quartermaster','farmer','cook','mason','monk','warden','stablemaster','guild_receptionist','road_warden','guardian'].includes(v.role));
   if(!questCapable) return '';
+  const claimable=claimableObjectiveForNpc(v);
+  if(claimable)return 'turnin:'+npcQuestMarkerSourceForObjective(claimable);
+  const offered=availableObjectiveForNpc(v);
+  if(offered)return 'offer:'+npcQuestMarkerSourceForObjective(offered);
   const directed=typeof progressionDirectorGuidanceInfo==='function'?progressionDirectorGuidanceInfo():null;
-  if(directed&&directed.npc&&(v.name===directed.npc||v.shortName===directed.npc))return 'offer';
+  if(directed&&directed.npc&&(v.name===directed.npc||v.shortName===directed.npc))return 'offer:progression';
   const giver=v.name||v.shortName||'';
   if(quest){
     const source=(quest.source||'npc');
-    if(source==='npc' && quest.giver===giver) return questDone()?'turnin':'active';
-    return 'unavailable';
+    const markerSource=source==='guardian'?'aegis':quest.type==='pvp_bounty'?'aegis':quest.source==='manhunt'?'manhunt':'story';
+    if((source==='npc'||source==='guardian'||source==='manhunt') && quest.giver===giver) return (questDone()?'turnin:':'active:')+markerSource;
+    return 'unavailable:'+markerSource;
   }
-  if(v.role==='guide' && !(typeof firstQuestMilestoneComplete==='function'&&firstQuestMilestoneComplete())) return 'offer';
-  return v.role==='guide'||S.lvl>1?'offer':'';
+  if(v.role==='guide' && !(typeof firstQuestMilestoneComplete==='function'&&firstQuestMilestoneComplete())) return 'offer:story';
+  if(v.role==='guild_receptionist')return 'offer:guild';
+  if(v.role==='guardian')return 'offer:aegis';
+  if(v.role==='road_warden')return 'offer:manhunt';
+  return v.role==='guide'||S.lvl>1?'offer:story':'';
 }
 function updateNpcQuestMarker(v,dt,t,d){
   const sp=v&&v.questMarker;
@@ -3159,7 +4157,8 @@ function updateNpcQuestMarker(v,dt,t,d){
   const state=npcQuestMarkerState(v);
   paintNpcQuestMarker(sp,state);
   const near=dim==='overworld' && !v.inside && !qOpen && d<14 && !!state;
-  const base=state==='unavailable'?0.34:state==='active'?0.72:.95;
+  const kind=String(state||'').split(':')[0];
+  const base=kind==='unavailable'?0.34:kind==='active'?0.72:.95;
   const target=near ? Math.min(base,(14-d)/3.5) : 0;
   sp.material.opacity+=(target-sp.material.opacity)*Math.min(1,dt*8);
   sp.position.y=3.52+Math.sin(t*2.2+(v.phase||0))*.08;
@@ -3171,6 +4170,35 @@ function addTownInteractLabel(text, x, y, z, color, radius){
   sp.userData.labelRadius=radius||8;
   townGroup.add(sp);
   townInteractLabels.push(sp);
+  return sp;
+}
+function serviceObjectiveFor(type, statuses=['claimable','complete','offered']){
+  if(!Array.isArray(activeObjectives))return null;
+  return activeObjectives.find(o=>{
+    if(!o||!statuses.includes(o.status))return false;
+    const action=o.action&&o.action.type||'';
+    if(type==='jobs')return action==='jobs'||o.source==='job';
+    if(type==='guild_contracts')return action==='guild_contracts'||o.source==='guild';
+    if(type==='claim_aegis')return action==='claim_aegis'||o.source==='aegis';
+    return false;
+  })||null;
+}
+function townQuestMarkerState(sp){
+  const type=sp&&sp.userData&&sp.userData.questServiceType;
+  if(!type)return '';
+  const obj=serviceObjectiveFor(type);
+  if(obj)return ((obj.status==='claimable'||obj.status==='complete')?'turnin:':'offer:')+npcQuestMarkerSourceForObjective(obj);
+  if(type==='jobs'&&(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'))return 'offer:job';
+  if(type==='guild_contracts'&&(progressionFocus==='first_road_ready'||progressionFocus==='first_guild_contract'))return 'offer:guild';
+  return '';
+}
+function addTownQuestMarker(type,x,y,z){
+  const sp=makeNpcQuestMarker();
+  sp.position.set(x,y,z);
+  sp.scale.set(.72,.72,1);
+  sp.userData.questServiceType=type;
+  townGroup.add(sp);
+  townQuestMarkers.push(sp);
   return sp;
 }
 addTownInteractLabel('Shard Pedestal', (HUB.shard.x|0)+.5, TOWN.G+4.7, (HUB.shard.z|0)+.5, '#7dd3fc', 8);
@@ -3186,12 +4214,525 @@ addTownInteractLabel('Roulette Table · G', tp(84.5), TOWN.G+3.65, tp(89.5), '#f
 addTownInteractLabel('2 Smithy / Crafting', tp(78.5), TOWN.G+4.7, tp(50), '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, tc(36)+.4, '#f2c75c', 14);
+addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
 addTownInteractLabel('3 North Gate', HUB.northGate.x, TOWN.G+5.4, HUB.northGate.z+1.3, '#d8f2ff', 14);
 addTownInteractLabel('Town Shrine', tp(47.5), TOWN.G+5.2, tp(56.5), '#d8f2ff', 12);
 addTownInteractLabel('Meditation Hall', HUB.shrine.x, TOWN.G+2.85, HUB.shrine.z, '#7dd3fc', 9);
 addTownInteractLabel('Westwind Skyport · G to board · S-Rank · 1000 gold', HUB.skyport.x, HUB.skyport.y+4.2, HUB.skyport.z, '#ffd98a', 20);
 addTownInteractLabel('G BOARD · Requires S-Rank + 1,000 gold', HUB.skyport.x-12.5, HUB.skyport.y+3.2, HUB.skyport.z, '#ffcf6a', 7);
-let guildHallState={floors:[],fellowships:[],guild:null,nextFloor:1,nextPrice:500,maxFloors:6};
+addTownQuestMarker('jobs',HUB.jobs.x,TOWN.G+4.55,HUB.jobs.z+.35);
+addTownQuestMarker('guild_contracts',HUB.guild.x,TOWN.G+5.0,tc(36)+.4);
+addTownQuestMarker('claim_aegis',HUB.guardian.x,TOWN.G+5.8,HUB.guardian.z);
+let guildHallState={floors:[],fellowships:[],guild:null,projectCatalog:[],noticeObjectiveCatalog:[],nextFloor:1,nextPrice:500,maxFloors:6};
+updateFellowshipNoticeBoardLabel();
+let fellowshipProjectProps=null,fellowshipProjectPropsKey='';
+function disposeThreeObject(obj){
+  if(!obj)return;
+  obj.traverse&&obj.traverse(child=>{
+    if(child.geometry)child.geometry.dispose&&child.geometry.dispose();
+    const mats=Array.isArray(child.material)?child.material:(child.material?[child.material]:[]);
+    for(const mat of mats){
+      if(mat&&mat.map)mat.map.dispose&&mat.map.dispose();
+      if(mat)mat.dispose&&mat.dispose();
+    }
+  });
+}
+function fellowshipCompletedProjectIds(){
+  const projects=guildHallState&&guildHallState.guild&&Array.isArray(guildHallState.guild.projects)?guildHallState.guild.projects:[];
+  return projects.filter(p=>p&&p.done&&p.id).map(p=>String(p.id)).sort();
+}
+function makeMiniProjectLabel(text,color='#f2c75c'){
+  const c=document.createElement('canvas');c.width=256;c.height=64;
+  const g=c.getContext('2d');
+  g.fillStyle='rgba(7,12,20,.76)';roundedRect(g,12,16,232,32,5);g.fill();
+  g.strokeStyle=color;g.lineWidth=2;roundedRect(g,12,16,232,32,5);g.stroke();
+  g.fillStyle=color;g.textAlign='center';fitCanvasText(g,text,210,17,'bold');g.fillText(text,128,38);
+  const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.92,depthWrite:false,depthTest:true}));
+  sp.scale.set(2.2,.55,1);
+  return sp;
+}
+let fellowshipWeeklyCacheProp=null,fellowshipWeeklyCacheKey='';
+function fellowshipClaimableWeeklyRewards(){
+  const rewards=guildHallState&&guildHallState.guild&&Array.isArray(guildHallState.guild.weeklyRewards)?guildHallState.guild.weeklyRewards:[];
+  return rewards.filter(r=>r&&r.claimable&&!r.claimed);
+}
+function fellowshipWeeklyCacheStateKey(){
+  const mine=guildHallState&&guildHallState.guild;
+  const rewards=Array.isArray(mine&&mine.weeklyRewards)?mine.weeklyRewards:[];
+  return rewards.map(r=>[r&&r.id,r&&r.threshold|0,r&&r.claimable?1:0,r&&r.claimed?1:0].join(':')).join('|');
+}
+function makeFellowshipWeeklyCacheProp(){
+  const root=new THREE.Group();
+  const wood=voxelMats('#6b421f','#8a5a2a','#3a220f','#241307');
+  const dark=voxelMats('#2b170b','#4a2b13','#1a0d04','#0d0703');
+  const gold=glowVoxelMats('#c8a85a','#ffe08a','#7a5a1f','#f2c75c',.85);
+  addBox(root,[1.35,.58,.82],[0,.38,0],wood);
+  addBox(root,[1.45,.18,.9],[0,.79,0],dark);
+  addBox(root,[1.52,.12,.96],[0,.99,0],gold);
+  addBox(root,[.16,.76,.96],[-.58,.56,0],gold);
+  addBox(root,[.16,.76,.96],[.58,.56,0],gold);
+  addBox(root,[.34,.24,.98],[0,.58,-.03],gold);
+  const seam=new THREE.Mesh(new THREE.BoxGeometry(1.58,.035,.035),new THREE.MeshBasicMaterial({color:0xf2c75c,transparent:true,opacity:.85,depthWrite:false,blending:THREE.AdditiveBlending}));
+  seam.position.set(0,.92,-.51);root.add(seam);
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.38,4.4,18,1,true),new THREE.MeshBasicMaterial({color:0xf2c75c,transparent:true,opacity:.18,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+  beam.position.set(0,2.75,0);root.add(beam);
+  const floorRing=new THREE.Mesh(new THREE.TorusGeometry(.9,.028,8,48),new THREE.MeshBasicMaterial({color:0xf2c75c,transparent:true,opacity:.45,depthWrite:false,blending:THREE.AdditiveBlending}));
+  floorRing.rotation.x=Math.PI/2;floorRing.position.y=.08;root.add(floorRing);
+  const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xf2c75c,transparent:true,opacity:.5,depthWrite:false,blending:THREE.AdditiveBlending}));
+  glow.position.set(0,1.05,0);glow.scale.set(2.4,2.4,1);root.add(glow);
+  const light=new THREE.PointLight(0xf2c75c,1.25,8);light.position.set(0,1.55,0);root.add(light);
+  const label=makeMiniProjectLabel('Weekly Cache Ready','#f2c75c');
+  label.position.set(0,2.85,0);
+  label.material.opacity=0;
+  label.material.depthTest=false;
+  root.add(label);
+  root.position.set(HUB.guildNoticeBoard.x+1.85,TOWN.G+1.04,HUB.guildNoticeBoard.z+.2);
+  root.userData={kind:'fellowship_weekly_cache',glow,beam,floorRing,light,label,phase:Math.random()*10};
+  return root;
+}
+function updateFellowshipWeeklyCacheProp(){
+  const key=fellowshipWeeklyCacheStateKey();
+  const claimable=fellowshipClaimableWeeklyRewards();
+  if(fellowshipWeeklyCacheProp&&fellowshipWeeklyCacheKey===key)return;
+  if(fellowshipWeeklyCacheProp){
+    townGroup.remove(fellowshipWeeklyCacheProp);
+    disposeThreeObject(fellowshipWeeklyCacheProp);
+    fellowshipWeeklyCacheProp=null;
+  }
+  fellowshipWeeklyCacheKey=key;
+  if(!claimable.length)return;
+  fellowshipWeeklyCacheProp=makeFellowshipWeeklyCacheProp();
+  townGroup.add(fellowshipWeeklyCacheProp);
+}
+function tickFellowshipWeeklyCacheProp(dt,t){
+  updateFellowshipWeeklyCacheProp();
+  const prop=fellowshipWeeklyCacheProp;
+  if(!prop)return;
+  const ud=prop.userData||{};
+  const breath=.5+.5*Math.sin(t*2.15+(ud.phase||0));
+  const near=dim==='overworld'&&!uiOpen&&!qOpen&&!statOpen&&Math.hypot(player.pos.x-prop.position.x,player.pos.z-prop.position.z)<8.5;
+  if(ud.glow){
+    const s=2.05+breath*.55;
+    ud.glow.scale.set(s,s,1);
+    ud.glow.material.opacity=.35+breath*.28;
+  }
+  if(ud.beam){
+    ud.beam.rotation.y+=dt*.85;
+    ud.beam.material.opacity=.1+breath*.16;
+    ud.beam.scale.setScalar(1+breath*.08);
+  }
+  if(ud.floorRing){
+    ud.floorRing.rotation.z+=dt*(1.05+breath*.35);
+    ud.floorRing.material.opacity=.28+breath*.34;
+  }
+  if(ud.light)ud.light.intensity=.8+breath*.85;
+  if(ud.label&&ud.label.material){
+    const target=near?.95:0;
+    ud.label.material.opacity+=(target-ud.label.material.opacity)*Math.min(1,dt*8);
+    ud.label.position.y=2.85+Math.sin(t*2.4)*.08;
+    ud.label.visible=ud.label.material.opacity>.03;
+  }
+}
+function fellowshipCanvasPlane(title,line,color='#f2c75c'){
+  const c=document.createElement('canvas');c.width=256;c.height=128;
+  const g=c.getContext('2d');
+  g.fillStyle='#1a2430';g.fillRect(0,0,256,128);
+  g.strokeStyle=color;g.lineWidth=7;g.strokeRect(8,8,240,112);
+  g.fillStyle=color;g.textAlign='center';fitCanvasText(g,title,205,22,'bold');g.fillText(title,128,48);
+  g.fillStyle='#e8dcc0';fitCanvasText(g,line,205,15,'bold');g.fillText(line,128,78);
+  const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+  return new THREE.Mesh(new THREE.PlaneGeometry(1.8,.9),new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide}));
+}
+const FELLOWSHIP_STATION_POLISH={
+  recall_lectern:{title:'LEARN',color:0xa78bfa,label:'#a78bfa'},
+  map_table:{title:'PLAN',color:0x7dd3fc,label:'#7dd3fc'},
+  armory_rack:{title:'PREP',color:0xffd24a,label:'#ffd24a'},
+  pantry_shelf:{title:'SUSTAIN',color:0x86efac,label:'#86efac'},
+  weather_vane:{title:'SKY',color:0x67d6ff,label:'#67d6ff'},
+};
+function makeFellowshipStationHubDecor(ids,placements){
+  const root=new THREE.Group();
+  const completed=new Set(ids);
+  const rugMat=new THREE.MeshLambertMaterial({color:0x233549,transparent:true,opacity:.86});
+  const trimMat=new THREE.MeshLambertMaterial({color:0xc8a85a,transparent:true,opacity:.9});
+  const connectorMat=new THREE.MeshBasicMaterial({color:0x6aa3bf,transparent:true,opacity:.24,depthWrite:false,blending:THREE.AdditiveBlending});
+  function box(w,h,d,mat,x,y,z){
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+    mesh.position.set(x,y,z);root.add(mesh);return mesh;
+  }
+  const cx=HUB.guild.x,cz=HUB.guild.z-.55,y=TOWN.G+1.012;
+  box(8.65,.035,5.35,rugMat,cx,y,cz);
+  box(8.95,.045,.12,trimMat,cx,y+.015,cz-2.68);
+  box(8.95,.045,.12,trimMat,cx,y+.015,cz+2.68);
+  box(.12,.045,5.45,trimMat,cx-4.45,y+.015,cz);
+  box(.12,.045,5.45,trimMat,cx+4.45,y+.015,cz);
+  const hubGlow=new THREE.Mesh(new THREE.TorusGeometry(1.05,.028,8,48),new THREE.MeshBasicMaterial({color:0xc8a85a,transparent:true,opacity:.34,depthWrite:false,blending:THREE.AdditiveBlending}));
+  hubGlow.rotation.x=Math.PI/2;hubGlow.position.set(cx,y+.06,cz);root.add(hubGlow);
+  const title=makeMiniProjectLabel('Fellowship Stations','#f2c75c');
+  title.position.set(cx,TOWN.G+3.55,cz+2.45);title.scale.set(2.7,.66,1);root.add(title);
+  const loop=makeMiniProjectLabel('LEARN · PLAN · PREP · SUSTAIN · SKY','#e8dcc0');
+  loop.position.set(cx,TOWN.G+3.05,cz+2.45);loop.scale.set(3.35,.54,1);root.add(loop);
+  const pads=[];
+  for(const id of Object.keys(placements)){
+    const p=placements[id],spec=FELLOWSHIP_STATION_POLISH[id];
+    if(!p||!spec||!completed.has(id))continue;
+    const padMat=new THREE.MeshLambertMaterial({color:spec.color,transparent:true,opacity:.28});
+    const pad=box(1.85,.04,1.22,padMat,p[0],y+.03,p[2]);
+    pad.userData.stationPad=id;pads.push(pad);
+    const line=box(Math.max(.14,Math.abs(p[0]-cx)),.025,.07,connectorMat,(p[0]+cx)/2,y+.075,p[2]);
+    line.userData.stationConnector=id;
+    const zLine=box(.07,.025,Math.max(.14,Math.abs(p[2]-cz)),connectorMat,cx,y+.08,(p[2]+cz)/2);
+    zLine.userData.stationConnector=id;
+    const placard=makeMiniProjectLabel(spec.title,spec.label);
+    placard.position.set(p[0],TOWN.G+1.58,p[2]+.78);placard.scale.set(1.18,.38,1);root.add(placard);
+  }
+  root.userData={kind:'fellowship_station_hub',hubGlow,pads,phase:Math.random()*10};
+  return root;
+}
+const recallLecternBursts=[];
+function makeFellowshipProjectProp(id){
+  const root=new THREE.Group();
+  const wood=new THREE.MeshLambertMaterial({color:0x6b421f});
+  const dark=new THREE.MeshLambertMaterial({color:0x2b170b});
+  const brass=new THREE.MeshLambertMaterial({color:0xc8a85a});
+  const paper=new THREE.MeshLambertMaterial({color:0xd9bb78});
+  const iron=new THREE.MeshLambertMaterial({color:0xaeb6c2});
+  const blue=new THREE.MeshBasicMaterial({color:0x7dd3fc});
+  const green=new THREE.MeshLambertMaterial({color:0x86efac});
+  function box(w,h,d,mat,x,y,z,ry=0){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+    m.position.set(x,y,z);m.rotation.y=ry;root.add(m);return m;
+  }
+  if(id==='map_table'){
+    box(2.2,.18,1.2,wood,0,.82,0);
+    for(const [x,z] of [[-.85,-.45],[.85,-.45],[-.85,.45],[.85,.45]])box(.16,.82,.16,dark,x,.4,z);
+    const map=fellowshipCanvasPlane('MAP TABLE','sharper clues','#7dd3fc');
+    map.rotation.x=-Math.PI/2;map.position.set(0,.93,0);map.scale.set(.82,.82,1);root.add(map);
+    box(.18,.08,.18,brass,-.82,.99,-.34);box(.18,.08,.18,brass,.76,.99,.28);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x7dd3fc,transparent:true,opacity:.26,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glow.position.set(0,1.08,0);glow.scale.set(1.95,1.05,1);root.add(glow);
+    const pathLine=new THREE.Mesh(new THREE.TorusGeometry(.72,.018,8,44),new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.48,depthWrite:false,blending:THREE.AdditiveBlending}));
+    pathLine.rotation.x=Math.PI/2;pathLine.position.y=1.03;pathLine.scale.z=.45;root.add(pathLine);
+    const pins=[];
+    for(const [x,z,c] of [[-.45,-.18,0xffd24a],[.16,.22,0x86efac],[.54,-.24,0xf472b6]]){
+      const pin=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,.22,8),new THREE.MeshBasicMaterial({color:c}));
+      pin.position.set(x,1.14,z);root.add(pin);pins.push(pin);
+    }
+    const label=makeMiniProjectLabel('Map Table','#7dd3fc');label.position.set(0,1.82,0);root.add(label);
+    root.userData={kind:'map_table',glow,pathLine,pins,pulseUntil:0,phase:Math.random()*10};
+  }else if(id==='armory_rack'){
+    box(2.35,.16,.18,dark,0,1.85,0);
+    box(2.35,.16,.18,dark,0,.78,0);
+    box(.16,1.25,.16,wood,-1.05,1.2,0);box(.16,1.25,.16,wood,1.05,1.2,0);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xffd24a,transparent:true,opacity:.22,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glow.position.set(0,1.38,-.16);glow.scale.set(2.55,1.25,1);root.add(glow);
+    for(const x of [-.62,0,.62]){
+      const blade=box(.08,1.05,.08,iron,x,1.32,-.08,.25);
+      blade.rotation.z=.28;
+      box(.38,.08,.08,brass,x-.16,.86,-.08,.25);
+    }
+    const readyRing=new THREE.Mesh(new THREE.TorusGeometry(.86,.025,8,44),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.48,depthWrite:false,blending:THREE.AdditiveBlending}));
+    readyRing.rotation.x=Math.PI/2;readyRing.position.set(0,.72,-.18);root.add(readyRing);
+    const light=new THREE.PointLight(0xffd24a,.85,6);light.position.set(0,1.45,-.18);root.add(light);
+    const label=makeMiniProjectLabel('Armory Rack','#c8d2df');label.position.set(0,2.35,0);root.add(label);
+    root.userData={kind:'armory_rack',glow,readyRing,light,pulseUntil:0,pulseColor:0xffd24a,phase:Math.random()*10};
+  }else if(id==='pantry_shelf'){
+    box(2.25,.14,.62,wood,0,1.78,0);
+    box(2.25,.14,.62,wood,0,1.22,0);
+    box(2.25,.14,.62,wood,0,.72,0);
+    box(.16,1.4,.16,dark,-1.02,1.22,0);box(.16,1.4,.16,dark,1.02,1.22,0);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x86efac,transparent:true,opacity:.2,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glow.position.set(0,1.35,-.2);glow.scale.set(2.2,1.35,1);root.add(glow);
+    const readyRing=new THREE.Mesh(new THREE.TorusGeometry(.72,.022,8,44),new THREE.MeshBasicMaterial({color:0x86efac,transparent:true,opacity:.36,depthWrite:false,blending:THREE.AdditiveBlending}));
+    readyRing.rotation.x=Math.PI/2;readyRing.position.set(0,.58,-.08);root.add(readyRing);
+    const jars=[];
+    for(const [x,y,z,c] of [[-.62,1.38,-.08,0xd49a45],[.1,1.38,.1,0x8b5a2b],[.62,.88,-.05,0x6fbf5a],[-.2,.88,.12,0xd9bb78]]){
+      box(.38,.28,.32,new THREE.MeshLambertMaterial({color:c}),x,y,z);
+      const jar=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:c,transparent:true,opacity:.16,depthWrite:false,blending:THREE.AdditiveBlending}));
+      jar.position.set(x,y+.18,z);jar.scale.set(.34,.34,1);root.add(jar);jars.push(jar);
+    }
+    const light=new THREE.PointLight(0x86efac,.55,5);light.position.set(0,1.25,-.2);root.add(light);
+    const label=makeMiniProjectLabel('Pantry Shelf','#86efac');label.position.set(0,2.35,0);root.add(label);
+    root.userData={kind:'pantry_shelf',glow,readyRing,jars,light,pulseUntil:0,pulseColor:0x86efac,phase:Math.random()*10};
+  }else if(id==='recall_lectern'){
+    box(.52,.9,.42,wood,0,.45,0);
+    box(1.1,.16,.72,dark,0,.98,0);
+    const page=fellowshipCanvasPlane('RECALL','practice','#a78bfa');
+    page.rotation.x=-Math.PI/2;page.rotation.z=.08;page.position.set(0,1.09,0);page.scale.set(.44,.44,1);root.add(page);
+    const leftPage=box(.42,.035,.5,paper,-.22,1.12,0,.08),rightPage=box(.42,.035,.5,paper,.22,1.12,0,-.08);
+    leftPage.rotation.z=.08;rightPage.rotation.z=-.08;
+    const runeMat=new THREE.MeshBasicMaterial({color:0xa78bfa,transparent:true,opacity:.72,depthWrite:false,blending:THREE.AdditiveBlending});
+    const lowerRune=new THREE.Mesh(new THREE.TorusGeometry(.74,.025,8,42),runeMat.clone());
+    lowerRune.rotation.x=Math.PI/2;lowerRune.position.y=1.18;root.add(lowerRune);
+    const upperRune=new THREE.Mesh(new THREE.TorusGeometry(.46,.018,8,36),runeMat.clone());
+    upperRune.rotation.x=Math.PI/2;upperRune.position.y=1.52;root.add(upperRune);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xa78bfa,transparent:true,opacity:.55,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glow.position.set(0,1.42,0);glow.scale.set(1.5,1.5,1);root.add(glow);
+    const light=new THREE.PointLight(0xa78bfa,1.15,8);light.position.set(0,1.35,0);root.add(light);
+    const sparks=[];
+    for(let i=0;i<7;i++){
+      const spark=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:i%2?0xc4b5fd:0x7dd3fc,transparent:true,opacity:.42,depthWrite:false,blending:THREE.AdditiveBlending}));
+      spark.scale.set(.12,.12,1);root.add(spark);sparks.push(spark);
+    }
+    const label=makeMiniProjectLabel('Recall Lectern','#a78bfa');label.position.set(0,2.05,0);root.add(label);
+    root.userData={kind:'recall_lectern',glow,light,lowerRune,upperRune,leftPage,rightPage,sparks,pulseUntil:0,phase:Math.random()*10};
+  }else if(id==='weather_vane'){
+    box(.14,1.8,.14,dark,0,.9,0);
+    const crossA=box(1.4,.08,.08,brass,0,1.72,0);
+    const crossB=box(.08,.08,1.4,brass,0,1.72,0);
+    const arrow=box(.32,.16,.08,green,.72,1.72,0);
+    box(.18,.18,.18,blue,0,1.95,0);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x7dd3fc,transparent:true,opacity:.2,depthWrite:false,blending:THREE.AdditiveBlending}));
+    glow.position.set(0,1.62,0);glow.scale.set(1.9,1.9,1);root.add(glow);
+    const skyRing=new THREE.Mesh(new THREE.TorusGeometry(.82,.022,8,44),new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.38,depthWrite:false,blending:THREE.AdditiveBlending}));
+    skyRing.rotation.x=Math.PI/2;skyRing.position.set(0,1.58,0);root.add(skyRing);
+    const light=new THREE.PointLight(0x7dd3fc,.55,6);light.position.set(0,1.9,0);root.add(light);
+    const label=makeMiniProjectLabel('Weather Vane','#86efac');label.position.set(0,2.42,0);root.add(label);
+    root.userData={kind:'weather_vane',glow,skyRing,light,crossA,crossB,arrow,pulseUntil:0,pulseColor:0x7dd3fc,phase:Math.random()*10};
+  }
+  return root;
+}
+function updateFellowshipProjectProps(){
+  const ids=fellowshipCompletedProjectIds();
+  const key=ids.join('|');
+  if(fellowshipProjectProps&&fellowshipProjectPropsKey===key)return;
+  if(fellowshipProjectProps){
+    townGroup.remove(fellowshipProjectProps);
+    disposeThreeObject(fellowshipProjectProps);
+  }
+  fellowshipProjectPropsKey=key;
+  fellowshipProjectProps=new THREE.Group();
+  const placements={
+    map_table:[HUB.guild.x-3.7,TOWN.G+1.02,HUB.guild.z+1.2,0],
+    armory_rack:[HUB.guild.x+3.9,TOWN.G+1.02,HUB.guild.z+1.05,0],
+    pantry_shelf:[HUB.guild.x-3.75,TOWN.G+1.02,HUB.guild.z-2.45,0],
+    recall_lectern:[HUB.guild.x+.25,TOWN.G+1.02,HUB.guild.z-2.65,0],
+    weather_vane:[HUB.guild.x+3.65,TOWN.G+1.02,HUB.guild.z-2.45,0],
+  };
+  for(const id of ids){
+    const prop=makeFellowshipProjectProp(id), p=placements[id];
+    if(!prop||!p)continue;
+    prop.position.set(p[0],p[1],p[2]);prop.rotation.y=p[3]||0;
+    fellowshipProjectProps.add(prop);
+  }
+  if(ids.length)fellowshipProjectProps.add(makeFellowshipStationHubDecor(ids,placements));
+  townGroup.add(fellowshipProjectProps);
+}
+function tickFellowshipProjectProps(dt,t){
+  if(!fellowshipProjectProps)return;
+  const now=performance.now();
+  fellowshipProjectProps.traverse(prop=>{
+    const ud=prop.userData;
+    if(!ud||ud.kind!=='fellowship_station_hub')return;
+    const breath=.5+.5*Math.sin(t*1.45+(ud.phase||0));
+    if(ud.hubGlow){ud.hubGlow.rotation.z+=dt*.42;ud.hubGlow.material.opacity=.22+breath*.18;}
+    if(Array.isArray(ud.pads))ud.pads.forEach((pad,i)=>{if(pad.material)pad.material.opacity=.2+(.5+.5*Math.sin(t*1.7+i))*.12;});
+  });
+  fellowshipProjectProps.traverse(prop=>{
+    const ud=prop.userData;
+    if(!ud||ud.kind!=='recall_lectern')return;
+    const pulse=Math.max(0,Math.min(1,(ud.pulseUntil-now)/1400));
+    const breath=.5+.5*Math.sin(t*2.1+(ud.phase||0));
+    if(ud.glow){
+      const s=1.35+breath*.28+pulse*.8;
+      ud.glow.scale.set(s,s,1);
+      ud.glow.material.opacity=.38+breath*.22+pulse*.32;
+    }
+    if(ud.light)ud.light.intensity=1.05+breath*.55+pulse*1.5;
+    if(ud.lowerRune){ud.lowerRune.rotation.z+=dt*(.85+pulse*2);ud.lowerRune.material.opacity=.42+breath*.22+pulse*.28;}
+    if(ud.upperRune){ud.upperRune.rotation.z-=dt*(1.25+pulse*2.4);ud.upperRune.material.opacity=.36+breath*.2+pulse*.35;}
+    if(ud.leftPage)ud.leftPage.rotation.z=.08+Math.sin(t*3.3)*.025+pulse*.06;
+    if(ud.rightPage)ud.rightPage.rotation.z=-.08-Math.sin(t*3.1)*.025-pulse*.06;
+    if(Array.isArray(ud.sparks))ud.sparks.forEach((spark,i)=>{
+      const a=t*(.9+i*.07)+i*.9, r=.38+(i%3)*.12+pulse*.18, y=1.32+((t*.42+i*.19)%1)*.68;
+      spark.position.set(Math.cos(a)*r,y,Math.sin(a)*r);
+      const size=.09+(.5+.5*Math.sin(t*4+i))*.045+pulse*.08;
+      spark.scale.set(size,size,1);
+      spark.material.opacity=.22+(.5+.5*Math.sin(t*3.6+i))*.26+pulse*.28;
+    });
+  });
+  fellowshipProjectProps.traverse(prop=>{
+    const ud=prop.userData;
+    if(!ud||ud.kind!=='map_table')return;
+    const pulse=Math.max(0,Math.min(1,(ud.pulseUntil-now)/1200));
+    const breath=.5+.5*Math.sin(t*1.75+(ud.phase||0));
+    if(ud.glow){
+      ud.glow.material.opacity=.16+breath*.18+pulse*.34;
+      ud.glow.scale.set(1.85+breath*.18+pulse*.55,1.02+breath*.08+pulse*.22,1);
+    }
+    if(ud.pathLine){
+      ud.pathLine.rotation.z+=dt*(.65+pulse*2.2);
+      ud.pathLine.material.opacity=.26+breath*.2+pulse*.34;
+    }
+    if(Array.isArray(ud.pins))ud.pins.forEach((pin,i)=>{
+      pin.position.y=1.13+Math.sin(t*3+i)*.025+pulse*.06;
+      pin.scale.setScalar(1+pulse*.32);
+    });
+  });
+  fellowshipProjectProps.traverse(prop=>{
+    const ud=prop.userData;
+    if(!ud||ud.kind!=='armory_rack')return;
+    const pulse=Math.max(0,Math.min(1,(ud.pulseUntil-now)/1300));
+    const breath=.5+.5*Math.sin(t*2.4+(ud.phase||0));
+    const color=ud.pulseColor||0xffd24a;
+    if(ud.glow){
+      ud.glow.material.color.setHex(color);
+      ud.glow.material.opacity=.15+breath*.16+pulse*.42;
+      ud.glow.scale.set(2.35+breath*.22+pulse*.62,1.08+breath*.12+pulse*.34,1);
+    }
+    if(ud.readyRing){
+      ud.readyRing.material.color.setHex(color);
+      ud.readyRing.rotation.z+=dt*(1.2+pulse*2.6);
+      ud.readyRing.material.opacity=.26+breath*.22+pulse*.42;
+      ud.readyRing.scale.setScalar(1+pulse*.28);
+    }
+    if(ud.light){ud.light.color.setHex(color);ud.light.intensity=.65+breath*.42+pulse*1.4;}
+  });
+  fellowshipProjectProps.traverse(prop=>{
+    const ud=prop.userData;
+    if(!ud||ud.kind!=='pantry_shelf')return;
+    const pulse=Math.max(0,Math.min(1,(ud.pulseUntil-now)/1300));
+    const breath=.5+.5*Math.sin(t*2.05+(ud.phase||0));
+    const color=ud.pulseColor||0x86efac;
+    if(ud.glow){
+      ud.glow.material.color.setHex(color);
+      ud.glow.material.opacity=.14+breath*.16+pulse*.4;
+      ud.glow.scale.set(2.05+breath*.2+pulse*.58,1.18+breath*.12+pulse*.28,1);
+    }
+    if(ud.readyRing){
+      ud.readyRing.material.color.setHex(color);
+      ud.readyRing.rotation.z-=dt*(.9+pulse*2.2);
+      ud.readyRing.material.opacity=.22+breath*.18+pulse*.38;
+      ud.readyRing.scale.setScalar(1+pulse*.22);
+    }
+    if(Array.isArray(ud.jars))ud.jars.forEach((jar,i)=>{
+      const s=.3+(.5+.5*Math.sin(t*3.2+i))*.05+pulse*.08;
+      jar.scale.set(s,s,1);
+      jar.material.opacity=.1+(.5+.5*Math.sin(t*2.7+i))*.12+pulse*.25;
+    });
+    if(ud.light){ud.light.color.setHex(color);ud.light.intensity=.38+breath*.32+pulse*1.15;}
+  });
+  fellowshipProjectProps.traverse(prop=>{
+    const ud=prop.userData;
+    if(!ud||ud.kind!=='weather_vane')return;
+    const pulse=Math.max(0,Math.min(1,(ud.pulseUntil-now)/1400));
+    const breath=.5+.5*Math.sin(t*1.9+(ud.phase||0));
+    const sky=weather==='storm'?0xb79cff:weather==='rain'?0x67d6ff:0xffd24a;
+    const color=ud.pulseColor||sky;
+    if(ud.glow){
+      ud.glow.material.color.setHex(color);
+      ud.glow.material.opacity=.13+breath*.14+pulse*.42;
+      ud.glow.scale.set(1.75+breath*.18+pulse*.62,1.75+breath*.18+pulse*.62,1);
+    }
+    if(ud.skyRing){
+      ud.skyRing.material.color.setHex(sky);
+      ud.skyRing.rotation.z+=dt*(.75+pulse*2.1+(weather==='storm'?.65:0));
+      ud.skyRing.material.opacity=.22+breath*.2+pulse*.38;
+      ud.skyRing.scale.setScalar(1+pulse*.24);
+    }
+    if(ud.crossA)ud.crossA.rotation.y+=dt*(.24+pulse*.7);
+    if(ud.crossB)ud.crossB.rotation.y+=dt*(.24+pulse*.7);
+    if(ud.arrow){ud.arrow.position.y=1.72+Math.sin(t*3.1)*.025+pulse*.08;ud.arrow.material.color.setHex(sky);}
+    if(ud.light){ud.light.color.setHex(sky);ud.light.intensity=.35+breath*.32+pulse*1.2+(weather==='storm'?.35:0);}
+  });
+  for(let i=recallLecternBursts.length-1;i>=0;i--){
+    const fx=recallLecternBursts[i],age=now-fx.created,life=fx.expires-fx.created,t01=Math.max(0,Math.min(1,age/life));
+    if(t01>=1){
+      townGroup.remove(fx.sprite);
+      if(fx.sprite.material&&fx.sprite.material.map)fx.sprite.material.map.dispose();
+      if(fx.sprite.material)fx.sprite.material.dispose();
+      recallLecternBursts.splice(i,1);continue;
+    }
+    fx.sprite.position.y=fx.startY+t01*.82;
+    fx.sprite.material.opacity=.96*(1-t01);
+    fx.sprite.scale.set(2.2+t01*.35,.55+t01*.08,1);
+  }
+}
+function pulseRecallLecternRenown(amount=1){
+  if(!fellowshipProjectProps)return;
+  const now=performance.now();
+  let target=null;
+  fellowshipProjectProps.traverse(prop=>{if(!target&&prop.userData&&prop.userData.kind==='recall_lectern')target=prop;});
+  if(!target)return;
+  target.userData.pulseUntil=now+1700;
+  const worldPos=new THREE.Vector3();
+  target.getWorldPosition(worldPos);
+  const burst=makeMiniProjectLabel('RENOWN +'+Math.max(1,amount|0),'#f2c75c');
+  burst.position.set(worldPos.x,worldPos.y+2.35,worldPos.z);
+  burst.material.depthTest=false;
+  burst.renderOrder=35;
+  townGroup.add(burst);
+  recallLecternBursts.push({sprite:burst,created:now,expires:now+1550,startY:burst.position.y});
+}
+function pulseMapTablePlanning(label='MAP PLANNED'){
+  if(!fellowshipProjectProps)return;
+  const now=performance.now();
+  let target=null;
+  fellowshipProjectProps.traverse(prop=>{if(!target&&prop.userData&&prop.userData.kind==='map_table')target=prop;});
+  if(!target)return;
+  target.userData.pulseUntil=now+1400;
+  const worldPos=new THREE.Vector3();
+  target.getWorldPosition(worldPos);
+  const burst=makeMiniProjectLabel(String(label||'MAP PLANNED').toUpperCase(),'#7dd3fc');
+  burst.position.set(worldPos.x,worldPos.y+2.15,worldPos.z);
+  burst.material.depthTest=false;
+  burst.renderOrder=35;
+  townGroup.add(burst);
+  recallLecternBursts.push({sprite:burst,created:now,expires:now+1350,startY:burst.position.y});
+}
+function pulseArmoryRack(label='GEAR CHECKED',ready=false){
+  if(!fellowshipProjectProps)return;
+  const now=performance.now();
+  let target=null;
+  fellowshipProjectProps.traverse(prop=>{if(!target&&prop.userData&&prop.userData.kind==='armory_rack')target=prop;});
+  if(!target)return;
+  target.userData.pulseUntil=now+1500;
+  target.userData.pulseColor=ready?0x86efac:0xffd24a;
+  const worldPos=new THREE.Vector3();
+  target.getWorldPosition(worldPos);
+  const burst=makeMiniProjectLabel(String(label||'GEAR CHECKED').toUpperCase(),ready?'#86efac':'#ffd24a');
+  burst.position.set(worldPos.x,worldPos.y+2.55,worldPos.z);
+  burst.material.depthTest=false;
+  burst.renderOrder=35;
+  townGroup.add(burst);
+  recallLecternBursts.push({sprite:burst,created:now,expires:now+1450,startY:burst.position.y});
+}
+function pulsePantryShelf(label='RATIONS CHECKED',ready=false){
+  if(!fellowshipProjectProps)return;
+  const now=performance.now();
+  let target=null;
+  fellowshipProjectProps.traverse(prop=>{if(!target&&prop.userData&&prop.userData.kind==='pantry_shelf')target=prop;});
+  if(!target)return;
+  target.userData.pulseUntil=now+1500;
+  target.userData.pulseColor=ready?0x86efac:0xffad66;
+  const worldPos=new THREE.Vector3();
+  target.getWorldPosition(worldPos);
+  const burst=makeMiniProjectLabel(String(label||'RATIONS CHECKED').toUpperCase(),ready?'#86efac':'#ffad66');
+  burst.position.set(worldPos.x,worldPos.y+2.55,worldPos.z);
+  burst.material.depthTest=false;
+  burst.renderOrder=35;
+  townGroup.add(burst);
+  recallLecternBursts.push({sprite:burst,created:now,expires:now+1450,startY:burst.position.y});
+}
+function pulseWeatherVane(label='SKY READ',ready=false){
+  if(!fellowshipProjectProps)return;
+  const now=performance.now();
+  let target=null;
+  fellowshipProjectProps.traverse(prop=>{if(!target&&prop.userData&&prop.userData.kind==='weather_vane')target=prop;});
+  if(!target)return;
+  target.userData.pulseUntil=now+1600;
+  target.userData.pulseColor=ready?0x86efac:(weather==='storm'?0xb79cff:weather==='rain'?0x67d6ff:0xffd24a);
+  const worldPos=new THREE.Vector3();
+  target.getWorldPosition(worldPos);
+  const burst=makeMiniProjectLabel(String(label||'SKY READ').toUpperCase(),ready?'#86efac':(weather==='storm'?'#b79cff':weather==='rain'?'#67d6ff':'#ffd24a'));
+  burst.position.set(worldPos.x,worldPos.y+2.65,worldPos.z);
+  burst.material.depthTest=false;
+  burst.renderOrder=35;
+  townGroup.add(burst);
+  recallLecternBursts.push({sprite:burst,created:now,expires:now+1500,startY:burst.position.y});
+}
+globalThis.BlockcraftFellowshipEffects={pulseRecallLecternRenown,pulseMapTablePlanning,pulseArmoryRack,pulsePantryShelf,pulseWeatherVane};
 const guildFloorLabels=[];
 function makeGuildFloorLabel(floor){
   const c=document.createElement('canvas');c.width=512;c.height=112;
@@ -3213,12 +4754,26 @@ function renderGuildHallFloors(){
   for(const floor of guildHallState.floors||[]){const sp=makeGuildFloorLabel(floor);townGroup.add(sp);guildFloorLabels.push(sp);}
 }
 function tickTownInteractLabels(dt){
+  updateFellowshipNoticeBoardLabel();
+  updateFellowshipProjectProps();
+  tickFellowshipProjectProps(dt,performance.now()/1000);
+  tickFellowshipWeeklyCacheProp(dt,performance.now()/1000);
   const showTown=dim==='overworld' && !uiOpen && !qOpen && !statOpen;
   for(const sp of townInteractLabels){
     const r=sp.userData.labelRadius||8;
     const d=showTown ? Math.hypot(player.pos.x-sp.position.x, player.pos.z-sp.position.z) : Infinity;
     const target=d<r ? Math.min(.92, (r-d)/2.2) : 0;
     sp.material.opacity += (target-sp.material.opacity)*Math.min(1,dt*9);
+    sp.visible=sp.material.opacity>.03;
+  }
+  for(const sp of townQuestMarkers){
+    const state=townQuestMarkerState(sp);
+    paintNpcQuestMarker(sp,state);
+    const r=sp.userData.questServiceType==='claim_aegis'?18:12;
+    const d=showTown&&state ? Math.hypot(player.pos.x-sp.position.x, player.pos.z-sp.position.z) : Infinity;
+    const target=d<r ? Math.min(.96, (r-d)/3.2) : 0;
+    sp.material.opacity += (target-sp.material.opacity)*Math.min(1,dt*9);
+    sp.position.y+=(Math.sin(performance.now()/450)*.002);
     sp.visible=sp.material.opacity>.03;
   }
 }
@@ -3676,11 +5231,12 @@ function updateDayNight(dt){
   // dungeon dimension overrides the surface lighting
   if(dim==='dungeon'){
     const mood=new THREE.Color(dungeonMoodColor(dungeon));
+    const dungeonTheme=dungeon&&dungeon.definition&&dungeon.definition.theme;
     const tint=new THREE.Color(0x8a8198).lerp(mood,.35);
     matOpaque.color.copy(tint);
     matTrans.color.copy(tint);
     scene.fog.near=5.5;
-    scene.fog.far=30;
+    scene.fog.far=dungeonTheme==='mine'?34:dungeonTheme==='crypt'?26:dungeonTheme==='overgrown'?29:30;
     scene.fog.color.copy(mood);
     SKY.copy(mood);
     hemi.intensity=.46; hemi.color.copy(new THREE.Color(0x6d6388).lerp(mood,.2));
@@ -3795,19 +5351,21 @@ const S={lvl:1, xp:0, pts:0, str:1, agi:1, vit:1, int:1, path:null};
 const GATE_RANK_LETTERS='EDCBA';
 const HUNTER_RANK_LETTERS='EDCBAS';
 const UTILITY_DEFS={
-  compass:{name:'Compass Sense', icon:'C', slot:'passive', unlock:'Claim your first Guild Contract.', desc:'Adds a bearing and distance readout toward your current quest, guild contract, gate, or town objective.'},
-  minimap:{name:'Mini Map', icon:'M', slot:'passive', unlock:'Map your first discovery.', desc:'Keeps the exploration map visible while adventuring so ordinary travel has a navigational anchor.'},
-  world_map:{name:'World Map', icon:'W', slot:'passive', unlock:'Map 5 landmarks or small discoveries.', desc:'Expands the exploration map into a larger cartographer view for longer routes.'},
-  feather_step:{name:'Feather Step', icon:'F', slot:'passive', unlock:'Finish a Parkour event.', desc:'Prevents hard landing shock and acts as the no-fall-damage utility hook for future server damage.'},
-  party_compass:{name:'Party Compass', icon:'P', slot:'passive', unlock:'Create or join a team.', desc:'Shows a bearing and distance to your nearest teammate.'},
-  trail_sense:{name:'Trail Sense', icon:'T', slot:'passive', unlock:'Reach Road Warden reputation III.', desc:'Reads bandit tracks and gives exact patrol bearings without revealing the full map.'},
+  compass:{name:'Compass Sense', icon:'C', slot:'passive', unlock:'Claim your first Guild Contract.', use:'Keeps your current objective on the HUD.', desc:'Adds a bearing and distance readout toward your current quest, guild contract, gate, or town objective.'},
+  minimap:{name:'Mini Map', icon:'M', slot:'passive', unlock:'Map your first discovery.', use:'Improves nearby awareness while exploring.', desc:'Local cartography: keeps nearby mapped sites, road trouble, and active weather discoveries visible while adventuring.'},
+  world_map:{name:'World Map', icon:'W', slot:'passive', unlock:'Map 5 landmarks or small discoveries.', use:'Turns the map into a regional planning tool.', desc:'Regional cartography: expands the map with danger rings, contract targets, treasure clues, and long-route planning markers.'},
+  feather_step:{name:'Feather Step', icon:'F', slot:'passive', unlock:'Clear your first E-rank Gate or finish a Parkour event.', use:'Protects risky climbs, bridges, towers, and dungeon drops.', desc:'Absorbs normal hard falls and softens extreme drops, with server-authoritative landing protection.'},
+  party_compass:{name:'Party Compass', icon:'P', slot:'passive', unlock:'Create or join a team.', use:'Keeps parties together before gates and inside dungeons.', desc:'Coordinates groups: prioritizes gate rally, dungeon pings, downed or spirit allies, and separated teammates.'},
+  trail_sense:{name:'Trail Sense', icon:'T', slot:'active', unlock:'Reach Road Warden reputation III or map 10 discoveries.', use:'Press I to reveal nearby road danger, patrols, or breach trouble.', desc:'Active utility. Reveals nearby road danger, bandit patrols, or breach trouble for a short tracking window.'},
+  weather_sense:{name:'Weather Sense', icon:'S', slot:'passive', unlock:'Harvest Rainwake, Stormglass, and Sun Dial discoveries.', use:'Extends active weather-site awareness.', desc:'Passive utility. Spotted unharvested weather sites stay easier to track, and active weather discoveries can alert you from farther away.'},
 };
-const UTILITY_ORDER=['compass','minimap','world_map','feather_step','party_compass','trail_sense'];
+const UTILITY_ORDER=['compass','minimap','world_map','feather_step','party_compass','trail_sense','weather_sense'];
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
-let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, jobContract=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let activeObjectives=[];
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
 let highestGateRankCleared=-1;
@@ -3919,11 +5477,11 @@ function clampUtilityLoadout(raw){
   const out={active:'',passive:[]};
   if(!raw||typeof raw!=='object') return out;
   const active=String(raw.active||'');
-  if(UTILITY_DEFS[active]&&owned.has(active)) out.active=active;
+  if(UTILITY_DEFS[active]&&UTILITY_DEFS[active].slot==='active'&&owned.has(active)) out.active=active;
   const passive=Array.isArray(raw.passive)?raw.passive:[];
   for(const k of passive){
     const id=String(k||'');
-    if(!UTILITY_DEFS[id]||!owned.has(id)||out.passive.includes(id)) continue;
+    if(!UTILITY_DEFS[id]||UTILITY_DEFS[id].slot==='active'||!owned.has(id)||out.passive.includes(id)) continue;
     out.passive.push(id);
     if(out.passive.length>=3) break;
   }
@@ -3943,6 +5501,11 @@ function setUtilityLoadout(next){
 }
 function toggleUtilityEquip(id){
   if(!utilityUnlocked(id)) return sysMsg('Locked utility: <b>'+escHTML(UTILITY_DEFS[id].name)+'</b> - '+escHTML(UTILITY_DEFS[id].unlock));
+  if(UTILITY_DEFS[id]&&UTILITY_DEFS[id].slot==='active'){
+    setUtilityLoadout({active:utilityLoadout.active===id?'':id,passive:utilityLoadout.passive});
+    renderUtilitiesUI();
+    return;
+  }
   const pass=utilityLoadout.passive.slice();
   const idx=pass.indexOf(id);
   if(idx>=0) pass.splice(idx,1);
@@ -3952,6 +5515,12 @@ function toggleUtilityEquip(id){
   }
   setUtilityLoadout({active:utilityLoadout.active,passive:pass});
   renderUtilitiesUI();
+}
+function useActiveUtility(){
+  const id=utilityLoadout.active,u=UTILITY_DEFS[id];
+  if(!id||!u) return sysMsg('Equip an <b>active utility</b> first.');
+  if(!NET.on||!NET.room) return sysMsg('<b>'+escHTML(u.name)+'</b> needs the server to read the world.');
+  NET.room.send('utilityUse',{id});
 }
 function makeJobContract(jobId){
   if(!JOBS[jobId]) return null;
@@ -3963,25 +5532,40 @@ function makeJobContract(jobId){
   return clampJobContract({...pool[(Math.random()*pool.length)|0],rewardXp:hunterXpForActivity(S.lvl,'job_contract')});
 }
 function jobContractReady(){ return !!(jobContract && jobContract.have>=jobContract.need); }
-function jobContractProgress(kind, n=1, target=0){
-  if(NET.on) return; // authoritative progress arrives from validated server actions
-  if(!jobContract || (jobContract.job!=='adventurer'&&jobContract.job!==playerJob) || !JOBS[jobContract.job]) return;
-  if(jobContractReady()) return;
+function jobContractNextHint(job,level=jobLevelFromXp(jobXpFor(job)),milestones=[],graduation=false){
+  if(graduation)return 'Next: use the graduation kit to prep your first D-rank gate.';
+  const latest=Array.isArray(milestones)&&milestones.length?milestones[milestones.length-1]:null;
+  const lvl=Math.max(1,level|0);
+  if(latest&&job==='farmer')return latest.level>=10?'Next: try Compost on a growing crop.':'Next: plant Prairie Windseed on farmland.';
+  if(latest&&job==='cook')return latest.level>=20?'Next: share a Feast Platter before a serious gate.':latest.level>=10?'Next: pack Trail Rations for dungeon prep.':'Next: craft Golden Broth for recovery.';
+  if(latest&&job==='blacksmith')return 'Next: use the new forge option at Tobin.';
+  if(job==='farmer')return lvl>=10?'Next: grow crops, use Compost, or take another Farmer contract.':lvl>=5?'Next: plant Prairie Windseed or take another Farmer contract.':'Next: plant, harvest, or take another Farmer contract.';
+  if(job==='cook')return lvl>=20?'Next: craft Feast Platter or prep a gate group.':lvl>=10?'Next: pack Trail Rations or take another Cook contract.':lvl>=5?'Next: craft Golden Broth or take another Cook contract.':'Next: cook food or take another Cook contract.';
+  if(job==='blacksmith')return lvl>=2?'Next: reforge at Tobin or take another Blacksmith contract.':'Next: craft tools, smelt ingots, or take another Blacksmith contract.';
+  if(job==='miner')return 'Next: survey caves or take another mining contract.';
+  if(job==='monk')return 'Next: refresh focus at the shrine.';
+  return 'Next: take another contract or prep for the next gate.';
+}
+function jobContractProgress(kind, n=1, target=0, opts={}){
+  if(NET.on) return false; // authoritative progress arrives from validated server actions
+  if(!jobContract || (jobContract.job!=='adventurer'&&jobContract.job!==playerJob) || !JOBS[jobContract.job]) return false;
+  if(jobContractReady()) return false;
   const type=jobContract.type;
   if(type!==kind){
-    if(!(type==='smith' && kind==='repair')) return;
+    if(!(type==='smith' && (kind==='repair'||kind==='upgrade'||kind==='salvage'))) return false;
   }
   if(jobContract.target && target && jobContract.target!==target){
-    if(!(type==='mine' && [B.STONE,B.COBBLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.BRICK,B.CONCRETE,B.TERRACOTTA].includes(target))) return;
-    if(type!=='mine' || ![B.STONE,B.COBBLE].includes(jobContract.target)) return;
+    if(!(type==='mine' && [B.STONE,B.COBBLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.BRICK,B.CONCRETE,B.TERRACOTTA].includes(target))) return false;
+    if(type!=='mine' || ![B.STONE,B.COBBLE].includes(jobContract.target)) return false;
   }
   jobContract.have=Math.min(jobContract.need, jobContract.have+Math.max(1,Math.round(n||1)));
   if(jobContractReady()){
     SFX.level();
-    sysMsg('<b>'+escHTML(jobContract.title)+'</b> complete - claim it from Jobs');
+    if(!opts.silentReady)sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));
     showName('Contract complete');
   }
   refreshHUD();
+  return true;
 }
 function claimJobContract(){
   if(!jobContractReady()) return;
@@ -3989,11 +5573,19 @@ function claimJobContract(){
   const c=jobContract;
   let rewardGold=c.rewardGold|0;
   if(c.job==='adventurer' && jobPerkTier('adventurer')) rewardGold=Math.round(rewardGold*(1+jobPerkTier('adventurer')*.06));
+  const jobName=(JOBS[c.job]&&JOBS[c.job].name)||'Job';
+  const before=jobLevelFromXp(jobXpFor(c.job));
   addGold(rewardGold);
   gainXP(c.rewardXp|0);
   gainJobXP(c.job, c.rewardJobXp, 'contract');
+  const after=jobLevelFromXp(jobXpFor(c.job));
+  const milestone=after>before?JOB_SYSTEM.milestoneAt(c.job,after):null;
+  const next=jobContractNextHint(c.job,after,milestone?[milestone]:[]);
+  if(rewardGold)rewardGain('gold',rewardGold,'Gold');
+  if(c.rewardXp)rewardGain('xp',c.rewardXp,'Hunter XP');
+  if(c.rewardJobXp)rewardGain('item',c.rewardJobXp,jobName+' XP',{icon:'JOB'});
   SFX.coin();
-  sysMsg('Contract claimed: <b>'+escHTML(c.title)+'</b> +' +rewardGold+'g');
+  sysMsg('<b>'+escHTML(c.title||'Contract')+' complete:</b> +'+rewardGold+'g'+(c.rewardXp?', +'+(c.rewardXp|0)+' Hunter XP':'')+(c.rewardJobXp?', +'+(c.rewardJobXp|0)+' '+escHTML(jobName)+' XP':'')+'<br>'+escHTML(after>before?jobName+' Lv '+before+' -> '+after:jobName+' progress advanced')+(milestone?'<br>'+escHTML(milestone.title)+' unlocked':'')+'<br>'+escHTML(next));
   jobContract=null;
   refreshHUD();
   openJobsUI();
@@ -4015,8 +5607,10 @@ function gainJobXP(jobId, n, reason){
   const after=jobLevelFromXp(jobXpFor(jobId));
   if(after>before){
     const milestone=JOB_SYSTEM.milestoneAt(jobId,after);
+    const reward=milestone&&(milestone.reward||JOB_SYSTEM.milestoneReward(jobId,after));
     SFX.level();
-    sysMsg('<b>'+JOBS[jobId].name+' Job Level '+after+'</b> reached'+(milestone?'<br><b>'+escHTML(milestone.title)+' unlocked:</b> '+escHTML(milestone.desc):''));
+    if(reward)rewardGain('rare',1,reward,{icon:'JOB'});
+    sysMsg('<b>'+JOBS[jobId].name+' Job Level '+after+'</b> reached'+(milestone?'<br><b>'+escHTML(milestone.title)+' unlocked:</b> '+escHTML(milestone.desc)+(reward?'<br><b>Reward:</b> '+escHTML(reward):''):''));
     burst(player.pos.x, player.pos.y+1, player.pos.z, jobColorArr(jobId), 24, 2.5, 2.6, .7);
   } else if(reason && Math.random()<.18){
     showName('+'+n+' '+JOBS[jobId].name+' XP');
@@ -4029,21 +5623,71 @@ function awardJobForBlock(id){
     jobContractProgress('mine', 1, id);
   }
 }
-function awardJobForCraft(id, count){
+function craftProfessionOutcome(id,count){
+  count=Math.max(1,Math.round(count||1));
+  if([I.BREAD,I.HEARTY_SANDWICH,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id)){
+    const xp=id===I.FEAST_PLATTER?20:id===I.TRAIL_RATION?10:id===I.GOLDEN_BROTH?8:id===I.DRAGON_TREAT?6:5;
+    const effect=id===I.GOLDEN_BROTH?'strong recovery meal':id===I.TRAIL_RATION?'Well Fed gate prep':id===I.FEAST_PLATTER?'party feast prep':id===I.HEARTY_SANDWICH?'hearty travel food':id===I.DRAGON_TREAT?'dragon care food':'food supply';
+    return {job:'cook',kind:'cook',xp:xp*count,effect};
+  }
+  if(id===I.COOKED_MEAT) return {job:'cook',kind:'cook',xp:4*count,effect:'safer cooked food'};
+  if(id===I.CHARCOAL) return {job:'blacksmith',kind:'smith',xp:4*count,effect:'forge fuel'};
+  if([I.IRON_INGOT,B.STONE].includes(id)) return {job:'blacksmith',kind:'smith',xp:3*count,effect:id===I.IRON_INGOT?'forge material':'worked stone'};
+  if(ITEMS[id] && ITEMS[id].tool) return {job:'blacksmith',kind:'smith',xp:8*count,effect:'dungeon utility gear'};
+  if(ITEMS[id] && ITEMS[id].armor) return {job:'blacksmith',kind:'smith',xp:14*count,effect:'defensive gear'};
+  if(id===I.REPAIR_KIT) return {job:'blacksmith',kind:'smith',xp:6*count,effect:'gear maintenance kit'};
+  return null;
+}
+function contractProgressPreview(kind,target){
+  if(!jobContract || (jobContract.job!=='adventurer'&&jobContract.job!==playerJob) || !JOBS[jobContract.job]) return null;
+  const type=jobContract.type;
+  if(type!==kind && !(type==='smith' && kind==='repair')) return null;
+  if(jobContract.target && target && jobContract.target!==target){
+    if(!(type==='mine' && [B.STONE,B.COBBLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.BRICK,B.CONCRETE,B.TERRACOTTA].includes(target))) return null;
+    if(type!=='mine' || ![B.STONE,B.COBBLE].includes(jobContract.target)) return null;
+  }
+  return {title:jobContract.title||'Contract',have:jobContract.have|0,need:jobContract.need|0,ready:jobContractReady()};
+}
+function craftOutcomeContractLine(before,after,netMode){
+  if(!before) return '';
+  if(netMode) return 'Contract update incoming';
+  if(after && after.ready && !before.ready) return 'Contract ready: '+after.title;
+  if(after && after.have!==before.have) return 'Contract: '+Math.min(after.need,after.have)+'/'+after.need;
+  return '';
+}
+function presentProfessionCraftOutcome(id,count,outcome,before){
+  if(!outcome || !JOBS[outcome.job]) return;
+  const after=contractProgressPreview(outcome.kind,id);
+  const contract=craftOutcomeContractLine(before,after,!!NET.on);
+  const qty=count>1?' x'+count:'';
+  const parts=['<b>'+escHTML(JOBS[outcome.job].name)+' craft:</b> '+escHTML(itemLabel(id))+qty,'+'+outcome.xp+' '+escHTML(JOBS[outcome.job].name)+' XP',escHTML(outcome.effect)];
+  if(contract) parts.push(escHTML(contract));
+  sysMsg(parts.join(' - '));
+  showName('+'+outcome.xp+' '+JOBS[outcome.job].name+' XP');
+}
+function awardJobForCraft(id, count, opts={}){
   count=Math.max(1,count||1);
+  const outcome=craftProfessionOutcome(id,count);
+  if(opts.recapOnly){
+    presentProfessionCraftOutcome(id,count,outcome,null);
+    return outcome;
+  }
+  const before=outcome?contractProgressPreview(outcome.kind,id):null;
   if([I.BREAD,I.HEARTY_SANDWICH,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id)){
     const xp=id===I.FEAST_PLATTER?20:id===I.TRAIL_RATION?10:id===I.GOLDEN_BROTH?8:id===I.DRAGON_TREAT?6:5;
     gainJobXP('cook', xp*count, 'cook');
-    jobContractProgress('cook', count, id);
+    jobContractProgress('cook', count, id, {silentReady:true});
   }
   if([I.COOKED_MEAT,I.CHARCOAL].includes(id)){
     gainJobXP(id===I.COOKED_MEAT?'cook':'blacksmith', 4*count, 'smelt');
-    jobContractProgress(id===I.COOKED_MEAT?'cook':'smith', count, id);
+    jobContractProgress(id===I.COOKED_MEAT?'cook':'smith', count, id, {silentReady:true});
   }
-  if([I.IRON_INGOT,B.STONE].includes(id)){ gainJobXP('blacksmith', 3*count, 'smelt'); jobContractProgress('smith', count, id); }
-  if(ITEMS[id] && ITEMS[id].tool){ gainJobXP('blacksmith', 8*count, 'craft'); jobContractProgress('smith', count, id); }
-  if(ITEMS[id] && ITEMS[id].armor){ gainJobXP('blacksmith', 14*count, 'craft'); jobContractProgress('smith', count, id); }
-  if(id===I.REPAIR_KIT){ gainJobXP('blacksmith', 6*count, 'craft'); jobContractProgress('smith', count, id); }
+  if([I.IRON_INGOT,B.STONE].includes(id)){ gainJobXP('blacksmith', 3*count, 'smelt'); jobContractProgress('smith', count, id, {silentReady:true}); }
+  if(ITEMS[id] && ITEMS[id].tool){ gainJobXP('blacksmith', 8*count, 'craft'); jobContractProgress('smith', count, id, {silentReady:true}); }
+  if(ITEMS[id] && ITEMS[id].armor){ gainJobXP('blacksmith', 14*count, 'craft'); jobContractProgress('smith', count, id, {silentReady:true}); }
+  if(id===I.REPAIR_KIT){ gainJobXP('blacksmith', 6*count, 'craft'); jobContractProgress('smith', count, id, {silentReady:true}); }
+  if(!opts.silent) presentProfessionCraftOutcome(id,count,outcome,before);
+  return outcome;
 }
 const stCost=n=>n*Math.max(.5,1-0.02*(S.agi-1));
 const XP_MINE={[B.COAL_ORE]:4,[B.IRON_ORE]:6,[B.DIAMOND_ORE]:15,[B.LOG]:1,[B.STONE]:.4};
@@ -4065,6 +5709,7 @@ const eventBar=document.getElementById('eventbar');
 const eventQueuePill=document.getElementById('eventqueuepill');
 const eventRewardPill=document.getElementById('eventrewardpill');
 const eventTimePill=document.getElementById('eventtimepill');
+const eventRoster=document.getElementById('eventroster');
 const kingHud=document.getElementById('kinghud');
 const kingTime=document.getElementById('kingtime');
 const kingTeam=document.getElementById('kingteam');
@@ -4130,18 +5775,32 @@ function fmtRace(ms){
   const total=Math.floor(ms/100),tenths=total%10,seconds=Math.floor(total/10)%60,minutes=Math.floor(total/600);
   return minutes+':'+String(seconds).padStart(2,'0')+'.'+tenths;
 }
+function pulseEventHud(){
+  if(!eventHud)return;
+  eventHud.classList.remove('eventflash');
+  void eventHud.offsetWidth;
+  eventHud.classList.add('eventflash');
+}
 function renderEventHud(){
   renderEventResult();
   renderEventStart();
   renderKingHud();
   renderParkourHud();
   renderCaravanHud();
-  if(calmTownHud()){
-    if(eventHud) eventHud.classList.add('hidden');
-    return;
-  }
-  if(!eventHud||!serverEvent || serverEvent.phase==='idle'||serverEvent.phase==='ended'){
-    if(eventHud) eventHud.classList.add('hidden');
+  if(!eventHud)return;
+  if(!serverEvent){
+    eventHud.classList.remove('hidden');
+    eventHud.classList.add('idle');
+    eventHud.classList.remove('queue','joined','starting','ready','go','active','king');
+    eventTitle.innerHTML='<b>SERVER EVENTS</b>';
+    eventSub.textContent='Syncing event schedule - queue status will appear here';
+    eventJoinBtn.textContent=NET.on?'SYNCING':'CONNECTING';
+    eventJoinBtn.disabled=true;
+    if(eventQueuePill)eventQueuePill.textContent='QUEUE --/--';
+    if(eventRewardPill)eventRewardPill.textContent='SCHEDULE';
+    if(eventTimePill)eventTimePill.textContent='SYNCING';
+    if(eventRoster){eventRoster.classList.add('hidden');eventRoster.innerHTML='';}
+    if(eventBar)eventBar.style.width='0%';
     return;
   }
   const now=Date.now();
@@ -4155,23 +5814,34 @@ function renderEventHud(){
     ?Math.max(1,serverEvent.rewardMin|0)+'-'+Math.max(1,serverEvent.rewardMax|0)+' legendary tokens'
     :reward+' legendary tokens';
   const rewardText=rewardTokens+(rewardXp?' + '+rewardXp.toLocaleString('en-US')+' Hunter XP':'');
+  const queueSize=Math.max(0,serverEvent.queueSize|0);
+  const queueCapacity=Math.max(1,serverEvent.queueCapacity||8);
   let sub='Waiting for event';
   let btn='JOIN QUEUE', disabled=true, timeLeft=0, barPct=0;
+  eventHud.classList.toggle('idle',serverEvent.phase==='idle'||serverEvent.phase==='ended');
   eventHud.classList.toggle('queue',serverEvent.phase==='queue');
-  eventHud.classList.toggle('joined',serverEvent.phase==='queue'&&!!serverEvent.joined);
+  eventHud.classList.toggle('joined',!!serverEvent.joined||!!serverEvent.ready||!!serverEvent.participating);
+  eventHud.classList.toggle('starting',serverEvent.phase==='starting');
+  eventHud.classList.toggle('ready',serverEvent.phase==='starting'&&!!serverEvent.ready);
+  eventHud.classList.toggle('go',serverEvent.phase==='starting'&&!!serverEvent.goAt);
   eventHud.classList.toggle('active',serverEvent.phase==='active');
   eventHud.classList.toggle('king',isKing);
-  if(serverEvent.phase==='queue'){
+  if(serverEvent.phase==='idle'){
+    timeLeft=Math.max(0,(serverEvent.nextAt||0)-now);
+    sub='Next queue opens in '+fmtClock(timeLeft)+' - queued '+queueSize+'/'+queueCapacity+' - reward '+rewardText;
+    btn='QUEUE CLOSED';
+    disabled=true;
+  } else if(serverEvent.phase==='queue'){
     timeLeft=Math.max(0,(serverEvent.startsAt||0)-now);
     barPct=1-Math.min(1,timeLeft/EVENT_QUEUE_CLIENT_MS);
     if(serverEvent.waitingForPlayers){
       sub=serverEvent.waitingReason==='teams'
         ?'Waiting for an opposing squad - teams hold up to 5 hunters'
-        :'Waiting for more hunters - '+(serverEvent.queueSize||0)+' / '+(serverEvent.minParticipants||1)+' minimum';
+        :'Waiting for more hunters - '+queueSize+' / '+(serverEvent.minParticipants||1)+' minimum';
     }else if(serverEvent.queueExtended){
-      sub='Final call - queue extended '+fmtClock(timeLeft)+' - '+(serverEvent.queueSize||0)+' / '+(serverEvent.queueCapacity||8);
+      sub='Final call - queue extended '+fmtClock(timeLeft)+' - '+queueSize+' / '+queueCapacity;
     }else{
-      sub=(serverEvent.joined?'Signed up':'Event alert')+' - starts in '+fmtClock(timeLeft)+' - queued '+(serverEvent.queueSize||0)+' - reward '+rewardText;
+      sub=(serverEvent.joined?'Signed up':'Not signed up')+' - starts in '+fmtClock(timeLeft)+' - queued '+queueSize+'/'+queueCapacity+' - reward '+rewardText;
     }
     btn=serverEvent.joined?'LEAVE QUEUE':'JOIN QUEUE';
     disabled=false;
@@ -4181,7 +5851,8 @@ function renderEventHud(){
     sub=serverEvent.goAt
       ?'All hunters ready - begins in '+Math.max(1,Math.ceil(timeLeft/1000))
       :(serverEvent.ready?'Ready - waiting for hunters':'Press a movement key to confirm you are ready')+' - '+(serverEvent.readyCount||0)+' / '+(serverEvent.participantCount||0);
-    btn='GET READY';
+    btn=serverEvent.ready?'READY':'READY UP';
+    disabled=!!serverEvent.ready||!!serverEvent.goAt;
   } else if(serverEvent.phase==='active'){
     timeLeft=Math.max(0,(serverEvent.endsAt||0)-now);
     barPct=Math.min(1,timeLeft/(EVENT_ACTIVE_CLIENT_MS[serverEvent.kind]||EVENT_ACTIVE_CLIENT_MS.parkour));
@@ -4191,6 +5862,9 @@ function renderEventHud(){
       sub+=' - '+(isKing?'leader ':'best ')+(best.name||'Hunter')+' '+fmtClock(best.ms||0);
     }
     btn=serverEvent.completed?'COMPLETE':'ACTIVE';
+  } else if(serverEvent.phase==='ended'){
+    sub='Event results posted - queue will reopen after the next alert';
+    btn='EVENT DONE';
   }
   if(isKing && serverEvent.phase==='active'){
     const crown=serverEvent.crown||{};
@@ -4209,9 +5883,23 @@ function renderEventHud(){
   eventSub.textContent=sub;
   eventJoinBtn.textContent=btn;
   eventJoinBtn.disabled=disabled;
-  if(eventQueuePill)eventQueuePill.textContent=(serverEvent.joined?'SIGNED UP':'QUEUE')+' '+(serverEvent.queueSize|0)+'/'+(serverEvent.queueCapacity||8);
+  if(eventQueuePill)eventQueuePill.textContent=(serverEvent.joined?'SIGNED UP':serverEvent.phase==='starting'&&serverEvent.ready?'READY':'QUEUE')+' '+queueSize+'/'+queueCapacity;
   if(eventRewardPill)eventRewardPill.textContent=rewardText.toUpperCase();
-  if(eventTimePill)eventTimePill.textContent=serverEvent.phase==='queue'&&serverEvent.waitingForPlayers?'WAITING':fmtClock(timeLeft);
+  if(eventTimePill)eventTimePill.textContent=serverEvent.phase==='queue'&&serverEvent.waitingForPlayers?'WAITING':serverEvent.phase==='ended'?'DONE':fmtClock(timeLeft);
+  if(eventRoster){
+    const roster=Array.isArray(serverEvent.stagingRoster)?serverEvent.stagingRoster:[];
+    if(serverEvent.phase==='starting'&&roster.length){
+      eventRoster.classList.remove('hidden');
+      eventRoster.innerHTML=roster.map(member=>{
+        const cls=member&&member.ready?'ready':'waiting';
+        const label=member&&member.ready?'READY':'WAITING';
+        return '<span class="'+cls+'"><b>'+escHTML(member&&member.name||'Hunter')+'</b><i>'+label+'</i></span>';
+      }).join('');
+    }else{
+      eventRoster.classList.add('hidden');
+      eventRoster.innerHTML='';
+    }
+  }
   if(eventBar)eventBar.style.width=Math.max(0,Math.min(100,Math.round(barPct*100)))+'%';
 }
 function clearParkourObjectiveVisuals(){
@@ -4597,15 +6285,31 @@ function kingCrownChanged(m){
 if(eventJoinBtn) eventJoinBtn.onclick=()=>{
   if(!NET.on||!NET.room||!serverEvent) return;
   if(serverEvent.phase==='queue') NET.room.send(serverEvent.joined?'eventLeave':'eventJoin', {});
+  else if(serverEvent.phase==='starting') confirmEventReady();
 };
 function applyEventStatus(m){
   const previousEventId=serverEvent&&serverEvent.id||'';
+  const previousPhase=serverEvent&&serverEvent.phase||'';
+  const previousJoined=!!(serverEvent&&serverEvent.joined);
+  const previousReady=!!(serverEvent&&serverEvent.ready);
+  const previousGoAt=serverEvent&&serverEvent.goAt||0;
   serverEvent=m||null;
   if(!serverEvent||serverEvent.id!==previousEventId||serverEvent.kind!=='caravan'||serverEvent.phase==='ended')lastCaravanRewardTier=null;
   if(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id!==lastEventAlertId){
     lastEventAlertId=serverEvent.id;
     sysMsg('<b>Event Alert:</b> '+escHTML(serverEvent.name||'Server Event')+' queue is open. Join from the event banner before the countdown ends. <b>Reward:</b> '+Math.max(0,serverEvent.reward||2)+' Legendary Tokens'+(serverEvent.rewardXp?' + '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' Hunter XP':'')+'.');
-    if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}
+    pulseEventHud();
+  }else if(serverEvent&&serverEvent.phase==='queue'&&!previousJoined&&serverEvent.joined){
+    pulseEventHud();
+  }else if(serverEvent&&serverEvent.phase==='starting'&&previousPhase!=='starting'&&serverEvent.participating){
+    pulseEventHud();
+    sysMsg('<b>Staging started:</b> ready up from the event strip or move once to confirm.');
+  }else if(serverEvent&&serverEvent.phase==='starting'&&!previousReady&&serverEvent.ready){
+    pulseEventHud();
+    sysMsg('<b>Ready confirmed.</b> Waiting for the remaining hunters.');
+  }else if(serverEvent&&serverEvent.phase==='starting'&&!previousGoAt&&serverEvent.goAt){
+    pulseEventHud();
+    sysMsg('<b>All hunters ready.</b> Event begins in moments.');
   }
   renderEventHud();
   const activeHere=!!(serverEvent&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&!serverEvent.completed&&serverEvent.id===eventId);
@@ -4637,7 +6341,7 @@ function applyEventTeleport(m){
   if(m.kind==='caravan'){
     if(m.eventId&&m.arena)enterCaravanEvent(m);
     else leaveEventDimension(m);
-    if(m.reason==='start'){if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}sysMsg('<b>Caravan Defence staging!</b> Ready your escort.');}
+    if(m.reason==='start'){pulseEventHud();sysMsg('<b>Caravan Defence staging!</b> Ready your escort.');}
     else if(m.reason==='respawn')sysMsg('You were overwhelmed and have rejoined beside the wagon.');
     else if(m.reason==='arena')sysMsg('Stay with the caravan escort.','minor');
     return;
@@ -4645,14 +6349,14 @@ function applyEventTeleport(m){
   if(m.kind==='king'){
     if(m.eventId&&m.arena) enterKingEvent(m);
     else leaveEventDimension(m);
-    if(m.reason==='start'){ if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');} sysMsg('<b>King of the Hill started!</b> Hold the crown longest.'); }
+    if(m.reason==='start'){ pulseEventHud(); sysMsg('<b>King of the Hill staging!</b> Ready up, then hold the crown longest.'); }
     else if(m.reason==='respawn') sysMsg('You were defeated. Respawning in the arena.');
     else if(m.reason==='arena') sysMsg('Stay inside the King of the Hill arena.');
     return;
   }
   if(m.eventId && m.course) enterParkourEvent(m);
   else leaveParkourEvent(m);
-  if(m.reason==='start'){ if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');} sysMsg('<b>Parkour started!</b> Reach the finish before time runs out.'); }
+  if(m.reason==='start'){ pulseEventHud(); sysMsg('<b>Parkour staging!</b> Ready up, then reach the finish before time runs out.'); }
   else if(m.reason==='reset') sysMsg('You fell out of the event course. Returning to your latest checkpoint.');
 }
 function buildParkourWorld(course){
@@ -4783,7 +6487,7 @@ const rewardGainActive=new Map();
 function rewardGain(kind, amount, label, opts={}){
   amount=Math.max(0,Math.round(Number(amount)||0));
   if(!rewardFeedEl||!amount)return;
-  kind=['xp','gold','item','rare','legendary'].includes(kind)?kind:'item';
+  kind=['xp','gold','item','rare','legendary','renown'].includes(kind)?kind:'item';
   label=String(label||kind.toUpperCase()).slice(0,48);
   const key=kind+'|'+label;
   const old=rewardGainActive.get(key);
@@ -4870,6 +6574,25 @@ function eventLog(text, name='[Event]'){
 function itemLabel(id){
   return ITEMS[id] ? ITEMS[id].name : ('Item '+id);
 }
+function goldDeltaText(delta, label='gold'){
+  const n=Math.round(Number(delta)||0);
+  if(!n)return '0 '+label;
+  return (n>0?'+':'-')+Math.abs(n)+' '+label;
+}
+function goldDeltaHTML(delta, label='gold'){
+  const n=Math.round(Number(delta)||0),cls=n>=0?'ok':'bad';
+  return '<b class="'+cls+'">'+escHTML(goldDeltaText(n,label))+'</b>';
+}
+function goldBalanceHTML(value=gold){
+  const n=Math.max(0,Math.round(Number(value)||0));
+  return 'Balance: <b>'+n+' gold</b>';
+}
+function economyRecapHTML(delta, balance=gold, reason=''){
+  const parts=[goldDeltaHTML(delta)];
+  if(reason)parts.push(escHTML(reason));
+  parts.push(goldBalanceHTML(balance));
+  return parts.join(' - ');
+}
 function rewardReasonText(reason){
   if(reason==='dead') return 'You were defeated before the boss fell.';
   if(reason==='range') return 'You were too far from the boss room when the fight ended.';
@@ -4890,6 +6613,15 @@ function rewardUnlockText(m, earned){
   if(nr==null) return 'No clear reward. Hunter rank still advances only through earned XP.';
   return 'No clear reward. Earn XP to reach '+RANKS[nr].n+'-Rank; gate clears do not promote you directly.';
 }
+function dungeonRewardHandoffText(m, earned, failed){
+  const result=m&&m.result;
+  if(failed && result&&result.reason==='breach') return 'The failed Gate cost the clear payout and left a public threat. Repair, restock, and clear the next Gate before the timer expires.';
+  if(failed) return 'Return to town, repair, restock, and challenge another Gate. Existing gear is kept.';
+  if(!earned) return rewardUnlockText(m||{}, false);
+  const total=Math.max(0,result&&result.chestTotal|0),opened=Math.max(0,result&&result.chestsOpened|0),left=Math.max(0,total-opened);
+  const chest=total&&left>0?' Optional chests remain: '+left+'.':'';
+  return 'Full clear reward awarded: XP, gold, materials, key/shard/gear chances, and progress credit. Exit through the portal when ready.'+chest+' '+rewardUnlockText(m||{}, true);
+}
 function rewardIcon(label, id){
   if(label==='XP'||label==='Hunter XP') return 'XP';
   if(label==='Gold') return 'G';
@@ -4906,6 +6638,29 @@ function rewardClass(label, id){
   if(id===I.DIAMOND || label.indexOf('Diamond')>=0 || label.indexOf('Key')>=0) return 'rare';
   return '';
 }
+function rewardTriageGroup(r){
+  const id=r&&r.id, item=id!=null&&ITEMS[id];
+  if(r.label==='XP'||r.label==='Hunter XP')return 'Progression';
+  if(r.label==='Gold')return 'Currency';
+  if(item&&(item.tool||item.armor)||r.gear)return 'Gear';
+  if([I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A,I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A].includes(id))return 'Keys';
+  if([I.SHARD_MINOR,I.SHARD_MAJOR,I.SHARD_GLIMMER,I.SHARD_EFFERV,I.SHARD_RADIANT].includes(id))return 'Shards';
+  if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id))return 'Rare Protected';
+  if(id===I.COAL||id===I.IRON_INGOT||id===I.DIAMOND||(item&&item.place!=null))return 'Materials';
+  return 'Items';
+}
+function groupedRewardLootHTML(rows){
+  const order=['Progression','Currency','Gear','Keys','Shards','Rare Protected','Materials','Items'];
+  const groups=new Map();
+  for(const r of rows){
+    const group=rewardTriageGroup(r);
+    if(!groups.has(group))groups.set(group,[]);
+    groups.get(group).push(r);
+  }
+  return order.filter(g=>groups.has(g)).map(group=>
+    '<div class="rewardgroup"><small>'+escHTML(group)+'</small>'+groups.get(group).map(rewardLineHTML).join('')+'</div>'
+  ).join('');
+}
 function rewardLineHTML(r){
   const cls=rewardClass(r.label, r.id);
   const item=r.id!=null&&ITEMS[r.id];
@@ -4914,6 +6669,24 @@ function rewardLineHTML(r){
     try{ icon='<i class="ricon"><img src="'+item.icon.toDataURL()+'" alt=""></i>'; }catch(e){}
   }
   return '<div class="rline '+cls+'">'+icon+'<span>'+escHTML(r.label)+'</span><b>'+escHTML(r.value)+'</b></div>';
+}
+function dungeonResultTime(ms){
+  const sec=Math.max(0,Math.round((ms||0)/1000)),m=Math.floor(sec/60),s=sec%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+function dungeonResultStatsHTML(result){
+  if(!result)return '';
+  const stats=[
+    ['Dungeon', result.dungeonName||'Ranked Gate'],
+    ['Boss', result.bossName||'Gate Boss'],
+    ['Time', dungeonResultTime(result.clearMs||0)],
+    ['Party', Math.max(1,result.partySize|0)+' hunter'+((result.partySize|0)===1?'':'s')],
+    ['Deaths', Math.max(0,result.deaths|0)],
+    ['Spirits', Math.max(0,result.spirits|0)],
+    ['Returned', Math.max(0,result.returned|0)],
+    ['Chests', Math.max(0,result.chestsOpened|0)+'/'+Math.max(0,result.chestTotal|0)],
+  ];
+  return '<div class="resultstats">'+stats.map(([k,v])=>'<span><b>'+escHTML(k)+'</b>'+escHTML(String(v))+'</span>').join('')+'</div>';
 }
 function applyGateProgress(p){
   if(!p || typeof p.highestGateRankCleared!=='number') return;
@@ -4928,8 +6701,9 @@ function showDungeonReward(m, earned){
   if(earned) applyGateProgress(m&&m.progress);
   const milestone=gateMilestoneHandoff(m,earned);
   const resumePlay=!!(milestone&&(locked||lockFallback));
-  const ri=Math.max(0,Math.min(4,(m&&typeof m.rank==='number')?m.rank:(dungeon?dungeon.rank:0)));
-  const kind=gateKindLabel((m&&m.kind)||((dungeon&&dungeon.kind)||'public'));
+  const result=m&&m.result||null,failed=!!(m&&m.failed||result&&result.outcome==='failed');
+  const ri=Math.max(0,Math.min(4,(result&&typeof result.rank==='number')?result.rank:(m&&typeof m.rank==='number')?m.rank:(dungeon?dungeon.rank:0)));
+  const kind=gateKindLabel((result&&result.kind)||(m&&m.kind)||((dungeon&&dungeon.kind)||'public'));
   const rows=[];
   if(earned){
     if(m.xp) rows.push({label:'XP', value:'+'+(m.xp|0)});
@@ -4937,21 +6711,30 @@ function showDungeonReward(m, earned){
     if(m.coal) rows.push({label:itemLabel(I.COAL), value:'x'+(m.coal|0), id:I.COAL});
     if(m.iron) rows.push({label:itemLabel(I.IRON_INGOT), value:'x'+(m.iron|0), id:I.IRON_INGOT});
     if(m.dia) rows.push({label:itemLabel(I.DIAMOND), value:'x'+(m.dia|0), id:I.DIAMOND});
-    if(Array.isArray(m.items)) for(const it of m.items) if(it&&ITEMS[it.id]){const gear=it.gear&&ITEMS[it.id].tool?GEAR_SYSTEM.profile({tier:ITEMS[it.id].tool.tier,legendary:!!ITEMS[it.id].legendary},it):null;rows.push({label:(gear?gear.rank.name+' '+gear.rarity.name+' ':'')+itemLabel(it.id),value:'x'+(it.count||1),id:it.id});}
+    if(Array.isArray(m.items)) for(const it of m.items) if(it&&ITEMS[it.id]){const gear=it.gear&&ITEMS[it.id].tool?GEAR_SYSTEM.profile({tier:ITEMS[it.id].tool.tier,legendary:!!ITEMS[it.id].legendary},it):null;rows.push({label:(gear?gear.rank.name+' '+gear.rarity.name+' ':'')+itemLabel(it.id),value:'x'+(it.count||1),id:it.id,gear:!!gear});}
   }
   rewardPanel.className=earned?'earned':'missed';
-  const shardLine=earned&&m.shard ? '<div class="rbonus"><b>Shard bonus:</b> '+escHTML((m.shard.name||'Sharded')+' +'+(m.shard.plus||0))+' increased boss gold, XP, and legendary token drops.</div>' : '';
+  const shard=result&&result.shard||m&&m.shard;
+  const shardLine=shard ? '<div class="rbonus"><b>Shard bonus:</b> '+escHTML((shard.name||'Sharded')+' +'+(shard.plus||0))+(earned?' increased boss gold, XP, and legendary token drops.':' shaped this attempt with '+(Array.isArray(shard.mods)&&shard.mods.length?shard.mods.join(', '):'extra danger')+'.')+'</div>' : '';
   const milestoneLine=milestone?'<div class="rbonus"><b>'+escHTML(milestone.label)+':</b> '+escHTML(milestone.text)+'</div>':'';
-  const body=earned
-    ? (rows.length?'<div class="rewardloot">'+rows.map(rewardLineHTML).join('')+'</div>':'<div class="rnote">No item drops this time.</div>')
+  const failText=result&&result.reason==='breach'
+    ? 'Timer expired. No clear loot, progress, keys, shards, or gear. The escaped boss becomes a public cleanup bounty with reduced XP and materials only.'
+    : result&&result.reason==='wipe'
+    ? 'The party was reduced to spirits and returned to town. No clear loot or progress; existing gear is kept.'
+    : 'The dungeon collapsed before the boss was cleared. No clear loot or progress; existing gear is kept.';
+  const body=failed
+    ? '<div class="rnote"><b>Attempt failed.</b><br>'+escHTML(failText)+'</div>'
+    : earned
+    ? (rows.length?'<div class="rewardloot triage">'+groupedRewardLootHTML(rows)+'</div>':'<div class="rnote">No item drops this time.</div>')
     : '<div class="rnote"><b>No loot earned.</b><br>'+escHTML(rewardReasonText(m&&m.reason))+'</div>';
   rewardPanel.innerHTML=
-    '<h2>'+(earned?'DUNGEON CLEARED':'LOOT MISSED')+'</h2>'+
-    '<div class="rsub">'+escHTML(RANKS[ri].n+'-Rank '+kind+' Gate')+'</div>'+
+    '<h2>'+(failed?'DUNGEON FAILED':earned?'DUNGEON CLEARED':'LOOT MISSED')+'</h2>'+
+    '<div class="rsub">'+escHTML((result&&result.dungeonName?result.dungeonName+' · ':'')+RANKS[ri].n+'-Rank '+kind+' Gate')+'</div>'+
+    dungeonResultStatsHTML(result)+
     body+
     shardLine+
     milestoneLine+
-    '<div class="rnote">'+escHTML(rewardUnlockText(m||{}, earned))+'</div>'+
+    '<div class="rnote">'+escHTML(dungeonRewardHandoffText(m||{}, earned, failed))+'</div>'+
     '<button id="rewardclose">'+escHTML(milestone?milestone.action:'CLOSE')+'</button>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.toggle('promotion-open',!!milestone);
@@ -5027,17 +6810,19 @@ function eventGo(m){
   applyEventStatus(m);
   eventStageAnchor=null;
   if(eventStartWin)eventStartWin.classList.add('hidden');
-  if(eventHud){eventHud.classList.remove('eventflash');void eventHud.offsetWidth;eventHud.classList.add('eventflash');}
+  pulseEventHud();
   sysMsg('<b>GO!</b> '+(m&&m.kind==='king'?'Take and hold the crown.':m&&m.kind==='caravan'?'Defend the wagon through every ambush.':'Follow the checkpoint beacons to the finish.'));
 }
 function eventAfk(m){
   eventStageAnchor=null;
   if(eventStartWin)eventStartWin.classList.add('hidden');
+  pulseEventHud();
   sysMsg('Removed from <b>'+escHTML(m&&m.name||'the event')+'</b>: no ready input was received during staging.');
 }
 function eventCancelled(m){
   eventStageAnchor=null;
   if(eventStartWin)eventStartWin.classList.add('hidden');
+  pulseEventHud();
   sysMsg('<b>'+escHTML(m&&m.name||'Event')+' cancelled.</b> Not enough ready hunters remained. You have been returned safely.');
 }
 function eventResultCell(label,value){
@@ -5213,6 +6998,18 @@ function die(){
 let deathEl=null, deathHideTimer=0;
 function deathCauseText(source){
   const s=String(source||'').replace(/^server:/,'').toLowerCase();
+  if(s.indexOf('boss_slam')>=0) return 'Crushed by a boss slam';
+  if(s.indexOf('boss_charge')>=0) return 'Trampled by a boss charge';
+  if(s.indexOf('boss_spikes')>=0) return 'Impaled by ground spikes';
+  if(s.indexOf('boss_melee')>=0) return 'Cut down by the boss';
+  if(s.indexOf('grave_ring')>=0) return 'Caught in the Grave Ring';
+  if(s.indexOf('falling_rock')>=0) return 'Crushed by falling rock';
+  if(s.indexOf('keeper_roots')>=0||s.indexOf('blighted_roots')>=0) return 'Snared by roots';
+  if(s.indexOf('drowned_tide')>=0) return 'Swept away by the Drowned Tide';
+  if(s.indexOf('ossuary_wave')>=0) return 'Shattered by the ossuary wave';
+  if(s.indexOf('arrow')>=0||s.indexOf('quickshot')>=0) return 'Shot by a ranged enemy';
+  if(s.indexOf('brute')>=0) return 'Crushed by a brute slam';
+  if(s.indexOf('flanker')>=0) return 'Taken down by a pack lunge';
   if(s.indexOf('lightning')>=0) return 'Struck down by lightning';
   if(s.indexOf('bandit')>=0) return 'Cut down by bandits';
   if(s.indexOf('fall')>=0) return 'The fall was too far';
@@ -5223,14 +7020,16 @@ function deathCauseText(source){
   if(s.indexOf('pvp')>=0||s.indexOf('bounty')>=0) return 'Slain by a rival hunter';
   return 'Slain in the field';
 }
-function showDeathScreen(cause,sub){
+function showDeathScreen(cause,sub,recap=''){
   if(!deathEl){
     deathEl=document.createElement('div'); deathEl.id='deathscreen';
-    deathEl.innerHTML='<div id="deathtitle">YOU DIED</div><div id="deathcause"></div><div id="deathsub"></div>';
+    deathEl.innerHTML='<div id="deathtitle">YOU DIED</div><div id="deathcause"></div><div id="deathsub"></div><div id="deathrecap"></div>';
     document.body.appendChild(deathEl);
   }
   deathEl.querySelector('#deathcause').textContent=cause||'';
   deathEl.querySelector('#deathsub').textContent=sub||'';
+  const recapEl=deathEl.querySelector('#deathrecap');
+  if(recapEl) recapEl.textContent=recap?('Last hits: '+recap):'';
   deathEl.classList.add('show');
   camShake=Math.max(camShake,.4);
   clearTimeout(deathHideTimer);
@@ -6819,7 +8618,9 @@ gameContext.registerState('world', Object.freeze({
   get grid(){ return world; },
   set grid(next){ world=next; },
   stats:S,
+  get landClaimOverlay(){ return landClaimOverlay; },
   get overworldActivity(){ return overworldActivity; },
+  get activeObjectives(){ return activeObjectives; },
   get event(){ return Object.freeze({id:eventId,active:eventMode,grid:eventWorld}); },
   get skyshipJourney(){ return skyshipJourney; },
 }));
@@ -6832,8 +8633,16 @@ gameContext.registerModule('world', Object.freeze({
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,
   message:sysMsg,
+  goldDeltaText,
+  goldDeltaHTML,
+  goldBalanceHTML,
+  economyRecapHTML,
   applySkyshipJourney,
   tickRoadSafetyScenes,
+  spotlightLandClaim,
+  baseSetupStatus,
+  openLandClaims:openLandClaimsUI,
+  toggleLandClaims:toggleLandClaimOverlay,
   tavernGameAction,
 }));
 
@@ -6842,6 +8651,7 @@ const legacyWorldBindings={
   "addBox":{get:()=>addBox},
   "ABILITY_MEADOW":{get:()=>ABILITY_MEADOW},
   "activeJob":{get:()=>activeJob},
+  "activeObjectives":{get:()=>activeObjectives,set:value=>{activeObjectives=Array.isArray(value)?value:[];}},
   "addTorchMesh":{get:()=>addTorchMesh},
   "angDiff":{get:()=>angDiff},
   "applyDayCycleSync":{get:()=>applyDayCycleSync},
@@ -6875,6 +8685,7 @@ const legacyWorldBindings={
   "campfireGlowMat":{get:()=>campfireGlowMat},
   "canBreakHere":{get:()=>canBreakHere},
   "canBuildHere":{get:()=>canBuildHere},
+  "baseSetupStatus":{get:()=>baseSetupStatus},
   "CHUNK":{get:()=>CHUNK},
   "chunkMeshes":{get:()=>chunkMeshes},
   "claimCam":{get:()=>claimCam,set:value=>{claimCam=value;}},
@@ -6882,6 +8693,7 @@ const legacyWorldBindings={
   "claimJobContract":{get:()=>claimJobContract},
   "claimMode":{get:()=>claimMode,set:value=>{claimMode=value;}},
   "claimMouse":{get:()=>claimMouse,set:value=>{claimMouse=value;}},
+  "clampHomesteadWorkOrder":{get:()=>clampHomesteadWorkOrder},
   "clampJobContract":{get:()=>clampJobContract},
   "clampRegionalContract":{get:()=>clampRegionalContract},
   "clampUtilityLoadout":{get:()=>clampUtilityLoadout},
@@ -6936,6 +8748,8 @@ const legacyWorldBindings={
   "caravanHunterDowned":{get:()=>caravanHunterDowned},
   "caravanHunterRevived":{get:()=>caravanHunterRevived},
   "showEventResult":{get:()=>showEventResult},
+  "showLandEditDenied":{get:()=>showLandEditDenied},
+  "explainBaseSetupPlacement":{get:()=>explainBaseSetupPlacement},
   "eventLog":{get:()=>eventLog},
   "eventRejected":{get:()=>eventRejected},
   "fireballExplodeVfx":{get:()=>fireballExplodeVfx},
@@ -6956,6 +8770,9 @@ const legacyWorldBindings={
   "giantGuardian":{get:()=>giantGuardian,set:value=>{giantGuardian=value;}},
   "glowFlash":{get:()=>glowFlash},
   "glowTexCanvas":{get:()=>glowTexCanvas},
+  "goldBalanceHTML":{get:()=>goldBalanceHTML},
+  "goldDeltaHTML":{get:()=>goldDeltaHTML},
+  "goldDeltaText":{get:()=>goldDeltaText},
   "guardShellVfx":{get:()=>guardShellVfx},
   "guildHallState":{get:()=>guildHallState,set:value=>{guildHallState=value;}},
   "hash2":{get:()=>hash2},
@@ -6982,11 +8799,14 @@ const legacyWorldBindings={
   "isTownLand":{get:()=>isTownLand},
   "isTrainingMeadowLand":{get:()=>isTrainingMeadowLand},
   "itemLabel":{get:()=>itemLabel},
+  "economyRecapHTML":{get:()=>economyRecapHTML},
   "ITEMS":{get:()=>ITEMS},
+  "homesteadWorkOrder":{get:()=>homesteadWorkOrder,set:value=>{homesteadWorkOrder=value;}},
   "jobContract":{get:()=>jobContract,set:value=>{jobContract=value;}},
   "jobContractOffers":{get:()=>jobContractOffers,set:value=>{jobContractOffers=value;}},
   "jobContractOffersJob":{get:()=>jobContractOffersJob,set:value=>{jobContractOffersJob=value;}},
   "jobContractRefreshAt":{get:()=>jobContractRefreshAt,set:value=>{jobContractRefreshAt=value;}},
+  "jobContractNextHint":{get:()=>jobContractNextHint},
   "jobContractProgress":{get:()=>jobContractProgress},
   "jobContractReady":{get:()=>jobContractReady},
   "jobLevelFromXp":{get:()=>jobLevelFromXp},
@@ -7002,6 +8822,7 @@ const legacyWorldBindings={
   "jobXpIntoLevel":{get:()=>jobXpIntoLevel},
   "lam":{get:()=>lam},
   "landClaims":{get:()=>landClaims},
+  "landClaimStatusAt":{get:()=>landClaimStatusAt},
   "landKey":{get:()=>landKey},
   "landPrice":{get:()=>landPrice},
   "lastHurt":{get:()=>lastHurt,set:value=>{lastHurt=value;}},
@@ -7061,6 +8882,7 @@ const legacyWorldBindings={
   "renderGuildHallFloors":{get:()=>renderGuildHallFloors},
   "rendering":{get:()=>rendering},
   "requestLandClaim":{get:()=>requestLandClaim},
+  "openLandClaimsUI":{get:()=>openLandClaimsUI},
   "resetGateCutsceneSeen":{get:()=>resetGateCutsceneSeen},
   "rewardHideTimer":{get:()=>rewardHideTimer,set:value=>{rewardHideTimer=value;}},
   "rewardLineHTML":{get:()=>rewardLineHTML},
@@ -7117,6 +8939,7 @@ const legacyWorldBindings={
   "tickCropTimers":{get:()=>tickCropTimers},
   "tickDragonIncubationMeshes":{get:()=>tickDragonIncubationMeshes},
   "tickGuidancePath":{get:()=>tickGuidancePath},
+  "tickLandClaimOverlay":{get:()=>tickLandClaimOverlay},
   "tickMobs":{get:()=>tickMobs},
   "tickTownInteractLabels":{get:()=>tickTownInteractLabels},
   "tickVillagers":{get:()=>tickVillagers},
@@ -7124,7 +8947,10 @@ const legacyWorldBindings={
   "tileV":{get:()=>tileV},
   "tod":{get:()=>tod,set:value=>{tod=value;}},
   "toggleClaimMode":{get:()=>toggleClaimMode},
+  "toggleLandClaimOverlay":{get:()=>toggleLandClaimOverlay},
+  "spotlightLandClaim":{get:()=>spotlightLandClaim},
   "toggleUtilityEquip":{get:()=>toggleUtilityEquip},
+  "useActiveUtility":{get:()=>useActiveUtility},
   "torches":{get:()=>torches},
   "torchFlameMat":{get:()=>torchFlameMat},
   "torchGlowMat":{get:()=>torchGlowMat},

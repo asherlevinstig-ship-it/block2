@@ -25,6 +25,29 @@ const EVENT_QUEUE_EXTENSION_MS = 15000;
 const EVENT_QUEUE_CAPACITY = 8;
 const EVENT_QUEUE_NEAR_FULL = 6;
 const EVENT_TEAM_MAX = 5;
+const FELLOWSHIP_PROJECTS = [
+  { id: 'map_table', name: 'Map Table', cost: 30, desc: 'Guild scouting reports become easier to read.', perk: 'Map leads and treasure clues are your fellowship identity hook.' },
+  { id: 'armory_rack', name: 'Armory Rack', cost: 45, desc: 'A shared place for repair notes, kit prep, and trophy weapons.', perk: 'Future pass: small repair convenience and weapon trophy display.' },
+  { id: 'pantry_shelf', name: 'Pantry Shelf', cost: 45, desc: 'A shared food-prep shelf for dungeon rations and broth planning.', perk: 'Future pass: fellowship food preparation contracts.' },
+  { id: 'weather_vane', name: 'Weather Vane', cost: 60, desc: 'Tracks rain, storm, and clear-sky opportunities for weather discoveries.', perk: 'Pairs naturally with Weather Sense and weather materials.' },
+  { id: 'recall_lectern', name: 'Recall Lectern', cost: 75, desc: 'A study corner for Recall practice and limbo recovery.', perk: 'Future pass: visible fellowship learning achievements.' },
+];
+const FELLOWSHIP_PROJECT_BY_ID = new Map(FELLOWSHIP_PROJECTS.map(p => [p.id, p]));
+const FELLOWSHIP_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const FELLOWSHIP_NOTICE_OBJECTIVES = [
+  { id: 'earn_30_renown', title: 'Earn 30 Renown', desc: 'Complete Guild or Road Warden work together this week.', target: 30, unit: 'Renown' },
+  { id: 'finish_3_contracts', title: 'Finish 3 Contracts', desc: 'Clear three Guild or Road Warden contracts as a fellowship.', target: 3, unit: 'contracts' },
+  { id: 'complete_project', title: 'Complete a Hall Project', desc: 'Save Renown and finish one fellowship upgrade.', target: 1, unit: 'project' },
+  { id: 'grow_to_3', title: 'Gather 3 Hunters', desc: 'Recruit enough members for a real expedition party.', target: 3, unit: 'members' },
+];
+const FELLOWSHIP_NOTICE_BY_ID = new Map(FELLOWSHIP_NOTICE_OBJECTIVES.map(o => [o.id, o]));
+const FELLOWSHIP_WEEKLY_REWARDS = [
+  { id: 'supply_10', threshold: 10, name: 'Supply Cache', desc: 'A small shared-play thank-you for getting the week moving.', gold: 25, items: [{ id: I.BREAD, count: 2 }, { id: I.COAL, count: 2 }] },
+  { id: 'chest_30', threshold: 30, name: 'Fellowship Chest', desc: 'The first real weekly target: practical materials for the next run.', gold: 75, items: [{ id: I.IRON_INGOT, count: 3 }, { id: I.REPAIR_KIT, count: 1 }] },
+  { id: 'banner_60', threshold: 60, name: 'Hall Banner Cache', desc: 'Prestige supplies for a fellowship that keeps playing together.', gold: 150, items: [{ id: I.TRAIL_RATION, count: 2 }, { id: I.DIAMOND, count: 1 }] },
+  { id: 'prestige_100', threshold: 100, name: 'Prestige Coffer', desc: 'A strong weekly capstone for organised fellowship work.', gold: 300, items: [{ id: I.FEAST_PLATTER, count: 1 }, { id: I.DIAMOND, count: 2 }] },
+];
+const FELLOWSHIP_WEEKLY_REWARD_BY_ID = new Map(FELLOWSHIP_WEEKLY_REWARDS.map(r => [r.id, r]));
 
 class EventsMixin {
   // Server-event and day-cycle state, co-located with the mixin that owns it.
@@ -168,6 +191,7 @@ class EventsMixin {
     this.skyshipPassengers.set(sid, part);
     rec.prof.skyshipTransit = { ...part, route: 'western' };
     this.dirtyPlayers.add(rec.token);
+    if (this.recordEconomyGold) this.recordEconomyGold(client, -SKYSHIP_BOARD_GOLD, 'travel_sink', 'skyship_board', { party: !!party, rank });
     this.placeSkyshipPassenger(sid, now);
     client.send('skyshipBoardResult', { ok: true, ...this.skyshipPassengerPayload(sid, now), gold: rec.prof.gold | 0, rank });
     return true;
@@ -182,6 +206,7 @@ class EventsMixin {
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + (part.paid | 0));
     rec.prof.skyshipTransit = null;
     this.dirtyPlayers.add(rec.token);
+    if (this.recordEconomyGold) this.recordEconomyGold(client, part.paid | 0, 'travel_refund', 'skyship_leave', { paid: part.paid | 0 });
     const p = this.state.players.get(sid);
     if (p) { p.x = W.TOWN.TC - 42; p.y = W.TOWN.G + 25.05; p.z = W.TOWN.TC; }
     client.send('skyshipLeft', { gold: rec.prof.gold | 0, refunded: part.paid | 0 });
@@ -1541,13 +1566,17 @@ class EventsMixin {
     const targets = this.validAegisBountyTargets(client);
     if (!targets.length) return client.send('pvpBountyReject', { reason: 'target' });
     const pick = targets[(Math.random() * targets.length) | 0];
-    const expiresAt = Date.now() + AEGIS_BOUNTY_MS;
+    const now = Date.now(), expiresAt = now + AEGIS_BOUNTY_MS;
     this.aegisBounties.set(client.sessionId, {
       targetSid: pick.client.sessionId,
       targetName: pick.player.name || 'Hunter',
       expiresAt,
+      offeredAt: now,
+      acceptedAt: now,
       nextHitAt: 0,
     });
+    const rec = this.profileFor(client);
+    if (rec && this.activeQuestObjectives) client.send('progressionFocus', { focus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
     client.send('pvpBountyAssigned', { targetSid: pick.client.sessionId, targetName: pick.player.name || 'Hunter', expiresAt });
   }
   handlePvpBountyHit(client, m) {
@@ -1556,6 +1585,16 @@ class EventsMixin {
     const now = Date.now();
     if (now > bounty.expiresAt) {
       this.aegisBounties.delete(client.sessionId);
+      if (this.sendQuestOutcome) this.sendQuestOutcome(client, {
+        source: 'aegis',
+        questType: 'manhunt',
+        title: 'Silent Bounty',
+        outcome: 'expired',
+        reason: 'time',
+        location: 'Aegis Guardian',
+        canReaccept: true,
+        noReward: true,
+      });
       return client.send('pvpBountyFail', { reason: 'time' });
     }
     const targetSid = String(m && m.sid || '');
@@ -1588,7 +1627,12 @@ class EventsMixin {
     this.aegisBounties.delete(killerSid);
     if (killer) {
       const rec = this.profileFor(killer);
-      if (rec) { rec.prof.aegisTrialReady = true; this.dirtyPlayers.add(rec.token); }
+      if (rec) {
+        rec.prof.aegisTrialReady = true;
+        rec.prof.aegisTrial = { claimableAt: Date.now(), acceptedAt: bounty.acceptedAt || 0, completedAt: Date.now() };
+        this.dirtyPlayers.add(rec.token);
+        if (this.activeQuestObjectives) killer.send('progressionFocus', { focus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(killer, rec.prof) });
+      }
       killer.send('pvpBountyComplete', { targetSid: client.sessionId, targetName: p.name || bounty.targetName || 'Hunter' });
     }
     client.send('pvpBountySlain', { hunterSid: killerSid });
@@ -1817,6 +1861,120 @@ class EventsMixin {
     if (a === 'leader') return true;
     return a === 'officer' && t === 'member';
   }
+  publicFellowshipProject(project, guild) {
+    const done = !!(project && guild && guild.projects && guild.projects.has(project.id));
+    return project ? { ...project, done } : null;
+  }
+  fellowshipProjectsFor(guild) {
+    return FELLOWSHIP_PROJECTS.map(p => this.publicFellowshipProject(p, guild));
+  }
+  currentFellowshipWeek(now = Date.now()) {
+    return Math.floor(now / FELLOWSHIP_WEEK_MS) * FELLOWSHIP_WEEK_MS;
+  }
+  normalizeFellowshipWeek(guild, now = Date.now()) {
+    if (!guild) return;
+    const week = this.currentFellowshipWeek(now);
+    if (Math.max(0, Number(guild.renownWeekStart) || 0) !== week) {
+      guild.renownWeekStart = week;
+      guild.renownWeek = 0;
+      guild.contractsWeek = 0;
+      guild.weeklyRewardClaims = { week, claims: {} };
+      this.dirtyGuilds = true;
+    }
+    guild.renownWeek = Math.max(0, guild.renownWeek | 0);
+    guild.contractsWeek = Math.max(0, guild.contractsWeek | 0);
+    if (!guild.weeklyRewardClaims || typeof guild.weeklyRewardClaims !== 'object' || Math.max(0, Number(guild.weeklyRewardClaims.week) || 0) !== week) guild.weeklyRewardClaims = { week, claims: {} };
+    if (!guild.weeklyRewardClaims.claims || typeof guild.weeklyRewardClaims.claims !== 'object' || Array.isArray(guild.weeklyRewardClaims.claims)) guild.weeklyRewardClaims.claims = {};
+  }
+  fellowshipWeeklyRewardsFor(guild, token = '') {
+    if (!guild) return [];
+    this.normalizeFellowshipWeek(guild);
+    const claims = guild.weeklyRewardClaims && guild.weeklyRewardClaims.claims || {};
+    return FELLOWSHIP_WEEKLY_REWARDS.map(r => {
+      const claimedBy = Array.isArray(claims[r.id]) ? claims[r.id] : [];
+      const unlocked = (guild.renownWeek | 0) >= r.threshold;
+      const claimed = !!(token && claimedBy.includes(token));
+      return { id: r.id, threshold: r.threshold, name: r.name, desc: r.desc, gold: r.gold | 0, items: (r.items || []).map(it => ({ id: it.id, count: it.count })), unlocked, claimed, claimable: unlocked && !claimed };
+    });
+  }
+  publicFellowshipNoticeObjective(objective, guild) {
+    if (!objective || !guild) return null;
+    this.normalizeFellowshipWeek(guild);
+    let value = 0;
+    if (objective.id === 'earn_30_renown') value = guild.renownWeek | 0;
+    else if (objective.id === 'finish_3_contracts') value = guild.contractsWeek | 0;
+    else if (objective.id === 'complete_project') value = guild.projects && guild.projects.size ? 1 : 0;
+    else if (objective.id === 'grow_to_3') value = guild.members ? guild.members.size : 0;
+    const target = Math.max(1, objective.target | 0);
+    return { ...objective, value: Math.max(0, value | 0), target, done: value >= target };
+  }
+  fellowshipActiveWorkFor(guild) {
+    if (!guild || !guild.members) return [];
+    const out = [];
+    for (const token of guild.members) {
+      const prof = this.profiles.get(token);
+      const c = prof && prof.regionalContract;
+      if (!c) continue;
+      out.push({
+        hunter: this.fellowshipNameForToken(token),
+        title: c.title || 'Guild Contract',
+        have: Math.max(0, c.have | 0),
+        need: Math.max(1, c.need | 0),
+        ready: !!c.ready || ((c.have | 0) >= (c.need | 0)),
+      });
+      if (out.length >= 8) break;
+    }
+    return out;
+  }
+  fellowshipNoticeBoardFor(guild) {
+    if (!guild) return null;
+    this.normalizeFellowshipWeek(guild);
+    const pinnedId = guild.notice && typeof guild.notice.id === 'string' ? guild.notice.id : '';
+    const pinnedDef = FELLOWSHIP_NOTICE_BY_ID.get(pinnedId);
+    return {
+      weekRenown: guild.renownWeek | 0,
+      weekContracts: guild.contractsWeek | 0,
+      weeklyRewards: this.fellowshipWeeklyRewardsFor(guild),
+      activeWork: this.fellowshipActiveWorkFor(guild),
+      pinned: pinnedDef ? {
+        ...this.publicFellowshipNoticeObjective(pinnedDef, guild),
+        pinnedBy: guild.notice.pinnedBy || 'Officer',
+        pinnedAt: Math.max(0, Number(guild.notice.pinnedAt) || 0),
+      } : null,
+      objectiveCatalog: FELLOWSHIP_NOTICE_OBJECTIVES.map(o => this.publicFellowshipNoticeObjective(o, guild)),
+    };
+  }
+  awardGuildRenown(client, amount, reason = 'activity') {
+    const rec = this.profileFor(client), guild = rec && this.guildForToken(rec.token);
+    amount = Math.max(0, Math.min(999, amount | 0));
+    if (!guild || !amount) return false;
+    this.normalizeFellowshipWeek(guild);
+    guild.renown = Math.min(1000000, (guild.renown | 0) + amount);
+    guild.totalRenown = Math.min(1000000, (guild.totalRenown | 0) + amount);
+    guild.renownWeek = Math.min(1000000, (guild.renownWeek | 0) + amount);
+    if (/contract/i.test(String(reason || ''))) guild.contractsWeek = Math.min(1000000, (guild.contractsWeek | 0) + 1);
+    this.dirtyGuilds = true;
+    const board = this.fellowshipNoticeBoardFor ? this.fellowshipNoticeBoardFor(guild) : null;
+    const pinned = board && board.pinned ? {
+      id: board.pinned.id,
+      title: board.pinned.title,
+      value: board.pinned.value | 0,
+      target: Math.max(1, board.pinned.target | 0),
+      unit: board.pinned.unit || '',
+      done: !!board.pinned.done,
+    } : null;
+    client.send('guildRenown', { id: guild.id, name: guild.name, amount, reason, renown: guild.renown | 0, totalRenown: guild.totalRenown | 0, weekRenown: guild.renownWeek | 0, weekGoal: 30, pinned });
+    this.broadcastGuildHallSync();
+    return true;
+  }
+  awardGuildRenownForProject(client, projectId, amount, reason = 'activity') {
+    if (!this.clientGuildHasProject(client, projectId)) return 0;
+    return this.awardGuildRenown(client, amount, reason) ? Math.max(0, Math.min(999, amount | 0)) : 0;
+  }
+  clientGuildHasProject(client, id) {
+    const rec = this.profileFor(client), guild = rec && this.guildForToken(rec.token);
+    return !!(guild && guild.projects && guild.projects.has(id));
+  }
   guildHallPayload(client) {
     const token = this.clientToken(client);
     const mine = this.guildForToken(token);
@@ -1842,7 +2000,13 @@ class EventsMixin {
         id: mine.id, name: mine.name, leaderName: mine.leaderName, floor: mine.floor,
         memberCount: mine.members.size, isLeader: mine.leader === token,
         role: this.guildRole(mine, token), private: !!mine.private, members,
+        renown: mine.renown | 0, totalRenown: mine.totalRenown | 0,
+        projects: this.fellowshipProjectsFor(mine),
+        noticeBoard: this.fellowshipNoticeBoardFor(mine),
+        weeklyRewards: this.fellowshipWeeklyRewardsFor(mine, token),
       } : null,
+      projectCatalog: FELLOWSHIP_PROJECTS.map(p => ({ ...p })),
+      noticeObjectiveCatalog: FELLOWSHIP_NOTICE_OBJECTIVES.map(o => ({ ...o })),
       nextFloor: floors.length + 1,
       nextPrice: guildFloorPrice(floors.length),
       maxFloors: GUILD_FLOOR_MAX,
@@ -1874,6 +2038,7 @@ class EventsMixin {
     const guild = {
       id: 'G' + (++this.guildSeq), name, leader: token, leaderName: p && p.name || rec.prof.name || 'Guild Leader',
       members: new Set([token]), roles: new Map(), invites: new Set(), private: !!(m && m.private), floor: 0, foundedAt: Date.now(), floorBoughtAt: 0,
+      renown: 0, totalRenown: 0, renownWeek: 0, contractsWeek: 0, renownWeekStart: this.currentFellowshipWeek(), weeklyRewardClaims: { week: this.currentFellowshipWeek(), claims: {} }, projects: new Set(), notice: null,
     };
     this.guilds.set(guild.id, guild);
     this.dirtyGuilds = true;
@@ -2006,6 +2171,82 @@ class EventsMixin {
     this.broadcastGuildHallSync();
     this.broadcast('chat', { name: '[Fellowship]', text: this.fellowshipNameForToken(targetToken) + ' is now ' + role + ' of ' + guild.name });
   }
+  handleGuildProjectFund(client, m) {
+    const rec = this.profileFor(client);
+    const guild = rec && this.guildForToken(rec.token);
+    if (!rec || !guild) return client.send('guildReject', { reason: 'guild' });
+    if (!this.nearGuildReception(client)) return client.send('guildReject', { reason: 'range' });
+    if (this.rateLimited(client, 'guild', 1, 3)) return client.send('guildReject', { reason: 'rate' });
+    if (!this.guildCanInvite(guild, rec.token)) return client.send('guildReject', { reason: 'officer' });
+    const id = typeof (m && m.id) === 'string' ? m.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) : '';
+    const project = FELLOWSHIP_PROJECT_BY_ID.get(id);
+    if (!project) return client.send('guildReject', { reason: 'project' });
+    if (!guild.projects) guild.projects = new Set();
+    if (guild.projects.has(id)) return client.send('guildReject', { reason: 'project_done' });
+    if ((guild.renown | 0) < project.cost) return client.send('guildReject', { reason: 'renown', cost: project.cost, renown: guild.renown | 0 });
+    guild.renown = Math.max(0, (guild.renown | 0) - project.cost);
+    guild.projects.add(id);
+    this.dirtyGuilds = true;
+    client.send('guildProjectResult', { id, name: project.name, cost: project.cost, renown: guild.renown | 0 });
+    this.broadcastGuildHallSync();
+    this.broadcast('chat', { name: '[Fellowship]', text: guild.name + ' completed project: ' + project.name });
+  }
+  handleGuildWeeklyRewardClaim(client, m) {
+    const rec = this.profileFor(client);
+    const guild = rec && this.guildForToken(rec.token);
+    if (!rec || !guild) return client.send('guildReject', { reason: 'guild' });
+    if (!this.nearGuildReception(client)) return client.send('guildReject', { reason: 'range' });
+    this.normalizeFellowshipWeek(guild);
+    const id = typeof (m && m.id) === 'string' ? m.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) : '';
+    const reward = FELLOWSHIP_WEEKLY_REWARD_BY_ID.get(id);
+    if (!reward) return client.send('guildReject', { reason: 'reward' });
+    if ((guild.renownWeek | 0) < reward.threshold) return client.send('guildReject', { reason: 'reward_locked', threshold: reward.threshold, weekRenown: guild.renownWeek | 0 });
+    const claims = guild.weeklyRewardClaims.claims;
+    const claimedBy = Array.isArray(claims[id]) ? claims[id] : (claims[id] = []);
+    if (claimedBy.includes(rec.token)) return client.send('guildReject', { reason: 'reward_claimed' });
+    if (this.rateLimited(client, 'guildReward', 1, 2)) return client.send('guildReject', { reason: 'rate' });
+    claimedBy.push(rec.token);
+    if (claimedBy.length > 200) claims[id] = claimedBy.slice(-200);
+    const rewardGold = Math.max(0, reward.gold | 0);
+    if (rewardGold) {
+      rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + rewardGold);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'fellowship_faucet', 'weekly_reward', { id });
+    }
+    const items = [];
+    for (const item of reward.items || []) {
+      const left = this.addRewardItem(rec.prof, item.id, item.count);
+      items.push({ id: item.id, count: Math.max(0, (item.count | 0) - left), requested: item.count | 0, overflow: Math.max(0, left | 0) });
+    }
+    this.dirtyGuilds = true;
+    this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    const rewards = this.fellowshipWeeklyRewardsFor(guild, rec.token).map(r => r.id === id ? { ...r, claimed: true, claimable: false } : r);
+    client.send('guildWeeklyRewardResult', { id, name: reward.name, threshold: reward.threshold, rewardGold, gold: rec.prof.gold | 0, items, weekRenown: guild.renownWeek | 0, rewards });
+    this.broadcastGuildHallSync();
+  }
+  handleGuildNoticePin(client, m) {
+    const rec = this.profileFor(client);
+    const guild = rec && this.guildForToken(rec.token);
+    if (!rec || !guild) return client.send('guildReject', { reason: 'guild' });
+    if (!this.nearGuildReception(client)) return client.send('guildReject', { reason: 'range' });
+    if (this.rateLimited(client, 'guild', 1, 3)) return client.send('guildReject', { reason: 'rate' });
+    if (!this.guildCanInvite(guild, rec.token)) return client.send('guildReject', { reason: 'officer' });
+    const rawId = typeof (m && m.id) === 'string' ? m.id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) : '';
+    if (!rawId) {
+      guild.notice = null;
+      this.dirtyGuilds = true;
+      client.send('guildResult', { ok: true, action: 'noticeClear' });
+      this.broadcastGuildHallSync();
+      return;
+    }
+    const objective = FELLOWSHIP_NOTICE_BY_ID.get(rawId);
+    if (!objective) return client.send('guildReject', { reason: 'notice' });
+    guild.notice = { id: rawId, pinnedAt: Date.now(), pinnedBy: this.fellowshipNameForToken(rec.token) };
+    this.dirtyGuilds = true;
+    client.send('guildResult', { ok: true, action: 'noticePin', title: objective.title });
+    this.broadcastGuildHallSync();
+    this.broadcast('chat', { name: '[Fellowship]', text: guild.name + ' pinned a new notice: ' + objective.title });
+  }
   setGuildHallBlock(x, y, z, id, dirty = true) {
     if (!W.inWorld(x, y, z)) return;
     this.world.setB(x, y, z, id);
@@ -2072,6 +2313,7 @@ class EventsMixin {
     guild.floorBoughtAt = Date.now();
     this.dirtyPlayers.add(rec.token);
     this.dirtyGuilds = true;
+    if (this.recordEconomyGold) this.recordEconomyGold(client, -price, 'guild_sink', 'floor_buy', { floor });
     this.buildGuildHallFloor(floor, true);
     client.send('guildFloorResult', { floor, price, gold: rec.prof.gold | 0, name: guild.name });
     this.broadcastGuildHallSync();

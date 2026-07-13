@@ -473,7 +473,8 @@ class CombatMixin {
     const cooldowns = { ember: 7000, frost: 9000, storm: 6500, verdant: 12000, void: 10000 };
     const care = this.dragonCareFor(rec.prof, type) || { happiness: 50 };
     const happyBonus = Math.max(0, Math.min(0.18, (care.happiness - 50) / 50 * 0.18));
-    const cd = Math.round((cooldowns[type] || 9000) * (1 - happyBonus));
+    const bondBonus = typeof this.dragonBondCooldownBonus === 'function' ? this.dragonBondCooldownBonus(rec.prof, type) : 0;
+    const cd = Math.round((cooldowns[type] || 9000) * (1 - happyBonus - bondBonus));
     const key = client.sessionId + ':' + type;
     const readyAt = this.dragonAbilityCd.get(key) || 0;
     if (readyAt > now) return client.send('dragonAbilityReject', { reason: 'cooldown', left: Math.ceil((readyAt - now) / 1000) });
@@ -501,8 +502,10 @@ class CombatMixin {
       this.damageMobsInRadius(client, p.x, p.y + 1, p.z, 2.4, 6, { slow: 2.2, stun: .35 });
       fx.fromX = from.x; fx.fromY = from.y; fx.fromZ = from.z; fx.x = p.x; fx.y = p.y; fx.z = p.z;
     }
+    const bond = typeof this.awardDragonBondXp === 'function' ? this.awardDragonBondXp(rec.prof, type, 2, 'ability') : null;
+    if (bond && bond.gained > 0) this.dirtyPlayers.add(rec.token);
     this.sendSpace(dgn, 'fx', fx);
-    client.send('dragonAbilityResult', { type, cd: Math.ceil(cd / 1000), happiness: care.happiness | 0 });
+    client.send('dragonAbilityResult', { type, cd: Math.ceil(cd / 1000), happiness: care.happiness | 0, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
   }
   spawnAbilityFireball(client, p, m, def, prof) {
     let dx = Number(m.dx), dy = Number(m.dy), dz = Number(m.dz);
@@ -810,6 +813,7 @@ class CombatMixin {
     delete this.mobMeta[mobId];
     if (dgn) this.removeTransient(dgn, String(mobId));
     if (wasBoss && dgn) this.onBossDown(dgn);
+    else if (wasBoss && !dgn && killedMeta.gateBreachBoss && this.resolveGateBreachBoss && this.resolveGateBreachBoss(client, String(mobId), { ...mob, x: dx, y: dy, z: dz }, killedMeta)) { /* breach cleanup reward handled by gate lifecycle */ }
     else if (kind === 'orb' || kind === 'ghost') { /* hazard entities: no reward */ }
     else if (client) {
       const ring = dgn ? 0 : Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
@@ -910,6 +914,7 @@ class CombatMixin {
     if (rec) {
       this.grantHunterXp(rec.prof, loot.xp, client, loot.source || 'gate');
       rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + (loot.gold | 0)));
+      if (this.recordEconomyGold) this.recordEconomyGold(client, loot.gold | 0, 'loot_faucet', loot.source || 'gate', { rank: loot.rank | 0, kind: loot.kind || '' });
       if (loot.coal) this.addRewardItem(rec.prof, REWARD_ITEMS.coal, loot.coal);
       if (loot.iron) this.addRewardItem(rec.prof, REWARD_ITEMS.iron, loot.iron);
       if (loot.dia) this.addRewardItem(rec.prof, REWARD_ITEMS.dia, loot.dia);
@@ -928,7 +933,7 @@ class CombatMixin {
       this.dirtyPlayers.add(rec.token);
     }
     client.send('loot', loot);
-    if (rec) client.send('profile', rec.prof);
+    if (rec) this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
   }
   markGateCleared(client, rank) {
     const rec = this.profileFor(client);
@@ -950,7 +955,7 @@ class CombatMixin {
     if ((rec.prof.highestGateRankCleared | 0) < ri) {
       rec.prof.highestGateRankCleared = ri;
       this.dirtyPlayers.add(rec.token);
-      client.send('profile', rec.prof);
+      this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     }
     const after = Math.max(-1, Math.min(4, rec.prof.highestGateRankCleared | 0));
     const availableRank = this.maxUnlockedGateRankForProfile(rec.prof);

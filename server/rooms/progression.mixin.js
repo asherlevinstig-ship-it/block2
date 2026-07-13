@@ -1,6 +1,7 @@
 const W = require('../world');
 const JOB_SYSTEM = require('../../shared/job-system');
 const GEAR_SYSTEM = require('../../shared/gear-system');
+const NPC_QUEST_REGISTRY = require('../../shared/npc-quest-chains');
 const { hunterXpForActivity } = require('./xp-economy');
 const {
   ARMOR_INFO, I, JOB_IDS, TOOL_INFO, hunterActivityXpForLevel, jobLevelFromXp, jobPerkTier,
@@ -28,41 +29,414 @@ const GRADUATION_REWARD = Object.freeze([
   Object.freeze({ id: I.IRON_INGOT, count: 8 }),
   Object.freeze({ id: I.REPAIR_KIT, count: 1 }),
 ]);
+const PROGRESSION_MILESTONE_REWARDS = Object.freeze({
+  first_e_gate: Object.freeze({
+    title: 'First Dungeon Cleared',
+    text: 'The E-rank Gate paid for your first workshop. Build a station before the next push.',
+    modal: true,
+    subtitle: 'FIRST E-RANK GATE PAYOFF',
+    action: 'CRAFT FIRST STATION',
+    items: Object.freeze([
+      Object.freeze({ id: W.B.PLANKS, count: 8 }),
+      Object.freeze({ id: W.B.COBBLE, count: 8 }),
+      Object.freeze({ id: W.B.TORCH, count: 8 }),
+    ]),
+  }),
+  craft_station: Object.freeze({
+    title: 'Station Built',
+    text: 'Your base can now grow into a workshop.',
+    items: Object.freeze([Object.freeze({ id: W.B.TORCH, count: 8 }), Object.freeze({ id: I.BREAD, count: 2 })]),
+  }),
+  land_claim: Object.freeze({
+    title: 'First Claim Secured',
+    text: 'This land is yours: you can build here, untrusted hunters cannot edit it, and wilderness outside remains open.',
+    modal: true,
+    subtitle: 'YOUR FIRST PROTECTED BASE',
+    action: 'PLACE STORAGE AND LIGHT',
+    items: Object.freeze([Object.freeze({ id: W.B.CHEST, count: 1 }), Object.freeze({ id: W.B.TORCH, count: 8 })]),
+  }),
+  base_setup: Object.freeze({
+    title: 'Base Established',
+    text: 'Your protected base now has storage, light, and a working station. Take a contract when you are ready.',
+    modal: true,
+    subtitle: 'HOME BASE READY',
+    action: 'TAKE FIRST CONTRACT',
+    items: Object.freeze([Object.freeze({ id: I.REPAIR_KIT, count: 1 }), Object.freeze({ id: I.BREAD, count: 2 })]),
+  }),
+  first_contract: Object.freeze({
+    title: 'Work Accepted',
+    text: 'Pack a small lunch before heading into the field.',
+    items: Object.freeze([Object.freeze({ id: I.BREAD, count: 2 })]),
+  }),
+});
+const PROFESSION_MILESTONE_STARTERS = Object.freeze({
+  'blacksmith:2': Object.freeze({ title: 'Basic Reforge Supplies', text: 'Tobin sets aside iron for your first reforge. Try it on a sword, axe, or pick.', items: Object.freeze([Object.freeze({ id: I.IRON_INGOT, count: 1 })]) }),
+  'farmer:5': Object.freeze({ title: 'Prairie Windseed Starter', text: 'Plant these in farmland to try Windseed Cultivation immediately.', items: Object.freeze([Object.freeze({ id: I.WINDSEED, count: 2 })]) }),
+  'farmer:10': Object.freeze({ title: 'Fieldcraft Starter', text: 'Use Compost on young crops to feel the Fieldcraft speed-up right away.', items: Object.freeze([Object.freeze({ id: I.COMPOST, count: 2 })]) }),
+  'cook:5': Object.freeze({ title: 'Golden Broth Sample', text: 'Taste the recovery meal you can now cook at Lv 5.', items: Object.freeze([Object.freeze({ id: I.GOLDEN_BROTH, count: 1 })]) }),
+  'cook:10': Object.freeze({ title: 'Trail Ration Sample', text: 'Pack this before your next Gate to feel the new expedition food loop.', items: Object.freeze([Object.freeze({ id: I.TRAIL_RATION, count: 1 })]) }),
+  'cook:20': Object.freeze({ title: 'Feast Platter Sample', text: 'Share this with nearby party members before a serious Gate pull.', items: Object.freeze([Object.freeze({ id: I.FEAST_PLATTER, count: 1 })]) }),
+  'miner:20': Object.freeze({ title: 'Geode Mastery Sample', text: 'Crack this open at the forge loop so Geode Mastery has an immediate payoff.', items: Object.freeze([Object.freeze({ id: I.GEODE, count: 1 })]) }),
+});
+const HOMESTEAD_WORK_ORDER_SPECS = Object.freeze([
+  Object.freeze({ type: 'stock', job: 'miner', target: W.B.COBBLE, need: 20, rewardGold: 24, rewardJobXp: 18, title: 'Foundation Stock', desc: 'Contribute cobblestone for repairs and future rooms.' }),
+  Object.freeze({ type: 'stock', job: 'blacksmith', target: W.B.TORCH, need: 8, rewardGold: 20, rewardJobXp: 16, title: 'Lantern Reserve', desc: 'Keep spare torches ready so the homestead stays workable at night.' }),
+  Object.freeze({ type: 'craft', job: 'cook', target: I.BREAD, need: 3, rewardGold: 22, rewardJobXp: 18, title: 'Pantry Ledger', desc: 'Set aside travel bread for the next dungeon run.' }),
+  Object.freeze({ type: 'craft', job: 'blacksmith', target: I.REPAIR_KIT, need: 1, rewardGold: 30, rewardJobXp: 22, title: 'Tool Bench Reserve', desc: 'Add a repair kit to the homestead supplies.' }),
+]);
 
-// Compact trusted copies of the town quest chains. Fields: title, type, item/requirement,
-// need, base gold, base XP, optional reward items.
-const Q = (title, type, item, need, gold, xp, rewardItems = [], extra = {}) => ({ title, type, item, need, gold, xp, rewardItems, ...extra });
-const NPC_QUEST_CHAINS = {
-  'Mara Vale': [
-    Q('First Hands','fetch',W.B.LOG,6,16,12,[],{levelTarget:2,desc:'Gather 6 logs beyond the walls. This first field task will take you to Level 2.'}),
-    Q('Road Ready','kill',0,3,24,31,[],{levelTarget:3,desc:'Take this wooden sword and defeat 3 monsters beyond town. Return ready for Level 3 and your first Gate.'}),
-    Q('The First Gate','gate',0,1,50,60,[],{gateRank:0,desc:'An E-rank Gate has opened for you. Find it, clear it, and return to Mara.'}),
-    Q('A Better Sense','utility','compass',1,42,58),Q('Meat Becomes Gold','sell',I.MONSTER_MEAT,1,38,54,[{id:I.SHADOW_SIGIL,count:1}]),Q('A Shadow Companion','familiar','shade',1,52,72,[{id:W.B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]),Q('First Bonded Mount','mount','dragon',1,78,100),Q('Sky Legs','mount_use','dragon',1,64,88)
-  ],
-  'Garrik Flint': [Q('Stonehand Trial','fetch',W.B.COBBLE,18,24,34),Q('Coal Mark','mine',W.B.COAL_ORE,6,34,46),Q('Iron Below','mine',W.B.IRON_ORE,5,48,64)],
-  'Tobin Ashhand': [Q('Forge Fuel','mine',W.B.COAL_ORE,5,30,42),Q('Smith Stock','fetch',I.IRON_INGOT,3,48,66),Q('A Practical Edge','fetch',I.REPAIR_KIT,1,64,84)],
-  'Edda Quill': [Q('Gate Notes','gate',0,1,72,80),Q('Crystal Harmonics','mine',W.B.DIAMOND_ORE,2,90,100),Q('Scholar Supplies','fetch',W.B.GLASS,8,44,58)],
-  'Bram Ledger': [Q('Crates And Claims','fetch',W.B.PLANKS,20,28,34),Q('Road Reserve','fetch',W.B.COBBLE,20,32,40),Q('Night Stock','fetch',W.B.TORCH,10,42,52)],
-  'Liss Barley': [Q('Field Hands','fetch',I.WHEAT,8,30,42),Q('Bread Line','fetch',I.BREAD,3,42,54),Q('Care Feed','fetch',I.DRAGON_TREAT,1,62,74),Q('The Bright Harvest','fetch',I.GOLDEN_WHEAT,1,74,92,[{id:I.FORAGE_CHARM,count:1}],{desc:'Bring Liss one Golden Wheat. She has seen a harvest-sprite following its light.'}),Q('A Sprite in the Sheaves','familiar','sprite',1,82,104,[],{desc:'Use the Forage Charm to bind Sprite, then return to Liss.'})],
-  'Pippa Hearth': [Q('Warm Meals','fetch',I.COOKED_MEAT,3,36,46),Q('Travel Bread','fetch',I.BREAD,3,40,52),Q('Roost Treats','fetch',I.DRAGON_TREAT,1,64,78),Q('A Light for the Wounded','fetch',I.HEARTY_SANDWICH,1,76,94,[{id:I.MOTE_CHARM,count:1}],{desc:'Bring Pippa a Hearty Sandwich for the infirmary. She will entrust you with a restorative charm.'}),Q('The Gentle Mote','familiar','mote',1,84,108,[],{desc:'Use the Mote Charm to bind Mote, then return to Pippa.'})],
-  'Oren Mortar': [Q('Foundation Check','fetch',W.B.COBBLE,22,32,42),Q('Pane Work','fetch',W.B.GLASS,8,40,50),Q('Brick Sense','fetch',W.B.BRICK,12,50,64)],
-  'Sable Venn': [Q('Quiet Watch','kill',0,3,34,48),Q('Candle Reserve','fetch',W.B.TORCH,8,38,50),Q('Stillness After Storm','gate',0,1,76,86)],
-  'Pell Graywatch': [Q('Wall Patrol','kill',0,5,38,54),Q('Patrol Gear','fetch',W.B.TORCH,10,42,54),Q('Gate Duty','gate',0,1,82,92),Q('Tracks Beyond the Wall','kill',0,8,78,98,[{id:I.FANG_TOTEM,count:1}],{desc:'Cull 8 monsters beyond the wall. Pell says an old guardian hound answers proven hunters.'}),Q('The Fang Pact','familiar','fang',1,86,112,[],{desc:'Use the Fang Totem to bind Fang, then report to Pell.'})],
-  'Greta Warmug': [Q('Cellar Supper','fetch',I.COOKED_MEAT,3,38,48),Q('Breakfast Rush','fetch',I.BREAD,4,46,56),Q('House Specialty','fetch',I.HEARTY_SANDWICH,1,68,82)],
-  'Rook Emberstall': [Q('Roost Manners','fetch',I.WHEAT,6,34,44),Q('Treat Training','fetch',I.DRAGON_TREAT,1,70,82),Q('Sky Stock','fetch',W.B.PLANKS,24,50,62)],
-};
+const NPC_QUEST_CHAINS = NPC_QUEST_REGISTRY.createNpcQuestChains({ B: W.B, I });
+const NPC_QUEST_CHAIN_ERRORS = NPC_QUEST_REGISTRY.validateNpcQuestChains(NPC_QUEST_CHAINS);
+if (NPC_QUEST_CHAIN_ERRORS.length) throw new Error('Invalid NPC quest chains: ' + NPC_QUEST_CHAIN_ERRORS.join('; '));
 
 function contractPools(job, scale, level) {
   return JOB_SYSTEM.contractPool(job, scale, level, { STONE: W.B.STONE, IRON_ORE: W.B.IRON_ORE, WHEAT_3: W.B.WHEAT_3 });
 }
 
 class ProgressionMixin {
+  homesteadContextForClient(client) {
+    const actorRec = this.profileFor(client);
+    const p = this.state.players.get(client.sessionId);
+    if (!actorRec || !p || p.dgn || typeof this.connectedOwnedLandClaims !== 'function') return null;
+    const x = Math.floor(p.x || 0), z = Math.floor(p.z || 0);
+    const claim = this.landClaimFor(x, z);
+    if (!claim || this.isLandClaimAbandoned(claim) || !this.hasLandPermission(client, claim)) return null;
+    const ownerToken = claim.owner || '';
+    const group = ownerToken ? this.connectedOwnedLandClaims(x, z, ownerToken) : [];
+    if (group.length < 3) return null;
+    const ownerProf = this.profiles && this.profiles.get(ownerToken);
+    return {
+      actorRec,
+      ownerRec: ownerProf ? { token: ownerToken, prof: ownerProf } : null,
+      ownerToken,
+      group,
+      own: actorRec.token === ownerToken,
+      claim,
+    };
+  }
+
+  homesteadGroupForClient(client) {
+    const ctx = this.homesteadContextForClient(client);
+    return ctx && ctx.own ? ctx.group : null;
+  }
+
+  makeHomesteadWorkOrder(rec, group) {
+    const now = Date.now();
+    let seed = Math.floor(now / 86400000) + (group && group.length || 0);
+    for (const ch of String(rec && rec.token || 'homestead')) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const spec = HOMESTEAD_WORK_ORDER_SPECS[seed % HOMESTEAD_WORK_ORDER_SPECS.length];
+    return {
+      ...spec,
+      id: ['home', now, spec.job, spec.target].join('_'),
+      have: 0,
+      offeredAt: now,
+      completedAt: 0,
+    };
+  }
+
+  homesteadChestEntries(group, ownerToken, client) {
+    const entries = [];
+    if (!group || !ownerToken || !this.world || !this.chests) return entries;
+    const actorToken = this.clientToken(client);
+    const p = client && this.state.players.get(client.sessionId);
+    const actorTeam = p ? this.cleanTeamId(p.team) : '';
+    for (const cell of group) {
+      for (let y = 0; y < W.WH; y++) {
+        if (this.world.getB(cell.x, y, cell.z) !== W.B.CHEST) continue;
+        const key = 'overworld:' + cell.x + ',' + y + ',' + cell.z;
+        const rec = this.getChestRecord(key);
+        if (!rec) continue;
+        const supplyChest = rec.scope === 'personal' && rec.supply === true && rec.owner === ownerToken;
+        const ownChest = rec.scope === 'personal' && rec.owner === ownerToken && actorToken === ownerToken;
+        const helperChest = rec.scope === 'personal' && rec.owner === actorToken;
+        const teamChest = rec.scope === 'team' && rec.team && rec.team === actorTeam;
+        if (!supplyChest && !ownChest && !helperChest && !teamChest) continue;
+        entries.push({ key, rec, x: cell.x, y, z: cell.z, supply: supplyChest });
+      }
+    }
+    return entries.sort((a, b) => (b.supply === true) - (a.supply === true));
+  }
+
+  homesteadStorageSummary(group, ownerToken, itemId = 0, client = null) {
+    const chests = this.homesteadChestEntries(group, ownerToken, client);
+    let have = 0, supplyHave = 0;
+    if (itemId) {
+      for (const chest of chests) {
+        for (const slot of chest.rec.slots) {
+          if (slot && slot.id === itemId && slot.dur == null) {
+            const count = Math.max(0, slot.count | 0);
+            have += count;
+            if (chest.supply === true) supplyHave += count;
+          }
+        }
+      }
+    }
+    return { chests: chests.length, have, supplyChests: chests.filter(chest => chest.supply === true).length, supplyHave };
+  }
+
+  consumeHomesteadChestItem(group, ownerToken, itemId, count = 1, client = null) {
+    let left = Math.max(1, count | 0);
+    const chests = this.homesteadChestEntries(group, ownerToken, client);
+    for (const chest of chests) {
+      for (let i = 0; i < chest.rec.slots.length && left > 0; i++) {
+        const slot = chest.rec.slots[i];
+        if (!slot || slot.id !== itemId || slot.dur != null) continue;
+        const take = Math.min(left, slot.count | 0);
+        slot.count -= take;
+        left -= take;
+        if (slot.count <= 0) chest.rec.slots[i] = null;
+      }
+      if (left <= 0) break;
+    }
+    if (left > 0) return false;
+    this.dirtyChests = true;
+    return true;
+  }
+
+  recordHomesteadContributor(order, actorRec) {
+    if (!order || !actorRec) return;
+    if (!order.contributors || typeof order.contributors !== 'object') order.contributors = {};
+    const entry = order.contributors[actorRec.token] || { name: actorRec.prof.name || 'Hunter', count: 0 };
+    entry.name = actorRec.prof.name || entry.name || 'Hunter';
+    entry.count = Math.max(0, (entry.count | 0) + 1);
+    order.contributors[actorRec.token] = entry;
+  }
+
+  grantHomesteadAssistXp(client, actorRec, ownerToken, order) {
+    if (!actorRec || actorRec.token === ownerToken) return 0;
+    const job = JOB_XP_IDS.includes(order && order.job) ? order.job : '';
+    if (!job) return 0;
+    const amount = Math.max(1, Math.round(Math.max(0, order.rewardJobXp | 0) * .25 / Math.max(1, order.need | 0)));
+    const xpMap = ensureJobXpMap(actorRec.prof);
+    xpMap[job] = Math.max(0, (xpMap[job] | 0) + amount);
+    actorRec.prof.jobXp = xpMap[actorRec.prof.job || 'adventurer'] | 0;
+    this.dirtyPlayers.add(actorRec.token);
+    this.syncPlayerProfile(client, actorRec.prof);
+    client.send('jobProgress', { job, jobXp: xpMap[job] | 0, jobXpByJob: xpMap, contract: actorRec.prof.jobContract || null });
+    return amount;
+  }
+
+  sendHomesteadWorkOrder(client, action = 'sync', extra = {}, ctx = null) {
+    ctx = ctx || this.homesteadContextForClient(client);
+    const rec = ctx && ctx.ownerRec;
+    if (!rec) return false;
+    let storage = extra.storage;
+    if (!storage) {
+      const order = rec.prof.homesteadWorkOrder;
+      storage = ctx ? this.homesteadStorageSummary(ctx.group, rec.token, order && (order.target | 0), client) : { chests: 0, have: 0 };
+    }
+    client.send('homesteadWorkOrder', { action, order: rec.prof.homesteadWorkOrder || null, storage, own: !!(ctx && ctx.own), ...extra });
+    return true;
+  }
+
+  rejectHomesteadWorkOrder(client, reason) {
+    client.send('homesteadWorkOrderReject', { reason });
+    return false;
+  }
+
+  handleHomesteadWorkOrder(client, m) {
+    const action = m && typeof m.action === 'string' ? m.action : '';
+    const actorRec = this.profileFor(client);
+    if (!actorRec) return this.rejectHomesteadWorkOrder(client, 'profile');
+    if (this.rateLimited(client, 'progression', 8, 16)) return this.rejectHomesteadWorkOrder(client, 'rate');
+    const ctx = this.homesteadContextForClient(client);
+    if (!ctx) return this.rejectHomesteadWorkOrder(client, 'homestead');
+    const rec = ctx.ownerRec;
+    if (!rec) return this.rejectHomesteadWorkOrder(client, 'owner');
+    if (action === 'status') return this.sendHomesteadWorkOrder(client, 'status', { groupSize: ctx.group.length }, ctx);
+    if (action === 'request') {
+      if (!ctx.own) return this.rejectHomesteadWorkOrder(client, 'owner');
+      if (!rec.prof.homesteadWorkOrder) {
+        rec.prof.homesteadWorkOrder = this.makeHomesteadWorkOrder(rec, ctx.group);
+        this.dirtyPlayers.add(rec.token);
+      }
+      return this.sendHomesteadWorkOrder(client, 'request', { groupSize: ctx.group.length }, ctx);
+    }
+    const order = rec.prof.homesteadWorkOrder;
+    if (!order) return this.rejectHomesteadWorkOrder(client, 'missing');
+    if (action === 'contribute') {
+      if ((order.have | 0) >= (order.need | 0)) return this.sendHomesteadWorkOrder(client, 'contribute', { groupSize: ctx.group.length }, ctx);
+      const storage = this.homesteadStorageSummary(ctx.group, rec.token, order.target | 0, client);
+      if (!storage.chests) return this.rejectHomesteadWorkOrder(client, 'storage');
+      if (storage.have <= 0 || !this.consumeHomesteadChestItem(ctx.group, rec.token, order.target | 0, 1, client)) {
+        return this.rejectHomesteadWorkOrder(client, 'item');
+      }
+      order.have = Math.min(order.need | 0, (order.have | 0) + 1);
+      this.recordHomesteadContributor(order, actorRec);
+      const assistRewardJobXp = this.grantHomesteadAssistXp(client, actorRec, rec.token, order);
+      if ((order.have | 0) >= (order.need | 0)) order.completedAt = Date.now();
+      this.dirtyPlayers.add(rec.token);
+      return this.sendHomesteadWorkOrder(client, 'contribute', { groupSize: ctx.group.length, assistRewardJobXp, assistJob: order.job }, ctx);
+    }
+    if (action === 'claim') {
+      if (!ctx.own) return this.rejectHomesteadWorkOrder(client, 'owner');
+      if ((order.have | 0) < (order.need | 0)) return this.rejectHomesteadWorkOrder(client, 'incomplete');
+      const xpMap = ensureJobXpMap(rec.prof);
+      const job = JOB_XP_IDS.includes(order.job) ? order.job : 'miner';
+      const rewardGold = Math.max(0, order.rewardGold | 0);
+      const rewardJobXp = Math.max(0, order.rewardJobXp | 0);
+      const jobLevelBefore = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
+      rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + rewardGold);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'contract_faucet', 'homestead_work_order', { job, title: order.title || '' });
+      xpMap[job] = Math.max(0, (xpMap[job] | 0) + rewardJobXp);
+      const jobLevelAfter = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
+      const milestones = JOB_SYSTEM.milestonesFor(job)
+        .filter(milestone => milestone.level > jobLevelBefore && milestone.level <= jobLevelAfter)
+        .map(milestone => ({ ...milestone, reward: milestone.reward || JOB_SYSTEM.milestoneReward(job, milestone.level) }));
+      const milestoneStarterItems = this.grantProfessionMilestoneStarters(client, job, milestones);
+      rec.prof.jobXp = xpMap[rec.prof.job || 'adventurer'] | 0;
+      const completed = order;
+      rec.prof.homesteadWorkOrder = null;
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      client.send('homesteadWorkOrderResult', {
+        order: completed,
+        rewardGold,
+        rewardJobXp,
+        job,
+        jobXp: xpMap[job] | 0,
+        jobXpByJob: xpMap,
+        jobLevelBefore,
+        jobLevelAfter,
+        milestones,
+        milestoneStarterItems,
+        gold: rec.prof.gold | 0,
+      });
+      return true;
+    }
+    return this.rejectHomesteadWorkOrder(client, 'action');
+  }
+
+  baseSetupStatusForClient(client) {
+    const token = this.clientToken(client);
+    const status = { storage: false, light: false, station: false };
+    if (!token || !this.landClaims || !this.world) return status;
+    this.landClaims.forEach((claim, key) => {
+      if (status.storage && status.light && status.station) return;
+      if (!claim || this.isLandClaimAbandoned(claim) || !this.hasLandPermission(client, claim)) return;
+      const [x, z] = key.split(',').map(Number);
+      for (let y = 0; y < W.WH; y++) {
+        const id = this.world.getB(x, y, z);
+        if (id === W.B.CHEST) status.storage = true;
+        else if (id === W.B.TORCH || id === W.B.LANTERN || id === W.B.CAMPFIRE) status.light = true;
+        else if (id === W.B.TABLE || id === W.B.FURNACE) status.station = true;
+        if (status.storage && status.light && status.station) return;
+      }
+    });
+    return status;
+  }
+
+  hasBaseSetup(client) {
+    const status = this.baseSetupStatusForClient(client);
+    return !!(status.storage && status.light && status.station);
+  }
+
+  checkBaseSetupProgress(client) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof || rec.prof.progressionFocus !== 'first_base_setup') return false;
+    if (!this.hasBaseSetup(client)) return false;
+    return this.advanceProgressionDirector(client, 'base_setup_completed', { profile: false });
+  }
+
+  grantProgressionMilestoneReward(client, key) {
+    const rec = this.profileFor(client), spec = PROGRESSION_MILESTONE_REWARDS[key];
+    if (!rec || !rec.prof || !spec) return false;
+    const prof = rec.prof;
+    if (!Array.isArray(prof.progressionMilestoneRewards)) prof.progressionMilestoneRewards = [];
+    if (prof.progressionMilestoneRewards.includes(key)) return false;
+    const delivered = [];
+    for (const item of spec.items) {
+      const count = Math.max(0, item.count | 0);
+      const left = this.addRewardItem(prof, item.id | 0, count);
+      const placed = Math.max(0, count - left);
+      if (placed > 0) delivered.push({ id: item.id | 0, count: placed });
+    }
+    if (!delivered.length) return false;
+    prof.progressionMilestoneRewards.push(key);
+    this.dirtyPlayers.add(rec.token);
+    client.send('progressionMilestoneReward', { key, title: spec.title, text: spec.text, items: delivered, modal: spec.modal === true, subtitle: spec.subtitle || '', action: spec.action || '' });
+    return true;
+  }
+
+  grantProfessionMilestoneStarters(client, job, milestones) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof || !Array.isArray(milestones) || !milestones.length) return [];
+    const prof = rec.prof;
+    if (!Array.isArray(prof.progressionMilestoneRewards)) prof.progressionMilestoneRewards = [];
+    const granted = [];
+    for (const milestone of milestones) {
+      const level = milestone && (milestone.level | 0);
+      const kitKey = `${job}:${level}`;
+      const spec = PROFESSION_MILESTONE_STARTERS[kitKey];
+      const saveKey = `profession:${kitKey}`;
+      if (!spec || prof.progressionMilestoneRewards.includes(saveKey)) continue;
+      const delivered = [];
+      for (const item of spec.items) {
+        const count = Math.max(0, item.count | 0);
+        const left = this.addRewardItem(prof, item.id | 0, count);
+        const placed = Math.max(0, count - left);
+        if (placed > 0) delivered.push({ id: item.id | 0, count: placed });
+      }
+      if (!delivered.length) continue;
+      prof.progressionMilestoneRewards.push(saveKey);
+      granted.push({ key: saveKey, title: spec.title, text: spec.text, items: delivered });
+      client.send('progressionMilestoneReward', { key: saveKey, title: spec.title, text: spec.text, items: delivered, modal: false, subtitle: 'PROFESSION STARTER', action: 'CONTINUE' });
+    }
+    if (granted.length) {
+      this.dirtyPlayers.add(rec.token);
+      this.syncPlayerProfile(client, prof);
+    }
+    return granted;
+  }
+
+  advanceProgressionDirector(client, event, detail = {}) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof) return false;
+    const prof = rec.prof;
+    const hasStation = () => this.countItem(prof, W.B.TABLE) > 0 || this.countItem(prof, W.B.FURNACE) > 0;
+    const hasLand = () => {
+      if (!this.landClaims) return false;
+      for (const claim of this.landClaims.values()) if (claim && claim.owner === rec.token) return true;
+      return false;
+    };
+    const hasExpandedLand = () => typeof this.largestOwnedLandGroupSize === 'function'
+      ? this.largestOwnedLandGroupSize(rec.token) >= 3
+      : hasLand();
+    let next = '';
+    if (event === 'first_hands_claimed' && !prof.progressionFocus) next = 'first_road_ready';
+    else if (event === 'first_e_gate_cleared' && ['first_road_ready', 'first_e_gate', ''].includes(prof.progressionFocus || '')) next = hasExpandedLand() ? 'first_base_setup' : hasLand() ? 'first_claim_expand' : hasStation() ? 'first_land_claim' : 'first_craft_station';
+    else if (event === 'crafted_station' && prof.progressionFocus === 'first_craft_station') next = hasExpandedLand() ? 'first_base_setup' : hasLand() ? 'first_claim_expand' : 'first_land_claim';
+    else if (event === 'land_claimed' && ['first_craft_station', 'first_land_claim'].includes(prof.progressionFocus)) next = hasExpandedLand() ? 'first_base_setup' : 'first_claim_expand';
+    else if (event === 'land_claimed' && ['first_claim_expand', 'first_land_claim'].includes(prof.progressionFocus) && hasExpandedLand()) next = 'first_base_setup';
+    else if (event === 'base_setup_completed' && prof.progressionFocus === 'first_base_setup') next = 'first_profession_contract';
+    else if (event === 'job_contract_taken' && prof.progressionFocus === 'first_profession_contract') next = 'e_rank_climb';
+    if (next === prof.progressionFocus) return false;
+    if (!next && event !== 'job_contract_taken') return false;
+    prof.progressionFocus = next;
+    this.dirtyPlayers.add(rec.token);
+    if (event === 'crafted_station') this.grantProgressionMilestoneReward(client, 'craft_station');
+    else if (event === 'first_e_gate_cleared') {
+      this.unlockUtility(client, 'feather_step', 'First E-rank Gate cleared');
+      this.grantProgressionMilestoneReward(client, 'first_e_gate');
+    }
+    else if (event === 'land_claimed') this.grantProgressionMilestoneReward(client, 'land_claim');
+    else if (event === 'base_setup_completed') this.grantProgressionMilestoneReward(client, 'base_setup');
+    else if (event === 'job_contract_taken') this.grantProgressionMilestoneReward(client, 'first_contract');
+    if (detail.profile !== false) this.sendProfile ? this.sendProfile(client, prof) : client.send('profile', prof);
+    else client.send('progressionFocus', {
+      progressionFocus: next,
+      activeObjectives: this.activeQuestObjectives ? this.activeQuestObjectives(client, prof) : [],
+    });
+    if (next === 'first_base_setup') this.checkBaseSetupProgress(client);
+    return true;
+  }
+
   progressionChanged(client, type, extra = {}) {
     const rec = this.profileFor(client);
     if (!rec) return false;
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
-    client.send('profile', rec.prof);
+    this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     client.send('progressionResult', { ok: true, type, ...extra });
     return true;
   }
@@ -70,7 +444,7 @@ class ProgressionMixin {
   progressionReject(client, type, reason) {
     if (type === 'armor') {
       const rec = this.profileFor(client);
-      if (rec) client.send('profile', rec.prof);
+      if (rec) this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     }
     client.send('progressionResult', { ok: false, type, reason });
     return false;
@@ -140,11 +514,11 @@ class ProgressionMixin {
     const now=Math.max(actualNow,Number(board.at||0)+1,previousOfferAt+1);
     const level=Math.max(1,prof.S&&prof.S.lvl|0),xpMap=ensureJobXpMap(prof),hunterXp=hunterXpForActivity(level,'job_contract');
     let offers;
-    if(job==='adventurer'&&!(prof.adventurerContractsCompleted|0))offers=[{...JOB_SYSTEM.firstHunterContract(),difficulty:'balanced',difficultyLabel:'First Assignment',estimate:'About 5 minutes',location:'Beyond the town walls',rewardXp:hunterXp}];
+    if(job==='adventurer'&&!(prof.adventurerContractsCompleted|0))offers=[{...JOB_SYSTEM.firstHunterContract(),difficulty:'balanced',difficultyLabel:'First Assignment',estimate:'About 5 minutes',location:'Beyond the town walls',focus:'first combat lesson',reward:'Compass Sense unlock path',party:'Solo',rewardXp:hunterXp}];
     else{
       let rotation=0;for(const ch of String(rec.token||'hunter')+job)rotation=(rotation*31+ch.charCodeAt(0))>>>0;
       rotation+=Math.floor(now/JOB_SYSTEM.OFFER_REFRESH_MS);
-      offers=JOB_SYSTEM.contractOffers(job,JOB_SYSTEM.contractScaleFromXp(xpMap[job]),level,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3},hunterXp,rotation);
+      offers=JOB_SYSTEM.contractOffers(job,JOB_SYSTEM.contractScaleFromXp(xpMap[job]),level,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT},hunterXp,rotation);
     }
     const expiresAt=now+JOB_SYSTEM.OFFER_REFRESH_MS;
     prof.jobContractOffers=offers.map((c,i)=>({...c,id:['job',job,now,i,c.type].join('_'),offeredAt:now,expiresAt}));
@@ -180,6 +554,8 @@ class ProgressionMixin {
         rec.prof.jobContractOffers=[]; // one choice per rotation; abandon cannot become a free reroll
         if(rec.prof.jobContractOfferBoards&&rec.prof.jobContractOfferBoards[contractJob])rec.prof.jobContractOfferBoards[contractJob].offers=[];
       }else rec.prof.jobContract = this.makeServerJobContract(rec.prof, contractJob); // legacy/test compatibility
+      rec.prof.jobContract.lifecycleState = 'active';
+      rec.prof.jobContract.acceptedAt = rec.prof.jobContract.acceptedAt || Date.now();
       if (rec.prof.progressionFocus === 'first_promotion_job' && contractJob === 'adventurer') rec.prof.progressionFocus = 'first_promotion_contract';
       // 'first_promotion_contract' specifically guides taking the first adventurer
       // contract; 'next_adventurer_contract' just nudges back to the board, so any
@@ -188,8 +564,20 @@ class ProgressionMixin {
           rec.prof.progressionFocus === 'first_promotion_contract') {
         rec.prof.progressionFocus = '';
       }
+      this.advanceProgressionDirector(client, 'job_contract_taken', { profile: false });
     } else if (action === 'abandon') {
+      const abandoned = rec.prof.jobContract;
       rec.prof.jobContract = null;
+      if (abandoned && this.sendQuestOutcome) this.sendQuestOutcome(client, {
+        source: 'job',
+        questType: 'job',
+        title: abandoned.title || 'Job Contract',
+        outcome: 'abandoned',
+        reason: 'player',
+        location: 'Job Board',
+        canReaccept: true,
+        noReward: true,
+      });
     } else if (action === 'claim') {
       const c = rec.prof.jobContract;
       if (!c || (c.have | 0) < (c.need | 0)) return this.progressionReject(client, 'jobContract', 'incomplete');
@@ -208,13 +596,17 @@ class ProgressionMixin {
       let rewardGold = c.rewardGold | 0;
       if (c.job === 'adventurer' && jobPerkTier(rec.prof, 'adventurer')) rewardGold = Math.round(rewardGold * (1 + jobPerkTier(rec.prof, 'adventurer') * .06));
       rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'contract_faucet', 'job_contract', { job: c.job, type: c.type, title: c.title || '' });
       const rewardXp = Math.max(0, c.rewardXp | 0);
       this.grantHunterXp(rec.prof, rewardXp, client, 'job_contract');
       const xpMap = ensureJobXpMap(rec.prof);
       const jobLevelBefore = JOB_SYSTEM.jobLevelFromXp(xpMap[c.job] | 0);
       xpMap[c.job] = Math.max(0, (xpMap[c.job] | 0) + Math.max(0, c.rewardJobXp | 0));
       const jobLevelAfter = JOB_SYSTEM.jobLevelFromXp(xpMap[c.job] | 0);
-      const milestones = JOB_SYSTEM.milestonesFor(c.job).filter(m => m.level > jobLevelBefore && m.level <= jobLevelAfter);
+      const milestones = JOB_SYSTEM.milestonesFor(c.job)
+        .filter(m => m.level > jobLevelBefore && m.level <= jobLevelAfter)
+        .map(m => ({ ...m, reward: m.reward || JOB_SYSTEM.milestoneReward(c.job, m.level) }));
+      const milestoneStarterItems = this.grantProfessionMilestoneStarters(client, c.job, milestones);
       rec.prof.jobXp = xpMap[rec.prof.job || 'adventurer'] | 0;
       if (c.job === 'adventurer') rec.prof.adventurerContractsCompleted = Math.max(0, (rec.prof.adventurerContractsCompleted | 0) + 1);
       if (graduation) {
@@ -224,8 +616,20 @@ class ProgressionMixin {
         this.ensurePublicGateRank(1);
       }
       rec.prof.jobContract = null;
+      if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
+        source: 'job',
+        questType: 'job',
+        title: c.title || 'Job Contract',
+        gold: rewardGold,
+        xp: rewardXp,
+        jobXp: Math.max(0, c.rewardJobXp | 0),
+        job: c.job,
+        items: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
+        claimLocation: 'Job Board',
+        inventoryOverflow: false,
+      });
       return this.progressionChanged(client, 'jobContract', {
-        action, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, graduation,
+        action, contract: c, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, milestoneStarterItems, graduation,
         rewardItems: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
       });
     } else return this.progressionReject(client, 'jobContract', 'action');
@@ -237,11 +641,17 @@ class ProgressionMixin {
     amount = Math.max(0, Math.min(1000, Math.round(Number(amount) || 0)));
     if (!rec || !amount || (job !== 'adventurer' && rec.prof.job !== job)) return false;
     const xpMap = ensureJobXpMap(rec.prof);
+    const jobLevelBefore = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
     xpMap[job] = Math.max(0, (xpMap[job] | 0) + amount);
+    const jobLevelAfter = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
+    const milestones = JOB_SYSTEM.milestonesFor(job)
+      .filter(m => m.level > jobLevelBefore && m.level <= jobLevelAfter)
+      .map(m => ({ ...m, reward: m.reward || JOB_SYSTEM.milestoneReward(job, m.level) }));
+    const milestoneStarterItems = this.grantProfessionMilestoneStarters(client, job, milestones);
     rec.prof.jobXp = xpMap[rec.prof.job || 'adventurer'] | 0;
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
-    client.send('jobProgress', { job, jobXp: xpMap[job] | 0, jobXpByJob: xpMap, contract: rec.prof.jobContract || null });
+    client.send('jobProgress', { job, jobXp: xpMap[job] | 0, jobXpByJob: xpMap, contract: rec.prof.jobContract || null, jobLevelBefore, jobLevelAfter, milestones, milestoneStarterItems });
     return true;
   }
 
@@ -254,6 +664,10 @@ class ProgressionMixin {
       if (!stonePair) return false;
     }
     c.have = Math.min(c.need | 0, (c.have | 0) + Math.max(1, count | 0));
+    if ((c.have | 0) >= (c.need | 0) && c.lifecycleState !== 'claimable') {
+      c.lifecycleState = 'claimable';
+      c.claimableAt = Date.now();
+    }
     this.dirtyPlayers.add(rec.token);
     client.send('jobProgress', { job: rec.prof.job, jobXp: rec.prof.jobXp | 0, contract: c });
     return true;
@@ -303,14 +717,9 @@ class ProgressionMixin {
     const step = Math.max(0, Math.min(chain ? chain.length : 0, (prof.npcQuestChains && prof.npcQuestChains[giver]) | 0));
     if (!chain || step >= chain.length) return null;
     const def = chain[step], lvl = Math.max(1, prof.S.lvl | 0);
-    const textTarget = typeof def.item === 'string' ? def.item : def.item ? 'the listed supplies' : 'the objective';
-    const quest = {
-      source: 'npc', giver, role: String(role || 'town').slice(0, 32), chainKey: giver, chainStep: step, chainTotal: chain.length,
-      chainTitle: def.title, title: def.title, type: def.type, need: def.need, have: 0,
+    const rewards = {
       gold: Math.round(def.gold + lvl * 2 + step * 4),
       xp: Math.max(Math.round(def.xp + lvl * 5 + step * 6), hunterXpForActivity(lvl, 'town_quest')),
-      desc: def.desc || (def.type === 'fetch' ? `Bring ${def.need} of ${textTarget}.` : `Complete ${def.need} ${def.type} objective${def.need === 1 ? '' : 's'}.`),
-      rewardItems: def.rewardItems || [],
     };
     if ((def.levelTarget | 0) > lvl) {
       let targetXp = 0, targetLvl = lvl, carriedXp = Math.max(0, prof.S.xp | 0);
@@ -321,15 +730,35 @@ class ProgressionMixin {
       }
       // The two opening lessons are paced milestones, not scalable repeatables:
       // land exactly on the advertised level even when the wider XP economy rises.
-      quest.xp = targetXp;
-      quest.levelTarget = def.levelTarget | 0;
+      rewards.xp = targetXp;
     }
-    if (def.gateRank != null) quest.gateRank = Math.max(0, Math.min(4, def.gateRank | 0));
-    if (typeof def.item === 'number') quest.item = def.item;
-    else if (def.type === 'utility') quest.utility = def.item;
-    else if (def.type === 'familiar') quest.familiar = def.item;
-    else if (def.type === 'mount' || def.type === 'mount_use') quest.mount = def.item;
-    return quest;
+    return NPC_QUEST_REGISTRY.buildRuntimeNpcQuest(def, {
+      giver, role, step, total: chain.length, level: lvl, gold: rewards.gold, xp: rewards.xp, lifecycleState: 'offered', now: Date.now(),
+    });
+  }
+
+  rehydrateNpcQuestFromAuthoring(prof, q) {
+    if (!prof || !q || typeof q !== 'object') return null;
+    const giver = NPC_QUEST_REGISTRY.npcChainKey(q.giver);
+    const chain = NPC_QUEST_CHAINS[giver];
+    const step = Math.max(0, q.chainStep | 0);
+    if (!chain || step >= chain.length) return null;
+    const currentStep = Math.max(0, prof.npcQuestChains && prof.npcQuestChains[giver] | 0);
+    if (step !== currentStep) return null;
+    const def = chain[step];
+    if (!NPC_QUEST_REGISTRY.runtimeQuestMatchesDefinition(q, def, giver, step, chain.length)) return null;
+    const rebuilt = this.buildNpcQuest(prof, giver, q.role || 'town');
+    if (!rebuilt) return null;
+    return {
+      ...rebuilt,
+      have: Math.max(0, Math.min(rebuilt.need | 0, q.have | 0)),
+      lifecycleState: ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(q.lifecycleState) ? q.lifecycleState : 'active',
+      offeredAt: Math.max(0, q.offeredAt | 0),
+      acceptedAt: Math.max(0, q.acceptedAt | 0),
+      claimableAt: Math.max(0, q.claimableAt | 0),
+      completedAt: Math.max(0, q.completedAt | 0),
+      expiresAt: Math.max(0, q.expiresAt | 0),
+    };
   }
 
   npcQuestReady(client, quest) {
@@ -355,6 +784,8 @@ class ProgressionMixin {
       if (q.type === 'gate' && q.gateRank >= 0 && !this.ensurePublicGateRank(q.gateRank)) {
         return this.progressionReject(client, 'npcQuest', 'gate');
       }
+      q.lifecycleState = 'active';
+      q.acceptedAt = Date.now();
       const grantRoadReadySword = q.giver === 'Mara Vale' && (q.chainStep | 0) === 1 && !rec.prof.maraRoadReadySwordGranted;
       if (grantRoadReadySword) {
         const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
@@ -363,8 +794,13 @@ class ProgressionMixin {
         rec.prof.maraRoadReadySwordGranted = true;
       }
       rec.prof.activeNpcQuest = q;
+      if (q.giver === 'Mara Vale' && q.title === 'Road Ready' && ['first_road_ready', ''].includes(rec.prof.progressionFocus || '')) {
+        rec.prof.progressionFocus = 'first_road_ready';
+      } else if (q.giver === 'Mara Vale' && q.title === 'The First Gate' && ['first_road_ready', 'first_e_gate', ''].includes(rec.prof.progressionFocus || '')) {
+        rec.prof.progressionFocus = 'first_e_gate';
+      }
       this.dirtyPlayers.add(rec.token);
-      if (grantRoadReadySword) client.send('profile', rec.prof);
+      if (grantRoadReadySword) this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
       client.send('npcQuest', {
         action,
         quest: q,
@@ -373,33 +809,65 @@ class ProgressionMixin {
       return true;
     }
     if (action === 'abandon') {
+      const abandoned = rec.prof.activeNpcQuest;
       rec.prof.activeNpcQuest = null;
       this.dirtyPlayers.add(rec.token);
-      client.send('npcQuest', { action, quest: null });
+      client.send('npcQuest', { action, quest: null, abandoned });
+      if (abandoned && this.sendQuestOutcome) this.sendQuestOutcome(client, {
+        source: abandoned.type === 'manhunt' ? 'manhunt' : 'story',
+        questType: abandoned.type === 'manhunt' ? 'manhunt' : 'npc',
+        title: abandoned.title || abandoned.chainTitle || 'Town Quest',
+        outcome: 'abandoned',
+        reason: 'player',
+        location: abandoned.giver || 'Quest giver',
+        canReaccept: true,
+        noReward: true,
+      });
       return true;
     }
     if (action !== 'claim') return this.progressionReject(client, 'npcQuest', 'action');
     const q = rec.prof.activeNpcQuest;
     if (!q || !this.npcQuestReady(client, q)) return this.progressionReject(client, 'npcQuest', 'incomplete');
     if (q.type === 'fetch' && !this.consumeItem(rec.prof, q.item | 0, q.need | 0)) return this.progressionReject(client, 'npcQuest', 'items');
+    q.lifecycleState = 'completed';
+    q.completedAt = Date.now();
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + (q.gold | 0));
+    if (this.recordEconomyGold) this.recordEconomyGold(client, q.gold | 0, 'quest_faucet', 'npc_quest', { giver: q.giver || '', title: q.title || '' });
     this.grantHunterXp(rec.prof, q.xp, client, 'town_quest');
-    for (const it of q.rewardItems || []) this.addRewardItem(rec.prof, it.id, it.count);
+    let rewardItemOverflow = false;
+    for (const it of q.rewardItems || []) if (this.addRewardItem(rec.prof, it.id, it.count)) rewardItemOverflow = true;
     rec.prof.npcQuestChains[q.giver] = Math.max((rec.prof.npcQuestChains[q.giver] | 0), (q.chainStep | 0) + 1);
     let firstQuestMilestone = null;
     if (q.giver === 'Mara Vale' && q.title === 'First Hands' && !rec.prof.firstQuestRewardClaimed) {
       rec.prof.firstQuestRewardClaimed = true;
       rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + 100);
+      if (this.recordEconomyGold) this.recordEconomyGold(client, 100, 'quest_faucet', 'first_quest_bonus', { giver: q.giver || '', title: q.title || '' });
       firstQuestMilestone = { gold: 100, totalGold: rec.prof.gold | 0 };
+      this.advanceProgressionDirector(client, 'first_hands_claimed', { profile: false });
+    }
+    if (q.giver === 'Mara Vale' && q.title === 'Road Ready' && (q.chainStep | 0) === 1 && ['first_road_ready', ''].includes(rec.prof.progressionFocus || '')) {
+      rec.prof.progressionFocus = 'first_e_gate';
     }
     if (q.giver === 'Mara Vale' && q.type === 'gate' && (q.gateRank | 0) === 0 && (q.chainStep | 0) === 2) {
-      rec.prof.progressionFocus = 'e_rank_climb';
+      this.advanceProgressionDirector(client, 'first_e_gate_cleared', { profile: false });
     }
     rec.prof.activeNpcQuest = null;
     this.grantJobXp(client, 'adventurer', 12);
     this.progressJobContract(client, 'quest', 1, 0);
     client.send('npcQuest', { action, quest: null, completed: q, firstQuestMilestone });
     if (firstQuestMilestone) client.send('firstQuestReward', { ok: true, gold: 100, totalGold: firstQuestMilestone.totalGold });
+    if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
+      source: q.type === 'manhunt' ? 'manhunt' : 'story',
+      questType: q.type === 'manhunt' ? 'manhunt' : 'npc',
+      title: q.title || q.chainTitle || 'Town Quest',
+      gold: q.gold | 0,
+      xp: q.xp | 0,
+      jobXp: 12,
+      job: 'adventurer',
+      items: q.rewardItems || [],
+      claimLocation: q.giver || 'Quest giver',
+      inventoryOverflow: rewardItemOverflow,
+    });
     // Present completion before the profile update that may cross a level
     // threshold; the client can then hold path selection behind the reward.
     this.progressionChanged(client, 'npcQuest', { action, rewardGold: q.gold | 0, rewardXp: q.xp | 0, giver: q.giver });
@@ -408,12 +876,18 @@ class ProgressionMixin {
 
   progressNpcQuest(client, type, count = 1, target = 0) {
     const rec = this.profileFor(client), q = rec && rec.prof.activeNpcQuest;
-    if (!q || q.type !== type || (q.have | 0) >= (q.need | 0)) return false;
+    const compatible = q && (q.type === type || (q.type === 'manhunt' && type === 'kill'));
+    if (!compatible || (q.have | 0) >= (q.need | 0)) return false;
     if (q.item && target && (q.item | 0) !== (target | 0)) return false;
     if (type === 'gate' && q.gateRank >= 0 && (q.gateRank | 0) !== (target | 0)) return false;
     q.have = Math.min(q.need | 0, (q.have | 0) + Math.max(1, count | 0));
+    if ((q.have | 0) >= (q.need | 0)) {
+      q.lifecycleState = 'claimable';
+      q.claimableAt = Date.now();
+    }
     this.dirtyPlayers.add(rec.token);
     client.send('npcQuest', { action: 'progress', quest: q });
+    if (this.activeQuestObjectives) client.send('progressionFocus', { focus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
     return true;
   }
 
@@ -423,7 +897,9 @@ class ProgressionMixin {
     const lvl = Math.max(1, rec.prof.S.lvl | 0), rewardGold = 135 + lvl * 8;
     const rewardXp = Math.max(130 + lvl * 12, hunterXpForActivity(lvl, 'aegis_trial'));
     rec.prof.aegisTrialReady = false;
+    rec.prof.aegisTrial = null;
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) + rewardGold);
+    if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'quest_faucet', 'aegis_trial', { level: lvl });
     this.grantHunterXp(rec.prof, rewardXp, client, 'aegis_trial');
     let reward;
     const roll = Math.random();
@@ -433,16 +909,30 @@ class ProgressionMixin {
       rec.prof.familiarUnlocks.push('shade');
       reward = { kind: 'Shade Familiar', id: I.SHADOW_SIGIL, unlocked: true };
     } else reward = { kind: 'Shade Sigil', id: I.SHADOW_SIGIL };
+    let aegisOverflow = false;
     if (!reward.unlocked) {
       if(ARMOR_INFO[reward.id]){
         const types=['scout','vanguard','bulwark'],armorType=types[(Math.random()*types.length)|0];
-        this.addGearRewardItem(rec.prof,{id:reward.id,count:1,rarity:'rare',armorType,source:'aegis_trial',gear:true});
+        aegisOverflow = !!this.addGearRewardItem(rec.prof,{id:reward.id,count:1,rarity:'rare',armorType,source:'aegis_trial',gear:true});
         reward.armorType=armorType;reward.rarity='rare';
-      }else this.addRewardItem(rec.prof, reward.id, 1);
+      }else aegisOverflow = !!this.addRewardItem(rec.prof, reward.id, 1);
     }
     this.grantJobXp(client, 'adventurer', 12);
     this.progressJobContract(client, 'quest', 1, 0);
     this.progressionChanged(client, 'aegisTrial', { rewardGold, rewardXp });
+    if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
+      source: 'aegis',
+      questType: 'manhunt',
+      title: 'Silent Bounty',
+      gold: rewardGold,
+      xp: rewardXp,
+      jobXp: 12,
+      job: 'adventurer',
+      items: reward.id && !ARMOR_INFO[reward.id] ? [{ id: reward.id, count: 1 }] : [],
+      gear: reward.id && ARMOR_INFO[reward.id] ? { id: reward.id, count: 1, rarity: reward.rarity || 'rare', name: reward.kind || 'Rare Armor' } : null,
+      claimLocation: 'Aegis Guardian',
+      inventoryOverflow: aegisOverflow,
+    });
     client.send('aegisTrialReward', { rewardGold, rewardXp, reward });
     return true;
   }
@@ -522,7 +1012,13 @@ class ProgressionMixin {
 
   recordRepairProgress(client, upgraded = false) {
     this.grantJobXp(client, 'blacksmith', upgraded ? 10 : 5);
-    this.progressJobContract(client, upgraded ? 'smith' : 'repair', 1, 0);
+    if (upgraded) this.progressJobContract(client, 'upgrade', 1, 0) || this.progressJobContract(client, 'smith', 1, 0);
+    else this.progressJobContract(client, 'repair', 1, 0);
+  }
+
+  recordSalvageProgress(client, itemId = 0) {
+    this.grantJobXp(client, 'blacksmith', 6);
+    this.progressJobContract(client, 'salvage', 1, itemId) || this.progressJobContract(client, 'smith', 1, itemId);
   }
 
   recordKillProgress(client, hostile = true) {
@@ -542,7 +1038,7 @@ class ProgressionMixin {
     if (rec && rec.prof.progressionFocus === 'first_d_gate' && (rank | 0) >= 1) {
       rec.prof.progressionFocus = 'next_adventurer_contract';
       this.dirtyPlayers.add(rec.token);
-      client.send('profile', rec.prof);
+      this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     }
   }
 

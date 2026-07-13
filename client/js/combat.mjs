@@ -1501,7 +1501,12 @@ addEventListener('keydown', e=>{
     e.preventDefault();
     return;
   }
-  if(e.code==='Tab'&&!e.repeat&&(locked||overlay.classList.contains('hidden'))){e.preventDefault();startQuickChatWheel();return;}
+  if(e.code==='Tab'&&!e.repeat&&(locked||overlay.classList.contains('hidden'))){
+    e.preventDefault();
+    if(e.shiftKey && typeof startDragonCommandWheel==='function') startDragonCommandWheel();
+    else startQuickChatWheel();
+    return;
+  }
   if(e.code==='Enter' && !locked && !overlay.classList.contains('hidden')){
     e.preventDefault();
     showStartHelp();
@@ -1588,6 +1593,7 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyB' && !e.repeat) openDragonBondUI();
     if(e.code==='KeyV' && !e.repeat) toggleAppearanceDummy();
     if(e.code==='KeyU' && !e.repeat) toggleAbilityDemo();
+    if(e.code==='KeyI' && !e.repeat) useActiveUtility();
     if(e.code==='KeyL' && !e.repeat) toggleClaimMode();
     if(e.code==='KeyZ' && !e.repeat) toggleMount();
     if(e.code==='KeyX' && !e.repeat) cycleDragon();
@@ -1707,7 +1713,7 @@ function farmAction(hit){
   const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand(hit.x,hit.z,2);
   if(hit.id===B.WHEAT_3){
     if(!canBuildHere(hit.x,hit.z)){
-      sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That crop belongs to another claim');
+      showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
     if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'harvest',x:hit.x,y:hit.y,z:hit.z,slot:selected});
@@ -1731,7 +1737,7 @@ function farmAction(hit){
   }
   if(s && (s.id===I.WHEAT_SEEDS || s.id===I.WINDSEED) && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
     if(!canBuildHere(hit.x,hit.z)){
-      sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That land is protected by another claim');
+      showLandEditDenied(hit.x,hit.z,'farm',hit.y,s.id);
       return true;
     }
     if(s.id===I.WINDSEED && jobLevelFromXp(jobXpFor('farmer'))<JOB_SYSTEM.FARMER_RULES.windseedLevel){sysMsg('Farmer Lv 5 is required to cultivate <b>Prairie Windseeds</b>');return true;}
@@ -1747,7 +1753,7 @@ function farmAction(hit){
   }
   if(heldToolClass('hoe') && (hit.id===B.GRASS || hit.id===B.DIRT) && getB(hit.x,hit.y+1,hit.z)===B.AIR){
     if(!canBuildHere(hit.x,hit.z)){
-      sysMsg(isTownLand(hit.x,hit.z) ? 'The <b>Town of Beginnings</b> is protected' : 'That land is protected by another claim');
+      showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
     if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'till',x:hit.x,y:hit.y,z:hit.z,slot:selected});
@@ -1800,6 +1806,69 @@ function isJobBoardHit(hit){
 }
 function nearJobBoard(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<3.4;
+}
+function nearGuildContractDesk(){
+  return dim==='overworld' && Math.hypot(player.pos.x-HUB.guild.x, player.pos.z-HUB.guild.z)<7.5;
+}
+function nearFellowshipNoticeBoard(range=3.6){
+  return dim==='overworld' && HUB.guildNoticeBoard && Math.hypot(player.pos.x-HUB.guildNoticeBoard.x, player.pos.z-HUB.guildNoticeBoard.z)<range;
+}
+function fellowshipClaimableWeeklyRewardCount(){
+  const rewards=globalThis.guildHallState&&globalThis.guildHallState.guild&&Array.isArray(globalThis.guildHallState.guild.weeklyRewards)?globalThis.guildHallState.guild.weeklyRewards:[];
+  return rewards.filter(r=>r&&r.claimable&&!r.claimed).length;
+}
+function nearFellowshipWeeklyCache(range=3.5){
+  return dim==='overworld' && HUB.guildNoticeBoard && fellowshipClaimableWeeklyRewardCount()>0 &&
+    Math.hypot(player.pos.x-(HUB.guildNoticeBoard.x+1.85), player.pos.z-(HUB.guildNoticeBoard.z+.2))<range;
+}
+function hasFellowshipProject(id){
+  const projects=globalThis.guildHallState&&globalThis.guildHallState.guild&&Array.isArray(globalThis.guildHallState.guild.projects)?globalThis.guildHallState.guild.projects:[];
+  return projects.some(p=>p&&p.id===id&&p.done);
+}
+function nearRecallLectern(range=3.2){
+  return dim==='overworld' && hasFellowshipProject('recall_lectern') && Math.hypot(player.pos.x-(HUB.guild.x+.25), player.pos.z-(HUB.guild.z-2.65))<range;
+}
+function nearFellowshipMapTable(range=3.4){
+  return dim==='overworld' && hasFellowshipProject('map_table') && Math.hypot(player.pos.x-(HUB.guild.x-3.7), player.pos.z-(HUB.guild.z+1.2))<range;
+}
+function nearFellowshipArmoryRack(range=3.6){
+  return dim==='overworld' && hasFellowshipProject('armory_rack') && Math.hypot(player.pos.x-(HUB.guild.x+3.9), player.pos.z-(HUB.guild.z+1.05))<range;
+}
+function nearFellowshipPantryShelf(range=3.6){
+  return dim==='overworld' && hasFellowshipProject('pantry_shelf') && Math.hypot(player.pos.x-(HUB.guild.x-3.75), player.pos.z-(HUB.guild.z-2.45))<range;
+}
+function nearFellowshipWeatherVane(range=3.6){
+  return dim==='overworld' && hasFellowshipProject('weather_vane') && Math.hypot(player.pos.x-(HUB.guild.x+3.65), player.pos.z-(HUB.guild.z-2.45))<range;
+}
+function claimReadyQuestAtService(){
+  if(!NET.on||!NET.room) return false;
+  if(quest&&questDone&&questDone()&&quest.source==='guardian'&&guardianUnderCrosshair(8)){
+    NET.room.send('claimAegisTrial',{});
+    showName('Claiming Aegis Trial');
+    return true;
+  }
+  if(nearJobBoard()){
+    if(jobContract&&jobContractReady&&jobContractReady()){
+      claimJobContract();
+      showName('Claiming Job Reward');
+      return true;
+    }
+    const c=clampRegionalContract(regionalContract);
+    if(c&&c.ready){
+      NET.room.send('regionalContractClaim',{});
+      showName('Claiming Guild Contract');
+      return true;
+    }
+  }
+  if(nearGuildContractDesk()){
+    const c=clampRegionalContract(regionalContract);
+    if(c&&c.ready){
+      NET.room.send('regionalContractClaim',{});
+      showName('Claiming Guild Contract');
+      return true;
+    }
+  }
+  return false;
 }
 function nearDragonRoost(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<13;
@@ -1891,6 +1960,37 @@ function secondaryAction(){
   if(heldRC && heldRC.id===I.DRAGON_TREAT && feedMountedDragon(selected)) return;
   if(heldRC && POTIONS[heldRC.id]){ drinkPotion(heldRC.id); return; }
   if(heldRC && FOOD_VALUES[heldRC.id]){ eatFood(selected); return; }
+  if(claimReadyQuestAtService()) return;
+  if(nearFellowshipWeeklyCache()){
+    if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'weekly_cache'});
+    openGuildHallUI('weekly_rewards');
+    return;
+  }
+  if(nearFellowshipNoticeBoard()){
+    if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'notice_board'});
+    openGuildHallUI();
+    return;
+  }
+  if(nearRecallLectern()){
+    if(typeof openRecallLecternUI==='function')openRecallLecternUI();
+    return;
+  }
+  if(nearFellowshipMapTable()){
+    if(typeof openFellowshipMapTableUI==='function')openFellowshipMapTableUI();
+    return;
+  }
+  if(nearFellowshipArmoryRack()){
+    if(typeof openFellowshipArmoryUI==='function')openFellowshipArmoryUI();
+    return;
+  }
+  if(nearFellowshipPantryShelf()){
+    if(typeof openFellowshipPantryUI==='function')openFellowshipPantryUI();
+    return;
+  }
+  if(nearFellowshipWeatherVane()){
+    if(typeof openFellowshipWeatherVaneUI==='function')openFellowshipWeatherVaneUI();
+    return;
+  }
   if(nearJobBoard()){ openJobsUI(); return; }
   if(nearTavernDiceTable()){ openTavernDiceUI(); return; }
   if(nearTavernRouletteTable()){ openTavernRouletteUI(); return; }
@@ -1901,6 +2001,10 @@ function secondaryAction(){
     interactWithVillager(vill);
     return;
   }
+  const nearbyDragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
+    ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
+    : null;
+  if(nearbyDragon&&nearbyDragon.type&&typeof openDragonInteractUI==='function'){ openDragonInteractUI(nearbyDragon.type); return; }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
   const treasureClue=nearbyTreasureClue();
   if(treasureClue){if(NET.on&&NET.room)NET.room.send('treasureMapAdvance',{id:treasureClue.id});return;}
@@ -1975,9 +2079,10 @@ function secondaryAction(){
   if(cur!==B.AIR && cur!==B.WATER) return;
   const placeId=s.id;
   if(dim==='overworld' && !canBuildHere(px,pz,py,placeId)){
-    sysMsg(isLavaBorderLand(px,pz) ? 'The <b>world border</b> is protected' : isTownLand(px,pz) ? 'Only <b>fellowship decor</b> can be placed on your hall floor' : 'That land is protected by another claim');
+    showLandEditDenied(px,pz,'build',py,placeId);
     return;
   }
+  if(dim==='overworld' && typeof explainBaseSetupPlacement==='function') explainBaseSetupPlacement(px,pz,py,placeId);
   setB(px,py,pz,placeId);
   if(collides(player.pos)){ setB(px,py,pz,cur); return; }
   if(isLightBlock(placeId)) addTorchMesh(px,py,pz);
@@ -2043,13 +2148,29 @@ gameContext.registerState('combat', Object.freeze({
   get equipmentModel(){ return equipmentModel; },
   get inputLocked(){ return locked; },
   get uiOpen(){ return uiOpen; },
+  get pathChoiceOpen(){ return pathChoiceOpen; },
+  get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
+  get abilityTrainingActive(){ return abilityTrainingActive; },
+  get abilityTrainingUsed(){ return abilityTrainingUsed; },
+  get abilityReady(){ return abilityHudAvailable(); },
+  get abilityTutorialDone(){ return abilityTutorialDone(); },
 }));
 gameContext.registerModule('combat', Object.freeze({
   collides,
   primaryAction,
   secondaryAction,
   stopPrimaryAction,
+  showPathSelection,
+  showAbilityAwakening,
+  startAbilityTraining,
   nearbyTavernGameTable,
+  nearFellowshipNoticeBoard,
+  nearFellowshipWeeklyCache,
+  nearRecallLectern,
+  nearFellowshipMapTable,
+  nearFellowshipArmoryRack,
+  nearFellowshipPantryShelf,
+  nearFellowshipWeatherVane,
 }));
 
 

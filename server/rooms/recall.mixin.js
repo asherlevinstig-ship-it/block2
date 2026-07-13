@@ -4,7 +4,7 @@ const AI=require('../ai');
 const W=require('../world');
 
 class RecallMixin{
-  initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallSeq=0;}
+  initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
   handleRecallSubject(client,message={}){
     if(!client||!RECALL.SUBJECTS.includes(message.subject))return;
     this.recallSubjects.set(client.sessionId,message.subject);
@@ -80,8 +80,9 @@ class RecallMixin{
     const q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
-    this.recallChallenges.set(client.sessionId,{id,questionId:q.id,topic:q.topic,difficulty:q.difficulty,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,ruinId});
-    client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
+    const source=message.source==='lectern'?'lectern':'';
+    this.recallChallenges.set(client.sessionId,{id,questionId:q.id,topic:q.topic,difficulty:q.difficulty,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,ruinId,source});
+    client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
   }
   handleRecallAnswer(client,message){
     const sid=client&&client.sessionId,challenge=sid&&this.recallChallenges.get(sid),p=sid&&this.state.players.get(sid),now=Date.now();
@@ -110,7 +111,14 @@ class RecallMixin{
           if(typeof this.syncPlayerProfile==='function')this.syncPlayerProfile(client,rec.prof);
         }
       }
-      return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery});
+      let fellowshipRenown=0;
+      if(challenge.source==='lectern'&&typeof this.clientGuildHasProject==='function'&&this.clientGuildHasProject(client,'recall_lectern')){
+        const key=rec&&rec.token||sid,last=this.recallLecternRenownAt.get(key)||0;
+        if(now-last>=10*60*1000&&typeof this.awardGuildRenown==='function'){
+          if(this.awardGuildRenown(client,1,'Recall Lectern study')){fellowshipRenown=1;this.recallLecternRenownAt.set(key,now);}
+        }
+      }
+      return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,fellowshipRenown,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery});
     }
     const frozenUntil=now+RECALL.FREEZE_MS;this.recallFrozenUntil.set(sid,frozenUntil);
     client.send('recallResult',{id:challenge.id,correct:false,correctIndex:challenge.correct,explanation:challenge.explanation,freezeMs:RECALL.FREEZE_MS,nextDue:review&&review.record.nextDue,mastery});

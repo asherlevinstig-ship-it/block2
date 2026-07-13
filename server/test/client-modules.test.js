@@ -10,6 +10,9 @@ const { DimensionGrid, isDimensionGrid } = require('../../shared/dimension-grid'
 const serverCommsRules = require('../../shared/comms-rules');
 const sharedJobs = require('../../shared/job-system');
 const sharedGear = require('../../shared/gear-system');
+const questObjectives = require('../../shared/quest-objectives');
+const npcQuestChains = require('../../shared/npc-quest-chains');
+const { I } = require('../rooms/constants');
 
 const clientModule = name => import(pathToFileURL(path.join(__dirname, '..', '..', 'client', 'js', name)).href);
 
@@ -65,10 +68,14 @@ test('client dimensions and server consume the shared grid contract', () => {
   const dimensionScript = html.indexOf('<script src="/shared/dimension-grid.js"></script>');
   const commsScript = html.indexOf('<script src="/shared/comms-rules.js"></script>');
   const jobsScript = html.indexOf('<script src="/shared/job-system.js"></script>');
+  const questObjectivesScript = html.indexOf('<script src="/shared/quest-objectives.js"></script>');
+  const npcQuestChainsScript = html.indexOf('<script src="/shared/npc-quest-chains.js"></script>');
   const dungeonScript = html.indexOf('<script src="/shared/dungeon-generation.js"></script>');
-  assert.equal(dimensionScript >= 0 && commsScript > dimensionScript && jobsScript > commsScript && dungeonScript > jobsScript, true);
+  assert.equal(dimensionScript >= 0 && commsScript > dimensionScript && jobsScript > commsScript && questObjectivesScript > jobsScript && npcQuestChainsScript > questObjectivesScript && dungeonScript > npcQuestChainsScript, true);
   assert.match(html, /<script src="\/shared\/comms-rules\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/job-system\.js"><\/script>/);
+  assert.match(html, /<script src="\/shared\/quest-objectives\.js"><\/script>/);
+  assert.match(html, /<script src="\/shared\/npc-quest-chains\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/gear-system\.js"><\/script>/);
   assert.match(html, /<script src="\/shared\/dungeon-generation\.js"><\/script>/);
   assert.match(html, /<script type="module" src="\/js\/boot\.mjs"><\/script>/);
@@ -87,6 +94,9 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(boot, /dataset\.gamePhase\s*=\s*'ready'[\s\S]*button\.disabled\s*=\s*false/);
   assert.doesNotMatch(html, /\.\/js\/ui\.js/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /HUD hotbar/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /function itemTriageTags/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /Storage: protected - bulk chest shortcuts leave this in your bag/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'hud.mjs'), 'utf8'), /Action: compare first; lock good gear or salvage extras at Tobin/);
   const menusSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   assert.match(menusSource, /inventory \/ crafting UI/);
   assert.match(menusSource, /registerModule\('menus'/);
@@ -96,6 +106,20 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /UPGRADE/);
   assert.match(menusSource, /REPAIR AT TOBIN/);
   assert.match(menusSource, /STAMINA COST/);
+  assert.match(menusSource, /HOMESTEAD SUPPLY/);
+  assert.match(menusSource, /MARK SUPPLY/);
+  assert.match(menusSource, /chestSupplyModeHint/);
+  assert.match(menusSource, /chestMode/);
+  assert.match(menusSource, /SORT BAG/);
+  assert.match(menusSource, /requestInventorySort/);
+  assert.match(menusSource, /DEPOSIT MATCHING/);
+  assert.match(menusSource, /DEPOSIT MATERIALS/);
+  assert.match(menusSource, /requestChestBatchDeposit/);
+  assert.match(menusSource, /function sellDecisionLine/);
+  assert.match(menusSource, /function salvageDecisionLine/);
+  assert.match(menusSource, /Possible upgrade:/);
+  assert.match(menusSource, /Sell extras only - used for crafting and reforging/);
+  assert.match(menusSource, /inventoryFullHelpHTML/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /armorMovement[\s\S]*staminaCostMultiplier[\s\S]*moveMultiplier/);
   const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(networkingSource, /registerState\('networking'/);
@@ -103,6 +127,17 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(networkingSource, /export const api=gameContext\.requireModule\('networking'\)/);
   assert.match(networkingSource, /multiplayer \(colyseus\)/);
   assert.match(networkingSource, /Event'[\s\S]*Hunter XP/, 'event completion names its exact XP reward');
+  assert.match(networkingSource, /chestModeResult/);
+  assert.match(networkingSource, /chestBatchResult/);
+  assert.match(networkingSource, /inventorySortResult/);
+  assert.match(networkingSource, /function itemTriageSummary/);
+  assert.match(networkingSource, /function rewardItemsGroupedHTML/);
+  assert.match(networkingSource, /Loot triage:/);
+  assert.match(networkingSource, /Reward triage:/);
+  assert.match(networkingSource, /Sort your bag, deposit supplies/);
+  assert.match(networkingSource, /Only the owner can withdraw from Homestead Supply/);
+  assert.match(networkingSource, /Supply mode unlocks inside a connected 3-claim Homestead/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Supply Chests/);
   assert.match(menusSource, /Boss clear reward:[\s\S]*Hunter XP/, 'Gate lobby previews authoritative boss XP');
   for (const [file, factory] of [
     ['network-session.mjs', 'createNetworkSession'],
@@ -130,6 +165,17 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(runtimeSource, /mapUtility&&overworldActivity/);
   assert.match(runtimeSource, /Talk to Caravan Merchant/);
   assert.match(html, /id="kinghud"/);
+  assert.match(html, /id="eventhud"/);
+  assert.match(html, /id="eventroster"/);
+  assert.match(runtimeSource, /Syncing event schedule/);
+  assert.match(runtimeSource, /stagingRoster/);
+  assert.match(runtimeSource, /function pulseEventHud\(\)/);
+  assert.match(runtimeSource, /Staging started:/);
+  assert.match(runtimeSource, /Ready confirmed/);
+  assert.match(runtimeSource, /All hunters ready/);
+  assert.match(runtimeSource, /eventJoinBtn\.textContent=NET\.on\?'SYNCING':'CONNECTING'/);
+  assert.match(runtimeSource, /serverEvent\.phase==='starting'\) confirmEventReady\(\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /renderEventHud\(\)/);
   assert.match(runtimeSource, /CROWN · SQUAD/);
   assert.match(runtimeSource, /Final minute!/);
   assert.match(runtimeSource, /CLAIM THE CROWN/);
@@ -140,6 +186,65 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(runtimeSource, /function ensureParkourObjectiveVisuals\(course\)/);
   assert.match(runtimeSource, /function parkourCheckpointReached\(m\)/);
   assert.match(networkingSource, /eventCheckpoint/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /OBJECTIVE/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Rooms Cleared/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Boss locked/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Boss open/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /dungeonBossHud/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Near boss room/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Reward eligible/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Hit boss to qualify/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8'), /Boss phase/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8'), /Boss casting/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8'), /Punish window open/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Room cleared/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Boss gate progress/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Boss down\. Open remaining chests/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Stay as spirit for party credit/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Return to town now/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Stay for party credit/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /Collapses in /);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /gateUrgency/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Collapse imminent/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'replication-visuals.mjs'), 'utf8'), /expiresAt:g\.expiresAt/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /gateBreach/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Gate Breach Emergency/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /gateBreachCleared/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Gate breach contained/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Full clear rewards only come from beating the Gate before collapse/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Cleanup paid .* clear XP plus materials only, no keys/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Public cleanup bounties are for outside responders/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Gate Scar remains/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /reduced XP \+ materials, no keys/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Gate Breach:/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Gate Scar:/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /BREACH AFTERMATH/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Emergency bounty/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /PUBLIC CLEANUP/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /activityTimeLeft/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /overworldActivity\.gateBreach/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /overworldActivity\.gateScar/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'replication-visuals.mjs'), 'utf8'), /\^Breached /);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Gate clear recap/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Boss mastery/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Clean mastery earned/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Gate opens in /);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /enterDungeonAfterCountdown/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'rooms', 'dungeon.mixin.js'), 'utf8'), /Stay together until first room/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'rooms', 'dungeon.mixin.js'), 'utf8'), /Gate collapse timer continues outside/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /public cleanup pays reduced XP and materials only/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Optional chests remain/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Exit through the portal when ready/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Full clear reward awarded/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /function groupedRewardLootHTML/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /Rare Protected/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /No clear loot, progress, keys, shards, or gear/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8'), /\.dungeonrun/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8'), /\.rewardgroup/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8'), /small\.safety/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8'), /\.recipetags/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8'), /\.recipeitem\.next/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8'), /\.objective-crafts/);
   assert.match(html, /id="caravanhud"/);
   assert.match(runtimeSource, /function buildCaravanWorld\(arena\)/);
   assert.match(runtimeSource, /function renderCaravanHud\(\)/);
@@ -176,23 +281,30 @@ test('client dimensions and server consume the shared grid contract', () => {
 
 test('browser and Node adapters generate byte-identical dungeons', () => {
   const dimensionSource = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'dimension-grid.js'), 'utf8');
+  const poolSource = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'dungeon-pools.js'), 'utf8');
   const dungeonSource = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'dungeon-generation.js'), 'utf8');
   const browser = { Uint8Array, Set, Math, Number, TypeError };
   vm.createContext(browser);
   vm.runInContext(dimensionSource, browser);
+  vm.runInContext(poolSource, browser);
   vm.runInContext(dungeonSource, browser);
   const browserDungeon = browser.BlockcraftDungeonGeneration.createDungeonGeneration({
     B: W.B,
     hash2: W.hash2,
   });
 
-  for (const [rank, seed] of [[0, 1], [2, 0x12345678], [4, 0xfedcba98]]) {
-    const nodeResult = serverDungeon.generateDungeon(rank, seed);
-    const browserResult = browserDungeon.generateDungeon(rank, seed);
+  for (const [rank, seed, dungeonId] of [[0, 1, 'abandoned_mine'], [0, 1, 'sunken_crypt'], [0, 1, 'mossbound_cellar'], [2, 0x12345678], [4, 0xfedcba98]]) {
+    const nodeResult = serverDungeon.generateDungeon(rank, seed, dungeonId);
+    const browserResult = browserDungeon.generateDungeon(rank, seed, dungeonId);
+    assert.equal(browserResult.dungeonId, nodeResult.dungeonId);
     assert.deepEqual(JSON.parse(JSON.stringify(browserResult.rooms)), nodeResult.rooms);
     assert.deepEqual(JSON.parse(JSON.stringify(browserResult.spawns)), nodeResult.spawns);
     assert.deepEqual(Buffer.from(browserResult.world.data), Buffer.from(nodeResult.world.data));
   }
+
+  const variants = ['abandoned_mine', 'sunken_crypt', 'mossbound_cellar'].map(id => serverDungeon.generateDungeon(0, 7, id));
+  assert.equal(new Set(variants.map(v => Buffer.from(v.world.data).toString('base64'))).size, 3, 'each E-rank identity produces a distinct world');
+  assert.deepEqual(variants.map(v => v.definition.boss), ['The Foreman', 'The Drowned Regent', 'The Rootbound Keeper']);
 });
 
 test('onboarding building counts a three-block stack above the stone pad', async () => {
@@ -225,6 +337,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   for(const id of sharedJobs.JOB_IDS){
     const milestones=sharedJobs.milestonesFor(id);
     assert.deepEqual(milestones.map(m=>m.level),[2,5,10,20],`${id} has the shared milestone ladder`);
+    assert.equal(milestones.every(m=>sharedJobs.milestoneReward(id,m.level)), true, `${id} milestones resolve concrete rewards`);
     assert.equal(sharedJobs.milestoneState(id,1).next.level,2);
     assert.equal(sharedJobs.milestoneState(id,10).earned.length,3);
     assert.equal(sharedJobs.milestoneAt(id,5).title.length>0,true);
@@ -244,32 +357,167 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.MINER_RULES.oreSenseLevel,2);
   assert.equal(sharedJobs.MINER_RULES.deepSurveyRadius,18);
   assert.equal(sharedJobs.MINER_RULES.geodeChance,.08);
+  assert.equal(sharedJobs.reforgeCost('basic').gold,25);
+  assert.equal(sharedJobs.reforgeCost('basic').iron,1);
   assert.deepEqual(sharedJobs.PROFESSION_REWARD_MULTIPLIER,{miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1});
-  const objectiveXp={miner:c=>c.need*(c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:6),monk:c=>c.need*.4};
-  const runway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<20&&contracts<200){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),20,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3});xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
+  const objectiveXp={miner:c=>c.need*(c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:c.type==='upgrade'?10:c.type==='salvage'?6:6),monk:c=>c.need*.4};
+  const allTargets = {STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT};
+  const earlyRunway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<5&&contracts<30){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),5,allTargets);xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
+  assert.equal(Math.max(...earlyRunway)<=7,true,'every profession reaches its first play-changing Lv5 unlock within seven average contracts');
+  const runway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<20&&contracts<200){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),20,allTargets);xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
   assert.equal(Math.max(...runway)/Math.min(...runway)<1.2,true,'profession Lv20 runways remain within 20% of each other');
-  const targets = {STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3};
+  const targets = allTargets;
   const miner = sharedJobs.contractPool('miner', 2, 5, targets);
-  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Iron Survey']);
+  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Foundation Rush','Iron Survey','Deep Iron Run','Cave Mapping Shift']);
   assert.equal(miner[0].target, W.B.STONE);
   assert.equal(miner[0].need, 28);
+  assert.equal(miner.every(c=>c.focus&&c.reward&&c.party), true, 'profession contracts explain focus, reward hook, and party relevance');
+  const blacksmith = sharedJobs.contractPool('blacksmith', 2, 5, targets);
+  assert.deepEqual(blacksmith.map(c=>c.title), ['Forge Work','Gate Prep Kits','Tool Doctor','Edge Upgrade Order','Scrap Recovery','Ingot Commission']);
+  assert.equal(blacksmith.find(c=>c.title==='Edge Upgrade Order').type, 'upgrade');
+  assert.equal(blacksmith.find(c=>c.title==='Scrap Recovery').type, 'salvage');
+  assert.equal(blacksmith.find(c=>c.title==='Ingot Commission').target, I.IRON_INGOT);
+  assert.deepEqual(sharedJobs.contractTags({...blacksmith.find(c=>c.title==='Scrap Recovery'),difficulty:'quick'}), ['Fast','Cleanup','Solo']);
+  assert.deepEqual(sharedJobs.contractTags({...blacksmith.find(c=>c.title==='Ingot Commission'),difficulty:'balanced',difficultyLabel:'Balanced'}).slice(0,3), ['Balanced','Targeted','Craft']);
+  assert.match(sharedJobs.contractBestFor(blacksmith.find(c=>c.title==='Edge Upgrade Order')), /weapon or tool to improve/);
+  assert.match(sharedJobs.guideSteps('upgrade').join(' '), /Upgrade, reforge, reroll, or masterwork/i);
+  assert.match(sharedJobs.guideSteps('salvage').join(' '), /salvage/i);
   assert.match(sharedJobs.guideSteps('mine').join(' '), /stone or cobble/i);
   const offers=sharedJobs.contractOffers('miner',2,5,targets,100,0);
   assert.deepEqual(offers.map(o=>o.difficulty),['quick','balanced','demanding']);
   assert.ok(offers[0].rewardXp<offers[1].rewardXp&&offers[1].rewardXp<offers[2].rewardXp);
+  assert.equal(offers.every(o=>o.focus&&o.reward&&o.party&&o.location), true, 'timed offers carry identity metadata to the client');
   assert.deepEqual(offers.map(o=>o.estimate),['About 5 minutes','About 10 minutes','About 15–20 minutes']);
   const worldSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const progressionSource = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
   assert.match(worldSource, /BlockcraftJobSystem/);
+  assert.match(worldSource, /function craftProfessionOutcome/);
+  assert.match(worldSource, /function presentProfessionCraftOutcome/);
+  assert.match(worldSource, /function jobContractNextHint/);
+  assert.match(worldSource, /function economyRecapHTML/);
+  assert.match(worldSource, /function goldDeltaHTML/);
+  assert.match(worldSource, /silentReady/);
+  assert.match(worldSource, /JOBS\[outcome\.job\]\.name\)\+' craft:<\/b>/);
+  assert.match(worldSource, /Contract ready:/);
+  assert.match(worldSource, /complete:<\/b> \+'/);
+  assert.match(worldSource, /Next: take another contract or prep for the next gate/);
   assert.match(progressionSource, /shared\/job-system/);
+  assert.match(progressionSource, /contract: c, rewardGold/);
   assert.doesNotMatch(worldSource, /const pools=\{[\s\S]*Stone Order/);
   const menusSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   assert.match(menusSource,/HUNTER OFFERS/);
   assert.match(menusSource,/offerId:offer\.id/);
   assert.match(menusSource,/function jobMilestoneHTML/);
+  assert.match(menusSource,/function professionNowHTML/);
   assert.match(menusSource,/Next at Lv/);
+  assert.match(menusSource,/Reward earned:/);
+  assert.match(menusSource,/IRON_INGOT:I\.IRON_INGOT/);
+  assert.match(menusSource,/jobContractProgress\('upgrade',1,s\.id\)\|\|jobContractProgress\('smith',1,s\.id\)/);
+  assert.match(menusSource,/jobContractProgress\('salvage',1,0\)\|\|jobContractProgress\('smith',1,0\)/);
+  assert.match(menusSource,/function contractTagHTML/);
+  assert.match(menusSource,/function contractBestForHTML/);
+  assert.match(menusSource,/contractTagHTML\(offer\)/);
+  const cssSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(cssSource,/\.contract-tags/);
+  assert.match(cssSource,/\.contract-best/);
+  assert.match(menusSource,/Reward next:/);
+  assert.match(menusSource,/Right now:/);
+  assert.match(menusSource,/Plant Prairie Windseed/);
+  assert.match(menusSource,/Craft Golden Broth/);
+  assert.match(menusSource,/Reforge selected/);
+  assert.match(menusSource,/refresh focus/);
+  assert.match(menusSource,/function selectProfessionItem/);
+  assert.match(menusSource,/SELECT COMPOST/);
+  assert.match(menusSource,/SELECT WINDSEED/);
+  assert.match(menusSource,/FOOD RECIPES/);
+  assert.match(menusSource,/TOOL RECIPES/);
+  assert.match(menusSource,/Select reforge tool/);
+  assert.match(menusSource,/function recipeJobLockText/);
+  assert.match(menusSource,/function recipePurposeTags/);
+  assert.match(menusSource,/function recipeUsedForHint/);
+  assert.match(menusSource,/function recipeProgressionFocus/);
+  assert.match(menusSource,/Craft this next/);
+  assert.match(menusSource,/Gate Prep/);
+  assert.match(menusSource,/profession recipe/);
+  assert.match(menusSource,/Missing: /);
+  assert.match(menusSource,/PRO READY/);
+  assert.match(menusSource,/offerWhy/);
+  assert.match(menusSource,/Focus: /);
+  assert.match(menusSource,/Party: /);
+  assert.match(menusSource,/Hook: /);
   assert.match(menusSource,/requestBlacksmithReforge/);
   assert.match(menusSource,/Temper Reroll/);
+  assert.match(menusSource,/Blacksmith reforge:/);
+  assert.match(menusSource,/Cost: /);
+  assert.match(menusSource,/economyRecapHTML\(m\.gold\|\|0,gold/);
+  assert.match(menusSource,/Salvage return/);
+  assert.match(menusSource,/recapOnly/);
+  assert.match(menusSource,/jobContractNextHint\(c\.job/);
+  const networkingSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(networkingSource,/function presentJobMilestone|const presentJobMilestone/);
+  assert.match(networkingSource,/const presentJobContractClaim/);
+  assert.match(networkingSource,/Starter items granted:/);
+  assert.match(networkingSource,/jobContractNextHint\(job,m\.jobLevelAfter/);
+  assert.match(networkingSource,/ready to claim/);
+  assert.match(networkingSource,/Dungeon gold:/);
+  assert.match(networkingSource,/Contract payout/);
+  assert.match(networkingSource,/Protected claim purchased/);
+  assert.match(networkingSource,/Treasure cache/);
+  assert.match(networkingSource,/rewardGain\('rare',1,reward,\{icon:'JOB'\}\)/);
+  assert.match(networkingSource,/JOB_SYSTEM\.milestoneReward/);
+  assert.match(networkingSource,/Windseed planted/);
+  assert.match(networkingSource,/Compost worked/);
+  assert.match(networkingSource,/Golden Wheat!/);
+  assert.match(networkingSource,/Restoration.*Flow.*Stone/);
+  const progressionClientSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'progression.mjs'), 'utf8');
+  assert.match(progressionClientSource,/message\.milestones/);
+  assert.match(progressionClientSource,/onJobMilestone/);
+});
+
+test('browser and server share authoritative quest objective descriptors', () => {
+  const normalized = questObjectives.normalizeObjective({
+    id: 'story:test',
+    source: 'story',
+    title: 'Test Story',
+    status: 'claimable',
+    text: 'Return to town.',
+    location: 'Mara Vale',
+    progress: { current: 2, required: 2 },
+    reward: { gold: 10, xp: 20 },
+    action: { type: 'turn_in', label: 'TURN IN TO MARA' },
+  });
+  assert.equal(normalized.category, 'story');
+  assert.equal(normalized.hudAction.type, 'turn_in');
+  assert.equal(normalized.questLogAction.type, 'turn_in');
+  assert.equal(normalized.claimAction.type, 'turn_in');
+  assert.match(normalized.hudText, /Complete/);
+  assert.deepEqual(normalized.progress, { current: 2, required: 2 });
+});
+
+test('NPC story and manhunt quests come from one validated authoring registry', () => {
+  const chains = npcQuestChains.createNpcQuestChains({ B: W.B, I });
+  assert.deepEqual(npcQuestChains.validateNpcQuestChains(chains), []);
+  assert.equal(chains['Mara Vale'][0].title, 'First Hands');
+  assert.equal(chains['Mara Vale'][0].levelTarget, 2);
+  assert.equal(chains['Pell Graywatch'][3].type, 'manhunt');
+  assert.equal(chains['Pell Graywatch'][3].metadata.category, 'manhunt');
+  assert.equal(chains['Pell Graywatch'][3].metadata.objectiveAction.type, 'hunt');
+  assert.equal(chains['Pell Graywatch'][3].metadata.turnInAction.type, 'turn_in');
+  assert.equal(chains['Pell Graywatch'][3].rewardItems[0].id, I.FANG_TOTEM);
+  assert.equal(chains['Mara Vale'][3].utility, 'compass');
+  assert.equal(chains['Mara Vale'][3].metadata.objectiveAction.type, 'utility');
+  assert.equal(chains['Mara Vale'][5].familiar, 'shade');
+  assert.equal(chains['Mara Vale'][6].mount, 'dragon');
+  const runtime = npcQuestChains.buildRuntimeNpcQuest(chains['Mara Vale'][0], {
+    giver: 'Mara Vale', role: 'guide', step: 0, total: chains['Mara Vale'].length, gold: 18, xp: 33, now: 123,
+  });
+  assert.equal(runtime.title, 'First Hands');
+  assert.equal(runtime.have, 0);
+  assert.equal(runtime.gold, 18);
+  assert.equal(runtime.xp, 33);
+  assert.equal(runtime.category, 'story');
+  assert.equal(runtime.lifecycleState, 'offered');
+  assert.equal(npcQuestChains.runtimeQuestMatchesDefinition(runtime, chains['Mara Vale'][0], 'Mara Vale', 0, chains['Mara Vale'].length), true);
 });
 
 test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () => {
@@ -462,7 +710,7 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
   assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
   assert.doesNotMatch(html,/id="recallanswers"/);
-  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\)\}/);
+  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
   assert.doesNotMatch(room,/recallCooldowns|reason:'cooldown'/);
 });
 
@@ -511,7 +759,7 @@ test('Escape opens subject focus only when gameplay has no open window',()=>{
   assert.match(combat,/if\(closed\)\{ e\.preventDefault\(\); return; \}[\s\S]*overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active[\s\S]*BlockcraftSubjectFocus\.open\(\)/);
   assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
   for(const subject of ['Computer Science','Information Technology','Religious Education','English'])assert.match(menus,new RegExp(subject));
-  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\)\}/);
+  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
 });
 
 test('ordinary combat exposes health, telegraphs, statuses, impact pause, and death motion',()=>{
@@ -521,9 +769,19 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(visuals,/if\(!name\)name=ref\.kind==='boss'/,'generic enemies receive readable names instead of special encounters only');
   assert.match(visuals,/textSprite\('STUNNED'/);
   assert.match(visuals,/textSprite\('FROZEN'/);
+  assert.match(visuals,/bossMeleeWind/);
+  assert.match(visuals,/slamWarn/);
+  assert.match(visuals,/meleeWarn/);
+  assert.match(visuals,/rangedWarn/);
+  assert.match(visuals,/volleyWarn/);
   assert.match(visuals,/const deathTick=setInterval/);
+  assert.match(feedback,/SLAM - LEAVE THE CIRCLE/);
+  assert.match(feedback,/DODGE OUT/);
+  assert.match(feedback,/ARROW DRAW - SIDESTEP/);
+  assert.match(feedback,/VOLLEY - LEAVE THE LANES/);
   assert.match(feedback,/sound\.crit/);
   assert.match(feedback,/sound\.block/);
+  assert.match(styles,/#deathrecap/);
   assert.match(styles,/body\.combat-hit #game canvas/);
 });
 
@@ -539,9 +797,19 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   assert.match(combat,/Nothing gives XP until you explicitly accept it/);
   assert.match(frame,/Accept Mara’s first quest/);
   assert.match(world,/function npcQuestMarkerState\(v\)/);
-  assert.match(world,/offer:\['!'/);
-  assert.match(world,/turnin:\['\?'/);
-  assert.match(world,/unavailable:\['-'/);
+  assert.match(world,/function npcQuestMarkerVisual\(state\)/);
+  assert.match(world,/source==='manhunt'\?'MANHUNT'/);
+  assert.match(world,/source==='job'\?'JOB'/);
+  assert.match(world,/source==='guild'\?'GUILD'/);
+  assert.match(world,/source==='aegis'\?'AEGIS'/);
+  assert.match(world,/return 'offer:story'/);
+  assert.match(world,/return 'offer:manhunt'/);
+  assert.match(world,/return 'offer:aegis'/);
+  assert.match(world,/function townQuestMarkerState\(sp\)/);
+  assert.match(world,/addTownQuestMarker\('jobs'/);
+  assert.match(world,/addTownQuestMarker\('guild_contracts'/);
+  assert.match(world,/addTownQuestMarker\('claim_aegis'/);
+  assert.match(world,/serviceObjectiveFor\(type/);
 });
 
 test('server profile tutorial state overrides stale browser onboarding flags',()=>{
@@ -581,9 +849,22 @@ test('First Hands guides the player through the first real objective',()=>{
 
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   assert.match(html,/Click a phrase to send/);
+  assert.match(html,/Teams, quick comms, and closing open panels\./);
+  assert.match(html,/aria-label="Quick comms phrase"/);
+  assert.doesNotMatch(html,/chat commands/);
+  assert.match(social,/Nearby quick phrase/);
+  assert.match(social,/Party quick phrase/);
+  assert.match(social,/Whisper quick phrase/);
+  assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
+  assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
   assert.match(social,/createElement\('button'\)[\s\S]*addEventListener\('click',\(\)=>\{sendQuickPhrase\(id\);closeQuickChatWheel\(true\);\}\)/);
+  assert.match(social,/cycleChatMode\(\);\s*renderQuickChatWheel\(\);/);
+  assert.doesNotMatch(social,/event\.code==='Tab'&&chatWheel\)[\s\S]*startDragonCommandWheel\(\)/);
+  assert.match(combat,/e\.shiftKey && typeof startDragonCommandWheel==='function'/);
+  assert.doesNotMatch(combat,/lastTabWheelAt/);
   assert.doesNotMatch(social,/held<220|movementX|movementY|Release Tab/);
 });
 
@@ -655,10 +936,319 @@ test('regional road safety stays in the bottom-left event log instead of the sid
   assert.doesNotMatch(networking,/sysMsg\('Regional road safety/);
 });
 
-test('the regional side tracker requires an explicitly accepted regional contract',()=>{
+test('the regional side tracker requires a contract except public gate breach states and active Trail Sense reveals',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   assert.match(frame,/acceptedRegionalContract=clampRegionalContract\(regionalContract\)/);
-  assert.match(frame,/if\(!acceptedRegionalContract\)\{displayedRegionalOpportunity=null;activityTrackerEl\.classList\.add\('hidden'\);return;\}/);
+  assert.match(frame,/const trail=a\.trailSense&&\(!a\.trailSense\.expiresAt\|\|a\.trailSense\.expiresAt>Date\.now\(\)\)\?a\.trailSense:null;/);
+  assert.match(frame,/if\(!acceptedRegionalContract&&!a\.gateBreach&&!a\.gateScar&&!trail\)\{displayedRegionalOpportunity=null;activityTrackerEl\.classList\.add\('hidden'\);return;\}/);
+  assert.match(frame,/PUBLIC CLEANUP/);
+  assert.match(frame,/BREACH AFTERMATH/);
+  assert.match(frame,/TRAIL SENSE/);
+});
+
+test('cartographer utilities split Mini Map local awareness from World Map planning',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(world,/miniMap = utilityEquipped\('minimap'\), worldMap = utilityEquipped\('world_map'\)/);
+  assert.match(world,/MINI MAP/);
+  assert.match(world,/function updateLandMinimap/);
+  assert.match(world,/const drawDangerRings=/);
+  assert.match(world,/const cartographerMapTarget=/);
+  assert.match(world,/weatherMapReq=\{rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'\}/);
+  assert.match(world,/regionalContract&&regionalContract\.targetId/);
+  assert.match(world,/BlockcraftTreasureMap/);
+  assert.match(world,/miniMap&&!worldMap&&!nearPlayer/);
+});
+
+test('discovery journal explains weather-site harvest state clearly',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(menus,/function weatherCodexState\(entry,found\)/);
+  assert.match(menus,/CURRENT SKY/);
+  assert.match(menus,/ACTIVE NOW - GO HARVEST/);
+  assert.match(menus,/SPOTTED - WAITING FOR/);
+  assert.match(menus,/UNSEEN - NEED/);
+  assert.match(menus,/function weatherEntryStatus\(e\)/);
+  assert.match(menus,/SPOTTED - ACTIVE NOW/);
+  assert.match(menus,/SPOTTED - RETURN IN/);
+});
+
+test('fellowship hall exposes renown and project completion controls',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(menus,/function requestGuildProject\(id\)/);
+  assert.match(menus,/function requestGuildWeeklyReward\(id\)/);
+  assert.match(menus,/function focusGuildHallSection\(section\)/);
+  assert.match(menus,/fellowship-weekly-rewards/);
+  assert.match(menus,/openGuildHallUI\(focus=''\)/);
+  assert.match(menus,/function requestGuildNoticePin\(id\)/);
+  assert.match(menus,/function openRecallLecternUI\(\)/);
+  assert.match(menus,/FELLOWSHIP STUDY LECTERN/);
+  assert.match(menus,/START LECTERN RECALL/);
+  assert.match(menus,/BlockcraftRecall\.start\(\{source:'lectern'\}\)/);
+  assert.match(menus,/FELLOWSHIP PROJECTS/);
+  assert.match(menus,/FELLOWSHIP_STATION_OVERVIEW/);
+  assert.match(menus,/FELLOWSHIP_RENOWN_SOURCES/);
+  assert.match(menus,/function appendFellowshipOverview\(mine,canModerate\)/);
+  assert.match(menus,/function appendFellowshipRenownSources\(mine\)/);
+  assert.match(menus,/function appendFellowshipWeeklyRewards\(mine\)/);
+  assert.match(menus,/FELLOWSHIP OVERVIEW/);
+  assert.match(menus,/WEEKLY FELLOWSHIP REWARDS/);
+  assert.match(menus,/Weekly rewards are <b>per member<\/b>/);
+  assert.match(menus,/BEST RENOWN SOURCES/);
+  assert.match(menus,/Guild and Road Warden contracts/);
+  assert.match(menus,/Map Table treasure route/);
+  assert.match(menus,/Weather Vane harvest/);
+  assert.match(menus,/Study Lectern/);
+  assert.match(menus,/Map Table/);
+  assert.match(menus,/Armory Rack/);
+  assert.match(menus,/Pantry Shelf/);
+  assert.match(menus,/Weather Vane/);
+  assert.match(menus,/FUND NEXT:/);
+  assert.match(menus,/FELLOWSHIP NOTICE BOARD/);
+  assert.match(menus,/Fellowship Renown/);
+  assert.match(menus,/Active guild work/);
+  assert.match(menus,/requestGuildProject\(project\.id\)/);
+  assert.match(menus,/requestGuildWeeklyReward\(r\.id\)/);
+  assert.match(menus,/requestGuildNoticePin\(o\.id\)/);
+  assert.match(networking,/projectCatalog:Array\.isArray/);
+  assert.match(networking,/noticeObjectiveCatalog:Array\.isArray/);
+  assert.match(networking,/function applyGuildRenownToast\(m\)/);
+  assert.match(networking,/rewardGain\('renown',amount,'Renown'/);
+  assert.match(networking,/fellowship-renown-progress/);
+  assert.match(networking,/pulseFellowshipRenownSource\(reason,amount\)/);
+  assert.match(networking,/This week:/);
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(styles,/rewardgain\.renown/);
+  assert.match(styles,/fellowship-renown-progress/);
+  assert.match(networking,/FELLOWSHIP_TUTORIAL_KEY='bc_fellowship_tutorial_seen_v1'/);
+  assert.match(networking,/function showFellowshipTutorial\(m=\{\},mode='joined'\)/);
+  assert.match(networking,/FELLOWSHIP UNLOCKED/);
+  assert.match(networking,/SHARED UPGRADE CURRENCY/);
+  assert.match(networking,/OPEN FELLOWSHIP HALL/);
+  assert.match(networking,/showFellowshipTutorial\(m,'created'\)/);
+  assert.match(networking,/showFellowshipTutorial\(m,'joined'\)/);
+  assert.match(networking,/room\.onMessage\('guildRenown'/);
+  assert.match(networking,/room\.onMessage\('guildWeeklyRewardResult'/);
+  assert.match(menus,/guildWeeklyRewardClaim/);
+  assert.match(networking,/WEEKLY CACHE CLAIMED/);
+  assert.match(networking,/reward_locked/);
+  assert.match(networking,/reward_claimed/);
+  assert.match(networking,/room\.onMessage\('guildProjectResult'/);
+  assert.match(networking,/noticePin/);
+  assert.match(world,/makeFellowshipNoticeBoardDecor/);
+  assert.match(world,/Notice Board · G/);
+  assert.match(world,/pinnedFellowshipNoticeText/);
+  assert.match(world,/function fellowshipClaimableWeeklyRewards\(\)/);
+  assert.match(world,/function makeFellowshipWeeklyCacheProp\(\)/);
+  assert.match(world,/Weekly Cache Ready/);
+  assert.match(world,/kind:'fellowship_weekly_cache'/);
+  assert.match(world,/function tickFellowshipWeeklyCacheProp\(dt,t\)/);
+  assert.match(world,/function updateFellowshipProjectProps\(\)/);
+  assert.match(world,/function makeFellowshipProjectProp\(id\)/);
+  assert.match(world,/function makeFellowshipStationHubDecor\(ids,placements\)/);
+  assert.match(world,/function tickFellowshipProjectProps\(dt,t\)/);
+  assert.match(world,/FELLOWSHIP_STATION_POLISH/);
+  assert.match(world,/Fellowship Stations/);
+  assert.match(world,/LEARN · PLAN · PREP · SUSTAIN · SKY/);
+  assert.match(world,/kind:'fellowship_station_hub'/);
+  assert.match(world,/function pulseRecallLecternRenown\(amount=1\)/);
+  assert.match(world,/globalThis\.BlockcraftFellowshipEffects=\{pulseRecallLecternRenown,pulseMapTablePlanning,pulseArmoryRack,pulsePantryShelf,pulseWeatherVane\}/);
+  assert.match(world,/kind:'recall_lectern',glow,light,lowerRune,upperRune,leftPage,rightPage,sparks/);
+  assert.match(world,/kind:'map_table',glow,pathLine,pins/);
+  assert.match(world,/kind:'armory_rack',glow,readyRing,light/);
+  assert.match(world,/kind:'pantry_shelf',glow,readyRing,jars,light/);
+  assert.match(world,/kind:'weather_vane',glow,skyRing,light,crossA,crossB,arrow/);
+  assert.match(world,/RENOWN \+'\+Math\.max\(1,amount\|0\)/);
+  assert.match(world,/function pulseMapTablePlanning\(label='MAP PLANNED'\)/);
+  assert.match(world,/function pulseArmoryRack\(label='GEAR CHECKED',ready=false\)/);
+  assert.match(world,/function pulsePantryShelf\(label='RATIONS CHECKED',ready=false\)/);
+  assert.match(world,/function pulseWeatherVane\(label='SKY READ',ready=false\)/);
+  assert.match(world,/map_table:\[HUB\.guild\.x-3\.7/);
+  assert.match(world,/armory_rack:\[HUB\.guild\.x\+3\.9/);
+  assert.match(world,/pantry_shelf:\[HUB\.guild\.x-3\.75/);
+  assert.match(world,/recall_lectern:\[HUB\.guild\.x\+\.25/);
+  assert.match(world,/weather_vane:\[HUB\.guild\.x\+3\.65/);
+  assert.match(combat,/function nearFellowshipNoticeBoard/);
+  assert.match(combat,/function nearFellowshipWeeklyCache/);
+  assert.match(combat,/guildHallRequest',\{source:'weekly_cache'\}/);
+  assert.match(combat,/openGuildHallUI\('weekly_rewards'\)/);
+  assert.match(combat,/function nearRecallLectern/);
+  assert.match(combat,/function nearFellowshipMapTable/);
+  assert.match(combat,/function nearFellowshipArmoryRack/);
+  assert.match(combat,/function nearFellowshipPantryShelf/);
+  assert.match(combat,/function nearFellowshipWeatherVane/);
+  assert.match(combat,/hasFellowshipProject\('recall_lectern'\)/);
+  assert.match(combat,/hasFellowshipProject\('map_table'\)/);
+  assert.match(combat,/hasFellowshipProject\('armory_rack'\)/);
+  assert.match(combat,/hasFellowshipProject\('pantry_shelf'\)/);
+  assert.match(combat,/hasFellowshipProject\('weather_vane'\)/);
+  assert.match(combat,/openFellowshipMapTableUI/);
+  assert.match(combat,/openFellowshipArmoryUI/);
+  assert.match(combat,/openFellowshipPantryUI/);
+  assert.match(combat,/openFellowshipWeatherVaneUI/);
+  assert.match(combat,/guildHallRequest/);
+  assert.match(frame,/Fellowship Notice Board/);
+  assert.match(frame,/Fellowship Weekly Cache/);
+  assert.match(frame,/Press G to claim unlocked rewards/);
+  assert.match(frame,/Fellowship Study Lectern/);
+  assert.match(frame,/Fellowship Map Table/);
+  assert.match(frame,/Fellowship Armory Rack/);
+  assert.match(frame,/Fellowship Pantry Shelf/);
+  assert.match(frame,/Fellowship Weather Vane/);
+  const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  assert.match(recall,/BlockcraftFellowshipEffects\.pulseRecallLecternRenown\(m\.fellowshipRenown\|0\)/);
+});
+
+test('Armory Rack acts as a fellowship combat-prep station',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(menus,/function openFellowshipArmoryUI\(/);
+  assert.match(menus,/FELLOWSHIP ARMORY RACK/);
+  assert.match(menus,/COMBAT PREP STATION/);
+  assert.match(menus,/gateReadinessLocal\(rank\)/);
+  assert.match(menus,/armoryBestWeapon/);
+  assert.match(menus,/armoryMostDamagedGear/);
+  assert.match(menus,/INSPECT GEAR/);
+  assert.match(menus,/TOBIN REPAIRS/);
+  assert.match(menus,/CRAFT PREP/);
+  assert.match(menus,/GATE PREP/);
+  assert.match(menus,/openBlacksmithServicesUI\(\)/);
+  assert.match(menus,/openCraftingFromNpc\('tools'\)/);
+  assert.match(menus,/READY FOR/);
+  assert.match(world,/pulseArmoryRack/);
+  assert.match(combat,/nearFellowshipArmoryRack/);
+  assert.match(frame,/Gate readiness, repairs and loadout checks/);
+});
+
+test('Pantry Shelf acts as a fellowship sustain-prep station',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(menus,/function openFellowshipPantryUI\(/);
+  assert.match(menus,/FELLOWSHIP PANTRY SHELF/);
+  assert.match(menus,/SUSTAIN PREP STATION/);
+  assert.match(menus,/pantrySummary\(rank/);
+  assert.match(menus,/Current hunger/);
+  assert.match(menus,/Gate rations/);
+  assert.match(menus,/Strong meal packed/);
+  assert.match(menus,/FOOD RECIPES/);
+  assert.match(menus,/GRETA TAVERN/);
+  assert.match(menus,/COOK JOBS/);
+  assert.match(menus,/openCraftingFromNpc\('food'\)/);
+  assert.match(world,/pulsePantryShelf/);
+  assert.match(combat,/nearFellowshipPantryShelf/);
+  assert.match(frame,/hunger, rations and Cook prep/);
+});
+
+test('Weather Vane acts as a fellowship weather-planning station',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(menus,/function openFellowshipWeatherVaneUI\(/);
+  assert.match(menus,/FELLOWSHIP WEATHER VANE/);
+  assert.match(menus,/WEATHER PLANNING STATION/);
+  assert.match(menus,/weatherVaneSummary\(\)/);
+  assert.match(menus,/AWAKE NOW/);
+  assert.match(menus,/MAPPED \+ ACTIVE/);
+  assert.match(menus,/FELLOWSHIP WEATHER CODEX/);
+  assert.match(menus,/OPEN DISCOVERY JOURNAL/);
+  assert.match(menus,/WEATHER SENSE/);
+  assert.match(world,/pulseWeatherVane/);
+  assert.match(combat,/nearFellowshipWeatherVane/);
+  assert.match(frame,/active weather sites and sky planning/);
+});
+
+test('Map Table affects cartographer lead cost and treasure clue messaging',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const game=fs.readFileSync(path.join(__dirname,'..','..','server','rooms','GameRoom.js'),'utf8');
+  assert.match(game,/mapLeadCost=mapTable\?15:25/);
+  assert.match(game,/atFellowshipMapTable/);
+  assert.match(game,/clientGuildHasProject\(client,'map_table'\)/);
+  assert.match(game,/Fellowship Map Table note/);
+  assert.match(menus,/function openFellowshipMapTableUI\(state=cartographerState\)/);
+  assert.match(menus,/FELLOWSHIP MAP TABLE/);
+  assert.match(menus,/fellowship-map-table-marker/);
+  assert.match(menus,/mapTableAction\('hint'/);
+  assert.match(menus,/mapTableAction\('treasure_start'/);
+  assert.match(menus,/state\.mapLeadCost/);
+  assert.match(menus,/MAP TABLE/);
+  assert.match(networking,/openFellowshipMapTableUI\(m\)/);
+  assert.match(networking,/your fellowship has sharpened this clue/);
+  assert.match(networking,/clue narrowed by your fellowship/);
+});
+
+test('Party Compass prioritizes rally, dungeon pings, downed allies, and split teammates',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(world,/Coordinates groups: prioritizes gate rally, dungeon pings, downed or spirit allies, and separated teammates/);
+  assert.match(frame,/function partyCompassTarget\(\)/);
+  assert.match(frame,/activeDungeonPing&&performance\.now\(\)<activeDungeonPing\.expires/);
+  assert.match(frame,/const labels=\{group:'Regroup',boss:'Boss Ping',loot:'Loot Ping'\}/);
+  assert.match(frame,/party\.find\(m=>m\.downed\|\|m\.spirit\)/);
+  assert.match(frame,/dungeonObjectiveState\(status,me/);
+  assert.match(frame,/dungeonLobbyState&&dungeonLobbyState\.rally/);
+  assert.match(frame,/bd=-1/);
+  assert.match(frame,/Split: /);
+  assert.match(frame,/partyCompassTarget:partyCompassTarget\(\)/);
+  assert.match(social,/NET\.room&&NET\.room\.state&&NET\.room\.state\.players/);
+  assert.match(social,/typeof players\.get==='function'/);
+});
+
+test('utility feedback has readable world markers and urgent party HUD states',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(frame,/const trailSenseGroup=new THREE\.Group\(\)/);
+  assert.match(frame,/const partyCompassGroup=new THREE\.Group\(\)/);
+  assert.match(frame,/function updateUtilityWorldFeedback\(now,dt\)/);
+  assert.match(frame,/function showFeatherStepLandingFx\(m=\{\}\)/);
+  assert.match(frame,/globalThis\.BlockcraftUtilityFeedback=\{showFeatherStepLandingFx\}/);
+  assert.match(frame,/utilityPriorityClass\(t\.priority\)/);
+  assert.match(frame,/utilityTargetHudLine\(t\)/);
+  assert.match(networking,/showFeatherStepLandingFx\(m\)/);
+  assert.match(styles,/\.statuschip\.utility\.urgent/);
+  assert.match(styles,/\.statuschip\.utility\.active/);
+});
+
+test('utility ability screen explains slots, unlock sources, and gameplay use cases',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(world,/use:'Press I to reveal nearby road danger/);
+  assert.match(world,/use:'Protects risky climbs, bridges, towers, and dungeon drops/);
+  assert.match(world,/Clear your first E-rank Gate or finish a Parkour event/);
+  assert.match(world,/Reach Road Warden reputation III or map 10 discoveries/);
+  assert.match(menus,/function utilitySlotLabel\(id\)/);
+  assert.match(menus,/utility-loadout-panel/);
+  assert.match(menus,/ACTIVE UTILITY/);
+  assert.match(menus,/PASSIVE UTILITIES/);
+  assert.match(menus,/Locked utilities show exactly where to earn them/);
+  assert.match(menus,/btn\.title='Unlock from: '\+u\.unlock/);
+  assert.match(styles,/\.utility-slots/);
+  assert.match(styles,/\.shoprow\.utilityrow/);
+});
+
+test('utility unlocks present a reward toast with slot outcome and open-utilities action',()=>{
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(networking,/utilityUnlockToastEl\.id='utilityunlocktoast'/);
+  assert.match(networking,/function utilitySlotUnlockLine\(m,u\)/);
+  assert.match(networking,/Equipped in passive slot/);
+  assert.match(networking,/Equipped in active slot\. Press I to use it/);
+  assert.match(networking,/Utilities shape exploration\. Equip up to 3 passives and 1 active/);
+  assert.match(networking,/function showUtilityUnlockToast\(m,u,firstUnlock=false\)/);
+  assert.match(networking,/menusApi\.openUtilitiesUI/);
+  assert.match(networking,/const firstUnlock=utilityUnlocks\.filter\(k=>UTILITY_DEFS\[k\]\)\.length===0/);
+  assert.match(styles,/#utilityunlocktoast/);
+  assert.match(styles,/body\.cutscene [^}]*#utilityunlocktoast/);
 });
 
 test('client XP previews match the authoritative activity economy', async () => {
@@ -859,6 +1449,50 @@ test('network controller retries when a fresh room join never settles', async ()
   assert.equal(controller.state.on, true);
 });
 
+test('network controller tries the next overworld shard and returns to it after dungeon rooms', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const events = [], selected = [];
+  const makeRoom = token => ({
+    reconnectionToken: token,
+    onLeave(fn) { this.leaveHandler = fn; },
+    async leave() { if (this.leaveHandler) this.leaveHandler(); },
+  });
+  const shard2 = makeRoom('shard-2:token'), dungeon = makeRoom('dungeon:token'), back = makeRoom('shard-2:back');
+  let blockcraftJoins = 0;
+  class Client {
+    async joinOrCreate(name, options) {
+      events.push(['join', name, options.shardId || '', options.name]);
+      if (name === 'blockcraft' && options.shardId === 'main') throw new Error('shard full');
+      if (name === 'blockcraft' && options.shardId === 'shard-2') return blockcraftJoins++ ? back : shard2;
+      if (name === 'dungeon') return dungeon;
+      throw new Error('unexpected room');
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    joinAttempts: 1, shardAttempts: 2,
+    primaryJoinOptions: ({ attempt }) => ({ shardId: attempt === 0 ? 'main' : 'shard-2' }),
+    onPrimaryJoinOptions: options => selected.push(options.shardId),
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(controller.state.room, shard2);
+  assert.equal(controller.state.shardId, 'shard-2');
+  assert.deepEqual(selected, ['shard-2']);
+  await controller.switchRoom('dungeon', { gateId: 'g1' });
+  await controller.returnToPrimary();
+  assert.equal(controller.state.room, back);
+  assert.deepEqual(events, [
+    ['join', 'blockcraft', 'main', 'Hunter'],
+    ['join', 'blockcraft', 'shard-2', 'Hunter'],
+    ['join', 'dungeon', '', 'Hunter'],
+    ['join', 'blockcraft', 'shard-2', 'Hunter'],
+  ]);
+});
+
 test('network controller bounds a hung live reconnect and falls back to a fresh join', async () => {
   const attached = [], events = [];
   const first = { reconnectionToken: 'live:token', onLeave(fn) { this.leaveHandler = fn; } };
@@ -958,14 +1592,284 @@ test('tavern gambling has server-backed dice roulette and blackjack table entry 
 test('quest log progression director introduces one system at a time',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const onboarding=fs.readFileSync(path.join(__dirname,'..','..','client','js','onboarding.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
   const store=fs.readFileSync(path.join(__dirname,'..','store.js'),'utf8');
+  const earlyLoopE2E=fs.readFileSync(path.join(__dirname,'..','..','e2e','player-facing-early-loop.spec.js'),'utf8');
   assert.match(menus,/function progressionRoadmap\(\)/);
   assert.match(menus,/function whatNextQuestLogCard\(\)/);
+  assert.match(menus,/function activeObjectiveList\(\)/);
+  assert.match(menus,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
+  assert.match(menus,/const NPC_QUEST_REGISTRY=globalThis\.BlockcraftNpcQuestChains/);
+  assert.match(menus,/NPC_QUEST_REGISTRY\.createNpcQuestChains\(\{B,I\}\)/);
+  assert.match(menus,/QUEST_OBJECTIVES\.normalizeObjectiveList/);
+  assert.match(menus,/function serverObjectiveQuestLogCards\(\)/);
+  assert.match(menus,/function serverObjectiveQuestLogSections\(/);
+  assert.match(menus,/function questHistoryQuestLogSections\(/);
+  assert.match(menus,/function questLogFilterBarHTML\(\)/);
+  assert.match(menus,/data-quest-filter/);
+  assert.match(menus,/function questLogActionLabel\(o\)/);
+  assert.match(menus,/o\.questLogAction\|\|o\.claimAction\|\|o\.action/);
+  assert.match(menus,/track_npc/);
+  assert.match(menus,/Failed \/ Abandoned/);
+  assert.match(menus,/function questRewardPreviewHTML\(/);
+  assert.match(menus,/function questSectionHTML\(/);
+  assert.match(menus,/function bindServerObjectiveActions/);
+  assert.match(menus,/data-server-objective-action/);
+  assert.match(menus,/openRegionalContracts:openRegionalContractsUI/);
+  assert.match(menus,/openGuardian:openGuardianUI/);
+  assert.match(menus,/Server Objectives/);
+  assert.match(menus,/Manhunt Quest/);
+  const npcQuestRegistry=fs.readFileSync(path.join(__dirname,'..','..','shared','npc-quest-chains.js'),'utf8');
+  assert.match(npcQuestRegistry,/type:'manhunt'/);
+  assert.match(menus,/function recoveryHubInfo\(\)/);
+  assert.match(menus,/function appendRecoveryHubCard/);
+  assert.match(menus,/Recovery Hub/);
+  assert.match(menus,/Reward Pending/);
+  assert.match(menus,/Choose Path/);
+  assert.match(menus,/Start Awakening/);
+  assert.match(menus,/Land Claim Recovery/);
+  assert.match(menus,/Contract Recovery/);
+  assert.match(menus,/appendRecoveryHubCard\(qpanelEl\)/);
   assert.match(menus,/function progressionDirectorGuidanceInfo\(\)/);
+  assert.match(menus,/function objectiveCraftCandidates\(/);
+  assert.match(menus,/progressionFocus==='first_craft_station'/);
+  assert.match(menus,/function objectiveCraftShortcutsHTML\(/);
+  assert.match(menus,/function presentObjectiveCraftCompletion\(/);
+  assert.match(menus,/Objective updated: /);
+  assert.match(menus,/Craft complete/);
+  assert.match(menus,/Smelt complete/);
+  assert.match(menus,/place it inside editable claimed land/);
+  assert.match(menus,/claim at the Job Board/);
+  assert.match(menus,/data-craft-output/);
+  assert.match(menus,/Craftable now/);
+  assert.match(menus,/STAGE RECIPE/);
+  assert.match(menus,/trackerCraftAction:objectiveTrackerCraftAction/);
+  assert.match(menus,/get craftResult\(\)/);
+  assert.match(frame,/function currentObjectiveAction\(/);
+  assert.match(frame,/function nearbyQuestClaimPrompt\(\)/);
+  assert.match(frame,/Turn In '\+qTitle/);
+  assert.match(frame,/Claim Job Reward/);
+  assert.match(frame,/Claim Guild Contract/);
+  assert.match(frame,/function activeObjectiveList\(\)/);
+  assert.match(frame,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
+  assert.match(frame,/QUEST_OBJECTIVES\.normalizeObjectiveList/);
+  assert.match(frame,/function serverObjectiveForHud\(\)/);
+  assert.match(frame,/function serverObjectiveHudText\(o\)/);
+  assert.match(frame,/function serverObjectiveHudAction\(o\)/);
+  assert.match(frame,/const explicit=o\.hudAction\|\|o\.claimAction\|\|o\.action/);
+  assert.match(frame,/function unifiedObjectiveList\(\)/);
+  assert.match(frame,/function unifiedObjectiveHud\(\)/);
+  assert.match(frame,/function currentObjectiveHud\(\)/);
+  assert.match(frame,/localStoryObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('story','manhunt'\),'Story'\)/);
+  assert.match(frame,/localJobObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('job'\),'Job'\)/);
+  assert.match(frame,/localGuildObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('guild'\),'Guild'\)/);
+  assert.match(frame,/serverObjectiveLine\(serverObjectiveBySource\('progression'\),'Next'\)\|\|progressionObjectiveFallback\(\)/);
+  assert.match(frame,/obj\.unified&&Array\.isArray\(obj\.lines\)/);
+  assert.match(frame,/class="objective-line /);
+  assert.match(frame,/function objectiveTurnInLabel\(o\)/);
+  assert.match(frame,/CLAIM AT JOB BOARD/);
+  assert.match(frame,/CLAIM GUILD CONTRACT/);
+  assert.match(frame,/CLAIM AT AEGIS/);
+  assert.match(frame,/action==='guild_contracts'/);
+  assert.match(frame,/action==='claim_aegis'/);
+  assert.match(frame,/data-location/);
+  assert.match(frame,/activeObjectiveList\(\)\.length/);
+  assert.match(frame,/progression:first_land_claim/);
+  assert.match(frame,/OPEN GATE PREP/);
+  assert.match(frame,/function transitionRecoveryAction\(/);
+  assert.match(frame,/continue_panel/);
+  assert.match(frame,/choose_path/);
+  assert.match(frame,/start_awakening/);
+  assert.match(frame,/use_ability/);
+  assert.match(frame,/transitionPanels:transitionPanelState\(\)/);
+  assert.match(frame,/function e2eCurrentObjectiveAction\(/);
+  assert.match(frame,/data-objective-action/);
+  assert.match(frame,/objectiveAction:e2eCurrentObjectiveAction\(\)/);
+  assert.match(frame,/landClaimOverlay:!!worldState\.landClaimOverlay/);
+  assert.match(frame,/OPEN JOB BOARD/);
+  assert.match(frame,/TURN IN TO MARA/);
+  assert.match(frame,/CLAIM LAND/);
+  assert.match(frame,/FIND GATE/);
+  assert.match(frame,/first_profession_contract'\|\|progressionFocus==='first_promotion_job/);
+  assert.match(frame,/toggleLandClaims&&worldApi\.toggleLandClaims\(true\)/);
+  assert.match(frame,/no nearby Gate is currently tracked/);
+  assert.match(frame,/Quest Log opened for context/);
+  assert.match(combat,/function claimReadyQuestAtService\(\)/);
+  assert.match(combat,/NET\.room\.send\('regionalContractClaim'/);
+  assert.match(combat,/Claiming Job Reward/);
+  assert.match(combat,/Claiming Guild Contract/);
+  assert.match(menus,/Stand beside a <b>Furnace<\/b>/);
+  assert.match(onboarding,/actionHTML/);
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(styles,/\.qaction/);
+  assert.match(styles,/overflow-wrap:anywhere/);
+  assert.match(styles,/\.objective-list/);
+  assert.match(styles,/\.objective-line/);
+  assert.match(styles,/#currentquest \.objective-line\{grid-template-columns:36px minmax\(0,1fr\)/);
+  assert.match(styles,/#currentquest \.oact\{grid-column:2;grid-row:2/);
+  assert.match(styles,/#currentquest \.obody span\{display:none\}/);
+  assert.match(styles,/\.oact/);
+  assert.match(styles,/\.questsection/);
+  assert.match(styles,/\.questlog-tabs/);
+  assert.match(styles,/\.questcard\.recent/);
+  assert.match(styles,/\.qbadge/);
+  assert.match(styles,/\.qreward/);
+  assert.match(styles,/\.qprogress/);
   assert.match(menus,/ACTIVATE /);
   assert.match(menus,/DISMISS GUIDE/);
   assert.match(menus,/SYSTEM JOURNEY · ONE INTRODUCTION AT A TIME/);
   assert.match(menus,/OPTIONAL · Tavern Games/);
   assert.match(networking,/m\.systemIntroductions/);
+  assert.match(networking,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
+  assert.match(networking,/QUEST_OBJECTIVES\.normalizeObjectiveList/);
+  assert.match(networking,/progressionMilestoneReward/);
+  assert.match(networking,/questRewardSummary/);
+  assert.match(networking,/function questRewardSummaryLine\(m\)/);
+  assert.match(networking,/function questRewardNextStep\(m\)/);
+  assert.match(networking,/function questRewardCompletionTitle\(m,sourceLabel\)/);
+  assert.match(networking,/Next: '\+escHTML\(next\)/);
+  assert.match(networking,/function clampQuestHistoryEntry\(raw\)/);
+  assert.match(networking,/setQuestHistoryFromServer\(m\.questHistory\)/);
+  assert.match(networking,/function setActiveObjectives\(next, opts=\{\}\)/);
+  assert.match(networking,/READY TO CLAIM/);
+  assert.match(networking,/ready to claim/);
+  assert.match(networking,/Manhunt Quest/);
+  assert.match(networking,/m\.subtitle/);
+  assert.match(networking,/PROGRESSION MILESTONE/);
+  assert.match(networking,/milestonecontinue/);
+  assert.match(networking,/spotlightLandClaim/);
+  assert.match(networking,/Claim protected/);
+  assert.match(networking,/landClaimTrustNotice/);
+  assert.match(networking,/landClaimRefresh/);
+  assert.match(networking,/homesteadWorkOrder/);
+  assert.match(networking,/Homestead ledger/);
+  assert.match(networking,/Homestead assist/);
+  assert.match(networking,/Protection active for/);
+  assert.match(networking,/trusted you to build/);
+  assert.match(networking,/gatePrepWarning/);
+  assert.match(onboarding,/pathstrip/);
+  assert.match(onboarding,/prephint/);
+  assert.match(onboarding,/Craft a station/);
+  assert.match(onboarding,/Then claim land/);
+  assert.match(onboarding,/first_claim_expand/);
+  assert.match(onboarding,/Expand your protected base to 3 connected land claims/);
+  assert.match(onboarding,/first_base_setup/);
+  assert.match(onboarding,/place a chest, a torch or lantern, and a Crafting Table or Furnace/);
+  assert.match(onboarding,/baseSetupStatus/);
+  assert.match(onboarding,/Storage/);
+  assert.match(onboarding,/These only count inside editable claimed land/);
+  assert.match(combat,/explainBaseSetupPlacement/);
+  assert.match(menus,/gate-readiness-list/);
+  assert.match(menus,/gate-party-readiness/);
+  assert.match(menus,/PARTY CHECK/);
+  assert.match(menus,/UNDER RANK/);
+  assert.match(menus,/GATE_READINESS_HINTS/);
+  assert.match(frame,/Missing: /);
+  assert.match(frame,/no nearby Gate/);
+  assert.match(frame,/clearInventoryItems/);
+  assert.match(frame,/Homestead/);
+  assert.match(world,/function spotlightLandClaim/);
+  assert.match(world,/get landClaimOverlay\(\)/);
+  assert.match(world,/function baseSetupStatus/);
+  assert.match(world,/function explainBaseSetupPlacement/);
+  assert.match(world,/function claimableObjectiveForNpc\(v\)/);
+  assert.match(world,/role='guardian'/);
+  assert.match(world,/claim_aegis/);
+  assert.match(world,/function landClaimPermissionPreview/);
+  assert.match(world,/function landClaimAreaPlace/);
+  assert.match(world,/Homestead/);
+  assert.match(world,/Owner rights/);
+  assert.match(world,/<\/b> Build/);
+  assert.match(world,/NAME HOMESTEAD/);
+  assert.match(world,/TRUST HOMESTEAD/);
+  assert.match(world,/REMOVE HOMESTEAD/);
+  assert.match(world,/HOMESTEAD WORK ORDERS/);
+  assert.match(world,/Homestead chest/);
+  assert.match(world,/Trusted helper: contributions grant assist XP/);
+  assert.match(world,/CHECK WORK ORDER/);
+  assert.match(world,/Contributors:/);
+  assert.match(world,/GET WORK ORDER/);
+  assert.match(world,/CONTRIBUTE/);
+  assert.match(world,/CLAIM/);
+  assert.match(world,/applyGroup:true/);
+  assert.match(world,/area action applies to/);
+  assert.match(world,/function landClaimUpkeepLine/);
+  assert.match(world,/Dormant: abandoned in/);
+  assert.match(world,/Active: dormant in/);
+  assert.match(world,/claimDormantMat/);
+  assert.match(world,/Base setup blocks only count inside editable claimed land/);
+  assert.match(world,/toggleLandClaimOverlay\(true\)/);
+  assert.match(world,/function landPriceForClaim/);
+  assert.match(world,/expansion discount/);
+  assert.match(world,/3-tile base goal ready/);
+  assert.match(world,/function firstLandClaimGuidanceHTML/);
+  assert.match(world,/First claim route/);
+  assert.match(world,/Shortfall: /);
+  assert.match(world,/Earn gold from Mara quests/);
+  assert.match(world,/function landClaimAccessRole/);
+  assert.match(world,/must trust you before you can build here/);
+  assert.match(world,/land-role/);
+  assert.match(menus,/function objectiveCraftRecoveryHint/);
+  assert.match(menus,/Recipe blocked:/);
+  assert.match(menus,/craft Oak Planks/);
+  assert.match(room,/prepareProgressionFocus/);
+  assert.match(room,/lifecycleFor/);
+  const progressionMixin=fs.readFileSync(path.join(__dirname,'..','rooms','progression.mixin.js'),'utf8');
+  assert.match(progressionMixin,/NPC_QUEST_REGISTRY = require\('\.\.\/\.\.\/shared\/npc-quest-chains'\)/);
+  assert.match(progressionMixin,/NPC_QUEST_REGISTRY\.createNpcQuestChains\(\{ B: W\.B, I \}\)/);
+  assert.match(progressionMixin,/validateNpcQuestChains\(NPC_QUEST_CHAINS\)/);
+  assert.match(progressionMixin,/buildRuntimeNpcQuest\(def/);
+  assert.match(progressionMixin,/rehydrateNpcQuestFromAuthoring/);
+  assert.match(npcQuestRegistry,/replace\(\/\\\{N\\\}\/g/);
+  assert.match(npcQuestRegistry,/runtimeQuestMatchesDefinition/);
+  assert.match(room,/recordQuestHistory\(client/);
+  assert.match(room,/questType/);
+  assert.match(room,/aegis:silent_bounty:active/);
+  assert.match(room,/PROGRESSION_FOCUS_STATES\.includes\(focus\)/);
+  assert.match(room,/rec\.prof\.activeNpcQuest = null/);
+  assert.match(room,/focus === 'first_craft_station'/);
+  assert.match(room,/W\.B\.PLANKS/);
+  assert.match(room,/expirePublicGates/);
+  assert.match(room,/noMaterials/);
+  assert.match(room,/noGold/);
   assert.match(store,/systemIntroductions/);
+  assert.match(store,/function sanitizeQuestHistory\(raw\)/);
+  assert.match(store,/questHistory: \[\]/);
+  assert.match(store,/sanitizeAegisTrial/);
+  assert.match(store,/manhunt/);
+  assert.match(store,/progressionMilestoneRewards/);
+  assert.match(store,/first_road_ready/);
+  assert.match(store,/first_e_gate/);
+  assert.match(store,/first_claim_expand/);
+  assert.match(store,/first_base_setup/);
+  assert.match(earlyLoopE2E,/player-facing early loop tracker gives a clear next action/);
+  assert.match(earlyLoopE2E,/function clickTrackerAction/);
+  assert.match(earlyLoopE2E,/dispatchEvent\(new MouseEvent\('click'/);
+  assert.match(earlyLoopE2E,/craftResult: \{ out: \[13, 1\] \}/);
+  assert.match(earlyLoopE2E,/landClaimOverlay\)\)\.toBe\(true\)/);
+  assert.match(earlyLoopE2E,/reload preserves the active objective and tracker action/);
+  assert.match(earlyLoopE2E,/TURN IN TO MARA/);
+  assert.match(earlyLoopE2E,/FIND GATE/);
+  assert.match(earlyLoopE2E,/expirePublicGates/);
+  assert.match(earlyLoopE2E,/The First Gate/);
+  assert.match(earlyLoopE2E,/first_craft_station/);
+  assert.match(earlyLoopE2E,/noMaterials: true/);
+  assert.match(earlyLoopE2E,/clearInventoryItems/);
+  assert.match(earlyLoopE2E,/Recipe blocked:/);
+  assert.match(earlyLoopE2E,/OPEN RECIPE/);
+  assert.match(earlyLoopE2E,/noGold: true/);
+  assert.match(earlyLoopE2E,/Shortfall/);
+  assert.match(earlyLoopE2E,/first_profession_contract/);
+  assert.match(earlyLoopE2E,/OPEN JOB BOARD/);
+  const transitionE2E=fs.readFileSync(path.join(__dirname,'..','..','e2e','transition-panel-recovery.spec.js'),'utf8');
+  assert.match(transitionE2E,/transition panels recover after reload/);
+  assert.match(transitionE2E,/expectRecoveryHub/);
+  assert.match(transitionE2E,/Recovery Hub/);
+  assert.match(transitionE2E,/CHOOSE PATH/);
+  assert.match(transitionE2E,/START AWAKENING/);
+  assert.match(transitionE2E,/abilityTraining/);
 });

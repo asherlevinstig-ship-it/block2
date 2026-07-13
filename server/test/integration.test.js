@@ -15,9 +15,16 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { Client } = require('@colyseus/sdk');
+const { getAuthService } = require('../auth');
+const { issueDungeonAdmission } = require('../rooms/dungeon-admission');
 
 const PORT = 2599;
 const ENDPOINT = 'ws://localhost:' + PORT;
+const accountToken = cookie => {
+  const account = getAuthService().sessionAccount(String(cookie).split('=', 2)[1]);
+  if (!account) throw new Error('integration session did not resolve to an account');
+  return account.id;
+};
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 function register(username, password, displayName) {
@@ -224,12 +231,14 @@ async function main() {
   await A.leave().catch(() => {});
   await wait(200);
 
-  // ---- DungeonRoom (Phase 2b): a hunter joins the dungeon room directly and plays a raid ----
+  // ---- DungeonRoom: an admitted hunter joins the room and plays a raid ----
   const cookieC = await register('charlie_user', 'correct horse charlie', 'Charlie');
   const clientC = new Client(ENDPOINT, { headers: { Cookie: cookieC } });
   // Use the entry-rank raid here: this check is about real-room combat + profile
   // handoff, and a fresh level-one hunter must survive long enough to earn the grant.
-  const Dn = await clientC.joinOrCreate('dungeon', { gateId: 'itest-gate', seed: 4242, rank: 0, name: 'Charlie' });
+  const soloGate = { id: 'itest-gate', seed: 4242, dungeonId: 'abandoned_mine', rank: 0, kind: 'public', x: 20.5, y: 16, z: 20.5 };
+  const soloTicket = issueDungeonAdmission(soloGate, [accountToken(cookieC)]);
+  const Dn = await clientC.joinOrCreate('dungeon', { gateId: soloGate.id, ticket: soloTicket, name: 'Charlie' });
   const dungeonGrants = [];
   Dn.onMessage('grant', m => dungeonGrants.push(m));
   inbox(Dn);
@@ -342,7 +351,9 @@ async function main() {
   const cookieE = await register('echo_user', 'correct horse echo', 'Echo');
   const clientD = new Client(ENDPOINT, { headers: { Cookie: cookieD } });
   const clientE = new Client(ENDPOINT, { headers: { Cookie: cookieE } });
-  const coopOpts = { gateId: 'coop-gate', seed: 909, rank: 1 };
+  const coopGate = { id: 'coop-gate', seed: 909, rank: 1, kind: 'public', x: 20.5, y: 16, z: 20.5 };
+  const coopTicket = issueDungeonAdmission(coopGate, [accountToken(cookieD), accountToken(cookieE)]);
+  const coopOpts = { gateId: coopGate.id, ticket: coopTicket };
   const Dd = await clientD.joinOrCreate('dungeon', { ...coopOpts, name: 'Delta' });
   const De = await clientE.joinOrCreate('dungeon', { ...coopOpts, name: 'Echo' });
   inbox(Dd); inbox(De);

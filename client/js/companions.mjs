@@ -105,8 +105,9 @@ function emitDragonAura(pos, type, dt, holder){
 }
 function mountLift(kind){ return isDragon(kind)?1.6:1.0; }
 function mountEye(kind){ return isDragon(kind)?1.55:0.95; }   // extra camera height for the local rider
-function makeMount(kind){
-  const g = isDragon(kind) ? makeDragonMount(dragonType(kind)) : makeHorseMount();
+function makeMount(kind, bondLevel=1, specialization=''){
+  const type=isDragon(kind)?dragonType(kind):'';
+  const g = type ? makeDragonMount(type, bondLevel, specialization) : makeHorseMount();
   g.userData.mountKind=kind;
   return g;
 }
@@ -135,9 +136,11 @@ function makeHorseMount(){
   grp.userData.mountKind='horse';
   return grp;
 }
-function makeDragonMount(type){
+function makeDragonMount(type, bondLevel=1, specialization=''){
   const d=DRAGON_TYPES[type]||DRAGON_TYPES.ember;
   const sh=DRAGON_SHAPES[type]||DRAGON_SHAPES.ember;
+  const bond=Math.max(1,Math.min(6,bondLevel|0));
+  const spec=DRAGON_SPECIALIZATION_DEFS_C[specialization]?specialization:'';
   const grp=new THREE.Group();
   const scale=voxelMats(...d.scale);
   const belly=voxelMats(...d.belly);
@@ -146,20 +149,42 @@ function makeDragonMount(type){
   const horn=voxelMats(...d.horn);
   const eye=glowVoxelMats(d.membrane[1],d.membrane[1],d.membrane[0],d.membrane[3],1.25);
   const saddleM=voxelMats('#3a2412','#5a3a20','#1e1208','#160d06');
+  const strapM=voxelMats('#17100a','#2a1a10','#090604','#050302');
+  const toothM=voxelMats('#e8e0c8','#fff8e8','#9a9074','#5a523e');
+  const accent=glowVoxelMats(d.membrane[0],d.membrane[1],d.membrane[2],d.membrane[3],1.05);
   addBox(grp,sh.body,[0,1.3,0],scale);                    // body
   addBox(grp,[sh.body[0]*.72,0.38,sh.body[2]*.86],[0,1.0,0],belly); // belly
   addBox(grp,sh.chest,[0,1.36,.88],scale,[-.18,0,0]);      // chest plate
+  addBox(grp,[sh.body[0]*.9,.13,.18],[0,1.73,.42],dark,[.28,0,0]);
+  addBox(grp,[sh.body[0]*.82,.12,.16],[0,1.72,-.22],dark,[.18,0,0]);
+  for(let i=0;i<4;i++){
+    addBox(grp,[sh.body[0]*.48,.055,.16],[0,.78,-.72+i*.43],belly,[.12,0,0]);
+  }
   const lh=0.85;
   for(const sx of [-1,1]) for(const sz of [-1,1]){
+    addBox(grp,[0.3,0.32,0.34],[sx*0.36,0.92,sz*0.52],scale,[sz*.12,0,sx*.04]); // shoulder/haunch
     addBox(grp,[0.22,lh,0.26],[sx*0.34, lh/2, sz*0.58], dark);     // legs
+    addBox(grp,[0.18,0.26,0.22],[sx*0.34,0.38,sz*0.74],scale,[sz*.16,0,0]);      // ankle scale
     addBox(grp,[0.28,0.13,0.34],[sx*0.34,0.065,sz*0.66], dark);    // clawed feet
     addBox(grp,[0.08,0.06,0.16],[sx*0.34,0.15,sz*0.84],horn);      // toe claw
+    addBox(grp,[0.06,0.05,0.12],[sx*0.22,0.14,sz*0.86],horn,[0,sx*.16,0]);
+    addBox(grp,[0.06,0.05,0.12],[sx*0.46,0.14,sz*0.86],horn,[0,-sx*.16,0]);
   }
   addBox(grp,sh.neck,[0,1.76,1.0],scale,[-0.55,0,0]);      // neck
+  addBox(grp,[sh.neck[0]*.82,.18,sh.neck[2]*.76],[0,1.63,1.05],belly,[-.55,0,0]);
   addBox(grp,sh.head,[0,2.13,1.5],scale);                  // head
+  addBox(grp,[sh.head[0]*.96,.14,.42],[0,2.29,1.32],dark,[-.1,0,0]); // brow ridge
   addBox(grp,sh.snout,[0,2.06,1.88],dark);                 // snout
+  addBox(grp,[sh.snout[0]*.72,.12,sh.snout[2]*.72],[0,1.91,1.84],belly,[.08,0,0]); // lower jaw
+  addBox(grp,[.09,.08,.16],[-.28,2.11,1.66],scale,[0,0,-.18]);
+  addBox(grp,[.09,.08,.16],[ .28,2.11,1.66],scale,[0,0,.18]);
   addBox(grp,[.07,.08,.06],[-.15,2.2,1.84],eye);
   addBox(grp,[.07,.08,.06],[ .15,2.2,1.84],eye);
+  for(const sx of [-1,1]){
+    addBox(grp,[.05,.09,.12],[sx*.12,1.96,2.08],toothM,[.18,0,0]);
+    addBox(grp,[.05,.08,.1],[sx*.24,1.98,1.98],toothM,[.12,0,0]);
+    addBox(grp,[.08,.34,.12],[sx*.31,2.2,1.35],membrane,[0,0,sx*.48]); // cheek fin
+  }
   if(sh.horns==='antler'){
     for(const sx of [-1,1]){
       addBox(grp,[.08,.36,.08],[sx*.2,2.45,1.3],horn,[-.25,0,sx*.35]);
@@ -183,26 +208,50 @@ function makeDragonMount(type){
     addBox(grp,[0.13,0.36,0.13],[-0.2,2.45,1.3],horn,[-0.35,0,-0.42]);
     addBox(grp,[0.13,0.36,0.13],[0.2,2.45,1.3],horn,[-0.35,0,0.42]);
   }
+  for(let i=0;i<3;i++){
+    const z=.9+i*.22, y=1.82+i*.16;
+    addBox(grp,[.09,.18,.1],[0,y,z],horn,[-.45,0,0]);
+  }
   addBox(grp,[0.36,0.34,0.95*sh.tail],[0,1.22,-1.1],scale,[0.22,0,0]); // tail base
   addBox(grp,[0.22,0.22,0.85*sh.tail],[0,0.98,-1.78],scale,[0.4,0,0]); // tail mid
+  addBox(grp,[0.14,0.14,0.46*sh.tail],[0,0.78,-2.32],dark,[0.56,0,0]); // tail whip
   if(sh.fin==='leaf'){
     addBox(grp,[0.58,0.08,0.34],[0,0.8,-2.25],membrane,[0,.35,0]);
+    addBox(grp,[0.34,0.06,0.24],[-.22,0.92,-2.36],membrane,[0,.72,.25]);
+    addBox(grp,[0.34,0.06,0.24],[ .22,0.7,-2.38],membrane,[0,-.72,-.25]);
   } else if(sh.fin==='crystal'){
     addBox(grp,[0.16,0.4,0.22],[0,0.82,-2.2],horn,[.65,0,0]);
     addBox(grp,[0.3,0.12,0.24],[0,0.72,-2.12],dark);
+    addBox(grp,[0.12,0.28,0.18],[-.16,0.72,-2.46],horn,[.35,0,-.35]);
+    addBox(grp,[0.12,0.28,0.18],[ .16,0.64,-2.45],horn,[.25,0,.35]);
   } else if(sh.fin==='bolt'){
     addBox(grp,[0.18,0.18,0.42],[-.08,0.82,-2.12],horn,[0,0,.55]);
     addBox(grp,[0.18,0.18,0.42],[ .1,0.7,-2.3],horn,[0,0,-.55]);
+    addBox(grp,[0.08,0.08,0.42],[0,0.62,-2.55],accent,[0,0,.8]);
   } else if(sh.fin==='void'){
     addBox(grp,[0.42,0.06,0.3],[-.18,0.88,-2.22],membrane,[0,.5,.2]);
     addBox(grp,[0.36,0.06,0.26],[ .18,0.7,-2.1],membrane,[0,-.4,-.2]);
+    addBox(grp,[0.18,0.18,0.18],[0,0.72,-2.48],accent,[.65,.35,.2]);
   } else {
     addBox(grp,[0.42,0.14,0.28],[0,0.8,-2.18],membrane);
+    addBox(grp,[0.24,0.1,0.2],[0,0.7,-2.46],accent,[.25,0,0]);
   }
   // spinal ridge
   for(let i=0;i<5;i++){
     const h=.14+sh.spine*.06*(i%2?0.8:1.15);
     addBox(grp,[0.1,h,0.14],[0,1.68+h*.35,-0.78+i*0.4],i%2&&type==='frost'?horn:dark,[0.2,0,0]);
+  }
+  if(type==='ember'){
+    addBox(grp,[.12,.12,.12],[-.34,1.64,.42],accent,[.4,0,0]);
+    addBox(grp,[.12,.12,.12],[ .34,1.64,.42],accent,[.4,0,0]);
+  } else if(type==='verdant'){
+    for(const sx of [-1,1]) addBox(grp,[.22,.05,.18],[sx*.48,1.52,-.3],membrane,[.25,0,sx*.45]);
+  } else if(type==='frost'){
+    for(const sx of [-1,1]) addBox(grp,[.09,.28,.09],[sx*.22,1.9,-.3],horn,[.75,0,sx*.2]);
+  } else if(type==='storm'){
+    addBox(grp,[.08,.08,1.25],[0,1.78,-.18],accent,[0,0,.62]);
+  } else if(type==='void'){
+    addBox(grp,[.26,.16,.26],[0,1.54,-.64],accent,[.35,.4,.15]);
   }
   // wings on shoulder pivots so they can flap
   const wings=[];
@@ -211,15 +260,65 @@ function makeDragonMount(type){
     piv.position.set(side*0.36, 1.72, 0.1);
     addBox(piv,[0.18,0.5,0.18],[side*0.18,0.16,0],dark);            // shoulder spar
     addBox(piv,[1.55*sh.wing,0.14,0.18],[side*.86*sh.wing,0.07,-0.45],dark); // leading bone
+    addBox(piv,[0.82*sh.wing,0.08,0.12],[side*.58*sh.wing,-.08,-.1],horn,[0,0,side*.18]);
+    addBox(piv,[0.64*sh.wing,0.07,0.12],[side*.48*sh.wing,-.2,-.58],horn,[0,0,side*.26]);
     addBox(piv,[1.16*sh.wing,0.09,.48],[side*.74*sh.wing,-sh.wingDrop*.25,.04],membrane,[0,0,side*.04]);
     addBox(piv,[.92*sh.wing,0.08,.46],[side*.62*sh.wing,-.12-sh.wingDrop*.5,-.42],membrane,[0,0,side*.08]);
     addBox(piv,[.56*sh.wing,0.07,.34],[side*.42*sh.wing,-.22-sh.wingDrop*.75,-.84],membrane,[0,0,side*.12]);
+    addBox(piv,[.18,.08,.18],[side*1.58*sh.wing,.04,-.52],horn,[0,0,side*.2]);
+    addBox(piv,[.08,.08,.72],[side*.98*sh.wing,-.16,-.95],membrane,[0,0,side*.3]);
     if(type==='storm') addBox(piv,[.09,.09,1.05],[side*1.15*sh.wing,.0,-.52],horn,[0,side*.25,0]);
     if(type==='verdant') addBox(piv,[.34,.06,.28],[side*.98*sh.wing,-.3,-.9],membrane,[0,0,side*.55]);
+    if(type==='frost') addBox(piv,[.08,.18,.38],[side*1.0*sh.wing,-.28,-.92],horn,[.45,0,side*.24]);
+    if(type==='void') addBox(piv,[.12,.12,.32],[side*1.18*sh.wing,-.24,-.78],accent,[.25,0,side*.28]);
     grp.add(piv);
     wings.push(piv);
   }
   addBox(grp,[0.62,0.18,0.72],[0,1.72,-0.05],saddleM);             // saddle
+  addBox(grp,[0.78,0.08,0.12],[0,1.62,.24],strapM);
+  addBox(grp,[0.78,0.08,0.12],[0,1.61,-.34],strapM);
+  addBox(grp,[0.08,0.36,0.08],[-.42,1.43,-.02],strapM);
+  addBox(grp,[0.08,0.36,0.08],[ .42,1.43,-.02],strapM);
+  addBox(grp,[0.22,0.05,0.16],[-.48,1.24,-.02],saddleM);
+  addBox(grp,[0.22,0.05,0.16],[ .48,1.24,-.02],saddleM);
+  if(bond>=2){
+    const trim=glowVoxelMats(d.membrane[1],d.membrane[0],d.membrane[2],d.membrane[3],1.15);
+    addBox(grp,[0.7,0.04,0.08],[0,1.84,.22],trim);
+    addBox(grp,[0.7,0.04,0.08],[0,1.84,-.32],trim);
+  }
+  if(bond>=4){
+    const glow=glowVoxelMats(d.membrane[0],d.membrane[1],d.membrane[2],d.membrane[3],1.35);
+    for(const sx of [-1,1]){
+      addBox(grp,[0.06,0.06,0.82],[sx*.62,1.55,-.06],glow,[0,0,sx*.08]);
+      addBox(grp,[0.08,0.08,0.2],[sx*.46,2.22,1.74],glow,[0,0,sx*.18]);
+    }
+  }
+  if(bond>=6){
+    const gem=glowVoxelMats('#fff7b0',d.membrane[1],d.membrane[0],d.membrane[3],1.65);
+    addBox(grp,[0.18,0.12,0.18],[0,2.36,1.54],gem,[.25,.45,0]);
+    addBox(grp,[0.12,0.28,0.12],[0,2.58,1.28],gem,[-.7,0,0]);
+  }
+  if(spec){
+    const specM=glowVoxelMats(dragonSpecializationColor(spec),dragonSpecializationColor(spec),'#ffffff','#140c1c',1.45);
+    if(spec==='scout'){
+      for(const sx of [-1,1]){
+        addBox(grp,[0.09,0.09,0.92],[sx*1.72*sh.wing,1.74,-.62],specM,[0,0,sx*.34]);
+        addBox(grp,[0.08,0.08,0.54],[sx*.44,2.08,1.78],specM,[.12,0,sx*.32]);
+      }
+      addBox(grp,[0.12,0.07,0.82],[0,1.86,.04],specM,[0,0,.2]);
+    } else if(spec==='defender'){
+      for(const sx of [-1,1]){
+        addBox(grp,[0.22,0.22,0.28],[sx*.5,1.62,.64],specM,[.25,0,sx*.18]);
+        addBox(grp,[0.16,0.16,0.26],[sx*.44,1.02,-.66],specM,[.1,0,sx*.16]);
+      }
+      addBox(grp,[0.76,0.08,0.16],[0,1.88,.42],specM,[.2,0,0]);
+    } else if(spec==='sage'){
+      addBox(grp,[0.18,0.3,0.18],[0,2.39,1.44],specM,[-.45,.35,0]);
+      addBox(grp,[0.5,0.06,0.32],[-.26,1.72,-.46],specM,[.1,0,.35]);
+      addBox(grp,[0.5,0.06,0.32],[ .26,1.72,-.46],specM,[.1,0,-.35]);
+      addBox(grp,[0.24,0.08,0.32],[0,.92,-2.32],specM,[0,.25,0]);
+    }
+  }
   grp.scale.setScalar(d.size||1);
   grp.userData.wings=wings;
   grp.userData.dragonType=type;
@@ -253,7 +352,369 @@ function ensureRemoteMount(r, kind){
 let mounted=false, mountKind='', localMountObj=null;
 let dragonUnlocks=[];            // hatched dragon type ids, in cycle order; persisted in the profile
 let dragonCare={};               // type -> {happiness, fedAt}
+let dragonBondXp={};             // type -> server-owned bond XP, raised by care/riding/combat
 let dragonNames={};              // type -> custom name, shown on bond cards and roost nameplates
+let dragonGenders={};            // type -> male/female, assigned when the egg hatches
+let dragonPersonalities={};       // type -> personality trait assigned when the egg hatches
+let dragonRoles={};               // type -> follow/stay/guard/rest command role
+let dragonStaySpots={};           // type -> {x,y,z,yaw} saved when role is stay
+let dragonHatchedAt={};           // type -> hatch timestamp; 0 means migrated adult
+let dragonRoleMastery={};          // type -> role -> XP earned by using dragon roles
+let dragonSpecializations={};      // type -> scout/defender/sage once chosen at high bond
+let dragonTrainingState=null;       // active server-authoritative role drill progress
+let dragonChallenges={};           // server-owned daily bond challenge state
+let dragonRoleReadyAt={};         // type:role -> local HUD cooldown estimate after authoritative role events
+let dragonRoleActivity={};        // type -> {role,text,until} short-lived live HUD activity label
+let dragonMapFocus={type:'',until:0}; // short-lived map highlight requested from command UI
+let dragonActivityLog=[];          // recent local-only dragon events for command/bond panels
+const DRAGON_GROW_MS_C=2*60*1000;
+const DRAGON_JUVENILE_MS_C=Math.floor(DRAGON_GROW_MS_C/2);
+function dragonGender(type){ return dragonGenders[type]==='female'?'female':'male'; }
+function dragonGenderLabel(type){ return dragonGender(type)==='female'?'Female':'Male'; }
+const DRAGON_PERSONALITIES_C=['bold','gentle','proud','playful','skittish','hungry'];
+function defaultDragonPersonality(type){ return ({ember:'bold',verdant:'gentle',frost:'skittish',storm:'playful',void:'proud'})[type]||'bold'; }
+function randomDragonPersonality(){ return DRAGON_PERSONALITIES_C[(Math.random()*DRAGON_PERSONALITIES_C.length)|0]; }
+function dragonPersonality(type){
+  const p=dragonPersonalities[type];
+  return DRAGON_PERSONALITIES_C.includes(p)?p:defaultDragonPersonality(type);
+}
+function dragonPersonalityTrait(typeOrTrait){
+  return DRAGON_PERSONALITIES_C.includes(typeOrTrait)?typeOrTrait:dragonPersonality(typeOrTrait);
+}
+function dragonPersonalityLabel(type){
+  const p=dragonPersonalityTrait(type);
+  return p.charAt(0).toUpperCase()+p.slice(1);
+}
+function dragonPersonalityText(type){
+  const p=dragonPersonalityTrait(type);
+  return ({
+    bold:'Leans in during guard work and earns extra bond from mounted abilities.',
+    gentle:'Keeps calmer rest poses and happiness fades more slowly.',
+    proud:'Carries a taller idle pose and gains stronger bond cooldown scaling.',
+    playful:'Bounces more while following and earns extra bond from care.',
+    skittish:'Keeps a wider orbit, reacts quickly, and bonds faster while young.',
+    hungry:'Sniffs around for treats and gains more happiness from feeding.',
+  })[p]||'A steady companion with balanced behavior.';
+}
+function dragonPersonalityColor(type){
+  const p=dragonPersonalityTrait(type);
+  return ({bold:'#ff8a5b',gentle:'#a7f3d0',proud:'#d8a8ff',playful:'#ffd166',skittish:'#93c5fd',hungry:'#fbbf24'})[p]||'#7dd3fc';
+}
+function dragonPersonalityMotion(type){
+  const p=dragonPersonalityTrait(type);
+  return ({
+    bold:{back:.9,side:.92,move:1.14,wing:1.08,bob:1.05,guardSpark:1.35},
+    gentle:{back:1.04,side:.95,move:.92,wing:.78,bob:.58,restSpark:1.2},
+    proud:{back:1,side:1,move:1,wing:.94,bob:.82,tilt:.055},
+    playful:{back:.92,side:1.08,move:1.12,wing:1.32,bob:1.55,happySpark:1.35},
+    skittish:{back:1.22,side:1.28,move:1.28,wing:1.22,bob:1.12,jitter:.18},
+    hungry:{back:.86,side:.88,move:1.04,wing:1,bob:1.08,sniff:1},
+  })[p]||{back:1,side:1,move:1,wing:1,bob:1};
+}
+const DRAGON_ROLES_C=['follow','stay','guard','rest'];
+function dragonRole(type){
+  const r=dragonRoles[type];
+  return DRAGON_ROLES_C.includes(r)?r:'follow';
+}
+function dragonRoleLabel(type){
+  const r=dragonRole(type);
+  return r.charAt(0).toUpperCase()+r.slice(1);
+}
+function dragonHatchTime(type){
+  const at=Number(dragonHatchedAt&&dragonHatchedAt[type]||0);
+  return Number.isFinite(at)&&at>0?at:0;
+}
+function dragonAgeMs(type){
+  const at=dragonHatchTime(type);
+  return at?Math.max(0,Date.now()-at):DRAGON_GROW_MS_C;
+}
+function dragonIsAdult(type){ return dragonAgeMs(type)>=DRAGON_GROW_MS_C; }
+function dragonGrowthProgress(type){ return Math.max(0,Math.min(1,dragonAgeMs(type)/DRAGON_GROW_MS_C)); }
+function dragonStage(type){
+  const age=dragonAgeMs(type);
+  return age>=DRAGON_GROW_MS_C?'adult':(age>=DRAGON_JUVENILE_MS_C?'juvenile':'baby');
+}
+function dragonStageLabel(type){
+  const stage=dragonStage(type);
+  return stage==='adult'?'Adult':(stage==='juvenile'?'Juvenile':'Baby');
+}
+function dragonGrowthLeftSeconds(type){ return Math.max(0,Math.ceil((DRAGON_GROW_MS_C-dragonAgeMs(type))/1000)); }
+const DRAGON_BOND_THRESHOLDS_C=[0,40,120,260,480,800];
+const DRAGON_BOND_MILESTONES_C=[
+  {level:1, title:'Bonded', reward:'Basic care, names, roles, and roosting.'},
+  {level:2, title:'Saddle Trust', reward:'Saddle trim appears on your mounted dragon.'},
+  {level:3, title:'Command Focus', reward:'Role mastery improves guard and stay cooldowns.'},
+  {level:4, title:'Luminous Wing', reward:'Wing and eye glow marks a proven companion.'},
+  {level:5, title:'Battle Rhythm', reward:'Dragon guard damage and ability bond scaling improve.'},
+  {level:6, title:'Loyal Legend', reward:'A crown gem marks a fully loyal dragon.'},
+];
+const DRAGON_DAILY_CHALLENGES_C=[
+  {id:'care', title:'Treat Training', reason:'care', need:1, reward:24, desc:'Care for or feed any bonded dragon.'},
+  {id:'follow', title:'Wing Road', reason:'follow', need:3, reward:28, desc:'Earn three travel bond ticks with a Follow dragon.'},
+  {id:'guard', title:'Watchful Guard', reason:'guard', need:3, reward:32, desc:'Let a Guard dragon protect you three times.'},
+  {id:'rest', title:'Quiet Roost', reason:'rest', need:3, reward:24, desc:'Recover happiness three times with a Rest dragon.'},
+  {id:'stay', title:'Hold The Post', reason:'stay', need:1, reward:30, desc:'Let a Stay dragon defend its saved post once.'},
+  {id:'ability', title:'Breath Practice', reason:'ability', need:2, reward:30, desc:'Use mounted dragon abilities twice.'},
+];
+function dragonChallengeDay(now=Date.now()){ return Math.floor(now/86400000); }
+function dragonDailyChallenge(day=dragonChallengeDay()){
+  return DRAGON_DAILY_CHALLENGES_C[Math.abs(day|0)%DRAGON_DAILY_CHALLENGES_C.length];
+}
+function dragonChallengeProgress(){
+  const day=dragonChallengeDay(), def=dragonDailyChallenge(day), saved=dragonChallenges&&typeof dragonChallenges==='object'?dragonChallenges:{};
+  const active=saved.day===day&&saved.id===def.id;
+  const progress=active?Math.max(0,Math.min(def.need,saved.progress|0)):0;
+  return {...def, day, progress, claimed:!!(active&&saved.claimed), type:active?(saved.type||''):''};
+}
+function dragonBondLevelFromXp(xp){
+  xp=Math.max(0,xp|0);
+  let level=1;
+  for(let i=1;i<DRAGON_BOND_THRESHOLDS_C.length;i++) if(xp>=DRAGON_BOND_THRESHOLDS_C[i]) level=i+1;
+  return level;
+}
+function dragonBondLevel(type){ return dragonBondLevelFromXp(dragonBondXp[type]||0); }
+function dragonBondProgress(type){
+  const xp=Math.max(0,dragonBondXp[type]||0), level=dragonBondLevelFromXp(xp);
+  const cur=DRAGON_BOND_THRESHOLDS_C[level-1]||0, next=DRAGON_BOND_THRESHOLDS_C[level]||cur;
+  return {xp, level, cur, next, pct:next>cur?Math.round((xp-cur)/(next-cur)*100):100};
+}
+function dragonBondMilestone(level){
+  level=Math.max(1,Math.min(DRAGON_BOND_MILESTONES_C.length,level|0));
+  return DRAGON_BOND_MILESTONES_C[level-1];
+}
+function dragonBondRewardText(type){
+  const level=dragonBondLevel(type), current=dragonBondMilestone(level), next=dragonBondMilestone(level+1);
+  return current.title+': '+current.reward+(next&&next.level>level?' Next: '+next.title+' at Lv '+next.level+'.':'');
+}
+const DRAGON_MASTERY_THRESHOLDS_C=[0,12,36,80,150];
+const DRAGON_SPECIALIZATION_DEFS_C={
+  scout:{name:'Scout',desc:'Follow travel bond and travel drills trigger about 10% sooner.'},
+  defender:{name:'Defender',desc:'Guard and Stay gain +1 range, +1 damage, and 10% faster defense recovery.'},
+  sage:{name:'Roost Sage',desc:'Care treats restore +4 happiness, Rest recovers 25% faster, and Rest can reach 90 happiness.'},
+};
+const DRAGON_SPECIALIZATION_COLORS_C={scout:'#5ee7ff',defender:'#ffd166',sage:'#8fffb0'};
+const DRAGON_MASTERY_TITLES_C={
+  follow:['Trail Rookie','Path Rider','Wing Guide','Sky Scout','Horizon Master'],
+  guard:['Watch Rookie','Shield Claw','Aegis Wing','Bulwark Drake','Guardian Master'],
+  stay:['Post Rookie','Sentinel','Ward Drake','Holdfast','Keep Warden'],
+  rest:['Calm Rookie','Nest Tender','Soothing Wing','Tranquil Drake','Roost Sage'],
+};
+const DRAGON_MASTERY_REWARDS_C={
+  follow:[
+    'Travel drills active.',
+    'Training trail flourish unlocked.',
+    'Shorter travel drill pacing.',
+    'Faster travel bond rhythm.',
+    'Master trail title shown.',
+  ],
+  guard:[
+    'Owner defense active.',
+    'Training shield flourish unlocked.',
+    'Wider guard intercept range.',
+    'Quicker guard recovery.',
+    'Stronger high-rank guard hits.',
+  ],
+  stay:[
+    'Post defense active.',
+    'Training post flourish unlocked.',
+    'Wider stay watch range.',
+    'Quicker post defense recovery.',
+    'Stronger high-rank stay hits.',
+  ],
+  rest:[
+    'Recovery training active.',
+    'Training calm flourish unlocked.',
+    'Faster happiness recovery.',
+    'Stronger calm recovery rhythm.',
+    'Master roost title shown.',
+  ],
+};
+function dragonRoleMasteryXp(type, role){
+  const row=dragonRoleMastery&&dragonRoleMastery[type];
+  return row&&typeof row==='object'?Math.max(0,row[role]|0):0;
+}
+function dragonRoleMasteryLevel(type, role){
+  const xp=dragonRoleMasteryXp(type, role);
+  let level=1;
+  for(let i=1;i<DRAGON_MASTERY_THRESHOLDS_C.length;i++) if(xp>=DRAGON_MASTERY_THRESHOLDS_C[i]) level=i+1;
+  return level;
+}
+function dragonRoleMasteryProgress(type, role=dragonRole(type)){
+  const xp=dragonRoleMasteryXp(type, role), level=dragonRoleMasteryLevel(type, role);
+  const cur=DRAGON_MASTERY_THRESHOLDS_C[level-1]||0, next=DRAGON_MASTERY_THRESHOLDS_C[level]||cur;
+  return {role,xp,level,cur,next,pct:next>cur?Math.round((xp-cur)/(next-cur)*100):100};
+}
+function dragonRoleMasteryTitle(type, role=dragonRole(type)){
+  const level=dragonRoleMasteryLevel(type, role);
+  const titles=DRAGON_MASTERY_TITLES_C[role]||DRAGON_MASTERY_TITLES_C.follow;
+  return titles[Math.max(0,Math.min(titles.length-1,level-1))]||('Rank '+level);
+}
+function dragonRoleMasteryReward(type, role=dragonRole(type), level=dragonRoleMasteryLevel(type, role)){
+  const rewards=DRAGON_MASTERY_REWARDS_C[role]||DRAGON_MASTERY_REWARDS_C.follow;
+  return rewards[Math.max(0,Math.min(rewards.length-1,level-1))]||'Role mastery improved.';
+}
+function dragonRoleMasteryNextReward(type, role=dragonRole(type)){
+  const level=dragonRoleMasteryLevel(type, role);
+  if(level>=DRAGON_MASTERY_THRESHOLDS_C.length) return 'All role unlocks earned.';
+  return dragonRoleMasteryReward(type, role, level+1);
+}
+function dragonSpecialization(type){
+  const s=dragonSpecializations&&dragonSpecializations[type];
+  return DRAGON_SPECIALIZATION_DEFS_C[s]?s:'';
+}
+function dragonSpecializationName(typeOrSpec){
+  const spec=DRAGON_SPECIALIZATION_DEFS_C[typeOrSpec]?typeOrSpec:dragonSpecialization(typeOrSpec);
+  return spec?(DRAGON_SPECIALIZATION_DEFS_C[spec].name||spec):'Unchosen';
+}
+function dragonSpecializationText(typeOrSpec){
+  const spec=DRAGON_SPECIALIZATION_DEFS_C[typeOrSpec]?typeOrSpec:dragonSpecialization(typeOrSpec);
+  return spec?(DRAGON_SPECIALIZATION_DEFS_C[spec].desc||'Specialized dragon bonus active.'):'Choose at Bond Lv 4.';
+}
+function dragonSpecializationChoices(){ return Object.keys(DRAGON_SPECIALIZATION_DEFS_C); }
+function dragonSpecializationColor(typeOrSpec){
+  const spec=DRAGON_SPECIALIZATION_DEFS_C[typeOrSpec]?typeOrSpec:dragonSpecialization(typeOrSpec);
+  return spec?(DRAGON_SPECIALIZATION_COLORS_C[spec]||'#d8a8ff'):'#7dd3fc';
+}
+function dragonSpecializationHex(typeOrSpec){
+  return parseInt(dragonSpecializationColor(typeOrSpec).slice(1),16)||0x7dd3fc;
+}
+function hexToRgb01(hex){
+  hex=Math.max(0,Math.min(0xffffff,hex|0));
+  return [((hex>>16)&255)/255,((hex>>8)&255)/255,(hex&255)/255];
+}
+function canChooseDragonSpecialization(type){
+  return !!(DRAGON_TYPES[type]&&dragonUnlocks.includes(type)&&dragonIsAdult(type)&&dragonBondLevel(type)>=4&&!dragonSpecialization(type));
+}
+function chooseDragonSpecialization(type, specialization){
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type) || !DRAGON_SPECIALIZATION_DEFS_C[specialization]) return false;
+  if(!canChooseDragonSpecialization(type)){ sysMsg('Dragon specializations unlock for adult dragons at <b>Bond Lv 4</b>.'); return false; }
+  if(NET.on && NET.room){ NET.room.send('chooseDragonSpecialization',{type,specialization}); return true; }
+  dragonSpecializations[type]=specialization;
+  addDragonActivity(type,'Specialization chosen',dragonSpecializationName(specialization));
+  sysMsg('<b>'+DRAGON_TYPES[type].name+'</b> specialized as <b>'+dragonSpecializationName(specialization)+'</b>.');
+  if(mounted&&mountKind==='dragon:'+type) applyMount('dragon:'+type);
+  return true;
+}
+function applyDragonRoleMasteryUpdate(m){
+  if(!m||!DRAGON_TYPES[m.type]||!m.role) return false;
+  if(!dragonRoleMastery[m.type]) dragonRoleMastery[m.type]={};
+  const before=dragonRoleMasteryLevel(m.type,m.role);
+  dragonRoleMastery[m.type][m.role]=Math.max(0,m.xp|0);
+  const after=dragonRoleMasteryLevel(m.type,m.role);
+  if(after>before) addDragonActivity(m.type,'Training rank unlocked',dragonRoleMasteryTitle(m.type,m.role)+' - '+dragonRoleMasteryReward(m.type,m.role,after));
+  return true;
+}
+function startDragonTraining(type){
+  const role=dragonRole(type);
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type)) return false;
+  if(!dragonIsAdult(type)){ sysMsg('Young dragons need to grow before training.'); return false; }
+  if(NET.on && NET.room){ NET.room.send('startDragonTraining',{type,role}); return true; }
+  dragonTrainingState={type,role,title:role.charAt(0).toUpperCase()+role.slice(1)+' Drill',progress:0,need:1,unit:'task'};
+  const mastery=applyDragonRoleMasteryUpdate({type,role,xp:dragonRoleMasteryXp(type,role)+3});
+  addDragonActivity(type,'Training drill complete','Mastery +3');
+  sysMsg('<b>'+dragonTrainingState.title+'</b> complete. Mastery improved.');
+  dragonTrainingState=null;
+  return mastery;
+}
+function applyDragonTrainingUpdate(m){
+  if(!m||!DRAGON_TYPES[m.type]) return false;
+  dragonTrainingState={type:m.type,role:m.role||dragonRole(m.type),title:m.title||'Dragon Drill',progress:Math.max(0,Number(m.progress)||0),need:Math.max(1,Number(m.need)||1),unit:m.unit||'',waiting:m.waiting||''};
+  return true;
+}
+function applyDragonTrainingComplete(m){
+  if(!m||!DRAGON_TYPES[m.type]) return false;
+  if(m.roleMastery) applyDragonRoleMasteryUpdate({type:m.type,...m.roleMastery});
+  addDragonActivity(m.type,'Training drill complete',(m.role||'role')+' mastery +'+((m.roleMastery&&m.roleMastery.gained)||0));
+  dragonTrainingState=null;
+  return true;
+}
+function clearDragonTraining(m={}){
+  dragonTrainingState=null;
+  return true;
+}
+function dragonTrainingProgress(type){
+  return dragonTrainingState&&dragonTrainingState.type===type?dragonTrainingState:null;
+}
+function dragonTrainingLabel(t=dragonTrainingState){
+  if(!t) return '';
+  const need=Math.max(1,Number(t.need)||1), progress=Math.max(0,Math.min(need,Number(t.progress)||0));
+  const pct=Math.round(progress/need*100);
+  const unit=t.unit?(' '+t.unit):'';
+  const waiting=t.waiting?(' - '+String(t.waiting).toUpperCase()):'';
+  return (t.title||'Dragon Drill')+' '+pct+'% ('+Math.floor(progress)+'/'+Math.floor(need)+unit+')'+waiting;
+}
+function dragonTrainingFx(now, dt){
+  const t=dragonTrainingState;
+  if(!t||dim!=='overworld'||!DRAGON_TYPES[t.type]) return;
+  const role=t.role||dragonRole(t.type), col=dragonTrailColor(t.type);
+  const mastery=dragonRoleMasteryLevel(t.type, role);
+  const boost=1+Math.max(0,mastery-1)*.08;
+  const extra=mastery>=2?4:0;
+  const hex=new THREE.Color(col[0],col[1],col[2]).getHex();
+  const spec=dragonSpecialization(t.type), specHex=spec?dragonSpecializationHex(spec):hex;
+  if(!t.fxNext||now>=t.fxNext){
+    t.fxNext=now+(role==='follow'?520:role==='rest'?760:640);
+    if(role==='stay'){
+      const s=dragonStaySpots[t.type];
+      const x=s&&Number.isFinite(+s.x)?+s.x:player.pos.x, y=s&&Number.isFinite(+s.y)?+s.y:player.pos.y, z=s&&Number.isFinite(+s.z)?+s.z:player.pos.z;
+      if(typeof ringPulse==='function') ringPulse(x,y+.08,z,2.4*boost,hex,.55);
+      if(spec && typeof ringPulse==='function') ringPulse(x,y+.12,z,1.7*boost,specHex,.28);
+      if(mastery>=5 && typeof ringPulse==='function') ringPulse(x,y+.11,z,1.35*boost,0xffe78a,.32);
+      for(let i=0;i<8+extra;i++){
+        const a=Math.random()*6.283, r=1.2+Math.random()*2.3;
+        spawnParticle({x:x+Math.cos(a)*r,y:y+.12,z:z+Math.sin(a)*r,vx:0,vy:.18+Math.random()*.25,vz:0,life:.55,grav:-.08,r:col[0],g:col[1],b:col[2]});
+      }
+    } else if(role==='guard'){
+      if(typeof ringPulse==='function') ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,1.55*boost,hex,.42);
+      if(typeof ringPulse==='function') ringPulse(player.pos.x,player.pos.y+.1,player.pos.z,.85*boost,(spec?specHex:(mastery>=5?0xffe78a:0xffffff)),.24);
+    } else if(role==='rest'){
+      const pos=dragonReactionPosition(t.type);
+      if(typeof ringPulse==='function') ringPulse(pos.x,pos.y+.08,pos.z,1.4*boost,0x70f06a,.45);
+      if((spec||mastery>=5) && typeof ringPulse==='function') ringPulse(pos.x,pos.y+.13,pos.z,.72*boost,spec?specHex:0xffffff,.28);
+      for(let i=0;i<7+extra;i++){
+        const a=Math.random()*6.283, r=.35+Math.random()*1.2;
+        spawnParticle({x:pos.x+Math.cos(a)*r,y:pos.y+.35+Math.random()*.85,z:pos.z+Math.sin(a)*r,vx:(Math.random()-.5)*.06,vy:.08+Math.random()*.16,vz:(Math.random()-.5)*.06,life:.75,grav:-.05,r:.45,g:1,b:.55});
+      }
+    } else {
+      const yaw=player.yaw||0, x=player.pos.x+Math.sin(yaw)*2.1, y=player.pos.y, z=player.pos.z+Math.cos(yaw)*2.1;
+      if(typeof ringPulse==='function') ringPulse(x,y+.08,z,.72*boost,hex,.42);
+      if((spec||mastery>=5) && typeof ringPulse==='function') ringPulse(x,y+.11,z,.38*boost,spec?specHex:0xffe78a,.24);
+      for(let i=0;i<(mastery>=2?2:1);i++) spawnParticle({x,y:y+.25,z,vx:(Math.random()-.5)*.08,vy:.28,vz:(Math.random()-.5)*.08,life:.55,grav:-.08,r:col[0],g:col[1],b:col[2]});
+    }
+  }
+}
+function dragonRoleCooldownMs(type, role){
+  const level=dragonBondLevel(type), personality=dragonPersonality(type);
+  const base=role==='stay'
+    ? (personality==='bold'?8500:(personality==='gentle'?10500:9500))
+    : (personality==='bold'?3800:(personality==='gentle'?5200:4600));
+  const perLevel=personality==='proud'?.03:.025, cap=personality==='proud'?.15:.12;
+  const mastery=dragonRoleMasteryLevel(type, role);
+  return Math.round(base*(1-Math.min(cap,(level-1)*perLevel)-Math.min(.1,(mastery-1)*.025)));
+}
+function addDragonActivity(type, text, detail=''){
+  if(!DRAGON_TYPES[type]) return;
+  const entry={at:Date.now(),type,text:String(text||'').slice(0,80),detail:String(detail||'').slice(0,120)};
+  dragonActivityLog=[entry,...dragonActivityLog.filter(e=>!(e.type===entry.type&&e.text===entry.text&&Date.now()-(e.at||0)<1200))].slice(0,14);
+}
+function dragonActivityEntries(limit=8){
+  return dragonActivityLog.slice(0,Math.max(1,limit|0));
+}
+function noteDragonRoleEvent(m){
+  if(!m) return;
+  const type=m.kind||m.type;
+  if(!DRAGON_TYPES[type]) return;
+  const role=m.role||m.reason||'guard';
+  const now=performance.now();
+  if(role==='guard'||role==='stay') dragonRoleReadyAt[type+':'+role]=now+dragonRoleCooldownMs(type, role);
+  const text=role==='recall'?'recalled':role==='follow'?'traveling':role==='rest'?'+happiness':role==='stay'?'protecting':'protecting';
+  dragonRoleActivity[type]={role,text,until:now+(role==='follow'?2600:2200)};
+  if(role==='stay') addDragonActivity(type,'Stay defended post',(m.damage?('Hit for '+(m.damage|0)):'Post protected'));
+  else if(role==='guard') addDragonActivity(type,'Guard protected you',(m.damage?('Hit for '+(m.damage|0)):'Threat intercepted'));
+  else if(role==='rest') addDragonActivity(type,'Rest recovered happiness',(m.gain?('+'+(m.gain|0)+' happiness'):'Recovering'));
+  else if(role==='follow') addDragonActivity(type,'Follow travel bond','Overworld travel');
+  else if(role==='recall') addDragonActivity(type,'Dragon recalled',m.clearedStaySpot?'Stay post cleared':'Whistled to your side');
+}
 function applyMount(kind){       // kind '' dismounts
   if(!kind){
     mountKind=''; mounted=false;
@@ -262,6 +723,11 @@ function applyMount(kind){       // kind '' dismounts
     return;
   }
   if(dim!=='overworld'){ showName('You can only ride in the overworld'); return; }
+  if(isDragon(kind) && !dragonIsAdult(dragonType(kind))){
+    showName((DRAGON_TYPES[dragonType(kind)]||{}).name+' is still growing');
+    sysMsg('Your '+dragonStageLabel(dragonType(kind)).toLowerCase()+' dragon will be rideable in <b>'+dragonGrowthLeftSeconds(dragonType(kind))+'s</b>');
+    return;
+  }
   mountKind=kind; mounted=true;
   if(NET.room) NET.room.send('mount', {kind});
   if(isDragon(kind)){
@@ -273,11 +739,13 @@ function applyMount(kind){       // kind '' dismounts
 function toggleMount(){ applyMount(mountKind==='horse' ? '' : 'horse'); }     // Z
 function cycleDragon(){                                                       // X: cycle owned dragons, then off
   if(!dragonUnlocks.length){ sysMsg('You need to hatch a <b>Dragon Egg</b> first'); return; }
+  const rideable=dragonUnlocks.filter(dragonIsAdult);
+  if(!rideable.length){ sysMsg('Your young dragon is still growing. Rideable in <b>'+Math.min(...dragonUnlocks.map(dragonGrowthLeftSeconds))+'s</b>.'); return; }
   if(isDragon(mountKind)){
-    const next=dragonUnlocks.indexOf(dragonType(mountKind))+1;
-    applyMount(next>=dragonUnlocks.length ? '' : 'dragon:'+dragonUnlocks[next]);
+    const next=rideable.indexOf(dragonType(mountKind))+1;
+    applyMount(next>=rideable.length ? '' : 'dragon:'+rideable[next]);
   } else {
-    applyMount('dragon:'+dragonUnlocks[0]);
+    applyMount('dragon:'+rideable[0]);
   }
 }
 const DRAGON_ABILITIES={
@@ -291,7 +759,8 @@ let dragonAbilityReadyAt=0;
 function dragonHappiness(type){
   const c=dragonCare[type]||{};
   const elapsed=c.fedAt ? (Date.now()-c.fedAt)/3600000 : 0;
-  return Math.max(0, Math.min(100, Math.round((c.happiness==null?50:c.happiness)-elapsed*2)));
+  const decay=dragonPersonality(type)==='gentle'?1.2:2;
+  return Math.max(0, Math.min(100, Math.round((c.happiness==null?50:c.happiness)-elapsed*decay)));
 }
 function setDragonCare(type, happiness, fedAt){
   if(!DRAGON_TYPES[type]) return;
@@ -321,10 +790,88 @@ function feedMountedDragon(slot=selected){
   if(NET.on && NET.room){ NET.room.send('feedMountedDragon',{slot}); return true; }
   s.count--; if(s.count<=0) inv[slot]=null;
   const type=dragonType(mountKind);
-  setDragonCare(type, dragonHappiness(type)+20, Date.now());
+  setDragonCare(type, dragonHappiness(type)+20+(dragonPersonality(type)==='hungry'?4:0), Date.now());
   refreshHUD(); if(uiOpen) renderUI();
   netDragonCareFx({kind:type,x:player.pos.x,y:player.pos.y,z:player.pos.z,happiness:dragonHappiness(type)});
   sysMsg('You feed your <b>'+(DRAGON_TYPES[type]||{}).name+'</b>. Happiness: <b>'+dragonHappiness(type)+'</b>');
+  return true;
+}
+function careDragon(type, slot=selected){
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type)) return false;
+  const s=inv[slot];
+  if(!s || s.id!==I.DRAGON_TREAT) return false;
+  if(NET.on && NET.room){ NET.room.send('careDragon',{type,slot}); return true; }
+  s.count--; if(s.count<=0) inv[slot]=null;
+  const personality=dragonPersonality(type);
+  setDragonCare(type, dragonHappiness(type)+(dragonIsAdult(type)?12:18)+(personality==='hungry'?4:0), Date.now());
+  let bondGain=dragonIsAdult(type)?10:16;
+  if(personality==='playful') bondGain=Math.ceil(bondGain*1.2);
+  if(!dragonIsAdult(type)&&personality==='skittish') bondGain=Math.ceil(bondGain*1.25);
+  dragonBondXp[type]=Math.max(0,(dragonBondXp[type]||0)+bondGain);
+  addDragonActivity(type,'Care treat used','Happiness '+dragonHappiness(type)+'/100');
+  dragonReaction(type,'happy');
+  refreshHUD(); if(uiOpen) renderUI();
+  sysMsg('You care for your <b>'+(DRAGON_TYPES[type]||{}).name+'</b>. Bond Lv <b>'+dragonBondLevel(type)+'</b>');
+  return true;
+}
+function setDragonRole(type, role){
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type)) return false;
+  if(!DRAGON_ROLES_C.includes(role)) return false;
+  if((role==='guard'||role==='stay') && !dragonIsAdult(type)){ sysMsg('Young dragons need to grow before that command.'); return false; }
+  if(NET.on && NET.room){ NET.room.send('setDragonRole',{type,role}); return true; }
+  dragonRoles[type]=role;
+  if(role==='stay') dragonStaySpots[type]={x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw||0};
+  else if(dragonStaySpots[type]) delete dragonStaySpots[type];
+  if(typeof globalThis.BlockcraftDragonCommandFx==='function') globalThis.BlockcraftDragonCommandFx({kind:type,role,x:player.pos.x,y:player.pos.y,z:player.pos.z});
+  dragonReaction(type,role==='rest'?'rest':(role==='guard'?'guard':'happy'));
+  addDragonActivity(type,'Role set to '+dragonRoleLabel(type),role==='stay'?'Post saved at '+Math.round(player.pos.x)+', '+Math.round(player.pos.z):'Command accepted');
+  refreshHUD(); if(uiOpen) renderUI();
+  if(typeof globalThis.updateLandMinimap==='function') globalThis.updateLandMinimap();
+  sysMsg('<b>'+(DRAGON_TYPES[type]||{}).name+'</b> role set to <b>'+dragonRoleLabel(type)+'</b>.');
+  return true;
+}
+function clearDragonStaySpot(type){
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type)) return false;
+  if(!dragonIsAdult(type)){ sysMsg('Young dragons need to grow before that command.'); return false; }
+  if(NET.on && NET.room){ NET.room.send('setDragonRole',{type,role:'stay',clearStaySpot:true}); return true; }
+  dragonRoles[type]='stay';
+  const oldSpot=dragonStaySpots[type]||null;
+  if(dragonStaySpots[type]) delete dragonStaySpots[type];
+  if(typeof globalThis.BlockcraftDragonCommandFx==='function') globalThis.BlockcraftDragonCommandFx({kind:type,role:'stay',clearStaySpot:true,x:oldSpot?oldSpot.x:player.pos.x,y:oldSpot?oldSpot.y:player.pos.y,z:oldSpot?oldSpot.z:player.pos.z});
+  dragonReaction(type,'happy');
+  addDragonActivity(type,'Stay post cleared','Awaiting a new post');
+  refreshHUD(); if(uiOpen) renderUI();
+  if(typeof globalThis.updateLandMinimap==='function') globalThis.updateLandMinimap();
+  sysMsg('<b>'+(DRAGON_TYPES[type]||{}).name+'</b> stay post cleared.');
+  return true;
+}
+function recallDragon(type, options={}){
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type)) return false;
+  if(!dragonIsAdult(type)){ sysMsg('Young dragons need to grow before recall.'); return false; }
+  const clearStaySpot=!!(options&&options.clearStaySpot);
+  if(NET.on && NET.room){ NET.room.send('recallDragon',{type,clearStaySpot}); return true; }
+  if(dragonRole(type)==='stay' && dragonStaySpots[type] && !clearStaySpot){
+    sysMsg('Clear or move the stay post before recalling <b>'+(DRAGON_TYPES[type]||{}).name+'</b>.');
+    return false;
+  }
+  const hadPost=!!dragonStaySpots[type];
+  if(clearStaySpot && dragonStaySpots[type]) delete dragonStaySpots[type];
+  if(dragonRole(type)==='stay') dragonRoles[type]='follow';
+  if(typeof globalThis.BlockcraftDragonCommandFx==='function') globalThis.BlockcraftDragonCommandFx({kind:type,role:'recall',x:player.pos.x,y:player.pos.y,z:player.pos.z,clearStaySpot:hadPost&&clearStaySpot});
+  dragonReaction(type,'happy');
+  addDragonActivity(type,'Dragon recalled',hadPost&&clearStaySpot?'Stay post cleared':'Whistled to your side');
+  refreshHUD(); if(uiOpen) renderUI();
+  if(typeof globalThis.updateLandMinimap==='function') globalThis.updateLandMinimap();
+  sysMsg('<b>'+(DRAGON_TYPES[type]||{}).name+'</b> recalled.');
+  return true;
+}
+function focusDragonStayPost(type){
+  if(!DRAGON_TYPES[type] || !dragonUnlocks.includes(type)) return false;
+  const s=dragonStaySpots[type];
+  if(!s) return false;
+  dragonMapFocus={type,until:performance.now()+6000};
+  if(typeof globalThis.BlockcraftDragonCommandFx==='function') globalThis.BlockcraftDragonCommandFx({kind:type,focus:true,x:s.x,y:s.y,z:s.z});
+  if(typeof globalThis.updateLandMinimap==='function') globalThis.updateLandMinimap();
   return true;
 }
 function dragonHatchTarget(){
@@ -382,11 +929,14 @@ function claimLocalIncubation(x,y,z){
   removeDragonIncubationMesh(x,y,z);
   if(d && !dragonUnlocks.includes(type)){
     dragonUnlocks.push(type);
+    dragonGenders[type]=ud.gender==='female'?'female':'male';
+    dragonPersonalities[type]=DRAGON_PERSONALITIES_C.includes(ud.personality)?ud.personality:randomDragonPersonality();
+    dragonHatchedAt[type]=Date.now();
     refreshHUD(); if(uiOpen) renderUI();
     if(typeof SFX!=='undefined' && SFX.boom) SFX.boom();
     const n=parseInt(d.membrane[1].slice(1),16);
     burst(x+.5, y+1.2, z+.5, [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255], 40, 3.2, 3.4, .8);
-    sysMsg('The <b>'+d.name+' Egg</b> hatches and bonds to you — press <b>X</b> to summon!');
+    sysMsg('The <b>'+d.name+' Egg</b> hatches as a baby and bonds to you. It will become rideable soon.');
   }
   questSystemCheck();
   return true;
@@ -420,7 +970,12 @@ function applyDragonIncubationComplete(m){
   if(!m || !DRAGON_TYPES[m.type]) return;
   removeDragonIncubationMesh(m.x|0,m.y|0,m.z|0);
   const isOwner=!NET.on || !m.ownerSid || (NET.room && m.ownerSid===NET.room.sessionId);
-  if(isOwner && !dragonUnlocks.includes(m.type)) dragonUnlocks.push(m.type);
+  if(isOwner){
+    if(!dragonUnlocks.includes(m.type)) dragonUnlocks.push(m.type);
+    dragonGenders[m.type]=m.gender==='female'?'female':'male';
+    dragonPersonalities[m.type]=DRAGON_PERSONALITIES_C.includes(m.personality)?m.personality:defaultDragonPersonality(m.type);
+    dragonHatchedAt[m.type]=Number.isFinite(+m.hatchedAt)?+m.hatchedAt:Date.now();
+  }
   if(isOwner){ refreshHUD(); if(uiOpen) renderUI(); }
   const d=DRAGON_TYPES[m.type];
   if(typeof SFX!=='undefined' && SFX.boom) SFX.boom();
@@ -428,7 +983,7 @@ function applyDragonIncubationComplete(m){
   const x=(m.x|0)+.5, y=(m.y|0)+1.2, z=(m.z|0)+.5;
   burst(x, y, z, [(n>>16&255)/255,(n>>8&255)/255,(n&255)/255], 40, 3.2, 3.4, .8);
   sysMsg(isOwner
-    ? 'The <b>'+d.name+' Egg</b> hatches and bonds to you - press <b>X</b> to summon!'
+    ? 'The <b>'+d.name+' Egg</b> hatches as a baby and bonds to you. It will become rideable soon.'
     : 'A <b>'+d.name+' Egg</b> hatches nearby.');
   if(isOwner) questSystemCheck();
 }
@@ -460,18 +1015,21 @@ function perchRejected(m){
   const r=m&&m.reason;
   if(r==='full') sysMsg('This nest is full');
   else if(r==='range') sysMsg('Stand closer to the nest');
-  else if(r==='treat') sysMsg('You need a <b>Dragon Treat</b> to breed');
+  else if(r==='treat') sysMsg('Select a <b>Dragon Treat</b> to feed this nest');
   else if(r==='already') sysMsg('That dragon is already smitten');
   else if(r==='tired') sysMsg('That dragon is resting after breeding');
   else if(r==='unowned') sysMsg('You can only perch a dragon you have bonded with');
+  else if(r==='baby'||r==='young') sysMsg((m&&m.stage==='juvenile'?'Juvenile':'Baby')+' dragons need to grow before nesting');
   else if(r==='notyours') sysMsg('That dragon is not yours');
   else sysMsg('You cannot perch a dragon here');
 }
 function tickLocalMount(now, dt){
   if(mounted){
-    if(!localMountObj || localMountObj.userData.mountKind!==mountKind){
+    const localBond=isDragon(mountKind)?dragonBondLevel(dragonType(mountKind)):1;
+    if(!localMountObj || localMountObj.userData.mountKind!==mountKind || localMountObj.userData.bondLevel!==localBond){
       if(localMountObj) scene.remove(localMountObj);
-      localMountObj=makeMount(mountKind);
+      localMountObj=makeMount(mountKind, localBond, dragonSpecialization(dragonType(mountKind)));
+      localMountObj.userData.bondLevel=localBond;
       scene.add(localMountObj);
     }
     localMountObj.visible=true;
@@ -494,6 +1052,8 @@ function tickLocalMount(now, dt){
 const dragonRoostGroup=new THREE.Group();
 scene.add(dragonRoostGroup);
 let dragonRoostSig='', dragonRoostNextRefresh=0;
+const companionDragons={};
+let companionDragonSig='', companionDragonNextRefresh=0;
 const DRAGON_ROOST_SLOTS=(()=>{
   const slots=[];
   // bonded dragons just stand on the ground in an open grid inside the pen
@@ -521,6 +1081,66 @@ function roostDragonNames(p){
     return out;
   }catch(e){ return {}; }
 }
+function roostDragonGenders(p){
+  try{
+    const raw=JSON.parse(String(p&&p.dragonGenders||'{}'));
+    const out={};
+    if(raw&&typeof raw==='object') for(const t in raw) if(DRAGON_TYPES[t]&&(raw[t]==='male'||raw[t]==='female')) out[t]=raw[t];
+    return out;
+  }catch(e){ return {}; }
+}
+function roostDragonPersonalities(p){
+  try{
+    const raw=JSON.parse(String(p&&p.dragonPersonalities||'{}'));
+    const out={};
+    if(raw&&typeof raw==='object') for(const t in raw) if(DRAGON_TYPES[t]&&DRAGON_PERSONALITIES_C.includes(raw[t])) out[t]=raw[t];
+    return out;
+  }catch(e){ return {}; }
+}
+function roostDragonRoles(p){
+  try{
+    const raw=JSON.parse(String(p&&p.dragonRoles||'{}'));
+    const out={};
+    if(raw&&typeof raw==='object') for(const t in raw) if(DRAGON_TYPES[t]&&DRAGON_ROLES_C.includes(raw[t])) out[t]=raw[t];
+    return out;
+  }catch(e){ return {}; }
+}
+function cleanDragonStaySpot(s){
+  if(!s||typeof s!=='object') return null;
+  const x=Number(s.x), y=Number(s.y), z=Number(s.z), yaw=Number(s.yaw||0);
+  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
+  return {x,y,z,yaw:Number.isFinite(yaw)?yaw:0};
+}
+function roostDragonStaySpots(p){
+  try{
+    const raw=JSON.parse(String(p&&p.dragonStaySpots||'{}'));
+    const out={};
+    if(raw&&typeof raw==='object') for(const t in raw) if(DRAGON_TYPES[t]){
+      const spot=cleanDragonStaySpot(raw[t]);
+      if(spot) out[t]=spot;
+    }
+    return out;
+  }catch(e){ return {}; }
+}
+function roostDragonHatchedAt(p){
+  try{
+    const raw=JSON.parse(String(p&&p.dragonHatchedAt||'{}'));
+    const out={};
+    if(raw&&typeof raw==='object') for(const t in raw) if(DRAGON_TYPES[t]){
+      const at=Number(raw[t]||0);
+      out[t]=Number.isFinite(at)&&at>0?at:0;
+    }
+    return out;
+  }catch(e){ return {}; }
+}
+function roostDragonStage(type, hatchedAt){
+  const at=Number(hatchedAt||0);
+  if(!(Number.isFinite(at)&&at>0)) return 'adult';
+  const age=Math.max(0,Date.now()-at);
+  return age>=DRAGON_GROW_MS_C?'adult':(age>=DRAGON_JUVENILE_MS_C?'juvenile':'baby');
+}
+function roostDragonIsAdult(type, hatchedAt){ return roostDragonStage(type,hatchedAt)==='adult'; }
+function roostDragonStageLabel(stage){ return stage==='adult'?'Adult':(stage==='juvenile'?'Juvenile':'Baby'); }
 function makeDragonNameplate(name, owner, color){
   const c=document.createElement('canvas'); c.width=256; c.height=112; const g=c.getContext('2d');
   g.fillStyle='rgba(6,10,18,.78)';
@@ -535,43 +1155,375 @@ function makeDragonNameplate(name, owner, color){
 }
 function collectRoostDragons(){
   const rows=[];
-  const add=(sid,p,owner,types,mount,names={})=>{
+  const add=(sid,p,owner,types,mount,names={},genders={},personalities={},roles={},staySpots={},hatched={},specializations={})=>{
     const mountedType=isDragon(mount)?dragonType(mount):'';
     for(const type of types){
       if(type===mountedType) continue;
-      rows.push({sid, owner, type, name:cleanDragonDisplayName(names[type])||dragonDisplayName(type)});
+      const at=Number(hatched[type]||0);
+      const stage=roostDragonStage(type,at);
+      const role=DRAGON_ROLES_C.includes(roles[type])?roles[type]:'follow';
+      if(stage==='adult'&&(role==='follow'||role==='guard'||(role==='stay'&&cleanDragonStaySpot(staySpots[type])))) continue;
+      const spec=DRAGON_SPECIALIZATION_DEFS_C[specializations[type]]?specializations[type]:'';
+      rows.push({sid, owner, type, spec, gender:genders[type]==='female'?'female':'male', personality:DRAGON_PERSONALITIES_C.includes(personalities[type])?personalities[type]:defaultDragonPersonality(type), role, hatchedAt:Number.isFinite(at)&&at>0?at:0, name:cleanDragonDisplayName(names[type])||dragonDisplayName(type)});
     }
   };
   if(NET.on&&NET.room&&NET.room.state&&NET.room.state.players){
     NET.room.state.players.forEach((p,sid)=>{
       const types=roostOwnedDragonTypes(p);
-      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p));
+      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),sid===NET.room.sessionId?dragonSpecializations:{});
     });
     const me=NET.room.state.players.get(NET.room.sessionId);
     if(!me || !roostOwnedDragonTypes(me).length)
-      add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames);
+      add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
   } else {
-    add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames);
+    add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
   }
   return rows.slice(0,DRAGON_ROOST_SLOTS.length);
+}
+function collectCompanionDragons(){
+  const rows=[];
+  const add=(sid,p,owner,types,mount,names={},genders={},personalities={},roles={},staySpots={},hatched={},specializations={})=>{
+    const mountedType=isDragon(mount)?dragonType(mount):'';
+    for(const type of types){
+      if(type===mountedType) continue;
+      const role=DRAGON_ROLES_C.includes(roles[type])?roles[type]:'follow';
+      if(role!=='follow'&&role!=='guard'&&role!=='stay'&&role!=='rest') continue;
+      const at=Number(hatched[type]||0);
+      const stage=roostDragonStage(type,at);
+      const staySpot=role==='stay'?cleanDragonStaySpot(staySpots[type]):null;
+      if(role==='stay'&&!staySpot) continue;
+      const spec=DRAGON_SPECIALIZATION_DEFS_C[specializations[type]]?specializations[type]:'';
+      rows.push({sid, owner, type, spec, role, stage, staySpot, gender:genders[type]==='female'?'female':'male', personality:DRAGON_PERSONALITIES_C.includes(personalities[type])?personalities[type]:defaultDragonPersonality(type), hatchedAt:Number.isFinite(at)&&at>0?at:0, name:cleanDragonDisplayName(names[type])||dragonDisplayName(type)});
+    }
+  };
+  if(NET.on&&NET.room&&NET.room.state&&NET.room.state.players){
+    NET.room.state.players.forEach((p,sid)=>{
+      const types=roostOwnedDragonTypes(p);
+      if(types.length) add(sid,p,roostNameForPlayer(p,sid),types,p.mount||'',roostDragonNames(p),roostDragonGenders(p),roostDragonPersonalities(p),roostDragonRoles(p),roostDragonStaySpots(p),roostDragonHatchedAt(p),sid===NET.room.sessionId?dragonSpecializations:{});
+    });
+    const me=NET.room.state.players.get(NET.room.sessionId);
+    if(!me || !roostOwnedDragonTypes(me).length)
+      add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
+  } else {
+    add('local',null,roostNameForPlayer(null,localDisplayName()),dragonUnlocks,mountKind,dragonNames,dragonGenders,dragonPersonalities,dragonRoles,dragonStaySpots,dragonHatchedAt,dragonSpecializations);
+  }
+  return rows.slice(0,12);
+}
+function companionOwnerPose(row){
+  if(row&&row.role==='stay'&&row.staySpot) return row.staySpot;
+  if(row.sid==='local' || (NET.room&&row.sid===NET.room.sessionId)) return {x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw||0};
+  const remote=NET.remotes&&NET.remotes[row.sid], ref=remote&&remote.ref;
+  if(ref) return {x:ref.x,y:ref.y,z:ref.z,yaw:ref.yaw||0};
+  return null;
+}
+function companionDragonKey(row){ return row.sid+':'+row.type; }
+function companionDragonScale(stage, role){
+  const base=stage==='baby'?.24:(stage==='juvenile'?.34:.46);
+  return role==='rest'?base*.94:base;
+}
+function companionDragonTagY(stage){
+  return stage==='baby'?1.02:(stage==='juvenile'?1.28:1.58);
+}
+function companionDragonTagScale(stage){
+  return stage==='baby'?[1.05,.46,1]:(stage==='juvenile'?[1.18,.52,1]:[1.32,.58,1]);
+}
+function dragonReactionPosition(type){
+  const ownSid=NET.room&&NET.room.sessionId;
+  for(const key of Object.keys(companionDragons)){
+    const rec=companionDragons[key], row=rec&&rec.row;
+    if(!rec||!row||row.type!==type) continue;
+    if(row.sid!=='local' && (!ownSid||row.sid!==ownSid)) continue;
+    return {rec,x:rec.group.position.x,y:rec.group.position.y,z:rec.group.position.z};
+  }
+  return {rec:null,x:player.pos.x,y:player.pos.y,z:player.pos.z};
+}
+function dragonReaction(type, mood='happy'){
+  const kind=dragonType(type);
+  if(!DRAGON_TYPES[kind]) return false;
+  const pos=dragonReactionPosition(kind), now=performance.now();
+  if(pos.rec) pos.rec.reaction={mood,start:now,until:now+1200};
+  const spec=dragonSpecialization(kind);
+  const specCol=spec?hexToRgb01(dragonSpecializationHex(spec)):null;
+  const col=specCol||(mood==='rest'?[.45,1,.52]:(mood==='guard'?[.85,.95,1]:dragonTrailColor(kind)));
+  const count=mood==='happy'?18:12;
+  for(let i=0;i<count;i++){
+    const a=Math.random()*6.283, r=.25+Math.random()*.85;
+    spawnParticle({x:pos.x+Math.cos(a)*r,y:pos.y+.65+Math.random()*.95,z:pos.z+Math.sin(a)*r,
+      vx:Math.cos(a)*.08+(Math.random()-.5)*.1,vy:.25+Math.random()*.42,vz:Math.sin(a)*.08+(Math.random()-.5)*.1,
+      life:.55+Math.random()*.4,grav:-.12,r:i%4?col[0]:1,g:i%4?col[1]:.58,b:i%4?col[2]:.72});
+  }
+  return true;
+}
+function ensureCompanionDragon(row){
+  const key=companionDragonKey(row);
+  let rec=companionDragons[key];
+  const sig=row.type+':'+row.role+':'+row.name+':'+row.owner+':'+(row.stage||'adult')+':'+(row.spec||'')+':'+(row.personality||'');
+  if(rec&&(rec.type!==row.type||rec.sig!==sig)){ disposeObjectTree(rec.group); delete companionDragons[key]; rec=null; }
+  if(!rec){
+    const group=new THREE.Group();
+    const dragon=makeMount('dragon:'+row.type,1,row.spec||'');
+    const baseCompanionScale=companionDragonScale(row.stage,row.role);
+    dragon.scale.multiplyScalar(baseCompanionScale);
+    dragon.userData.baseCompanionScale=baseCompanionScale;
+    dragon.rotation.y=Math.PI;
+    group.add(dragon);
+    const def=DRAGON_TYPES[row.type]||DRAGON_TYPES.ember;
+    const roleText=row.role==='guard'?'Guard':(row.role==='stay'?'Stay':(row.role==='rest'?'Rest':'Follow'));
+    const tagText=row.name+' · '+roleText+' · '+dragonPersonalityLabel(row.personality||row.type)+(row.spec?' · '+dragonSpecializationName(row.spec):'');
+    const tag=makeDragonNameplate(tagText, row.owner, row.spec?dragonSpecializationColor(row.spec):(row.personality?dragonPersonalityColor(row.personality):def.membrane[1]));
+    tag.position.set(0,companionDragonTagY(row.stage),0);
+    tag.scale.set(...companionDragonTagScale(row.stage));
+    group.add(tag);
+    scene.add(group);
+    rec={group,dragon,tag,type:row.type,role:row.role,stage:row.stage||'adult',sig,phase:Math.random()*8,row,reaction:null};
+    companionDragons[key]=rec;
+  }
+  rec.row=row;
+  rec.role=row.role;
+  rec.stage=row.stage||'adult';
+  return rec;
+}
+function clearMissingCompanionDragons(keys){
+  for(const key of Object.keys(companionDragons)){
+    if(!keys.has(key)){ disposeObjectTree(companionDragons[key].group); delete companionDragons[key]; }
+  }
+}
+function nearestOwnedDragon(range=3.2){
+  let best=null, bestD=range;
+  const ownSid=NET.room&&NET.room.sessionId;
+  for(const key of Object.keys(companionDragons)){
+    const rec=companionDragons[key], row=rec&&rec.row;
+    if(!rec||!rec.group||!rec.group.visible||!row) continue;
+    const mine=row.sid==='local'||(ownSid&&row.sid===ownSid);
+    if(!mine) continue;
+    const d=Math.hypot(rec.group.position.x-player.pos.x,rec.group.position.z-player.pos.z);
+    if(d<bestD){
+      bestD=d;
+      best={type:row.type,name:row.name,role:row.role,stage:row.stage||'adult',distance:d,x:rec.group.position.x,y:rec.group.position.y,z:rec.group.position.z};
+    }
+  }
+  return best;
+}
+let dragonHudSig='', dragonHudNextRefresh=0;
+let dragonHudMoveSample={x:0,z:0,t:0,moving:false};
+function dragonHudEscape(v){
+  return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function dragonHudName(type){
+  const cleaner=typeof cleanDragonDisplayName==='function'?cleanDragonDisplayName:null;
+  const custom=cleaner?cleaner(dragonNames[type]):'';
+  if(custom) return custom;
+  const def=DRAGON_TYPES[type];
+  return def?def.name.replace(' Dragon',''):type;
+}
+function dragonHudStayDistance(type){
+  const s=dragonStaySpots[type];
+  if(!s) return '';
+  const dx=(Number(player.pos.x)||0)-(Number(s.x)||0), dz=(Number(player.pos.z)||0)-(Number(s.z)||0);
+  const dist=Math.hypot(dx,dz);
+  return Number.isFinite(dist)?Math.round(dist)+'m':'';
+}
+function dragonStayMapMarkers(now=performance.now()){
+  const rows=[];
+  for(const type of dragonUnlocks){
+    const s=dragonStaySpots[type];
+    if(!s || dragonRole(type)!=='stay' || !dragonIsAdult(type)) continue;
+    const x=Number(s.x), z=Number(s.z);
+    if(!Number.isFinite(x)||!Number.isFinite(z)) continue;
+    const dx=(Number(player.pos.x)||0)-x, dz=(Number(player.pos.z)||0)-z;
+    const dist=Math.hypot(dx,dz);
+    const activity=dragonRoleActivity[type];
+    const focus=dragonMapFocus.type===type&&now<dragonMapFocus.until;
+    const training=dragonTrainingState&&dragonTrainingState.type===type&&dragonTrainingState.role==='stay';
+    rows.push({
+      type,
+      name:dragonHudName(type),
+      x,
+      z,
+      distance:Number.isFinite(dist)?dist:0,
+      active:Number.isFinite(dist)&&dist<=80,
+      pulse:training||focus||!!(activity&&activity.role==='stay'&&now<activity.until),
+      focus,
+    });
+  }
+  return rows;
+}
+function dragonHudMoving(now){
+  const x=Number(player.pos.x)||0, z=Number(player.pos.z)||0;
+  if(!dragonHudMoveSample.t){ dragonHudMoveSample={x,z,t:now,moving:false}; return false; }
+  const dt=Math.max(.001,(now-dragonHudMoveSample.t)/1000), dist=Math.hypot(x-dragonHudMoveSample.x,z-dragonHudMoveSample.z);
+  const moving=dist/dt>.8;
+  dragonHudMoveSample={x,z,t:now,moving};
+  return moving;
+}
+function dragonHudRoleState(type, mountedHere, moving){
+  if(mountedHere) return 'Mounted';
+  if(!dragonIsAdult(type)) return dragonStageLabel(type)+' - grows '+dragonGrowthLeftSeconds(type)+'s';
+  const role=dragonRole(type), now=performance.now(), activity=dragonRoleActivity[type];
+  if(activity && activity.role===role && now<activity.until) return dragonRoleLabel(type)+' - '+activity.text;
+  if(role==='follow') return 'Follow - '+(moving?'traveling':'ready');
+  if(role==='rest') return dragonHappiness(type)>=75?'Rest - capped':'Rest - recovering';
+  if(role==='guard' && mounted && isDragon(mountKind)) return 'Guard - inactive';
+  if(role==='stay' && !dragonStaySpots[type]) return 'Stay - no post';
+  if(role==='guard'||role==='stay'){
+    const left=Math.max(0,(dragonRoleReadyAt[type+':'+role]||0)-now);
+    return dragonRoleLabel(type)+' - '+(left>0?Math.ceil(left/1000)+'s':'ready');
+  }
+  return dragonRoleLabel(type);
+}
+function updateDragonRoleHUD(now){
+  const el=document.getElementById('dragonhud');
+  if(!el) return;
+  if(dim!=='overworld' || !dragonUnlocks.length){
+    if(!el.classList.contains('hidden')) el.classList.add('hidden');
+    dragonHudSig='';
+    return;
+  }
+  if(now<dragonHudNextRefresh) return;
+  dragonHudNextRefresh=now+500;
+  const active=isDragon(mountKind)?dragonType(mountKind):'';
+  const moving=dragonHudMoving(now);
+  const rows=[];
+  for(const type of dragonUnlocks){
+    if(!DRAGON_TYPES[type]) continue;
+    const mountedHere=active===type;
+    const adult=dragonIsAdult(type);
+    const parts=[dragonHudRoleState(type,mountedHere,moving)];
+    if(adult && dragonRole(type)==='stay'){
+      const dist=dragonHudStayDistance(type);
+      if(dist) parts.push(dist);
+    }
+    parts.push('Lv '+dragonBondLevel(type));
+    parts.push(dragonPersonalityLabel(type));
+    const spec=dragonSpecialization(type);
+    if(spec) parts.push(dragonSpecializationName(spec));
+    parts.push(dragonHappiness(type)+'%');
+    rows.push({type,name:dragonHudName(type),meta:parts.join(' - '),active:mountedHere,spec});
+  }
+  if(!rows.length){
+    if(!el.classList.contains('hidden')) el.classList.add('hidden');
+    dragonHudSig='';
+    return;
+  }
+  rows.sort((a,b)=>(b.active?1:0)-(a.active?1:0));
+  const headline=active?dragonHudName(active):rows[0].meta.split(' - ')[0];
+  const trainingText=dragonTrainingLabel();
+  const sig=rows.map(r=>r.type+':'+r.name+':'+r.meta+':'+(r.active?1:0)+':'+(r.spec||'')).join('|')+'|'+headline+'|'+trainingText;
+  el.classList.remove('hidden');
+  if(sig===dragonHudSig) return;
+  dragonHudSig=sig;
+  const color=(DRAGON_TYPES[(dragonTrainingState&&dragonTrainingState.type)||active]||DRAGON_TYPES[rows[0].type]||DRAGON_TYPES.ember).membrane[1];
+  el.style.borderColor=color+'88';
+  el.innerHTML='<div class="dhead"><span class="ddot" style="background:'+color+';color:'+color+'"></span>DRAGONS<span class="drole">'+dragonHudEscape(headline)+'</span></div>'+
+    (trainingText?'<div class="dtraining"><b>TRAINING</b><span>'+dragonHudEscape(trainingText)+'</span><i style="width:'+Math.max(0,Math.min(100,Math.round((dragonTrainingState.progress||0)/Math.max(1,dragonTrainingState.need||1)*100)))+'%"></i></div>':'')+
+    '<div class="dlist">'+rows.map(r=>'<div class="drow'+(r.spec?' specialized':'')+'"><span class="dname">'+dragonHudEscape(r.name)+(r.spec?' <b class="dspec" style="color:'+dragonSpecializationColor(r.spec)+'">'+dragonHudEscape(dragonSpecializationName(r.spec))+'</b>':'')+'</span><span class="dmeta">'+dragonHudEscape(r.meta)+'</span></div>').join('')+'</div>';
+}
+function tickCompanionDragons(now, dt){
+  if(dim!=='overworld'){
+    clearMissingCompanionDragons(new Set());
+    companionDragonSig='';
+    updateDragonRoleHUD(now);
+    return;
+  }
+  updateDragonRoleHUD(now);
+  dragonTrainingFx(now, dt);
+  if(now>=companionDragonNextRefresh){
+    companionDragonNextRefresh=now+700;
+    const rows=collectCompanionDragons();
+    const sig=rows.map(r=>companionDragonKey(r)+':'+r.role+':'+r.name+':'+r.owner+':'+(r.stage||'adult')+':'+(r.personality||'')+':'+(r.spec||'')+':' +(r.staySpot?Math.round(r.staySpot.x*10)+','+Math.round(r.staySpot.y*10)+','+Math.round(r.staySpot.z*10):'')).join('|')+'|'+mountKind;
+    if(sig!==companionDragonSig){
+      companionDragonSig=sig;
+      const live=new Set();
+      for(const row of rows){ live.add(companionDragonKey(row)); ensureCompanionDragon(row); }
+      clearMissingCompanionDragons(live);
+    } else {
+      for(const row of rows) ensureCompanionDragon(row);
+    }
+  }
+  let i=0;
+  for(const key of Object.keys(companionDragons)){
+    const rec=companionDragons[key], row=rec.row, owner=row&&companionOwnerPose(row);
+    if(!owner){ rec.group.visible=false; continue; }
+    rec.group.visible=true;
+    const young=rec.stage==='baby'||rec.stage==='juvenile';
+    const personality=dragonPersonalityTrait(row.personality||rec.type), motion=dragonPersonalityMotion(personality);
+    const side=i%2===0?-1:1, back=(rec.stage==='baby'?1.15:(rec.stage==='juvenile'?1.55:1.95))+Math.floor(i/2)*(young ? .46 : .75);
+    const yaw=owner.yaw||0, resting=rec.role==='rest';
+    const guardClose=rec.role==='guard'&&personality==='bold'?.72:1;
+    const sideReach=(resting ? .58 : (young ? .72 : .95))*motion.side*guardClose;
+    const restBack=(resting?(rec.stage==='baby'?1.35:1.65):back)*motion.back*guardClose;
+    const sx=rec.role==='stay'?0:Math.cos(yaw)*side*sideReach, sz=rec.role==='stay'?0:-Math.sin(yaw)*side*sideReach;
+    const bx=rec.role==='stay'?0:Math.sin(yaw)*restBack, bz=rec.role==='stay'?0:Math.cos(yaw)*restBack;
+    const jitter=motion.jitter?Math.sin(now/260+rec.phase)*motion.jitter:0;
+    const tx=owner.x+sx+bx+Math.cos(yaw)*jitter, ty=owner.y, tz=owner.z+sz+bz-Math.sin(yaw)*jitter;
+    const moveRate=(resting?3.2:(young?6.5:5.5))*motion.move;
+    rec.group.position.x+=(tx-rec.group.position.x)*Math.min(1,dt*moveRate);
+    rec.group.position.y+=(ty-rec.group.position.y)*Math.min(1,dt*7);
+    rec.group.position.z+=(tz-rec.group.position.z)*Math.min(1,dt*moveRate);
+    const dx=owner.x-rec.group.position.x, dz=owner.z-rec.group.position.z;
+    rec.group.rotation.y=rec.role==='stay'?yaw:Math.atan2(dx,dz);
+    animateMountWings(rec.dragon, now*(rec.role==='guard' ? .72 : (rec.role==='rest' ? .22 : (young ? .86 : .48)))*motion.wing+rec.phase*1000);
+    const bob=(rec.stage==='baby' ? .115 : (rec.stage==='juvenile' ? .07 : (resting ? .018 : .045)))*motion.bob;
+    rec.dragon.position.y=Math.max(resting?-.035:0,Math.sin(now/1000*(rec.stage==='baby'?2.7:1.6)+rec.phase)*bob);
+    rec.dragon.rotation.z=(rec.stage==='baby'?Math.sin(now/1000*3.1+rec.phase)*.035:(resting?Math.sin(now/1000*.9+rec.phase)*.012:0))+(motion.tilt||0);
+    if(rec.reaction&&now<rec.reaction.until){
+      const age=Math.max(0,(now-rec.reaction.start)/1000), left=Math.max(0,(rec.reaction.until-now)/1200);
+      const kick=Math.sin(age*13)*left, mood=rec.reaction.mood;
+      rec.dragon.position.y+=Math.abs(kick)*(mood==='rest'?.025:.16);
+      rec.dragon.rotation.x=(mood==='guard'?-.16:(mood==='rest'?.08:.11))*left+Math.sin(age*9+rec.phase)*.03*left;
+      rec.dragon.rotation.z+=(mood==='happy'?Math.sin(age*18)*.1:0)*left;
+      const base=rec.dragon.userData.baseCompanionScale||1;
+      const happyMul=motion.happySpark||1, guardMul=motion.guardSpark||1;
+      const s=base*(1+(mood==='happy'?Math.abs(kick)*.04*happyMul:(mood==='guard'?left*.025*guardMul:0)));
+      rec.dragon.scale.setScalar(s);
+      if(Math.random()<dt*(mood==='happy'?6*(motion.happySpark||1):2.5)){
+        const pcol=hexToRgb01(parseInt(dragonPersonalityColor(personality).slice(1),16));
+        const col=mood==='rest'?(personality==='gentle'?pcol:[.45,1,.52]):(mood==='guard'?(personality==='bold'?pcol:[.85,.95,1]):dragonTrailColor(rec.type));
+        spawnParticle({x:rec.group.position.x+(Math.random()-.5)*.55,y:rec.group.position.y+.9+Math.random()*.55,z:rec.group.position.z+(Math.random()-.5)*.55,
+          vx:(Math.random()-.5)*.08,vy:.1+Math.random()*.2,vz:(Math.random()-.5)*.08,life:.45+Math.random()*.25,grav:-.08,r:col[0],g:col[1],b:col[2]});
+      }
+    } else {
+      rec.reaction=null;
+      rec.dragon.rotation.x=0;
+      rec.dragon.scale.setScalar(rec.dragon.userData.baseCompanionScale||1);
+    }
+    if(rec.role==='guard' && Math.random()<dt*.85*(motion.guardSpark||1)){
+      const col=personality==='bold'?hexToRgb01(parseInt(dragonPersonalityColor(personality).slice(1),16)):dragonTrailColor(rec.type);
+      spawnParticle({x:rec.group.position.x+(Math.random()-.5)*.55,y:rec.group.position.y+1.18+Math.random()*.35,z:rec.group.position.z+(Math.random()-.5)*.55,
+        vx:(Math.random()-.5)*.08,vy:.06+Math.random()*.11,vz:(Math.random()-.5)*.08,life:.45+Math.random()*.3,grav:-.08,r:col[0],g:col[1],b:col[2]});
+    } else if(rec.role==='rest' && Math.random()<dt*.45*(motion.restSpark||1)){
+      const col=personality==='gentle'?hexToRgb01(parseInt(dragonPersonalityColor(personality).slice(1),16)):dragonTrailColor(rec.type);
+      spawnParticle({x:rec.group.position.x+(Math.random()-.5)*.38,y:rec.group.position.y+.55+Math.random()*.32,z:rec.group.position.z+(Math.random()-.5)*.38,
+        vx:(Math.random()-.5)*.04,vy:.05+Math.random()*.09,vz:(Math.random()-.5)*.04,life:.7+Math.random()*.35,grav:-.05,r:col[0]*.75+.2,g:Math.min(1,col[1]*.75+.25),b:col[2]*.75+.2});
+    } else if(personality==='hungry' && rec.role!=='rest' && Math.random()<dt*.22){
+      const col=hexToRgb01(parseInt(dragonPersonalityColor(personality).slice(1),16));
+      spawnParticle({x:rec.group.position.x+(Math.random()-.5)*.32,y:rec.group.position.y+.42+Math.random()*.18,z:rec.group.position.z+(Math.random()-.5)*.32,
+        vx:(Math.random()-.5)*.035,vy:.035+Math.random()*.045,vz:(Math.random()-.5)*.035,life:.38+Math.random()*.18,grav:-.04,r:col[0],g:col[1],b:col[2]});
+    }
+    i++;
+  }
 }
 function rebuildDragonRoost(rows){
   while(dragonRoostGroup.children.length) dragonRoostGroup.remove(dragonRoostGroup.children[0]);
   for(let i=0;i<rows.length;i++){
     const r=rows[i], slot=DRAGON_ROOST_SLOTS[i], def=DRAGON_TYPES[r.type]||DRAGON_TYPES.ember;
     const perch=new THREE.Group();
-    const dragon=makeMount('dragon:'+r.type);
-    dragon.scale.multiplyScalar(.68);
+    const dragon=makeMount('dragon:'+r.type,1,r.spec||'');
+    const stage=roostDragonStage(r.type,r.hatchedAt), adult=stage==='adult', juvenile=stage==='juvenile';
+    dragon.scale.multiplyScalar(adult?.68:(juvenile?.52:.34));
     dragon.position.set(0,0,0);
     dragon.rotation.y=slot.yaw;
     perch.add(dragon);
-    const tag=makeDragonNameplate(r.name, r.owner, def.membrane[1]);
-    tag.position.set(0,2.35,0);
-    tag.scale.set(1.75,.78,1);
+    const specText=r.spec?' · '+dragonSpecializationName(r.spec):'';
+    const tag=makeDragonNameplate(r.name+' · '+(r.gender==='female'?'F':'M')+' · '+roostDragonStageLabel(stage)+' · '+(r.role||'follow')+specText, r.owner, r.spec?dragonSpecializationColor(r.spec):def.membrane[1]);
+    tag.position.set(0,adult?2.35:(juvenile?1.85:1.32),0);
+    tag.scale.set(adult?1.75:(juvenile?1.58:1.36),adult?.78:(juvenile?.7:.6),1);
     perch.add(tag);
     perch.position.set(slot.x,slot.y,slot.z);
     perch.userData.dragon=dragon;
     perch.userData.type=r.type;
+    perch.userData.stage=stage;
+    perch.userData.baby=stage==='baby';
     perch.userData.phase=i*.7;
     dragonRoostGroup.add(perch);
   }
@@ -582,17 +1534,21 @@ function tickDragonRoost(now, dt){
   if(now>=dragonRoostNextRefresh){
     dragonRoostNextRefresh=now+1200;
     const rows=collectRoostDragons();
-    const sig=rows.map(r=>r.sid+':'+r.owner+':'+r.type+':'+r.name).join('|')+'|'+mountKind;
+    const sig=rows.map(r=>r.sid+':'+r.owner+':'+r.type+':'+r.gender+':'+r.personality+':'+r.role+':'+roostDragonStage(r.type,r.hatchedAt)+':'+r.name+':'+(r.spec||'')).join('|')+'|'+mountKind;
     if(sig!==dragonRoostSig){ dragonRoostSig=sig; rebuildDragonRoost(rows); }
   }
   for(const perch of dragonRoostGroup.children){
     const d=perch.userData.dragon;
     if(!d) continue;
-    animateMountWings(d, now*.45+perch.userData.phase*1000);
-    d.position.y=Math.sin(now/1000*1.1+perch.userData.phase)*.035;
-    if(Math.random()<dt*.8){
+    const stage=perch.userData.stage||'adult';
+    const baby=stage==='baby', juvenile=stage==='juvenile';
+    animateMountWings(d, now*(baby?1.05:(juvenile?.72:.45))+perch.userData.phase*1000);
+    const t=now/1000+perch.userData.phase;
+    d.position.y=baby?Math.max(0,Math.sin(t*2.8))*.13:(juvenile?Math.sin(t*1.8)*.065:Math.sin(t*1.1)*.035);
+    d.rotation.z=baby?Math.sin(t*3.4)*.035:(juvenile?Math.sin(t*1.7)*.018:0);
+    if(Math.random()<dt*(baby?.28:(juvenile?.55:.8))){
       const type=perch.userData.type||'ember', col=dragonTrailColor(type);
-      spawnParticle({x:perch.position.x+(Math.random()-.5)*.6,y:perch.position.y+1.4,z:perch.position.z+(Math.random()-.5)*.6,
+      spawnParticle({x:perch.position.x+(Math.random()-.5)*(baby?.28:.6),y:perch.position.y+(baby?.82:(juvenile?1.12:1.4)),z:perch.position.z+(Math.random()-.5)*(baby?.28:.6),
         vx:(Math.random()-.5)*.08,vy:.08+Math.random()*.12,vz:(Math.random()-.5)*.08,
         life:.5+Math.random()*.4,grav:-.12,r:col[0],g:col[1],b:col[2]});
     }
@@ -607,19 +1563,19 @@ for(const [a,b,o] of [['ember','ember','verdant'],['verdant','verdant','ember'],
   ['ember','storm','void'],['verdant','storm','void'],['frost','storm','void'],['storm','storm','void']]){
   DRAGON_BREED_C[a+'|'+b]=o; DRAGON_BREED_C[b+'|'+a]=o;
 }
-const perchedDragons={};   // "x,y,z#slot" -> { group, type, x,y,z,slot, loveUntil, breedCdUntil, breedStart, heartAcc }
+const perchedDragons={};   // "x,y,z#slot" -> { group, type, gender, x,y,z,slot, loveUntil, breedCdUntil, breedStart, heartAcc }
 function nestSlotPos(x,y,z,slot){ return { x:x+0.5+(slot?0.95:-0.95), y, z:z+0.5 }; }
 function nestCoordKey(x,y,z){ return x+','+y+','+z; }
 function perchKeysAt(x,y,z){ const out=[]; for(let s=0;s<DRAGON_PERCH_SLOTS_C;s++){ const k=nestCoordKey(x,y,z)+'#'+s; if(perchedDragons[k]) out.push(k); } return out; }
 function freePerchSlotAt(x,y,z){ for(let s=0;s<DRAGON_PERCH_SLOTS_C;s++) if(!perchedDragons[nestCoordKey(x,y,z)+'#'+s]) return s; return -1; }
-function addPerchedDragon(key,x,y,z,slot,type,loveUntil){
+function addPerchedDragon(key,x,y,z,slot,type,gender,loveUntil){
   removePerchedDragon(key);
-  const grp=makeMount('dragon:'+type);
+  const grp=makeMount('dragon:'+type,1,dragonSpecialization(type));
   const p=nestSlotPos(x,y,z,slot);
   grp.position.set(p.x,p.y,p.z);
   grp.rotation.y = slot ? -Math.PI*0.6 : Math.PI*0.6;   // face inward toward the nest
   scene.add(grp);
-  perchedDragons[key]={ group:grp, type, x,y,z,slot, loveUntil:loveUntil||0, breedCdUntil:0, breedStart:0, heartAcc:0 };
+  perchedDragons[key]={ group:grp, type, gender:gender==='female'?'female':'male', x,y,z,slot, loveUntil:loveUntil||0, breedCdUntil:0, breedStart:0, heartAcc:0 };
 }
 function removePerchedDragon(key){
   const e=perchedDragons[key];
@@ -647,7 +1603,8 @@ function tickSoloBreeding(now){
     const list=nests[c];
     if(list.length<DRAGON_PERCH_SLOTS_C){ for(const e of list) e.breedStart=0; continue; }
     const [a,b]=list, offspring=DRAGON_BREED_C[a.type+'|'+b.type];
-    const fertile = offspring && a.loveUntil>now && b.loveUntil>now && now>=a.breedCdUntil && now>=b.breedCdUntil;
+    const compatibleGender = a.type===b.type || a.gender!==b.gender;
+    const fertile = offspring && compatibleGender && a.loveUntil>now && b.loveUntil>now && now>=a.breedCdUntil && now>=b.breedCdUntil;
     if(!fertile){ a.breedStart=0; b.breedStart=0; continue; }
     if(!a.breedStart){ a.breedStart=b.breedStart=now; }
     if(now-a.breedStart<DRAGON_BREED_MS_C) continue;
@@ -668,21 +1625,25 @@ function dragonBreedFx(x,y,z,offspring){
 // --- player actions at a nest ---
 function perchMyDragon(hit){
   const kind=mountKind;
+  if(!isDragon(kind)){ sysMsg('Ride a dragon here to perch it'); return; }
+  if(!dragonIsAdult(dragonType(kind))){ sysMsg(dragonStageLabel(dragonType(kind))+' dragons need to grow before nesting'); return; }
   if(NET.on&&NET.room){ NET.room.send('perchDragon', {x:hit.x, y:hit.y, z:hit.z, kind}); }
   else {
     const slot=freePerchSlotAt(hit.x,hit.y,hit.z);
     if(slot<0){ sysMsg('This nest is full'); return; }
-    addPerchedDragon(nestCoordKey(hit.x,hit.y,hit.z)+'#'+slot, hit.x,hit.y,hit.z, slot, dragonType(kind), 0);
+    const type=dragonType(kind);
+    addPerchedDragon(nestCoordKey(hit.x,hit.y,hit.z)+'#'+slot, hit.x,hit.y,hit.z, slot, type, dragonGender(type), 0);
   }
   mounted=false; mountKind=''; if(localMountObj) localMountObj.visible=false;
   sysMsg('Your <b>'+(DRAGON_TYPES[dragonType(kind)]||{}).name+'</b> settles onto the nest. Feed it a <b>Dragon Treat</b> to breed.');
 }
-function feedNestDragon(key){
-  if(NET.on&&NET.room){ NET.room.send('feedDragon', {key}); return; }
+function feedNestDragon(key, slot=selected){
+  if(NET.on&&NET.room){ NET.room.send('feedDragon', {key, slot}); return; }
   const e=perchedDragons[key]; if(!e) return;
-  const slot=inv.findIndex(s=>s&&s.id===I.DRAGON_TREAT);
-  if(slot<0){ sysMsg('You need a <b>Dragon Treat</b>'); return; }
-  const s=inv[slot]; s.count--; if(s.count<=0) inv[slot]=null; refreshHUD(); if(uiOpen) renderUI();
+  let useSlot=Math.max(0,Math.min(35,slot|0));
+  if(!inv[useSlot] || inv[useSlot].id!==I.DRAGON_TREAT) useSlot=inv.findIndex(s=>s&&s.id===I.DRAGON_TREAT);
+  if(useSlot<0){ sysMsg('You need a <b>Dragon Treat</b>'); return; }
+  const s=inv[useSlot]; s.count--; if(s.count<=0) inv[useSlot]=null; refreshHUD(); if(uiOpen) renderUI();
   e.loveUntil=Date.now()+DRAGON_LOVE_MS_C;
   sysMsg('The <b>'+(DRAGON_TYPES[e.type]||{}).name+'</b> is smitten ❤');
 }
@@ -1217,7 +2178,7 @@ function bindFamiliarItem(slot=selected){
   const s=inv[slot], kind=s&&FAMILIAR_BY_SIGIL[s.id];
   if(!kind) return false;
   if(familiarUnlocks.includes(kind)){ sysMsg('<b>'+FAMILIARS[kind].name+'</b> is already bound to you'); return true; }
-  if(NET.on&&NET.room){ NET.room.send('bindFamiliar',{kind}); return true; }   // server consumes + replies
+  if(NET.on&&NET.room){ NET.room.send('bindFamiliar',{kind,slot}); return true; }   // server consumes + replies
   s.count--; if(s.count<=0) inv[slot]=null; refreshHUD(); if(uiOpen) renderUI();
   familiarBoundLocal(kind);
   return true;
@@ -1609,6 +2570,76 @@ function makeRemoteAvatar(look){
 function equipmentSignatureFrom(ref){
   return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, (ref&&ref.armorType)||'', ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0, (ref&&ref.cosmetics)||''].join('|');
 }
+function makeSpiritDiscTexture(){
+  const c=document.createElement('canvas');c.width=c.height=96;
+  const g=c.getContext('2d'),r=c.width/2;
+  const grad=g.createRadialGradient(r,r,2,r,r,r);
+  grad.addColorStop(0,'rgba(210,245,255,.95)');
+  grad.addColorStop(.28,'rgba(125,211,252,.55)');
+  grad.addColorStop(.72,'rgba(80,160,255,.16)');
+  grad.addColorStop(1,'rgba(80,160,255,0)');
+  g.fillStyle=grad;g.fillRect(0,0,c.width,c.height);
+  return new THREE.CanvasTexture(c);
+}
+let spiritDiscTexture=null;
+function spiritTexture(){
+  if(!spiritDiscTexture)spiritDiscTexture=makeSpiritDiscTexture();
+  return spiritDiscTexture;
+}
+function addSpiritVisual(r){
+  if(!r||!r.grp||r.spiritVisual)return;
+  const tinted=[];
+  r.grp.traverse(o=>{
+    if(!o.isMesh||o.userData&&o.userData.spiritVisual)return;
+    const original=o.material,src=Array.isArray(original)?original:[original];
+    const next=src.map(m=>{
+      const clone=m.clone();
+      if(clone.color)clone.color.lerp(new THREE.Color(0x8bdcff),.62);
+      clone.transparent=true;
+      clone.opacity=Math.min(.46,Number.isFinite(clone.opacity)?clone.opacity*.52:.46);
+      clone.depthWrite=false;
+      if(clone.emissive)clone.emissive.setHex(0x1c86d1);
+      if(clone.emissiveIntensity!=null)clone.emissiveIntensity=Math.max(clone.emissiveIntensity||0,.28);
+      return clone;
+    });
+    o.material=Array.isArray(original)?next:next[0];
+    tinted.push({mesh:o,original,clones:next});
+  });
+  const root=new THREE.Group();
+  root.userData.spiritVisual=true;
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.74,.035,8,48),new THREE.MeshBasicMaterial({color:0x82d8ff,transparent:true,opacity:.72,depthWrite:false,side:THREE.DoubleSide}));
+  ring.rotation.x=Math.PI/2;ring.position.y=.08;ring.userData.spiritVisual=true;root.add(ring);
+  const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:spiritTexture(),color:0x9bdcff,transparent:true,opacity:.42,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  halo.position.y=1.18;halo.scale.set(1.55,2.6,1);halo.userData.spiritVisual=true;root.add(halo);
+  const flame=new THREE.Sprite(new THREE.SpriteMaterial({map:spiritTexture(),color:0xe4f8ff,transparent:true,opacity:.78,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  flame.position.y=2.25;flame.scale.set(.58,.9,1);flame.userData.spiritVisual=true;root.add(flame);
+  r.grp.add(root);
+  r.spiritVisual={root,ring,halo,flame,tinted,phase:Math.random()*Math.PI*2};
+}
+function removeSpiritVisual(r){
+  const sv=r&&r.spiritVisual;if(!sv)return;
+  for(const entry of sv.tinted||[]){
+    if(entry.mesh)entry.mesh.material=entry.original;
+    for(const mat of entry.clones||[])if(mat&&mat.dispose)mat.dispose();
+  }
+  if(sv.root)disposeObjectTree(sv.root);
+  r.spiritVisual=null;
+}
+function tickSpiritVisual(r,now){
+  if(!r||!r.grp)return;
+  const want=!!(r.ref&&r.ref.spirit);
+  if(want)addSpiritVisual(r);else removeSpiritVisual(r);
+  const sv=r.spiritVisual;if(!sv)return;
+  const t=now/1000+(sv.phase||0),pulse=.5+.5*Math.sin(t*2.4);
+  sv.root.position.y=Math.sin(t*1.35)*.035;
+  sv.ring.rotation.z=t*.55;
+  sv.ring.material.opacity=.46+pulse*.22;
+  sv.ring.scale.setScalar(1+pulse*.08);
+  sv.halo.material.opacity=.22+pulse*.14;
+  sv.halo.scale.set(1.45+pulse*.25,2.35+pulse*.32,1);
+  sv.flame.position.y=2.18+Math.sin(t*2.1)*.09;
+  sv.flame.material.opacity=.62+pulse*.24;
+}
 function netAddRemote(sid, ref){
   const r={...makeRemoteAvatar(remoteAppearance(ref)), ref, phase:Math.random()*10, tagText:'', equipSig:equipmentSignatureFrom(ref)};
   r.grp.position.set(ref.x, ref.y, ref.z);
@@ -1633,16 +2664,17 @@ function netRefreshRemoteAvatar(sid, r){
 }
 function netUpdateTag(r){
   const pathCol=r.ref.path && PATHS[r.ref.path] ? PATHS[r.ref.path].col : '#ffffff';
-  const team=teamName(r.ref.team||'');
+  const spirit=!!r.ref.spirit;
+  const team=spirit?'SPIRIT':teamName(r.ref.team||'');
   const rank=playerRankName(r.ref.lvl);
   const job=JOBS[r.ref.job] ? JOBS[r.ref.job].name : '';
   const jobLvl=r.ref.jobLvl|0;
   const jobTitle=JOBS[r.ref.job] ? jobTitleFor(r.ref.job, jobLvl||1) : 'Adventurer';
-  const text=r.ref.name+'|'+r.ref.lvl+'|'+rank+'|'+team+'|'+job+'|'+jobLvl+'|'+jobTitle;
+  const text=r.ref.name+'|'+r.ref.lvl+'|'+rank+'|'+team+'|'+job+'|'+jobLvl+'|'+jobTitle+'|'+(spirit?1:0);
   if(text===r.tagText) return;
   r.tagText=text;
   if(r.tag) disposeObjectTree(r.tag);
-  r.tag=makeNameTag(r.ref.name, pathCol, team, teamCol(r.ref.team||''), { lvl:r.ref.lvl, rank, job, jobLvl, jobTitle });
+  r.tag=makeNameTag(r.ref.name, spirit?'#9bdcff':pathCol, team, spirit?'#7dd3fc':teamCol(r.ref.team||''), { lvl:r.ref.lvl, rank:spirit?'Spirit':rank, job, jobLvl, jobTitle });
   r.grp.add(r.tag);
 }
 function pulseAegisGlow(model, now){
@@ -1679,10 +2711,58 @@ function netRemoveRemote(sid){
     toggleMount,
     cycleDragon,
     DRAGON_ABILITIES,
+    dragonGender,
+    dragonGenderLabel,
+    dragonPersonality,
+    dragonPersonalityLabel,
+    dragonPersonalityText,
+    dragonPersonalityColor,
+    dragonRole,
+    dragonRoleLabel,
+    dragonStage,
+    dragonIsAdult,
+    dragonStageLabel,
+    dragonGrowthProgress,
+    dragonGrowthLeftSeconds,
+    dragonBondLevel,
+    dragonBondProgress,
+    dragonBondMilestone,
+    dragonBondRewardText,
+    dragonRoleMasteryProgress,
+    dragonRoleMasteryLevel,
+    dragonRoleMasteryTitle,
+    dragonRoleMasteryReward,
+    dragonRoleMasteryNextReward,
+    dragonSpecialization,
+    dragonSpecializationName,
+    dragonSpecializationText,
+    dragonSpecializationChoices,
+    dragonSpecializationColor,
+    canChooseDragonSpecialization,
+    chooseDragonSpecialization,
+    applyDragonRoleMasteryUpdate,
+    dragonDailyChallenge,
+    dragonChallengeProgress,
+    dragonStayMapMarkers,
+    nearestOwnedDragon,
+    dragonReaction,
+    addDragonActivity,
+    dragonActivityEntries,
+    noteDragonRoleEvent,
     dragonHappiness,
     setDragonCare,
     castDragonAbility,
     feedMountedDragon,
+    careDragon,
+    startDragonTraining,
+    applyDragonTrainingUpdate,
+    applyDragonTrainingComplete,
+    clearDragonTraining,
+    dragonTrainingProgress,
+    setDragonRole,
+    clearDragonStaySpot,
+    recallDragon,
+    focusDragonStayPost,
     firstDragonEggSlot,
     hatchDragonEgg,
     claimLocalIncubation,
@@ -1695,6 +2775,7 @@ function netRemoveRemote(sid){
     perchRejected,
     tickLocalMount,
     tickDragonRoost,
+    tickCompanionDragons,
     DRAGON_PERCH_SLOTS_C,
     perchedDragons,
     perchKeysAt,
@@ -1727,6 +2808,7 @@ function netRemoveRemote(sid){
     netAddRemote,
     netRefreshRemoteAvatar,
     netUpdateTag,
+    tickSpiritVisual,
     pulseAegisGlow,
     netRemoveRemote,
     get mounted(){ return mounted; },
@@ -1743,8 +2825,26 @@ function netRemoveRemote(sid){
     set familiarChallenges(value){ familiarChallenges=value&&typeof value==='object'?value:{}; },
     get dragonCare(){ return dragonCare; },
     set dragonCare(value){ dragonCare=value; },
+    get dragonBondXp(){ return dragonBondXp; },
+    set dragonBondXp(value){ dragonBondXp=value&&typeof value==='object'?value:{}; },
+    get dragonRoleMastery(){ return dragonRoleMastery; },
+    set dragonRoleMastery(value){ dragonRoleMastery=value&&typeof value==='object'?value:{}; },
+    get dragonSpecializations(){ return dragonSpecializations; },
+    set dragonSpecializations(value){ dragonSpecializations=value&&typeof value==='object'?value:{}; },
+    get dragonChallenges(){ return dragonChallenges; },
+    set dragonChallenges(value){ dragonChallenges=value&&typeof value==='object'?value:{}; },
     get dragonNames(){ return dragonNames; },
     set dragonNames(value){ dragonNames=value; },
+    get dragonGenders(){ return dragonGenders; },
+    set dragonGenders(value){ dragonGenders=value&&typeof value==='object'?value:{}; },
+    get dragonPersonalities(){ return dragonPersonalities; },
+    set dragonPersonalities(value){ dragonPersonalities=value&&typeof value==='object'?value:{}; },
+    get dragonRoles(){ return dragonRoles; },
+    set dragonRoles(value){ dragonRoles=value&&typeof value==='object'?value:{}; },
+    get dragonStaySpots(){ return dragonStaySpots; },
+    set dragonStaySpots(value){ dragonStaySpots=value&&typeof value==='object'?value:{}; },
+    get dragonHatchedAt(){ return dragonHatchedAt; },
+    set dragonHatchedAt(value){ dragonHatchedAt=value&&typeof value==='object'?value:{}; },
     get dragonAbilityReadyAt(){ return dragonAbilityReadyAt; },
     set dragonAbilityReadyAt(value){ dragonAbilityReadyAt=value; },
     get dragonRoostSig(){ return dragonRoostSig; },

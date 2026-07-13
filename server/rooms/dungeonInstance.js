@@ -17,6 +17,9 @@ class DungeonInstance {
     this.room = room;
     this.id = g.id;
     this.seed = g.seed;
+    this.dungeonId = g.dungeonId || '';
+    this.definition = d.definition || null;
+    this.bossStyle = this.definition && this.definition.combat ? this.definition.combat.bossStyle || '' : '';
     this.rank = g.rank;
     this.gateX = g.x;
     this.gateY = g.y;
@@ -24,12 +27,25 @@ class DungeonInstance {
     this.world = d.world;              // compact instance-local DungeonGrid
     this.edits = [];                  // party mining/building log, replayed to late joiners
     this.players = new Set();         // session ids currently inside
+    this.originalPlayers = new Set(); // session ids who ever joined this run; used for party status
+    this.startedAt = Date.now();
+    this.deathCount = 0;
+    this.bossMastery = {
+      hitsBySid: new Map(),
+      partyHits: 0,
+      deathsByReason: new Map(),
+    };
     this.cleared = false;
     this.kind = g.kind || 'public';
     this.bossRoom = { x: d.bossRoom.x, z: d.bossRoom.z };
     // entry room — where a DungeonRoom spawns a joining hunter (falls back to the boss room)
     this.entrance = d.entrance ? { x: d.entrance.x, z: d.entrance.z } : { x: this.bossRoom.x, z: this.bossRoom.z };
     this.lootChestTotal = 0;          // set by the room after construction (needs a chest count)
+    this.roomProgress = {
+      rooms: new Map(),
+      total: 0,
+      cleared: 0,
+    };
     this.shardPlus = g.shardPlus | 0;
     this.shardName = g.shardName || '';
     this.shardMods = g.shardMods || '';
@@ -51,10 +67,63 @@ class DungeonInstance {
   addEdit(x, y, z, id) { this.edits.push({ x, y, z, id }); }
 
   // ---- roster ----
-  addPlayer(sid) { this.players.add(sid); }
+  addPlayer(sid) { this.players.add(sid); this.originalPlayers.add(sid); }
   removePlayer(sid) { this.players.delete(sid); }
   hasPlayer(sid) { return this.players.has(sid); }
   get playerCount() { return this.players.size; }
+
+  configureRoomProgress(groups) {
+    this.roomProgress.rooms.clear();
+    this.roomProgress.total = 0;
+    this.roomProgress.cleared = 0;
+    for (const group of groups || []) {
+      if (!group || !group.key || !group.list || !group.list.length) continue;
+      this.roomProgress.rooms.set(group.key, {
+        key: group.key,
+        type: group.type || 'guard',
+        x: group.x,
+        z: group.z,
+        total: group.list.length,
+        alive: group.list.length,
+        cleared: false,
+      });
+    }
+    this.roomProgress.total = this.roomProgress.rooms.size;
+  }
+
+  roomKeyNear(x, z) {
+    let best = '', bd = Infinity;
+    for (const room of this.roomProgress.rooms.values()) {
+      const d = Math.hypot((room.x || 0) - x, (room.z || 0) - z);
+      if (d < bd) { bd = d; best = room.key; }
+    }
+    return best;
+  }
+
+  markRoomMobKilled(x, z) {
+    const key = this.roomKeyNear(x, z);
+    const room = key && this.roomProgress.rooms.get(key);
+    if (!room || room.cleared) return null;
+    room.alive = Math.max(0, (room.alive | 0) - 1);
+    if (room.alive > 0) return null;
+    room.cleared = true;
+    this.roomProgress.cleared = [...this.roomProgress.rooms.values()].filter(r => r.cleared).length;
+    return {
+      key: room.key,
+      type: room.type,
+      x: room.x,
+      z: room.z,
+      roomsCleared: this.roomProgress.cleared,
+      roomTotal: this.roomProgress.total,
+      bossGateState: this.bossGateState(),
+    };
+  }
+
+  bossGateState() {
+    if (this.cleared) return 'defeated';
+    if (!this.roomProgress.total || this.roomProgress.cleared >= this.roomProgress.total) return 'open';
+    return 'locked';
+  }
 
   // True while at least one roster member is still inside this instance and alive.
   // Drives the wipe check: when it goes false, the run fails.

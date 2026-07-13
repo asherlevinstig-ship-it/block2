@@ -1,6 +1,9 @@
 export function createSocialSystem({
   network:NET,
   dragonTypes:DRAGON_TYPES,
+  companions:COMPANIONS,
+  applyMount,
+  updateLandMinimap,
   resetGateCutsceneSeen,
   startGateUnlockCutscene,
   markGateCutsceneSeen,
@@ -23,6 +26,7 @@ const chatWheelModeEl=document.getElementById('chatwheelmode');
 let chatTyping=false;
 let chatMode='local';
 let chatWheel=null;
+let dragonWheel=null;
 const mutedPlayers=new Set();
 let commsSound=localStorage.getItem('bc_comms_sound')!=='0';
 function chatInputActive(){
@@ -53,7 +57,9 @@ function setChatMode(mode){
   chatModeEl.textContent=chatMode.toUpperCase();
   document.body.classList.toggle('chat-whisper',chatMode==='whisper');
   if(chatMode==='whisper')populateWhisperTargets();
-  chatInEl.placeholder=chatMode==='local'?'Message nearby hunters...':chatMode==='party'?'Message your party...':'Whisper privately...';
+  const label=chatMode==='local'?'Nearby quick phrase':chatMode==='party'?'Party quick phrase':'Whisper quick phrase';
+  chatInEl.setAttribute('aria-label',label);
+  chatInEl.title=label+' - press Enter to send';
 }
 function cycleChatMode(){setChatMode(chatMode==='local'?'party':chatMode==='party'?'whisper':'local');}
 function quickChatContext(){
@@ -78,7 +84,10 @@ function sendQuickPhrase(phrase){
 }
 function renderQuickChatWheel(){
   if(!chatWheel)return;
+  chatWheelEl.classList.remove('dragonwheel');
   chatWheelItemsEl.innerHTML='';
+  chatWheelModeEl.textContent=chatMode.toUpperCase();
+  const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase to send';
   const count=chatWheel.ids.length;
   chatWheel.ids.forEach((id,index)=>{
     const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('button');item.type='button';
@@ -88,7 +97,7 @@ function renderQuickChatWheel(){
   });
 }
 function startQuickChatWheel(){
-  if(chatWheel)return;
+  if(chatWheel || dragonWheel)return;
   chatTyping=true;for(const k in keys)keys[k]=false;setChatMode(chatMode);
   if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
   const ids=populateQuickChat().slice(0,COMMS_RULES.maxWheelPhrases);
@@ -96,8 +105,144 @@ function startQuickChatWheel(){
   chatWheelModeEl.textContent=chatMode.toUpperCase();chatWheelEl.classList.remove('hidden');renderQuickChatWheel();
 }
 function closeQuickChatWheel(relock=false){if(!chatWheel)return;chatWheel=null;chatWheelEl.classList.add('hidden');chatTyping=false;if(relock)renderer.domElement.requestPointerLock();}
-addEventListener('keyup',event=>{if(event.code==='Tab'&&chatWheel)event.preventDefault();});
-addEventListener('keydown',event=>{if(event.code==='Escape'&&chatWheel){event.preventDefault();event.stopImmediatePropagation();closeQuickChatWheel(true);}});
+function dragonOwnedTypes(){return COMPANIONS&&Array.isArray(COMPANIONS.dragonUnlocks)?COMPANIONS.dragonUnlocks.filter(t=>DRAGON_TYPES[t]):[];}
+function dragonWheelName(type){
+  const custom=COMPANIONS&&COMPANIONS.dragonNames&&COMPANIONS.dragonNames[type];
+  if(custom)return custom;
+  const d=DRAGON_TYPES[type];
+  return d?(d.name||type).replace(' Dragon',''):type;
+}
+function dragonWheelSpot(type){
+  const s=COMPANIONS&&COMPANIONS.dragonStaySpots&&COMPANIONS.dragonStaySpots[type];
+  if(!s||typeof s!=='object')return null;
+  const x=Number(s.x),z=Number(s.z);
+  return Number.isFinite(x)&&Number.isFinite(z)?s:null;
+}
+function dragonWheelAdult(type){return !COMPANIONS||!COMPANIONS.dragonIsAdult||COMPANIONS.dragonIsAdult(type);}
+function dragonWheelTarget(){
+  const owned=dragonOwnedTypes();
+  if(!owned.length)return '';
+  const mountedType=COMPANIONS&&COMPANIONS.mounted&&String(COMPANIONS.mountKind||'').startsWith('dragon:')?String(COMPANIONS.mountKind).slice(7):'';
+  if(mountedType&&owned.includes(mountedType))return mountedType;
+  const adults=owned.filter(dragonWheelAdult);
+  return adults[0]||owned[0];
+}
+function dragonWheelAction(label, detail, disabled, run){
+  return {label, detail, disabled:!!disabled, run};
+}
+function dragonWheelActions(type){
+  const adult=dragonWheelAdult(type), spot=dragonWheelSpot(type);
+  const mountedHere=COMPANIONS&&COMPANIONS.mounted&&COMPANIONS.mountKind==='dragon:'+type;
+  const role=COMPANIONS&&COMPANIONS.dragonRole?COMPANIONS.dragonRole(type):'follow';
+  const recallClearsPost=role==='stay'&&!!spot;
+  return [
+    dragonWheelAction('RECALL',recallClearsPost?'Clear post and call':'Whistle to side',!adult,()=>COMPANIONS.recallDragon&&COMPANIONS.recallDragon(type,{clearStaySpot:recallClearsPost})),
+    {...dragonWheelAction('FOLLOW','Travel with me',!adult,()=>COMPANIONS.setDragonRole&&COMPANIONS.setDragonRole(type,'follow')), active:role==='follow'},
+    {...dragonWheelAction(spot?'RESET POST':'SET POST',spot?'Move post here':'Stay here',!adult,()=>COMPANIONS.setDragonRole&&COMPANIONS.setDragonRole(type,'stay')), active:role==='stay'&&!!spot},
+    {...dragonWheelAction('GUARD','Protect me',!adult,()=>COMPANIONS.setDragonRole&&COMPANIONS.setDragonRole(type,'guard')), active:role==='guard'},
+    {...dragonWheelAction('REST','Recover care',!adult,()=>COMPANIONS.setDragonRole&&COMPANIONS.setDragonRole(type,'rest')), active:role==='rest'},
+    dragonWheelAction('CLEAR POST','Forget post',!adult||!spot,()=>COMPANIONS.clearDragonStaySpot&&COMPANIONS.clearDragonStaySpot(type)),
+    dragonWheelAction('SHOW MAP','Highlight post',!adult||!spot,()=>{if(COMPANIONS.focusDragonStayPost)COMPANIONS.focusDragonStayPost(type);if(updateLandMinimap)updateLandMinimap();}),
+    dragonWheelAction(mountedHere?'DISMISS':'SUMMON',mountedHere?'Ground dragon':'Ride dragon',!adult&&!mountedHere,()=>applyMount&&applyMount(mountedHere?'':'dragon:'+type)),
+    dragonWheelAction('BONDS','Full details',false,()=>{closeDragonCommandWheel(false);if(typeof openDragonBondUI==='function')openDragonBondUI();return false;}),
+  ];
+}
+function dragonWheelPostDistance(type){
+  const s=dragonWheelSpot(type);
+  if(!s||!player||!player.pos)return '';
+  const d=Math.hypot((Number(player.pos.x)||0)-Number(s.x||0),(Number(player.pos.z)||0)-Number(s.z||0));
+  return Number.isFinite(d)?Math.round(d)+'m':'';
+}
+function dragonWheelStatusHTML(type){
+  const role=COMPANIONS&&COMPANIONS.dragonRoleLabel?COMPANIONS.dragonRoleLabel(type):'Follow';
+  const stage=COMPANIONS&&COMPANIONS.dragonStageLabel?COMPANIONS.dragonStageLabel(type):'Adult';
+  const bond=COMPANIONS&&COMPANIONS.dragonBondLevel?COMPANIONS.dragonBondLevel(type):1;
+  const happy=COMPANIONS&&COMPANIONS.dragonHappiness?COMPANIONS.dragonHappiness(type):50;
+  const post=dragonWheelSpot(type), dist=dragonWheelPostDistance(type);
+  const mount=COMPANIONS&&COMPANIONS.mounted&&COMPANIONS.mountKind==='dragon:'+type?'MOUNTED':'';
+  return '<span class="drole">'+escHTML(role.toUpperCase())+(mount?' · '+mount:'')+'</span>'+
+    '<span>'+escHTML(stage.toUpperCase())+' · BOND '+bond+' · CARE '+happy+'</span>'+
+    '<span>'+(post?'POST '+Math.round(post.x)+', '+Math.round(post.z)+(dist?' · '+dist:''):'NO STAY POST')+'</span>';
+}
+function renderDragonSelector(type){
+  const owned=dragonOwnedTypes();
+  if(owned.length<2)return;
+  const select=document.createElement('div');select.className='dragonselect';
+  owned.forEach(t=>{
+    const d=DRAGON_TYPES[t]||{},btn=document.createElement('button');btn.type='button';
+    const mounted=COMPANIONS&&COMPANIONS.mounted&&COMPANIONS.mountKind==='dragon:'+t;
+    btn.className='dragonchip'+(t===type?' active':'')+(dragonWheelAdult(t)?'':' young')+(mounted?' mounted':'');
+    btn.style.setProperty('--dragon-color',(d.membrane&&d.membrane[1])||'#d8a8ff');
+    btn.innerHTML='<b>'+escHTML(dragonWheelName(t))+'</b><span>'+escHTML((COMPANIONS&&COMPANIONS.dragonRoleLabel?COMPANIONS.dragonRoleLabel(t):'Follow').toUpperCase())+'</span>';
+    btn.addEventListener('click',()=>{dragonWheel.type=t;renderDragonCommandWheel();});
+    select.appendChild(btn);
+  });
+  chatWheelItemsEl.appendChild(select);
+}
+function renderDragonCommandWheel(){
+  if(!dragonWheel)return;
+  chatWheelEl.classList.add('dragonwheel');
+  chatWheelItemsEl.innerHTML='';
+  const type=dragonWheel.type||dragonWheelTarget();
+  dragonWheel.type=type;
+  if(!type){
+    chatWheelModeEl.textContent='DRAGON';
+    const empty=document.createElement('button');empty.type='button';empty.className='wheelitem selected';empty.textContent='NO BONDED DRAGONS';
+    empty.style.left='215px';empty.style.top='72px';empty.addEventListener('click',()=>closeDragonCommandWheel(true));chatWheelItemsEl.appendChild(empty);
+    const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Hatch an egg first';
+    return;
+  }
+  chatWheelModeEl.textContent=dragonWheelName(type).toUpperCase();
+  const actions=dragonWheelActions(type),count=actions.length;
+  actions.forEach((action,index)=>{
+    const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('button');item.type='button';
+    item.className='wheelitem'+(action.disabled?' dim':'')+(action.active?' active':'')+(index===dragonWheel.selected?' selected':'');
+    item.innerHTML='<b>'+escHTML(action.label)+'</b><span>'+escHTML(action.detail)+'</span>';
+    item.addEventListener('click',()=>{
+      if(action.disabled){if(typeof SFX!=='undefined'&&SFX.error)SFX.error();return;}
+      const shouldClose=action.run()!==false;
+      if(shouldClose)closeDragonCommandWheel(true);
+    });
+    item.style.left=(215+Math.cos(angle)*155)+'px';item.style.top=(215+Math.sin(angle)*155)+'px';chatWheelItemsEl.appendChild(item);
+  });
+  renderDragonSelector(type);
+  const center=chatWheelEl.querySelector('.wheelcenter span');
+  if(center)center.innerHTML=dragonWheelStatusHTML(type);
+}
+function startDragonCommandWheel(){
+  if(dragonWheel)return;
+  if(chatWheel){chatWheel=null;}
+  chatTyping=true;for(const k in keys)keys[k]=false;
+  if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
+  dragonWheel={type:dragonWheelTarget(),selected:0};
+  chatWheelEl.classList.remove('hidden');renderDragonCommandWheel();
+}
+function closeDragonCommandWheel(relock=false){
+  if(!dragonWheel)return;
+  dragonWheel=null;chatWheelEl.classList.remove('dragonwheel');chatWheelEl.classList.add('hidden');chatTyping=false;
+  const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase to send';
+  if(relock)renderer.domElement.requestPointerLock();
+}
+function closeAnyWheel(relock=false){
+  if(dragonWheel)closeDragonCommandWheel(relock);
+  else closeQuickChatWheel(relock);
+}
+addEventListener('keyup',event=>{if(event.code==='Tab'&&(chatWheel||dragonWheel))event.preventDefault();});
+addEventListener('keydown',event=>{
+  if(event.code==='Tab'&&chatWheel){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    cycleChatMode();
+    renderQuickChatWheel();
+    return;
+  }
+  if(event.code==='Tab'&&dragonWheel){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return;
+  }
+  if(event.code==='Escape'&&(chatWheel||dragonWheel)){event.preventDefault();event.stopImmediatePropagation();closeAnyWheel(true);}
+});
 function openChat(mode){
   chatTyping=true;
   for(const k in keys) keys[k]=false;
@@ -235,7 +380,8 @@ function teamName(id){
   return t ? t.name : '';
 }
 function myTeamId(){
-  const p=NET.room ? NET.room.state.players.get(NET.room.sessionId) : null;
+  const players=NET.room&&NET.room.state&&NET.room.state.players;
+  const p=players&&typeof players.get==='function' ? players.get(NET.room.sessionId) : null;
   return p ? (p.team||'') : '';
 }
 function isMyTeamLeader(t){
@@ -254,7 +400,7 @@ function openTeamUI(){
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='HUNTER TEAMS'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='UP TO 5 HUNTERS \u00b7 /t TO TALK TO YOUR TEAM';
+  sub.textContent='UP TO 5 HUNTERS \u00b7 USE PARTY QUICK PHRASES TO COORDINATE';
   qpanelEl.appendChild(sub);
   if(!NET.on){
     const p2=document.createElement('p'); p2.className='qtext';
@@ -366,6 +512,7 @@ function openTeamUI(){
     setChatMode,
     showChatBubble,
     startQuickChatWheel,
+    startDragonCommandWheel,
     applyMuteResult,
     applyBlockList,
     playCommsCue,

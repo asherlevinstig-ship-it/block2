@@ -16,12 +16,67 @@ import {normalizeRewardGear} from './reward-items.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
+const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const player=combatState.player,inv=combatState.inventory;
 const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
 biomeStatus.init(document);
+const UTILITY_UNLOCK_NUDGE_KEY='bc_utility_unlock_nudge_seen';
+const utilityUnlockToastEl=document.createElement('div');
+utilityUnlockToastEl.id='utilityunlocktoast';
+utilityUnlockToastEl.setAttribute('aria-live','polite');
+document.body.appendChild(utilityUnlockToastEl);
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
+let seenClaimableObjectiveIds=new Set();
+let objectiveFeedPrimed=false;
+function claimableObjectiveHint(o){
+  const loc=String(o&&o.location||'').trim();
+  if(o&&o.source==='job')return 'Claim at the <b>Job Board</b>.';
+  if(o&&o.source==='guild')return 'Claim from <b>Guild Contracts</b>.';
+  if(o&&o.source==='aegis')return 'Return to the <b>Aegis Guardian</b>.';
+  if(loc)return 'Turn in to <b>'+escHTML(loc)+'</b>.';
+  return 'Open the <b>Quest Log</b> for the turn-in point.';
+}
+function pulseFellowshipRenownSource(reason,amount){
+  const fx=globalThis.BlockcraftFellowshipEffects, r=String(reason||'').toLowerCase();
+  if(!fx)return;
+  if(r.includes('lectern')&&fx.pulseRecallLecternRenown)fx.pulseRecallLecternRenown(amount);
+  else if((r.includes('map table')||r.includes('treasure route'))&&fx.pulseMapTablePlanning)fx.pulseMapTablePlanning('RENOWN +'+amount);
+  else if(r.includes('weather')&&fx.pulseWeatherVane)fx.pulseWeatherVane('RENOWN +'+amount,true);
+}
+function applyGuildRenownToast(m){
+  if(!m)return;
+  const amount=Math.max(0,m.amount|0),reason=String(m.reason||'').trim();
+  if(!amount)return;
+  pulseFellowshipRenownSource(reason,amount);
+  rewardGain('renown',amount,'Renown',{icon:'REN',duration:2600});
+  showName('FELLOWSHIP +'+amount+' RENOWN');
+  if(SFX.success)SFX.success();else if(SFX.level)SFX.level();
+  const week=Math.max(0,m.weekRenown|0),goal=Math.max(1,(m.weekGoal|0)||30),pct=Math.max(0,Math.min(100,Math.round((week/goal)*100)));
+  const pinned=m.pinned;
+  const pinnedLine=pinned?'<br><small><b>Pinned:</b> '+escHTML(pinned.title||'Shared objective')+' '+Math.max(0,pinned.value|0)+'/'+Math.max(1,pinned.target|0)+(pinned.done?' COMPLETE':'')+'</small>':'';
+  sysMsg('<b>'+escHTML(m.name||'Fellowship')+'</b> gained <b>+'+amount+' Renown</b>'+(reason?' from '+escHTML(reason):'')+'.<span class="fellowship-renown-progress"><i style="width:'+pct+'%"></i></span><small>This week: <b>'+week+'</b> / '+goal+' Renown</small>'+pinnedLine,{tier:amount>=10?'major':'notice',title:'Fellowship Renown'});
+}
+function setActiveObjectives(next, opts={}){
+  const list=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(next):(Array.isArray(next)?next:[]);
+  const claimable=new Set(list.filter(o=>o&&o.id&&(o.status==='claimable'||o.status==='complete')).map(o=>String(o.id)));
+  if(opts.announce&&objectiveFeedPrimed){
+    for(const o of list){
+      if(!o||!o.id||!(o.status==='claimable'||o.status==='complete'))continue;
+      const id=String(o.id);
+      if(seenClaimableObjectiveIds.has(id))continue;
+      seenClaimableObjectiveIds.add(id);
+      if(o.source==='job')continue;
+      SFX.success&&SFX.success();
+      showName('READY TO CLAIM');
+      sysMsg('<b>'+escHTML(o.title||'Objective')+'</b> ready to claim.<br>'+claimableObjectiveHint(o),{tier:'minor',title:'Ready to Claim'});
+    }
+  }
+  activeObjectives=list;
+  seenClaimableObjectiveIds=claimable;
+  objectiveFeedPrimed=true;
+}
 function receiveRewardItemLegacy(it){
   if(!it||!ITEMS[it.id])return;
   const itemInfo=ITEMS[it.id],info=itemInfo.tool||itemInfo.armor;
@@ -60,6 +115,109 @@ function receiveRewardItemLegacy(it){
 function rewardGearStack(it){
   return normalizeRewardGear(it,{items:ITEMS,gearSystem:GEAR_SYSTEM,jobSystem:JOB_SYSTEM,armorMaxDur,toolMaxDur});
 }
+function itemTriageGroupName(id, item=ITEMS[id]){
+  if(!item)return 'Items';
+  if(item.tool||item.armor)return 'Gear';
+  if(SOLO_KEY_IDS.includes(id)||TEAM_KEY_IDS.includes(id))return 'Keys';
+  if(SHARD_IDS.includes(id))return 'Shards';
+  if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id))return 'Rare Protected';
+  if(item.place!=null||[I.STICK,I.COAL,I.CHARCOAL,I.IRON_INGOT,I.DIAMOND,I.WHEAT_SEEDS,I.WHEAT,I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM,I.RIVER_FISH,I.COMPOST,I.GOLDEN_WHEAT,I.GEODE,I.RAINWAKE_PETAL,I.STORMGLASS,I.SOLAR_GLYPH].includes(id))return 'Materials';
+  if(FOOD_VALUES[id])return 'Food';
+  return 'Items';
+}
+function itemTriageSummary(items){
+  const counts=new Map();
+  for(const it of Array.isArray(items)?items:[])if(it&&ITEMS[it.id]){
+    const group=itemTriageGroupName(it.id);
+    counts.set(group,(counts.get(group)||0)+Math.max(1,it.count|0||1));
+  }
+  const order=['Gear','Keys','Shards','Rare Protected','Materials','Food','Items'];
+  return order.filter(g=>counts.has(g)).map(g=>g+' x'+counts.get(g)).join(', ');
+}
+function rewardItemsGroupedHTML(items){
+  const order=['Gear','Keys','Shards','Rare Protected','Materials','Food','Items'];
+  const groups=new Map();
+  for(const it of Array.isArray(items)?items:[])if(it&&ITEMS[it.id]){
+    const group=itemTriageGroupName(it.id);
+    if(!groups.has(group))groups.set(group,[]);
+    groups.get(group).push(it);
+  }
+  return order.filter(g=>groups.has(g)).map(group=>
+    '<div class="rewardgroup"><small>'+escHTML(group)+'</small>'+groups.get(group).map(it=>
+      '<div class="rline item"><i class="ricon">'+escHTML(ITEMS[it.id].sym||'*')+'</i><span>'+escHTML(ITEMS[it.id].name)+'</span><b>x'+Math.max(1,it.count|0)+'</b></div>'
+    ).join('')+'</div>'
+  ).join('');
+}
+function questRewardSummaryLine(m){
+  if(!m||typeof m!=='object')return '';
+  const parts=[];
+  if(m.gold)parts.push('+'+(m.gold|0)+' gold');
+  if(m.xp)parts.push('+'+(m.xp|0)+' Hunter XP');
+  if(m.jobXp)parts.push('+'+(m.jobXp|0)+' '+escHTML((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP');
+  const items=Array.isArray(m.items)?m.items.filter(it=>it&&ITEMS[it.id]):[];
+  if(items.length)parts.push(items.map(it=>escHTML(ITEMS[it.id].name)+' x'+Math.max(1,it.count|0||1)).join(', '));
+  const gear=m.gear&&ITEMS[m.gear.id]?m.gear:null;
+  if(gear)parts.push(escHTML((gear.rarity?gear.rarity+' ':'')+ITEMS[gear.id].name)+(gear.recovered?' secured in recovery':''));
+  if(m.inventoryOverflow)parts.push('inventory overflow handled');
+  return parts.join(' · ');
+}
+function questRewardNextStep(m){
+  const source=String(m&&m.source||'');
+  if(source==='story'||source==='manhunt')return 'Check the Quest Log or the marked NPC for the next story beat.';
+  if(source==='job')return 'Open the Job Board for your next profession contract.';
+  if(source==='guild')return 'Open Guild Contracts for another regional job.';
+  if(source==='aegis')return 'Return to the Aegis Guardian when you are ready for another trial.';
+  return 'Open the Quest Log to choose your next objective.';
+}
+function questRewardCompletionTitle(m,sourceLabel){
+  const title=String(m&&m.title||sourceLabel||'Quest');
+  return (sourceLabel||'Quest')+' Complete: '+title;
+}
+function clampQuestHistoryEntry(raw){
+  if(!raw||typeof raw!=='object')return null;
+  const outcome=['completed','abandoned','failed','expired'].includes(raw.outcome)?raw.outcome:(raw.gold||raw.xp||raw.jobXp||raw.items||raw.gear?'completed':'failed');
+  const items=Array.isArray(raw.items)?raw.items.slice(0,12).map(it=>({
+    id:Math.max(0,Math.min(999,it&&it.id|0)),
+    count:Math.max(1,Math.min(999,it&&it.count|0||1)),
+    name:String(it&&it.name||ITEMS[it&&it.id]&&ITEMS[it.id].name||'Item').slice(0,64),
+  })).filter(it=>it.id>0):[];
+  const gear=raw.gear&&typeof raw.gear==='object'?{
+    id:Math.max(0,Math.min(999,raw.gear.id|0)),
+    count:Math.max(1,Math.min(99,raw.gear.count|0||1)),
+    name:String(raw.gear.name||ITEMS[raw.gear.id|0]&&ITEMS[raw.gear.id|0].name||'Gear').slice(0,64),
+    rarity:String(raw.gear.rarity||'').slice(0,24),
+    recovered:raw.gear.recovered===true,
+  }:null;
+  return {
+    id:String(raw.id||('local_qh_'+Date.now().toString(36))).slice(0,96),
+    source:String(raw.source||'quest').slice(0,32),
+    questType:String(raw.questType||raw.source||'quest').slice(0,32),
+    title:String(raw.title||'Quest').slice(0,96),
+    outcome,
+    reason:String(raw.reason||outcome).slice(0,48),
+    location:String(raw.location||raw.claimLocation||'').slice(0,80),
+    endedAt:Math.max(0,Number(raw.endedAt||raw.completedAt||raw.at)||Date.now()),
+    gold:Math.max(0,Math.min(999999,raw.gold|0)),
+    xp:Math.max(0,Math.min(999999,raw.xp|0)),
+    jobXp:Math.max(0,Math.min(999999,raw.jobXp|0)),
+    job:String(raw.job||'').slice(0,32),
+    items,gear,
+    inventoryOverflow:raw.inventoryOverflow===true,
+    noReward:raw.noReward===true||outcome!=='completed',
+    shared:raw.shared===true,
+    endedBy:String(raw.endedBy||'').slice(0,64),
+    canReaccept:raw.canReaccept!==false,
+  };
+}
+function setQuestHistoryFromServer(list){
+  questHistory=Array.isArray(list)?list.map(clampQuestHistoryEntry).filter(Boolean).slice(0,50):[];
+}
+function appendQuestHistoryLocal(raw){
+  const entry=clampQuestHistoryEntry(raw);
+  if(!entry)return;
+  const current=Array.isArray(questHistory)?questHistory:[];
+  questHistory=[entry,...current.filter(h=>h&&h.id!==entry.id)].slice(0,50);
+}
 function receiveRewardItem(it){
   if(!it||!ITEMS[it.id])return null;
   const itemInfo=ITEMS[it.id],info=itemInfo.tool||itemInfo.armor;
@@ -95,6 +253,41 @@ const GEAR_REWARDS=createGearRewardPresenter({
     setTimeout(()=>{scene.remove(beam);beam.geometry.dispose();beam.material.dispose();},1800);
   },
 });
+
+function utilitySlotUnlockLine(m,u){
+  if(!m||!m.equipped)return 'Open Utilities to equip it.';
+  if(m.slot==='active')return 'Equipped in active slot. Press I to use it.';
+  if(m.slot==='passive')return 'Equipped in passive slot '+(((m.passiveIndex|0)+1)||1)+'/'+(m.passiveLimit||3)+'.';
+  return u&&u.slot==='active'?'Unlocked for the active slot.':'Unlocked for a passive slot.';
+}
+function utilityFirstUnlockNudge(){
+  try{
+    if(localStorage.getItem(UTILITY_UNLOCK_NUDGE_KEY))return '';
+    localStorage.setItem(UTILITY_UNLOCK_NUDGE_KEY,'1');
+  }catch(e){}
+  return 'Utilities shape exploration. Equip up to 3 passives and 1 active.';
+}
+function showUtilityUnlockToast(m,u,firstUnlock=false){
+  if(!u)return;
+  const slotLabel=u.slot==='active'?'Active Utility':'Passive Utility';
+  const line=utilitySlotUnlockLine(m,u);
+  const nudge=firstUnlock?utilityFirstUnlockNudge():'';
+  utilityUnlockToastEl.className='show '+(u.slot==='active'?'active':'passive');
+  utilityUnlockToastEl.innerHTML=
+    '<div class="utilityunlock-icon">'+escHTML(u.icon||'?')+'</div>'+
+    '<div class="utilityunlock-copy">'+
+      '<small>Utility Unlocked</small>'+
+      '<b>'+escHTML(u.name)+'</b>'+
+      '<span>'+escHTML(slotLabel)+' - '+escHTML(u.use||u.desc||'New exploration tool available.')+'</span>'+
+      '<em>'+escHTML(line)+'</em>'+
+      (nudge?'<em class="nudge">'+escHTML(nudge)+'</em>':'')+
+    '</div>'+
+    '<button type="button">Open Utilities</button>';
+  const btn=utilityUnlockToastEl.querySelector('button');
+  if(btn)btn.onclick=()=>{utilityUnlockToastEl.classList.remove('show');if(menusApi.openUtilitiesUI)menusApi.openUtilitiesUI();};
+  clearTimeout(showUtilityUnlockToast.timer);
+  showUtilityUnlockToast.timer=setTimeout(()=>utilityUnlockToastEl.classList.remove('show'),6800);
+}
 const majorPresentationQueue=[];
 let majorPresentationRunning=false;
 function majorPresentationBusy(){
@@ -119,6 +312,154 @@ function presentMajor(show){
 }
 function presentGear(entry){if(entry&&entry.stack)presentMajor(()=>GEAR_REWARDS.present(entry));}
 let deathLimboState=null,deathLimboEl=null;
+let dungeonSpiritEl=null;
+let dungeonLobbyStartTimer=null;
+let localSpiritFx=null;
+function dungeonResultTimeText(ms){
+  const sec=Math.max(0,Math.round((ms||0)/1000)),min=Math.floor(sec/60),s=sec%60;
+  return min+':'+String(s).padStart(2,'0');
+}
+function dungeonChestSummary(result){
+  if(!result) return '';
+  const total=Math.max(0,result.chestTotal|0),opened=Math.max(0,result.chestsOpened|0),left=Math.max(0,total-opened);
+  if(!total) return '';
+  return left>0?' Optional chests remain: <b>'+left+'</b>.':' All dungeon chests were opened.';
+}
+function dungeonReturnRecap(result, earned=false){
+  if(!result) return '';
+  const cleared=result.outcome==='cleared'||earned;
+  const time=dungeonResultTimeText(result.clearMs||0);
+  const deaths=Math.max(0,result.deaths|0),spirits=Math.max(0,result.spirits|0);
+  const chest=dungeonChestSummary(result);
+  const mastery=result.mastery&&Array.isArray(result.mastery.lines)&&result.mastery.lines.length
+    ? ' <b>Boss mastery:</b> '+result.mastery.lines.map(escHTML).join(' ')
+    : '';
+  const rewardLine=cleared
+    ? ' Full clear reward: boss XP, gold, materials, key/shard/gear chances, and progress credit.'
+    : result.reason==='breach'
+    ? ' Failed Gate: no clear loot, keys, shards, gear, or progress; public cleanup pays reduced XP and materials only.'
+    : ' Failed attempt: no clear loot or progress, but existing gear is kept.';
+  return (cleared?'<b>Gate clear recap:</b> ':'<b>Dungeon attempt recap:</b> ')+
+    escHTML(result.dungeonName||'Ranked Gate')+' - '+time+
+    ' - deaths '+deaths+' - spirits '+spirits+'.'+chest+mastery+rewardLine;
+}
+function announceDungeonClearHandoff(m){
+  const result=m&&m.result;
+  const chest=dungeonChestSummary(result);
+  const mastery=result&&result.mastery&&result.mastery.clean?' Clean mastery earned.':result&&result.mastery?' Mastery recap ready.':'';
+  sysMsg('<b>Boss defeated.</b> Loot awarded. Exit through the portal when ready.'+chest+mastery,{tier:'major',title:'Gate Cleared'});
+}
+function announceDungeonMissedLoot(m){
+  const reason=m&&m.reason;
+  const fix=reason==='damage'?'Damage the boss before it falls.'
+    :reason==='range'?'Stay near the boss room when the fight ends.'
+    :reason==='dead'?'Survive, or remain as a spirit while allies finish.'
+    :reason==='stale'?'Keep contributing during the final boss phase.'
+    :reason==='not_inside'?'Stay inside the dungeon until the clear resolves.'
+    :'Stay near the fight and help damage the boss.';
+  sysMsg('No boss loot: '+escHTML(rewardReasonText(reason))+' '+escHTML(fix));
+  if(m&&m.mastery&&Array.isArray(m.mastery.lines)&&m.mastery.lines.length)sysMsg('<b>Boss mastery:</b> '+m.mastery.lines.map(escHTML).join(' '),'minor');
+}
+function announceBossMastery(m){
+  const mastery=m&&m.mastery;
+  if(!mastery) return;
+  const bonus=mastery.bonus||m.masteryBonus;
+  const bonusLine=bonus?(' Bonus: +'+((bonus.gold|0)||0)+' gold, +'+((bonus.iron|0)||0)+' iron.'):'';
+  const line=Array.isArray(mastery.lines)&&mastery.lines.length?mastery.lines[0]:(mastery.clean?'Clean lesson mastered.':'Lesson recap complete.');
+  sysMsg('<b>'+escHTML(mastery.tag||'Boss Mastery')+':</b> '+escHTML(line)+bonusLine,'minor');
+}
+function announceDungeonRoomCleared(m){
+  const cleared=Math.max(0,m&&m.roomsCleared|0),total=Math.max(0,m&&m.roomTotal|0);
+  const gate=m&&m.bossGateState==='open'?' Boss gate open.':m&&m.bossGateState==='defeated'?' Boss defeated.':'';
+  sysMsg('<b>Room cleared.</b> Boss gate progress '+cleared+'/'+total+'.'+gate,'minor');
+}
+function announceDungeonLobbyStart(m){
+  const summary=m&&m.finalSummary||{},line=summary.line||'Entering Gate: stay together, clear rooms, and prepare for the boss.';
+  const responsibilities=Array.isArray(summary.responsibilities)?summary.responsibilities:[];
+  const delay=Math.max(0,Math.min(5000,Number(m&&m.startsAt?m.startsAt-Date.now():m&&m.countdownMs)||0));
+  const seconds=Math.max(1,Math.ceil(delay/1000));
+  sysMsg('<b>Gate opens in '+seconds+'...</b><br>'+escHTML(line)+(responsibilities.length?'<br>'+responsibilities.map(escHTML).join('<br>'):''),{tier:'major',title:'Gate Opening'});
+}
+function enterDungeonAfterCountdown(m){
+  if(dungeonLobbyStartTimer){clearTimeout(dungeonLobbyStartTimer);dungeonLobbyStartTimer=null;}
+  const delay=Math.max(0,Math.min(5000,Number(m&&m.startsAt?m.startsAt-Date.now():m&&m.countdownMs)||0));
+  dungeonLobbyStartTimer=setTimeout(()=>{
+    dungeonLobbyStartTimer=null;
+    sysMsg('The party is ready. <b>The Gate opens.</b>');
+    if(m && m.mode==='room' && globalThis.enterDungeonRoomWith) globalThis.enterDungeonRoomWith(m);
+  },delay);
+}
+function showDungeonSpirit(m){
+  if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();
+  if(!dungeonSpiritEl){
+    dungeonSpiritEl=document.createElement('div');dungeonSpiritEl.id='dungeonspirit';
+    dungeonSpiritEl.innerHTML='<div class="dungeonspirit-panel"><div class="dungeonspirit-kicker">SPIRIT FORM</div><h2>You have fallen</h2><div class="dungeonspirit-choice stay"><b>Stay as spirit for party credit</b><span>Remain bound here, watch allies finish the boss, and keep the group run resolving together.</span></div><div class="dungeonspirit-choice return"><b>Return to town now</b><span>Leave the dungeon immediately to repair, restock, and try another Gate.</span></div><div class="dungeonspirit-actions"><button type="button" data-action="stay">STAY AS SPIRIT</button><button type="button" data-action="return">RETURN TO TOWN</button></div></div>';
+    dungeonSpiritEl.addEventListener('click',e=>{
+      const btn=e.target&&e.target.closest&&e.target.closest('button[data-action]');
+      if(!btn)return;
+      e.stopPropagation();
+      if(btn.dataset.action==='stay'){dungeonSpiritEl.classList.add('minimized');sysMsg('<b>Staying as spirit.</b> Watch allies finish for party credit; use the return button when you want town.','minor');return;}
+      if(NET.room)NET.room.send('quitDungeonSpirit',{});
+    });
+    (document.getElementById('game')||document.body).appendChild(dungeonSpiritEl);
+  }
+  dungeonSpiritEl.classList.add('show');dungeonSpiritEl.classList.remove('minimized');
+  if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
+}
+function hideDungeonSpirit(){if(dungeonSpiritEl)dungeonSpiritEl.classList.remove('show');}
+function localSpiritTexture(){
+  if(localSpiritTexture.tex)return localSpiritTexture.tex;
+  const c=document.createElement('canvas');c.width=c.height=96;
+  const g=c.getContext('2d'),r=c.width/2;
+  const grad=g.createRadialGradient(r,r,1,r,r,r);
+  grad.addColorStop(0,'rgba(235,250,255,.95)');
+  grad.addColorStop(.24,'rgba(125,211,252,.66)');
+  grad.addColorStop(.65,'rgba(80,160,255,.18)');
+  grad.addColorStop(1,'rgba(80,160,255,0)');
+  g.fillStyle=grad;g.fillRect(0,0,c.width,c.height);
+  localSpiritTexture.tex=new THREE.CanvasTexture(c);
+  return localSpiritTexture.tex;
+}
+function ensureLocalSpiritFx(){
+  if(localSpiritFx)return localSpiritFx;
+  const grp=new THREE.Group();
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.9,.04,8,56),new THREE.MeshBasicMaterial({color:0x82d8ff,transparent:true,opacity:.7,depthWrite:false,side:THREE.DoubleSide}));
+  ring.rotation.x=Math.PI/2;ring.position.y=.09;grp.add(ring);
+  const pillar=new THREE.Sprite(new THREE.SpriteMaterial({map:localSpiritTexture(),color:0x9bdcff,transparent:true,opacity:.34,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  pillar.position.y=1.35;pillar.scale.set(1.7,3.2,1);grp.add(pillar);
+  const flame=new THREE.Sprite(new THREE.SpriteMaterial({map:localSpiritTexture(),color:0xe4f8ff,transparent:true,opacity:.78,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  flame.position.y=2.35;flame.scale.set(.62,.98,1);grp.add(flame);
+  scene.add(grp);
+  localSpiritFx={grp,ring,pillar,flame,phase:Math.random()*Math.PI*2,wispAt:0};
+  globalThis.BlockcraftLocalSpiritFxActive=true;
+  return localSpiritFx;
+}
+function disposeLocalSpiritFx(){
+  if(!localSpiritFx)return;
+  scene.remove(localSpiritFx.grp);
+  localSpiritFx.grp.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});
+  localSpiritFx=null;
+  globalThis.BlockcraftLocalSpiritFxActive=false;
+}
+function tickLocalSpiritVisual(now){
+  const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);
+  if(!self||!self.spirit){disposeLocalSpiritFx();return;}
+  const fx=ensureLocalSpiritFx(),t=now/1000+fx.phase,pulse=.5+.5*Math.sin(t*2.5);
+  fx.grp.position.set(player.pos.x,player.pos.y,player.pos.z);
+  fx.ring.rotation.z=t*.6;
+  fx.ring.material.opacity=.46+pulse*.2;
+  fx.ring.scale.setScalar(1+pulse*.08);
+  fx.pillar.material.opacity=.22+pulse*.12;
+  fx.pillar.scale.set(1.55+pulse*.22,2.8+pulse*.35,1);
+  fx.flame.position.y=2.28+Math.sin(t*2.2)*.1;
+  fx.flame.material.opacity=.6+pulse*.25;
+  if(now>(fx.wispAt||0)){
+    fx.wispAt=now+95;
+    const a=Math.random()*Math.PI*2,r=.25+Math.random()*.65;
+    spawnParticle({x:player.pos.x+Math.cos(a)*r,y:player.pos.y+.25+Math.random()*.45,z:player.pos.z+Math.sin(a)*r,
+      vx:Math.cos(a)*.05,vy:.45+Math.random()*.28,vz:Math.sin(a)*.05,life:.75+Math.random()*.45,grav:-.08,r:.55,g:.86,b:1});
+  }
+}
 function ensureDeathLimboEl(){
   if(deathLimboEl)return deathLimboEl;
   deathLimboEl=document.createElement('div');deathLimboEl.id='deathlimbo';
@@ -330,11 +671,48 @@ const ONBOARD=createOnboardingUI({
   escHTML, rewardLineHTML, countItem, hasAnyArmorItem, toolMaxDur, refreshPlayUi,
   getFocus:()=>progressionFocus,
   getInv:()=>inv,
+  baseSetupStatus:()=>typeof baseSetupStatus==='function'?baseSetupStatus():null,
   releasePointerLock:()=>{ if(document.pointerLockElement===renderer.domElement)document.exitPointerLock(); locked=false; lockFallback=false; },
   restoreLock:()=>{ lockFallback=true; locked=true; },
   clearRewardTimer:()=>clearTimeout(rewardHideTimer),
   sendNet:(type,payload)=>{ if(NET.on&&NET.room)NET.room.send(type,payload); },
 });
+const FELLOWSHIP_TUTORIAL_KEY='bc_fellowship_tutorial_seen_v1';
+function fellowshipTutorialSeen(){
+  try{return localStorage.getItem(FELLOWSHIP_TUTORIAL_KEY)==='1';}catch{return false;}
+}
+function markFellowshipTutorialSeen(){
+  try{localStorage.setItem(FELLOWSHIP_TUTORIAL_KEY,'1');}catch{}
+}
+function showFellowshipTutorial(m={},mode='joined'){
+  if(fellowshipTutorialSeen()||!rewardWin||!rewardPanel)return false;
+  markFellowshipTutorialSeen();
+  clearTimeout(rewardHideTimer);
+  if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
+  locked=false;lockFallback=false;
+  const name=escHTML(m&&m.name||'Your Fellowship');
+  rewardPanel.className='earned promotion fellowship-tutorial';
+  rewardPanel.innerHTML=
+    '<h2>FELLOWSHIP UNLOCKED</h2>'+
+    '<div class="rsub">'+(mode==='created'?'YOU FOUNDED '+name:'YOU JOINED '+name)+'</div>'+
+    '<div class="rewardloot">'+
+      rewardLineHTML({label:'Renown',value:'SHARED UPGRADE CURRENCY'})+
+      rewardLineHTML({label:'Stations',value:'LEARN · PLAN · PREP · SUSTAIN · SKY'})+
+      rewardLineHTML({label:'Notice Board',value:'PIN A WEEKLY FOCUS'})+
+    '</div>'+
+    '<div class="rnote"><b>How fellowships work:</b><br>Complete Guild/Road work and special station activities to earn Renown. Spend Renown with Lyra to build stations in your hall.</div>'+
+    '<div class="rnote"><b>First good move:</b><br>Open Lyra’s Fellowship Overview, check the next affordable project, then pin a shared notice so everyone knows what matters.</div>'+
+    '<button id="fellowshipopenhall">OPEN FELLOWSHIP HALL</button>'+
+    '<button id="fellowshipcontinue" class="secondary">GOT IT</button>';
+  rewardWin.classList.remove('hidden');
+  rewardWin.classList.add('promotion-open');
+  const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');lockFallback=true;locked=true;refreshPlayUi();};
+  const open=document.getElementById('fellowshipopenhall');
+  if(open)open.onclick=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'tutorial'});openGuildHallUI();refreshPlayUi();};
+  const done=document.getElementById('fellowshipcontinue');
+  if(done)done.onclick=close;
+  return true;
+}
 
 const netConnect=SESSION.connect;
 
@@ -361,6 +739,11 @@ function netAttachRoom(room,name,client){
 
     const $=Colyseus.getStateCallbacks(room);
     $(room.state).listen('tod', v=>{ NET.tod=v; });
+    room.onMessage('shard', m=>{
+      const id=String(m&&m.id||'main');
+      NET.shardId=id;
+      try{localStorage.setItem('bc_shard_id',id);}catch(e){}
+    });
     room.onMessage('dayCycleSync', m=>applyDayCycleSync(m));
     if(isOverworldRoom) room.send('dayCycleSyncRequest', {});
     $(room.state).edits.onAdd((id,key)=>netApplyEdit(key,id));
@@ -380,17 +763,51 @@ function netAttachRoom(room,name,client){
       }
     });
     room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
+    room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
+    room.onMessage('progressionFocus', m=>{
+      progressionFocus=PROGRESSION_FOCUS_STATES.includes(m&&m.progressionFocus)?m.progressionFocus:'';
+      setActiveObjectives(m&&m.activeObjectives,{announce:true});
+      refreshHUD(); refreshPlayUi();
+    });
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
     room.onMessage('tutorialProgress', m=>{if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);});
     room.onMessage('firstPromotionAck', m=>{if(m&&m.ok)ONBOARD.setSeen(true);});
     room.onMessage('rankUp', m=>{
       presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
     });
+    const presentJobMilestone=(job,idMilestone)=>{
+      if(!idMilestone)return;
+      const jobName=(JOBS[job]&&JOBS[job].name)||'Job';
+      const reward=idMilestone.reward||JOB_SYSTEM.milestoneReward(job,idMilestone.level)||'Profession milestone';
+      SFX.level();
+      rewardGain('rare',1,reward,{icon:'JOB'});
+      sysMsg('<b>'+escHTML(jobName)+' Level '+(idMilestone.level|0)+'</b> reached<br><b>'+escHTML(idMilestone.title)+' unlocked:</b> '+escHTML(idMilestone.desc)+(reward?'<br><b>Reward:</b> '+escHTML(reward):''));
+    };
+    const presentJobContractClaim=(m)=>{
+      const c=clampJobContract(m&&m.contract)||{};
+      const job=m&&m.job||c.job||playerJob||'adventurer';
+      const jobName=(JOBS[job]&&JOBS[job].name)||'Job';
+      const title=c.title||'Contract';
+      const parts=[];
+      if(m.rewardGold)parts.push('+'+(m.rewardGold|0)+'g');
+      if(m.rewardXp)parts.push('+'+(m.rewardXp|0)+' Hunter XP');
+      if(m.rewardJobXp)parts.push('+'+(m.rewardJobXp|0)+' '+jobName+' XP');
+      const milestones=Array.isArray(m.milestones)?m.milestones:[];
+      const levelLine=Number.isFinite(m.jobLevelBefore)&&Number.isFinite(m.jobLevelAfter)&&m.jobLevelAfter>m.jobLevelBefore
+        ? jobName+' Lv '+m.jobLevelBefore+' -> '+m.jobLevelAfter
+        : jobName+' progress advanced';
+      const starterCount=Array.isArray(m.milestoneStarterItems)?m.milestoneStarterItems.reduce((sum,it)=>sum+Math.max(0,it&&it.count|0),0):0;
+      const starterLine=starterCount?'Starter items granted: '+starterCount:'';
+      const next=jobContractNextHint(job,m.jobLevelAfter|0,milestones,!!m.graduation);
+      sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
+      showName(title+' complete');
+    };
     bindProgressionMessages(room,{
       getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},setContract:v=>{jobContract=v;},clampContract:clampJobContract,
       jobLevel:jobLevelFromXp,contractReady:jobContractReady,
-      onJobLevel:(level,id)=>{const milestone=JOB_SYSTEM.milestoneAt(id,level);SFX.level();sysMsg('<b>'+escHTML((JOBS[id]&&JOBS[id].name)||'Job')+' Level '+level+'</b> reached'+(milestone?'<br><b>'+escHTML(milestone.title)+' unlocked:</b> '+escHTML(milestone.desc):''));},
-      onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> complete - claim it from Jobs');},
+      onJobLevel:(level,id)=>{const milestone=JOB_SYSTEM.milestoneAt(id,level);if(milestone)presentJobMilestone(id,milestone);else{SFX.level();sysMsg('<b>'+escHTML((JOBS[id]&&JOBS[id].name)||'Job')+' Level '+level+'</b> reached');}},
+      onJobMilestone:(id,milestone)=>presentJobMilestone(id,milestone),
+      onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));},
       reconcileArmor:()=>{cursorStack=null;renderCursor();if(uiOpen)renderUI();},
       reject:why=>{sysMsg(why);SFX.error();},
       accept:m=>{
@@ -399,8 +816,8 @@ function netAttachRoom(room,name,client){
           if(m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
           if(m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
           if(m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
-          SFX.coin();sysMsg('Contract claimed'+(m.rewardGold?' - <b>+'+m.rewardGold+' gold</b>':'')+(m.rewardXp?', <b>+'+m.rewardXp+' XP</b>':'')+'.');
-          for(const milestone of Array.isArray(m.milestones)?m.milestones:[]){SFX.level();sysMsg('<b>'+escHTML((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' Level '+milestone.level+'</b> reached<br><b>'+escHTML(milestone.title)+' unlocked:</b> '+escHTML(milestone.desc));}
+          SFX.coin();presentJobContractClaim(m);
+          for(const milestone of Array.isArray(m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
           if(m.graduation)setTimeout(()=>ONBOARD.showFieldWorkGraduation(),40);
         }
         if(m.type==='jobContract'&&m.action==='take')clearTownJobGuidance();
@@ -414,6 +831,86 @@ function netAttachRoom(room,name,client){
       jobContractOffersJob=String(m&&m.job||'');jobContractRefreshAt=Math.max(0,Number(m&&m.refreshAt)||0);
       if(qOpen&&qMode==='management')openJobsUI(jobContractOffersJob==='adventurer'?'':jobContractOffersJob);
     });
+    room.onMessage('homesteadWorkOrder',m=>{
+      homesteadWorkOrder=clampHomesteadWorkOrder(m&&m.order);
+      if(homesteadWorkOrder&&m&&m.storage)homesteadWorkOrder.storage={
+        chests:Math.max(0,m.storage.chests|0),
+        have:Math.max(0,m.storage.have|0),
+        supplyChests:Math.max(0,m.storage.supplyChests|0),
+        supplyHave:Math.max(0,m.storage.supplyHave|0),
+      };
+      if(m&&m.action==='request'&&homesteadWorkOrder)sysMsg('Homestead order posted: <b>'+escHTML(homesteadWorkOrder.title)+'</b>.');
+      if(m&&m.action==='contribute'&&homesteadWorkOrder){
+        const ready=homesteadWorkOrder.have>=homesteadWorkOrder.need;
+        sysMsg('Homestead supplies updated: <b>'+escHTML(homesteadWorkOrder.title)+'</b> '+homesteadWorkOrder.have+'/'+homesteadWorkOrder.need+(ready?' - ready to claim':'')+'.');
+      }
+      if(m&&m.assistRewardJobXp){
+        rewardGain('item',m.assistRewardJobXp,((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' Assist XP',{icon:'JOB'});
+        sysMsg('Homestead assist: <b>+'+(m.assistRewardJobXp|0)+' '+escHTML((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' XP</b>.');
+      }
+      refreshHUD();if(qOpen&&qMode==='management')openLandClaimsUI();
+    });
+    room.onMessage('homesteadWorkOrderResult',m=>{
+      homesteadWorkOrder=null;
+      if(typeof (m&&m.gold)==='number')gold=Math.max(0,m.gold|0);
+      if(m&&m.jobXpByJob){for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(m.jobXpByJob&&m.jobXpByJob[id])|0);jobXp=jobXpFor(playerJob||'adventurer');}
+      if(m&&m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
+      if(m&&m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
+      SFX.coin();
+      sysMsg('Homestead work order claimed'+(m&&m.rewardGold?'<br>'+economyRecapHTML(m.rewardGold|0,gold,'Homestead contract payout'):'.'));
+      for(const milestone of Array.isArray(m&&m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
+      refreshHUD();renderBars();if(qOpen&&qMode==='management')openLandClaimsUI();
+    });
+    room.onMessage('homesteadWorkOrderReject',m=>{
+      const reason=m&&m.reason;
+      const text=reason==='homestead'?'Stand inside an editable 3-tile Homestead to use work orders.'
+        :reason==='owner'?'Only the Homestead owner can post or claim that work order.'
+        :reason==='storage'?'Place a personal chest inside this Homestead before contributing work order supplies.'
+        :reason==='item'?'The requested supply is not stored in a Homestead chest.'
+        :reason==='incomplete'?'That Homestead work order is not complete yet.'
+        :reason==='rate'?'Slow down a moment before using the Homestead ledger again.'
+        :'The Homestead ledger could not complete that request.';
+      SFX.error();sysMsg(text);
+      if(qOpen&&qMode==='management')openLandClaimsUI();
+    });
+    room.onMessage('questRewardSummary', m=>{
+      appendQuestHistoryLocal({...(m||{}),outcome:'completed',reason:'claimed',location:m&&m.claimLocation});
+      const line=questRewardSummaryLine(m);
+      if(!line)return;
+      const sourceLabel=({
+        story:'Story Quest',
+        manhunt:'Manhunt Quest',
+        job:'Job Contract',
+        guild:'Guild Contract',
+        aegis:'Aegis Trial'
+      })[m.source]||'Quest Reward';
+      const where=m.claimLocation?' <small>Claimed at '+escHTML(m.claimLocation)+'</small>':'';
+      const completeTitle=questRewardCompletionTitle(m,sourceLabel),next=questRewardNextStep(m);
+      showName(completeTitle);
+      sysMsg('<b>'+escHTML(completeTitle)+'</b><br>'+line+where+'<br><small>Next: '+escHTML(next)+'</small>',{tier:'minor',title:sourceLabel+' Reward'});
+    });
+    room.onMessage('questOutcome', m=>{
+      if(!m)return;
+      appendQuestHistoryLocal(m);
+      const sourceLabel=({
+        story:'Story Quest',
+        manhunt:'Manhunt Quest',
+        job:'Job Contract',
+        guild:'Guild Contract',
+        aegis:'Aegis Trial'
+      })[m.source]||'Quest';
+      const outcome=String(m.outcome||'failed');
+      const reason=String(m.reason||'');
+      const explanation=outcome==='abandoned'
+        ? (m.shared&&m.endedBy ? 'Abandoned by '+m.endedBy+'.' : 'Abandoned. No reward was granted.')
+        : outcome==='expired'
+          ? 'Expired. No reward was granted.'
+          : reason==='offline'
+            ? 'Failed because the target left the world.'
+            : 'Failed. No reward was granted.';
+      const next=m.canReaccept?' You can pick up new work from '+(m.location||'the quest giver')+'.':'';
+      sysMsg('<b>'+escHTML(m.title||sourceLabel)+'</b><br>'+escHTML(explanation+next),{tier:outcome==='abandoned'?'minor':'major',title:sourceLabel+' '+(outcome==='expired'?'Expired':outcome==='abandoned'?'Abandoned':'Failed')});
+    });
     room.onMessage('npcQuest', m=>{
       if(!m)return;
       quest=m.quest||null;
@@ -422,8 +919,11 @@ function netAttachRoom(room,name,client){
         SFX.coin();SFX.level();
         if(m.completed.gold)rewardGain('gold',m.completed.gold,'Gold');
         if(m.completed.xp)rewardGain('xp',m.completed.xp,'Hunter XP');
-        for(const it of Array.isArray(m.completed.rewardItems)?m.completed.rewardItems:[])if(it&&ITEMS[it.id])rewardGain('item',it.count||1,ITEMS[it.id].name);
-        sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.',{tier:'major',title:'Quest Complete'});
+        const rewardItems=Array.isArray(m.completed.rewardItems)?m.completed.rewardItems:[];
+        for(const it of rewardItems)if(it&&ITEMS[it.id])rewardGain('item',it.count||1,ITEMS[it.id].name);
+        const questGold=m.completed.gold|0;
+        const triage=itemTriageSummary(rewardItems);
+        sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.'+(questGold?'<br>'+economyRecapHTML(questGold,gold+questGold,'Town quest reward'):'')+(triage?'<br><b>Reward triage:</b> '+escHTML(triage):''),{tier:'major',title:'Quest Complete'});
         // Multiplayer turn-in returns here before the local dialogue callback
         // can run. Start the one-time milestone reward from the authoritative
         // completion message so Level 2 never skips straight past its reward.
@@ -439,11 +939,43 @@ function netAttachRoom(room,name,client){
         }
         maraQuestCue(quest);
       }
-      else if(m.action==='abandon')sysMsg('Quest abandoned.');
+      else if(m.action==='abandon'&&!m.abandoned)sysMsg('Quest abandoned.');
       else if(m.action==='progress'&&quest&&questDone())sysMsg(quest.giver==='Mara Vale'&&quest.title==='First Hands'
         ? '<b>First Hands complete.</b> Follow the gold trail back to <b>Mara Vale</b>.'
         : '<b>'+escHTML(quest.title||'Town quest')+'</b> complete - return to '+escHTML(quest.giver)+'.');
       refreshHUD();if(qOpen)closeQWin();
+    });
+    room.onMessage('progressionMilestoneReward', m=>{
+      const items=Array.isArray(m&&m.items)?m.items:[];
+      for(const it of items) if(it&&ITEMS[it.id]){
+        addItem(it.id,it.count||1);
+        rewardGain('item',it.count||1,ITEMS[it.id].name);
+      }
+      SFX.level();
+      if(m&&m.modal&&rewardWin&&rewardPanel){
+        presentMajor(()=>{
+          rewardPanel.className='earned promotion';
+          rewardPanel.innerHTML=
+            '<h2>'+escHTML(m.title||'MILESTONE CLEARED')+'</h2>'+
+            '<div class="rsub">'+escHTML(m.subtitle||'PROGRESSION MILESTONE')+'</div>'+
+            '<div class="rewardloot triage">'+rewardItemsGroupedHTML(items)+'</div>'+
+            '<div class="rnote"><b>Next objective:</b><br>'+escHTML(m.text||'Build your first station before pushing deeper into E-rank.')+'</div>'+
+            '<button id="milestonecontinue">'+escHTML(m.action||'CONTINUE')+'</button>';
+          rewardWin.classList.remove('hidden');
+          rewardWin.classList.add('promotion-open');
+          if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
+          locked=false;lockFallback=false;refreshPlayUi();
+          const btn=document.getElementById('milestonecontinue');
+          if(btn)btn.onclick=()=>{
+            rewardWin.classList.add('hidden');
+            rewardWin.classList.remove('promotion-open');
+            lockFallback=true;locked=true;refreshPlayUi();
+          };
+        });
+      }
+      const triage=itemTriageSummary(items);
+      sysMsg('<b>'+escHTML(m&&m.title||'Progression Reward')+'</b><br>'+escHTML(m&&m.text||'Milestone supplies added to your inventory.')+(triage?'<br><b>Reward triage:</b> '+escHTML(triage):''),{tier:'major',title:'Path Milestone'});
+      refreshHUD();if(qOpen)renderUI();
     });
     room.onMessage('aegisTrialReward', m=>{
       quest=null;SFX.coin();SFX.level();
@@ -451,19 +983,21 @@ function netAttachRoom(room,name,client){
       if(m&&m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
       if(m&&m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
       if(reward.id&&ITEMS[reward.id])rewardGain(reward.rarity==='rare'?'rare':'item',1,ITEMS[reward.id].name);
-      sysMsg('<b>Aegis Trial complete</b> - +'+((m&&m.rewardGold)||0)+' gold, +'+((m&&m.rewardXp)||0)+' XP, <b>'+escHTML(label)+'</b>.');
+      sysMsg('<b>Aegis Trial complete</b> - +'+((m&&m.rewardXp)||0)+' XP, <b>'+escHTML(label)+'</b>.<br>'+economyRecapHTML((m&&m.rewardGold)||0,gold+((m&&m.rewardGold)||0),'Trial purse'));
       refreshHUD();if(qOpen)closeQWin();
     });
     room.onMessage('guildHallSync', m=>{
       guildHallState={
         floors:Array.isArray(m&&m.floors)?m.floors:[],fellowships:Array.isArray(m&&m.fellowships)?m.fellowships:[],guild:m&&m.guild||null,
+        projectCatalog:Array.isArray(m&&m.projectCatalog)?m.projectCatalog:[],
+        noticeObjectiveCatalog:Array.isArray(m&&m.noticeObjectiveCatalog)?m.noticeObjectiveCatalog:[],
         nextFloor:Math.max(1,(m&&m.nextFloor)|0||1),nextPrice:Math.max(0,(m&&m.nextPrice)|0),maxFloors:Math.max(1,(m&&m.maxFloors)|0||6)
       };
       renderGuildHallFloors();
       if(guildHallOpen) openGuildHallUI();
     });
-    room.onMessage('guildCreated',m=>{sysMsg('Guild founded: <b>'+escHTML(m&&m.name||'New Guild')+'</b>. You are its leader.');SFX.level();});
-    room.onMessage('guildJoined',m=>{if(m&&m.id)delete pendingGuildInvites[m.id];sysMsg('Joined fellowship: <b>'+escHTML(m&&m.name||'Fellowship')+'</b>.');SFX.level();});
+    room.onMessage('guildCreated',m=>{sysMsg('Guild founded: <b>'+escHTML(m&&m.name||'New Guild')+'</b>. You are its leader.');SFX.level();showFellowshipTutorial(m,'created');});
+    room.onMessage('guildJoined',m=>{if(m&&m.id)delete pendingGuildInvites[m.id];sysMsg('Joined fellowship: <b>'+escHTML(m&&m.name||'Fellowship')+'</b>.');SFX.level();showFellowshipTutorial(m,'joined');});
     room.onMessage('guildLeft',m=>{sysMsg((m&&m.kicked)?'You were removed from <b>'+escHTML(m.name||'your fellowship')+'</b>.':(m&&m.disbanded)?'<b>'+escHTML(m&&m.name||'Your fellowship')+'</b> disbanded.':'You left <b>'+escHTML(m&&m.name||'your fellowship')+'</b>.');SFX.uiClose();});
     room.onMessage('guildInvite',m=>{if(m&&m.id)pendingGuildInvites[m.id]=Date.now();sysMsg('<b>'+escHTML(m&&m.from||'An officer')+'</b> invited you to <b>'+escHTML(m&&m.name||'a fellowship')+'</b>. Visit Lyra at the Fellowship Hall to join.');SFX.level();});
     room.onMessage('guildResult',m=>{
@@ -473,6 +1007,28 @@ function netAttachRoom(room,name,client){
       else if(m.action==='kick')sysMsg('Removed <b>'+escHTML(m.target||'hunter')+'</b> from the fellowship.');
       else if(m.action==='role')sysMsg('<b>'+escHTML(m.target||'Hunter')+'</b> is now '+escHTML(m.role||'member')+'.');
       else if(m.action==='roleChanged')sysMsg('Your fellowship role is now <b>'+escHTML(m.role||'member')+'</b>.');
+      else if(m.action==='noticePin')sysMsg('Pinned fellowship notice: <b>'+escHTML(m.title||'Shared objective')+'</b>.');
+      else if(m.action==='noticeClear')sysMsg('Cleared the pinned fellowship notice.');
+      if(guildHallOpen)openGuildHallUI();
+    });
+    room.onMessage('guildRenown',m=>{
+      applyGuildRenownToast(m);
+    });
+    room.onMessage('guildProjectResult',m=>{
+      if(!m)return;
+      sysMsg('Fellowship project complete: <b>'+escHTML(m.name||'Project')+'</b>.');
+      SFX.level();
+      if(guildHallOpen)openGuildHallUI();
+    });
+    room.onMessage('guildWeeklyRewardResult',m=>{
+      if(!m)return;
+      if(Number.isFinite(m.gold))gold=Math.max(0,m.gold|0);
+      if(m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
+      if(Array.isArray(m.items))for(const it of m.items)if(it&&ITEMS[it.id]&&(it.count|0)>0)rewardGain('item',it.count|0,ITEMS[it.id].name);
+      showName('WEEKLY CACHE CLAIMED');
+      sysMsg('<b>'+escHTML(m.name||'Fellowship reward')+'</b> claimed from the weekly Renown track.<br>'+(m.rewardGold?'<b>+'+(m.rewardGold|0)+' gold</b>':'')+(Array.isArray(m.items)&&m.items.length?'<br>'+m.items.filter(it=>it&&ITEMS[it.id]&&(it.count|0)>0).map(it=>escHTML(ITEMS[it.id].name)+' x'+(it.count|0)).join(' · '):''),{tier:'major',title:'Fellowship Cache'});
+      SFX.level();refreshHUD();
+      if(guildHallState&&guildHallState.guild&&Array.isArray(m.rewards))guildHallState.guild.weeklyRewards=m.rewards;
       if(guildHallOpen)openGuildHallUI();
     });
     room.onMessage('guildFloorResult',m=>{
@@ -482,14 +1038,16 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('guildReject',m=>{
       const r=m&&m.reason;
-       sysMsg(r==='range'?'Speak with <b>Lyra Pennant</b> at the Fellowship Hall.':r==='member'?'You already belong to a fellowship.':r==='name'?'Choose a fellowship name between <b>3 and 20 characters</b>.':r==='taken'?'That fellowship name is already registered.':r==='guild'?'Join or create a fellowship first.':r==='leader'?'Only the <b>fellowship leader</b> may do that.':r==='officer'?'Only a <b>leader or officer</b> may do that.':r==='invite'?'That fellowship is <b>invite-only</b>.':r==='target'?'That hunter is not available for this fellowship action.':r==='leader_self'?'Transfer leadership before changing your own leader role.':r==='owned'?'Your fellowship already owns a hall floor.':r==='full'?'Every Fellowship Hall floor is occupied.':r==='full_members'?'That fellowship is full.':r==='missing'?'That fellowship no longer exists.':r==='gold'?'You need <b>'+((m&&m.price)|0)+' gold</b> for the next floor.':'The Fellowship Hall could not complete that request.');
+       sysMsg(r==='range'?'Speak with <b>Lyra Pennant</b> at the Fellowship Hall.':r==='member'?'You already belong to a fellowship.':r==='name'?'Choose a fellowship name between <b>3 and 20 characters</b>.':r==='taken'?'That fellowship name is already registered.':r==='guild'?'Join or create a fellowship first.':r==='leader'?'Only the <b>fellowship leader</b> may do that.':r==='officer'?'Only a <b>leader or officer</b> may do that.':r==='invite'?'That fellowship is <b>invite-only</b>.':r==='target'?'That hunter is not available for this fellowship action.':r==='leader_self'?'Transfer leadership before changing your own leader role.':r==='owned'?'Your fellowship already owns a hall floor.':r==='full'?'Every Fellowship Hall floor is occupied.':r==='full_members'?'That fellowship is full.':r==='missing'?'That fellowship no longer exists.':r==='project'?'That fellowship project is not available.':r==='project_done'?'That fellowship project is already complete.':r==='notice'?'That fellowship notice is not available.':r==='reward_locked'?'Earn <b>'+((m&&m.threshold)|0)+' weekly Renown</b> before claiming that cache.':r==='reward_claimed'?'You already claimed that weekly fellowship reward.':r==='reward'?'That weekly fellowship reward is not available.':r==='renown'?'Your fellowship needs <b>'+((m&&m.cost)|0)+' Renown</b> for that project.':r==='gold'?'You need <b>'+((m&&m.price)|0)+' gold</b> for the next floor.':'The Fellowship Hall could not complete that request.');
     });
     room.onMessage('utilityUnlock', m=>{
       const id=String(m&&m.id||''), u=UTILITY_DEFS[id];
       if(!u) return;
+      const firstUnlock=utilityUnlocks.filter(k=>UTILITY_DEFS[k]).length===0;
       if(!utilityUnlocks.includes(id)) utilityUnlocks.push(id);
       SFX.level();
-      sysMsg('Utility unlocked: <b>'+escHTML(u.name)+'</b>'+(m&&m.equipped?' (equipped)':'')+(m&&m.reason?' - '+escHTML(m.reason):''));
+      showUtilityUnlockToast(m,u,firstUnlock);
+      sysMsg('Utility unlocked: <b>'+escHTML(u.name)+'</b>'+(m&&m.equipped?' - '+escHTML(utilitySlotUnlockLine(m,u)):'')+(m&&m.reason?' - '+escHTML(m.reason):''),'minor');
       renderUtilitiesUI();
       updateLandMinimap();
       questSystemCheck();
@@ -498,6 +1056,49 @@ function netAttachRoom(room,name,client){
       utilityLoadout=clampUtilityLoadout(m);
       renderUtilitiesUI();
       updateLandMinimap();
+    });
+    room.onMessage('utilityResult', m=>{
+      const id=String(m&&m.id||''),u=UTILITY_DEFS[id];
+      if(!u)return;
+      if(id==='trail_sense'&&m&&m.target){
+        const duration=Math.max(3000,Math.min(60000,m.durationMs|0||22000));
+        overworldActivity={...(overworldActivity||{}),trailSense:{...m.target,expiresAt:Date.now()+duration}};
+        SFX.success();
+        sysMsg('<b>Trail Sense:</b> '+escHTML(m.target.label||'Fresh tracks')+' - '+Math.max(0,m.target.distance|0)+'m.');
+        updateLandMinimap();
+      }
+    });
+    room.onMessage('utilityFeedback', m=>{
+      const id=String(m&&m.id||''),u=UTILITY_DEFS[id];
+      if(!u)return;
+      if(id==='feather_step'){
+        const dmg=Math.max(0,(m&&m.damage)|0),drop=Math.max(0,Number(m&&m.drop)||0);
+        SFX.success();
+        if(globalThis.BlockcraftUtilityFeedback&&globalThis.BlockcraftUtilityFeedback.showFeatherStepLandingFx)globalThis.BlockcraftUtilityFeedback.showFeatherStepLandingFx(m);
+        showName(dmg>0?'Feather Step softened fall':'Feather Step absorbed fall');
+        sysMsg('<b>Feather Step:</b> '+(dmg>0?'softened a '+drop.toFixed(1)+'m drop.':'absorbed a '+drop.toFixed(1)+'m drop.'));
+      }
+    });
+    room.onMessage('utilityReject', m=>{
+      const id=String(m&&m.id||''),name=UTILITY_DEFS[id]&&UTILITY_DEFS[id].name||'Utility';
+      const reason=String(m&&m.reason||'');
+      SFX.error();
+      sysMsg(reason==='cooldown'?'<b>'+escHTML(name)+'</b> recharging: '+Math.ceil(Math.max(0,m.readyInMs|0)/1000)+'s.':
+        reason==='empty'?'<b>'+escHTML(name)+'</b> finds no nearby trail.':
+        reason==='inactive'?'Set <b>'+escHTML(name)+'</b> as your active utility first.':
+        reason==='dimension'?'Use <b>'+escHTML(name)+'</b> in the overworld.':
+        '<b>'+escHTML(name)+'</b> is not ready.');
+    });
+    room.onMessage('cosmeticEquipResult', m=>{
+      equippedCosmetics=clampEquippedCosmetics(m&&m.equippedCosmetics);
+      SFX.success();
+      refreshAppearanceDummy();
+      renderCosmeticsUI();
+    });
+    room.onMessage('cosmeticReject', m=>{
+      SFX.error();
+      sysMsg((m&&m.reason)==='locked'?'That cosmetic is still locked.':'Could not equip that cosmetic.');
+      renderCosmeticsUI();
     });
     room.onMessage('skyshipSync', m=>applySkyShipSync(m));
     if(isOverworldRoom) room.send('skyshipSyncRequest', {});
@@ -543,7 +1144,7 @@ function netAttachRoom(room,name,client){
       if(dungeonLobbyOpen) closeQWin();
       NET.dgn=m.id;
       const shard=(m.shardPlus>0)?{plus:m.shardPlus, name:m.shardName||'', mods:(m.shardMods||'').split(',').filter(Boolean)}:null;
-      beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
+      beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, dungeonId:m.dungeonId||'', shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
     });
     room.onMessage('shardAttuneResult', m=>{
       const i=Math.max(0, Math.min(35, m.slot|0));
@@ -557,6 +1158,7 @@ function netAttachRoom(room,name,client){
              r==='item'?'You have no shard in that slot':'Could not attune that shard');
     });
     room.onMessage('dungeonStatus', m=>applyDungeonStatus(m));
+    room.onMessage('dungeonRoomCleared', m=>announceDungeonRoomCleared(m));
     room.onMessage('dungeonPing', m=>{if(globalThis.applyDungeonPing)globalThis.applyDungeonPing(m);});
     room.onMessage('dungeonLobby', m=>{
       dungeonLobbyState=m;
@@ -569,11 +1171,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('dungeonLobbyStart', m=>{
       if(dungeonLobbyOpen) closeQWin();
       dungeonLobbyState=null;
-      sysMsg('The party is ready. <b>The Gate opens.</b>');
+      announceDungeonLobbyStart(m);
       // Flag-on members get the gate descriptor (mode:'room') and switch into the dedicated
       // DungeonRoom; flag-off members instead receive a follow-up 'enterDungeon' (legacy in-room)
       // and just close the lobby here.
-      if(m && m.mode==='room' && globalThis.enterDungeonRoomWith) globalThis.enterDungeonRoomWith(m);
+      enterDungeonAfterCountdown(m);
     });
     room.onMessage('dungeonLobbyClosed', m=>{
       const r=m&&m.reason;
@@ -584,20 +1186,43 @@ function netAttachRoom(room,name,client){
       else if(r==='left') sysMsg('You left the <b>Gate Lobby</b>.');
     });
     room.onMessage('gateReject', m=>gateRejected(m));
+    room.onMessage('gatePrepWarning', m=>{
+      const next=m&&m.next;
+      const missing=Array.isArray(m&&m.missing)?m.missing:[];
+      const label=next&&next.label?next.label:(missing[0]&&missing[0].label)||'prep item';
+      const hint=next&&next.hint?next.hint:(missing[0]&&missing[0].hint)||'You may enter, but the gate will be safer after one more prep step.';
+      sysMsg('<b>D-rank prep check:</b> missing '+escHTML(label)+'.<br>'+escHTML(hint),{tier:'minor',title:'Gate Prep'});
+    });
     room.onMessage('dedit', m=>{ if(dim==='dungeon') netWriteEdit(m.x, m.y, m.z, m.id); });
-    room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); } });
+    room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); announceDungeonClearHandoff(m); } });
+    room.onMessage('dungeonSpirit', m=>{
+      COMPANIONS.activeFamiliar='';
+      hp=0;sp=0;renderBars();
+      if(m&&m.recentHits)showDeathScreen(deathCauseText('server:'+((m&&m.deathCause)||'combat')),'Stay as spirit for party credit, or return to town.',m.recentHits);
+      showDungeonSpirit(m);
+    });
+    room.onMessage('dungeonSpiritQuit', m=>{
+      hideDungeonSpirit();
+      if(dim==='dungeon')exitDungeon(true);
+      if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
+      hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();
+      if(m&&m.result){
+        presentMajor(()=>showDungeonReward({ result:m.result, rank:m.result.rank, kind:m.result.kind, failed:true, reason:m.result.reason||'wipe' }, false));
+        sysMsg(dungeonReturnRecap(m.result,false));
+      }
+    });
     room.onMessage('dungeonDeath', m=>{
       COMPANIONS.activeFamiliar='';
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
-      showDeathScreen('The dungeon overwhelmed you','The attempt has failed — returning to the gate');
+      showDeathScreen('The dungeon overwhelmed you','The attempt has failed - returning to the gate',m&&m.recentHits||'');
     });
     room.onMessage('deathLimboStart',m=>{
       COMPANIONS.activeFamiliar='';
       if(dim==='dungeon') exitDungeon(true);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
-      showDeathScreen('You are in limbo','Answer to recover your carried items');
+      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Answer to recover your carried items',m&&m.recentHits||'');
       renderDeathLimbo(m);
     });
     room.onMessage('deathLimboQuestion',m=>setTimeout(()=>renderDeathLimbo(m),650));
@@ -621,16 +1246,37 @@ function netAttachRoom(room,name,client){
       sysMsg('<b>'+escHTML(m&&m.by||'A hunter')+'</b> looted '+escHTML(label)+'.');
     });
     room.onMessage('deathDropExpired',m=>removeDeathDropVisual(m&&m.id));
-    room.onMessage('deathDropReject',m=>{if((m&&m.reason)==='full')sysMsg('Make inventory room before looting that death drop.');});
+    room.onMessage('deathDropReject',m=>{if((m&&m.reason)==='full')sysMsg('Bag full. Sort your bag, deposit supplies in a chest, or free one slot before looting that death drop.');});
     room.onMessage('worldDeath',m=>{
       COMPANIONS.activeFamiliar='';
-      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Returning to the Town of Beginnings');
+      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Returning to the Town of Beginnings',m&&m.recentHits||'');
     });
     room.onMessage('dungeonFailed', m=>{
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
-      sysMsg((m&&m.reason)==='solo' ? 'The solo dungeon collapses.' : 'The party wiped. The dungeon collapses.');
+      if(m&&m.result)presentMajor(()=>showDungeonReward({ result:m.result, rank:m.result.rank, kind:m.result.kind, failed:true, reason:m.result.reason||m.reason||'wipe' }, false));
+      sysMsg((m&&m.reason)==='breach' ? 'The Gate timer expired. Dungeon mobs breached into the overworld.' : (m&&m.reason)==='solo' ? 'The solo dungeon collapses.' : 'The party wiped. The dungeon collapses.');
+      if(m&&m.result)sysMsg(dungeonReturnRecap(m.result,false));
+    });
+    room.onMessage('gateBreach', m=>{
+      const rankName=RANKS[Math.max(0,Math.min(4,(m&&m.rank)|0))].n;
+      const place=Number.isFinite(m&&m.x)&&Number.isFinite(m&&m.z)?' near '+escHTML(Math.round(m.x)+', '+Math.round(m.z)):' nearby';
+      sysMsg('<b>Gate Breach Emergency.</b> '+escHTML((m&&m.bossName)||'The escaped boss')+' escaped'+place+' with '+((m&&m.count)|0)+' dungeon threat'+(((m&&m.count)|0)===1?'':'s')+'. Track it as a public cleanup bounty: reduced XP + materials, no keys. Full clear rewards only come from beating the Gate before collapse.',{tier:'major',title:rankName+'-Rank Breach'});
+      try{ SFX.boom&&SFX.boom(); }catch(e){}
+      if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)) burst(m.x,m.y+1.5,m.z,[1,.35,.18],42,4.5,4,.95);
+    });
+    room.onMessage('gateBreachCleared',m=>{
+      const pct=Math.max(0,(m&&m.cleanupRatio)|0);
+      const recap=pct?(' Cleanup paid '+pct+'% clear XP plus materials only, no keys.'):' Cleanup paid reduced XP plus materials only, no keys.';
+      sysMsg('<b>Gate breach contained.</b> '+escHTML((m&&m.bossName)||'The escaped boss')+' is down.'+recap,{tier:'major',title:'Breach Contained'});
+      if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)) burst(m.x,m.y+1.5,m.z,[1,.82,.3],36,3.2,3,.9);
+    });
+    room.onMessage('gateBreachRewardSkipped',m=>{
+      if((m&&m.reason)==='original_party') sysMsg('Cleanup reward skipped: your party opened this breach. Public cleanup bounties are for outside responders and never award keys.');
+    });
+    room.onMessage('gateBreachExpired',m=>{
+      sysMsg('<b>Gate breach lost.</b> '+escHTML((m&&m.bossName)||'The escaped boss')+' scattered into the region. A temporary Gate Scar remains at the collapse site; road safety worsened.',{tier:'major',title:'Breach Lost'});
     });
     room.onMessage('loot', m=>{
       gainXP(m.xp||0);
@@ -645,16 +1291,21 @@ function netAttachRoom(room,name,client){
       }
       presentMajor(()=>showDungeonReward(m, true));
       for(const received of gearRewards)presentGear(received);
-      sysMsg('<b>Boss defeated!</b> Party loot acquired'+(m.dia?' (diamonds!)':'')+(keyCount?' + key':''));
+      if(m.gold)sysMsg('<b>Dungeon gold:</b> '+economyRecapHTML(m.gold,gold,'Boss clear reward'),{tier:'minor',title:'Gold Reward'});
+      const triage=itemTriageSummary(m&&m.items);
+      if(triage)sysMsg('<b>Loot triage:</b> '+escHTML(triage)+'. Protected items stay out of bulk chest deposits.','minor');
+      sysMsg(dungeonReturnRecap(m&&m.result,true)||('<b>Boss defeated!</b> Party loot acquired'));
+      announceBossMastery(m);
     });
     room.onMessage('lootReject', m=>{
       presentMajor(()=>showDungeonReward(m||{}, false));
-      sysMsg('No boss loot: '+escHTML(rewardReasonText(m&&m.reason)));
+      announceDungeonMissedLoot(m);
     });
     room.onMessage('firstQuestReward', m=>applyFirstQuestRewardResult(m));
     room.onMessage('grant', m=>{
       if(m&&['discovery','bandit_rescue','caravan_recovery'].includes(m.source))OVERWORLD_RESULTS.recordGrant(m);
       if(m.xp) gainXP(m.xp);
+      const grantTriage=itemTriageSummary(m&&m.items);
       if(Array.isArray(m.items)) for(const it of m.items) if(ITEMS[it.id]){
         const received=receiveRewardItem(it);if(received)presentGear(received);
         if(received&&!ITEMS[it.id].tool)rewardGain('item',it.count||1,ITEMS[it.id].name);
@@ -676,7 +1327,7 @@ function netAttachRoom(room,name,client){
           if(quest && quest.type==='sell' && quest.item===I.MONSTER_MEAT && !questDone()) showName('Now sell the Monster Meat to Greta');
         }
       } else if(m.source==='event'){
-        sysMsg('<b>'+escHTML(m.event||'Event')+'</b> reward acquired'+(m.xp?' - <b>+'+(m.xp|0)+' Hunter XP</b>':''));
+        sysMsg('<b>'+escHTML(m.event||'Event')+'</b> reward acquired'+(m.xp?' - <b>+'+(m.xp|0)+' Hunter XP</b>':'')+(grantTriage?'<br><b>Loot triage:</b> '+escHTML(grantTriage):''));
       } else if(m.source==='mob'&&m.elite){
         sysMsg('<b>Elite defeated!</b> Ring '+((m.dangerRing|0)+1)+' treasure acquired');
       }
@@ -685,7 +1336,7 @@ function netAttachRoom(room,name,client){
       if(m&&m.name) sysMsg('Regional discovery: <b>'+escHTML(m.name)+(m.count>1?' x'+(m.count|0):'')+'</b>');
     });
     room.onMessage('discoveryResult',m=>{
-      if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired'));
+      if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired')+(m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Weather Vane.':''));
       if(m.id)claimedDiscoveryIds.add(m.id);
       if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');
       OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Job Board if your contract is ready.'});
@@ -696,25 +1347,35 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('explorationMilestone',m=>{
       if(!m)return;if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();
-      sysMsg('<b>'+escHTML(m.title||'Exploration milestone')+'</b> reached at '+(m.count|0)+' discoveries. <b>+'+(m.gold|0)+' gold</b>.');
+      sysMsg('<b>'+escHTML(m.title||'Exploration milestone')+'</b> reached at '+(m.count|0)+' discoveries.<br>'+economyRecapHTML(m.gold|0,gold,'Exploration milestone'));
       showName((m.title||'EXPLORATION MILESTONE').toUpperCase());
     });
+    room.onMessage('weatherDiscoveryMilestone',m=>{
+      if(!m)return;if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();updateLandMinimap();
+      if(m.kind==='weatherwise')sysMsg('<b>Weatherwise:</b> Weather Sense unlocked. Active spotted weather sites are now easier to track.');
+      else sysMsg('<b>First Weather Find:</b> Orin would approve.<br>'+economyRecapHTML(m.goldReward|0,gold,'Weather discovery'));
+      showName((m.title||'WEATHERWISE').toUpperCase());
+    });
     room.onMessage('cartographerIntro',()=>sysMsg('<b>Orin Mapwell:</b> I mark leads in gold, treasure in ink, and weather-sites by patience. Some discoveries only wake under the right sky.'));
-    room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);}refreshHUD();updateLandMinimap();openCartographerUI(m);});
+    room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);}refreshHUD();updateLandMinimap();if(document.querySelector('#qpanel .fellowship-map-table-marker')&&typeof openFellowshipMapTableUI==='function')openFellowshipMapTableUI(m);else openCartographerUI(m);});
     room.onMessage('cartographerHint',m=>{
       if(!m||!m.id)return;hintedDiscoveryIds.add(m.id);if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();
-      sysMsg('<b>Map lead purchased:</b> '+escHTML(m.name||'Uncharted site')+' is marked in gold on your map.');
+      sysMsg('<b>Map lead purchased:</b> '+escHTML(m.name||'Uncharted site')+' is marked in gold on your map.<br>'+economyRecapHTML(-Math.abs(m.cost|0),gold,'Cartographer hint'));
     });
     room.onMessage('cartographerReward',m=>{
       if(!m)return;if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();
-      if(m.kind==='world'&&m.cosmetic==='cartographers_mantle'&&!cosmeticUnlocks.includes('cartographers_mantle')){cosmeticUnlocks.push('cartographers_mantle');refreshAppearanceDummy();}
+      if(m.kind==='world'&&m.cosmetic==='cartographers_mantle'){
+        if(!cosmeticUnlocks.includes('cartographers_mantle'))cosmeticUnlocks.push('cartographers_mantle');
+        if(!equippedCosmetics.includes('cartographers_mantle'))equippedCosmetics.push('cartographers_mantle');
+        refreshAppearanceDummy();
+      }
       if(m.kind==='world')showName('CARTOGRAPHER\'S MANTLE UNLOCKED');else showName('+'+(m.reward|0)+' GOLD');
-      sysMsg(m.kind==='world'?'<b>World mapped!</b> Orin awards the unique Cartographer\'s Mantle.':'<b>Cartography reward:</b> +'+(m.reward|0)+' gold.');
+      sysMsg(m.kind==='world'?'<b>World mapped!</b> Orin awards the unique Cartographer\'s Mantle.':'<b>Cartography reward:</b> '+economyRecapHTML(m.reward|0,gold,'Mapwork reward')+(m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Map Table.':''));
     });
     room.onMessage('cartographerReject',m=>{const r=m&&m.reason;sysMsg(r==='range'?'Move closer to Orin Mapwell.':r==='gold'?'You need more gold for that map lead.':r==='no_hints'?'Orin has no undiscovered leads left.':r==='claimed'?'That reward is already claimed.':r==='active'?'Finish your current scouting commission first.':r==='treasure_active'?'Finish your current treasure map before taking another.':r==='complete'?'Every region is already mapped.':'That cartography reward is not ready yet.');});
-    room.onMessage('treasureMapStarted',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('TREASURE MAP STARTED');if(globalThis.BlockcraftTreasureParchment)globalThis.BlockcraftTreasureParchment(m,'NEW TREASURE MAP');sysMsg('<b>Treasure map started:</b> follow the gold mark, then press <b>G</b> at the clue site.');});
-    room.onMessage('treasureMapUpdate',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('CLUE SOLVED');sysMsg('<b>Treasure clue '+((m.stage|0)+1)+'/'+(m.total|0)+':</b> '+escHTML(m.clue||'Follow the ink.'));});
-    room.onMessage('treasureMapComplete',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=null;if(m&&Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();showName('TREASURE FOUND');sysMsg('<b>Treasure map complete!</b> +'+(m.rewardGold|0)+' gold and 2 diamonds.');});
+    room.onMessage('treasureMapStarted',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('TREASURE MAP STARTED');if(globalThis.BlockcraftTreasureParchment)globalThis.BlockcraftTreasureParchment(m,'NEW TREASURE MAP');sysMsg('<b>Treasure map started:</b> follow the gold mark, then press <b>G</b> at the clue site.'+(m&&m.mapTable?'<br><b>Map Table:</b> your fellowship has sharpened this clue.':''));});
+    room.onMessage('treasureMapUpdate',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('CLUE SOLVED');sysMsg('<b>Treasure clue '+((m.stage|0)+1)+'/'+(m.total|0)+':</b> '+escHTML(m.clue||'Follow the ink.')+(m&&m.mapTable?'<br><b>Map Table:</b> clue narrowed by your fellowship.':''));});
+    room.onMessage('treasureMapComplete',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=null;if(m&&Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();showName('TREASURE FOUND');sysMsg('<b>Treasure map complete!</b> 2 diamonds secured.<br>'+economyRecapHTML((m&&m.rewardGold)|0,gold,'Treasure cache')+(m&&m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Map Table.':''));});
     room.onMessage('treasureMapReject',m=>sysMsg(m&&m.reason==='range'?'Search closer to the marked landmark.':'You do not have an active treasure clue.'));
     room.onMessage('discoveryReject',m=>{
       const r=m&&m.reason;if(r==='weather'&&globalThis.BlockcraftExplorationFx)globalThis.BlockcraftExplorationFx.dormantWeather(m.type);
@@ -786,7 +1447,7 @@ function netAttachRoom(room,name,client){
       if(typeof (m&&m.roadWardenRep)==='number') roadWardenRep=Math.max(0,m.roadWardenRep|0);
       regionalContract=null;
       renderRegionalContractsUI();
-      sysMsg((c&&String(c.type||'').startsWith('road_')?'Road Warden':'Guild')+' contract claimed'+(c?': <b>'+escHTML(c.title)+'</b>':'')+' - <b>+'+((m&&m.rewardGold)|0)+' gold</b>');
+      sysMsg((c&&String(c.type||'').startsWith('road_')?'Road Warden':'Guild')+' contract claimed'+(c?': <b>'+escHTML(c.title)+'</b>':'')+'<br>'+economyRecapHTML((m&&m.rewardGold)|0,gold,'Contract payout'));
       if(m&&m.roadWardenMilestone)sysMsg('<b>Road Warden milestone · '+escHTML(m.roadWardenMilestone.name)+'</b> — '+escHTML(m.roadWardenMilestone.reward||''));
     });
     room.onMessage('regionalContractReject',m=>{
@@ -866,12 +1527,12 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonIncubationComplete', m=>applyDragonIncubationComplete(m));
     room.onMessage('dragonRenameResult', m=>applyDragonRenameResult(m));
     room.onMessage('dragonRenameReject', m=>dragonRenameRejected(m));
-    room.onMessage('dragonPerchAdd', m=>{ if(m) addPerchedDragon(m.key, m.x|0, m.y|0, m.z|0, m.slot|0, m.type, m.loveUntil||0); });
+    room.onMessage('dragonPerchAdd', m=>{ if(m) addPerchedDragon(m.key, m.x|0, m.y|0, m.z|0, m.slot|0, m.type, m.gender, m.loveUntil||0); });
     room.onMessage('dragonPerchRemove', m=>{ if(m) removePerchedDragon(m.key); });
     room.onMessage('dragonPerchLove', m=>{ const e=m&&perchedDragons[m.key]; if(e){ e.loveUntil=m.loveUntil||0; sysMsg('The <b>'+(DRAGON_TYPES[e.type]||{}).name+'</b> is smitten ❤'); } });
     room.onMessage('dragonPerchBreed', m=>{ if(m) dragonBreedFx(m.x|0, m.y|0, m.z|0, m.offspring); });
     room.onMessage('perchReject', m=>perchRejected(m));
-    room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; const i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); });
+    room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; let i=Math.max(0,Math.min(35,(m&&m.slot)|0)); if(!(m&&m.slot>=0&&inv[i]&&inv[i].id===sig))i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); });
     room.onMessage('familiarBond', m=>COMPANIONS.applyFamiliarBond(m));
     room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]) COMPANIONS.activeFamiliar=m.kind; });
     room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; });
@@ -930,8 +1591,19 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonAbilityReject', m=>dragonAbilityRejected(m));
     room.onMessage('dragonAbilityResult', m=>dragonAbilityResolved(m));
     room.onMessage('dragonCare', m=>applyDragonCare(m));
+    room.onMessage('dragonBond', m=>applyDragonBond(m));
     room.onMessage('feedDragonResult', m=>applyFeedDragonResult(m));
     room.onMessage('feedDragonReject', m=>feedDragonRejected(m));
+    room.onMessage('dragonSpecializationResult', m=>applyDragonSpecializationResult(m));
+    room.onMessage('dragonSpecializationReject', m=>dragonSpecializationRejected(m));
+    room.onMessage('dragonRoleResult', m=>applyDragonRoleResult(m));
+    room.onMessage('dragonRoleReject', m=>dragonRoleRejected(m));
+    room.onMessage('dragonRecallResult', m=>applyDragonRecallResult(m));
+    room.onMessage('dragonRecallReject', m=>dragonRecallRejected(m));
+    room.onMessage('dragonTrainingUpdate', m=>applyDragonTrainingUpdate(m));
+    room.onMessage('dragonTrainingComplete', m=>applyDragonTrainingComplete(m));
+    room.onMessage('dragonTrainingCancel', m=>{ if(COMPANIONS.clearDragonTraining) COMPANIONS.clearDragonTraining(m); sysMsg('Dragon training '+(((m&&m.reason)||'cancelled'))+'.'); });
+    room.onMessage('dragonTrainingReject', m=>dragonTrainingRejected(m));
     room.onMessage('editReject', m=>netEditReject(m));
     room.onMessage('craftResult', m=>applyServerCraft(m));
     room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='profession'?'Equip <b>'+((JOBS[m.job]&&JOBS[m.job].name)||'Cook')+'</b> and reach Lv '+(m.level||1)+' for that recipe':'Crafting failed: missing server-side ingredients'); });
@@ -945,6 +1617,12 @@ function netAttachRoom(room,name,client){
     room.onMessage('landClaimUpdate', m=>applyLandClaimUpdate(m));
     room.onMessage('landClaimResult', m=>applyLandClaimResult(m));
     room.onMessage('landClaimReject', m=>landClaimRejected(m));
+    room.onMessage('landClaimRefresh', m=>applyLandClaimRefresh(m));
+    room.onMessage('landClaimRenameResult', m=>applyLandClaimRenameResult(m));
+    room.onMessage('landClaimRenameReject', m=>landClaimRenameRejected(m));
+    room.onMessage('landClaimTrustResult', m=>applyLandClaimTrustResult(m));
+    room.onMessage('landClaimTrustNotice', m=>applyLandClaimTrustNotice(m));
+    room.onMessage('landClaimTrustReject', m=>landClaimTrustRejected(m));
     room.onMessage('farmResult', m=>applyFarmResult(m));
     room.onMessage('farmReject', m=>farmRejected(m));
     room.onMessage('foodResult', m=>applyFoodResult(m));
@@ -956,7 +1634,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('meditateFocus', m=>{
       const secs=Math.max(1,Math.round(((m&&m.durationMs)||0)/1000));
       if(m&&m.regen)buffs.regen=Math.max(buffs.regen,secs);if(m&&m.speed)buffs.spd=Math.max(buffs.spd,secs);if(m&&m.stone)buffs.stone=Math.max(buffs.stone,secs);
-      showJobPerk('monk',m&&m.shared?'shared focus':'shrine focus');
+      const focusNames=[m&&m.regen?'Restoration':'',m&&m.speed?'Flow':'',m&&m.stone?'Stone':''].filter(Boolean);
+      const focusText=(m&&m.shared?'party focus':'shrine focus')+(focusNames.length?': '+focusNames.join(' + '):'');
+      showJobPerk('monk',focusText+' '+secs+'s');
       if(m&&m.shared)sysMsg('<b>'+escHTML(m.by||'A monk')+'</b> shares tranquillity: '+[m.regen?'Restoration':'',m.speed?'Flow':'',m.stone?'Stone':''].filter(Boolean).join(', ')+' for '+secs+' sec.');
     });
     room.onMessage('prospectResult',m=>showProspectMarkers(m));
@@ -976,12 +1656,39 @@ function netAttachRoom(room,name,client){
     room.onMessage('gateKeyReject', m=>gateKeyRejected(m));
     room.onMessage('chestState', m=>applyChestState(m));
     room.onMessage('chestTx', m=>applyChestTx(m));
-    room.onMessage('chestReject', ()=>{ SFX.error(); sysMsg('Chest transaction failed'); });
+    room.onMessage('chestBatchResult', m=>applyChestBatchResult(m));
+    room.onMessage('chestModeResult', m=>{ SFX.success(); sysMsg(m&&m.supply?'Chest marked as Homestead Supply. Trusted helpers can deposit; only you can withdraw.':'Chest returned to Personal mode.'); });
+    room.onMessage('chestReject', m=>{
+      const reason=m&&m.reason;
+      const text=({
+        near:'Stand closer to the chest.',
+        locked:'That chest is locked.',
+        supply_trust:'You are not trusted on this Homestead.',
+        supply_owner:'Only the owner can withdraw from Homestead Supply.',
+        owner:'Only the chest owner can do that.',
+        full:'That chest has no room for those items.',
+        no_matching:'No backpack stacks match items already in that chest.',
+        no_materials:'No deposit-safe materials found in your backpack.',
+        empty:'That chest slot is empty.',
+        rate:'Slow down a moment before using that chest again.',
+        supply_overworld:'Homestead Supply only works in the overworld.',
+        supply_personal:'Only personal chests can become Homestead Supply.',
+        supply_toggle_owner:'Only the chest owner can mark Homestead Supply.',
+        supply_claim:'Place the chest inside land you own before marking Supply.',
+        supply_active:'Refresh or reclaim this land before using Supply mode.',
+        supply_homestead:'Supply mode unlocks inside a connected 3-claim Homestead.',
+      })[reason]||'Chest transaction failed.';
+      SFX.error();sysMsg(text);
+    });
     room.onMessage('furnaceState', m=>applyFurnaceState(m));
     room.onMessage('furnaceStarted', m=>applyFurnaceStarted(m));
     room.onMessage('furnaceResult', m=>applyFurnaceResult(m));
     room.onMessage('furnaceReject', ()=>{ SFX.error(); sysMsg('Furnace transaction failed'); });
-    room.onMessage('fx', m=>{COMBAT_FEEDBACK.showTelegraph(m);netFx(m);});
+    room.onMessage('fx', m=>{
+      if(m && (m.t==='dragonGuard'||m.t==='dragonRest'||m.t==='dragonRecall') && COMPANIONS.noteDragonRoleEvent) COMPANIONS.noteDragonRoleEvent(m.t==='dragonRest'?{...m,role:'rest'}:(m.t==='dragonRecall'?{...m,role:'recall'}:m));
+      if(m && m.t==='dragonGuard' && m.role==='stay') updateLandMinimap();
+      COMBAT_FEEDBACK.showTelegraph(m);netFx(m);
+    });
     room.onMessage('dmgnum', m=>{COMBAT_FEEDBACK.confirmHit(m);camShake=Math.max(camShake,m&&m.crit?.16:.08);spawnDamageNumber(m);});
     room.onMessage('weaponIdentity',m=>{
       if(!m)return;
@@ -1031,7 +1738,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('teamInvite', m=>{
       if(m&&m.id) pendingTeamInvites[m.id]=Date.now();
       sysMsg('<b>'+escHTML(m&&m.from||'A team leader')+'</b> invited you to <b>'+escHTML(m&&m.name||'a team')+'</b>. Open Teams (T) to join.');
-      chatLine('[Team]', 'Invite received: /team join '+((m&&m.id)||'team'));
+      chatLine('[Team]', 'Invite received. Open Teams (T) to join '+((m&&m.name)||'the team')+'.');
       SFX.level();
     });
     room.onMessage('teamLeft', m=>{
@@ -1125,6 +1832,24 @@ function netRestoreProfile(m){
         COMPANIONS.dragonCare[t]={happiness:Math.max(0,Math.min(100,(m.dragonCare[t].happiness==null?50:m.dragonCare[t].happiness)|0)), fedAt:m.dragonCare[t].fedAt||0};
       }
     }
+    COMPANIONS.dragonBondXp={};
+    if(m.dragonBondXp && typeof m.dragonBondXp==='object'){
+      for(const t in m.dragonBondXp) if(DRAGON_TYPES[t]) COMPANIONS.dragonBondXp[t]=Math.max(0,m.dragonBondXp[t]|0);
+    }
+    for(const t of COMPANIONS.dragonUnlocks) if(COMPANIONS.dragonBondXp[t]==null) COMPANIONS.dragonBondXp[t]=0;
+    COMPANIONS.dragonRoleMastery={};
+    if(m.dragonRoleMastery && typeof m.dragonRoleMastery==='object'){
+      for(const t in m.dragonRoleMastery) if(DRAGON_TYPES[t]){
+        const src=m.dragonRoleMastery[t]&&typeof m.dragonRoleMastery[t]==='object'?m.dragonRoleMastery[t]:{};
+        COMPANIONS.dragonRoleMastery[t]={follow:Math.max(0,src.follow|0),guard:Math.max(0,src.guard|0),stay:Math.max(0,src.stay|0),rest:Math.max(0,src.rest|0)};
+      }
+    }
+    for(const t of COMPANIONS.dragonUnlocks) if(!COMPANIONS.dragonRoleMastery[t]) COMPANIONS.dragonRoleMastery[t]={follow:0,guard:0,stay:0,rest:0};
+    COMPANIONS.dragonSpecializations={};
+    if(m.dragonSpecializations && typeof m.dragonSpecializations==='object'){
+      for(const t in m.dragonSpecializations) if(DRAGON_TYPES[t]&&['scout','defender','sage'].includes(m.dragonSpecializations[t])) COMPANIONS.dragonSpecializations[t]=m.dragonSpecializations[t];
+    }
+    COMPANIONS.dragonChallenges=m.dragonChallenges&&typeof m.dragonChallenges==='object'?m.dragonChallenges:{};
     COMPANIONS.dragonNames={};
     if(m.dragonNames && typeof m.dragonNames==='object'){
       for(const t in m.dragonNames) if(DRAGON_TYPES[t]){
@@ -1132,17 +1857,50 @@ function netRestoreProfile(m){
         if(n) COMPANIONS.dragonNames[t]=n;
       }
     }
+    COMPANIONS.dragonGenders={};
+    if(m.dragonGenders && typeof m.dragonGenders==='object'){
+      for(const t in m.dragonGenders) if(DRAGON_TYPES[t]&&(m.dragonGenders[t]==='male'||m.dragonGenders[t]==='female')) COMPANIONS.dragonGenders[t]=m.dragonGenders[t];
+    }
+    for(const t of COMPANIONS.dragonUnlocks) if(!COMPANIONS.dragonGenders[t]) COMPANIONS.dragonGenders[t]=['ember','frost','void'].includes(t)?'male':'female';
+    COMPANIONS.dragonPersonalities={};
+    if(m.dragonPersonalities && typeof m.dragonPersonalities==='object'){
+      for(const t in m.dragonPersonalities) if(DRAGON_TYPES[t]&&['bold','gentle','proud','playful','skittish','hungry'].includes(m.dragonPersonalities[t])) COMPANIONS.dragonPersonalities[t]=m.dragonPersonalities[t];
+    }
+    for(const t of COMPANIONS.dragonUnlocks) if(!COMPANIONS.dragonPersonalities[t]) COMPANIONS.dragonPersonalities[t]=COMPANIONS.dragonPersonality?COMPANIONS.dragonPersonality(t):'bold';
+    COMPANIONS.dragonRoles={};
+    if(m.dragonRoles && typeof m.dragonRoles==='object'){
+      for(const t in m.dragonRoles) if(DRAGON_TYPES[t]&&['follow','stay','guard','rest'].includes(m.dragonRoles[t])) COMPANIONS.dragonRoles[t]=m.dragonRoles[t];
+    }
+    for(const t of COMPANIONS.dragonUnlocks) if(!COMPANIONS.dragonRoles[t]) COMPANIONS.dragonRoles[t]='follow';
+    COMPANIONS.dragonStaySpots={};
+    if(m.dragonStaySpots && typeof m.dragonStaySpots==='object'){
+      for(const t in m.dragonStaySpots) if(DRAGON_TYPES[t]){
+        const s=m.dragonStaySpots[t], x=Number(s&&s.x), y=Number(s&&s.y), z=Number(s&&s.z), yaw=Number(s&&s.yaw||0);
+        if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)) COMPANIONS.dragonStaySpots[t]={x,y,z,yaw:Number.isFinite(yaw)?yaw:0};
+      }
+    }
+    COMPANIONS.dragonHatchedAt={};
+    if(m.dragonHatchedAt && typeof m.dragonHatchedAt==='object'){
+      for(const t in m.dragonHatchedAt) if(DRAGON_TYPES[t]){
+        const at=Number(m.dragonHatchedAt[t]||0);
+        COMPANIONS.dragonHatchedAt[t]=Number.isFinite(at)&&at>0?at:0;
+      }
+    }
+    for(const t of COMPANIONS.dragonUnlocks) if(COMPANIONS.dragonHatchedAt[t]==null) COMPANIONS.dragonHatchedAt[t]=0;
     playerJob=m.job&&m.job!=='adventurer'&&JOBS[m.job]?m.job:'';
     for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(m.jobXpByJob&&m.jobXpByJob[id])|0);
     if(!m.jobXpByJob)jobXpByJob[playerJob||'adventurer']=Math.max(0,m.jobXp|0);
     jobXp=jobXpFor(playerJob||'adventurer');
     jobContract=clampJobContract(m.jobContract);
+    homesteadWorkOrder=clampHomesteadWorkOrder(m.homesteadWorkOrder);
     jobContractOffers=Array.isArray(m.jobContractOffers)?m.jobContractOffers.map(clampJobContract).filter(Boolean):[];
     jobContractOffersJob=String(m.jobContractOfferJob||'');
     jobContractRefreshAt=Math.max(0,Number(m.jobContractOffersAt)||0)+JOB_SYSTEM.OFFER_REFRESH_MS;
     progressionFocus=PROGRESSION_FOCUS_STATES.includes(m.progressionFocus)?m.progressionFocus:'';
+    setActiveObjectives(m.activeObjectives,{announce:false});
     ONBOARD.setSeen(m.firstPromotionSeen===true);
     applyServerNpcQuestChains(m.npcQuestChains);
+    setQuestHistoryFromServer(m.questHistory);
     systemIntroductions=Array.isArray(m.systemIntroductions)?m.systemIntroductions.filter(v=>typeof v==='string').slice(0,32):[];
     if(!quest||quest.source!=='guardian')quest=m.activeNpcQuest||null;
     if(m.aegisTrialReady&&!quest)quest={source:'guardian',type:'pvp_bounty',have:1,need:1,giver:'Aegis Guardian',role:'guardian',title:'Silent Bounty',gold:135+(S.lvl||1)*8,xp:130+(S.lvl||1)*12};
@@ -1161,6 +1919,7 @@ function netRestoreProfile(m){
     claimedDiscoveryIds.clear();if(Array.isArray(m.claimedDiscoveries))for(const id of m.claimedDiscoveries)if(typeof id==='string')claimedDiscoveryIds.add(id);
     hintedDiscoveryIds.clear();if(Array.isArray(m.cartographerHints))for(const id of m.cartographerHints)if(typeof id==='string')hintedDiscoveryIds.add(id);
     cosmeticUnlocks=Array.isArray(m.cosmeticUnlocks)?m.cosmeticUnlocks.filter(v=>v==='cartographers_mantle'):[];
+    equippedCosmetics=clampEquippedCosmetics(m.equippedCosmetics);
     globalThis.BlockcraftTreasureMap=null;if(m.treasureMap&&Array.isArray(m.treasureMap.targets)){const stage=Math.max(0,m.treasureMap.stage|0),targetId=m.treasureMap.targets[stage];if(targetId){globalThis.BlockcraftTreasureMap={id:m.treasureMap.id,stage,total:m.treasureMap.targets.length,targetId,clue:'Follow the current ink mark and investigate with G.',rewardGold:m.treasureMap.rewardGold|0};hintedDiscoveryIds.add(targetId);}}
     if(Array.isArray(m.pos) && !onboardingActive){
       player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2]);
@@ -1236,33 +1995,195 @@ function dragonAbilityRejected(m){
 function dragonAbilityResolved(m){
   if(m && typeof m.cd==='number') COMPANIONS.dragonAbilityReadyAt=performance.now()+Math.max(0,m.cd)*1000;
   if(m && m.type && typeof m.happiness==='number') setDragonCare(m.type, m.happiness, Date.now());
+  if(m && m.type && COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Mounted ability used',(m.bondGained?('Bond +'+(m.bondGained|0)):'Cooldown '+Math.ceil((m.cd||0))+'s'));
+  applyDragonBondXpUpdate(m, 'ability');
 }
 function applyDragonCare(m){
   if(!m || !DRAGON_TYPES[m.type]) return;
+  if(typeof m.slot==='number'){
+    const slot=Math.max(0,Math.min(35,m.slot|0));
+    if(inv[slot] && inv[slot].id===I.DRAGON_TREAT){ inv[slot].count--; if(inv[slot].count<=0) inv[slot]=null; }
+  }
   setDragonCare(m.type, m.happiness, m.fedAt||Date.now());
+  if(m.roleMastery && COMPANIONS.applyDragonRoleMasteryUpdate) COMPANIONS.applyDragonRoleMasteryUpdate({type:m.type,...m.roleMastery});
+  if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type, m.rest?'rest':'happy');
+  if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,m.rest?'Rest recovered happiness':'Care updated','Happiness '+dragonHappiness(m.type)+'/100');
+  applyDragonBondXpUpdate(m, 'care');
+}
+function applyDragonBondXpUpdate(m, reason){
+  if(!m || !DRAGON_TYPES[m.type]) return;
+  if(m.roleMastery && COMPANIONS.applyDragonRoleMasteryUpdate) COMPANIONS.applyDragonRoleMasteryUpdate({type:m.type,...m.roleMastery});
+  if(typeof m.bondXp!=='number') return;
+  const before=COMPANIONS.dragonBondLevel ? COMPANIONS.dragonBondLevel(m.type) : 1;
+  COMPANIONS.dragonBondXp[m.type]=Math.max(0,m.bondXp|0);
+  if(m.dragonChallenge && typeof m.dragonChallenge==='object') applyDragonChallengeUpdate(m.dragonChallenge, m.type);
+  const after=COMPANIONS.dragonBondLevel ? COMPANIONS.dragonBondLevel(m.type) : (m.bondLevel||before);
+  if(after>before){
+    const reward=COMPANIONS.dragonBondMilestone ? COMPANIONS.dragonBondMilestone(after) : null;
+    const title=reward&&reward.title ? reward.title : 'Bond Lv '+after;
+    if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Bond milestone reached','Lv '+after+' - '+title);
+    showName((DRAGON_TYPES[m.type]||{}).name+' '+title);
+    sysMsg('<b>'+DRAGON_TYPES[m.type].name+'</b> reached <b>Bond Lv '+after+'</b>: '+escHTML(reward&&reward.reward ? reward.reward : 'new bond reward unlocked.'));
+  } else if((m.bondGained|0)>0 && COMPANIONS.addDragonActivity){
+    const label=reason==='follow'?'Follow travel bond':reason==='guard'?'Guard bond':reason==='stay'?'Stay post bond':reason==='rest'?'Rest bond':reason==='ability'?'Ability bond':'Bond gained';
+    COMPANIONS.addDragonActivity(m.type,label,'+'+(m.bondGained|0)+' bond XP');
+  }
+}
+function applyDragonChallengeUpdate(challenge, type){
+  if(!challenge || typeof challenge!=='object') return;
+  COMPANIONS.dragonChallenges=challenge;
+  if(challenge.justCompleted){
+    const name=DRAGON_TYPES[type] ? DRAGON_TYPES[type].name : 'Dragon';
+    if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(type,'Daily challenge completed',(challenge.title||challenge.id||'Challenge')+' +' + (((challenge.reward|0)||0)) + ' XP');
+    showName('Daily dragon bond complete');
+    sysMsg('<b>Daily dragon bond complete:</b> '+escHTML(challenge.title||challenge.id||'Challenge')+' - <b>+'+((challenge.reward|0)||0)+' bond XP</b> for '+escHTML(name)+'.');
+  }
+}
+function applyDragonBond(m){
+  if(!m || !DRAGON_TYPES[m.type]) return;
+  applyDragonBondXpUpdate(m, m.reason||'bond');
+  if(COMPANIONS.noteDragonRoleEvent && m.reason==='follow') COMPANIONS.noteDragonRoleEvent({type:m.type,role:'follow'});
+  refreshHUD(); if(uiOpen) renderUI();
+  if(m.reason==='follow' && m.bondGained) showName((DRAGON_TYPES[m.type]||{}).name+' bond +'+(m.bondGained|0));
 }
 function applyFeedDragonResult(m){
   if(!m || !DRAGON_TYPES[m.type]) return;
   const slot=Math.max(0,Math.min(35,m.slot|0));
   if(inv[slot] && inv[slot].id===I.DRAGON_TREAT){ inv[slot].count--; if(inv[slot].count<=0) inv[slot]=null; }
   setDragonCare(m.type, m.happiness, m.fedAt||Date.now());
+  if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,'happy');
+  applyDragonBondXpUpdate(m, 'care');
+  if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,m.careOnly?'Care treat used':'Fed mounted dragon','Happiness '+dragonHappiness(m.type)+'/100');
   refreshHUD(); if(uiOpen) renderUI();
-  sysMsg('You feed your <b>'+DRAGON_TYPES[m.type].name+'</b>. Happiness: <b>'+dragonHappiness(m.type)+'</b>');
+  const bond=m.bondGained?(' Bond +<b>'+m.bondGained+'</b>.'):'';
+  sysMsg('You '+(m.careOnly?'care for':'feed')+' your <b>'+DRAGON_TYPES[m.type].name+'</b>. Happiness: <b>'+dragonHappiness(m.type)+'</b>.'+bond);
+}
+function applyDragonSpecializationResult(m){
+  if(!m || !DRAGON_TYPES[m.type] || !['scout','defender','sage'].includes(m.specialization)) return;
+  COMPANIONS.dragonSpecializations[m.type]=m.specialization;
+  const title=COMPANIONS.dragonSpecializationName ? COMPANIONS.dragonSpecializationName(m.specialization) : m.specialization;
+  const desc=COMPANIONS.dragonSpecializationText ? COMPANIONS.dragonSpecializationText(m.specialization) : 'Specialization active.';
+  if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Specialization chosen',title);
+  if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,'happy');
+  if(mounted && mountKind==='dragon:'+m.type) applyMount('dragon:'+m.type);
+  showName((DRAGON_TYPES[m.type]||{}).name+' '+title);
+  sysMsg('<b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b> specialized as <b>'+escHTML(title)+'</b>. '+escHTML(desc));
+  refreshHUD(); if(uiOpen) renderUI();
+  if(qOpen && typeof openDragonProgressionUI==='function') openDragonProgressionUI();
+}
+function applyDragonRoleResult(m){
+  if(!m || !DRAGON_TYPES[m.type] || !['follow','stay','guard','rest'].includes(m.role)) return;
+  COMPANIONS.dragonRoles[m.type]=m.role;
+  const clearedStayPost=!!(m.clearStaySpot && m.role==='stay' && !m.staySpot);
+  if(m.role==='stay'&&m.staySpot){
+    const s=m.staySpot, x=Number(s.x), y=Number(s.y), z=Number(s.z), yaw=Number(s.yaw||0);
+    if(Number.isFinite(x)&&Number.isFinite(y)&&Number.isFinite(z)) COMPANIONS.dragonStaySpots[m.type]={x,y,z,yaw:Number.isFinite(yaw)?yaw:0};
+  } else if(m.clearStaySpot && COMPANIONS.dragonStaySpots){
+    delete COMPANIONS.dragonStaySpots[m.type];
+  }
+  refreshHUD(); if(uiOpen) renderUI();
+  updateLandMinimap();
+  const label=COMPANIONS.dragonRoleLabel?COMPANIONS.dragonRoleLabel(m.type):(m.role.charAt(0).toUpperCase()+m.role.slice(1));
+  const detail=clearedStayPost?'Post cleared':(m.role==='stay'&&m.staySpot?'Post saved at '+Math.round(m.staySpot.x)+', '+Math.round(m.staySpot.z):(m.clearStaySpot?'Command accepted; post cleared':'Command accepted'));
+  const fxSpot=m.staySpot||null;
+  dragonCommandFx({kind:m.type,role:m.role,clearStaySpot:m.clearStaySpot&&!m.staySpot,x:fxSpot?fxSpot.x:player.pos.x,y:fxSpot?fxSpot.y:player.pos.y,z:fxSpot?fxSpot.z:player.pos.z});
+  if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,m.role==='rest'?'rest':(m.role==='guard'?'guard':'happy'));
+  if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,clearedStayPost?'Stay post cleared':'Role set to '+label,detail);
+  sysMsg(clearedStayPost?'<b>'+DRAGON_TYPES[m.type].name+'</b> stay post cleared.':'<b>'+DRAGON_TYPES[m.type].name+'</b> role set to <b>'+label+'</b>.');
+}
+function applyDragonRecallResult(m){
+  if(!m || !DRAGON_TYPES[m.type]) return;
+  if(m.role && COMPANIONS.dragonRoles) COMPANIONS.dragonRoles[m.type]=m.role;
+  if(m.clearedStaySpot && COMPANIONS.dragonStaySpots) delete COMPANIONS.dragonStaySpots[m.type];
+  refreshHUD(); if(uiOpen) renderUI();
+  updateLandMinimap();
+  dragonCommandFx({kind:m.type,role:'recall',x:Number.isFinite(+m.x)?+m.x:player.pos.x,y:Number.isFinite(+m.y)?+m.y:player.pos.y,z:Number.isFinite(+m.z)?+m.z:player.pos.z,clearStaySpot:!!m.clearedStaySpot});
+  if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,'happy');
+  if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Dragon recalled',m.clearedStaySpot?'Stay post cleared':'Whistled to your side');
+  sysMsg('<b>'+DRAGON_TYPES[m.type].name+'</b> recalled.'+(m.clearedStaySpot?' Stay post cleared.':''));
+}
+function dragonRecallRejected(m){
+  SFX.error();
+  const r=(m&&m.reason)||'invalid';
+  if(r==='stay') sysMsg('That dragon is holding a stay post. Use <b>Recall</b> from the dragon wheel to clear the post and call it.');
+  else if(r==='young') sysMsg('Young dragons need to grow before recall.');
+  else if(r==='overworld') sysMsg('Dragons can only be recalled in the overworld.');
+  else if(r==='nested') sysMsg('That dragon is nesting. Recall it from the nest first.');
+  else if(r==='unowned') sysMsg('That dragon is not bonded to you.');
+  else sysMsg('Could not recall that dragon.');
+}
+function applyDragonTrainingUpdate(m){
+  if(!m || !DRAGON_TYPES[m.type]) return;
+  if(COMPANIONS.applyDragonTrainingUpdate) COMPANIONS.applyDragonTrainingUpdate(m);
+  if(m.started) showName((m.title||'Dragon Drill')+' started');
+  if(qOpen && typeof openDragonInteractUI==='function') openDragonInteractUI(m.type);
+}
+function applyDragonTrainingComplete(m){
+  if(!m || !DRAGON_TYPES[m.type]) return;
+  if(COMPANIONS.applyDragonTrainingComplete) COMPANIONS.applyDragonTrainingComplete(m);
+  applyDragonBondXpUpdate(m, m.role||'training');
+  if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,m.role==='rest'?'rest':(m.role==='guard'?'guard':'happy'));
+  showName((m.title||'Dragon Drill')+' complete');
+  const masteryTitle=COMPANIONS.dragonRoleMasteryTitle ? COMPANIONS.dragonRoleMasteryTitle(m.type,m.role) : '';
+  sysMsg('<b>'+escHTML(m.title||'Dragon training')+'</b> complete. Mastery improved for <b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b>'+(masteryTitle?' - <b>'+escHTML(masteryTitle)+'</b>.':'.'));
+  if(qOpen && typeof openDragonInteractUI==='function') openDragonInteractUI(m.type);
+}
+function dragonRoleRejected(m){
+  SFX.error();
+  const r=(m&&m.reason)||'invalid';
+  if(r==='young') sysMsg('Young dragons need to grow before that command.');
+  else if(r==='overworld') sysMsg('Stay spots can only be set in the overworld.');
+  else if(r==='unowned') sysMsg('That dragon is not bonded to you.');
+  else sysMsg('Could not command that dragon.');
+}
+function dragonTrainingRejected(m){
+  SFX.error();
+  const r=(m&&m.reason)||'invalid';
+  if(r==='young') sysMsg('Young dragons need to grow before training.');
+  else if(r==='overworld') sysMsg('Dragon drills must be done in the overworld.');
+  else if(r==='post') sysMsg('Set a <b>Stay post</b> before running a Stay drill.');
+  else if(r==='nested') sysMsg('Nested dragons cannot train right now.');
+  else if(r==='unowned') sysMsg('That dragon is not bonded to you.');
+  else sysMsg('Could not start dragon training.');
+}
+function dragonSpecializationRejected(m){
+  SFX.error();
+  const r=(m&&m.reason)||'invalid';
+  if(r==='bond') sysMsg('Dragon specializations unlock at <b>Bond Lv 4</b>.');
+  else if(r==='young') sysMsg('Young dragons need to grow before specializing.');
+  else if(r==='chosen') sysMsg('That dragon already has a specialization.');
+  else if(r==='unowned') sysMsg('That dragon is not bonded to you.');
+  else sysMsg('Could not choose that dragon specialization.');
 }
 function feedDragonRejected(m){
   SFX.error();
   const r=(m&&m.reason)||'invalid';
-  if(r==='treat') sysMsg('Hold a <b>Dragon Treat</b> to feed your dragon');
-  else if(r==='mount') sysMsg('Mount a <b>dragon</b> before feeding it');
-  else sysMsg('Could not feed that dragon');
+  if(r==='treat') sysMsg('Select a <b>Dragon Treat</b> first');
+  else if(r==='mount') sysMsg('Mount a <b>dragon</b>, or stand near one and use care');
+  else if(r==='unowned') sysMsg('That dragon is not bonded to you');
+  else sysMsg('Could not care for that dragon');
 }
 function applyLandClaimResult(m){
   if(!m) return;
   if(typeof m.gold==='number') gold=Math.max(0,m.gold|0);
   SFX.coin();
-  sysMsg('Purchased land at <b>'+((m.x|0))+', '+((m.z|0))+'</b> for <b>'+(m.price|0)+' gold</b>');
+  const discount=(m&&m.discount)|0;
+  sysMsg((m.takeover?'Reclaimed abandoned land':'Purchased land')+' at <b>'+((m.x|0))+', '+((m.z|0))+'</b>.<br>'+economyRecapHTML(-(m.price|0),gold,(discount>0?discount+'g expansion discount':'Protected claim purchased')));
+  if(worldApi.spotlightLandClaim) worldApi.spotlightLandClaim(m.x|0,m.z|0);
+  eventLog('Claim protected: you and trusted hunters can build here. Others need permission; wilderness outside remains editable.','[Land]');
   clearTownTutorialStep('land');
   updateClaimHud();
+}
+function landClaimRefreshDuration(ms){
+  const days=Math.max(1,Math.round((ms||0)/(24*60*60*1000)));
+  return days+' day'+(days===1?'':'s');
+}
+function applyLandClaimRefresh(m){
+  if(!m) return;
+  const count=Math.max(1,(m.groupSize|0)||1);
+  const place=escHTML((m.title&&String(m.title).trim())||((m.ownerName||'Your')+'\'s '+(count>=3?'homestead':'land')));
+  sysMsg('<b>'+place+' refreshed.</b><br>Protection active for '+landClaimRefreshDuration(m.activeMs)+'.',{tier:'minor',title:count>=3?'Homestead Refreshed':'Claim Refreshed'});
+  eventLog('Claim upkeep refreshed at '+((m.x|0))+', '+((m.z|0))+'.','[Land]');
 }
 function landClaimRejected(m){
   SFX.error();
@@ -1270,7 +2191,10 @@ function landClaimRejected(m){
   if(r==='border') sysMsg('The <b>world border</b> cannot be claimed');
   else if(r==='town') sysMsg('The <b>Town of Beginnings</b> cannot be claimed');
   else if(r==='owned') sysMsg('That land is already claimed');
-  else if(r==='gold') sysMsg('Not enough <b>gold</b> for this claim');
+  else if(r==='gold'){
+    const price=(m&&m.price)||landPrice(claimHover&&claimHover.x||0,claimHover&&claimHover.z||0);
+    sysMsg('Not enough <b>gold</b>: need '+price+', have '+gold+'. Earn gold from quests, hunting, contracts, or selling spare materials.');
+  }
   else if(r==='range') sysMsg('Move closer before claiming that land');
   else sysMsg('Land claim failed');
   const detail=r==='town'?'Town tiles are protected — choose a tile marked Available.':
@@ -1279,6 +2203,51 @@ function landClaimRejected(m){
     r==='range'?'That tile is too far from your character — choose a closer Available tile.':'Land purchase rejected: '+r+'.';
   eventLog(detail,'[Land]');
   updateClaimHud();
+}
+function applyLandClaimTrustResult(m){
+  if(!m) return;
+  SFX.success();
+  const name=escHTML(m.targetName||'Hunter');
+  const count=Math.max(1,(m.count|0)||1);
+  const scope=m.applyGroup&&count>=3?'homestead':m.applyGroup?count+' tiles':'land';
+  sysMsg((m.trust===false?'Removed <b>'+name+'</b> from':'Trusted <b>'+name+'</b> on')+' '+scope+' <b>'+((m.x|0))+', '+((m.z|0))+'</b>');
+  if(qOpen && qpanelEl && qpanelEl.querySelector('.land-claim-manager') && typeof openLandClaimsUI==='function') openLandClaimsUI(m.x|0,m.z|0);
+}
+function applyLandClaimTrustNotice(m){
+  if(!m) return;
+  const count=Math.max(1,(m.count|0)||1);
+  const fallback=(m.ownerName||'A hunter')+'\'s '+(m.applyGroup&&count>=3?'homestead':'land');
+  const place=escHTML((m.title&&String(m.title).trim())||fallback);
+  if(m.trust===false) sysMsg('Your build access was removed from <b>'+place+'</b>.');
+  else sysMsg('<b>'+escHTML(m.ownerName||'A hunter')+'</b> trusted you to build on <b>'+place+'</b>.');
+  updateClaimHud();
+}
+function applyLandClaimRenameResult(m){
+  if(!m) return;
+  SFX.success();
+  const title=String(m.title||'').trim();
+  const count=Math.max(1,(m.count|0)||1), scope=count>1?count+' tiles':'land';
+  sysMsg(title?'Named '+scope+' <b>'+escHTML(title)+'</b>':'Cleared '+scope+' name at <b>'+((m.x|0))+', '+((m.z|0))+'</b>');
+  if(qOpen && qpanelEl && qpanelEl.querySelector('.land-claim-manager') && typeof openLandClaimsUI==='function') openLandClaimsUI(m.x|0,m.z|0);
+}
+function landClaimRenameRejected(m){
+  SFX.error();
+  const r=(m&&m.reason)||'invalid';
+  if(r==='owner') sysMsg('Only the <b>land owner</b> can rename that claim');
+  else if(r==='missing') sysMsg('That land claim no longer exists');
+  else if(r==='rate') sysMsg('Land naming is cooling down');
+  else sysMsg('Could not rename land claim');
+  if(qOpen && qpanelEl && qpanelEl.querySelector('.land-claim-manager') && typeof openLandClaimsUI==='function') openLandClaimsUI(m&&m.x,m&&m.z);
+}
+function landClaimTrustRejected(m){
+  SFX.error();
+  const r=(m&&m.reason)||'invalid';
+  if(r==='owner') sysMsg('Only the <b>land owner</b> can change claim permissions');
+  else if(r==='target') sysMsg('Choose an online hunter to trust');
+  else if(r==='missing') sysMsg('That land claim no longer exists');
+  else if(r==='rate') sysMsg('Land permission changes are cooling down');
+  else sysMsg('Could not update land permissions');
+  if(qOpen && qpanelEl && qpanelEl.querySelector('.land-claim-manager') && typeof openLandClaimsUI==='function') openLandClaimsUI(m&&m.x,m&&m.z);
 }
 function applyFarmResult(m){
   if(!m) return;
@@ -1291,9 +2260,22 @@ function applyFarmResult(m){
     const consumed=m.action==='fertilize'?I.COMPOST:(m.seedId||I.WHEAT_SEEDS);
     if(s && s.id===consumed){ s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); }
   }
-  if(m.action==='harvest'&&m.golden) showJobPerk('farmer','Golden Wheat');
-  else if(m.action==='harvest'&&m.kind==='windseed') showJobPerk('farmer','rich Windseed harvest');
-  else if(m.action==='fertilize') showJobPerk('farmer','crop advanced');
+  if(m.action==='plant'&&m.kind==='windseed'){
+    SFX.success();
+    showJobPerk('farmer','Windseed planted');
+    sysMsg('<b>Prairie Windseed planted.</b> This crop can return extra wheat and later Golden Wheat.');
+  }else if(m.action==='fertilize'){
+    SFX.success();
+    showJobPerk('farmer',m.ripe?'Compost: crop ripened':'Compost: crop advanced');
+    sysMsg(m.ripe?'<b>Compost worked.</b> '+(m.kind==='windseed'?'Windseed crop':'Crop')+' is ready to harvest.':'<b>Compost worked.</b> Crop advanced one stage.');
+  }else if(m.action==='harvest'&&m.golden){
+    SFX.level();
+    showJobPerk('farmer','Golden Wheat harvest');
+    sysMsg('<b>Golden Wheat!</b> Master harvest yielded a rare cooking crop.');
+  }else if(m.action==='harvest'&&m.kind==='windseed'){
+    SFX.success();
+    showJobPerk('farmer','rich Windseed harvest');
+  }else if(m.action==='harvest'&&m.bonus)showJobPerk('farmer','bonus wheat');
 }
 function farmRejected(m){
   SFX.error();
@@ -1332,6 +2314,10 @@ function netEditReject(m){
   syncCropMesh(x,y,z,id);
   syncInsulatorMesh(x,y,z,id);
   rebuildAround(x,z);
+  if(dim==='overworld' && typeof landClaimStatusAt==='function' && typeof showLandEditDenied==='function'){
+    const status=landClaimStatusAt(x,z,y,m.requested||0);
+    if(status && status.canEdit===false) showLandEditDenied(x,z,m.requested===B.AIR?'break':'build',y,m.requested||id);
+  }
 }
 function netApplyEdit(key,id){
   const [x,y,z]=key.split(',').map(Number);
@@ -1446,7 +2432,7 @@ function playerAppearance(){
   look.armorId=armorSlot?armorSlot.id:0;
   look.armorType=armorSlot?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
   look.heldId=displayHeldId();
-  look.cosmetics=[...cosmeticUnlocks];
+  look.cosmetics=[...equippedCosmetics];
   return look;
 }
 function remoteAppearance(ref){
@@ -1492,7 +2478,7 @@ function faceTexture(look){
   });
 }
 const REPLICATION_VISUALS=createReplicationVisuals({NET,player,familiarReaction:kind=>COMPANIONS.familiarReaction(kind)});
-const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate}=REPLICATION_VISUALS;
+const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,dragonCommandFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate}=REPLICATION_VISUALS;
 
 const COMPANIONS=createCompanionSystem({
   NET,
@@ -1514,12 +2500,64 @@ const COMPANIONS=createCompanionSystem({
   teamCol:(...args)=>SOCIAL.teamCol(...args),
   teamName:(...args)=>SOCIAL.teamName(...args),
 });
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
+Object.defineProperty(globalThis,'BlockcraftDragonMap',{value:Object.freeze({
+  stayMarkers:()=>COMPANIONS.dragonStayMapMarkers ? COMPANIONS.dragonStayMapMarkers() : [],
+  focusStayPost:type=>COMPANIONS.focusDragonStayPost ? COMPANIONS.focusDragonStayPost(type) : false,
+}),configurable:true});
+Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
+  nearestOwned:(range)=>COMPANIONS.nearestOwnedDragon ? COMPANIONS.nearestOwnedDragon(range) : null,
+  react:(type,mood)=>COMPANIONS.dragonReaction ? COMPANIONS.dragonReaction(type,mood) : false,
+}),configurable:true});
+Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
 let appearancePreviewActive=false, meditationOwnedAppearance=false;
 let cosmeticUnlocks=[];
+let equippedCosmetics=[];
+const COSMETIC_DEFS={
+  cartographers_mantle:{name:"Cartographer's Mantle", icon:'M', unlock:'Map every discovery with Orin Mapwell.', desc:'A gilded explorer mantle worn over your armor and visible to other hunters.'},
+};
+const COSMETIC_ORDER=['cartographers_mantle'];
+function clampCosmeticUnlocks(list){
+  const out=[];
+  if(Array.isArray(list)) for(const k of list){
+    const id=String(k||'');
+    if(COSMETIC_DEFS[id]&&!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+function clampEquippedCosmetics(list){
+  const owned=new Set(cosmeticUnlocks);
+  const out=[];
+  if(Array.isArray(list)) for(const k of list){
+    const id=String(k||'');
+    if(COSMETIC_DEFS[id]&&owned.has(id)&&!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+function cosmeticUnlocked(id){ return cosmeticUnlocks.includes(id); }
+function cosmeticEquipped(id){ return equippedCosmetics.includes(id); }
+function setCosmeticEquipped(id,equip){
+  if(!COSMETIC_DEFS[id]) return;
+  if(!cosmeticUnlocked(id)) return sysMsg('Locked cosmetic: <b>'+escHTML(COSMETIC_DEFS[id].name)+'</b> - '+escHTML(COSMETIC_DEFS[id].unlock));
+  const next=equippedCosmetics.filter(k=>k!==id);
+  if(equip!==false) next.push(id);
+  equippedCosmetics=clampEquippedCosmetics(next);
+  refreshAppearanceDummy();
+  if(NET.on&&NET.room) NET.room.send('cosmeticEquip',{id,equip:equip!==false});
+  else renderCosmeticsUI();
+}
+Object.defineProperty(globalThis,'BlockcraftCosmetics',{value:Object.freeze({
+  defs:COSMETIC_DEFS,
+  order:COSMETIC_ORDER,
+  unlocks:()=>[...cosmeticUnlocks],
+  equipped:()=>[...equippedCosmetics],
+  unlocked:cosmeticUnlocked,
+  isEquipped:cosmeticEquipped,
+  set:setCosmeticEquipped,
+}),configurable:true});
 const APPEARANCE_DUMMY_GROUND_OFFSET=-0.12;
 function localDisplayName(){
   return (document.getElementById('playername').value||'Hunter').slice(0,16);
@@ -1528,7 +2566,7 @@ function appearanceSignature(){
   const held=inv[selected]?inv[selected].id:0;
   const armor=armorSlot?armorSlot.id:0;
   const armorType=armorSlot&&ITEMS[armorSlot.id]&&ITEMS[armorSlot.id].armor?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
-  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), cosmeticUnlocks.join(',')].join('|');
+  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), equippedCosmetics.join(',')].join('|');
 }
 function buildAppearanceDummy(){
   const d={...makeRemoteAvatar(playerAppearance()), phase:Math.random()*10, sig:'', tag:null};
@@ -2792,6 +3830,9 @@ function resetLevel2AbilityFlow(){
 const SOCIAL=createSocialSystem({
   network:NET,
   dragonTypes:DRAGON_TYPES,
+  companions:COMPANIONS,
+  applyMount,
+  updateLandMinimap,
   resetGateCutsceneSeen,
   startGateUnlockCutscene,
   markGateCutsceneSeen,
@@ -2799,6 +3840,7 @@ const SOCIAL=createSocialSystem({
   resetLevel2AbilityFlow,
 });
 globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
+globalThis.startDragonCommandWheel=SOCIAL.startDragonCommandWheel;
 const {chatLine,openChat,closeChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
 
 // ---- smart top-screen player suggestions ----
@@ -2986,6 +4028,8 @@ const netTick=createNetworkFramePump({
   dragonType,
   emitDragonTrail,
   pulseAegisGlow,
+  tickSpiritVisual,
+  tickLocalSpiritVisual,
   updateTag:netUpdateTag,
 });
 
@@ -2999,6 +4043,7 @@ gameContext.registerState('networking', Object.freeze({
 gameContext.registerModule('networking', Object.freeze({
   connect:netConnect,
   tick:netTick,
+  tickCompanionDragons,
   snapshot:netSnapshot,
   send(type,payload={}){ if(NET.on&&NET.room)NET.room.send(type,payload); },
   pauseReconnect(){ return NETWORK.pauseReconnect(); },

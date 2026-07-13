@@ -21,7 +21,7 @@ const SKYSHIP_BOARD_GOLD = 1000;
 const GUILD_HALL = { x1: W.TOWN.TC - 39, x2: W.TOWN.TC - 4, z1: W.TOWN.TC - 40, z2: W.TOWN.TC - 28, receptionistX: W.TOWN.TC - 9.5, receptionistZ: W.TOWN.TC - 37.5 };
 const GUILD_FLOOR_MAX = 6;
 const guildFloorPrice = floorCount => 500 + Math.max(0, floorCount | 0) * 250;
-const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense']);
+const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense','weather_sense']);
 
 function skyshipSnapshot(epoch, now = Date.now()) {
   const elapsed = ((now - epoch) % SKYSHIP_CYCLE_MS + SKYSHIP_CYCLE_MS) % SKYSHIP_CYCLE_MS;
@@ -47,7 +47,11 @@ const REWARD_ITEMS = { coal: 101, iron: 102, dia: 103 };
 // Valid states for the guided-onboarding focus pointer. Mirrored verbatim in
 // client/js/progression.mjs (pinned by the client-modules parity test) so the
 // client whitelist can't drift from the server.
-const PROGRESSION_FOCUS_STATES = Object.freeze(['e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
+const PROGRESSION_FOCUS_STATES = Object.freeze([
+  'first_road_ready', 'first_e_gate',
+  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
+]);
 const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
@@ -180,6 +184,13 @@ const BOSS_REWARD_BY_RANK = [
   { xp: 563, gold: 110, coal: 7, iron: 5, dia: 1 },
   { xp: 813, gold: 175, coal: 9, iron: 7, dia: 2 },
   { xp: 1188, gold: 270, coal: 12, iron: 10, dia: 4 },
+];
+const BREACH_CLEANUP_REWARD_BY_RANK = [
+  { xp: 25, items: [{ id: I.MONSTER_MEAT, count: 2 }, { id: I.COAL, count: 1 }] },
+  { xp: 110, items: [{ id: I.MONSTER_MEAT, count: 3 }, { id: I.COAL, count: 2 }, { id: I.IRON_INGOT, count: 1 }] },
+  { xp: 165, items: [{ id: I.MONSTER_MEAT, count: 4 }, { id: I.COAL, count: 3 }, { id: I.IRON_INGOT, count: 2 }] },
+  { xp: 240, items: [{ id: I.MONSTER_MEAT, count: 5 }, { id: I.COAL, count: 4 }, { id: I.IRON_INGOT, count: 3 }, { id: I.DIAMOND, count: 1 }] },
+  { xp: 350, items: [{ id: I.MONSTER_MEAT, count: 6 }, { id: I.COAL, count: 5 }, { id: I.IRON_INGOT, count: 5 }, { id: I.DIAMOND, count: 2 }] },
 ];
 const CHEST_REWARD_BY_RANK = [
   { coal: [2, 4], iron: [0, 1], dia: [0, 0] },
@@ -333,10 +344,16 @@ function mobTargetInRange(kind, mobY, playerY, horizontal) {
   const maxY = RANGED_ENEMY_KINDS.has(kind) ? 10 : kind === 'boss' ? 6 : 3.25;
   return dy <= maxY && Math.hypot(horizontal, dy) < 26;
 }
-const LAND_BASE_PRICE = 8;
-const LAND_NEAR_TOWN_BONUS = 42;
+const LAND_BASE_PRICE = 16;
+const LAND_NEAR_TOWN_BONUS = 54;
 const LAND_FREE_RADIUS = W.TOWN.HS + 2;
 const LAND_PRICE_FADE = 44;
+const LAND_REAL_DAY_MS = 24 * 60 * 60 * 1000;
+const LAND_DORMANT_DAYS = 7;
+const LAND_ABANDONED_DAYS = 21;
+const LAND_DORMANT_MS = LAND_DORMANT_DAYS * LAND_REAL_DAY_MS;
+const LAND_ABANDONED_MS = LAND_ABANDONED_DAYS * LAND_REAL_DAY_MS;
+const LAND_VISIT_REFRESH_MS = 5 * 60 * 1000;
 const EVENT_QUEUE_MS = 15 * 60 * 1000;
 const EVENT_ACTIVE_MS = 10 * 60 * 1000;
 const EVENT_FIRST_DELAY_MS = 25 * 1000;
@@ -441,7 +458,7 @@ const ROAD_MERCHANT_BUY = [[I.RIVER_FISH,2,14],[I.REPAIR_KIT,1,34],[W.B.TORCH,12
 const GUILD_DECOR_BUY = [[W.B.TORCH,8,10],[W.B.LANTERN,2,18],[W.B.CAMPFIRE,1,18],[W.B.TABLE,1,18],[W.B.BED,1,24],[W.B.CHEST,1,28],[W.B.FURNACE,1,30]];
 const GUILD_DECOR_BLOCKS = new Set(GUILD_DECOR_BUY.map(e => e[0]));
 const TAVERN_BUY = [[I.COOKED_MEAT, 1, 8], [I.POT_ALE, 1, 5], [I.POT_STEW, 1, 12], [I.POT_MANA, 1, 15], [I.POT_SWIFT, 1, 20], [I.POT_STONE, 1, 25]];
-const TAVERN_SELL = [[I.WHEAT, 4, 6], [I.GOLDEN_WHEAT, 1, 18], [I.BREAD, 1, 7], [I.POT_STEW, 1, 8], [I.MONSTER_MEAT, 1, 5], [I.COOKED_MEAT, 1, 8]];
+const TAVERN_SELL = [[I.WHEAT, 4, 6], [I.GOLDEN_WHEAT, 1, 18], [I.BREAD, 1, 7], [I.POT_STEW, 1, 8], [I.MONSTER_MEAT, 1, 5], [I.COOKED_MEAT, 1, 6]];
 const ITEM_NAMES = {
   [I.WINDSEED]: 'Prairie Windseed', [I.HEARTWOOD_RESIN]: 'Heartwood Resin', [I.SUNSHARD]: 'Sunshard',
   [I.MESA_AMBER]: 'Mesa Amber', [I.FROST_CRYSTAL]: 'Frost Crystal', [I.MIRE_BLOOM]: 'Mire Bloom',
@@ -449,6 +466,8 @@ const ITEM_NAMES = {
   [I.COMPOST]: 'Compost', [I.GOLDEN_WHEAT]: 'Golden Wheat',
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
+  [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
+  [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
 };
 const GUILD_BOARD_POS = { x: W.TOWN.TC + 4.5, z: W.TOWN.TC - 8.5 };
 const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
@@ -485,6 +504,10 @@ const RECIPES = [
   { shapeless: [I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 1] },
   { shape: ['WWW'], keys: { W: I.WHEAT }, out: [I.BREAD, 1] },
   { shapeless: [I.COOKED_MEAT, I.COOKED_MEAT, I.COAL], out: [I.DRAGON_TREAT, 2] },
+  { shapeless: [I.COAL, I.COAL, I.COAL, I.DIAMOND], out: [I.SHADOW_SIGIL, 1] },
+  { shapeless: [I.MONSTER_MEAT, I.MONSTER_MEAT, I.IRON_INGOT, I.STICK], out: [I.FANG_TOTEM, 1] },
+  { shapeless: [I.BREAD, I.WHEAT, I.WHEAT, I.DIAMOND], out: [I.MOTE_CHARM, 1] },
+  { shapeless: [I.WHEAT, I.WHEAT, I.COAL, I.IRON_INGOT], out: [I.FORAGE_CHARM, 1] },
   { shapeless: [I.WHEAT, I.WHEAT, I.COOKED_MEAT, I.CHARCOAL], out: [I.DRAGON_TREAT, 3] },
   { shapeless: [I.WINDSEED, I.WHEAT, I.WHEAT], out: [I.BREAD, 2] },
   { shapeless: [I.HEARTWOOD_RESIN, I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 2] },
@@ -562,8 +585,9 @@ function cleanDragonName(v, fallback = 'Dragon') {
 }
 
 module.exports = {
-  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, ANIMAL_BASE_KIND, ANIMAL_CAP, ANIMAL_DESPAWN_RADIUS, ANIMAL_KINDS, ANIMAL_LOOT, ANIMAL_SPAWN_INTERVAL, ARMOR_INFO, BETA_EVENT_TEST, BETA_FARM_TEST, BETA_LEGENDARY_TEST, BIOME_ANIMAL, BIOME_COLLECTIBLE, BOLSTER_DMG, BOLSTER_HP, BOLSTER_MAX_STACKS, BOLSTER_RADIUS, BOSS_CONTRIB_MS, BOSS_REWARD_BY_RANK, BOSS_REWARD_RANGE, CARAVAN_ACTIVE_MS, CHEST_REWARD_BY_RANK, CROP_GROW_MS, DANGER_RINGS, DAY_LEN, DAY_MS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_BREEDING, DRAGON_BREED_CD_MS, DRAGON_BREED_MS, DRAGON_BREED_RESULT, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_CHEST_CHANCE, DRAGON_EGG_OF, DRAGON_INCUBATION_MS, DRAGON_INCUBATION_MS_BY_TYPE, DRAGON_LOVE_MS, DRAGON_PERCH_SLOTS, DRAGON_TYPES, DRAGON_TYPE_BY_EGG, DRAGON_TYPE_SET, ELITE_FAMILIES, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS, EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS, EVENT_TEST_QUEUE_MS, FAMILIAR_BIND_ITEM, FAMILIAR_KINDS, FANG_CD_MS, FANG_RANGE, FOOD_VALUES, FUEL, GATE_DISTANCE_BANDS, GUARDIAN_POS, GUILD_BOARD_POS, GUILD_DECOR_BLOCKS, GUILD_DECOR_BUY, GUILD_FLOOR_MAX, GUILD_HALL, HAZARD_MOD_SET, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, HUNTER_ACTIVITY_XP_BY_RANK, HUNTER_RANK_LEVELS, HUNTER_RANK_XP_MULTIPLIERS, I, ITEM_NAMES, JOB_IDS, KEY_LOOT, KING_ACTIVE_MS, KING_ARENA_SIZE, KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, LAND_BASE_PRICE, LAND_FREE_RADIUS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LEGENDARY_CRAFTS, LOCAL_ANIMAL_COUNT_RADIUS, LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, MAX_HUNGER, MINE_DROPS, MINE_REQUIRE, MOB_CAP, MOTE_BURST_CD_MS, MOTE_BURST_MIN_TIER, MOTE_BURST_RANGE, PROGRESSION_FOCUS_STATES, RANGED_ENEMY_KINDS, RECIPES, REGIONAL_CONTRACT_TYPES, REWARD_ITEMS, ROAD_MERCHANT_BUY, SHADE_RANK_LVLS, SHARD_ITEM_IDS, SHARD_MOD_KEYS, SHARD_TIERS, SHOP_BUY, SHOP_SELL, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS, SKYSHIP_DOCK_X, SKYSHIP_EDGE_X, SKYSHIP_SPEED, SKYSHIP_TRAVEL_MS, SMELT, SMELT_MS, SOLO_KEYS, SOLO_KEY_PRICES, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TEAM_KEY_PRICES, TOOL_INFO, TOOL_MAT_ITEMS, UTILITY_IDS, WEATHER_KINDS, WEATHER_DURATION_MS, WEATHER_NEXT, LIGHTNING_INTERVAL_MS, LIGHTNING_RADIUS, LIGHTNING_PLAYER_DMG, LIGHTNING_MOB_DMG, rollWeatherNext, rollWeatherDurationMs, weatherSpawnMods, animalBudgetFor, dangerRingAt, dayTimeAt, dragonIncubationMs, dragonMountType, dragonOffspring, famTier, fangDamage, gateRankIndexForLevel, guildFloorPrice, hostileBudgetFor, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, isUnlockableMount, isValidMount, jobLevelFor, jobLevelFromXp, jobPerkChance, jobPerkTier, keyForRank, mobTargetInRange, moteBurst, moteRegen, nextHunterRankLevel, rollShardMods, shadeMitigation, skyshipSnapshot, spriteForageChance, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
+  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, ANIMAL_BASE_KIND, ANIMAL_CAP, ANIMAL_DESPAWN_RADIUS, ANIMAL_KINDS, ANIMAL_LOOT, ANIMAL_SPAWN_INTERVAL, ARMOR_INFO, BETA_EVENT_TEST, BETA_FARM_TEST, BETA_LEGENDARY_TEST, BIOME_ANIMAL, BIOME_COLLECTIBLE, BOLSTER_DMG, BOLSTER_HP, BOLSTER_MAX_STACKS, BOLSTER_RADIUS, BOSS_CONTRIB_MS, BOSS_REWARD_BY_RANK, BOSS_REWARD_RANGE, CARAVAN_ACTIVE_MS, CHEST_REWARD_BY_RANK, CROP_GROW_MS, DANGER_RINGS, DAY_LEN, DAY_MS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_BREEDING, DRAGON_BREED_CD_MS, DRAGON_BREED_MS, DRAGON_BREED_RESULT, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_CHEST_CHANCE, DRAGON_EGG_OF, DRAGON_INCUBATION_MS, DRAGON_INCUBATION_MS_BY_TYPE, DRAGON_LOVE_MS, DRAGON_PERCH_SLOTS, DRAGON_TYPES, DRAGON_TYPE_BY_EGG, DRAGON_TYPE_SET, ELITE_FAMILIES, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS, EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS, EVENT_TEST_QUEUE_MS, FAMILIAR_BIND_ITEM, FAMILIAR_KINDS, FANG_CD_MS, FANG_RANGE, FOOD_VALUES, FUEL, GATE_DISTANCE_BANDS, GUARDIAN_POS, GUILD_BOARD_POS, GUILD_DECOR_BLOCKS, GUILD_DECOR_BUY, GUILD_FLOOR_MAX, GUILD_HALL, HAZARD_MOD_SET, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, HUNTER_ACTIVITY_XP_BY_RANK, HUNTER_RANK_LEVELS, HUNTER_RANK_XP_MULTIPLIERS, I, ITEM_NAMES, JOB_IDS, KEY_LOOT, KING_ACTIVE_MS, KING_ARENA_SIZE, KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, LAND_ABANDONED_DAYS, LAND_ABANDONED_MS, LAND_BASE_PRICE, LAND_DORMANT_DAYS, LAND_DORMANT_MS, LAND_FREE_RADIUS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LAND_REAL_DAY_MS, LAND_VISIT_REFRESH_MS, LEGENDARY_CRAFTS, LOCAL_ANIMAL_COUNT_RADIUS, LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, MAX_HUNGER, MINE_DROPS, MINE_REQUIRE, MOB_CAP, MOTE_BURST_CD_MS, MOTE_BURST_MIN_TIER, MOTE_BURST_RANGE, PROGRESSION_FOCUS_STATES, RANGED_ENEMY_KINDS, RECIPES, REGIONAL_CONTRACT_TYPES, REWARD_ITEMS, ROAD_MERCHANT_BUY, SHADE_RANK_LVLS, SHARD_ITEM_IDS, SHARD_MOD_KEYS, SHARD_TIERS, SHOP_BUY, SHOP_SELL, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS, SKYSHIP_DOCK_X, SKYSHIP_EDGE_X, SKYSHIP_SPEED, SKYSHIP_TRAVEL_MS, SMELT, SMELT_MS, SOLO_KEYS, SOLO_KEY_PRICES, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TEAM_KEY_PRICES, TOOL_INFO, TOOL_MAT_ITEMS, UTILITY_IDS, WEATHER_KINDS, WEATHER_DURATION_MS, WEATHER_NEXT, LIGHTNING_INTERVAL_MS, LIGHTNING_RADIUS, LIGHTNING_PLAYER_DMG, LIGHTNING_MOB_DMG, rollWeatherNext, rollWeatherDurationMs, weatherSpawnMods, animalBudgetFor, dangerRingAt, dayTimeAt, dragonIncubationMs, dragonMountType, dragonOffspring, famTier, fangDamage, gateRankIndexForLevel, guildFloorPrice, hostileBudgetFor, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, isUnlockableMount, isValidMount, jobLevelFor, jobLevelFromXp, jobPerkChance, jobPerkTier, keyForRank, mobTargetInRange, moteBurst, moteRegen, nextHunterRankLevel, rollShardMods, shadeMitigation, skyshipSnapshot, spriteForageChance, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 };
+module.exports.BREACH_CLEANUP_REWARD_BY_RANK = BREACH_CLEANUP_REWARD_BY_RANK;
 module.exports.BIOME_HOSTILE = BIOME_HOSTILE;
 module.exports.SHADE_STEP_MIN_TIER = SHADE_STEP_MIN_TIER;
 module.exports.SHADE_STEP_CD_MS = SHADE_STEP_CD_MS;

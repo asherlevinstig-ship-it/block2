@@ -5,16 +5,18 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, TUTORIAL_VERSIONS } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
 const JOB_SYSTEM = require('../../shared/job-system');
+const QUEST_OBJECTIVES = require('../../shared/quest-objectives');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
-const { takeHandoff, drainConsumedGates } = require('./dungeon-handoff');
+const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches } = require('./dungeon-handoff');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
+const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
 // Blockcraft is one persistent global world, not a set of independent room
@@ -39,13 +41,20 @@ const {
   ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
   BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
   EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
-  ITEM_NAMES, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
-  SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
-  SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, dangerRingAt, dayTimeAt, dragonMountType,
+  ITEM_NAMES, LAND_ABANDONED_MS, LAND_DORMANT_MS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LAND_VISIT_REFRESH_MS, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
+  PROGRESSION_FOCUS_STATES, SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
+  SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, REGIONAL_CONTRACT_TYPES, dangerRingAt, dayTimeAt, dragonMountType,
   gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
   nextHunterRankLevel,
   mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
+
+const ACTIVE_UTILITY_IDS = new Set(['trail_sense']);
+const TRAIL_SENSE_COOLDOWN_MS = 45000;
+const TRAIL_SENSE_DURATION_MS = 22000;
+const TRAIL_SENSE_RANGE = 320;
+const FALL_SAFE_DROP = 5;
+const FEATHER_STEP_ABSORB_DROP = 16;
 
 class GameRoom extends Room {
   static async onAuth(_token, _options, context) {
@@ -64,6 +73,7 @@ class GameRoom extends Room {
     if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
     this.setState(new State());
+    this.economyLedger = createEconomyLedger();
     this.world = W.createWorld();
     this.world.generate();
 
@@ -76,9 +86,11 @@ class GameRoom extends Room {
     this.lastAttackMsg = new Map();
     this.rateBuckets = new Map();   // sessionId -> Map(bucket -> {tokens,last}) for handler flood control
     this.playerLastHit = new Map();
+    this.playerDamageRecaps = new Map();
     this.aegisBounties = new Map();
     this.playerHp = new Map();
     this.playerHunger = new Map();
+    this.fallState = new Map();
     this.biomeStatuses = new Map();
     this.bossContrib = new Map();
     this.recentApprovedComms = [];
@@ -206,6 +218,14 @@ class GameRoom extends Room {
         g.members = new Set(g.members || [g.leader]);
         g.invites = new Set(g.invites || []);
         g.roles = new Map(Object.entries(g.roles || {}).filter(([, role]) => role === 'officer'));
+        g.projects = new Set(Array.isArray(g.projects) ? g.projects : []);
+        g.renown = Math.max(0, g.renown | 0);
+        g.totalRenown = Math.max(0, g.totalRenown | 0);
+        g.renownWeek = Math.max(0, g.renownWeek | 0);
+        g.contractsWeek = Math.max(0, g.contractsWeek | 0);
+        g.renownWeekStart = Math.max(0, g.renownWeekStart | 0);
+        g.weeklyRewardClaims = g.weeklyRewardClaims && typeof g.weeklyRewardClaims === 'object' ? g.weeklyRewardClaims : { week: g.renownWeekStart | 0, claims: {} };
+        g.notice = g.notice && typeof g.notice === 'object' ? g.notice : null;
         this.guilds.set(id, g);
         const seq = id.match(/^G(\d+)$/);
         if (seq) this.guildSeq = Math.max(this.guildSeq, seq[1] | 0);
@@ -224,8 +244,7 @@ class GameRoom extends Room {
     this.onMessage('profileRequest', client => {
       const rec = this.profileFor(client);
       if (!rec || !rec.prof) return;
-      this.refreshSystemIntroductions(rec.prof);
-      client.send('profile', rec.prof);
+      this.sendProfile(client, rec.prof);
       const hunger = this.playerHunger.get(client.sessionId);
       if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
       const recovery = this.restartRecoveries.get(rec.token);
@@ -236,9 +255,13 @@ class GameRoom extends Room {
     this.onMessage('dismount', (client) => this.handleDismount(client));
     this.onMessage('hatchDragonEgg', (client, m) => this.handleHatchDragonEgg(client, m));
     this.onMessage('renameDragon', (client, m) => this.handleRenameDragon(client, m));
+    this.onMessage('setDragonRole', (client, m) => this.handleSetDragonRole(client, m));
+    this.onMessage('chooseDragonSpecialization', (client, m) => this.handleChooseDragonSpecialization(client, m));
+    this.onMessage('startDragonTraining', (client, m) => this.handleStartDragonTraining(client, m));
     this.onMessage('perchDragon', (client, m) => this.handlePerchDragon(client, m));
     this.onMessage('recallDragon', (client, m) => this.handleRecallDragon(client, m));
     this.onMessage('feedDragon', (client, m) => this.handleFeedDragon(client, m));
+    this.onMessage('careDragon', (client, m) => this.handleCareDragon(client, m));
     this.onMessage('dragonBreath', (client, m) => this.handleDragonBreath(client, m));
     this.onMessage('bindFamiliar', (client, m) => this.handleBindFamiliar(client, m));
     this.onMessage('summonFamiliar', (client, m) => this.handleSummonFamiliar(client, m));
@@ -262,6 +285,7 @@ class GameRoom extends Room {
     this.onMessage('abilitySpec',(client,m)=>this.setAbilitySpecialization(client,String(m&&m.spec||'')));
     this.onMessage('setJob', (client, m) => this.handleSetJob(client, m));
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
+    this.onMessage('homesteadWorkOrder', (client, m) => this.handleHomesteadWorkOrder(client, m));
     this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
     this.onMessage('equipArmor', (client, m) => this.handleEquipArmor(client, m));
     this.onMessage('equipWeapon', (client, m) => this.handleEquipWeapon(client, m));
@@ -273,6 +297,8 @@ class GameRoom extends Room {
     this.onMessage('tutorialEnter', (client, m) => this.handleTutorialEnter(client, m));
     this.onMessage('tutorialExit', (client) => this.handleTutorialExit(client));
     this.onMessage('landClaimBuy', (client, m) => this.handleLandClaimBuy(client, m));
+    this.onMessage('landClaimRename', (client, m) => this.handleLandClaimRename(client, m));
+    this.onMessage('landClaimTrust', (client, m) => this.handleLandClaimTrust(client, m));
     this.onMessage('useFood', (client, m) => this.handleUseFood(client, m));
     this.onMessage('useRepairKit', (client, m) => this.handleUseRepairKit(client, m));
     this.onMessage('blacksmithRepair', (client, m) => this.handleBlacksmithRepair(client, m));
@@ -281,6 +307,7 @@ class GameRoom extends Room {
     this.onMessage('blacksmithSalvage', (client, m) => this.handleBlacksmithSalvage(client, m));
     this.onMessage('lootRecovery', (client, m) => this.handleLootRecovery(client, m));
     this.onMessage('gearLock', (client, m) => this.handleGearLock(client, m));
+    this.onMessage('inventorySort', (client, m) => this.handleInventorySort(client, m));
 
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
@@ -297,6 +324,8 @@ class GameRoom extends Room {
     this.onMessage('ability', (client, m) => this.handleAbility(client, m));
     this.onMessage('dragonAbility', (client, m) => this.handleDragonAbility(client, m));
     this.onMessage('utilityLoadout', (client, m) => this.handleUtilityLoadout(client, m));
+    this.onMessage('utilityUse', (client, m) => this.handleUtilityUse(client, m));
+    this.onMessage('cosmeticEquip', (client, m) => this.handleCosmeticEquip(client, m));
 
     this.onMessage('save', (client, m) => {
       const token = this.tokens.get(client.sessionId);
@@ -372,6 +401,9 @@ class GameRoom extends Room {
     this.onMessage('guildInvite', (client, m) => this.handleGuildInvite(client, m));
     this.onMessage('guildKick', (client, m) => this.handleGuildKick(client, m));
     this.onMessage('guildRole', (client, m) => this.handleGuildRole(client, m));
+    this.onMessage('guildProjectFund', (client, m) => this.handleGuildProjectFund(client, m));
+    this.onMessage('guildWeeklyRewardClaim', (client, m) => this.handleGuildWeeklyRewardClaim(client, m));
+    this.onMessage('guildNoticePin', (client, m) => this.handleGuildNoticePin(client, m));
     this.onMessage('guildFloorBuy', client => this.handleGuildFloorBuy(client));
     this.onMessage('tchat', (client, m) => {
       const t = this.teamMgr.teamOf(client.sessionId);
@@ -456,6 +488,7 @@ class GameRoom extends Room {
     this.onMessage('dungeonMatchmakingJoin', (client, m) => this.handleDungeonMatchmakingJoin(client, m));
     this.onMessage('dungeonPing', (client, m) => this.handleDungeonPing(client, m));
     this.onMessage('exitGate', (client) => this.leaveInstance(client.sessionId));
+    this.onMessage('quitDungeonSpirit', (client) => this.handleQuitDungeonSpirit(client));
     this.onMessage('useGateKey', (client, m) => this.handleUseGateKey(client, m));
     this.onMessage('attuneShard', (client, m) => this.handleAttuneShard(client, m));
     this.onMessage('craft', (client, m) => this.handleCraft(client, m));
@@ -472,7 +505,9 @@ class GameRoom extends Room {
     this.onMessage('eventDebugStart', (client) => this.handleEventDebugStart(client));
     this.onMessage('chestOpen', (client, m) => this.handleChestOpen(client, m));
     this.onMessage('chestDeposit', (client, m) => this.handleChestDeposit(client, m));
+    this.onMessage('chestBatchDeposit', (client, m) => this.handleChestBatchDeposit(client, m));
     this.onMessage('chestWithdraw', (client, m) => this.handleChestWithdraw(client, m));
+    this.onMessage('chestMode', (client, m) => this.handleChestMode(client, m));
     this.onMessage('discoveryInteract', (client, m) => this.handleDiscoveryInteract(client, m));
     this.onMessage('discoverySight', (client, m) => this.handleDiscoverySight(client, m));
     this.onMessage('cartographer', (client, m) => this.handleCartographer(client, m));
@@ -592,6 +627,11 @@ class GameRoom extends Room {
         ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
         : '';
       p.dragonNames = this.publicDragonNames(prof);
+      p.dragonGenders = this.publicDragonGenders(prof);
+      p.dragonPersonalities = this.publicDragonPersonalities(prof);
+      p.dragonRoles = this.publicDragonRoles(prof);
+      p.dragonStaySpots = this.publicDragonStaySpots(prof);
+      p.dragonHatchedAt = this.publicDragonHatchedAt(prof);
       p.cosmetics = this.publicCosmetics(prof);
       p.x = prof.pos[0]; p.y = prof.pos[1] + .01; p.z = prof.pos[2];
     } else {
@@ -659,7 +699,7 @@ class GameRoom extends Room {
         await this.allowReconnection(client, 15);
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
-        if (profile) { this.refreshSystemIntroductions(profile); client.send('profile', profile); }
+        if (profile) this.sendProfile(client, profile);
         const hunger = this.playerHunger.get(client.sessionId);
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
         if (!this.resumeTutorialDimension(client) && !this.resumeEventParticipant(client)) this.resumeDungeonInstance(client);
@@ -699,18 +739,32 @@ class GameRoom extends Room {
         if (hit && hit.attackerSid === client.sessionId) this.playerLastHit.delete(sid);
       }
     }
+    if (this.playerDamageRecaps) this.playerDamageRecaps.delete(client.sessionId);
     if (this.aegisBounties) {
       this.aegisBounties.delete(client.sessionId);
       for (const [sid, b] of [...this.aegisBounties.entries()]) {
         if (b && b.targetSid === client.sessionId) {
           this.aegisBounties.delete(sid);
           const hunter = this.clients.find(c => c.sessionId === sid);
-          if (hunter) hunter.send('pvpBountyFail', { reason: 'offline' });
+          if (hunter) {
+            if (this.sendQuestOutcome) this.sendQuestOutcome(hunter, {
+              source: 'aegis',
+              questType: 'manhunt',
+              title: 'Silent Bounty',
+              outcome: 'failed',
+              reason: 'offline',
+              location: 'Aegis Guardian',
+              canReaccept: true,
+              noReward: true,
+            });
+            hunter.send('pvpBountyFail', { reason: 'offline' });
+          }
         }
       }
     }
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);
+    if (this.fallState) this.fallState.delete(client.sessionId);
     this.biomeStatuses.delete(client.sessionId);
     this.abilityState.delete(client.sessionId);
     if(typeof this.clearRecallState==='function')this.clearRecallState(client.sessionId);
@@ -844,6 +898,7 @@ class GameRoom extends Room {
           kind: g.kind,
           rank: g.rank,
           seed: g.seed,
+          dungeonId: g.dungeonId,
           owner: g.owner,
           team: g.team,
           shardPlus: g.shardPlus,
@@ -885,6 +940,9 @@ class GameRoom extends Room {
           members: [...g.members],
           invites: [...(g.invites || [])],
           roles: Object.fromEntries(g.roles || []),
+          projects: [...(g.projects || [])],
+          weeklyRewardClaims: g.weeklyRewardClaims || null,
+          notice: g.notice || null,
         };
       });
       try { await this.store.saveGuilds(obj); }
@@ -932,6 +990,7 @@ class GameRoom extends Room {
     prof.firstQuestRewardClaimed = true;
     prof.gold = Math.max(0, (prof.gold | 0) + 100);
     this.dirtyPlayers.add(rec.token);
+    this.recordEconomyGold(client, 100, 'quest_faucet', 'first_quest_bonus');
     client.send('firstQuestReward', { ok: true, gold: 100, totalGold: prof.gold | 0 });
     return true;
   }
@@ -1049,6 +1108,70 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     const action = m && String(m.action || '');
     if (!rec) return false;
+    if (action === 'prepareERankDungeon') {
+      const dungeonId = String(m && m.dungeonId || '');
+      const allowed = ['abandoned_mine', 'sunken_crypt', 'mossbound_cellar'];
+      const p = this.state.players.get(client.sessionId);
+      if (p && p.dim === 'tutorial') this.leaveTutorialDimension(client);
+      if (!p || !allowed.includes(dungeonId) || p.dgn) return false;
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      const old = [];
+      this.state.gates.forEach(gate => { if (gate.owner === rec.token && gate.kind === 'solo') old.push(gate.id); });
+      for (const id of old) this.expireGate(id);
+      const gate = this.createGate({ x: p.x + 2.5, y: p.y, z: p.z, rank: 0, kind: 'solo', owner: rec.token, ttl: 180, dungeonId });
+      this.progressionChanged(client, 'e2eJourney', { action });
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, id: gate.id, dungeonId });
+      return true;
+    }
+    if (action === 'prepareDRankDungeon') {
+      const dungeonId = String(m && m.dungeonId || '');
+      const allowed = ['bone_catacombs', 'blighted_grotto', 'watchers_vault'];
+      const p = this.state.players.get(client.sessionId);
+      if (p && p.dim === 'tutorial') this.leaveTutorialDimension(client);
+      if (!p || !allowed.includes(dungeonId) || p.dgn) return false;
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+      rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
+      rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
+      rec.prof.S.lvl = Math.max(HUNTER_RANK_LEVELS[1], rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      const old = [];
+      this.state.gates.forEach(gate => { if (gate.owner === rec.token && gate.kind === 'solo') old.push(gate.id); });
+      for (const id of old) this.expireGate(id);
+      const gate = this.createGate({ x: p.x + 2.5, y: p.y, z: p.z, rank: 1, kind: 'solo', owner: rec.token, ttl: 180, dungeonId });
+      this.progressionChanged(client, 'e2eJourney', { action });
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, id: gate.id, dungeonId });
+      return true;
+    }
+    if (action === 'becomeDungeonSpirit') {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || !p.dgn) return false;
+      this.hurtPlayer(client, 999999, 'e2e-spirit');
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true });
+      return true;
+    }
+    if (action === 'exerciseERankBoss' || action === 'defeatERankBoss') {
+      const requestId = m && String(m.requestId || '').slice(0, 32);
+      const p = this.state.players.get(client.sessionId), inst = p && p.dgn && this.instances[p.dgn];
+      let bossId = '', boss = null;
+      if (inst) this.state.mobs.forEach((mob, id) => { if (!boss && mob.kind === 'boss' && mob.dgn === inst.id) { boss = mob; bossId = String(id); } });
+      if (!p || !inst || !boss || (inst.rank | 0) !== 0) { client.send('e2eJourneyResult', { action, requestId, ok: false }); return false; }
+      const meta = this.mobMeta[bossId], style = meta && meta.bossStyle || '';
+      if (action === 'exerciseERankBoss') {
+        const states = { foreman: 'foremanWind', regent: 'regentWind', rootkeeper: 'rootWind' };
+        boss.state = states[style] || 'slamWind'; meta.stateT = 2.5; meta.woke = true;
+        meta.signatureTargets = [{ x: p.x, z: p.z }];
+        client.send('e2eJourneyResult', { action, requestId, ok: true, style, state: boss.state });
+        return true;
+      }
+      p.x = inst.bossRoom.x; p.z = inst.bossRoom.z;
+      this.recordBossContribution(client, inst.id, Math.max(1, boss.maxHp | 0));
+      this.finishMobKill(client, bossId, boss);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, style });
+      return true;
+    }
     if (action === 'positionAck') {
       const p = this.state.players.get(client.sessionId);
       client.send('e2eJourneyResult', {
@@ -1113,6 +1236,17 @@ class GameRoom extends Room {
       rec.prof.S.path = rec.prof.S.path || 'shadow';
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
+    if (action === 'expirePublicGates') {
+      const requestId = String(m && m.requestId || '');
+      const rank = Number.isFinite(m && m.rank) ? (m.rank | 0) : -1;
+      const expired = [];
+      this.state.gates.forEach((gate, id) => {
+        if (gate && gate.active && gate.kind === 'public' && (rank < 0 || (gate.rank | 0) === rank)) expired.push(id);
+      });
+      for (const id of expired) this.expireGate(id);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, expired: expired.length, rank });
+      return this.progressionChanged(client, 'e2eJourney', { action, rank });
+    }
     if (action === 'prepareTownTutorialPersistence') {
       rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
       rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
@@ -1128,6 +1262,36 @@ class GameRoom extends Room {
     if (action === 'prepareDRankJourney') {
       rec.prof.S.lvl = Math.max(HUNTER_RANK_LEVELS[1], rec.prof.S.lvl | 0);
       return this.progressionChanged(client, 'e2eJourney', { action });
+    }
+    if (action === 'prepareProgressionFocus') {
+      const focus = String(m && m.focus || '');
+      const variant = String(m && m.variant || '');
+      const noMaterials = !!(m && m.noMaterials) || variant === 'no_materials';
+      const noGold = !!(m && m.noGold) || variant === 'no_gold';
+      if (!PROGRESSION_FOCUS_STATES.includes(focus)) {
+        client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: false, focus });
+        return false;
+      }
+      rec.prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+      rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
+      rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
+      rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
+      rec.prof.S.lvl = Math.max(focus === 'first_d_gate' ? HUNTER_RANK_LEVELS[1] : 3, rec.prof.S.lvl | 0);
+      rec.prof.S.path = rec.prof.S.path || 'shadow';
+      rec.prof.progressionFocus = focus;
+      rec.prof.activeNpcQuest = null;
+      rec.prof.jobContract = null;
+      if (noGold) rec.prof.gold = 0;
+      if (focus === 'first_craft_station' && noMaterials) {
+        const clearIds = new Set([W.B.LOG, W.B.PLANKS, W.B.COBBLE, W.B.TABLE, W.B.FURNACE]);
+        rec.prof.inv = (Array.isArray(rec.prof.inv) ? rec.prof.inv : []).map(stack => stack && clearIds.has(stack.id | 0) ? null : stack);
+      } else if (focus === 'first_craft_station' && this.countItem(rec.prof, W.B.PLANKS) < 4) {
+        this.addRewardItem(rec.prof, W.B.PLANKS, 4 - this.countItem(rec.prof, W.B.PLANKS));
+      }
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, focus });
+      return this.progressionChanged(client, 'e2eJourney', { action, focus });
     }
     if (action === 'completeMaraFieldWork') {
       const c = rec.prof.jobContract;
@@ -1239,8 +1403,7 @@ class GameRoom extends Room {
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
     if (this.isTownProtected(x, z) && !guildFloorEdit) return this.rejectEdit(client, x, y, z, prev, id);
     if (this.isEventProtectedBlock(x, y, z)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (id !== W.B.AIR && this.isLandOwnedByOther(client, x, z)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (id === W.B.AIR && this.isLandOwnedByOther(client, x, z)) return this.rejectEdit(client, x, y, z, prev, id);
+    if (!this.canEditLand(client, x, z, { allowTown: guildFloorEdit })) return this.rejectEdit(client, x, y, z, prev, id);
     if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id);
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, 'overworld:' + x + ',' + y + ',' + z)) {
       return this.rejectEdit(client, x, y, z, prev, id);
@@ -1254,6 +1417,7 @@ class GameRoom extends Room {
     if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest('overworld:' + x + ',' + y + ',' + z);
     if (id === W.B.CHEST) this.createPlacedChest(client, 'overworld:' + x + ',' + y + ',' + z, 'personal');
     if (id === W.B.AIR && prev !== W.B.AIR) this.awardMine(client, prev, m.slot, naturalHarvest ? x : undefined, y, naturalHarvest ? z : undefined);
+    if (id !== W.B.AIR) this.checkBaseSetupProgress(client);
   }
   handleDungeonEdit(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -1374,6 +1538,86 @@ class GameRoom extends Room {
     }
     return { token, prof };
   }
+  recordEconomyGold(client, amount, category, source, meta = {}) {
+    if (!this.economyLedger) this.economyLedger = createEconomyLedger();
+    const rec = client && this.profileFor(client);
+    const prof = rec && rec.prof;
+    return recordEconomyGoldEvent(this.economyLedger, {
+      token: rec && rec.token,
+      sid: client && client.sessionId,
+      player: prof && prof.name,
+      amount,
+      category,
+      source,
+      balance: prof && (prof.gold | 0),
+      meta,
+    });
+  }
+  economyGoldSummary(opts = {}) {
+    if (!this.economyLedger) this.economyLedger = createEconomyLedger();
+    return summarizeEconomyGold(this.economyLedger, opts);
+  }
+  inventorySortCategory(stack) {
+    const id = stack && (stack.id | 0);
+    if (!id) return 99;
+    if (SOLO_KEYS.includes(id) || TEAM_KEYS.includes(id) || SHARD_ITEM_IDS.includes(id) || id === I.LEGEND_TOKEN) return 10;
+    if (FOOD_VALUES[id] || [I.POT_ALE, I.POT_STEW, I.POT_MANA, I.POT_SWIFT, I.POT_STONE, I.REPAIR_KIT].includes(id)) return 20;
+    if ([I.COAL, I.CHARCOAL, I.IRON_INGOT, I.DIAMOND, I.WHEAT_SEEDS, I.WHEAT, I.WINDSEED, I.HEARTWOOD_RESIN, I.SUNSHARD, I.MESA_AMBER, I.FROST_CRYSTAL, I.MIRE_BLOOM, I.RIVER_FISH, I.COMPOST, I.GOLDEN_WHEAT, I.GEODE, I.RAINWAKE_PETAL, I.STORMGLASS, I.SOLAR_GLYPH].includes(id)) return 30;
+    if (TOOL_INFO[id] || ARMOR_INFO[id] || stack.dur != null) return 40;
+    if ([I.DRAGON_EGG, I.EGG_VERDANT, I.EGG_FROST, I.EGG_STORM, I.EGG_VOID, I.DRAGON_TREAT, I.SHADOW_SIGIL, I.FANG_TOTEM, I.MOTE_CHARM, I.FORAGE_CHARM].includes(id)) return 50;
+    if (id < 100) return 60;
+    return 90;
+  }
+  inventorySortLabel(category) {
+    return category === 10 ? 'keys/shards' : category === 20 ? 'food/utility' : category === 30 ? 'materials' : category === 40 ? 'gear' : category === 50 ? 'companions' : category === 60 ? 'blocks' : 'misc';
+  }
+  simpleSortableStack(stack) {
+    if (!stack || stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id]) return false;
+    return !stack.plus && !stack.gearRank && !stack.rarity && !stack.armorType && !stack.forge && !stack.masterwork && !stack.locked && !stack.source;
+  }
+  sortInventoryRange(inv, start, end) {
+    const merged = new Map(), singles = [];
+    for (let i = start; i < end; i++) {
+      const stack = inv[i];
+      if (!stack) continue;
+      const clean = { ...stack, id: stack.id | 0, count: Math.max(1, Math.min(64, stack.count | 0 || 1)) };
+      if (this.simpleSortableStack(clean)) merged.set(clean.id, (merged.get(clean.id) || 0) + clean.count);
+      else singles.push(clean);
+    }
+    const stacks = [];
+    for (const [id, total] of merged.entries()) {
+      let left = total;
+      while (left > 0) {
+        const count = Math.min(64, left);
+        stacks.push({ id, count });
+        left -= count;
+      }
+    }
+    stacks.push(...singles);
+    stacks.sort((a, b) => {
+      const ca = this.inventorySortCategory(a), cb = this.inventorySortCategory(b);
+      if (ca !== cb) return ca - cb;
+      const na = ITEM_NAMES[a.id] || String(a.id), nb = ITEM_NAMES[b.id] || String(b.id);
+      if (na !== nb) return na < nb ? -1 : 1;
+      return (a.count | 0) - (b.count | 0);
+    });
+    for (let i = start; i < end; i++) inv[i] = stacks[i - start] || null;
+    return [...new Set(stacks.map(s => this.inventorySortLabel(this.inventorySortCategory(s))))].slice(0, 6);
+  }
+  handleInventorySort(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || this.rateLimited(client, 'inventorySort', 2, 4)) return;
+    const prof = rec.prof;
+    prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
+    while (prof.inv.length < 36) prof.inv.push(null);
+    const before = JSON.stringify(prof.inv.slice(9, 36));
+    const groups = this.sortInventoryRange(prof.inv, 9, 36);
+    const changed = before !== JSON.stringify(prof.inv.slice(9, 36));
+    if (changed) this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, prof);
+    this.sendProfile(client, prof);
+    client.send('inventorySortResult', { ok: true, changed, range: 'backpack', groups });
+  }
   unlockUtility(client, id, reason = '') {
     if (!UTILITY_IDS.has(id)) return false;
     const rec = this.profileFor(client);
@@ -1384,9 +1628,18 @@ class GameRoom extends Room {
     rec.prof.utilityLoadout = sanitizeUtilityLoadout(rec.prof.utilityLoadout, rec.prof.utilityUnlocks);
     const loadout = rec.prof.utilityLoadout;
     const equipped = loadout.active === id || loadout.passive.includes(id);
-    if (!equipped && loadout.passive.length < 3) loadout.passive.push(id);
+    if (!equipped && ACTIVE_UTILITY_IDS.has(id) && !loadout.active) loadout.active = id;
+    else if (!equipped && !ACTIVE_UTILITY_IDS.has(id) && loadout.passive.length < 3) loadout.passive.push(id);
+    const activeEquipped = loadout.active === id;
+    const passiveIndex = loadout.passive.indexOf(id);
     this.dirtyPlayers.add(rec.token);
-    client.send('utilityUnlock', { id, reason, equipped: loadout.active === id || loadout.passive.includes(id) });
+    client.send('utilityUnlock', {
+      id, reason,
+      equipped: activeEquipped || passiveIndex >= 0,
+      slot: activeEquipped ? 'active' : (passiveIndex >= 0 ? 'passive' : ''),
+      passiveIndex: passiveIndex >= 0 ? passiveIndex : -1,
+      passiveLimit: 3,
+    });
     client.send('utilityLoadout', loadout);
     return true;
   }
@@ -1397,6 +1650,86 @@ class GameRoom extends Room {
     rec.prof.utilityLoadout = sanitizeUtilityLoadout(m, rec.prof.utilityUnlocks);
     this.dirtyPlayers.add(rec.token);
     client.send('utilityLoadout', rec.prof.utilityLoadout);
+  }
+  handleUtilityUse(client, m = {}) {
+    const id = String(m && m.id || '');
+    const rec = this.profileFor(client), p = this.state.players.get(client.sessionId);
+    if (!rec || !p) return;
+    if (p.dgn) return client.send('utilityReject', { id, reason: 'dimension' });
+    if (!Array.isArray(rec.prof.utilityUnlocks)) rec.prof.utilityUnlocks = [];
+    rec.prof.utilityLoadout = sanitizeUtilityLoadout(rec.prof.utilityLoadout, rec.prof.utilityUnlocks);
+    if (rec.prof.utilityLoadout.active !== id) {
+      return client.send('utilityReject', { id, reason: rec.prof.utilityUnlocks.includes(id) ? 'inactive' : 'locked' });
+    }
+    if (id === 'trail_sense') return this.handleTrailSense(client, p);
+    return client.send('utilityReject', { id, reason: 'unknown' });
+  }
+  handleTrailSense(client, p) {
+    const now = Date.now();
+    if (!this.utilityUseAt) this.utilityUseAt = new Map();
+    const key = client.sessionId + ':trail_sense';
+    const last = this.utilityUseAt.get(key) || 0;
+    const readyAt = last + TRAIL_SENSE_COOLDOWN_MS;
+    if (now < readyAt) return client.send('utilityReject', { id: 'trail_sense', reason: 'cooldown', readyInMs: readyAt - now });
+    const target = this.findTrailSenseTarget(p);
+    if (!target) return client.send('utilityReject', { id: 'trail_sense', reason: 'empty' });
+    this.utilityUseAt.set(key, now);
+    client.send('utilityResult', {
+      id: 'trail_sense',
+      target,
+      usedAt: now,
+      durationMs: TRAIL_SENSE_DURATION_MS,
+      cooldownMs: TRAIL_SENSE_COOLDOWN_MS,
+    });
+  }
+  findTrailSenseTarget(p) {
+    let best = null, bestDistance = TRAIL_SENSE_RANGE;
+    const consider = target => {
+      if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.z)) return;
+      const d = Math.hypot(target.x - p.x, target.z - p.z);
+      if (d >= bestDistance) return;
+      bestDistance = d;
+      best = { ...target, distance: Math.round(d) };
+    };
+    this.state.mobs.forEach((m, id) => {
+      const meta = this.mobMeta[id];
+      if (!meta || !meta.banditPatrol || m.dgn || m.hp <= 0) return;
+      consider({ kind: 'patrol', x: m.x, z: m.z, campId: meta.banditCampId || '', label: 'Roaming Bandit Patrol' });
+    });
+    if (this.gateBreaches && this.gateBreaches.size) for (const breach of this.gateBreaches.values()) {
+      const payload = this.gateBreachPayload ? this.gateBreachPayload(breach) : null;
+      if (payload) consider({ kind: 'breach', x: payload.x, z: payload.z, label: 'Gate Breach', bossName: payload.bossName || '' });
+    }
+    if (this.caravanRecoveryByCamp && this.caravanRecoveryByCamp.size) for (const campId of this.caravanRecoveryByCamp.keys()) {
+      const camp = W.regionalLandmarkSpecs().find(s => s.id === campId && s.type === 'bandit_camp');
+      if (camp) consider({ kind: 'recovery', x: camp.x, z: camp.z, campId: camp.id, label: 'Stolen Supplies Camp' });
+    }
+    if (this.banditCampStates) for (const camp of W.regionalLandmarkSpecs().filter(s => s.type === 'bandit_camp')) {
+      const state = this.banditCampStates.get(camp.id);
+      if (!state || state.phase === 'cleared') continue;
+      consider({ kind: 'camp', x: camp.x, z: camp.z, campId: camp.id, label: state.phase === 'captain' ? 'Bandit Captain' : 'Bandit Camp' });
+    }
+    return best;
+  }
+  handleCosmeticEquip(client, m = {}) {
+    const rec = this.profileFor(client);
+    if (!rec) return;
+    if (!Array.isArray(rec.prof.cosmeticUnlocks)) rec.prof.cosmeticUnlocks = [];
+    const id = typeof m.id === 'string' ? m.id : '';
+    if (id !== 'cartographers_mantle') return client.send('cosmeticReject', { reason: 'id' });
+    if (!rec.prof.cosmeticUnlocks.includes(id)) return client.send('cosmeticReject', { reason: 'locked', id });
+    const equipped = new Set(sanitizeEquippedCosmetics(rec.prof.equippedCosmetics, rec.prof.cosmeticUnlocks));
+    const equip = m.equip !== false;
+    if (equip) equipped.add(id);
+    else equipped.delete(id);
+    rec.prof.equippedCosmetics = sanitizeEquippedCosmetics([...equipped], rec.prof.cosmeticUnlocks);
+    this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    client.send('cosmeticEquipResult', {
+      id,
+      equipped: rec.prof.equippedCosmetics.includes(id),
+      equippedCosmetics: rec.prof.equippedCosmetics,
+    });
   }
   ensureStarterArmor(prof) {
     if (!prof || typeof prof !== 'object') return false;
@@ -1527,6 +1860,14 @@ class GameRoom extends Room {
     for (let i = 0; i < blocks.length; i++) if (blocks[i] === W.B.CHEST) count++;
     return count;
   }
+  generatedDungeonChestLocations(wbuf) {
+    const out = [];
+    if (!wbuf || !(wbuf.data instanceof Uint8Array)) return out;
+    for (let x = 0; x < wbuf.width; x++) for (let y = 0; y < wbuf.height; y++) for (let z = 0; z < wbuf.depth; z++) {
+      if (wbuf.getB(x, y, z) === W.B.CHEST) out.push({ key: x + ',' + y + ',' + z, x: x + .5, y, z: z + .5 });
+    }
+    return out;
+  }
   isTownProtected(x, z) {
     const dx = Math.abs((x | 0) - W.TOWN.TC);
     const dz = Math.abs((z | 0) - W.TOWN.TC);
@@ -1542,26 +1883,131 @@ class GameRoom extends Room {
     const near = Math.max(0, 1 - outside / LAND_PRICE_FADE);
     return LAND_BASE_PRICE + Math.round(LAND_NEAR_TOWN_BONUS * near);
   }
+  adjacentOwnedLandCount(x, z, ownerToken) {
+    if (!ownerToken || !this.landClaims) return 0;
+    let count = 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const rec = this.landClaims.get(this.landKey((x | 0) + dx, (z | 0) + dz));
+      if (rec && rec.owner === ownerToken && !this.isLandClaimAbandoned(rec)) count++;
+    }
+    return count;
+  }
+  landPriceForOwner(x, z, ownerToken) {
+    const base = this.landPrice(x, z);
+    const adjacent = this.adjacentOwnedLandCount(x, z, ownerToken);
+    const discount = adjacent > 0 ? Math.max(1, Math.round(base * .2)) : 0;
+    return { price: Math.max(1, base - discount), basePrice: base, discount, adjacent };
+  }
   landClaimFor(x, z) {
     return this.landClaims && this.landClaims.get(this.landKey(x, z));
   }
-  canEditLand(client, x, z) {
-    if (W.isLavaBorderLand(x | 0, z | 0)) return false;
-    if (this.isTownProtected(x, z)) return false;
+  landClaimLastVisitedAt(rec) {
+    if (rec && rec.lastVisitedAt == null && Number(rec.boughtAt) > 0 && Number(rec.boughtAt) < 1000000000000) return Date.now();
+    const n = Number(rec && (rec.lastVisitedAt || rec.boughtAt));
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }
+  landClaimLifecycle(rec, now = Date.now()) {
+    if (!rec) return 'none';
+    const last = this.landClaimLastVisitedAt(rec) || Number(rec.boughtAt) || now;
+    const age = Math.max(0, now - last);
+    if (age >= LAND_ABANDONED_MS) return 'abandoned';
+    if (age >= LAND_DORMANT_MS) return 'dormant';
+    return 'active';
+  }
+  isLandClaimAbandoned(rec, now = Date.now()) {
+    return this.landClaimLifecycle(rec, now) === 'abandoned';
+  }
+  refreshLandClaimVisit(client, x, z, now = Date.now()) {
+    if (!client || !this.landClaims) return;
     const rec = this.landClaimFor(x, z);
-    return !!rec && rec.owner === this.clientToken(client);
+    if (!rec || this.isLandClaimAbandoned(rec, now) || !this.hasLandPermission(client, rec)) return;
+    const before = this.landClaimLifecycle(rec, now);
+    const last = this.landClaimLastVisitedAt(rec);
+    if (last && now - last < LAND_VISIT_REFRESH_MS) return;
+    rec.lastVisitedAt = now;
+    this.dirtyLandClaims = true;
+    this.broadcastLandClaim(x | 0, z | 0, rec);
+    if (before === 'dormant') {
+      const groupSize = rec.owner ? this.connectedOwnedLandClaims(x | 0, z | 0, rec.owner).length : 1;
+      client.send('landClaimRefresh', {
+        x: x | 0,
+        z: z | 0,
+        title: rec.title ? cleanName(rec.title).slice(0, 32) : '',
+        ownerName: rec.name || 'Hunter',
+        groupSize,
+        activeMs: LAND_DORMANT_MS,
+      });
+    }
+  }
+  canEditLand(client, x, z, opts = {}) {
+    if (W.isLavaBorderLand(x | 0, z | 0)) return false;
+    if (!opts.allowTown && this.isTownProtected(x, z)) return false;
+    const rec = this.landClaimFor(x, z);
+    if (!rec) return true;
+    if (this.isLandClaimAbandoned(rec)) return true;
+    return this.hasLandPermission(client, rec);
+  }
+  hasLandPermission(client, rec) {
+    const token = this.clientToken(client);
+    if (!rec || !token) return false;
+    if (rec.owner === token) return true;
+    return this.landAllowedTokens(rec).includes(token);
   }
   isLandOwnedByOther(client, x, z) {
     const rec = this.landClaimFor(x, z);
-    return !!rec && rec.owner !== this.clientToken(client);
+    return !!rec && !this.isLandClaimAbandoned(rec) && !this.hasLandPermission(client, rec);
+  }
+  landAllowedTokens(rec) {
+    const out = [];
+    const seen = new Set();
+    const add = value => {
+      const token = cleanToken(value);
+      if (!token || token === rec.owner || seen.has(token)) return;
+      seen.add(token);
+      out.push(token);
+    };
+    const allowed = rec && (rec.allowed || rec.permissions || rec.permitted);
+    if (Array.isArray(allowed) || allowed instanceof Set) for (const token of allowed) add(token);
+    else if (allowed && typeof allowed === 'object') {
+      for (const [token, enabled] of Object.entries(allowed)) if (enabled) add(token);
+    }
+    return out.slice(0, 64);
+  }
+  sessionIdForToken(token) {
+    for (const [sid, value] of this.tokens.entries()) if (value === token) return sid;
+    return '';
+  }
+  landAllowedPayload(rec) {
+    return this.landAllowedTokens(rec).map(token => {
+      const sid = this.sessionIdForToken(token);
+      const player = sid && this.state.players.get(sid);
+      const prof = this.profiles.get(token);
+      return { token, sid, online: !!sid, name: (player && player.name) || (prof && prof.name) || 'Hunter' };
+    });
+  }
+  landClaimPayloadForClient(client, x, z, rec) {
+    const token = this.clientToken(client);
+    const own = rec.owner === token;
+    const payload = {
+      x, z,
+      name: rec.name || 'Hunter',
+      ownerName: rec.name || 'Hunter',
+      title: rec.title ? cleanName(rec.title).slice(0, 32) : '',
+      price: rec.price | 0,
+      status: this.landClaimLifecycle(rec),
+      lastVisitedAt: this.landClaimLastVisitedAt(rec),
+      own,
+      canEdit: this.isLandClaimAbandoned(rec) || this.hasLandPermission(client, rec),
+    };
+    if (own) payload.allowed = this.landAllowedPayload(rec);
+    return payload;
   }
   landClaimsForClient(client) {
-    const token = this.clientToken(client);
     const claims = [];
     if (!this.landClaims) return claims;
     this.landClaims.forEach((rec, key) => {
       const [x, z] = key.split(',').map(Number);
-      claims.push({ x, z, name: rec.name || 'Hunter', price: rec.price | 0, own: rec.owner === token });
+      claims.push(this.landClaimPayloadForClient(client, x, z, rec));
     });
     return claims;
   }
@@ -1570,9 +2016,42 @@ class GameRoom extends Room {
   }
   broadcastLandClaim(x, z, rec) {
     for (const c of this.clients) {
-      const token = this.clientToken(c);
-      c.send('landClaimUpdate', { x, z, name: rec.name || 'Hunter', price: rec.price | 0, own: rec.owner === token });
+      c.send('landClaimUpdate', this.landClaimPayloadForClient(c, x, z, rec));
     }
+  }
+  connectedOwnedLandClaims(x, z, ownerToken) {
+    const out = [];
+    const startKey = this.landKey(x, z);
+    const start = this.landClaims && this.landClaims.get(startKey);
+    if (!start || start.owner !== ownerToken) return out;
+    const seen = new Set([startKey]);
+    const stack = [{ x, z, rec: start }];
+    while (stack.length) {
+      const cur = stack.pop();
+      out.push(cur);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cur.x + dx, nz = cur.z + dz, key = this.landKey(nx, nz);
+        if (seen.has(key)) continue;
+        const rec = this.landClaims.get(key);
+        if (!rec || rec.owner !== ownerToken || this.isLandClaimAbandoned(rec)) continue;
+        seen.add(key);
+        stack.push({ x: nx, z: nz, rec });
+      }
+    }
+    return out;
+  }
+  largestOwnedLandGroupSize(ownerToken) {
+    if (!ownerToken || !this.landClaims) return 0;
+    let best = 0;
+    const seen = new Set();
+    this.landClaims.forEach((rec, key) => {
+      if (!rec || rec.owner !== ownerToken || seen.has(key) || this.isLandClaimAbandoned(rec)) return;
+      const [x, z] = key.split(',').map(Number);
+      const group = this.connectedOwnedLandClaims(x, z, ownerToken);
+      for (const cell of group) seen.add(this.landKey(cell.x, cell.z));
+      best = Math.max(best, group.length);
+    });
+    return best;
   }
   handleLandClaimBuy(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -1586,16 +2065,97 @@ class GameRoom extends Room {
     if (this.isTownProtected(x, z)) return client.send('landClaimReject', { reason: 'town', x, z });
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 64) return client.send('landClaimReject', { reason: 'range', x, z });
     const key = this.landKey(x, z);
-    if (this.landClaims.has(key)) return client.send('landClaimReject', { reason: 'owned', x, z });
-    const price = this.landPrice(x, z);
+    const existing = this.landClaims.get(key);
+    const abandoned = existing && this.isLandClaimAbandoned(existing);
+    if (existing && !abandoned) return client.send('landClaimReject', { reason: 'owned', x, z });
+    const pricing = this.landPriceForOwner(x, z, rec.token);
+    const price = pricing.price;
     if ((rec.prof.gold | 0) < price) return client.send('landClaimReject', { reason: 'gold', x, z, price, gold: rec.prof.gold | 0 });
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) - price);
-    const claim = { owner: rec.token, name: p.name || rec.prof.name || 'Hunter', price, boughtAt: Date.now() };
+    const now = Date.now();
+    const claim = { owner: rec.token, name: p.name || rec.prof.name || 'Hunter', price, boughtAt: now, lastVisitedAt: now };
     this.landClaims.set(key, claim);
     this.dirtyLandClaims = true;
     this.dirtyPlayers.add(rec.token);
-    client.send('landClaimResult', { x, z, price, gold: rec.prof.gold | 0 });
+    this.recordEconomyGold(client, -price, 'land_sink', abandoned ? 'claim_takeover' : 'claim_buy', { x, z, basePrice: pricing.basePrice, discount: pricing.discount, adjacent: pricing.adjacent });
+    this.advanceProgressionDirector(client, 'land_claimed', { profile: false });
+    client.send('landClaimResult', { x, z, price, basePrice: pricing.basePrice, discount: pricing.discount, adjacent: pricing.adjacent, gold: rec.prof.gold | 0, takeover: !!abandoned });
     this.broadcastLandClaim(x, z, claim);
+  }
+  handleLandClaimRename(client, m) {
+    const ownerToken = this.clientToken(client);
+    const x = m && isFinite(+m.x) ? (m.x | 0) : -1;
+    const z = m && isFinite(+m.z) ? (m.z | 0) : -1;
+    const reject = reason => client.send('landClaimRenameReject', { reason, x, z });
+    if (this.rateLimited(client, 'action', 5, 10)) return reject('rate');
+    if (!ownerToken || x < 0 || z < 0 || x >= W.WX || z >= W.WX) return reject('invalid');
+    const rec = this.landClaimFor(x, z);
+    if (!rec) return reject('missing');
+    if (rec.owner !== ownerToken) return reject('owner');
+    const rawTitle = typeof (m && m.title) === 'string' ? m.title.trim() : '';
+    const title = rawTitle ? cleanName(rawTitle).slice(0, 32) : '';
+    const targets = m && m.applyGroup ? this.connectedOwnedLandClaims(x, z, ownerToken) : [{ x, z, rec }];
+    for (const target of targets) {
+      if (title) target.rec.title = title;
+      else delete target.rec.title;
+    }
+    this.dirtyLandClaims = true;
+    for (const target of targets) this.broadcastLandClaim(target.x, target.z, target.rec);
+    client.send('landClaimRenameResult', { x, z, title, count: targets.length });
+  }
+  handleLandClaimTrust(client, m) {
+    const ownerToken = this.clientToken(client);
+    const x = m && isFinite(+m.x) ? (m.x | 0) : -1;
+    const z = m && isFinite(+m.z) ? (m.z | 0) : -1;
+    const trust = !(m && m.trust === false);
+    const reject = reason => client.send('landClaimTrustReject', { reason, x, z });
+    if (this.rateLimited(client, 'action', 5, 10)) return reject('rate');
+    if (!ownerToken || x < 0 || z < 0 || x >= W.WX || z >= W.WX) return reject('invalid');
+    const rec = this.landClaimFor(x, z);
+    if (!rec) return reject('missing');
+    if (rec.owner !== ownerToken) return reject('owner');
+    const sid = m && typeof m.sid === 'string' ? m.sid : '';
+    const targetClient = sid && this.clients.find(c => c.sessionId === sid);
+    const targetToken = trust ? this.clientToken(targetClient || {}) : (cleanToken(m && m.targetToken) || this.clientToken(targetClient || {}));
+    if (!targetToken || targetToken === ownerToken) return reject('target');
+    const targets = m && m.applyGroup ? this.connectedOwnedLandClaims(x, z, ownerToken) : [{ x, z, rec }];
+    for (const target of targets) {
+      const allowed = this.landAllowedTokens(target.rec);
+      const idx = allowed.indexOf(targetToken);
+      if (trust && idx < 0) allowed.push(targetToken);
+      if (!trust && idx >= 0) allowed.splice(idx, 1);
+      if (allowed.length) target.rec.allowed = allowed.slice(0, 64);
+      else delete target.rec.allowed;
+    }
+    this.dirtyLandClaims = true;
+    for (const target of targets) this.broadcastLandClaim(target.x, target.z, target.rec);
+    const targetSid = this.sessionIdForToken(targetToken);
+    const targetPlayer = targetSid && this.state.players.get(targetSid);
+    const targetProfile = this.profiles.get(targetToken);
+    const result = {
+      x, z, trust,
+      targetToken,
+      targetName: (targetPlayer && targetPlayer.name) || (targetProfile && targetProfile.name) || 'Hunter',
+      allowed: this.landAllowedPayload(rec),
+    };
+    if (targets.length > 1) {
+      result.count = targets.length;
+      result.applyGroup = true;
+    }
+    client.send('landClaimTrustResult', result);
+    const notifiedClient = targetSid && this.clients.find(c => c.sessionId === targetSid);
+    if (notifiedClient) {
+      const notice = {
+        x, z, trust,
+        ownerName: rec.name || 'Hunter',
+        title: rec.title ? cleanName(rec.title).slice(0, 32) : '',
+      };
+      if (targets.length > 1) {
+        notice.count = targets.length;
+        notice.applyGroup = true;
+      }
+      notifiedClient.send('landClaimTrustNotice', notice);
+    }
   }
   syncPlayerProfile(client, prof) {
     const p = this.state.players.get(client.sessionId);
@@ -1612,7 +2172,454 @@ class GameRoom extends Room {
       ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
       : '';
     p.dragonNames = this.publicDragonNames(prof);
+    p.dragonGenders = this.publicDragonGenders(prof);
+    p.dragonPersonalities = this.publicDragonPersonalities(prof);
+    p.dragonRoles = this.publicDragonRoles(prof);
+    p.dragonStaySpots = this.publicDragonStaySpots(prof);
+    p.dragonHatchedAt = this.publicDragonHatchedAt(prof);
     p.cosmetics = this.publicCosmetics(prof);
+  }
+  sendProfile(client, prof) {
+    if (!client || !prof) return false;
+    client.send('profile', this.profilePayload(client, prof));
+    return true;
+  }
+  profilePayload(client, prof) {
+    this.normalizeQuestLifecycles(client, prof);
+    this.refreshSystemIntroductions(prof);
+    return { ...prof, activeObjectives: this.activeQuestObjectives(client, prof) };
+  }
+  normalizeQuestLifecycles(client, prof) {
+    if (!prof || typeof prof !== 'object') return false;
+    const now = Date.now();
+    let changed = false;
+    const stampClaimable = obj => {
+      if (!obj || typeof obj !== 'object') return false;
+      if (obj.claimableAt) return false;
+      obj.claimableAt = now;
+      return true;
+    };
+    const npc = prof.activeNpcQuest;
+    if (npc) {
+      const rehydratedNpc = typeof this.rehydrateNpcQuestFromAuthoring === 'function' ? this.rehydrateNpcQuestFromAuthoring(prof, npc) : null;
+      if (!rehydratedNpc) {
+        this.recoverTerminalQuest(client, prof, 'npc', npc, 'failed', 'invalid_state');
+        changed = true;
+      } else if (['failed', 'expired'].includes(npc.lifecycleState)) {
+        this.recoverTerminalQuest(client, prof, 'npc', npc, npc.lifecycleState, npc.lifecycleState);
+        changed = true;
+      } else {
+        if (rehydratedNpc !== npc) {
+          prof.activeNpcQuest = rehydratedNpc;
+          changed = true;
+        }
+        const activeNpc = prof.activeNpcQuest;
+        const ready = typeof this.npcQuestReady === 'function' ? this.npcQuestReady(client, activeNpc) : (activeNpc.have | 0) >= (activeNpc.need | 0);
+        const state = ready ? 'claimable' : 'active';
+        if (activeNpc.lifecycleState !== state && activeNpc.lifecycleState !== 'completed') {
+          activeNpc.lifecycleState = state;
+          changed = true;
+        } else if (activeNpc.lifecycleState === 'completed') {
+          activeNpc.lifecycleState = ready ? 'claimable' : 'active';
+          changed = true;
+        }
+        if (ready && stampClaimable(activeNpc)) changed = true;
+      }
+    }
+    const job = prof.jobContract;
+    if (job) {
+      if (!this.questRecoveryValidJob(prof, job)) {
+        this.recoverTerminalQuest(client, prof, 'job', job, 'failed', 'invalid_state');
+        changed = true;
+      } else if (['failed', 'expired'].includes(job.lifecycleState)) {
+        this.recoverTerminalQuest(client, prof, 'job', job, job.lifecycleState, job.lifecycleState);
+        changed = true;
+      } else if ((job.have | 0) >= (job.need | 0)) {
+        if (job.lifecycleState !== 'claimable') {
+          job.lifecycleState = 'claimable';
+          changed = true;
+        }
+        if (stampClaimable(job)) changed = true;
+      } else if (job.lifecycleState !== 'active') {
+        job.lifecycleState = 'active';
+        changed = true;
+      }
+    }
+    const guild = prof.regionalContract;
+    if (guild) {
+      if (!this.questRecoveryValidGuild(guild)) {
+        this.recoverTerminalQuest(client, prof, 'guild', guild, 'failed', 'invalid_state');
+        changed = true;
+      } else if (['failed', 'expired'].includes(guild.lifecycleState)) {
+        this.recoverTerminalQuest(client, prof, 'guild', guild, guild.lifecycleState, guild.lifecycleState);
+        changed = true;
+      } else if ((guild.have | 0) >= (guild.need | 0) || guild.ready === true) {
+        if (guild.ready !== true) {
+          guild.ready = true;
+          changed = true;
+        }
+        if (guild.lifecycleState !== 'claimable') {
+          guild.lifecycleState = 'claimable';
+          changed = true;
+        }
+        if (stampClaimable(guild)) changed = true;
+      } else if (guild.lifecycleState !== 'active') {
+        guild.lifecycleState = 'active';
+        changed = true;
+      }
+    }
+    if (changed) {
+      const token = client && this.tokens && this.tokens.get(client.sessionId);
+      if (token && this.dirtyPlayers) this.dirtyPlayers.add(token);
+    }
+    const bounty = client && this.aegisBounties && this.aegisBounties.get(client.sessionId);
+    if (bounty && bounty.expiresAt && now > bounty.expiresAt) {
+      this.aegisBounties.delete(client.sessionId);
+      if (this.sendQuestOutcome) this.sendQuestOutcome(client, {
+        source: 'aegis',
+        questType: 'manhunt',
+        title: 'Silent Bounty',
+        outcome: 'expired',
+        reason: 'time',
+        location: 'Aegis Guardian',
+        canReaccept: true,
+        noReward: true,
+      });
+      client.send('pvpBountyFail', { reason: 'time' });
+    }
+    return changed;
+  }
+  questRecoveryValidNpc(prof, q) {
+    if (typeof this.rehydrateNpcQuestFromAuthoring === 'function') return !!this.rehydrateNpcQuestFromAuthoring(prof, q);
+    return false;
+  }
+  questRecoveryValidJob(prof, c) {
+    if (!c || typeof c !== 'object') return false;
+    if (!JOB_SYSTEM.JOB_IDS.includes(c.job) || !(JOB_SYSTEM.GUIDE_STEPS && JOB_SYSTEM.GUIDE_STEPS[c.type])) return false;
+    if ((c.need | 0) < 1 || (c.have | 0) < 0) return false;
+    return true;
+  }
+  questRecoveryValidGuild(c) {
+    if (!c || typeof c !== 'object') return false;
+    if (!REGIONAL_CONTRACT_TYPES.includes(c.type) || !String(c.id || '').trim()) return false;
+    if ((c.need | 0) < 1 || (c.have | 0) < 0) return false;
+    if ((c.targetItem | 0) < 0) return false;
+    return true;
+  }
+  recoverTerminalQuest(client, prof, kind, quest, outcome = 'failed', reason = 'invalid_state') {
+    if (!prof || !quest) return false;
+    const terminal = ['expired', 'failed'].includes(outcome) ? outcome : 'failed';
+    if (kind === 'npc') prof.activeNpcQuest = null;
+    else if (kind === 'job') prof.jobContract = null;
+    else if (kind === 'guild') prof.regionalContract = null;
+    else return false;
+    const source = kind === 'npc' ? (quest.type === 'manhunt' ? 'manhunt' : 'story') : kind;
+    if (this.sendQuestOutcome && client) this.sendQuestOutcome(client, {
+      source,
+      questType: kind === 'npc' ? (quest.type === 'manhunt' ? 'manhunt' : 'npc') : kind,
+      title: quest.title || quest.chainTitle || (kind === 'job' ? 'Job Contract' : kind === 'guild' ? 'Guild Contract' : 'Quest'),
+      outcome: terminal,
+      reason,
+      location: quest.giver || (kind === 'guild' ? 'Guild Board' : kind === 'job' ? 'Job Board' : 'Quest giver'),
+      canReaccept: reason !== 'invalid_state',
+      noReward: true,
+    });
+    return true;
+  }
+  questRewardSummaryPayload(input = {}) {
+    const cleanItems = list => (Array.isArray(list) ? list : []).slice(0, 12)
+      .map(it => ({
+        id: Math.max(0, Math.min(999, it && it.id | 0)),
+        count: Math.max(1, Math.min(999, it && it.count | 0 || 1)),
+        name: String(it && it.name || ITEM_NAMES[it && it.id | 0] || 'Item').slice(0, 64),
+      }))
+      .filter(it => it.id > 0);
+    const gear = input.gear && typeof input.gear === 'object' ? {
+      id: Math.max(0, Math.min(999, input.gear.id | 0)),
+      count: Math.max(1, Math.min(99, input.gear.count | 0 || 1)),
+      name: String(input.gear.name || ITEM_NAMES[input.gear.id | 0] || input.gear.kind || 'Gear').slice(0, 64),
+      rarity: String(input.gear.rarity || '').slice(0, 24),
+      recovered: input.gear.recovered === true,
+    } : null;
+    return {
+      source: String(input.source || 'quest').slice(0, 32),
+      questType: String(input.questType || input.source || 'quest').slice(0, 32),
+      title: String(input.title || 'Quest Complete').slice(0, 96),
+      gold: Math.max(0, Math.min(999999, input.gold | 0)),
+      xp: Math.max(0, Math.min(999999, input.xp | 0)),
+      jobXp: Math.max(0, Math.min(999999, input.jobXp | 0)),
+      job: String(input.job || '').slice(0, 32),
+      items: cleanItems(input.items),
+      gear,
+      claimLocation: String(input.claimLocation || '').slice(0, 80),
+      inventoryOverflow: input.inventoryOverflow === true,
+    };
+  }
+  sendQuestRewardSummary(client, input) {
+    if (!client || !input) return false;
+    const payload = this.questRewardSummaryPayload(input);
+    this.recordQuestHistory(client, { ...payload, outcome: 'completed', reason: 'claimed', location: payload.claimLocation });
+    client.send('questRewardSummary', payload);
+    return true;
+  }
+  questOutcomePayload(input = {}) {
+    const outcome = ['abandoned', 'failed', 'expired'].includes(input.outcome) ? input.outcome : 'failed';
+    return {
+      source: String(input.source || 'quest').slice(0, 32),
+      questType: String(input.questType || input.source || 'quest').slice(0, 32),
+      title: String(input.title || 'Quest').slice(0, 96),
+      outcome,
+      reason: String(input.reason || outcome).slice(0, 48),
+      location: String(input.location || '').slice(0, 80),
+      canReaccept: input.canReaccept !== false,
+      noReward: input.noReward !== false,
+      shared: input.shared === true,
+      endedBy: String(input.endedBy || '').slice(0, 64),
+    };
+  }
+  sendQuestOutcome(client, input) {
+    if (!client || !input) return false;
+    const payload = this.questOutcomePayload(input);
+    this.recordQuestHistory(client, payload);
+    client.send('questOutcome', payload);
+    return true;
+  }
+  questHistoryEntryPayload(input = {}) {
+    const outcome = ['completed', 'abandoned', 'failed', 'expired'].includes(input.outcome) ? input.outcome : 'failed';
+    const cleanItems = list => (Array.isArray(list) ? list : []).slice(0, 12)
+      .map(it => ({
+        id: Math.max(0, Math.min(999, it && it.id | 0)),
+        count: Math.max(1, Math.min(999, it && it.count | 0 || 1)),
+        name: String(it && it.name || ITEM_NAMES[it && it.id | 0] || 'Item').slice(0, 64),
+      }))
+      .filter(it => it.id > 0);
+    const gear = input.gear && typeof input.gear === 'object' ? {
+      id: Math.max(0, Math.min(999, input.gear.id | 0)),
+      count: Math.max(1, Math.min(99, input.gear.count | 0 || 1)),
+      name: String(input.gear.name || ITEM_NAMES[input.gear.id | 0] || input.gear.kind || 'Gear').slice(0, 64),
+      rarity: String(input.gear.rarity || '').slice(0, 24),
+      recovered: input.gear.recovered === true,
+    } : null;
+    return {
+      id: 'qh_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+      source: String(input.source || 'quest').slice(0, 32),
+      questType: String(input.questType || input.source || 'quest').slice(0, 32),
+      title: String(input.title || (outcome === 'completed' ? 'Quest Complete' : 'Quest')).slice(0, 96),
+      outcome,
+      reason: String(input.reason || (outcome === 'completed' ? 'claimed' : outcome)).slice(0, 48),
+      location: String(input.location || input.claimLocation || '').slice(0, 80),
+      endedAt: Date.now(),
+      gold: Math.max(0, Math.min(999999, input.gold | 0)),
+      xp: Math.max(0, Math.min(999999, input.xp | 0)),
+      jobXp: Math.max(0, Math.min(999999, input.jobXp | 0)),
+      job: String(input.job || '').slice(0, 32),
+      items: cleanItems(input.items),
+      gear,
+      inventoryOverflow: input.inventoryOverflow === true,
+      noReward: input.noReward === true || outcome !== 'completed',
+      shared: input.shared === true,
+      endedBy: String(input.endedBy || '').slice(0, 64),
+      canReaccept: input.canReaccept !== false,
+    };
+  }
+  recordQuestHistory(client, input = {}) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof) return null;
+    const entry = this.questHistoryEntryPayload(input);
+    const history = Array.isArray(rec.prof.questHistory) ? rec.prof.questHistory : [];
+    rec.prof.questHistory = [entry, ...history].slice(0, 50);
+    if (rec.token && this.dirtyPlayers) this.dirtyPlayers.add(rec.token);
+    return entry;
+  }
+  activeQuestObjectives(client, prof) {
+    const objectives = [];
+    const lifecycleFor = (state, src = {}) => ({
+      state: ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(state) ? state : 'active',
+      offeredAt: Math.max(0, Number(src.offeredAt) || 0),
+      acceptedAt: Math.max(0, Number(src.acceptedAt) || 0),
+      claimableAt: Math.max(0, Number(src.claimableAt) || 0),
+      completedAt: Math.max(0, Number(src.completedAt) || 0),
+      expiresAt: Math.max(0, Number(src.expiresAt) || 0),
+    });
+    const rewardPayload = reward => {
+      if (!reward || typeof reward !== 'object') return null;
+      const items = Array.isArray(reward.items)
+        ? reward.items.slice(0, 6).map(it => ({
+          id: Math.max(0, it && it.id | 0),
+          count: Math.max(1, Math.min(999, it && it.count | 0 || 1)),
+          name: String(it && it.name || ITEM_NAMES[it && it.id | 0] || 'Item').slice(0, 48),
+        })).filter(it => it.id > 0)
+        : [];
+      const out = {
+        gold: Math.max(0, Math.min(999999, reward.gold | 0)),
+        xp: Math.max(0, Math.min(999999, reward.xp | 0)),
+        jobXp: Math.max(0, Math.min(999999, reward.jobXp | 0)),
+        job: String(reward.job || '').slice(0, 24),
+        items,
+        note: String(reward.note || '').slice(0, 80),
+      };
+      return out.gold || out.xp || out.jobXp || out.items.length || out.note ? out : null;
+    };
+    const add = objective => {
+      if (!objective || !objective.id || !objective.title) return;
+      const status = ['offered', 'active', 'complete', 'claimable', 'failed'].includes(objective.status) ? objective.status : 'active';
+      const category = String(objective.category || objective.source || 'quest').slice(0, 32);
+      const action = objective.action && typeof objective.action === 'object' ? {
+        type: String(objective.action.type || '').slice(0, 32),
+        label: String(objective.action.label || '').slice(0, 32),
+      } : null;
+      const payload = {
+        id: String(objective.id).slice(0, 96),
+        source: String(objective.source || 'quest').slice(0, 32),
+        category,
+        questType: String(objective.questType || objective.source || 'quest').slice(0, 32),
+        title: String(objective.title).slice(0, 80),
+        status,
+        text: String(objective.text || '').slice(0, 180),
+        location: String(objective.location || '').slice(0, 80),
+        action,
+        claimAction: objective.claimAction || null,
+        hudAction: objective.hudAction || action,
+        questLogAction: objective.questLogAction || action,
+        progress: objective.progress && typeof objective.progress === 'object' ? {
+          current: Math.max(0, Math.min(999999, objective.progress.current | 0)),
+          required: Math.max(1, Math.min(999999, objective.progress.required | 0 || 1)),
+        } : null,
+        priority: Math.max(0, Math.min(999, objective.priority | 0 || 100)),
+        serverOwned: objective.serverOwned !== false,
+        reward: rewardPayload(objective.reward),
+        lifecycle: lifecycleFor(objective.lifecycle && objective.lifecycle.state || (status === 'claimable' ? 'claimable' : status === 'complete' ? 'completed' : status), objective.lifecycle || objective),
+      };
+      objectives.push(QUEST_OBJECTIVES.normalizeObjective(payload) || payload);
+    };
+    const bounty = this.aegisBounties && client ? this.aegisBounties.get(client.sessionId) : null;
+    if (bounty) add({
+      id: 'aegis:silent_bounty:active',
+      source: 'aegis',
+      questType: 'manhunt',
+      title: 'Silent Bounty',
+      status: Date.now() > (bounty.expiresAt || 0) ? 'failed' : 'active',
+      text: `Manhunt target: ${bounty.targetName || 'Unknown Hunter'}. Defeat them outside protected town land.`,
+      location: 'Overworld wilderness',
+      action: null,
+      progress: { current: 0, required: 1 },
+      priority: 8,
+      lifecycle: lifecycleFor('active', bounty),
+    });
+    const npc = prof.activeNpcQuest;
+    if (npc) {
+      const ready = typeof this.npcQuestReady === 'function' ? this.npcQuestReady(client, npc) : (npc.have | 0) >= (npc.need | 0);
+      const current = npc.type === 'fetch' && typeof this.countItem === 'function'
+        ? this.countItem(prof, npc.item | 0)
+        : Math.max(0, npc.have | 0);
+      const required = Math.max(1, npc.need | 0 || 1);
+      add({
+        id: `npc:${npc.giver || 'giver'}:${npc.chainStep | 0}`,
+        source: npc.category || (npc.type === 'manhunt' ? 'manhunt' : 'story'),
+        category: npc.category || (npc.type === 'manhunt' ? 'manhunt' : 'story'),
+        questType: npc.questType || (npc.type === 'manhunt' ? 'manhunt' : 'npc'),
+        title: npc.title || npc.chainTitle || 'Story Quest',
+        status: ready ? 'claimable' : 'active',
+        text: ready ? (npc.turnInText || `Turn in to ${npc.giver || 'the quest giver'}`) : (npc.desc || npc.objectiveText || `Complete ${required} objective${required === 1 ? '' : 's'}.`),
+        location: ready ? (npc.turnInLocation || npc.giver || 'Quest giver') : (npc.objectiveLocation || (npc.type === 'gate' ? 'Wilderness Gate' : 'Follow the active trail')),
+        action: ready ? (npc.turnInAction || { type: 'turn_in', label: 'TURN IN' }) : (npc.objectiveAction || (npc.type === 'gate' ? { type: 'find_gate', label: 'FIND GATE' } : null)),
+        progress: { current: Math.min(required, current), required },
+        reward: {
+          gold: npc.gold | 0,
+          xp: npc.xp | 0,
+          jobXp: 12,
+          job: 'adventurer',
+          items: npc.rewardItems || [],
+        },
+        priority: 10,
+        lifecycle: lifecycleFor(ready ? 'claimable' : 'active', npc),
+      });
+    }
+    if (prof.aegisTrialReady) add({
+      id: 'aegis:silent_bounty:claim',
+      source: 'aegis',
+      questType: 'manhunt',
+      title: 'Silent Bounty',
+      status: 'claimable',
+      text: 'The manhunt is complete. Claim the Aegis cache.',
+      location: 'Aegis Guardian',
+      action: { type: 'claim_aegis', label: 'CLAIM TRIAL' },
+      progress: { current: 1, required: 1 },
+      reward: {
+        gold: Math.max(0, 135 + Math.max(1, prof.S && prof.S.lvl | 0) * 8),
+        xp: Math.max(0, 130 + Math.max(1, prof.S && prof.S.lvl | 0) * 12),
+        jobXp: 12,
+        job: 'adventurer',
+        note: 'Aegis cache loot',
+      },
+      priority: 20,
+      lifecycle: lifecycleFor('claimable', prof.aegisTrial || {}),
+    });
+    const job = prof.jobContract;
+    if (job) add({
+      id: `job:${job.id || job.job || 'contract'}`,
+      source: 'job',
+      questType: 'job',
+      title: job.title || 'Job Contract',
+      status: (job.have | 0) >= (job.need | 0) ? 'claimable' : 'active',
+      text: job.desc || 'Complete the job contract.',
+      location: (job.have | 0) >= (job.need | 0) ? 'Job Board' : (job.location || 'Follow the contract description'),
+      action: (job.have | 0) >= (job.need | 0) ? { type: 'jobs', label: 'CLAIM JOB' } : null,
+      progress: { current: Math.max(0, job.have | 0), required: Math.max(1, job.need | 0 || 1) },
+      reward: {
+        gold: job.rewardGold | 0,
+        xp: job.rewardXp | 0,
+        jobXp: job.rewardJobXp | 0,
+        job: job.job || '',
+      },
+      priority: 30,
+      lifecycle: lifecycleFor((job.have | 0) >= (job.need | 0) ? 'claimable' : 'active', job),
+    });
+    const guild = prof.regionalContract;
+    if (guild) add({
+      id: `guild:${guild.id || guild.type || 'contract'}`,
+      source: 'guild',
+      questType: 'guild',
+      title: guild.title || 'Guild Contract',
+      status: guild.ready || (guild.have | 0) >= (guild.need | 0) ? 'claimable' : 'active',
+      text: guild.desc || 'Complete the guild contract.',
+      location: guild.ready ? 'Job Board' : (guild.targetName || 'Regional target'),
+      action: guild.ready ? { type: 'guild_contracts', label: 'CLAIM GUILD' } : null,
+      progress: { current: Math.max(0, guild.have | 0), required: Math.max(1, guild.need | 0 || 1) },
+      reward: {
+        gold: guild.rewardGold | 0,
+        xp: guild.rewardXp | 0,
+        items: guild.rewardItems || [],
+      },
+      priority: 40,
+      lifecycle: lifecycleFor(guild.ready || (guild.have | 0) >= (guild.need | 0) ? 'claimable' : 'active', guild),
+    });
+    const progression = this.progressionObjective(prof.progressionFocus);
+    if (progression) add(progression);
+    return objectives.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
+  }
+  progressionObjective(focus) {
+    const map = {
+      first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Mara\'s combat lesson.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
+      first_e_gate: ['progression:first_e_gate', 'progression', 'First E-rank Gate', 'Clear Mara\'s first E-rank Gate.', 'Wilderness Gate', 'find_gate', 'FIND GATE', 50],
+      first_craft_station: ['progression:first_craft_station', 'progression', 'First Craft Station', 'Craft a Crafting Table or Furnace.', 'Crafting menu', 'craft', 'CRAFT STATION', 50],
+      first_land_claim: ['progression:first_land_claim', 'progression', 'First Land Claim', 'Buy protected land for your first base.', 'Land Claims', 'land', 'CLAIM LAND', 50],
+      first_claim_expand: ['progression:first_claim_expand', 'progression', 'Expand Claim', 'Expand your claim to at least three connected tiles.', 'Land Claims', 'land', 'EXPAND LAND', 50],
+      first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Place storage, light, and a station inside claimed land.', 'Claimed land', 'land', 'OPEN LAND', 50],
+      first_profession_contract: ['progression:first_profession_contract', 'progression', 'First Contract', 'Take your first profession or Adventurer contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
+      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', 'Use contracts, gates, and field work to grow toward D-rank.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
+      first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
+      first_promotion_contract: ['progression:first_promotion_contract', 'progression', 'Promotion Contract', 'Take the first Adventurer promotion contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
+      first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare armor, food, repair supplies, and clear a D-rank Gate.', 'Gate prep', 'quest_log', 'OPEN PREP', 50],
+      next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'Next Adventurer Contract', 'Return to repeatable Adventurer contracts.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
+    };
+    const spec = map[focus];
+    if (!spec) return null;
+    return {
+      id: spec[0], source: spec[1], title: spec[2], status: 'active', text: spec[3],
+      location: spec[4], action: { type: spec[5], label: spec[6] }, priority: spec[7],
+      progress: null, serverOwned: true,
+    };
   }
   refreshSystemIntroductions(prof) {
     if (!prof) return [];
@@ -1683,13 +2690,14 @@ class GameRoom extends Room {
       z: Number.isFinite(context.z) ? context.z : p.z,
       dgn: context.dgn || '',
       cause: context.cause || 'death',
+      recentHits: context.recentHits || '',
     };
     const limbo = { id, index: 0, items, death, startedAt: Date.now() };
     this.deathLimbo.set(client.sessionId, limbo);
     p.x = W.TOWN.TC + .5; p.y = W.TOWN.G + 72; p.z = W.TOWN.TC + .5; p.dgn = '';
     this.pvel.set(client.sessionId, { x: 0, z: 0 });
     this.dirtyPlayers.add(rec.token);
-    client.send('profile', rec.prof);
+    this.sendProfile(client, rec.prof);
     client.send('deathLimboStart', this.publicDeathLimbo(limbo, p));
     return true;
   }
@@ -1699,6 +2707,8 @@ class GameRoom extends Room {
       id: limbo.id, index: limbo.index, total: limbo.items.length,
       item: entry && { slot: entry.slot, id: entry.item.id, count: entry.item.count, label: entry.label },
       question: entry && { subject: entry.question.subject, stage: entry.question.stage, prompt: entry.question.prompt, answers: entry.question.answers },
+      cause: limbo.death && limbo.death.cause || 'death',
+      recentHits: limbo.death && limbo.death.recentHits || '',
       x: p && p.x, y: p && p.y, z: p && p.z,
     };
   }
@@ -1756,7 +2766,7 @@ class GameRoom extends Room {
     else this.createDeathDrop(entry, limbo.death, rec.prof.name || 'A hunter');
     limbo.index++;
     this.dirtyPlayers.add(rec.token);
-    client.send('profile', rec.prof);
+    this.sendProfile(client, rec.prof);
     client.send('deathLimboResult', { id: limbo.id, correct, item: { id: entry.item.id, count: entry.item.count || 1, label: entry.label }, correctIndex: entry.question.correct, explanation: entry.question.explanation, nextDue:review.record.nextDue, mastery:RECALL.masterySummary(review.history,rec.prof.recallSubject||'English') });
     const p = this.state.players.get(client.sessionId);
     if (limbo.index >= limbo.items.length) {
@@ -1776,7 +2786,7 @@ class GameRoom extends Room {
       const item = this.cloneDeathItem(drop.item);
       if (!item) { this.deathDrops.delete(id); continue; }
       if (!this.addDeathStackToInventory(rec.prof, item)) return client.send('deathDropReject', { reason: 'full', id });
-      this.deathDrops.delete(id); this.dirtyPlayers.add(rec.token); client.send('profile', rec.prof);
+      this.deathDrops.delete(id); this.dirtyPlayers.add(rec.token); this.sendProfile(client, rec.prof);
       this.sendSpace(drop.dgn || '', 'deathDropTaken', { id, by: rec.prof.name || 'A hunter', item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '' });
     }
   }
@@ -1791,20 +2801,244 @@ class GameRoom extends Room {
     }
     return JSON.stringify(out);
   }
+  defaultDragonGender(type) {
+    return ['ember', 'frost', 'void'].includes(type) ? 'male' : 'female';
+  }
+  randomDragonGender() {
+    return Math.random() < 0.5 ? 'male' : 'female';
+  }
+  defaultDragonPersonality(type) {
+    return ({ ember: 'bold', verdant: 'gentle', frost: 'skittish', storm: 'playful', void: 'proud' })[type] || 'bold';
+  }
+  randomDragonPersonality() {
+    const list = ['bold', 'gentle', 'proud', 'playful', 'skittish', 'hungry'];
+    return list[(Math.random() * list.length) | 0];
+  }
+  ensureDragonGender(prof, type, preferred = '') {
+    if (!prof || !DRAGON_TYPE_SET.has(type)) return '';
+    if (!prof.dragonGenders || typeof prof.dragonGenders !== 'object') prof.dragonGenders = {};
+    const gender = preferred === 'male' || preferred === 'female' ? preferred
+      : (prof.dragonGenders[type] === 'male' || prof.dragonGenders[type] === 'female' ? prof.dragonGenders[type] : this.defaultDragonGender(type));
+    prof.dragonGenders[type] = gender;
+    return gender;
+  }
+  publicDragonGenders(prof) {
+    const out = {};
+    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
+      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
+    for (const type of owned) out[type] = this.ensureDragonGender(prof, type);
+    return JSON.stringify(out);
+  }
+  ensureDragonPersonality(prof, type, preferred = '') {
+    if (!prof || !DRAGON_TYPE_SET.has(type)) return '';
+    if (!prof.dragonPersonalities || typeof prof.dragonPersonalities !== 'object') prof.dragonPersonalities = {};
+    const valid = new Set(['bold', 'gentle', 'proud', 'playful', 'skittish', 'hungry']);
+    const personality = valid.has(preferred) ? preferred
+      : (valid.has(prof.dragonPersonalities[type]) ? prof.dragonPersonalities[type] : this.defaultDragonPersonality(type));
+    prof.dragonPersonalities[type] = personality;
+    return personality;
+  }
+  publicDragonPersonalities(prof) {
+    const out = {};
+    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
+      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
+    for (const type of owned) out[type] = this.ensureDragonPersonality(prof, type);
+    return JSON.stringify(out);
+  }
+  ensureDragonRole(prof, type, preferred = '') {
+    if (!prof || !DRAGON_TYPE_SET.has(type)) return '';
+    if (!prof.dragonRoles || typeof prof.dragonRoles !== 'object') prof.dragonRoles = {};
+    const valid = new Set(['follow', 'stay', 'guard', 'rest']);
+    const role = valid.has(preferred) ? preferred
+      : (valid.has(prof.dragonRoles[type]) ? prof.dragonRoles[type] : 'follow');
+    prof.dragonRoles[type] = role;
+    return role;
+  }
+  publicDragonRoles(prof) {
+    const out = {};
+    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
+      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
+    for (const type of owned) out[type] = this.ensureDragonRole(prof, type);
+    return JSON.stringify(out);
+  }
+  setDragonStaySpot(prof, type, p) {
+    if (!prof || !DRAGON_TYPE_SET.has(type) || !p) return null;
+    if (!prof.dragonStaySpots || typeof prof.dragonStaySpots !== 'object') prof.dragonStaySpots = {};
+    const spot = {
+      x: Math.max(-100000, Math.min(100000, Number(p.x) || 0)),
+      y: Math.max(-128, Math.min(512, Number(p.y) || 0)),
+      z: Math.max(-100000, Math.min(100000, Number(p.z) || 0)),
+      yaw: Math.max(-Math.PI * 4, Math.min(Math.PI * 4, Number(p.yaw) || 0)),
+    };
+    prof.dragonStaySpots[type] = spot;
+    return spot;
+  }
+  publicDragonStaySpots(prof) {
+    const out = {};
+    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
+      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
+    const spots = prof && prof.dragonStaySpots && typeof prof.dragonStaySpots === 'object' ? prof.dragonStaySpots : {};
+    for (const type of owned) {
+      const role = this.ensureDragonRole(prof, type);
+      const s = spots[type];
+      if (role === 'stay' && s && typeof s === 'object') out[type] = {
+        x: Math.max(-100000, Math.min(100000, Number(s.x) || 0)),
+        y: Math.max(-128, Math.min(512, Number(s.y) || 0)),
+        z: Math.max(-100000, Math.min(100000, Number(s.z) || 0)),
+        yaw: Math.max(-Math.PI * 4, Math.min(Math.PI * 4, Number(s.yaw) || 0)),
+      };
+    }
+    return JSON.stringify(out);
+  }
+  ensureDragonHatchedAt(prof, type, preferred = null) {
+    if (!prof || !DRAGON_TYPE_SET.has(type)) return 0;
+    if (!prof.dragonHatchedAt || typeof prof.dragonHatchedAt !== 'object') prof.dragonHatchedAt = {};
+    const raw = preferred != null ? preferred : prof.dragonHatchedAt[type];
+    const at = raw == null ? 0 : Math.max(0, Math.min(4102444800000, Math.round(Number(raw) || 0)));
+    prof.dragonHatchedAt[type] = at;
+    return at;
+  }
+  dragonAgeMs(prof, type, now = Date.now()) {
+    const at = this.ensureDragonHatchedAt(prof, type);
+    return at ? Math.max(0, now - at) : DRAGON_GROW_MS;
+  }
+  isDragonAdult(prof, type, now = Date.now()) {
+    return this.dragonAgeMs(prof, type, now) >= DRAGON_GROW_MS;
+  }
+  dragonStage(prof, type, now = Date.now()) {
+    const age = this.dragonAgeMs(prof, type, now);
+    return age >= DRAGON_GROW_MS ? 'adult' : (age >= DRAGON_JUVENILE_MS ? 'juvenile' : 'baby');
+  }
+  publicDragonHatchedAt(prof) {
+    const out = {};
+    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
+      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
+    for (const type of owned) out[type] = this.ensureDragonHatchedAt(prof, type);
+    return JSON.stringify(out);
+  }
   dragonCareFor(prof, type) {
     if (!prof || !DRAGON_TYPE_SET.has(type)) return null;
     if (!prof.dragonCare || typeof prof.dragonCare !== 'object') prof.dragonCare = {};
     const cur = prof.dragonCare[type] || {};
     const now = Date.now();
     const elapsedHours = cur.fedAt ? Math.max(0, (now - cur.fedAt) / 3600000) : 0;
-    const decayed = Math.max(0, Math.round((cur.happiness == null ? 50 : cur.happiness) - elapsedHours * 2));
+    const decayRate = this.ensureDragonPersonality(prof, type) === 'gentle' ? 1.2 : 2;
+    const decayed = Math.max(0, Math.round((cur.happiness == null ? 50 : cur.happiness) - elapsedHours * decayRate));
     const care = { happiness: decayed, fedAt: cur.fedAt || 0 };
     prof.dragonCare[type] = care;
     return care;
   }
+  dragonBondThresholds() {
+    return [0, 40, 120, 260, 480, 800];
+  }
+  dragonBondLevelFromXp(xp) {
+    const thresholds = this.dragonBondThresholds();
+    let level = 1;
+    for (let i = 1; i < thresholds.length; i++) if ((xp | 0) >= thresholds[i]) level = i + 1;
+    return level;
+  }
+  dragonBondLevel(prof, type) {
+    return this.dragonBondLevelFromXp(prof && prof.dragonBondXp ? prof.dragonBondXp[type] | 0 : 0);
+  }
+  dragonSpecialization(prof, type) {
+    if (!prof || !DRAGON_TYPE_SET.has(type)) return '';
+    const s = prof.dragonSpecializations && typeof prof.dragonSpecializations === 'object' ? prof.dragonSpecializations[type] : '';
+    return ['scout', 'defender', 'sage'].includes(s) ? s : '';
+  }
+  setDragonSpecialization(prof, type, specialization) {
+    if (!prof || !DRAGON_TYPE_SET.has(type) || !['scout', 'defender', 'sage'].includes(specialization)) return '';
+    if (!prof.dragonSpecializations || typeof prof.dragonSpecializations !== 'object') prof.dragonSpecializations = {};
+    if (this.dragonSpecialization(prof, type)) return '';
+    prof.dragonSpecializations[type] = specialization;
+    return specialization;
+  }
+  dragonBondCooldownBonus(prof, type) {
+    const perLevel = this.ensureDragonPersonality(prof, type) === 'proud' ? 0.03 : 0.025;
+    const cap = this.ensureDragonPersonality(prof, type) === 'proud' ? 0.15 : 0.12;
+    return Math.min(cap, Math.max(0, (this.dragonBondLevel(prof, type) - 1) * perLevel));
+  }
+  dragonMasteryThresholds() {
+    return [0, 12, 36, 80, 150];
+  }
+  dragonRoleMasteryXp(prof, type, role) {
+    if (!prof || !DRAGON_TYPE_SET.has(type) || !['follow', 'guard', 'stay', 'rest'].includes(role)) return 0;
+    const byType = prof.dragonRoleMastery && typeof prof.dragonRoleMastery === 'object' ? prof.dragonRoleMastery[type] : null;
+    return byType && typeof byType === 'object' ? Math.max(0, byType[role] | 0) : 0;
+  }
+  dragonRoleMasteryLevel(prof, type, role) {
+    const xp = this.dragonRoleMasteryXp(prof, type, role), thresholds = this.dragonMasteryThresholds();
+    let level = 1;
+    for (let i = 1; i < thresholds.length; i++) if (xp >= thresholds[i]) level = i + 1;
+    return level;
+  }
+  awardDragonRoleMastery(prof, type, role, amount = 1) {
+    if (!prof || !DRAGON_TYPE_SET.has(type) || !['follow', 'guard', 'stay', 'rest'].includes(role) || amount <= 0) return null;
+    const kind = 'dragon:' + type;
+    if (!Array.isArray(prof.mountUnlocks) || !prof.mountUnlocks.includes(kind)) return null;
+    if (!prof.dragonRoleMastery || typeof prof.dragonRoleMastery !== 'object') prof.dragonRoleMastery = {};
+    if (!prof.dragonRoleMastery[type] || typeof prof.dragonRoleMastery[type] !== 'object') prof.dragonRoleMastery[type] = {};
+    const before = Math.max(0, prof.dragonRoleMastery[type][role] | 0);
+    const after = Math.min(1000000, before + (amount | 0));
+    prof.dragonRoleMastery[type][role] = after;
+    return { role, xp: after, level: this.dragonRoleMasteryLevel(prof, type, role), gained: after - before };
+  }
+  dragonChallengeDay(now = Date.now()) {
+    return Math.floor(now / 86400000);
+  }
+  dragonDailyChallenge(day = this.dragonChallengeDay()) {
+    const defs = [
+      { id: 'care', title: 'Treat Training', reason: 'care', need: 1, reward: 24 },
+      { id: 'follow', title: 'Wing Road', reason: 'follow', need: 3, reward: 28 },
+      { id: 'guard', title: 'Watchful Guard', reason: 'guard', need: 3, reward: 32 },
+      { id: 'rest', title: 'Quiet Roost', reason: 'rest', need: 3, reward: 24 },
+      { id: 'stay', title: 'Hold The Post', reason: 'stay', need: 1, reward: 30 },
+      { id: 'ability', title: 'Breath Practice', reason: 'ability', need: 2, reward: 30 },
+    ];
+    return defs[Math.abs(day | 0) % defs.length];
+  }
+  dragonChallengeState(prof, now = Date.now()) {
+    if (!prof) return null;
+    const day = this.dragonChallengeDay(now), def = this.dragonDailyChallenge(day);
+    let st = prof.dragonChallenges;
+    if (!st || typeof st !== 'object' || st.day !== day || st.id !== def.id) {
+      st = { day, id: def.id, type: '', reason: def.reason, need: def.need, progress: 0, claimed: false };
+      prof.dragonChallenges = st;
+    }
+    st.reason = def.reason;
+    st.need = def.need;
+    return st;
+  }
+  recordDragonChallenge(prof, type, reason, value = 1, now = Date.now()) {
+    const st = this.dragonChallengeState(prof, now), def = this.dragonDailyChallenge(st ? st.day : this.dragonChallengeDay(now));
+    if (!st || st.claimed || def.reason !== reason) return null;
+    st.type = type;
+    st.progress = Math.min(def.need, Math.max(0, (st.progress | 0) + Math.max(1, value | 0)));
+    if (st.progress >= def.need) {
+      st.claimed = true;
+      return { ...st, title: def.title, reward: def.reward, justCompleted: true };
+    }
+    return { ...st, title: def.title, reward: def.reward, justCompleted: false };
+  }
+  awardDragonBondXp(prof, type, amount, reason = '') {
+    if (!prof || !DRAGON_TYPE_SET.has(type) || amount <= 0) return null;
+    const kind = 'dragon:' + type;
+    if (!Array.isArray(prof.mountUnlocks) || !prof.mountUnlocks.includes(kind)) return null;
+    const personality = this.ensureDragonPersonality(prof, type);
+    if (reason === 'care' && personality === 'playful') amount = Math.ceil(amount * 1.2);
+    if (reason === 'ability' && personality === 'bold') amount = Math.ceil(amount * 1.5);
+    if (this.dragonStage(prof, type) !== 'adult' && personality === 'skittish') amount = Math.ceil(amount * 1.25);
+    if (!prof.dragonBondXp || typeof prof.dragonBondXp !== 'object') prof.dragonBondXp = {};
+    const before = Math.max(0, prof.dragonBondXp[type] | 0);
+    const challenge = this.recordDragonChallenge(prof, type, reason, 1);
+    const bonus = challenge && challenge.justCompleted ? (challenge.reward | 0) : 0;
+    const after = Math.min(1000000, before + (amount | 0) + bonus);
+    prof.dragonBondXp[type] = after;
+    return { xp: after, level: this.dragonBondLevelFromXp(after), gained: after - before, challenge };
+  }
   feedDragonCare(prof, type, amount) {
     const care = this.dragonCareFor(prof, type);
     if (!care) return null;
+    if (this.ensureDragonPersonality(prof, type) === 'hungry') amount += 4;
     care.happiness = Math.max(0, Math.min(100, (care.happiness | 0) + (amount | 0)));
     care.fedAt = Date.now();
     return care;
@@ -1881,7 +3115,34 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     return !!(p && p.dim === 'tutorial' && p.dgn);
   }
-  hurtPlayer(client, amount, reason = 'combat') {
+  combatReasonLabel(reason = 'combat') {
+    const key = String(reason || 'combat').replace(/^server:/, '').replace(/_arrow$/, '');
+    const names = {
+      arrow: 'Arrow Shot', combat: 'Melee Hit', boss_melee: 'Boss Swipe', boss_slam: 'Boss Slam',
+      boss_charge: 'Boss Charge', boss_spikes: 'Ground Spikes', grave_ring: 'Grave Ring',
+      falling_rock: 'Falling Rock', keeper_roots: 'Keeper Roots', boss_control_roots: 'Control Roots', drowned_tide: 'Drowned Tide',
+      ossuary_wave: 'Ossuary Wave', blighted_roots: 'Blighted Roots', bandit_captain: 'Captain Cleave',
+      caravan_bandit: 'Caravan Bandit', brute: 'Brute Slam', flanker: 'Pack Lunge',
+      quickshot: 'Quick Shot', mire_poison: 'Mire Poison', fall: 'Hard Landing',
+    };
+    return names[key] || key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+  }
+  recentHitSummary(client, limit = 3) {
+    const hits = this.playerDamageRecaps && this.playerDamageRecaps.get(client && client.sessionId);
+    if (!Array.isArray(hits) || !hits.length) return '';
+    return hits.slice(-limit).reverse().map(h => h.label + ' ' + h.damage).join(', ');
+  }
+  rememberPlayerHit(client, damage, reason, detail = {}) {
+    if (!client || damage <= 0) return;
+    if (!this.playerDamageRecaps) this.playerDamageRecaps = new Map();
+    const label = detail.attack || this.combatReasonLabel(reason);
+    const hit = { at: Date.now(), damage: Math.round(damage), reason, label };
+    const prior = this.playerDamageRecaps.get(client.sessionId) || [];
+    const fresh = prior.filter(h => hit.at - (h.at || 0) < 10000);
+    fresh.push(hit);
+    this.playerDamageRecaps.set(client.sessionId, fresh.slice(-5));
+  }
+  hurtPlayer(client, amount, reason = 'combat', detail = {}) {
     if (!client) return;
     if (this.isTrainingMeadowPlayer(client)) {
       const hp = this.ensurePlayerHp(client);
@@ -1916,9 +3177,13 @@ class GameRoom extends Room {
     const hp = this.ensurePlayerHp(client);
     const dmg = Math.max(0, Math.round(amount));
     hp.hp = Math.max(0, hp.hp - dmg);
+    this.rememberPlayerHit(client, dmg, reason, detail);
+    if (this.rememberDungeonBossMechanicHit) this.rememberDungeonBossMechanicHit(client, dmg, reason);
+    const recentHits = this.recentHitSummary(client);
     client.send('hurt', {
       n:dmg,reason,raw:Math.round(incoming),absorbed:Math.max(0,Math.round(incoming)-dmg),
       hp:hp.hp,maxHp:hp.max,lethal:hp.hp<=0,armor:armorFeedback,
+      hitLabel: detail.attack || this.combatReasonLabel(reason), recentHits,
     });
     // Second Wind — Iron Guardian passive, simulated where the authoritative HP lives
     if (hp.hp > 0 && hp.hp < hp.max * .25 && rec && rec.prof && rec.prof.S
@@ -1935,6 +3200,71 @@ class GameRoom extends Room {
     }
     if (p && p.dgn) this.sendDungeonStatus(p.dgn);
     if (hp.hp <= 0) this.handlePlayerDeath(client,reason);
+  }
+  utilityEquippedServer(client, id) {
+    const rec = client && this.profileFor(client);
+    if (!rec || !rec.prof) return false;
+    if (!Array.isArray(rec.prof.utilityUnlocks)) rec.prof.utilityUnlocks = [];
+    rec.prof.utilityLoadout = sanitizeUtilityLoadout(rec.prof.utilityLoadout, rec.prof.utilityUnlocks);
+    const loadout = rec.prof.utilityLoadout || {};
+    return loadout.active === id || (Array.isArray(loadout.passive) && loadout.passive.includes(id));
+  }
+  fallDamageFor(drop, featherStep = false) {
+    const d = Math.max(0, Number(drop) || 0);
+    if (d <= FALL_SAFE_DROP) return { damage: 0, kind: 'safe' };
+    if (featherStep) {
+      if (d <= FEATHER_STEP_ABSORB_DROP) return { damage: 0, kind: 'absorbed' };
+      return { damage: Math.max(1, Math.ceil((d - FEATHER_STEP_ABSORB_DROP) * .5)), kind: 'softened' };
+    }
+    return { damage: Math.min(18, Math.ceil((d - FALL_SAFE_DROP) * 1.25)), kind: 'hard' };
+  }
+  resolveFallLanding(client, drop) {
+    if (!client || drop <= FALL_SAFE_DROP) return;
+    const featherStep = this.utilityEquippedServer(client, 'feather_step');
+    const result = this.fallDamageFor(drop, featherStep);
+    if (featherStep) {
+      client.send('utilityFeedback', {
+        id: 'feather_step',
+        kind: result.kind,
+        drop: Math.round(drop * 10) / 10,
+        damage: result.damage,
+      });
+    }
+    if (result.damage > 0) {
+      this.hurtPlayer(client, result.damage, 'fall', { attack: featherStep ? 'Feather Step Fall' : 'Hard Landing' });
+    }
+  }
+  trackAcceptedMoveFall(client, fromY, toY) {
+    if (!client || !Number.isFinite(fromY) || !Number.isFinite(toY)) return;
+    if (!this.fallState) this.fallState = new Map();
+    const sid = client.sessionId;
+    const dy = toY - fromY;
+    const st = this.fallState.get(sid) || { peak: fromY, lastY: fromY, falling: false, fast: false };
+    if (dy < -0.03) {
+      if (!st.falling) {
+        st.falling = true;
+        st.peak = Math.max(fromY, toY);
+      } else st.peak = Math.max(st.peak, fromY, toY);
+      if (dy <= -2.5) st.fast = true;
+      st.lastY = toY;
+      this.fallState.set(sid, st);
+      return;
+    }
+    if (st.falling) {
+      const drop = Math.max(0, st.peak - toY);
+      st.falling = false;
+      st.peak = toY;
+      st.lastY = toY;
+      const fast = !!st.fast;
+      st.fast = false;
+      this.fallState.set(sid, st);
+      if (fast) this.resolveFallLanding(client, drop);
+      return;
+    }
+    st.fast = false;
+    st.peak = Math.max(st.peak, toY);
+    st.lastY = toY;
+    this.fallState.set(sid, st);
   }
   handleUseFood(client, m) {
     const rec = this.profileFor(client);
@@ -2024,6 +3354,7 @@ class GameRoom extends Room {
     rec.prof.gold = (rec.prof.gold | 0) - cost;
     target.s.dur = target.max;
     this.dirtyPlayers.add(rec.token);
+    this.recordEconomyGold(client, -cost, 'blacksmith_sink', 'repair', { slot: target.i, id: target.s.id, missing: target.missing });
     this.recordRepairProgress(client, false);
     client.send('blacksmithRepairResult', {
       toolSlot: target.i,
@@ -2067,6 +3398,7 @@ class GameRoom extends Room {
     s.plus = cost.next;
     s.dur = this.toolMaxDur(s, cost.info);
     this.dirtyPlayers.add(rec.token);
+    this.recordEconomyGold(client, -cost.goldCost, 'blacksmith_sink', 'upgrade', { slot, id: s.id, plus: cost.next });
     this.recordRepairProgress(client, true);
     client.send('blacksmithUpgradeResult', {
       slot,
@@ -2099,6 +3431,7 @@ class GameRoom extends Room {
     if(cost.iron)this.consumeItem(rec.prof,I.IRON_INGOT,cost.iron);if(cost.diamond)this.consumeItem(rec.prof,I.DIAMOND,cost.diamond);
     rec.prof.gold=(rec.prof.gold|0)-cost.gold;if(action==='masterwork')s.masterwork=true;else s.forge=modifier;
     s.dur=this.toolMaxDur(s,info);this.dirtyPlayers.add(rec.token);this.recordRepairProgress(client,true);
+    this.recordEconomyGold(client,-cost.gold,'blacksmith_sink','reforge_'+action,{slot,id:s.id});
     client.send('blacksmithReforgeResult',{slot,tool:{id:s.id,count:s.count||1,dur:s.dur,plus:this.toolPlus(s),rarity:s.rarity||'',forge:s.forge||'',masterwork:!!s.masterwork,locked:!!s.locked,source:s.source||''},gold:-cost.gold,materials:{iron:cost.iron,diamond:cost.diamond},action});
     this.sendSpace('','fx',{t:'blacksmith',action:'reforge',id:s.id,plus:this.toolPlus(s),name:rec.prof.name||'Hunter',dgn:''});
   }
@@ -2113,6 +3446,8 @@ class GameRoom extends Room {
     if(stack.locked)return client.send('blacksmithReject',{reason:'locked'});
     const gear=GEAR_SYSTEM.profile(info,stack),salvage=LOOT_ECONOMY.salvageYield(gear.rankIndex,gear.rarityIndex,info.tier),iron=salvage.iron,gold=salvage.gold;
     rec.prof.inv[slot]=null;this.addRewardItem(rec.prof,I.IRON_INGOT,iron);rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+gold);
+    this.recordEconomyGold(client,gold,'blacksmith_faucet','salvage',{slot,id:stack.id,rank:gear.rank.id,rarity:gear.rarity.id});
+    this.recordSalvageProgress(client,stack.id);
     this.dirtyPlayers.add(rec.token);client.send('blacksmithSalvageResult',{slot,iron,gold,rank:gear.rank.id,rarity:gear.rarity.id});
     this.sendSpace('','fx',{t:'blacksmith',action:'salvage',id:stack.id,plus:this.toolPlus(stack),name:rec.prof.name||'Hunter',dgn:''});
   }
@@ -2199,24 +3534,46 @@ class GameRoom extends Room {
     if (p && p.dgn) {
       const dgn = p.dgn;
       const inst = this.instances[dgn];
-      const reason = inst && inst.players.size <= 1 ? 'solo' : 'wipe';
-      const death = { x: p.x, y: p.y, z: p.z, dgn, cause: reason };
-      this.ejectFromDungeon(client.sessionId);
-      if (inst && !inst.hasLivingPlayers()) {
-        this.failDungeon(dgn, reason);
-        const quest = rec && rec.prof && rec.prof.activeNpcQuest;
-        if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) {
-          this.ensurePublicGateRank(quest.gateRank);
-        } else if (rec && rec.prof && rec.prof.progressionFocus === 'first_d_gate') {
-          this.ensurePublicGateRank(1);
-        }
-      }
-      if (!this.beginDeathLimbo(client, rec, death)) client.send('dungeonDeath', { reason:'death',cause:reason,x:death.x,y:death.y,z:death.z });
+      const wipeReason = inst && inst.players.size <= 1 ? 'solo' : 'wipe';
+      if (inst) inst.deathCount = (inst.deathCount | 0) + 1;
+      if (this.recordDungeonBossDeathReason) this.recordDungeonBossDeathReason(client, reason);
+      p.spirit = true;
+      this.pvel.set(client.sessionId, { x: 0, z: 0 });
+      client.send('dungeonSpirit', { reason:'death', cause:wipeReason, deathCause: reason, lastHit: this.combatReasonLabel(reason), recentHits: this.recentHitSummary(client), x:p.x, y:p.y, z:p.z });
+      this.sendDungeonStatus(dgn);
     } else {
       hp.hp = hp.max;
-      const death = { x: p && p.x, y: p && p.y, z: p && p.z, dgn: '', cause: reason };
-      if (!this.beginDeathLimbo(client, rec, death)) client.send('worldDeath', {reason:'death',cause:reason});
+      const death = { x: p && p.x, y: p && p.y, z: p && p.z, dgn: '', cause: reason, recentHits: this.recentHitSummary(client) };
+      if (!this.beginDeathLimbo(client, rec, death)) client.send('worldDeath', {reason:'death',cause:reason,lastHit:this.combatReasonLabel(reason),recentHits:this.recentHitSummary(client)});
     }
+  }
+  handleQuitDungeonSpirit(client) {
+    const p = client && this.state.players.get(client.sessionId);
+    const hp = client && this.playerHp.get(client.sessionId);
+    if (!p || !p.dgn || !p.spirit || !hp || hp.hp > 0) return false;
+    const dgn = p.dgn;
+    const inst = this.instances[dgn];
+    const rec = this.profileFor(client);
+    const town = { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 };
+    let result = null;
+    p.spirit = false;
+    this.ejectFromDungeon(client.sessionId);
+    if (rec) {
+      rec.prof.pos = [town.x, town.y, town.z];
+      this.dirtyPlayers.add(rec.token);
+    }
+    if (inst && inst.playerCount === 0) {
+      result = this.dungeonResultPayload(inst, 'failed', 'wipe');
+      this.clearDungeonInstance(dgn);
+      this.expireGate(dgn);
+      const quest = rec && rec.prof.activeNpcQuest;
+      if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) this.ensurePublicGateRank(quest.gateRank);
+      else if (rec && rec.prof.progressionFocus === 'first_d_gate') this.ensurePublicGateRank(1);
+    } else if (inst) {
+      this.sendDungeonStatus(dgn);
+    }
+    client.send('dungeonSpiritQuit', result ? { ...town, result } : town);
+    return true;
   }
   updatePlayerHunger(dt) {
     for (const client of this.clients || []) {
@@ -2396,7 +3753,10 @@ class GameRoom extends Room {
       rewardGold: Math.max(0, c.rewardGold | 0), rewardXp: Math.max(0, c.rewardXp | 0),
       rewardItems: Array.isArray(c.rewardItems) ? c.rewardItems.map(it => ({ id: it.id | 0, count: Math.max(1, it.count | 0) })) : [],
       title: String(c.title || 'Guild Contract'), desc: String(c.desc || ''),
-      ready: (c.have | 0) >= (c.need | 0),
+      ready: c.ready === true || (c.have | 0) >= (c.need | 0),
+      acceptedAt: Math.max(0, Number(c.acceptedAt) || 0),
+      claimableAt: Math.max(0, Number(c.claimableAt) || 0),
+      lifecycleState: ['active', 'claimable', 'completed', 'failed', 'expired'].includes(c.lifecycleState) ? c.lifecycleState : (c.ready === true || (c.have | 0) >= (c.need | 0) ? 'claimable' : 'active'),
     };
   }
   sendRegionalContracts(client) {
@@ -2419,13 +3779,13 @@ class GameRoom extends Room {
     const id = String(m && m.id || '');
     const offer = this.regionalContractOffers(Date.now(), rec.prof.S.lvl).find(c => c.id === id);
     if (!offer) return client.send('regionalContractReject', { reason: 'expired' });
-    rec.prof.regionalContract = { ...offer, have: 0, acceptedAt: Date.now() };
+    rec.prof.regionalContract = { ...offer, have: 0, acceptedAt: Date.now(), lifecycleState: 'active' };
     this.dirtyPlayers.add(rec.token);
     client.send('regionalContractUpdate', { active: this.publicRegionalContract(rec.prof.regionalContract) });
     for (const mate of this.onlineTeamClients(client)) {
       const mrec = this.profileFor(mate);
       if (!mrec || mrec.prof.regionalContract) continue;
-      mrec.prof.regionalContract = { ...offer, have: 0, acceptedAt: Date.now() };
+      mrec.prof.regionalContract = { ...offer, have: 0, acceptedAt: Date.now(), lifecycleState: 'active' };
       this.dirtyPlayers.add(mrec.token);
       mate.send('regionalContractUpdate', { active: this.publicRegionalContract(mrec.prof.regionalContract), shared: true });
       mate.send('chat', { name: '[Guild]', text: 'Team contract accepted: ' + (offer.title || 'Guild Contract') });
@@ -2442,7 +3802,7 @@ class GameRoom extends Room {
       id:'caravan_escort_'+caravan.id+'_'+Date.now(),type:'road_escort',targetId:caravan.id,targetType:'caravan',targetName:'Road Caravan',
       need:1,have:0,title:'Safe Arrival',desc:'Stay with this caravan until it reaches its destination.',
       rewardGold:Math.round(72*DANGER_RINGS[ring].loot),rewardXp:Math.max(48,hunterXpForActivity(rec.prof.S.lvl,'guild_contract')),
-      rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:Date.now(),seed:Date.now(),
+      rewardItems:[{id:I.IRON_INGOT,count:2}],acceptedAt:Date.now(),seed:Date.now(),lifecycleState:'active',
     };
     rec.prof.regionalContract=contract;caravan.escorts.add(client.sessionId);this.dirtyPlayers.add(rec.token);
     client.send('regionalContractUpdate',{active:this.publicRegionalContract(contract),caravan:true});
@@ -2451,9 +3811,31 @@ class GameRoom extends Room {
   handleRegionalContractAbandon(client) {
     const rec = this.profileFor(client);
     if (!rec) return;
-    rec.prof.regionalContract = null;
-    this.dirtyPlayers.add(rec.token);
-    client.send('regionalContractUpdate', { active: null });
+    const abandoned = rec.prof.regionalContract;
+    if (!abandoned) {
+      client.send('regionalContractUpdate', { active: null });
+      return;
+    }
+    const endContract = (targetClient, targetRec, shared = false) => {
+      if (!targetRec || !targetRec.prof.regionalContract || targetRec.prof.regionalContract.id !== abandoned.id) return;
+      targetRec.prof.regionalContract = null;
+      this.dirtyPlayers.add(targetRec.token);
+      targetClient.send('regionalContractUpdate', { active: null, abandoned: true, shared, by: this.state.players.get(client.sessionId)?.name || 'A teammate' });
+      if (this.sendQuestOutcome) this.sendQuestOutcome(targetClient, {
+        source: 'guild',
+        questType: 'guild',
+        title: abandoned.title || 'Guild Contract',
+        outcome: 'abandoned',
+        reason: shared ? 'team' : 'player',
+        location: 'Guild Board',
+        canReaccept: true,
+        noReward: true,
+        shared,
+        endedBy: this.state.players.get(client.sessionId)?.name || '',
+      });
+    };
+    endContract(client, rec, false);
+    for (const mate of this.onlineTeamClients(client)) endContract(mate, this.profileFor(mate), true);
     this.sendRegionalContracts(client);
   }
   handleRegionalContractClaim(client) {
@@ -2464,6 +3846,7 @@ class GameRoom extends Room {
     const rewardItems = Array.isArray(c.rewardItems) ? c.rewardItems.map(it => ({ id: it.id | 0, count: Math.max(1, it.count | 0) })) : [];
     const rewardGold = Math.max(0, c.rewardGold | 0), rewardXp = Math.max(0, c.rewardXp | 0);
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + rewardGold));
+    this.recordEconomyGold(client, rewardGold, 'contract_faucet', 'regional_contract', { type: c.type || '', id: c.id || '' });
     this.grantHunterXp(rec.prof, rewardXp, client, 'guild_contract');
     for (const it of rewardItems) this.addRewardItem(rec.prof, it.id, it.count);
     const done = this.publicRegionalContract(c);
@@ -2493,11 +3876,25 @@ class GameRoom extends Room {
       }
       this.adjustRoadSafety(2, 'warden_contract');
     }
+    const guildRenown = this.awardGuildRenown ? (String(c.type || '').startsWith('road_') ? 14 : 10) : 0;
+    if (guildRenown) this.awardGuildRenown(client, guildRenown, String(c.type || '').startsWith('road_') ? 'Road Warden contract' : 'Guild contract');
     this.unlockUtility(client, 'compass', 'Guild contract complete');
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
+    this.sendQuestRewardSummary(client, {
+      source: 'guild',
+      questType: 'guild',
+      title: done.title || 'Guild Contract',
+      gold: rewardGold,
+      xp: rewardXp,
+      jobXp: 0,
+      items: rewardItems,
+      gear: rewardGear ? { ...rewardGear, recovered: rewardGearRecovered } : null,
+      claimLocation: 'Guild Board',
+      inventoryOverflow: rewardGearRecovered,
+    });
     client.send('regionalContractClaimed', { contract: done, rewardGold, rewardXp, rewardItems, rewardGear, rewardGearRecovered, roadWardenRep: rec.prof.roadWardenRep | 0, roadWardenMilestone });
-    client.send('profile', rec.prof);
+    this.sendProfile(client, rec.prof);
     this.sendRegionalContracts(client);
   }
   progressRegionalContract(client, type, opts = {}) {
@@ -2517,6 +3914,11 @@ class GameRoom extends Room {
       if (c.targetId && opts.targetId && c.targetId !== opts.targetId) continue;
       if (c.targetItem && opts.itemId && (c.targetItem | 0) !== (opts.itemId | 0)) continue;
       c.have = Math.min(c.need | 0, (c.have | 0) + add);
+      if ((c.have | 0) >= (c.need | 0) && c.lifecycleState !== 'claimable') {
+        c.ready = true;
+        c.lifecycleState = 'claimable';
+        c.claimableAt = Date.now();
+      }
       this.dirtyPlayers.add(entry.rec.token);
       const active = this.publicRegionalContract(c);
       entry.client.send('regionalContractUpdate', { active, progress: add, shared: entry.client !== client });
@@ -2544,7 +3946,7 @@ class GameRoom extends Room {
     const contract=rec.prof.cartographerContract;
     if(contract&&dangerRingAt(s.x,s.z)===(contract.region|0)&&(contract.have|0)<(contract.need|0)){
       contract.have=Math.min(contract.need|0,(contract.have|0)+1);
-      client.send('cartographerUpdate',this.cartographerPayload(rec.prof));
+      client.send('cartographerUpdate',this.cartographerPayload(rec.prof,client));
     }
     client.send('discoverySighted', { id: s.id, type: s.type, name: s.name || s.type.replace(/_/g, ' ') });
     for (const mate of this.onlineTeamClients(client)) this.shareDiscoveryWithClient(mate, s, client);
@@ -2552,22 +3954,26 @@ class GameRoom extends Room {
   }
   cartographerInRange(client) {
     const p=client&&this.state.players.get(client.sessionId);
-    return !!(p&&!p.dgn&&Math.hypot(p.x-(W.TOWN.TC-10.5),p.z-(W.TOWN.TC-8.5))<11);
+    if(!p||p.dgn)return false;
+    if(Math.hypot(p.x-(W.TOWN.TC-10.5),p.z-(W.TOWN.TC-8.5))<11)return true;
+    const atFellowshipMapTable=Math.hypot(p.x-(W.TOWN.TC-13.2),p.z-(W.TOWN.TC-36.3))<5.2;
+    return !!(atFellowshipMapTable&&this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'));
   }
   cartographerEntries(prof) {
     const found=new Set(Array.isArray(prof.discoveries)?prof.discoveries:[]);
     return [...W.regionalLandmarkSpecs(),...W.smallDiscoverySpecs()].map(s=>({s,found:found.has(s.id),region:dangerRingAt(s.x,s.z)}));
   }
-  cartographerPayload(prof) {
+  cartographerPayload(prof, client = null) {
     const entries=this.cartographerEntries(prof),regions=DANGER_RINGS.map((r,i)=>{const all=entries.filter(e=>e.region===i);return {index:i,name:r.name,found:all.filter(e=>e.found).length,total:all.length,claimed:(prof.cartographerRegionClaims||[]).includes(i)};});
-    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap),cosmetics:prof.cosmeticUnlocks||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen};
+    const mapTable=!!(client&&this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table')),mapLeadCost=mapTable?15:25;
+    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap,mapTable),cosmetics:prof.cosmeticUnlocks||[],equippedCosmetics:prof.equippedCosmetics||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen,mapTable,mapLeadCost};
   }
   publicCosmetics(prof) {
-    return Array.isArray(prof && prof.cosmeticUnlocks)
-      ? prof.cosmeticUnlocks.filter(v => v === 'cartographers_mantle').join(',')
+    return Array.isArray(prof && prof.equippedCosmetics)
+      ? prof.equippedCosmetics.filter(v => v === 'cartographers_mantle').join(',')
       : '';
   }
-  publicTreasureMap(map) {
+  publicTreasureMap(map, mapTable = false) {
     if(!map||!Array.isArray(map.targets)||!map.targets.length)return null;
     const stage=Math.max(0,Math.min(map.targets.length-1,map.stage|0)),target=this.explorationSpec(map.targets[stage]);if(!target)return null;
     const ring=dangerRingAt(target.x,target.z),clues=[
@@ -2575,7 +3981,8 @@ class GameRoom extends Room {
       'The second mark lies near '+String(target.name||target.type).replace(/_/g,' ').toLowerCase()+'. Search the ground, not the sky.',
       'Final clue: follow the ink to '+String(target.name||target.type).replace(/_/g,' ')+'. The cache is within a few strides.',
     ];
-    return {id:map.id,stage,total:map.targets.length,targetId:target.id,clue:clues[stage]||clues[2],rewardGold:map.rewardGold|0};
+    const tableNote=mapTable?' Fellowship Map Table note: '+String(target.name||target.type).replace(/_/g,' ')+' is in '+DANGER_RINGS[ring].name+'.':'';
+    return {id:map.id,stage,total:map.targets.length,targetId:target.id,clue:(clues[stage]||clues[2])+tableNote,rewardGold:map.rewardGold|0,mapTable:!!mapTable};
   }
   handleCartographer(client,m={}) {
     const rec=this.profileFor(client),action=typeof m.action==='string'?m.action:'status';
@@ -2584,26 +3991,30 @@ class GameRoom extends Room {
     if(!Array.isArray(prof.cartographerRegionClaims))prof.cartographerRegionClaims=[];
     if(!Array.isArray(prof.cartographerHints))prof.cartographerHints=[];
     if(!Array.isArray(prof.cosmeticUnlocks))prof.cosmeticUnlocks=[];
+    if(!Array.isArray(prof.equippedCosmetics))prof.equippedCosmetics=sanitizeEquippedCosmetics(prof.equippedCosmetics,prof.cosmeticUnlocks);
     if(!prof.cartographerIntroSeen){prof.cartographerIntroSeen=true;this.dirtyPlayers.add(rec.token);client.send('cartographerIntro',{ok:true});}
     if(action==='hint'){
-      const cost=25,candidates=entries.filter(e=>!e.found&&!prof.cartographerHints.includes(e.s.id));
+      const mapTable=!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'));
+      const cost=mapTable?15:25,candidates=entries.filter(e=>!e.found&&!prof.cartographerHints.includes(e.s.id));
       if(!candidates.length)return client.send('cartographerReject',{reason:'no_hints'});
       if((prof.gold|0)<cost)return client.send('cartographerReject',{reason:'gold',cost});
       const pick=candidates[Math.floor(W.hash2(Date.now()%100000,prof.cartographerHints.length+17)*candidates.length)];
       prof.gold-=cost;prof.cartographerHints.push(pick.s.id);this.dirtyPlayers.add(rec.token);
-      client.send('cartographerHint',{id:pick.s.id,name:pick.s.name||pick.s.type.replace(/_/g,' '),cost,gold:prof.gold|0});
+      this.recordEconomyGold(client,-cost,'cartographer_sink','hint',{ id: pick.s.id, mapTable });
+      client.send('cartographerHint',{id:pick.s.id,name:pick.s.name||pick.s.type.replace(/_/g,' '),cost,gold:prof.gold|0,mapTable});
     }else if(action==='treasure_start'){
       if(prof.treasureMap)return client.send('cartographerReject',{reason:'treasure_active'});
       const pool=entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
       if(pool.length<3)return client.send('cartographerReject',{reason:'complete'});
       const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*7+i*13)%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
       prof.treasureMap={id:'treasure_'+day+'_'+Date.now().toString(36),stage:0,targets,rewardGold:180};this.dirtyPlayers.add(rec.token);
-      client.send('treasureMapStarted',this.publicTreasureMap(prof.treasureMap));
+      client.send('treasureMapStarted',this.publicTreasureMap(prof.treasureMap,!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'))));
     }else if(action==='claim_region'){
       const region=Math.max(0,Math.min(3,m.region|0)),all=entries.filter(e=>e.region===region);
       if(!all.length||all.some(e=>!e.found))return client.send('cartographerReject',{reason:'incomplete'});
       if(prof.cartographerRegionClaims.includes(region))return client.send('cartographerReject',{reason:'claimed'});
       const reward=100*(region+1);prof.cartographerRegionClaims.push(region);prof.gold=Math.min(1e9,(prof.gold|0)+reward);this.dirtyPlayers.add(rec.token);
+      this.recordEconomyGold(client,reward,'cartographer_faucet','region_claim',{ region });
       client.send('cartographerReward',{kind:'region',region,reward,gold:prof.gold|0});
     }else if(action==='accept_contract'){
       if(prof.cartographerContract)return client.send('cartographerReject',{reason:'active'});
@@ -2614,15 +4025,19 @@ class GameRoom extends Room {
     }else if(action==='claim_contract'){
       const c=prof.cartographerContract;if(!c||(c.have|0)<(c.need|0))return client.send('cartographerReject',{reason:'incomplete'});
       const reward=c.rewardGold|0;prof.gold=Math.min(1e9,(prof.gold|0)+reward);prof.cartographerContract=null;this.dirtyPlayers.add(rec.token);
-      client.send('cartographerReward',{kind:'contract',reward,gold:prof.gold|0});
+      this.recordEconomyGold(client,reward,'cartographer_faucet','survey_contract',{ region: c.region | 0 });
+      const fellowshipRenown = this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'map_table', 1, 'Map Table survey') : 0;
+      client.send('cartographerReward',{kind:'contract',reward,gold:prof.gold|0,fellowshipRenown});
     }else if(action==='claim_world'){
       if(entries.some(e=>!e.found))return client.send('cartographerReject',{reason:'incomplete'});
       if(prof.cosmeticUnlocks.includes('cartographers_mantle'))return client.send('cartographerReject',{reason:'claimed'});
-      prof.cosmeticUnlocks.push('cartographers_mantle');this.dirtyPlayers.add(rec.token);
+      prof.cosmeticUnlocks.push('cartographers_mantle');
+      prof.equippedCosmetics=sanitizeEquippedCosmetics([...(prof.equippedCosmetics||[]),'cartographers_mantle'],prof.cosmeticUnlocks);
+      this.dirtyPlayers.add(rec.token);
       this.syncPlayerProfile(client,prof);
       client.send('cartographerReward',{kind:'world',cosmetic:'cartographers_mantle',gold:prof.gold|0});
     }
-    client.send('cartographerUpdate',this.cartographerPayload(prof));
+    client.send('cartographerUpdate',this.cartographerPayload(prof,client));
   }
   handleTreasureMapAdvance(client,m={}) {
     const rec=this.profileFor(client),p=client&&this.state.players.get(client.sessionId),map=rec&&rec.prof.treasureMap;
@@ -2632,8 +4047,10 @@ class GameRoom extends Room {
     map.stage=(map.stage|0)+1;this.dirtyPlayers.add(rec.token);
     if(map.stage>=map.targets.length){
       const rewardGold=map.rewardGold|0;rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);this.addRewardItem(rec.prof,I.DIAMOND,2);rec.prof.treasureMap=null;
-      this.syncPlayerProfile(client,rec.prof);client.send('treasureMapComplete',{rewardGold,gold:rec.prof.gold|0,items:[{id:I.DIAMOND,count:2}]});
-    }else client.send('treasureMapUpdate',this.publicTreasureMap(map));
+      this.recordEconomyGold(client,rewardGold,'cartographer_faucet','treasure_map',{ id: map.id || '' });
+      const fellowshipRenown = this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'map_table', 2, 'Treasure route') : 0;
+      this.syncPlayerProfile(client,rec.prof);client.send('treasureMapComplete',{rewardGold,gold:rec.prof.gold|0,items:[{id:I.DIAMOND,count:2}],fellowshipRenown});
+    }else client.send('treasureMapUpdate',this.publicTreasureMap(map,!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'))));
   }
   applyExplorationMilestones(client, rec) {
     if (!rec || !client) return;
@@ -2647,10 +4064,38 @@ class GameRoom extends Room {
       if (count < reward.count || rec.prof.explorationMilestones.includes(reward.count)) continue;
       rec.prof.explorationMilestones.push(reward.count);
       rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + reward.gold);
+      this.recordEconomyGold(client, reward.gold, 'cartographer_faucet', 'exploration_milestone', { count: reward.count, title: reward.title });
       if (reward.utility) this.unlockUtility(client, reward.utility, reward.title + ' milestone');
       this.dirtyPlayers.add(rec.token);
       client.send('explorationMilestone', { ...reward, totalGold: rec.prof.gold | 0 });
     }
+  }
+  weatherDiscoveryTypesFromClaims(prof) {
+    const claims = new Set(Array.isArray(prof && prof.claimedDiscoveries) ? prof.claimedDiscoveries : []);
+    const out = new Set();
+    for (const s of W.smallDiscoverySpecs()) {
+      if (claims.has(s.id) && (s.type === 'rain_bloom' || s.type === 'storm_crystal' || s.type === 'sun_dial')) out.add(s.type);
+    }
+    return out;
+  }
+  applyWeatherDiscoveryMilestones(client, rec) {
+    if (!client || !rec || !rec.prof) return [];
+    if (!Array.isArray(rec.prof.explorationMilestones)) rec.prof.explorationMilestones = [];
+    const types = this.weatherDiscoveryTypesFromClaims(rec.prof), events = [];
+    if (types.size >= 1 && !rec.prof.explorationMilestones.includes(901)) {
+      rec.prof.explorationMilestones.push(901);
+      rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + 25);
+      this.recordEconomyGold(client, 25, 'cartographer_faucet', 'first_weather_discovery', { types: [...types] });
+      this.dirtyPlayers.add(rec.token);
+      events.push({ kind: 'first', title: 'First Weather Find', goldReward: 25, totalGold: rec.prof.gold | 0, types: [...types] });
+    }
+    if (types.size >= 3 && !rec.prof.explorationMilestones.includes(902)) {
+      rec.prof.explorationMilestones.push(902);
+      const unlocked = this.unlockUtility(client, 'weather_sense', 'Weatherwise: harvested rain, storm, and sun sites');
+      this.dirtyPlayers.add(rec.token);
+      events.push({ kind: 'weatherwise', title: 'Weatherwise', utility: 'weather_sense', unlocked, totalGold: rec.prof.gold | 0, types: [...types] });
+    }
+    return events;
   }
   shareDiscoveryWithClient(client, s, sourceClient) {
     const rec = this.profileFor(client); if (!rec || !s) return false;
@@ -2725,8 +4170,11 @@ class GameRoom extends Room {
       items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + Math.max(0, ring - 1) });
       this.progressRegionalContract(client, 'solve_puzzle_shrine', { targetId: s.id });
     }
+    const weatherRenown = required && this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'weather_vane', 1, 'Weather site harvest') : 0;
+    const weatherEvents=this.applyWeatherDiscoveryMilestones(client,rec);
     this.awardGrant(client, { source: 'discovery', discovery: s.type, xp, items });
-    client.send('discoveryResult', { id: s.id, type: s.type, name, text, xp, items });
+    for (const event of weatherEvents) client.send('weatherDiscoveryMilestone', event);
+    client.send('discoveryResult', { id: s.id, type: s.type, name, text, xp, items, fellowshipRenown: weatherRenown });
   }
   awardGrant(client, grant) {
     const rec = this.profileFor(client);
@@ -2850,10 +4298,11 @@ class GameRoom extends Room {
       const next = id === W.B.WHEAT_1 ? W.B.WHEAT_2 : W.B.WHEAT_3;
       this.setWorldBlock(x, y, z, next);
       const key = x + ',' + y + ',' + z;
+      const meta = this.cropMeta.get(key) || { kind: (this.worldProgress.cropKinds || {})[key] || 'wheat' };
       if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
       else this.cropTimers.set(key, Date.now() + this.cropGrowMs(farmerLevel));
       this.grantJobXp(client, 'farmer', 2);
-      return client.send('farmResult', { action, x, y, z, slot, id: next });
+      return client.send('farmResult', { action, x, y, z, slot, id: next, kind: meta.kind, ripe: next === W.B.WHEAT_3 });
     }
     if (action === 'harvest') {
       if (id !== W.B.WHEAT_3) return client.send('farmReject', { reason: 'ripe' });
@@ -3095,6 +4544,10 @@ class GameRoom extends Room {
     this.growCrops(dt);
     this.completeDragonIncubations();
     this.tickNestBreeding();
+    this.tickDragonRest(Date.now(), dt);
+    this.tickDragonFollowBond(Date.now());
+    this.tickDragonGuards(Date.now());
+    if (typeof this.tickDragonTraining === 'function') this.tickDragonTraining(Date.now(), dt);
     this.tickFangCombat(Date.now());
     this.tickShadowSoldiers(Date.now(), dt);
     this.tickMote(dt);
@@ -3125,7 +4578,7 @@ class GameRoom extends Room {
 
     if (dayF > 0.5) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive||meta.gateBreach))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
     }
     const surfaceClusters = this.surfaceDensityClusters(surface);
@@ -3141,6 +4594,7 @@ class GameRoom extends Room {
     this.tickLocalAnimalSpawns(dt, surfaceClusters);
     if (night) this.tickLocalHostileSpawns(dt, surfaceClusters,'night');
     else if(dayF>.5)this.tickLocalHostileSpawns(dt,surfaceClusters,'day');
+    this.tickGateBreaches();
 
     // ---- projectiles (3 substeps for dodgeable flight) ----
     this.stepProjectiles(dt, spaces);
@@ -3166,6 +4620,10 @@ class GameRoom extends Room {
   handleMove(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return;
+    if (p.spirit) {
+      this.pvel.set(client.sessionId, { x: 0, z: 0 });
+      return;
+    }
     if (this.deathLimbo && this.deathLimbo.has(client.sessionId)) {
       p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
     }
@@ -3230,8 +4688,11 @@ class GameRoom extends Room {
       x: Math.max(-velCap, Math.min(velCap, (sx - p.x) / dt)),
       z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
     });
+    const fromY = p.y;
     p.x = sx; p.y = sy; p.z = sz;
     p.yaw = clampN(m.yaw, -10, 10);
+    this.trackAcceptedMoveFall(client, fromY, p.y);
+    if (!p.dgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
     this.collectDeathDrops(client);
   }
 
@@ -3304,7 +4765,10 @@ class GameRoom extends Room {
       if (m.dgn && !inst) return;
       const ground = (x, z, fromY) => inst ? D.standHeightIn(inst.world, x, z, fromY) : this.world.standHeight(x, z, fromY);
       const solid = this.spaceSolid(m.dgn);
-      const candidates = spaces[m.dgn || ''] || [];
+      const candidates = (spaces[m.dgn || ''] || []).filter(s => {
+        const hp = s && this.playerHp.get(s.sid);
+        return s && s.p && (!hp || hp.hp > 0);
+      });
       meta.atkCd -= dt;
       // Frenzied shard affix: wounded dungeon trash gains attack and move speed
       const frenzied = inst && inst.shardModSet && inst.shardModSet.has('Frenzied') &&
@@ -3420,8 +4884,8 @@ class GameRoom extends Room {
             meta.commandT=(meta.commandT||0)-dt;
             if(meta.commandT<=0){meta.commandT=6;meta.rallyT=.8;this.state.mobs.forEach((o,oid)=>{const om=this.mobMeta[oid];if(om&&om.banditCampId===meta.banditCampId&&!om.surrendered){om.alert=true;om.ralliedT=5;if(m.hp<m.maxHp*.3&&!om.banditCaptain)om.retreating=true;}});}
             if(meta.rallyT>0){meta.rallyT-=dt;m.state='rally';rooted=true;}
-            else if(meta.cleaveT>0){meta.cleaveT-=dt;m.state='captainCleave';rooted=true;if(meta.cleaveT<=0){m.state='';this.sendSpace('', 'fx',{t:'banditCleave',x:m.x,y:m.y,z:m.z,dgn:''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<=4.2&&Math.abs(target.p.y-m.y)<2.5){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.15),'bandit_captain');}}}}
-            else if(meta.alert&&bd<4.2&&meta.atkCd<=0){meta.cleaveT=.9;meta.atkCd=4;m.state='captainCleave';rooted=true;}
+            else if(meta.cleaveT>0){meta.cleaveT-=dt;m.state='captainCleave';rooted=true;if(meta.cleaveT<=0){m.state='';this.sendSpace('', 'fx',{t:'banditCleave',x:m.x,y:m.y,z:m.z,dgn:''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<=4.2&&Math.abs(target.p.y-m.y)<2.5){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.15),'bandit_captain',{attack:'Captain Cleave'});}}}}
+            else if(meta.alert&&bd<4.2&&meta.atkCd<=0){meta.cleaveT=.9;meta.atkCd=4;m.state='captainCleave';rooted=true;this.sendSpace('', 'fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:4.2,label:'Captain Cleave',dgn:''});}
           }
           if (meta.banditPatrol && !meta.banditCaptain && m.hp <= m.maxHp * .3) {
             meta.retreating = true; meta.alert = false; meta.tx = meta.sx; meta.tz = meta.sz;
@@ -3449,8 +4913,8 @@ class GameRoom extends Room {
 
         if (meta.alert && best && !rooted) {
           if (meta.brute && ((meta.bruteT||0)>0 || (bd<3.8&&meta.atkCd<=0))) {
-            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;}meta.bruteT-=dt;m.state='bruteWind';rooted=true;
-            if(meta.bruteT<=0){m.state='';this.sendSpace(m.dgn||'','fx',{t:'biomeSlam',x:m.x,y:m.y,z:m.z,effect:'brute',dgn:m.dgn||''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35),meta.biomeBehavior||'brute');}}}
+            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;this.sendSpace(m.dgn||'','fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:3.8,label:'Brute Slam',dgn:m.dgn||''});}meta.bruteT-=dt;m.state='bruteWind';rooted=true;
+            if(meta.bruteT<=0){m.state='';this.sendSpace(m.dgn||'','fx',{t:'biomeSlam',x:m.x,y:m.y,z:m.z,effect:'brute',dgn:m.dgn||''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35),meta.biomeBehavior||'brute',{attack:'Brute Slam'});}}}
           } else if (RANGED_ENEMY_KINDS.has(m.kind)) {
             if (meta.drawT > 0) {
               meta.drawT -= dt;
@@ -3476,8 +4940,10 @@ class GameRoom extends Room {
                 moveMul = .6;
               }
               if (bd > 4 && bd < 18 && meta.shootCd <= 0 &&
-                  AI.losClear(solid, m.x, m.y + 1.4, m.z, best.p.x, best.p.y + 1.2, best.p.z))
+                  AI.losClear(solid, m.x, m.y + 1.4, m.z, best.p.x, best.p.y + 1.2, best.p.z)){
                 meta.drawT = meta.quickShot ? .3 : .5;
+                this.sendSpace(m.dgn || '', 'fx', { t: 'rangedWarn', x: m.x, y: m.y, z: m.z, tx: best.p.x, ty: best.p.y + 1.2, tz: best.p.z, quick: !!meta.quickShot, dgn: m.dgn || '' });
+              }
             }
           } else {                                           // zombie
             if (meta.lungeT > 0) {
@@ -3485,7 +4951,7 @@ class GameRoom extends Room {
               m.state = meta.undeadRole === 'graveguard' ? 'graveWind' : (meta.biomeBehavior==='flanker'?'packWind':'windup');
               rooted = true;
               if (meta.lungeT <= 0) {
-                meta.lunging = meta.undeadRole === 'graveguard' ? .32 : .45;
+                meta.lunging = meta.undeadRole === 'graveguard' ? .28 : .48;
                 meta.ldx = (best.p.x - m.x) / (bd || 1);
                 meta.ldz = (best.p.z - m.z) / (bd || 1);
                 m.state = '';
@@ -3497,7 +4963,13 @@ class GameRoom extends Room {
               if (bd < 1.5 && Math.abs(best.p.y - m.y) < 2.1 && meta.atkCd <= 0) {
                 meta.atkCd = 1.1;
                 const c = this.clients.find(c => c.sessionId === best.sid);
-                if (c){this.hurtPlayer(c,Math.round(meta.dmg*frenzyDmg*(meta.ralliedT>0?1.25:1)),meta.biomeBehavior||'combat');if(meta.biomeBehavior)this.applyBiomeStatus(c,meta.biomeBehavior);}
+                if (c){
+                  const roleMul=meta.undeadRole==='graveguard'?.82:meta.undeadRole==='charger'?1.15:1;
+                  const attack=meta.undeadRole==='graveguard'?'Graveguard Chop':meta.undeadRole==='charger'?'Charger Lunge':meta.biomeBehavior==='flanker'?'Pack Lunge':'Melee Lunge';
+                  this.hurtPlayer(c,Math.round(meta.dmg*roleMul*frenzyDmg*(meta.ralliedT>0?1.25:1)),meta.undeadRole||meta.biomeBehavior||'combat',{attack});
+                  if(meta.undeadRole==='graveguard')this.applyBiomeStatus(c,'sturdy');
+                  else if(meta.biomeBehavior)this.applyBiomeStatus(c,meta.biomeBehavior);
+                }
                 meta.lunging = 0;
               }
             } else {
@@ -3507,7 +4979,8 @@ class GameRoom extends Room {
               tx = best.p.x + px2 * off; tz = best.p.z + pz2 * off;
               if (bd < 2.4 && Math.abs(best.p.y - m.y) < 2.6 && meta.atkCd <= 0 &&
                   AI.losClear(solid, m.x, m.y + 1.2, m.z, best.p.x, best.p.y + 1.2, best.p.z)){
-                meta.lungeT = meta.biomeBehavior==='flanker'?.45:.35;
+                meta.lungeT = meta.undeadRole==='graveguard'?.55:(meta.biomeBehavior==='flanker'?.45:.35);
+                this.sendSpace(m.dgn || '', 'fx', { t: 'meleeWarn', x: m.x, y: m.y, z: m.z, radius: meta.undeadRole==='graveguard'?1.75:1.5, label: meta.undeadRole==='graveguard'?'Graveguard Chop':meta.biomeBehavior==='flanker'?'Pack Lunge':'Melee Lunge', dgn: m.dgn || '' });
                 if(meta.biomeBehavior==='flanker')this.state.mobs.forEach((ally,aid)=>{const am=this.mobMeta[aid];if(aid!==id&&am&&am.biomeBehavior==='flanker'&&Math.hypot(ally.x-m.x,ally.z-m.z)<7&&!(am.lungeT>0)&&!(am.lunging>0))am.lungeT=.52;});
               }
             }
@@ -3524,11 +4997,23 @@ class GameRoom extends Room {
         }
       } else {
         // boss in 'chase': pursue
+        if ((meta.bossMeleeT || 0) > 0) {
+          meta.bossMeleeT -= dt; rooted = true; m.state = 'bossMeleeWind';
+          if (meta.bossMeleeT <= 0) {
+            m.state = 'recover'; meta.stateT = .35; meta.gcd = Math.max(meta.gcd || 0, .8);
+            if (best && Math.hypot(best.p.x - m.x, best.p.z - m.z) < 2.35 && Math.abs(best.p.y - m.y) < 2.4) {
+              const c = this.clients.find(c => c.sessionId === best.sid);
+              if (c) this.hurtPlayer(c, meta.dmg, 'boss_melee', { attack: 'Boss Swipe' });
+            }
+          }
+        }
         if (best) { tx = best.p.x; tz = best.p.z; moveMul = 1.25; }
-        if (best && bd < 2.2 && Math.abs(best.p.y - m.y) < 2.4 && meta.atkCd <= 0) {
+        if (best && !(meta.bossMeleeT > 0) && bd < 2.2 && Math.abs(best.p.y - m.y) < 2.4 && meta.atkCd <= 0) {
           meta.atkCd = 1.2;
-          const c = this.clients.find(c => c.sessionId === best.sid);
-          if (c) this.hurtPlayer(c, meta.dmg);
+          meta.bossMeleeT = .42;
+          m.state = 'bossMeleeWind';
+          rooted = true;
+          this.sendSpace(m.dgn || '', 'fx', { t: 'meleeWarn', x: m.x, y: m.y, z: m.z, radius: 2.35, label: 'Boss Swipe', dgn: m.dgn || '' });
         }
       }
 
@@ -3583,7 +5068,10 @@ class GameRoom extends Room {
     this.gateTtls.forEach((expiresAt, id) => {
       if (expiresAt <= nowMs) expiredGates.push(id);
     });
-    for (const id of expiredGates) this.expireGate(id);
+    for (const id of expiredGates) {
+      if (!isHostedGate(id)) this.breachExpiredGate(id);
+    }
+    for (const breach of drainGateBreaches()) this.breachExternalDungeonGate(breach);
     // Retire gates whose DungeonRoom (flag-gated switchRoom entry) has disposed —
     // the entry never routed through enterGate, so this is the only signal the
     // overworld gets that the gate has been spent. expireGate no-ops on ids that

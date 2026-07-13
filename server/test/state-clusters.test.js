@@ -34,13 +34,13 @@ const CLUSTERS = {
     'dragonAbilityCd', 'phoenixUsed', 'abilityState', 'abilityBuffs', 'weaponMomentum', 'monkAuraAt', 'prospectAt',
     'shadowSoldiers', 'shadowSpirits', 'secondWindAt', 'pvel',
   ],
-  initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
+  initDungeonState: ['dungeonLobbies', 'dungeonPingAt', 'gateBreaches', 'gateBreachScars', 'gateSeq', 'gateTtls', 'gateLootedChests', 'gateTimer', 'gateTtl'],
   initPersistenceState: [
     'profiles', 'tokens', 'dirtyWorld', 'dirtyWorldProgress', 'dirtyLandClaims', 'dirtyChests',
     'dirtyFurnaces', 'dirtyIncubations', 'dirtyGates', 'dirtyTeams', 'dirtyGuilds', 'dirtyNests',
     'dirtyPlayers', 'lastSaveMsg',
   ],
-  initDragonState: ['dragonIncubations', 'nestDragons'],
+  initDragonState: ['dragonFollowBondTravel', 'dragonIncubations', 'dragonTraining', 'nestDragons'],
 };
 
 for (const [method, expected] of Object.entries(CLUSTERS)) {

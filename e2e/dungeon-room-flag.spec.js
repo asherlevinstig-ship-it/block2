@@ -35,15 +35,16 @@ test('the ?dungeonRoom-flagged path enters and exits a real DungeonRoom via swit
   ).toBeTruthy();
   const gate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'solo'));
 
-  // Flag ON skips the enterGate/lobby/READY round trip entirely (dimensions.mjs enterDungeon()
-  // calls NETWORK.switchRoom() directly), so walk to the gate and drive the real client entry
-  // path instead of sending 'enterGate'.
+  // The flagged client still enters through the authoritative lobby. Only the server-issued
+  // admission ticket may carry it into the dedicated DungeonRoom.
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
   await expect.poll(
     () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.trackedGate()?.id),
     { timeout: 15_000 },
   ).toBe(gate.id);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.enterTrackedGate())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('dungeonLobbyReady', { gateId: id, ready: true }), gate.id);
 
   // Poll the full settled state together rather than racing a single snapshot: `connected` can
   // blip false for a tick while the client attaches to the new room around the same time

@@ -44,6 +44,7 @@ handler — they're short and grouped by system in `rooms/*.mixin.js`.
 | `dedit` | place/break a block inside a dungeon instance |
 | `trainingReset` | reset the Training Meadow sandbox |
 | `landClaimBuy` | purchase protection over a tile |
+| `landClaimTrust` | owner grants/removes build permission on a claimed tile, or a connected Homestead with `applyGroup` |
 | `useFood` | eat an inventory food item |
 | `useRepairKit` | repair the held/selected tool |
 | `farm` | till / plant / harvest crops |
@@ -140,7 +141,8 @@ Grouped by intent. `*Result` = success, `*Reject` = rejected/invalid.
 - **Identity & loadout:** `profile`, `grant`, `toolSync`, `abilitySync`, `utilityLoadout`,
   `utilityUnlock`, `firstQuestReward`.
 - **World & building:** `editReject`, `dedit`, `trainingReset`, `landClaims`,
-  `landClaimUpdate`, `landClaimResult`/`landClaimReject`, `mineNoDrop`.
+  `landClaimUpdate`, `landClaimResult`/`landClaimReject`,
+  `landClaimTrustResult`/`landClaimTrustReject`, `mineNoDrop`.
 - **Combat & status:** `hurt`, `xp`, `dmgnum`, `loot`/`lootReject`, `hunger`,
   `worldDeath`, `abilityResult`/`abilityReject`, `blackholeReject`, `legendaryReject`,
   `devMana`.

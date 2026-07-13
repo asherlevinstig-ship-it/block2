@@ -19,15 +19,21 @@ class Player extends Schema {
     this.mount = '';         // active mount kind ('' = on foot); overworld only
     this.dragons = '';       // CSV of bonded dragon type ids for public roost displays
     this.dragonNames = '';   // JSON map type -> custom dragon name for public roost plates
+    this.dragonGenders = ''; // JSON map type -> male/female dragon gender for public roost plates
+    this.dragonPersonalities = ''; // JSON map type -> dragon personality for public roost plates
+    this.dragonRoles = '';   // JSON map type -> follow/stay/guard/rest for public roost plates
+    this.dragonStaySpots = ''; // JSON map type -> saved overworld stay position
+    this.dragonHatchedAt = ''; // JSON map type -> hatch timestamp; 0 means legacy/adult dragon
     this.cosmetics = '';     // CSV of public cosmetic unlock ids
     this.familiar = '';      // active familiar ('' = none, 'shade' = Shade manifested)
     this.familiarTier = 0;   // public visual tier of the active familiar
+    this.spirit = false;     // defeated inside a dungeon; fixed in place until the player quits
   }
 }
 defineTypes(Player, {
   x: 'number', y: 'number', z: 'number', yaw: 'number',
   name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
-  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8',
+  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean',
 });
 
 class Team extends Schema {
@@ -50,7 +56,11 @@ class Mob extends Schema {
     this.kind = 'zombie';
     this.dgn = '';           // dungeon instance this mob belongs to
     this.state = '';         // telegraph state for client animation
+    this.variant = '';       // visual/combat variant (charger, graveguard, miner, drowned, ...)
+    this.bossStyle = '';     // named dungeon boss visual style
+    this.displayName = '';   // optional nameplate override
     this.elite = false;      // elite variant: client renders a larger, decorated, tinted model
+    this.enraged = false;    // persistent boss phase tell
     this.shadowKind = '';    // captured creature identity for allied shadow rendering
     this.shadowRank = 0;
     this.shadowBoss = false;
@@ -58,7 +68,7 @@ class Mob extends Schema {
 }
 defineTypes(Mob, {
   x: 'number', y: 'number', z: 'number', yaw: 'number',
-  hp: 'number', maxHp: 'number', kind: 'string', dgn: 'string', state: 'string', elite: 'boolean',
+  hp: 'number', maxHp: 'number', kind: 'string', dgn: 'string', state: 'string', variant: 'string', bossStyle: 'string', displayName: 'string', elite: 'boolean', enraged: 'boolean',
   shadowKind:'string',shadowRank:'uint8',shadowBoss:'boolean',
 });
 
@@ -70,6 +80,7 @@ class Gate extends Schema {
     this.rank = 0;
     this.id = '';            // instance key for party entry
     this.seed = 0;           // deterministic dungeon seed shared with clients
+    this.dungeonId = '';     // canonical content identity selected from the rank pool
     this.kind = 'public';    // public | solo | team | shard
     this.owner = '';         // player token for solo/key/shard gates
     this.team = '';          // team id for team/shard gates
@@ -78,13 +89,14 @@ class Gate extends Schema {
     this.shardMods = '';     // CSV of active affix names
     this.refundItem = 0;     // private entry currency returned if a live instance is lost on restart
     this.refundOwner = '';   // verified account that paid that currency
+    this.expiresAt = 0;      // synced wall-clock expiry for client gate timers
   }
 }
 defineTypes(Gate, {
   active: 'boolean', x: 'number', y: 'number', z: 'number', rank: 'uint8',
-  id: 'string', seed: 'uint32', kind: 'string', owner: 'string', team: 'string',
+  id: 'string', seed: 'uint32', dungeonId: 'string', kind: 'string', owner: 'string', team: 'string',
   shardPlus: 'uint8', shardName: 'string', shardMods: 'string',
-  refundItem: 'uint16', refundOwner: 'string',
+  refundItem: 'uint16', refundOwner: 'string', expiresAt: 'number',
 });
 
 class State extends Schema {

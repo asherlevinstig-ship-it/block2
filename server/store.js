@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { canonicalDungeonId } = require('../shared/dungeon-pools');
 const JOB_SYSTEM = require('../shared/job-system');
 const GEAR_SYSTEM = require('../shared/gear-system');
 const SHADOW_ARMY = require('../shared/shadow-army');
@@ -37,10 +38,21 @@ const ARMOR_IDS = new Set([137, 183, 184]);
 // Guided-onboarding focus states the persistence layer will accept. Kept local
 // (like ARMOR_IDS/TUTORIAL_VERSIONS) to keep store.js free of game-code requires;
 // must stay in lockstep with PROGRESSION_FOCUS_STATES in rooms/constants.js.
-const PROGRESSION_FOCUS_STATES = new Set(['e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract']);
+const PROGRESSION_FOCUS_STATES = new Set([
+  'first_road_ready', 'first_e_gate',
+  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
+]);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
 const DRAGON_SPECIES = new Set(['ember', 'verdant', 'frost', 'storm', 'void']);
+const DRAGON_GENDERS = new Set(['male', 'female']);
+const DRAGON_PERSONALITIES = new Set(['bold', 'gentle', 'proud', 'playful', 'skittish', 'hungry']);
+const DRAGON_ROLES = new Set(['follow', 'stay', 'guard', 'rest']);
+const DRAGON_MASTERY_ROLES = new Set(['follow', 'guard', 'stay', 'rest']);
+const DRAGON_SPECIALIZATIONS = new Set(['scout', 'defender', 'sage']);
+const DRAGON_GROW_MS = 2 * 60 * 1000;
+const DRAGON_JUVENILE_MS = Math.floor(DRAGON_GROW_MS / 2);
 const FAMILIAR_UNLOCK_IDS = new Set(['shade', 'fang', 'mote', 'sprite']);
 function sanitizeMountUnlocks(list) {
   const out = [];
@@ -84,6 +96,50 @@ function sanitizeDragonCare(care) {
   }
   return out;
 }
+function sanitizeDragonBondXp(xp, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  const raw = xp && typeof xp === 'object' ? xp : {};
+  for (const type of owned) out[type] = clampI(raw[type], 0, 1000000);
+  return out;
+}
+function sanitizeDragonRoleMastery(mastery, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  const raw = mastery && typeof mastery === 'object' ? mastery : {};
+  for (const type of owned) {
+    const src = raw[type] && typeof raw[type] === 'object' ? raw[type] : {};
+    const row = {};
+    for (const role of DRAGON_MASTERY_ROLES) row[role] = clampI(src[role], 0, 1000000);
+    out[type] = row;
+  }
+  return out;
+}
+function sanitizeDragonSpecializations(specializations, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  const raw = specializations && typeof specializations === 'object' ? specializations : {};
+  for (const type of owned) if (DRAGON_SPECIALIZATIONS.has(raw[type])) out[type] = raw[type];
+  return out;
+}
+function sanitizeDragonChallenges(challenges) {
+  if (!challenges || typeof challenges !== 'object') return {};
+  return {
+    day: clampI(challenges.day, 0, 100000),
+    id: cleanShortText(challenges.id, '', 32).replace(/[^a-z0-9_:-]/gi, ''),
+    type: DRAGON_SPECIES.has(challenges.type) ? challenges.type : '',
+    reason: cleanShortText(challenges.reason, '', 16).replace(/[^a-z]/gi, ''),
+    need: clampI(challenges.need, 1, 1000000),
+    progress: clampI(challenges.progress, 0, 1000000),
+    claimed: challenges.claimed === true,
+  };
+}
 function sanitizeDragonNames(names) {
   const out = {};
   if (!names || typeof names !== 'object') return out;
@@ -93,12 +149,82 @@ function sanitizeDragonNames(names) {
   }
   return out;
 }
+function defaultDragonGender(type) {
+  return ['ember', 'frost', 'void'].includes(type) ? 'male' : 'female';
+}
+function defaultDragonPersonality(type) {
+  return ({ ember: 'bold', verdant: 'gentle', frost: 'skittish', storm: 'playful', void: 'proud' })[type] || 'bold';
+}
+function sanitizeDragonGenders(genders, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  if (genders && typeof genders === 'object') {
+    for (const type of DRAGON_SPECIES) if (owned.has(type) && DRAGON_GENDERS.has(genders[type])) out[type] = genders[type];
+  }
+  for (const type of owned) if (!out[type]) out[type] = defaultDragonGender(type);
+  return out;
+}
+function sanitizeDragonPersonalities(personalities, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  if (personalities && typeof personalities === 'object') {
+    for (const type of DRAGON_SPECIES) if (owned.has(type) && DRAGON_PERSONALITIES.has(personalities[type])) out[type] = personalities[type];
+  }
+  for (const type of owned) if (!out[type]) out[type] = defaultDragonPersonality(type);
+  return out;
+}
+function sanitizeDragonRoles(roles, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  if (roles && typeof roles === 'object') {
+    for (const type of DRAGON_SPECIES) if (owned.has(type) && DRAGON_ROLES.has(roles[type])) out[type] = roles[type];
+  }
+  for (const type of owned) if (!out[type]) out[type] = 'follow';
+  return out;
+}
+function sanitizeDragonStaySpots(spots, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  const raw = spots && typeof spots === 'object' ? spots : {};
+  for (const type of owned) {
+    const s = raw[type];
+    if (!s || typeof s !== 'object') continue;
+    out[type] = {
+      x: clampF(s.x, -100000, 100000),
+      y: clampF(s.y, -128, 512),
+      z: clampF(s.z, -100000, 100000),
+      yaw: clampF(s.yaw, -Math.PI * 4, Math.PI * 4),
+    };
+  }
+  return out;
+}
+function sanitizeDragonHatchedAt(hatchedAt, unlocks = []) {
+  const out = {};
+  const owned = new Set((Array.isArray(unlocks) ? unlocks : [])
+    .map(k => k === 'dragon' ? 'ember' : (typeof k === 'string' && k.slice(0, 7) === 'dragon:' ? k.slice(7) : ''))
+    .filter(type => DRAGON_SPECIES.has(type)));
+  const raw = hatchedAt && typeof hatchedAt === 'object' ? hatchedAt : {};
+  for (const type of owned) out[type] = raw[type] == null ? 0 : clampI(raw[type], 0, 4102444800000);
+  return out;
+}
 const JOB_IDS = new Set(['', ...JOB_SYSTEM.JOB_IDS]);
 const PROFESSION_IDS = JOB_SYSTEM.PROFESSION_IDS;
 const JOB_XP_IDS = JOB_SYSTEM.JOB_IDS;
-const JOB_CONTRACT_TYPES = new Set(['mine', 'farm', 'cook', 'smith', 'repair', 'meditate', 'sell', 'kill', 'gate', 'quest', 'event']);
+const JOB_CONTRACT_TYPES = new Set(['mine', 'farm', 'cook', 'smith', 'repair', 'upgrade', 'salvage', 'meditate', 'sell', 'kill', 'gate', 'quest', 'event']);
 const REGIONAL_CONTRACT_TYPES = new Set(['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles']);
-const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense']);
+const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense','weather_sense']);
+const ACTIVE_UTILITY_IDS = new Set(['trail_sense']);
+const COSMETIC_IDS = new Set(['cartographers_mantle']);
+const QUEST_HISTORY_MAX = 50;
+const QUEST_HISTORY_OUTCOMES = new Set(['completed', 'abandoned', 'failed', 'expired']);
 const cleanJob = job => JOB_IDS.has(job) ? job : '';
 
 function sanitizeUtilityUnlocks(list) {
@@ -111,12 +237,28 @@ function sanitizeUtilityLoadout(raw, unlocks = []) {
   const owned = new Set(sanitizeUtilityUnlocks(unlocks));
   const out = { active: '', passive: [] };
   if (!raw || typeof raw !== 'object') return out;
-  out.active = typeof raw.active === 'string' && UTILITY_IDS.has(raw.active) && owned.has(raw.active) ? raw.active : '';
+  out.active = typeof raw.active === 'string' && ACTIVE_UTILITY_IDS.has(raw.active) && owned.has(raw.active) ? raw.active : '';
   const passive = Array.isArray(raw.passive) ? raw.passive : [];
   for (const k of passive) {
-    if (!UTILITY_IDS.has(k) || !owned.has(k) || out.passive.includes(k)) continue;
+    if (!UTILITY_IDS.has(k) || ACTIVE_UTILITY_IDS.has(k) || !owned.has(k) || out.passive.includes(k)) continue;
     out.passive.push(k);
     if (out.passive.length >= 3) break;
+  }
+  return out;
+}
+
+function sanitizeCosmeticUnlocks(list) {
+  const out = [];
+  if (Array.isArray(list)) for (const k of list) if (COSMETIC_IDS.has(k) && !out.includes(k)) out.push(k);
+  return out;
+}
+
+function sanitizeEquippedCosmetics(raw, unlocks = []) {
+  const owned = new Set(sanitizeCosmeticUnlocks(unlocks));
+  const out = [];
+  if (Array.isArray(raw)) for (const k of raw) {
+    if (!COSMETIC_IDS.has(k) || !owned.has(k) || out.includes(k)) continue;
+    out.push(k);
   }
   return out;
 }
@@ -129,6 +271,7 @@ function defaultProfile(name) {
     jobXp: 0,
     jobXpByJob: { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0 },
     jobContract: null,
+    homesteadWorkOrder: null,
     jobContractOffers: [],
     jobContractOffersAt: 0,
     jobContractOfferJob: '',
@@ -144,7 +287,9 @@ function defaultProfile(name) {
     maraRoadReadySwordGranted: false,
     npcQuestChains: {},
     activeNpcQuest: null,
+    questHistory: [],
     aegisTrialReady: false,
+    aegisTrial: null,
     inv: [],
     lootRecovery: [],
     armor: null,
@@ -155,7 +300,16 @@ function defaultProfile(name) {
     shadowArmy: [],
     abilitySpec: '',
     dragonCare: {},
+    dragonBondXp: {},
+    dragonRoleMastery: {},
+    dragonSpecializations: {},
+    dragonChallenges: {},
     dragonNames: {},
+    dragonGenders: {},
+    dragonPersonalities: {},
+    dragonRoles: {},
+    dragonStaySpots: {},
+    dragonHatchedAt: {},
     discoveries: [],
     claimedDiscoveries: [],
     explorationMilestones: [],
@@ -165,6 +319,7 @@ function defaultProfile(name) {
     treasureMap: null,
     cartographerIntroSeen: false,
     cosmeticUnlocks: [],
+    equippedCosmetics: [],
     regionalContract: null,
     roadWardenRep: 0,
     parkourBestMs: 0,
@@ -175,6 +330,7 @@ function defaultProfile(name) {
     recallMastery: { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 },
     progressionFocus: '',
     systemIntroductions: [],
+    progressionMilestoneRewards: [],
     firstPromotionSeen: false,
     tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 },
     dungeonRecovery: null,
@@ -213,8 +369,49 @@ function sanitizeJobContract(c) {
     difficultyLabel: cleanShortText(c.difficultyLabel, '', 20),
     estimate: cleanShortText(c.estimate, '', 40),
     location: cleanShortText(c.location, '', 64),
+    focus: cleanShortText(c.focus, '', 48),
+    reward: cleanShortText(c.reward, '', 80),
+    party: cleanShortText(c.party, '', 24),
     offeredAt: clampI(c.offeredAt, 0, Number.MAX_SAFE_INTEGER),
+    acceptedAt: clampI(c.acceptedAt, 0, Number.MAX_SAFE_INTEGER),
+    claimableAt: clampI(c.claimableAt, 0, Number.MAX_SAFE_INTEGER),
     expiresAt: clampI(c.expiresAt, 0, Number.MAX_SAFE_INTEGER),
+    lifecycleState: ['active', 'claimable', 'completed', 'failed', 'expired'].includes(c.lifecycleState) ? c.lifecycleState : ((c.have | 0) >= need ? 'claimable' : 'active'),
+  };
+}
+
+function sanitizeHomesteadWorkOrder(c) {
+  if (!c || typeof c !== 'object') return null;
+  const type = ['stock', 'craft'].includes(c.type) ? c.type : '';
+  const job = JOB_XP_IDS.includes(c.job) && c.job !== 'adventurer' ? c.job : '';
+  if (!type || !job) return null;
+  const need = clampI(c.need, 1, 999);
+  const contributors = {};
+  if (c.contributors && typeof c.contributors === 'object') {
+    for (const [rawToken, rawEntry] of Object.entries(c.contributors).slice(0, 32)) {
+      const token = cleanToken(rawToken);
+      const entry = rawEntry && typeof rawEntry === 'object' ? rawEntry : {};
+      if (!token) continue;
+      contributors[token] = {
+        name: cleanName(entry.name || 'Hunter'),
+        count: clampI(entry.count, 0, need),
+      };
+    }
+  }
+  return {
+    id: cleanShortText(c.id, 'homestead_order', 80),
+    type,
+    job,
+    target: clampI(c.target, 1, 999),
+    need,
+    have: clampI(c.have, 0, need),
+    rewardGold: clampI(c.rewardGold, 0, 9999),
+    rewardJobXp: clampI(c.rewardJobXp, 0, 9999),
+    title: cleanShortText(c.title, 'Homestead Work Order', 64),
+    desc: cleanShortText(c.desc, 'Bring supplies to your homestead.', 160),
+    offeredAt: clampI(c.offeredAt, 0, Number.MAX_SAFE_INTEGER),
+    completedAt: clampI(c.completedAt, 0, Number.MAX_SAFE_INTEGER),
+    contributors,
   };
 }
 
@@ -249,6 +446,9 @@ function sanitizeRegionalContract(c) {
     title: cleanShortText(c.title, 'Guild Contract', 64),
     desc: cleanShortText(c.desc, 'Complete the regional contract.', 180),
     acceptedAt: clampI(c.acceptedAt, 0, 4102444800000),
+    claimableAt: clampI(c.claimableAt, 0, 4102444800000),
+    lifecycleState: ['active', 'claimable', 'completed', 'failed', 'expired'].includes(c.lifecycleState) ? c.lifecycleState : ((c.have | 0) >= need || c.ready === true ? 'claimable' : 'active'),
+    ready: c.ready === true || (c.have | 0) >= need,
     seed: clampI(c.seed, 0, 999999999),
   };
 }
@@ -266,10 +466,11 @@ function sanitizeNpcQuestChains(chains) {
 
 function sanitizeActiveNpcQuest(q) {
   if (!q || typeof q !== 'object') return null;
-  const types = new Set(['fetch', 'mine', 'kill', 'gate', 'sell', 'utility', 'familiar', 'mount', 'mount_use']);
+  const types = new Set(['fetch', 'mine', 'kill', 'manhunt', 'gate', 'sell', 'utility', 'familiar', 'mount', 'mount_use']);
   const type = types.has(q.type) ? q.type : '';
   const giver = cleanShortText(q.giver, '', 64);
   if (!type || !giver) return null;
+  const lifecycleState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(q.lifecycleState) ? q.lifecycleState : 'active';
   return {
     source: 'npc', giver, role: cleanShortText(q.role, 'town', 32),
     chainKey: giver, chainStep: clampI(q.chainStep, 0, 99), chainTotal: clampI(q.chainTotal, 1, 99),
@@ -278,7 +479,74 @@ function sanitizeActiveNpcQuest(q) {
     gold: clampI(q.gold, 0, 99999), xp: clampI(q.xp, 0, 99999), desc: cleanShortText(q.desc, 'Complete the task.', 180),
     levelTarget: clampI(q.levelTarget, 0, 999), gateRank: clampI(q.gateRank, -1, 4),
     utility: cleanShortText(q.utility, '', 32), familiar: cleanShortText(q.familiar, '', 32), mount: cleanShortText(q.mount, '', 32),
+    lifecycleState,
+    offeredAt: clampI(q.offeredAt, 0, 4102444800000),
+    acceptedAt: clampI(q.acceptedAt, 0, 4102444800000),
+    claimableAt: clampI(q.claimableAt, 0, 4102444800000),
+    completedAt: clampI(q.completedAt, 0, 4102444800000),
+    expiresAt: clampI(q.expiresAt, 0, 4102444800000),
     rewardItems: Array.isArray(q.rewardItems) ? q.rewardItems.slice(0, 4).map(it => ({ id: clampI(it && it.id, 1, 999), count: clampI(it && it.count, 1, 64) })) : [],
+  };
+}
+
+function sanitizeQuestHistory(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const entry of raw.slice(0, QUEST_HISTORY_MAX)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const title = cleanShortText(entry.title, 'Quest', 96);
+    const outcome = QUEST_HISTORY_OUTCOMES.has(entry.outcome) ? entry.outcome : '';
+    if (!title || !outcome) continue;
+    const items = [];
+    if (Array.isArray(entry.items)) {
+      for (const it of entry.items.slice(0, 12)) {
+        if (!it || typeof it !== 'object') continue;
+        const id = clampI(it.id, 1, 999);
+        items.push({
+          id,
+          count: clampI(it.count, 1, 999),
+          name: cleanShortText(it.name, 'Item', 64),
+        });
+      }
+    }
+    const gear = entry.gear && typeof entry.gear === 'object' ? {
+      id: clampI(entry.gear.id, 1, 999),
+      count: clampI(entry.gear.count, 1, 99),
+      name: cleanShortText(entry.gear.name, 'Gear', 64),
+      rarity: cleanShortText(entry.gear.rarity, '', 24),
+      recovered: entry.gear.recovered === true,
+    } : null;
+    out.push({
+      id: cleanShortText(entry.id, 'quest_history_' + out.length, 96),
+      source: cleanShortText(entry.source, 'quest', 32),
+      questType: cleanShortText(entry.questType, 'quest', 32),
+      title,
+      outcome,
+      reason: cleanShortText(entry.reason, outcome, 48),
+      location: cleanShortText(entry.location || entry.claimLocation, '', 80),
+      endedAt: clampI(entry.endedAt || entry.completedAt || entry.at, 0, 4102444800000),
+      gold: clampI(entry.gold, 0, 999999),
+      xp: clampI(entry.xp, 0, 999999),
+      jobXp: clampI(entry.jobXp, 0, 999999),
+      job: cleanShortText(entry.job, '', 32),
+      items,
+      gear,
+      inventoryOverflow: entry.inventoryOverflow === true,
+      noReward: entry.noReward === true,
+      shared: entry.shared === true,
+      endedBy: cleanShortText(entry.endedBy, '', 64),
+      canReaccept: entry.canReaccept !== false,
+    });
+  }
+  return out;
+}
+
+function sanitizeAegisTrial(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    acceptedAt: clampI(raw.acceptedAt, 0, 4102444800000),
+    claimableAt: clampI(raw.claimableAt, 0, 4102444800000),
+    completedAt: clampI(raw.completedAt, 0, 4102444800000),
   };
 }
 
@@ -359,16 +627,30 @@ function sanitizeLandClaims(claims) {
   for (const key in claims) {
     if (!/^\d+,\d+$/.test(key)) continue;
     const [x, z] = key.split(',').map(Number);
-    if (x < 0 || x > 127 || z < 0 || z > 127) continue;
+    if (x < 0 || x >= 1000 || z < 0 || z >= 1000) continue;
     const raw = claims[key] || {};
     const owner = cleanToken(raw.owner) || '';
     if (!owner) continue;
-    out[key] = {
+    const allowed = [];
+    const addAllowed = token => {
+      const clean = cleanToken(token);
+      if (clean && clean !== owner && !allowed.includes(clean) && allowed.length < 64) allowed.push(clean);
+    };
+    const rawAllowed = raw.allowed || raw.permissions || raw.permitted;
+    if (Array.isArray(rawAllowed)) rawAllowed.forEach(addAllowed);
+    else if (rawAllowed && typeof rawAllowed === 'object') Object.keys(rawAllowed).forEach(token => { if (rawAllowed[token]) addAllowed(token); });
+    const rawTitle = typeof raw.title === 'string' ? raw.title.trim() : '';
+    const claim = {
       owner,
       name: cleanName(raw.name || 'Hunter'),
+      title: rawTitle ? cleanName(rawTitle).slice(0, 32) : '',
       price: clampI(raw.price, 0, 1000000),
       boughtAt: clampI(raw.boughtAt, 0, 4102444800000),
+      lastVisitedAt: clampI(raw.lastVisitedAt || raw.boughtAt, 0, 4102444800000),
     };
+    if (!claim.title) delete claim.title;
+    if (allowed.length) claim.allowed = allowed;
+    out[key] = claim;
   }
   return out;
 }
@@ -396,6 +678,7 @@ function sanitizeProfile(p) {
   if (!p.jobXpByJob || typeof p.jobXpByJob !== 'object') out.jobXpByJob[legacyJob || 'adventurer'] = clampI(p.jobXp, 0, 1e9);
   out.jobXp = out.jobXpByJob[out.job || 'adventurer']; // compatibility snapshot for older clients
   out.jobContract = sanitizeJobContract(p.jobContract);
+  out.homesteadWorkOrder = sanitizeHomesteadWorkOrder(p.homesteadWorkOrder);
   out.jobContractOffers = (Array.isArray(p.jobContractOffers) ? p.jobContractOffers : []).slice(0,3).map(sanitizeJobContract).filter(Boolean);
   out.jobContractOffersAt = clampI(p.jobContractOffersAt, 0, Number.MAX_SAFE_INTEGER);
   out.jobContractOfferJob = JOB_XP_IDS.includes(p.jobContractOfferJob) ? p.jobContractOfferJob : '';
@@ -431,7 +714,9 @@ function sanitizeProfile(p) {
   out.maraRoadReadySwordGranted = p.maraRoadReadySwordGranted === true;
   out.npcQuestChains = sanitizeNpcQuestChains(p.npcQuestChains);
   out.activeNpcQuest = sanitizeActiveNpcQuest(p.activeNpcQuest);
+  out.questHistory = sanitizeQuestHistory(p.questHistory);
   out.aegisTrialReady = p.aegisTrialReady === true;
+  out.aegisTrial = sanitizeAegisTrial(p.aegisTrial);
   out.inv = [];
   if (Array.isArray(p.inv)) {
     for (const s of p.inv.slice(0, INV_MAX)) {
@@ -486,7 +771,16 @@ function sanitizeProfile(p) {
   out.shadowArmy = sanitizeShadowArmy(p.shadowArmy,out.S.lvl);
   out.abilitySpec = ABILITY_PROGRESSION.validSpecialization(out.S.path,p.abilitySpec)?p.abilitySpec:'';
   out.dragonCare = sanitizeDragonCare(p.dragonCare);
+  out.dragonBondXp = sanitizeDragonBondXp(p.dragonBondXp, out.mountUnlocks);
+  out.dragonRoleMastery = sanitizeDragonRoleMastery(p.dragonRoleMastery, out.mountUnlocks);
+  out.dragonSpecializations = sanitizeDragonSpecializations(p.dragonSpecializations, out.mountUnlocks);
+  out.dragonChallenges = sanitizeDragonChallenges(p.dragonChallenges);
   out.dragonNames = sanitizeDragonNames(p.dragonNames);
+  out.dragonGenders = sanitizeDragonGenders(p.dragonGenders, out.mountUnlocks);
+  out.dragonPersonalities = sanitizeDragonPersonalities(p.dragonPersonalities, out.mountUnlocks);
+  out.dragonRoles = sanitizeDragonRoles(p.dragonRoles, out.mountUnlocks);
+  out.dragonStaySpots = sanitizeDragonStaySpots(p.dragonStaySpots, out.mountUnlocks);
+  out.dragonHatchedAt = sanitizeDragonHatchedAt(p.dragonHatchedAt, out.mountUnlocks);
   const cleanDiscoveryList = list => Array.isArray(list) ? [...new Set(list.filter(v => typeof v === 'string' && /^(discovery|major|minor)_[A-Za-z0-9_]+$/.test(v)).slice(0, 512))] : [];
   out.discoveries = cleanDiscoveryList(p.discoveries);
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);
@@ -505,8 +799,10 @@ function sanitizeProfile(p) {
     targets: cleanDiscoveryList(p.treasureMap.targets).slice(0, 3), rewardGold: clampI(p.treasureMap.rewardGold, 0, 9999),
   } : null;
   out.cartographerIntroSeen = !!p.cartographerIntroSeen;
-  out.cosmeticUnlocks = Array.isArray(p.cosmeticUnlocks)
-    ? [...new Set(p.cosmeticUnlocks.filter(v => v === 'cartographers_mantle'))] : [];
+  out.cosmeticUnlocks = sanitizeCosmeticUnlocks(p.cosmeticUnlocks);
+  out.equippedCosmetics = Object.prototype.hasOwnProperty.call(p, 'equippedCosmetics')
+    ? sanitizeEquippedCosmetics(p.equippedCosmetics, out.cosmeticUnlocks)
+    : [...out.cosmeticUnlocks];
   out.regionalContract = sanitizeRegionalContract(p.regionalContract);
   out.roadWardenRep = clampI(p.roadWardenRep, 0, 9999);
   out.parkourBestMs = clampI(p.parkourBestMs, 0, 24 * 60 * 60 * 1000);
@@ -528,9 +824,11 @@ function sanitizeProfile(p) {
   out.progressionFocus = PROGRESSION_FOCUS_STATES.has(p.progressionFocus) ? p.progressionFocus : '';
   out.systemIntroductions = [...new Set((Array.isArray(p.systemIntroductions) ? p.systemIntroductions : [])
     .filter(v => typeof v === 'string' && /^[a-z_]{2,32}$/.test(v)).slice(0, 32))];
+  out.progressionMilestoneRewards = [...new Set((Array.isArray(p.progressionMilestoneRewards) ? p.progressionMilestoneRewards : [])
+    .filter(v => typeof v === 'string' && /^[a-z_]{2,32}$/.test(v)).slice(0, 32))];
   if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'next_adventurer_contract';
   if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job';
-  if (out.progressionFocus === 'next_adventurer_contract' && out.jobContract) out.progressionFocus = '';
+  if (['first_profession_contract', 'next_adventurer_contract'].includes(out.progressionFocus) && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;
   out.tutorials = sanitizeTutorials(p.tutorials, out);
   out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
@@ -583,6 +881,7 @@ function sanitizeChests(chests) {
     const owner = cleanToken(obj.owner) || '';
     const team = typeof obj.team === 'string' ? obj.team.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) : '';
     out[key] = { scope, owner, team, slots: cleanChestSlots(Array.isArray(raw) ? raw : obj.slots) };
+    if (obj.supply === true && scope === 'personal') out[key].supply = true;
   }
   return out;
 }
@@ -633,6 +932,8 @@ function sanitizeIncubations(incubations) {
       startedAt: clampI(inc.startedAt, 0, 4102444800000),
       finishAt: clampI(inc.finishAt, 0, 4102444800000),
       ready: !!inc.ready,
+      gender: DRAGON_GENDERS.has(inc.gender) ? inc.gender : defaultDragonGender(inc.type),
+      personality: DRAGON_PERSONALITIES.has(inc.personality) ? inc.personality : defaultDragonPersonality(inc.type),
     };
   }
   return out;
@@ -649,6 +950,7 @@ function sanitizeNestDragons(nests) {
     out[key] = {
       type: n.type,
       token,
+      gender: DRAGON_GENDERS.has(n.gender) ? n.gender : defaultDragonGender(n.type),
       loveUntil: clampI(n.loveUntil, 0, 4102444800000),
       breedCdUntil: clampI(n.breedCdUntil, 0, 4102444800000),
       breedStart: 0,
@@ -749,6 +1051,31 @@ function sanitizeGuilds(guilds) {
       invites: Array.isArray(raw.invites)
         ? raw.invites.map(cleanToken).filter((t, i, a) => t && a.indexOf(t) === i && !members.includes(t)).slice(0, 100)
         : [],
+      renown: clampI(raw.renown, 0, 1000000),
+      totalRenown: clampI(raw.totalRenown, 0, 1000000),
+      renownWeek: clampI(raw.renownWeek, 0, 1000000),
+      contractsWeek: clampI(raw.contractsWeek, 0, 1000000),
+      renownWeekStart: clampI(raw.renownWeekStart, 0, 4102444800000),
+      weeklyRewardClaims: (() => {
+        const src = raw.weeklyRewardClaims && typeof raw.weeklyRewardClaims === 'object' && !Array.isArray(raw.weeklyRewardClaims) ? raw.weeklyRewardClaims : {};
+        const claims = {};
+        const rawClaims = src.claims && typeof src.claims === 'object' && !Array.isArray(src.claims) ? src.claims : {};
+        for (const rewardId in rawClaims) {
+          const cleanId = cleanShortText(rewardId, '', 40);
+          if (!cleanId || !Array.isArray(rawClaims[rewardId])) continue;
+          const tokens = rawClaims[rewardId].map(cleanToken).filter((t, i, a) => t && members.includes(t) && a.indexOf(t) === i).slice(0, 200);
+          if (tokens.length) claims[cleanId] = tokens;
+        }
+        return { week: clampI(src.week, 0, 4102444800000), claims };
+      })(),
+      projects: Array.isArray(raw.projects)
+        ? raw.projects.map(v => cleanShortText(v, '', 40)).filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 32)
+        : [],
+      notice: raw.notice && typeof raw.notice === 'object' ? {
+        id: cleanShortText(raw.notice.id, '', 40),
+        pinnedAt: clampI(raw.notice.pinnedAt, 0, 4102444800000),
+        pinnedBy: cleanTeamName(raw.notice.pinnedBy) || 'Officer',
+      } : null,
       floor: clampI(raw.floor, 0, 6),
       foundedAt: clampI(raw.foundedAt, 0, 4102444800000),
       floorBoughtAt: clampI(raw.floorBoughtAt, 0, 4102444800000),
@@ -777,6 +1104,7 @@ function sanitizeGates(gates) {
       kind,
       rank: clampI(raw.rank, 0, 4),
       seed: clampI(raw.seed, 0, 4294967295),
+      dungeonId: canonicalDungeonId(clampI(raw.rank, 0, 4), clampI(raw.seed, 0, 4294967295), raw.dungeonId),
       owner: (kind === 'solo' || kind === 'team' || kind === 'shard') ? (cleanToken(raw.owner) || '') : '',
       team: (kind === 'team' || kind === 'shard') ? cleanTeam(raw.team) : '',
       refundItem: clampI(raw.refundItem, 0, 999),
@@ -1109,7 +1437,7 @@ function createStore(options = {}) {
   const Firebase = options.FirebaseStoreClass || FirebaseStore;
   const Json = options.JsonStoreClass || JsonStore;
   if ((env.STORE || '').toLowerCase() === 'firebase') {
-    try { return new Firebase({ shardId: options.shardId }); }
+      try { return new Firebase({ shardId: options.shardId }); }
     catch (e) {
       if ((env.NODE_ENV || '').toLowerCase() === 'production') {
         throw new Error('Firebase storage was requested but could not initialize: ' + e.message, { cause: e });
@@ -1120,4 +1448,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, cleanToken, TUTORIAL_VERSIONS };
+module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, cleanToken, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };

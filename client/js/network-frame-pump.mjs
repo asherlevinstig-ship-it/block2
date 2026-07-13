@@ -11,6 +11,8 @@ export function createNetworkFramePump({
   dragonType,
   emitDragonTrail,
   pulseAegisGlow,
+  tickSpiritVisual,
+  tickLocalSpiritVisual,
   updateTag:netUpdateTag,
 }){
   return function netTick(dt,now){
@@ -62,6 +64,7 @@ export function createNetworkFramePump({
         emitDragonAura({x:p.x,y:p.y-lift,z:p.z},dragonType(ref.mount),stepDt,r);
         if(moving) emitDragonTrail({x:p.x,y:p.y-lift,z:p.z},r.grp.rotation.y,dragonType(ref.mount),stepDt,r);
       }
+      if(tickSpiritVisual)tickSpiritVisual(r,now);
       if(ref.mount){
         r.legs[0].rotation.x=-.95;
         r.legs[1].rotation.x=-.95;
@@ -73,5 +76,6 @@ export function createNetworkFramePump({
       pulseAegisGlow(r,now);
       netUpdateTag(r);
     }
+    if(tickLocalSpiritVisual)tickLocalSpiritVisual(now);
   };
 }

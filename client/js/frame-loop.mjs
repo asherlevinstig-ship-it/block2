@@ -7,6 +7,7 @@ import {api as networkingApi,state as networkingState} from './networking.mjs';
 import {createPerformanceDiagnostics} from './performance-budget.mjs';
 import {biomeStatus} from './biome-status.mjs';
 const gameContext=window.BlockcraftGameContext;
+const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
@@ -24,6 +25,10 @@ const gatePromptEl=document.getElementById('gateprompt');
 const encounterPromptEl=document.getElementById('encounterprompt');
 const dungeonPartyEl=document.getElementById('dungeonparty');
 const dungeonPingEl=document.getElementById('dungeonping');
+const landBoundaryToastEl=document.createElement('div');
+landBoundaryToastEl.id='landboundarytoast';
+landBoundaryToastEl.setAttribute('aria-live','polite');
+document.body.appendChild(landBoundaryToastEl);
 const gateRallyGroup=new THREE.Group();
 const gateRallyBeam=new THREE.Mesh(new THREE.CylinderGeometry(.22,.5,14,12,1,true),new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.18,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
 const gateRallyRing=new THREE.Mesh(new THREE.TorusGeometry(2.2,.07,8,48),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.82,depthWrite:false,blending:THREE.AdditiveBlending}));
@@ -33,6 +38,16 @@ const dungeonPingBeam=new THREE.Mesh(new THREE.CylinderGeometry(.12,.34,7,10,1,t
 const dungeonPingRing=new THREE.Mesh(new THREE.TorusGeometry(1.15,.07,8,36),new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.9,depthWrite:false,blending:THREE.AdditiveBlending}));
 dungeonPingBeam.position.y=3.5;dungeonPingRing.rotation.x=Math.PI/2;dungeonPingRing.position.y=.12;dungeonPingGroup.add(dungeonPingBeam,dungeonPingRing);dungeonPingGroup.visible=false;scene.add(dungeonPingGroup);
 let activeDungeonPing=null;
+const trailSenseGroup=new THREE.Group();
+const trailSenseBeam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.44,7.5,12,1,true),new THREE.MeshBasicMaterial({color:0x8ff7c7,transparent:true,opacity:.2,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+const trailSenseRing=new THREE.Mesh(new THREE.TorusGeometry(1.5,.07,8,44),new THREE.MeshBasicMaterial({color:0x8ff7c7,transparent:true,opacity:.86,depthWrite:false,blending:THREE.AdditiveBlending}));
+trailSenseBeam.position.y=3.75;trailSenseRing.rotation.x=Math.PI/2;trailSenseRing.position.y=.13;trailSenseGroup.add(trailSenseBeam,trailSenseRing);trailSenseGroup.visible=false;scene.add(trailSenseGroup);
+const partyCompassGroup=new THREE.Group();
+const partyCompassBeam=new THREE.Mesh(new THREE.CylinderGeometry(.13,.32,6.5,10,1,true),new THREE.MeshBasicMaterial({color:0xd7b5ff,transparent:true,opacity:.18,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+const partyCompassRing=new THREE.Mesh(new THREE.TorusGeometry(1.25,.065,8,40),new THREE.MeshBasicMaterial({color:0xd7b5ff,transparent:true,opacity:.8,depthWrite:false,blending:THREE.AdditiveBlending}));
+partyCompassBeam.position.y=3.25;partyCompassRing.rotation.x=Math.PI/2;partyCompassRing.position.y=.12;partyCompassGroup.add(partyCompassBeam,partyCompassRing);partyCompassGroup.visible=false;scene.add(partyCompassGroup);
+const featherStepLandings=[];
+const dungeonSpiritMarkers=new Map();
 const treasureClueGroup=new THREE.Group();
 const treasureBeamMat=new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.24,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
 const treasureCoreMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
@@ -53,6 +68,63 @@ function retitleSprite(sp,text,color){
   const d=sp.userData,c=d.canvas,g=c.getContext('2d'),col=color||d.color;d.text=text;d.color=col;
   g.clearRect(0,0,c.width,c.height);g.fillStyle=d.bg||'rgba(7,10,16,.74)';roundedRect(g,8,14,240,42,8);g.fill();g.strokeStyle=col;g.lineWidth=2;g.stroke();
   g.font='bold 19px Courier New';g.textAlign='center';g.fillStyle=col;g.fillText(text,128,43);d.tex.needsUpdate=true;
+}
+function makeDungeonSpiritMarker(){
+  const group=new THREE.Group();
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.16,.42,8,12,1,true),new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.22,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.05,.065,8,42),new THREE.MeshBasicMaterial({color:0x9bdcff,transparent:true,opacity:.86,depthWrite:false,blending:THREE.AdditiveBlending}));
+  const label=makeHudSprite('SPIRIT','#9bdcff','rgba(4,13,25,.72)');
+  beam.position.y=4;ring.rotation.x=Math.PI/2;ring.position.y=.13;label.position.y=2.9;
+  group.add(beam,ring,label);group.userData={beam,ring,label,phase:Math.random()*10};
+  scene.add(group);
+  return group;
+}
+function showFeatherStepLandingFx(m={}){
+  const softened=Math.max(0,(m&&m.damage)|0)>0,color=softened?0xffd24a:0x9bdcff;
+  const group=new THREE.Group();
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.85,.055,8,40),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.92,depthWrite:false,blending:THREE.AdditiveBlending}));
+  const pulse=new THREE.Mesh(new THREE.TorusGeometry(1.25,.04,8,44),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.48,depthWrite:false,blending:THREE.AdditiveBlending}));
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.08,.2,1.9,10,1,true),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.28,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+  ring.rotation.x=Math.PI/2;pulse.rotation.x=Math.PI/2;ring.position.y=.09;pulse.position.y=.1;beam.position.y=.95;
+  group.add(ring,pulse,beam);group.position.set(player.pos.x,player.pos.y+.03,player.pos.z);scene.add(group);
+  featherStepLandings.push({group,ring,pulse,beam,created:performance.now(),expires:performance.now()+900});
+}
+function tickFeatherStepLandingFx(now){
+  for(let i=featherStepLandings.length-1;i>=0;i--){
+    const fx=featherStepLandings[i],age=Math.max(0,now-fx.created),life=Math.max(.001,fx.expires-fx.created),t=age/life;
+    if(t>=1){
+      scene.remove(fx.group);
+      fx.group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});
+      featherStepLandings.splice(i,1);continue;
+    }
+    const ease=1-t;
+    fx.ring.scale.setScalar(1+t*.75);fx.pulse.scale.setScalar(1+t*1.55);fx.beam.scale.setScalar(1+t*.25);
+    fx.ring.material.opacity=.78*ease;fx.pulse.material.opacity=.4*ease;fx.beam.material.opacity=.22*ease;
+  }
+}
+globalThis.BlockcraftUtilityFeedback={showFeatherStepLandingFx};
+function clearDungeonSpiritMarkers(keep=null){
+  for(const [sid,marker] of dungeonSpiritMarkers){
+    if(keep&&keep.has(sid))continue;
+    scene.remove(marker);
+    marker.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});
+    dungeonSpiritMarkers.delete(sid);
+  }
+}
+function updateDungeonSpiritMarkers(status,now){
+  if(dim!=='dungeon'||!status||!Array.isArray(status.party)){clearDungeonSpiritMarkers();return;}
+  const mine=NET.room&&NET.room.sessionId,keep=new Set();
+  for(const member of status.party){
+    if(!member||member.sid===mine||!member.spirit)continue;
+    const marker=dungeonSpiritMarkers.get(member.sid)||makeDungeonSpiritMarker();
+    dungeonSpiritMarkers.set(member.sid,marker);keep.add(member.sid);
+    const x=Number.isFinite(member.x)?member.x:0,y=Number.isFinite(member.y)?member.y:8,z=Number.isFinite(member.z)?member.z:0;
+    marker.position.set(x,y+.05,z);
+    const ud=marker.userData||{},pulse=.5+.5*Math.sin(now*.006+(ud.phase||0));
+    if(ud.ring){ud.ring.rotation.z=now*.0012;ud.ring.scale.setScalar(1+pulse*.15);ud.ring.material.opacity=.52+pulse*.3;}
+    if(ud.beam)ud.beam.material.opacity=.12+pulse*.12;
+  }
+  clearDungeonSpiritMarkers(keep);
 }
 {
   const base=new THREE.Mesh(new THREE.BoxGeometry(1.25,.65,.85),new THREE.MeshLambertMaterial({color:0x6d411f}));
@@ -144,7 +216,11 @@ hudState.slots[0].classList.add('sel');
 let nextRecallRechargeHintAt=0;
 let nextTreasureMapHintAt=0;
 let nextFirstHandsProtectedHintAt=0;
+let nextLandProtectedHintAt=0;
 let nextWeatherDiscoveryHintAt=0;
+let lastLandBoundarySig='';
+let lastLandBoundaryTile='';
+let landBoundaryToastUntil=0;
 let lastWeatherDiscoveryPromptWeather=null;
 const weatherDiscoveryHintCooldowns=new Map();
 function firstHandsQuestActive(){
@@ -180,9 +256,11 @@ function maybePromptWeatherDiscovery(now){
   }
   if(now<nextWeatherDiscoveryHintAt)return;
   let best=null,bestDist=Infinity;
-  const maxDist=currentWeather==='clear'?58:96;
+  const weatherSense=utilityUnlocked('weather_sense');
+  const maxDist=weatherSense?(currentWeather==='clear'?110:180):(currentWeather==='clear'?58:96);
   for(const s of smallDiscoveries){
-    if(!s||discoveredIds.has(s.id)||weatherDiscoveryReq[s.type]!==currentWeather)continue;
+    if(!s||claimedDiscoveryIds.has(s.id)||weatherDiscoveryReq[s.type]!==currentWeather)continue;
+    if(discoveredIds.has(s.id)&&!weatherSense)continue;
     const key=s.id+'|'+currentWeather;
     if((weatherDiscoveryHintCooldowns.get(key)||0)>now)continue;
     const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);
@@ -190,10 +268,62 @@ function maybePromptWeatherDiscovery(now){
   }
   if(!best)return;
   const key=best.id+'|'+currentWeather,near=bestDist<18,name=weatherDiscoveryName[best.type]||'WEATHER DISCOVERY';
+  const spotted=discoveredIds.has(best.id);
   weatherDiscoveryHintCooldowns.set(key,now+90000);
   nextWeatherDiscoveryHintAt=now+(near?18000:32000);
   if(near)sysMsg('<b>'+name+'</b> is active now - press <b>G</b> to '+escHTML(weatherDiscoveryAction[best.type]||'investigate')+' <b>'+escHTML(weatherDiscoveryItem[best.type]||'weather materials')+'</b>.','minor');
+  else if(spotted)sysMsg('<b>Weather Sense:</b> '+escHTML(currentWeather==='storm'?'The storm':currentWeather==='rain'?'The rain':'Clear sunlight')+' has woken your spotted <b>'+name+'</b>. Track it on the map before the weather changes.','minor');
   else sysMsg('<b>'+escHTML(currentWeather==='storm'?'The storm':currentWeather==='rain'?'The rain':'Clear sunlight')+'</b> has woken a <b>'+name+'</b> nearby. Look for its beam before the weather changes.','minor');
+}
+function landBoundarySignature(status){
+  if(!status) return '';
+  if(status.kind==='available') return 'wilderness';
+  if(status.kind==='abandoned') return 'abandoned:'+(status.claim&&status.claim.title||status.claim&&status.claim.name||status.label||'');
+  if(status.kind==='own') return 'own:'+(status.group&&status.group.key||status.claim&&status.claim.title||'');
+  if(status.kind==='shared') return 'shared:'+(status.claim&&status.claim.title||status.claim&&status.claim.name||status.label||'');
+  if(status.kind==='other') return 'other:'+(status.claim&&status.claim.title||status.claim&&status.claim.name||status.label||'');
+  return status.kind||'';
+}
+function landClaimToastName(status){
+  const claim=status&&status.claim;
+  if(!claim) return '';
+  const groupSize=status&&status.group&&status.group.size||1;
+  return claim.title || (claim.name ? claim.name+'\'s '+(groupSize>=3?'Homestead':'land') : '');
+}
+function landBoundaryToastText(status){
+  if(!status) return null;
+  if(status.kind==='available') return {title:'Entering Wilderness', meta:'Unclaimed land - buildable, not protected', cls:'wild'};
+  if(status.kind==='abandoned') return {title:'Entering '+(landClaimToastName(status)||'Abandoned Land'), meta:'Abandoned claim - buildable and reclaimable', cls:'wild'};
+  if(status.kind==='own') return {title:'Entering '+(landClaimToastName(status)||'Your Land'), meta:'Protected claim - you can build here', cls:'own'};
+  if(status.kind==='shared') return {title:'Entering '+(landClaimToastName(status)||'Shared Land'), meta:(status.claim&&status.claim.name?status.claim.name:'Owner')+' trusts you here', cls:'shared'};
+  if(status.kind==='other') return {title:'Entering '+(landClaimToastName(status)||'Claimed Land'), meta:'Protected claim - permission required', cls:'other'};
+  if(status.kind==='town') return {title:'Entering Town Land', meta:'Protected by the Town of Beginnings', cls:'town'};
+  if(status.kind==='border') return {title:'World Border', meta:'Protected edge of the realm', cls:'other'};
+  return null;
+}
+function tickLandBoundaryToast(now){
+  if(dim!=='overworld'||!player||typeof landClaimStatusAt!=='function'){
+    lastLandBoundarySig='';lastLandBoundaryTile='';landBoundaryToastEl.classList.remove('show');return;
+  }
+  const x=Math.floor(player.pos.x), z=Math.floor(player.pos.z), tile=x+','+z;
+  if(tile!==lastLandBoundaryTile){
+    lastLandBoundaryTile=tile;
+    const status=landClaimStatusAt(x,z,Math.floor(player.pos.y));
+    const sig=landBoundarySignature(status);
+    if(lastLandBoundarySig && sig!==lastLandBoundarySig){
+      const text=landBoundaryToastText(status);
+      if(text){
+        landBoundaryToastEl.className='show '+text.cls;
+        landBoundaryToastEl.innerHTML='<b>'+escHTML(text.title)+'</b><span>'+escHTML(text.meta)+'</span>';
+        landBoundaryToastUntil=now+2600;
+      }
+    }
+    lastLandBoundarySig=sig;
+  }
+  if(landBoundaryToastUntil && now>landBoundaryToastUntil){
+    landBoundaryToastEl.classList.remove('show');
+    landBoundaryToastUntil=0;
+  }
 }
 function currentLocationInfo(){
   if(dim==='dungeon'){
@@ -348,6 +478,304 @@ function jobContractObjective(){
   if(jobContractReady()) return {label:'Job Contract', text:'Claim reward: '+c.title};
   return {label:'Job Contract', text:c.title+' '+Math.min(c.need,c.have)+'/'+c.need};
 }
+function activeObjectiveList(){
+  const list=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(activeObjectives):activeObjectives;
+  return Array.isArray(list) ? list
+    .filter(o=>o&&typeof o==='object'&&o.id&&o.title&&o.status!=='failed')
+    .slice(0,12) : [];
+}
+function serverObjectiveForHud(){
+  const list=activeObjectiveList();
+  if(!list.length)return null;
+  return list
+    .filter(o=>o.source!=='tutorial')
+    .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0] || null;
+}
+function serverObjectiveProgressText(o){
+  const p=o&&o.progress;
+  if(!p||!Number.isFinite(p.current)||!Number.isFinite(p.required))return '';
+  return Math.min(p.required,p.current)+'/'+p.required+' - ';
+}
+function serverObjectiveHudText(o){
+  if(!o)return '';
+  if(o.hudText)return o.hudText;
+  const legacy={
+    'progression:first_land_claim':'Leave town and buy your first land claim',
+    'progression:first_claim_expand':'Expand your protected base to 3 connected land claims',
+    'progression:first_base_setup':'Inside claimed land: place storage, light, and a station',
+    'progression:first_profession_contract':'Take your first repeatable contract at the Job Board'
+  };
+  if(legacy[o.id])return legacy[o.id];
+  const prefix=serverObjectiveProgressText(o);
+  if(o.status==='claimable'){
+    const location=o.location||'the turn-in point';
+    if(o.source==='job')return 'Complete - claim at the Job Board';
+    if(o.source==='guild')return 'Complete - claim at Guild Contracts';
+    if(o.source==='aegis')return 'Complete - claim from the Aegis Guardian';
+    return 'Complete - turn in to '+location;
+  }
+  const state=o.status==='offered'?'Available - ':'';
+  return prefix+state+(o.text||'Follow the objective.');
+}
+function objectiveTurnInLabel(o){
+  if(!o)return 'TURN IN';
+  const location=String(o.location||'').trim();
+  if(o.source==='job')return 'CLAIM AT JOB BOARD';
+  if(o.source==='guild')return 'CLAIM GUILD CONTRACT';
+  if(o.source==='aegis')return 'CLAIM AT AEGIS';
+  if(location==='Mara Vale')return 'TURN IN TO MARA';
+  if(location)return 'TURN IN TO '+location.toUpperCase().slice(0,18);
+  return 'TURN IN';
+}
+function serverObjectiveHudAction(o){
+  if(!o)return null;
+  if(o.id==='progression:first_d_gate'){
+    const craft=objectiveCraftAction('what_next');
+    if(craft)return craft;
+    const prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
+    return prep&&prep.ready ? {type:'find_gate',label:'FIND GATE'} : {type:'questlog',label:'OPEN GATE PREP'};
+  }
+  const explicit=o.hudAction||o.claimAction||o.action;
+  const type=explicit&&explicit.type||'';
+  if(type==='turn_in')return {type:'turn_in',label:objectiveTurnInLabel(o),location:o.location||'',source:o.source||''};
+  if(type==='find_gate')return {type:'find_gate',label:explicit.label||'FIND GATE'};
+  if(type==='jobs')return {type:'jobs',label:explicit.label||(o.status==='claimable'?'CLAIM AT JOB BOARD':'OPEN JOB BOARD')};
+  if(type==='guild_contracts')return {type:'guild_contracts',label:explicit.label||(o.status==='claimable'?'CLAIM GUILD CONTRACT':'OPEN GUILD CONTRACTS')};
+  if(type==='land')return {type:'land',label:explicit.label||'CLAIM LAND'};
+  if(type==='craft'){
+    const craft=objectiveCraftAction('what_next');
+    return craft || {type:'questlog',label:explicit.label||'OPEN QUEST LOG'};
+  }
+  if(type==='claim_aegis')return {type:'claim_aegis',label:explicit.label||'CLAIM AT AEGIS'};
+  if(type==='quest_log')return {type:'questlog',label:explicit.label||'OPEN QUEST LOG'};
+  return explicit&&explicit.label ? {type:'questlog',label:explicit.label} : null;
+}
+function serverObjectiveHud(){
+  const obj=serverObjectiveForHud();
+  return obj ? {label:obj.title||'Objective', text:serverObjectiveHudText(obj), serverObjective:obj} : null;
+}
+function objectiveProgressParts(current,required){
+  current=Math.max(0,current|0);required=Math.max(1,required|0);
+  return {current:Math.min(required,current),required,pct:Math.max(0,Math.min(100,Math.round((Math.min(required,current)/required)*100)))};
+}
+function serverObjectiveProgressParts(o){
+  const p=o&&o.progress;
+  return p&&Number.isFinite(p.current)&&Number.isFinite(p.required)?objectiveProgressParts(p.current,p.required):null;
+}
+function objectiveLine(kind,label,title,text,action,progress=null){
+  return {kind,label,title:title||label,text:text||'',action,progress};
+}
+function serverObjectiveBySource(...sources){
+  const set=new Set(sources);
+  return activeObjectiveList()
+    .filter(o=>set.has(o.source)||sources.some(src=>String(o.id||'').startsWith(src+':')))
+    .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0] || null;
+}
+function progressionObjectiveFallback(){
+  if(progressionFocus==='first_land_claim')return objectiveLine('progression','Next','First Claim','Leave town and buy your first land claim',{type:'land',label:'CLAIM LAND'});
+  if(progressionFocus==='first_claim_expand')return objectiveLine('progression','Next','Expand Claim','Expand your protected base to 3 connected land claims',{type:'land',label:'CLAIM LAND'});
+  if(progressionFocus==='first_base_setup')return objectiveLine('progression','Next','Base Setup','Inside claimed land: place storage, light, and a station',{type:'land',label:'CLAIM LAND'});
+  if(progressionFocus==='first_craft_station'){
+    const craft=objectiveCraftAction('what_next');
+    return objectiveLine('progression','Next','Craft Station','Craft your first table or furnace',craft||{type:'questlog',label:'OPEN QUEST LOG'});
+  }
+  if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
+    return objectiveLine('progression','Next','Profession Work','Take or claim repeatable work at the Job Board',{type:'jobs',label:'OPEN JOB BOARD'});
+  }
+  if(progressionFocus==='first_d_gate'){
+    const craft=objectiveCraftAction('what_next'),prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
+    return objectiveLine('progression','Next','D-Rank Prep',prep&&prep.ready?'Ready - find and clear a D-rank Gate':'Prepare food, gear, repairs, and a D-rank key',craft||(prep&&prep.ready?{type:'find_gate',label:'FIND GATE'}:{type:'questlog',label:'OPEN GATE PREP'}));
+  }
+  const promotion=ONBOARD.firstPromotionObjective&&ONBOARD.firstPromotionObjective();
+  return promotion?objectiveLine('progression','Next',promotion.label,promotion.text,currentObjectiveAction()):null;
+}
+function localStoryObjectiveLine(){
+  if(!quest)return null;
+  if(questExpired()){failAegisBounty('time');return null;}
+  const story=questObjective();if(!story)return null;
+  const isAegis=quest.source==='guardian'||quest.type==='pvp_bounty';
+  let action;
+  if(questDone())action=isAegis?{type:'claim_aegis',label:'CLAIM AT AEGIS'}:{type:'turn_in',label:quest.giver==='Mara Vale'?'TURN IN TO MARA':'TURN IN',location:quest.giver||'',source:quest.source||'npc'};
+  else if(quest.type==='gate')action={type:'find_gate',label:'FIND GATE'};
+  else action=objectiveCraftAction('story')||{type:'questlog',label:'QUEST LOG'};
+  const progress=quest.need?objectiveProgressParts(quest.have||countItem(quest.item)||0,quest.need):null;
+  return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress);
+}
+function localJobObjectiveLine(){
+  const c=clampJobContract(jobContract),job=jobContractObjective();
+  if(!c||!job)return null;
+  const action=jobContractReady()?{type:'jobs',label:'CLAIM AT JOB BOARD'}:(objectiveCraftAction('job')||{type:'jobs',label:'JOB BOARD'});
+  return objectiveLine('job','Job',job.label,job.text,action,objectiveProgressParts(c.have,c.need));
+}
+function localGuildObjectiveLine(){
+  const c=clampRegionalContract(regionalContract),guild=guildContractObjective();
+  if(!c||!guild)return null;
+  return objectiveLine('guild','Guild',guild.label,guild.text,{type:'guild_contracts',label:c.ready?'CLAIM GUILD':'GUILD WORK'},objectiveProgressParts(c.have,c.need));
+}
+function serverObjectiveLine(o,labelOverride=''){
+  if(!o)return null;
+  return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o));
+}
+function unifiedObjectiveList(){
+  if(dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
+  if(townGuidanceActive||transitionRecoveryAction())return [];
+  const lines=[];
+  const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
+  if(story)lines.push(story);
+  const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
+  if(aegis)lines.push(aegis);
+  const job=localJobObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('job'),'Job');
+  if(job)lines.push(job);
+  const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
+  if(guild)lines.push(guild);
+  const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
+  if(progression)lines.push(progression);
+  const seen=new Set();
+  return lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,4);
+}
+function unifiedObjectiveHud(){
+  const lines=unifiedObjectiveList();
+  return lines.length>=2?{label:'Objectives',text:'Story, contracts, and next step',unified:true,lines}:null;
+}
+function trackerActionButton(action){
+  if(!action) return '';
+  const attrs=['type="button"','class="qaction"','data-objective-action="'+escHTML(action.type||'')+'"'];
+  if(action.outputId!=null) attrs.push('data-output-id="'+(action.outputId|0)+'"');
+  if(action.kind) attrs.push('data-kind="'+escHTML(action.kind)+'"');
+  if(action.location) attrs.push('data-location="'+escHTML(action.location)+'"');
+  if(action.source) attrs.push('data-source="'+escHTML(action.source)+'"');
+  return '<button '+attrs.join(' ')+'>'+escHTML(action.label||'OPEN')+'</button>';
+}
+function objectiveCraftAction(scope='what_next'){
+  const action=menusApi.trackerCraftAction&&menusApi.trackerCraftAction(scope);
+  return action ? {type:'craft',label:action.label,outputId:action.outputId,kind:action.kind} : null;
+}
+function transitionPanelState(){
+  const reward=document.getElementById('rewardwin');
+  const path=document.getElementById('pathselect');
+  const awakening=document.getElementById('awakeningwin');
+  const rewardOpen=!!(reward&&!reward.classList.contains('hidden'));
+  const pathOpen=!!(path&&!path.classList.contains('hidden'));
+  const awakeningOpen=!!(awakening&&!awakening.classList.contains('hidden'));
+  return {rewardOpen,pathOpen,awakeningOpen};
+}
+function transitionRecoveryAction(){
+  const panels=transitionPanelState();
+  if(panels.rewardOpen) return {type:'continue_panel',label:'CONTINUE'};
+  if(panels.pathOpen || (S&&S.lvl>=2&&!S.path)) return {type:'choose_path',label:'CHOOSE PATH'};
+  if(panels.awakeningOpen || (S&&S.lvl>=2&&S.path&&combatState.abilityReady&&!combatState.abilityTutorialDone&&!combatState.abilityTrainingActive)) return {type:'start_awakening',label:'START AWAKENING'};
+  if(combatState.abilityTrainingActive) return {type:'use_ability',label:combatState.abilityTrainingUsed?'FINISH TRAINING':'USE ABILITY'};
+  return null;
+}
+function currentObjectiveAction(){
+  const transition=transitionRecoveryAction();
+  if(transition) return transition;
+  const server=serverObjectiveForHud(),serverAction=serverObjectiveHudAction(server);
+  if(serverAction)return serverAction;
+  if(quest && questDone()) return {type:'turn_in',label:quest.giver==='Mara Vale'?'TURN IN TO MARA':'TURN IN',location:quest.giver||'',source:quest.source||'npc'};
+  if(jobContract&&jobContractReady()) return {type:'jobs',label:'CLAIM AT JOB BOARD'};
+  const rc=clampRegionalContract(regionalContract);
+  if(rc&&rc.ready) return {type:'guild_contracts',label:'CLAIM GUILD CONTRACT'};
+  if(progressionFocus==='first_craft_station'){
+    const craft=objectiveCraftAction('what_next');
+    if(craft) return craft;
+  }
+  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup') return {type:'land',label:'CLAIM LAND'};
+  if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'jobs',label:'OPEN JOB BOARD'};
+  if(progressionFocus==='first_d_gate'){
+    const craft=objectiveCraftAction('what_next');
+    if(craft) return craft;
+    const prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
+    return prep&&prep.ready ? {type:'find_gate',label:'FIND GATE'} : {type:'questlog',label:'OPEN GATE PREP'};
+  }
+  if(jobContract&&!jobContractReady()){
+    const craft=objectiveCraftAction('job');
+    if(craft) return craft;
+    return {type:'jobs',label:'OPEN JOB BOARD'};
+  }
+  if(quest&&!questDone()){
+    if(quest.type==='gate') return {type:'find_gate',label:'FIND GATE'};
+    const craft=objectiveCraftAction('story');
+    if(craft) return craft;
+  }
+  return null;
+}
+function e2eCurrentObjectiveAction(){
+  const action=currentObjectiveAction();
+  return action ? {type:action.type||'',label:action.label||'',outputId:action.outputId||0,kind:action.kind||''} : null;
+}
+function objectiveHudHTML(obj){
+  if(!obj) return '';
+  if(obj.unified&&Array.isArray(obj.lines)){
+    const rows=obj.lines.map(line=>{
+      const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
+      const progressText=line.progress?'<em>'+line.progress.current+'/'+line.progress.required+'</em>':'';
+      return '<div class="objective-line '+escHTML(line.kind||'objective')+'">'+
+        '<div class="olabel">'+escHTML(line.label||'Objective')+'</div>'+
+        '<div class="obody"><b>'+escHTML(line.title||'Objective')+'</b><span>'+escHTML(line.text||'')+'</span>'+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
+        '<div class="oact">'+progressText+trackerActionButton(line.action)+'</div>'+
+      '</div>';
+    }).join('');
+    return '<div class="qt">Objective Tracker</div><div class="objective-list">'+rows+'</div>';
+  }
+  const action=currentObjectiveAction(obj);
+  return ONBOARD.objectiveHudHTML(action?{...obj,actionHTML:trackerActionButton(action)}:obj);
+}
+function currentObjectiveHud(){
+  return unifiedObjectiveHud()||currentObjective();
+}
+function handleObjectiveAction(action,btn){
+  if(action==='craft'){menusApi.activateCraftShortcut&&menusApi.activateCraftShortcut(+(btn.dataset.outputId||0),btn.dataset.kind||'craft');return;}
+  if(action==='jobs'){menusApi.openJobs&&menusApi.openJobs();return;}
+  if(action==='guild_contracts'){menusApi.openRegionalContracts&&menusApi.openRegionalContracts();return;}
+  if(action==='claim_aegis'){menusApi.openGuardian&&menusApi.openGuardian();return;}
+  if(action==='continue_panel'){
+    const btn=document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
+    if(btn){ btn.click(); return; }
+    sysMsg('<b>Continue:</b> close the open reward panel to resume the next objective.');
+    return;
+  }
+  if(action==='choose_path'){
+    if(combatState.pathChoiceOpen || transitionPanelState().pathOpen){ sysMsg('<b>Choose Path:</b> select Shadow, Mage, or Guardian to unlock your first ability.'); return; }
+    if(combatApi.showPathSelection&&combatApi.showPathSelection()) return;
+    sysMsg('<b>Choose Path:</b> finish the current panel, then choose your combat path.');
+    return;
+  }
+  if(action==='start_awakening'){
+    if(transitionPanelState().awakeningOpen){ const b=document.getElementById('awakeningbegin'); if(b){ b.click(); return; } }
+    if(combatApi.showAbilityAwakening&&combatApi.showAbilityAwakening()) return;
+    if(combatApi.startAbilityTraining&&combatApi.startAbilityTraining()) return;
+    sysMsg('<b>Awakening:</b> choose your path first, then start ability training.');
+    return;
+  }
+  if(action==='use_ability'){ combatApi.primaryAction&&combatApi.primaryAction(); return; }
+  if(action==='land'){
+    worldApi.toggleLandClaims&&worldApi.toggleLandClaims(true);
+    worldApi.openLandClaims&&worldApi.openLandClaims();
+    sysMsg('<b>Land claiming:</b> choose an available tile near your base. The overlay shows owned, shared, and wilderness land.');
+    return;
+  }
+  if(action==='questlog'){menusApi.openQuestLog&&menusApi.openQuestLog();return;}
+  if(action==='find_gate'){
+    if(gate){sysMsg('<b>Gate target:</b> '+escHTML(RANKS[gate.rank].n+'-Rank '+gateKindLabel(gate.kind))+' Gate is '+escHTML(gateCompass())+'.');return;}
+    menusApi.openQuestLog&&menusApi.openQuestLog();
+    sysMsg('<b>Find Gate:</b> no nearby Gate is currently tracked. Open the Quest Log and follow the active Gate objective.');
+    return;
+  }
+  if(action==='turn_in'||action==='return_mara'){
+    menusApi.openQuestLog&&menusApi.openQuestLog();
+    const location=btn&&btn.dataset&&btn.dataset.location || quest&&quest.giver || 'the quest giver';
+    sysMsg('<b>Ready to claim:</b> return to '+escHTML(location)+'. Quest Log opened for context.');
+  }
+}
+if(currentQuestEl){
+  currentQuestEl.addEventListener('click',e=>{
+    const btn=e.target&&e.target.closest&&e.target.closest('[data-objective-action]');
+    if(!btn) return;
+    e.preventDefault();
+    handleObjectiveAction(btn.dataset.objectiveAction,btn);
+  });
+}
 function currentObjective(){
   if(dim==='gatecutscene') return {label:'Gate Vision', text:'The first dungeon reveals itself'};
   if(dim==='dungeon'){
@@ -356,7 +784,9 @@ function currentObjective(){
     const chests=st?(' - chests '+st.remainingChests):'';
     let party=st&&st.party?st.party.length:1;
     if(!st&&NET.on&&NET.dgn) for(const sid in NET.remotes) if((NET.remotes[sid].ref.dgn||'')===NET.dgn) party++;
-    return {label:'Current Goal', text:boss+' - party '+party+chests};
+    const spirits=st&&Number.isFinite(st.spiritCount)?(' - spirits '+st.spiritCount):'';
+    const alive=st&&Number.isFinite(st.aliveCount)?(' - alive '+st.aliveCount):'';
+    return {label:'Current Goal', text:boss+' - party '+party+alive+spirits+chests};
   }
   if(dim==='event'){
     const left=serverEvent&&serverEvent.endsAt?(' - '+fmtTimeLeft(serverEvent.endsAt-Date.now())+' left'):'';
@@ -365,6 +795,15 @@ function currentObjective(){
   }
   const guided=tutorialObjective();
   if(guided) return guided;
+  const transition=transitionRecoveryAction();
+  if(transition){
+    if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
+    if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};
+    if(transition.type==='start_awakening') return {label:'Ability Awakening', text:'Start ability training for your chosen path'};
+    if(transition.type==='use_ability') return {label:'Ability Training', text:combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'};
+  }
+  const server=serverObjectiveHud();
+  if(server) return server;
   const story=questObjective();
   if(story) return story;
   const guild=guildContractObjective();
@@ -417,6 +856,21 @@ function bearingLabelTo(x,z){
   const dir=dirs[Math.round(ang/(Math.PI/4))%8];
   return dir+' '+dist+'m';
 }
+function activityTimeLeft(expiresAt){
+  const ms=(expiresAt||0)-Date.now();
+  if(!expiresAt||ms<=0)return 'expiring now';
+  const sec=Math.ceil(ms/1000), min=Math.floor(sec/60), s=sec%60;
+  return min+':'+String(s).padStart(2,'0');
+}
+function gateCollapseHint(expiresAt){
+  const ms=(expiresAt||0)-Date.now();
+  if(!expiresAt||ms>24*3600*1000)return '';
+  if(ms<=0)return 'Gate is breaching now';
+  const sec=Math.ceil(ms/1000), min=Math.floor(sec/60), s=sec%60, time=min+':'+String(s).padStart(2,'0');
+  if(ms<=60000)return 'Collapse imminent: '+time;
+  if(ms<=180000)return 'Unstable: '+time+' until collapse';
+  return 'Collapses in '+time;
+}
 function findKnownSite(id){
   return [...regionalLandmarks,...smallDiscoveries].find(s=>s.id===id)||null;
 }
@@ -434,6 +888,8 @@ function nearbyRegionalOpportunity(){
   if(a.caravan&&activeCaravanContract&&activeCaravanContract.type==='road_escort'&&(!activeCaravanContract.targetId||activeCaravanContract.targetId===a.caravan.id))
     add(a.caravan,a.caravan.state==='ambushed'?'Caravan Under Attack':'Road Caravan','Active caravan escort',a.caravan.state==='ambushed');
   if(a.recoveryCamp)add(a.recoveryCamp,'Stolen Supplies Camp','Road Warden recovery');
+  if(a.gateBreach)add(a.gateBreach,'Gate Breach: '+(a.gateBreach.bossName||'Escaped Boss'),'Containment cleanup');
+  if(!a.gateBreach&&a.gateScar)add(a.gateScar,'Gate Scar: '+(a.gateScar.bossName||'Collapsed Gate'),'Breach aftermath');
   if(a.camp&&a.camp.phase!=='cleared')add(a.camp,a.camp.phase==='captain'?'Bandit Captain':'Bandit Camp','Road Warden camp');
   if(a.patrol)add(a.patrol,'Roaming Bandit Patrol','Road Warden patrol');
   for(const site of regionalLandmarks){
@@ -460,6 +916,25 @@ globalThis.resolveRegionalOpportunity=(id='')=>{
   trackedRegionalOpportunity=null;displayedRegionalOpportunity=null;return true;
 };
 function utilityCompassTarget(){
+  const trail=dim==='overworld'&&overworldActivity&&overworldActivity.trailSense;
+  if(trail&&Number.isFinite(trail.x)&&Number.isFinite(trail.z)&&(!trail.expiresAt||trail.expiresAt>Date.now())){
+    return {label:trail.kind==='breach'?'Breach Trail':'Trail Sense',x:trail.x,z:trail.z};
+  }
+  if(dim==='overworld'&&overworldActivity&&overworldActivity.gateBreach){
+    const b=overworldActivity.gateBreach;
+    return {label:'Breach',x:b.x,z:b.z};
+  }
+  if(dim==='overworld'&&overworldActivity&&overworldActivity.gateScar){
+    const s=overworldActivity.gateScar;
+    return {label:'Gate Scar',x:s.x,z:s.z};
+  }
+  if(progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate'){
+    const mara=HUB.mara||HUB.guide;
+    return mara?{label:'Mara',x:mara.x,z:mara.z}:null;
+  }
+  if(progressionFocus==='first_craft_station') return {label:'Crafting',x:HUB.smith.x,z:HUB.smith.z};
+  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup') return {label:'Claim Land',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
+  if(progressionFocus==='first_profession_contract') return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
@@ -485,17 +960,70 @@ function utilityCompassTarget(){
   if(dim==='overworld') return {label:'Town', x:TOWN.TC, z:TOWN.TC};
   return null;
 }
-function nearestTeammate(){
+function partyCompassTarget(){
   if(!NET.on || !NET.room) return null;
-  const mine=myTeamId(); if(!mine) return null;
-  let best=null, bd=1e9;
+  if(dim==='dungeon'&&activeDungeonPing&&performance.now()<activeDungeonPing.expires&&Number.isFinite(activeDungeonPing.x)&&Number.isFinite(activeDungeonPing.z)){
+    const labels={group:'Regroup',boss:'Boss Ping',loot:'Loot Ping'};
+    return {label:labels[activeDungeonPing.kind]||'Party Ping', x:activeDungeonPing.x, z:activeDungeonPing.z, priority:'ping'};
+  }
+  const mine=myTeamId();
+  const mineSid=NET.room.sessionId;
+  if(dim==='dungeon'&&dungeon&&dungeon.status&&Array.isArray(dungeon.status.party)){
+    const status=dungeon.status, me=dungeonStatusMember(status,mineSid), party=status.party.filter(m=>m&&m.sid!==mineSid);
+    const urgent=party.find(m=>m.downed||m.spirit);
+    if(urgent&&Number.isFinite(urgent.x)&&Number.isFinite(urgent.z)){
+      return {label:(urgent.name||'Ally')+' '+(urgent.downed?'downed':'spirit'), x:urgent.x, z:urgent.z, priority:urgent.downed?'downed':'spirit'};
+    }
+    const objective=dungeonObjectiveState(status,me,Math.max(0,status.remainingChests|0));
+    if(objective&&objective.target&&Number.isFinite(objective.target.x)&&Number.isFinite(objective.target.z)){
+      return {label:objective.targetLabel==='Ally'?'Regroup':objective.targetLabel||objective.label, x:objective.target.x, z:objective.target.z, priority:'objective'};
+    }
+  }
+  if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
+    const rally=dungeonLobbyState.rally,distance=Math.round(Math.hypot(rally.x-player.pos.x,rally.z-player.pos.z));
+    return {label:distance<=6?'At Gate Rally':'Gate Rally', x:rally.x, z:rally.z, priority:'rally'};
+  }
+  if(!mine) return null;
+  let best=null, bd=-1;
   for(const sid in NET.remotes){
     const r=NET.remotes[sid], ref=r&&r.ref;
     if(!ref || ref.team!==mine || (ref.dgn||'')!==NET.dgn) continue;
     const d=Math.hypot((ref.x||0)-player.pos.x,(ref.z||0)-player.pos.z);
-    if(d<bd){ bd=d; best=ref; }
+    if(d>bd){ bd=d; best=ref; }
   }
-  return best?{label:best.name||'Teammate', x:best.x, z:best.z, d:bd}:null;
+  return best?{label:(bd>70?'Split: ':'')+(best.name||'Teammate'), x:best.x, z:best.z, d:bd, priority:'teammate'}:null;
+}
+function utilityTargetHudLine(t){
+  if(!t||!Number.isFinite(t.x)||!Number.isFinite(t.z))return t&&t.text||'Active';
+  const d=Math.round(Math.hypot(t.x-player.pos.x,t.z-player.pos.z));
+  return bearingLabelTo(t.x,t.z)+' · '+d+'m';
+}
+function utilityPriorityClass(priority){
+  return priority==='downed'||priority==='spirit'?' urgent':priority==='rally'||priority==='ping'?' active':'';
+}
+function updateUtilityWorldFeedback(now,dt){
+  const trail=dim==='overworld'&&overworldActivity&&overworldActivity.trailSense&&(!overworldActivity.trailSense.expiresAt||overworldActivity.trailSense.expiresAt>Date.now())?overworldActivity.trailSense:null;
+  trailSenseGroup.visible=!!(trail&&Number.isFinite(trail.x)&&Number.isFinite(trail.z));
+  if(trailSenseGroup.visible){
+    const y=surfaceY(trail.x,trail.z),pulse=.5+.5*Math.sin(now*.007);
+    trailSenseGroup.position.set(trail.x,y+.1,trail.z);
+    trailSenseRing.rotation.z+=dt*1.8;trailSenseRing.scale.setScalar(1+pulse*.2);
+    trailSenseRing.material.opacity=.56+pulse*.28;trailSenseBeam.material.opacity=.12+pulse*.15;
+    if(Math.random()<dt*9)spawnParticle({x:trail.x+(Math.random()-.5)*1.6,y:y+.35+Math.random()*3,z:trail.z+(Math.random()-.5)*1.6,vx:(Math.random()-.5)*.18,vy:.28+Math.random()*.45,vz:(Math.random()-.5)*.18,life:.6,grav:-.08,r:.56,g:.97,b:.78});
+  }
+  const party=utilityEquipped('party_compass')?partyCompassTarget():null;
+  const partyVisible=party&&Number.isFinite(party.x)&&Number.isFinite(party.z)&&Math.hypot(party.x-player.pos.x,party.z-player.pos.z)>8;
+  partyCompassGroup.visible=!!partyVisible;
+  if(partyVisible){
+    const urgent=party.priority==='downed'||party.priority==='spirit',color=urgent?0xff8fa3:party.priority==='rally'?0x7dd3fc:0xd7b5ff;
+    partyCompassBeam.material.color.setHex(color);partyCompassRing.material.color.setHex(color);
+    const y=dim==='overworld'?surfaceY(party.x,party.z):(Number.isFinite(party.y)?party.y:player.pos.y);
+    const pulse=.5+.5*Math.sin(now*(urgent ? .011 : .006));
+    partyCompassGroup.position.set(party.x,y+.1,party.z);
+    partyCompassRing.rotation.z+=dt*(urgent?2.5:1.25);partyCompassRing.scale.setScalar(1+pulse*(urgent?.36:.16));
+    partyCompassRing.material.opacity=(urgent?.68:.5)+pulse*.24;partyCompassBeam.material.opacity=(urgent?.18:.1)+pulse*.14;
+  }
+  tickFeatherStepLandingFx(now);
 }
 function rankHudProgress(){
   const progress=currentRankProgress();
@@ -520,7 +1048,10 @@ function updateGatePrompt(){
   if(distance>6){gatePromptEl.classList.add('hidden');gatePromptEl.innerHTML='';return;}
   const readiness=gateReadinessLocal(gate.rank|0),preview=gatePreviewLocal(gate.rank|0,gate.kind),statusClass=readiness.ready?'ready':'warning';
   const party=preview.recommendedParty,partyText=party[0]===party[1]?String(party[0]):party[0]+'-'+party[1];
-  gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(RANKS[gate.rank|0].n)+'-Rank '+escHTML(gateKindLabel(gate.kind))+' Gate <span class="gate-status '+statusClass+'">'+escHTML(readiness.status)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+' · Recommended party '+partyText+' · '+escHTML(readiness.difficulty)+'</span>';
+  const missing=readiness.next&&!readiness.next.done?(' · Missing: '+readiness.next.label):'';
+  gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(RANKS[gate.rank|0].n)+'-Rank '+escHTML(gateKindLabel(gate.kind))+' Gate <span class="gate-status '+statusClass+'">'+escHTML(readiness.status)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+' · Recommended party '+partyText+' · '+escHTML(readiness.difficulty+missing)+'</span>';
+  const collapse=gateCollapseHint(gate.expiresAt),collapseClass=collapse&&collapse.indexOf('imminent')>=0?' danger':'';
+  if(collapse)gatePromptEl.innerHTML='<span class="key">G</span>Inspect '+escHTML(RANKS[gate.rank|0].n)+'-Rank '+escHTML(gateKindLabel(gate.kind))+' Gate <span class="gate-status '+statusClass+collapseClass+'">'+escHTML(collapse)+'</span><span class="gate-preview">Enemy Lv '+preview.enemyLevels[0]+'-'+preview.enemyLevels[1]+' - Recommended party '+partyText+' - '+escHTML(readiness.difficulty+missing)+'</span>';
   gatePromptEl.classList.remove('hidden');
 }
 function updateGateRally(now){
@@ -533,19 +1064,107 @@ function updateGateRally(now){
   const pulse=1+Math.sin(now*.004)*.1;gateRallyRing.scale.setScalar(pulse);gateRallyRing.rotation.z=now*.00045;
   gateRallyBeam.material.opacity=.14+Math.sin(now*.003)*.05;
 }
+function dungeonStatusMember(status,sid){
+  if(!status||!Array.isArray(status.party)||!sid)return null;
+  return status.party.find(m=>m&&m.sid===sid)||null;
+}
+function dungeonObjectiveState(status,me,chestCount){
+  if(status.wipe||status.party.length>0&&status.aliveCount===0)return {cls:'danger',label:'Party Wiped',text:'Return to town, repair, and challenge another Gate.',target:status.exit,targetLabel:'Exit'};
+  if(me&&me.spirit)return {cls:'danger',label:'Spirit Form',text:'Stay as spirit for party credit, or return to town now to repair and restock.',target:nearestDungeonAlly(status,me),targetLabel:'Ally'};
+  if(me&&me.downed)return {cls:'danger',label:'Downed',text:'Hold position while allies finish the fight or return safely.',target:nearestDungeonAlly(status,me),targetLabel:'Ally'};
+  if(status.cleared){
+    const chest=chestCount>0?nearestDungeonChest(status):null;
+    return {cls:'cleared',label:'Boss Defeated',text:chestCount>0?'Boss down. Open remaining chests, then exit through the portal.':'Boss down. Exit through the portal to return safely.',target:chest||status.exit,targetLabel:chest?'Chest':'Exit'};
+  }
+  if(status.bossAlive){
+    if(status.bossGateState==='locked')return {cls:'active',label:'Boss Locked',text:'Clear rooms to open the boss route.',target:status.bossRoom,targetLabel:'Boss'};
+    const contrib=Math.max(0,me&&me.contribution|0);
+    if(contrib<=0)return {cls:'active',label:'Boss Open',text:'Hit the boss to qualify for reward, then stay near the fight.',target:status.bossRoom,targetLabel:'Boss'};
+    return {cls:'active',label:'Boss Open',text:'Reward eligible. Stay near the boss and finish the fight.',target:status.bossRoom,targetLabel:'Boss'};
+  }
+  const chest=chestCount>0?nearestDungeonChest(status):null;
+  return {cls:'active',label:'Regroup',text:chestCount>0?'Boss down. Open remaining chests, then exit through the portal.':'Boss down. Exit through the portal to complete the run.',target:chest||status.exit,targetLabel:chest?'Chest':'Exit'};
+}
+function nearestDungeonAlly(status,me){
+  if(!status||!Array.isArray(status.party))return null;
+  let best=null,bd=1e9;
+  for(const member of status.party){
+    if(!member||member.sid===(me&&me.sid)||member.spirit||member.downed)continue;
+    const d=Math.hypot((member.x||0)-player.pos.x,(member.z||0)-player.pos.z);
+    if(d<bd){bd=d;best={x:member.x,z:member.z};}
+  }
+  return best;
+}
+function dungeonEligibilityState(status,me){
+  if(status.wipe)return {cls:'bad',text:'Run failed'};
+  if(status.cleared)return {cls:'good',text:'Loot awarded'};
+  if(me&&me.spirit)return {cls:'warn',text:'Stay for party credit'};
+  if(me&&me.downed)return {cls:'warn',text:'Downed'};
+  if(status.bossAlive&&Math.max(0,me&&me.contribution|0)>0)return {cls:'good',text:'Reward eligible'};
+  if(status.bossAlive)return {cls:'warn',text:'Hit boss to qualify'};
+  return {cls:'warn',text:'Stay near boss room'};
+}
+function dungeonBossRangeText(status){
+  const target=status&&status.boss||status&&status.bossRoom;
+  if(!target||!Number.isFinite(target.x)||!Number.isFinite(target.z))return '';
+  const d=Math.round(Math.hypot(target.x-player.pos.x,target.z-player.pos.z));
+  return d<=18?'Near boss room':'Boss room '+bearingLabelTo(target.x,target.z);
+}
+function nearestDungeonChest(status){
+  if(!status||!Array.isArray(status.unopenedChests))return null;
+  let best=null,bd=1e9;
+  for(const ch of status.unopenedChests){
+    if(!ch||!Number.isFinite(ch.x)||!Number.isFinite(ch.z))continue;
+    const d=Math.hypot(ch.x-player.pos.x,ch.z-player.pos.z);
+    if(d<bd){bd=d;best=ch;}
+  }
+  return best;
+}
+function dungeonBossGateLabel(status){
+  const s=status&&status.bossGateState;
+  return s==='defeated'?'Boss defeated':s==='locked'?'Boss locked':'Boss open';
+}
+function dungeonBossHud(status){
+  const boss=status&&status.boss;
+  if(!boss||status.cleared)return '';
+  const pct=Math.max(0,Math.min(100,boss.pct|0));
+  return '<div class="dungeonboss"><div><b>'+escHTML(boss.phaseLabel||'Phase 1')+'</b><span>'+pct+'%</span></div><i><em style="width:'+pct+'%"></em></i><small>'+escHTML(boss.action||'Engaged')+' - '+escHTML(dungeonBossRangeText(status)||'Boss room')+'</small></div>';
+}
+function dungeonNavLine(state){
+  if(!state||!state.target||!Number.isFinite(state.target.x)||!Number.isFinite(state.target.z))return '';
+  return '<small class="dungeonnav">Objective '+escHTML(state.targetLabel||'Target')+' - '+escHTML(bearingLabelTo(state.target.x,state.target.z))+'</small>';
+}
 function updateDungeonCoordination(now){
   const status=dim==='dungeon'&&dungeon&&dungeon.status;
   if(!status||!Array.isArray(status.party)){
     dungeonPartyEl.classList.add('hidden');dungeonPartyEl.innerHTML='';
+    updateDungeonSpiritMarkers(null,now);
   }else{
     const mine=NET.room&&NET.room.sessionId;
-    dungeonPartyEl.innerHTML='<div class="partytitle">GATE PARTY · F1 GROUP · F2 BOSS · F3 LOOT</div>'+status.party.map(member=>{
+    const alive=Number.isFinite(status.aliveCount)?status.aliveCount:status.party.filter(m=>m&&!m.downed&&!m.spirit).length;
+    const spirits=Number.isFinite(status.spiritCount)?status.spiritCount:status.party.filter(m=>m&&m.spirit).length;
+    const returned=Math.max(0,status.returnedCount|0);
+    const total=Math.max(status.totalPlayers|0,status.party.length+returned);
+    const chestCount=Math.max(0,status.remainingChests|0);
+    const me=dungeonStatusMember(status,mine);
+    const runState=dungeonObjectiveState(status,me,chestCount);
+    const eligibility=dungeonEligibilityState(status,me);
+    const roomsLine=(status.roomTotal|0)>0?'Rooms Cleared '+Math.max(0,status.roomsCleared|0)+'/'+Math.max(0,status.roomTotal|0)+' - ':'';
+    const runCard='<div class="dungeonrun '+runState.cls+'"><div><b>OBJECTIVE</b><span>'+escHTML(runState.label)+'</span></div><p>'+escHTML(runState.text)+'</p>'+dungeonBossHud(status)+'<small class="dungeonnav">'+roomsLine+escHTML(dungeonBossGateLabel(status))+'</small><small class="dungeonnav">Chests '+chestCount+' - Alive '+alive+' - Spirits '+spirits+'</small>'+dungeonNavLine(runState)+'<span class="dungeonelig '+eligibility.cls+'">'+escHTML(eligibility.text)+'</span></div>';
+    const summary=runCard+'<div class="partysummary"><span>'+alive+' alive</span><span>'+spirits+' spirit'+(spirits===1?'':'s')+'</span>'+(returned?'<span>'+returned+' returned</span>':'')+'</div>';
+    const warning=(status.wipe||status.party.length>0&&alive===0)?'<div class="partywipe">PARTY WIPED · CHOOSE RETURN TO TOWN</div>':'';
+    const returnedCard=returned?'<div class="partycard returned"><div class="partyline"><b>Returned to Town</b><small>'+returned+'/'+total+'</small></div><div class="partyline"><small>Left the dungeon instance</small><span class="partycontrib">Safe</span></div></div>':'';
+    dungeonPartyEl.innerHTML='<div class="partytitle">GATE PARTY · F1 GROUP · F2 BOSS · F3 LOOT</div>'+summary+warning+status.party.map(member=>{
       let distance=0;
       if(member.sid!==mine){const remote=NET.remotes[member.sid],ref=remote&&remote.ref;distance=ref?Math.round(Math.hypot((ref.x||0)-player.pos.x,(ref.z||0)-player.pos.z)):0;}
       const hp=Math.max(0,member.hp|0),max=Math.max(1,member.maxHp|0),pct=Math.max(0,Math.min(100,hp/max*100));
-      return '<div class="partycard'+(member.downed?' downed':'')+'"><div class="partyline"><b>'+escHTML(member.name||'Hunter')+'</b><small>'+escHTML(member.role||'Striker')+(member.sid===mine?' · YOU':' · '+distance+'m')+'</small></div><div class="partyhp"><i style="width:'+pct+'%"></i></div><div class="partyline"><small>'+(member.downed?'DOWNED':hp+'/'+max+' HP')+'</small><span class="partycontrib">Boss '+Math.max(0,member.contribution|0)+'</span></div></div>';
-    }).join('');
+      const state=member.spirit?'SPIRIT':member.downed?'DOWNED':'ALIVE';
+      const stateClass=member.spirit?' spirit':member.downed?' downed':'';
+      const where=member.sid===mine?'YOU':(member.spirit?'SPIRIT · ':'')+distance+'m';
+      return '<div class="partycard'+stateClass+'"><div class="partyline"><b>'+escHTML(member.name||'Hunter')+'</b><small>'+escHTML(member.role||'Striker')+' · '+where+'</small></div><div class="partyhp"><i style="width:'+pct+'%"></i></div><div class="partyline"><small>'+state+(member.spirit?' · bound in place':member.downed?'':' · '+hp+'/'+max+' HP')+'</small><span class="partycontrib">Boss '+Math.max(0,member.contribution|0)+'</span></div></div>';
+    }).join('')+returnedCard;
     dungeonPartyEl.classList.remove('hidden');
+    updateDungeonSpiritMarkers(status,now);
   }
   if(!activeDungeonPing||dim!=='dungeon'||now>=activeDungeonPing.expires){
     activeDungeonPing=null;dungeonPingGroup.visible=false;dungeonPingEl.classList.add('hidden');return;
@@ -556,11 +1175,25 @@ function updateDungeonCoordination(now){
 function updateOverworldActivityTracker(){
   if(!activityTrackerEl)return;
   if(dim!=='overworld'||onboardingActive){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
+  const a=overworldActivity||{};
   const acceptedRegionalContract=clampRegionalContract(regionalContract);
-  if(!acceptedRegionalContract){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
-  const a=overworldActivity||{},rawCaravan=a.caravan,caravanContract=clampRegionalContract(regionalContract),c=rawCaravan&&caravanContract&&caravanContract.type==='road_escort'&&(!caravanContract.targetId||caravanContract.targetId===rawCaravan.id)?rawCaravan:null,camp=a.camp,patrol=a.patrol,encounter=a.encounter;
+  const trail=a.trailSense&&(!a.trailSense.expiresAt||a.trailSense.expiresAt>Date.now())?a.trailSense:null;
+  if(!acceptedRegionalContract&&!a.gateBreach&&!a.gateScar&&!trail){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
+  const rawCaravan=a.caravan,caravanContract=clampRegionalContract(regionalContract),c=rawCaravan&&caravanContract&&caravanContract.type==='road_escort'&&(!caravanContract.targetId||caravanContract.targetId===rawCaravan.id)?rawCaravan:null,camp=a.camp,patrol=a.patrol,encounter=a.encounter,breach=a.gateBreach,scar=a.gateScar;
   let title='',text='',target=null,danger=false;
-  if(encounter&&encounter.type==='wounded_hunter'){title='Wounded Hunter';text='Reach the hunter and provide aid before nightfall.';target=encounter;}
+  if(breach){
+    const hp=Math.max(0,Math.ceil(breach.hp||0)),max=Math.max(1,Math.ceil(breach.maxHp||1)),pct=Math.round(hp/max*100);
+    title='Gate Breach: '+(breach.bossName||'Escaped Boss');
+    text='Contain the boss · '+hp+'/'+max+' HP · '+pct+'% · '+activityTimeLeft(breach.expiresAt)+' left · cleanup reward';
+    text='Emergency bounty - boss '+hp+'/'+max+' HP ('+pct+'%) - '+Math.max(0,breach.remaining|0)+' threat'+((breach.remaining|0)===1?'':'s')+' active - '+activityTimeLeft(breach.expiresAt)+' left';
+    target=breach;danger=true;
+  }
+  else if(scar){
+    title='Gate Scar: '+(scar.bossName||'Collapsed Gate');
+    text='Aftermath zone - unstable ground from a lost breach - fades in '+activityTimeLeft(scar.expiresAt);
+    target=scar;danger=true;
+  }
+  else if(encounter&&encounter.type==='wounded_hunter'){title='Wounded Hunter';text='Reach the hunter and provide aid before nightfall.';target=encounter;}
   else if(encounter&&encounter.type==='merchant_rescue'){title='Merchant Rescue';text='Defeat '+(encounter.remaining|0)+' attackers before the merchant falls.';target=encounter;danger=true;}
   else if(encounter&&encounter.type==='pursuit'){title='Stolen Supply Pursuit';text='Catch '+(encounter.remaining|0)+' fleeing bandits before they escape.';target=encounter;danger=true;}
   else if(c&&c.state==='ambushed'){title='Caravan Under Attack';text='Defend the wagon and its remaining guards.';target=c;danger=true;}
@@ -568,6 +1201,7 @@ function updateOverworldActivityTracker(){
   else if(c){title='Road Caravan';text='Escort the convoy · '+Math.round((c.progress||0)*100)+'% · wagon '+Math.max(0,Math.ceil(c.hp||0))+'/'+Math.max(1,Math.ceil(c.maxHp||1));target=c;}
   else if(camp&&camp.phase==='captain'){title='Bandit Captain';text='Defeat the leader to unlock the camp chest.';target=camp;danger=true;}
   else if(camp&&camp.phase==='guards'){title='Bandit Camp';text='Guards remaining: '+(camp.guards|0)+'. Clear them to draw out the captain.';target=camp;danger=true;}
+  else if(trail){title='Trail Sense: '+(trail.label||'Fresh Tracks');text='Tracks stay readable for '+Math.max(1,Math.ceil((trail.expiresAt-Date.now())/1000))+'s.';target=trail;danger=trail.kind!=='recovery';}
   else if(patrol){title='Bandit Tracks';text='A roaming patrol is active nearby.';target=patrol;danger=true;}
   else if((a.discountUntil||0)>Date.now()){title='Merchant Favour';text='Road merchant discount active for '+Math.max(1,Math.ceil((a.discountUntil-Date.now())/60000))+' min.';}
   if(!title){
@@ -576,28 +1210,123 @@ function updateOverworldActivityTracker(){
     else {displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
   }
   let nav='';
-  if(target){const d=Math.hypot(target.x-player.pos.x,target.z-player.pos.z);nav=d<35?'Nearby':d<90?'In the surrounding region':'Far away';if(utilityEquipped('compass')||(target===patrol&&utilityEquipped('trail_sense')))nav=bearingLabelTo(target.x,target.z)+' · '+Math.round(d)+'m';}
+  if(target){const d=Math.hypot(target.x-player.pos.x,target.z-player.pos.z);nav=d<35?'Nearby':d<90?'In the surrounding region':'Far away';if(utilityEquipped('compass')||target===trail||(target===patrol&&utilityEquipped('trail_sense')))nav=bearingLabelTo(target.x,target.z)+' · '+Math.round(d)+'m';}
   const mapOn=utilityEquipped('minimap')||utilityEquipped('world_map');if(target)nav+=(nav?' · ':'')+(mapOn?'shown on map':'equip Mini Map to plot');
   activityTrackerEl.classList.remove('hidden');activityTrackerEl.classList.toggle('danger',danger);
   let detail='';displayedRegionalOpportunity=null;
   if(target){
     const ring=dangerRingAtClient(target.x,target.z),rank=RANKS[Math.max(0,Math.min(4,ring))].n;
-    const rc=clampRegionalContract(regionalContract),relevant=rc&&(!rc.targetId||rc.targetId===target.id)?'ACTIVE CONTRACT':'ROAD WARDEN WORK';
+    const rc=clampRegionalContract(regionalContract),relevant=target===breach?'PUBLIC CLEANUP':target===scar?'BREACH AFTERMATH':target===trail?'TRAIL SENSE':rc&&(!rc.targetId||rc.targetId===target.id)?'ACTIVE CONTRACT':'ROAD WARDEN WORK';
     const tracked=!!(trackedRegionalOpportunity&&trackedRegionalOpportunity.x===target.x&&trackedRegionalOpportunity.z===target.z);
     displayedRegionalOpportunity={target,x:target.x,z:target.z,title,kind:relevant,rank,tracked,danger};
-    detail='<div class="ar"><b>'+escHTML(rank)+'-RANK AREA</b><span>'+escHTML(relevant)+'</span><kbd>P</kbd> '+(tracked?'UNTRACK':'TRACK')+'</div>';
+    const reward=target===breach?' · XP + materials':'';
+    const rewardDetail=target===breach?' - reduced XP + materials, no keys':target===scar?' - temporary danger scar':reward;
+    detail='<div class="ar"><b>'+escHTML(rank)+'-RANK AREA</b><span>'+escHTML(relevant+rewardDetail)+'</span><kbd>P</kbd> '+(tracked?'UNTRACK':'TRACK')+'</div>';
   }
   activityTrackerEl.innerHTML='<div class="at">'+escHTML(title)+'</div><div class="av">'+escHTML(text)+'</div>'+(nav?'<div class="am">'+escHTML(nav)+'</div>':'')+detail;
 }
+function nearbyQuestClaimPrompt(){
+  if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive||dim!=='overworld')return null;
+  if(quest&&questDone&&questDone()){
+    const qTitle=quest.title||questTypeLabel(quest)||'Quest';
+    const target=quest.source==='guardian'?HUB.guardian:quest.giver==='Mara Vale'?HUB.guide:null;
+    if(target&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<5.2){
+      return {title:'Turn In '+qTitle,small:'Quest complete - claim reward'};
+    }
+  }
+  if(jobContract&&jobContractReady&&jobContractReady()&&Math.hypot(player.pos.x-HUB.jobs.x,player.pos.z-HUB.jobs.z)<4.6){
+    return {title:'Claim Job Reward',small:String(jobContract.title||'Contract complete')};
+  }
+  const rc=clampRegionalContract(regionalContract);
+  if(rc&&rc.ready){
+    const nearBoard=Math.hypot(player.pos.x-HUB.jobs.x,player.pos.z-HUB.jobs.z)<4.6;
+    const nearGuild=Math.hypot(player.pos.x-HUB.guild.x,player.pos.z-HUB.guild.z)<8.5;
+    if(nearBoard||nearGuild)return {title:'Claim Guild Contract',small:String(rc.title||'Contract complete')};
+  }
+  const claimable=activeObjectiveList().find(o=>o&&(o.status==='claimable'||o.status==='complete'));
+  if(claimable){
+    const source=claimable.source||'',action=claimable.action&&claimable.action.type||'';
+    if((source==='job'||action==='jobs')&&Math.hypot(player.pos.x-HUB.jobs.x,player.pos.z-HUB.jobs.z)<4.6)return {title:'Claim Job Reward',small:String(claimable.title||'Ready to claim')};
+    if((source==='guild'||action==='guild_contracts')&&(Math.hypot(player.pos.x-HUB.jobs.x,player.pos.z-HUB.jobs.z)<4.6||Math.hypot(player.pos.x-HUB.guild.x,player.pos.z-HUB.guild.z)<8.5))return {title:'Claim Guild Contract',small:String(claimable.title||'Ready to claim')};
+    if((source==='aegis'||action==='claim_aegis')&&Math.hypot(player.pos.x-HUB.guardian.x,player.pos.z-HUB.guardian.z)<9)return {title:'Claim Aegis Trial',small:String(claimable.title||'Ready to claim')};
+  }
+  return null;
+}
 function updateEncounterPrompt(){
   if(!encounterPromptEl)return;
+  const claimPrompt=nearbyQuestClaimPrompt();
+  if(claimPrompt){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(claimPrompt.title)+'</b><small>'+escHTML(claimPrompt.small)+'</small>';
+    return;
+  }
+  const weeklyCache=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipWeeklyCache&&combatApi.nearFellowshipWeeklyCache();
+  if(weeklyCache){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Weekly Cache</b><small>Press G to claim unlocked rewards</small>';
+    return;
+  }
+  const noticeBoard=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipNoticeBoard&&combatApi.nearFellowshipNoticeBoard();
+  if(noticeBoard){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Notice Board</b><small>Press G to view pinned objectives</small>';
+    return;
+  }
+  const recallLectern=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearRecallLectern&&combatApi.nearRecallLectern();
+    if(recallLectern){
+      encounterPromptEl.classList.remove('danger','hidden');
+      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Study Lectern</b><small>Press G for Recall mastery and practice</small>';
+      return;
+    }
+    const fellowshipMapTable=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipMapTable&&combatApi.nearFellowshipMapTable();
+    if(fellowshipMapTable){
+      encounterPromptEl.classList.remove('danger','hidden');
+      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Map Table</b><small>Press G to plan leads, treasure and discoveries</small>';
+      return;
+    }
+    const fellowshipArmory=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipArmoryRack&&combatApi.nearFellowshipArmoryRack();
+    if(fellowshipArmory){
+      encounterPromptEl.classList.remove('danger','hidden');
+      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Armory Rack</b><small>Press G for Gate readiness, repairs and loadout checks</small>';
+      return;
+    }
+    const fellowshipPantry=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipPantryShelf&&combatApi.nearFellowshipPantryShelf();
+    if(fellowshipPantry){
+      encounterPromptEl.classList.remove('danger','hidden');
+      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Pantry Shelf</b><small>Press G for hunger, rations and Cook prep</small>';
+      return;
+    }
+    const fellowshipWeather=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipWeatherVane&&combatApi.nearFellowshipWeatherVane();
+    if(fellowshipWeather){
+      encounterPromptEl.classList.remove('danger','hidden');
+      encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Weather Vane</b><small>Press G for active weather sites and sky planning</small>';
+      return;
+    }
   const table=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive?combatApi.nearbyTavernGameTable():null;
   if(table){
     encounterPromptEl.classList.remove('danger','hidden');
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(table.label)+'</b><small>Press G to interact</small>';
     return;
   }
+  const dragon=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
+    ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
+    : null;
+  if(dragon){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
+    return;
+  }
   if(dim!=='overworld'||!overworldActivity){encounterPromptEl.classList.add('hidden');encounterPromptEl.innerHTML='';return;}
+  const breach=overworldActivity.gateBreach;
+  if(breach){
+    const distance=Math.hypot(breach.x-player.pos.x,breach.z-player.pos.z);
+    if(distance<=34){
+      encounterPromptEl.classList.add('danger');encounterPromptEl.classList.remove('hidden');
+      encounterPromptEl.textContent='Gate Breach · contain '+(breach.bossName||'the escaped boss')+' · cleanup reward';
+      encounterPromptEl.textContent='Gate Breach - contain '+(breach.bossName||'the escaped boss')+' - reduced cleanup bounty';
+      return;
+    }
+  }
   const encounter=overworldActivity.encounter;
   if(encounter){
     const distance=Math.hypot(encounter.x-player.pos.x,encounter.z-player.pos.z),range=encounter.type==='wounded_hunter'?8:24;
@@ -634,10 +1363,10 @@ function updateInfoHud(held){
       '<div class="statuschip rank"><i class="ico">R</i><span>'+escHTML(rank.label)+'</span><b>'+escHTML(rank.value)+'</b></div>'
     ].join('');
     if(currentQuestEl){
-      const obj=(quest||jobContract||regionalContract||townGuidanceActive||progressionFocus||dungeonLobbyState)?currentObjective():null;
+      const obj=(quest||jobContract||regionalContract||townGuidanceActive||progressionFocus||dungeonLobbyState||activeObjectiveList().length)?currentObjectiveHud():null;
       if(obj){
         currentQuestEl.classList.remove('hidden');
-        currentQuestEl.innerHTML=ONBOARD.objectiveHudHTML(obj);
+        currentQuestEl.innerHTML=objectiveHudHTML(obj);
       } else {
         currentQuestEl.classList.add('hidden');
         currentQuestEl.innerHTML='';
@@ -653,23 +1382,23 @@ function updateInfoHud(held){
   ];
   if(utilityEquipped('compass')){
     const t=utilityCompassTarget();
-    if(t) rows.push('<div class="statuschip utility"><i class="ico">C</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(bearingLabelTo(t.x,t.z))+'</b></div>');
+    if(t) rows.push('<div class="statuschip utility"><i class="ico">C</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(utilityTargetHudLine(t))+'</b></div>');
   }
   if(utilityEquipped('party_compass')){
-    const t=nearestTeammate();
-    if(t) rows.push('<div class="statuschip utility"><i class="ico">P</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(bearingLabelTo(t.x,t.z))+'</b></div>');
+    const t=partyCompassTarget();
+    if(t) rows.push('<div class="statuschip utility'+utilityPriorityClass(t.priority)+'"><i class="ico">P</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(utilityTargetHudLine(t))+'</b></div>');
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
     const rally=dungeonLobbyState.rally,distance=Math.round(Math.hypot(rally.x-player.pos.x,rally.z-player.pos.z));
     rows.push('<div class="statuschip utility"><i class="ico">G</i><span>Gate Rally</span><b>'+escHTML(bearingLabelTo(rally.x,rally.z)+' · '+distance+'m')+'</b></div>');
   }
-  if(utilityEquipped('feather_step')) rows.push('<div class="statuschip utility"><i class="ico">F</i><span>Feather</span><b>Safe fall</b></div>');
+  if(utilityEquipped('feather_step')) rows.push('<div class="statuschip utility"><i class="ico">F</i><span>Feather</span><b>Landing guard</b></div>');
   coordsEl.innerHTML=rows.join('');
-  const obj=currentObjective();
+  const obj=currentObjectiveHud();
   if(currentQuestEl){
     if(obj){
       currentQuestEl.classList.remove('hidden');
-      currentQuestEl.innerHTML=ONBOARD.objectiveHudHTML(obj);
+      currentQuestEl.innerHTML=objectiveHudHTML(obj);
     } else {
       currentQuestEl.classList.add('hidden');
       currentQuestEl.innerHTML='';
@@ -691,6 +1420,7 @@ function tick(now){
   tickOnboarding(now);
   tickAbilityTraining(now);
   tickTownGuidance(now);
+  tickLandBoundaryToast(now);
   if(shouldOpenLevel2PathChoice()) showPathSelection();
   else if(!cutscene && !abilityTrainingActive && !abilityAwakeningOpen && abilityHudAvailable() && !abilityTutorialDone()){
     if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
@@ -837,7 +1567,7 @@ function tick(now){
       burst(player.pos.x, player.pos.y+.1, player.pos.z, BLOCK_COLORS[bid]||[.5,.5,.5], feather?4:(hard?14:7), feather?1.1:2.2, feather?.8:1.4, feather?.28:.45);
       SFX.land(hard);
       camShake=Math.max(camShake, feather?.04:(hard?.3:.14));
-      if(feather && prevVy<-15) showName('Feather Step');
+      if(feather && prevVy<-15) showName('Feather Step ready');
     }
     if(player.onGround && (f!==0||s!==0)){                      // footsteps
       stepAcc+=Math.hypot(vx,vz)*dt;
@@ -852,6 +1582,7 @@ function tick(now){
     if(player.pos.y<-12){ player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+14.5); player.vel.set(0,0,0); }
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
+    if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);
     tickDragonRoost(now, dt);
 
     if(worldState.skyshipJourney&&worldState.skyshipJourney.boarded&&worldState.skyshipJourney.phase==='flight'&&skyShip){
@@ -923,10 +1654,14 @@ function tick(now){
         }
       }
     } else {
-      if(mouseL && hit && BREAK[hit.id] && dim==='overworld' && !canBreakHere(hit.x,hit.z,hit.y,hit.id)
-        && firstHandsQuestActive() && hit.id===B.LOG && isTownLand(hit.x,hit.z) && now>=nextFirstHandsProtectedHintAt){
-        nextFirstHandsProtectedHintAt=now+4500;
-        sysMsg('Mara: town trees are protected. Follow the north gate trail and gather logs <b>outside the wall</b>.','minor');
+      if(mouseL && hit && BREAK[hit.id] && dim==='overworld' && !canBreakHere(hit.x,hit.z,hit.y,hit.id)){
+        if(firstHandsQuestActive() && hit.id===B.LOG && isTownLand(hit.x,hit.z) && now>=nextFirstHandsProtectedHintAt){
+          nextFirstHandsProtectedHintAt=now+4500;
+          sysMsg('Mara: town trees are protected. Follow the north gate trail and gather logs <b>outside the wall</b>.','minor');
+        } else if(now>=nextLandProtectedHintAt){
+          nextLandProtectedHintAt=now+3500;
+          showLandEditDenied(hit.x,hit.z,'break',hit.y,hit.id);
+        }
       }
       mining=null; crack.visible=false; crack.userData.st=-1; hideMineUI();
     }
@@ -959,6 +1694,7 @@ function tick(now){
   updateGatePrompt();
   updateGateRally(now);
   updateDungeonCoordination(now);
+  updateUtilityWorldFeedback(now,dt);
 
   tickVillagers(dt, now/1000);
   tickTownInteractLabels(dt);
@@ -1022,6 +1758,7 @@ function tick(now){
   }
   cloudGroup.children.forEach((c,i)=>{ c.position.x += dt*(.6+ i*.04); if(c.position.x>WX+20) c.position.x=-20; });
   updateVisibleChunks(false);
+  if(worldApi.tickLandClaimOverlay) worldApi.tickLandClaimOverlay();
   updateLandMinimap();
   updateBossUI();
   rendering.render();
@@ -1067,7 +1804,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     const found=[];
     const gates=NET.room&&NET.room.state&&NET.room.state.gates;
     if(gates&&gates.forEach)gates.forEach(g=>{
-      if(g&&g.active)found.push({id:g.id,rank:g.rank|0,x:+g.x,y:+g.y,z:+g.z,kind:g.kind||'public'});
+      if(g&&g.active)found.push({id:g.id,dungeonId:g.dungeonId||'',rank:g.rank|0,x:+g.x,y:+g.y,z:+g.z,kind:g.kind||'public',shardPlus:g.shardPlus|0,shardName:g.shardName||'',shardMods:(g.shardMods||'').split(',').filter(Boolean)});
     });
     return found;
   };
@@ -1150,9 +1887,13 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     return count;
   };
   window.__BLOCKCRAFT_E2E__={
-    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,progressionFocus,firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
+    status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.sessionId&&NET.room.state.players.get(NET.room.sessionId);let bossState='';const dungeonMobs=[];if(NET.room&&NET.room.state&&NET.room.state.mobs)NET.room.state.mobs.forEach((m,id)=>{if(m.dgn===NET.dgn){dungeonMobs.push({id:String(id),kind:m.kind||'',variant:m.variant||'',bossStyle:m.bossStyle||'',displayName:m.displayName||'',elite:!!m.elite,state:m.state||''});if(m.kind==='boss')bossState=m.state||'';}});return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,progressionFocus,activeObjectives:Array.isArray(activeObjectives)?JSON.parse(JSON.stringify(activeObjectives)):[],firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),objectiveAction:e2eCurrentObjectiveAction(),transitionPanels:transitionPanelState(),menu:{open:menusState.open,mode:menusState.mode,modalOpen:menusState.modalOpen,craftResult:menusState.craftResult?JSON.parse(JSON.stringify(menusState.craftResult)):null},landClaimOverlay:!!worldState.landClaimOverlay,dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),partyCompassTarget:partyCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTrainingUsed:combatState.abilityTrainingUsed,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonContentId:dungeon&&dungeon.dungeonId||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonBossState:bossState,dungeonMobs,dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
     inventoryCount:id=>inventoryModel.count(id),
     inventorySlot:id=>inventoryModel.slots.findIndex(stack=>stack&&stack.id===id),
+    clearInventoryItems:ids=>{const clear=new Set((Array.isArray(ids)?ids:[]).map(id=>id|0));for(let i=0;i<inv.length;i++)if(inv[i]&&clear.has(inv[i].id|0))inv[i]=null;refreshHUD();return true;},
+    isDungeonSpirit:()=>{const p=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return !!(p&&p.spirit);},
+    hasLocalSpiritVisual:()=>!!globalThis.BlockcraftLocalSpiritFxActive,
+    selfPosition:()=>{const p=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return p?{x:p.x,y:p.y,z:p.z}:null;},
     trackedGate:()=>gate?{id:gate.id||'',rank:gate.rank|0,kind:gate.kind||'public'}:null,
     send:(type,message={})=>{if(!NET.on||!NET.room)throw new Error('not connected');NET.room.send(type,message);},
     disconnect:()=>{if(!NET.room||!NET.room.connection)throw new Error('no active connection');NET.room.connection.close();},

@@ -55,6 +55,20 @@ function takeHandoff(token) {
 // and only increments, so a drained id can only ever match the same gate. Across
 // a real process restart this module starts empty, so no stale ids carry over.
 const consumedGates = new Set(); // overworld gate ids awaiting expiry
+const hostedGates = new Set(); // overworld gate ids currently owned by a DungeonRoom
+const breachedGates = []; // serialized DungeonRoom breach payloads awaiting overworld spawn
+
+function hostGate(gateId) {
+  if (gateId) hostedGates.add(String(gateId));
+}
+
+function unhostGate(gateId) {
+  if (gateId) hostedGates.delete(String(gateId));
+}
+
+function isHostedGate(gateId) {
+  return gateId ? hostedGates.has(String(gateId)) : false;
+}
 
 function consumeGate(gateId) {
   if (gateId) consumedGates.add(String(gateId));
@@ -67,4 +81,19 @@ function drainConsumedGates() {
   return ids;
 }
 
-module.exports = { handOff, takeHandoff, consumeGate, drainConsumedGates };
+function recordGateBreach(payload) {
+  if (!payload || !payload.gateId) return;
+  breachedGates.push({ ...payload, gateId: String(payload.gateId), at: payload.at || Date.now() });
+}
+
+function drainGateBreaches() {
+  if (!breachedGates.length) return [];
+  return breachedGates.splice(0, breachedGates.length);
+}
+
+module.exports = {
+  handOff, takeHandoff,
+  hostGate, unhostGate, isHostedGate,
+  consumeGate, drainConsumedGates,
+  recordGateBreach, drainGateBreaches,
+};

@@ -1,10 +1,22 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { BOSS_REWARD_BY_RANK, HUNTER_RANK_LEVELS, hunterActivityXpForLevel } = require('../rooms/constants');
+const {
+  BOSS_REWARD_BY_RANK,
+  BREACH_CLEANUP_REWARD_BY_RANK,
+  HUNTER_RANK_LEVELS,
+  I,
+  LAND_BASE_PRICE,
+  LAND_NEAR_TOWN_BONUS,
+  SOLO_KEY_PRICES,
+  TAVERN_BUY,
+  TAVERN_SELL,
+  hunterActivityXpForLevel,
+} = require('../rooms/constants');
 const { RANK_PACING_TARGETS, activityEconomySnapshot, progressionPacingSnapshot, xpToNextRank } = require('../progression-balance');
 const { GATE_INTERACT_RANGE, gateEncounterPreview, gateReadinessForProfile } = require('../rooms/gate-readiness');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
+const { contractOffers, contractPool } = require('../../shared/job-system');
 const { lootEconomySnapshot, simulateLootProgression } = require('../loot-progression');
 
 test('mixed quest and dungeon pacing grows from a short D climb to an aspirational S climb', () => {
@@ -43,6 +55,39 @@ test('XP economy rewards risk and time without making starter-zone farming scale
   assert.deepEqual(rows.map(row => row.threat), [30, 45, 65, 65]);
 });
 
+test('breach cleanup bounties stay below full Gate clears while scaling by rank', () => {
+  assert.equal(BREACH_CLEANUP_REWARD_BY_RANK.length, BOSS_REWARD_BY_RANK.length);
+  for (let rank = 0; rank < BOSS_REWARD_BY_RANK.length; rank++) {
+    const normal = BOSS_REWARD_BY_RANK[rank];
+    const cleanup = BREACH_CLEANUP_REWARD_BY_RANK[rank];
+    assert.ok(cleanup.xp < normal.xp, `rank ${rank} cleanup XP is below a clean clear`);
+    assert.equal(cleanup.gold || 0, 0, 'cleanup never pays boss gold');
+    assert.ok(Array.isArray(cleanup.items) && cleanup.items.length > 0, 'cleanup pays materials instead of premium loot');
+    if (rank > 0) assert.ok(cleanup.xp > BREACH_CLEANUP_REWARD_BY_RANK[rank - 1].xp, `rank ${rank} cleanup XP scales upward`);
+  }
+});
+
+test('gold economy keeps early goals affordable without free vendor or job loops', () => {
+  const firstTownClaim = LAND_BASE_PRICE + LAND_NEAR_TOWN_BONUS;
+  assert.ok(firstTownClaim >= 60, `town-adjacent first claim should matter: ${firstTownClaim}g`);
+  assert.ok(firstTownClaim <= 100, `opening quest should still fund a first claim: ${firstTownClaim}g`);
+  assert.ok(LAND_BASE_PRICE >= 16, 'wilderness claims should not be negligible spam');
+
+  const tavernBuy = new Map(TAVERN_BUY.map(([id, count, gold]) => [id, gold / count]));
+  const tavernSell = new Map(TAVERN_SELL.map(([id, count, gold]) => [id, gold / count]));
+  assert.ok(tavernSell.get(I.COOKED_MEAT) < tavernBuy.get(I.COOKED_MEAT), 'cooked meat needs a tavern buy/sell spread');
+  assert.ok(tavernSell.get(I.POT_STEW) < tavernBuy.get(I.POT_STEW), 'stew needs a tavern buy/sell spread');
+
+  assert.ok(SOLO_KEY_PRICES[0] > BOSS_REWARD_BY_RANK[0].gold, 'E-rank solo keys should not be fully refunded by boss gold');
+  const earlyOffers = ['cook', 'blacksmith', 'monk'].flatMap(jobId => contractOffers(jobId, 0, 3).map(c => ({ jobId, ...c })));
+  assert.ok(Math.max(...earlyOffers.map(c => c.rewardGold)) <= BOSS_REWARD_BY_RANK[1].gold, 'early job contracts should not outpay a D-rank boss');
+
+  const cookOffers = contractPool('cook', 0, 3);
+  assert.ok(cookOffers.find(c => c.type === 'sell').rewardGold < cookOffers.find(c => c.type === 'cook').rewardGold, 'tavern delivery should be lower gold than cooking output');
+  const smithOffers = contractPool('blacksmith', 0, 3);
+  assert.ok(smithOffers.find(c => c.type === 'repair').rewardGold <= smithOffers.find(c => c.title === 'Forge Work').rewardGold, 'repair contracts should not erase durability sink pressure');
+});
+
 test('Gate readiness scales loadout advice without becoming an entry lock', () => {
   assert.equal(GATE_INTERACT_RANGE, 6);
   const starter = gateReadinessForProfile({
@@ -73,6 +118,7 @@ test('Gate encounter previews derive difficulty, boss stats, party size, and rew
   assert.equal(base.eliteCount, 1);
   assert.equal(base.boss.hp, 120);
   assert.equal(base.boss.damage, 9);
+  assert.ok(base.boss.traits.includes('C-rank: positioning checks with rings and ground spikes'));
   assert.equal(base.rewards.xp, BOSS_REWARD_BY_RANK[2].xp);
   assert.equal(base.rewards.gold, BOSS_REWARD_BY_RANK[2].gold);
 
@@ -82,6 +128,11 @@ test('Gate encounter previews derive difficulty, boss stats, party size, and rew
   assert.ok(shard.boss.damage > base.boss.damage);
   assert.equal(shard.rewards.legendaryTokens, 2);
   assert.ok(shard.boss.traits.includes('Shard: Tyrannical'));
+
+  const starter = gateEncounterPreview({ rank: 0, kind: 'public' });
+  const apex = gateEncounterPreview({ rank: 4, kind: 'public' });
+  assert.ok(starter.boss.traits.includes('E-rank: learn slam, charge, and one safe-zone ring'));
+  assert.ok(apex.boss.traits.includes('A/S-rank: layered mechanics chain into follow-up casts'));
 });
 
 test('weapon sources climb one rank at a time and never skip the early gear path', () => {

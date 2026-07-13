@@ -23,11 +23,16 @@ class DragonsMixin {
   initDragonState() {
     this.dragonIncubations = new Map();
     this.nestDragons = new Map();        // "x,y,z#slot" -> { type, token, loveUntil, breedCdUntil, breedAccum }
+    this.dragonFollowBondTravel = new Map();
+    this.dragonTraining = new Map();      // sessionId -> { type, role, progress, need, lastX, lastZ, until }
   }
 
   hasMountUnlock(client, kind) {
     const rec = this.profileFor(client);
-    return !!(rec && Array.isArray(rec.prof.mountUnlocks) && rec.prof.mountUnlocks.includes(kind));
+    if (!rec || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind)) return false;
+    if (!isDragonMount(kind)) return true;
+    const type = dragonMountType(kind);
+    return this.isDragonAdult(rec.prof, type);
   }
   hasFamiliarUnlock(client, kind) {
     const rec = this.profileFor(client);
@@ -82,12 +87,15 @@ class DragonsMixin {
     if (!FAMILIAR_KINDS.has(kind)) return client.send('familiarReject', { reason: 'kind' });
     if (!Array.isArray(rec.prof.familiarUnlocks)) rec.prof.familiarUnlocks = [];
     if (rec.prof.familiarUnlocks.includes(kind)) return client.send('familiarReject', { reason: 'owned' });
-    if (!this.consumeItem(rec.prof, FAMILIAR_BIND_ITEM[kind], 1)) return client.send('familiarReject', { reason: 'item' });
+    const itemId = FAMILIAR_BIND_ITEM[kind];
+    const slot = Math.max(0, Math.min(35, m && m.slot | 0));
+    const usedSlot = this.consumeSlotItem(rec.prof, slot, itemId, 1);
+    if (!usedSlot && !this.consumeItem(rec.prof, itemId, 1)) return client.send('familiarReject', { reason: 'item', kind });
     rec.prof.familiarUnlocks.push(kind);
     if(!rec.prof.familiarXp)rec.prof.familiarXp={shade:0,fang:0,mote:0,sprite:0};
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
-    client.send('familiarBound', { kind });
+    client.send('familiarBound', { kind, slot: usedSlot ? slot : -1 });
   }
   handleSummonFamiliar(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -210,6 +218,7 @@ class DragonsMixin {
       if (token && inc.token === token) inc.ownerSid = client.sessionId;
       client.send('dragonIncubationStart', {
         x: inc.x, y: inc.y, z: inc.z, type: inc.type, eggId: inc.eggId,
+        gender: inc.gender || this.defaultDragonGender(inc.type),
         startedAt: inc.startedAt, finishAt: inc.finishAt, ready: !!inc.ready, now,
       });
     }
@@ -230,7 +239,7 @@ class DragonsMixin {
       if (inc.ready || now < inc.finishAt) continue;
       inc.ready = true;
       this.dirtyIncubations = true;
-      this.broadcast('dragonIncubationReady', { x: inc.x, y: inc.y, z: inc.z, type: inc.type, eggId: inc.eggId, ownerSid: inc.ownerSid || '' });
+      this.broadcast('dragonIncubationReady', { x: inc.x, y: inc.y, z: inc.z, type: inc.type, eggId: inc.eggId, gender: inc.gender || this.defaultDragonGender(inc.type), ownerSid: inc.ownerSid || '' });
     }
   }
   claimDragonIncubation(client, key, inc) {
@@ -241,11 +250,14 @@ class DragonsMixin {
     if (!Array.isArray(rec.prof.mountUnlocks)) rec.prof.mountUnlocks = [];
     if (rec.prof.mountUnlocks.includes(kind)) return client.send('hatchDragonReject', { reason: 'owned', type: inc.type });
     rec.prof.mountUnlocks.push(kind);
+    this.ensureDragonGender(rec.prof, inc.type, inc.gender);
+    const personality = this.ensureDragonPersonality(rec.prof, inc.type, inc.personality || this.randomDragonPersonality());
+    const hatchedAt = this.ensureDragonHatchedAt(rec.prof, inc.type, Date.now());
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
     this.ensureDragonIncubations().delete(key);
     this.dirtyIncubations = true;
-    this.broadcast('dragonIncubationComplete', { x: inc.x, y: inc.y, z: inc.z, type: inc.type, eggId: inc.eggId, kind, ownerSid: client.sessionId });
+    this.broadcast('dragonIncubationComplete', { x: inc.x, y: inc.y, z: inc.z, type: inc.type, eggId: inc.eggId, gender: rec.prof.dragonGenders[inc.type], personality, hatchedAt, kind, ownerSid: client.sessionId });
   }
   handleRenameDragon(client, m) {
     const rec = this.profileFor(client);
@@ -291,10 +303,10 @@ class DragonsMixin {
     this.dirtyPlayers.add(rec.token);
     const now = Date.now();
     const incubationMs = dragonIncubationMs(type);
-    const inc = { x, y, z, type, eggId: egg.id | 0, token: rec.token, ownerSid: client.sessionId, slot, startedAt: now, finishAt: now + incubationMs };
+    const inc = { x, y, z, type, eggId: egg.id | 0, gender: this.randomDragonGender(), personality: this.randomDragonPersonality(), token: rec.token, ownerSid: client.sessionId, slot, startedAt: now, finishAt: now + incubationMs };
     incubations.set(key, inc);
     this.dirtyIncubations = true;
-    this.broadcast('dragonIncubationStart', { x, y, z, type, eggId: inc.eggId, slot, startedAt: inc.startedAt, finishAt: inc.finishAt, incubationMs, now });
+    this.broadcast('dragonIncubationStart', { x, y, z, type, eggId: inc.eggId, gender: inc.gender, slot, startedAt: inc.startedAt, finishAt: inc.finishAt, incubationMs, now });
   }
 
   // ---------------- dragon breeding: perch two dragons at a nest, feed treats, lay an egg ----------------
@@ -304,7 +316,7 @@ class DragonsMixin {
     for (const [key, n] of this.nestDragons) {
       const [coord, slotStr] = key.split('#');
       const [x, y, z] = coord.split(',').map(Number);
-      client.send('dragonPerchAdd', { key, x, y, z, slot: +slotStr, type: n.type, loveUntil: n.loveUntil || 0, now });
+      client.send('dragonPerchAdd', { key, x, y, z, slot: +slotStr, type: n.type, gender: n.gender || this.defaultDragonGender(n.type), loveUntil: n.loveUntil || 0, now });
     }
   }
   cancelNestDragonsAt(x, y, z) {
@@ -326,24 +338,51 @@ class DragonsMixin {
     const kind = typeof m.kind === 'string' ? m.kind : '';
     if (!isDragonMount(kind) || !DRAGON_TYPE_SET.has(dragonMountType(kind))) return client.send('perchReject', { reason: 'kind' });
     if (!Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind)) return client.send('perchReject', { reason: 'unowned' });
+    if (!this.isDragonAdult(rec.prof, dragonMountType(kind))) return client.send('perchReject', { reason: 'young', stage: this.dragonStage(rec.prof, dragonMountType(kind)) });
     let slot = -1;
     for (let s = 0; s < DRAGON_PERCH_SLOTS; s++) if (!this.nestDragons.has(this.nestSlotKey(x, y, z, s))) { slot = s; break; }
     if (slot < 0) return client.send('perchReject', { reason: 'full' });
     const type = dragonMountType(kind);
-    this.nestDragons.set(this.nestSlotKey(x, y, z, slot), { type, token: rec.token, loveUntil: 0, breedCdUntil: 0, breedStart: 0 });
+    const gender = this.ensureDragonGender(rec.prof, type);
+    this.nestDragons.set(this.nestSlotKey(x, y, z, slot), { type, gender, token: rec.token, loveUntil: 0, breedCdUntil: 0, breedStart: 0 });
     this.dirtyNests = true;
     if (p.mount === kind) p.mount = '';                  // the dragon is now nesting, not ridden
-    this.broadcast('dragonPerchAdd', { key: this.nestSlotKey(x, y, z, slot), x, y, z, slot, type, loveUntil: 0, now: Date.now() });
+    this.broadcast('dragonPerchAdd', { key: this.nestSlotKey(x, y, z, slot), x, y, z, slot, type, gender, loveUntil: 0, now: Date.now() });
   }
   handleRecallDragon(client, m) {
     const rec = this.profileFor(client);
     if (!rec || !m) return;
     const key = typeof m.key === 'string' ? m.key : '';
-    const n = this.nestDragons.get(key);
-    if (!n || n.token !== rec.token) return client.send('perchReject', { reason: 'notyours' });
-    this.nestDragons.delete(key);
-    this.dirtyNests = true;
-    this.broadcast('dragonPerchRemove', { key });
+    if (key) {
+      const n = this.nestDragons.get(key);
+      if (!n || n.token !== rec.token) return client.send('perchReject', { reason: 'notyours' });
+      this.nestDragons.delete(key);
+      this.dirtyNests = true;
+      this.broadcast('dragonPerchRemove', { key });
+      return;
+    }
+    const p = this.state.players.get(client && client.sessionId);
+    if (!p || !this.isPlayerAlive(client)) return client.send('dragonRecallReject', { reason: 'invalid' });
+    const type = typeof m.type === 'string' ? m.type : '';
+    const kind = 'dragon:' + type;
+    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+      return client.send('dragonRecallReject', { reason: 'unowned' });
+    if (!this.isDragonAdult(rec.prof, type)) return client.send('dragonRecallReject', { reason: 'young', type, stage: this.dragonStage(rec.prof, type) });
+    if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '')) return client.send('dragonRecallReject', { reason: 'overworld' });
+    if (this.dragonIsNested(rec.token, type)) return client.send('dragonRecallReject', { reason: 'nested', type });
+    const role = this.ensureDragonRole(rec.prof, type);
+    const hasPost = !!(rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[type]);
+    if (role === 'stay' && hasPost && m.clearStaySpot !== true) return client.send('dragonRecallReject', { reason: 'stay', type });
+    let clearedStaySpot = false;
+    if (hasPost && m.clearStaySpot === true) {
+      delete rec.prof.dragonStaySpots[type];
+      clearedStaySpot = true;
+    }
+    if (role === 'stay') rec.prof.dragonRoles[type] = 'follow';
+    this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    client.send('dragonRecallResult', { type, role: this.ensureDragonRole(rec.prof, type), clearedStaySpot, x: p.x, y: p.y, z: p.z });
+    this.sendSpace(p.dgn || '', 'fx', { t: 'dragonRecall', kind: type, x: p.x, y: p.y, z: p.z, owner: client.sessionId, clearedStaySpot, dgn: p.dgn || '' });
   }
   handleFeedDragon(client, m) {
     const rec = this.profileFor(client);
@@ -354,9 +393,16 @@ class DragonsMixin {
     const now = Date.now();
     if (n.loveUntil > now) return client.send('perchReject', { reason: 'already' });
     if (now < (n.breedCdUntil || 0)) return client.send('perchReject', { reason: 'tired' });
-    if (this.countItem(rec.prof, I.DRAGON_TREAT) < 1) return client.send('perchReject', { reason: 'treat' });
-    this.consumeItem(rec.prof, I.DRAGON_TREAT, 1);
+    const slot = Math.max(0, Math.min(35, m.slot | 0));
+    let consumedSlot = slot;
+    if (!this.consumeSlotItem(rec.prof, consumedSlot, I.DRAGON_TREAT, 1)) {
+      consumedSlot = -1;
+      const inv = Array.isArray(rec.prof.inv) ? rec.prof.inv : [];
+      for (let i = 0; i < 36; i++) if (inv[i] && inv[i].id === I.DRAGON_TREAT && this.consumeSlotItem(rec.prof, i, I.DRAGON_TREAT, 1)) { consumedSlot = i; break; }
+      if (consumedSlot < 0) return client.send('perchReject', { reason: 'treat' });
+    }
     const care = this.feedDragonCare(rec.prof, n.type, 16);
+    const bond = this.awardDragonBondXp(rec.prof, n.type, 12, 'care');
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
     n.loveUntil = now + DRAGON_LOVE_MS;
@@ -364,7 +410,134 @@ class DragonsMixin {
     const [coord, slotStr] = key.split('#');
     const [x, y, z] = coord.split(',').map(Number);
     this.broadcast('dragonPerchLove', { key, x, y, z, slot: +slotStr, type: n.type, loveUntil: n.loveUntil, happiness: care ? care.happiness : 0, now });
-    client.send('dragonCare', { type: n.type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : now });
+    client.send('dragonCare', { type: n.type, slot: consumedSlot, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : now, bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
+  }
+  handleCareDragon(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || !m || !this.isPlayerAlive(client)) return client.send('feedDragonReject', { reason: 'invalid' });
+    const type = typeof m.type === 'string' ? m.type : '';
+    const kind = 'dragon:' + type;
+    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+      return client.send('feedDragonReject', { reason: 'unowned' });
+    const slot = Math.max(0, Math.min(35, m.slot | 0));
+    if (!this.consumeSlotItem(rec.prof, slot, I.DRAGON_TREAT, 1)) return client.send('feedDragonReject', { reason: 'treat' });
+    const sage = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage';
+    const care = this.feedDragonCare(rec.prof, type, (this.isDragonAdult(rec.prof, type) ? 12 : 18) + (sage ? 4 : 0));
+    const bond = this.awardDragonBondXp(rec.prof, type, this.isDragonAdult(rec.prof, type) ? 10 : 16, 'care');
+    const now = Date.now();
+    this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : now, bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null, careOnly: true });
+  }
+  handleSetDragonRole(client, m) {
+    const rec = this.profileFor(client);
+    const p = this.state.players.get(client && client.sessionId);
+    if (!rec || !p || !m || !this.isPlayerAlive(client)) return client.send('dragonRoleReject', { reason: 'invalid' });
+    const type = typeof m.type === 'string' ? m.type : '';
+    const role = typeof m.role === 'string' ? m.role : '';
+    const kind = 'dragon:' + type;
+    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+      return client.send('dragonRoleReject', { reason: 'unowned' });
+    if (!['follow', 'stay', 'guard', 'rest'].includes(role)) return client.send('dragonRoleReject', { reason: 'role' });
+    const clearOnly = role === 'stay' && m.clearStaySpot === true;
+    if ((role === 'guard' || role === 'stay') && !this.isDragonAdult(rec.prof, type)) return client.send('dragonRoleReject', { reason: 'young', type, role, stage: this.dragonStage(rec.prof, type) });
+    if (role === 'stay' && !clearOnly && (p.dgn || '')) return client.send('dragonRoleReject', { reason: 'overworld' });
+    this.ensureDragonRole(rec.prof, type, role);
+    const staySpot = role === 'stay' && !clearOnly ? this.setDragonStaySpot(rec.prof, type, p) : null;
+    const clearStaySpot = clearOnly || (role !== 'stay' && !!(rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[type]));
+    if (clearStaySpot && rec.prof.dragonStaySpots) delete rec.prof.dragonStaySpots[type];
+    this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    client.send('dragonRoleResult', { type, role, staySpot, clearStaySpot });
+  }
+  handleChooseDragonSpecialization(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || !m || !this.isPlayerAlive(client)) return client.send('dragonSpecializationReject', { reason: 'invalid' });
+    const type = typeof m.type === 'string' ? m.type : '';
+    const specialization = typeof m.specialization === 'string' ? m.specialization : '';
+    const kind = 'dragon:' + type;
+    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+      return client.send('dragonSpecializationReject', { reason: 'unowned' });
+    if (!['scout', 'defender', 'sage'].includes(specialization)) return client.send('dragonSpecializationReject', { reason: 'choice' });
+    if (this.dragonSpecialization && this.dragonSpecialization(rec.prof, type)) return client.send('dragonSpecializationReject', { reason: 'chosen', type, specialization: this.dragonSpecialization(rec.prof, type) });
+    if (!this.isDragonAdult(rec.prof, type)) return client.send('dragonSpecializationReject', { reason: 'young', type, stage: this.dragonStage(rec.prof, type) });
+    if (this.dragonBondLevel(rec.prof, type) < 4) return client.send('dragonSpecializationReject', { reason: 'bond', type, level: this.dragonBondLevel(rec.prof, type), need: 4 });
+    const chosen = this.setDragonSpecialization ? this.setDragonSpecialization(rec.prof, type, specialization) : '';
+    if (!chosen) return client.send('dragonSpecializationReject', { reason: 'chosen', type, specialization: this.dragonSpecialization ? this.dragonSpecialization(rec.prof, type) : '' });
+    this.dirtyPlayers.add(rec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    client.send('dragonSpecializationResult', { type, specialization: chosen });
+  }
+  dragonTrainingSpec(role) {
+    return {
+      follow: { title: 'Follow Drill', need: 42, unit: 'm', award: 6 },
+      guard: { title: 'Guard Drill', need: 10, unit: 's', award: 5 },
+      stay: { title: 'Stay Drill', need: 10, unit: 's', award: 5 },
+      rest: { title: 'Rest Drill', need: 10, unit: 's', award: 5 },
+    }[role] || null;
+  }
+  handleStartDragonTraining(client, m) {
+    const rec = this.profileFor(client);
+    const p = this.state.players.get(client && client.sessionId);
+    if (!rec || !p || !m || !this.isPlayerAlive(client)) return client.send('dragonTrainingReject', { reason: 'invalid' });
+    const type = typeof m.type === 'string' ? m.type : '';
+    const role = typeof m.role === 'string' ? m.role : this.ensureDragonRole(rec.prof, type);
+    const kind = 'dragon:' + type, spec = this.dragonTrainingSpec(role);
+    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+      return client.send('dragonTrainingReject', { reason: 'unowned' });
+    if (!spec || !['follow', 'guard', 'stay', 'rest'].includes(role)) return client.send('dragonTrainingReject', { reason: 'role' });
+    if (!this.isDragonAdult(rec.prof, type)) return client.send('dragonTrainingReject', { reason: 'young', type, role, stage: this.dragonStage(rec.prof, type) });
+    if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '')) return client.send('dragonTrainingReject', { reason: 'overworld' });
+    if (this.dragonIsNested(rec.token, type)) return client.send('dragonTrainingReject', { reason: 'nested' });
+    if (role === 'stay') {
+      const s = rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[type];
+      if (!s || !Number.isFinite(Number(s.x)) || !Number.isFinite(Number(s.z))) return client.send('dragonTrainingReject', { reason: 'post' });
+    }
+    if (!this.dragonTraining) this.dragonTraining = new Map();
+    const session = { type, role, progress: 0, need: spec.need, unit: spec.unit, title: spec.title, award: spec.award, lastX: p.x, lastZ: p.z, until: Date.now() + 90000 };
+    this.dragonTraining.set(client.sessionId, session);
+    client.send('dragonTrainingUpdate', { type, role, title: spec.title, progress: 0, need: spec.need, unit: spec.unit, started: true });
+  }
+  cancelDragonTrainingFor(sid, reason = 'cancelled') {
+    if (!this.dragonTraining || !this.dragonTraining.has(sid)) return false;
+    this.dragonTraining.delete(sid);
+    const client = this.clients.find(c => c.sessionId === sid);
+    if (client) client.send('dragonTrainingCancel', { reason });
+    return true;
+  }
+  tickDragonTraining(now, dt) {
+    if (!this.dragonTraining || !this.dragonTraining.size) return;
+    for (const [sid, tr] of [...this.dragonTraining.entries()]) {
+      const client = this.clients.find(c => c.sessionId === sid), rec = client && this.profileFor(client), p = this.state.players.get(sid);
+      if (!client || !rec || !p || !this.isPlayerAlive(client) || now > (tr.until || 0)) { this.cancelDragonTrainingFor(sid, 'expired'); continue; }
+      if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '') || this.dragonIsNested(rec.token, tr.type)) { this.cancelDragonTrainingFor(sid, 'interrupted'); continue; }
+      const role = tr.role;
+      if (role === 'follow') {
+        const step = Math.hypot((p.x || 0) - (tr.lastX || p.x || 0), (p.z || 0) - (tr.lastZ || p.z || 0));
+        tr.lastX = p.x; tr.lastZ = p.z;
+        if (!p.mount && step >= .03 && step <= 12) tr.progress += step;
+      } else if (role === 'stay') {
+        const s = rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[tr.type];
+        if (!s || Math.hypot((p.x || 0) - Number(s.x), (p.z || 0) - Number(s.z)) > 18) { client.send('dragonTrainingUpdate', { type: tr.type, role, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit, waiting: 'post' }); continue; }
+        tr.progress += Math.max(0, dt || 0);
+      } else if (role === 'guard') {
+        if (p.mount && isDragonMount(p.mount)) { client.send('dragonTrainingUpdate', { type: tr.type, role, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit, waiting: 'dismount' }); continue; }
+        tr.progress += Math.max(0, dt || 0);
+      } else if (role === 'rest') {
+        const care = this.dragonCareFor(rec.prof, tr.type);
+        if (care && care.happiness >= 95) { client.send('dragonTrainingUpdate', { type: tr.type, role, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit, waiting: 'calm' }); continue; }
+        tr.progress += Math.max(0, dt || 0);
+      }
+      if (tr.progress >= tr.need) {
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, tr.type, role, tr.award || 1) : null;
+        const bond = this.awardDragonBondXp(rec.prof, tr.type, 2, role);
+        this.dirtyPlayers.add(rec.token);
+        client.send('dragonTrainingComplete', { type: tr.type, role, title: tr.title, progress: tr.need, need: tr.need, unit: tr.unit, roleMastery: mastery, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
+        this.dragonTraining.delete(sid);
+      } else {
+        client.send('dragonTrainingUpdate', { type: tr.type, role, title: tr.title, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit });
+      }
+    }
   }
   handleFeedMountedDragon(client, m) {
     const rec = this.profileFor(client);
@@ -376,11 +549,160 @@ class DragonsMixin {
       return client.send('feedDragonReject', { reason: 'unowned' });
     const slot = Math.max(0, Math.min(35, m.slot | 0));
     if (!this.consumeSlotItem(rec.prof, slot, I.DRAGON_TREAT, 1)) return client.send('feedDragonReject', { reason: 'treat' });
-    const care = this.feedDragonCare(rec.prof, type, 20);
+    const care = this.feedDragonCare(rec.prof, type, 20 + (this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage' ? 4 : 0));
+    const bond = this.awardDragonBondXp(rec.prof, type, 18, 'care');
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
-    client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : Date.now() });
+    client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : Date.now(), bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
     this.sendSpace(p.dgn || '', 'fx', { t: 'dragonCare', kind: type, x: p.x, y: p.y, z: p.z, happiness: care ? care.happiness : 0, dgn: p.dgn || '' });
+  }
+  dragonIsNested(token, type) {
+    if (!token || !type || !this.nestDragons || !this.nestDragons.size) return false;
+    for (const n of this.nestDragons.values()) if (n && n.token === token && n.type === type) return true;
+    return false;
+  }
+  dragonGuardDamage(type, bondLevel = 1) {
+    const base = { ember: 7, frost: 5, storm: 6, verdant: 4, void: 5 }[type] || 5;
+    return base + Math.max(0, Math.min(5, bondLevel | 0) - 1);
+  }
+  dragonStayDamage(type, bondLevel = 1) {
+    return Math.max(3, Math.ceil(this.dragonGuardDamage(type, bondLevel) * .72));
+  }
+  dragonStayPostActive(anchor) {
+    const radius = 80;
+    let active = false;
+    this.state.players.forEach((p, sid) => {
+      if (active || !p || (p.dim || 'overworld') !== 'overworld' || (p.dgn || '') !== (anchor.dgn || '')) return;
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (!client || !this.isPlayerAlive(client)) return;
+      if (Math.hypot((p.x || 0) - anchor.x, (p.z || 0) - anchor.z) <= radius) active = true;
+    });
+    return active;
+  }
+  tickDragonRest(now, dt) {
+    if (!this.dragonRestAcc) this.dragonRestAcc = new Map();
+    const baseCap = 75;
+    const perSecond = 12 / 3600;
+    for (const client of this.clients) {
+      const rec = this.profileFor(client);
+      const p = this.state.players.get(client.sessionId);
+      if (!rec || !p || !Array.isArray(rec.prof.mountUnlocks)) continue;
+      for (const kind of rec.prof.mountUnlocks) {
+        if (!isDragonMount(kind)) continue;
+        const type = dragonMountType(kind);
+        if (!DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(rec.prof, type) !== 'rest') continue;
+        if (!this.isDragonAdult(rec.prof, type, now) || this.dragonIsNested(rec.token, type) || p.mount === kind) continue;
+        const cap = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage' ? 90 : baseCap;
+        const care = this.dragonCareFor(rec.prof, type);
+        if (!care || care.happiness >= cap) continue;
+        const key = rec.token + ':' + type;
+        const personality = this.ensureDragonPersonality(rec.prof, type);
+        const restMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(rec.prof, type, 'rest') : 1;
+        const rate = (personality === 'gentle' ? perSecond * 1.25 : perSecond) * (1 + Math.max(0, restMastery - 1) * .08) * (this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage' ? 1.25 : 1);
+        let acc = (this.dragonRestAcc.get(key) || 0) + Math.max(0, dt || 0) * rate;
+        const gain = Math.min(cap - care.happiness, Math.floor(acc));
+        if (gain <= 0) { this.dragonRestAcc.set(key, acc); continue; }
+        acc -= gain;
+        care.happiness = Math.min(cap, care.happiness + gain);
+        care.fedAt = now;
+        this.dragonRestAcc.set(key, acc);
+        const bond = this.awardDragonBondXp(rec.prof, type, 1, 'rest');
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, type, 'rest', gain) : null;
+        this.dirtyPlayers.add(rec.token);
+        client.send('dragonCare', { type, happiness: care.happiness, fedAt: care.fedAt, rest: true, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null, roleMastery: mastery });
+        this.sendSpace(p.dgn || '', 'fx', { t: 'dragonRest', kind: type, x: p.x, y: p.y, z: p.z, owner: client.sessionId, gain, happiness: care.happiness, masteryLevel: mastery ? mastery.level : restMastery, dgn: p.dgn || '' });
+      }
+    }
+  }
+  tickDragonFollowBond(now) {
+    if (!this.dragonFollowBondTravel) this.dragonFollowBondTravel = new Map();
+    for (const client of this.clients) {
+      const rec = this.profileFor(client);
+      const p = this.state.players.get(client.sessionId);
+      if (!rec || !p || !Array.isArray(rec.prof.mountUnlocks)) continue;
+      const movingInWorld = (p.dim || 'overworld') === 'overworld' && !(p.dgn || '') && !p.mount && this.isPlayerAlive(client);
+      for (const kind of rec.prof.mountUnlocks) {
+        if (!isDragonMount(kind)) continue;
+        const type = dragonMountType(kind);
+        if (!DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(rec.prof, type) !== 'follow') continue;
+        const key = rec.token + ':' + type;
+        let travel = this.dragonFollowBondTravel.get(key);
+        if (!travel || !movingInWorld) {
+          this.dragonFollowBondTravel.set(key, { x: p.x, z: p.z, dist: travel ? travel.dist || 0 : 0, lastAward: travel ? travel.lastAward || 0 : 0 });
+          continue;
+        }
+        const step = Math.hypot(p.x - travel.x, p.z - travel.z);
+        travel.x = p.x; travel.z = p.z;
+        if (!this.isDragonAdult(rec.prof, type, now) || this.dragonIsNested(rec.token, type) || step < 0.05 || step > 12) {
+          this.dragonFollowBondTravel.set(key, travel);
+          continue;
+        }
+        travel.dist = Math.min(240, (travel.dist || 0) + step);
+        const followMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(rec.prof, type, 'follow') : 1;
+        const scout = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'scout';
+        const needDist = Math.max(70, (120 - Math.max(0, followMastery - 1) * 8) * (scout ? .9 : 1));
+        const needMs = Math.max(26000, (45000 - Math.max(0, followMastery - 1) * 2500) * (scout ? .9 : 1));
+        if (travel.dist < needDist || now - (travel.lastAward || 0) < needMs) {
+          this.dragonFollowBondTravel.set(key, travel);
+          continue;
+        }
+        travel.dist -= needDist;
+        travel.lastAward = now;
+        const bond = this.awardDragonBondXp(rec.prof, type, 1, 'follow');
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, type, 'follow', 1) : null;
+        this.dragonFollowBondTravel.set(key, travel);
+        this.dirtyPlayers.add(rec.token);
+        client.send('dragonBond', { type, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, reason: 'follow', dragonChallenge: bond ? bond.challenge : null, roleMastery: mastery });
+      }
+    }
+  }
+  tickDragonGuards(now) {
+    if (!this.dragonGuardCd) this.dragonGuardCd = new Map();
+    this.state.players.forEach((p, sid) => {
+      const client = this.clients.find(c => c.sessionId === sid);
+      const rec = client && this.profileFor(client);
+      if (!client || !rec || !this.isPlayerAlive(client)) return;
+      const unlocks = Array.isArray(rec.prof.mountUnlocks) ? rec.prof.mountUnlocks : [];
+      for (const kind of unlocks) {
+        if (!isDragonMount(kind)) continue;
+        const type = dragonMountType(kind);
+        const role = this.ensureDragonRole(rec.prof, type);
+        if (!DRAGON_TYPE_SET.has(type) || (role !== 'guard' && role !== 'stay')) continue;
+        if (!this.isDragonAdult(rec.prof, type, now) || this.dragonIsNested(rec.token, type)) continue;
+        if (p.mount === kind || (role === 'guard' && isDragonMount(p.mount))) continue;
+        const spots = rec.prof.dragonStaySpots && typeof rec.prof.dragonStaySpots === 'object' ? rec.prof.dragonStaySpots : {};
+        const spot = role === 'stay' ? spots[type] : null;
+        if (role === 'stay' && (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.z)))) continue;
+        const anchor = role === 'stay' ? { x: Number(spot.x), y: Number(spot.y) || p.y, z: Number(spot.z), dgn: '' } : p;
+        if (role === 'stay' && !this.dragonStayPostActive(anchor)) continue;
+        const key = sid + ':' + type + ':' + role;
+        if (now < (this.dragonGuardCd.get(key) || 0)) continue;
+        const masteryLevel = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(rec.prof, type, role) : 1;
+        const defender = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'defender';
+        let best = null, bestId = '', bd = (role === 'stay' ? 9.5 : 7.5) + Math.max(0, masteryLevel - 1) * .35 + (defender ? 1 : 0);
+        this.state.mobs.forEach((mob, id) => {
+          const meta = this.mobMeta[id];
+          if (!mob || mob.hp <= 0 || (mob.dgn || '') !== (anchor.dgn || '') || this.isAnimalKind(mob.kind) || (meta && meta.friendly)) return;
+          const d = Math.hypot(mob.x - anchor.x, mob.z - anchor.z);
+          if (d < bd) { bd = d; best = mob; bestId = id; }
+        });
+        if (!best) continue;
+        const level = this.dragonBondLevel(rec.prof, type);
+        const personality = this.ensureDragonPersonality(rec.prof, type);
+        const cooldownBase = role === 'stay'
+          ? (personality === 'bold' ? 8500 : personality === 'gentle' ? 10500 : 9500)
+          : (personality === 'bold' ? 3800 : personality === 'gentle' ? 5200 : 4600);
+        const cooldown = Math.round(cooldownBase * (defender ? .9 : 1) * (1 - Math.min(.15, (level - 1) * .025) - Math.min(.1, Math.max(0, masteryLevel - 1) * .025)));
+        this.dragonGuardCd.set(key, now + cooldown);
+        const damage = (role === 'stay' ? this.dragonStayDamage(type, level) : this.dragonGuardDamage(type, level)) + Math.floor(Math.max(0, masteryLevel - 1) / 2) + (defender ? 1 : 0);
+        this.damageMobByAbility(client, bestId, best, damage);
+        const bond = this.awardDragonBondXp(rec.prof, type, role === 'stay' ? (personality === 'bold' ? 2 : 1) : (personality === 'bold' ? 3 : 2), role);
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, type, role, 1) : null;
+        this.dirtyPlayers.add(rec.token);
+        client.send('dragonBond', { type, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, reason: role, dragonChallenge: bond ? bond.challenge : null, roleMastery: mastery });
+        this.sendSpace(anchor.dgn || '', 'fx', { t: 'dragonGuard', kind: type, role, x: best.x, y: best.y + .8, z: best.z, postX: anchor.x, postY: anchor.y, postZ: anchor.z, owner: sid, damage, bondGained: bond ? bond.gained : 0, masteryLevel: mastery ? mastery.level : masteryLevel, dgn: anchor.dgn || '' });
+      }
+    });
   }
   tickNestBreeding() {
     if (!this.nestDragons || !this.nestDragons.size) return;
@@ -395,7 +717,8 @@ class DragonsMixin {
       if (list.length < DRAGON_PERCH_SLOTS) { for (const n of list) n.breedStart = 0; continue; }
       const [a, b] = list;
       const offspring = a.token === b.token ? dragonOffspring(a.type, b.type) : '';   // breed only your own pair
-      const fertile = offspring && a.loveUntil > now && b.loveUntil > now && now >= (a.breedCdUntil || 0) && now >= (b.breedCdUntil || 0);
+      const compatibleGender = a.type === b.type || ((a.gender || this.defaultDragonGender(a.type)) !== (b.gender || this.defaultDragonGender(b.type)));
+      const fertile = offspring && compatibleGender && a.loveUntil > now && b.loveUntil > now && now >= (a.breedCdUntil || 0) && now >= (b.breedCdUntil || 0);
       if (!fertile) { a.breedStart = 0; b.breedStart = 0; continue; }
       if (!a.breedStart) { a.breedStart = b.breedStart = now; }
       if (now - a.breedStart < DRAGON_BREED_MS) continue;

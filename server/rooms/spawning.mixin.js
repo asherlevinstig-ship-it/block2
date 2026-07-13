@@ -16,12 +16,43 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 
 class SpawningMixin {
   // ---------------- boss pattern machine ----------------
+  bossRecover(m, meta, stateT, gcd, haste = 1) {
+    m.state = 'recover';
+    meta.stateT = stateT * haste;
+    if (meta.layeredNext) {
+      meta.forcePat = meta.layeredNext;
+      meta.layeredNext = '';
+      meta.gcd = Math.min(gcd * haste, .55 * haste);
+    } else {
+      meta.gcd = gcd * haste;
+    }
+  }
+
+  bossMaybeLayer(meta, pat) {
+    const rank = Math.max(0, Math.min(4, meta.rank | 0));
+    if (rank < 4 || meta.forcePat || meta.layeredNext) return;
+    const follow = {
+      volley: 'charge',
+      watcher: 'charge',
+      charge: 'slam',
+      spikes: 'graveRing',
+      graveRing: 'spikes',
+      control: 'slam',
+      root: 'spikes',
+      foreman: 'spikes',
+      regent: 'control',
+      ossuary: 'control',
+      blight: 'graveRing',
+    }[pat];
+    if (follow && follow !== pat) meta.layeredNext = follow;
+  }
+
   // returns true when the boss consumed its turn (skip shared movement)
   bossBrain(m, id, meta, dt, best, bd, candidates, ground, solid) {
     if (!meta.sum1 && m.hp <= m.maxHp * .66) { meta.sum1 = true; this.bossSummon(m, meta); }
     if (!meta.sum2 && m.hp <= m.maxHp * .33) { meta.sum2 = true; this.bossSummon(m, meta); }
     if (!meta.enraged && m.hp <= m.maxHp * .2) {
-      meta.enraged = true; meta.speed *= 1.4;
+      meta.enraged = true; m.enraged = true; meta.speed *= 1.4;
       this.broadcast('chat', { name: '[System]', text: 'The Gate boss enrages!' });
     }
     const haste = meta.enraged ? .65 : 1;
@@ -53,10 +84,10 @@ class SpawningMixin {
         for (const s of candidates) {
           if (Math.hypot(s.p.x - m.x, s.p.z - m.z) < 4.6 && Math.abs(s.p.y - m.y) < 2.8) {
             const c = this.clients.find(c => c.sessionId === s.sid);
-            if (c) this.hurtPlayer(c, meta.slamDmg);
+            if (c) this.hurtPlayer(c, meta.slamDmg, 'boss_slam', { attack: 'Boss Slam' });
           }
         }
-        m.state = 'recover'; meta.stateT = .9 * haste; meta.gcd = (2.6 + Math.random()) * haste;
+        this.bossRecover(m, meta, .9, 2.6 + Math.random(), haste);
       }
       return true;
     }
@@ -73,7 +104,7 @@ class SpawningMixin {
             if (c) this.hurtPlayer(c, Math.max(1, meta.slamDmg - 2), 'grave_ring');
           }
         }
-        m.state = 'recover'; meta.stateT = .8 * haste; meta.gcd = (3.1 + Math.random()) * haste;
+        this.bossRecover(m, meta, .8, 3.1 + Math.random(), haste);
       }
       return true;
     }
@@ -97,10 +128,10 @@ class SpawningMixin {
           if (Math.hypot(s.p.x - m.x, s.p.z - m.z) < 1.9 && Math.abs(s.p.y - m.y) < 2.3) {
             meta.chargedHit.add(s.sid);
             const c = this.clients.find(c => c.sessionId === s.sid);
-            if (c) this.hurtPlayer(c, meta.slamDmg + 2);
+            if (c) this.hurtPlayer(c, meta.slamDmg + 2, 'boss_charge', { attack: 'Boss Charge' });
           }
         }
-        if (meta.stateT <= 0) { m.state = 'recover'; meta.stateT = .7 * haste; meta.gcd = (2.8 + Math.random()) * haste; }
+        if (meta.stateT <= 0) this.bossRecover(m, meta, .7, 2.8 + Math.random(), haste);
       } else {
         m.state = 'stun'; meta.stateT = 1.7;
         this.sendSpace(m.dgn, 'fx', { t: 'crash', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
@@ -119,7 +150,7 @@ class SpawningMixin {
             m.x + (bx * ca - bz * sa) * 10, m.y + 1.6 + by * 10, m.z + (bx * sa + bz * ca) * 10,
             3 + meta.rank, true);
         }
-        m.state = 'recover'; meta.stateT = .6 * haste; meta.gcd = (3 + Math.random()) * haste;
+        this.bossRecover(m, meta, .6, 3 + Math.random(), haste);
       }
       if (meta.stateT <= 0 && !best) { m.state = 'recover'; meta.stateT = .5; }
       return true;
@@ -140,11 +171,89 @@ class SpawningMixin {
         for (const s of candidates) {
           if (Math.hypot(s.p.x - sx2, s.p.z - sz2) < 1.4 && Math.abs(s.p.y - m.y) < 2.6) {
             const c = this.clients.find(c => c.sessionId === s.sid);
-            if (c) this.hurtPlayer(c, 3 + meta.rank);
+            if (c) this.hurtPlayer(c, 3 + meta.rank, 'boss_spikes', { attack: 'Ground Spikes' });
           }
         }
       }
-      if (meta.stateT <= 0 && meta.spikeK >= 7) { m.state = 'recover'; meta.stateT = .6 * haste; meta.gcd = (2.8 + Math.random()) * haste; }
+      if (meta.stateT <= 0 && meta.spikeK >= 7) this.bossRecover(m, meta, .6, 2.8 + Math.random(), haste);
+      return true;
+    }
+    if (st === 'foremanWind' || st === 'rootWind' || st === 'controlWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        const control = st === 'controlWind';
+        const rooted = st === 'rootWind' || control;
+        this.sendSpace(m.dgn, 'fx', { t: rooted ? 'rootBurst' : 'rockFall', targets: meta.signatureTargets || [], dgn: m.dgn || '' });
+        for (const target of meta.signatureTargets || []) for (const s of candidates) {
+          if (Math.hypot(s.p.x - target.x, s.p.z - target.z) > 1.65) continue;
+          const c = this.clients.find(client => client.sessionId === s.sid);
+          if (!c) continue;
+          this.hurtPlayer(c, rooted ? Math.max(1, meta.slamDmg - (control ? 5 : 3)) : meta.slamDmg, control ? 'boss_control_roots' : rooted ? 'keeper_roots' : 'falling_rock', { attack: control ? 'Control Roots' : rooted ? 'Keeper Roots' : 'Falling Rock' });
+          if (rooted) this.applyBiomeStatus(c, 'sturdy');
+        }
+        this.bossRecover(m, meta, .75, 3, haste);
+      }
+      return true;
+    }
+    if (st === 'regentWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        this.sendSpace(m.dgn, 'fx', { t: 'tideBurst', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+        for (const s of candidates) {
+          const dist = Math.hypot(s.p.x - m.x, s.p.z - m.z);
+          if (dist < 3 || dist > 7) continue;
+          const c = this.clients.find(client => client.sessionId === s.sid);
+          if (c) { this.hurtPlayer(c, Math.max(2, meta.slamDmg - 2), 'drowned_tide'); this.applyBiomeStatus(c, 'frost'); }
+        }
+        this.bossRecover(m, meta, .8, 3.2, haste);
+      }
+      return true;
+    }
+    if (st === 'ossuaryWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        this.sendSpace(m.dgn, 'fx', { t: 'graveRing', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+        for (const s of candidates) {
+          const dist = Math.hypot(s.p.x - m.x, s.p.z - m.z);
+          if (dist < 3 || dist > 8) continue;
+          const c = this.clients.find(client => client.sessionId === s.sid);
+          if (c) this.hurtPlayer(c, Math.max(2, meta.slamDmg - 1), 'ossuary_wave');
+        }
+        this.bossSummon(m, { ...meta, forceWave: true });
+        this.bossRecover(m, meta, .9, 3.4, haste);
+      }
+      return true;
+    }
+    if (st === 'blightWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        this.sendSpace(m.dgn, 'fx', { t: 'rootBurst', targets: meta.signatureTargets || [], dgn: m.dgn || '' });
+        for (const target of meta.signatureTargets || []) for (const s of candidates) {
+          if (Math.hypot(s.p.x - target.x, s.p.z - target.z) > 2.0) continue;
+          const c = this.clients.find(client => client.sessionId === s.sid);
+          if (!c) continue;
+          this.hurtPlayer(c, Math.max(2, meta.slamDmg - 2), 'blighted_roots');
+          this.applyBiomeStatus(c, 'frost');
+        }
+        this.bossRecover(m, meta, .8, 3.2, haste);
+      }
+      return true;
+    }
+    if (st === 'watcherWind') {
+      faceBest();
+      if (meta.stateT <= 0 && best) {
+        const bd2 = bd || 1;
+        const bx = (best.p.x - m.x) / bd2, bz = (best.p.z - m.z) / bd2;
+        const by = ((best.p.y + 1.2) - (m.y + 1.6)) / bd2;
+        for (const off of [-.44, -.22, 0, .22, .44]) {
+          const ca = Math.cos(off), sa = Math.sin(off);
+          this.fireArrow(m, m.dgn,
+            m.x + (bx * ca - bz * sa) * 11, m.y + 1.6 + by * 11, m.z + (bx * sa + bz * ca) * 11,
+            4 + meta.rank, true);
+        }
+        this.bossRecover(m, meta, .7, 3.1, haste);
+      }
+      if (meta.stateT <= 0 && !best) { m.state = 'recover'; meta.stateT = .5; }
       return true;
     }
     if (st === 'stun') {
@@ -159,20 +268,47 @@ class SpawningMixin {
     // 'chase' (or fresh ''): maybe start a pattern, otherwise fall through to pursuit
     if (st === '') m.state = 'chase';
     if (meta.gcd <= 0 && best) {
+      const rank = Math.max(0, Math.min(4, meta.rank | 0));
       const picks = [];
-      if (bd < 6) { picks.push('slam', 'slam'); if (meta.rank >= 2) picks.push('spikes'); }
-      if (meta.rank === 0 && m.hp <= m.maxHp * .66 && bd < 9) picks.push('graveRing', 'graveRing');
+      if (bd < 6) { picks.push('slam', 'slam'); if (rank >= 2) picks.push('spikes'); }
+      if (rank === 0 && m.hp <= m.maxHp * .66 && bd < 9) picks.push('graveRing', 'graveRing');
+      if (rank >= 2 && bd >= 5 && bd < 10) picks.push('graveRing');
       if (bd > 5 && bd < 16) picks.push('charge', 'charge');
-      if (bd > 6 && bd < 18) picks.push('volley');
+      if (rank >= 1 && bd > 6 && bd < 18) picks.push('volley');
+      if (rank >= 1 && meta.bossStyle === 'foreman' && bd < 15) picks.push('foreman');
+      if (rank >= 1 && meta.bossStyle === 'regent' && bd < 12) picks.push('regent');
+      if (rank >= 1 && meta.bossStyle === 'rootkeeper' && bd < 14) picks.push('root');
+      if (rank >= 1 && meta.bossStyle === 'ossuary' && bd < 16) picks.push('ossuary');
+      if (rank >= 1 && meta.bossStyle === 'blight' && bd < 15) picks.push('blight');
+      if (rank >= 1 && meta.bossStyle === 'watcher' && bd > 5 && bd < 20) picks.push('watcher');
+      if (rank >= 3 && bd < 13) picks.push('control');
       if (picks.length) {
-        let pat = picks[(Math.random() * picks.length) | 0];
+        const combos = {
+          foreman: ['charge', 'foreman', 'slam', 'volley'],
+          regent: ['graveRing', 'regent', 'volley', 'slam'],
+          rootkeeper: ['root', 'charge', 'graveRing', 'slam'],
+          ossuary: ['volley', 'ossuary', 'charge', 'slam'],
+          blight: ['blight', 'graveRing', 'charge', 'slam'],
+          watcher: ['watcher', 'charge', 'volley', 'slam'],
+        };
+        const combo = combos[meta.bossStyle];
+        let pat = meta.forcePat || '';
+        meta.forcePat = '';
+        if (!pat && combo) {
+          for (let offset = 0; offset < combo.length; offset++) {
+            const candidate = combo[((meta.patternStep || 0) + offset) % combo.length];
+            if (picks.includes(candidate)) { pat = candidate; meta.patternStep = (combo.indexOf(candidate) + 1) % combo.length; break; }
+          }
+        }
+        if (!pat) pat = picks[(Math.random() * picks.length) | 0];
         if (pat === meta.lastPat && picks.some(q => q !== pat)) pat = picks.find(q => q !== pat);
         meta.lastPat = pat;
+        this.bossMaybeLayer(meta, pat);
         const bd2 = bd || 1;
         meta.cdx = (best.p.x - m.x) / bd2; meta.cdz = (best.p.z - m.z) / bd2;
         if (pat === 'slam') {
           m.state = 'slamWind'; meta.stateT = 1.1 * haste;
-          this.sendSpace(m.dgn, 'fx', { t: 'warn', dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'slamWarn', x: m.x, y: m.y, z: m.z, radius: 4.6, dgn: m.dgn || '' });
         } else if (pat === 'graveRing') {
           m.state = 'graveRingWind'; meta.stateT = 1.35 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
@@ -183,10 +319,34 @@ class SpawningMixin {
         } else if (pat === 'volley') {
           m.state = 'volleyWind'; meta.stateT = .7 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
-        } else {
+          this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', id, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
+        } else if (pat === 'spikes') {
           m.state = 'spikeWind'; meta.stateT = .7 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'warn', dgn: m.dgn || '' });
           this.sendSpace(m.dgn, 'fx', { t: 'swind', id, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
+        } else if (pat === 'control') {
+          m.state = 'controlWind'; meta.stateT = 1 * haste;
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 5);
+          if (!meta.signatureTargets.length && best) meta.signatureTargets = [{ x: best.p.x, z: best.p.z }];
+          this.sendSpace(m.dgn, 'fx', { t: 'rootWarn', targets: meta.signatureTargets, dgn: m.dgn || '' });
+        } else if (pat === 'regent') {
+          m.state = 'regentWind'; meta.stateT = 1.25 * haste;
+          this.sendSpace(m.dgn, 'fx', { t: 'tideWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+        } else if (pat === 'ossuary') {
+          m.state = 'ossuaryWind'; meta.stateT = 1.35 * haste;
+          this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });
+        } else if (pat === 'blight') {
+          m.state = 'blightWind'; meta.stateT = 1.1 * haste;
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 5);
+          this.sendSpace(m.dgn, 'fx', { t: 'rootWarn', targets: meta.signatureTargets, dgn: m.dgn || '' });
+        } else if (pat === 'watcher') {
+          m.state = 'watcherWind'; meta.stateT = .9 * haste;
+          this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
+          this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', id, dx: meta.cdx, dz: meta.cdz, wide: true, dgn: m.dgn || '' });
+        } else {
+          m.state = pat === 'root' ? 'rootWind' : 'foremanWind'; meta.stateT = (pat === 'root' ? 1 : 1.15) * haste;
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 4);
+          this.sendSpace(m.dgn, 'fx', { t: pat === 'root' ? 'rootWarn' : 'rockWarn', targets: meta.signatureTargets, dgn: m.dgn || '' });
         }
         return true;
       }
@@ -197,15 +357,27 @@ class SpawningMixin {
   bossSummon(m, meta) {
     const inst = this.instances[m.dgn];
     if (!inst) return;
-    const n = 2 + Math.floor(meta.rank / 2);
+    const n = (meta.forceWave ? 3 : 2) + Math.floor(meta.rank / 2);
     const mul = D.RANK_MUL[meta.rank];
     for (let k = 0; k < n; k++) {
-      const skel = meta.rank >= 1 && Math.random() < .35;
-      this.addDungeonMob(m.dgn,
-        m.x + (Math.random() * 4 - 2), m.z + (Math.random() * 4 - 2),
+      const skel = meta.bossStyle === 'foreman' ? k === 1
+        : meta.bossStyle === 'regent' ? k % 2 === 0
+          : meta.bossStyle === 'ossuary' || meta.bossStyle === 'watcher' ? k !== 0
+            : (meta.rank >= 1 && Math.random() < .35);
+      const summonedId = this.addDungeonMob(m.dgn,
+        m.x + (Math.random() * 6 - 3), m.z + (Math.random() * 6 - 3),
         skel ? 'skeleton' : 'zombie',
         Math.round((skel ? 6 : 8) + 8 * mul), 3 + meta.rank, 1.6 + Math.random() * .5,
         inst.world, meta.rank);
+      const summonedMeta = this.mobMeta[summonedId];
+      const summonedMob = this.state.mobs.get(summonedId);
+      if (summonedMob) {
+        const style = meta.bossStyle || '';
+        summonedMob.variant = skel
+          ? (style === 'regent' ? 'drowned' : style === 'ossuary' ? 'ossuary' : style === 'watcher' ? 'watcher' : style === 'blight' || style === 'rootkeeper' ? 'blighted' : '')
+          : (style === 'foreman' ? 'miner' : style === 'watcher' ? 'vault_guard' : style === 'ossuary' ? 'ossuary_guard' : style === 'blight' || style === 'rootkeeper' || style === 'regent' ? 'graveguard' : 'charger');
+      }
+      if (summonedMeta && !skel) summonedMeta.undeadRole = meta.bossStyle === 'rootkeeper' || meta.bossStyle === 'regent' || meta.bossStyle === 'blight' || meta.bossStyle === 'ossuary' ? 'graveguard' : 'charger';
     }
     // summons join the fight already angry
     this.state.mobs.forEach((o, oid) => {
@@ -276,14 +448,14 @@ class SpawningMixin {
   cleanupFarOverworldMobs(clusters) {
     if (!clusters || !clusters.length) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { if (!m.dgn && !(this.mobMeta[id] && this.mobMeta[id].friendly)) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !(meta && (meta.friendly || meta.gateBreach))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
       return;
     }
     const dead = [];
     this.state.mobs.forEach((m, id) => {
       if (m.dgn) return;
-      if (this.mobMeta[id] && this.mobMeta[id].friendly) return;
+      if (this.mobMeta[id] && (this.mobMeta[id].friendly || this.mobMeta[id].gateBreach)) return;
       const radius = this.isAnimalKind(m.kind) ? ANIMAL_DESPAWN_RADIUS : HOSTILE_DESPAWN_RADIUS;
       if (!this.nearestSurfaceCluster(m.x, m.z, clusters, radius)) dead.push(id);
     });
@@ -727,7 +899,21 @@ class SpawningMixin {
         };
       }
       const rec = this.profileFor(client), discountUntil = rec && this.caravanDiscounts && (this.caravanDiscounts.get(rec.token) || 0) || 0;
-      client.send('overworldActivity', { caravan: caravanPayload, camp: campPayload, patrol: patrolPayload, recoveryCamp, encounter: encounterPayload, roadSafety: this.roadSafetySnapshot(), discountUntil, now: Date.now() });
+      let gateBreachPayload = null, gateBreachBest = 260;
+      if (this.gateBreaches && this.gateBreaches.size) for (const breach of this.gateBreaches.values()) {
+        const payload = this.gateBreachPayload ? this.gateBreachPayload(breach) : null;
+        if (!payload) continue;
+        const d = Math.hypot(payload.x - p.x, payload.z - p.z);
+        if (d < gateBreachBest) { gateBreachBest = d; gateBreachPayload = payload; }
+      }
+      let gateScarPayload = null, gateScarBest = 240;
+      if (this.gateBreachScars && this.gateBreachScars.size) for (const scar of this.gateBreachScars.values()) {
+        const payload = this.gateBreachScarPayload ? this.gateBreachScarPayload(scar) : null;
+        if (!payload) continue;
+        const d = Math.hypot(payload.x - p.x, payload.z - p.z);
+        if (d < gateScarBest) { gateScarBest = d; gateScarPayload = payload; }
+      }
+      client.send('overworldActivity', { caravan: caravanPayload, camp: campPayload, patrol: patrolPayload, recoveryCamp, encounter: encounterPayload, gateBreach: gateBreachPayload, gateScar: gateScarPayload, roadSafety: this.roadSafetySnapshot(), discountUntil, now: Date.now() });
     }
   }
 

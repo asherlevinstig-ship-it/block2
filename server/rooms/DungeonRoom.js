@@ -3,7 +3,9 @@ const { State, Player } = require('../schema');
 const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
-const { handOff, consumeGate } = require('./dungeon-handoff');
+const W = require('../world');
+const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach } = require('./dungeon-handoff');
+const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
@@ -44,15 +46,23 @@ class DungeonRoom extends GameRoom {
     this.lastAttackMsg = new Map();
     this.rateBuckets = new Map();
     this.playerLastHit = new Map();
+    this.playerDamageRecaps = new Map();
     this.aegisBounties = new Map();
     this.playerHp = new Map();
     this.playerHunger = new Map();
+    this.fallState = new Map();
+    this.biomeStatuses = new Map();
     this.bossContrib = new Map();
     this.restartRecoveries = new Map();
     this.tutorialReturns = new Map();
+    this.deathLimbo = new Map();
+    this.deathDrops = new Map();
+    this.deathDropSeq = 0;
     this.mobSeq = 0;
     this.mobMeta = {};
     this.instances = {};
+    this.gateExpiresAt = Number(admittedGate.expiresAt) || 0;
+    this.breached = false;
     this.initPersistenceState();
     this.initDungeonState();
     this.initDragonState();
@@ -60,7 +70,8 @@ class DungeonRoom extends GameRoom {
     this.initRecallState();
 
     // The single instance this room hosts, built from the gate options matchmaking carried in.
-    this.instance = this.createInstance(this.gateFromOptions(options));
+    this.instance = this.createInstance(this.gateFromOptions(admittedGate));
+    hostGate(this.instance.id);
 
     this.registerRaidHandlers();
     this.setSimulationInterval(dt => {
@@ -83,15 +94,17 @@ class DungeonRoom extends GameRoom {
   // Translate matchmaking options into the gate descriptor createInstance() (dungeon.mixin) wants.
   gateFromOptions(options = {}) {
     return {
-      id: options.gateId || ('dgn-' + this.roomId),
-      seed: (options.seed | 0) || 1,
+      id: options.id || options.gateId || ('dgn-' + this.roomId),
+      seed: (options.seed >>> 0) || 1,
       rank: options.rank | 0,
+      dungeonId: canonicalDungeonId(options.rank, options.seed, options.dungeonId),
       kind: options.kind || 'public',
       // gate world coords so gateEntryPayload's back-position (bx/by/bz) returns the hunter to
       // the overworld gate on exit; the client passes these from the gate it entered.
-      x: Number.isFinite(options.gateX) ? options.gateX : 0,
-      y: Number.isFinite(options.gateY) ? options.gateY : 0,
-      z: Number.isFinite(options.gateZ) ? options.gateZ : 0,
+      x: Number.isFinite(options.x) ? options.x : (Number.isFinite(options.gateX) ? options.gateX : 0),
+      y: Number.isFinite(options.y) ? options.y : (Number.isFinite(options.gateY) ? options.gateY : 0),
+      z: Number.isFinite(options.z) ? options.z : (Number.isFinite(options.gateZ) ? options.gateZ : 0),
+      expiresAt: Number(options.expiresAt) || 0,
       shardPlus: options.shardPlus | 0,
       shardName: options.shardName || '',
       shardMods: options.shardMods || '',
@@ -119,9 +132,11 @@ class DungeonRoom extends GameRoom {
     this.onMessage('spendStat', (c, m) => this.handleSpendStat(c, m));
     this.onMessage('equipArmor', (c, m) => this.handleEquipArmor(c, m));
     this.onMessage('useFood', (c, m) => this.handleUseFood(c, m));
+    this.onMessage('quitDungeonSpirit', c => this.handleQuitDungeonSpirit(c));
     this.onMessage('prospect', c => this.handleProspect(c));
     this.onMessage('useRepairKit', (c, m) => this.handleUseRepairKit(c, m));
     this.onMessage('dedit', (c, m) => this.handleDungeonEdit(c, m));   // mining inside the dungeon
+    if (process.env.BLOCKCRAFT_E2E === '1') this.onMessage('e2eJourney', (c, m) => this.handleE2EJourney(c, m));
   }
 
   async onJoin(client, options, auth) {
@@ -198,11 +213,15 @@ class DungeonRoom extends GameRoom {
     // duration of the store write.
     const token = this.tokens.get(client.sessionId);
     if (this.instance) this.instance.removePlayer(client.sessionId);
+    if (this.instance && this.instance.playerCount > 0) this.sendDungeonStatus(this.instance.id);
     this.state.players.delete(client.sessionId);
     this.playerHp.delete(client.sessionId);
     this.playerHunger.delete(client.sessionId);
+    if (this.fallState) this.fallState.delete(client.sessionId);
+    if (this.biomeStatuses) this.biomeStatuses.delete(client.sessionId);
     if(typeof this.clearRecallState==='function')this.clearRecallState(client.sessionId);
     this.clearFamiliarRuntime(client.sessionId);
+    if (this.moveRejects) this.moveRejects.delete(client.sessionId);
     if (this.weaponMomentum) this.weaponMomentum.delete(client.sessionId);
     this.tokens.delete(client.sessionId);
     if (!token) return;
@@ -246,8 +265,67 @@ class DungeonRoom extends GameRoom {
     // passed in as gateId (== this.instance.id); the overworld room drains this on
     // its next gate-lifecycle tick. Public gates stay walk-up-joinable for the
     // rest of the party while this room lives — only its disposal retires them.
-    if (this.instance) consumeGate(this.instance.id);
+    if (this.instance) {
+      unhostGate(this.instance.id);
+      if (!this.breached) consumeGate(this.instance.id);
+    }
     if (this.instance) { try { this.instance.dispose(); } catch (_) {} }
+  }
+
+  breachToOverworld(now = Date.now()) {
+    const inst = this.instance;
+    if (!inst || inst.cleared || this.breached) return false;
+    this.breached = true;
+    const mobs = [];
+    this.state.mobs.forEach((m, id) => {
+      if (!m || m.dgn !== inst.id || m.hp <= 0) return;
+      const meta = this.mobMeta[id] || {};
+      mobs.push({
+        id: String(id),
+        kind: m.kind || 'zombie',
+        hp: Math.max(0, m.hp || 0),
+        maxHp: Math.max(1, m.maxHp || m.hp || 1),
+        state: m.state || '',
+        yaw: m.yaw || 0,
+        variant: m.variant || meta.variant || '',
+        bossStyle: m.bossStyle || meta.bossStyle || inst.bossStyle || '',
+        displayName: m.displayName || '',
+        elite: !!m.elite,
+      });
+    });
+    const originalTokens = [];
+    for (const sid of [...inst.players]) {
+      const token = this.tokens && this.tokens.get(sid);
+      if (token) originalTokens.push(token);
+    }
+    recordGateBreach({
+      gateId: inst.id,
+      x: inst.gateX, y: inst.gateY, z: inst.gateZ,
+      rank: inst.rank | 0,
+      kind: inst.kind || 'public',
+      dungeonId: inst.dungeonId || '',
+      bossName: inst.definition && inst.definition.boss || 'Gate Boss',
+      bossStyle: inst.bossStyle || '',
+      originalTokens,
+      mobs,
+      at: now,
+    });
+    const result = this.dungeonResultPayload(inst, 'failed', 'breach');
+    const tx = W.TOWN.TC + .5, ty = W.TOWN.G + 2, tz = W.TOWN.TC + 14.5;
+    for (const sid of [...inst.players]) {
+      const p = this.state.players.get(sid);
+      if (p) { p.x = tx; p.y = ty; p.z = tz; p.dgn = ''; p.dim = 'overworld'; }
+      const token = this.tokens && this.tokens.get(sid);
+      const prof = token && this.profiles && this.profiles.get(token);
+      if (prof) {
+        prof.pos = [tx, ty, tz];
+        prof.dungeonRecovery = null;
+        if (this.dirtyPlayers) this.dirtyPlayers.add(token);
+      }
+      const client = this.clients.find(c => c.sessionId === sid);
+      if (client) client.send('dungeonFailed', { reason: 'breach', result, x: tx, y: ty, z: tz });
+    }
+    return true;
   }
 
   // Single-instance tick: the Phase-1 dispatch with no overworld passes and no gate lifecycle.
@@ -256,6 +334,10 @@ class DungeonRoom extends GameRoom {
   update(dt) {
     const inst = this.instance;
     if (!inst) return;
+    if (this.gateExpiresAt && this.gateExpiresAt <= Date.now() && !inst.cleared) {
+      this.breachToOverworld();
+      return;
+    }
     const players = [];
     this.state.players.forEach((p, sid) => { if (p.dgn === inst.id) players.push({ p, sid }); });
     const mobIds = [];

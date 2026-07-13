@@ -69,12 +69,70 @@ baseline. Definitions, level titles, and perk rules live in
 (`jobXpByJob`) so switching professions never loses progress. Profession level rises on
 `30 × lvl^1.45` (cap 99); perk strength steps at levels **2 / 5 / 10 / 20**.
 
+The early **Progression Director** deliberately introduces systems in order through
+`progressionFocus`: finish Mara's First Hands → Road Ready → the first E-rank Gate →
+craft a station → claim land → expand to a 3-tile connected base → place storage, light,
+and a station inside claimed land → take the first repeatable contract → climb E-rank toward
+D-rank promotion prep. Each step advances from
+server-validated actions, so doing work early catches the objective up instead of forcing
+duplicate chores. The first E-rank Gate clear pays a one-time **First Dungeon Cleared**
+bundle of planks, cobble, and torches, unlocks **Feather Step** before the base-building
+climb phase, then opens a reward panel pointing directly into the first station objective.
+The HUD renders this as a compact path card with the current
+step, the next step, and the reason it matters; the server also grants one-time milestone
+supplies for the first station, first claim, and first contract. The first land claim also
+opens a **First Claim Secured** panel and briefly spotlights the claim outline so the player
+sees the protected base tile they just bought.
+
+The first **D-rank preparation** step is an advisory checklist, not a hard gate. The HUD,
+compass, Gate prompt, and Gate Lobby all surface the next missing preparation item with a
+short acquisition hint: iron-tier weapon, equipped iron armor, three food, a healthy
+utility tool, and a D-rank key. If a hunter on the first-D objective joins the D-rank Gate
+underprepared, the server sends a one-time warning before allowing them to ready up.
+
 Each profession has signature server-validated perks: **miners** run prospect surveys
 (ore sense → deep prospecting, geode finds, durability saves), **farmers** craft compost
 fertilizer and cultivate windseed, **cooks** serve timed meal buffs (might/gathering),
 **blacksmiths** reforge and eventually Masterwork gear, and **monks** channel auras
 (stone skin, regeneration, speed). Job contracts come as refreshing **offer boards** with
-quick/balanced/demanding difficulties.
+quick/balanced/demanding difficulties. Each offer now carries a visible identity line:
+its focus, party relevance, and reward hook. This lets Miner, Farmer, Cook, Blacksmith,
+Monk, and Adventurer work point at different play rhythms instead of only showing
+`do N actions for XP`; the board also previews the next profession milestone so contracts
+feel connected to useful unlocks. Milestone unlocks carry concrete reward labels through
+server result payloads and the local/offline path; the client shows a rare reward-feed
+moment plus a recap line like **Reward: Prospect survey action** when the level is crossed.
+Direct activity XP also reports every crossed milestone, so mining, farming, cooking,
+smithing, and meditation cannot skip intermediate unlock messaging. Balance tests keep
+the first play-changing Lv5 unlock within seven average contracts for every profession,
+and material-dependent milestones grant a tiny one-time starter kit: for example
+Windseeds at Farmer Lv5, Compost at Farmer Lv10, sample meals for Cook milestones, and
+starter iron for Blacksmith Lv2.
+Profession moments are intentionally named at the point of use: Monk focus labels the
+active blessings and duration, Windseed planting explains the special crop, Compost says
+whether the crop advanced or ripened, and Golden Wheat harvests get a distinct rare-crop
+message.
+Profession UI also includes a compact **Right now** affordance line per job, derived from
+current level, equipped profession, selected tool, and relevant inventory. The Jobs board
+and profession service screens use this to point at immediate actions such as surveying,
+planting Windseeds, crafting Golden Broth, reforging selected gear, or refreshing focus.
+The same screens route common actions directly: Farmer can select hotbar Compost,
+Windseeds, or seeds; Cook and cook contracts open the Food recipe tab; smith contracts and
+Blacksmith services open tool recipes; and the forge can select the first unreforged
+hotbar sword, axe, or pick.
+The recipe book reinforces that routing by labeling profession recipes with their job and
+level, showing whether they are locked by profession/level or missing ingredients, and
+calling out unlocked profession recipes that are ready to stage.
+Crafting outcomes close the loop: Cook and Blacksmith crafts recap the item made, the
+profession XP value, the practical effect such as gate food or repair-kit prep, and any
+matching contract progress. Reforge results also state the modifier/masterwork outcome,
+material cost, Blacksmith XP, and contract update relevance.
+Contract claims use the same reward language: completed title, gold, Hunter XP,
+profession XP, profession level movement, milestone starter items, and a next-action hint
+based on the profession or first-contract graduation state.
+The Jobs board, contract-ready notices, and claim recaps share that next-action hint so
+profession guidance stays consistent. Craft-driven contract completion suppresses the
+extra standalone "ready" toast because the craft recap already carries that progress beat.
 
 Because some XP sources never reach the server, job XP is **rate-capped on save**
 (`clampJobXpGain` in [`store.js`](../server/store.js)) — a forged save can't claim an
@@ -140,6 +198,16 @@ Town vendors trade for **gold** (all server-validated in
 - **Tavern** (`TAVERN_BUY` / `TAVERN_SELL`): potions (ale/stew/mana/swift/stone) and food.
 - **Road merchant / guild decor** (`ROAD_MERCHANT_BUY`, `GUILD_DECOR_BUY`): biome
   collectibles, repair kits, and furnishing blocks.
+
+The economy balance target is that the opening quest can still fund a first land claim,
+while repeated land, tavern, and profession loops have real pressure. Tavern buy/sell
+spreads prevent no-loss food flips, and profession contracts lean toward job XP plus
+modest gold instead of replacing dungeon clears as the best cash source.
+
+Server gold movement is also recorded in a bounded in-memory telemetry ledger by
+category/source (`quest_faucet`, `contract_faucet`, `loot_faucet`, `shop_sink`,
+`land_sink`, `blacksmith_sink`, etc.). It is operational balance data, not player save
+data, and lets balance tests/admin tools summarize faucets, sinks, and net flow.
 
 **Gate keys** open private dungeons without waiting for a public gate. Solo keys
 (`SOLO_KEYS`, prices `45→800`) and team keys (`TEAM_KEYS`, prices `70→1100`) come in five
@@ -237,8 +305,29 @@ bands (`SHADE_RANK_LVLS`, `famTier`):
 
 - **Land claims** ([`economy`](../server/rooms/economy.mixin.js) /
   [`GameRoom`](../server/rooms/GameRoom.js)): buy protection over a tile; price rises near
-  town (`LAND_BASE_PRICE`, `LAND_NEAR_TOWN_BONUS`, fading with distance). A radius around
-  town is free-to-build (`LAND_FREE_RADIUS`); claimed land rejects edits by others.
+  town (`LAND_BASE_PRICE`, `LAND_NEAR_TOWN_BONUS`, fading with distance). Adjacent expansion
+  receives a small discount so protected bases naturally grow as connected areas. A radius around
+  town is free-to-build (`LAND_FREE_RADIUS`). The early base-setup goal only completes when
+  storage, light, and a station are placed inside editable claimed land. Unclaimed wilderness is editable by anyone;
+  claimed land rejects edits by untrusted players while still allowing the owner and
+  permitted tokens. Claim owners manage trusted hunters from the claim panel, which labels the
+  current tile as Owner, Trusted, Visitor, Wilderness, or Reclaimable so blocked building has an
+  obvious social cause. Grants can target online players, trusted players receive a notice, and
+  removals persist by account token. Claim activity is refreshed when
+  the owner or a trusted hunter visits; inactive claims become **Dormant** after
+  `LAND_DORMANT_DAYS` real days, then **Abandoned** and reclaimable after
+  `LAND_ABANDONED_DAYS` real days. The land manager shows active/dormant/abandoned
+  countdowns, dormant claims pulse amber in claim views, and visiting dormant land sends
+  a refresh notice before protection loss can feel surprising. Owning a connected
+  3-tile area upgrades the claim panel into a **Homestead** manager with small work
+  orders: the server only accepts them while the owner stands inside that connected
+  land, consumes supplies from personal chests physically placed inside the Homestead,
+  and pays modest gold plus profession XP. Owners can mark a personal Homestead chest as
+  **Homestead Supply**; trusted hunters can deposit into those chests but only the owner can
+  withdraw, and Work Orders consume Supply Chests before other eligible Homestead storage.
+  Trusted hunters standing in the Homestead can also contribute from their own accessible
+  Homestead chests; the owner keeps the claim reward, while helpers receive small immediate
+  profession-assist XP and appear on the order's contributor list.
 - **Teams** ([`teams.mixin.js`](../server/rooms/teams.mixin.js), `TeamManager`): persistent
   parties (create/join/invite/kick/transfer, privacy + LFG flags). Team membership drives
   team-gate entry and shared discoveries.
@@ -297,6 +386,12 @@ shrine, or visit the road merchant. Contracts are validated and credited server-
 persist only for the player's active job. Road-flavored contracts (`road_*`) additionally
 build **Road Warden reputation** with milestones at 3 (Trail Sense + iron in the road
 merchant's stock), 6 (cooked provisions + permanent price cuts), and 9 (maximum discount).
+Trail Sense can also unlock from the Trailblazer exploration milestone after 10 mapped
+discoveries, so road scouts and cartographers both get an active tracking utility.
+Utility feedback is deliberately in-world as well as textual: Trail Sense paints a short-lived
+track marker and activity card, Party Compass adds distance-bearing HUD states plus urgent
+markers for downed/spirit allies, and Feather Step flashes at the landing point when it absorbs
+or softens a hard fall.
 
 ---
 

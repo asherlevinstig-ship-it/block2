@@ -68,18 +68,63 @@ export function createOnboardingUI(deps) {
     rewardWin, rewardPanel, rankUpWin, rankUpPanel, I, ITEMS, HUB,
     escHTML, rewardLineHTML, countItem, hasAnyArmorItem, toolMaxDur, refreshPlayUi,
     getFocus, getInv, releasePointerLock, restoreLock, clearRewardTimer, sendNet,
+    baseSetupStatus,
   } = deps;
 
   let firstPromotionSeen = false, firstPromotionShown = false, trainingCompleteShown = false;
 
   function firstPromotionObjective() {
     const focus = getFocus();
+    if (focus === 'first_road_ready') return {
+      label: 'Progression Path', text: "Take Mara's Road Ready quest, use the starter sword, and reach Level 3", target: HUB.mara,
+      path: { now: 'Road Ready', next: 'Then clear your first E-rank Gate', why: 'The first dungeon should teach combat before the base loop opens up', step: 2, total: 6 },
+    };
+    if (focus === 'first_e_gate') return {
+      label: 'First Dungeon', text: "Accept Mara's First Gate quest, find the E-rank Gate, and defeat its boss", target: HUB.mara,
+      path: { now: 'Clear an E-rank Gate', next: 'Then build your first station', why: 'This is the first dungeon milestone, not D-rank prep', step: 3, total: 6 },
+    };
+    if (focus === 'first_craft_station') return {
+      label: 'Progression Path', text: 'Craft a Crafting Table or Furnace so your base has a real work station', target: HUB.smith,
+      path: { now: 'Craft a station', next: 'Then claim land', why: 'Your first dungeon should pay forward into a safer home base', step: 4, total: 6 },
+    };
+    if (focus === 'first_land_claim') return {
+      label: 'Progression Path', text: 'Leave town, press L, and buy your first land claim for a protected base', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
+      path: { now: 'Claim your first land', next: 'Then expand it to 3 connected tiles', why: 'Protect your home before repeatable field work', step: 5, total: 7 },
+    };
+    if (focus === 'first_claim_expand') return {
+      label: 'Progression Path', text: 'Expand your protected base to 3 connected land claims. Adjacent expansion gets a discount.', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
+      path: { now: 'Expand to 3 connected claims', next: 'Then establish your base', why: 'A real base needs enough protected room for storage, light, and a station', step: 6, total: 8 },
+    };
+    if (focus === 'first_base_setup') {
+      const base = typeof baseSetupStatus === 'function' ? baseSetupStatus() : null;
+      const checks = base && Array.isArray(base.checks) ? base.checks : [
+        { id: 'storage', label: 'Storage', done: false },
+        { id: 'light', label: 'Light', done: false },
+        { id: 'station', label: 'Station', done: false },
+      ];
+      const missing = checks.filter(c => !c.done);
+      const next = missing[0]
+        ? { ...missing[0], hint: 'These only count inside editable claimed land.' }
+        : { id: 'contract', hint: 'Base established. Take your first profession contract from the Job Board.' };
+      return {
+        label: 'Progression Path',
+        text: base && base.ready ? 'Base established - visit the Job Board and take your first profession contract' : 'Inside claimed land, place a chest, a torch or lantern, and a Crafting Table or Furnace',
+        target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
+        checklist: checks,
+        prep: { next },
+        path: { now: 'Place storage, light, and a station', next: 'Then take a contract', why: 'Your first base should become a usable home before repeatable field work', step: 7, total: 8 },
+      };
+    }
+    if (focus === 'first_profession_contract') return {
+      label: 'Progression Path', text: 'Visit the Job Board and take your first repeatable contract', target: HUB.jobs,
+      path: { now: 'Take a contract', next: 'Then climb E-rank toward promotion', why: 'Contracts become the repeatable path between Gates', step: 8, total: 8 },
+    };
     if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through contracts, quests, Gates, events, and hostile threats. D-Rank begins at Level 11.', target: HUB.jobs };
     if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract', target: HUB.jobs };
     if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board", target: HUB.jobs };
     if (focus === 'first_d_gate') {
       const prep = dRankPrepStatus();
-      return { label: 'D-Rank Preparation', text: prep.next.text, checklist: prep.checks };
+      return { label: 'D-Rank Preparation', text: prep.next.text, checklist: prep.checks, prep };
     }
     if (focus === 'next_adventurer_contract') return { label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract', target: HUB.jobs };
     return null;
@@ -102,25 +147,37 @@ export function createOnboardingUI(deps) {
     });
     const key = countItem(I.SOLO_KEY_D) > 0 || countItem(I.TEAM_KEY_D) > 0;
     const checks = [
-      { label: 'Iron-tier weapon', done: weapon },
-      { label: 'Iron armor', done: armor },
-      { label: 'Food x3', done: food },
-      { label: 'Healthy tool', done: tool },
-      { label: 'D-rank key', done: key },
+      { id: 'weapon', label: 'Iron-tier weapon', done: weapon, hint: 'Craft or carry an iron sword or axe at Tobin\'s smithy.', target: HUB.smith },
+      { id: 'armor', label: 'Iron armor', done: armor, hint: 'Craft Iron Armor with 8 ingots, then equip it.', target: HUB.smith },
+      { id: 'food', label: 'Food x3', done: food, hint: 'Buy food from Greta or cook meals for the road.', target: HUB.tavern },
+      { id: 'tool', label: 'Healthy tool', done: tool, hint: 'Use a Repair Kit or craft a fresh utility tool.', target: HUB.smith },
+      { id: 'key', label: 'D-rank key', done: key, hint: 'Take Adventurer work or use a D-rank key from your rewards.', target: HUB.jobs },
     ];
     let next;
-    if (!weapon) next = { id: 'weapon', text: 'Equip or carry an iron-tier weapon', target: HUB.smith };
-    else if (!armor) next = { id: 'armor', text: "Craft Iron Armor with 8 ingots near Tobin's smithy", target: HUB.smith };
-    else if (!food) next = { id: 'food', text: 'Visit Greta at the tavern and stock 3 food', target: HUB.tavern };
-    else if (!tool) next = { id: 'tool', text: 'Use your Repair Kit on a worn tool', target: HUB.smith };
-    else if (!key) next = { id: 'key', text: 'Secure a D-rank Gate key', target: HUB.jobs };
+    if (!weapon) next = { ...checks[0], text: 'Equip or carry an iron-tier weapon' };
+    else if (!armor) next = { ...checks[1], text: "Craft Iron Armor with 8 ingots near Tobin's smithy" };
+    else if (!food) next = { ...checks[2], text: 'Visit Greta at the tavern and stock 3 food' };
+    else if (!tool) next = { ...checks[3], text: 'Use your Repair Kit on a worn tool' };
+    else if (!key) next = { ...checks[4], text: 'Secure a D-rank Gate key' };
     else next = { id: 'gate', text: 'Ready - find and clear a D-rank Gate', target: null };
-    return { weapon, armor, food, tool, key, checks, next, ready: checks.every(c => c.done) };
+    return { weapon, armor, food, tool, key, checks, missing: checks.filter(c => !c.done), next, ready: checks.every(c => c.done) };
   }
 
   function objectiveHudHTML(obj) {
     let html = '<div class="qt">' + escHTML(obj.label || 'Current Quest') + '</div><div class="qv">' + escHTML(obj.text) + '</div>';
-    if (Array.isArray(obj.checklist)) html += '<div class="prepchecklist">' + obj.checklist.map(c => '<div class="' + (c.done ? 'done' : 'todo') + '"><b>' + (c.done ? '&#10003;' : '&#9675;') + '</b>' + escHTML(c.label) + '</div>').join('') + '</div>';
+    if (obj.path) {
+      html += '<div class="pathstrip">' +
+        '<div class="pathbar"><i style="width:' + Math.max(0, Math.min(100, ((obj.path.step || 1) / (obj.path.total || 1)) * 100)) + '%"></i></div>' +
+        '<div class="pathrow active"><b>Now</b><span>' + escHTML(obj.path.now || obj.text) + '</span></div>' +
+        '<div class="pathrow"><b>Next</b><span>' + escHTML(obj.path.next || 'Keep going') + '</span></div>' +
+        '<div class="pathwhy">' + escHTML(obj.path.why || '') + '</div>' +
+      '</div>';
+    }
+    if (Array.isArray(obj.checklist)) {
+      html += '<div class="prepchecklist">' + obj.checklist.map(c => '<div class="' + (c.done ? 'done' : 'todo') + '"><b>' + (c.done ? '&#10003;' : '&#9675;') + '</b><span>' + escHTML(c.label) + '</span></div>').join('') + '</div>';
+      if (obj.prep && obj.prep.next && obj.prep.next.hint) html += '<div class="prephint"><b>How:</b> ' + escHTML(obj.prep.next.hint) + '</div>';
+    }
+    if (obj.actionHTML) html += '<div class="qactions">' + obj.actionHTML + '</div>';
     return html;
   }
 
@@ -180,7 +237,8 @@ export function createOnboardingUI(deps) {
 
   function showFirstPromotion() {
     const focus = getFocus();
-    if (!rewardWin || !rewardPanel || !focus || firstPromotionSeen || firstPromotionShown) return false;
+    if (!['first_promotion_job','first_promotion_contract','first_d_gate','next_adventurer_contract'].includes(focus)) return false;
+    if (!rewardWin || !rewardPanel || firstPromotionSeen || firstPromotionShown) return false;
     firstPromotionShown = true;
     const hasKey = countItem(I.SOLO_KEY_D) > 0;
     const objective = firstPromotionObjective();

@@ -31,6 +31,9 @@ export function clampJobContract(contract, knownJobs) {
     difficultyLabel: String(contract.difficultyLabel || '').slice(0, 20),
     estimate: String(contract.estimate || '').slice(0, 40),
     location: String(contract.location || '').slice(0, 64),
+    focus: String(contract.focus || '').slice(0, 48),
+    reward: String(contract.reward || '').slice(0, 80),
+    party: String(contract.party || '').slice(0, 24),
     offeredAt: Math.max(0, Number(contract.offeredAt) || 0),
     expiresAt: Math.max(0, Number(contract.expiresAt) || 0),
   };
