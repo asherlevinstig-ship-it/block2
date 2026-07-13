@@ -32,6 +32,9 @@ function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gat
         outboundMessagesPerSecond: 7,
         outboundBytesPerSecond: type === 'dungeon' ? 2000 : 1000,
         outboundBytesPerSecondByKind: type === 'dungeon' ? { statePatch: 1500, message: 500 } : { statePatch: 750, message: 250 },
+        outboundMessagesPerSecondByType: type === 'dungeon' ? { dungeonPartyStatus: 2, chat: 1 } : { shard: 1, chat: 1 },
+        outboundMessageBytesByType: type === 'dungeon' ? { dungeonPartyStatus: 1200, dungeonStatus: 800 } : { shard: 400, chat: 600 },
+        outboundMessageBytesPerSecondByType: type === 'dungeon' ? { dungeonPartyStatus: 300, dungeonStatus: 200 } : { shard: 100, chat: 150 },
         outboundBytesPerClientPerSecond: type === 'dungeon' ? 250 : 125,
         outboundPeakClientBytesPerSecond: type === 'dungeon' ? 400 : 175,
         disconnects: type === 'dungeon' ? 1 : 0,
@@ -90,6 +93,9 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.outboundBytesPerSecond, 4000);
   assert.deepEqual(snapshot.totals.outboundBytesByKind, { statePatch: 12000, message: 4000 });
   assert.deepEqual(snapshot.totals.outboundBytesPerSecondByKind, { statePatch: 3000, message: 1000 });
+  assert.deepEqual(snapshot.totals.outboundMessagesPerSecondByType, { shard: 2, chat: 3, dungeonPartyStatus: 2 });
+  assert.deepEqual(snapshot.totals.outboundMessageBytesByType, { shard: 800, chat: 1200, dungeonPartyStatus: 1200, dungeonStatus: 800 });
+  assert.deepEqual(snapshot.totals.outboundMessageBytesPerSecondByType, { shard: 200, chat: 300, dungeonPartyStatus: 300, dungeonStatus: 200 });
   assert.equal(snapshot.totals.outboundBytesPerClientPerSecond, 181.82);
   assert.equal(snapshot.totals.outboundPeakClientBytesPerSecond, 400);
   assert.equal(snapshot.totals.disconnects, 1);
@@ -104,8 +110,8 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.dungeonFxSent, 12);
   assert.equal(snapshot.totals.dungeonFxSkipped, 20);
   assert.equal(snapshot.totals.persistenceFailures, 1);
-  assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond, s.outboundBytesPerSecond, s.outboundBytesPerSecondByKind.statePatch]), [['main', 8, 5, 1000, 750], ['shard-2', 6, 5, 1000, 750]]);
-  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.visiblePlayerLinks, d.hiddenPlayerLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond, d.outboundBytesPerSecondByKind.statePatch]), [['gate-a', 8, 8, 1, 40, 120, 36, 28, 20, 2000, 1500]]);
+  assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond, s.outboundBytesPerSecond, s.outboundBytesPerSecondByKind.statePatch, s.outboundMessageBytesPerSecondByType.shard]), [['main', 8, 5, 1000, 750, 100], ['shard-2', 6, 5, 1000, 750, 100]]);
+  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.visiblePlayerLinks, d.hiddenPlayerLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond, d.outboundBytesPerSecondByKind.statePatch, d.outboundMessageBytesPerSecondByType.dungeonPartyStatus]), [['gate-a', 8, 8, 1, 40, 120, 36, 28, 20, 2000, 1500, 300]]);
 
   unregisterRoom(main);
   unregisterRoom(shard2);

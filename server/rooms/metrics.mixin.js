@@ -20,13 +20,16 @@ class MetricsMixin {
       inboundByType: {},
       outboundByType: {},
       outboundEstimatedBytesByType: {},
+      outboundMessageBytesByType: {},
       outboundBytesByKind: {},
       windowStartedAt: Date.now(),
       windowInbound: 0,
       windowOutbound: 0,
+      windowOutboundByType: {},
       windowOutboundBytes: 0,
       windowOutboundBytesByClient: {},
       windowOutboundBytesByKind: {},
+      windowOutboundMessageBytesByType: {},
       disconnects: 0,
       unexpectedDisconnects: 0,
     };
@@ -44,9 +47,11 @@ class MetricsMixin {
     m.windowStartedAt = now;
     m.windowInbound = 0;
     m.windowOutbound = 0;
+    m.windowOutboundByType = {};
     m.windowOutboundBytes = 0;
     m.windowOutboundBytesByClient = {};
     m.windowOutboundBytesByKind = {};
+    m.windowOutboundMessageBytesByType = {};
   }
 
   recordInboundMessage(type) {
@@ -102,7 +107,7 @@ class MetricsMixin {
     }
   }
 
-  recordOutboundMessage(type, estimatedBytes = 0, sessionId = '') {
+  recordOutboundMessage(type, estimatedBytes = 0, sessionId = '', countEstimatedBytesInTotals = true) {
     const m = this.messageMetrics || (this.messageMetrics = { outbound: 0, outboundByType: {}, windowStartedAt: Date.now(), windowOutbound: 0 });
     const key = String(type || 'unknown');
     const now = Date.now();
@@ -111,10 +116,17 @@ class MetricsMixin {
     m.windowOutbound = (m.windowOutbound || 0) + 1;
     m.outboundByType = m.outboundByType || {};
     m.outboundByType[key] = (m.outboundByType[key] || 0) + 1;
+    m.windowOutboundByType = m.windowOutboundByType || {};
+    m.windowOutboundByType[key] = (m.windowOutboundByType[key] || 0) + 1;
     if (estimatedBytes > 0) {
-      const byType = m.outboundEstimatedBytesByType || (m.outboundEstimatedBytesByType = {});
-      byType[key] = (byType[key] || 0) + estimatedBytes;
-      this.recordOutboundBytes(estimatedBytes, sessionId, 'estimatedMessage');
+      const n = Math.max(0, Number(estimatedBytes) || 0);
+      const estimatedByType = m.outboundEstimatedBytesByType || (m.outboundEstimatedBytesByType = {});
+      const messageBytesByType = m.outboundMessageBytesByType || (m.outboundMessageBytesByType = {});
+      const windowMessageBytesByType = m.windowOutboundMessageBytesByType || (m.windowOutboundMessageBytesByType = {});
+      estimatedByType[key] = (estimatedByType[key] || 0) + n;
+      messageBytesByType[key] = (messageBytesByType[key] || 0) + n;
+      windowMessageBytesByType[key] = (windowMessageBytesByType[key] || 0) + n;
+      if (countEstimatedBytesInTotals) this.recordOutboundBytes(n, sessionId, 'estimatedMessage');
     }
   }
 
@@ -182,7 +194,7 @@ class MetricsMixin {
     const original = client.send.bind(client);
     client.send = (type, payload) => {
       const hasRawAccounting = typeof client.raw === 'function';
-      this.recordOutboundMessage(type, hasRawAccounting ? 0 : this.outboundPayloadBytes(type, payload), client.sessionId);
+      this.recordOutboundMessage(type, this.outboundPayloadBytes(type, payload), client.sessionId, !hasRawAccounting);
       if (/Reject$/.test(String(type))) {
         const m = this.rejectionMetrics || (this.rejectionMetrics = { total: 0, byType: {}, byReason: {} });
         const reason = payload && payload.reason || 'unspecified';
@@ -222,6 +234,14 @@ class MetricsMixin {
     for (const [kind, bytes] of Object.entries(mm.windowOutboundBytesByKind || {})) {
       outboundBytesPerSecondByKind[kind] = Math.round(((bytes || 0) / windowAgeSec) * 100) / 100;
     }
+    const outboundMessagesPerSecondByType = {};
+    for (const [type, count] of Object.entries(mm.windowOutboundByType || {})) {
+      outboundMessagesPerSecondByType[type] = Math.round(((count || 0) / windowAgeSec) * 100) / 100;
+    }
+    const outboundMessageBytesPerSecondByType = {};
+    for (const [type, bytes] of Object.entries(mm.windowOutboundMessageBytesByType || {})) {
+      outboundMessageBytesPerSecondByType[type] = Math.round(((bytes || 0) / windowAgeSec) * 100) / 100;
+    }
     return {
       players: this.state.players.size, connectedClients: clients, owPlayers, dgnPlayers,
       instances: Object.keys(this.instances || {}).length,
@@ -250,6 +270,9 @@ class MetricsMixin {
       inboundByType: { ...(mm.inboundByType || {}) },
       outboundByType: { ...(mm.outboundByType || {}) },
       outboundEstimatedBytesByType: { ...(mm.outboundEstimatedBytesByType || {}) },
+      outboundMessagesPerSecondByType,
+      outboundMessageBytesByType: { ...(mm.outboundMessageBytesByType || mm.outboundEstimatedBytesByType || {}) },
+      outboundMessageBytesPerSecondByType,
       disconnects: mm.disconnects || 0,
       unexpectedDisconnects: mm.unexpectedDisconnects || 0,
     };

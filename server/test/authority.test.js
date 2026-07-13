@@ -4546,6 +4546,7 @@ test('metrics track connected clients, rejected messages, and persistence latenc
   assert.ok(s.outboundBytesPerSecond > 0, 'reports outbound byte rate');
   assert.ok(s.outboundPeakClientBytesPerSecond > 0, 'reports peak per-client byte rate');
   assert.ok(s.outboundEstimatedBytesByType.shopReject > 0, 'keeps estimated byte attribution by message type');
+  assert.ok(s.outboundMessageBytesPerSecondByType.shopReject > 0, 'reports estimated message byte rate by type');
   assert.equal(s.persistenceOperations, 2);
   assert.equal(s.persistenceFailures, 1);
   assert.equal(s.tickOverBudget, 1);
@@ -4570,6 +4571,8 @@ test('metrics count raw encoded outbound bytes without inflating logical message
   assert.equal(s.outboundBytes, 6);
   assert.equal(s.outboundBytesByKind.statePatch, 6);
   assert.equal(s.outboundBytesPerSecondByKind.statePatch, 6);
+  assert.ok(s.outboundMessageBytesByType.notice > 0, 'keeps logical type byte attribution even when raw bytes are authoritative');
+  assert.ok(s.outboundMessageBytesPerSecondByType.notice > 0, 'reports logical type byte rate without inflating raw totals');
   assert.equal(s.outboundPeakClientBytesPerSecond, 6);
 });
 

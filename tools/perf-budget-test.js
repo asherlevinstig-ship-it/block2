@@ -29,6 +29,8 @@ function summarizeMetrics(snapshot) {
   if (!snapshot) return 'no metrics snapshot captured';
   const totals = snapshot.totals || {};
   const outboundByKind = totals.outboundBytesPerSecondByKind || {};
+  const outboundByType = totals.outboundMessageBytesPerSecondByType || {};
+  const dungeonStatusBytes = (outboundByType.dungeonStatus || 0) + (outboundByType.dungeonPartyStatus || 0);
   const eventLoop = snapshot.eventLoop || {};
   const memory = snapshot.memory || {};
   return 'rooms=' + (totals.rooms || 0)
@@ -38,6 +40,8 @@ function summarizeMetrics(snapshot) {
     + ' outboundKBps=' + Math.round(((totals.outboundBytesPerSecond || 0) / 1024) * 100) / 100
     + ' statePatchKBps=' + Math.round(((outboundByKind.statePatch || 0) / 1024) * 100) / 100
     + ' msgKBps=' + Math.round((((outboundByKind.message || 0) + (outboundByKind.messageBytes || 0) + (outboundByKind.estimatedMessage || 0)) / 1024) * 100) / 100
+    + ' dungeonStatusKBps=' + Math.round((dungeonStatusBytes / 1024) * 100) / 100
+    + ' dungeonPartyStatusKBps=' + Math.round(((outboundByType.dungeonPartyStatus || 0) / 1024) * 100) / 100
     + ' peakClientKBps=' + Math.round(((totals.outboundPeakClientBytesPerSecond || 0) / 1024) * 100) / 100
     + ' rejects=' + (totals.rejectedMessages || 0)
     + ' disconnects=' + (totals.disconnects || 0)
@@ -75,6 +79,7 @@ function mergePeakMetrics(loadSnapshot, interestSnapshot, bandwidthSnapshot) {
       dungeonFxSkipped: interestTotals.dungeonFxSkipped || 0,
       outboundBytesPerSecond: bandwidthTotals.outboundBytesPerSecond || loadTotals.outboundBytesPerSecond || 0,
       outboundBytesPerSecondByKind: bandwidthTotals.outboundBytesPerSecondByKind || loadTotals.outboundBytesPerSecondByKind || {},
+      outboundMessageBytesPerSecondByType: bandwidthTotals.outboundMessageBytesPerSecondByType || loadTotals.outboundMessageBytesPerSecondByType || {},
       outboundPeakClientBytesPerSecond: bandwidthTotals.outboundPeakClientBytesPerSecond || loadTotals.outboundPeakClientBytesPerSecond || 0,
     },
   };
@@ -116,8 +121,11 @@ function run(label, script, env, metricsPort, budgets) {
       if (!peakMetrics) return reject(new Error(label + ' did not expose performance metrics'));
       const kbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundBytesPerSecond) || 0) / 1024;
       const peakClientKbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundPeakClientBytesPerSecond) || 0) / 1024;
+      const peakTypeBytes = peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundMessageBytesPerSecondByType || {};
+      const dungeonStatusKbps = ((peakTypeBytes.dungeonStatus || 0) + (peakTypeBytes.dungeonPartyStatus || 0)) / 1024;
       if (kbps > budgets.maxOutboundKbps) return reject(new Error(label + ' outbound bandwidth ' + kbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundKbps + ' KB/s'));
       if (peakClientKbps > budgets.maxOutboundClientKbps) return reject(new Error(label + ' peak client bandwidth ' + peakClientKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundClientKbps + ' KB/s'));
+      if (dungeonStatusKbps > budgets.maxDungeonStatusKbps) return reject(new Error(label + ' dungeon status bandwidth ' + dungeonStatusKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxDungeonStatusKbps + ' KB/s'));
       if (budgets.minDungeonFxSkipped && (!merged.totals || (merged.totals.dungeonFxSkipped || 0) < budgets.minDungeonFxSkipped)) {
         return reject(new Error(label + ' skipped only ' + ((merged.totals && merged.totals.dungeonFxSkipped) || 0) + ' dungeon FX fanouts; expected at least ' + budgets.minDungeonFxSkipped));
       }
@@ -132,6 +140,7 @@ async function main() {
   const bandwidthBudgets = {
     maxOutboundKbps: Number(envNumber('PERF_MAX_OUTBOUND_KBPS', 2048)),
     maxOutboundClientKbps: Number(envNumber('PERF_MAX_OUTBOUND_CLIENT_KBPS', 96)),
+    maxDungeonStatusKbps: Number(envNumber('PERF_MAX_DUNGEON_STATUS_KBPS', 32)),
   };
   const shardPort = envNumber('PERF_SHARD_PORT', 2631);
   const dungeonPort = envNumber('PERF_DUNGEON_PORT', 2632);

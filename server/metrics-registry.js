@@ -24,7 +24,7 @@ function round2(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
-function addKindTotals(target, source) {
+function addMetricTotals(target, source) {
   for (const [kind, value] of Object.entries(source || {})) {
     target[kind] = round2((target[kind] || 0) + (Number(value) || 0));
   }
@@ -59,6 +59,9 @@ function summarizeRooms(rooms) {
     outboundBytesPerSecond: 0,
     outboundBytesByKind: {},
     outboundBytesPerSecondByKind: {},
+    outboundMessagesPerSecondByType: {},
+    outboundMessageBytesByType: {},
+    outboundMessageBytesPerSecondByType: {},
     outboundPeakClientBytesPerSecond: 0,
     disconnects: 0,
     unexpectedDisconnects: 0,
@@ -91,8 +94,11 @@ function summarizeRooms(rooms) {
     totals.outboundMessages += room.outboundMessages || 0;
     totals.outboundBytes += room.outboundBytes || 0;
     totals.outboundBytesPerSecond += room.outboundBytesPerSecond || 0;
-    addKindTotals(totals.outboundBytesByKind, room.outboundBytesByKind);
-    addKindTotals(totals.outboundBytesPerSecondByKind, room.outboundBytesPerSecondByKind);
+    addMetricTotals(totals.outboundBytesByKind, room.outboundBytesByKind);
+    addMetricTotals(totals.outboundBytesPerSecondByKind, room.outboundBytesPerSecondByKind);
+    addMetricTotals(totals.outboundMessagesPerSecondByType, room.outboundMessagesPerSecondByType);
+    addMetricTotals(totals.outboundMessageBytesByType, room.outboundMessageBytesByType);
+    addMetricTotals(totals.outboundMessageBytesPerSecondByType, room.outboundMessageBytesPerSecondByType);
     totals.outboundPeakClientBytesPerSecond = Math.max(totals.outboundPeakClientBytesPerSecond, room.outboundPeakClientBytesPerSecond || 0);
     totals.disconnects += room.disconnects || 0;
     totals.unexpectedDisconnects += room.unexpectedDisconnects || 0;
@@ -137,6 +143,8 @@ function groupByShard(rooms) {
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
     outboundBytesPerSecond: room.outboundBytesPerSecond || 0,
     outboundBytesPerSecondByKind: { ...(room.outboundBytesPerSecondByKind || {}) },
+    outboundMessagesPerSecondByType: { ...(room.outboundMessagesPerSecondByType || {}) },
+    outboundMessageBytesPerSecondByType: { ...(room.outboundMessageBytesPerSecondByType || {}) },
     outboundBytesPerClientPerSecond: room.outboundBytesPerClientPerSecond || 0,
     outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
@@ -160,6 +168,8 @@ function groupByDungeon(rooms) {
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
     outboundBytesPerSecond: room.outboundBytesPerSecond || 0,
     outboundBytesPerSecondByKind: { ...(room.outboundBytesPerSecondByKind || {}) },
+    outboundMessagesPerSecondByType: { ...(room.outboundMessagesPerSecondByType || {}) },
+    outboundMessageBytesPerSecondByType: { ...(room.outboundMessageBytesPerSecondByType || {}) },
     outboundBytesPerClientPerSecond: room.outboundBytesPerClientPerSecond || 0,
     outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
