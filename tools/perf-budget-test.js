@@ -156,6 +156,7 @@ async function main() {
   const soakPort = envNumber('PERF_SOAK_PORT', 2633);
   const spreadPort = envNumber('PERF_SPREAD_PORT', 2634);
   const fullShardPort = envNumber('PERF_FULL_SHARD_PORT', 2635);
+  const mobShardPort = envNumber('PERF_MOB_SHARD_PORT', 2636);
   const checks = [
     ['Shard load budget', 'tools/shard-load-test.js', {
       SHARD_LOAD_PORT: shardPort,
@@ -171,6 +172,16 @@ async function main() {
       SHARD_LOAD_MAX_P99_MS: envNumber('PERF_FULL_SHARD_MAX_P99_MS', maxP99Ms),
       SHARD_LOAD_MAX_HEAP_MB: envNumber('PERF_FULL_SHARD_MAX_HEAP_MB', maxHeapMb),
     }, Number(fullShardPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_FULL_SHARD_STATE_PATCH_KBPS', 33)) }],
+    ['Overworld mob pressure budget', 'tools/shard-load-test.js', {
+      SHARD_LOAD_PORT: mobShardPort,
+      SHARD_LOAD_CLIENTS: envNumber('PERF_MOB_SHARD_CLIENTS', 16),
+      SHARD_LOAD_CAP: envNumber('PERF_MOB_SHARD_CAP', 16),
+      SHARD_LOAD_DURATION_MS: envNumber('PERF_MOB_SHARD_DURATION_MS', 12_000),
+      SHARD_LOAD_MOB_PRESSURE: '1',
+      SHARD_LOAD_MIN_MOBS: envNumber('PERF_MOB_SHARD_MIN_MOBS', 8),
+      SHARD_LOAD_MAX_P99_MS: envNumber('PERF_MOB_SHARD_MAX_P99_MS', maxP99Ms),
+      SHARD_LOAD_MAX_HEAP_MB: envNumber('PERF_MOB_SHARD_MAX_HEAP_MB', maxHeapMb),
+    }, Number(mobShardPort), { maxStatePatchKbps: Number(envNumber('PERF_MAX_MOB_SHARD_STATE_PATCH_KBPS', 40)) }],
     ['Dungeon load budget', 'tools/dungeon-load-test.js', {
       DUNGEON_LOAD_PORT: dungeonPort,
       DUNGEON_LOAD_DURATION_MS: envNumber('PERF_DUNGEON_DURATION_MS', 8_000),

@@ -13,6 +13,8 @@ const CLIENTS = Number(process.env.SHARD_LOAD_CLIENTS || 10);
 const SHARD_CAP = Number(process.env.SHARD_LOAD_CAP || 4);
 const PORT = Number(process.env.SHARD_LOAD_PORT || 2618);
 const DURATION_MS = Number(process.env.SHARD_LOAD_DURATION_MS || 8_000);
+const MOB_PRESSURE = process.env.SHARD_LOAD_MOB_PRESSURE === '1';
+const MIN_MOBS = Number(process.env.SHARD_LOAD_MIN_MOBS || (MOB_PRESSURE ? 8 : 0));
 const STEP_MS = 100;
 const endpoint = 'ws://127.0.0.1:' + PORT;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -31,13 +33,34 @@ function shardId(index) {
   return index === 0 ? 'main' : 'shard-' + (index + 1);
 }
 
+function mobPressureAnchors() {
+  const landmarks = W.regionalLandmarkSpecs()
+    .filter(s => s && (s.type === 'bandit_camp' || s.type === 'hunter_camp') && s.x > 32 && s.z > 32 && s.x < W.WX - 32 && s.z < W.WX - 32);
+  const anchors = landmarks.length ? landmarks : [
+    { x: 250, z: 250 },
+    { x: 750, z: 250 },
+    { x: 250, z: 750 },
+    { x: 750, z: 750 },
+  ];
+  return anchors.slice(0, Math.max(1, Math.ceil(CLIENTS / Math.min(4, Math.max(1, SHARD_CAP)))));
+}
+
 async function seed(dataDir) {
   const auth = new AuthService(dataDir), store = new JsonStore(dataDir), cookies = [];
+  const anchors = MOB_PRESSURE ? mobPressureAnchors() : [];
   for (let i = 0; i < CLIENTS; i++) {
     const account = await auth.register('shard_load_user_' + i, 'load test password ' + i, 'Shard' + i);
     const sid = await auth.issueSession(account);
     cookies.push('bc_session=' + encodeURIComponent(sid));
-    const profile = defaultProfile(), x = 20 + (i % SHARD_CAP) * 5, z = 20 + Math.floor(i / SHARD_CAP) * 7;
+    const profile = defaultProfile();
+    let x = 20 + (i % SHARD_CAP) * 5, z = 20 + Math.floor(i / SHARD_CAP) * 7;
+    if (MOB_PRESSURE) {
+      const anchor = anchors[i % anchors.length];
+      const slot = Math.floor(i / anchors.length);
+      x = Math.max(24, Math.min(W.WX - 24, Math.round(anchor.x + (slot % 2 ? 10 : -10))));
+      z = Math.max(24, Math.min(W.WX - 24, Math.round(anchor.z + (slot > 1 ? 10 : -10))));
+      profile.S.lvl = 21;
+    }
     profile.name = 'Shard' + i;
     profile.pos = [x + 0.5, W.terrainHeight(x, z) + 2, z + 0.5];
     profile.inv[0] = { id: W.B.DIRT, count: 64 };
@@ -45,6 +68,38 @@ async function seed(dataDir) {
   }
   auth.stop();
   return cookies;
+}
+
+function stateMobs(room) {
+  return room && room.state && room.state.mobs && typeof room.state.mobs.values === 'function'
+    ? room.state.mobs
+    : null;
+}
+
+function firstMob(room, me) {
+  const mobs = stateMobs(room);
+  if (!mobs) return null;
+  let best = null, bd = Infinity;
+  mobs.forEach((mob, id) => {
+    if (!mob || mob.hp <= 0 || mob.dgn) return;
+    const d = me ? Math.hypot((mob.x || 0) - me.x, (mob.z || 0) - me.z) : 0;
+    if (d < bd) { bd = d; best = { id, mob }; }
+  });
+  return best;
+}
+
+function roomMobReports(rooms) {
+  return [...rooms.values()].map(entry => {
+    let mobs = 0, hostiles = 0, animals = 0;
+    const state = stateMobs(entry.rooms[0]);
+    if (state) state.forEach(mob => {
+      if (!mob || mob.dgn) return;
+      mobs++;
+      if (['rabbit', 'deer', 'boar', 'desert_fox', 'snow_hare'].includes(String(mob.kind || ''))) animals++;
+      else hostiles++;
+    });
+    return { shardId: entry.shardId, roomId: entry.rooms[0].roomId, mobs, hostiles, animals };
+  }).sort((a, b) => a.shardId.localeCompare(b.shardId));
 }
 
 function shutdown() {
@@ -122,7 +177,7 @@ async function main() {
       if (!me) continue;
       const angle = tick * 0.09 + i * Math.PI * 2 / CLIENTS;
       room.send('move', { x: me.x + Math.cos(angle) * 0.55, y: me.y, z: me.z + Math.sin(angle) * 0.55, yaw: angle }); messages++;
-      if (tick % 3 === 0) { room.send('attack', { id: 'missing-shard-load-target' }); messages++; }
+      if (tick % 3 === 0) { room.send('attack', { id: (MOB_PRESSURE && firstMob(room, me) || {}).id || 'missing-shard-load-target' }); messages++; }
       if (tick % 20 === 0) { room.send('save', { name: 'Shard' + i }); messages++; }
     }
     tick++;
@@ -135,7 +190,9 @@ async function main() {
   const report = {
     clients: sessions.length,
     shardCap: SHARD_CAP,
+    mobPressure: MOB_PRESSURE,
     shards: distribution,
+    mobReports: roomMobReports(rooms),
     durationMs: Math.round(elapsed),
     messages,
     messagesPerSecond: Math.round(messages / (elapsed / 1000)),
@@ -148,6 +205,7 @@ async function main() {
   };
   console.log('\nMulti-shard load test\n' + JSON.stringify(report, null, 2));
   assert.ok(report.messagesPerSecond >= CLIENTS * 10, 'throughput fell below expected movement rate');
+  if (MIN_MOBS > 0) assert.ok(report.mobReports.reduce((n, shard) => Math.max(n, shard.mobs), 0) >= MIN_MOBS, 'mob pressure did not create enough overworld mobs');
   assert.ok(report.eventLoopP99Ms < Number(process.env.SHARD_LOAD_MAX_P99_MS || 250), 'event-loop p99 exceeded threshold');
   assert.ok(report.heapGrowthMb < Number(process.env.SHARD_LOAD_MAX_HEAP_MB || 128), 'heap growth exceeded threshold');
 
