@@ -3582,13 +3582,19 @@ test('dungeon mob targeting ignores a nearer downed hunter', () => {
   assert.equal(selected, alive.sessionId);
 });
 
-test('GameRoom interest view keeps players visible and filters overworld mobs by distance', () => {
+test('GameRoom interest view filters overworld players and mobs by distance', () => {
   const room = makeRoom();
   const viewer = makeClient('ow-viewer');
-  const remote = makeClient('ow-remote');
+  const nearPlayer = makeClient('ow-near');
+  const farPlayer = makeClient('ow-far');
+  const teamPlayer = makeClient('ow-team');
   seedPlayer(room, viewer, { x: 0, y: 10, z: 0 });
-  seedPlayer(room, remote, { x: 220, y: 10, z: 0 });
-  room.clients.push(viewer, remote);
+  seedPlayer(room, nearPlayer, { x: 40, y: 10, z: 0 });
+  seedPlayer(room, farPlayer, { x: 220, y: 10, z: 0 });
+  seedPlayer(room, teamPlayer, { x: 150, y: 10, z: 0, team: 'T1' });
+  for (let i = 0; i < 13; i++) seedPlayer(room, makeClient('ow-extra-' + i), { x: 400 + i * 12, y: 10, z: 0 });
+  room.state.players.get(viewer.sessionId).team = 'T1';
+  room.clients.push(viewer, nearPlayer, farPlayer, teamPlayer);
   viewer.view = makeTrackingView();
   viewer.__visibleGameMobs = new Map();
   viewer.__visibleGamePlayers = new Map();
@@ -3600,22 +3606,35 @@ test('GameRoom interest view keeps players visible and filters overworld mobs by
 
   room.updateClientGameInterestView(viewer);
   assert.equal(viewer.view.added.has(room.state.players.get(viewer.sessionId)), true, 'self remains visible through the game view');
-  assert.equal(viewer.view.added.has(room.state.players.get(remote.sessionId)), true, 'remote players remain visible in this pass');
+  assert.equal(viewer.view.added.has(room.state.players.get(nearPlayer.sessionId)), true, 'near overworld players enter the client view');
+  assert.equal(viewer.view.added.has(room.state.players.get(farPlayer.sessionId)), false, 'far overworld players stay hidden from the client view');
+  assert.equal(viewer.view.added.has(room.state.players.get(teamPlayer.sessionId)), true, 'teammates use the wider overworld interest radius');
   assert.equal(viewer.view.added.has(near), true, 'near overworld mobs enter the client view');
   assert.equal(viewer.view.added.has(far), false, 'far overworld mobs stay hidden from the client view');
 
   let metrics = room.gameInterestSnapshot();
   assert.equal(metrics.visibleMobLinks, 1);
   assert.equal(metrics.overworldVisibleMobLinks, 1);
-  assert.equal(metrics.hiddenMobLinksAvoided, 3);
-  assert.equal(metrics.overworldHiddenMobLinksAvoided, 3);
+  assert.equal(metrics.hiddenMobLinksAvoided, 7);
+  assert.equal(metrics.overworldHiddenMobLinksAvoided, 7);
+  assert.equal(metrics.visiblePlayerLinks, 3);
+  assert.equal(metrics.overworldVisiblePlayerLinks, 3);
+  assert.equal(metrics.hiddenPlayerLinksAvoided, 65);
+  assert.equal(metrics.selfPlayerLinks, 1);
+  assert.equal(metrics.teamPlayerLinks, 1);
 
   const p = room.state.players.get(viewer.sessionId);
   p.x = 180;
   room.updateClientGameInterestView(viewer);
+  assert.equal(viewer.view.added.has(room.state.players.get(farPlayer.sessionId)), true, 'players enter the view when the viewer moves near them');
+  assert.equal(viewer.view.removed.has(room.state.players.get(nearPlayer.sessionId)), true, 'old players leave after the exit radius');
   assert.equal(viewer.view.added.has(far), true, 'overworld mobs enter the view when the player moves near them');
   assert.equal(viewer.view.removed.has(near), true, 'old overworld mobs leave after the exit radius');
 
+  const removedFarPlayer = room.state.players.get(farPlayer.sessionId);
+  room.state.players.delete(farPlayer.sessionId);
+  room.updateClientGameInterestView(viewer);
+  assert.equal(viewer.view.removed.has(removedFarPlayer), true, 'deleted overworld players are removed from the client view');
   room.state.mobs.delete('far');
   room.updateClientGameInterestView(viewer);
   assert.equal(viewer.view.removed.has(far), true, 'deleted overworld mobs are removed from the client view');

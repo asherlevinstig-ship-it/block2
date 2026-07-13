@@ -70,6 +70,11 @@ const DUNGEON_MOB_REPLICATION_Y_EPS = Math.max(0, Number(process.env.DUNGEON_MOB
 const DUNGEON_MOB_REPLICATION_YAW_EPS = Math.max(0, Number(process.env.DUNGEON_MOB_REPLICATION_YAW_EPS || 0.16));
 const OVERWORLD_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.OVERWORLD_MOB_INTEREST_RADIUS || 72));
 const OVERWORLD_MOB_INTEREST_EXIT_RADIUS = Math.max(OVERWORLD_MOB_INTEREST_RADIUS, Number(process.env.OVERWORLD_MOB_INTEREST_EXIT_RADIUS || 96));
+const OVERWORLD_PLAYER_INTEREST_RADIUS = Math.max(1, Number(process.env.OVERWORLD_PLAYER_INTEREST_RADIUS || 96));
+const OVERWORLD_PLAYER_INTEREST_EXIT_RADIUS = Math.max(OVERWORLD_PLAYER_INTEREST_RADIUS, Number(process.env.OVERWORLD_PLAYER_INTEREST_EXIT_RADIUS || 128));
+const OVERWORLD_TEAM_PLAYER_INTEREST_RADIUS = Math.max(OVERWORLD_PLAYER_INTEREST_RADIUS, Number(process.env.OVERWORLD_TEAM_PLAYER_INTEREST_RADIUS || 160));
+const OVERWORLD_TEAM_PLAYER_INTEREST_EXIT_RADIUS = Math.max(OVERWORLD_TEAM_PLAYER_INTEREST_RADIUS, Number(process.env.OVERWORLD_TEAM_PLAYER_INTEREST_EXIT_RADIUS || 208));
+const OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS = Math.max(2, Number(process.env.OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS || 17));
 const GAME_DUNGEON_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.GAME_DUNGEON_MOB_INTEREST_RADIUS || 28));
 const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST_RADIUS, Number(process.env.GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40));
 
@@ -638,22 +643,42 @@ class GameRoom extends Room {
     return Math.hypot((mob.x || 0) - (viewer.x || 0), (mob.z || 0) - (viewer.z || 0)) <= radius;
   }
 
+  shouldSeeGamePlayer(viewerSid, viewer, targetSid, target, alreadyVisible = false, filterOverworldPlayers = true) {
+    if (!viewer || !target) return false;
+    if (viewerSid === targetSid) return true;
+    const viewerDgn = viewer.dgn || '';
+    const targetDgn = target.dgn || '';
+    if (viewerDgn || targetDgn) return viewerDgn === targetDgn;
+    if (!filterOverworldPlayers) return true;
+    const sameTeam = !!(viewer.team && target.team && viewer.team === target.team);
+    const radius = sameTeam
+      ? (alreadyVisible ? OVERWORLD_TEAM_PLAYER_INTEREST_EXIT_RADIUS : OVERWORLD_TEAM_PLAYER_INTEREST_RADIUS)
+      : (alreadyVisible ? OVERWORLD_PLAYER_INTEREST_EXIT_RADIUS : OVERWORLD_PLAYER_INTEREST_RADIUS);
+    return Math.hypot((target.x || 0) - (viewer.x || 0), (target.z || 0) - (viewer.z || 0)) <= radius;
+  }
+
   updateClientGameInterestView(client) {
     if (!client || !client.view) return;
     const viewer = this.state.players.get(client.sessionId);
     const visibleMobs = client.__visibleGameMobs || (client.__visibleGameMobs = new Map());
     const visiblePlayers = client.__visibleGamePlayers || (client.__visibleGamePlayers = new Map());
+    let overworldPlayers = 0;
+    this.state.players.forEach(player => { if (player && !player.dgn) overworldPlayers++; });
+    const filterOverworldPlayers = overworldPlayers >= OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS;
 
     this.state.players.forEach((player, sid) => {
+      if (!this.shouldSeeGamePlayer(client.sessionId, viewer, sid, player, visiblePlayers.has(sid), filterOverworldPlayers)) return;
       if (!visiblePlayers.has(sid)) {
         client.view.add(player);
         visiblePlayers.set(sid, player);
+        this.recordGameInterestChange('add');
       }
     });
     for (const [sid, player] of [...visiblePlayers.entries()]) {
-      if (!this.state.players.has(sid)) {
+      if (!this.state.players.has(sid) || !this.shouldSeeGamePlayer(client.sessionId, viewer, sid, player, true, filterOverworldPlayers)) {
         client.view.remove(player);
         visiblePlayers.delete(sid);
+        this.recordGameInterestChange('remove');
       }
     }
 
@@ -682,22 +707,39 @@ class GameRoom extends Room {
     const clients = this.clients ? this.clients.length : 0;
     let visibleMobLinks = 0, overworldVisibleMobLinks = 0, dungeonVisibleMobLinks = 0;
     let overworldMobs = 0, dungeonMobs = 0;
+    let visiblePlayerLinks = 0, overworldVisiblePlayerLinks = 0, dungeonVisiblePlayerLinks = 0, selfPlayerLinks = 0, teamPlayerLinks = 0;
+    let overworldPlayers = 0, dungeonPlayers = 0;
     this.state.mobs.forEach(mob => {
       if (!mob || mob.hp <= 0) return;
       if (mob.dgn) dungeonMobs++;
       else overworldMobs++;
     });
+    this.state.players.forEach(player => {
+      if (!player) return;
+      if (player.dgn) dungeonPlayers++;
+      else overworldPlayers++;
+    });
     for (const client of this.clients || []) {
-      const visible = client.__visibleGameMobs;
-      if (!visible) continue;
-      visible.forEach(mob => {
+      const visibleMobs = client.__visibleGameMobs;
+      if (visibleMobs) visibleMobs.forEach(mob => {
         if (!mob || mob.hp <= 0) return;
         visibleMobLinks++;
         if (mob.dgn) dungeonVisibleMobLinks++;
         else overworldVisibleMobLinks++;
       });
+      const viewer = this.state.players.get(client.sessionId);
+      const visiblePlayers = client.__visibleGamePlayers;
+      if (visiblePlayers) visiblePlayers.forEach((player, sid) => {
+        if (!player) return;
+        visiblePlayerLinks++;
+        if (player.dgn) dungeonVisiblePlayerLinks++;
+        else overworldVisiblePlayerLinks++;
+        if (client.sessionId === sid) selfPlayerLinks++;
+        else if (viewer && viewer.team && player.team && viewer.team === player.team) teamPlayerLinks++;
+      });
     }
     const possibleMobLinks = (overworldMobs + dungeonMobs) * clients;
+    const possiblePlayerLinks = (overworldPlayers + dungeonPlayers) * clients;
     const metrics = this.gameInterestMetrics || {};
     const windowAgeSec = Math.max(1, (Date.now() - (metrics.windowStartedAt || Date.now())) / 1000);
     return {
@@ -709,6 +751,16 @@ class GameRoom extends Room {
       hiddenMobLinksAvoided: Math.max(0, possibleMobLinks - visibleMobLinks),
       overworldHiddenMobLinksAvoided: Math.max(0, overworldMobs * clients - overworldVisibleMobLinks),
       dungeonHiddenMobLinksAvoided: Math.max(0, dungeonMobs * clients - dungeonVisibleMobLinks),
+      visiblePlayerLinks,
+      overworldVisiblePlayerLinks,
+      dungeonVisiblePlayerLinks,
+      avgVisiblePlayersPerClient: clients ? Math.round(visiblePlayerLinks / clients * 100) / 100 : 0,
+      avgOverworldVisiblePlayersPerClient: clients ? Math.round(overworldVisiblePlayerLinks / clients * 100) / 100 : 0,
+      hiddenPlayerLinksAvoided: Math.max(0, possiblePlayerLinks - visiblePlayerLinks),
+      overworldHiddenPlayerLinksAvoided: Math.max(0, overworldPlayers * clients - overworldVisiblePlayerLinks),
+      dungeonHiddenPlayerLinksAvoided: Math.max(0, dungeonPlayers * clients - dungeonVisiblePlayerLinks),
+      selfPlayerLinks,
+      teamPlayerLinks,
       interestViewAdds: metrics.added || 0,
       interestViewRemoves: metrics.removed || 0,
       interestViewAddsPerSecond: Math.round(((metrics.windowAdded || 0) / windowAgeSec) * 100) / 100,
