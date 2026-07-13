@@ -36,22 +36,45 @@ function summarizeMetrics(snapshot) {
     + ' outbound=' + (totals.outboundMessages || 0)
     + ' rejects=' + (totals.rejectedMessages || 0)
     + ' disconnects=' + (totals.disconnects || 0)
+    + ' visibleMobLinks=' + (totals.visibleMobLinks || 0)
+    + ' hiddenMobLinksAvoided=' + (totals.hiddenMobLinksAvoided || 0)
+    + ' avgVisibleMobs=' + (totals.avgVisibleMobsPerDungeonClient || 0)
+    + ' viewChurn=' + ((totals.interestViewAdds || 0) + (totals.interestViewRemoves || 0))
     + ' loopP99Ms=' + (eventLoop.p99Ms || 0)
     + ' heapUsedMb=' + (memory.heapUsedMb || 0);
+}
+
+function mergePeakMetrics(loadSnapshot, interestSnapshot) {
+  if (!loadSnapshot || !interestSnapshot) return loadSnapshot || interestSnapshot;
+  return {
+    ...loadSnapshot,
+    totals: {
+      ...(loadSnapshot.totals || {}),
+      visibleMobLinks: interestSnapshot.totals && interestSnapshot.totals.visibleMobLinks || 0,
+      hiddenMobLinksAvoided: interestSnapshot.totals && interestSnapshot.totals.hiddenMobLinksAvoided || 0,
+      avgVisibleMobsPerDungeonClient: interestSnapshot.totals && interestSnapshot.totals.avgVisibleMobsPerDungeonClient || 0,
+      interestViewAdds: interestSnapshot.totals && interestSnapshot.totals.interestViewAdds || 0,
+      interestViewRemoves: interestSnapshot.totals && interestSnapshot.totals.interestViewRemoves || 0,
+    },
+  };
 }
 
 function run(label, script, env, metricsPort) {
   return new Promise((resolve, reject) => {
     console.log('\n=== ' + label + ' ===');
     let peakMetrics = null;
+    let peakInterestMetrics = null;
     const poll = setInterval(async () => {
       const snapshot = await fetchMetrics(metricsPort);
       if (snapshot && snapshot.totals && snapshot.totals.rooms > 0) {
         const score = (snapshot.totals.clients || 0) * 1000 + (snapshot.totals.rooms || 0);
         const peakScore = peakMetrics ? (peakMetrics.totals.clients || 0) * 1000 + (peakMetrics.totals.rooms || 0) : -1;
         if (score >= peakScore) peakMetrics = snapshot;
+        const interestScore = (snapshot.totals.hiddenMobLinksAvoided || 0) + (snapshot.totals.visibleMobLinks || 0);
+        const peakInterestScore = peakInterestMetrics ? (peakInterestMetrics.totals.hiddenMobLinksAvoided || 0) + (peakInterestMetrics.totals.visibleMobLinks || 0) : -1;
+        if (interestScore >= peakInterestScore) peakInterestMetrics = snapshot;
       }
-    }, 1000);
+    }, 500);
     const child = spawn(process.execPath, [script], {
       stdio: 'inherit',
       env: { ...process.env, BLOCKCRAFT_METRICS: '1', ...env },
@@ -62,7 +85,7 @@ function run(label, script, env, metricsPort) {
     });
     child.on('exit', code => {
       clearInterval(poll);
-      console.log('Peak metrics snapshot: ' + summarizeMetrics(peakMetrics));
+      console.log('Peak metrics snapshot: ' + summarizeMetrics(mergePeakMetrics(peakMetrics, peakInterestMetrics)));
       if (code !== 0) return reject(new Error(label + ' failed with exit code ' + code));
       if (!peakMetrics) return reject(new Error(label + ' did not expose performance metrics'));
       resolve();

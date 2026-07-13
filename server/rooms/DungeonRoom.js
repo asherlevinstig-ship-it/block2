@@ -343,6 +343,29 @@ class DungeonRoom extends GameRoom {
     client.__visibleDungeonMobs = client.__visibleDungeonMobs || new Map();
   }
 
+  recordDungeonInterestChange(kind) {
+    const now = Date.now();
+    const metrics = this.dungeonInterestMetrics || (this.dungeonInterestMetrics = {
+      added: 0,
+      removed: 0,
+      windowStartedAt: now,
+      windowAdded: 0,
+      windowRemoved: 0,
+    });
+    if (now - metrics.windowStartedAt > 10000) {
+      metrics.windowStartedAt = now;
+      metrics.windowAdded = 0;
+      metrics.windowRemoved = 0;
+    }
+    if (kind === 'add') {
+      metrics.added++;
+      metrics.windowAdded++;
+    } else if (kind === 'remove') {
+      metrics.removed++;
+      metrics.windowRemoved++;
+    }
+  }
+
   shouldSeeDungeonMob(viewer, mob, alreadyVisible = false) {
     if (!viewer || !mob || !viewer.dgn || mob.dgn !== viewer.dgn) return false;
     if (mob.kind === 'boss') return true;
@@ -360,6 +383,7 @@ class DungeonRoom extends GameRoom {
       if (!visible.has(id)) {
         client.view.add(mob);
         visible.set(id, mob);
+        this.recordDungeonInterestChange('add');
       }
     });
 
@@ -367,12 +391,52 @@ class DungeonRoom extends GameRoom {
       if (!this.state.mobs.has(id) || !this.shouldSeeDungeonMob(viewer, mob, true)) {
         client.view.remove(mob);
         visible.delete(id);
+        this.recordDungeonInterestChange('remove');
       }
     }
   }
 
   updateDungeonInterestViews() {
     for (const client of this.clients) this.updateClientDungeonInterestView(client);
+  }
+
+  dungeonInterestSnapshot() {
+    const clients = this.clients ? this.clients.length : 0;
+    let dungeonMobs = 0, bosses = 0, visibleMobLinks = 0, bossVisibleLinks = 0;
+    this.state.mobs.forEach(mob => {
+      if (!mob || !mob.dgn) return;
+      dungeonMobs++;
+      if (mob.kind === 'boss') bosses++;
+    });
+    for (const client of this.clients || []) {
+      const visible = client.__visibleDungeonMobs;
+      if (!visible) continue;
+      visible.forEach(mob => {
+        if (!mob || !mob.dgn) return;
+        visibleMobLinks++;
+        if (mob.kind === 'boss') bossVisibleLinks++;
+      });
+    }
+    const possibleMobLinks = dungeonMobs * clients;
+    const hiddenMobLinksAvoided = Math.max(0, possibleMobLinks - visibleMobLinks);
+    const metrics = this.dungeonInterestMetrics || {};
+    const windowAgeSec = Math.max(1, (Date.now() - (metrics.windowStartedAt || Date.now())) / 1000);
+    return {
+      dungeonMobs,
+      visibleMobLinks,
+      avgVisibleMobsPerClient: clients ? Math.round(visibleMobLinks / clients * 100) / 100 : 0,
+      hiddenMobLinksAvoided,
+      bossVisibleLinks,
+      bossMobs: bosses,
+      interestViewAdds: metrics.added || 0,
+      interestViewRemoves: metrics.removed || 0,
+      interestViewAddsPerSecond: Math.round(((metrics.windowAdded || 0) / windowAgeSec) * 100) / 100,
+      interestViewRemovesPerSecond: Math.round(((metrics.windowRemoved || 0) / windowAgeSec) * 100) / 100,
+    };
+  }
+
+  metricsSnapshot() {
+    return { ...super.metricsSnapshot(), ...this.dungeonInterestSnapshot() };
   }
 
   // Single-instance tick: the Phase-1 dispatch with no overworld passes and no gate lifecycle.

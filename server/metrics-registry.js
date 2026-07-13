@@ -54,6 +54,13 @@ function summarizeRooms(rooms) {
     persistenceOperations: 0,
     persistenceFailures: 0,
     tickOverBudget: 0,
+    dungeonMobs: 0,
+    visibleMobLinks: 0,
+    hiddenMobLinksAvoided: 0,
+    bossVisibleLinks: 0,
+    interestViewAdds: 0,
+    interestViewRemoves: 0,
+    dungeonClients: 0,
   };
   for (const room of rooms) {
     totals.clients += room.connectedClients || 0;
@@ -68,7 +75,15 @@ function summarizeRooms(rooms) {
     totals.persistenceOperations += room.persistenceOperations || 0;
     totals.persistenceFailures += room.persistenceFailures || 0;
     totals.tickOverBudget += room.tickOverBudget || 0;
+    totals.dungeonMobs += room.dungeonMobs || 0;
+    totals.visibleMobLinks += room.visibleMobLinks || 0;
+    totals.hiddenMobLinksAvoided += room.hiddenMobLinksAvoided || 0;
+    totals.bossVisibleLinks += room.bossVisibleLinks || 0;
+    totals.interestViewAdds += room.interestViewAdds || 0;
+    totals.interestViewRemoves += room.interestViewRemoves || 0;
+    if (room.type === 'dungeon') totals.dungeonClients += room.connectedClients || 0;
   }
+  totals.avgVisibleMobsPerDungeonClient = totals.dungeonClients ? round2(totals.visibleMobLinks / totals.dungeonClients) : 0;
   return totals;
 }
 
@@ -107,6 +122,16 @@ function groupByDungeon(rooms) {
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
     disconnects: room.disconnects || 0,
     unexpectedDisconnects: room.unexpectedDisconnects || 0,
+    dungeonMobs: room.dungeonMobs || 0,
+    visibleMobLinks: room.visibleMobLinks || 0,
+    avgVisibleMobsPerClient: room.avgVisibleMobsPerClient || 0,
+    hiddenMobLinksAvoided: room.hiddenMobLinksAvoided || 0,
+    bossVisibleLinks: room.bossVisibleLinks || 0,
+    bossMobs: room.bossMobs || 0,
+    interestViewAdds: room.interestViewAdds || 0,
+    interestViewRemoves: room.interestViewRemoves || 0,
+    interestViewAddsPerSecond: room.interestViewAddsPerSecond || 0,
+    interestViewRemovesPerSecond: room.interestViewRemovesPerSecond || 0,
   })).sort((a, b) => a.gateId.localeCompare(b.gateId));
 }
 

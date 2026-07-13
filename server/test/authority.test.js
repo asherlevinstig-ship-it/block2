@@ -3598,16 +3598,28 @@ test('DungeonRoom interest view syncs nearby mobs and boss state only', () => {
   assert.equal(client.view.added.has(near), true, 'nearby mobs enter the client view');
   assert.equal(client.view.added.has(far), false, 'far mobs stay hidden from the client view');
   assert.equal(client.view.added.has(boss), true, 'boss state stays visible for phase/status awareness');
+  let metrics = room.dungeonInterestSnapshot();
+  assert.equal(metrics.visibleMobLinks, 2, 'interest metrics count visible mob-client links');
+  assert.equal(metrics.hiddenMobLinksAvoided, 1, 'interest metrics count hidden mob-client links avoided');
+  assert.equal(metrics.avgVisibleMobsPerClient, 2);
+  assert.equal(metrics.interestViewAdds, 2);
 
   const viewer = room.state.players.get(client.sessionId);
   viewer.x = 120;
   room.updateClientDungeonInterestView(client);
   assert.equal(client.view.added.has(far), true, 'mobs enter the view when the player moves near them');
   assert.equal(client.view.removed.has(near), true, 'mobs leave the view after the player moves out of the exit radius');
+  metrics = room.dungeonInterestSnapshot();
+  assert.equal(metrics.visibleMobLinks, 2, 'the view keeps far-now-near plus boss after removing the old nearby mob');
+  assert.equal(metrics.interestViewAdds, 3);
+  assert.equal(metrics.interestViewRemoves, 1);
 
   room.state.mobs.delete('far');
   room.updateClientDungeonInterestView(client);
   assert.equal(client.view.removed.has(far), true, 'deleted mobs are removed from the client view');
+  metrics = room.dungeonInterestSnapshot();
+  assert.equal(metrics.visibleMobLinks, 1, 'deleted mobs no longer count as visible links');
+  assert.equal(metrics.interestViewRemoves, 2);
 });
 
 test('E-rank boss style defers signatures while preserving deterministic combo and enrage sync', () => {
