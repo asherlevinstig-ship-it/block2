@@ -1,4 +1,4 @@
-import {distanceTierSq,consumeEntityStep,PERFORMANCE_BUDGETS} from './performance-budget.mjs';
+import {remotePlayerDistanceTierSq,consumeEntityStep,PERFORMANCE_BUDGETS} from './performance-budget.mjs';
 
 export function createNetworkFramePump({
   connection:NET,
@@ -44,13 +44,14 @@ export function createNetworkFramePump({
     }
     for(const sid in NET.remotes){
       const r=NET.remotes[sid];
-      netRefreshRemoteAvatar(sid,r);
       const ref=r.ref,p=r.grp.position;
       const dx=(ref.x||0)-player.pos.x,dz=(ref.z||0)-player.pos.z,distSq=dx*dx+dz*dz;
       r.grp.visible=dim!=='ability'&&(ref.dgn||'')===NET.dgn&&distSq<=PERFORMANCE_BUDGETS.playerCullSq;
       if(!r.grp.visible)continue;
-      const stepDt=consumeEntityStep(r,dt,distanceTierSq(distSq));
+      const tier=remotePlayerDistanceTierSq(distSq,!!ref.spirit);
+      const stepDt=consumeEntityStep(r,dt,tier);
       if(!stepDt)continue;
+      netRefreshRemoteAvatar(sid,r);
       const lift=ref.mount?mountLift(ref.mount):0;
       const mvx=ref.x-p.x,mvz=ref.z-p.z;
       p.x+=mvx*Math.min(1,stepDt*12);

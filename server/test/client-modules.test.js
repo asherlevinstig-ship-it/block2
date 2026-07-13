@@ -43,12 +43,16 @@ test('GameContext owns shared services, state slices, module APIs, and runtime l
 });
 
 test('client mob performance tiers reduce ordinary dungeon visual update cost', async () => {
-  const { PERFORMANCE_BUDGETS, distanceTierSq, mobDistanceTierSq, consumeEntityStep, createParticleBudget } = await clientModule('performance-budget.mjs');
+  const { PERFORMANCE_BUDGETS, distanceTierSq, mobDistanceTierSq, remotePlayerDistanceTierSq, consumeEntityStep, createParticleBudget } = await clientModule('performance-budget.mjs');
   assert.equal(distanceTierSq(24 * 24), 0, 'remote players keep the existing near tier');
   assert.equal(mobDistanceTierSq(17 * 17), 0, 'ordinary mobs stay smooth up close');
   assert.equal(mobDistanceTierSq(24 * 24), 1, 'ordinary mobs outside melee range use the medium cadence');
   assert.equal(mobDistanceTierSq(24 * 24, true), 0, 'important mobs keep the wider near tier');
   assert.equal(PERFORMANCE_BUDGETS.mobNearSq < PERFORMANCE_BUDGETS.nearSq, true);
+  assert.equal(remotePlayerDistanceTierSq(21 * 21), 0, 'ordinary teammates stay smooth nearby');
+  assert.equal(remotePlayerDistanceTierSq(24 * 24), 1, 'ordinary teammates outside close range use the medium cadence');
+  assert.equal(remotePlayerDistanceTierSq(24 * 24, true), 0, 'spirit or urgent teammates keep the wider near tier');
+  assert.equal(PERFORMANCE_BUDGETS.remotePlayerNearSq < PERFORMANCE_BUDGETS.nearSq, true);
 
   const mob = {};
   assert.equal(consumeEntityStep(mob, PERFORMANCE_BUDGETS.mediumStep / 2, 1), 0);
