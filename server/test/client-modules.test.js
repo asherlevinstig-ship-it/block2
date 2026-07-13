@@ -53,6 +53,10 @@ test('client mob performance tiers reduce ordinary dungeon visual update cost', 
   assert.equal(remotePlayerDistanceTierSq(24 * 24), 1, 'ordinary teammates outside close range use the medium cadence');
   assert.equal(remotePlayerDistanceTierSq(24 * 24, true), 0, 'spirit or urgent teammates keep the wider near tier');
   assert.equal(PERFORMANCE_BUDGETS.remotePlayerNearSq < PERFORMANCE_BUDGETS.nearSq, true);
+  assert.equal(PERFORMANCE_BUDGETS.remotePlayerCrowdedNearSq < PERFORMANCE_BUDGETS.remotePlayerNearSq, true);
+  assert.equal(PERFORMANCE_BUDGETS.remotePlayerCrowdThreshold > 1, true);
+  assert.equal(PERFORMANCE_BUDGETS.remoteMaintenanceNearMs < PERFORMANCE_BUDGETS.remoteMaintenanceMediumMs, true);
+  assert.equal(PERFORMANCE_BUDGETS.remoteMaintenanceMediumMs < PERFORMANCE_BUDGETS.remoteMaintenanceFarMs, true);
 
   const mob = {};
   assert.equal(consumeEntityStep(mob, PERFORMANCE_BUDGETS.mediumStep / 2, 1), 0);
@@ -67,6 +71,52 @@ test('client mob performance tiers reduce ordinary dungeon visual update cost', 
   assert.deepEqual(particles.stats(), { particleAccepted: 0, particleDropped: 0, particleAcceptedTotal: 3, particleDroppedTotal: 2 });
   particles.resetFrame();
   assert.deepEqual(particles.stats(), { particleAccepted: 3, particleDropped: 2, particleAcceptedTotal: 3, particleDroppedTotal: 2 });
+});
+
+test('client performance diagnostics separates update and render timing', async () => {
+  const previousDocument = globalThis.document;
+  const previousAdd = globalThis.addEventListener;
+  const previousRemove = globalThis.removeEventListener;
+  const listeners = new Map();
+  const created = [];
+  globalThis.document = {
+    body: { appendChild(value) { created.push(value); } },
+    createElement(tag) {
+      return {
+        tag,
+        hidden: false,
+        style: {},
+        set id(value) { this._id = value; },
+        get id() { return this._id; },
+        remove() { this.removed = true; },
+      };
+    },
+  };
+  globalThis.addEventListener = (type, fn) => listeners.set(type, fn);
+  globalThis.removeEventListener = (type, fn) => {
+    if (listeners.get(type) === fn) listeners.delete(type);
+  };
+  try {
+    const { createPerformanceDiagnostics } = await clientModule('performance-budget.mjs');
+    const renderer = { info: { render: { calls: 7, triangles: 900 }, memory: { geometries: 4, textures: 3 } } };
+    const diagnostics = createPerformanceDiagnostics({ renderer, getCounts: () => ({ remotes: 16, mobs: 42 }) });
+    const hud = created[0];
+    hud.hidden = false;
+    diagnostics.beginFrame(1000);
+    diagnostics.beginRender(1012);
+    diagnostics.endRender(1017);
+    diagnostics.beginFrame(1300);
+    assert.match(hud.textContent, /update \d+\.\d ms {2}render \d+\.\d ms/);
+    assert.match(hud.textContent, /7 draws {2}900 tris/);
+    assert.match(hud.textContent, /remotes: 16 {2}mobs: 42/);
+    diagnostics.destroy();
+    assert.equal(hud.removed, true);
+    assert.equal(listeners.has('keydown'), false);
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.addEventListener = previousAdd;
+    globalThis.removeEventListener = previousRemove;
+  }
 });
 
 test('DimensionGrid provides one origin-aware storage contract for every dimension kind', () => {

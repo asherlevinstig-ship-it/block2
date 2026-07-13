@@ -3,6 +3,8 @@ export const PERFORMANCE_BUDGETS=Object.freeze({
   mobNearSq:18*18,
   importantMobNearSq:30*30,
   remotePlayerNearSq:22*22,
+  remotePlayerCrowdedNearSq:12*12,
+  remotePlayerCrowdThreshold:8,
   importantRemotePlayerNearSq:30*30,
   mediumSq:58*58,
   mobCullSq:100*100,
@@ -10,6 +12,9 @@ export const PERFORMANCE_BUDGETS=Object.freeze({
   playerCullSq:120*120,
   mediumStep:1/15,
   farStep:1/6,
+  remoteMaintenanceNearMs:250,
+  remoteMaintenanceMediumMs:500,
+  remoteMaintenanceFarMs:1000,
   particleFrameCap:180,
   cosmeticParticleFrameCap:120,
 });
@@ -73,15 +78,34 @@ export function createPerformanceDiagnostics({renderer,getCounts=()=>({})}){
   el.id='perfhud';el.hidden=true;
   Object.assign(el.style,{position:'fixed',right:'12px',top:'12px',zIndex:'10000',padding:'8px 10px',background:'rgba(5,9,14,.84)',border:'1px solid rgba(125,211,252,.45)',borderRadius:'6px',color:'#dff6ff',font:'12px/1.45 ui-monospace,monospace',whiteSpace:'pre',pointerEvents:'none'});
   document.body.appendChild(el);
-  let ema=16.7,last=performance.now(),lastPaint=0;
+  let ema=16.7,updateEma=0,renderEma=0,last=performance.now(),lastPaint=0,frameStartedAt=last,renderStartedAt=0;
   const toggle=e=>{if(e.code==='F3'){e.preventDefault();el.hidden=!el.hidden;}};
   addEventListener('keydown',toggle);
+  const updatePaint=now=>{
+    if(el.hidden||now-lastPaint<250)return;lastPaint=now;
+    const info=renderer&&renderer.info,render=info&&info.render||{},memory=info&&info.memory||{},counts=getCounts()||{};
+    el.textContent=`F3 PERFORMANCE\n${Math.round(1000/Math.max(1,ema))} fps  ${ema.toFixed(1)} ms\nupdate ${updateEma.toFixed(1)} ms  render ${renderEma.toFixed(1)} ms\n${render.calls||0} draws  ${render.triangles||0} tris\n${memory.geometries||0} geo  ${memory.textures||0} tex\n${Object.entries(counts).map(([k,v])=>k+': '+v).join('  ')}`;
+  };
   return {
-    sample(now){
+    beginFrame(now){
       const frame=Math.min(250,Math.max(0,now-last));last=now;ema+=((frame||ema)-ema)*.08;
-      if(el.hidden||now-lastPaint<250)return;lastPaint=now;
-      const info=renderer&&renderer.info,render=info&&info.render||{},memory=info&&info.memory||{},counts=getCounts()||{};
-      el.textContent=`F3 PERFORMANCE\n${Math.round(1000/Math.max(1,ema))} fps  ${ema.toFixed(1)} ms\n${render.calls||0} draws  ${render.triangles||0} tris\n${memory.geometries||0} geo  ${memory.textures||0} tex\n${Object.entries(counts).map(([k,v])=>k+': '+v).join('  ')}`;
+      frameStartedAt=now;renderStartedAt=0;
+      updatePaint(now);
+    },
+    beginRender(now){
+      renderStartedAt=now;
+      const update=Math.min(250,Math.max(0,renderStartedAt-frameStartedAt));
+      updateEma+=((update||updateEma)-updateEma)*.12;
+    },
+    endRender(now){
+      if(renderStartedAt){
+        const renderTime=Math.min(250,Math.max(0,now-renderStartedAt));
+        renderEma+=((renderTime||renderEma)-renderEma)*.12;
+      }
+      updatePaint(now);
+    },
+    sample(now){
+      this.beginFrame(now);
     },
     destroy(){removeEventListener('keydown',toggle);el.remove();},
   };

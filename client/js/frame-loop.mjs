@@ -1411,7 +1411,7 @@ function tick(now){
   requestAnimationFrame(tick);
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
   worldApi.resetParticleBudget();
-  perfDiagnostics.sample(now);
+  perfDiagnostics.beginFrame(now);
   biomeStatus.tick(now);
   globalThis.BlockcraftRecall.tick(now);
   if(globalThis.BlockcraftDeathDrops)globalThis.BlockcraftDeathDrops.tick(now);
@@ -1762,7 +1762,9 @@ function tick(now){
   if(worldApi.tickLandClaimOverlay) worldApi.tickLandClaimOverlay();
   updateLandMinimap();
   updateBossUI();
+  perfDiagnostics.beginRender(performance.now());
   rendering.render();
+  perfDiagnostics.endRender(performance.now());
 }
 requestAnimationFrame(tick);
 

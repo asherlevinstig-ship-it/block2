@@ -42,16 +42,25 @@ export function createNetworkFramePump({
         });
       }
     }
+    const remoteCount=Object.keys(NET.remotes).length;
+    const crowdedRemotes=remoteCount>PERFORMANCE_BUDGETS.remotePlayerCrowdThreshold;
     for(const sid in NET.remotes){
       const r=NET.remotes[sid];
       const ref=r.ref,p=r.grp.position;
       const dx=(ref.x||0)-player.pos.x,dz=(ref.z||0)-player.pos.z,distSq=dx*dx+dz*dz;
       r.grp.visible=dim!=='ability'&&(ref.dgn||'')===NET.dgn&&distSq<=PERFORMANCE_BUDGETS.playerCullSq;
       if(!r.grp.visible)continue;
-      const tier=remotePlayerDistanceTierSq(distSq,!!ref.spirit);
+      let tier=remotePlayerDistanceTierSq(distSq,!!ref.spirit);
+      if(crowdedRemotes&&tier===0&&!ref.spirit&&distSq>PERFORMANCE_BUDGETS.remotePlayerCrowdedNearSq)tier=1;
       const stepDt=consumeEntityStep(r,dt,tier);
       if(!stepDt)continue;
-      netRefreshRemoteAvatar(sid,r);
+      const maintenanceMs=tier===0?PERFORMANCE_BUDGETS.remoteMaintenanceNearMs:(tier===1?PERFORMANCE_BUDGETS.remoteMaintenanceMediumMs:PERFORMANCE_BUDGETS.remoteMaintenanceFarMs);
+      if(!r._nextMaintenanceAt)r._nextMaintenanceAt=now+Math.random()*maintenanceMs;
+      const maintenanceDue=now>=r._nextMaintenanceAt;
+      if(maintenanceDue){
+        r._nextMaintenanceAt=now+maintenanceMs;
+        netRefreshRemoteAvatar(sid,r);
+      }
       const lift=ref.mount?mountLift(ref.mount):0;
       const mvx=ref.x-p.x,mvz=ref.z-p.z;
       p.x+=mvx*Math.min(1,stepDt*12);
@@ -75,7 +84,7 @@ export function createNetworkFramePump({
         r.legs[1].rotation.x=-sw;
       }
       pulseAegisGlow(r,now);
-      netUpdateTag(r);
+      if(maintenanceDue)netUpdateTag(r);
     }
     if(tickLocalSpiritVisual)tickLocalSpiritVisual(now);
   };

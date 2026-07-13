@@ -18,6 +18,7 @@
     "test:load:dungeons": "node tools/dungeon-load-test.js",
     "test:soak:online": "node tools/online-soak-test.js",
     "test:perf": "node tools/perf-budget-test.js",
+    "test:perf:client": "node tools/client-overworld-perf-test.js",
     "test:perf:interest": "node tools/interest-radius-matrix.js",
     "balance:loot": "node tools/loot-progression-sim.js",
     "balance:familiars": "node tools/familiar-balance-sim.js"
