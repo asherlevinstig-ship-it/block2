@@ -3622,6 +3622,27 @@ test('DungeonRoom interest view syncs nearby mobs and boss state only', () => {
   assert.equal(metrics.interestViewRemoves, 2);
 });
 
+test('DungeonRoom filters positioned dungeon fx to nearby players', () => {
+  const room = makeDungeonRoom();
+  const inst = hazInstance(room, 'fx-interest-dgn', []);
+  const near = seedDungeonPlayer(room, 'fx-near', inst, { x: 0, y: 10, z: 0 });
+  const far = seedDungeonPlayer(room, 'fx-far', inst, { x: 120, y: 10, z: 0 });
+
+  room.sendSpace(inst.id, 'fx', { t: 'meleeWarn', x: 2, y: 10, z: 0, dgn: inst.id });
+  assert.equal(near.sent.some(entry => entry.type === 'fx'), true, 'nearby players receive positioned dungeon fx');
+  assert.equal(far.sent.some(entry => entry.type === 'fx'), false, 'far players skip positioned dungeon fx');
+  let metrics = room.dungeonInterestSnapshot();
+  assert.equal(metrics.dungeonFxSent, 1);
+  assert.equal(metrics.dungeonFxSkipped, 1);
+  assert.equal(metrics.dungeonFxFilteredEvents, 1);
+
+  room.sendSpace(inst.id, 'fx', { t: 'warn', dgn: inst.id });
+  assert.equal(near.sent.filter(entry => entry.type === 'fx').length, 2, 'space-wide dungeon fx remain global');
+  assert.equal(far.sent.filter(entry => entry.type === 'fx').length, 1, 'far players still receive global dungeon fx');
+  metrics = room.dungeonInterestSnapshot();
+  assert.equal(metrics.dungeonFxSkipped, 1, 'global dungeon fx do not count as skipped');
+});
+
 test('E-rank boss style defers signatures while preserving deterministic combo and enrage sync', () => {
   const room = makeDungeonRoom();
   const inst = putInstance(room, { id: 'root-combo', world: new D.DungeonGrid() });

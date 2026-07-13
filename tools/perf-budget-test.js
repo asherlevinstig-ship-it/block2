@@ -40,6 +40,8 @@ function summarizeMetrics(snapshot) {
     + ' hiddenMobLinksAvoided=' + (totals.hiddenMobLinksAvoided || 0)
     + ' avgVisibleMobs=' + (totals.avgVisibleMobsPerDungeonClient || 0)
     + ' viewChurn=' + ((totals.interestViewAdds || 0) + (totals.interestViewRemoves || 0))
+    + ' fxSent=' + (totals.dungeonFxSent || 0)
+    + ' fxSkipped=' + (totals.dungeonFxSkipped || 0)
     + ' loopP99Ms=' + (eventLoop.p99Ms || 0)
     + ' heapUsedMb=' + (memory.heapUsedMb || 0);
 }
@@ -55,6 +57,8 @@ function mergePeakMetrics(loadSnapshot, interestSnapshot) {
       avgVisibleMobsPerDungeonClient: interestSnapshot.totals && interestSnapshot.totals.avgVisibleMobsPerDungeonClient || 0,
       interestViewAdds: interestSnapshot.totals && interestSnapshot.totals.interestViewAdds || 0,
       interestViewRemoves: interestSnapshot.totals && interestSnapshot.totals.interestViewRemoves || 0,
+      dungeonFxSent: interestSnapshot.totals && interestSnapshot.totals.dungeonFxSent || 0,
+      dungeonFxSkipped: interestSnapshot.totals && interestSnapshot.totals.dungeonFxSkipped || 0,
     },
   };
 }
@@ -70,8 +74,8 @@ function run(label, script, env, metricsPort) {
         const score = (snapshot.totals.clients || 0) * 1000 + (snapshot.totals.rooms || 0);
         const peakScore = peakMetrics ? (peakMetrics.totals.clients || 0) * 1000 + (peakMetrics.totals.rooms || 0) : -1;
         if (score >= peakScore) peakMetrics = snapshot;
-        const interestScore = (snapshot.totals.hiddenMobLinksAvoided || 0) + (snapshot.totals.visibleMobLinks || 0);
-        const peakInterestScore = peakInterestMetrics ? (peakInterestMetrics.totals.hiddenMobLinksAvoided || 0) + (peakInterestMetrics.totals.visibleMobLinks || 0) : -1;
+        const interestScore = (snapshot.totals.hiddenMobLinksAvoided || 0) + (snapshot.totals.visibleMobLinks || 0) + (snapshot.totals.dungeonFxSkipped || 0);
+        const peakInterestScore = peakInterestMetrics ? (peakInterestMetrics.totals.hiddenMobLinksAvoided || 0) + (peakInterestMetrics.totals.visibleMobLinks || 0) + (peakInterestMetrics.totals.dungeonFxSkipped || 0) : -1;
         if (interestScore >= peakInterestScore) peakInterestMetrics = snapshot;
       }
     }, 500);

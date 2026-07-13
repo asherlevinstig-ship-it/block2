@@ -40,6 +40,9 @@ function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gat
         interestViewRemoves: type === 'dungeon' ? 2 : 0,
         interestViewAddsPerSecond: type === 'dungeon' ? 4 : 0,
         interestViewRemovesPerSecond: type === 'dungeon' ? 1 : 0,
+        dungeonFxSent: type === 'dungeon' ? 12 : 0,
+        dungeonFxSkipped: type === 'dungeon' ? 20 : 0,
+        dungeonFxFilteredEvents: type === 'dungeon' ? 3 : 0,
       };
     },
   };
@@ -76,9 +79,11 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.hiddenMobLinksAvoided, 120);
   assert.equal(snapshot.totals.dungeonClients, 8);
   assert.equal(snapshot.totals.avgVisibleMobsPerDungeonClient, 5);
+  assert.equal(snapshot.totals.dungeonFxSent, 12);
+  assert.equal(snapshot.totals.dungeonFxSkipped, 20);
   assert.equal(snapshot.totals.persistenceFailures, 1);
   assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond]), [['main', 8, 5], ['shard-2', 6, 5]]);
-  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided]), [['gate-a', 8, 8, 1, 40, 120]]);
+  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.dungeonFxSkipped]), [['gate-a', 8, 8, 1, 40, 120, 20]]);
 
   unregisterRoom(main);
   unregisterRoom(shard2);

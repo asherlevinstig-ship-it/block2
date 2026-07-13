@@ -12,6 +12,7 @@ const { registerRoom, unregisterRoom } = require('../metrics-registry');
 
 const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 28);
 const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40);
+const DUNGEON_FX_INTEREST_RADIUS = Number(process.env.DUNGEON_FX_INTEREST_RADIUS || 44);
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -400,6 +401,49 @@ class DungeonRoom extends GameRoom {
     for (const client of this.clients) this.updateClientDungeonInterestView(client);
   }
 
+  dungeonFxPoints(msg) {
+    if (!msg || typeof msg !== 'object') return [];
+    const points = [];
+    const add = (x, z) => {
+      if (Number.isFinite(x) && Number.isFinite(z)) points.push({ x, z });
+    };
+    add(Number(msg.x), Number(msg.z));
+    add(Number(msg.fromX), Number(msg.fromZ));
+    add(Number(msg.tx), Number(msg.tz));
+    for (const point of msg.points || []) add(Number(point && point.x), Number(point && point.z));
+    for (const target of msg.targets || []) add(Number(target && target.x), Number(target && target.z));
+    return points;
+  }
+
+  shouldFilterSpaceMessage(dgn, type, msg) {
+    return !!dgn && (type === 'fx' || type === 'arrow') && this.dungeonFxPoints(msg).length > 0;
+  }
+
+  recordDungeonFxFanout(sent, skipped) {
+    const metrics = this.dungeonFxMetrics || (this.dungeonFxMetrics = { sent: 0, skipped: 0, filteredEvents: 0 });
+    metrics.sent += sent;
+    metrics.skipped += skipped;
+    if (skipped > 0) metrics.filteredEvents++;
+  }
+
+  sendSpace(dgn, type, msg) {
+    if (!this.shouldFilterSpaceMessage(dgn, type, msg)) return super.sendSpace(dgn, type, msg);
+    const points = this.dungeonFxPoints(msg);
+    let sent = 0, skipped = 0;
+    for (const client of this.clients) {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || (player.dgn || '') !== (dgn || '')) continue;
+      const nearby = points.some(point => Math.hypot((player.x || 0) - point.x, (player.z || 0) - point.z) <= DUNGEON_FX_INTEREST_RADIUS);
+      if (nearby) {
+        client.send(type, msg);
+        sent++;
+      } else {
+        skipped++;
+      }
+    }
+    this.recordDungeonFxFanout(sent, skipped);
+  }
+
   dungeonInterestSnapshot() {
     const clients = this.clients ? this.clients.length : 0;
     let dungeonMobs = 0, bosses = 0, visibleMobLinks = 0, bossVisibleLinks = 0;
@@ -420,6 +464,7 @@ class DungeonRoom extends GameRoom {
     const possibleMobLinks = dungeonMobs * clients;
     const hiddenMobLinksAvoided = Math.max(0, possibleMobLinks - visibleMobLinks);
     const metrics = this.dungeonInterestMetrics || {};
+    const fxMetrics = this.dungeonFxMetrics || {};
     const windowAgeSec = Math.max(1, (Date.now() - (metrics.windowStartedAt || Date.now())) / 1000);
     return {
       dungeonMobs,
@@ -432,6 +477,9 @@ class DungeonRoom extends GameRoom {
       interestViewRemoves: metrics.removed || 0,
       interestViewAddsPerSecond: Math.round(((metrics.windowAdded || 0) / windowAgeSec) * 100) / 100,
       interestViewRemovesPerSecond: Math.round(((metrics.windowRemoved || 0) / windowAgeSec) * 100) / 100,
+      dungeonFxSent: fxMetrics.sent || 0,
+      dungeonFxSkipped: fxMetrics.skipped || 0,
+      dungeonFxFilteredEvents: fxMetrics.filteredEvents || 0,
     };
   }
 

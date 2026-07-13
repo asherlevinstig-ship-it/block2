@@ -61,6 +61,9 @@ function summarizeRooms(rooms) {
     interestViewAdds: 0,
     interestViewRemoves: 0,
     dungeonClients: 0,
+    dungeonFxSent: 0,
+    dungeonFxSkipped: 0,
+    dungeonFxFilteredEvents: 0,
   };
   for (const room of rooms) {
     totals.clients += room.connectedClients || 0;
@@ -82,6 +85,9 @@ function summarizeRooms(rooms) {
     totals.interestViewAdds += room.interestViewAdds || 0;
     totals.interestViewRemoves += room.interestViewRemoves || 0;
     if (room.type === 'dungeon') totals.dungeonClients += room.connectedClients || 0;
+    totals.dungeonFxSent += room.dungeonFxSent || 0;
+    totals.dungeonFxSkipped += room.dungeonFxSkipped || 0;
+    totals.dungeonFxFilteredEvents += room.dungeonFxFilteredEvents || 0;
   }
   totals.avgVisibleMobsPerDungeonClient = totals.dungeonClients ? round2(totals.visibleMobLinks / totals.dungeonClients) : 0;
   return totals;
@@ -132,6 +138,9 @@ function groupByDungeon(rooms) {
     interestViewRemoves: room.interestViewRemoves || 0,
     interestViewAddsPerSecond: room.interestViewAddsPerSecond || 0,
     interestViewRemovesPerSecond: room.interestViewRemovesPerSecond || 0,
+    dungeonFxSent: room.dungeonFxSent || 0,
+    dungeonFxSkipped: room.dungeonFxSkipped || 0,
+    dungeonFxFilteredEvents: room.dungeonFxFilteredEvents || 0,
   })).sort((a, b) => a.gateId.localeCompare(b.gateId));
 }
 
