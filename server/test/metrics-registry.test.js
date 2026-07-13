@@ -26,8 +26,12 @@ function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gat
         rejectedMessages: 4,
         inboundMessages: 10,
         outboundMessages: 20,
+        outboundBytes: type === 'dungeon' ? 8000 : 4000,
         inboundMessagesPerSecond: 5,
         outboundMessagesPerSecond: 7,
+        outboundBytesPerSecond: type === 'dungeon' ? 2000 : 1000,
+        outboundBytesPerClientPerSecond: type === 'dungeon' ? 250 : 125,
+        outboundPeakClientBytesPerSecond: type === 'dungeon' ? 400 : 175,
         disconnects: type === 'dungeon' ? 1 : 0,
         unexpectedDisconnects: 0,
         dungeonMobs: type === 'dungeon' ? mobs : 0,
@@ -74,6 +78,10 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.players, 22);
   assert.equal(snapshot.totals.inboundMessages, 30);
   assert.equal(snapshot.totals.outboundMessages, 60);
+  assert.equal(snapshot.totals.outboundBytes, 16000);
+  assert.equal(snapshot.totals.outboundBytesPerSecond, 4000);
+  assert.equal(snapshot.totals.outboundBytesPerClientPerSecond, 181.82);
+  assert.equal(snapshot.totals.outboundPeakClientBytesPerSecond, 400);
   assert.equal(snapshot.totals.disconnects, 1);
   assert.equal(snapshot.totals.visibleMobLinks, 40);
   assert.equal(snapshot.totals.hiddenMobLinksAvoided, 120);
@@ -82,8 +90,8 @@ test('metrics registry aggregates overworld shards and dungeon rooms', () => {
   assert.equal(snapshot.totals.dungeonFxSent, 12);
   assert.equal(snapshot.totals.dungeonFxSkipped, 20);
   assert.equal(snapshot.totals.persistenceFailures, 1);
-  assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond]), [['main', 8, 5], ['shard-2', 6, 5]]);
-  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.dungeonFxSkipped]), [['gate-a', 8, 8, 1, 40, 120, 20]]);
+  assert.deepEqual(snapshot.shards.map(s => [s.shardId, s.clients, s.inboundMessagesPerSecond, s.outboundBytesPerSecond]), [['main', 8, 5, 1000], ['shard-2', 6, 5, 1000]]);
+  assert.deepEqual(snapshot.dungeons.map(d => [d.gateId, d.clients, d.maxClients, d.disconnects, d.visibleMobLinks, d.hiddenMobLinksAvoided, d.dungeonFxSkipped, d.outboundBytesPerSecond]), [['gate-a', 8, 8, 1, 40, 120, 20, 2000]]);
 
   unregisterRoom(main);
   unregisterRoom(shard2);

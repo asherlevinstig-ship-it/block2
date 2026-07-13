@@ -34,6 +34,8 @@ function summarizeMetrics(snapshot) {
     + ' clients=' + (totals.clients || 0)
     + ' inbound=' + (totals.inboundMessages || 0)
     + ' outbound=' + (totals.outboundMessages || 0)
+    + ' outboundKBps=' + Math.round(((totals.outboundBytesPerSecond || 0) / 1024) * 100) / 100
+    + ' peakClientKBps=' + Math.round(((totals.outboundPeakClientBytesPerSecond || 0) / 1024) * 100) / 100
     + ' rejects=' + (totals.rejectedMessages || 0)
     + ' disconnects=' + (totals.disconnects || 0)
     + ' visibleMobLinks=' + (totals.visibleMobLinks || 0)
@@ -46,28 +48,34 @@ function summarizeMetrics(snapshot) {
     + ' heapUsedMb=' + (memory.heapUsedMb || 0);
 }
 
-function mergePeakMetrics(loadSnapshot, interestSnapshot) {
-  if (!loadSnapshot || !interestSnapshot) return loadSnapshot || interestSnapshot;
+function mergePeakMetrics(loadSnapshot, interestSnapshot, bandwidthSnapshot) {
+  if (!loadSnapshot || !interestSnapshot && !bandwidthSnapshot) return loadSnapshot || interestSnapshot || bandwidthSnapshot;
+  const loadTotals = loadSnapshot && loadSnapshot.totals || {};
+  const interestTotals = interestSnapshot && interestSnapshot.totals || {};
+  const bandwidthTotals = bandwidthSnapshot && bandwidthSnapshot.totals || {};
   return {
     ...loadSnapshot,
     totals: {
-      ...(loadSnapshot.totals || {}),
-      visibleMobLinks: interestSnapshot.totals && interestSnapshot.totals.visibleMobLinks || 0,
-      hiddenMobLinksAvoided: interestSnapshot.totals && interestSnapshot.totals.hiddenMobLinksAvoided || 0,
-      avgVisibleMobsPerDungeonClient: interestSnapshot.totals && interestSnapshot.totals.avgVisibleMobsPerDungeonClient || 0,
-      interestViewAdds: interestSnapshot.totals && interestSnapshot.totals.interestViewAdds || 0,
-      interestViewRemoves: interestSnapshot.totals && interestSnapshot.totals.interestViewRemoves || 0,
-      dungeonFxSent: interestSnapshot.totals && interestSnapshot.totals.dungeonFxSent || 0,
-      dungeonFxSkipped: interestSnapshot.totals && interestSnapshot.totals.dungeonFxSkipped || 0,
+      ...loadTotals,
+      visibleMobLinks: interestTotals.visibleMobLinks || 0,
+      hiddenMobLinksAvoided: interestTotals.hiddenMobLinksAvoided || 0,
+      avgVisibleMobsPerDungeonClient: interestTotals.avgVisibleMobsPerDungeonClient || 0,
+      interestViewAdds: interestTotals.interestViewAdds || 0,
+      interestViewRemoves: interestTotals.interestViewRemoves || 0,
+      dungeonFxSent: interestTotals.dungeonFxSent || 0,
+      dungeonFxSkipped: interestTotals.dungeonFxSkipped || 0,
+      outboundBytesPerSecond: bandwidthTotals.outboundBytesPerSecond || loadTotals.outboundBytesPerSecond || 0,
+      outboundPeakClientBytesPerSecond: bandwidthTotals.outboundPeakClientBytesPerSecond || loadTotals.outboundPeakClientBytesPerSecond || 0,
     },
   };
 }
 
-function run(label, script, env, metricsPort) {
+function run(label, script, env, metricsPort, budgets) {
   return new Promise((resolve, reject) => {
     console.log('\n=== ' + label + ' ===');
     let peakMetrics = null;
     let peakInterestMetrics = null;
+    let peakBandwidthMetrics = null;
     const poll = setInterval(async () => {
       const snapshot = await fetchMetrics(metricsPort);
       if (snapshot && snapshot.totals && snapshot.totals.rooms > 0) {
@@ -77,6 +85,9 @@ function run(label, script, env, metricsPort) {
         const interestScore = (snapshot.totals.hiddenMobLinksAvoided || 0) + (snapshot.totals.visibleMobLinks || 0) + (snapshot.totals.dungeonFxSkipped || 0);
         const peakInterestScore = peakInterestMetrics ? (peakInterestMetrics.totals.hiddenMobLinksAvoided || 0) + (peakInterestMetrics.totals.visibleMobLinks || 0) + (peakInterestMetrics.totals.dungeonFxSkipped || 0) : -1;
         if (interestScore >= peakInterestScore) peakInterestMetrics = snapshot;
+        const bandwidthScore = snapshot.totals.outboundBytesPerSecond || 0;
+        const peakBandwidthScore = peakBandwidthMetrics ? peakBandwidthMetrics.totals.outboundBytesPerSecond || 0 : -1;
+        if (bandwidthScore >= peakBandwidthScore) peakBandwidthMetrics = snapshot;
       }
     }, 500);
     const child = spawn(process.execPath, [script], {
@@ -89,9 +100,14 @@ function run(label, script, env, metricsPort) {
     });
     child.on('exit', code => {
       clearInterval(poll);
-      console.log('Peak metrics snapshot: ' + summarizeMetrics(mergePeakMetrics(peakMetrics, peakInterestMetrics)));
+      const merged = mergePeakMetrics(peakMetrics, peakInterestMetrics, peakBandwidthMetrics);
+      console.log('Peak metrics snapshot: ' + summarizeMetrics(merged));
       if (code !== 0) return reject(new Error(label + ' failed with exit code ' + code));
       if (!peakMetrics) return reject(new Error(label + ' did not expose performance metrics'));
+      const kbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundBytesPerSecond) || 0) / 1024;
+      const peakClientKbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundPeakClientBytesPerSecond) || 0) / 1024;
+      if (kbps > budgets.maxOutboundKbps) return reject(new Error(label + ' outbound bandwidth ' + kbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundKbps + ' KB/s'));
+      if (peakClientKbps > budgets.maxOutboundClientKbps) return reject(new Error(label + ' peak client bandwidth ' + peakClientKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundClientKbps + ' KB/s'));
       resolve();
     });
   });
@@ -100,6 +116,10 @@ function run(label, script, env, metricsPort) {
 async function main() {
   const maxP99Ms = envNumber('PERF_MAX_P99_MS', 75);
   const maxHeapMb = envNumber('PERF_MAX_HEAP_MB', 96);
+  const bandwidthBudgets = {
+    maxOutboundKbps: Number(envNumber('PERF_MAX_OUTBOUND_KBPS', 2048)),
+    maxOutboundClientKbps: Number(envNumber('PERF_MAX_OUTBOUND_CLIENT_KBPS', 96)),
+  };
   const shardPort = envNumber('PERF_SHARD_PORT', 2631);
   const dungeonPort = envNumber('PERF_DUNGEON_PORT', 2632);
   const soakPort = envNumber('PERF_SOAK_PORT', 2633);
@@ -124,7 +144,7 @@ async function main() {
     }, Number(soakPort)],
   ];
 
-  for (const [label, script, env, metricsPort] of checks) await run(label, script, env, metricsPort);
+  for (const [label, script, env, metricsPort] of checks) await run(label, script, env, metricsPort, bandwidthBudgets);
   console.log('\nPerformance budget suite passed');
 }
 

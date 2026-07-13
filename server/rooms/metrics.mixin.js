@@ -14,11 +14,15 @@ class MetricsMixin {
     this.messageMetrics = {
       inbound: 0,
       outbound: 0,
+      outboundBytes: 0,
       inboundByType: {},
       outboundByType: {},
+      outboundEstimatedBytesByType: {},
       windowStartedAt: Date.now(),
       windowInbound: 0,
       windowOutbound: 0,
+      windowOutboundBytes: 0,
+      windowOutboundBytesByClient: {},
       disconnects: 0,
       unexpectedDisconnects: 0,
     };
@@ -31,32 +35,64 @@ class MetricsMixin {
     this.__metricsOnMessageWrapped = true;
   }
 
+  resetMessageWindow(m, now) {
+    if (now - (m.windowStartedAt || now) <= 10000) return;
+    m.windowStartedAt = now;
+    m.windowInbound = 0;
+    m.windowOutbound = 0;
+    m.windowOutboundBytes = 0;
+    m.windowOutboundBytesByClient = {};
+  }
+
   recordInboundMessage(type) {
     const m = this.messageMetrics || (this.messageMetrics = { inbound: 0, inboundByType: {}, windowStartedAt: Date.now(), windowInbound: 0 });
     const key = String(type || 'unknown');
     const now = Date.now();
-    if (now - (m.windowStartedAt || now) > 10000) {
-      m.windowStartedAt = now;
-      m.windowInbound = 0;
-      m.windowOutbound = 0;
-    }
+    this.resetMessageWindow(m, now);
     m.inbound = (m.inbound || 0) + 1;
     m.windowInbound = (m.windowInbound || 0) + 1;
+    m.inboundByType = m.inboundByType || {};
     m.inboundByType[key] = (m.inboundByType[key] || 0) + 1;
   }
 
-  recordOutboundMessage(type) {
+  outboundPayloadBytes(type, payload) {
+    let payloadBytes = 0;
+    if (payload instanceof Uint8Array || Buffer.isBuffer(payload)) payloadBytes = payload.length;
+    else {
+      try { payloadBytes = Buffer.byteLength(JSON.stringify(payload === undefined ? null : payload)); }
+      catch (_) { payloadBytes = Buffer.byteLength(String(payload || '')); }
+    }
+    return Buffer.byteLength(String(type || '')) + payloadBytes;
+  }
+
+  recordOutboundBytes(bytes, sessionId = '') {
+    const n = Math.max(0, Number(bytes) || 0);
+    if (!n) return;
+    const m = this.messageMetrics || (this.messageMetrics = { windowStartedAt: Date.now() });
+    const now = Date.now();
+    this.resetMessageWindow(m, now);
+    m.outboundBytes = (m.outboundBytes || 0) + n;
+    m.windowOutboundBytes = (m.windowOutboundBytes || 0) + n;
+    if (sessionId) {
+      const byClient = m.windowOutboundBytesByClient || (m.windowOutboundBytesByClient = {});
+      byClient[sessionId] = (byClient[sessionId] || 0) + n;
+    }
+  }
+
+  recordOutboundMessage(type, estimatedBytes = 0, sessionId = '') {
     const m = this.messageMetrics || (this.messageMetrics = { outbound: 0, outboundByType: {}, windowStartedAt: Date.now(), windowOutbound: 0 });
     const key = String(type || 'unknown');
     const now = Date.now();
-    if (now - (m.windowStartedAt || now) > 10000) {
-      m.windowStartedAt = now;
-      m.windowInbound = 0;
-      m.windowOutbound = 0;
-    }
+    this.resetMessageWindow(m, now);
     m.outbound = (m.outbound || 0) + 1;
     m.windowOutbound = (m.windowOutbound || 0) + 1;
+    m.outboundByType = m.outboundByType || {};
     m.outboundByType[key] = (m.outboundByType[key] || 0) + 1;
+    if (estimatedBytes > 0) {
+      const byType = m.outboundEstimatedBytesByType || (m.outboundEstimatedBytesByType = {});
+      byType[key] = (byType[key] || 0) + estimatedBytes;
+      this.recordOutboundBytes(estimatedBytes, sessionId);
+    }
   }
 
   recordClientLeave(_code, unexpected = false) {
@@ -112,9 +148,18 @@ class MetricsMixin {
 
   monitorClient(client) {
     if (!client || client.__metricsSendWrapped) return;
+    if (typeof client.raw === 'function' && !client.__metricsRawWrapped) {
+      const originalRaw = client.raw.bind(client);
+      client.raw = (data, ...args) => {
+        this.recordOutboundBytes(data && data.length, client.sessionId);
+        return originalRaw(data, ...args);
+      };
+      client.__metricsRawWrapped = true;
+    }
     const original = client.send.bind(client);
     client.send = (type, payload) => {
-      this.recordOutboundMessage(type);
+      const hasRawAccounting = typeof client.raw === 'function';
+      this.recordOutboundMessage(type, hasRawAccounting ? 0 : this.outboundPayloadBytes(type, payload), client.sessionId);
       if (/Reject$/.test(String(type))) {
         const m = this.rejectionMetrics || (this.rejectionMetrics = { total: 0, byType: {}, byReason: {} });
         const reason = payload && payload.reason || 'unspecified';
@@ -147,6 +192,8 @@ class MetricsMixin {
     const tm = this.tickMetrics || {}, pm = this.persistenceMetrics || {}, rm = this.rejectionMetrics || {};
     const mm = this.messageMetrics || {};
     const windowAgeSec = Math.max(1, (Date.now() - (mm.windowStartedAt || Date.now())) / 1000);
+    const windowOutboundBytesByClient = Object.values(mm.windowOutboundBytesByClient || {});
+    const peakClientBytes = windowOutboundBytesByClient.length ? Math.max(...windowOutboundBytesByClient) : 0;
     return {
       players: this.state.players.size, connectedClients: clients, owPlayers, dgnPlayers,
       instances: Object.keys(this.instances || {}).length,
@@ -164,10 +211,15 @@ class MetricsMixin {
       rejectedByReason: { ...(rm.byReason || {}) },
       inboundMessages: mm.inbound || 0,
       outboundMessages: mm.outbound || 0,
+      outboundBytes: mm.outboundBytes || 0,
       inboundMessagesPerSecond: Math.round(((mm.windowInbound || 0) / windowAgeSec) * 100) / 100,
       outboundMessagesPerSecond: Math.round(((mm.windowOutbound || 0) / windowAgeSec) * 100) / 100,
+      outboundBytesPerSecond: Math.round(((mm.windowOutboundBytes || 0) / windowAgeSec) * 100) / 100,
+      outboundBytesPerClientPerSecond: clients ? Math.round((((mm.windowOutboundBytes || 0) / windowAgeSec) / clients) * 100) / 100 : 0,
+      outboundPeakClientBytesPerSecond: Math.round((peakClientBytes / windowAgeSec) * 100) / 100,
       inboundByType: { ...(mm.inboundByType || {}) },
       outboundByType: { ...(mm.outboundByType || {}) },
+      outboundEstimatedBytesByType: { ...(mm.outboundEstimatedBytesByType || {}) },
       disconnects: mm.disconnects || 0,
       unexpectedDisconnects: mm.unexpectedDisconnects || 0,
     };
@@ -182,6 +234,8 @@ class MetricsMixin {
       + ' mobs=' + s.mobs + ' (ow=' + s.owMobs + ' dgn=' + s.dgnMobs + ')'
       + ' wastedMobSyncs=' + s.wastedMobSyncs
       + ' tick(ms) avg=' + s.tickAvgMs + ' max=' + s.tickMaxMs + ' overBudget=' + s.tickOverBudget
+      + ' outboundKBps=' + Math.round((s.outboundBytesPerSecond || 0) / 1024 * 100) / 100
+      + ' peakClientKBps=' + Math.round((s.outboundPeakClientBytesPerSecond || 0) / 1024 * 100) / 100
       + ' persistence ops=' + s.persistenceOperations + ' failures=' + s.persistenceFailures + ' avgMs=' + s.persistenceAvgMs + ' maxMs=' + s.persistenceMaxMs
       + ' rejected=' + s.rejectedMessages);
   }

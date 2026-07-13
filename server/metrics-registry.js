@@ -49,6 +49,9 @@ function summarizeRooms(rooms) {
     rejectedMessages: 0,
     inboundMessages: 0,
     outboundMessages: 0,
+    outboundBytes: 0,
+    outboundBytesPerSecond: 0,
+    outboundPeakClientBytesPerSecond: 0,
     disconnects: 0,
     unexpectedDisconnects: 0,
     persistenceOperations: 0,
@@ -73,6 +76,9 @@ function summarizeRooms(rooms) {
     totals.rejectedMessages += room.rejectedMessages || 0;
     totals.inboundMessages += room.inboundMessages || 0;
     totals.outboundMessages += room.outboundMessages || 0;
+    totals.outboundBytes += room.outboundBytes || 0;
+    totals.outboundBytesPerSecond += room.outboundBytesPerSecond || 0;
+    totals.outboundPeakClientBytesPerSecond = Math.max(totals.outboundPeakClientBytesPerSecond, room.outboundPeakClientBytesPerSecond || 0);
     totals.disconnects += room.disconnects || 0;
     totals.unexpectedDisconnects += room.unexpectedDisconnects || 0;
     totals.persistenceOperations += room.persistenceOperations || 0;
@@ -90,6 +96,7 @@ function summarizeRooms(rooms) {
     totals.dungeonFxFilteredEvents += room.dungeonFxFilteredEvents || 0;
   }
   totals.avgVisibleMobsPerDungeonClient = totals.dungeonClients ? round2(totals.visibleMobLinks / totals.dungeonClients) : 0;
+  totals.outboundBytesPerClientPerSecond = totals.clients ? round2(totals.outboundBytesPerSecond / totals.clients) : 0;
   return totals;
 }
 
@@ -107,6 +114,9 @@ function groupByShard(rooms) {
     rejectedMessages: room.rejectedMessages || 0,
     inboundMessagesPerSecond: room.inboundMessagesPerSecond || 0,
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
+    outboundBytesPerSecond: room.outboundBytesPerSecond || 0,
+    outboundBytesPerClientPerSecond: room.outboundBytesPerClientPerSecond || 0,
+    outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
     unexpectedDisconnects: room.unexpectedDisconnects || 0,
   })).sort((a, b) => a.shardId.localeCompare(b.shardId));
@@ -126,6 +136,9 @@ function groupByDungeon(rooms) {
     rejectedMessages: room.rejectedMessages || 0,
     inboundMessagesPerSecond: room.inboundMessagesPerSecond || 0,
     outboundMessagesPerSecond: room.outboundMessagesPerSecond || 0,
+    outboundBytesPerSecond: room.outboundBytesPerSecond || 0,
+    outboundBytesPerClientPerSecond: room.outboundBytesPerClientPerSecond || 0,
+    outboundPeakClientBytesPerSecond: room.outboundPeakClientBytesPerSecond || 0,
     disconnects: room.disconnects || 0,
     unexpectedDisconnects: room.unexpectedDisconnects || 0,
     dungeonMobs: room.dungeonMobs || 0,

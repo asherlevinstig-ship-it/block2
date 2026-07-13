@@ -4448,6 +4448,7 @@ test('metrics track connected clients, rejected messages, and persistence latenc
   client.send('shopReject', { reason: 'gold' });
   client.send('shopReject', { reason: 'gold' });
   client.send('profile', {});
+  client.send('small', { ok: true });
 
   const store = room.monitorStore({
     async savePlayer() {},
@@ -4462,9 +4463,34 @@ test('metrics track connected clients, rejected messages, and persistence latenc
   assert.equal(s.rejectedMessages, 2);
   assert.equal(s.rejectedByType.shopReject, 2);
   assert.equal(s.rejectedByReason.gold, 2);
+  assert.equal(s.outboundMessages, 4);
+  assert.ok(s.outboundBytes > 0, 'tracks estimated outbound bytes for test clients');
+  assert.ok(s.outboundBytesPerSecond > 0, 'reports outbound byte rate');
+  assert.ok(s.outboundPeakClientBytesPerSecond > 0, 'reports peak per-client byte rate');
+  assert.ok(s.outboundEstimatedBytesByType.shopReject > 0, 'keeps estimated byte attribution by message type');
   assert.equal(s.persistenceOperations, 2);
   assert.equal(s.persistenceFailures, 1);
   assert.equal(s.tickOverBudget, 1);
+});
+
+test('metrics count raw encoded outbound bytes without inflating logical message counts', () => {
+  const room = makeRoom();
+  const client = {
+    sessionId: 'raw-client',
+    rawSent: [],
+    raw(data) { this.rawSent.push(data); },
+    send(type, msg) { this.last = { type, msg }; },
+  };
+  room.clients = [client];
+  room.monitorClient(client);
+
+  client.raw(Buffer.from([1, 2, 3, 4, 5, 6]));
+  client.send('notice', { text: 'tracked as a logical send only' });
+
+  const s = room.metricsSnapshot();
+  assert.equal(s.outboundMessages, 1);
+  assert.equal(s.outboundBytes, 6);
+  assert.equal(s.outboundPeakClientBytesPerSecond, 6);
 });
 
 test('addRewardItem reuses freed inventory slots instead of dropping the item', () => {
