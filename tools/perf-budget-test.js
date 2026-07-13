@@ -108,6 +108,9 @@ function run(label, script, env, metricsPort, budgets) {
       const peakClientKbps = ((peakBandwidthMetrics && peakBandwidthMetrics.totals && peakBandwidthMetrics.totals.outboundPeakClientBytesPerSecond) || 0) / 1024;
       if (kbps > budgets.maxOutboundKbps) return reject(new Error(label + ' outbound bandwidth ' + kbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundKbps + ' KB/s'));
       if (peakClientKbps > budgets.maxOutboundClientKbps) return reject(new Error(label + ' peak client bandwidth ' + peakClientKbps.toFixed(2) + ' KB/s exceeded budget ' + budgets.maxOutboundClientKbps + ' KB/s'));
+      if (budgets.minDungeonFxSkipped && (!merged.totals || (merged.totals.dungeonFxSkipped || 0) < budgets.minDungeonFxSkipped)) {
+        return reject(new Error(label + ' skipped only ' + ((merged.totals && merged.totals.dungeonFxSkipped) || 0) + ' dungeon FX fanouts; expected at least ' + budgets.minDungeonFxSkipped));
+      }
       resolve();
     });
   });
@@ -123,6 +126,7 @@ async function main() {
   const shardPort = envNumber('PERF_SHARD_PORT', 2631);
   const dungeonPort = envNumber('PERF_DUNGEON_PORT', 2632);
   const soakPort = envNumber('PERF_SOAK_PORT', 2633);
+  const spreadPort = envNumber('PERF_SPREAD_PORT', 2634);
   const checks = [
     ['Shard load budget', 'tools/shard-load-test.js', {
       SHARD_LOAD_PORT: shardPort,
@@ -135,16 +139,25 @@ async function main() {
       DUNGEON_LOAD_DURATION_MS: envNumber('PERF_DUNGEON_DURATION_MS', 8_000),
       DUNGEON_LOAD_MAX_P99_MS: envNumber('PERF_DUNGEON_MAX_P99_MS', maxP99Ms),
       DUNGEON_LOAD_MAX_HEAP_MB: envNumber('PERF_DUNGEON_MAX_HEAP_MB', maxHeapMb),
-    }, Number(dungeonPort)],
+    }, Number(dungeonPort), {}],
+    ['Spread dungeon bandwidth budget', 'tools/dungeon-load-test.js', {
+      DUNGEON_LOAD_PORT: spreadPort,
+      DUNGEON_LOAD_DUNGEONS: envNumber('PERF_SPREAD_DUNGEONS', 1),
+      DUNGEON_LOAD_DURATION_MS: envNumber('PERF_SPREAD_DURATION_MS', 8_000),
+      DUNGEON_LOAD_SPREAD: '1',
+      DUNGEON_LOAD_REQUIRE_FX_SKIPS: '1',
+      DUNGEON_LOAD_MAX_P99_MS: envNumber('PERF_SPREAD_MAX_P99_MS', maxP99Ms),
+      DUNGEON_LOAD_MAX_HEAP_MB: envNumber('PERF_SPREAD_MAX_HEAP_MB', maxHeapMb),
+    }, Number(spreadPort), { minDungeonFxSkipped: 1 }],
     ['Mixed online soak budget', 'tools/online-soak-test.js', {
       SOAK_PORT: soakPort,
       SOAK_DURATION_MS: envNumber('PERF_SOAK_DURATION_MS', 20_000),
       SOAK_MAX_P99_MS: envNumber('PERF_SOAK_MAX_P99_MS', maxP99Ms),
       SOAK_MAX_HEAP_MB: envNumber('PERF_SOAK_MAX_HEAP_MB', 160),
-    }, Number(soakPort)],
+    }, Number(soakPort), {}],
   ];
 
-  for (const [label, script, env, metricsPort] of checks) await run(label, script, env, metricsPort, bandwidthBudgets);
+  for (const [label, script, env, metricsPort, extraBudgets] of checks) await run(label, script, env, metricsPort, { ...bandwidthBudgets, ...extraBudgets });
   console.log('\nPerformance budget suite passed');
 }
 

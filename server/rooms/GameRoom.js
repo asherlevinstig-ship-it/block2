@@ -1187,6 +1187,59 @@ class GameRoom extends Room {
       });
       return !!p;
     }
+    if (action === 'positionDungeonLoadProbe') {
+      const p = this.state.players.get(client.sessionId);
+      const inst = p && p.dgn && this.instances[p.dgn];
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p || !inst) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      const mobs = [];
+      this.state.mobs.forEach(mob => {
+        if (mob && mob.dgn === inst.id && mob.hp > 0 && mob.kind !== 'boss') mobs.push(mob);
+      });
+      const points = mobs.map(mob => ({ x: mob.x, z: mob.z }));
+      const w = inst.world;
+      const step = 8;
+      for (let x = w.originX + 2; x < w.originX + w.width - 2; x += step) {
+        for (let z = w.originZ + 2; z < w.originZ + w.depth - 2; z += step) {
+          const y = D.standHeightIn(w, x, z, 12);
+          if (y > 0) points.push({ x, z });
+        }
+      }
+      const fallbackA = inst.entrance || inst.bossRoom || { x: p.x, z: p.z };
+      const fallbackB = inst.bossRoom || inst.entrance || { x: p.x, z: p.z };
+      if (!points.length) points.push({ x: fallbackA.x, z: fallbackA.z }, { x: fallbackB.x, z: fallbackB.z });
+      let a = points[0], b = points[points.length - 1], best = -1;
+      for (const left of points) for (const right of points) {
+        const d = Math.hypot((left.x || 0) - (right.x || 0), (left.z || 0) - (right.z || 0));
+        if (d > best) { best = d; a = left; b = right; }
+      }
+      const index = Math.max(0, Number(m && m.index) | 0);
+      const total = Math.max(1, Number(m && m.total) | 0);
+      const target = index < Math.ceil(total / 2) ? a : b;
+      const angle = index * Math.PI * 2 / total;
+      const tx = Number.isFinite(target.x) ? target.x : fallbackA.x;
+      const tz = Number.isFinite(target.z) ? target.z : fallbackA.z;
+      const x = tx + Math.cos(angle) * 1.4;
+      const z = tz + Math.sin(angle) * 1.4;
+      const y = D.standHeightIn(inst.world, x, z, 12);
+      p.x = x; p.y = y > 0 ? y : p.y; p.z = z; p.dim = 'dungeon'; p.dgn = inst.id;
+      client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z, separation: Math.round(best * 100) / 100 });
+      return true;
+    }
+    if (action === 'emitDungeonLoadFx') {
+      const p = this.state.players.get(client.sessionId);
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p || !p.dgn) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      this.sendSpace(p.dgn, 'fx', { t: 'loadProbe', x: p.x, y: p.y, z: p.z, dgn: p.dgn });
+      client.send('e2eJourneyResult', { action, requestId, ok: true });
+      return true;
+    }
     if (action === 'positionAtGate') {
       const p = this.state.players.get(client.sessionId), id = String(m && m.id || '');
       const gate = this.state.gates && this.state.gates.get(id);

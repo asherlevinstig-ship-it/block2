@@ -15,6 +15,8 @@ const PARTY_SIZE = Number(process.env.DUNGEON_LOAD_PARTY_SIZE || 8);
 const CLIENTS = DUNGEONS * PARTY_SIZE;
 const PORT = Number(process.env.DUNGEON_LOAD_PORT || 2619);
 const DURATION_MS = Number(process.env.DUNGEON_LOAD_DURATION_MS || 8_000);
+const SPREAD_MODE = process.env.DUNGEON_LOAD_SPREAD === '1';
+const REQUIRE_FX_SKIPS = process.env.DUNGEON_LOAD_REQUIRE_FX_SKIPS === '1';
 const STEP_MS = 100;
 const endpoint = 'ws://127.0.0.1:' + PORT;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -85,6 +87,43 @@ function firstMob(room) {
   return null;
 }
 
+function nearestMob(room, player) {
+  let best = null, bestDist = Infinity;
+  if (!room.state.mobs || !player) return null;
+  for (const mob of room.state.mobs.values()) {
+    if (!mob || mob.hp <= 0) continue;
+    const d = Math.hypot((mob.x || 0) - player.x, (mob.z || 0) - player.z);
+    if (d < bestDist) { best = mob; bestDist = d; }
+  }
+  return best;
+}
+
+let requestSeq = 0;
+async function e2e(session, action, payload = {}) {
+  const requestId = action + '-' + (++requestSeq);
+  session.room.send('e2eJourney', { ...payload, action, requestId });
+  return waitFor(() => session.e2eResults.get(requestId), action + ' result', 3000);
+}
+
+async function spreadDungeonParties(groups) {
+  const reports = [];
+  for (const group of groups.values()) {
+    const positioned = await Promise.all(group.sessions.map((session, index) =>
+      e2e(session, 'positionDungeonLoadProbe', { index, total: group.sessions.length })));
+    for (let i = 0; i < positioned.length; i++) {
+      assert.equal(positioned[i].ok, true, 'spread positioning failed for ' + group.gateId);
+      group.sessions[i].spreadBase = { x: positioned[i].x, y: positioned[i].y, z: positioned[i].z };
+    }
+    const near = positioned.slice(0, Math.ceil(positioned.length / 2));
+    const far = positioned.slice(Math.ceil(positioned.length / 2));
+    let minCrossDistance = Infinity;
+    for (const a of near) for (const b of far) minCrossDistance = Math.min(minCrossDistance, Math.hypot((a.x || 0) - (b.x || 0), (a.z || 0) - (b.z || 0)));
+    reports.push({ gateId: group.gateId, separation: positioned[0] ? positioned[0].separation : 0, minCrossDistance: Math.round(minCrossDistance * 100) / 100 });
+  }
+  await wait(500);
+  return reports;
+}
+
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-dungeon-load-'));
   const accounts = await seed(dataDir);
@@ -105,7 +144,11 @@ async function main() {
       const room = await client.joinOrCreate('dungeon', { gateId: gate.id, ticket, name: account.name });
       room.onMessage('*', () => {});
       for (const type of ['abilityReject', 'dungeonEditReject', 'commsReject']) room.onMessage(type, () => rejects++);
-      sessions.push({ room, gate, account });
+      const e2eResults = new Map();
+      room.onMessage('e2eJourneyResult', message => {
+        if (message && message.requestId) e2eResults.set(String(message.requestId), message);
+      });
+      sessions.push({ room, gate, account, e2eResults });
     }
   }
 
@@ -117,6 +160,7 @@ async function main() {
   }, 'all dungeon parties to sync');
 
   const groups = roomGroups(sessions);
+  const spreadReports = SPREAD_MODE ? await spreadDungeonParties(groups) : [];
   const distribution = [...groups.values()].map(group => ({
     gateId: group.gateId,
     roomId: group.room.roomId,
@@ -143,13 +187,18 @@ async function main() {
       const room = sessions[i].room, me = room.state.players.get(room.sessionId);
       if (!me) continue;
       const angle = tick * 0.11 + i * Math.PI * 2 / Math.max(1, CLIENTS);
-      room.send('move', { x: me.x + Math.cos(angle) * 0.6, y: me.y, z: me.z + Math.sin(angle) * 0.6, yaw: angle }); messages++;
+      const base = sessions[i].spreadBase || me;
+      const radius = SPREAD_MODE ? 0.55 : 0.6;
+      room.send('move', { x: base.x + Math.cos(angle) * radius, y: base.y || me.y, z: base.z + Math.sin(angle) * radius, yaw: angle }); messages++;
+      if (SPREAD_MODE && tick % 5 === 0 && i % PARTY_SIZE < Math.ceil(PARTY_SIZE / 2)) {
+        room.send('e2eJourney', { action: 'emitDungeonLoadFx', requestId: 'fx-' + tick + '-' + i }); messages++;
+      }
       if (tick % 2 === 0) {
-        const mob = firstMob(room);
+        const mob = SPREAD_MODE ? nearestMob(room, me) : firstMob(room);
         room.send('attack', { id: mob ? mob.id : 'missing-dungeon-load-target' }); messages++;
       }
       if (tick % 10 === 0) {
-        const mob = firstMob(room);
+        const mob = SPREAD_MODE ? nearestMob(room, me) : firstMob(room);
         room.send('ability', { slot: 0, id: mob ? mob.id : 'missing-dungeon-load-target' }); messages++;
       }
     }
@@ -164,6 +213,8 @@ async function main() {
     clients: sessions.length,
     dungeons: DUNGEONS,
     partySize: PARTY_SIZE,
+    spreadMode: SPREAD_MODE,
+    spreadReports,
     rooms: distribution,
     durationMs: Math.round(elapsed),
     messages,
@@ -182,6 +233,22 @@ async function main() {
   assert.ok(report.messagesPerSecond >= CLIENTS * 8, 'throughput fell below expected dungeon traffic rate');
   assert.ok(report.eventLoopP99Ms < Number(process.env.DUNGEON_LOAD_MAX_P99_MS || 250), 'event-loop p99 exceeded threshold');
   assert.ok(report.heapGrowthMb < Number(process.env.DUNGEON_LOAD_MAX_HEAP_MB || 128), 'heap growth exceeded threshold');
+  if (REQUIRE_FX_SKIPS) {
+    const metrics = await new Promise(resolve => {
+      const request = http.get({ host: '127.0.0.1', port: PORT, path: '/__metrics', timeout: 750 }, response => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', chunk => { body += chunk; });
+        response.on('end', () => {
+          try { resolve(response.statusCode === 200 ? JSON.parse(body) : null); }
+          catch (_) { resolve(null); }
+        });
+      });
+      request.on('error', () => resolve(null));
+      request.on('timeout', () => { request.destroy(); resolve(null); });
+    });
+    assert.ok(metrics && metrics.totals && metrics.totals.dungeonFxSkipped > 0, 'spread dungeon load did not skip any positioned FX fanout');
+  }
 
   await Promise.all(sessions.map(session => session.room.leave().catch(() => {})));
   await shutdown();

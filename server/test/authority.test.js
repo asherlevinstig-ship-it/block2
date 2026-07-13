@@ -3643,6 +3643,33 @@ test('DungeonRoom filters positioned dungeon fx to nearby players', () => {
   assert.equal(metrics.dungeonFxSkipped, 1, 'global dungeon fx do not count as skipped');
 });
 
+test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', () => {
+  const priorE2E = process.env.BLOCKCRAFT_E2E;
+  process.env.BLOCKCRAFT_E2E = '1';
+  try {
+    const room = makeDungeonRoom();
+    const inst = hazInstance(room, 'load-probe-dgn', []);
+    const near = seedDungeonPlayer(room, 'load-probe-near', inst, { x: 0, y: 10, z: 0 });
+    const far = seedDungeonPlayer(room, 'load-probe-far', inst, { x: 0, y: 10, z: 0 });
+    room.state.mobs.set('probe-a', dungeonMob('probe-a', inst.id, 0, 0));
+    room.state.mobs.set('probe-b', dungeonMob('probe-b', inst.id, 150, 0));
+
+    assert.equal(room.handleE2EJourney(near, { action: 'positionDungeonLoadProbe', index: 0, total: 2, requestId: 'near' }), true);
+    assert.equal(room.handleE2EJourney(far, { action: 'positionDungeonLoadProbe', index: 1, total: 2, requestId: 'far' }), true);
+    const np = room.state.players.get(near.sessionId), fp = room.state.players.get(far.sessionId);
+    assert.ok(Math.hypot(np.x - fp.x, np.z - fp.z) > 100, 'probe positions create a high-spread party');
+
+    assert.equal(room.handleE2EJourney(near, { action: 'emitDungeonLoadFx', requestId: 'fx' }), true);
+    assert.equal(near.sent.some(entry => entry.type === 'fx' && entry.msg.t === 'loadProbe'), true);
+    assert.equal(far.sent.some(entry => entry.type === 'fx' && entry.msg.t === 'loadProbe'), false);
+    const metrics = room.dungeonInterestSnapshot();
+    assert.equal(metrics.dungeonFxSkipped, 1);
+  } finally {
+    if (priorE2E === undefined) delete process.env.BLOCKCRAFT_E2E;
+    else process.env.BLOCKCRAFT_E2E = priorE2E;
+  }
+});
+
 test('E-rank boss style defers signatures while preserving deterministic combo and enrage sync', () => {
   const room = makeDungeonRoom();
   const inst = putInstance(room, { id: 'root-combo', world: new D.DungeonGrid() });
