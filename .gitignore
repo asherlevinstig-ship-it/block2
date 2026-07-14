@@ -7,6 +7,13 @@ data/
 # server logs
 *.log
 
+# local secrets and service-account keys
+.env
+.env.*
+!.env.example
+firebase-service-account*.json
+service-account*.json
+
 # playwright e2e artifacts
 test-results/
 playwright-report/

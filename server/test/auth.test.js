@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const bcrypt = require('bcryptjs');
 const { AuthService } = require('../auth');
+const { MySqlAuthBackend, normalizeBcryptHash } = require('../mysql-auth');
 
 test('accounts use scrypt hashes and verified server sessions', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-'));
@@ -54,4 +56,78 @@ test('concurrent auth saves are serialized without losing sessions', async () =>
   }
   restarted.stop();
   auth.stop();
+});
+
+function fakeMysqlPool({ teacher, student } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async execute(sql, params) {
+      calls.push({ sql, params });
+      if (/FROM teachers/i.test(sql)) return [[teacher].filter(Boolean)];
+      if (/FROM students/i.test(sql)) return [[student].filter(Boolean)];
+      return [{ affectedRows: 1 }];
+    },
+  };
+}
+
+test('MySQL auth backend validates existing teacher accounts and persists session snapshots', async () => {
+  const hash = await bcrypt.hash('correct horse teacher', 10);
+  const pool = fakeMysqlPool({
+    teacher: { id: 42, name: 'Mara Vale', email: 'Mara@School.test', password_hash: hash, role: 'teacher', is_active: 1, school_id: 7 },
+  });
+  const backend = new MySqlAuthBackend({ pool });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-mysql-'));
+  const auth = new AuthService(dir, { authBackend: backend });
+
+  const account = await auth.login('mara@school.test', 'correct horse teacher');
+  assert.deepEqual(account, {
+    id: 'teacher_42',
+    username: 'mara@school.test',
+    displayName: 'Mara Vale',
+    accountType: 'teacher',
+    role: 'teacher',
+    schoolId: '7',
+  });
+  await assert.rejects(() => auth.register('new_user', 'long enough password', 'New'), /school account system/);
+
+  const sid = await auth.issueSession(account);
+  const req = { headers: { cookie: 'bc_session=' + encodeURIComponent(sid) } };
+  assert.deepEqual(auth.authenticateRequest(req), {
+    id: 'teacher_42',
+    username: 'mara@school.test',
+    displayName: 'Mara Vale',
+    accountType: 'teacher',
+    role: 'teacher',
+    schoolId: '7',
+  });
+  const restarted = new AuthService(dir, { authBackend: null });
+  assert.equal(restarted.authenticateRequest(req).id, 'teacher_42');
+  restarted.stop();
+  auth.stop();
+});
+
+test('MySQL auth backend falls through to students and rejects inactive teachers', async () => {
+  const studentHash = await bcrypt.hash('correct horse student', 10);
+  const pool = fakeMysqlPool({
+    teacher: { id: 2, name: 'Inactive', email: 'shared@test.school', password_hash: await bcrypt.hash('teacher password', 10), role: 'teacher', is_active: 0, school_id: 1 },
+    student: { id: 9, name: 'Kirito', email: 'Shared@Test.school', password_hash: studentHash, school_id: 1 },
+  });
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.login('shared@test.school', 'correct horse student');
+  assert.equal(account.id, 'student_9');
+  assert.equal(account.accountType, 'student');
+  assert.equal(account.role, 'student');
+});
+
+test('MySQL auth backend accepts PHP 2y bcrypt hashes', async () => {
+  const hash = (await bcrypt.hash('correct horse php', 10)).replace('$2b$', '$2y$');
+  assert.equal(normalizeBcryptHash(hash).startsWith('$2b$'), true);
+  const backend = new MySqlAuthBackend({
+    pool: fakeMysqlPool({
+      student: { id: 3, name: 'PHP User', email: 'php@test.school', password_hash: hash, school_id: null },
+    }),
+  });
+  const account = await backend.login('php@test.school', 'correct horse php');
+  assert.equal(account.id, 'student_3');
 });

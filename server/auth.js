@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { createConfiguredAuthBackend } = require('./mysql-auth');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -28,9 +29,10 @@ function scrypt(password, salt) {
 }
 
 class AuthService {
-  constructor(dir) {
+  constructor(dir, options = {}) {
     this.dir = dir || path.join(process.cwd(), 'data');
     this.file = path.join(this.dir, 'auth.json');
+    this.authBackend = options.authBackend === undefined ? createConfiguredAuthBackend(options.env || process.env) : options.authBackend;
     this.accounts = new Map();
     this.byId = new Map();
     this.sessions = new Map();
@@ -70,8 +72,10 @@ class AuthService {
     }
     const now = Date.now();
     for (const raw of Array.isArray(data.sessions) ? data.sessions : []) {
-      if (!/^[a-f0-9]{64}$/.test(raw.id || '') || !this.byId.has(raw.accountId) || !(Number(raw.expiresAt) > now)) continue;
-      this.sessions.set(raw.id, { accountId: raw.accountId, expiresAt: Number(raw.expiresAt) });
+      if (!/^[a-f0-9]{64}$/.test(raw.id || '') || !(Number(raw.expiresAt) > now)) continue;
+      const account = this.publicAccount(raw.account);
+      if (!this.byId.has(raw.accountId) && !account) continue;
+      this.sessions.set(raw.id, { accountId: raw.accountId, account, expiresAt: Number(raw.expiresAt) });
     }
   }
 
@@ -89,10 +93,16 @@ class AuthService {
   }
 
   publicAccount(account) {
-    return account ? { id: account.id, username: account.username, displayName: account.displayName } : null;
+    if (!account || typeof account.id !== 'string') return null;
+    const out = { id: account.id, username: cleanUsername(account.username), displayName: cleanDisplayName(account.displayName) };
+    if (account.accountType) out.accountType = String(account.accountType);
+    if (account.role) out.role = String(account.role);
+    if (account.schoolId != null) out.schoolId = String(account.schoolId);
+    return out;
   }
 
   async register(username, password, displayName) {
+    if (this.authBackend) throw Object.assign(new Error('Registration is managed by your school account system.'), { status: 403, code: 'external_auth' });
     username = cleanUsername(username);
     if (!validUsername(username)) throw Object.assign(new Error('Username must be 3-24 lowercase letters, numbers, or underscores.'), { status: 400, code: 'username' });
     if (typeof password !== 'string' || password.length < 10 || password.length > 128) throw Object.assign(new Error('Password must be 10-128 characters.'), { status: 400, code: 'password' });
@@ -110,6 +120,7 @@ class AuthService {
   }
 
   async login(username, password) {
+    if (this.authBackend) return this.authBackend.login(username, password);
     username = cleanUsername(username);
     const account = this.accounts.get(username);
     // Perform the expensive hash even for unknown accounts to reduce username probing.
@@ -122,7 +133,8 @@ class AuthService {
 
   async issueSession(account) {
     const sid = b64url(crypto.randomBytes(32));
-    this.sessions.set(this.sessionKey(sid), { accountId: account.id, expiresAt: Date.now() + SESSION_MS });
+    const publicAccount = this.publicAccount(account);
+    this.sessions.set(this.sessionKey(sid), { accountId: publicAccount.id, account: publicAccount, expiresAt: Date.now() + SESSION_MS });
     await this.save();
     return sid;
   }
@@ -136,7 +148,7 @@ class AuthService {
     const session = this.sessions.get(key);
     if (!session) return null;
     if (session.expiresAt <= Date.now()) { this.sessions.delete(key); return null; }
-    return this.byId.get(session.accountId) || null;
+    return this.byId.get(session.accountId) || session.account || null;
   }
 
   authenticateRequest(req) {

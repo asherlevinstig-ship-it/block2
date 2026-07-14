@@ -46,6 +46,8 @@ async function validateStartup(env = process.env) {
   const production = String(env.NODE_ENV || '').toLowerCase() === 'production';
   const storage = String(env.STORE || 'json').toLowerCase();
   if (!['json', 'firebase'].includes(storage)) throw new Error('STORE must be either json or firebase');
+  const authBackend = String(env.AUTH_BACKEND || 'file').toLowerCase();
+  if (!['file', 'mysql'].includes(authBackend)) throw new Error('AUTH_BACKEND must be either file or mysql');
   const dataDir = path.resolve(env.DATA_DIR || path.join(process.cwd(), 'data'));
   const trustProxy = parseTrustProxy(env.TRUST_PROXY);
 
@@ -73,7 +75,13 @@ async function validateStartup(env = process.env) {
     } else if (production) throw new Error('Firebase production storage requires FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS');
   }
 
-  // Authentication remains file-backed even when game state uses Firebase.
+  if (authBackend === 'mysql') {
+    for (const field of ['MYSQL_HOST', 'MYSQL_USER', 'MYSQL_PASSWORD', 'MYSQL_DATABASE']) {
+      if (!String(env[field] || '').trim()) throw new Error('AUTH_BACKEND=mysql requires ' + field);
+    }
+  }
+
+  // DATA_DIR is still used for auth sessions and JSON storage fallback.
   await assertWritableDirectory(dataDir);
   return { production, storage, dataDir, trustProxy };
 }

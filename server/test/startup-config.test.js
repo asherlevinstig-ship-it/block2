@@ -26,6 +26,7 @@ test('production rejects unsafe HTTPS and proxy configuration', async () => {
 test('production rejects unsafe flags and unsupported storage', async () => {
   await assert.rejects(() => validateStartup(productionEnv({ DEV_CHEATS: '1' })), /must not be enabled/);
   await assert.rejects(() => validateStartup(productionEnv({ STORE: 'sqlite' })), /STORE must be/);
+  await assert.rejects(() => validateStartup(productionEnv({ AUTH_BACKEND: 'ldap' })), /AUTH_BACKEND must be/);
 });
 
 test('Firebase production validates credential secrets', async () => {
@@ -37,4 +38,16 @@ test('startup rejects an unwritable data path', async () => {
   const file = path.join(tempDir(), 'not-a-directory');
   fs.writeFileSync(file, 'occupied');
   await assert.rejects(() => validateStartup({ DATA_DIR: file }), /DATA_DIR is not writable/);
+});
+
+test('MySQL auth backend requires database credentials', async () => {
+  await assert.rejects(() => validateStartup(productionEnv({ AUTH_BACKEND: 'mysql', MYSQL_HOST: 'localhost' })), /MYSQL_USER/);
+  const config = await validateStartup(productionEnv({
+    AUTH_BACKEND: 'mysql',
+    MYSQL_HOST: 'localhost',
+    MYSQL_USER: 'user',
+    MYSQL_PASSWORD: 'secret',
+    MYSQL_DATABASE: 'school',
+  }));
+  assert.equal(config.production, true);
 });

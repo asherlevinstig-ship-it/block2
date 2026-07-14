@@ -47,7 +47,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const secret = password.value || '';
     const displayName = (playerName.value || 'Hunter').slice(0, 16);
     if (!username || !secret) {
-      setStatus('ENTER YOUR USERNAME AND PASSWORD', 'bad');
+      setStatus('ENTER YOUR USERNAME OR EMAIL AND PASSWORD', 'bad');
       return false;
     }
     setStatus(create ? 'CREATING ACCOUNT...' : 'SIGNING IN...');

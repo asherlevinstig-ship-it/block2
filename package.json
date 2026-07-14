@@ -20,6 +20,10 @@
     "test:perf": "node tools/perf-budget-test.js",
     "test:perf:client": "node tools/client-overworld-perf-test.js",
     "test:perf:interest": "node tools/interest-radius-matrix.js",
+    "firebase:smoke": "node tools/firebase-smoke-test.js",
+    "mysql:auth:smoke": "node tools/mysql-auth-smoke-test.js",
+    "firebase:wipe:dry": "node tools/wipe-firestore.js --dry-run",
+    "firebase:wipe": "node tools/wipe-firestore.js",
     "balance:loot": "node tools/loot-progression-sim.js",
     "balance:familiars": "node tools/familiar-balance-sim.js"
   },
@@ -28,7 +32,10 @@
     "@colyseus/schema": "^4.0.27",
     "@colyseus/sdk": "^0.17.43",
     "@colyseus/ws-transport": "^0.17.13",
+    "bcryptjs": "^3.0.3",
     "express": "^4.18.0",
+    "firebase-admin": "^13.10.0",
+    "mysql2": "^3.22.6",
     "three": "^0.128.0"
   },
   "devDependencies": {
