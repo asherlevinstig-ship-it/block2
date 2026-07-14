@@ -24,6 +24,13 @@ function parseCookies(header) {
   return out;
 }
 
+function configuredClientOrigins() {
+  return String(process.env.CLIENT_ORIGIN || process.env.CLIENT_ORIGINS || '')
+    .split(',')
+    .map(origin => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+}
+
 function scrypt(password, salt) {
   return new Promise((resolve, reject) => crypto.scrypt(password, salt, 32, SCRYPT, (err, key) => err ? reject(err) : resolve(key)));
 }
@@ -160,7 +167,9 @@ class AuthService {
 
   cookie(sid, req, clear = false) {
     const secure = !!(req && (req.secure || String(req.headers && req.headers['x-forwarded-proto']).split(',')[0].trim() === 'https'));
-    return `${COOKIE}=${clear ? '' : encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear ? 0 : Math.floor(SESSION_MS / 1000)}${secure ? '; Secure' : ''}`;
+    const crossSite = configuredClientOrigins().length > 0;
+    const sameSite = crossSite ? 'None' : 'Strict';
+    return `${COOKIE}=${clear ? '' : encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${clear ? 0 : Math.floor(SESSION_MS / 1000)}${secure || crossSite ? '; Secure' : ''}`;
   }
 
   consumeAttempt(key, now) {
@@ -183,6 +192,18 @@ class AuthService {
   attach(app) {
     app.use('/auth', (req, res, next) => {
       res.setHeader('Cache-Control', 'no-store');
+      const origins = configuredClientOrigins();
+      const origin = String(req.headers.origin || '').replace(/\/+$/, '');
+      if (origin && origins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
+      }
+      if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        return res.status(204).end();
+      }
       const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
       if (process.env.NODE_ENV === 'production' && !secure) return res.status(426).json({ ok: false, error: 'HTTPS is required for authentication.' });
       next();

@@ -13,6 +13,7 @@ import {createCombatFeedback} from './combat-feedback.mjs';
 import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
+import {backendWsUrl} from './config.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -640,7 +641,7 @@ for(const [bindingName,binding] of Object.entries(legacyNetworkingBindings)){
 const SESSION=createNetworkSession({
   createController:createNetworkController,
   Client:typeof Colyseus==='undefined'?null:Colyseus.Client,
-  endpoint:()=>((location.protocol==='https:'?'wss':'ws')+'://'+location.host),
+  endpoint:()=>backendWsUrl(),
   sessionStorage,
   attachRoom:(...args)=>netAttachRoom(...args),
   unavailable:()=>{eventLog('Solo mode: no server SDK');setWorldLoadingStatus('Starting solo world...');setTimeout(()=>finishWorldLoading('solo'),900);},

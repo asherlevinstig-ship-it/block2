@@ -47,6 +47,14 @@ STORE=firebase
 FIREBASE_SERVICE_ACCOUNT={"type":"service_account","project_id":"..."}
 ```
 
+If the browser client is hosted separately on Vercel, set the exact Vercel origin on the Colyseus server too:
+
+```env
+CLIENT_ORIGIN=https://your-vercel-client.vercel.app
+```
+
+The client uses the Colyseus endpoint automatically on `*.vercel.app`, and can also be pointed at a different backend with `?backend=https://your-colyseus-endpoint`.
+
 ## 5. Existing MySQL Users
 
 The repo supports Firebase storage and optional MySQL-backed login. Set `AUTH_BACKEND=mysql` so `/auth/login` validates against:

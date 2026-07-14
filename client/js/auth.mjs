@@ -1,4 +1,4 @@
-export function createAuthController({ user, password, playerName, status, play, register, logout, request = fetch }) {
+export function createAuthController({ user, password, playerName, status, play, register, logout, request = fetch, apiUrl = path => path }) {
   const state = { checked: false, account: null, busy: false };
 
   function setStatus(text, kind = '') {
@@ -20,8 +20,8 @@ export function createAuthController({ user, password, playerName, status, play,
   }
 
   async function json(url, body) {
-    const res = await request(url, {
-      method: body ? 'POST' : 'GET', credentials: 'same-origin',
+    const res = await request(apiUrl(url), {
+      method: body ? 'POST' : 'GET', credentials: 'include',
       headers: body ? { 'Content-Type': 'application/json' } : {},
       body: body ? JSON.stringify(body) : undefined,
     });

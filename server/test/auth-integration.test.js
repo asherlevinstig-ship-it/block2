@@ -7,9 +7,11 @@ const path = require('path');
 const express = require('express');
 const { AuthService } = require('../auth');
 
-async function fixture({ production = false, trustProxy = 1 } = {}) {
+async function fixture({ production = false, trustProxy = 1, clientOrigin = '' } = {}) {
   const previousEnv = process.env.NODE_ENV;
+  const previousClientOrigin = process.env.CLIENT_ORIGIN;
   process.env.NODE_ENV = production ? 'production' : 'test';
+  if (clientOrigin) process.env.CLIENT_ORIGIN = clientOrigin; else delete process.env.CLIENT_ORIGIN;
   const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-http-')));
   const app = express();
   app.set('trust proxy', trustProxy);
@@ -24,6 +26,7 @@ async function fixture({ production = false, trustProxy = 1 } = {}) {
       await new Promise(resolve => server.close(resolve));
       auth.stop();
       if (previousEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousEnv;
+      if (previousClientOrigin === undefined) delete process.env.CLIENT_ORIGIN; else process.env.CLIENT_ORIGIN = previousClientOrigin;
     },
   };
 }
@@ -62,6 +65,30 @@ test('session cookies authenticate, logout revokes them, and expiry is enforced'
     const expiringCookie = sessionCookie(login);
     for (const session of f.auth.sessions.values()) session.expiresAt = Date.now() - 1;
     assert.equal((await f.request('/auth/me', { headers: { cookie: expiringCookie } })).status, 401);
+  } finally { await f.close(); }
+});
+
+test('configured client origins receive credentialed CORS and cross-site cookies', { concurrency: false }, async () => {
+  const origin = 'https://blockcraft-client.vercel.app';
+  const f = await fixture({ production: true, clientOrigin: origin });
+  try {
+    const preflight = await f.request('/auth/login', {
+      method: 'OPTIONS',
+      headers: { origin, 'x-forwarded-proto': 'https' },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
+    assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+
+    const accepted = await f.request('/auth/register', jsonPost(
+      { username: 'vercel_user', password: 'long enough password' },
+      { origin, 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.9' },
+    ));
+    assert.equal(accepted.status, 200);
+    assert.equal(accepted.headers.get('access-control-allow-origin'), origin);
+    assert.equal(accepted.headers.get('access-control-allow-credentials'), 'true');
+    assert.match(accepted.headers.get('set-cookie'), /SameSite=None/);
+    assert.match(accepted.headers.get('set-cookie'), /; Secure/);
   } finally { await f.close(); }
 });
 

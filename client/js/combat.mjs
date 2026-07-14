@@ -1,5 +1,6 @@
 import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
+import {apiUrl} from './config.mjs';
 const gameContext=window.BlockcraftGameContext;
 const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -1448,7 +1449,7 @@ function enterPlayFallback(){
   locked=true;
   refreshPlayUi();
 }
-const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn});
+const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn,apiUrl});
 const AUTH=AUTH_UI.state;
 const setAuthStatus=(text,kind='')=>AUTH_UI.setStatus(text,kind);
 const renderAuthState=()=>AUTH_UI.render();
