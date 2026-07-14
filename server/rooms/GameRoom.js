@@ -332,7 +332,16 @@ class GameRoom extends Room {
     this.onMessage('meta', (client, m) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || !m) return;
-      if (typeof m.name === 'string') p.name = cleanName(m.name);
+      if (typeof m.name === 'string') {
+        const name = cleanName(m.name);
+        p.name = name;
+        const rec = this.profileFor(client);
+        if (rec && rec.prof && name) {
+          rec.prof.name = name;
+          rec.prof.nameSet = true;
+          this.dirtyPlayers.add(rec.token);
+        }
+      }
       if (['shadow', 'mage', 'guardian'].includes(m.path)) this.setPath(client, m.path);
       p.heldId = clampN(m.heldId, 0, 999) | 0;
     });
@@ -397,6 +406,7 @@ class GameRoom extends Room {
       const p = this.state.players.get(client.sessionId);
       if (p) {
         prof.name = p.name;
+        prof.nameSet = true;
         p.lvl = prof.S.lvl;
         p.path = prof.S.path;
         p.job = JOB_IDS.has(prof.job) ? prof.job : '';

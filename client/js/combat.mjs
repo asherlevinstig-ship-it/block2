@@ -1460,6 +1460,8 @@ async function startPlaying(create=false){
   const authenticated=await authenticate(false);
   AUTH.busy=false;playbtn.disabled=false;registerbtn.disabled=false;
   if(!authenticated)return;
+  const hunterName=AUTH_UI.requireHunterName();
+  if(!hunterName)return;
   SFX.init();
   if(!NET.tried) showWorldLoading('Preparing world...');
   netConnect();

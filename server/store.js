@@ -264,8 +264,10 @@ function sanitizeEquippedCosmetics(raw, unlocks = []) {
 }
 
 function defaultProfile(name) {
+  const chosenName = typeof name === 'string' && cleanName(name) !== 'Hunter';
   return {
     name: cleanName(name),
+    nameSet: chosenName,
     S: { lvl: 1, xp: 0, pts: 0, str: 1, agi: 1, vit: 1, int: 1, path: '' },
     job: '',
     jobXp: 0,
@@ -671,6 +673,14 @@ function sanitizeProfile(p) {
     int: clampI(S.int, 1, 999),
     path: ['', 'shadow', 'mage', 'guardian'].includes(S.path) ? S.path : '',
   };
+  out.nameSet = p.nameSet === true || (p.nameSet == null && (
+    out.name !== 'Hunter'
+    || (out.S.lvl | 0) > 1
+    || !!out.S.path
+    || (p.highestGateRankCleared | 0) >= 0
+    || !!p.firstQuestRewardClaimed
+    || (p.npcQuestChains && typeof p.npcQuestChains === 'object' && Object.keys(p.npcQuestChains).length > 0)
+  ));
   const legacyJob = cleanJob(p.job);
   out.job = PROFESSION_IDS.includes(legacyJob) ? legacyJob : '';
   out.jobXpByJob = {};
@@ -850,6 +860,7 @@ function mergeClientSave(current, snapshot) {
   if (!snapshot || typeof snapshot !== 'object') return current;
   const out = sanitizeProfile(current);
   out.name = cleanName(snapshot.name || out.name);
+  if (out.name && out.name !== 'Hunter') out.nameSet = true;
   // Persistent progression is server-owned. Snapshot saves are only a legacy
   // identity heartbeat; dedicated validated handlers mutate path, stats, jobs,
   // contracts, equipment, inventory, economy, unlocks, quests, and position.

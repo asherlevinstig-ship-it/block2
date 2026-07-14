@@ -1786,6 +1786,12 @@ function netConnectionFailed(err){
 function netRestoreProfile(m){
   try{
     applyServerTutorials(m&&m.tutorials);
+    const profileName=String(m&&m.nameSet&&m.name||'').replace(/[^A-Za-z0-9 _-]/g,'').replace(/\s+/g,' ').trim().slice(0,16);
+    if(profileName){
+      const nameInput=document.getElementById('playername');
+      if(nameInput)nameInput.value=profileName;
+      try{localStorage.setItem('bc_name',profileName);}catch(e){}
+    }
     if(!onboardingDone()){
       if(!onboardingActive) beginOnboarding();
       eventLog('Tutorial active - saved profile ignored until training is complete');

@@ -1,5 +1,6 @@
 export function createAuthController({ user, password, playerName, status, play, register, logout, request = fetch, apiUrl = path => path }) {
   const state = { checked: false, account: null, busy: false };
+  const cleanHunterName = value => String(value || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
 
   function setStatus(text, kind = '') {
     status.textContent = text || '';
@@ -15,8 +16,7 @@ export function createAuthController({ user, password, playerName, status, play,
     logout.classList.toggle('hidden', !signed);
     play.textContent = signed ? 'PLAY' : 'SIGN IN & PLAY';
     if (signed) {
-      setStatus('SIGNED IN AS ' + state.account.username.toUpperCase(), 'ok');
-      if (!playerName.value) playerName.value = state.account.displayName || 'Hunter';
+      setStatus(cleanHunterName(playerName.value) ? 'SIGNED IN AS ' + state.account.username.toUpperCase() : 'CHOOSE YOUR HUNTER NAME', cleanHunterName(playerName.value) ? 'ok' : '');
     }
   }
 
@@ -46,14 +46,13 @@ export function createAuthController({ user, password, playerName, status, play,
     if (state.account) return true;
     const username = (user.value || '').trim();
     const secret = password.value || '';
-    const displayName = (playerName.value || 'Hunter').slice(0, 16);
     if (!username || !secret) {
       setStatus('ENTER YOUR SCHOOL EMAIL AND PASSWORD', 'bad');
       return false;
     }
     setStatus('SIGNING IN...');
     try {
-      state.account = (await json('/auth/login', { username, password: secret, displayName })).account;
+      state.account = (await json('/auth/login', { username, password: secret })).account;
       password.value = '';
       render();
       return true;
@@ -78,5 +77,16 @@ export function createAuthController({ user, password, playerName, status, play,
     setStatus(message, 'bad');
   }
 
-  return { state, setStatus, render, json, check, authenticate, signOut, expire };
+  function requireHunterName() {
+    const name = cleanHunterName(playerName.value);
+    if (!name) {
+      setStatus('CHOOSE YOUR HUNTER NAME', 'bad');
+      playerName.focus();
+      return '';
+    }
+    if (playerName.value !== name) playerName.value = name;
+    return name;
+  }
+
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName };
 }
