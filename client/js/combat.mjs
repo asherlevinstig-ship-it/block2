@@ -1477,7 +1477,7 @@ async function startPlaying(create=false){
 }
 try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
 checkAuth();
-function primeMenuAudio(){ SFX.init(); }
+function primeMenuAudio(){ if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
 playbtn.addEventListener('click', ()=>startPlaying(false));
@@ -1497,7 +1497,7 @@ document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !
 
 let hintDone=false;
 addEventListener('keydown', e=>{
-  if(chatTyping) return;
+  if(globalThis.chatTyping) return;
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
   if(pathChoiceOpen){
     e.preventDefault();

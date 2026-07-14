@@ -32,7 +32,7 @@ const TS = 16;
 const ATLAS_COLS = 8, ATLAS_ROWS = 6;
 const atlasCanvas = document.createElement('canvas');
 atlasCanvas.width = ATLAS_COLS*TS; atlasCanvas.height = ATLAS_ROWS*TS;
-const actx = atlasCanvas.getContext('2d');
+const actx = atlasCanvas.getContext('2d', { willReadFrequently: true });
 
 const prng=createPrng,vary=varyColor;
 const paintTile=(tx,ty,fn)=>paintAtlasTile(actx,TS,tx,ty,fn);
