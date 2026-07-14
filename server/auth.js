@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
+const { createStore, sanitizeProfile } = require('./store');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -46,6 +47,8 @@ class AuthService {
     this.attempts = new Map();
     this.pendingRegistrations = new Set();
     this.writeQueue = Promise.resolve();
+    this.profileStore = Object.prototype.hasOwnProperty.call(options, 'profileStore') ? options.profileStore : null;
+    this.env = options.env || process.env;
     fs.mkdirSync(this.dir, { recursive: true });
     this.load();
     // Expired sessions and rate-limit rows are otherwise only reclaimed lazily on
@@ -106,6 +109,26 @@ class AuthService {
     if (account.role) out.role = String(account.role);
     if (account.schoolId != null) out.schoolId = String(account.schoolId);
     return out;
+  }
+
+  getProfileStore() {
+    if (this.profileStore) return this.profileStore;
+    this.profileStore = createStore({ shardId: 'main', env: this.env });
+    return this.profileStore;
+  }
+
+  async publicGameProfile(account) {
+    const id = account && account.id;
+    if (!id) return { name: '', nameSet: false };
+    try {
+      const raw = await this.getProfileStore().loadPlayer(id);
+      if (!raw) return { name: '', nameSet: false };
+      const profile = sanitizeProfile(raw);
+      return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true };
+    } catch (e) {
+      console.warn('[auth] game profile lookup failed:', e.message);
+      return null;
+    }
   }
 
   async register(username, password, displayName) {
@@ -217,15 +240,15 @@ class AuthService {
           : await this.login(req.body && req.body.username, req.body && req.body.password);
         const sid = await this.issueSession(account);
         res.setHeader('Set-Cookie', this.cookie(sid, req));
-        res.json({ ok: true, account: this.publicAccount(account) });
+        res.json({ ok: true, account: this.publicAccount(account), gameProfile: await this.publicGameProfile(account) });
       } catch (e) { res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Authentication failed.' }); }
     };
     app.post('/auth/register', (req, res) => complete(req, res, true));
     app.post('/auth/login', (req, res) => complete(req, res, false));
-    app.get('/auth/me', (req, res) => {
+    app.get('/auth/me', async (req, res) => {
       const account = this.authenticateRequest(req);
       if (!account) return res.status(401).json({ ok: false });
-      res.json({ ok: true, account });
+      res.json({ ok: true, account, gameProfile: await this.publicGameProfile(account) });
     });
     app.post('/auth/logout', async (req, res) => {
       const sid = parseCookies(req.headers.cookie)[COOKIE];

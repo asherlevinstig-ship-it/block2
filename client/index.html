@@ -155,7 +155,10 @@
       <div class="account-fields">
         <input id="authuser" maxlength="255" placeholder="SCHOOL EMAIL" autocomplete="username">
         <input id="authpass" type="password" maxlength="128" placeholder="PASSWORD (10+ CHARACTERS)" autocomplete="current-password">
-        <input id="playername" maxlength="16" placeholder="HUNTER NAME" autocomplete="nickname">
+        <div id="huntersetup" class="hunter-setup hidden">
+          <div class="hunter-setup-title">CHOOSE YOUR HUNTER NAME</div>
+          <input id="playername" maxlength="16" placeholder="HUNTER NAME" autocomplete="nickname">
+        </div>
         <div id="authstatus">SIGN IN WITH YOUR SCHOOL ACCOUNT</div>
       </div>
       <div class="account-actions"><button id="playbtn" disabled>SIGN IN &amp; PLAY</button><button id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true">CREATE ACCOUNT</button><button id="logoutbtn" class="hidden" type="button" disabled>LOG OUT</button></div>

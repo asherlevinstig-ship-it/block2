@@ -1,6 +1,11 @@
 export function createAuthController({ user, password, playerName, status, play, register, logout, request = fetch, apiUrl = path => path }) {
-  const state = { checked: false, account: null, busy: false };
+  const state = { checked: false, account: null, gameProfile: null, busy: false };
   const cleanHunterName = value => String(value || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
+  const hunterSetup = typeof document === 'undefined' ? null : document.getElementById('huntersetup');
+
+  function hasHunterName() {
+    return !!(state.gameProfile && state.gameProfile.nameSet);
+  }
 
   function setStatus(text, kind = '') {
     status.textContent = text || '';
@@ -11,12 +16,14 @@ export function createAuthController({ user, password, playerName, status, play,
     const signed = !!state.account;
     user.classList.toggle('hidden', signed);
     password.classList.toggle('hidden', signed);
+    if (hunterSetup) hunterSetup.classList.toggle('hidden', !signed || hasHunterName());
     register.classList.add('hidden');
     register.hidden = true;
     logout.classList.toggle('hidden', !signed);
-    play.textContent = signed ? 'PLAY' : 'SIGN IN & PLAY';
+    play.textContent = signed && !hasHunterName() ? 'SAVE HUNTER NAME' : signed ? 'PLAY' : 'SIGN IN & PLAY';
     if (signed) {
-      setStatus(cleanHunterName(playerName.value) ? 'SIGNED IN AS ' + state.account.username.toUpperCase() : 'CHOOSE YOUR HUNTER NAME', cleanHunterName(playerName.value) ? 'ok' : '');
+      if (hasHunterName()) setStatus('SIGNED IN AS ' + state.account.username.toUpperCase(), 'ok');
+      else setStatus('CHOOSE YOUR HUNTER NAME');
     }
   }
 
@@ -35,8 +42,12 @@ export function createAuthController({ user, password, playerName, status, play,
   async function check() {
     if (state.checked) return state.account;
     state.checked = true;
-    try { state.account = (await json('/auth/me')).account || null; }
-    catch (_) { state.account = null; }
+    try {
+      const data = await json('/auth/me');
+      state.account = data.account || null;
+      state.gameProfile = data.gameProfile || null;
+      if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
+    } catch (_) { state.account = null; state.gameProfile = null; }
     render();
     return state.account;
   }
@@ -52,7 +63,10 @@ export function createAuthController({ user, password, playerName, status, play,
     }
     setStatus('SIGNING IN...');
     try {
-      state.account = (await json('/auth/login', { username, password: secret })).account;
+      const data = await json('/auth/login', { username, password: secret });
+      state.account = data.account;
+      state.gameProfile = data.gameProfile || null;
+      if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
       password.value = '';
       render();
       return true;
@@ -65,6 +79,7 @@ export function createAuthController({ user, password, playerName, status, play,
   async function signOut() {
     try { await json('/auth/logout', {}); } catch (_) {}
     state.account = null;
+    state.gameProfile = null;
     state.checked = true;
     render();
     setStatus('SIGNED OUT');
@@ -72,6 +87,7 @@ export function createAuthController({ user, password, playerName, status, play,
 
   function expire(message = 'SESSION EXPIRED - SIGN IN AGAIN') {
     state.account = null;
+    state.gameProfile = null;
     state.checked = false;
     render();
     setStatus(message, 'bad');
@@ -85,8 +101,10 @@ export function createAuthController({ user, password, playerName, status, play,
       return '';
     }
     if (playerName.value !== name) playerName.value = name;
+    state.gameProfile = { name, nameSet: true };
+    render();
     return name;
   }
 
-  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName };
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName };
 }

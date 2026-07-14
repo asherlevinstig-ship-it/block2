@@ -7,12 +7,13 @@ const path = require('path');
 const express = require('express');
 const { AuthService } = require('../auth');
 
-async function fixture({ production = false, trustProxy = 1, clientOrigin = '' } = {}) {
+async function fixture({ production = false, trustProxy = 1, clientOrigin = '', profileStore } = {}) {
   const previousEnv = process.env.NODE_ENV;
   const previousClientOrigin = process.env.CLIENT_ORIGIN;
   process.env.NODE_ENV = production ? 'production' : 'test';
   if (clientOrigin) process.env.CLIENT_ORIGIN = clientOrigin; else delete process.env.CLIENT_ORIGIN;
-  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-http-')));
+  const authOptions = profileStore ? { profileStore } : {};
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-http-')), authOptions);
   const app = express();
   app.set('trust proxy', trustProxy);
   auth.attach(app);
@@ -65,6 +66,25 @@ test('session cookies authenticate, logout revokes them, and expiry is enforced'
     const expiringCookie = sessionCookie(login);
     for (const session of f.auth.sessions.values()) session.expiresAt = Date.now() - 1;
     assert.equal((await f.request('/auth/me', { headers: { cookie: expiringCookie } })).status, 401);
+  } finally { await f.close(); }
+});
+
+test('auth responses include the saved hunter-name setup state', { concurrency: false }, async () => {
+  const profileStore = {
+    async loadPlayer(id) {
+      return id ? { name: 'Mara', nameSet: true, S: { lvl: 1, str: 1, agi: 1, vit: 1, int: 1 } } : null;
+    },
+  };
+  const f = await fixture({ profileStore });
+  try {
+    const registered = await f.request('/auth/register', jsonPost({ username: 'profile_user', password: 'long enough password' }));
+    assert.equal(registered.status, 200);
+    const body = await registered.json();
+    assert.deepEqual(body.gameProfile, { name: 'Mara', nameSet: true });
+    const cookie = sessionCookie(registered);
+    const me = await f.request('/auth/me', { headers: { cookie } });
+    assert.equal(me.status, 200);
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Mara', nameSet: true });
   } finally { await f.close(); }
 });
 
