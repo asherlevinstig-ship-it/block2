@@ -57,6 +57,7 @@ async function main() {
 
   const PORT = process.env.PORT || 2567;
   await gameServer.listen(PORT);
+  if (typeof process.send === 'function') process.send('ready');
   console.log('Blockcraft server running — open http://localhost:' + PORT);
 }
 
