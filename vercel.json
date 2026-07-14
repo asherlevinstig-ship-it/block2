@@ -1,8 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/", "destination": "/client/index.html" },
-    { "source": "/:path*", "destination": "/client/:path*" }
-  ],
+  "outputDirectory": "client",
   "headers": [
     {
       "source": "/(.*)",
