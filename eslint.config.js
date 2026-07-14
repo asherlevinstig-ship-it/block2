@@ -1,7 +1,7 @@
 const js = require('@eslint/js');
 
 module.exports = [
-  { ignores: ['node_modules/**', 'client/vendor/**', 'data/**', 'test-results/**', 'playwright-report/**', 'pebble/**'] },
+  { ignores: ['node_modules/**', 'client/vendor/**', 'data/**', 'dist/**', 'test-results/**', 'playwright-report/**', 'pebble/**'] },
   {
     files: ['**/*.{js,mjs,cjs}'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module' },

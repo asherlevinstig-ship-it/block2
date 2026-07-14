@@ -5,7 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "build": "node -e \"require('fs').mkdirSync('dist',{recursive:true})\"",
+    "build": "node tools/build-static-client.js",
     "lint": "eslint .",
     "format:check": "node tools/check-format.js && git diff --check",
     "audit": "npm audit --audit-level=high",

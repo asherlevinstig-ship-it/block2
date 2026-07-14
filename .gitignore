@@ -1,5 +1,6 @@
 # dependencies
 node_modules/
+dist/
 
 # runtime persistence (JsonStore output) — regenerated at runtime
 data/
