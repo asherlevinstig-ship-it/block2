@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: 'blockcraft-mp',
-    script: 'server/index.js',
+    script: 'server/cloud-listen.js',
     time: true,
     watch: false,
     instances: Number(process.env.WEB_CONCURRENCY || 1),
