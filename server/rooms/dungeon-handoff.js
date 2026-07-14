@@ -57,6 +57,7 @@ function takeHandoff(token) {
 const consumedGates = new Set(); // overworld gate ids awaiting expiry
 const hostedGates = new Set(); // overworld gate ids currently owned by a DungeonRoom
 const breachedGates = []; // serialized DungeonRoom breach payloads awaiting overworld spawn
+const requestedPublicGateRanks = new Set(); // public rank backfills requested by DungeonRooms
 
 function hostGate(gateId) {
   if (gateId) hostedGates.add(String(gateId));
@@ -91,9 +92,22 @@ function drainGateBreaches() {
   return breachedGates.splice(0, breachedGates.length);
 }
 
+function requestPublicGateRank(rank) {
+  if (!Number.isFinite(rank)) return;
+  requestedPublicGateRanks.add(Math.max(0, Math.min(4, rank | 0)));
+}
+
+function drainRequestedPublicGateRanks() {
+  if (!requestedPublicGateRanks.size) return [];
+  const ranks = [...requestedPublicGateRanks];
+  requestedPublicGateRanks.clear();
+  return ranks;
+}
+
 module.exports = {
   handOff, takeHandoff,
   hostGate, unhostGate, isHostedGate,
   consumeGate, drainConsumedGates,
   recordGateBreach, drainGateBreaches,
+  requestPublicGateRank, drainRequestedPublicGateRanks,
 };

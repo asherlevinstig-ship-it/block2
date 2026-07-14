@@ -405,6 +405,7 @@ function showDungeonSpirit(m){
   }
   dungeonSpiritEl.classList.add('show');dungeonSpiritEl.classList.remove('minimized');
   if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
+  ensureLocalSpiritFx();
 }
 function hideDungeonSpirit(){if(dungeonSpiritEl)dungeonSpiritEl.classList.remove('show');}
 function localSpiritTexture(){
@@ -1199,7 +1200,6 @@ function netAttachRoom(room,name,client){
     room.onMessage('dungeonSpirit', m=>{
       COMPANIONS.activeFamiliar='';
       hp=0;sp=0;renderBars();
-      if(m&&m.recentHits)showDeathScreen(deathCauseText('server:'+((m&&m.deathCause)||'combat')),'Stay as spirit for party credit, or return to town.',m.recentHits);
       showDungeonSpirit(m);
     });
     room.onMessage('dungeonSpiritQuit', m=>{

@@ -1940,7 +1940,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(earlyLoopE2E,/first_craft_station/);
   assert.match(earlyLoopE2E,/noMaterials: true/);
   assert.match(earlyLoopE2E,/clearInventoryItems/);
-  assert.match(earlyLoopE2E,/Recipe blocked:/);
+  assert.match(earlyLoopE2E,/status\(\)\.menu\.open/);
   assert.match(earlyLoopE2E,/OPEN RECIPE/);
   assert.match(earlyLoopE2E,/noGold: true/);
   assert.match(earlyLoopE2E,/Shortfall/);

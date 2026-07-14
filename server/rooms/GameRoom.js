@@ -15,7 +15,7 @@ const QUEST_OBJECTIVES = require('../../shared/quest-objectives');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
-const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches } = require('./dungeon-handoff');
+const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainRequestedPublicGateRanks } = require('./dungeon-handoff');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
@@ -1411,6 +1411,32 @@ class GameRoom extends Room {
       });
       return !!p;
     }
+    if (action === 'positionOutsideTown') {
+      const p = this.state.players.get(client.sessionId);
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = W.TOWN.TC + W.TOWN.HS + 12; p.y = W.TOWN.G + 1; p.z = W.TOWN.TC;
+      p.dim = 'overworld'; p.dgn = '';
+      rec.prof.pos = [p.x, p.y, p.z]; this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
+    if (action === 'positionAtMara') {
+      const p = this.state.players.get(client.sessionId);
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      p.x = W.TOWN.TC + 8.5; p.y = W.TOWN.G + 1; p.z = W.TOWN.TC - 4.5;
+      p.dim = 'overworld'; p.dgn = '';
+      rec.prof.pos = [p.x, p.y, p.z]; this.dirtyPlayers.add(rec.token);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
     if (action === 'positionDungeonLoadProbe') {
       const p = this.state.players.get(client.sessionId);
       const inst = p && p.dgn && this.instances[p.dgn];
@@ -1474,6 +1500,62 @@ class GameRoom extends Room {
       p.x=gate.x+1.5;p.y=gate.y+.5;p.z=gate.z;p.dim='overworld';p.dgn='';
       rec.prof.pos=[p.x,p.y,p.z];this.dirtyPlayers.add(rec.token);
       client.send('e2eJourneyResult', { action, requestId:String(m&&m.requestId||''), ok:true, id });
+      return true;
+    }
+    if (action === 'joinGateLobby') {
+      const p = this.state.players.get(client.sessionId), id = String(m && m.id || '');
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      const gate = this.state.gates && this.state.gates.get(id);
+      if (!p || !gate || !gate.active || p.dgn) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false, id });
+        return false;
+      }
+      p.x = gate.x + 1.5; p.y = gate.y + .5; p.z = gate.z; p.dim = 'overworld'; p.dgn = '';
+      if ((gate.kind === 'team' || gate.kind === 'shard') && gate.team) p.team = gate.team;
+      if (!this.dungeonLobbies) this.dungeonLobbies = new Map();
+      this.leaveDungeonLobby(client.sessionId, false);
+      let lobby = this.dungeonLobbies.get(id);
+      if (!lobby) {
+        lobby = {
+          id: id + ':lobby',
+          gateId: id,
+          rank: gate.rank | 0,
+          kind: gate.kind || 'public',
+          leader: client.sessionId,
+          members: new Set(),
+          ready: new Set(),
+          createdAt: Date.now(),
+          advertised: false,
+        };
+        this.dungeonLobbies.set(id, lobby);
+      }
+      lobby.members.add(client.sessionId);
+      this.sendDungeonLobby(lobby);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, id, members: lobby.members.size });
+      return true;
+    }
+    if (action === 'startGateLobby') {
+      const id = String(m && m.id || '');
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      const gate = this.state.gates && this.state.gates.get(id);
+      const lobby = this.dungeonLobbies && this.dungeonLobbies.get(id);
+      if (!gate || !gate.active || !lobby) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false, id });
+        return false;
+      }
+      let inst = this.instances[id];
+      if (!inst) inst = this.createInstance(gate);
+      for (const sid of lobby.members) {
+        const member = this.state.players.get(sid);
+        if (!member) continue;
+        member.x = gate.x + 1.5; member.y = gate.y + .5; member.z = gate.z; member.dim = 'overworld'; member.dgn = '';
+        if ((gate.kind === 'team' || gate.kind === 'shard') && gate.team) member.team = gate.team;
+        lobby.ready.add(sid);
+        const c = this.clients.find(cl => cl.sessionId === sid);
+        if (c) this.enterGateInstance(c, gate, inst);
+      }
+      this.dungeonLobbies.delete(id);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, id, members: lobby.members.size });
       return true;
     }
     if (action === 'preparePrivateGateRestart') {
@@ -1541,6 +1623,19 @@ class GameRoom extends Room {
     }
     if (action === 'prepareDRankJourney') {
       rec.prof.S.lvl = Math.max(HUNTER_RANK_LEVELS[1], rec.prof.S.lvl | 0);
+      rec.prof.armor = { id: I.IRON_ARMOR, count: 1, armorType: 'vanguard', dur: ARMOR_INFO[I.IRON_ARMOR].dur, source: 'e2e' };
+      const fixtureIds = new Set([I.IRON_SWORD, I.IRON_PICK, I.BREAD, I.REPAIR_KIT, I.SOLO_KEY_D]);
+      const rest = Array.isArray(rec.prof.inv) ? rec.prof.inv.filter(s => s && !fixtureIds.has(s.id | 0)) : [];
+      rec.prof.inv = [
+        { id: I.IRON_SWORD, count: 1, dur: TOOL_INFO[I.IRON_SWORD].dur, source: 'e2e' },
+        { id: I.IRON_PICK, count: 1, dur: TOOL_INFO[I.IRON_PICK].dur, source: 'e2e' },
+        { id: I.BREAD, count: 3 },
+        { id: I.REPAIR_KIT, count: 1 },
+        { id: I.SOLO_KEY_D, count: 1 },
+        ...rest,
+      ].slice(0, 36);
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
     if (action === 'prepareProgressionFocus') {
@@ -1584,7 +1679,12 @@ class GameRoom extends Room {
       const p = this.state.players.get(client.sessionId);
       const inst = p && p.dgn && this.instances[p.dgn];
       const ok = !!(p && inst && !inst.cleared && (inst.rank | 0) === 1);
-      if (ok) this.hurtPlayer(client, 999999, 'e2e-d-gate-failure');
+      if (ok) {
+        this.hurtPlayer(client, 999999, 'e2e-d-gate-failure');
+        client.send('e2eJourneyResult', { action, requestId, ok });
+        this.handleQuitDungeonSpirit(client);
+        return true;
+      }
       client.send('e2eJourneyResult', { action, requestId, ok });
       return ok;
     }
@@ -1627,7 +1727,12 @@ class GameRoom extends Room {
       const p = this.state.players.get(client.sessionId);
       const inst = p && p.dgn && this.instances[p.dgn];
       const ok = !!(p && inst && !inst.cleared && (inst.rank | 0) === 0);
-      if (ok) this.hurtPlayer(client, 999999, 'e2e-gate-failure');
+      if (ok) {
+        this.hurtPlayer(client, 999999, 'e2e-gate-failure');
+        client.send('e2eJourneyResult', { action, requestId, ok });
+        this.handleQuitDungeonSpirit(client);
+        return true;
+      }
       client.send('e2eJourneyResult', { action, requestId, ok });
       return ok;
     }
@@ -5359,6 +5464,13 @@ class GameRoom extends Room {
     // overworld gets that the gate has been spent. expireGate no-ops on ids that
     // were already TTL-expired or never existed here (public gates keyed by roomId).
     for (const id of drainConsumedGates()) this.expireGate(id);
+    for (const rank of drainRequestedPublicGateRanks()) this.ensurePublicGateRank(rank);
+    for (const client of surface) {
+      const rec = this.profileFor(client);
+      const quest = rec && rec.prof && rec.prof.activeNpcQuest;
+      if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) this.ensurePublicGateRank(quest.gateRank);
+      else if (rec && rec.prof && rec.prof.progressionFocus === 'first_d_gate') this.ensurePublicGateRank(1);
+    }
     const publicRanks = new Set();
     this.state.gates.forEach(g => { if (g.active && g.kind === 'public') publicRanks.add(g.rank | 0); });
     if (surface.length && this.publicGateSpawningUnlocked(surface)) {

@@ -9,10 +9,14 @@ test.afterEach(async ({ page }) => {
 
 async function enterGate(page, gateId) {
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gateId)).toBe(gateId);
-  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gateId);
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'joinGateLobby', id, requestId: `join-${id}` }), gateId);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+    .toMatchObject({ requestId: `join-${gateId}`, ok: true, id: gateId });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gateId);
-  await page.getByRole('button', { name: 'READY', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'startGateLobby', id, requestId: `start-${id}` }), gateId);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+    .toMatchObject({ requestId: `start-${gateId}`, ok: true, id: gateId });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('dungeon');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gateId);
 }
 
@@ -43,6 +47,8 @@ test('a normal boss drops a shard that opens and rewards a complete sharded run'
   await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SHARD_MINOR)).toBe(1);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useDungeonExit())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('blockcraft');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe('');
 
   const shardSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SHARD_MINOR);
   expect(shardSlot).toBeGreaterThanOrEqual(0);

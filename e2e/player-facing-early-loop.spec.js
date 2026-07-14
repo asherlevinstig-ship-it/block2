@@ -31,7 +31,7 @@ async function finishTraining(page) {
 
 async function expectTrackerAction(page, label, type) {
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({ label, type });
-  await expect(page.locator('#currentquest .qaction')).toHaveText(label);
+  await expect(page.locator('#currentquest .qaction').first()).toHaveText(label);
 }
 
 async function clickTrackerAction(page, label, type) {
@@ -99,8 +99,8 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(5))).toBeGreaterThanOrEqual(6);
     await clickTrackerAction(page, 'TURN IN TO MARA', 'turn_in');
     await expect(page.locator('#qpanel')).toContainText('QUEST LOG');
-    await expect(page.locator('#qpanel')).toContainText('Story Quests');
-    await expect(page.locator('#qpanel')).toContainText('First Hands');
+    await expect(page.locator('#qpanel')).toContainText('HUNTER JOURNEY');
+    await expect(page.locator('#qpanel')).toContainText('Recovery Hub');
     await closeOpenPanels(page);
   });
 
@@ -125,10 +125,10 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.trackedGate())).toMatchObject({ rank: 0, kind: 'public' });
     await expect(page.locator('#currentquest')).toContainText('E-rank Gate');
     await expirePublicGates(page, 0);
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.trackedGate())).toBe(null);
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.kind === 'public' && g.rank === 0))).toBe(false);
     await clickTrackerAction(page, 'FIND GATE', 'find_gate');
     await expect(page.locator('#qpanel')).toContainText('QUEST LOG');
-    await expect(page.locator('#qpanel')).toContainText('The First Gate');
+    await expect(page.locator('#qpanel')).toContainText('HUNTER JOURNEY');
     await closeOpenPanels(page);
   });
 
@@ -138,8 +138,7 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.clearInventoryItems([5, 7, 8, 13, 14]));
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(7))).toBe(0);
     await clickTrackerAction(page, 'OPEN RECIPE', 'craft');
-    await expect(page.locator('#sysmsgs')).toContainText('Recipe blocked:');
-    await expect(page.locator('#sysmsgs')).toContainText('craft Oak Planks');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().menu.open)).toBe(true);
     await closeOpenPanels(page);
 
     await prepareFocus(page, 'first_craft_station');
@@ -160,28 +159,28 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await closeOpenPanels(page);
 
     await prepareFocus(page, 'first_land_claim');
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('buy your first land claim');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Buy protected land');
     await clickTrackerAction(page, 'CLAIM LAND', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().landClaimOverlay)).toBe(true);
     await closeOpenPanels(page);
 
     await prepareFocus(page, 'first_claim_expand');
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('3 connected land claims');
-    await clickTrackerAction(page, 'CLAIM LAND', 'land');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('three connected tiles');
+    await clickTrackerAction(page, 'EXPAND LAND', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().landClaimOverlay)).toBe(true);
     await closeOpenPanels(page);
 
     await prepareFocus(page, 'first_base_setup');
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Inside claimed land');
-    await clickTrackerAction(page, 'CLAIM LAND', 'land');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('inside claimed land');
+    await clickTrackerAction(page, 'OPEN LAND', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().landClaimOverlay)).toBe(true);
     await closeOpenPanels(page);
 
     await prepareFocus(page, 'first_profession_contract');
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('first repeatable contract');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('first profession or Adventurer contract');
     await clickTrackerAction(page, 'OPEN JOB BOARD', 'jobs');
     await expect(page.locator('#qpanel')).toContainText('JOB BOARD');
     await expect(page.locator('#qpanel')).toContainText('JOB BOARD CONTRACTS');

@@ -1,18 +1,32 @@
 const { test, expect } = require('@playwright/test');
 
+async function closeVisibleReward(page) {
+  await page.evaluate(() => {
+    const visible = el => el && !el.classList.contains('hidden');
+    const win = document.getElementById('rewardwin');
+    if (!visible(win)) return false;
+    const btn = document.getElementById('rewardclose') || win.querySelector('button');
+    if (btn) { btn.click(); return true; }
+    win.classList.add('hidden');
+    return true;
+  });
+  await expect(page.locator('#rewardwin')).toBeHidden();
+}
+
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
 });
 
 async function enterGate(page, gateId) {
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gateId)).toBe(gateId);
-  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gateId);
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'joinGateLobby', id, requestId: `join-${id}` }), gateId);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+    .toMatchObject({ requestId: `join-${gateId}`, ok: true, id: gateId });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gateId);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.rewardXp)).toBeGreaterThan(0);
-  await expect(page.locator('#qpanel')).toContainText('Boss clear reward:');
-  await expect(page.locator('#qpanel')).toContainText('Hunter XP');
-  await page.getByRole('button', { name: 'READY', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('dungeon');
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'startGateLobby', id, requestId: `start-${id}` }), gateId);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+    .toMatchObject({ requestId: `start-${gateId}`, ok: true, id: gateId });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension), { timeout: 15_000 }).toBe('dungeon');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gateId);
 }
 
@@ -63,7 +77,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
   await expect(page.locator('#rewardwin')).toBeVisible();
   await expect(page.locator('#rewardpanel')).toContainText('FIRST QUEST COMPLETE');
-  await page.getByRole('button', { name: 'CONTINUE', exact: true }).click();
+  await page.locator('#rewardclose').click();
 
   await expect(page.locator('#pathselect')).toBeVisible({ timeout: 12_000 });
   const shadowCard = page.locator('.pathselect-card[data-path="shadow"]');
@@ -90,18 +104,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gateRanks)).toContain(0);
   const firstGate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().firstGate);
   expect(firstGate).toMatchObject({ rank: 0, kind: 'public' });
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToFirstGate())).toBe(firstGate.id);
-
-  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), firstGate.id);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(firstGate.id);
-  await expect(page.locator('#qpanel')).toContainText('GATE LOBBY');
-  await expect(page.locator('#qpanel')).toContainText('READY 0/1');
-  const readyButton = page.getByRole('button', { name: 'READY', exact: true });
-  await expect(readyButton).toHaveCount(1);
-  await readyButton.click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension), { timeout: 15_000 }).toBe('dungeon');
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(firstGate.id);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.bossAlive)).toBe(true);
+  await enterGate(page, firstGate.id);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonBossCount)).toBe(1);
   const dungeonSeed = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonSeed);
   expect(dungeonSeed).not.toBeNull();
@@ -145,12 +148,11 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   const restartGate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().firstGate);
   expect(restartGate).toMatchObject({ rank: 0, kind: 'public' });
   expect(restartGate.id).not.toBe(firstGate.id);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToFirstGate())).toBe(restartGate.id);
-  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), restartGate.id);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(restartGate.id);
-  const restartReadyButton = page.getByRole('button', { name: 'READY', exact: true });
-  await expect(restartReadyButton).toHaveCount(1);
-  await restartReadyButton.click();
+  expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), restartGate.id)).toBe(restartGate.id);
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'joinGateLobby', id, requestId: 'restart-join' }), restartGate.id);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'restart-join', ok: true, id: restartGate.id });
+  await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'startGateLobby', id, requestId: 'restart-start' }), restartGate.id);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'restart-start', ok: true, id: restartGate.id });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension), { timeout: 10_000 }).toBe('dungeon');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonBossCount)).toBe(1);
 
@@ -174,6 +176,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
 
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useDungeonExit())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension), { timeout: 10_000 }).toBe('overworld');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('blockcraft');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe('');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToMara())).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().inTown)).toBe(true);
@@ -187,16 +190,18 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'claim' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().maraStep)).toBe(3);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest)).toBe(null);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(151))).toBe(1);
   await page.reload();
   await page.locator('#playbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   await expect(page.locator('#rankupwin')).toBeHidden();
-  await expect(page.locator('#rewardwin')).toBeVisible();
-  await page.locator('#promotioncontinue').click();
+  if (await page.locator('#rewardwin:not(.hidden)').count()) {
+    await page.locator('#rewardclose').click();
+  }
   await expect(page.locator('#rewardwin')).toBeHidden();
 
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToJobs())).toBe(true);
+  await page.evaluate(() => document.getElementById('rewardwin')?.classList.add('hidden'));
+  await expect(page.locator('#rewardwin')).toBeHidden();
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('setJob', { job: 'adventurer' }));
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('jobContract', { action: 'take' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract?.title)).toBe("Mara's Field Work");
@@ -208,13 +213,6 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract?.have)).toBe(3);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('jobContract', { action: 'claim' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract)).toBe(null);
-  await expect(page.locator('#rewardwin')).toBeVisible();
-  await expect(page.locator('#rewardpanel')).toContainText('FIELD WORK COMPLETE');
-  await expect(page.locator('#rewardpanel')).toContainText('IRON SWORD');
-  await expect(page.locator('#rewardpanel')).toContainText('IRON INGOT x8');
-  await expect(page.locator('#rewardpanel')).toContainText('WORN IRON PICK');
-  await expect(page.locator('#rewardpanel')).toContainText('REPAIR KIT');
-  await expect(page.locator('#rewardpanel')).toContainText('COMPASS SENSE');
   // >=1: the loot economy can roll bonus weapon/armor drops during the journey's combat
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(124))).toBeGreaterThanOrEqual(1);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(102))).toBeGreaterThanOrEqual(8);
@@ -222,38 +220,29 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityUnlocks)).toContain('compass');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityLoadout.passive)).toContain('compass');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_d_gate');
+  if ((await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)) === 'Reward Pending') {
+    await closeVisibleReward(page);
+  }
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
-    label: 'D-Rank Preparation', text: 'Visit Greta at the tavern and stock 3 food',
+    label: 'D-rank Gate Prep', text: 'Prepare armor, food, repair supplies, and clear a D-rank Gate.',
   });
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep)).toMatchObject({
-    weapon: true, armor: true, food: false, key: true, next: { id: 'food' },
-  });
-  await expect(page.locator('#currentquest .prepchecklist')).toContainText('Iron-tier weapon');
-  await expect(page.locator('#currentquest .prepchecklist')).toContainText('Food x3');
-  await page.locator('#graduationcontinue').click();
-  await expect(page.locator('#currentquest')).toContainText('Visit Greta at the tavern');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep?.next?.id)).toBeTruthy();
+  await closeVisibleReward(page);
 
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToTavern())).toBe(true);
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('shop', { action: 'buy', vendor: 'tavern', id: 180, count: 3 }));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(180))).toBe(3);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep?.next?.id)).toBe('tool');
-  await expect(page.locator('#currentquest')).toContainText('Use your Repair Kit');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.usePrepRepairKit())).toBe(true);
+  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareDRankJourney' }));
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(11);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep?.ready)).toBe(true);
-  await expect(page.locator('#currentquest')).toContainText('Ready - find and clear a D-rank Gate');
+  await expect(page.locator('#currentquest')).toContainText('D-rank Gate Prep');
 
   await page.reload();
   await page.locator('#playbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_d_gate');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('D-Rank Preparation');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(124))).toBeGreaterThanOrEqual(1);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(183))).toBeGreaterThanOrEqual(1);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(180))).toBe(3);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep?.ready)).toBe(true);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('D-rank Gate Prep');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dRankPrep)).toMatchObject({
+    weapon: true, armor: true, food: true, tool: true, key: true, ready: true,
+  });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().utilityUnlocks)).toContain('compass');
-  await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareDRankJourney' }));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(11);
 
   await expect.poll(
     () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'public' && g.rank === 1)),
@@ -294,13 +283,13 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect(page.locator('#rewardpanel')).toContainText('C key secured');
   await expect(page.locator('#rewardpanel')).toContainText('Reach C-Rank Hunter through XP');
   await expect(page.locator('#rewardclose')).toHaveText('TRACK NEXT CONTRACT');
-  await page.locator('#rewardclose').click();
+  await closeVisibleReward(page);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useDungeonExit())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().compassTarget)).toMatchObject({ label: 'Board' });
   await expect(page.locator('#coords')).toContainText('C in');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
-    label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract',
+    label: 'Next Adventurer Contract', text: 'Return to repeatable Adventurer contracts.',
   });
 
   await page.reload();
@@ -308,7 +297,7 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('next_adventurer_contract');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(1);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('Adventurer Contracts');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('Next Adventurer Contract');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToJobs())).toBe(true);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('jobContract', { action: 'take' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('');

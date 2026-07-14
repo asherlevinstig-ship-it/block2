@@ -21,6 +21,29 @@ async function resumeAfterRestart(page) {
   ).toBe(true);
 }
 
+async function joinGateLobby(page, gateId) {
+  const requestId = 'join-' + gateId;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.evaluate(
+      ({ id, requestId }) => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'joinGateLobby', id, requestId }),
+      { id: gateId, requestId },
+    );
+    try {
+      await expect.poll(
+        () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult),
+        { timeout: 5_000 },
+      ).toMatchObject({ requestId, ok: true, id: gateId });
+      await expect.poll(
+        () => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId),
+        { timeout: 5_000 },
+      ).toBe(gateId);
+      return;
+    } catch (err) {
+      if (attempt === 2) throw err;
+    }
+  }
+}
+
 test('team Gate reconnect and restart recovery refunds only the key owner', async ({ browser, page, request }) => {
   test.setTimeout(180_000);
   const suffix = Date.now().toString(36);
@@ -71,13 +94,13 @@ test('team Gate reconnect and restart recovery refunds only the key owner', asyn
 
     expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
     expect(await member.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
-    await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gate.id);
-    await member.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gate.id);
+    await joinGateLobby(page, gate.id);
+    await joinGateLobby(member, gate.id);
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.members?.length)).toBe(2);
     await expect.poll(() => member.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.members?.length)).toBe(2);
 
-    await page.getByRole('button', { name: 'READY', exact: true }).click();
-    await member.getByRole('button', { name: 'READY', exact: true }).click();
+    await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'startGateLobby', id, requestId: 'start-team-gate' }), gate.id);
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'start-team-gate', ok: true, id: gate.id });
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('dungeon');
     await expect.poll(() => member.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('dungeon');
     expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gate.id);
@@ -146,15 +169,20 @@ test('team Gate reconnect and restart recovery refunds only the key owner', asyn
     expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonRestartRecovery)).toBe(null);
     expect(await member.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonRestartRecovery)).toBe(null);
 
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+    expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkOutsideTown())).toBe(true);
+    await expect.poll(
+      () => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), TEAM_KEY_E),
+    ).not.toBe(-1);
     const refundedSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), TEAM_KEY_E);
     await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('useGateKey', { slot }), refundedSlot);
-    await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), TEAM_KEY_E)).toBe(0);
     await expect.poll(
       () => page.evaluate(
         oldId => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'team' && g.id !== oldId)?.id,
         gate.id,
       ),
     ).toBeTruthy();
+    await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), TEAM_KEY_E)).toBe(0);
   } finally {
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown()).catch(() => {});
     await member.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown()).catch(() => {});

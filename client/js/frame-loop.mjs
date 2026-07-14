@@ -1818,20 +1818,22 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     if(!target||!NET.on||!NET.room) return false;
     const sx=player.pos.x,sy=player.pos.y,sz=player.pos.z;
     const tx=target.x,ty=target.y,tz=target.z;
-    const steps=Math.max(1,Math.ceil(Math.hypot(tx-sx,tz-sz)/.6));
+    const steps=Math.max(1,Math.ceil(Math.hypot(tx-sx,tz-sz)/4));
     for(let step=1;step<=steps;step++){
+      if(!NET.on||!NET.room) return false;
       const t=step/steps;
       const x=sx+(tx-sx)*t,z=sz+(tz-sz)*t;
       const y=dim==='overworld'?surfaceY(x,z)+1.01:sy+(ty-sy)*t;
       player.pos.set(x,y,z);
       NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw});
-      await new Promise(resolve=>setTimeout(resolve,75));
+      await new Promise(resolve=>setTimeout(resolve,16));
     }
     if(arrivalRadius==null) return true;
     // Range checks use the server position, so finish only after an ordered
     // test-only acknowledgement confirms the authoritative player arrived.
     const requestId='walk-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
     for(let settle=0;settle<100;settle++){
+      if(!NET.on||!NET.room) return false;
       player.pos.set(tx,ty,tz);
       NET.room.send('move',{x:tx,y:ty,z:tz,yaw:player.yaw});
       NET.room.send('e2eJourney',{action:'positionAck',requestId});
@@ -1856,7 +1858,29 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     for(let settle=0;settle<50;settle++){
       await new Promise(resolve=>setTimeout(resolve,100));
       const ack=networkingState.journeyResult;
-      if(ack&&ack.requestId===requestId&&ack.ok&&ack.id===id){player.pos.set(target.x+1.5,target.y+.5,target.z);return id;}
+      if(ack&&ack.requestId===requestId&&ack.ok&&ack.id===id){player.pos.set(target.x+1.5,target.y+.5,target.z);gate=netGates[id]||target;return id;}
+    }
+    return false;
+  };
+  const e2ePositionOutsideTown=async()=>{
+    if(!NET.on||!NET.room) return false;
+    const requestId='outside-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+    NET.room.send('e2eJourney',{action:'positionOutsideTown',requestId});
+    for(let settle=0;settle<50;settle++){
+      await new Promise(resolve=>setTimeout(resolve,100));
+      const ack=networkingState.journeyResult;
+      if(ack&&ack.requestId===requestId&&ack.ok){player.pos.set(ack.x,ack.y,ack.z);return true;}
+    }
+    return false;
+  };
+  const e2ePositionAtMara=async()=>{
+    if(!NET.on||!NET.room) return false;
+    const requestId='mara-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+    NET.room.send('e2eJourney',{action:'positionAtMara',requestId});
+    for(let settle=0;settle<50;settle++){
+      await new Promise(resolve=>setTimeout(resolve,100));
+      const ack=networkingState.journeyResult;
+      if(ack&&ack.requestId===requestId&&ack.ok){player.pos.set(ack.x,ack.y,ack.z);return true;}
     }
     return false;
   };
@@ -1896,7 +1920,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     clearInventoryItems:ids=>{const clear=new Set((Array.isArray(ids)?ids:[]).map(id=>id|0));for(let i=0;i<inv.length;i++)if(inv[i]&&clear.has(inv[i].id|0))inv[i]=null;refreshHUD();return true;},
     isDungeonSpirit:()=>{const p=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return !!(p&&p.spirit);},
     hasLocalSpiritVisual:()=>!!globalThis.BlockcraftLocalSpiritFxActive,
-    selfPosition:()=>{const p=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return p?{x:p.x,y:p.y,z:p.z}:null;},
+    selfPosition:()=>{const p=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return p?{x:p.x,y:p.y,z:p.z}:player&&player.pos?{x:player.pos.x,y:player.pos.y,z:player.pos.z}:null;},
     trackedGate:()=>gate?{id:gate.id||'',rank:gate.rank|0,kind:gate.kind||'public'}:null,
     send:(type,message={})=>{if(!NET.on||!NET.room)throw new Error('not connected');NET.room.send(type,message);},
     disconnect:()=>{if(!NET.room||!NET.room.connection)throw new Error('no active connection');NET.room.connection.close();},
@@ -1906,10 +1930,10 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     completeOnboardingStep:e2eCompleteOnboardingStep,
     completeTownTutorialStep:step=>completeTownTutorialStep(step),
     useFirstAbility:()=>cast(0),
-    walkOutsideTown:()=>e2eWalkTo({x:TOWN.TC+TOWN.HS+12,y:TOWN.G+1,z:TOWN.TC}),
+    walkOutsideTown:e2ePositionOutsideTown,
     walkToFirstGate:e2eWalkToFirstGate,
     walkToGate:e2eWalkToGate,
-    walkToMara:()=>e2eWalkTo({x:HUB.guide.x,y:TOWN.G+1,z:HUB.guide.z}),
+    walkToMara:e2ePositionAtMara,
     walkToTavern:()=>e2eWalkTo({x:HUB.tavern.x,y:TOWN.G+1,z:HUB.tavern.z},7.5),
     walkToJobs:()=>e2eWalkTo({x:HUB.jobs.x,y:TOWN.G+1,z:HUB.jobs.z}),
     usePrepRepairKit:()=>{const slot=inv.findIndex(s=>s&&s.id===I.REPAIR_KIT);return slot>=0&&useRepairKit(slot);},

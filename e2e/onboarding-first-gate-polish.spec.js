@@ -39,7 +39,7 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
 
   await expect(page.locator('#rewardwin')).toBeVisible();
-  await page.getByRole('button',{name:'CONTINUE',exact:true}).click();
+  await page.locator('#rewardclose').click();
   await expect(page.locator('#pathselect')).toBeVisible();
   await page.locator('.pathselect-card[data-path="shadow"]').click();
   await expect(page.locator('#awakeningwin')).toBeVisible();
@@ -51,7 +51,7 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(122))).toBe(1);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Defeat enemies');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('defeat 3 monsters');
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney',{action:'completeRoadReady'}));
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'claim'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(3);

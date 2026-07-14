@@ -34,7 +34,7 @@ test('Mara First Hands deliberately reaches Level 2 and path choice',async({page
   await expect(page.locator('#rewardwin')).toBeVisible();
   await expect(page.locator('#rewardpanel')).toContainText('FIRST QUEST COMPLETE');
   await expect(page.locator('#rewardpanel')).toContainText('+100');
-  await page.getByRole('button',{name:'CONTINUE',exact:true}).click();
+  await page.locator('#rewardclose').click();
   await expect(page.locator('#pathselect')).toBeVisible();
   await expect(page.locator('.pathselect-card')).toHaveCount(3);
 

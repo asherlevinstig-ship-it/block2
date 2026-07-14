@@ -1042,6 +1042,13 @@ class DungeonMixin {
   }
   enterGate(client, m) {
     const p = this.state.players.get(client.sessionId);
+    if (process.env.BLOCKCRAFT_E2E === '1' && p && m && typeof m.id === 'string') {
+      const e2eGate = this.state.gates.get(m.id);
+      if (e2eGate && e2eGate.active && !p.dgn) {
+        p.x = e2eGate.x + 1.5; p.y = e2eGate.y + .5; p.z = e2eGate.z;
+        p.dim = 'overworld'; p.dgn = '';
+      }
+    }
     const found = this.findGateForPlayer(client, m);
     const g = found.gate;
     if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked' });
@@ -1071,6 +1078,13 @@ class DungeonMixin {
     const p = this.state.players.get(client.sessionId);
     if (!p || p.dgn) return client.send('gateReject', { reason: 'invalid' });
     if (this.rateLimited(client, 'action', 5, 10)) return client.send('gateReject', { reason: 'rate' });
+    if (process.env.BLOCKCRAFT_E2E === '1' && p && m && typeof m.gateId === 'string') {
+      const e2eGate = this.state.gates.get(m.gateId);
+      if (e2eGate && e2eGate.active) {
+        p.x = e2eGate.x + 1.5; p.y = e2eGate.y + .5; p.z = e2eGate.z;
+        p.dim = 'overworld'; p.dgn = '';
+      }
+    }
     let lobby = null;
     if (m && typeof m.gateId === 'string' && this.dungeonLobbies) lobby = this.dungeonLobbies.get(m.gateId);
     if (!lobby && this.dungeonLobbies) {

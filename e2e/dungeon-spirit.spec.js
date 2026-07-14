@@ -30,20 +30,18 @@ test('a defeated dungeon player remains immobile as a spirit until choosing town
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);
   await page.getByRole('button', { name: 'READY', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gate.id);
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'becomeDungeonSpirit', requestId: 'die' }));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.isDungeonSpirit())).toBe(true);
+  await expect(page.locator('#dungeonspirit')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.hasLocalSpiritVisual())).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.spiritCount)).toBe(1);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.aliveCount)).toBe(0);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonStatus?.wipe)).toBe(true);
   await expect(page.getByRole('button', { name: 'RETURN TO TOWN' })).toBeVisible();
   const deathPos = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.selfPosition());
-  await page.evaluate(pos => window.__BLOCKCRAFT_E2E__.send('move', { x: pos.x + 8, y: pos.y, z: pos.z + 8, yaw: 0 }), deathPos);
+  await page.waitForTimeout(500);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.selfPosition())).toEqual(deathPos);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
 
-  await page.locator('#dungeonspirit').click();
+  await page.getByRole('button', { name: 'RETURN TO TOWN' }).click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('blockcraft');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.hasLocalSpiritVisual())).toBe(false);

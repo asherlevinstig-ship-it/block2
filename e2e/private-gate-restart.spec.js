@@ -81,16 +81,23 @@ test('private Gate entry items are refunded once and reusable after a server res
   await enterGate(page, soloGate.id);
   await restartAndResume(page, request, soloGate, SOLO_KEY_E);
 
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkOutsideTown())).toBe(true);
+  await expect.poll(
+    () => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SOLO_KEY_E),
+  ).not.toBe(-1);
   const refundedSoloSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SOLO_KEY_E);
   await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('useGateKey', { slot }), refundedSoloSlot);
-  await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SOLO_KEY_E)).toBe(0);
   await expect.poll(
     () => page.evaluate(
       oldId => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.kind === 'solo' && g.id !== oldId)?.id,
       soloGate.id,
     ),
   ).not.toBeUndefined();
+  await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventoryCount(id), SOLO_KEY_E)).toBe(0);
 
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe('');
   const shardSlot = await page.evaluate(id => window.__BLOCKCRAFT_E2E__.inventorySlot(id), SHARD_MINOR);
   expect(shardSlot).toBeGreaterThanOrEqual(0);
   await page.evaluate(slot => window.__BLOCKCRAFT_E2E__.send('attuneShard', { slot }), shardSlot);

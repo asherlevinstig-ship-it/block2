@@ -5,7 +5,7 @@ const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('..
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
 const W = require('../world');
-const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach } = require('./dungeon-handoff');
+const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach, requestPublicGateRank } = require('./dungeon-handoff');
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
@@ -267,6 +267,37 @@ class DungeonRoom extends GameRoom {
     this.profiles.delete(token);
     if (prof && !prof.noPersist) handOff(token, prof);
     // empty room disposes via Colyseus autoDispose; the instance goes with it.
+  }
+
+  handleQuitDungeonSpirit(client) {
+    const p = client && this.state.players.get(client.sessionId);
+    const hp = client && this.playerHp.get(client.sessionId);
+    if (!p || !p.dgn || !p.spirit || !hp || hp.hp > 0) return false;
+    const inst = this.instance || this.instances[p.dgn];
+    const rec = this.profileFor(client);
+    const town = { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 };
+    const result = inst ? this.dungeonResultPayload(inst, 'failed', 'wipe') : null;
+    const dgn = p.dgn;
+    p.spirit = false;
+    p.dgn = '';
+    p.dim = 'overworld';
+    p.x = town.x; p.y = town.y; p.z = town.z;
+    hp.hp = hp.max;
+    if (inst) {
+      inst.removePlayer(client.sessionId);
+      this.sendDungeonPartyStatus(dgn);
+    }
+    this.clearDungeonRecoveryForSid(client.sessionId);
+    if (rec) {
+      rec.prof.pos = [town.x, town.y, town.z];
+      rec.prof.dungeonRecovery = null;
+      const quest = rec.prof.activeNpcQuest;
+      if (quest && quest.type === 'gate' && (quest.gateRank | 0) >= 0) requestPublicGateRank(quest.gateRank);
+      else if (rec.prof.progressionFocus === 'first_d_gate') requestPublicGateRank(1);
+      this.dirtyPlayers.add(rec.token);
+    }
+    client.send('dungeonSpiritQuit', result ? { ...town, result } : town);
+    return true;
   }
 
   async onDispose() {
