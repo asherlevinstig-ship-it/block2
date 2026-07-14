@@ -1496,7 +1496,12 @@ document.addEventListener('pointerlockchange', ()=>{
 document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
 
 let hintDone=false;
+function isTextEntryTarget(target){
+  const tag=target&&target.tagName?String(target.tagName).toLowerCase():'';
+  return tag==='input'||tag==='textarea'||tag==='select'||!!(target&&target.isContentEditable);
+}
 addEventListener('keydown', e=>{
+  if(isTextEntryTarget(e.target)) return;
   if(globalThis.chatTyping) return;
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
   if(pathChoiceOpen){
