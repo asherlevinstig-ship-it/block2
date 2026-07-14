@@ -23,6 +23,27 @@ function validateServiceAccount(raw, source) {
   if (!credential.private_key.includes('BEGIN PRIVATE KEY')) throw new Error(source + ' does not contain a valid private key');
 }
 
+function summarizeStartupEnv(env = process.env) {
+  const serviceAccount = String(env.FIREBASE_SERVICE_ACCOUNT || '');
+  return {
+    NODE_ENV: env.NODE_ENV || '',
+    PUBLIC_URL: env.PUBLIC_URL || '',
+    TRUST_PROXY: env.TRUST_PROXY || '',
+    DATA_DIR: env.DATA_DIR || '',
+    STORE: env.STORE || '',
+    AUTH_BACKEND: env.AUTH_BACKEND || '',
+    MYSQL_HOST: env.MYSQL_HOST || '',
+    MYSQL_PORT: env.MYSQL_PORT || '',
+    MYSQL_DATABASE: env.MYSQL_DATABASE ? '<set>' : '',
+    MYSQL_USER: env.MYSQL_USER ? '<set>' : '',
+    MYSQL_PASSWORD: env.MYSQL_PASSWORD ? '<set>' : '',
+    CLIENT_ORIGIN: env.CLIENT_ORIGIN || '',
+    CLIENT_ORIGINS: env.CLIENT_ORIGINS || '',
+    GOOGLE_APPLICATION_CREDENTIALS: env.GOOGLE_APPLICATION_CREDENTIALS ? '<set>' : '',
+    FIREBASE_SERVICE_ACCOUNT: serviceAccount ? '<set length=' + serviceAccount.length + '>' : '',
+  };
+}
+
 async function assertWritableDirectory(dir) {
   try {
     await fs.promises.mkdir(dir, { recursive: true });
@@ -86,4 +107,4 @@ async function validateStartup(env = process.env) {
   return { production, storage, dataDir, trustProxy };
 }
 
-module.exports = { validateStartup, parseTrustProxy, assertWritableDirectory, validateServiceAccount };
+module.exports = { validateStartup, parseTrustProxy, assertWritableDirectory, validateServiceAccount, summarizeStartupEnv };

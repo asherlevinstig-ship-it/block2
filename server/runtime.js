@@ -18,6 +18,11 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
 
   app.set('trust proxy', config.trustProxy);
   app.use(securityHeaders({ production: config.production }));
+  app.get('/healthz', (_req, res) => res.json({
+    ok: true,
+    storage: config.storage,
+    authBackend: String(process.env.AUTH_BACKEND || 'file').toLowerCase(),
+  }));
   getAuthService().attach(app);
 
   if (process.env.BLOCKCRAFT_E2E === '1') {
