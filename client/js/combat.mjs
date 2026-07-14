@@ -1457,7 +1457,7 @@ const checkAuth=()=>AUTH_UI.check();
 const authenticate=(create=false)=>AUTH_UI.authenticate(create);
 async function startPlaying(create=false){
   if(AUTH.busy)return;AUTH.busy=true;playbtn.disabled=true;registerbtn.disabled=true;
-  const authenticated=await authenticate(create);
+  const authenticated=await authenticate(false);
   AUTH.busy=false;playbtn.disabled=false;registerbtn.disabled=false;
   if(!authenticated)return;
   SFX.init();
@@ -1479,7 +1479,6 @@ function primeMenuAudio(){ SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
 playbtn.addEventListener('click', ()=>startPlaying(false));
-registerbtn.addEventListener('click', ()=>startPlaying(true));
 logoutbtn.addEventListener('click',async()=>{
   const rankContinue=document.getElementById('rankupcontinue');
   if(rankContinue)rankContinue.click();

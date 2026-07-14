@@ -166,7 +166,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   }
   assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
-  assert.match(html, /id="registerbtn" type="button" disabled/);
+  assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(html, /id="gearrewardwin"/);
   assert.match(boot, /dataset\.gamePhase\s*=\s*'ready'[\s\S]*button\.disabled\s*=\s*false/);
   assert.doesNotMatch(html, /\.\/js\/ui\.js/);

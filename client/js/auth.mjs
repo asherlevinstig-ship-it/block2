@@ -10,7 +10,8 @@ export function createAuthController({ user, password, playerName, status, play,
     const signed = !!state.account;
     user.classList.toggle('hidden', signed);
     password.classList.toggle('hidden', signed);
-    register.classList.toggle('hidden', signed);
+    register.classList.add('hidden');
+    register.hidden = true;
     logout.classList.toggle('hidden', !signed);
     play.textContent = signed ? 'PLAY' : 'SIGN IN & PLAY';
     if (signed) {
@@ -47,12 +48,12 @@ export function createAuthController({ user, password, playerName, status, play,
     const secret = password.value || '';
     const displayName = (playerName.value || 'Hunter').slice(0, 16);
     if (!username || !secret) {
-      setStatus('ENTER YOUR USERNAME OR EMAIL AND PASSWORD', 'bad');
+      setStatus('ENTER YOUR SCHOOL EMAIL AND PASSWORD', 'bad');
       return false;
     }
-    setStatus(create ? 'CREATING ACCOUNT...' : 'SIGNING IN...');
+    setStatus('SIGNING IN...');
     try {
-      state.account = (await json(create ? '/auth/register' : '/auth/login', { username, password: secret, displayName })).account;
+      state.account = (await json('/auth/login', { username, password: secret, displayName })).account;
       password.value = '';
       render();
       return true;

@@ -80,7 +80,7 @@ $env:MYSQL_USER = "your-database-user"
 $env:MYSQL_PASSWORD = "your-rotated-password"
 ```
 
-The bridge accepts existing teacher/student emails and PHP bcrypt password hashes from `password_hash()`. Registration is disabled in this mode because account creation remains owned by your existing school system.
+The bridge accepts existing teacher/student emails and PHP bcrypt password hashes from `password_hash()`. Registration is disabled in this mode because account creation remains owned by your existing school system. The game login screen should be treated as "sign in with school account"; it creates only the Firebase game profile/save after MySQL authentication succeeds.
 
 If your old PHP app uses `DB_SERVER=localhost`, that usually means "localhost from the web-hosting server", not from your Windows machine. For local testing you need either:
 
