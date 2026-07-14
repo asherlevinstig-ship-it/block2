@@ -41,6 +41,13 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
   const colyseusBrowserSdk = path.join(path.dirname(require.resolve('@colyseus/sdk/package.json')), 'dist', 'colyseus.js');
   app.get('/colyseus.js', (_req, res) => res.sendFile(colyseusBrowserSdk));
   app.get('/three.js', (_req, res) => res.sendFile(require.resolve('three/build/three.min.js')));
+
+  app.use((err, _req, res, next) => {
+    if (err instanceof URIError || err && err.status === 400 && /decode/i.test(String(err.message || ''))) {
+      return res.status(400).type('text/plain').send('Bad request');
+    }
+    return next(err);
+  });
 }
 
 module.exports = { prepareRuntime, attachHttpRoutes };
