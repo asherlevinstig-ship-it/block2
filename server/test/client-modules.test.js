@@ -599,6 +599,10 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/Contract payout/);
   assert.match(networkingSource,/Protected claim purchased/);
   assert.match(networkingSource,/Treasure cache/);
+  assert.match(networkingSource,/function showLevelUpReveal\(m\)/);
+  assert.match(networkingSource,/LEVEL UP/);
+  assert.match(networkingSource,/room\.onMessage\('levelUp'/);
+  assert.match(networkingSource,/rewardGain\('rare',statPoints\|\|1,'Stat Points'/);
   assert.match(networkingSource,/rewardGain\('rare',1,reward,\{icon:'JOB'\}\)/);
   assert.match(networkingSource,/JOB_SYSTEM\.milestoneReward/);
   assert.match(networkingSource,/Windseed planted/);

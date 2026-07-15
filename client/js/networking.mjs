@@ -59,6 +59,59 @@ function applyGuildRenownToast(m){
   const pinnedLine=pinned?'<br><small><b>Pinned:</b> '+escHTML(pinned.title||'Shared objective')+' '+Math.max(0,pinned.value|0)+'/'+Math.max(1,pinned.target|0)+(pinned.done?' COMPLETE':'')+'</small>':'';
   sysMsg('<b>'+escHTML(m.name||'Fellowship')+'</b> gained <b>+'+amount+' Renown</b>'+(reason?' from '+escHTML(reason):'')+'.<span class="fellowship-renown-progress"><i style="width:'+pct+'%"></i></span><small>This week: <b>'+week+'</b> / '+goal+' Renown</small>'+pinnedLine,{tier:amount>=10?'major':'notice',title:'Fellowship Renown'});
 }
+function ensureLevelUpRevealStyles(){
+  if(document.getElementById('level-up-reveal-style'))return;
+  const style=document.createElement('style');style.id='level-up-reveal-style';
+  style.textContent=`
+    .level-up-reveal{position:fixed;left:50%;top:12vh;z-index:9100;transform:translate(-50%,-16px) scale(.96);opacity:0;pointer-events:none;min-width:min(500px,calc(100vw - 28px));max-width:600px;padding:18px 20px 16px;border:2px solid #9ae66e;border-radius:8px;background:linear-gradient(180deg,rgba(21,37,34,.98),rgba(7,15,22,.96));box-shadow:0 0 0 1px rgba(255,255,255,.13) inset,0 20px 52px rgba(0,0,0,.55),0 0 46px rgba(154,230,110,.24);color:#f5fff0;text-align:center;font-family:inherit;transition:opacity .22s ease,transform .22s ease}
+    .level-up-reveal.show{opacity:1;transform:translate(-50%,0) scale(1)}
+    .level-up-reveal.leaving{opacity:0;transform:translate(-50%,-10px) scale(.98)}
+    .level-up-reveal small{display:block;color:#c9ff7e;letter-spacing:.24em;font-size:12px;margin-bottom:4px}
+    .level-up-reveal h3{margin:0;font-size:30px;line-height:1;color:#fffbd2;text-shadow:0 2px 0 #1d2a33}
+    .level-up-reveal p{margin:8px 0 12px;color:#dff6d5;font-size:15px}
+    .level-up-rewards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .level-up-reward{padding:9px;border:1px solid rgba(201,255,126,.36);background:rgba(255,255,255,.075);border-radius:6px}
+    .level-up-reward span{display:block;color:#b8cbd0;font-size:11px;letter-spacing:.12em}
+    .level-up-reward b{display:block;color:#ffffff;font-size:15px;margin-top:2px}
+    .level-up-spark{position:absolute;width:8px;height:8px;border-radius:50%;background:#e7ff9b;box-shadow:0 0 14px #9ae66e;animation:level-up-spark 950ms ease-out forwards}
+    @keyframes level-up-spark{from{opacity:1;transform:translate(0,0) scale(1)}to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.25)}}
+    @media (max-width:560px){.level-up-rewards{grid-template-columns:1fr}.level-up-reveal h3{font-size:26px}}
+    @media (prefers-reduced-motion:reduce){.level-up-reveal,.level-up-spark{transition:none;animation:none}}
+  `;
+  document.head.appendChild(style);
+}
+function showLevelUpReveal(m){
+  const level=Math.max(1,(m&&m.level)|0),fromLevel=Math.max(1,(m&&m.fromLevel)|0);
+  if(level<=fromLevel)return;
+  const levels=Math.max(1,(m&&m.levels)|0),statPoints=Math.max(0,(m&&m.statPoints)|0);
+  const nextRankLevel=Math.max(0,(m&&m.nextRankLevel)|0);
+  ensureLevelUpRevealStyles();
+  const card=document.createElement('div');card.className='level-up-reveal';card.setAttribute('role','status');card.setAttribute('aria-live','polite');
+  const levelLine=levels>1?'Level '+fromLevel+' -> '+level:'Level '+level;
+  const nextLine=nextRankLevel?'Next rank at Level '+nextRankLevel:'Mastery rank reached';
+  const xp=Number.isFinite(Number(m&&m.xp))?Math.max(0,(m.xp|0)):0;
+  const nextXp=Number.isFinite(Number(m&&m.nextXp))?Math.max(0,(m.nextXp|0)):0;
+  card.innerHTML='<small>LEVEL UP</small><h3>'+escHTML(levelLine)+'</h3><p>Your hunter grew stronger. Spend stat points when you are ready.</p><div class="level-up-rewards">'
+    +'<div class="level-up-reward"><span>STAT POINTS</span><b>+'+statPoints+'</b></div>'
+    +'<div class="level-up-reward"><span>NEXT TARGET</span><b>'+escHTML(nextLine)+'</b></div>'
+    +'<div class="level-up-reward"><span>XP PROGRESS</span><b>'+xp.toLocaleString('en-US')+' / '+Math.max(1,nextXp).toLocaleString('en-US')+'</b></div>'
+    +'<div class="level-up-reward"><span>OPEN STATS</span><b>Press C</b></div>'
+    +'</div>';
+  for(let i=0;i<16;i++){
+    const spark=document.createElement('i');spark.className='level-up-spark';
+    spark.style.left=(8+Math.random()*84)+'%';spark.style.top=(10+Math.random()*74)+'%';
+    spark.style.setProperty('--tx',((Math.random()-.5)*190).toFixed(0)+'px');
+    spark.style.setProperty('--ty',((-40-Math.random()*110)).toFixed(0)+'px');
+    card.appendChild(spark);
+  }
+  document.body.appendChild(card);
+  requestAnimationFrame(()=>card.classList.add('show'));
+  setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),360);},4300);
+  SFX.level();
+  rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700});
+  showName('LEVEL '+level);
+  sysMsg('<b>Level '+level+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
+}
 function setActiveObjectives(next, opts={}){
   const list=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(next):(Array.isArray(next)?next:[]);
   const claimable=new Set(list.filter(o=>o&&o.id&&(o.status==='claimable'||o.status==='complete')).map(o=>String(o.id)));
@@ -794,6 +847,7 @@ function netAttachRoom(room,name,client){
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
     room.onMessage('tutorialProgress', m=>{if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);});
     room.onMessage('firstPromotionAck', m=>{if(m&&m.ok)ONBOARD.setSeen(true);});
+    room.onMessage('levelUp', m=>showLevelUpReveal(m));
     room.onMessage('rankUp', m=>{
       presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
     });

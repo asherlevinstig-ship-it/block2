@@ -1941,20 +1941,34 @@ class GameRoom extends Room {
         : 'first_promotion_job';
       prof.firstPromotionSeen = false;
     }
-    if (client && rank > beforeRank) {
-      const gateRank = Math.min(4, rank);
-      client.send('rankUp', {
-        fromRank: beforeRank,
-        rank,
-        rankName: 'EDCBAS'[rank] + '-Rank Hunter',
-        gateRank,
-        gateRankName: 'EDCBA'[gateRank] + '-Rank Gates',
+    if (client && levels > 0) {
+      const baseLevelMessage = {
+        fromLevel: before,
         level: S.lvl | 0,
         levels,
         statPoints: levels * 3,
-        nextRankLevel: nextHunterRankLevel(rank),
+        xp: S.xp | 0,
+        nextXp: this.xpNeed(S.lvl) | 0,
         source: String(source || 'activity').slice(0, 32),
-      });
+      };
+      if (rank > beforeRank) {
+        const gateRank = Math.min(4, rank);
+        client.send('rankUp', {
+          ...baseLevelMessage,
+          fromRank: beforeRank,
+          rank,
+          rankName: 'EDCBAS'[rank] + '-Rank Hunter',
+          gateRank,
+          gateRankName: 'EDCBA'[gateRank] + '-Rank Gates',
+          nextRankLevel: nextHunterRankLevel(rank),
+        });
+      } else {
+        client.send('levelUp', {
+          ...baseLevelMessage,
+          rank,
+          nextRankLevel: nextHunterRankLevel(rank),
+        });
+      }
     }
     return { granted, levels, rankUp: rank > beforeRank, fromRank: beforeRank, rank };
   }

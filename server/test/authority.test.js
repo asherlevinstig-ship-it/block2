@@ -487,9 +487,12 @@ test('crossing an XP rank threshold emits one authoritative promotion', () => {
       rankName: 'D-Rank Hunter',
       gateRank: 1,
       gateRankName: 'D-Rank Gates',
+      fromLevel: 10,
       level: 11,
       levels: 1,
       statPoints: 3,
+      xp: 0,
+      nextXp: room.xpNeed(11),
       nextRankLevel: 21,
       source: 'town_quest',
     },
@@ -497,6 +500,32 @@ test('crossing an XP rank threshold emits one authoritative promotion', () => {
 
   client.sent.length = 0;
   assert.equal(room.grantHunterXp(prof, 1, client, 'town_quest').rankUp, false);
+  assert.equal(client.sent.some(message => message.type === 'rankUp'), false);
+});
+
+test('ordinary Hunter level gains emit a rewarding level-up event', () => {
+  const room = makeRoom(), client = makeClient('level_up_owner');
+  const { prof } = seedPlayer(room, client, { lvl: 1 });
+  prof.S.xp = room.xpNeed(1) - 1;
+
+  const result = room.grantHunterXp(prof, 1, client, 'job_contract');
+  assert.deepEqual(result, { granted: 1, levels: 1, rankUp: false, fromRank: 0, rank: 0 });
+  assert.equal(prof.S.lvl, 2);
+  assert.equal(prof.S.pts, 3);
+  assert.deepEqual(client.sent.at(-1), {
+    type: 'levelUp',
+    msg: {
+      fromLevel: 1,
+      level: 2,
+      levels: 1,
+      statPoints: 3,
+      xp: 0,
+      nextXp: room.xpNeed(2),
+      source: 'job_contract',
+      rank: 0,
+      nextRankLevel: 11,
+    },
+  });
   assert.equal(client.sent.some(message => message.type === 'rankUp'), false);
 });
 
