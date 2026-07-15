@@ -518,7 +518,7 @@ let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn
 const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
   markSubjectFocus:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='subject')onboardingFlags.subject=true;},
-  markRecall:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='recall')onboardingFlags.recall=true;}
+  markRecall:()=>{if(onboardingActive&&onboardingKind()==='recall')onboardingFlags.recall=true;}
 }),configurable:true});
 const ONBOARDING_FULL_TURN=Math.PI*2;
 let onboardingArrowTurn=0,onboardingPreparedStep=-1;
@@ -560,7 +560,7 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'farm',pillar:'Lesson 7 / 11 — Farming', key:'WOODEN HOE + G', text:'Use the wooden hoe on one mature wheat crop.', sub:'Select the hoe on your hotbar, aim at tall golden wheat, then use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
   {kind:'eat',pillar:'Lesson 8 / 11 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
   {kind:'combat',pillar:'Lesson 9 / 11 — Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
-  {kind:'recall',pillar:'Lesson 10 / 11 — Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingArrived&&onboardingFlags.recall},
+  {kind:'recall',pillar:'Lesson 10 / 11 — Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
   {kind:'finish',pillar:'Lesson 11 / 11 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
 for(const step of ONBOARDING_STEPS){
