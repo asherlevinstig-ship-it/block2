@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { parseFirebaseServiceAccount } = require('./firebase-credentials');
 
 function parseTrustProxy(value) {
   const raw = String(value || '').trim();
@@ -14,13 +15,7 @@ function parseTrustProxy(value) {
 }
 
 function validateServiceAccount(raw, source) {
-  let credential;
-  try { credential = JSON.parse(raw); }
-  catch (e) { throw new Error(source + ' must contain valid JSON: ' + e.message); }
-  for (const field of ['project_id', 'client_email', 'private_key']) {
-    if (typeof credential[field] !== 'string' || !credential[field].trim()) throw new Error(source + ' is missing service-account field ' + field);
-  }
-  if (!credential.private_key.includes('BEGIN PRIVATE KEY')) throw new Error(source + ' does not contain a valid private key');
+  parseFirebaseServiceAccount(raw, source);
 }
 
 function summarizeStartupEnv(env = process.env) {

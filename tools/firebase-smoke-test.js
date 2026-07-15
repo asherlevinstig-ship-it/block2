@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 const admin = require('firebase-admin');
+const { parseFirebaseServiceAccount } = require('../server/firebase-credentials');
 
 function init() {
   if (admin.apps.length) return;
   const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
   admin.initializeApp(svc
-    ? { credential: admin.credential.cert(JSON.parse(svc)) }
+    ? { credential: admin.credential.cert(parseFirebaseServiceAccount(svc)) }
     : {});
 }
 
