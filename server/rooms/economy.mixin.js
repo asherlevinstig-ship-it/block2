@@ -515,7 +515,7 @@ class EconomyMixin {
     this.dirtyPlayers.add(rec.token);
     this.recordCraftProgress(client, outId, finalCount);
     if ((outId | 0) === W.B.TABLE || (outId | 0) === W.B.FURNACE) this.advanceProgressionDirector(client, 'crafted_station', { profile: false });
-    const msg = { out: { id: outId, count: outCount }, times };
+    const msg = { out: { id: outId, count: outCount }, times, inv: rec.prof.inv };
     if (finalCount !== outCount * times) msg.finalCount = finalCount;
     client.send('craftResult', msg);
   }

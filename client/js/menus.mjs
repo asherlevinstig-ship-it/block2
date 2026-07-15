@@ -725,13 +725,34 @@ function requestServerCraft(shift){
   NET.room.send('craft', { w: craftW, shift: !!shift, cells: craftCells.map(s=>s?{id:s.id,count:s.count}:null) });
   return true;
 }
+function restoreInventorySnapshot(slots){
+  if(!Array.isArray(slots)) return false;
+  for(let i=0;i<36;i++){
+    const s=slots[i];
+    if(!s || !ITEMS[s.id]){ inv[i]=null; continue; }
+    inv[i]=newStack(s.id,Math.max(1,Math.min(64,s.count|0)));
+    if(ITEMS[s.id].tool) inv[i].dur=(s.dur!=null)?s.dur:ITEMS[s.id].tool.dur;
+    if(ITEMS[s.id].armor){
+      inv[i].dur=(s.dur!=null)?s.dur:ITEMS[s.id].armor.dur;
+      if(GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType]) inv[i].armorType=s.armorType;
+    }
+    if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.plus) inv[i].plus=Math.max(0,Math.min(3,s.plus|0));
+    if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RANKS.some((r,j)=>j<6&&r.id===s.gearRank)) inv[i].gearRank=s.gearRank;
+    if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) inv[i].rarity=s.rarity;
+    if(ITEMS[s.id].tool&&JOB_SYSTEM.reforgeModifier(s.forge)) inv[i].forge=s.forge;
+    if(ITEMS[s.id].tool&&s.masterwork&&inv[i].forge) inv[i].masterwork=true;
+    if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.locked) inv[i].locked=true;
+    if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&typeof s.source==='string'&&s.source) inv[i].source=s.source;
+  }
+  return true;
+}
 function applyServerCraft(m){
   if(!m || !m.out || !ITEMS[m.out.id]) return;
   const times=Math.max(1, Math.min(64, m.times|0));
   consumeCraftTimes(times);
   const made=m.finalCount || ((m.out.count||1)*times);
   const beforeContract=objectiveContractCraftSnapshot(m.out.id);
-  addCraftedItem(m.out.id, made);
+  if(!restoreInventorySnapshot(m.inv)) addCraftedItem(m.out.id, made);
   awardJobForCraft(m.out.id, made);
   presentObjectiveCraftCompletion(m.out.id, made, 'craft', beforeContract);
   if(onboardingActive&&onboardingArrived&&onboardingKind()==='craft') onboardingFlags.crafted=true;

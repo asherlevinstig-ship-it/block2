@@ -953,6 +953,12 @@ test('onboarding combat dummy can be hit inside the tutorial meadow',()=>{
   assert.match(combat,/onboardingFlags\.dummy=true;/);
 });
 
+test('online craft result restores the authoritative inventory snapshot',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(menus,/function restoreInventorySnapshot\(slots\)\{/);
+  assert.match(menus,/if\(!restoreInventorySnapshot\(m\.inv\)\) addCraftedItem\(m\.out\.id, made\);/);
+});
+
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');

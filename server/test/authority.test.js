@@ -2764,7 +2764,10 @@ test('crafting consumes persisted ingredients and grants the server recipe resul
 
   assert.equal(itemCount(prof, W.B.LOG), 0);
   assert.equal(itemCount(prof, W.B.PLANKS), 8);
-  assert.deepEqual(client.sent.at(-1), { type: 'craftResult', msg: { out: { id: W.B.PLANKS, count: 4 }, times: 2 } });
+  assert.equal(client.sent.at(-1).type, 'craftResult');
+  assert.deepEqual(client.sent.at(-1).msg.out, { id: W.B.PLANKS, count: 4 });
+  assert.equal(client.sent.at(-1).msg.times, 2);
+  assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
   assert.equal(room.dirtyPlayers.has(room.tokens.get(client.sessionId)), true);
 });
 
@@ -2804,7 +2807,10 @@ test('server crafting accepts familiar binding recipes advertised by the client'
     room.handleCraft(client, { w: 2, cells: spec.cells });
 
     assert.equal(itemCount(prof, spec.out), 1, spec.name + ' binding item should be crafted');
-    assert.deepEqual(client.sent.at(-1), { type: 'craftResult', msg: { out: { id: spec.out, count: 1 }, times: 1 } });
+    assert.equal(client.sent.at(-1).type, 'craftResult');
+    assert.deepEqual(client.sent.at(-1).msg.out, { id: spec.out, count: 1 });
+    assert.equal(client.sent.at(-1).msg.times, 1);
+    assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
   }
 });
 
@@ -2843,7 +2849,10 @@ test('normal armor crafts from ingots and diamonds', () => {
   ] });
   assert.equal(itemCount(prof, I.IRON_INGOT), 0);
   assert.equal(itemCount(prof, I.IRON_ARMOR), 1);
-  assert.deepEqual(client.sent.at(-1), { type: 'craftResult', msg: { out: { id: I.IRON_ARMOR, count: 1 }, times: 1 } });
+  assert.equal(client.sent.at(-1).type, 'craftResult');
+  assert.deepEqual(client.sent.at(-1).msg.out, { id: I.IRON_ARMOR, count: 1 });
+  assert.equal(client.sent.at(-1).msg.times, 1);
+  assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
 
   room.handleCraft(client, { w: 3, cells: [
     { id: I.DIAMOND, count: 1 }, 0, { id: I.DIAMOND, count: 1 },
