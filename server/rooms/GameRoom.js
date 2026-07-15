@@ -2003,7 +2003,7 @@ class GameRoom extends Room {
   }
   simpleSortableStack(stack) {
     if (!stack || stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id]) return false;
-    return !stack.plus && !stack.gearRank && !stack.rarity && !stack.armorType && !stack.forge && !stack.masterwork && !stack.locked && !stack.source;
+    return !stack.plus && !stack.gearRank && !stack.rarity && !stack.armorType && !stack.forge && !stack.masterwork && !stack.unique && !stack.locked && !stack.source;
   }
   sortInventoryRange(inv, start, end) {
     const merged = new Map(), singles = [];
@@ -3164,7 +3164,7 @@ class GameRoom extends Room {
   addDeathStackToInventory(prof, item) {
     if (!prof || !item || !Number.isFinite(Number(item.id)) || (item.id | 0) <= 0) return false;
     const inv = Array.isArray(prof.inv) ? prof.inv : (prof.inv = []);
-    const gearLike = !!(TOOL_INFO[item.id] || ARMOR_INFO[item.id] || item.dur != null || item.gearRank || item.rarity || item.forge || item.masterwork || item.armorType);
+    const gearLike = !!(TOOL_INFO[item.id] || ARMOR_INFO[item.id] || item.dur != null || item.gearRank || item.rarity || item.forge || item.masterwork || item.armorType || item.unique);
     if (!gearLike) return this.addRewardItem(prof, item.id, item.count || 1) <= 0;
     const slot = inv.findIndex(s => !s);
     if (slot < 0 && inv.length >= 36) return false;
@@ -3839,7 +3839,7 @@ class GameRoom extends Room {
     this.recordRepairProgress(client, false);
     client.send('blacksmithRepairResult', {
       toolSlot: target.i,
-      tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s), gearRank:target.s.gearRank||'', armorType:target.s.armorType||'', rarity:target.s.rarity||'', forge:target.s.forge||'', masterwork:!!target.s.masterwork, locked:!!target.s.locked, source:target.s.source||'' },
+      tool: { id: target.s.id, count: target.s.count || 1, dur: target.s.dur, plus: this.toolPlus(target.s), gearRank:target.s.gearRank||'', armorType:target.s.armorType||'', rarity:target.s.rarity||'', forge:target.s.forge||'', masterwork:!!target.s.masterwork, unique:target.s.unique||'', locked:!!target.s.locked, source:target.s.source||'' },
       repaired: target.max - target.cur,
       gold: -cost,
     });
@@ -3883,7 +3883,7 @@ class GameRoom extends Room {
     this.recordRepairProgress(client, true);
     client.send('blacksmithUpgradeResult', {
       slot,
-      tool: { id: s.id, count: s.count || 1, dur: s.dur, plus: s.plus, rarity:s.rarity||'', forge:s.forge||'', masterwork:!!s.masterwork, locked:!!s.locked, source:s.source||'' },
+      tool: { id: s.id, count: s.count || 1, dur: s.dur, plus: s.plus, rarity:s.rarity||'', forge:s.forge||'', masterwork:!!s.masterwork, unique:s.unique||'', locked:!!s.locked, source:s.source||'' },
       mat: { id: cost.matId, count: cost.matCount },
       gold: -cost.goldCost,
     });
@@ -3913,7 +3913,7 @@ class GameRoom extends Room {
     rec.prof.gold=(rec.prof.gold|0)-cost.gold;if(action==='masterwork')s.masterwork=true;else s.forge=modifier;
     s.dur=this.toolMaxDur(s,info);this.dirtyPlayers.add(rec.token);this.recordRepairProgress(client,true);
     this.recordEconomyGold(client,-cost.gold,'blacksmith_sink','reforge_'+action,{slot,id:s.id});
-    client.send('blacksmithReforgeResult',{slot,tool:{id:s.id,count:s.count||1,dur:s.dur,plus:this.toolPlus(s),rarity:s.rarity||'',forge:s.forge||'',masterwork:!!s.masterwork,locked:!!s.locked,source:s.source||''},gold:-cost.gold,materials:{iron:cost.iron,diamond:cost.diamond},action});
+    client.send('blacksmithReforgeResult',{slot,tool:{id:s.id,count:s.count||1,dur:s.dur,plus:this.toolPlus(s),rarity:s.rarity||'',forge:s.forge||'',masterwork:!!s.masterwork,unique:s.unique||'',locked:!!s.locked,source:s.source||''},gold:-cost.gold,materials:{iron:cost.iron,diamond:cost.diamond},action});
     this.sendSpace('','fx',{t:'blacksmith',action:'reforge',id:s.id,plus:this.toolPlus(s),name:rec.prof.name||'Hunter',dgn:''});
   }
   handleBlacksmithSalvage(client,m){
@@ -3985,7 +3985,7 @@ class GameRoom extends Room {
     client.send('repairResult', {
       kitSlot,
       toolSlot: best.i,
-      tool: { id: best.s.id, count: best.s.count || 1, dur: best.s.dur, plus: this.toolPlus(best.s), gearRank:best.s.gearRank||'', armorType:best.s.armorType||'', rarity:best.s.rarity||'', forge:best.s.forge||'', masterwork:!!best.s.masterwork, locked:!!best.s.locked, source:best.s.source||'' },
+      tool: { id: best.s.id, count: best.s.count || 1, dur: best.s.dur, plus: this.toolPlus(best.s), gearRank:best.s.gearRank||'', armorType:best.s.armorType||'', rarity:best.s.rarity||'', forge:best.s.forge||'', masterwork:!!best.s.masterwork, unique:best.s.unique||'', locked:!!best.s.locked, source:best.s.source||'' },
       repaired: best.s.dur - best.cur,
     });
   }

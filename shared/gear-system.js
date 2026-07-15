@@ -31,7 +31,34 @@
     momentum:Object.freeze({maxStacks:3,windowMs:1400,damagePerExtraStack:.06}),
     stagger:Object.freeze({normalSeconds:.32,bossSeconds:.8,bossMoveMultiplier:.75}),
   });
+  const UNIQUE_GEAR=Object.freeze({
+    emberbrand:Object.freeze({id:'emberbrand',kind:'weapon',name:'Emberbrand',color:'#ff7a34',minRank:0,weight:10,perk:'Cinder edge: +1.5 damage on every hit.',damageBonus:1.5}),
+    frostbite_fang:Object.freeze({id:'frostbite_fang',kind:'weapon',name:'Frostbite Fang',color:'#82d8ff',minRank:1,weight:8,perk:'Frost bite: +0.8 damage and 8% faster swings.',damageBonus:.8,cooldownMultiplier:.92}),
+    stormpiercer:Object.freeze({id:'stormpiercer',kind:'weapon',name:'Stormpiercer',color:'#d7b7ff',minRank:2,weight:6,perk:'Storm line: +6% damage and 5% faster swings.',damageMultiplier:1.06,cooldownMultiplier:.95}),
+    mossguard_mantle:Object.freeze({id:'mossguard_mantle',kind:'armor',name:'Mossguard Mantle',color:'#70d98b',minRank:0,weight:10,perk:'Living weave: +1% mitigation, +2% movement, -8% stamina cost.',mitigationBonus:.01,moveMultiplier:1.02,staminaCostMultiplier:.92}),
+    sunwarden_plate:Object.freeze({id:'sunwarden_plate',kind:'armor',name:'Sunwarden Plate',color:'#ffd15c',minRank:1,weight:8,perk:'Solar shell: +2% mitigation and +10% durability.',mitigationBonus:.02,durabilityMultiplier:1.10}),
+    voidweave_harness:Object.freeze({id:'voidweave_harness',kind:'armor',name:'Voidweave Harness',color:'#b28cff',minRank:2,weight:6,perk:'Lightless step: +6% movement and -12% stamina cost.',moveMultiplier:1.06,staminaCostMultiplier:.88}),
+  });
   function clamp(value,min,max){return Math.max(min,Math.min(max,value|0));}
+  function uniqueFor(stack={},kind=''){
+    const unique=UNIQUE_GEAR[stack&&stack.unique];
+    return unique&&(!kind||unique.kind===kind)?unique:null;
+  }
+  function uniqueCandidates(kind='',rankIndex=0){
+    const rank=clamp(rankIndex,0,6);
+    return Object.keys(UNIQUE_GEAR).map(id=>UNIQUE_GEAR[id]).filter(u=>u.kind===kind&&rank>=u.minRank);
+  }
+  function rollUniqueId(kind='',rankIndex=0,roll=Math.random()){
+    const candidates=uniqueCandidates(kind,rankIndex);
+    if(!candidates.length)return '';
+    const total=candidates.reduce((sum,u)=>sum+Math.max(1,u.weight|0),0);
+    let cursor=Math.max(0,Math.min(.999999,Number(roll)||0))*total;
+    for(const unique of candidates){
+      cursor-=Math.max(1,unique.weight|0);
+      if(cursor<0)return unique.id;
+    }
+    return candidates[candidates.length-1].id;
+  }
   function rarityIndexFor(stack={}){
     const explicit=RARITIES.findIndex(r=>r.id===stack.rarity);
     if(explicit>=0)return explicit;
@@ -71,11 +98,12 @@
     const tier=clamp(info.tier,1,4),plus=clamp(stack.plus,0,3);
     const base=info.cls==='sword'?[0,3,6,10,15][tier]:[0,5,9,15,22][tier];
     const raw=base+plus*2+(stack.forge==='keen'?2:0)+(stack.masterwork?2:0);
-    const damage=Math.round(raw*profile(info,stack).rarity.damage*10)/10;
-    const cooldownMs=Math.round((info.cls==='sword'?250:480)*(stack.forge==='swift'?.92:1)*(stack.masterwork?.94:1));
+    const unique=uniqueFor(stack,'weapon');
+    const damage=Math.round((raw*profile(info,stack).rarity.damage*(unique&&unique.damageMultiplier||1)+(unique&&unique.damageBonus||0))*10)/10;
+    const cooldownMs=Math.max(120,Math.round((info.cls==='sword'?250:480)*(stack.forge==='swift'?.92:1)*(stack.masterwork?.94:1)*(unique&&unique.cooldownMultiplier||1)));
     const attacksPerSecond=Math.round(10000/cooldownMs)/10;
     const dps=Math.round(damage*1000/cooldownMs*10)/10;
-    return Object.freeze({archetype:info.cls,damage,cooldownMs,attacksPerSecond,dps});
+    return Object.freeze({archetype:info.cls,damage,cooldownMs,attacksPerSecond,dps,unique});
   }
   function armorArchetypeFor(info={},stack={}){
     if(info.legendary||stack.legendary||(info.tier|0)>=5)return ARMOR_ARCHETYPES.aegis;
@@ -83,9 +111,12 @@
   }
   function armorProfile(info={},stack={}){
     const gear=profile(info,stack),type=armorArchetypeFor(info,stack),baseDur=Math.max(1,info.dur|0||1);
-    const mitigation=Math.max(.02,Math.min(.30,Math.round((ARMOR_MITIGATION[gear.rankIndex]+gear.rarity.armor+type.mitigation)*1000)/1000));
-    const maxDur=Math.min(99999,Math.round(baseDur*(1+clamp(stack.plus,0,3)*.15)*gear.rarity.durability*type.durability));
-    return Object.freeze({...gear,type,mitigation,maxDur,moveMultiplier:type.moveMultiplier,staminaCostMultiplier:type.staminaCostMultiplier});
+    const unique=uniqueFor(stack,'armor');
+    const mitigation=Math.max(.02,Math.min(.35,Math.round((ARMOR_MITIGATION[gear.rankIndex]+gear.rarity.armor+type.mitigation+(unique&&unique.mitigationBonus||0))*1000)/1000));
+    const maxDur=Math.min(99999,Math.round(baseDur*(1+clamp(stack.plus,0,3)*.15)*gear.rarity.durability*type.durability*(unique&&unique.durabilityMultiplier||1)));
+    const moveMultiplier=Math.round(type.moveMultiplier*(unique&&unique.moveMultiplier||1)*1000)/1000;
+    const staminaCostMultiplier=Math.round(type.staminaCostMultiplier*(unique&&unique.staminaCostMultiplier||1)*1000)/1000;
+    return Object.freeze({...gear,type,mitigation,maxDur,moveMultiplier,staminaCostMultiplier,unique});
   }
   function nextMomentum(previous={},now=Date.now(),targetId=''){
     const same=String(previous.targetId||'')===String(targetId||'')&&Number(previous.expiresAt)>now;
@@ -95,5 +126,5 @@
   function momentumMultiplier(stacks=0){
     return 1+Math.max(0,Math.min(WEAPON_IDENTITY.momentum.maxStacks,stacks|0)-1)*WEAPON_IDENTITY.momentum.damagePerExtraStack;
   }
-  return Object.freeze({RANKS,RARITIES,ARMOR_MITIGATION,ARMOR_ARCHETYPES,WEAPON_IDENTITY,rankIndexFor,rarityIndexFor,rarityIndexFromRoll,rollRarity,profile,weaponCombatProfile,armorArchetypeFor,armorProfile,nextMomentum,momentumMultiplier});
+  return Object.freeze({RANKS,RARITIES,ARMOR_MITIGATION,ARMOR_ARCHETYPES,WEAPON_IDENTITY,UNIQUE_GEAR,rankIndexFor,rarityIndexFor,rarityIndexFromRoll,rollRarity,profile,uniqueFor,uniqueCandidates,rollUniqueId,weaponCombatProfile,armorArchetypeFor,armorProfile,nextMomentum,momentumMultiplier});
 });

@@ -744,6 +744,7 @@ function restoreInventorySnapshot(slots){
     if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) inv[i].rarity=s.rarity;
     if(ITEMS[s.id].tool&&JOB_SYSTEM.reforgeModifier(s.forge)) inv[i].forge=s.forge;
     if(ITEMS[s.id].tool&&s.masterwork&&inv[i].forge) inv[i].masterwork=true;
+    if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(s,ITEMS[s.id].armor?'armor':'weapon'))inv[i].unique=s.unique;
     if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.locked) inv[i].locked=true;
     if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&typeof s.source==='string'&&s.source) inv[i].source=s.source;
   }
@@ -919,6 +920,7 @@ function inspectedGear(){
 function gearSourceLabel(stack,item){
   const source=String(stack&&stack.source||'').toLowerCase();
   if(source==='gate')return 'Gate clear';
+  if(source==='unique_gate')return 'Unique Gate drop';
   if(source==='captain')return 'Bandit captain';
   if(source==='bandit')return 'Bandit';
   if(source==='boss')return 'Boss reward';
@@ -975,7 +977,8 @@ function renderGearComparison(){
     }
     verdict=tradeoff||equal?'SIDEGRADE':better?'UPGRADE':'DOWNGRADE';verdictClass=tradeoff||equal?'sidegrade':better?'upgrade':'downgrade';
   }
-  const special=armor?(profile.type.name+' · '+profile.type.desc+(info.power==='aegis'?' · J: Aegis Pulse':'')):(info.cls==='sword'?'Momentum · consecutive hits gain damage':'Stagger · interrupts and slows');
+  const unique=GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(stack,armor?'armor':'weapon');
+  const special=unique?(unique.name+' · '+unique.perk):(armor?(profile.type.name+' · '+profile.type.desc+(info.power==='aegis'?' · J: Aegis Pulse':'')):(info.cls==='sword'?'Momentum · consecutive hits gain damage':'Stagger · interrupts and slows'));
   const rows=armor
     ?[
       ['MITIGATION',Math.round(profile.mitigation*100)+'%',baseProfile?comparisonDelta(profile.mitigation*100,baseProfile.mitigation*100,'%',0):'—'],
@@ -989,7 +992,7 @@ function renderGearComparison(){
       ['DPS',combat.dps,baseProfile?comparisonDelta(combat.dps,baseProfile.dps):'—'],
       ['DURABILITY',curDur+' / '+maxDur,baseline?comparisonDelta(maxDur,toolMaxDur(baseline),'',0):'—'],
     ];
-  panel.innerHTML='<header><div><small>SELECTED GEAR</small><h3 style="color:'+profile.rarity.color+'">'+escHTML(profile.rank.name+' '+profile.rarity.name)+'</h3><b>'+escHTML(itemNameWithPlus(stack))+'</b></div><strong class="'+verdictClass+'">'+verdict+'</strong></header>'+
+  panel.innerHTML='<header><div><small>SELECTED GEAR</small><h3 style="color:'+(unique?unique.color:profile.rarity.color)+'">'+escHTML((unique?'Unique · ':'')+profile.rank.name+' '+profile.rarity.name)+'</h3><b>'+escHTML(itemNameWithPlus(stack))+'</b></div><strong class="'+verdictClass+'">'+verdict+'</strong></header>'+
     '<div class="gear-stat-grid">'+rows.map(r=>'<div><span>'+r[0]+'</span><b>'+r[1]+'</b>'+r[2]+'</div>').join('')+'</div>'+
     '<div class="gear-traits"><span><b>IDENTITY</b>'+escHTML(special)+'</span><span><b>SOURCE</b>'+escHTML(gearSourceLabel(stack,item))+'</span><span><b>STATUS</b>'+(stack.locked?'Protected':'Unprotected')+'</span><span><b>ACTION</b>'+escHTML(gearRecommendedAction(stack,item,info,verdict))+'</span></div>';
   const actions=document.createElement('div');actions.className='gear-actions';
@@ -1926,7 +1929,7 @@ function applyFurnaceResult(m){
 function applyToolSync(m){
   if(!m) return;
   const i=Math.max(0, Math.min(35, m.slot|0));
-  inv[i]=m.item?{id:m.item.id, count:m.item.count||1, ...(m.item.dur!=null?{dur:m.item.dur}:{}), ...(m.item.plus?{plus:m.item.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.item.rarity)?{rarity:m.item.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.item.forge)?{forge:m.item.forge}:{}),...(m.item.masterwork?{masterwork:true}:{}),...(m.item.locked?{locked:true}:{})}:null;
+  inv[i]=m.item?{id:m.item.id, count:m.item.count||1, ...(m.item.dur!=null?{dur:m.item.dur}:{}), ...(m.item.plus?{plus:m.item.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.item.rarity)?{rarity:m.item.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.item.forge)?{forge:m.item.forge}:{}),...(m.item.masterwork?{masterwork:true}:{}),...(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(m.item,ITEMS[m.item.id]&&ITEMS[m.item.id].armor?'armor':'weapon')?{unique:m.item.unique}:{}),...(m.item.locked?{locked:true}:{})}:null;
   if(m.broke) showName('Tool broke!');
   if(m.spared) showJobPerk('miner','tool spared');
   refreshHUD();
@@ -1938,7 +1941,7 @@ function applyRepairResult(m){
   const kit=inv[kitSlot];
   if(kit&&kit.id===I.REPAIR_KIT){ kit.count--; if(kit.count<=0) inv[kitSlot]=null; }
   const toolSlot=Math.max(0,Math.min(35,m.toolSlot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.ARMOR_ARCHETYPES[m.tool.armorType]?{armorType:m.tool.armorType}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.ARMOR_ARCHETYPES[m.tool.armorType]?{armorType:m.tool.armorType}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(m.tool,ITEMS[m.tool.id]&&ITEMS[m.tool.id].armor?'armor':'weapon')?{unique:m.tool.unique}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair');
   jobContractProgress('repair', 1, I.REPAIR_KIT);
@@ -1947,7 +1950,7 @@ function applyRepairResult(m){
 function applyBlacksmithRepairResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id]) return;
   const toolSlot=Math.max(0,Math.min(35,m.toolSlot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.ARMOR_ARCHETYPES[m.tool.armorType]?{armorType:m.tool.armorType}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===m.tool.gearRank)?{gearRank:m.tool.gearRank}:{}),...(GEAR_SYSTEM.ARMOR_ARCHETYPES[m.tool.armorType]?{armorType:m.tool.armorType}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(m.tool,ITEMS[m.tool.id]&&ITEMS[m.tool.id].armor?'armor':'weapon')?{unique:m.tool.unique}:{}),...(m.tool.locked?{locked:true}:{}),...(m.tool.source?{source:m.tool.source}:{})};
   if(typeof m.gold==='number') gold=Math.max(0,gold+(m.gold|0));
   refreshHUD(); if(uiOpen) renderUI();
   gainJobXP('blacksmith',5,'repair');
@@ -1958,7 +1961,7 @@ function applyBlacksmithRepairResult(m){
 function applyBlacksmithUpgradeResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id]) return;
   const toolSlot=Math.max(0,Math.min(35,m.slot|0));
-  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(m.tool.locked?{locked:true}:{})};
+  inv[toolSlot]={id:m.tool.id,count:m.tool.count||1,dur:m.tool.dur,...(m.tool.plus?{plus:m.tool.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===m.tool.rarity)?{rarity:m.tool.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(m.tool.forge)?{forge:m.tool.forge}:{}),...(m.tool.masterwork?{masterwork:true}:{}),...(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(m.tool,ITEMS[m.tool.id]&&ITEMS[m.tool.id].armor?'armor':'weapon')?{unique:m.tool.unique}:{}),...(m.tool.locked?{locked:true}:{})};
   if(typeof m.gold==='number') gold=Math.max(0,gold+(m.gold|0));
   if(m.mat && m.mat.id) removeItems(m.mat.id, m.mat.count||1);
   refreshHUD(); if(uiOpen) renderUI();
@@ -1970,7 +1973,7 @@ function applyBlacksmithUpgradeResult(m){
 function applyBlacksmithReforgeResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id])return;
   const slot=Math.max(0,Math.min(35,m.slot|0)),t=m.tool;
-  inv[slot]={id:t.id,count:t.count||1,dur:t.dur,...(t.plus?{plus:t.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===t.rarity)?{rarity:t.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(t.forge)?{forge:t.forge}:{}),...(t.masterwork?{masterwork:true}:{}),...(t.locked?{locked:true}:{})};
+  inv[slot]={id:t.id,count:t.count||1,dur:t.dur,...(t.plus?{plus:t.plus|0}:{}),...(GEAR_SYSTEM.RARITIES.some(r=>r.id===t.rarity)?{rarity:t.rarity}:{}),...(JOB_SYSTEM.reforgeModifier(t.forge)?{forge:t.forge}:{}),...(t.masterwork?{masterwork:true}:{}),...(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(t,ITEMS[t.id]&&ITEMS[t.id].armor?'armor':'weapon')?{unique:t.unique}:{}),...(t.locked?{locked:true}:{})};
   if(typeof m.gold==='number')gold=Math.max(0,gold+(m.gold|0));
   if(m.materials){if(m.materials.iron)removeItems(I.IRON_INGOT,m.materials.iron);if(m.materials.diamond)removeItems(I.DIAMOND,m.materials.diamond);}
   const mod=JOB_SYSTEM.reforgeModifier(inv[slot].forge),cost=JOB_SYSTEM.reforgeCost(m.action);
@@ -5450,7 +5453,7 @@ function cleanRecoveredGear(item){
     ...(GEAR_SYSTEM.ARMOR_ARCHETYPES[item.armorType]?{armorType:item.armorType}:{}),
     ...(GEAR_SYSTEM.RARITIES.some(r=>r.id===item.rarity)?{rarity:item.rarity}:{}),
     ...(JOB_SYSTEM.reforgeModifier(item.forge)?{forge:item.forge}:{}),
-    ...(item.masterwork?{masterwork:true}:{}),...(item.locked?{locked:true}:{}),
+    ...(item.masterwork?{masterwork:true}:{}),...(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(item,ITEMS[item.id].armor?'armor':'weapon')?{unique:item.unique}:{}),...(item.locked?{locked:true}:{}),
     source:String(item.source||'loot'),acquiredAt:Number(item.acquiredAt)||0,expiresAt:Number(item.expiresAt)||0};
 }
 function applyLootRecoveryState(m,silent=false){

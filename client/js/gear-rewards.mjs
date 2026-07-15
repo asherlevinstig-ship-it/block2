@@ -1,5 +1,5 @@
 const SOURCE_LABELS=Object.freeze({
-  gate:'Gate clear',boss:'Boss reward',captain:'Bandit captain',bandit:'Bandit camp',
+  gate:'Gate clear',unique_gate:'Unique Gate drop',boss:'Boss reward',captain:'Bandit captain',bandit:'Bandit camp',
   road_warden:'Road Warden cache',regional_contract:'Regional contract',
   aegis_trial:'Aegis trial',crafted:'Crafted',starter:'Starter equipment',dev:'Test reward',
 });
@@ -68,19 +68,22 @@ export function createGearRewardPresenter({
     const baseline=baselineStack&&items[baselineStack.id]?{stack:baselineStack,item:items[baselineStack.id]}:null;
     const summary=compareGearReward({stack,item,baseline,gearSystem,toolMaxDur});
     const {profile,armor,rows,verdict}=summary;
-    const archetype=armor?profile.type.name:(item.tool.cls==='axe'?'Stagger Axe':'Momentum Sword');
-    panel.style.setProperty('--gear-color',profile.rarity.color);
-    panel.className='gear-reward-panel rarity-'+profile.rarity.id;
+    const unique=gearSystem.uniqueFor&&gearSystem.uniqueFor(stack,armor?'armor':'weapon');
+    const archetype=unique?unique.name:(armor?profile.type.name:(item.tool.cls==='axe'?'Stagger Axe':'Momentum Sword'));
+    panel.style.setProperty('--gear-color',unique?unique.color:profile.rarity.color);
+    panel.className='gear-reward-panel rarity-'+profile.rarity.id+(unique?' unique-gear':'');
     panel.innerHTML='';
     const kicker=document.createElement('div');kicker.className='gr-kicker';kicker.textContent=recovered?'LOOT RECOVERY':'GEAR ACQUIRED';panel.appendChild(kicker);
     const header=document.createElement('header');
     const identity=document.createElement('div');
     const quality=document.createElement('small');quality.textContent=profile.rank.name+' · '+profile.rarity.name;
-    const name=document.createElement('h2');name.textContent=itemName(stack);identity.append(quality,name);
+    const name=document.createElement('h2');name.textContent=itemName(stack);
+    if(unique)quality.textContent='UNIQUE · '+profile.rank.name+' · '+profile.rarity.name;
+    identity.append(quality,name);
     const verdictEl=document.createElement('strong');verdictEl.className=verdict.toLowerCase().replace(' ','-');verdictEl.textContent=recovered?'SECURED':verdict;
     header.append(identity,verdictEl);panel.appendChild(header);
     const meta=document.createElement('div');meta.className='gr-meta';
-    for(const [label,value] of [['IDENTITY',archetype],['SOURCE',gearRewardSource(stack.source)]]){
+    for(const [label,value] of [['IDENTITY',archetype],...(unique?[['PERK',unique.perk]]:[]),['SOURCE',gearRewardSource(stack.source)]]){
       const block=document.createElement('span'),heading=document.createElement('b');
       heading.textContent=label;block.append(heading,document.createTextNode(value));meta.appendChild(block);
     }

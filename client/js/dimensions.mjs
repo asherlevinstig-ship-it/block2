@@ -89,7 +89,7 @@ function removeEquippedArmorCopies(){
   if(!armor) return false;
   for(let i=0;i<inv.length;i++){
     const stack=inv[i];
-    if(stack&&stack.id===armor.id&&(stack.gearRank||'')===(armor.gearRank||'')&&(stack.rarity||'')===(armor.rarity||'')&&(stack.armorType||'')===(armor.armorType||'')&&(stack.dur==null||armor.dur==null||stack.dur===armor.dur)){
+    if(stack&&stack.id===armor.id&&(stack.gearRank||'')===(armor.gearRank||'')&&(stack.rarity||'')===(armor.rarity||'')&&(stack.armorType||'')===(armor.armorType||'')&&(stack.unique||'')===(armor.unique||'')&&(stack.dur==null||armor.dur==null||stack.dur===armor.dur)){
       inv[i]=null;
       return true;
     }

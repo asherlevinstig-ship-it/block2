@@ -40,6 +40,8 @@ function itemTooltipText(stack){
   if(info.place) lines.push('Placeable block');
   if(info.tool){
     const gear=GEAR_SYSTEM.profile({tier:info.tool.tier,legendary:!!info.legendary},stack);
+    const unique=GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(stack,'weapon');
+    if(unique)lines.push('Unique: '+unique.perk);
     lines.push(gear.rank.name+' · '+gear.rarity.name);
     if(stack.locked) lines.push('Protected from salvage');
     if(toolPlus(stack)) lines.push('Upgrade: +'+toolPlus(stack));
@@ -56,6 +58,8 @@ function itemTooltipText(stack){
   }
   if(info.armor){
     const armor=GEAR_SYSTEM.armorProfile(info.armor,stack);
+    const unique=GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(stack,'armor');
+    if(unique)lines.push('Unique: '+unique.perk);
     lines.push(armor.rank.name+' Â· '+armor.rarity.name+' Â· '+armor.type.name);
     if(stack.locked)lines.push('Protected from salvage');
     lines.push('Armor: -'+Math.round(armor.mitigation*100)+'% damage');
@@ -112,16 +116,20 @@ function itemRecommendedActionLine(stack){
   return '';
 }
 function fillSlotEl(el, stack, keepKey){
-  [...el.querySelectorAll('canvas,.cnt,.upg,.dur,.gear-rank,.gear-lock,.armor-kind')].forEach(n=>n.remove());
+  [...el.querySelectorAll('canvas,.cnt,.upg,.dur,.gear-rank,.gear-lock,.armor-kind,.gear-unique-badge')].forEach(n=>n.remove());
   for(const rarity of GEAR_SYSTEM.RARITIES)el.classList.remove('gear-'+rarity.id);
+  el.classList.remove('gear-unique');
+  el.style.removeProperty('--unique-color');
   const tip=itemTooltipText(stack);
   if(tip){ el.dataset.tip=tip; el.title=tip; }
   else { delete el.dataset.tip; el.removeAttribute('title'); }
   if(!stack) return;
-  if(ITEMS[stack.id].tool||ITEMS[stack.id].armor){const info=ITEMS[stack.id].tool||ITEMS[stack.id].armor,gear=GEAR_SYSTEM.profile({tier:info.tier,legendary:!!ITEMS[stack.id].legendary||!!info.legendary},stack);el.classList.add('gear-'+gear.rarity.id);el.style.setProperty('--gear-color',gear.rarity.color);const badge=document.createElement('span');badge.className='gear-rank';badge.textContent=gear.rank.id==='LEGENDARY'?'L':gear.rank.id;badge.style.color=gear.rank.color;el.appendChild(badge);if(stack.locked){const lock=document.createElement('span');lock.className='gear-lock';lock.textContent='LOCK';el.appendChild(lock);}}
+  const unique=GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(stack);
+  if(ITEMS[stack.id].tool||ITEMS[stack.id].armor){const info=ITEMS[stack.id].tool||ITEMS[stack.id].armor,gear=GEAR_SYSTEM.profile({tier:info.tier,legendary:!!ITEMS[stack.id].legendary||!!info.legendary},stack);el.classList.add('gear-'+gear.rarity.id);el.style.setProperty('--gear-color',gear.rarity.color);const badge=document.createElement('span');badge.className='gear-rank';badge.textContent=gear.rank.id==='LEGENDARY'?'L':gear.rank.id;badge.style.color=gear.rank.color;el.appendChild(badge);if(unique){el.classList.add('gear-unique');el.style.setProperty('--unique-color',unique.color);const u=document.createElement('span');u.className='gear-unique-badge';u.textContent='U';u.title=unique.name;u.style.color=unique.color;el.appendChild(u);}if(stack.locked){const lock=document.createElement('span');lock.className='gear-lock';lock.textContent='LOCK';el.appendChild(lock);}}
   if(ITEMS[stack.id].armor){const type=GEAR_SYSTEM.armorProfile(ITEMS[stack.id].armor,stack).type,badge=document.createElement('span');badge.className='armor-kind';badge.textContent=type.glyph;badge.title=type.name;badge.style.color=type.color;badge.style.borderColor=type.color;el.appendChild(badge);}
   const c=document.createElement('canvas'); c.width=TS; c.height=TS;
-  c.getContext('2d').drawImage(ITEMS[stack.id].icon,0,0);
+  const ctx=c.getContext('2d');ctx.drawImage(ITEMS[stack.id].icon,0,0);
+  if(unique){ctx.save();ctx.globalCompositeOperation='source-atop';ctx.globalAlpha=.28;ctx.fillStyle=unique.color;ctx.fillRect(0,0,TS,TS);ctx.restore();ctx.save();ctx.strokeStyle=unique.color;ctx.lineWidth=2;ctx.shadowColor=unique.color;ctx.shadowBlur=5;ctx.beginPath();ctx.moveTo(TS*.72,TS*.12);ctx.lineTo(TS*.84,TS*.34);ctx.lineTo(TS*.62,TS*.28);ctx.lineTo(TS*.72,TS*.12);ctx.stroke();ctx.restore();}
   el.appendChild(c);
   if(stack.count>1){ const s=document.createElement('span'); s.className='cnt'; s.textContent=stack.count; el.appendChild(s); }
   if(toolPlus(stack)){ const u=document.createElement('span'); u.className='upg'; u.textContent='+'+toolPlus(stack); el.appendChild(u); }

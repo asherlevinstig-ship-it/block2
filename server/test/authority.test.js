@@ -57,7 +57,7 @@ const {
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate, Mob } = require('../schema');
-const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
+const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
@@ -1766,6 +1766,9 @@ test('profile merge and sanitize support normal equipped armor', () => {
     { id: I.HIDE_ARMOR, count: 1, armorType: 'scout' });
   assert.deepEqual(sanitizeProfile({ armor: { id: I.STORMGLASS_ARMOR, count: 1, rarity: 'rare' } }).armor,
     { id: I.STORMGLASS_ARMOR, count: 1, rarity: 'rare' });
+  assert.equal(sanitizeProfile({ inv: [{ id: I.IRON_SWORD, count: 1, unique: 'stormpiercer' }] }).inv[0].unique, 'stormpiercer');
+  assert.equal(sanitizeProfile({ inv: [{ id: I.IRON_SWORD, count: 1, unique: 'fake_unique' }] }).inv[0].unique, undefined);
+  assert.equal(sanitizeProfile({ armor: { id: I.IRON_ARMOR, count: 1, unique: 'sunwarden_plate' } }).armor.unique, 'sunwarden_plate');
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.DIA_ARMOR, count: 4 },
     inv: [{ id: I.DIA_ARMOR, count: 1 }, { id: I.DIAMOND, count: 2 }],
@@ -8994,6 +8997,23 @@ test('Gate smart loot favours the player weapon archetype that is behind',()=>{
     assert.equal(drop.id,I.DIA_AXE);
     assert.equal(drop.archetype,'axe');
   }finally{Math.random=random;}
+});
+
+test('dungeon gear can roll unique skins and persists the unique perk tag',()=>{
+  const room=makeRoom();
+  const weapon=room.applyUniqueDungeonSkin({id:I.IRON_SWORD,count:1,rarity:'common',gear:true},'weapon','gate',3,0);
+  assert.equal(weapon.unique,'emberbrand');
+  assert.equal(weapon.source,'unique_gate');
+  assert.equal(weapon.locked,true);
+  assert.equal(weapon.rarity,'rare');
+  const stack=room.gearRewardStack(weapon,TOOL_INFO[I.IRON_SWORD]);
+  assert.equal(stack.unique,'emberbrand');
+  assert.equal(stack.locked,true);
+  const armor=room.applyUniqueDungeonSkin({id:I.IRON_ARMOR,count:1,gearRank:'C',rarity:'rare',armorType:'scout',gear:true},'armor','gate',3,0);
+  assert.equal(armor.unique,'mossguard_mantle');
+  assert.equal(room.gearRewardStack(armor,ARMOR_INFO[I.IRON_ARMOR]).unique,'mossguard_mantle');
+  const captain=room.applyUniqueDungeonSkin({id:I.IRON_SWORD,count:1,rarity:'common',gear:true},'weapon','captain',3,0);
+  assert.equal(captain.unique,undefined);
 });
 
 test('Captain drops personalize to the lagging archetype instead of the axe table bias',()=>{

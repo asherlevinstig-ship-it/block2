@@ -7,6 +7,7 @@ export function normalizeRewardGear(item,{items,gearSystem,jobSystem,armorMaxDur
   if(gearSystem.RARITIES.some(rarity=>rarity.id===item.rarity))stack.rarity=item.rarity;
   if(jobSystem.reforgeModifier(item.forge))stack.forge=item.forge;
   if(item.masterwork&&stack.forge)stack.masterwork=true;
+  if(gearSystem.uniqueFor&&gearSystem.uniqueFor(item,info.armor?'armor':'weapon'))stack.unique=item.unique;
   if(item.locked)stack.locked=true;
   if(typeof item.source==='string'&&item.source)stack.source=item.source;
   stack.dur=Number.isFinite(item.dur)?item.dur:(info.armor?armorMaxDur(stack):toolMaxDur(stack));

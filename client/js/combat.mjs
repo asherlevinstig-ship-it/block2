@@ -261,7 +261,8 @@ function itemNameWithPlus(stack){
   const mod=JOB_SYSTEM.reforgeModifier(stack.forge),prefix=(stack.masterwork?'Masterwork ':'')+(mod?mod.name+' ':'');
   const armor=ITEMS[stack.id].armor,armorType=armor&&GEAR_SYSTEM.armorProfile(armor,stack).type;
   const armorPrefix=armorType&&armorType.id!=='aegis'?armorType.name+' ':'';
-  return prefix+armorPrefix+ITEMS[stack.id].name+(p?' +'+p:'');
+  const unique=GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(stack,armor?'armor':'weapon');
+  return prefix+armorPrefix+(unique?unique.name:ITEMS[stack.id].name)+(p?' +'+p:'');
 }
 function gearProfileFor(stack){
   const item=stack&&ITEMS[stack.id],info=item&&(item.tool||item.armor);

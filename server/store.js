@@ -742,6 +742,7 @@ function sanitizeProfile(p) {
       if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) slot.rarity=s.rarity;
       if (typeof s.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[s.forge]) slot.forge = s.forge;
       if (s.masterwork === true && slot.forge) slot.masterwork = true;
+      if (GEAR_SYSTEM.uniqueFor(s)) slot.unique=s.unique;
       if (s.locked === true) slot.locked = true;
       if (typeof s.source === 'string' && s.source) slot.source=cleanShortText(s.source, 'loot', 32);
       out.inv.push(slot);
@@ -768,6 +769,7 @@ function sanitizeProfile(p) {
       if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) item.rarity=s.rarity;
       if (typeof s.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[s.forge]) item.forge=s.forge;
       if (s.masterwork === true && item.forge) item.masterwork=true;
+      if (GEAR_SYSTEM.uniqueFor(s)) item.unique=s.unique;
       if (s.locked === true) item.locked=true;
       out.lootRecovery.push(item);
     }
@@ -862,7 +864,7 @@ function sanitizeProfile(p) {
   out.armor = armor && ARMOR_IDS.has(armor.id) ? armor : null;
   if(out.armor)out.armor.count=1;
   if(out.armor){
-    const duplicate=out.inv.findIndex(s=>s&&s.id===out.armor.id&&(s.gearRank||'')===(out.armor.gearRank||'')&&(s.rarity||'')===(out.armor.rarity||'')&&(s.armorType||'')===(out.armor.armorType||'')&&(s.dur==null||out.armor.dur==null||s.dur===out.armor.dur));
+    const duplicate=out.inv.findIndex(s=>s&&s.id===out.armor.id&&(s.gearRank||'')===(out.armor.gearRank||'')&&(s.rarity||'')===(out.armor.rarity||'')&&(s.armorType||'')===(out.armor.armorType||'')&&(s.unique||'')===(out.armor.unique||'')&&(s.dur==null||out.armor.dur==null||s.dur===out.armor.dur));
     if(duplicate>=0)out.inv[duplicate]=null;
   }
   let pos = Array.isArray(p.pos) ? p.pos : [];
@@ -925,6 +927,7 @@ function cleanSlot(s) {
   if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===s.gearRank)) out.gearRank=s.gearRank;
   if (GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType]) out.armorType=s.armorType;
   if (GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity)) out.rarity=s.rarity;
+  if (GEAR_SYSTEM.uniqueFor(s)) out.unique=s.unique;
   if (s.locked === true) out.locked=true;
   if (typeof s.source === 'string' && s.source) out.source=cleanShortText(s.source, 'loot', 32);
   return out;

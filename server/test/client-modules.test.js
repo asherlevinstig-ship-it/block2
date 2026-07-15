@@ -675,6 +675,15 @@ test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () 
   const axe=sharedGear.weaponCombatProfile({tier:3,cls:'axe'},{});
   assert.equal(sword.damage,10);assert.equal(sword.cooldownMs,250);assert.equal(sword.dps,40);
   assert.equal(axe.damage,15);assert.equal(axe.cooldownMs,480);assert.equal(axe.dps,31.3);
+  const uniqueSword=sharedGear.weaponCombatProfile({tier:3,cls:'sword'},{unique:'stormpiercer'});
+  assert.equal(uniqueSword.unique.name,'Stormpiercer');
+  assert.ok(uniqueSword.damage>sword.damage);
+  assert.ok(uniqueSword.cooldownMs<sword.cooldownMs);
+  const uniqueArmor=sharedGear.armorProfile({tier:3,dur:480},{unique:'voidweave_harness',armorType:'scout'});
+  const scoutArmor=sharedGear.armorProfile({tier:3,dur:480},{armorType:'scout'});
+  assert.equal(uniqueArmor.unique.name,'Voidweave Harness');
+  assert.ok(uniqueArmor.moveMultiplier>scoutArmor.moveMultiplier);
+  assert.ok(uniqueArmor.staminaCostMultiplier<scoutArmor.staminaCostMultiplier);
   assert.ok(axe.damage>sword.damage&&axe.dps<sword.dps);
   const first=sharedGear.nextMomentum({},1000,'mob-a'),second=sharedGear.nextMomentum(first,1100,'mob-a');
   assert.equal(first.stacks,1);assert.equal(second.stacks,2);

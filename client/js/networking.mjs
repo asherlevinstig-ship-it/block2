@@ -88,6 +88,7 @@ function receiveRewardItemLegacy(it){
   if(GEAR_SYSTEM.RARITIES.some(r=>r.id===it.rarity))stack.rarity=it.rarity;
   if(JOB_SYSTEM.reforgeModifier(it.forge))stack.forge=it.forge;
   if(it.masterwork&&stack.forge)stack.masterwork=true;
+  if(GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(it,itemInfo.armor?'armor':'weapon'))stack.unique=it.unique;
   if(it.locked)stack.locked=true;
   if(typeof it.source==='string'&&it.source)stack.source=it.source;
   stack.dur=Number.isFinite(it.dur)?it.dur:(itemInfo.armor?armorMaxDur(stack):toolMaxDur(stack));
@@ -1844,6 +1845,7 @@ function netRestoreProfile(m){
           if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity))inv[i].rarity=s.rarity;
           if(ITEMS[s.id].tool&&JOB_SYSTEM.reforgeModifier(s.forge))inv[i].forge=s.forge;
           if(ITEMS[s.id].tool&&s.masterwork&&inv[i].forge)inv[i].masterwork=true;
+          if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(s,ITEMS[s.id].armor?'armor':'weapon'))inv[i].unique=s.unique;
           if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.locked)inv[i].locked=true;
           if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&typeof s.source==='string'&&s.source)inv[i].source=s.source;
         } else inv[i]=null;

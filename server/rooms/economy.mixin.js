@@ -24,6 +24,18 @@ class EconomyMixin {
     const kind=archetype==='axe'?'axe':'sword',ids=kind==='axe'?axes:swords;
     return {id:ids[ri],count:1,plus:ri<=3?0:ri-3,rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,archetype:kind,gear:true};
   }
+  applyUniqueDungeonSkin(item,kind='weapon',source='',rank=0,roll=Math.random()){
+    if(!item||source!=='gate')return item;
+    const chance=Math.min(.24,.12+Math.max(0,rank|0)*.018+Math.max(0,item.plus|0)*.02);
+    if(Math.max(0,Math.min(.999999,Number(roll)||0))>=chance)return item;
+    const unique=GEAR_SYSTEM.rollUniqueId(kind,rank,(roll*9973)%1);
+    if(!unique)return item;
+    item.unique=unique;
+    item.source='unique_gate';
+    item.locked=true;
+    if(GEAR_SYSTEM.rarityIndexFor(item)<2)item.rarity='rare';
+    return item;
+  }
   gateWeaponArchetype(prof,fallback='sword'){
     const best={sword:-1,axe:-1},stacks=[...(prof&&Array.isArray(prof.inv)?prof.inv:[]),...(prof&&Array.isArray(prof.lootRecovery)?prof.lootRecovery:[])];
     for(const stack of stacks){
@@ -39,7 +51,7 @@ class EconomyMixin {
     // Gates and captains are the guaranteed progression sources, so they gear the
     // player's lagging archetype; bandit trash keeps its thematic axe bias.
     const archetype=(source==='gate'||source==='captain')&&prof?this.gateWeaponArchetype(prof,spec.archetype):spec.archetype;
-    return {...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype),source};
+    return this.applyUniqueDungeonSkin({...this.rollWeaponDrop(spec.rank,spec.rarityBonus,archetype),source},'weapon',source,spec.rank);
   }
   rollArmorDrop(rank=0,rarityBonus=0,armorType='vanguard'){
     const ri=Math.max(0,Math.min(5,rank|0));
@@ -52,7 +64,7 @@ class EconomyMixin {
   }
   rollArmorDropForSource(source,tier=0,plus=0){
     const spec=LOOT_ECONOMY.armorSpec(source,tier,plus,Math.random());
-    return spec?{...this.rollArmorDrop(spec.rank,spec.rarityBonus,spec.armorType),source}:null;
+    return spec?this.applyUniqueDungeonSkin({...this.rollArmorDrop(spec.rank,spec.rarityBonus,spec.armorType),source},'armor',source,spec.rank):null;
   }
   gearRewardStack(item,info){
     if(!item||!info)return null;
@@ -63,6 +75,8 @@ class EconomyMixin {
     else if(ARMOR_INFO[item.id])stack.armorType=info.armorType||'vanguard';
     if(JOB_SYSTEM.reforgeModifier(item.forge))stack.forge=item.forge;
     if(item.masterwork&&stack.forge)stack.masterwork=true;
+    const unique=GEAR_SYSTEM.uniqueFor(item,ARMOR_INFO[item.id]?'armor':'weapon');
+    if(unique)stack.unique=unique.id;
     if(item.locked||stack.rarity==='mythic'||(info.tier|0)>=5)stack.locked=true;
     if(typeof item.source==='string'&&item.source)stack.source=item.source.slice(0,32);
     stack.dur=Number.isFinite(item.dur)?Math.max(0,item.dur|0):(ARMOR_INFO[item.id]?GEAR_SYSTEM.armorProfile(info,stack).maxDur:this.toolMaxDur(stack,info));
@@ -820,7 +834,7 @@ class EconomyMixin {
     return want - left;
   }
   isSimpleChestBulkStack(stack) {
-    if (!stack || !stack.id || stack.dur != null || stack.plus || stack.gearRank || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.locked || stack.source) return false;
+    if (!stack || !stack.id || stack.dur != null || stack.plus || stack.gearRank || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.unique || stack.locked || stack.source) return false;
     return !TOOL_INFO[stack.id] && !ARMOR_INFO[stack.id];
   }
   isProtectedChestBulkItem(id) {
