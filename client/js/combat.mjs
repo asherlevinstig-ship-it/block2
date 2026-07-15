@@ -1577,6 +1577,9 @@ function isTextEntryTarget(target){
   const tag=target&&target.tagName?String(target.tagName).toLowerCase():'';
   return tag==='input'||tag==='textarea'||tag==='select'||!!(target&&target.isContentEditable);
 }
+function gameplayInputActive(){
+  return locked||overlay.classList.contains('hidden');
+}
 addEventListener('keydown', e=>{
   if(e.code==='F9'&&!e.repeat){
     e.preventDefault();
@@ -1596,7 +1599,8 @@ addEventListener('keydown', e=>{
     e.preventDefault();
     return;
   }
-  if(e.code==='Tab'&&!e.repeat&&(locked||overlay.classList.contains('hidden'))){
+  const gameInput=gameplayInputActive();
+  if(e.code==='Tab'&&!e.repeat&&gameInput){
     e.preventDefault();
     if(e.shiftKey && typeof startDragonCommandWheel==='function') startDragonCommandWheel();
     else startQuickChatWheel();
@@ -1617,7 +1621,7 @@ addEventListener('keydown', e=>{
     refreshPlayUi();
     return;
   }
-  if((e.code==='Slash' || e.code==='Backquote') && locked){
+  if((e.code==='Slash' || e.code==='Backquote') && gameInput){
     e.preventDefault();
     openChat();
     return;
@@ -1625,7 +1629,7 @@ addEventListener('keydown', e=>{
   keys[e.code]=true;
   acknowledgeSmartSuggestionKey(e.code);
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
-  if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&locked){
+  if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&gameInput){
     e.preventDefault();
     globalThis.BlockcraftRecall.start();
     return;
@@ -1633,7 +1637,7 @@ addEventListener('keydown', e=>{
   if(e.code==='KeyE'){
     if(onboardingActive&&onboardingArrived) onboardingFlags.inventory=true;
     if(uiOpen) closeUI();
-    else if(locked){
+    else if(gameInput){
       const nearbyVillager=villagerUnderCrosshair(4.5);
       if(nearbyVillager){
         e.preventDefault();
@@ -1643,13 +1647,24 @@ addEventListener('keydown', e=>{
   }
   if(e.code==='KeyC'){
     if(statOpen) closeStat();
-    else if(locked) openStat();
+    else if(gameInput) openStat();
   }
   if(e.code==='KeyO' && !e.repeat){
     e.preventDefault();
     if(uiShellState.qOpen && questLogOpen) closeQWin();
-    else if(locked||overlay.classList.contains('hidden')) openQuestLogUI();
+    else if(gameInput) openQuestLogUI();
     return;
+  }
+  if(gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen){
+    if(e.code==='KeyM'){ e.preventDefault(); showName(SFX.toggleMute()?'Sound muted':'Sound on'); return; }
+    if(e.code==='KeyT'){ e.preventDefault(); openTeamUI(); return; }
+    if(e.code==='KeyB' && !e.repeat){ e.preventDefault(); openDragonBondUI(); return; }
+    if(e.code==='KeyV' && !e.repeat){ e.preventDefault(); toggleAppearanceDummy(); return; }
+    if(e.code==='KeyU' && !e.repeat){ e.preventDefault(); toggleAbilityDemo(); return; }
+    if(e.code==='KeyL' && !e.repeat){ e.preventDefault(); toggleClaimMode(); return; }
+    if(e.code==='KeyZ' && !e.repeat){ e.preventDefault(); toggleMount(); return; }
+    if(e.code==='KeyX' && !e.repeat){ e.preventDefault(); cycleDragon(); return; }
+    if(e.code==='KeyK' && !e.repeat){ e.preventDefault(); cycleFamiliar(); return; }
   }
   if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
   if(e.code==='Escape'){
@@ -1686,16 +1701,7 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyJ' && !e.repeat){ if(!castDragonAbility()) castArmorPower(); }
     if(e.code==='KeyY' && !e.repeat) cycleBetaAbilityPath();
     if(e.code==='Semicolon' && !e.repeat) cycleBetaLegendaryWeapon();
-    if(e.code==='KeyM') showName(SFX.toggleMute()?'Sound muted':'Sound on');
-    if(e.code==='KeyT') openTeamUI();
-    if(e.code==='KeyB' && !e.repeat) openDragonBondUI();
-    if(e.code==='KeyV' && !e.repeat) toggleAppearanceDummy();
-    if(e.code==='KeyU' && !e.repeat) toggleAbilityDemo();
     if(e.code==='KeyI' && !e.repeat) useActiveUtility();
-    if(e.code==='KeyL' && !e.repeat) toggleClaimMode();
-    if(e.code==='KeyZ' && !e.repeat) toggleMount();
-    if(e.code==='KeyX' && !e.repeat) cycleDragon();
-    if(e.code==='KeyK' && !e.repeat) cycleFamiliar();
     if(e.code==='KeyN' && !e.repeat) shadowStep();
     if(e.code.startsWith('Digit')){ const n=+e.code.slice(5); if(n>=1&&n<=9) selectSlot(n-1); }
   } else if(claimMode && e.code==='KeyL' && !e.repeat){

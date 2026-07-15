@@ -788,7 +788,7 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
-  assert.match(combat,/String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'&&!e\.repeat&&locked[\s\S]*BlockcraftRecall\.start\(\);\s*return;/);
+  assert.match(combat,/String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'&&!e\.repeat&&gameInput[\s\S]*BlockcraftRecall\.start\(\);\s*return;/);
   assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
   assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
   assert.doesNotMatch(html,/id="recallanswers"/);
@@ -861,10 +861,23 @@ test('Escape opens subject focus only when gameplay has no open window',()=>{
 test('quest log hotkey works while gameplay overlay is hidden even without pointer lock',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(combat,/function gameplayInputActive\(\)\{\s*return locked\|\|overlay\.classList\.contains\('hidden'\);\s*\}/);
   assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat\)\{/);
-  assert.match(combat,/else if\(locked\|\|overlay\.classList\.contains\('hidden'\)\) openQuestLogUI\(\);/);
+  assert.match(combat,/else if\(gameInput\) openQuestLogUI\(\);/);
   assert.doesNotMatch(combat,/else if\(locked && !uiOpen && !statOpen\) openQuestLogUI\(\);/);
   assert.match(menus,/openQuestLog:openQuestLogUI/);
+});
+
+test('menu-style gameplay hotkeys are not tied directly to pointer lock',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/const gameInput=gameplayInputActive\(\);/);
+  assert.match(combat,/if\(e\.code==='KeyC'\)\{\s*if\(statOpen\) closeStat\(\);\s*else if\(gameInput\) openStat\(\);/);
+  assert.match(combat,/if\(gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen\)\{/);
+  for(const call of ['openTeamUI','openDragonBondUI','toggleClaimMode','toggleMount','cycleDragon','cycleFamiliar']){
+    assert.match(combat,new RegExp(call+'\\(\\); return;'));
+  }
+  assert.doesNotMatch(combat,/if\(e\.code==='KeyT'\) openTeamUI\(\);/);
+  assert.doesNotMatch(combat,/if\(e\.code==='KeyB' && !e\.repeat\) openDragonBondUI\(\);/);
 });
 
 test('ordinary combat exposes health, telegraphs, statuses, impact pause, and death motion',()=>{
