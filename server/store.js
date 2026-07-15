@@ -338,6 +338,8 @@ function defaultProfile(name) {
     tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 },
     dungeonRecovery: null,
     skyshipTransit: null,
+    vitals: { hp: 20, mp: 20, sp: 100, hunger: 100 },
+    vitalsSavedAt: 0,
     pos: [64.5, 20, 71.5],
   };
 }
@@ -843,6 +845,19 @@ function sanitizeProfile(p) {
   out.firstPromotionSeen = p.firstPromotionSeen === true;
   out.tutorials = sanitizeTutorials(p.tutorials, out);
   out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
+  out.vitalsSavedAt = clampI(p.vitalsSavedAt, 0, 4102444800000);
+  const rawVitals = p.vitals && typeof p.vitals === 'object' ? p.vitals : p;
+  const maxHp = 20 + (out.S.vit - 1) * 2;
+  const maxMp = 20 + (out.S.int - 1) * 3;
+  const maxSp = 100 + (out.S.agi - 1) * 4;
+  const trustedVitals = out.vitalsSavedAt > 0;
+  const vital = (value, fallback, min, max) => trustedVitals && Number.isFinite(+value) ? clampF(value, min, max) : fallback;
+  out.vitals = {
+    hp: vital(rawVitals.hp, maxHp, 0, maxHp),
+    mp: vital(rawVitals.mp, maxMp, 0, maxMp),
+    sp: vital(rawVitals.sp, maxSp, 0, maxSp),
+    hunger: vital(rawVitals.hunger, 100, 0, 100),
+  };
   const armor = cleanSlot(p.armor);
   out.armor = armor && ARMOR_IDS.has(armor.id) ? armor : null;
   if(out.armor)out.armor.count=1;
@@ -862,9 +877,13 @@ function mergeClientSave(current, snapshot) {
   const out = sanitizeProfile(current);
   out.name = cleanName(snapshot.name || out.name);
   if (out.name && out.name !== 'Hunter') out.nameSet = true;
+  if (typeof snapshot.sp === 'number') {
+    out.vitals.sp = clampF(snapshot.sp, 0, 1000000);
+    out.vitalsSavedAt = Date.now();
+  }
   // Persistent progression is server-owned. Snapshot saves are only a legacy
-  // identity heartbeat; dedicated validated handlers mutate path, stats, jobs,
-  // contracts, equipment, inventory, economy, unlocks, quests, and position.
+  // identity/stamina heartbeat; dedicated validated handlers mutate path, stats,
+  // jobs, contracts, equipment, inventory, economy, unlocks, quests, and position.
   return out;
 }
 

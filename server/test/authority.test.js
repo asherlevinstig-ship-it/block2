@@ -418,6 +418,10 @@ test('profile merge accepts only identity and ignores every client-owned progres
     inv: [{ id: I.DIAMOND, count: 64 }],
     utilityUnlocks: ['compass', 'world_map'],
     utilityLoadout: { passive: ['compass'] },
+    hp: 1,
+    mp: 1,
+    hunger: 0,
+    sp: 42,
     pos: [10, 11, 12],
   });
 
@@ -432,6 +436,10 @@ test('profile merge accepts only identity and ignores every client-owned progres
   assert.deepEqual(merged.utilityUnlocks, []);
   assert.deepEqual(merged.utilityLoadout, { active: '', passive: [] });
   assert.deepEqual(merged.inv, [{ id: W.B.LOG, count: 3 }]);
+  assert.equal(merged.vitals.hp, current.vitals.hp);
+  assert.equal(merged.vitals.mp, current.vitals.mp);
+  assert.equal(merged.vitals.hunger, current.vitals.hunger);
+  assert.equal(merged.vitals.sp, 42);
   assert.deepEqual(merged.pos, current.pos);
 });
 
@@ -993,6 +1001,21 @@ test('profile payload exposes unified active objective descriptors', () => {
   assert.equal(progression.hudAction.type, 'craft');
   assert.equal(progression.questLogAction.type, 'craft');
   assert.equal(progression.serverOwned, true);
+});
+
+test('profile payload exposes live survival vitals instead of refill defaults', () => {
+  const room = makeRoom(), client = makeClient('vitals_payload');
+  const { prof } = seedPlayer(room, client, { hp: 7, hunger: 23 });
+  prof.vitals.sp = 41;
+  prof.vitalsSavedAt = Date.now();
+  room.abilityState.set(client.sessionId, { mp: 6, maxMp: 20, cds: {}, last: Date.now() });
+
+  const payload = room.profilePayload(client, prof);
+
+  assert.equal(payload.vitals.hp, 7);
+  assert.equal(payload.vitals.mp, 6);
+  assert.equal(payload.vitals.sp, 41);
+  assert.equal(Math.round(payload.vitals.hunger), 23);
 });
 
 test('profile payload normalizes restored claimable quest lifecycles', () => {
@@ -5021,7 +5044,7 @@ test('food use consumes edible items and heals server HP', () => {
   assert.equal(client.sent.at(-1).msg.reason, 'full');
 });
 
-test('hunger drains and starvation damages players', () => {
+test('hunger drains and empty hunger slows without damaging players', () => {
   const room = makeRoom();
   const client = makeClient('hungry');
   seedPlayer(room, client, { hp: 10, hunger: 0 });
@@ -5034,9 +5057,9 @@ test('hunger drains and starvation damages players', () => {
 
   room.updatePlayerHunger(1);
 
-  assert.equal(room.playerHp.get(client.sessionId).hp, 9);
-  assert.equal(client.sent.at(-1).type, 'hurt');
-  assert.equal(client.sent.some(e => e.type === 'hurt' && e.msg.reason === 'hunger'), true);
+  assert.equal(room.playerHp.get(client.sessionId).hp, 10);
+  assert.equal(client.sent.some(e => e.type === 'hungerPenalty' && e.msg.moveMultiplier === 0.62), true);
+  assert.equal(client.sent.some(e => e.type === 'hurt' && e.msg.reason === 'hunger'), false);
 });
 
 test('key shop catalog exposes tuned prices beyond starter ranks', () => {

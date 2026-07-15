@@ -1582,6 +1582,20 @@ test('progression focus states stay identical across client and server', async (
   assert.deepEqual([...PROGRESSION_FOCUS_STATES], [...serverStates], 'client/server onboarding focus whitelist parity');
 });
 
+test('client restore and movement use persisted vitals and empty-hunger slowdown', () => {
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const frameLoop = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+
+  assert.match(networking, /const vitals=m&&m\.vitals&&typeof m\.vitals==='object'\?m\.vitals:\{\}/);
+  assert.match(networking, /sp:Math\.max\(0,Math\.min\(maxSp\(\),Number\(sp\)\|\|0\)\)/);
+  assert.doesNotMatch(networking, /hp=maxHp\(\); mp=maxMp\(\); sp=maxSp\(\); hunger=maxHunger\(\);/);
+  assert.match(frameLoop, /const outOfFood=!mounted && hunger<=0/);
+  assert.match(frameLoop, /const sprint=.*&&\s*!outOfFood/);
+  assert.match(frameLoop, /baseSpd\*\(outOfFood\?0\.62:1\)/);
+  assert.doesNotMatch(dimensions, /local:starvation/);
+});
+
 test('inventory and equipment models own stacking consumption and profile restore', async () => {
   const { createInventoryModel, createEquipmentModel } = await clientModule('inventory.mjs');
   const slots = new Array(4).fill(null), changes = [];

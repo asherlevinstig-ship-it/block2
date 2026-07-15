@@ -723,7 +723,7 @@ function tickAbilities(dt,t){
     hungerAcc+=dt;
     if(hunger<=0){
       starvationAcc+=dt;
-      if(starvationAcc>=60){ starvationAcc=0; damagePlayer(1,'local:starvation'); sysMsg('You are <b>starving</b>'); }
+      if(starvationAcc>=30){ starvationAcc=0; sysMsg('You are too hungry to sprint. Eat food to move at full speed.'); }
     } else starvationAcc=0;
     if(hungerAcc>=1){ hungerAcc=0; renderBars(); }
   }

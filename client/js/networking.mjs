@@ -1674,6 +1674,12 @@ function netAttachRoom(room,name,client){
       if(tutorialSafe()){ hunger=maxHunger(); renderBars(); return; }
       if(m&&typeof m.hunger==='number'){ hunger=Math.max(0,Math.min(maxHunger(),m.hunger)); renderBars(); }
     });
+    room.onMessage('hungerPenalty', m=>{
+      if(tutorialSafe())return;
+      if(m&&typeof m.hunger==='number')hunger=Math.max(0,Math.min(maxHunger(),m.hunger));
+      renderBars();
+      sysMsg('You are too hungry to sprint. Eat food to move at full speed.');
+    });
     room.onMessage('gateKeyResult', m=>applyGateKeyResult(m));
     room.onMessage('gateKeyReject', m=>gateKeyRejected(m));
     room.onMessage('chestState', m=>applyChestState(m));
@@ -1953,7 +1959,12 @@ function netRestoreProfile(m){
       player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2]);
       player.vel.set(0,0,0);
     }
-    hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
+    const vitals=m&&m.vitals&&typeof m.vitals==='object'?m.vitals:{};
+    const finite=(value,fallback)=>Number.isFinite(+value)?+value:fallback;
+    hp=Math.max(1,Math.min(maxHp(),finite(vitals.hp,m&&m.hp!=null?m.hp:maxHp())));
+    mp=Math.max(0,Math.min(maxMp(),finite(vitals.mp,m&&m.mp!=null?m.mp:maxMp())));
+    sp=Math.max(0,Math.min(maxSp(),finite(vitals.sp,m&&m.sp!=null?m.sp:maxSp())));
+    hunger=Math.max(0,Math.min(maxHunger(),finite(vitals.hunger,m&&m.hunger!=null?m.hunger:maxHunger())));
     if(onboardingActive) prepareOnboardingStep();
     refreshHUD(); renderBars(); refreshPlayUi(); updateLandMinimap();
     if(m.firstQuestRewardClaimed===true&&Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0&&!firstQuestRewardPresentationSeen()){
@@ -2320,6 +2331,7 @@ function farmRejected(m){
 function netSnapshot(){
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
+    sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
   };
 }
 

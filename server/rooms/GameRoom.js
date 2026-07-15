@@ -419,6 +419,7 @@ class GameRoom extends Room {
           if (prev) prof.pos = prev.pos;
         }
       }
+      this.syncProfileVitals(client, prof);
       this.profiles.set(token, prof);
       this.dirtyPlayers.add(token);
     });
@@ -903,11 +904,6 @@ class GameRoom extends Room {
     }
     this.ensurePlayerHp(client);
     const hunger = this.ensurePlayerHunger(client);
-    // Every login begins fed. This also provisions currently cached/reconnecting
-    // profiles immediately instead of waiting for the hunger simulation to reset.
-    hunger.hunger = hunger.max;
-    hunger.acc = 0;
-    hunger.syncAcc = 0;
     client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
     if (restartRecovery) {
       this.restartRecoveries.set(token, restartRecovery);
@@ -965,6 +961,7 @@ class GameRoom extends Room {
       const prof = this.profiles.get(token);
       if (prof) {
         if (p && !wasInDungeon) prof.pos = [p.x, p.y, p.z];
+        this.syncProfileVitals(client, prof);
         this.dirtyPlayers.add(token);
       }
       this.tokens.delete(client.sessionId);
@@ -1201,6 +1198,8 @@ class GameRoom extends Room {
     for (const t of toks) {
       const prof = this.profiles.get(t);
       if (!prof || prof.noPersist) continue;   // never overwrite a save we couldn't load
+      const live = (this.clients || []).find(c => this.tokens.get(c.sessionId) === t);
+      if (live) this.syncProfileVitals(live, prof);
       try { await this.store.savePlayer(t, prof); }
       catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
     }
@@ -2617,6 +2616,7 @@ class GameRoom extends Room {
     return true;
   }
   profilePayload(client, prof) {
+    this.syncProfileVitals(client, prof);
     this.normalizeQuestLifecycles(client, prof);
     this.refreshSystemIntroductions(prof);
     return { ...prof, activeObjectives: this.activeQuestObjectives(client, prof) };
@@ -3483,12 +3483,49 @@ class GameRoom extends Room {
     const intv = prof && prof.S ? Math.max(1, prof.S.int | 0) : 1;
     return 20 + (intv - 1) * 3;
   }
+  maxStaminaForProfile(prof) {
+    const agi = prof && prof.S ? Math.max(1, prof.S.agi | 0) : 1;
+    return 100 + (agi - 1) * 4;
+  }
+  cleanProfileVitals(prof) {
+    const maxHp = this.maxHpForProfile(prof);
+    const maxMp = this.maxMpForProfile(prof);
+    const maxSp = this.maxStaminaForProfile(prof);
+    const raw = prof && prof.vitals && typeof prof.vitals === 'object' ? prof.vitals : {};
+    const trusted = !!(prof && prof.vitalsSavedAt > 0);
+    const num = (v, fallback) => Number.isFinite(+v) ? +v : fallback;
+    return {
+      hp: Math.max(1, Math.min(maxHp, trusted ? num(raw.hp, maxHp) : maxHp)),
+      mp: Math.max(0, Math.min(maxMp, trusted ? num(raw.mp, maxMp) : maxMp)),
+      sp: Math.max(0, Math.min(maxSp, trusted ? num(raw.sp, maxSp) : maxSp)),
+      hunger: Math.max(0, Math.min(MAX_HUNGER, trusted ? num(raw.hunger, MAX_HUNGER) : MAX_HUNGER)),
+    };
+  }
+  syncProfileVitals(client, prof) {
+    if (!client || !prof) return null;
+    const current = this.cleanProfileVitals(prof);
+    const hp = this.playerHp && this.playerHp.get(client.sessionId);
+    const ability = this.abilityState && this.abilityState.get(client.sessionId);
+    const hunger = this.playerHunger && this.playerHunger.get(client.sessionId);
+    const maxHp = this.maxHpForProfile(prof);
+    const maxMp = this.maxMpForProfile(prof);
+    const maxSp = this.maxStaminaForProfile(prof);
+    prof.vitals = {
+      hp: Math.max(1, Math.min(maxHp, Number.isFinite(hp && +hp.hp) ? +hp.hp : current.hp)),
+      mp: Math.max(0, Math.min(maxMp, Number.isFinite(ability && +ability.mp) ? +ability.mp : current.mp)),
+      sp: Math.max(0, Math.min(maxSp, current.sp)),
+      hunger: Math.max(0, Math.min(MAX_HUNGER, Number.isFinite(hunger && +hunger.hunger) ? +hunger.hunger : current.hunger)),
+    };
+    prof.vitalsSavedAt = Date.now();
+    return prof.vitals;
+  }
   ensureAbilityState(client) {
     const rec = this.profileFor(client);
     const maxMp = this.maxMpForProfile(rec && rec.prof);
     let st = this.abilityState.get(client.sessionId);
     if (!st) {
-      st = { mp: maxMp, maxMp, cds: {}, last: Date.now() };
+      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { mp: maxMp };
+      st = { mp: Math.max(0, Math.min(maxMp, vitals.mp)), maxMp, cds: {}, last: Date.now() };
       this.abilityState.set(client.sessionId, st);
       return st;
     }
@@ -3511,13 +3548,19 @@ class GameRoom extends Room {
     const cds = {};
     for (const k in st.cds || {}) cds[k] = Math.max(0, Math.ceil(((st.cds[k] || 0) - now) / 1000));
     client.send('abilitySync', { mp: Math.floor(st.mp), maxMp: st.maxMp, cds });
+    const rec = this.profileFor(client);
+    if (rec) {
+      this.syncProfileVitals(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+    }
   }
   ensurePlayerHp(client) {
     const rec = this.profileFor(client);
     const max = this.maxHpForProfile(rec && rec.prof);
     const cur = this.playerHp.get(client.sessionId);
     if (!cur) {
-      this.playerHp.set(client.sessionId, { hp: max, max });
+      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { hp: max };
+      this.playerHp.set(client.sessionId, { hp: Math.max(1, Math.min(max, vitals.hp)), max });
       return this.playerHp.get(client.sessionId);
     }
     if (cur.max !== max) {
@@ -3527,9 +3570,11 @@ class GameRoom extends Room {
     return cur;
   }
   ensurePlayerHunger(client) {
+    const rec = this.profileFor(client);
     let cur = this.playerHunger.get(client.sessionId);
     if (!cur) {
-      cur = { hunger: MAX_HUNGER, max: MAX_HUNGER, acc: 0, syncAcc: 0 };
+      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { hunger: MAX_HUNGER };
+      cur = { hunger: Math.max(0, Math.min(MAX_HUNGER, vitals.hunger)), max: MAX_HUNGER, acc: 0, syncAcc: 0 };
       this.playerHunger.set(client.sessionId, cur);
     }
     cur.max = MAX_HUNGER;
@@ -3629,6 +3674,10 @@ class GameRoom extends Room {
         client.send('hurt', { n:-heal,reason:'second_wind',hp:hp.hp,maxHp:hp.max });
         if (p) this.sendSpace(p.dgn || '', 'fx', { t: 'secondWind', x: p.x, y: p.y, z: p.z, sid:client.sessionId, dgn: p.dgn || '' });
       }
+    }
+    if (rec) {
+      this.syncProfileVitals(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
     }
     if (p && p.dgn) this.sendDungeonStatus(p.dgn);
     if (hp.hp <= 0) this.handlePlayerDeath(client,reason);
@@ -4034,14 +4083,18 @@ class GameRoom extends Room {
         h.acc = (h.acc || 0) + dt;
         if (h.acc >= 60) {
           h.acc = 0;
-          hp.hp = Math.max(1, hp.hp - 1);
-          client.send('hurt', { n: 1, reason: 'hunger' });
+          client.send('hungerPenalty', { hunger: 0, moveMultiplier: 0.62 });
         }
       } else h.acc = 0;
       h.syncAcc = (h.syncAcc || 0) + dt;
       if (before !== Math.ceil(h.hunger) || h.syncAcc >= 5) {
         h.syncAcc = 0;
         this.sendHungerSync(client, h);
+        const rec = this.profileFor(client);
+        if (rec) {
+          this.syncProfileVitals(client, rec.prof);
+          this.dirtyPlayers.add(rec.token);
+        }
       }
     }
   }
@@ -5082,8 +5135,10 @@ class GameRoom extends Room {
     const mounted = !!p.mount;
     const rec=this.profileFor(client),armorStack=rec&&rec.prof&&rec.prof.armor,armorInfo=armorStack&&ARMOR_INFO[armorStack.id];
     const armorMove=!mounted&&armorInfo?GEAR_SYSTEM.armorProfile(armorInfo,armorStack).moveMultiplier:1;
-    const maxStep = (mounted ? 20 : 12*armorMove) * dt + 1.25;
-    const velCap = mounted ? 16 : 9*armorMove;
+    const hungerState = !mounted && this.playerHunger && this.playerHunger.get(client.sessionId);
+    const hungerMove = hungerState && hungerState.hunger <= 0 ? 0.62 : 1;
+    const maxStep = (mounted ? 20 : 12*armorMove*hungerMove) * dt + 1.25;
+    const velCap = mounted ? 16 : 9*armorMove*hungerMove;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
     const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
