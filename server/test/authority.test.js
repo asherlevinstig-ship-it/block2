@@ -1348,6 +1348,31 @@ test('town quest chains award and verify Fang, Mote, and Sprite acquisition item
   }
 });
 
+test('server item grants update active fetch NPC quest objectives immediately', () => {
+  const room = makeRoom(), client = makeClient('first_hands_fetch_progress');
+  const { prof } = seedPlayer(room, client);
+
+  assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' }), true);
+  assert.equal(prof.activeNpcQuest.title, 'First Hands');
+  assert.equal(prof.activeNpcQuest.type, 'fetch');
+
+  client.sent.length = 0;
+  room.awardGrant(client, { source: 'mine', items: [{ id: W.B.LOG, count: 5 }] });
+  assert.equal(itemCount(prof, W.B.LOG), 5);
+  assert.equal(prof.activeNpcQuest.have, 5);
+  assert.equal(prof.activeNpcQuest.lifecycleState, 'active');
+  assert.equal(client.sent.some(e => e.type === 'npcQuest' && e.msg.action === 'progress' && e.msg.quest.have === 5), true);
+
+  room.awardGrant(client, { source: 'mine', items: [{ id: W.B.LOG, count: 1 }] });
+  assert.equal(itemCount(prof, W.B.LOG), 6);
+  assert.equal(prof.activeNpcQuest.have, 6);
+  assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable');
+  const focus = client.sent.filter(e => e.type === 'progressionFocus').at(-1);
+  const objective = focus && focus.msg.activeObjectives.find(o => o.title === 'First Hands');
+  assert.equal(objective.status, 'claimable');
+  assert.deepEqual(objective.progress, { current: 6, required: 6 });
+});
+
 test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate', () => {
   const room = makeRoom(), client = makeClient('mara_path_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });

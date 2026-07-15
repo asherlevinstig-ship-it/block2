@@ -4622,6 +4622,7 @@ class GameRoom extends Room {
         }
         if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });
       }
+      if (delivered.length && this.refreshFetchNpcQuestProgress) this.refreshFetchNpcQuestProgress(client);
       grant={...grant,items:delivered};
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);

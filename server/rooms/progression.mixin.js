@@ -891,6 +891,27 @@ class ProgressionMixin {
     return true;
   }
 
+  refreshFetchNpcQuestProgress(client) {
+    const rec = this.profileFor(client), q = rec && rec.prof.activeNpcQuest;
+    if (!rec || !q || q.type !== 'fetch') return false;
+    const need = Math.max(1, q.need | 0);
+    const current = Math.max(0, Math.min(need, this.countItem(rec.prof, q.item | 0)));
+    const previous = Math.max(0, Math.min(need, q.have | 0));
+    const previousState = q.lifecycleState || 'active';
+    const wasClaimable = previousState === 'claimable';
+    q.have = current;
+    if (current >= need && !wasClaimable) {
+      q.lifecycleState = 'claimable';
+      q.claimableAt = Date.now();
+    }
+    const changed = current !== previous || (q.lifecycleState || 'active') !== previousState;
+    if (!changed) return false;
+    this.dirtyPlayers.add(rec.token);
+    client.send('npcQuest', { action: 'progress', quest: q });
+    if (this.activeQuestObjectives) client.send('progressionFocus', { focus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
+    return true;
+  }
+
   handleClaimAegisTrial(client) {
     const rec = this.profileFor(client);
     if (!rec || !rec.prof.aegisTrialReady) return this.progressionReject(client, 'aegisTrial', 'incomplete');
