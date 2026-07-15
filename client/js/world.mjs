@@ -984,6 +984,45 @@ function buildTreasureCaches(setBlock){
   }
   return treasureCacheSpecs();
 }
+function caveNetworkSpecs(){
+  return regionalLandmarkSpecs().filter(s=>s.type==='cave').map((s,caveIndex)=>{
+    const points=[];let x=s.x,z=s.z+12,y=Math.max(7,Math.min(WH-10,s.y-3)),angle=hash2(s.x+3101,s.z+8807)*Math.PI*2;
+    points.push({x,y,z,r:2.4});
+    for(let i=0;i<6;i++){
+      angle+=(hash2(s.x+i*97+41,s.z+i*131+73)-.5)*1.45;
+      const len=15+Math.floor(hash2(s.x+i*53+11,s.z+i*71+29)*13);
+      x=Math.max(24,Math.min(WX-25,Math.round(x+Math.cos(angle)*len)));
+      z=Math.max(24,Math.min(WX-25,Math.round(z+Math.sin(angle)*len)));
+      y=Math.max(6,Math.min(Math.min(WH-12,terrainHeight(x,z)-5),y+Math.floor((hash2(s.x+i*173,s.z+i*199)-.58)*5)));
+      points.push({x,y,z,r:2.2+hash2(x+17,z+23)*.8});
+    }
+    const caverns=points.filter((_,i)=>i===2||i===4||i===points.length-1).map((p,i)=>({
+      x:p.x,y:p.y,z:p.z,rx:5+Math.floor(hash2(p.x+503,p.z+907)*4)+(i===2?1:0),ry:3+Math.floor(hash2(p.x+911,p.z+317)*2),rz:5+Math.floor(hash2(p.x+223,p.z+613)*4)
+    }));
+    return {id:'cave_network_'+caveIndex,entrance:{x:s.x,y:s.y-3,z:s.z+11},points,caverns};
+  });
+}
+function buildCaveNetworks(setBlock,getBlock=getB){
+  const safeColumn=(x,z)=>x>LAVA_BORDER_WIDTH+8&&z>LAVA_BORDER_WIDTH+8&&x<WX-LAVA_BORDER_WIDTH-8&&z<WX-LAVA_BORDER_WIDTH-8&&Math.hypot(x-WORLD_TC,z-WORLD_TC)>WORLD_TOWN_HS+65&&!isTrainingMeadowLandClient(x,z,18);
+  const putAir=(x,y,z)=>{if(x<0||x>=WX||y<=1||y>=WH-2||z<0||z>=WX||!safeColumn(x,z))return;const cur=getBlock(x,y,z);if(cur===B.BEDROCK||cur===B.CHEST||cur===B.FURNACE)return;setBlock(x,y,z,B.AIR);};
+  const carveEllipsoid=(cx,cy,cz,rx,ry,rz,openToSky=false)=>{for(let x=Math.floor(cx-rx);x<=Math.ceil(cx+rx);x++)for(let y=Math.floor(cy-ry);y<=Math.ceil(cy+ry);y++)for(let z=Math.floor(cz-rz);z<=Math.ceil(cz+rz);z++){if(!openToSky&&y>=terrainHeight(x,z)-1)continue;const dx=(x-cx)/rx,dy=(y-cy)/ry,dz=(z-cz)/rz;if(dx*dx+dy*dy+dz*dz<=1)putAir(x,y,z);}};
+  const solidForOre=id=>id===B.STONE||id===B.COBBLE||id===B.COAL_ORE||id===B.IRON_ORE||id===B.DIAMOND_ORE;
+  const placeOreSeam=(cx,cy,cz,salt)=>{const ring=Math.min(3,Math.floor(Math.hypot(cx-WORLD_TC,cz-WORLD_TC)/100)),roll=hash2(cx+salt*17,cz+salt*31),ore=cy<10&&(ring>=2||roll>.82)?B.DIAMOND_ORE:cy<25&&(ring>=1||roll>.35)?B.IRON_ORE:B.COAL_ORE;for(let i=0;i<7;i++){const ox=Math.round((hash2(cx+salt+i*19,cz+7)-.5)*3),oy=Math.round((hash2(cx+11,cz+salt+i*23)-.5)*3),oz=Math.round((hash2(cx+salt+i*29,cz+13)-.5)*3),x=cx+ox,y=cy+oy,z=cz+oz;if(x>=0&&x<WX&&y>1&&y<terrainHeight(x,z)-1&&z>=0&&z<WX&&safeColumn(x,z)&&solidForOre(getBlock(x,y,z)))setBlock(x,y,z,ore);}};
+  const layFloor=(cx,cy,cz,radius=1)=>{const fy=Math.max(1,Math.floor(cy-2));for(let ox=-radius;ox<=radius;ox++)for(let oz=-radius;oz<=radius;oz++){const x=Math.round(cx+ox),z=Math.round(cz+oz);if(safeColumn(x,z)&&fy<terrainHeight(x,z)-1)setBlock(x,fy,z,Math.abs(ox)+Math.abs(oz)<=1?B.COBBLE:B.STONE);}};
+  const lightRoute=(cx,cy,cz,salt)=>{const x=Math.round(cx+(hash2(cx+salt,cz)>.5?2:-2)),y=Math.max(2,Math.floor(cy-1)),z=Math.round(cz);if(safeColumn(x,z)&&getBlock(x,y,z)!==B.CHEST){setBlock(x,y,z,B.COBBLE);setBlock(x,y+1,z,salt%3===0?B.LANTERN:B.TORCH);}};
+  const carveTunnel=(a,b,salt)=>{const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,steps=Math.max(1,Math.ceil(Math.hypot(dx,dy,dz)*1.2));for(let i=0;i<=steps;i++){const t=i/steps,wobble=Math.sin((t+salt)*Math.PI*2)*.7,cx=a.x+dx*t+wobble,cy=a.y+dy*t,cz=a.z+dz*t-wobble*.35,r=1.8+hash2(Math.round(cx)+salt,Math.round(cz)-salt)*.8;carveEllipsoid(cx,cy,cz,r,1.75,r);if(i%5===0)layFloor(cx,cy,cz,1);if(i>0&&i%18===0)lightRoute(cx,cy,cz,salt+i);if(i>0&&i%13===0)placeOreSeam(Math.round(cx+(hash2(i+salt,salt)>.5?r+1:-r-1)),Math.round(cy),Math.round(cz),salt+i);}};
+  for(const net of caveNetworkSpecs()){
+    const entry=net.entrance;carveEllipsoid(entry.x,entry.y+2,entry.z-2,3.2,2.4,5.5,true);layFloor(entry.x,entry.y+2,entry.z-2,2);lightRoute(entry.x,entry.y+3,entry.z-4,101);
+    for(let i=1;i<net.points.length;i++)carveTunnel(net.points[i-1],net.points[i],i*101+entry.x);
+    for(let i=0;i<net.caverns.length;i++){
+      const c=net.caverns[i],floorY=Math.max(1,Math.floor(c.y-c.ry));carveEllipsoid(c.x,c.y,c.z,c.rx,c.ry,c.rz);
+      for(let x=c.x-c.rx+1;x<=c.x+c.rx-1;x++)for(let z=c.z-c.rz+1;z<=c.z+c.rz-1;z++)if(((x-c.x)*(x-c.x))/(c.rx*c.rx)+((z-c.z)*(z-c.z))/(c.rz*c.rz)<.75&&safeColumn(x,z))setBlock(x,floorY,z,hash2(x+i,z-i)>.8?B.COBBLE:B.STONE);
+      for(const [ox,oz]of[[-c.rx+1,0],[c.rx-1,0],[0,-c.rz+1],[0,c.rz-1]]){const x=c.x+ox,z=c.z+oz;setBlock(x,floorY+1,z,B.LOG);setBlock(x,floorY+2,z,B.LOG);setBlock(x,floorY+3,z,B.LANTERN);}
+      placeOreSeam(c.x-c.rx+1,c.y,c.z,i*211+3);placeOreSeam(c.x+c.rx-1,c.y-1,c.z+1,i*211+7);placeOreSeam(c.x,c.y-1,c.z-c.rz+1,i*211+11);
+    }
+  }
+  return caveNetworkSpecs();
+}
 let smallDiscoveries=[];
 let treasureCaches=[];
 let roadBreadcrumbs=[];
@@ -1057,6 +1096,7 @@ function generateWorld(){
   roadBreadcrumbs=buildRoadNetwork(setB);
   smallDiscoveries=buildSmallDiscoveries(setB);
   regionalLandmarks=buildRegionalLandmarks(setB);
+  buildCaveNetworks(setB,getB);
   treasureCaches=buildTreasureCaches(setB);
   buildLavaBorder();
 }

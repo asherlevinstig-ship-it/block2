@@ -169,6 +169,39 @@ test('DimensionGrid provides one origin-aware storage contract for every dimensi
   assert.equal(serverDungeon.generateDungeon(0,1).world instanceof DimensionGrid, true);
 });
 
+test('overworld cave networks add explorable underground routes from cave landmarks', () => {
+  const nets = W.caveNetworkSpecs();
+  assert.equal(nets.length >= 2, true, 'world has multiple cave networks');
+  assert.equal(nets.every(net => net.points.length >= 6 && net.caverns.length >= 3), true, 'each cave has route points and caverns');
+  const world = W.createWorld(); world.generate();
+  for (const net of nets) {
+    let air = 0, lights = 0, ores = 0;
+    for (const p of net.points) {
+      for (let x = p.x - 4; x <= p.x + 4; x++) for (let y = p.y - 3; y <= p.y + 3; y++) for (let z = p.z - 4; z <= p.z + 4; z++) {
+        const id = world.getB(x, y, z);
+        if (id === W.B.AIR) air++;
+        if (id === W.B.TORCH || id === W.B.LANTERN) lights++;
+        if (id === W.B.COAL_ORE || id === W.B.IRON_ORE || id === W.B.DIAMOND_ORE) ores++;
+      }
+    }
+    for (const c of net.caverns) {
+      for (let x = c.x - c.rx; x <= c.x + c.rx; x++) for (let y = c.y - c.ry; y <= c.y + c.ry; y++) for (let z = c.z - c.rz; z <= c.z + c.rz; z++) {
+        const id = world.getB(x, y, z);
+        if (id === W.B.AIR) air++;
+        if (id === W.B.TORCH || id === W.B.LANTERN) lights++;
+        if (id === W.B.COAL_ORE || id === W.B.IRON_ORE || id === W.B.DIAMOND_ORE) ores++;
+      }
+    }
+    assert.equal(air > 900, true, `${net.id} has carved tunnel/cavern air`);
+    assert.equal(lights > 0, true, `${net.id} has readable torch or lantern routes`);
+    assert.equal(ores > 0, true, `${net.id} has mineable ore seams`);
+  }
+  const clientWorld = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  assert.match(clientWorld, /function caveNetworkSpecs\(\)/);
+  assert.match(clientWorld, /function buildCaveNetworks\(setBlock,getBlock=getB\)/);
+  assert.match(clientWorld, /buildCaveNetworks\(setB,getB\)/);
+});
+
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
