@@ -2643,6 +2643,7 @@ function toggleClaimMode(force){
   if(on && dim!=='overworld'){ sysMsg('Land can only be claimed in the overworld'); return; }
   const was = claimMode;
   claimMode=on;
+  document.body.classList.toggle('claim-mode', claimMode);
   updateClaimGroupVisibility();
   claimHoverMesh.visible=false;
   claimRecommendMesh.visible=false;

@@ -880,6 +880,18 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
 });
 
+test('guided overlays suppress optional side HUD panels instead of overlapping them',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(combat,/function syncHudLayerState\(\)\{/);
+  assert.match(combat,/MutationObserver\(syncHudLayerState\)/);
+  assert.match(combat,/document\.body\.classList\.toggle\('tutorial-hud-active', tutorialVisible\);/);
+  assert.match(combat,/document\.body\.classList\.toggle\('coach-hud-active', coachVisible&&!tutorialVisible\);/);
+  assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
+  assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #currentquest,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
+  assert.match(styles,/body\.coach-hud-active #currentquest,body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
+});
+
 test('death drops render as timed public world loot and onboarding teaches Recall and limbo',()=>{
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
@@ -913,14 +925,26 @@ test('quest log hotkey works while gameplay overlay is hidden even without point
   assert.match(menus,/openQuestLog:openQuestLogUI/);
 });
 
+test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(combat,/if\(e\.code==='KeyL' && !e\.repeat && !uiOpen && !statOpen && !uiShellState\.qOpen && \(gameInput \|\| claimMode\)\)\{/);
+  assert.match(combat,/toggleClaimMode\(claimMode\?false:true\);/);
+  assert.match(combat,/if\(claimMode\)\{ toggleClaimMode\(false\); closed=true; \}/);
+  assert.doesNotMatch(combat,/else if\(claimMode && e\.code==='KeyL'/);
+  assert.match(combat,/document\.body\.classList\.toggle\('claim-mode', !!claimMode\);/);
+  assert.match(world,/document\.body\.classList\.toggle\('claim-mode', claimMode\);/);
+});
+
 test('menu-style gameplay hotkeys are not tied directly to pointer lock',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   assert.match(combat,/const gameInput=gameplayInputActive\(\);/);
   assert.match(combat,/if\(e\.code==='KeyC'\)\{\s*if\(statOpen\) closeStat\(\);\s*else if\(gameInput\) openStat\(\);/);
   assert.match(combat,/if\(gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen\)\{/);
-  for(const call of ['openTeamUI','openDragonBondUI','toggleClaimMode','toggleMount','cycleDragon','cycleFamiliar']){
+  for(const call of ['openTeamUI','openDragonBondUI','toggleMount','cycleDragon','cycleFamiliar']){
     assert.match(combat,new RegExp(call+'\\(\\); return;'));
   }
+  assert.match(combat,/toggleClaimMode\(claimMode\?false:true\);/);
   assert.doesNotMatch(combat,/if\(e\.code==='KeyT'\) openTeamUI\(\);/);
   assert.doesNotMatch(combat,/if\(e\.code==='KeyB' && !e\.repeat\) openDragonBondUI\(\);/);
 });

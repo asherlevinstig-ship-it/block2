@@ -466,6 +466,18 @@ const uipanel=document.getElementById('uipanel');
 const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
+const coachHudStateEl=document.getElementById('coachhud');
+function syncHudLayerState(){
+  const tutorialVisible=!!(tutorialEl&&!tutorialEl.classList.contains('hidden'));
+  const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
+  document.body.classList.toggle('tutorial-hud-active', tutorialVisible);
+  document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible);
+}
+if(globalThis.MutationObserver){
+  const hudStateObserver=new MutationObserver(syncHudLayerState);
+  if(tutorialEl) hudStateObserver.observe(tutorialEl,{attributes:true,attributeFilter:['class']});
+  if(coachHudStateEl) hudStateObserver.observe(coachHudStateEl,{attributes:true,attributeFilter:['class']});
+}
 const pathSelectEl=document.getElementById('pathselect');
 const pathPanelEl=document.getElementById('pathpanel');
 const awakeningWin=document.getElementById('awakeningwin');
@@ -1446,6 +1458,7 @@ function calmTownHud(){
 function refreshPlayUi(){
   const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode;
   overlay.classList.toggle('hidden', showHud);
+  document.body.classList.toggle('claim-mode', !!claimMode);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
   const minimal=onboardingActive;
   const calm=calmTownHud();
@@ -1460,6 +1473,7 @@ function refreshPlayUi(){
   document.getElementById('eventhud').classList.toggle('hidden', true);
   hintEl.classList.add('hidden');
   updateLandMinimap();
+  syncHudLayerState();
   playbtn.textContent='RESUME';
   if(!locked) mouseL=false, mining=null;
 }
@@ -1658,13 +1672,17 @@ addEventListener('keydown', e=>{
     else if(gameInput) openQuestLogUI();
     return;
   }
+  if(e.code==='KeyL' && !e.repeat && !uiOpen && !statOpen && !uiShellState.qOpen && (gameInput || claimMode)){
+    e.preventDefault();
+    toggleClaimMode(claimMode?false:true);
+    return;
+  }
   if(gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen){
     if(e.code==='KeyM'){ e.preventDefault(); showName(SFX.toggleMute()?'Sound muted':'Sound on'); return; }
     if(e.code==='KeyT'){ e.preventDefault(); openTeamUI(); return; }
     if(e.code==='KeyB' && !e.repeat){ e.preventDefault(); openDragonBondUI(); return; }
     if(e.code==='KeyV' && !e.repeat){ e.preventDefault(); toggleAppearanceDummy(); return; }
     if(e.code==='KeyU' && !e.repeat){ e.preventDefault(); toggleAbilityDemo(); return; }
-    if(e.code==='KeyL' && !e.repeat){ e.preventDefault(); toggleClaimMode(); return; }
     if(e.code==='KeyZ' && !e.repeat){ e.preventDefault(); toggleMount(); return; }
     if(e.code==='KeyX' && !e.repeat){ e.preventDefault(); cycleDragon(); return; }
     if(e.code==='KeyK' && !e.repeat){ e.preventDefault(); cycleFamiliar(); return; }
@@ -1682,6 +1700,7 @@ addEventListener('keydown', e=>{
     if(statOpen){ closeStat(false); closed=true; }
     if(uiShellState.qOpen){ closeQWin(false); closed=true; }
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
+    if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
     const limboOpen=!!document.querySelector('#deathlimbo.show');
     if(overlay.classList.contains('hidden')&&!limboOpen&&!globalThis.BlockcraftRecall.active){e.preventDefault();if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();return;}
@@ -1707,8 +1726,6 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyI' && !e.repeat) useActiveUtility();
     if(e.code==='KeyN' && !e.repeat) shadowStep();
     if(e.code.startsWith('Digit')){ const n=+e.code.slice(5); if(n>=1&&n<=9) selectSlot(n-1); }
-  } else if(claimMode && e.code==='KeyL' && !e.repeat){
-    toggleClaimMode(false);
   }
 });
 function stopPrimaryAction(){ mouseL=false; mining=null; suppressMine=false; }
