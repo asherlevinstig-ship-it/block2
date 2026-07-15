@@ -905,12 +905,14 @@ test('death drops render as timed public world loot and onboarding teaches Recal
   assert.match(combat,/Death sends carried items to limbo[\s\S]*mistakes become public loot/);
 });
 
-test('Escape opens subject focus only when gameplay has no open window',()=>{
+test('Left Alt opens subject focus while Escape only closes or releases cursor',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  assert.match(combat,/if\(e\.code==='AltLeft'&&!e\.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!claimMode&&!globalThis\.BlockcraftRecall\.active\)\{/);
+  assert.match(combat,/if\(globalThis\.BlockcraftSubjectFocus\)globalThis\.BlockcraftSubjectFocus\.open\(\);/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*e\.preventDefault\(\);\s*try\{ document\.exitPointerLock\(\); \}catch\(err\)\{\}\s*lockFallback=true;\s*locked=true;\s*refreshPlayUi\(\);\s*return;\s*\}/);
-  assert.match(combat,/if\(closed\)\{ e\.preventDefault\(\); return; \}[\s\S]*overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active[\s\S]*BlockcraftSubjectFocus\.open\(\)/);
+  assert.doesNotMatch(combat,/overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active/);
   assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
   for(const subject of ['Computer Science','Information Technology','Religious Education','English'])assert.match(menus,new RegExp(subject));
   assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
@@ -979,7 +981,8 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(combat,/Lesson 10 \/ 12 - Subject Focus/);
-  assert.match(combat,/Press Escape and choose your Recall subject/);
+  assert.match(combat,/key:'LEFT ALT'/);
+  assert.match(combat,/Press Left Alt and choose your Recall subject/);
   assert.match(menus,/BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markSubjectFocus\(\)/);
   assert.match(combat,/Town Step 1 - Accept First Quest/);
   assert.match(combat,/Nothing gives XP until you explicitly accept it/);

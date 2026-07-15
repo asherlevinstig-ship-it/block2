@@ -596,8 +596,8 @@ for(const step of ONBOARDING_STEPS){
 ONBOARDING_STEPS.splice(9,0,{
   kind:'subject',
   pillar:'Lesson 10 / 12 - Subject Focus',
-  key:'ESC',
-  text:'Press Escape and choose your Recall subject.',
+  key:'LEFT ALT',
+  text:'Press Left Alt and choose your Recall subject.',
   sub:'Recall Cast and death limbo questions use this subject. Pick Computer Science, IT, RE, or English.',
   done:()=>onboardingArrived&&onboardingFlags.subject
 });
@@ -1617,6 +1617,11 @@ addEventListener('keydown', e=>{
     return;
   }
   const gameInput=gameplayInputActive();
+  if(e.code==='AltLeft'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!globalThis.BlockcraftRecall.active){
+    e.preventDefault();
+    if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();
+    return;
+  }
   if(e.code==='Tab'&&!e.repeat&&gameInput){
     e.preventDefault();
     if(e.shiftKey && typeof startDragonCommandWheel==='function') startDragonCommandWheel();
@@ -1702,7 +1707,6 @@ addEventListener('keydown', e=>{
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
     if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
-    const limboOpen=!!document.querySelector('#deathlimbo.show');
     if(document.pointerLockElement===renderer.domElement){
       e.preventDefault();
       try{ document.exitPointerLock(); }catch(err){}
@@ -1711,7 +1715,6 @@ addEventListener('keydown', e=>{
       refreshPlayUi();
       return;
     }
-    if(overlay.classList.contains('hidden')&&!limboOpen&&!globalThis.BlockcraftRecall.active){e.preventDefault();if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();return;}
   }
   if(locked){
     if(e.code.startsWith('Arrow')) e.preventDefault();
