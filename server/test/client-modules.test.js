@@ -962,6 +962,14 @@ test('onboarding build lesson completes after three placed planks without an ext
   assert.match(combat,/if\(onboardingKind\(\)==='build'\) onboardingFlags\.built=countOnboardingBuildBlocks\(TRAINING_MEADOW,getB,B\.PLANKS\);/);
 });
 
+test('onboarding material safety grants count cursor-held stacks before adding replacements',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/function countHeldCursorItem\(id\)\{/);
+  assert.match(combat,/countItem\(B\.LOG\)\+countCraftCellItem\(B\.LOG\)\+countHeldCursorItem\(B\.LOG\)<=0/);
+  assert.match(combat,/countItem\(B\.PLANKS\)\+countHeldCursorItem\(B\.PLANKS\)<=0/);
+  assert.match(combat,/const onboardingHeldPlanks=countItem\(B\.PLANKS\)\+countHeldCursorItem\(B\.PLANKS\);/);
+});
+
 test('online craft result restores the authoritative inventory snapshot',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(menus,/function restoreInventorySnapshot\(slots\)\{/);

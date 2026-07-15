@@ -319,6 +319,10 @@ function addCraftedItem(id, count){
   }
   return addItem(id,count);
 }
+function countHeldCursorItem(id){
+  const s=globalThis.cursorStack;
+  return s&&s.id===id ? Math.max(0,s.count|0) : 0;
+}
 function cookingOutputCount(id, n){
   if(![I.BREAD,I.HEARTY_SANDWICH,I.COOKED_MEAT,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION].includes(id) || playerJob!=='cook') return n;
   const extra=Math.random()<jobPerkChance('cook', .08) ? Math.max(1, Math.floor(n*.25)) : 0;
@@ -790,7 +794,7 @@ function prepareOnboardingStep(){
   if(entering&&kind==='arrows') onboardingArrowTurn=0;
   if(kind==='tree') selectItemForOnboarding(I.WOOD_AXE);
   else if(kind==='craft'){
-    if(countItem(B.LOG)+countCraftCellItem(B.LOG)<=0 && countItem(B.PLANKS)<=0) ensureOnboardingItem(B.LOG,1);
+    if(countItem(B.LOG)+countCraftCellItem(B.LOG)+countHeldCursorItem(B.LOG)<=0 && countItem(B.PLANKS)+countHeldCursorItem(B.PLANKS)<=0) ensureOnboardingItem(B.LOG,1);
   }
   else if(kind==='build'){
     repairOnboardingBuildPad();
@@ -1400,14 +1404,15 @@ function tickOnboarding(now){
   if(!onboardingActive) return;
   updateOnboardingPillar(now);
   tickTutorialResourceRegen(now);
-  if(onboardingKind()==='craft'&&!onboardingFlags.crafted&&countItem(B.LOG)+countCraftCellItem(B.LOG)<=0&&countItem(B.PLANKS)<=0){
+  if(onboardingKind()==='craft'&&!onboardingFlags.crafted&&countItem(B.LOG)+countCraftCellItem(B.LOG)+countHeldCursorItem(B.LOG)<=0&&countItem(B.PLANKS)+countHeldCursorItem(B.PLANKS)<=0){
     ensureOnboardingItem(B.LOG,1);
     if(uiOpen) renderUI();
   }
   if(onboardingKind()==='build') onboardingFlags.built=countOnboardingBuildBlocks(TRAINING_MEADOW,getB,B.PLANKS);
-  if(onboardingKind()==='build'&&onboardingFlags.built<3&&(!onboardingBuildHasRoom()||countItem(B.PLANKS)<3-onboardingFlags.built)){
+  const onboardingHeldPlanks=countItem(B.PLANKS)+countHeldCursorItem(B.PLANKS);
+  if(onboardingKind()==='build'&&onboardingFlags.built<3&&(!onboardingBuildHasRoom()||onboardingHeldPlanks<3-onboardingFlags.built)){
     if(!onboardingBuildHasRoom()) repairOnboardingBuildPad();
-    if(countItem(B.PLANKS)<3-onboardingFlags.built) ensureOnboardingItem(B.PLANKS,3-onboardingFlags.built);
+    if(onboardingHeldPlanks<3-onboardingFlags.built) ensureOnboardingItem(B.PLANKS,3-onboardingFlags.built-onboardingHeldPlanks);
     selectItemForOnboarding(B.PLANKS);
   }
   if(onboardingKind()==='farm'&&!onboardingFlags.farmed&&!onboardingFarmHasMatureWheat()) repairOnboardingFarmPatch();
