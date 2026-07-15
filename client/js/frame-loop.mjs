@@ -154,7 +154,7 @@ function makeWeatherDiscoveryFx(s){
   scene.add(group);weatherDiscoveryFx.set(s.id,group);return group;
 }
 function tickExplorationPresentation(now,dt){
-  const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===map.targetId):null;
+  const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===map.targetId):null;
   treasureClueGroup.visible=!!(dim==='overworld'&&site);
   if(site){
     const y=surfaceY(site.x,site.z),dist=Math.hypot(player.pos.x-site.x,player.pos.z-site.z),pulse=.5+.5*Math.sin(now*.0048);
@@ -195,7 +195,7 @@ globalThis.BlockcraftExplorationFx={
     for(let i=0;i<24;i++)spawnParticle({x:site.x+.5+(Math.random()-.5)*2.6,y:y+.4+Math.random()*2.2,z:site.z+.5+(Math.random()-.5)*2.6,vx:(Math.random()-.5)*1.4,vy:1+Math.random()*2.2,vz:(Math.random()-.5)*1.4,life:1.1,grav:.55,r:1,g:.78,b:.22});
   },
   treasureComplete(){
-    const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===map.targetId):null;
+    const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===map.targetId):null;
     if(site)this.treasureSolved(site);
   },
   dormantWeather(type){
@@ -242,7 +242,7 @@ function maybePromptTreasureMap(now){
   const map=globalThis.BlockcraftTreasureMap;
   if(!map||!map.targetId||dim!=='overworld'||!locked||cutscene)return;
   if(now<nextTreasureMapHintAt)return;
-  const site=[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===map.targetId);
+  const site=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===map.targetId);
   if(!site)return;
   const near=Math.hypot(player.pos.x-site.x,player.pos.z-site.z)<(site.radius||8)+12;
   nextTreasureMapHintAt=now+(near?18000:30000);
@@ -352,8 +352,10 @@ function currentLocationInfo(){
   }
   if(dim==='overworld'){
     const ring=dangerRingAtClient(player.pos.x,player.pos.z), danger=DANGER_RINGS[ring];
-    const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&[...regionalLandmarks,...smallDiscoveries].find(s=>s.id===treasure.targetId);
+    const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===treasure.targetId);
     if(treasureSite&&Math.hypot(player.pos.x-treasureSite.x,player.pos.z-treasureSite.z)<(treasureSite.radius||8)+5)return {cls:'event',name:'Treasure Clue',meta:'Search this landmark and press G to investigate'};
+    const ancient=(ancientCities||[]).find(s=>Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<(s.radius||24));
+    if(ancient)return {cls:'event danger'+ring,name:'Ancient City',meta:'Deep ruins - read tablets, open vaults, and approach the core carefully'};
     const discovery=nearbySmallDiscovery(8);
     if(discovery){
       const names={rare_plant:'Rare Wildgrowth',buried_chest:'Disturbed Earth',lore_tablet:'Weathered Lore Tablet',monster_nest:'Monster Nest',fishing_pool:'Hidden Fishing Pool',ore_outcrop:'Ore Outcrop',traveling_merchant:'Road Merchant Camp',puzzle_shrine:'Odd-Flame Shrine',rain_bloom:'Rainwake Bloom',storm_crystal:'Stormglass Crystal',sun_dial:'Ancient Sun Dial'};
@@ -843,7 +845,7 @@ let nextDiscoverySightAt=0;
 function updateDiscoverySight(){
   const now=performance.now();if(dim!=='overworld'||now<nextDiscoverySightAt)return;nextDiscoverySightAt=now+900;
   let seen=null;
-  for(const s of [...smallDiscoveries,...regionalLandmarks])if(!discoveredIds.has(s.id)&&Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<(s.radius||8)+2){seen=s;break;}
+  for(const s of [...smallDiscoveries,...regionalLandmarks,...(ancientCities||[])])if(!discoveredIds.has(s.id)&&Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<(s.radius||8)+2){seen=s;break;}
   if(!seen)return;
   if(NET.on&&NET.room)NET.room.send('discoverySight',{id:seen.id});
   else{discoveredIds.add(seen.id);sysMsg('Mapped: <b>'+escHTML(seen.name||seen.type.replace(/_/g,' '))+'</b>');updateLandMinimap();}
@@ -881,7 +883,7 @@ function gateCollapseHint(expiresAt){
   return 'Collapses in '+time;
 }
 function findKnownSite(id){
-  return [...regionalLandmarks,...smallDiscoveries].find(s=>s.id===id)||null;
+  return [...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===id)||null;
 }
 let trackedRegionalOpportunity=null;
 let displayedRegionalOpportunity=null;
@@ -1315,6 +1317,17 @@ function updateEncounterPrompt(){
   if(table){
     encounterPromptEl.classList.remove('danger','hidden');
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(table.label)+'</b><small>Press G to interact</small>';
+    return;
+  }
+  const ancient=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearbyAncientCityInteractable&&combatApi.nearbyAncientCityInteractable(6.5);
+  if(ancient){
+    const prompt=ancient.type==='ancient_vault'
+      ? ['Ancient Vault','Press G to open the sealed cache']
+      : ancient.type==='ancient_core'
+        ? ['Ancient Core','Press G to inspect the Warden seal']
+        : ['Lore Tablet','Press G to read and trigger Recall'];
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(prompt[0])+'</b><small>'+escHTML(prompt[1])+'</small>';
     return;
   }
   const dragon=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'

@@ -4222,7 +4222,7 @@ function openCartographerUI(state=cartographerState){
   const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn(leadLabel,()=>NET.room.send('cartographer',{action:'hint'}),gold<leadCost));row.appendChild(qBtn('OPEN JOURNAL',()=>openDiscoveryJournalUI()));row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));qpanelEl.appendChild(row);
 }
 function discoveryJournalEntries(){
-  return [...regionalLandmarks,...smallDiscoveries].map(s=>({...s,region:dangerRingAtClient(s.x,s.z),biome:biomeAt(s.x,s.z),found:discoveredIds.has(s.id),claimed:claimedDiscoveryIds.has(s.id)}));
+  return [...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].map(s=>({...s,region:dangerRingAtClient(s.x,s.z),biome:biomeAt(s.x,s.z),found:discoveredIds.has(s.id),claimed:claimedDiscoveryIds.has(s.id)}));
 }
 function weatherVaneSummary(){
   const current=String(worldState.weather||'clear').toLowerCase();

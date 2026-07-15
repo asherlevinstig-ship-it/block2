@@ -4157,13 +4157,15 @@ class GameRoom extends Room {
     client.send('xp', { n: amount });
   }
   discoverySpec(id) {
-    if (!this.smallDiscoveryById) this.smallDiscoveryById = new Map(W.smallDiscoverySpecs().map(s => [s.id, s]));
-    return this.smallDiscoveryById.get(String(id || '')) || null;
+    if (!this.discoveryById) this.discoveryById = new Map([...W.smallDiscoverySpecs(), ...W.ancientCityDiscoverySpecs().filter(s => s.type !== 'ancient_city')].map(s => [s.id, s]));
+    return this.discoveryById.get(String(id || '')) || null;
   }
   explorationSpec(id) {
     const small = this.discoverySpec(id); if (small) return small;
     if (!this.regionalLandmarkById) this.regionalLandmarkById = new Map(W.regionalLandmarkSpecs().map(s => [s.id, s]));
-    return this.regionalLandmarkById.get(String(id || '')) || null;
+    const landmark = this.regionalLandmarkById.get(String(id || '')); if (landmark) return landmark;
+    if (!this.ancientCityById) this.ancientCityById = new Map(W.ancientCitySpecs().map(s => [s.id, s]));
+    return this.ancientCityById.get(String(id || '')) || null;
   }
   regionalContractBucket(now = Date.now()) {
     return Math.floor(now / (6 * 60 * 60 * 1000));
@@ -4460,7 +4462,7 @@ class GameRoom extends Room {
   }
   cartographerEntries(prof) {
     const found=new Set(Array.isArray(prof.discoveries)?prof.discoveries:[]);
-    return [...W.regionalLandmarkSpecs(),...W.smallDiscoverySpecs()].map(s=>({s,found:found.has(s.id),region:dangerRingAt(s.x,s.z)}));
+    return [...W.regionalLandmarkSpecs(),...W.smallDiscoverySpecs(),...W.ancientCitySpecs()].map(s=>({s,found:found.has(s.id),region:dangerRingAt(s.x,s.z)}));
   }
   cartographerPayload(prof, client = null) {
     const entries=this.cartographerEntries(prof),regions=DANGER_RINGS.map((r,i)=>{const all=entries.filter(e=>e.region===i);return {index:i,name:r.name,found:all.filter(e=>e.found).length,total:all.length,claimed:(prof.cartographerRegionClaims||[]).includes(i)};});
@@ -4627,7 +4629,7 @@ class GameRoom extends Room {
     if (!p || p.dgn || !s || Math.hypot(p.x - s.x, p.z - s.z) > s.radius + 2) return client.send('discoveryReject', { reason: 'range' });
     if (s.type === 'puzzle_shrine' && (!s.target || (m.x | 0) !== s.target.x || (m.y | 0) !== s.target.y || (m.z | 0) !== s.target.z))
       return client.send('discoveryReject', { reason: 'pattern', hint: 'Two flames agree. Touch the one that does not.' });
-    if (!['rare_plant', 'lore_tablet', 'fishing_pool', 'puzzle_shrine', 'buried_chest','rain_bloom','storm_crystal','sun_dial'].includes(s.type)) return client.send('discoveryReject', { reason: 'inactive' });
+    if (!['rare_plant', 'lore_tablet', 'fishing_pool', 'puzzle_shrine', 'buried_chest','rain_bloom','storm_crystal','sun_dial','ancient_tablet','ancient_vault','ancient_core'].includes(s.type)) return client.send('discoveryReject', { reason: 'inactive' });
     const required={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'}[s.type];
     const rec=this.profileFor(client);if(!rec)return client.send('discoveryReject',{reason:'invalid'});
     this.markDiscovery(client,s);
@@ -4640,6 +4642,10 @@ class GameRoom extends Room {
     if(s.type==='fishing_pool'){claims.add(claimKey);this.discoveryClaims.set(token,claims);}else{rec.prof.claimedDiscoveries.push(s.id);this.dirtyPlayers.add(rec.token);}
     const ring = dangerRingAt(s.x, s.z), regional = BIOME_COLLECTIBLE[W.biomeAt(s.x, s.z)];
     let name = 'Small Discovery', text = '', xp = 5, items = [];
+    if (s.cityId) {
+      const city = this.explorationSpec(s.cityId);
+      if (city) this.markDiscovery(client, city);
+    }
     if (s.type === 'rare_plant') {
       name = 'Rare Plant'; text = 'A wild specimen found far from cultivated ground.';
       if (regional) items.push({ id: regional.item, count: 2 + ring });
@@ -4666,6 +4672,17 @@ class GameRoom extends Room {
       name='Stormglass Crystal';text='Stormglass holds a charge that blacksmiths can turn into repair work.';xp=24+ring*6;items.push({id:I.STORMGLASS,count:1+ring});
     } else if(s.type==='sun_dial'){
       name='Sun Dial';text='The aligned light leaves a solar glyph used to focus sunshards.';xp=16+ring*4;items.push({id:I.SOLAR_GLYPH,count:1+ring});
+    } else if(s.type==='ancient_tablet'){
+      const lore=s.hook==='ancient_core_recall'
+        ? 'The tablet names the core as a promise: answer, endure, and the sleeping Warden may open the way.'
+        : 'The city was built below the noise of the world so its last lesson could not be burned.';
+      name=s.name||'Ancient Lore Tablet';text=lore+' A Recall echo stirs from the carved stone.';xp=30+ring*8;items.push({id:I.GEODE,count:1});
+    } else if(s.type==='ancient_vault'){
+      name='Ancient Vault';text='The vault seal cracks open. Blue dust spills across old brick.';
+      xp=45+ring*12;items.push({id:I.GEODE,count:1+Math.max(0,ring-1)},{id:I.IRON_INGOT,count:2+ring},{id:I.DIAMOND,count:1+Math.floor(ring/2)});
+      this.recordTreasureProgress(client);
+    } else if(s.type==='ancient_core'){
+      name='Ancient Core';text='The core is sealed by a Warden oath. Defeat the Warden here later to awaken a rare ability.';xp=20+ring*6;
     } else {
       name = 'Odd-Flame Shrine'; text = 'The mismatched flame sinks. A hidden compartment opens.'; xp = 15 + ring * 5;
       items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + Math.max(0, ring - 1) });

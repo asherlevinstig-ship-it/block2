@@ -386,6 +386,7 @@ function ancientCitySpecs() {
     return {
       id: 'ancient_city_' + cityIndex,
       type: 'ancient_city',
+      name: 'Ancient City',
       caveNetworkId: net.id,
       x, y, z, axis,
       radius: 24,
@@ -403,6 +404,31 @@ function ancientCityLootTable() {
     { id: 'unique_gear', label: 'Unique dungeon gear', weight: 5, tier: 'epic', use: 'Rolls from the unique weapon and armor pool' },
     { id: 'ancient_core_ability', label: 'Rare ability: Echo Step', weight: 1, tier: 'mythic', requires: 'ancient_warden' },
   ];
+}
+function ancientCityDiscoverySpecs() {
+  const out = [];
+  for (const city of ancientCitySpecs()) {
+    out.push({ id: city.id, type: 'ancient_city', name: 'Ancient City', x: city.x, y: city.y, z: city.z, radius: city.radius, cityId: city.id });
+    for (const tablet of city.tablets) out.push({
+      id: city.id + '_' + tablet.id,
+      type: 'ancient_tablet',
+      name: tablet.id === 'tablet_core' ? 'Ancient Core Tablet' : 'Ancient Lore Tablet',
+      x: tablet.x, y: tablet.y, z: tablet.z, radius: 4, cityId: city.id, hook: tablet.hook,
+    });
+    for (const vault of city.vaults) out.push({
+      id: vault.chestKey,
+      type: 'ancient_vault',
+      name: 'Ancient Vault',
+      x: vault.x, y: vault.y + 1, z: vault.z, radius: 4, cityId: city.id,
+    });
+    out.push({
+      id: city.id + '_core',
+      type: 'ancient_core',
+      name: 'Ancient Core',
+      x: city.core.x, y: city.core.y + 1, z: city.core.z, radius: 5, cityId: city.id, hook: city.core.hook, bossKind: city.core.bossKind,
+    });
+  }
+  return out;
 }
 function buildAncientCities(setBlock, getBlock = getB) {
   const box = (x1, y1, z1, x2, y2, z2, id) => {
@@ -894,6 +920,6 @@ module.exports = {
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
-  ancientCitySpecs, ancientCityLootTable, buildAncientCities, isTrainingMeadowLand, buildTrainingMeadow,
+  ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, buildTrainingMeadow,
   buildGuildHallBase,
 };

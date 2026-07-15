@@ -209,6 +209,10 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   assert.equal(cities.every(city => city.core && city.core.bossKind === 'ancient_warden'), true, 'core chambers reserve the Warden boss hook');
   assert.equal(cities.every(city => city.vaults.length >= 2 && city.tablets.length >= 2), true, 'cities include vault rooms and lore tablets');
   assert.equal(W.ancientCityLootTable().some(row => row.requires === 'ancient_warden'), true, 'loot table reserves the rare Warden ability reward');
+  const discoveries = W.ancientCityDiscoverySpecs();
+  assert.equal(discoveries.some(s => s.type === 'ancient_city' && s.name === 'Ancient City'), true, 'ancient cities are mapped as discoveries');
+  assert.equal(discoveries.filter(s => s.type === 'ancient_vault').length >= cities.length * 2, true, 'vault chests have persistent discovery ids');
+  assert.equal(discoveries.some(s => s.type === 'ancient_core' && s.bossKind === 'ancient_warden'), true, 'core discovery exposes the Warden hook');
   const world = W.createWorld(); world.generate();
   for (const city of cities) {
     let air = 0, brick = 0, lights = 0, chests = 0, core = 0;
@@ -233,11 +237,25 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
     }
   }
   const clientWorld = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   assert.match(clientWorld, /function ancientCitySpecs\(\)/);
   assert.match(clientWorld, /function ancientCityLootTable\(\)/);
+  assert.match(clientWorld, /function ancientCityDiscoverySpecs\(\)/);
   assert.match(clientWorld, /function buildAncientCities\(setBlock,getBlock=getB\)/);
+  assert.match(clientWorld, /ancientCities=buildAncientCities\(setB,getB\)/);
   assert.match(clientWorld, /bossKind:'ancient_warden'/);
   assert.match(clientWorld, /buildAncientCities\(setB,getB\)/);
+  assert.match(combat, /function nearbyAncientCityInteractable\(range=6,hit=null\)/);
+  assert.match(combat, /function interactAncientCityDiscovery\(s\)/);
+  assert.ok(combat.indexOf('interactAncientCityDiscovery(nearbyAncientCityInteractable(7,hit))') < combat.indexOf('if(hit.id===B.CHEST)'), 'ancient vaults are intercepted before normal chest storage');
+  assert.match(frame, /Ancient Vault/);
+  assert.match(frame, /Ancient Core/);
+  assert.match(frame, /Deep ruins - read tablets, open vaults, and approach the core carefully/);
+  assert.match(room, /W\.ancientCityDiscoverySpecs\(\)/);
+  assert.match(room, /'ancient_tablet','ancient_vault','ancient_core'/);
+  assert.match(room, /Defeat the Warden here later to awaken a rare ability/);
 });
 
 test('client dimensions and server consume the shared grid contract', () => {

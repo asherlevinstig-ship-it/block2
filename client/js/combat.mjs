@@ -2083,6 +2083,23 @@ function nearbySmallDiscovery(range=6){
   for(const s of smallDiscoveries){const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);if(d<bd){bd=d;best=s;}}
   return best;
 }
+function ancientCityInteractables(){
+  return worldApi.ancientCityDiscoverySpecs ? worldApi.ancientCityDiscoverySpecs().filter(s=>s.type!=='ancient_city') : [];
+}
+function nearbyAncientCityInteractable(range=6,hit=null){
+  if(dim!=='overworld')return null;
+  const specs=ancientCityInteractables();
+  if(hit){
+    const exact=specs.find(s=>s.type==='ancient_vault'&&hit.id===B.CHEST&&hit.x===s.x&&hit.y===s.y&&hit.z===s.z);
+    if(exact)return exact;
+  }
+  let best=null,bd=range;
+  for(const s of specs){
+    const d=Math.hypot(player.pos.x-s.x,player.pos.y-(s.y||player.pos.y),player.pos.z-s.z);
+    if(d<bd){bd=d;best=s;}
+  }
+  return best;
+}
 function nearbyKnowledgeRuin(range=14){
   if(dim!=='overworld')return null;let best=null,bd=range;
   for(const s of regionalLandmarks)if(s.type==='ruins'){const d=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);if(d<bd){bd=d;best=s;}}
@@ -2090,7 +2107,7 @@ function nearbyKnowledgeRuin(range=14){
 }
 function nearbyTreasureClue(range=18){
   const map=globalThis.BlockcraftTreasureMap;if(!map||!map.targetId||dim!=='overworld')return null;
-  const s=[...regionalLandmarks,...smallDiscoveries].find(v=>v.id===map.targetId);return s&&Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<Math.max(range,(s.radius||8)+4)?s:null;
+  const s=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(v=>v.id===map.targetId);return s&&Math.hypot(player.pos.x-s.x,player.pos.z-s.z)<Math.max(range,(s.radius||8)+4)?s:null;
 }
 const localDiscoveryClaims=new Set();
 function interactSmallDiscovery(s,hit){
@@ -2111,6 +2128,19 @@ function interactSmallDiscovery(s,hit){
   else if(s.type==='storm_crystal'){addItem(I.STORMGLASS,1);gainXP(24);sysMsg('Stormglass holds a charge that blacksmiths can turn into repair work.');}
   else if(s.type==='sun_dial'){addItem(I.SOLAR_GLYPH,1);gainXP(16);sysMsg('The aligned light leaves a solar glyph used to focus sunshards.');}
   else{addItem(I.IRON_INGOT,2);gainXP(15);sysMsg('The odd flame yields. A hidden compartment opens.');}
+  return true;
+}
+function interactAncientCityDiscovery(s){
+  if(!s||!['ancient_tablet','ancient_vault','ancient_core'].includes(s.type))return false;
+  const msg={id:s.id,x:s.x|0,y:s.y|0,z:s.z|0};
+  if(NET.on&&NET.room){NET.room.send('discoveryInteract',msg);return true;}
+  const city=(ancientCities||[]).find(c=>c.id===s.cityId);
+  if(city){discoveredIds.add(city.id);updateLandMinimap();}
+  if(localDiscoveryClaims.has(s.id)){sysMsg(s.type==='ancient_core'?'The core remains sealed.':'You have already searched this ancient site.');return true;}
+  localDiscoveryClaims.add(s.id);claimedDiscoveryIds.add(s.id);
+  if(s.type==='ancient_vault'){addItem(I.GEODE,1);addItem(I.DIAMOND,1);gainXP(45);sysMsg('<b>Ancient Vault:</b> the cache opens with a cold blue flash.');}
+  else if(s.type==='ancient_core'){gainXP(20);sysMsg('<b>Ancient Core:</b> a sleeping Warden seal hums below the glass. Defeat the Warden here later to awaken a rare ability.');}
+  else{gainXP(30);sysMsg('<b>Lore Tablet:</b> the carved lesson wakes a Recall echo. Press <b>P</b> to answer while the memory is fresh.');}
   return true;
 }
 function secondaryAction(){
@@ -2199,6 +2229,7 @@ function secondaryAction(){
   }
   const hit=raycast(BLOCK_PLACE_REACH);
   if(!hit) return;
+  if(interactAncientCityDiscovery(nearbyAncientCityInteractable(7,hit)))return;
   if(interactSmallDiscovery(nearbySmallDiscovery(7),hit))return;
   if(isJobBoardHit(hit)){ openJobsUI(); return; }
   if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2){ openShardUI(); return; }
@@ -2341,6 +2372,7 @@ gameContext.registerModule('combat', Object.freeze({
   nearFellowshipArmoryRack,
   nearFellowshipPantryShelf,
   nearFellowshipWeatherVane,
+  nearbyAncientCityInteractable,
 }));
 
 

@@ -1037,7 +1037,7 @@ function ancientCitySpecs(){
       {id:'tablet_origin',x:x-6,y,z:z-2,hook:'ancient_city_origin'},
       {id:'tablet_core',x:x+6,y,z:z+2,hook:'ancient_core_recall'}
     ];
-    return {id:'ancient_city_'+cityIndex,type:'ancient_city',caveNetworkId:net.id,x,y,z,axis,radius:24,entrance:{x:end.x,y:end.y,z:end.z},core:{x,y,z,hook:'ancient_core',bossKind:'ancient_warden'},vaults,tablets};
+    return {id:'ancient_city_'+cityIndex,type:'ancient_city',name:'Ancient City',caveNetworkId:net.id,x,y,z,axis,radius:24,entrance:{x:end.x,y:end.y,z:end.z},core:{x,y,z,hook:'ancient_core',bossKind:'ancient_warden'},vaults,tablets};
   });
 }
 function ancientCityLootTable(){
@@ -1047,6 +1047,16 @@ function ancientCityLootTable(){
     {id:'unique_gear',label:'Unique dungeon gear',weight:5,tier:'epic',use:'Rolls from the unique weapon and armor pool'},
     {id:'ancient_core_ability',label:'Rare ability: Echo Step',weight:1,tier:'mythic',requires:'ancient_warden'}
   ];
+}
+function ancientCityDiscoverySpecs(){
+  const out=[];
+  for(const city of ancientCitySpecs()){
+    out.push({id:city.id,type:'ancient_city',name:'Ancient City',x:city.x,y:city.y,z:city.z,radius:city.radius,cityId:city.id});
+    for(const tablet of city.tablets)out.push({id:city.id+'_'+tablet.id,type:'ancient_tablet',name:tablet.id==='tablet_core'?'Ancient Core Tablet':'Ancient Lore Tablet',x:tablet.x,y:tablet.y,z:tablet.z,radius:4,cityId:city.id,hook:tablet.hook});
+    for(const vault of city.vaults)out.push({id:vault.chestKey,type:'ancient_vault',name:'Ancient Vault',x:vault.x,y:vault.y+1,z:vault.z,radius:4,cityId:city.id});
+    out.push({id:city.id+'_core',type:'ancient_core',name:'Ancient Core',x:city.core.x,y:city.core.y+1,z:city.core.z,radius:5,cityId:city.id,hook:city.core.hook,bossKind:city.core.bossKind});
+  }
+  return out;
 }
 function buildAncientCities(setBlock,getBlock=getB){
   const inBounds=(x,y,z)=>x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
@@ -1067,6 +1077,7 @@ function buildAncientCities(setBlock,getBlock=getB){
 }
 let smallDiscoveries=[];
 let treasureCaches=[];
+let ancientCities=[];
 let roadBreadcrumbs=[];
 let regionalLandmarks=[];
 const discoveredIds=new Set();
@@ -1139,7 +1150,7 @@ function generateWorld(){
   smallDiscoveries=buildSmallDiscoveries(setB);
   regionalLandmarks=buildRegionalLandmarks(setB);
   buildCaveNetworks(setB,getB);
-  buildAncientCities(setB,getB);
+  ancientCities=buildAncientCities(setB,getB);
   treasureCaches=buildTreasureCaches(setB);
   buildLavaBorder();
 }
@@ -2492,6 +2503,7 @@ function updateLandMinimap(){
     if(hinted){landMapCtx.strokeStyle='rgba(255,210,74,.85)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);}
   };
   for(const s of regionalLandmarks)marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);
+  for(const s of ancientCities)if(discoveredOrHinted(s))marker(s,'#7dd3fc',3);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
   if(miniMap&&!worldMap){
@@ -2503,7 +2515,7 @@ function updateLandMinimap(){
     }
   }
   if(worldMap&&!claimMode){
-    const sites=[...regionalLandmarks,...smallDiscoveries];
+    const sites=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])];
     const contractSite=regionalContract&&regionalContract.targetId?sites.find(s=>s.id===regionalContract.targetId):null;
     if(contractSite)cartographerMapTarget(contractSite,'#7dd3fc','C');
     const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&treasure.targetId?sites.find(s=>s.id===treasure.targetId):null;
@@ -8872,6 +8884,7 @@ gameContext.registerState('world', Object.freeze({
   get grid(){ return world; },
   set grid(next){ world=next; },
   stats:S,
+  get ancientCities(){ return ancientCities; },
   get landClaimOverlay(){ return landClaimOverlay; },
   get overworldActivity(){ return overworldActivity; },
   get activeObjectives(){ return activeObjectives; },
@@ -8898,6 +8911,7 @@ gameContext.registerModule('world', Object.freeze({
   openLandClaims:openLandClaimsUI,
   toggleLandClaims:toggleLandClaimOverlay,
   setBuildGhostPreview,
+  ancientCityDiscoverySpecs,
   tavernGameAction,
   inOverworldBattle,
   resetParticleBudget,
@@ -8919,6 +8933,8 @@ const legacyWorldBindings={
   "applyLandClaimUpdate":{get:()=>applyLandClaimUpdate},
   "applySkyShipSync":{get:()=>applySkyShipSync},
   "armorSlot":{get:()=>armorSlot,set:value=>{armorSlot=value;}},
+  "ancientCities":{get:()=>ancientCities,set:value=>{ancientCities=Array.isArray(value)?value:[];}},
+  "ancientCityDiscoverySpecs":{get:()=>ancientCityDiscoverySpecs},
   "atlasTex":{get:()=>atlasTex},
   "attachNpcNameplate":{get:()=>attachNpcNameplate},
   "attackCd":{get:()=>attackCd,set:value=>{attackCd=value;}},
