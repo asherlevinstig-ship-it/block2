@@ -50,3 +50,13 @@ test('recall uses a screen-space fallback when no safe pillar location exists',(
   assert.equal(pillars.length,4);
   assert.equal(pillars.every(p=>p.blocked),true);
 });
+
+test('recall answer pillars remain visible inside private tutorial spaces',()=>{
+  const room=Object.create(recall);
+  room.instances={};room.world={standHeight(){return -1;}};room.spaceSolid=()=>()=>true;
+  const p={x:770,y:20,z:820,yaw:0,dim:'tutorial',dgn:'tutorial-onboarding-p1'};
+  const pillars=room.recallPositions(p,0);
+  assert.equal(pillars.length,4);
+  assert.equal(pillars.every(p=>!p.blocked),true);
+  assert.deepEqual(pillars.map(p=>p.y),[20,20,20,20]);
+});

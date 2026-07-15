@@ -5,12 +5,16 @@ const W=require('../world');
 
 class RecallMixin{
   initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
+  recallTutorialSpace(p){
+    return !!(p&&(p.dim==='tutorial'||String(p.dgn||'').startsWith('tutorial-')));
+  }
   handleRecallSubject(client,message={}){
     if(!client||!RECALL.SUBJECTS.includes(message.subject))return;
     this.recallSubjects.set(client.sessionId,message.subject);
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);if(rec){rec.prof.recallSubject=message.subject;this.dirtyPlayers.add(rec.token);client.send('recallMastery',{subject:message.subject,...RECALL.masterySummary(rec.prof.recallMastery||{},message.subject)});}
   }
   recallStandHeight(p,x,z){
+    if(this.recallTutorialSpace(p))return p.y;
     const dgn=p&&p.dgn||'',inst=dgn&&this.instances&&this.instances[dgn],world=inst&&inst.world||this.world;
     const h=world&&typeof world.standHeight==='function'?world.standHeight(x,z,(p&&p.y||W.WH)-1):W.standHeight(x,z,(p&&p.y||W.WH)-1);
     return h>0?h:p.y;
@@ -20,6 +24,10 @@ class RecallMixin{
     // Relocation probes must never pull an answer back into the camera. The
     // world-space label is intentionally large enough to read at a distance.
     if(Math.hypot(candidate.x-p.x,candidate.z-p.z)<6)return false;
+    if(this.recallTutorialSpace(p)){
+      candidate.y=p.y;
+      return true;
+    }
     const solid=typeof this.spaceSolid==='function'?this.spaceSolid(p.dgn||''):null;
     if(!solid)return true;
     const y=this.recallStandHeight(p,candidate.x,candidate.z);
