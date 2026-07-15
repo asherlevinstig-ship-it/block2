@@ -399,8 +399,9 @@ function ancientCitySpecs() {
 }
 function ancientCityLootTable() {
   return [
-    { id: 'echo_shard', label: 'Echo Shard', weight: 18, tier: 'rare', use: 'Ancient crafting and Warden ability unlocks' },
-    { id: 'warden_relic', label: 'Warden Relic', weight: 8, tier: 'epic', use: 'Future Ancient Core offering' },
+    { id: 'ancient_fragment', label: 'Ancient Fragment', weight: 22, tier: 'rare', use: 'Ancient crafting and Warden ability unlocks' },
+    { id: 'echo_glyph', label: 'Echo Glyph', weight: 10, tier: 'epic', use: 'Glyph-based ability and relic recipes' },
+    { id: 'relic_armor_piece', label: 'Relic Armor Piece', weight: 7, tier: 'epic', use: 'Collect pieces toward relic armor sets' },
     { id: 'unique_gear', label: 'Unique dungeon gear', weight: 5, tier: 'epic', use: 'Rolls from the unique weapon and armor pool' },
     { id: 'ancient_core_ability', label: 'Rare ability: Echo Step', weight: 1, tier: 'mythic', requires: 'ancient_warden' },
   ];

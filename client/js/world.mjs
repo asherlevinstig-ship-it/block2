@@ -271,6 +271,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   GOLDEN_BROTH:204, TRAIL_RATION:205, FEAST_PLATTER:206,
   GEODE:207, RAINWAKE_PETAL:208, STORMGLASS:209, SOLAR_GLYPH:210,
   HIDE_ARMOR:211, CHAIN_ARMOR:212, STORMGLASS_ARMOR:213,
+  ANCIENT_FRAGMENT:214, ECHO_GLYPH:215, RELIC_ARMOR_PIECE:216,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -659,6 +660,9 @@ ITEMS[I.MIRE_BLOOM]={name:'Mire Bloom',stack:64,icon:regionalIcon('#325328','#8e
 ITEMS[I.RAINWAKE_PETAL]={name:'Rainwake Petal',stack:64,icon:regionalIcon('#246b7d','#67d6ff','#e6fbff')};
 ITEMS[I.STORMGLASS]={name:'Stormglass Shard',stack:64,icon:regionalIcon('#4f3d83','#b79cff','#f4e7ff')};
 ITEMS[I.SOLAR_GLYPH]={name:'Solar Glyph',stack:64,icon:regionalIcon('#8a5b12','#ffd24a','#fff4b8')};
+ITEMS[I.ANCIENT_FRAGMENT]={name:'Ancient Fragment',stack:64,icon:regionalIcon('#18323a','#35d0c8','#e8ffff')};
+ITEMS[I.ECHO_GLYPH]={name:'Echo Glyph',stack:64,icon:regionalIcon('#1d2552','#8bd7ff','#ffffff')};
+ITEMS[I.RELIC_ARMOR_PIECE]={name:'Relic Armor Piece',stack:32,icon:regionalIcon('#3f3426','#d7b45d','#fff0a8')};
 ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
 const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
@@ -1042,8 +1046,9 @@ function ancientCitySpecs(){
 }
 function ancientCityLootTable(){
   return [
-    {id:'echo_shard',label:'Echo Shard',weight:18,tier:'rare',use:'Ancient crafting and Warden ability unlocks'},
-    {id:'warden_relic',label:'Warden Relic',weight:8,tier:'epic',use:'Future Ancient Core offering'},
+    {id:'ancient_fragment',label:'Ancient Fragment',weight:22,tier:'rare',use:'Ancient crafting and Warden ability unlocks'},
+    {id:'echo_glyph',label:'Echo Glyph',weight:10,tier:'epic',use:'Glyph-based ability and relic recipes'},
+    {id:'relic_armor_piece',label:'Relic Armor Piece',weight:7,tier:'epic',use:'Collect pieces toward relic armor sets'},
     {id:'unique_gear',label:'Unique dungeon gear',weight:5,tier:'epic',use:'Rolls from the unique weapon and armor pool'},
     {id:'ancient_core_ability',label:'Rare ability: Echo Step',weight:1,tier:'mythic',requires:'ancient_warden'}
   ];
@@ -2502,7 +2507,23 @@ function updateLandMinimap(){
     landMapCtx.fillStyle=hinted?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);
     if(hinted){landMapCtx.strokeStyle='rgba(255,210,74,.85)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);}
   };
-  for(const s of regionalLandmarks)marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);
+  const caveMarker=s=>{
+    if(!s||s.type!=='cave')return false;
+    const visibleCave=discoveredOrHinted(s)||(mapUtility&&nearPlayer(s));
+    if(!visibleCave)return true;
+    if(miniMap&&!worldMap&&!nearPlayer(s)&&!hintedDiscoveryIds.has(s.id))return true;
+    const x=mapPx(s.x),z=mapPz(s.z),hinted=hintedDiscoveryIds.has(s.id)&&!discoveredIds.has(s.id);
+    landMapCtx.save();
+    landMapCtx.strokeStyle=hinted?'rgba(255,210,74,.95)':'rgba(125,211,252,.95)';
+    landMapCtx.fillStyle=hinted?'#ffd24a':'#7dd3fc';
+    landMapCtx.lineWidth=2;
+    landMapCtx.beginPath();landMapCtx.moveTo(x,z-4);landMapCtx.lineTo(x+5,z+4);landMapCtx.lineTo(x-5,z+4);landMapCtx.closePath();landMapCtx.stroke();
+    landMapCtx.fillRect(x-1,z,3,3);
+    if(worldMap&&!claimMode){landMapCtx.font='bold 8px Courier New';landMapCtx.fillText('C',x+6,z+7);}
+    landMapCtx.restore();
+    return true;
+  };
+  for(const s of regionalLandmarks){if(caveMarker(s))continue;marker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);}
   for(const s of ancientCities)if(discoveredOrHinted(s))marker(s,'#7dd3fc',3);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);

@@ -828,6 +828,9 @@ class CombatMixin {
           { id: I.WARDEN_CLEAVER, count: 1, rarity: 'mythic', locked: true, gear: true, source: 'ancient_warden' },
           { id: I.LEGEND_TOKEN, count: 1 + Math.floor(ring / 2) },
           { id: I.GEODE, count: 2 + ring },
+          { id: I.ANCIENT_FRAGMENT, count: 4 + ring },
+          { id: I.ECHO_GLYPH, count: 1 + Math.floor(ring / 2) },
+          { id: I.RELIC_ARMOR_PIECE, count: 1 },
         ];
         this.awardGrant(client, { source: 'ancient_warden', xp: 220 + ring * 90, items, dangerRing: ring, elite: true });
         client.send('wardenDefeated', { cityId: killedMeta.cityId || '', coreId: killedMeta.coreId || '', ability: 'Warden Cleaver', items });
@@ -857,6 +860,11 @@ class CombatMixin {
       else if (!dgn) {
         items.push({ id: I.MONSTER_MEAT, count: 1 + Math.floor(ring / 2) });
         if(killedMeta.biomeDrop&&Math.random()<.45)items.push({id:killedMeta.biomeDrop,count:1+Math.floor(ring/2)});
+        if(killedMeta.underground){
+          if(Math.random() < (killedMeta.ancientCityMob ? .8 : .35)) items.push({ id: I.ANCIENT_FRAGMENT, count: 1 + (killedMeta.ancientCityMob ? Math.floor(ring / 2) : 0) });
+          if(killedMeta.ancientCityMob && Math.random() < .28) items.push({ id: I.ECHO_GLYPH, count: 1 });
+          if(killedMeta.ancientCityMob && Math.random() < .14) items.push({ id: I.RELIC_ARMOR_PIECE, count: 1 });
+        }
         if (killedMeta.elite) {
           items.push({ id: ring >= 3 ? I.DIAMOND : I.IRON_INGOT, count: ring >= 3 ? 2 : 1 + ring });
           const regional = BIOME_COLLECTIBLE[W.biomeAt(dx, dz)];

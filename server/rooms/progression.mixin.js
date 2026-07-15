@@ -504,6 +504,35 @@ class ProgressionMixin {
     return { ...pool[(Math.random() * pool.length) | 0], job, have: 0, rewardXp: hunterXpForActivity(level, 'job_contract') };
   }
 
+  minerUndergroundTarget(type, salt = 0) {
+    const sites = type === 'ancient_map'
+      ? W.ancientCitySpecs()
+      : W.regionalLandmarkSpecs().filter(s => s.type === 'cave');
+    if (!sites.length) return null;
+    const idx = Math.floor(W.hash2((salt | 0) + 7109, sites.length * 3571 + (type === 'ancient_map' ? 19 : 7)) * sites.length) % sites.length;
+    const s = sites[idx];
+    return {
+      targetId: s.id,
+      targetType: type === 'ancient_map' ? 'ancient_city' : 'cave',
+      targetName: s.name || (type === 'ancient_map' ? 'Ancient City' : 'Deepmouth Cave'),
+      targetX: s.x | 0,
+      targetZ: s.z | 0,
+    };
+  }
+
+  decorateMinerUndergroundOffer(c, rec, salt = 0) {
+    if (!c || c.job !== 'miner' || !['cave_survey', 'ancient_map'].includes(c.type)) return c;
+    const target = this.minerUndergroundTarget(c.type, salt + String(rec && rec.token || '').length * 97);
+    if (!target) return c;
+    return {
+      ...c,
+      ...target,
+      location: c.type === 'ancient_map' ? 'Ancient City treasure route' : target.targetName + ' entrance',
+      focus: c.type === 'ancient_map' ? 'ancient city treasure map' : 'descend and survey underground',
+      reward: c.type === 'ancient_map' ? 'ancient fragments, glyphs, and Miner XP' : 'Miner XP plus cave loot chances',
+    };
+  }
+
   jobContractOffers(rec, requested = '') {
     const prof=rec.prof,job=requested==='adventurer'?'adventurer':(prof.job||'adventurer'),actualNow=Date.now();
     if(job!=='adventurer'&&job!==prof.job)return [];
@@ -518,7 +547,8 @@ class ProgressionMixin {
     else{
       let rotation=0;for(const ch of String(rec.token||'hunter')+job)rotation=(rotation*31+ch.charCodeAt(0))>>>0;
       rotation+=Math.floor(now/JOB_SYSTEM.OFFER_REFRESH_MS);
-      offers=JOB_SYSTEM.contractOffers(job,JOB_SYSTEM.contractScaleFromXp(xpMap[job]),level,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT},hunterXp,rotation);
+      offers=JOB_SYSTEM.contractOffers(job,JOB_SYSTEM.contractScaleFromXp(xpMap[job]),level,{STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT},hunterXp,rotation)
+        .map((c,i)=>this.decorateMinerUndergroundOffer(c,rec,rotation+i));
     }
     const expiresAt=now+JOB_SYSTEM.OFFER_REFRESH_MS;
     prof.jobContractOffers=offers.map((c,i)=>({...c,id:['job',job,now,i,c.type].join('_'),offeredAt:now,expiresAt}));
@@ -1025,6 +1055,46 @@ class ProgressionMixin {
     this.grantJobXp(client, 'miner', 6);
     this.progressJobContract(client, 'treasure', 1, 0);
     this.progressNpcQuest(client, 'treasure', 1, 0);
+  }
+
+  recordAncientMapProgress(client) {
+    this.grantJobXp(client, 'miner', 10);
+    this.progressJobContract(client, 'ancient_map', 1, 0);
+  }
+
+  playerNearCaveRoute(p) {
+    if (!p || p.dgn) return null;
+    const surface = W.terrainHeight(Math.floor(p.x), Math.floor(p.z));
+    if (p.y > Math.min(surface - 4, 32)) return null;
+    for (const net of W.caveNetworkSpecs()) {
+      for (const point of net.points) {
+        if (Math.hypot(p.x - point.x, p.z - point.z) <= 15 && Math.abs(p.y - point.y) <= 8) return { id: net.id, type: 'cave_network', x: point.x, y: point.y, z: point.z };
+      }
+      for (const c of net.caverns) {
+        if (Math.hypot(p.x - c.x, p.z - c.z) <= Math.max(c.rx, c.rz) + 8 && Math.abs(p.y - c.y) <= c.ry + 6) return { id: net.id, type: 'cavern', x: c.x, y: c.y, z: c.z };
+      }
+    }
+    for (const city of W.ancientCitySpecs()) {
+      if (Math.hypot(p.x - city.x, p.z - city.z) <= city.radius + 8 && Math.abs(p.y - city.y) <= 10) return { id: city.id, type: 'ancient_city', x: city.x, y: city.y, z: city.z };
+    }
+    return null;
+  }
+
+  tickCaveSurveyContracts(now = Date.now()) {
+    if (!this.caveSurveyProgressAt) this.caveSurveyProgressAt = new Map();
+    this.state.players.forEach((p, sid) => {
+      const client = this.clients.find(c => c.sessionId === sid);
+      const rec = client && this.profileFor(client);
+      const c = rec && rec.prof.jobContract;
+      if (!client || !c || c.type !== 'cave_survey' || (c.have | 0) >= (c.need | 0)) return;
+      const route = this.playerNearCaveRoute(p);
+      if (!route) return;
+      const key = sid + ':' + route.id + ':' + Math.floor((c.have | 0) / 1);
+      if (now < (this.caveSurveyProgressAt.get(key) || 0)) return;
+      this.caveSurveyProgressAt.set(key, now + 9000);
+      this.grantJobXp(client, 'miner', route.type === 'ancient_city' ? 8 : 5);
+      if (this.progressJobContract(client, 'cave_survey', 1, 0)) client.send('chat', { name: '[Miner]', text: route.type === 'ancient_city' ? 'Ancient survey marker recorded.' : 'Cave survey marker recorded.' });
+    });
   }
 
   recordFarmProgress(client, action) {

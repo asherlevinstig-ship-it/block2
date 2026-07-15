@@ -455,7 +455,7 @@ class SpawningMixin {
     const dead = [];
     this.state.mobs.forEach((m, id) => {
       if (m.dgn) return;
-      if (this.mobMeta[id] && (this.mobMeta[id].friendly || this.mobMeta[id].gateBreach)) return;
+      if (this.mobMeta[id] && (this.mobMeta[id].friendly || this.mobMeta[id].gateBreach || this.mobMeta[id].ancientWarden)) return;
       const radius = this.isAnimalKind(m.kind) ? ANIMAL_DESPAWN_RADIUS : HOSTILE_DESPAWN_RADIUS;
       if (!this.nearestSurfaceCluster(m.x, m.z, clusters, radius)) dead.push(id);
     });
@@ -1088,6 +1088,64 @@ class SpawningMixin {
         meta.discoveryNest=true;meta.nestId=nest.id;meta.dangerRing=ring;this.mobMeta[id]=meta;
       }
     }
+  }
+
+  maintainUndergroundThreats(dt) {
+    this.undergroundThreatAcc = (this.undergroundThreatAcc || 0) + dt;
+    if (this.undergroundThreatAcc < 6) return;
+    this.undergroundThreatAcc = 0;
+    const players = [];
+    this.state.players.forEach((p, sid) => {
+      if (!p || p.dgn) return;
+      const surface = W.terrainHeight(Math.floor(p.x), Math.floor(p.z));
+      if (p.y <= Math.min(surface - 4, 32)) players.push({ p, sid });
+    });
+    if (!players.length) return;
+    const cavePoints = [];
+    for (const net of W.caveNetworkSpecs()) {
+      for (const point of net.points) cavePoints.push({ ...point, id: net.id, type: 'cave' });
+      for (const c of net.caverns) cavePoints.push({ x: c.x, y: c.y, z: c.z, id: net.id, type: 'cavern', r: Math.max(c.rx, c.rz) });
+    }
+    for (const city of W.ancientCitySpecs()) cavePoints.push({ x: city.x, y: city.y, z: city.z, id: city.id, type: 'ancient_city', r: city.radius });
+    for (const entry of players) {
+      const p = entry.p;
+      let site = null, bd = Infinity;
+      for (const s of cavePoints) {
+        const d = Math.hypot(p.x - s.x, p.z - s.z) + Math.abs(p.y - s.y) * 1.6;
+        if (d < bd) { bd = d; site = s; }
+      }
+      if (!site || bd > (site.type === 'ancient_city' ? 44 : 28)) continue;
+      const living = this.countOverworldMobsNear(p.x, p.z, 54, (m, meta) => !!meta.underground);
+      const desired = site.type === 'ancient_city' ? 5 : 3;
+      if (living >= desired) continue;
+      this.spawnUndergroundThreat(p, site);
+    }
+  }
+
+  spawnUndergroundThreat(p, site) {
+    const ring = Math.max(dangerRingAt(p.x, p.z), site.type === 'ancient_city' ? 2 : 0);
+    const cfg = DANGER_RINGS[Math.max(0, Math.min(3, ring))];
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, d = 9 + Math.random() * 18;
+      const x = p.x + Math.cos(a) * d, z = p.z + Math.sin(a) * d;
+      const gy = this.world.standHeight(x, z, p.y + 4);
+      if (gy < 2 || Math.abs(gy - p.y) > 5 || gy >= W.terrainHeight(Math.floor(x), Math.floor(z)) - 2) continue;
+      const ranged = Math.random() < (site.type === 'ancient_city' ? .45 : .3);
+      const kind = ranged ? cfg.family[1] || 'skeleton' : cfg.family[0] || 'zombie';
+      const id = String(++this.mobSeq), mob = new Mob();
+      mob.x = x; mob.y = gy; mob.z = z; mob.kind = kind;
+      mob.variant = site.type === 'ancient_city' ? 'ancient' : 'cavebound';
+      mob.displayName = site.type === 'ancient_city' ? (ranged ? 'Echo Archer' : 'Relic Guard') : (ranged ? 'Cave Archer' : 'Cave Stalker');
+      mob.maxHp = mob.hp = Math.round((site.type === 'ancient_city' ? 22 : 16) * cfg.hp);
+      this.state.mobs.set(id, mob);
+      const meta = this.freshMeta(x, z, Math.round((site.type === 'ancient_city' ? 6 : 4) * cfg.dmg), (ranged ? 1.32 : 1.48) + ring * .05, kind, ring, true);
+      meta.underground = true; meta.undergroundSiteId = site.id; meta.ancientCityMob = site.type === 'ancient_city'; meta.dangerRing = ring; meta.dayActive = true;
+      if (ranged) meta.arrowDmg = Math.round((3 + ring) * cfg.dmg);
+      if (site.type === 'ancient_city') meta.elite = true;
+      this.mobMeta[id] = meta;
+      return true;
+    }
+    return false;
   }
 
   trySpawnMob(near, cluster = null, phase='night') {

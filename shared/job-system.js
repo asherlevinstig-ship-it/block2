@@ -79,6 +79,8 @@
       {type:'mine',target:'IRON_ORE',need:s=>5+s,title:'Iron Survey',desc:'Mine iron ore for the forge.',gold:s=>38+s*5,jobXp:s=>22+s*5,focus:'ore hunt',reward:'forge-oriented XP',party:'Solo'},
       {type:'mine',target:'IRON_ORE',need:s=>8+s*2,title:'Deep Iron Run',desc:'Bring back enough iron ore to support blacksmith upgrades and repairs.',gold:s=>48+s*6,jobXp:s=>30+s*6,focus:'ore route planning',reward:'high-value ore XP',party:'Helpful'},
       {type:'mine',need:s=>28+s*5,title:'Cave Mapping Shift',desc:'Mine any useful stone or ore while pushing deeper into cave routes.',gold:s=>42+s*5,jobXp:s=>28+s*5,focus:'mixed mining route',reward:'flexible Miner progress',party:'Solo'},
+      {type:'cave_survey',need:s=>2+Math.min(3,(s/5)|0),title:'Deepmouth Survey',desc:'Descend through cave entrances and survey underground route markers for the mining office.',gold:s=>52+s*6,jobXp:s=>58+s*8,focus:'underground cave route',reward:'Miner XP plus ancient-material chances',party:'Solo'},
+      {type:'ancient_map',need:s=>1+Math.min(2,(s/6)|0),title:'Ancient Seam Map',desc:'Follow ancient city treasure-map clues and report what the old halls were built around.',gold:s=>82+s*8,jobXp:s=>76+s*10,focus:'ancient city treasure map',reward:'ancient fragments and relic prospects',party:'Helpful'},
       {type:'treasure',need:s=>1+Math.min(2,(s/4)|0),title:'Surveyor\'s Cache Map',desc:'Complete treasure-map routes or recover buried caches for the mining office.',gold:s=>54+s*6,jobXp:s=>34+s*5,focus:'treasure map route',reward:'prospecting gold and Miner XP',party:'Solo'},
       {type:'treasure',need:s=>2+Math.min(3,(s/3)|0),title:'Forgotten Seam Charts',desc:'Follow old survey marks and secure buried caches before the wild buries them again.',gold:s=>70+s*7,jobXp:s=>44+s*6,focus:'long cache survey',reward:'higher pay for exploration mining',party:'Helpful'},
     ]),
@@ -118,6 +120,8 @@
     gate:['Find an active Gate outside town.','Enter and defeat its boss.','A successful clear advances the contract.'],
     event:['Join a server-event alert and finish the event.','Cancelled or failed events do not count.','Return to the Job Board after completion.'],
     mine:['Equip a pickaxe.','Mine the requested stone or ore. Stone Quota accepts stone or cobble.','Wild caves and Gates contain useful ore.'],
+    cave_survey:['Follow a cave entrance marker on the map or minimap.','Descend below the surface and move through the lit cave route.','Each new underground survey pulse advances the contract.'],
+    ancient_map:['Start an Ancient City map with Orin or the Fellowship Map Table.','Follow the gold clues into deep ruins and investigate with G.','Completing an ancient route advances the contract.'],
     treasure:['Start a treasure map with Orin or find a buried cache discovery.','Follow the gold map clue and press G at the marked site.','Completing the route or recovering a buried cache advances the contract.'],
     farm:['Till soil, plant seeds, and harvest mature crops.','General farm contracts accept all three actions.','Harvest Basket requires mature wheat.'],
     cook:['Gather ingredients and prepare meals through crafting or cooking stations.','Completed food items advance the contract.','Return to the board when ready.'],
@@ -138,7 +142,7 @@
     Object.freeze({id:'balanced',label:'Balanced',need:1,reward:1,estimate:'About 10 minutes'}),
     Object.freeze({id:'demanding',label:'Demanding',need:1.45,reward:1.5,estimate:'About 15–20 minutes'}),
   ]);
-  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Town Shrine'});
+  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',cave_survey:'Cave entrances',ancient_map:'Ancient city clues',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Town Shrine'});
   const REFORGE_MODIFIERS=Object.freeze({keen:Object.freeze({name:'Keen',desc:'+2 weapon damage.'}),swift:Object.freeze({name:'Swift',desc:'8% faster weapon and tool use.'}),sturdy:Object.freeze({name:'Sturdy',desc:'20% more maximum durability.'})});
   const REFORGE_ACTIONS=Object.freeze({basic:Object.freeze({level:2,gold:25,iron:1,diamond:0}),choose:Object.freeze({level:5,gold:70,iron:4,diamond:0}),reroll:Object.freeze({level:10,gold:120,iron:0,diamond:1}),masterwork:Object.freeze({level:20,gold:260,iron:0,diamond:3})});
   const FARMER_RULES=Object.freeze({bonusYieldLevel:2,windseedLevel:5,fieldcraftLevel:10,goldenHarvestLevel:20,fieldcraftGrowthMultiplier:.75,goldenGrowthMultiplier:.6,goldenWheatChance:.25});
@@ -176,6 +180,8 @@
     else if(['cook','smith'].includes(c.type))pushUnique(tags,'Craft');
     else if(c.type==='mine')pushUnique(tags,c.target?'Ore':'Bulk');
     else if(c.type==='treasure')pushUnique(tags,'Treasure');
+    else if(c.type==='cave_survey')pushUnique(tags,'Underground');
+    else if(c.type==='ancient_map')pushUnique(tags,'Ancient City');
     else if(c.type==='farm')pushUnique(tags,c.target?'Harvest':'Crop');
     else if(c.type==='hunt')pushUnique(tags,'Hunt');
     else if(c.type==='kill')pushUnique(tags,'Combat');
@@ -201,6 +207,8 @@
     if(title==='Counter Rush'||title==='Tavern Supplier')return 'Best when you have extra food to sell.';
     if(title==='Surveyor\'s Cache Map')return 'Best when you have an active treasure map or a buried cache clue.';
     if(title==='Forgotten Seam Charts')return 'Best for longer prospecting trips with multiple cache stops.';
+    if(title==='Deepmouth Survey')return 'Best when you are ready to follow cave entrance markers underground.';
+    if(title==='Ancient Seam Map')return 'Best when you want ancient city clues, relic materials, and tougher underground fights.';
     if(title==='Deep Iron Run'||title==='Iron Survey')return 'Best while mining iron routes.';
     if(title==='Stone Quota'||title==='Foundation Rush')return 'Best while gathering base-building stone.';
     if(title==='Homestead Supply Crop')return 'Best while working fields inside claimed land.';

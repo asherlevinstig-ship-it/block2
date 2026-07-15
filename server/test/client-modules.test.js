@@ -602,13 +602,17 @@ test('browser and server consume one shared profession and contract ruleset', ()
   }
   assert.equal(rotatedKillTitles.size >= 6, true, 'repeatable kill offers rotate through varied combat contracts');
   const miner = sharedJobs.contractPool('miner', 2, 5, targets);
-  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Foundation Rush','Iron Survey','Deep Iron Run','Cave Mapping Shift','Surveyor\'s Cache Map','Forgotten Seam Charts']);
+  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Foundation Rush','Iron Survey','Deep Iron Run','Cave Mapping Shift','Deepmouth Survey','Ancient Seam Map','Surveyor\'s Cache Map','Forgotten Seam Charts']);
   assert.equal(miner[0].target, W.B.STONE);
   assert.equal(miner[0].need, 28);
   assert.equal(miner.every(c=>c.focus&&c.reward&&c.party), true, 'profession contracts explain focus, reward hook, and party relevance');
+  assert.deepEqual(miner.filter(c=>c.type==='cave_survey').map(c=>c.title), ['Deepmouth Survey']);
+  assert.deepEqual(miner.filter(c=>c.type==='ancient_map').map(c=>c.title), ['Ancient Seam Map']);
   assert.deepEqual(miner.filter(c=>c.type==='treasure').map(c=>c.title), ['Surveyor\'s Cache Map','Forgotten Seam Charts']);
   assert.match(sharedJobs.contractBestFor(miner.find(c=>c.title==='Surveyor\'s Cache Map')), /treasure map/);
   assert.match(sharedJobs.guideSteps('treasure').join(' '), /Orin|buried cache/i);
+  assert.match(sharedJobs.guideSteps('cave_survey').join(' '), /cave entrance marker/i);
+  assert.match(sharedJobs.guideSteps('ancient_map').join(' '), /Ancient City map/i);
   const blacksmith = sharedJobs.contractPool('blacksmith', 2, 5, targets);
   assert.deepEqual(blacksmith.map(c=>c.title), ['Forge Work','Gate Prep Kits','Tool Doctor','Edge Upgrade Order','Scrap Recovery','Ingot Commission']);
   assert.equal(blacksmith.find(c=>c.title==='Edge Upgrade Order').type, 'upgrade');

@@ -3354,6 +3354,10 @@ function openFellowshipMapTableUI(state=cartographerState){
     treasureCard.onclick=()=>mapTableAction('treasure_start',{},'TREASURE ROUTE');
   }
   qpanelEl.appendChild(treasureCard);
+  const ancientCard=document.createElement('div');ancientCard.className='quest-rank-summary treasure-card';
+  if(treasure)ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Finish the active map route first</b></span><span>MAP ACTIVE</span>';
+  else{ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Start a deep route toward cave entrances, old halls, and relic loot</b></span><span>START ANCIENT</span>';ancientCard.onclick=()=>mapTableAction('ancient_treasure_start',{},'ANCIENT ROUTE');}
+  qpanelEl.appendChild(ancientCard);
   const c=state.contract,contract=document.createElement('div');contract.className='quest-rank-summary';
   if(c){
     const rn=(state.regions&&state.regions[c.region]||{}).name||'Unknown Region';
@@ -4224,6 +4228,10 @@ function openCartographerUI(state=cartographerState){
   else{mapCard.innerHTML='<span><small>MULTI-STAGE TREASURE MAP</small><b>Three landmark clues lead to a hidden cache</b></span><span>TAKE MAP</span>';mapCard.onclick=()=>NET.room.send('cartographer',{action:'treasure_start'});}qpanelEl.appendChild(mapCard);
   if(treasure){mapCard.innerHTML='<span><small>ACTIVE TREASURE MAP - CLUE '+((treasure.stage|0)+1)+' / '+(treasure.total|0)+'</small><b>'+escHTML(treasure.clue||'Follow the ink.')+'</b></span><span>VIEW CLUE</span>';mapCard.onclick=()=>showTreasureParchment(treasure);}
   else{mapCard.innerHTML='<span><small>MULTI-STAGE TREASURE MAP</small><b>Start a three-clue hunt ending in gold and diamonds</b></span><span>START TREASURE MAP</span>';mapCard.onclick=()=>NET.room.send('cartographer',{action:'treasure_start'});}
+  const ancientCard=document.createElement('div');ancientCard.className='quest-rank-summary treasure-card';
+  if(treasure){ancientCard.innerHTML='<span><small>ANCIENT CITY MAP</small><b>Finish your active map before starting another route</b></span><span>MAP ACTIVE</span>';}
+  else{ancientCard.innerHTML='<span><small>ANCIENT CITY TREASURE MAP</small><b>Trace cave entrances into deep halls for ancient fragments, glyphs, and relic armor pieces</b></span><span>START ANCIENT MAP</span>';ancientCard.onclick=()=>NET.room.send('cartographer',{action:'ancient_treasure_start'});}
+  qpanelEl.appendChild(ancientCard);
   const mantle=(state.cosmetics||[]).includes('cartographers_mantle'),worldComplete=(state.total|0)>0&&(state.totalFound|0)>=(state.total|0),prize=document.createElement('div');prize.className='quest-rank-summary';prize.innerHTML='<span><small>WORLD COMPLETION REWARD</small><b>Cartographer\'s Mantle</b></span><span>'+(mantle?'UNLOCKED':worldComplete?'READY TO CLAIM':'MAP EVERY LOCATION')+'</span>';if(worldComplete&&!mantle)prize.onclick=()=>NET.room.send('cartographer',{action:'claim_world'});qpanelEl.appendChild(prize);
   const leadCost=Math.max(0,(state.mapLeadCost|0)||25),leadLabel='BUY MAP LEAD · '+leadCost+' GOLD'+(state.mapTable?' · MAP TABLE':'');
   const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn(leadLabel,()=>NET.room.send('cartographer',{action:'hint'}),gold<leadCost));row.appendChild(qBtn('OPEN JOURNAL',()=>openDiscoveryJournalUI()));row.appendChild(qBtn('LEAVE',()=>closeQWin(),true));qpanelEl.appendChild(row);

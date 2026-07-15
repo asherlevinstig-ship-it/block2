@@ -484,6 +484,8 @@ function jobContractObjective(){
   const c=clampJobContract(jobContract);
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob)) return null;
   if(jobContractReady()) return {label:'Job Contract', text:'Claim reward: '+c.title};
+  if(c.type==='cave_survey') return {label:'Miner Contract', text:'Survey underground cave routes '+Math.min(c.need,c.have)+'/'+c.need};
+  if(c.type==='ancient_map') return {label:'Miner Contract', text:'Complete Ancient City map clues '+Math.min(c.need,c.have)+'/'+c.need};
   return {label:'Job Contract', text:c.title+' '+Math.min(c.need,c.have)+'/'+c.need};
 }
 function activeObjectiveList(){

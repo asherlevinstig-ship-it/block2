@@ -4556,13 +4556,18 @@ class GameRoom extends Room {
   publicTreasureMap(map, mapTable = false) {
     if(!map||!Array.isArray(map.targets)||!map.targets.length)return null;
     const stage=Math.max(0,Math.min(map.targets.length-1,map.stage|0)),target=this.explorationSpec(map.targets[stage]);if(!target)return null;
-    const ring=dangerRingAt(target.x,target.z),clues=[
+    const ring=dangerRingAt(target.x,target.z),ancient=map.kind==='ancient_city';
+    const clues=ancient?[
+      'Seek '+DANGER_RINGS[ring].name+', where a cave mouth leads below the noise of the world.',
+      'The second mark points through old stone and lantern routes. Search below the surface.',
+      'Final clue: follow the ink to '+String(target.name||target.type).replace(/_/g,' ')+'. The ancient halls are close.',
+    ]:[
       'Seek '+DANGER_RINGS[ring].name+', where '+(target.major?'a great landmark breaks the horizon':'an old roadside secret waits')+'.',
       'The second mark lies near '+String(target.name||target.type).replace(/_/g,' ').toLowerCase()+'. Search the ground, not the sky.',
       'Final clue: follow the ink to '+String(target.name||target.type).replace(/_/g,' ')+'. The cache is within a few strides.',
     ];
     const tableNote=mapTable?' Fellowship Map Table note: '+String(target.name||target.type).replace(/_/g,' ')+' is in '+DANGER_RINGS[ring].name+'.':'';
-    return {id:map.id,stage,total:map.targets.length,targetId:target.id,clue:(clues[stage]||clues[2])+tableNote,rewardGold:map.rewardGold|0,mapTable:!!mapTable};
+    return {id:map.id,kind:map.kind||'treasure',stage,total:map.targets.length,targetId:target.id,clue:(clues[stage]||clues[2])+tableNote,rewardGold:map.rewardGold|0,mapTable:!!mapTable};
   }
   handleCartographer(client,m={}) {
     const rec=this.profileFor(client),action=typeof m.action==='string'?m.action:'status';
@@ -4582,12 +4587,18 @@ class GameRoom extends Room {
       prof.gold-=cost;prof.cartographerHints.push(pick.s.id);this.dirtyPlayers.add(rec.token);
       this.recordEconomyGold(client,-cost,'cartographer_sink','hint',{ id: pick.s.id, mapTable });
       client.send('cartographerHint',{id:pick.s.id,name:pick.s.name||pick.s.type.replace(/_/g,' '),cost,gold:prof.gold|0,mapTable});
-    }else if(action==='treasure_start'){
+    }else if(action==='treasure_start'||action==='ancient_treasure_start'){
       if(prof.treasureMap)return client.send('cartographerReject',{reason:'treasure_active'});
-      const pool=entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
+      const ancient=action==='ancient_treasure_start';
+      const basePool=ancient
+        ? entries.map(e=>e.s).filter(s=>s.type==='ancient_city'||s.type==='cave')
+        : entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
+      const cities=W.ancientCitySpecs();
+      const pool=ancient&&cities.length ? basePool.concat(cities) : basePool;
       if(pool.length<3)return client.send('cartographerReject',{reason:'complete'});
-      const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*7+i*13)%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
-      prof.treasureMap={id:'treasure_'+day+'_'+Date.now().toString(36),stage:0,targets,rewardGold:180};this.dirtyPlayers.add(rec.token);
+      const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*(ancient?11:7)+i*(ancient?17:13))%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
+      if(ancient&&cities.length&&!targets.some(id=>String(id).indexOf('ancient_city_')===0))targets[targets.length-1]=cities[day%cities.length].id;
+      prof.treasureMap={id:(ancient?'ancient_map_':'treasure_')+day+'_'+Date.now().toString(36),kind:ancient?'ancient_city':'treasure',stage:0,targets,rewardGold:ancient?260:180};this.dirtyPlayers.add(rec.token);
       client.send('treasureMapStarted',this.publicTreasureMap(prof.treasureMap,!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'))));
     }else if(action==='claim_region'){
       const region=Math.max(0,Math.min(3,m.region|0)),all=entries.filter(e=>e.region===region);
@@ -4626,11 +4637,17 @@ class GameRoom extends Room {
     if(!target||m.id!==target.id||Math.hypot(p.x-target.x,p.z-target.z)>(target.radius||8)+4)return client.send('treasureMapReject',{reason:'range'});
     map.stage=(map.stage|0)+1;this.dirtyPlayers.add(rec.token);
     if(map.stage>=map.targets.length){
-      const rewardGold=map.rewardGold|0;rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);this.addRewardItem(rec.prof,I.DIAMOND,2);rec.prof.treasureMap=null;
-      this.recordEconomyGold(client,rewardGold,'cartographer_faucet','treasure_map',{ id: map.id || '' });
+      const ancient=map.kind==='ancient_city';
+      const rewardGold=map.rewardGold|0;rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);
+      const rewardItems=ancient
+        ? [{id:I.ANCIENT_FRAGMENT,count:3},{id:I.ECHO_GLYPH,count:1},{id:I.RELIC_ARMOR_PIECE,count:1},{id:I.DIAMOND,count:1}]
+        : [{id:I.DIAMOND,count:2}];
+      for(const it of rewardItems)this.addRewardItem(rec.prof,it.id,it.count);
+      rec.prof.treasureMap=null;
+      this.recordEconomyGold(client,rewardGold,'cartographer_faucet',ancient?'ancient_treasure_map':'treasure_map',{ id: map.id || '' });
       const fellowshipRenown = this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'map_table', 2, 'Treasure route') : 0;
-      this.recordTreasureProgress(client);
-      this.syncPlayerProfile(client,rec.prof);client.send('treasureMapComplete',{rewardGold,gold:rec.prof.gold|0,items:[{id:I.DIAMOND,count:2}],fellowshipRenown});
+      if(ancient)this.recordAncientMapProgress(client);else this.recordTreasureProgress(client);
+      this.syncPlayerProfile(client,rec.prof);client.send('treasureMapComplete',{kind:ancient?'ancient_city':'treasure',rewardGold,gold:rec.prof.gold|0,items:rewardItems,fellowshipRenown});
     }else client.send('treasureMapUpdate',this.publicTreasureMap(map,!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'))));
   }
   applyExplorationMilestones(client, rec) {
@@ -4759,7 +4776,14 @@ class GameRoom extends Room {
       name=s.name||'Ancient Lore Tablet';text=lore+' A Recall echo stirs from the carved stone.';xp=30+ring*8;items.push({id:I.GEODE,count:1});
     } else if(s.type==='ancient_vault'){
       name='Ancient Vault';text='The vault seal cracks open. Blue dust spills across old brick.';
-      xp=45+ring*12;items.push({id:I.GEODE,count:1+Math.max(0,ring-1)},{id:I.IRON_INGOT,count:2+ring},{id:I.DIAMOND,count:1+Math.floor(ring/2)});
+      xp=45+ring*12;items.push(
+        {id:I.GEODE,count:1+Math.max(0,ring-1)},
+        {id:I.ANCIENT_FRAGMENT,count:2+ring},
+        {id:I.ECHO_GLYPH,count:1},
+        {id:I.IRON_INGOT,count:2+ring},
+        {id:I.DIAMOND,count:1+Math.floor(ring/2)}
+      );
+      if(ring>=2)items.push({id:I.RELIC_ARMOR_PIECE,count:1});
       this.recordTreasureProgress(client);
     } else if(s.type==='ancient_core'){
       name='Ancient Core';text='The core is quiet. The Warden seal has already been answered.';xp=20+ring*6;
@@ -5174,16 +5198,18 @@ class GameRoom extends Room {
     });
     this.updatePlayerHunger(dt);
     this.tickBiomeStatuses(dt);
+    this.tickCaveSurveyContracts(Date.now());
 
     if (dayF > 0.5) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive||meta.gateBreach||meta.ancientWarden))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive||meta.gateBreach||meta.ancientWarden||meta.underground))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
     }
     const surfaceClusters = this.surfaceDensityClusters(surface);
     this.cleanupFarOverworldMobs(surfaceClusters);
     this.maintainEliteCamps(dt, surfaceClusters);
     this.maintainDiscoveryNests(dt, surfaceClusters);
+    this.maintainUndergroundThreats(dt);
     if (dayF > .35) this.maintainBanditCamps(dt, surfaceClusters);
     else {
       const gone=[];this.state.mobs.forEach((m,id)=>{if(!m.dgn&&this.mobMeta[id]&&this.mobMeta[id].bandit)gone.push(id);});

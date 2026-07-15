@@ -100,6 +100,7 @@ const I = {
   GOLDEN_BROTH: 204, TRAIL_RATION: 205, FEAST_PLATTER: 206,
   GEODE: 207, RAINWAKE_PETAL: 208, STORMGLASS: 209, SOLAR_GLYPH: 210,
   HIDE_ARMOR: 211, CHAIN_ARMOR: 212, STORMGLASS_ARMOR: 213,
+  ANCIENT_FRAGMENT: 214, ECHO_GLYPH: 215, RELIC_ARMOR_PIECE: 216,
 };
 // Familiars. Shade: defense, Fang: offense, Mote: restoration, Sprite: forage (bonus yield).
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite']);
@@ -546,6 +547,7 @@ const ITEM_NAMES = {
   [I.COMPOST]: 'Compost', [I.GOLDEN_WHEAT]: 'Golden Wheat',
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
+  [I.ANCIENT_FRAGMENT]: 'Ancient Fragment', [I.ECHO_GLYPH]: 'Echo Glyph', [I.RELIC_ARMOR_PIECE]: 'Relic Armor Piece',
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
 };
