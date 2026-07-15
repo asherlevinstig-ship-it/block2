@@ -233,8 +233,9 @@ function maybePromptRecallRecharge(now){
   const manaMax=Math.max(1,maxMp()),staminaMax=Math.max(1,maxSp());
   const manaLow=mp/manaMax<=.28,staminaLow=sp/staminaMax<=.24;
   if(!manaLow&&!staminaLow)return;
-  nextRecallRechargeHintAt=now+18000;
+  nextRecallRechargeHintAt=now+10000;
   const what=manaLow&&staminaLow?'mana and stamina':manaLow?'mana':'stamina';
+  showName('LOW '+what.toUpperCase()+' - PRESS P');
   sysMsg('Low <b>'+what+'</b> — press <b>P</b> for a Recall recharge question.','minor');
 }
 function maybePromptTreasureMap(now){

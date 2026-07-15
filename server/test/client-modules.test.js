@@ -842,6 +842,8 @@ test('low mana or stamina prompts Recall recharge without interrupting active qu
   assert.match(frame,/BlockcraftRecall&&globalThis\.BlockcraftRecall\.active/);
   assert.match(frame,/mp\/manaMax<=\.28/);
   assert.match(frame,/sp\/staminaMax<=\.24/);
+  assert.match(frame,/nextRecallRechargeHintAt=now\+10000/);
+  assert.match(frame,/showName\('LOW '\+what\.toUpperCase\(\)\+' - PRESS P'\)/);
   assert.match(frame,/press <b>P<\/b> for a Recall recharge question/);
   assert.match(frame,/Recall recharge question\.',\s*'minor'\)/);
   assert.match(frame,/maybePromptRecallRecharge\(now\)/);
