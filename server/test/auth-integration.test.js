@@ -7,13 +7,17 @@ const path = require('path');
 const express = require('express');
 const { AuthService } = require('../auth');
 
-async function fixture({ production = false, trustProxy = 1, clientOrigin = '', profileStore } = {}) {
+async function fixture({ production = false, trustProxy = 1, clientOrigin = '', profileStore, authOptions = {}, env = {} } = {}) {
   const previousEnv = process.env.NODE_ENV;
   const previousClientOrigin = process.env.CLIENT_ORIGIN;
+  const previousAdminResetToken = process.env.ADMIN_RESET_TOKEN;
   process.env.NODE_ENV = production ? 'production' : 'test';
   if (clientOrigin) process.env.CLIENT_ORIGIN = clientOrigin; else delete process.env.CLIENT_ORIGIN;
-  const authOptions = profileStore ? { profileStore } : {};
-  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-http-')), authOptions);
+  if (Object.prototype.hasOwnProperty.call(env, 'ADMIN_RESET_TOKEN')) process.env.ADMIN_RESET_TOKEN = env.ADMIN_RESET_TOKEN;
+  else delete process.env.ADMIN_RESET_TOKEN;
+  const options = { ...authOptions };
+  if (profileStore) options.profileStore = profileStore;
+  const auth = new AuthService(fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-http-')), options);
   const app = express();
   app.set('trust proxy', trustProxy);
   auth.attach(app);
@@ -28,6 +32,7 @@ async function fixture({ production = false, trustProxy = 1, clientOrigin = '', 
       auth.stop();
       if (previousEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousEnv;
       if (previousClientOrigin === undefined) delete process.env.CLIENT_ORIGIN; else process.env.CLIENT_ORIGIN = previousClientOrigin;
+      if (previousAdminResetToken === undefined) delete process.env.ADMIN_RESET_TOKEN; else process.env.ADMIN_RESET_TOKEN = previousAdminResetToken;
     },
   };
 }
@@ -125,5 +130,40 @@ test('rotating forwarded IP addresses cannot bypass the per-account auth limit',
     }
     assert.equal(statuses.slice(0, 12).every(status => status === 401), true);
     assert.equal(statuses[12], 429);
+  } finally { await f.close(); }
+});
+
+test('admin reset endpoint deletes game profiles only with the reset token', { concurrency: false }, async () => {
+  const deleted = [];
+  const profileStore = {
+    async loadPlayer() { return null; },
+    async deletePlayer(id) { deleted.push(id); },
+  };
+  const backend = {
+    async findAccount(identifier) {
+      if (identifier !== 'student@example.test') return null;
+      return { id: 'student_42', username: identifier, displayName: 'Student' };
+    },
+  };
+  const f = await fixture({
+    profileStore,
+    authOptions: { authBackend: backend },
+    env: { ADMIN_RESET_TOKEN: 'reset-secret' },
+  });
+  try {
+    const denied = await f.request('/auth/admin/reset-player', jsonPost({ accountId: 'student_42' }));
+    assert.equal(denied.status, 403);
+    const byId = await f.request('/auth/admin/reset-player', jsonPost(
+      { accountId: 'student_42' },
+      { 'x-admin-reset-token': 'reset-secret' },
+    ));
+    assert.equal(byId.status, 200);
+    assert.equal((await byId.json()).account.id, 'student_42');
+    const byEmail = await f.request('/auth/admin/reset-player', jsonPost(
+      { email: 'student@example.test' },
+      { 'x-admin-reset-token': 'reset-secret' },
+    ));
+    assert.equal(byEmail.status, 200);
+    assert.deepEqual(deleted, ['student_42', 'student_42']);
   } finally { await f.close(); }
 });

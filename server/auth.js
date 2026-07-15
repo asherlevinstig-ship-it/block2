@@ -131,6 +131,30 @@ class AuthService {
     }
   }
 
+  async resolveAccountForReset(body) {
+    const accountId = String(body && body.accountId || '').trim();
+    if (/^(?:student|teacher)_[0-9A-Za-z_-]{1,64}$/.test(accountId)) {
+      return { id: accountId, username: '' };
+    }
+    const identifier = cleanUsername(body && (body.email || body.username));
+    if (!identifier || !identifier.includes('@') || !this.authBackend || typeof this.authBackend.findAccount !== 'function') return null;
+    const account = await this.authBackend.findAccount(identifier);
+    return account ? this.publicAccount(account) : null;
+  }
+
+  async resetPlayerProfile(body) {
+    const account = await this.resolveAccountForReset(body);
+    if (!account || !account.id) throw Object.assign(new Error('Account not found.'), { status: 404, code: 'account' });
+    const store = this.getProfileStore();
+    if (typeof store.deletePlayer === 'function') await store.deletePlayer(account.id);
+    else await store.savePlayer(account.id, null);
+    for (const [key, session] of [...this.sessions]) {
+      if (session && session.accountId === account.id) this.sessions.delete(key);
+    }
+    await this.save();
+    return { account };
+  }
+
   async register(username, password, displayName) {
     if (this.authBackend) throw Object.assign(new Error('Registration is managed by your school account system.'), { status: 403, code: 'external_auth' });
     username = cleanUsername(username);
@@ -249,6 +273,17 @@ class AuthService {
       const account = this.authenticateRequest(req);
       if (!account) return res.status(401).json({ ok: false });
       res.json({ ok: true, account, gameProfile: await this.publicGameProfile(account) });
+    });
+    app.post('/auth/admin/reset-player', async (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      try {
+        const result = await this.resetPlayerProfile(req.body);
+        res.json({ ok: true, account: result.account });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Reset failed.' });
+      }
     });
     app.post('/auth/logout', async (req, res) => {
       const sid = parseCookies(req.headers.cookie)[COOKIE];

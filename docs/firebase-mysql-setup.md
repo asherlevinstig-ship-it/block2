@@ -93,7 +93,31 @@ The smoke test for live credentials is:
 npm run mysql:auth:smoke
 ```
 
-## 6. Wipe Existing Firestore Data
+## 6. Reset A Player Game Profile
+
+To reset one player's game progress without deleting their SiteGround/MySQL
+school account, set a long random server-only token:
+
+```env
+ADMIN_RESET_TOKEN=replace-with-a-long-random-secret
+```
+
+Then call the reset endpoint with either the school email or the game account id:
+
+```powershell
+$body = @{ email = "student@example.com" } | ConvertTo-Json
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "https://your-colyseus-endpoint/auth/admin/reset-player" `
+  -Headers @{ "x-admin-reset-token" = "replace-with-a-long-random-secret" } `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+The next login creates a fresh Firebase player profile and runs first-time
+onboarding again.
+
+## 7. Wipe Existing Firestore Data
 
 If your Firebase project already has old test collections, run a dry-run first:
 

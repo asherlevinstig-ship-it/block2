@@ -1302,6 +1302,12 @@ class JsonStore {
     catch (e) { throw new Error('corrupt profile file ' + file + ': ' + e.message); }
   }
   async savePlayer(token, profile) { await this._write(this._pfile(token), { ...profile, savedAt: Date.now() }); }
+  async deletePlayer(token) {
+    const file = this._pfile(token);
+    await (fileWriteQueues.get(path.resolve(file)) || Promise.resolve()).catch(() => {});
+    try { await fs.promises.unlink(file); }
+    catch (e) { if (e.code !== 'ENOENT') throw e; }
+  }
   async saveModerationReport(report) {
     await this._enqueue(async () => {
       await fs.promises.mkdir(this.dir, { recursive: true });
@@ -1437,6 +1443,9 @@ class FirebaseStore {
   }
   async savePlayer(token, profile) {
     await this.db.collection('players').doc(token).set({ ...profile, savedAt: Date.now() });
+  }
+  async deletePlayer(token) {
+    await this.db.collection('players').doc(token).delete();
   }
   async saveModerationReport(report) {
     await this.db.collection('moderationReports').doc(report.id).set(report);
