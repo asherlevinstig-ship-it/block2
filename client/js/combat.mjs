@@ -6,6 +6,7 @@ const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
+const BLOCK_PLACE_REACH=8;
 
 const legacyCombatBindings={
   "isDragon":{get:()=>isDragon},
@@ -2127,7 +2128,7 @@ function secondaryAction(){
     if(NET.on&&NET.room)NET.room.send('banditSpare',{id:spared.netId});
     return;
   }
-  const hit=raycast(6);
+  const hit=raycast(BLOCK_PLACE_REACH);
   if(!hit) return;
   if(interactSmallDiscovery(nearbySmallDiscovery(7),hit))return;
   if(isJobBoardHit(hit)){ openJobsUI(); return; }

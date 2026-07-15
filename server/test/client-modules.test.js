@@ -813,6 +813,20 @@ test('low mana or stamina prompts Recall recharge without interrupting active qu
   assert.match(frame,/maybePromptRecallRecharge\(now\)/);
 });
 
+test('basic jumping is not blocked by empty stamina',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:8\.2;/);
+  assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
+  assert.match(frame,/if\(!mounted && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
+});
+
+test('block placement uses Minecraft-style targeted block face at build reach',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/const BLOCK_PLACE_REACH=8;/);
+  assert.match(combat,/const hit=raycast\(BLOCK_PLACE_REACH\);/);
+  assert.match(combat,/const px=hit\.x\+hit\.face\[0\], py=hit\.y\+hit\.face\[1\], pz=hit\.z\+hit\.face\[2\];/);
+});
+
 test('narrow game HUD consolidates abilities, quest, status, and hotbar without clipping',()=>{
   const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#abilities\{left:50%;bottom:124px;transform:translateX\(-50%\)/);

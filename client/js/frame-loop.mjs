@@ -1523,10 +1523,10 @@ function tick(now){
     const wantJump = keys['Space'] || (now-jumpPressT<130);         // buffered taps
     if(wantJump){
       const canJump = player.onGround || (!feetWater && now-lastGroundT<120);  // coyote time
-      if(canJump && (mounted || sp>=5)){
+      if(canJump){
         player.vel.y=mounted?9.4:8.2; player.onGround=false;
         lastGroundT=-1e9; jumpPressT=-1e9;
-        if(!mounted) sp=Math.max(0,sp-stCost(5)*armorStamina);
+        if(!mounted && sp>0) sp=Math.max(0,sp-stCost(5)*armorStamina);
       } else if(feetWater && !player.onGround){
         // swim up: accelerate, and keep thrusting while breaching the surface
         player.vel.y=Math.min(player.vel.y+30*dt, waistWater?3.6:4.6);
