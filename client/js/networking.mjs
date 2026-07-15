@@ -1336,8 +1336,8 @@ function netAttachRoom(room,name,client){
         gainJobXP('adventurer', 3, 'hunt');
         jobContractProgress('kill', 1, 0);
       } else if(m.source==='hunt'){
-        gainJobXP('adventurer', 2, 'hunt');
-        jobContractProgress('kill', 1, 0);
+        gainJobXP('cook', 4, 'hunt');
+        jobContractProgress('hunt', 1, 0);
       } else if(m.source==='event'){
         gainJobXP('adventurer', 12, 'event');
         jobContractProgress('event', 1, 0);

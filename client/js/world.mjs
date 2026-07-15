@@ -7718,7 +7718,10 @@ function damageMob(mob, dmg, kbv){
       addGold(gld);
       burst(mob.grp.position.x, mob.grp.position.y+1.2, mob.grp.position.z, [1,.85,.25], 7, 1.6, 2, .5);
       SFX.kill(); SFX.coin();
-      questKill();
+      if(mob.animal){
+        gainJobXP('cook', 4, 'hunt');
+        jobContractProgress('hunt', 1, 0);
+      }else questKill();
       gainXP(mob.boss ? 0 : 12);
       if(!mob.boss && !mob.dungeon) addItem(I.MONSTER_MEAT,1);
       const shk=dungeon?dungeon.shard:null;

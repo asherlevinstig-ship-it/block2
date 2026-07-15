@@ -508,6 +508,10 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(sharedJobs.guideSteps('upgrade').join(' '), /Upgrade, reforge, reroll, or masterwork/i);
   assert.match(sharedJobs.guideSteps('salvage').join(' '), /salvage/i);
   assert.match(sharedJobs.guideSteps('mine').join(' '), /stone or cobble/i);
+  const cook = sharedJobs.contractPool('cook', 2, 5, targets);
+  assert.deepEqual(cook.filter(c=>c.type==='hunt').map(c=>c.title), ['Fresh Meat Run','Campfire Butchery']);
+  assert.match(sharedJobs.contractBestFor(cook.find(c=>c.title==='Fresh Meat Run')), /kitchen ingredients/);
+  assert.match(sharedJobs.guideSteps('hunt').join(' '), /Hostile monsters do not count/i);
   const offers=sharedJobs.contractOffers('miner',2,5,targets,100,0);
   assert.deepEqual(offers.map(o=>o.difficulty),['quick','balanced','demanding']);
   assert.ok(offers[0].rewardXp<offers[1].rewardXp&&offers[1].rewardXp<offers[2].rewardXp);

@@ -1058,6 +1058,11 @@ class ProgressionMixin {
     this.progressNpcQuest(client, 'kill', 1, 0);
   }
 
+  recordHuntProgress(client) {
+    this.grantJobXp(client, 'cook', 4);
+    this.progressJobContract(client, 'hunt', 1, 0);
+  }
+
   recordGateProgress(client, rank = 0) {
     const rec = this.profileFor(client);
     this.grantJobXp(client, 'adventurer', 18);

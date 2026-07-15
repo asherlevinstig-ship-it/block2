@@ -3080,6 +3080,8 @@ test('hunted animals grant food through server rewards', () => {
   const room = makeRoom();
   const client = makeClient('hunter');
   const { prof } = seedPlayer(room, client);
+  room.handleSetJob(client, { job: 'cook' });
+  prof.jobContract = { job: 'cook', type: 'hunt', need: 1, have: 0, rewardGold: 32, rewardJobXp: 24, rewardXp: 0, title: 'Fresh Meat Run', desc: 'Hunt wild animals.' };
   room.state.mobs.set('deer1', { x: 24, y: 10, z: 24, yaw: 0, hp: 0, maxHp: 7, kind: 'deer', dgn: '', state: '' });
   room.mobMeta.deer1 = room.freshMeta(24, 24, 0, 2, 'deer', 0, false);
 
@@ -3087,7 +3089,10 @@ test('hunted animals grant food through server rewards', () => {
 
   assert.equal(room.state.mobs.has('deer1'), false);
   assert.equal(itemCount(prof, I.MONSTER_MEAT), 2);
+  assert.equal(prof.jobXpByJob.cook, 4);
+  assert.equal(prof.jobContract.have, 1);
   assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'hunt' && e.msg.xp === 4), true);
+  assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.type === 'hunt'), true);
 });
 
 test('normal attacks use hunted animal drops', () => {

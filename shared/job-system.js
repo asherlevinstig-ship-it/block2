@@ -90,6 +90,8 @@
     cook:Object.freeze([
       {type:'cook',need:s=>5+s,title:'Kitchen Shift',desc:'Cook, bake, or prepare meals for hungry townsfolk.',gold:s=>30+s*4,jobXp:s=>22+s*4,focus:'meal crafting',reward:'batch-cooking progress',party:'Solo'},
       {type:'cook',need:s=>8+s*2,title:'Dungeon Pantry',desc:'Prepare travel food before gate groups head out.',gold:s=>38+s*5,jobXp:s=>28+s*5,focus:'dungeon prep supply',reward:'better XP for larger batches',party:'Helpful'},
+      {type:'hunt',need:s=>4+Math.min(6,s),title:'Fresh Meat Run',desc:'Hunt wild animals outside town and bring back ingredients for the kitchen.',gold:s=>32+s*4,jobXp:s=>24+s*4,focus:'animal hunting',reward:'Cook XP before meal prep',party:'Solo'},
+      {type:'hunt',need:s=>6+s,title:'Campfire Butchery',desc:'Gather meat from wild animals for campfire meals and hunter rations.',gold:s=>40+s*5,jobXp:s=>30+s*5,focus:'field ingredients',reward:'ingredient-gathering XP',party:'Solo'},
       {type:'sell',need:s=>6+s*2,title:'Tavern Supplier',desc:'Sell food to the tavern counter.',gold:s=>24+s*3,jobXp:s=>20+s*4,focus:'market delivery',reward:'steady food turnover',party:'Solo'},
       {type:'cook',need:s=>4+Math.min(8,s),title:'Ration Test Batch',desc:'Prepare compact foods for hunters leaving town for Gates and road work.',gold:s=>42+s*5,jobXp:s=>32+s*5,focus:'gate prep food',reward:'strong Cook XP for prep crafting',party:'Helpful'},
       {type:'sell',need:s=>9+s*2,title:'Counter Rush',desc:'Cook food, then sell it through the tavern during a busy service window.',gold:s=>36+s*4,jobXp:s=>30+s*5,focus:'cook-and-sell loop',reward:'market gold plus profession XP',party:'Solo'},
@@ -116,6 +118,7 @@
     mine:['Equip a pickaxe.','Mine the requested stone or ore. Stone Quota accepts stone or cobble.','Wild caves and Gates contain useful ore.'],
     farm:['Till soil, plant seeds, and harvest mature crops.','General farm contracts accept all three actions.','Harvest Basket requires mature wheat.'],
     cook:['Gather ingredients and prepare meals through crafting or cooking stations.','Completed food items advance the contract.','Return to the board when ready.'],
+    hunt:['Find wild animals outside town.','Defeat passive wildlife to gather meat for the kitchen.','Hostile monsters do not count for Cook hunting contracts.'],
     sell:['Prepare food items.','Sell them at the tavern counter.','Each accepted food item advances the contract.'],
     smith:['Smelt ingots, craft tools or armor, or make repair kits.','The work counts when the item is completed.','Return to the board when ready.'],
     repair:['Obtain Repair Kits.','Use one on a damaged tool.','Each successful repair advances the contract.'],
@@ -132,7 +135,7 @@
     Object.freeze({id:'balanced',label:'Balanced',need:1,reward:1,estimate:'About 10 minutes'}),
     Object.freeze({id:'demanding',label:'Demanding',need:1.45,reward:1.5,estimate:'About 15–20 minutes'}),
   ]);
-  const LOCATIONS = Object.freeze({kill:'Wilderness roads',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Town Shrine'});
+  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Town Shrine'});
   const REFORGE_MODIFIERS=Object.freeze({keen:Object.freeze({name:'Keen',desc:'+2 weapon damage.'}),swift:Object.freeze({name:'Swift',desc:'8% faster weapon and tool use.'}),sturdy:Object.freeze({name:'Sturdy',desc:'20% more maximum durability.'})});
   const REFORGE_ACTIONS=Object.freeze({basic:Object.freeze({level:2,gold:25,iron:1,diamond:0}),choose:Object.freeze({level:5,gold:70,iron:4,diamond:0}),reroll:Object.freeze({level:10,gold:120,iron:0,diamond:1}),masterwork:Object.freeze({level:20,gold:260,iron:0,diamond:3})});
   const FARMER_RULES=Object.freeze({bonusYieldLevel:2,windseedLevel:5,fieldcraftLevel:10,goldenHarvestLevel:20,fieldcraftGrowthMultiplier:.75,goldenGrowthMultiplier:.6,goldenWheatChance:.25});
@@ -170,6 +173,7 @@
     else if(['cook','smith'].includes(c.type))pushUnique(tags,'Craft');
     else if(c.type==='mine')pushUnique(tags,c.target?'Ore':'Bulk');
     else if(c.type==='farm')pushUnique(tags,c.target?'Harvest':'Crop');
+    else if(c.type==='hunt')pushUnique(tags,'Hunt');
     else if(c.type==='kill')pushUnique(tags,'Combat');
     else if(c.type==='meditate')pushUnique(tags,'Focus');
     const focus=String(c.focus||'').toLowerCase();
@@ -188,6 +192,8 @@
     if(title==='Ingot Commission')return 'Best while smelting iron for repairs and upgrades.';
     if(title==='Gate Prep Kits')return 'Best before a Gate run.';
     if(title==='Dungeon Pantry'||title==='Ration Test Batch')return 'Best before leaving town for Gates.';
+    if(title==='Fresh Meat Run')return 'Best while hunting nearby animals for kitchen ingredients.';
+    if(title==='Campfire Butchery')return 'Best before cooking meat-heavy travel food.';
     if(title==='Counter Rush'||title==='Tavern Supplier')return 'Best when you have extra food to sell.';
     if(title==='Deep Iron Run'||title==='Iron Survey')return 'Best while mining iron routes.';
     if(title==='Stone Quota'||title==='Foundation Rush')return 'Best while gathering base-building stone.';
