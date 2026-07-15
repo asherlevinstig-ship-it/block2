@@ -3634,7 +3634,15 @@ function objectiveActionHTML(o){
     const category=o&&(o.category||o.source);
     type=category==='job'?'jobs':category==='guild'?'guild_contracts':category==='aegis'?'claim_aegis':category==='story'||category==='manhunt'?'track_npc':'quest_log';
   }
-  return '<div class="qrow server-objective-actions"><button type="button" class="qbtn" data-server-objective-action="'+escHTML(type)+'">'+escHTML(questLogActionLabel(o))+'</button></div>';
+  const attrs=[
+    'type="button"',
+    'class="qbtn"',
+    'data-server-objective-action="'+escHTML(type)+'"',
+    'data-server-objective-source="'+escHTML(o&&o.source||o&&o.category||'')+'"',
+    'data-server-objective-title="'+escHTML(o&&o.title||'')+'"',
+    'data-server-objective-location="'+escHTML(o&&o.location||'')+'"',
+  ];
+  return '<div class="qrow server-objective-actions"><button '+attrs.join(' ')+'>'+escHTML(questLogActionLabel(o))+'</button></div>';
 }
 function serverObjectiveQuestLogCard(o){
   return questLogCardHTML(
@@ -3756,7 +3764,32 @@ function serverObjectiveQuestLogCards(){
   if(questLogFilter==='completed'||questLogFilter==='failed')return questHistoryQuestLogSections(questLogFilter);
   return serverObjectiveQuestLogSections(questLogFilter)+questHistoryQuestLogSections(questLogFilter);
 }
-function handleServerObjectiveAction(action){
+function questActionNpcTarget(meta={}){
+  const raw=String(meta.location||meta.giver||'').trim();
+  const key=raw.toLowerCase();
+  if(!key)return null;
+  if(key.includes('job board'))return {kind:'jobs'};
+  if(key.includes('guild'))return {kind:'guild'};
+  if(key.includes('aegis')||key.includes('guardian'))return {kind:'guardian'};
+  const wantsMara=key.includes('mara')||key.includes('town guide');
+  const list=[...(Array.isArray(villagers)?villagers:[]),...(Array.isArray(NPC_ROLES)?NPC_ROLES:[])];
+  const npc=list.find(v=>{
+    if(!v)return false;
+    const fields=[v.name,v.shortName,v.title,v.role].map(s=>String(s||'').toLowerCase());
+    return wantsMara&&v.role==='guide'||fields.some(field=>field&&field===key);
+  });
+  return npc||null;
+}
+function openServerObjectiveDestination(meta={}){
+  const target=questActionNpcTarget(meta);
+  if(!target)return false;
+  if(target.kind==='jobs'){openJobsUI();return true;}
+  if(target.kind==='guild'){openRegionalContractsUI();return true;}
+  if(target.kind==='guardian'){openGuardianUI();return true;}
+  openQuestUI(target);
+  return true;
+}
+function handleServerObjectiveAction(action,meta={}){
   if(action==='jobs'){openJobsUI();return;}
   if(action==='guild_contracts'){openRegionalContractsUI();return;}
   if(action==='land'){openLandRecovery();return;}
@@ -3772,24 +3805,37 @@ function handleServerObjectiveAction(action){
     return;
   }
   if(action==='turn_in'){
+    if(openServerObjectiveDestination(meta))return;
     sysMsg('<b>Turn in:</b> return to the listed quest giver to claim the reward.');
     return;
   }
   if(action==='track_npc'){
+    if(openServerObjectiveDestination(meta))return;
     sysMsg('<b>Track quest:</b> follow the active trail, or return to the NPC named on the card when the objective is complete.');
     return;
   }
+  if(action==='quest_log'&&openServerObjectiveDestination(meta))return;
   openQuestLogUI();
 }
 function bindServerObjectiveActions(root=qpanelEl){
   if(!root||root.dataset.serverObjectiveActionsBound==='1')return;
   root.dataset.serverObjectiveActionsBound='1';
-  root.addEventListener('click',e=>{
+  const trigger=e=>{
     const btn=e.target&&e.target.closest&&e.target.closest('[data-server-objective-action]');
     if(!btn||!root.contains(btn))return;
+    const now=Date.now();
+    if(e.type==='click'&&now-Number(btn.dataset.serverObjectiveLastPointer||0)<500)return;
+    if(e.type==='pointerdown')btn.dataset.serverObjectiveLastPointer=String(now);
     e.preventDefault();
-    handleServerObjectiveAction(btn.dataset.serverObjectiveAction||'');
-  });
+    e.stopPropagation();
+    handleServerObjectiveAction(btn.dataset.serverObjectiveAction||'',{
+      source:btn.dataset.serverObjectiveSource||'',
+      title:btn.dataset.serverObjectiveTitle||'',
+      location:btn.dataset.serverObjectiveLocation||'',
+    });
+  };
+  root.addEventListener('pointerdown',trigger,{capture:true});
+  root.addEventListener('click',trigger);
 }
 function panelVisible(id){
   const el=document.getElementById(id);

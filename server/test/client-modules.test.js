@@ -1909,6 +1909,10 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/function questSectionHTML\(/);
   assert.match(menus,/function bindServerObjectiveActions/);
   assert.match(menus,/data-server-objective-action/);
+  assert.match(menus,/data-server-objective-location/);
+  assert.match(menus,/function openServerObjectiveDestination/);
+  assert.match(menus,/if\(action==='quest_log'&&openServerObjectiveDestination\(meta\)\)return;/);
+  assert.match(menus,/root\.addEventListener\('pointerdown',trigger,\{capture:true\}\);/);
   assert.match(menus,/openRegionalContracts:openRegionalContractsUI/);
   assert.match(menus,/openGuardian:openGuardianUI/);
   assert.match(menus,/Server Objectives/);
