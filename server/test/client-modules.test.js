@@ -1637,6 +1637,11 @@ test('rendering runtime owns renderer initialization resize and draw', async () 
 
 test('network controller joins stores resume token and reattaches after disconnect', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
+  const networkingSource=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(networkingSource,/function connectionNotice\(kind, attempt=0\)/);
+  assert.match(networkingSource,/Connection lost[\s\S]*Reconnecting to the world/);
+  assert.match(networkingSource,/Back online[\s\S]*World state restored/);
+  assert.match(networkingSource,/Could not reconnect/);
   const storage = new Map(), attached = [], events = [];
   const makeRoom = token => ({ reconnectionToken: token, onLeave(fn) { this.leaveHandler = fn; } });
   const first = makeRoom('room:first'), second = makeRoom('room:second');
@@ -1648,7 +1653,7 @@ test('network controller joins stores resume token and reattaches after disconne
     Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
     sessionStorage: { getItem: key => storage.get(key) || '', setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted: () => events.push(['interrupted']),
-    onReconnectAttempt() {}, onRestored: () => events.push(['restored']), onFailure: error => { throw error; },
+    onReconnectAttempt: attempt => events.push(['attempt', attempt]), onRestored: () => events.push(['restored']), onFailure: error => { throw error; },
   });
   controller.connect('Hunter');
   await new Promise(resolve => setTimeout(resolve, 0));
@@ -1659,6 +1664,13 @@ test('network controller joins stores resume token and reattaches after disconne
   assert.equal(controller.state.room, second);
   assert.equal(controller.state.attachCount, 2);
   assert.deepEqual(attached, [first, second]);
+  assert.deepEqual(events, [
+    ['join', 'blockcraft', 'Hunter'],
+    ['interrupted'],
+    ['attempt', 1],
+    ['reconnect', 'room:first'],
+    ['restored'],
+  ]);
 });
 
 test('network controller shutdown leaves deliberately without starting reconnect teardown', async () => {

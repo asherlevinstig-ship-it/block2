@@ -638,6 +638,24 @@ for(const [bindingName,binding] of Object.entries(legacyNetworkingBindings)){
  * Loaded sequentially; shares the compatibility scope with combat and sibling UI modules.
  */
 // ---------------- multiplayer (colyseus) ----------------
+function connectionNotice(kind, attempt=0){
+  if(kind==='lost'){
+    eventLog('Connection lost - trying to reconnect and keep your progress safe','[Network]');
+    if(typeof sysMsg==='function')sysMsg('<b>Connection lost.</b> Reconnecting to the world...');
+    if(typeof showName==='function')showName('Reconnecting...');
+    setWorldLoadingStatus('Connection lost - reconnecting...');
+  }else if(kind==='attempt'){
+    setWorldLoadingStatus('Reconnecting to world... attempt '+attempt);
+  }else if(kind==='restored'){
+    eventLog('Connection restored','[Network]');
+    if(typeof sysMsg==='function')sysMsg('<b>Back online.</b> World state restored.');
+    if(typeof showName==='function')showName('Back online');
+    setWorldLoadingStatus('Connection restored');
+  }else if(kind==='failed'){
+    eventLog('Server connection failed','[Network]');
+    if(typeof sysMsg==='function')sysMsg('<b>Could not reconnect.</b> Check your internet connection, then sign in again.');
+  }
+}
 const SESSION=createNetworkSession({
   createController:createNetworkController,
   Client:typeof Colyseus==='undefined'?null:Colyseus.Client,
@@ -645,9 +663,9 @@ const SESSION=createNetworkSession({
   sessionStorage,
   attachRoom:(...args)=>netAttachRoom(...args),
   unavailable:()=>{eventLog('Solo mode: no server SDK');setWorldLoadingStatus('Starting solo world...');setTimeout(()=>finishWorldLoading('solo'),900);},
-  interrupted:()=>eventLog('Connection interrupted - reconnecting...'),
-  reconnectAttempt:n=>setWorldLoadingStatus('Reconnecting to world... attempt '+n),
-  restored:()=>eventLog('Connection restored'),
+  interrupted:()=>connectionNotice('lost'),
+  reconnectAttempt:n=>connectionNotice('attempt',n),
+  restored:()=>connectionNotice('restored'),
   failure:netConnectionFailed,
   getPlayerName:()=>document.getElementById('playername').value,
   beforeConnect:()=>setWorldLoadingStatus('Connecting to world server...'),
@@ -1781,7 +1799,7 @@ function netConnectionFailed(err){
   const authError=err&&/auth/i.test(String(err.message||err));
   setAuthStatus(authError?'SESSION EXPIRED - SIGN IN AGAIN':'COULD NOT JOIN THE SERVER','bad');
   if(authError)AUTH_UI.expire();
-  eventLog('Server connection failed');
+  connectionNotice('failed');
 }
 
 // ---- persistence: restore on join, snapshot on a timer ----
