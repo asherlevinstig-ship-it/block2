@@ -451,6 +451,10 @@ function questObjective(){
   }
   if(quest.type==='kill') return {label:qLabel, text:'Defeat enemies for '+quest.giver+' '+quest.have+'/'+quest.need};
   if(quest.type==='mine') return {label:qLabel, text:'Mine '+quest.have+'/'+quest.need+' for '+quest.giver};
+  if(quest.type==='farm') return {label:qLabel, text:'Farm crops for '+quest.giver+' '+quest.have+'/'+quest.need};
+  if(quest.type==='cook') return {label:qLabel, text:'Cook food for '+quest.giver+' '+quest.have+'/'+quest.need};
+  if(quest.type==='smith') return {label:qLabel, text:'Forge supplies for '+quest.giver+' '+quest.have+'/'+quest.need};
+  if(quest.type==='treasure') return {label:qLabel, text:'Recover caches for '+quest.giver+' '+quest.have+'/'+quest.need};
   if(quest.giver==='Mara Vale'&&quest.title==='First Hands'){
     const have=Math.min(quest.need,countItem(quest.item||B.LOG));
     if(have>=quest.need) return {label:'First Hands', text:'Return to Mara with '+have+'/'+quest.need+' logs'};
@@ -459,7 +463,8 @@ function questObjective(){
   if(quest.type==='fetch') return {label:qLabel, text:'Bring '+Math.min(quest.need,countItem(quest.item))+'/'+quest.need+' to '+quest.giver};
   if(quest.type==='sell'){
     const has=countItem(quest.item||I.MONSTER_MEAT)>0;
-    return {label:qLabel, text:has?'Bring Monster Meat to Greta and sell it':'Go beyond the gate and hunt for Monster Meat'};
+    const item=ITEMS[quest.item]&&ITEMS[quest.item].name||'goods';
+    return {label:qLabel, text:has?'Bring '+item+' to Greta and sell it':'Gather '+item+' for Greta'};
   }
   if(quest.type==='utility') return {label:qLabel, text:utilityUnlocked(quest.utility)?'Return to '+quest.giver:'Follow the trail to the Job Board and complete a Guild Contract'};
   if(quest.type==='familiar') return {label:qLabel, text:familiarUnlocks.includes(quest.familiar)?'Return to '+quest.giver:'Use the Shadow Sigil from your hotbar, then press K'};

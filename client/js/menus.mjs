@@ -2788,6 +2788,18 @@ function questBump(){
     else sysMsg(escHTML(questTypeLabel(quest))+' complete - return to <b>'+escHTML(quest.giver)+'</b>');
   }
 }
+function questActivityWhere(q){
+  if(!q) return 'Follow the active trail';
+  if(q.type==='sell' && countItem(q.item||I.MONSTER_MEAT)>0) return 'Greta at the tavern';
+  if(q.type==='utility') return 'Job Board / Guild Contracts';
+  if(q.type==='familiar') return 'Use the sigil from your hotbar';
+  if(q.type==='mount'||q.type==='mount_use') return 'Dragon roost practice area';
+  if(q.type==='farm') return 'Town Farm or claimed field';
+  if(q.type==='cook') return 'Crafting and kitchens';
+  if(q.type==='smith') return 'Forge and crafting';
+  if(q.type==='treasure') return 'Orin treasure map or buried cache';
+  return 'Follow the active trail';
+}
 function questSell(id, count=1, vendor=''){
   if(!quest || quest.type!=='sell' || questDone()) return;
   if(NET.on&&(quest.source||'npc')==='npc') return;
@@ -3922,7 +3934,7 @@ function safeQuestLogCard(source, build){
 function legacyStoryQuestLogCard(){
   if(!quest || (quest.source||'npc')!=='npc') return questLogCardHTML('Story Quests','No active story quest','Speak to a town NPC to accept one.','Mara Vale or another villager',false);
   const done=questDone();
-  const where=done ? quest.giver : (quest.type==='sell' && countItem(quest.item||I.MONSTER_MEAT)>0 ? 'Greta at the tavern' : quest.type==='utility' ? 'Job Board / Guild Contracts' : quest.type==='familiar' ? 'Use the sigil from your hotbar' : quest.type==='mount'||quest.type==='mount_use' ? 'Dragon roost practice area' : 'Follow the active trail');
+  const where=done ? quest.giver : questActivityWhere(quest);
   return questLogCardHTML('Story Quests', quest.chainTitle||questTypeLabel(quest),
     done ? 'Complete — turn in to '+quest.giver : questProgressText(quest),
     where,true,done?'':objectiveCraftShortcutsHTML('story'));
@@ -3953,7 +3965,7 @@ function storyQuestLogCard(){
   if(!quest || (quest.source||'npc')!=='npc') return questLogCardHTML('Story Quests','No active story quest','Speak to a town NPC to accept one.','Mara Vale or another villager',false);
   const done=questDone();
   const required=Math.max(1,quest.need|0||1),current=quest.type==='fetch'?countItem(quest.item):Math.max(0,quest.have|0);
-  const where=done ? quest.giver : (quest.type==='sell' && countItem(quest.item||I.MONSTER_MEAT)>0 ? 'Greta at the tavern' : quest.type==='utility' ? 'Job Board / Guild Contracts' : quest.type==='familiar' ? 'Use the sigil from your hotbar' : quest.type==='mount'||quest.type==='mount_use' ? 'Dragon roost practice area' : 'Follow the active trail');
+  const where=done ? quest.giver : questActivityWhere(quest);
   return questLogCardHTML('Story Quests', quest.chainTitle||questTypeLabel(quest), done ? 'Complete - turn in to '+quest.giver : questProgressText(quest), where, true, done?'':objectiveCraftShortcutsHTML('story'), {ready:done,recommended:true,progressHTML:questProgressHTML(current,required),rewardHTML:questRewardPreviewFromQuest(quest)});
 }
 function aegisQuestLogCard(){

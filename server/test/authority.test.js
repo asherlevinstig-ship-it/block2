@@ -1396,6 +1396,25 @@ test('server item grants update active fetch NPC quest objectives immediately', 
   assert.deepEqual(objective.progress, { current: 6, required: 6 });
 });
 
+test('activity NPC quests progress from farming, cooking, smithing, and treasure hooks', () => {
+  const cases = [
+    { type:'farm', item:0, job:'farmer', action:(room, client) => room.recordFarmProgress(client, 'harvest') },
+    { type:'cook', item:I.COOKED_MEAT, job:'cook', action:(room, client) => room.recordCraftProgress(client, I.COOKED_MEAT, 1) },
+    { type:'smith', item:I.REPAIR_KIT, job:'blacksmith', action:(room, client) => room.recordCraftProgress(client, I.REPAIR_KIT, 1) },
+    { type:'treasure', item:0, job:'miner', action:(room, client) => room.recordTreasureProgress(client) },
+  ];
+  for (const entry of cases) {
+    const room = makeRoom(), client = makeClient('npc_activity_' + entry.type);
+    const { prof } = seedPlayer(room, client);
+    prof.job = entry.job;
+    prof.activeNpcQuest = { source:'npc', giver:'Quality Tester', title:entry.type + ' quest', type:entry.type, item:entry.item, need:1, have:0, gold:1, xp:1, lifecycleState:'active' };
+    entry.action(room, client);
+    assert.equal(prof.activeNpcQuest.have, 1, entry.type + ' quest progresses');
+    assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable', entry.type + ' quest becomes claimable');
+    assert.equal(client.sent.some(e => e.type === 'npcQuest' && e.msg.action === 'progress' && e.msg.quest.type === entry.type), true, entry.type + ' progress sent');
+  }
+});
+
 test('state-backed NPC quests refresh from utility familiar mount and ride actions', () => {
   {
     const room = makeRoom(), client = makeClient('utility_story_progress');

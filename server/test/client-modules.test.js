@@ -636,6 +636,12 @@ test('NPC story and manhunt quests come from one validated authoring registry', 
   assert.equal(chains['Pell Graywatch'][3].metadata.objectiveAction.type, 'hunt');
   assert.equal(chains['Pell Graywatch'][3].metadata.turnInAction.type, 'turn_in');
   assert.equal(chains['Pell Graywatch'][3].rewardItems[0].id, I.FANG_TOTEM);
+  assert.equal(chains['Garrik Flint'][3].type, 'treasure');
+  assert.equal(chains['Garrik Flint'][3].metadata.objectiveAction.type, 'guild_contracts');
+  assert.equal(chains['Liss Barley'][0].type, 'farm');
+  assert.equal(chains['Pippa Hearth'][0].type, 'cook');
+  assert.equal(chains['Tobin Ashhand'][1].type, 'smith');
+  assert.equal(chains['Greta Warmug'][0].type, 'sell');
   assert.equal(chains['Mara Vale'][3].utility, 'compass');
   assert.equal(chains['Mara Vale'][3].metadata.objectiveAction.type, 'utility');
   assert.equal(chains['Mara Vale'][5].familiar, 'shade');

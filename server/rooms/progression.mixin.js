@@ -1021,12 +1021,14 @@ class ProgressionMixin {
   recordTreasureProgress(client) {
     this.grantJobXp(client, 'miner', 6);
     this.progressJobContract(client, 'treasure', 1, 0);
+    this.progressNpcQuest(client, 'treasure', 1, 0);
   }
 
   recordFarmProgress(client, action) {
     const target = action === 'harvest' ? W.B.WHEAT_3 : action === 'plant' ? I.WHEAT_SEEDS : W.B.FARMLAND;
     this.grantJobXp(client, 'farmer', action === 'harvest' ? 5 : 1);
     this.progressJobContract(client, 'farm', 1, target);
+    this.progressNpcQuest(client, 'farm', 1, target);
   }
 
   recordCraftProgress(client, id, count) {
@@ -1035,11 +1037,13 @@ class ProgressionMixin {
       const xp = id === I.FEAST_PLATTER ? 20 : id === I.TRAIL_RATION ? 10 : id === I.GOLDEN_BROTH ? 8 : id === I.DRAGON_TREAT ? 6 : id === I.COOKED_MEAT ? 4 : 5;
       this.grantJobXp(client, 'cook', xp * count);
       this.progressJobContract(client, 'cook', count, id);
+      this.progressNpcQuest(client, 'cook', count, id);
     }
     if (TOOL_INFO[id] || ARMOR_INFO[id] || id === I.REPAIR_KIT || id === I.IRON_INGOT) {
       const xp = ARMOR_INFO[id] ? 14 : TOOL_INFO[id] ? 8 : id === I.REPAIR_KIT ? 6 : 3;
       this.grantJobXp(client, 'blacksmith', xp * count);
       this.progressJobContract(client, 'smith', count, id);
+      this.progressNpcQuest(client, 'smith', count, id);
     }
   }
 

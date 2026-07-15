@@ -471,7 +471,7 @@ function sanitizeNpcQuestChains(chains) {
 
 function sanitizeActiveNpcQuest(q) {
   if (!q || typeof q !== 'object') return null;
-  const types = new Set(['fetch', 'mine', 'kill', 'manhunt', 'gate', 'sell', 'utility', 'familiar', 'mount', 'mount_use']);
+  const types = new Set(['fetch', 'mine', 'farm', 'cook', 'smith', 'treasure', 'kill', 'manhunt', 'gate', 'sell', 'utility', 'familiar', 'mount', 'mount_use']);
   const type = types.has(q.type) ? q.type : '';
   const giver = cleanShortText(q.giver, '', 64);
   if (!type || !giver) return null;

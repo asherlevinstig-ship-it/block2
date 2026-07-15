@@ -5,6 +5,10 @@
   const TYPE_META=Object.freeze({
     fetch:Object.freeze({location:'Town delivery',action:null,text:'Gather the requested supplies.',claimLabel:'TURN IN'}),
     mine:Object.freeze({location:'Mine or cave route',action:null,text:'Mine the requested material.',claimLabel:'TURN IN'}),
+    farm:Object.freeze({location:'Town Farm or claimed field',action:Object.freeze({type:'craft',label:'FARM CROPS'}),text:'Work crops through tilling, planting, or harvesting.',claimLabel:'REPORT HARVEST'}),
+    cook:Object.freeze({location:'Crafting and kitchens',action:Object.freeze({type:'craft',label:'COOK FOOD'}),text:'Cook the requested food.',claimLabel:'REPORT COOKING'}),
+    smith:Object.freeze({location:'Forge and crafting',action:Object.freeze({type:'craft',label:'CRAFT GEAR'}),text:'Smith the requested item.',claimLabel:'REPORT FORGE WORK'}),
+    treasure:Object.freeze({location:'Treasure map route',action:Object.freeze({type:'guild_contracts',label:'FIND CACHE'}),text:'Follow a treasure map or recover a buried cache.',claimLabel:'REPORT CACHE'}),
     kill:Object.freeze({location:'Overworld wilderness',action:null,text:'Defeat hostile creatures beyond town.',claimLabel:'REPORT BACK'}),
     gate:Object.freeze({location:'Wilderness Gate',action:Object.freeze({type:'find_gate',label:'FIND GATE'}),text:'Find and clear the assigned Gate.',claimLabel:'REPORT CLEAR'}),
     sell:Object.freeze({location:'Town market',action:Object.freeze({type:'sell_items',label:'SELL ITEMS'}),text:'Sell the requested goods.',claimLabel:'REPORT SALE'}),
@@ -55,12 +59,13 @@
       'Garrik Flint':[
         {title:'Stonehand Trial', type:'fetch', item:B.COBBLE, need:18, desc:'Bring {N} cobble. A miner learns by weight, not by words.', gold:24, xp:34},
         {title:'Coal Mark', type:'mine', item:B.COAL_ORE, need:6, desc:'Mine {N} coal ore veins and listen for the pitch of the rock.', gold:34, xp:46},
-        {title:'Iron Below', type:'mine', item:B.IRON_ORE, need:5, desc:'Mine {N} iron ore veins. Bring back proof you can read the deeper seams.', gold:48, xp:64}
+        {title:'Iron Below', type:'mine', item:B.IRON_ORE, need:5, desc:'Mine {N} iron ore veins. Bring back proof you can read the deeper seams.', gold:48, xp:64},
+        {title:'Old Survey Marks', type:'treasure', need:1, desc:'Complete {N} treasure route or recover a buried cache. Garrik wants to compare old survey marks with what you find.', gold:66, xp:78}
       ],
       'Tobin Ashhand':[
         {title:'Forge Fuel', type:'mine', item:B.COAL_ORE, need:5, desc:'The forge needs heat. Mine {N} coal ore for the smithy.', gold:30, xp:42},
-        {title:'Smith Stock', type:'fetch', item:I.IRON_INGOT, need:3, desc:'Smelt and deliver {N} iron ingots for real town equipment.', gold:48, xp:66},
-        {title:'A Practical Edge', type:'fetch', item:I.REPAIR_KIT, need:1, desc:'Craft {N} repair kit. Good gear is maintained, not discarded.', gold:64, xp:84}
+        {title:'Smith Stock', type:'smith', item:I.IRON_INGOT, need:3, desc:'Smelt {N} iron ingots for real town equipment.', gold:48, xp:66},
+        {title:'A Practical Edge', type:'smith', item:I.REPAIR_KIT, need:1, desc:'Craft {N} repair kit. Good gear is maintained, not discarded.', gold:64, xp:84}
       ],
       'Edda Quill':[
         {title:'Gate Notes', type:'gate', need:1, desc:'Clear {N} gate and return with what the air felt like inside.', gold:72, xp:80},
@@ -73,14 +78,14 @@
         {title:'Night Stock', type:'fetch', item:B.TORCH, need:10, desc:'Bring {N} torches for the night patrol supply chest.', gold:42, xp:52}
       ],
       'Liss Barley':[
-        {title:'Field Hands', type:'fetch', item:I.WHEAT, need:8, desc:'Harvest {N} wheat so the tavern can feed workers and travelers.', gold:30, xp:42},
+        {title:'Field Hands', type:'farm', need:8, desc:'Till, plant, or harvest crops {N} times so the tavern can feed workers and travelers.', gold:30, xp:42},
         {title:'Bread Line', type:'fetch', item:I.BREAD, need:3, desc:'Bake and deliver {N} loaves for the morning shift.', gold:42, xp:54},
         {title:'Care Feed', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Craft {N} dragon treat. The roost depends on farmers and cooks.', gold:62, xp:74},
         {title:'The Bright Harvest', type:'fetch', item:I.GOLDEN_WHEAT, need:1, desc:'Bring Liss one Golden Wheat. She has seen a harvest-sprite following its light.', gold:74, xp:92, rewardItems:[{id:I.FORAGE_CHARM,count:1}]},
         {title:'A Sprite in the Sheaves', type:'familiar', familiar:'sprite', need:1, desc:'Use the Forage Charm to bind Sprite, then return to Liss.', gold:82, xp:104}
       ],
       'Pippa Hearth':[
-        {title:'Warm Meals', type:'fetch', item:I.COOKED_MEAT, need:3, desc:'Cook {N} cuts for workers coming in from the cold roads.', gold:36, xp:46},
+        {title:'Warm Meals', type:'cook', item:I.COOKED_MEAT, need:3, desc:'Cook {N} cuts for workers coming in from the cold roads.', gold:36, xp:46},
         {title:'Travel Bread', type:'fetch', item:I.BREAD, need:3, desc:'Bring {N} loaves for travelers headed to the gates.', gold:40, xp:52},
         {title:'Roost Treats', type:'fetch', item:I.DRAGON_TREAT, need:1, desc:'Prepare {N} dragon treat for the stablemaster.', gold:64, xp:78},
         {title:'A Light for the Wounded', type:'fetch', item:I.HEARTY_SANDWICH, need:1, desc:'Bring Pippa a Hearty Sandwich for the infirmary. She will entrust you with a restorative charm.', gold:76, xp:94, rewardItems:[{id:I.MOTE_CHARM,count:1}]},
@@ -104,7 +109,7 @@
         {title:'The Fang Pact', type:'familiar', familiar:'fang', need:1, desc:'Use the Fang Totem to bind Fang, then return to Pell.', gold:86, xp:112}
       ],
       'Greta Warmug':[
-        {title:'Cellar Supper', type:'fetch', item:I.COOKED_MEAT, need:3, desc:'Bring {N} cooked meat so the tavern can serve a proper supper.', gold:38, xp:48},
+        {title:'Cellar Supper', type:'sell', item:I.COOKED_MEAT, need:3, desc:'Sell {N} cooked meat through the tavern counter so Greta can serve a proper supper.', gold:38, xp:48},
         {title:'Breakfast Rush', type:'fetch', item:I.BREAD, need:4, desc:'Deliver {N} loaves before the morning crowd finds the counter empty.', gold:46, xp:56},
         {title:'House Specialty', type:'fetch', item:I.HEARTY_SANDWICH, need:1, desc:'Make {N} hearty sandwich worthy of the Gilded Mug sign.', gold:68, xp:82}
       ],
@@ -125,10 +130,10 @@
         const where=giver+'['+index+']';
         if(!q||typeof q!=='object')return errors.push(where+' is not an object');
         if(!q.title)errors.push(where+' missing title');
-        if(!['fetch','mine','kill','gate','sell','utility','familiar','mount','mount_use','manhunt'].includes(q.type))errors.push(where+' invalid type '+q.type);
+        if(!['fetch','mine','farm','cook','smith','treasure','kill','gate','sell','utility','familiar','mount','mount_use','manhunt'].includes(q.type))errors.push(where+' invalid type '+q.type);
         if((q.need|0)<1)errors.push(where+' need must be >= 1');
         if((q.gold|0)<0||(q.xp|0)<0)errors.push(where+' reward must be non-negative');
-        if(['fetch','mine','sell'].includes(q.type)&&!(q.item>0))errors.push(where+' missing item target');
+        if(['fetch','mine','cook','smith','sell'].includes(q.type)&&!(q.item>0))errors.push(where+' missing item target');
         if(q.type==='utility'&&!q.utility)errors.push(where+' missing utility target');
         if(q.type==='familiar'&&!q.familiar)errors.push(where+' missing familiar target');
         if((q.type==='mount'||q.type==='mount_use')&&!q.mount)errors.push(where+' missing mount target');
