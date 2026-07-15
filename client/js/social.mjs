@@ -246,15 +246,20 @@ addEventListener('keydown',event=>{
 function openChat(mode){
   chatTyping=true;
   for(const k in keys) keys[k]=false;
+  if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
   if(mode)setChatMode(mode);else setChatMode(chatMode);
   document.body.classList.add('chat-open');
   populateQuickChat();
   chatInEl.focus();
 }
-function closeChat(){
+function closeChat(relock=false){
   chatTyping=false;
   document.body.classList.remove('chat-open','chat-whisper');
   chatInEl.blur();
+  if(relock)renderer.domElement.requestPointerLock();
+}
+for(const eventName of ['pointerdown','mousedown','click','wheel']){
+  chatBarEl.addEventListener(eventName,event=>event.stopPropagation());
 }
 chatModeEl.addEventListener('click',cycleChatMode);
 chatTargetEl.addEventListener('change',updateMuteButton);
@@ -263,12 +268,17 @@ chatReportEl.addEventListener('click',()=>{const target=chatTargetEl.value;if(ta
 chatBlockedEl.addEventListener('click',()=>{if(NET.on)NET.room.send('commsBlockList',{});});
 chatSoundEl.classList.toggle('off',!commsSound);
 chatSoundEl.addEventListener('click',()=>{commsSound=!commsSound;localStorage.setItem('bc_comms_sound',commsSound?'1':'0');chatSoundEl.classList.toggle('off',!commsSound);});
+chatInEl.addEventListener('change',()=>{
+  if(!document.body.classList.contains('chat-open'))return;
+  sendQuickPhrase(chatInEl.value);
+  closeChat(true);
+});
 chatInEl.addEventListener('keydown', e=>{
   e.stopPropagation();
   if(e.code==='Tab'){e.preventDefault();cycleChatMode();return;}
   if(e.code==='Enter'){
     sendQuickPhrase(chatInEl.value);
-    closeChat();
+    closeChat(true);
     return;
     const text=chatInEl.value.trim();
     if(text && text[0]==='/'){

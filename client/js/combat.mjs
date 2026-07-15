@@ -2228,6 +2228,7 @@ function interactWithVillager(vill){
   return true;
 }
 addEventListener('mousedown', e=>{
+  if(globalThis.chatTyping) return;
   if(claimMode){
     if(e.button===0) requestLandClaim();
     return;

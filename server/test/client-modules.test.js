@@ -1051,6 +1051,10 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/Whisper quick phrase/);
   assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
+  assert.match(social,/function openChat\(mode\)\{[\s\S]*if\(document\.pointerLockElement\)document\.exitPointerLock\(\);lockFallback=false;locked=false;/);
+  assert.match(social,/for\(const eventName of \['pointerdown','mousedown','click','wheel'\]\)\{[\s\S]*chatBarEl\.addEventListener\(eventName,event=>event\.stopPropagation\(\)\);/);
+  assert.match(social,/chatInEl\.addEventListener\('change',\(\)=>\{[\s\S]*sendQuickPhrase\(chatInEl\.value\);\s*closeChat\(true\);/);
+  assert.match(combat,/addEventListener\('mousedown', e=>\{\s*if\(globalThis\.chatTyping\) return;/);
   assert.match(social,/createElement\('button'\)[\s\S]*addEventListener\('click',\(\)=>\{sendQuickPhrase\(id\);closeQuickChatWheel\(true\);\}\)/);
   assert.match(social,/cycleChatMode\(\);\s*renderQuickChatWheel\(\);/);
   assert.doesNotMatch(social,/event\.code==='Tab'&&chatWheel\)[\s\S]*startDragonCommandWheel\(\)/);
