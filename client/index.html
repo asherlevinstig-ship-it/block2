@@ -168,6 +168,21 @@
 </div>
 <div id="loadscreen" class="hidden"><div id="loadpanel"><div class="loadsigil">◆</div><h2>LOADING WORLD</h2><div id="loadstatus">Preparing your hunter profile...</div><div id="loadbar"><i></i></div></div></div>
 
+<div id="devreset" class="hidden" role="dialog" aria-modal="true" aria-labelledby="devresettitle">
+  <div id="devresetpanel">
+    <div class="drpill">TEMP DEV TOOL</div>
+    <h2 id="devresettitle">Reset Player Profile</h2>
+    <p>Deletes Firebase game progress only. The school login remains in MySQL.</p>
+    <input id="devresettarget" maxlength="255" placeholder="EMAIL OR ACCOUNT ID">
+    <input id="devresettoken" type="password" maxlength="256" placeholder="ADMIN RESET TOKEN">
+    <div id="devresetstatus"></div>
+    <div class="devresetactions">
+      <button id="devresetcancel" type="button">CANCEL</button>
+      <button id="devresetgo" type="button">RESET</button>
+    </div>
+  </div>
+</div>
+
 <script src="/three.js"></script>
 <script src="/colyseus.js"></script>
 <script src="/shared/dimension-grid.js"></script>

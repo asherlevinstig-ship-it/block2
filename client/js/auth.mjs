@@ -85,6 +85,31 @@ export function createAuthController({ user, password, playerName, status, play,
     setStatus('SIGNED OUT');
   }
 
+  async function resetPlayerProfile({ target, token } = {}) {
+    const value = String(target || '').trim();
+    const adminToken = String(token || '').trim();
+    if (!adminToken) throw new Error('Admin reset token required');
+    const body = value && value.includes('@') ? { email: value }
+      : value ? { accountId: value }
+        : state.account && state.account.id ? { accountId: state.account.id }
+          : {};
+    if (!body.email && !body.accountId) throw new Error('Sign in or enter an email/account id');
+    const res = await request(apiUrl('/auth/admin/reset-player'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken },
+      body: JSON.stringify(body),
+    });
+    let data = {};
+    try { data = await res.json(); } catch (_) {}
+    if (!res.ok) throw new Error(data.error || 'Reset failed');
+    state.account = null;
+    state.gameProfile = null;
+    state.checked = false;
+    render();
+    return data;
+  }
+
   function expire(message = 'SESSION EXPIRED - SIGN IN AGAIN') {
     state.account = null;
     state.gameProfile = null;
@@ -106,5 +131,5 @@ export function createAuthController({ user, password, playerName, status, play,
     return name;
   }
 
-  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName };
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, resetPlayerProfile };
 }

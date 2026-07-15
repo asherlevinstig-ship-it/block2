@@ -132,6 +132,18 @@
   .pathselect-card .current{position:absolute;right:14px;top:14px;font-size:10px;letter-spacing:2px;color:#ffd24a;border:1px solid rgba(255,210,74,.6);border-radius:999px;padding:4px 8px;background:rgba(255,210,74,.08)}
   #pathnote{margin-top:18px;font-size:11px;letter-spacing:1px;color:#7f93aa}
   body.path-selecting #chatlog,body.path-selecting #sysmsgs,body.path-selecting #rewardfeed,body.path-selecting #hotbar,body.path-selecting #stats,body.path-selecting #abilities,body.path-selecting #dragonhud,body.path-selecting #familiarhud,body.path-selecting #currentquest,body.path-selecting #landmap,body.path-selecting #eventhud,body.path-selecting #coachhud,body.path-selecting #crosshair,body.path-selecting #tutorialhud{display:none!important}
+  #devreset{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,5,10,.72);backdrop-filter:blur(6px);color:#eef7ff}
+  #devreset.hidden{display:none}
+  #devresetpanel{width:min(460px,calc(100vw - 32px));padding:22px;border:1px solid rgba(255,92,92,.65);border-radius:8px;background:linear-gradient(180deg,rgba(18,20,28,.98),rgba(8,10,16,.98));box-shadow:0 20px 70px rgba(0,0,0,.65),inset 0 0 24px rgba(255,92,92,.05)}
+  #devreset .drpill{margin-bottom:8px;color:#ffad66;font-size:10px;letter-spacing:3px}
+  #devreset h2{margin:0 0 8px;color:#fff;font-size:18px;letter-spacing:2px}
+  #devreset p{margin:0 0 14px;color:#aebbd0;font-size:12px;line-height:1.45}
+  #devreset input{width:100%;height:38px;margin:0 0 9px;padding:0 11px;border:1px solid rgba(125,211,252,.42);border-radius:5px;background:#07111d;color:#eaf6ff;font-family:inherit;font-size:12px;letter-spacing:1px;user-select:text}
+  #devresetstatus{min-height:18px;margin:3px 0 11px;color:#ffcf9a;font-size:11px;line-height:1.4}
+  #devresetstatus.ok{color:#9be76d}#devresetstatus.bad{color:#ff8f8f}
+  .devresetactions{display:flex;justify-content:flex-end;gap:8px}
+  .devresetactions button{font-family:inherit;font-size:12px;letter-spacing:2px;padding:10px 14px;border-radius:5px;border:1px solid rgba(255,255,255,.16);background:#162133;color:#dceaff;cursor:pointer}
+  .devresetactions #devresetgo{background:#6b241f;border-color:#ff695c;color:#fff}
   @media (max-width:920px){#pathcards{grid-template-columns:1fr}.pathselect-card{min-height:0}#pathpanel{padding:22px}#pathpanel h1{font-size:22px;letter-spacing:5px}}
   #awakeningwin{position:fixed;inset:0;z-index:13;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 30%,rgba(139,92,246,.24),transparent 30%),radial-gradient(circle at 50% 60%,rgba(79,216,255,.14),transparent 34%),linear-gradient(180deg,rgba(3,7,14,.96),rgba(5,8,16,.99));backdrop-filter:blur(9px);color:#eaf6ff;text-align:center}
   #awakeningpanel{width:min(820px,calc(100vw - 48px));border:1px solid rgba(255,210,74,.62);border-radius:16px;background:linear-gradient(160deg,rgba(12,22,44,.96),rgba(8,10,22,.98));box-shadow:0 0 56px rgba(255,210,74,.22),0 0 90px rgba(79,216,255,.16),inset 0 0 56px rgba(255,210,74,.06);padding:38px 42px;position:relative;overflow:hidden}

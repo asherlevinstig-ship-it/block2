@@ -447,6 +447,12 @@ const logoutbtn=document.getElementById('logoutbtn');
 const authuser=document.getElementById('authuser');
 const authpass=document.getElementById('authpass');
 const authstatus=document.getElementById('authstatus');
+const devReset=document.getElementById('devreset');
+const devResetTarget=document.getElementById('devresettarget');
+const devResetToken=document.getElementById('devresettoken');
+const devResetStatus=document.getElementById('devresetstatus');
+const devResetGo=document.getElementById('devresetgo');
+const devResetCancel=document.getElementById('devresetcancel');
 const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
@@ -1486,6 +1492,56 @@ logoutbtn.addEventListener('click',async()=>{
   if(rankContinue)rankContinue.click();
   await AUTH_UI.signOut();NET.tried=false;
 });
+function setDevResetStatus(text,kind=''){
+  if(!devResetStatus)return;
+  devResetStatus.textContent=text||'';
+  devResetStatus.className=kind;
+}
+function closeDevResetPanel(){
+  if(!devReset)return;
+  devReset.classList.add('hidden');
+  setDevResetStatus('');
+}
+function openDevResetPanel(){
+  if(!devReset)return;
+  if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
+  lockFallback=false;locked=false;refreshPlayUi();
+  const account=AUTH&&AUTH.account;
+  if(devResetTarget&&!devResetTarget.value)devResetTarget.value=account&&account.id||authuser.value||'';
+  try{if(devResetToken&&!devResetToken.value)devResetToken.value=sessionStorage.getItem('bc_admin_reset_token')||'';}catch(e){}
+  devReset.classList.remove('hidden');
+  setDevResetStatus('Reset deletes the game save, then the next login runs first-time onboarding.');
+  setTimeout(()=>{if(devResetTarget)devResetTarget.focus();},0);
+}
+async function runDevReset(){
+  if(!devResetGo)return;
+  const target=devResetTarget&&devResetTarget.value||'';
+  const token=devResetToken&&devResetToken.value||'';
+  const ownId=AUTH&&AUTH.account&&AUTH.account.id;
+  const ownEmail=AUTH&&AUTH.account&&AUTH.account.username;
+  const ownReset=!target||target===ownId||target.toLowerCase()===String(ownEmail||'').toLowerCase();
+  if(!confirm('Reset this player game profile? This deletes Firebase progress but keeps the school login.'))return;
+  devResetGo.disabled=true;
+  setDevResetStatus('Resetting...');
+  try{
+    try{sessionStorage.setItem('bc_admin_reset_token',token);}catch(e){}
+    const result=await AUTH_UI.resetPlayerProfile({target,token});
+    setDevResetStatus('Reset complete: '+((result.account&&result.account.id)||target)+'.','ok');
+    if(ownReset){
+      NET.tried=false;
+      try{if(NET.room)await NET.room.leave();}catch(e){}
+      setTimeout(()=>location.reload(),700);
+    }
+  }catch(e){
+    setDevResetStatus(e.message||'Reset failed','bad');
+  }finally{
+    devResetGo.disabled=false;
+  }
+}
+if(devResetCancel)devResetCancel.addEventListener('click',closeDevResetPanel);
+if(devResetGo)devResetGo.addEventListener('click',runDevReset);
+if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});
+if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
   if(hasLock) lockFallback=false;
@@ -1503,6 +1559,17 @@ function isTextEntryTarget(target){
 addEventListener('keydown', e=>{
   if(isTextEntryTarget(e.target)) return;
   if(globalThis.chatTyping) return;
+  if(e.code==='F9'&&!e.repeat){
+    e.preventDefault();
+    if(devReset&&!devReset.classList.contains('hidden'))closeDevResetPanel();
+    else openDevResetPanel();
+    return;
+  }
+  if(e.code==='Escape'&&devReset&&!devReset.classList.contains('hidden')){
+    e.preventDefault();
+    closeDevResetPanel();
+    return;
+  }
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
   if(pathChoiceOpen){
     e.preventDefault();

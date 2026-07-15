@@ -19,6 +19,7 @@ const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainR
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
+const { registerProfileResetHandler } = require('../profile-reset');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -134,6 +135,7 @@ class GameRoom extends Room {
     // ---- persistence ----
     this.store = this.monitorStore(createStore({ shardId: this.shardId }));
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
+    this.unregisterProfileResetHandler = registerProfileResetHandler(token => this.resetLivePlayerProfile(token));
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
     this.lastMoveMsg = new Map();
@@ -1207,9 +1209,27 @@ class GameRoom extends Room {
   async onDispose() {
     try { await this.flush(); }
     finally {
+      if (this.unregisterProfileResetHandler) {
+        this.unregisterProfileResetHandler();
+        this.unregisterProfileResetHandler = null;
+      }
       unregisterRoom(this);
       releaseGlobalWorld(this);
     }
+  }
+
+  resetLivePlayerProfile(token) {
+    const id = cleanToken(token);
+    if (!id) return false;
+    const hadProfile = this.profiles && this.profiles.delete(id);
+    if (this.dirtyPlayers) this.dirtyPlayers.delete(id);
+    if (this.restartRecoveries) this.restartRecoveries.delete(id);
+    for (const client of [...this.clients]) {
+      if (this.tokens.get(client.sessionId) !== id) continue;
+      client.send('accountReset', { ok: true });
+      try { client.leave(CloseCode.CONSENTED); } catch (_) {}
+    }
+    return !!hadProfile;
   }
 
   handleClaimFirstQuestReward(client) {

@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { createStore, sanitizeProfile } = require('./store');
+const { resetLivePlayerProfiles } = require('./profile-reset');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -148,11 +149,12 @@ class AuthService {
     const store = this.getProfileStore();
     if (typeof store.deletePlayer === 'function') await store.deletePlayer(account.id);
     else await store.savePlayer(account.id, null);
+    const liveRoomsReset = await resetLivePlayerProfiles(account.id);
     for (const [key, session] of [...this.sessions]) {
       if (session && session.accountId === account.id) this.sessions.delete(key);
     }
     await this.save();
-    return { account };
+    return { account, liveRoomsReset };
   }
 
   async register(username, password, displayName) {
@@ -280,7 +282,7 @@ class AuthService {
       if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       try {
         const result = await this.resetPlayerProfile(req.body);
-        res.json({ ok: true, account: result.account });
+        res.json({ ok: true, account: result.account, liveRoomsReset: result.liveRoomsReset });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Reset failed.' });
       }
