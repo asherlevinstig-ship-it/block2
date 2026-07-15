@@ -476,7 +476,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.reforgeCost('basic').gold,25);
   assert.equal(sharedJobs.reforgeCost('basic').iron,1);
   assert.deepEqual(sharedJobs.PROFESSION_REWARD_MULTIPLIER,{miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1});
-  const objectiveXp={miner:c=>c.need*(c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:c.type==='upgrade'?10:c.type==='salvage'?6:6),monk:c=>c.need*.4};
+  const objectiveXp={miner:c=>c.need*(c.type==='treasure'?6:c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:c.type==='upgrade'?10:c.type==='salvage'?6:6),monk:c=>c.need*.4};
   const allTargets = {STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT};
   const earlyRunway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<5&&contracts<30){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),5,allTargets);xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
   assert.equal(Math.max(...earlyRunway)<=7,true,'every profession reaches its first play-changing Lv5 unlock within seven average contracts');
@@ -493,10 +493,13 @@ test('browser and server consume one shared profession and contract ruleset', ()
   }
   assert.equal(rotatedKillTitles.size >= 6, true, 'repeatable kill offers rotate through varied combat contracts');
   const miner = sharedJobs.contractPool('miner', 2, 5, targets);
-  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Foundation Rush','Iron Survey','Deep Iron Run','Cave Mapping Shift']);
+  assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Foundation Rush','Iron Survey','Deep Iron Run','Cave Mapping Shift','Surveyor\'s Cache Map','Forgotten Seam Charts']);
   assert.equal(miner[0].target, W.B.STONE);
   assert.equal(miner[0].need, 28);
   assert.equal(miner.every(c=>c.focus&&c.reward&&c.party), true, 'profession contracts explain focus, reward hook, and party relevance');
+  assert.deepEqual(miner.filter(c=>c.type==='treasure').map(c=>c.title), ['Surveyor\'s Cache Map','Forgotten Seam Charts']);
+  assert.match(sharedJobs.contractBestFor(miner.find(c=>c.title==='Surveyor\'s Cache Map')), /treasure map/);
+  assert.match(sharedJobs.guideSteps('treasure').join(' '), /Orin|buried cache/i);
   const blacksmith = sharedJobs.contractPool('blacksmith', 2, 5, targets);
   assert.deepEqual(blacksmith.map(c=>c.title), ['Forge Work','Gate Prep Kits','Tool Doctor','Edge Upgrade Order','Scrap Recovery','Ingot Commission']);
   assert.equal(blacksmith.find(c=>c.title==='Edge Upgrade Order').type, 'upgrade');

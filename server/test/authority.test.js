@@ -9735,10 +9735,15 @@ test('fellowship Map Table discounts cartographer leads and sharpens treasure cl
   assert.equal(client.sent.some(e => e.type === 'cartographerReward' && e.msg.kind === 'contract' && e.msg.fellowshipRenown === 1), true);
 
   const treasureSite = W.smallDiscoverySpecs().find(s => s.type === 'buried_chest');
+  room.handleSetJob(client, { job: 'miner' });
+  prof.jobContract = { job: 'miner', type: 'treasure', need: 1, have: 0, rewardGold: 54, rewardJobXp: 34, rewardXp: 0, title: "Surveyor's Cache Map", desc: 'Complete a treasure route.' };
   prof.treasureMap = { id: 'test_route', stage: 0, targets: [treasureSite.id], rewardGold: 180 };
   const p = room.state.players.get(client.sessionId);
   p.x = treasureSite.x; p.y = treasureSite.y + 1; p.z = treasureSite.z;
   room.handleTreasureMapAdvance(client, { id: treasureSite.id });
   assert.equal(room.guilds.get('G1').renown, 3);
+  assert.equal(prof.jobXpByJob.miner, 6);
+  assert.equal(prof.jobContract.have, 1);
   assert.equal(client.sent.some(e => e.type === 'treasureMapComplete' && e.msg.fellowshipRenown === 2), true);
+  assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.type === 'treasure'), true);
 });

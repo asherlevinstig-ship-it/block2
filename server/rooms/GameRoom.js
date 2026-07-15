@@ -4534,6 +4534,7 @@ class GameRoom extends Room {
       const rewardGold=map.rewardGold|0;rec.prof.gold=Math.min(1e9,(rec.prof.gold|0)+rewardGold);this.addRewardItem(rec.prof,I.DIAMOND,2);rec.prof.treasureMap=null;
       this.recordEconomyGold(client,rewardGold,'cartographer_faucet','treasure_map',{ id: map.id || '' });
       const fellowshipRenown = this.awardGuildRenownForProject ? this.awardGuildRenownForProject(client, 'map_table', 2, 'Treasure route') : 0;
+      this.recordTreasureProgress(client);
       this.syncPlayerProfile(client,rec.prof);client.send('treasureMapComplete',{rewardGold,gold:rec.prof.gold|0,items:[{id:I.DIAMOND,count:2}],fellowshipRenown});
     }else client.send('treasureMapUpdate',this.publicTreasureMap(map,!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'))));
   }
@@ -4644,6 +4645,7 @@ class GameRoom extends Room {
       name = 'Buried Cache'; text = 'You recover the cache before the wilds swallow it.'; xp = 8 + ring * 3;
       items.push({ id: ring >= 2 ? I.IRON_INGOT : I.COAL, count: 2 + ring });
       this.progressRegionalContract(client, 'recover_buried_cache', { targetId: s.id });
+      this.recordTreasureProgress(client);
     } else if(s.type==='rain_bloom'){
       name='Rainwake Bloom';text='Rainwake petals can be cooked into strong restorative broth.';xp=18+ring*4;items.push({id:I.RAINWAKE_PETAL,count:1+ring});
     } else if(s.type==='storm_crystal'){

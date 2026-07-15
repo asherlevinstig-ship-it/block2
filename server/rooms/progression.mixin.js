@@ -1018,6 +1018,11 @@ class ProgressionMixin {
     this.progressNpcQuest(client, 'mine', 1, blockId);
   }
 
+  recordTreasureProgress(client) {
+    this.grantJobXp(client, 'miner', 6);
+    this.progressJobContract(client, 'treasure', 1, 0);
+  }
+
   recordFarmProgress(client, action) {
     const target = action === 'harvest' ? W.B.WHEAT_3 : action === 'plant' ? I.WHEAT_SEEDS : W.B.FARMLAND;
     this.grantJobXp(client, 'farmer', action === 'harvest' ? 5 : 1);
