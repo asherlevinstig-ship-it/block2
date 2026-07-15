@@ -6148,6 +6148,14 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
 
   const room = makeRoom(), client = makeClient('tutorial_owner');
   const { prof } = seedPlayer(room, client);
+  assert.equal(room.returningOrLegacyProfile(defaultProfile('Brand New')), false);
+  assert.equal(room.returningOrLegacyProfile(prof), false);
+  const returning = defaultProfile('Returning');
+  returning.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  assert.equal(room.returningOrLegacyProfile(returning), true);
+  const legacyStarted = defaultProfile('Legacy Started');
+  legacyStarted.S.lvl = 2;
+  assert.equal(room.returningOrLegacyProfile(legacyStarted), true);
   assert.equal(room.handleTutorialComplete(client, { tutorial: 'ability', version: 999 }), false);
   assert.equal(prof.tutorials.ability, 0);
   assert.equal(room.handleTutorialComplete(client, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability }), true);

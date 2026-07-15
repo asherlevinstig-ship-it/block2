@@ -821,18 +821,19 @@ class GameRoom extends Room {
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
       if (this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
-      if (Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
+      const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
+      if (returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
       // Move profiles saved at the old cramped plaza spawn into the new open
       // arrival point so returning players receive the same readable opening.
-      if (Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
+      if (returningOrLegacyProfile && Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
       const openingMaraStep=prof.npcQuestChains&&(prof.npcQuestChains['Mara Vale']|0)||0;
-      if ((prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
+      if (returningOrLegacyProfile && (prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
@@ -1272,6 +1273,21 @@ class GameRoom extends Room {
     if (!Array.isArray(prof.pos) || !W.isTrainingMeadowLand(prof.pos[0], prof.pos[2], 4)) return false;
     prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
     return true;
+  }
+
+  returningOrLegacyProfile(prof) {
+    if (!prof || typeof prof !== 'object') return false;
+    const tutorials = prof.tutorials || {};
+    const S = prof.S || {};
+    const chains = prof.npcQuestChains || {};
+    return (tutorials.onboarding | 0) >= TUTORIAL_VERSIONS.onboarding
+      || (S.lvl | 0) > 1
+      || !!S.path
+      || Object.keys(chains).length > 0
+      || !!prof.quest
+      || !!prof.activeNpcQuest
+      || prof.firstQuestRewardClaimed === true
+      || (prof.highestGateRankCleared | 0) >= 0;
   }
 
   tutorialSpaceId(client, kind) {
