@@ -1793,11 +1793,12 @@ function damageHeldToolLocal(){
   refreshHUD();
 }
 function farmAction(hit){
-  if(!hit || dim!=='overworld') return false;
-  const s=inv[selected];
+  if(!hit) return false;
   const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand(hit.x,hit.z,2);
+  if(dim!=='overworld'&&!tutorialMeadowFarm) return false;
+  const s=inv[selected];
   if(hit.id===B.WHEAT_3){
-    if(!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
@@ -1812,7 +1813,7 @@ function farmAction(hit){
       gainJobXP('farmer',5,'harvest');
       jobContractProgress('farm', 1, B.WHEAT_3);
     }
-    if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
+    if(onboardingActive&&tutorialMeadowFarm&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.breakBlk(null); vmSwing(); return true;
   }
   if(s && s.id===I.COMPOST && (hit.id===B.WHEAT_1 || hit.id===B.WHEAT_2)){
@@ -1821,7 +1822,7 @@ function farmAction(hit){
     SFX.place(); vmSwing(); return true;
   }
   if(s && (s.id===I.WHEAT_SEEDS || s.id===I.WINDSEED) && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
-    if(!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,s.id);
       return true;
     }
@@ -1833,11 +1834,11 @@ function farmAction(hit){
       gainJobXP('farmer',1,'plant');
       jobContractProgress('farm', 1, I.WHEAT_SEEDS);
     }
-    if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
+    if(onboardingActive&&tutorialMeadowFarm&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.place(); vmSwing(); return true;
   }
   if(heldToolClass('hoe') && (hit.id===B.GRASS || hit.id===B.DIRT) && getB(hit.x,hit.y+1,hit.z)===B.AIR){
-    if(!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
@@ -1847,7 +1848,7 @@ function farmAction(hit){
       gainJobXP('farmer',1,'till');
       jobContractProgress('farm', 1, B.FARMLAND);
     }
-    if(onboardingActive&&onboardingArrived&&onboardingKind()==='farm') onboardingFlags.farmed=true;
+    if(onboardingActive&&tutorialMeadowFarm&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.place(); vmSwing(); return true;
   }
   return false;

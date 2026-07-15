@@ -938,6 +938,14 @@ test('onboarding gathering pillar and completion both use the training tree',()=
   assert.match(world,/"isOnboardingTreeLog":\{get:\(\)=>isOnboardingTreeLog\}/);
 });
 
+test('onboarding farming uses the G action inside the tutorial meadow',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand\(hit\.x,hit\.z,2\);/);
+  assert.match(combat,/if\(dim!=='overworld'&&!tutorialMeadowFarm\) return false;/);
+  assert.match(combat,/if\(!tutorialMeadowFarm&&!canBuildHere\(hit\.x,hit\.z\)\)/);
+  assert.match(combat,/if\(onboardingActive&&tutorialMeadowFarm&&onboardingKind\(\)==='farm'\) onboardingFlags\.farmed=true;/);
+});
+
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
