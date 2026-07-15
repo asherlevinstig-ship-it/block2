@@ -909,6 +909,7 @@ test('Escape opens subject focus only when gameplay has no open window',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*e\.preventDefault\(\);\s*try\{ document\.exitPointerLock\(\); \}catch\(err\)\{\}\s*lockFallback=true;\s*locked=true;\s*refreshPlayUi\(\);\s*return;\s*\}/);
   assert.match(combat,/if\(closed\)\{ e\.preventDefault\(\); return; \}[\s\S]*overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active[\s\S]*BlockcraftSubjectFocus\.open\(\)/);
   assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
   for(const subject of ['Computer Science','Information Technology','Religious Education','English'])assert.match(menus,new RegExp(subject));

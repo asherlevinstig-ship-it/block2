@@ -1703,6 +1703,14 @@ addEventListener('keydown', e=>{
     if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
     const limboOpen=!!document.querySelector('#deathlimbo.show');
+    if(document.pointerLockElement===renderer.domElement){
+      e.preventDefault();
+      try{ document.exitPointerLock(); }catch(err){}
+      lockFallback=true;
+      locked=true;
+      refreshPlayUi();
+      return;
+    }
     if(overlay.classList.contains('hidden')&&!limboOpen&&!globalThis.BlockcraftRecall.active){e.preventDefault();if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();return;}
   }
   if(locked){
