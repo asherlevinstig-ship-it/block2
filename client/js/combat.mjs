@@ -511,7 +511,7 @@ function cancelOnboardingForProfileRestore(){
 }
 let pathChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
-const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:false,subject:false,recall:false,inventory:false,finish:false};
+const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
   markSubjectFocus:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='subject')onboardingFlags.subject=true;},
   markRecall:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='recall')onboardingFlags.recall=true;}
@@ -552,10 +552,10 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'jump',pillar:'Lesson 3 / 11 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
   {kind:'tree',pillar:'Lesson 4 / 11 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
   {kind:'craft',pillar:'Lesson 5 / 11 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
-  {kind:'build',pillar:'Lesson 6 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingArrived&&onboardingFlags.built>=3},
+  {kind:'build',pillar:'Lesson 6 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingFlags.built>=3},
   {kind:'farm',pillar:'Lesson 7 / 11 — Farming', key:'G / RIGHT CLICK', text:'Harvest one mature wheat crop.', sub:'Aim at the tall golden wheat and use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
   {kind:'eat',pillar:'Lesson 8 / 11 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
-  {kind:'combat',pillar:'Lesson 9 / 11 — Combat', key:'LEFT CLICK / F', text:'Aim at the training dummy and strike it.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingArrived&&onboardingFlags.dummy},
+  {kind:'combat',pillar:'Lesson 9 / 11 — Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
   {kind:'recall',pillar:'Lesson 10 / 11 — Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingArrived&&onboardingFlags.recall},
   {kind:'finish',pillar:'Lesson 11 / 11 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
@@ -1362,10 +1362,10 @@ function updateOnboardingHud(){
 }
 function updateOnboardingPillar(now){
   if(abilityTrainingActive) return;
-  tutorialDummyGroup.visible=onboardingActive&&dim==='tutorial'&&onboardingKind()==='combat';
+  tutorialDummyGroup.visible=onboardingActive&&dim==='tutorial'&&onboardingKind()==='combat'&&(onboardingFlags.dummy|0)<3;
   if(tutorialDummyGroup.visible){
     tutorialDummyGroup.rotation.y=Math.sin(now*.003)*.08;
-    const hitGlow=onboardingFlags.dummy?.18:0;
+    const hitGlow=(onboardingFlags.dummy|0)>0 ? .12 : 0;
     dummyBody.scale.set(1+hitGlow,1+hitGlow,1+hitGlow);
   }
   if(!onboardingActive||dim!=='tutorial'){tutorialPillarGroup.visible=false;return;}
@@ -1387,9 +1387,11 @@ function tryHitTutorialDummy(){
   const dist=to.length(); if(dist<.001||dist>6) return false;
   to.normalize();
   if(dir.dot(to)<.88) return false;
-  onboardingFlags.dummy=true;
-  burst(p.x,p.y+1.4,p.z,[1,.82,.28],18,2.4,1.8,.45);
-  ringPulse(p.x,p.y+.08,p.z,1.3,0xffd24a,.55);
+  onboardingFlags.dummy=Math.min(3,(onboardingFlags.dummy|0)+1);
+  const broken=onboardingFlags.dummy>=3;
+  burst(p.x,p.y+1.4,p.z,[1,.82,.28],broken?32:18,broken?3.2:2.4,1.8,.45);
+  ringPulse(p.x,p.y+.08,p.z,broken?1.8:1.3,broken?0xff7d4a:0xffd24a,.55);
+  if(broken) tutorialDummyGroup.visible=false;
   SFX.crit();
   vmSwing();
   return true;

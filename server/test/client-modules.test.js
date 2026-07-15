@@ -950,7 +950,16 @@ test('onboarding combat dummy can be hit inside the tutorial meadow',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   assert.match(combat,/function tryHitTutorialDummy\(\)\{/);
   assert.match(combat,/onboardingKind\(\)!=='combat'\|\|dim!=='tutorial'/);
-  assert.match(combat,/onboardingFlags\.dummy=true;/);
+  assert.match(combat,/done:\(\)=>onboardingFlags\.dummy>=3/);
+  assert.match(combat,/onboardingFlags\.dummy=Math\.min\(3,\(onboardingFlags\.dummy\|0\)\+1\);/);
+  assert.match(combat,/if\(broken\) tutorialDummyGroup\.visible=false;/);
+});
+
+test('onboarding build lesson completes after three placed planks without an extra pillar gate',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/Place three plank blocks on the stone pad\.[\s\S]*done:\(\)=>onboardingFlags\.built>=3/);
+  assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.built>=3/);
+  assert.match(combat,/if\(onboardingKind\(\)==='build'\) onboardingFlags\.built=countOnboardingBuildBlocks\(TRAINING_MEADOW,getB,B\.PLANKS\);/);
 });
 
 test('online craft result restores the authoritative inventory snapshot',()=>{
