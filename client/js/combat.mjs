@@ -1468,6 +1468,13 @@ async function startPlaying(create=false){
   if(!authenticated)return;
   const hunterName=AUTH_UI.requireHunterName();
   if(!hunterName)return;
+  try{
+    setAuthStatus('SAVING HUNTER NAME...');
+    await AUTH_UI.saveHunterName(hunterName);
+  }catch(e){
+    setAuthStatus(e.message||'COULD NOT SAVE HUNTER NAME','bad');
+    return;
+  }
   SFX.init();
   if(!NET.tried) showWorldLoading('Preparing world...');
   netConnect();
@@ -1557,14 +1564,14 @@ function isTextEntryTarget(target){
   return tag==='input'||tag==='textarea'||tag==='select'||!!(target&&target.isContentEditable);
 }
 addEventListener('keydown', e=>{
-  if(isTextEntryTarget(e.target)) return;
-  if(globalThis.chatTyping) return;
   if(e.code==='F9'&&!e.repeat){
     e.preventDefault();
     if(devReset&&!devReset.classList.contains('hidden'))closeDevResetPanel();
     else openDevResetPanel();
     return;
   }
+  if(isTextEntryTarget(e.target)) return;
+  if(globalThis.chatTyping) return;
   if(e.code==='Escape'&&devReset&&!devReset.classList.contains('hidden')){
     e.preventDefault();
     closeDevResetPanel();

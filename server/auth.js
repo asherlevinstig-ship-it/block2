@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
-const { createStore, sanitizeProfile } = require('./store');
+const { createStore, sanitizeProfile, defaultProfile } = require('./store');
 const { resetLivePlayerProfiles } = require('./profile-reset');
 
 const COOKIE = 'bc_session';
@@ -157,6 +157,24 @@ class AuthService {
     return { account, liveRoomsReset };
   }
 
+  async saveHunterName(account, name) {
+    const publicAccount = this.publicAccount(account);
+    if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
+    const clean = cleanDisplayName(name);
+    if (!clean || clean === 'Hunter') throw Object.assign(new Error('Choose your hunter name.'), { status: 400, code: 'name' });
+    const store = this.getProfileStore();
+    let profile = null;
+    try {
+      const existing = await store.loadPlayer(publicAccount.id);
+      profile = existing ? sanitizeProfile(existing) : defaultProfile(clean);
+    }
+    catch (e) { throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' }); }
+    profile.name = clean;
+    profile.nameSet = true;
+    await store.savePlayer(publicAccount.id, profile);
+    return { name: clean, nameSet: true };
+  }
+
   async register(username, password, displayName) {
     if (this.authBackend) throw Object.assign(new Error('Registration is managed by your school account system.'), { status: 403, code: 'external_auth' });
     username = cleanUsername(username);
@@ -275,6 +293,16 @@ class AuthService {
       const account = this.authenticateRequest(req);
       if (!account) return res.status(401).json({ ok: false });
       res.json({ ok: true, account, gameProfile: await this.publicGameProfile(account) });
+    });
+    app.post('/auth/profile/name', async (req, res) => {
+      const account = this.authenticateRequest(req);
+      if (!account) return res.status(401).json({ ok: false });
+      try {
+        const gameProfile = await this.saveHunterName(account, req.body && req.body.name);
+        res.json({ ok: true, gameProfile });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile update failed.' });
+      }
     });
     app.post('/auth/admin/reset-player', async (req, res) => {
       const expected = String(process.env.ADMIN_RESET_TOKEN || '');

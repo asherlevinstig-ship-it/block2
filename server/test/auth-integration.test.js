@@ -93,6 +93,33 @@ test('auth responses include the saved hunter-name setup state', { concurrency: 
   } finally { await f.close(); }
 });
 
+test('hunter name setup is persisted before joining the world', { concurrency: false }, async () => {
+  const profiles = new Map();
+  const profileStore = {
+    async loadPlayer(id) { return profiles.get(id) || null; },
+    async savePlayer(id, profile) { profiles.set(id, profile); },
+  };
+  const f = await fixture({ profileStore });
+  try {
+    const registered = await f.request('/auth/register', jsonPost({ username: 'new_hunter', password: 'long enough password' }));
+    assert.equal(registered.status, 200);
+    const registeredBody = await registered.json();
+    const accountId = registeredBody.account.id;
+    const cookie = sessionCookie(registered);
+    assert.deepEqual(registeredBody.gameProfile, { name: '', nameSet: false });
+
+    const saved = await f.request('/auth/profile/name', jsonPost({ name: 'Kirito' }, { cookie }));
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).gameProfile, { name: 'Kirito', nameSet: true });
+
+    const me = await f.request('/auth/me', { headers: { cookie } });
+    assert.equal(me.status, 200);
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Kirito', nameSet: true });
+    assert.equal(profiles.get(accountId).name, 'Kirito');
+    assert.equal(profiles.get(accountId).nameSet, true);
+  } finally { await f.close(); }
+});
+
 test('configured client origins receive credentialed CORS and cross-site cookies', { concurrency: false }, async () => {
   const origin = 'https://blockcraft-client.vercel.app';
   const f = await fixture({ production: true, clientOrigin: origin });

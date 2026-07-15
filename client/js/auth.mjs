@@ -131,5 +131,15 @@ export function createAuthController({ user, password, playerName, status, play,
     return name;
   }
 
-  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, resetPlayerProfile };
+  async function saveHunterName(name) {
+    const clean = cleanHunterName(name);
+    if (!clean) throw new Error('Choose your hunter name');
+    const data = await json('/auth/profile/name', { name: clean });
+    state.gameProfile = data.gameProfile || { name: clean, nameSet: true };
+    if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
+    render();
+    return state.gameProfile;
+  }
+
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, resetPlayerProfile, saveHunterName };
 }
