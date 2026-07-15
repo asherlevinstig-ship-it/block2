@@ -806,6 +806,7 @@ class ProgressionMixin {
         quest: q,
         grantedItems: grantRoadReadySword ? [{ id: I.WOOD_SWORD, count: 1 }] : [],
       });
+      if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
       return true;
     }
     if (action === 'abandon') {
@@ -891,19 +892,24 @@ class ProgressionMixin {
     return true;
   }
 
-  refreshFetchNpcQuestProgress(client) {
-    const rec = this.profileFor(client), q = rec && rec.prof.activeNpcQuest;
-    if (!rec || !q || q.type !== 'fetch') return false;
+  refreshNpcQuestReadiness(client) {
+    const rec = this.profileFor(client), q = rec && rec.prof.activeNpcQuest, p = this.state.players.get(client.sessionId);
+    if (!rec || !q) return false;
     const need = Math.max(1, q.need | 0);
-    const current = Math.max(0, Math.min(need, this.countItem(rec.prof, q.item | 0)));
+    let current = -1;
+    if (q.type === 'fetch') current = this.countItem(rec.prof, q.item | 0);
+    else if (q.type === 'utility') current = Array.isArray(rec.prof.utilityUnlocks) && rec.prof.utilityUnlocks.includes(q.utility) ? need : 0;
+    else if (q.type === 'familiar') current = Array.isArray(rec.prof.familiarUnlocks) && rec.prof.familiarUnlocks.includes(q.familiar) ? need : 0;
+    else if (q.type === 'mount') current = Array.isArray(rec.prof.mountUnlocks) && rec.prof.mountUnlocks.some(k => String(k).startsWith('dragon:')) ? need : 0;
+    else if (q.type === 'mount_use') current = p && String(p.mount || '').startsWith('dragon:') ? need : 0;
+    else return false;
+    current = Math.max(0, Math.min(need, current));
     const previous = Math.max(0, Math.min(need, q.have | 0));
     const previousState = q.lifecycleState || 'active';
-    const wasClaimable = previousState === 'claimable';
     q.have = current;
-    if (current >= need && !wasClaimable) {
-      q.lifecycleState = 'claimable';
-      q.claimableAt = Date.now();
-    }
+    if (current >= need) q.lifecycleState = 'claimable';
+    else q.lifecycleState = 'active';
+    if (q.lifecycleState === 'claimable' && previousState !== 'claimable') q.claimableAt = Date.now();
     const changed = current !== previous || (q.lifecycleState || 'active') !== previousState;
     if (!changed) return false;
     this.dirtyPlayers.add(rec.token);
@@ -928,6 +934,7 @@ class ProgressionMixin {
     else if (roll < .8) reward = { kind: 'Rare Armor', id: Math.random() < .5 ? I.DIA_ARMOR : I.IRON_ARMOR };
     else if (!rec.prof.familiarUnlocks.includes('shade')) {
       rec.prof.familiarUnlocks.push('shade');
+      if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
       reward = { kind: 'Shade Familiar', id: I.SHADOW_SIGIL, unlocked: true };
     } else reward = { kind: 'Shade Sigil', id: I.SHADOW_SIGIL };
     let aegisOverflow = false;

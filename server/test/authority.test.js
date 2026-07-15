@@ -1373,6 +1373,66 @@ test('server item grants update active fetch NPC quest objectives immediately', 
   assert.deepEqual(objective.progress, { current: 6, required: 6 });
 });
 
+test('state-backed NPC quests refresh from utility familiar mount and ride actions', () => {
+  {
+    const room = makeRoom(), client = makeClient('utility_story_progress');
+    const { prof } = seedPlayer(room, client);
+    prof.npcQuestChains['Mara Vale'] = 3;
+    assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' }), true);
+    client.sent.length = 0;
+    assert.equal(room.unlockUtility(client, 'compass', 'test unlock'), true);
+    assert.equal(prof.activeNpcQuest.title, 'A Better Sense');
+    assert.equal(prof.activeNpcQuest.have, 1);
+    assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable');
+    const objective = client.sent.find(e => e.type === 'progressionFocus').msg.activeObjectives.find(o => o.title === 'A Better Sense');
+    assert.equal(objective.status, 'claimable');
+  }
+
+  {
+    const room = makeRoom(), client = makeClient('familiar_story_progress');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: I.SHADOW_SIGIL, count: 1 }] });
+    prof.npcQuestChains['Mara Vale'] = 5;
+    assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' }), true);
+    client.sent.length = 0;
+    room.handleBindFamiliar(client, { kind: 'shade', slot: 0 });
+    assert.equal(prof.activeNpcQuest.title, 'A Shadow Companion');
+    assert.equal(prof.activeNpcQuest.have, 1);
+    assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable');
+    assert.equal(client.sent.some(e => e.type === 'npcQuest' && e.msg.action === 'progress' && e.msg.quest.title === 'A Shadow Companion'), true);
+  }
+
+  {
+    const room = makeRoom(), client = makeClient('mount_story_progress');
+    const { prof, token } = seedPlayer(room, client);
+    prof.npcQuestChains['Mara Vale'] = 6;
+    assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' }), true);
+    client.sent.length = 0;
+    room.broadcast = (type, msg) => client.sent.push({ type, msg });
+    const inc = { token, x: 3, y: 11, z: 4, type: 'frost', eggId: I.DRAGON_EGG, finishAt: Date.now() - 1, ready: true };
+    const incKey = room.dragonIncubationKey(inc.x, inc.y, inc.z);
+    room.ensureDragonIncubations().set(incKey, inc);
+    room.claimDragonIncubation(client, incKey, inc);
+    assert.equal(prof.activeNpcQuest.title, 'First Bonded Mount');
+    assert.equal(prof.activeNpcQuest.have, 1);
+    assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable');
+    assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.activeObjectives.some(o => o.title === 'First Bonded Mount' && o.status === 'claimable')), true);
+  }
+
+  {
+    const room = makeRoom(), client = makeClient('mount_use_story_progress');
+    const { prof } = seedPlayer(room, client);
+    prof.npcQuestChains['Mara Vale'] = 7;
+    prof.mountUnlocks = ['dragon:frost'];
+    assert.equal(room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' }), true);
+    client.sent.length = 0;
+    room.handleMount(client, { kind: 'dragon:frost' });
+    assert.equal(prof.activeNpcQuest.title, 'Sky Legs');
+    assert.equal(prof.activeNpcQuest.have, 1);
+    assert.equal(prof.activeNpcQuest.lifecycleState, 'claimable');
+    assert.equal(client.sent.some(e => e.type === 'npcQuest' && e.msg.action === 'progress' && e.msg.quest.title === 'Sky Legs'), true);
+  }
+});
+
 test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate', () => {
   const room = makeRoom(), client = makeClient('mara_path_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });

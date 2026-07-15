@@ -96,6 +96,7 @@ class DragonsMixin {
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
     client.send('familiarBound', { kind, slot: usedSlot ? slot : -1 });
+    if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
   }
   handleSummonFamiliar(client, m) {
     const p = this.state.players.get(client.sessionId);
@@ -201,6 +202,7 @@ class DragonsMixin {
     if (!isValidMount(kind)) return;
     if (isUnlockableMount(kind) && !this.hasMountUnlock(client, kind)) return;  // must be earned
     p.mount = kind;
+    if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
   }
   handleDismount(client) {
     const p = this.state.players.get(client.sessionId);
@@ -258,6 +260,7 @@ class DragonsMixin {
     this.ensureDragonIncubations().delete(key);
     this.dirtyIncubations = true;
     this.broadcast('dragonIncubationComplete', { x: inc.x, y: inc.y, z: inc.z, type: inc.type, eggId: inc.eggId, gender: rec.prof.dragonGenders[inc.type], personality, hatchedAt, kind, ownerSid: client.sessionId });
+    if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
   }
   handleRenameDragon(client, m) {
     const rec = this.profileFor(client);

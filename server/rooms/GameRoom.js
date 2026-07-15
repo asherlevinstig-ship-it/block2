@@ -2064,6 +2064,7 @@ class GameRoom extends Room {
     const activeEquipped = loadout.active === id;
     const passiveIndex = loadout.passive.indexOf(id);
     this.dirtyPlayers.add(rec.token);
+    if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
     client.send('utilityUnlock', {
       id, reason,
       equipped: activeEquipped || passiveIndex >= 0,
@@ -4622,7 +4623,7 @@ class GameRoom extends Room {
         }
         if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });
       }
-      if (delivered.length && this.refreshFetchNpcQuestProgress) this.refreshFetchNpcQuestProgress(client);
+      if (delivered.length && this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
       grant={...grant,items:delivered};
       this.syncPlayerProfile(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
