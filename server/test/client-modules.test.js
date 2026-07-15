@@ -858,6 +858,15 @@ test('Escape opens subject focus only when gameplay has no open window',()=>{
   assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
 });
 
+test('quest log hotkey works while gameplay overlay is hidden even without pointer lock',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat\)\{/);
+  assert.match(combat,/else if\(locked\|\|overlay\.classList\.contains\('hidden'\)\) openQuestLogUI\(\);/);
+  assert.doesNotMatch(combat,/else if\(locked && !uiOpen && !statOpen\) openQuestLogUI\(\);/);
+  assert.match(menus,/openQuestLog:openQuestLogUI/);
+});
+
 test('ordinary combat exposes health, telegraphs, statuses, impact pause, and death motion',()=>{
   const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
   const feedback=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat-feedback.mjs'),'utf8');

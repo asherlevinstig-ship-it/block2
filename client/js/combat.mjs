@@ -1648,7 +1648,7 @@ addEventListener('keydown', e=>{
   if(e.code==='KeyO' && !e.repeat){
     e.preventDefault();
     if(uiShellState.qOpen && questLogOpen) closeQWin();
-    else if(locked && !uiOpen && !statOpen) openQuestLogUI();
+    else if(locked||overlay.classList.contains('hidden')) openQuestLogUI();
     return;
   }
   if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
