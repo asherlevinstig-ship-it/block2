@@ -222,6 +222,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /MARK SUPPLY/);
   assert.match(menusSource, /chestSupplyModeHint/);
   assert.match(menusSource, /chestMode/);
+  assert.match(menusSource, /treasureChestRevealSeen/);
+  assert.match(menusSource, /function showTreasureChestReveal\(key, chest\)/);
+  assert.match(menusSource, /TREASURE FOUND/);
+  assert.match(menusSource, /SFX\.treasure\(\)/);
   assert.match(menusSource, /SORT BAG/);
   assert.match(menusSource, /requestInventorySort/);
   assert.match(menusSource, /DEPOSIT MATCHING/);

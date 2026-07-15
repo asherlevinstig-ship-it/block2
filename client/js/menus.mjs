@@ -1319,6 +1319,7 @@ function noise(dur,vol,fc,q,delay,type){
     chip(cls){ noise(.04,.13, cls==='pick'?1300:700); },
     place(){ noise(.06,.32,900); osc('sine',300,150,.06,.25); },
     level(){ osc('sine',523,0,.16,.35); osc('sine',659,0,.16,.35,.11); osc('sine',784,0,.24,.4,.22); noise(.4,.12,3000,2,.22); },
+    treasure(){ osc('sine',523,784,.18,.22); osc('sine',659,1047,.2,.2,.08); osc('sine',988,1318,.24,.18,.16); noise(.24,.16,3200,2,.16); },
     coin(){ osc('sine',1320,0,.07,.3); osc('sine',1760,0,.12,.3,.06); },
     bow(){ noise(.05,.4,2400); osc('sawtooth',420,900,.08,.2); },
     boom(){ osc('sine',90,28,.6,.8); noise(.4,.5,160,1,0,'lowpass'); },
@@ -1849,6 +1850,70 @@ function requestChestMode(supply){
   if(!NET.on || uiMode!=='chest') return;
   const c=chestCoords(); if(c) NET.room.send('chestMode', {...c, supply:!!supply});
 }
+const treasureChestRevealSeen=new Set();
+function ensureTreasureRevealStyles(){
+  if(document.getElementById('treasure-reveal-style'))return;
+  const style=document.createElement('style');style.id='treasure-reveal-style';
+  style.textContent=`
+    .treasure-reveal{position:fixed;left:50%;top:15vh;z-index:9000;transform:translate(-50%,-18px) scale(.96);opacity:0;pointer-events:none;min-width:min(520px,calc(100vw - 28px));max-width:620px;padding:18px 20px 16px;border:2px solid #ffd65a;border-radius:8px;background:linear-gradient(180deg,rgba(20,31,44,.98),rgba(7,14,23,.96));box-shadow:0 0 0 1px rgba(255,255,255,.12) inset,0 18px 46px rgba(0,0,0,.55),0 0 42px rgba(255,199,74,.22);color:#eef6ff;text-align:center;font-family:inherit;transition:opacity .22s ease,transform .22s ease}
+    .treasure-reveal.show{opacity:1;transform:translate(-50%,0) scale(1)}
+    .treasure-reveal.leaving{opacity:0;transform:translate(-50%,-10px) scale(.98)}
+    .treasure-reveal small{display:block;color:#ffd65a;letter-spacing:.22em;font-size:12px;margin-bottom:4px}
+    .treasure-reveal h3{margin:0;font-size:28px;line-height:1.1;color:#fff7ca;text-shadow:0 2px 0 #1d2a33}
+    .treasure-reveal p{margin:8px 0 12px;color:#d7e7f6;font-size:15px}
+    .treasure-reveal-items{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+    .treasure-reveal-item{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid rgba(255,214,90,.35);background:rgba(255,255,255,.07);border-radius:6px;text-align:left}
+    .treasure-reveal-item canvas{width:32px;height:32px;image-rendering:pixelated;flex:0 0 auto}
+    .treasure-reveal-item b{display:block;font-size:13px;line-height:1.1;color:#ffffff}
+    .treasure-reveal-item span{display:block;font-size:12px;color:#ffd65a}
+    .treasure-spark{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff2a8;box-shadow:0 0 12px #ffd65a;animation:treasure-spark 900ms ease-out forwards}
+    @keyframes treasure-spark{from{opacity:1;transform:translate(0,0) scale(1)}to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.2)}}
+    @media (prefers-reduced-motion:reduce){.treasure-reveal,.treasure-spark{transition:none;animation:none}}
+  `;
+  document.head.appendChild(style);
+}
+function treasureItemScore(stack){
+  const id=stack&&stack.id|0;
+  if(id===I.LEGEND_TOKEN)return 100;
+  if(id===I.SOLAR_GLYPH||id===I.STORMGLASS)return 90;
+  if(id===I.GEODE)return 80;
+  if(id===I.DIAMOND)return 70;
+  if(id===I.REPAIR_KIT)return 55;
+  if(id===I.IRON_INGOT)return 45;
+  return 20;
+}
+function showTreasureChestReveal(key, chest){
+  if(!key||!chest||chest.scope!=='public'||treasureChestRevealSeen.has(key))return;
+  const items=(chest.slots||[]).filter(s=>s&&ITEMS[s.id]).map(s=>({id:s.id|0,count:Math.max(1,s.count|0||1)}));
+  if(!items.length)return;
+  treasureChestRevealSeen.add(key);
+  const grouped=new Map();
+  for(const it of items)grouped.set(it.id,(grouped.get(it.id)||0)+it.count);
+  const top=[...grouped].map(([id,count])=>({id,count})).sort((a,b)=>treasureItemScore(b)-treasureItemScore(a)||((ITEMS[a.id].name||'').localeCompare(ITEMS[b.id].name||''))).slice(0,4);
+  ensureTreasureRevealStyles();
+  const card=document.createElement('div');card.className='treasure-reveal';card.setAttribute('role','status');card.setAttribute('aria-live','polite');
+  card.innerHTML='<small>TREASURE FOUND</small><h3>Chest Opened!</h3><p>Choose your rewards from the glowing chest slots.</p><div class="treasure-reveal-items"></div>';
+  const list=card.querySelector('.treasure-reveal-items');
+  for(const it of top){
+    const row=document.createElement('div');row.className='treasure-reveal-item';
+    const icon=document.createElement('canvas');icon.width=TS;icon.height=TS;icon.getContext('2d').drawImage(ITEMS[it.id].icon,0,0);
+    const label=document.createElement('div');label.innerHTML='<b>'+escHTML(ITEMS[it.id].name)+'</b><span>x'+it.count+'</span>';
+    row.appendChild(icon);row.appendChild(label);list.appendChild(row);
+  }
+  for(let i=0;i<14;i++){
+    const spark=document.createElement('i');spark.className='treasure-spark';
+    spark.style.left=(8+Math.random()*84)+'%';spark.style.top=(10+Math.random()*70)+'%';
+    spark.style.setProperty('--tx',((Math.random()-.5)*180).toFixed(0)+'px');
+    spark.style.setProperty('--ty',((-35-Math.random()*95)).toFixed(0)+'px');
+    card.appendChild(spark);
+  }
+  document.body.appendChild(card);
+  requestAnimationFrame(()=>card.classList.add('show'));
+  setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),360);},4200);
+  SFX.treasure();
+  rewardGain(top.some(it=>treasureItemScore(it)>=80)?'rare':'item',1,'Treasure Found',{icon:'+'});
+  sysMsg('<b>Treasure found!</b> Take the rewards you want from the chest.',{tier:'major',title:'Treasure Chest'});
+}
 function applyChestState(m){
   if(!m || !m.key) return;
   const key=m.key.split(':').pop();
@@ -1860,6 +1925,7 @@ function applyChestState(m){
   c.supplyModeReason=typeof m.supplyModeReason==='string'?m.supplyModeReason:'';
   c.canWithdraw=m.canWithdraw!==false;
   if(uiOpen && uiMode==='chest' && uiFurnaceKey===key) renderUI();
+  showTreasureChestReveal(m.key,c);
 }
 function applyChestTx(m){
   if(!m || !ITEMS[m.id]) return;
