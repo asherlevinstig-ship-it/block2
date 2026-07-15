@@ -202,6 +202,44 @@ test('overworld cave networks add explorable underground routes from cave landma
   assert.match(clientWorld, /buildCaveNetworks\(setB,getB\)/);
 });
 
+test('ancient city POIs generate rare deep halls, vaults, core chambers, and lore hooks', () => {
+  const cities = W.ancientCitySpecs();
+  assert.equal(cities.length >= 1, true, 'world has ancient city POIs below cave routes');
+  assert.equal(cities.every(city => city.y >= 10 && city.y <= 20), true, 'ancient cities sit in the deep y 10-20 band');
+  assert.equal(cities.every(city => city.core && city.core.bossKind === 'ancient_warden'), true, 'core chambers reserve the Warden boss hook');
+  assert.equal(cities.every(city => city.vaults.length >= 2 && city.tablets.length >= 2), true, 'cities include vault rooms and lore tablets');
+  assert.equal(W.ancientCityLootTable().some(row => row.requires === 'ancient_warden'), true, 'loot table reserves the rare Warden ability reward');
+  const world = W.createWorld(); world.generate();
+  for (const city of cities) {
+    let air = 0, brick = 0, lights = 0, chests = 0, core = 0;
+    for (let x = city.x - city.radius; x <= city.x + city.radius; x++)
+      for (let y = city.y - 4; y <= city.y + 8; y++)
+        for (let z = city.z - city.radius; z <= city.z + city.radius; z++) {
+          const id = world.getB(x, y, z);
+          if (id === W.B.AIR) air++;
+          if (id === W.B.BRICK || id === W.B.COBBLE) brick++;
+          if (id === W.B.TORCH || id === W.B.LANTERN) lights++;
+          if (id === W.B.CHEST) chests++;
+          if (id === W.B.DIAMOND_ORE || id === W.B.GLASS) core++;
+        }
+    assert.equal(air > 1200, true, `${city.id} has carved halls and rooms`);
+    assert.equal(brick > 600, true, `${city.id} has broken brick architecture`);
+    assert.equal(lights >= 8, true, `${city.id} is lantern/torch readable`);
+    assert.equal(chests >= 2, true, `${city.id} has treasure vault chests`);
+    assert.equal(core >= 3, true, `${city.id} has an ancient core chamber`);
+    for (const tablet of city.tablets) {
+      assert.equal(world.getB(tablet.x, tablet.y + 1, tablet.z), W.B.BRICK, `${tablet.id} has a tablet body`);
+      assert.equal(world.getB(tablet.x, tablet.y + 2, tablet.z), W.B.LANTERN, `${tablet.id} has a recall/lore marker`);
+    }
+  }
+  const clientWorld = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  assert.match(clientWorld, /function ancientCitySpecs\(\)/);
+  assert.match(clientWorld, /function ancientCityLootTable\(\)/);
+  assert.match(clientWorld, /function buildAncientCities\(setBlock,getBlock=getB\)/);
+  assert.match(clientWorld, /bossKind:'ancient_warden'/);
+  assert.match(clientWorld, /buildAncientCities\(setB,getB\)/);
+});
+
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');

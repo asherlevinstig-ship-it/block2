@@ -1023,6 +1023,48 @@ function buildCaveNetworks(setBlock,getBlock=getB){
   }
   return caveNetworkSpecs();
 }
+function ancientCitySpecs(){
+  return caveNetworkSpecs().map((net,cityIndex)=>{
+    const end=net.points[net.points.length-1],prev=net.points[net.points.length-2]||net.points[0]||end;
+    const x=Math.max(LAVA_BORDER_WIDTH+32,Math.min(WX-LAVA_BORDER_WIDTH-33,Math.round(end.x+(end.x-prev.x)*.45)));
+    const z=Math.max(LAVA_BORDER_WIDTH+32,Math.min(WX-LAVA_BORDER_WIDTH-33,Math.round(end.z+(end.z-prev.z)*.45)));
+    const y=10+Math.floor(hash2(net.entrance.x+7127,net.entrance.z+3301)*9),axis=hash2(x+4049,z+2707)>.5?'x':'z';
+    const vaults=[
+      {id:'vault_a',x:x+(axis==='x'?15:-10),y,z:z+(axis==='x'?-9:15),chestKey:'ancient_city_'+cityIndex+'_vault_a'},
+      {id:'vault_b',x:x+(axis==='x'?-15:10),y,z:z+(axis==='x'?9:-15),chestKey:'ancient_city_'+cityIndex+'_vault_b'}
+    ];
+    const tablets=[
+      {id:'tablet_origin',x:x-6,y,z:z-2,hook:'ancient_city_origin'},
+      {id:'tablet_core',x:x+6,y,z:z+2,hook:'ancient_core_recall'}
+    ];
+    return {id:'ancient_city_'+cityIndex,type:'ancient_city',caveNetworkId:net.id,x,y,z,axis,radius:24,entrance:{x:end.x,y:end.y,z:end.z},core:{x,y,z,hook:'ancient_core',bossKind:'ancient_warden'},vaults,tablets};
+  });
+}
+function ancientCityLootTable(){
+  return [
+    {id:'echo_shard',label:'Echo Shard',weight:18,tier:'rare',use:'Ancient crafting and Warden ability unlocks'},
+    {id:'warden_relic',label:'Warden Relic',weight:8,tier:'epic',use:'Future Ancient Core offering'},
+    {id:'unique_gear',label:'Unique dungeon gear',weight:5,tier:'epic',use:'Rolls from the unique weapon and armor pool'},
+    {id:'ancient_core_ability',label:'Rare ability: Echo Step',weight:1,tier:'mythic',requires:'ancient_warden'}
+  ];
+}
+function buildAncientCities(setBlock,getBlock=getB){
+  const inBounds=(x,y,z)=>x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
+  const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)if(inBounds(x,y,z))setBlock(x,y,z,id);};
+  const room=(cx,cy,cz,rx,rz,salt)=>{for(let x=cx-rx;x<=cx+rx;x++)for(let z=cz-rz;z<=cz+rz;z++)for(let y=cy-1;y<=cy+5;y++){const wall=x===cx-rx||x===cx+rx||z===cz-rz||z===cz+rz||y===cy-1||y===cy+5;if(wall){const cracked=hash2(x+salt*17+y,z-salt*23)>.82;setBlock(x,y,z,cracked?B.COBBLE:B.BRICK);}else setBlock(x,y,z,B.AIR);}};
+  const hall=(x1,y,z1,x2,z2,salt)=>{const steps=Math.max(Math.abs(x2-x1),Math.abs(z2-z1),1);for(let i=0;i<=steps;i++){const cx=Math.round(x1+(x2-x1)*i/steps),cz=Math.round(z1+(z2-z1)*i/steps);for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++){const side=Math.abs(ox)===2||Math.abs(oz)===2,x=cx+ox,z=cz+oz;setBlock(x,y-1,z,side?B.BRICK:(hash2(x+salt,z-salt)>.75?B.COBBLE:B.BRICK));for(let h=0;h<=4;h++)setBlock(x,y+h,z,side&&h>0&&hash2(x+h*31+salt,z-h*17)>.28?B.BRICK:B.AIR);}if(i>0&&i%10===0){setBlock(cx+2,y,cz,B.COBBLE);setBlock(cx+2,y+1,cz,B.LANTERN);setBlock(cx-2,y,cz,B.COBBLE);setBlock(cx-2,y+1,cz,B.TORCH);}}};
+  const tablet=t=>{setBlock(t.x,t.y-1,t.z,B.BRICK);setBlock(t.x,t.y,t.z,B.BRICK);setBlock(t.x,t.y+1,t.z,B.BRICK);setBlock(t.x,t.y+2,t.z,B.LANTERN);for(const [ox,oz]of[[1,0],[-1,0]])setBlock(t.x+ox,t.y-1,t.z+oz,B.COBBLE);};
+  for(const city of ancientCitySpecs()){
+    const {x,y,z}=city;hall(city.entrance.x,city.entrance.y,city.entrance.z,x,z,x+z);room(x,y,z,9,9,300+x);
+    for(const v of city.vaults){hall(x,y,z,v.x,v.z,v.x+v.z);room(v.x,v.y,v.z,6,5,700+v.x);box(v.x-2,v.y,v.z-2,v.x+2,v.y+2,v.z+2,B.AIR);setBlock(v.x,v.y,v.z,B.BRICK);setBlock(v.x,v.y+1,v.z,B.CHEST);setBlock(v.x-3,v.y+1,v.z-3,B.LANTERN);setBlock(v.x+3,v.y+1,v.z+3,B.LANTERN);}
+    room(x,y-1,z,7,7,1100+x);
+    for(const [ox,oz]of[[-5,-5],[5,-5],[-5,5],[5,5]]){box(x+ox,y-1,z+oz,x+ox,y+3,z+oz,B.BRICK);setBlock(x+ox,y+4,z+oz,B.LANTERN);}
+    setBlock(x,y-1,z,B.DIAMOND_ORE);setBlock(x,y,z,B.GLASS);setBlock(x,y+1,z,B.LANTERN);setBlock(x,y+2,z,B.DIAMOND_ORE);
+    for(const t of city.tablets)tablet(t);
+    for(const [ox,oz]of[[0,-8],[8,0],[0,8],[-8,0]]){setBlock(x+ox,y,z+oz,B.BRICK);setBlock(x+ox,y+1,z+oz,B.TORCH);}
+  }
+  return ancientCitySpecs();
+}
 let smallDiscoveries=[];
 let treasureCaches=[];
 let roadBreadcrumbs=[];
@@ -1097,6 +1139,7 @@ function generateWorld(){
   smallDiscoveries=buildSmallDiscoveries(setB);
   regionalLandmarks=buildRegionalLandmarks(setB);
   buildCaveNetworks(setB,getB);
+  buildAncientCities(setB,getB);
   treasureCaches=buildTreasureCaches(setB);
   buildLavaBorder();
 }
