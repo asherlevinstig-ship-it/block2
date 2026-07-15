@@ -767,7 +767,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
     room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
     room.onMessage('progressionFocus', m=>{
-      progressionFocus=PROGRESSION_FOCUS_STATES.includes(m&&m.progressionFocus)?m.progressionFocus:'';
+      const focus=String(m&& (m.progressionFocus||m.focus) || '');
+      progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
       setActiveObjectives(m&&m.activeObjectives,{announce:true});
       refreshHUD(); refreshPlayUi();
     });

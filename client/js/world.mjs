@@ -3576,6 +3576,47 @@ function maraQuestGuidanceTarget(q){
   }
   return null;
 }
+function activeServerObjectiveForGuidance(){
+  if(!Array.isArray(activeObjectives))return null;
+  return activeObjectives
+    .filter(o=>o&&o.status!=='failed')
+    .filter(o=>o.source!=='tutorial')
+    .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0]||null;
+}
+function serverObjectiveGuidanceTarget(o){
+  if(!o)return null;
+  const action=o.action&&o.action.type||o.hudAction&&o.hudAction.type||o.questLogAction&&o.questLogAction.type||'';
+  const source=String(o.source||'');
+  const loc=String(o.location||'').toLowerCase();
+  const title=String(o.title||'').toLowerCase();
+  const gate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(action==='jobs'||source==='job'||loc.includes('job board')){
+    return {kind:'server-jobs',color:0x8bbf5a,target:HUB.jobs,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.jobs]};
+  }
+  if(action==='guild_contracts'||source==='guild'||loc.includes('guild')){
+    return {kind:'server-guild',color:0x8bbf5a,target:HUB.guild,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guild]};
+  }
+  if(action==='claim_aegis'||source==='aegis'||loc.includes('aegis')||loc.includes('guardian')){
+    return {kind:'server-aegis',color:0xd7b5ff,target:HUB.guardian,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guardian]};
+  }
+  if(action==='land'||loc.includes('land')||loc.includes('claim')){
+    const target={x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
+    return {kind:'server-land',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+7},target]};
+  }
+  if(action==='find_gate'||loc.includes('gate')){
+    return {kind:'server-gate',color:0x7dd3fc,target:gate,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate]};
+  }
+  if(loc.includes('mara')||title.includes('road ready')){
+    const toMara=action==='quest_log'||action==='turn_in'||o.status==='claimable'||o.status==='complete';
+    const target=toMara?HUB.guide:gate;
+    const color=toMara?0x9ad26b:0x7dd3fc;
+    return {kind:'server-mara',color,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target]};
+  }
+  if(source==='story'||source==='manhunt'){
+    return {kind:'server-story',color:0x7dd3fc,target:gate,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate]};
+  }
+  return null;
+}
 function guidanceTargetInfo(){
   if(dim!=='overworld') return null;
   if(coachTrail){
@@ -3604,6 +3645,8 @@ function guidanceTargetInfo(){
     }
   }
   if(!isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z))) return null;
+  const serverTarget=serverObjectiveGuidanceTarget(activeServerObjectiveForGuidance());
+  if(serverTarget)return serverTarget;
   const directed=typeof progressionDirectorGuidanceInfo==='function'?progressionDirectorGuidanceInfo():null;
   if(directed){
     const target=directed.target==='jobs'?HUB.jobs:directed.target==='roost'?HUB.roost:directed.target==='guild'?HUB.guild:directed.target==='roads'?guidanceNpcPosition('Tamsin Rook'):directed.target==='skyport'?HUB.skyport:HUB.guide;

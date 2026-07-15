@@ -1013,6 +1013,10 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   assert.match(world,/addTownQuestMarker\('guild_contracts'/);
   assert.match(world,/addTownQuestMarker\('claim_aegis'/);
   assert.match(world,/serviceObjectiveFor\(type/);
+  assert.match(world,/function activeServerObjectiveForGuidance\(\)/);
+  assert.match(world,/function serverObjectiveGuidanceTarget\(o\)/);
+  assert.match(world,/title\.includes\('road ready'\)/);
+  assert.match(world,/color=toMara\?0x9ad26b:0x7dd3fc/);
 });
 
 test('server profile tutorial state overrides stale browser onboarding flags',()=>{
@@ -1890,6 +1894,7 @@ test('quest log progression director introduces one system at a time',()=>{
   const store=fs.readFileSync(path.join(__dirname,'..','store.js'),'utf8');
   const earlyLoopE2E=fs.readFileSync(path.join(__dirname,'..','..','e2e','player-facing-early-loop.spec.js'),'utf8');
   assert.match(menus,/function progressionRoadmap\(\)/);
+  assert.match(networking,/const focus=String\(m&& \(m\.progressionFocus\|\|m\.focus\) \|\| ''\);/);
   assert.match(menus,/function whatNextQuestLogCard\(\)/);
   assert.match(menus,/function activeObjectiveList\(\)/);
   assert.match(menus,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
