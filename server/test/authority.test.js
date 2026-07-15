@@ -108,6 +108,9 @@ const I = {
   LEGEND_ARMOR: 137,
   IRON_ARMOR: 183,
   DIA_ARMOR: 184,
+  HIDE_ARMOR: 211,
+  CHAIN_ARMOR: 212,
+  STORMGLASS_ARMOR: 213,
   DRAGON_EGG: 185,
   EGG_VERDANT: 186,
   EGG_FROST: 187,
@@ -1759,6 +1762,10 @@ test('profile merge and sanitize support normal equipped armor', () => {
   const current = defaultProfile('Armor');
   const iron = mergeClientSave(current, { armor: { id: I.IRON_ARMOR, count: 1 } });
   assert.equal(iron.armor, null);
+  assert.deepEqual(sanitizeProfile({ armor: { id: I.HIDE_ARMOR, count: 1, armorType: 'scout' } }).armor,
+    { id: I.HIDE_ARMOR, count: 1, armorType: 'scout' });
+  assert.deepEqual(sanitizeProfile({ armor: { id: I.STORMGLASS_ARMOR, count: 1, rarity: 'rare' } }).armor,
+    { id: I.STORMGLASS_ARMOR, count: 1, rarity: 'rare' });
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.DIA_ARMOR, count: 4 },
     inv: [{ id: I.DIA_ARMOR, count: 1 }, { id: I.DIAMOND, count: 2 }],
@@ -3003,6 +3010,48 @@ test('normal armor crafts from ingots and diamonds', () => {
   ] });
   assert.equal(itemCount(prof, I.DIAMOND), 0);
   assert.equal(itemCount(prof, I.DIA_ARMOR), 1);
+});
+
+test('expanded armor bases craft from monster hides chain and stormglass', () => {
+  {
+    const room = makeRoom(), client = makeClient('hide_armorer');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: I.MONSTER_MEAT, count: 8 }] });
+    room.handleCraft(client, { w: 3, cells: [
+      { id: I.MONSTER_MEAT, count: 1 }, 0, { id: I.MONSTER_MEAT, count: 1 },
+      { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 },
+      { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 },
+    ] });
+    assert.equal(itemCount(prof, I.HIDE_ARMOR), 1);
+  }
+  {
+    const room = makeRoom(), client = makeClient('chain_armorer');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 7 }, { id: I.COAL, count: 1 }] });
+    room.handleCraft(client, { w: 3, cells: [
+      { id: I.IRON_INGOT, count: 1 }, 0, { id: I.IRON_INGOT, count: 1 },
+      { id: I.IRON_INGOT, count: 1 }, { id: I.COAL, count: 1 }, { id: I.IRON_INGOT, count: 1 },
+      { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
+    ] });
+    assert.equal(itemCount(prof, I.CHAIN_ARMOR), 1);
+  }
+  {
+    const room = makeRoom(), client = makeClient('stormglass_armorer');
+    const { prof } = seedPlayer(room, client, { inv: [{ id: I.STORMGLASS, count: 7 }, { id: I.DIAMOND, count: 1 }] });
+    room.handleCraft(client, { w: 3, cells: [
+      { id: I.STORMGLASS, count: 1 }, 0, { id: I.STORMGLASS, count: 1 },
+      { id: I.STORMGLASS, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.STORMGLASS, count: 1 },
+      { id: I.STORMGLASS, count: 1 }, { id: I.STORMGLASS, count: 1 }, { id: I.STORMGLASS, count: 1 },
+    ] });
+    assert.equal(itemCount(prof, I.STORMGLASS_ARMOR), 1);
+  }
+});
+
+test('armor drops scale across expanded armor bases', () => {
+  const room = makeRoom();
+  assert.equal(room.rollArmorDrop(0, 0, 'scout').id, I.HIDE_ARMOR);
+  assert.equal(room.rollArmorDrop(1, 0, 'vanguard').id, I.CHAIN_ARMOR);
+  assert.equal(room.rollArmorDrop(2, 0, 'vanguard').id, I.IRON_ARMOR);
+  assert.equal(room.rollArmorDrop(3, 0, 'bulwark').id, I.DIA_ARMOR);
+  assert.equal(room.rollArmorDrop(4, 0, 'scout').id, I.STORMGLASS_ARMOR);
 });
 
 test('rate limiter allows a burst then throttles, isolating buckets and clients', () => {

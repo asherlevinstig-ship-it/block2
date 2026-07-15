@@ -99,6 +99,7 @@ const I = {
   RIVER_FISH: 199, MOTE_CHARM: 200, FORAGE_CHARM: 201, COMPOST: 202, GOLDEN_WHEAT: 203,
   GOLDEN_BROTH: 204, TRAIL_RATION: 205, FEAST_PLATTER: 206,
   GEODE: 207, RAINWAKE_PETAL: 208, STORMGLASS: 209, SOLAR_GLYPH: 210,
+  HIDE_ARMOR: 211, CHAIN_ARMOR: 212, STORMGLASS_ARMOR: 213,
 };
 // Familiars. Shade: defense, Fang: offense, Mote: restoration, Sprite: forage (bonus yield).
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite']);
@@ -132,8 +133,11 @@ const LEGENDARY_CRAFTS = {
   [I.VOID_ANCHOR]: { cost: 3, name: 'Void Anchor' },
 };
 const ARMOR_INFO = {
+  [I.HIDE_ARMOR]: { tier: 2, armorType:'scout', mitigation: .08, dur: 260 },
+  [I.CHAIN_ARMOR]: { tier: 3, armorType:'vanguard', mitigation: .11, dur: 420 },
   [I.IRON_ARMOR]: { tier: 3, armorType:'vanguard', mitigation: .12, dur: 480 },
   [I.DIA_ARMOR]: { tier: 4, armorType:'bulwark', mitigation: .16, dur: 900 },
+  [I.STORMGLASS_ARMOR]: { tier: 4, armorType:'scout', mitigation: .15, dur: 760 },
   [I.LEGEND_ARMOR]: { tier: 5, armorType:'aegis', legendary: true, mitigation: .20, dur: 1800 },
 };
 const SOLO_KEYS = [I.SOLO_KEY_E, I.SOLO_KEY_D, I.SOLO_KEY_C, I.SOLO_KEY_B, I.SOLO_KEY_A];
@@ -534,8 +538,11 @@ for (const m in TOOL_MAT_ITEMS) {
   RECIPES.push({ shape: ['M', 'M', 's'], keys: { M, s }, out: [I[m + '_SWORD'], 1] });
   RECIPES.push({ shape: ['MM', '.s', '.s'], keys: { M, s }, out: [I[m + '_HOE'], 1], mirror: true });
 }
+RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.MONSTER_MEAT }, out: [I.HIDE_ARMOR, 1] });
+RECIPES.push({ shape: ['I.I', 'ICI', 'III'], keys: { I: I.IRON_INGOT, C: I.COAL }, out: [I.CHAIN_ARMOR, 1] });
 RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.IRON_INGOT }, out: [I.IRON_ARMOR, 1] });
 RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.DIAMOND }, out: [I.DIA_ARMOR, 1] });
+RECIPES.push({ shape: ['S.S', 'SDS', 'SSS'], keys: { S: I.STORMGLASS, D: I.DIAMOND }, out: [I.STORMGLASS_ARMOR, 1] });
 const MINE_DROPS = {
   [W.B.GRASS]: { item: W.B.DIRT, count: 1 },
   [W.B.GLASS]: null,

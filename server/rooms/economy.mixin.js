@@ -43,8 +43,9 @@ class EconomyMixin {
   }
   rollArmorDrop(rank=0,rarityBonus=0,armorType='vanguard'){
     const ri=Math.max(0,Math.min(5,rank|0));
+    const ids=[I.HIDE_ARMOR,I.CHAIN_ARMOR,I.IRON_ARMOR,I.DIA_ARMOR,I.STORMGLASS_ARMOR,I.STORMGLASS_ARMOR];
     return {
-      id:ri<=2?I.IRON_ARMOR:I.DIA_ARMOR,count:1,gearRank:GEAR_SYSTEM.RANKS[ri].id,
+      id:ids[ri]||I.IRON_ARMOR,count:1,gearRank:GEAR_SYSTEM.RANKS[ri].id,
       rarity:GEAR_SYSTEM.rollRarity(Math.random(),rarityBonus).id,
       armorType:GEAR_SYSTEM.ARMOR_ARCHETYPES[armorType]?armorType:'vanguard',gear:true,
     };

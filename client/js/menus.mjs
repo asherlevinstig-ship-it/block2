@@ -394,8 +394,11 @@ function recipeUnlocked(recipe){
   if(mat==='stone') return seenAny(B.COBBLE,B.STONE);
   if(mat==='iron') return seenAny(I.IRON_INGOT,B.IRON_ORE);
   if(mat==='diamond') return seenAny(I.DIAMOND,B.DIAMOND_ORE);
+  if(out===I.HIDE_ARMOR) return seenAny(I.MONSTER_MEAT);
+  if(out===I.CHAIN_ARMOR) return seenAny(I.IRON_INGOT,B.IRON_ORE,I.COAL,B.COAL_ORE);
   if(out===I.IRON_ARMOR) return seenAny(I.IRON_INGOT,B.IRON_ORE);
   if(out===I.DIA_ARMOR) return seenAny(I.DIAMOND,B.DIAMOND_ORE);
+  if(out===I.STORMGLASS_ARMOR) return seenAny(I.STORMGLASS,I.DIAMOND);
   if(out===B.PLANKS||out===I.STICK||out===B.TABLE||out===I.BREAD) return true;
   if(out===B.TORCH) return seenAny(I.COAL,I.CHARCOAL,B.COAL_ORE);
   if(out===B.LANTERN) return seenAny(B.TORCH,I.IRON_INGOT);
@@ -2733,7 +2736,7 @@ function questTypeLabel(q){
 }
 const AEGIS_TRIAL_LOOT=[
   {kind:'Rare Weapon', weight:45, items:[I.DIA_SWORD,I.IRON_SWORD], note:'The guardian releases a weapon cache.'},
-  {kind:'Rare Armor', weight:35, items:[I.DIA_ARMOR,I.IRON_ARMOR], note:'The guardian releases an armor cache.'},
+  {kind:'Rare Armor', weight:35, items:[I.STORMGLASS_ARMOR,I.DIA_ARMOR,I.IRON_ARMOR,I.CHAIN_ARMOR], note:'The guardian releases an armor cache.'},
   {kind:'Shade Familiar', weight:20, items:[I.SHADOW_SIGIL], note:'A shadow answers from inside the shrine.'},
 ];
 function rollWeightedLoot(table){
@@ -3139,7 +3142,7 @@ const GATE_DIFFICULTIES=['Initiate','Dangerous','Severe','Extreme','Cataclysmic'
 const GATE_LEGENDARY_WEAPONS=new Set([136,138,160,161,162,163,164,165,166,167,168,169,170,171]);
 const GATE_READINESS_HINTS={
   weapon:'Craft or carry an iron-tier sword or axe at Tobin\'s smithy.',
-  armor:'Craft Iron Armor with 8 ingots, then equip it before entering.',
+  armor:'Craft or equip Chainmail, Iron, Diamond, or better armor before entering.',
   food:'Buy food from Greta or cook meals until you have enough rations.',
   tool:'Repair or craft a healthy pick, shovel, or hoe for dungeon utility.',
 };
@@ -3148,7 +3151,7 @@ function gateReadinessLocal(rank){
   const req=GATE_READINESS_REQUIREMENTS[rank],tierName=['Basic','Wood','Stone','Iron','Diamond','Legendary'];
   const stacks=inv.filter(Boolean),weapons=stacks.filter(s=>(ITEMS[s.id]&&ITEMS[s.id].tool&&['sword','axe'].includes(ITEMS[s.id].tool.cls))||GATE_LEGENDARY_WEAPONS.has(s.id));
   const weaponOk=weapons.some(s=>GATE_LEGENDARY_WEAPONS.has(s.id)||((ITEMS[s.id].tool.tier|0)>=req.weapon&&(s.plus|0)>=(req.weaponPlus||0)));
-  const armorTier=armorSlot&&armorSlot.id===137?5:armorSlot&&armorSlot.id===I.DIA_ARMOR?4:armorSlot&&armorSlot.id===I.IRON_ARMOR?3:0;
+  const armorTier=armorSlot&&armorSlot.id===137?5:armorSlot&&[I.DIA_ARMOR,I.STORMGLASS_ARMOR].includes(armorSlot.id)?4:armorSlot&&[I.IRON_ARMOR,I.CHAIN_ARMOR].includes(armorSlot.id)?3:armorSlot&&armorSlot.id===I.HIDE_ARMOR?2:0;
   const foodCount=stacks.reduce((n,s)=>n+(FOOD_VALUES[s.id]?Math.max(0,s.count|0):0),0);
   const toolOk=stacks.some(s=>{const t=ITEMS[s.id]&&ITEMS[s.id].tool;if(!t||t.cls==='sword'||(t.tier|0)<req.tool)return false;const max=toolMaxDur(s),cur=s.dur==null?max:Math.max(0,s.dur|0);return cur/max>=req.health;});
   const checks=[
@@ -5965,6 +5968,9 @@ I.LEGEND_TOKEN=135;
 I.LEGEND_SWORD=136;
 I.LEGEND_ARMOR=137;
 I.BLACKHOLE_STAFF=138;
+I.HIDE_ARMOR=211;
+I.CHAIN_ARMOR=212;
+I.STORMGLASS_ARMOR=213;
 I.CHRONO_DAGGER=160;
 I.TITAN_HAMMER=161;
 I.METEOR_STAFF=162;
@@ -6305,14 +6311,26 @@ const ARMOR_ROWS=[
 "................",
 "................",
 "................"];
+const HIDE_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'h').replace(/Y/g,'H').replace(/P/g,'l'));
+const CHAIN_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'c').replace(/Y/g,'C').replace(/P/g,'m'));
 const IRON_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'i').replace(/Y/g,'I').replace(/P/g,'s'));
 const DIA_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'d').replace(/Y/g,'D').replace(/P/g,'c'));
+const STORMGLASS_ARMOR_ROWS=ARMOR_ROWS.map(r=>r.replace(/G/g,'v').replace(/Y/g,'V').replace(/P/g,'g'));
+ITEMS[I.HIDE_ARMOR]={name:'Hide Armor', stack:1,
+  icon:iconCanvas(ctx=>drawPattern(ctx, HIDE_ARMOR_ROWS, {h:'#5a341f', H:'#b77945', l:'#2f1d13'})),
+  armor:{tier:2,armorType:'scout',mitigation:.08,dur:260,power:null}};
+ITEMS[I.CHAIN_ARMOR]={name:'Chainmail Armor', stack:1,
+  icon:iconCanvas(ctx=>drawPattern(ctx, CHAIN_ARMOR_ROWS, {c:'#475569', C:'#cbd5e1', m:'#94a3b8'})),
+  armor:{tier:3,armorType:'vanguard',mitigation:.11,dur:420,power:null}};
 ITEMS[I.IRON_ARMOR]={name:'Iron Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, IRON_ARMOR_ROWS, {i:'#6b7280', I:'#e5e7eb', s:'#9ca3af'})),
   armor:{tier:3,armorType:'vanguard',mitigation:.12,dur:480,power:null}};
 ITEMS[I.DIA_ARMOR]={name:'Diamond Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, DIA_ARMOR_ROWS, {d:'#0e7490', D:'#67e8f9', c:'#22d3ee'})),
   armor:{tier:4,armorType:'bulwark',mitigation:.16,dur:900,power:null}};
+ITEMS[I.STORMGLASS_ARMOR]={name:'Stormglass Armor', stack:1,
+  icon:iconCanvas(ctx=>drawPattern(ctx, STORMGLASS_ARMOR_ROWS, {v:'#3b1b60', V:'#b86cff', g:'#7dd3fc'})),
+  armor:{tier:4,armorType:'scout',mitigation:.15,dur:760,power:null}};
 ITEMS[I.LEGEND_ARMOR]={name:'Legendary Aegis Armor', stack:1,
   icon:iconCanvas(ctx=>drawPattern(ctx, ARMOR_ROWS, {G:'#8a6424', Y:'#ffd24a', P:'#9b6be8'})),
   armor:{tier:5,armorType:'aegis',legendary:true,mitigation:.2,dur:1800,power:'aegis'}};

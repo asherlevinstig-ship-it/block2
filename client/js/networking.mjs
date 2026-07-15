@@ -3916,7 +3916,10 @@ function hideSmartSuggestion(){
   if(coachHud) coachHud.classList.add('hidden');
 }
 function hasAnyArmorItem(){
-  return !!equippedArmor() || countItem(I.IRON_ARMOR)>0 || countItem(I.DIA_ARMOR)>0 || countItem(I.LEGEND_ARMOR)>0;
+  return !!equippedArmor()
+    || countItem(I.HIDE_ARMOR)>0 || countItem(I.CHAIN_ARMOR)>0
+    || countItem(I.IRON_ARMOR)>0 || countItem(I.DIA_ARMOR)>0
+    || countItem(I.STORMGLASS_ARMOR)>0 || countItem(I.LEGEND_ARMOR)>0;
 }
 function acknowledgeSmartSuggestionKey(code){
   if(!smartSuggestion || !smartSuggestion.code || smartSuggestion.code!==code) return;

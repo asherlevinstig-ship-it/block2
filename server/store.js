@@ -35,7 +35,7 @@ function cleanShardId(value) {
   return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(raw) ? raw : 'main';
 }
 
-const ARMOR_IDS = new Set([137, 183, 184]);
+const ARMOR_IDS = new Set([137, 183, 184, 211, 212, 213]);
 // Guided-onboarding focus states the persistence layer will accept. Kept local
 // (like ARMOR_IDS/TUTORIAL_VERSIONS) to keep store.js free of game-code requires;
 // must stay in lockstep with PROGRESSION_FOCUS_STATES in rooms/constants.js.

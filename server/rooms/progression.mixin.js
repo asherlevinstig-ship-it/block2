@@ -931,7 +931,10 @@ class ProgressionMixin {
     let reward;
     const roll = Math.random();
     if (roll < .45) reward = { kind: 'Rare Weapon', id: Math.random() < .5 ? I.DIA_SWORD : I.IRON_SWORD };
-    else if (roll < .8) reward = { kind: 'Rare Armor', id: Math.random() < .5 ? I.DIA_ARMOR : I.IRON_ARMOR };
+    else if (roll < .8) {
+      const armorPool = [I.CHAIN_ARMOR, I.IRON_ARMOR, I.DIA_ARMOR, I.STORMGLASS_ARMOR];
+      reward = { kind: 'Rare Armor', id: armorPool[(Math.random() * armorPool.length) | 0] };
+    }
     else if (!rec.prof.familiarUnlocks.includes('shade')) {
       rec.prof.familiarUnlocks.push('shade');
       if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
