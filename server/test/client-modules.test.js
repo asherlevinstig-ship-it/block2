@@ -119,6 +119,40 @@ test('client performance diagnostics separates update and render timing', async 
   }
 });
 
+test('client soundtrack manager selects one exclusive music mode', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  assert.match(menus, /function nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle\)/);
+  assert.match(menus, /if\(muted\|\|inCutscene\)return 'none';\s*if\(inMenu\)return 'menu';\s*if\(inTavern\)return 'tavern';\s*if\(inBattle\)return 'battle';\s*if\(inTown\)return 'town';\s*if\(outdoor\)return 'forest';/);
+  assert.match(menus, /activeMusicMode=nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle\);/);
+  assert.match(menus, /updateMusicTrack\(menuMusic, activeMusicMode==='menu'/);
+  assert.match(menus, /updateMusicTrack\(townMusic, activeMusicMode==='town'/);
+  assert.match(menus, /updateMusicTrack\(tavernMusic, activeMusicMode==='tavern'/);
+  assert.match(menus, /forestMusic=createMusic\('audio\/ancientforest\.mp3'\);/);
+  assert.match(menus, /updateMusicTrack\(forestMusic, activeMusicMode==='forest'/);
+  assert.match(menus, /battleMusic=createMusic\('audio\/battle\.mp3'\);/);
+  assert.match(menus, /updateMusicTrack\(battleMusic, activeMusicMode==='battle'/);
+  assert.match(menus, /if\(!active&&audio\.volume<MUSIC_SILENCE\)/);
+});
+
+test('client soundtrack mp3 assets exist for every referenced music mode', () => {
+  for (const name of ['menu.mp3', 'townbg.mp3', 'tavern.mp3', 'ancientforest.mp3', 'battle.mp3']) {
+    const file = path.join(__dirname, '..', '..', 'client', 'audio', name);
+    assert.equal(fs.existsSync(file), true, `${name} is present for static hosting`);
+    assert.ok(fs.statSync(file).size > 1000, `${name} is not an empty placeholder`);
+  }
+});
+
+test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  assert.match(world, /function inOverworldBattle\(\)\{/);
+  assert.match(world, /if\(dim!=='overworld'\|\|isTownLand\(Math\.floor\(player\.pos\.x\),Math\.floor\(player\.pos\.z\)\)\)return false;/);
+  assert.match(world, /if\(m\.ref&&\(m\.ref\.dgn\|\|''\)\)return false;/);
+  assert.match(world, /BATTLE_MUSIC_STATES\.has\(state\)/);
+  assert.match(world, /inOverworldBattle,/);
+  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\)\);/);
+});
+
 test('DimensionGrid provides one origin-aware storage contract for every dimension kind', () => {
   const grid = new DimensionGrid({kind:'tutorial',id:'training',originX:100,originY:5,originZ:200,width:4,height:3,depth:5,empty:0,outside:9});
   assert.equal(isDimensionGrid(grid), true);
@@ -822,9 +856,20 @@ test('basic jumping is not blocked by empty stamina',()=>{
 
 test('block placement uses Minecraft-style targeted block face at build reach',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   assert.match(combat,/const BLOCK_PLACE_REACH=8;/);
   assert.match(combat,/const hit=raycast\(BLOCK_PLACE_REACH\);/);
   assert.match(combat,/const px=hit\.x\+hit\.face\[0\], py=hit\.y\+hit\.face\[1\], pz=hit\.z\+hit\.face\[2\];/);
+  assert.match(combat,/function buildPlacementPreview\(\)\{/);
+  assert.match(combat,/ITEMS\[s\.id\]\.place===undefined/);
+  assert.match(combat,/worldApi\.setBuildGhostPreview\(active\?buildPlacementPreview\(\):null\);/);
+  assert.match(combat,/updateBuildPreview,/);
+  assert.match(frame,/combatApi\.updateBuildPreview\(!cutscene\);/);
+  assert.match(frame,/combatApi\.updateBuildPreview\(false\);/);
+  assert.match(world,/const buildGhost = new THREE\.Group\(\);/);
+  assert.match(world,/function setBuildGhostPreview\(preview\)\{/);
+  assert.match(world,/setBuildGhostPreview,/);
 });
 
 test('narrow game HUD consolidates abilities, quest, status, and hotbar without clipping',()=>{

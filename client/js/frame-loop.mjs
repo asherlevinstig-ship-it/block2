@@ -1446,6 +1446,7 @@ function tick(now){
     camera.rotation.set(-Math.PI/2, 0, 0);
     highlight.visible=false;
     crack.visible=false;
+    combatApi.updateBuildPreview(false);
     updateAppearanceDummy(dt, now, false);
     updateClaimHover();
   }
@@ -1612,6 +1613,7 @@ function tick(now){
     const hit=raycast(6);
     if(hit){ highlight.visible=true; highlight.position.set(hit.x+.5,hit.y+.5,hit.z+.5); }
     else { highlight.visible=false; }
+    combatApi.updateBuildPreview(!cutscene);
 
     // mining (a mounted dragon breathes instead of mining while you hold the primary action)
     if(cutscene){ /* controls suspended during the cinematic */ }
@@ -1691,7 +1693,7 @@ function tick(now){
     tickQuestTimers();
     updateLocationHud();
     updateInfoHud(held);
-  } else { crack.visible=false; }
+  } else { crack.visible=false; combatApi.updateBuildPreview(false); }
   updateGatePrompt();
   updateGateRally(now);
   updateDungeonCoordination(now);
@@ -1740,7 +1742,7 @@ function tick(now){
     }
     const inTown=dim==='overworld' && isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
     const inMenu=overlay && !overlay.classList.contains('hidden');
-    SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene);
+    SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle());
   }
   tickGates(dt, now);
   tickAbilities(dt, now/1000);

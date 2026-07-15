@@ -1912,6 +1912,36 @@ function isJobBoardHit(hit){
   return Math.abs(hit.x-jbx)<=1 && Math.abs(hit.z-jbz)<=1 && hit.y>=TOWN.G+1 && hit.y<=TOWN.G+3 &&
     (hit.id===B.PLANKS || hit.id===B.LOG);
 }
+function placementIntersectsPlayer(px,py,pz,placeId){
+  if(!isSolid(placeId)) return false;
+  return px<player.pos.x+player.w && px+1>player.pos.x-player.w
+    && py<player.pos.y+player.h && py+1>player.pos.y
+    && pz<player.pos.z+player.w && pz+1>player.pos.z-player.w;
+}
+function isPlacementInteractionHit(hit){
+  if(!hit) return false;
+  if(isJobBoardHit(hit)) return true;
+  if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2) return true;
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX &&
+     ((hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)||(hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8))) return true;
+  return hit.id===B.CHEST || hit.id===B.TABLE || hit.id===B.FURNACE || hit.id===B.EGG_INSULATOR || hit.id===B.BED || hit.id===B.WHEAT_3;
+}
+function buildPlacementPreview(){
+  const s=inv[selected];
+  if(!s || ITEMS[s.id].place===undefined) return null;
+  const hit=raycast(BLOCK_PLACE_REACH);
+  if(!hit || isPlacementInteractionHit(hit)) return null;
+  const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2], placeId=s.id;
+  const cur=inWorld(px,py,pz)?getB(px,py,pz):B.BEDROCK;
+  const valid=inWorld(px,py,pz)
+    && (cur===B.AIR || cur===B.WATER)
+    && !(dim==='overworld' && !canBuildHere(px,pz,py,placeId))
+    && !placementIntersectsPlayer(px,py,pz,placeId);
+  return {x:px,y:py,z:pz,placeId,valid};
+}
+function updateBuildPreview(active=true){
+  worldApi.setBuildGhostPreview(active?buildPlacementPreview():null);
+}
 function nearJobBoard(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<3.4;
 }
@@ -2267,6 +2297,7 @@ gameContext.registerState('combat', Object.freeze({
 }));
 gameContext.registerModule('combat', Object.freeze({
   collides,
+  updateBuildPreview,
   primaryAction,
   secondaryAction,
   stopPrimaryAction,

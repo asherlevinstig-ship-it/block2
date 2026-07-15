@@ -1197,9 +1197,43 @@ function renderUI(){
 // ---------------- audio (synthesized, no assets) ----------------
 const SFX=(()=>{
   const MASTER_VOLUME=.18;
-  const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08;
-  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null;
+  const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08, FOREST_MUSIC_VOLUME=.075, BATTLE_MUSIC_VOLUME=.095;
+  const MUSIC_FADE_IN=1.8, MUSIC_FADE_OUT=5.5, MUSIC_SILENCE=.002;
+  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null, forestMusic=null, battleMusic=null;
+  let activeMusicMode='none';
   let muted=false, cricketT=0, popT=0, fireVol=0;
+  function createMusic(src){
+    const audio=new Audio(src);
+    audio.loop=true;
+    audio.preload='auto';
+    audio.volume=0;
+    audio.play().then(()=>{
+      if(activeMusicMode==='none')audio.pause();
+    }).catch(()=>{});
+    return audio;
+  }
+  function nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle){
+    if(muted||inCutscene)return 'none';
+    if(inMenu)return 'menu';
+    if(inTavern)return 'tavern';
+    if(inBattle)return 'battle';
+    if(inTown)return 'town';
+    if(outdoor)return 'forest';
+    return 'none';
+  }
+  function updateMusicTrack(audio, active, target, dt){
+    if(!audio)return;
+    audio.muted=muted;
+    const desired=active&&!muted ? target : 0;
+    if(active&&!muted&&audio.paused){
+      audio.play().catch(()=>{});
+    }
+    audio.volume+=(desired-audio.volume)*Math.min(1,dt*(active?MUSIC_FADE_IN:MUSIC_FADE_OUT));
+    if(!active&&audio.volume<MUSIC_SILENCE){
+      audio.volume=0;
+      if(!audio.paused)audio.pause();
+    }
+  }
   function init(){
     if(ctx) return;
     try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
@@ -1217,21 +1251,11 @@ const SFX=(()=>{
     const rf=ctx.createBiquadFilter(); rf.type='bandpass'; rf.frequency.value=1500; rf.Q.value=.6;
     rainGain=ctx.createGain(); rainGain.gain.value=0;
     rs.connect(rf); rf.connect(rainGain); rainGain.connect(master); rs.start();
-    menuMusic=new Audio('audio/menu.mp3');
-    menuMusic.loop=true;
-    menuMusic.preload='auto';
-    menuMusic.volume=0;
-    menuMusic.play().catch(()=>{});
-    townMusic=new Audio('audio/townbg.mp3');
-    townMusic.loop=true;
-    townMusic.preload='auto';
-    townMusic.volume=0;
-    townMusic.play().catch(()=>{});
-    tavernMusic=new Audio('audio/tavern.mp3');
-    tavernMusic.loop=true;
-    tavernMusic.preload='auto';
-    tavernMusic.volume=0;
-    tavernMusic.play().catch(()=>{});
+    menuMusic=createMusic('audio/menu.mp3');
+    townMusic=createMusic('audio/townbg.mp3');
+    tavernMusic=createMusic('audio/tavern.mp3');
+    forestMusic=createMusic('audio/ancientforest.mp3');
+    battleMusic=createMusic('audio/battle.mp3');
   }
   function osc(type,f0,f1,dur,vol,delay){
     if(!ctx||muted) return;
@@ -1263,6 +1287,8 @@ function noise(dur,vol,fc,q,delay,type){
       if(menuMusic) menuMusic.muted=muted;
       if(townMusic) townMusic.muted=muted;
       if(tavernMusic) tavernMusic.muted=muted;
+      if(forestMusic) forestMusic.muted=muted;
+      if(battleMusic) battleMusic.muted=muted;
       return muted;
     },
     uiOpen(){ osc('sine',320,470,.09,.11); },
@@ -1314,25 +1340,19 @@ function noise(dur,vol,fc,q,delay,type){
     whine(){ osc('sine',540,780,.13,.08); osc('sine',780,430,.16,.07,.11); },
     whisper(){ noise(.5,.07,1700,1.5,0,'bandpass'); osc('sine',170,120,.5,.04); },
     portal(){ noise(.6,.4,520,1.5); osc('sine',200,700,.6,.25); },
-    tick(dt, fireD, nightF, outdoor, inTown, inTavern, inMenu, inCutscene){
+    tick(dt, fireD, nightF, outdoor, inTown, inTavern, inMenu, inCutscene, inBattle=false){
       if(!ctx) return;
       const ft=Math.max(0, 1-fireD/9)*.4;
       fireVol+= (ft-fireVol)*Math.min(1,dt*4);
       const rl=typeof weatherLerp==='number'?weatherLerp:0;                 // world.mjs weather intensity
       windGain.gain.value=muted?0:(outdoor? .014+gDayF*.008+rl*.02 : .003); // storms gust harder
       if(rainGain)rainGain.gain.value=muted||!outdoor?0:rl*.05;
-      if(menuMusic){
-        const target=!muted&&inMenu&&!inCutscene ? MENU_MUSIC_VOLUME : 0;
-        menuMusic.volume+= (target-menuMusic.volume)*Math.min(1,dt*1.8);
-      }
-      if(townMusic){
-        const target=!muted&&!inCutscene&&inTown&&!inTavern ? TOWN_MUSIC_VOLUME : 0;
-        townMusic.volume+= (target-townMusic.volume)*Math.min(1,dt*(inCutscene?5.0:1.4));
-      }
-      if(tavernMusic){
-        const target=!muted&&!inCutscene&&inTavern ? TAVERN_MUSIC_VOLUME : 0;
-        tavernMusic.volume+= (target-tavernMusic.volume)*Math.min(1,dt*(inCutscene?5.0:1.4));
-      }
+      activeMusicMode=nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle);
+      updateMusicTrack(menuMusic, activeMusicMode==='menu', MENU_MUSIC_VOLUME, dt);
+      updateMusicTrack(townMusic, activeMusicMode==='town', TOWN_MUSIC_VOLUME, dt);
+      updateMusicTrack(tavernMusic, activeMusicMode==='tavern', TAVERN_MUSIC_VOLUME, dt);
+      updateMusicTrack(forestMusic, activeMusicMode==='forest', FOREST_MUSIC_VOLUME, dt);
+      updateMusicTrack(battleMusic, activeMusicMode==='battle', BATTLE_MUSIC_VOLUME, dt);
       if(!muted && fireVol>.04){
         popT-=dt;
         if(popT<=0){ popT=.35+Math.random()*.8; noise(.025,fireVol*.18,900+Math.random()*1200); }

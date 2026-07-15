@@ -1885,6 +1885,29 @@ const highlight = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002,1.002,1.002)),
   new THREE.LineBasicMaterial({color:0x111111, transparent:true, opacity:.7}));
 highlight.visible=false; scene.add(highlight);
+const buildGhostFillMat = new THREE.MeshBasicMaterial({color:0x9ad26b, transparent:true, opacity:.34, depthWrite:false});
+const buildGhostLineMat = new THREE.LineBasicMaterial({color:0x9ad26b, transparent:true, opacity:.86, depthWrite:false});
+const buildGhost = new THREE.Group();
+const buildGhostFill = new THREE.Mesh(new THREE.BoxGeometry(.98,.98,.98), buildGhostFillMat);
+const buildGhostEdges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.01,1.01,1.01)), buildGhostLineMat);
+buildGhost.add(buildGhostFill, buildGhostEdges);
+buildGhost.visible=false; scene.add(buildGhost);
+function setBuildGhostPreview(preview){
+  if(!preview){ buildGhost.visible=false; return; }
+  const valid=!!preview.valid, placeId=preview.placeId|0;
+  buildGhost.visible=true;
+  buildGhost.position.set((preview.x|0)+.5,(preview.y|0)+.5,(preview.z|0)+.5);
+  buildGhostFillMat.opacity=valid?.34:.22;
+  buildGhostLineMat.opacity=valid?.92:.82;
+  if(valid && BLOCK_COLORS[placeId]){
+    const c=BLOCK_COLORS[placeId];
+    buildGhostFillMat.color.setRGB(c[0],c[1],c[2]);
+    buildGhostLineMat.color.set(0x9ad26b);
+  } else {
+    buildGhostFillMat.color.set(0xff4f4f);
+    buildGhostLineMat.color.set(0xff5555);
+  }
+}
 const crackMat = new THREE.MeshBasicMaterial({transparent:true, depthWrite:false});
 const crack = new THREE.Mesh(new THREE.BoxGeometry(1.004,1.004,1.004), crackMat);
 crack.visible=false; crack.userData.st=-1; scene.add(crack);
@@ -7137,6 +7160,30 @@ function makeZombie(){
 }
 const mobs=[];
 let mobSpawnT=2;
+const BATTLE_MUSIC_CLOSE_RANGE=7;
+const BATTLE_MUSIC_ACTIVE_RANGE=22;
+const BATTLE_MUSIC_STATES=new Set(['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind']);
+function isBattleMusicMob(m){
+  if(!m||!m.grp||m.shadowAlly||m.demoDummy||m.animal||m.kind==='shadow_soldier')return false;
+  if(m.dungeon||m.boss&&dim==='dungeon')return false;
+  if(m.ref&&(m.ref.dgn||''))return false;
+  if(m.encounterUi&&m.encounterUi.friendly)return false;
+  if(/^caravan_/.test(m.kind||'')||m.kind==='pack_mule'||m.kind==='wounded_hunter')return false;
+  const hp=typeof (m.ref&&m.ref.hp)==='number'?m.ref.hp:m.hp;
+  return hp>0;
+}
+function inOverworldBattle(){
+  if(dim!=='overworld'||isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return false;
+  for(const m of mobs){
+    if(!isBattleMusicMob(m)||m.grp.visible===false)continue;
+    const p=m.grp.position;
+    const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+    const state=(m.ref&&m.ref.state)||m.state||'';
+    const active=!!(m.alert||m.boss||m.elite||m.hitT>0||BATTLE_MUSIC_STATES.has(state));
+    if(d<=(active?BATTLE_MUSIC_ACTIVE_RANGE:BATTLE_MUSIC_CLOSE_RANGE))return true;
+  }
+  return false;
+}
 function standHeight(x,z,fromY){
   const bx=Math.floor(x), bz=Math.floor(z);
   if(bx<0||bx>=WX||bz<0||bz>=WX) return -1;
@@ -8689,7 +8736,9 @@ gameContext.registerModule('world', Object.freeze({
   baseSetupStatus,
   openLandClaims:openLandClaimsUI,
   toggleLandClaims:toggleLandClaimOverlay,
+  setBuildGhostPreview,
   tavernGameAction,
+  inOverworldBattle,
   resetParticleBudget,
   particleBudgetStats,
 }));
@@ -8734,6 +8783,7 @@ const legacyWorldBindings={
   "canBreakHere":{get:()=>canBreakHere},
   "canBuildHere":{get:()=>canBuildHere},
   "baseSetupStatus":{get:()=>baseSetupStatus},
+  "buildGhost":{get:()=>buildGhost},
   "CHUNK":{get:()=>CHUNK},
   "chunkMeshes":{get:()=>chunkMeshes},
   "claimCam":{get:()=>claimCam,set:value=>{claimCam=value;}},
@@ -8797,6 +8847,7 @@ const legacyWorldBindings={
   "caravanHunterRevived":{get:()=>caravanHunterRevived},
   "showEventResult":{get:()=>showEventResult},
   "showLandEditDenied":{get:()=>showLandEditDenied},
+  "setBuildGhostPreview":{get:()=>setBuildGhostPreview},
   "explainBaseSetupPlacement":{get:()=>explainBaseSetupPlacement},
   "eventLog":{get:()=>eventLog},
   "eventRejected":{get:()=>eventRejected},
