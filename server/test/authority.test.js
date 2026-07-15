@@ -918,6 +918,21 @@ test('armor equip validates ownership in the server inventory', () => {
   assert.equal(itemCount(prof, I.DIA_ARMOR), 1, 'unequipping returns the item to inventory');
 });
 
+test('equipped armor cannot overflow a full bag through legacy armor stacks', () => {
+  const room = makeRoom(), client = makeClient('armor_full_legacy');
+  const fullLegacyGear = Array.from({ length: 36 }, (_, i) => (
+    i === 0 ? { id: I.IRON_ARMOR, count: 1 } : { id: 700 + i, count: 64 }
+  ));
+  const { prof } = seedPlayer(room, client, { inv: fullLegacyGear });
+  prof.armor = { id: I.IRON_ARMOR, count: 1, dur: 320, armorType: 'scout', rarity: 'rare' };
+  assert.equal(room.inventorySpaceFor(prof, I.IRON_ARMOR, 1), 0);
+  room.handleEquipArmor(client, { id: 0 });
+  assert.equal(prof.armor.id, I.IRON_ARMOR);
+  assert.equal(prof.inv.length, 36);
+  assert.equal(prof.inv[0].count, 1, 'legacy armor stack was not treated as free space');
+  assert.equal(client.sent.some(e => e.type === 'progressionResult' && e.msg.type === 'armor' && e.msg.reason === 'full'), true);
+});
+
 test('NPC chain acceptance progress rewards and milestones are server-owned', () => {
   const room = makeRoom(), client = makeClient('quest_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });
@@ -4821,6 +4836,23 @@ test('addRewardItem reuses freed inventory slots instead of dropping the item', 
 
   const full = { inv: Array.from({ length: 36 }, (_, i) => ({ id: 900 + i, count: 64 })) };
   assert.equal(room.addRewardItem(full, 555, 3), 3, 'a genuinely full bag reports all 3 as leftover');
+});
+
+test('addRewardItem treats weapons and armor as individual durable gear', () => {
+  const room = makeRoom();
+  const prof = { inv: [null, null, null] };
+  assert.equal(room.addRewardItem(prof, I.IRON_SWORD, 2), 0);
+  assert.equal(prof.inv.filter(s => s && s.id === I.IRON_SWORD).length, 2);
+  assert.equal(prof.inv[0].count, 1);
+  assert.equal(prof.inv[1].count, 1);
+  assert.equal(prof.inv[0].dur, require('../rooms/constants').TOOL_INFO[I.IRON_SWORD].dur);
+
+  const full = { inv: Array.from({ length: 36 }, (_, i) => (
+    i === 0 ? { id: I.IRON_SWORD, count: 1 } : { id: 800 + i, count: 64 }
+  )) };
+  assert.equal(room.addRewardItem(full, I.IRON_SWORD, 1), 1, 'legacy weapon stack is not free space');
+  assert.equal(full.inv.length, 36);
+  assert.equal(full.inv[0].count, 1);
 });
 
 test('inventory sort preserves hotbar and merges simple backpack stacks', () => {

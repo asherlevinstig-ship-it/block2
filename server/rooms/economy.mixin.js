@@ -299,6 +299,8 @@ class EconomyMixin {
     if (!left) return 0;
     if (ARMOR_INFO[id] && prof && prof.armor && prof.armor.id === id) return 0;   // already equipped: intentional no-op
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
+    const gearLike = !!(TOOL_INFO[id] || ARMOR_INFO[id]);
+    if (gearLike) return this.addCraftedRewardItem(prof, id, left);
     for (const slot of prof.inv) {
       if (!slot || slot.id !== id || slot.dur != null) continue;
       const add = Math.min(left, 64 - slot.count);
@@ -322,13 +324,18 @@ class EconomyMixin {
   // How many of `id` would fit right now (without mutating) — used to make purchases atomic.
   inventorySpaceFor(prof, id, count) {
     const inv = prof && Array.isArray(prof.inv) ? prof.inv : [];
+    const requested = Math.max(0, count | 0);
+    if (TOOL_INFO[id] || ARMOR_INFO[id]) {
+      const empty = inv.reduce((n, slot) => n + (slot ? 0 : 1), 0) + Math.max(0, 36 - inv.length);
+      return Math.min(requested, empty);
+    }
     let room = 0;
     for (const slot of inv) {
       if (slot && slot.id === id && slot.dur == null) room += Math.max(0, 64 - slot.count);
       else if (!slot) room += 64;
     }
     room += Math.max(0, 36 - inv.length) * 64;
-    return Math.min(Math.max(0, count | 0), room);
+    return Math.min(requested, room);
   }
   craftedOutputCount(prof, id, count) {
     let out = Math.max(1, count | 0);

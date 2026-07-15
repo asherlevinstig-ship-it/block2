@@ -853,7 +853,7 @@ function slotInteract(acc, e, opts={}){
     let count=s.count;
     for(let i=to[0];i<to[1]&&count>0;i++){
       const t=arr[i];
-      if(t && t.id===s.id && !ITEMS[s.id].tool && t.count<stackMax(s.id)){ const add=Math.min(count,stackMax(s.id)-t.count); t.count+=add; count-=add; }
+      if(t && t.id===s.id && !ITEMS[s.id].tool && !ITEMS[s.id].armor && t.count<stackMax(s.id)){ const add=Math.min(count,stackMax(s.id)-t.count); t.count+=add; count-=add; }
     }
     for(let i=to[0];i<to[1]&&count>0;i++){
       if(!arr[i]){ arr[i]= s.dur!==undefined ? {...s, count:Math.min(count,1)} : newStack(s.id,Math.min(count,stackMax(s.id))); if(s.dur!==undefined) arr[i].dur=s.dur; count-= arr[i].count; }
@@ -865,7 +865,7 @@ function slotInteract(acc, e, opts={}){
     if(!cursorStack && s){ cursorStack=s; acc.set(null); }
     else if(cursorStack && !s){ acc.set(cursorStack); cursorStack=null; }
     else if(cursorStack && s){
-      if(cursorStack.id===s.id && !ITEMS[s.id].tool){
+      if(cursorStack.id===s.id && !ITEMS[s.id].tool && !ITEMS[s.id].armor){
         const add=Math.min(cursorStack.count, stackMax(s.id)-s.count);
         s.count+=add; cursorStack.count-=add;
         if(cursorStack.count<=0) cursorStack=null;
@@ -874,7 +874,7 @@ function slotInteract(acc, e, opts={}){
   } else if(e.button===2){
     if(cursorStack){
       if(!s){ acc.set({...cursorStack,count:1}); cursorStack.count--; if(cursorStack.count<=0) cursorStack=null; }
-      else if(s.id===cursorStack.id && !ITEMS[s.id].tool && s.count<stackMax(s.id)){ s.count++; cursorStack.count--; if(cursorStack.count<=0) cursorStack=null; }
+      else if(s.id===cursorStack.id && !ITEMS[s.id].tool && !ITEMS[s.id].armor && s.count<stackMax(s.id)){ s.count++; cursorStack.count--; if(cursorStack.count<=0) cursorStack=null; }
     } else if(s && s.count>1){
       const half=Math.ceil(s.count/2);
       cursorStack={...s, count:half}; s.count-=half;
