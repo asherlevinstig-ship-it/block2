@@ -9016,6 +9016,19 @@ test('dungeon gear can roll unique skins and persists the unique perk tag',()=>{
   assert.equal(captain.unique,undefined);
 });
 
+test('fantasy dungeon bonus loot scales from supplies into relic rewards',()=>{
+  const room=makeRoom();
+  const low=room.rollDungeonBonusLoot('chest',0,()=>0);
+  assert.ok(low.some(it=>it.id===I.MONSTER_MEAT));
+  assert.ok(low.some(it=>it.id===W.B.TORCH));
+  const high=room.rollDungeonBonusLoot('boss',4,()=>0);
+  assert.ok(high.some(it=>it.id===I.FEAST_PLATTER));
+  assert.ok(high.some(it=>it.id===I.STORMGLASS));
+  assert.ok(high.some(it=>it.id===I.SOLAR_GLYPH));
+  assert.ok(high.some(it=>it.id===I.LEGEND_TOKEN));
+  assert.ok(high.some(it=>[I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(it.id)));
+});
+
 test('Captain drops personalize to the lagging archetype instead of the axe table bias',()=>{
   const room=makeRoom(),client=makeClient('smart_captain_loot'),{prof}=seedPlayer(room,client,{inv:[
     {id:I.DIA_SWORD,count:1,plus:2,rarity:'rare'},

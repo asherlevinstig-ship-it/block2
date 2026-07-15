@@ -203,6 +203,82 @@ const CHEST_REWARD_BY_RANK = [
   { coal: [6, 10], iron: [3, 7], dia: [1, 2] },
   { coal: [8, 12], iron: [5, 9], dia: [2, 4] },
 ];
+const REGIONAL_ESSENCE_ITEMS = [I.WINDSEED, I.HEARTWOOD_RESIN, I.SUNSHARD, I.MESA_AMBER, I.FROST_CRYSTAL, I.MIRE_BLOOM];
+const FAMILIAR_RELIC_ITEMS = [I.FANG_TOTEM, I.MOTE_CHARM, I.FORAGE_CHARM];
+const DUNGEON_CHEST_BONUS_LOOT = [
+  [
+    { id: I.MONSTER_MEAT, count: [1, 2], chance: .35 },
+    { id: W.B.TORCH, count: [2, 4], chance: .24 },
+    { id: I.REPAIR_KIT, count: [1, 1], chance: .05 },
+    { id: I.GEODE, count: [1, 1], chance: .04 },
+  ],
+  [
+    { id: I.COOKED_MEAT, count: [1, 2], chance: .30 },
+    { id: REGIONAL_ESSENCE_ITEMS, count: [1, 2], chance: .18 },
+    { id: I.REPAIR_KIT, count: [1, 1], chance: .08 },
+    { id: I.DRAGON_TREAT, count: [1, 1], chance: .06 },
+    { id: I.GEODE, count: [1, 1], chance: .07 },
+  ],
+  [
+    { id: I.GOLDEN_BROTH, count: [1, 1], chance: .08 },
+    { id: I.DRAGON_TREAT, count: [1, 2], chance: .10 },
+    { id: I.RAINWAKE_PETAL, count: [1, 1], chance: .08 },
+    { id: I.STORMGLASS, count: [1, 1], chance: .06 },
+    { id: I.GEODE, count: [1, 2], chance: .12 },
+  ],
+  [
+    { id: I.TRAIL_RATION, count: [1, 1], chance: .11 },
+    { id: I.GOLDEN_BROTH, count: [1, 1], chance: .09 },
+    { id: I.STORMGLASS, count: [1, 2], chance: .10 },
+    { id: I.SOLAR_GLYPH, count: [1, 1], chance: .08 },
+    { id: I.LEGEND_TOKEN, count: [1, 1], chance: .02 },
+    { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .015 },
+  ],
+  [
+    { id: I.FEAST_PLATTER, count: [1, 1], chance: .07 },
+    { id: I.GOLDEN_BROTH, count: [1, 2], chance: .12 },
+    { id: I.STORMGLASS, count: [2, 3], chance: .15 },
+    { id: I.SOLAR_GLYPH, count: [1, 2], chance: .14 },
+    { id: I.LEGEND_TOKEN, count: [1, 1], chance: .05 },
+    { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .03 },
+  ],
+];
+const DUNGEON_BOSS_BONUS_LOOT = [
+  [
+    { id: I.COOKED_MEAT, count: [1, 2], chance: .24 },
+    { id: I.REPAIR_KIT, count: [1, 1], chance: .12 },
+    { id: I.GEODE, count: [1, 1], chance: .06 },
+  ],
+  [
+    { id: I.REPAIR_KIT, count: [1, 1], chance: .15 },
+    { id: I.DRAGON_TREAT, count: [1, 1], chance: .10 },
+    { id: REGIONAL_ESSENCE_ITEMS, count: [1, 3], chance: .18 },
+    { id: I.RAINWAKE_PETAL, count: [1, 1], chance: .08 },
+    { id: I.GEODE, count: [1, 1], chance: .10 },
+  ],
+  [
+    { id: I.GOLDEN_BROTH, count: [1, 1], chance: .10 },
+    { id: I.TRAIL_RATION, count: [1, 1], chance: .08 },
+    { id: I.STORMGLASS, count: [1, 1], chance: .08 },
+    { id: I.SOLAR_GLYPH, count: [1, 1], chance: .06 },
+    { id: I.GEODE, count: [1, 2], chance: .15 },
+  ],
+  [
+    { id: I.TRAIL_RATION, count: [1, 2], chance: .12 },
+    { id: I.FEAST_PLATTER, count: [1, 1], chance: .04 },
+    { id: I.STORMGLASS, count: [1, 2], chance: .12 },
+    { id: I.SOLAR_GLYPH, count: [1, 2], chance: .10 },
+    { id: I.LEGEND_TOKEN, count: [1, 1], chance: .06 },
+    { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .03 },
+  ],
+  [
+    { id: I.FEAST_PLATTER, count: [1, 1], chance: .07 },
+    { id: I.STORMGLASS, count: [2, 4], chance: .18 },
+    { id: I.SOLAR_GLYPH, count: [1, 3], chance: .14 },
+    { id: I.LEGEND_TOKEN, count: [1, 2], chance: .10 },
+    { id: FAMILIAR_RELIC_ITEMS, count: [1, 1], chance: .05 },
+  ],
+];
 const GATE_DISTANCE_BANDS = [
   { min: 90, max: 160 },
   { min: 180, max: 280 },
@@ -595,6 +671,8 @@ module.exports = {
   ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, ANIMAL_BASE_KIND, ANIMAL_CAP, ANIMAL_DESPAWN_RADIUS, ANIMAL_KINDS, ANIMAL_LOOT, ANIMAL_SPAWN_INTERVAL, ARMOR_INFO, BETA_EVENT_TEST, BETA_FARM_TEST, BETA_LEGENDARY_TEST, BIOME_ANIMAL, BIOME_COLLECTIBLE, BOLSTER_DMG, BOLSTER_HP, BOLSTER_MAX_STACKS, BOLSTER_RADIUS, BOSS_CONTRIB_MS, BOSS_REWARD_BY_RANK, BOSS_REWARD_RANGE, CARAVAN_ACTIVE_MS, CHEST_REWARD_BY_RANK, CROP_GROW_MS, DANGER_RINGS, DAY_LEN, DAY_MS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_BREEDING, DRAGON_BREED_CD_MS, DRAGON_BREED_MS, DRAGON_BREED_RESULT, DRAGON_DROP_POOL, DRAGON_EGG_BOSS_CHANCE, DRAGON_EGG_CHEST_CHANCE, DRAGON_EGG_OF, DRAGON_INCUBATION_MS, DRAGON_INCUBATION_MS_BY_TYPE, DRAGON_LOVE_MS, DRAGON_PERCH_SLOTS, DRAGON_TYPES, DRAGON_TYPE_BY_EGG, DRAGON_TYPE_SET, ELITE_FAMILIES, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS, EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS, EVENT_TEST_QUEUE_MS, FAMILIAR_BIND_ITEM, FAMILIAR_KINDS, FANG_CD_MS, FANG_RANGE, FOOD_VALUES, FUEL, GATE_DISTANCE_BANDS, GUARDIAN_POS, GUILD_BOARD_POS, GUILD_DECOR_BLOCKS, GUILD_DECOR_BUY, GUILD_FLOOR_MAX, GUILD_HALL, HAZARD_MOD_SET, HOSTILE_DESPAWN_RADIUS, HOSTILE_SPAWN_INTERVAL, HUNTER_ACTIVITY_XP_BY_RANK, HUNTER_RANK_LEVELS, HUNTER_RANK_XP_MULTIPLIERS, I, ITEM_NAMES, JOB_IDS, KEY_LOOT, KING_ACTIVE_MS, KING_ARENA_SIZE, KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, LAND_ABANDONED_DAYS, LAND_ABANDONED_MS, LAND_BASE_PRICE, LAND_DORMANT_DAYS, LAND_DORMANT_MS, LAND_FREE_RADIUS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LAND_REAL_DAY_MS, LAND_VISIT_REFRESH_MS, LEGENDARY_CRAFTS, LOCAL_ANIMAL_COUNT_RADIUS, LOCAL_DENSITY_CLUSTER_RADIUS, LOCAL_HOSTILE_COUNT_RADIUS, MAX_HUNGER, MINE_DROPS, MINE_REQUIRE, MOB_CAP, MOTE_BURST_CD_MS, MOTE_BURST_MIN_TIER, MOTE_BURST_RANGE, PROGRESSION_FOCUS_STATES, RANGED_ENEMY_KINDS, RECIPES, REGIONAL_CONTRACT_TYPES, REWARD_ITEMS, ROAD_MERCHANT_BUY, SHADE_RANK_LVLS, SHARD_ITEM_IDS, SHARD_MOD_KEYS, SHARD_TIERS, SHOP_BUY, SHOP_SELL, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS, SKYSHIP_DOCK_X, SKYSHIP_EDGE_X, SKYSHIP_SPEED, SKYSHIP_TRAVEL_MS, SMELT, SMELT_MS, SOLO_KEYS, SOLO_KEY_PRICES, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TEAM_KEY_PRICES, TOOL_INFO, TOOL_MAT_ITEMS, UTILITY_IDS, WEATHER_KINDS, WEATHER_DURATION_MS, WEATHER_NEXT, LIGHTNING_INTERVAL_MS, LIGHTNING_RADIUS, LIGHTNING_PLAYER_DMG, LIGHTNING_MOB_DMG, rollWeatherNext, rollWeatherDurationMs, weatherSpawnMods, animalBudgetFor, dangerRingAt, dayTimeAt, dragonIncubationMs, dragonMountType, dragonOffspring, famTier, fangDamage, gateRankIndexForLevel, guildFloorPrice, hostileBudgetFor, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, isUnlockableMount, isValidMount, jobLevelFor, jobLevelFromXp, jobPerkChance, jobPerkTier, keyForRank, mobTargetInRange, moteBurst, moteRegen, nextHunterRankLevel, rollShardMods, shadeMitigation, skyshipSnapshot, spriteForageChance, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 };
 module.exports.BREACH_CLEANUP_REWARD_BY_RANK = BREACH_CLEANUP_REWARD_BY_RANK;
+module.exports.DUNGEON_BOSS_BONUS_LOOT = DUNGEON_BOSS_BONUS_LOOT;
+module.exports.DUNGEON_CHEST_BONUS_LOOT = DUNGEON_CHEST_BONUS_LOOT;
 module.exports.BIOME_HOSTILE = BIOME_HOSTILE;
 module.exports.SHADE_STEP_MIN_TIER = SHADE_STEP_MIN_TIER;
 module.exports.SHADE_STEP_CD_MS = SHADE_STEP_CD_MS;

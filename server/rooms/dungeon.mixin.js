@@ -1534,6 +1534,7 @@ class DungeonMixin {
         c.send('gateCleared', { rank: ri, result: { ...result, mastery } });
         const progress = this.markGateCleared(c, ri);
         const items = baseLoot.items.map(it => ({ ...it }));
+        items.push(...this.rollDungeonBonusLoot('boss',ri,Math.random));
         const rewardProfile=this.profileFor(c),weapon=this.rollWeaponDropForSource('gate',ri,plus,rewardProfile&&rewardProfile.prof);if(weapon)items.push(weapon);
         const armor=this.rollArmorDropForSource('gate',ri,plus);if(armor)items.push(armor);
         const eggPool = DRAGON_DROP_POOL[ri] || [];

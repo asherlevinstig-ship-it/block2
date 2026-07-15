@@ -1,7 +1,7 @@
 // Economy & storage: inventory, crafting, shops, chests (records + slots) and
 // furnaces. Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
-  ARMOR_INFO, BIOME_COLLECTIBLE, CHEST_REWARD_BY_RANK, DRAGON_DROP_POOL, DRAGON_EGG_CHEST_CHANCE,
+  ARMOR_INFO, BIOME_COLLECTIBLE, CHEST_REWARD_BY_RANK, DUNGEON_BOSS_BONUS_LOOT, DUNGEON_CHEST_BONUS_LOOT, DRAGON_DROP_POOL, DRAGON_EGG_CHEST_CHANCE,
   DRAGON_EGG_OF, FUEL, GUARDIAN_POS, GUILD_DECOR_BUY, I, KEY_LOOT, LEGENDARY_CRAFTS, RECIPES, REWARD_ITEMS,
   ROAD_MERCHANT_BUY, SHARD_ITEM_IDS, SHOP_BUY, SHOP_SELL, SMELT, SMELT_MS, SOLO_KEYS, TAVERN_BUY, TAVERN_SELL, TEAM_KEYS, TOOL_INFO,
   dangerRingAt, jobLevelFor, jobPerkChance, jobPerkTier, keyForRank,
@@ -35,6 +35,25 @@ class EconomyMixin {
     item.locked=true;
     if(GEAR_SYSTEM.rarityIndexFor(item)<2)item.rarity='rare';
     return item;
+  }
+  rollFantasyLootTable(table=[],rank=0,rand=Math.random){
+    const rows=table[Math.max(0,Math.min(table.length-1,rank|0))]||[],merged=new Map();
+    const r=n=>Math.max(0,Math.min(.999999,Number(rand(n))||0));
+    let n=0;
+    for(const row of rows){
+      if(r(n++)>=Math.max(0,Math.min(1,Number(row.chance)||0)))continue;
+      const ids=Array.isArray(row.id)?row.id:[row.id];
+      const id=ids[Math.min(ids.length-1,Math.floor(r(n++)*ids.length))]|0;
+      if(!id)continue;
+      const range=Array.isArray(row.count)?row.count:[row.count||1,row.count||1];
+      const lo=Math.max(1,range[0]|0),hi=Math.max(lo,range[1]|0);
+      const count=lo+Math.floor(r(n++)*(hi-lo+1));
+      merged.set(id,(merged.get(id)||0)+count);
+    }
+    return [...merged].map(([id,count])=>({id,count}));
+  }
+  rollDungeonBonusLoot(kind='chest',rank=0,rand=Math.random){
+    return this.rollFantasyLootTable(kind==='boss'?DUNGEON_BOSS_BONUS_LOOT:DUNGEON_CHEST_BONUS_LOOT,rank,rand);
   }
   gateWeaponArchetype(prof,fallback='sword'){
     const best={sword:-1,axe:-1},stacks=[...(prof&&Array.isArray(prof.inv)?prof.inv:[]),...(prof&&Array.isArray(prof.lootRecovery)?prof.lootRecovery:[])];
@@ -163,6 +182,8 @@ class EconomyMixin {
         slots[i++] = { id: DRAGON_EGG_OF(pool[Math.min(pool.length - 1, Math.floor(pick * pool.length))]), count: 1 };
       }
     }
+    const bonus = this.rollDungeonBonusLoot('chest', rank, n => W.hash2(info.x * 6113 + inst.seed + n * 101, info.z * 3257 + info.y * 313 + rank * 911 + n * 17));
+    for (const it of bonus) if (i < slots.length) slots[i++] = { ...it };
     looted.add(chestId);
     this.gateLootedChests.set(info.space, looted);
     this.dirtyGates = true;
