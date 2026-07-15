@@ -932,6 +932,7 @@ test('First Hands guides the player through the first real objective',()=>{
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   assert.match(frame,/First Hands leave town, gather logs/);
   assert.match(frame,/Leave through the north gate and gather logs/);
   assert.match(frame,/town trees are protected[\s\S]*outside the wall/);
@@ -941,6 +942,8 @@ test('First Hands guides the player through the first real objective',()=>{
   assert.match(menus,/Quest accepted: First Hands[\s\S]*north gate/);
   assert.match(menus,/First Hands complete[\s\S]*gold trail back/);
   assert.match(networking,/Quest accepted: First Hands[\s\S]*north gate/);
+  assert.match(combat,/"clearTownGuidance":\{get:\(\)=>clearTownGuidance\}/);
+  assert.match(networking,/if\(townGuidanceActive&&townGuidanceStep==='quest'\) clearTownGuidance\(\);/);
 });
 
 test('onboarding gathering pillar and completion both use the training tree',()=>{

@@ -932,6 +932,7 @@ function netAttachRoom(room,name,client){
         if(completedFirstHands) townGuidanceSequenceHold=true;
       }
       else if(m.action==='accept'&&quest){
+        if(townGuidanceActive&&townGuidanceStep==='quest') clearTownGuidance();
         SFX.quest();
         if(quest.giver==='Mara Vale'&&quest.title==='First Hands') sysMsg('<b>Quest accepted: First Hands.</b> Leave through the <b>north gate</b> and gather 6 logs.');
         else sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> accepted from '+escHTML(quest.giver)+'.');

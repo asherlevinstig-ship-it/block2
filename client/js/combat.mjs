@@ -28,6 +28,7 @@ const legacyCombatBindings={
   "calmTownHud":{get:()=>calmTownHud},
   "cancelOnboardingForProfileRestore":{get:()=>cancelOnboardingForProfileRestore},
   "clearTownJobGuidance":{get:()=>clearTownJobGuidance},
+  "clearTownGuidance":{get:()=>clearTownGuidance},
   "clearTownTutorialStep":{get:()=>clearTownTutorialStep},
   "completeOnboarding":{get:()=>completeOnboarding},
   "completeTownTutorialStep":{get:()=>completeTownTutorialStep},
