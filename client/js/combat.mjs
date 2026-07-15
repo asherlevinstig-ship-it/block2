@@ -1379,7 +1379,7 @@ function updateOnboardingPillar(now){
   tutorialRing.scale.set(s,s,s);
 }
 function tryHitTutorialDummy(){
-  if(!onboardingActive||!onboardingArrived||onboardingKind()!=='combat'||dim!=='overworld') return false;
+  if(!onboardingActive||!onboardingArrived||onboardingKind()!=='combat'||dim!=='tutorial') return false;
   const p=tutorialDummyGroup.position;
   if(Math.hypot(player.pos.x-p.x,player.pos.z-p.z)>5.5) return false;
   const dir=new THREE.Vector3(); camera.getWorldDirection(dir);

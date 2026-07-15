@@ -946,6 +946,13 @@ test('onboarding farming uses the G action inside the tutorial meadow',()=>{
   assert.match(combat,/if\(onboardingActive&&tutorialMeadowFarm&&onboardingKind\(\)==='farm'\) onboardingFlags\.farmed=true;/);
 });
 
+test('onboarding combat dummy can be hit inside the tutorial meadow',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/function tryHitTutorialDummy\(\)\{/);
+  assert.match(combat,/onboardingKind\(\)!=='combat'\|\|dim!=='tutorial'/);
+  assert.match(combat,/onboardingFlags\.dummy=true;/);
+});
+
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
