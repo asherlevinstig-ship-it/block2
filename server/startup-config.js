@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { parseFirebaseServiceAccount } = require('./firebase-credentials');
+const { parseFirebaseServiceAccount, parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials');
 
 function parseTrustProxy(value) {
   const raw = String(value || '').trim();
@@ -20,6 +20,7 @@ function validateServiceAccount(raw, source) {
 
 function summarizeStartupEnv(env = process.env) {
   const serviceAccount = String(env.FIREBASE_SERVICE_ACCOUNT || '');
+  const serviceAccountB64 = String(env.FIREBASE_SERVICE_ACCOUNT_B64 || '');
   return {
     NODE_ENV: env.NODE_ENV || '',
     PUBLIC_URL: env.PUBLIC_URL || '',
@@ -36,6 +37,7 @@ function summarizeStartupEnv(env = process.env) {
     CLIENT_ORIGINS: env.CLIENT_ORIGINS || '',
     GOOGLE_APPLICATION_CREDENTIALS: env.GOOGLE_APPLICATION_CREDENTIALS ? '<set>' : '',
     FIREBASE_SERVICE_ACCOUNT: serviceAccount ? '<set length=' + serviceAccount.length + '>' : '',
+    FIREBASE_SERVICE_ACCOUNT_B64: serviceAccountB64 ? '<set length=' + serviceAccountB64.length + '>' : '',
   };
 }
 
@@ -82,13 +84,14 @@ async function validateStartup(env = process.env) {
   }
 
   if (storage === 'firebase') {
-    if (env.FIREBASE_SERVICE_ACCOUNT) validateServiceAccount(env.FIREBASE_SERVICE_ACCOUNT, 'FIREBASE_SERVICE_ACCOUNT');
+    if (env.FIREBASE_SERVICE_ACCOUNT_B64) parseFirebaseServiceAccountFromEnv(env);
+    else if (env.FIREBASE_SERVICE_ACCOUNT) validateServiceAccount(env.FIREBASE_SERVICE_ACCOUNT, 'FIREBASE_SERVICE_ACCOUNT');
     else if (env.GOOGLE_APPLICATION_CREDENTIALS) {
       let raw;
       try { raw = await fs.promises.readFile(path.resolve(env.GOOGLE_APPLICATION_CREDENTIALS), 'utf8'); }
       catch (e) { throw new Error('GOOGLE_APPLICATION_CREDENTIALS is not readable: ' + e.message); }
       validateServiceAccount(raw, 'GOOGLE_APPLICATION_CREDENTIALS');
-    } else if (production) throw new Error('Firebase production storage requires FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS');
+    } else if (production) throw new Error('Firebase production storage requires FIREBASE_SERVICE_ACCOUNT_B64, FIREBASE_SERVICE_ACCOUNT, or GOOGLE_APPLICATION_CREDENTIALS');
   }
 
   if (authBackend === 'mysql') {

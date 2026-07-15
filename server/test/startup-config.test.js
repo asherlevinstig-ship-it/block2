@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { validateStartup, parseTrustProxy } = require('../startup-config');
+const crypto = require('crypto');
 
 const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'bc-startup-'));
 const productionEnv = overrides => ({ NODE_ENV: 'production', PUBLIC_URL: 'https://play.example.test', TRUST_PROXY: '1', DATA_DIR: tempDir(), STORE: 'json', ...overrides });
@@ -32,6 +33,20 @@ test('production rejects unsafe flags and unsupported storage', async () => {
 test('Firebase production validates credential secrets', async () => {
   await assert.rejects(() => validateStartup(productionEnv({ STORE: 'firebase' })), /requires FIREBASE_SERVICE_ACCOUNT/);
   await assert.rejects(() => validateStartup(productionEnv({ STORE: 'firebase', FIREBASE_SERVICE_ACCOUNT: '{}' })), /missing service-account field/);
+});
+
+test('Firebase production accepts base64 encoded service account JSON', async () => {
+  const privateKey = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const raw = JSON.stringify({
+    project_id: 'solo-test',
+    client_email: 'firebase-adminsdk@test.iam.gserviceaccount.com',
+    private_key: privateKey,
+  });
+  const config = await validateStartup(productionEnv({
+    STORE: 'firebase',
+    FIREBASE_SERVICE_ACCOUNT_B64: Buffer.from(raw, 'utf8').toString('base64'),
+  }));
+  assert.equal(config.storage, 'firebase');
 });
 
 test('startup rejects an unwritable data path', async () => {

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
-const { parseFirebaseServiceAccount, normalizePrivateKey } = require('../firebase-credentials');
+const { parseFirebaseServiceAccount, parseFirebaseServiceAccountFromEnv, serviceAccountJsonFromEnv, normalizePrivateKey } = require('../firebase-credentials');
 
 function serviceAccount(privateKey) {
   return JSON.stringify({
@@ -26,6 +26,16 @@ test('Firebase service account private keys recover from flattened PEM text', ()
   const credential = parseFirebaseServiceAccount(serviceAccount(flattened));
   assert.equal(credential.private_key, normalizePrivateKey(privateKey));
   assert.doesNotThrow(() => crypto.createPrivateKey({ key: credential.private_key, format: 'pem' }));
+});
+
+test('Firebase service account JSON can be supplied as base64 env', () => {
+  const privateKey = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'pem' });
+  const raw = serviceAccount(privateKey);
+  const env = { FIREBASE_SERVICE_ACCOUNT_B64: Buffer.from(raw, 'utf8').toString('base64') };
+  assert.equal(serviceAccountJsonFromEnv(env), raw);
+  const credential = parseFirebaseServiceAccountFromEnv(env);
+  assert.equal(credential.project_id, 'solo-test');
+  assert.equal(credential.private_key, normalizePrivateKey(privateKey));
 });
 
 test('Firebase service account validation reports missing fields', () => {

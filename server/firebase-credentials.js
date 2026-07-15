@@ -28,4 +28,18 @@ function parseFirebaseServiceAccount(raw, source = 'FIREBASE_SERVICE_ACCOUNT') {
   return credential;
 }
 
-module.exports = { parseFirebaseServiceAccount, normalizePrivateKey };
+function serviceAccountJsonFromEnv(env = process.env) {
+  const b64 = String(env.FIREBASE_SERVICE_ACCOUNT_B64 || '').trim();
+  if (b64) {
+    try { return Buffer.from(b64, 'base64').toString('utf8'); }
+    catch (e) { throw new Error('FIREBASE_SERVICE_ACCOUNT_B64 must be valid base64: ' + e.message); }
+  }
+  return env.FIREBASE_SERVICE_ACCOUNT;
+}
+
+function parseFirebaseServiceAccountFromEnv(env = process.env) {
+  const source = String(env.FIREBASE_SERVICE_ACCOUNT_B64 || '').trim() ? 'FIREBASE_SERVICE_ACCOUNT_B64' : 'FIREBASE_SERVICE_ACCOUNT';
+  return parseFirebaseServiceAccount(serviceAccountJsonFromEnv(env), source);
+}
+
+module.exports = { parseFirebaseServiceAccount, parseFirebaseServiceAccountFromEnv, serviceAccountJsonFromEnv, normalizePrivateKey };

@@ -20,7 +20,7 @@ const GEAR_SYSTEM = require('../shared/gear-system');
 const SHADOW_ARMY = require('../shared/shadow-army');
 const ABILITY_PROGRESSION = require('../shared/ability-progression');
 const FAMILIAR_SYSTEM = require('../shared/familiar-system');
-const { parseFirebaseServiceAccount } = require('./firebase-credentials');
+const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
@@ -1334,9 +1334,9 @@ class FirebaseStore {
   constructor(options = {}) {
     const admin = require('firebase-admin');
     if (!admin.apps.length) {
-      const svc = process.env.FIREBASE_SERVICE_ACCOUNT;
+      const svc = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_B64;
       admin.initializeApp(svc
-        ? { credential: admin.credential.cert(parseFirebaseServiceAccount(svc)) }
+        ? { credential: admin.credential.cert(parseFirebaseServiceAccountFromEnv(process.env)) }
         : {});                                  // falls back to application-default creds
     }
     this.db = admin.firestore();
