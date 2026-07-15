@@ -1055,9 +1055,15 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/for\(const eventName of \['pointerdown','mousedown','click','wheel'\]\)\{[\s\S]*chatBarEl\.addEventListener\(eventName,event=>event\.stopPropagation\(\)\);/);
   assert.match(social,/chatInEl\.addEventListener\('change',\(\)=>\{[\s\S]*sendQuickPhrase\(chatInEl\.value\);\s*closeChat\(true\);/);
   assert.match(combat,/addEventListener\('mousedown', e=>\{\s*if\(globalThis\.chatTyping\) return;/);
+  assert.match(combat,/function isWorldPointerTarget\(target\)\{\s*return target===renderer\.domElement\|\|target===document\.body\|\|target===document\.documentElement;\s*\}/);
+  assert.match(combat,/addEventListener\('mousedown', e=>\{\s*if\(globalThis\.chatTyping\) return;\s*if\(!isWorldPointerTarget\(e\.target\)\) return;/);
+  assert.match(combat,/addEventListener\('wheel', e=>\{ if\(locked&&isWorldPointerTarget\(e\.target\)\) selectSlot/);
   assert.match(social,/createElement\('button'\)[\s\S]*addEventListener\('click',\(\)=>\{sendQuickPhrase\(id\);closeQuickChatWheel\(true\);\}\)/);
+  assert.match(social,/if\(e\.code==='Enter'\)\{\s*e\.preventDefault\(\);\s*sendQuickPhrase\(chatInEl\.value\);\s*closeChat\(true\);\s*return;\s*\}/);
   assert.match(social,/cycleChatMode\(\);\s*renderQuickChatWheel\(\);/);
   assert.doesNotMatch(social,/event\.code==='Tab'&&chatWheel\)[\s\S]*startDragonCommandWheel\(\)/);
+  assert.doesNotMatch(social,/const text=chatInEl\.value\.trim\(\);/);
+  assert.doesNotMatch(social,/unknown command/);
   assert.match(combat,/e\.shiftKey && typeof startDragonCommandWheel==='function'/);
   assert.doesNotMatch(combat,/lastTabWheelAt/);
   assert.doesNotMatch(social,/held<220|movementX|movementY|Release Tab/);

@@ -277,73 +277,10 @@ chatInEl.addEventListener('keydown', e=>{
   e.stopPropagation();
   if(e.code==='Tab'){e.preventDefault();cycleChatMode();return;}
   if(e.code==='Enter'){
+    e.preventDefault();
     sendQuickPhrase(chatInEl.value);
     closeChat(true);
     return;
-    const text=chatInEl.value.trim();
-    if(text && text[0]==='/'){
-      const a=text.slice(1).split(/\s+/);
-      const cmd=(a[0]||'').toLowerCase();
-      if(cmd==='team'){
-        const sub=(a[1]||'').toLowerCase();
-        if(sub==='create' && NET.on) NET.room.send('teamCreate',{name:a.slice(2).join(' ')});
-        else if(sub==='join' && NET.on) NET.room.send('teamJoin',{key:a.slice(2).join(' ')});
-        else if(sub==='leave' && NET.on) NET.room.send('teamLeave',{});
-        else if(sub==='invite' && NET.on) NET.room.send('teamInvite',{name:a.slice(2).join(' ')});
-        else if(sub==='private' && NET.on) NET.room.send('teamPrivacy',{private:true});
-        else if(sub==='public' && NET.on) NET.room.send('teamPrivacy',{private:false});
-        else if(sub==='lfg' && NET.on) NET.room.send('teamLfg',{lfg:true});
-        else if((sub==='nolfg'||sub==='clearstatus') && NET.on) NET.room.send('teamLfg',{lfg:false});
-        else chatLine('[Help]','/team create <name> \u00b7 /team join <name> \u00b7 /team invite <name> \u00b7 /team private/public \u00b7 /team lfg/nolfg \u00b7 /team leave \u00b7 /t <msg>');
-      } else if(cmd==='t'){
-        const msg=a.slice(1).join(' ');
-        if(msg && NET.on) NET.room.send('comms',{mode:'party',text:msg});
-      } else if(cmd==='w'||cmd==='whisper'||cmd==='msg'){
-        const target=a[1]||'',msg=a.slice(2).join(' ');
-        if(target&&msg&&NET.on)NET.room.send('comms',{mode:'whisper',target,text:msg});
-      } else if(cmd==='give'){
-        if(NET.on) NET.room.send('chat',{text});   // dev cheat; server honors only if DEV_CHEATS is set
-        else {                                      // solo sandbox: grant locally
-          const what=(a[1]||'').toLowerCase();
-          if(what==='sigil'){ addItem(I.SHADOW_SIGIL,1); chatLine('[Give]','Shadow Sigil'); }
-          else if(what==='fang'||what==='totem'){ addItem(I.FANG_TOTEM,1); chatLine('[Give]','Fang Totem'); }
-          else if(what==='mote'||what==='charm'){ addItem(I.MOTE_CHARM,1); chatLine('[Give]','Lifebloom Charm'); }
-          else if(what==='sprite'||what==='forage'){ addItem(I.FORAGE_CHARM,1); chatLine('[Give]',"Forager's Charm"); }
-          else if(what==='treat'){ const c=Math.max(1,Math.min(64,parseInt(a[2],10)||4)); addItem(I.DRAGON_TREAT,c); chatLine('[Give]',c+'x Dragon Treat'); }
-          else if(what==='egg'||what==='dragon'){ const t=DRAGON_TYPES[a[2]]?a[2]:'ember'; addItem(DRAGON_TYPES[t].egg,1); chatLine('[Give]',(DRAGON_TYPES[t].name)+' Egg'); }
-          else { chatLine('[Help]','/give sigil · fang · mote · sprite · egg [type] · treat [n]'); }
-          refreshHUD(); if(uiOpen) renderUI();
-        }
-      } else if(cmd==='event'){
-        if(NET.on) NET.room.send('chat',{text});
-        else chatLine('[Help]','/event works in multiplayer only');
-      } else if(cmd==='cutscene'){
-        const path=(a[1]||'').toLowerCase();
-        if(path==='gate'){
-          closeChat();
-          resetGateCutsceneSeen();
-          if(startGateUnlockCutscene(true)) markGateCutsceneSeen();
-          else chatLine('[Cutscene]','Return to the overworld to replay the Gate cutscene.');
-          return;
-        }
-        if(path && !PATHS[path]) chatLine('[Help]','/cutscene shadow · /cutscene mage · /cutscene guardian · /cutscene gate');
-        else {
-          closeChat();
-          if(!startIntroCutscene(true,path||null)) chatLine('[Cutscene]','Return to the overworld to replay ability cutscenes.');
-        }
-      } else if(cmd==='resetlevel2' || cmd==='resetability' || cmd==='resetawakening'){
-        closeChat(); resetLevel2AbilityFlow();
-      } else {
-        chatLine('[Help]','unknown command \u2014 try /team, /event, /give, /cutscene, or /resetlevel2');
-      }
-    } else if(text){
-      if(NET.on){
-        const target=chatMode==='whisper'?chatTargetEl.value:'';
-        if(chatMode==='whisper'&&!target)chatLine('[Whisper]','No other hunter is online.');
-        else NET.room.send('comms',{mode:chatMode,target,text});
-      }else chatLine('You', text);
-    }
-    closeChat();
   }
   if(e.code==='Escape') closeChat();
 });

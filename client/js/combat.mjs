@@ -1580,6 +1580,9 @@ function isTextEntryTarget(target){
 function gameplayInputActive(){
   return locked||overlay.classList.contains('hidden');
 }
+function isWorldPointerTarget(target){
+  return target===renderer.domElement||target===document.body||target===document.documentElement;
+}
 addEventListener('keydown', e=>{
   if(e.code==='F9'&&!e.repeat){
     e.preventDefault();
@@ -2229,6 +2232,7 @@ function interactWithVillager(vill){
 }
 addEventListener('mousedown', e=>{
   if(globalThis.chatTyping) return;
+  if(!isWorldPointerTarget(e.target)) return;
   if(claimMode){
     if(e.button===0) requestLandClaim();
     return;
@@ -2243,7 +2247,7 @@ addEventListener('mousedown', e=>{
 });
 addEventListener('mouseup', e=>{ if(e.button===0) stopPrimaryAction(); });
 addEventListener('contextmenu', e=> e.preventDefault());
-addEventListener('wheel', e=>{ if(locked) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
+addEventListener('wheel', e=>{ if(locked&&isWorldPointerTarget(e.target)) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
 
 gameContext.registerState('combat', Object.freeze({
   player,
