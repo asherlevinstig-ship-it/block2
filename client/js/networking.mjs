@@ -1414,9 +1414,19 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('discoveryResult',m=>{
       if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired')+(m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Weather Vane.':''));
-      if(m.id)claimedDiscoveryIds.add(m.id);
+      if(m.id&&m.type!=='ancient_core')claimedDiscoveryIds.add(m.id);
       if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');
       OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Job Board if your contract is ready.'});
+    });
+    room.onMessage('wardenAlarm',m=>{
+      const level=Math.max(1,Math.min(3,(m&&m.level)|0||1));
+      if(SFX.wardenAlarm)SFX.wardenAlarm(level);else SFX.slamWarn();
+      showName(level>=3?'THE WARDEN WAKES':'WARDEN ALARM '+level+'/3');
+      sysMsg('<b>Ancient City alarm '+level+'/3:</b> '+escHTML((m&&m.text)||'The deep city is listening.')+(level<3?'<br><small>Touching the core again will raise the alarm.</small>':''));
+    });
+    room.onMessage('wardenDefeated',m=>{
+      SFX.level();SFX.treasure();showName('ECHO ABILITY CLAIMED');
+      sysMsg('<b>Warden defeated.</b> The Ancient Core releases <b>'+escHTML((m&&m.ability)||'Warden Cleaver')+'</b>. Its sonic boom is now yours if the weapon reached your inventory.');
     });
     room.onMessage('discoverySighted',m=>{
       if(!m||!m.id)return;const fresh=!discoveredIds.has(m.id);discoveredIds.add(m.id);hintedDiscoveryIds.delete(m.id);updateLandMinimap();

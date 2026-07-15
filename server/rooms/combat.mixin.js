@@ -813,6 +813,28 @@ class CombatMixin {
     delete this.mobMeta[mobId];
     if (dgn) this.removeTransient(dgn, String(mobId));
     if (wasBoss && dgn) this.onBossDown(dgn);
+    else if (wasBoss && !dgn && killedMeta.ancientWarden) {
+      if (this.ancientWardenAlarms && killedMeta.cityId) this.ancientWardenAlarms.delete(killedMeta.cityId);
+      if (client) {
+        const rec = this.profileFor(client);
+        const claimKey = this.ancientWardenDefeatKey ? this.ancientWardenDefeatKey(killedMeta.coreId) : String(killedMeta.coreId || '') + '_warden_defeated';
+        if (rec) {
+          if (!Array.isArray(rec.prof.claimedDiscoveries)) rec.prof.claimedDiscoveries = [];
+          if (claimKey && !rec.prof.claimedDiscoveries.includes(claimKey)) rec.prof.claimedDiscoveries.push(claimKey);
+          this.dirtyPlayers.add(rec.token);
+        }
+        const ring = Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
+        const items = [
+          { id: I.WARDEN_CLEAVER, count: 1, rarity: 'mythic', locked: true, gear: true, source: 'ancient_warden' },
+          { id: I.LEGEND_TOKEN, count: 1 + Math.floor(ring / 2) },
+          { id: I.GEODE, count: 2 + ring },
+        ];
+        this.awardGrant(client, { source: 'ancient_warden', xp: 220 + ring * 90, items, dangerRing: ring, elite: true });
+        client.send('wardenDefeated', { cityId: killedMeta.cityId || '', coreId: killedMeta.coreId || '', ability: 'Warden Cleaver', items });
+      }
+      this.sendSpace('', 'fx', { t: 'wardenDefeated', x: dx, y: dy, z: dz, cityId: killedMeta.cityId || '', dgn: '' });
+      this.broadcast('chat', { name: '[Ancient City]', text: 'The Warden falls. The sealed echo answers.' });
+    }
     else if (wasBoss && !dgn && killedMeta.gateBreachBoss && this.resolveGateBreachBoss && this.resolveGateBreachBoss(client, String(mobId), { ...mob, x: dx, y: dy, z: dz }, killedMeta)) { /* breach cleanup reward handled by gate lifecycle */ }
     else if (kind === 'orb' || kind === 'ghost') { /* hazard entities: no reward */ }
     else if (client) {

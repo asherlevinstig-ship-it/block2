@@ -1343,6 +1343,13 @@ function noise(dur,vol,fc,q,delay,type){
     forge(){ noise(.055,.38,2100,2); osc('square',620,240,.09,.16); noise(.08,.18,820,1,.08,'bandpass'); },
     growl(){ osc('sawtooth',95,55,.35,.28); noise(.22,.18,180,1,0,'lowpass'); },
     roar(){ osc('sawtooth',80,45,.7,.4); noise(.5,.3,150,1,0,'lowpass'); noise(.3,.2,600,1,.1); },
+    wardenAlarm(level=1){
+      const n=Math.max(1,Math.min(3,level|0));
+      osc('sawtooth',70,38,.55+n*.12,.36+n*.08);
+      noise(.35+n*.12,.22+n*.07,180,1.2,0,'lowpass');
+      if(n>=2)osc('sine',96,48,.55,.16,.16);
+      if(n>=3)this.roar();
+    },
     bark(){ osc('square',300,165,.06,.16); noise(.05,.14,950,1); osc('square',250,150,.05,.12,.07); },
     whine(){ osc('sine',540,780,.13,.08); osc('sine',780,430,.16,.07,.11); },
     whisper(){ noise(.5,.07,1700,1.5,0,'bandpass'); osc('sine',170,120,.5,.04); },

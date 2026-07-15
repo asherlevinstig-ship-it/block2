@@ -257,6 +257,7 @@ class GameRoom extends Room {
     // ---- sim state ----
     this.mobSeq = 0;
     this.mobMeta = {};
+    this.ancientWardenAlarms = new Map();
     this.instances = {};
     this.initCombatState();     // combat-domain sim state lives in combat.mixin.js
     this.teamMgr = new TeamManager(5);
@@ -4156,6 +4157,84 @@ class GameRoom extends Room {
     }
     client.send('xp', { n: amount });
   }
+  ancientWardenDefeatKey(coreId) {
+    return String(coreId || '') + '_warden_defeated';
+  }
+  activeAncientWarden(cityId) {
+    const state = this.ancientWardenAlarms && this.ancientWardenAlarms.get(String(cityId || ''));
+    if (!state || !state.mobId) return null;
+    const mob = this.state.mobs.get(String(state.mobId));
+    const meta = this.mobMeta[String(state.mobId)];
+    return mob && meta && meta.ancientWarden ? { mob, meta, id: String(state.mobId), state } : null;
+  }
+  triggerAncientWardenAlarm(client, s, ring) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dgn || !s || s.type !== 'ancient_core') return false;
+    if (Math.hypot(p.x - s.x, p.z - s.z) > (s.radius || 5) + 3 || Math.abs(p.y - s.y) > 6) {
+      client.send('discoveryReject', { reason: 'range' });
+      return true;
+    }
+    const claimedKey = this.ancientWardenDefeatKey(s.id);
+    const rec = this.profileFor(client);
+    if (rec && Array.isArray(rec.prof.claimedDiscoveries) && rec.prof.claimedDiscoveries.includes(claimedKey)) {
+      client.send('discoveryReject', { reason: 'claimed' });
+      return true;
+    }
+    const cityId = String(s.cityId || s.id || '');
+    const live = this.activeAncientWarden(cityId);
+    if (live) {
+      client.send('wardenAlarm', { cityId, coreId: s.id, level: 3, awakened: true, x: live.mob.x, y: live.mob.y, z: live.mob.z, text: 'The Warden is already awake.' });
+      return true;
+    }
+    const now = Date.now();
+    const alarm = this.ancientWardenAlarms.get(cityId) || { level: 0, last: 0, mobId: '' };
+    if (now - (alarm.last || 0) > 90000) alarm.level = 0;
+    alarm.level = Math.max(1, Math.min(3, (alarm.level | 0) + 1));
+    alarm.last = now;
+    this.ancientWardenAlarms.set(cityId, alarm);
+    const messages = [
+      'A deep note rolls through the ancient stone.',
+      'The city answers with a second warning. Something below is listening.',
+      'The alarm breaks into a roar. The Warden wakes.',
+    ];
+    this.sendSpace('', 'fx', { t: 'wardenAlarm', level: alarm.level, x: s.x, y: s.y, z: s.z, cityId, dgn: '' });
+    this.sendSpace('', 'wardenAlarm', { cityId, coreId: s.id, level: alarm.level, awakened: alarm.level >= 3, x: s.x, y: s.y, z: s.z, text: messages[alarm.level - 1] });
+    if (alarm.level < 3) {
+      client.send('discoveryResult', { id: s.id, type: s.type, name: 'Ancient Core', text: messages[alarm.level - 1] + ' Disturb the core again only if you are ready.', xp: 0, items: [] });
+      return true;
+    }
+    this.spawnAncientWarden(client, s, ring, alarm);
+    return true;
+  }
+  spawnAncientWarden(client, s, ring = 0, alarm = null) {
+    const id = String(++this.mobSeq), mob = new Mob();
+    const gy = this.world.standHeight(s.x, s.z, s.y + 1);
+    mob.x = s.x; mob.y = gy > 0 ? gy : s.y; mob.z = s.z;
+    mob.kind = 'boss';
+    mob.displayName = 'Ancient Warden';
+    mob.bossStyle = 'ancient_warden';
+    mob.maxHp = mob.hp = 180 + ring * 70;
+    mob.enraged = true;
+    this.state.mobs.set(id, mob);
+    const meta = this.freshMeta(mob.x, mob.z, 10 + ring * 3, 1.05 + ring * .08, 'boss', Math.max(1, ring + 1), true);
+    meta.ancientWarden = true;
+    meta.cityId = String(s.cityId || '');
+    meta.coreId = String(s.id || '');
+    meta.bossStyle = 'watcher';
+    meta.slamDmg = 10 + ring * 4;
+    meta.gcd = 1.4;
+    meta.enraged = true;
+    meta.woke = true;
+    meta.sum1 = true;
+    meta.sum2 = true;
+    this.mobMeta[id] = meta;
+    if (alarm) alarm.mobId = id;
+    this.ancientWardenAlarms.set(meta.cityId, alarm || { level: 3, last: Date.now(), mobId: id });
+    this.sendSpace('', 'fx', { t: 'wardenAwake', x: mob.x, y: mob.y, z: mob.z, cityId: meta.cityId, dgn: '' });
+    this.broadcast('chat', { name: '[Ancient City]', text: 'The Warden has awakened beneath the world.' });
+    if (client) client.send('discoveryResult', { id: s.id, type: s.type, name: 'Ancient Core', text: 'The Warden wakes. Defeat it to claim the echo ability sealed in the city core.', xp: 0, items: [] });
+    return id;
+  }
   discoverySpec(id) {
     if (!this.discoveryById) this.discoveryById = new Map([...W.smallDiscoverySpecs(), ...W.ancientCityDiscoverySpecs().filter(s => s.type !== 'ancient_city')].map(s => [s.id, s]));
     return this.discoveryById.get(String(id || '')) || null;
@@ -4638,9 +4717,10 @@ class GameRoom extends Room {
     if (!this.discoveryClaims) this.discoveryClaims = new Map();
     const token = this.clientToken(client), claims = this.discoveryClaims.get(token) || new Set();
     const claimKey=s.type==='fishing_pool'?s.id+':'+Math.floor(Date.now()/DAY_MS):s.id;
+    const ring = dangerRingAt(s.x, s.z), regional = BIOME_COLLECTIBLE[W.biomeAt(s.x, s.z)];
+    if (s.type === 'ancient_core' && this.triggerAncientWardenAlarm(client, s, ring)) return;
     if ((s.type==='fishing_pool'?claims.has(claimKey):rec.prof.claimedDiscoveries.includes(s.id))) return client.send('discoveryReject', { reason: s.type==='fishing_pool'?'cooldown':'claimed' });
     if(s.type==='fishing_pool'){claims.add(claimKey);this.discoveryClaims.set(token,claims);}else{rec.prof.claimedDiscoveries.push(s.id);this.dirtyPlayers.add(rec.token);}
-    const ring = dangerRingAt(s.x, s.z), regional = BIOME_COLLECTIBLE[W.biomeAt(s.x, s.z)];
     let name = 'Small Discovery', text = '', xp = 5, items = [];
     if (s.cityId) {
       const city = this.explorationSpec(s.cityId);
@@ -4682,7 +4762,7 @@ class GameRoom extends Room {
       xp=45+ring*12;items.push({id:I.GEODE,count:1+Math.max(0,ring-1)},{id:I.IRON_INGOT,count:2+ring},{id:I.DIAMOND,count:1+Math.floor(ring/2)});
       this.recordTreasureProgress(client);
     } else if(s.type==='ancient_core'){
-      name='Ancient Core';text='The core is sealed by a Warden oath. Defeat the Warden here later to awaken a rare ability.';xp=20+ring*6;
+      name='Ancient Core';text='The core is quiet. The Warden seal has already been answered.';xp=20+ring*6;
     } else {
       name = 'Odd-Flame Shrine'; text = 'The mismatched flame sinks. A hidden compartment opens.'; xp = 15 + ring * 5;
       items.push({ id: ring >= 2 ? I.DIAMOND : I.IRON_INGOT, count: 1 + Math.max(0, ring - 1) });
@@ -5097,7 +5177,7 @@ class GameRoom extends Room {
 
     if (dayF > 0.5) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive||meta.gateBreach))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !this.isAnimalKind(m.kind) && !(meta && (meta.campId || meta.discoveryNest || meta.bandit || meta.friendly||meta.dayActive||meta.gateBreach||meta.ancientWarden))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
     }
     const surfaceClusters = this.surfaceDensityClusters(surface);

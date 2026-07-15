@@ -127,6 +127,7 @@ function decorateBossStyle(m,ref){
     ossuary:{col:[.78,.68,.45],hex:0xd8d2bc,parts:()=>{if(m.head)for(const sx of [-.24,-.08,.08,.24])attachBox(m.head,[.06,.32,.06],[sx,.44,.04],0xd8d2bc,[0,0,sx*.9]);for(let i=0;i<5;i++)attachBox(m.grp,[.08,.34-i*.035,.08],[0,1.58-i*.18,-.28],0xd8d2bc,[.35,0,0]);}},
     blight:{col:[.42,.92,.22],hex:0x9cff3a,parts:()=>{if(m.head){for(const sx of [-.18,.18]){const cap=new THREE.Mesh(new THREE.SphereGeometry(.17,8,5,0,Math.PI*2,0,Math.PI/2),material(0x9cff3a));cap.position.set(sx,.4,.04);m.head.add(cap);}}}},
     watcher:{col:[.58,.42,.95],hex:0x9b7cff,parts:()=>{if(m.head)attachBox(m.head,[.5,.1,.08],[0,.04,.31],0x9b7cff,[0,0,0],true);for(const sx of [-.5,.5])attachBox(m.grp,[.24,.38,.2],[sx,1.5,.02],0x5b4b88);}},
+    ancient_warden:{col:[.06,.22,.26],hex:0x35d0c8,parts:()=>{if(m.head){attachBox(m.head,[.56,.12,.1],[0,.06,.32],0x78fff2,[0,0,0],true);for(const sx of [-.24,.24])attachBox(m.head,[.08,.5,.08],[sx,.42,.02],0x0f2f35,[0,0,sx>0?-.28:.28]);}for(const sx of [-.52,.52])attachBox(m.grp,[.22,.72,.24],[sx,1.38,.02],0x12353a);attachBox(m.grp,[.7,.12,.16],[0,1.62,-.18],0x35d0c8,[0,0,0],true);}},
   };
   const spec=styles[s];if(!spec)return;tintModel(m,spec.col);spec.parts();
   const aura=new THREE.Mesh(new THREE.TorusGeometry(1.22,.045,8,42),new THREE.MeshBasicMaterial({color:spec.hex,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -534,6 +535,22 @@ function netFx(m){
   }
   if(m.t==='blacksmith'){
     blacksmithRitualVfx(m.action||'upgrade',m.id||I.IRON_SWORD,m.plus||0,m.name||'Tobin');
+    return;
+  }
+  if(m.t==='wardenAlarm'||m.t==='wardenAwake'){
+    const level=Math.max(1,Math.min(3,m.level|0||3)),radius=level===1?3.4:level===2?5.2:7.2;
+    ringPulse(m.x,m.y+.08,m.z,radius,0x35d0c8,1.15);
+    burst(m.x,m.y+.35,m.z,[.12,.85,.8],12+level*10,2.2+level,2.4,.55);
+    if(SFX.wardenAlarm)SFX.wardenAlarm(level);else SFX.slamWarn();
+    camShake=Math.max(camShake,level*.18);
+    showName(m.t==='wardenAwake'?'THE WARDEN WAKES':'WARDEN ALARM '+level+'/3');
+    return;
+  }
+  if(m.t==='wardenDefeated'){
+    ringPulse(m.x,m.y+.08,m.z,5.2,0x78fff2,.7);
+    burst(m.x,m.y+1,m.z,[.35,1,.95],46,5.6,4.4,.9);
+    SFX.level();SFX.treasure();camShake=Math.max(camShake,.55);
+    showName('WARDEN DEFEATED');
     return;
   }
   if(m.t==='slam'){

@@ -239,7 +239,12 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   const clientWorld = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const replication = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'replication-visuals.mjs'), 'utf8');
   const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const combatMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'combat.mixin.js'), 'utf8');
+  const spawningMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'spawning.mixin.js'), 'utf8');
   assert.match(clientWorld, /function ancientCitySpecs\(\)/);
   assert.match(clientWorld, /function ancientCityLootTable\(\)/);
   assert.match(clientWorld, /function ancientCityDiscoverySpecs\(\)/);
@@ -255,7 +260,18 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   assert.match(frame, /Deep ruins - read tablets, open vaults, and approach the core carefully/);
   assert.match(room, /W\.ancientCityDiscoverySpecs\(\)/);
   assert.match(room, /'ancient_tablet','ancient_vault','ancient_core'/);
-  assert.match(room, /Defeat the Warden here later to awaken a rare ability/);
+  assert.match(room, /ancientWardenAlarms = new Map/);
+  assert.match(room, /triggerAncientWardenAlarm\(client, s, ring\)/);
+  assert.match(room, /spawnAncientWarden\(client, s, ring, alarm\)/);
+  assert.match(room, /Warden Cleaver/);
+  assert.match(combatMixin, /killedMeta\.ancientWarden/);
+  assert.match(combatMixin, /I\.WARDEN_CLEAVER/);
+  assert.match(spawningMixin, /meta\.ancientWarden \? '\[Ancient City\]'/);
+  assert.match(menus, /wardenAlarm\(level=1\)/);
+  assert.match(networking, /room\.onMessage\('wardenAlarm'/);
+  assert.match(networking, /room\.onMessage\('wardenDefeated'/);
+  assert.match(replication, /ancient_warden:\{col:/);
+  assert.match(replication, /m\.t==='wardenAlarm'\|\|m\.t==='wardenAwake'/);
 });
 
 test('client dimensions and server consume the shared grid contract', () => {

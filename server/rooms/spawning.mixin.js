@@ -53,7 +53,7 @@ class SpawningMixin {
     if (!meta.sum2 && m.hp <= m.maxHp * .33) { meta.sum2 = true; this.bossSummon(m, meta); }
     if (!meta.enraged && m.hp <= m.maxHp * .2) {
       meta.enraged = true; m.enraged = true; meta.speed *= 1.4;
-      this.broadcast('chat', { name: '[System]', text: 'The Gate boss enrages!' });
+      this.broadcast('chat', { name: meta.ancientWarden ? '[Ancient City]' : '[System]', text: meta.ancientWarden ? 'The Warden locks onto every sound!' : 'The Gate boss enrages!' });
     }
     const haste = meta.enraged ? .65 : 1;
     meta.stateT -= dt;
@@ -71,7 +71,7 @@ class SpawningMixin {
       faceBest();
       this.sendSpace(m.dgn, 'fx', { t: 'roar', dgn: m.dgn || '' });
       this.sendSpace(m.dgn, 'fx', { t: 'warn', dgn: m.dgn || '' });
-      this.broadcast('chat', { name: '[Gate]', text: 'The Gate Boss awakens with a roar!' });
+      this.broadcast('chat', { name: meta.ancientWarden ? '[Ancient City]' : '[Gate]', text: meta.ancientWarden ? 'The Warden rises from the alarm.' : 'The Gate Boss awakens with a roar!' });
       m.state = 'slamWind'; meta.stateT = 1.6;   // longer than the usual 1.1s tell
       return true;
     }
@@ -448,7 +448,7 @@ class SpawningMixin {
   cleanupFarOverworldMobs(clusters) {
     if (!clusters || !clusters.length) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !(meta && (meta.friendly || meta.gateBreach))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !(meta && (meta.friendly || meta.gateBreach || meta.ancientWarden))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
       return;
     }
