@@ -9183,6 +9183,22 @@ test('small discoveries include every archetype and buried treasure is public', 
   assert.equal(chest.slots.some(Boolean), true);
 });
 
+test('overworld treasure caches scatter visible public loot chests around the map', () => {
+  const specs = W.treasureCacheSpecs();
+  assert.ok(specs.length >= 35);
+  assert.equal(new Set(specs.map(s => s.id)).size, specs.length);
+  assert.ok(specs.every(s => Math.hypot(s.x - W.TOWN.TC, s.z - W.TOWN.TC) >= W.TOWN.HS + 90));
+  const world = W.createWorld(); world.generate();
+  assert.equal(specs.filter(s => world.getB(s.x, s.y + 1, s.z) === W.B.CHEST).length, specs.length);
+
+  const room = makeRoom(), cache = specs.find(s => s.ring >= 3) || specs[0];
+  room.world.setB(cache.x, cache.y + 1, cache.z, W.B.CHEST);
+  const chest = room.getChestRecord('overworld:' + cache.x + ',' + (cache.y + 1) + ',' + cache.z);
+  assert.equal(chest.scope, 'public');
+  assert.ok(chest.slots.some(s => s && s.id === I.COAL));
+  assert.ok(chest.slots.some(s => s && [I.GEODE, I.STORMGLASS, I.SOLAR_GLYPH, I.LEGEND_TOKEN].includes(s.id)));
+});
+
 test('discovery rewards are one-time and odd-flame puzzles validate the correct pedestal', () => {
   const room = makeRoom(), client = makeClient('explorer');
   const pool = W.smallDiscoverySpecs().find(s => s.type === 'fishing_pool');

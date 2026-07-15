@@ -199,22 +199,32 @@ class EconomyMixin {
         if (s.type === 'bandit_camp') this.landmarkCampChests.set(s.x + ',' + (s.y + 1) + ',' + (s.z + 2), s);
       }
     }
-    let site = this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z), discovery = false;
+    let site = this.landmarkCampChests.get(info.x + ',' + info.y + ',' + info.z), discovery = false, cache = false;
     if (!site) {
       for (const s of W.smallDiscoverySpecs()) {
         const chest = s.type === 'buried_chest' ? [s.x, s.y - 1, s.z] : s.type === 'traveling_merchant' ? [s.x, s.y + 1, s.z - 2] : null;
         if (chest && chest[0] === info.x && chest[1] === info.y && chest[2] === info.z) { site = s; discovery = true; break; }
       }
     }
+    if (!site) {
+      for (const s of W.treasureCacheSpecs()) {
+        if (s.x === info.x && s.y + 1 === info.y && s.z === info.z) { site = s; cache = true; break; }
+      }
+    }
     if (!site || this.world.getB(info.x, info.y, info.z) !== W.B.CHEST) return null;
     const ring = dangerRingAt(site.x, site.z), regional = BIOME_COLLECTIBLE[W.biomeAt(site.x, site.z)];
     const roll = W.hash2(site.x * 7717, site.z * 3571), slots = new Array(18).fill(null);
     let i = 0;
-    slots[i++] = { id: I.COAL, count: (discovery ? 1 : 2) + ring * 3 };
+    slots[i++] = { id: I.COAL, count: (discovery ? 1 : 2) + ring * (cache ? 2 : 3) };
     if (site.type === 'bandit_camp') slots[i++] = { id: I.IRON_INGOT, count: 2 + ring * 2 };
     if (ring >= 1) slots[i++] = { id: I.IRON_INGOT, count: ring + 1 };
     if (ring >= 2) slots[i++] = { id: I.DIAMOND, count: ring - 1 + (roll > .55 ? 1 : 0) };
     if (regional) slots[i++] = { id: regional.item, count: 1 + ring };
+    if (cache && roll > .20) slots[i++] = { id: ring >= 2 ? I.COOKED_MEAT : I.BREAD, count: 1 + (roll > .70 ? 1 : 0) };
+    if (cache && roll > .35) slots[i++] = { id: I.REPAIR_KIT, count: 1 };
+    if (cache && ring >= 2 && roll > .45) slots[i++] = { id: I.GEODE, count: 1 + (roll > .85 ? 1 : 0) };
+    if (cache && ring >= 3 && roll > .55) slots[i++] = { id: I.STORMGLASS, count: 1 };
+    if (cache && ring >= 3 && roll > .78) slots[i++] = { id: I.SOLAR_GLYPH, count: 1 };
     if (ring >= 3) slots[i++] = { id: I.LEGEND_TOKEN, count: 1 };
     return { scope: 'public', owner: '', team: '', slots };
   }

@@ -232,6 +232,34 @@ function buildSmallDiscoveries(setBlock){
   }
   return smallDiscoverySpecs();
 }
+function treasureCacheSpecs() {
+  const out = [], landmarks = regionalLandmarkSpecs(), roads = roadNetworkSpecs(), discoveries = smallDiscoverySpecs();
+  const segDist = (px, pz, r) => { const vx = r.b.x - r.a.x, vz = r.b.z - r.a.z, l2 = vx * vx + vz * vz; const t = Math.max(0, Math.min(1, ((px - r.a.x) * vx + (pz - r.a.z) * vz) / l2)); return Math.hypot(px - (r.a.x + vx * t), pz - (r.a.z + vz * t)); };
+  for (let gx = 85; gx < WX - 70; gx += 90) for (let gz = 85; gz < WX - 70; gz += 90) {
+    const x = Math.round(gx + (hash2(gx + 9401, gz + 1723) - .5) * 58);
+    const z = Math.round(gz + (hash2(gx + 5527, gz + 8831) - .5) * 58);
+    const y = terrainHeight(x, z), ring = Math.min(3, Math.floor(Math.hypot(x - TOWN.TC, z - TOWN.TC) / 100));
+    if (x < LAVA_BORDER_WIDTH + 18 || z < LAVA_BORDER_WIDTH + 18 || x >= WX - LAVA_BORDER_WIDTH - 18 || z >= WX - LAVA_BORDER_WIDTH - 18 || y <= SEA + 1 || y > 40) continue;
+    if (Math.hypot(x - TOWN.TC, z - TOWN.TC) < TOWN.HS + 90 || isTrainingMeadowLand(x, z, 24)) continue;
+    if (landmarks.some(s => Math.hypot(x - s.x, z - s.z) < 30) || discoveries.some(s => Math.hypot(x - s.x, z - s.z) < 22) || roads.some(r => segDist(x, z, r) < 14)) continue;
+    const hs = [terrainHeight(x - 2, z - 2), terrainHeight(x + 2, z - 2), terrainHeight(x - 2, z + 2), terrainHeight(x + 2, z + 2), y];
+    if (Math.max(...hs) - Math.min(...hs) > 3) continue;
+    out.push({ id: 'cache_' + gx + '_' + gz, type: 'treasure_cache', x, y, z, ring, radius: 4 });
+  }
+  return out;
+}
+function buildTreasureCaches(setBlock) {
+  for (const s of treasureCacheSpecs()) {
+    const { x, y, z, ring } = s;
+    for (let h = 1; h <= 4; h++) for (let ox = -2; ox <= 2; ox++) for (let oz = -2; oz <= 2; oz++) if (Math.abs(ox) <= 1 || Math.abs(oz) <= 1) setBlock(x + ox, y + h, z + oz, B.AIR);
+    for (let ox = -1; ox <= 1; ox++) for (let oz = -1; oz <= 1; oz++) setBlock(x + ox, y, z + oz, ring >= 2 ? B.COBBLE : B.DIRT);
+    setBlock(x, y + 1, z, B.CHEST);
+    setBlock(x + 1, y + 1, z, B.TORCH);
+    if (ring >= 2) setBlock(x - 1, y + 1, z, B.BRICK);
+    if (ring >= 3) setBlock(x, y + 2, z - 1, B.LANTERN);
+  }
+  return treasureCacheSpecs();
+}
 function buildRegionalLandmarks(setBlock) {
   const specs = regionalLandmarkSpecs();
   const box = (x1,y1,z1,x2,y2,z2,id) => { for(let x=x1;x<=x2;x++) for(let y=y1;y<=y2;y++) for(let z=z1;z<=z2;z++) setBlock(x,y,z,id); };
@@ -388,6 +416,7 @@ function generate() {
   buildRoadNetwork(setB);
   buildSmallDiscoveries(setB);
   buildRegionalLandmarks(setB);
+  buildTreasureCaches(setB);
   buildLavaBorder();
   buildTown();
 }
@@ -616,6 +645,7 @@ function createWorld() {
     buildRoadNetwork(setLocal);
     buildSmallDiscoveries(setLocal);
     buildRegionalLandmarks(setLocal);
+    buildTreasureCaches(setLocal);
     buildLavaBorderLocal();
     buildTownLocal();
   };
@@ -645,6 +675,6 @@ module.exports = {
   WX, WH, TOWN, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
-  SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, isTrainingMeadowLand, buildTrainingMeadow,
+  SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, isTrainingMeadowLand, buildTrainingMeadow,
   buildGuildHallBase,
 };
