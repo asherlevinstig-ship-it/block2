@@ -970,6 +970,20 @@ test('onboarding material safety grants count cursor-held stacks before adding r
   assert.match(combat,/const onboardingHeldPlanks=countItem\(B\.PLANKS\)\+countHeldCursorItem\(B\.PLANKS\);/);
 });
 
+test('onboarding eat step recovers bread consumed before the lesson accepts it',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/if\(countItem\(I\.BREAD\)\+countHeldCursorItem\(I\.BREAD\)<=0\) ensureOnboardingItem\(I\.BREAD,1\);/);
+  assert.match(combat,/if\(onboardingKind\(\)==='eat'&&!onboardingFlags\.ate\)\{/);
+  assert.match(combat,/selectItemForOnboarding\(I\.BREAD\);[\s\S]*makeOnboardingPlayerHungry\(\);/);
+});
+
+test('onboarding farming prompt tells players to use the wooden hoe',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  assert.match(combat,/key:'WOODEN HOE \+ G'/);
+  assert.match(combat,/Use the wooden hoe on one mature wheat crop\./);
+  assert.match(combat,/Select the hoe on your hotbar/);
+});
+
 test('online craft result restores the authoritative inventory snapshot',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(menus,/function restoreInventorySnapshot\(slots\)\{/);

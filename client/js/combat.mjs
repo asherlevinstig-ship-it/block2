@@ -557,7 +557,7 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'tree',pillar:'Lesson 4 / 11 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
   {kind:'craft',pillar:'Lesson 5 / 11 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
   {kind:'build',pillar:'Lesson 6 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingFlags.built>=3},
-  {kind:'farm',pillar:'Lesson 7 / 11 — Farming', key:'G / RIGHT CLICK', text:'Harvest one mature wheat crop.', sub:'Aim at the tall golden wheat and use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
+  {kind:'farm',pillar:'Lesson 7 / 11 — Farming', key:'WOODEN HOE + G', text:'Use the wooden hoe on one mature wheat crop.', sub:'Select the hoe on your hotbar, aim at tall golden wheat, then use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
   {kind:'eat',pillar:'Lesson 8 / 11 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
   {kind:'combat',pillar:'Lesson 9 / 11 — Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
   {kind:'recall',pillar:'Lesson 10 / 11 — Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingArrived&&onboardingFlags.recall},
@@ -807,7 +807,7 @@ function prepareOnboardingStep(){
     selectItemForOnboarding(I.WOOD_HOE);
   }
   else if(kind==='eat'){
-    ensureOnboardingItem(I.BREAD,1);
+    if(countItem(I.BREAD)+countHeldCursorItem(I.BREAD)<=0) ensureOnboardingItem(I.BREAD,1);
     selectItemForOnboarding(I.BREAD);
     makeOnboardingPlayerHungry();
   }
@@ -1416,7 +1416,11 @@ function tickOnboarding(now){
     selectItemForOnboarding(B.PLANKS);
   }
   if(onboardingKind()==='farm'&&!onboardingFlags.farmed&&!onboardingFarmHasMatureWheat()) repairOnboardingFarmPatch();
-  if(onboardingKind()==='eat'&&!onboardingFlags.ate) makeOnboardingPlayerHungry();
+  if(onboardingKind()==='eat'&&!onboardingFlags.ate){
+    if(countItem(I.BREAD)+countHeldCursorItem(I.BREAD)<=0) ensureOnboardingItem(I.BREAD,1);
+    selectItemForOnboarding(I.BREAD);
+    makeOnboardingPlayerHungry();
+  }
   const target=onboardingRoute[onboardingStep];
   const wasArrived=onboardingArrived;
   onboardingArrived=!!(target&&player&&dim==='tutorial'&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<2.2);
