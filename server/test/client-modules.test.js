@@ -397,11 +397,15 @@ test('onboarding building counts a three-block stack above the stone pad', async
 });
 
 test('onboarding resource manifest restores every tutorial log and mature crop', async () => {
-  const { onboardingResourceCells } = await clientModule('onboarding.mjs');
-  const cells = onboardingResourceCells({ x: 100, z: 200, G: 12 }, { LOG: 5, WHEAT_3: 25 });
+  const { onboardingResourceCells, onboardingTreeTarget, isOnboardingTreeLog } = await clientModule('onboarding.mjs');
+  const meadow = { x: 100, z: 200, G: 12 };
+  const cells = onboardingResourceCells(meadow, { LOG: 5, WHEAT_3: 25 });
+  assert.deepEqual(onboardingTreeTarget(meadow), { x: 122, z: 194 });
   assert.deepEqual(cells.filter(cell => cell.id === 5).map(cell => [cell.x, cell.y, cell.z]), [
     [122, 13, 194], [122, 14, 194], [122, 15, 194], [122, 16, 194],
   ]);
+  assert.equal(isOnboardingTreeLog(122, 13, 194, meadow), true);
+  assert.equal(isOnboardingTreeLog(122, 17, 194, meadow), false);
   assert.deepEqual(cells.filter(cell => cell.id === 25).map(cell => [cell.x, cell.y, cell.z]), [
     [108, 13, 172], [110, 13, 172], [112, 13, 172],
   ]);
@@ -923,6 +927,15 @@ test('First Hands guides the player through the first real objective',()=>{
   assert.match(menus,/Quest accepted: First Hands[\s\S]*north gate/);
   assert.match(menus,/First Hands complete[\s\S]*gold trail back/);
   assert.match(networking,/Quest accepted: First Hands[\s\S]*north gate/);
+});
+
+test('onboarding gathering pillar and completion both use the training tree',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(combat,/const tree=onboardingTreeTarget\(TRAINING_MEADOW\);[\s\S]*tree,[\s\S]*\{x:sx\+30, z:sz-12\}/);
+  assert.match(combat,/isOnboardingTreeLog\(m\.x,m\.y,m\.z,TRAINING_MEADOW\)/);
+  assert.match(world,/"onboardingTreeTarget":\{get:\(\)=>onboardingTreeTarget\}/);
+  assert.match(world,/"isOnboardingTreeLog":\{get:\(\)=>isOnboardingTreeLog\}/);
 });
 
 test('quick chat uses Tab then click to send instead of hold and release',()=>{

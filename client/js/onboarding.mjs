@@ -29,9 +29,21 @@ export function onboardingResourceCells(meadow, blocks) {
   if (!meadow || !blocks) return [];
   const { x: cx, z: cz, G } = meadow;
   const cells = [];
-  for (let y = G + 1; y <= G + 4; y++) cells.push({ x: cx + 22, y, z: cz - 6, id: blocks.LOG });
+  const tree = onboardingTreeTarget(meadow);
+  for (let y = G + 1; y <= G + 4; y++) cells.push({ x: tree.x, y, z: tree.z, id: blocks.LOG });
   for (let x = cx + 8; x <= cx + 12; x += 2) cells.push({ x, y: G + 1, z: cz - 28, id: blocks.WHEAT_3 });
   return cells;
+}
+
+export function onboardingTreeTarget(meadow) {
+  if (!meadow) return null;
+  return { x: meadow.x + 22, z: meadow.z - 6 };
+}
+
+export function isOnboardingTreeLog(x, y, z, meadow) {
+  if (!meadow) return false;
+  const tree = onboardingTreeTarget(meadow);
+  return x === tree.x && z === tree.z && y >= meadow.G + 1 && y <= meadow.G + 4;
 }
 
 export function gateMilestoneHandoff(message, earned = true) {

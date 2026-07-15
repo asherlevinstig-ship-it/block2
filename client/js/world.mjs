@@ -19,7 +19,7 @@ const {createInventoryModel,createEquipmentModel}=inventoryModule;
 const {createQuestModel}=questJobModule;
 const {createNetworkController}=networkModule;
 const {createRenderingRuntime}=renderingModule;
-const {createOnboardingUI,isOnboardingBuildPlacement,countOnboardingBuildBlocks,onboardingResourceCells,gateMilestoneHandoff}=onboardingModule;
+const {createOnboardingUI,isOnboardingBuildPlacement,countOnboardingBuildBlocks,onboardingResourceCells,onboardingTreeTarget,isOnboardingTreeLog,gateMilestoneHandoff}=onboardingModule;
 "use strict";
 /* ============================================================
    BLOCKCRAFT SURVIVAL — voxel engine + full crafting loop:
@@ -8901,6 +8901,8 @@ const legacyWorldBindings={
   "NPC_ROLES":{get:()=>NPC_ROLES},
   "npcTex":{get:()=>npcTex},
   "onboardingResourceCells":{get:()=>onboardingResourceCells},
+  "onboardingTreeTarget":{get:()=>onboardingTreeTarget},
+  "isOnboardingTreeLog":{get:()=>isOnboardingTreeLog},
   "paintLavaTile":{get:()=>paintLavaTile},
   "particleBudgetStats":{get:()=>particleBudgetStats},
   "playerJob":{get:()=>playerJob,set:value=>{playerJob=value;}},

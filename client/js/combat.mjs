@@ -400,7 +400,7 @@ function finishMine(){
   if(m.id===B.EGG_INSULATOR) removeInsulatorMesh(m.x,m.y,m.z,true);
   burst(m.x+.5, m.y+.5, m.z+.5, BLOCK_COLORS[m.id]||[.5,.5,.5], 14, 2.6, 2.2, .55);
   setB(m.x,m.y,m.z,B.AIR);
-  if(onboardingActive&&onboardingArrived&&onboardingKind()==='tree'&&m.id===B.LOG&&isTrainingMeadowLand(m.x,m.z,8)) onboardingFlags.tree=true;
+  if(onboardingActive&&onboardingKind()==='tree'&&m.id===B.LOG&&isOnboardingTreeLog(m.x,m.y,m.z,TRAINING_MEADOW)) onboardingFlags.tree=true;
   rebuildAround(m.x,m.z);
   netSendEdit(m.x,m.y,m.z,B.AIR);
   if(!NET.on && m.willDrop){
@@ -810,12 +810,12 @@ function prepareOnboardingStep(){
 }
 function buildOnboardingRoute(){
   const sx=TRAINING_MEADOW.x, sz=TRAINING_MEADOW.z;
+  const tree=onboardingTreeTarget(TRAINING_MEADOW);
   return [
     {x:sx-20, z:sz+18},
     {x:sx-8, z:sz+12},
     {x:sx+4, z:sz+6},
-    {x:sx+14, z:sz},
-    {x:sx+22, z:sz-6},
+    tree,
     {x:sx+30, z:sz-12},
     {x:sx+40, z:sz-18},
     {x:sx+10, z:sz-28},
@@ -823,6 +823,7 @@ function buildOnboardingRoute(){
     {x:sx-22, z:sz-20},
     {x:sx-28, z:sz-14},
     {x:sx-32, z:sz-8},
+    {x:sx-32, z:sz+4},
   ];
 }
 function resetForFreshOnboarding(){
