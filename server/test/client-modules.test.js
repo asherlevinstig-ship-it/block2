@@ -922,10 +922,22 @@ test('quest log hotkey works while gameplay overlay is hidden even without point
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(combat,/function gameplayInputActive\(\)\{\s*return locked\|\|overlay\.classList\.contains\('hidden'\);\s*\}/);
-  assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat\)\{/);
-  assert.match(combat,/else if\(gameInput\) openQuestLogUI\(\);/);
+  assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat && !pathChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive\(\)\)\{/);
+  assert.match(combat,/else if\(!uiShellState\.qOpen\) openQuestLogUI\(\);/);
+  assert.match(combat,/if\(e\.code==='KeyO'[\s\S]*return;\s*\}\s*if\(globalThis\.chatTyping\) return;/);
   assert.doesNotMatch(combat,/else if\(locked && !uiOpen && !statOpen\) openQuestLogUI\(\);/);
   assert.match(menus,/openQuestLog:openQuestLogUI/);
+});
+
+test('objective tracker buttons open actions on pointerdown above the HUD layer',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(frame,/const triggerObjectiveAction=e=>\{/);
+  assert.match(frame,/e\.stopPropagation\(\);/);
+  assert.match(frame,/currentQuestEl\.addEventListener\('pointerdown',triggerObjectiveAction,\{capture:true\}\);/);
+  assert.match(frame,/currentQuestEl\.addEventListener\('click',triggerObjectiveAction\);/);
+  assert.match(styles,/#currentquest\{position:fixed;right:14px;top:282px;[\s\S]*pointer-events:auto/);
+  assert.match(styles,/#qwin\{position:fixed;inset:0;[\s\S]*z-index:32/);
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{

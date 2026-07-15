@@ -391,7 +391,7 @@
   .ablist .dim{color:#5a7494}
   #statclose{display:block;margin:14px auto 0;font-family:inherit;padding:8px 26px;background:#16345e;color:#4fd8ff;border:1px solid #4fd8ff;border-radius:4px;cursor:pointer;letter-spacing:2px}
   /* quest & shop window (warm gold styling) */
-  #qwin{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,.6);z-index:8;padding:18px}
+  #qwin{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,.6);z-index:32;padding:18px}
   #qpanel{width:430px;max-width:calc(100vw - 36px);max-height:84vh;overflow-y:auto;background:linear-gradient(160deg, rgba(34,26,16,.97), rgba(18,13,8,.97));border:1px solid #d8a020;box-shadow:0 0 26px rgba(216,160,32,.35), inset 0 0 30px rgba(216,160,32,.06);border-radius:8px;padding:20px 26px;color:#f0e4cc}
   #qpanel.dialog{width:min(450px,calc(100vw - 36px))}
   #qpanel.commerce{width:min(760px,calc(100vw - 36px))}
@@ -717,7 +717,7 @@
   .statuschip.utility.active .ico{background:rgba(125,211,252,.16);border-color:rgba(125,211,252,.55);color:#9fd8ff}
   .statuschip.utility.urgent{border-color:rgba(255,143,163,.42);box-shadow:0 8px 20px rgba(255,80,110,.12)}
   .statuschip.utility.urgent .ico{background:rgba(255,143,163,.16);border-color:rgba(255,143,163,.6);color:#ffb7c5}
-  #currentquest{position:fixed;right:14px;top:282px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:none;color:#f7ecbf;text-shadow:1px 1px 0 #000;background:linear-gradient(135deg,rgba(30,22,10,.86),rgba(10,14,24,.82));border:1px solid rgba(255,210,74,.5);box-shadow:0 0 18px rgba(255,210,74,.18), inset 0 0 20px rgba(255,210,74,.05);border-radius:7px;padding:10px 12px}
+  #currentquest{position:fixed;right:14px;top:282px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:auto;color:#f7ecbf;text-shadow:1px 1px 0 #000;background:linear-gradient(135deg,rgba(30,22,10,.86),rgba(10,14,24,.82));border:1px solid rgba(255,210,74,.5);box-shadow:0 0 18px rgba(255,210,74,.18), inset 0 0 20px rgba(255,210,74,.05);border-radius:7px;padding:10px 12px}
   #currentquest .qt{font-size:10px;letter-spacing:2px;color:#ffd24a;text-transform:uppercase;margin-bottom:4px}
   #currentquest .qv{font-size:13px;line-height:1.35;color:#fff3c4}
   #currentquest .pathstrip{display:grid;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,210,74,.2);color:#d8e3f1;text-shadow:none}

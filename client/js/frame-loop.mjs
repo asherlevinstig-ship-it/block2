@@ -769,12 +769,15 @@ function handleObjectiveAction(action,btn){
   }
 }
 if(currentQuestEl){
-  currentQuestEl.addEventListener('click',e=>{
+  const triggerObjectiveAction=e=>{
     const btn=e.target&&e.target.closest&&e.target.closest('[data-objective-action]');
     if(!btn) return;
     e.preventDefault();
+    e.stopPropagation();
     handleObjectiveAction(btn.dataset.objectiveAction,btn);
-  });
+  };
+  currentQuestEl.addEventListener('pointerdown',triggerObjectiveAction,{capture:true});
+  currentQuestEl.addEventListener('click',triggerObjectiveAction);
 }
 function currentObjective(){
   if(dim==='gatecutscene') return {label:'Gate Vision', text:'The first dungeon reveals itself'};

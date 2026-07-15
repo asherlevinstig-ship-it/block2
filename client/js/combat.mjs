@@ -1605,12 +1605,18 @@ addEventListener('keydown', e=>{
     return;
   }
   if(isTextEntryTarget(e.target)) return;
-  if(globalThis.chatTyping) return;
   if(e.code==='Escape'&&devReset&&!devReset.classList.contains('hidden')){
     e.preventDefault();
     closeDevResetPanel();
     return;
   }
+  if(e.code==='KeyO' && !e.repeat && !pathChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive()){
+    e.preventDefault();
+    if(uiShellState.qOpen && questLogOpen) closeQWin();
+    else if(!uiShellState.qOpen) openQuestLogUI();
+    return;
+  }
+  if(globalThis.chatTyping) return;
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
   if(pathChoiceOpen){
     e.preventDefault();
@@ -1670,12 +1676,6 @@ addEventListener('keydown', e=>{
   if(e.code==='KeyC'){
     if(statOpen) closeStat();
     else if(gameInput) openStat();
-  }
-  if(e.code==='KeyO' && !e.repeat){
-    e.preventDefault();
-    if(uiShellState.qOpen && questLogOpen) closeQWin();
-    else if(gameInput) openQuestLogUI();
-    return;
   }
   if(e.code==='KeyL' && !e.repeat && !uiOpen && !statOpen && !uiShellState.qOpen && (gameInput || claimMode)){
     e.preventDefault();
