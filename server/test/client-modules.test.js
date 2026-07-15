@@ -483,6 +483,15 @@ test('browser and server consume one shared profession and contract ruleset', ()
   const runway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<20&&contracts<200){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),20,allTargets);xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
   assert.equal(Math.max(...runway)/Math.min(...runway)<1.2,true,'profession Lv20 runways remain within 20% of each other');
   const targets = allTargets;
+  const adventurer = sharedJobs.contractPool('adventurer', 2, 5, targets);
+  assert.deepEqual(adventurer.filter(c=>c.type==='kill').map(c=>c.title), ['Road Patrol','Threat Sweep','Dusk Watch','North Gate Sweep','Campfire Culling','Outer Ring Hunt','Supply Road Guard']);
+  assert.equal(adventurer.find(c=>c.title==='Outer Ring Hunt').party, 'Helpful');
+  assert.match(sharedJobs.contractBestFor(adventurer.find(c=>c.title==='Dusk Watch')), /quick combat loop/);
+  const rotatedKillTitles = new Set();
+  for (let i = 0; i < 8; i++) {
+    sharedJobs.contractOffers('adventurer', 2, 5, targets, 100, i).filter(c=>c.type==='kill').forEach(c=>rotatedKillTitles.add(c.title));
+  }
+  assert.equal(rotatedKillTitles.size >= 6, true, 'repeatable kill offers rotate through varied combat contracts');
   const miner = sharedJobs.contractPool('miner', 2, 5, targets);
   assert.deepEqual(miner.map(c=>c.title), ['Stone Quota','Foundation Rush','Iron Survey','Deep Iron Run','Cave Mapping Shift']);
   assert.equal(miner[0].target, W.B.STONE);

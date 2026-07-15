@@ -835,7 +835,7 @@ test('new adventurers receive Mara field work first, then level-gated random con
   try {
     prof.adventurerContractsCompleted = 1;
     for (let i = 0; i < 30; i++) assert.notEqual(room.makeServerJobContract(prof).type, 'gate');
-    Math.random = () => .6; // gate entry in the four-contract Level 3 pool
+    Math.random = () => .82; // gate entry after the repeatable kill-contract variants
     prof.S.lvl = 3;
     assert.equal(room.makeServerJobContract(prof).type, 'gate');
   } finally {

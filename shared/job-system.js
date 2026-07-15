@@ -65,6 +65,11 @@
     adventurer:Object.freeze([
       {type:'kill',need:s=>8+s*2,title:'Road Patrol',desc:'Defeat hostile creatures beyond town.',gold:s=>30+s*5,jobXp:s=>18+s*4,focus:'solo combat',reward:'steady gold and Adventurer XP',party:'Optional'},
       {type:'kill',need:s=>12+s*3,title:'Threat Sweep',desc:'Clear a larger pocket of hostile creatures so roads stay usable.',gold:s=>40+s*6,jobXp:s=>24+s*5,focus:'combat route cleanup',reward:'better gold for longer hunts',party:'Helpful'},
+      {type:'kill',need:s=>6+s*2,title:'Dusk Watch',desc:'Thin out hostile creatures as the light fades beyond the walls.',gold:s=>32+s*5,jobXp:s=>20+s*4,focus:'short evening patrol',reward:'quick combat pay',party:'Solo'},
+      {type:'kill',need:s=>9+s*2,title:'North Gate Sweep',desc:'Push hostile creatures away from the north road out of town.',gold:s=>36+s*5,jobXp:s=>22+s*4,focus:'north road safety',reward:'road safety pay',party:'Optional'},
+      {type:'kill',need:s=>10+s*2,title:'Campfire Culling',desc:'Break up roaming mobs before they gather near hunter camps.',gold:s=>38+s*5,jobXp:s=>23+s*4,focus:'camp route cleanup',reward:'good pay for patrol loops',party:'Optional'},
+      {type:'kill',need:s=>14+s*3,title:'Outer Ring Hunt',desc:'Range farther from town and defeat hostile creatures on the outer paths.',gold:s=>48+s*7,jobXp:s=>30+s*6,focus:'long combat patrol',reward:'higher gold for longer hunts',party:'Helpful'},
+      {type:'kill',need:s=>7+s*2,title:'Supply Road Guard',desc:'Clear hostile creatures threatening supply routes and caravans.',gold:s=>34+s*5,jobXp:s=>21+s*4,focus:'road guard duty',reward:'steady contract progress',party:'Solo'},
       {type:'gate',need:s=>1+Math.min(2,(s/3)|0),minLevel:3,title:'Gate Watch',desc:'Clear active gates for the Hunter Guild.',gold:s=>48+s*6,jobXp:s=>28+s*5,focus:'dungeon clear',reward:'Hunter XP plus gate practice',party:'Recommended'},
       {type:'event',need:()=>1,title:'Server Duty',desc:'Complete a server event.',gold:s=>44+s*5,jobXp:s=>24+s*5,focus:'public event response',reward:'event tokens plus contract pay',party:'Public'},
     ]),
@@ -189,6 +194,11 @@
     if(title==='Homestead Supply Crop')return 'Best while working fields inside claimed land.';
     if(title==='Tavern Wheat Order'||title==='Harvest Basket')return 'Best when ripe wheat is ready.';
     if(title==='Gate Watch')return 'Best when your party is already doing dungeons.';
+    if(title==='Dusk Watch')return 'Best for a quick combat loop just outside town.';
+    if(title==='North Gate Sweep')return 'Best while following the north road from town.';
+    if(title==='Campfire Culling')return 'Best while circling nearby hunter camps.';
+    if(title==='Outer Ring Hunt')return 'Best when you want a longer combat patrol.';
+    if(title==='Supply Road Guard')return 'Best while checking roads and caravan routes.';
     if(title==='Threat Sweep'||title==='Road Patrol')return 'Best while hunting outside town.';
     if(/dungeon|gate|prep/.test(focus))return 'Best while preparing for dungeon runs.';
     if(/base|claim|homestead/.test(focus))return 'Best while improving your claim.';
