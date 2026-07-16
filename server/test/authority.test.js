@@ -612,6 +612,20 @@ test('admins receive all Deity powers without saving them as progression', () =>
   assert.deepEqual(prof.deity.powers, []);
 });
 
+test('teacher accounts receive admin Deity powers without a teachers.role value', () => {
+  const room = makeRoom(), client = makeClient('teacher_deity');
+  client._accountType = 'teacher';
+  client._accountRole = 'teacher';
+  const { prof } = seedPlayer(room, client, { lvl: 1 });
+
+  const payload = room.profilePayload(client, prof);
+
+  assert.equal(room.isAdminClient(client), true);
+  assert.equal(payload.deity.unlocked, true);
+  assert.equal(payload.deity.admin, true);
+  assert.deepEqual(payload.deity.powers, [...DEITY_POWER_IDS]);
+});
+
 test('Deity powers drive server-owned flight invisibility day cycle and weather', () => {
   const room = makeRoom(), client = makeClient('deity_uses');
   const { prof } = seedPlayer(room, client, { lvl: DEITY_LEVEL });
