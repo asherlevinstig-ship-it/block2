@@ -285,6 +285,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
+  const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
   const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.mjs', 'hud.mjs', 'menus.mjs', 'networking.mjs', 'frame-loop.mjs'];
   const runtimeSource = runtimeFiles.map(name =>
@@ -315,6 +316,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
+  assert.match(html, /assets\/splash-cinematic\.png/);
+  assert.ok(fs.statSync(splashAsset).size > 10_000, 'splash cinematic asset is packaged with the client');
   assert.match(registerHtml, /id="registerForm"/);
   assert.match(registerHtml, /name="yearGroup"/);
   assert.doesNotMatch(registerHtml, /name="school"/);
