@@ -1103,6 +1103,20 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(styles,/body\.coach-hud-active #currentquest,body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
 });
 
+test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(dimensions,/stat-hero/);
+  assert.match(dimensions,/hunterName=escHTML/);
+  assert.match(dimensions,/stat-crest/);
+  assert.match(dimensions,/stat-grid/);
+  assert.match(styles,/#statpanel\{width:min\(820px,calc\(100vw - 36px\)\)/);
+  assert.match(styles,/\.stat-hero\{display:grid/);
+  assert.match(styles,/\.stat-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(styles,/#statpanel \.qrow button/);
+  assert.match(styles,/@media\(max-width:680px\)[\s\S]*\.stat-grid\{grid-template-columns:1fr\}/);
+});
+
 test('death drops render as timed public world loot and onboarding teaches Recall and limbo',()=>{
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');

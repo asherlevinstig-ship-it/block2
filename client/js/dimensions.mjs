@@ -912,9 +912,11 @@ function renderStat(){
     ['vit','VITALITY','+2 max HP per point'],
     ['int','INTELLIGENCE','+3 max MP, stronger spells'],
   ];
-  let h='<h2>S T A T U S</h2><div class="sub2">HUNTER PROFILE &middot; PRESS C TO CLOSE</div>';
-  h+='<div class="srow"><span>NAME</span><b>HUNTER</b></div>';
+  const hunterName=escHTML(((document.getElementById('playername')&&document.getElementById('playername').value)||'Hunter').slice(0,16)||'Hunter');
   const ji=jobXpIntoLevel(jobXp), jd=activeJob();
+  let h='<div class="stat-hero"><div><small>HUNTER PROFILE</small><h2>'+hunterName+'</h2><p>Press C or Escape to close</p></div><div class="stat-crest">'+hunterRankLetter(localPlayerHunterRankIndex())+'</div></div>';
+  h+='<div class="qrow stat-top-actions"><button id="jobopen">JOBS</button><button id="statclose">CLOSE</button></div>';
+  h+='<div class="stat-grid">';
   h+='<div class="srow"><span>CLASS</span><b>'+(S.path?PATHS[S.path].name:'None &mdash; Unawakened')+'</b></div>';
   h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
   h+='<div class="srow"><span>LEVEL</span><b>'+S.lvl+'</b></div>';
@@ -932,6 +934,7 @@ function renderStat(){
   h+='<div class="srow"><span>PLAYER RANK</span><b style="color:#d8f2ff">'+localPlayerRankName()+'</b></div>';
   h+='<div class="srow"><span>GATE ACCESS</span><b>'+gateRankLetter(rankIdx)+'-Rank available &middot; '+clearedGate+(nextLvl?' &middot; next Hunter rank at Lv '+nextLvl:' &middot; top Hunter rank')+'</b></div>';
   h+='<div class="srow"><span>XP</span><b>'+Math.floor(S.xp)+' / '+xpNeed()+'</b></div>';
+  h+='</div>';
   if(rankProgress.maxRank){
     const deityUnlocked=deity&&deity.unlocked;
     const deityPct=deityUnlocked?100:Math.max(0,Math.min(100,Math.round(((S.lvl-51)/(DEITY_LEVEL-51))*100)));
@@ -997,7 +1000,6 @@ function renderStat(){
       for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec'+(chosen?' selected':'')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+'</p></div>';}
     }
   }
-  h+='<div class="qrow"><button id="jobopen">JOBS</button><button id="statclose">CLOSE</button></div>';
   statPanel.innerHTML=h;
   statPanel.querySelectorAll('button[data-attr]').forEach(b=>b.addEventListener('click',()=>{
     if(S.pts<=0) return;
