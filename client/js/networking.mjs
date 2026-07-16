@@ -1952,6 +1952,7 @@ function netConnectionFailed(err){
 function netRestoreProfile(m){
   try{
     applyServerTutorials(m&&m.tutorials);
+    applyDeityState(m&&m.deity);
     const profileName=String(m&&m.nameSet&&m.name||'').replace(/[^A-Za-z0-9 _-]/g,'').replace(/\s+/g,' ').trim().slice(0,16);
     if(profileName){
       const nameInput=document.getElementById('playername');
@@ -1970,7 +1971,6 @@ function netRestoreProfile(m){
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
       S.path=['shadow','mage','guardian'].includes(m.S.path)?m.S.path:'';
     }
-    applyDeityState(m.deity);
     if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
     if(Array.isArray(m.inv)){
       for(let i=0;i<36;i++){

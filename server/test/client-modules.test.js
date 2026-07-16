@@ -755,6 +755,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/room\.onMessage\('levelUp'/);
   assert.match(networkingSource,/room\.onMessage\('deityAscended'/);
   assert.match(networkingSource,/room\.onMessage\('deityPowerResult'/);
+  assert.match(networkingSource,/applyDeityState\(m&&m\.deity\)[\s\S]*if\(!onboardingDone\(\)\)/);
   const dimensionsSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
   assert.match(dimensionsSource,/deityPowerChoose/);
   assert.match(dimensionsSource,/deityPowerUse/);
