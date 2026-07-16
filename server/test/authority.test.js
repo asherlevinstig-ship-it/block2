@@ -201,6 +201,9 @@ function makeRoom() {
   room.playerHp = new Map();
   room.playerLastHit = new Map();
   room.playerHunger = new Map();
+  room.lastSaveMsg = new Map();
+  room.lastMoveMsg = new Map();
+  room.lastAttackMsg = new Map();
   room.biomeStatuses = new Map();
   room.rateBuckets = new Map();
   room.pvel = new Map();
@@ -3705,6 +3708,28 @@ test('Aegis bounty target disconnect reports failure and clears the contract', a
   assert.equal(outcome.msg.outcome, 'failed');
   assert.equal(outcome.msg.reason, 'offline');
   assert.equal(outcome.msg.noReward, true);
+});
+
+test('overworld leave resolves only after the final profile flush', async () => {
+  const room = makeRoom();
+  const client = makeClient('overworld_leave_flush');
+  const { token, prof } = seedPlayer(room, client, { x: 20.5, y: 16, z: 20.5 });
+  room.clients = [client];
+  const p = room.state.players.get(client.sessionId);
+  p.x = 44.5; p.y = 18; p.z = 55.5;
+  const saved = [];
+  room.store = {
+    async savePlayer(id, profile) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      saved.push({ id, pos: [...profile.pos] });
+    },
+  };
+
+  await room.onLeave(client, true);
+
+  assert.deepEqual(saved, [{ id: token, pos: [44.5, 18, 55.5] }]);
+  assert.deepEqual(prof.pos, [44.5, 18, 55.5]);
+  assert.equal(room.state.players.has(client.sessionId), false);
 });
 
 test('a lethal aegis bounty strike completes the contract and notifies both hunters', () => {

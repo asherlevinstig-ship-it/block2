@@ -963,10 +963,10 @@ class GameRoom extends Room {
       }
     }
     this.recordClientLeave(code, unexpected);
-    this.finalizeLeave(client);
+    await this.finalizeLeave(client);
   }
 
-  finalizeLeave(client) {
+  async finalizeLeave(client) {
     if (typeof this.refundTavernBlackjack === 'function') this.refundTavernBlackjack(client, 'disconnect');
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
@@ -1057,7 +1057,8 @@ class GameRoom extends Room {
     this.pvel.delete(client.sessionId);
     if (p) this.broadcast('chat', { name: '[System]', text: p.name + ' has left' });
     this.state.players.delete(client.sessionId);
-    this.flush();   // persist the departing player's final state now (README: flush on each departure)
+    try { await this.flush(); }   // persist the departing player's final state now (README: flush on each departure)
+    catch (e) { console.warn('[persist] leave flush failed:', e.message); }
   }
 
   // Persistence bookkeeping. Persistence has no mixin (flush() and the onCreate
