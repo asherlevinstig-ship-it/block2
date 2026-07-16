@@ -612,18 +612,25 @@ test('admins receive all Deity powers without saving them as progression', () =>
 test('Deity powers drive server-owned flight invisibility day cycle and weather', () => {
   const room = makeRoom(), client = makeClient('deity_uses');
   const { prof } = seedPlayer(room, client, { lvl: DEITY_LEVEL });
+  const fx = [];
+  room.sendSpace = function sendSpace(space, type, msg) { if (type === 'fx') fx.push(msg); };
   room.ensureDeityState(prof);
   prof.deity.chosenPower = 'invisibility';
   prof.deity.powers = ['invisibility'];
   room.handleDeityPowerUse(client, { power: 'invisibility' });
   assert.equal(room.state.players.get(client.sessionId).invisible, true);
   assert.equal(prof.deity.active.invisibility, true);
+  assert.equal(fx.at(-1).t, 'deityPower');
+  assert.equal(fx.at(-1).power, 'invisibility');
+  assert.equal(fx.at(-1).active, true);
 
   prof.deity.chosenPower = 'weather';
   prof.deity.powers = ['weather'];
   room.state.weather = 'clear';
   room.handleDeityPowerUse(client, { power: 'weather', weather: 'storm' });
   assert.equal(room.state.weather, 'storm');
+  assert.equal(fx.at(-1).power, 'weather');
+  assert.equal(fx.at(-1).weather, 'storm');
 
   prof.deity.chosenPower = 'day_night';
   prof.deity.powers = ['day_night'];
@@ -632,6 +639,35 @@ test('Deity powers drive server-owned flight invisibility day cycle and weather'
   room.handleDeityPowerUse(client, { power: 'day_night' });
   assert.equal(room._dayBroadcasted, true);
   assert.equal(dayTimeAt(room.dayEpoch, Date.now()) > .7, true);
+  assert.equal(fx.at(-1).power, 'day_night');
+  assert.equal(fx.at(-1).target, 'night');
+});
+
+test('Deity invisibility hides players from mob targeting until combat reveals them', () => {
+  const room = makeRoom(), client = makeClient('deity_stealth');
+  room.clients = [client];
+  const fx = [];
+  room.sendSpace = function sendSpace(space, type, msg) { if (type === 'fx') fx.push(msg); };
+  const { prof } = seedPlayer(room, client, { lvl: DEITY_LEVEL, x: 220, y: 16, z: 220 });
+  room.ensureDeityState(prof);
+  prof.deity.chosenPower = 'invisibility';
+  prof.deity.powers = ['invisibility'];
+  room.handleDeityPowerUse(client, { power: 'invisibility' });
+  const player = room.state.players.get(client.sessionId);
+  room.state.mobs.set('stealth_zombie', { x: 221, y: 16, z: 220, yaw: 0, hp: 20, maxHp: 20, kind: 'zombie', dgn: '', state: '' });
+  const meta = room.mobMeta.stealth_zombie = room.freshMeta(221, 220, 3, 2, 'zombie', 0, false);
+  meta.alert = true;
+  meta.atkCd = 0;
+  meta.tx = 221;
+  meta.tz = 220;
+  room.simulateMob(room.state.mobs.get('stealth_zombie'), 'stealth_zombie', meta, .2, { '': [{ p: player, sid: client.sessionId }] });
+  assert.equal(meta.lungeT || 0, 0);
+
+  room.handleAttack(client, { id: 'stealth_zombie' });
+  assert.equal(player.invisible, false);
+  assert.notEqual(prof.deity.active.invisibility, true);
+  assert.equal(fx.at(-1).power, 'invisibility');
+  assert.equal(fx.at(-1).active, false);
 });
 
 test('jobs and repeatable contracts are created progressed and claimed only by the server', () => {

@@ -153,6 +153,21 @@ test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => 
   assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\)\);/);
 });
 
+test('client renders Deity power effects and stealth shimmer states', () => {
+  const visuals = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'replication-visuals.mjs'), 'utf8');
+  const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  const pump = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network-frame-pump.mjs'), 'utf8');
+  assert.match(visuals, /function deityPowerFx\(m\)/);
+  assert.match(visuals, /m\.t==='deityPower'/);
+  assert.match(visuals, /DEITY FLIGHT/);
+  assert.match(visuals, /STORM CALLED/);
+  assert.match(companions, /function addInvisibilityVisual\(r\)/);
+  assert.match(companions, /function tickInvisibilityVisual\(r,now\)/);
+  assert.match(frame, /deityFlying&&Math\.random\(\)<dt\*22/);
+  assert.doesNotMatch(pump, /ref\.invisible!==true/);
+});
+
 test('DimensionGrid provides one origin-aware storage contract for every dimension kind', () => {
   const grid = new DimensionGrid({kind:'tutorial',id:'training',originX:100,originY:5,originZ:200,width:4,height:3,depth:5,empty:0,outside:9});
   assert.equal(isDimensionGrid(grid), true);

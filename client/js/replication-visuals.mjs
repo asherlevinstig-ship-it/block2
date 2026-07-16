@@ -489,8 +489,74 @@ function netMobTick(m, dt, t){
 }
 
 // ---- server fx + projectiles (visual; damage is server-side) ----
+function deityPowerFx(m){
+  const x=Number.isFinite(+m.x)?+m.x:player.pos.x;
+  const y=Number.isFinite(+m.y)?+m.y:player.pos.y;
+  const z=Number.isFinite(+m.z)?+m.z:player.pos.z;
+  const power=String(m.power||'');
+  const active=m.active!==false;
+  const isSelf=!!(NET.room&&m.sid===NET.room.sessionId);
+  const castSound=()=>{ if(isSelf&&typeof SFX!=='undefined'&&SFX.cast)SFX.cast(); };
+  if(power==='flight'){
+    castSound();
+    ringPulse(x,y+.08,z,active?2.25:1.35,active?0xffd166:0x8bd3ff,.55);
+    glowFlash(x,y+1.05,z,active?0xffe9a8:0x8bd3ff,active?3.4:2.1,.38);
+    burst(x,y+.75,z,active?[1,.78,.22]:[.55,.85,1],active?36:18,active?3.6:2.0,active?3.2:1.6,.72);
+    for(let i=0;i<20;i++){
+      const a=i/20*Math.PI*2,r=.45+Math.random()*.55;
+      spawnParticle({x:x+Math.cos(a)*r,y:y+.25+Math.random()*1.4,z:z+Math.sin(a)*r,
+        vx:Math.cos(a)*.45,vy:1.6+Math.random()*1.4,vz:Math.sin(a)*.45,life:.65,grav:.2,r:1,g:.82,b:.35});
+    }
+    showName(active?'DEITY FLIGHT':'FLIGHT RELEASED');
+    return;
+  }
+  if(power==='invisibility'){
+    castSound();
+    ringPulse(x,y+.08,z,active?1.85:2.25,active?0xa78bfa:0xe0f2fe,.65);
+    glowFlash(x,y+1,z,active?0x9f7aea:0xf8fafc,active?2.8:3.2,.45);
+    burst(x,y+.85,z,active?[.62,.42,1]:[.92,.96,1],active?34:42,active?2.5:3.2,active?2.4:2.9,.78);
+    if(!active)camShake=Math.max(camShake,.12);
+    showName(active?'INVISIBLE':'REVEALED');
+    return;
+  }
+  if(power==='day_night'){
+    castSound();
+    const night=String(m.target||'')==='night';
+    ringPulse(x,y+.08,z,4.8,night?0x7c3aed:0xffd166,.95);
+    ringPulse(x,y+.1,z,2.7,night?0x1e1b4b:0xfff1a8,.75);
+    glowFlash(x,y+1.5,z,night?0x7c3aed:0xfff3b0,5.2,.7);
+    burst(x,y+1.1,z,night?[.35,.18,.85]:[1,.82,.28],56,5.8,4.2,1.1);
+    addLightningBeam(x,y+8,z,x,y+.25,z,night?.65:.45);
+    camShake=Math.max(camShake,.2);
+    showName(night?'NIGHT FALLS':'DAYBREAK');
+    return;
+  }
+  if(power==='weather'){
+    castSound();
+    const weather=String(m.weather||'clear');
+    const storm=weather==='storm',rain=weather==='rain';
+    const hex=storm?0x8b5cf6:rain?0x38bdf8:0xffd166;
+    const col=storm?[.55,.34,1]:rain?[.2,.74,1]:[1,.82,.28];
+    ringPulse(x,y+.08,z,storm?4.4:3.4,hex,.85);
+    glowFlash(x,y+1.35,z,hex,storm?4.8:3.5,.55);
+    burst(x,y+1,z,col,storm?52:38,storm?5.0:3.7,storm?4.6:3.2,.95);
+    if(storm){
+      addLightningBeam(x+1.2,y+7,z-.8,x,y+.25,z,1.0);
+      camShake=Math.max(camShake,.24);
+    }
+    showName(storm?'STORM CALLED':rain?'RAIN CALLED':'SKIES CLEARED');
+    return;
+  }
+  if(m.action==='choose'){
+    ringPulse(x,y+.08,z,2.6,0xffd166,.85);
+    burst(x,y+1,z,[1,.86,.35],42,4.2,3.5,.95);
+    glowFlash(x,y+1,z,0xffd166,4,.65);
+    showName('DEITY POWER CHOSEN');
+  }
+}
 function netFx(m){
   if((m.dgn||'')!==NET.dgn) return;
+  if(m.t==='deityPower'){deityPowerFx(m);return;}
   if(m.t==='familiarSummon'||m.t==='familiarDismiss'){
     if(NET.room&&m.sid===NET.room.sessionId) return;
     const col=m.kind==='shade'?[.45,.2,.7]:m.kind==='fang'?[.55,.4,.3]:m.kind==='mote'?[.55,1,.38]:[1,.85,.3];

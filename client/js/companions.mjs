@@ -2625,8 +2625,43 @@ function removeSpiritVisual(r){
   if(sv.root)disposeObjectTree(sv.root);
   r.spiritVisual=null;
 }
+function addInvisibilityVisual(r){
+  if(!r||!r.grp||r.invisibilityVisual)return;
+  const tinted=[];
+  const root=new THREE.Group();
+  root.userData.spiritVisual=true;
+  const veil=new THREE.Sprite(new THREE.SpriteMaterial({map:spiritTexture(),color:0xb794f6,transparent:true,opacity:.32,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  veil.position.y=1.12;veil.scale.set(1.25,2.15,1);veil.userData.spiritVisual=true;root.add(veil);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.62,.025,8,40),new THREE.MeshBasicMaterial({color:0xdbeafe,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide}));
+  ring.rotation.x=Math.PI/2;ring.position.y=.08;ring.userData.spiritVisual=true;root.add(ring);
+  r.grp.add(root);
+  r.invisibilityVisual={root,veil,ring,tinted,phase:Math.random()*Math.PI*2};
+}
+function removeInvisibilityVisual(r){
+  const iv=r&&r.invisibilityVisual;if(!iv)return;
+  for(const entry of iv.tinted||[]){
+    if(entry.mesh)entry.mesh.material=entry.original;
+    for(const mat of entry.clones||[])if(mat&&mat.dispose)mat.dispose();
+  }
+  if(iv.root)disposeObjectTree(iv.root);
+  r.invisibilityVisual=null;
+}
+function tickInvisibilityVisual(r,now){
+  if(!r||!r.grp)return;
+  const want=!!(r.ref&&r.ref.invisible);
+  if(want)addInvisibilityVisual(r);else removeInvisibilityVisual(r);
+  const iv=r.invisibilityVisual;if(!iv)return;
+  const t=now/1000+(iv.phase||0),pulse=.5+.5*Math.sin(t*3.1);
+  iv.root.position.y=Math.sin(t*1.8)*.025;
+  iv.veil.material.opacity=.16+pulse*.18;
+  iv.veil.scale.set(1.1+pulse*.24,2.05+pulse*.24,1);
+  iv.ring.rotation.z=-t*.9;
+  iv.ring.material.opacity=.24+pulse*.2;
+  iv.ring.scale.setScalar(.9+pulse*.12);
+}
 function tickSpiritVisual(r,now){
   if(!r||!r.grp)return;
+  tickInvisibilityVisual(r,now);
   const want=!!(r.ref&&r.ref.spirit);
   if(want)addSpiritVisual(r);else removeSpiritVisual(r);
   const sv=r.spiritVisual;if(!sv)return;
@@ -2658,6 +2693,8 @@ function netRefreshRemoteAvatar(sid, r){
   r.grp.rotation.y=rot;
   r.equipSig=sig;
   r.mountObj=null;                  // rebuilt fresh by ensureRemoteMount next frame
+  r.invisibilityVisual=null;
+  r.spiritVisual=null;
   r.tag=null; r.tagText='';
   scene.add(r.grp);
   netUpdateTag(r);

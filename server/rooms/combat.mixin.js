@@ -76,6 +76,7 @@ class CombatMixin {
     if (!mob || !meta || (p.dgn || '') !== (mob.dgn || '')) return client.send('blackholeReject', { reason: 'target' });
     if (Math.hypot(mob.x - p.x, mob.z - p.z) > 26) return client.send('blackholeReject', { reason: 'range' });
     if (meta.blackhole) return client.send('blackholeReject', { reason: 'busy' });
+    if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
     this.blackholeCd.set(client.sessionId, now);
     meta.blackhole = {
       t: 0,
@@ -122,6 +123,7 @@ class CombatMixin {
     const key = client.sessionId + ':' + kind;
     const last = this.legendaryCd.get(key) || 0;
     if (now - last < def.cd) return client.send('legendaryReject', { kind, reason: 'cooldown' });
+    if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
     const dgn = p.dgn || '';
 
     if (kind === 'titan') {
@@ -303,6 +305,7 @@ class CombatMixin {
     st.mp -= manaCost;
     st.cds[cdKey] = now + cooldown;
     this.sendAbilitySync(client, st);
+    if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
 
     const fx = { t: 'ability', path, slot, kind: def.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0, sid: client.sessionId, dgn: p.dgn || '' };
     let target = null, targetId = String(m.targetId || '');
@@ -479,6 +482,7 @@ class CombatMixin {
     const readyAt = this.dragonAbilityCd.get(key) || 0;
     if (readyAt > now) return client.send('dragonAbilityReject', { reason: 'cooldown', left: Math.ceil((readyAt - now) / 1000) });
     this.dragonAbilityCd.set(key, now + cd);
+    if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
 
     const dir = this.dragonAbilityDir(p, m || {});
     const from = { x: p.x, y: p.y, z: p.z };
@@ -742,6 +746,7 @@ class CombatMixin {
     if (Math.hypot(mob.x - p.x, mob.z - p.z) > 4.5 || Math.abs(mob.y - p.y) > 3) return;   // melee reach (3D)
     // require line of sight, matching the mob side — no hitting through walls
     if (!AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, mob.x, mob.y + 0.9, mob.z)) return;
+    if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
     const crit = mob.state === 'stun';
     let dmg = this.serverDamageFor(p, client.sessionId);
     if (crit) dmg *= 1.5;

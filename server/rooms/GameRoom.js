@@ -2002,6 +2002,42 @@ class GameRoom extends Room {
     client.send('deityPowerResult', { ok: false, reason: String(reason || 'invalid').slice(0, 32) });
     return false;
   }
+  sendDeityFx(client, power, extra = {}) {
+    const p = this.state.players.get(client && client.sessionId);
+    if (!p || typeof this.sendSpace !== 'function') return;
+    this.sendSpace(p.dgn || '', 'fx', {
+      t: 'deityPower',
+      sid: client.sessionId,
+      power: String(power || ''),
+      x: p.x,
+      y: p.y,
+      z: p.z,
+      dgn: p.dgn || '',
+      ...extra,
+    });
+  }
+  revealDeityInvisibility(client, reason = 'action') {
+    if (!client) return false;
+    const rec = this.profileFor(client);
+    const admin = this.isAdminClient(client);
+    const active = admin ? client._deityActive : rec && rec.prof && rec.prof.deity && rec.prof.deity.active;
+    if (!active || active.invisibility !== true) return false;
+    active.invisibility = false;
+    const p = this.state.players.get(client.sessionId);
+    if (p) p.invisible = false;
+    if (!admin && rec) this.dirtyPlayers.add(rec.token);
+    client.send('deityPowerResult', {
+      ok: true,
+      deity: this.deityPayloadFor(client, rec && rec.prof),
+      action: 'toggle',
+      power: 'invisibility',
+      active: false,
+      reason: String(reason || 'action').slice(0, 32),
+    });
+    if (rec) this.sendProfile(client, rec.prof);
+    this.sendDeityFx(client, 'invisibility', { active: false, reason: String(reason || 'action').slice(0, 32) });
+    return true;
+  }
   hasDeityPower(client, prof, power) {
     if (this.isAdminClient(client)) return DEITY_POWER_IDS.includes(power);
     this.ensureDeityState(prof);
@@ -2020,6 +2056,7 @@ class GameRoom extends Room {
     rec.prof.deity.powers = [power];
     rec.prof.deity.active = {};
     this.dirtyPlayers.add(rec.token);
+    this.sendDeityFx(client, power, { action: 'choose', active: true });
     return this.sendDeityResult(client, rec.prof, { action: 'choose', power });
   }
   handleDeityPowerUse(client, m) {
@@ -2039,6 +2076,7 @@ class GameRoom extends Room {
       activeState.flight = active;
       this.fallState && this.fallState.delete(client.sessionId);
       if (!admin) this.dirtyPlayers.add(rec.token);
+      this.sendDeityFx(client, power, { active });
       return this.sendDeityResult(client, prof, { action: 'toggle', power, active });
     }
     if (power === 'invisibility') {
@@ -2046,6 +2084,7 @@ class GameRoom extends Room {
       activeState.invisibility = active;
       if (p) p.invisible = active;
       if (!admin) this.dirtyPlayers.add(rec.token);
+      this.sendDeityFx(client, power, { active });
       return this.sendDeityResult(client, prof, { action: 'toggle', power, active });
     }
     if (power === 'day_night') {
@@ -2055,6 +2094,7 @@ class GameRoom extends Room {
       this.dayEpoch = now - target * DAY_MS;
       if (this.state) this.state.tod = target;
       if (typeof this.broadcastDayCycleSync === 'function') this.broadcastDayCycleSync();
+      this.sendDeityFx(client, power, { target: target >= .7 ? 'night' : 'day' });
       return this.sendDeityResult(client, prof, { action: 'day_night', power, target: target >= .7 ? 'night' : 'day' });
     }
     if (power === 'weather') {
@@ -2065,6 +2105,7 @@ class GameRoom extends Room {
       }
       if (typeof this.setWeather === 'function') this.setWeather(kind, Date.now());
       else if (this.state) this.state.weather = kind;
+      this.sendDeityFx(client, power, { weather: kind });
       return this.sendDeityResult(client, prof, { action: 'weather', power, weather: kind });
     }
     return this.deityReject(client, 'power');
@@ -5569,7 +5610,7 @@ class GameRoom extends Room {
       const solid = this.spaceSolid(m.dgn);
       const candidates = (spaces[m.dgn || ''] || []).filter(s => {
         const hp = s && this.playerHp.get(s.sid);
-        return s && s.p && (!hp || hp.hp > 0);
+        return s && s.p && s.p.invisible !== true && (!hp || hp.hp > 0);
       });
       meta.atkCd -= dt;
       // Frenzied shard affix: wounded dungeon trash gains attack and move speed
