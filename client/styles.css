@@ -108,6 +108,7 @@
   @keyframes rewardGainIn{from{opacity:0;transform:translateY(9px) scale(.94)}to{opacity:1;transform:none}}
   @keyframes rewardGainBump{50%{transform:scale(1.08);filter:brightness(1.4)}}
   body.system-notice-active #tutorialhud,body.system-notice-active #coachhud,body.system-notice-active #hint{display:none!important}
+  body.game-modal-open #tutorialhud,body.game-modal-open #coachhud,body.game-modal-open #currentquest,body.game-modal-open #activitytracker,body.game-modal-open #townchoices,body.game-modal-open #eventhud,body.game-modal-open #landmap,body.game-modal-open #coords,body.game-modal-open #locationhud,body.game-modal-open #hotbar,body.game-modal-open #stats,body.game-modal-open #abilities,body.game-modal-open #dragonhud,body.game-modal-open #familiarhud{display:none!important}
   body.claim-mode #tutorialhud,body.claim-mode #coachhud,body.claim-mode #currentquest,body.claim-mode #activitytracker,body.claim-mode #townchoices,body.claim-mode #eventhud,body.claim-mode #landmap{display:none!important}
   body.tutorial-hud-active #coachhud,body.tutorial-hud-active #currentquest,body.tutorial-hud-active #activitytracker,body.tutorial-hud-active #townchoices{display:none!important}
   body.coach-hud-active #currentquest,body.coach-hud-active #activitytracker,body.coach-hud-active #townchoices{display:none!important}

@@ -468,17 +468,42 @@ const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
+const rightHudStackIds=['currentquest','activitytracker','townchoices'];
+function layoutRightHudStack(){
+  const narrow=window.innerWidth<=760;
+  let top=narrow?8:282;
+  for(const id of rightHudStackIds){
+    const el=document.getElementById(id);
+    if(!el) continue;
+    const visible=!el.classList.contains('hidden')&&getComputedStyle(el).display!=='none';
+    if(!visible){ el.style.top=''; continue; }
+    el.style.top=top+'px';
+    top+=Math.ceil(el.getBoundingClientRect().height)+(narrow?8:10);
+  }
+}
 function syncHudLayerState(){
   const tutorialVisible=!!(tutorialEl&&!tutorialEl.classList.contains('hidden'));
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
+  const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset'].some(id=>{
+    const el=document.getElementById(id);
+    if(!el) return false;
+    return id==='ui' ? el.classList.contains('open') : !el.classList.contains('hidden');
+  });
+  document.body.classList.toggle('game-modal-open', gameModalOpen);
   document.body.classList.toggle('tutorial-hud-active', tutorialVisible);
-  document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible);
+  document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen);
+  layoutRightHudStack();
 }
 if(globalThis.MutationObserver){
   const hudStateObserver=new MutationObserver(syncHudLayerState);
   if(tutorialEl) hudStateObserver.observe(tutorialEl,{attributes:true,attributeFilter:['class']});
   if(coachHudStateEl) hudStateObserver.observe(coachHudStateEl,{attributes:true,attributeFilter:['class']});
+  for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset']){
+    const el=document.getElementById(id);
+    if(el) hudStateObserver.observe(el,{attributes:true,attributeFilter:['class']});
+  }
 }
+window.addEventListener('resize', syncHudLayerState);
 const pathSelectEl=document.getElementById('pathselect');
 const pathPanelEl=document.getElementById('pathpanel');
 const awakeningWin=document.getElementById('awakeningwin');
