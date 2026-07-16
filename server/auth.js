@@ -50,6 +50,7 @@ class AuthService {
     this.writeQueue = Promise.resolve();
     this.profileStore = Object.prototype.hasOwnProperty.call(options, 'profileStore') ? options.profileStore : null;
     this.env = options.env || process.env;
+    this.reloadSessionsOnMiss = Object.prototype.hasOwnProperty.call(options, 'reloadSessionsOnMiss') ? options.reloadSessionsOnMiss : !!this.authBackend;
     fs.mkdirSync(this.dir, { recursive: true });
     this.load();
     // Expired sessions and rate-limit rows are otherwise only reclaimed lazily on
@@ -86,6 +87,18 @@ class AuthService {
       if (!/^[a-f0-9]{64}$/.test(raw.id || '') || !(Number(raw.expiresAt) > now)) continue;
       const account = this.publicAccount(raw.account);
       if (!this.byId.has(raw.accountId) && !account) continue;
+      this.sessions.set(raw.id, { accountId: raw.accountId, account, expiresAt: Number(raw.expiresAt) });
+    }
+  }
+
+  loadSessionsFromDisk(now = Date.now()) {
+    let data = { sessions: [] };
+    try { data = JSON.parse(fs.readFileSync(this.file, 'utf8')); }
+    catch (e) { if (e.code !== 'ENOENT') throw new Error('cannot read auth sessions: ' + e.message); }
+    for (const raw of Array.isArray(data.sessions) ? data.sessions : []) {
+      if (!/^[a-f0-9]{64}$/.test(raw.id || '') || !(Number(raw.expiresAt) > now)) continue;
+      const account = this.publicAccount(raw.account);
+      if (!raw.accountId || !account) continue;
       this.sessions.set(raw.id, { accountId: raw.accountId, account, expiresAt: Number(raw.expiresAt) });
     }
   }
@@ -231,7 +244,11 @@ class AuthService {
 
   sessionAccount(sid) {
     const key = this.sessionKey(sid);
-    const session = this.sessions.get(key);
+    let session = this.sessions.get(key);
+    if (!session && sid && this.reloadSessionsOnMiss) {
+      this.loadSessionsFromDisk();
+      session = this.sessions.get(key);
+    }
     if (!session) return null;
     if (session.expiresAt <= Date.now()) { this.sessions.delete(key); return null; }
     return this.byId.get(session.accountId) || session.account || null;

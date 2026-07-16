@@ -58,6 +58,23 @@ test('concurrent auth saves are serialized without losing sessions', async () =>
   auth.stop();
 });
 
+test('shared auth storage lets another server process accept a fresh session', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-shared-'));
+  const authA = new AuthService(dir, { reloadSessionsOnMiss: true });
+  const authB = new AuthService(dir, { reloadSessionsOnMiss: true });
+  const account = await authA.register('shared_session', 'long enough password', 'Shared Session');
+  const sid = await authA.issueSession(account);
+  const req = { headers: { cookie: 'bc_session=' + encodeURIComponent(sid) } };
+
+  assert.deepEqual(authB.authenticateRequest(req), {
+    id: account.id,
+    username: 'shared_session',
+    displayName: 'Shared Session',
+  });
+  authA.stop();
+  authB.stop();
+});
+
 function fakeMysqlPool({ teacher, student } = {}) {
   const calls = [];
   return {
