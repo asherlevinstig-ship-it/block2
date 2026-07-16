@@ -288,6 +288,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
+  const authSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
   const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.mjs', 'hud.mjs', 'menus.mjs', 'networking.mjs', 'frame-loop.mjs'];
   const runtimeSource = runtimeFiles.map(name =>
     fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', name), 'utf8')
@@ -325,6 +326,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(registerHtml, /find your school from your email address/);
   assert.match(registerJs, /\/auth\/student\/register/);
   assert.doesNotMatch(registerJs, /form\.school/);
+  assert.match(authSource, /localStorage\.setItem\(sessionKey/);
+  assert.match(authSource, /Authorization: 'Bearer ' \+ token/);
   assert.match(html, /id="huntersetup" class="hunter-setup hidden"/);
   assert.match(html, /id="gearrewardwin"/);
   assert.match(boot, /dataset\.gamePhase\s*=\s*'ready'[\s\S]*button\.disabled\s*=\s*false/);

@@ -255,8 +255,13 @@ class AuthService {
   }
 
   authenticateRequest(req) {
-    const sid = parseCookies(req && req.headers && req.headers.cookie)[COOKIE];
-    const account = this.sessionAccount(sid);
+    const headers = req && req.headers || {};
+    const auth = String(headers.authorization || '');
+    const bearer = auth.match(/^Bearer\s+(.+)$/i);
+    const bearerSid = bearer ? bearer[1].trim() : '';
+    const cookieSid = parseCookies(headers.cookie)[COOKIE] || '';
+    let account = this.sessionAccount(bearerSid || cookieSid);
+    if (!account && bearerSid && cookieSid && bearerSid !== cookieSid) account = this.sessionAccount(cookieSid);
     if (!account) return false;
     return this.publicAccount(account);
   }
@@ -297,7 +302,7 @@ class AuthService {
       }
       if (req.method === 'OPTIONS') {
         res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-admin-reset-token');
         return res.status(204).end();
       }
       const secure = req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
@@ -313,7 +318,7 @@ class AuthService {
           : await this.login(req.body && req.body.username, req.body && req.body.password);
         const sid = await this.issueSession(account);
         res.setHeader('Set-Cookie', this.cookie(sid, req));
-        res.json({ ok: true, account: this.publicAccount(account), gameProfile: await this.publicGameProfile(account) });
+        res.json({ ok: true, account: this.publicAccount(account), gameProfile: await this.publicGameProfile(account), sessionToken: sid });
       } catch (e) { res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Authentication failed.' }); }
     };
     app.post('/auth/register', (req, res) => complete(req, res, true));
@@ -328,6 +333,7 @@ class AuthService {
           ok: true,
           account: this.publicAccount(result.account),
           gameProfile: await this.publicGameProfile(result.account),
+          sessionToken: sid,
           yearGroupSaved: result.yearGroupSaved,
         });
       } catch (e) {

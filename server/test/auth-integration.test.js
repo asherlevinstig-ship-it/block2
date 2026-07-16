@@ -131,6 +131,7 @@ test('configured client origins receive credentialed CORS and cross-site cookies
     assert.equal(preflight.status, 204);
     assert.equal(preflight.headers.get('access-control-allow-origin'), origin);
     assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
+    assert.match(preflight.headers.get('access-control-allow-headers'), /Authorization/);
 
     const accepted = await f.request('/auth/register', jsonPost(
       { username: 'vercel_user', password: 'long enough password' },
@@ -141,6 +142,38 @@ test('configured client origins receive credentialed CORS and cross-site cookies
     assert.equal(accepted.headers.get('access-control-allow-credentials'), 'true');
     assert.match(accepted.headers.get('set-cookie'), /SameSite=None/);
     assert.match(accepted.headers.get('set-cookie'), /; Secure/);
+  } finally { await f.close(); }
+});
+
+test('bearer session token authenticates cross-site auth requests when cookies are unavailable', { concurrency: false }, async () => {
+  const profiles = new Map();
+  const profileStore = {
+    async loadPlayer(id) { return profiles.get(id) || null; },
+    async savePlayer(id, profile) { profiles.set(id, profile); },
+  };
+  const origin = 'https://blockcraft-client.vercel.app';
+  const f = await fixture({ production: true, clientOrigin: origin, profileStore });
+  try {
+    const login = await f.request('/auth/register', jsonPost(
+      { username: 'bearer_user', password: 'long enough password' },
+      { origin, 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.10' },
+    ));
+    assert.equal(login.status, 200);
+    const loginBody = await login.json();
+    assert.match(loginBody.sessionToken, /^[A-Za-z0-9_-]{20,}$/);
+
+    const saved = await f.request('/auth/profile/name', jsonPost(
+      { name: 'Admin_Levin' },
+      { origin, 'x-forwarded-proto': 'https', Authorization: 'Bearer ' + loginBody.sessionToken },
+    ));
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).gameProfile, { name: 'Admin_Levin', nameSet: true });
+
+    const me = await f.request('/auth/me', {
+      headers: { origin, 'x-forwarded-proto': 'https', Authorization: 'Bearer ' + loginBody.sessionToken },
+    });
+    assert.equal(me.status, 200);
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Admin_Levin', nameSet: true });
   } finally { await f.close(); }
 });
 

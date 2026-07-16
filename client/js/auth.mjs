@@ -2,6 +2,25 @@ export function createAuthController({ user, password, playerName, status, play,
   const state = { checked: false, account: null, gameProfile: null, busy: false };
   const cleanHunterName = value => String(value || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
   const hunterSetup = typeof document === 'undefined' ? null : document.getElementById('huntersetup');
+  const sessionKey = 'blockcraft.auth.session';
+
+  function storedSession() {
+    try { return typeof localStorage === 'undefined' ? '' : String(localStorage.getItem(sessionKey) || '').trim(); } catch (_) { return ''; }
+  }
+
+  function storeSession(token) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const clean = String(token || '').trim();
+      if (clean) localStorage.setItem(sessionKey, clean);
+      else localStorage.removeItem(sessionKey);
+    } catch (_) {}
+  }
+
+  function authHeaders(base = {}) {
+    const token = storedSession();
+    return token ? { ...base, Authorization: 'Bearer ' + token } : base;
+  }
 
   function hasHunterName() {
     return !!(state.gameProfile && state.gameProfile.nameSet);
@@ -30,7 +49,7 @@ export function createAuthController({ user, password, playerName, status, play,
   async function json(url, body) {
     const res = await request(apiUrl(url), {
       method: body ? 'POST' : 'GET', credentials: 'include',
-      headers: body ? { 'Content-Type': 'application/json' } : {},
+      headers: authHeaders(body ? { 'Content-Type': 'application/json' } : {}),
       body: body ? JSON.stringify(body) : undefined,
     });
     let data = {};
@@ -44,6 +63,7 @@ export function createAuthController({ user, password, playerName, status, play,
     state.checked = true;
     try {
       const data = await json('/auth/me');
+      if (data.sessionToken) storeSession(data.sessionToken);
       state.account = data.account || null;
       state.gameProfile = data.gameProfile || null;
       if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
@@ -64,6 +84,7 @@ export function createAuthController({ user, password, playerName, status, play,
     setStatus('SIGNING IN...');
     try {
       const data = await json('/auth/login', { username, password: secret });
+      if (data.sessionToken) storeSession(data.sessionToken);
       state.account = data.account;
       state.gameProfile = data.gameProfile || null;
       if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
@@ -78,6 +99,7 @@ export function createAuthController({ user, password, playerName, status, play,
 
   async function signOut() {
     try { await json('/auth/logout', {}); } catch (_) {}
+    storeSession('');
     state.account = null;
     state.gameProfile = null;
     state.checked = true;
@@ -97,7 +119,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const res = await request(apiUrl('/auth/admin/reset-player'), {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken },
+      headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
       body: JSON.stringify(body),
     });
     let data = {};
@@ -106,6 +128,7 @@ export function createAuthController({ user, password, playerName, status, play,
     state.account = null;
     state.gameProfile = null;
     state.checked = false;
+    storeSession('');
     render();
     return data;
   }
@@ -114,6 +137,7 @@ export function createAuthController({ user, password, playerName, status, play,
     state.account = null;
     state.gameProfile = null;
     state.checked = false;
+    storeSession('');
     render();
     setStatus(message, 'bad');
   }
