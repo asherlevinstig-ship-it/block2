@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { createStore, sanitizeProfile, defaultProfile } = require('./store');
-const { resetLivePlayerProfiles } = require('./profile-reset');
+const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -187,6 +187,7 @@ class AuthService {
     profile.name = clean;
     profile.nameSet = true;
     await store.savePlayer(publicAccount.id, profile);
+    await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true });
     return { name: clean, nameSet: true };
   }
 

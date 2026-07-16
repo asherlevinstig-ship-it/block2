@@ -19,7 +19,7 @@ const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainR
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
-const { registerProfileResetHandler } = require('../profile-reset');
+const { registerProfileResetHandler, registerProfileUpdateHandler } = require('../profile-reset');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -148,6 +148,7 @@ class GameRoom extends Room {
     this.store = this.monitorStore(createStore({ shardId: this.shardId }));
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
     this.unregisterProfileResetHandler = registerProfileResetHandler(token => this.resetLivePlayerProfile(token));
+    this.unregisterProfileUpdateHandler = registerProfileUpdateHandler((token, patch) => this.updateLivePlayerProfile(token, patch));
 
     // ---- per-session bookkeeping (rate limiting, PvP, vitals) ----
     this.lastMoveMsg = new Map();
@@ -1223,12 +1224,32 @@ class GameRoom extends Room {
     }
   }
 
+  async savePlayerProfileNow(token, prof) {
+    const t = cleanToken(token);
+    if (!t || !prof || prof.noPersist || !this.store || typeof this.store.savePlayer !== 'function') return false;
+    const live = (this.clients || []).find(c => this.tokens.get(c.sessionId) === t);
+    if (live) this.syncProfileVitals(live, prof);
+    try {
+      await this.store.savePlayer(t, prof);
+      if (this.dirtyPlayers) this.dirtyPlayers.delete(t);
+      return true;
+    } catch (e) {
+      console.warn('[persist] immediate player save failed:', e.message);
+      if (this.dirtyPlayers) this.dirtyPlayers.add(t);
+      return false;
+    }
+  }
+
   async onDispose() {
     try { await this.flush(); }
     finally {
       if (this.unregisterProfileResetHandler) {
         this.unregisterProfileResetHandler();
         this.unregisterProfileResetHandler = null;
+      }
+      if (this.unregisterProfileUpdateHandler) {
+        this.unregisterProfileUpdateHandler();
+        this.unregisterProfileUpdateHandler = null;
       }
       unregisterRoom(this);
       releaseGlobalWorld(this);
@@ -1247,6 +1268,35 @@ class GameRoom extends Room {
       try { client.leave(CloseCode.CONSENTED); } catch (_) {}
     }
     return !!hadProfile;
+  }
+
+  updateLivePlayerProfile(token, patch) {
+    const id = cleanToken(token);
+    if (!id || !patch || typeof patch !== 'object') return false;
+    const prof = this.profiles && this.profiles.get(id);
+    if (!prof || prof.noPersist) return false;
+    let changed = false;
+    if (typeof patch.name === 'string') {
+      const name = cleanName(patch.name);
+      if (name && prof.name !== name) {
+        prof.name = name;
+        changed = true;
+      }
+    }
+    if (patch.nameSet === true && prof.nameSet !== true) {
+      prof.nameSet = true;
+      changed = true;
+    }
+    if (!changed) return false;
+    for (const client of [...(this.clients || [])]) {
+      if (this.tokens.get(client.sessionId) !== id) continue;
+      const p = this.state.players.get(client.sessionId);
+      if (p && prof.name) p.name = prof.name;
+      this.sendProfile(client, prof);
+    }
+    if (this.dirtyPlayers) this.dirtyPlayers.add(id);
+    this.savePlayerProfileNow(id, prof);
+    return true;
   }
 
   handleClaimFirstQuestReward(client) {
@@ -1296,6 +1346,7 @@ class GameRoom extends Room {
       this.leaveTutorialDimension(client);
     }
     this.dirtyPlayers.add(rec.token);
+    this.savePlayerProfileNow(rec.token, rec.prof);
     client.send('tutorialProgress', {
       ok: true,
       tutorial,

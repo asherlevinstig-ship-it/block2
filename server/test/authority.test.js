@@ -6570,6 +6570,61 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   assert.deepEqual(affected.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
 });
 
+test('completed onboarding is persisted immediately for refresh-safe restore', async () => {
+  const room = makeRoom(), client = makeClient('tutorial_persist');
+  const { token, prof } = seedPlayer(room, client);
+  const saved = [];
+  room.store = {
+    async savePlayer(id, profile) {
+      saved.push({
+        id,
+        profile: {
+          pos: [...profile.pos],
+          tutorials: { ...profile.tutorials },
+        },
+      });
+    },
+  };
+  const p = room.state.players.get(client.sessionId);
+  p.dim = 'tutorial';
+  p.dgn = 'tutorial-onboarding-test';
+  p.x = W.TRAINING_MEADOW.x; p.y = W.TRAINING_MEADOW.G + 1; p.z = W.TRAINING_MEADOW.z;
+  prof.pos = [p.x, p.y, p.z];
+
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding }), true);
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].id, token);
+  assert.equal(saved[0].profile.tutorials.onboarding, TUTORIAL_VERSIONS.onboarding);
+  assert.deepEqual(saved[0].profile.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
+  assert.equal(room.dirtyPlayers.has(token), false);
+});
+
+test('live hunter name updates cannot be overwritten by stale room profiles', async () => {
+  const room = makeRoom(), client = makeClient('name_sync');
+  room.clients.push(client);
+  const { token, prof } = seedPlayer(room, client);
+  prof.name = 'Hunter';
+  prof.nameSet = false;
+  const saved = [];
+  room.store = {
+    async savePlayer(id, profile) {
+      saved.push({ id, name: profile.name, nameSet: profile.nameSet });
+    },
+  };
+
+  assert.equal(room.updateLivePlayerProfile(token, { name: 'Admin Levin', nameSet: true }), true);
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(prof.name, 'Admin Levin');
+  assert.equal(prof.nameSet, true);
+  assert.equal(room.state.players.get(client.sessionId).name, 'Admin Levin');
+  assert.deepEqual(client.sent.filter(m => m.type === 'profile').map(m => m.msg.name), ['Admin Levin']);
+  assert.deepEqual(saved, [{ id: token, name: 'Admin Levin', nameSet: true }]);
+  assert.equal(room.dirtyPlayers.has(token), false);
+});
+
 test('generated dungeons use compact instance-local grids', () => {
   const d = D.generateDungeon(4, 0x5eed1234);
   const fullWorldBytes = W.WX * W.WH * W.WX;
