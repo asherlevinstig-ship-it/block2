@@ -1,5 +1,8 @@
 {
   "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/register", "destination": "/register.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

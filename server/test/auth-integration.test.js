@@ -194,3 +194,44 @@ test('admin reset endpoint deletes game profiles only with the reset token', { c
     assert.deepEqual(deleted, ['student_42', 'student_42']);
   } finally { await f.close(); }
 });
+
+test('student registration endpoint creates a MySQL-backed session', { concurrency: false }, async () => {
+  const profileStore = {
+    async loadPlayer() { return null; },
+  };
+  const backend = {
+    async registerStudent(body) {
+      assert.equal(body.email, 'new.student@school.test');
+      assert.equal(body.school, '42');
+      assert.equal(body.yearGroup, 'Year 9');
+      return {
+        id: 'student_42',
+        username: 'new.student@school.test',
+        displayName: 'New Student',
+        accountType: 'student',
+        role: 'student',
+        schoolId: '42',
+        yearGroup: 'Year 9',
+        yearGroupSaved: true,
+      };
+    },
+  };
+  const f = await fixture({ profileStore, authOptions: { authBackend: backend } });
+  try {
+    const response = await f.request('/auth/student/register', jsonPost({
+      email: 'new.student@school.test',
+      school: '42',
+      yearGroup: 'Year 9',
+      password: 'correct horse student',
+    }));
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('set-cookie'), /bc_session=/);
+    const body = await response.json();
+    assert.equal(body.ok, true);
+    assert.equal(body.account.id, 'student_42');
+    assert.equal(body.account.schoolId, '42');
+    assert.equal(body.account.yearGroup, 'Year 9');
+    assert.equal(body.yearGroupSaved, true);
+    assert.deepEqual(body.gameProfile, { name: '', nameSet: false });
+  } finally { await f.close(); }
+});

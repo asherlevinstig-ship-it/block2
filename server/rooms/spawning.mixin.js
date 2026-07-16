@@ -448,14 +448,14 @@ class SpawningMixin {
   cleanupFarOverworldMobs(clusters) {
     if (!clusters || !clusters.length) {
       const dead = [];
-      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !(meta && (meta.friendly || meta.gateBreach || meta.ancientWarden))) dead.push(id); });
+      this.state.mobs.forEach((m, id) => { const meta=this.mobMeta[id]; if (!m.dgn && !(meta && (meta.friendly || meta.gateBreach || meta.ancientWarden || meta.underground))) dead.push(id); });
       for (const id of dead) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
       return;
     }
     const dead = [];
     this.state.mobs.forEach((m, id) => {
       if (m.dgn) return;
-      if (this.mobMeta[id] && (this.mobMeta[id].friendly || this.mobMeta[id].gateBreach || this.mobMeta[id].ancientWarden)) return;
+      if (this.mobMeta[id] && (this.mobMeta[id].friendly || this.mobMeta[id].gateBreach || this.mobMeta[id].ancientWarden || this.mobMeta[id].underground)) return;
       const radius = this.isAnimalKind(m.kind) ? ANIMAL_DESPAWN_RADIUS : HOSTILE_DESPAWN_RADIUS;
       if (!this.nearestSurfaceCluster(m.x, m.z, clusters, radius)) dead.push(id);
     });

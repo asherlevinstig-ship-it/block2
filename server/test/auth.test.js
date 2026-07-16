@@ -131,3 +131,69 @@ test('MySQL auth backend accepts PHP 2y bcrypt hashes', async () => {
   const account = await backend.login('php@test.school', 'correct horse php');
   assert.equal(account.id, 'student_3');
 });
+
+test('MySQL student registration inserts a bcrypt student account with optional year group', async () => {
+  const inserts = [];
+  const pool = {
+    async execute(sql, params) {
+      if (/^SHOW COLUMNS FROM students/i.test(sql)) return [[
+        { Field: 'id' }, { Field: 'name' }, { Field: 'email' }, { Field: 'password_hash' },
+        { Field: 'school_id' }, { Field: 'year_group' }, { Field: 'last_active' },
+      ]];
+      if (/FROM teachers/i.test(sql)) return [[]];
+      if (/FROM students/i.test(sql)) return [[]];
+      if (/^INSERT INTO students/i.test(sql)) {
+        inserts.push({ sql, params });
+        return [{ insertId: 77 }];
+      }
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.registerStudent({
+    email: 'new.player@school.test',
+    school: '12',
+    yearGroup: 'Year 8',
+    password: 'correct horse student',
+  });
+  assert.equal(account.id, 'student_77');
+  assert.equal(account.username, 'new.player@school.test');
+  assert.equal(account.schoolId, '12');
+  assert.equal(account.yearGroup, 'Year 8');
+  assert.equal(account.yearGroupSaved, true);
+  assert.match(inserts[0].sql, /`year_group`/);
+  assert.match(inserts[0].sql, /`last_active`/);
+  assert.equal(inserts[0].params[0], 'New Player');
+  assert.equal(inserts[0].params[1], 'new.player@school.test');
+  assert.equal(await bcrypt.compare('correct horse student', inserts[0].params[2]), true);
+  assert.equal(inserts[0].params[3], 12);
+  assert.equal(inserts[0].params[4], 'Year 8');
+});
+
+test('MySQL student registration works when students has no year_group column', async () => {
+  let insert = null;
+  const pool = {
+    async execute(sql, params) {
+      if (/^SHOW COLUMNS FROM students/i.test(sql)) return [[
+        { Field: 'id' }, { Field: 'name' }, { Field: 'email' }, { Field: 'password_hash' }, { Field: 'school_id' },
+      ]];
+      if (/FROM teachers/i.test(sql)) return [[]];
+      if (/FROM students/i.test(sql)) return [[]];
+      if (/^INSERT INTO students/i.test(sql)) {
+        insert = { sql, params };
+        return [{ insertId: 78 }];
+      }
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.registerStudent({
+    email: 'yearless@school.test',
+    school: '9',
+    yearGroup: 'Year 7',
+    password: 'correct horse student',
+  });
+  assert.equal(account.id, 'student_78');
+  assert.equal(account.yearGroupSaved, false);
+  assert.doesNotMatch(insert.sql, /year_group/);
+});

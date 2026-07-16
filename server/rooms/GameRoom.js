@@ -4594,7 +4594,7 @@ class GameRoom extends Room {
         ? entries.map(e=>e.s).filter(s=>s.type==='ancient_city'||s.type==='cave')
         : entries.map(e=>e.s).filter(s=>s.type!=='traveling_merchant'&&!['rain_bloom','storm_crystal','sun_dial'].includes(s.type));
       const cities=W.ancientCitySpecs();
-      const pool=ancient&&cities.length ? basePool.concat(cities) : basePool;
+      const pool=Array.from(new Map((ancient&&cities.length ? basePool.concat(cities) : basePool).map(s=>[s.id,s])).values());
       if(pool.length<3)return client.send('cartographerReject',{reason:'complete'});
       const day=Math.floor(Date.now()/DAY_MS),targets=[];for(let i=0;i<3;i++){let pick=pool[(day*(ancient?11:7)+i*(ancient?17:13))%pool.length],guard=0;while(targets.includes(pick.id)&&guard++<pool.length)pick=pool[(pool.indexOf(pick)+1)%pool.length];targets.push(pick.id);}
       if(ancient&&cities.length&&!targets.some(id=>String(id).indexOf('ancient_city_')===0))targets[targets.length-1]=cities[day%cities.length].id;
@@ -4642,6 +4642,9 @@ class GameRoom extends Room {
       const rewardItems=ancient
         ? [{id:I.ANCIENT_FRAGMENT,count:3},{id:I.ECHO_GLYPH,count:1},{id:I.RELIC_ARMOR_PIECE,count:1},{id:I.DIAMOND,count:1}]
         : [{id:I.DIAMOND,count:2}];
+      const draft = { ...rec.prof, inv: (rec.prof.inv || []).map(slot => slot ? { ...slot } : null) };
+      const fits = rewardItems.every(it => this.addRewardItem(draft, it.id, it.count) === 0);
+      if (!fits) { map.stage--; this.dirtyPlayers.add(rec.token); return client.send('treasureMapReject',{reason:'full'}); }
       for(const it of rewardItems)this.addRewardItem(rec.prof,it.id,it.count);
       rec.prof.treasureMap=null;
       this.recordEconomyGold(client,rewardGold,'cartographer_faucet',ancient?'ancient_treasure_map':'treasure_map',{ id: map.id || '' });
@@ -4806,12 +4809,17 @@ class GameRoom extends Room {
       for (const item of grant.items || []) {
         const rewardItem=item&&item.gear?{...item,source:item.source||grant.source||'grant'}:item;
         const left=rewardItem&&rewardItem.gear?this.addGearRewardItem(rec.prof,rewardItem):this.addRewardItem(rec.prof,rewardItem.id,rewardItem.count);
-        if(!rewardItem.gear||!left)delivered.push(rewardItem&&rewardItem.gear?{...rewardItem,locked:!!(rewardItem.locked||rewardItem.rarity==='mythic')}:rewardItem);
+        let placed = 0;
+        if(rewardItem.gear&&!left)delivered.push({...rewardItem,locked:!!(rewardItem.locked||rewardItem.rarity==='mythic')});
+        else if(!rewardItem.gear){
+          placed = Math.max(0, Math.max(0, rewardItem.count | 0) - left);
+          if (placed > 0) delivered.push({...rewardItem,count:placed});
+        }
         else {
           const recovered=this.queueGearRecovery(rec.prof,rewardItem,grant.source||'grant');
           if(recovered)client.send('lootRecoveryState',{items:rec.prof.lootRecovery,queued:recovered});
         }
-        if (item && item.id) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: Math.max(1, item.count | 0) });
+        if (item && item.id && ((rewardItem.gear && !left) || placed > 0)) this.progressRegionalContract(client, 'collect_biome', { itemId: item.id | 0, count: rewardItem.gear ? 1 : placed });
       }
       if (delivered.length && this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
       grant={...grant,items:delivered};

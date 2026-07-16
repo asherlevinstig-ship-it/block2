@@ -109,6 +109,7 @@ class AuthService {
     if (account.accountType) out.accountType = String(account.accountType);
     if (account.role) out.role = String(account.role);
     if (account.schoolId != null) out.schoolId = String(account.schoolId);
+    if (account.yearGroup != null) out.yearGroup = String(account.yearGroup).slice(0, 50);
     return out;
   }
 
@@ -191,6 +192,16 @@ class AuthService {
       await this.save();
       return account;
     } finally { this.pendingRegistrations.delete(username); }
+  }
+
+  async registerStudent(body) {
+    if (!this.authBackend || typeof this.authBackend.registerStudent !== 'function') {
+      throw Object.assign(new Error('Student registration is not available on this server.'), { status: 403, code: 'external_auth' });
+    }
+    const account = await this.authBackend.registerStudent(body || {});
+    const yearGroupSaved = account.yearGroupSaved === true;
+    delete account.yearGroupSaved;
+    return { account, yearGroupSaved };
   }
 
   async login(username, password) {
@@ -288,6 +299,23 @@ class AuthService {
       } catch (e) { res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Authentication failed.' }); }
     };
     app.post('/auth/register', (req, res) => complete(req, res, true));
+    app.post('/auth/student/register', async (req, res) => {
+      const identifier = req.body && (req.body.email || req.body.username);
+      if (!this.allowAttempt(req, identifier)) return res.status(429).json({ ok: false, error: 'Too many registration attempts.' });
+      try {
+        const result = await this.registerStudent(req.body);
+        const sid = await this.issueSession(result.account);
+        res.setHeader('Set-Cookie', this.cookie(sid, req));
+        res.json({
+          ok: true,
+          account: this.publicAccount(result.account),
+          gameProfile: await this.publicGameProfile(result.account),
+          yearGroupSaved: result.yearGroupSaved,
+        });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Registration failed.' });
+      }
+    });
     app.post('/auth/login', (req, res) => complete(req, res, false));
     app.get('/auth/me', async (req, res) => {
       const account = this.authenticateRequest(req);

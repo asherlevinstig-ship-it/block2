@@ -245,6 +245,7 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   const combatMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'combat.mixin.js'), 'utf8');
   const spawningMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'spawning.mixin.js'), 'utf8');
+  const progressionMixin = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
   assert.match(clientWorld, /function ancientCitySpecs\(\)/);
   assert.match(clientWorld, /function ancientCityLootTable\(\)/);
   assert.match(clientWorld, /function ancientCityDiscoverySpecs\(\)/);
@@ -268,6 +269,11 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   assert.match(combatMixin, /killedMeta\.ancientWarden/);
   assert.match(combatMixin, /I\.WARDEN_CLEAVER/);
   assert.match(spawningMixin, /meta\.ancientWarden \? '\[Ancient City\]'/);
+  assert.match(spawningMixin, /meta\.underground/);
+  assert.match(progressionMixin, /caveSurveySites = new Map/);
+  assert.match(room, /treasureMapReject',\{reason:'full'\}/);
+  assert.match(room, /new Map\(\(ancient&&cities\.length \? basePool\.concat\(cities\) : basePool\)\.map\(s=>\[s\.id,s\]\)\)\.values\(\)/);
+  assert.match(networking, /Make room in your inventory before claiming this treasure route/);
   assert.match(menus, /wardenAlarm\(level=1\)/);
   assert.match(networking, /room\.onMessage\('wardenAlarm'/);
   assert.match(networking, /room\.onMessage\('wardenDefeated'/);
@@ -277,6 +283,8 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
 
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
+  const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
   const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.mjs', 'hud.mjs', 'menus.mjs', 'networking.mjs', 'frame-loop.mjs'];
   const runtimeSource = runtimeFiles.map(name =>
@@ -307,6 +315,9 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
+  assert.match(registerHtml, /id="registerForm"/);
+  assert.match(registerHtml, /name="yearGroup"/);
+  assert.match(registerJs, /\/auth\/student\/register/);
   assert.match(html, /id="huntersetup" class="hunter-setup hidden"/);
   assert.match(html, /id="gearrewardwin"/);
   assert.match(boot, /dataset\.gamePhase\s*=\s*'ready'[\s\S]*button\.disabled\s*=\s*false/);
@@ -614,6 +625,10 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(sharedJobs.guideSteps('treasure').join(' '), /Orin|buried cache/i);
   assert.match(sharedJobs.guideSteps('cave_survey').join(' '), /cave entrance marker/i);
   assert.match(sharedJobs.guideSteps('ancient_map').join(' '), /Ancient City map/i);
+  const storeSource = fs.readFileSync(path.join(__dirname, '..', 'store.js'), 'utf8');
+  const jobsClientSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'quests-jobs.mjs'), 'utf8');
+  assert.match(storeSource, /targetId: cleanShortText\(c\.targetId/);
+  assert.match(jobsClientSource, /targetName: String\(contract\.targetName/);
   const blacksmith = sharedJobs.contractPool('blacksmith', 2, 5, targets);
   assert.deepEqual(blacksmith.map(c=>c.title), ['Forge Work','Gate Prep Kits','Tool Doctor','Edge Upgrade Order','Scrap Recovery','Ingot Commission']);
   assert.equal(blacksmith.find(c=>c.title==='Edge Upgrade Order').type, 'upgrade');

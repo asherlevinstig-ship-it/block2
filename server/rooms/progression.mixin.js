@@ -1082,6 +1082,7 @@ class ProgressionMixin {
 
   tickCaveSurveyContracts(now = Date.now()) {
     if (!this.caveSurveyProgressAt) this.caveSurveyProgressAt = new Map();
+    if (!this.caveSurveySites) this.caveSurveySites = new Map();
     this.state.players.forEach((p, sid) => {
       const client = this.clients.find(c => c.sessionId === sid);
       const rec = client && this.profileFor(client);
@@ -1089,9 +1090,15 @@ class ProgressionMixin {
       if (!client || !c || c.type !== 'cave_survey' || (c.have | 0) >= (c.need | 0)) return;
       const route = this.playerNearCaveRoute(p);
       if (!route) return;
-      const key = sid + ':' + route.id + ':' + Math.floor((c.have | 0) / 1);
+      const contractKey = sid + ':' + String(c.id || 'cave_survey');
+      let visited = this.caveSurveySites.get(contractKey);
+      if (!visited) { visited = new Set(); this.caveSurveySites.set(contractKey, visited); }
+      const routeKey = route.id + ':' + route.type;
+      if (visited.has(routeKey)) return;
+      const key = contractKey + ':' + routeKey;
       if (now < (this.caveSurveyProgressAt.get(key) || 0)) return;
       this.caveSurveyProgressAt.set(key, now + 9000);
+      visited.add(routeKey);
       this.grantJobXp(client, 'miner', route.type === 'ancient_city' ? 8 : 5);
       if (this.progressJobContract(client, 'cave_survey', 1, 0)) client.send('chat', { name: '[Miner]', text: route.type === 'ancient_city' ? 'Ancient survey marker recorded.' : 'Cave survey marker recorded.' });
     });

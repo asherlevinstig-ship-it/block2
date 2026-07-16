@@ -34,6 +34,11 @@ export function clampJobContract(contract, knownJobs) {
     focus: String(contract.focus || '').slice(0, 48),
     reward: String(contract.reward || '').slice(0, 80),
     party: String(contract.party || '').slice(0, 24),
+    targetId: String(contract.targetId || '').slice(0, 64),
+    targetType: String(contract.targetType || '').slice(0, 32),
+    targetName: String(contract.targetName || '').slice(0, 64),
+    targetX: Number.isFinite(Number(contract.targetX)) ? Number(contract.targetX) | 0 : 0,
+    targetZ: Number.isFinite(Number(contract.targetZ)) ? Number(contract.targetZ) | 0 : 0,
     offeredAt: Math.max(0, Number(contract.offeredAt) || 0),
     expiresAt: Math.max(0, Number(contract.expiresAt) || 0),
   };
