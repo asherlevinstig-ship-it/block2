@@ -722,6 +722,9 @@ const SESSION=createNetworkSession({
   restored:()=>connectionNotice('restored'),
   failure:netConnectionFailed,
   getPlayerName:()=>document.getElementById('playername').value,
+  authToken:()=>{
+    try{return String(localStorage.getItem('blockcraft.auth.session')||'').trim();}catch(e){return '';}
+  },
   beforeConnect:()=>setWorldLoadingStatus('Connecting to world server...'),
 });
 const NETWORK=SESSION.controller;

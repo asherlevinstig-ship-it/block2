@@ -10,6 +10,7 @@ export function createNetworkSession({
   restored,
   failure,
   getPlayerName,
+  authToken,
   beforeConnect,
 }) {
   const shardKey='bc_shard_id';
@@ -44,6 +45,7 @@ export function createNetworkSession({
     onReconnectAttempt:reconnectAttempt,
     onRestored:restored,
     onFailure:failure,
+    authToken,
   });
   const state=controller.state;
 

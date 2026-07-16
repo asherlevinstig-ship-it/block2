@@ -39,6 +39,19 @@ function releaseGlobalWorld(room) {
   for (const [id, active] of activeGlobalRooms) if (active === room) activeGlobalRooms.delete(id);
 }
 
+function headerValue(headers, name) {
+  if (!headers) return '';
+  if (typeof headers.get === 'function') return headers.get(name) || '';
+  return headers[name] || headers[name.toLowerCase()] || '';
+}
+
+function authRequestFromColyseus(options, context) {
+  const headers = context && context.headers;
+  const authToken = String(options && (options.authToken || options.sessionToken) || '').trim();
+  const authorization = headerValue(headers, 'authorization') || (authToken ? 'Bearer ' + authToken : '');
+  return { headers: { cookie: headerValue(headers, 'cookie'), authorization } };
+}
+
 const {
   ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
   BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
@@ -112,9 +125,8 @@ function setReplicatedPlayerPose(p, x, y, z, yaw) {
 }
 
 class GameRoom extends Room {
-  static async onAuth(_token, _options, context) {
-    const headers = context && context.headers;
-    const request = { headers: { cookie: headers && typeof headers.get === 'function' ? headers.get('cookie') : '' } };
+  static async onAuth(_token, options, context) {
+    const request = authRequestFromColyseus(options, context);
     const account = getAuthService().authenticateRequest(request);
     if (!account) throw new Error('authentication required');
     return account;

@@ -1863,6 +1863,36 @@ test('network controller joins stores resume token and reattaches after disconne
   ]);
 });
 
+test('network controller sends saved auth token during room matchmaking', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const gameRoomSource = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  assert.match(gameRoomSource, /authToken \|\| options\.sessionToken/);
+  assert.match(gameRoomSource, /authorization.*Bearer/);
+  let clientAuthToken = '';
+  let joinedOptions = null;
+  const room = { reconnectionToken: 'room:first', onLeave() {} };
+  class Client {
+    constructor() { this.auth = {}; }
+    async joinOrCreate(_name, options) {
+      clientAuthToken = this.auth.token || '';
+      joinedOptions = options;
+      return room;
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    authToken: () => 'session-token-123',
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(clientAuthToken, 'session-token-123');
+  assert.equal(joinedOptions.authToken, 'session-token-123');
+  assert.equal(joinedOptions.name, 'Hunter');
+});
+
 test('network controller shutdown leaves deliberately without starting reconnect teardown', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
   let reconnects = 0, leaves = 0;

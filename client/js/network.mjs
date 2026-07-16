@@ -58,10 +58,12 @@ export function createNetworkController(options) {
     let lastError = null;
     for (let shardAttempt = 0; shardAttempt < shardAttempts; shardAttempt++) {
       const joinOptions = options.primaryJoinOptions ? options.primaryJoinOptions({ name, attempt: shardAttempt }) : {};
+      const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
+      const authOptions = authToken ? { authToken } : {};
       try {
         const room = await reconnectWithBackoff(
           () => roomWithTimeout(
-            () => client.joinOrCreate(options.roomName, { name, ...joinOptions }),
+            () => client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }),
             joinTimeout,
             'Room join timed out',
           ),
@@ -137,6 +139,8 @@ export function createNetworkController(options) {
     currentName = name;
     if (!options.Client) return options.onUnavailable();
     const client = new options.Client(options.endpoint());
+    const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
+    if (authToken && client.auth) client.auth.token = authToken;
     activeClient = client;
     let resumeToken = '';
     try { resumeToken = options.sessionStorage.getItem(options.tokenKey) || ''; } catch (_) {}
@@ -175,7 +179,10 @@ export function createNetworkController(options) {
     state.on = false;
     if (cur) { try { await cur.leave(); } catch (_) {} }
     try {
-      const room = await client.joinOrCreate(roomName, { name: currentName, ...joinOptions });
+      const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
+      if (authToken && client.auth) client.auth.token = authToken;
+      const authOptions = authToken ? { authToken } : {};
+      const room = await client.joinOrCreate(roomName, { name: currentName, ...joinOptions, ...authOptions });
       switching = false;
       state.roomName = roomName;
       attach(room, currentName, client);
