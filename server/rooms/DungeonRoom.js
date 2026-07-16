@@ -132,6 +132,8 @@ class DungeonRoom extends GameRoom {
     this.onMessage('recallSubject', (c, m) => this.handleRecallSubject(c, m));
     this.onMessage('attack', (c, m) => this.handleAttack(c, m));
     this.onMessage('ability', (c, m) => this.handleAbility(c, m));
+    this.onMessage('deityPowerChoose', (c, m) => this.handleDeityPowerChoose(c, m));
+    this.onMessage('deityPowerUse', (c, m) => this.handleDeityPowerUse(c, m));
     this.onMessage('dragonAbility', (c, m) => this.handleDragonAbility(c, m));
     this.onMessage('dragonBreath', (c, m) => this.handleDragonBreath(c, m));
     this.onMessage('blackhole', (c, m) => this.handleBlackholeStaff(c, m));
@@ -154,6 +156,8 @@ class DungeonRoom extends GameRoom {
 
   async onJoin(client, options, auth) {
     this.monitorClient(client);
+    client._accountRole = String(auth && auth.role || '').toLowerCase();
+    client._accountType = String(auth && auth.accountType || '').toLowerCase();
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
     const admittedGate = claimDungeonAdmission(options && options.ticket, token);
@@ -166,6 +170,7 @@ class DungeonRoom extends GameRoom {
       this.profiles.set(token, prof);
     }
     this.tokens.set(client.sessionId, token);
+    if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
 
     const inst = this.instance;
     const ex = inst.entrance;

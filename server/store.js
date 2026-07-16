@@ -25,7 +25,7 @@ const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials')
 // ---------------- validation ----------------
 const INV_MAX = 36;
 const DEITY_LEVEL = 60;
-const DEITY_POWER_IDS = Object.freeze(['deity_presence']);
+const DEITY_POWER_IDS = Object.freeze(['flight', 'day_night', 'weather', 'invisibility']);
 const TUTORIAL_VERSIONS = Object.freeze({
   onboarding: 7, ability: 2, intro: 1, gate: 1,
   townJob: 1, townTavern: 1, townLand: 1, familiar: 1,
@@ -268,16 +268,24 @@ function sanitizeEquippedCosmetics(raw, unlocks = []) {
 
 function sanitizeDeity(raw, level = 1) {
   const eligible = (Math.max(1, level | 0) >= DEITY_LEVEL);
-  if (!eligible) return { unlocked: false, ascendedAt: 0, powers: [] };
+  if (!eligible) return { unlocked: false, ascendedAt: 0, chosenPower: '', powers: [], active: {} };
   const src = raw && typeof raw === 'object' ? raw : {};
-  const powers = [...DEITY_POWER_IDS];
-  if (Array.isArray(src.powers)) for (const id of src.powers) {
-    if (DEITY_POWER_IDS.includes(id) && !powers.includes(id)) powers.push(id);
+  let chosenPower = DEITY_POWER_IDS.includes(src.chosenPower) ? src.chosenPower : '';
+  if (!chosenPower && Array.isArray(src.powers)) {
+    const legacy = src.powers.find(id => DEITY_POWER_IDS.includes(id));
+    if (legacy) chosenPower = legacy;
   }
+  const powers = chosenPower ? [chosenPower] : [];
+  const rawActive = src.active && typeof src.active === 'object' ? src.active : {};
+  const active = {};
+  if (powers.includes('flight') && rawActive.flight === true) active.flight = true;
+  if (powers.includes('invisibility') && rawActive.invisibility === true) active.invisibility = true;
   return {
     unlocked: true,
     ascendedAt: clampI(src.ascendedAt, 0, 4102444800000),
+    chosenPower,
     powers,
+    active,
   };
 }
 
@@ -319,7 +327,7 @@ function defaultProfile(name) {
     familiarChallenges: {},
     shadowArmy: [],
     abilitySpec: '',
-    deity: { unlocked: false, ascendedAt: 0, powers: [] },
+    deity: { unlocked: false, ascendedAt: 0, chosenPower: '', powers: [], active: {} },
     dragonCare: {},
     dragonBondXp: {},
     dragonRoleMastery: {},

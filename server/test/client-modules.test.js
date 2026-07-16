@@ -739,6 +739,10 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/LEVEL UP/);
   assert.match(networkingSource,/room\.onMessage\('levelUp'/);
   assert.match(networkingSource,/room\.onMessage\('deityAscended'/);
+  assert.match(networkingSource,/room\.onMessage\('deityPowerResult'/);
+  const dimensionsSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  assert.match(dimensionsSource,/deityPowerChoose/);
+  assert.match(dimensionsSource,/deityPowerUse/);
   assert.match(networkingSource,/rewardGain\('rare',statPoints\|\|1,'Stat Points'/);
   assert.match(networkingSource,/rewardGain\('legendary',1,'Deity Power'/);
   assert.match(networkingSource,/rewardGain\('rare',1,reward,\{icon:'JOB'\}\)/);
@@ -957,10 +961,12 @@ test('progression module reconciles authoritative updates and rejection messages
 test('Hunter XP curve has explicit rank thresholds and steepens at high rank', async () => {
   const progression = await clientModule('progression.mjs');
   const serverProgression = require('../rooms/constants');
-  const { DEITY_LEVEL, hunterActivityXpForLevel, hunterRankIndexForLevel, gateRankIndexForLevel, isDeityLevel, nextHunterRankLevel, xpNeedForLevel } = progression;
+  const { DEITY_LEVEL, DEITY_POWER_IDS, DEITY_POWER_DEFS, hunterActivityXpForLevel, hunterRankIndexForLevel, gateRankIndexForLevel, isDeityLevel, nextHunterRankLevel, xpNeedForLevel } = progression;
   assert.deepEqual([1, 11, 21, 31, 41, 51].map(hunterRankIndexForLevel), [0, 1, 2, 3, 4, 5]);
   assert.equal(DEITY_LEVEL, 60);
   assert.equal(DEITY_LEVEL, serverProgression.DEITY_LEVEL);
+  assert.deepEqual(DEITY_POWER_IDS, serverProgression.DEITY_POWER_IDS);
+  assert.deepEqual(DEITY_POWER_DEFS.map(power => power.id), DEITY_POWER_IDS);
   assert.equal(isDeityLevel(59), false);
   assert.equal(isDeityLevel(60), true);
   assert.equal(isDeityLevel(60), serverProgression.isDeityLevel(60));

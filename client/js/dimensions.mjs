@@ -1,5 +1,5 @@
 import {api as worldApi,state as worldState} from './world.mjs';
-import {DEITY_LEVEL} from './progression.mjs';
+import {DEITY_LEVEL,DEITY_POWER_DEFS} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -920,8 +920,8 @@ function renderStat(){
   h+='<div class="srow"><span>LEVEL</span><b>'+S.lvl+'</b></div>';
   const deity=globalThis.BlockcraftDeityState;
   if(deity&&deity.unlocked){
-    const powers=(Array.isArray(deity.powers)?deity.powers:[]).map(id=>id==='deity_presence'?'Deity Presence':String(id).replace(/_/g,' ')).join(', ')||'Deity Presence';
-    h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">DEITY &middot; '+escHTML(powers)+'</b></div>';
+    const powerNames=(Array.isArray(deity.powers)?deity.powers:[]).map(id=>(DEITY_POWER_DEFS.find(p=>p.id===id)||{}).name||String(id).replace(/_/g,' '));
+    h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">DEITY'+(deity.admin?' ADMIN':'')+' &middot; '+escHTML(powerNames.join(', ')||'Choose one power')+'</b></div>';
   }else if(S.lvl>=51){
     h+='<div class="srow"><span>ASCENSION</span><b>S-Rank Level 10 at Lv '+DEITY_LEVEL+'</b></div>';
   }
@@ -935,7 +935,7 @@ function renderStat(){
   if(rankProgress.maxRank){
     const deityUnlocked=deity&&deity.unlocked;
     const deityPct=deityUnlocked?100:Math.max(0,Math.min(100,Math.round(((S.lvl-51)/(DEITY_LEVEL-51))*100)));
-    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are now awake. Future ascension powers will attach here.':'Hunter XP still advances levels and stat points. Reach S-Rank Level 10 at Lv '+DEITY_LEVEL+' to become Deity.')+'</p></div>';
+    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are awake. Choose one permanent power, then use it from this panel.':'Hunter XP still advances levels and stat points. Reach S-Rank Level 10 at Lv '+DEITY_LEVEL+' to become Deity.')+'</p></div>';
   }else{
     const nextLetter=hunterRankLetter(rankProgress.nextRank);
     h+='<div class="rankjourney"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK AT LEVEL '+rankProgress.nextRankLevel+'</b></div>'+
@@ -944,6 +944,26 @@ function renderStat(){
       '<p>Earn Hunter XP your way: town quests, job and Guild contracts, Gates, server events, or hostile threats. Gate clears award XP; rank advances when your level crosses the threshold.</p></div>';
   }
   h+='<div class="srow"><span>HP / MP / SP / Food</span><b>'+Math.ceil(hp)+'/'+maxHp()+' &middot; '+Math.floor(mp)+'/'+maxMp()+' &middot; '+Math.floor(sp)+'/'+maxSp()+' &middot; '+Math.floor(hunger)+'/'+maxHunger()+'</b></div>';
+  if(deity&&deity.unlocked){
+    const owned=new Set(Array.isArray(deity.powers)?deity.powers:[]);
+    const active=deity.active||{};
+    if(!owned.size&&!deity.admin){
+      h+='<div class="sub2" style="margin-top:14px;color:#ffd76a">CHOOSE ONE DEITY POWER &mdash; PERMANENT</div>';
+      for(const power of DEITY_POWER_DEFS){
+        h+='<div class="pathcard deitychoice" data-deity-choice="'+power.id+'" style="border-color:#ffd76a"><h3 style="color:#ffd76a">'+escHTML(power.name)+'</h3><p>'+escHTML(power.desc)+'</p></div>';
+      }
+    }else{
+      h+='<div class="sub2" style="margin-top:14px;color:#ffd76a">DEITY POWERS</div>';
+      for(const power of DEITY_POWER_DEFS){
+        const has=owned.has(power.id);
+        if(!has&&!deity.admin)continue;
+        if(power.id==='flight')h+='<div class="ablist"><span>'+escHTML(power.name)+'</span><span class="dim">'+escHTML(power.desc)+'</span><button data-deity-use="flight">'+(active.flight?'LAND':'FLY')+'</button></div>';
+        else if(power.id==='day_night')h+='<div class="ablist"><span>'+escHTML(power.name)+'</span><span class="dim">'+escHTML(power.desc)+'</span><button data-deity-use="day_night">SHIFT</button></div>';
+        else if(power.id==='weather')h+='<div class="ablist"><span>'+escHTML(power.name)+'</span><span class="dim">'+escHTML(power.desc)+'</span><button data-deity-use="weather" data-weather="clear">CLEAR</button><button data-deity-use="weather" data-weather="rain">RAIN</button><button data-deity-use="weather" data-weather="storm">STORM</button></div>';
+        else if(power.id==='invisibility')h+='<div class="ablist"><span>'+escHTML(power.name)+'</span><span class="dim">'+escHTML(power.desc)+'</span><button data-deity-use="invisibility">'+(active.invisibility?'REVEAL':'HIDE')+'</button></div>';
+      }
+    }
+  }
   const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
   const armorProfile=armor?GEAR_SYSTEM.armorProfile(armorInfo,armor):null;
   h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
@@ -988,8 +1008,13 @@ function renderStat(){
     renderBars(); renderStat();
   }));
   statPanel.querySelectorAll('.pathcard').forEach(c=>c.addEventListener('click',()=>{
+    if(c.dataset.deityChoice){if(NET.on&&NET.room)NET.room.send('deityPowerChoose',{power:c.dataset.deityChoice});return;}
     if(c.dataset.spec){if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:c.dataset.spec});return;}
     setAbilityPath(c.dataset.path);
+  }));
+  statPanel.querySelectorAll('button[data-deity-use]').forEach(b=>b.addEventListener('click',()=>{
+    if(!NET.on||!NET.room)return;
+    NET.room.send('deityPowerUse',{power:b.dataset.deityUse,weather:b.dataset.weather||''});
   }));
   document.getElementById('statclose').addEventListener('click',()=>closeStat());
   document.getElementById('jobopen').addEventListener('click',()=>openJobsUI());

@@ -48,7 +48,7 @@ export function createNetworkFramePump({
       const r=NET.remotes[sid];
       const ref=r.ref,p=r.grp.position;
       const dx=(ref.x||0)-player.pos.x,dz=(ref.z||0)-player.pos.z,distSq=dx*dx+dz*dz;
-      r.grp.visible=dim!=='ability'&&(ref.dgn||'')===NET.dgn&&distSq<=PERFORMANCE_BUDGETS.playerCullSq;
+      r.grp.visible=dim!=='ability'&&(ref.dgn||'')===NET.dgn&&distSq<=PERFORMANCE_BUDGETS.playerCullSq&&ref.invisible!==true;
       if(!r.grp.visible)continue;
       let tier=remotePlayerDistanceTierSq(distSq,!!ref.spirit);
       if(crowdedRemotes&&tier===0&&!ref.spirit&&distSq>PERFORMANCE_BUDGETS.remotePlayerCrowdedNearSq)tier=1;

@@ -54,7 +54,7 @@ const PROGRESSION_FOCUS_STATES = Object.freeze([
 ]);
 const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 const DEITY_LEVEL = 60;
-const DEITY_POWER_IDS = Object.freeze(['deity_presence']);
+const DEITY_POWER_IDS = Object.freeze(['flight', 'day_night', 'weather', 'invisibility']);
 const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
 function hunterRankIndexForLevel(level) {

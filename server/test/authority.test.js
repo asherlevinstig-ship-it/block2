@@ -57,7 +57,7 @@ const {
 const { ADMISSION_TTL_MS, issueDungeonAdmission, peekDungeonAdmission, claimDungeonAdmission, clearDungeonAdmissions } = require('../rooms/dungeon-admission');
 const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP_DOCK_MS, SKYSHIP_TRAVEL_MS, SKYSHIP_AWAY_MS, SKYSHIP_CYCLE_MS, SKYSHIP_BOARD_GOLD, DAY_MS, dayTimeAt, DANGER_RINGS, dangerRingAt, mobTargetInRange, townDistance } = require('../rooms/GameRoom');
 const { Gate, Mob } = require('../schema');
-const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
+const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, DEITY_POWER_IDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
@@ -539,7 +539,8 @@ test('S-rank level ten unlocks Deity as a server-owned ascension state', () => {
   assert.equal(prof.S.lvl, DEITY_LEVEL);
   assert.equal(prof.deity.unlocked, true);
   assert.ok(prof.deity.ascendedAt > 0);
-  assert.deepEqual(prof.deity.powers, ['deity_presence']);
+  assert.deepEqual(prof.deity.powers, []);
+  assert.deepEqual(prof.deity.active, {});
   assert.equal(client.sent.at(-2).type, 'levelUp');
   assert.deepEqual(client.sent.at(-1), {
     type: 'deityAscended',
@@ -548,7 +549,8 @@ test('S-rank level ten unlocks Deity as a server-owned ascension state', () => {
       level: DEITY_LEVEL,
       threshold: DEITY_LEVEL,
       title: 'Deity',
-      powers: ['deity_presence'],
+      powers: [],
+      choices: [...DEITY_POWER_IDS],
       source: 'guild_contract',
     },
   });
@@ -560,18 +562,76 @@ test('S-rank level ten unlocks Deity as a server-owned ascension state', () => {
 
 test('Deity persistence cannot be forged below the ascension threshold', () => {
   const current = defaultProfile('DeityForge');
-  const merged = mergeClientSave(current, { deity: { unlocked: true, powers: ['deity_presence'] }, S: { lvl: DEITY_LEVEL } });
+  const merged = mergeClientSave(current, { deity: { unlocked: true, chosenPower: 'flight', powers: ['flight'] }, S: { lvl: DEITY_LEVEL } });
   assert.equal(merged.deity.unlocked, false);
   assert.deepEqual(merged.deity.powers, []);
 
-  const tooEarly = sanitizeProfile({ S: { lvl: DEITY_LEVEL - 1 }, deity: { unlocked: true, ascendedAt: 123, powers: ['deity_presence'] } });
+  const tooEarly = sanitizeProfile({ S: { lvl: DEITY_LEVEL - 1 }, deity: { unlocked: true, ascendedAt: 123, chosenPower: 'flight', powers: ['flight'] } });
   assert.equal(tooEarly.deity.unlocked, false);
   assert.equal(tooEarly.deity.ascendedAt, 0);
 
-  const ascended = sanitizeProfile({ S: { lvl: DEITY_LEVEL }, deity: { ascendedAt: 123, powers: ['deity_presence'] } });
+  const ascended = sanitizeProfile({ S: { lvl: DEITY_LEVEL }, deity: { ascendedAt: 123, chosenPower: 'flight', powers: ['flight'], active: { flight: true, invisibility: true } } });
   assert.equal(ascended.deity.unlocked, true);
   assert.equal(ascended.deity.ascendedAt, 123);
-  assert.deepEqual(ascended.deity.powers, ['deity_presence']);
+  assert.equal(ascended.deity.chosenPower, 'flight');
+  assert.deepEqual(ascended.deity.powers, ['flight']);
+  assert.deepEqual(ascended.deity.active, { flight: true });
+});
+
+test('Deity players choose one permanent power and the server rejects swaps', () => {
+  const room = makeRoom(), client = makeClient('deity_choice');
+  const { prof } = seedPlayer(room, client, { lvl: DEITY_LEVEL });
+  assert.equal(room.ensureDeityState(prof), true);
+  assert.deepEqual(prof.deity.powers, []);
+
+  room.handleDeityPowerChoose(client, { power: 'flight' });
+  assert.equal(prof.deity.chosenPower, 'flight');
+  assert.deepEqual(prof.deity.powers, ['flight']);
+  assert.equal(client.sent.at(-2).type, 'deityPowerResult');
+  assert.equal(client.sent.at(-2).msg.ok, true);
+  assert.equal(client.sent.at(-2).msg.deity.powers[0], 'flight');
+  assert.equal(client.sent.at(-1).type, 'profile');
+
+  room.handleDeityPowerChoose(client, { power: 'weather' });
+  assert.deepEqual(client.sent.at(-1), { type: 'deityPowerResult', msg: { ok: false, reason: 'chosen' } });
+  assert.deepEqual(prof.deity.powers, ['flight']);
+});
+
+test('admins receive all Deity powers without saving them as progression', () => {
+  const room = makeRoom(), client = makeClient('admin_deity');
+  client._accountRole = 'admin';
+  const { prof } = seedPlayer(room, client, { lvl: 1 });
+  const payload = room.profilePayload(client, prof);
+  assert.equal(payload.deity.unlocked, true);
+  assert.equal(payload.deity.admin, true);
+  assert.deepEqual(payload.deity.powers, [...DEITY_POWER_IDS]);
+  assert.equal(prof.deity.unlocked, false);
+  assert.deepEqual(prof.deity.powers, []);
+});
+
+test('Deity powers drive server-owned flight invisibility day cycle and weather', () => {
+  const room = makeRoom(), client = makeClient('deity_uses');
+  const { prof } = seedPlayer(room, client, { lvl: DEITY_LEVEL });
+  room.ensureDeityState(prof);
+  prof.deity.chosenPower = 'invisibility';
+  prof.deity.powers = ['invisibility'];
+  room.handleDeityPowerUse(client, { power: 'invisibility' });
+  assert.equal(room.state.players.get(client.sessionId).invisible, true);
+  assert.equal(prof.deity.active.invisibility, true);
+
+  prof.deity.chosenPower = 'weather';
+  prof.deity.powers = ['weather'];
+  room.state.weather = 'clear';
+  room.handleDeityPowerUse(client, { power: 'weather', weather: 'storm' });
+  assert.equal(room.state.weather, 'storm');
+
+  prof.deity.chosenPower = 'day_night';
+  prof.deity.powers = ['day_night'];
+  room.dayEpoch = Date.now() - .35 * DAY_MS;
+  room.broadcastDayCycleSync = () => { room._dayBroadcasted = true; };
+  room.handleDeityPowerUse(client, { power: 'day_night' });
+  assert.equal(room._dayBroadcasted, true);
+  assert.equal(dayTimeAt(room.dayEpoch, Date.now()) > .7, true);
 });
 
 test('jobs and repeatable contracts are created progressed and claimed only by the server', () => {

@@ -1519,7 +1519,9 @@ function tick(now){
         }
       }
     }
-    const flying = mounted && isDragon(mountKind);
+    const deityActive=globalThis.BlockcraftDeityState&&globalThis.BlockcraftDeityState.active;
+    const deityFlying=!mounted&&deityActive&&deityActive.flight===true;
+    const flying = deityFlying || (mounted && isDragon(mountKind));
     const outOfFood=!mounted && hunger<=0;
     const sprint=sprintKey && (f!==0||s!==0) && sp>1 && !mounted && !outOfFood;
     sprintingNow=sprint;
@@ -1527,7 +1529,7 @@ function tick(now){
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
     if(sprint) sp=Math.max(0,sp-stCost(8)*armorStamina*dt);
-    const dragFly=flying?((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13):0;
+    const dragFly=flying?(deityFlying?12:((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13)):0;
     const baseSpd=flying?dragFly:(mounted?9.6:(sprint?6.2:4.3));
     const speed=baseSpd*(outOfFood?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
     const sin=Math.sin(player.yaw), cos=Math.cos(player.yaw);
@@ -1545,7 +1547,7 @@ function tick(now){
     }
     wasInWater=feetWater;
     if(flying){
-      // dragon flight: no gravity. Space climbs, Shift descends, otherwise hover.
+      // Divine/dragon flight: no gravity. Space climbs, Shift descends, otherwise hover.
       const climb=(keys['Space']?1:0)-((keys['ShiftLeft']||keys['ShiftRight'])?1:0);
       if(climb!==0) player.vel.y=climb*9;
       else player.vel.y += (0-player.vel.y)*Math.min(1,dt*8);

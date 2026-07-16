@@ -60,7 +60,7 @@ const {
   PROGRESSION_FOCUS_STATES, SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, REGIONAL_CONTRACT_TYPES, dangerRingAt, dayTimeAt, dragonMountType,
   gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDeityLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
-  nextHunterRankLevel,
+  nextHunterRankLevel, WEATHER_KINDS,
   mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
 
@@ -402,6 +402,8 @@ class GameRoom extends Room {
     this.onMessage('legendaryWeapon', (client, m) => this.handleLegendaryWeapon(client, m));
     this.onMessage('craftLegendary', (client, m) => this.handleCraftLegendary(client, m));
     this.onMessage('ability', (client, m) => this.handleAbility(client, m));
+    this.onMessage('deityPowerChoose', (client, m) => this.handleDeityPowerChoose(client, m));
+    this.onMessage('deityPowerUse', (client, m) => this.handleDeityPowerUse(client, m));
     this.onMessage('dragonAbility', (client, m) => this.handleDragonAbility(client, m));
     this.onMessage('utilityLoadout', (client, m) => this.handleUtilityLoadout(client, m));
     this.onMessage('utilityUse', (client, m) => this.handleUtilityUse(client, m));
@@ -798,6 +800,8 @@ class GameRoom extends Room {
     this.monitorClient(client);
     this.initGameInterestView(client);
     client.send('shard', { id: this.shardId || 'main', maxClients: this.maxClients });
+    client._accountRole = String(auth && auth.role || '').toLowerCase();
+    client._accountType = String(auth && auth.accountType || '').toLowerCase();
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
     if (token) this.tokens.set(client.sessionId, token);
@@ -832,6 +836,7 @@ class GameRoom extends Room {
         this.profiles.set(token, prof);
         this.dirtyPlayers.add(token);
       }
+      if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
@@ -1934,12 +1939,25 @@ class GameRoom extends Room {
   xpNeed(lvl) {
     return xpNeedForLevel(lvl);
   }
+  isAdminClient(client) {
+    const role = String(client && client._accountRole || '').toLowerCase();
+    const type = String(client && client._accountType || '').toLowerCase();
+    return role === 'admin' || role === 'owner' || type === 'admin';
+  }
+  cleanDeityActive(active, powers) {
+    const owned = new Set(Array.isArray(powers) ? powers : []);
+    const src = active && typeof active === 'object' ? active : {};
+    const out = {};
+    if (owned.has('flight') && src.flight === true) out.flight = true;
+    if (owned.has('invisibility') && src.invisibility === true) out.invisibility = true;
+    return out;
+  }
   ensureDeityState(prof, now = Date.now()) {
     if (!prof || !prof.S) return false;
     const eligible = isDeityLevel(prof.S.lvl);
     const wasUnlocked = !!(prof.deity && prof.deity.unlocked);
     if (!eligible) {
-      prof.deity = { unlocked: false, ascendedAt: 0, powers: [] };
+      prof.deity = { unlocked: false, ascendedAt: 0, chosenPower: '', powers: [], active: {} };
       return false;
     }
     if (!prof.deity || typeof prof.deity !== 'object') prof.deity = {};
@@ -1948,13 +1966,108 @@ class GameRoom extends Room {
     prof.deity.ascendedAt = Number.isFinite(ascendedAt) && ascendedAt > 0
       ? Math.min(4102444800000, Math.round(ascendedAt))
       : now;
-    const powers = [];
-    for (const id of DEITY_POWER_IDS) powers.push(id);
-    if (Array.isArray(prof.deity.powers)) for (const id of prof.deity.powers) {
-      if (DEITY_POWER_IDS.includes(id) && !powers.includes(id)) powers.push(id);
+    delete prof.deity.admin;
+    let chosenPower = DEITY_POWER_IDS.includes(prof.deity.chosenPower) ? prof.deity.chosenPower : '';
+    if (!chosenPower && Array.isArray(prof.deity.powers)) {
+      const legacy = prof.deity.powers.find(id => DEITY_POWER_IDS.includes(id));
+      if (legacy) chosenPower = legacy;
     }
-    prof.deity.powers = powers;
+    prof.deity.chosenPower = chosenPower;
+    prof.deity.powers = chosenPower ? [chosenPower] : [];
+    prof.deity.active = this.cleanDeityActive(prof.deity.active, prof.deity.powers);
     return !wasUnlocked;
+  }
+  deityPayloadFor(client, prof) {
+    this.ensureDeityState(prof);
+    const admin = this.isAdminClient(client);
+    const deity = prof && prof.deity && typeof prof.deity === 'object' ? prof.deity : {};
+    const powers = admin ? [...DEITY_POWER_IDS] : (Array.isArray(deity.powers) ? deity.powers.filter(id => DEITY_POWER_IDS.includes(id)) : []);
+    return {
+      unlocked: admin || deity.unlocked === true,
+      ascendedAt: Math.max(0, Math.round(Number(deity.ascendedAt) || 0)),
+      chosenPower: admin ? 'admin' : (typeof deity.chosenPower === 'string' ? deity.chosenPower : ''),
+      powers,
+      active: this.cleanDeityActive(admin ? client && client._deityActive : deity.active, powers),
+      admin,
+      choices: [...DEITY_POWER_IDS],
+    };
+  }
+  sendDeityResult(client, prof, extra = {}) {
+    const deity = this.deityPayloadFor(client, prof);
+    client.send('deityPowerResult', { ok: true, deity, ...extra });
+    this.sendProfile(client, prof);
+    return true;
+  }
+  deityReject(client, reason) {
+    client.send('deityPowerResult', { ok: false, reason: String(reason || 'invalid').slice(0, 32) });
+    return false;
+  }
+  hasDeityPower(client, prof, power) {
+    if (this.isAdminClient(client)) return DEITY_POWER_IDS.includes(power);
+    this.ensureDeityState(prof);
+    return !!(prof && prof.deity && prof.deity.unlocked && Array.isArray(prof.deity.powers) && prof.deity.powers.includes(power));
+  }
+  handleDeityPowerChoose(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec) return this.deityReject(client, 'profile');
+    if (this.isAdminClient(client)) return this.sendDeityResult(client, rec.prof, { action: 'admin' });
+    this.ensureDeityState(rec.prof);
+    if (!rec.prof.deity || !rec.prof.deity.unlocked) return this.deityReject(client, 'locked');
+    const power = String(m && m.power || '');
+    if (!DEITY_POWER_IDS.includes(power)) return this.deityReject(client, 'power');
+    if (rec.prof.deity.chosenPower) return this.deityReject(client, 'chosen');
+    rec.prof.deity.chosenPower = power;
+    rec.prof.deity.powers = [power];
+    rec.prof.deity.active = {};
+    this.dirtyPlayers.add(rec.token);
+    return this.sendDeityResult(client, rec.prof, { action: 'choose', power });
+  }
+  handleDeityPowerUse(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec) return this.deityReject(client, 'profile');
+    const prof = rec.prof, power = String(m && m.power || '');
+    if (!DEITY_POWER_IDS.includes(power)) return this.deityReject(client, 'power');
+    if (!this.hasDeityPower(client, prof, power)) return this.deityReject(client, prof.deity && prof.deity.unlocked ? 'unowned' : 'locked');
+    const p = this.state.players.get(client.sessionId);
+    const admin = this.isAdminClient(client);
+    if (admin && (!client._deityActive || typeof client._deityActive !== 'object')) client._deityActive = {};
+    if (!admin && (!prof.deity.active || typeof prof.deity.active !== 'object')) prof.deity.active = {};
+    const activeState = admin ? client._deityActive : prof.deity.active;
+    let active = false;
+    if (power === 'flight') {
+      active = activeState.flight !== true;
+      activeState.flight = active;
+      this.fallState && this.fallState.delete(client.sessionId);
+      if (!admin) this.dirtyPlayers.add(rec.token);
+      return this.sendDeityResult(client, prof, { action: 'toggle', power, active });
+    }
+    if (power === 'invisibility') {
+      active = activeState.invisibility !== true;
+      activeState.invisibility = active;
+      if (p) p.invisible = active;
+      if (!admin) this.dirtyPlayers.add(rec.token);
+      return this.sendDeityResult(client, prof, { action: 'toggle', power, active });
+    }
+    if (power === 'day_night') {
+      const now = Date.now();
+      const tod = dayTimeAt(this.dayEpoch || (now - .35 * DAY_MS), now);
+      const target = tod >= .23 && tod <= .72 ? .79 : .35;
+      this.dayEpoch = now - target * DAY_MS;
+      if (this.state) this.state.tod = target;
+      if (typeof this.broadcastDayCycleSync === 'function') this.broadcastDayCycleSync();
+      return this.sendDeityResult(client, prof, { action: 'day_night', power, target: target >= .7 ? 'night' : 'day' });
+    }
+    if (power === 'weather') {
+      let kind = String(m && m.weather || '').toLowerCase();
+      if (!WEATHER_KINDS.includes(kind)) {
+        const current = String(this.state && this.state.weather || 'clear');
+        kind = current === 'clear' ? 'rain' : current === 'rain' ? 'storm' : 'clear';
+      }
+      if (typeof this.setWeather === 'function') this.setWeather(kind, Date.now());
+      else if (this.state) this.state.weather = kind;
+      return this.sendDeityResult(client, prof, { action: 'weather', power, weather: kind });
+    }
+    return this.deityReject(client, 'power');
   }
   grantHunterXp(prof, amount, client = null, source = 'activity') {
     const S = prof && prof.S;
@@ -2012,7 +2125,8 @@ class GameRoom extends Room {
           level: S.lvl | 0,
           threshold: DEITY_LEVEL,
           title: 'Deity',
-          powers: [...DEITY_POWER_IDS],
+          powers: prof.deity && Array.isArray(prof.deity.powers) ? [...prof.deity.powers] : [],
+          choices: [...DEITY_POWER_IDS],
           source: String(source || 'activity').slice(0, 32),
         });
       }
@@ -2673,6 +2787,7 @@ class GameRoom extends Room {
     p.dragonStaySpots = this.publicDragonStaySpots(prof);
     p.dragonHatchedAt = this.publicDragonHatchedAt(prof);
     p.cosmetics = this.publicCosmetics(prof);
+    p.invisible = !!(this.isAdminClient(client) ? client._deityActive && client._deityActive.invisibility : prof.deity && prof.deity.active && prof.deity.active.invisibility && this.hasDeityPower(client, prof, 'invisibility'));
   }
   sendProfile(client, prof) {
     if (!client || !prof) return false;
@@ -2684,7 +2799,7 @@ class GameRoom extends Room {
     this.normalizeQuestLifecycles(client, prof);
     this.ensureDeityState(prof);
     this.refreshSystemIntroductions(prof);
-    return { ...prof, activeObjectives: this.activeQuestObjectives(client, prof) };
+    return { ...prof, deity: this.deityPayloadFor(client, prof), activeObjectives: this.activeQuestObjectives(client, prof) };
   }
   normalizeQuestLifecycles(client, prof) {
     if (!prof || typeof prof !== 'object') return false;
@@ -5331,11 +5446,12 @@ class GameRoom extends Room {
     // mounted players move faster, so the anti-teleport clamp is loosened to match
     const mounted = !!p.mount;
     const rec=this.profileFor(client),armorStack=rec&&rec.prof&&rec.prof.armor,armorInfo=armorStack&&ARMOR_INFO[armorStack.id];
+    const deityFlight = !mounted && rec && rec.prof && this.hasDeityPower(client, rec.prof, 'flight') && (this.isAdminClient(client) ? client._deityActive && client._deityActive.flight === true : rec.prof.deity && rec.prof.deity.active && rec.prof.deity.active.flight === true);
     const armorMove=!mounted&&armorInfo?GEAR_SYSTEM.armorProfile(armorInfo,armorStack).moveMultiplier:1;
     const hungerState = !mounted && this.playerHunger && this.playerHunger.get(client.sessionId);
     const hungerMove = hungerState && hungerState.hunger <= 0 ? 0.62 : 1;
-    const maxStep = (mounted ? 20 : 12*armorMove*hungerMove) * dt + 1.25;
-    const velCap = mounted ? 16 : 9*armorMove*hungerMove;
+    const maxStep = (deityFlight ? 19 : mounted ? 20 : 12*armorMove*hungerMove) * dt + 1.25;
+    const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove;
     let sx = hd > maxStep ? p.x + dx / hd * maxStep : nx;
     let sz = hd > maxStep ? p.z + dz / hd * maxStep : nz;
     const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
@@ -5343,7 +5459,7 @@ class GameRoom extends Room {
     sx = clampN(sx, borderMin, borderMax);
     sz = clampN(sz, borderMin, borderMax);
     const dy = ny - p.y;
-    const maxYStep = 18 * dt + 2.5;
+    const maxYStep = (deityFlight ? 16 : 18) * dt + (deityFlight ? 3.5 : 2.5);
     let sy = Math.abs(dy) > maxYStep ? p.y + Math.sign(dy) * maxYStep : ny;
     // No-clip guard: a destination that buries the player's body in solid blocks is
     // rejected, so nobody can camp inside terrain or under the map where melee, mobs,
@@ -5376,7 +5492,8 @@ class GameRoom extends Room {
     const fromY = p.y;
     const yaw = clampN(m.yaw, -10, 10);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
-    this.trackAcceptedMoveFall(client, fromY, p.y);
+    if (deityFlight && this.fallState) this.fallState.delete(client.sessionId);
+    else this.trackAcceptedMoveFall(client, fromY, p.y);
     if (!p.dgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
     this.collectDeathDrops(client);
   }

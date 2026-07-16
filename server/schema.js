@@ -28,12 +28,13 @@ class Player extends Schema {
     this.familiar = '';      // active familiar ('' = none, 'shade' = Shade manifested)
     this.familiarTier = 0;   // public visual tier of the active familiar
     this.spirit = false;     // defeated inside a dungeon; fixed in place until the player quits
+    this.invisible = false;  // Deity invisibility: clients fade the avatar/nameplate
   }
 }
 defineTypes(Player, {
   x: 'float32', y: 'float32', z: 'float32', yaw: 'float32',
   name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
-  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean',
+  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean', invisible:'boolean',
 });
 
 class Team extends Schema {

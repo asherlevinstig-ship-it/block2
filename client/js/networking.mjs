@@ -14,7 +14,7 @@ import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
 import {backendWsUrl} from './config.mjs';
-import {DEITY_LEVEL,DEITY_POWER_IDS,isDeityLevel} from './progression.mjs';
+import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,isDeityLevel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -32,7 +32,8 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
 let seenClaimableObjectiveIds=new Set();
 let objectiveFeedPrimed=false;
-const deityState={unlocked:false,ascendedAt:0,powers:[]};
+const DEITY_POWER_LABELS=Object.fromEntries(DEITY_POWER_DEFS.map(power=>[power.id,power.name]));
+const deityState={unlocked:false,ascendedAt:0,chosenPower:'',powers:[],active:{},admin:false,choices:[...DEITY_POWER_IDS]};
 globalThis.BlockcraftDeityState=deityState;
 function applyDeityState(raw){
   const src=raw&&typeof raw==='object'?raw:{};
@@ -40,12 +41,19 @@ function applyDeityState(raw){
   deityState.unlocked=!!unlocked;
   const ascendedAt=Number(src.ascendedAt);
   deityState.ascendedAt=unlocked&&Number.isFinite(ascendedAt)?Math.max(0,Math.round(ascendedAt)):0;
+  deityState.chosenPower=typeof src.chosenPower==='string'?src.chosenPower:'';
   deityState.powers=unlocked
-    ? (Array.isArray(src.powers)?src.powers:DEITY_POWER_IDS).filter(id=>DEITY_POWER_IDS.includes(id)).slice(0,8)
+    ? (Array.isArray(src.powers)?src.powers:[]).filter(id=>DEITY_POWER_IDS.includes(id)).slice(0,DEITY_POWER_IDS.length)
     : [];
-  if(unlocked&&!deityState.powers.includes('deity_presence'))deityState.powers.unshift('deity_presence');
+  deityState.active={};
+  const active=src.active&&typeof src.active==='object'?src.active:{};
+  if(deityState.powers.includes('flight')&&active.flight===true)deityState.active.flight=true;
+  if(deityState.powers.includes('invisibility')&&active.invisibility===true)deityState.active.invisibility=true;
+  deityState.admin=src.admin===true;
+  deityState.choices=(Array.isArray(src.choices)?src.choices:DEITY_POWER_IDS).filter(id=>DEITY_POWER_IDS.includes(id));
   return deityState;
 }
+function deityPowerName(id){return DEITY_POWER_LABELS[id]||String(id||'Power').replace(/_/g,' ');}
 function claimableObjectiveHint(o){
   const loc=String(o&&o.location||'').trim();
   if(o&&o.source==='job')return 'Claim at the <b>Job Board</b>.';
@@ -133,15 +141,15 @@ function showLevelUpReveal(m){
   sysMsg('<b>Level '+level+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
 }
 function showDeityAscension(m){
-  applyDeityState({unlocked:true,ascendedAt:Date.now(),powers:m&&m.powers});
+  applyDeityState({unlocked:true,ascendedAt:Date.now(),powers:m&&m.powers,choices:m&&m.choices});
   ensureLevelUpRevealStyles();
-  const level=Math.max(DEITY_LEVEL,(m&&m.level)|0),powers=deityState.powers.length?deityState.powers:['deity_presence'];
-  const powerText=powers.map(id=>id==='deity_presence'?'Deity Presence':id.replace(/_/g,' ')).join(', ');
+  const level=Math.max(DEITY_LEVEL,(m&&m.level)|0);
+  const powerText=deityState.powers.length?deityState.powers.map(deityPowerName).join(', '):'Choose one in Status';
   const card=document.createElement('div');card.className='level-up-reveal deity';card.setAttribute('role','status');card.setAttribute('aria-live','assertive');
   card.innerHTML='<small>ASCENSION UNLOCKED</small><h3>DEITY</h3><p>S-Rank Level 10 reached. Your hunter has crossed into divine power.</p><div class="level-up-rewards">'
     +'<div class="level-up-reward"><span>THRESHOLD</span><b>Level '+level+'</b></div>'
     +'<div class="level-up-reward"><span>STATE</span><b>Deity</b></div>'
-    +'<div class="level-up-reward"><span>FIRST POWER</span><b>'+escHTML(powerText)+'</b></div>'
+    +'<div class="level-up-reward"><span>POWER</span><b>'+escHTML(powerText)+'</b></div>'
     +'<div class="level-up-reward"><span>OPEN STATS</span><b>Press C</b></div>'
     +'</div>';
   for(let i=0;i<26;i++){
@@ -157,7 +165,7 @@ function showDeityAscension(m){
   SFX.level();
   rewardGain('legendary',1,'Deity Power',{icon:'DIV',duration:4200});
   showName('DEITY ASCENDED');
-  sysMsg('<b>Deity unlocked!</b> You reached <b>S-Rank Level 10</b>. First power: <b>'+escHTML(powerText)+'</b>.',{tier:'major',title:'Ascension'});
+  sysMsg('<b>Deity unlocked!</b> You reached <b>S-Rank Level 10</b>. Press <b>C</b> to choose one Deity power.',{tier:'major',title:'Ascension'});
   refreshHUD();
 }
 function setActiveObjectives(next, opts={}){
@@ -903,6 +911,21 @@ function netAttachRoom(room,name,client){
       presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
     });
     room.onMessage('deityAscended', m=>showDeityAscension(m));
+    room.onMessage('deityPowerResult', m=>{
+      if(m&&m.deity)applyDeityState(m.deity);
+      if(!m||m.ok===false){
+        SFX.error();
+        sysMsg('Deity power failed: <b>'+escHTML(String(m&&m.reason||'invalid'))+'</b>.');
+        return;
+      }
+      const power=deityPowerName(m.power);
+      if(m.action==='choose'){SFX.level();showName(power.toUpperCase());sysMsg('Deity power chosen: <b>'+escHTML(power)+'</b>.',{tier:'major',title:'Deity'});}
+      else if(m.action==='toggle')sysMsg('<b>'+escHTML(power)+'</b> '+(m.active?'enabled':'disabled')+'.');
+      else if(m.action==='day_night')sysMsg('The sky bends toward <b>'+escHTML(m.target||'another time')+'</b>.');
+      else if(m.action==='weather')sysMsg('Weather shifted to <b>'+escHTML(m.weather||'clear')+'</b>.');
+      if(typeof renderStat==='function'&&statOpen)renderStat();
+      refreshHUD();
+    });
     const presentJobMilestone=(job,idMilestone)=>{
       if(!idMilestone)return;
       const jobName=(JOBS[job]&&JOBS[job].name)||'Job';

@@ -15,7 +15,13 @@ export const PROGRESSION_FOCUS_STATES = Object.freeze([
 ]);
 export const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 export const DEITY_LEVEL = 60;
-export const DEITY_POWER_IDS = Object.freeze(['deity_presence']);
+export const DEITY_POWER_DEFS = Object.freeze([
+  { id: 'flight', name: 'Flight', desc: 'Rise, hover, and travel through the world without falling.' },
+  { id: 'day_night', name: 'Day / Night Shift', desc: 'Turn day into night, or night back into day.' },
+  { id: 'weather', name: 'Weather Control', desc: 'Call clear skies, rain, or storms across the overworld.' },
+  { id: 'invisibility', name: 'Invisibility', desc: 'Fade from sight while you travel or reposition.' },
+]);
+export const DEITY_POWER_IDS = Object.freeze(DEITY_POWER_DEFS.map(power => power.id));
 export const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 export const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
 export const HUNTER_ACTIVITY_XP_WEIGHTS = Object.freeze({
