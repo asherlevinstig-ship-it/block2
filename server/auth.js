@@ -109,6 +109,7 @@ class AuthService {
     if (account.accountType) out.accountType = String(account.accountType);
     if (account.role) out.role = String(account.role);
     if (account.schoolId != null) out.schoolId = String(account.schoolId);
+    if (account.schoolName != null) out.schoolName = String(account.schoolName).slice(0, 255);
     if (account.yearGroup != null) out.yearGroup = String(account.yearGroup).slice(0, 50);
     return out;
   }

@@ -132,6 +132,57 @@ test('MySQL auth backend accepts PHP 2y bcrypt hashes', async () => {
   assert.equal(account.id, 'student_3');
 });
 
+test('MySQL auth backend resolves existing personal-email students through their school row', async () => {
+  const hash = await bcrypt.hash('correct horse personal', 10);
+  const calls = [];
+  const pool = {
+    async execute(sql, params) {
+      calls.push({ sql, params });
+      if (/FROM teachers/i.test(sql)) return [[]];
+      if (/FROM students/i.test(sql)) return [[{
+        id: 17,
+        name: 'Legacy Learner',
+        email: 'learner.personal@gmail.com',
+        password_hash: hash,
+        school_id: 12,
+      }]];
+      if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.login('learner.personal@gmail.com', 'correct horse personal');
+  assert.equal(account.id, 'student_17');
+  assert.equal(account.username, 'learner.personal@gmail.com');
+  assert.equal(account.schoolId, '12');
+  assert.equal(account.schoolName, 'Town Academy');
+  assert.equal(calls.some(call => /FROM schools WHERE id = \?/i.test(call.sql) && call.params[0] === 12), true);
+});
+
+test('MySQL auth backend falls back to school email domain when student school_id is blank', async () => {
+  const hash = await bcrypt.hash('correct horse domain', 10);
+  const pool = {
+    async execute(sql) {
+      if (/FROM teachers/i.test(sql)) return [[]];
+      if (/FROM students/i.test(sql)) return [[{
+        id: 18,
+        name: 'Domain Learner',
+        email: 'learner@town.ac.uk',
+        password_hash: hash,
+        school_id: null,
+      }]];
+      if (/FROM schools WHERE id = \?/i.test(sql)) return [[]];
+      if (/FROM schools WHERE LOWER\(domain\) = \?/i.test(sql)) return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.login('learner@town.ac.uk', 'correct horse domain');
+  assert.equal(account.id, 'student_18');
+  assert.equal(account.schoolId, '12');
+  assert.equal(account.schoolName, 'Town Academy');
+});
+
 test('MySQL student registration inserts a bcrypt student account with optional year group', async () => {
   const inserts = [];
   const pool = {

@@ -84,6 +84,7 @@ class MySqlAuthBackend {
     );
     const row = rows && rows[0];
     if (!row) return null;
+    const school = await this.schoolForStudent(pool, row, email);
     return {
       id: publicId('student', row.id),
       username: cleanEmail(row.email),
@@ -91,7 +92,8 @@ class MySqlAuthBackend {
       passwordHash: row.password_hash,
       accountType: 'student',
       role: 'student',
-      schoolId: row.school_id == null ? null : String(row.school_id),
+      schoolId: school && school.id ? String(school.id) : row.school_id == null ? null : String(row.school_id),
+      schoolName: school && school.name ? school.name : undefined,
       sourceId: String(row.id),
     };
   }
@@ -127,6 +129,28 @@ class MySqlAuthBackend {
       name: String(row.name || '').trim(),
       domain: String(row.domain || domain).trim().toLowerCase(),
     };
+  }
+
+  async schoolForId(pool, schoolId) {
+    const id = Number.parseInt(String(schoolId || '').trim(), 10);
+    if (!Number.isSafeInteger(id) || id <= 0) return null;
+    const [rows] = await pool.execute(
+      'SELECT id, name, domain FROM schools WHERE id = ? LIMIT 1',
+      [id],
+    );
+    const row = rows && rows[0];
+    if (!row) return null;
+    return {
+      id: Number(row.id),
+      name: String(row.name || '').trim(),
+      domain: String(row.domain || '').trim().toLowerCase(),
+    };
+  }
+
+  async schoolForStudent(pool, row, email) {
+    const linked = await this.schoolForId(pool, row && row.school_id);
+    if (linked) return linked;
+    return this.schoolForEmail(pool, email);
   }
 
   async registerStudent(input = {}) {

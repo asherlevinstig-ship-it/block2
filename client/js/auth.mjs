@@ -58,7 +58,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const username = (user.value || '').trim();
     const secret = password.value || '';
     if (!username || !secret) {
-      setStatus('ENTER YOUR SCHOOL EMAIL AND PASSWORD', 'bad');
+      setStatus('ENTER YOUR EMAIL AND PASSWORD', 'bad');
       return false;
     }
     setStatus('SIGNING IN...');
