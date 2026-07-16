@@ -60,21 +60,24 @@ class MySqlAuthBackend {
 
   async findTeacher(pool, email) {
     const [rows] = await pool.execute(
-      'SELECT id, name, email, password_hash, role, is_active, school_id FROM teachers WHERE LOWER(email) = ? LIMIT 1',
+      'SELECT id, name, email, password_hash, role, is_active, school_id, domain FROM teachers WHERE LOWER(email) = ? LIMIT 1',
       [email],
     );
     const row = rows && rows[0];
     if (!row || Number(row.is_active) === 0) return null;
-    return {
+    const school = await this.schoolForTeacher(pool, row, email);
+    const account = {
       id: publicId('teacher', row.id),
       username: cleanEmail(row.email),
       displayName: String(row.name || 'Teacher').trim().slice(0, 32) || 'Teacher',
       passwordHash: row.password_hash,
       accountType: 'teacher',
       role: String(row.role || 'teacher'),
-      schoolId: row.school_id == null ? null : String(row.school_id),
+      schoolId: school && school.id ? String(school.id) : row.school_id == null ? null : String(row.school_id),
       sourceId: String(row.id),
     };
+    if (school && school.name) account.schoolName = school.name;
+    return account;
   }
 
   async findStudent(pool, email) {
@@ -85,7 +88,7 @@ class MySqlAuthBackend {
     const row = rows && rows[0];
     if (!row) return null;
     const school = await this.schoolForStudent(pool, row, email);
-    return {
+    const account = {
       id: publicId('student', row.id),
       username: cleanEmail(row.email),
       displayName: String(row.name || 'Student').trim().slice(0, 32) || 'Student',
@@ -93,9 +96,10 @@ class MySqlAuthBackend {
       accountType: 'student',
       role: 'student',
       schoolId: school && school.id ? String(school.id) : row.school_id == null ? null : String(row.school_id),
-      schoolName: school && school.name ? school.name : undefined,
       sourceId: String(row.id),
     };
+    if (school && school.name) account.schoolName = school.name;
+    return account;
   }
 
   async verifyPassword(password, hash) {
@@ -117,6 +121,11 @@ class MySqlAuthBackend {
 
   async schoolForEmail(pool, email) {
     const domain = emailDomain(email);
+    return this.schoolForDomain(pool, domain);
+  }
+
+  async schoolForDomain(pool, domainValue) {
+    const domain = String(domainValue || '').trim().toLowerCase();
     if (!domain) return null;
     const [rows] = await pool.execute(
       'SELECT id, name, domain FROM schools WHERE LOWER(domain) = ? LIMIT 1',
@@ -150,6 +159,14 @@ class MySqlAuthBackend {
   async schoolForStudent(pool, row, email) {
     const linked = await this.schoolForId(pool, row && row.school_id);
     if (linked) return linked;
+    return this.schoolForEmail(pool, email);
+  }
+
+  async schoolForTeacher(pool, row, email) {
+    const linked = await this.schoolForId(pool, row && row.school_id);
+    if (linked) return linked;
+    const domainLinked = await this.schoolForDomain(pool, row && row.domain);
+    if (domainLinked) return domainLinked;
     return this.schoolForEmail(pool, email);
   }
 

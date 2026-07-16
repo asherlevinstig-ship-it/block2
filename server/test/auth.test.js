@@ -107,6 +107,63 @@ test('MySQL auth backend validates existing teacher accounts and persists sessio
   auth.stop();
 });
 
+test('MySQL auth backend preserves admin teacher role and resolves linked school', async () => {
+  const hash = await bcrypt.hash('correct horse admin', 10);
+  const calls = [];
+  const pool = {
+    async execute(sql, params) {
+      calls.push({ sql, params });
+      if (/FROM teachers/i.test(sql)) return [[{
+        id: 7,
+        name: 'School Admin',
+        email: 'admin.personal@gmail.com',
+        password_hash: hash,
+        role: 'admin',
+        is_active: 1,
+        school_id: 12,
+        domain: null,
+      }]];
+      if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.login('admin.personal@gmail.com', 'correct horse admin');
+  assert.equal(account.id, 'teacher_7');
+  assert.equal(account.accountType, 'teacher');
+  assert.equal(account.role, 'admin');
+  assert.equal(account.schoolId, '12');
+  assert.equal(account.schoolName, 'Town Academy');
+  assert.equal(calls.some(call => /FROM schools WHERE id = \?/i.test(call.sql) && call.params[0] === 12), true);
+});
+
+test('MySQL auth backend resolves teacher school from teacher domain when school_id is blank', async () => {
+  const hash = await bcrypt.hash('correct horse domain admin', 10);
+  const pool = {
+    async execute(sql, params) {
+      if (/FROM teachers/i.test(sql)) return [[{
+        id: 8,
+        name: 'Domain Admin',
+        email: 'domain.admin@gmail.com',
+        password_hash: hash,
+        role: 'admin',
+        is_active: 1,
+        school_id: null,
+        domain: 'town.ac.uk',
+      }]];
+      if (/FROM schools WHERE id = \?/i.test(sql)) return [[]];
+      if (/FROM schools WHERE LOWER\(domain\) = \?/i.test(sql) && params[0] === 'town.ac.uk') return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const account = await backend.login('domain.admin@gmail.com', 'correct horse domain admin');
+  assert.equal(account.id, 'teacher_8');
+  assert.equal(account.role, 'admin');
+  assert.equal(account.schoolId, '12');
+  assert.equal(account.schoolName, 'Town Academy');
+});
+
 test('MySQL auth backend falls through to students and rejects inactive teachers', async () => {
   const studentHash = await bcrypt.hash('correct horse student', 10);
   const pool = fakeMysqlPool({

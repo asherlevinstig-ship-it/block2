@@ -84,6 +84,8 @@ The bridge accepts existing teacher/student emails and PHP bcrypt password hashe
 
 For existing students whose `students.email` is not a school-domain email address, the bridge still accepts their saved email/password and resolves the school from `students.school_id`. If `school_id` is blank, it falls back to the email domain and `schools.domain`.
 
+Teacher/admin logins use the `teachers` table first. The bridge preserves `teachers.role` values such as `teacher` or `admin`, resolves the school from `teachers.school_id`, then falls back to `teachers.domain` and the login email domain.
+
 If your old PHP app uses `DB_SERVER=localhost`, that usually means "localhost from the web-hosting server", not from your Windows machine. For local testing you need either:
 
 - the real external MySQL hostname from your hosting panel, with your current IP allowlisted for remote MySQL, or
