@@ -200,6 +200,7 @@ test('overworld cave networks add explorable underground routes from cave landma
   assert.match(clientWorld, /function caveNetworkSpecs\(\)/);
   assert.match(clientWorld, /function buildCaveNetworks\(setBlock,getBlock=getB\)/);
   assert.match(clientWorld, /buildCaveNetworks\(setB,getB\)/);
+  assert.doesNotMatch(clientWorld, /isTrainingMeadowLandClient/);
 });
 
 test('ancient city POIs generate rare deep halls, vaults, core chambers, and lore hooks', () => {

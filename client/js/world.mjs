@@ -969,7 +969,7 @@ function treasureCacheSpecs(){
   for(let gx=85;gx<WX-70;gx+=90)for(let gz=85;gz<WX-70;gz+=90){
     const x=Math.round(gx+(hash2(gx+9401,gz+1723)-.5)*58),z=Math.round(gz+(hash2(gx+5527,gz+8831)-.5)*58),y=terrainHeight(x,z),ring=Math.min(3,Math.floor(Math.hypot(x-WORLD_TC,z-WORLD_TC)/100));
     if(x<LAVA_BORDER_WIDTH+18||z<LAVA_BORDER_WIDTH+18||x>=WX-LAVA_BORDER_WIDTH-18||z>=WX-LAVA_BORDER_WIDTH-18||y<=SEA+1||y>40)continue;
-    if(Math.hypot(x-WORLD_TC,z-WORLD_TC)<WORLD_TOWN_HS+90||isTrainingMeadowLandClient(x,z,24))continue;
+    if(Math.hypot(x-WORLD_TC,z-WORLD_TC)<WORLD_TOWN_HS+90||isTrainingMeadowLand(x,z,24))continue;
     if(landmarks.some(s=>Math.hypot(x-s.x,z-s.z)<30)||discoveries.some(s=>Math.hypot(x-s.x,z-s.z)<22)||roads.some(r=>segDist(x,z,r)<14))continue;
     const hs=[terrainHeight(x-2,z-2),terrainHeight(x+2,z-2),terrainHeight(x-2,z+2),terrainHeight(x+2,z+2),y];
     if(Math.max(...hs)-Math.min(...hs)>3)continue;
@@ -1007,7 +1007,7 @@ function caveNetworkSpecs(){
   });
 }
 function buildCaveNetworks(setBlock,getBlock=getB){
-  const safeColumn=(x,z)=>x>LAVA_BORDER_WIDTH+8&&z>LAVA_BORDER_WIDTH+8&&x<WX-LAVA_BORDER_WIDTH-8&&z<WX-LAVA_BORDER_WIDTH-8&&Math.hypot(x-WORLD_TC,z-WORLD_TC)>WORLD_TOWN_HS+65&&!isTrainingMeadowLandClient(x,z,18);
+  const safeColumn=(x,z)=>x>LAVA_BORDER_WIDTH+8&&z>LAVA_BORDER_WIDTH+8&&x<WX-LAVA_BORDER_WIDTH-8&&z<WX-LAVA_BORDER_WIDTH-8&&Math.hypot(x-WORLD_TC,z-WORLD_TC)>WORLD_TOWN_HS+65&&!isTrainingMeadowLand(x,z,18);
   const putAir=(x,y,z)=>{if(x<0||x>=WX||y<=1||y>=WH-2||z<0||z>=WX||!safeColumn(x,z))return;const cur=getBlock(x,y,z);if(cur===B.BEDROCK||cur===B.CHEST||cur===B.FURNACE)return;setBlock(x,y,z,B.AIR);};
   const carveEllipsoid=(cx,cy,cz,rx,ry,rz,openToSky=false)=>{for(let x=Math.floor(cx-rx);x<=Math.ceil(cx+rx);x++)for(let y=Math.floor(cy-ry);y<=Math.ceil(cy+ry);y++)for(let z=Math.floor(cz-rz);z<=Math.ceil(cz+rz);z++){if(!openToSky&&y>=terrainHeight(x,z)-1)continue;const dx=(x-cx)/rx,dy=(y-cy)/ry,dz=(z-cz)/rz;if(dx*dx+dy*dy+dz*dz<=1)putAir(x,y,z);}};
   const solidForOre=id=>id===B.STONE||id===B.COBBLE||id===B.COAL_ORE||id===B.IRON_ORE||id===B.DIAMOND_ORE;
