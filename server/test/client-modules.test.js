@@ -1077,7 +1077,7 @@ test('death drops render as timed public world loot and onboarding teaches Recal
   assert.match(networking,/deathDropSnapshot[\s\S]*deathDropExpired/);
   assert.match(frame,/BlockcraftDeathDrops\)globalThis\.BlockcraftDeathDrops\.tick\(now\)/);
   assert.match(combat,/kind:'recall'[\s\S]*key:'P'/);
-  assert.match(combat,/Lesson 11 \/ 12 - Recall Cast/);
+  assert.match(combat,/Lesson 12 \/ 13 - Recall Cast/);
   assert.match(combat,/Death sends carried items to limbo[\s\S]*mistakes become public loot/);
 });
 
@@ -1168,7 +1168,7 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
-  assert.match(combat,/Lesson 10 \/ 12 - Subject Focus/);
+  assert.match(combat,/Lesson 11 \/ 13 - Subject Focus/);
   assert.match(combat,/key:'LEFT ALT'/);
   assert.match(combat,/Press Left Alt and choose your Recall subject/);
   assert.match(menus,/BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markSubjectFocus\(\)/);
@@ -1231,6 +1231,20 @@ test('First Hands guides the player through the first real objective',()=>{
   assert.match(networking,/Quest accepted: First Hands[\s\S]*north gate/);
   assert.match(combat,/"clearTownGuidance":\{get:\(\)=>clearTownGuidance\}/);
   assert.match(networking,/if\(townGuidanceActive&&townGuidanceStep==='quest'\) clearTownGuidance\(\);/);
+});
+
+test('onboarding teaches Escape cursor release after jumping and shows a large arrow-turn counter',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(combat,/jumped:false,cursor:false,tree:false/);
+  assert.match(combat,/kind:'jump'[\s\S]*kind:'cursor'[\s\S]*kind:'tree'/);
+  assert.match(combat,/Lesson 4 \/ 13 - Cursor/);
+  assert.match(combat,/key:'ESCAPE'/);
+  assert.match(combat,/Press Escape to free the cursor/);
+  assert.match(combat,/onboardingActive&&onboardingArrived&&onboardingKind\(\)==='cursor'[\s\S]*onboardingFlags\.cursor=true/);
+  assert.match(combat,/ONBOARDING_STEPS\.splice\(10,0/);
+  assert.match(combat,/tutprogress/);
+  assert.match(styles,/#tutorialhud \.tutprogress b\{font-size:42px/);
 });
 
 test('onboarding gathering pillar and completion both use the training tree',()=>{

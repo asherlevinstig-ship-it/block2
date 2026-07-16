@@ -530,7 +530,7 @@ function cancelOnboardingForProfileRestore(){
 }
 let pathChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
-const onboardingFlags={arrowLook:false,jumped:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
+const onboardingFlags={arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
   markSubjectFocus:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='subject')onboardingFlags.subject=true;},
   markRecall:()=>{if(onboardingActive&&onboardingKind()==='recall')onboardingFlags.recall=true;}
@@ -569,6 +569,7 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'move',pillar:'Lesson 1 / 11 — Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
   {kind:'arrows',pillar:'Lesson 2 / 11 — Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
   {kind:'jump',pillar:'Lesson 3 / 11 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
+  {kind:'cursor',pillar:'Lesson 4 / 13 - Cursor', key:'ESCAPE', text:'Press Escape to free the cursor.', sub:'Use this whenever you need to select buttons, inventory slots, quest options, or menus. Click the world to look around again.', done:()=>onboardingArrived&&onboardingFlags.cursor},
   {kind:'tree',pillar:'Lesson 4 / 11 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
   {kind:'craft',pillar:'Lesson 5 / 11 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
   {kind:'build',pillar:'Lesson 6 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingFlags.built>=3},
@@ -579,24 +580,25 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'finish',pillar:'Lesson 11 / 11 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
 for(const step of ONBOARDING_STEPS){
-  if(step.kind==='move') step.pillar='Lesson 1 / 12 - Movement';
-  else if(step.kind==='arrows') step.pillar='Lesson 2 / 12 - Arrow Camera';
-  else if(step.kind==='jump') step.pillar='Lesson 3 / 12 - Jumping';
-  else if(step.kind==='tree') step.pillar='Lesson 4 / 12 - Gathering';
-  else if(step.kind==='craft') step.pillar='Lesson 5 / 12 - Crafting';
-  else if(step.kind==='build') step.pillar='Lesson 6 / 12 - Building';
-  else if(step.kind==='farm') step.pillar='Lesson 7 / 12 - Farming';
-  else if(step.kind==='eat') step.pillar='Lesson 8 / 12 - Eating';
-  else if(step.kind==='combat') step.pillar='Lesson 9 / 12 - Combat';
-  else if(step.kind==='recall') step.pillar='Lesson 11 / 12 - Recall Cast';
+  if(step.kind==='move') step.pillar='Lesson 1 / 13 - Movement';
+  else if(step.kind==='arrows') step.pillar='Lesson 2 / 13 - Arrow Camera';
+  else if(step.kind==='jump') step.pillar='Lesson 3 / 13 - Jumping';
+  else if(step.kind==='cursor') step.pillar='Lesson 4 / 13 - Cursor';
+  else if(step.kind==='tree') step.pillar='Lesson 5 / 13 - Gathering';
+  else if(step.kind==='craft') step.pillar='Lesson 6 / 13 - Crafting';
+  else if(step.kind==='build') step.pillar='Lesson 7 / 13 - Building';
+  else if(step.kind==='farm') step.pillar='Lesson 8 / 13 - Farming';
+  else if(step.kind==='eat') step.pillar='Lesson 9 / 13 - Eating';
+  else if(step.kind==='combat') step.pillar='Lesson 10 / 13 - Combat';
+  else if(step.kind==='recall') step.pillar='Lesson 12 / 13 - Recall Cast';
   else if(step.kind==='finish'){
-    step.pillar='Lesson 12 / 12 - Departure';
+    step.pillar='Lesson 13 / 13 - Departure';
     step.sub='Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot for everyone.';
   }
 }
-ONBOARDING_STEPS.splice(9,0,{
+ONBOARDING_STEPS.splice(10,0,{
   kind:'subject',
-  pillar:'Lesson 10 / 12 - Subject Focus',
+  pillar:'Lesson 11 / 13 - Subject Focus',
   key:'LEFT ALT',
   text:'Press Left Alt and choose your Recall subject.',
   sub:'Recall Cast and death limbo questions use this subject. Pick Computer Science, IT, RE, or English.',
@@ -834,6 +836,7 @@ function buildOnboardingRoute(){
     {x:sx-20, z:sz+18},
     {x:sx-8, z:sz+12},
     {x:sx+4, z:sz+6},
+    {x:sx+14, z:sz},
     tree,
     {x:sx+30, z:sz-12},
     {x:sx+40, z:sz-18},
@@ -1376,8 +1379,12 @@ function updateOnboardingHud(){
   const lockedText=onboardingArrived?s.text:'Follow the glowing pillar for '+s.pillar+'.';
   const key=onboardingArrived?s.key:'FOLLOW LIGHT';
   let sub=s.sub;
-  if(onboardingArrived&&s.kind==='arrows') sub+=' Progress: '+Math.min(100,Math.floor(onboardingArrowTurn/ONBOARDING_FULL_TURN*100))+'%';
-  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(s.pillar)+'</div><div class="tutkey">'+escHTML(key)+'</div><div class="tuttext">'+escHTML(lockedText)+'</div><div class="tutsub">'+escHTML(sub)+'</div>';
+  let progress='';
+  if(onboardingArrived&&s.kind==='arrows'){
+    const pct=Math.min(100,Math.floor(onboardingArrowTurn/ONBOARDING_FULL_TURN*100));
+    progress='<div class="tutprogress"><b>'+pct+'%</b><span>TURNED</span></div>';
+  }
+  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(s.pillar)+'</div><div class="tutkey">'+escHTML(key)+'</div>'+progress+'<div class="tuttext">'+escHTML(lockedText)+'</div><div class="tutsub">'+escHTML(sub)+'</div>';
 }
 function updateOnboardingPillar(now){
   if(abilityTrainingActive) return;
@@ -1708,6 +1715,18 @@ addEventListener('keydown', e=>{
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
     if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='cursor'){
+      e.preventDefault();
+      onboardingFlags.cursor=true;
+      if(document.pointerLockElement===renderer.domElement){
+        try{ document.exitPointerLock(); }catch(err){}
+      }
+      lockFallback=true;
+      locked=true;
+      refreshPlayUi();
+      updateOnboardingHud();
+      return;
+    }
     if(document.pointerLockElement===renderer.domElement){
       e.preventDefault();
       try{ document.exitPointerLock(); }catch(err){}
