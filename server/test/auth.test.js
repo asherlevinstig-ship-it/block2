@@ -142,6 +142,7 @@ test('MySQL student registration inserts a bcrypt student account with optional 
       ]];
       if (/FROM teachers/i.test(sql)) return [[]];
       if (/FROM students/i.test(sql)) return [[]];
+      if (/FROM schools/i.test(sql)) return [[{ id: 12, name: 'Test School', domain: 'school.test' }]];
       if (/^INSERT INTO students/i.test(sql)) {
         inserts.push({ sql, params });
         return [{ insertId: 77 }];
@@ -152,7 +153,6 @@ test('MySQL student registration inserts a bcrypt student account with optional 
   const backend = new MySqlAuthBackend({ pool });
   const account = await backend.registerStudent({
     email: 'new.player@school.test',
-    school: '12',
     yearGroup: 'Year 8',
     password: 'correct horse student',
   });
@@ -179,6 +179,7 @@ test('MySQL student registration works when students has no year_group column', 
       ]];
       if (/FROM teachers/i.test(sql)) return [[]];
       if (/FROM students/i.test(sql)) return [[]];
+      if (/FROM schools/i.test(sql)) return [[{ id: 9, name: 'Yearless School', domain: 'school.test' }]];
       if (/^INSERT INTO students/i.test(sql)) {
         insert = { sql, params };
         return [{ insertId: 78 }];
@@ -189,11 +190,27 @@ test('MySQL student registration works when students has no year_group column', 
   const backend = new MySqlAuthBackend({ pool });
   const account = await backend.registerStudent({
     email: 'yearless@school.test',
-    school: '9',
     yearGroup: 'Year 7',
     password: 'correct horse student',
   });
   assert.equal(account.id, 'student_78');
   assert.equal(account.yearGroupSaved, false);
   assert.doesNotMatch(insert.sql, /year_group/);
+});
+
+test('MySQL student registration rejects email domains without a matching school', async () => {
+  const pool = {
+    async execute(sql) {
+      if (/FROM teachers/i.test(sql)) return [[]];
+      if (/FROM students/i.test(sql)) return [[]];
+      if (/FROM schools/i.test(sql)) return [[]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  await assert.rejects(() => backend.registerStudent({
+    email: 'new.player@unknown.test',
+    yearGroup: 'Year 8',
+    password: 'correct horse student',
+  }), /could not find a school/);
 });

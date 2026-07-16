@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const cleanEmail = value => String(value || '').trim().toLowerCase();
 const cleanYearGroup = value => String(value || '').replace(/[<>]/g, '').trim().slice(0, 50);
 const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || ''));
+const emailDomain = value => cleanEmail(value).split('@')[1] || '';
 
 function publicId(type, id) {
   return String(type || '').toLowerCase() + '_' + String(id || '').replace(/[^0-9a-z_-]/gi, '');
@@ -112,18 +113,42 @@ class MySqlAuthBackend {
     return this.studentColumnSet;
   }
 
+  async schoolForEmail(pool, email) {
+    const domain = emailDomain(email);
+    if (!domain) return null;
+    const [rows] = await pool.execute(
+      'SELECT id, name, domain FROM schools WHERE LOWER(domain) = ? LIMIT 1',
+      [domain],
+    );
+    const row = rows && rows[0];
+    if (!row) return null;
+    return {
+      id: Number(row.id),
+      name: String(row.name || '').trim(),
+      domain: String(row.domain || domain).trim().toLowerCase(),
+    };
+  }
+
   async registerStudent(input = {}) {
     const email = cleanEmail(input.email || input.username);
     if (!validEmail(email)) throw Object.assign(new Error('Enter a valid school email address.'), { status: 400, code: 'email' });
     const password = String(input.password || '');
     if (password.length < 10 || password.length > 128) throw Object.assign(new Error('Password must be 10-128 characters.'), { status: 400, code: 'password' });
-    const schoolId = Number.parseInt(String(input.school || input.schoolId || '').trim(), 10);
-    if (!Number.isSafeInteger(schoolId) || schoolId <= 0) throw Object.assign(new Error('Enter a valid numeric school code.'), { status: 400, code: 'school' });
     const yearGroup = cleanYearGroup(input.yearGroup || input.year_group);
     if (!yearGroup || !/^[A-Za-z0-9 _-]{1,50}$/.test(yearGroup)) throw Object.assign(new Error('Enter a valid year group.'), { status: 400, code: 'year_group' });
     if (await this.findAccount(email)) throw Object.assign(new Error('That email address is already registered.'), { status: 409, code: 'exists' });
 
     const pool = this.getPool();
+    const explicitSchoolId = Number.parseInt(String(input.school || input.schoolId || '').trim(), 10);
+    let school = null;
+    let schoolId = explicitSchoolId;
+    if (!Number.isSafeInteger(schoolId) || schoolId <= 0) {
+      school = await this.schoolForEmail(pool, email);
+      if (!school || !Number.isSafeInteger(school.id) || school.id <= 0) {
+        throw Object.assign(new Error('We could not find a school for that email domain.'), { status: 400, code: 'school_domain' });
+      }
+      schoolId = school.id;
+    }
     const columns = await this.studentColumns(pool);
     const fields = ['name', 'email', 'password_hash', 'school_id'];
     const values = [displayNameFromEmail(email), email, await this.bcrypt.hash(password, Number(this.env.STUDENT_REGISTER_BCRYPT_ROUNDS || 10)), schoolId];
@@ -148,6 +173,7 @@ class MySqlAuthBackend {
         accountType: 'student',
         role: 'student',
         schoolId: String(schoolId),
+        schoolName: school && school.name ? school.name : undefined,
         yearGroup,
       } : await this.findStudent(pool, email);
       if (!account) throw Object.assign(new Error('Registration could not be completed.'), { status: 500, code: 'register' });

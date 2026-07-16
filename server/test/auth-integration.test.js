@@ -202,7 +202,7 @@ test('student registration endpoint creates a MySQL-backed session', { concurren
   const backend = {
     async registerStudent(body) {
       assert.equal(body.email, 'new.student@school.test');
-      assert.equal(body.school, '42');
+      assert.equal(body.school, undefined);
       assert.equal(body.yearGroup, 'Year 9');
       return {
         id: 'student_42',
@@ -220,7 +220,6 @@ test('student registration endpoint creates a MySQL-backed session', { concurren
   try {
     const response = await f.request('/auth/student/register', jsonPost({
       email: 'new.student@school.test',
-      school: '42',
       yearGroup: 'Year 9',
       password: 'correct horse student',
     }));

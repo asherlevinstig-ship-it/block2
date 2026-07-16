@@ -317,7 +317,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(registerHtml, /id="registerForm"/);
   assert.match(registerHtml, /name="yearGroup"/);
+  assert.doesNotMatch(registerHtml, /name="school"/);
+  assert.match(registerHtml, /find your school from your email address/);
   assert.match(registerJs, /\/auth\/student\/register/);
+  assert.doesNotMatch(registerJs, /form\.school/);
   assert.match(html, /id="huntersetup" class="hunter-setup hidden"/);
   assert.match(html, /id="gearrewardwin"/);
   assert.match(boot, /dataset\.gamePhase\s*=\s*'ready'[\s\S]*button\.disabled\s*=\s*false/);

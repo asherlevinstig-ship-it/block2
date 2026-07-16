@@ -13,7 +13,6 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   const body = {
     email: form.email.value.trim(),
-    school: form.school.value.trim(),
     yearGroup: form.yearGroup.value.trim(),
     password: form.password.value,
   };
