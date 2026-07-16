@@ -254,7 +254,8 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
   assert.match(clientWorld, /buildAncientCities\(setB,getB\)/);
   assert.match(combat, /function nearbyAncientCityInteractable\(range=6,hit=null\)/);
   assert.match(combat, /function interactAncientCityDiscovery\(s\)/);
-  assert.ok(combat.indexOf('interactAncientCityDiscovery(nearbyAncientCityInteractable(7,hit))') < combat.indexOf('if(hit.id===B.CHEST)'), 'ancient vaults are intercepted before normal chest storage');
+  assert.ok(combat.indexOf('interactAncientCityDiscovery(nearbyAncientCityInteractable(7,hit))') < combat.lastIndexOf('if(hit.id===B.CHEST)'), 'ancient vaults are intercepted before normal chest storage');
+  assert.match(combat, /function blockInteractionPrompt\(hit\)/);
   assert.match(frame, /Ancient Vault/);
   assert.match(frame, /Ancient Core/);
   assert.match(frame, /Deep ruins - read tablets, open vaults, and approach the core carefully/);
@@ -2126,6 +2127,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/get craftResult\(\)/);
   assert.match(frame,/function currentObjectiveAction\(/);
   assert.match(frame,/function nearbyQuestClaimPrompt\(\)/);
+  assert.match(frame,/combatApi\.nearbyInteractionPrompt&&combatApi\.nearbyInteractionPrompt\(\)/);
   assert.match(frame,/Turn In '\+qTitle/);
   assert.match(frame,/Claim Job Reward/);
   assert.match(frame,/Claim Guild Contract/);
@@ -2174,6 +2176,11 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/no nearby Gate is currently tracked/);
   assert.match(frame,/Quest Log opened for context/);
   assert.match(combat,/function claimReadyQuestAtService\(\)/);
+  assert.match(combat,/function nearbyInteractionPrompt\(\)/);
+  assert.match(combat,/function nearbyVillager\(range=3\.6\)/);
+  assert.match(combat,/guardianUnderCrosshair\(8\)\|\|nearbyGuardian\(\)/);
+  assert.match(combat,/villagerUnderCrosshair\(4\.5\)\|\|nearbyVillager\(3\.7\)/);
+  assert.match(combat,/blockInteractionPrompt\(hit\)/);
   assert.match(combat,/NET\.room\.send\('regionalContractClaim'/);
   assert.match(combat,/Claiming Job Reward/);
   assert.match(combat,/Claiming Guild Contract/);

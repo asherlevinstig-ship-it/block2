@@ -1273,6 +1273,13 @@ function updateEncounterPrompt(){
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(claimPrompt.title)+'</b><small>'+escHTML(claimPrompt.small)+'</small>';
     return;
   }
+  const interactionPrompt=combatApi.nearbyInteractionPrompt&&combatApi.nearbyInteractionPrompt();
+  if(interactionPrompt){
+    encounterPromptEl.classList.toggle('danger',!!interactionPrompt.danger);
+    encounterPromptEl.classList.remove('hidden');
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(interactionPrompt.key||'G')+'</span><b>'+escHTML(interactionPrompt.title||'Interact')+'</b><small>'+escHTML(interactionPrompt.small||'Press G to interact')+'</small>';
+    return;
+  }
   const weeklyCache=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearFellowshipWeeklyCache&&combatApi.nearFellowshipWeeklyCache();
   if(weeklyCache){
     encounterPromptEl.classList.remove('danger','hidden');

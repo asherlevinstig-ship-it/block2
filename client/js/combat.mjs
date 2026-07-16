@@ -2007,9 +2007,100 @@ function nearFellowshipPantryShelf(range=3.6){
 function nearFellowshipWeatherVane(range=3.6){
   return dim==='overworld' && hasFellowshipProject('weather_vane') && Math.hypot(player.pos.x-(HUB.guild.x+3.65), player.pos.z-(HUB.guild.z-2.45))<range;
 }
+function interactionPromptActive(){
+  return locked&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!onboardingActive&&!pathChoiceOpen&&!globalThis.chatTyping;
+}
+function nearbyGuardian(range=7.8){
+  if(dim!=='overworld')return false;
+  return Math.hypot(player.pos.x-HUB.guardian.x, player.pos.z-HUB.guardian.z)<range;
+}
+function nearbyVillager(range=3.6){
+  if(dim!=='overworld'||!Array.isArray(villagers))return null;
+  let best=null,bd=range;
+  for(const v of villagers){
+    if(!v||!v.grp||v.inside||v.grp.visible===false)continue;
+    const p=v.grp.position,d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+    if(d<bd){bd=d;best=v;}
+  }
+  return best?{...best,distance:bd}:null;
+}
+function blockInteractionPrompt(hit){
+  if(!hit)return null;
+  if(isJobBoardHit(hit))return {key:'G',title:'Job Board',small:'Open profession and contract work',priority:80};
+  if(hit.id===B.BRICK && hit.x===(HUB.shard.x|0) && hit.z===(HUB.shard.z|0) && hit.y<=TOWN.G+2)return {key:'G',title:'Shard Pedestal',small:'Open shard keys and Gate options',priority:70};
+  if(hit.id===B.PLANKS && hit.y===TOWN.G+1 && hit.x===HUB.marketX &&
+     ((hit.z>=TOWN.TC-8&&hit.z<=TOWN.TC-6)||(hit.z>=TOWN.TC+6&&hit.z<=TOWN.TC+8)))return {key:'G',title:'Market Stall',small:'Open town shop',priority:68};
+  if(hit.id===B.CHEST)return {key:'G',title:'Chest',small:'Open storage',priority:65};
+  if(hit.id===B.TABLE)return {key:'G',title:'Crafting Table',small:'Open crafting grid',priority:65};
+  if(hit.id===B.FURNACE)return {key:'G',title:'Furnace',small:'Open smelting station',priority:65};
+  if(hit.id===B.EGG_INSULATOR)return {key:'G',title:'Dragon Nest',small:'Perch, feed, hatch, or recall a dragon',priority:64};
+  if(hit.id===B.BED)return {key:'G',title:'Bed',small:'Sleep until morning',priority:60};
+  if(hit.id===B.WHEAT_3)return {key:'G',title:'Ripe Wheat',small:'Use the action key to harvest',priority:58};
+  return null;
+}
+function nearbyInteractionPrompt(){
+  if(!interactionPromptActive())return null;
+  const candidates=[];
+  const push=(entry,distance=0)=>{if(entry)candidates.push({...entry,distance:Number.isFinite(distance)?distance:0});};
+  if(gate && dim==='overworld'){
+    const d=Math.hypot(gate.x-player.pos.x,gate.z-player.pos.z);
+    if(d<=6)push({key:'G',title:'Gate Portal',small:'Enter this Gate dungeon',priority:120},d);
+  }
+  if(dim==='dungeon'&&exitPortal){
+    const d=Math.hypot(exitPortal.position.x-player.pos.x,exitPortal.position.z-player.pos.z);
+    if(d<2.8)push({key:'G',title:'Dungeon Exit',small:'Return to the overworld',priority:120},d);
+  }
+  if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
+  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':'Begin focus meditation',priority:112},0);
+  const readyClaim=claimReadyQuestAtServicePrompt();
+  if(readyClaim)push(readyClaim,0);
+  if(nearFellowshipWeeklyCache())push({key:'G',title:'Fellowship Weekly Cache',small:'Claim unlocked rewards',priority:104},0);
+  if(nearFellowshipNoticeBoard())push({key:'G',title:'Fellowship Notice Board',small:'View pinned objectives',priority:102},0);
+  if(nearRecallLectern())push({key:'G',title:'Fellowship Study Lectern',small:'Open Recall mastery and practice',priority:100},0);
+  if(nearFellowshipMapTable())push({key:'G',title:'Fellowship Map Table',small:'Plan leads, treasure and discoveries',priority:100},0);
+  if(nearFellowshipArmoryRack())push({key:'G',title:'Fellowship Armory Rack',small:'Check Gate readiness and loadouts',priority:100},0);
+  if(nearFellowshipPantryShelf())push({key:'G',title:'Fellowship Pantry Shelf',small:'Prepare hunger, rations and Cook work',priority:100},0);
+  if(nearFellowshipWeatherVane())push({key:'G',title:'Fellowship Weather Vane',small:'Review weather sites and sky planning',priority:100},0);
+  if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
+  const table=nearbyTavernGameTable();
+  if(table)push({key:'G',title:table.label,small:'Play tavern games',priority:94},table.distance);
+  if(guardianUnderCrosshair(8)||nearbyGuardian())push({key:'G',title:'Aegis Guardian',small:'Open Guardian trials and rewards',priority:93},0);
+  const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
+  if(vill)push({key:'G',title:vill.name||vill.shortName||'Villager',small:vill.title||'Talk',priority:90},vill.distance||0);
+  const dragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
+    ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
+    : null;
+  if(dragon)push({key:'G',title:dragon.name||'Dragon',small:(dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase(),priority:88},0);
+  if(nearDragonRoost())push({key:'G',title:'Dragon Roost',small:'Open dragon bond and roost options',priority:82},0);
+  const treasureClue=nearbyTreasureClue();
+  if(treasureClue)push({key:'G',title:'Treasure Clue',small:'Investigate the marked clue site',priority:86},0);
+  const ancient=nearbyAncientCityInteractable(6.5);
+  if(ancient){
+    const title=ancient.type==='ancient_vault'?'Ancient Vault':ancient.type==='ancient_core'?'Ancient Core':'Lore Tablet';
+    const small=ancient.type==='ancient_vault'?'Open the sealed cache':ancient.type==='ancient_core'?'Inspect the Warden seal':'Read and trigger Recall';
+    push({key:'G',title,small,priority:84},0);
+  }
+  const discovery=nearbySmallDiscovery(7);
+  if(discovery&&['rare_plant','lore_tablet','fishing_pool','puzzle_shrine','rain_bloom','storm_crystal','sun_dial','traveling_merchant'].includes(discovery.type)){
+    push({key:'G',title:String(discovery.name||discovery.type||'Discovery').replace(/_/g,' '),small:'Investigate nearby discovery',priority:78},0);
+  }
+  const knowledgeRuin=nearbyKnowledgeRuin();
+  if(knowledgeRuin)push({key:'G',title:'Knowledge Ruin',small:'Start a Recall challenge from the inscription',priority:76},0);
+  const hit=raycast(BLOCK_PLACE_REACH);
+  push(blockInteractionPrompt(hit),hit?Math.hypot(player.pos.x-(hit.x+.5),player.pos.z-(hit.z+.5)):0);
+  candidates.sort((a,b)=>(b.priority-a.priority)||(a.distance-b.distance));
+  return candidates[0]||null;
+}
+function claimReadyQuestAtServicePrompt(){
+  if(jobContract&&jobContractReady&&jobContractReady()&&nearJobBoard())return {key:'G',title:'Claim Job Reward',small:String(jobContract.title||'Contract complete'),priority:110};
+  const c=clampRegionalContract(regionalContract);
+  if(c&&c.ready&&(nearJobBoard()||nearGuildContractDesk()))return {key:'G',title:'Claim Guild Contract',small:String(c.title||'Contract complete'),priority:110};
+  if(quest&&questDone&&questDone()&&quest.source==='guardian'&&nearbyGuardian())return {key:'G',title:'Claim Aegis Trial',small:String(quest.title||'Trial complete'),priority:110};
+  return null;
+}
 function claimReadyQuestAtService(){
   if(!NET.on||!NET.room) return false;
-  if(quest&&questDone&&questDone()&&quest.source==='guardian'&&guardianUnderCrosshair(8)){
+  if(quest&&questDone&&questDone()&&quest.source==='guardian'&&(guardianUnderCrosshair(8)||nearbyGuardian())){
     NET.room.send('claimAegisTrial',{});
     showName('Claiming Aegis Trial');
     return true;
@@ -2192,8 +2283,8 @@ function secondaryAction(){
   if(nearTavernDiceTable()){ openTavernDiceUI(); return; }
   if(nearTavernRouletteTable()){ openTavernRouletteUI(); return; }
   if(nearTavernBlackjackTable()){ openTavernBlackjackUI(); return; }
-  if(guardianUnderCrosshair(8)){ openGuardianUI(); return; }
-  const vill=villagerUnderCrosshair(4.5);
+  if(guardianUnderCrosshair(8)||nearbyGuardian()){ openGuardianUI(); return; }
+  const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
   if(vill){
     interactWithVillager(vill);
     return;
@@ -2365,6 +2456,7 @@ gameContext.registerModule('combat', Object.freeze({
   showAbilityAwakening,
   startAbilityTraining,
   nearbyTavernGameTable,
+  nearbyInteractionPrompt,
   nearFellowshipNoticeBoard,
   nearFellowshipWeeklyCache,
   nearRecallLectern,
