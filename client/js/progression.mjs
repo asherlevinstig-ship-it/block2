@@ -14,6 +14,8 @@ export const PROGRESSION_FOCUS_STATES = Object.freeze([
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);
 export const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
+export const DEITY_LEVEL = 60;
+export const DEITY_POWER_IDS = Object.freeze(['deity_presence']);
 export const HUNTER_RANK_XP_MULTIPLIERS = Object.freeze([1, 1.5, 2.1, 2.9, 4, 5.5]);
 export const HUNTER_ACTIVITY_XP_BY_RANK = Object.freeze([70, 300, 450, 650, 950, 1300]);
 export const HUNTER_ACTIVITY_XP_WEIGHTS = Object.freeze({
@@ -33,6 +35,10 @@ export function hunterRankIndexForLevel(level) {
 
 export function gateRankIndexForLevel(level) {
   return Math.min(4, hunterRankIndexForLevel(level));
+}
+
+export function isDeityLevel(level) {
+  return Math.max(1, level | 0) >= DEITY_LEVEL;
 }
 
 export function nextHunterRankLevel(rank) {

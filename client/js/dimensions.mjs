@@ -1,4 +1,5 @@
 import {api as worldApi,state as worldState} from './world.mjs';
+import {DEITY_LEVEL} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -917,6 +918,13 @@ function renderStat(){
   h+='<div class="srow"><span>CLASS</span><b>'+(S.path?PATHS[S.path].name:'None &mdash; Unawakened')+'</b></div>';
   h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
   h+='<div class="srow"><span>LEVEL</span><b>'+S.lvl+'</b></div>';
+  const deity=globalThis.BlockcraftDeityState;
+  if(deity&&deity.unlocked){
+    const powers=(Array.isArray(deity.powers)?deity.powers:[]).map(id=>id==='deity_presence'?'Deity Presence':String(id).replace(/_/g,' ')).join(', ')||'Deity Presence';
+    h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">DEITY &middot; '+escHTML(powers)+'</b></div>';
+  }else if(S.lvl>=51){
+    h+='<div class="srow"><span>ASCENSION</span><b>S-Rank Level 10 at Lv '+DEITY_LEVEL+'</b></div>';
+  }
   const rankIdx=localPlayerRankIndex(), hunterRankIdx=localPlayerHunterRankIndex();
   const nextLvl=nextRankLevel(hunterRankIdx);
   const rankProgress=currentRankProgress();
@@ -925,7 +933,9 @@ function renderStat(){
   h+='<div class="srow"><span>GATE ACCESS</span><b>'+gateRankLetter(rankIdx)+'-Rank available &middot; '+clearedGate+(nextLvl?' &middot; next Hunter rank at Lv '+nextLvl:' &middot; top Hunter rank')+'</b></div>';
   h+='<div class="srow"><span>XP</span><b>'+Math.floor(S.xp)+' / '+xpNeed()+'</b></div>';
   if(rankProgress.maxRank){
-    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>S-RANK ACHIEVED</b></div><div class="rjbar"><i style="width:100%"></i></div><p>Hunter XP still advances levels, stat points, and mastery.</p></div>';
+    const deityUnlocked=deity&&deity.unlocked;
+    const deityPct=deityUnlocked?100:Math.max(0,Math.min(100,Math.round(((S.lvl-51)/(DEITY_LEVEL-51))*100)));
+    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are now awake. Future ascension powers will attach here.':'Hunter XP still advances levels and stat points. Reach S-Rank Level 10 at Lv '+DEITY_LEVEL+' to become Deity.')+'</p></div>';
   }else{
     const nextLetter=hunterRankLetter(rankProgress.nextRank);
     h+='<div class="rankjourney"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK AT LEVEL '+rankProgress.nextRankLevel+'</b></div>'+

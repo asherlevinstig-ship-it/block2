@@ -735,9 +735,12 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/Protected claim purchased/);
   assert.match(networkingSource,/Treasure cache/);
   assert.match(networkingSource,/function showLevelUpReveal\(m\)/);
+  assert.match(networkingSource,/function showDeityAscension\(m\)/);
   assert.match(networkingSource,/LEVEL UP/);
   assert.match(networkingSource,/room\.onMessage\('levelUp'/);
+  assert.match(networkingSource,/room\.onMessage\('deityAscended'/);
   assert.match(networkingSource,/rewardGain\('rare',statPoints\|\|1,'Stat Points'/);
+  assert.match(networkingSource,/rewardGain\('legendary',1,'Deity Power'/);
   assert.match(networkingSource,/rewardGain\('rare',1,reward,\{icon:'JOB'\}\)/);
   assert.match(networkingSource,/JOB_SYSTEM\.milestoneReward/);
   assert.match(networkingSource,/Windseed planted/);
@@ -954,8 +957,13 @@ test('progression module reconciles authoritative updates and rejection messages
 test('Hunter XP curve has explicit rank thresholds and steepens at high rank', async () => {
   const progression = await clientModule('progression.mjs');
   const serverProgression = require('../rooms/constants');
-  const { hunterActivityXpForLevel, hunterRankIndexForLevel, gateRankIndexForLevel, nextHunterRankLevel, xpNeedForLevel } = progression;
+  const { DEITY_LEVEL, hunterActivityXpForLevel, hunterRankIndexForLevel, gateRankIndexForLevel, isDeityLevel, nextHunterRankLevel, xpNeedForLevel } = progression;
   assert.deepEqual([1, 11, 21, 31, 41, 51].map(hunterRankIndexForLevel), [0, 1, 2, 3, 4, 5]);
+  assert.equal(DEITY_LEVEL, 60);
+  assert.equal(DEITY_LEVEL, serverProgression.DEITY_LEVEL);
+  assert.equal(isDeityLevel(59), false);
+  assert.equal(isDeityLevel(60), true);
+  assert.equal(isDeityLevel(60), serverProgression.isDeityLevel(60));
   assert.equal(gateRankIndexForLevel(99), 4, 'gate tiers stop at A while Hunter rank reaches S');
   assert.deepEqual([0, 1, 2, 3, 4, 5].map(nextHunterRankLevel), [11, 21, 31, 41, 51, 0]);
   assert.equal(xpNeedForLevel(3), 53);

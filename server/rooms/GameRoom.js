@@ -55,11 +55,11 @@ function authRequestFromColyseus(options, context) {
 const {
   ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
   BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
-  EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
+  EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, DEITY_LEVEL, DEITY_POWER_IDS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
   ITEM_NAMES, LAND_ABANDONED_MS, LAND_DORMANT_MS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LAND_VISIT_REFRESH_MS, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
   PROGRESSION_FOCUS_STATES, SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, REGIONAL_CONTRACT_TYPES, dangerRingAt, dayTimeAt, dragonMountType,
-  gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
+  gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDeityLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
   nextHunterRankLevel,
   mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
@@ -1934,12 +1934,35 @@ class GameRoom extends Room {
   xpNeed(lvl) {
     return xpNeedForLevel(lvl);
   }
+  ensureDeityState(prof, now = Date.now()) {
+    if (!prof || !prof.S) return false;
+    const eligible = isDeityLevel(prof.S.lvl);
+    const wasUnlocked = !!(prof.deity && prof.deity.unlocked);
+    if (!eligible) {
+      prof.deity = { unlocked: false, ascendedAt: 0, powers: [] };
+      return false;
+    }
+    if (!prof.deity || typeof prof.deity !== 'object') prof.deity = {};
+    prof.deity.unlocked = true;
+    const ascendedAt = Number(prof.deity.ascendedAt);
+    prof.deity.ascendedAt = Number.isFinite(ascendedAt) && ascendedAt > 0
+      ? Math.min(4102444800000, Math.round(ascendedAt))
+      : now;
+    const powers = [];
+    for (const id of DEITY_POWER_IDS) powers.push(id);
+    if (Array.isArray(prof.deity.powers)) for (const id of prof.deity.powers) {
+      if (DEITY_POWER_IDS.includes(id) && !powers.includes(id)) powers.push(id);
+    }
+    prof.deity.powers = powers;
+    return !wasUnlocked;
+  }
   grantHunterXp(prof, amount, client = null, source = 'activity') {
     const S = prof && prof.S;
     const granted = Math.max(0, Math.min(1000000, Math.round(Number(amount) || 0)));
     if (!S || !granted) return { granted: 0, levels: 0 };
     const before = Math.max(1, S.lvl | 0);
     const beforeRank = hunterRankIndexForLevel(before);
+    const beforeDeity = isDeityLevel(before);
     S.xp = Math.max(0, S.xp | 0) + granted;
     while (S.xp >= this.xpNeed(S.lvl)) {
       S.xp -= this.xpNeed(S.lvl);
@@ -1948,6 +1971,7 @@ class GameRoom extends Room {
     }
     const levels = Math.max(0, (S.lvl | 0) - before);
     const rank = hunterRankIndexForLevel(S.lvl);
+    const deityAscended = !beforeDeity && this.ensureDeityState(prof);
     if (rank > beforeRank && beforeRank === 0) {
       prof.progressionFocus = prof.job === 'adventurer'
         ? (prof.jobContract ? '' : 'first_promotion_contract')
@@ -1982,8 +2006,20 @@ class GameRoom extends Room {
           nextRankLevel: nextHunterRankLevel(rank),
         });
       }
+      if (deityAscended) {
+        client.send('deityAscended', {
+          fromLevel: before,
+          level: S.lvl | 0,
+          threshold: DEITY_LEVEL,
+          title: 'Deity',
+          powers: [...DEITY_POWER_IDS],
+          source: String(source || 'activity').slice(0, 32),
+        });
+      }
     }
-    return { granted, levels, rankUp: rank > beforeRank, fromRank: beforeRank, rank };
+    const result = { granted, levels, rankUp: rank > beforeRank, fromRank: beforeRank, rank };
+    if (deityAscended) result.deityAscended = true;
+    return result;
   }
   profileFor(client) {
     const token = this.tokens.get(client.sessionId);
@@ -2618,6 +2654,7 @@ class GameRoom extends Room {
   syncPlayerProfile(client, prof) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !prof) return;
+    this.ensureDeityState(prof);
     this.refreshSystemIntroductions(prof);
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
@@ -2645,6 +2682,7 @@ class GameRoom extends Room {
   profilePayload(client, prof) {
     this.syncProfileVitals(client, prof);
     this.normalizeQuestLifecycles(client, prof);
+    this.ensureDeityState(prof);
     this.refreshSystemIntroductions(prof);
     return { ...prof, activeObjectives: this.activeQuestObjectives(client, prof) };
   }

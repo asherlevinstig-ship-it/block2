@@ -14,6 +14,7 @@ import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
 import {backendWsUrl} from './config.mjs';
+import {DEITY_LEVEL,DEITY_POWER_IDS,isDeityLevel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -31,6 +32,20 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
 let seenClaimableObjectiveIds=new Set();
 let objectiveFeedPrimed=false;
+const deityState={unlocked:false,ascendedAt:0,powers:[]};
+globalThis.BlockcraftDeityState=deityState;
+function applyDeityState(raw){
+  const src=raw&&typeof raw==='object'?raw:{};
+  const unlocked=src.unlocked===true||isDeityLevel(S&&S.lvl);
+  deityState.unlocked=!!unlocked;
+  const ascendedAt=Number(src.ascendedAt);
+  deityState.ascendedAt=unlocked&&Number.isFinite(ascendedAt)?Math.max(0,Math.round(ascendedAt)):0;
+  deityState.powers=unlocked
+    ? (Array.isArray(src.powers)?src.powers:DEITY_POWER_IDS).filter(id=>DEITY_POWER_IDS.includes(id)).slice(0,8)
+    : [];
+  if(unlocked&&!deityState.powers.includes('deity_presence'))deityState.powers.unshift('deity_presence');
+  return deityState;
+}
 function claimableObjectiveHint(o){
   const loc=String(o&&o.location||'').trim();
   if(o&&o.source==='job')return 'Claim at the <b>Job Board</b>.';
@@ -73,6 +88,11 @@ function ensureLevelUpRevealStyles(){
     .level-up-reward{padding:9px;border:1px solid rgba(201,255,126,.36);background:rgba(255,255,255,.075);border-radius:6px}
     .level-up-reward span{display:block;color:#b8cbd0;font-size:11px;letter-spacing:.12em}
     .level-up-reward b{display:block;color:#ffffff;font-size:15px;margin-top:2px}
+    .level-up-reveal.deity{border-color:#ffd76a;background:radial-gradient(circle at 50% 0%,rgba(255,215,106,.24),transparent 46%),linear-gradient(180deg,rgba(39,31,70,.98),rgba(8,12,26,.97));box-shadow:0 0 0 1px rgba(255,255,255,.16) inset,0 26px 70px rgba(0,0,0,.62),0 0 64px rgba(255,215,106,.38)}
+    .level-up-reveal.deity small{color:#ffd76a}
+    .level-up-reveal.deity h3{color:#fff1b0;text-shadow:0 2px 0 #2e2547,0 0 24px rgba(255,215,106,.42)}
+    .level-up-reveal.deity .level-up-reward{border-color:rgba(255,215,106,.42);background:rgba(255,231,150,.09)}
+    .level-up-reveal.deity .level-up-spark{background:#fff1b0;box-shadow:0 0 18px #ffd76a}
     .level-up-spark{position:absolute;width:8px;height:8px;border-radius:50%;background:#e7ff9b;box-shadow:0 0 14px #9ae66e;animation:level-up-spark 950ms ease-out forwards}
     @keyframes level-up-spark{from{opacity:1;transform:translate(0,0) scale(1)}to{opacity:0;transform:translate(var(--tx),var(--ty)) scale(.25)}}
     @media (max-width:560px){.level-up-rewards{grid-template-columns:1fr}.level-up-reveal h3{font-size:26px}}
@@ -111,6 +131,34 @@ function showLevelUpReveal(m){
   rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700});
   showName('LEVEL '+level);
   sysMsg('<b>Level '+level+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
+}
+function showDeityAscension(m){
+  applyDeityState({unlocked:true,ascendedAt:Date.now(),powers:m&&m.powers});
+  ensureLevelUpRevealStyles();
+  const level=Math.max(DEITY_LEVEL,(m&&m.level)|0),powers=deityState.powers.length?deityState.powers:['deity_presence'];
+  const powerText=powers.map(id=>id==='deity_presence'?'Deity Presence':id.replace(/_/g,' ')).join(', ');
+  const card=document.createElement('div');card.className='level-up-reveal deity';card.setAttribute('role','status');card.setAttribute('aria-live','assertive');
+  card.innerHTML='<small>ASCENSION UNLOCKED</small><h3>DEITY</h3><p>S-Rank Level 10 reached. Your hunter has crossed into divine power.</p><div class="level-up-rewards">'
+    +'<div class="level-up-reward"><span>THRESHOLD</span><b>Level '+level+'</b></div>'
+    +'<div class="level-up-reward"><span>STATE</span><b>Deity</b></div>'
+    +'<div class="level-up-reward"><span>FIRST POWER</span><b>'+escHTML(powerText)+'</b></div>'
+    +'<div class="level-up-reward"><span>OPEN STATS</span><b>Press C</b></div>'
+    +'</div>';
+  for(let i=0;i<26;i++){
+    const spark=document.createElement('i');spark.className='level-up-spark';
+    spark.style.left=(6+Math.random()*88)+'%';spark.style.top=(8+Math.random()*78)+'%';
+    spark.style.setProperty('--tx',((Math.random()-.5)*260).toFixed(0)+'px');
+    spark.style.setProperty('--ty',((-55-Math.random()*150)).toFixed(0)+'px');
+    card.appendChild(spark);
+  }
+  document.body.appendChild(card);
+  requestAnimationFrame(()=>card.classList.add('show'));
+  setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),420);},6200);
+  SFX.level();
+  rewardGain('legendary',1,'Deity Power',{icon:'DIV',duration:4200});
+  showName('DEITY ASCENDED');
+  sysMsg('<b>Deity unlocked!</b> You reached <b>S-Rank Level 10</b>. First power: <b>'+escHTML(powerText)+'</b>.',{tier:'major',title:'Ascension'});
+  refreshHUD();
 }
 function setActiveObjectives(next, opts={}){
   const list=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(next):(Array.isArray(next)?next:[]);
@@ -854,6 +902,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('rankUp', m=>{
       presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
     });
+    room.onMessage('deityAscended', m=>showDeityAscension(m));
     const presentJobMilestone=(job,idMilestone)=>{
       if(!idMilestone)return;
       const jobName=(JOBS[job]&&JOBS[job].name)||'Job';
@@ -1898,6 +1947,7 @@ function netRestoreProfile(m){
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
       S.path=['shadow','mage','guardian'].includes(m.S.path)?m.S.path:'';
     }
+    applyDeityState(m.deity);
     if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
     if(Array.isArray(m.inv)){
       for(let i=0;i<36;i++){

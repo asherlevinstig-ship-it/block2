@@ -24,6 +24,8 @@ const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials')
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
+const DEITY_LEVEL = 60;
+const DEITY_POWER_IDS = Object.freeze(['deity_presence']);
 const TUTORIAL_VERSIONS = Object.freeze({
   onboarding: 7, ability: 2, intro: 1, gate: 1,
   townJob: 1, townTavern: 1, townLand: 1, familiar: 1,
@@ -264,6 +266,21 @@ function sanitizeEquippedCosmetics(raw, unlocks = []) {
   return out;
 }
 
+function sanitizeDeity(raw, level = 1) {
+  const eligible = (Math.max(1, level | 0) >= DEITY_LEVEL);
+  if (!eligible) return { unlocked: false, ascendedAt: 0, powers: [] };
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const powers = [...DEITY_POWER_IDS];
+  if (Array.isArray(src.powers)) for (const id of src.powers) {
+    if (DEITY_POWER_IDS.includes(id) && !powers.includes(id)) powers.push(id);
+  }
+  return {
+    unlocked: true,
+    ascendedAt: clampI(src.ascendedAt, 0, 4102444800000),
+    powers,
+  };
+}
+
 function defaultProfile(name) {
   const chosenName = typeof name === 'string' && cleanName(name) !== 'Hunter';
   return {
@@ -302,6 +319,7 @@ function defaultProfile(name) {
     familiarChallenges: {},
     shadowArmy: [],
     abilitySpec: '',
+    deity: { unlocked: false, ascendedAt: 0, powers: [] },
     dragonCare: {},
     dragonBondXp: {},
     dragonRoleMastery: {},
@@ -689,6 +707,7 @@ function sanitizeProfile(p) {
     || !!p.firstQuestRewardClaimed
     || (p.npcQuestChains && typeof p.npcQuestChains === 'object' && Object.keys(p.npcQuestChains).length > 0)
   ));
+  out.deity = sanitizeDeity(p.deity, out.S.lvl);
   const legacyJob = cleanJob(p.job);
   out.job = PROFESSION_IDS.includes(legacyJob) ? legacyJob : '';
   out.jobXpByJob = {};

@@ -6,6 +6,7 @@ import {api as menusApi,state as menusState} from './menus.mjs';
 import {api as networkingApi,state as networkingState} from './networking.mjs';
 import {createPerformanceDiagnostics} from './performance-budget.mjs';
 import {biomeStatus} from './biome-status.mjs';
+import {DEITY_LEVEL} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 const player=combatState.player,inv=combatState.inventory;
@@ -1040,7 +1041,8 @@ function updateUtilityWorldFeedback(now,dt){
 }
 function rankHudProgress(){
   const progress=currentRankProgress();
-  if(progress.maxRank)return {label:'Hunter Rank',value:'S-Rank · MAX'};
+  if(globalThis.BlockcraftDeityState&&globalThis.BlockcraftDeityState.unlocked)return {label:'Ascension',value:'Deity'};
+  if(progress.maxRank)return {label:'Hunter Rank',value:'S-Rank - Deity at Lv '+DEITY_LEVEL};
   return {
     label:'Next Rank',
     value:hunterRankLetter(progress.nextRank)+' in '+progress.remaining.toLocaleString('en-US')+' XP',
