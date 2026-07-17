@@ -875,7 +875,7 @@ class GameRoom extends Room {
     }
     const restartRecovery = prof ? await this.recoverDungeonAfterRestart(token, prof) : null;
     const p = new Player();
-    p.name = cleanName(options && typeof options.name === 'string' ? options.name : (prof ? prof.name : auth.displayName));
+    p.name = cleanName((prof && prof.name) || (options && typeof options.name === 'string' ? options.name : auth.displayName));
     if (prof) {
       p.lvl = prof.S.lvl;
       p.path = prof.S.path;

@@ -140,6 +140,14 @@ export function createNetworkController(options) {
     if (!options.Client) return options.onUnavailable();
     const client = new options.Client(options.endpoint());
     const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
+    try {
+      const authKey = options.tokenKey ? options.tokenKey + ':auth' : '';
+      if (authKey && authToken) {
+        const previousAuthToken = options.sessionStorage.getItem(authKey) || '';
+        if (previousAuthToken && previousAuthToken !== authToken) options.sessionStorage.removeItem(options.tokenKey);
+        options.sessionStorage.setItem(authKey, authToken);
+      }
+    } catch (_) {}
     if (authToken && client.auth) client.auth.token = authToken;
     activeClient = client;
     let resumeToken = '';

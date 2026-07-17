@@ -66,7 +66,7 @@ export function createNetworkFramePump({
       p.x+=mvx*Math.min(1,stepDt*12);
       p.z+=mvz*Math.min(1,stepDt*12);
       p.y+=((ref.y+lift)-p.y)*Math.min(1,stepDt*12);
-      r.grp.rotation.y+=angDiff(ref.yaw+Math.PI,r.grp.rotation.y)*Math.min(1,stepDt*10);
+      r.grp.rotation.y+=angDiff(ref.yaw,r.grp.rotation.y)*Math.min(1,stepDt*10);
       ensureRemoteMount(r,ref.mount||'');
       const moving=Math.hypot(mvx,mvz)>.08;
       if(r.mountObj&&isDragon(ref.mount)){

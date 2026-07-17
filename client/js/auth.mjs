@@ -17,6 +17,14 @@ export function createAuthController({ user, password, playerName, status, play,
     } catch (_) {}
   }
 
+  function clearWorldSession() {
+    try {
+      if (typeof sessionStorage === 'undefined') return;
+      sessionStorage.removeItem('bc_reconnect_token');
+      sessionStorage.removeItem('bc_reconnect_token:auth');
+    } catch (_) {}
+  }
+
   function authHeaders(base = {}) {
     const token = storedSession();
     return token ? { ...base, Authorization: 'Bearer ' + token } : base;
@@ -74,9 +82,18 @@ export function createAuthController({ user, password, playerName, status, play,
 
   async function authenticate(create = false) {
     await check();
-    if (state.account) return true;
     const username = (user.value || '').trim();
     const secret = password.value || '';
+    if (state.account) {
+      const signedUsername = String(state.account.username || '').trim().toLowerCase();
+      const wantedUsername = username.toLowerCase();
+      if (!wantedUsername || wantedUsername === signedUsername) return true;
+      storeSession('');
+      clearWorldSession();
+      state.account = null;
+      state.gameProfile = null;
+      state.checked = true;
+    }
     if (!username || !secret) {
       setStatus('ENTER YOUR EMAIL AND PASSWORD', 'bad');
       return false;
@@ -100,6 +117,7 @@ export function createAuthController({ user, password, playerName, status, play,
   async function signOut() {
     try { await json('/auth/logout', {}); } catch (_) {}
     storeSession('');
+    clearWorldSession();
     state.account = null;
     state.gameProfile = null;
     state.checked = true;
@@ -129,6 +147,7 @@ export function createAuthController({ user, password, playerName, status, play,
     state.gameProfile = null;
     state.checked = false;
     storeSession('');
+    clearWorldSession();
     render();
     return data;
   }
@@ -138,6 +157,7 @@ export function createAuthController({ user, password, playerName, status, play,
     state.gameProfile = null;
     state.checked = false;
     storeSession('');
+    clearWorldSession();
     render();
     setStatus(message, 'bad');
   }

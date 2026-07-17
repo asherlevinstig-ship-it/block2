@@ -2015,6 +2015,63 @@ test('quest and job model calculates progress without page globals', async () =>
   assert.equal(model.progressText({ type: 'fetch', item: 5, need: 4 }), '3 / 4');
 });
 
+test('auth controller logs into the typed account instead of reusing a different stored session', async () => {
+  const previousLocalStorage = globalThis.localStorage;
+  const previousSessionStorage = globalThis.sessionStorage;
+  const local = new Map([['blockcraft.auth.session', 'admin-session']]);
+  const session = new Map([['bc_reconnect_token', 'admin-room'], ['bc_reconnect_token:auth', 'admin-session']]);
+  globalThis.localStorage = {
+    getItem: key => local.get(key) || '',
+    setItem: (key, value) => local.set(key, value),
+    removeItem: key => local.delete(key),
+  };
+  globalThis.sessionStorage = {
+    getItem: key => session.get(key) || '',
+    setItem: (key, value) => session.set(key, value),
+    removeItem: key => session.delete(key),
+  };
+  const fakeEl = value => ({
+    value,
+    textContent: '',
+    className: '',
+    hidden: false,
+    classList: { add() {}, toggle() {} },
+    focus() {},
+  });
+  const calls = [];
+  const responses = {
+    '/auth/me': { ok: true, account: { id: 'u_admin', username: 'admin.levin@example.com' }, gameProfile: { name: 'Admin_Levin', nameSet: true } },
+    '/auth/login': { ok: true, sessionToken: 'dylan-session', account: { id: 'u_dylan', username: 'dylan.lynee@example.com' }, gameProfile: { name: 'Dylan', nameSet: true } },
+  };
+  try {
+    const { createAuthController } = await clientModule('auth.mjs');
+    const user = fakeEl('dylan.lynee@example.com');
+    const password = fakeEl('dylan12345678');
+    const controller = createAuthController({
+      user,
+      password,
+      playerName: fakeEl(''),
+      status: fakeEl(''),
+      play: fakeEl(''),
+      register: fakeEl(''),
+      logout: fakeEl(''),
+      request: async (url, options = {}) => {
+        calls.push([url, options.headers && options.headers.Authorization || '', options.body || '']);
+        return { ok: responses[url].ok, json: async () => responses[url] };
+      },
+    });
+    assert.equal(await controller.authenticate(), true);
+    assert.equal(controller.state.account.username, 'dylan.lynee@example.com');
+    assert.equal(local.get('blockcraft.auth.session'), 'dylan-session');
+    assert.equal(session.has('bc_reconnect_token'), false);
+    assert.equal(session.has('bc_reconnect_token:auth'), false);
+    assert.deepEqual(calls.map(c => c[0]), ['/auth/me', '/auth/login']);
+  } finally {
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.sessionStorage = previousSessionStorage;
+  }
+});
+
 test('rendering runtime owns renderer initialization resize and draw', async () => {
   const { createRenderingRuntime } = await clientModule('rendering.mjs');
   const calls = [], canvas = {};
@@ -2101,6 +2158,36 @@ test('network controller sends saved auth token during room matchmaking', async 
   assert.equal(clientAuthToken, 'session-token-123');
   assert.equal(joinedOptions.authToken, 'session-token-123');
   assert.equal(joinedOptions.name, 'Hunter');
+});
+
+test('network controller clears stale room resume token when auth session changes', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const storage = new Map([['resume', 'admin-room-token'], ['resume:auth', 'admin-session']]);
+  const events = [];
+  const room = { reconnectionToken: 'dylan-room-token', onLeave() {} };
+  class Client {
+    constructor() { this.auth = {}; }
+    async reconnect(token) {
+      events.push(['reconnect', token]);
+      throw new Error('stale resume token should not be used');
+    }
+    async joinOrCreate(name, options) {
+      events.push(['join', name, options.name, options.authToken, this.auth.token]);
+      return room;
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    authToken: () => 'dylan-session',
+    sessionStorage: { getItem: key => storage.get(key) || '', setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure(error) { throw error; },
+  });
+  controller.connect('Dylan');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(events, [['join', 'blockcraft', 'Dylan', 'dylan-session', 'dylan-session']]);
+  assert.equal(storage.get('resume'), 'dylan-room-token');
+  assert.equal(storage.get('resume:auth'), 'dylan-session');
 });
 
 test('network controller shutdown leaves deliberately without starting reconnect teardown', async () => {
@@ -2261,6 +2348,17 @@ test('network controller bounds a hung live reconnect and falls back to a fresh 
   assert.deepEqual(attached, [first, fresh]);
   assert.equal(controller.state.room, fresh);
   assert.equal(controller.state.on, true);
+});
+
+test('multiplayer avatars use authenticated profile names and unflipped replicated yaw', () => {
+  const gameRoomSource = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const pumpSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network-frame-pump.mjs'), 'utf8');
+  const avatarSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  assert.match(gameRoomSource, /p\.name = cleanName\(\(prof && prof\.name\) \|\|/);
+  assert.doesNotMatch(gameRoomSource, /p\.name = cleanName\(options && typeof options\.name === 'string' \? options\.name : \(prof \? prof\.name : auth\.displayName\)\)/);
+  assert.match(avatarSource, /blink\.push\(addBox\(head,\[\.085,\.09,\.034\],\[-\.11,\.\d+,-\.276\],eyeM\)\)/);
+  assert.match(pumpSource, /angDiff\(ref\.yaw,r\.grp\.rotation\.y\)/);
+  assert.doesNotMatch(pumpSource, /ref\.yaw\+Math\.PI/);
 });
 
 test('Mesa slams and Plains pack lunges have explicit replicated telegraphs',()=>{
