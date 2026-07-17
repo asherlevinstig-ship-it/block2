@@ -1512,36 +1512,9 @@ function buildTown(){
     for(let i=0;i<len;i++) setB(x,G+1,z+i,B.PLANKS);
     setB(x-1,G+1,z,B.LOG); setB(x-1,G+1,z+len-1,B.LOG);
   };
-  const pocketGarden=(x1,z1,x2,z2)=>{
-    for(let x=x1;x<=x2;x++) for(let z=z1;z<=z2;z++){
-      const border=x===x1||x===x2||z===z1||z===z2;
-      setB(x,G,z,border?B.BRICK:B.GRASS);
-      if(border && ((x+z)&3)===0) setB(x,G+1,z,B.LEAVES);
-      else if(!border && ((x*13+z*7)&15)===0) setB(x,G+1,z,B.WHEAT_3);
-    }
-  };
-  const smallTree=(x,z)=>{
-    fillBox(x,G+1,z,x,G+3,z,B.LOG);
-    for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++) for(let dy=0;dy<=2;dy++){
-      if(Math.abs(dx)+Math.abs(dz)+dy>4) continue;
-      setB(x+dx,G+4+dy,z+dz,B.LEAVES);
-    }
-  };
-  const crateStack=(x,z)=>{
-    fillBox(x,G+1,z,x+1,G+1,z+1,B.PLANKS);
-    setB(x+2,G+1,z,B.CHEST);
-    setB(x,G+2,z+1,B.PLANKS);
-  };
   paveDistrict(tc(40),tc(70),tc(61),tc(89),B.COBBLE,B.BRICK);        // tavern commons and player storage yard
   paveDistrict(tc(68),tc(37),tc(89),tc(44),B.COBBLE,B.BRICK);        // forge district training yard
   paveDistrict(tc(26),tc(56),tc(38),tc(72),B.CONCRETE,B.BRICK);      // airship cargo apron
-  // Pocket gardens and service yards turn the wider layout into a lived-in town
-  // instead of empty flat ground.
-  pocketGarden(tc(29),tc(43),tc(39),tc(55));                         // shrine gardens west lawn
-  pocketGarden(tc(53),tc(56),tc(67),tc(67));                         // central lower garden
-  pocketGarden(tc(30),tc(75),tc(38),tc(93));                         // airship port green
-  pocketGarden(tc(61),tc(78),tc(69),tc(92));                         // tavern approach green
-  pocketGarden(tc(91),tc(86),tc(109),tc(103));                       // east commons lawn
   for(let x=tc(38);x<=tc(83);x++) for(let w=-1;w<=1;w++){
     setB(x,G,tc(64)+w,B.COBBLE); setB(x,G+1,tc(64)+w,B.AIR);
     setB(x,G,tc(60)+w,B.COBBLE); setB(x,G+1,tc(60)+w,B.AIR);
@@ -1550,8 +1523,6 @@ function buildTown(){
     setB(tc(64)+w,G,z,B.COBBLE); setB(tc(64)+w,G+1,z,B.AIR);
     setB(tc(40)+w,G,z,B.COBBLE); setB(tc(40)+w,G+1,z,B.AIR);
   }
-  for(const [tx,tz] of [[33,48],[36,89],[63,61],[66,88],[96,91],[105,99]]) smallTree(tc(tx),tc(tz));
-  for(const [cx,cz] of [[29,63],[33,68],[35,58],[92,88],[96,94]]) crateStack(tc(cx),tc(cz));
   for(const [lx,lz] of [[41,71],[60,71],[41,88],[60,88],[69,38],[88,38],[69,43],[88,43],[27,57],[37,71]])
     lanternPost(tc(lx),tc(lz));
   benchX(tc(44),tc(75),4); benchX(tc(44),tc(84),4);

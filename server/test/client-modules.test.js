@@ -157,8 +157,6 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /tavern commons and player storage yard/);
   assert.match(world, /forge district training yard/);
   assert.match(world, /airship cargo apron/);
-  assert.match(world, /Pocket gardens and service yards turn the wider layout into a lived-in town/);
-  assert.match(serverWorld, /greenDistrict/);
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
   assert.doesNotMatch(menus, /SW cottage|S cottage|NE cottage|each cottage/);
   assert.doesNotMatch(serverWorld, /cottage SW|cottage S|cottage NE/);
