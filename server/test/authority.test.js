@@ -153,6 +153,26 @@ function fakeWorld() {
   };
 }
 
+test('central court fountain stays low, supported, and free of leftover pillars', () => {
+  W.generate();
+  const { TC, G } = W.TOWN;
+  let water = 0, patternedFloor = 0;
+  assert.equal(W.isCentralCourtProtectedEdit(TC, G + 2, TC), true, 'saved edits in the central court cleanup zone must be ignored');
+  assert.equal(W.isCentralCourtProtectedEdit(TC + 45, G + 2, TC), false, 'saved edits outside the court cleanup zone should still restore');
+  for (let x = TC - 8; x <= TC + 8; x++) for (let z = TC - 8; z <= TC + 8; z++) {
+    const d = Math.hypot(x - TC, z - TC);
+    if (d > 7.4) continue;
+    assert.notEqual(W.getB(x, G, z), W.B.AIR, `central court floor gap at ${x},${z}`);
+    for (let y = G + 2; y <= G + 6; y++) {
+      assert.equal(W.getB(x, y, z), W.B.AIR, `leftover high fountain block at ${x},${y},${z}`);
+    }
+    if (W.getB(x, G + 1, z) === W.B.WATER) water++;
+    if ([W.B.COBBLE, W.B.BRICK].includes(W.getB(x, G, z))) patternedFloor++;
+  }
+  assert.ok(water >= 30, `fountain should have a visible low water pool, got ${water}`);
+  assert.ok(patternedFloor >= 120, `fountain should have a readable patterned stone base, got ${patternedFloor}`);
+});
+
 test('only one room may own each overworld shard persistence lease', () => {
   const owner = {}, overflow = {}, otherShard = {};
   claimGlobalWorld(owner, 'main');

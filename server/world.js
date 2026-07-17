@@ -32,6 +32,9 @@ const dpx = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.x || 0);
 const dpz = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.z || 0);
 const townPos = (x, z, district) => ({ x: dpx(x, district), z: dpz(z, district) });
 const townBlockPos = (x, z, district) => ({ x: dtx(x, district), z: dtz(z, district) });
+function isCentralCourtProtectedEdit(x, y, z) {
+  return y >= TOWN.G - 3 && y <= TOWN.G + 12 && Math.hypot(x - TOWN.TC, z - TOWN.TC) <= 34;
+}
 
 const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6, PLANKS: 7,
@@ -761,18 +764,16 @@ function buildTown() {
   // corner towers
   for (const [cx, cz] of [[x1, z1], [x1, z2], [x2, z1], [x2, z2]])
     fillBox(cx - 2, G + 1, cz - 2, cx + 2, G + 7, cz + 2, B.BRICK);
-  // Low fountain basin. Keep it short so the plaza stays readable and the
-  // server collision matches the cleaned client geometry.
-  for (let x = TC - 5; x <= TC + 5; x++) for (let z = TC - 5; z <= TC + 5; z++) {
-    for (let y = G + 1; y <= G + 5; y++) setB(x, y, z, B.AIR);
+  // Central court fountain. Keep it broad and shallow so the plaza reads cleanly
+  // and client/server collision never leaves old high blocks or gaps.
+  for (let x = TC - 8; x <= TC + 8; x++) for (let z = TC - 8; z <= TC + 8; z++) {
     const d = Math.hypot(x - TC, z - TC);
-    if (d <= 4.35) setB(x, G, z, d > 3.2 ? B.COBBLE : B.BRICK);
-    if (d >= 3.15 && d <= 4.25) setB(x, G + 1, z, B.COBBLE);
-    else if (d < 2.75) setB(x, G + 1, z, B.WATER);
+    if (d > 7.4) continue;
+    for (let y = G + 1; y <= G + 6; y++) setB(x, y, z, B.AIR);
+    setB(x, G, z, d > 5.8 ? B.COBBLE : d > 4.8 ? B.BRICK : B.COBBLE);
+    if (d < 3.9) setB(x, G + 1, z, B.WATER);
   }
-  setB(TC, G + 1, TC, B.COBBLE);
-  setB(TC, G + 2, TC, B.WATER);
-  for (const [ox, oz] of [[-4, 0], [4, 0], [0, -4], [0, 4]]) setB(TC + ox, G + 1, TC + oz, B.LANTERN);
+  for (const [ox, oz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) setB(TC + ox, G + 1, TC + oz, B.LANTERN);
   // Open district footprints replacing the old NPC cottages. These are
   // ground-level only so server collision agrees with the cleaned client town.
   const paveDistrict = (xa, za, xb, zb, fill = B.COBBLE, edge = B.BRICK) => {
@@ -978,5 +979,5 @@ module.exports = {
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, buildTrainingMeadow,
-  buildGuildHallBase,
+  buildGuildHallBase, isCentralCourtProtectedEdit,
 };

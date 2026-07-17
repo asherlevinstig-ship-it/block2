@@ -189,11 +189,12 @@ class GameRoom extends Room {
     this.initEventsState();
     const saved = await this.store.loadWorldEdits();
     this.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
-    let applied = 0;
+    let applied = 0, skippedCentralCourt = 0;
     for (const k in saved) {
       const [x, y, z] = k.split(',').map(Number);
       const id = saved[k] | 0;
       if (!W.inWorld(x, y, z) || id < 0 || id > W.MAX_BLOCK_ID) continue;
+      if (W.isCentralCourtProtectedEdit(x, y, z)) { skippedCentralCourt++; continue; }
       this.world.setB(x, y, z, id);
       this.state.edits.set(k, id);
       applied++;
@@ -215,6 +216,10 @@ class GameRoom extends Room {
     this.chests = new Map();
     this.furnaces = new Map();
     if (applied) console.log('[persist] restored ' + applied + ' world edits');
+    if (skippedCentralCourt) {
+      console.log('[persist] skipped ' + skippedCentralCourt + ' stale central court world edits');
+      this.dirtyWorld = true;
+    }
     try {
       const savedChests = await this.store.loadChests();
       let chestCount = 0;

@@ -1372,17 +1372,15 @@ function buildTown(){
   setB(sx, G+2, sz, B.BRICK);
   for(let x=TC+8;x<=sx-4;x++) for(let w=-1;w<=1;w++) setB(x,G,sz+w,B.COBBLE);
 
-  // --- central fountain: low basin, no tall debug-looking brick stack ---
-  for(let x=TC-5;x<=TC+5;x++)for(let z=TC-5;z<=TC+5;z++){
-    for(let y=G+1;y<=G+5;y++) setB(x,y,z,B.AIR);
+  // --- central court fountain: shallow circular pool with no high filler blocks ---
+  for(let x=TC-8;x<=TC+8;x++)for(let z=TC-8;z<=TC+8;z++){
     const d=Math.hypot(x-TC,z-TC);
-    if(d<=4.35) setB(x,G,z,d>3.2?B.COBBLE:B.BRICK);
-    if(d>=3.15&&d<=4.25) setB(x,G+1,z,B.COBBLE);
-    else if(d<2.75) setB(x,G+1,z,B.WATER);
+    if(d>7.4) continue;
+    for(let y=G+1;y<=G+6;y++) setB(x,y,z,B.AIR);
+    setB(x,G,z,d>5.8?B.COBBLE:d>4.8?B.BRICK:B.COBBLE);
+    if(d<3.9) setB(x,G+1,z,B.WATER);
   }
-  setB(TC,G+1,TC,B.COBBLE);
-  setB(TC,G+2,TC,B.WATER);
-  for(const [ox,oz] of [[-4,0],[4,0],[0,-4],[0,4]]) setB(TC+ox,G+1,TC+oz,B.LANTERN);
+  for(const [ox,oz] of [[-5,0],[5,0],[0,-5],[0,5]]) setB(TC+ox,G+1,TC+oz,B.LANTERN);
 
   // --- town walls (2 thick, gated on all four sides) ---
   for(let x=x1;x<=x2;x++)for(let z=z1;z<=z2;z++){
