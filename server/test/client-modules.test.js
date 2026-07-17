@@ -147,9 +147,11 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   const serverWorld = fs.readFileSync(path.join(__dirname, '..', 'world.js'), 'utf8');
 
-  assert.match(world, /WORLD_TOWN_HS=50/);
-  assert.match(world, /TOWN = \{ TC: WX\/2, HS: 50, G: 15 \}/);
-  assert.match(serverWorld, /TOWN = \{ TC: WX \/ 2, HS: 50, G: 15 \}/);
+  assert.match(world, /WORLD_TOWN_HS=60/);
+  assert.match(world, /TOWN = \{ TC: WX\/2, HS: 60, G: 15 \}/);
+  assert.match(world, /TOWN_SPACING = 1\.14/);
+  assert.match(serverWorld, /TOWN = \{ TC: WX \/ 2, HS: 60, G: 15 \}/);
+  assert.match(serverWorld, /TOWN_SPACING = 1\.14/);
   assert.match(world, /open town districts replacing NPC houses/);
   assert.match(serverWorld, /Open district footprints replacing the old NPC cottages/);
   assert.match(world, /tavern commons and player storage yard/);

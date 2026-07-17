@@ -10,10 +10,11 @@ const { DimensionGrid } = require('../shared/dimension-grid');
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
 const LAVA_BORDER_WIDTH = 12, LAVA_BORDER_TOP = WH - 2;
-const TOWN = { TC: WX / 2, HS: 50, G: 15 };
+const TOWN = { TC: WX / 2, HS: 60, G: 15 };
 const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
 const OLD_TOWN_TC = 64;
-const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC));
+const TOWN_SPACING = 1.14;
+const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
 
 const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6, PLANKS: 7,
@@ -558,7 +559,7 @@ function fillBox(xa, ya, za, xb, yb, zb, id) {
 }
 
 function buildSkyportBlocks(setBlock) {
-  const cx = TOWN.TC - 32, cz = TOWN.TC, r = 7, top = TOWN.G + 24;
+  const cx = tc(32), cz = TOWN.TC, r = 7, top = TOWN.G + 24;
   const rampOpening = new Set();
   // Four broad switchback ramps rise six blocks apiece. Each run reverses at a
   // full-width landing, and the six-block separation leaves generous headroom.
@@ -760,7 +761,7 @@ function buildTown() {
   paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
   paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
   // buildings as solid collision footprints (visual detail lives on the client)
-  fillBox(tc(72), G + 1, tc(70), tc(84), G + 4, tc(82), B.PLANKS); // tavern
+  fillBox(tc(71), G + 1, tc(69), tc(87), G + 4, tc(94), B.PLANKS); // tavern
   fillBox(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE); // smithy
   fillBox(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);  // church
   // Dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside).
@@ -841,7 +842,7 @@ function createWorld() {
     paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
     paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
     paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
-    fillLocal(tc(72), G + 1, tc(70), tc(84), G + 4, tc(82), B.PLANKS);
+    fillLocal(tc(71), G + 1, tc(69), tc(87), G + 4, tc(94), B.PLANKS);
     fillLocal(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE);
     fillLocal(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);
     {
@@ -931,7 +932,7 @@ function createWorld() {
 }
 
 module.exports = {
-  WX, WH, TOWN, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
+  WX, WH, TOWN, TOWN_SPACING, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,

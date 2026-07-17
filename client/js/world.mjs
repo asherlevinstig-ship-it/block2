@@ -819,7 +819,7 @@ function matchRecipe(cells, w){
 // ---------------- world ----------------
 const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_SIZE, WH=64, SEA=13;
 const LAVA_BORDER_WIDTH=12, LAVA_BORDER_TOP=WH-2;
-const WORLD_TC=WX/2, WORLD_TOWN_HS=50, WORLD_TOWN_G=15;
+const WORLD_TC=WX/2, WORLD_TOWN_HS=60, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
 const {DimensionGrid}=window.BlockcraftDimensions;
@@ -1173,10 +1173,11 @@ function buildLavaBorder(){
 generateWorld();
 
 // ---------------- Town of Beginnings ----------------
-const TOWN = { TC: WX/2, HS: 50, G: 15 }; // center, wall half-size, ground level
+const TOWN = { TC: WX/2, HS: 60, G: 15 }; // center, wall half-size, ground level
 const OLD_TOWN_TC = 64;
-const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC));
-const tp = v => TOWN.TC + (v - OLD_TOWN_TC);
+const TOWN_SPACING = 1.14;
+const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
+const tp = v => TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING;
 const HUB = {
   guide: { x: TOWN.TC + 8.5, z: TOWN.TC - 4.5 },
   jobs: { x: TOWN.TC + 4.5, z: TOWN.TC - 8.5 },
@@ -1184,7 +1185,7 @@ const HUB = {
   quarry: { x: TOWN.TC + 20.5, z: TOWN.TC - 15.5 },
   farm: { x: tp(56), z: tp(79) },
   roost: { x: tp(96), z: tp(65) },
-  skyport: { x: TOWN.TC - 32, z: TOWN.TC, y: TOWN.G + 24 },
+  skyport: { x: tp(32), z: TOWN.TC, y: TOWN.G + 24 },
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
   guild: { x: tp(54.5), z: tp(26.5) },
   guildNoticeBoard: { x: tp(47), z: tp(26.7) },
@@ -1193,7 +1194,7 @@ const HUB = {
   smith: { x: tp(78.5), z: tp(50) },
   tavern: { x: tp(83.5), z: tp(77.5) },
   shard: { x: TOWN.TC + 19, z: TOWN.TC + 1 },
-  marketX: TOWN.TC - 21,
+  marketX: tp(43),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 };
 function fillBox(xa,ya,za,xb,yb,zb,id){
@@ -1384,8 +1385,8 @@ function buildTown(){
       if((x===cx-2||x===cx+2||z===cz-2||z===cz+2) && ((x+z)&1)===0) setB(x,G+8,z,B.BRICK);
   }
 
-  // --- the tavern (south-east of the fountain, door facing the plaza) ---
-  const tx1=TC+7, tx2=TC+23, tz1=TC+5, tz2=TC+22, dz0=TC+12;
+  // --- the tavern (south-east district, door facing the plaza) ---
+  const tx1=tc(71), tx2=tc(87), tz1=tc(69), tz2=tc(86), dz0=tc(76);
   fillBox(tx1,G,tz1, tx2,G,tz2, B.PLANKS);                          // floor
   for(let x=tx1;x<=tx2;x++)for(let z=tz1;z<=tz2;z++){
     const edge = x===tx1||x===tx2||z===tz1||z===tz2;
@@ -1428,7 +1429,7 @@ function buildTown(){
   fillBox(tx2-1,G+8,tz1+1, tx2-1,G+10,tz1+1, B.BRICK);              // kitchen chimney
   // South games-room annex. The original hearth remains as a central divider,
   // with two broad openings connecting food service to the quieter games room.
-  const gamesZ2=TC+30;
+  const gamesZ2=tc(94);
   fillBox(tx1,G,tz2+1,tx2,G,gamesZ2,B.PLANKS);
   for(let z=tz2+1;z<=gamesZ2;z++)for(const x of [tx1,tx2])for(let y=G+1;y<=G+4;y++)setB(x,y,z,(z===gamesZ2?B.LOG:B.PLANKS));
   for(let x=tx1;x<=tx2;x++)for(let y=G+1;y<=G+4;y++)setB(x,y,gamesZ2,(x===tx1||x===tx2)?B.LOG:B.PLANKS);
@@ -1437,7 +1438,7 @@ function buildTown(){
   for(const x of [tx1+3,tx1+8,tx1+13])for(let y=G+2;y<=G+3;y++)setB(x,y,gamesZ2,B.GLASS);
   fillBox(tx1-1,G+5,tz2,tx2+1,G+5,gamesZ2+1,B.PLANKS);
   for(const x of [tx1,tx1+5,tx1+10,tx1+15,tx2])fillBox(x,G+4,tz2+1,x,G+4,gamesZ2-1,B.LOG);
-  for(const [x,z] of [[TC+10,TC+25],[TC+15,TC+25],[TC+20,TC+25]])setB(x,G+1,z,B.LOG);
+  for(const [x,z] of [[tc(74),tc(89)],[tc(79),tc(89)],[tc(84),tc(89)]])setB(x,G+1,z,B.LOG);
 
   // --- the meditation hall (north-west, dark timber shrine with steeple, door facing the road) ---
   const cx1=tc(42), cz1=tc(40), cx2=tc(52), cz2=tc(56);
@@ -1528,10 +1529,11 @@ function buildTown(){
   setB(tc(49),G+1,tc(78),B.TABLE); setB(tc(56),G+1,tc(86),B.FURNACE); setB(tc(85),G+1,tc(42),B.TABLE);
 
   // --- first-time route: spawn -> quest giver -> smithy/crafting -> north wilderness gate ---
+  const firstRouteX=tc(71);
   for(let z=TC+7;z>=TC-6;z--) for(let w=-1;w<=1;w++) setB(TC+w,G,z,B.COBBLE);
-  for(let x=TC;x<=TC+7;x++) for(let w=-1;w<=1;w++) setB(x,G,TC-5+w,B.COBBLE);
-  for(let z=TC-5;z>=tc(50);z--) for(let w=-1;w<=1;w++) setB(TC+7+w,G,z,B.COBBLE);
-  for(let x=TC+7;x<=tc(73);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(50)+w,B.COBBLE);
+  for(let x=TC;x<=firstRouteX;x++) for(let w=-1;w<=1;w++) setB(x,G,TC-5+w,B.COBBLE);
+  for(let z=TC-5;z>=tc(50);z--) for(let w=-1;w<=1;w++) setB(firstRouteX+w,G,z,B.COBBLE);
+  for(let x=firstRouteX;x<=tc(73);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(50)+w,B.COBBLE);
   for(let x=TC+1;x<=TC+3;x++) setB(x,G,TC-1,B.BRICK);  // subtle step 1 marker near fountain
   for(let z=TC-5;z>=TC-7;z--) setB(TC+7,G,z,B.BRICK);  // quest turn marker
   setB(tc(73),G,tc(50),B.BRICK); setB(tc(74),G,tc(50),B.BRICK); // smithy threshold marker
@@ -2199,7 +2201,7 @@ function guildFloorY0Client(floor){ return TOWN.G+6+(((floor|0)-1)*5); }
 function guildFloorInteriorForLocal(x,y,z){
   const mine=guildHallState&&guildHallState.guild;
   if(!mine||!(mine.floor>0)) return false;
-  const x1=TOWN.TC-39, x2=TOWN.TC-4, z1=TOWN.TC-40, z2=TOWN.TC-28, y0=guildFloorY0Client(mine.floor);
+  const x1=tc(25), x2=tc(60), z1=tc(24), z2=tc(36), y0=guildFloorY0Client(mine.floor);
   if(x<x1+2||x>x2-2||z<z1+2||z>z2-2||y<y0+1||y>y0+4) return false;
   return !(x>=x1+3&&x<=x1+4&&z>=z2-7&&z<=z2-3);
 }

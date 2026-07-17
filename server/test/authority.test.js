@@ -8985,7 +8985,7 @@ test('follow dragons gain paced bond XP from real overworld travel', () => {
 test('skyport switchback ramps reach the platform with rails and player headroom', () => {
   const world = W.createWorld();
   world.generate();
-  const cx = W.TOWN.TC - 32;
+  const cx = Math.round(W.TOWN.TC + (32 - 64) * W.TOWN_SPACING);
   const cz = W.TOWN.TC;
   const top = W.TOWN.G + 24;
   const start = [cx - 3, W.TOWN.G, cz - 6];
