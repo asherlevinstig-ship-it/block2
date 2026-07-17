@@ -881,8 +881,23 @@ function netAttachRoom(room,name,client){
     if(isOverworldRoom) room.send('dayCycleSyncRequest', {});
     $(room.state).edits.onAdd((id,key)=>netApplyEdit(key,id));
     $(room.state).edits.onChange((id,key)=>netApplyEdit(key,id));
-    $(room.state).players.onAdd((p,sid)=>{ if(sid!==room.sessionId) netAddRemote(sid,p); });
+    const syncRemotePlayerSnapshot=()=>{
+      const live=new Set();
+      room.state.players.forEach((p,sid)=>{
+        if(sid===room.sessionId)return;
+        live.add(sid);
+        if(NET.remotes[sid])NET.remotes[sid].ref=p;
+        else netAddRemote(sid,p);
+      });
+      for(const sid in NET.remotes)if(!live.has(sid))netRemoveRemote(sid);
+    };
+    $(room.state).players.onAdd((p,sid)=>{
+      if(sid===room.sessionId)return;
+      if(NET.remotes[sid])NET.remotes[sid].ref=p;
+      else netAddRemote(sid,p);
+    });
     $(room.state).players.onRemove((p,sid)=>netRemoveRemote(sid));
+    syncRemotePlayerSnapshot();
     $(room.state).mobs.onAdd((mb,id)=>netAddMob(id,mb));
     $(room.state).mobs.onRemove((mb,id)=>netRemoveMob(id));
 

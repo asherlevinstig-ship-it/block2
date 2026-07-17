@@ -2406,8 +2406,13 @@ test('multiplayer avatars use authenticated profile names and unflipped replicat
   const gameRoomSource = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   const pumpSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network-frame-pump.mjs'), 'utf8');
   const avatarSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(gameRoomSource, /p\.name = cleanName\(\(prof && prof\.name\) \|\|/);
   assert.doesNotMatch(gameRoomSource, /p\.name = cleanName\(options && typeof options\.name === 'string' \? options\.name : \(prof \? prof\.name : auth\.displayName\)\)/);
+  assert.match(networkingSource, /const syncRemotePlayerSnapshot=\(\)=>/);
+  assert.match(networkingSource, /room\.state\.players\.forEach\(\(p,sid\)=>/);
+  assert.match(networkingSource, /if\(NET\.remotes\[sid\]\)NET\.remotes\[sid\]\.ref=p;\s*else netAddRemote\(sid,p\);/);
+  assert.match(networkingSource, /syncRemotePlayerSnapshot\(\);/);
   assert.match(avatarSource, /blink\.push\(addBox\(head,\[\.085,\.09,\.034\],\[-\.11,\.\d+,-\.276\],eyeM\)\)/);
   assert.match(pumpSource, /angDiff\(ref\.yaw,r\.grp\.rotation\.y\)/);
   assert.doesNotMatch(pumpSource, /ref\.yaw\+Math\.PI/);
