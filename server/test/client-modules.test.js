@@ -1229,6 +1229,7 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
 
 test('guided overlays suppress optional side HUD panels instead of overlapping them',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(combat,/const rightHudStackIds=\['currentquest','activitytracker','townchoices'\]/);
   assert.match(combat,/function layoutRightHudStack\(\)\{/);
@@ -1240,8 +1241,12 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
   assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
-  assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #currentquest,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
-  assert.match(styles,/body\.coach-hud-active #currentquest,body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
+  assert.match(combat,/const minimal=onboardingActive&&dim==='tutorial';/);
+  assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
+  assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
+  assert.match(styles,/body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
+  assert.doesNotMatch(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #currentquest/);
+  assert.doesNotMatch(styles,/body\.onboarding[^\{]*#currentquest/);
 });
 
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{

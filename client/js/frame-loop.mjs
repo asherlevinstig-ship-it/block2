@@ -1380,7 +1380,7 @@ function updateEncounterPrompt(){
 }
 function updateInfoHud(held){
   document.body.classList.toggle('calm-town', (locked || uiOpen || statOpen || qOpen || claimMode) && calmTownHud());
-  if(onboardingActive){
+  if(onboardingActive&&dim==='tutorial'){
     if(activityTrackerEl)activityTrackerEl.classList.add('hidden');
     coordsEl.innerHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>';
     if(currentQuestEl){currentQuestEl.classList.add('hidden');currentQuestEl.innerHTML='';}

@@ -1493,7 +1493,7 @@ function refreshPlayUi(){
   overlay.classList.toggle('hidden', showHud);
   document.body.classList.toggle('claim-mode', !!claimMode);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
-  const minimal=onboardingActive;
+  const minimal=onboardingActive&&dim==='tutorial';
   const calm=calmTownHud();
   document.body.classList.toggle('calm-town', showHud&&calm);
   document.getElementById('hotbar').classList.toggle('hidden', !showHud);
@@ -1501,7 +1501,7 @@ function refreshPlayUi(){
   document.getElementById('abilities').classList.toggle('hidden', !showHud || minimal || !abilityHudAvailable());
   document.getElementById('locationhud').classList.toggle('hidden', !showHud);
   document.getElementById('coords').classList.toggle('hidden', !showHud);
-  document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus));
+  document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus && !(Array.isArray(activeObjectives)&&activeObjectives.length)));
   document.getElementById('landmap').classList.toggle('hidden', true);
   document.getElementById('eventhud').classList.toggle('hidden', true);
   hintEl.classList.add('hidden');
