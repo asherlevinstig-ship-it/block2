@@ -194,6 +194,34 @@ class AuthService {
     };
   }
 
+  async setPlayerProfileName(body) {
+    const account = await this.resolveAccountForReset(body);
+    if (!account || !account.id) throw Object.assign(new Error('Account not found.'), { status: 404, code: 'account' });
+    const clean = cleanDisplayName(body && body.name);
+    if (!clean || clean === 'Hunter') throw Object.assign(new Error('Choose a hunter name.'), { status: 400, code: 'name' });
+    const store = this.getProfileStore();
+    let profile = null;
+    try {
+      const raw = await store.loadPlayer(account.id);
+      profile = raw ? sanitizeProfile(raw) : defaultProfile(clean);
+    } catch (e) {
+      throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
+    }
+    profile.name = clean;
+    profile.nameSet = true;
+    await store.savePlayer(account.id, profile);
+    await updateLivePlayerProfiles(account.id, { name: clean, nameSet: true });
+    return {
+      account,
+      profile: {
+        exists: true,
+        name: profile.name,
+        nameSet: profile.nameSet === true,
+        level: profile.S && profile.S.lvl || 1,
+      },
+    };
+  }
+
   async saveHunterName(account, name) {
     const publicAccount = this.publicAccount(account);
     if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
@@ -399,6 +427,17 @@ class AuthService {
         res.json({ ok: true, account: result.account, profile: result.profile });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile lookup failed.' });
+      }
+    });
+    app.post('/auth/admin/player-profile/name', async (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      try {
+        const result = await this.setPlayerProfileName(req.body);
+        res.json({ ok: true, account: result.account, profile: result.profile });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile rename failed.' });
       }
     });
     app.post('/auth/logout', async (req, res) => {

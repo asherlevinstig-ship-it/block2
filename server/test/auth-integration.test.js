@@ -232,6 +232,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
   const profiles = new Map([['student_42', { name: 'Admin_Levin', nameSet: true, S: { lvl: 1, str: 1, agi: 1, vit: 1, int: 1 } }]]);
   const profileStore = {
     async loadPlayer(id) { return profiles.get(id) || null; },
+    async savePlayer(id, profile) { profiles.set(id, profile); },
   };
   const authOptions = {
     authBackend: {
@@ -266,6 +267,17 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(body.account.id, 'student_42');
     assert.equal(body.account.username, 'dylan.lynee@st-ignatius.example');
     assert.deepEqual(body.profile, { exists: true, name: 'Admin_Levin', nameSet: true, level: 1 });
+
+    const renamed = await f.request('/auth/admin/player-profile/name', jsonPost(
+      { email: 'dylan.lynee@st-ignatius.example', name: 'Dylan Lynee' },
+      { 'x-admin-reset-token': 'admin-secret' },
+    ));
+    assert.equal(renamed.status, 200);
+    const renamedBody = await renamed.json();
+    assert.equal(renamedBody.account.id, 'student_42');
+    assert.deepEqual(renamedBody.profile, { exists: true, name: 'Dylan Lynee', nameSet: true, level: 1 });
+    assert.equal(profiles.get('student_42').name, 'Dylan Lynee');
+    assert.equal(profiles.get('student_42').S.lvl, 1);
   } finally { await f.close(); }
 });
 
