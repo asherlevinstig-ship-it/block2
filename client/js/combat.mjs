@@ -1530,14 +1530,16 @@ async function startPlaying(create=false){
   const authenticated=await authenticate(false);
   AUTH.busy=false;playbtn.disabled=false;registerbtn.disabled=false;
   if(!authenticated)return;
-  const hunterName=AUTH_UI.requireHunterName();
-  if(!hunterName)return;
-  try{
-    setAuthStatus('SAVING HUNTER NAME...');
-    await AUTH_UI.saveHunterName(hunterName);
-  }catch(e){
-    setAuthStatus(e.message||'COULD NOT SAVE HUNTER NAME','bad');
-    return;
+  if(!AUTH_UI.hasHunterName()){
+    const hunterName=AUTH_UI.requireHunterName();
+    if(!hunterName)return;
+    try{
+      setAuthStatus('SAVING HUNTER NAME...');
+      await AUTH_UI.saveHunterName(hunterName);
+    }catch(e){
+      setAuthStatus(e.message||'COULD NOT SAVE HUNTER NAME','bad');
+      return;
+    }
   }
   SFX.init();
   if(!NET.tried) showWorldLoading('Preparing world...');

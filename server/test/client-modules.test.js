@@ -2088,6 +2088,63 @@ test('auth controller logs into the typed account instead of reusing a different
   }
 });
 
+test('auth controller clears stale hunter name when the signed-in account has no profile name', async () => {
+  const previousLocalStorage = globalThis.localStorage;
+  const previousSessionStorage = globalThis.sessionStorage;
+  const local = new Map([['blockcraft.auth.session', 'admin-session']]);
+  const session = new Map([['bc_reconnect_token', 'old-room'], ['bc_reconnect_token:auth', 'admin-session']]);
+  globalThis.localStorage = {
+    getItem: key => local.get(key) || '',
+    setItem: (key, value) => local.set(key, value),
+    removeItem: key => local.delete(key),
+  };
+  globalThis.sessionStorage = {
+    getItem: key => session.get(key) || '',
+    setItem: (key, value) => session.set(key, value),
+    removeItem: key => session.delete(key),
+  };
+  const fakeEl = value => ({
+    value,
+    textContent: '',
+    className: '',
+    hidden: false,
+    classList: { add() {}, toggle() {} },
+    focus() {},
+  });
+  const responses = {
+    '/auth/me': { ok: true, account: { id: 'u_admin', username: 'admin.levin@example.com' }, gameProfile: { name: 'Admin_Levin', nameSet: true } },
+    '/auth/login': { ok: true, sessionToken: 'fresh-student-session', account: { id: 'u_new', username: 'new.student@example.com' }, gameProfile: { name: '', nameSet: false } },
+  };
+  try {
+    const { createAuthController } = await clientModule('auth.mjs');
+    const playerName = fakeEl('Admin_Levin');
+    const controller = createAuthController({
+      user: fakeEl('new.student@example.com'),
+      password: fakeEl('newstudent12345'),
+      playerName,
+      status: fakeEl(''),
+      play: fakeEl(''),
+      register: fakeEl(''),
+      logout: fakeEl(''),
+      request: async (url) => ({ ok: responses[url].ok, json: async () => responses[url] }),
+    });
+    assert.equal(await controller.authenticate(), true);
+    assert.equal(controller.state.account.username, 'new.student@example.com');
+    assert.equal(playerName.value, '');
+    assert.equal(local.get('blockcraft.auth.session'), 'fresh-student-session');
+    assert.equal(session.has('bc_reconnect_token'), false);
+  } finally {
+    globalThis.localStorage = previousLocalStorage;
+    globalThis.sessionStorage = previousSessionStorage;
+  }
+});
+
+test('play flow does not overwrite an existing server hunter name from the input field', () => {
+  const combatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  assert.match(combatSource, /if\(!AUTH_UI\.hasHunterName\(\)\)\{/);
+  assert.match(combatSource, /await AUTH_UI\.saveHunterName\(hunterName\);/);
+});
+
 test('rendering runtime owns renderer initialization resize and draw', async () => {
   const { createRenderingRuntime } = await clientModule('rendering.mjs');
   const calls = [], canvas = {};
@@ -2408,6 +2465,8 @@ test('multiplayer avatars use authenticated profile names and unflipped replicat
   const avatarSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
   const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(gameRoomSource, /p\.name = cleanName\(\(prof && prof\.name\) \|\|/);
+  assert.match(gameRoomSource, /defaultProfile\(auth && auth\.displayName\)/);
+  assert.doesNotMatch(gameRoomSource, /defaultProfile\(options && options\.name \|\| auth\.displayName\)/);
   assert.doesNotMatch(gameRoomSource, /p\.name = cleanName\(options && typeof options\.name === 'string' \? options\.name : \(prof \? prof\.name : auth\.displayName\)\)/);
   assert.match(gameRoomSource, /JOIN_SNAPSHOT_DELAY_MS/);
   assert.match(gameRoomSource, /setTimeout\(\(\) => \{[\s\S]*client\.send\('hunger'/);

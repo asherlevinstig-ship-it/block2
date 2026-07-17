@@ -835,13 +835,13 @@ class GameRoom extends Room {
         }
       }
       if (loadFailed) {
-        prof = defaultProfile(options && options.name || auth.displayName);
+        prof = defaultProfile(auth && auth.displayName);
         prof.noPersist = true;
         this.profiles.set(token, prof);
       } else if (prof) {
         this.profiles.set(token, prof);
       } else {
-        prof = defaultProfile(options && options.name || auth.displayName);
+        prof = defaultProfile(auth && auth.displayName);
         this.profiles.set(token, prof);
         this.dirtyPlayers.add(token);
       }
@@ -881,7 +881,7 @@ class GameRoom extends Room {
     }
     const restartRecovery = prof ? await this.recoverDungeonAfterRestart(token, prof) : null;
     const p = new Player();
-    p.name = cleanName((prof && prof.name) || (options && typeof options.name === 'string' ? options.name : auth.displayName));
+    p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
     if (prof) {
       p.lvl = prof.S.lvl;
       p.path = prof.S.path;

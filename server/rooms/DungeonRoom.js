@@ -9,6 +9,7 @@ const { handOff, hostGate, unhostGate, consumeGate, recordGateBreach, requestPub
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
+const { cleanName } = require('./constants');
 
 const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 28);
 const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40);
@@ -166,7 +167,7 @@ class DungeonRoom extends GameRoom {
     if (!prof) {
       try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
       catch (e) { prof = null; }
-      if (!prof) { prof = defaultProfile((options && options.name) || (auth && auth.displayName)); prof.noPersist = true; }
+      if (!prof) { prof = defaultProfile(auth && auth.displayName); prof.noPersist = true; }
       this.profiles.set(token, prof);
     }
     this.tokens.set(client.sessionId, token);
@@ -176,7 +177,7 @@ class DungeonRoom extends GameRoom {
     const ex = inst.entrance;
     const ey = D.standHeightIn(inst.world, ex.x, ex.z, 12);
     const p = new Player();
-    p.name = (options && typeof options.name === 'string' && options.name) || prof.name || 'Hunter';
+    p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
     p.x = ex.x; p.y = ey > 0 ? ey : 9; p.z = ex.z;

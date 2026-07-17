@@ -75,6 +75,7 @@ export function createAuthController({ user, password, playerName, status, play,
       state.account = data.account || null;
       state.gameProfile = data.gameProfile || null;
       if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
+      else if (state.account) playerName.value = '';
     } catch (_) { state.account = null; state.gameProfile = null; }
     render();
     return state.account;
@@ -105,6 +106,7 @@ export function createAuthController({ user, password, playerName, status, play,
       state.account = data.account;
       state.gameProfile = data.gameProfile || null;
       if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
+      else playerName.value = '';
       password.value = '';
       render();
       return true;
