@@ -761,12 +761,18 @@ function buildTown() {
   // corner towers
   for (const [cx, cz] of [[x1, z1], [x1, z2], [x2, z1], [x2, z2]])
     fillBox(cx - 2, G + 1, cz - 2, cx + 2, G + 7, cz + 2, B.BRICK);
-  // fountain rim (small height feature on the plaza)
-  for (let x = TC - 4; x <= TC + 4; x++) for (let z = TC - 4; z <= TC + 4; z++) {
+  // Low fountain basin. Keep it short so the plaza stays readable and the
+  // server collision matches the cleaned client geometry.
+  for (let x = TC - 5; x <= TC + 5; x++) for (let z = TC - 5; z <= TC + 5; z++) {
+    for (let y = G + 1; y <= G + 5; y++) setB(x, y, z, B.AIR);
     const d = Math.hypot(x - TC, z - TC);
-    if (d >= 3 && d < 4) setB(x, G + 1, z, B.BRICK);
-    else if (d < 3) setB(x, G + 1, z, B.WATER);
+    if (d <= 4.35) setB(x, G, z, d > 3.2 ? B.COBBLE : B.BRICK);
+    if (d >= 3.15 && d <= 4.25) setB(x, G + 1, z, B.COBBLE);
+    else if (d < 2.75) setB(x, G + 1, z, B.WATER);
   }
+  setB(TC, G + 1, TC, B.COBBLE);
+  setB(TC, G + 2, TC, B.WATER);
+  for (const [ox, oz] of [[-4, 0], [4, 0], [0, -4], [0, 4]]) setB(TC + ox, G + 1, TC + oz, B.LANTERN);
   // Open district footprints replacing the old NPC cottages. These are
   // ground-level only so server collision agrees with the cleaned client town.
   const paveDistrict = (xa, za, xb, zb, fill = B.COBBLE, edge = B.BRICK) => {

@@ -1372,19 +1372,17 @@ function buildTown(){
   setB(sx, G+2, sz, B.BRICK);
   for(let x=TC+8;x<=sx-4;x++) for(let w=-1;w<=1;w++) setB(x,G,sz+w,B.COBBLE);
 
-  // --- central fountain ---
-  for(let x=TC-4;x<=TC+4;x++)for(let z=TC-4;z<=TC+4;z++){
+  // --- central fountain: low basin, no tall debug-looking brick stack ---
+  for(let x=TC-5;x<=TC+5;x++)for(let z=TC-5;z<=TC+5;z++){
+    for(let y=G+1;y<=G+5;y++) setB(x,y,z,B.AIR);
     const d=Math.hypot(x-TC,z-TC);
-    if(d>=3 && d<4) setB(x,G+1,z,B.BRICK);
-    else if(d<3){ setB(x,G,z,B.BRICK); setB(x,G+1,z,B.WATER); }
+    if(d<=4.35) setB(x,G,z,d>3.2?B.COBBLE:B.BRICK);
+    if(d>=3.15&&d<=4.25) setB(x,G+1,z,B.COBBLE);
+    else if(d<2.75) setB(x,G+1,z,B.WATER);
   }
-  fillBox(TC,G+1,TC, TC,G+3,TC, B.BRICK);
-  setB(TC,G+4,TC,B.WATER);
-
-  // --- lamp posts around the plaza ---
-  for(const [lx,lz] of [[TC-6,TC-6],[TC+6,TC-6],[TC-6,TC+6],[TC+6,TC+6]]){
-    fillBox(lx,G+1,lz, lx,G+3,lz, B.LOG); setB(lx,G+4,lz,B.GLASS);
-  }
+  setB(TC,G+1,TC,B.COBBLE);
+  setB(TC,G+2,TC,B.WATER);
+  for(const [ox,oz] of [[-4,0],[4,0],[0,-4],[0,4]]) setB(TC+ox,G+1,TC+oz,B.LANTERN);
 
   // --- town walls (2 thick, gated on all four sides) ---
   for(let x=x1;x<=x2;x++)for(let z=z1;z<=z2;z++){
@@ -8504,7 +8502,7 @@ const emitters=[
   {x:HUB.tavernChimney.x, y:TG+12.7, z:HUB.tavernChimney.z,  type:'smoke',  rate:6,  nightOnly:true}, // tavern chimney
   {x:HUB.forgeFire.x, y:TG+1.5,  z:HUB.forgeFire.z,  type:'fire',   rate:12}, // smithy forge
   {x:HUB.forgeChimney.x, y:TG+9.6,  z:HUB.forgeChimney.z,  type:'smoke',  rate:5},  // smithy chimney
-  {x:tp(64.5), y:TG+4.9,  z:tp(64.5),  type:'splash', rate:20}, // fountain
+  {x:tp(64), y:TG+2.35,  z:tp(64),  type:'splash', rate:14}, // low plaza fountain
 ];
 for(const b of roadBreadcrumbs) if(b.type==='campfire') emitters.push({x:b.x+.5,y:b.y+1.45,z:b.z+.5,type:'roadSmoke',rate:3.2});
 for(const s of regionalLandmarks) if(s.type==='bandit_camp') emitters.push({x:s.x+.5,y:s.y+1.6,z:s.z+.5,type:'banditSmoke',rate:5.5});

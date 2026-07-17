@@ -161,8 +161,14 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /tavern commons and player storage yard/);
   assert.match(world, /forge district training yard/);
   assert.match(world, /airship cargo apron/);
+  assert.match(world, /central fountain: low basin/);
+  assert.match(serverWorld, /Low fountain basin/);
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
   assert.doesNotMatch(world, /inn sleeping alcoves|function curtain\(|propCloth|PlaneGeometry\(w,1\.35\)|TG\+1\.62/);
+  assert.doesNotMatch(world, /lamp posts around the plaza/);
+  assert.doesNotMatch(world, /fillBox\(lx,G\+1,lz, lx,G\+3,lz, B\.LOG\); setB\(lx,G\+4,lz,B\.GLASS\)/);
+  assert.doesNotMatch(world, /fillBox\(TC,G\+1,TC, TC,G\+3,TC, B\.BRICK\)|setB\(TC,G\+4,TC,B\.WATER\)/);
+  assert.doesNotMatch(world, /type:'splash', rate:20/);
   assert.doesNotMatch(menus, /SW cottage|S cottage|NE cottage|each cottage/);
   assert.doesNotMatch(serverWorld, /cottage SW|cottage S|cottage NE/);
 });
