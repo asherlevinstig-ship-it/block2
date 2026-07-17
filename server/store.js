@@ -1494,6 +1494,54 @@ class FirebaseStore {
     await this._worldDoc().collection('containers').doc('guilds')
       .set({ guilds: sanitizeGuilds(guilds), savedAt: Date.now() });
   }
+  async grantTownMapToAllPlayers(options = {}) {
+    const itemId = Math.max(0, options.itemId | 0);
+    const invMax = Math.max(1, Math.min(64, options.inventoryMax | 0 || INV_MAX));
+    const dryRun = options.dryRun === true;
+    const migrationRef = this._worldDoc().collection('meta').doc('migration_town_map_' + itemId);
+    const marker = await migrationRef.get();
+    if (marker.exists && !dryRun) return { ok: true, skipped: true, reason: 'already-ran', ...(marker.data() || {}) };
+
+    const snap = await this.db.collection('players').get();
+    const writer = dryRun ? null : this.db.bulkWriter();
+    let scanned = 0, updated = 0, alreadyHad = 0, full = 0;
+
+    function hasMap(inv) {
+      return Array.isArray(inv) && inv.some(slot => slot && (slot.id | 0) === itemId && (slot.count | 0) > 0);
+    }
+    function withMap(inv) {
+      const next = Array.isArray(inv) ? inv.slice(0, invMax) : [];
+      if (hasMap(next)) return { inv: next, added: false, full: false };
+      for (let i = 0; i < next.length; i++) {
+        if (next[i]) continue;
+        next[i] = { id: itemId, count: 1 };
+        return { inv: next, added: true, full: false };
+      }
+      if (next.length < invMax) {
+        next.push({ id: itemId, count: 1 });
+        return { inv: next, added: true, full: false };
+      }
+      return { inv: next, added: false, full: true };
+    }
+
+    for (const doc of snap.docs) {
+      scanned++;
+      const result = withMap((doc.data() || {}).inv);
+      if (!result.added && !result.full) { alreadyHad++; continue; }
+      if (result.full) {
+        full++;
+        continue;
+      }
+      updated++;
+      if (writer) writer.update(doc.ref, { inv: result.inv, townMapClaimed: true, savedAt: Date.now() });
+    }
+
+    if (!dryRun) {
+      await writer.close();
+      await migrationRef.set({ ok: true, itemId, scanned, updated, alreadyHad, full, savedAt: Date.now() });
+    }
+    return { ok: true, dryRun, scanned, updated, alreadyHad, full };
+  }
   async loadPlayer(token) {
     const d = await this.db.collection('players').doc(token).get();
     return d.exists ? d.data() : null;

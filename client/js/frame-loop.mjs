@@ -1528,8 +1528,7 @@ function tick(now){
     if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,f!==0||s!==0,dt);
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
-    if(sprint) sp=Math.max(0,sp-stCost(8)*armorStamina*dt);
-    else if(!mounted && !mining && sp<maxSp()) sp=Math.min(maxSp(),sp+stCost((f!==0||s!==0)?5:10)*dt);
+    if(sprint) sp=Math.max(0,sp-stCost(3.5)*armorStamina*dt);
     const dragFly=flying?(deityFlying?12:((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13)):0;
     const baseSpd=flying?dragFly:(mounted?9.6:(sprint?6.2:4.3));
     const speed=baseSpd*(outOfFood?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);

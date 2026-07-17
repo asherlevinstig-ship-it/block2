@@ -6655,17 +6655,17 @@ test('completed onboarding is persisted immediately for refresh-safe restore', a
   assert.equal(room.dirtyPlayers.has(token), false);
 });
 
-test('Admin_Levin receives a town map backfill without losing current progress', () => {
+test('registered profiles receive a town map backfill without losing current progress', () => {
   const room = makeRoom();
-  const prof = defaultProfile('Admin_Levin');
+  const prof = defaultProfile('Any Hunter');
   prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
   prof.progressionFocus = 'first_road_ready';
 
-  assert.equal(room.ensureAdminTownMap(prof), true);
+  assert.equal(room.ensureTownMapBackfill(prof), true);
   assert.equal(prof.townMapClaimed, true);
   assert.equal(itemCount(prof, I.TOWN_MAP), 1);
   assert.equal(prof.progressionFocus, 'first_road_ready');
-  assert.equal(room.ensureAdminTownMap(prof), false);
+  assert.equal(room.ensureTownMapBackfill(prof), false);
   assert.equal(itemCount(prof, I.TOWN_MAP), 1);
 });
 

@@ -27,6 +27,7 @@ const { registerProfileResetHandler, registerProfileUpdateHandler } = require('.
 // same world persistence. Keep a process-local lease so overflow fails closed
 // instead of starting a second, divergent world writer.
 const activeGlobalRooms = new Map();
+let townMapBackfillPromise = null;
 function claimGlobalWorld(room, shardId = 'main') {
   const id = cleanShardId(shardId);
   const active = activeGlobalRooms.get(id);
@@ -146,6 +147,7 @@ class GameRoom extends Room {
 
     // ---- persistence ----
     this.store = this.monitorStore(createStore({ shardId: this.shardId }));
+    this.startTownMapBackfill();
     this.initPersistenceState();   // dirty-tracking + profile/save bookkeeping (defined below)
     this.unregisterProfileResetHandler = registerProfileResetHandler(token => this.resetLivePlayerProfile(token));
     this.unregisterProfileUpdateHandler = registerProfileUpdateHandler((token, patch) => this.updateLivePlayerProfile(token, patch));
@@ -843,7 +845,7 @@ class GameRoom extends Room {
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
       if (this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
-      if (this.ensureAdminTownMap(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
+      if (this.ensureTownMapBackfill(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
       const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
       if (returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
@@ -1272,6 +1274,18 @@ class GameRoom extends Room {
     return !!hadProfile;
   }
 
+  startTownMapBackfill() {
+    if (!this.store || typeof this.store.grantTownMapToAllPlayers !== 'function' || townMapBackfillPromise) return;
+    townMapBackfillPromise = Promise.resolve(this.store.grantTownMapToAllPlayers({ itemId: I.TOWN_MAP, inventoryMax: 36 }))
+      .then(stats => {
+        if (stats && !stats.skipped) console.log('[migration] town map backfill ' + JSON.stringify(stats));
+      })
+      .catch(error => {
+        townMapBackfillPromise = null;
+        console.warn('[migration] town map backfill failed:', error && error.message || error);
+      });
+  }
+
   updateLivePlayerProfile(token, patch) {
     const id = cleanToken(token);
     if (!id || !patch || typeof patch !== 'object') return false;
@@ -1375,10 +1389,8 @@ class GameRoom extends Room {
     return true;
   }
 
-  ensureAdminTownMap(prof) {
+  ensureTownMapBackfill(prof) {
     if (!prof || prof.noPersist) return false;
-    const adminName = String(prof.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (adminName !== 'adminlevin') return false;
     let changed = false;
     if (this.profileItemCount(prof, I.TOWN_MAP) <= 0) {
       const left = this.addRewardItem(prof, I.TOWN_MAP, 1);

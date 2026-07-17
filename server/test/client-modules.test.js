@@ -193,8 +193,7 @@ test('Town Map is granted by Orin and opens as a live position item', () => {
   assert.match(world, /ITEMS\[I\.TOWN_MAP\]=\{name:'Town Map',stack:1/);
   assert.match(world, /BlockcraftTownLayout/);
   assert.match(room, /ensureTownMapIntroduction\(prof\)/);
-  assert.match(room, /ensureAdminTownMap\(prof\)/);
-  assert.match(room, /adminlevin/);
+  assert.match(room, /ensureTownMapBackfill\(prof\)/);
   assert.match(room, /first_town_map/);
   assert.match(room, /claim_town_map/);
   assert.match(room, /townMapClaimed/);
@@ -1138,7 +1137,8 @@ test('basic jumping is not blocked by empty stamina',()=>{
   assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:8\.2;/);
   assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
   assert.match(frame,/if\(!mounted && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
-  assert.match(frame,/!mounted && !mining && sp<maxSp\(\)/);
+  assert.match(frame,/if\(sprint\) sp=Math\.max\(0,sp-stCost\(3\.5\)\*armorStamina\*dt\);/);
+  assert.doesNotMatch(frame,/sp<maxSp\(\).*stCost/);
 });
 
 test('block placement uses Minecraft-style targeted block face at build reach',()=>{
