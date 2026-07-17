@@ -7016,6 +7016,17 @@ function stepKind(id){
 // ---------------- town interiors: chests, potions, the bartender, decor ----------------
 // chest storage, keyed "x,y,z"
 const chests={};
+const MENU_TOWN_DISTRICTS=Object.freeze({
+  guild:{x:-18,z:-24},
+  shrine:{x:34,z:-26},
+  forge:{x:24,z:-22},
+  tavern:{x:-44,z:18},
+});
+function menuTownDistrictOffset(district){return MENU_TOWN_DISTRICTS[district]||{x:0,z:0};}
+function townPx(x,district){return tp(x)+menuTownDistrictOffset(district).x;}
+function townPz(z,district){return tp(z)+menuTownDistrictOffset(district).z;}
+function townCx(x,district){return tc(x)+menuTownDistrictOffset(district).x;}
+function townCz(z,district){return tc(z)+menuTownDistrictOffset(district).z;}
 function getChest(key){
   return chests[key] || (chests[key]={slots:new Array(18).fill(null),scope:'',supply:false,canToggleSupply:false,supplyModeReason:'',canWithdraw:true});
 }
@@ -7183,13 +7194,13 @@ const bartender={...makeVillager('#7a3b2e','#5e2c22',false),
   personality:'big-hearted, teasing, remembers every tab',
   line:'Sit, Hunter. The night out there is long and full of teeth, and I refuse to let you face it hungry.',
   static:true, inside:false,
-  wait:0, tx:0, tz:0, speed:0, phase:Math.random()*10, home:[tc(81),tc(76)], stuck:0};
+  wait:0, tx:0, tz:0, speed:0, phase:Math.random()*10, home:[townCx(81,'tavern'),townCz(76,'tavern')], stuck:0};
 (function(){
   const apron=new THREE.Mesh(new THREE.BoxGeometry(.42,.52,.06),
     new THREE.MeshLambertMaterial({color:0xe8e4d8}));
   apron.position.set(0,.92,.17);
   bartender.grp.add(apron);
-  bartender.grp.position.set(tp(83.5), TOWN.G+1, tp(77.5));
+  bartender.grp.position.set(townPx(83.5,'tavern'), TOWN.G+1, townPz(77.5,'tavern'));
   bartender.grp.rotation.y=-Math.PI/2;            // facing the bar and the door
   attachNpcNameplate(bartender);
   townGroup.add(bartender.grp);
@@ -7197,8 +7208,8 @@ const bartender={...makeVillager('#7a3b2e','#5e2c22',false),
 })();
 const tokenCashier={...makeVillager('#5a3d78','#39264f',true),role:'token_cashier',name:'Tilda Mint',shortName:'Tilda',title:'Token Cashier',
   personality:'precise, cheerful, unimpressed by lucky streaks',line:'Gold stays useful outside. Tokens stay fun inside. I keep the two ledgers separate.',
-  static:true,inside:false,wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[tc(74),tc(76)],stuck:0};
-(function(){tokenCashier.grp.position.set(tp(83.2),TOWN.G+1,tp(80.5));tokenCashier.grp.rotation.y=-Math.PI/2;attachNpcNameplate(tokenCashier);townGroup.add(tokenCashier.grp);villagers.push(tokenCashier);})();
+  static:true,inside:false,wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[townCx(74,'tavern'),townCz(76,'tavern')],stuck:0};
+(function(){tokenCashier.grp.position.set(townPx(83.2,'tavern'),TOWN.G+1,townPz(80.5,'tavern'));tokenCashier.grp.rotation.y=-Math.PI/2;attachNpcNameplate(tokenCashier);townGroup.add(tokenCashier.grp);villagers.push(tokenCashier);})();
 function tavernIntroSeen(){try{return localStorage.getItem('bc_tavern_games_intro')==='1';}catch{return false;}}
 function dismissTavernIntro(){try{localStorage.setItem('bc_tavern_games_intro','1');}catch{}openTavernCashierUI();}
 function openTavernCashierUI(){
@@ -7337,7 +7348,7 @@ function addShelfWithBottles(){
   const wood=new THREE.MeshLambertMaterial({color:0x9a7445});
   for(const [y,w] of [[2.18,3.4],[2.78,2.8]]){
     const shelf=new THREE.Mesh(new THREE.BoxGeometry(.34,.08,w), wood);
-    shelf.position.set(tp(84.05), G+y, tp(77.2));
+    shelf.position.set(townPx(84.05,'tavern'), G+y, townPz(77.2,'tavern'));
     townGroup.add(shelf);
   }
   const glassMat=new THREE.MeshLambertMaterial({color:0xd9fbff, transparent:true, opacity:.34});
@@ -7360,9 +7371,9 @@ function addShelfWithBottles(){
     cork.position.y=.62*scale; grp.add(cork);
     const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:col, transparent:true, opacity:.34, depthWrite:false, blending:THREE.AdditiveBlending}));
     glow.position.y=.26*scale; glow.scale.set(.7*scale,.7*scale,1); grp.add(glow);
-    grp.position.set(tp(x),G+y,tp(z)); townGroup.add(grp);
+    grp.position.set(townPx(x,'tavern'),G+y,townPz(z,'tavern')); townGroup.add(grp);
     const c=new THREE.Color(col);
-    potionVapors.push({x:tp(x),y:G+y+.55*scale,z:tp(z),r:c.r,g:c.g,b:c.b,rate:3.5});
+    potionVapors.push({x:townPx(x,'tavern'),y:G+y+.55*scale,z:townPz(z,'tavern'),r:c.r,g:c.g,b:c.b,rate:3.5});
     return grp;
   }
   potionData.forEach((p,i)=>addPotionBottle(84.05, i<6?2.22:2.82, p[2], p[0], p[1]));
@@ -7385,22 +7396,22 @@ function addFlowerPot(x,y,z){
 (function decorate(){
   const G=TOWN.G;
   // rugs: tavern hall, shrine aisle, and guild waiting hall
-  addRug(tp(78.5), tp(78),   5.4, 3.8, '#8a2c2c', '#6a1f1f', '#3a1212'); // tavern crimson
-  addRug(tp(47.5), tp(49),   1.8, 9.0, '#8a2c2c', '#7a2424', '#3a1212'); // church runner
-  addRug(tp(40),   tp(31),   9.0, 4.6, '#31566b', '#294757', '#c8a85a'); // guild waiting hall
+  addRug(townPx(78.5,'tavern'), townPz(78,'tavern'),   5.4, 3.8, '#8a2c2c', '#6a1f1f', '#3a1212'); // tavern crimson
+  addRug(townPx(47.5,'shrine'), townPz(49,'shrine'),   1.8, 9.0, '#8a2c2c', '#7a2424', '#3a1212'); // church runner
+  addRug(townPx(40,'guild'),   townPz(31,'guild'),   9.0, 4.6, '#31566b', '#294757', '#c8a85a'); // guild waiting hall
   // paintings on interior walls
-  addPainting(tp(78), G+2.6, tp(69.55), 0, 11);            // tavern, north wall
-  addPainting(tp(52), G+3.15, tp(24.55), 0, 71);           // guild charter wall
-  addPainting(tp(57), G+3.15, tp(24.55), 0, 89);           // guild founder gallery
+  addPainting(townPx(78,'tavern'), G+2.6, townPz(69.55,'tavern'), 0, 11);            // tavern, north wall
+  addPainting(townPx(52,'guild'), G+3.15, townPz(24.55,'guild'), 0, 71);           // guild charter wall
+  addPainting(townPx(57,'guild'), G+3.15, townPz(24.55,'guild'), 0, 89);           // guild founder gallery
   addShelfWithBottles();
-  addFlowerPot(tp(82.5), G+2.1, tp(73.5));         // bar top
-  addFlowerPot(tp(50), G+2.1, tp(28));             // guild reception counter
-  addFlowerPot(tp(57.5), G+2.1, tp(28));           // guild reception counter
+  addFlowerPot(townPx(82.5,'tavern'), G+2.1, townPz(73.5,'tavern'));         // bar top
+  addFlowerPot(townPx(50,'guild'), G+2.1, townPz(28,'guild'));             // guild reception counter
+  addFlowerPot(townPx(57.5,'guild'), G+2.1, townPz(28,'guild'));           // guild reception counter
 })();
 
 // ---- stock the town's chests ----
-seedChest(tc(85), TOWN.G+1, tc(84), [[I.POT_ALE,2],[I.COAL,4],[B.PLANKS,8]]); // tavern stockroom
-seedChest(tc(75), TOWN.G+1, tc(46), [[I.IRON_INGOT,4],[I.COAL,8]]);           // smithy supplies
+seedChest(townCx(85,'tavern'), TOWN.G+1, townCz(84,'tavern'), [[I.POT_ALE,2],[I.COAL,4],[B.PLANKS,8]]); // tavern stockroom
+seedChest(townCx(75,'forge'), TOWN.G+1, townCz(46,'forge'), [[I.IRON_INGOT,4],[I.COAL,8]]);           // smithy supplies
 
 // ---------------- mob senses, pack behavior & looks ----------------
 // voxel line-of-sight between two points (grid DDA sampling)

@@ -215,6 +215,11 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   assert.match(combat, /HUB\.tavernRoulette\.x/);
   assert.match(menus, /HUB\.smith\.x/);
   assert.match(networking, /HUB\.smith\.x/);
+  assert.match(menus, /MENU_TOWN_DISTRICTS=Object\.freeze/);
+  assert.match(menus, /potionVapors\.push\(\{x:townPx\(x,'tavern'\)/);
+  assert.match(menus, /addRug\(townPx\(78\.5,'tavern'\), townPz\(78,'tavern'\)/);
+  assert.match(menus, /addPainting\(townPx\(52,'guild'\), G\+3\.15, townPz\(24\.55,'guild'\)/);
+  assert.match(menus, /seedChest\(townCx\(75,'forge'\), TOWN\.G\+1, townCz\(46,'forge'\)/);
   assert.match(constants, /SKYSHIP_DOCK_X = W\.townPos\(32, 64, 'skyport'\)\.x - 23/);
   assert.match(events, /const dock = W\.townPos\(32, 64, 'skyport'\)/);
   assert.match(room, /W\.townPos\(78\.5, 50, 'forge'\)/);
@@ -225,6 +230,7 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   assert.doesNotMatch(combat, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5/);
   assert.doesNotMatch(economy, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5|TOWN\.TC\+19\.5|TOWN\.TC\+12\.5/);
   assert.doesNotMatch(menus + networking + room, /TOWN\.TC\+14\.5|TOWN\.TC-14/);
+  assert.doesNotMatch(menus, /bartender\.grp\.position\.set\(tp|tokenCashier\.grp\.position\.set\(tp|potionVapors\.push\(\{x:tp|addRug\(tp|addPainting\(tp|addFlowerPot\(tp|seedChest\(tc\(85\)|seedChest\(tc\(75\)/);
   assert.doesNotMatch(constants + events, /TOWN\.TC - 32/);
 });
 
