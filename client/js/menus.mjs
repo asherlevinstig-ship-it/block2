@@ -7310,18 +7310,12 @@ function addFlowerPot(x,y,z){
 }
 (function decorate(){
   const G=TOWN.G;
-  // rugs: tavern hall, each cottage, the church aisle
+  // rugs: tavern hall, shrine aisle, and guild waiting hall
   addRug(tp(78.5), tp(78),   5.4, 3.8, '#8a2c2c', '#6a1f1f', '#3a1212'); // tavern crimson
-  addRug(tp(46.5), tp(75.5), 2.4, 2.0, '#2c6a6a', '#1f4f4f', '#123232'); // SW cottage teal
-  addRug(tp(56.5), tp(85.5), 2.4, 2.0, '#9a7a2c', '#7a5f1f', '#4a3a12'); // S cottage ochre
-  addRug(tp(85),   tp(40.5), 2.0, 2.0, '#5a3a7a', '#462c5f', '#2a1a3a'); // NE cottage violet
   addRug(tp(47.5), tp(49),   1.8, 9.0, '#8a2c2c', '#7a2424', '#3a1212'); // church runner
   addRug(tp(40),   tp(31),   9.0, 4.6, '#31566b', '#294757', '#c8a85a'); // guild waiting hall
   // paintings on interior walls
   addPainting(tp(78), G+2.6, tp(69.55), 0, 11);            // tavern, north wall
-  addPainting(tp(49.45), G+2.4, tp(75), -Math.PI/2, 23);   // SW cottage, east wall
-  addPainting(tp(56), G+2.4, tp(87.45), Math.PI, 37);      // S cottage, south wall
-  addPainting(tp(84), G+2.4, tp(38.55), 0, 51);            // NE cottage, north wall
   addPainting(tp(52), G+3.15, tp(24.55), 0, 71);           // guild charter wall
   addPainting(tp(57), G+3.15, tp(24.55), 0, 89);           // guild founder gallery
   addShelfWithBottles();
@@ -7332,9 +7326,6 @@ function addFlowerPot(x,y,z){
 
 // ---- stock the town's chests ----
 seedChest(tc(85), TOWN.G+1, tc(84), [[I.POT_ALE,2],[I.COAL,4],[B.PLANKS,8]]); // tavern stockroom
-seedChest(tc(49), TOWN.G+1, tc(73), [[B.LOG,8],[B.TORCH,4],[B.SAND,6]]);      // SW cottage
-seedChest(tc(58), TOWN.G+1, tc(83), [[B.PLANKS,12],[B.GLASS,4]]);             // S cottage
-seedChest(tc(87), TOWN.G+1, tc(39), [[B.COBBLE,16],[I.COAL,3]]);              // NE cottage
 seedChest(tc(75), TOWN.G+1, tc(46), [[I.IRON_INGOT,4],[I.COAL,8]]);           // smithy supplies
 
 // ---------------- mob senses, pack behavior & looks ----------------

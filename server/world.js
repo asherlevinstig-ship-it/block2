@@ -10,7 +10,7 @@ const { DimensionGrid } = require('../shared/dimension-grid');
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
 const LAVA_BORDER_WIDTH = 12, LAVA_BORDER_TOP = WH - 2;
-const TOWN = { TC: WX / 2, HS: 42, G: 15 };
+const TOWN = { TC: WX / 2, HS: 50, G: 15 };
 const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
 const OLD_TOWN_TC = 64;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC));
@@ -748,13 +748,21 @@ function buildTown() {
     if (d >= 3 && d < 4) setB(x, G + 1, z, B.BRICK);
     else if (d < 3) setB(x, G + 1, z, B.WATER);
   }
+  // Open district footprints replacing the old NPC cottages. These are
+  // ground-level only so server collision agrees with the cleaned client town.
+  const paveDistrict = (xa, za, xb, zb, fill = B.COBBLE, edge = B.BRICK) => {
+    for (let x = xa; x <= xb; x++) for (let z = za; z <= zb; z++) {
+      const border = x === xa || x === xb || z === za || z === zb;
+      setB(x, G, z, border ? edge : fill);
+    }
+  };
+  paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
+  paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
+  paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
   // buildings as solid collision footprints (visual detail lives on the client)
   fillBox(tc(72), G + 1, tc(70), tc(84), G + 4, tc(82), B.PLANKS); // tavern
   fillBox(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE); // smithy
   fillBox(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);  // church
-  fillBox(tc(42), G + 1, tc(72), tc(50), G + 4, tc(78), B.PLANKS); // cottage SW
-  fillBox(tc(53), G + 1, tc(82), tc(59), G + 4, tc(88), B.PLANKS); // cottage S
-  fillBox(tc(82), G + 1, tc(38), tc(88), G + 4, tc(43), B.PLANKS); // cottage NE
   // Dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside).
   {
     const rx1 = tc(88), rz1 = tc(48), rx2 = tc(105), rz2 = tc(82);
@@ -824,12 +832,18 @@ function createWorld() {
       if (d >= 3 && d < 4) setLocal(x, G + 1, z, B.BRICK);
       else if (d < 3) setLocal(x, G + 1, z, B.WATER);
     }
+    const paveDistrict = (xa, za, xb, zb, fill = B.COBBLE, edge = B.BRICK) => {
+      for (let x = xa; x <= xb; x++) for (let z = za; z <= zb; z++) {
+        const border = x === xa || x === xb || z === za || z === zb;
+        setLocal(x, G, z, border ? edge : fill);
+      }
+    };
+    paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
+    paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
+    paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
     fillLocal(tc(72), G + 1, tc(70), tc(84), G + 4, tc(82), B.PLANKS);
     fillLocal(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE);
     fillLocal(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);
-    fillLocal(tc(42), G + 1, tc(72), tc(50), G + 4, tc(78), B.PLANKS);
-    fillLocal(tc(53), G + 1, tc(82), tc(59), G + 4, tc(88), B.PLANKS);
-    fillLocal(tc(82), G + 1, tc(38), tc(88), G + 4, tc(43), B.PLANKS);
     {
       const rx1 = tc(88), rz1 = tc(48), rx2 = tc(105), rz2 = tc(82);
       for (let x = rx1; x <= rx2; x++) for (let z = rz1; z <= rz2; z++) {

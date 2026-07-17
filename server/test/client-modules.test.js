@@ -142,6 +142,24 @@ test('client soundtrack mp3 assets exist for every referenced music mode', () =>
   }
 });
 
+test('Town of Beginnings removes NPC cottages in favor of open districts', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const serverWorld = fs.readFileSync(path.join(__dirname, '..', 'world.js'), 'utf8');
+
+  assert.match(world, /WORLD_TOWN_HS=50/);
+  assert.match(world, /TOWN = \{ TC: WX\/2, HS: 50, G: 15 \}/);
+  assert.match(serverWorld, /TOWN = \{ TC: WX \/ 2, HS: 50, G: 15 \}/);
+  assert.match(world, /open town districts replacing NPC houses/);
+  assert.match(serverWorld, /Open district footprints replacing the old NPC cottages/);
+  assert.match(world, /tavern commons and player storage yard/);
+  assert.match(world, /forge district training yard/);
+  assert.match(world, /airship cargo apron/);
+  assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
+  assert.doesNotMatch(menus, /SW cottage|S cottage|NE cottage|each cottage/);
+  assert.doesNotMatch(serverWorld, /cottage SW|cottage S|cottage NE/);
+});
+
 test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => {
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');

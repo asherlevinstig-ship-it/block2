@@ -819,7 +819,7 @@ function matchRecipe(cells, w){
 // ---------------- world ----------------
 const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_SIZE, WH=64, SEA=13;
 const LAVA_BORDER_WIDTH=12, LAVA_BORDER_TOP=WH-2;
-const WORLD_TC=WX/2, WORLD_TOWN_HS=42, WORLD_TOWN_G=15;
+const WORLD_TC=WX/2, WORLD_TOWN_HS=50, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
 const {DimensionGrid}=window.BlockcraftDimensions;
@@ -1173,7 +1173,7 @@ function buildLavaBorder(){
 generateWorld();
 
 // ---------------- Town of Beginnings ----------------
-const TOWN = { TC: WX/2, HS: 42, G: 15 }; // center, wall half-size, ground level
+const TOWN = { TC: WX/2, HS: 50, G: 15 }; // center, wall half-size, ground level
 const OLD_TOWN_TC = 64;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC));
 const tp = v => TOWN.TC + (v - OLD_TOWN_TC);
@@ -1255,25 +1255,6 @@ function buildSkyportBlocks(setBlock=setB){
   for(let x=cx-3;x<=TOWN.TC;x++) setBlock(x,TOWN.G,cz-6,B.COBBLE);
 }
 function wallMat(x,y,z){ return hash2(x*7+y, z*13-y)<0.3 ? B.COBBLE : B.BRICK; }
-function buildCottage(x1,z1,x2,z2,door){ // door:[x,z]
-  const G=TOWN.G;
-  fillBox(x1,G,z1, x2,G,z2, B.PLANKS);
-  for(let x=x1;x<=x2;x++)for(let z=z1;z<=z2;z++){
-    const edge=x===x1||x===x2||z===z1||z===z2;
-    if(!edge) continue;
-    const corner=(x===x1||x===x2)&&(z===z1||z===z2);
-    for(let y=G+1;y<=G+3;y++) setB(x,y,z, corner?B.LOG:B.PLANKS);
-  }
-  const mx=(x1+x2)>>1, mz=(z1+z2)>>1;
-  setB(mx,G+2,z1,B.GLASS); setB(mx,G+2,z2,B.GLASS);
-  setB(x1,G+2,mz,B.GLASS); setB(x2,G+2,mz,B.GLASS);
-  fillBox(door[0],G+1,door[1], door[0],G+2,door[1], B.AIR);
-  if(x2-x1>=z2-z1){
-    for(let i=0;;i++){ const za=z1-1+i, zb=z2+1-i; if(za>zb)break; fillBox(x1-1,G+4+i,za, x2+1,G+4+i,zb, B.PLANKS); }
-  } else {
-    for(let i=0;;i++){ const xa=x1-1+i, xb=x2+1-i; if(xa>xb)break; fillBox(xa,G+4+i,z1-1, xb,G+4+i,z2+1, B.PLANKS); }
-  }
-}
 function buildGuildHallBase(){
   const G=TOWN.G,x1=tc(25),x2=tc(60),z1=tc(24),z2=tc(36),doorX=tc(57);
   fillBox(x1,G,z1,x2,G,z2,B.BRICK);
@@ -1512,19 +1493,39 @@ function buildTown(){
   for(let z=tc(57);z<=tc(82);z++) for(let w=-1;w<=1;w++) setB(tc(84)+w,G,z,B.COBBLE);
   for(let x=tc(84);x<=rx1;x++) for(let w=-2;w<=2;w++) setB(x,G,tc(65)+w,B.COBBLE);
 
-  // --- cottages ---
-  buildCottage(tc(42),tc(72),tc(50),tc(78),[tc(46),tc(72)]);         // SW house, door north
-  buildCottage(tc(53),tc(82),tc(59),tc(88),[tc(56),tc(82)]);         // S house, door north
-  buildCottage(tc(82),tc(38),tc(88),tc(43),[tc(82),tc(40)]);         // NE house, door west
-
-  // --- furnishings: beds and storage chests in every home ---
-  setB(tc(43),G+1,tc(77),B.BED); setB(tc(44),G+1,tc(77),B.BED); setB(tc(49),G+1,tc(73),B.CHEST); // SW cottage
-  setB(tc(54),G+1,tc(87),B.BED); setB(tc(55),G+1,tc(87),B.BED); setB(tc(58),G+1,tc(83),B.CHEST); // S cottage
-  setB(tc(86),G+1,tc(42),B.BED); setB(tc(87),G+1,tc(42),B.BED); setB(tc(87),G+1,tc(39),B.CHEST); // NE cottage
+  // --- open town districts replacing NPC houses ---
+  const paveDistrict=(x1,z1,x2,z2,fill=B.COBBLE,edge=B.BRICK)=>{
+    for(let x=x1;x<=x2;x++) for(let z=z1;z<=z2;z++){
+      const border=x===x1||x===x2||z===z1||z===z2;
+      setB(x,G,z,border?edge:fill);
+    }
+  };
+  const lanternPost=(x,z)=>{
+    setB(x,G+1,z,B.LOG); setB(x,G+2,z,B.LOG); setB(x,G+3,z,B.TORCH);
+  };
+  const benchX=(x,z,len=4)=>{
+    for(let i=0;i<len;i++) setB(x+i,G+1,z,B.PLANKS);
+    setB(x,G+1,z-1,B.LOG); setB(x+len-1,G+1,z-1,B.LOG);
+  };
+  const benchZ=(x,z,len=4)=>{
+    for(let i=0;i<len;i++) setB(x,G+1,z+i,B.PLANKS);
+    setB(x-1,G+1,z,B.LOG); setB(x-1,G+1,z+len-1,B.LOG);
+  };
+  paveDistrict(tc(40),tc(70),tc(61),tc(89),B.COBBLE,B.BRICK);        // tavern commons and player storage yard
+  paveDistrict(tc(68),tc(37),tc(89),tc(44),B.COBBLE,B.BRICK);        // forge district training yard
+  paveDistrict(tc(26),tc(56),tc(38),tc(72),B.CONCRETE,B.BRICK);      // airship cargo apron
+  for(const [lx,lz] of [[41,71],[60,71],[41,88],[60,88],[69,38],[88,38],[69,43],[88,43],[27,57],[37,71]])
+    lanternPost(tc(lx),tc(lz));
+  benchX(tc(44),tc(75),4); benchX(tc(44),tc(84),4);
+  benchZ(tc(57),tc(74),4); benchZ(tc(33),tc(60),5);
+  fillBox(tc(72),G+1,tc(40),tc(76),G+1,tc(40),B.LOG);                // training rail
+  fillBox(tc(79),G+1,tc(40),tc(83),G+1,tc(40),B.LOG);
+  setB(tc(75),G+1,tc(41),B.STONE); setB(tc(81),G+1,tc(41),B.STONE);
+  fillBox(tc(31),G+1,tc(66),tc(35),G+1,tc(67),B.PLANKS);             // cargo pallets
   setB(tc(85),G+1,tc(84),B.CHEST);                                                 // tavern stockroom
   setB(tc(75),G+1,tc(46),B.CHEST);                                                 // smithy supplies
   for(const [lx,lz] of [[74,74],[74,80],[78,76],[78,82]]) setB(tc(lx),G+1,tc(lz),B.LOG); // standing tavern table supports
-  setB(tc(48),G+1,tc(77),B.TABLE); setB(tc(58),G+1,tc(87),B.FURNACE); setB(tc(84),G+1,tc(42),B.TABLE);
+  setB(tc(49),G+1,tc(78),B.TABLE); setB(tc(56),G+1,tc(86),B.FURNACE); setB(tc(85),G+1,tc(42),B.TABLE);
 
   // --- first-time route: spawn -> quest giver -> smithy/crafting -> north wilderness gate ---
   for(let z=TC+7;z>=TC-6;z--) for(let w=-1;w<=1;w++) setB(TC+w,G,z,B.COBBLE);
@@ -1550,10 +1551,11 @@ function buildTown(){
     if((x+z)&1) setB(x,G+1,z,B.WHEAT_3);
   }
 
-  // --- cobble connector paths from each door to the main roads ---
-  for(let z=tc(66);z<=tc(71);z++) setB(tc(46),G,z,B.COBBLE);        // SW house
-  for(let z=tc(66);z<=tc(81);z++) setB(tc(56),G,z,B.COBBLE);        // S house
-  for(let x=tc(66);x<=tc(81);x++) setB(x,G,tc(40),B.COBBLE);        // NE house
+  // --- cobble connector paths between public districts and main roads ---
+  for(let z=tc(66);z<=tc(89);z++) for(let w=-1;w<=1;w++) setB(tc(50)+w,G,z,B.COBBLE); // tavern commons spine
+  for(let x=tc(50);x<=tc(72);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(72)+w,B.COBBLE); // commons to tavern
+  for(let z=tc(37);z<=tc(50);z++) for(let w=-1;w<=1;w++) setB(tc(78)+w,G,z,B.COBBLE); // forge yard to smithy
+  for(let x=tc(38);x<=tc(50);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(64)+w,B.COBBLE); // airship apron to west road
   for(let x=tc(66);x<=tc(73);x++) setB(x,G,tc(50),B.COBBLE);        // smithy
   for(let z=tc(57);z<=tc(62);z++) setB(tc(47),G,z,B.COBBLE);        // church
   for(let x=tc(84);x<=tc(88);x++) for(let z=tc(63);z<=tc(67);z++) setB(x,G,z,B.COBBLE); // roost threshold
@@ -3316,16 +3318,20 @@ const villagers=[];
 let giantGuardian=null;
 const ROBES=[['#8a5a32','#6b4524'],['#5a6e8a','#44546a'],['#6e8a5a','#54693f'],
              ['#8a6e8a','#6a5266'],['#a8743c','#82582c'],['#707a86','#565e68']];
-const HOMES=[[tc(74),tc(76)],[tc(46),tc(75)],[tc(56),tc(85)],[tc(85),tc(40)],[tc(47),tc(48)],[tc(78),tc(50)],[tc(77),tc(79)]]; // tavern, cottages, church, smithy
+const HOMES=[
+  [tc(74),tc(76)], [HUB.guild.x,HUB.guild.z], [tc(47),tc(48)],
+  [tc(78),tc(50)], [HUB.jobs.x,HUB.jobs.z], [HUB.roost.x,HUB.roost.z],
+  [HUB.farm.x,HUB.farm.z],
+]; // functional town anchors after NPC houses were removed
 const NPC_ROLES=[
   {name:'Mara Vale', shortName:'Mara', role:'guide', title:'Town Guide', personality:'warm, bossy, impossible to discourage',
-   work:[HUB.guide.x,HUB.guide.z], home:[tc(56),tc(85)], static:true,
+   work:[HUB.guide.x,HUB.guide.z], home:[HUB.guild.x,HUB.guild.z], static:true,
    line:'I meet new hunters at the fountain. Smile first, panic later. The first job is not glamorous; it is how the town learns you come back.',
    accept:'Good. No grand speech yet — first we make sure your hands know the road.',
    done:'Look at that. Still breathing, already useful.',
    focus:'starter', job:'adventurer'},
   {name:'Garrik Flint', shortName:'Garrik', role:'miner', title:'Quarry Foreman', personality:'blunt, cheerful, judges people by their boots',
-   work:[HUB.quarry.x,HUB.quarry.z], home:[tc(85),tc(40)], static:true,
+   work:[HUB.quarry.x,HUB.quarry.z], home:[HUB.quarry.x,HUB.quarry.z], static:true,
    line:'Stone tells you what it wants if you listen with a pickaxe. The town always needs ore, cobble, and steady hands.',
    accept:'Good. Keep your tunnel sense awake and your pick sharper than your excuses.',
    done:'That is honest weight. The walls will stand a little longer.',
@@ -3343,13 +3349,13 @@ const NPC_ROLES=[
    done:'The readings moved. That means you mattered.',
    focus:'gate'},
   {name:'Bram Ledger', shortName:'Bram', role:'quartermaster', title:'Quartermaster', personality:'practical, dry, counts everything twice',
-   work:[HUB.marketX-.5,TOWN.TC-.5], home:[tc(46),tc(75)],
+   work:[HUB.marketX-.5,TOWN.TC-.5], home:[HUB.marketX-.5,TOWN.TC-.5],
    line:'Torches, keys, planks, food stock. A prepared hunter comes home alive, and an unprepared one becomes paperwork.',
    accept:'Efficient. I appreciate that in a person.',
    done:'Stock improved. Casualty odds reduced. Excellent.',
    focus:'fetch'},
   {name:'Liss Barley', shortName:'Liss', role:'farmer', title:'Farmer', personality:'gentle, stubborn, knows everyone by appetite',
-   work:[tp(56),tp(82)], home:[tc(56),tc(85)],
+   work:[tp(56),tp(82)], home:[HUB.farm.x,HUB.farm.z],
    line:'The tavern needs bread, and the walls need fed workers. Heroics are easier on a full stomach.',
    accept:'Take care out there. Crops grow back. People are trickier.',
    done:'Good hands. The town will taste this kindness.',
@@ -3373,29 +3379,29 @@ const NPC_ROLES=[
    done:'You return quieter. Good. Quiet survives.',
    focus:'meditate', job:'monk'},
   {name:'Pell Graywatch', shortName:'Pell', role:'warden', title:'Night Warden', personality:'quiet, severe, notices every sound',
-   work:[TOWN.TC+.5,TOWN.TC-TOWN.HS+3], home:[tc(85),tc(40)],
+   work:[TOWN.TC+.5,TOWN.TC-TOWN.HS+3], home:[HUB.northGate.x,HUB.northGate.z],
    line:'I watch the north gate. When the wild goes silent, draw steel.',
    accept:'Do not chase glory. End threats. Come back.',
    done:'Fewer eyes in the dark tonight. Good.',
    focus:'kill', job:'adventurer'},
   {name:'Rook Emberstall', shortName:'Rook', role:'stablemaster', title:'Roost Stablemaster', personality:'patient, proud, smells faintly of smoke and apples',
-   work:[tp(86.5),tp(65)], home:[tc(85),tc(40)], static:true,
+   work:[tp(86.5),tp(65)], home:[HUB.roost.x,HUB.roost.z], static:true,
    line:'A dragon is not equipment. It is a promise with wings. Name it, feed it, ride it, and let it rest where the town can see it.',
    accept:'Good. Start with trust, then treats.',
    done:'That bond has more shine on it now.',
    focus:'dragon'},
   {name:'Lyra Pennant', shortName:'Lyra', role:'guild_receptionist', title:'Guild Hall Receptionist', personality:'precise, welcoming, keeps every charter immaculate',
-   work:[HUB.guild.x,HUB.guild.z], home:[tc(46),tc(75)], static:true,
+   work:[HUB.guild.x,HUB.guild.z], home:[HUB.guild.x,HUB.guild.z], static:true,
    line:'Every great guild begins with a name, a founder, and enough ambition to need another floor.',
    accept:'I will prepare the charter and record you as guild leader.',
    done:'Your banner has a place in this hall now.',
    focus:'guild'},
   {name:'Tamsin Rook',shortName:'Tamsin',role:'road_warden',title:'Road Warden',personality:'watchful, practical, unimpressed by excuses',
-   work:[HUB.jobs.x+2,HUB.jobs.z],home:[tc(46),tc(75)],static:true,
+   work:[HUB.jobs.x+2,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts.',
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
   {name:'Orin Mapwell',shortName:'Orin',role:'cartographer',title:'Royal Cartographer',personality:'curious, ink-stained, delighted by blank spaces',
-   work:[HUB.cartographer.x,HUB.cartographer.z],home:[tc(46),tc(75)],static:true,
+   work:[HUB.cartographer.x,HUB.cartographer.z],home:[HUB.cartographer.x,HUB.cartographer.z],static:true,
    line:'A blank map is not empty. It is asking you a question. Bring me honest roads and I will make them remembered.',
    accept:'Walk until the ink has something new to say.',done:'There. One less mystery pretending to be nowhere.',focus:'explore'},
 ];
