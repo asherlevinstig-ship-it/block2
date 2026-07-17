@@ -1537,6 +1537,7 @@ function inventoryFullHelpHTML(context='reward'){
 function inventorySortCategory(stack){
   const id=stack&&stack.id|0;
   if(!id)return 99;
+  if(id===I.TOWN_MAP)return 8;
   if(SOLO_KEY_IDS.includes(id)||TEAM_KEY_IDS.includes(id)||SHARD_IDS.includes(id)||id===I.LEGEND_TOKEN)return 10;
   if(FOOD_VALUES[id]||[I.POT_ALE,I.POT_STEW,I.POT_MANA,I.POT_SWIFT,I.POT_STONE,I.REPAIR_KIT].includes(id))return 20;
   if([I.COAL,I.CHARCOAL,I.IRON_INGOT,I.DIAMOND,I.WHEAT_SEEDS,I.WHEAT,I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM,I.RIVER_FISH,I.COMPOST,I.GOLDEN_WHEAT,I.GEODE,I.RAINWAKE_PETAL,I.STORMGLASS,I.SOLAR_GLYPH].includes(id))return 30;
@@ -1773,6 +1774,7 @@ function simpleChestBulkStack(stack){
 function protectedChestBulkItem(id){
   return SOLO_KEY_IDS.includes(id)||TEAM_KEY_IDS.includes(id)||SHARD_IDS.includes(id)||[
     I.LEGEND_TOKEN,I.LEGEND_SWORD,I.LEGEND_ARMOR,I.BLACKHOLE_STAFF,
+    I.TOWN_MAP,
     I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT,
     I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,
   ].includes(id);
@@ -3888,6 +3890,11 @@ function handleServerObjectiveAction(action,meta={}){
   if(action==='jobs'){openJobsUI();return;}
   if(action==='guild_contracts'){openRegionalContractsUI();return;}
   if(action==='land'){openLandRecovery();return;}
+  if(action==='cartographer'){
+    if(NET.on&&NET.room)NET.room.send('cartographer',{action:'status'});
+    sysMsg('<b>Town Map:</b> visit Orin Mapwell at the cartographer table and take your map.');
+    return;
+  }
   if(action==='claim_aegis'){openGuardianUI();return;}
   if(action==='find_gate'){
     sysMsg('<b>Gate target:</b> follow the active gate tracker. Public Gate timers continue outside.');
@@ -3988,6 +3995,7 @@ function recoveryHubInfo(){
     const craft=objectiveTrackerCraftAction('what_next');
     if(craft)return {title:'First Craft Station',status:'Craft your first Crafting Table or Furnace. If blocked, the recipe button will list exactly what to gather.',where:'Crafting menu',button:craft.label,action:()=>activateObjectiveCraftShortcut(craft.outputId,craft.kind)};
   }
+  if(progressionFocus==='first_town_map')return {title:'Town Map',status:'Visit Orin Mapwell and take a Town of Beginnings map. Once you own it, select it on the hotbar and right-click to open it.',where:'Orin Mapwell',button:'VISIT ORIN',action:()=>{if(NET.on&&NET.room)NET.room.send('cartographer',{action:'status'});else sysMsg('Find Orin Mapwell at the cartographer table.');}};
   if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup')return {title:'Land Claim Recovery',status:progressionFocus==='first_base_setup'?'Open Land Claims and place storage, light, and a station inside editable claimed land.':'Open Land Claims and buy or expand protected land.',where:'Land Claims',button:'CLAIM LAND',action:openLandRecovery};
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract')return {title:'Contract Recovery',status:'Open the Job Board and choose, finish, or claim the next usable contract.',where:'Job Board',button:'OPEN JOB BOARD',action:()=>openJobsUI()};
   const craft=objectiveTrackerCraftAction('what_next');
@@ -4200,6 +4208,68 @@ function weatherEntryStatus(e){
   return active?'SPOTTED - ACTIVE NOW':'SPOTTED - RETURN IN '+req.toUpperCase();
 }
 let cartographerState=null;
+let townMapAnimation=0;
+function townMapLayout(){
+  const layout=globalThis.BlockcraftTownLayout||{};
+  return {
+    town:layout.town||globalThis.TOWN||{},
+    hub:layout.hub||globalThis.HUB||{},
+    signs:Array.isArray(layout.signs)?layout.signs:[],
+    labels:Array.isArray(layout.labels)?layout.labels:[],
+  };
+}
+function drawTownMapCanvas(canvas){
+  const ctx=canvas&&canvas.getContext&&canvas.getContext('2d');
+  if(!ctx)return;
+  const layout=townMapLayout(),town=layout.town||{},hub=layout.hub||{};
+  const w=canvas.width,h=canvas.height,pad=38,tc=town.TC||0,hs=town.HS||64;
+  const min=tc-hs,max=tc+hs,scale=Math.min((w-pad*2)/(max-min),(h-pad*2)/(max-min));
+  const xy=(x,z)=>({x:pad+(Number(x)-min)*scale,y:pad+(Number(z)-min)*scale});
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#102137';ctx.fillRect(0,0,w,h);
+  const grd=ctx.createLinearGradient(0,0,w,h);grd.addColorStop(0,'rgba(94,145,80,.38)');grd.addColorStop(1,'rgba(33,63,88,.42)');ctx.fillStyle=grd;ctx.fillRect(pad,pad,(max-min)*scale,(max-min)*scale);
+  ctx.strokeStyle='#d7b45d';ctx.lineWidth=5;ctx.strokeRect(pad,pad,(max-min)*scale,(max-min)*scale);
+  ctx.strokeStyle='rgba(238,226,190,.48)';ctx.lineWidth=10;ctx.lineCap='round';
+  let a=xy(tc,min+8),b=xy(tc,max-8);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  a=xy(min+8,tc);b=xy(max-8,tc);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  const roads=[
+    [hub.guild,hub.jobs],[hub.jobs,hub.guide],[hub.guild,hub.roost],[hub.guild,hub.shrine],[hub.jobs,hub.tavern],[hub.jobs,hub.skyport],[hub.jobs,hub.marketX?{x:hub.marketX,z:tc}:null],
+  ].filter(r=>r[0]&&r[1]);
+  ctx.strokeStyle='rgba(216,193,139,.55)';ctx.lineWidth=4;
+  for(const [from,to] of roads){const p1=xy(from.x,from.z),p2=xy(to.x,to.z);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();}
+  const drawPoint=(label,x,z,color='#9ad26b',r=6)=>{
+    const p=xy(x,z);ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#f8fbff';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(label,p.x,p.y-11);
+  };
+  const signLabels=layout.signs.map(s=>({title:s.title,x:s.x,z:s.z,color:s.color||'#d7b45d'}));
+  const short=s=>String(s||'').replace(/\s*&\s*/g,' & ').replace('WESTWIND ','').slice(0,18);
+  for(const s of signLabels)drawPoint(short(s.title),s.x,s.z,s.color,5);
+  for(const s of layout.labels)drawPoint(short(s.title),s.x,s.z,s.color||'#ffd24a',5);
+  if(globalThis.dim==='overworld'&&globalThis.player&&globalThis.player.pos){
+    const px=Math.max(min,Math.min(max,globalThis.player.pos.x)),pz=Math.max(min,Math.min(max,globalThis.player.pos.z)),p=xy(px,pz);
+    const pulse=5+Math.sin(performance.now()/180)*2;
+    ctx.fillStyle='rgba(79,216,255,.24)';ctx.beginPath();ctx.arc(p.x,p.y,pulse+8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#4fd8ff';ctx.beginPath();ctx.arc(p.x,p.y,pulse,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#ffffff';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#ffffff';ctx.font='bold 13px monospace';ctx.fillText('YOU',p.x,p.y-17);
+  }
+  ctx.fillStyle='rgba(3,9,16,.78)';ctx.fillRect(12,12,250,34);
+  ctx.fillStyle='#ffe39a';ctx.font='bold 14px monospace';ctx.textAlign='left';ctx.fillText('TOWN OF BEGINNINGS',24,34);
+}
+function openTownMapUI(){
+  openQWin('management');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='TOWN MAP';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='TOWN OF BEGINNINGS - LIVE POSITION';qpanelEl.appendChild(sub);
+  const panel=document.createElement('div');panel.className='town-map-panel';
+  const canvas=document.createElement('canvas');canvas.className='town-map-canvas';canvas.width=760;canvas.height=540;panel.appendChild(canvas);
+  const legend=document.createElement('div');legend.className='town-map-legend';legend.innerHTML='<span><b></b>You</span><span><b class="gold"></b>Buildings</span><span><b class="green"></b>NPCs / services</span>';panel.appendChild(legend);
+  qpanelEl.appendChild(panel);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('REFRESH',()=>drawTownMapCanvas(canvas)));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+  cancelAnimationFrame(townMapAnimation);
+  const tick=()=>{if(!canvas.isConnected)return;drawTownMapCanvas(canvas);townMapAnimation=requestAnimationFrame(tick);};
+  tick();
+}
+globalThis.BlockcraftTownMap={open:openTownMapUI};
 function showTreasureParchment(map,title='TREASURE MAP'){
   if(!map)return;
   let el=document.getElementById('treasureparchment');
@@ -4216,6 +4286,10 @@ function openCartographerUI(state=cartographerState){
   const h=document.createElement('h2');h.textContent='ORIN MAPWELL';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='ROYAL CARTOGRAPHER · '+(state.totalFound|0)+' / '+(state.total|0)+' LOCATIONS';qpanelEl.appendChild(sub);
   const intro=document.createElement('div');intro.className='cartographer-briefing'+(state.introSeen?'':' fresh');intro.innerHTML='<small>'+(state.introSeen?'ORIN\'S NOTES':'FIRST BRIEFING')+'</small><p>"A blank map is not empty. It is asking you a question."</p><ul><li><b>Map Leads</b> mark one undiscovered place in gold.</li><li><b>Treasure Maps</b> give three clue stages and a visible gold beam.</li><li><b>Weather Sites</b> only wake in rain, storms, or clear skies.</li></ul>';qpanelEl.appendChild(intro);
+  const townMapCard=document.createElement('div');townMapCard.className='quest-rank-summary treasure-card'+(state.hasTownMap?'':' fresh');
+  if(state.hasTownMap){townMapCard.innerHTML='<span><small>TOWN OF BEGINNINGS MAP</small><b>Open a live town layout with your current position marked.</b></span><span>OPEN MAP</span>';townMapCard.onclick=()=>openTownMapUI();}
+  else{townMapCard.innerHTML='<span><small>TOWN OF BEGINNINGS MAP</small><b>Take your first town map before you begin exploring the districts.</b></span><span>TAKE MAP</span>';townMapCard.onclick=()=>NET.room&&NET.room.send('cartographer',{action:'claim_town_map'});}
+  qpanelEl.appendChild(townMapCard);
   const regions=document.createElement('div');regions.className='discovery-regions';
   for(const r of state.regions||[]){const complete=r.total>0&&r.found>=r.total,card=document.createElement('div');card.className='discovery-region';card.innerHTML='<small>'+escHTML(r.name)+'</small><b>'+r.found+' / '+r.total+'</b><i><span style="width:'+(r.total?Math.round(r.found/r.total*100):0)+'%"></span></i><em>'+(r.claimed?'CLAIMED':complete?'READY':'SCOUTING')+'</em>';if(complete&&!r.claimed){const claim=qBtn('CLAIM '+(100*(r.index+1))+' GOLD',()=>NET.room.send('cartographer',{action:'claim_region',region:r.index}));card.appendChild(claim);}regions.appendChild(card);}qpanelEl.appendChild(regions);
   const c=state.contract,contract=document.createElement('div');contract.className='quest-rank-summary';

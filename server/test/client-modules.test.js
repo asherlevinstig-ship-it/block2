@@ -147,11 +147,13 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   const serverWorld = fs.readFileSync(path.join(__dirname, '..', 'world.js'), 'utf8');
 
-  assert.match(world, /WORLD_TOWN_HS=60/);
-  assert.match(world, /TOWN = \{ TC: WX\/2, HS: 60, G: 15 \}/);
+  assert.match(world, /WORLD_TOWN_HS=72/);
+  assert.match(world, /TOWN = \{ TC: WX\/2, HS: 72, G: 15 \}/);
   assert.match(world, /TOWN_SPACING = 1\.14/);
-  assert.match(serverWorld, /TOWN = \{ TC: WX \/ 2, HS: 60, G: 15 \}/);
+  assert.match(world, /TOWN_DISTRICTS = Object\.freeze/);
+  assert.match(serverWorld, /TOWN = \{ TC: WX \/ 2, HS: 72, G: 15 \}/);
   assert.match(serverWorld, /TOWN_SPACING = 1\.14/);
+  assert.match(serverWorld, /TOWN_DISTRICTS = Object\.freeze/);
   assert.match(world, /open town districts replacing NPC houses/);
   assert.match(serverWorld, /Open district footprints replacing the old NPC cottages/);
   assert.match(world, /tavern commons and player storage yard/);
@@ -160,6 +162,50 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
   assert.doesNotMatch(menus, /SW cottage|S cottage|NE cottage|each cottage/);
   assert.doesNotMatch(serverWorld, /cottage SW|cottage S|cottage NE/);
+});
+
+test('Town of Beginnings gives every public building or worksite a physical sign', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  assert.match(world, /const TOWN_BUILDING_SIGNS=Object\.freeze\(\[/);
+  assert.match(world, /function makeTownBuildingSign\(spec\)/);
+  assert.match(world, /TOWN_BUILDING_SIGNS\.forEach\(makeTownBuildingSign\)/);
+  for (const title of [
+    'GUILD HALL', 'TAVERN & INN', 'SMITHY', 'MEDITATION HALL', 'DRAGON ROOST',
+    'WESTWIND SKYPORT', 'MARKET STALLS', 'FARM PLOTS', 'QUARRY WORK', 'GATE SHARD', 'AEGIS SHRINE',
+  ]) {
+    assert.match(world, new RegExp(`title:'${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+  }
+});
+
+test('Town Map is granted by Orin and opens as a live position item', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const constants = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'constants.js'), 'utf8');
+  const store = fs.readFileSync(path.join(__dirname, '..', 'store.js'), 'utf8');
+
+  assert.match(constants, /TOWN_MAP: 217/);
+  assert.match(constants, /\[I\.TOWN_MAP\]: 'Town Map'/);
+  assert.match(world, /TOWN_MAP:217/);
+  assert.match(world, /ITEMS\[I\.TOWN_MAP\]=\{name:'Town Map',stack:1/);
+  assert.match(world, /BlockcraftTownLayout/);
+  assert.match(room, /ensureTownMapIntroduction\(prof\)/);
+  assert.match(room, /ensureAdminTownMap\(prof\)/);
+  assert.match(room, /adminlevin/);
+  assert.match(room, /first_town_map/);
+  assert.match(room, /claim_town_map/);
+  assert.match(room, /townMapClaimed/);
+  assert.match(store, /townMapClaimed/);
+  assert.match(menus, /function openTownMapUI\(\)/);
+  assert.match(menus, /BlockcraftTownMap=\{open:openTownMapUI\}/);
+  assert.match(menus, /drawTownMapCanvas\(canvas\)/);
+  assert.match(menus, /action==='cartographer'/);
+  assert.match(combat, /heldRC && heldRC\.id===I\.TOWN_MAP/);
+  assert.match(networking, /room\.onMessage\('townMapClaimed'/);
+  assert.match(styles, /\.town-map-canvas/);
 });
 
 test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => {
@@ -1071,6 +1117,20 @@ test('low mana or stamina prompts Recall recharge without interrupting active qu
   assert.match(frame,/press <b>P<\/b> for a Recall recharge question/);
   assert.match(frame,/Recall recharge question\.',\s*'minor'\)/);
   assert.match(frame,/maybePromptRecallRecharge\(now\)/);
+});
+
+test('Recall Cast restores stamina and level-one town HUD shows the stamina bar',()=>{
+  const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
+  const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(room,/restoreRecallStamina\(client,prof\)/);
+  assert.match(room,/stamina:stamina\.restore,sp:stamina\.sp,maxSp:stamina\.maxSp/);
+  assert.match(room,/staminaFraction:RECALL\.RESTORE_FRACTION/);
+  assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
+  assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
+  assert.match(recall,/renderBars\(\);setTimeout\(clearRecall/);
+  assert.match(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
+  assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
 });
 
 test('basic jumping is not blocked by empty stamina',()=>{

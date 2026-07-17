@@ -843,6 +843,7 @@ class GameRoom extends Room {
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
       if (this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
+      if (this.ensureAdminTownMap(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
       const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
       if (returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
@@ -1337,6 +1338,7 @@ class GameRoom extends Room {
     if (tutorial === 'onboarding') {
       const spawn = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
       rec.prof.pos = spawn;
+      this.ensureTownMapIntroduction(rec.prof);
       this.leaveTutorialDimension(client, spawn);
       const p = this.state.players.get(client.sessionId);
       if (p) {
@@ -1354,6 +1356,7 @@ class GameRoom extends Room {
       version: expected,
       tutorials: { ...rec.prof.tutorials },
     });
+    this.sendProfile(client, rec.prof);
     return true;
   }
 
@@ -1362,6 +1365,35 @@ class GameRoom extends Room {
     if (!Array.isArray(prof.pos) || !W.isTrainingMeadowLand(prof.pos[0], prof.pos[2], 4)) return false;
     prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
     return true;
+  }
+
+  ensureTownMapIntroduction(prof) {
+    if (!prof || prof.noPersist || !prof.tutorials || (prof.tutorials.onboarding | 0) < TUTORIAL_VERSIONS.onboarding) return false;
+    if (prof.townMapClaimed || this.profileItemCount(prof, I.TOWN_MAP) > 0) return false;
+    if (prof.progressionFocus && PROGRESSION_FOCUS_STATES.includes(prof.progressionFocus)) return false;
+    prof.progressionFocus = 'first_town_map';
+    return true;
+  }
+
+  ensureAdminTownMap(prof) {
+    if (!prof || prof.noPersist) return false;
+    const adminName = String(prof.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+    if (adminName !== 'adminlevin') return false;
+    let changed = false;
+    if (this.profileItemCount(prof, I.TOWN_MAP) <= 0) {
+      const left = this.addRewardItem(prof, I.TOWN_MAP, 1);
+      if (left > 0) return false;
+      changed = true;
+    }
+    if (prof.townMapClaimed !== true) {
+      prof.townMapClaimed = true;
+      changed = true;
+    }
+    if (prof.progressionFocus === 'first_town_map') {
+      prof.progressionFocus = '';
+      changed = true;
+    }
+    return changed;
   }
 
   returningOrLegacyProfile(prof) {
@@ -3305,6 +3337,7 @@ class GameRoom extends Room {
   }
   progressionObjective(focus) {
     const map = {
+      first_town_map: ['progression:first_town_map', 'progression', 'Town Map', 'Pick up a Town of Beginnings map from Orin Mapwell.', 'Orin Mapwell', 'cartographer', 'VISIT ORIN', 45],
       first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Mara\'s combat lesson.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
       first_e_gate: ['progression:first_e_gate', 'progression', 'First E-rank Gate', 'Clear Mara\'s first E-rank Gate.', 'Wilderness Gate', 'find_gate', 'FIND GATE', 50],
       first_craft_station: ['progression:first_craft_station', 'progression', 'First Craft Station', 'Craft a Crafting Table or Furnace.', 'Crafting menu', 'craft', 'CRAFT STATION', 50],
@@ -4804,7 +4837,8 @@ class GameRoom extends Room {
   cartographerPayload(prof, client = null) {
     const entries=this.cartographerEntries(prof),regions=DANGER_RINGS.map((r,i)=>{const all=entries.filter(e=>e.region===i);return {index:i,name:r.name,found:all.filter(e=>e.found).length,total:all.length,claimed:(prof.cartographerRegionClaims||[]).includes(i)};});
     const mapTable=!!(client&&this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table')),mapLeadCost=mapTable?15:25;
-    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap,mapTable),cosmetics:prof.cosmeticUnlocks||[],equippedCosmetics:prof.equippedCosmetics||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen,mapTable,mapLeadCost};
+    const hasTownMap=this.profileItemCount(prof,I.TOWN_MAP)>0;
+    return {regions,hints:prof.cartographerHints||[],contract:prof.cartographerContract||null,treasure:this.publicTreasureMap(prof.treasureMap,mapTable),cosmetics:prof.cosmeticUnlocks||[],equippedCosmetics:prof.equippedCosmetics||[],gold:prof.gold|0,totalFound:entries.filter(e=>e.found).length,total:entries.length,introSeen:!!prof.cartographerIntroSeen,mapTable,mapLeadCost,hasTownMap,townMapClaimed:!!prof.townMapClaimed||hasTownMap,townMapObjective:prof.progressionFocus==='first_town_map'};
   }
   publicCosmetics(prof) {
     return Array.isArray(prof && prof.equippedCosmetics)
@@ -4836,7 +4870,17 @@ class GameRoom extends Room {
     if(!Array.isArray(prof.cosmeticUnlocks))prof.cosmeticUnlocks=[];
     if(!Array.isArray(prof.equippedCosmetics))prof.equippedCosmetics=sanitizeEquippedCosmetics(prof.equippedCosmetics,prof.cosmeticUnlocks);
     if(!prof.cartographerIntroSeen){prof.cartographerIntroSeen=true;this.dirtyPlayers.add(rec.token);client.send('cartographerIntro',{ok:true});}
-    if(action==='hint'){
+    if(action==='claim_town_map'){
+      if(this.profileItemCount(prof,I.TOWN_MAP)<=0){
+        const left=this.addRewardItem(prof,I.TOWN_MAP,1);
+        if(left>0)return client.send('cartographerReject',{reason:'full'});
+      }
+      prof.townMapClaimed=true;
+      if(prof.progressionFocus==='first_town_map')prof.progressionFocus='';
+      this.dirtyPlayers.add(rec.token);
+      this.sendProfile(client,prof);
+      client.send('townMapClaimed',{ok:true,item:I.TOWN_MAP,activeObjectives:this.activeQuestObjectives(client,prof)});
+    }else if(action==='hint'){
       const mapTable=!!(this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'));
       const cost=mapTable?15:25,candidates=entries.filter(e=>!e.found&&!prof.cartographerHints.includes(e.s.id));
       if(!candidates.length)return client.send('cartographerReject',{reason:'no_hints'});

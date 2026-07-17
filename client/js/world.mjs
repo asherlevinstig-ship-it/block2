@@ -271,7 +271,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   GOLDEN_BROTH:204, TRAIL_RATION:205, FEAST_PLATTER:206,
   GEODE:207, RAINWAKE_PETAL:208, STORMGLASS:209, SOLAR_GLYPH:210,
   HIDE_ARMOR:211, CHAIN_ARMOR:212, STORMGLASS_ARMOR:213,
-  ANCIENT_FRAGMENT:214, ECHO_GLYPH:215, RELIC_ARMOR_PIECE:216,
+  ANCIENT_FRAGMENT:214, ECHO_GLYPH:215, RELIC_ARMOR_PIECE:216, TOWN_MAP:217,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -663,6 +663,19 @@ ITEMS[I.SOLAR_GLYPH]={name:'Solar Glyph',stack:64,icon:regionalIcon('#8a5b12','#
 ITEMS[I.ANCIENT_FRAGMENT]={name:'Ancient Fragment',stack:64,icon:regionalIcon('#18323a','#35d0c8','#e8ffff')};
 ITEMS[I.ECHO_GLYPH]={name:'Echo Glyph',stack:64,icon:regionalIcon('#1d2552','#8bd7ff','#ffffff')};
 ITEMS[I.RELIC_ARMOR_PIECE]={name:'Relic Armor Piece',stack:32,icon:regionalIcon('#3f3426','#d7b45d','#fff0a8')};
+ITEMS[I.TOWN_MAP]={name:'Town Map',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................",
+"..pppppppppppp..",
+"..pGGGg..bBBp..",
+"..pGGGg..bBBp..",
+"..p...rrrr..p..",
+"..p..rRRRRr.p..",
+"..p..rRYYRr.p..",
+"..p...rrrr..p..",
+"..pBBb..gGGp..",
+"..pBBb..gGGp..",
+"..pppppppppppp..",
+"................"],{p:'#d7b45d',G:'#8ecf72',g:'#4c8f45',b:'#4777a8',B:'#7db7e8',r:'#7a4a25',R:'#b78342',Y:'#ffd86a'}))};
 ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
 const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
@@ -819,7 +832,7 @@ function matchRecipe(cells, w){
 // ---------------- world ----------------
 const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_SIZE, WH=64, SEA=13;
 const LAVA_BORDER_WIDTH=12, LAVA_BORDER_TOP=WH-2;
-const WORLD_TC=WX/2, WORLD_TOWN_HS=60, WORLD_TOWN_G=15;
+const WORLD_TC=WX/2, WORLD_TOWN_HS=72, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
 const {DimensionGrid}=window.BlockcraftDimensions;
@@ -1173,28 +1186,42 @@ function buildLavaBorder(){
 generateWorld();
 
 // ---------------- Town of Beginnings ----------------
-const TOWN = { TC: WX/2, HS: 60, G: 15 }; // center, wall half-size, ground level
+const TOWN = { TC: WX/2, HS: 72, G: 15 }; // center, wall half-size, ground level
 const OLD_TOWN_TC = 64;
 const TOWN_SPACING = 1.14;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
 const tp = v => TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING;
+const TOWN_DISTRICTS = Object.freeze({
+  guild: { x: -18, z: -24 },
+  shrine: { x: 34, z: -26 },
+  forge: { x: 24, z: -22 },
+  tavern: { x: -44, z: 18 },
+  roost: { x: 12, z: 24 },
+  skyport: { x: -18, z: 20 },
+  farm: { x: 36, z: 24 },
+  market: { x: -28, z: 0 },
+});
+const dtx = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.x || 0);
+const dtz = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.z || 0);
+const dpx = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.x || 0);
+const dpz = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.z || 0);
 const HUB = {
   guide: { x: TOWN.TC + 8.5, z: TOWN.TC - 4.5 },
   jobs: { x: TOWN.TC + 4.5, z: TOWN.TC - 8.5 },
-  cartographer: { x: TOWN.TC - 10.5, z: TOWN.TC - 8.5 },
-  quarry: { x: TOWN.TC + 20.5, z: TOWN.TC - 15.5 },
-  farm: { x: tp(56), z: tp(79) },
-  roost: { x: tp(96), z: tp(65) },
-  skyport: { x: tp(32), z: TOWN.TC, y: TOWN.G + 24 },
+  cartographer: { x: TOWN.TC - 22.5, z: TOWN.TC - 11.5 },
+  quarry: { x: dpx(79, 'forge'), z: dpz(39, 'forge') },
+  farm: { x: dpx(56, 'farm'), z: dpz(79, 'farm') },
+  roost: { x: dpx(96, 'roost'), z: dpz(65, 'roost') },
+  skyport: { x: dpx(32, 'skyport'), z: dpz(64, 'skyport'), y: TOWN.G + 24 },
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
-  guild: { x: tp(54.5), z: tp(26.5) },
-  guildNoticeBoard: { x: tp(47), z: tp(26.7) },
-  shrine: { x: tp(47.5), z: tp(48) },
-  meditate: { x: tp(47.5), z: tp(46.5) },
-  smith: { x: tp(78.5), z: tp(50) },
-  tavern: { x: tp(83.5), z: tp(77.5) },
+  guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
+  guildNoticeBoard: { x: dpx(47, 'guild'), z: dpz(26.7, 'guild') },
+  shrine: { x: dpx(47.5, 'shrine'), z: dpz(48, 'shrine') },
+  meditate: { x: dpx(47.5, 'shrine'), z: dpz(46.5, 'shrine') },
+  smith: { x: dpx(78.5, 'forge'), z: dpz(50, 'forge') },
+  tavern: { x: dpx(83.5, 'tavern'), z: dpz(77.5, 'tavern') },
   shard: { x: TOWN.TC + 19, z: TOWN.TC + 1 },
-  marketX: tp(43),
+  marketX: dpx(43, 'market'),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 };
 function fillBox(xa,ya,za,xb,yb,zb,id){
@@ -1257,7 +1284,8 @@ function buildSkyportBlocks(setBlock=setB){
 }
 function wallMat(x,y,z){ return hash2(x*7+y, z*13-y)<0.3 ? B.COBBLE : B.BRICK; }
 function buildGuildHallBase(){
-  const G=TOWN.G,x1=tc(25),x2=tc(60),z1=tc(24),z2=tc(36),doorX=tc(57);
+  const G=TOWN.G, gx=v=>dtx(v,'guild'), gz=v=>dtz(v,'guild');
+  const x1=gx(25),x2=gx(60),z1=gz(24),z2=gz(36),doorX=gx(57);
   fillBox(x1,G,z1,x2,G,z2,B.BRICK);
   fillBox(x1+1,G,z1+1,x2-1,G,z2-1,B.PLANKS);
   for(let x=x1;x<=x2;x++)for(let z=z1;z<=z2;z++){
@@ -1269,23 +1297,23 @@ function buildGuildHallBase(){
   fillBox(doorX-1,G+1,z2,doorX+1,G+3,z2,B.AIR);
   // Reception lobby: a long processional runner leaves the entrance open and
   // leads to a deep, L-shaped desk near the rear wall.
-  for(let z=tc(29);z<=tc(35);z++)for(let x=tc(54);x<=tc(59);x++)setB(x,G,z,(x===tc(54)||x===tc(59))?B.BRICK:B.COBBLE);
-  fillBox(tc(48),G,tc(25),tc(59),G,tc(28),B.BRICK);
-  fillBox(tc(48),G+1,tc(28),tc(59),G+1,tc(28),B.PLANKS);
-  fillBox(tc(48),G+1,tc(26),tc(48),G+1,tc(28),B.PLANKS);
-  setB(tc(48),G+1,tc(28),B.LOG);setB(tc(59),G+1,tc(28),B.LOG);
+  for(let z=gz(29);z<=gz(35);z++)for(let x=gx(54);x<=gx(59);x++)setB(x,G,z,(x===gx(54)||x===gx(59))?B.BRICK:B.COBBLE);
+  fillBox(gx(48),G,gz(25),gx(59),G,gz(28),B.BRICK);
+  fillBox(gx(48),G+1,gz(28),gx(59),G+1,gz(28),B.PLANKS);
+  fillBox(gx(48),G+1,gz(26),gx(48),G+1,gz(28),B.PLANKS);
+  setB(gx(48),G+1,gz(28),B.LOG);setB(gx(59),G+1,gz(28),B.LOG);
   // Waiting benches and timber columns make the wide lobby feel occupied
   // without obstructing the west-side stairwell.
-  for(const z of [tc(29),tc(33)]){
-    fillBox(tc(34),G+1,z,tc(43),G+1,z,B.PLANKS);
-    setB(tc(34),G+1,z,B.LOG);setB(tc(43),G+1,z,B.LOG);
+  for(const z of [gz(29),gz(33)]){
+    fillBox(gx(34),G+1,z,gx(43),G+1,z,B.PLANKS);
+    setB(gx(34),G+1,z,B.LOG);setB(gx(43),G+1,z,B.LOG);
   }
-  for(const [x,z] of [[tc(32),tc(27)],[tc(32),tc(34)],[tc(51),tc(26)]]){
+  for(const [x,z] of [[gx(32),gz(27)],[gx(32),gz(34)],[gx(51),gz(26)]]){
     fillBox(x,G+1,z,x,G+3,z,B.LOG);setB(x,G+4,z,B.TORCH);
   }
   fillBox(x1,G+6,z1,x2,G+6,z2,B.PLANKS);
-  for(let z=z2+1;z<=tc(39);z++)for(let x=doorX-1;x<=doorX+1;x++)setB(x,G,z,B.COBBLE);
-  for(let x=doorX;x<=tc(64);x++)for(let z=tc(38);z<=tc(40);z++)setB(x,G,z,B.COBBLE);
+  for(let z=z2+1;z<=TOWN.TC-12;z++)for(let x=doorX-1;x<=doorX+1;x++)setB(x,G,z,B.COBBLE);
+  for(let x=doorX;x<=TOWN.TC;x++)for(let z=TOWN.TC-14;z<=TOWN.TC-12;z++)setB(x,G,z,B.COBBLE);
   setB(doorX-2,G+1,z2+1,B.TORCH);setB(doorX+2,G+1,z2+1,B.TORCH);
 }
 function buildTown(){
@@ -1385,8 +1413,9 @@ function buildTown(){
       if((x===cx-2||x===cx+2||z===cz-2||z===cz+2) && ((x+z)&1)===0) setB(x,G+8,z,B.BRICK);
   }
 
-  // --- the tavern (south-east district, door facing the plaza) ---
-  const tx1=tc(71), tx2=tc(87), tz1=tc(69), tz2=tc(86), dz0=tc(76);
+  // --- the tavern (south-west district, pulled out toward the wall) ---
+  const tavX=v=>dtx(v,'tavern'), tavZ=v=>dtz(v,'tavern');
+  const tx1=tavX(71), tx2=tavX(87), tz1=tavZ(69), tz2=tavZ(86), dz0=tavZ(76);
   fillBox(tx1,G,tz1, tx2,G,tz2, B.PLANKS);                          // floor
   for(let x=tx1;x<=tx2;x++)for(let z=tz1;z<=tz2;z++){
     const edge = x===tx1||x===tx2||z===tz1||z===tz2;
@@ -1404,7 +1433,8 @@ function buildTown(){
   setB(tx1,G+3,dz0,B.LOG);
   for(const wz of [dz0-5,dz0+5]) for(let y=G+2;y<=G+3;y++) setB(tx1,y,wz,B.GLASS);
   // cobble step path from plaza to the door
-  for(let x=TC+5;x<tx1;x++) setB(x,G,dz0,B.COBBLE);
+  for(let z=Math.min(TC+5,dz0);z<=Math.max(TC+5,dz0);z++) for(let w=-1;w<=1;w++) setB(TC+w,G,z,B.COBBLE);
+  for(let x=Math.min(TC,tx1);x<=Math.max(TC,tx1);x++) for(let w=-1;w<=1;w++) setB(x,G,dz0+w,B.COBBLE);
   // gabled plank roof (slopes along z)
   for(let i=0;;i++){
     const za=tz1-1+i, zb=tz2+1-i;
@@ -1429,7 +1459,7 @@ function buildTown(){
   fillBox(tx2-1,G+8,tz1+1, tx2-1,G+10,tz1+1, B.BRICK);              // kitchen chimney
   // South games-room annex. The original hearth remains as a central divider,
   // with two broad openings connecting food service to the quieter games room.
-  const gamesZ2=tc(94);
+  const gamesZ2=tavZ(94);
   fillBox(tx1,G,tz2+1,tx2,G,gamesZ2,B.PLANKS);
   for(let z=tz2+1;z<=gamesZ2;z++)for(const x of [tx1,tx2])for(let y=G+1;y<=G+4;y++)setB(x,y,z,(z===gamesZ2?B.LOG:B.PLANKS));
   for(let x=tx1;x<=tx2;x++)for(let y=G+1;y<=G+4;y++)setB(x,y,gamesZ2,(x===tx1||x===tx2)?B.LOG:B.PLANKS);
@@ -1438,10 +1468,11 @@ function buildTown(){
   for(const x of [tx1+3,tx1+8,tx1+13])for(let y=G+2;y<=G+3;y++)setB(x,y,gamesZ2,B.GLASS);
   fillBox(tx1-1,G+5,tz2,tx2+1,G+5,gamesZ2+1,B.PLANKS);
   for(const x of [tx1,tx1+5,tx1+10,tx1+15,tx2])fillBox(x,G+4,tz2+1,x,G+4,gamesZ2-1,B.LOG);
-  for(const [x,z] of [[tc(74),tc(89)],[tc(79),tc(89)],[tc(84),tc(89)]])setB(x,G+1,z,B.LOG);
+  for(const [x,z] of [[tavX(74),tavZ(89)],[tavX(79),tavZ(89)],[tavX(84),tavZ(89)]])setB(x,G+1,z,B.LOG);
 
-  // --- the meditation hall (north-west, dark timber shrine with steeple, door facing the road) ---
-  const cx1=tc(42), cz1=tc(40), cx2=tc(52), cz2=tc(56);
+  // --- the meditation hall (north-east shrine district, separated from guild traffic) ---
+  const shrX=v=>dtx(v,'shrine'), shrZ=v=>dtz(v,'shrine');
+  const cx1=shrX(42), cz1=shrZ(40), cx2=shrX(52), cz2=shrZ(56);
   fillBox(cx1,G,cz1, cx2,G,cz2, B.LOG);                              // dark wood floor
   for(let x=cx1;x<=cx2;x++)for(let z=cz1;z<=cz2;z++){
     const edge=x===cx1||x===cx2||z===cz1||z===cz2;
@@ -1450,23 +1481,24 @@ function buildTown(){
     for(let y=G+1;y<=G+5;y++) setB(x,y,z,corner?B.LOG:B.PLANKS);
   }
   // No windows: the hall is lit only by interior candles.
-  fillBox(tc(46),G+1,cz2, tc(48),G+3,cz2, B.AIR);                    // wide arched door, south
-  for(let y=G+1;y<=G+3;y++){ setB(tc(45),y,cz2,B.LOG); setB(tc(49),y,cz2,B.LOG); }
-  fillBox(tc(46),G+4,cz2, tc(48),G+4,cz2, B.LOG);
+  fillBox(shrX(46),G+1,cz2, shrX(48),G+3,cz2, B.AIR);                // wide arched door, south
+  for(let y=G+1;y<=G+3;y++){ setB(shrX(45),y,cz2,B.LOG); setB(shrX(49),y,cz2,B.LOG); }
+  fillBox(shrX(46),G+4,cz2, shrX(48),G+4,cz2, B.LOG);
   for(let i=0;;i++){                                                // gabled roof along z
     const xa=cx1-1+i, xb=cx2+1-i; if(xa>xb) break;
     fillBox(xa,G+6+i,cz1-1, xb,G+6+i,cz2+1, B.LOG);
   }
-  fillBox(tc(45),G+1,tc(38), tc(49),G+10,tc(42), B.LOG);             // steeple shaft
-  for(const [bx,bz] of [[45,40],[49,40],[47,38],[47,42]]) setB(tc(bx),G+9,tc(bz),B.LOG); // sealed belfry
-  fillBox(tc(45),G+11,tc(38), tc(49),G+11,tc(42), B.LOG);            // spire steps
-  fillBox(tc(46),G+12,tc(39), tc(48),G+12,tc(41), B.LOG);
-  setB(tc(47),G+13,tc(40),B.LOG); setB(tc(47),G+14,tc(40),B.LOG);
-  fillBox(tc(45),G+1,tc(44), tc(49),G+1,tc(44), B.LOG);              // low meditation dais
+  fillBox(shrX(45),G+1,shrZ(38), shrX(49),G+10,shrZ(42), B.LOG);     // steeple shaft
+  for(const [bx,bz] of [[45,40],[49,40],[47,38],[47,42]]) setB(shrX(bx),G+9,shrZ(bz),B.LOG); // sealed belfry
+  fillBox(shrX(45),G+11,shrZ(38), shrX(49),G+11,shrZ(42), B.LOG);    // spire steps
+  fillBox(shrX(46),G+12,shrZ(39), shrX(48),G+12,shrZ(41), B.LOG);
+  setB(shrX(47),G+13,shrZ(40),B.LOG); setB(shrX(47),G+14,shrZ(40),B.LOG);
+  fillBox(shrX(45),G+1,shrZ(44), shrX(49),G+1,shrZ(44), B.LOG);      // low meditation dais
   // Open meditation floor: no pews, so groups can gather without blocked paths.
 
-  // --- the smithy (north-east, open-fronted cobble workshop) ---
-  const sx1=tc(74), sz1=tc(45), sx2=tc(83), sz2=tc(54);
+  // --- the smithy (east forge district, open-fronted cobble workshop) ---
+  const forgeX=v=>dtx(v,'forge'), forgeZ=v=>dtz(v,'forge');
+  const sx1=forgeX(74), sz1=forgeZ(45), sx2=forgeX(83), sz2=forgeZ(54);
   fillBox(sx1,G,sz1, sx2,G,sz2, B.COBBLE);                          // floor
   for(let x=sx1;x<=sx2;x++)for(let z=sz1;z<=sz2;z++){
     const edge=x===sx1||x===sx2||z===sz1||z===sz2;
@@ -1474,25 +1506,26 @@ function buildTown(){
     const corner=(x===sx1||x===sx2)&&(z===sz1||z===sz2);
     for(let y=G+1;y<=G+3;y++) setB(x,y,z, corner?B.LOG:B.COBBLE);
   }
-  fillBox(sx1,G+1,tc(49), sx1,G+3,tc(51), B.AIR);                   // wide open front
-  for(const wz of [sz1,sz2]){ setB(tc(78),G+2,wz,B.GLASS); setB(tc(79),G+2,wz,B.GLASS); }
+  fillBox(sx1,G+1,forgeZ(49), sx1,G+3,forgeZ(51), B.AIR);           // wide open front
+  for(const wz of [sz1,sz2]){ setB(forgeX(78),G+2,wz,B.GLASS); setB(forgeX(79),G+2,wz,B.GLASS); }
   fillBox(sx1-1,G+4,sz1-1, sx2+1,G+4,sz2+1, B.BRICK);               // flat brick roof
-  fillBox(tc(82),G+5,tc(47), tc(82),G+8,tc(47), B.COBBLE);           // chimney
-  for(let z=tc(47);z<=tc(49);z++) setB(tc(82),G+1,z,B.FURNACE);     // forge bank
-  setB(tc(82),G+1,tc(52),B.TABLE); setB(tc(82),G+1,tc(53),B.TABLE);
-  setB(tc(78),G+1,tc(47),B.STONE);                                  // anvil block
+  fillBox(forgeX(82),G+5,forgeZ(47), forgeX(82),G+8,forgeZ(47), B.COBBLE); // chimney
+  for(let z=forgeZ(47);z<=forgeZ(49);z++) setB(forgeX(82),G+1,z,B.FURNACE); // forge bank
+  setB(forgeX(82),G+1,forgeZ(52),B.TABLE); setB(forgeX(82),G+1,forgeZ(53),B.TABLE);
+  setB(forgeX(78),G+1,forgeZ(47),B.STONE);                          // anvil block
 
-  // --- dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside) ---
-  const rx1=tc(88), rz1=tc(48), rx2=tc(105), rz2=tc(82);
+  // --- dragon roost: a big open pen for bonded dragons, now using the far south-east wall space ---
+  const roostX=v=>dtx(v,'roost'), roostZ=v=>dtz(v,'roost');
+  const rx1=roostX(88), rz1=roostZ(48), rx2=roostX(105), rz2=roostZ(82);
   for(let x=rx1;x<=rx2;x++) for(let z=rz1;z<=rz2;z++){
     const border=x===rx1||x===rx2||z===rz1||z===rz2;
     setB(x,G,z,border?B.BRICK:B.COBBLE);                              // paved floor
-    if(border && !(x===rx1 && z>=tc(64) && z<=tc(66))){              // 2-high fence; gap = west entrance
+    if(border && !(x===rx1 && z>=roostZ(64) && z<=roostZ(66))){      // 2-high fence; gap = west entrance
       setB(x,G+1,z,B.LOG); setB(x,G+2,z,B.LOG);
     }
   }
-  for(let z=tc(57);z<=tc(82);z++) for(let w=-1;w<=1;w++) setB(tc(84)+w,G,z,B.COBBLE);
-  for(let x=tc(84);x<=rx1;x++) for(let w=-2;w<=2;w++) setB(x,G,tc(65)+w,B.COBBLE);
+  for(let z=Math.min(TC,roostZ(82));z<=Math.max(TC,roostZ(82));z++) for(let w=-1;w<=1;w++) setB(roostX(84)+w,G,z,B.COBBLE);
+  for(let x=roostX(84);x<=rx1;x++) for(let w=-2;w<=2;w++) setB(x,G,roostZ(65)+w,B.COBBLE);
 
   // --- open town districts replacing NPC houses ---
   const paveDistrict=(x1,z1,x2,z2,fill=B.COBBLE,edge=B.BRICK)=>{
@@ -1512,9 +1545,9 @@ function buildTown(){
     for(let i=0;i<len;i++) setB(x,G+1,z+i,B.PLANKS);
     setB(x-1,G+1,z,B.LOG); setB(x-1,G+1,z+len-1,B.LOG);
   };
-  paveDistrict(tc(40),tc(70),tc(61),tc(89),B.COBBLE,B.BRICK);        // tavern commons and player storage yard
-  paveDistrict(tc(68),tc(37),tc(89),tc(44),B.COBBLE,B.BRICK);        // forge district training yard
-  paveDistrict(tc(26),tc(56),tc(38),tc(72),B.CONCRETE,B.BRICK);      // airship cargo apron
+  paveDistrict(dtx(40,'tavern'),dtz(70,'tavern'),dtx(61,'tavern'),dtz(89,'tavern'),B.COBBLE,B.BRICK); // tavern commons and player storage yard
+  paveDistrict(dtx(68,'forge'),dtz(37,'forge'),dtx(89,'forge'),dtz(44,'forge'),B.COBBLE,B.BRICK);     // forge district training yard
+  paveDistrict(dtx(26,'skyport'),dtz(56,'skyport'),dtx(38,'skyport'),dtz(72,'skyport'),B.CONCRETE,B.BRICK); // airship cargo apron
   for(let x=tc(38);x<=tc(83);x++) for(let w=-1;w<=1;w++){
     setB(x,G,tc(64)+w,B.COBBLE); setB(x,G+1,tc(64)+w,B.AIR);
     setB(x,G,tc(60)+w,B.COBBLE); setB(x,G+1,tc(60)+w,B.AIR);
@@ -1523,28 +1556,32 @@ function buildTown(){
     setB(tc(64)+w,G,z,B.COBBLE); setB(tc(64)+w,G+1,z,B.AIR);
     setB(tc(40)+w,G,z,B.COBBLE); setB(tc(40)+w,G+1,z,B.AIR);
   }
-  for(const [lx,lz] of [[41,71],[60,71],[41,88],[60,88],[69,38],[88,38],[69,43],[88,43],[27,57],[37,71]])
-    lanternPost(tc(lx),tc(lz));
-  benchX(tc(44),tc(75),4); benchX(tc(44),tc(84),4);
-  benchZ(tc(57),tc(74),4); benchZ(tc(33),tc(60),5);
-  fillBox(tc(72),G+1,tc(40),tc(76),G+1,tc(40),B.LOG);                // training rail
-  fillBox(tc(79),G+1,tc(40),tc(83),G+1,tc(40),B.LOG);
-  setB(tc(75),G+1,tc(41),B.STONE); setB(tc(81),G+1,tc(41),B.STONE);
-  fillBox(tc(31),G+1,tc(66),tc(35),G+1,tc(67),B.PLANKS);             // cargo pallets
-  setB(tc(85),G+1,tc(84),B.CHEST);                                                 // tavern stockroom
-  setB(tc(75),G+1,tc(46),B.CHEST);                                                 // smithy supplies
-  for(const [lx,lz] of [[74,74],[74,80],[78,76],[78,82]]) setB(tc(lx),G+1,tc(lz),B.LOG); // standing tavern table supports
-  setB(tc(49),G+1,tc(78),B.TABLE); setB(tc(56),G+1,tc(86),B.FURNACE); setB(tc(85),G+1,tc(42),B.TABLE);
+  for(const [lx,lz] of [[41,71],[60,71],[41,88],[60,88]])
+    lanternPost(dtx(lx,'tavern'),dtz(lz,'tavern'));
+  for(const [lx,lz] of [[69,38],[88,38],[69,43],[88,43]])
+    lanternPost(dtx(lx,'forge'),dtz(lz,'forge'));
+  for(const [lx,lz] of [[27,57],[37,71]])
+    lanternPost(dtx(lx,'skyport'),dtz(lz,'skyport'));
+  benchX(dtx(44,'tavern'),dtz(75,'tavern'),4); benchX(dtx(44,'tavern'),dtz(84,'tavern'),4);
+  benchZ(dtx(57,'tavern'),dtz(74,'tavern'),4); benchZ(dtx(33,'skyport'),dtz(60,'skyport'),5);
+  fillBox(dtx(72,'forge'),G+1,dtz(40,'forge'),dtx(76,'forge'),G+1,dtz(40,'forge'),B.LOG); // training rail
+  fillBox(dtx(79,'forge'),G+1,dtz(40,'forge'),dtx(83,'forge'),G+1,dtz(40,'forge'),B.LOG);
+  setB(dtx(75,'forge'),G+1,dtz(41,'forge'),B.STONE); setB(dtx(81,'forge'),G+1,dtz(41,'forge'),B.STONE);
+  fillBox(dtx(31,'skyport'),G+1,dtz(66,'skyport'),dtx(35,'skyport'),G+1,dtz(67,'skyport'),B.PLANKS); // cargo pallets
+  setB(dtx(85,'tavern'),G+1,dtz(84,'tavern'),B.CHEST);               // tavern stockroom
+  setB(dtx(75,'forge'),G+1,dtz(46,'forge'),B.CHEST);                 // smithy supplies
+  for(const [lx,lz] of [[74,74],[74,80],[78,76],[78,82]]) setB(dtx(lx,'tavern'),G+1,dtz(lz,'tavern'),B.LOG); // standing tavern table supports
+  setB(dtx(49,'tavern'),G+1,dtz(78,'tavern'),B.TABLE); setB(dtx(56,'tavern'),G+1,dtz(86,'tavern'),B.FURNACE); setB(dtx(85,'forge'),G+1,dtz(42,'forge'),B.TABLE);
 
   // --- first-time route: spawn -> quest giver -> smithy/crafting -> north wilderness gate ---
-  const firstRouteX=tc(71);
+  const firstRouteX=dtx(71,'forge');
   for(let z=TC+7;z>=TC-6;z--) for(let w=-1;w<=1;w++) setB(TC+w,G,z,B.COBBLE);
   for(let x=TC;x<=firstRouteX;x++) for(let w=-1;w<=1;w++) setB(x,G,TC-5+w,B.COBBLE);
-  for(let z=TC-5;z>=tc(50);z--) for(let w=-1;w<=1;w++) setB(firstRouteX+w,G,z,B.COBBLE);
-  for(let x=firstRouteX;x<=tc(73);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(50)+w,B.COBBLE);
+  for(let z=dtz(50,'forge');z<=TC-5;z++) for(let w=-1;w<=1;w++) setB(firstRouteX+w,G,z,B.COBBLE);
+  for(let x=firstRouteX;x<=dtx(73,'forge');x++) for(let w=-1;w<=1;w++) setB(x,G,dtz(50,'forge')+w,B.COBBLE);
   for(let x=TC+1;x<=TC+3;x++) setB(x,G,TC-1,B.BRICK);  // subtle step 1 marker near fountain
   for(let z=TC-5;z>=TC-7;z--) setB(TC+7,G,z,B.BRICK);  // quest turn marker
-  setB(tc(73),G,tc(50),B.BRICK); setB(tc(74),G,tc(50),B.BRICK); // smithy threshold marker
+  setB(dtx(73,'forge'),G,dtz(50,'forge'),B.BRICK); setB(dtx(74,'forge'),G,dtz(50,'forge'),B.BRICK); // smithy threshold marker
 
   // --- job board: profession contracts sit just off the first-time route ---
   const jbx=(HUB.jobs.x|0), jbz=(HUB.jobs.z|0);
@@ -1562,13 +1599,13 @@ function buildTown(){
   }
 
   // --- cobble connector paths between public districts and main roads ---
-  for(let z=tc(66);z<=tc(89);z++) for(let w=-1;w<=1;w++) setB(tc(50)+w,G,z,B.COBBLE); // tavern commons spine
-  for(let x=tc(50);x<=tc(72);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(72)+w,B.COBBLE); // commons to tavern
-  for(let z=tc(37);z<=tc(50);z++) for(let w=-1;w<=1;w++) setB(tc(78)+w,G,z,B.COBBLE); // forge yard to smithy
-  for(let x=tc(38);x<=tc(50);x++) for(let w=-1;w<=1;w++) setB(x,G,tc(64)+w,B.COBBLE); // airship apron to west road
-  for(let x=tc(66);x<=tc(73);x++) setB(x,G,tc(50),B.COBBLE);        // smithy
-  for(let z=tc(57);z<=tc(62);z++) setB(tc(47),G,z,B.COBBLE);        // church
-  for(let x=tc(84);x<=tc(88);x++) for(let z=tc(63);z<=tc(67);z++) setB(x,G,z,B.COBBLE); // roost threshold
+  for(let z=dtz(66,'tavern');z<=dtz(89,'tavern');z++) for(let w=-1;w<=1;w++) setB(dtx(50,'tavern')+w,G,z,B.COBBLE); // tavern commons spine
+  for(let x=Math.min(dtx(50,'tavern'),tx1);x<=Math.max(dtx(50,'tavern'),tx1);x++) for(let w=-1;w<=1;w++) setB(x,G,dtz(72,'tavern')+w,B.COBBLE); // commons to tavern
+  for(let z=dtz(37,'forge');z<=dtz(50,'forge');z++) for(let w=-1;w<=1;w++) setB(dtx(78,'forge')+w,G,z,B.COBBLE); // forge yard to smithy
+  for(let x=dtx(38,'skyport');x<=tc(50);x++) for(let w=-1;w<=1;w++) setB(x,G,dtz(64,'skyport')+w,B.COBBLE); // airship apron to west road
+  for(let x=dtx(66,'forge');x<=dtx(73,'forge');x++) setB(x,G,dtz(50,'forge'),B.COBBLE); // smithy
+  for(let z=dtz(57,'shrine');z<=dtz(62,'shrine');z++) setB(dtx(47,'shrine'),G,z,B.COBBLE); // shrine
+  for(let x=roostX(84);x<=roostX(88);x++) for(let z=roostZ(63);z<=roostZ(67);z++) setB(x,G,z,B.COBBLE); // roost threshold
 
   // --- market stalls on the west road, far enough from spawn to read as a district ---
   for(const mz of [TC-8, TC+6]){
@@ -1582,10 +1619,10 @@ function buildTown(){
   for(const [ax,az] of [[1,0],[-1,0],[0,1],[0,-1]])
     for(const o of [-2,2]){
       const txp=TC+ax*(HS-2)+(az!==0?o:0), tzp=TC+az*(HS-2)+(ax!==0?o:0);
-      if(txp>=tc(88)&&txp<=tc(105)&&tzp>=tc(48)&&tzp<=tc(82)) continue;   // keep the dragon pen clear
+      if(txp>=dtx(88,'roost')&&txp<=dtx(105,'roost')&&tzp>=dtz(48,'roost')&&tzp<=dtz(82,'roost')) continue; // keep the dragon pen clear
       setB(txp, G+1, tzp, B.TORCH);
     }
-  setB(tc(76),G+1,tc(46),B.TORCH); setB(tc(76),G+1,tc(53),B.TORCH); // smithy
+  setB(dtx(76,'forge'),G+1,dtz(46,'forge'),B.TORCH); setB(dtx(76,'forge'),G+1,dtz(53,'forge'),B.TORCH); // smithy
   buildGuildHallBase();
   buildSkyportBlocks();
   // Final egress pass: town districts (especially the dragon pen and skyport)
@@ -2209,7 +2246,7 @@ function guildFloorY0Client(floor){ return TOWN.G+6+(((floor|0)-1)*5); }
 function guildFloorInteriorForLocal(x,y,z){
   const mine=guildHallState&&guildHallState.guild;
   if(!mine||!(mine.floor>0)) return false;
-  const x1=tc(25), x2=tc(60), z1=tc(24), z2=tc(36), y0=guildFloorY0Client(mine.floor);
+  const x1=dtx(25,'guild'), x2=dtx(60,'guild'), z1=dtz(24,'guild'), z2=dtz(36,'guild'), y0=guildFloorY0Client(mine.floor);
   if(x<x1+2||x>x2-2||z<z1+2||z>z2-2||y<y0+1||y>y0+4) return false;
   return !(x>=x1+3&&x<=x1+4&&z>=z2-7&&z<=z2-3);
 }
@@ -3329,8 +3366,8 @@ let giantGuardian=null;
 const ROBES=[['#8a5a32','#6b4524'],['#5a6e8a','#44546a'],['#6e8a5a','#54693f'],
              ['#8a6e8a','#6a5266'],['#a8743c','#82582c'],['#707a86','#565e68']];
 const HOMES=[
-  [tc(74),tc(76)], [HUB.guild.x,HUB.guild.z], [tc(47),tc(48)],
-  [tc(78),tc(50)], [HUB.jobs.x,HUB.jobs.z], [HUB.roost.x,HUB.roost.z],
+  [dtx(74,'tavern'),dtz(76,'tavern')], [HUB.guild.x,HUB.guild.z], [dtx(47,'shrine'),dtz(48,'shrine')],
+  [dtx(78,'forge'),dtz(50,'forge')], [HUB.jobs.x,HUB.jobs.z], [HUB.roost.x,HUB.roost.z],
   [HUB.farm.x,HUB.farm.z],
 ]; // functional town anchors after NPC houses were removed
 const NPC_ROLES=[
@@ -3347,13 +3384,13 @@ const NPC_ROLES=[
    done:'That is honest weight. The walls will stand a little longer.',
    focus:'mine', job:'miner'},
   {name:'Tobin Ashhand', shortName:'Tobin', role:'smith', title:'Blacksmith', personality:'gruff, proud, secretly protective',
-   work:[tp(78.5),tp(50)], home:[tc(78),tc(50)],
+   work:[HUB.smith.x,HUB.smith.z], home:[dtx(78,'forge'),dtz(50,'forge')],
    line:'Ore in, tools out. I keep the town armed, and I do not send fools past the wall with splinters.',
    accept:'Bring it back clean. Do not make me guess what bit you.',
    done:'Hah. That will ring nicely on the anvil.',
    focus:'mine', job:'blacksmith'},
   {name:'Edda Quill', shortName:'Edda', role:'scholar', title:'Gate Scholar', personality:'curious, nervous, talks too fast near crystals',
-   work:[HUB.shard.x+.5,HUB.shard.z+.5], home:[tc(47),tc(48)],
+   work:[HUB.shard.x+.5,HUB.shard.z+.5], home:[dtx(47,'shrine'),dtz(48,'shrine')],
    line:'Every shard changes a gate. Terrifying, yes, but also beautifully measurable. Bring me proof from the other side.',
    accept:'Wonderful. Dangerous, obviously, but wonderful.',
    done:'The readings moved. That means you mattered.',
@@ -3365,25 +3402,25 @@ const NPC_ROLES=[
    done:'Stock improved. Casualty odds reduced. Excellent.',
    focus:'fetch'},
   {name:'Liss Barley', shortName:'Liss', role:'farmer', title:'Farmer', personality:'gentle, stubborn, knows everyone by appetite',
-   work:[tp(56),tp(82)], home:[HUB.farm.x,HUB.farm.z],
+   work:[HUB.farm.x,HUB.farm.z+3], home:[HUB.farm.x,HUB.farm.z],
    line:'The tavern needs bread, and the walls need fed workers. Heroics are easier on a full stomach.',
    accept:'Take care out there. Crops grow back. People are trickier.',
    done:'Good hands. The town will taste this kindness.',
    focus:'food', job:'farmer'},
   {name:'Pippa Hearth', shortName:'Pippa', role:'cook', title:'Tavern Cook', personality:'fast-talking, generous, terrifying with a ladle',
-   work:[tp(81),tp(75)], home:[tc(74),tc(76)], static:true,
+   work:[HUB.tavern.x,HUB.tavern.z-2.5], home:[dtx(74,'tavern'),dtz(76,'tavern')], static:true,
    line:'A good meal is a buff you can taste. Bring ingredients, leave with something worth eating after a gate.',
    accept:'Lovely. Wash your hands, then touch absolutely nothing fragile.',
    done:'There. The town smells braver already.',
    focus:'food', job:'cook'},
   {name:'Oren Mortar', shortName:'Oren', role:'mason', title:'Mason', personality:'patient, poetic, obsessed with straight lines',
-   work:[tp(47),tp(50)], home:[tc(47),tc(48)],
+   work:[dpx(47,'shrine'),dpz(50,'shrine')], home:[dtx(47,'shrine'),dtz(48,'shrine')],
    line:'Stone keeps the night outside. A wall is just courage stacked carefully.',
    accept:'Good. Bring materials, and I will turn them into certainty.',
    done:'Solid work. The road will remember your boots.',
    focus:'build'},
   {name:'Sable Venn', shortName:'Sable', role:'monk', title:'Shrine Acolyte', personality:'soft-spoken, unsettlingly calm, notices breathing before words',
-   work:[HUB.shrine.x,HUB.shrine.z+.5], home:[tc(47),tc(48)], static:true,
+   work:[HUB.shrine.x,HUB.shrine.z+.5], home:[dtx(47,'shrine'),dtz(48,'shrine')], static:true,
    line:'Stillness is not doing nothing. It is sharpening the part of you that chooses.',
    accept:'Sit with the silence. It gives better orders than panic.',
    done:'You return quieter. Good. Quiet survives.',
@@ -3395,7 +3432,7 @@ const NPC_ROLES=[
    done:'Fewer eyes in the dark tonight. Good.',
    focus:'kill', job:'adventurer'},
   {name:'Rook Emberstall', shortName:'Rook', role:'stablemaster', title:'Roost Stablemaster', personality:'patient, proud, smells faintly of smoke and apples',
-   work:[tp(86.5),tp(65)], home:[HUB.roost.x,HUB.roost.z], static:true,
+   work:[dpx(86.5,'roost'),dpz(65,'roost')], home:[HUB.roost.x,HUB.roost.z], static:true,
    line:'A dragon is not equipment. It is a promise with wings. Name it, feed it, ride it, and let it rest where the town can see it.',
    accept:'Good. Start with trust, then treats.',
    done:'That bond has more shine on it now.',
@@ -3701,7 +3738,7 @@ function guidanceNpcPosition(name){
 function tavernGuidanceTarget(){
   return (typeof bartender!=='undefined' && bartender && bartender.grp)
     ? {x:bartender.grp.position.x, z:bartender.grp.position.z}
-    : {x:tp(79.5), z:tp(80.5)};
+    : {x:dpx(79.5,'tavern'), z:dpz(80.5,'tavern')};
 }
 function dragonPracticeTarget(){
   return {x:HUB.roost.x-8, z:HUB.roost.z+7};
@@ -3761,6 +3798,9 @@ function serverObjectiveGuidanceTarget(o){
   }
   if(action==='claim_aegis'||source==='aegis'||loc.includes('aegis')||loc.includes('guardian')){
     return {kind:'server-aegis',color:0xd7b5ff,target:HUB.guardian,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guardian]};
+  }
+  if(action==='cartographer'||loc.includes('orin')||loc.includes('cartographer')||title.includes('town map')){
+    return {kind:'server-cartographer',color:0xffd24a,target:HUB.cartographer,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.cartographer]};
   }
   if(action==='land'||loc.includes('land')||loc.includes('claim')){
     const target={x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
@@ -4099,12 +4139,12 @@ townGroup.add(makeAegisShrineDecor());
 const meditateMat=new THREE.MeshBasicMaterial({color:0x6fb7c8, transparent:true, opacity:.055, depthWrite:false, blending:THREE.AdditiveBlending});
 const meditateRing=new THREE.Mesh(new THREE.PlaneGeometry(8.6,13.2), meditateMat);
 meditateRing.rotation.x=-Math.PI/2;
-meditateRing.position.set(HUB.shrine.x,TOWN.G+1.032,tp(48.4));
+meditateRing.position.set(HUB.shrine.x,TOWN.G+1.032,dpz(48.4,'shrine'));
 townGroup.add(meditateRing);
 function addTownMeditationGlow(){
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:0x7dd3fc, transparent:true,
     opacity:.07, depthWrite:false, blending:THREE.AdditiveBlending}));
-  sp.position.set(HUB.shrine.x,TOWN.G+1.14,tp(48.4));
+  sp.position.set(HUB.shrine.x,TOWN.G+1.14,dpz(48.4,'shrine'));
   sp.scale.set(9.2,9.2,1);
   townGroup.add(sp);
   meditateRing.userData.glow=sp;
@@ -4126,10 +4166,65 @@ function makeShrineMeditationSign(){
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(1.9,.64), new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide}));
   sign.position.set(0,2.45,0);
   grp.add(sign);
-  grp.position.set(tp(43.85),TOWN.G+1,tp(56.62));
+  grp.position.set(dpx(43.85,'shrine'),TOWN.G+1,dpz(56.62,'shrine'));
   townGroup.add(grp);
 }
 makeShrineMeditationSign();
+
+const TOWN_BUILDING_SIGNS=Object.freeze([
+  {title:'GUILD HALL',sub:'FELLOWSHIP',x:dpx(57,'guild'),z:dpz(37.45,'guild'),rot:0,color:'#f2c75c'},
+  {title:'TAVERN & INN',sub:'GILDED MUG',x:dpx(70.25,'tavern'),z:dpz(76,'tavern'),rot:-Math.PI/2,color:'#ffd24a'},
+  {title:'SMITHY',sub:'TOOLS & CRAFTING',x:dpx(72.7,'forge'),z:dpz(50,'forge'),rot:-Math.PI/2,color:'#ffb45e'},
+  {title:'MEDITATION HALL',sub:'TOWN SHRINE',x:dpx(47,'shrine'),z:dpz(57.15,'shrine'),rot:0,color:'#d8f2ff'},
+  {title:'DRAGON ROOST',sub:'DEN & LANDING FIELD',x:dpx(87.15,'roost'),z:dpz(65,'roost'),rot:-Math.PI/2,color:'#66f0ff'},
+  {title:'WESTWIND SKYPORT',sub:'DOCK & CARGO',x:dpx(32,'skyport'),z:dpz(55.15,'skyport'),rot:0,color:'#ffd98a'},
+  {title:'MARKET STALLS',sub:'SUPPLIES',x:HUB.marketX-1.5,z:TOWN.TC-12.5,rot:Math.PI/2,color:'#ffd24a'},
+  {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
+  {title:'QUARRY WORK',sub:'MINER JOBS',x:HUB.quarry.x,z:HUB.quarry.z-3.45,rot:0,color:'#b8c0cc'},
+  {title:'GATE SHARD',sub:'DUNGEON ACCESS',x:HUB.shard.x-3.9,z:HUB.shard.z,rot:-Math.PI/2,color:'#7dd3fc'},
+  {title:'AEGIS SHRINE',sub:'ROAD OATHS',x:HUB.guardian.x,z:HUB.guardian.z-4.1,rot:Math.PI,color:'#d8f2ff'},
+]);
+function makeTownBuildingSign(spec){
+  const grp=new THREE.Group();
+  const wood=voxelMats('#6b421f','#9b6934','#40230f','#241307');
+  const trim=voxelMats('#2b170b','#4a2b13','#1b0d05','#100703');
+  const accent=new THREE.MeshBasicMaterial({color:new THREE.Color(spec.color||'#f2c75c')});
+  addBox(grp,[.12,1.7,.12],[-1.2,.85,0],wood);
+  addBox(grp,[.12,1.7,.12],[1.2,.85,0],wood);
+  addBox(grp,[2.9,1.04,.18],[0,1.75,0],trim);
+  addBox(grp,[2.72,.86,.22],[0,1.75,.02],wood);
+  addBox(grp,[.18,.18,.08],[-1.42,2.33,.08],accent);
+  addBox(grp,[.18,.18,.08],[1.42,2.33,.08],accent);
+  const c=document.createElement('canvas');c.width=384;c.height=144;
+  const g=c.getContext('2d');
+  g.fillStyle='#201106';g.fillRect(0,0,c.width,c.height);
+  g.fillStyle='#b08a55';g.fillRect(10,10,c.width-20,c.height-20);
+  g.strokeStyle=spec.color||'#f2c75c';g.lineWidth=7;g.strokeRect(18,18,c.width-36,c.height-36);
+  g.fillStyle='#170d05';g.textAlign='center';
+  fitCanvasText(g,spec.title,310,32,'bold');g.fillText(spec.title,192,61);
+  g.fillStyle='#3b260f';
+  fitCanvasText(g,spec.sub||'',270,18,'bold');g.fillText(spec.sub||'',192,101);
+  const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+  const face=new THREE.Mesh(new THREE.PlaneGeometry(2.45,.92),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
+  face.position.set(0,1.75,.14);
+  grp.add(face);
+  grp.position.set(spec.x,TOWN.G+1,spec.z);
+  grp.rotation.y=spec.rot||0;
+  townGroup.add(grp);
+  return grp;
+}
+TOWN_BUILDING_SIGNS.forEach(makeTownBuildingSign);
+Object.defineProperty(globalThis,'BlockcraftTownLayout',{value:Object.freeze({
+  town:TOWN,
+  hub:HUB,
+  signs:TOWN_BUILDING_SIGNS,
+  labels:Object.freeze([
+    {title:'Cartographer',x:HUB.cartographer.x,z:HUB.cartographer.z,color:'#ffd24a'},
+    {title:'Mara Vale',x:HUB.guide.x,z:HUB.guide.z,color:'#9ad26b'},
+    {title:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z,color:'#8bbf5a'},
+    {title:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z,color:'#d8f2ff'},
+  ]),
+}),configurable:true});
 
 function makeJobBoardDecor(){
   const grp=new THREE.Group();
@@ -4458,21 +4553,21 @@ addTownInteractLabel('1 Quest Giver', HUB.guide.x, TOWN.G+3.15, HUB.guide.z, '#9
 addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 9);
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);
 addTownInteractLabel('Farm Work', HUB.farm.x, TOWN.G+3.45, HUB.farm.z, '#86efac', 9);
-addTownInteractLabel('Cook Work', tp(81), TOWN.G+3.5, tp(75), '#ffd24a', 8);
-addTownInteractLabel('Dice Table · G', tp(74.5), TOWN.G+3.65, tp(89.5), '#ffd24a', 6);
-addTownInteractLabel('Blackjack Table · G', tp(79.5), TOWN.G+3.65, tp(89.5), '#9ad7ff', 5);
-addTownInteractLabel('Roulette Table · G', tp(84.5), TOWN.G+3.65, tp(89.5), '#ff8aa8', 5);
-addTownInteractLabel('2 Smithy / Crafting', tp(78.5), TOWN.G+4.7, tp(50), '#ffb45e', 12);
+addTownInteractLabel('Cook Work', dpx(81,'tavern'), TOWN.G+3.5, dpz(75,'tavern'), '#ffd24a', 8);
+addTownInteractLabel('Dice Table · G', dpx(74.5,'tavern'), TOWN.G+3.65, dpz(89.5,'tavern'), '#ffd24a', 6);
+addTownInteractLabel('Blackjack Table · G', dpx(79.5,'tavern'), TOWN.G+3.65, dpz(89.5,'tavern'), '#9ad7ff', 5);
+addTownInteractLabel('Roulette Table · G', dpx(84.5,'tavern'), TOWN.G+3.65, dpz(89.5,'tavern'), '#ff8aa8', 5);
+addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
-addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, tc(36)+.4, '#f2c75c', 14);
+addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, '#f2c75c', 14);
 addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
 addTownInteractLabel('3 North Gate', HUB.northGate.x, TOWN.G+5.4, HUB.northGate.z+1.3, '#d8f2ff', 14);
-addTownInteractLabel('Town Shrine', tp(47.5), TOWN.G+5.2, tp(56.5), '#d8f2ff', 12);
+addTownInteractLabel('Town Shrine', dpx(47.5,'shrine'), TOWN.G+5.2, dpz(56.5,'shrine'), '#d8f2ff', 12);
 addTownInteractLabel('Meditation Hall', HUB.shrine.x, TOWN.G+2.85, HUB.shrine.z, '#7dd3fc', 9);
 addTownInteractLabel('Westwind Skyport · G to board · S-Rank · 1000 gold', HUB.skyport.x, HUB.skyport.y+4.2, HUB.skyport.z, '#ffd98a', 20);
 addTownInteractLabel('G BOARD · Requires S-Rank + 1,000 gold', HUB.skyport.x-12.5, HUB.skyport.y+3.2, HUB.skyport.z, '#ffcf6a', 7);
 addTownQuestMarker('jobs',HUB.jobs.x,TOWN.G+4.55,HUB.jobs.z+.35);
-addTownQuestMarker('guild_contracts',HUB.guild.x,TOWN.G+5.0,tc(36)+.4);
+addTownQuestMarker('guild_contracts',HUB.guild.x,TOWN.G+5.0,dtz(36,'guild')+.4);
 addTownQuestMarker('claim_aegis',HUB.guardian.x,TOWN.G+5.8,HUB.guardian.z);
 let guildHallState={floors:[],fellowships:[],guild:null,projectCatalog:[],noticeObjectiveCatalog:[],nextFloor:1,nextPrice:500,maxFloors:6};
 updateFellowshipNoticeBoardLabel();
@@ -4997,7 +5092,7 @@ function makeGuildFloorLabel(floor){
   const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:true}));
   sp.scale.set(7.4,1.62,1);
-  sp.position.set(tp(42.5),TOWN.G+8.6+(floor.floor-1)*5,tc(36)+.12);
+  sp.position.set(dpx(42.5,'guild'),TOWN.G+8.6+(floor.floor-1)*5,dtz(36,'guild')+.12);
   return sp;
 }
 function renderGuildHallFloors(){
@@ -5231,7 +5326,7 @@ const _sunDir=new THREE.Vector3(), _tint=new THREE.Color(), _fog=new THREE.Color
 function shrineInteriorFactor(){
   if(dim!=='overworld' || typeof player==='undefined') return 0;
   const x=player.pos.x, z=player.pos.z, y=player.pos.y;
-  const inside=x>=tc(43)-.5 && x<=tc(51)+.5 && z>=tc(41)-.5 && z<=tc(55)+.5 && y>=TOWN.G && y<=TOWN.G+6.5;
+  const inside=x>=dtx(43,'shrine')-.5 && x<=dtx(51,'shrine')+.5 && z>=dtz(41,'shrine')-.5 && z<=dtz(55,'shrine')+.5 && y>=TOWN.G && y<=TOWN.G+6.5;
   if(inside) return 1;
   const approach=Math.hypot(x-HUB.shrine.x,z-HUB.shrine.z);
   return approach<10 ? Math.max(0,1-approach/10)*.35 : 0;
@@ -8142,8 +8237,8 @@ function itemIconSprite(id,x,y,z,scale=1.05,life=1.05){
   return sp;
 }
 function blacksmithRitualVfx(action='upgrade', itemId=I.IRON_SWORD, plus=0, who='Tobin'){
-  const ax=tp(78.5), ay=TG+2.48, az=tp(47.5);
-  const fx=tp(81.7), fy=TG+1.7, fz=tp(48.5);
+  const ax=dpx(78.5,'forge'), ay=TG+2.48, az=dpz(47.5,'forge');
+  const fx=dpx(81.7,'forge'), fy=TG+1.7, fz=dpz(48.5,'forge');
   const repair=action==='repair';
   const title=repair?'REPAIRED':'REFORGED';
   const name=ITEMS[itemId]?ITEMS[itemId].name:'gear';
@@ -8411,18 +8506,18 @@ function tavernNightLevel(){
 }
 function isInsideTavern(){
   return dim==='overworld' && player.pos.y>=TOWN.G && player.pos.y<TOWN.G+5 &&
-    player.pos.x>tp(71) && player.pos.x<tp(87) &&
-    player.pos.z>tp(69) && player.pos.z<tp(94);
+    player.pos.x>dpx(71,'tavern') && player.pos.x<dpx(87,'tavern') &&
+    player.pos.z>dpz(69,'tavern') && player.pos.z<dpz(94,'tavern');
 }
 const tavernNightObjects=[], tavernNightLights=[], shrineCandleLights=[];
 
 // ambient emitters: hearth fire, forge embers, chimney smoke, fountain splash
 const TG=TOWN.G;
 const emitters=[
-  {x:tp(79.5), y:TG+1.35, z:tp(85.45), type:'fire',   rate:26, nightOnly:true}, // tavern hearth
-  {x:tp(79.5), y:TG+12.7, z:tp(86.5),  type:'smoke',  rate:6,  nightOnly:true}, // tavern chimney
-  {x:tp(81.7), y:TG+1.5,  z:tp(48.5),  type:'fire',   rate:12}, // smithy forge
-  {x:tp(82.5), y:TG+9.6,  z:tp(47.5),  type:'smoke',  rate:5},  // smithy chimney
+  {x:dpx(79.5,'tavern'), y:TG+1.35, z:dpz(85.45,'tavern'), type:'fire',   rate:26, nightOnly:true}, // tavern hearth
+  {x:dpx(79.5,'tavern'), y:TG+12.7, z:dpz(86.5,'tavern'),  type:'smoke',  rate:6,  nightOnly:true}, // tavern chimney
+  {x:dpx(81.7,'forge'), y:TG+1.5,  z:dpz(48.5,'forge'),  type:'fire',   rate:12}, // smithy forge
+  {x:dpx(82.5,'forge'), y:TG+9.6,  z:dpz(47.5,'forge'),  type:'smoke',  rate:5},  // smithy chimney
   {x:tp(64.5), y:TG+4.9,  z:tp(64.5),  type:'splash', rate:20}, // fountain
 ];
 for(const b of roadBreadcrumbs) if(b.type==='campfire') emitters.push({x:b.x+.5,y:b.y+1.45,z:b.z+.5,type:'roadSmoke',rate:3.2});
@@ -8540,7 +8635,7 @@ function updateTavernNightEffects(dt, tt){
 
 // flickering glow sprites for the hearth and forge
 const fireGlowMat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:0xff8c30, transparent:true, opacity:.5, depthWrite:false, blending:THREE.AdditiveBlending});
-for(const [gx,gy,gz,sc,nightOnly] of [[tp(79.5),TG+1.7,tp(85.4),3.1,true],[tp(81.7),TG+1.8,tp(48.5),2.2,false]]){
+for(const [gx,gy,gz,sc,nightOnly] of [[dpx(79.5,'tavern'),TG+1.7,dpz(85.4,'tavern'),3.1,true],[dpx(81.7,'forge'),TG+1.8,dpz(48.5,'forge'),2.2,false]]){
   const mat=nightOnly ? fireGlowMat.clone() : fireGlowMat;
   const sp=new THREE.Sprite(mat);
   sp.position.set(gx,gy,gz); sp.scale.set(sc,sc,1);
@@ -8566,6 +8661,14 @@ function tavernGameAction(game,phase='play'){
     v.gameWatchUntil=now+2.8;v.gameWatchTarget=dealer.grp.position;
   }
 }
+function townPropDistrict(x,z){
+  if(z>=68 || (x>=70 && z>=60)) return 'tavern';
+  if(x>=70 && z<=56) return 'forge';
+  if(x>=42 && x<=53 && z>=38 && z<=58) return 'shrine';
+  return '';
+}
+function townPropX(x,z){ const district=townPropDistrict(x,z); return district?dpx(x,district):tp(x); }
+function townPropZ(x,z){ const district=townPropDistrict(x,z); return district?dpz(z,district):tp(z); }
 function addProp(geo,mat,x,y,z,ry){
   const m=new THREE.Mesh(geo,mat);
   m.position.set(x,y,z); if(ry) m.rotation.y=ry;
@@ -8580,36 +8683,36 @@ function buildProps(){
     const foam=new THREE.Mesh(new THREE.CylinderGeometry(.092,.092,.035,8), propWhite); foam.position.y=.195; grp.add(foam);
     const handle=new THREE.Mesh(new THREE.TorusGeometry(.075,.018,6,10), propMug);
     handle.position.set(.09,.105,0); handle.rotation.y=Math.PI/2; grp.add(handle);
-    grp.position.set(tp(x),y,tp(z)); if(ry) grp.rotation.y=ry; townGroup.add(grp); return grp;
+    grp.position.set(townPropX(x,z),y,townPropZ(x,z)); if(ry) grp.rotation.y=ry; townGroup.add(grp); return grp;
   }
   function plateMeal(x,y,z){
     const plate=new THREE.Mesh(new THREE.CylinderGeometry(.2,.2,.035,12), propWhite);
-    plate.position.set(tp(x),y,tp(z)); townGroup.add(plate);
-    addProp(new THREE.BoxGeometry(.26,.08,.13), new THREE.MeshLambertMaterial({color:0xd49a45}), tp(x-.04), y+.055, tp(z), .25);
-    addProp(new THREE.BoxGeometry(.11,.07,.16), new THREE.MeshLambertMaterial({color:0x7a3b22}), tp(x+.09), y+.065, tp(z+.02), -.35);
+    plate.position.set(townPropX(x,z),y,townPropZ(x,z)); townGroup.add(plate);
+    addProp(new THREE.BoxGeometry(.26,.08,.13), new THREE.MeshLambertMaterial({color:0xd49a45}), townPropX(x-.04,z), y+.055, townPropZ(x-.04,z), .25);
+    addProp(new THREE.BoxGeometry(.11,.07,.16), new THREE.MeshLambertMaterial({color:0x7a3b22}), townPropX(x+.09,z+.02), y+.065, townPropZ(x+.09,z+.02), -.35);
   }
   function curtain(x,z,w,rot){
     const m=new THREE.Mesh(new THREE.PlaneGeometry(w,1.35), propCloth);
-    m.position.set(tp(x),TG+2.05,tp(z)); m.rotation.y=rot||0; townGroup.add(m);
+    m.position.set(townPropX(x,z),TG+2.05,townPropZ(x,z)); m.rotation.y=rot||0; townGroup.add(m);
   }
   function tavernNightLight(x,y,z,color,intensity,dist){
     const l=new THREE.PointLight(color,intensity,dist||7,1.8);
-    l.position.set(tp(x),y,tp(z));
+    l.position.set(townPropX(x,z),y,townPropZ(x,z));
     l.userData.baseIntensity=intensity;
     townGroup.add(l);
     tavernNightLights.push(l);
     return l;
   }
   // tavern: proper counter top and brass foot rail for standing service
-  addProp(new THREE.BoxGeometry(.9,.09,10.7), propWoodL, tp(82.5), TG+2.08, tp(77.5));
-  addProp(new THREE.BoxGeometry(3.7,.09,.9), propWoodL, tp(80.65), TG+2.08, tp(72.5));
-  addProp(new THREE.BoxGeometry(.08,.08,8.3), propBrass, tp(81.84), TG+1.42, tp(78.1));
+  addProp(new THREE.BoxGeometry(.9,.09,10.7), propWoodL, townPropX(82.5,77.5), TG+2.08, townPropZ(82.5,77.5));
+  addProp(new THREE.BoxGeometry(3.7,.09,.9), propWoodL, townPropX(80.65,72.5), TG+2.08, townPropZ(80.65,72.5));
+  addProp(new THREE.BoxGeometry(.08,.08,8.3), propBrass, townPropX(81.84,78.1), TG+1.42, townPropZ(81.84,78.1));
   for(const z of [74.5,76.5,78.5,80.5]){
     chunkyMug(82.25,TG+2.18,z+.1,Math.PI/2);
   }
   // tavern: standing-height drink tables with clear walk space around them
   for(const [lx,lz] of [[74,74],[74,80],[78,76],[78,82]]){
-    addProp(topGeo, propWoodL, tp(lx+.5), TG+2.16, tp(lz+.5));
+    addProp(topGeo, propWoodL, townPropX(lx+.5,lz+.5), TG+2.16, townPropZ(lx+.5,lz+.5));
   }
   for(const [x,z] of [[74.5,74.5],[74.5,80.5],[78.5,76.5],[78.5,82.5]]){
     chunkyMug(x+.18,TG+2.25,z-.12);
@@ -8627,20 +8730,20 @@ function buildProps(){
       pip.position.set(px,.116,pz);
       g.add(pip);
     }
-    g.position.set(tp(x),TG+2.31,tp(z));
+    g.position.set(townPropX(x,z),TG+2.31,townPropZ(x,z));
     g.rotation.y=Math.random()*Math.PI;
     townGroup.add(g);
     return g;
   }
-  for(const [x,z] of [[74.5,89.5],[79.5,89.5],[84.5,89.5]])addProp(topGeo,propWoodL,tp(x),TG+2.16,tp(z));
+  for(const [x,z] of [[74.5,89.5],[79.5,89.5],[84.5,89.5]])addProp(topGeo,propWoodL,townPropX(x,z),TG+2.16,townPropZ(x,z));
   diceCube(74.35,89.35,5); diceCube(74.66,89.58,2);
-  addProp(new THREE.CylinderGeometry(.26,.26,.025,16), new THREE.MeshLambertMaterial({color:0x10151f}), tp(84.5), TG+2.285, tp(89.5));
-  addProp(new THREE.CylinderGeometry(.18,.18,.03,16), new THREE.MeshLambertMaterial({color:0x8a2020}), tp(84.5), TG+2.32, tp(89.5));
-  addProp(new THREE.BoxGeometry(.58,.035,.32), new THREE.MeshLambertMaterial({color:0x1a2634}), tp(79.5), TG+2.285, tp(89.5), .08);
+  addProp(new THREE.CylinderGeometry(.26,.26,.025,16), new THREE.MeshLambertMaterial({color:0x10151f}), townPropX(84.5,89.5), TG+2.285, townPropZ(84.5,89.5));
+  addProp(new THREE.CylinderGeometry(.18,.18,.03,16), new THREE.MeshLambertMaterial({color:0x8a2020}), townPropX(84.5,89.5), TG+2.32, townPropZ(84.5,89.5));
+  addProp(new THREE.BoxGeometry(.58,.035,.32), new THREE.MeshLambertMaterial({color:0x1a2634}), townPropX(79.5,89.5), TG+2.285, townPropZ(79.5,89.5), .08);
   // inn sleeping alcoves
   curtain(74.4,70.8,1.2,Math.PI/2); curtain(77.4,70.8,1.2,Math.PI/2);
   curtain(72.5,72.1,2.0,0); curtain(76.0,72.1,2.0,0); curtain(79.5,72.1,2.0,0);
-  for(const [x,z] of [[72.4,71.45],[75.4,71.45],[78.4,71.45]]) addProp(new THREE.BoxGeometry(.45,.05,.28), propWhite, tp(x), TG+1.62, tp(z));
+  for(const [x,z] of [[72.4,71.45],[75.4,71.45],[78.4,71.45]]) addProp(new THREE.BoxGeometry(.45,.05,.28), propWhite, townPropX(x,z), TG+1.62, townPropZ(x,z));
   // barrels: tavern corner + smithy
   function barrel(x,z){
     const g=new THREE.Group();
@@ -8650,7 +8753,7 @@ function buildProps(){
       const ring=new THREE.Mesh(new THREE.CylinderGeometry(.335,.335,.06,10), propIron);
       ring.position.y=ry; g.add(ring);
     }
-    g.position.set(tp(x),TG+1,tp(z)); townGroup.add(g);
+    g.position.set(townPropX(x,z),TG+1,townPropZ(x,z)); townGroup.add(g);
   }
   barrel(85.5,82.7); barrel(85.45,81.5); barrel(84.6,84.2); barrel(75.6,53.4); barrel(76.8,53.5);
   // round woven rug in the tavern
@@ -8659,27 +8762,27 @@ function buildProps(){
     for(let rr=32;rr>0;rr-=5){ g.fillStyle = (rr/5)%2 ? '#8a2828':'#c8a86a'; g.beginPath(); g.arc(32,32,rr,0,7); g.fill(); } }
   const rugTex=new THREE.CanvasTexture(rugC);
   const rug=new THREE.Mesh(new THREE.CircleGeometry(1.5,20), new THREE.MeshLambertMaterial({map:rugTex}));
-  rug.rotation.x=-Math.PI/2; rug.position.set(tp(78.2),TG+1.02,tp(78.2)); rug.scale.set(1.35,1.15,1); townGroup.add(rug);
+  rug.rotation.x=-Math.PI/2; rug.position.set(townPropX(78.2,78.2),TG+1.02,townPropZ(78.2,78.2)); rug.scale.set(1.35,1.15,1); townGroup.add(rug);
   // meditation hall: red aisle carpet + quiet perimeter candles
   const carpet=new THREE.Mesh(new THREE.PlaneGeometry(1.8,10), new THREE.MeshLambertMaterial({color:0x8a2020}));
-  carpet.rotation.x=-Math.PI/2; carpet.position.set(tp(47.5),TG+1.02,tp(50)); townGroup.add(carpet);
+  carpet.rotation.x=-Math.PI/2; carpet.position.set(townPropX(47.5,50),TG+1.02,townPropZ(47.5,50)); townGroup.add(carpet);
   function candle(x,y,z){
     const isTavern=x>70 && x<86 && z>70;
     const isShrine=x>42 && x<53 && z>40 && z<56;
     const wickMat=new THREE.MeshBasicMaterial({color:0xffcf6a, transparent:isTavern, opacity:isTavern?0:1});
-    const wax=addProp(new THREE.CylinderGeometry(.05,.05,.18,6), propWhite, tp(x),y+.09,tp(z));
-    const flame=addProp(new THREE.BoxGeometry(.06,.07,.06), wickMat, tp(x),y+.22,tp(z));
+    const wax=addProp(new THREE.CylinderGeometry(.05,.05,.18,6), propWhite, townPropX(x,z),y+.09,townPropZ(x,z));
+    const flame=addProp(new THREE.BoxGeometry(.06,.07,.06), wickMat, townPropX(x,z),y+.22,townPropZ(x,z));
     const mat=(isTavern||isShrine) ? fireGlowMat.clone() : fireGlowMat;
     if(isTavern) mat.opacity=0;
     if(isShrine) mat.opacity=.34;
-    const sp=new THREE.Sprite(mat); sp.position.set(tp(x),y+.25,tp(z)); sp.scale.set(.9,.9,1); townGroup.add(sp);
+    const sp=new THREE.Sprite(mat); sp.position.set(townPropX(x,z),y+.25,townPropZ(x,z)); sp.scale.set(.9,.9,1); townGroup.add(sp);
     if(isTavern){
       tavernNightObjects.push({obj:flame, baseOpacity:1, flicker:.18});
       tavernNightObjects.push({obj:sp, baseOpacity:.7, baseScale:.9, flicker:.2});
       tavernNightLight(x,y+.45,z,0xffa64a,.55,4.8);
     } else if(isShrine){
       const l=new THREE.PointLight(0xff9f4a,.42,5.2,1.9);
-      l.position.set(tp(x),y+.48,tp(z));
+      l.position.set(townPropX(x,z),y+.48,townPropZ(x,z));
       l.userData.baseIntensity=.42;
       townGroup.add(l);
       shrineCandleLights.push(l);
@@ -8702,14 +8805,14 @@ function buildProps(){
   const aMid=new THREE.Mesh(new THREE.BoxGeometry(.2,.16,.18), propIron); aMid.position.y=.2; anvil.add(aMid);
   const aTop=new THREE.Mesh(new THREE.BoxGeometry(.58,.14,.26), propIron); aTop.position.y=.35; anvil.add(aTop);
   const aHorn=new THREE.Mesh(new THREE.BoxGeometry(.16,.1,.14), propIron); aHorn.position.set(.34,.35,0); anvil.add(aHorn);
-  anvil.position.set(tp(78.5),TG+2,tp(47.5)); townGroup.add(anvil);
+  anvil.position.set(townPropX(78.5,47.5),TG+2,townPropZ(78.5,47.5)); townGroup.add(anvil);
   const ingotGeo=new THREE.BoxGeometry(.28,.09,.13);
   const ingotMat=new THREE.MeshLambertMaterial({color:0xc8c8d4});
   for(const [ix,iy,iz,iry] of [[81.4,TG+1.05,50.3,0],[81.7,TG+1.05,50.5,.5],[81.5,TG+1.14,50.4,.25]])
-    addProp(ingotGeo, ingotMat, tp(ix),iy,tp(iz), iry);
+    addProp(ingotGeo, ingotMat, townPropX(ix,iz),iy,townPropZ(ix,iz), iry);
   for(let i=0;i<3;i++){
-    addProp(new THREE.BoxGeometry(.06,.6,.06), propWood, tp(79.6+i*.8), TG+2.6, tp(45.62));
-    addProp(new THREE.BoxGeometry(.2,.18,.06), propIron, tp(79.6+i*.8), TG+2.82, tp(45.62));
+    addProp(new THREE.BoxGeometry(.06,.6,.06), propWood, townPropX(79.6+i*.8,45.62), TG+2.6, townPropZ(79.6+i*.8,45.62));
+    addProp(new THREE.BoxGeometry(.2,.18,.06), propIron, townPropX(79.6+i*.8,45.62), TG+2.82, townPropZ(79.6+i*.8,45.62));
   }
   // hanging tavern sign by the door
   const signC=document.createElement('canvas'); signC.width=128; signC.height=64;
@@ -8724,10 +8827,10 @@ function buildProps(){
     g.fillText('MUG',75,45);
   }
   const signTex=new THREE.CanvasTexture(signC); signTex.magFilter=THREE.NearestFilter; signTex.minFilter=THREE.NearestFilter;
-  addProp(new THREE.BoxGeometry(.08,.08,1.45), propWood, tp(70.8), TG+3.75, tp(76.5));
+  addProp(new THREE.BoxGeometry(.08,.08,1.45), propWood, townPropX(70.8,76.5), TG+3.75, townPropZ(70.8,76.5));
   const signMat=new THREE.MeshBasicMaterial({map:signTex, side:THREE.DoubleSide});
   const facade=new THREE.Mesh(new THREE.PlaneGeometry(3.8,1.0), signMat);
-  facade.position.set(tp(70.86), TG+4.45, tp(76));
+  facade.position.set(townPropX(70.86,76), TG+4.45, townPropZ(70.86,76));
   facade.rotation.y=-Math.PI/2;
   townGroup.add(facade);
   function rulesBoard(title,lines,x,z,rot,color='#ffd24a'){
@@ -8737,13 +8840,13 @@ function buildProps(){
     g.fillStyle='#eadfc9';g.font='20px Courier New';lines.forEach((line,i)=>g.fillText(line,192,92+i*32));
     const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
     const board=new THREE.Mesh(new THREE.PlaneGeometry(2.25,1.4),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
-    board.position.set(tp(x),TG+2.55,tp(z));board.rotation.y=rot;townGroup.add(board);
+    board.position.set(townPropX(x,z),TG+2.55,townPropZ(x,z));board.rotation.y=rot;townGroup.add(board);
   }
   function gameDealer(game,name,title,x,z,rot,robe,trim){
     const d={...makeVillager(robe,trim,true),role:'game_dealer',game,name,shortName:name.split(' ')[0],title,
       personality:'tavern dealer',line:'Place your call. The table settles every wager fairly.',static:true,inside:false,
-      wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[tc(74),tc(76)],stuck:0,gameActiveUntil:0,gamePhase:''};
-    d.grp.position.set(tp(x),TG+1,tp(z));d.grp.rotation.y=rot;attachNpcNameplate(d);townGroup.add(d.grp);villagers.push(d);tavernGameDealers.push(d);
+      wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[dtx(74,'tavern'),dtz(76,'tavern')],stuck:0,gameActiveUntil:0,gamePhase:''};
+    d.grp.position.set(townPropX(x,z),TG+1,townPropZ(x,z));d.grp.rotation.y=rot;attachNpcNameplate(d);townGroup.add(d.grp);villagers.push(d);tavernGameDealers.push(d);
   }
   gameDealer('dice','Rook Tallow','Dice Caller',74.5,92.0,Math.PI,'#70462b','#4b2d1d');
   gameDealer('blackjack','Vera Slate','Card Dealer',79.5,92.0,Math.PI,'#294a63','#182f43');
@@ -8754,8 +8857,8 @@ function buildProps(){
   function tavernPatron(name,title,x,z,rot,robe,trim,line){
     const p={...makeVillager(robe,trim,false), role:'patron', name, shortName:name.split(' ')[0], title,
       personality:'tavern regular', line, static:true, inside:false, wait:0, tx:0, tz:0, speed:0,
-      phase:Math.random()*10, home:[tc(74),tc(76)], stuck:0};
-    p.grp.position.set(tp(x),TG+1,tp(z));
+      phase:Math.random()*10, home:[dtx(74,'tavern'),dtz(76,'tavern')], stuck:0};
+    p.grp.position.set(townPropX(x,z),TG+1,townPropZ(x,z));
     p.grp.rotation.y=rot;
     attachNpcNameplate(p);
     townGroup.add(p.grp);

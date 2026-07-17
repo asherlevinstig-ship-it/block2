@@ -9,7 +9,7 @@ export const PROGRESSION_ERRORS = Object.freeze({
 });
 
 export const PROGRESSION_FOCUS_STATES = Object.freeze([
-  'first_road_ready', 'first_e_gate',
+  'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);

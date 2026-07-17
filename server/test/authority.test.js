@@ -129,6 +129,7 @@ const I = {
   MIDAS_BLADE: 169,
   LEVIATHAN_TRIDENT: 170,
   VOID_ANCHOR: 171,
+  TOWN_MAP: 217,
   SOLO_KEY_E: 150,
   SOLO_KEY_D: 151,
   TEAM_KEY_E: 155,
@@ -6640,6 +6641,20 @@ test('completed onboarding is persisted immediately for refresh-safe restore', a
   assert.equal(room.dirtyPlayers.has(token), false);
 });
 
+test('Admin_Levin receives a town map backfill without losing current progress', () => {
+  const room = makeRoom();
+  const prof = defaultProfile('Admin_Levin');
+  prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  prof.progressionFocus = 'first_road_ready';
+
+  assert.equal(room.ensureAdminTownMap(prof), true);
+  assert.equal(prof.townMapClaimed, true);
+  assert.equal(itemCount(prof, I.TOWN_MAP), 1);
+  assert.equal(prof.progressionFocus, 'first_road_ready');
+  assert.equal(room.ensureAdminTownMap(prof), false);
+  assert.equal(itemCount(prof, I.TOWN_MAP), 1);
+});
+
 test('live hunter name updates cannot be overwritten by stale room profiles', async () => {
   const room = makeRoom(), client = makeClient('name_sync');
   room.clients.push(client);
@@ -8985,8 +9000,8 @@ test('follow dragons gain paced bond XP from real overworld travel', () => {
 test('skyport switchback ramps reach the platform with rails and player headroom', () => {
   const world = W.createWorld();
   world.generate();
-  const cx = Math.round(W.TOWN.TC + (32 - 64) * W.TOWN_SPACING);
-  const cz = W.TOWN.TC;
+  const cx = Math.round(W.TOWN.TC + (32 - 64) * W.TOWN_SPACING) - 18;
+  const cz = W.TOWN.TC + 20;
   const top = W.TOWN.G + 24;
   const start = [cx - 3, W.TOWN.G, cz - 6];
   const queue = [start];
@@ -10117,6 +10132,28 @@ test('Recall Lectern study can earn paced fellowship renown', () => {
   p.x = pillar2.x; p.y = pillar2.y || p.y; p.z = pillar2.z;
   room.handleRecallAnswer(client, { id: challenge.id, index: challenge.correct });
   assert.equal(guild.renown, 1);
+});
+
+test('Recall correct answers restore stamina in authoritative profile vitals', () => {
+  const room = makeRoom(), client = makeClient('recall_stamina_restore');
+  room.initRecallState();
+  const { token, prof } = seedPlayer(room, client, { token: 'recall_stamina_token', name: 'Tired Scholar', x: W.TOWN.TC + 10, y: W.TOWN.G + 1, z: W.TOWN.TC + 10 });
+  prof.vitals = { hp: 20, mp: 5, sp: 0, hunger: 100 };
+  prof.vitalsSavedAt = Date.now();
+
+  room.handleRecallStart(client, { subject: 'English', yaw: 0 });
+  const challenge = room.recallChallenges.get(client.sessionId);
+  const p = room.state.players.get(client.sessionId), pillar = challenge.pillars[challenge.correct];
+  p.x = pillar.x; p.y = pillar.y || p.y; p.z = pillar.z;
+  room.handleRecallAnswer(client, { id: challenge.id, index: challenge.correct });
+
+  const result = client.sent.find(e => e.type === 'recallResult' && e.msg.correct);
+  assert.ok(result);
+  assert.equal(result.msg.stamina, 20);
+  assert.equal(result.msg.sp, 20);
+  assert.equal(result.msg.maxSp, 100);
+  assert.equal(prof.vitals.sp, 20);
+  assert.equal(room.dirtyPlayers.has(token), true);
 });
 
 test('fellowship Map Table discounts cartographer leads and sharpens treasure clues', () => {

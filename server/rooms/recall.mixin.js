@@ -109,6 +109,8 @@ class RecallMixin{
     if(correct){
       const st=this.regenAbilityState(client),restore=Math.max(1,Math.ceil(st.maxMp*RECALL.RESTORE_FRACTION));
       st.mp=Math.min(st.maxMp,st.mp+restore);this.sendAbilitySync(client,st);
+      const stamina=rec?this.restoreRecallStamina(client,rec.prof):{restore:0,sp:null,maxSp:null};
+      if(rec)this.dirtyPlayers.add(rec.token);
       let explorationGold=0;
       if(challenge.ruinId&&rec){
         const claimKey=challenge.ruinId+'_knowledge';
@@ -126,10 +128,19 @@ class RecallMixin{
           if(this.awardGuildRenown(client,1,'Recall Lectern study')){fellowshipRenown=1;this.recallLecternRenownAt.set(key,now);}
         }
       }
-      return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,fellowshipRenown,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery});
+      return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,stamina:stamina.restore,sp:stamina.sp,maxSp:stamina.maxSp,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,fellowshipRenown,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery});
     }
     const frozenUntil=now+RECALL.FREEZE_MS;this.recallFrozenUntil.set(sid,frozenUntil);
     client.send('recallResult',{id:challenge.id,correct:false,correctIndex:challenge.correct,explanation:challenge.explanation,freezeMs:RECALL.FREEZE_MS,nextDue:review&&review.record.nextDue,mastery});
+  }
+  restoreRecallStamina(client,prof){
+    if(!prof||typeof this.maxStaminaForProfile!=='function')return{restore:0,sp:null,maxSp:null};
+    if(typeof this.syncProfileVitals==='function')this.syncProfileVitals(client,prof);
+    const maxSp=this.maxStaminaForProfile(prof),raw=prof.vitals&&typeof prof.vitals==='object'?prof.vitals:{};
+    const current=Number.isFinite(+raw.sp)?+raw.sp:maxSp,restore=Math.max(1,Math.ceil(maxSp*RECALL.RESTORE_FRACTION));
+    prof.vitals={...raw,sp:Math.max(0,Math.min(maxSp,current+restore))};
+    prof.vitalsSavedAt=Date.now();
+    return{restore,sp:prof.vitals.sp,maxSp};
   }
   recallMovementLocked(sessionId,now=Date.now()){
     const until=this.recallFrozenUntil&&this.recallFrozenUntil.get(sessionId)||0;

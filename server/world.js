@@ -10,11 +10,23 @@ const { DimensionGrid } = require('../shared/dimension-grid');
 const CHUNK = 16, WORLD_SIZE = 1000, WORLD_CH = Math.ceil(WORLD_SIZE / CHUNK);
 const WX = WORLD_SIZE, WH = 64, SEA = 13;
 const LAVA_BORDER_WIDTH = 12, LAVA_BORDER_TOP = WH - 2;
-const TOWN = { TC: WX / 2, HS: 60, G: 15 };
+const TOWN = { TC: WX / 2, HS: 72, G: 15 };
 const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
 const OLD_TOWN_TC = 64;
 const TOWN_SPACING = 1.14;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
+const TOWN_DISTRICTS = Object.freeze({
+  guild: { x: -18, z: -24 },
+  shrine: { x: 34, z: -26 },
+  forge: { x: 24, z: -22 },
+  tavern: { x: -44, z: 18 },
+  roost: { x: 12, z: 24 },
+  skyport: { x: -18, z: 20 },
+  farm: { x: 36, z: 24 },
+  market: { x: -28, z: 0 },
+});
+const dtx = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.x || 0);
+const dtz = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.z || 0);
 
 const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6, PLANKS: 7,
@@ -559,7 +571,7 @@ function fillBox(xa, ya, za, xb, yb, zb, id) {
 }
 
 function buildSkyportBlocks(setBlock) {
-  const cx = tc(32), cz = TOWN.TC, r = 7, top = TOWN.G + 24;
+  const cx = dtx(32, 'skyport'), cz = dtz(64, 'skyport'), r = 7, top = TOWN.G + 24;
   const rampOpening = new Set();
   // Four broad switchback ramps rise six blocks apiece. Each run reverses at a
   // full-width landing, and the six-block separation leaves generous headroom.
@@ -677,7 +689,8 @@ function buildLavaBorder() {
 }
 
 function buildGuildHallBase(setBlock = setB) {
-  const G = TOWN.G, x1 = tc(25), x2 = tc(60), z1 = tc(24), z2 = tc(36), doorX = tc(57);
+  const G = TOWN.G, gx = v => dtx(v, 'guild'), gz = v => dtz(v, 'guild');
+  const x1 = gx(25), x2 = gx(60), z1 = gz(24), z2 = gz(36), doorX = gx(57);
   const box = (xa, ya, za, xb, yb, zb, id) => {
     for (let x = xa; x <= xb; x++) for (let y = ya; y <= yb; y++) for (let z = za; z <= zb; z++) setBlock(x, y, z, id);
   };
@@ -690,21 +703,21 @@ function buildGuildHallBase(setBlock = setB) {
   }
   for (let x = x1 + 3; x <= x2 - 3; x += 5) { setBlock(x, G + 3, z1, B.GLASS); setBlock(x, G + 3, z2, B.GLASS); }
   box(doorX - 1, G + 1, z2, doorX + 1, G + 3, z2, B.AIR);
-  for (let z = tc(29); z <= tc(35); z++) for (let x = tc(54); x <= tc(59); x++) setBlock(x, G, z, (x === tc(54) || x === tc(59)) ? B.BRICK : B.COBBLE);
-  box(tc(48), G, tc(25), tc(59), G, tc(28), B.BRICK);
-  box(tc(48), G + 1, tc(28), tc(59), G + 1, tc(28), B.PLANKS);
-  box(tc(48), G + 1, tc(26), tc(48), G + 1, tc(28), B.PLANKS);
-  setBlock(tc(48), G + 1, tc(28), B.LOG); setBlock(tc(59), G + 1, tc(28), B.LOG);
-  for (const z of [tc(29), tc(33)]) {
-    box(tc(34), G + 1, z, tc(43), G + 1, z, B.PLANKS);
-    setBlock(tc(34), G + 1, z, B.LOG); setBlock(tc(43), G + 1, z, B.LOG);
+  for (let z = gz(29); z <= gz(35); z++) for (let x = gx(54); x <= gx(59); x++) setBlock(x, G, z, (x === gx(54) || x === gx(59)) ? B.BRICK : B.COBBLE);
+  box(gx(48), G, gz(25), gx(59), G, gz(28), B.BRICK);
+  box(gx(48), G + 1, gz(28), gx(59), G + 1, gz(28), B.PLANKS);
+  box(gx(48), G + 1, gz(26), gx(48), G + 1, gz(28), B.PLANKS);
+  setBlock(gx(48), G + 1, gz(28), B.LOG); setBlock(gx(59), G + 1, gz(28), B.LOG);
+  for (const z of [gz(29), gz(33)]) {
+    box(gx(34), G + 1, z, gx(43), G + 1, z, B.PLANKS);
+    setBlock(gx(34), G + 1, z, B.LOG); setBlock(gx(43), G + 1, z, B.LOG);
   }
-  for (const [x, z] of [[tc(32), tc(27)], [tc(32), tc(34)], [tc(51), tc(26)]]) {
+  for (const [x, z] of [[gx(32), gz(27)], [gx(32), gz(34)], [gx(51), gz(26)]]) {
     box(x, G + 1, z, x, G + 3, z, B.LOG); setBlock(x, G + 4, z, B.TORCH);
   }
   box(x1, G + 6, z1, x2, G + 6, z2, B.PLANKS);
-  for (let z = z2 + 1; z <= tc(39); z++) for (let x = doorX - 1; x <= doorX + 1; x++) setBlock(x, G, z, B.COBBLE);
-  for (let x = doorX; x <= tc(64); x++) for (let z = tc(38); z <= tc(40); z++) setBlock(x, G, z, B.COBBLE);
+  for (let z = z2 + 1; z <= TOWN.TC - 12; z++) for (let x = doorX - 1; x <= doorX + 1; x++) setBlock(x, G, z, B.COBBLE);
+  for (let x = doorX; x <= TOWN.TC; x++) for (let z = TOWN.TC - 14; z <= TOWN.TC - 12; z++) setBlock(x, G, z, B.COBBLE);
   setBlock(doorX - 2, G + 1, z2 + 1, B.TORCH); setBlock(doorX + 2, G + 1, z2 + 1, B.TORCH);
 }
 
@@ -757,9 +770,9 @@ function buildTown() {
       setB(x, G, z, border ? edge : fill);
     }
   };
-  paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
-  paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
-  paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
+  paveDistrict(dtx(40, 'tavern'), dtz(70, 'tavern'), dtx(61, 'tavern'), dtz(89, 'tavern'), B.COBBLE, B.BRICK);
+  paveDistrict(dtx(68, 'forge'), dtz(37, 'forge'), dtx(89, 'forge'), dtz(44, 'forge'), B.COBBLE, B.BRICK);
+  paveDistrict(dtx(26, 'skyport'), dtz(56, 'skyport'), dtx(38, 'skyport'), dtz(72, 'skyport'), B.CONCRETE, B.BRICK);
   for (let x = tc(38); x <= tc(83); x++) for (let w = -1; w <= 1; w++) {
     setB(x, G, tc(64) + w, B.COBBLE);
     setB(x, G, tc(60) + w, B.COBBLE);
@@ -769,16 +782,16 @@ function buildTown() {
     setB(tc(40) + w, G, z, B.COBBLE);
   }
   // buildings as solid collision footprints (visual detail lives on the client)
-  fillBox(tc(71), G + 1, tc(69), tc(87), G + 4, tc(94), B.PLANKS); // tavern
-  fillBox(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE); // smithy
-  fillBox(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);  // church
+  fillBox(dtx(71, 'tavern'), G + 1, dtz(69, 'tavern'), dtx(87, 'tavern'), G + 4, dtz(94, 'tavern'), B.PLANKS); // tavern
+  fillBox(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE); // smithy
+  fillBox(dtx(42, 'shrine'), G + 1, dtz(40, 'shrine'), dtx(52, 'shrine'), G + 5, dtz(56, 'shrine'), B.BRICK); // meditation hall
   // Dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside).
   {
-    const rx1 = tc(88), rz1 = tc(48), rx2 = tc(105), rz2 = tc(82);
+    const rx1 = dtx(88, 'roost'), rz1 = dtz(48, 'roost'), rx2 = dtx(105, 'roost'), rz2 = dtz(82, 'roost');
     for (let x = rx1; x <= rx2; x++) for (let z = rz1; z <= rz2; z++) {
       const border = x === rx1 || x === rx2 || z === rz1 || z === rz2;
       setB(x, G, z, border ? B.BRICK : B.COBBLE);
-      if (border && !(x === rx1 && z >= tc(64) && z <= tc(66))) { setB(x, G + 1, z, B.LOG); setB(x, G + 2, z, B.LOG); }
+      if (border && !(x === rx1 && z >= dtz(64, 'roost') && z <= dtz(66, 'roost'))) { setB(x, G + 1, z, B.LOG); setB(x, G + 2, z, B.LOG); }
     }
   }
   buildGuildHallBase(setB);
@@ -847,9 +860,9 @@ function createWorld() {
         setLocal(x, G, z, border ? edge : fill);
       }
     };
-    paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
-    paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
-    paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
+    paveDistrict(dtx(40, 'tavern'), dtz(70, 'tavern'), dtx(61, 'tavern'), dtz(89, 'tavern'), B.COBBLE, B.BRICK);
+    paveDistrict(dtx(68, 'forge'), dtz(37, 'forge'), dtx(89, 'forge'), dtz(44, 'forge'), B.COBBLE, B.BRICK);
+    paveDistrict(dtx(26, 'skyport'), dtz(56, 'skyport'), dtx(38, 'skyport'), dtz(72, 'skyport'), B.CONCRETE, B.BRICK);
     for (let x = tc(38); x <= tc(83); x++) for (let w = -1; w <= 1; w++) {
       setLocal(x, G, tc(64) + w, B.COBBLE);
       setLocal(x, G, tc(60) + w, B.COBBLE);
@@ -858,15 +871,15 @@ function createWorld() {
       setLocal(tc(64) + w, G, z, B.COBBLE);
       setLocal(tc(40) + w, G, z, B.COBBLE);
     }
-    fillLocal(tc(71), G + 1, tc(69), tc(87), G + 4, tc(94), B.PLANKS);
-    fillLocal(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE);
-    fillLocal(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);
+    fillLocal(dtx(71, 'tavern'), G + 1, dtz(69, 'tavern'), dtx(87, 'tavern'), G + 4, dtz(94, 'tavern'), B.PLANKS);
+    fillLocal(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE);
+    fillLocal(dtx(42, 'shrine'), G + 1, dtz(40, 'shrine'), dtx(52, 'shrine'), G + 5, dtz(56, 'shrine'), B.BRICK);
     {
-      const rx1 = tc(88), rz1 = tc(48), rx2 = tc(105), rz2 = tc(82);
+      const rx1 = dtx(88, 'roost'), rz1 = dtz(48, 'roost'), rx2 = dtx(105, 'roost'), rz2 = dtz(82, 'roost');
       for (let x = rx1; x <= rx2; x++) for (let z = rz1; z <= rz2; z++) {
         const border = x === rx1 || x === rx2 || z === rz1 || z === rz2;
         setLocal(x, G, z, border ? B.BRICK : B.COBBLE);
-        if (border && !(x === rx1 && z >= tc(64) && z <= tc(66))) { setLocal(x, G + 1, z, B.LOG); setLocal(x, G + 2, z, B.LOG); }
+        if (border && !(x === rx1 && z >= dtz(64, 'roost') && z <= dtz(66, 'roost'))) { setLocal(x, G + 1, z, B.LOG); setLocal(x, G + 2, z, B.LOG); }
       }
     }
     buildGuildHallBase(setLocal);

@@ -42,7 +42,7 @@ const ARMOR_IDS = new Set([137, 183, 184, 211, 212, 213]);
 // (like ARMOR_IDS/TUTORIAL_VERSIONS) to keep store.js free of game-code requires;
 // must stay in lockstep with PROGRESSION_FOCUS_STATES in rooms/constants.js.
 const PROGRESSION_FOCUS_STATES = new Set([
-  'first_road_ready', 'first_e_gate',
+  'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);
@@ -347,6 +347,7 @@ function defaultProfile(name) {
     cartographerContract: null,
     treasureMap: null,
     cartographerIntroSeen: false,
+    townMapClaimed: false,
     cosmeticUnlocks: [],
     equippedCosmetics: [],
     regionalContract: null,
@@ -846,6 +847,7 @@ function sanitizeProfile(p) {
     targets: cleanDiscoveryList(p.treasureMap.targets).slice(0, 3), rewardGold: clampI(p.treasureMap.rewardGold, 0, 9999),
   } : null;
   out.cartographerIntroSeen = !!p.cartographerIntroSeen;
+  out.townMapClaimed = p.townMapClaimed === true;
   out.cosmeticUnlocks = sanitizeCosmeticUnlocks(p.cosmeticUnlocks);
   out.equippedCosmetics = Object.prototype.hasOwnProperty.call(p, 'equippedCosmetics')
     ? sanitizeEquippedCosmetics(p.equippedCosmetics, out.cosmeticUnlocks)

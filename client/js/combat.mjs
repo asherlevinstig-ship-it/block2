@@ -2286,6 +2286,7 @@ function secondaryAction(){
   if(toggleMeditation()) return;
   const heldRC=inv[selected];
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
+  if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
   if(heldRC && heldRC.id===I.REPAIR_KIT){ useRepairKit(selected); return; }
   if(heldRC && DRAGON_EGG_TO_TYPE[heldRC.id]!==undefined){ hatchDragonEgg(selected); return; }
   if(heldRC && FAMILIAR_BY_SIGIL[heldRC.id]){ bindFamiliarItem(selected); return; }

@@ -48,7 +48,7 @@ const REWARD_ITEMS = { coal: 101, iron: 102, dia: 103 };
 // client/js/progression.mjs (pinned by the client-modules parity test) so the
 // client whitelist can't drift from the server.
 const PROGRESSION_FOCUS_STATES = Object.freeze([
-  'first_road_ready', 'first_e_gate',
+  'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);
@@ -103,7 +103,7 @@ const I = {
   GOLDEN_BROTH: 204, TRAIL_RATION: 205, FEAST_PLATTER: 206,
   GEODE: 207, RAINWAKE_PETAL: 208, STORMGLASS: 209, SOLAR_GLYPH: 210,
   HIDE_ARMOR: 211, CHAIN_ARMOR: 212, STORMGLASS_ARMOR: 213,
-  ANCIENT_FRAGMENT: 214, ECHO_GLYPH: 215, RELIC_ARMOR_PIECE: 216,
+  ANCIENT_FRAGMENT: 214, ECHO_GLYPH: 215, RELIC_ARMOR_PIECE: 216, TOWN_MAP: 217,
 };
 // Familiars. Shade: defense, Fang: offense, Mote: restoration, Sprite: forage (bonus yield).
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite']);
@@ -551,6 +551,7 @@ const ITEM_NAMES = {
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
   [I.ANCIENT_FRAGMENT]: 'Ancient Fragment', [I.ECHO_GLYPH]: 'Echo Glyph', [I.RELIC_ARMOR_PIECE]: 'Relic Armor Piece',
+  [I.TOWN_MAP]: 'Town Map',
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
 };
