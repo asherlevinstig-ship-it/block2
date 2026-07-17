@@ -3793,6 +3793,9 @@ class GameRoom extends Room {
     const agi = prof && prof.S ? Math.max(1, prof.S.agi | 0) : 1;
     return 100 + (agi - 1) * 4;
   }
+  hungerProtectedForProfile(prof) {
+    return !prof || !prof.S || (prof.S.lvl | 0) < 3;
+  }
   cleanProfileVitals(prof) {
     const maxHp = this.maxHpForProfile(prof);
     const maxMp = this.maxMpForProfile(prof);
@@ -3804,7 +3807,7 @@ class GameRoom extends Room {
       hp: Math.max(1, Math.min(maxHp, trusted ? num(raw.hp, maxHp) : maxHp)),
       mp: Math.max(0, Math.min(maxMp, trusted ? num(raw.mp, maxMp) : maxMp)),
       sp: Math.max(0, Math.min(maxSp, trusted ? num(raw.sp, maxSp) : maxSp)),
-      hunger: Math.max(0, Math.min(MAX_HUNGER, trusted ? num(raw.hunger, MAX_HUNGER) : MAX_HUNGER)),
+      hunger: this.hungerProtectedForProfile(prof) ? MAX_HUNGER : Math.max(0, Math.min(MAX_HUNGER, trusted ? num(raw.hunger, MAX_HUNGER) : MAX_HUNGER)),
     };
   }
   syncProfileVitals(client, prof) {
@@ -3820,7 +3823,7 @@ class GameRoom extends Room {
       hp: Math.max(1, Math.min(maxHp, Number.isFinite(hp && +hp.hp) ? +hp.hp : current.hp)),
       mp: Math.max(0, Math.min(maxMp, Number.isFinite(ability && +ability.mp) ? +ability.mp : current.mp)),
       sp: Math.max(0, Math.min(maxSp, current.sp)),
-      hunger: Math.max(0, Math.min(MAX_HUNGER, Number.isFinite(hunger && +hunger.hunger) ? +hunger.hunger : current.hunger)),
+      hunger: this.hungerProtectedForProfile(prof) ? MAX_HUNGER : Math.max(0, Math.min(MAX_HUNGER, Number.isFinite(hunger && +hunger.hunger) ? +hunger.hunger : current.hunger)),
     };
     prof.vitalsSavedAt = Date.now();
     return prof.vitals;
@@ -3884,6 +3887,7 @@ class GameRoom extends Room {
       this.playerHunger.set(client.sessionId, cur);
     }
     cur.max = MAX_HUNGER;
+    if (rec && this.hungerProtectedForProfile(rec.prof)) cur.hunger = cur.max;
     cur.hunger = Math.max(0, Math.min(cur.max, cur.hunger));
     return cur;
   }
@@ -4379,6 +4383,19 @@ class GameRoom extends Room {
       if (hp.hp <= 0) continue;
       const focus = this.abilityBuffs.get(client.sessionId);
       if (focus && focus.monkRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + JOB_SYSTEM.MONK_RULES.regenPerSecond * dt);
+      const rec = this.profileFor(client);
+      if (rec && this.hungerProtectedForProfile(rec.prof)) {
+        const beforeProtected = Math.ceil(h.hunger);
+        h.hunger = h.max;
+        h.acc = 0;
+        h.syncAcc = 0;
+        if (beforeProtected !== Math.ceil(h.hunger)) {
+          this.sendHungerSync(client, h);
+          this.syncProfileVitals(client, rec.prof);
+          this.dirtyPlayers.add(rec.token);
+        }
+        continue;
+      }
       const before = Math.ceil(h.hunger);
       const moving = (this.pvel.get(client.sessionId) || { x: 0, z: 0 });
       const moveRate = Math.min(1, Math.hypot(moving.x || 0, moving.z || 0) / 6);

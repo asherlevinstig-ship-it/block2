@@ -1211,7 +1211,7 @@ test('profile payload exposes unified active objective descriptors', () => {
 
 test('profile payload exposes live survival vitals instead of refill defaults', () => {
   const room = makeRoom(), client = makeClient('vitals_payload');
-  const { prof } = seedPlayer(room, client, { hp: 7, hunger: 23 });
+  const { prof } = seedPlayer(room, client, { hp: 7, hunger: 23, lvl: 3 });
   prof.vitals.sp = 41;
   prof.vitalsSavedAt = Date.now();
   room.abilityState.set(client.sessionId, { mp: 6, maxMp: 20, cds: {}, last: Date.now() });
@@ -5336,6 +5336,7 @@ test('food use consumes edible items and heals server HP', () => {
   const { prof } = seedPlayer(room, client, {
     hp: 10,
     hunger: 40,
+    lvl: 3,
     inv: [{ id: I.BREAD, count: 2 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.WHEAT, count: 1 }],
   });
 
@@ -5365,7 +5366,7 @@ test('food use consumes edible items and heals server HP', () => {
 test('hunger drains and empty hunger slows without damaging players', () => {
   const room = makeRoom();
   const client = makeClient('hungry');
-  seedPlayer(room, client, { hp: 10, hunger: 0 });
+  seedPlayer(room, client, { hp: 10, hunger: 0, lvl: 3 });
   room.clients = [client];
 
   room.updatePlayerHunger(59);
@@ -5378,6 +5379,19 @@ test('hunger drains and empty hunger slows without damaging players', () => {
   assert.equal(room.playerHp.get(client.sessionId).hp, 10);
   assert.equal(client.sent.some(e => e.type === 'hungerPenalty' && e.msg.moveMultiplier === 0.62), true);
   assert.equal(client.sent.some(e => e.type === 'hurt' && e.msg.reason === 'hunger'), false);
+});
+
+test('hunger stays full for early players below level three', () => {
+  const room = makeRoom();
+  const client = makeClient('early_hunger');
+  const { prof } = seedPlayer(room, client, { hp: 10, hunger: 0, lvl: 2 });
+  room.clients = [client];
+
+  room.updatePlayerHunger(120);
+
+  assert.equal(room.playerHunger.get(client.sessionId).hunger, 100);
+  assert.equal(room.profilePayload(client, prof).vitals.hunger, 100);
+  assert.equal(client.sent.some(e => e.type === 'hungerPenalty'), false);
 });
 
 test('key shop catalog exposes tuned prices beyond starter ranks', () => {

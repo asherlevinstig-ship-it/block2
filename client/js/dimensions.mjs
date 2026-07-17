@@ -718,7 +718,9 @@ function tickAbilities(dt,t){
   if(buffs.regen>0){ buffs.regen=Math.max(0,buffs.regen-dt); hp=Math.min(maxHp(),hp+2*dt); }
   if(buffs.dmg>0 && Math.random()<dt*2.2) umbralEdgeVfx(player.pos.x,player.pos.y,player.pos.z,.34,player.yaw);
   if(buffs.armor>0 && Math.random()<dt*3.5) guardShellVfx(player.pos.x,player.pos.y,player.pos.z,.32);
-  if(!NET.on && locked && hp>0 && !sleeping && !tutorialSafe()){
+  if(S.lvl<3 && hunger<maxHunger()){
+    hunger=maxHunger();hungerAcc=0;starvationAcc=0;renderBars();
+  }else if(!NET.on && locked && hp>0 && !sleeping && !tutorialSafe()){
     const moveRate=sprintingNow?1.8:(keys['KeyW']||keys['KeyA']||keys['KeyS']||keys['KeyD'])?1.25:.55;
     hunger=Math.max(0,hunger-dt*(.018+moveRate*.012));
     hungerAcc+=dt;

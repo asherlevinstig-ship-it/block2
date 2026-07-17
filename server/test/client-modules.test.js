@@ -1129,7 +1129,7 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
   assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
   assert.match(recall,/renderBars\(\);setTimeout\(clearRecall/);
-  assert.match(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
+  assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
 });
 
@@ -1138,6 +1138,7 @@ test('basic jumping is not blocked by empty stamina',()=>{
   assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:8\.2;/);
   assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
   assert.match(frame,/if\(!mounted && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
+  assert.match(frame,/!mounted && !mining && sp<maxSp\(\)/);
 });
 
 test('block placement uses Minecraft-style targeted block face at build reach',()=>{
@@ -1912,6 +1913,7 @@ test('client restore and movement use persisted vitals and empty-hunger slowdown
   assert.match(frameLoop, /const outOfFood=!mounted && hunger<=0/);
   assert.match(frameLoop, /const sprint=.*&&\s*!outOfFood/);
   assert.match(frameLoop, /baseSpd\*\(outOfFood\?0\.62:1\)/);
+  assert.match(dimensions, /if\(S\.lvl<3 && hunger<maxHunger\(\)\)/);
   assert.doesNotMatch(dimensions, /local:starvation/);
 });
 

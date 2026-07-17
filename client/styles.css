@@ -41,9 +41,6 @@
   .xpb span{right:3px;top:-15px;color:#ffe27a;opacity:0;transition:opacity .18s}
   .xpb.xp-gain i{animation:xpGainPulse .42s ease-out}.xpb.xp-gain span{opacity:1}
   @keyframes xpGainPulse{0%{filter:brightness(2.2);box-shadow:0 0 16px #ffd24a}100%{filter:none;box-shadow:0 0 7px rgba(255,210,74,.45)}}
-  body.calm-town:not(.level-two-hud) #stats .mpb,body.calm-town:not(.level-two-hud) #stats .hub{display:none}
-  body.calm-town:not(.level-two-hud) #barcol{width:260px}
-  body.calm-town:not(.level-two-hud) #stats .hpb{height:11px}
   body.calm-town #locationhud .meta{display:none}
   body.calm-town #landmap{display:none!important}
   /* ability slots */
