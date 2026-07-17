@@ -757,9 +757,28 @@ function buildTown() {
       setB(x, G, z, border ? edge : fill);
     }
   };
+  const greenDistrict = (xa, za, xb, zb) => {
+    for (let x = xa; x <= xb; x++) for (let z = za; z <= zb; z++) {
+      const border = x === xa || x === xb || z === za || z === zb;
+      setB(x, G, z, border ? B.BRICK : B.GRASS);
+    }
+  };
   paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
   paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
   paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
+  greenDistrict(tc(29), tc(43), tc(39), tc(55));
+  greenDistrict(tc(53), tc(56), tc(67), tc(67));
+  greenDistrict(tc(30), tc(75), tc(38), tc(93));
+  greenDistrict(tc(61), tc(78), tc(69), tc(92));
+  greenDistrict(tc(91), tc(86), tc(109), tc(103));
+  for (let x = tc(38); x <= tc(83); x++) for (let w = -1; w <= 1; w++) {
+    setB(x, G, tc(64) + w, B.COBBLE);
+    setB(x, G, tc(60) + w, B.COBBLE);
+  }
+  for (let z = tc(42); z <= tc(94); z++) for (let w = -1; w <= 1; w++) {
+    setB(tc(64) + w, G, z, B.COBBLE);
+    setB(tc(40) + w, G, z, B.COBBLE);
+  }
   // buildings as solid collision footprints (visual detail lives on the client)
   fillBox(tc(71), G + 1, tc(69), tc(87), G + 4, tc(94), B.PLANKS); // tavern
   fillBox(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE); // smithy
@@ -839,9 +858,28 @@ function createWorld() {
         setLocal(x, G, z, border ? edge : fill);
       }
     };
+    const greenDistrict = (xa, za, xb, zb) => {
+      for (let x = xa; x <= xb; x++) for (let z = za; z <= zb; z++) {
+        const border = x === xa || x === xb || z === za || z === zb;
+        setLocal(x, G, z, border ? B.BRICK : B.GRASS);
+      }
+    };
     paveDistrict(tc(40), tc(70), tc(61), tc(89), B.COBBLE, B.BRICK);
     paveDistrict(tc(68), tc(37), tc(89), tc(44), B.COBBLE, B.BRICK);
     paveDistrict(tc(26), tc(56), tc(38), tc(72), B.CONCRETE, B.BRICK);
+    greenDistrict(tc(29), tc(43), tc(39), tc(55));
+    greenDistrict(tc(53), tc(56), tc(67), tc(67));
+    greenDistrict(tc(30), tc(75), tc(38), tc(93));
+    greenDistrict(tc(61), tc(78), tc(69), tc(92));
+    greenDistrict(tc(91), tc(86), tc(109), tc(103));
+    for (let x = tc(38); x <= tc(83); x++) for (let w = -1; w <= 1; w++) {
+      setLocal(x, G, tc(64) + w, B.COBBLE);
+      setLocal(x, G, tc(60) + w, B.COBBLE);
+    }
+    for (let z = tc(42); z <= tc(94); z++) for (let w = -1; w <= 1; w++) {
+      setLocal(tc(64) + w, G, z, B.COBBLE);
+      setLocal(tc(40) + w, G, z, B.COBBLE);
+    }
     fillLocal(tc(71), G + 1, tc(69), tc(87), G + 4, tc(94), B.PLANKS);
     fillLocal(tc(74), G + 1, tc(45), tc(83), G + 4, tc(54), B.COBBLE);
     fillLocal(tc(42), G + 1, tc(40), tc(52), G + 5, tc(56), B.BRICK);
