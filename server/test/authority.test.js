@@ -153,10 +153,10 @@ function fakeWorld() {
   };
 }
 
-test('central court fountain stays low, supported, and free of leftover pillars', () => {
+test('central court feature stays flat, supported, and free of leftover pillars', () => {
   W.generate();
   const { TC, G } = W.TOWN;
-  let water = 0, patternedFloor = 0;
+  let patternedFloor = 0, highWater = 0;
   assert.equal(W.isCentralCourtProtectedEdit(TC, G + 2, TC), true, 'saved edits in the central court cleanup zone must be ignored');
   assert.equal(W.isCentralCourtProtectedEdit(TC + 45, G + 2, TC), false, 'saved edits outside the court cleanup zone should still restore');
   for (let x = TC - 8; x <= TC + 8; x++) for (let z = TC - 8; z <= TC + 8; z++) {
@@ -166,10 +166,10 @@ test('central court fountain stays low, supported, and free of leftover pillars'
     for (let y = G + 2; y <= G + 6; y++) {
       assert.equal(W.getB(x, y, z), W.B.AIR, `leftover high fountain block at ${x},${y},${z}`);
     }
-    if (W.getB(x, G + 1, z) === W.B.WATER) water++;
-    if ([W.B.COBBLE, W.B.BRICK].includes(W.getB(x, G, z))) patternedFloor++;
+    if (W.getB(x, G + 1, z) === W.B.WATER) highWater++;
+    if ([W.B.COBBLE, W.B.BRICK, W.B.CONCRETE].includes(W.getB(x, G, z))) patternedFloor++;
   }
-  assert.ok(water >= 30, `fountain should have a visible low water pool, got ${water}`);
+  assert.equal(highWater, 0, 'central court must not use full-height water blocks');
   assert.ok(patternedFloor >= 120, `fountain should have a readable patterned stone base, got ${patternedFloor}`);
 });
 

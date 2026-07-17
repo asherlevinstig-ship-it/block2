@@ -1372,13 +1372,12 @@ function buildTown(){
   setB(sx, G+2, sz, B.BRICK);
   for(let x=TC+8;x<=sx-4;x++) for(let w=-1;w<=1;w++) setB(x,G,sz+w,B.COBBLE);
 
-  // --- central court fountain: shallow circular pool with no high filler blocks ---
+  // --- central court medallion: flat, readable plaza feature with no high filler blocks ---
   for(let x=TC-8;x<=TC+8;x++)for(let z=TC-8;z<=TC+8;z++){
     const d=Math.hypot(x-TC,z-TC);
     if(d>7.4) continue;
     for(let y=G+1;y<=G+6;y++) setB(x,y,z,B.AIR);
-    setB(x,G,z,d>5.8?B.COBBLE:d>4.8?B.BRICK:B.COBBLE);
-    if(d<3.9) setB(x,G+1,z,B.WATER);
+    setB(x,G,z,d>6.3?B.COBBLE:d>4.6?B.BRICK:d>2.2?B.COBBLE:B.CONCRETE);
   }
   for(const [ox,oz] of [[-5,0],[5,0],[0,-5],[0,5]]) setB(TC+ox,G+1,TC+oz,B.LANTERN);
 
