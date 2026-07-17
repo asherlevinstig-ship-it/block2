@@ -1220,6 +1220,13 @@ const HUB = {
   meditate: { x: dpx(47.5, 'shrine'), z: dpz(46.5, 'shrine') },
   smith: { x: dpx(78.5, 'forge'), z: dpz(50, 'forge') },
   tavern: { x: dpx(83.5, 'tavern'), z: dpz(77.5, 'tavern') },
+  tavernDice: { x: dpx(74.5, 'tavern'), z: dpz(89.5, 'tavern') },
+  tavernBlackjack: { x: dpx(79.5, 'tavern'), z: dpz(89.5, 'tavern') },
+  tavernRoulette: { x: dpx(84.5, 'tavern'), z: dpz(89.5, 'tavern') },
+  tavernHearth: { x: dpx(79.5, 'tavern'), z: dpz(85.45, 'tavern') },
+  tavernChimney: { x: dpx(79.5, 'tavern'), z: dpz(86.5, 'tavern') },
+  forgeFire: { x: dpx(81.7, 'forge'), z: dpz(48.5, 'forge') },
+  forgeChimney: { x: dpx(82.5, 'forge'), z: dpz(47.5, 'forge') },
   shard: { x: TOWN.TC + 19, z: TOWN.TC + 1 },
   marketX: dpx(43, 'market'),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
@@ -4150,33 +4157,12 @@ function addTownMeditationGlow(){
   meditateRing.userData.glow=sp;
 }
 addTownMeditationGlow();
-function makeShrineMeditationSign(){
-  const grp=new THREE.Group();
-  const wood=voxelMats('#8a5d33','#b98a52','#4d2f18','#2a180c');
-  addBox(grp,[2.05,.12,.08],[0,2.12,-.05],wood);
-  const c=document.createElement('canvas'); c.width=192; c.height=64;
-  const g=c.getContext('2d');
-  g.fillStyle='#2b1b10'; g.fillRect(0,0,192,64);
-  g.fillStyle='#b08a55'; g.fillRect(6,6,180,52);
-  g.strokeStyle='#5e3f20'; g.lineWidth=6; g.strokeRect(8,8,176,48);
-  g.textAlign='center';
-  g.fillStyle='#10202a'; g.font='bold 17px Courier New'; g.fillText('TOWN SHRINE',96,28);
-  g.fillStyle='#5a3a20'; g.font='bold 10px Courier New'; g.fillText('MEDITATION HALL',96,46);
-  const tex=new THREE.CanvasTexture(c); tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
-  const sign=new THREE.Mesh(new THREE.PlaneGeometry(1.9,.64), new THREE.MeshBasicMaterial({map:tex, side:THREE.DoubleSide}));
-  sign.position.set(0,2.45,0);
-  grp.add(sign);
-  grp.position.set(dpx(43.85,'shrine'),TOWN.G+1,dpz(56.62,'shrine'));
-  townGroup.add(grp);
-}
-makeShrineMeditationSign();
-
 const TOWN_BUILDING_SIGNS=Object.freeze([
-  {title:'GUILD HALL',sub:'FELLOWSHIP',x:dpx(57,'guild'),z:dpz(37.45,'guild'),rot:0,color:'#f2c75c'},
-  {title:'TAVERN & INN',sub:'GILDED MUG',x:dpx(70.25,'tavern'),z:dpz(76,'tavern'),rot:-Math.PI/2,color:'#ffd24a'},
-  {title:'SMITHY',sub:'TOOLS & CRAFTING',x:dpx(72.7,'forge'),z:dpz(50,'forge'),rot:-Math.PI/2,color:'#ffb45e'},
-  {title:'MEDITATION HALL',sub:'TOWN SHRINE',x:dpx(47,'shrine'),z:dpz(57.15,'shrine'),rot:0,color:'#d8f2ff'},
-  {title:'DRAGON ROOST',sub:'DEN & LANDING FIELD',x:dpx(87.15,'roost'),z:dpz(65,'roost'),rot:-Math.PI/2,color:'#66f0ff'},
+  {title:'GUILD HALL',sub:'FELLOWSHIP',x:dpx(50.25,'guild'),z:dpz(39.1,'guild'),rot:0,color:'#f2c75c'},
+  {title:'TAVERN & INN',sub:'GILDED MUG',x:dpx(68.35,'tavern'),z:dpz(71.45,'tavern'),rot:-Math.PI/2,color:'#ffd24a'},
+  {title:'SMITHY',sub:'TOOLS & CRAFTING',x:dpx(71.65,'forge'),z:dpz(45.75,'forge'),rot:-Math.PI/2,color:'#ffb45e'},
+  {title:'MEDITATION HALL',sub:'TOWN SHRINE',x:dpx(42.35,'shrine'),z:dpz(58.05,'shrine'),rot:0,color:'#d8f2ff'},
+  {title:'DRAGON ROOST',sub:'DEN & LANDING FIELD',x:dpx(85.65,'roost'),z:dpz(60.2,'roost'),rot:-Math.PI/2,color:'#66f0ff'},
   {title:'WESTWIND SKYPORT',sub:'DOCK & CARGO',x:dpx(32,'skyport'),z:dpz(55.15,'skyport'),rot:0,color:'#ffd98a'},
   {title:'MARKET STALLS',sub:'SUPPLIES',x:HUB.marketX-1.5,z:TOWN.TC-12.5,rot:Math.PI/2,color:'#ffd24a'},
   {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
@@ -4554,9 +4540,9 @@ addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bb
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);
 addTownInteractLabel('Farm Work', HUB.farm.x, TOWN.G+3.45, HUB.farm.z, '#86efac', 9);
 addTownInteractLabel('Cook Work', dpx(81,'tavern'), TOWN.G+3.5, dpz(75,'tavern'), '#ffd24a', 8);
-addTownInteractLabel('Dice Table · G', dpx(74.5,'tavern'), TOWN.G+3.65, dpz(89.5,'tavern'), '#ffd24a', 6);
-addTownInteractLabel('Blackjack Table · G', dpx(79.5,'tavern'), TOWN.G+3.65, dpz(89.5,'tavern'), '#9ad7ff', 5);
-addTownInteractLabel('Roulette Table · G', dpx(84.5,'tavern'), TOWN.G+3.65, dpz(89.5,'tavern'), '#ff8aa8', 5);
+addTownInteractLabel('Dice Table · G', HUB.tavernDice.x, TOWN.G+3.65, HUB.tavernDice.z, '#ffd24a', 6);
+addTownInteractLabel('Blackjack Table · G', HUB.tavernBlackjack.x, TOWN.G+3.65, HUB.tavernBlackjack.z, '#9ad7ff', 5);
+addTownInteractLabel('Roulette Table · G', HUB.tavernRoulette.x, TOWN.G+3.65, HUB.tavernRoulette.z, '#ff8aa8', 5);
 addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, '#f2c75c', 14);
@@ -8514,10 +8500,10 @@ const tavernNightObjects=[], tavernNightLights=[], shrineCandleLights=[];
 // ambient emitters: hearth fire, forge embers, chimney smoke, fountain splash
 const TG=TOWN.G;
 const emitters=[
-  {x:dpx(79.5,'tavern'), y:TG+1.35, z:dpz(85.45,'tavern'), type:'fire',   rate:26, nightOnly:true}, // tavern hearth
-  {x:dpx(79.5,'tavern'), y:TG+12.7, z:dpz(86.5,'tavern'),  type:'smoke',  rate:6,  nightOnly:true}, // tavern chimney
-  {x:dpx(81.7,'forge'), y:TG+1.5,  z:dpz(48.5,'forge'),  type:'fire',   rate:12}, // smithy forge
-  {x:dpx(82.5,'forge'), y:TG+9.6,  z:dpz(47.5,'forge'),  type:'smoke',  rate:5},  // smithy chimney
+  {x:HUB.tavernHearth.x, y:TG+1.35, z:HUB.tavernHearth.z, type:'fire',   rate:26, nightOnly:true}, // tavern hearth
+  {x:HUB.tavernChimney.x, y:TG+12.7, z:HUB.tavernChimney.z,  type:'smoke',  rate:6,  nightOnly:true}, // tavern chimney
+  {x:HUB.forgeFire.x, y:TG+1.5,  z:HUB.forgeFire.z,  type:'fire',   rate:12}, // smithy forge
+  {x:HUB.forgeChimney.x, y:TG+9.6,  z:HUB.forgeChimney.z,  type:'smoke',  rate:5},  // smithy chimney
   {x:tp(64.5), y:TG+4.9,  z:tp(64.5),  type:'splash', rate:20}, // fountain
 ];
 for(const b of roadBreadcrumbs) if(b.type==='campfire') emitters.push({x:b.x+.5,y:b.y+1.45,z:b.z+.5,type:'roadSmoke',rate:3.2});
@@ -8635,7 +8621,7 @@ function updateTavernNightEffects(dt, tt){
 
 // flickering glow sprites for the hearth and forge
 const fireGlowMat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:0xff8c30, transparent:true, opacity:.5, depthWrite:false, blending:THREE.AdditiveBlending});
-for(const [gx,gy,gz,sc,nightOnly] of [[dpx(79.5,'tavern'),TG+1.7,dpz(85.4,'tavern'),3.1,true],[dpx(81.7,'forge'),TG+1.8,dpz(48.5,'forge'),2.2,false]]){
+for(const [gx,gy,gz,sc,nightOnly] of [[HUB.tavernHearth.x,TG+1.7,HUB.tavernHearth.z,3.1,true],[HUB.forgeFire.x,TG+1.8,HUB.forgeFire.z,2.2,false]]){
   const mat=nightOnly ? fireGlowMat.clone() : fireGlowMat;
   const sp=new THREE.Sprite(mat);
   sp.position.set(gx,gy,gz); sp.scale.set(sc,sc,1);
@@ -8650,7 +8636,6 @@ const propIron=new THREE.MeshLambertMaterial({color:0x3c3c44});
 const propMug=new THREE.MeshLambertMaterial({color:0xc8a060});
 const propWhite=new THREE.MeshLambertMaterial({color:0xeae6da});
 const propBrass=new THREE.MeshLambertMaterial({color:0xd2a43f});
-const propCloth=new THREE.MeshLambertMaterial({color:0x7a2430, side:THREE.DoubleSide});
 const potionVapors=[];
 const tavernGameDealers=[];
 function tavernGameAction(game,phase='play'){
@@ -8690,10 +8675,6 @@ function buildProps(){
     plate.position.set(townPropX(x,z),y,townPropZ(x,z)); townGroup.add(plate);
     addProp(new THREE.BoxGeometry(.26,.08,.13), new THREE.MeshLambertMaterial({color:0xd49a45}), townPropX(x-.04,z), y+.055, townPropZ(x-.04,z), .25);
     addProp(new THREE.BoxGeometry(.11,.07,.16), new THREE.MeshLambertMaterial({color:0x7a3b22}), townPropX(x+.09,z+.02), y+.065, townPropZ(x+.09,z+.02), -.35);
-  }
-  function curtain(x,z,w,rot){
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(w,1.35), propCloth);
-    m.position.set(townPropX(x,z),TG+2.05,townPropZ(x,z)); m.rotation.y=rot||0; townGroup.add(m);
   }
   function tavernNightLight(x,y,z,color,intensity,dist){
     const l=new THREE.PointLight(color,intensity,dist||7,1.8);
@@ -8740,10 +8721,6 @@ function buildProps(){
   addProp(new THREE.CylinderGeometry(.26,.26,.025,16), new THREE.MeshLambertMaterial({color:0x10151f}), townPropX(84.5,89.5), TG+2.285, townPropZ(84.5,89.5));
   addProp(new THREE.CylinderGeometry(.18,.18,.03,16), new THREE.MeshLambertMaterial({color:0x8a2020}), townPropX(84.5,89.5), TG+2.32, townPropZ(84.5,89.5));
   addProp(new THREE.BoxGeometry(.58,.035,.32), new THREE.MeshLambertMaterial({color:0x1a2634}), townPropX(79.5,89.5), TG+2.285, townPropZ(79.5,89.5), .08);
-  // inn sleeping alcoves
-  curtain(74.4,70.8,1.2,Math.PI/2); curtain(77.4,70.8,1.2,Math.PI/2);
-  curtain(72.5,72.1,2.0,0); curtain(76.0,72.1,2.0,0); curtain(79.5,72.1,2.0,0);
-  for(const [x,z] of [[72.4,71.45],[75.4,71.45],[78.4,71.45]]) addProp(new THREE.BoxGeometry(.45,.05,.28), propWhite, townPropX(x,z), TG+1.62, townPropZ(x,z));
   // barrels: tavern corner + smithy
   function barrel(x,z){
     const g=new THREE.Group();
@@ -8814,25 +8791,6 @@ function buildProps(){
     addProp(new THREE.BoxGeometry(.06,.6,.06), propWood, townPropX(79.6+i*.8,45.62), TG+2.6, townPropZ(79.6+i*.8,45.62));
     addProp(new THREE.BoxGeometry(.2,.18,.06), propIron, townPropX(79.6+i*.8,45.62), TG+2.82, townPropZ(79.6+i*.8,45.62));
   }
-  // hanging tavern sign by the door
-  const signC=document.createElement('canvas'); signC.width=128; signC.height=64;
-  { const g=signC.getContext('2d');
-    g.fillStyle='#2b1b10'; g.fillRect(0,0,128,64);
-    g.fillStyle='#b08a55'; g.fillRect(5,5,118,54);
-    g.strokeStyle='#5e3f20'; g.lineWidth=7; g.strokeRect(7,7,114,50);
-    g.fillStyle='#c8a060'; g.fillRect(18,20,23,25);                 // mug body
-    g.fillStyle='#f2ead8'; g.fillRect(17,15,25,7);                  // foam
-    g.strokeStyle='#7a5830'; g.lineWidth=4; g.strokeRect(44,25,10,13); // handle
-    g.fillStyle='#2c1608'; g.font='bold 15px Courier New'; g.fillText('GILDED',62,26);
-    g.fillText('MUG',75,45);
-  }
-  const signTex=new THREE.CanvasTexture(signC); signTex.magFilter=THREE.NearestFilter; signTex.minFilter=THREE.NearestFilter;
-  addProp(new THREE.BoxGeometry(.08,.08,1.45), propWood, townPropX(70.8,76.5), TG+3.75, townPropZ(70.8,76.5));
-  const signMat=new THREE.MeshBasicMaterial({map:signTex, side:THREE.DoubleSide});
-  const facade=new THREE.Mesh(new THREE.PlaneGeometry(3.8,1.0), signMat);
-  facade.position.set(townPropX(70.86,76), TG+4.45, townPropZ(70.86,76));
-  facade.rotation.y=-Math.PI/2;
-  townGroup.add(facade);
   function rulesBoard(title,lines,x,z,rot,color='#ffd24a'){
     const c=document.createElement('canvas');c.width=384;c.height=240;const g=c.getContext('2d');
     g.fillStyle='#111827';g.fillRect(0,0,c.width,c.height);g.strokeStyle='#9a6b32';g.lineWidth=14;g.strokeRect(7,7,c.width-14,c.height-14);

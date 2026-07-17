@@ -142,9 +142,10 @@ class EventsMixin {
 
   skyshipPosition(now = Date.now()) {
     const timing = this.skyshipTiming(now), ship = timing.snapshot;
-    const dockX = W.TOWN.TC - 32 - 23, edgeX = W.LAVA_BORDER_WIDTH + 14;
+    const dock = W.townPos(32, 64, 'skyport');
+    const dockX = dock.x - 23, edgeX = W.LAVA_BORDER_WIDTH + 14;
     const dockY = W.TOWN.G + 23.45;
-    let x = dockX, y = dockY, z = W.TOWN.TC;
+    let x = dockX, y = dockY, z = dock.z;
     if (ship.state === 'outbound') {
       x = dockX + (edgeX - dockX) * ship.progress;
       y += Math.min(8, (dockX - x) * .035);
@@ -280,7 +281,8 @@ class EventsMixin {
     const rec = this.profileFor(client);
     if (!p || !rec || p.dgn) return client.send('skyshipBoardReject', { reason: 'invalid' });
     if (this.leaveSkyshipPassenger(client)) return;
-    const cx = W.TOWN.TC - 32, cz = W.TOWN.TC, top = W.TOWN.G + 24;
+    const dock = W.townPos(32, 64, 'skyport');
+    const cx = dock.x, cz = dock.z, top = W.TOWN.G + 24;
     const inGangway = p.x >= cx - 15.5 && p.x <= cx - 6.5
       && Math.abs(p.z - cz) <= 3.25 && p.y >= top + .25 && p.y <= top + 4;
     if (!inGangway) return client.send('skyshipBoardReject', { reason: 'range' });

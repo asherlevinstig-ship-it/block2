@@ -154,12 +154,15 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(serverWorld, /TOWN = \{ TC: WX \/ 2, HS: 72, G: 15 \}/);
   assert.match(serverWorld, /TOWN_SPACING = 1\.14/);
   assert.match(serverWorld, /TOWN_DISTRICTS = Object\.freeze/);
+  assert.match(serverWorld, /const townPos = \(x, z, district\) =>/);
+  assert.match(serverWorld, /const townBlockPos = \(x, z, district\) =>/);
   assert.match(world, /open town districts replacing NPC houses/);
   assert.match(serverWorld, /Open district footprints replacing the old NPC cottages/);
   assert.match(world, /tavern commons and player storage yard/);
   assert.match(world, /forge district training yard/);
   assert.match(world, /airship cargo apron/);
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
+  assert.doesNotMatch(world, /inn sleeping alcoves|function curtain\(|propCloth|PlaneGeometry\(w,1\.35\)|TG\+1\.62/);
   assert.doesNotMatch(menus, /SW cottage|S cottage|NE cottage|each cottage/);
   assert.doesNotMatch(serverWorld, /cottage SW|cottage S|cottage NE/);
 });
@@ -175,6 +178,48 @@ test('Town of Beginnings gives every public building or worksite a physical sign
   ]) {
     assert.match(world, new RegExp(`title:'${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   }
+  assert.doesNotMatch(world, /title:'GUILD HALL'[\s\S]*?x:dpx\(57,'guild'\),z:dpz\(37\.45,'guild'\)/);
+  assert.doesNotMatch(world, /title:'TAVERN & INN'[\s\S]*?z:dpz\(76,'tavern'\)/);
+  assert.doesNotMatch(world, /title:'SMITHY'[\s\S]*?z:dpz\(50,'forge'\)/);
+  assert.doesNotMatch(world, /title:'MEDITATION HALL'[\s\S]*?x:dpx\(47,'shrine'\)/);
+  assert.doesNotMatch(world, /title:'DRAGON ROOST'[\s\S]*?z:dpz\(65,'roost'\)/);
+  assert.doesNotMatch(world, /makeShrineMeditationSign/);
+  assert.doesNotMatch(world, /townPropX\(70\.86,76\)|townPropZ\(70\.86,76\)/);
+  assert.doesNotMatch(world, /hanging tavern sign by the door/);
+  assert.doesNotMatch(world, /title:'GUILD HALL'[\s\S]*?x:dpx\(52\.75,'guild'\),z:dpz\(37\.45,'guild'\)/);
+  assert.doesNotMatch(world, /title:'TAVERN & INN'[\s\S]*?x:dpx\(70\.25,'tavern'\),z:dpz\(73\.25,'tavern'\)/);
+  assert.doesNotMatch(world, /title:'SMITHY'[\s\S]*?x:dpx\(72\.7,'forge'\),z:dpz\(46\.6,'forge'\)/);
+  assert.doesNotMatch(world, /title:'MEDITATION HALL'[\s\S]*?x:dpx\(43\.8,'shrine'\),z:dpz\(57\.15,'shrine'\)/);
+  assert.doesNotMatch(world, /title:'DRAGON ROOST'[\s\S]*?x:dpx\(87\.15,'roost'\),z:dpz\(61\.5,'roost'\)/);
+});
+
+test('Town systems use district anchors instead of stale compact-town coordinates', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const constants = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'constants.js'), 'utf8');
+  const events = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'events.mixin.js'), 'utf8');
+  const economy = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'economy.mixin.js'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+
+  assert.match(world, /tavernDice: \{ x: dpx\(74\.5, 'tavern'\), z: dpz\(89\.5, 'tavern'\) \}/);
+  assert.match(combat, /HUB\.tavernDice\.x/);
+  assert.match(combat, /HUB\.tavernBlackjack\.x/);
+  assert.match(combat, /HUB\.tavernRoulette\.x/);
+  assert.match(menus, /HUB\.smith\.x/);
+  assert.match(networking, /HUB\.smith\.x/);
+  assert.match(constants, /SKYSHIP_DOCK_X = W\.townPos\(32, 64, 'skyport'\)\.x - 23/);
+  assert.match(events, /const dock = W\.townPos\(32, 64, 'skyport'\)/);
+  assert.match(room, /W\.townPos\(78\.5, 50, 'forge'\)/);
+  assert.match(room, /W\.townPos\(54\.5,26\.5,'guild'\)/);
+  assert.match(economy, /townTavernAnchor\(74\.5, 89\.5\)/);
+  assert.match(economy, /townTavernAnchor\(79\.5, 89\.5\)/);
+  assert.match(economy, /townTavernAnchor\(84\.5, 89\.5\)/);
+  assert.doesNotMatch(combat, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5/);
+  assert.doesNotMatch(economy, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5|TOWN\.TC\+19\.5|TOWN\.TC\+12\.5/);
+  assert.doesNotMatch(menus + networking + room, /TOWN\.TC\+14\.5|TOWN\.TC-14/);
+  assert.doesNotMatch(constants + events, /TOWN\.TC - 32/);
 });
 
 test('Town Map is granted by Orin and opens as a live position item', () => {

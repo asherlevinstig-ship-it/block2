@@ -575,6 +575,9 @@ class EconomyMixin {
   findCatalogEntry(list, id) {
     return list.find(e => e[0] === id) || null;
   }
+  townTavernAnchor(x, z) {
+    return W.townPos(x, z, 'tavern');
+  }
   handleShop(client, m) {
     const rec = this.profileFor(client);
     if (!rec || !m) return;
@@ -586,7 +589,8 @@ class EconomyMixin {
     const reject = reason => client.send('shopReject', { reason, vendor });
     if (this.rateLimited(client, 'shop', 8, 16)) return reject('rate');
     const p=this.state.players.get(client.sessionId);
-    if(isTavern&&(!p||p.dgn||Math.hypot(p.x-(W.TOWN.TC+19.5),p.z-(W.TOWN.TC+13.5))>8))return reject('range');
+    const tavern=this.townTavernAnchor(83.5,77.5);
+    if(isTavern&&(!p||p.dgn||Math.hypot(p.x-tavern.x,p.z-tavern.z)>9))return reject('range');
     if(isRoad&&(!p||p.dgn||!W.smallDiscoverySpecs().some(s=>s.type==='traveling_merchant'&&Math.hypot(p.x-s.x,p.z-s.z)<6)))return reject('range');
     if (isGuild) {
       const guild = this.guildForToken && this.guildForToken(rec.token);
@@ -636,7 +640,7 @@ class EconomyMixin {
     if (!rec || !m) return;
     if (this.rateLimited(client, 'tavernDice', 4, 8)) return reject('rate');
     const p = this.state.players.get(client.sessionId);
-    const tableX = W.TOWN.TC + 10.5, tableZ = W.TOWN.TC + 25.5;
+    const { x: tableX, z: tableZ } = this.townTavernAnchor(74.5, 89.5);
     if (!p || p.dgn || Math.hypot(p.x - tableX, p.z - tableZ) > 4.2) return reject('range');
     const wager = ['low', 'seven', 'high'].includes(m.wager) ? m.wager : 'high';
     const bet = Math.max(1, Math.min(25, m.bet | 0 || 1));
@@ -675,7 +679,7 @@ class EconomyMixin {
     if (!rec || !m) return;
     if (this.rateLimited(client, 'tavernRoulette', 4, 8)) return reject('rate');
     const p = this.state.players.get(client.sessionId);
-    const tableX = W.TOWN.TC + 20.5, tableZ = W.TOWN.TC + 25.5;
+    const { x: tableX, z: tableZ } = this.townTavernAnchor(84.5, 89.5);
     if (!p || p.dgn || Math.hypot(p.x - tableX, p.z - tableZ) > 4.2) return reject('range');
     const valid = ['red', 'black', 'odd', 'even', 'dozen1', 'dozen2', 'dozen3', 'zero'];
     const wager = valid.includes(m.wager) ? m.wager : 'red';
@@ -746,7 +750,7 @@ class EconomyMixin {
     if (!rec || !m) return;
     if (this.rateLimited(client, 'tavernBlackjack', 6, 10)) return reject('rate');
     const p = this.state.players.get(client.sessionId);
-    const tableX = W.TOWN.TC + 15.5, tableZ = W.TOWN.TC + 25.5;
+    const { x: tableX, z: tableZ } = this.townTavernAnchor(79.5, 89.5);
     if (!p || p.dgn || Math.hypot(p.x - tableX, p.z - tableZ) > 4.2) return reject('range');
     if (!this.tavernBlackjackHands) this.tavernBlackjackHands = new Map();
     const action = m.action === 'hit' || m.action === 'stand' || m.action === 'clear' ? m.action : 'deal';
@@ -803,7 +807,8 @@ class EconomyMixin {
     if (!rec || !m) return;
     if (this.rateLimited(client, 'tavernTokenExchange', 3, 6)) return reject('rate');
     const p = this.state.players.get(client.sessionId);
-    if (!p || p.dgn || Math.hypot(p.x - (W.TOWN.TC + 12.5), p.z - (W.TOWN.TC + 15.5)) > 9) return reject('range');
+    const tavern=this.townTavernAnchor(83.5,77.5);
+    if (!p || p.dgn || Math.hypot(p.x - tavern.x, p.z - tavern.z) > 9) return reject('range');
     const day = new Date().toISOString().slice(0, 10);
     if (rec.prof.tavernTokenDay !== day) { rec.prof.tavernTokenDay = day; rec.prof.tavernTokenBoughtToday = 0; }
     const amount = Math.max(1, Math.min(25, m.amount | 0 || 5));

@@ -1001,7 +1001,7 @@ function renderGearComparison(){
     if(slot===-2)action('UNEQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:0});});
     else action('EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipArmor',{id:stack.id,slot,gearRank:stack.gearRank||'',armorType:stack.armorType||'',rarity:stack.rarity||'common'});},false);
   }else action(equipped?'EQUIPPED':'EQUIP',()=>{if(NET.on&&NET.room)NET.room.send('equipWeapon',{slot,hotbar:combatState.selectedSlot});},equipped);
-  const nearSmith=dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-(TOWN.TC+14.5),player.pos.z-(TOWN.TC-14))<=10;
+  const nearSmith=dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-HUB.smith.x,player.pos.z-HUB.smith.z)<=10;
   const missing=Math.max(0,maxDur-curDur);
   action(stack.locked?'UNLOCK':'LOCK',()=>requestGearLock(slot,!stack.locked),slot<0,'Unequip armour before changing protection');
   action(nearSmith?'REPAIR':'REPAIR AT TOBIN',()=>requestBlacksmithRepair(slot),slot<0||!nearSmith||!missing);

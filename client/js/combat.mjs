@@ -2176,20 +2176,20 @@ function nearDragonRoost(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<13;
 }
 function nearTavernDiceTable(){
-  return dim==='overworld' && Math.hypot(player.pos.x-(TOWN.TC+10.5), player.pos.z-(TOWN.TC+25.5))<3.2;
+  return dim==='overworld' && Math.hypot(player.pos.x-HUB.tavernDice.x, player.pos.z-HUB.tavernDice.z)<3.2;
 }
 function nearTavernRouletteTable(){
-  return dim==='overworld' && Math.hypot(player.pos.x-(TOWN.TC+20.5), player.pos.z-(TOWN.TC+25.5))<3.2;
+  return dim==='overworld' && Math.hypot(player.pos.x-HUB.tavernRoulette.x, player.pos.z-HUB.tavernRoulette.z)<3.2;
 }
 function nearTavernBlackjackTable(){
-  return dim==='overworld' && Math.hypot(player.pos.x-(TOWN.TC+15.5), player.pos.z-(TOWN.TC+25.5))<3.2;
+  return dim==='overworld' && Math.hypot(player.pos.x-HUB.tavernBlackjack.x, player.pos.z-HUB.tavernBlackjack.z)<3.2;
 }
 function nearbyTavernGameTable(range=3.8){
   if(dim!=='overworld')return null;
   const tables=[
-    {id:'dice',label:'Dice Table',x:TOWN.TC+10.5,z:TOWN.TC+25.5},
-    {id:'blackjack',label:'Blackjack Table',x:TOWN.TC+15.5,z:TOWN.TC+25.5},
-    {id:'roulette',label:'Roulette Table',x:TOWN.TC+20.5,z:TOWN.TC+25.5},
+    {id:'dice',label:'Dice Table',x:HUB.tavernDice.x,z:HUB.tavernDice.z},
+    {id:'blackjack',label:'Blackjack Table',x:HUB.tavernBlackjack.x,z:HUB.tavernBlackjack.z},
+    {id:'roulette',label:'Roulette Table',x:HUB.tavernRoulette.x,z:HUB.tavernRoulette.z},
   ];
   let nearest=null,best=range;
   for(const table of tables){const distance=Math.hypot(player.pos.x-table.x,player.pos.z-table.z);if(distance<best){best=distance;nearest={...table,distance};}}

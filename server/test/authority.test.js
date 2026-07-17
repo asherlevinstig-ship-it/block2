@@ -61,6 +61,9 @@ const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGE
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
 const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
+const SMITH_POS = W.townPos(78.5, 50, 'forge');
+const GUILD_RECEPTION_POS = W.townPos(54.5, 26.5, 'guild');
+const GUILD_RECEPTION_PLAYER_POS = { x: GUILD_RECEPTION_POS.x, y: W.TOWN.G + 2, z: GUILD_RECEPTION_POS.z };
 
 const I = {
   STICK: 100,
@@ -785,7 +788,7 @@ test('legacy single-job XP migrates only to the job that earned it', () => {
 
 test('Blacksmith reforging is level-gated, server-priced, persistent, and affects weapon damage', () => {
   const room=makeRoom(),client=makeClient('reforge_smith'),{prof}=seedPlayer(room,client,{gold:100});
-  const p=room.state.players.get(client.sessionId);p.x=W.TOWN.TC+14.5;p.z=W.TOWN.TC-14;p.heldId=I.IRON_SWORD;
+  const p=room.state.players.get(client.sessionId);p.x=SMITH_POS.x;p.z=SMITH_POS.z;p.heldId=I.IRON_SWORD;
   prof.job='blacksmith';prof.inv=[{id:I.IRON_SWORD,count:1,dur:251},{id:I.IRON_INGOT,count:4}];
   room.handleBlacksmithReforge(client,{slot:0,action:'choose',modifier:'keen'});
   assert.equal(client.sent.at(-1).msg.reason,'level');
@@ -823,7 +826,7 @@ test('explicit weapon rarity persists and authoritatively improves combat stats'
 
 test('Blacksmith salvage converts non-Legendary weapons into materials',()=>{
   const room=makeRoom(),client=makeClient('salvager');
-  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,gold:0,inv:[{id:I.IRON_SWORD,count:1,dur:251,rarity:'epic'}]});
+  const {prof}=seedPlayer(room,client,{x:SMITH_POS.x,z:SMITH_POS.z,gold:0,inv:[{id:I.IRON_SWORD,count:1,dur:251,rarity:'epic'}]});
   prof.job='blacksmith';
   prof.jobContract={job:'blacksmith',type:'salvage',need:1,have:0,rewardGold:20,rewardJobXp:20,rewardXp:0,title:'Scrap Recovery',desc:'Salvage unwanted gear.'};
   room.handleBlacksmithSalvage(client,{slot:0});
@@ -837,7 +840,7 @@ test('Blacksmith salvage converts non-Legendary weapons into materials',()=>{
 
 test('Blacksmith upgrade contracts progress from forge upgrades',()=>{
   const room=makeRoom(),client=makeClient('upgrade_contract');
-  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,gold:100,inv:[{id:I.IRON_SWORD,count:1,dur:180},{id:I.IRON_INGOT,count:2}]});
+  const {prof}=seedPlayer(room,client,{x:SMITH_POS.x,z:SMITH_POS.z,gold:100,inv:[{id:I.IRON_SWORD,count:1,dur:180},{id:I.IRON_INGOT,count:2}]});
   prof.job='blacksmith';
   prof.jobContract={job:'blacksmith',type:'upgrade',need:1,have:0,rewardGold:20,rewardJobXp:20,rewardXp:0,title:'Edge Upgrade Order',desc:'Improve eligible gear.'};
   room.handleBlacksmithUpgrade(client,{slot:0});
@@ -850,7 +853,7 @@ test('Blacksmith upgrade contracts progress from forge upgrades',()=>{
 
 test('ranked armor keeps metadata through equip, damage, repair, locking, and salvage',()=>{
   const room=makeRoom(),client=makeClient('armor_loop');
-  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,gold:999,inv:[
+  const {prof}=seedPlayer(room,client,{x:SMITH_POS.x,z:SMITH_POS.z,gold:999,inv:[
     {id:I.IRON_ARMOR,count:1,dur:400,gearRank:'C',rarity:'rare',armorType:'scout'},
   ]});
   room.handleEquipArmor(client,{id:I.IRON_ARMOR,gearRank:'C',rarity:'rare',armorType:'scout'});
@@ -946,8 +949,8 @@ test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is pr
 
 test('Tobin claims recovered weapons only into real free inventory slots',()=>{
   const room=makeRoom(),client=makeClient('recovery_claim');
-  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),full=Array.from({length:36},()=>({id:I.COAL,count:64}));
-  const {prof}=seedPlayer(room,client,{x,z,inv:full});
+  const full=Array.from({length:36},()=>({id:I.COAL,count:64}));
+  const {prof}=seedPlayer(room,client,{x:SMITH_POS.x,z:SMITH_POS.z,inv:full});
   prof.lootRecovery=[{id:I.IRON_SWORD,count:1,dur:251,rarity:'rare',source:'boss',acquiredAt:Date.now(),expiresAt:Date.now()+86400000}];
   room.handleLootRecovery(client,{action:'claim',index:0});
   assert.equal(client.sent.at(-1).msg.reason,'full');
@@ -962,7 +965,7 @@ test('Tobin claims recovered weapons only into real free inventory slots',()=>{
 
 test('server-owned gear locks block salvage until explicitly removed',()=>{
   const room=makeRoom(),client=makeClient('locked_salvage');
-  const x=W.TOWN.TC+(78.5-64),z=W.TOWN.TC+(50-64),{prof}=seedPlayer(room,client,{x,z,inv:[{id:I.IRON_SWORD,count:1,dur:251,rarity:'mythic',locked:true}]});
+  const {prof}=seedPlayer(room,client,{x:SMITH_POS.x,z:SMITH_POS.z,inv:[{id:I.IRON_SWORD,count:1,dur:251,rarity:'mythic',locked:true}]});
   room.handleBlacksmithSalvage(client,{slot:0});
   assert.equal(prof.inv[0].id,I.IRON_SWORD);
   assert.equal(client.sent.at(-1).msg.reason,'locked');
@@ -3303,8 +3306,7 @@ test('tavern buys farmed and hunted food for server gold', () => {
   const client = makeClient('seller');
   const { prof } = seedPlayer(room, client, {
     gold: 2,
-    x: W.TOWN.TC + 19.5,
-    z: W.TOWN.TC + 13.5,
+    ...W.townPos(83.5, 77.5, 'tavern'),
     inv: [{ id: I.BREAD, count: 2 }, { id: I.MONSTER_MEAT, count: 1 }],
   });
 
@@ -3332,8 +3334,7 @@ test('economy telemetry captures authoritative room gold faucets and sinks', () 
   });
 
   room.handleShop(client, { action: 'buy', id: W.B.TORCH });
-  room.state.players.get(client.sessionId).x = W.TOWN.TC + 19.5;
-  room.state.players.get(client.sessionId).z = W.TOWN.TC + 13.5;
+  Object.assign(room.state.players.get(client.sessionId), W.townPos(83.5, 77.5, 'tavern'));
   room.handleShop(client, { action: 'sell', vendor: 'tavern', id: I.BREAD });
   room.state.players.get(client.sessionId).x = claimX + .5;
   room.state.players.get(client.sessionId).z = claimZ + .5;
@@ -6451,7 +6452,7 @@ test('the tavern sells deterministic Gate food bundles only to nearby hunters', 
   assert.equal(prof.gold, 60);
   assert.equal(client.sent.at(-1).msg.reason, 'range');
   const p = room.state.players.get(client.sessionId);
-  p.x = W.TOWN.TC + 19.5; p.z = W.TOWN.TC + 13.5;
+  Object.assign(p, W.townPos(83.5, 77.5, 'tavern'));
   room.handleShop(client, { action: 'buy', vendor: 'tavern', id: I.COOKED_MEAT });
   assert.equal(prof.gold, 52);
   assert.equal(itemCount(prof, I.COOKED_MEAT), 1);
@@ -6473,7 +6474,7 @@ test('tavern dice wagers are range checked and resolved on the server', () => {
   assert.equal(client.sent.at(-1).msg.reason, 'range');
 
   const p = room.state.players.get(client.sessionId);
-  p.x = W.TOWN.TC + 10.5; p.z = W.TOWN.TC + 25.5;
+  Object.assign(p, W.townPos(74.5, 89.5, 'tavern'));
   const oldRandom = Math.random;
   Math.random = () => .99;
   try {
@@ -6499,7 +6500,7 @@ test('tavern roulette wagers are range checked and resolved on the server', () =
   assert.equal(client.sent.at(-1).msg.reason, 'range');
 
   const p = room.state.players.get(client.sessionId);
-  p.x = W.TOWN.TC + 20.5; p.z = W.TOWN.TC + 25.5;
+  Object.assign(p, W.townPos(84.5, 89.5, 'tavern'));
   const oldRandom = Math.random;
   Math.random = () => 1 / 37;
   try {
@@ -6526,7 +6527,7 @@ test('tavern blackjack deals a server-owned hand and resolves stand payout', () 
   assert.equal(client.sent.at(-1).msg.reason, 'range');
 
   const p = room.state.players.get(client.sessionId);
-  p.x = W.TOWN.TC + 15.5; p.z = W.TOWN.TC + 25.5;
+  Object.assign(p, W.townPos(79.5, 89.5, 'tavern'));
   const sequence = [
     12 / 13, 0, 11 / 13, 0, // player K, Q
     8 / 13, 0, 6 / 13, 0,   // dealer 9, 7
@@ -6559,14 +6560,14 @@ test('tavern token exchange is capped and unfinished blackjack stakes refund', (
   const room = makeRoom(), client = makeClient('safe_gambler');
   const { prof } = seedPlayer(room, client, { gold: 150 });
   const p = room.state.players.get(client.sessionId);
-  p.x = W.TOWN.TC + 12.5; p.z = W.TOWN.TC + 15.5;
+  Object.assign(p, W.townPos(83.5, 77.5, 'tavern'));
   room.handleTavernTokenExchange(client, { amount: 25 });
   assert.equal(prof.gold, 125);
   assert.equal(prof.tavernTokens, 25);
   prof.tavernTokenBoughtToday = 100;
   room.handleTavernTokenExchange(client, { amount: 1 });
   assert.equal(client.sent.at(-1).msg.reason, 'daily');
-  p.x = W.TOWN.TC + 15.5; p.z = W.TOWN.TC + 25.5;
+  Object.assign(p, W.townPos(79.5, 89.5, 'tavern'));
   const oldRandom = Math.random;
   Math.random = () => .5; // four sevens: a live, unsettled hand
   try { room.handleTavernBlackjack(client, { action: 'deal', bet: 5 }); }
@@ -9100,7 +9101,8 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   const room = makeRoom();
   const client = makeClient('sky_rider');
   room.clients.push(client);
-  const cx = W.TOWN.TC - 32, cz = W.TOWN.TC, top = W.TOWN.G + 24;
+  const dock = W.townPos(32, 64, 'skyport');
+  const cx = dock.x, cz = dock.z, top = W.TOWN.G + 24;
   const seeded = seedPlayer(room, client, { x: cx - 10, y: top + 1, z: cz, lvl: 1, gold: 999 });
   room.skyshipEpoch = Date.now();
 
@@ -9122,12 +9124,13 @@ test('skyship boarding is server-gated by dock state, S rank, 1000 gold, and gan
   assert.equal(client.sent.at(-1).type, 'skyshipLeft');
   assert.equal(seeded.prof.gold, SKYSHIP_BOARD_GOLD);
 
+  Object.assign(room.state.players.get(client.sessionId), { x: cx - 10, y: top + 1, z: cz });
   room.skyshipEpoch = Date.now() - SKYSHIP_DOCK_MS - SKYSHIP_TRAVEL_MS - 1;
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).msg.reason, 'away');
 
   room.skyshipEpoch = Date.now();
-  room.state.players.get(client.sessionId).x = cx;
+  Object.assign(room.state.players.get(client.sessionId), { x: cx, y: top + 1, z: cz });
   room.handleSkyshipBoard(client);
   assert.equal(client.sent.at(-1).msg.reason, 'range');
 });
@@ -9858,8 +9861,7 @@ test('far overworld mobs despawn when no surface player cluster owns them', () =
 test('guild founder becomes leader and can purchase one appended hall floor', () => {
   const room = makeRoom(), leader = makeClient('guild_leader');
   room.clients.push(leader);
-  const x = W.TOWN.TC - 9.5, z = W.TOWN.TC - 37.5;
-  const { token, prof } = seedPlayer(room, leader, { name: 'Aria', token: 'guild_leader_token', x, y: W.TOWN.G + 2, z, gold: 1000 });
+  const { token, prof } = seedPlayer(room, leader, { name: 'Aria', token: 'guild_leader_token', ...GUILD_RECEPTION_PLAYER_POS, gold: 1000 });
   room.handleGuildCreate(leader, { name: 'Dawn Wardens' });
   const guild = room.guildForToken(token);
   assert.ok(guild);
@@ -9873,7 +9875,8 @@ test('guild founder becomes leader and can purchase one appended hall floor', ()
   assert.equal(prof.gold, 500);
   assert.equal(room.dirtyGuilds, true);
   assert.equal(room.dirtyWorld, true);
-  assert.equal(room.world.getB(W.TOWN.TC - 39, W.TOWN.G + 6, W.TOWN.TC - 40), W.B.PLANKS);
+  const guildCorner = W.townBlockPos(25, 24, 'guild');
+  assert.equal(room.world.getB(guildCorner.x, W.TOWN.G + 6, guildCorner.z), W.B.PLANKS);
   assert.equal(leader.sent.some(e => e.type === 'guildFloorResult' && e.msg.floor === 1), true);
 
   room.handleGuildFloorBuy(leader);
@@ -9883,7 +9886,7 @@ test('guild founder becomes leader and can purchase one appended hall floor', ()
 
 test('guild hall purchase is leader-only and guild persistence sanitizes floor ownership', () => {
   const room = makeRoom(), leader = makeClient('leader'), member = makeClient('member');
-  const pos = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 2, z: W.TOWN.TC - 37.5 };
+  const pos = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...pos, token: 'leader_token_123', name: 'Leader', gold: 1000 });
   const mate = seedPlayer(room, member, { ...pos, token: 'member_token_123', name: 'Member', gold: 1000 });
   room.guilds.set('G1', { id: 'G1', name: 'Stone Oath', leader: lead.token, leaderName: 'Leader', members: new Set([lead.token, mate.token]), floor: 0, foundedAt: 1, floorBoughtAt: 0 });
@@ -9904,7 +9907,7 @@ test('guild hall purchase is leader-only and guild persistence sanitizes floor o
 test('guild reception sells decor only to fellowships with claimed floors', () => {
   const room = makeRoom(), leader = makeClient('leader'), stranger = makeClient('stranger');
   room.clients = [leader, stranger];
-  const pos = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 2, z: W.TOWN.TC - 37.5 };
+  const pos = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...pos, token: 'leader_token_123', name: 'Leader', gold: 1000 });
   const bad = seedPlayer(room, stranger, { ...pos, token: 'stranger_token_123', name: 'Stranger', gold: 1000 });
 
@@ -9926,7 +9929,7 @@ test('guild reception sells decor only to fellowships with claimed floors', () =
 test('fellowship members can decorate only their claimed hall floor interior', () => {
   const room = makeRoom(), leader = makeClient('leader'), member = makeClient('member');
   room.clients = [leader, member];
-  const reception = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 2, z: W.TOWN.TC - 37.5 };
+  const reception = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...reception, token: 'leader_token_123', name: 'Leader', gold: 1000 });
   const mate = seedPlayer(room, member, { ...reception, token: 'member_token_123', name: 'Member', gold: 0, inv: [{ id: W.B.LANTERN, count: 1 }, { id: W.B.PLANKS, count: 1 }] });
   room.handleGuildCreate(leader, { name: 'Room Keepers' });
@@ -9934,7 +9937,8 @@ test('fellowship members can decorate only their claimed hall floor interior', (
   room.handleGuildJoin(member, { id: guild.id });
   room.handleGuildFloorBuy(leader);
 
-  const x = W.TOWN.TC - 33, z = W.TOWN.TC - 36, y = W.TOWN.G + 7;
+  const hall = W.townBlockPos(25, 24, 'guild');
+  const x = hall.x + 6, z = hall.z + 4, y = W.TOWN.G + 7;
   room.state.players.get(member.sessionId).x = x + .5;
   room.state.players.get(member.sessionId).y = y;
   room.state.players.get(member.sessionId).z = z + .5;
@@ -9957,7 +9961,7 @@ test('fellowship members can decorate only their claimed hall floor interior', (
 test('fellowships can be joined, left, and pass leadership on leader departure', () => {
   const room = makeRoom(), leader = makeClient('leader'), member = makeClient('member');
   room.clients = [leader, member];
-  const pos = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 2, z: W.TOWN.TC - 37.5 };
+  const pos = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...pos, token: 'leader_token_123', name: 'Leader' });
   const mate = seedPlayer(room, member, { ...pos, token: 'member_token_123', name: 'Member' });
 
@@ -9981,7 +9985,7 @@ test('fellowships can be joined, left, and pass leadership on leader departure',
 test('private fellowships require invites and officers can moderate members', () => {
   const room = makeRoom(), leader = makeClient('leader'), officer = makeClient('officer'), member = makeClient('member'), stranger = makeClient('stranger');
   room.clients = [leader, officer, member, stranger];
-  const pos = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 2, z: W.TOWN.TC - 37.5 };
+  const pos = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...pos, token: 'leader_token_123', name: 'Leader' });
   const off = seedPlayer(room, officer, { ...pos, token: 'officer_token_123', name: 'Officer' });
   const mem = seedPlayer(room, member, { ...pos, token: 'member_token_123', name: 'Member' });
@@ -10020,7 +10024,7 @@ test('private fellowships require invites and officers can moderate members', ()
 test('fellowship leadership can transfer and private mode can toggle', () => {
   const room = makeRoom(), leader = makeClient('leader'), member = makeClient('member');
   room.clients = [leader, member];
-  const pos = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 2, z: W.TOWN.TC - 37.5 };
+  const pos = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...pos, token: 'leader_token_123', name: 'Leader' });
   const mate = seedPlayer(room, member, { ...pos, token: 'member_token_123', name: 'Member' });
 
@@ -10053,8 +10057,8 @@ test('fellowships earn renown from guild work and spend it on projects', () => {
   assert.equal(leader.sent.some(e => e.type === 'guildRenown' && e.msg.amount === 10), true);
 
   guild.renown = 30;
-  room.state.players.get(leader.sessionId).x = W.TOWN.TC - 9.5;
-  room.state.players.get(leader.sessionId).z = W.TOWN.TC - 37.5;
+  room.state.players.get(leader.sessionId).x = GUILD_RECEPTION_POS.x;
+  room.state.players.get(leader.sessionId).z = GUILD_RECEPTION_POS.z;
   room.handleGuildProjectFund(leader, { id: 'map_table' });
   assert.equal(guild.projects.has('map_table'), true);
   assert.equal(guild.renown, 0);
@@ -10066,7 +10070,7 @@ test('fellowships earn renown from guild work and spend it on projects', () => {
 test('fellowship notice board pins shared objectives and summarizes active work', () => {
   const room = makeRoom(), leader = makeClient('fellowship_notice_leader'), member = makeClient('fellowship_notice_member');
   room.clients = [leader, member];
-  const board = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 37.5 };
+  const board = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...board, token: 'notice_leader_token', name: 'Notice Leader' });
   const mate = seedPlayer(room, member, { ...board, token: 'notice_member_token', name: 'Notice Member' });
   const guild = { id: 'G1', name: 'Notice Wardens', leader: lead.token, leaderName: 'Notice Leader', members: new Set([lead.token, mate.token]), roles: new Map([[mate.token, 'officer']]), invites: new Set(), private: false, floor: 0, foundedAt: 1, floorBoughtAt: 0, renown: 0, totalRenown: 0, renownWeek: 0, contractsWeek: 0, renownWeekStart: 0, projects: new Set(), notice: null };
@@ -10096,7 +10100,7 @@ test('fellowship notice board pins shared objectives and summarizes active work'
 test('weekly fellowship rewards unlock by Renown and are claimed once per member', () => {
   const room = makeRoom(), leader = makeClient('fellowship_weekly_leader'), member = makeClient('fellowship_weekly_member');
   room.clients = [leader, member];
-  const pos = { x: W.TOWN.TC - 9.5, y: W.TOWN.G + 1, z: W.TOWN.TC - 37.5 };
+  const pos = GUILD_RECEPTION_PLAYER_POS;
   const lead = seedPlayer(room, leader, { ...pos, token: 'weekly_leader_token', name: 'Weekly Leader', gold: 0 });
   const mate = seedPlayer(room, member, { ...pos, token: 'weekly_member_token', name: 'Weekly Member', gold: 0 });
   const guild = { id: 'G1', name: 'Weekly Wardens', leader: lead.token, leaderName: 'Weekly Leader', members: new Set([lead.token, mate.token]), roles: new Map(), invites: new Set(), private: false, floor: 0, foundedAt: 1, floorBoughtAt: 0, renown: 0, totalRenown: 0, renownWeek: 9, contractsWeek: 0, renownWeekStart: room.currentFellowshipWeek(), projects: new Set(), notice: null };
@@ -10173,7 +10177,7 @@ test('Recall correct answers restore stamina in authoritative profile vitals', (
 test('fellowship Map Table discounts cartographer leads and sharpens treasure clues', () => {
   const room = makeRoom(), client = makeClient('map_table_cartographer');
   room.clients = [client];
-  const pos = { x: W.TOWN.TC - 13.2, y: W.TOWN.G + 1, z: W.TOWN.TC - 36.3 };
+  const pos = { x: GUILD_RECEPTION_POS.x - 3.7, y: W.TOWN.G + 1, z: GUILD_RECEPTION_POS.z + 1.2 };
   const { token, prof } = seedPlayer(room, client, { ...pos, token: 'map_table_token', name: 'Mapkeeper', gold: 20 });
   room.guilds.set('G1', { id: 'G1', name: 'Map Wardens', leader: token, leaderName: 'Mapkeeper', members: new Set([token]), roles: new Map(), invites: new Set(), private: false, floor: 0, foundedAt: 1, floorBoughtAt: 0, renown: 0, totalRenown: 30, projects: new Set(['map_table']) });
 

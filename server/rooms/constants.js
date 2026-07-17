@@ -12,13 +12,16 @@ const SKYSHIP_DOCK_MS = 22000;
 const SKYSHIP_AWAY_MS = 16000;
 const SKYSHIP_SPEED = 19;
 // The group origin sits amidships; -23 places its eastern stern at the gangway.
-const SKYSHIP_DOCK_X = W.TOWN.TC - 32 - 23;
+const SKYSHIP_DOCK_X = W.townPos(32, 64, 'skyport').x - 23;
 const SKYSHIP_EDGE_X = W.LAVA_BORDER_WIDTH + 14;
 const SKYSHIP_TRAVEL_MS = Math.round((SKYSHIP_DOCK_X - SKYSHIP_EDGE_X) / SKYSHIP_SPEED * 1000);
 const SKYSHIP_CYCLE_MS = SKYSHIP_DOCK_MS + SKYSHIP_TRAVEL_MS * 2 + SKYSHIP_AWAY_MS;
 const SKYSHIP_BOARD_RANK = 5; // S in the extended E,D,C,B,A,S hunter ordering
 const SKYSHIP_BOARD_GOLD = 1000;
-const GUILD_HALL = { x1: W.TOWN.TC - 39, x2: W.TOWN.TC - 4, z1: W.TOWN.TC - 40, z2: W.TOWN.TC - 28, receptionistX: W.TOWN.TC - 9.5, receptionistZ: W.TOWN.TC - 37.5 };
+const GUILD_HALL_NW = W.townBlockPos(25, 24, 'guild');
+const GUILD_HALL_SE = W.townBlockPos(60, 36, 'guild');
+const GUILD_RECEPTION = W.townPos(54.5, 26.5, 'guild');
+const GUILD_HALL = { x1: GUILD_HALL_NW.x, x2: GUILD_HALL_SE.x, z1: GUILD_HALL_NW.z, z2: GUILD_HALL_SE.z, receptionistX: GUILD_RECEPTION.x, receptionistZ: GUILD_RECEPTION.z };
 const GUILD_FLOOR_MAX = 6;
 const guildFloorPrice = floorCount => 500 + Math.max(0, floorCount | 0) * 250;
 const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense','weather_sense']);

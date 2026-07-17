@@ -4120,7 +4120,7 @@ class GameRoom extends Room {
   blacksmithNear(client) {
     const p = this.state.players.get(client.sessionId);
     if (!p || p.dgn) return false;
-    const sx = W.TOWN.TC + (78.5 - 64), sz = W.TOWN.TC + (50 - 64);
+    const { x: sx, z: sz } = W.townPos(78.5, 50, 'forge');
     return Math.hypot((p.x || 0) - sx, (p.z || 0) - sz) <= 10;
   }
   repairCostFor(prof, missing) {
@@ -4855,8 +4855,10 @@ class GameRoom extends Room {
   cartographerInRange(client) {
     const p=client&&this.state.players.get(client.sessionId);
     if(!p||p.dgn)return false;
-    if(Math.hypot(p.x-(W.TOWN.TC-10.5),p.z-(W.TOWN.TC-8.5))<11)return true;
-    const atFellowshipMapTable=Math.hypot(p.x-(W.TOWN.TC-13.2),p.z-(W.TOWN.TC-36.3))<5.2;
+    const cartographer={x:W.TOWN.TC-22.5,z:W.TOWN.TC-11.5};
+    if(Math.hypot(p.x-cartographer.x,p.z-cartographer.z)<11)return true;
+    const guild=W.townPos(54.5,26.5,'guild');
+    const atFellowshipMapTable=Math.hypot(p.x-(guild.x-3.7),p.z-(guild.z+1.2))<5.2;
     return !!(atFellowshipMapTable&&this.clientGuildHasProject&&this.clientGuildHasProject(client,'map_table'));
   }
   cartographerEntries(prof) {

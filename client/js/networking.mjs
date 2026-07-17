@@ -352,7 +352,7 @@ const GEAR_REWARDS=createGearRewardPresenter({
   },
   getSelectedSlot:()=>combatState.selectedSlot,
   send:(type,payload)=>{if(NET.on&&NET.room)NET.room.send(type,payload);},
-  nearBlacksmith:()=>dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-(TOWN.TC+14.5),player.pos.z-(TOWN.TC-14))<=10,
+  nearBlacksmith:()=>dimensionsState.kind==='overworld'&&!dimensionsState.dungeon&&Math.hypot(player.pos.x-HUB.smith.x,player.pos.z-HUB.smith.z)<=10,
   onReveal:({summary,recovered})=>{
     const color=summary.profile.rarity.color;
     if(summary.profile.rarityIndex>=3||summary.profile.rankIndex>=5)SFX.level();else SFX.success();

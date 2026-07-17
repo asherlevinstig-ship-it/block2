@@ -15,6 +15,7 @@ const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
 const OLD_TOWN_TC = 64;
 const TOWN_SPACING = 1.14;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
+const tp = v => TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING;
 const TOWN_DISTRICTS = Object.freeze({
   guild: { x: -18, z: -24 },
   shrine: { x: 34, z: -26 },
@@ -27,6 +28,10 @@ const TOWN_DISTRICTS = Object.freeze({
 });
 const dtx = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.x || 0);
 const dtz = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.z || 0);
+const dpx = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.x || 0);
+const dpz = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.z || 0);
+const townPos = (x, z, district) => ({ x: dpx(x, district), z: dpz(z, district) });
+const townBlockPos = (x, z, district) => ({ x: dtx(x, district), z: dtz(z, district) });
 
 const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6, PLANKS: 7,
@@ -961,7 +966,8 @@ function createWorld() {
 }
 
 module.exports = {
-  WX, WH, TOWN, TOWN_SPACING, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
+  WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
+  townPos, townBlockPos,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
