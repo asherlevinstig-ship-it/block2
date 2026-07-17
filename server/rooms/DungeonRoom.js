@@ -10,6 +10,7 @@ const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { peekDungeonAdmission, claimDungeonAdmission, revokeDungeonAdmission } = require('./dungeon-admission');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { cleanName } = require('./constants');
+const { accountSummary, recordIdentityTrace, shortHash } = require('../identity-trace');
 
 const DUNGEON_MOB_INTEREST_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_RADIUS || 28);
 const DUNGEON_MOB_INTEREST_EXIT_RADIUS = Number(process.env.DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40);
@@ -164,9 +165,14 @@ class DungeonRoom extends GameRoom {
     const admittedGate = claimDungeonAdmission(options && options.ticket, token);
     if (!admittedGate || options.ticket !== this.admissionTicket || admittedGate.id !== this.instance.id) throw new Error('invalid dungeon admission');
     let prof = this.profiles.get(token);
+    let profileSource = prof ? 'cache' : 'store';
     if (!prof) {
-      try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
-      catch (e) { prof = null; }
+      try {
+        const raw = await this.store.loadPlayer(token);
+        prof = raw ? sanitizeProfile(raw) : null;
+        profileSource = raw ? 'store' : 'default';
+      }
+      catch (e) { prof = null; profileSource = 'load_failed'; }
       if (!prof) { prof = defaultProfile(auth && auth.displayName); prof.noPersist = true; }
       this.profiles.set(token, prof);
     }
@@ -178,6 +184,21 @@ class DungeonRoom extends GameRoom {
     const ey = D.standHeightIn(inst.world, ex.x, ex.z, 12);
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
+    recordIdentityTrace('room.join.profile', {
+      room: 'dungeon',
+      gateId: String(this.instance && this.instance.id || ''),
+      sidHash: shortHash(client.sessionId),
+      token,
+      account: accountSummary(auth),
+      profileSource,
+      profile: prof ? {
+        name: prof.name,
+        nameSet: prof.nameSet === true,
+        level: prof.S && prof.S.lvl || 1,
+        noPersist: prof.noPersist === true,
+      } : null,
+      playerName: p.name,
+    });
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
     p.x = ex.x; p.y = ey > 0 ? ey : 9; p.z = ex.z;

@@ -4,6 +4,7 @@ const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { createStore, sanitizeProfile, defaultProfile } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
+const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -138,11 +139,30 @@ class AuthService {
     if (!id) return { name: '', nameSet: false };
     try {
       const raw = await this.getProfileStore().loadPlayer(id);
-      if (!raw) return { name: '', nameSet: false };
+      if (!raw) {
+        recordIdentityTrace('auth.profile.lookup', {
+          account: accountSummary(account),
+          profile: { exists: false, name: '', nameSet: false, level: 1 },
+        });
+        return { name: '', nameSet: false };
+      }
       const profile = sanitizeProfile(raw);
+      recordIdentityTrace('auth.profile.lookup', {
+        account: accountSummary(account),
+        profile: {
+          exists: true,
+          name: profile.name,
+          nameSet: profile.nameSet === true,
+          level: profile.S && profile.S.lvl || 1,
+        },
+      });
       return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true };
     } catch (e) {
       console.warn('[auth] game profile lookup failed:', e.message);
+      recordIdentityTrace('auth.profile.lookup_failed', {
+        account: accountSummary(account),
+        error: e && e.message ? String(e.message).slice(0, 160) : 'unknown',
+      });
       return null;
     }
   }
@@ -286,6 +306,10 @@ class AuthService {
     const publicAccount = this.publicAccount(account);
     this.sessions.set(this.sessionKey(sid), { accountId: publicAccount.id, account: publicAccount, expiresAt: Date.now() + SESSION_MS });
     await this.save();
+    recordIdentityTrace('auth.session.issue', {
+      account: accountSummary(publicAccount),
+      sessionHash: shortHash(sid),
+    });
     return sid;
   }
 
@@ -313,8 +337,16 @@ class AuthService {
     const cookieSid = parseCookies(headers.cookie)[COOKIE] || '';
     let account = this.sessionAccount(bearerSid || cookieSid);
     if (!account && bearerSid && cookieSid && bearerSid !== cookieSid) account = this.sessionAccount(cookieSid);
+    const publicAccount = account ? this.publicAccount(account) : false;
+    recordIdentityTrace('auth.request', {
+      source: bearerSid ? 'bearer' : cookieSid ? 'cookie' : 'none',
+      bearerHash: shortHash(bearerSid),
+      cookieHash: shortHash(cookieSid),
+      account: accountSummary(publicAccount),
+      ok: !!publicAccount,
+    });
     if (!account) return false;
-    return this.publicAccount(account);
+    return publicAccount;
   }
 
   cookie(sid, req, clear = false) {
@@ -439,6 +471,18 @@ class AuthService {
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile rename failed.' });
       }
+    });
+    app.get('/auth/admin/identity-trace', (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || req.query && req.query.token || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      res.json({ ok: true, events: recentIdentityTrace() });
+    });
+    app.post('/auth/admin/identity-trace/clear', (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      res.json({ ok: true, cleared: clearIdentityTrace() });
     });
     app.post('/auth/logout', async (req, res) => {
       const sid = parseCookies(req.headers.cookie)[COOKIE];

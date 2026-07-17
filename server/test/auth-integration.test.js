@@ -278,6 +278,17 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.deepEqual(renamedBody.profile, { exists: true, name: 'Dylan Lynee', nameSet: true, level: 1 });
     assert.equal(profiles.get('student_42').name, 'Dylan Lynee');
     assert.equal(profiles.get('student_42').S.lvl, 1);
+
+    const deniedTrace = await f.request('/auth/admin/identity-trace');
+    assert.equal(deniedTrace.status, 403);
+    const trace = await f.request('/auth/admin/identity-trace', { headers: { 'x-admin-reset-token': 'admin-secret' } });
+    assert.equal(trace.status, 200);
+    const traceBody = await trace.json();
+    assert.equal(traceBody.ok, true);
+    assert.equal(Array.isArray(traceBody.events), true);
+    const cleared = await f.request('/auth/admin/identity-trace/clear', jsonPost({}, { 'x-admin-reset-token': 'admin-secret' }));
+    assert.equal(cleared.status, 200);
+    assert.equal((await cleared.json()).ok, true);
   } finally { await f.close(); }
 });
 

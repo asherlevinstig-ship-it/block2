@@ -20,6 +20,7 @@ const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { registerProfileResetHandler, registerProfileUpdateHandler } = require('../profile-reset');
+const { accountSummary, recordIdentityTrace, shortHash } = require('../identity-trace');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -130,6 +131,15 @@ class GameRoom extends Room {
   static async onAuth(_token, options, context) {
     const request = authRequestFromColyseus(options, context);
     const account = getAuthService().authenticateRequest(request);
+    const roomName = this && this.name === 'DungeonRoom' ? 'dungeon' : 'overworld';
+    recordIdentityTrace('room.auth', {
+      room: roomName,
+      shardId: String(options && options.shardId || 'main'),
+      gateId: String(options && options.gateId || ''),
+      authTokenHash: shortHash(options && (options.authToken || options.sessionToken)),
+      account: accountSummary(account),
+      ok: !!account,
+    });
     if (!account) throw new Error('authentication required');
     return account;
   }
@@ -815,6 +825,7 @@ class GameRoom extends Room {
     if (!token) throw new Error('authenticated account required');
     if (token) this.tokens.set(client.sessionId, token);
     let prof = null;
+    let profileSource = 'none';
     if (token) {
       // A DungeonRoom (Phase 2c) may have just saved fresher progress for this
       // token than our own in-memory cache — which we otherwise trust forever
@@ -822,16 +833,24 @@ class GameRoom extends Room {
       // handoff over our stale copy; takeHandoff() is a no-op for every token
       // that never went through a DungeonRoom.
       const handedOff = takeHandoff(token);
-      if (handedOff) prof = handedOff;
-      else prof = this.profiles.get(token);
+      if (handedOff) { prof = handedOff; profileSource = 'handoff'; }
+      else {
+        prof = this.profiles.get(token);
+        if (prof) profileSource = 'cache';
+      }
       let loadFailed = false;
       if (!prof) {
-        try { prof = sanitizeProfile(await this.store.loadPlayer(token)); }
+        try {
+          const raw = await this.store.loadPlayer(token);
+          prof = raw ? sanitizeProfile(raw) : null;
+          profileSource = raw ? 'store' : 'default';
+        }
         catch (e) {
           // Couldn't read an existing save (corrupt file or I/O error). Do NOT overwrite it:
           // hand out a playable default flagged non-persistable so flush() never clobbers the file.
           console.warn('[persist] load failed for ' + token + ' — using a non-persistable default to protect the saved profile:', e.message);
           loadFailed = true;
+          profileSource = 'load_failed';
         }
       }
       if (loadFailed) {
@@ -882,6 +901,21 @@ class GameRoom extends Room {
     const restartRecovery = prof ? await this.recoverDungeonAfterRestart(token, prof) : null;
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
+    recordIdentityTrace('room.join.profile', {
+      room: 'overworld',
+      shardId: String(this.shardId || 'main'),
+      sidHash: shortHash(client.sessionId),
+      token,
+      account: accountSummary(auth),
+      profileSource,
+      profile: prof ? {
+        name: prof.name,
+        nameSet: prof.nameSet === true,
+        level: prof.S && prof.S.lvl || 1,
+        noPersist: prof.noPersist === true,
+      } : null,
+      playerName: p.name,
+    });
     if (prof) {
       p.lvl = prof.S.lvl;
       p.path = prof.S.path;
