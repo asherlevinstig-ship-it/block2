@@ -1524,6 +1524,10 @@ function tick(now){
     const flying = deityFlying || (mounted && isDragon(mountKind));
     const outOfFood=!mounted && hunger<=0;
     const sprint=sprintKey && (f!==0||s!==0) && sp>1 && !mounted && !outOfFood;
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='sprint'&&sprint){
+      onboardingFlags.sprint=true;
+      updateOnboardingHud();
+    }
     sprintingNow=sprint;
     if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,f!==0||s!==0,dt);
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;

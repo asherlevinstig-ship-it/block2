@@ -555,7 +555,7 @@ function cancelOnboardingForProfileRestore(){
 }
 let pathChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
-const onboardingFlags={arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
+const onboardingFlags={sprint:false,arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
   markSubjectFocus:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='subject')onboardingFlags.subject=true;},
   markRecall:()=>{if(onboardingActive&&onboardingKind()==='recall')onboardingFlags.recall=true;}
@@ -591,39 +591,41 @@ function finishWorldLoading(reason){
 }
 const ONBOARDING_STEPS=[];
 ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
-  {kind:'move',pillar:'Lesson 1 / 11 — Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
-  {kind:'arrows',pillar:'Lesson 2 / 11 — Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
-  {kind:'jump',pillar:'Lesson 3 / 11 — Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
-  {kind:'cursor',pillar:'Lesson 4 / 13 - Cursor', key:'ESCAPE', text:'Press Escape to free the cursor.', sub:'Use this whenever you need to select buttons, inventory slots, quest options, or menus. Click the world to look around again.', done:()=>onboardingArrived&&onboardingFlags.cursor},
-  {kind:'tree',pillar:'Lesson 4 / 11 — Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
-  {kind:'craft',pillar:'Lesson 5 / 11 — Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
-  {kind:'build',pillar:'Lesson 6 / 11 — Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingFlags.built>=3},
-  {kind:'farm',pillar:'Lesson 7 / 11 — Farming', key:'WOODEN HOE + G', text:'Use the wooden hoe on one mature wheat crop.', sub:'Select the hoe on your hotbar, aim at tall golden wheat, then use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
-  {kind:'eat',pillar:'Lesson 8 / 11 — Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
-  {kind:'combat',pillar:'Lesson 9 / 11 — Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
-  {kind:'recall',pillar:'Lesson 10 / 11 — Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
-  {kind:'finish',pillar:'Lesson 11 / 11 — Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
+  {kind:'move',pillar:'Lesson 1 / 14 - Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
+  {kind:'sprint',pillar:'Lesson 2 / 14 - Sprinting', key:'SHIFT + W', text:'Hold Shift while moving to run into the next light.', sub:'Running uses stamina. Answer Recall questions later to recharge it.', done:()=>onboardingArrived&&onboardingFlags.sprint},
+  {kind:'arrows',pillar:'Lesson 3 / 14 - Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
+  {kind:'jump',pillar:'Lesson 4 / 14 - Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
+  {kind:'cursor',pillar:'Lesson 5 / 14 - Cursor', key:'ESCAPE', text:'Press Escape to free the cursor.', sub:'Use this whenever you need to select buttons, inventory slots, quest options, or menus. Click the world to look around again.', done:()=>onboardingArrived&&onboardingFlags.cursor},
+  {kind:'tree',pillar:'Lesson 6 / 14 - Gathering', key:'LEFT CLICK / F', text:'Chop one log from the training tree.', sub:'Aim at the trunk and hold the action until the block breaks.', done:()=>onboardingArrived&&onboardingFlags.tree},
+  {kind:'craft',pillar:'Lesson 7 / 14 - Crafting', key:'E', text:'Open inventory and craft oak planks from your log.', sub:'Choose the plank recipe, then move the result into your inventory.', done:()=>onboardingArrived&&onboardingFlags.crafted},
+  {kind:'build',pillar:'Lesson 8 / 14 - Building', key:'G / RIGHT CLICK', text:'Place three plank blocks on the stone pad.', sub:'Select planks on your hotbar, then place them on the marked foundation.', done:()=>onboardingFlags.built>=3},
+  {kind:'farm',pillar:'Lesson 9 / 14 - Farming', key:'WOODEN HOE + G', text:'Use the wooden hoe on one mature wheat crop.', sub:'Select the hoe on your hotbar, aim at tall golden wheat, then use the action control.', done:()=>onboardingArrived&&onboardingFlags.farmed},
+  {kind:'eat',pillar:'Lesson 10 / 14 - Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
+  {kind:'combat',pillar:'Lesson 11 / 14 - Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
+  {kind:'recall',pillar:'Lesson 13 / 14 - Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
+  {kind:'finish',pillar:'Lesson 14 / 14 - Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
 for(const step of ONBOARDING_STEPS){
-  if(step.kind==='move') step.pillar='Lesson 1 / 13 - Movement';
-  else if(step.kind==='arrows') step.pillar='Lesson 2 / 13 - Arrow Camera';
-  else if(step.kind==='jump') step.pillar='Lesson 3 / 13 - Jumping';
-  else if(step.kind==='cursor') step.pillar='Lesson 4 / 13 - Cursor';
-  else if(step.kind==='tree') step.pillar='Lesson 5 / 13 - Gathering';
-  else if(step.kind==='craft') step.pillar='Lesson 6 / 13 - Crafting';
-  else if(step.kind==='build') step.pillar='Lesson 7 / 13 - Building';
-  else if(step.kind==='farm') step.pillar='Lesson 8 / 13 - Farming';
-  else if(step.kind==='eat') step.pillar='Lesson 9 / 13 - Eating';
-  else if(step.kind==='combat') step.pillar='Lesson 10 / 13 - Combat';
-  else if(step.kind==='recall') step.pillar='Lesson 12 / 13 - Recall Cast';
+  if(step.kind==='move') step.pillar='Lesson 1 / 14 - Movement';
+  else if(step.kind==='sprint') step.pillar='Lesson 2 / 14 - Sprinting';
+  else if(step.kind==='arrows') step.pillar='Lesson 3 / 14 - Arrow Camera';
+  else if(step.kind==='jump') step.pillar='Lesson 4 / 14 - Jumping';
+  else if(step.kind==='cursor') step.pillar='Lesson 5 / 14 - Cursor';
+  else if(step.kind==='tree') step.pillar='Lesson 6 / 14 - Gathering';
+  else if(step.kind==='craft') step.pillar='Lesson 7 / 14 - Crafting';
+  else if(step.kind==='build') step.pillar='Lesson 8 / 14 - Building';
+  else if(step.kind==='farm') step.pillar='Lesson 9 / 14 - Farming';
+  else if(step.kind==='eat') step.pillar='Lesson 10 / 14 - Eating';
+  else if(step.kind==='combat') step.pillar='Lesson 11 / 14 - Combat';
+  else if(step.kind==='recall') step.pillar='Lesson 13 / 14 - Recall Cast';
   else if(step.kind==='finish'){
-    step.pillar='Lesson 13 / 13 - Departure';
+    step.pillar='Lesson 14 / 14 - Departure';
     step.sub='Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot for everyone.';
   }
 }
-ONBOARDING_STEPS.splice(10,0,{
+ONBOARDING_STEPS.splice(11,0,{
   kind:'subject',
-  pillar:'Lesson 11 / 13 - Subject Focus',
+  pillar:'Lesson 12 / 14 - Subject Focus',
   key:'LEFT ALT',
   text:'Press Left Alt and choose your Recall subject.',
   sub:'Recall Cast and death limbo questions use this subject. Pick Computer Science, IT, RE, or English.',
@@ -859,6 +861,7 @@ function buildOnboardingRoute(){
   const tree=onboardingTreeTarget(TRAINING_MEADOW);
   return [
     {x:sx-20, z:sz+18},
+    {x:sx-14, z:sz+15},
     {x:sx-8, z:sz+12},
     {x:sx+4, z:sz+6},
     {x:sx+14, z:sz},
