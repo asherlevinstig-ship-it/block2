@@ -2409,6 +2409,9 @@ test('multiplayer avatars use authenticated profile names and unflipped replicat
   const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(gameRoomSource, /p\.name = cleanName\(\(prof && prof\.name\) \|\|/);
   assert.doesNotMatch(gameRoomSource, /p\.name = cleanName\(options && typeof options\.name === 'string' \? options\.name : \(prof \? prof\.name : auth\.displayName\)\)/);
+  assert.match(gameRoomSource, /JOIN_SNAPSHOT_DELAY_MS/);
+  assert.match(gameRoomSource, /setTimeout\(\(\) => \{[\s\S]*client\.send\('hunger'/);
+  assert.match(gameRoomSource, /\}, JOIN_SNAPSHOT_DELAY_MS\);/);
   assert.match(networkingSource, /const syncRemotePlayerSnapshot=\(\)=>/);
   assert.match(networkingSource, /room\.state\.players\.forEach\(\(p,sid\)=>/);
   assert.match(networkingSource, /if\(NET\.remotes\[sid\]\)NET\.remotes\[sid\]\.ref=p;\s*else netAddRemote\(sid,p\);/);

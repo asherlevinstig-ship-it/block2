@@ -92,6 +92,7 @@ const OVERWORLD_TEAM_PLAYER_INTEREST_EXIT_RADIUS = Math.max(OVERWORLD_TEAM_PLAYE
 const OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS = Math.max(2, Number(process.env.OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS || 17));
 const GAME_DUNGEON_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.GAME_DUNGEON_MOB_INTEREST_RADIUS || 28));
 const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST_RADIUS, Number(process.env.GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40));
+const JOIN_SNAPSHOT_DELAY_MS = Math.max(0, Number(process.env.JOIN_SNAPSHOT_DELAY_MS || 100));
 
 function angleDelta(a, b) {
   let d = (Number(a) || 0) - (Number(b) || 0);
@@ -931,23 +932,28 @@ class GameRoom extends Room {
     }
     this.ensurePlayerHp(client);
     const hunger = this.ensurePlayerHunger(client);
-    client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
     if (restartRecovery) {
       this.restartRecoveries.set(token, restartRecovery);
     }
-    this.sendLandClaims(client);
-    const visibleDeathDrops = [...this.deathDrops.values()].filter(drop => drop.expiresAt > Date.now() && (drop.dgn || '') === (p.dgn || '')).map(drop => this.publicDeathDrop(drop));
-    if (visibleDeathDrops.length) client.send('deathDropSnapshot', { drops: visibleDeathDrops });
-    this.sendDragonIncubations(client);
-    this.sendNestDragons(client);
-    this.sendEventStatus(client);
-    this.sendSkyshipSync(client);
-    if (this.skyshipPassengers.has(client.sessionId)) client.send('skyshipBoardResult', { ok: true, recovered: true, ...this.skyshipPassengerPayload(client.sessionId), gold: prof.gold | 0 });
-    else if (client._skyshipRecovered) client.send('skyshipArrived', { route: 'western', recovered: true, x: p.x, y: p.y, z: p.z });
-    this.sendDayCycleSync(client);
-    this.sendWeather(client);
-    this.sendGuildHallSync(client);
-    this.broadcast('chat', { name: '[System]', text: p.name + (prof ? ' has returned' : ' has entered the world') });
+    setTimeout(() => {
+      if (!this.state.players.has(client.sessionId)) return;
+      const joined = this.state.players.get(client.sessionId);
+      const liveHunger = this.playerHunger.get(client.sessionId) || hunger;
+      if (liveHunger) client.send('hunger', { hunger: Math.ceil(liveHunger.hunger), maxHunger: liveHunger.max });
+      this.sendLandClaims(client);
+      const visibleDeathDrops = [...this.deathDrops.values()].filter(drop => drop.expiresAt > Date.now() && (drop.dgn || '') === (joined.dgn || '')).map(drop => this.publicDeathDrop(drop));
+      if (visibleDeathDrops.length) client.send('deathDropSnapshot', { drops: visibleDeathDrops });
+      this.sendDragonIncubations(client);
+      this.sendNestDragons(client);
+      this.sendEventStatus(client);
+      this.sendSkyshipSync(client);
+      if (this.skyshipPassengers.has(client.sessionId)) client.send('skyshipBoardResult', { ok: true, recovered: true, ...this.skyshipPassengerPayload(client.sessionId), gold: prof ? prof.gold | 0 : 0 });
+      else if (client._skyshipRecovered) client.send('skyshipArrived', { route: 'western', recovered: true, x: joined.x, y: joined.y, z: joined.z });
+      this.sendDayCycleSync(client);
+      this.sendWeather(client);
+      this.sendGuildHallSync(client);
+      this.broadcast('chat', { name: '[System]', text: joined.name + (prof ? ' has returned' : ' has entered the world') });
+    }, JOIN_SNAPSHOT_DELAY_MS);
   }
 
 
