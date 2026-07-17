@@ -22,8 +22,8 @@ export function createNetworkSession({
     let saved='';
     try{saved=cleanShardId(localStorage.getItem(shardKey));}catch(e){}
     const ordered=[];
-    if(saved)ordered.push(saved);
     ordered.push('main');
+    if(saved&&saved!=='main')ordered.push(saved);
     for(let i=2;i<=16;i++)ordered.push('shard-'+i);
     const unique=ordered.filter((id,i,a)=>id&&a.indexOf(id)===i);
     return unique[Math.max(0,attempt|0)]||('shard-'+(Math.max(0,attempt|0)+1));

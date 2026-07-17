@@ -2332,6 +2332,42 @@ test('network controller tries the next overworld shard and returns to it after 
   ]);
 });
 
+test('network session fresh joins prefer main before a saved overflow shard', async () => {
+  const previousLocalStorage = globalThis.localStorage;
+  const local = new Map([['bc_shard_id', 'shard-2']]);
+  globalThis.localStorage = {
+    getItem: key => local.get(key) || '',
+    setItem: (key, value) => local.set(key, value),
+    removeItem: key => local.delete(key),
+  };
+  try {
+    const { createNetworkSession } = await clientModule('network-session.mjs');
+    let captured = null;
+    createNetworkSession({
+      createController: options => {
+        captured = options;
+        return { state: {}, connect() {} };
+      },
+      Client: class {},
+      endpoint: () => 'ws://test',
+      sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+      attachRoom() {},
+      unavailable() {},
+      interrupted() {},
+      reconnectAttempt() {},
+      restored() {},
+      failure() {},
+      getPlayerName: () => 'Hunter',
+      authToken: () => '',
+      beforeConnect() {},
+    });
+    assert.equal(captured.primaryJoinOptions({ name: 'Hunter', attempt: 0 }).shardId, 'main');
+    assert.equal(captured.primaryJoinOptions({ name: 'Hunter', attempt: 1 }).shardId, 'shard-2');
+  } finally {
+    globalThis.localStorage = previousLocalStorage;
+  }
+});
+
 test('network controller bounds a hung live reconnect and falls back to a fresh join', async () => {
   const attached = [], events = [];
   const first = { reconnectionToken: 'live:token', onLeave(fn) { this.leaveHandler = fn; } };
