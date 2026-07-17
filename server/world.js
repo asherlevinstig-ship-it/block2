@@ -764,8 +764,8 @@ function buildTown() {
   // corner towers
   for (const [cx, cz] of [[x1, z1], [x1, z2], [x2, z1], [x2, z2]])
     fillBox(cx - 2, G + 1, cz - 2, cx + 2, G + 7, cz + 2, B.BRICK);
-  // Central court medallion. Keep it broad and flat so the plaza reads cleanly
-  // and client/server collision never leaves old high blocks or gaps.
+  // Central court fountain base. Keep collision broad and flat so the plaza reads
+  // cleanly; the client renders the water as a non-blocking visual.
   for (let x = TC - 8; x <= TC + 8; x++) for (let z = TC - 8; z <= TC + 8; z++) {
     const d = Math.hypot(x - TC, z - TC);
     if (d > 7.4) continue;

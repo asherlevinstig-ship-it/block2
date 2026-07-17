@@ -1372,7 +1372,7 @@ function buildTown(){
   setB(sx, G+2, sz, B.BRICK);
   for(let x=TC+8;x<=sx-4;x++) for(let w=-1;w<=1;w++) setB(x,G,sz+w,B.COBBLE);
 
-  // --- central court medallion: flat, readable plaza feature with no high filler blocks ---
+  // --- central court fountain base: flat collision; water is rendered as a thin client visual ---
   for(let x=TC-8;x<=TC+8;x++)for(let z=TC-8;z<=TC+8;z++){
     const d=Math.hypot(x-TC,z-TC);
     if(d>7.4) continue;
@@ -8499,8 +8499,42 @@ const emitters=[
   {x:HUB.tavernChimney.x, y:TG+12.7, z:HUB.tavernChimney.z,  type:'smoke',  rate:4,  nightOnly:true, maxDist:28}, // tavern chimney
   {x:HUB.forgeFire.x, y:TG+1.5,  z:HUB.forgeFire.z,  type:'fire',   rate:10, maxDist:30}, // smithy forge
   {x:HUB.forgeChimney.x, y:TG+9.6,  z:HUB.forgeChimney.z,  type:'smoke',  rate:2.2, maxDist:16},  // smithy chimney
-  {x:tp(64), y:TG+2.35,  z:tp(64),  type:'splash', rate:10, maxDist:34}, // low plaza fountain
+  {x:tp(64), y:TG+1.75,  z:tp(64),  type:'splash', rate:7, maxDist:34}, // low plaza fountain
 ];
+function createCentralFountainVisual(){
+  const root=new THREE.Group();
+  const cx=tp(64), cz=tp(64);
+  root.position.set(cx,TG+1.035,cz);
+  const waterMat=new THREE.MeshBasicMaterial({color:0x55b8ff,transparent:true,opacity:.34,depthWrite:false,side:THREE.DoubleSide});
+  const water=new THREE.Mesh(new THREE.CircleGeometry(3.62,64),waterMat);
+  water.rotation.x=-Math.PI/2;
+  water.renderOrder=2;
+  root.add(water);
+  const rippleMat=new THREE.MeshBasicMaterial({color:0xb7ecff,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  const rippleA=new THREE.Mesh(new THREE.RingGeometry(1.15,1.22,64),rippleMat.clone());
+  const rippleB=new THREE.Mesh(new THREE.RingGeometry(2.45,2.53,64),rippleMat.clone());
+  for(const r of [rippleA,rippleB]){r.rotation.x=-Math.PI/2;r.position.y=.018;r.renderOrder=3;root.add(r);}
+  const stone=new THREE.MeshLambertMaterial({color:0x6b747c});
+  const pedestal=new THREE.Mesh(new THREE.CylinderGeometry(.48,.62,.34,14),stone);
+  pedestal.position.y=.17;
+  root.add(pedestal);
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(.86,.98,.13,24),stone);
+  bowl.position.y=.42;
+  root.add(bowl);
+  const bowlWater=new THREE.Mesh(new THREE.CircleGeometry(.72,36),waterMat.clone());
+  bowlWater.material.opacity=.48;
+  bowlWater.rotation.x=-Math.PI/2;
+  bowlWater.position.y=.495;
+  bowlWater.renderOrder=4;
+  root.add(bowlWater);
+  const jetMat=new THREE.MeshBasicMaterial({color:0xbdefff,transparent:true,opacity:.55,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  const jet=new THREE.Mesh(new THREE.CylinderGeometry(.035,.075,1.15,10,1,true),jetMat);
+  jet.position.y=1.05;
+  root.add(jet);
+  townGroup.add(root);
+  return {root,water,bowlWater,rippleA,rippleB,jet,phase:Math.random()*Math.PI*2};
+}
+const centralFountainVisual=createCentralFountainVisual();
 for(const b of roadBreadcrumbs) if(b.type==='campfire') emitters.push({x:b.x+.5,y:b.y+1.45,z:b.z+.5,type:'roadSmoke',rate:3.2});
 for(const s of regionalLandmarks) if(s.type==='bandit_camp') emitters.push({x:s.x+.5,y:s.y+1.6,z:s.z+.5,type:'banditSmoke',rate:5.5});
 const roadBirds=[];
@@ -8543,7 +8577,28 @@ function emitOne(e){
       r:.55+Math.random()*.3, g:.75+Math.random()*.2, b:1});
   }
 }
+function updateCentralFountainVisual(dt){
+  const f=centralFountainVisual;
+  const near=dim==='overworld'&&playerOverworldDistanceSq(tp(64),tp(64))<70*70;
+  f.root.visible=near;
+  if(!near)return;
+  const t=performance.now()/1000+f.phase;
+  f.water.material.opacity=.30+.045*Math.sin(t*1.7);
+  f.bowlWater.material.opacity=.42+.06*Math.sin(t*2.3);
+  f.rippleA.rotation.z=t*.35;
+  f.rippleB.rotation.z=-t*.22;
+  f.rippleA.scale.setScalar(1+.035*Math.sin(t*2.1));
+  f.rippleB.scale.setScalar(1+.025*Math.cos(t*1.8));
+  f.jet.material.opacity=.42+.12*Math.sin(t*3.8);
+  if(Math.random()<dt*10){
+    const a=Math.random()*Math.PI*2, r=.2+Math.random()*.45;
+    spawnParticle({x:tp(64)+Math.cos(a)*r,y:TG+2.05,z:tp(64)+Math.sin(a)*r,
+      vx:Math.cos(a)*(.08+Math.random()*.18),vy:.25+Math.random()*.38,vz:Math.sin(a)*(.08+Math.random()*.18),
+      life:.38+Math.random()*.28,grav:5.5,r:.68,g:.86,b:1});
+  }
+}
 function updateEmitters(dt){
+  updateCentralFountainVisual(dt);
   const night=tavernNightLevel();
   for(const e of emitters){
     if(dim!=='overworld'||Math.hypot(player.pos.x-e.x,player.pos.z-e.z)>(e.maxDist||105)){e.acc=0;continue;}

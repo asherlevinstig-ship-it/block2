@@ -161,11 +161,13 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /tavern commons and player storage yard/);
   assert.match(world, /forge district training yard/);
   assert.match(world, /airship cargo apron/);
-  assert.match(world, /central court medallion: flat, readable plaza feature/);
+  assert.match(world, /central court fountain base: flat collision/);
+  assert.match(world, /function createCentralFountainVisual\(\)/);
+  assert.match(world, /new THREE\.CircleGeometry\(3\.62,64\)/);
   assert.match(world, /\{x:HUB\.forgeChimney\.x, y:TG\+9\.6,\s+z:HUB\.forgeChimney\.z,\s+type:'smoke',\s+rate:2\.2,\s+maxDist:16\}/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-e\.x,player\.pos\.z-e\.z\)>\(e\.maxDist\|\|105\)/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.z-p\.z\)>38\) continue/);
-  assert.match(serverWorld, /Central court medallion/);
+  assert.match(serverWorld, /Central court fountain base/);
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
   assert.doesNotMatch(world, /inn sleeping alcoves|function curtain\(|propCloth|PlaneGeometry\(w,1\.35\)|TG\+1\.62/);
   assert.doesNotMatch(world, /lamp posts around the plaza/);
