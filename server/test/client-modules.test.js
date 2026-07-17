@@ -2413,7 +2413,8 @@ test('multiplayer avatars use authenticated profile names and unflipped replicat
   assert.match(gameRoomSource, /setTimeout\(\(\) => \{[\s\S]*client\.send\('hunger'/);
   assert.match(gameRoomSource, /\}, JOIN_SNAPSHOT_DELAY_MS\);/);
   assert.match(networkingSource, /const syncRemotePlayerSnapshot=\(\)=>/);
-  assert.match(networkingSource, /room\.state\.players\.forEach\(\(p,sid\)=>/);
+  assert.match(networkingSource, /const players=room&&room\.state&&room\.state\.players;/);
+  assert.match(networkingSource, /players\.forEach\(\(p,sid\)=>/);
   assert.match(networkingSource, /if\(NET\.remotes\[sid\]\)NET\.remotes\[sid\]\.ref=p;\s*else netAddRemote\(sid,p\);/);
   assert.match(networkingSource, /syncRemotePlayerSnapshot\(\);/);
   assert.match(avatarSource, /blink\.push\(addBox\(head,\[\.085,\.09,\.034\],\[-\.11,\.\d+,-\.276\],eyeM\)\)/);

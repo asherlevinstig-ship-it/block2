@@ -855,6 +855,10 @@ function netAttachRoom(room,name,client){
     let staleLocalMobs=0;
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net){ removeMob(i); staleLocalMobs++; }
     eventLog('Connected as '+name);
+    // Colyseus can deliver startup sync messages before this large attach
+    // routine has registered every handler. Keep those early packets from
+    // turning into noisy SDK warnings while the explicit handlers below come online.
+    room.onMessage('*',()=>{});
     room.onMessage('e2eJourneyResult',m=>{e2eJourneyResult=m||null;});
     room.onMessage('familiarTelemetry',renderFamiliarTelemetry);
     room.onMessage('dungeonRestartRecovery',m=>{
@@ -882,14 +886,20 @@ function netAttachRoom(room,name,client){
     $(room.state).edits.onAdd((id,key)=>netApplyEdit(key,id));
     $(room.state).edits.onChange((id,key)=>netApplyEdit(key,id));
     const syncRemotePlayerSnapshot=()=>{
-      const live=new Set();
-      room.state.players.forEach((p,sid)=>{
-        if(sid===room.sessionId)return;
-        live.add(sid);
-        if(NET.remotes[sid])NET.remotes[sid].ref=p;
-        else netAddRemote(sid,p);
-      });
-      for(const sid in NET.remotes)if(!live.has(sid))netRemoveRemote(sid);
+      try{
+        const players=room&&room.state&&room.state.players;
+        if(!players||typeof players.forEach!=='function')return;
+        const live=new Set();
+        players.forEach((p,sid)=>{
+          if(sid===room.sessionId)return;
+          live.add(sid);
+          if(NET.remotes[sid])NET.remotes[sid].ref=p;
+          else netAddRemote(sid,p);
+        });
+        for(const sid in NET.remotes)if(!live.has(sid))netRemoveRemote(sid);
+      }catch(e){
+        console.warn('[network] remote player snapshot sync skipped',e);
+      }
     };
     $(room.state).players.onAdd((p,sid)=>{
       if(sid===room.sessionId)return;
