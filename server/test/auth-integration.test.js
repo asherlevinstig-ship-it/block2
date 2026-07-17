@@ -228,6 +228,47 @@ test('admin reset endpoint deletes game profiles only with the reset token', { c
   } finally { await f.close(); }
 });
 
+test('admin profile lookup reports the resolved account id and hunter name', { concurrency: false }, async () => {
+  const profiles = new Map([['student_42', { name: 'Admin_Levin', nameSet: true, S: { lvl: 1, str: 1, agi: 1, vit: 1, int: 1 } }]]);
+  const profileStore = {
+    async loadPlayer(id) { return profiles.get(id) || null; },
+  };
+  const authOptions = {
+    authBackend: {
+      async findAccount(identifier) {
+        if (identifier !== 'dylan.lynee@st-ignatius.example') return null;
+        return {
+          id: 'student_42',
+          username: identifier,
+          displayName: 'Dylan Lynee',
+          accountType: 'student',
+          role: 'student',
+          schoolId: '1',
+          schoolName: 'St Ignatius',
+        };
+      },
+    },
+  };
+  const f = await fixture({ profileStore, authOptions, env: { ADMIN_RESET_TOKEN: 'admin-secret' } });
+  try {
+    const forbidden = await f.request('/auth/admin/player-profile', jsonPost(
+      { email: 'dylan.lynee@st-ignatius.example' },
+      { 'x-admin-reset-token': 'wrong' },
+    ));
+    assert.equal(forbidden.status, 403);
+
+    const lookup = await f.request('/auth/admin/player-profile', jsonPost(
+      { email: 'dylan.lynee@st-ignatius.example' },
+      { 'x-admin-reset-token': 'admin-secret' },
+    ));
+    assert.equal(lookup.status, 200);
+    const body = await lookup.json();
+    assert.equal(body.account.id, 'student_42');
+    assert.equal(body.account.username, 'dylan.lynee@st-ignatius.example');
+    assert.deepEqual(body.profile, { exists: true, name: 'Admin_Levin', nameSet: true, level: 1 });
+  } finally { await f.close(); }
+});
+
 test('student registration endpoint creates a MySQL-backed session', { concurrency: false }, async () => {
   const profileStore = {
     async loadPlayer() { return null; },

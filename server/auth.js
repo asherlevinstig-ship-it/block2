@@ -172,6 +172,28 @@ class AuthService {
     return { account, liveRoomsReset };
   }
 
+  async inspectPlayerProfile(body) {
+    const account = await this.resolveAccountForReset(body);
+    if (!account || !account.id) throw Object.assign(new Error('Account not found.'), { status: 404, code: 'account' });
+    const store = this.getProfileStore();
+    let raw = null;
+    try {
+      raw = await store.loadPlayer(account.id);
+    } catch (e) {
+      throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
+    }
+    const profile = raw ? sanitizeProfile(raw) : null;
+    return {
+      account,
+      profile: profile ? {
+        exists: true,
+        name: profile.name,
+        nameSet: profile.nameSet === true,
+        level: profile.S && profile.S.lvl || 1,
+      } : { exists: false, name: '', nameSet: false, level: 1 },
+    };
+  }
+
   async saveHunterName(account, name) {
     const publicAccount = this.publicAccount(account);
     if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
@@ -366,6 +388,17 @@ class AuthService {
         res.json({ ok: true, account: result.account, liveRoomsReset: result.liveRoomsReset });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Reset failed.' });
+      }
+    });
+    app.post('/auth/admin/player-profile', async (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      try {
+        const result = await this.inspectPlayerProfile(req.body);
+        res.json({ ok: true, account: result.account, profile: result.profile });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile lookup failed.' });
       }
     });
     app.post('/auth/logout', async (req, res) => {
