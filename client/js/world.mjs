@@ -8498,11 +8498,11 @@ const tavernNightObjects=[], tavernNightLights=[], shrineCandleLights=[];
 // ambient emitters: hearth fire, forge embers, chimney smoke, fountain splash
 const TG=TOWN.G;
 const emitters=[
-  {x:HUB.tavernHearth.x, y:TG+1.35, z:HUB.tavernHearth.z, type:'fire',   rate:26, nightOnly:true}, // tavern hearth
-  {x:HUB.tavernChimney.x, y:TG+12.7, z:HUB.tavernChimney.z,  type:'smoke',  rate:6,  nightOnly:true}, // tavern chimney
-  {x:HUB.forgeFire.x, y:TG+1.5,  z:HUB.forgeFire.z,  type:'fire',   rate:12}, // smithy forge
-  {x:HUB.forgeChimney.x, y:TG+9.6,  z:HUB.forgeChimney.z,  type:'smoke',  rate:5},  // smithy chimney
-  {x:tp(64), y:TG+2.35,  z:tp(64),  type:'splash', rate:14}, // low plaza fountain
+  {x:HUB.tavernHearth.x, y:TG+1.35, z:HUB.tavernHearth.z, type:'fire',   rate:26, nightOnly:true, maxDist:36}, // tavern hearth
+  {x:HUB.tavernChimney.x, y:TG+12.7, z:HUB.tavernChimney.z,  type:'smoke',  rate:4,  nightOnly:true, maxDist:28}, // tavern chimney
+  {x:HUB.forgeFire.x, y:TG+1.5,  z:HUB.forgeFire.z,  type:'fire',   rate:10, maxDist:30}, // smithy forge
+  {x:HUB.forgeChimney.x, y:TG+9.6,  z:HUB.forgeChimney.z,  type:'smoke',  rate:2.2, maxDist:16},  // smithy chimney
+  {x:tp(64), y:TG+2.35,  z:tp(64),  type:'splash', rate:10, maxDist:34}, // low plaza fountain
 ];
 for(const b of roadBreadcrumbs) if(b.type==='campfire') emitters.push({x:b.x+.5,y:b.y+1.45,z:b.z+.5,type:'roadSmoke',rate:3.2});
 for(const s of regionalLandmarks) if(s.type==='bandit_camp') emitters.push({x:s.x+.5,y:s.y+1.6,z:s.z+.5,type:'banditSmoke',rate:5.5});
@@ -8549,7 +8549,7 @@ function emitOne(e){
 function updateEmitters(dt){
   const night=tavernNightLevel();
   for(const e of emitters){
-    if(dim!=='overworld'||Math.hypot(player.pos.x-e.x,player.pos.z-e.z)>105){e.acc=0;continue;}
+    if(dim!=='overworld'||Math.hypot(player.pos.x-e.x,player.pos.z-e.z)>(e.maxDist||105)){e.acc=0;continue;}
     const scale=e.nightOnly ? night : 1;
     if(scale<=0.02){ e.acc=0; continue; }
     e.acc=(e.acc||0)+e.rate*scale*dt;
@@ -8559,6 +8559,7 @@ function updateEmitters(dt){
   for(const key in torches){
     if(Math.random()<dt*1.4){
       const p=torches[key].position;
+      if(dim!=='overworld'||Math.hypot(player.pos.x-p.x,player.pos.z-p.z)>38) continue;
       spawnParticle({x:p.x+(Math.random()-.5)*.1, y:p.y+.68, z:p.z+(Math.random()-.5)*.1,
         vx:(Math.random()-.5)*.15, vy:.5+Math.random()*.5, vz:(Math.random()-.5)*.15,
         life:.25+Math.random()*.25, grav:-1, r:1, g:.6, b:.15});

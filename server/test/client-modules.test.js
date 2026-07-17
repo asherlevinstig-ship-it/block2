@@ -162,6 +162,9 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /forge district training yard/);
   assert.match(world, /airship cargo apron/);
   assert.match(world, /central fountain: low basin/);
+  assert.match(world, /\{x:HUB\.forgeChimney\.x, y:TG\+9\.6,\s+z:HUB\.forgeChimney\.z,\s+type:'smoke',\s+rate:2\.2,\s+maxDist:16\}/);
+  assert.match(world, /Math\.hypot\(player\.pos\.x-e\.x,player\.pos\.z-e\.z\)>\(e\.maxDist\|\|105\)/);
+  assert.match(world, /Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.z-p\.z\)>38\) continue/);
   assert.match(serverWorld, /Low fountain basin/);
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
   assert.doesNotMatch(world, /inn sleeping alcoves|function curtain\(|propCloth|PlaneGeometry\(w,1\.35\)|TG\+1\.62/);
