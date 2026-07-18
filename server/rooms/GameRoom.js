@@ -6,7 +6,7 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
@@ -386,6 +386,7 @@ class GameRoom extends Room {
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
     this.onMessage('homesteadWorkOrder', (client, m) => this.handleHomesteadWorkOrder(client, m));
     this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
+    this.onMessage('meditationComplete', (client, m) => this.handleMeditationComplete(client, m));
     this.onMessage('equipArmor', (client, m) => this.handleEquipArmor(client, m));
     this.onMessage('equipWeapon', (client, m) => this.handleEquipWeapon(client, m));
     this.onMessage('npcQuest', (client, m) => this.handleNpcQuest(client, m));
@@ -3873,7 +3874,8 @@ class GameRoom extends Room {
   }
   maxHpForProfile(prof) {
     const vit = prof && prof.S ? Math.max(1, prof.S.vit | 0) : 1;
-    return 20 + (vit - 1) * 2;
+    const growth = sanitizeMeditationGrowth(prof && prof.meditationGrowth, prof && prof.S && prof.S.lvl || 1);
+    return 20 + (vit - 1) * 2 + growth.hp;
   }
   maxMpForProfile(prof) {
     const intv = prof && prof.S ? Math.max(1, prof.S.int | 0) : 1;
@@ -3881,7 +3883,12 @@ class GameRoom extends Room {
   }
   maxStaminaForProfile(prof) {
     const agi = prof && prof.S ? Math.max(1, prof.S.agi | 0) : 1;
-    return 100 + (agi - 1) * 4;
+    const growth = sanitizeMeditationGrowth(prof && prof.meditationGrowth, prof && prof.S && prof.S.lvl || 1);
+    return 100 + (agi - 1) * 4 + growth.sp;
+  }
+  maxHungerForProfile(prof) {
+    const growth = sanitizeMeditationGrowth(prof && prof.meditationGrowth, prof && prof.S && prof.S.lvl || 1);
+    return MAX_HUNGER + growth.hunger;
   }
   hungerProtectedForProfile(prof) {
     return !prof || !prof.S || (prof.S.lvl | 0) < 3;
@@ -3897,7 +3904,7 @@ class GameRoom extends Room {
       hp: Math.max(1, Math.min(maxHp, trusted ? num(raw.hp, maxHp) : maxHp)),
       mp: Math.max(0, Math.min(maxMp, trusted ? num(raw.mp, maxMp) : maxMp)),
       sp: Math.max(0, Math.min(maxSp, trusted ? num(raw.sp, maxSp) : maxSp)),
-      hunger: this.hungerProtectedForProfile(prof) ? MAX_HUNGER : Math.max(0, Math.min(MAX_HUNGER, trusted ? num(raw.hunger, MAX_HUNGER) : MAX_HUNGER)),
+      hunger: this.hungerProtectedForProfile(prof) ? this.maxHungerForProfile(prof) : Math.max(0, Math.min(this.maxHungerForProfile(prof), trusted ? num(raw.hunger, this.maxHungerForProfile(prof)) : this.maxHungerForProfile(prof))),
     };
   }
   syncProfileVitals(client, prof) {
@@ -3913,7 +3920,7 @@ class GameRoom extends Room {
       hp: Math.max(1, Math.min(maxHp, Number.isFinite(hp && +hp.hp) ? +hp.hp : current.hp)),
       mp: Math.max(0, Math.min(maxMp, Number.isFinite(ability && +ability.mp) ? +ability.mp : current.mp)),
       sp: Math.max(0, Math.min(maxSp, current.sp)),
-      hunger: this.hungerProtectedForProfile(prof) ? MAX_HUNGER : Math.max(0, Math.min(MAX_HUNGER, Number.isFinite(hunger && +hunger.hunger) ? +hunger.hunger : current.hunger)),
+      hunger: this.hungerProtectedForProfile(prof) ? this.maxHungerForProfile(prof) : Math.max(0, Math.min(this.maxHungerForProfile(prof), Number.isFinite(hunger && +hunger.hunger) ? +hunger.hunger : current.hunger)),
     };
     prof.vitalsSavedAt = Date.now();
     return prof.vitals;
@@ -3972,11 +3979,12 @@ class GameRoom extends Room {
     const rec = this.profileFor(client);
     let cur = this.playerHunger.get(client.sessionId);
     if (!cur) {
-      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { hunger: MAX_HUNGER };
-      cur = { hunger: Math.max(0, Math.min(MAX_HUNGER, vitals.hunger)), max: MAX_HUNGER, acc: 0, syncAcc: 0 };
+      const maxHunger = rec && rec.prof ? this.maxHungerForProfile(rec.prof) : MAX_HUNGER;
+      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { hunger: maxHunger };
+      cur = { hunger: Math.max(0, Math.min(maxHunger, vitals.hunger)), max: maxHunger, acc: 0, syncAcc: 0 };
       this.playerHunger.set(client.sessionId, cur);
     }
-    cur.max = MAX_HUNGER;
+    cur.max = rec && rec.prof ? this.maxHungerForProfile(rec.prof) : MAX_HUNGER;
     if (rec && this.hungerProtectedForProfile(rec.prof)) cur.hunger = cur.max;
     cur.hunger = Math.max(0, Math.min(cur.max, cur.hunger));
     return cur;

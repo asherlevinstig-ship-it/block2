@@ -6127,7 +6127,7 @@ test('Monk shrine focus regenerates and mitigates damage according to profession
   const room = makeRoom(), monk = makeClient('focus-monk');
   room.clients = [monk];
   const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
-  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10 });
+  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10, lvl: 4 });
   prof.job = 'monk';
   prof.jobXpByJob.monk = Array.from({ length: 9 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
   prof.vitals = { hp: 10, mp: 4, sp: 5, hunger: 100 };
@@ -6153,9 +6153,9 @@ test('Zen Master meditation shares focus only with nearby party members', () => 
   const room = makeRoom(), monk = makeClient('aura-monk'), near = makeClient('aura-near'), far = makeClient('aura-far');
   room.clients = [monk, near, far];
   const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
-  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1' });
-  seedPlayer(room, near, { x: sx + 4, z: sz, team: 'T1' });
-  seedPlayer(room, far, { x: sx + 30, z: sz, team: 'T1' });
+  const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1', lvl: 4 });
+  seedPlayer(room, near, { x: sx + 4, z: sz, team: 'T1', lvl: 4 });
+  seedPlayer(room, far, { x: sx + 30, z: sz, team: 'T1', lvl: 4 });
   const nearProf = room.profiles.get(room.tokens.get(near.sessionId));
   nearProf.vitals = { hp: 20, mp: 3, sp: 1, hunger: 100 };
   nearProf.vitalsSavedAt = Date.now();
@@ -6169,6 +6169,24 @@ test('Zen Master meditation shares focus only with nearby party members', () => 
   assert.equal(near.sent.some(e => e.type === 'meditateFocus' && e.msg.shared), true);
   assert.equal(far.sent.some(e => e.type === 'meditateFocus'), false);
   assert.equal(room.monkAuraAt.get(monk.sessionId) > 0, true);
+});
+
+test('Meditation Hall completions unlock at level four and grow rank-capped body stats', () => {
+  const room = makeRoom(), novice = makeClient('med-novice'), adept = makeClient('med-adept');
+  room.clients = [novice, adept];
+  const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
+  seedPlayer(room, novice, { x: sx, z: sz, lvl: 3 });
+  const { prof, token } = seedPlayer(room, adept, { x: sx, z: sz, lvl: 4 });
+  prof.meditationGrowth = { completed: 2, next: 3, hp: 0, sp: 0, hunger: 0 };
+  room.handleMeditationComplete(novice, { seconds: 8 });
+  assert.equal(novice.sent.at(-1).msg.reason, 'level');
+  room.handleMeditationComplete(adept, { seconds: 8 });
+  const msg = adept.sent.find(e => e.type === 'meditationGrowth' && e.msg.ok);
+  assert.equal(msg.msg.growth.completed, 3);
+  assert.equal(msg.msg.growth.next, 8);
+  assert.equal(!!msg.msg.award, true);
+  assert.equal(msg.msg.growth.hp + msg.msg.growth.sp + msg.msg.growth.hunger > 0, true);
+  assert.equal(room.dirtyPlayers.has(token), true);
 });
 
 test('Farmer milestones gate Windseeds and compost while Golden Harvest persists and rewards', () => {

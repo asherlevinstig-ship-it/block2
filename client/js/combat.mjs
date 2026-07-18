@@ -1821,6 +1821,8 @@ function primaryAction(){
   }
   mouseL=true;
 }
+const MEDITATION_UNLOCK_LEVEL=4;
+const MEDITATION_COMPLETE_SECONDS=8;
 let isMeditating=false, meditateStartedAt=0, meditationPrevView=null;
 function inMeditationSpot(){
   const x=player.pos.x, z=player.pos.z;
@@ -1828,6 +1830,58 @@ function inMeditationSpot(){
   return dim==='overworld' && Math.abs(player.pos.y-(TOWN.G+1))<2.5 &&
     !!zone && Math.hypot(x-zone.x,z-zone.z)<=((zone.radius||8.6)+.35);
 }
+function meditationUnlocked(){
+  return (S&&S.lvl|0)>=MEDITATION_UNLOCK_LEVEL;
+}
+function normalizeMeditationGrowth(raw=meditationGrowth){
+  const src=raw&&typeof raw==='object'?raw:{};
+  const out={
+    completed:Math.max(0,Math.min(100000,src.completed|0)),
+    next:Math.max(3,Math.min(100000,src.next|0||3)),
+    hp:Math.max(0,Math.min(40,src.hp|0)),
+    sp:Math.max(0,Math.min(80,src.sp|0)),
+    hunger:Math.max(0,Math.min(40,src.hunger|0)),
+  };
+  if(out.next<=out.completed)out.next=nextMeditationBenchmark(out.completed);
+  return out;
+}
+function nextMeditationBenchmark(done){
+  const n=Math.max(0,done|0);
+  if(n<3)return 3;
+  if(n<8)return 8;
+  if(n<15)return 15;
+  if(n<25)return 25;
+  return Math.ceil((n+1)/15)*15;
+}
+function applyMeditationGrowthPayload(m){
+  if(!m)return;
+  if(m.ok===false){
+    const r=String(m.reason||'');
+    SFX.error&&SFX.error();
+    if(r==='level')sysMsg('Meditation unlocks at <b>Level '+MEDITATION_UNLOCK_LEVEL+'</b>.',{tier:'minor',title:'Meditation'});
+    else if(r==='range')sysMsg('Meditation only works inside the <b>Meditation Hall</b>.',{tier:'minor',title:'Meditation'});
+    else if(r==='short')sysMsg('Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds to complete meditation.',{tier:'minor',title:'Meditation'});
+    return;
+  }
+  if(!m.growth)return;
+  meditationGrowth=normalizeMeditationGrowth(m.growth);
+  if(m.award&&m.award.stat){
+    const labels={hp:'Max HP',sp:'Max SP',hunger:'Max Food'};
+    const amount=Math.max(1,m.award.amount|0),label=labels[m.award.stat]||'Body';
+    if(m.award.stat==='hp')hp=Math.min(maxHp(),hp+amount);
+    else if(m.award.stat==='sp')sp=Math.min(maxSp(),sp+amount);
+    else if(m.award.stat==='hunger')hunger=Math.min(maxHunger(),hunger+amount);
+    renderBars();refreshHUD();
+    SFX.level&&SFX.level();
+    rewardGain('rare',amount,label,{icon:'ZEN',duration:2600});
+    sysMsg('<b>Meditation breakthrough!</b> '+escHTML(label)+' increased by <b>+'+amount+'</b>. Next benchmark: '+meditationGrowth.next+' complete meditations.',{tier:'major',title:'Meditation'});
+  }else if(m.capped){
+    sysMsg('Your meditation growth is capped for this Hunter rank. Rank up to grow further.',{tier:'minor',title:'Meditation'});
+  }else if(m.completed){
+    sysMsg('Meditation recorded: <b>'+meditationGrowth.completed+'</b> / '+meditationGrowth.next+' toward your next body breakthrough.',{tier:'minor',title:'Meditation'});
+  }
+}
+globalThis.BlockcraftApplyMeditationGrowth=applyMeditationGrowthPayload;
 function startMeditation(){
   if(!meditationPrevView) meditationPrevView={ yaw:player.yaw, pitch:player.pitch };
   isMeditating=true;
@@ -1850,7 +1904,7 @@ function startMeditation(){
   meditateJobAcc=0;
   applyMeditationCamera();
   SFX.meditate(true);
-  sysMsg('You settle into meditation at the <b>Town Shrine</b>');
+  sysMsg('You settle into meditation inside the <b>Meditation Hall</b>. Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds.');
   ringPulse(player.pos.x,TOWN.G+1.08,player.pos.z,1.4,0x7dd3fc,.55);
   glowFlash(player.pos.x,TOWN.G+1.4,player.pos.z,0x7dd3fc,2.2,.45);
 }
@@ -1868,7 +1922,15 @@ function stopMeditation(){
     meditationPrevView=null;
   }
   SFX.meditate(false);
-  sysMsg('Meditation ended');
+  const secs=Math.floor((performance.now()-meditateStartedAt)/1000);
+  if(secs>=MEDITATION_COMPLETE_SECONDS){
+    if(NET.on&&NET.room&&NET.room.name==='blockcraft')NET.room.send('meditationComplete',{seconds:secs});
+    else {
+      meditationGrowth=normalizeMeditationGrowth({...meditationGrowth,completed:(meditationGrowth&&meditationGrowth.completed|0)+1});
+      meditationGrowth.next=nextMeditationBenchmark(meditationGrowth.completed);
+      sysMsg('Meditation complete. Progress will persist when connected to the world server.',{tier:'minor',title:'Meditation'});
+    }
+  }else sysMsg('Meditation ended. Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds to progress.');
 }
 function applyMeditationCamera(){
   const r=4.2;
@@ -1878,6 +1940,11 @@ function applyMeditationCamera(){
 function toggleMeditation(){
   if(isMeditating){ stopMeditation(); return true; }
   if(!inMeditationSpot()) return false;
+  if(!meditationUnlocked()){
+    SFX.error&&SFX.error();
+    sysMsg('Meditation unlocks at <b>Level '+MEDITATION_UNLOCK_LEVEL+'</b>. Return to the Meditation Hall after more training.',{tier:'minor',title:'Meditation'});
+    return true;
+  }
   startMeditation();
   return true;
 }
@@ -2101,7 +2168,7 @@ function nearbyInteractionPrompt(){
     if(d<2.8)push({key:'G',title:'Dungeon Exit',small:'Return to the overworld',priority:120},d);
   }
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
-  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':'Begin focus meditation',priority:112},0);
+  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at Level '+MEDITATION_UNLOCK_LEVEL),priority:112},0);
   const readyClaim=claimReadyQuestAtServicePrompt();
   if(readyClaim)push(readyClaim,0);
   if(nearFellowshipWeeklyCache())push({key:'G',title:'Fellowship Weekly Cache',small:'Claim unlocked rewards',priority:104},0);

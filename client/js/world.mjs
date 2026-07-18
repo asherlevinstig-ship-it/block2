@@ -3828,7 +3828,7 @@ function jobContractTargetLabel(c){
   if(jobContractReady())return 'Job Board';
   if(c.targetName)return c.targetName;
   if(c.location)return c.location;
-  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Town Shrine'};
+  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall'};
   return labels[c.type]||'Contract marker';
 }
 function jobContractRouteTo(target){
@@ -4655,7 +4655,7 @@ addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, 
 addTownInteractLabel('Social Mentor - Tab Chat', HUB.socialMentor.x, TOWN.G+3.75, HUB.socialMentor.z, '#82e6a7', 9);
 addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
 addTownInteractLabel('3 North Gate', HUB.northGate.x, TOWN.G+5.4, HUB.northGate.z+1.3, '#d8f2ff', 14);
-addTownInteractLabel('Town Shrine', dpx(47.5,'shrine'), TOWN.G+5.2, dpz(56.5,'shrine'), '#d8f2ff', 12);
+addTownInteractLabel('Meditation Hall', dpx(47.5,'shrine'), TOWN.G+5.2, dpz(56.5,'shrine'), '#d8f2ff', 12);
 addTownInteractLabel('Meditation Hall', HUB.shrine.x, TOWN.G+2.85, HUB.shrine.z, '#7dd3fc', 9);
 addTownInteractLabel('Westwind Skyport · G to board · S-Rank · 1000 gold', HUB.skyport.x, HUB.skyport.y+4.2, HUB.skyport.z, '#ffd98a', 20);
 addTownInteractLabel('G BOARD · Requires S-Rank + 1,000 gold', HUB.skyport.x-12.5, HUB.skyport.y+3.2, HUB.skyport.z, '#ffcf6a', 7);
@@ -5808,16 +5808,17 @@ const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
-let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let activeObjectives=[];
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
 let highestGateRankCleared=-1;
 let armorSlot=null;
-const maxHp=()=>20+(S.vit-1)*2;
+const meditationBonus=(key)=>Math.max(0,Math.min(key==='sp'?80:40,(meditationGrowth&&Number.isFinite(+meditationGrowth[key])?+meditationGrowth[key]:0)|0));
+const maxHp=()=>20+(S.vit-1)*2+meditationBonus('hp');
 const maxMp=()=>20+(S.int-1)*3;
-const maxSp=()=>100+(S.agi-1)*4;
-const maxHunger=()=>100;
+const maxSp=()=>100+(S.agi-1)*4+meditationBonus('sp');
+const maxHunger=()=>100+meditationBonus('hunger');
 const xpNeed=()=>xpNeedForLevel(S.lvl);
 function gateRankLetter(ri){ return GATE_RANK_LETTERS[Math.max(0,Math.min(4,ri|0))]||'E'; }
 function rankIndexFromLevel(lvl){ return gateRankIndexForLevel(lvl); }
@@ -9384,6 +9385,7 @@ const legacyWorldBindings={
   "maxMp":{get:()=>maxMp},
   "maxSp":{get:()=>maxSp},
   "meditateJobAcc":{get:()=>meditateJobAcc,set:value=>{meditateJobAcc=value;}},
+  "meditationGrowth":{get:()=>meditationGrowth,set:value=>{meditationGrowth=value&&typeof value==='object'?value:{completed:0,next:3,hp:0,sp:0,hunger:0};}},
   "meditateMat":{get:()=>meditateMat},
   "meditateRing":{get:()=>meditateRing},
   "mobs":{get:()=>mobs},

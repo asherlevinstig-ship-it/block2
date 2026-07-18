@@ -486,7 +486,7 @@ function jobContractDestinationLabel(c){
   if(jobContractReady())return 'Job Board';
   if(c.targetName)return c.targetName;
   if(c.location)return c.location;
-  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Crafting or kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Town Shrine'};
+    const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Crafting or kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall'};
   return labels[c.type]||'contract marker';
 }
 function jobContractCompassTarget(c=clampJobContract(jobContract)){
@@ -496,7 +496,7 @@ function jobContractCompassTarget(c=clampJobContract(jobContract)){
   if(c.type==='farm')return {label:'Town Farm',x:HUB.farm.x,z:HUB.farm.z};
   if(c.type==='cook'||c.type==='sell')return {label:c.type==='sell'?'Tavern counter':'Kitchen',x:HUB.tavern.x,z:HUB.tavern.z};
   if(c.type==='smith'||c.type==='repair'||c.type==='upgrade'||c.type==='salvage')return {label:'Smithy',x:HUB.smith.x,z:HUB.smith.z};
-  if(c.type==='meditate')return {label:'Town Shrine',x:HUB.shrine.x,z:HUB.shrine.z};
+  if(c.type==='meditate')return {label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z};
   if(c.type==='mine'||c.type==='cave_survey'||c.type==='ancient_map'||c.type==='treasure')return {label:jobContractDestinationLabel(c),x:HUB.quarry.x,z:HUB.quarry.z};
   if(c.type==='gate')return gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   if(c.type==='kill'||c.type==='hunt')return {label:jobContractDestinationLabel(c),x:HUB.northGate.x,z:HUB.northGate.z-15};
@@ -944,7 +944,7 @@ function currentObjective(){
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.farm.x, player.pos.z-HUB.farm.z)<7)
     return {label:'Current Goal', text:'Speak with Liss for farmer work'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.shrine.x, player.pos.z-HUB.shrine.z)<9)
-    return {label:'Current Goal', text:inMeditationSpot()?'Meditate with G / right-click':'Stand inside the shrine to meditate'};
+    return {label:'Current Goal', text:inMeditationSpot()?'Meditate with G / right-click':'Stand inside the Meditation Hall to meditate'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.guardian.x, player.pos.z-HUB.guardian.z)<9)
     return {label:'Current Goal', text:'Speak with the Aegis Guardian'};
   if(gate) return {label:'Current Goal', text:RANKS[gate.rank].n+'-Rank '+gateKindLabel(gate.kind)+' Gate - '+gateCompass()};

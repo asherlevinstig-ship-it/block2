@@ -1831,11 +1831,14 @@ function netAttachRoom(room,name,client){
       if(m&&Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));
       renderBars();
       const focusNames=[m&&m.regen?'Restoration':'',m&&m.speed?'Flow':'',m&&m.stone?'Stone':''].filter(Boolean);
-      const focusText=(m&&m.shared?'party focus':'shrine focus')+(focusNames.length?': '+focusNames.join(' + '):'');
+      const focusText=(m&&m.shared?'party focus':'hall focus')+(focusNames.length?': '+focusNames.join(' + '):'');
       showJobPerk('monk',focusText+' '+secs+'s');
       const restored=[m&&Number.isFinite(+m.mana)&&m.mana>0?'+'+(m.mana|0)+' MP':'',m&&Number.isFinite(+m.stamina)&&m.stamina>0?'+'+(m.stamina|0)+' SP':''].filter(Boolean).join(' / ');
-      if(restored)showName('Shrine focus '+restored);
+      if(restored)showName('Hall focus '+restored);
       if(m&&m.shared)sysMsg('<b>'+escHTML(m.by||'A monk')+'</b> shares tranquillity: '+[m.regen?'Restoration':'',m.speed?'Flow':'',m.stone?'Stone':''].filter(Boolean).join(', ')+' for '+secs+' sec.');
+    });
+    room.onMessage('meditationGrowth', m=>{
+      if(globalThis.BlockcraftApplyMeditationGrowth)globalThis.BlockcraftApplyMeditationGrowth(m);
     });
     room.onMessage('prospectResult',m=>showProspectMarkers(m));
     room.onMessage('prospectReject',m=>{
@@ -2136,6 +2139,9 @@ function netRestoreProfile(m){
     if(Array.isArray(m.pos) && !onboardingActive){
       player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2]);
       player.vel.set(0,0,0);
+    }
+    if(m&&m.meditationGrowth&&typeof m.meditationGrowth==='object'&&typeof meditationGrowth!=='undefined'){
+      meditationGrowth=m.meditationGrowth;
     }
     const vitals=m&&m.vitals&&typeof m.vitals==='object'?m.vitals:{};
     const finite=(value,fallback)=>Number.isFinite(+value)?+value:fallback;

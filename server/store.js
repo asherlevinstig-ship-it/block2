@@ -26,6 +26,7 @@ const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials')
 const INV_MAX = 36;
 const DEITY_LEVEL = 60;
 const DEITY_POWER_IDS = Object.freeze(['flight', 'day_night', 'weather', 'invisibility']);
+const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 const TUTORIAL_VERSIONS = Object.freeze({
   onboarding: 7, ability: 2, intro: 1, gate: 1,
   townJob: 1, townTavern: 1, townLand: 1, familiar: 1,
@@ -289,6 +290,39 @@ function sanitizeDeity(raw, level = 1) {
   };
 }
 
+function hunterRankIndexForLevel(level = 1) {
+  const lvl = Math.max(1, level | 0);
+  let rank = 0;
+  for (let i = 1; i < HUNTER_RANK_LEVELS.length; i++) if (lvl >= HUNTER_RANK_LEVELS[i]) rank = i;
+  return rank;
+}
+
+function meditationGrowthCapsForLevel(level = 1) {
+  const rank = hunterRankIndexForLevel(level);
+  return { hp: 4 + rank * 4, sp: 8 + rank * 8, hunger: 4 + rank * 4, rank };
+}
+
+function sanitizeMeditationGrowth(raw, level = 1) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const caps = meditationGrowthCapsForLevel(level);
+  const completed = clampI(src.completed, 0, 100000);
+  let next = clampI(src.next, 3, 100000);
+  if (next <= completed) {
+    if (completed < 3) next = 3;
+    else if (completed < 8) next = 8;
+    else if (completed < 15) next = 15;
+    else if (completed < 25) next = 25;
+    else next = Math.ceil((completed + 1) / 15) * 15;
+  }
+  return {
+    completed,
+    next,
+    hp: clampI(src.hp, 0, caps.hp),
+    sp: clampI(src.sp, 0, caps.sp),
+    hunger: clampI(src.hunger, 0, caps.hunger),
+  };
+}
+
 function defaultProfile(name) {
   const chosenName = typeof name === 'string' && cleanName(name) !== 'Hunter';
   return {
@@ -328,6 +362,7 @@ function defaultProfile(name) {
     shadowArmy: [],
     abilitySpec: '',
     deity: { unlocked: false, ascendedAt: 0, chosenPower: '', powers: [], active: {} },
+    meditationGrowth: { completed: 0, next: 3, hp: 0, sp: 0, hunger: 0 },
     dragonCare: {},
     dragonBondXp: {},
     dragonRoleMastery: {},
@@ -717,6 +752,7 @@ function sanitizeProfile(p) {
     || (p.npcQuestChains && typeof p.npcQuestChains === 'object' && Object.keys(p.npcQuestChains).length > 0)
   ));
   out.deity = sanitizeDeity(p.deity, out.S.lvl);
+  out.meditationGrowth = sanitizeMeditationGrowth(p.meditationGrowth, out.S.lvl);
   const legacyJob = cleanJob(p.job);
   out.job = PROFESSION_IDS.includes(legacyJob) ? legacyJob : '';
   out.jobXpByJob = {};
@@ -883,16 +919,17 @@ function sanitizeProfile(p) {
   out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
   out.vitalsSavedAt = clampI(p.vitalsSavedAt, 0, 4102444800000);
   const rawVitals = p.vitals && typeof p.vitals === 'object' ? p.vitals : p;
-  const maxHp = 20 + (out.S.vit - 1) * 2;
+  const maxHp = 20 + (out.S.vit - 1) * 2 + out.meditationGrowth.hp;
   const maxMp = 20 + (out.S.int - 1) * 3;
-  const maxSp = 100 + (out.S.agi - 1) * 4;
+  const maxSp = 100 + (out.S.agi - 1) * 4 + out.meditationGrowth.sp;
+  const maxHunger = 100 + out.meditationGrowth.hunger;
   const trustedVitals = out.vitalsSavedAt > 0;
   const vital = (value, fallback, min, max) => trustedVitals && Number.isFinite(+value) ? clampF(value, min, max) : fallback;
   out.vitals = {
     hp: vital(rawVitals.hp, maxHp, 0, maxHp),
     mp: vital(rawVitals.mp, maxMp, 0, maxMp),
     sp: vital(rawVitals.sp, maxSp, 0, maxSp),
-    hunger: vital(rawVitals.hunger, 100, 0, 100),
+    hunger: vital(rawVitals.hunger, maxHunger, 0, maxHunger),
   };
   const armor = cleanSlot(p.armor);
   out.armor = armor && ARMOR_IDS.has(armor.id) ? armor : null;
@@ -1573,4 +1610,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, cleanToken, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };

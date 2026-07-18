@@ -5454,8 +5454,9 @@ function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
     return line(active?'Gather gold and iron for reforging.':'Equip Blacksmith to use forge services.');
   }
   if(jobId==='monk'){
-    if(active&&level>=JOB_SYSTEM.MONK_RULES.regenLevel)return line('Stand in the shrine and press G/right-click to refresh focus.',true);
-    return line(active?'Reach Monk Lv 2 to make meditation grant focus.':'Equip Monk before meditating for profession focus.');
+    if((S&&S.lvl|0)<4)return line('Reach Hunter Level 4 to unlock Meditation Hall focus.');
+    if(active&&level>=JOB_SYSTEM.MONK_RULES.regenLevel)return line('Stand in the Meditation Hall and press G/right-click to refresh focus.',true);
+    return line(active?'Reach Monk Lv 4 to make meditation grant focus.':'Equip Monk before meditating for profession focus.');
   }
   return '';
 }
@@ -5490,13 +5491,13 @@ function openFarmerServicesUI(){
 function openMonkRitualUI(){
   openQWin('management');qpanelEl.innerHTML='';
   const level=jobLevelFromXp(jobXpFor('monk')),rules=JOB_SYSTEM.MONK_RULES;
-  const h=document.createElement('h2');h.textContent='SHRINE RITUALS';qpanelEl.appendChild(h);
+  const h=document.createElement('h2');h.textContent='MEDITATION HALL';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='MONK LV '+level+' · SABLE VENN';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   const line=(need,title,text)=>'<b style="color:'+(level>=need?'#7dd3fc':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Stand inside the shrine and press <b>G</b> or right-click to meditate. Moving ends meditation, but earned focus remains for its duration.</small>';qpanelEl.appendChild(p);
+  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Reach Hunter Level 4, stand inside the Meditation Hall circle, then press <b>G</b> or right-click to meditate. Complete sessions build permanent HP, SP, or Food-cap breakthroughs. Moving ends meditation.</small>';qpanelEl.appendChild(p);
   const active=document.createElement('p');active.className='qtext';const activeText=[buffs.regen>0?'Restoration '+Math.ceil(buffs.regen)+'s':'',buffs.spd>0?'Flow '+Math.ceil(buffs.spd)+'s':'',buffs.stone>0?'Stone '+Math.ceil(buffs.stone)+'s':''].filter(Boolean).join(' · ');active.innerHTML='<b>Active focus:</b> '+(activeText||'None');qpanelEl.appendChild(active);
-  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('MONK WORK',()=>openJobsUI('monk','Shrine')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('MONK WORK',()=>openJobsUI('monk','Meditation')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function openMinerSurveyUI(){
   openQWin('management');qpanelEl.innerHTML='';

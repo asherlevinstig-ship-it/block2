@@ -743,9 +743,9 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.perkTierFromLevel(20), 4);
   for(const id of sharedJobs.JOB_IDS){
     const milestones=sharedJobs.milestonesFor(id);
-    assert.deepEqual(milestones.map(m=>m.level),[2,5,10,20],`${id} has the shared milestone ladder`);
+    assert.deepEqual(milestones.map(m=>m.level),id==='monk'?[4,5,10,20]:[2,5,10,20],`${id} has the shared milestone ladder`);
     assert.equal(milestones.every(m=>sharedJobs.milestoneReward(id,m.level)), true, `${id} milestones resolve concrete rewards`);
-    assert.equal(sharedJobs.milestoneState(id,1).next.level,2);
+    assert.equal(sharedJobs.milestoneState(id,1).next.level,id==='monk'?4:2);
     assert.equal(sharedJobs.milestoneState(id,10).earned.length,3);
     assert.equal(sharedJobs.milestoneAt(id,5).title.length>0,true);
   }
@@ -758,7 +758,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.COOK_RULES.brothLevel,5);
   assert.equal(sharedJobs.COOK_RULES.feastLevel,20);
   assert.equal(sharedJobs.COOK_RULES.feastRange,20);
-  assert.equal(sharedJobs.MONK_RULES.regenLevel,2);
+  assert.equal(sharedJobs.MONK_RULES.regenLevel,4);
   assert.equal(sharedJobs.MONK_RULES.resourceRestoreFraction,.08);
   assert.equal(sharedJobs.MONK_RULES.stoneMitigation,.35);
   assert.equal(sharedJobs.MONK_RULES.auraCooldownMs,15000);

@@ -4,7 +4,7 @@ export const PROGRESSION_ERRORS = Object.freeze({
   incomplete: 'That contract is not complete',
   active: 'You already have an active contract',
   full: 'Free up inventory space before claiming this reward',
-  range: 'Meditate inside the Town Shrine',
+  range: 'Meditate inside the Meditation Hall',
   offer: 'That contract offer is no longer available',
 });
 

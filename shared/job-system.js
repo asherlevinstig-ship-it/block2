@@ -13,7 +13,7 @@
     farmer:Object.freeze({name:'Farmer',icon:'☘',col:'#86efac',role:'Crops and food supply',desc:'Progress by tilling, planting, and harvesting crops.',perkName:'Green Thumb',perk:'Chance for bonus wheat on harvest.'}),
     cook:Object.freeze({name:'Cook',icon:'♨',col:'#fbbf24',role:'Meals and tavern goods',desc:'Progress by cooking, baking, preparing meals, and selling food.',perkName:'Batch Cooking',perk:'Chance to create extra meals while cooking.'}),
     blacksmith:Object.freeze({name:'Blacksmith',icon:'⚒',col:'#fb923c',role:'Gear, tools, repair',desc:'Progress by crafting equipment, smelting ingots, and repairing gear.',perkName:'Tempered Craft',perk:'Crafted tools gain durability; repair kits restore more.'}),
-    monk:Object.freeze({name:'Monk',icon:'◇',col:'#7dd3fc',role:'Meditation and support',desc:'Progress by meditating in the Town Shrine.',perkName:'Shrine Focus',perk:'Meditation grants short focus buffs.'}),
+    monk:Object.freeze({name:'Monk',icon:'◇',col:'#7dd3fc',role:'Meditation and support',desc:'Progress by meditating in the Meditation Hall from Level 4 onward.',perkName:'Hall Focus',perk:'Meditation grants short focus buffs and long-term body growth.'}),
   });
   const TITLES = Object.freeze({
     adventurer:[[20,'Legendary Adventurer'],[10,'Gatebreaker'],[5,'Pathfinder'],[2,'Wayfarer'],[1,'Adventurer']],
@@ -55,7 +55,7 @@
       Object.freeze({level:20,title:'Masterwork',desc:'Perfect a reforged item for stronger damage, speed, and durability.',reward:'Masterwork forge action'}),
     ]),
     monk:Object.freeze([
-      Object.freeze({level:2,title:'Restoring Focus',desc:'Meditation grants a regeneration blessing.',reward:'Regeneration focus buff'}),
+      Object.freeze({level:4,title:'Restoring Focus',desc:'Meditation Hall focus restores resources and grants a regeneration blessing.',reward:'Regeneration focus buff'}),
       Object.freeze({level:5,title:'Flowing Focus',desc:'Meditation also grants a movement blessing.',reward:'Movement focus buff'}),
       Object.freeze({level:10,title:'Stone Focus',desc:'Meditation also reduces incoming damage.',reward:'Stone skin focus buff'}),
       Object.freeze({level:20,title:'Shared Tranquillity',desc:'Meditation periodically shares full focus with nearby party members.',reward:'Shared party focus aura'}),
@@ -109,9 +109,9 @@
       {type:'smith',target:'IRON_INGOT',need:s=>6+s*2,title:'Ingot Commission',desc:'Smelt iron ingots for repairs, reforging, and guild supply orders.',gold:s=>40+s*5,jobXp:s=>30+s*5,focus:'smelting supply chain',reward:'forge material mastery',party:'Solo'},
     ]),
     monk:Object.freeze([
-      {type:'meditate',need:s=>60+s*15,title:'Quiet Vigil',desc:'Meditate inside the Town Shrine and hold focus.',gold:s=>24+s*4,jobXp:s=>22+s*5,focus:'short focus channel',reward:'safe profession XP',party:'Solo'},
-      {type:'meditate',need:s=>90+s*20,title:'Deep Stillness',desc:'Keep a longer meditation so the shrine can settle around you.',gold:s=>32+s*4,jobXp:s=>30+s*6,focus:'long focus channel',reward:'stronger XP for longer focus',party:'Solo'},
-      {type:'meditate',need:s=>120+s*25,title:'Party Blessing Vigil',desc:'Hold focus long enough to ready shrine blessings for nearby allies.',gold:s=>36+s*4,jobXp:s=>36+s*6,focus:'support preparation',reward:'milestone progress toward shared focus',party:'Helpful'},
+      {type:'meditate',need:s=>60+s*15,title:'Quiet Vigil',desc:'Meditate inside the Meditation Hall and hold focus.',gold:s=>24+s*4,jobXp:s=>22+s*5,focus:'short focus channel',reward:'safe profession XP',party:'Solo'},
+      {type:'meditate',need:s=>90+s*20,title:'Deep Stillness',desc:'Keep a longer meditation so the hall can settle around you.',gold:s=>32+s*4,jobXp:s=>30+s*6,focus:'long focus channel',reward:'stronger XP for longer focus',party:'Solo'},
+      {type:'meditate',need:s=>120+s*25,title:'Party Blessing Vigil',desc:'Hold focus long enough to ready Meditation Hall blessings for nearby allies.',gold:s=>36+s*4,jobXp:s=>36+s*6,focus:'support preparation',reward:'milestone progress toward shared focus',party:'Helpful'},
     ]),
   });
   const FIRST_HUNTER_CONTRACT = Object.freeze({job:'adventurer',type:'kill',need:3,have:0,title:"Mara's Field Work",desc:'Defeat 3 hostile creatures beyond the town walls.',rewardGold:34,rewardJobXp:20});
@@ -131,7 +131,7 @@
     repair:['Obtain Repair Kits.','Use one on a damaged tool.','Each successful repair advances the contract.'],
     upgrade:['Bring an eligible sword, pick, or forged weapon to Tobin.','Upgrade, reforge, reroll, or masterwork the item at the forge.','Each successful improvement advances the contract.'],
     salvage:['Bring unwanted non-legendary weapons or armor to Tobin.','Unlock protected gear first, then salvage it at the smithy.','Each successful salvage advances the contract.'],
-    meditate:['Go inside the Town Shrine circle.','Use the meditation interaction and remain focused.','Accumulated focus time advances the contract.'],
+    meditate:['Reach Level 4, then go inside the Meditation Hall circle.','Use the meditation interaction and remain focused.','Accumulated focus time advances the contract and complete sessions build body-growth benchmarks.'],
   });
   const OFFER_REFRESH_MS = 15 * 60 * 1000;
   // Contracts supplement the XP earned while doing their objective. Material-heavy
@@ -142,12 +142,12 @@
     Object.freeze({id:'balanced',label:'Balanced',need:1,reward:1,estimate:'About 10 minutes'}),
     Object.freeze({id:'demanding',label:'Demanding',need:1.45,reward:1.5,estimate:'About 15–20 minutes'}),
   ]);
-  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',cave_survey:'Cave entrances',ancient_map:'Ancient city clues',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Town Shrine'});
+  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',cave_survey:'Cave entrances',ancient_map:'Ancient city clues',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Meditation Hall'});
   const REFORGE_MODIFIERS=Object.freeze({keen:Object.freeze({name:'Keen',desc:'+2 weapon damage.'}),swift:Object.freeze({name:'Swift',desc:'8% faster weapon and tool use.'}),sturdy:Object.freeze({name:'Sturdy',desc:'20% more maximum durability.'})});
   const REFORGE_ACTIONS=Object.freeze({basic:Object.freeze({level:2,gold:25,iron:1,diamond:0}),choose:Object.freeze({level:5,gold:70,iron:4,diamond:0}),reroll:Object.freeze({level:10,gold:120,iron:0,diamond:1}),masterwork:Object.freeze({level:20,gold:260,iron:0,diamond:3})});
   const FARMER_RULES=Object.freeze({bonusYieldLevel:2,windseedLevel:5,fieldcraftLevel:10,goldenHarvestLevel:20,fieldcraftGrowthMultiplier:.75,goldenGrowthMultiplier:.6,goldenWheatChance:.25});
   const COOK_RULES=Object.freeze({batchLevel:2,brothLevel:5,rationLevel:10,feastLevel:20,rationDurationMs:120000,feastDurationMs:180000,feastRange:20,mightMultiplier:1.15,gatherBonusChance:.25});
-  const MONK_RULES=Object.freeze({regenLevel:2,speedLevel:5,stoneLevel:10,auraLevel:20,durationByTier:Object.freeze([0,8,10,12,16]),regenPerSecond:2,resourceRestoreFraction:.08,speedMultiplier:1.25,stoneMitigation:.35,auraRange:12,auraCooldownMs:15000});
+  const MONK_RULES=Object.freeze({regenLevel:4,speedLevel:5,stoneLevel:10,auraLevel:20,durationByTier:Object.freeze([0,8,10,12,16]),regenPerSecond:2,resourceRestoreFraction:.08,speedMultiplier:1.25,stoneMitigation:.35,auraRange:12,auraCooldownMs:15000});
   const MINER_RULES=Object.freeze({oreSenseLevel:2,stonehandLevel:5,deepProspectLevel:10,geodeLevel:20,surveyRadius:8,deepSurveyRadius:18,surveyCooldownMs:30000,deepSurveyCooldownMs:15000,markerDurationMs:12000,geodeChance:.08,durabilitySaveChance:.18});
   function jobXpNeed(level){return Math.round(30*Math.pow(Math.max(1,level|0),1.45));}
   function jobLevelFromXp(xp){let lvl=1,left=Math.max(0,xp|0);while(lvl<99){const need=jobXpNeed(lvl);if(left<need)break;left-=need;lvl++;}return lvl;}
@@ -222,7 +222,7 @@
     if(title==='Threat Sweep'||title==='Road Patrol')return 'Best while hunting outside town.';
     if(/dungeon|gate|prep/.test(focus))return 'Best while preparing for dungeon runs.';
     if(/base|claim|homestead/.test(focus))return 'Best while improving your claim.';
-    if(c.type==='meditate')return 'Best during a calm Shrine stop.';
+    if(c.type==='meditate')return 'Best during a calm Meditation Hall stop.';
     return 'Best when this matches what you were already planning to do.';
   }
   function guideSteps(type){return [...(GUIDE_STEPS[type]||['Follow the contract description.','Watch the objective tracker for progress.','Return to the Job Board when complete.'])];}
@@ -250,7 +250,7 @@
       if(lvl>=FARMER_RULES.windseedLevel)hooks.push('Windseed crops produce richer harvests.');
       if(lvl>=FARMER_RULES.fieldcraftLevel)hooks.push('Fieldcraft speeds crop growth and unlocks compost acceleration.');
     }else if(job==='monk'){
-      hooks.push('Restore mana and stamina at the shrine, then carry focus buffs into group play.');
+      hooks.push('Restore mana and stamina in the Meditation Hall, then build permanent HP, stamina, and food-cap breakthroughs.');
       if(lvl>=MONK_RULES.regenLevel)hooks.push('Restoring Focus heals and restores resources while meditating.');
       if(lvl>=MONK_RULES.stoneLevel)hooks.push('Stone Focus reduces incoming damage.');
       if(lvl>=MONK_RULES.auraLevel)hooks.push('Shared Tranquillity supports nearby party members.');
