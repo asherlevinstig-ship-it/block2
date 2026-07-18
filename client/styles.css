@@ -419,6 +419,8 @@
   .questcard{border:1px solid rgba(255,255,255,.12);background:linear-gradient(135deg,rgba(255,255,255,.045),rgba(0,0,0,.16));border-radius:7px;padding:11px}
   .questcard.active{border-color:rgba(255,210,74,.62);box-shadow:0 0 14px rgba(255,210,74,.12)}
   .questcard.ready{border-color:rgba(154,210,107,.68);box-shadow:0 0 16px rgba(154,210,107,.14)}.questcard.recommended{background:linear-gradient(135deg,rgba(255,210,74,.09),rgba(0,0,0,.18))}
+  .questcard.prep-loop{border-color:rgba(125,211,252,.48);background:linear-gradient(135deg,rgba(20,52,72,.34),rgba(0,0,0,.18))}
+  .questcard.prep-loop.recommended{box-shadow:0 0 18px rgba(125,211,252,.14),inset 0 0 22px rgba(125,211,252,.045)}
   .questcard.recent{border-color:rgba(125,211,252,.66);box-shadow:0 0 16px rgba(125,211,252,.16)}
   .questcard .qtop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px}.questcard .qsrc{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#ffd24a}
   .questcard .qbadge{flex:0 0 auto;max-width:48%;font-size:8px;letter-spacing:1.2px;color:#101923;background:#ffd24a;border-radius:4px;padding:3px 5px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.questcard.ready .qbadge{background:#9ad26b}
@@ -428,6 +430,10 @@
   .questcard.empty{opacity:.62}
   .qprogress{position:relative;height:14px;margin:8px 0;border:1px solid rgba(255,210,74,.18);border-radius:4px;background:rgba(0,0,0,.3);overflow:hidden}.qprogress i{display:block;height:100%;background:linear-gradient(90deg,#4e9b57,#9ad26b)}.qprogress span{position:absolute;inset:0;display:grid;place-items:center;font-size:9px;color:#f4ffe7;text-shadow:1px 1px 0 #000}
   .qreward{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,210,74,.16)}.qreward b,.qreward span{font-size:9px;line-height:1.2;border:1px solid rgba(255,210,74,.24);border-radius:4px;padding:4px 6px}.qreward b{color:#ffd24a;background:rgba(255,210,74,.08)}.qreward span{color:#d8e8ff;background:rgba(8,14,24,.58)}
+  .gate-prep-mini{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin:8px 0 2px;padding-top:8px;border-top:1px solid rgba(125,211,252,.14)}
+  .gate-prep-mini span{display:flex;align-items:center;gap:5px;min-width:0;padding:5px 6px;border:1px solid rgba(255,255,255,.09);border-radius:4px;background:rgba(5,12,22,.44);font-size:9px;color:#c9d8e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gate-prep-mini b{display:inline-grid;place-items:center;width:15px;height:15px;flex:0 0 auto;border-radius:50%;font-size:9px;background:rgba(255,255,255,.08);color:#ffad66}
+  .gate-prep-mini .done{color:#c8ffa7;border-color:rgba(154,210,107,.24)}.gate-prep-mini .done b{color:#102015;background:#9ad26b}
   .objective-crafts{display:grid;gap:6px;margin-top:9px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)}
   .objective-crafts>b{font-size:9px;letter-spacing:1.7px;text-transform:uppercase;color:#ffd24a}
   .objective-craft{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;align-items:center;width:100%;padding:7px 8px;border:1px solid rgba(145,164,189,.28);border-radius:5px;background:rgba(5,11,18,.56);color:#dceaff;text-align:left;font-family:inherit;cursor:pointer}
@@ -760,6 +766,8 @@
   #currentquest .objective-line.job .olabel{color:#9fd8ff}
   #currentquest .objective-line.guild .olabel{color:#ffd36b}
   #currentquest .objective-line.aegis .olabel{color:#d7b5ff}
+  #currentquest .objective-line.prep .olabel{color:#7dd3fc}
+  #currentquest .objective-line.prep .obar i{background:linear-gradient(90deg,#38bdf8,#9ad26b)}
   #currentquest .objective-line.progression .olabel{color:#9ad26b}
   #activitytracker{position:fixed;right:14px;top:402px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:none;color:#dcecff;background:linear-gradient(135deg,rgba(8,18,28,.9),rgba(18,12,9,.86));border:1px solid rgba(91,194,255,.48);box-shadow:0 0 16px rgba(69,170,255,.14);border-radius:7px;padding:9px 12px}
   #activitytracker .at{font-size:10px;letter-spacing:2px;color:#72d4ff;text-transform:uppercase;margin-bottom:4px}

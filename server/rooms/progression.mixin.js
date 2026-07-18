@@ -719,12 +719,33 @@ class ProgressionMixin {
     if (!tier) return true;
     const now = Date.now(), duration = (rules.durationByTier[tier] || 0) * 1000;
     const applyFocus = (target, shared) => {
+      const targetRec = this.profileFor(target);
+      const targetProf = targetRec && targetRec.prof;
+      const st = targetProf && typeof this.ensureAbilityState === 'function' ? this.ensureAbilityState(target) : null;
+      const maxSp = targetProf && typeof this.maxStaminaForProfile === 'function' ? this.maxStaminaForProfile(targetProf) : 0;
+      let mpRestore = 0, spRestore = 0, nextSp = null;
+      if (level >= rules.regenLevel && st) {
+        const beforeMp = st.mp;
+        st.mp = Math.min(st.maxMp, st.mp + Math.max(1, Math.ceil(st.maxMp * (rules.resourceRestoreFraction || .08))));
+        mpRestore = Math.max(0, Math.round(st.mp - beforeMp));
+        if (typeof this.sendAbilitySync === 'function') this.sendAbilitySync(target, st);
+      }
+      if (level >= rules.regenLevel && targetProf && maxSp > 0) {
+        const raw = targetProf.vitals && typeof targetProf.vitals === 'object' ? targetProf.vitals : {};
+        const current = Number.isFinite(+raw.sp) ? +raw.sp : maxSp;
+        nextSp = Math.max(0, Math.min(maxSp, current + Math.max(1, Math.ceil(maxSp * (rules.resourceRestoreFraction || .08)))));
+        spRestore = Math.max(0, Math.round(nextSp - current));
+        targetProf.vitals = { ...raw, sp: nextSp };
+        targetProf.vitalsSavedAt = Date.now();
+        if (typeof this.syncProfileVitals === 'function') this.syncProfileVitals(target, targetProf);
+        if (targetRec && this.dirtyPlayers) this.dirtyPlayers.add(targetRec.token);
+      }
       const buffs = this.abilityBuffs.get(target.sessionId) || {};
       if (level >= rules.regenLevel) buffs.monkRegenUntil = Math.max(buffs.monkRegenUntil || 0, now + duration);
       if (level >= rules.speedLevel) buffs.monkSpeedUntil = Math.max(buffs.monkSpeedUntil || 0, now + duration);
       if (level >= rules.stoneLevel) buffs.monkStoneUntil = Math.max(buffs.monkStoneUntil || 0, now + duration);
       this.abilityBuffs.set(target.sessionId, buffs);
-      target.send('meditateFocus', { level, tier, durationMs: duration, regen: level >= rules.regenLevel, speed: level >= rules.speedLevel, stone: level >= rules.stoneLevel, shared: !!shared, by: p.name || 'a monk' });
+      target.send('meditateFocus', { level, tier, durationMs: duration, regen: level >= rules.regenLevel, speed: level >= rules.speedLevel, stone: level >= rules.stoneLevel, shared: !!shared, by: p.name || 'a monk', mana: mpRestore, mp: st ? Math.floor(st.mp) : null, maxMp: st ? st.maxMp : null, stamina: spRestore, sp: nextSp, maxSp });
     };
     applyFocus(client, false);
     if (level >= rules.auraLevel) {

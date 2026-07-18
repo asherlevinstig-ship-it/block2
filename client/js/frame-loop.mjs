@@ -627,12 +627,33 @@ function serverObjectiveLine(o,labelOverride=''){
   if(!o)return null;
   return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o));
 }
+function gatePrepTargetRank(){
+  if(menusApi.nextGatePrepRank){
+    const rank=menusApi.nextGatePrepRank();
+    if(rank>=0)return rank;
+  }
+  if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
+  if(progressionFocus==='first_d_gate')return 1;
+  return -1;
+}
+function gatePrepObjectiveLine(){
+  const rank=gatePrepTargetRank();
+  if(rank<0||!menusApi.gateReadiness)return null;
+  const prep=menusApi.gateReadiness(rank);
+  if(!prep||prep.ready&&!(quest&&quest.type==='gate')&&progressionFocus!=='first_d_gate')return null;
+  const rankName=RANKS[rank]&&RANKS[rank].n||'?';
+  const next=prep.next?'Next: '+prep.next.label:'Ready - find or join a Gate';
+  const action=prep.ready?{type:'find_gate',label:'FIND GATE'}:{type:'gate_prep',label:'PREP CHECK',rank};
+  return objectiveLine('prep','Prep',rankName+'-Rank Prep',prep.status+' '+prep.score+'/'+prep.total+' - '+next,action,objectiveProgressParts(prep.score,prep.total));
+}
 function unifiedObjectiveList(){
   if(dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
   if(townGuidanceActive||transitionRecoveryAction())return [];
   const lines=[];
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
   if(story)lines.push(story);
+  const prep=gatePrepObjectiveLine();
+  if(prep)lines.push(prep);
   const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
   if(aegis)lines.push(aegis);
   const job=localJobObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('job'),'Job');
@@ -652,6 +673,7 @@ function trackerActionButton(action){
   if(!action) return '';
   const attrs=['type="button"','class="qaction"','data-objective-action="'+escHTML(action.type||'')+'"'];
   if(action.outputId!=null) attrs.push('data-output-id="'+(action.outputId|0)+'"');
+  if(action.rank!=null) attrs.push('data-rank="'+(action.rank|0)+'"');
   if(action.kind) attrs.push('data-kind="'+escHTML(action.kind)+'"');
   if(action.location) attrs.push('data-location="'+escHTML(action.location)+'"');
   if(action.source) attrs.push('data-source="'+escHTML(action.source)+'"');
@@ -764,6 +786,10 @@ function handleObjectiveAction(action,btn){
     worldApi.toggleLandClaims&&worldApi.toggleLandClaims(true);
     worldApi.openLandClaims&&worldApi.openLandClaims();
     sysMsg('<b>Land claiming:</b> choose an available tile near your base. The overlay shows owned, shared, and wilderness land.');
+    return;
+  }
+  if(action==='gate_prep'){
+    menusApi.openGatePrep&&menusApi.openGatePrep(+(btn.dataset.rank||0));
     return;
   }
   if(action==='questlog'){menusApi.openQuestLog&&menusApi.openQuestLog();return;}

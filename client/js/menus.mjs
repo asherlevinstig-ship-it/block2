@@ -3242,6 +3242,54 @@ function gateReadinessLocal(rank){
   const missing=checks.filter(c=>!c.done);
   return {rank,difficulty:GATE_DIFFICULTIES[rank],ready:score===checks.length,status:score===checks.length?'READY':'UNDERPREPARED',score,total:checks.length,checks,missing,next:missing[0]||null};
 }
+function nextGatePrepRank(){
+  if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
+  if(progressionFocus==='first_d_gate')return 1;
+  if(S&&S.lvl>=3)return Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));
+  return -1;
+}
+function gatePrepLoopCard(){
+  const rank=nextGatePrepRank();
+  if(rank<0)return '';
+  const r=gateReadinessLocal(rank),rankName=RANKS[rank]&&RANKS[rank].n||'?';
+  const next=r.next?('Next fix: '+r.next.label+'. '+(r.next.hint||'')):'Ready to find, join, or open a '+rankName+'-rank Gate.';
+  const checks='<div class="gate-prep-mini">'+r.checks.map(c=>'<span class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'✓':'!')+'</b>'+escHTML(c.label)+'</span>').join('')+'</div>';
+  const extra=checks+'<div class="qrow"><button type="button" class="qbtn" data-gate-prep-rank="'+rank+'">OPEN PREP CHECK</button></div>';
+  return questLogCardHTML('Gate Prep',rankName+'-Rank Readiness',r.status+' '+r.score+'/'+r.total+' - '+next,'Smithy, tavern, inventory, then wilderness Gate',true,extra,{className:'prep-loop',recommended:!r.ready,ready:r.ready,progressHTML:questProgressHTML(r.score,r.total)});
+}
+function bindGatePrepActions(root=qpanelEl){
+  root.querySelectorAll('[data-gate-prep-rank]').forEach(btn=>{
+    btn.onclick=()=>openGatePrepUI(+(btn.dataset.gatePrepRank||0));
+  });
+}
+function openGatePrepUI(rank=nextGatePrepRank()){
+  rank=Math.max(0,Math.min(4,rank|0));
+  if(uiOpen)closeUI(false);openQWin('questlog');qpanelEl.innerHTML='';
+  const r=gateReadinessLocal(rank),preview=gatePreviewLocal(rank,'team'),rankName=RANKS[rank]&&RANKS[rank].n||'?';
+  const h=document.createElement('h2');h.textContent='GATE PREP';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent=rankName+'-RANK DANGER CHECK · '+r.status+' · '+r.score+'/'+r.total;qpanelEl.appendChild(sub);
+  const intro=document.createElement('div');intro.className='cartographer-briefing'+(r.ready?'':' fresh');
+  intro.innerHTML='<small>PREPARE - ENTER DANGER - LOOT - UPGRADE</small><p>'+(r.ready?'Your kit is ready enough. Find a Gate, group up if needed, then bring the loot back to town.':'Fix the first missing item before entering. Preparation makes Gates feel like a planned expedition instead of a coin flip.')+'</p><ul><li><b>Smithy</b> handles weapons, armor, repair kits, and tools.</li><li><b>Tavern</b> handles food before long fights.</li><li><b>Party</b> matters more as Gate rank rises.</li></ul>';
+  qpanelEl.appendChild(intro);
+  const checks=document.createElement('div');checks.className='gate-readiness-list';
+  checks.innerHTML=r.checks.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'✓':'!')+'</b><span>'+escHTML(c.label)+'<small>'+escHTML(c.done?'Covered':(c.hint||'Improve this before entering.'))+'</small></span></div>').join('');
+  qpanelEl.appendChild(checks);
+  const party=preview.recommendedParty||[1,1],partyText=party[0]===party[1]?String(party[0]):party[0]+'-'+party[1],levels=preview.enemyLevels||[1,1];
+  const grid=document.createElement('div');grid.className='gate-preview-grid';
+  grid.innerHTML='<div class="gate-preview-card"><b>ENEMY LEVELS</b><br>'+levels[0]+'-'+levels[1]+'</div>'+
+    '<div class="gate-preview-card"><b>PARTY SIZE</b><br>'+partyText+' recommended</div>'+
+    '<div class="gate-preview-card"><b>NEXT FIX</b><br>'+escHTML(r.next?r.next.label:'Ready to enter')+'</div>'+
+    '<div class="gate-preview-card"><b>LOOP</b><br>Clear boss, loot chest, upgrade, then climb rank.</div>';
+  qpanelEl.appendChild(grid);
+  if(r.next){const p=document.createElement('p');p.className='qtext';p.innerHTML='<b>Do this now:</b> '+escHTML(r.next.hint||r.next.label);qpanelEl.appendChild(p);}
+  const row=document.createElement('div');row.className='qrow';
+  row.appendChild(qBtn('INVENTORY',()=>openUI()));
+  row.appendChild(qBtn('SMITHY',()=>openQuestUI(villagers.find(v=>v.role==='smith')||NPC_ROLES.find(v=>v.role==='smith'))));
+  row.appendChild(qBtn('TAVERN',()=>openTavernUI()));
+  row.appendChild(qBtn(r.ready?'FIND GATE':'QUEST LOG',()=>r.ready?sysMsg('<b>Gate ready:</b> follow the Gate marker or join a nearby party.'):openQuestLogUI()));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  qpanelEl.appendChild(row);
+}
 function gatePreviewLocal(rank,kind){
   rank=Math.max(0,Math.min(4,rank|0));
   const levels=[[1,10],[11,20],[21,30],[31,40],[41,50]][rank];
@@ -4399,9 +4447,11 @@ function openQuestLogUI(){
   const historyOnly=questLogFilter==='completed'||questLogFilter==='failed';
   grid.innerHTML=serverCards&&historyOnly?serverCards:serverCards?[
     serverCards,
+    safeQuestLogCard('Gate Prep',gatePrepLoopCard),
     safeQuestLogCard('What Next?',whatNextQuestLogCard),
     safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard),
   ].join(''):[
+    safeQuestLogCard('Gate Prep',gatePrepLoopCard),
     safeQuestLogCard('What Next?',whatNextQuestLogCard),
     safeQuestLogCard('Story Quests',storyQuestLogCard),
     safeQuestLogCard('Job Contract',jobQuestLogCard),
@@ -4411,6 +4461,7 @@ function openQuestLogUI(){
   ].join('');
   qpanelEl.appendChild(grid);
   bindQuestLogFilters(qpanelEl);
+  bindGatePrepActions(qpanelEl);
   bindObjectiveCraftShortcuts();
   bindServerObjectiveActions(qpanelEl);
   const directed=progressionDirectorCandidate();
@@ -5327,6 +5378,10 @@ function jobMilestoneHTML(jobId,level){
   const next=state.next?'<br><span style="color:#d9b66f">Next at Lv '+state.next.level+': '+escHTML(state.next.title)+' — '+escHTML(state.next.desc)+'</span>':'<br><span style="color:#d8f8c8">All milestones earned.</span>';
   return '<small>'+earned+(latestReward?'<br><span style="color:#8fbcae">Reward earned: '+escHTML(latestReward)+'</span>':'')+next+(nextReward?'<br><span style="color:#d9b66f">Reward next: '+escHTML(nextReward)+'</span>':'')+'</small>';
 }
+function professionGameplayHTML(jobId,level){
+  const hooks=JOB_SYSTEM.gameplayHooks?JOB_SYSTEM.gameplayHooks(jobId,level):[];
+  return hooks.length?'<small style="color:#d8f8c8"><b>Gameplay:</b> '+hooks.slice(0,3).map(escHTML).join(' / ')+'</small>':'';
+}
 function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
   const active=playerJob===jobId,sel=inv[combatState.selectedSlot],selDef=sel&&ITEMS[sel.id],selTool=selDef&&selDef.tool;
   const line=(text,ready=false)=>'<small><span style="color:'+(ready?'#d8f8c8':'#9fb0c6')+'"><b>Right now:</b> '+escHTML(text)+'</span></small>';
@@ -5399,7 +5454,7 @@ function openMonkRitualUI(){
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='MONK LV '+level+' · SABLE VENN';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   const line=(need,title,text)=>'<b style="color:'+(level>=need?'#7dd3fc':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation renews a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus.')].join('<br><br>')+'<br><br><small>Stand inside the shrine and press <b>G</b> or right-click to meditate. Moving ends meditation, but earned focus remains for its duration.</small>';qpanelEl.appendChild(p);
+  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Stand inside the shrine and press <b>G</b> or right-click to meditate. Moving ends meditation, but earned focus remains for its duration.</small>';qpanelEl.appendChild(p);
   const active=document.createElement('p');active.className='qtext';const activeText=[buffs.regen>0?'Restoration '+Math.ceil(buffs.regen)+'s':'',buffs.spd>0?'Flow '+Math.ceil(buffs.spd)+'s':'',buffs.stone>0?'Stone '+Math.ceil(buffs.stone)+'s':''].filter(Boolean).join(' · ');active.innerHTML='<b>Active focus:</b> '+(activeText||'None');qpanelEl.appendChild(active);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('MONK WORK',()=>openJobsUI('monk','Shrine')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
@@ -5501,7 +5556,7 @@ function openJobsUI(focusJob='', sourceTitle=''){
     const title=jobTitleFor(id,prog.lvl);
     nm.innerHTML='<b style="color:'+j.col+'">'+title+'</b>'+(cur?' <small style="color:#d8f8c8">ACTIVE - '+j.name+' Lv '+prog.lvl+'</small>':'')+
       '<br><small style="color:#b8985e">'+escHTML(j.role)+' · Saved Lv '+prog.lvl+'</small><br><small>'+escHTML(j.desc)+'</small><br><small style="color:#8fbcae">'+jobPerkText(id)+'</small><br>'+jobMilestoneHTML(id,prog.lvl);
-    nm.innerHTML=nm.innerHTML.replace('<br><small style="color:#8fbcae">','<br>'+professionNowHTML(id,prog.lvl)+'<br><small style="color:#8fbcae">');
+    nm.innerHTML=nm.innerHTML.replace('<br><small style="color:#8fbcae">','<br>'+professionNowHTML(id,prog.lvl)+'<br>'+professionGameplayHTML(id,prog.lvl)+'<br><small style="color:#8fbcae">');
     r.appendChild(nm);
     r.appendChild(qBtn(cur?'ACTIVE':(id===focusJob?'WORK THIS JOB':'CHOOSE'), ()=>{ if(!cur) chooseJob(id, focusJob); }, cur));
     qpanelEl.appendChild(r);
@@ -7662,6 +7717,9 @@ gameContext.registerModule('menus', Object.freeze({
   openJobs:openJobsUI,
   openRegionalContracts:openRegionalContractsUI,
   openGuardian:openGuardianUI,
+  openGatePrep:openGatePrepUI,
+  gateReadiness:gateReadinessLocal,
+  nextGatePrepRank,
   openCrafting:openCraftingFromNpc,
   trackerCraftAction:objectiveTrackerCraftAction,
   activateCraftShortcut:activateObjectiveCraftShortcut,

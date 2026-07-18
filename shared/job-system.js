@@ -147,7 +147,7 @@
   const REFORGE_ACTIONS=Object.freeze({basic:Object.freeze({level:2,gold:25,iron:1,diamond:0}),choose:Object.freeze({level:5,gold:70,iron:4,diamond:0}),reroll:Object.freeze({level:10,gold:120,iron:0,diamond:1}),masterwork:Object.freeze({level:20,gold:260,iron:0,diamond:3})});
   const FARMER_RULES=Object.freeze({bonusYieldLevel:2,windseedLevel:5,fieldcraftLevel:10,goldenHarvestLevel:20,fieldcraftGrowthMultiplier:.75,goldenGrowthMultiplier:.6,goldenWheatChance:.25});
   const COOK_RULES=Object.freeze({batchLevel:2,brothLevel:5,rationLevel:10,feastLevel:20,rationDurationMs:120000,feastDurationMs:180000,feastRange:20,mightMultiplier:1.15,gatherBonusChance:.25});
-  const MONK_RULES=Object.freeze({regenLevel:2,speedLevel:5,stoneLevel:10,auraLevel:20,durationByTier:Object.freeze([0,8,10,12,16]),regenPerSecond:2,speedMultiplier:1.25,stoneMitigation:.35,auraRange:12,auraCooldownMs:15000});
+  const MONK_RULES=Object.freeze({regenLevel:2,speedLevel:5,stoneLevel:10,auraLevel:20,durationByTier:Object.freeze([0,8,10,12,16]),regenPerSecond:2,resourceRestoreFraction:.08,speedMultiplier:1.25,stoneMitigation:.35,auraRange:12,auraCooldownMs:15000});
   const MINER_RULES=Object.freeze({oreSenseLevel:2,stonehandLevel:5,deepProspectLevel:10,geodeLevel:20,surveyRadius:8,deepSurveyRadius:18,surveyCooldownMs:30000,deepSurveyCooldownMs:15000,markerDurationMs:12000,geodeChance:.08,durabilitySaveChance:.18});
   function jobXpNeed(level){return Math.round(30*Math.pow(Math.max(1,level|0),1.45));}
   function jobLevelFromXp(xp){let lvl=1,left=Math.max(0,xp|0);while(lvl<99){const need=jobXpNeed(lvl);if(left<need)break;left-=need;lvl++;}return lvl;}
@@ -227,5 +227,35 @@
   }
   function guideSteps(type){return [...(GUIDE_STEPS[type]||['Follow the contract description.','Watch the objective tracker for progress.','Return to the Job Board when complete.'])];}
   function firstHunterContract(){return {...FIRST_HUNTER_CONTRACT};}
-  return Object.freeze({CAREER_ID,PROFESSION_IDS,JOB_IDS,JOBS,TITLES,MILESTONES,REFORGE_MODIFIERS,REFORGE_ACTIONS,FARMER_RULES,COOK_RULES,MONK_RULES,MINER_RULES,CONTRACTS,FIRST_HUNTER_CONTRACT,GUIDE_STEPS,OFFER_REFRESH_MS,PROFESSION_REWARD_MULTIPLIER,OFFER_TIERS,LOCATIONS,jobXpNeed,jobLevelFromXp,jobXpIntoLevel,contractScaleFromXp,perkTierFromLevel,perkChance,titleFor,milestonesFor,milestoneState,milestoneAt,milestoneReward,reforgeModifier,reforgeCost,contractPool,contractOffers,contractTags,contractBestFor,guideSteps,firstHunterContract});
+  function gameplayHooks(job,level=1){
+    const lvl=Math.max(1,level|0),hooks=[];
+    if(job==='miner'){
+      hooks.push('Find hidden cave routes, ore seams, treasure maps, and ancient-city survey work.');
+      if(lvl>=MINER_RULES.oreSenseLevel)hooks.push('Ore Sense reveals nearby ore through walls.');
+      if(lvl>=MINER_RULES.stonehandLevel)hooks.push('Stonehand can preserve pick durability.');
+      if(lvl>=MINER_RULES.geodeLevel)hooks.push('Rare ore can uncover Prismatic Geodes.');
+    }else if(job==='cook'){
+      hooks.push('Turn crops and meat into gate-prep food, combat meals, stamina economy, and tavern supply.');
+      if(lvl>=COOK_RULES.batchLevel)hooks.push('Batch Cooking can create extra portions.');
+      if(lvl>=COOK_RULES.rationLevel)hooks.push('Trail Rations grant Well Fed combat and gathering buffs.');
+      if(lvl>=COOK_RULES.feastLevel)hooks.push('Feast Platters share buffs with nearby party members.');
+    }else if(job==='blacksmith'){
+      hooks.push('Repair damaged gear, upgrade weapons and picks, salvage drops, and reforge tool perks.');
+      if(lvl>=2)hooks.push('Basic Reforge adds a forge modifier.');
+      if(lvl>=10)hooks.push('Temper Reroll changes an existing modifier.');
+      if(lvl>=20)hooks.push('Masterwork perfects forged gear.');
+    }else if(job==='farmer'){
+      hooks.push('Supply the food economy with wheat, seeds, Windseeds, compost, and Golden Wheat.');
+      if(lvl>=FARMER_RULES.bonusYieldLevel)hooks.push('Bountiful Harvest can produce bonus wheat.');
+      if(lvl>=FARMER_RULES.windseedLevel)hooks.push('Windseed crops produce richer harvests.');
+      if(lvl>=FARMER_RULES.fieldcraftLevel)hooks.push('Fieldcraft speeds crop growth and unlocks compost acceleration.');
+    }else if(job==='monk'){
+      hooks.push('Restore mana and stamina at the shrine, then carry focus buffs into group play.');
+      if(lvl>=MONK_RULES.regenLevel)hooks.push('Restoring Focus heals and restores resources while meditating.');
+      if(lvl>=MONK_RULES.stoneLevel)hooks.push('Stone Focus reduces incoming damage.');
+      if(lvl>=MONK_RULES.auraLevel)hooks.push('Shared Tranquillity supports nearby party members.');
+    }
+    return hooks;
+  }
+  return Object.freeze({CAREER_ID,PROFESSION_IDS,JOB_IDS,JOBS,TITLES,MILESTONES,REFORGE_MODIFIERS,REFORGE_ACTIONS,FARMER_RULES,COOK_RULES,MONK_RULES,MINER_RULES,CONTRACTS,FIRST_HUNTER_CONTRACT,GUIDE_STEPS,OFFER_REFRESH_MS,PROFESSION_REWARD_MULTIPLIER,OFFER_TIERS,LOCATIONS,jobXpNeed,jobLevelFromXp,jobXpIntoLevel,contractScaleFromXp,perkTierFromLevel,perkChance,titleFor,milestonesFor,milestoneState,milestoneAt,milestoneReward,reforgeModifier,reforgeCost,contractPool,contractOffers,contractTags,contractBestFor,guideSteps,firstHunterContract,gameplayHooks});
 });

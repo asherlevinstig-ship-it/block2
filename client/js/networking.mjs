@@ -1826,9 +1826,14 @@ function netAttachRoom(room,name,client){
     room.onMessage('meditateFocus', m=>{
       const secs=Math.max(1,Math.round(((m&&m.durationMs)||0)/1000));
       if(m&&m.regen)buffs.regen=Math.max(buffs.regen,secs);if(m&&m.speed)buffs.spd=Math.max(buffs.spd,secs);if(m&&m.stone)buffs.stone=Math.max(buffs.stone,secs);
+      if(m&&Number.isFinite(+m.mp))mp=Math.max(0,Math.min(maxMp(),+m.mp));
+      if(m&&Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));
+      renderBars();
       const focusNames=[m&&m.regen?'Restoration':'',m&&m.speed?'Flow':'',m&&m.stone?'Stone':''].filter(Boolean);
       const focusText=(m&&m.shared?'party focus':'shrine focus')+(focusNames.length?': '+focusNames.join(' + '):'');
       showJobPerk('monk',focusText+' '+secs+'s');
+      const restored=[m&&Number.isFinite(+m.mana)&&m.mana>0?'+'+(m.mana|0)+' MP':'',m&&Number.isFinite(+m.stamina)&&m.stamina>0?'+'+(m.stamina|0)+' SP':''].filter(Boolean).join(' / ');
+      if(restored)showName('Shrine focus '+restored);
       if(m&&m.shared)sysMsg('<b>'+escHTML(m.by||'A monk')+'</b> shares tranquillity: '+[m.regen?'Restoration':'',m.speed?'Flow':'',m.stone?'Stone':''].filter(Boolean).join(', ')+' for '+secs+' sec.');
     });
     room.onMessage('prospectResult',m=>showProspectMarkers(m));

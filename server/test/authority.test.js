@@ -6112,17 +6112,23 @@ test('Monk shrine focus regenerates and mitigates damage according to profession
   const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10 });
   prof.job = 'monk';
   prof.jobXpByJob.monk = Array.from({ length: 9 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
+  prof.vitals = { hp: 10, mp: 4, sp: 5, hunger: 100 };
+  prof.vitalsSavedAt = Date.now();
   room.handleMeditateTick(monk);
   const focus = room.abilityBuffs.get(monk.sessionId);
   assert.equal(focus.monkRegenUntil > Date.now(), true);
   assert.equal(focus.monkSpeedUntil > Date.now(), true);
   assert.equal(focus.monkStoneUntil > Date.now(), true);
+  assert.equal(room.abilityState.get(monk.sessionId).mp, 6);
+  assert.equal(prof.vitals.sp, 13);
+  assert.equal(monk.sent.some(e => e.type === 'abilitySync' && e.msg.mp === 6), true);
   room.hurtPlayer(monk, 10, 'focus_test');
   assert.equal(room.playerHp.get(monk.sessionId).hp, 3, 'Stone Focus reduces a 10-damage hit to 7');
   room.updatePlayerHunger(1);
   assert.equal(room.playerHp.get(monk.sessionId).hp, 5, 'Restoring Focus heals authoritatively over time');
   const msg = monk.sent.find(e => e.type === 'meditateFocus');
   assert.equal(msg.msg.durationMs, JOB_SYSTEM.MONK_RULES.durationByTier[3] * 1000);
+  assert.deepEqual({ mana: msg.msg.mana, mp: msg.msg.mp, stamina: msg.msg.stamina, sp: msg.msg.sp, maxSp: msg.msg.maxSp }, { mana: 2, mp: 6, stamina: 8, sp: 13, maxSp: 100 });
 });
 
 test('Zen Master meditation shares focus only with nearby party members', () => {
@@ -6132,10 +6138,15 @@ test('Zen Master meditation shares focus only with nearby party members', () => 
   const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1' });
   seedPlayer(room, near, { x: sx + 4, z: sz, team: 'T1' });
   seedPlayer(room, far, { x: sx + 30, z: sz, team: 'T1' });
+  const nearProf = room.profiles.get(room.tokens.get(near.sessionId));
+  nearProf.vitals = { hp: 20, mp: 3, sp: 1, hunger: 100 };
+  nearProf.vitalsSavedAt = Date.now();
   prof.job = 'monk';
   prof.jobXpByJob.monk = Array.from({ length: 19 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
   room.handleMeditateTick(monk);
   assert.equal(room.abilityBuffs.get(near.sessionId).monkStoneUntil > Date.now(), true);
+  assert.equal(nearProf.vitals.sp, 9);
+  assert.equal(room.abilityState.get(near.sessionId).mp, 5);
   assert.equal(room.abilityBuffs.has(far.sessionId), false);
   assert.equal(near.sent.some(e => e.type === 'meditateFocus' && e.msg.shared), true);
   assert.equal(far.sent.some(e => e.type === 'meditateFocus'), false);

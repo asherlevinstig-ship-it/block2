@@ -741,6 +741,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.COOK_RULES.feastLevel,20);
   assert.equal(sharedJobs.COOK_RULES.feastRange,20);
   assert.equal(sharedJobs.MONK_RULES.regenLevel,2);
+  assert.equal(sharedJobs.MONK_RULES.resourceRestoreFraction,.08);
   assert.equal(sharedJobs.MONK_RULES.stoneMitigation,.35);
   assert.equal(sharedJobs.MONK_RULES.auraCooldownMs,15000);
   assert.equal(sharedJobs.MINER_RULES.oreSenseLevel,2);
@@ -749,6 +750,11 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.reforgeCost('basic').gold,25);
   assert.equal(sharedJobs.reforgeCost('basic').iron,1);
   assert.deepEqual(sharedJobs.PROFESSION_REWARD_MULTIPLIER,{miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1});
+  assert.match(sharedJobs.gameplayHooks('miner',20).join(' '), /hidden cave routes|Prismatic Geodes/);
+  assert.match(sharedJobs.gameplayHooks('cook',20).join(' '), /combat meals|Feast Platters/);
+  assert.match(sharedJobs.gameplayHooks('blacksmith',20).join(' '), /Repair damaged gear|Masterwork/);
+  assert.match(sharedJobs.gameplayHooks('farmer',20).join(' '), /food economy|Windseed/);
+  assert.match(sharedJobs.gameplayHooks('monk',20).join(' '), /Restore mana and stamina|Shared Tranquillity/);
   const objectiveXp={miner:c=>c.need*(c.type==='treasure'?6:c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:c.type==='upgrade'?10:c.type==='salvage'?6:6),monk:c=>c.need*.4};
   const allTargets = {STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT};
   const earlyRunway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<5&&contracts<30){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),5,allTargets);xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
@@ -2626,6 +2632,12 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/function serverObjectiveQuestLogCards\(\)/);
   assert.match(menus,/function serverObjectiveQuestLogSections\(/);
   assert.match(menus,/function questHistoryQuestLogSections\(/);
+  assert.match(menus,/function nextGatePrepRank\(\)/);
+  assert.match(menus,/function gatePrepLoopCard\(\)/);
+  assert.match(menus,/function openGatePrepUI\(rank=nextGatePrepRank\(\)\)/);
+  assert.match(menus,/safeQuestLogCard\('Gate Prep',gatePrepLoopCard\)/);
+  assert.match(menus,/openGatePrep:openGatePrepUI/);
+  assert.match(menus,/gateReadiness:gateReadinessLocal/);
   assert.match(menus,/function questLogFilterBarHTML\(\)/);
   assert.match(menus,/data-quest-filter/);
   assert.match(menus,/function questLogActionLabel\(o\)/);
@@ -2685,6 +2697,9 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/const explicit=o\.hudAction\|\|o\.claimAction\|\|o\.action/);
   assert.match(frame,/function unifiedObjectiveList\(\)/);
   assert.match(frame,/function unifiedObjectiveHud\(\)/);
+  assert.match(frame,/function gatePrepObjectiveLine\(\)/);
+  assert.match(frame,/objectiveLine\('prep','Prep'/);
+  assert.match(frame,/action==='gate_prep'/);
   assert.match(frame,/function currentObjectiveHud\(\)/);
   assert.match(frame,/localStoryObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('story','manhunt'\),'Story'\)/);
   assert.match(frame,/localJobObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('job'\),'Job'\)/);
@@ -2736,6 +2751,9 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(styles,/overflow-wrap:anywhere/);
   assert.match(styles,/\.objective-list/);
   assert.match(styles,/\.objective-line/);
+  assert.match(styles,/\.questcard\.prep-loop/);
+  assert.match(styles,/\.gate-prep-mini/);
+  assert.match(styles,/#currentquest \.objective-line\.prep/);
   assert.match(styles,/#currentquest \.objective-line\{grid-template-columns:36px minmax\(0,1fr\)/);
   assert.match(styles,/#currentquest \.oact\{grid-column:2;grid-row:2/);
   assert.match(styles,/#currentquest \.obody span\{display:none\}/);
