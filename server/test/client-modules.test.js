@@ -593,6 +593,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(html, /id="activitytracker"/);
   assert.match(html, /shared\/familiar-system\.js/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8'), /BlockcraftFamiliarSystem/);
+  assert.match(menusSource, /Familiars grow through <b>Bond XP<\/b> earned only while they are active/);
+  assert.match(menusSource, /familiarBindingSlot\(def\.sigil\)/);
+  assert.match(menusSource, /Daily Bond:/);
+  assert.match(menusSource, /BIND '\+def\.name\.toUpperCase\(\)/);
   assert.match(runtimeSource, /Caravan Under Attack/);
   assert.match(runtimeSource, /utilityEquipped\('compass'\)/);
   assert.match(runtimeSource, /mapUtility&&overworldActivity/);

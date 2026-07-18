@@ -4973,6 +4973,42 @@ function openDragonInteractUI(type){
   actions.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI()));
   actions.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
+const FAMILIAR_UI_INFO={
+  shade:{role:'GUARDIAN',identity:'Protects fragile hunters and unlocks shadow movement.',color:'#b86cff',source:'Mara Vale companion quest or craft a Shadow Sigil.',verb:'take damage while Shade is active'},
+  fang:{role:'HOUND',identity:'Bites nearby hostile mobs and helps finish hunts.',color:'#ffcf4a',source:'Pell Graywatch hunting quest or craft a Fang Totem.',verb:'fight mobs while Fang is active'},
+  mote:{role:'HEALER',identity:'Restores health and blooms when danger gets close.',color:'#8fe06a',source:'Pippa Hearth cooking quest or craft a Mote Charm.',verb:'recover health while Mote is active'},
+  sprite:{role:'FORAGER',identity:'Finds bonus drops while gathering and mining.',color:'#ffe27a',source:'Liss Barley farming quest or craft a Forage Charm.',verb:'gather resources while Sprite is active'},
+};
+function familiarBindingSlot(itemId){
+  for(let i=0;i<inv.length;i++){const s=inv[i];if(s&&s.id===itemId)return i;}
+  return -1;
+}
+function familiarBondCard(id){
+  const def=FAMILIARS[id],info=FAMILIAR_UI_INFO[id],xp=Math.max(0,(COMPANIONS.familiarXp[id]||0)|0);
+  const lvl=BlockcraftFamiliarSystem.bondLevel(xp),tier=BlockcraftFamiliarSystem.tier(lvl),bound=familiarUnlocks.includes(id);
+  const thresholds=BlockcraftFamiliarSystem.BOND_XP_THRESHOLDS,nextXp=thresholds[Math.min(tier+1,thresholds.length-1)]||thresholds[thresholds.length-1];
+  const prevXp=thresholds[tier]||0,span=Math.max(1,nextXp-prevXp),xpPercent=tier>=4?100:Math.max(4,Math.min(100,Math.round((xp-prevXp)/span*100)));
+  const f={id,def,...info,xp,lvl,tier,nextXp,xpPercent,bound,active:activeFamiliar===id,bindingSlot:familiarBindingSlot(def.sigil)};
+  if(id==='shade'){const n=BlockcraftFamiliarSystem.shadeStepCharges(lvl);f.effect='Damage taken reduced by '+Math.round(BlockcraftFamiliarSystem.shadeMitigation(lvl)*100)+'%.';f.next=n?n+' stored Dark Passage charge'+(n>1?'s':'')+' with N.':'Dark Passage unlocks at Bond Tier 3.';}
+  if(id==='fang'){const n=BlockcraftFamiliarSystem.fangStrikes(lvl);f.effect=n+' bite strike'+(n>1?'s':'')+' for '+BlockcraftFamiliarSystem.fangDamage(lvl)+' damage.';f.next='Pursuit cooldown improves to '+(BlockcraftFamiliarSystem.fangCooldown(lvl)/1000).toFixed(2)+' seconds.';}
+  if(id==='mote'){f.effect='Restores '+BlockcraftFamiliarSystem.moteRegen(lvl).toFixed(1)+' HP per second.';f.next=tier>=BlockcraftFamiliarSystem.MOTE_BURST_MIN_TIER?'Emergency bloom every '+(BlockcraftFamiliarSystem.moteBurstCooldown(lvl)/1000)+' seconds.':'Emergency bloom unlocks at Bond Tier 3.';}
+  if(id==='sprite'){f.effect=Math.round(BlockcraftFamiliarSystem.spriteForageChance(lvl)*100)+'% chance for +'+BlockcraftFamiliarSystem.spriteBonusDrops(lvl)+' gathered drops.';f.next=tier>=3?'Higher tiers keep improving double hauls.':'Bonus haul improves at Bond Tier 4.';}
+  return f;
+}
+function familiarTierHTML(f){
+  const list=BlockcraftFamiliarSystem.TIER_ABILITIES[f.id]||[];
+  return '<div class="familiar-tiers">'+list.map((ability,i)=>'<span class="'+(i===f.tier?'current':'')+'"><b>T'+(i+1)+'</b>'+escHTML(ability)+'</span>').join('')+'</div>';
+}
+function familiarDailyHTML(f){
+  const day=BlockcraftFamiliarSystem.dayKey(),daily=BlockcraftFamiliarSystem.dailyChallenge(f.id,day),saved=COMPANIONS.familiarChallenges[f.id];
+  if(!daily)return '';
+  const progress=saved&&saved.day===day?Math.min(daily.need,saved.progress|0):0,done=saved&&saved.day===day&&saved.claimed;
+  const pct=done?100:Math.max(0,Math.min(100,Math.round(progress/Math.max(1,daily.need)*100)));
+  return '<div class="familiar-daily"><b>Daily Bond: '+escHTML(daily.title)+'</b><span>'+escHTML(done?'Complete':progress+' / '+daily.need)+' - +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' XP</span><i><em style="width:'+pct+'%"></em></i></div>';
+}
+function familiarBondCards(){
+  return ['shade','fang','mote','sprite'].map(familiarBondCard);
+}
 function openDragonBondUI(){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   if(uiOpen) closeUI(false);
@@ -5038,35 +5074,39 @@ function openDragonBondUI(){
     grid.appendChild(card);
   }
   const fh=document.createElement('h2'); fh.textContent='FAMILIAR BONDS'; qpanelEl.appendChild(fh);
-  const fint=document.createElement('p'); fint.className='qtext';
-  fint.innerHTML='Choose one bound familiar to accompany you. Familiar power grows automatically with your Hunter level.';
+  const fint=document.createElement('p'); fint.className='qtext familiar-intro';
+  fint.innerHTML='<b>One familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Familiars grow through <b>Bond XP</b> earned only while they are active.';
   qpanelEl.appendChild(fint);
+  const fguide=document.createElement('div'); fguide.className='familiar-guide';
+  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active familiar only</span>';
+  qpanelEl.appendChild(fguide);
   const fgrid=document.createElement('div'); fgrid.className='bondgrid familiargrid'; qpanelEl.appendChild(fgrid);
-  const bondLevel=id=>BlockcraftFamiliarSystem.bondLevel(COMPANIONS.familiarXp[id]||0);
-  const familiarCards=[
-    {id:'shade',role:'GUARDIAN',color:'#b86cff'}, {id:'fang',role:'HOUND',color:'#ffcf4a'},
-    {id:'mote',role:'HEALER',color:'#8fe06a'}, {id:'sprite',role:'FORAGER',color:'#ffe27a'},
-  ].map(f=>{const lvl=bondLevel(f.id),tier=BlockcraftFamiliarSystem.tier(lvl);f.lvl=lvl;f.tier=tier;
-    if(f.id==='shade'){const n=BlockcraftFamiliarSystem.shadeStepCharges(lvl);f.effect='Reduces incoming damage by '+Math.round(BlockcraftFamiliarSystem.shadeMitigation(lvl)*100)+'%.';f.extra=n?n+' stored personal shadow jump'+(n>1?'s':'')+' (N).':'Dark Passage unlocks at Bond Tier 3.';}
-    if(f.id==='fang'){const n=BlockcraftFamiliarSystem.fangStrikes(lvl);f.effect=n+' strike'+(n>1?'s':'')+' for '+BlockcraftFamiliarSystem.fangDamage(lvl)+' damage.';f.extra='Pursuit cooldown: '+(BlockcraftFamiliarSystem.fangCooldown(lvl)/1000).toFixed(2)+' seconds.';}
-    if(f.id==='mote'){f.effect='Restores '+BlockcraftFamiliarSystem.moteRegen(lvl).toFixed(1)+' HP per second.';f.extra=tier>=BlockcraftFamiliarSystem.MOTE_BURST_MIN_TIER?'Emergency bloom every '+(BlockcraftFamiliarSystem.moteBurstCooldown(lvl)/1000)+' seconds.':'Emergency bloom unlocks at Bond Tier 3.';}
-    if(f.id==='sprite'){f.effect=Math.round(BlockcraftFamiliarSystem.spriteForageChance(lvl)*100)+'% chance for +'+BlockcraftFamiliarSystem.spriteBonusDrops(lvl)+' gathered drops.';f.extra='Applies to server-authoritative mining rewards.';}return f;});
+  const familiarCards=familiarBondCards();
   for(const f of familiarCards){
-    const def=FAMILIARS[f.id], bound=familiarUnlocks.includes(f.id), active=activeFamiliar===f.id;
+    const def=FAMILIARS[f.id], bound=f.bound, active=f.active;
     const card=document.createElement('div'); card.className='bondcard familiarcard'+(active?' active':'')+(!bound?' dim':'');
+    card.style.setProperty('--familiar-color',f.color);
     const icon=iconNode(def.sigil); icon.className='bondicon'; card.appendChild(icon);
     const body=document.createElement('div'); card.appendChild(body);
-    const name=document.createElement('div'); name.className='bondname';
-    name.innerHTML='<b style="color:'+f.color+'">'+escHTML(def.name)+'</b><span>'+escHTML(bound?(active?'ACTIVE':'BOUND'):'LOCKED')+'</span>'; body.appendChild(name);
-    const meta=document.createElement('div'); meta.className='bondmeta';
-    const tiers=BlockcraftFamiliarSystem.TIER_ABILITIES[f.id].map((ability,i)=>(i===f.tier?'▶ ':'')+'T'+(i+1)+' '+ability).join('<br>');
-    const day=BlockcraftFamiliarSystem.dayKey(),daily=BlockcraftFamiliarSystem.dailyChallenge(f.id,day),saved=COMPANIONS.familiarChallenges[f.id];
-    const progress=saved&&saved.day===day?Math.min(daily.need,saved.progress|0):0,done=saved&&saved.day===day&&saved.claimed;
-    const challenge='<br><br><b>DAILY BOND · '+escHTML(daily.title)+'</b><br>'+(done?'COMPLETE':progress+' / '+daily.need)+' · +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' XP';
-    meta.innerHTML='Role: <b>'+f.role+'</b><br>'+escHTML(f.effect)+'<br>'+escHTML(f.extra)+challenge+'<br><br>'+tiers+(bound?'':'<br>Bind with: <b>'+escHTML((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>'); body.appendChild(meta);
+    const name=document.createElement('div'); name.className='bondname familiar-title';
+    name.innerHTML='<b style="color:'+f.color+'">'+escHTML(def.name)+'</b><span>'+escHTML(active?'ACTIVE':bound?'BOUND':f.bindingSlot>=0?'READY TO BIND':'LOCKED')+'</span>'; body.appendChild(name);
+    const meta=document.createElement('div'); meta.className='bondmeta familiar-meta';
+    body.appendChild(meta);
+    meta.innerHTML=
+      '<div class="familiar-role"><b>'+escHTML(f.role)+'</b><span>'+escHTML(f.identity)+'</span></div>'+
+      '<div class="familiar-lines"><span><b>Now</b>'+escHTML(f.effect)+'</span><span><b>Next</b>'+escHTML(f.next)+'</span><span><b>Source</b>'+escHTML(f.source)+'</span></div>'+
+      familiarDailyHTML(f)+
+      familiarTierHTML(f);
+    const bar=document.createElement('div'); bar.className='bondbar familiarbar';
+    const fill=document.createElement('i'); fill.style.width=f.xpPercent+'%'; bar.appendChild(fill); body.appendChild(bar);
+    const xp=document.createElement('div'); xp.className='familiar-xp';
+    xp.textContent=f.tier>=4?'Bond Tier 5 - max tier':('Bond XP '+f.xp+' / '+f.nextXp+' - Tier '+(f.tier+1));
+    body.appendChild(xp);
     const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
     if(bound) actions.appendChild(qBtn(active?'DISMISS':'SUMMON',()=>{cycleFamiliar(active?'':f.id);openDragonBondUI();}));
-    else actions.appendChild(qBtn('VIEW RECIPE',()=>{closeQWin();openCraftingFromNpc();}));
+    else if(f.bindingSlot>=0) actions.appendChild(qBtn('BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(f.bindingSlot);setTimeout(openDragonBondUI, NET.on?180:0);}));
+    else actions.appendChild(qBtn('VIEW RECIPE',()=>{closeQWin();openCraftingFromNpc('companions');}));
+    if(!bound) actions.appendChild(qBtn('FIND SOURCE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source))));
     fgrid.appendChild(card);
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
