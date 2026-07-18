@@ -8114,6 +8114,23 @@ function tradeTargetUnderCrosshair(range=4.8){
   }
   return best;
 }
+function townSocialTargetNear(range=4.8){
+  if(!NET.on||!NET.room||!NET.remotes||dim!=='overworld'||!player) return null;
+  if(!isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))) return null;
+  let best=null,bd=range;
+  for(const sid in NET.remotes){
+    const r=NET.remotes[sid];
+    if(!r||!r.grp||!r.grp.visible) continue;
+    const ref=r.ref;
+    if(ref&&ref.dgn) continue;
+    const x=r.grp.position.x,z=r.grp.position.z,y=r.grp.position.y;
+    if(!isTownLand(Math.floor(x),Math.floor(z))) continue;
+    const dist=Math.hypot(x-player.pos.x,z-player.pos.z);
+    if(dist>range||Math.abs((y||0)-player.pos.y)>6) continue;
+    if(dist<bd){bd=dist;best={sid,remote:r,name:String(ref&&ref.name||'Hunter'),distance:dist};}
+  }
+  return best;
+}
 function damageMob(mob, dmg, kbv){
   if(mob.net){
     mob.hitT=.15;
@@ -9247,6 +9264,7 @@ gameContext.registerModule('world', Object.freeze({
   resetParticleBudget,
   particleBudgetStats,
   tradeTargetUnderCrosshair,
+  townSocialTargetNear,
 }));
 
 
@@ -9484,6 +9502,7 @@ const legacyWorldBindings={
   "regionalLandmarks":{get:()=>regionalLandmarks,set:value=>{regionalLandmarks=value;}},
   "remoteUnderCrosshair":{get:()=>remoteUnderCrosshair},
   "tradeTargetUnderCrosshair":{get:()=>tradeTargetUnderCrosshair},
+  "townSocialTargetNear":{get:()=>townSocialTargetNear},
   "removeCropMesh":{get:()=>removeCropMesh},
   "removeDragonIncubationMesh":{get:()=>removeDragonIncubationMesh},
   "removeInsulatorMesh":{get:()=>removeInsulatorMesh},

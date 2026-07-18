@@ -46,6 +46,7 @@ const legacyMenuBindings={
   "applyTavernTokenResult":{get:()=>applyTavernTokenResult},
   "applyToolSync":{get:()=>applyToolSync},
   "applyTradeCancel":{get:()=>applyTradeCancel},
+  "applyFriendResult":{get:()=>applyFriendResult},
   "applyTradeOffer":{get:()=>applyTradeOffer},
   "applyTradePending":{get:()=>applyTradePending},
   "applyTradeReject":{get:()=>applyTradeReject},
@@ -138,6 +139,7 @@ const legacyMenuBindings={
   "openTavernDiceUI":{get:()=>openTavernDiceUI},
   "openTavernRouletteUI":{get:()=>openTavernRouletteUI},
   "openTavernUI":{get:()=>openTavernUI},
+  "openPlayerSocialUI":{get:()=>openPlayerSocialUI},
   "openPlayerTradeUI":{get:()=>openPlayerTradeUI},
   "openUtilitiesUI":{get:()=>openUtilitiesUI},
   "openUI":{get:()=>openUI},
@@ -5194,8 +5196,36 @@ function openPlayerTradeUI(target){
   row.appendChild(qBtn('OPEN INVENTORY',()=>{closeQWin(false);openUI('inv');},true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
+function openPlayerSocialUI(target){
+  if(!NET.on||!NET.room){sysMsg('Player social actions require the live world server.');return;}
+  target=target||(typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null);
+  if(!target||!target.sid){sysMsg('Stand near another hunter in Town of Beginnings, then press <b>E</b>.');return;}
+  if(uiOpen)closeUI(false);
+  openQWin('social');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='NEARBY HUNTER';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(target.name||'Hunter').toUpperCase();qpanelEl.appendChild(sub);
+  const intro=document.createElement('p');intro.className='qtext';
+  intro.innerHTML='Choose what to do with this nearby player. Social actions are only available inside <b>Town of Beginnings</b>.';
+  qpanelEl.appendChild(intro);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('TRADE',()=>openPlayerTradeUI(target)));
+  row.appendChild(qBtn('ADD FRIEND',()=>{NET.room.send('friendAdd',{targetSid:target.sid});closeQWin();},true));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
 function applyTradePending(m){
   sysMsg('Trade offer sent to <b>'+escHTML(String(m&&m.toName||'Hunter'))+'</b>: '+tradeOfferSummary(m&&m.offer)+'.',{tier:'minor',title:'Trade'});
+}
+function applyFriendResult(m){
+  const name=escHTML(String(m&&m.targetName||'Hunter'));
+  if(m&&m.ok){
+    SFX.level();
+    sysMsg((m.action==='already'?'You are already friends with ':'Added ')+('<b>'+name+'</b>')+(m.action==='already'?'.':' as a friend.'),{tier:'minor',title:'Friends'});
+    return;
+  }
+  const reason=String(m&&m.reason||'invalid');
+  const text={target:'That hunter is no longer nearby.',range:'Friend actions only work beside another hunter in Town of Beginnings.',rate:'Slow down before adding another friend.'}[reason]||'Friend request failed.';
+  SFX.error();
+  sysMsg(text,{tier:'minor',title:'Friends'});
 }
 function applyTradeOffer(m){
   if(!m||!m.id)return;
@@ -8073,11 +8103,13 @@ gameContext.registerModule('menus', Object.freeze({
   nextGatePrepRank,
   openCrafting:openCraftingFromNpc,
   openPlayerTrade:openPlayerTradeUI,
+  openPlayerSocial:openPlayerSocialUI,
   applyTradeOffer,
   applyTradePending,
   applyTradeResult,
   applyTradeReject,
   applyTradeCancel,
+  applyFriendResult,
   trackerCraftAction:objectiveTrackerCraftAction,
   activateCraftShortcut:activateObjectiveCraftShortcut,
 }));

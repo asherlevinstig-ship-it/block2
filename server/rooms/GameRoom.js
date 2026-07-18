@@ -415,6 +415,7 @@ class GameRoom extends Room {
     this.onMessage('tradeOffer', (client, m) => this.handleTradeOffer(client, m));
     this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
+    this.onMessage('friendAdd', (client, m) => this.handleFriendAdd(client, m));
 
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
@@ -3084,6 +3085,36 @@ class GameRoom extends Room {
   tradePlayersClose(a, b, range = 8) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
     return !!(pa && pb && !pa.dgn && !pb.dgn && Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
+  }
+  socialPlayersCloseInTown(a, b, range = 8) {
+    const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
+    return !!(pa && pb && !pa.dgn && !pb.dgn && this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z) &&
+      Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
+  }
+  handleFriendAdd(client, m = {}) {
+    const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
+    const target = this.clients.find(c => c.sessionId === targetSid);
+    const targetRec = target && this.profileFor(target);
+    const reject = reason => client.send('friendResult', { ok: false, reason });
+    if (!rec || !target || !targetRec || target === client) return reject('target');
+    if (this.rateLimited(client, 'friendAdd', 4, 12)) return reject('rate');
+    if (!this.socialPlayersCloseInTown(client, target)) return reject('range');
+    rec.prof.friends = Array.isArray(rec.prof.friends) ? rec.prof.friends.map(cleanToken).filter(Boolean) : [];
+    targetRec.prof.friends = Array.isArray(targetRec.prof.friends) ? targetRec.prof.friends.map(cleanToken).filter(Boolean) : [];
+    const already = rec.prof.friends.includes(targetRec.token);
+    const targetAlready = targetRec.prof.friends.includes(rec.token);
+    if (!already) rec.prof.friends.push(targetRec.token);
+    if (!targetAlready) targetRec.prof.friends.push(rec.token);
+    rec.prof.friends = [...new Set(rec.prof.friends)].slice(0, 256);
+    targetRec.prof.friends = [...new Set(targetRec.prof.friends)].slice(0, 256);
+    this.dirtyPlayers.add(rec.token);
+    this.dirtyPlayers.add(targetRec.token);
+    this.sendProfile(client, rec.prof);
+    this.sendProfile(target, targetRec.prof);
+    const fromName = (this.state.players.get(client.sessionId) || {}).name || rec.prof.name || 'Hunter';
+    const targetName = (this.state.players.get(target.sessionId) || {}).name || targetRec.prof.name || 'Hunter';
+    client.send('friendResult', { ok: true, action: already ? 'already' : 'add', targetSid: target.sessionId, targetToken: targetRec.token, targetName });
+    target.send('friendResult', { ok: true, action: targetAlready ? 'already' : 'add', targetSid: client.sessionId, targetToken: rec.token, targetName: fromName });
   }
   handleTradeOffer(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');

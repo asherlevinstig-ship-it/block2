@@ -363,12 +363,17 @@ test('client modules expose and route player trading actions', () => {
   const menus = readClientModule('menus.mjs');
   const networking = readClientModule('networking.mjs');
   assert.match(world, /function tradeTargetUnderCrosshair/);
+  assert.match(world, /function townSocialTargetNear/);
   assert.match(world, /"tradeTargetUnderCrosshair":\{get:\(\)=>tradeTargetUnderCrosshair\}/);
-  assert.match(combat, /KeyE[\s\S]*tradeTargetUnderCrosshair[\s\S]*openPlayerTradeUI/);
+  assert.match(world, /"townSocialTargetNear":\{get:\(\)=>townSocialTargetNear\}/);
+  assert.match(combat, /KeyE[\s\S]*townSocialTargetNear[\s\S]*openPlayerSocialUI[\s\S]*openPlayerTradeUI/);
   assert.match(menus, /function openPlayerTradeUI/);
+  assert.match(menus, /function openPlayerSocialUI/);
+  assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);
   assert.match(networking, /room\.onMessage\('tradeOffer'/);
   assert.match(networking, /room\.onMessage\('tradeResult'/);
+  assert.match(networking, /room\.onMessage\('friendResult'/);
 });
 
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that
@@ -5278,6 +5283,39 @@ test('player trade validates range before creating an offer', () => {
   assert.deepEqual(alice.sent.at(-1), { type: 'tradeReject', msg: { reason: 'range' } });
 });
 
+test('town friendship creates a mutual persistent friend link', () => {
+  const room = makeRoom(), alice = makeClient('friend_alice'), bob = makeClient('friend_bob');
+  const tc = W.TOWN.TC;
+  const { token: aToken, prof: aProf } = seedPlayer(room, alice, { name: 'Alice', x: tc, z: tc });
+  const { token: bToken, prof: bProf } = seedPlayer(room, bob, { name: 'Bob', x: tc + 2, z: tc });
+  room.clients = [alice, bob];
+
+  room.handleFriendAdd(alice, { targetSid: bob.sessionId });
+
+  assert.deepEqual(aProf.friends, [bToken]);
+  assert.deepEqual(bProf.friends, [aToken]);
+  assert.ok(room.dirtyPlayers.has(aToken));
+  assert.ok(room.dirtyPlayers.has(bToken));
+  assert.ok(alice.sent.some(e => e.type === 'profile'));
+  assert.ok(bob.sent.some(e => e.type === 'profile'));
+  assert.ok(alice.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Bob'));
+  assert.ok(bob.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Alice'));
+});
+
+test('town friendship rejects players outside town or out of proximity', () => {
+  const room = makeRoom(), alice = makeClient('friend_far_alice'), bob = makeClient('friend_far_bob');
+  const tc = W.TOWN.TC;
+  const { prof: aProf } = seedPlayer(room, alice, { x: tc, z: tc });
+  const { prof: bProf } = seedPlayer(room, bob, { x: tc + 40, z: tc });
+  room.clients = [alice, bob];
+
+  room.handleFriendAdd(alice, { targetSid: bob.sessionId });
+
+  assert.deepEqual(aProf.friends, []);
+  assert.deepEqual(bProf.friends, []);
+  assert.deepEqual(alice.sent.at(-1), { type: 'friendResult', msg: { ok: false, reason: 'range' } });
+});
+
 test('player trade full inventory swap simulates outgoing slots before rejecting space', () => {
   const room = makeRoom(), alice = makeClient('full_alice'), bob = makeClient('full_bob');
   const aInv = Array.from({ length: 36 }, (_, i) => ({ id: I.BREAD + i, count: 1 }));
@@ -6629,10 +6667,16 @@ test('DungeonRoom refuses to create from raw client-authored gate options', asyn
 });
 
 test('communication safety data sanitizes display names and persists account blocks', () => {
-  const profile = sanitizeProfile({ name: '<Bad! Name>✨', mutedPlayers: ['target_token_123', 'target_token_123', '../bad'] });
+  const profile = sanitizeProfile({
+    name: '<Bad! Name>✨',
+    mutedPlayers: ['target_token_123', 'target_token_123', '../bad'],
+    friends: ['friend_token_123', 'friend_token_123', '../bad'],
+  });
   assert.equal(profile.name, 'Bad Name');
   assert.deepEqual(profile.mutedPlayers, ['target_token_123']);
+  assert.deepEqual(profile.friends, ['friend_token_123']);
   assert.deepEqual(defaultProfile('Safe_Name-2').mutedPlayers, []);
+  assert.deepEqual(defaultProfile('Safe_Name-2').friends, []);
 });
 
 test('Gate matchmaking advertises nearby eligible parties and joins without bypassing readiness range', () => {

@@ -971,6 +971,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
     room.onMessage('tradeReject', m=>applyTradeReject(m));
     room.onMessage('tradeCancel', m=>applyTradeCancel(m));
+    room.onMessage('friendResult', m=>{applyFriendResult(m);if(m&&m.ok&&m.action!=='already')eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});});
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
       progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
