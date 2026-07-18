@@ -860,6 +860,16 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(menusSource,/function jobOfferLoopHTML/);
   assert.match(menusSource,/function jobOfferRewardHTML/);
   assert.match(menusSource,/function jobOfferCardHTML/);
+  assert.match(menusSource,/function jobBoardCurrentContractHTML/);
+  assert.match(menusSource,/function jobBoardMilestoneSummaryHTML/);
+  assert.match(menusSource,/job-board-v2/);
+  assert.match(menusSource,/job-profession-grid/);
+  const liveJobBoard=menusSource.slice(menusSource.indexOf('function openJobsUI('),menusSource.indexOf('function iconNode('));
+  assert.match(liveJobBoard,/Current Work/);
+  assert.match(liveJobBoard,/Available Contracts/);
+  assert.match(liveJobBoard,/Choose A Trade/);
+  assert.doesNotMatch(liveJobBoard,/GUILD CONTRACTS/);
+  assert.doesNotMatch(liveJobBoard,/UTILITIES/);
   assert.match(menusSource,/job-offer-loop/);
   assert.match(menusSource,/job-offer-rewards/);
   assert.match(menusSource,/job-offer-card/);
@@ -870,6 +880,9 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(cssSource,/\.job-offer-card/);
   assert.match(cssSource,/\.job-offer-loop/);
   assert.match(cssSource,/\.job-offer-rewards/);
+  assert.match(cssSource,/\.job-board-summary/);
+  assert.match(cssSource,/\.job-board-current/);
+  assert.match(cssSource,/\.job-profession-card/);
   assert.match(menusSource,/Reward next:/);
   assert.match(menusSource,/Right now:/);
   assert.match(menusSource,/Plant Prairie Windseed/);

@@ -554,6 +554,49 @@
   .job-offer-main p{margin:0;color:#cbd6e4;font-size:11px;line-height:1.35}.job-offer-need{display:flex;align-items:baseline;gap:6px;color:#9fb0c6;font-size:10px}.job-offer-need>b{width:auto!important;color:#ffd24a!important;font-size:17px}.job-offer-need i{margin-left:auto;font-style:normal;color:#7f93aa}
   .job-offer-loop{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.job-offer-loop span,.job-offer-rewards span{padding:6px 7px;border:1px solid rgba(255,255,255,.09);border-radius:5px;background:rgba(0,0,0,.18)}.job-offer-loop small{display:block;margin-bottom:3px;color:#7dd3fc;font-size:7px;letter-spacing:1.4px}.job-offer-loop b{display:block;width:auto!important;text-align:left!important;color:#e8f5ff!important;font-size:10px;line-height:1.25}
   .job-offer-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.job-offer-rewards span{color:#b9c8d8;font-size:10px}.job-offer-rewards b{width:auto!important;color:#ffd24a!important;text-align:left!important;font-size:13px}
+  .job-board-v2{display:grid;gap:12px;margin-top:10px}
+  .job-board-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .job-board-stat{min-width:0;padding:10px;border:1px solid rgba(159,216,255,.16);border-radius:7px;background:rgba(5,15,26,.58)}
+  .job-board-stat small,.job-board-section-title{display:block;color:#8fd8ff;font-size:9px;letter-spacing:1.7px;text-transform:uppercase}
+  .job-board-stat b{display:block;width:auto!important;margin:3px 0;text-align:left!important;color:#fff3c4;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .job-board-stat span{display:block;color:#9fb0c6;font-size:10px;line-height:1.25}
+  .job-board-stat i,.job-board-progress{display:block;position:relative;height:8px;margin-top:8px;border:1px solid rgba(255,255,255,.1);border-radius:999px;background:rgba(0,0,0,.28);overflow:hidden}
+  .job-board-stat i em,.job-board-progress i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#5ad7ff,#9ad26b,#ffd24a)}
+  .job-board-tabs{display:flex;gap:7px;flex-wrap:wrap;padding:2px 0}
+  .job-board-tabs .qbtn{margin:0;padding:7px 12px}
+  .job-board-section{display:grid;gap:8px;padding:11px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(7,15,26,.44)}
+  .job-board-section-title{color:#ffd24a}
+  .job-board-current{display:grid;gap:8px;padding:11px;border:1px solid rgba(159,216,255,.18);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.075),rgba(0,0,0,.14))}
+  .job-board-current.ready{border-color:rgba(154,210,107,.42);background:linear-gradient(135deg,rgba(154,210,107,.12),rgba(0,0,0,.14))}
+  .job-board-current.empty{border-style:dashed;opacity:.88}
+  .job-board-current>small,.job-board-hint{color:#8fd8ff;font-size:9px;letter-spacing:1.6px;text-transform:uppercase}
+  .job-board-current>b{width:auto!important;text-align:left!important;color:#fff3c4;font-size:15px}
+  .job-board-current p{margin:0;color:#cbd6e4;font-size:12px;line-height:1.35}
+  .job-board-current-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .job-board-current-head b{width:auto!important;text-align:left!important;color:#fff3c4;font-size:15px}
+  .job-board-current-head em{font-style:normal;color:#d8f8c8;font-size:9px;letter-spacing:1.4px;text-transform:uppercase}
+  .job-board-progress{height:10px;margin:0}
+  .job-board-progress.small{height:7px;margin:7px 0 5px}
+  .job-board-progress span{position:absolute;inset:0;display:grid;place-items:center;color:#eaf6ff;font-size:8px;text-shadow:0 1px 2px #000}
+  .job-board-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .job-board-rewards span{padding:7px;border:1px solid rgba(255,255,255,.09);border-radius:5px;background:rgba(0,0,0,.18);color:#b9c8d8;font-size:10px}
+  .job-board-rewards b{width:auto!important;text-align:left!important;color:#ffd24a;font-size:13px}
+  .job-board-actions{display:flex;gap:7px;flex-wrap:wrap}.job-board-actions .qbtn{margin:0}
+  .job-board-note{margin:0;color:#b8c8d8;font-size:11px;line-height:1.35}.job-board-note.muted{color:#7f93aa}
+  .job-board-offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .job-board-offer-card{display:grid;gap:9px;padding:10px;border:1px solid rgba(159,216,255,.16);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.06),rgba(0,0,0,.16))}
+  .job-board-offer-card .qbtn{justify-self:start;margin:0}
+  .job-profession-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .job-profession-card{display:grid;gap:8px;align-content:start;padding:10px;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:rgba(0,0,0,.16)}
+  .job-profession-card.active{border-color:rgba(154,210,107,.34);background:rgba(154,210,107,.075)}
+  .job-profession-top{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center}
+  .job-profession-top i{display:grid;place-items:center;width:30px;height:30px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.045);font-style:normal;font-size:18px}
+  .job-profession-top b{display:block;width:auto!important;text-align:left!important;font-size:13px}
+  .job-profession-top small,.job-profession-body small{display:block;color:#9fb0c6;font-size:10px;line-height:1.3}
+  .job-profession-body{display:grid;gap:5px}.job-profession-body p{margin:0;color:#cbd6e4;font-size:11px;line-height:1.35}
+  .job-board-milestones{display:grid;gap:2px;margin-top:3px;padding-top:5px;border-top:1px solid rgba(255,255,255,.07)}
+  .job-board-milestones span{color:#d9b66f;font-size:10px;line-height:1.25}
+  .job-board-footer{margin-top:10px!important}
   .shoprow b{color:#ffd24a;width:48px;text-align:right}
   #qpanel.commerce .shoprow b,#qpanel.management .shoprow b{width:auto}
   #qpanel.management .shoprow .utility-icon{width:30px;text-align:center}
@@ -1029,6 +1072,8 @@
     #qpanel.management .shoprow.job-offer-card .qbtn{grid-column:1;justify-self:start}
     .job-offer-loop,.job-offer-rewards{grid-template-columns:1fr}
     .job-offer-need{flex-wrap:wrap}.job-offer-need i{margin-left:0;width:100%}
+    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards{grid-template-columns:1fr}
+    .job-board-current-head{align-items:flex-start;flex-direction:column;gap:4px}
     #locationhud{top:8px;left:8px;min-width:0;width:190px;max-width:34vw;padding:7px 9px}
     #locationhud .zone{font-size:11px;letter-spacing:1.3px}
     #locationhud .meta{display:none}

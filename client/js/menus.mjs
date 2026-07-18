@@ -5510,7 +5510,31 @@ function openMinerSurveyUI(){
   if(level>=rules.oreSenseLevel)row.appendChild(qBtn('SURVEY NOW',()=>{if(NET.on&&NET.room){NET.room.send('prospect',{});closeQWin();}else sysMsg('Ore surveys require a live world connection.');}));
   row.appendChild(qBtn('MINER WORK',()=>openJobsUI('miner','Mine')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
-function openJobsUI(focusJob='', sourceTitle=''){
+function jobBoardLevelCardHTML(jobId,label=''){
+  const j=JOBS[jobId]||JOBS.adventurer, prog=jobXpIntoLevel(jobXpFor(jobId));
+  const pct=Math.max(0,Math.min(100,Math.round((prog.xp/Math.max(1,prog.need))*100)));
+  return '<article class="job-board-stat"><small>'+escHTML(label||j.name)+'</small><b style="color:'+j.col+'">'+escHTML(jobTitleFor(jobId,prog.lvl))+'</b><span>Lv '+prog.lvl+' - '+prog.xp+' / '+prog.need+' XP</span><i><em style="width:'+pct+'%"></em></i></article>';
+}
+function jobBoardMilestoneSummaryHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
+  const state=JOB_SYSTEM.milestoneState(jobId,level),latest=state.earned[state.earned.length-1],next=state.next;
+  const earned=latest?'Earned: '+latest.title:'No milestone yet';
+  const upcoming=next?'Next Lv '+next.level+': '+next.title:'All milestones earned';
+  return '<div class="job-board-milestones"><span>'+escHTML(earned)+'</span><span>'+escHTML(upcoming)+'</span></div>';
+}
+function jobBoardProgressHTML(current,required){
+  current=Math.max(0,current|0);required=Math.max(1,required|0);
+  const pct=Math.max(0,Math.min(100,Math.round(Math.min(required,current)/required*100)));
+  return '<div class="job-board-progress"><i style="width:'+pct+'%"></i><span>'+Math.min(required,current)+' / '+required+'</span></div>';
+}
+function jobBoardRewardLine(c){
+  return '<div class="job-board-rewards"><span><b>'+Math.max(0,c.rewardGold|0)+'</b> gold</span><span><b>'+Math.max(0,c.rewardXp|0)+'</b> Hunter XP</span><span><b>'+Math.max(0,c.rewardJobXp|0)+'</b> job XP</span></div>';
+}
+function jobBoardCurrentContractHTML(c){
+  if(!c)return '<div class="job-board-current empty"><small>CURRENT WORK</small><b>No active contract</b><p>Pick one clear task below. You can hold one job contract at a time.</p></div>';
+  const def=JOBS[c.job]||JOBS.adventurer, ready=jobContractReady();
+  return '<div class="job-board-current '+(ready?'ready':'')+'"><small>CURRENT WORK</small><div class="job-board-current-head"><b style="color:'+def.col+'">'+escHTML(c.title)+'</b><em>'+(ready?'READY TO CLAIM':escHTML((c.difficultyLabel||c.difficulty||'Active').toUpperCase()))+'</em></div><p>'+escHTML(c.desc)+'</p>'+jobBoardProgressHTML(c.have,c.need)+contractTagHTML(c)+contractBestForHTML(c)+jobBoardRewardLine(c)+'<small class="job-board-hint">'+escHTML(jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job))))+'</small></div>';
+}
+function openJobsUILegacy(focusJob='', sourceTitle=''){
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   openQWin('management');
@@ -5611,6 +5635,129 @@ function openJobsUI(focusJob='', sourceTitle=''){
     playerJob='';jobContract=null;sysMsg('Job cleared');openJobsUI();refreshAppearanceDummy();
   }, !playerJob));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
+}
+function openJobsUI(focusJob='', sourceTitle=''){
+  if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
+  if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
+  openQWin('management');
+  qpanelEl.innerHTML='';
+  focusJob=JOBS[focusJob]?focusJob:'';
+  const offerJob=focusJob&&JOBS[focusJob]?focusJob:'adventurer';
+  const offerDef=JOBS[offerJob]||JOBS.adventurer;
+  const offerProg=jobXpIntoLevel(jobXpFor(offerJob));
+  const offerMilestone=JOB_SYSTEM.milestoneState(offerJob,offerProg.lvl).next;
+  const offerWhy=offerMilestone?'Next '+offerDef.name+' milestone: Lv '+offerMilestone.level+' - '+offerMilestone.title+'.':'All core '+offerDef.name+' milestones earned.';
+
+  const h=document.createElement('h2');
+  h.textContent='JOB BOARD';
+  qpanelEl.appendChild(h);
+  const sub=document.createElement('div');
+  sub.className='sub2';
+  sub.textContent=(sourceTitle?sourceTitle.toUpperCase()+' - ':'')+'JOB BOARD CONTRACTS - TAKE ONE CLEAR TASK';
+  qpanelEl.appendChild(sub);
+
+  const shell=document.createElement('div');
+  shell.className='job-board-v2';
+  qpanelEl.appendChild(shell);
+
+  const summary=document.createElement('div');
+  summary.className='job-board-summary';
+  summary.innerHTML=jobBoardLevelCardHTML('adventurer','Hunter Career')+
+    (playerJob?jobBoardLevelCardHTML(playerJob,'Equipped Trade'):'<article class="job-board-stat empty"><small>Equipped Trade</small><b>None chosen</b><span>Choose a profession below.</span><i><em style="width:0%"></em></i></article>')+
+    '<article class="job-board-stat"><small>Board View</small><b style="color:'+offerDef.col+'">'+escHTML(offerDef.name)+' Offers</b><span>'+escHTML(offerWhy)+'</span><i><em style="width:100%"></em></i></article>';
+  shell.appendChild(summary);
+
+  if(!jobContract){
+    const tabs=document.createElement('div');
+    tabs.className='job-board-tabs';
+    tabs.appendChild(qBtn('HUNTER OFFERS',()=>openJobsUI('adventurer'),offerJob==='adventurer'));
+    if(playerJob)tabs.appendChild(qBtn(JOBS[playerJob].name.toUpperCase()+' OFFERS',()=>openJobsUI(playerJob),offerJob===playerJob));
+    shell.appendChild(tabs);
+    if(NET.on&&NET.room&&(jobContractOffersJob!==offerJob||Date.now()>=jobContractRefreshAt))NET.room.send('jobContract',{action:'offers',job:offerJob});
+    else if(!NET.on&&(jobContractOffersJob!==offerJob||!jobContractOffers.length)){
+      const scale=JOB_SYSTEM.contractScaleFromXp(jobXpFor(offerJob)),baseXp=hunterXpForActivity(S.lvl,'job_contract');
+      jobContractOffers=offerJob==='adventurer'&&jobXpFor('adventurer')<=0?[{...JOB_SYSTEM.firstHunterContract(),id:'local_first',difficulty:'balanced',difficultyLabel:'First Assignment',estimate:'About 5 minutes',location:'Beyond the town walls',focus:'first combat lesson',reward:'Compass Sense unlock path',party:'Solo',rewardXp:baseXp}]:JOB_SYSTEM.contractOffers(offerJob,scale,S.lvl,{STONE:B.STONE,IRON_ORE:B.IRON_ORE,WHEAT_3:B.WHEAT_3,IRON_INGOT:I.IRON_INGOT},baseXp,0).map((o,i)=>({...o,id:'local_'+offerJob+'_'+i}));
+      jobContractOffersJob=offerJob;
+      jobContractRefreshAt=Date.now()+JOB_SYSTEM.OFFER_REFRESH_MS;
+    }
+  }
+
+  jobContract=clampJobContract(jobContract);
+  const c=jobContract;
+  const currentSection=document.createElement('section');
+  currentSection.className='job-board-section';
+  currentSection.innerHTML='<div class="job-board-section-title">Current Work</div>'+jobBoardCurrentContractHTML(c);
+  const actions=document.createElement('div');
+  actions.className='job-board-actions';
+  if(c&&jobContractReady())actions.appendChild(qBtn('CLAIM',()=>claimJobContract()));
+  else if(c){
+    actions.appendChild(qBtn('GUIDE',()=>openJobContractGuide(c)));
+    actions.appendChild(qBtn('ABANDON',()=>{
+      if(NET.on&&NET.room){NET.room.send('jobContract',{action:'abandon'});return;}
+      jobContract=null;sysMsg('Job contract abandoned');refreshHUD();openJobsUI();
+    },false));
+  }
+  if(actions.children.length)currentSection.appendChild(actions);
+  shell.appendChild(currentSection);
+
+  if(!c&&jobContractOffersJob===offerJob){
+    const offersSection=document.createElement('section');
+    offersSection.className='job-board-section';
+    offersSection.innerHTML='<div class="job-board-section-title">Available Contracts</div>';
+    const intro=document.createElement('p');
+    intro.className='job-board-note';
+    intro.textContent=jobContractOffers.length?'Choose one '+offerDef.name+' contract. Offers refresh together; abandoning work does not reroll the board.':(Date.now()<jobContractRefreshAt?'This rotation has been used. New '+offerDef.name+' offers arrive when the board refreshes.':'Waiting for offers...');
+    offersSection.appendChild(intro);
+    const offersGrid=document.createElement('div');
+    offersGrid.className='job-board-offers';
+    offersSection.appendChild(offersGrid);
+    for(const offer of jobContractOffers){
+      const card=document.createElement('div');
+      card.className='job-offer-card job-board-offer-card';
+      card.innerHTML=jobOfferCardHTML(offer);
+      card.appendChild(qBtn('ACCEPT',()=>{
+        if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:offer.id});return;}
+        jobContract={...offer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
+      }));
+      offersGrid.appendChild(card);
+    }
+    const remaining=Math.max(0,jobContractRefreshAt-Date.now()),mins=Math.max(1,Math.ceil(remaining/60000));
+    const refresh=document.createElement('p');
+    refresh.className='job-board-note muted';
+    refresh.textContent='New offers in about '+mins+' minute'+(mins===1?'':'s')+'.';
+    offersSection.appendChild(refresh);
+    shell.appendChild(offersSection);
+  }
+
+  const jobOrder=Object.keys(JOBS).filter(id=>id!=='adventurer');
+  if(focusJob)jobOrder.sort((a,b)=>(a===focusJob?-1:b===focusJob?1:0));
+  const professionSection=document.createElement('section');
+  professionSection.className='job-board-section';
+  professionSection.innerHTML='<div class="job-board-section-title">Choose A Trade</div>';
+  const professionGrid=document.createElement('div');
+  professionGrid.className='job-profession-grid';
+  professionSection.appendChild(professionGrid);
+  for(const id of jobOrder){
+    const j=JOBS[id],cur=id===playerJob,prog=jobXpIntoLevel(jobXpFor(id)),pct=Math.max(0,Math.min(100,Math.round((prog.xp/Math.max(1,prog.need))*100)));
+    const card=document.createElement('article');
+    card.className='job-profession-card '+(cur?'active':'');
+    card.innerHTML='<div class="job-profession-top"><i style="color:'+j.col+'">'+escHTML(j.icon)+'</i><span><b style="color:'+j.col+'">'+escHTML(j.name)+'</b><small>'+escHTML(jobTitleFor(id,prog.lvl))+' - Lv '+prog.lvl+'</small></span></div>'+
+      '<div class="job-profession-body"><p>'+escHTML(j.desc)+'</p><div class="job-board-progress small"><i style="width:'+pct+'%"></i><span>'+prog.xp+' / '+prog.need+'</span></div><small>'+escHTML(jobPerkText(id))+'</small>'+professionNowHTML(id,prog.lvl)+professionGameplayHTML(id,prog.lvl)+jobBoardMilestoneSummaryHTML(id,prog.lvl)+'</div>';
+    card.appendChild(qBtn(cur?'ACTIVE':(id===focusJob?'WORK THIS JOB':'CHOOSE'),()=>{if(!cur)chooseJob(id,focusJob);},cur));
+    professionGrid.appendChild(card);
+  }
+  shell.appendChild(professionSection);
+
+  const row=document.createElement('div');
+  row.className='qrow job-board-footer';
+  qpanelEl.appendChild(row);
+  row.appendChild(qBtn('TOWN TUTORIALS',()=>openTownTutorialsUI()));
+  row.appendChild(qBtn('CLEAR JOB',()=>{
+    if(!playerJob)return;
+    if(NET.on&&NET.room){NET.room.send('setJob',{job:''});return;}
+    playerJob='';jobContract=null;sysMsg('Job cleared');openJobsUI();refreshAppearanceDummy();
+  },!playerJob));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function iconNode(id){
   const c=document.createElement('canvas'); c.width=TS; c.height=TS;
