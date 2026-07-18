@@ -5164,7 +5164,8 @@ function tradeOfferPayload(selectedRef,countInput,goldInput){
   const selected=selectedRef&&selectedRef.current;
   const count=Math.max(0,Math.min(selected?selected.max:0,Number(countInput&&countInput.value)||0));
   const goldOffer=Math.max(0,Math.min(gold|0,Number(goldInput&&goldInput.value)||0));
-  return {slot:selected&&count>0?selected.slot:-1,count,gold:goldOffer};
+  const itemId=selected&&selected.stack?selected.stack.id|0:0;
+  return {slot:selected&&count>0?selected.slot:-1,itemId,count,gold:goldOffer};
 }
 function tradeInventoryPicker(selectedRef,countInput,summaryEl){
   const wrap=document.createElement('div');wrap.className='trade-builder';
@@ -5314,6 +5315,10 @@ function applyTradeReject(m){
   let text={target:'No nearby hunter found.',rate:'Trading too quickly.',range:'Move closer to trade.',empty:'Add an item or gold first.',gold:'Not enough gold.',full:'One inventory is full.',item:'That item is no longer available.',missing:'That trade expired.',offline:'That hunter went offline.',expired:'That trade expired.'}[reason]||'Trade failed.';
   if(reason==='range'&&m&&Number.isFinite(Number(m.distance)))text+=' Distance: '+Number(m.distance).toFixed(1)+' blocks.';
   if(reason==='target'&&m&&m.targetName)text+=' Target: '+escHTML(String(m.targetName))+'.';
+  if(reason==='empty'&&m&&m.itemId){
+    const seen=m.serverSlotId|0;
+    text+=' The server saw '+(seen?('item '+seen):'no item')+' in slot '+(((m.slot|0)+1)||1)+'.';
+  }
   SFX.error();
   showName('TRADE FAILED');
   if(qOpen&&qMode==='commerce'&&qpanelEl){

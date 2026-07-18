@@ -5309,6 +5309,41 @@ test('player trade can resolve a nearby named target when the client session id 
   assert.ok(broadcasts.some(e => e.type === 'tradeOfferBroadcast' && e.msg.toSid === bob.sessionId));
 });
 
+test('player trade recovers stackable block offers when the client slot is stale', () => {
+  const room = makeRoom(), alice = makeClient('stale_slot_alice'), bob = makeClient('stale_slot_bob');
+  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 0, inv: [null, { id: W.B.SAND, count: 3 }], x: 20, z: 20 });
+  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 25, inv: [], x: 21, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, itemId: W.B.SAND, count: 1, gold: 0 });
+  const offer = bob.sent.find(e => e.type === 'tradeOffer');
+  assert.ok(offer, 'target receives the recovered trade offer');
+  assert.equal(offer.msg.offer.stack.id, W.B.SAND);
+  assert.equal(offer.msg.offer.stack.slot, 1, 'server uses the authoritative slot');
+
+  room.handleTradeAccept(bob, { tradeId: offer.msg.id, slot: -1, count: 0, gold: 5 });
+
+  assert.equal(itemCount(aProf, W.B.SAND), 2);
+  assert.equal(itemCount(bProf, W.B.SAND), 1);
+  assert.equal(aProf.gold, 5);
+  assert.equal(bProf.gold, 20);
+});
+
+test('player trade reports what the server saw when an offered item is missing', () => {
+  const room = makeRoom(), alice = makeClient('missing_item_alice'), bob = makeClient('missing_item_bob');
+  seedPlayer(room, alice, { name: 'Alice', gold: 0, inv: [], x: 20, z: 20 });
+  seedPlayer(room, bob, { name: 'Bob', gold: 25, inv: [], x: 21, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, itemId: W.B.SAND, count: 1, gold: 0 });
+
+  assert.equal(room.trades.size, 0);
+  assert.equal(alice.sent.at(-1).type, 'tradeReject');
+  assert.equal(alice.sent.at(-1).msg.reason, 'empty');
+  assert.equal(alice.sent.at(-1).msg.itemId, W.B.SAND);
+  assert.equal(alice.sent.at(-1).msg.serverSlotId, 0);
+});
+
 test('town friendship creates a mutual persistent friend link', () => {
   const room = makeRoom(), alice = makeClient('friend_alice'), bob = makeClient('friend_bob');
   const tc = W.TOWN.TC;

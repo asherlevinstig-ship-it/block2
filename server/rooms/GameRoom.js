@@ -3023,13 +3023,32 @@ class GameRoom extends Room {
     }
     return out;
   }
-  tradeStackFromSlot(prof, slot, count) {
+  tradeStackIsSpecial(stack) {
+    return !!(stack && (stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id] || stack.plus || stack.gearRank || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.unique || stack.locked || stack.source));
+  }
+  tradeStackFromSlot(prof, slot, count, expectedId = 0) {
     const i = Math.max(0, Math.min(35, slot | 0));
     const s = prof && Array.isArray(prof.inv) ? prof.inv[i] : null;
     if (!s || !this.tradeItemKnown(s.id)) return null;
-    const special = !!(s.dur != null || TOOL_INFO[s.id] || ARMOR_INFO[s.id] || s.plus || s.gearRank || s.rarity || s.armorType || s.forge || s.masterwork || s.unique || s.locked || s.source);
+    if (expectedId && (s.id | 0) !== (expectedId | 0)) return null;
+    const special = this.tradeStackIsSpecial(s);
     const n = special ? 1 : Math.max(1, Math.min(64, count | 0 || 1, s.count | 0 || 1));
     return this.publicTradeStack(s, n, i);
+  }
+  tradeStackFromInventory(prof, itemId, count, preferredSlot = -1) {
+    itemId |= 0;
+    if (!itemId || !this.tradeItemKnown(itemId)) return null;
+    const inv = prof && Array.isArray(prof.inv) ? prof.inv : [];
+    const preferred = preferredSlot >= 0 ? this.tradeStackFromSlot(prof, preferredSlot, count, itemId) : null;
+    if (preferred) return preferred;
+    for (let i = 0; i < Math.min(36, inv.length); i++) {
+      const s = inv[i];
+      if (!s || (s.id | 0) !== itemId || !this.tradeItemKnown(s.id)) continue;
+      if (this.tradeStackIsSpecial(s)) continue;
+      const n = Math.max(1, Math.min(64, count | 0 || 1, s.count | 0 || 1));
+      return this.publicTradeStack(s, n, i);
+    }
+    return null;
   }
   tradeCanReceive(prof, stack) {
     if (!stack) return true;
@@ -3073,8 +3092,21 @@ class GameRoom extends Room {
   tradeOfferFromMessage(prof, m = {}) {
     const gold = Math.max(0, Math.min(999999, m.gold | 0));
     const slot = Math.max(-1, Math.min(35, m.slot == null ? -1 : m.slot | 0));
-    const stack = slot >= 0 ? this.tradeStackFromSlot(prof, slot, m.count) : null;
+    const itemId = Math.max(0, m.itemId | 0);
+    const stack = slot >= 0 ? (this.tradeStackFromSlot(prof, slot, m.count, itemId) || this.tradeStackFromInventory(prof, itemId, m.count, slot)) : null;
     return { gold, stack };
+  }
+  tradeOfferDebug(prof, m = {}) {
+    const slot = Math.max(-1, Math.min(35, m.slot == null ? -1 : m.slot | 0));
+    const itemId = Math.max(0, m.itemId | 0);
+    const inv = prof && Array.isArray(prof.inv) ? prof.inv : [];
+    const s = slot >= 0 ? inv[slot] : null;
+    return {
+      slot,
+      itemId,
+      serverSlotId: s && s.id ? s.id | 0 : 0,
+      serverSlotCount: s && s.count ? s.count | 0 : 0,
+    };
   }
   tradeSummary(offer) {
     const parts = [];
@@ -3152,7 +3184,7 @@ class GameRoom extends Room {
     if (this.rateLimited(client, 'trade', 3, 6)) return reject('rate');
     if (!this.tradePlayersClose(client, target)) return reject('range', this.tradeDistanceInfo(client, target));
     const offer = this.tradeOfferFromMessage(rec.prof, m);
-    if (!offer.stack && !offer.gold) return reject('empty');
+    if (!offer.stack && !offer.gold) return reject('empty', this.tradeOfferDebug(rec.prof, m));
     if (offer.gold > (rec.prof.gold | 0)) return reject('gold');
     const id = 'tr_' + (++this.tradeSeq) + '_' + Date.now().toString(36);
     const from = this.state.players.get(client.sessionId), to = this.state.players.get(target.sessionId);
@@ -3174,7 +3206,7 @@ class GameRoom extends Room {
     if (Date.now() - trade.createdAt > 45000) { this.trades.delete(id); return reject('expired'); }
     if (!this.tradePlayersClose(from, client)) return reject('range');
     const response = this.tradeOfferFromMessage(toRec.prof, m);
-    if (!response.stack && !response.gold) return reject('empty');
+    if (!response.stack && !response.gold) return reject('empty', this.tradeOfferDebug(toRec.prof, m));
     if (trade.offer.gold > (fromRec.prof.gold | 0) || response.gold > (toRec.prof.gold | 0)) return reject('gold');
     const fromDraft = this.tradeDraftProfile(fromRec.prof), toDraft = this.tradeDraftProfile(toRec.prof);
     if (!this.consumeTradeStack(fromDraft, trade.offer) || !this.consumeTradeStack(toDraft, response)) {
