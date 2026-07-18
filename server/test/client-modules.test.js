@@ -1512,9 +1512,13 @@ test('onboarding gathering pillar and completion both use the training tree',()=
 
 test('onboarding farming uses the G action inside the tutorial meadow',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(combat,/const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand\(hit\.x,hit\.z,2\);/);
   assert.match(combat,/if\(dim!=='overworld'&&!tutorialMeadowFarm\) return false;/);
-  assert.match(combat,/if\(!tutorialMeadowFarm&&!canBuildHere\(hit\.x,hit\.z\)\)/);
+  assert.match(combat,/const townFarmWorksite=!tutorialMeadowFarm&&dim==='overworld'&&isTownFarmWorksite\(hit\.x,hit\.z\);/);
+  assert.match(combat,/if\(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere\(hit\.x,hit\.z\)\)/);
+  assert.match(world,/function isTownFarmWorksite\(x,z\)/);
+  assert.match(world,/"isTownFarmWorksite":\{get:\(\)=>isTownFarmWorksite\}/);
   assert.match(combat,/if\(onboardingActive&&tutorialMeadowFarm&&onboardingKind\(\)==='farm'\) onboardingFlags\.farmed=true;/);
 });
 

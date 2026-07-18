@@ -5301,7 +5301,8 @@ class GameRoom extends Room {
     if (!W.inWorld(x, y, z)) return client.send('farmReject', { reason: 'bounds' });
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 8) return client.send('farmReject', { reason: 'range' });
     if (W.isLavaBorderLand(x, z)) return client.send('farmReject', { reason: 'protected' });
-    if (this.isTownProtected(x, z) || this.isLandOwnedByOther(client, x, z)) return client.send('farmReject', { reason: 'protected' });
+    const townFarmWorksite = W.isTownFarmWorksite(x, z);
+    if ((this.isTownProtected(x, z) && !townFarmWorksite) || this.isLandOwnedByOther(client, x, z)) return client.send('farmReject', { reason: 'protected' });
     const id = this.world.getB(x, y, z);
     if (action === 'till') {
       const tool = this.equippedTool(rec.prof, slot);

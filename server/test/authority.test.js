@@ -6211,7 +6211,7 @@ test('Farmer milestones gate Windseeds and compost while Golden Harvest persists
   assert.equal(client.sent.some(e => e.type === 'farmResult' && e.msg.golden), true);
 });
 
-test('farming respects town and claimed land protection', () => {
+test('farming respects protected land but allows the town farm worksite', () => {
   const room = makeRoom();
   const client = makeClient('farmer');
   const { prof } = seedPlayer(room, client, {
@@ -6232,6 +6232,17 @@ test('farming respects town and claimed land protection', () => {
   room.state.players.get(client.sessionId).z = W.TOWN.TC + 0.5;
   room.handleFarm(client, { action: 'till', x: W.TOWN.TC, y: W.TOWN.G, z: W.TOWN.TC, slot: 0 });
   assert.equal(client.sent.at(-1).msg.reason, 'protected');
+
+  const fx = W.HUB.farm.x | 0, fz = W.HUB.farm.z | 0;
+  room.world.setB(fx, W.TOWN.G, fz, W.B.GRASS);
+  room.state.players.get(client.sessionId).x = fx + 0.5;
+  room.state.players.get(client.sessionId).z = fz + 0.5;
+  room.handleFarm(client, { action: 'till', x: fx, y: W.TOWN.G, z: fz, slot: 0 });
+  assert.equal(room.world.getB(fx, W.TOWN.G, fz), W.B.FARMLAND);
+  assert.equal(client.sent.at(-1).type, 'farmResult');
+
+  room.handleFarm(client, { action: 'plant', x: fx, y: W.TOWN.G + 1, z: fz, slot: 1 });
+  assert.equal(room.world.getB(fx, W.TOWN.G + 1, fz), W.B.WHEAT_1);
 });
 
 test('mining requires server-known tool tier and damages the persisted tool', () => {

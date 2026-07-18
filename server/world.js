@@ -50,6 +50,11 @@ const HUB = Object.freeze({
   tavern: townPos(83.5, 77.5, 'tavern'),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 });
+function isTownFarmWorksite(x, z) {
+  const fx = HUB.farm.x | 0, fz = HUB.farm.z | 0;
+  x |= 0; z |= 0;
+  return x >= fx - 3 && x <= fx + 3 && z >= fz - 2 && z <= fz + 2;
+}
 function isCentralCourtProtectedEdit(x, y, z) {
   return y >= TOWN.G - 3 && y <= TOWN.G + 12 && Math.hypot(x - TOWN.TC, z - TOWN.TC) <= 34;
 }
@@ -996,5 +1001,5 @@ module.exports = {
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
   ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, buildTrainingMeadow,
-  buildGuildHallBase, isCentralCourtProtectedEdit,
+  buildGuildHallBase, isCentralCourtProtectedEdit, isTownFarmWorksite,
 };

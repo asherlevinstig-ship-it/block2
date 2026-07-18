@@ -1240,6 +1240,11 @@ const TOWN_INTERACTION_ZONES = Object.freeze({
   roost: { x: HUB.roost.x, z: HUB.roost.z, radius: 13 },
   skyportGangway: { x1: HUB.skyport.x - 15.5, x2: HUB.skyport.x - 6.5, z: HUB.skyport.z, radiusZ: 3.25 },
 });
+function isTownFarmWorksite(x,z){
+  const fx=HUB.farm.x|0, fz=HUB.farm.z|0;
+  x|=0; z|=0;
+  return x>=fx-3 && x<=fx+3 && z>=fz-2 && z<=fz+2;
+}
 function fillBox(xa,ya,za,xb,yb,zb,id){
   for(let x=Math.min(xa,xb);x<=Math.max(xa,xb);x++)
   for(let y=Math.min(ya,yb);y<=Math.max(ya,yb);y++)
@@ -9331,6 +9336,7 @@ const legacyWorldBindings={
   "isOnboardingBuildPlacement":{get:()=>isOnboardingBuildPlacement},
   "isSolid":{get:()=>isSolid},
   "isTownLand":{get:()=>isTownLand},
+  "isTownFarmWorksite":{get:()=>isTownFarmWorksite},
   "isTrainingMeadowLand":{get:()=>isTrainingMeadowLand},
   "itemLabel":{get:()=>itemLabel},
   "economyRecapHTML":{get:()=>economyRecapHTML},

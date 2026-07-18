@@ -1896,9 +1896,10 @@ function farmAction(hit){
   if(!hit) return false;
   const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand(hit.x,hit.z,2);
   if(dim!=='overworld'&&!tutorialMeadowFarm) return false;
+  const townFarmWorksite=!tutorialMeadowFarm&&dim==='overworld'&&isTownFarmWorksite(hit.x,hit.z);
   const s=inv[selected];
   if(hit.id===B.WHEAT_3){
-    if(!tutorialMeadowFarm&&!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
@@ -1922,7 +1923,7 @@ function farmAction(hit){
     SFX.place(); vmSwing(); return true;
   }
   if(s && (s.id===I.WHEAT_SEEDS || s.id===I.WINDSEED) && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
-    if(!tutorialMeadowFarm&&!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,s.id);
       return true;
     }
@@ -1938,7 +1939,7 @@ function farmAction(hit){
     SFX.place(); vmSwing(); return true;
   }
   if(heldToolClass('hoe') && (hit.id===B.GRASS || hit.id===B.DIRT) && getB(hit.x,hit.y+1,hit.z)===B.AIR){
-    if(!tutorialMeadowFarm&&!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
