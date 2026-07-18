@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const SHARD_MINOR = 130;
 const LEGEND_TOKEN = 135;
@@ -29,12 +30,11 @@ test('a normal boss drops a shard that opens and rewards a complete sharded run'
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('shard_loop_' + suffix);
-  await page.locator('#authpass').fill('correct horse shard loop');
-  await page.locator('#playername').fill('ShardRunner');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'shard_loop_' + suffix,
+    password: 'correct horse shard loop',
+    hunterName: 'ShardRunner',
+  });
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', {
     action: 'prepareERankDungeon', dungeonId: 'abandoned_mine', requestId: 'prepare-normal',

@@ -1,15 +1,14 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
-const BASE_URL = 'http://127.0.0.1:2607';
 const TEAM_KEY_E = 155;
 
 async function register(page, username, playerName) {
-  await page.goto(BASE_URL + '/?e2e=1');
-  await page.locator('#authuser').fill(username);
-  await page.locator('#authpass').fill('correct horse team gate');
-  await page.locator('#playername').fill(playerName);
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username,
+    password: 'correct horse team gate',
+    hunterName: playerName,
+  });
 }
 
 async function resumeAfterRestart(page) {
@@ -63,7 +62,7 @@ test('team Gate reconnect and restart recovery refunds only the key owner', asyn
       register(page, 'team_owner_' + suffix, 'KeyOwner'),
       register(member, 'team_member_' + suffix, 'Teammate'),
     ]);
-    for (const kind of ['move','arrows','jump','tree','craft','build','farm','eat','combat','subject','recall','finish']) {
+    for (const kind of ['move','sprint','arrows','jump','cursor','tree','craft','build','farm','eat','combat','subject','recall','finish']) {
       await expect.poll(() => member.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe(kind);
       expect(await member.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
     }

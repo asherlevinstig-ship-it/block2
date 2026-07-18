@@ -2468,8 +2468,10 @@ function firstLandClaimGuidanceHTML(){
   const blocked=analysis.blockedDetail||analysis.blocked||'Choose a nearby available wilderness tile.';
   let next='';
   if(analysis.canBuy) next='Ready to buy now.';
-  else if((analysis.blocked||'')==='Need more gold') next='Shortfall: '+shortfall+' gold. Earn gold from Mara quests, hunting, contracts, or selling spare materials.';
-  else next=blocked+' Move outside town and pick a tile marked Available.';
+  else {
+    const moneyHint=shortfall>0?'Shortfall: '+shortfall+' gold. Earn gold from Mara quests, hunting, contracts, or selling spare materials. ':'';
+    next=moneyHint+(((analysis.blocked||'')==='Need more gold')?'':blocked+' Move outside town and pick a tile marked Available.');
+  }
   return '<b>First claim route:</b> Recommended tile <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+'.<br>Price: <b>'+analysis.price+' gold</b> - You have <b>'+gold+'</b>.<br>'+escHTML(next);
 }
 function updateLandMinimap(){
@@ -7425,7 +7427,12 @@ function damagePlayer(n,source='unknown',detail=null){
     healingPlusVfx(player.pos.x, player.pos.y, player.pos.z, 1.05, 1.15);
   }
   renderBars();
-  if(hp<=0) die();
+  if(hp<=0){
+    // In multiplayer the server follows a lethal hurt packet with the actual outcome
+    // (dungeon spirit, limbo, or world death). Do not run the local solo death path first.
+    if(NET.on && String(source).startsWith('server:')) return;
+    die();
+  }
 }
 function die(){
   if(tutorialSafe()){

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -13,12 +14,11 @@ test('a defeated dungeon player remains immobile as a spirit until choosing town
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('dungeon_spirit_' + suffix);
-  await page.locator('#authpass').fill('correct horse dungeon spirit');
-  await page.locator('#playername').fill('SpiritTester');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'dungeon_spirit_' + suffix,
+    password: 'correct horse dungeon spirit',
+    hunterName: 'SpiritTester',
+  });
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', {
     action: 'prepareERankDungeon', dungeonId: 'mossbound_cellar', requestId: 'prepare',

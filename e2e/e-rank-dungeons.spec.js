@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const VARIANTS = [
   ['abandoned_mine', 'foremanWind', 'foreman', 'The Foreman'],
@@ -20,12 +21,11 @@ for (const [dungeonId, signatureState, bossStyle, bossName] of VARIANTS) {
       localStorage.setItem('bc_introcut', '1');
       localStorage.setItem('bc_gatecut_v1', '1');
     });
-    await page.goto('/?e2e=1');
-    await page.locator('#authuser').fill('e_rank_' + suffix);
-    await page.locator('#authpass').fill('correct horse e rank dungeon');
-    await page.locator('#playername').fill('GateTester');
-    await page.locator('#registerbtn').click();
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+    await registerAndPlay(page, {
+      username: 'e_rank_' + suffix,
+      password: 'correct horse e rank dungeon',
+      hunterName: 'GateTester',
+    });
 
     await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareERankDungeon', dungeonId: id, requestId: 'prepare' }), dungeonId);
     await expect.poll(() => page.evaluate(id => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === id), dungeonId)).toBeTruthy();

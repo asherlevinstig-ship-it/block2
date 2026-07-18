@@ -689,6 +689,8 @@ function nextBestObjectiveLine(){
   if(localJob)return localJob;
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
   if(story)return story;
+  const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
+  if(progression&&progressionFocus&&progressionFocus!=='first_d_gate')return progression;
   const prep=gatePrepObjectiveLine();
   if(prep)return prep;
   const aegis=serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis');
@@ -697,7 +699,7 @@ function nextBestObjectiveLine(){
   if(job)return job;
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)return guild;
-  return serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback()||idleObjectiveLine();
+  return progression||idleObjectiveLine();
 }
 function unifiedObjectiveList(){
   if(dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
@@ -1950,8 +1952,10 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     if(!target||!player) return false;
     player.pos.set(target.x,surfaceY(target.x,target.z)+2,target.z);
     onboardingArrived=true;
-    if(kind==='arrows')onboardingFlags.arrowLook=true;
+    if(kind==='sprint')onboardingFlags.sprint=true;
+    else if(kind==='arrows')onboardingFlags.arrowLook=true;
     else if(kind==='jump')onboardingFlags.jumped=true;
+    else if(kind==='cursor')onboardingFlags.cursor=true;
     else if(kind==='tree')onboardingFlags.tree=true;
     else if(kind==='craft')onboardingFlags.crafted=true;
     else if(kind==='build'){

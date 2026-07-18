@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAccount, playRegisteredHunter } = require('./helpers/auth-flow.cjs');
 
 const BASE_URL = 'http://127.0.0.1:2607';
 const TUTORIALS = {
@@ -21,12 +22,8 @@ test('server tutorial milestones restore a returning hunter in a fresh browser',
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill(username);
-  await page.locator('#authpass').fill(password);
-  await page.locator('#playername').fill('Returning');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAccount(page, { username, password, hunterName: 'Returning' });
+  await playRegisteredHunter(page, { username, password, hunterName: 'Returning' });
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareReturningHunter' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(3);
 
@@ -43,10 +40,7 @@ test('server tutorial milestones restore a returning hunter in a fresh browser',
       onboarding: localStorage.getItem('bc_onboarding_done_v7'),
       ability: localStorage.getItem('bc_ability_tutorial_done_v2'),
     }))).toEqual({ onboarding: null, ability: null });
-    await freshPage.locator('#authuser').fill(username);
-    await freshPage.locator('#authpass').fill(password);
-    await freshPage.locator('#playername').fill('Returning');
-    await freshPage.locator('#playbtn').click();
+    await playRegisteredHunter(freshPage, { username, password, hunterName: 'Returning' });
 
     await expect.poll(
       () => freshPage.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected),
@@ -61,7 +55,7 @@ test('server tutorial milestones restore a returning hunter in a fresh browser',
       tutorials: TUTORIALS,
     });
     expect(await freshPage.evaluate(() => document.body.classList.contains('onboarding'))).toBe(false);
-    await expect(freshPage.locator('#tutorialhud')).not.toContainText('Lesson 1 / 12');
+    await expect(freshPage.locator('#tutorialhud')).not.toContainText('Lesson 1 / 14');
     await expect(freshPage.locator('#zonename')).toHaveText('Town of Beginnings');
     await expect(freshPage.locator('#awakeningwin')).toBeHidden();
     expect(await freshPage.evaluate(() => ({

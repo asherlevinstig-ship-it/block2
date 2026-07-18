@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test');
+const {registerAndPlay}=require('./helpers/auth-flow.cjs');
 
 test.afterEach(async({page})=>{await page.evaluate(()=>window.__BLOCKCRAFT_E2E__?.shutdown());});
 
@@ -6,14 +7,13 @@ test('Mara First Hands deliberately reaches Level 2 and path choice',async({page
   test.setTimeout(90_000);
   const suffix=Date.now().toString(36);
   await page.addInitScript(()=>{localStorage.setItem('bc_introcut','1');localStorage.setItem('bc_gatecut_v1','1');});
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('mara_'+suffix);
-  await page.locator('#authpass').fill('correct horse mara');
-  await page.locator('#playername').fill('MaraTest');
-  await page.locator('#registerbtn').click();
-  await expect.poll(()=>page.evaluate(()=>window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page,{
+    username:'mara_'+suffix,
+    password:'correct horse mara',
+    hunterName:'MaraTest',
+  });
 
-  const lessons=['move','arrows','jump','tree','craft','build','farm','eat','combat','subject','recall','finish'];
+  const lessons=['move','sprint','arrows','jump','cursor','tree','craft','build','farm','eat','combat','subject','recall','finish'];
   for(const kind of lessons){
     await expect.poll(()=>page.evaluate(()=>window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe(kind);
     expect(await page.evaluate(()=>window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);

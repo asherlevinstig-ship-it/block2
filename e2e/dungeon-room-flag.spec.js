@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const SOLO_KEY_E = 150;
 
@@ -14,12 +15,11 @@ test('the ?dungeonRoom-flagged path enters and exits a real DungeonRoom via swit
     localStorage.setItem('bc_ability_tutorial_done_v2', '1');
     localStorage.setItem('bc_dungeon_room', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('dungeon_room_flag_' + suffix);
-  await page.locator('#authpass').fill('correct horse dungeon room');
-  await page.locator('#playername').fill('RoomHopper');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'droom_' + suffix,
+    password: 'correct horse dungeon room',
+    hunterName: 'RoomHopper',
+  });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('blockcraft');
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'preparePrivateGateRestart' }));

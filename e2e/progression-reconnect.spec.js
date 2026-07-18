@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -7,13 +8,11 @@ test.afterEach(async ({ page }) => {
 test('authoritative progression survives socket reconnect and page reload', async ({ page }) => {
   const suffix = Date.now().toString(36);
   await page.addInitScript(() => localStorage.setItem('bc_onboarding_done_v7', '1'));
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('e2e_' + suffix);
-  await page.locator('#authpass').fill('correct horse battery');
-  await page.locator('#playername').fill('Reconnect');
-  await page.locator('#registerbtn').click();
-
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'e2e_' + suffix,
+    password: 'correct horse battery',
+    hunterName: 'Reconnect',
+  });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(5))).toBe(0);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(7))).toBe(0);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareReturningHunter' }));
@@ -38,18 +37,16 @@ test('authoritative progression survives socket reconnect and page reload', asyn
 
 test('fresh meadow keeps its instructions visible and defers path choice until level 2', async ({ page }) => {
   const suffix = Date.now().toString(36);
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('onboard_' + suffix);
-  await page.locator('#authpass').fill('correct horse onboarding');
-  await page.locator('#playername').fill('NewHunter');
-  await page.locator('#registerbtn').click();
-
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'onboard_' + suffix,
+    password: 'correct horse onboarding',
+    hunterName: 'NewHunter',
+  });
   await expect(page.locator('#tutorialhud')).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('#tutorialhud')).toContainText('Lesson 1 / 12 - Movement');
+  await expect(page.locator('#tutorialhud')).toContainText('Lesson 1 / 14 - Movement');
   await expect(page.locator('#zonename')).toHaveText('Hunter Training Meadow');
   await expect(page.locator('#zonemeta')).toHaveText('Safe training grounds');
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal)).toBe(12);
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal)).toBe(14);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe('move');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().path)).toBe('');
 

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const NEXT_RANK_SOLO_KEY = 151;
 
@@ -24,13 +25,12 @@ test('a failed first Gate preserves progression and immediately offers a success
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('gate_failure_' + suffix);
-  await page.locator('#authpass').fill('correct horse gate failure');
-  await page.locator('#playername').fill('RetryHunter');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
-  for(const kind of ['move','arrows','jump','tree','craft','build','farm','eat','combat','subject','recall','finish']){
+  await registerAndPlay(page, {
+    username: 'gate_failure_' + suffix,
+    password: 'correct horse gate failure',
+    hunterName: 'RetryHunter',
+  });
+  for(const kind of ['move','sprint','arrows','jump','cursor','tree','craft','build','farm','eat','combat','subject','recall','finish']){
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingKind)).toBe(kind);
     expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
   }

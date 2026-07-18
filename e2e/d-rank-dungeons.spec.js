@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -22,12 +23,11 @@ test('D-rank dungeon mobs replicate boss style, boss name, and trash variants', 
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('d_rank_visual_' + suffix);
-  await page.locator('#authpass').fill('correct horse d rank visual');
-  await page.locator('#playername').fill('DVisual');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'd_rank_visual_' + suffix,
+    password: 'correct horse d rank visual',
+    hunterName: 'DVisual',
+  });
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareDRankDungeon', dungeonId: 'blighted_grotto', requestId: 'd-prep' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'd-prep', ok: true, dungeonId: 'blighted_grotto' });

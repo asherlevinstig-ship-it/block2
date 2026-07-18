@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -10,16 +11,16 @@ async function registerFreshHunter(page, prefix) {
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill(prefix + '_' + suffix);
-  await page.locator('#authpass').fill('correct horse playtest');
-  await page.locator('#playername').fill('Playtest');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: prefix + '_' + suffix,
+    password: 'correct horse playtest',
+    hunterName: 'Playtest',
+  });
 }
 
 async function finishTraining(page) {
-  for (let step = 0; step < 12; step++) {
+  const total = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboardingTotal);
+  for (let step = 0; step < total; step++) {
     expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeOnboardingStep())).toBe(true);
   }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);

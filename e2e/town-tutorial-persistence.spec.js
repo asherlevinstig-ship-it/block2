@@ -1,17 +1,8 @@
 const { test, expect } = require('@playwright/test');
-
-const BASE_URL = 'http://127.0.0.1:2607';
+const { registerAccount, playRegisteredHunter } = require('./helpers/auth-flow.cjs');
 
 async function signIn(page, username, password) {
-  await page.goto(BASE_URL + '/?e2e=1');
-  await page.locator('#authuser').fill(username);
-  await page.locator('#authpass').fill(password);
-  await page.locator('#playername').fill('TownLearner');
-  await page.locator('#playbtn').click();
-  await expect.poll(
-    () => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected),
-    { timeout: 15_000 },
-  ).toBe(true);
+  await playRegisteredHunter(page, { username, password, hunterName: 'TownLearner' });
 }
 
 test.afterEach(async ({ page }) => {
@@ -29,12 +20,8 @@ test('partial town tutorial progress survives a fresh browser and the completed 
     localStorage.setItem('bc_introcut', '1');
     localStorage.setItem('bc_gatecut_v1', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill(username);
-  await page.locator('#authpass').fill(password);
-  await page.locator('#playername').fill('TownLearner');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAccount(page, { username, password, hunterName: 'TownLearner' });
+  await signIn(page, username, password);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'prepareTownTutorialPersistence' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.completeTownTutorialStep('job'))).toBe(true);

@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 
 const SOLO_KEY_E = 150;
 const SHARD_MINOR = 130;
@@ -54,12 +55,11 @@ test('private Gate entry items are refunded once and reusable after a server res
     localStorage.setItem('bc_onboarding_done_v7', '1');
     localStorage.setItem('bc_ability_tutorial_done_v2', '1');
   });
-  await page.goto('/?e2e=1');
-  await page.locator('#authuser').fill('private_restart_' + suffix);
-  await page.locator('#authpass').fill('correct horse private gate');
-  await page.locator('#playername').fill('Recovery');
-  await page.locator('#registerbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await registerAndPlay(page, {
+    username: 'private_restart_' + suffix,
+    password: 'correct horse private gate',
+    hunterName: 'Recovery',
+  });
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'preparePrivateGateRestart' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(3);
