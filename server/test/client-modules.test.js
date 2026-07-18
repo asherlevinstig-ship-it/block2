@@ -1335,6 +1335,11 @@ test('Left Alt opens subject focus while Escape only closes or releases cursor',
   assert.match(combat,/if\(e\.code==='AltLeft'&&!e\.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!claimMode&&!globalThis\.BlockcraftRecall\.active\)\{/);
   assert.match(combat,/if\(globalThis\.BlockcraftSubjectFocus\)globalThis\.BlockcraftSubjectFocus\.open\(\);/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*e\.preventDefault\(\);\s*try\{ document\.exitPointerLock\(\); \}catch\(err\)\{\}\s*lockFallback=true;\s*locked=true;\s*refreshPlayUi\(\);\s*return;\s*\}/);
+  const escapeCloseBlock=combat.slice(combat.indexOf("if(e.code==='Escape'){\n    let closed=false;"),combat.indexOf("if(locked){",combat.indexOf("if(e.code==='Escape'){\n    let closed=false;")));
+  assert.match(escapeCloseBlock,/if\(uiOpen\)\{ closeUI\(\); closed=true; \}/);
+  assert.match(escapeCloseBlock,/if\(statOpen\)\{ closeStat\(\); closed=true; \}/);
+  assert.match(escapeCloseBlock,/if\(uiShellState\.qOpen\)\{ closeQWin\(\); closed=true; \}/);
+  assert.doesNotMatch(escapeCloseBlock,/closeUI\(false\)|closeStat\(false\)|closeQWin\(false\)/);
   assert.doesNotMatch(combat,/overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active/);
   assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
   for(const subject of ['Computer Science','Information Technology','Religious Education','English'])assert.match(menus,new RegExp(subject));

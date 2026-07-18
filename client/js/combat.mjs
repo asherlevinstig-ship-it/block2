@@ -1739,9 +1739,9 @@ addEventListener('keydown', e=>{
       if(rankContinue)rankContinue.click();else rankUpWin.classList.add('hidden');
       closed=true;
     }
-    if(uiOpen){ closeUI(false); closed=true; }
-    if(statOpen){ closeStat(false); closed=true; }
-    if(uiShellState.qOpen){ closeQWin(false); closed=true; }
+    if(uiOpen){ closeUI(); closed=true; }
+    if(statOpen){ closeStat(); closed=true; }
+    if(uiShellState.qOpen){ closeQWin(); closed=true; }
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
     if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
