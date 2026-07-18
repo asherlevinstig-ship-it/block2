@@ -362,6 +362,7 @@ test('client modules expose and route player trading actions', () => {
   const combat = readClientModule('combat.mjs');
   const menus = readClientModule('menus.mjs');
   const networking = readClientModule('networking.mjs');
+  const gameRoom = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   assert.match(world, /function tradeTargetUnderCrosshair/);
   assert.match(world, /function townSocialTargetNear/);
   assert.match(world, /"tradeTargetUnderCrosshair":\{get:\(\)=>tradeTargetUnderCrosshair\}/);
@@ -378,8 +379,11 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /tradeAccept/);
   assert.match(networking, /room\.onMessage\('tradeOffer'/);
   assert.match(networking, /room\.onMessage\('tradeOfferBroadcast'/);
+  assert.match(networking, /room\.onMessage\('tradeInventory'/);
   assert.match(networking, /room\.onMessage\('tradeResult'/);
   assert.match(networking, /room\.onMessage\('friendResult'/);
+  assert.match(gameRoom, /profileRequest[\s\S]*reason === 'trade'[\s\S]*sendTradeInventory\(client, rec\.prof\);[\s\S]*return;/);
+  assert.match(gameRoom, /sendTradeInventory\(client, prof\)/);
 });
 
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that

@@ -991,6 +991,10 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
     room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
+    room.onMessage('tradeInventory', m=>{
+      updateServerInventorySnapshot(m&&m.inv);
+      if(typeof (m&&m.gold)==='number'){gold=Math.max(0,m.gold|0);refreshHUD();}
+    });
     const receiveTradeOffer=m=>{
       if(m&&m.toSid&&m.toSid!==room.sessionId)return;
       applyTradeOffer(m);

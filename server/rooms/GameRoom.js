@@ -335,9 +335,13 @@ class GameRoom extends Room {
     this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
     this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
-    this.onMessage('profileRequest', client => {
+    this.onMessage('profileRequest', (client, m = {}) => {
       const rec = this.profileFor(client);
       if (!rec || !rec.prof) return;
+      if (m && m.reason === 'trade') {
+        this.sendTradeInventory(client, rec.prof);
+        return;
+      }
       this.sendProfile(client, rec.prof);
       const hunger = this.playerHunger.get(client.sessionId);
       if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
@@ -2986,6 +2990,14 @@ class GameRoom extends Room {
     client.send('profile', this.profilePayload(client, prof));
     return true;
   }
+  sendTradeInventory(client, prof) {
+    if (!client || !prof) return false;
+    client.send('tradeInventory', {
+      inv: Array.isArray(prof.inv) ? prof.inv.map(s => s ? { ...s } : null) : [],
+      gold: Math.max(0, prof.gold | 0),
+    });
+    return true;
+  }
   profilePayload(client, prof) {
     this.syncProfileVitals(client, prof);
     this.normalizeQuestLifecycles(client, prof);
@@ -3180,7 +3192,7 @@ class GameRoom extends Room {
     const target = this.findTradeTarget(client, m);
     const targetRec = target && this.profileFor(target);
     const reject = (reason, extra = {}) => {
-      if ((reason === 'empty' || reason === 'item') && rec) this.sendProfile(client, rec.prof);
+      if ((reason === 'empty' || reason === 'item') && rec) this.sendTradeInventory(client, rec.prof);
       client.send('tradeReject', { reason, targetSid, targetName: String(m.targetName || ''), ...extra });
     };
     if (!rec || !target || !targetRec || target === client) return reject('target', { online: (this.clients || []).length });
@@ -3203,7 +3215,7 @@ class GameRoom extends Room {
     const trade = this.trades && this.trades.get(id);
     const reject = (reason, extra = {}) => {
       const rec = this.profileFor(client);
-      if ((reason === 'empty' || reason === 'item') && rec) this.sendProfile(client, rec.prof);
+      if ((reason === 'empty' || reason === 'item') && rec) this.sendTradeInventory(client, rec.prof);
       client.send('tradeReject', { reason, id, ...extra });
     };
     if (!trade || trade.toSid !== client.sessionId) return reject('missing');
