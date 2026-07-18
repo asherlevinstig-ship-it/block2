@@ -370,6 +370,7 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function openPlayerTradeUI/);
   assert.match(menus, /function tradeInventoryPicker/);
   assert.match(menus, /tradeStackFromInventorySlot/);
+  assert.match(menus, /function applyTradeOffer[\s\S]*statOpen[\s\S]*closeQWin\(false\)[\s\S]*showName\('TRADE OFFER'\)/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);

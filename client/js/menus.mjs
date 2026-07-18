@@ -5263,7 +5263,11 @@ function applyFriendResult(m){
 }
 function applyTradeOffer(m){
   if(!m||!m.id)return;
+  if(statOpen){statOpen=false;statEl.classList.add('hidden');}
   if(uiOpen)closeUI(false);
+  if(qOpen)closeQWin(false);
+  showName('TRADE OFFER');
+  if(SFX.level)SFX.level();
   openQWin('commerce');qpanelEl.innerHTML='';
   const h=document.createElement('h2');h.textContent='TRADE OFFER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' IS OFFERING';qpanelEl.appendChild(sub);
