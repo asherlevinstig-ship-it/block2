@@ -2516,6 +2516,13 @@ function interactWithVillager(vill){
     else openCartographerUI();
   }
   else if(vill.role==='guild_receptionist') openGuildHallUI();
+  else if(vill.role==='job_mentor'){
+    sysMsg('<b>'+escHTML(vill.name||'Job Board Helper')+':</b> "Pick one clear contract, finish it, then claim the reward here. Jobs change how you play: Miner surveys, Cook hunts and feeds, Blacksmith improves gear, Farmer grows supplies, Monk restores focus."');
+    openJobsUI();
+  }
+  else if(vill.role==='skyship_attendant'){
+    sysMsg('<b>'+escHTML(vill.name||'Westwind Travel Clerk')+':</b> "The Westwind flies to distant regions. Reach <b>S-Rank</b>, bring <b>1,000 gold</b>, then stand at the gangway and press <b>G</b> to board."');
+  }
   else if(vill.role==='bartender') openTavernUI();
   else if(vill.role==='token_cashier') openTavernCashierUI();
   else if(vill.role==='traveling_merchant'){

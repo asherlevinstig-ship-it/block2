@@ -3471,10 +3471,16 @@ const NPC_ROLES=[
    work:[HUB.jobs.x+2,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts.',
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
+  {name:'Bryn Notice',shortName:'Bryn',role:'job_mentor',title:'Job Board Helper',personality:'clear, encouraging, points with both hands',
+   work:[HUB.jobs.x-2.2,HUB.jobs.z+.8],home:[HUB.jobs.x,HUB.jobs.z],static:true,
+   line:'The board is your loop when you feel stuck: pick a job, take one contract, finish it, then come back for XP, gold, and profession progress.'},
   {name:'Orin Mapwell',shortName:'Orin',role:'cartographer',title:'Royal Cartographer',personality:'curious, ink-stained, delighted by blank spaces',
    work:[HUB.cartographer.x,HUB.cartographer.z],home:[HUB.cartographer.x,HUB.cartographer.z],static:true,
    line:'A blank map is not empty. It is asking you a question. Bring me honest roads and I will make them remembered.',
    accept:'Walk until the ink has something new to say.',done:'There. One less mystery pretending to be nowhere.',focus:'explore'},
+  {name:'Captain Elowen Skydock',shortName:'Elowen',role:'skyship_attendant',title:'Westwind Travel Clerk',personality:'calm under wind, formal, checks every rope twice',
+   work:[HUB.skyport.x-10.5,HUB.skyport.z+2.2],home:[HUB.skyport.x,HUB.skyport.z],static:true,fixedY:HUB.skyport.y+1,
+   line:'The Westwind is long-distance travel. You need S-Rank clearance and 1,000 gold, then press G at the gangway to board before departure.'},
 ];
 function npcSpotFree(x,z){
   const bx=Math.floor(x), bz=Math.floor(z), G=TOWN.G;
@@ -3503,16 +3509,16 @@ function spawnVillagers(n){
              name:def.name, shortName:def.shortName||def.name, role:def.role, title:def.title,
              personality:def.personality, line:def.line, accept:def.accept, done:def.done, focus:def.focus,
              work:def.work, home:def.home||HOMES[i%HOMES.length], static:!!def.static,
-             inside:false, stuck:0, targetCenter:def.work, targetRadius:def.role==='warden'?2.5:3.5};
+             fixedY:def.fixedY, inside:false, stuck:0, targetCenter:def.work, targetRadius:def.role==='warden'?2.5:3.5};
     if(v.static){
       let sx=def.work[0], sz=def.work[1];
-      if(!npcSpotFree(sx,sz)){
+      if(!Number.isFinite(def.fixedY)&&!npcSpotFree(sx,sz)){
         for(const [ox,oz] of [[2,0],[-2,0],[0,2],[0,-2],[2,2],[2,-2],[-2,2],[-2,-2]]){
           if(npcSpotFree(def.work[0]+ox,def.work[1]+oz)){ sx=def.work[0]+ox; sz=def.work[1]+oz; break; }
         }
       }
-      v.grp.position.set(sx, TOWN.G+1, sz);
-      v.grp.rotation.y=def.role==='guild_receptionist'?0:-Math.PI/2;
+      v.grp.position.set(sx, Number.isFinite(def.fixedY)?def.fixedY:TOWN.G+1, sz);
+      v.grp.rotation.y=def.role==='guild_receptionist'?0:def.role==='skyship_attendant'?Math.PI/2:-Math.PI/2;
       attachNpcNameplate(v);
       townGroup.add(v.grp);
       villagers.push(v);
@@ -4460,7 +4466,7 @@ function makeNpcNameplate(name, role, color){
 function npcRoleColor(role){
   return role==='smith'?'#ffb45e':role==='scholar'?'#7dd3fc':role==='quartermaster'?'#ffd24a':
     role==='warden'?'#d8f2ff':role==='guide'?'#9ad26b':role==='bartender'||role==='cook'?'#ffd24a':
-    role==='guild_receptionist'?'#f2c75c':role==='stablemaster'?'#66f0ff':role==='miner'?'#b8c0cc':role==='farmer'?'#86efac':role==='monk'?'#7dd3fc':'#e8dcc0';
+    role==='guild_receptionist'||role==='job_mentor'?'#f2c75c':role==='stablemaster'||role==='skyship_attendant'?'#66f0ff':role==='miner'?'#b8c0cc':role==='farmer'?'#86efac':role==='monk'?'#7dd3fc':'#e8dcc0';
 }
 function attachNpcNameplate(v, y){
   if(!v||!v.grp) return;

@@ -208,6 +208,34 @@ test('Town of Beginnings gives every public building or worksite a physical sign
   assert.doesNotMatch(world, /title:'DRAGON ROOST'[\s\S]*?x:dpx\(87\.15,'roost'\),z:dpz\(61\.5,'roost'\)/);
 });
 
+test('Town of Beginnings has explainer NPC helpers for major areas', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  for (const [role, area] of [
+    ['guide', 'central quest path'],
+    ['quartermaster', 'market stalls'],
+    ['scholar', 'Gate Shard'],
+    ['smith', 'Smithy'],
+    ['miner', 'Quarry Work'],
+    ['farmer', 'Farm Plots'],
+    ['cook', 'Tavern & Inn'],
+    ['monk', 'Meditation Hall'],
+    ['stablemaster', 'Dragon Roost'],
+    ['guild_receptionist', 'Guild Hall'],
+    ['social_mentor', 'chat and teams'],
+    ['cartographer', 'Royal Cartographer'],
+    ['road_warden', 'roads and regional contracts'],
+    ['job_mentor', 'Job Board'],
+    ['skyship_attendant', 'Westwind Skyport'],
+  ]) {
+    assert.match(world, new RegExp(`role:'${role}'`), `${area} needs an explainer NPC`);
+  }
+  assert.match(world, /fixedY:HUB\.skyport\.y\+1/);
+  assert.match(world, /Number\.isFinite\(def\.fixedY\)\?def\.fixedY:TOWN\.G\+1/);
+  assert.match(combat, /vill\.role==='job_mentor'/);
+  assert.match(combat, /vill\.role==='skyship_attendant'/);
+});
+
 test('Town systems use district anchors instead of stale compact-town coordinates', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
