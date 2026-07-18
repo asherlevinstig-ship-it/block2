@@ -2039,7 +2039,7 @@ function applyBlacksmithRepairResult(m){
   gainJobXP('blacksmith',5,'repair');
   jobContractProgress('repair', 1, 0);
   sysMsg('Tobin repairs <b>'+escHTML(itemNameWithPlus(inv[toolSlot]))+'</b>.<br>'+economyRecapHTML(m.gold||0,gold,'Durability restored: '+((m.repaired||0)|0)));
-  if(qOpen) openBlacksmithServicesUI();
+  if(qModalIs('blacksmith')) openBlacksmithServicesUI();
 }
 function applyBlacksmithUpgradeResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id]) return;
@@ -2051,7 +2051,7 @@ function applyBlacksmithUpgradeResult(m){
   gainJobXP('blacksmith',10+(toolPlus(inv[toolSlot])*3),'upgrade');
   jobContractProgress('upgrade', 1, inv[toolSlot].id) || jobContractProgress('smith', 1, inv[toolSlot].id);
   sysMsg('Tobin upgrades <b>'+escHTML(itemNameWithPlus(inv[toolSlot]))+'</b>.<br>'+economyRecapHTML(m.gold||0,gold,'Materials spent: '+(m.mat&&ITEMS[m.mat.id]?ITEMS[m.mat.id].name+' x'+(m.mat.count||1):'forge materials')));
-  if(qOpen) openBlacksmithServicesUI();
+  if(qModalIs('blacksmith')) openBlacksmithServicesUI();
 }
 function applyBlacksmithReforgeResult(m){
   if(!m||!m.tool||!ITEMS[m.tool.id])return;
@@ -2063,7 +2063,7 @@ function applyBlacksmithReforgeResult(m){
   const costLine=cost?'Cost: '+cost.gold+'g'+(cost.iron?', Iron x'+cost.iron:'')+(cost.diamond?', Diamond x'+cost.diamond:''):'Cost paid';
   const trait=inv[slot].masterwork?'Masterwork perfected':mod?mod.name+' - '+mod.desc:'Reforge complete';
   const contract=jobContract&&jobContract.job==='blacksmith'&&['smith','repair','upgrade','salvage'].includes(jobContract.type)?' - Contract update incoming':'';
-  refreshHUD();if(uiOpen)renderUI();SFX.level();sysMsg('<b>Blacksmith reforge:</b> '+escHTML(itemNameWithPlus(inv[slot]))+' - '+escHTML(trait)+' - +10 Blacksmith XP<br>'+economyRecapHTML(m.gold||0,gold,costLine)+contract);if(qOpen)openBlacksmithServicesUI();
+  refreshHUD();if(uiOpen)renderUI();SFX.level();sysMsg('<b>Blacksmith reforge:</b> '+escHTML(itemNameWithPlus(inv[slot]))+' - '+escHTML(trait)+' - +10 Blacksmith XP<br>'+economyRecapHTML(m.gold||0,gold,costLine)+contract);if(qModalIs('blacksmith'))openBlacksmithServicesUI();
 }
 function repairRejected(m){
   const r=m&&m.reason;
@@ -2087,7 +2087,7 @@ function blacksmithServiceRejected(m){
   else if(r==='legendary') sysMsg('Legendary relics cannot be salvaged');
   else if(r==='locked') sysMsg('That gear is <b>protected</b>. Unlock it before salvaging.');
   else sysMsg('Tobin cannot work that item.');
-  if(qOpen) openBlacksmithServicesUI();
+  if(qModalIs('blacksmith')) openBlacksmithServicesUI();
 }
 function shopRejected(m){
   SFX.error();
@@ -3037,6 +3037,7 @@ function openQWin(mode='dialog'){
   if(document.pointerLockElement) document.exitPointerLock();
   lockFallback=false; locked=false;
   qpanelEl.className=mode;
+  qpanelEl.dataset.modal=mode;
   qwinEl.classList.remove('trade-offer-open');
   qwinEl.classList.remove('hidden');
   refreshPlayUi();
@@ -3045,12 +3046,16 @@ function closeQWin(relock=true){
   setTownMapMovementOverlay(false);
   if(qOpen) SFX.uiClose();
   qOpen=false; qMode=''; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
+  qpanelEl.dataset.modal='';
   qwinEl.classList.remove('trade-offer-open');
   if(relock) renderer.domElement.requestPointerLock();
   else {
     overlay.classList.remove('hidden');
     for(const id of ['hotbar','stats','abilities','locationhud','coords','landmap']) document.getElementById(id).classList.add('hidden');
   }
+}
+function qModalIs(name){
+  return !!(qOpen && qpanelEl && qpanelEl.dataset && qpanelEl.dataset.modal===name);
 }
 function qBtn(label, cb, dim2){
   const b=document.createElement('button');
@@ -5226,6 +5231,7 @@ function openPlayerTradeUI(target,opts={}){
   }
   if(uiOpen)closeUI(false);
   openQWin('commerce');qpanelEl.innerHTML='';
+  qpanelEl.dataset.modal='player-trade';
   const h=document.createElement('h2');h.textContent='PLAYER TRADE';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='WITH '+String(target.name||'Hunter').toUpperCase()+' - ITEM OR GOLD';qpanelEl.appendChild(sub);
   const intro=document.createElement('p');intro.className='qtext';
@@ -5297,6 +5303,7 @@ function applyTradeOffer(m){
   showName('TRADE OFFER');
   if(SFX.level)SFX.level();
   openQWin('commerce');qpanelEl.innerHTML='';
+  qpanelEl.dataset.modal='trade-offer';
   qwinEl.classList.add('trade-offer-open');
   const h=document.createElement('h2');h.textContent='TRADE OFFER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' IS OFFERING';qpanelEl.appendChild(sub);
@@ -6135,7 +6142,7 @@ function applyLootRecoveryState(m,silent=false){
     const item=cleanRecoveredGear(m.queued),gear=item&&GEAR_SYSTEM.profile(ITEMS[item.id].tool||ITEMS[item.id].armor,item);
     if(item&&gear)sysMsg('Inventory full: <b style="color:'+gear.rarity.color+'">'+escHTML(gear.rank.name+' '+gear.rarity.name+' '+itemNameWithPlus(item))+'</b> was secured by Tobin. Free a slot and claim it from Loot Recovery.');
   }
-  if(qOpen&&qMode==='commerce')openBlacksmithServicesUI();
+  if(qModalIs('blacksmith'))openBlacksmithServicesUI();
 }
 function requestLootRecoveryClaim(index){
   if(!NET.on||!NET.room)return false;
@@ -6161,13 +6168,13 @@ function requestGearLock(slot=combatState.selectedSlot,locked=true){
 function applyGearLockResult(m){
   const slot=Math.max(0,Math.min(35,m&&m.slot|0)),item=inv[slot];
   if(m&&m.ok&&item){if(m.locked)item.locked=true;else delete item.locked;refreshHUD();if(uiOpen)renderUI();sysMsg(m.locked?'Gear protected from salvage.':'Gear protection removed.');}
-  if(qOpen&&qMode==='commerce')openBlacksmithServicesUI();
+  if(qModalIs('blacksmith'))openBlacksmithServicesUI();
 }
 function applyBlacksmithSalvageResult(m){
   const slot=Math.max(0,Math.min(35,m&&m.slot|0));inv[slot]=null;
   if(m&&m.iron)addItem(I.IRON_INGOT,m.iron|0);if(m&&m.gold)addGold(m.gold|0);
   jobContractProgress('salvage',1,0)||jobContractProgress('smith',1,0);
-  refreshHUD();if(uiOpen)renderUI();SFX.forge();sysMsg('Gear salvaged: <b>+'+(m.iron|0)+' Iron Ingots</b>.<br>'+economyRecapHTML((m&&m.gold)|0,gold,'Salvage return'));if(qOpen)openBlacksmithServicesUI();
+  refreshHUD();if(uiOpen)renderUI();SFX.forge();sysMsg('Gear salvaged: <b>+'+(m.iron|0)+' Iron Ingots</b>.<br>'+economyRecapHTML((m&&m.gold)|0,gold,'Salvage return'));if(qModalIs('blacksmith'))openBlacksmithServicesUI();
 }
 function blacksmithReforgeCostText(action){
   const c=JOB_SYSTEM.reforgeCost(action);if(!c)return '';
@@ -6195,6 +6202,7 @@ function salvageDecisionLine(stack,item,info,gear){
 function openBlacksmithServicesUI(){
   openQWin('commerce');
   qpanelEl.innerHTML='';
+  qpanelEl.dataset.modal='blacksmith';
   const h=document.createElement('h2'); h.textContent='BLACKSMITH SERVICES'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
   sub.innerHTML='TOBIN ASHHAND - YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>';
