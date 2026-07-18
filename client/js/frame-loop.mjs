@@ -1880,10 +1880,10 @@ function tick(now){
   { // ambience: nearest fire source + crickets after dark
     let fd=Infinity;
     if(dim==='overworld'){
-      const tavernFire=tavernNightLevel()>.05 ? Math.hypot(player.pos.x-tp(79.5), player.pos.z-tp(85.4)) : Infinity;
+      const tavernFire=tavernNightLevel()>.05 ? Math.hypot(player.pos.x-HUB.tavernHearth.x, player.pos.z-HUB.tavernHearth.z) : Infinity;
       fd=Math.min(
         tavernFire,                                                // tavern hearth
-        Math.hypot(player.pos.x-tp(81.7), player.pos.z-tp(48.5))); // smithy forge
+        Math.hypot(player.pos.x-HUB.forgeFire.x, player.pos.z-HUB.forgeFire.z)); // smithy forge
     }
     for(const key in torches){
       const tp=torches[key].position;

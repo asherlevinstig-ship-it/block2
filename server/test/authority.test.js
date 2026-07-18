@@ -6126,7 +6126,7 @@ test('Master Feast feeds only nearby teammates and grants authoritative combat b
 test('Monk shrine focus regenerates and mitigates damage according to profession level', () => {
   const room = makeRoom(), monk = makeClient('focus-monk');
   room.clients = [monk];
-  const sx = W.TOWN.TC - 16.5, sz = W.TOWN.TC - 16;
+  const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
   const { prof } = seedPlayer(room, monk, { x: sx, z: sz, hp: 10 });
   prof.job = 'monk';
   prof.jobXpByJob.monk = Array.from({ length: 9 }, (_, i) => JOB_SYSTEM.jobXpNeed(i + 1)).reduce((a, b) => a + b, 0);
@@ -6152,7 +6152,7 @@ test('Monk shrine focus regenerates and mitigates damage according to profession
 test('Zen Master meditation shares focus only with nearby party members', () => {
   const room = makeRoom(), monk = makeClient('aura-monk'), near = makeClient('aura-near'), far = makeClient('aura-far');
   room.clients = [monk, near, far];
-  const sx = W.TOWN.TC - 16.5, sz = W.TOWN.TC - 16;
+  const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
   const { prof } = seedPlayer(room, monk, { x: sx, z: sz, team: 'T1' });
   seedPlayer(room, near, { x: sx + 4, z: sz, team: 'T1' });
   seedPlayer(room, far, { x: sx + 30, z: sz, team: 'T1' });

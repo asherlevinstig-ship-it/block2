@@ -1824,9 +1824,9 @@ function primaryAction(){
 let isMeditating=false, meditateStartedAt=0, meditationPrevView=null;
 function inMeditationSpot(){
   const x=player.pos.x, z=player.pos.z;
+  const zone=globalThis.TOWN_INTERACTION_ZONES&&globalThis.TOWN_INTERACTION_ZONES.meditation || (globalThis.HUB&&globalThis.HUB.meditate);
   return dim==='overworld' && Math.abs(player.pos.y-(TOWN.G+1))<2.5 &&
-    x>=tc(43)-.25 && x<=tc(51)+.25 &&
-    z>=tc(41)-.25 && z<=tc(55)+.25;
+    !!zone && Math.hypot(x-zone.x,z-zone.z)<=((zone.radius||8.6)+.35);
 }
 function startMeditation(){
   if(!meditationPrevView) meditationPrevView={ yaw:player.yaw, pitch:player.pitch };

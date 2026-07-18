@@ -156,6 +156,8 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(serverWorld, /TOWN_DISTRICTS = Object\.freeze/);
   assert.match(serverWorld, /const townPos = \(x, z, district\) =>/);
   assert.match(serverWorld, /const townBlockPos = \(x, z, district\) =>/);
+  assert.match(serverWorld, /const HUB = Object\.freeze/);
+  assert.match(serverWorld, /meditate: townPos\(47\.5, 46\.5, 'shrine'\)/);
   assert.match(world, /open town districts replacing NPC houses/);
   assert.match(serverWorld, /Open district footprints replacing the old NPC cottages/);
   assert.match(world, /tavern commons and player storage yard/);
@@ -168,6 +170,8 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /Math\.hypot\(player\.pos\.x-e\.x,player\.pos\.z-e\.z\)>\(e\.maxDist\|\|105\)/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.z-p\.z\)>38\) continue/);
   assert.match(serverWorld, /Central court fountain base/);
+  assert.match(world, /TOWN_INTERACTION_ZONES = Object\.freeze/);
+  assert.match(world, /meditation: \{ x: HUB\.meditate\.x, z: HUB\.meditate\.z, radius: 8\.6 \}/);
   assert.doesNotMatch(world, /buildCottage|SW house|S house|NE house/);
   assert.doesNotMatch(world, /inn sleeping alcoves|function curtain\(|propCloth|PlaneGeometry\(w,1\.35\)|TG\+1\.62/);
   assert.doesNotMatch(world, /lamp posts around the plaza/);
@@ -209,10 +213,12 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const frameLoop = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
   const constants = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'constants.js'), 'utf8');
   const events = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'events.mixin.js'), 'utf8');
   const economy = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'economy.mixin.js'), 'utf8');
   const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const progression = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
 
   assert.match(world, /tavernDice: \{ x: dpx\(74\.5, 'tavern'\), z: dpz\(89\.5, 'tavern'\) \}/);
   assert.match(combat, /HUB\.tavernDice\.x/);
@@ -229,12 +235,20 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   assert.match(events, /const dock = W\.townPos\(32, 64, 'skyport'\)/);
   assert.match(room, /W\.townPos\(78\.5, 50, 'forge'\)/);
   assert.match(room, /W\.townPos\(54\.5,26\.5,'guild'\)/);
+  assert.match(progression, /const sx = W\.HUB\.meditate\.x, sz = W\.HUB\.meditate\.z/);
+  assert.match(combat, /globalThis\.TOWN_INTERACTION_ZONES&&globalThis\.TOWN_INTERACTION_ZONES\.meditation/);
+  assert.match(frameLoop, /HUB\.tavernHearth\.x/);
+  assert.match(frameLoop, /HUB\.forgeFire\.x/);
+  assert.match(world, /const district=townPropDistrict\(x,z\)/);
+  assert.match(world, /\{x:HUB\.tavernChimney\.x, y:TG\+12\.7,\s+z:HUB\.tavernChimney\.z,\s+type:'smoke',\s+rate:4,\s+nightOnly:true,\s+maxDist:28\}/);
   assert.match(economy, /townTavernAnchor\(74\.5, 89\.5\)/);
   assert.match(economy, /townTavernAnchor\(79\.5, 89\.5\)/);
   assert.match(economy, /townTavernAnchor\(84\.5, 89\.5\)/);
   assert.doesNotMatch(combat, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5/);
   assert.doesNotMatch(economy, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5|TOWN\.TC\+19\.5|TOWN\.TC\+12\.5/);
   assert.doesNotMatch(menus + networking + room, /TOWN\.TC\+14\.5|TOWN\.TC-14/);
+  assert.doesNotMatch(combat + progression, /tc\(43\)|tc\(51\)|tc\(41\)|tc\(55\)|TOWN\.TC - 16\.5|TOWN\.TC - 16/);
+  assert.doesNotMatch(frameLoop, /tp\(79\.5\)|tp\(85\.4\)|tp\(81\.7\)|tp\(48\.5\)/);
   assert.doesNotMatch(menus, /bartender\.grp\.position\.set\(tp|tokenCashier\.grp\.position\.set\(tp|potionVapors\.push\(\{x:tp|addRug\(tp|addPainting\(tp|addFlowerPot\(tp|seedChest\(tc\(85\)|seedChest\(tc\(75\)/);
   assert.doesNotMatch(constants + events, /TOWN\.TC - 32/);
 });

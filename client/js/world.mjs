@@ -1232,6 +1232,14 @@ const HUB = {
   marketX: dpx(43, 'market'),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 };
+const TOWN_INTERACTION_ZONES = Object.freeze({
+  meditation: { x: HUB.meditate.x, z: HUB.meditate.z, radius: 8.6 },
+  tavern: { x1: dpx(71, 'tavern'), x2: dpx(87, 'tavern'), z1: dpz(69, 'tavern'), z2: dpz(94, 'tavern') },
+  smithy: { x: HUB.smith.x, z: HUB.smith.z, radius: 6.5 },
+  guild: { x: HUB.guild.x, z: HUB.guild.z, radius: 8.5 },
+  roost: { x: HUB.roost.x, z: HUB.roost.z, radius: 13 },
+  skyportGangway: { x1: HUB.skyport.x - 15.5, x2: HUB.skyport.x - 6.5, z: HUB.skyport.z, radiusZ: 3.25 },
+});
 function fillBox(xa,ya,za,xb,yb,zb,id){
   for(let x=Math.min(xa,xb);x<=Math.max(xa,xb);x++)
   for(let y=Math.min(ya,yb);y<=Math.max(ya,yb);y++)
@@ -4295,6 +4303,7 @@ TOWN_BUILDING_SIGNS.forEach(makeTownBuildingSign);
 Object.defineProperty(globalThis,'BlockcraftTownLayout',{value:Object.freeze({
   town:TOWN,
   hub:HUB,
+  zones:TOWN_INTERACTION_ZONES,
   signs:TOWN_BUILDING_SIGNS,
   labels:Object.freeze([
     {title:'Cartographer',x:HUB.cartographer.x,z:HUB.cartographer.z,color:'#ffd24a'},
@@ -5407,7 +5416,7 @@ function shrineInteriorFactor(){
   const x=player.pos.x, z=player.pos.z, y=player.pos.y;
   const inside=x>=dtx(43,'shrine')-.5 && x<=dtx(51,'shrine')+.5 && z>=dtz(41,'shrine')-.5 && z<=dtz(55,'shrine')+.5 && y>=TOWN.G && y<=TOWN.G+6.5;
   if(inside) return 1;
-  const approach=Math.hypot(x-HUB.shrine.x,z-HUB.shrine.z);
+  const approach=Math.hypot(x-TOWN_INTERACTION_ZONES.meditation.x,z-TOWN_INTERACTION_ZONES.meditation.z);
   return approach<10 ? Math.max(0,1-approach/10)*.35 : 0;
 }
 // ---------------- weather: server-owned in multiplayer, local machine in solo ----------------
@@ -8584,9 +8593,10 @@ function tavernNightLevel(){
   return Math.max(0, Math.min(1, (0.62-gDayF)/0.5));
 }
 function isInsideTavern(){
+  const z=TOWN_INTERACTION_ZONES.tavern;
   return dim==='overworld' && player.pos.y>=TOWN.G && player.pos.y<TOWN.G+5 &&
-    player.pos.x>dpx(71,'tavern') && player.pos.x<dpx(87,'tavern') &&
-    player.pos.z>dpz(69,'tavern') && player.pos.z<dpz(94,'tavern');
+    player.pos.x>z.x1 && player.pos.x<z.x2 &&
+    player.pos.z>z.z1 && player.pos.z<z.z2;
 }
 const tavernNightObjects=[], tavernNightLights=[], shrineCandleLights=[];
 
@@ -8893,8 +8903,9 @@ function buildProps(){
   const carpet=new THREE.Mesh(new THREE.PlaneGeometry(1.8,10), new THREE.MeshLambertMaterial({color:0x8a2020}));
   carpet.rotation.x=-Math.PI/2; carpet.position.set(townPropX(47.5,50),TG+1.02,townPropZ(47.5,50)); townGroup.add(carpet);
   function candle(x,y,z){
-    const isTavern=x>70 && x<86 && z>70;
-    const isShrine=x>42 && x<53 && z>40 && z<56;
+    const district=townPropDistrict(x,z);
+    const isTavern=district==='tavern';
+    const isShrine=district==='shrine';
     const wickMat=new THREE.MeshBasicMaterial({color:0xffcf6a, transparent:isTavern, opacity:isTavern?0:1});
     const wax=addProp(new THREE.CylinderGeometry(.05,.05,.18,6), propWhite, townPropX(x,z),y+.09,townPropZ(x,z));
     const flame=addProp(new THREE.BoxGeometry(.06,.07,.06), wickMat, townPropX(x,z),y+.22,townPropZ(x,z));
@@ -9482,6 +9493,7 @@ const legacyWorldBindings={
   "torchFlameMat":{get:()=>torchFlameMat},
   "torchGlowMat":{get:()=>torchGlowMat},
   "TOWN":{get:()=>TOWN},
+  "TOWN_INTERACTION_ZONES":{get:()=>TOWN_INTERACTION_ZONES},
   "shadeHex":{get:()=>shadeHex},
   "fitCanvasText":{get:()=>fitCanvasText},
   "glowVoxelMats":{get:()=>glowVoxelMats},

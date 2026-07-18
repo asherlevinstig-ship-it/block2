@@ -716,8 +716,7 @@ class ProgressionMixin {
     const p = this.state.players.get(client.sessionId);
     if (!rec || !p || rec.prof.job !== 'monk' || p.dgn) return this.progressionReject(client, 'meditate', 'invalid');
     if (this.rateLimited(client, 'meditate', 1, 2)) return this.progressionReject(client, 'meditate', 'rate');
-    // Meditation hall center mirrors the deterministic town build (47.5, 48 in town-local coordinates).
-    const sx = W.TOWN.TC - 16.5, sz = W.TOWN.TC - 16;
+    const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
     if (Math.hypot(p.x - sx, p.z - sz) > 9) return this.progressionReject(client, 'meditate', 'range');
     this.grantJobXp(client, 'monk', 2);
     this.progressJobContract(client, 'meditate', 5, 0);

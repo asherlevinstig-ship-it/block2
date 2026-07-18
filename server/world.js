@@ -32,6 +32,24 @@ const dpx = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.x || 0);
 const dpz = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.z || 0);
 const townPos = (x, z, district) => ({ x: dpx(x, district), z: dpz(z, district) });
 const townBlockPos = (x, z, district) => ({ x: dtx(x, district), z: dtz(z, district) });
+const HUB = Object.freeze({
+  guide: { x: TOWN.TC + 8.5, z: TOWN.TC - 4.5 },
+  jobs: { x: TOWN.TC + 4.5, z: TOWN.TC - 8.5 },
+  cartographer: { x: TOWN.TC - 22.5, z: TOWN.TC - 11.5 },
+  quarry: townPos(79, 39, 'forge'),
+  farm: townPos(56, 79, 'farm'),
+  roost: townPos(96, 65, 'roost'),
+  skyport: { ...townPos(32, 64, 'skyport'), y: TOWN.G + 24 },
+  guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
+  guild: townPos(54.5, 26.5, 'guild'),
+  guildNoticeBoard: townPos(47, 26.7, 'guild'),
+  socialMentor: townPos(43.5, 34, 'guild'),
+  shrine: townPos(47.5, 48, 'shrine'),
+  meditate: townPos(47.5, 46.5, 'shrine'),
+  smith: townPos(78.5, 50, 'forge'),
+  tavern: townPos(83.5, 77.5, 'tavern'),
+  northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
+});
 function isCentralCourtProtectedEdit(x, y, z) {
   return y >= TOWN.G - 3 && y <= TOWN.G + 12 && Math.hypot(x - TOWN.TC, z - TOWN.TC) <= 34;
 }
@@ -972,7 +990,7 @@ function createWorld() {
 }
 
 module.exports = {
-  WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
+  WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
   townPos, townBlockPos,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
