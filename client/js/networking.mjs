@@ -273,6 +273,7 @@ function questRewardSummaryLine(m){
   return parts.join(' · ');
 }
 function questRewardNextStep(m){
+  if(m&&m.nextStep)return String(m.nextStep);
   const source=String(m&&m.source||'');
   if(source==='story'||source==='manhunt')return 'Check the Quest Log or the marked NPC for the next story beat.';
   if(source==='job')return 'Open the Job Board for your next profession contract.';
@@ -985,7 +986,7 @@ function netAttachRoom(room,name,client){
       onJobMilestone:(id,milestone)=>presentJobMilestone(id,milestone),
       onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));},
       reconcileArmor:()=>{cursorStack=null;renderCursor();if(uiOpen)renderUI();},
-      reject:why=>{sysMsg(why);SFX.error();},
+      reject:why=>{globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__=why;sysMsg(why);SFX.error();},
       accept:m=>{
         if(m.type==='armor'){gearInspectSlot=m.id?-2:-1;if(uiOpen)renderUI();}
         if(m.type==='jobContract'&&m.action==='claim'){
@@ -1000,7 +1001,7 @@ function netAttachRoom(room,name,client){
         if(m.type==='job'&&m.job)sysMsg('You are now working as a <b>'+escHTML(JOBS[m.job]&&JOBS[m.job].name||m.job)+'</b>.'+(jobContract&&jobContract.job!=='adventurer'&&jobContract.job!==m.job?'<br>Your '+escHTML((JOBS[jobContract.job]&&JOBS[jobContract.job].name)||jobContract.job)+' contract is paused until you switch back.':''));
         if((m.type==='job'||m.type==='jobContract')&&qOpen)openJobsUI(m.job||playerJob);
       },
-      refresh:()=>{renderBars();renderStat();refreshHUD();refreshAppearanceDummy();if(qOpen&&qMode==='management')openJobsUI();},
+      refresh:()=>{renderBars();renderStat();refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();refreshAppearanceDummy();if(qOpen&&qMode==='management')openJobsUI();},
     });
     room.onMessage('jobContractOffers',m=>{
       jobContractOffers=Array.isArray(m&&m.offers)?m.offers.map(clampJobContract).filter(Boolean):[];
@@ -2143,7 +2144,7 @@ function netRestoreProfile(m){
     sp=Math.max(0,Math.min(maxSp(),finite(vitals.sp,m&&m.sp!=null?m.sp:maxSp())));
     hunger=Math.max(0,Math.min(maxHunger(),finite(vitals.hunger,m&&m.hunger!=null?m.hunger:maxHunger())));
     if(onboardingActive) prepareOnboardingStep();
-    refreshHUD(); renderBars(); refreshPlayUi(); updateLandMinimap();
+    refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker(); renderBars(); refreshPlayUi(); updateLandMinimap();
     if(m.firstQuestRewardClaimed===true&&Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0&&!firstQuestRewardPresentationSeen()){
       rewardGain('gold',100,'Gold');
       eventLog('First villager quest complete — server reward: +100 gold.');

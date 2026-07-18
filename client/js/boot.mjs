@@ -19,13 +19,18 @@ try {
       rendering: renderingModule,
       onboarding: onboardingModule,
     },
-    state: { uiShell: { qOpen: false } },
+    state: { uiShell: { qOpen: false, qMode: '' } },
   });
   window.BlockcraftGameContext = gameContext;
   const uiShellState = gameContext.requireState('uiShell');
   Object.defineProperty(window, 'qOpen', {
     get: () => uiShellState.qOpen,
     set: value => { uiShellState.qOpen = !!value; },
+    configurable: true,
+  });
+  Object.defineProperty(window, 'qMode', {
+    get: () => uiShellState.qMode || '',
+    set: value => { uiShellState.qMode = typeof value === 'string' ? value : ''; },
     configurable: true,
   });
   for (const src of ['./world.mjs', './dimensions.mjs', './recall.mjs', './combat.mjs', './hud.mjs', './menus.mjs', './networking.mjs']) {

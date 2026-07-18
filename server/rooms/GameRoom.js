@@ -3120,6 +3120,37 @@ class GameRoom extends Room {
     });
     return true;
   }
+  questRewardLoopHint(input = {}) {
+    const source = String(input.source || '');
+    const title = String(input.title || '');
+    const type = String(input.contractType || input.questType || '');
+    const job = String(input.job || '');
+    if (source === 'job') {
+      if (input.graduation === true) return 'Equip the graduation gear, make food and repairs, then follow D-Rank Prep toward your first D-rank Gate.';
+      if (job === 'miner') return type === 'ancient_map'
+        ? 'Follow the ancient route again for relic materials, then spend the haul on gear upgrades.'
+        : 'Take another Miner contract, follow cave or ore markers, bring materials back, then upgrade your kit.';
+      if (job === 'cook') return type === 'hunt'
+        ? 'Cook the meat into travel food, then take a pantry or ration contract for stronger Gate prep.'
+        : 'Stock food for stamina and Gate runs, then take another kitchen contract or sell surplus at the tavern.';
+      if (job === 'blacksmith') return 'Use the forge rewards to repair, reforge, or upgrade gear, then take another smithing order.';
+      if (job === 'farmer') return 'Turn the harvest into food supply for cooks and Gates, then replant or take another field order.';
+      if (job === 'monk') return 'Carry the focus buff into travel or party play, then return to the Shrine for another support contract.';
+      return 'Take another Adventurer contract, use the reward to improve gear, then push toward the next Gate rank.';
+    }
+    if (source === 'story' || source === 'manhunt') {
+      if (title === 'First Hands') return 'Speak to Mara again for Road Ready, then start preparing for your first Gate.';
+      if (title === 'Road Ready') return 'Use the Compass path to find and clear the first E-rank Gate.';
+      if (title === 'The First Gate') return 'Claim your reward, choose a profession loop, then prepare for D-rank Gates.';
+      return 'Open the Quest Log or follow the marked NPC for the next story beat.';
+    }
+    if (source === 'guild') {
+      if (type.startsWith('road_')) return 'Use Trail Sense on roads, help caravans, then take another Road Warden contract.';
+      return 'Open Guild Contracts for another regional route, then invest renown into Fellowship projects.';
+    }
+    if (source === 'aegis') return 'Use the trial reward to improve combat readiness, then return to the Aegis Guardian for another trial.';
+    return 'Open the Quest Log and choose the next objective that matches what you want to do.';
+  }
   questRewardSummaryPayload(input = {}) {
     const cleanItems = list => (Array.isArray(list) ? list : []).slice(0, 12)
       .map(it => ({
@@ -3147,6 +3178,7 @@ class GameRoom extends Room {
       gear,
       claimLocation: String(input.claimLocation || '').slice(0, 80),
       inventoryOverflow: input.inventoryOverflow === true,
+      nextStep: String(input.nextStep || this.questRewardLoopHint(input)).slice(0, 180),
     };
   }
   sendQuestRewardSummary(client, input) {
@@ -3210,6 +3242,7 @@ class GameRoom extends Room {
       items: cleanItems(input.items),
       gear,
       inventoryOverflow: input.inventoryOverflow === true,
+      nextStep: String(input.nextStep || this.questRewardLoopHint(input)).slice(0, 180),
       noReward: input.noReward === true || outcome !== 'completed',
       shared: input.shared === true,
       endedBy: String(input.endedBy || '').slice(0, 64),
@@ -4833,6 +4866,7 @@ class GameRoom extends Room {
       gold: rewardGold,
       xp: rewardXp,
       jobXp: 0,
+      contractType: c.type || '',
       items: rewardItems,
       gear: rewardGear ? { ...rewardGear, recovered: rewardGearRecovered } : null,
       claimLocation: 'Guild Board',

@@ -1021,6 +1021,22 @@ test('job board offers three timed tiers and accepts only an authoritative offer
   assert.deepEqual(client.sent.at(-1).msg.offers,[],'abandoning does not reroll or restore the chosen offer');
 });
 
+test('first adventurer offer can be accepted by authoritative offer id', () => {
+  const room=makeRoom(),client=makeClient('first_offer_hunter');
+  const {prof}=seedPlayer(room,client,{lvl:1});
+  room.handleJobContract(client,{action:'offers',job:'adventurer'});
+  const offers=client.sent.at(-1).msg.offers;
+  assert.equal(offers.length,1);
+  assert.equal(offers[0].title,"Mara's Field Work");
+  room.handleJobContract(client,{action:'take',job:'adventurer',offerId:offers[0].id});
+  assert.equal(prof.jobContract.title,"Mara's Field Work");
+  assert.equal(prof.jobContract.type,'kill');
+  assert.equal(client.sent.some(e=>e.type==='profile'&&e.msg.jobContract&&e.msg.jobContract.title==="Mara's Field Work"),true);
+  assert.equal(client.sent.at(-1).type,'progressionResult');
+  assert.equal(client.sent.at(-1).msg.ok,true);
+  assert.equal(client.sent.at(-1).msg.action,'take');
+});
+
 test('job offers omit locked objectives and refresh only after their timer', () => {
   const room=makeRoom(),client=makeClient('offer_timer');
   const {prof}=seedPlayer(room,client,{lvl:2});prof.adventurerContractsCompleted=1;
@@ -1071,6 +1087,7 @@ test('claiming the first adventurer contract permanently unlocks the rotating po
   assert.equal(jobSummary.msg.title, "Mara's Field Work");
   assert.equal(jobSummary.msg.questType, 'job');
   assert.equal(jobSummary.msg.jobXp > 0, true);
+  assert.match(jobSummary.msg.nextStep, /D-Rank Prep/);
   assert.equal(jobSummary.msg.items.some(it => it.id === I.IRON_SWORD), true);
   assert.equal(prof.questHistory[0].title, "Mara's Field Work");
   assert.equal(prof.questHistory[0].outcome, 'completed');
@@ -1159,6 +1176,7 @@ test('NPC chain acceptance progress rewards and milestones are server-owned', ()
   assert.equal(summary.msg.gold > 0, true);
   assert.equal(summary.msg.xp > 0, true);
   assert.equal(summary.msg.jobXp, 12);
+  assert.match(summary.msg.nextStep, /Speak to Mara again/);
   assert.equal(prof.questHistory[0].title, 'First Hands');
   assert.equal(prof.questHistory[0].outcome, 'completed');
   assert.equal(prof.questHistory[0].source, 'story');
@@ -9689,6 +9707,7 @@ test('regional contract acceptance progress and claim are server-owned', () => {
   assert.equal(summary.msg.gold > 0, true);
   assert.equal(summary.msg.xp > 0, true);
   assert.equal(summary.msg.claimLocation, 'Guild Board');
+  assert.match(summary.msg.nextStep, /Guild Contracts|Fellowship/);
   assert.equal(prof.questHistory[0].title, active.title);
   assert.equal(prof.questHistory[0].outcome, 'completed');
   assert.equal(prof.questHistory[0].source, 'guild');

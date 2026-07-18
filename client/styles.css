@@ -547,6 +547,12 @@
   .contract-tags{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 2px}
   .contract-tag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border:1px solid rgba(159,216,255,.28);border-radius:4px;background:rgba(9,24,38,.58);color:#bfe9ff;font-size:9px;line-height:18px;white-space:nowrap}
   .contract-best{display:block;margin-top:2px;color:#d8f8c8;line-height:1.25}
+  .shoprow.job-offer-card{align-items:start;grid-template-columns:minmax(0,1fr) auto;gap:12px;border-bottom-color:rgba(159,216,255,.16);background:linear-gradient(90deg,rgba(79,216,255,.055),rgba(0,0,0,0))}
+  .shoprow.job-offer-card>b{display:none}
+  .job-offer-main{display:grid;gap:7px;min-width:0}.job-offer-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.job-offer-head>b{width:auto!important;text-align:left!important;color:#fff3c4!important;font-size:14px}.job-offer-head em{font-style:normal;font-size:8px;letter-spacing:1.3px;text-transform:uppercase;padding:3px 6px;border:1px solid rgba(159,216,255,.32);border-radius:4px;color:#9fd7ff;background:rgba(8,20,34,.7)}.job-offer-head em.quick{color:#b9f6c6;border-color:rgba(134,239,172,.38)}.job-offer-head em.demanding{color:#ffc391;border-color:rgba(251,146,60,.42)}
+  .job-offer-main p{margin:0;color:#cbd6e4;font-size:11px;line-height:1.35}.job-offer-need{display:flex;align-items:baseline;gap:6px;color:#9fb0c6;font-size:10px}.job-offer-need>b{width:auto!important;color:#ffd24a!important;font-size:17px}.job-offer-need i{margin-left:auto;font-style:normal;color:#7f93aa}
+  .job-offer-loop{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.job-offer-loop span,.job-offer-rewards span{padding:6px 7px;border:1px solid rgba(255,255,255,.09);border-radius:5px;background:rgba(0,0,0,.18)}.job-offer-loop small{display:block;margin-bottom:3px;color:#7dd3fc;font-size:7px;letter-spacing:1.4px}.job-offer-loop b{display:block;width:auto!important;text-align:left!important;color:#e8f5ff!important;font-size:10px;line-height:1.25}
+  .job-offer-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.job-offer-rewards span{color:#b9c8d8;font-size:10px}.job-offer-rewards b{width:auto!important;color:#ffd24a!important;text-align:left!important;font-size:13px}
   .shoprow b{color:#ffd24a;width:48px;text-align:right}
   #qpanel.commerce .shoprow b,#qpanel.management .shoprow b{width:auto}
   #qpanel.management .shoprow .utility-icon{width:30px;text-align:center}
@@ -753,7 +759,9 @@
   #currentquest .qaction{max-width:100%;font-family:inherit;font-size:9px;line-height:1.15;letter-spacing:1.5px;padding:6px 9px;border:1px solid rgba(255,210,74,.58);border-radius:5px;background:rgba(35,27,12,.92);color:#ffe89a;box-shadow:inset 0 0 12px rgba(255,210,74,.08);cursor:pointer;white-space:normal;overflow-wrap:anywhere}
   #currentquest .qaction:hover{background:rgba(61,45,16,.96);color:#fff3c4}
   #currentquest .objective-list{display:grid;gap:7px;margin-top:6px;text-shadow:none}
+  #currentquest .objective-list.next-best-list{gap:0;margin-top:5px}
   #currentquest .objective-line{display:grid;grid-template-columns:48px minmax(0,1fr) minmax(58px,max-content);gap:7px;align-items:center;min-width:0;padding:7px 0;border-top:1px solid rgba(255,210,74,.14)}
+  #currentquest .objective-line.next-best{padding:4px 0 0;border-top:0}
   #currentquest .objective-line:first-child{border-top:0}
   #currentquest .olabel{font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:#ffd24a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #currentquest .obody{display:grid;gap:2px;min-width:0}
@@ -767,6 +775,7 @@
   #currentquest .objective-line.guild .olabel{color:#ffd36b}
   #currentquest .objective-line.aegis .olabel{color:#d7b5ff}
   #currentquest .objective-line.prep .olabel{color:#7dd3fc}
+  #currentquest .objective-line.transition .olabel{color:#ffdf7e}
   #currentquest .objective-line.prep .obar i{background:linear-gradient(90deg,#38bdf8,#9ad26b)}
   #currentquest .objective-line.progression .olabel{color:#9ad26b}
   #activitytracker{position:fixed;right:14px;top:402px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:none;color:#dcecff;background:linear-gradient(135deg,rgba(8,18,28,.9),rgba(18,12,9,.86));border:1px solid rgba(91,194,255,.48);box-shadow:0 0 16px rgba(69,170,255,.14);border-radius:7px;padding:9px 12px}
@@ -1015,6 +1024,10 @@
     #qpanel.management .shoprow.utilityrow .qbtn{grid-column:2;justify-self:start}
     #qpanel.management .shoprow{grid-template-columns:32px minmax(0,1fr);align-items:start}
     #qpanel.management .shoprow .qbtn{grid-column:2;justify-self:start}
+    #qpanel.management .shoprow.job-offer-card{grid-template-columns:minmax(0,1fr)}
+    #qpanel.management .shoprow.job-offer-card .qbtn{grid-column:1;justify-self:start}
+    .job-offer-loop,.job-offer-rewards{grid-template-columns:1fr}
+    .job-offer-need{flex-wrap:wrap}.job-offer-need i{margin-left:0;width:100%}
     #locationhud{top:8px;left:8px;min-width:0;width:190px;max-width:34vw;padding:7px 9px}
     #locationhud .zone{font-size:11px;letter-spacing:1.3px}
     #locationhud .meta{display:none}

@@ -2596,6 +2596,8 @@ function updateLandMinimap(){
   }
   if(mapUtility&&overworldActivity){
     const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z)||miniMap&&!worldMap&&!nearPlayer(s))return;const x=mapPx(s.x),z=mapPz(s.z);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
+    const jobTarget=jobContractGuidanceTarget();
+    if(jobTarget)dynamic(jobTarget.target,'#9fd7ff',5);
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
     dynamic(overworldActivity.encounter,overworldActivity.encounter&&overworldActivity.encounter.type==='wounded_hunter'?'#7edc9a':'#ff7b57',4);
     dynamic(overworldActivity.gateBreach,'#ff2f2f',5);
@@ -3808,6 +3810,38 @@ function townRouteTo(target, mid='north'){
   const midZ=mid==='south'?TOWN.TC+7:TOWN.TC-5;
   return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:midZ},target];
 }
+function jobContractTargetLabel(c){
+  if(!c)return 'Contract marker';
+  if(jobContractReady())return 'Job Board';
+  if(c.targetName)return c.targetName;
+  if(c.location)return c.location;
+  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Town Shrine'};
+  return labels[c.type]||'Contract marker';
+}
+function jobContractRouteTo(target){
+  const northGate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  const outside=target&&Number.isFinite(target.x)&&Number.isFinite(target.z)&&!isTownLand(Math.floor(target.x),Math.floor(target.z));
+  return outside
+    ? [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},northGate,target]
+    : townRouteTo(target,'north');
+}
+function jobContractGuidanceTarget(){
+  const c=clampJobContract(jobContract);
+  if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
+  if(jobContractReady())return {kind:'job-claim',color:0xffd24a,target:HUB.jobs,route:townRouteTo(HUB.jobs,'north')};
+  let target=null;
+  if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))target={x:c.targetX,z:c.targetZ};
+  else if(c.type==='farm')target=HUB.farm;
+  else if(c.type==='cook'||c.type==='sell')target=c.type==='sell'?tavernGuidanceTarget():HUB.tavern;
+  else if(c.type==='smith'||c.type==='repair'||c.type==='upgrade'||c.type==='salvage')target=HUB.smith;
+  else if(c.type==='meditate')target=HUB.shrine;
+  else if(c.type==='mine'||c.type==='cave_survey'||c.type==='ancient_map'||c.type==='treasure')target=HUB.quarry;
+  else if(c.type==='gate')target=gate?{x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  else if(c.type==='kill'||c.type==='hunt')target=firstHandsLoggingTarget();
+  if(!target)return null;
+  const color=c.type==='farm'?0x86efac:c.type==='cook'||c.type==='sell'?0xffd24a:c.type==='smith'||c.type==='repair'||c.type==='upgrade'||c.type==='salvage'?0xffb45e:c.type==='meditate'?0x7dd3fc:0x9fd7ff;
+  return {kind:'job-'+c.type,color,target,route:jobContractRouteTo(target),label:jobContractTargetLabel(c)};
+}
 function maraQuestGuidanceTarget(q){
   if(!q || q.source==='guardian') return null;
   const northGate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
@@ -3905,6 +3939,8 @@ function guidanceTargetInfo(){
       if(maraTarget) return maraTarget;
     }
   }
+  const jobTarget=jobContractGuidanceTarget();
+  if(jobTarget)return jobTarget;
   if(!isTownLand(Math.floor(player.pos.x), Math.floor(player.pos.z))) return null;
   const serverTarget=serverObjectiveGuidanceTarget(activeServerObjectiveForGuidance());
   if(serverTarget)return serverTarget;

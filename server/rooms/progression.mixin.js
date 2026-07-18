@@ -578,7 +578,13 @@ class ProgressionMixin {
       if (contractJob !== 'adventurer' && contractJob !== rec.prof.job) return this.progressionReject(client, 'jobContract', 'job');
       const offerId=m&&typeof m.offerId==='string'?m.offerId:'';
       if(offerId){
-        const offers=this.jobContractOffers(rec,contractJob),offer=offers.find(c=>c.id===offerId&&Date.now()<(c.expiresAt||0));
+        const board=rec.prof.jobContractOfferBoards&&rec.prof.jobContractOfferBoards[contractJob];
+        const cached=[
+          ...(Array.isArray(rec.prof.jobContractOffers)?rec.prof.jobContractOffers:[]),
+          ...(board&&Array.isArray(board.offers)?board.offers:[]),
+        ];
+        const offers=this.jobContractOffers(rec,contractJob);
+        const offer=[...offers,...cached].find(c=>c&&c.id===offerId&&Date.now()<(c.expiresAt||0));
         if(!offer)return this.progressionReject(client,'jobContract','offer');
         rec.prof.jobContract={...offer,have:0};
         rec.prof.jobContractOffers=[]; // one choice per rotation; abandon cannot become a free reroll
@@ -654,6 +660,8 @@ class ProgressionMixin {
         xp: rewardXp,
         jobXp: Math.max(0, c.rewardJobXp | 0),
         job: c.job,
+        contractType: c.type || '',
+        graduation,
         items: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
         claimLocation: 'Job Board',
         inventoryOverflow: false,
@@ -916,6 +924,9 @@ class ProgressionMixin {
       xp: q.xp | 0,
       jobXp: 12,
       job: 'adventurer',
+      contractType: q.type || '',
+      chainStep: q.chainStep | 0,
+      giver: q.giver || '',
       items: q.rewardItems || [],
       claimLocation: q.giver || 'Quest giver',
       inventoryOverflow: rewardItemOverflow,

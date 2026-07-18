@@ -3019,6 +3019,7 @@ const pendingGuildInvites={};
 function openQWin(mode='dialog'){
   if(!qOpen) SFX.uiOpen();
   qOpen=true;
+  qMode=mode;
   regionalContractsOpen=false;
   utilityPanelOpen=false;
   questLogOpen=false;
@@ -3032,7 +3033,7 @@ function openQWin(mode='dialog'){
 }
 function closeQWin(relock=true){
   if(qOpen) SFX.uiClose();
-  qOpen=false; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
+  qOpen=false; qMode=''; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
   if(relock) renderer.domElement.requestPointerLock();
   else {
     overlay.classList.remove('hidden');
@@ -3992,7 +3993,7 @@ function panelVisible(id){
   return !!(el&&!el.classList.contains('hidden'));
 }
 function continueOpenTransitionPanel(){
-  const button=document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
+  const button=document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('trainingcontinue')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
   if(button)button.click();
   setTimeout(()=>{
     if(panelVisible('rewardwin')){
@@ -5370,6 +5371,38 @@ function contractBestForHTML(c){
   const text=JOB_SYSTEM.contractBestFor?JOB_SYSTEM.contractBestFor(c):'Best when this matches what you were already planning to do.';
   return '<small class="contract-best">'+escHTML(text)+'</small>';
 }
+function jobOfferLoopHTML(offer){
+  if(!offer)return '';
+  const route=offer.targetName?offer.targetName:(offer.location||'Job objective');
+  const reward=offer.reward||'gold, Hunter XP, and profession XP';
+  const focus=offer.focus||'contract work';
+  return '<div class="job-offer-loop">'+
+    '<span><small>WHY</small><b>'+escHTML(focus)+'</b></span>'+
+    '<span><small>ROUTE</small><b>'+escHTML(route)+'</b></span>'+
+    '<span><small>PAYOFF</small><b>'+escHTML(reward)+'</b></span>'+
+  '</div>';
+}
+function jobOfferRewardHTML(offer){
+  return '<div class="job-offer-rewards">'+
+    '<span><b>'+Math.max(0,offer.rewardGold|0)+'</b> gold</span>'+
+    '<span><b>'+Math.max(0,offer.rewardXp|0)+'</b> Hunter XP</span>'+
+    '<span><b>'+Math.max(0,offer.rewardJobXp|0)+'</b> job XP</span>'+
+  '</div>';
+}
+function jobOfferCardHTML(offer){
+  const difficulty=offer.difficulty==='quick'?'quick':offer.difficulty==='demanding'?'demanding':'balanced';
+  const estimate=offer.estimate||'Flexible duration';
+  const party=offer.party||'Solo';
+  return '<div class="job-offer-main">'+
+    '<div class="job-offer-head"><b>'+escHTML(offer.title||'Job Contract')+'</b><em class="'+difficulty+'">'+escHTML(offer.difficultyLabel||offer.difficulty||'Offer')+'</em></div>'+
+    '<p>'+escHTML(offer.desc||'Complete the work order.')+'</p>'+
+    '<div class="job-offer-need"><b>'+Math.max(1,offer.need|0)+'</b><span>required</span><i>'+escHTML(estimate)+' / '+escHTML(party)+'</i></div>'+
+    contractTagHTML(offer)+
+    contractBestForHTML(offer)+
+    jobOfferLoopHTML(offer)+
+    jobOfferRewardHTML(offer)+
+  '</div>';
+}
 function jobMilestoneHTML(jobId,level){
   const state=JOB_SYSTEM.milestoneState(jobId,level),latest=state.earned[state.earned.length-1];
   const latestReward=latest&&(latest.reward||JOB_SYSTEM.milestoneReward(jobId,latest.level));
@@ -5532,12 +5565,12 @@ function openJobsUI(focusJob='', sourceTitle=''){
   }
   if(!jobContract&&jobContractOffersJob===offerJob){
     for(const offer of jobContractOffers){
-      const card=document.createElement('div');card.className='shoprow';
+      const card=document.createElement('div');card.className='shoprow job-offer-card';
       const badge=document.createElement('b');badge.style.color=offer.difficulty==='quick'?'#86efac':offer.difficulty==='demanding'?'#fb923c':'#9fd7ff';badge.textContent=(offer.difficultyLabel||offer.difficulty||'Offer').toUpperCase();card.appendChild(badge);
       const offerMeta=[offer.focus&&('Focus: '+offer.focus),offer.party&&('Party: '+offer.party),offer.reward&&('Hook: '+offer.reward)].filter(Boolean).join(' - ');
       const text=document.createElement('span');text.innerHTML='<b>'+escHTML(offer.title)+'</b> · '+offer.need+' required<br><small>'+escHTML(offer.desc)+'</small><br><small style="color:#9fb0c6">'+escHTML(offer.estimate||'Flexible duration')+' · '+escHTML(offer.location||'Job objective')+'</small><br><small style="color:#d9b66f">Reward: '+offer.rewardGold+' gold, '+offer.rewardXp+' Hunter XP, '+offer.rewardJobXp+' job XP</small>';card.appendChild(text);
       if(offerMeta){const small=text.querySelectorAll('small')[1];if(small)small.textContent+=' - '+offerMeta;}
-      text.innerHTML=text.innerHTML.replace(' required<br>',' required'+contractTagHTML(offer)+'<br>').replace('<br><small style="color:#9fb0c6">','<br>'+contractBestForHTML(offer)+'<br><small style="color:#9fb0c6">');
+      text.innerHTML=jobOfferCardHTML(offer);
       card.appendChild(qBtn('ACCEPT',()=>{
         if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:offer.id});return;}
         jobContract={...offer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
