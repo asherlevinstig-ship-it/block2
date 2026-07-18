@@ -3017,6 +3017,7 @@ let dungeonLobbyState=null;
 let dungeonMatchmakingState={listings:[]};
 const pendingGuildInvites={};
 function openQWin(mode='dialog'){
+  setTownMapMovementOverlay(false);
   if(!qOpen) SFX.uiOpen();
   qOpen=true;
   qMode=mode;
@@ -3032,6 +3033,7 @@ function openQWin(mode='dialog'){
   refreshPlayUi();
 }
 function closeQWin(relock=true){
+  setTownMapMovementOverlay(false);
   if(qOpen) SFX.uiClose();
   qOpen=false; qMode=''; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
   if(relock) renderer.domElement.requestPointerLock();
@@ -4258,6 +4260,11 @@ function weatherEntryStatus(e){
 }
 let cartographerState=null;
 let townMapAnimation=0;
+let townMapMovementOverlay=false;
+function setTownMapMovementOverlay(on){
+  townMapMovementOverlay=!!on;
+  document.body.classList.toggle('town-map-open', townMapMovementOverlay);
+}
 function townMapLayout(){
   const layout=globalThis.BlockcraftTownLayout||{};
   return {
@@ -4281,11 +4288,6 @@ function drawTownMapCanvas(canvas){
   ctx.strokeStyle='rgba(238,226,190,.48)';ctx.lineWidth=10;ctx.lineCap='round';
   let a=xy(tc,min+8),b=xy(tc,max-8);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
   a=xy(min+8,tc);b=xy(max-8,tc);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
-  const roads=[
-    [hub.guild,hub.jobs],[hub.jobs,hub.guide],[hub.guild,hub.roost],[hub.guild,hub.shrine],[hub.jobs,hub.tavern],[hub.jobs,hub.skyport],[hub.jobs,hub.marketX?{x:hub.marketX,z:tc}:null],
-  ].filter(r=>r[0]&&r[1]);
-  ctx.strokeStyle='rgba(216,193,139,.55)';ctx.lineWidth=4;
-  for(const [from,to] of roads){const p1=xy(from.x,from.z),p2=xy(to.x,to.z);ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();}
   const drawPoint=(label,x,z,color='#9ad26b',r=6)=>{
     const p=xy(x,z);ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#f8fbff';ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(label,p.x,p.y-11);
@@ -4307,6 +4309,10 @@ function drawTownMapCanvas(canvas){
 }
 function openTownMapUI(){
   openQWin('management');qpanelEl.innerHTML='';
+  setTownMapMovementOverlay(true);
+  lockFallback=true;
+  locked=true;
+  refreshPlayUi();
   const h=document.createElement('h2');h.textContent='TOWN MAP';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='TOWN OF BEGINNINGS - LIVE POSITION';qpanelEl.appendChild(sub);
   const panel=document.createElement('div');panel.className='town-map-panel';
@@ -4318,7 +4324,7 @@ function openTownMapUI(){
   const tick=()=>{if(!canvas.isConnected)return;drawTownMapCanvas(canvas);townMapAnimation=requestAnimationFrame(tick);};
   tick();
 }
-globalThis.BlockcraftTownMap={open:openTownMapUI};
+globalThis.BlockcraftTownMap={open:openTownMapUI,isMovementOverlay:()=>townMapMovementOverlay};
 function showTreasureParchment(map,title='TREASURE MAP'){
   if(!map)return;
   let el=document.getElementById('treasureparchment');

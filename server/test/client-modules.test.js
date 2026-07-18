@@ -275,8 +275,12 @@ test('Town Map is granted by Orin and opens as a live position item', () => {
   assert.match(room, /townMapClaimed/);
   assert.match(store, /townMapClaimed/);
   assert.match(menus, /function openTownMapUI\(\)/);
-  assert.match(menus, /BlockcraftTownMap=\{open:openTownMapUI\}/);
+  assert.match(menus, /BlockcraftTownMap=\{open:openTownMapUI,isMovementOverlay:\(\)=>townMapMovementOverlay\}/);
+  assert.match(menus, /setTownMapMovementOverlay\(true\)/);
+  assert.match(menus, /lockFallback=true;\s*locked=true;\s*refreshPlayUi\(\)/);
+  assert.doesNotMatch(menus, /const roads=\[/);
   assert.match(menus, /drawTownMapCanvas\(canvas\)/);
+  assert.match(styles, /body\.town-map-open #crosshair\{display:none\}/);
   assert.match(menus, /action==='cartographer'/);
   assert.match(combat, /heldRC && heldRC\.id===I\.TOWN_MAP/);
   assert.match(networking, /room\.onMessage\('townMapClaimed'/);
