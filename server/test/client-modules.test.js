@@ -236,6 +236,20 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   assert.match(combat, /vill\.role==='scholar'/);
   assert.match(combat, /Dungeon Shards open Gates/);
   assert.match(combat, /vill\.role==='skyship_attendant'/);
+  assert.match(world, /Rabbits, deer, and boars can rarely drop pet collars/);
+});
+
+test('wild pet familiar discovery is taught through hunting and familiar UI', () => {
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const jobs = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'job-system.js'), 'utf8');
+  assert.match(networking, /PET_FAMILIAR_COLLAR_IDS/);
+  assert.match(networking, /Pet collar found:/);
+  assert.match(networking, /rabbits, deer, and boars outside town can rarely drop pet collars/);
+  assert.match(networking, /press <b>K<\/b> to call your familiar/);
+  assert.match(menus, /Pet collars can drop from animals outside town/);
+  assert.match(menus, /COLLARS<\/b> hunt wildlife outside town/);
+  assert.match(jobs, /Rare pet collars can drop from rabbits, deer, and boars/);
 });
 
 test('Town systems use district anchors instead of stale compact-town coordinates', () => {

@@ -365,6 +365,27 @@ function receiveRewardItem(it){
   inv[slot]=stack;refreshHUD();
   return {stack,slot,baseline};
 }
+const PET_FAMILIAR_COLLAR_IDS=new Set([I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR]);
+let nextPetFamiliarHuntHintAt=0;
+function petFamiliarCollarDrops(items){
+  return Array.isArray(items)?items.filter(it=>it&&PET_FAMILIAR_COLLAR_IDS.has(it.id)&&ITEMS[it.id]):[];
+}
+function teachPetFamiliarFromHunt(items){
+  const collars=petFamiliarCollarDrops(items);
+  if(collars.length){
+    const names=collars.map(it=>ITEMS[it.id].name+' x'+Math.max(1,it.count|0||1)).join(', ');
+    sysMsg('<b>Pet collar found:</b> '+escHTML(names)+'. Put it on your hotbar, use it to bind the pet, then press <b>K</b> to call your familiar.',{tier:'major',title:'Familiar Found'});
+    eventFeed('[Familiar]','Pet collar found: '+names+'. Use it from the hotbar, then press K.',{key:'familiar:collar:'+names,cooldown:0});
+    return true;
+  }
+  const now=Date.now(),hasFamiliar=Array.isArray(COMPANIONS&&COMPANIONS.familiarUnlocks)&&COMPANIONS.familiarUnlocks.length>0;
+  if(!hasFamiliar&&now>=nextPetFamiliarHuntHintAt){
+    nextPetFamiliarHuntHintAt=now+180000;
+    sysMsg('<b>Familiar hint:</b> rabbits, deer, and boars outside town can rarely drop pet collars. Use a collar from your hotbar, then press <b>K</b> to call the pet.','minor');
+    eventFeed('[Familiar]','Wild animals can rarely drop pet collars. Use one from the hotbar, then press K.',{key:'familiar:hunt-hint',cooldown:180000});
+  }
+  return false;
+}
 
 const GEAR_REWARDS=createGearRewardPresenter({
   document,items:ITEMS,gearSystem:GEAR_SYSTEM,itemName:itemNameWithPlus,toolMaxDur,
@@ -1539,6 +1560,7 @@ function netAttachRoom(room,name,client){
         jobContractProgress('event', 1, 0);
       }
       if(m.source==='hunt'){
+        teachPetFamiliarFromHunt(m.items);
         const meat=(m.items||[]).find(it=>it&&it.id===I.MONSTER_MEAT);
         if(meat){
           sysMsg('Hunted food acquired: <b>Monster Meat x'+(meat.count||1)+'</b>','minor');

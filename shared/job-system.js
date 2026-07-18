@@ -125,7 +125,7 @@
     treasure:['Start a treasure map with Orin or find a buried cache discovery.','Follow the gold map clue and press G at the marked site.','Completing the route or recovering a buried cache advances the contract.'],
     farm:['Till soil, plant seeds, and harvest mature crops.','General farm contracts accept all three actions.','Harvest Basket requires mature wheat.'],
     cook:['Gather ingredients and prepare meals through crafting or cooking stations.','Completed food items advance the contract.','Return to the board when ready.'],
-    hunt:['Find wild animals outside town.','Defeat passive wildlife to gather meat for the kitchen.','Hostile monsters do not count for Cook hunting contracts.'],
+    hunt:['Find wild animals outside town.','Defeat passive wildlife to gather meat for the kitchen.','Rare pet collars can drop from rabbits, deer, and boars; use one from your hotbar, then press K.','Hostile monsters do not count for Cook hunting contracts.'],
     sell:['Prepare food items.','Sell them at the tavern counter.','Each accepted food item advances the contract.'],
     smith:['Smelt ingots, craft tools or armor, or make repair kits.','The work counts when the item is completed.','Return to the board when ready.'],
     repair:['Obtain Repair Kits.','Use one on a damaged tool.','Each successful repair advances the contract.'],

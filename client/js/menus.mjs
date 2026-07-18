@@ -5081,10 +5081,10 @@ function openDragonBondUI(){
   }
   const fh=document.createElement('h2'); fh.textContent='FAMILIAR BONDS'; qpanelEl.appendChild(fh);
   const fint=document.createElement('p'); fint.className='qtext familiar-intro';
-  fint.innerHTML='<b>One familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Familiars grow through <b>Bond XP</b> earned only while they are active.';
+  fint.innerHTML='<b>One familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Pet collars can drop from animals outside town; put one on your hotbar and use it to bind that pet. Familiars grow through <b>Bond XP</b> earned only while they are active.';
   qpanelEl.appendChild(fint);
   const fguide=document.createElement('div'); fguide.className='familiar-guide';
-  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active familiar only</span>';
+  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>COLLARS</b> hunt wildlife outside town</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active familiar only</span>';
   qpanelEl.appendChild(fguide);
   const fgrid=document.createElement('div'); fgrid.className='bondgrid familiargrid'; qpanelEl.appendChild(fgrid);
   const familiarCards=familiarBondCards();
@@ -5111,7 +5111,7 @@ function openDragonBondUI(){
     const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
     if(bound) actions.appendChild(qBtn(active?'DISMISS':'SUMMON',()=>{cycleFamiliar(active?'':f.id);openDragonBondUI();}));
     else if(f.bindingSlot>=0) actions.appendChild(qBtn('BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(f.bindingSlot);setTimeout(openDragonBondUI, NET.on?180:0);}));
-    else if(f.wild) actions.appendChild(qBtn('FIND OUTSIDE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source))));
+    else if(f.wild) actions.appendChild(qBtn('FIND OUTSIDE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source)+'. Hunt the animal outside town, then use the collar from your hotbar and press <b>K</b>.')));
     else actions.appendChild(qBtn('VIEW RECIPE',()=>{closeQWin();openCraftingFromNpc('companions');}));
     if(!bound) actions.appendChild(qBtn('FIND SOURCE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source))));
     fgrid.appendChild(card);
