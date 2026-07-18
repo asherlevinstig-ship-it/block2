@@ -2,10 +2,10 @@
 // area damage helpers, and kill / mine / loot rewards. Lifted verbatim out of
 // GameRoom.js and mixed into its prototype.
 const {
-  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_LOOT, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
+  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_BASE_KIND, ANIMAL_LOOT, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
   DANGER_RINGS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_TYPE_SET,
-  I, KEY_LOOT, MINE_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
-  keyForRank, spriteForageChance, spriteBonusDrops,
+  I, KEY_LOOT, MINE_DROPS, PET_FAMILIAR_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
+  keyForRank, spriteForageChance, spriteBonusDrops, dogExtraMeatChance, wolfHostileXpBonus,
 } = require('./constants');
 const { State, Player, Mob, Team, Gate } = require('../schema');
 const { TeamManager } = require('../teams');
@@ -721,6 +721,16 @@ class CombatMixin {
     mob.hp -= applied;
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
+  rollPetFamiliarDrop(client, animalKind, ring = 0) {
+    const base = ANIMAL_BASE_KIND[animalKind] || animalKind;
+    const drop = PET_FAMILIAR_DROPS[base];
+    if (!drop) return null;
+    const rec = this.profileFor(client);
+    if (rec && Array.isArray(rec.prof.familiarUnlocks) && rec.prof.familiarUnlocks.includes(drop.familiar)) return null;
+    if (rec && this.profileItemCount(rec.prof, drop.item) > 0) return null;
+    const chance = Math.min(.16, drop.chance + Math.max(0, ring | 0) * .018);
+    return Math.random() < chance ? { id: drop.item, count: 1 } : null;
+  }
   // Tell the attacker the actual damage their hit dealt, so the client can float a
   // number over the mob. Server-authoritative — no client-side damage prediction.
   emitDamageNumber(client, mob, damage, crit, lethal=mob.hp-damage<=0) {
@@ -848,7 +858,19 @@ class CombatMixin {
     else if (client) {
       const ring = dgn ? 0 : Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
       let items = dgn ? [] : this.rollOverworldKeyDrops(ring);
-      if (!dgn && this.isAnimalKind(kind)) items = (ANIMAL_LOOT[kind] || [{ id: I.MONSTER_MEAT, count: 1 }]).map(it => ({ ...it }));
+      if (!dgn && this.isAnimalKind(kind)) {
+        items = (ANIMAL_LOOT[kind] || [{ id: I.MONSTER_MEAT, count: 1 }]).map(it => ({ ...it }));
+        const petDrop = this.rollPetFamiliarDrop(client, kind, ring);
+        if (petDrop) items.push(petDrop);
+        if (this.activeFamiliarIs && this.activeFamiliarIs(client, 'dog')) {
+          const dogLevel = this.familiarPowerLevel(client, 'dog');
+          if (Math.random() < dogExtraMeatChance(dogLevel)) {
+            items.push({ id: I.MONSTER_MEAT, count: 1 });
+            this.awardFamiliarXp(client, 'dog', 12, 'trail_nose');
+            this.awardFamiliarXp(client, 'dog', 1, 'extra_meat');
+          }
+        }
+      }
       else if (!dgn && killedMeta.bandit) {
         items.push({ id: I.COAL, count: 1 + Math.floor(ring / 2) });
         if (ring >= 1 || Math.random() < .3) items.push({ id: I.IRON_INGOT, count: 1 });
@@ -878,7 +900,14 @@ class CombatMixin {
       }
       const animal = this.isAnimalKind(kind);
       const elite=!!killedMeta.elite||!!killedMeta.banditCaptain;
-      this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp: threatXpForRing(ring, { elite, animal }), items, dangerRing: ring, elite });
+      let xp = threatXpForRing(ring, { elite, animal });
+      if (!animal && this.activeFamiliarIs && this.activeFamiliarIs(client, 'wolf')) {
+        const bonus = Math.max(1, Math.round(xp * wolfHostileXpBonus(this.familiarPowerLevel(client, 'wolf'))));
+        xp += bonus;
+        this.awardFamiliarXp(client, 'wolf', bonus, 'hostile_xp_bonus');
+        this.awardFamiliarXp(client, 'wolf', 1, 'hunter_howl');
+      }
+      this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp, items, dangerRing: ring, elite });
       if (animal) this.recordHuntProgress(client);
       else this.recordKillProgress(client, true);
       if (killedMeta.eventCaravan && typeof this.onCaravanEventMobKilled === 'function')

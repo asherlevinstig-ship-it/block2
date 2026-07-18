@@ -597,6 +597,11 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(menusSource, /familiarBindingSlot\(def\.sigil\)/);
   assert.match(menusSource, /Daily Bond:/);
   assert.match(menusSource, /BIND '\+def\.name\.toUpperCase\(\)/);
+  assert.match(menusSource, /Rare Cat Collar from rabbits and hares outside town/);
+  assert.match(menusSource, /Rare Dog Collar from deer and stags outside town/);
+  assert.match(menusSource, /Rare Wolf Collar from boars outside town/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8'), /cat:\{ name:'Cat', sigil:I\.CAT_COLLAR/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8'), /ITEMS\[I\.CAT_COLLAR\]=\{name:'Cat Collar'/);
   assert.match(runtimeSource, /Caravan Under Attack/);
   assert.match(runtimeSource, /utilityEquipped\('compass'\)/);
   assert.match(runtimeSource, /mapUtility&&overworldActivity/);

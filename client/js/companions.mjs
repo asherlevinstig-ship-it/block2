@@ -1685,8 +1685,10 @@ function soloBreathDamage(ox,oy,oz,dir,type){
 }
 
 // ---------------- familiar: Shade (utility + defense shadow companion) ----------------
+const FAMILIAR_IDS=['shade','fang','mote','sprite','cat','dog','wolf'];
+const DEFAULT_FAMILIAR_XP=Object.freeze({shade:0,fang:0,mote:0,sprite:0,cat:0,dog:0,wolf:0});
 let familiarUnlocks=[];          // bound familiar kinds (persisted in the profile)
-let familiarXp={shade:0,fang:0,mote:0,sprite:0};
+let familiarXp={...DEFAULT_FAMILIAR_XP};
 let familiarChallenges={};
 let activeFamiliar='';           // currently summoned familiar kind ('' = none)
 function familiarPowerLevel(kind){return FAMILIAR_SYSTEM.bondLevel(familiarXp[kind]||0);}
@@ -1698,6 +1700,7 @@ function shadeTier(lvl){ return famTier(lvl); }
 function shadeRankCount(lvl){ return SHADE_RANK_N[shadeTier(lvl)]; }
 function shadeBodyCount(lvl){ return Math.min(SHADE_VISIBLE_CAP, shadeRankCount(lvl)); }
 function fangBodyCount(lvl){ return Math.min(3, 1+Math.floor(famTier(lvl)/2)); }   // 1..3 hounds
+function petBodyCount(){ return 1; }
 const fangDamage=FAMILIAR_SYSTEM.fangDamage;
 function spriteBodyCount(lvl){ return Math.min(3, 1+Math.floor(famTier(lvl)/2)); }   // 1..3 sprites
 const spriteForageChance=FAMILIAR_SYSTEM.spriteForageChance;
@@ -1762,6 +1765,41 @@ function makeFangBody(){
   grp.userData={ body, head, legs, tail };
   return grp;
 }
+function makePetBody(kind){
+  const style=kind==='cat'
+    ? {fur:0x6c6b66,furL:0xd7c7a7,furD:0x343436,eye:0x9ad26b,scale:[.72,.72,.72],tail:.44,ears:.18}
+    : kind==='wolf'
+      ? {fur:0x59636f,furL:0x9aa6b2,furD:0x26303a,eye:0x8bd7ff,scale:[.92,.9,.96],tail:.42,ears:.2}
+      : {fur:0x7a4a25,furL:0xd0a066,furD:0x3a2412,eye:0xffd24a,scale:[.86,.82,.88],tail:.5,ears:.14};
+  const grp=new THREE.Group();
+  const fur=new THREE.MeshLambertMaterial({color:style.fur});
+  const furL=new THREE.MeshLambertMaterial({color:style.furL});
+  const furD=new THREE.MeshLambertMaterial({color:style.furD});
+  const eye=new THREE.MeshBasicMaterial({color:style.eye});
+  const box=(sx,sy,sz,px,py,pz,m,parent)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m); me.position.set(px,py,pz); (parent||grp).add(me); return me; };
+  const hip=0.38;
+  const body=box(.34,.28,.62,0,hip,0,fur); body.userData.base=hip;
+  const head=new THREE.Group(); head.position.set(0,hip+.08,.36); grp.add(head);
+  box(.3,.26,.28,0,0,.12,fur,head);
+  box(.16,.12,.2,0,-.04,.32,furL,head);
+  box(.11,.05,.07,0,-.1,.42,furD,head);
+  box(.05,.05,.03,-.08,.03,.25,eye,head); box(.05,.05,.03,.08,.03,.25,eye,head);
+  box(.07,style.ears,.05,-.1,.18,.04,fur,head); box(.07,style.ears,.05,.1,.18,.04,fur,head);
+  const legs=[];
+  for(const [lx,lz] of [[-.1,.2],[.1,.2],[-.1,-.22],[.1,-.22]]){
+    const piv=new THREE.Group(); piv.position.set(lx,hip-.03,lz); grp.add(piv);
+    box(.1,.32,.1,0,-.16,0,furD,piv);
+    legs.push(piv);
+  }
+  const tail=new THREE.Group(); tail.position.set(0,hip+.08,-.32); grp.add(tail);
+  box(.09,.09,style.tail,0,.05,-style.tail*.5,fur,tail);
+  grp.scale.set(style.scale[0],style.scale[1],style.scale[2]);
+  grp.userData={body,head,legs,tail,petKind:kind};
+  return grp;
+}
+const makeCatBody=()=>makePetBody('cat');
+const makeDogBody=()=>makePetBody('dog');
+const makeWolfBody=()=>makePetBody('wolf');
 function makeShadeBody(){
   const grp=new THREE.Group();
   const dark=new THREE.MeshBasicMaterial({color:0x0a0712, transparent:true, opacity:.58, depthWrite:false});
@@ -1786,8 +1824,11 @@ const FAMILIARS={
   fang: { name:'Fang',  sigil:I.FANG_TOTEM,   make:makeFangBody,  count:fangBodyCount,  combat:true },
   mote: { name:'Mote',  sigil:I.MOTE_CHARM,   make:makeMoteBody,  count:moteBodyCount,  combat:false },
   sprite:{ name:'Sprite', sigil:I.FORAGE_CHARM, make:makeSpriteBody, count:spriteBodyCount, combat:false },
+  cat:{ name:'Cat', sigil:I.CAT_COLLAR, make:makeCatBody, count:petBodyCount, combat:false },
+  dog:{ name:'Dog', sigil:I.DOG_COLLAR, make:makeDogBody, count:petBodyCount, combat:false },
+  wolf:{ name:'Wolf', sigil:I.WOLF_COLLAR, make:makeWolfBody, count:petBodyCount, combat:false },
 };
-const FAMILIAR_BY_SIGIL={ [I.SHADOW_SIGIL]:'shade', [I.FANG_TOTEM]:'fang', [I.MOTE_CHARM]:'mote', [I.FORAGE_CHARM]:'sprite' };
+const FAMILIAR_BY_SIGIL={ [I.SHADOW_SIGIL]:'shade', [I.FANG_TOTEM]:'fang', [I.MOTE_CHARM]:'mote', [I.FORAGE_CHARM]:'sprite', [I.CAT_COLLAR]:'cat', [I.DOG_COLLAR]:'dog', [I.WOLF_COLLAR]:'wolf' };
 const familiarRender={};          // ownerKey -> { kind, grp, bodies:[{mesh,phase}] }
 function clearFamiliarRender(key){ const s=familiarRender[key]; if(s){ scene.remove(s.grp); delete familiarRender[key]; } }
 function ensureFamiliarRender(key, kind, count){
@@ -1819,6 +1860,7 @@ function tickFamiliars(now, dt){
     if(o.kind==='fang') tickFangPack(s,o,n,sdt,t,k==='local');
     else if(o.kind==='mote') tickMoteSwarm(s,o,n,sdt,t);
     else if(o.kind==='sprite') tickSpriteSwarm(s,o,n,sdt,t);
+    else if(o.kind==='cat'||o.kind==='dog'||o.kind==='wolf') tickPetFollow(s,o,n,sdt,t,k==='local');
     else tickShadeSwarm(s,o,n,sdt,t,k==='local');
   }
   if(!NET.on && activeFamiliar==='fang') tickSoloFang(now);
@@ -1834,7 +1876,7 @@ function tickFamiliarTierEvolution(){
   familiarTierSeen=tier;
   if(!activeFamiliar)return;
   const ability=FAMILIAR_SYSTEM.TIER_ABILITIES[activeFamiliar][tier];
-  const col=activeFamiliar==='shade'?[.55,.25,.9]:activeFamiliar==='fang'?[1,.75,.25]:activeFamiliar==='mote'?[.55,1,.35]:[1,.9,.35];
+  const col=activeFamiliar==='shade'?[.55,.25,.9]:activeFamiliar==='fang'?[1,.75,.25]:activeFamiliar==='mote'?[.55,1,.35]:activeFamiliar==='cat'?[.62,.84,.45]:activeFamiliar==='dog'?[1,.64,.28]:activeFamiliar==='wolf'?[.55,.82,1]:[1,.9,.35];
   burst(player.pos.x,player.pos.y+1,player.pos.z,col,36,3.5,3,.8);
   if(typeof SFX!=='undefined'&&SFX.boom)SFX.boom();
   sysMsg('<b>'+FAMILIARS[activeFamiliar].name+' evolved — Tier '+(tier+1)+':</b> '+ability);
@@ -1843,6 +1885,9 @@ let familiarIdleAt=0, familiarReactionAt=0;
 const FAMILIAR_IDLE_LINES={
   mote:['Mote hums softly, warming the air around you.','Mote circles once, checking old wounds that are no longer there.'],
   sprite:['Sprite counts your supplies. Twice.','Sprite flits toward the road, then remembers it is supposed to wait for you.'],
+  cat:['Cat pads silently beside you.','Cat studies the nearest ledge with complete confidence.'],
+  dog:['Dog sniffs the trail and looks back at you.','Dog waits at your heel, ready for the next hunt.'],
+  wolf:['Wolf watches the treeline without blinking.','Wolf gives a quiet hunting huff.'],
 };
 function tickFamiliarPersonality(now){
   const lines=FAMILIAR_IDLE_LINES[activeFamiliar];
@@ -1856,6 +1901,9 @@ function familiarReaction(kind,count=1){
   familiarReactionAt=now+12000;
   if(kind==='mote'){ moteBloomReadyAt=now+FAMILIAR_SYSTEM.moteBurstCooldown(familiarPowerLevel('mote')); sysMsg('Mote brightens as your strength returns.'); }
   else if(kind==='sprite') sysMsg(count>1?'Sprite trills: <i>"A whole hidden cache!"</i>':'Sprite chirps: <i>"Found one more!"</i>');
+  else if(kind==='cat') sysMsg('Cat lands softly and looks pleased with itself.');
+  else if(kind==='dog') sysMsg('Dog noses out extra meat from the hunt.');
+  else if(kind==='wolf') sysMsg('Wolf howls as the hostile falls.');
 }
 // Mote: gentle restoration wisps that hover and bob close around the owner (not a swarm, not a pet).
 function tickMoteSwarm(s,o,n,dt,t){
@@ -1931,6 +1979,28 @@ function tickFangPack(s,o,n,dt,t,local){
     const wasSit=(b.sit||0)>0.5;
     animateFang(b, Math.min(1,spd/6), t, chase, dt);
     if(local && !wasSit && (b.sit||0)>0.5 && t*1000>fangWhineCd){ fangWhineCd=t*1000+9000; if(typeof SFX!=='undefined'&&SFX.whine) SFX.whine(); }
+  }
+}
+function tickPetFollow(s,o,n,dt,t,local){
+  const fwx=-Math.sin(o.yaw), fwz=-Math.cos(o.yaw), rgx=Math.cos(o.yaw), rgz=-Math.sin(o.yaw);
+  for(let i=0;i<s.bodies.length;i++){
+    const b=s.bodies[i], p=b.mesh.position, petKind=b.mesh.userData&&b.mesh.userData.petKind||s.kind;
+    const side=petKind==='cat'?.75:petKind==='wolf'?-1.0:-.75;
+    const back=petKind==='cat'?1.0:petKind==='wolf'?1.75:1.35;
+    const tx=o.x - fwx*back + rgx*side, tz=o.z - fwz*back + rgz*side, ty=o.y;
+    if(Math.hypot(tx-p.x,tz-p.z)>14){ p.set(tx,ty,tz); b.gy=ty; }
+    const dx=tx-p.x,dz=tz-p.z,dist=Math.hypot(dx,dz),speed=dist>2.4?7.2:dist>0.6?3.0:0;
+    let moved=0;
+    if(speed>0 && dist>1e-3){ const step=Math.min(dist,speed*dt); p.x+=dx/dist*step; p.z+=dz/dist*step; moved=step; }
+    b.gy=(b.gy==null?ty:b.gy)+(ty-(b.gy==null?ty:b.gy))*Math.min(1,dt*8);
+    b.mesh.position.y=b.gy;
+    const spd=moved/Math.max(dt,1e-3);
+    b.idle=spd>0.3?0:(b.idle||0)+dt;
+    const fcx=moved>1e-3?dx:-fwx, fcz=moved>1e-3?dz:-fwz;
+    if(Math.abs(fcx)+Math.abs(fcz)>1e-3){ const want=Math.atan2(fcx,fcz); b.mesh.rotation.y += angDiff(want,b.mesh.rotation.y)*Math.min(1,dt*10); }
+    b.gait=(b.gait||0)+spd*dt*3.5;
+    animateFang(b,Math.min(1,spd/5.5),t,false,dt);
+    if(local && petKind==='cat' && Math.random()<dt*.08) spawnParticle({x:p.x,y:p.y+.55,z:p.z,vx:(Math.random()-.5)*.08,vy:.18,vz:(Math.random()-.5)*.08,life:.55,grav:-.2,r:.6,g:.85,b:.42});
   }
 }
 function animateFang(b, run, t, chase, dt){
@@ -2063,11 +2133,21 @@ function familiarSummonFx(kind){
     burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 24, 2.8, 2.5, .55);
     if(typeof SFX!=='undefined'&&SFX.coin) SFX.coin();
     sysMsg('<b>Sprite</b> darts from the charm, already searching for overlooked treasure.');
+  } else if(kind==='cat'){
+    burst(player.pos.x, player.pos.y+.55, player.pos.z, [.62,.84,.45], 14, 1.6, 1.2, .35);
+    sysMsg('<b>Cat</b> slips to your side. Soft Paws reduces fall damage.');
+  } else if(kind==='dog'){
+    burst(player.pos.x, player.pos.y+.55, player.pos.z, [1,.64,.28], 14, 1.6, 1.2, .35);
+    if(typeof SFX!=='undefined'&&SFX.bark) SFX.bark();
+    sysMsg('<b>Dog</b> trots beside you. Trail Nose can find extra meat from animals.');
+  } else if(kind==='wolf'){
+    burst(player.pos.x, player.pos.y+.65, player.pos.z, [.55,.82,1], 16, 1.8, 1.3, .4);
+    sysMsg('<b>Wolf</b> joins the hunt. Hunter Howl grants bonus XP from hostile kills.');
   }
   familiarIdleAt=performance.now()+90000+Math.random()*45000;
 }
 function familiarDismissFx(kind){
-  const col=kind==='shade'?[.45,.2,.7]:kind==='fang'?[.55,.4,.3]:kind==='mote'?[.55,1,.38]:[1,.85,.3];
+  const col=kind==='shade'?[.45,.2,.7]:kind==='fang'?[.55,.4,.3]:kind==='mote'?[.55,1,.38]:kind==='cat'?[.62,.84,.45]:kind==='dog'?[1,.64,.28]:kind==='wolf'?[.55,.82,1]:[1,.85,.3];
   burst(player.pos.x,player.pos.y+.8,player.pos.z,col,12,1.5,1.4,.35);
 }
 let familiarTutorialKind='';
@@ -2078,7 +2158,7 @@ function showFamiliarTutorial(kind){
   if(familiarTutorialDone()||typeof onboardingActive!=='undefined'&&onboardingActive)return;
   familiarTutorialKind=kind;
   const el=document.getElementById('tutorialhud'); if(!el)return;
-  const role=kind==='shade'?'guard you':kind==='fang'?'hunt beside you':kind==='mote'?'restore your health':'find bonus drops';
+  const role=kind==='shade'?'guard you':kind==='fang'?'hunt beside you':kind==='mote'?'restore your health':kind==='sprite'?'find bonus drops':kind==='cat'?'soften rough landings':kind==='dog'?'help animal hunts':'strengthen hostile hunts';
   el.innerHTML='<div class="tutpill">Familiar bond</div><div class="tutkey">K</div><div class="tuttext">Call '+FAMILIARS[kind].name+' to '+role+'</div><div class="tutsub">Open Dragon Bonds with B to see Bond XP, daily challenge, and upgrades.</div>';
   el.classList.remove('hidden');
 }
@@ -2109,7 +2189,7 @@ function cycleFamiliar(target){                  // K cycles; menus may request 
   const next=order.indexOf(activeFamiliar)+1;
   setFamiliar(next>=order.length ? '' : order[next]);
 }
-const FAMILIAR_HUD={ shade:{color:'#b86cff',role:'Guardian'}, fang:{color:'#ffcf4a',role:'Hound'}, mote:{color:'#8fe06a',role:'Healer'}, sprite:{color:'#ffe27a',role:'Forager'} };
+const FAMILIAR_HUD={ shade:{color:'#b86cff',role:'Guardian'}, fang:{color:'#ffcf4a',role:'Hound'}, mote:{color:'#8fe06a',role:'Healer'}, sprite:{color:'#ffe27a',role:'Forager'}, cat:{color:'#9ad26b',role:'Soft Paws'}, dog:{color:'#ff9a42',role:'Trail Nose'}, wolf:{color:'#8bd7ff',role:'Hunter Howl'} };
 let famHudSig='', shadeStepPendingUntil=0, shadeStepCharges=0, shadeStepMaxCharges=0, shadeStepChargeUpdatedAt=0;
 function shadeAvailableCharges(){
   const max=shadeStepMaxCharges||FAMILIAR_SYSTEM.shadeStepCharges((S&&S.lvl)||1);
@@ -2126,6 +2206,9 @@ function updateFamiliarHUD(){
   else if(k==='fang'){ const c=fangBodyCount(lvl); rank=c+(c>1?' hounds':' hound'); stat=FAMILIAR_SYSTEM.fangStrikes(lvl)+'× bite '+fangDamage(lvl); }
   else if(k==='mote'){ rank='×'+moteBodyCount(lvl); stat='Regen +'+FAMILIAR_SYSTEM.moteRegen(lvl).toFixed(1)+'/s'+(tier>=FAMILIAR_SYSTEM.MOTE_BURST_MIN_TIER?' · burst':''); }
   else { rank='×'+spriteBodyCount(lvl); stat='Forage '+Math.round(spriteForageChance(lvl)*100)+'% · +'+FAMILIAR_SYSTEM.spriteBonusDrops(lvl); }
+  if(k==='cat'){ rank='pet'; stat='Fall damage -'+Math.round(FAMILIAR_SYSTEM.catFallMitigation(lvl)*100)+'%'; }
+  else if(k==='dog'){ rank='pet'; stat='Extra meat '+Math.round(FAMILIAR_SYSTEM.dogExtraMeatChance(lvl)*100)+'%'; }
+  else if(k==='wolf'){ rank='pet'; stat='Hostile XP +'+Math.round(FAMILIAR_SYSTEM.wolfHostileXpBonus(lvl)*100)+'%'; }
   const multi=familiarUnlocks.filter(x=>FAMILIARS[x]).length>1;
   const sig=k+'|'+rank+'|'+stat+'|'+multi+'|'+xp;
   el.classList.remove('hidden');
@@ -2858,7 +2941,11 @@ function netRemoveRemote(sid){
     get dragonUnlocks(){ return dragonUnlocks; },
     set dragonUnlocks(value){ dragonUnlocks=value; },
     get familiarXp(){ return familiarXp; },
-    set familiarXp(value){ familiarXp=value&&typeof value==='object'?{shade:value.shade|0,fang:value.fang|0,mote:value.mote|0,sprite:value.sprite|0}:{shade:0,fang:0,mote:0,sprite:0}; },
+    set familiarXp(value){
+      const next={...DEFAULT_FAMILIAR_XP};
+      if(value&&typeof value==='object')for(const kind of FAMILIAR_IDS)next[kind]=Math.max(0,value[kind]|0);
+      familiarXp=next;
+    },
     get familiarChallenges(){ return familiarChallenges; },
     set familiarChallenges(value){ familiarChallenges=value&&typeof value==='object'?value:{}; },
     get dragonCare(){ return dragonCare; },

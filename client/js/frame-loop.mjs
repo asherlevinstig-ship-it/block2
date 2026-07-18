@@ -470,7 +470,10 @@ function questObjective(){
     return {label:qLabel, text:has?'Bring '+item+' to Greta and sell it':'Gather '+item+' for Greta'};
   }
   if(quest.type==='utility') return {label:qLabel, text:utilityUnlocked(quest.utility)?'Return to '+quest.giver:'Follow the trail to the Job Board and complete a Guild Contract'};
-  if(quest.type==='familiar') return {label:qLabel, text:familiarUnlocks.includes(quest.familiar)?'Return to '+quest.giver:'Use the Shadow Sigil from your hotbar, then press K'};
+  if(quest.type==='familiar'){
+    const def=FAMILIARS&&FAMILIARS[quest.familiar], item=def&&ITEMS[def.sigil]&&ITEMS[def.sigil].name||'binding item';
+    return {label:qLabel, text:familiarUnlocks.includes(quest.familiar)?'Return to '+quest.giver:'Use '+item+' from your hotbar, then press K'};
+  }
   if(quest.type==='mount') return {label:qLabel, text:dragonUnlocks.length?'Return to '+quest.giver:'Follow the trail, place the Egg Insulator, then use the Dragon Egg'};
   if(quest.type==='mount_use') return {label:qLabel, text:(mounted&&isDragon(mountKind))?'Return to '+quest.giver:'Press X to summon your dragon and mount up'};
   return {label:qLabel, text:questTypeLabel(quest)+' for '+quest.giver};

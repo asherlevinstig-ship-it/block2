@@ -272,6 +272,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   GEODE:207, RAINWAKE_PETAL:208, STORMGLASS:209, SOLAR_GLYPH:210,
   HIDE_ARMOR:211, CHAIN_ARMOR:212, STORMGLASS_ARMOR:213,
   ANCIENT_FRAGMENT:214, ECHO_GLYPH:215, RELIC_ARMOR_PIECE:216, TOWN_MAP:217,
+  CAT_COLLAR:218, DOG_COLLAR:219, WOLF_COLLAR:220,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -647,6 +648,39 @@ ITEMS[I.FORAGE_CHARM]={name:"Forager's Charm",stack:1,icon:iconCanvas(ctx=>drawP
 "......yYYy......",
 "....t..yy..t....",
 "...t........t..."],{y:'#caa23e',Y:'#ffe27a',G:'#fff6c8',t:'#3ea66a'}))};
+ITEMS[I.CAT_COLLAR]={name:'Cat Collar',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................",
+"......rrrr......",
+"....rr....rr....",
+"...r..gggg..r...",
+"...r.gG..Gg.r...",
+"...r.g....g.r...",
+"....rr.ww.rr....",
+"......rrrr......",
+".......bb.......",
+"................"],{r:'#b66f48',g:'#4a4a4a',G:'#9ad26b',w:'#f0e4d4',b:'#d7b45d'}))};
+ITEMS[I.DOG_COLLAR]={name:'Dog Collar',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................",
+".....bbbbbb.....",
+"...bb......bb...",
+"..b..cccccc..b..",
+"..b.cC....Cc.b..",
+"..b.c......c.b..",
+"...bb..yy..bb...",
+".....bbbbbb.....",
+".......yy.......",
+"................"],{b:'#7a4a25',c:'#8b2f2f',C:'#d95b5b',y:'#ffd24a'}))};
+ITEMS[I.WOLF_COLLAR]={name:'Wolf Collar',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................",
+".....ssssss.....",
+"...ss......ss...",
+"..s..wwwwww..s..",
+"..s.wW....Ww.s..",
+"..s.w......w.s..",
+"...ss..cc..ss...",
+".....ssssss.....",
+".......cc.......",
+"................"],{s:'#59636f',w:'#26303a',W:'#dceaff',c:'#8bd7ff'}))};
 function regionalIcon(outer,inner,glint){ return iconCanvas(ctx=>{
   ctx.fillStyle=outer; ctx.fillRect(3,5,10,7); ctx.fillRect(5,3,6,11);
   ctx.fillStyle=inner; ctx.fillRect(5,5,6,6); ctx.fillStyle=glint; ctx.fillRect(6,5,2,2); ctx.fillRect(9,8,1,1);
@@ -7098,7 +7132,7 @@ function rewardTriageGroup(r){
   if(item&&(item.tool||item.armor)||r.gear)return 'Gear';
   if([I.SOLO_KEY_E,I.SOLO_KEY_D,I.SOLO_KEY_C,I.SOLO_KEY_B,I.SOLO_KEY_A,I.TEAM_KEY_E,I.TEAM_KEY_D,I.TEAM_KEY_C,I.TEAM_KEY_B,I.TEAM_KEY_A].includes(id))return 'Keys';
   if([I.SHARD_MINOR,I.SHARD_MAJOR,I.SHARD_GLIMMER,I.SHARD_EFFERV,I.SHARD_RADIANT].includes(id))return 'Shards';
-  if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id))return 'Rare Protected';
+  if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR].includes(id))return 'Rare Protected';
   if(id===I.COAL||id===I.IRON_INGOT||id===I.DIAMOND||(item&&item.place!=null))return 'Materials';
   return 'Items';
 }

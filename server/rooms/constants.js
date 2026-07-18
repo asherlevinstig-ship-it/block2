@@ -107,10 +107,11 @@ const I = {
   GEODE: 207, RAINWAKE_PETAL: 208, STORMGLASS: 209, SOLAR_GLYPH: 210,
   HIDE_ARMOR: 211, CHAIN_ARMOR: 212, STORMGLASS_ARMOR: 213,
   ANCIENT_FRAGMENT: 214, ECHO_GLYPH: 215, RELIC_ARMOR_PIECE: 216, TOWN_MAP: 217,
+  CAT_COLLAR: 218, DOG_COLLAR: 219, WOLF_COLLAR: 220,
 };
-// Familiars. Shade: defense, Fang: offense, Mote: restoration, Sprite: forage (bonus yield).
-const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite']);
-const FAMILIAR_BIND_ITEM = { shade: 191, fang: 192, mote: 200, sprite: 201 };   // item consumed to bind each familiar
+// Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
+const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
+const FAMILIAR_BIND_ITEM = { shade: 191, fang: 192, mote: 200, sprite: 201, cat: 218, dog: 219, wolf: 220 };   // item consumed to bind each familiar
 const SHADE_RANK_LVLS = FAMILIAR_SYSTEM.TIER_LEVELS;
 const famTier = FAMILIAR_SYSTEM.tier, shadeMitigation = FAMILIAR_SYSTEM.shadeMitigation;
 const fangDamage = FAMILIAR_SYSTEM.fangDamage, { FANG_CD_MS, FANG_RANGE } = FAMILIAR_SYSTEM;
@@ -118,6 +119,9 @@ const moteRegen = FAMILIAR_SYSTEM.moteRegen, moteBurst = FAMILIAR_SYSTEM.moteBur
 const { MOTE_BURST_MIN_TIER, MOTE_BURST_CD_MS, MOTE_BURST_RANGE } = FAMILIAR_SYSTEM;
 const spriteForageChance = FAMILIAR_SYSTEM.spriteForageChance;
 const spriteBonusDrops = FAMILIAR_SYSTEM.spriteBonusDrops;
+const catFallMitigation = FAMILIAR_SYSTEM.catFallMitigation;
+const dogExtraMeatChance = FAMILIAR_SYSTEM.dogExtraMeatChance;
+const wolfHostileXpBonus = FAMILIAR_SYSTEM.wolfHostileXpBonus;
 const fangCooldown = FAMILIAR_SYSTEM.fangCooldown, fangStrikes = FAMILIAR_SYSTEM.fangStrikes;
 const moteBurstCooldown = FAMILIAR_SYSTEM.moteBurstCooldown;
 const shadeStepCharges = FAMILIAR_SYSTEM.shadeStepCharges, shadeStepDistance = FAMILIAR_SYSTEM.shadeStepDistance;
@@ -393,6 +397,11 @@ const ANIMAL_LOOT = {
   frost_stag: [{ id: I.MONSTER_MEAT, count: 2 }, { id: I.FROST_CRYSTAL, count: 1 }],
   mire_boar: [{ id: I.MONSTER_MEAT, count: 3 }, { id: I.MIRE_BLOOM, count: 1 }],
 };
+const PET_FAMILIAR_DROPS = {
+  rabbit: { familiar: 'cat', item: I.CAT_COLLAR, chance: .055 },
+  deer: { familiar: 'dog', item: I.DOG_COLLAR, chance: .05 },
+  boar: { familiar: 'wolf', item: I.WOLF_COLLAR, chance: .045 },
+};
 const BIOME_COLLECTIBLE = {
   [W.BIO.PLAINS]: { item: I.WINDSEED, blocks: new Set([W.B.GRASS]), name: 'Prairie Windseed' },
   [W.BIO.FOREST]: { item: I.HEARTWOOD_RESIN, blocks: new Set([W.B.LOG, W.B.LEAVES]), name: 'Heartwood Resin' },
@@ -557,6 +566,7 @@ const ITEM_NAMES = {
   [I.TOWN_MAP]: 'Town Map',
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
+  [I.CAT_COLLAR]: 'Cat Collar', [I.DOG_COLLAR]: 'Dog Collar', [I.WOLF_COLLAR]: 'Wolf Collar',
 };
 const GUILD_BOARD_POS = { x: W.TOWN.TC + 4.5, z: W.TOWN.TC - 8.5 };
 const REGIONAL_CONTRACT_TYPES = ['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles'];
@@ -687,6 +697,10 @@ module.exports.SHADE_STEP_MIN_TIER = SHADE_STEP_MIN_TIER;
 module.exports.SHADE_STEP_CD_MS = SHADE_STEP_CD_MS;
 module.exports.SHADE_STEP_DISTANCE = SHADE_STEP_DISTANCE;
 module.exports.spriteBonusDrops = spriteBonusDrops;
+module.exports.PET_FAMILIAR_DROPS = PET_FAMILIAR_DROPS;
+module.exports.catFallMitigation = catFallMitigation;
+module.exports.dogExtraMeatChance = dogExtraMeatChance;
+module.exports.wolfHostileXpBonus = wolfHostileXpBonus;
 module.exports.fangCooldown = fangCooldown;
 module.exports.fangStrikes = fangStrikes;
 module.exports.moteBurstCooldown = moteBurstCooldown;

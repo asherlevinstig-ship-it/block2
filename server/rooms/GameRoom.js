@@ -63,7 +63,7 @@ const {
   SKYSHIP_TRAVEL_MS, SOLO_KEYS, TEAM_KEYS, TOOL_INFO, UTILITY_IDS, REGIONAL_CONTRACT_TYPES, dangerRingAt, dayTimeAt, dragonMountType,
   gateRankIndexForLevel, hunterActivityXpForLevel, hunterRankIndexForLevel, isDeityLevel, isDragonMount, jobLevelFromXp, jobPerkChance, jobPerkTier,
   nextHunterRankLevel, WEATHER_KINDS,
-  mobTargetInRange, shadeMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
+  mobTargetInRange, shadeMitigation, catFallMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
 
 const ACTIVE_UTILITY_IDS = new Set(['trail_sense']);
@@ -2354,7 +2354,7 @@ class GameRoom extends Room {
     if (FOOD_VALUES[id] || [I.POT_ALE, I.POT_STEW, I.POT_MANA, I.POT_SWIFT, I.POT_STONE, I.REPAIR_KIT].includes(id)) return 20;
     if ([I.COAL, I.CHARCOAL, I.IRON_INGOT, I.DIAMOND, I.WHEAT_SEEDS, I.WHEAT, I.WINDSEED, I.HEARTWOOD_RESIN, I.SUNSHARD, I.MESA_AMBER, I.FROST_CRYSTAL, I.MIRE_BLOOM, I.RIVER_FISH, I.COMPOST, I.GOLDEN_WHEAT, I.GEODE, I.RAINWAKE_PETAL, I.STORMGLASS, I.SOLAR_GLYPH].includes(id)) return 30;
     if (TOOL_INFO[id] || ARMOR_INFO[id] || stack.dur != null) return 40;
-    if ([I.DRAGON_EGG, I.EGG_VERDANT, I.EGG_FROST, I.EGG_STORM, I.EGG_VOID, I.DRAGON_TREAT, I.SHADOW_SIGIL, I.FANG_TOTEM, I.MOTE_CHARM, I.FORAGE_CHARM].includes(id)) return 50;
+    if ([I.DRAGON_EGG, I.EGG_VERDANT, I.EGG_FROST, I.EGG_STORM, I.EGG_VOID, I.DRAGON_TREAT, I.SHADOW_SIGIL, I.FANG_TOTEM, I.MOTE_CHARM, I.FORAGE_CHARM, I.CAT_COLLAR, I.DOG_COLLAR, I.WOLF_COLLAR].includes(id)) return 50;
     if (id < 100) return 60;
     return 90;
   }
@@ -4111,6 +4111,13 @@ class GameRoom extends Room {
     if (!client || drop <= FALL_SAFE_DROP) return;
     const featherStep = this.utilityEquippedServer(client, 'feather_step');
     const result = this.fallDamageFor(drop, featherStep);
+    if (result.damage > 0 && this.activeFamiliarIs && this.activeFamiliarIs(client, 'cat')) {
+      const saved = Math.max(1, Math.round(result.damage * catFallMitigation(this.familiarPowerLevel(client, 'cat'))));
+      result.damage = Math.max(0, result.damage - saved);
+      this.awardFamiliarXp(client, 'cat', saved, 'fall_damage_saved');
+      this.awardFamiliarXp(client, 'cat', 1, 'soft_landing');
+      client.send('familiarTrait', { kind: 'cat', trait: 'soft_paws', saved, damage: result.damage });
+    }
     if (featherStep) {
       client.send('utilityFeedback', {
         id: 'feather_step',

@@ -253,7 +253,7 @@ function itemTriageGroupName(id, item=ITEMS[id]){
   if(item.tool||item.armor)return 'Gear';
   if(SOLO_KEY_IDS.includes(id)||TEAM_KEY_IDS.includes(id))return 'Keys';
   if(SHARD_IDS.includes(id))return 'Shards';
-  if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id))return 'Rare Protected';
+  if(id===I.LEGEND_TOKEN||[I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR].includes(id))return 'Rare Protected';
   if(item.place!=null||[I.STICK,I.COAL,I.CHARCOAL,I.IRON_INGOT,I.DIAMOND,I.WHEAT_SEEDS,I.WHEAT,I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM,I.RIVER_FISH,I.COMPOST,I.GOLDEN_WHEAT,I.GEODE,I.RAINWAKE_PETAL,I.STORMGLASS,I.SOLAR_GLYPH].includes(id))return 'Materials';
   if(FOOD_VALUES[id])return 'Food';
   return 'Items';
@@ -813,7 +813,7 @@ const familiarTelemetryEl=document.getElementById('familiartelemetry');
 let familiarTelemetryOpen=false,familiarTelemetryTimer=0;
 function requestFamiliarTelemetry(){if(familiarTelemetryOpen&&NET.on&&NET.room)NET.room.send('familiarTelemetry',{});}
 function renderFamiliarTelemetry(m){
-  if(!familiarTelemetryEl||!m)return;const kinds=['shade','fang','mote','sprite'];
+  if(!familiarTelemetryEl||!m)return;const kinds=['shade','fang','mote','sprite','cat','dog','wolf'];
   const rows=kinds.map(kind=>{const r=m.byKind&&m.byKind[kind]||{},tiers=m.tiers&&m.tiers[kind]||[];return '<tr><td>'+kind.toUpperCase()+'</td><td>'+Math.round(r.xp||0)+'</td><td>'+(r.actions||0)+'</td><td class="'+((r.diminished||0)?'warn':'ok')+'">'+(r.diminished||0)+'</td><td>'+tiers.join(' / ')+'</td></tr>';}).join('');
   familiarTelemetryEl.innerHTML='<h3>FAMILIAR TELEMETRY · F8</h3><div>Rolling window: 60m · Loaded profiles: '+(m.profiles||0)+' · Daily completions: '+(m.dailyCompleted||0)+'</div><table><thead><tr><th>Bond</th><th>XP/h</th><th>Actions</th><th>Dim.</th><th>Tiers 1→5</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
@@ -1783,6 +1783,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('perchReject', m=>perchRejected(m));
     room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; let i=Math.max(0,Math.min(35,(m&&m.slot)|0)); if(!(m&&m.slot>=0&&inv[i]&&inv[i].id===sig))i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); eventFeed('[Familiar]',((FAMILIARS[kind]&&FAMILIARS[kind].name)||'Familiar')+' bound to you.',{key:'familiar:bound:'+kind,cooldown:0}); });
     room.onMessage('familiarBond', m=>{COMPANIONS.applyFamiliarBond(m);if(m&&m.challenge&&m.challenge.justCompleted&&FAMILIARS[m.kind])eventFeed('[Familiar]',FAMILIARS[m.kind].name+' bond challenge complete.',{key:'familiar:challenge:'+m.kind+':'+String(m.challenge.id||m.challenge.title||''),cooldown:0});});
+    room.onMessage('familiarTrait', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.familiarReaction(m.kind,1); eventFeed('[Familiar]',FAMILIARS[m.kind].name+' helped you.',{key:'familiar:trait:'+String(m.trait||m.kind),cooldown:2500}); } });
     room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.activeFamiliar=m.kind; eventFeed('[Familiar]',FAMILIARS[m.kind].name+' summoned.',{key:'familiar:summon:'+m.kind,cooldown:3000}); } });
     room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; eventFeed('[Familiar]','Familiar dismissed.',{key:'familiar:dismiss',cooldown:3000}); });
     room.onMessage('familiarReject', m=>{
@@ -2097,7 +2098,7 @@ function netRestoreProfile(m){
       const t = k==='dragon' ? 'ember' : (typeof k==='string' && k.slice(0,7)==='dragon:') ? k.slice(7) : '';
       if(DRAGON_TYPES[t] && !COMPANIONS.dragonUnlocks.includes(t)) COMPANIONS.dragonUnlocks.push(t);
     }
-    COMPANIONS.familiarUnlocks = Array.isArray(m.familiarUnlocks) ? m.familiarUnlocks.filter(k=>['shade','fang','mote','sprite'].includes(k)) : [];
+    COMPANIONS.familiarUnlocks = Array.isArray(m.familiarUnlocks) ? m.familiarUnlocks.filter(k=>['shade','fang','mote','sprite','cat','dog','wolf'].includes(k)) : [];
     COMPANIONS.familiarXp=m.familiarXp;
     COMPANIONS.familiarChallenges=m.familiarChallenges;
     COMPANIONS.activeFamiliar='';   // summon state isn't persisted; recall with K

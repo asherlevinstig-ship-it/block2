@@ -1542,7 +1542,7 @@ function inventorySortCategory(stack){
   if(FOOD_VALUES[id]||[I.POT_ALE,I.POT_STEW,I.POT_MANA,I.POT_SWIFT,I.POT_STONE,I.REPAIR_KIT].includes(id))return 20;
   if([I.COAL,I.CHARCOAL,I.IRON_INGOT,I.DIAMOND,I.WHEAT_SEEDS,I.WHEAT,I.WINDSEED,I.HEARTWOOD_RESIN,I.SUNSHARD,I.MESA_AMBER,I.FROST_CRYSTAL,I.MIRE_BLOOM,I.RIVER_FISH,I.COMPOST,I.GOLDEN_WHEAT,I.GEODE,I.RAINWAKE_PETAL,I.STORMGLASS,I.SOLAR_GLYPH].includes(id))return 30;
   if((ITEMS[id]&&(ITEMS[id].tool||ITEMS[id].armor))||stack.dur!=null)return 40;
-  if([I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id))return 50;
+  if([I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT,I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR].includes(id))return 50;
   if(id<100)return 60;
   return 90;
 }
@@ -1776,7 +1776,7 @@ function protectedChestBulkItem(id){
     I.LEGEND_TOKEN,I.LEGEND_SWORD,I.LEGEND_ARMOR,I.BLACKHOLE_STAFF,
     I.TOWN_MAP,
     I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT,
-    I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,
+    I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR,
   ].includes(id);
 }
 function chestBulkMaterialItem(id){
@@ -4978,6 +4978,9 @@ const FAMILIAR_UI_INFO={
   fang:{role:'HOUND',identity:'Bites nearby hostile mobs and helps finish hunts.',color:'#ffcf4a',source:'Pell Graywatch hunting quest or craft a Fang Totem.',verb:'fight mobs while Fang is active'},
   mote:{role:'HEALER',identity:'Restores health and blooms when danger gets close.',color:'#8fe06a',source:'Pippa Hearth cooking quest or craft a Mote Charm.',verb:'recover health while Mote is active'},
   sprite:{role:'FORAGER',identity:'Finds bonus drops while gathering and mining.',color:'#ffe27a',source:'Liss Barley farming quest or craft a Forage Charm.',verb:'gather resources while Sprite is active'},
+  cat:{role:'PET - SOFT PAWS',identity:'A quiet outdoor companion that softens fall damage.',color:'#9ad26b',source:'Rare Cat Collar from rabbits and hares outside town.',verb:'land from falls while Cat is active',wild:true},
+  dog:{role:'PET - TRAIL NOSE',identity:'A loyal hunting pet that can find extra meat from animals.',color:'#ff9a42',source:'Rare Dog Collar from deer and stags outside town.',verb:'hunt animals while Dog is active',wild:true},
+  wolf:{role:'PET - HUNTER HOWL',identity:'A wild partner that gives bonus XP from hostile kills.',color:'#8bd7ff',source:'Rare Wolf Collar from boars outside town.',verb:'defeat hostile mobs while Wolf is active',wild:true},
 };
 function familiarBindingSlot(itemId){
   for(let i=0;i<inv.length;i++){const s=inv[i];if(s&&s.id===itemId)return i;}
@@ -4993,6 +4996,9 @@ function familiarBondCard(id){
   if(id==='fang'){const n=BlockcraftFamiliarSystem.fangStrikes(lvl);f.effect=n+' bite strike'+(n>1?'s':'')+' for '+BlockcraftFamiliarSystem.fangDamage(lvl)+' damage.';f.next='Pursuit cooldown improves to '+(BlockcraftFamiliarSystem.fangCooldown(lvl)/1000).toFixed(2)+' seconds.';}
   if(id==='mote'){f.effect='Restores '+BlockcraftFamiliarSystem.moteRegen(lvl).toFixed(1)+' HP per second.';f.next=tier>=BlockcraftFamiliarSystem.MOTE_BURST_MIN_TIER?'Emergency bloom every '+(BlockcraftFamiliarSystem.moteBurstCooldown(lvl)/1000)+' seconds.':'Emergency bloom unlocks at Bond Tier 3.';}
   if(id==='sprite'){f.effect=Math.round(BlockcraftFamiliarSystem.spriteForageChance(lvl)*100)+'% chance for +'+BlockcraftFamiliarSystem.spriteBonusDrops(lvl)+' gathered drops.';f.next=tier>=3?'Higher tiers keep improving double hauls.':'Bonus haul improves at Bond Tier 4.';}
+  if(id==='cat'){f.effect='Reduces fall damage by '+Math.round(BlockcraftFamiliarSystem.catFallMitigation(lvl)*100)+'%.';f.next='Higher Bond tiers soften bigger mistakes.';}
+  if(id==='dog'){f.effect=Math.round(BlockcraftFamiliarSystem.dogExtraMeatChance(lvl)*100)+'% chance to find +1 Monster Meat from animal hunts.';f.next='Higher Bond tiers improve Dog\'s scenting chance.';}
+  if(id==='wolf'){f.effect='Hostile mob kills grant +'+Math.round(BlockcraftFamiliarSystem.wolfHostileXpBonus(lvl)*100)+'% XP.';f.next='Higher Bond tiers improve Wolf\'s XP howl.';}
   return f;
 }
 function familiarTierHTML(f){
@@ -5007,7 +5013,7 @@ function familiarDailyHTML(f){
   return '<div class="familiar-daily"><b>Daily Bond: '+escHTML(daily.title)+'</b><span>'+escHTML(done?'Complete':progress+' / '+daily.need)+' - +'+BlockcraftFamiliarSystem.DAILY_CHALLENGE_REWARD+' XP</span><i><em style="width:'+pct+'%"></em></i></div>';
 }
 function familiarBondCards(){
-  return ['shade','fang','mote','sprite'].map(familiarBondCard);
+  return ['cat','dog','wolf','shade','fang','mote','sprite'].map(familiarBondCard);
 }
 function openDragonBondUI(){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
@@ -5105,6 +5111,7 @@ function openDragonBondUI(){
     const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
     if(bound) actions.appendChild(qBtn(active?'DISMISS':'SUMMON',()=>{cycleFamiliar(active?'':f.id);openDragonBondUI();}));
     else if(f.bindingSlot>=0) actions.appendChild(qBtn('BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(f.bindingSlot);setTimeout(openDragonBondUI, NET.on?180:0);}));
+    else if(f.wild) actions.appendChild(qBtn('FIND OUTSIDE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source))));
     else actions.appendChild(qBtn('VIEW RECIPE',()=>{closeQWin();openCraftingFromNpc('companions');}));
     if(!bound) actions.appendChild(qBtn('FIND SOURCE',()=>sysMsg('<b>'+escHTML(def.name)+' source:</b> '+escHTML(f.source))));
     fgrid.appendChild(card);

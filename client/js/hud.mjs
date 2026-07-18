@@ -77,6 +77,9 @@ function itemTooltipText(stack){
   if(stack.id===I.FANG_TOTEM) lines.push('Use to bind the familiar Fang (then press K)');
   if(stack.id===I.MOTE_CHARM) lines.push('Use to bind the familiar Mote (then press K)');
   if(stack.id===I.FORAGE_CHARM) lines.push('Use to bind the familiar Sprite (then press K)');
+  if(stack.id===I.CAT_COLLAR) lines.push('Use to bind the pet familiar Cat (then press K)');
+  if(stack.id===I.DOG_COLLAR) lines.push('Use to bind the pet familiar Dog (then press K)');
+  if(stack.id===I.WOLF_COLLAR) lines.push('Use to bind the pet familiar Wolf (then press K)');
   if(stack.id===B.EGG_INSULATOR) lines.push('Place down, then use a dragon egg on top');
   return lines.join('\n');
 }
@@ -91,7 +94,7 @@ function itemTriageTags(stack){
   if([I.SHARD_MINOR,I.SHARD_MAJOR,I.SHARD_GLIMMER,I.SHARD_EFFERV,I.SHARD_RADIANT].includes(id)){tags.push('Shard');tags.push('Protected');}
   if(id===I.LEGEND_TOKEN){tags.push('Legendary');tags.push('Protected');}
   if([I.DRAGON_EGG,I.EGG_VERDANT,I.EGG_FROST,I.EGG_STORM,I.EGG_VOID,I.DRAGON_TREAT].includes(id)){tags.push('Dragon');tags.push('Protected');}
-  if([I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM].includes(id)){tags.push('Familiar');tags.push('Protected');}
+  if([I.SHADOW_SIGIL,I.FANG_TOTEM,I.MOTE_CHARM,I.FORAGE_CHARM,I.CAT_COLLAR,I.DOG_COLLAR,I.WOLF_COLLAR].includes(id)){tags.push('Familiar');tags.push('Protected');}
   if([I.REPAIR_KIT,I.CHARCOAL,B.PLANKS,B.TABLE,B.FURNACE,B.CHEST,B.TORCH,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR].includes(id))tags.push('Crafting');
   return [...new Set(tags)];
 }

@@ -57,7 +57,7 @@ const DRAGON_MASTERY_ROLES = new Set(['follow', 'guard', 'stay', 'rest']);
 const DRAGON_SPECIALIZATIONS = new Set(['scout', 'defender', 'sage']);
 const DRAGON_GROW_MS = 2 * 60 * 1000;
 const DRAGON_JUVENILE_MS = Math.floor(DRAGON_GROW_MS / 2);
-const FAMILIAR_UNLOCK_IDS = new Set(['shade', 'fang', 'mote', 'sprite']);
+const FAMILIAR_UNLOCK_IDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
 function sanitizeMountUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (let k of list) {
@@ -357,7 +357,7 @@ function defaultProfile(name) {
     armor: null,
     mountUnlocks: [],
     familiarUnlocks: [],
-    familiarXp: { shade: 0, fang: 0, mote: 0, sprite: 0 },
+    familiarXp: { shade: 0, fang: 0, mote: 0, sprite: 0, cat: 0, dog: 0, wolf: 0 },
     familiarChallenges: {},
     shadowArmy: [],
     abilitySpec: '',

@@ -42,10 +42,19 @@ class DragonsMixin {
     const rec=this.profileFor(client), xp=rec&&rec.prof.familiarXp&&rec.prof.familiarXp[kind]||0;
     return FAMILIAR_SYSTEM.bondLevel(xp);
   }
+  ensureFamiliarXpBag(prof) {
+    if (!prof.familiarXp || typeof prof.familiarXp !== 'object') prof.familiarXp = {};
+    for (const kind of FAMILIAR_KINDS) if (!Number.isFinite(prof.familiarXp[kind])) prof.familiarXp[kind] = 0;
+    return prof.familiarXp;
+  }
+  activeFamiliarIs(client, kind) {
+    const p = client && this.state.players.get(client.sessionId);
+    return !!(p && p.familiar === kind && this.hasFamiliarUnlock(client, kind) && !this.familiarMechanicsSuspended(client.sessionId));
+  }
   awardFamiliarXp(client, kind, amount, reason) {
     const rec=this.profileFor(client), p=client&&this.state.players.get(client.sessionId);
     if(!rec||!p||p.familiar!==kind||!FAMILIAR_KINDS.has(kind))return 0;
-    if(!rec.prof.familiarXp)rec.prof.familiarXp={shade:0,fang:0,mote:0,sprite:0};
+    this.ensureFamiliarXpBag(rec.prof);
     if(!this.familiarXpPace)this.familiarXpPace=new Map();
     const paceKey=client.sessionId+':'+kind+':'+reason,now=Date.now();let pace=this.familiarXpPace.get(paceKey);
     if(!pace||now-pace.since>=3600000)pace={since:now,count:0};pace.count++;this.familiarXpPace.set(paceKey,pace);
@@ -64,7 +73,7 @@ class DragonsMixin {
     return after-before;
   }
   familiarTelemetrySnapshot(client){
-    const now=Date.now(),since=now-3600000,kinds=['shade','fang','mote','sprite'];
+    const now=Date.now(),since=now-3600000,kinds=[...FAMILIAR_KINDS];
     const recent=(this.familiarTelemetryLog||[]).filter(e=>e.at>=since),own=recent.filter(e=>e.sid===client.sessionId);
     const byKind=Object.fromEntries(kinds.map(kind=>{const rows=own.filter(e=>e.kind===kind);return[kind,{xp:rows.reduce((n,e)=>n+e.gained,0),actions:rows.length,diminished:rows.filter(e=>e.diminished).length,challenges:rows.filter(e=>e.challenge).length}];}));
     const tiers=Object.fromEntries(kinds.map(kind=>[kind,[0,0,0,0,0]]));let completed=0,profiles=0;
@@ -92,7 +101,7 @@ class DragonsMixin {
     const usedSlot = this.consumeSlotItem(rec.prof, slot, itemId, 1);
     if (!usedSlot && !this.consumeItem(rec.prof, itemId, 1)) return client.send('familiarReject', { reason: 'item', kind });
     rec.prof.familiarUnlocks.push(kind);
-    if(!rec.prof.familiarXp)rec.prof.familiarXp={shade:0,fang:0,mote:0,sprite:0};
+    this.ensureFamiliarXpBag(rec.prof);
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
     client.send('familiarBound', { kind, slot: usedSlot ? slot : -1 });

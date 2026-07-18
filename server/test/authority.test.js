@@ -103,6 +103,9 @@ const I = {
   STORMGLASS: 209,
   SOLAR_GLYPH: 210,
   FORAGE_CHARM: 201,
+  CAT_COLLAR: 218,
+  DOG_COLLAR: 219,
+  WOLF_COLLAR: 220,
   RIVER_FISH: 199,
   SHARD_MINOR: 130,
   SHARD_RADIANT: 134,
@@ -2430,6 +2433,7 @@ test('Shade familiar: a sigil binds it, summon is gated on the bind, and Guardin
 
   // unlocks sanitize/persist; junk dropped
   assert.deepEqual(sanitizeProfile({ familiarUnlocks: ['shade', 'bogus', 'shade'] }).familiarUnlocks, ['shade']);
+  assert.deepEqual(sanitizeProfile({ familiarUnlocks: ['cat', 'dog', 'wolf', 'bogus'] }).familiarUnlocks, ['cat', 'dog', 'wolf']);
 });
 
 test('familiar binding consumes the requested slot before fallback inventory search', () => {
@@ -2450,18 +2454,67 @@ test('familiar binding consumes the requested slot before fallback inventory sea
   assert.deepEqual(client.sent.at(-1), { type: 'familiarBound', msg: { kind: 'fang', slot: 1 } });
 });
 
+test('pet familiars bind from wildlife collars and persist Bond XP buckets', () => {
+  const room = makeRoom();
+  const client = makeClient('pet_binder');
+  const { prof } = seedPlayer(room, client, {
+    inv: [
+      { id: I.CAT_COLLAR, count: 1 },
+      { id: I.DOG_COLLAR, count: 1 },
+      { id: I.WOLF_COLLAR, count: 1 },
+    ],
+  });
+  room.clients = [client];
+  const p = room.state.players.get(client.sessionId);
+
+  room.handleBindFamiliar(client, { kind: 'cat', slot: 0 });
+  room.handleBindFamiliar(client, { kind: 'dog', slot: 1 });
+  room.handleBindFamiliar(client, { kind: 'wolf', slot: 2 });
+
+  assert.deepEqual(prof.familiarUnlocks, ['cat', 'dog', 'wolf']);
+  assert.equal(itemCount(prof, I.CAT_COLLAR), 0);
+  assert.equal(itemCount(prof, I.DOG_COLLAR), 0);
+  assert.equal(itemCount(prof, I.WOLF_COLLAR), 0);
+  for (const kind of ['cat', 'dog', 'wolf']) assert.equal(prof.familiarXp[kind], 0);
+  room.handleSummonFamiliar(client, { kind: 'dog' });
+  assert.equal(p.familiar, 'dog');
+});
+
 test('shared familiar tuning drives server values and reaches the advertised final tier', () => {
   const levels = FAMILIAR_SYSTEM.TIER_LEVELS;
   assert.deepEqual(levels.map(shadeMitigation), [...FAMILIAR_SYSTEM.SHADE_MITIGATION]);
   assert.deepEqual(levels.map(fangDamage), [...FAMILIAR_SYSTEM.FANG_DAMAGE]);
   assert.deepEqual(levels.map(moteRegen), [...FAMILIAR_SYSTEM.MOTE_REGEN]);
   assert.deepEqual(levels.map(spriteForageChance), [...FAMILIAR_SYSTEM.SPRITE_CHANCE]);
+  assert.deepEqual(levels.map(FAMILIAR_SYSTEM.catFallMitigation), [...FAMILIAR_SYSTEM.CAT_FALL_MITIGATION]);
+  assert.deepEqual(levels.map(FAMILIAR_SYSTEM.dogExtraMeatChance), [...FAMILIAR_SYSTEM.DOG_EXTRA_MEAT_CHANCE]);
+  assert.deepEqual(levels.map(FAMILIAR_SYSTEM.wolfHostileXpBonus), [...FAMILIAR_SYSTEM.WOLF_HOSTILE_XP_BONUS]);
   assert.equal(shadeMitigation(21), .25);
   assert.equal(fangDamage(21) / (FAMILIAR_SYSTEM.FANG_CD_MS / 1000) > 15, true, 'top Fang sustains about 15.3 DPS while in range');
   assert.deepEqual(FAMILIAR_SYSTEM.SHADE_STEP_CHARGES, [0, 0, 1, 2, 3]);
   assert.equal(FAMILIAR_SYSTEM.fangStrikes(21), 3);
   assert.equal(FAMILIAR_SYSTEM.moteBurstCooldown(21), 12000);
   assert.equal(FAMILIAR_SYSTEM.spriteBonusDrops(21), 2);
+  assert.equal(FAMILIAR_SYSTEM.catFallMitigation(21), .60);
+  assert.equal(FAMILIAR_SYSTEM.dogExtraMeatChance(21), .44);
+  assert.equal(FAMILIAR_SYSTEM.wolfHostileXpBonus(21), .22);
+});
+
+test('pet familiar collars are rare wildlife drops and skip owned pets', () => {
+  const room = makeRoom();
+  const client = makeClient('pet_dropper');
+  const { prof } = seedPlayer(room, client);
+  const random = Math.random;
+  Math.random = () => 0;
+  try {
+    assert.deepEqual(room.rollPetFamiliarDrop(client, 'prairie_hare', 0), { id: I.CAT_COLLAR, count: 1 });
+    assert.deepEqual(room.rollPetFamiliarDrop(client, 'forest_stag', 0), { id: I.DOG_COLLAR, count: 1 });
+    assert.deepEqual(room.rollPetFamiliarDrop(client, 'ridge_boar', 0), { id: I.WOLF_COLLAR, count: 1 });
+    prof.familiarUnlocks.push('cat');
+    assert.equal(room.rollPetFamiliarDrop(client, 'rabbit', 0), null);
+  } finally {
+    Math.random = random;
+  }
 });
 
 test('familiar Bond XP is independent, server-owned, and requires an active matching familiar', () => {
