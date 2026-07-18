@@ -5142,8 +5142,8 @@ function tradeOfferSummary(offer){
   if(offer&&offer.gold) parts.push('<b>'+Math.max(0,offer.gold|0).toLocaleString('en-US')+'g</b>');
   return parts.join(' + ') || 'nothing';
 }
-function selectedTradeStack(){
-  const slot=Math.max(0,Math.min(8,combatState.selectedSlot|0));
+function tradeStackFromInventorySlot(slot){
+  slot=Math.max(0,Math.min(35,slot|0));
   const stack=inv[slot],item=stack&&ITEMS[stack.id];
   if(!stack||!item) return null;
   const special=!!(stack.dur!=null||item.tool||item.armor||stack.plus||stack.rarity||stack.armorType||stack.forge||stack.masterwork||stack.unique||stack.locked||stack.source);
@@ -5158,11 +5158,48 @@ function tradeNumberInput(value,min,max){
   input.style.cssText='width:96px;padding:10px;background:#101722;color:#fff;border:1px solid #58c7f6;font-family:inherit;text-align:center';
   return input;
 }
-function tradeOfferPayload(countInput,goldInput){
-  const selected=selectedTradeStack();
+function tradeOfferPayload(selectedRef,countInput,goldInput){
+  const selected=selectedRef&&selectedRef.current;
   const count=Math.max(0,Math.min(selected?selected.max:0,Number(countInput&&countInput.value)||0));
   const goldOffer=Math.max(0,Math.min(gold|0,Number(goldInput&&goldInput.value)||0));
   return {slot:selected&&count>0?selected.slot:-1,count,gold:goldOffer};
+}
+function tradeInventoryPicker(selectedRef,countInput,summaryEl){
+  const wrap=document.createElement('div');wrap.className='trade-builder';
+  const grid=document.createElement('div');grid.className='trade-inventory-grid';
+  const refreshSelection=()=>{
+    [...grid.children].forEach((el,i)=>el.classList.toggle('picked',!!selectedRef.current&&selectedRef.current.slot===i));
+    if(selectedRef.current){
+      countInput.max=String(selectedRef.current.max);
+      countInput.value=String(Math.max(1,Math.min(selectedRef.current.max,Number(countInput.value)||1)));
+      summaryEl.innerHTML='<b>'+escHTML(selectedRef.current.name)+'</b><br><small>Slot '+(selectedRef.current.slot+1)+' - max '+selectedRef.current.max+'</small>';
+    }else{
+      countInput.max='0';
+      countInput.value='0';
+      summaryEl.innerHTML='<b>No item selected</b><br><small>Offer gold only, or click an item below.</small>';
+    }
+  };
+  for(let i=0;i<36;i++){
+    const stack=inv[i]&&ITEMS[inv[i].id]?inv[i]:null;
+    const cell=document.createElement('button');
+    cell.type='button';
+    cell.className='slot trade-slot';
+    fillSlotEl(cell,stack);
+    cell.disabled=!stack;
+    cell.addEventListener('click',()=>{
+      selectedRef.current=selectedRef.current&&selectedRef.current.slot===i?null:tradeStackFromInventorySlot(i);
+      refreshSelection();
+    });
+    grid.appendChild(cell);
+  }
+  const side=document.createElement('div');side.className='trade-offer-panel';
+  const countRow=document.createElement('div');countRow.className='trade-control-row';
+  const itemLabelEl=document.createElement('small');itemLabelEl.textContent='ITEM QTY';
+  countRow.appendChild(itemLabelEl);countRow.appendChild(countInput);
+  side.appendChild(summaryEl);side.appendChild(countRow);
+  wrap.appendChild(grid);wrap.appendChild(side);
+  refreshSelection();
+  return wrap;
 }
 function openPlayerTradeUI(target){
   if(!NET.on||!NET.room){sysMsg('Player trading requires the live world server.');return;}
@@ -5172,28 +5209,25 @@ function openPlayerTradeUI(target){
   openQWin('commerce');qpanelEl.innerHTML='';
   const h=document.createElement('h2');h.textContent='PLAYER TRADE';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='WITH '+String(target.name||'Hunter').toUpperCase()+' - ITEM OR GOLD';qpanelEl.appendChild(sub);
-  const selected=selectedTradeStack();
   const intro=document.createElement('p');intro.className='qtext';
-  intro.innerHTML=selected
-    ? 'Offering selected hotbar item: <b>'+escHTML(selected.name)+'</b>. Set item quantity, gold, or both.'
-    : 'No hotbar item selected. You can still offer gold, or close this and select an item first.';
+  intro.innerHTML='Click an item from your inventory to add it to the offer. You can also offer gold only.';
   qpanelEl.appendChild(intro);
-  const itemCount=tradeNumberInput(selected?1:0,0,selected?selected.max:0);
+  const selectedRef={current:null};
+  const itemCount=tradeNumberInput(0,0,0);
   const goldCount=tradeNumberInput(0,0,Math.max(0,gold|0));
-  const form=document.createElement('div');form.className='shoprow';
-  form.innerHTML='<span><b>YOUR OFFER</b><br><small>Item quantity from selected hotbar slot</small></span>';
-  const controls=document.createElement('span');controls.style.display='flex';controls.style.gap='8px';controls.style.alignItems='center';
-  const itemLabelEl=document.createElement('small');itemLabelEl.textContent='ITEM';controls.appendChild(itemLabelEl);controls.appendChild(itemCount);
-  const goldLabelEl=document.createElement('small');goldLabelEl.textContent='GOLD';controls.appendChild(goldLabelEl);controls.appendChild(goldCount);
-  form.appendChild(controls);qpanelEl.appendChild(form);
+  const summary=document.createElement('div');summary.className='trade-selected-summary';
+  qpanelEl.appendChild(tradeInventoryPicker(selectedRef,itemCount,summary));
+  const form=document.createElement('div');form.className='trade-gold-row';
+  const goldLabelEl=document.createElement('span');goldLabelEl.innerHTML='<b>GOLD OFFER</b><small>Your balance: '+Math.max(0,gold|0).toLocaleString('en-US')+'g</small>';
+  form.appendChild(goldLabelEl);form.appendChild(goldCount);qpanelEl.appendChild(form);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('SEND OFFER',()=>{
-    const payload=tradeOfferPayload(itemCount,goldCount);
+    const payload=tradeOfferPayload(selectedRef,itemCount,goldCount);
     if(payload.slot<0&&!payload.gold){sysMsg('Add an item quantity or gold before sending a trade.');return;}
     NET.room.send('tradeOffer',{targetSid:target.sid,...payload});
     closeQWin();
   }));
-  row.appendChild(qBtn('OPEN INVENTORY',()=>{closeQWin(false);openUI('inv');},true));
+  row.appendChild(qBtn('GOLD ONLY',()=>{selectedRef.current=null;itemCount.max='0';itemCount.value='0';summary.innerHTML='<b>No item selected</b><br><small>Offer gold only, or click an item below.</small>';[...qpanelEl.querySelectorAll('.trade-slot')].forEach(el=>el.classList.remove('picked'));},true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function openPlayerSocialUI(target){
@@ -5234,24 +5268,24 @@ function applyTradeOffer(m){
   const h=document.createElement('h2');h.textContent='TRADE OFFER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' IS OFFERING';qpanelEl.appendChild(sub);
   const incoming=document.createElement('p');incoming.className='qtext';
-  incoming.innerHTML='<b>You receive:</b> '+tradeOfferSummary(m.offer)+'<br><br>Select a hotbar item if you want to answer with an item, or enter gold only.';
+  incoming.innerHTML='<b>You receive:</b> '+tradeOfferSummary(m.offer)+'<br><br>Click an inventory item to give in return, or answer with gold only.';
   qpanelEl.appendChild(incoming);
-  const selected=selectedTradeStack();
-  const itemCount=tradeNumberInput(selected?1:0,0,selected?selected.max:0);
+  const selectedRef={current:null};
+  const itemCount=tradeNumberInput(0,0,0);
   const goldCount=tradeNumberInput(0,0,Math.max(0,gold|0));
-  const form=document.createElement('div');form.className='shoprow';
-  form.innerHTML='<span><b>YOU GIVE</b><br><small>'+(selected?escHTML(selected.name):'No selected hotbar item')+'</small></span>';
-  const controls=document.createElement('span');controls.style.display='flex';controls.style.gap='8px';controls.style.alignItems='center';
-  const itemLabelEl=document.createElement('small');itemLabelEl.textContent='ITEM';controls.appendChild(itemLabelEl);controls.appendChild(itemCount);
-  const goldLabelEl=document.createElement('small');goldLabelEl.textContent='GOLD';controls.appendChild(goldLabelEl);controls.appendChild(goldCount);
-  form.appendChild(controls);qpanelEl.appendChild(form);
+  const summary=document.createElement('div');summary.className='trade-selected-summary';
+  qpanelEl.appendChild(tradeInventoryPicker(selectedRef,itemCount,summary));
+  const form=document.createElement('div');form.className='trade-gold-row';
+  const goldLabelEl=document.createElement('span');goldLabelEl.innerHTML='<b>GOLD RESPONSE</b><small>Your balance: '+Math.max(0,gold|0).toLocaleString('en-US')+'g</small>';
+  form.appendChild(goldLabelEl);form.appendChild(goldCount);qpanelEl.appendChild(form);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('ACCEPT TRADE',()=>{
-    const payload=tradeOfferPayload(itemCount,goldCount);
+    const payload=tradeOfferPayload(selectedRef,itemCount,goldCount);
     if(payload.slot<0&&!payload.gold){sysMsg('Offer an item or gold to complete the trade.');return;}
     NET.room.send('tradeAccept',{tradeId:m.id,...payload});
     closeQWin();
   }));
+  row.appendChild(qBtn('GOLD ONLY',()=>{selectedRef.current=null;itemCount.max='0';itemCount.value='0';summary.innerHTML='<b>No item selected</b><br><small>Offer gold only, or click an item below.</small>';[...qpanelEl.querySelectorAll('.trade-slot')].forEach(el=>el.classList.remove('picked'));},true));
   row.appendChild(qBtn('DECLINE',()=>{NET.room.send('tradeCancel',{tradeId:m.id});closeQWin();},true));
 }
 function applyTradeResult(m){

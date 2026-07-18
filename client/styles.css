@@ -463,6 +463,17 @@
   .qrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
   .qbtn{font-family:inherit;font-size:12px;letter-spacing:2px;padding:8px 18px;background:#5a4014;color:#ffd24a;border:1px solid #d8a020;border-radius:4px;cursor:pointer;margin-top:6px}
   .qbtn:hover{background:#6e5020}
+  .trade-builder{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:14px;margin:12px 0 10px;align-items:start}
+  .trade-inventory-grid{display:grid;grid-template-columns:repeat(9,48px);gap:5px;padding:10px;border:1px solid rgba(216,160,32,.24);border-radius:7px;background:rgba(3,7,12,.34);width:max-content;max-width:100%;overflow-x:auto}
+  .trade-slot{padding:0;cursor:pointer;background:var(--slot-bg);border:2px solid;border-color:var(--slot-dark) var(--slot-light) var(--slot-light) var(--slot-dark)}
+  .trade-slot:disabled{cursor:default;opacity:.42}
+  .trade-slot:not(:disabled):hover{box-shadow:inset 0 0 0 999px rgba(255,255,255,.18)}
+  .trade-slot.picked{border-color:#9ad26b;box-shadow:0 0 0 2px rgba(154,210,107,.45),0 0 16px rgba(154,210,107,.35),inset 0 0 12px rgba(154,210,107,.18)}
+  .trade-offer-panel,.trade-gold-row{border:1px solid rgba(255,210,74,.2);border-radius:7px;background:rgba(5,10,18,.54);padding:10px}
+  .trade-selected-summary b,.trade-gold-row b{display:block;color:#ffd24a;font-size:12px;letter-spacing:1.1px}
+  .trade-selected-summary small,.trade-gold-row small{display:block;margin-top:3px;color:#b9c8d6;font-size:10px;line-height:1.35}
+  .trade-control-row,.trade-gold-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px}
+  .trade-control-row small{color:#9fd8ff;font-size:9px;letter-spacing:1.4px}
   .gate-readiness-list{display:grid;gap:6px;margin:9px 0 13px;padding:10px;border:1px solid rgba(255,210,74,.2);border-radius:7px;background:rgba(5,12,22,.36)}
   .gate-readiness-list div{display:grid;grid-template-columns:18px minmax(0,1fr);gap:7px;align-items:start;font-size:11px;color:#d8e6f4}
   .gate-readiness-list b{color:#8090a4}
@@ -1089,6 +1100,9 @@
   }
   /* Compact game HUD: one top information rail and one centred bottom control stack. */
   @media (max-width:760px){
+    .trade-builder{grid-template-columns:1fr}
+    .trade-inventory-grid{grid-template-columns:repeat(6,48px)}
+    .trade-gold-row{align-items:flex-start;flex-direction:column}
     #qpanel.management .utility-loadout-panel{grid-template-columns:1fr}
     #qpanel.management .utility-slots{grid-template-columns:repeat(2,minmax(0,1fr))}
     #qpanel.management .shoprow.utilityrow{grid-template-columns:32px minmax(0,1fr)}

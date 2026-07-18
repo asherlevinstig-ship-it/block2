@@ -368,6 +368,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(world, /"townSocialTargetNear":\{get:\(\)=>townSocialTargetNear\}/);
   assert.match(combat, /KeyE[\s\S]*townSocialTargetNear[\s\S]*openPlayerSocialUI[\s\S]*openPlayerTradeUI/);
   assert.match(menus, /function openPlayerTradeUI/);
+  assert.match(menus, /function tradeInventoryPicker/);
+  assert.match(menus, /tradeStackFromInventorySlot/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);
