@@ -3086,6 +3086,33 @@ class GameRoom extends Room {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
     return !!(pa && pb && !pa.dgn && !pb.dgn && Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
   }
+  tradeDistanceInfo(a, b) {
+    const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
+    if (!pa || !pb) return {};
+    return {
+      distance: Math.round(Math.hypot((pa.x || 0) - (pb.x || 0), (pa.z || 0) - (pb.z || 0)) * 10) / 10,
+      yDelta: Math.round(Math.abs((pa.y || 0) - (pb.y || 0)) * 10) / 10,
+    };
+  }
+  findTradeTarget(client, m = {}) {
+    const targetSid = String(m.targetSid || '');
+    const bySid = targetSid && this.clients.find(c => c.sessionId === targetSid);
+    if (bySid && bySid !== client) return bySid;
+    const wantedName = cleanName(m.targetName || '').toLowerCase();
+    if (!wantedName) return null;
+    let best = null, bestDist = Infinity;
+    const pa = client && this.state.players.get(client.sessionId);
+    if (!pa) return null;
+    for (const c of this.clients || []) {
+      if (!c || c === client) continue;
+      const p = this.state.players.get(c.sessionId);
+      if (!p || cleanName(p.name || '').toLowerCase() !== wantedName) continue;
+      if (!this.tradePlayersClose(client, c, 10)) continue;
+      const dist = Math.hypot((pa.x || 0) - (p.x || 0), (pa.z || 0) - (p.z || 0));
+      if (dist < bestDist) { best = c; bestDist = dist; }
+    }
+    return best;
+  }
   socialPlayersCloseInTown(a, b, range = 8) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
     return !!(pa && pb && !pa.dgn && !pb.dgn && this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z) &&
@@ -3118,12 +3145,12 @@ class GameRoom extends Room {
   }
   handleTradeOffer(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
-    const target = this.clients.find(c => c.sessionId === targetSid);
+    const target = this.findTradeTarget(client, m);
     const targetRec = target && this.profileFor(target);
-    const reject = reason => client.send('tradeReject', { reason });
-    if (!rec || !target || !targetRec || target === client) return reject('target');
+    const reject = (reason, extra = {}) => client.send('tradeReject', { reason, targetSid, targetName: String(m.targetName || ''), ...extra });
+    if (!rec || !target || !targetRec || target === client) return reject('target', { online: (this.clients || []).length });
     if (this.rateLimited(client, 'trade', 3, 6)) return reject('rate');
-    if (!this.tradePlayersClose(client, target)) return reject('range');
+    if (!this.tradePlayersClose(client, target)) return reject('range', this.tradeDistanceInfo(client, target));
     const offer = this.tradeOfferFromMessage(rec.prof, m);
     if (!offer.stack && !offer.gold) return reject('empty');
     if (offer.gold > (rec.prof.gold | 0)) return reject('gold');

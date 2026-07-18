@@ -370,6 +370,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function openPlayerTradeUI/);
   assert.match(menus, /function tradeInventoryPicker/);
   assert.match(menus, /tradeStackFromInventorySlot/);
+  assert.match(menus, /NET\.room\.send\('tradeOffer',\{targetSid:target\.sid,targetName:String\(target\.name\|\|''\)/);
+  assert.match(menus, /function applyTradeReject[\s\S]*trade-error-panel[\s\S]*SEND OFFER/);
   assert.match(menus, /function applyTradeOffer[\s\S]*seenTradeOfferIds[\s\S]*statOpen[\s\S]*closeQWin\(false\)[\s\S]*trade-offer-open/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /friendAdd/);
@@ -5287,7 +5289,24 @@ test('player trade validates range before creating an offer', () => {
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });
 
   assert.equal(room.trades.size, 0);
-  assert.deepEqual(alice.sent.at(-1), { type: 'tradeReject', msg: { reason: 'range' } });
+  assert.equal(alice.sent.at(-1).type, 'tradeReject');
+  assert.equal(alice.sent.at(-1).msg.reason, 'range');
+  assert.equal(alice.sent.at(-1).msg.distance, 40);
+});
+
+test('player trade can resolve a nearby named target when the client session id is stale', () => {
+  const room = makeRoom(), alice = makeClient('name_alice'), bob = makeClient('name_bob');
+  seedPlayer(room, alice, { name: 'Alice', inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
+  seedPlayer(room, bob, { name: 'Dylan', inv: [], x: 21, z: 20 });
+  room.clients = [alice, bob];
+  const broadcasts = [];
+  room.broadcast = (type, msg) => broadcasts.push({ type, msg });
+
+  room.handleTradeOffer(alice, { targetSid: 'stale_session', targetName: 'Dylan', slot: 0, count: 1, gold: 0 });
+
+  assert.equal(room.trades.size, 1);
+  assert.ok(bob.sent.some(e => e.type === 'tradeOffer' && e.msg.toSid === bob.sessionId));
+  assert.ok(broadcasts.some(e => e.type === 'tradeOfferBroadcast' && e.msg.toSid === bob.sessionId));
 });
 
 test('town friendship creates a mutual persistent friend link', () => {

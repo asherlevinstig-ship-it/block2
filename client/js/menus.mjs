@@ -5223,12 +5223,14 @@ function openPlayerTradeUI(target){
   const goldLabelEl=document.createElement('span');goldLabelEl.innerHTML='<b>GOLD OFFER</b><small>Your balance: '+Math.max(0,gold|0).toLocaleString('en-US')+'g</small>';
   form.appendChild(goldLabelEl);form.appendChild(goldCount);qpanelEl.appendChild(form);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
-  row.appendChild(qBtn('SEND OFFER',()=>{
+  const sendBtn=qBtn('SEND OFFER',()=>{
     const payload=tradeOfferPayload(selectedRef,itemCount,goldCount);
     if(payload.slot<0&&!payload.gold){sysMsg('Add an item quantity or gold before sending a trade.');return;}
-    NET.room.send('tradeOffer',{targetSid:target.sid,...payload});
-    closeQWin();
-  }));
+    sendBtn.disabled=true;
+    sendBtn.textContent='SENDING...';
+    NET.room.send('tradeOffer',{targetSid:target.sid,targetName:String(target.name||''),...payload});
+  });
+  row.appendChild(sendBtn);
   row.appendChild(qBtn('GOLD ONLY',()=>{selectedRef.current=null;itemCount.max='0';itemCount.value='0';summary.innerHTML='<b>No item selected</b><br><small>Offer gold only, or click an item below.</small>';[...qpanelEl.querySelectorAll('.trade-slot')].forEach(el=>el.classList.remove('picked'));},true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
@@ -5249,6 +5251,7 @@ function openPlayerSocialUI(target){
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function applyTradePending(m){
+  if(qOpen&&qMode==='commerce')closeQWin(false);
   sysMsg('Trade offer sent to <b>'+escHTML(String(m&&m.toName||'Hunter'))+'</b>: '+tradeOfferSummary(m&&m.offer)+'.',{tier:'minor',title:'Trade'});
 }
 function applyFriendResult(m){
@@ -5308,9 +5311,17 @@ function applyTradeResult(m){
 }
 function applyTradeReject(m){
   const reason=String(m&&m.reason||'invalid');
-  const text={target:'No nearby hunter found.',rate:'Trading too quickly.',range:'Move closer to trade.',empty:'Add an item or gold first.',gold:'Not enough gold.',full:'One inventory is full.',item:'That item is no longer available.',missing:'That trade expired.',offline:'That hunter went offline.',expired:'That trade expired.'}[reason]||'Trade failed.';
+  let text={target:'No nearby hunter found.',rate:'Trading too quickly.',range:'Move closer to trade.',empty:'Add an item or gold first.',gold:'Not enough gold.',full:'One inventory is full.',item:'That item is no longer available.',missing:'That trade expired.',offline:'That hunter went offline.',expired:'That trade expired.'}[reason]||'Trade failed.';
+  if(reason==='range'&&m&&Number.isFinite(Number(m.distance)))text+=' Distance: '+Number(m.distance).toFixed(1)+' blocks.';
+  if(reason==='target'&&m&&m.targetName)text+=' Target: '+escHTML(String(m.targetName))+'.';
   SFX.error();
   showName('TRADE FAILED');
+  if(qOpen&&qMode==='commerce'&&qpanelEl){
+    [...qpanelEl.querySelectorAll('.trade-error-panel')].forEach(el=>el.remove());
+    const err=document.createElement('div');err.className='trade-error-panel';err.innerHTML='<b>Trade failed:</b> '+text+'<br><small>Adjust the offer or move beside the player, then press Send Offer again.</small>';
+    qpanelEl.insertBefore(err,qpanelEl.querySelector('.qrow')||null);
+    [...qpanelEl.querySelectorAll('.qrow .qbtn')].forEach(btn=>{if(btn.textContent==='SENDING...'){btn.disabled=false;btn.textContent='SEND OFFER';}});
+  }
   sysMsg(text,{tier:'minor',title:'Trade'});
 }
 function applyTradeCancel(m){
