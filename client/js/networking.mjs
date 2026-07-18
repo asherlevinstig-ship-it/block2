@@ -32,6 +32,28 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
 let seenClaimableObjectiveIds=new Set();
 let objectiveFeedPrimed=false;
+const EVENT_FEED_COOLDOWN_MS=7000;
+const eventFeedRecent=new Map();
+function eventFeed(name,text,opts={}){
+  const label=String(name||'[Event]').trim().slice(0,32)||'[Event]';
+  const body=String(text||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,180);
+  if(!body)return;
+  const key=String(opts.key||label+'|'+body);
+  const now=Date.now(),cooldown=Math.max(0,Number(opts.cooldown)||EVENT_FEED_COOLDOWN_MS);
+  if(cooldown&&now-(eventFeedRecent.get(key)||0)<cooldown)return;
+  eventFeedRecent.set(key,now);
+  if(eventFeedRecent.size>90){
+    const cutoff=now-60000;
+    for(const [k,t] of eventFeedRecent)if(t<cutoff)eventFeedRecent.delete(k);
+  }
+  if(typeof eventLog==='function')eventLog(body,label);
+}
+function feedItemName(id){
+  return (ITEMS[id]&&ITEMS[id].name)||'Item';
+}
+function feedStackText(id,count=1){
+  return feedItemName(id)+' x'+Math.max(1,count|0||1);
+}
 const DEITY_POWER_LABELS=Object.fromEntries(DEITY_POWER_DEFS.map(power=>[power.id,power.name]));
 const deityState={unlocked:false,ascendedAt:0,chosenPower:'',powers:[],active:{},admin:false,choices:[...DEITY_POWER_IDS]};
 globalThis.BlockcraftDeityState=deityState;
@@ -932,11 +954,12 @@ function netAttachRoom(room,name,client){
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
     room.onMessage('tutorialProgress', m=>{if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);});
     room.onMessage('firstPromotionAck', m=>{if(m&&m.ok)ONBOARD.setSeen(true);});
-    room.onMessage('levelUp', m=>showLevelUpReveal(m));
+    room.onMessage('levelUp', m=>{showLevelUpReveal(m);eventFeed('[Progress]','You reached Hunter Level '+Math.max(1,(m&&m.level)|0)+'. Spend stat points with C.',{key:'level:'+((m&&m.level)|0),cooldown:0});});
     room.onMessage('rankUp', m=>{
       presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
+      eventFeed('[Progress]','Hunter rank advanced to '+String(m&&m.rankName||'a new rank')+'.',{key:'rank:'+String(m&&m.rankName||''),cooldown:0});
     });
-    room.onMessage('deityAscended', m=>showDeityAscension(m));
+    room.onMessage('deityAscended', m=>{showDeityAscension(m);eventFeed('[Deity]','You ascended into Deity power at Level '+Math.max(DEITY_LEVEL,(m&&m.level)|0)+'.',{key:'deity:ascended',cooldown:0});});
     room.onMessage('deityPowerResult', m=>{
       if(m&&m.deity)applyDeityState(m.deity);
       if(!m||m.ok===false){
@@ -945,10 +968,10 @@ function netAttachRoom(room,name,client){
         return;
       }
       const power=deityPowerName(m.power);
-      if(m.action==='choose'){SFX.level();showName(power.toUpperCase());sysMsg('Deity power chosen: <b>'+escHTML(power)+'</b>.',{tier:'major',title:'Deity'});}
-      else if(m.action==='toggle')sysMsg('<b>'+escHTML(power)+'</b> '+(m.active?'enabled':'disabled')+'.');
-      else if(m.action==='day_night')sysMsg('The sky bends toward <b>'+escHTML(m.target||'another time')+'</b>.');
-      else if(m.action==='weather')sysMsg('Weather shifted to <b>'+escHTML(m.weather||'clear')+'</b>.');
+      if(m.action==='choose'){SFX.level();showName(power.toUpperCase());sysMsg('Deity power chosen: <b>'+escHTML(power)+'</b>.',{tier:'major',title:'Deity'});eventFeed('[Deity]','You chose '+power+' as a Deity power.',{key:'deity:choose:'+m.power,cooldown:0});}
+      else if(m.action==='toggle'){sysMsg('<b>'+escHTML(power)+'</b> '+(m.active?'enabled':'disabled')+'.');eventFeed('[Deity]',power+' '+(m.active?'enabled':'disabled')+'.');}
+      else if(m.action==='day_night'){sysMsg('The sky bends toward <b>'+escHTML(m.target||'another time')+'</b>.');eventFeed('[Deity]','You changed the world time toward '+String(m.target||'another time')+'.');}
+      else if(m.action==='weather'){sysMsg('Weather shifted to <b>'+escHTML(m.weather||'clear')+'</b>.');eventFeed('[Deity]','You changed the weather to '+String(m.weather||'clear')+'.');}
       if(typeof renderStat==='function'&&statOpen)renderStat();
       refreshHUD();
     });
@@ -959,6 +982,7 @@ function netAttachRoom(room,name,client){
       SFX.level();
       rewardGain('rare',1,reward,{icon:'JOB'});
       sysMsg('<b>'+escHTML(jobName)+' Level '+(idMilestone.level|0)+'</b> reached<br><b>'+escHTML(idMilestone.title)+' unlocked:</b> '+escHTML(idMilestone.desc)+(reward?'<br><b>Reward:</b> '+escHTML(reward):''));
+      eventFeed('[Job]',jobName+' reached Level '+(idMilestone.level|0)+': '+String(idMilestone.title||reward)+'.',{key:'job:'+job+':'+(idMilestone.level|0),cooldown:0});
     };
     const presentJobContractClaim=(m)=>{
       const c=clampJobContract(m&&m.contract)||{};
@@ -978,11 +1002,12 @@ function netAttachRoom(room,name,client){
       const next=jobContractNextHint(job,m.jobLevelAfter|0,milestones,!!m.graduation);
       sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
       showName(title+' complete');
+      eventFeed('[Job]',title+' complete. '+parts.join(', ')+'. Next: '+next,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
     };
     bindProgressionMessages(room,{
       getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},setContract:v=>{jobContract=v;},clampContract:clampJobContract,
       jobLevel:jobLevelFromXp,contractReady:jobContractReady,
-      onJobLevel:(level,id)=>{const milestone=JOB_SYSTEM.milestoneAt(id,level);if(milestone)presentJobMilestone(id,milestone);else{SFX.level();sysMsg('<b>'+escHTML((JOBS[id]&&JOBS[id].name)||'Job')+' Level '+level+'</b> reached');}},
+      onJobLevel:(level,id)=>{const milestone=JOB_SYSTEM.milestoneAt(id,level);if(milestone)presentJobMilestone(id,milestone);else{SFX.level();sysMsg('<b>'+escHTML((JOBS[id]&&JOBS[id].name)||'Job')+' Level '+level+'</b> reached');eventFeed('[Job]',((JOBS[id]&&JOBS[id].name)||'Job')+' reached Level '+level+'.',{key:'job:'+id+':'+level,cooldown:0});}},
       onJobMilestone:(id,milestone)=>presentJobMilestone(id,milestone),
       onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));},
       reconcileArmor:()=>{cursorStack=null;renderCursor();if(uiOpen)renderUI();},
@@ -998,7 +1023,7 @@ function netAttachRoom(room,name,client){
           if(m.graduation)setTimeout(()=>ONBOARD.showFieldWorkGraduation(),40);
         }
         if(m.type==='jobContract'&&m.action==='take')clearTownJobGuidance();
-        if(m.type==='job'&&m.job)sysMsg('You are now working as a <b>'+escHTML(JOBS[m.job]&&JOBS[m.job].name||m.job)+'</b>.'+(jobContract&&jobContract.job!=='adventurer'&&jobContract.job!==m.job?'<br>Your '+escHTML((JOBS[jobContract.job]&&JOBS[jobContract.job].name)||jobContract.job)+' contract is paused until you switch back.':''));
+        if(m.type==='job'&&m.job){sysMsg('You are now working as a <b>'+escHTML(JOBS[m.job]&&JOBS[m.job].name||m.job)+'</b>.'+(jobContract&&jobContract.job!=='adventurer'&&jobContract.job!==m.job?'<br>Your '+escHTML((JOBS[jobContract.job]&&JOBS[jobContract.job].name)||jobContract.job)+' contract is paused until you switch back.':''));eventFeed('[Job]','You switched job to '+((JOBS[m.job]&&JOBS[m.job].name)||m.job)+'.',{key:'job:set:'+m.job,cooldown:2000});}
         if((m.type==='job'||m.type==='jobContract')&&qOpen)openJobsUI(m.job||playerJob);
       },
       refresh:()=>{renderBars();renderStat();refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();refreshAppearanceDummy();if(qOpen&&qMode==='management')openJobsUI();},
@@ -1024,6 +1049,7 @@ function netAttachRoom(room,name,client){
       if(m&&m.assistRewardJobXp){
         rewardGain('item',m.assistRewardJobXp,((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' Assist XP',{icon:'JOB'});
         sysMsg('Homestead assist: <b>+'+(m.assistRewardJobXp|0)+' '+escHTML((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' XP</b>.');
+        eventFeed('[Homestead]','Assisted a homestead and earned '+(m.assistRewardJobXp|0)+' '+((JOBS[m.assistJob]&&JOBS[m.assistJob].name)||'Job')+' XP.',{key:'homestead:assist:'+String(m&&m.assistJob||''),cooldown:2500});
       }
       refreshHUD();if(qOpen&&qMode==='management')openLandClaimsUI();
     });
@@ -1035,6 +1061,7 @@ function netAttachRoom(room,name,client){
       if(m&&m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
       SFX.coin();
       sysMsg('Homestead work order claimed'+(m&&m.rewardGold?'<br>'+economyRecapHTML(m.rewardGold|0,gold,'Homestead contract payout'):'.'));
+      eventFeed('[Homestead]','Work order claimed'+(m&&m.rewardGold?' for '+(m.rewardGold|0)+' gold':'')+(m&&m.rewardJobXp?' and '+(m.rewardJobXp|0)+' Job XP':'')+'.',{key:'homestead:workorder:'+String(m&&m.id||Date.now()),cooldown:0});
       for(const milestone of Array.isArray(m&&m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
       refreshHUD();renderBars();if(qOpen&&qMode==='management')openLandClaimsUI();
     });
@@ -1065,6 +1092,7 @@ function netAttachRoom(room,name,client){
       const completeTitle=questRewardCompletionTitle(m,sourceLabel),next=questRewardNextStep(m);
       showName(completeTitle);
       sysMsg('<b>'+escHTML(completeTitle)+'</b><br>'+line+where+'<br><small>Next: '+escHTML(next)+'</small>',{tier:'minor',title:sourceLabel+' Reward'});
+      eventFeed('[Quest]',completeTitle+' claimed. '+line.replace(/\s+/g,' ')+'.',{key:'quest-reward:'+String(m.id||completeTitle),cooldown:0});
     });
     room.onMessage('questOutcome', m=>{
       if(!m)return;
@@ -1087,6 +1115,7 @@ function netAttachRoom(room,name,client){
             : 'Failed. No reward was granted.';
       const next=m.canReaccept?' You can pick up new work from '+(m.location||'the quest giver')+'.':'';
       sysMsg('<b>'+escHTML(m.title||sourceLabel)+'</b><br>'+escHTML(explanation+next),{tier:outcome==='abandoned'?'minor':'major',title:sourceLabel+' '+(outcome==='expired'?'Expired':outcome==='abandoned'?'Abandoned':'Failed')});
+      eventFeed('[Quest]',String(m.title||sourceLabel)+' '+outcome+'. '+explanation,{key:'quest-outcome:'+String(m.id||m.title||sourceLabel)+':'+outcome,cooldown:0});
     });
     room.onMessage('npcQuest', m=>{
       if(!m)return;
@@ -1101,6 +1130,7 @@ function netAttachRoom(room,name,client){
         const questGold=m.completed.gold|0;
         const triage=itemTriageSummary(rewardItems);
         sysMsg('<b>'+escHTML(m.completed.title||'Town quest')+'</b> complete.'+(questGold?'<br>'+economyRecapHTML(questGold,gold+questGold,'Town quest reward'):'')+(triage?'<br><b>Reward triage:</b> '+escHTML(triage):''),{tier:'major',title:'Quest Complete'});
+        eventFeed('[Quest]',String(m.completed.title||'Town quest')+' complete'+(triage?': '+triage:'')+'.',{key:'npc-complete:'+String(m.completed.id||m.completed.title||''),cooldown:0});
         // Multiplayer turn-in returns here before the local dialogue callback
         // can run. Start the one-time milestone reward from the authoritative
         // completion message so Level 2 never skips straight past its reward.
@@ -1111,6 +1141,7 @@ function netAttachRoom(room,name,client){
         SFX.quest();
         if(quest.giver==='Mara Vale'&&quest.title==='First Hands') sysMsg('<b>Quest accepted: First Hands.</b> Leave through the <b>north gate</b> and gather 6 logs.');
         else sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> accepted from '+escHTML(quest.giver)+'.');
+        eventFeed('[Quest]','Accepted '+String(quest.title||'Town quest')+' from '+String(quest.giver||'a quest giver')+'.',{key:'npc-accept:'+String(quest.id||quest.title||''),cooldown:0});
         if(Array.isArray(m.grantedItems)&&m.grantedItems.some(item=>item&&item.id===I.WOOD_SWORD)){
           sysMsg('Mara hands you a <b>Wooden Sword</b>. It is already in your inventory.');
           showName('Wooden Sword received');
@@ -1226,6 +1257,7 @@ function netAttachRoom(room,name,client){
       SFX.level();
       showUtilityUnlockToast(m,u,firstUnlock);
       sysMsg('Utility unlocked: <b>'+escHTML(u.name)+'</b>'+(m&&m.equipped?' - '+escHTML(utilitySlotUnlockLine(m,u)):'')+(m&&m.reason?' - '+escHTML(m.reason):''),'minor');
+      eventFeed('[Utility]',u.name+' unlocked'+(m&&m.equipped?' and equipped':'')+'.',{key:'utility:'+id,cooldown:0});
       renderUtilitiesUI();
       updateLandMinimap();
       questSystemCheck();
@@ -1243,6 +1275,7 @@ function netAttachRoom(room,name,client){
         overworldActivity={...(overworldActivity||{}),trailSense:{...m.target,expiresAt:Date.now()+duration}};
         SFX.success();
         sysMsg('<b>Trail Sense:</b> '+escHTML(m.target.label||'Fresh tracks')+' - '+Math.max(0,m.target.distance|0)+'m.');
+        eventFeed('[Utility]','Trail Sense found '+String(m.target.label||'fresh tracks')+' '+Math.max(0,m.target.distance|0)+'m away.');
         updateLandMinimap();
       }
     });
@@ -1285,22 +1318,26 @@ function netAttachRoom(room,name,client){
       if(typeof (m&&m.gold)==='number') gold=Math.max(0,m.gold|0);
       SFX.uiOpen();
       sysMsg((m&&m.recovered?'<b>Westwind journey restored.</b>':'<b>Boarded the Westwind.</b> 1,000 gold fare paid.')+' Press <b>G</b> to leave before departure.');
+      eventFeed('[Skyship]',(m&&m.recovered?'Westwind journey restored.':'You boarded the Westwind.')+' Departure pending.',{key:'skyship:board',cooldown:0});
     });
     room.onMessage('skyshipLeft', m=>{
       worldApi.applySkyshipJourney({boarded:false});
       if(typeof (m&&m.gold)==='number') gold=Math.max(0,m.gold|0);
       SFX.uiClose(); sysMsg('You left the Westwind. <b>1,000 gold refunded.</b>');
+      eventFeed('[Skyship]','You left the Westwind and received a refund.',{key:'skyship:left',cooldown:0});
     });
     room.onMessage('skyshipDeparted', m=>{
       worldApi.applySkyshipJourney({...m,boarded:true,phase:'flight'});
       player.vel.set(0,0,0); SFX.success();
       sysMsg('<b>Westwind is underway.</b> Movement locked until the Western Frontier.');
+      eventFeed('[Skyship]','The Westwind departed for the Western Frontier.',{key:'skyship:departed',cooldown:0});
     });
     room.onMessage('skyshipArrived', m=>{
       worldApi.applySkyshipJourney({boarded:false});
       if(m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)) player.pos.set(+m.x,+m.y,+m.z);
       player.vel.set(0,0,0); SFX.level();
       sysMsg('<b>Westwind has arrived at the Western Frontier.</b>'+(m&&m.recovered?' Your interrupted journey was completed safely.':''));
+      eventFeed('[Skyship]','Arrived at the Western Frontier.',{key:'skyship:arrived',cooldown:0});
     });
     room.onMessage('skyshipBoardReject', m=>{
       const r=m&&m.reason;
@@ -1316,6 +1353,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('sleepComplete', ()=>{
       hp=Math.min(maxHp(),hp+8); mp=maxMp(); sp=maxSp(); renderBars();
       sleepEl.style.opacity=0; sleeping=false; showName('Good morning!');
+      eventFeed('[Rest]','You slept through the night. HP, MP, and SP refreshed.',{key:'sleep:complete',cooldown:0});
     });
     room.onMessage('enterDungeon', m=>{
       dungeonLobbyState=null;
@@ -1323,6 +1361,7 @@ function netAttachRoom(room,name,client){
       NET.dgn=m.id;
       const shard=(m.shardPlus>0)?{plus:m.shardPlus, name:m.shardName||'', mods:(m.shardMods||'').split(',').filter(Boolean)}:null;
       beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, dungeonId:m.dungeonId||'', shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
+      eventFeed('[Dungeon]','Entered '+RANKS[Math.max(0,Math.min(RANKS.length-1,(m.rank|0)))].n+'-Rank '+gateKindLabel(m.kind||'public')+' Gate.',{key:'dungeon:enter:'+String(m.id||''),cooldown:0});
     });
     room.onMessage('shardAttuneResult', m=>{
       const i=Math.max(0, Math.min(35, m.slot|0));
@@ -1473,6 +1512,7 @@ function netAttachRoom(room,name,client){
       const triage=itemTriageSummary(m&&m.items);
       if(triage)sysMsg('<b>Loot triage:</b> '+escHTML(triage)+'. Protected items stay out of bulk chest deposits.','minor');
       sysMsg(dungeonReturnRecap(m&&m.result,true)||('<b>Boss defeated!</b> Party loot acquired'));
+      eventFeed('[Dungeon]','Boss defeated. '+(m.xp?('+'+(m.xp|0)+' Hunter XP. '):'')+(triage?('Loot: '+triage+'.'):'Party loot acquired.'),{key:'dungeon:loot:'+String(m.dungeonId||Date.now()),cooldown:0});
       announceBossMastery(m);
     });
     room.onMessage('lootReject', m=>{
@@ -1506,49 +1546,61 @@ function netAttachRoom(room,name,client){
         }
       } else if(m.source==='event'){
         sysMsg('<b>'+escHTML(m.event||'Event')+'</b> reward acquired'+(m.xp?' - <b>+'+(m.xp|0)+' Hunter XP</b>':'')+(grantTriage?'<br><b>Loot triage:</b> '+escHTML(grantTriage):''));
+        eventFeed('[Reward]',String(m.event||'Event')+' reward acquired'+(grantTriage?': '+grantTriage:'')+'.',{key:'grant:event:'+String(m.event||''),cooldown:2000});
       } else if(m.source==='mob'&&m.elite){
         sysMsg('<b>Elite defeated!</b> Ring '+((m.dangerRing|0)+1)+' treasure acquired');
+        eventFeed('[Combat]','Elite defeated in danger ring '+((m.dangerRing|0)+1)+'. Treasure acquired.',{key:'elite:'+String(m.kind||'mob'),cooldown:2000});
+      } else if(grantTriage && !['discovery','bandit_rescue','caravan_recovery'].includes(m.source)){
+        eventFeed('[Reward]','Received '+grantTriage+'.',{key:'grant:'+String(m.source||'reward')+':'+grantTriage,cooldown:2500});
       }
     });
     room.onMessage('biomeFind', m=>{
       if(m&&m.name) sysMsg('Regional discovery: <b>'+escHTML(m.name)+(m.count>1?' x'+(m.count|0):'')+'</b>');
+      if(m&&m.name) eventFeed('[Discovery]','Found regional material: '+String(m.name)+(m.count>1?' x'+(m.count|0):'')+'.',{key:'biome:'+String(m.name),cooldown:6000});
     });
     room.onMessage('discoveryResult',m=>{
       if(!m)return;sysMsg('<b>'+escHTML(m.name||'Discovery')+':</b> '+escHTML(m.text||'Reward acquired')+(m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Weather Vane.':''));
       if(m.id&&m.type!=='ancient_core')claimedDiscoveryIds.add(m.id);
       if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');
       OVERWORLD_RESULTS.show({title:m.name||'Discovery Mapped',summary:m.text||'Regional discovery secured.',grant:m,next:'Continue exploring, or return to the Job Board if your contract is ready.'});
+      eventFeed('[Discovery]','Investigated '+String(m.name||'Discovery')+'. '+String(m.text||'Reward acquired'),{key:'discovery-result:'+String(m.id||m.name||''),cooldown:0});
     });
     room.onMessage('wardenAlarm',m=>{
       const level=Math.max(1,Math.min(3,(m&&m.level)|0||1));
       if(SFX.wardenAlarm)SFX.wardenAlarm(level);else SFX.slamWarn();
       showName(level>=3?'THE WARDEN WAKES':'WARDEN ALARM '+level+'/3');
       sysMsg('<b>Ancient City alarm '+level+'/3:</b> '+escHTML((m&&m.text)||'The deep city is listening.')+(level<3?'<br><small>Touching the core again will raise the alarm.</small>':''));
+      eventFeed('[Ancient]','Ancient City alarm '+level+'/3. '+String((m&&m.text)||'The deep city is listening.'),{key:'warden-alarm:'+level,cooldown:2500});
     });
     room.onMessage('wardenDefeated',m=>{
       SFX.level();SFX.treasure();showName('ECHO ABILITY CLAIMED');
       sysMsg('<b>Warden defeated.</b> The Ancient Core releases <b>'+escHTML((m&&m.ability)||'Warden Cleaver')+'</b>. Its sonic boom is now yours if the weapon reached your inventory.');
+      eventFeed('[Ancient]','Warden defeated. '+String((m&&m.ability)||'Warden Cleaver')+' released from the Ancient Core.',{key:'warden:defeated',cooldown:0});
     });
     room.onMessage('discoverySighted',m=>{
       if(!m||!m.id)return;const fresh=!discoveredIds.has(m.id);discoveredIds.add(m.id);hintedDiscoveryIds.delete(m.id);updateLandMinimap();
       if(fresh)sysMsg((m.shared?'Team mapped':'Mapped')+': <b>'+escHTML(String(m.name||'new discovery').replace(/_/g,' '))+'</b>'+(m.shared&&m.by?' via '+escHTML(m.by):''));
+      if(fresh)eventFeed('[Map]',(m.shared?'Team mapped ':'Mapped ')+String(m.name||'new discovery').replace(/_/g,' ')+(m.shared&&m.by?' via '+String(m.by):'')+'.',{key:'mapped:'+String(m.id),cooldown:0});
     });
     room.onMessage('explorationMilestone',m=>{
       if(!m)return;if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();
       sysMsg('<b>'+escHTML(m.title||'Exploration milestone')+'</b> reached at '+(m.count|0)+' discoveries.<br>'+economyRecapHTML(m.gold|0,gold,'Exploration milestone'));
       showName((m.title||'EXPLORATION MILESTONE').toUpperCase());
+      eventFeed('[Map]',String(m.title||'Exploration milestone')+' reached at '+(m.count|0)+' discoveries.',{key:'explore-milestone:'+String(m.count||''),cooldown:0});
     });
     room.onMessage('weatherDiscoveryMilestone',m=>{
       if(!m)return;if(Number.isFinite(m.totalGold))gold=m.totalGold|0;refreshHUD();updateLandMinimap();
       if(m.kind==='weatherwise')sysMsg('<b>Weatherwise:</b> Weather Sense unlocked. Active spotted weather sites are now easier to track.');
       else sysMsg('<b>First Weather Find:</b> Orin would approve.<br>'+economyRecapHTML(m.goldReward|0,gold,'Weather discovery'));
       showName((m.title||'WEATHERWISE').toUpperCase());
+      eventFeed('[Weather]',String(m.title||'Weather discovery milestone')+' achieved.',{key:'weather-milestone:'+String(m.kind||''),cooldown:0});
     });
     room.onMessage('cartographerIntro',()=>sysMsg('<b>Orin Mapwell:</b> I mark leads in gold, treasure in ink, and weather-sites by patience. Some discoveries only wake under the right sky.'));
     room.onMessage('cartographerUpdate',m=>{if(m&&Number.isFinite(m.gold))gold=m.gold|0;if(m){const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m.treasure||null;if(m.treasure&&m.treasure.targetId)hintedDiscoveryIds.add(m.treasure.targetId);}refreshHUD();updateLandMinimap();if(document.querySelector('#qpanel .fellowship-map-table-marker')&&typeof openFellowshipMapTableUI==='function')openFellowshipMapTableUI(m);else openCartographerUI(m);});
     room.onMessage('cartographerHint',m=>{
       if(!m||!m.id)return;hintedDiscoveryIds.add(m.id);if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();
       sysMsg('<b>Map lead purchased:</b> '+escHTML(m.name||'Uncharted site')+' is marked in gold on your map.<br>'+economyRecapHTML(-Math.abs(m.cost|0),gold,'Cartographer hint'));
+      eventFeed('[Map]','Purchased a lead for '+String(m.name||'an uncharted site')+'.',{key:'map-hint:'+String(m.id),cooldown:0});
     });
     room.onMessage('cartographerReward',m=>{
       if(!m)return;if(Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();
@@ -1559,16 +1611,18 @@ function netAttachRoom(room,name,client){
       }
       if(m.kind==='world')showName('CARTOGRAPHER\'S MANTLE UNLOCKED');else showName('+'+(m.reward|0)+' GOLD');
       sysMsg(m.kind==='world'?'<b>World mapped!</b> Orin awards the unique Cartographer\'s Mantle.':'<b>Cartography reward:</b> '+economyRecapHTML(m.reward|0,gold,'Mapwork reward')+(m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Map Table.':''));
+      eventFeed('[Map]',m.kind==='world'?'World mapped. Cartographer mantle unlocked.':'Cartography reward claimed: +'+((m.reward|0)||0)+' gold.',{key:'cartography-reward:'+String(m.kind||''),cooldown:0});
     });
     room.onMessage('townMapClaimed',m=>{
       showName('TOWN MAP ACQUIRED');
       sysMsg('<b>Town Map acquired:</b> select it on your hotbar and right-click to reopen the live town layout.');
+      eventFeed('[Map]','Town Map acquired. Select it on the hotbar to reopen the live town layout.',{key:'town-map:claimed',cooldown:0});
       if(globalThis.BlockcraftTownMap)globalThis.BlockcraftTownMap.open();
     });
     room.onMessage('cartographerReject',m=>{const r=m&&m.reason;sysMsg(r==='range'?'Move closer to Orin Mapwell.':r==='gold'?'You need more gold for that map lead.':r==='no_hints'?'Orin has no undiscovered leads left.':r==='claimed'?'That reward is already claimed.':r==='active'?'Finish your current scouting commission first.':r==='treasure_active'?'Finish your current treasure map before taking another.':r==='complete'?'Every region is already mapped.':r==='full'?'Make one free inventory slot before taking the town map.':'That cartography reward is not ready yet.');});
-    room.onMessage('treasureMapStarted',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('TREASURE MAP STARTED');if(globalThis.BlockcraftTreasureParchment)globalThis.BlockcraftTreasureParchment(m,'NEW TREASURE MAP');sysMsg('<b>Treasure map started:</b> follow the gold mark, then press <b>G</b> at the clue site.'+(m&&m.mapTable?'<br><b>Map Table:</b> your fellowship has sharpened this clue.':''));});
-    room.onMessage('treasureMapUpdate',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('CLUE SOLVED');sysMsg('<b>Treasure clue '+((m.stage|0)+1)+'/'+(m.total|0)+':</b> '+escHTML(m.clue||'Follow the ink.')+(m&&m.mapTable?'<br><b>Map Table:</b> clue narrowed by your fellowship.':''));});
-    room.onMessage('treasureMapComplete',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=null;if(m&&Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();const ancient=m&&m.kind==='ancient_city';showName(ancient?'ANCIENT ROUTE COMPLETE':'TREASURE FOUND');sysMsg('<b>'+(ancient?'Ancient city map complete!':'Treasure map complete!')+'</b> '+(ancient?'Fragments, an Echo Glyph, and a relic armor piece secured.':'2 diamonds secured.')+'<br>'+economyRecapHTML((m&&m.rewardGold)|0,gold,ancient?'Ancient map':'Treasure cache')+(m&&m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Map Table.':''));});
+    room.onMessage('treasureMapStarted',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('TREASURE MAP STARTED');if(globalThis.BlockcraftTreasureParchment)globalThis.BlockcraftTreasureParchment(m,'NEW TREASURE MAP');sysMsg('<b>Treasure map started:</b> follow the gold mark, then press <b>G</b> at the clue site.'+(m&&m.mapTable?'<br><b>Map Table:</b> your fellowship has sharpened this clue.':''));eventFeed('[Treasure]',(m&&m.kind)==='ancient_city'?'Ancient city treasure map started.':'Treasure map started.',{key:'treasure:start:'+String(m&&m.id||''),cooldown:0});});
+    room.onMessage('treasureMapUpdate',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=m||null;if(m&&m.targetId)hintedDiscoveryIds.add(m.targetId);updateLandMinimap();showName('CLUE SOLVED');sysMsg('<b>Treasure clue '+((m.stage|0)+1)+'/'+(m.total|0)+':</b> '+escHTML(m.clue||'Follow the ink.')+(m&&m.mapTable?'<br><b>Map Table:</b> clue narrowed by your fellowship.':''));eventFeed('[Treasure]','Clue solved. Next clue '+((m.stage|0)+1)+'/'+(m.total|0)+'.',{key:'treasure:update:'+String(m&&m.id||'')+':'+(m&&m.stage|0),cooldown:0});});
+    room.onMessage('treasureMapComplete',m=>{const old=globalThis.BlockcraftTreasureMap;if(old&&globalThis.BlockcraftExplorationFx){const site=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===old.targetId);globalThis.BlockcraftExplorationFx.treasureSolved(site);}if(old&&old.targetId)hintedDiscoveryIds.delete(old.targetId);globalThis.BlockcraftTreasureMap=null;if(m&&Number.isFinite(m.gold))gold=m.gold|0;refreshHUD();updateLandMinimap();const ancient=m&&m.kind==='ancient_city';showName(ancient?'ANCIENT ROUTE COMPLETE':'TREASURE FOUND');sysMsg('<b>'+(ancient?'Ancient city map complete!':'Treasure map complete!')+'</b> '+(ancient?'Fragments, an Echo Glyph, and a relic armor piece secured.':'2 diamonds secured.')+'<br>'+economyRecapHTML((m&&m.rewardGold)|0,gold,ancient?'Ancient map':'Treasure cache')+(m&&m.fellowshipRenown?'<br><b>Fellowship:</b> +'+(m.fellowshipRenown|0)+' Renown from the Map Table.':''));eventFeed('[Treasure]',ancient?'Ancient route complete. Relic rewards secured.':'Treasure found. Cache secured.',{key:'treasure:complete:'+String(m&&m.kind||''),cooldown:0});});
     room.onMessage('treasureMapReject',m=>{const r=m&&m.reason;sysMsg(r==='range'?'Search closer to the marked landmark.':r==='full'?'Make room in your inventory before claiming this treasure route.':'You do not have an active treasure clue.');});
     room.onMessage('discoveryReject',m=>{
       const r=m&&m.reason;if(r==='weather'&&globalThis.BlockcraftExplorationFx)globalThis.BlockcraftExplorationFx.dormantWeather(m.type);
@@ -1576,30 +1630,31 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('banditCampState',m=>{
       if(!m)return;
-      if(m.phase==='captain')sysMsg('<b>Bandit Captain!</b> The camp leader has entered the fight.');
-      else if(m.phase==='cleared'){discoveredIds.add(m.id);updateLandMinimap();sysMsg('<b>Bandit Camp Cleared!</b> The camp chest is unlocked for a short time.');if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');OVERWORLD_RESULTS.show({title:'BANDIT CAMP CLEARED',summary:m.name||'The captain has fallen.',contract:regionalContract&&regionalContract.ready?'READY':'UPDATED',next:'Open the camp chest before it locks again.'});}
+      if(m.phase==='captain'){sysMsg('<b>Bandit Captain!</b> The camp leader has entered the fight.');eventFeed('[Roads]','Bandit Captain entered the fight at '+String(m.name||'a camp')+'.',{key:'bandit:captain:'+String(m.id||''),cooldown:0});}
+      else if(m.phase==='cleared'){discoveredIds.add(m.id);updateLandMinimap();sysMsg('<b>Bandit Camp Cleared!</b> The camp chest is unlocked for a short time.');eventFeed('[Roads]','Bandit Camp cleared. Chest unlocked briefly.',{key:'bandit:cleared:'+String(m.id||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m.id||'');OVERWORLD_RESULTS.show({title:'BANDIT CAMP CLEARED',summary:m.name||'The captain has fallen.',contract:regionalContract&&regionalContract.ready?'READY':'UPDATED',next:'Open the camp chest before it locks again.'});}
     });
-    room.onMessage('banditPatrolSighted',m=>{if(m)sysMsg('<b>Bandit tracks:</b> '+escHTML(m.text||'A patrol has passed nearby.'));});
-    room.onMessage('banditCaravanRescued',m=>{sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.');if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'CARAVAN RESCUED',summary:'The merchant convoy can continue safely.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue along the road.'});});
-    room.onMessage('banditSpared',m=>{sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.');if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'SURRENDER ACCEPTED',summary:'The stolen supplies were returned without another kill.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue Road Warden work.'});});
+    room.onMessage('banditPatrolSighted',m=>{if(m)sysMsg('<b>Bandit tracks:</b> '+escHTML(m.text||'A patrol has passed nearby.'));if(m)eventFeed('[Roads]',String(m.text||'A bandit patrol passed nearby.'),{key:'bandit:patrol:'+String(m.id||m.text||''),cooldown:12000});});
+    room.onMessage('banditCaravanRescued',m=>{sysMsg('<b>Caravan rescued!</b> The road merchant rewards your intervention.');eventFeed('[Roads]','Caravan rescued. Merchant convoy can continue safely.',{key:'caravan:rescued:'+String(m&&m.campId||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'CARAVAN RESCUED',summary:'The merchant convoy can continue safely.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue along the road.'});});
+    room.onMessage('banditSpared',m=>{sysMsg('<b>Bandit spared.</b> They surrender their stolen supplies and flee.');eventFeed('[Roads]','Bandit spared. Stolen supplies returned without another kill.',{key:'bandit:spared:'+String(m&&m.campId||''),cooldown:0});if(globalThis.resolveRegionalOpportunity)globalThis.resolveRegionalOpportunity(m&&m.campId||'');OVERWORLD_RESULTS.show({title:'SURRENDER ACCEPTED',summary:'The stolen supplies were returned without another kill.',contract:'UPDATED',next:regionalContract&&regionalContract.ready?'Return to the Job Board to claim your contract.':'Continue Road Warden work.'});});
     room.onMessage('caravanState',m=>{
       if(!m)return;
-      if(m.state==='departed')sysMsg('A merchant caravan has departed along the regional road.');
-      else if(m.state==='arrived')sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes. Claim the contract reward at the Job Board.');
-      else if(m.state==='escort_failed')sysMsg('<b>Escort failed.</b> You did not remain with the caravan long enough to earn the reward.');
-      else if(m.state==='wrecked')sysMsg('<b>Caravan lost.</b> Bandits carried its supplies toward a nearby camp.');
-      else if(m.state==='recovered')sysMsg('<b>Stolen caravan supplies recovered!</b>');
+      if(m.state==='departed'){sysMsg('A merchant caravan has departed along the regional road.');eventFeed('[Roads]','A merchant caravan departed along the road.',{key:'caravan:departed:'+String(m.id||''),cooldown:0});}
+      else if(m.state==='arrived'){sysMsg('<b>Escort complete!</b> Road merchants offer you 20% off for ten minutes. Claim the contract reward at the Job Board.');eventFeed('[Roads]','Escort complete. Road merchant discount active.',{key:'caravan:arrived:'+String(m.id||''),cooldown:0});}
+      else if(m.state==='escort_failed'){sysMsg('<b>Escort failed.</b> You did not remain with the caravan long enough to earn the reward.');eventFeed('[Roads]','Escort failed. Caravan reward lost.',{key:'caravan:failed:'+String(m.id||''),cooldown:0});}
+      else if(m.state==='wrecked'){sysMsg('<b>Caravan lost.</b> Bandits carried its supplies toward a nearby camp.');eventFeed('[Roads]','Caravan lost. Bandits stole its supplies.',{key:'caravan:wrecked:'+String(m.id||''),cooldown:0});}
+      else if(m.state==='recovered'){sysMsg('<b>Stolen caravan supplies recovered!</b>');eventFeed('[Roads]','Stolen caravan supplies recovered.',{key:'caravan:recovered:'+String(m.id||''),cooldown:0});}
     });
     room.onMessage('roadsideEncounter',m=>{
       if(!m)return;
       const names={wounded_hunter:'Wounded hunter',merchant_rescue:'Merchant rescue',pursuit:'Stolen supply pursuit'},name=names[m.type]||'Roadside encounter';
-      if(m.state==='started')sysMsg('<b>'+name+':</b> a nearby road needs your help.');
-      else if(m.state==='failed')sysMsg('<b>'+name+' failed.</b> '+(m.reason==='merchant'?'The merchant was overwhelmed.':m.reason==='night'?'The trail went cold after dark.':'The bandits escaped with the supplies.'));
+      if(m.state==='started'){sysMsg('<b>'+name+':</b> a nearby road needs your help.');eventFeed('[Roads]',name+' started nearby.',{key:'roadside:start:'+String(m.id||m.type||''),cooldown:0});}
+      else if(m.state==='failed'){const reason=m.reason==='merchant'?'The merchant was overwhelmed.':m.reason==='night'?'The trail went cold after dark.':'The bandits escaped with the supplies.';sysMsg('<b>'+name+' failed.</b> '+reason);eventFeed('[Roads]',name+' failed. '+reason,{key:'roadside:fail:'+String(m.id||m.type||''),cooldown:0});}
     });
     room.onMessage('roadsideEncounterResult',m=>{
       if(!m)return;
       const text=m.type==='wounded_hunter'?'The hunter is stable and shares supplies in thanks.':m.type==='merchant_rescue'?'The merchant is safe.':'The stolen supplies are secured.';
       sysMsg('<b>Roadside encounter complete!</b> '+text);
+      eventFeed('[Roads]','Roadside encounter complete. '+text,{key:'roadside:complete:'+String(m.id||m.type||''),cooldown:0});
     });
     room.onMessage('roadsideEncounterReject',()=>sysMsg('Move closer and aim at the wounded hunter to provide aid.'));
     room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
@@ -1618,11 +1673,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('regionalContractUpdate',m=>{
       regionalContract=clampRegionalContract(m&&m.active);
       renderRegionalContractsUI();
-      if(regionalContract) sysMsg('Guild contract: <b>'+escHTML(regionalContract.title)+'</b> '+regionalContract.have+'/'+regionalContract.need);
+      if(regionalContract){ sysMsg('Guild contract: <b>'+escHTML(regionalContract.title)+'</b> '+regionalContract.have+'/'+regionalContract.need);eventFeed('[Guild]',String(regionalContract.title||'Guild contract')+' progress '+regionalContract.have+'/'+regionalContract.need+'.',{key:'guild-progress:'+String(regionalContract.id||regionalContract.title||''),cooldown:6000});}
     });
     room.onMessage('regionalContractReady',m=>{
       const c=clampRegionalContract(m&&m.active);
-      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Job Board');OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Job Board to claim your rewards.'}); }
+      if(c){ regionalContract=c; renderRegionalContractsUI(); sysMsg('Guild contract complete: <b>'+escHTML(c.title)+'</b> - claim it at the Job Board');eventFeed('[Guild]',String(c.title||'Guild contract')+' complete. Claim at the Job Board.',{key:'guild-ready:'+String(c.id||c.title||''),cooldown:0});OVERWORLD_RESULTS.show({title:'CONTRACT COMPLETE',summary:c.title,contract:'READY',next:'Return to the Job Board to claim your rewards.'}); }
     });
     room.onMessage('regionalContractClaimed',m=>{
       const c=clampRegionalContract(m&&m.contract);
@@ -1650,11 +1705,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('craftLegendaryResult', m=>applyLegendaryCraftResult(m));
     room.onMessage('craftLegendaryReject', m=>legendaryCraftRejected(m));
     room.onMessage('eventStatus', m=>applyEventStatus(m));
-    room.onMessage('eventJoined', m=>{ applyEventStatus(m); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue. Watch the countdown banner.'); });
-    room.onMessage('eventLeft', m=>{ applyEventStatus(m); sysMsg('Left the event queue. You can rejoin while the countdown is still open.'); });
+    room.onMessage('eventJoined', m=>{ applyEventStatus(m); sysMsg('Joined the <b>'+escHTML(m&&m.name||'server')+'</b> event queue. Watch the countdown banner.'); eventFeed('[Event]','Joined '+String(m&&m.name||'server event')+' queue.',{key:'event:joined:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
+    room.onMessage('eventLeft', m=>{ applyEventStatus(m); sysMsg('Left the event queue. You can rejoin while the countdown is still open.'); eventFeed('[Event]','Left '+String(m&&m.name||'server event')+' queue.',{key:'event:left:'+String(m&&m.id||m&&m.name||''),cooldown:0}); });
     room.onMessage('eventReject', m=>eventRejected(m));
-    room.onMessage('eventStarted', m=>applyEventStatus(m));
-    room.onMessage('eventGo', m=>eventGo(m));
+    room.onMessage('eventStarted', m=>{applyEventStatus(m);eventFeed('[Event]',String(m&&m.name||'Server event')+' staging started.',{key:'event:started:'+String(m&&m.id||m&&m.name||''),cooldown:0});});
+    room.onMessage('eventGo', m=>{eventGo(m);eventFeed('[Event]',String(m&&m.name||'Server event')+' began.',{key:'event:go:'+String(m&&m.id||m&&m.name||''),cooldown:0});});
     room.onMessage('eventReady', m=>applyEventStatus(m));
     room.onMessage('eventAfk', m=>eventAfk(m));
     room.onMessage('eventCancelled', m=>eventCancelled(m));
@@ -1690,16 +1745,17 @@ function netAttachRoom(room,name,client){
       const profile=item&&item.armor?GEAR_SYSTEM.armorProfile(item.armor,stack):null;
       COMBAT_FEEDBACK.syncArmor(profile?{...stack,maxDur:profile.maxDur}:null,!!(m&&m.broke));
       refreshHUD();if(uiOpen)renderUI();
+      if(m&&m.broke)eventFeed('[Gear]','Your armor broke.',{key:'armor:broke',cooldown:0});
     });
     room.onMessage('weaponEquipResult',m=>{
-      if(m&&m.ok){combatState.selectedSlot=Math.max(0,Math.min(8,m.slot|0));gearInspectSlot=combatState.selectedSlot;refreshHUD();if(uiOpen)renderUI();}
+      if(m&&m.ok){combatState.selectedSlot=Math.max(0,Math.min(8,m.slot|0));gearInspectSlot=combatState.selectedSlot;const stack=inv[combatState.selectedSlot];refreshHUD();if(uiOpen)renderUI();if(stack&&ITEMS[stack.id])eventFeed('[Gear]','Equipped '+feedItemName(stack.id)+'.',{key:'weapon:equip:'+stack.id,cooldown:3000});}
     });
-    room.onMessage('repairResult', m=>applyRepairResult(m));
+    room.onMessage('repairResult', m=>{applyRepairResult(m);if(m&&m.tool&&ITEMS[m.tool.id])eventFeed('[Gear]','Repaired '+feedItemName(m.tool.id)+' for '+((m.repaired||0)|0)+' durability.',{key:'repair:'+m.tool.id,cooldown:0});});
     room.onMessage('repairReject', m=>repairRejected(m));
-    room.onMessage('blacksmithRepairResult', m=>applyBlacksmithRepairResult(m));
-    room.onMessage('blacksmithUpgradeResult', m=>applyBlacksmithUpgradeResult(m));
-    room.onMessage('blacksmithReforgeResult', m=>applyBlacksmithReforgeResult(m));
-    room.onMessage('blacksmithSalvageResult',m=>applyBlacksmithSalvageResult(m));
+    room.onMessage('blacksmithRepairResult', m=>{applyBlacksmithRepairResult(m);if(m&&m.tool&&ITEMS[m.tool.id])eventFeed('[Blacksmith]','Tobin repaired '+feedItemName(m.tool.id)+'.',{key:'smith:repair:'+m.tool.id,cooldown:0});});
+    room.onMessage('blacksmithUpgradeResult', m=>{applyBlacksmithUpgradeResult(m);if(m&&m.tool&&ITEMS[m.tool.id])eventFeed('[Blacksmith]','Tobin upgraded '+feedItemName(m.tool.id)+' to +'+Math.max(1,(m.tool.plus||0)|0)+'.',{key:'smith:upgrade:'+String(m.slot||0)+':'+String(m.tool.plus||0),cooldown:0});});
+    room.onMessage('blacksmithReforgeResult', m=>{applyBlacksmithReforgeResult(m);if(m&&m.tool&&ITEMS[m.tool.id])eventFeed('[Blacksmith]','Tobin reforged '+feedItemName(m.tool.id)+(m.tool.masterwork?' into a Masterwork':'')+'.',{key:'smith:reforge:'+String(m.slot||0)+':'+String(m.tool.forge||'')+':'+(m.tool.masterwork?1:0),cooldown:0});});
+    room.onMessage('blacksmithSalvageResult',m=>{applyBlacksmithSalvageResult(m);eventFeed('[Blacksmith]','Salvaged gear for Iron x'+Math.max(0,(m&&m.iron)|0)+(m&&m.gold?' and '+(m.gold|0)+' gold':'')+'.',{key:'smith:salvage:'+String(m&&m.slot||0),cooldown:0});});
     room.onMessage('lootRecoveryState',m=>{
       applyLootRecoveryState(m);
       if(m&&m.queued){
@@ -1710,31 +1766,31 @@ function netAttachRoom(room,name,client){
         })()});
       }
     });
-    room.onMessage('lootRecoveryResult',m=>applyLootRecoveryResult(m));
-    room.onMessage('gearLockResult',m=>applyGearLockResult(m));
+    room.onMessage('lootRecoveryResult',m=>{applyLootRecoveryResult(m);if(m&&m.ok&&m.item&&ITEMS[m.item.id])eventFeed('[Gear]','Recovered '+feedItemName(m.item.id)+' from Tobin.',{key:'gear:recover:'+m.item.id,cooldown:0});});
+    room.onMessage('gearLockResult',m=>{applyGearLockResult(m);if(m&&m.ok)eventFeed('[Gear]',m.locked?'Protected selected gear from salvage.':'Removed gear protection.',{key:'gear:lock:'+String(m&&m.slot||0)+':'+m.locked,cooldown:0});});
     room.onMessage('blacksmithReject', m=>blacksmithServiceRejected(m));
     room.onMessage('hatchDragonReject', m=>dragonHatchRejected(m));
-    room.onMessage('dragonIncubationStart', m=>applyDragonIncubationStart(m));
-    room.onMessage('dragonIncubationReady', m=>applyDragonIncubationReady(m));
+    room.onMessage('dragonIncubationStart', m=>{applyDragonIncubationStart(m);eventFeed('[Dragon]','Dragon egg placed in the nest.',{key:'dragon:incubation:start:'+String(m&&m.key||''),cooldown:0});});
+    room.onMessage('dragonIncubationReady', m=>{applyDragonIncubationReady(m);eventFeed('[Dragon]','A dragon egg is ready to hatch.',{key:'dragon:incubation:ready:'+String(m&&m.key||''),cooldown:0});});
     room.onMessage('dragonIncubationRemove', m=>{ if(m) removeDragonIncubationMesh(m.x|0,m.y|0,m.z|0); });
-    room.onMessage('dragonIncubationComplete', m=>applyDragonIncubationComplete(m));
-    room.onMessage('dragonRenameResult', m=>applyDragonRenameResult(m));
+    room.onMessage('dragonIncubationComplete', m=>{applyDragonIncubationComplete(m);eventFeed('[Dragon]',((m&&DRAGON_TYPES[m.type]&&DRAGON_TYPES[m.type].name)||'Dragon')+' hatched.',{key:'dragon:incubation:complete:'+String(m&&m.key||m&&m.type||''),cooldown:0});});
+    room.onMessage('dragonRenameResult', m=>{applyDragonRenameResult(m);eventFeed('[Dragon]','Dragon renamed to '+String((m&&m.name)||'a new name')+'.',{key:'dragon:rename:'+String(m&&m.type||''),cooldown:0});});
     room.onMessage('dragonRenameReject', m=>dragonRenameRejected(m));
     room.onMessage('dragonPerchAdd', m=>{ if(m) addPerchedDragon(m.key, m.x|0, m.y|0, m.z|0, m.slot|0, m.type, m.gender, m.loveUntil||0); });
     room.onMessage('dragonPerchRemove', m=>{ if(m) removePerchedDragon(m.key); });
     room.onMessage('dragonPerchLove', m=>{ const e=m&&perchedDragons[m.key]; if(e){ e.loveUntil=m.loveUntil||0; sysMsg('The <b>'+(DRAGON_TYPES[e.type]||{}).name+'</b> is smitten ❤'); } });
     room.onMessage('dragonPerchBreed', m=>{ if(m) dragonBreedFx(m.x|0, m.y|0, m.z|0, m.offspring); });
     room.onMessage('perchReject', m=>perchRejected(m));
-    room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; let i=Math.max(0,Math.min(35,(m&&m.slot)|0)); if(!(m&&m.slot>=0&&inv[i]&&inv[i].id===sig))i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); });
-    room.onMessage('familiarBond', m=>COMPANIONS.applyFamiliarBond(m));
-    room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]) COMPANIONS.activeFamiliar=m.kind; });
-    room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; });
+    room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; let i=Math.max(0,Math.min(35,(m&&m.slot)|0)); if(!(m&&m.slot>=0&&inv[i]&&inv[i].id===sig))i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); eventFeed('[Familiar]',((FAMILIARS[kind]&&FAMILIARS[kind].name)||'Familiar')+' bound to you.',{key:'familiar:bound:'+kind,cooldown:0}); });
+    room.onMessage('familiarBond', m=>{COMPANIONS.applyFamiliarBond(m);if(m&&m.challenge&&m.challenge.justCompleted&&FAMILIARS[m.kind])eventFeed('[Familiar]',FAMILIARS[m.kind].name+' bond challenge complete.',{key:'familiar:challenge:'+m.kind+':'+String(m.challenge.id||m.challenge.title||''),cooldown:0});});
+    room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.activeFamiliar=m.kind; eventFeed('[Familiar]',FAMILIARS[m.kind].name+' summoned.',{key:'familiar:summon:'+m.kind,cooldown:3000}); } });
+    room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; eventFeed('[Familiar]','Familiar dismissed.',{key:'familiar:dismiss',cooldown:3000}); });
     room.onMessage('familiarReject', m=>{
       const kind=(m&&m.kind)||'shade', def=FAMILIARS[kind]||FAMILIARS.shade, r=m&&m.reason;
       if(m&&m.action==='summon') COMPANIONS.activeFamiliar='';
       sysMsg(r==='owned'?'<b>'+def.name+'</b> is already bound to you':r==='item'?'You need a <b>'+((ITEMS[def.sigil]&&ITEMS[def.sigil].name)||'binding item')+'</b>':r==='locked'?'You have not bound <b>'+def.name+'</b> yet':'<b>'+def.name+'</b> will not answer that call');
     });
-    room.onMessage('shadeStepResult', m=>applyShadeStepResult(m));
+    room.onMessage('shadeStepResult', m=>{applyShadeStepResult(m);eventFeed('[Familiar]','Shade carried you through Dark Passage.',{key:'shade:step',cooldown:2500});});
     room.onMessage('shadeStepReject', m=>{
       COMPANIONS.applyShadeStepReject(m);
       const r=m&&m.reason;
@@ -1773,14 +1829,15 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('abilityReject', m=>abilityRejected(m));
     room.onMessage('abilityResult', m=>abilityResolved(m));
-    room.onMessage('abilitySpecResult',m=>{if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m&&m.spec);showName('SPECIALIZATION AWAKENED');if(statOpen)renderStat();});
+    room.onMessage('abilitySpecResult',m=>{if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m&&m.spec);showName('SPECIALIZATION AWAKENED');eventFeed('[Abilities]','Specialization awakened: '+String((m&&m.spec)||'new path')+'.',{key:'ability:spec:'+String((m&&m.spec)||''),cooldown:0});if(statOpen)renderStat();});
     room.onMessage('abilitySpecReject',()=>sysMsg('That specialization cannot be changed.'));
     room.onMessage('shadowSpirit',m=>{
       if(!m)return;
       showName((m.boss?'BOSS SPIRIT':'FALLEN SPIRIT')+' · '+(m.rankName||'E')+'-RANK');
       sysMsg('A shadow remains. Stand near it and cast <b>Shadow Soldier</b> to command: <b>Arise</b>.');
+      eventFeed('[Abilities]','A '+String(m.rankName||'E')+'-Rank '+(m.boss?'boss ':'')+'shadow spirit is waiting.',{key:'shadow:spirit:'+String(m.id||m.rankName||''),cooldown:0});
     });
-    room.onMessage('shadowRecall',m=>{showName('BOSS SHADOW RECALLED');sysMsg('Your mana could no longer sustain the boss shadow.');});
+    room.onMessage('shadowRecall',m=>{showName('BOSS SHADOW RECALLED');sysMsg('Your mana could no longer sustain the boss shadow.');eventFeed('[Abilities]','Boss shadow recalled as your mana faded.',{key:'shadow:recall',cooldown:0});});
     room.onMessage('dragonAbilityReject', m=>dragonAbilityRejected(m));
     room.onMessage('dragonAbilityResult', m=>dragonAbilityResolved(m));
     room.onMessage('dragonCare', m=>applyDragonCare(m));
@@ -1798,9 +1855,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonTrainingCancel', m=>{ if(COMPANIONS.clearDragonTraining) COMPANIONS.clearDragonTraining(m); sysMsg('Dragon training '+(((m&&m.reason)||'cancelled'))+'.'); });
     room.onMessage('dragonTrainingReject', m=>dragonTrainingRejected(m));
     room.onMessage('editReject', m=>netEditReject(m));
-    room.onMessage('craftResult', m=>applyServerCraft(m));
+    room.onMessage('craftResult', m=>{applyServerCraft(m);if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Craft]','Crafted '+feedStackText(m.out.id,m.finalCount||((m.out.count||1)*Math.max(1,m.times|0||1)))+'.',{key:'craft:'+m.out.id,cooldown:1500});});
     room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='profession'?'Equip <b>'+((JOBS[m.job]&&JOBS[m.job].name)||'Cook')+'</b> and reach Lv '+(m.level||1)+' for that recipe':'Crafting failed: missing server-side ingredients'); });
-    room.onMessage('shopResult', m=>applyShopResult(m));
+    room.onMessage('shopResult', m=>{applyShopResult(m);if(m&&ITEMS[m.id])eventFeed('[Trade]',(m.action==='sell'?'Sold ':'Bought ')+feedStackText(m.id,m.count||1)+(m.gold?' for '+Math.abs(m.gold|0)+' gold':'')+'.',{key:'shop:'+String(m.vendor||'')+':'+String(m.action||'')+':'+m.id,cooldown:1500});});
     room.onMessage('shopReject', m=>shopRejected(m));
     room.onMessage('tavernDiceResult', m=>applyTavernDiceResult(m));
     room.onMessage('tavernRouletteResult', m=>applyTavernRouletteResult(m));
@@ -1818,11 +1875,12 @@ function netAttachRoom(room,name,client){
     room.onMessage('landClaimTrustReject', m=>landClaimTrustRejected(m));
     room.onMessage('farmResult', m=>applyFarmResult(m));
     room.onMessage('farmReject', m=>farmRejected(m));
-    room.onMessage('foodResult', m=>applyFoodResult(m));
+    room.onMessage('foodResult', m=>{applyFoodResult(m);if(m&&ITEMS[m.id])eventFeed('[Food]','Ate '+feedItemName(m.id)+(m.buff?'. Well Fed active.':'.'),{key:'food:'+m.id,cooldown:2500});});
     room.onMessage('foodBuff', m=>{
       const secs=Math.max(1,Math.round(((m&&m.durationMs)||0)/1000));buffs.dmg=Math.max(buffs.dmg,secs);buffs.gather=Math.max(buffs.gather||0,secs);
       if(typeof m.hp==='number')hp=Math.min(maxHp(),Math.max(0,m.hp));if(typeof m.hunger==='number')hunger=Math.min(maxHunger(),Math.max(0,m.hunger));renderBars();
       SFX.success();sysMsg('<b>'+escHTML((m&&m.by)||'Your cook')+'</b> shares a feast. <b>Well Fed</b> boosts combat and gathering for '+Math.ceil(secs/60)+' min.');
+      eventFeed('[Food]',String((m&&m.by)||'A cook')+' shared a feast. Well Fed active for '+Math.ceil(secs/60)+' min.',{key:'food:buff:'+String(m&&m.by||''),cooldown:3000});
     });
     room.onMessage('meditateFocus', m=>{
       const secs=Math.max(1,Math.round(((m&&m.durationMs)||0)/1000));
@@ -1836,11 +1894,13 @@ function netAttachRoom(room,name,client){
       const restored=[m&&Number.isFinite(+m.mana)&&m.mana>0?'+'+(m.mana|0)+' MP':'',m&&Number.isFinite(+m.stamina)&&m.stamina>0?'+'+(m.stamina|0)+' SP':''].filter(Boolean).join(' / ');
       if(restored)showName('Hall focus '+restored);
       if(m&&m.shared)sysMsg('<b>'+escHTML(m.by||'A monk')+'</b> shares tranquillity: '+[m.regen?'Restoration':'',m.speed?'Flow':'',m.stone?'Stone':''].filter(Boolean).join(', ')+' for '+secs+' sec.');
+      eventFeed('[Meditation]',(m&&m.shared?String(m.by||'A monk')+' shared ':'You entered ')+focusText+(restored?' and restored '+restored:'')+'.',{key:'meditate:focus:'+String(m&&m.shared?m.by:'self'),cooldown:3000});
     });
     room.onMessage('meditationGrowth', m=>{
       if(globalThis.BlockcraftApplyMeditationGrowth)globalThis.BlockcraftApplyMeditationGrowth(m);
+      if(m&&m.ok!==false)eventFeed('[Meditation]','Meditation benchmark reached. '+String(m.statName||m.stat||'Body')+' increased.',{key:'meditation:growth:'+String(m&&m.stat||m&&m.statName||Date.now()),cooldown:0});
     });
-    room.onMessage('prospectResult',m=>showProspectMarkers(m));
+    room.onMessage('prospectResult',m=>{showProspectMarkers(m);eventFeed('[Miner]','Ore Sense marked nearby underground opportunities.',{key:'prospect:'+String(m&&m.x||'')+':'+String(m&&m.z||''),cooldown:4000});});
     room.onMessage('prospectReject',m=>{
       const reason=m&&m.reason;
       if(reason==='profession')sysMsg('Equip <b>Miner</b> to survey for ore.');
@@ -1862,9 +1922,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('gateKeyResult', m=>applyGateKeyResult(m));
     room.onMessage('gateKeyReject', m=>gateKeyRejected(m));
     room.onMessage('chestState', m=>applyChestState(m));
-    room.onMessage('chestTx', m=>applyChestTx(m));
-    room.onMessage('chestBatchResult', m=>applyChestBatchResult(m));
-    room.onMessage('chestModeResult', m=>{ SFX.success(); sysMsg(m&&m.supply?'Chest marked as Homestead Supply. Trusted helpers can deposit; only you can withdraw.':'Chest returned to Personal mode.'); });
+    room.onMessage('chestTx', m=>{applyChestTx(m);if(m&&ITEMS[m.id])eventFeed('[Chest]',(m.action==='withdraw'?'Withdrew ':'Deposited ')+feedStackText(m.id,m.count||1)+'.',{key:'chest:'+String(m&&m.key||'')+':'+String(m.action||'')+':'+m.id,cooldown:1500});});
+    room.onMessage('chestBatchResult', m=>{applyChestBatchResult(m);if(m&&m.ok)eventFeed('[Chest]','Deposited '+Math.max(0,(m.count|0))+' '+(m.mode==='materials'?'materials':'matching items')+'.',{key:'chest:batch:'+String(m&&m.key||'')+':'+String(m&&m.mode||''),cooldown:1500});});
+    room.onMessage('chestModeResult', m=>{ SFX.success(); sysMsg(m&&m.supply?'Chest marked as Homestead Supply. Trusted helpers can deposit; only you can withdraw.':'Chest returned to Personal mode.'); eventFeed('[Chest]',m&&m.supply?'Chest marked as Homestead Supply.':'Chest returned to Personal mode.',{key:'chest:mode:'+String(m&&m.key||'')+':'+(m&&m.supply?1:0),cooldown:0}); });
     room.onMessage('chestReject', m=>{
       const reason=m&&m.reason;
       const text=({
@@ -1888,15 +1948,15 @@ function netAttachRoom(room,name,client){
       SFX.error();sysMsg(text);
     });
     room.onMessage('furnaceState', m=>applyFurnaceState(m));
-    room.onMessage('furnaceStarted', m=>applyFurnaceStarted(m));
-    room.onMessage('furnaceResult', m=>applyFurnaceResult(m));
+    room.onMessage('furnaceStarted', m=>{applyFurnaceStarted(m);eventFeed('[Furnace]','Smelting started'+(m&&ITEMS[m.input]?' for '+feedItemName(m.input):'')+'.',{key:'furnace:start:'+String(m&&m.key||''),cooldown:2000});});
+    room.onMessage('furnaceResult', m=>{applyFurnaceResult(m);if(m&&m.out&&ITEMS[m.out.id])eventFeed('[Furnace]','Smelted '+feedStackText(m.out.id,m.finalCount||m.out.count||1)+'.',{key:'furnace:result:'+String(m&&m.key||'')+':'+m.out.id,cooldown:1500});});
     room.onMessage('furnaceReject', ()=>{ SFX.error(); sysMsg('Furnace transaction failed'); });
     room.onMessage('fx', m=>{
       if(m && (m.t==='dragonGuard'||m.t==='dragonRest'||m.t==='dragonRecall') && COMPANIONS.noteDragonRoleEvent) COMPANIONS.noteDragonRoleEvent(m.t==='dragonRest'?{...m,role:'rest'}:(m.t==='dragonRecall'?{...m,role:'recall'}:m));
       if(m && m.t==='dragonGuard' && m.role==='stay') updateLandMinimap();
       COMBAT_FEEDBACK.showTelegraph(m);netFx(m);
     });
-    room.onMessage('dmgnum', m=>{COMBAT_FEEDBACK.confirmHit(m);camShake=Math.max(camShake,m&&m.crit?.16:.08);spawnDamageNumber(m);});
+    room.onMessage('dmgnum', m=>{COMBAT_FEEDBACK.confirmHit(m);camShake=Math.max(camShake,(m&&m.crit)?0.16:0.08);spawnDamageNumber(m);});
     room.onMessage('weaponIdentity',m=>{
       if(!m)return;
       if(m.kind==='momentum'){
@@ -2219,6 +2279,7 @@ function dragonAbilityResolved(m){
   if(m && typeof m.cd==='number') COMPANIONS.dragonAbilityReadyAt=performance.now()+Math.max(0,m.cd)*1000;
   if(m && m.type && typeof m.happiness==='number') setDragonCare(m.type, m.happiness, Date.now());
   if(m && m.type && COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Mounted ability used',(m.bondGained?('Bond +'+(m.bondGained|0)):'Cooldown '+Math.ceil((m.cd||0))+'s'));
+  if(m&&m.type&&DRAGON_TYPES[m.type])eventFeed('[Dragon]',DRAGON_TYPES[m.type].name+' used mounted ability'+(m.bondGained?' and gained '+(m.bondGained|0)+' bond XP':'')+'.',{key:'dragon:ability:'+m.type,cooldown:2500});
   applyDragonBondXpUpdate(m, 'ability');
 }
 function applyDragonCare(m){
@@ -2231,6 +2292,7 @@ function applyDragonCare(m){
   if(m.roleMastery && COMPANIONS.applyDragonRoleMasteryUpdate) COMPANIONS.applyDragonRoleMasteryUpdate({type:m.type,...m.roleMastery});
   if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type, m.rest?'rest':'happy');
   if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,m.rest?'Rest recovered happiness':'Care updated','Happiness '+dragonHappiness(m.type)+'/100');
+  eventFeed('[Dragon]',DRAGON_TYPES[m.type].name+' care updated. Happiness '+dragonHappiness(m.type)+'/100.',{key:'dragon:care:'+m.type,cooldown:6000});
   applyDragonBondXpUpdate(m, 'care');
 }
 function applyDragonBondXpUpdate(m, reason){
@@ -2247,6 +2309,7 @@ function applyDragonBondXpUpdate(m, reason){
     if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Bond milestone reached','Lv '+after+' - '+title);
     showName((DRAGON_TYPES[m.type]||{}).name+' '+title);
     sysMsg('<b>'+DRAGON_TYPES[m.type].name+'</b> reached <b>Bond Lv '+after+'</b>: '+escHTML(reward&&reward.reward ? reward.reward : 'new bond reward unlocked.'));
+    eventFeed('[Dragon]',DRAGON_TYPES[m.type].name+' reached Bond Lv '+after+': '+String(title)+'.',{key:'dragon:bond:'+m.type+':'+after,cooldown:0});
   } else if((m.bondGained|0)>0 && COMPANIONS.addDragonActivity){
     const label=reason==='follow'?'Follow travel bond':reason==='guard'?'Guard bond':reason==='stay'?'Stay post bond':reason==='rest'?'Rest bond':reason==='ability'?'Ability bond':'Bond gained';
     COMPANIONS.addDragonActivity(m.type,label,'+'+(m.bondGained|0)+' bond XP');
@@ -2280,6 +2343,7 @@ function applyFeedDragonResult(m){
   refreshHUD(); if(uiOpen) renderUI();
   const bond=m.bondGained?(' Bond +<b>'+m.bondGained+'</b>.'):'';
   sysMsg('You '+(m.careOnly?'care for':'feed')+' your <b>'+DRAGON_TYPES[m.type].name+'</b>. Happiness: <b>'+dragonHappiness(m.type)+'</b>.'+bond);
+  eventFeed('[Dragon]','You '+(m.careOnly?'cared for':'fed')+' '+DRAGON_TYPES[m.type].name+'. Happiness '+dragonHappiness(m.type)+'/100.',{key:'dragon:feed:'+m.type,cooldown:4000});
 }
 function applyDragonSpecializationResult(m){
   if(!m || !DRAGON_TYPES[m.type] || !['scout','defender','sage'].includes(m.specialization)) return;
@@ -2291,6 +2355,7 @@ function applyDragonSpecializationResult(m){
   if(mounted && mountKind==='dragon:'+m.type) applyMount('dragon:'+m.type);
   showName((DRAGON_TYPES[m.type]||{}).name+' '+title);
   sysMsg('<b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b> specialized as <b>'+escHTML(title)+'</b>. '+escHTML(desc));
+  eventFeed('[Dragon]',DRAGON_TYPES[m.type].name+' specialized as '+title+'.',{key:'dragon:spec:'+m.type,cooldown:0});
   refreshHUD(); if(uiOpen) renderUI();
   if(qOpen && typeof openDragonProgressionUI==='function') openDragonProgressionUI();
 }
@@ -2313,6 +2378,7 @@ function applyDragonRoleResult(m){
   if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,m.role==='rest'?'rest':(m.role==='guard'?'guard':'happy'));
   if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,clearedStayPost?'Stay post cleared':'Role set to '+label,detail);
   sysMsg(clearedStayPost?'<b>'+DRAGON_TYPES[m.type].name+'</b> stay post cleared.':'<b>'+DRAGON_TYPES[m.type].name+'</b> role set to <b>'+label+'</b>.');
+  eventFeed('[Dragon]',DRAGON_TYPES[m.type].name+' role set to '+label+'.',{key:'dragon:role:'+m.type+':'+m.role,cooldown:3000});
 }
 function applyDragonRecallResult(m){
   if(!m || !DRAGON_TYPES[m.type]) return;
@@ -2324,6 +2390,7 @@ function applyDragonRecallResult(m){
   if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,'happy');
   if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Dragon recalled',m.clearedStaySpot?'Stay post cleared':'Whistled to your side');
   sysMsg('<b>'+DRAGON_TYPES[m.type].name+'</b> recalled.'+(m.clearedStaySpot?' Stay post cleared.':''));
+  eventFeed('[Dragon]',DRAGON_TYPES[m.type].name+' recalled to your side.',{key:'dragon:recall:'+m.type,cooldown:4000});
 }
 function dragonRecallRejected(m){
   SFX.error();
@@ -2349,6 +2416,7 @@ function applyDragonTrainingComplete(m){
   showName((m.title||'Dragon Drill')+' complete');
   const masteryTitle=COMPANIONS.dragonRoleMasteryTitle ? COMPANIONS.dragonRoleMasteryTitle(m.type,m.role) : '';
   sysMsg('<b>'+escHTML(m.title||'Dragon training')+'</b> complete. Mastery improved for <b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b>'+(masteryTitle?' - <b>'+escHTML(masteryTitle)+'</b>.':'.'));
+  eventFeed('[Dragon]',String(m.title||'Dragon training')+' complete for '+DRAGON_TYPES[m.type].name+'.',{key:'dragon:training:'+m.type+':'+String(m.title||''),cooldown:0});
   if(qOpen && typeof openDragonInteractUI==='function') openDragonInteractUI(m.type);
 }
 function dragonRoleRejected(m){
@@ -2394,6 +2462,7 @@ function applyLandClaimResult(m){
   sysMsg((m.takeover?'Reclaimed abandoned land':'Purchased land')+' at <b>'+((m.x|0))+', '+((m.z|0))+'</b>.<br>'+economyRecapHTML(-(m.price|0),gold,(discount>0?discount+'g expansion discount':'Protected claim purchased')));
   if(worldApi.spotlightLandClaim) worldApi.spotlightLandClaim(m.x|0,m.z|0);
   eventLog('Claim protected: you and trusted hunters can build here. Others need permission; wilderness outside remains editable.','[Land]');
+  eventFeed('[Land]',(m.takeover?'Reclaimed':'Purchased')+' land at '+((m.x|0))+', '+((m.z|0))+' for '+(m.price|0)+' gold.',{key:'land:claim:'+((m.x|0))+','+((m.z|0)),cooldown:0});
   clearTownTutorialStep('land');
   updateClaimHud();
 }
@@ -2434,6 +2503,7 @@ function applyLandClaimTrustResult(m){
   const count=Math.max(1,(m.count|0)||1);
   const scope=m.applyGroup&&count>=3?'homestead':m.applyGroup?count+' tiles':'land';
   sysMsg((m.trust===false?'Removed <b>'+name+'</b> from':'Trusted <b>'+name+'</b> on')+' '+scope+' <b>'+((m.x|0))+', '+((m.z|0))+'</b>');
+  eventFeed('[Land]',(m.trust===false?'Removed ':'Trusted ')+String(m.targetName||'Hunter')+(m.trust===false?' from ':' on ')+scope+'.',{key:'land:trust:'+String(m.targetName||'')+':'+m.trust,cooldown:0});
   if(qOpen && qpanelEl && qpanelEl.querySelector('.land-claim-manager') && typeof openLandClaimsUI==='function') openLandClaimsUI(m.x|0,m.z|0);
 }
 function applyLandClaimTrustNotice(m){
@@ -2451,6 +2521,7 @@ function applyLandClaimRenameResult(m){
   const title=String(m.title||'').trim();
   const count=Math.max(1,(m.count|0)||1), scope=count>1?count+' tiles':'land';
   sysMsg(title?'Named '+scope+' <b>'+escHTML(title)+'</b>':'Cleared '+scope+' name at <b>'+((m.x|0))+', '+((m.z|0))+'</b>');
+  eventFeed('[Land]',title?'Named '+scope+' '+title+'.':'Cleared '+scope+' name.',{key:'land:name:'+((m.x|0))+','+((m.z|0)),cooldown:0});
   if(qOpen && qpanelEl && qpanelEl.querySelector('.land-claim-manager') && typeof openLandClaimsUI==='function') openLandClaimsUI(m.x|0,m.z|0);
 }
 function landClaimRenameRejected(m){
@@ -2474,9 +2545,9 @@ function landClaimTrustRejected(m){
 }
 function applyFarmResult(m){
   if(!m) return;
-  if(m.action==='till'){ gainJobXP('farmer',1,'till'); jobContractProgress('farm', 1, B.FARMLAND); }
-  if(m.action==='plant'){ gainJobXP('farmer',1,'plant'); jobContractProgress('farm', 1, I.WHEAT_SEEDS); }
-  if(m.action==='harvest'){ gainJobXP('farmer',5,'harvest'); jobContractProgress('farm', 1, B.WHEAT_3); }
+  if(m.action==='till'){ gainJobXP('farmer',1,'till'); jobContractProgress('farm', 1, B.FARMLAND); eventFeed('[Farm]','Tilled soil at '+(m.x|0)+', '+(m.z|0)+'.',{key:'farm:till:'+((m.x|0))+','+((m.z|0)),cooldown:4000}); }
+  if(m.action==='plant'){ gainJobXP('farmer',1,'plant'); jobContractProgress('farm', 1, I.WHEAT_SEEDS); eventFeed('[Farm]','Planted '+(m.kind==='windseed'?'Prairie Windseed':'wheat')+'.',{key:'farm:plant:'+((m.x|0))+','+((m.z|0)),cooldown:4000}); }
+  if(m.action==='harvest'){ gainJobXP('farmer',5,'harvest'); jobContractProgress('farm', 1, B.WHEAT_3); eventFeed('[Farm]','Harvested '+(m.kind==='windseed'?'Prairie Windseed crop':'wheat')+(m.golden?' and found Golden Wheat':'')+'.',{key:'farm:harvest:'+((m.x|0))+','+((m.z|0)),cooldown:3000}); }
   if(m.action==='plant' || m.action==='fertilize'){
     const i=Math.max(0,Math.min(35,m.slot==null?selected:(m.slot|0)));
     const s=inv[i];

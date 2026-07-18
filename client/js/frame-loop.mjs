@@ -387,7 +387,7 @@ function currentLocationInfo(){
     return { cls:'town', name:'Dragon Roost', meta:'Bonded dragons perch here - press B for bonds' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.shrine.x, player.pos.z-HUB.shrine.z)<9){
-    return { cls:'town', name:'Town Shrine', meta:'Meditation and quiet focus' };
+    return { cls:'town', name:'Meditation Hall', meta:'Meditation and quiet focus' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.guardian.x, player.pos.z-HUB.guardian.z)<9){
     return { cls:'town', name:'Aegis Forge', meta:'Legendary quests and relic forging' };
@@ -956,6 +956,25 @@ function currentObjective(){
   return null;
 }
 let nextDiscoverySightAt=0;
+let lastLocationFeedKey='', lastLocationFeedAt=0;
+function locationFeedKey(loc){
+  if(!loc||!loc.name)return '';
+  const cls=String(loc.cls||'').split(/\s+/)[0]||'zone';
+  return cls+':'+String(loc.name||'').toLowerCase();
+}
+function locationFeedLabel(loc){
+  const cls=String(loc&&loc.cls||'');
+  if(cls.includes('dungeon'))return '[Dungeon]';
+  if(cls.includes('event'))return '[Event]';
+  if(cls.includes('town'))return '[Town]';
+  return '[Explore]';
+}
+function announceLocationEnter(loc){
+  const key=locationFeedKey(loc), now=performance.now();
+  if(!key||key===lastLocationFeedKey||now-lastLocationFeedAt<2800)return;
+  lastLocationFeedKey=key;lastLocationFeedAt=now;
+  if(typeof eventLog==='function')eventLog('Entered '+String(loc.name||'new area')+(loc.meta?' - '+String(loc.meta):''),locationFeedLabel(loc));
+}
 function updateDiscoverySight(){
   const now=performance.now();if(dim!=='overworld'||now<nextDiscoverySightAt)return;nextDiscoverySightAt=now+900;
   let seen=null;
@@ -972,6 +991,7 @@ function updateLocationHud(){
   locationEl.className=(hidden?'hidden ':'')+(loc.cls||'');
   if(zoneNameEl) zoneNameEl.textContent=loc.name;
   if(zoneMetaEl) zoneMetaEl.textContent=loc.meta;
+  announceLocationEnter(loc);
 }
 function bearingLabelTo(x,z){
   const dx=x-player.pos.x, dz=z-player.pos.z;
