@@ -3179,7 +3179,10 @@ class GameRoom extends Room {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
     const target = this.findTradeTarget(client, m);
     const targetRec = target && this.profileFor(target);
-    const reject = (reason, extra = {}) => client.send('tradeReject', { reason, targetSid, targetName: String(m.targetName || ''), ...extra });
+    const reject = (reason, extra = {}) => {
+      if ((reason === 'empty' || reason === 'item') && rec) this.sendProfile(client, rec.prof);
+      client.send('tradeReject', { reason, targetSid, targetName: String(m.targetName || ''), ...extra });
+    };
     if (!rec || !target || !targetRec || target === client) return reject('target', { online: (this.clients || []).length });
     if (this.rateLimited(client, 'trade', 3, 6)) return reject('rate');
     if (!this.tradePlayersClose(client, target)) return reject('range', this.tradeDistanceInfo(client, target));
@@ -3198,7 +3201,11 @@ class GameRoom extends Room {
   handleTradeAccept(client, m = {}) {
     const id = String(m.tradeId || m.id || '');
     const trade = this.trades && this.trades.get(id);
-    const reject = reason => client.send('tradeReject', { reason, id });
+    const reject = (reason, extra = {}) => {
+      const rec = this.profileFor(client);
+      if ((reason === 'empty' || reason === 'item') && rec) this.sendProfile(client, rec.prof);
+      client.send('tradeReject', { reason, id, ...extra });
+    };
     if (!trade || trade.toSid !== client.sessionId) return reject('missing');
     const from = this.clients.find(c => c.sessionId === trade.fromSid);
     const fromRec = from && this.profileFor(from), toRec = this.profileFor(client);

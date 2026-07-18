@@ -23,6 +23,31 @@ if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const player=combatState.player,inv=combatState.inventory;
 const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
 biomeStatus.init(document);
+const serverInventorySnapshot=new Array(36).fill(null);
+globalThis.BlockcraftServerInventorySnapshot=serverInventorySnapshot;
+globalThis.BlockcraftServerInventorySnapshotUpdatedAt=0;
+function cleanServerInventoryStack(s){
+  if(!s||!ITEMS[s.id])return null;
+  const out={id:s.id,count:Math.max(1,Math.min(64,s.count|0))};
+  if(ITEMS[s.id].tool)out.dur=s.dur!=null?s.dur:ITEMS[s.id].tool.dur;
+  if(ITEMS[s.id].armor)out.dur=s.dur!=null?s.dur:armorMaxDur(out);
+  if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.plus)out.plus=Math.max(0,Math.min(3,s.plus|0));
+  if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RANKS.some((r,j)=>j<6&&r.id===s.gearRank))out.gearRank=s.gearRank;
+  if(ITEMS[s.id].armor&&GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType])out.armorType=s.armorType;
+  if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity))out.rarity=s.rarity;
+  if(ITEMS[s.id].tool&&JOB_SYSTEM.reforgeModifier(s.forge))out.forge=s.forge;
+  if(ITEMS[s.id].tool&&s.masterwork&&out.forge)out.masterwork=true;
+  if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(s,ITEMS[s.id].armor?'armor':'weapon'))out.unique=s.unique;
+  if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.locked)out.locked=true;
+  if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&typeof s.source==='string'&&s.source)out.source=s.source;
+  return out;
+}
+function updateServerInventorySnapshot(rawInv){
+  if(!Array.isArray(rawInv))return false;
+  for(let i=0;i<36;i++)serverInventorySnapshot[i]=cleanServerInventoryStack(rawInv[i]);
+  globalThis.BlockcraftServerInventorySnapshotUpdatedAt=performance.now();
+  return true;
+}
 const UTILITY_UNLOCK_NUDGE_KEY='bc_utility_unlock_nudge_seen';
 const utilityUnlockToastEl=document.createElement('div');
 utilityUnlockToastEl.id='utilityunlocktoast';
@@ -2087,6 +2112,7 @@ function netRestoreProfile(m){
   try{
     applyServerTutorials(m&&m.tutorials);
     applyDeityState(m&&m.deity);
+    updateServerInventorySnapshot(m&&m.inv);
     const profileName=String(m&&m.nameSet&&m.name||'').replace(/[^A-Za-z0-9 _-]/g,'').replace(/\s+/g,' ').trim().slice(0,16);
     if(profileName){
       const nameInput=document.getElementById('playername');
@@ -2108,21 +2134,7 @@ function netRestoreProfile(m){
     if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
     if(Array.isArray(m.inv)){
       for(let i=0;i<36;i++){
-        const s=m.inv[i];
-        if(s && ITEMS[s.id]){
-          inv[i]={id:s.id, count:Math.max(1,Math.min(64,s.count|0))};
-          if(ITEMS[s.id].tool) inv[i].dur=(s.dur!=null)?s.dur:ITEMS[s.id].tool.dur;
-          if(ITEMS[s.id].armor)inv[i].dur=(s.dur!=null)?s.dur:armorMaxDur(inv[i]);
-          if((ITEMS[s.id].tool||ITEMS[s.id].armor) && s.plus) inv[i].plus=Math.max(0,Math.min(3,s.plus|0));
-          if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RANKS.some((r,j)=>j<6&&r.id===s.gearRank))inv[i].gearRank=s.gearRank;
-          if(ITEMS[s.id].armor&&GEAR_SYSTEM.ARMOR_ARCHETYPES[s.armorType])inv[i].armorType=s.armorType;
-          if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.RARITIES.some(r=>r.id===s.rarity))inv[i].rarity=s.rarity;
-          if(ITEMS[s.id].tool&&JOB_SYSTEM.reforgeModifier(s.forge))inv[i].forge=s.forge;
-          if(ITEMS[s.id].tool&&s.masterwork&&inv[i].forge)inv[i].masterwork=true;
-          if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&GEAR_SYSTEM.uniqueFor&&GEAR_SYSTEM.uniqueFor(s,ITEMS[s.id].armor?'armor':'weapon'))inv[i].unique=s.unique;
-          if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&s.locked)inv[i].locked=true;
-          if((ITEMS[s.id].tool||ITEMS[s.id].armor)&&typeof s.source==='string'&&s.source)inv[i].source=s.source;
-        } else inv[i]=null;
+        inv[i]=cleanServerInventoryStack(m.inv[i]);
       }
     }
     equipmentModel.restore(m.armor);

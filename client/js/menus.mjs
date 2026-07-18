@@ -5144,9 +5144,17 @@ function tradeOfferSummary(offer){
   if(offer&&offer.gold) parts.push('<b>'+Math.max(0,offer.gold|0).toLocaleString('en-US')+'g</b>');
   return parts.join(' + ') || 'nothing';
 }
+function tradeInventorySlots(){
+  const serverInv=globalThis.BlockcraftServerInventorySnapshot;
+  return NET.on&&Array.isArray(serverInv)?serverInv:inv;
+}
+function requestTradeInventoryRefresh(){
+  if(NET.on&&NET.room&&NET.room.name==='blockcraft')NET.room.send('profileRequest',{reason:'trade'});
+}
 function tradeStackFromInventorySlot(slot){
   slot=Math.max(0,Math.min(35,slot|0));
-  const stack=inv[slot],item=stack&&ITEMS[stack.id];
+  const slots=tradeInventorySlots();
+  const stack=slots[slot],item=stack&&ITEMS[stack.id];
   if(!stack||!item) return null;
   const special=!!(stack.dur!=null||item.tool||item.armor||stack.plus||stack.rarity||stack.armorType||stack.forge||stack.masterwork||stack.unique||stack.locked||stack.source);
   return {slot, stack, max:special?1:Math.max(1,(stack.count|0)||1), name:tradeStackName(stack)};
@@ -5182,8 +5190,9 @@ function tradeInventoryPicker(selectedRef,countInput,summaryEl){
       summaryEl.innerHTML='<b>No item selected</b><br><small>Offer gold only, or click an item below.</small>';
     }
   };
+  const slots=tradeInventorySlots();
   for(let i=0;i<36;i++){
-    const stack=inv[i]&&ITEMS[inv[i].id]?inv[i]:null;
+    const stack=slots[i]&&ITEMS[slots[i].id]?slots[i]:null;
     const cell=document.createElement('button');
     cell.type='button';
     cell.className='slot trade-slot';
@@ -5204,10 +5213,17 @@ function tradeInventoryPicker(selectedRef,countInput,summaryEl){
   refreshSelection();
   return wrap;
 }
-function openPlayerTradeUI(target){
+function openPlayerTradeUI(target,opts={}){
   if(!NET.on||!NET.room){sysMsg('Player trading requires the live world server.');return;}
   target=target||(typeof tradeTargetUnderCrosshair==='function'?tradeTargetUnderCrosshair(4.8):null);
   if(!target||!target.sid){sysMsg('Look at a nearby hunter, then press <b>E</b> to trade.');return;}
+  const refreshedAt=Number(globalThis.BlockcraftServerInventorySnapshotUpdatedAt)||0;
+  if(!opts.afterProfileSync&&performance.now()-refreshedAt>800){
+    requestTradeInventoryRefresh();
+    sysMsg('Syncing your server inventory before trading...');
+    setTimeout(()=>openPlayerTradeUI(target,{afterProfileSync:true}),180);
+    return;
+  }
   if(uiOpen)closeUI(false);
   openQWin('commerce');qpanelEl.innerHTML='';
   const h=document.createElement('h2');h.textContent='PLAYER TRADE';qpanelEl.appendChild(h);
@@ -5318,6 +5334,7 @@ function applyTradeReject(m){
   if(reason==='empty'&&m&&m.itemId){
     const seen=m.serverSlotId|0;
     text+=' The server saw '+(seen?('item '+seen):'no item')+' in slot '+(((m.slot|0)+1)||1)+'.';
+    requestTradeInventoryRefresh();
   }
   SFX.error();
   showName('TRADE FAILED');
