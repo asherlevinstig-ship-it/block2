@@ -377,13 +377,32 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);
+  assert.match(menus, /else if\(!NET\.on\) addItem\(B\.SAND,1\)/);
   assert.match(networking, /room\.onMessage\('tradeOffer'/);
   assert.match(networking, /room\.onMessage\('tradeOfferBroadcast'/);
   assert.match(networking, /room\.onMessage\('tradeInventory'/);
   assert.match(networking, /room\.onMessage\('tradeResult'/);
   assert.match(networking, /room\.onMessage\('friendResult'/);
   assert.match(gameRoom, /profileRequest[\s\S]*reason === 'trade'[\s\S]*sendTradeInventory\(client, rec\.prof\);[\s\S]*return;/);
+  assert.match(gameRoom, /awardGrant\(client, grant\)[\s\S]*this\.syncPlayerProfile\(client, rec\.prof\);[\s\S]*this\.sendTradeInventory\(client, rec\.prof\);/);
   assert.match(gameRoom, /sendTradeInventory\(client, prof\)/);
+});
+
+test('server grants and block placement refresh the trade inventory snapshot', () => {
+  const room = makeRoom();
+  const client = makeClient('miner');
+  const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.SAND, count: 1 }] });
+  room.awardGrant(client, { source: 'mine', items: [{ id: W.B.SAND, count: 2 }] });
+  const grantSync = client.sent.find(e => e.type === 'tradeInventory');
+  assert.ok(grantSync, 'mining grants refresh the server-owned trade inventory snapshot');
+  assert.equal(grantSync.msg.inv[0].id, W.B.SAND);
+  assert.equal(grantSync.msg.inv[0].count, 3);
+  client.sent.length = 0;
+  assert.equal(room.consumeForPlacement(client, W.B.SAND), true);
+  const placeSync = client.sent.find(e => e.type === 'tradeInventory');
+  assert.ok(placeSync, 'block placement consumption refreshes the trade inventory snapshot');
+  assert.equal(placeSync.msg.inv[0].count, 2);
+  assert.equal(itemCount(prof, W.B.SAND), 2);
 });
 
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that

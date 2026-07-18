@@ -5539,6 +5539,7 @@ class GameRoom extends Room {
       if (delivered.length && this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
       grant={...grant,items:delivered};
       this.syncPlayerProfile(client, rec.prof);
+      this.sendTradeInventory(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
     }
     client.send('grant', grant);

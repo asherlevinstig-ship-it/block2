@@ -460,7 +460,10 @@ class EconomyMixin {
     const rec = this.profileFor(client);
     if (!rec) return false;
     const ok = this.consumeItem(rec.prof, id, 1);
-    if (ok) this.dirtyPlayers.add(rec.token);
+    if (ok) {
+      if (typeof this.sendTradeInventory === 'function') this.sendTradeInventory(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+    }
     return ok;
   }
   consumeSlotItem(prof, slot, id, count) {

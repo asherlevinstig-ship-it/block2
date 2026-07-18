@@ -7546,7 +7546,7 @@ function tickFalling(dt){
       if(cur===B.AIR || cur===B.WATER){
         setB(f.x,restY,f.z,B.SAND);
         rebuildAround(f.x,f.z);
-      } else addItem(B.SAND,1);                     // landing cell got occupied: pop as item
+      } else if(!NET.on) addItem(B.SAND,1);         // online inventory is server-owned; avoid phantom trade items
       burst(f.x+.5, restY+1, f.z+.5, [.86,.8,.58], 8, 1.6, 1.2, .4);
       SFX.place();
       scene.remove(f.mesh);
