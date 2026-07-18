@@ -966,7 +966,13 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
     room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
-    room.onMessage('tradeOffer', m=>{applyTradeOffer(m);eventFeed('[Trade]',String(m&&m.fromName||'Hunter')+' offered a player trade.',{key:'trade:'+String(m&&m.id||''),cooldown:0});});
+    const receiveTradeOffer=m=>{
+      if(m&&m.toSid&&m.toSid!==room.sessionId)return;
+      applyTradeOffer(m);
+      eventFeed('[Trade]',String(m&&m.fromName||'Hunter')+' offered a player trade.',{key:'trade:'+String(m&&m.id||''),cooldown:0});
+    };
+    room.onMessage('tradeOffer', receiveTradeOffer);
+    room.onMessage('tradeOfferBroadcast', receiveTradeOffer);
     room.onMessage('tradePending', m=>applyTradePending(m));
     room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
     room.onMessage('tradeReject', m=>applyTradeReject(m));

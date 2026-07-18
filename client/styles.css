@@ -400,9 +400,11 @@
   @media(max-width:680px){#statpanel{padding:14px}.stat-hero{grid-template-columns:1fr}.stat-crest{display:none}.stat-grid{grid-template-columns:1fr}.attr,.ablist{grid-template-columns:1fr}.ablist button{justify-self:start}.srow b{text-align:left}}
   /* quest & shop window (warm gold styling) */
   #qwin{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,.6);z-index:32;padding:18px}
+  #qwin.trade-offer-open{z-index:90;background:rgba(3,8,15,.82)}
   #qpanel{width:430px;max-width:calc(100vw - 36px);max-height:84vh;overflow-y:auto;background:linear-gradient(160deg, rgba(34,26,16,.97), rgba(18,13,8,.97));border:1px solid #d8a020;box-shadow:0 0 26px rgba(216,160,32,.35), inset 0 0 30px rgba(216,160,32,.06);border-radius:8px;padding:20px 26px;color:#f0e4cc}
   #qpanel.dialog{width:min(450px,calc(100vw - 36px))}
   #qpanel.commerce{width:min(760px,calc(100vw - 36px))}
+  #qwin.trade-offer-open #qpanel{border-color:#9ad26b;box-shadow:0 0 32px rgba(154,210,107,.42),0 0 80px rgba(79,216,255,.16),inset 0 0 34px rgba(154,210,107,.08)}
   #qpanel.management{width:min(880px,calc(100vw - 36px));background:linear-gradient(160deg, rgba(17,27,42,.97), rgba(9,14,24,.97));border-color:#4fd8ff;box-shadow:0 0 28px rgba(79,216,255,.28), inset 0 0 34px rgba(79,216,255,.06);color:#d8e8ff}
   #qpanel.management h2{color:#4fd8ff;text-shadow:0 0 10px rgba(79,216,255,.75)}
   #qpanel.management .sub2{color:#8fb8d8}

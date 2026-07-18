@@ -3132,7 +3132,9 @@ class GameRoom extends Room {
     const trade = { id, fromSid: client.sessionId, toSid: target.sessionId, offer, createdAt: Date.now() };
     this.trades.set(id, trade);
     client.send('tradePending', { id, toSid: target.sessionId, toName: to && to.name || 'Hunter', offer });
-    target.send('tradeOffer', { id, fromSid: client.sessionId, fromName: from && from.name || 'Hunter', offer });
+    const payload = { id, fromSid: client.sessionId, fromName: from && from.name || 'Hunter', toSid: target.sessionId, offer };
+    target.send('tradeOffer', payload);
+    if (typeof this.broadcast === 'function') this.broadcast('tradeOfferBroadcast', payload);
   }
   handleTradeAccept(client, m = {}) {
     const id = String(m.tradeId || m.id || '');

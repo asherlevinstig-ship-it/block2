@@ -3037,6 +3037,7 @@ function openQWin(mode='dialog'){
   if(document.pointerLockElement) document.exitPointerLock();
   lockFallback=false; locked=false;
   qpanelEl.className=mode;
+  qwinEl.classList.remove('trade-offer-open');
   qwinEl.classList.remove('hidden');
   refreshPlayUi();
 }
@@ -3044,6 +3045,7 @@ function closeQWin(relock=true){
   setTownMapMovementOverlay(false);
   if(qOpen) SFX.uiClose();
   qOpen=false; qMode=''; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
+  qwinEl.classList.remove('trade-offer-open');
   if(relock) renderer.domElement.requestPointerLock();
   else {
     overlay.classList.remove('hidden');
@@ -5261,14 +5263,21 @@ function applyFriendResult(m){
   SFX.error();
   sysMsg(text,{tier:'minor',title:'Friends'});
 }
+const seenTradeOfferIds=new Set();
 function applyTradeOffer(m){
   if(!m||!m.id)return;
+  if(m.toSid&&NET&&NET.room&&m.toSid!==NET.room.sessionId)return;
+  const id=String(m.id);
+  if(seenTradeOfferIds.has(id))return;
+  seenTradeOfferIds.add(id);
+  if(seenTradeOfferIds.size>16)seenTradeOfferIds.delete(seenTradeOfferIds.values().next().value);
   if(statOpen){statOpen=false;statEl.classList.add('hidden');}
   if(uiOpen)closeUI(false);
   if(qOpen)closeQWin(false);
   showName('TRADE OFFER');
   if(SFX.level)SFX.level();
   openQWin('commerce');qpanelEl.innerHTML='';
+  qwinEl.classList.add('trade-offer-open');
   const h=document.createElement('h2');h.textContent='TRADE OFFER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' IS OFFERING';qpanelEl.appendChild(sub);
   const incoming=document.createElement('p');incoming.className='qtext';
@@ -5301,6 +5310,7 @@ function applyTradeReject(m){
   const reason=String(m&&m.reason||'invalid');
   const text={target:'No nearby hunter found.',rate:'Trading too quickly.',range:'Move closer to trade.',empty:'Add an item or gold first.',gold:'Not enough gold.',full:'One inventory is full.',item:'That item is no longer available.',missing:'That trade expired.',offline:'That hunter went offline.',expired:'That trade expired.'}[reason]||'Trade failed.';
   SFX.error();
+  showName('TRADE FAILED');
   sysMsg(text,{tier:'minor',title:'Trade'});
 }
 function applyTradeCancel(m){

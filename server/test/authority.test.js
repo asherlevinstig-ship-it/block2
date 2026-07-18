@@ -370,11 +370,12 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function openPlayerTradeUI/);
   assert.match(menus, /function tradeInventoryPicker/);
   assert.match(menus, /tradeStackFromInventorySlot/);
-  assert.match(menus, /function applyTradeOffer[\s\S]*statOpen[\s\S]*closeQWin\(false\)[\s\S]*showName\('TRADE OFFER'\)/);
+  assert.match(menus, /function applyTradeOffer[\s\S]*seenTradeOfferIds[\s\S]*statOpen[\s\S]*closeQWin\(false\)[\s\S]*trade-offer-open/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);
   assert.match(networking, /room\.onMessage\('tradeOffer'/);
+  assert.match(networking, /room\.onMessage\('tradeOfferBroadcast'/);
   assert.match(networking, /room\.onMessage\('tradeResult'/);
   assert.match(networking, /room\.onMessage\('friendResult'/);
 });
@@ -5244,10 +5245,13 @@ test('player trade transfers an offered item for responder gold', () => {
   const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 4 }], x: 20, z: 20 });
   const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 50, inv: [], x: 21, z: 20 });
   room.clients = [alice, bob];
+  const broadcasts = [];
+  room.broadcast = (type, msg) => broadcasts.push({ type, msg });
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 2, gold: 0 });
   const offer = bob.sent.find(e => e.type === 'tradeOffer');
   assert.ok(offer, 'target receives a trade offer');
+  assert.ok(broadcasts.some(e => e.type === 'tradeOfferBroadcast' && e.msg.toSid === bob.sessionId && e.msg.id === offer.msg.id), 'room broadcasts a target-filtered trade offer fallback');
   room.handleTradeAccept(bob, { tradeId: offer.msg.id, slot: -1, count: 0, gold: 12 });
 
   assert.equal(itemCount(aProf, I.BREAD), 2);
