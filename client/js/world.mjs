@@ -3967,6 +3967,30 @@ function serverObjectiveGuidanceTarget(o){
   }
   return null;
 }
+function playerStyleGuidanceTargetInfo(){
+  const api=globalThis.BlockcraftPlayerStyleGuide;
+  const guide=api&&typeof api.current==='function'?api.current():null;
+  if(!guide||!guide.id)return null;
+  const target=guide.target==='mara'?HUB.guide:
+    guide.target==='land'?{x:TOWN.TC,z:TOWN.TC+TOWN.HS+10}:
+    guide.target==='farm'?HUB.farm:
+    guide.target==='quarry'?HUB.quarry:
+    guide.target==='social'?HUB.socialMentor:
+    guide.target==='roost'?HUB.roost:
+    guide.target==='cartographer'?HUB.cartographer:
+    guide.target==='shrine'?HUB.shrine:HUB.guide;
+  const color=guide.target==='farm'?0x86efac:
+    guide.target==='quarry'?0xb8c0cc:
+    guide.target==='roost'?0x66f0ff:
+    guide.target==='cartographer'?0xffd24a:
+    guide.target==='shrine'?0x7dd3fc:
+    guide.target==='social'?0xd7b5ff:
+    guide.target==='land'?0x7dd3fc:0x9ad26b;
+  const route=guide.target==='land'
+    ? landTutorialRoute(target)
+    : [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target];
+  return {kind:'player-style-'+guide.id,color,target,route};
+}
 function guidanceTargetInfo(){
   if(dim!=='overworld') return null;
   if(coachTrail){
@@ -4004,6 +4028,8 @@ function guidanceTargetInfo(){
     const target=directed.target==='jobs'?HUB.jobs:directed.target==='roost'?HUB.roost:directed.target==='guild'?HUB.guild:directed.target==='roads'?guidanceNpcPosition('Tamsin Rook'):directed.target==='skyport'?HUB.skyport:HUB.guide;
     return {kind:'system-'+directed.id,color:0xc79cff,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target]};
   }
+  const styleTarget=playerStyleGuidanceTargetInfo();
+  if(styleTarget)return styleTarget;
   if(quest){
     const maraTarget=maraQuestGuidanceTarget(quest);
     if(maraTarget) return maraTarget;

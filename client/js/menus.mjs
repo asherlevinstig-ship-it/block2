@@ -4156,6 +4156,67 @@ function tutorialQuestLogCard(){
   if(!obj) return questLogCardHTML('Tutorial Guide','No active tutorial guidance','Optional town/tutorial guidance is inactive.','Town Tutorials panel or Mara',false);
   return questLogCardHTML('Tutorial Guide', obj.label, obj.text, 'Follow the glowing pillar');
 }
+const PLAYER_STYLE_GUIDES=Object.freeze([
+  {id:'fighter',title:'Adventurer / Fighter',tag:'Quests, gates, monsters',target:'mara',label:'TALK TO MARA',action:'Talk to Mara Vale and take a field quest or Gate prep.',detail:'For players who like battles, bosses, loot, and clearing danger with friends.'},
+  {id:'builder',title:'Builder',tag:'Land, bases, crafting',target:'land',label:'CLAIM LAND',action:'Pick up town guidance, gather blocks, and claim land outside the wall.',detail:'For players who want a home, a workshop, decoration, and visible progress in the world.'},
+  {id:'farmer',title:'Farmer / Cook',tag:'Food economy, buffs',target:'farm',label:'VISIT FARM',action:'Visit Liss at the farm plots, then Greta at the tavern kitchen.',detail:'For players who like supplying food, making buffs, and helping groups prepare.'},
+  {id:'miner',title:'Miner / Crafter',tag:'Caves, ore, gear',target:'quarry',label:'VISIT QUARRY',action:'Visit Garrik at the quarry, then Tobin at the smithy.',detail:'For players who want hidden routes, ore seams, treasure maps, repairs, and upgrades.'},
+  {id:'social',title:'Social Player',tag:'Friends, chat, trading',target:'social',label:'MEET AELIN',action:'Meet Aelin near the guild and practise chat, friends, and trading.',detail:'For players who enjoy teaming up, helping classmates, and making the town feel alive.'},
+  {id:'collector',title:'Collector / Pet Keeper',tag:'Familiars, dragons, cosmetics',target:'roost',label:'VISIT ROOST',action:'Visit the Dragon Roost and ask about familiars, eggs, treats, and care.',detail:'For players who want pets, dragons, rare drops, skins, and collection goals.'},
+  {id:'explorer',title:'Explorer',tag:'Maps, landmarks, secrets',target:'cartographer',label:'VISIT CARTOGRAPHER',action:'Visit Orin the cartographer, get a map, then follow roads and landmarks.',detail:'For players who want caves, ancient cities, treasure chests, and discoveries.'},
+  {id:'learner',title:'Learner / Monk',tag:'Recall, meditation, support',target:'shrine',label:'VISIT HALL',action:'Visit the Meditation Hall and choose a Recall subject when prompted.',detail:'For players who like calm support, stamina/mana recovery, questions, and group help.'},
+]);
+function playerStyleGuideStorage(value){
+  try{if(value===undefined)return localStorage.getItem('bc_player_style_guide')||'';if(value===null)localStorage.removeItem('bc_player_style_guide');else localStorage.setItem('bc_player_style_guide',value);}catch{}
+  return '';
+}
+function playerStyleGuideById(id){return PLAYER_STYLE_GUIDES.find(g=>g.id===id)||null;}
+function currentPlayerStyleGuide(){return playerStyleGuideById(playerStyleGuideStorage());}
+function playerStyleGuideChoiceHTML(){
+  const active=currentPlayerStyleGuide();
+  return '<div class="player-style-guide"><div class="sub2">CHOOSE YOUR FIRST STYLE - THIS DOES NOT LOCK ANYTHING</div>'+
+    PLAYER_STYLE_GUIDES.map(g=>'<article class="'+(active&&active.id===g.id?'selected':'')+'"><small>'+escHTML(g.tag)+'</small><b>'+escHTML(g.title)+'</b><p>'+escHTML(g.detail)+'</p><em>'+escHTML(g.action)+'</em><button type="button" data-player-style="'+escHTML(g.id)+'">'+(active&&active.id===g.id?'ACTIVE':'CHOOSE')+'</button></article>').join('')+
+  '</div>';
+}
+function bindPlayerStyleGuideActions(root=qpanelEl){
+  if(!root)return;
+  root.querySelectorAll('[data-player-style]').forEach(btn=>{
+    btn.onclick=e=>{e.preventDefault();e.stopPropagation();choosePlayerStyleGuide(btn.dataset.playerStyle||'');};
+  });
+}
+function playerStyleGuideQuestLogCard(){
+  const active=currentPlayerStyleGuide();
+  if(!active)return questLogCardHTML('First Style','Choose how you want to start','Pick a route: fighter, builder, farmer, miner, social, collector, explorer, or learner. You can change it any time.','Quest Log -> Choose Style',true,'<div class="qrow"><button type="button" data-player-style-open="1">CHOOSE STYLE</button></div>');
+  return questLogCardHTML('First Style',active.title,active.action,active.tag,true,'<div class="qrow"><button type="button" data-player-style-open="1">CHANGE STYLE</button></div>');
+}
+function bindPlayerStyleOpenActions(root=qpanelEl){
+  if(!root)return;
+  root.querySelectorAll('[data-player-style-open]').forEach(btn=>{btn.onclick=e=>{e.preventDefault();e.stopPropagation();openPlayerStyleGuideUI();};});
+}
+function choosePlayerStyleGuide(id){
+  const guide=playerStyleGuideById(id);
+  if(!guide){sysMsg('Choose a player style from the list.');return;}
+  playerStyleGuideStorage(guide.id);
+  sysMsg('<b>'+escHTML(guide.title)+'</b> guidance selected. Follow the pillar when you want a clear next step.');
+  if(globalThis.BlockcraftRefreshObjectiveTracker)globalThis.BlockcraftRefreshObjectiveTracker();
+  openQuestLogUI();
+}
+function openPlayerStyleGuideUI(){
+  if(statOpen){statOpen=false;statEl.classList.add('hidden');}
+  if(uiOpen)closeUI(false);
+  openQWin('player-style-guide');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='CHOOSE YOUR STYLE';qpanelEl.appendChild(h);
+  const p=document.createElement('p');p.className='qtext';p.textContent='Choose what kind of hunter you want help with first. This only changes guidance, not access. You can still do every activity at any level.';qpanelEl.appendChild(p);
+  const wrap=document.createElement('div');wrap.innerHTML=playerStyleGuideChoiceHTML();qpanelEl.appendChild(wrap.firstElementChild);
+  bindPlayerStyleGuideActions(qpanelEl);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('QUEST LOG',()=>openQuestLogUI()));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+}
+globalThis.BlockcraftPlayerStyleGuide=Object.freeze({
+  all:()=>PLAYER_STYLE_GUIDES.map(g=>({...g})),
+  current:()=>{const g=currentPlayerStyleGuide();return g?{...g}:null;},
+  choose:choosePlayerStyleGuide,
+  open:openPlayerStyleGuideUI,
+});
 function progressionRoadmap(){
   const rank=localPlayerHunterRankIndex(),maraStep=Math.max(0,(npcQuestChains&&npcQuestChains['Mara Vale'])|0),introduced=new Set(systemIntroductions||[]);
   // Keep this overview safe on a brand-new profile. Companion, mount and guild
@@ -4475,10 +4536,12 @@ function openQuestLogUI(){
   const historyOnly=questLogFilter==='completed'||questLogFilter==='failed';
   grid.innerHTML=serverCards&&historyOnly?serverCards:serverCards?[
     serverCards,
+    safeQuestLogCard('First Style',playerStyleGuideQuestLogCard),
     safeQuestLogCard('Gate Prep',gatePrepLoopCard),
     safeQuestLogCard('What Next?',whatNextQuestLogCard),
     safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard),
   ].join(''):[
+    safeQuestLogCard('First Style',playerStyleGuideQuestLogCard),
     safeQuestLogCard('Gate Prep',gatePrepLoopCard),
     safeQuestLogCard('What Next?',whatNextQuestLogCard),
     safeQuestLogCard('Story Quests',storyQuestLogCard),
@@ -4490,10 +4553,12 @@ function openQuestLogUI(){
   bindGatePrepActions(qpanelEl);
   bindObjectiveCraftShortcuts();
   bindServerObjectiveActions(qpanelEl);
+  bindPlayerStyleOpenActions(qpanelEl);
   const directed=progressionDirectorCandidate();
   if(directed){const controls=document.createElement('div');controls.className='qrow progression-guide-controls';controls.appendChild(qBtn('ACTIVATE '+directed.title.toUpperCase(),()=>activateProgressionGuide(directed.id)));controls.appendChild(qBtn('DISMISS GUIDE',()=>dismissProgressionGuide(directed.id),true));qpanelEl.appendChild(controls);}
   const roadmap=document.createElement('div');roadmap.innerHTML=progressionRoadmapHTML();qpanelEl.appendChild(roadmap.firstElementChild);
   const row=document.createElement('div'); row.className='qrow';
+  row.appendChild(qBtn('CHOOSE STYLE',()=>openPlayerStyleGuideUI()));
   row.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
   row.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
@@ -8195,6 +8260,8 @@ gameContext.registerModule('menus', Object.freeze({
   openRegionalContracts:openRegionalContractsUI,
   openGuardian:openGuardianUI,
   openGatePrep:openGatePrepUI,
+  openPlayerStyleGuide:openPlayerStyleGuideUI,
+  playerStyleGuide:currentPlayerStyleGuide,
   gateReadiness:gateReadinessLocal,
   nextGatePrepRank,
   openCrafting:openCraftingFromNpc,

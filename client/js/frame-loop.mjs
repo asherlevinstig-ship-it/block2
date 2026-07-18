@@ -600,6 +600,32 @@ function serverObjectiveProgressParts(o){
 function objectiveLine(kind,label,title,text,action,progress=null){
   return {kind,label,title:title||label,text:text||'',action,progress};
 }
+function currentPlayerStyleGuide(){
+  if(menusApi.playerStyleGuide){
+    const guide=menusApi.playerStyleGuide();
+    if(guide&&guide.id)return guide;
+  }
+  const api=globalThis.BlockcraftPlayerStyleGuide;
+  return api&&typeof api.current==='function'?api.current():null;
+}
+function playerStyleTargetPoint(target){
+  if(target==='mara')return {label:'Mara',x:HUB.guide.x,z:HUB.guide.z};
+  if(target==='land')return {label:'Land Claim',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
+  if(target==='farm')return {label:'Farm',x:HUB.farm.x,z:HUB.farm.z};
+  if(target==='quarry')return {label:'Quarry',x:HUB.quarry.x,z:HUB.quarry.z};
+  if(target==='social')return {label:'Aelin',x:HUB.socialMentor.x,z:HUB.socialMentor.z};
+  if(target==='roost')return {label:'Roost',x:HUB.roost.x,z:HUB.roost.z};
+  if(target==='cartographer')return {label:'Cartographer',x:HUB.cartographer.x,z:HUB.cartographer.z};
+  if(target==='shrine')return {label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z};
+  return {label:'Town Guide',x:HUB.guide.x,z:HUB.guide.z};
+}
+function playerStyleObjectiveLine(){
+  if(dim!=='overworld')return null;
+  const guide=currentPlayerStyleGuide();
+  if(guide)return objectiveLine('player_style','Style',guide.title,guide.action,{type:'player_style',label:guide.label||'FOLLOW STYLE'});
+  if(isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return objectiveLine('player_style','Style','Choose Your First Style','Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance',{type:'player_style',label:'CHOOSE STYLE'});
+  return null;
+}
 function serverObjectiveBySource(...sources){
   const set=new Set(sources);
   return activeObjectiveList()
@@ -702,6 +728,8 @@ function nextBestObjectiveLine(){
   if(job)return job;
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)return guild;
+  const style=playerStyleObjectiveLine();
+  if(style)return style;
   return progression||idleObjectiveLine();
 }
 function unifiedObjectiveList(){
@@ -831,7 +859,7 @@ function currentObjectiveHud(){
 }
 function refreshObjectiveTracker(){
   if(!currentQuestEl)return;
-  const obj=(quest||jobContract||regionalContract||townGuidanceActive||progressionFocus||dungeonLobbyState||activeObjectiveList().length)?currentObjectiveHud():null;
+  const obj=currentObjectiveHud();
   if(obj){
     currentQuestEl.classList.remove('hidden');
     currentQuestEl.innerHTML=objectiveHudHTML(obj);
@@ -880,6 +908,10 @@ function handleObjectiveAction(action,btn){
   }
   if(action==='gate_prep'){
     menusApi.openGatePrep&&menusApi.openGatePrep(+(btn.dataset.rank||0));
+    return;
+  }
+  if(action==='player_style'){
+    menusApi.openPlayerStyleGuide&&menusApi.openPlayerStyleGuide();
     return;
   }
   if(action==='questlog'){menusApi.openQuestLog&&menusApi.openQuestLog();return;}
@@ -1098,6 +1130,11 @@ function utilityCompassTarget(){
   if(progressionFocus==='first_d_gate'){
     const prep=ONBOARD.dRankPrepStatus();
     if(prep.next.target)return {label:'D Prep',x:prep.next.target.x,z:prep.next.target.z};
+  }
+  const style=currentPlayerStyleGuide();
+  if(style){
+    const target=playerStyleTargetPoint(style.target);
+    if(target)return target;
   }
   const jobTarget=jobContractCompassTarget();
   if(jobTarget)return jobTarget;

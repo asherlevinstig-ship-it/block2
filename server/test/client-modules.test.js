@@ -1498,6 +1498,8 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   assert.match(world,/serviceObjectiveFor\(type/);
   assert.match(world,/function activeServerObjectiveForGuidance\(\)/);
   assert.match(world,/function serverObjectiveGuidanceTarget\(o\)/);
+  assert.match(world,/function playerStyleGuidanceTargetInfo\(\)/);
+  assert.match(world,/playerStyleGuidanceTargetInfo\(\);\s*if\(styleTarget\)return styleTarget;/);
   assert.match(world,/title\.includes\('road ready'\)/);
   assert.match(world,/color=toMara\?0x9ad26b:0x7dd3fc/);
   assert.match(combat,/Walk into the pillar of light/);
@@ -2730,6 +2732,15 @@ test('quest log progression director introduces one system at a time',()=>{
   const store=fs.readFileSync(path.join(__dirname,'..','store.js'),'utf8');
   const earlyLoopE2E=fs.readFileSync(path.join(__dirname,'..','..','e2e','player-facing-early-loop.spec.js'),'utf8');
   assert.match(menus,/function progressionRoadmap\(\)/);
+  assert.match(menus,/const PLAYER_STYLE_GUIDES=Object\.freeze\(\[/);
+  for (const id of ['fighter','builder','farmer','miner','social','collector','explorer','learner']) {
+    assert.match(menus, new RegExp("id:'" + id + "'"));
+  }
+  assert.match(menus,/function openPlayerStyleGuideUI\(\)/);
+  assert.match(menus,/BlockcraftPlayerStyleGuide=Object\.freeze/);
+  assert.match(menus,/safeQuestLogCard\('First Style',playerStyleGuideQuestLogCard\)/);
+  assert.match(menus,/openPlayerStyleGuide:openPlayerStyleGuideUI/);
+  assert.match(combat,/CHOOSE PLAYSTYLE/);
   assert.match(networking,/const focus=String\(m&& \(m\.progressionFocus\|\|m\.focus\) \|\| ''\);/);
   assert.match(menus,/function whatNextQuestLogCard\(\)/);
   assert.match(menus,/function activeObjectiveList\(\)/);
@@ -2798,6 +2809,10 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/trackerCraftAction:objectiveTrackerCraftAction/);
   assert.match(menus,/get craftResult\(\)/);
   assert.match(frame,/function currentObjectiveAction\(/);
+  assert.match(frame,/function playerStyleObjectiveLine\(\)/);
+  assert.match(frame,/type:'player_style',label:'CHOOSE STYLE'/);
+  assert.match(frame,/if\(action==='player_style'\)/);
+  assert.match(frame,/const style=currentPlayerStyleGuide\(\);\s*if\(style\)\{/);
   assert.match(frame,/function nearbyQuestClaimPrompt\(\)/);
   assert.match(frame,/combatApi\.nearbyInteractionPrompt&&combatApi\.nearbyInteractionPrompt\(\)/);
   assert.match(frame,/Turn In '\+qTitle/);
@@ -2837,7 +2852,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/action==='guild_contracts'/);
   assert.match(frame,/action==='claim_aegis'/);
   assert.match(frame,/data-location/);
-  assert.match(frame,/activeObjectiveList\(\)\.length/);
+  assert.match(frame,/const obj=currentObjectiveHud\(\);/);
   assert.match(frame,/progression:first_land_claim/);
   assert.match(frame,/OPEN GATE PREP/);
   assert.match(frame,/function transitionRecoveryAction\(/);

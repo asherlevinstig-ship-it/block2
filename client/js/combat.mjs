@@ -1123,6 +1123,11 @@ function renderTownTutorialOptions(force=false){
     ['land','BUY LAND',gold>=firstLandPrice?'Leave town and buy a wilderness title.':'Earn about '+firstLandPrice+' gold, then buy a wilderness title.',gold>=firstLandPrice]
   ].filter(c=>!townTutorialStepDone(c[0]));
   townChoicesEl.innerHTML='<div class="tct">TOWN TUTORIALS</div><div class="tcs">CHOOSE WHAT TO LEARN NEXT</div>';
+  const styleRow=document.createElement('div'); styleRow.className='tcrow player-style';
+  const styleText=document.createElement('div'); styleText.innerHTML='<div class="tcname">CHOOSE PLAYSTYLE</div><div class="tcdesc">Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance.</div>'; styleRow.appendChild(styleText);
+  const styleButton=document.createElement('button'); styleButton.textContent='CHOOSE';
+  styleButton.onpointerdown=e=>{e.preventDefault();e.stopPropagation();if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open();};
+  styleRow.appendChild(styleButton);townChoicesEl.appendChild(styleRow);
   for(const [step,label,desc,ready] of choices){
     const active=townGuidanceActive&&townGuidanceStep===step;
     const row=document.createElement('div'); row.className='tcrow'+(active?' active':'');
