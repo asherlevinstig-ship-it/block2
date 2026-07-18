@@ -2667,6 +2667,13 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/function serverObjectiveQuestLogCards\(\)/);
   assert.match(menus,/function serverObjectiveQuestLogSections\(/);
   assert.match(menus,/function questHistoryQuestLogSections\(/);
+  assert.match(menus,/function questLogObjectiveList\(\)/);
+  assert.match(menus,/!isBoardOnlyQuestLogSource\(o\.source\|\|o\.category\)/);
+  const questLogUi=menus.slice(menus.indexOf('function openQuestLogUI(){'),menus.indexOf('function firstDragonTreatSlot(){'));
+  assert.doesNotMatch(questLogUi,/safeQuestLogCard\('Job Contract'/);
+  assert.doesNotMatch(questLogUi,/safeQuestLogCard\('Guild Contract'/);
+  assert.doesNotMatch(questLogUi,/qBtn\('JOBS'/);
+  assert.doesNotMatch(questLogUi,/qBtn\('GUILD CONTRACTS'/);
   assert.match(menus,/function nextGatePrepRank\(\)/);
   assert.match(menus,/function gatePrepLoopCard\(\)/);
   assert.match(menus,/function openGatePrepUI\(rank=nextGatePrepRank\(\)\)/);

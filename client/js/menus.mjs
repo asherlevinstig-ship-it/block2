@@ -3706,6 +3706,12 @@ function activeObjectiveList(){
     .filter(o=>o&&typeof o==='object'&&o.id&&o.title)
     .slice(0,12) : [];
 }
+function isBoardOnlyQuestLogSource(source){
+  return source==='job'||source==='guild';
+}
+function questLogObjectiveList(){
+  return activeObjectiveList().filter(o=>!isBoardOnlyQuestLogSource(o.source||o.category));
+}
 function objectiveSourceLabel(source){
   return ({
     story:'Story Quests',
@@ -3813,7 +3819,7 @@ function questSectionHTML(title,cards,emptyText='No active objectives in this se
   return '<section class="questsection"><div class="questsection-title">'+escHTML(title)+'</div><div class="questgrid">'+body+'</div></section>';
 }
 function questLogFilteredObjectives(filter=questLogFilter){
-  const list=activeObjectiveList().sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')));
+  const list=questLogObjectiveList().sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')));
   if(filter==='ready')return list.filter(o=>o.status==='claimable'||o.status==='complete');
   if(filter==='active')return list.filter(o=>o.status!=='claimable'&&o.status!=='complete'&&o.status!=='failed');
   return list;
@@ -3821,15 +3827,13 @@ function questLogFilteredObjectives(filter=questLogFilter){
 function serverObjectiveQuestLogSections(filter=questLogFilter){
   const list=questLogFilteredObjectives(filter);
   if(!list.length){
-    const empty=filter==='ready'?'Complete objectives will appear here when a reward is waiting.':filter==='active'?'No active quest work is waiting. Check What Next, NPCs, the Job Board, or Guild Contracts.':'No active objectives in this section.';
+    const empty=filter==='ready'?'Complete story, trial, and progression objectives will appear here when a reward is waiting.':filter==='active'?'No active quest work is waiting. Check What Next or speak to town NPCs. Jobs live at the Job Board; Guild Contracts live at the Guild Hall.':'No active objectives in this section.';
     return questSectionHTML(filter==='ready'?'Ready':filter==='active'?'Active':'Objectives',[],empty);
   }
   const groups=[
     ['Ready to Claim',o=>o.status==='claimable'||o.status==='complete','Completed objectives waiting for a turn-in.'],
     ['Story',o=>o.source==='story','NPC story quests from town characters.'],
     ['Manhunt',o=>o.source==='manhunt','Town giant and bounty-style hunts.'],
-    ['Job',o=>o.source==='job','Profession and Adventurer contracts.'],
-    ['Guild',o=>o.source==='guild','Hunter Guild and Road Warden contracts.'],
     ['Aegis',o=>o.source==='aegis','Guardian trials and Aegis bounties.'],
     ['Progression',o=>['progression','tutorial','event','discovery'].includes(o.source),'Guidance, tutorial, and discovery objectives.'],
   ];
@@ -3841,6 +3845,7 @@ function serverObjectiveQuestLogSections(filter=questLogFilter){
 function questHistoryList(){
   return Array.isArray(questHistory) ? questHistory
     .filter(h=>h&&typeof h==='object'&&h.title&&h.outcome)
+    .filter(h=>!isBoardOnlyQuestLogSource(h.source))
     .slice(0,50) : [];
 }
 function questHistoryStatusText(h){
@@ -3891,7 +3896,7 @@ function questHistoryQuestLogSections(filter=questLogFilter){
   return recent.length?questSectionHTML('Recently Completed',recent,'Recent quest outcomes will appear here.'):'';
 }
 function questLogFilterCounts(){
-  const active=activeObjectiveList(),history=questHistoryList();
+  const active=questLogObjectiveList(),history=questHistoryList();
   return {
     active:active.filter(o=>o.status!=='claimable'&&o.status!=='complete'&&o.status!=='failed').length,
     ready:active.filter(o=>o.status==='claimable'||o.status==='complete').length,
@@ -4461,8 +4466,6 @@ function openQuestLogUI(){
     safeQuestLogCard('Gate Prep',gatePrepLoopCard),
     safeQuestLogCard('What Next?',whatNextQuestLogCard),
     safeQuestLogCard('Story Quests',storyQuestLogCard),
-    safeQuestLogCard('Job Contract',jobQuestLogCard),
-    safeQuestLogCard('Guild Contract',guildQuestLogCard),
     safeQuestLogCard('Aegis Trial',aegisQuestLogCard),
     safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard),
   ].join('');
@@ -4475,8 +4478,6 @@ function openQuestLogUI(){
   if(directed){const controls=document.createElement('div');controls.className='qrow progression-guide-controls';controls.appendChild(qBtn('ACTIVATE '+directed.title.toUpperCase(),()=>activateProgressionGuide(directed.id)));controls.appendChild(qBtn('DISMISS GUIDE',()=>dismissProgressionGuide(directed.id),true));qpanelEl.appendChild(controls);}
   const roadmap=document.createElement('div');roadmap.innerHTML=progressionRoadmapHTML();qpanelEl.appendChild(roadmap.firstElementChild);
   const row=document.createElement('div'); row.className='qrow';
-  row.appendChild(qBtn('JOBS',()=>openJobsUI()));
-  row.appendChild(qBtn('GUILD CONTRACTS',()=>openRegionalContractsUI()));
   row.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
   row.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
