@@ -369,11 +369,14 @@ test('client modules expose and route player trading actions', () => {
   assert.match(world, /"townSocialTargetNear":\{get:\(\)=>townSocialTargetNear\}/);
   assert.match(combat, /KeyE[\s\S]*townSocialTargetNear[\s\S]*openPlayerSocialUI[\s\S]*openPlayerTradeUI/);
   assert.match(menus, /function openPlayerTradeUI/);
+  assert.match(menus, /player-trade-sync/);
   assert.match(menus, /function tradeInventoryPicker/);
   assert.match(menus, /tradeStackFromInventorySlot/);
   assert.match(menus, /NET\.room\.send\('tradeOffer',\{targetSid:target\.sid,targetName:String\(target\.name\|\|''\)/);
   assert.match(menus, /function applyTradeReject[\s\S]*trade-error-panel[\s\S]*SEND OFFER/);
   assert.match(menus, /function applyTradeOffer[\s\S]*seenTradeOfferIds[\s\S]*statOpen[\s\S]*closeQWin\(false\)[\s\S]*trade-offer-open/);
+  assert.match(menus, /function applyTradePending[\s\S]*closeQWin\(true\)/);
+  assert.match(menus, /function qBtn[\s\S]*b\.type='button'[\s\S]*e\.preventDefault\(\); e\.stopPropagation\(\);/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);

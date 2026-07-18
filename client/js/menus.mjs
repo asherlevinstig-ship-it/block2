@@ -3059,9 +3059,10 @@ function qModalIs(name){
 }
 function qBtn(label, cb, dim2){
   const b=document.createElement('button');
+  b.type='button';
   b.className='qbtn'+(dim2?' dim':'');
   b.textContent=label;
-  b.addEventListener('click',e=>{ SFX.uiClick(); cb(e); });
+  b.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); SFX.uiClick(); cb(e); });
   return b;
 }
 const RECALL_SUBJECTS=['Computer Science','Information Technology','Religious Education','English'];
@@ -5224,6 +5225,13 @@ function openPlayerTradeUI(target,opts={}){
   if(!target||!target.sid){sysMsg('Look at a nearby hunter, then press <b>E</b> to trade.');return;}
   const refreshedAt=Number(globalThis.BlockcraftServerInventorySnapshotUpdatedAt)||0;
   if(!opts.afterProfileSync&&performance.now()-refreshedAt>800){
+    if(uiOpen)closeUI(false);
+    openQWin('commerce');qpanelEl.innerHTML='';
+    qpanelEl.dataset.modal='player-trade-sync';
+    const h=document.createElement('h2');h.textContent='PLAYER TRADE';qpanelEl.appendChild(h);
+    const intro=document.createElement('p');intro.className='qtext';
+    intro.innerHTML='Syncing your server inventory before trading with <b>'+escHTML(String(target.name||'Hunter'))+'</b>...';
+    qpanelEl.appendChild(intro);
     requestTradeInventoryRefresh();
     sysMsg('Syncing your server inventory before trading...');
     setTimeout(()=>openPlayerTradeUI(target,{afterProfileSync:true}),180);
@@ -5274,7 +5282,7 @@ function openPlayerSocialUI(target){
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function applyTradePending(m){
-  if(qOpen&&qMode==='commerce')closeQWin(false);
+  if(qOpen&&qMode==='commerce')closeQWin(true);
   sysMsg('Trade offer sent to <b>'+escHTML(String(m&&m.toName||'Hunter'))+'</b>: '+tradeOfferSummary(m&&m.offer)+'.',{tier:'minor',title:'Trade'});
 }
 function applyFriendResult(m){
