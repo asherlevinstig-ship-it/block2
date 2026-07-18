@@ -1569,6 +1569,22 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.doesNotMatch(social,/held<220|movementX|movementY|Release Tab/);
 });
 
+test('social mentor NPC teaches friends chat teams and safety without creating a quest',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(world,/socialMentor:\s*\{ x: dpx\(43\.5, 'guild'\), z: dpz\(34, 'guild'\) \}/);
+  assert.match(world,/name:'Nia Brightbell'[\s\S]*role:'social_mentor'[\s\S]*title:'Fellowship Mentor'/);
+  assert.match(world,/Tab opens quick chat, T opens teams/);
+  assert.match(world,/Social Mentor - Tab Chat/);
+  assert.match(menus,/function openSocialMentorUI/);
+  assert.match(menus,/TAB QUICK CHAT/);
+  assert.match(menus,/Local, Party, and Whisper/);
+  assert.match(menus,/Friendly play means clear invites/);
+  assert.match(menus,/globalThis\.startQuickChatWheel/);
+  assert.match(menus,/globalThis\.openTeamUI/);
+  assert.match(menus,/if\(v&&v\.role==='social_mentor'\)\{ openSocialMentorUI\(v\); return; \}/);
+});
+
 test('local quick chat remains visible in a Minecraft-style bottom-left feed',()=>{
   const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');

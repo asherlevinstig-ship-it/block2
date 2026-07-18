@@ -5814,8 +5814,41 @@ function openLegendaryCraftUI(){
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
   qpanelEl.appendChild(row);
 }
+function openSocialMentorUI(v={name:'Nia Brightbell'}){
+  openQWin('management');
+  qpanelEl.innerHTML='';
+  const h=document.createElement('h2'); h.textContent=(v.name||'Nia Brightbell').toUpperCase(); qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='FELLOWSHIP MENTOR - CHAT, TEAMS, AND SAFE PLAY'; qpanelEl.appendChild(sub);
+  const intro=document.createElement('p'); intro.className='qtext';
+  intro.innerHTML='"'+escHTML(v.line||'Adventuring gets easier when you know how to ask for help.')+'"<br><br>Use quick, safe messages first. If another hunter answers kindly, invite them to a team before Gates or long road work.';
+  qpanelEl.appendChild(intro);
+  const lessons=[
+    ['TAB QUICK CHAT','Press <b>Tab</b> while playing to open the quick-chat wheel, then click a phrase like Hello, Follow me, Wait, or Good job.'],
+    ['CHANNELS','While chat is open, press <b>Tab</b> again to cycle Local, Party, and Whisper. Local is nearby, Party is your team, Whisper is one player.'],
+    ['TEXT BAR','Press <b>/</b> or <b>`</b> to open the compact phrase bar. Press <b>Enter</b> to send the selected message.'],
+    ['TEAMS','Press <b>T</b> to create, join, invite, or mark a team as Looking For Dungeon. Team Gates and hard fights are safer together.'],
+    ['SAFETY','Use Whisper controls to mute or report. Friendly play means clear invites, no pressure, and helping newer hunters find their way.'],
+  ];
+  for(const [title,text] of lessons){
+    const item=document.createElement('div'); item.className='shoprow social-mentor-lesson';
+    item.innerHTML='<span><b>'+escHTML(title)+'</b><br><small style="color:#b8c6d8">'+text+'</small></span>';
+    qpanelEl.appendChild(item);
+  }
+  const actions=document.createElement('div'); actions.className='qrow'; actions.style.marginTop='10px';
+  actions.appendChild(qBtn('TRY TAB CHAT', ()=>{
+    closeQWin(false);
+    setTimeout(()=>{if(typeof globalThis.startQuickChatWheel==='function')globalThis.startQuickChatWheel();else sysMsg('Press <b>Tab</b> while playing to open quick chat.');},80);
+  }));
+  actions.appendChild(qBtn('OPEN TEAMS', ()=>{
+    if(typeof globalThis.openTeamUI==='function')globalThis.openTeamUI();
+    else sysMsg('Press <b>T</b> while playing to open teams.');
+  }));
+  actions.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
+  qpanelEl.appendChild(actions);
+}
 function openQuestUI(v){
   if(v&&v.role==='stablemaster'){ openStablemasterUI(v); return; }
+  if(v&&v.role==='social_mentor'){ openSocialMentorUI(v); return; }
   const source=questSourceFor(v);
   const giver=questGiverName(v);
   const sourceTitle=source==='guardian'?'AEGIS TRIALS':'NPC QUESTS';

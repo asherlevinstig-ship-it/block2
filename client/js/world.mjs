@@ -1216,6 +1216,7 @@ const HUB = {
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
   guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
   guildNoticeBoard: { x: dpx(47, 'guild'), z: dpz(26.7, 'guild') },
+  socialMentor: { x: dpx(43.5, 'guild'), z: dpz(34, 'guild') },
   shrine: { x: dpx(47.5, 'shrine'), z: dpz(48, 'shrine') },
   meditate: { x: dpx(47.5, 'shrine'), z: dpz(46.5, 'shrine') },
   smith: { x: dpx(78.5, 'forge'), z: dpz(50, 'forge') },
@@ -3445,6 +3446,12 @@ const NPC_ROLES=[
    accept:'I will prepare the charter and record you as guild leader.',
    done:'Your banner has a place in this hall now.',
    focus:'guild'},
+  {name:'Nia Brightbell', shortName:'Nia', role:'social_mentor', title:'Fellowship Mentor', personality:'bright, gentle, remembers every hunter by how they helped someone',
+   work:[HUB.socialMentor.x,HUB.socialMentor.z], home:[HUB.guild.x,HUB.guild.z], static:true,
+   line:'Adventuring gets easier when you know how to ask for help. Tab opens quick chat, T opens teams, and kind hunters become the safest map marker.',
+   accept:'Try a greeting first. A good party often starts with one small hello.',
+   done:'You are speaking like someone others can trust.',
+   focus:'social'},
   {name:'Tamsin Rook',shortName:'Tamsin',role:'road_warden',title:'Road Warden',personality:'watchful, practical, unimpressed by excuses',
    work:[HUB.jobs.x+2,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts.',
@@ -4595,6 +4602,7 @@ addTownInteractLabel('Roulette Table · G', HUB.tavernRoulette.x, TOWN.G+3.65, H
 addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, '#f2c75c', 14);
+addTownInteractLabel('Social Mentor - Tab Chat', HUB.socialMentor.x, TOWN.G+3.75, HUB.socialMentor.z, '#82e6a7', 9);
 addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
 addTownInteractLabel('3 North Gate', HUB.northGate.x, TOWN.G+5.4, HUB.northGate.z+1.3, '#d8f2ff', 14);
 addTownInteractLabel('Town Shrine', dpx(47.5,'shrine'), TOWN.G+5.2, dpz(56.5,'shrine'), '#d8f2ff', 12);
