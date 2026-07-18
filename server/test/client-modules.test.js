@@ -1473,6 +1473,7 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
 test('first ten minute guidance teaches subject focus and explicit quest acceptance',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(combat,/Lesson 12 \/ 14 - Subject Focus/);
@@ -1505,6 +1506,16 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   assert.match(combat,/Walk into the pillar of light/);
   assert.match(combat,/FIND LIGHT/);
   assert.match(combat,/Follow the pillar of light to the Job Board/);
+  assert.match(menus,/function openNpcDialogueShell\(v,context=''\)/);
+  assert.match(menus,/npc-dialogue-shell/);
+  assert.match(menus,/npc-dialogue-portrait/);
+  assert.match(menus,/npcDialogueButton\('ACCEPT'/);
+  assert.match(menus,/function openSocialMentorUI/);
+  assert.match(menus,/openQWin\('dialog'\);\s*qpanelEl\.innerHTML='';\s*const ui=openNpcDialogueShell\(v, 'FELLOWSHIP MENTOR/);
+  assert.match(styles,/#qpanel\.dialog\{width:min\(720px/);
+  assert.match(styles,/\.npc-dialogue-head/);
+  assert.match(styles,/\.npc-dialogue-text/);
+  assert.match(styles,/\.npc-dialogue-actions \.qbtn\.npc-primary/);
   assert.match(world,/const guideBeaconGroup=new THREE\.Group/);
   assert.match(world,/new THREE\.CylinderGeometry\(\.44,\.82,13\.5,18,1,true\)/);
   assert.match(world,/const guideBeaconRing=new THREE\.Mesh\(new THREE\.TorusGeometry/);

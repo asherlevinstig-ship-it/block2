@@ -6371,13 +6371,10 @@ function legendaryCraftRejected(m){
 function openGuardianUI(){
   openQWin('dialog');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent='AEGIS GUARDIAN'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='AEGIS FORGE - LEGENDARY CRAFTING'; qpanelEl.appendChild(sub);
-  const body=document.createElement('p'); body.className='qtext';
+  const ui=openNpcDialogueShell({name:'Aegis Guardian',title:'Legendary Forge',role:'guardian'}, 'AEGIS FORGE - LEGENDARY CRAFTING');
+  const body=ui.body,row=ui.row;
   body.innerHTML='"This shrine binds proof of victory into relics. Bring Legendary Tokens from gates and server events, and I will forge one legendary item at a time."';
-  qpanelEl.appendChild(body);
-  const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
-  row.appendChild(qBtn('ASK FOR TRIAL', ()=>openQuestUI({name:'Aegis Guardian', shortName:'Aegis Guardian', role:'guardian', title:'Aegis Guardian', questSource:'guardian', line:'Only proven hands may carry relics.', accept:'Take an Aegis Trial. These are not town errands; they prove you can guard what you craft.', done:'The Aegis recognizes the trial completed.'})));
+  row.appendChild(npcDialogueButton('ASK FOR TRIAL', ()=>openQuestUI({name:'Aegis Guardian', shortName:'Aegis Guardian', role:'guardian', title:'Aegis Guardian', questSource:'guardian', line:'Only proven hands may carry relics.', accept:'Take an Aegis Trial. These are not town errands; they prove you can guard what you craft.', done:'The Aegis recognizes the trial completed.'}), 'primary'));
   row.appendChild(qBtn('CRAFT LEGENDARY ITEM', ()=>openLegendaryCraftUI()));
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
@@ -6411,14 +6408,37 @@ function openLegendaryCraftUI(){
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
   qpanelEl.appendChild(row);
 }
+function npcDialogueInitials(v){
+  return String(v&&v.shortName||v&&v.name||'?').split(/\s+/).filter(Boolean).slice(0,2).map(s=>s[0]).join('').toUpperCase()||'?';
+}
+function npcDialogueRoleClass(v){
+  const role=String(v&&v.role||'town').replace(/[^a-z0-9_-]/gi,'').toLowerCase();
+  return role||'town';
+}
+function npcDialogueButton(label,cb,variant=''){
+  const b=qBtn(label,cb,variant==='dim');
+  if(variant&&variant!=='dim')b.classList.add('npc-'+variant);
+  return b;
+}
+function openNpcDialogueShell(v,context=''){
+  const shell=document.createElement('div');shell.className='npc-dialogue-shell '+npcDialogueRoleClass(v);
+  const head=document.createElement('div');head.className='npc-dialogue-head';
+  const portrait=document.createElement('div');portrait.className='npc-dialogue-portrait';portrait.textContent=npcDialogueInitials(v);head.appendChild(portrait);
+  const nameplate=document.createElement('div');nameplate.className='npc-dialogue-nameplate';
+  const name=document.createElement('h2');name.textContent=String(v&&v.name||'Villager').toUpperCase();nameplate.appendChild(name);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent=(context || (v&&v.title)||'Townsperson').toUpperCase();nameplate.appendChild(sub);
+  head.appendChild(nameplate);shell.appendChild(head);
+  const body=document.createElement('p');body.className='qtext npc-dialogue-text';shell.appendChild(body);
+  const row=document.createElement('div');row.className='qrow npc-dialogue-actions';shell.appendChild(row);
+  qpanelEl.appendChild(shell);
+  return {shell,body,row};
+}
 function openSocialMentorUI(v={name:'Nia Brightbell'}){
-  openQWin('management');
+  openQWin('dialog');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent=(v.name||'Nia Brightbell').toUpperCase(); qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='FELLOWSHIP MENTOR - CHAT, TEAMS, AND SAFE PLAY'; qpanelEl.appendChild(sub);
-  const intro=document.createElement('p'); intro.className='qtext';
+  const ui=openNpcDialogueShell(v, 'FELLOWSHIP MENTOR - CHAT, TEAMS, AND SAFE PLAY');
+  const intro=ui.body;
   intro.innerHTML='"'+escHTML(v.line||'Adventuring gets easier when you know how to ask for help.')+'"<br><br>Use quick, safe messages first. If another hunter answers kindly, invite them to a team before Gates or long road work.';
-  qpanelEl.appendChild(intro);
   const lessons=[
     ['TAB QUICK CHAT','Press <b>Tab</b> while playing to open the quick-chat wheel, then click a phrase like Hello, Follow me, Wait, or Good job.'],
     ['CHANNELS','While chat is open, press <b>Tab</b> again to cycle Local, Party, and Whisper. Local is nearby, Party is your team, Whisper is one player.'],
@@ -6429,9 +6449,9 @@ function openSocialMentorUI(v={name:'Nia Brightbell'}){
   for(const [title,text] of lessons){
     const item=document.createElement('div'); item.className='shoprow social-mentor-lesson';
     item.innerHTML='<span><b>'+escHTML(title)+'</b><br><small style="color:#b8c6d8">'+text+'</small></span>';
-    qpanelEl.appendChild(item);
+    ui.shell.insertBefore(item, ui.row);
   }
-  const actions=document.createElement('div'); actions.className='qrow'; actions.style.marginTop='10px';
+  const actions=ui.row; actions.style.marginTop='10px';
   actions.appendChild(qBtn('TRY TAB CHAT', ()=>{
     closeQWin(false);
     setTimeout(()=>{if(typeof globalThis.startQuickChatWheel==='function')globalThis.startQuickChatWheel();else sysMsg('Press <b>Tab</b> while playing to open quick chat.');},80);
@@ -6441,7 +6461,6 @@ function openSocialMentorUI(v={name:'Nia Brightbell'}){
     else sysMsg('Press <b>T</b> while playing to open teams.');
   }));
   actions.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
-  qpanelEl.appendChild(actions);
 }
 function openQuestUI(v){
   if(v&&v.role==='stablemaster'){ openStablemasterUI(v); return; }
@@ -6451,10 +6470,8 @@ function openQuestUI(v){
   const sourceTitle=source==='guardian'?'AEGIS TRIALS':'NPC QUESTS';
   openQWin('dialog');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent=v.name.toUpperCase(); qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent=sourceTitle+' - '+(v.title||'Villager').toUpperCase()+' OF THE TOWN OF BEGINNINGS'; qpanelEl.appendChild(sub);
-  const body=document.createElement('p'); body.className='qtext'; qpanelEl.appendChild(body);
-  const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
+  const ui=openNpcDialogueShell(v, sourceTitle+' - '+(v.title||'Villager')+' of the Town of Beginnings');
+  const body=ui.body,row=ui.row;
   const rewardItemsText=q=>{
     const items=Array.isArray(q&&q.rewardItems)?q.rewardItems.filter(it=>it&&ITEMS[it.id]):[];
     return items.length ? ' + '+items.map(it=>escHTML(ITEMS[it.id].name)+' x'+Math.max(1,it.count|0||1)).join(', ') : '';
@@ -6463,7 +6480,7 @@ function openQuestUI(v){
     const tier=jobPerkTier('adventurer');
     const rewardGold=playerJob==='adventurer'&&tier ? Math.round(quest.gold*(1+tier*.05)) : quest.gold;
     body.innerHTML='"'+escHTML(v.done||'You have done well. The town is in your debt.')+'"<br><br>'+npcFlavor(v)+'<br><br>Reward: <b>'+rewardGold+' gold</b> + '+quest.xp+' XP'+rewardItemsText(quest);
-    row.appendChild(qBtn('TURN IN', ()=>{
+    row.appendChild(npcDialogueButton('TURN IN', ()=>{
       if(NET.on&&NET.room&&quest.source==='guardian'){NET.room.send('claimAegisTrial',{});return;}
       if(NET.on&&NET.room&&(quest.source||'npc')==='npc'){NET.room.send('npcQuest',{action:'claim'});return;}
       if(quest.type==='fetch' && !removeItems(quest.item, quest.need)) return;
@@ -6484,7 +6501,7 @@ function openQuestUI(v){
       }
       quest=null;
       closeQWin();
-    }));
+    }, 'primary'));
   } else if(quest){
     const sameSource=(quest.source||'npc')===source;
     const sameGiver=questCanTurnIn(v) || ((quest.source||'npc')==='npc' && quest.giver===giver);
@@ -6493,10 +6510,10 @@ function openQuestUI(v){
       ? 'Return to '+quest.giver+' to turn this in.'
       : quest.desc+'<br>Progress: '+progress;
     body.innerHTML='"'+escHTML(sameSource&&sameGiver?'How goes the task?':'That work belongs elsewhere.')+'"<br><br>'+npcFlavor(v)+'<br><br><b>'+escHTML(questTypeLabel(quest))+'</b> from '+escHTML(quest.giver)+'<br>'+returnLine;
-    row.appendChild(qBtn('ABANDON', ()=>{
+    row.appendChild(npcDialogueButton('ABANDON', ()=>{
       if(NET.on&&NET.room&&(quest.source||'npc')==='npc'){NET.room.send('npcQuest',{action:'abandon'});return;}
       quest=null; closeQWin();
-    }, true));
+    }, 'dim'));
   } else {
     const offer=rollQuest(giver, v.role, source);
     const lootLine=source==='guardian'
@@ -6510,7 +6527,7 @@ function openQuestUI(v){
     } else {
       body.innerHTML='"'+escHTML(v.accept||offer.desc)+'"<br><br>'+npcFlavor(v)+'<br><br>'+chainLine+offer.desc+'<div class="quest-reward-preview"><small>REWARD PREVIEW</small><b>'+offer.xp+' HUNTER XP</b><span>'+offer.gold+' gold'+rewardItemsText(offer)+'</span></div>'+lootLine;
     }
-    row.appendChild(qBtn('ACCEPT', ()=>{
+    row.appendChild(npcDialogueButton('ACCEPT', ()=>{
       if(source==='guardian' && offer.type==='pvp_bounty'){
         if(requestAegisBounty(offer)) return;
       }
@@ -6521,8 +6538,8 @@ function openQuestUI(v){
       else sysMsg(escHTML(questTypeLabel(quest))+' accepted from <b>'+escHTML(giver)+'</b>');
       maraQuestCue(quest);
       closeQWin();
-    }));
-    row.appendChild(qBtn('DECLINE', ()=>closeQWin(), true));
+    }, 'primary'));
+    row.appendChild(npcDialogueButton('DECLINE', ()=>closeQWin(), 'dim'));
   }
   if(v.role==='smith') row.appendChild(qBtn('SERVICES', ()=>openBlacksmithServicesUI()));
   if(v.role==='farmer') row.appendChild(qBtn('FIELDCRAFT', ()=>openFarmerServicesUI()));

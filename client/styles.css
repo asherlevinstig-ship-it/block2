@@ -402,7 +402,7 @@
   #qwin{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,.6);z-index:32;padding:18px}
   #qwin.trade-offer-open{z-index:90;background:rgba(3,8,15,.82)}
   #qpanel{width:430px;max-width:calc(100vw - 36px);max-height:84vh;overflow-y:auto;background:linear-gradient(160deg, rgba(34,26,16,.97), rgba(18,13,8,.97));border:1px solid #d8a020;box-shadow:0 0 26px rgba(216,160,32,.35), inset 0 0 30px rgba(216,160,32,.06);border-radius:8px;padding:20px 26px;color:#f0e4cc}
-  #qpanel.dialog{width:min(450px,calc(100vw - 36px))}
+  #qpanel.dialog{width:min(720px,calc(100vw - 36px));padding:0;overflow-x:hidden;overflow-y:auto;background:linear-gradient(165deg,rgba(7,12,20,.98),rgba(20,14,9,.98));border-color:rgba(255,210,74,.72);box-shadow:0 18px 60px rgba(0,0,0,.55),0 0 38px rgba(255,210,74,.22),inset 0 0 34px rgba(255,210,74,.06)}
   #qpanel.commerce{width:min(760px,calc(100vw - 36px))}
   #qwin.trade-offer-open #qpanel{border-color:#9ad26b;box-shadow:0 0 32px rgba(154,210,107,.42),0 0 80px rgba(79,216,255,.16),inset 0 0 34px rgba(154,210,107,.08)}
   #qpanel.management{width:min(880px,calc(100vw - 36px));background:linear-gradient(160deg, rgba(17,27,42,.97), rgba(9,14,24,.97));border-color:#4fd8ff;box-shadow:0 0 28px rgba(79,216,255,.28), inset 0 0 34px rgba(79,216,255,.06);color:#d8e8ff}
@@ -450,6 +450,23 @@
   #qpanel h2{text-align:center;letter-spacing:5px;color:#ffd24a;text-shadow:0 0 10px rgba(255,210,74,.7);font-size:18px;margin-bottom:4px}
   #qpanel .sub2{text-align:center;font-size:10px;letter-spacing:3px;color:#b8985e;margin-bottom:8px}
   .qtext{font-size:13px;line-height:1.55;margin:10px 0 14px;color:#e8dcc0}
+  .npc-dialogue-shell{display:grid;grid-template-rows:auto minmax(104px,auto) auto;gap:0;min-height:250px;background:radial-gradient(circle at 18% 0,rgba(255,210,74,.12),transparent 34%),linear-gradient(180deg,rgba(9,18,31,.86),rgba(8,10,15,.96));color:#f3ead6}
+  .npc-dialogue-head{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;align-items:center;padding:16px 20px 14px;border-bottom:1px solid rgba(255,210,74,.34);background:linear-gradient(90deg,rgba(255,210,74,.14),rgba(10,20,35,.42))}
+  .npc-dialogue-portrait{display:grid;place-items:center;width:64px;height:64px;border:2px solid rgba(255,226,151,.76);border-radius:6px;background:linear-gradient(145deg,#2b1b11,#0d1726);color:#ffe39a;font-size:24px;font-weight:900;letter-spacing:1px;text-shadow:0 0 12px rgba(255,210,74,.7);box-shadow:inset 0 0 20px rgba(255,210,74,.08),0 0 18px rgba(0,0,0,.45)}
+  .npc-dialogue-nameplate{min-width:0}.npc-dialogue-nameplate h2{margin:0 0 5px;text-align:left!important;font-size:20px!important;letter-spacing:3px!important;color:#fff3c4!important;text-shadow:0 0 14px rgba(255,210,74,.5)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .npc-dialogue-nameplate .sub2{text-align:left!important;margin:0!important;color:#9fd8ff!important;font-size:9px!important;letter-spacing:2px!important;line-height:1.35}
+  .npc-dialogue-text{position:relative;margin:0!important;padding:22px 26px 20px 42px!important;color:#f7ead1!important;font-size:16px!important;line-height:1.62!important;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(0,0,0,.12));max-height:42vh;overflow:auto}
+  .npc-dialogue-text:before{content:"";position:absolute;left:23px;top:24px;bottom:22px;width:3px;border-radius:3px;background:linear-gradient(#ffd24a,#7dd3fc);opacity:.72;box-shadow:0 0 10px rgba(255,210,74,.35)}
+  .npc-dialogue-text b{color:#9fd8ff}.npc-dialogue-text small{color:#d9b66f}.npc-dialogue-text .quest-reward-preview{font-size:13px}
+  .npc-dialogue-actions{justify-content:flex-end!important;gap:9px;padding:14px 18px 16px;border-top:1px solid rgba(255,210,74,.24);background:linear-gradient(90deg,rgba(2,6,11,.92),rgba(25,16,8,.92))}
+  .npc-dialogue-actions .qbtn{margin:0;min-height:38px;border-radius:4px;background:rgba(17,32,50,.95);border-color:rgba(159,216,255,.55);color:#cdeeff;font-size:11px;letter-spacing:1.7px;box-shadow:inset 0 -2px rgba(0,0,0,.28)}
+  .npc-dialogue-actions .qbtn:hover{background:#1b3c5d;border-color:#9fd8ff}
+  .npc-dialogue-actions .qbtn.npc-primary{background:linear-gradient(180deg,#c39125,#715015);border-color:#ffd24a;color:#fff3c4;text-shadow:0 1px 0 #2b1800;box-shadow:0 0 14px rgba(255,210,74,.2),inset 0 -2px rgba(0,0,0,.24)}
+  .npc-dialogue-actions .qbtn.npc-primary:hover{filter:brightness(1.12)}
+  .npc-dialogue-actions .qbtn.dim{background:rgba(12,17,24,.76);border-color:rgba(255,255,255,.16);color:#aeb8c4}
+  .npc-dialogue-shell.guardian .npc-dialogue-portrait{border-color:#d7b5ff;color:#e9d5ff;text-shadow:0 0 12px rgba(199,156,255,.8)}.npc-dialogue-shell.guardian .npc-dialogue-text:before{background:linear-gradient(#d7b5ff,#7dd3fc)}
+  .npc-dialogue-shell.social_mentor .npc-dialogue-portrait{border-color:#9ad26b;color:#eaffc8}.npc-dialogue-shell.social_mentor .npc-dialogue-text:before{background:linear-gradient(#9ad26b,#ffd24a)}
+  .npc-dialogue-shell .social-mentor-lesson{margin:0 22px 8px;padding:9px 12px;border:1px solid rgba(159,216,255,.16);border-radius:6px;background:rgba(6,14,24,.66)}
   .mara-start{margin-top:12px;border:1px solid rgba(154,210,107,.46);background:linear-gradient(145deg,rgba(13,24,14,.86),rgba(31,22,9,.72));box-shadow:inset 0 0 24px rgba(154,210,107,.08),0 0 18px rgba(154,210,107,.12);border-radius:8px;padding:14px;text-align:left}
   .mara-start .mara-kicker{font-size:10px;letter-spacing:2.8px;color:#9ad26b;text-transform:uppercase;margin-bottom:6px}
   .mara-start h3{font-size:17px;line-height:1.25;color:#fff3c4;margin:0 0 8px;text-shadow:0 0 10px rgba(255,210,74,.25)}
@@ -1106,6 +1123,15 @@
   }
   /* Compact game HUD: one top information rail and one centred bottom control stack. */
   @media (max-width:760px){
+    #qpanel.dialog{width:calc(100vw - 20px);max-height:88vh}
+    .npc-dialogue-head{grid-template-columns:54px minmax(0,1fr);gap:10px;padding:12px}
+    .npc-dialogue-portrait{width:48px;height:48px;font-size:18px}
+    .npc-dialogue-nameplate h2{font-size:15px!important;letter-spacing:2px!important}
+    .npc-dialogue-nameplate .sub2{font-size:8px!important;letter-spacing:1.4px!important}
+    .npc-dialogue-text{padding:16px 16px 16px 30px!important;font-size:14px!important;line-height:1.5!important;max-height:46vh}
+    .npc-dialogue-text:before{left:15px;top:18px;bottom:18px}
+    .npc-dialogue-actions{justify-content:flex-start!important;padding:11px 12px}.npc-dialogue-actions .qbtn{min-height:34px;padding:7px 10px;font-size:9px;letter-spacing:1.2px}
+    .npc-dialogue-shell .social-mentor-lesson{margin:0 12px 7px}
     .trade-builder{grid-template-columns:1fr}
     .trade-inventory-grid{grid-template-columns:repeat(6,48px)}
     .trade-gold-row{align-items:flex-start;flex-direction:column}
