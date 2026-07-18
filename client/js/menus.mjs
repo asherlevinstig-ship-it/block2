@@ -45,6 +45,11 @@ const legacyMenuBindings={
   "applyTavernRouletteResult":{get:()=>applyTavernRouletteResult},
   "applyTavernTokenResult":{get:()=>applyTavernTokenResult},
   "applyToolSync":{get:()=>applyToolSync},
+  "applyTradeCancel":{get:()=>applyTradeCancel},
+  "applyTradeOffer":{get:()=>applyTradeOffer},
+  "applyTradePending":{get:()=>applyTradePending},
+  "applyTradeReject":{get:()=>applyTradeReject},
+  "applyTradeResult":{get:()=>applyTradeResult},
   "arrows":{get:()=>arrows},
   "awardFirstVillagerQuestBonus":{get:()=>awardFirstVillagerQuestBonus},
   "showFirstVillagerReward":{get:()=>showFirstVillagerReward},
@@ -133,6 +138,7 @@ const legacyMenuBindings={
   "openTavernDiceUI":{get:()=>openTavernDiceUI},
   "openTavernRouletteUI":{get:()=>openTavernRouletteUI},
   "openTavernUI":{get:()=>openTavernUI},
+  "openPlayerTradeUI":{get:()=>openPlayerTradeUI},
   "openUtilitiesUI":{get:()=>openUtilitiesUI},
   "openUI":{get:()=>openUI},
   "pendingGuildInvites":{get:()=>pendingGuildInvites},
@@ -5122,6 +5128,116 @@ function openDragonBondUI(){
   row.appendChild(qBtn('CRAFT TREATS', ()=>openCraftingFromNpc()));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
+function tradeStackName(stack){
+  if(!stack) return '';
+  const item=ITEMS[stack.id];
+  if(item&&typeof itemNameWithPlus==='function') return itemNameWithPlus(stack);
+  return stack.name || (item&&item.name) || ('Item '+(stack.id|0));
+}
+function tradeOfferSummary(offer){
+  const parts=[];
+  if(offer&&offer.stack) parts.push(escHTML(tradeStackName(offer.stack))+' x'+Math.max(1,(offer.stack.count|0)||1));
+  if(offer&&offer.gold) parts.push('<b>'+Math.max(0,offer.gold|0).toLocaleString('en-US')+'g</b>');
+  return parts.join(' + ') || 'nothing';
+}
+function selectedTradeStack(){
+  const slot=Math.max(0,Math.min(8,combatState.selectedSlot|0));
+  const stack=inv[slot],item=stack&&ITEMS[stack.id];
+  if(!stack||!item) return null;
+  const special=!!(stack.dur!=null||item.tool||item.armor||stack.plus||stack.rarity||stack.armorType||stack.forge||stack.masterwork||stack.unique||stack.locked||stack.source);
+  return {slot, stack, max:special?1:Math.max(1,(stack.count|0)||1), name:tradeStackName(stack)};
+}
+function tradeNumberInput(value,min,max){
+  const input=document.createElement('input');
+  input.type='number';
+  input.min=String(min|0);
+  input.max=String(Math.max(min|0,max|0));
+  input.value=String(Math.max(min|0,Math.min(max|0,value|0)));
+  input.style.cssText='width:96px;padding:10px;background:#101722;color:#fff;border:1px solid #58c7f6;font-family:inherit;text-align:center';
+  return input;
+}
+function tradeOfferPayload(countInput,goldInput){
+  const selected=selectedTradeStack();
+  const count=Math.max(0,Math.min(selected?selected.max:0,Number(countInput&&countInput.value)||0));
+  const goldOffer=Math.max(0,Math.min(gold|0,Number(goldInput&&goldInput.value)||0));
+  return {slot:selected&&count>0?selected.slot:-1,count,gold:goldOffer};
+}
+function openPlayerTradeUI(target){
+  if(!NET.on||!NET.room){sysMsg('Player trading requires the live world server.');return;}
+  target=target||(typeof tradeTargetUnderCrosshair==='function'?tradeTargetUnderCrosshair(4.8):null);
+  if(!target||!target.sid){sysMsg('Look at a nearby hunter, then press <b>E</b> to trade.');return;}
+  if(uiOpen)closeUI(false);
+  openQWin('commerce');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='PLAYER TRADE';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='WITH '+String(target.name||'Hunter').toUpperCase()+' - ITEM OR GOLD';qpanelEl.appendChild(sub);
+  const selected=selectedTradeStack();
+  const intro=document.createElement('p');intro.className='qtext';
+  intro.innerHTML=selected
+    ? 'Offering selected hotbar item: <b>'+escHTML(selected.name)+'</b>. Set item quantity, gold, or both.'
+    : 'No hotbar item selected. You can still offer gold, or close this and select an item first.';
+  qpanelEl.appendChild(intro);
+  const itemCount=tradeNumberInput(selected?1:0,0,selected?selected.max:0);
+  const goldCount=tradeNumberInput(0,0,Math.max(0,gold|0));
+  const form=document.createElement('div');form.className='shoprow';
+  form.innerHTML='<span><b>YOUR OFFER</b><br><small>Item quantity from selected hotbar slot</small></span>';
+  const controls=document.createElement('span');controls.style.display='flex';controls.style.gap='8px';controls.style.alignItems='center';
+  const itemLabelEl=document.createElement('small');itemLabelEl.textContent='ITEM';controls.appendChild(itemLabelEl);controls.appendChild(itemCount);
+  const goldLabelEl=document.createElement('small');goldLabelEl.textContent='GOLD';controls.appendChild(goldLabelEl);controls.appendChild(goldCount);
+  form.appendChild(controls);qpanelEl.appendChild(form);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('SEND OFFER',()=>{
+    const payload=tradeOfferPayload(itemCount,goldCount);
+    if(payload.slot<0&&!payload.gold){sysMsg('Add an item quantity or gold before sending a trade.');return;}
+    NET.room.send('tradeOffer',{targetSid:target.sid,...payload});
+    closeQWin();
+  }));
+  row.appendChild(qBtn('OPEN INVENTORY',()=>{closeQWin(false);openUI('inv');},true));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
+function applyTradePending(m){
+  sysMsg('Trade offer sent to <b>'+escHTML(String(m&&m.toName||'Hunter'))+'</b>: '+tradeOfferSummary(m&&m.offer)+'.',{tier:'minor',title:'Trade'});
+}
+function applyTradeOffer(m){
+  if(!m||!m.id)return;
+  if(uiOpen)closeUI(false);
+  openQWin('commerce');qpanelEl.innerHTML='';
+  const h=document.createElement('h2');h.textContent='TRADE OFFER';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' IS OFFERING';qpanelEl.appendChild(sub);
+  const incoming=document.createElement('p');incoming.className='qtext';
+  incoming.innerHTML='<b>You receive:</b> '+tradeOfferSummary(m.offer)+'<br><br>Select a hotbar item if you want to answer with an item, or enter gold only.';
+  qpanelEl.appendChild(incoming);
+  const selected=selectedTradeStack();
+  const itemCount=tradeNumberInput(selected?1:0,0,selected?selected.max:0);
+  const goldCount=tradeNumberInput(0,0,Math.max(0,gold|0));
+  const form=document.createElement('div');form.className='shoprow';
+  form.innerHTML='<span><b>YOU GIVE</b><br><small>'+(selected?escHTML(selected.name):'No selected hotbar item')+'</small></span>';
+  const controls=document.createElement('span');controls.style.display='flex';controls.style.gap='8px';controls.style.alignItems='center';
+  const itemLabelEl=document.createElement('small');itemLabelEl.textContent='ITEM';controls.appendChild(itemLabelEl);controls.appendChild(itemCount);
+  const goldLabelEl=document.createElement('small');goldLabelEl.textContent='GOLD';controls.appendChild(goldLabelEl);controls.appendChild(goldCount);
+  form.appendChild(controls);qpanelEl.appendChild(form);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('ACCEPT TRADE',()=>{
+    const payload=tradeOfferPayload(itemCount,goldCount);
+    if(payload.slot<0&&!payload.gold){sysMsg('Offer an item or gold to complete the trade.');return;}
+    NET.room.send('tradeAccept',{tradeId:m.id,...payload});
+    closeQWin();
+  }));
+  row.appendChild(qBtn('DECLINE',()=>{NET.room.send('tradeCancel',{tradeId:m.id});closeQWin();},true));
+}
+function applyTradeResult(m){
+  if(!m||m.ok===false){applyTradeReject(m);return;}
+  SFX.coin();
+  sysMsg('<b>Trade complete with '+escHTML(String(m.withName||'Hunter'))+'.</b><br>You gave '+tradeOfferSummary(m.gave)+'.<br>You received '+tradeOfferSummary(m.received)+'.',{tier:'major',title:'Trade'});
+}
+function applyTradeReject(m){
+  const reason=String(m&&m.reason||'invalid');
+  const text={target:'No nearby hunter found.',rate:'Trading too quickly.',range:'Move closer to trade.',empty:'Add an item or gold first.',gold:'Not enough gold.',full:'One inventory is full.',item:'That item is no longer available.',missing:'That trade expired.',offline:'That hunter went offline.',expired:'That trade expired.'}[reason]||'Trade failed.';
+  SFX.error();
+  sysMsg(text,{tier:'minor',title:'Trade'});
+}
+function applyTradeCancel(m){
+  sysMsg('Trade '+(String(m&&m.reason||'cancelled')==='offline'?'cancelled because a hunter went offline.':'cancelled.'),{tier:'minor',title:'Trade'});
+}
 function chooseJob(id, reopenFocus=''){
   if(!JOBS[id]||id==='adventurer') return;
   if(NET.on&&NET.room){ NET.room.send('setJob',{job:id}); return; }
@@ -7956,6 +8072,12 @@ gameContext.registerModule('menus', Object.freeze({
   gateReadiness:gateReadinessLocal,
   nextGatePrepRank,
   openCrafting:openCraftingFromNpc,
+  openPlayerTrade:openPlayerTradeUI,
+  applyTradeOffer,
+  applyTradePending,
+  applyTradeResult,
+  applyTradeReject,
+  applyTradeCancel,
   trackerCraftAction:objectiveTrackerCraftAction,
   activateCraftShortcut:activateObjectiveCraftShortcut,
 }));

@@ -66,6 +66,8 @@ const {
   mobTargetInRange, shadeMitigation, catFallMitigation, skyshipSnapshot, sstep, clampN, cleanName, cleanDragonName, townDistance, xpNeedForLevel,
 } = require('./constants');
 
+const TRADE_BLOCK_IDS = new Set(Object.values(W.B).filter(Number.isInteger));
+const TRADE_ITEM_IDS = new Set(Object.values(I).filter(Number.isInteger));
 const ACTIVE_UTILITY_IDS = new Set(['trail_sense']);
 const TRAIL_SENSE_COOLDOWN_MS = 45000;
 const TRAIL_SENSE_DURATION_MS = 22000;
@@ -182,6 +184,8 @@ class GameRoom extends Room {
     this.deathLimbo = new Map();
     this.deathDrops = new Map();
     this.deathDropSeq = 0;
+    this.trades = new Map();
+    this.tradeSeq = 0;
     this.initRecallState();
 
     // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
@@ -408,6 +412,9 @@ class GameRoom extends Room {
     this.onMessage('lootRecovery', (client, m) => this.handleLootRecovery(client, m));
     this.onMessage('gearLock', (client, m) => this.handleGearLock(client, m));
     this.onMessage('inventorySort', (client, m) => this.handleInventorySort(client, m));
+    this.onMessage('tradeOffer', (client, m) => this.handleTradeOffer(client, m));
+    this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
+    this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
 
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
@@ -1019,6 +1026,7 @@ class GameRoom extends Room {
     if (typeof this.refundTavernBlackjack === 'function') this.refundTavernBlackjack(client, 'disconnect');
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
+    if (this.cancelTradesFor) this.cancelTradesFor(client.sessionId, 'offline');
     this.detachTeamSession(client.sessionId);
     const p = this.state.players.get(client.sessionId);
     const wasInDungeon = !!(p && p.dgn);
@@ -2983,6 +2991,175 @@ class GameRoom extends Room {
     this.ensureDeityState(prof);
     this.refreshSystemIntroductions(prof);
     return { ...prof, deity: this.deityPayloadFor(client, prof), activeObjectives: this.activeQuestObjectives(client, prof) };
+  }
+  tradeItemName(id) {
+    id |= 0;
+    if (ITEM_NAMES[id]) return ITEM_NAMES[id];
+    if (TOOL_INFO[id] || ARMOR_INFO[id]) return 'Gear ' + id;
+    if (TRADE_ITEM_IDS.has(id)) return 'Item ' + id;
+    if (TRADE_BLOCK_IDS.has(id)) return 'Block ' + id;
+    return '';
+  }
+  tradeItemKnown(id) {
+    id |= 0;
+    return !!(ITEM_NAMES[id] || TOOL_INFO[id] || ARMOR_INFO[id] || TRADE_ITEM_IDS.has(id) || TRADE_BLOCK_IDS.has(id));
+  }
+  publicTradeStack(stack, count = 1, slot = -1) {
+    if (!stack || !this.tradeItemKnown(stack.id)) return null;
+    const special = !!(stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id] || stack.plus || stack.gearRank || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.unique || stack.locked || stack.source);
+    const n = special ? 1 : Math.max(1, Math.min(64, count | 0 || 1));
+    const out = { id: stack.id | 0, count: n, name: this.tradeItemName(stack.id) || ('Item ' + (stack.id | 0)), slot: slot | 0 };
+    if (special) {
+      if (stack.dur != null) out.dur = stack.dur | 0;
+      if (stack.plus) out.plus = stack.plus | 0;
+      if (stack.rarity) out.rarity = String(stack.rarity).slice(0, 24);
+      if (stack.armorType) out.armorType = String(stack.armorType).slice(0, 24);
+      if (stack.forge) out.forge = String(stack.forge).slice(0, 24);
+      if (stack.masterwork) out.masterwork = true;
+      if (stack.unique) out.unique = String(stack.unique).slice(0, 48);
+      if (stack.locked) out.locked = true;
+      if (stack.source) out.source = String(stack.source).slice(0, 48);
+    }
+    return out;
+  }
+  tradeStackFromSlot(prof, slot, count) {
+    const i = Math.max(0, Math.min(35, slot | 0));
+    const s = prof && Array.isArray(prof.inv) ? prof.inv[i] : null;
+    if (!s || !this.tradeItemKnown(s.id)) return null;
+    const special = !!(s.dur != null || TOOL_INFO[s.id] || ARMOR_INFO[s.id] || s.plus || s.gearRank || s.rarity || s.armorType || s.forge || s.masterwork || s.unique || s.locked || s.source);
+    const n = special ? 1 : Math.max(1, Math.min(64, count | 0 || 1, s.count | 0 || 1));
+    return this.publicTradeStack(s, n, i);
+  }
+  tradeCanReceive(prof, stack) {
+    if (!stack) return true;
+    const special = !!(stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id] || stack.plus || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.unique || stack.locked || stack.source);
+    if (!special) return this.inventorySpaceFor(prof, stack.id | 0, stack.count | 0) >= (stack.count | 0);
+    const inv = prof && Array.isArray(prof.inv) ? prof.inv : [];
+    return inv.some(slot => !slot) || inv.length < 36;
+  }
+  consumeTradeStack(prof, offer) {
+    if (!offer || !offer.stack) return true;
+    const i = Math.max(0, Math.min(35, offer.stack.slot | 0));
+    const s = prof && Array.isArray(prof.inv) ? prof.inv[i] : null;
+    const stack = offer.stack;
+    if (!s || (s.id | 0) !== (stack.id | 0)) return false;
+    const special = !!(stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id] || stack.plus || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.unique || stack.locked || stack.source);
+    if (special) {
+      if ((s.count | 0) < 1) return false;
+      prof.inv[i] = null;
+      return true;
+    }
+    const count = Math.max(1, Math.min(64, stack.count | 0 || 1));
+    if ((s.count | 0) < count || s.dur != null) return false;
+    s.count -= count;
+    if (s.count <= 0) prof.inv[i] = null;
+    return true;
+  }
+  addTradeStack(prof, stack) {
+    if (!stack) return true;
+    const special = !!(stack.dur != null || TOOL_INFO[stack.id] || ARMOR_INFO[stack.id] || stack.plus || stack.rarity || stack.armorType || stack.forge || stack.masterwork || stack.unique || stack.locked || stack.source);
+    if (!special) return this.addRewardItem(prof, stack.id | 0, Math.max(1, stack.count | 0 || 1)) === 0;
+    prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
+    const copy = { ...stack, id: stack.id | 0, count: 1 };
+    delete copy.name; delete copy.slot;
+    for (let i = 0; i < prof.inv.length; i++) if (!prof.inv[i]) { prof.inv[i] = copy; return true; }
+    if (prof.inv.length < 36) { prof.inv.push(copy); return true; }
+    return false;
+  }
+  tradeDraftProfile(prof) {
+    return { ...prof, inv: Array.isArray(prof && prof.inv) ? prof.inv.map(s => s ? { ...s } : null) : [] };
+  }
+  tradeOfferFromMessage(prof, m = {}) {
+    const gold = Math.max(0, Math.min(999999, m.gold | 0));
+    const slot = Math.max(-1, Math.min(35, m.slot == null ? -1 : m.slot | 0));
+    const stack = slot >= 0 ? this.tradeStackFromSlot(prof, slot, m.count) : null;
+    return { gold, stack };
+  }
+  tradeSummary(offer) {
+    const parts = [];
+    if (offer && offer.stack) parts.push((offer.stack.name || 'Item') + ' x' + Math.max(1, offer.stack.count | 0 || 1));
+    if (offer && offer.gold) parts.push((offer.gold | 0) + ' gold');
+    return parts.join(' + ') || 'nothing';
+  }
+  tradePlayersClose(a, b, range = 8) {
+    const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
+    return !!(pa && pb && !pa.dgn && !pb.dgn && Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
+  }
+  handleTradeOffer(client, m = {}) {
+    const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
+    const target = this.clients.find(c => c.sessionId === targetSid);
+    const targetRec = target && this.profileFor(target);
+    const reject = reason => client.send('tradeReject', { reason });
+    if (!rec || !target || !targetRec || target === client) return reject('target');
+    if (this.rateLimited(client, 'trade', 3, 6)) return reject('rate');
+    if (!this.tradePlayersClose(client, target)) return reject('range');
+    const offer = this.tradeOfferFromMessage(rec.prof, m);
+    if (!offer.stack && !offer.gold) return reject('empty');
+    if (offer.gold > (rec.prof.gold | 0)) return reject('gold');
+    const id = 'tr_' + (++this.tradeSeq) + '_' + Date.now().toString(36);
+    const from = this.state.players.get(client.sessionId), to = this.state.players.get(target.sessionId);
+    const trade = { id, fromSid: client.sessionId, toSid: target.sessionId, offer, createdAt: Date.now() };
+    this.trades.set(id, trade);
+    client.send('tradePending', { id, toSid: target.sessionId, toName: to && to.name || 'Hunter', offer });
+    target.send('tradeOffer', { id, fromSid: client.sessionId, fromName: from && from.name || 'Hunter', offer });
+  }
+  handleTradeAccept(client, m = {}) {
+    const id = String(m.tradeId || m.id || '');
+    const trade = this.trades && this.trades.get(id);
+    const reject = reason => client.send('tradeReject', { reason, id });
+    if (!trade || trade.toSid !== client.sessionId) return reject('missing');
+    const from = this.clients.find(c => c.sessionId === trade.fromSid);
+    const fromRec = from && this.profileFor(from), toRec = this.profileFor(client);
+    if (!from || !fromRec || !toRec) { this.trades.delete(id); return reject('offline'); }
+    if (Date.now() - trade.createdAt > 45000) { this.trades.delete(id); return reject('expired'); }
+    if (!this.tradePlayersClose(from, client)) return reject('range');
+    const response = this.tradeOfferFromMessage(toRec.prof, m);
+    if (!response.stack && !response.gold) return reject('empty');
+    if (trade.offer.gold > (fromRec.prof.gold | 0) || response.gold > (toRec.prof.gold | 0)) return reject('gold');
+    const fromDraft = this.tradeDraftProfile(fromRec.prof), toDraft = this.tradeDraftProfile(toRec.prof);
+    if (!this.consumeTradeStack(fromDraft, trade.offer) || !this.consumeTradeStack(toDraft, response)) {
+      this.trades.delete(id);
+      return reject('item');
+    }
+    if (!this.addTradeStack(toDraft, trade.offer.stack) || !this.addTradeStack(fromDraft, response.stack)) return reject('full');
+    fromRec.prof.inv = fromDraft.inv;
+    toRec.prof.inv = toDraft.inv;
+    fromRec.prof.gold = Math.max(0, Math.min(1e9, (fromRec.prof.gold | 0) - (trade.offer.gold | 0) + (response.gold | 0)));
+    toRec.prof.gold = Math.max(0, Math.min(1e9, (toRec.prof.gold | 0) - (response.gold | 0) + (trade.offer.gold | 0)));
+    this.dirtyPlayers.add(fromRec.token); this.dirtyPlayers.add(toRec.token);
+    this.syncPlayerProfile(from, fromRec.prof); this.syncPlayerProfile(client, toRec.prof);
+    this.sendProfile(from, fromRec.prof); this.sendProfile(client, toRec.prof);
+    if (this.recordEconomyGold) {
+      if (trade.offer.gold) this.recordEconomyGold(from, -(trade.offer.gold | 0), 'player_trade', 'trade_offer', { tradeId: id, to: client.sessionId });
+      if (trade.offer.gold) this.recordEconomyGold(client, trade.offer.gold | 0, 'player_trade', 'trade_receive', { tradeId: id, from: from.sessionId });
+      if (response.gold) this.recordEconomyGold(client, -(response.gold | 0), 'player_trade', 'trade_offer', { tradeId: id, to: from.sessionId });
+      if (response.gold) this.recordEconomyGold(from, response.gold | 0, 'player_trade', 'trade_receive', { tradeId: id, from: client.sessionId });
+    }
+    this.trades.delete(id);
+    const fromName = (this.state.players.get(from.sessionId) || {}).name || 'Hunter';
+    const toName = (this.state.players.get(client.sessionId) || {}).name || 'Hunter';
+    from.send('tradeResult', { ok: true, id, withName: toName, gave: trade.offer, received: response });
+    client.send('tradeResult', { ok: true, id, withName: fromName, gave: response, received: trade.offer });
+  }
+  handleTradeCancel(client, m = {}) {
+    const id = String(m.tradeId || m.id || '');
+    const trade = this.trades && this.trades.get(id);
+    if (!trade || (trade.fromSid !== client.sessionId && trade.toSid !== client.sessionId)) return;
+    this.trades.delete(id);
+    const otherSid = trade.fromSid === client.sessionId ? trade.toSid : trade.fromSid;
+    const other = this.clients.find(c => c.sessionId === otherSid);
+    client.send('tradeCancel', { id, reason: 'cancelled' });
+    if (other) other.send('tradeCancel', { id, reason: 'cancelled' });
+  }
+  cancelTradesFor(sid, reason = 'cancelled') {
+    if (!this.trades) return;
+    for (const [id, trade] of [...this.trades.entries()]) {
+      if (trade.fromSid !== sid && trade.toSid !== sid) continue;
+      this.trades.delete(id);
+      const otherSid = trade.fromSid === sid ? trade.toSid : trade.fromSid;
+      const other = this.clients.find(c => c.sessionId === otherSid);
+      if (other) other.send('tradeCancel', { id, reason });
+    }
   }
   normalizeQuestLifecycles(client, prof) {
     if (!prof || typeof prof !== 'object') return false;

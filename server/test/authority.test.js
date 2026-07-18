@@ -5,6 +5,8 @@ process.env.BLOCKCRAFT_BETA_TEST = '1';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const Module = require('module');
 const { Protocol } = require('@colyseus/shared-types');
 
@@ -271,6 +273,8 @@ function makeRoom() {
   room.deathDrops = new Map();
   room.recallSubjects = new Map();
   room.deathDropSeq = 0;
+  room.trades = new Map();
+  room.tradeSeq = 0;
   room.animalSpawnAcc = 0;
   room.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
   room.teamMgr = new (require('../teams').TeamManager)(5);
@@ -348,6 +352,24 @@ function markDragonDailyClaimed(room, prof) {
 function itemCount(prof, id) {
   return (prof.inv || []).reduce((n, s) => n + (s && s.id === id ? s.count : 0), 0);
 }
+
+function readClientModule(rel) {
+  return fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', rel), 'utf8');
+}
+
+test('client modules expose and route player trading actions', () => {
+  const world = readClientModule('world.mjs');
+  const combat = readClientModule('combat.mjs');
+  const menus = readClientModule('menus.mjs');
+  const networking = readClientModule('networking.mjs');
+  assert.match(world, /function tradeTargetUnderCrosshair/);
+  assert.match(world, /"tradeTargetUnderCrosshair":\{get:\(\)=>tradeTargetUnderCrosshair\}/);
+  assert.match(combat, /KeyE[\s\S]*tradeTargetUnderCrosshair[\s\S]*openPlayerTradeUI/);
+  assert.match(menus, /function openPlayerTradeUI/);
+  assert.match(menus, /tradeAccept/);
+  assert.match(networking, /room\.onMessage\('tradeOffer'/);
+  assert.match(networking, /room\.onMessage\('tradeResult'/);
+});
 
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that
 // tickInstanceHazards / onDungeonTrashDeath read, without generating a real dungeon.
@@ -5207,6 +5229,72 @@ test('addRewardItem treats weapons and armor as individual durable gear', () => 
   assert.equal(room.addRewardItem(full, I.IRON_SWORD, 1), 1, 'legacy weapon stack is not free space');
   assert.equal(full.inv.length, 36);
   assert.equal(full.inv[0].count, 1);
+});
+
+test('player trade transfers an offered item for responder gold', () => {
+  const room = makeRoom(), alice = makeClient('alice'), bob = makeClient('bob');
+  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 4 }], x: 20, z: 20 });
+  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 50, inv: [], x: 21, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 2, gold: 0 });
+  const offer = bob.sent.find(e => e.type === 'tradeOffer');
+  assert.ok(offer, 'target receives a trade offer');
+  room.handleTradeAccept(bob, { tradeId: offer.msg.id, slot: -1, count: 0, gold: 12 });
+
+  assert.equal(itemCount(aProf, I.BREAD), 2);
+  assert.equal(itemCount(bProf, I.BREAD), 2);
+  assert.equal(aProf.gold, 14);
+  assert.equal(bProf.gold, 38);
+  assert.ok(alice.sent.some(e => e.type === 'tradeResult' && e.msg.ok));
+  assert.ok(bob.sent.some(e => e.type === 'tradeResult' && e.msg.ok));
+});
+
+test('player trade supports item-for-item swaps', () => {
+  const room = makeRoom(), alice = makeClient('swap_alice'), bob = makeClient('swap_bob');
+  const { prof: aProf } = seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
+  const { prof: bProf } = seedPlayer(room, bob, { inv: [{ id: I.IRON_INGOT, count: 3 }], x: 21, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });
+  const offer = bob.sent.find(e => e.type === 'tradeOffer');
+  room.handleTradeAccept(bob, { tradeId: offer.msg.id, slot: 0, count: 2, gold: 0 });
+
+  assert.equal(itemCount(aProf, I.BREAD), 0);
+  assert.equal(itemCount(aProf, I.IRON_INGOT), 2);
+  assert.equal(itemCount(bProf, I.BREAD), 1);
+  assert.equal(itemCount(bProf, I.IRON_INGOT), 1);
+});
+
+test('player trade validates range before creating an offer', () => {
+  const room = makeRoom(), alice = makeClient('far_alice'), bob = makeClient('far_bob');
+  seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
+  seedPlayer(room, bob, { inv: [], x: 60, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });
+
+  assert.equal(room.trades.size, 0);
+  assert.deepEqual(alice.sent.at(-1), { type: 'tradeReject', msg: { reason: 'range' } });
+});
+
+test('player trade full inventory swap simulates outgoing slots before rejecting space', () => {
+  const room = makeRoom(), alice = makeClient('full_alice'), bob = makeClient('full_bob');
+  const aInv = Array.from({ length: 36 }, (_, i) => ({ id: I.BREAD + i, count: 1 }));
+  const bInv = Array.from({ length: 36 }, (_, i) => ({ id: I.COAL + i, count: 1 }));
+  aInv[0] = { id: I.IRON_SWORD, count: 1, dur: 251, rarity: 'rare' };
+  bInv[0] = { id: I.WOOD_SWORD, count: 1, dur: 59, rarity: 'common' };
+  const { prof: aProf } = seedPlayer(room, alice, { inv: aInv, x: 20, z: 20 });
+  const { prof: bProf } = seedPlayer(room, bob, { inv: bInv, x: 21, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });
+  const offer = bob.sent.find(e => e.type === 'tradeOffer');
+  room.handleTradeAccept(bob, { tradeId: offer.msg.id, slot: 0, count: 1, gold: 0 });
+
+  assert.equal(aProf.inv.some(s => s && s.id === I.WOOD_SWORD), true);
+  assert.equal(bProf.inv.some(s => s && s.id === I.IRON_SWORD), true);
+  assert.ok(alice.sent.some(e => e.type === 'tradeResult' && e.msg.ok));
 });
 
 test('inventory sort preserves hotbar and merges simple backpack stacks', () => {

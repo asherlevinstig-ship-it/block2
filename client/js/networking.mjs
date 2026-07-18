@@ -966,6 +966,11 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
     room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
+    room.onMessage('tradeOffer', m=>{applyTradeOffer(m);eventFeed('[Trade]',String(m&&m.fromName||'Hunter')+' offered a player trade.',{key:'trade:'+String(m&&m.id||''),cooldown:0});});
+    room.onMessage('tradePending', m=>applyTradePending(m));
+    room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
+    room.onMessage('tradeReject', m=>applyTradeReject(m));
+    room.onMessage('tradeCancel', m=>applyTradeCancel(m));
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
       progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';

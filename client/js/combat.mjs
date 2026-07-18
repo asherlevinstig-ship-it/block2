@@ -1708,7 +1708,13 @@ addEventListener('keydown', e=>{
       if(nearbyVillager){
         e.preventDefault();
         interactWithVillager(nearbyVillager);
-      } else openUI('inv');
+      } else {
+        const tradeTarget=typeof tradeTargetUnderCrosshair==='function'?tradeTargetUnderCrosshair(4.8):null;
+        if(tradeTarget&&typeof openPlayerTradeUI==='function'){
+          e.preventDefault();
+          openPlayerTradeUI(tradeTarget);
+        } else openUI('inv');
+      }
     }
   }
   if(e.code==='KeyC'){

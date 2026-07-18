@@ -8095,6 +8095,25 @@ function remoteUnderCrosshair(range=4.4){
   }
   return best;
 }
+function tradeTargetUnderCrosshair(range=4.8){
+  if(!NET.on||!NET.room||!NET.remotes) return null;
+  const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
+  const o=new THREE.Vector3(player.pos.x,player.pos.y+player.eye,player.pos.z);
+  let best=null, bd=range;
+  const v=new THREE.Vector3();
+  for(const sid in NET.remotes){
+    const r=NET.remotes[sid];
+    if(!r||!r.grp||!r.grp.visible) continue;
+    const ref=r.ref;
+    if(ref&&ref.dgn) continue;
+    v.set(r.grp.position.x-o.x, r.grp.position.y+1.0-o.y, r.grp.position.z-o.z);
+    const t=v.dot(dir);
+    if(t<0||t>range) continue;
+    const perp=Math.sqrt(Math.max(0,v.lengthSq()-t*t));
+    if(perp<.9&&t<bd){bd=t;best={sid,remote:r,name:String(ref&&ref.name||'Hunter')};}
+  }
+  return best;
+}
 function damageMob(mob, dmg, kbv){
   if(mob.net){
     mob.hitT=.15;
@@ -9227,6 +9246,7 @@ gameContext.registerModule('world', Object.freeze({
   inOverworldBattle,
   resetParticleBudget,
   particleBudgetStats,
+  tradeTargetUnderCrosshair,
 }));
 
 
@@ -9463,6 +9483,7 @@ const legacyWorldBindings={
   "roadSafety":{get:()=>roadSafety,set:value=>{roadSafety=value;}},
   "regionalLandmarks":{get:()=>regionalLandmarks,set:value=>{regionalLandmarks=value;}},
   "remoteUnderCrosshair":{get:()=>remoteUnderCrosshair},
+  "tradeTargetUnderCrosshair":{get:()=>tradeTargetUnderCrosshair},
   "removeCropMesh":{get:()=>removeCropMesh},
   "removeDragonIncubationMesh":{get:()=>removeDragonIncubationMesh},
   "removeInsulatorMesh":{get:()=>removeInsulatorMesh},
