@@ -1,4 +1,4 @@
-import { reconnectWithBackoff } from './reconnect.mjs';
+import { reconnectWithBackoff, wait } from './reconnect.mjs';
 
 export function createNetworkController(options) {
   const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, pendingDungeonPartyStatus: null, reconnecting: false, attachCount: 0, tried: false, roomName: options.roomName, shardId: '' };
@@ -18,9 +18,38 @@ export function createNetworkController(options) {
   // connect still resolves in ~1-2s regardless of these ceilings.
   const resumeTimeout = Math.max(1, options.resumeTimeout | 0 || 7000);
   const joinTimeout = Math.max(1, options.joinTimeout | 0 || 10000);
-  const joinAttempts = Math.max(1, options.joinAttempts | 0 || 2);
+  const joinAttempts = Math.max(1, options.joinAttempts | 0 || 6);
   const liveReconnectTimeout = Math.max(1, options.liveReconnectTimeout | 0 || 4000);
   const reconnectAttempts = Math.max(1, options.reconnectAttempts | 0 || 2);
+  const retryWait = options.wait || wait;
+
+  function errorMessage(error) {
+    return String(error && (error.message || error.reason || error.code) || error || '').toLowerCase();
+  }
+
+  function shardCapacityError(error) {
+    const text = errorMessage(error);
+    return text.includes('shard full') ||
+      text.includes('room is full') ||
+      text.includes('maxclients') ||
+      text.includes('max clients') ||
+      text.includes('no available') ||
+      text.includes('capacity');
+  }
+
+  async function joinRoomWithRetries(start) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= joinAttempts; attempt++) {
+      if (attempt > 1) await retryWait(250 * 2 ** (attempt - 2));
+      try {
+        return await roomWithTimeout(start, joinTimeout, 'Room join timed out');
+      } catch (error) {
+        lastError = error;
+        if (shardCapacityError(error)) throw error;
+      }
+    }
+    throw lastError || new Error('Room join failed');
+  }
 
   function roomWithTimeout(start, timeoutMs, message) {
     let expired = false;
@@ -61,14 +90,7 @@ export function createNetworkController(options) {
       const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
       const authOptions = authToken ? { authToken } : {};
       try {
-        const room = await reconnectWithBackoff(
-          () => roomWithTimeout(
-            () => client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }),
-            joinTimeout,
-            'Room join timed out',
-          ),
-          { attempts: joinAttempts, baseDelay: 250 },
-        );
+        const room = await joinRoomWithRetries(() => client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }));
         primaryJoinOptions = { ...joinOptions };
         state.shardId = String(joinOptions.shardId || 'main');
         if (options.onPrimaryJoinOptions) options.onPrimaryJoinOptions(primaryJoinOptions);

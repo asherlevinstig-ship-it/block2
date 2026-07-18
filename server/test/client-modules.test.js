@@ -2389,6 +2389,42 @@ test('network controller tries the next overworld shard and returns to it after 
   ]);
 });
 
+test('network controller waits for a booting main shard before trying overflow shards', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const events = [], selected = [];
+  const main = { reconnectionToken: 'main:token', onLeave() {} };
+  let mainAttempts = 0;
+  class Client {
+    async joinOrCreate(name, options) {
+      events.push(['join', name, options.shardId || '']);
+      if (options.shardId === 'main' && ++mainAttempts < 4) throw new Error('the Blockcraft overworld shard "main" is already active; refusing a second persistence writer');
+      if (options.shardId === 'main') return main;
+      throw new Error('should not overflow while main is booting');
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    joinAttempts: 4, shardAttempts: 2, wait: async () => {},
+    primaryJoinOptions: ({ attempt }) => ({ shardId: attempt === 0 ? 'main' : 'shard-2' }),
+    onPrimaryJoinOptions: options => selected.push(options.shardId),
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(controller.state.room, main);
+  assert.equal(controller.state.shardId, 'main');
+  assert.deepEqual(selected, ['main']);
+  assert.deepEqual(events, [
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+  ]);
+});
+
 test('network session fresh joins prefer main before a saved overflow shard', async () => {
   const previousLocalStorage = globalThis.localStorage;
   const local = new Map([['bc_shard_id', 'shard-2']]);
