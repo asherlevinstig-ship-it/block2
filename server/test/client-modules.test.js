@@ -868,6 +868,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(liveJobBoard,/Current Work/);
   assert.match(liveJobBoard,/Available Contracts/);
   assert.match(liveJobBoard,/Choose A Trade/);
+  assert.match(liveJobBoard,/<small>'\+jobPerkText\(id\)\+'<\/small>/);
+  assert.doesNotMatch(liveJobBoard,/escHTML\(jobPerkText\(id\)\)/);
   assert.doesNotMatch(liveJobBoard,/GUILD CONTRACTS/);
   assert.doesNotMatch(liveJobBoard,/UTILITIES/);
   assert.match(menusSource,/job-offer-loop/);

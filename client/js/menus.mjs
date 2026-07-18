@@ -5742,7 +5742,7 @@ function openJobsUI(focusJob='', sourceTitle=''){
     const card=document.createElement('article');
     card.className='job-profession-card '+(cur?'active':'');
     card.innerHTML='<div class="job-profession-top"><i style="color:'+j.col+'">'+escHTML(j.icon)+'</i><span><b style="color:'+j.col+'">'+escHTML(j.name)+'</b><small>'+escHTML(jobTitleFor(id,prog.lvl))+' - Lv '+prog.lvl+'</small></span></div>'+
-      '<div class="job-profession-body"><p>'+escHTML(j.desc)+'</p><div class="job-board-progress small"><i style="width:'+pct+'%"></i><span>'+prog.xp+' / '+prog.need+'</span></div><small>'+escHTML(jobPerkText(id))+'</small>'+professionNowHTML(id,prog.lvl)+professionGameplayHTML(id,prog.lvl)+jobBoardMilestoneSummaryHTML(id,prog.lvl)+'</div>';
+      '<div class="job-profession-body"><p>'+escHTML(j.desc)+'</p><div class="job-board-progress small"><i style="width:'+pct+'%"></i><span>'+prog.xp+' / '+prog.need+'</span></div><small>'+jobPerkText(id)+'</small>'+professionNowHTML(id,prog.lvl)+professionGameplayHTML(id,prog.lvl)+jobBoardMilestoneSummaryHTML(id,prog.lvl)+'</div>';
     card.appendChild(qBtn(cur?'ACTIVE':(id===focusJob?'WORK THIS JOB':'CHOOSE'),()=>{if(!cur)chooseJob(id,focusJob);},cur));
     professionGrid.appendChild(card);
   }
