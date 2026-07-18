@@ -4278,7 +4278,7 @@ const TOWN_BUILDING_SIGNS=Object.freeze([
   {title:'MARKET STALLS',sub:'SUPPLIES',x:HUB.marketX-1.5,z:TOWN.TC-12.5,rot:Math.PI/2,color:'#ffd24a'},
   {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
   {title:'QUARRY WORK',sub:'MINER JOBS',x:HUB.quarry.x,z:HUB.quarry.z-3.45,rot:0,color:'#b8c0cc'},
-  {title:'GATE SHARD',sub:'DUNGEON ACCESS',x:HUB.shard.x-3.9,z:HUB.shard.z,rot:-Math.PI/2,color:'#7dd3fc'},
+  {title:'DUNGEON SHARD',sub:'GATE ACCESS',x:HUB.shard.x-3.9,z:HUB.shard.z,rot:-Math.PI/2,color:'#7dd3fc'},
   {title:'AEGIS SHRINE',sub:'ROAD OATHS',x:HUB.guardian.x,z:HUB.guardian.z-4.1,rot:Math.PI,color:'#d8f2ff'},
 ]);
 function makeTownBuildingSign(spec){
@@ -4645,7 +4645,7 @@ function addTownQuestMarker(type,x,y,z){
   townQuestMarkers.push(sp);
   return sp;
 }
-addTownInteractLabel('Shard Pedestal', (HUB.shard.x|0)+.5, TOWN.G+4.7, (HUB.shard.z|0)+.5, '#7dd3fc', 8);
+addTownInteractLabel('Dungeon Shard', (HUB.shard.x|0)+.5, TOWN.G+4.7, (HUB.shard.z|0)+.5, '#7dd3fc', 8);
 addTownInteractLabel('Market Stall', HUB.marketX-.9, TOWN.G+4.9, TOWN.TC-.5, '#ffd24a', 9);
 addTownInteractLabel('1 Quest Giver', HUB.guide.x, TOWN.G+3.15, HUB.guide.z, '#9ad26b', 18);
 addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 9);

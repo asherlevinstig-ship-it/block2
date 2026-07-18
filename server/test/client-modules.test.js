@@ -189,7 +189,7 @@ test('Town of Beginnings gives every public building or worksite a physical sign
   assert.match(world, /TOWN_BUILDING_SIGNS\.forEach\(makeTownBuildingSign\)/);
   for (const title of [
     'GUILD HALL', 'TAVERN & INN', 'SMITHY', 'MEDITATION HALL', 'DRAGON ROOST',
-    'WESTWIND SKYPORT', 'MARKET STALLS', 'FARM PLOTS', 'QUARRY WORK', 'GATE SHARD', 'AEGIS SHRINE',
+    'WESTWIND SKYPORT', 'MARKET STALLS', 'FARM PLOTS', 'QUARRY WORK', 'DUNGEON SHARD', 'AEGIS SHRINE',
   ]) {
     assert.match(world, new RegExp(`title:'${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   }
@@ -214,7 +214,7 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   for (const [role, area] of [
     ['guide', 'central quest path'],
     ['quartermaster', 'market stalls'],
-    ['scholar', 'Gate Shard'],
+    ['scholar', 'Dungeon Shard'],
     ['smith', 'Smithy'],
     ['miner', 'Quarry Work'],
     ['farmer', 'Farm Plots'],
@@ -233,6 +233,8 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   assert.match(world, /fixedY:HUB\.skyport\.y\+1/);
   assert.match(world, /Number\.isFinite\(def\.fixedY\)\?def\.fixedY:TOWN\.G\+1/);
   assert.match(combat, /vill\.role==='job_mentor'/);
+  assert.match(combat, /vill\.role==='scholar'/);
+  assert.match(combat, /Dungeon Shards open Gates/);
   assert.match(combat, /vill\.role==='skyship_attendant'/);
 });
 

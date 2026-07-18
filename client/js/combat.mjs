@@ -2516,6 +2516,10 @@ function interactWithVillager(vill){
     else openCartographerUI();
   }
   else if(vill.role==='guild_receptionist') openGuildHallUI();
+  else if(vill.role==='scholar'){
+    sysMsg('<b>'+escHTML(vill.name||'Gate Scholar')+':</b> "Dungeon Shards open Gates. Use keys to enter solo or team dungeons, bring food and repaired gear, then return with loot to upgrade before the next rank."');
+    openShardUI();
+  }
   else if(vill.role==='job_mentor'){
     sysMsg('<b>'+escHTML(vill.name||'Job Board Helper')+':</b> "Pick one clear contract, finish it, then claim the reward here. Jobs change how you play: Miner surveys, Cook hunts and feeds, Blacksmith improves gear, Farmer grows supplies, Monk restores focus."');
     openJobsUI();
