@@ -1390,6 +1390,16 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   assert.match(world,/function serverObjectiveGuidanceTarget\(o\)/);
   assert.match(world,/title\.includes\('road ready'\)/);
   assert.match(world,/color=toMara\?0x9ad26b:0x7dd3fc/);
+  assert.match(combat,/Walk into the pillar of light/);
+  assert.match(combat,/FIND LIGHT/);
+  assert.match(combat,/Follow the pillar of light to the Job Board/);
+  assert.match(world,/const guideBeaconGroup=new THREE\.Group/);
+  assert.match(world,/new THREE\.CylinderGeometry\(\.44,\.82,13\.5,18,1,true\)/);
+  assert.match(world,/const guideBeaconRing=new THREE\.Mesh\(new THREE\.TorusGeometry/);
+  assert.match(world,/guideBeaconBeam\.renderOrder=28/);
+  assert.match(world,/surfaceY\(info\.target\.x,info\.target\.z\)\+\.04/);
+  assert.doesNotMatch(world,/const guideBeacon=new THREE\.Sprite/);
+  assert.doesNotMatch(combat,/glowing pillar|follow the glow|FOLLOW LIGHT/);
 });
 
 test('server profile tutorial state overrides stale browser onboarding flags',()=>{

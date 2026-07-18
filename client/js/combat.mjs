@@ -591,7 +591,7 @@ function finishWorldLoading(reason){
 }
 const ONBOARDING_STEPS=[];
 ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
-  {kind:'move',pillar:'Lesson 1 / 14 - Movement', key:'W A S D', text:'Walk into the glowing pillar.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
+  {kind:'move',pillar:'Lesson 1 / 14 - Movement', key:'W A S D', text:'Walk into the pillar of light.', sub:'Move at your own pace; the light waits for you.', done:()=>onboardingArrived},
   {kind:'sprint',pillar:'Lesson 2 / 14 - Sprinting', key:'SHIFT + W', text:'Hold Shift while moving to run into the next light.', sub:'Running uses stamina. Answer Recall questions later to recharge it.', done:()=>onboardingArrived&&onboardingFlags.sprint},
   {kind:'arrows',pillar:'Lesson 3 / 14 - Arrow Camera', key:'← / → 360°', text:'Turn through one full circle with the arrow keys.', sub:'Use the arrow keys whenever you want to turn or tilt the camera.', done:()=>onboardingArrived&&onboardingFlags.arrowLook},
   {kind:'jump',pillar:'Lesson 4 / 14 - Jumping', key:'SPACE', text:'Jump once inside the light.', sub:'Jumping clears ledges, terrain, and dungeon obstacles.', done:()=>onboardingArrived&&onboardingFlags.jumped},
@@ -603,7 +603,7 @@ ONBOARDING_STEPS.splice(0,ONBOARDING_STEPS.length,
   {kind:'eat',pillar:'Lesson 10 / 14 - Eating', key:'G / RIGHT CLICK', text:'Eat the bread prepared for you.', sub:'Food restores hunger; some meals also restore health.', done:()=>onboardingArrived&&onboardingFlags.ate},
   {kind:'combat',pillar:'Lesson 11 / 14 - Combat', key:'LEFT CLICK / F', text:'Break the training dummy with three strikes.', sub:'Get close, center the dummy, then use your attack control.', done:()=>onboardingFlags.dummy>=3},
   {kind:'recall',pillar:'Lesson 13 / 14 - Recall Cast', key:'P', text:'Press P and answer one knowledge challenge.', sub:'Correct answers recharge mana and stamina. Wrong answers briefly freeze you.', done:()=>onboardingFlags.recall},
-  {kind:'finish',pillar:'Lesson 14 / 14 - Departure', key:'FOLLOW LIGHT', text:'Step into the final pillar to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
+  {kind:'finish',pillar:'Lesson 14 / 14 - Departure', key:'FIND LIGHT', text:'Step into the final pillar of light to travel to town.', sub:'Death sends carried items to limbo. Answer correctly to recover them; mistakes become public loot.', done:()=>onboardingArrived}
 );
 for(const step of ONBOARDING_STEPS){
   if(step.kind==='move') step.pillar='Lesson 1 / 14 - Movement';
@@ -1085,20 +1085,20 @@ function landTutorialRoute(target){
 }
 function townTutorialInfo(step){
   if(step==='job') return {
-    pill:'Town Tutorial - Job Board', target:HUB.jobs, near:4.0, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
-    farText:'Follow the glowing pillar to the Job Board.', nearText:'Open the Job Board.',
+    pill:'Town Tutorial - Job Board', target:HUB.jobs, near:4.0, farKey:'FIND LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the pillar of light to the Job Board.', nearText:'Open the Job Board.',
     farSub:'The Job Board gives repeatable work, guild contracts, and exploration goals.', nearSub:'Take a job or guild contract for your next objective.'
   };
   if(step==='tavern') return {
-    pill:'Town Tutorial - Tavern', target:{x:bartender.grp.position.x,z:bartender.grp.position.z}, near:4.0, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
-    farText:'Follow the glowing pillar to the tavern.', nearText:'Speak to Greta and buy an item.',
+    pill:'Town Tutorial - Tavern', target:{x:bartender.grp.position.x,z:bartender.grp.position.z}, near:4.0, farKey:'FIND LIGHT', nearKey:'G / Right Click',
+    farText:'Follow the pillar of light to the tavern.', nearText:'Speak to Greta and buy an item.',
     farSub:'The tavern sells useful supplies and buys food. You need at least 5 gold to buy the cheapest item.',
     nearSub:gold>=5?'Buy a potion or stew. You can also sell food here for gold.':'You need at least 5 gold first. Complete a quest or job contract, then come back.'
   };
   if(step==='land') return {
-    pill:'Town Tutorial - Buy Land', target:landTutorialTarget(), near:5.0, farKey:'FOLLOW THE BLUE TRAIL', nearKey:'PRESS L',
-    farText:'Follow the highlighted trail through the marked town gate.', nearText:'You reached dry wilderness. Press L to buy land.',
-    farSub:'Stay on the blue trail until you reach the glowing wilderness marker.',
+    pill:'Town Tutorial - Buy Land', target:landTutorialTarget(), near:5.0, farKey:'FIND BLUE LIGHT', nearKey:'PRESS L',
+    farText:'Follow the blue pillar of light through the marked town gate.', nearText:'You reached dry wilderness. Press L to buy land.',
+    farSub:'Use the small blue lights as breadcrumbs until you reach the tall wilderness pillar.',
     nearSub:'In Land Claim mode, click a tile marked Available. Nearby land costs about '+landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9)+' gold.'
   };
   if(step==='menu') return {
@@ -1107,8 +1107,8 @@ function townTutorialInfo(step){
     farSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.', nearSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.'
   };
   return {
-    pill:'Town Step 1 - Accept First Quest', target:HUB.guide, near:4.2, farKey:'FOLLOW LIGHT', nearKey:'G / Right Click',
-    farText:'Follow the glowing pillar to Mara Vale.', nearText:'Talk to Mara and press ACCEPT.',
+    pill:'Town Step 1 - Accept First Quest', target:HUB.guide, near:4.2, farKey:'FIND LIGHT', nearKey:'G / Right Click',
+    farText:'Find the pillar of light at Mara Vale.', nearText:'Talk to Mara and press ACCEPT.',
     farSub:'The green ! marks a quest offer. Nothing gives XP until you explicitly accept it.', nearSub:'Accept Mara’s first quest so your tracker shows a real objective before you leave town.'
   };
 }
@@ -1147,7 +1147,7 @@ function openTownTutorialsUI(){
   const h=document.createElement('h2'); h.textContent='TOWN TUTORIALS'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='CHOOSE WHAT TO LEARN NEXT'; qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  info.innerHTML='Pick a guided town activity. The large prompt and glowing pillar will point you there.';
+  info.innerHTML='Pick a guided town activity. The large prompt and pillar of light will point you there.';
   qpanelEl.appendChild(info);
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
@@ -1181,7 +1181,7 @@ function guideTownTutorialChoice(step, ready=true){
   updateTownGuidanceHud();
   renderTownTutorialOptions();
   showName('Tutorial started: '+(step==='job'?'Job Board':step==='tavern'?'Tavern':'Buy Land'));
-  eventLog('Town tutorial started — follow the glowing pillar.');
+  eventLog('Town tutorial started — find the pillar of light.');
   lockFallback=true;
   try{ renderer.domElement.requestPointerLock(); }catch(e){}
   refreshPlayUi();
@@ -1404,8 +1404,8 @@ function updateOnboardingHud(){
   if(!onboardingActive){tutorialEl.classList.add('hidden');return;}
   const s=ONBOARDING_STEPS[Math.min(onboardingStep,ONBOARDING_STEPS.length-1)];
   tutorialEl.classList.remove('hidden');
-  const lockedText=onboardingArrived?s.text:'Follow the glowing pillar for '+s.pillar+'.';
-  const key=onboardingArrived?s.key:'FOLLOW LIGHT';
+  const lockedText=onboardingArrived?s.text:'Find the pillar of light for '+s.pillar+'.';
+  const key=onboardingArrived?s.key:'FIND LIGHT';
   let sub=s.sub;
   let progress='';
   if(onboardingArrived&&s.kind==='arrows'){

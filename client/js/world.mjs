@@ -3704,7 +3704,7 @@ for(const [lx,lz] of [[TOWN.TC-6,TOWN.TC-6],[TOWN.TC+6,TOWN.TC-6],[TOWN.TC-6,TOW
   townGroup.add(sp);
 }
 
-// First-time guidance: low, pulsing path lights that point to the next useful town task.
+// First-time guidance: small breadcrumbs lead toward a tall pillar of light at the target.
 const guidePathGroup=new THREE.Group();
 townGroup.add(guidePathGroup);
 const guidePathSprites=[];
@@ -3720,13 +3720,62 @@ for(let i=0;i<GUIDE_PATH_MAX;i++){
   guidePathGroup.add(sp);
   guidePathSprites.push(sp);
 }
-const guideBeacon=new THREE.Sprite(new THREE.SpriteMaterial({
+const guideBeaconGroup=new THREE.Group();
+guideBeaconGroup.visible=false;
+guidePathGroup.add(guideBeaconGroup);
+const guideBeaconBeamMat=new THREE.MeshBasicMaterial({
+  color:0x9ad26b, transparent:true, opacity:0, depthWrite:false, depthTest:false,
+  blending:THREE.AdditiveBlending, side:THREE.DoubleSide
+});
+const guideBeaconCoreMat=new THREE.MeshBasicMaterial({
+  color:0xffffff, transparent:true, opacity:0, depthWrite:false, depthTest:false,
+  blending:THREE.AdditiveBlending
+});
+const guideBeaconRingMat=new THREE.MeshBasicMaterial({
+  color:0x9ad26b, transparent:true, opacity:0, depthWrite:false, depthTest:false,
+  blending:THREE.AdditiveBlending, side:THREE.DoubleSide
+});
+const guideBeaconBeam=new THREE.Mesh(new THREE.CylinderGeometry(.44,.82,13.5,18,1,true),guideBeaconBeamMat);
+guideBeaconBeam.position.y=7.0;
+guideBeaconBeam.renderOrder=28;
+guideBeaconGroup.add(guideBeaconBeam);
+const guideBeaconCore=new THREE.Mesh(new THREE.CylinderGeometry(.08,.18,16.5,12,1,true),guideBeaconCoreMat);
+guideBeaconCore.position.y=8.25;
+guideBeaconCore.renderOrder=29;
+guideBeaconGroup.add(guideBeaconCore);
+const guideBeaconHalo=new THREE.Sprite(new THREE.SpriteMaterial({
   map:new THREE.CanvasTexture(glowTexCanvas), color:0x9ad26b, transparent:true, opacity:0,
   depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
 }));
-guideBeacon.scale.set(3.4,3.4,1);
-guideBeacon.visible=false;
-guidePathGroup.add(guideBeacon);
+guideBeaconHalo.position.y=4.1;
+guideBeaconHalo.scale.set(5.5,5.5,1);
+guideBeaconHalo.renderOrder=30;
+guideBeaconGroup.add(guideBeaconHalo);
+const guideBeaconRing=new THREE.Mesh(new THREE.TorusGeometry(1.25,.045,8,42),guideBeaconRingMat);
+guideBeaconRing.rotation.x=Math.PI/2;
+guideBeaconRing.position.y=.08;
+guideBeaconRing.renderOrder=29;
+guideBeaconGroup.add(guideBeaconRing);
+function setGuideBeaconOpacity(value){
+  guideBeaconBeam.material.opacity=value*.34;
+  guideBeaconCore.material.opacity=value*.62;
+  guideBeaconHalo.material.opacity=value*.48;
+  guideBeaconRing.material.opacity=value*.72;
+  guideBeaconGroup.visible=value>.02;
+}
+function currentGuideBeaconOpacity(){
+  return Math.max(
+    guideBeaconBeam.material.opacity/.34,
+    guideBeaconCore.material.opacity/.62,
+    guideBeaconHalo.material.opacity/.48,
+    guideBeaconRing.material.opacity/.72,
+  );
+}
+function setGuideBeaconColor(color){
+  guideBeaconBeam.material.color.setHex(color);
+  guideBeaconHalo.material.color.setHex(color);
+  guideBeaconRing.material.color.setHex(color);
+}
 function guidanceNpcPosition(name){
   const n=String(name||'').toLowerCase();
   if(n==='aegis guardian' || n==='guardian') return HUB.guardian;
@@ -3913,8 +3962,7 @@ function tickGuidancePath(dt, now){
       sp.material.opacity+=(0-sp.material.opacity)*Math.min(1,dt*8);
       sp.visible=sp.material.opacity>.02;
     }
-    guideBeacon.material.opacity+=(0-guideBeacon.material.opacity)*Math.min(1,dt*8);
-    guideBeacon.visible=guideBeacon.material.opacity>.02;
+    setGuideBeaconOpacity(currentGuideBeaconOpacity()+(0-currentGuideBeaconOpacity())*Math.min(1,dt*8));
     return;
   }
   const pts=routePoints(info.route);
@@ -3934,11 +3982,17 @@ function tickGuidancePath(dt, now){
       sp.visible=sp.material.opacity>.02;
     }
   }
-  guideBeacon.material.color.setHex(info.color);
-  guideBeacon.position.set(info.target.x, TOWN.G+2.6+Math.sin(now/520)*.22, info.target.z);
-  guideBeacon.material.opacity+=(.45-guideBeacon.material.opacity)*Math.min(1,dt*8);
-  guideBeacon.scale.setScalar(2.8+Math.sin(now/360)*.35);
-  guideBeacon.visible=true;
+  const baseY=surfaceY(info.target.x,info.target.z)+.04;
+  const beaconPulse=.85+.15*Math.sin(now/420);
+  setGuideBeaconColor(info.color);
+  guideBeaconGroup.position.set(info.target.x,baseY,info.target.z);
+  guideBeaconGroup.scale.setScalar(beaconPulse);
+  guideBeaconBeam.rotation.y=now*.00022;
+  guideBeaconCore.rotation.y=-now*.00034;
+  guideBeaconHalo.position.y=4.3+Math.sin(now/520)*.28;
+  guideBeaconRing.rotation.z=now*.001;
+  guideBeaconRing.scale.setScalar(1+.12*Math.sin(now/320));
+  setGuideBeaconOpacity(currentGuideBeaconOpacity()+(.95-currentGuideBeaconOpacity())*Math.min(1,dt*8));
 }
 
 function makeWingedGiantNpc(){
