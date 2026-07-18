@@ -5308,7 +5308,7 @@ function applyTradeOffer(m){
   const h=document.createElement('h2');h.textContent='TRADE OFFER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' IS OFFERING';qpanelEl.appendChild(sub);
   const incoming=document.createElement('p');incoming.className='qtext';
-  incoming.innerHTML='<b>You receive:</b> '+tradeOfferSummary(m.offer)+'<br><br>Click an inventory item to give in return, or answer with gold only.';
+  incoming.innerHTML='<b>You receive:</b> '+tradeOfferSummary(m.offer)+'<br><br>You can accept for free, or click an inventory item / gold amount to give something back.';
   qpanelEl.appendChild(incoming);
   const selectedRef={current:null};
   const itemCount=tradeNumberInput(0,0,0);
@@ -5321,7 +5321,6 @@ function applyTradeOffer(m){
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('ACCEPT TRADE',()=>{
     const payload=tradeOfferPayload(selectedRef,itemCount,goldCount);
-    if(payload.slot<0&&!payload.gold){sysMsg('Offer an item or gold to complete the trade.');return;}
     NET.room.send('tradeAccept',{tradeId:m.id,...payload});
     closeQWin();
   }));

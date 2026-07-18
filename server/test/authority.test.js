@@ -5287,6 +5287,24 @@ test('player trade transfers an offered item for responder gold', () => {
   assert.ok(bob.sent.some(e => e.type === 'tradeResult' && e.msg.ok));
 });
 
+test('player trade can be accepted without an item or gold in return', () => {
+  const room = makeRoom(), alice = makeClient('gift_alice'), bob = makeClient('gift_bob');
+  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 3 }], x: 20, z: 20 });
+  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 0, inv: [], x: 21, z: 20 });
+  room.clients = [alice, bob];
+
+  room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 2, gold: 0 });
+  const offer = bob.sent.find(e => e.type === 'tradeOffer');
+  room.handleTradeAccept(bob, { tradeId: offer.msg.id, slot: -1, count: 0, gold: 0 });
+
+  assert.equal(itemCount(aProf, I.BREAD), 1);
+  assert.equal(itemCount(bProf, I.BREAD), 2);
+  assert.equal(aProf.gold, 2);
+  assert.equal(bProf.gold, 0);
+  assert.ok(alice.sent.some(e => e.type === 'tradeResult' && e.msg.received && !e.msg.received.stack && !e.msg.received.gold));
+  assert.ok(bob.sent.some(e => e.type === 'tradeResult' && e.msg.gave && !e.msg.gave.stack && !e.msg.gave.gold));
+});
+
 test('player trade supports item-for-item swaps', () => {
   const room = makeRoom(), alice = makeClient('swap_alice'), bob = makeClient('swap_bob');
   const { prof: aProf } = seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });

@@ -3225,7 +3225,6 @@ class GameRoom extends Room {
     if (Date.now() - trade.createdAt > 45000) { this.trades.delete(id); return reject('expired'); }
     if (!this.tradePlayersClose(from, client)) return reject('range');
     const response = this.tradeOfferFromMessage(toRec.prof, m);
-    if (!response.stack && !response.gold) return reject('empty', this.tradeOfferDebug(toRec.prof, m));
     if (trade.offer.gold > (fromRec.prof.gold | 0) || response.gold > (toRec.prof.gold | 0)) return reject('gold');
     const fromDraft = this.tradeDraftProfile(fromRec.prof), toDraft = this.tradeDraftProfile(toRec.prof);
     if (!this.consumeTradeStack(fromDraft, trade.offer) || !this.consumeTradeStack(toDraft, response)) {
