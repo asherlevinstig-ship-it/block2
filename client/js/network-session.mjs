@@ -7,6 +7,8 @@ export function createNetworkSession({
   unavailable,
   interrupted,
   reconnectAttempt,
+  resumeFallback,
+  reconnectFallback,
   restored,
   failure,
   getPlayerName,
@@ -33,6 +35,9 @@ export function createNetworkSession({
     endpoint,
     roomName:'blockcraft',
     shardAttempts:16,
+    resumeTimeout:2600,
+    liveReconnectTimeout:2200,
+    reconnectAttempts:1,
     primaryJoinOptions:({attempt})=>({shardId:shardIdForAttempt(attempt)}),
     onPrimaryJoinOptions:(joinOptions)=>{
       try{localStorage.setItem(shardKey,cleanShardId(joinOptions&&joinOptions.shardId)||'main');}catch(e){}
@@ -43,6 +48,8 @@ export function createNetworkSession({
     onUnavailable:unavailable,
     onInterrupted:interrupted,
     onReconnectAttempt:reconnectAttempt,
+    onResumeFallback:resumeFallback,
+    onReconnectFallback:reconnectFallback,
     onRestored:restored,
     onFailure:failure,
     authToken,

@@ -2525,11 +2525,12 @@ test('network controller falls back when a stored session resume never settles',
     Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume', resumeTimeout: 10,
     sessionStorage: { getItem: key => storage.get(key) || '', setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onResumeFallback: error => events.push(['resumeFallback', /timed out/i.test(String(error && error.message || error))]),
     onRestored() {}, onFailure(error) { throw error; },
   });
   controller.connect('Hunter');
   await new Promise(resolve => setTimeout(resolve, 30));
-  assert.deepEqual(events, [['resume', 'stale:token'], ['join', 'blockcraft', 'Hunter']]);
+  assert.deepEqual(events, [['resume', 'stale:token'], ['resumeFallback', true], ['join', 'blockcraft', 'Hunter']]);
   assert.deepEqual(attached, [fresh]);
   assert.equal(controller.state.on, true);
   assert.equal(storage.get('resume'), 'fresh:token');
@@ -2672,6 +2673,9 @@ test('network session fresh joins prefer main before a saved overflow shard', as
     });
     assert.equal(captured.primaryJoinOptions({ name: 'Hunter', attempt: 0 }).shardId, 'main');
     assert.equal(captured.primaryJoinOptions({ name: 'Hunter', attempt: 1 }).shardId, 'shard-2');
+    assert.equal(captured.resumeTimeout, 2600);
+    assert.equal(captured.liveReconnectTimeout, 2200);
+    assert.equal(captured.reconnectAttempts, 1);
   } finally {
     globalThis.localStorage = previousLocalStorage;
   }
@@ -2699,13 +2703,14 @@ test('network controller bounds a hung live reconnect and falls back to a fresh 
     liveReconnectTimeout: 10, reconnectAttempts: 1, joinTimeout: 10, joinAttempts: 1,
     sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
     onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onReconnectFallback: error => events.push(['reconnectFallback', /timed out/i.test(String(error && error.message || error))]),
     onRestored() {}, onFailure(error) { throw error; },
   });
   controller.connect('Hunter');
   await new Promise(resolve => setTimeout(resolve, 0));
   first.leaveHandler();
   await new Promise(resolve => setTimeout(resolve, 30));
-  assert.deepEqual(events, [['join', 1], ['reconnect', 'live:token'], ['join', 2]]);
+  assert.deepEqual(events, [['join', 1], ['reconnect', 'live:token'], ['reconnectFallback', true], ['join', 2]]);
   assert.deepEqual(attached, [first, fresh]);
   assert.equal(controller.state.room, fresh);
   assert.equal(controller.state.on, true);

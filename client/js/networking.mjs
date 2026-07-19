@@ -825,6 +825,18 @@ function connectionNotice(kind, attempt=0){
     setWorldLoadingStatus('Connection lost - reconnecting...');
   }else if(kind==='attempt'){
     setWorldLoadingStatus('Reconnecting to world... attempt '+attempt);
+  }else if(kind==='resumeFallback'){
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.resume.fallback', { reason:String(attempt&&attempt.message||attempt||'') });
+    eventLog('Saved reconnect failed - rejoining the world fresh','[Network]');
+    if(typeof sysMsg==='function')sysMsg('<b>Reconnect token expired.</b> Rejoining the world now...');
+    if(typeof showName==='function')showName('Rejoining world...');
+    setWorldLoadingStatus('Reconnect stalled - rejoining world...');
+  }else if(kind==='reconnectFallback'){
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.live-reconnect.fallback', { reason:String(attempt&&attempt.message||attempt||'') });
+    eventLog('Reconnect stalled - fresh joining the world','[Network]');
+    if(typeof sysMsg==='function')sysMsg('<b>Reconnect stalled.</b> Rejoining the world safely...');
+    if(typeof showName==='function')showName('Rejoining world...');
+    setWorldLoadingStatus('Reconnect stalled - fresh joining...');
   }else if(kind==='restored'){
     eventLog('Connection restored','[Network]');
     if(typeof sysMsg==='function')sysMsg('<b>Back online.</b> World state restored.');
@@ -844,6 +856,8 @@ const SESSION=createNetworkSession({
   unavailable:()=>{eventLog('Solo mode: no server SDK');setWorldLoadingStatus('Starting solo world...');setTimeout(()=>finishWorldLoading('solo'),900);},
   interrupted:()=>connectionNotice('lost'),
   reconnectAttempt:n=>connectionNotice('attempt',n),
+  resumeFallback:e=>connectionNotice('resumeFallback',e),
+  reconnectFallback:e=>connectionNotice('reconnectFallback',e),
   restored:()=>connectionNotice('restored'),
   failure:netConnectionFailed,
   getPlayerName:()=>document.getElementById('playername').value,

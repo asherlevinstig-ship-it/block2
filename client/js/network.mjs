@@ -76,8 +76,9 @@ export function createNetworkController(options) {
       () => client.reconnect(token),
       resumeTimeout,
       'Session resume timed out',
-    ).catch(() => {
+    ).catch(error => {
       try { options.sessionStorage.removeItem(options.tokenKey); } catch (_) {}
+      if (options.onResumeFallback) options.onResumeFallback(error);
       return joinFresh();
     });
   }
@@ -132,8 +133,9 @@ export function createNetworkController(options) {
         'Live reconnect timed out',
       ),
       { attempts: reconnectAttempts, baseDelay: 250, onAttempt: options.onReconnectAttempt },
-    ).catch(() => {
+    ).catch(error => {
       try { options.sessionStorage.removeItem(options.tokenKey); } catch (_) {}
+      if (options.onReconnectFallback) options.onReconnectFallback(error);
       return joinFresh(client, name);
     }).then(next => {
       if (stopped) {
