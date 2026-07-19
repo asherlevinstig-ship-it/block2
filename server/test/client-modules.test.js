@@ -1436,10 +1436,17 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
   assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
   assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
+  assert.match(combat,/function performPetTamerDragonTutorialAction\(\)/);
+  assert.match(combat,/function consumeSelectedDragonTreatForTutorial\(\)/);
+  assert.match(combat,/mounted=true;\s*mountKind='dragon:verdant'/);
+  assert.match(combat,/ridden>=7/);
+  assert.match(combat,/nearPetTamerPracticeRoost\(5\.2\)/);
+  assert.match(combat,/if\(performPetTamerDragonTutorialAction\(\)\) return/);
   assert.match(combat,/petTamerTutorialProgressLabel\(\)\+' - '\+petTamerTutorialAction\(\)\.key/);
   assert.match(combat,/function jobTutorialBeaconTarget\(jobId, room\)/);
   assert.match(combat,/FOLLOW DRAGON LIGHT/);
-  assert.match(combat,/Press <b>G<\/b> beside the grounded practice dragon to start the Pet Tamer lesson/);
+  assert.match(combat,/Press G to perform this action/);
+  assert.match(combat,/Press <b>G<\/b> at the roost station to finish/);
   assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
   assert.match(combat,/setTimeout\(\(\)=>\{ if\(jobTutorialActive&&jobTutorialJob==='pet_tamer'\) completeJobTutorial\(\); \}, 900\)/);
   assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
