@@ -2141,6 +2141,26 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     if(synced&&synced.forEach)synced.forEach(m=>{if(m&&m.dgn===NET.dgn&&m.kind==='boss')count++;});
     return count;
   };
+  const debugSnapshot=()=>{
+    const overlayEl=document.getElementById('overlay');
+    const pathEl=document.getElementById('pathselect');
+    const awakeningEl=document.getElementById('awakeningwin');
+    const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.sessionId&&NET.room.state.players.get(NET.room.sessionId);
+    return {
+      connected:!!(NET.on&&NET.profileReady),
+      roomName:NET.roomName||'',
+      sessionId:NET.room&&NET.room.sessionId||'',
+      player:{name:self&&self.name||'',level:S&&S.lvl,path:S&&S.path||'',xp:S&&S.xp,job:playerJob||'',gold,dim,x:Math.round((player&&player.pos&&player.pos.x||0)*10)/10,z:Math.round((player&&player.pos&&player.pos.z||0)*10)/10},
+      quest:quest?{source:quest.source||'npc',giver:quest.giver||'',title:quest.title||'',type:quest.type||'',have:quest.have|0,need:quest.need|0,chainStep:quest.chainStep|0}:null,
+      progression:{focus:progressionFocus||'',maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),firstPromotionSeen:ONBOARD.isSeen(),objectives:Array.isArray(activeObjectives)?activeObjectives.map(o=>({source:o.source,status:o.status,title:o.title,type:o.type})).slice(0,5):[]},
+      objective:{current:currentObjective(),action:e2eCurrentObjectiveAction(),text:currentQuestEl&&currentQuestEl.textContent||''},
+      modal:{overlayVisible:!!(overlayEl&&!overlayEl.classList.contains('hidden')),pathVisible:!!(pathEl&&!pathEl.classList.contains('hidden')),pathIsJob:!!(pathEl&&pathEl.classList.contains('jobselect')),awakeningVisible:!!(awakeningEl&&!awakeningEl.classList.contains('hidden')),ui:menusState.open,uiMode:menusState.mode,q:menusState.modalOpen,transition:transitionPanelState()},
+      input:{locked:combatState.inputLocked,pointerLock:document.pointerLockElement===renderer.domElement},
+      tutorial:{onboarding:onboardingActive,abilityTraining:combatState.abilityTrainingActive,abilityDone:abilityTutorialDone(),tutorials:{...serverTutorials}},
+    };
+  };
+  globalThis.BlockcraftDebugSnapshot=debugSnapshot;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('debug.snapshot.ready');
   window.__BLOCKCRAFT_E2E__={
     status:()=>{const self=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.sessionId&&NET.room.state.players.get(NET.room.sessionId);let bossState='';const dungeonMobs=[];if(NET.room&&NET.room.state&&NET.room.state.mobs)NET.room.state.mobs.forEach((m,id)=>{if(m.dgn===NET.dgn){dungeonMobs.push({id:String(id),kind:m.kind||'',variant:m.variant||'',bossStyle:m.bossStyle||'',displayName:m.displayName||'',elite:!!m.elite,state:m.state||''});if(m.kind==='boss')bossState=m.state||'';}});return {connected:NET.on&&NET.profileReady===true,reconnecting:NET.reconnecting,attachCount:NET.attachCount,sessionId:NET.room&&NET.room.sessionId||'',team:self&&self.team||'',job:playerJob,jobXp,contract:jobContract?JSON.parse(JSON.stringify(jobContract)):null,jobContractOffers:Array.isArray(jobContractOffers)?jobContractOffers.map(c=>JSON.parse(JSON.stringify(c))):[],jobContractOffersJob,jobContractRefreshAt,lastProgressionReject:String(globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__||''),progressionFocus,activeObjectives:Array.isArray(activeObjectives)?JSON.parse(JSON.stringify(activeObjectives)):[],firstPromotionSeen:ONBOARD.isSeen(),currentObjective:currentObjective(),currentObjectiveHud:currentObjectiveHud(),objectiveText:currentQuestEl&&currentQuestEl.textContent||'',objectiveAction:e2eCurrentObjectiveAction(),transitionPanels:transitionPanelState(),menu:{open:menusState.open,mode:menusState.mode,modalOpen:menusState.modalOpen,craftResult:menusState.craftResult?JSON.parse(JSON.stringify(menusState.craftResult)):null},landClaimOverlay:!!worldState.landClaimOverlay,dRankPrep:progressionFocus==='first_d_gate'?ONBOARD.dRankPrepStatus():null,rankProgress:currentRankProgress(),utilityUnlocks:[...utilityUnlocks],utilityLoadout:{active:utilityLoadout.active,passive:[...utilityLoadout.passive]},compassTarget:utilityCompassTarget(),partyCompassTarget:partyCompassTarget(),armor:armorSlot&&armorSlot.id,level:S.lvl,xp:S.xp,points:S.pts,path:S.path||'',gold,onboarding:onboardingActive,onboardingStep,onboardingTotal:ONBOARDING_STEPS.length,onboardingKind:onboardingKind(),tutorials:{...serverTutorials},townTutorials:{job:townTutorialStepDone('job'),tavern:townTutorialStepDone('tavern'),land:townTutorialStepDone('land'),all:townTutorialsDone()},quest:quest?JSON.parse(JSON.stringify(quest)):null,maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),abilityTraining:abilityTrainingActive,abilityTrainingUsed:combatState.abilityTrainingUsed,abilityTutorialDone:abilityTutorialDone(),dimension:dim,inTown:dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)),dungeonId:NET.dgn||'',dungeonContentId:dungeon&&dungeon.dungeonId||'',dungeonSeed:dungeon?(dungeon.seed>>>0):null,dungeonCleared:!!(dungeon&&dungeon.cleared),dungeonStatus:dungeon&&dungeon.status?JSON.parse(JSON.stringify(dungeon.status)):null,dungeonBossCount:e2eDungeonBossCount(),dungeonBossState:bossState,dungeonMobs,dungeonRestartRecovery:networkingState.restartRecovery?JSON.parse(JSON.stringify(networkingState.restartRecovery)):null,e2eJourneyResult:networkingState.journeyResult?JSON.parse(JSON.stringify(networkingState.journeyResult)):null,lobby:dungeonLobbyState?JSON.parse(JSON.stringify(dungeonLobbyState)):null,highestGateRankCleared,gateRanks:e2eGateRanks(),gates:e2eGates(),firstGate:e2eFirstGate(),roomName:NET.roomName||''};},
     inventoryCount:id=>inventoryModel.count(id),
@@ -2168,6 +2188,8 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     useDungeonExit:e2eUseDungeonExit,
     fleeDungeon:e2eFleeDungeon,
     enterTrackedGate:e2eEnterTrackedGate,
+    debugTrace:()=>globalThis.BlockcraftDebug&&globalThis.BlockcraftDebug.dump?globalThis.BlockcraftDebug.dump():[],
+    clearDebugTrace:()=>{if(globalThis.BlockcraftDebug&&globalThis.BlockcraftDebug.clear)globalThis.BlockcraftDebug.clear();return true;},
   };
 }
 

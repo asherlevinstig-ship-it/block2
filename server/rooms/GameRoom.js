@@ -342,6 +342,7 @@ class GameRoom extends Room {
         this.sendTradeInventory(client, rec.prof);
         return;
       }
+      this.profileQuestTrace(client, 'profile.request', rec.prof, { reason: m && m.reason || '' });
       this.sendProfile(client, rec.prof);
       const hunger = this.playerHunger.get(client.sessionId);
       if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
@@ -3058,8 +3059,54 @@ class GameRoom extends Room {
   }
   sendProfile(client, prof) {
     if (!client || !prof) return false;
-    client.send('profile', this.profilePayload(client, prof));
+    const payload = this.profilePayload(client, prof);
+    this.profileQuestTrace(client, 'profile.send', payload);
+    client.send('profile', payload);
     return true;
+  }
+  profileQuestTrace(client, event, prof, extra = {}) {
+    try {
+      const q = prof && prof.activeNpcQuest;
+      const objectives = typeof this.activeQuestObjectives === 'function' ? this.activeQuestObjectives(client, prof) : [];
+      console.log('[pq-trace]', JSON.stringify({
+        at: new Date().toISOString(),
+        event,
+        room: this.roomName || 'blockcraft',
+        sid: client && client.sessionId || '',
+        player: {
+          name: prof && prof.name || '',
+          level: prof && prof.S && (prof.S.lvl | 0) || 1,
+          xp: prof && prof.S && (prof.S.xp | 0) || 0,
+          path: prof && prof.S && prof.S.path || '',
+          job: prof && prof.job || '',
+          gold: prof && (prof.gold | 0) || 0,
+        },
+        quest: q ? {
+          source: q.source || 'npc',
+          giver: q.giver || '',
+          title: q.title || '',
+          type: q.type || '',
+          have: q.have | 0,
+          need: q.need | 0,
+          chainStep: q.chainStep | 0,
+          lifecycleState: q.lifecycleState || '',
+        } : null,
+        progression: {
+          focus: prof && prof.progressionFocus || '',
+          maraStep: prof && prof.npcQuestChains && (prof.npcQuestChains['Mara Vale'] | 0) || 0,
+          firstQuestRewardClaimed: !!(prof && prof.firstQuestRewardClaimed),
+          activeObjectives: Array.isArray(objectives) ? objectives.map(o => ({
+            source: o && o.source || '',
+            status: o && o.status || '',
+            title: o && o.title || '',
+            type: o && o.type || '',
+          })).slice(0, 6) : [],
+        },
+        extra,
+      }));
+    } catch (e) {
+      console.warn('[pq-trace] failed:', e && e.message || e);
+    }
   }
   sendTradeInventory(client, prof) {
     if (!client || !prof) return false;

@@ -989,7 +989,21 @@ function netAttachRoom(room,name,client){
         NET.dgn='';
       }
     });
-    room.onMessage('profile', m=>{netRestoreProfile(m);NET.profileReady=true;});
+    room.onMessage('profile', m=>{
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.received', {
+        name:m&&m.name,
+        level:m&&m.S&&m.S.lvl,
+        path:m&&m.S&&m.S.path,
+        job:m&&m.job,
+        progressionFocus:m&&m.progressionFocus,
+        quest:m&&m.activeNpcQuest?{giver:m.activeNpcQuest.giver,title:m.activeNpcQuest.title,have:m.activeNpcQuest.have,need:m.activeNpcQuest.need,chainStep:m.activeNpcQuest.chainStep}:null,
+        maraStep:m&&m.npcQuestChains&&m.npcQuestChains['Mara Vale'],
+        firstQuestRewardClaimed:m&&m.firstQuestRewardClaimed,
+        activeRoom:m&&m.activeRoom?{dim:m.activeRoom.dim,job:m.activeRoom.job}:null,
+      });
+      netRestoreProfile(m);NET.profileReady=true;
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
+    });
     room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
     room.onMessage('tradeInventory', m=>{
       updateServerInventorySnapshot(m&&m.inv);
@@ -1011,6 +1025,7 @@ function netAttachRoom(room,name,client){
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
       progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
       setActiveObjectives(m&&m.activeObjectives,{announce:true});
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.progressionFocus.received', { focus:progressionFocus, activeObjectives:m&&m.activeObjectives });
       refreshHUD(); refreshPlayUi();
     });
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
@@ -1181,6 +1196,12 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('npcQuest', m=>{
       if(!m)return;
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.npcQuest.received', {
+        action:m.action,
+        quest:m.quest?{giver:m.quest.giver,title:m.quest.title,have:m.quest.have,need:m.quest.need,chainStep:m.quest.chainStep,type:m.quest.type}:null,
+        completed:m.completed?{giver:m.completed.giver,title:m.completed.title,chainStep:m.completed.chainStep,type:m.completed.type}:null,
+        firstQuestMilestone:!!m.firstQuestMilestone,
+      });
       quest=m.quest||null;
       if(m.completed){
         const completedFirstHands=m.completed.giver==='Mara Vale'&&m.completed.title==='First Hands';
@@ -1215,6 +1236,7 @@ function netAttachRoom(room,name,client){
         ? '<b>First Hands complete.</b> Follow the gold trail back to <b>Mara Vale</b>.'
         : '<b>'+escHTML(quest.title||'Town quest')+'</b> complete - return to '+escHTML(quest.giver)+'.');
       refreshHUD();if(qOpen)closeQWin();
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.npcQuest.applied', { action:m.action });
     });
     room.onMessage('progressionMilestoneReward', m=>{
       const items=Array.isArray(m&&m.items)?m.items:[];

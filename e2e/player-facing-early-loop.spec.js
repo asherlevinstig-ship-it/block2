@@ -111,6 +111,9 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await clickButtonById(page, 'rewardclose');
     await page.locator('.pathselect-card[data-path="shadow"]').click();
     await expect(page.locator('#overlay')).toBeHidden();
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.debugTrace().map(e => e.event))).toEqual(
+      expect.arrayContaining(['path.select.click', 'path.select.closed', 'ability.awakening.open']),
+    );
     await page.locator('#awakeningbegin').click();
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());

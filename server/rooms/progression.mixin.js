@@ -878,6 +878,11 @@ class ProgressionMixin {
     const rec = this.profileFor(client), action = m && String(m.action || '');
     if (!rec) return this.progressionReject(client, 'npcQuest', 'invalid');
     if (this.rateLimited(client, 'progression', 8, 16)) return this.progressionReject(client, 'npcQuest', 'rate');
+    if (this.profileQuestTrace) this.profileQuestTrace(client, 'npcQuest.request', rec.prof, {
+      action,
+      giver: m && m.giver || '',
+      role: m && m.role || '',
+    });
     if (action === 'accept') {
       if (rec.prof.activeNpcQuest) return this.progressionReject(client, 'npcQuest', 'active');
       const giver = String(m.giver || '').replace(/[<>]/g, '').trim().slice(0, 64);
@@ -907,6 +912,11 @@ class ProgressionMixin {
         action,
         quest: q,
         grantedItems: grantRoadReadySword ? [{ id: I.WOOD_SWORD, count: 1 }] : [],
+      });
+      if (this.profileQuestTrace) this.profileQuestTrace(client, 'npcQuest.accepted', rec.prof, {
+        title: q.title || '',
+        giver: q.giver || '',
+        chainStep: q.chainStep | 0,
       });
       if (this.refreshNpcQuestReadiness) this.refreshNpcQuestReadiness(client);
       return true;
@@ -958,6 +968,12 @@ class ProgressionMixin {
     this.grantJobXp(client, 'adventurer', 12);
     this.progressJobContract(client, 'quest', 1, 0);
     client.send('npcQuest', { action, quest: null, completed: q, firstQuestMilestone });
+    if (this.profileQuestTrace) this.profileQuestTrace(client, 'npcQuest.claimed', rec.prof, {
+      title: q.title || '',
+      giver: q.giver || '',
+      chainStep: q.chainStep | 0,
+      firstQuestMilestone: !!firstQuestMilestone,
+    });
     if (firstQuestMilestone) client.send('firstQuestReward', { ok: true, gold: 100, totalGold: firstQuestMilestone.totalGold });
     if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
       source: q.type === 'manhunt' ? 'manhunt' : 'story',

@@ -994,6 +994,7 @@ function showAbilityAwakening(){
   if(abilityAwakeningOpen || abilityTrainingActive || abilityTutorialDone() || !S.path || !abilityHudAvailable()) return false;
   if(onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
   abilityAwakeningOpen=true;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.open', { path:S.path, dim });
   const P=PATHS[S.path]||PATHS.shadow;
   const first=P.ab[0];
   awakeningPanel.innerHTML='<div class="awpill">Level 2 Reached</div>'
@@ -1014,6 +1015,7 @@ function showAbilityAwakening(){
   const btn=document.getElementById('awakeningbegin');
   if(btn) btn.addEventListener('click', ()=>{
     SFX.uiClick();
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.begin', { path:S.path, dim });
     awakeningWin.classList.add('hidden');
     abilityAwakeningOpen=false;
     startAbilityTraining(true);
@@ -1023,6 +1025,7 @@ function showAbilityAwakening(){
 function startAbilityTraining(){
   if(abilityTrainingActive || abilityTutorialDone() || onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
   if(!abilityHudAvailable()) return false;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.training.start.request', { path:S.path, dim });
   if(dim==='overworld' && !enterAbilityRoom()) return false;
   awakeningWin.classList.add('hidden');
   abilityAwakeningOpen=false;
@@ -1050,6 +1053,7 @@ function startAbilityTraining(){
   locked=true;
   try{ renderer.domElement.requestPointerLock(); }catch(e){ enterPlayFallback(); }
   refreshPlayUi();
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.training.start.ok', { path:S.path, dim });
   return true;
 }
 function updateAbilityTrainingHud(){
@@ -1778,6 +1782,7 @@ function shouldOpenLevel2PathChoice(){
 function showPathSelection(){
   pathChoiceOpen=true;
   jobChoiceOpen=false;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.open', { level:S&&S.lvl, path:S&&S.path, dim });
   onboardingActive=false;
   document.body.classList.remove('onboarding');
   document.body.classList.add('path-selecting');
@@ -1799,6 +1804,7 @@ function showPathSelection(){
   refreshPlayUi();
   pathPanelEl.querySelectorAll('.pathselect-card').forEach(card=>card.addEventListener('click',()=>{
     const path=card.dataset.path;
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.click', { path, beforePath:S&&S.path });
     if(!setAbilityPath(path,{message:false})) return;
     pathSelectEl.classList.add('hidden');
     pathSelectEl.classList.remove('jobselect');
@@ -1808,6 +1814,7 @@ function showPathSelection(){
     locked=true;
     try{ renderer.domElement.requestPointerLock(); }catch(e){}
     refreshPlayUi();
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
     sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
     if(S.lvl>=2 && !abilityTutorialDone()){
       setTimeout(()=>{
@@ -1938,6 +1945,21 @@ function refreshPlayUi(){
   syncHudLayerState();
   playbtn.textContent='RESUME';
   if(!locked) mouseL=false, mining=null;
+  const debugSig=[
+    overlay.classList.contains('hidden')?'overlay:hidden':'overlay:visible',
+    locked?'locked':'unlocked',
+    lockFallback?'fallback':'nofallback',
+    pathChoiceOpen?'path':'',
+    jobChoiceOpen?'job':'',
+    abilityAwakeningOpen?'awakening':'',
+    uiOpen?'ui':'',
+    statOpen?'stat':'',
+    uiShellState.qOpen?'questlog':''
+  ].filter(Boolean).join('|');
+  if(refreshPlayUi._debugSig!==debugSig){
+    refreshPlayUi._debugSig=debugSig;
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.play-state', { sig:debugSig, showHud, transitionModalOpen });
+  }
 }
 function enterPlayFallback(){
   if(document.pointerLockElement===renderer.domElement) return;
