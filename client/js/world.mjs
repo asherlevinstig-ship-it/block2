@@ -967,9 +967,22 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
   box(cx-2,G,cz+21,cx+2,G,cz+25,B.GLASS);
   setBlock(cx,G+1,cz+23,B.LANTERN);
   if(jobId==='miner'){
-    box(cx-14,G,cz-12,cx+14,G,cz-4,B.COBBLE);
-    for(let x=cx-12;x<=cx+12;x+=4){setBlock(x,G+1,cz-8,B.STONE);setBlock(x,G+2,cz-8,(x-cx)%8===0?B.IRON_ORE:B.COAL_ORE);}
-    for(let z=cz-2;z<=cz+16;z+=5){setBlock(cx-2,G+1,z,B.TORCH);setBlock(cx+2,G+1,z,B.TORCH);}
+    for(let x=cx-17;x<=cx+17;x++)for(let z=cz-16;z<=cz+26;z++){
+      const wall=Math.abs(x-cx)>=16||z===cz-16||z===cz+26;
+      setBlock(x,G,z,B.STONE);
+      for(let y=G+1;y<=G+7;y++)setBlock(x,y,z,wall||y===G+7?B.STONE:B.AIR);
+    }
+    for(let x=cx-5;x<=cx+5;x++)for(let y=G+1;y<=G+5;y++)setBlock(x,y,cz-16,B.AIR);
+    for(let x=cx-8;x<=cx+8;x+=4){
+      setBlock(x,G+1,cz-13,B.STONE);
+      setBlock(x,G+2,cz-13,Math.abs(x-cx)<=4?B.DIAMOND_ORE:B.IRON_ORE);
+      setBlock(x,G+3,cz-13,B.COAL_ORE);
+    }
+    setBlock(cx,G+2,cz-13,B.DIAMOND_ORE);
+    for(let z=cz-9;z<=cz+21;z+=6){setBlock(cx-6,G+1,z,B.TORCH);setBlock(cx+6,G+1,z,B.TORCH);}
+    box(cx-4,G,cz+7,cx+4,G,cz+12,B.PLANKS);
+    setBlock(cx-3,G+1,cz+10,B.CHEST);
+    setBlock(cx+3,G+1,cz+10,B.TABLE);
   }else if(jobId==='farmer'){
     for(let x=cx-12;x<=cx+12;x++)for(let z=cz-10;z<=cz-4;z++){
       if(z===cz-7)setBlock(x,G,z,B.WATER);

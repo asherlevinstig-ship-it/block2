@@ -434,6 +434,14 @@ function finishMine(){
   }
   if(activeFamiliar==='sprite' && m.willDrop && info && info.drop!==null) spriteForage(m.x,m.y,m.z);   // the sprite zips in to gather (visual; bonus is server-side in MP)
   if(!NET.on && XP_MINE[m.id]) gainXP(XP_MINE[m.id]);
+  if(jobTutorialActive&&jobTutorialJob==='miner'&&m.id===B.DIAMOND_ORE&&m.willDrop){
+    if(NET.on)addItem(I.DIAMOND,1);
+    jobTutorialMinedDiamond=true;
+    SFX.level&&SFX.level();
+    showName('Diamond mined');
+    eventLog('Miner tutorial - diamond mined.');
+    updateJobTutorialHud();
+  }
   questMine(m.id);
   SFX.breakBlk(info?info.cls:null);
   comboBump();
@@ -729,13 +737,15 @@ const JOB_TUTORIAL_STEPS=Object.freeze({
   monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
 });
 const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
-  miner:{key:'WOOD PICKAXE',text:'Mine the safe ore seam and notice how hidden routes and ore veins make Miner different.',sub:'Practice on the ore wall, then walk into the blue return pillar.'},
+  miner:{key:'DIAMOND PICKAXE',text:'Mine one diamond from the cave seam, then trade it with Garrik for gold.',sub:'This diamond pickaxe is tutorial-only. Aim at the blue ore wall and hold F / left click.'},
   farmer:{key:'WOODEN HOE',text:'Hoe, seed, and harvest practice crops so Farmer feels like the town food engine.',sub:'Use the plot rows, then walk into the blue return pillar.'},
   cook:{key:'KITCHEN STATIONS',text:'Use meals to create combat, stamina, and travel support for other players.',sub:'Inspect the table, furnace, and campfire, then walk into the blue return pillar.'},
   blacksmith:{key:'FORGE BAY',text:'Repair, smelt, and upgrade gear so dungeon loot becomes long-term progression.',sub:'Inspect the forge stations, then walk into the blue return pillar.'},
   monk:{key:'FOCUS CIRCLE',text:'Meditation grows support power and restores resources more strongly in the hall.',sub:'Stand in the focus circle, then walk into the blue return pillar.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
+const MINER_TUTORIAL_TRADE_GOLD=45;
 function level2JobChoiceSeen(){
   try{return localStorage.getItem(LEVEL2_JOB_CHOICE_KEY)==='1';}catch(e){return false;}
 }
@@ -1091,10 +1101,99 @@ function tickAbilityTraining(now){
   updateAbilityTrainingHud();
   if(abilityTrainingFinishAt && now>=abilityTrainingFinishAt) completeAbilityTraining();
 }
+function clearJobTutorialTemporaryItems(){
+  for(let i=0;i<inv.length;i++){
+    const s=inv[i];
+    if(s&&s.source==='job_tutorial'&&s.tutorialOnly)inv[i]=null;
+  }
+  refreshHUD();
+}
+function addTemporaryJobTutorialTool(id){
+  let slot=inv.findIndex(s=>s&&s.id===id&&s.source==='job_tutorial'&&s.tutorialOnly);
+  if(slot<0){
+    for(let i=0;i<9;i++)if(!inv[i]){slot=i;break;}
+    if(slot<0)for(let i=9;i<36;i++)if(!inv[i]){slot=i;break;}
+    if(slot<0){sysMsg('Make one inventory slot free for the tutorial tool.');return false;}
+    const stack=newStack(id,1);
+    stack.dur=toolMaxDur(stack);
+    stack.source='job_tutorial';
+    stack.tutorialOnly=true;
+    inv[slot]=stack;
+  }
+  if(slot>=0&&slot<9)selectSlot(slot);
+  else if(slot>=9&&!inv[selected]){inv[selected]=inv[slot];inv[slot]=null;}
+  refreshHUD();
+  return true;
+}
+function minerTutorialTraderPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  return room?{x:room.x+.5,y:room.G+1,z:room.z+9.5}:null;
+}
+function ensureMinerTutorialTrader(){
+  if(tutorialMinerTrader)return tutorialMinerTrader;
+  if(typeof makeVillager==='function'){
+    tutorialMinerTrader={...makeVillager('#596271','#333842',true),role:'miner',name:'Garrik Flint',shortName:'Garrik',title:'Tutorial Trader',phase:Math.random()*10};
+    if(typeof attachNpcNameplate==='function')attachNpcNameplate(tutorialMinerTrader);
+    tutorialMinerTrader.grp.visible=false;
+    scene.add(tutorialMinerTrader.grp);
+  }else{
+    const grp=new THREE.Group();
+    const mat=new THREE.MeshLambertMaterial({color:0x7c8797});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(.7,1.2,.35),mat);body.position.y=.85;grp.add(body);
+    tutorialMinerTrader={grp,phase:0,name:'Garrik Flint',title:'Tutorial Trader'};
+    grp.visible=false;scene.add(grp);
+  }
+  return tutorialMinerTrader;
+}
+function updateMinerTutorialTrader(now=performance.now()){
+  const actor=ensureMinerTutorialTrader(), p=minerTutorialTraderPos();
+  if(!actor||!p)return;
+  const visible=jobTutorialActive&&jobTutorialJob==='miner'&&dim==='job';
+  actor.grp.visible=visible;
+  if(!visible)return;
+  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
+  actor.grp.rotation.y=Math.PI;
+}
+function nearbyMinerTutorialTrader(range=4.2){
+  const p=minerTutorialTraderPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='miner'||dim!=='job')return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
+function tryMinerTutorialTrade(){
+  if(!nearbyMinerTutorialTrader())return false;
+  if(jobTutorialTraded){
+    sysMsg('<b>Garrik Flint:</b> Good trade. Follow the blue return pillar when you are ready.');
+    return true;
+  }
+  if(!jobTutorialMinedDiamond){
+    sysMsg('<b>Garrik Flint:</b> Mine a <b>diamond</b> from the cave seam first, then bring it here.');
+    updateJobTutorialHud();
+    return true;
+  }
+  if(countItem(I.DIAMOND)<=0){
+    sysMsg('<b>Garrik Flint:</b> I saw the ore break, but I cannot see a diamond in your bag. Mine another blue ore block.');
+    updateJobTutorialHud();
+    return true;
+  }
+  if(!inventoryModel.remove(I.DIAMOND,1)){
+    sysMsg('<b>Garrik Flint:</b> I cannot see the diamond in your bag.');
+    return true;
+  }
+  gold+=MINER_TUTORIAL_TRADE_GOLD;
+  jobTutorialTraded=true;
+  rewardGain('gold',MINER_TUTORIAL_TRADE_GOLD,'Gold');
+  gainJobXP('miner',10,'tutorial trade');
+  SFX.coin&&SFX.coin();
+  refreshHUD();
+  updateJobTutorialHud();
+  eventLog('Miner tutorial - traded diamond for '+MINER_TUTORIAL_TRADE_GOLD+' gold.');
+  sysMsg('<b>Garrik Flint:</b> Fine stone. Here is <b>'+MINER_TUTORIAL_TRADE_GOLD+' gold</b>. Miners turn deep finds into town money.');
+  return true;
+}
 function grantJobTutorialKit(jobId){
   if(jobId==='miner'){
-    ensureOnboardingItem(I.WOOD_PICK,1);
-    selectItemForOnboarding(I.WOOD_PICK);
+    addTemporaryJobTutorialTool(I.DIA_PICK);
   }else if(jobId==='farmer'){
     ensureOnboardingItem(I.WOOD_HOE,1);
     ensureOnboardingItem(I.WHEAT_SEEDS,4);
@@ -1112,19 +1211,32 @@ function updateJobTutorialHud(){
   if(!jobTutorialActive||dim!=='job'){tutorialEl.classList.add('hidden');return;}
   const job=JOBS[jobTutorialJob]||{name:'Job'};
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
-  const copy=JOB_TUTORIAL_ROOM_COPY[jobTutorialJob]||{key:'PRACTICE',text:'Try the job loop in this room.',sub:'Walk into the blue return pillar when done.'};
+  let copy=JOB_TUTORIAL_ROOM_COPY[jobTutorialJob]||{key:'PRACTICE',text:'Try the job loop in this room.',sub:'Walk into the blue return pillar when done.'};
+  if(jobTutorialJob==='miner'){
+    copy=!jobTutorialMinedDiamond
+      ? JOB_TUTORIAL_ROOM_COPY.miner
+      : !jobTutorialTraded
+        ? {key:'GARRIK FLINT',text:'Take the diamond to Garrik and press G to trade it for gold.',sub:'He is waiting on the wooden platform inside this cave.'}
+        : {key:'RETURN PILLAR',text:'You mined a diamond and traded it for gold.',sub:'Walk into the blue return pillar to go back to town.'};
+  }
   const nearReturn=room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
+  const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?'RETURN TO TOWN':copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?'Step into the pillar to return to Town of Beginnings.':copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?'Your job is equipped. You can switch later at the Job Board.':copy.sub)+'</div>';
+    +'<div class="tutkey">'+escHTML(nearReturn?(minerBlockedReturn?'FINISH TRADE':'RETURN TO TOWN'):copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':'Step into the pillar to return to Town of Beginnings.'):copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':'Your job is equipped. You can switch later at the Job Board.'):copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
   const jobId=jobTutorialJob, job=JOBS[jobId]||{name:'Job'};
+  clearJobTutorialTemporaryItems();
   jobTutorialActive=false;
   jobTutorialJob='';
+  jobTutorialMinedDiamond=false;
+  jobTutorialTraded=false;
+  jobTutorialReturnWarnAt=0;
+  if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   completeTownTutorialStep(jobTutorialStepId(jobId));
@@ -1147,12 +1259,16 @@ function startJobTutorial(jobId){
   jobChoiceOpen=false;
   jobTutorialActive=true;
   jobTutorialJob=jobId;
+  jobTutorialMinedDiamond=false;
+  jobTutorialTraded=false;
+  jobTutorialReturnWarnAt=0;
   player.pos.set(room.x+.5,room.G+2,room.z+14.5);
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
   updateVisibleChunks(true);
   grantJobTutorialKit(jobId);
+  updateMinerTutorialTrader();
   updateJobTutorialHud();
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
@@ -1161,9 +1277,19 @@ function startJobTutorial(jobId){
 }
 function tickJobTutorial(now){
   if(!jobTutorialActive) return;
-  if(dim!=='job'){ jobTutorialActive=false; tutorialPillarGroup.visible=false; tutorialEl.classList.add('hidden'); return; }
+  if(dim!=='job'){
+    clearJobTutorialTemporaryItems();
+    jobTutorialActive=false;
+    jobTutorialMinedDiamond=false;
+    jobTutorialTraded=false;
+    if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
+    tutorialPillarGroup.visible=false;
+    tutorialEl.classList.add('hidden');
+    return;
+  }
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
   if(!room) return;
+  updateMinerTutorialTrader(now);
   const target={x:room.x,z:room.z+23};
   const y=surfaceY(target.x,target.z);
   tutorialPillarGroup.visible=true;
@@ -1173,7 +1299,16 @@ function tickJobTutorial(now){
   const s=1+.08*Math.sin(now*.006);
   tutorialRing.scale.set(s,s,s);
   updateJobTutorialHud();
-  if(player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<2.6) completeJobTutorial();
+  if(player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<2.6){
+    if(jobTutorialJob==='miner'&&!jobTutorialTraded){
+      if(now>jobTutorialReturnWarnAt){
+        jobTutorialReturnWarnAt=now+1800;
+        sysMsg('Mine a diamond and trade it with <b>Garrik</b> before leaving the Miner tutorial.');
+      }
+      return;
+    }
+    completeJobTutorial();
+  }
 }
 function updateTownGuidanceHud(){
   if(!townGuidanceActive){tutorialEl.classList.add('hidden');return;}
@@ -2418,6 +2553,8 @@ function nearbyInteractionPrompt(){
   if(nearFellowshipArmoryRack())push({key:'G',title:'Fellowship Armory Rack',small:'Check Gate readiness and loadouts',priority:100},0);
   if(nearFellowshipPantryShelf())push({key:'G',title:'Fellowship Pantry Shelf',small:'Prepare hunger, rations and Cook work',priority:100},0);
   if(nearFellowshipWeatherVane())push({key:'G',title:'Fellowship Weather Vane',small:'Review weather sites and sky planning',priority:100},0);
+  const minerTutor=nearbyMinerTutorialTrader();
+  if(minerTutor)push({key:'G',title:'Garrik Flint',small:jobTutorialTraded?'Trade complete':jobTutorialMinedDiamond&&countItem(I.DIAMOND)>0?'Trade diamond for gold':'Mine a diamond first',priority:118},minerTutor.distance);
   if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
   const table=nearbyTavernGameTable();
   if(table)push({key:'G',title:table.label,small:'Play tavern games',priority:94},table.distance);
@@ -2594,6 +2731,7 @@ function interactAncientCityDiscovery(s){
 function secondaryAction(){
   if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
+  if(tryMinerTutorialTrade()) return;
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
   if(toggleMeditation()) return;

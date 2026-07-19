@@ -1366,11 +1366,16 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(combat,/const LEVEL2_JOB_CHOICE_KEY='bc_level2_job_choice_seen_v1'/);
   assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
   assert.match(combat,/const JOB_TUTORIAL_ROOM_COPY=Object\.freeze\(\{/);
+  assert.match(combat,/MINER_TUTORIAL_TRADE_GOLD=45/);
   for(const job of ['miner','farmer','cook','blacksmith','monk']) assert.match(combat,new RegExp(`${job}:\\{room:`));
   assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
   assert.match(combat,/function startJobTutorial\(jobId\)/);
   assert.match(combat,/function tickJobTutorial\(now\)/);
+  assert.match(combat,/function tryMinerTutorialTrade\(\)/);
+  assert.match(combat,/addTemporaryJobTutorialTool\(I\.DIA_PICK\)/);
+  assert.match(combat,/jobTutorialActive&&jobTutorialJob==='miner'&&m\.id===B\.DIAMOND_ORE/);
+  assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
@@ -1380,6 +1385,8 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(combat,/exitJobTutorialRoom\(\)/);
   assert.match(world,/const JOB_TUTORIAL_MEADOWS=Object\.freeze\(\{/);
   assert.match(world,/function buildJobTutorialMeadow\(jobId,setBlock=setB\)/);
+  assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
+  assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
   assert.match(dimensions,/function generateJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function enterJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);
