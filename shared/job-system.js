@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function jobSystemFactory() {
   'use strict';
   const CAREER_ID = 'adventurer';
-  const PROFESSION_IDS = Object.freeze(['miner','farmer','cook','blacksmith','monk']);
+  const PROFESSION_IDS = Object.freeze(['miner','farmer','cook','blacksmith','monk','pet_tamer']);
   const JOB_IDS = Object.freeze([CAREER_ID,...PROFESSION_IDS]);
   const JOBS = Object.freeze({
     adventurer:Object.freeze({name:'Adventurer',icon:'A',col:'#d8f2ff',role:'Quests, gates, monsters',desc:'Progress by completing town quests, clearing gates, joining events, and defeating threats.',perkName:'Trail Sense',perk:'Improves Hunter contract gold rewards.'}),
@@ -14,6 +14,7 @@
     cook:Object.freeze({name:'Cook',icon:'♨',col:'#fbbf24',role:'Meals and tavern goods',desc:'Progress by cooking, baking, preparing meals, and selling food.',perkName:'Batch Cooking',perk:'Chance to create extra meals while cooking.'}),
     blacksmith:Object.freeze({name:'Blacksmith',icon:'⚒',col:'#fb923c',role:'Gear, tools, repair',desc:'Progress by crafting equipment, smelting ingots, and repairing gear.',perkName:'Tempered Craft',perk:'Crafted tools gain durability; repair kits restore more.'}),
     monk:Object.freeze({name:'Monk',icon:'◇',col:'#7dd3fc',role:'Meditation and support',desc:'Progress by meditating in the Meditation Hall from Level 4 onward.',perkName:'Hall Focus',perk:'Meditation grants short focus buffs and long-term body growth.'}),
+    pet_tamer:Object.freeze({name:'Pet Tamer',icon:'P',col:'#f9a8d4',role:'Familiars and animal care',desc:'Progress by finding wild pets, crafting treats, caring for companions, and helping players bond familiars.',perkName:'Kindred Bond',perk:'Improves familiar discovery, treat rewards, and companion support.'}),
   });
   const TITLES = Object.freeze({
     adventurer:[[20,'Legendary Adventurer'],[10,'Gatebreaker'],[5,'Pathfinder'],[2,'Wayfarer'],[1,'Adventurer']],
@@ -22,6 +23,7 @@
     cook:[[20,'Master Chef'],[10,'Feastmaker'],[5,'Tavern Cook'],[2,'Kitchen Hand'],[1,'Cook']],
     blacksmith:[[20,'Master Smith'],[10,'Forgekeeper'],[5,'Ironhand'],[2,'Apprentice Smith'],[1,'Blacksmith']],
     monk:[[20,'Zen Master'],[10,'Runeseer'],[5,'Shrine Adept'],[2,'Acolyte'],[1,'Monk']],
+    pet_tamer:[[20,'Beast Whisperer'],[10,'Pack Keeper'],[5,'Companion Handler'],[2,'Apprentice Tamer'],[1,'Pet Tamer']],
   });
   const MILESTONES = Object.freeze({
     adventurer:Object.freeze([
@@ -59,6 +61,12 @@
       Object.freeze({level:5,title:'Flowing Focus',desc:'Meditation also grants a movement blessing.',reward:'Movement focus buff'}),
       Object.freeze({level:10,title:'Stone Focus',desc:'Meditation also reduces incoming damage.',reward:'Stone skin focus buff'}),
       Object.freeze({level:20,title:'Shared Tranquillity',desc:'Meditation periodically shares full focus with nearby party members.',reward:'Shared party focus aura'}),
+    ]),
+    pet_tamer:Object.freeze([
+      Object.freeze({level:2,title:'Gentle Approach',desc:'Unlocks friendly-track contracts and better pet-collar hints.',reward:'Friendly track contracts'}),
+      Object.freeze({level:5,title:'Treatcraft',desc:'Crafting companion treats gives stronger Pet Tamer progress.',reward:'Treatcraft bonus rewards'}),
+      Object.freeze({level:10,title:'Pack Signals',desc:'Active familiars support nearby routes more reliably.',reward:'Familiar support range'}),
+      Object.freeze({level:20,title:'Kindred Mastery',desc:'Rare familiar and dragon-bond work can produce relic companion rewards.',reward:'Rare companion relic chance'}),
     ]),
   });
   const CONTRACTS = Object.freeze({
@@ -113,6 +121,13 @@
       {type:'meditate',need:s=>90+s*20,title:'Deep Stillness',desc:'Keep a longer meditation so the hall can settle around you.',gold:s=>32+s*4,jobXp:s=>30+s*6,focus:'long focus channel',reward:'stronger XP for longer focus',party:'Solo'},
       {type:'meditate',need:s=>120+s*25,title:'Party Blessing Vigil',desc:'Hold focus long enough to ready Meditation Hall blessings for nearby allies.',gold:s=>36+s*4,jobXp:s=>36+s*6,focus:'support preparation',reward:'milestone progress toward shared focus',party:'Helpful'},
     ]),
+    pet_tamer:Object.freeze([
+      {type:'tame',need:s=>2+Math.min(4,s),title:'Friendly Tracks',desc:'Follow wild pet trails outside town and record signs of friendly animals.',gold:s=>30+s*4,jobXp:s=>22+s*5,focus:'wild pet discovery',reward:'Pet Tamer XP and collar chances',party:'Solo'},
+      {type:'tame',need:s=>1+Math.min(3,(s/2)|0),title:'Collar Bond',desc:'Bind or help bond a pet familiar using a collar, sigil, charm, or totem.',gold:s=>42+s*5,jobXp:s=>30+s*6,focus:'familiar binding',reward:'strong bond progress',party:'Helpful'},
+      {type:'pet_care',need:s=>4+s,title:'Treat Practice',desc:'Craft or prepare companion treats so familiars and dragons have care supplies.',gold:s=>28+s*4,jobXp:s=>20+s*5,focus:'treat crafting',reward:'care-loop profession XP',party:'Solo'},
+      {type:'pet_care',need:s=>5+s,title:'Stable Kindness',desc:'Feed, summon, or care for active companions around the roost and town trails.',gold:s=>36+s*5,jobXp:s=>28+s*6,focus:'companion care route',reward:'bond care rewards',party:'Helpful'},
+      {type:'hunt',need:s=>3+Math.min(5,s),title:'Wildlife Watch',desc:'Track animal routes outside town without fighting hostile monsters.',gold:s=>32+s*4,jobXp:s=>24+s*5,focus:'animal route scouting',reward:'pet-collar discovery practice',party:'Solo'},
+    ]),
   });
   const FIRST_HUNTER_CONTRACT = Object.freeze({job:'adventurer',type:'kill',need:3,have:0,title:"Mara's Field Work",desc:'Defeat 3 hostile creatures beyond the town walls.',rewardGold:34,rewardJobXp:20});
   const GUIDE_STEPS = Object.freeze({
@@ -126,6 +141,8 @@
     farm:['Till soil, plant seeds, and harvest mature crops.','General farm contracts accept all three actions.','Harvest Basket requires mature wheat.'],
     cook:['Gather ingredients and prepare meals through crafting or cooking stations.','Completed food items advance the contract.','Return to the board when ready.'],
     hunt:['Find wild animals outside town.','Defeat passive wildlife to gather meat for the kitchen.','Rare pet collars can drop from rabbits, deer, and boars; use one from your hotbar, then press K.','Hostile monsters do not count for Cook hunting contracts.'],
+    tame:['Search outside town for rabbit, deer, boar, cat, dog, or wolf signs.','Pet collars, sigils, charms, and totems count when used from your hotbar.','Press K after binding to call or cycle your familiar.'],
+    pet_care:['Craft Dragon Treats or prepare companion care supplies.','Feed dragons or keep a familiar active while travelling.','Return to the Job Board when your care work is ready.'],
     sell:['Prepare food items.','Sell them at the tavern counter.','Each accepted food item advances the contract.'],
     smith:['Smelt ingots, craft tools or armor, or make repair kits.','The work counts when the item is completed.','Return to the board when ready.'],
     repair:['Obtain Repair Kits.','Use one on a damaged tool.','Each successful repair advances the contract.'],
@@ -136,19 +153,20 @@
   const OFFER_REFRESH_MS = 15 * 60 * 1000;
   // Contracts supplement the XP earned while doing their objective. Material-heavy
   // professions need a larger completion reward to stay near the same Lv20 runway.
-  const PROFESSION_REWARD_MULTIPLIER=Object.freeze({miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1});
+  const PROFESSION_REWARD_MULTIPLIER=Object.freeze({miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1,pet_tamer:2});
   const OFFER_TIERS = Object.freeze([
     Object.freeze({id:'quick',label:'Quick',need:.72,reward:.78,estimate:'About 5 minutes'}),
     Object.freeze({id:'balanced',label:'Balanced',need:1,reward:1,estimate:'About 10 minutes'}),
     Object.freeze({id:'demanding',label:'Demanding',need:1.45,reward:1.5,estimate:'About 15–20 minutes'}),
   ]);
-  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',cave_survey:'Cave entrances',ancient_map:'Ancient city clues',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Meditation Hall'});
+  const LOCATIONS = Object.freeze({kill:'Wilderness roads',hunt:'Wild animal routes',tame:'Wild pet trails',pet_care:'Dragon Roost and companion pens',gate:'Active Gates',event:'Server event',mine:'Caves and Gate walls',cave_survey:'Cave entrances',ancient_map:'Ancient city clues',treasure:'Treasure map clues',farm:'Town Farm or claimed land',cook:'Crafting and kitchens',sell:'Tavern counter',smith:'Forge and crafting',repair:'Blacksmith workbench',upgrade:'Tobin\'s forge',salvage:'Tobin\'s salvage bench',meditate:'Meditation Hall'});
   const REFORGE_MODIFIERS=Object.freeze({keen:Object.freeze({name:'Keen',desc:'+2 weapon damage.'}),swift:Object.freeze({name:'Swift',desc:'8% faster weapon and tool use.'}),sturdy:Object.freeze({name:'Sturdy',desc:'20% more maximum durability.'})});
   const REFORGE_ACTIONS=Object.freeze({basic:Object.freeze({level:2,gold:25,iron:1,diamond:0}),choose:Object.freeze({level:5,gold:70,iron:4,diamond:0}),reroll:Object.freeze({level:10,gold:120,iron:0,diamond:1}),masterwork:Object.freeze({level:20,gold:260,iron:0,diamond:3})});
   const FARMER_RULES=Object.freeze({bonusYieldLevel:2,windseedLevel:5,fieldcraftLevel:10,goldenHarvestLevel:20,fieldcraftGrowthMultiplier:.75,goldenGrowthMultiplier:.6,goldenWheatChance:.25});
   const COOK_RULES=Object.freeze({batchLevel:2,brothLevel:5,rationLevel:10,feastLevel:20,rationDurationMs:120000,feastDurationMs:180000,feastRange:20,mightMultiplier:1.15,gatherBonusChance:.25});
   const MONK_RULES=Object.freeze({regenLevel:4,speedLevel:5,stoneLevel:10,auraLevel:20,durationByTier:Object.freeze([0,8,10,12,16]),regenPerSecond:2,resourceRestoreFraction:.08,speedMultiplier:1.25,stoneMitigation:.35,auraRange:12,auraCooldownMs:15000});
   const MINER_RULES=Object.freeze({oreSenseLevel:2,stonehandLevel:5,deepProspectLevel:10,geodeLevel:20,surveyRadius:8,deepSurveyRadius:18,surveyCooldownMs:30000,deepSurveyCooldownMs:15000,markerDurationMs:12000,geodeChance:.08,durabilitySaveChance:.18});
+  const PET_TAMER_RULES=Object.freeze({gentleApproachLevel:2,treatcraftLevel:5,packSignalsLevel:10,kindredMasteryLevel:20,collarHintBonus:.12,treatRewardMultiplier:1.25,supportRange:14,rareRelicChance:.05});
   function jobXpNeed(level){return Math.round(30*Math.pow(Math.max(1,level|0),1.45));}
   function jobLevelFromXp(xp){let lvl=1,left=Math.max(0,xp|0);while(lvl<99){const need=jobXpNeed(lvl);if(left<need)break;left-=need;lvl++;}return lvl;}
   function jobXpIntoLevel(xp){let lvl=1,left=Math.max(0,xp|0);while(lvl<99){const need=jobXpNeed(lvl);if(left<need)return {lvl,xp:left,need};left-=need;lvl++;}return {lvl,xp:left,need:jobXpNeed(lvl)};}
@@ -184,6 +202,8 @@
     else if(c.type==='ancient_map')pushUnique(tags,'Ancient City');
     else if(c.type==='farm')pushUnique(tags,c.target?'Harvest':'Crop');
     else if(c.type==='hunt')pushUnique(tags,'Hunt');
+    else if(c.type==='tame')pushUnique(tags,'Bond');
+    else if(c.type==='pet_care')pushUnique(tags,'Care');
     else if(c.type==='kill')pushUnique(tags,'Combat');
     else if(c.type==='meditate')pushUnique(tags,'Focus');
     const focus=String(c.focus||'').toLowerCase();
@@ -204,6 +224,11 @@
     if(title==='Dungeon Pantry'||title==='Ration Test Batch')return 'Best before leaving town for Gates.';
     if(title==='Fresh Meat Run')return 'Best while hunting nearby animals for kitchen ingredients.';
     if(title==='Campfire Butchery')return 'Best before cooking meat-heavy travel food.';
+    if(title==='Friendly Tracks')return 'Best while exploring outside town for pet collar drops and animal signs.';
+    if(title==='Collar Bond')return 'Best when you have a familiar collar, sigil, charm, or totem ready to use.';
+    if(title==='Treat Practice')return 'Best while crafting Dragon Treats and companion care supplies.';
+    if(title==='Stable Kindness')return 'Best while caring for dragons or travelling with an active familiar.';
+    if(title==='Wildlife Watch')return 'Best while scouting animal routes for future pets.';
     if(title==='Counter Rush'||title==='Tavern Supplier')return 'Best when you have extra food to sell.';
     if(title==='Surveyor\'s Cache Map')return 'Best when you have an active treasure map or a buried cache clue.';
     if(title==='Forgotten Seam Charts')return 'Best for longer prospecting trips with multiple cache stops.';
@@ -254,8 +279,13 @@
       if(lvl>=MONK_RULES.regenLevel)hooks.push('Restoring Focus heals and restores resources while meditating.');
       if(lvl>=MONK_RULES.stoneLevel)hooks.push('Stone Focus reduces incoming damage.');
       if(lvl>=MONK_RULES.auraLevel)hooks.push('Shared Tranquillity supports nearby party members.');
+    }else if(job==='pet_tamer'){
+      hooks.push('Find wild pet routes, bind familiars, craft treats, and grow companion support for travel and groups.');
+      if(lvl>=PET_TAMER_RULES.gentleApproachLevel)hooks.push('Gentle Approach improves pet discovery and collar-route contracts.');
+      if(lvl>=PET_TAMER_RULES.treatcraftLevel)hooks.push('Treatcraft makes companion care more rewarding.');
+      if(lvl>=PET_TAMER_RULES.kindredMasteryLevel)hooks.push('Kindred Mastery can reveal rare companion relic work.');
     }
     return hooks;
   }
-  return Object.freeze({CAREER_ID,PROFESSION_IDS,JOB_IDS,JOBS,TITLES,MILESTONES,REFORGE_MODIFIERS,REFORGE_ACTIONS,FARMER_RULES,COOK_RULES,MONK_RULES,MINER_RULES,CONTRACTS,FIRST_HUNTER_CONTRACT,GUIDE_STEPS,OFFER_REFRESH_MS,PROFESSION_REWARD_MULTIPLIER,OFFER_TIERS,LOCATIONS,jobXpNeed,jobLevelFromXp,jobXpIntoLevel,contractScaleFromXp,perkTierFromLevel,perkChance,titleFor,milestonesFor,milestoneState,milestoneAt,milestoneReward,reforgeModifier,reforgeCost,contractPool,contractOffers,contractTags,contractBestFor,guideSteps,firstHunterContract,gameplayHooks});
+  return Object.freeze({CAREER_ID,PROFESSION_IDS,JOB_IDS,JOBS,TITLES,MILESTONES,REFORGE_MODIFIERS,REFORGE_ACTIONS,FARMER_RULES,COOK_RULES,MONK_RULES,MINER_RULES,PET_TAMER_RULES,CONTRACTS,FIRST_HUNTER_CONTRACT,GUIDE_STEPS,OFFER_REFRESH_MS,PROFESSION_REWARD_MULTIPLIER,OFFER_TIERS,LOCATIONS,jobXpNeed,jobLevelFromXp,jobXpIntoLevel,contractScaleFromXp,perkTierFromLevel,perkChance,titleFor,milestonesFor,milestoneState,milestoneAt,milestoneReward,reforgeModifier,reforgeCost,contractPool,contractOffers,contractTags,contractBestFor,guideSteps,firstHunterContract,gameplayHooks});
 });

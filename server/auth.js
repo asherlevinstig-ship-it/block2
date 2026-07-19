@@ -269,7 +269,7 @@ class AuthService {
     profile.S.path = '';
     profile.job = '';
     profile.jobXp = 0;
-    profile.jobXpByJob = { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0 };
+    profile.jobXpByJob = { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0, pet_tamer: 0 };
     profile.gold = 100;
     profile.starterGoldGranted = true;
     profile.tutorials = {

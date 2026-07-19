@@ -3542,6 +3542,7 @@ class GameRoom extends Room {
       if (job === 'blacksmith') return 'Use the forge rewards to repair, reforge, or upgrade gear, then take another smithing order.';
       if (job === 'farmer') return 'Turn the harvest into food supply for cooks and Gates, then replant or take another field order.';
       if (job === 'monk') return 'Carry the focus buff into travel or party play, then return to the Shrine for another support contract.';
+      if (job === 'pet_tamer') return 'Keep a familiar active, search wild pet trails, craft treats, then take another Pet Tamer contract.';
       return 'Take another Adventurer contract, use the reward to improve gear, then push toward the next Gate rank.';
     }
     if (source === 'story' || source === 'manhunt') {

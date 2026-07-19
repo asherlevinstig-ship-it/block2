@@ -790,7 +790,7 @@ test('onboarding resource manifest restores every tutorial log and mature crop',
 });
 
 test('browser and server consume one shared profession and contract ruleset', () => {
-  assert.deepEqual(sharedJobs.PROFESSION_IDS, ['miner','farmer','cook','blacksmith','monk']);
+  assert.deepEqual(sharedJobs.PROFESSION_IDS, ['miner','farmer','cook','blacksmith','monk','pet_tamer']);
   assert.equal(sharedJobs.jobLevelFromXp(sharedJobs.jobXpNeed(1)), 2);
   assert.equal(sharedJobs.titleFor('miner', 10), 'Prospector');
   assert.equal(sharedJobs.perkTierFromLevel(20), 4);
@@ -820,13 +820,14 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.equal(sharedJobs.MINER_RULES.geodeChance,.08);
   assert.equal(sharedJobs.reforgeCost('basic').gold,25);
   assert.equal(sharedJobs.reforgeCost('basic').iron,1);
-  assert.deepEqual(sharedJobs.PROFESSION_REWARD_MULTIPLIER,{miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1});
+  assert.deepEqual(sharedJobs.PROFESSION_REWARD_MULTIPLIER,{miner:1,farmer:1.25,cook:1.5,blacksmith:1.5,monk:1,pet_tamer:2});
   assert.match(sharedJobs.gameplayHooks('miner',20).join(' '), /hidden cave routes|Prismatic Geodes/);
   assert.match(sharedJobs.gameplayHooks('cook',20).join(' '), /combat meals|Feast Platters/);
   assert.match(sharedJobs.gameplayHooks('blacksmith',20).join(' '), /Repair damaged gear|Masterwork/);
   assert.match(sharedJobs.gameplayHooks('farmer',20).join(' '), /food economy|Windseed/);
   assert.match(sharedJobs.gameplayHooks('monk',20).join(' '), /Restore mana and stamina|Shared Tranquillity/);
-  const objectiveXp={miner:c=>c.need*(c.type==='treasure'?6:c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:c.type==='upgrade'?10:c.type==='salvage'?6:6),monk:c=>c.need*.4};
+  assert.match(sharedJobs.gameplayHooks('pet_tamer',20).join(' '), /wild pet routes|Kindred Mastery/);
+  const objectiveXp={miner:c=>c.need*(c.type==='treasure'?6:c.target===W.B.IRON_ORE?5:2),farmer:c=>c.need*3,cook:c=>c.need*(c.type==='sell'?3:4),blacksmith:c=>c.need*(c.type==='repair'?5:c.type==='upgrade'?10:c.type==='salvage'?6:6),monk:c=>c.need*.4,pet_tamer:c=>c.need*(c.type==='tame'?5:4)};
   const allTargets = {STONE:W.B.STONE,IRON_ORE:W.B.IRON_ORE,WHEAT_3:W.B.WHEAT_3,IRON_INGOT:I.IRON_INGOT};
   const earlyRunway=sharedJobs.PROFESSION_IDS.map(job=>{let xp=0,contracts=0;while(sharedJobs.jobLevelFromXp(xp)<5&&contracts<30){const pool=sharedJobs.contractPool(job,sharedJobs.contractScaleFromXp(xp),5,allTargets);xp+=pool.reduce((sum,c)=>sum+c.rewardJobXp+objectiveXp[job](c),0)/pool.length;contracts++;}return contracts;});
   assert.equal(Math.max(...earlyRunway)<=7,true,'every profession reaches its first play-changing Lv5 unlock within seven average contracts');
@@ -873,6 +874,12 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.deepEqual(cook.filter(c=>c.type==='hunt').map(c=>c.title), ['Fresh Meat Run','Campfire Butchery']);
   assert.match(sharedJobs.contractBestFor(cook.find(c=>c.title==='Fresh Meat Run')), /kitchen ingredients/);
   assert.match(sharedJobs.guideSteps('hunt').join(' '), /Hostile monsters do not count/i);
+  const petTamer = sharedJobs.contractPool('pet_tamer', 2, 5, targets);
+  assert.deepEqual(petTamer.map(c=>c.title), ['Friendly Tracks','Collar Bond','Treat Practice','Stable Kindness','Wildlife Watch']);
+  assert.deepEqual(petTamer.filter(c=>c.type==='tame').map(c=>c.title), ['Friendly Tracks','Collar Bond']);
+  assert.deepEqual(petTamer.filter(c=>c.type==='pet_care').map(c=>c.title), ['Treat Practice','Stable Kindness']);
+  assert.match(sharedJobs.contractBestFor(petTamer.find(c=>c.title==='Collar Bond')), /collar, sigil, charm, or totem/);
+  assert.match(sharedJobs.guideSteps('tame').join(' '), /Press K/);
   const offers=sharedJobs.contractOffers('miner',2,5,targets,100,0);
   assert.deepEqual(offers.map(o=>o.difficulty),['quick','balanced','demanding']);
   assert.ok(offers[0].rewardXp<offers[1].rewardXp&&offers[1].rewardXp<offers[2].rewardXp);
@@ -1357,7 +1364,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.doesNotMatch(styles,/body\.onboarding[^\{]*#currentquest/);
 });
 
-test('level two job chooser presents five profession tutorial cards',()=>{
+test('level two job chooser presents six profession tutorial cards',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
@@ -1372,7 +1379,7 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
   assert.match(combat,/const JOB_TUTORIAL_ROOM_COPY=Object\.freeze\(\{/);
   assert.match(combat,/MINER_TUTORIAL_TRADE_GOLD=45/);
-  for(const job of ['miner','farmer','cook','blacksmith','monk']) assert.match(combat,new RegExp(`${job}:\\{room:`));
+  for(const job of ['miner','farmer','cook','blacksmith','monk','pet_tamer']) assert.match(combat,new RegExp(`${job}:\\{room:`));
   assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
   assert.match(combat,/function startJobTutorial\(jobId\)/);
@@ -1388,7 +1395,7 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
-  assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk'\]/);
+  assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
   assert.match(combat,/startJobTutorial\(jobId\)/);
   assert.match(combat,/teleport straight to a private practice room/);

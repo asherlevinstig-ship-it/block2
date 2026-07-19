@@ -58,13 +58,14 @@ const DRAGON_SPECIALIZATIONS = new Set(['scout', 'defender', 'sage']);
 const DRAGON_GROW_MS = 2 * 60 * 1000;
 const DRAGON_JUVENILE_MS = Math.floor(DRAGON_GROW_MS / 2);
 const FAMILIAR_UNLOCK_IDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
-const JOB_TUTORIAL_ROOM_IDS = new Set(['miner', 'farmer', 'cook', 'blacksmith', 'monk']);
+const JOB_TUTORIAL_ROOM_IDS = new Set(['miner', 'farmer', 'cook', 'blacksmith', 'monk', 'pet_tamer']);
 const JOB_TUTORIAL_ROOMS = Object.freeze({
   miner: Object.freeze({ x: 610, z: 925, g: 18, r: 34 }),
   farmer: Object.freeze({ x: 690, z: 925, g: 18, r: 34 }),
   cook: Object.freeze({ x: 770, z: 925, g: 18, r: 34 }),
   blacksmith: Object.freeze({ x: 850, z: 925, g: 18, r: 34 }),
   monk: Object.freeze({ x: 930, z: 925, g: 18, r: 34 }),
+  pet_tamer: Object.freeze({ x: 1010, z: 925, g: 18, r: 34 }),
 });
 function sanitizeMountUnlocks(list) {
   const out = [];
@@ -230,7 +231,7 @@ function sanitizeDragonHatchedAt(hatchedAt, unlocks = []) {
 const JOB_IDS = new Set(['', ...JOB_SYSTEM.JOB_IDS]);
 const PROFESSION_IDS = JOB_SYSTEM.PROFESSION_IDS;
 const JOB_XP_IDS = JOB_SYSTEM.JOB_IDS;
-const JOB_CONTRACT_TYPES = new Set(['mine', 'cave_survey', 'ancient_map', 'treasure', 'farm', 'cook', 'hunt', 'smith', 'repair', 'upgrade', 'salvage', 'meditate', 'sell', 'kill', 'gate', 'quest', 'event']);
+const JOB_CONTRACT_TYPES = new Set(['mine', 'cave_survey', 'ancient_map', 'treasure', 'farm', 'cook', 'hunt', 'tame', 'pet_care', 'smith', 'repair', 'upgrade', 'salvage', 'meditate', 'sell', 'kill', 'gate', 'quest', 'event']);
 const REGIONAL_CONTRACT_TYPES = new Set(['scout_landmark', 'clear_elite_camp', 'collect_biome', 'recover_buried_cache', 'solve_puzzle_shrine', 'visit_road_merchant','road_clear_camp','road_escort','road_rescue','road_recover','road_spare','road_roles']);
 const UTILITY_IDS = new Set(['compass', 'minimap', 'world_map', 'feather_step', 'party_compass','trail_sense','weather_sense']);
 const ACTIVE_UTILITY_IDS = new Set(['trail_sense']);
@@ -339,7 +340,7 @@ function defaultProfile(name) {
     S: { lvl: 1, xp: 0, pts: 0, str: 1, agi: 1, vit: 1, int: 1, path: '' },
     job: '',
     jobXp: 0,
-    jobXpByJob: { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0 },
+    jobXpByJob: { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0, pet_tamer: 0 },
     jobContract: null,
     homesteadWorkOrder: null,
     jobContractOffers: [],

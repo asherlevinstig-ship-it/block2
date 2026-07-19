@@ -875,6 +875,7 @@ const JOB_TUTORIAL_MEADOWS=Object.freeze({
   cook:{x:770,z:925,G:18,R:34,ground:B.PLANKS},
   blacksmith:{x:850,z:925,G:18,R:34,ground:B.COBBLE},
   monk:{x:930,z:925,G:18,R:34,ground:B.GRASS},
+  pet_tamer:{x:1010,z:925,G:18,R:34,ground:B.GRASS},
 });
 const {DimensionGrid}=window.BlockcraftDimensions;
 let world = new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
@@ -1001,6 +1002,17 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     for(let r=0;r<=9;r++)for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++)if(Math.abs(Math.hypot(x-cx,z-cz)-r)<.72)setBlock(x,G,z,r%3?B.GRASS:B.COBBLE);
     for(const [ox,oz] of [[0,-8],[8,0],[0,8],[-8,0]]){setBlock(cx+ox,G+1,cz+oz,B.LANTERN);setBlock(cx+ox,G,cz+oz,B.GLASS);}
     setBlock(cx,G+1,cz,B.CAMPFIRE);
+  }else if(jobId==='pet_tamer'){
+    for(let x=cx-13;x<=cx+13;x++)for(let z=cz-11;z<=cz+11;z++){
+      const fence=Math.abs(x-cx)===13||Math.abs(z-cz)===11;
+      if(fence&&(Math.abs(x-cx)>2||z!==cz+11))setBlock(x,G+1,z,B.LOG);
+    }
+    for(let x=cx-5;x<=cx+5;x++)for(let z=cz-4;z<=cz+4;z++)setBlock(x,G,z,B.GRASS);
+    for(const [ox,oz,id] of [[-7,-3,B.PLANKS],[7,-3,B.PLANKS],[-5,5,B.WATER],[5,5,B.WATER]])setBlock(cx+ox,G+1,cz+oz,id);
+    setBlock(cx,G+1,cz-8,B.CHEST);
+    setBlock(cx+3,G+1,cz-8,B.TABLE);
+    for(let y=G+1;y<=G+3;y++)setBlock(cx-9,y,cz+7,B.LOG);
+    for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)if(Math.abs(ox)+Math.abs(oz)<4)setBlock(cx-9+ox,G+4,cz+7+oz,B.LEAVES);
   }
 }
 const DANGER_RINGS=[
@@ -5941,7 +5953,7 @@ const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
-let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let activeObjectives=[];
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
@@ -6122,6 +6134,7 @@ function jobContractNextHint(job,level=jobLevelFromXp(jobXpFor(job)),milestones=
   if(job==='blacksmith')return lvl>=2?'Next: reforge at Tobin or take another Blacksmith contract.':'Next: craft tools, smelt ingots, or take another Blacksmith contract.';
   if(job==='miner')return 'Next: survey caves or take another mining contract.';
   if(job==='monk')return 'Next: refresh focus at the shrine.';
+  if(job==='pet_tamer')return 'Next: search wild pet trails, craft treats, or bind a familiar.';
   return 'Next: take another contract or prep for the next gate.';
 }
 function jobContractProgress(kind, n=1, target=0, opts={}){
@@ -6206,6 +6219,7 @@ function craftProfessionOutcome(id,count){
   if([I.BREAD,I.HEARTY_SANDWICH,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id)){
     const xp=id===I.FEAST_PLATTER?20:id===I.TRAIL_RATION?10:id===I.GOLDEN_BROTH?8:id===I.DRAGON_TREAT?6:5;
     const effect=id===I.GOLDEN_BROTH?'strong recovery meal':id===I.TRAIL_RATION?'Well Fed gate prep':id===I.FEAST_PLATTER?'party feast prep':id===I.HEARTY_SANDWICH?'hearty travel food':id===I.DRAGON_TREAT?'dragon care food':'food supply';
+    if(id===I.DRAGON_TREAT&&playerJob==='pet_tamer') return {job:'pet_tamer',kind:'pet_care',xp:8*count,effect:'companion care supplies'};
     return {job:'cook',kind:'cook',xp:xp*count,effect};
   }
   if(id===I.COOKED_MEAT) return {job:'cook',kind:'cook',xp:4*count,effect:'safer cooked food'};
@@ -6253,8 +6267,13 @@ function awardJobForCraft(id, count, opts={}){
   const before=outcome?contractProgressPreview(outcome.kind,id):null;
   if([I.BREAD,I.HEARTY_SANDWICH,I.DRAGON_TREAT,I.GOLDEN_BROTH,I.TRAIL_RATION,I.FEAST_PLATTER].includes(id)){
     const xp=id===I.FEAST_PLATTER?20:id===I.TRAIL_RATION?10:id===I.GOLDEN_BROTH?8:id===I.DRAGON_TREAT?6:5;
-    gainJobXP('cook', xp*count, 'cook');
-    jobContractProgress('cook', count, id, {silentReady:true});
+    if(id===I.DRAGON_TREAT&&playerJob==='pet_tamer'){
+      gainJobXP('pet_tamer', 8*count, 'pet care');
+      jobContractProgress('pet_care', count, id, {silentReady:true});
+    }else{
+      gainJobXP('cook', xp*count, 'cook');
+      jobContractProgress('cook', count, id, {silentReady:true});
+    }
   }
   if([I.COOKED_MEAT,I.CHARCOAL].includes(id)){
     gainJobXP(id===I.COOKED_MEAT?'cook':'blacksmith', 4*count, 'smelt');

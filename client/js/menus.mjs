@@ -5836,6 +5836,13 @@ function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
     if(active&&level>=JOB_SYSTEM.MONK_RULES.regenLevel)return line('Stand in the Meditation Hall and press G/right-click to refresh focus.',true);
     return line(active?'Reach Monk Lv 4 to make meditation grant focus.':'Equip Monk before meditating for profession focus.');
   }
+  if(jobId==='pet_tamer'){
+    const hasBinding=inv.some(s=>s&&FAMILIAR_BY_SIGIL&&FAMILIAR_BY_SIGIL[s.id]);
+    const hasTreat=countItem(I.DRAGON_TREAT)>0;
+    if(active&&hasBinding)return line('Use a collar, charm, sigil, or totem from your hotbar, then press K.',true);
+    if(active&&hasTreat)return line('Use Dragon Treats for companion care or take a Pet Tamer contract.',true);
+    return line(active?'Search animal routes for collars or craft Dragon Treats.':'Equip Pet Tamer to grow companion bonds.');
+  }
   return '';
 }
 function hotbarSlotForItem(id){for(let i=0;i<9;i++){const s=inv[i];if(s&&s.id===id)return i;}return -1;}

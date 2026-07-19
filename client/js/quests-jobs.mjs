@@ -16,7 +16,7 @@ export const jobLevelFromXp = xp => jobXpIntoLevel(xp).lvl;
 export function clampJobContract(contract, knownJobs) {
   if (!contract || typeof contract !== 'object' || !knownJobs[contract.job]) return null;
   const type = String(contract.type || '').slice(0, 20);
-  if (!['mine','cave_survey','ancient_map','treasure','farm','cook','hunt','smith','repair','meditate','sell','kill','gate','quest','event'].includes(type)) return null;
+  if (!['mine','cave_survey','ancient_map','treasure','farm','cook','hunt','tame','pet_care','smith','repair','upgrade','salvage','meditate','sell','kill','gate','quest','event'].includes(type)) return null;
   const out = {
     id: String(contract.id || '').slice(0, 80),
     job: contract.job, type, target: contract.target == null ? 0 : contract.target | 0,

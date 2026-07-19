@@ -102,6 +102,10 @@ class DragonsMixin {
     if (!usedSlot && !this.consumeItem(rec.prof, itemId, 1)) return client.send('familiarReject', { reason: 'item', kind });
     rec.prof.familiarUnlocks.push(kind);
     this.ensureFamiliarXpBag(rec.prof);
+    if (rec.prof.job === 'pet_tamer' && typeof this.grantJobXp === 'function') {
+      this.grantJobXp(client, 'pet_tamer', 14);
+      if (typeof this.progressJobContract === 'function') this.progressJobContract(client, 'tame', 1, 0);
+    }
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
     client.send('familiarBound', { kind, slot: usedSlot ? slot : -1 });

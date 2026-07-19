@@ -1209,6 +1209,11 @@ class ProgressionMixin {
       this.grantJobXp(client, 'cook', xp * count);
       this.progressJobContract(client, 'cook', count, id);
       this.progressNpcQuest(client, 'cook', count, id);
+      const rec = this.profileFor(client);
+      if (id === I.DRAGON_TREAT && rec && rec.prof && rec.prof.job === 'pet_tamer') {
+        this.grantJobXp(client, 'pet_tamer', 8 * count);
+        this.progressJobContract(client, 'pet_care', count, id);
+      }
     }
     if (TOOL_INFO[id] || ARMOR_INFO[id] || id === I.REPAIR_KIT || id === I.IRON_INGOT) {
       const xp = ARMOR_INFO[id] ? 14 : TOOL_INFO[id] ? 8 : id === I.REPAIR_KIT ? 6 : 3;
@@ -1239,7 +1244,9 @@ class ProgressionMixin {
   }
 
   recordHuntProgress(client) {
-    this.grantJobXp(client, 'cook', 4);
+    const rec = this.profileFor(client);
+    if (rec && rec.prof && rec.prof.job === 'pet_tamer') this.grantJobXp(client, 'pet_tamer', 4);
+    else this.grantJobXp(client, 'cook', 4);
     this.progressJobContract(client, 'hunt', 1, 0);
   }
 

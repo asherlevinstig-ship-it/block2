@@ -8,7 +8,7 @@ class Player extends Schema {
     this.name = 'Hunter';
     this.lvl = 1;
     this.path = '';          // '', 'shadow', 'mage', 'guardian'
-    this.job = '';           // '', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk'
+    this.job = '';           // '', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk', 'pet_tamer'
     this.jobLvl = 0;         // profession level for nameplates
     this.dim = 'overworld';  // overworld | dungeon | tutorial | event
     this.dgn = '';           // private-space id ('' = shared overworld)
