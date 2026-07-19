@@ -1348,6 +1348,29 @@ class GameRoom extends Room {
   updateLivePlayerProfile(token, patch) {
     const id = cleanToken(token);
     if (!id || !patch || typeof patch !== 'object') return false;
+    if (patch.replaceProfile && typeof patch.replaceProfile === 'object') {
+      const next = sanitizeProfile(patch.replaceProfile);
+      this.profiles.set(id, next);
+      if (this.dirtyPlayers) this.dirtyPlayers.delete(id);
+      for (const client of [...(this.clients || [])]) {
+        if (this.tokens.get(client.sessionId) !== id) continue;
+        const p = this.state.players.get(client.sessionId);
+        if (p) {
+          p.name = next.name || 'Hunter';
+          p.lvl = next.S && next.S.lvl || 1;
+          p.job = next.job || '';
+          p.jobLvl = 0;
+          p.dim = 'overworld';
+          p.dgn = '';
+          p.x = Array.isArray(next.pos) ? next.pos[0] || p.x : p.x;
+          p.y = Array.isArray(next.pos) ? next.pos[1] || p.y : p.y;
+          p.z = Array.isArray(next.pos) ? next.pos[2] || p.z : p.z;
+        }
+        client.send('accountProfileUpdated', { ok: true, reason: 'level_two_job_choice' });
+        this.sendProfile(client, next);
+      }
+      return true;
+    }
     const prof = this.profiles && this.profiles.get(id);
     if (!prof || prof.noPersist) return false;
     let changed = false;

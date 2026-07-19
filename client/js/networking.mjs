@@ -2115,6 +2115,9 @@ function netConnectionFailed(err){
 function netRestoreProfile(m){
   try{
     applyServerTutorials(m&&m.tutorials);
+    if(m&&m.forceJobChoice===true){
+      try{localStorage.removeItem('bc_level2_job_choice_seen_v1');}catch(e){}
+    }
     applyDeityState(m&&m.deity);
     updateServerInventorySnapshot(m&&m.inv);
     const profileName=String(m&&m.nameSet&&m.name||'').replace(/[^A-Za-z0-9 _-]/g,'').replace(/\s+/g,' ').trim().slice(0,16);

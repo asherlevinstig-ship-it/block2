@@ -279,6 +279,21 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(profiles.get('student_42').name, 'Dylan Lynee');
     assert.equal(profiles.get('student_42').S.lvl, 1);
 
+    const levelTwo = await f.request('/auth/admin/player-profile/level-two-job-choice', jsonPost(
+      { email: 'dylan.lynee@st-ignatius.example' },
+      { 'x-admin-reset-token': 'admin-secret' },
+    ));
+    assert.equal(levelTwo.status, 200);
+    const levelTwoBody = await levelTwo.json();
+    assert.equal(levelTwoBody.profile.level, 2);
+    assert.equal(levelTwoBody.profile.job, '');
+    assert.equal(levelTwoBody.profile.forceJobChoice, true);
+    assert.equal(profiles.get('student_42').name, 'Dylan Lynee');
+    assert.equal(profiles.get('student_42').S.lvl, 2);
+    assert.equal(profiles.get('student_42').job, '');
+    assert.equal(profiles.get('student_42').tutorials.onboarding, 7);
+    assert.equal(profiles.get('student_42').tutorials.townJob, 0);
+
     const deniedTrace = await f.request('/auth/admin/identity-trace');
     assert.equal(deniedTrace.status, 403);
     const trace = await f.request('/auth/admin/identity-trace', { headers: { 'x-admin-reset-token': 'admin-secret' } });

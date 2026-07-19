@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
-const { createStore, sanitizeProfile, defaultProfile } = require('./store');
+const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
 
@@ -242,6 +242,67 @@ class AuthService {
     };
   }
 
+  async resetPlayerToLevelTwoJobChoice(body) {
+    const account = await this.resolveAccountForReset(body);
+    if (!account || !account.id) throw Object.assign(new Error('Account not found.'), { status: 404, code: 'account' });
+    const store = this.getProfileStore();
+    let existing = null;
+    try {
+      existing = await store.loadPlayer(account.id);
+    } catch (e) {
+      throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
+    }
+    const current = existing ? sanitizeProfile(existing) : null;
+    const name = cleanDisplayName(
+      body && body.name
+      || current && current.nameSet && current.name
+      || account.displayName
+      || account.username
+      || 'Hunter',
+    );
+    const profile = defaultProfile(name);
+    profile.name = name;
+    profile.nameSet = name !== 'Hunter';
+    profile.S.lvl = 2;
+    profile.S.xp = 0;
+    profile.S.pts = 1;
+    profile.S.path = '';
+    profile.job = '';
+    profile.jobXp = 0;
+    profile.jobXpByJob = { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0 };
+    profile.gold = 100;
+    profile.starterGoldGranted = true;
+    profile.tutorials = {
+      onboarding: TUTORIAL_VERSIONS.onboarding,
+      ability: 0,
+      intro: TUTORIAL_VERSIONS.intro,
+      gate: 0,
+      townJob: 0,
+      townTavern: 0,
+      townLand: 0,
+      familiar: 0,
+    };
+    profile.forceJobChoice = true;
+    profile.progressionFocus = 'first_profession_contract';
+    profile.vitals = { hp: 20, mp: 20, sp: 100, hunger: 100 };
+    profile.vitalsSavedAt = Date.now();
+    profile.pos = [64.5, 20, 71.5];
+    await store.savePlayer(account.id, profile);
+    const liveRoomsUpdated = await updateLivePlayerProfiles(account.id, { replaceProfile: profile });
+    return {
+      account,
+      liveRoomsUpdated,
+      profile: {
+        exists: true,
+        name: profile.name,
+        nameSet: profile.nameSet === true,
+        level: profile.S.lvl,
+        job: profile.job,
+        forceJobChoice: profile.forceJobChoice === true,
+      },
+    };
+  }
+
   async saveHunterName(account, name) {
     const publicAccount = this.publicAccount(account);
     if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
@@ -470,6 +531,17 @@ class AuthService {
         res.json({ ok: true, account: result.account, profile: result.profile });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile rename failed.' });
+      }
+    });
+    app.post('/auth/admin/player-profile/level-two-job-choice', async (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      try {
+        const result = await this.resetPlayerToLevelTwoJobChoice(req.body);
+        res.json({ ok: true, account: result.account, profile: result.profile, liveRoomsUpdated: result.liveRoomsUpdated });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Level two reset failed.' });
       }
     });
     app.get('/auth/admin/identity-trace', (req, res) => {

@@ -398,6 +398,7 @@ function defaultProfile(name) {
     systemIntroductions: [],
     progressionMilestoneRewards: [],
     firstPromotionSeen: false,
+    forceJobChoice: false,
     tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 },
     dungeonRecovery: null,
     skyshipTransit: null,
@@ -917,6 +918,7 @@ function sanitizeProfile(p) {
   if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job';
   if (['first_profession_contract', 'next_adventurer_contract'].includes(out.progressionFocus) && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;
+  out.forceJobChoice = p.forceJobChoice === true;
   out.tutorials = sanitizeTutorials(p.tutorials, out);
   out.dungeonRecovery = sanitizeDungeonRecovery(p.dungeonRecovery);
   out.vitalsSavedAt = clampI(p.vitalsSavedAt, 0, 4102444800000);
