@@ -276,6 +276,9 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(companions, /Practice Dragon/);
   assert.match(networking, /tickPetTamerTutorialGroundDragon/);
   assert.match(frame, /networkingApi\.tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
+  assert.match(companions, /group\.name='petTamerPracticeDragon'/);
+  assert.match(companions, /group\.userData\.blockcraftKind='practiceDragon'/);
+  assert.match(companions, /globalThis\.__petTamerPracticeDragon=group/);
 });
 
 test('Town systems use district anchors instead of stale compact-town coordinates', () => {
@@ -1454,8 +1457,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/if\(jobId!=='pet_tamer'\)\{/);
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
-  assert.match(world,/const practiceDragon=\(ox,oz\)=>/);
-  assert.match(world,/practiceDragon\(9,8\)/);
+  assert.match(world,/const dragonLandingPad=\(ox,oz\)=>/);
+  assert.match(world,/for\(let y=G\+1;y<=G\+7;y\+\+\)setBlock\(x\+dx,y,z\+dz,B\.AIR\)/);
+  assert.match(world,/dragonLandingPad\(9,8\)/);
   assert.match(dimensions,/function generateJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function enterJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);

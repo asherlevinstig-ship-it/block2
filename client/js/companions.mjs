@@ -1082,6 +1082,7 @@ function clearPetTamerTutorialGroundDragon(){
   scene.remove(petTamerTutorialGroundDragon.group);
   disposeObjectTree(petTamerTutorialGroundDragon.group);
   petTamerTutorialGroundDragon=null;
+  if(globalThis.__petTamerPracticeDragon)globalThis.__petTamerPracticeDragon=null;
 }
 function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
   if(!active||!room||dim!=='job'){ clearPetTamerTutorialGroundDragon(); return; }
@@ -1089,9 +1090,14 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
   if(!spot)return;
   if(!petTamerTutorialGroundDragon){
     const group=new THREE.Group();
+    group.name='petTamerPracticeDragon';
+    group.userData.kind='petTamerPracticeDragon';
+    group.userData.blockcraftKind='practiceDragon';
     const dragon=makeMount('dragon:'+spot.type, 3, dragonSpecialization(spot.type));
     dragon.scale.setScalar(.7);
     dragon.userData.baseCompanionScale=.7;
+    dragon.userData.kind='petTamerPracticeDragonBody';
+    dragon.userData.blockcraftKind='practiceDragonBody';
     dragon.rotation.y=Math.PI;
     group.add(dragon);
     const tag=makeDragonNameplate('Practice Dragon', 'Pet Tamer Lesson', '#9ad26b');
@@ -1100,6 +1106,7 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
     group.add(tag);
     scene.add(group);
     petTamerTutorialGroundDragon={group,dragon,tag,type:spot.type,phase:Math.random()*8,aura:0};
+    globalThis.__petTamerPracticeDragon=group;
   }
   const rec=petTamerTutorialGroundDragon;
   rec.group.visible=true;
