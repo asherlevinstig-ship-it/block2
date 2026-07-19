@@ -2965,6 +2965,9 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/objectiveLine\('prep','Prep'/);
   assert.match(frame,/action==='gate_prep'/);
   assert.match(frame,/function currentObjectiveHud\(\)/);
+  assert.match(frame,/function debugObjectiveHudSummary\(obj\)/);
+  assert.match(frame,/BlockcraftTrace\('ui\.objective-hud'/);
+  assert.match(frame,/hud:debugObjectiveHudSummary\(currentObjectiveHud\(\)\)/);
   assert.match(frame,/localStoryObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('story','manhunt'\),'Story'\)/);
   assert.match(frame,/localJobObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('job'\),'Job'\)/);
   assert.match(frame,/localGuildObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('guild'\),'Guild'\)/);

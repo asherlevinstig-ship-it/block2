@@ -859,6 +859,27 @@ function currentObjectiveHud(){
   const current=currentObjective();
   return current?{...current,label:'Next Best Action'}:null;
 }
+function debugObjectiveHudSummary(obj){
+  if(!obj)return null;
+  const line=obj.line||null;
+  const server=line&&line.serverObjective||obj.serverObjective||null;
+  return {
+    label:obj.label||'',
+    text:obj.text||'',
+    nextBest:!!obj.nextBest,
+    unified:!!obj.unified,
+    line:line?{
+      kind:line.kind||'',
+      label:line.label||'',
+      title:line.title||'',
+      text:line.text||'',
+      action:line.action?{type:line.action.type||'',label:line.action.label||''}:null,
+      progress:line.progress||null,
+      serverObjective:server?{id:server.id||'',source:server.source||'',status:server.status||'',title:server.title||''}:null,
+    }:null,
+  };
+}
+let lastObjectiveHudDebugSig='';
 function refreshObjectiveTracker(){
   if(!currentQuestEl)return;
   const obj=currentObjectiveHud();
@@ -868,6 +889,15 @@ function refreshObjectiveTracker(){
   }else{
     currentQuestEl.classList.add('hidden');
     currentQuestEl.innerHTML='';
+  }
+  if(globalThis.BlockcraftTrace){
+    const summary=debugObjectiveHudSummary(obj);
+    const text=(currentQuestEl.textContent||'').replace(/\s+/g,' ').trim();
+    const sig=JSON.stringify({summary,text,hidden:currentQuestEl.classList.contains('hidden')});
+    if(sig!==lastObjectiveHudDebugSig){
+      lastObjectiveHudDebugSig=sig;
+      globalThis.BlockcraftTrace('ui.objective-hud', { hidden:currentQuestEl.classList.contains('hidden'), text, hud:summary });
+    }
   }
 }
 globalThis.BlockcraftRefreshObjectiveTracker=refreshObjectiveTracker;
@@ -2153,7 +2183,13 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
       player:{name:self&&self.name||'',level:S&&S.lvl,path:S&&S.path||'',xp:S&&S.xp,job:playerJob||'',gold,dim,x:Math.round((player&&player.pos&&player.pos.x||0)*10)/10,z:Math.round((player&&player.pos&&player.pos.z||0)*10)/10},
       quest:quest?{source:quest.source||'npc',giver:quest.giver||'',title:quest.title||'',type:quest.type||'',have:quest.have|0,need:quest.need|0,chainStep:quest.chainStep|0}:null,
       progression:{focus:progressionFocus||'',maraStep:Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0),firstPromotionSeen:ONBOARD.isSeen(),objectives:Array.isArray(activeObjectives)?activeObjectives.map(o=>({source:o.source,status:o.status,title:o.title,type:o.type})).slice(0,5):[]},
-      objective:{current:currentObjective(),action:e2eCurrentObjectiveAction(),text:currentQuestEl&&currentQuestEl.textContent||''},
+      objective:{
+        current:currentObjective(),
+        hud:debugObjectiveHudSummary(currentObjectiveHud()),
+        action:e2eCurrentObjectiveAction(),
+        hidden:!!(currentQuestEl&&currentQuestEl.classList.contains('hidden')),
+        text:(currentQuestEl&&currentQuestEl.textContent||'').replace(/\s+/g,' ').trim(),
+      },
       modal:{overlayVisible:!!(overlayEl&&!overlayEl.classList.contains('hidden')),pathVisible:!!(pathEl&&!pathEl.classList.contains('hidden')),pathIsJob:!!(pathEl&&pathEl.classList.contains('jobselect')),awakeningVisible:!!(awakeningEl&&!awakeningEl.classList.contains('hidden')),ui:menusState.open,uiMode:menusState.mode,q:menusState.modalOpen,transition:transitionPanelState()},
       input:{locked:combatState.inputLocked,pointerLock:document.pointerLockElement===renderer.domElement},
       tutorial:{onboarding:onboardingActive,abilityTraining:combatState.abilityTrainingActive,abilityDone:abilityTutorialDone(),tutorials:{...serverTutorials}},
