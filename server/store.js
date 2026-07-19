@@ -58,6 +58,14 @@ const DRAGON_SPECIALIZATIONS = new Set(['scout', 'defender', 'sage']);
 const DRAGON_GROW_MS = 2 * 60 * 1000;
 const DRAGON_JUVENILE_MS = Math.floor(DRAGON_GROW_MS / 2);
 const FAMILIAR_UNLOCK_IDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
+const JOB_TUTORIAL_ROOM_IDS = new Set(['miner', 'farmer', 'cook', 'blacksmith', 'monk']);
+const JOB_TUTORIAL_ROOMS = Object.freeze({
+  miner: Object.freeze({ x: 610, z: 925, g: 18, r: 34 }),
+  farmer: Object.freeze({ x: 690, z: 925, g: 18, r: 34 }),
+  cook: Object.freeze({ x: 770, z: 925, g: 18, r: 34 }),
+  blacksmith: Object.freeze({ x: 850, z: 925, g: 18, r: 34 }),
+  monk: Object.freeze({ x: 930, z: 925, g: 18, r: 34 }),
+});
 function sanitizeMountUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (let k of list) {
@@ -401,6 +409,7 @@ function defaultProfile(name) {
     forceJobChoice: false,
     tutorials: { onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0 },
     dungeonRecovery: null,
+    activeRoom: null,
     skyshipTransit: null,
     vitals: { hp: 20, mp: 20, sp: 100, hunger: 100 },
     vitalsSavedAt: 0,
@@ -414,6 +423,29 @@ function cleanName(name) {
 
 function cleanShortText(v, fallback, max) {
   return (typeof v === 'string' ? v : fallback).replace(/[<>]/g, '').trim().slice(0, max) || fallback;
+}
+
+function sanitizeActiveRoom(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const dim = typeof raw.dim === 'string' ? raw.dim : '';
+  const job = typeof raw.job === 'string' ? raw.job : '';
+  if (dim !== 'job' || !JOB_TUTORIAL_ROOM_IDS.has(job)) return null;
+  return {
+    dim: 'job',
+    job,
+    minedDiamond: raw.minedDiamond === true,
+    traded: raw.traded === true,
+  };
+}
+
+function sanitizeActiveRoomPosition(activeRoom, pos) {
+  if (!activeRoom || !Array.isArray(pos) || pos.length !== 3 || pos.some(v => !isFinite(+v))) return null;
+  const room = JOB_TUTORIAL_ROOMS[activeRoom.job];
+  if (!room) return null;
+  const x = clampF(pos[0], room.x - room.r - 8, room.x + room.r + 8);
+  const y = clampF(pos[1], 1, 80);
+  const z = clampF(pos[2], room.z - room.r - 8, room.z + room.r + 8);
+  return [x, y, z];
 }
 
 function sanitizeJobContract(c) {
@@ -945,6 +977,12 @@ function sanitizeProfile(p) {
   let pos = Array.isArray(p.pos) ? p.pos : [];
   if (pos.length !== 3 || pos.some(v => !isFinite(+v))) pos = [64.5, 20, 71.5];  // bad data -> plaza spawn
   out.pos = [clampF(pos[0], 0, 1000), clampF(pos[1], 1, 80), clampF(pos[2], 0, 1000)];
+  out.activeRoom = sanitizeActiveRoom(p.activeRoom);
+  if (out.activeRoom) {
+    const roomPos = sanitizeActiveRoomPosition(out.activeRoom, out.pos);
+    if (roomPos) out.pos = roomPos;
+    else out.activeRoom = null;
+  }
   return out;
 }
 
@@ -958,9 +996,16 @@ function mergeClientSave(current, snapshot) {
     out.vitals.sp = clampF(snapshot.sp, 0, 1000000);
     out.vitalsSavedAt = Date.now();
   }
+  const activeRoom = sanitizeActiveRoom(snapshot.activeRoom);
+  out.activeRoom = activeRoom;
+  if (activeRoom) {
+    const pos = sanitizeActiveRoomPosition(activeRoom, snapshot.pos);
+    if (pos) out.pos = pos;
+  }
   // Persistent progression is server-owned. Snapshot saves are only a legacy
-  // identity/stamina heartbeat; dedicated validated handlers mutate path, stats,
-  // jobs, contracts, equipment, inventory, economy, unlocks, quests, and position.
+  // identity/stamina heartbeat plus bounded private tutorial-room resume state;
+  // dedicated validated handlers mutate path, stats, jobs, contracts, equipment,
+  // inventory, economy, unlocks, quests, and overworld position.
   return out;
 }
 

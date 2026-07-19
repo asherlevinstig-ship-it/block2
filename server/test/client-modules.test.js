@@ -1378,9 +1378,13 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(combat,/function tickJobTutorial\(now\)/);
   assert.match(combat,/function tryMinerTutorialTrade\(\)/);
   assert.match(combat,/function jobTutorialWalkY\(x,z,fallbackY\)/);
+  assert.match(combat,/function jobTutorialSafeSpawnY\(jobId,x,z,fallbackY\)/);
+  assert.match(combat,/function resumeJobTutorial\(jobId,state=\{\}\)/);
   assert.match(combat,/addTemporaryJobTutorialTool\(I\.DIA_PICK\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='miner'&&m\.id===B\.DIAMOND_ORE/);
-  assert.match(combat,/jobTutorialWalkY\(target\.x,target\.z,room\.G\+1\.035\)/);
+  assert.match(combat,/jobTutorialSafeSpawnY\(jobId,room\.x\+\.5,room\.z\+14\.5,room\.G\+1\.035\)/);
+  assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
+  assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk'\]/);
@@ -1398,6 +1402,10 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);
   assert.match(dimensions,/dim='job'/);
   assert.match(dimensions,/tutorialEnter',\{kind:'job',job:jobId\}/);
+  assert.match(networking,/activeRoom=dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob/);
+  assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job\)/);
+  assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);
+  assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2])'), 'job room is rebuilt before restored position is applied');
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);
   assert.match(frame,/combatApi\.openLevel2JobChoice\(\)/);
   assert.match(frame,/tickJobTutorial\(now\)/);

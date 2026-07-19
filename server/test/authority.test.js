@@ -535,6 +535,30 @@ test('profile merge accepts only identity and ignores every client-owned progres
   assert.deepEqual(merged.pos, current.pos);
 });
 
+test('profile merge persists only bounded job tutorial room resume state', () => {
+  const current = defaultProfile('Miner');
+  const resumed = mergeClientSave(current, {
+    activeRoom: { dim: 'job', job: 'miner', minedDiamond: true, traded: false },
+    pos: [610.5, 19.035, 939.5],
+  });
+
+  assert.deepEqual(resumed.activeRoom, { dim: 'job', job: 'miner', minedDiamond: true, traded: false });
+  assert.deepEqual(resumed.pos, [610.5, 19.035, 939.5]);
+
+  const clamped = mergeClientSave(current, {
+    activeRoom: { dim: 'job', job: 'miner' },
+    pos: [9999, -50, -999],
+  });
+  assert.deepEqual(clamped.activeRoom, { dim: 'job', job: 'miner', minedDiamond: false, traded: false });
+  assert.deepEqual(clamped.pos, [652, 1, 883]);
+
+  const rejected = mergeClientSave(resumed, {
+    activeRoom: { dim: 'dungeon', job: 'miner' },
+    pos: [610.5, 19, 939.5],
+  });
+  assert.equal(rejected.activeRoom, null);
+});
+
 test('profile merge rejects client job and jobXp changes', () => {
   const current = defaultProfile('Worker');
   const merged = mergeClientSave(current, { job: 'miner', jobXp: 42 });

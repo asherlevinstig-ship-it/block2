@@ -1222,6 +1222,19 @@ function jobTutorialWalkY(x,z,fallbackY){
   }
   return fallbackY;
 }
+function jobTutorialSafeSpawnY(jobId,x,z,fallbackY){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobId]||null;
+  if(!room) return fallbackY;
+  const bx=Math.floor(x), bz=Math.floor(z), base=room.G;
+  if(isJobTutorialMeadowLand(jobId,bx,bz,3)){
+    const ground=room.ground||B.STONE;
+    if(!isSolid(getB(bx,base,bz))) setB(bx,base,bz,ground);
+    for(let y=base+1;y<=base+3;y++) if(isSolid(getB(bx,y,bz))) setB(bx,y,bz,B.AIR);
+    rebuildAround(bx,bz);
+    return base+1.035;
+  }
+  return jobTutorialWalkY(x,z,fallbackY);
+}
 function updateJobTutorialHud(){
   if(!jobTutorialActive||dim!=='job'){tutorialEl.classList.add('hidden');return;}
   const job=JOBS[jobTutorialJob]||{name:'Job'};
@@ -1261,6 +1274,7 @@ function completeJobTutorial(){
   sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> Keep an eye on the Next Best Action panel for useful work.');
   showName(job.name+' ready');
   refreshPlayUi();
+  sendProfileSaveNow();
 }
 function startJobTutorial(jobId){
   const job=JOBS[jobId], room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobId]||null;
@@ -1277,7 +1291,7 @@ function startJobTutorial(jobId){
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
   jobTutorialReturnWarnAt=0;
-  player.pos.set(room.x+.5,jobTutorialWalkY(room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
+  player.pos.set(room.x+.5,jobTutorialSafeSpawnY(jobId,room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
@@ -1288,6 +1302,30 @@ function startJobTutorial(jobId){
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
   sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
+  sendProfileSaveNow();
+  return true;
+}
+function resumeJobTutorial(jobId,state={}){
+  const job=JOBS[jobId], room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobId]||null;
+  if(!job||!room||dim!=='job') return false;
+  townGuidanceActive=false;
+  tutorialPillarGroup.visible=false;
+  tutorialDummyGroup.visible=false;
+  pathChoiceOpen=false;
+  jobChoiceOpen=false;
+  jobTutorialActive=true;
+  jobTutorialJob=jobId;
+  jobTutorialMinedDiamond=state.minedDiamond===true;
+  jobTutorialTraded=state.traded===true;
+  jobTutorialReturnWarnAt=0;
+  if(player){
+    player.pos.y=jobTutorialSafeSpawnY(jobId,player.pos.x||room.x+.5,player.pos.z||room.z+14.5,room.G+1.035);
+    player.vel.set(0,0,0);
+  }
+  grantJobTutorialKit(jobId);
+  updateMinerTutorialTrader();
+  updateJobTutorialHud();
+  eventLog('Resumed '+job.name+' tutorial room.');
   return true;
 }
 function tickJobTutorial(now){
@@ -2966,6 +3004,8 @@ gameContext.registerState('combat', Object.freeze({
   get jobChoiceOpen(){ return jobChoiceOpen; },
   get jobTutorialActive(){ return jobTutorialActive; },
   get jobTutorialJob(){ return jobTutorialJob; },
+  get jobTutorialMinedDiamond(){ return jobTutorialMinedDiamond; },
+  get jobTutorialTraded(){ return jobTutorialTraded; },
   get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
   get abilityTrainingActive(){ return abilityTrainingActive; },
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
@@ -2983,6 +3023,7 @@ gameContext.registerModule('combat', Object.freeze({
   forceLevel2JobChoice,
   shouldOpenLevel2JobChoice,
   startJobTutorial,
+  resumeJobTutorial,
   showAbilityAwakening,
   startAbilityTraining,
   nearbyTavernGameTable,

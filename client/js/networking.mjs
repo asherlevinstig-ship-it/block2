@@ -2250,10 +2250,16 @@ function netRestoreProfile(m){
     cosmeticUnlocks=Array.isArray(m.cosmeticUnlocks)?m.cosmeticUnlocks.filter(v=>v==='cartographers_mantle'):[];
     equippedCosmetics=clampEquippedCosmetics(m.equippedCosmetics);
     globalThis.BlockcraftTreasureMap=null;if(m.treasureMap&&Array.isArray(m.treasureMap.targets)){const stage=Math.max(0,m.treasureMap.stage|0),targetId=m.treasureMap.targets[stage];if(targetId){globalThis.BlockcraftTreasureMap={id:m.treasureMap.id,kind:m.treasureMap.kind||'treasure',stage,total:m.treasureMap.targets.length,targetId,clue:'Follow the current ink mark and investigate with G.',rewardGold:m.treasureMap.rewardGold|0};hintedDiscoveryIds.add(targetId);}}
+    const activeRoom=m&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
+    const restoreJobRoom=activeRoom&&activeRoom.dim==='job'&&JOBS[activeRoom.job]?activeRoom:null;
+    if(restoreJobRoom){
+      if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job);
+    }
     if(Array.isArray(m.pos) && !onboardingActive){
       player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2]);
       player.vel.set(0,0,0);
     }
+    if(restoreJobRoom&&combatApi.resumeJobTutorial) combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
     if(m&&m.meditationGrowth&&typeof m.meditationGrowth==='object'&&typeof meditationGrowth!=='undefined'){
       meditationGrowth=m.meditationGrowth;
     }
@@ -2638,9 +2644,19 @@ function farmRejected(m){
   else sysMsg('Farming action failed');
 }
 function netSnapshot(){
+  const activeRoom=dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob
+    ? {
+        dim:'job',
+        job:combatState.jobTutorialJob,
+        minedDiamond:combatState.jobTutorialMinedDiamond===true,
+        traded:combatState.jobTutorialTraded===true,
+      }
+    : null;
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
     sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
+    activeRoom,
+    pos:activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null,
   };
 }
 

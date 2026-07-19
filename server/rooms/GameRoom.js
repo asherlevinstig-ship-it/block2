@@ -460,7 +460,10 @@ class GameRoom extends Room {
         p.path = prof.S.path;
         p.job = JOB_IDS.has(prof.job) ? prof.job : '';
         p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
-        if (!p.dgn) prof.pos = [p.x, p.y, p.z];
+        if (prof.activeRoom) {
+          // Bounded private-room positions come from mergeClientSave(); the
+          // server's overworld pose may be stale or clamped against the wrong map.
+        } else if (!p.dgn) prof.pos = [p.x, p.y, p.z];
         else {
           const prev = this.profiles.get(token);
           if (prev) prof.pos = prev.pos;
@@ -901,7 +904,7 @@ class GameRoom extends Room {
         this.dirtyPlayers.add(token);
       }
       client._mutedComms = new Set(prof.mutedPlayers || []);
-      if (Array.isArray(prof.pos)) {
+      if (Array.isArray(prof.pos) && !prof.activeRoom) {
         const bx = Math.floor(prof.pos[0]), by = Math.floor(prof.pos[1]), bz = Math.floor(prof.pos[2]);
         const feetBlocked = W.isSolid(this.world.getB(bx, by, bz));
         const headBlocked = W.isSolid(this.world.getB(bx, by + 1, bz));
@@ -1041,7 +1044,7 @@ class GameRoom extends Room {
     if (token) {
       const prof = this.profiles.get(token);
       if (prof) {
-        if (p && !wasInDungeon) prof.pos = [p.x, p.y, p.z];
+        if (p && !wasInDungeon && !prof.activeRoom) prof.pos = [p.x, p.y, p.z];
         this.syncProfileVitals(client, prof);
         this.dirtyPlayers.add(token);
       }
