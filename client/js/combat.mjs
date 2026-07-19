@@ -1483,20 +1483,26 @@ function renderTownTutorialOptions(force=false){
   townChoicesEl.classList.remove('hidden');
 }
 function openTownTutorialsUI(){
-  if(uiShellState.qOpen) closeQWin(true);
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   townGuidanceActive=true;
   setTownTutorialChoice('menu');
-  renderTownTutorialOptions(true);
-  showName('Choose a town tutorial');
-  return;
   openQWin('management');
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='TOWN TUTORIALS'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='CHOOSE WHAT TO LEARN NEXT'; qpanelEl.appendChild(sub);
   const info=document.createElement('p'); info.className='qtext';
-  info.innerHTML='Pick a guided town activity. The large prompt and pillar of light will point you there.';
+  info.innerHTML='Pick a guided town activity. The large prompt and pillar of light will point you there. Completed tutorials can be replayed.';
   qpanelEl.appendChild(info);
+  const style=document.createElement('div'); style.className='shoprow';
+  const styleMark=document.createElement('b'); styleMark.style.color='#4fd8ff'; styleMark.style.fontSize='22px'; styleMark.textContent='?'; style.appendChild(styleMark);
+  const styleTxt=document.createElement('span'); styleTxt.innerHTML='<b>CHOOSE PLAYSTYLE</b><br><small>Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance.</small>'; style.appendChild(styleTxt);
+  style.appendChild(qBtn('CHOOSE',()=>{ if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open(); }));
+  qpanelEl.appendChild(style);
+  const jobRow=document.createElement('div'); jobRow.className='shoprow';
+  const jobMark=document.createElement('b'); jobMark.style.color='#ffd24a'; jobMark.style.fontSize='22px'; jobMark.textContent='!'; jobRow.appendChild(jobMark);
+  const jobTxt=document.createElement('span'); jobTxt.innerHTML='<b>JOB PATHS</b><br><small>Open the big worker cards and choose a training room.</small>'; jobRow.appendChild(jobTxt);
+  jobRow.appendChild(qBtn('OPEN',()=>{ if(uiShellState.qOpen) closeQWin(false); openLevel2JobChoice(true); }));
+  qpanelEl.appendChild(jobRow);
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
     ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
@@ -1507,19 +1513,23 @@ function openTownTutorialsUI(){
     const r=document.createElement('div'); r.className='shoprow';
     const mark=document.createElement('b'); mark.style.color=step==='job'?'#8bbf5a':step==='tavern'?'#ffd24a':'#9fd7ff'; mark.style.fontSize='22px'; mark.textContent=step==='job'?'!':step==='tavern'?'☕':'⌂';
     r.appendChild(mark);
-    const txt=document.createElement('span'); txt.innerHTML='<b>'+label+'</b><br><small>'+escHTML(desc)+'</small>'; r.appendChild(txt);
-    r.appendChild(qBtn(ready?'SHOW GLOW':'EARN GOLD', ()=>guideTownTutorialChoice(step, ready)));
+    const completed=townTutorialStepDone(step);
+    const txt=document.createElement('span'); txt.innerHTML='<b>'+label+'</b>'+(completed?' <small style="color:#9ad26b">REPLAYABLE</small>':'')+'<br><small>'+escHTML(desc)+'</small>'; r.appendChild(txt);
+    r.appendChild(qBtn(ready?(completed?'REPLAY':'BEGIN'):'EARN GOLD', ()=>guideTownTutorialChoice(step, ready)));
     qpanelEl.appendChild(r);
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('CLOSE', ()=>{ setTownTutorialMenuDismissed(); closeQWin(true); }, true));
+  showName('Choose a town tutorial');
 }
 function guideTownTutorialChoice(step, ready=true){
   if(!ready){
     sysMsg(step==='tavern'
       ? 'You need <b>5 gold</b> before the tavern buying tutorial.'
       : 'You need more <b>gold</b> before the land buying tutorial.');
+    return;
   }
+  if(uiShellState.qOpen) closeQWin(true);
   setTownTutorialChoice(step);
   townGuidanceActive=true;
   const info=townTutorialInfo(step);

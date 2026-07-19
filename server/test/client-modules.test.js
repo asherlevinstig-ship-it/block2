@@ -1386,7 +1386,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
   assert.match(combat,/function openTownTutorialsUI\(\)/);
+  assert.match(combat,/openQWin\('management'\)/);
   assert.match(combat,/setTownTutorialChoice\('menu'\)/);
+  assert.match(combat,/Completed tutorials can be replayed/);
+  assert.match(combat,/if\(uiShellState\.qOpen\) closeQWin\(true\)/);
   assert.match(combat,/filter\(c=>force\|\|!townTutorialStepDone\(c\[0\]\)\)/);
   assert.match(combat,/completed\?'REPLAY':'BEGIN'/);
   assert.match(combat,/function startJobTutorial\(jobId\)/);
