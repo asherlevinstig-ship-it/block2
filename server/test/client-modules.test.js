@@ -1429,9 +1429,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
-  assert.match(combat,/WHAT A DRAGON CAN DO/);
-  assert.match(combat,/Meet the grounded <b>practice dragon<\/b> and press <b>G<\/b> before leaving/);
-  assert.match(combat,/Practice Dragon',small:jobTutorialPetDragonSeen\?'Review dragon care and riding':'Learn care, riding and commands'/);
+  assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
+  assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
+  assert.match(combat,/petTamerTutorialProgressLabel\(\)\+' - '\+petTamerTutorialAction\(\)\.key/);
+  assert.match(combat,/Finish all <b>5 Pet Tamer steps<\/b> with the grounded practice dragon before leaving/);
+  assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO PRACTICE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
@@ -1453,6 +1455,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(dimensions,/tutorialEnter',\{kind:'job',job:jobId\}/);
   assert.match(networking,/activeRoom=dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob/);
   assert.match(networking,/const JOB_TUTORIAL_RESUME_KEY='bc_active_job_tutorial_room_v1'/);
+  assert.match(networking,/petDragonStep:Math\.max\(0,Math\.min\(5,Number\(combatState\.jobTutorialPetDragonStep\)\|\|0\)\)/);
   assert.match(networking,/function readJobTutorialResume\(\)/);
   assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job\)/);
   assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);

@@ -2725,6 +2725,7 @@ function netSnapshot(){
         minedDiamond:combatState.jobTutorialMinedDiamond===true,
         traded:combatState.jobTutorialTraded===true,
         petDragonSeen:combatState.jobTutorialPetDragonSeen===true,
+        petDragonStep:Math.max(0,Math.min(5,Number(combatState.jobTutorialPetDragonStep)||0)),
       }
     : null;
   const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;

@@ -748,8 +748,15 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   pet_tamer:{key:'MEET DRAGON',text:'Walk to the grounded practice dragon and press G beside it.',sub:'The flying dragons show the roost. The calm dragon on the ground teaches care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialPetDragonSeen=false, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
 const MINER_TUTORIAL_TRADE_GOLD=45;
+const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
+  {key:'MEET DRAGON',title:'Approach',verb:'START LESSON',purpose:'Dragons are long-term companions. First, stand close and learn their basic needs.',done:'You greet the practice dragon calmly.'},
+  {key:'FEED TREAT',title:'Care',verb:'GIVE TREAT',purpose:'Treats raise happiness and bond. Happy dragons recover abilities faster and respond better.',done:'The dragon accepts the treat. Happiness and bond are the first Pet Tamer loop.'},
+  {key:'COMMAND',title:'Roles',verb:'PRACTICE COMMAND',purpose:'Dragons can follow, stay, guard, or rest. Commands turn them into helpers, not pets that just trail behind.',done:'The dragon lowers its head. Follow, Stay, Guard, and Rest are role commands.'},
+  {key:'RIDE',title:'Travel',verb:'PRACTICE MOUNT',purpose:'Adult dragons can be summoned and ridden. Mounted dragons help with travel and unlock dragon abilities.',done:'You learn the riding idea: summon an adult dragon, mount it, then use movement and abilities.'},
+  {key:'ROOST',title:'Roost',verb:'FINISH LESSON',purpose:'The Dragon Roost is where you hatch eggs, rename dragons, manage bonds, and check dragon progression.',done:'You now know the dragon loop: hatch, care, command, ride, and manage bonds at the roost.'},
+]);
 function level2JobChoiceSeen(){
   try{return localStorage.getItem(LEVEL2_JOB_CHOICE_KEY)==='1';}catch(e){return false;}
 }
@@ -1183,38 +1190,69 @@ function nearPetTamerPracticeDragon(range=4.5){
   const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
   return d<=range?{...p,distance:d}:null;
 }
+function petTamerTutorialAction(){
+  return PET_TAMER_TUTORIAL_ACTIONS[Math.max(0,Math.min(PET_TAMER_TUTORIAL_ACTIONS.length-1,jobTutorialPetDragonStep|0))]||PET_TAMER_TUTORIAL_ACTIONS[0];
+}
+function petTamerTutorialProgressLabel(){
+  return 'Step '+Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,jobTutorialPetDragonStep+1)+' / '+PET_TAMER_TUTORIAL_ACTIONS.length;
+}
+function petTamerPracticeDragonFx(kind='happy'){
+  const p=petTamerPracticeDragonPos();
+  if(!p)return;
+  const col=kind==='command'?[.55,.8,1]:kind==='ride'?[.7,.45,1]:kind==='roost'?[1,.82,.28]:[.5,1,.35];
+  burst(p.x,p.y+1.4,p.z,col,kind==='roost'?38:24,kind==='ride'?3.4:2.4,kind==='command'?2.9:2.2,.75);
+  ringPulse(p.x,p.y+.06,p.z,kind==='ride'?3.2:2.2,kind==='roost'?0xffd24a:0x9ad26b,.65);
+  if(kind==='feed')SFX.coin&&SFX.coin();
+  else if(kind==='command')SFX.crit&&SFX.crit();
+  else SFX.level&&SFX.level();
+}
+function advancePetTamerDragonTutorial(){
+  const action=petTamerTutorialAction();
+  const kind=jobTutorialPetDragonStep===1?'feed':jobTutorialPetDragonStep===2?'command':jobTutorialPetDragonStep===3?'ride':jobTutorialPetDragonStep>=4?'roost':'happy';
+  petTamerPracticeDragonFx(kind);
+  eventLog('Pet Tamer tutorial - '+action.title+': '+action.done);
+  sysMsg('<b>Pet Tamer lesson:</b> '+escHTML(action.done));
+  jobTutorialPetDragonStep=Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,jobTutorialPetDragonStep+1);
+  jobTutorialPetDragonSeen=jobTutorialPetDragonStep>=PET_TAMER_TUTORIAL_ACTIONS.length;
+  updateJobTutorialHud();
+  sendProfileSaveNow();
+  if(jobTutorialPetDragonSeen){
+    showName('Dragon tutorial complete');
+    closeQWin(true);
+  }else{
+    openPetTamerDragonTutorialUI();
+  }
+}
 function openPetTamerDragonTutorialUI(){
   if(!nearPetTamerPracticeDragon(5.2))return false;
-  jobTutorialPetDragonSeen=true;
   updateJobTutorialHud();
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   if(uiOpen) closeUI(false);
   openQWin('management');
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent='DRAGON PRACTICE'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='WHAT A DRAGON CAN DO'; qpanelEl.appendChild(sub);
+  const action=petTamerTutorialAction();
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent=petTamerTutorialProgressLabel()+' - '+action.title.toUpperCase(); qpanelEl.appendChild(sub);
   const intro=document.createElement('p'); intro.className='qtext';
-  intro.innerHTML='A dragon is a long-term companion, not just a decoration. Hatch one from an egg, raise its bond, then use it to travel, guard, fight, and support your group.';
+  intro.innerHTML='<b>'+escHTML(action.key)+'</b><br>'+escHTML(action.purpose);
   qpanelEl.appendChild(intro);
   const rows=[
-    ['CARE','Feed Dragon Treats to increase happiness and bond. Happier dragons recover abilities faster.'],
-    ['RIDE','Adult dragons can be summoned and mounted. Riding helps travel and gives access to dragon movement and breath abilities.'],
-    ['COMMAND','Set a dragon to follow, stay at a post, guard you, or rest. Roles gain mastery over time.'],
-    ['PROTECT','Guard dragons can help defend you and make dangerous routes feel less lonely.'],
-    ['ROOST','The Dragon Roost is where you hatch eggs, manage bonds, rename dragons, and check progression.'],
+    ['1','Meet the dragon calmly so the bond starts with trust.'],
+    ['2','Feed a treat to learn happiness and bond growth.'],
+    ['3','Practice a command so the dragon has a job.'],
+    ['4','Learn riding so dragons become travel partners.'],
+    ['5','Use the Roost to hatch, name, manage, and grow dragons.'],
   ];
   for(const [label,text] of rows){
     const r=document.createElement('div'); r.className='shoprow';
-    const mark=document.createElement('b'); mark.style.color='#9ad26b'; mark.style.fontSize='22px'; mark.textContent=label[0]; r.appendChild(mark);
-    const body=document.createElement('span'); body.innerHTML='<b>'+escHTML(label)+'</b><br><small>'+escHTML(text)+'</small>'; r.appendChild(body);
+    const mark=document.createElement('b'); mark.style.color=(Number(label)<=jobTutorialPetDragonStep+1)?'#9ad26b':'#6b7280'; mark.style.fontSize='22px'; mark.textContent=label; r.appendChild(mark);
+    const body=document.createElement('span'); body.innerHTML='<b>'+escHTML(Number(label)===jobTutorialPetDragonStep+1?'CURRENT STEP':Number(label)<=jobTutorialPetDragonStep?'DONE':'UP NEXT')+'</b><br><small>'+escHTML(text)+'</small>'; r.appendChild(body);
     qpanelEl.appendChild(r);
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
-  row.appendChild(qBtn('DRAGON BONDS',()=>openDragonBondUI()));
-  row.appendChild(qBtn('FINISH LESSON',()=>closeQWin(true),true));
-  showName('Dragon lesson learned');
-  eventLog('Pet Tamer tutorial - learned dragon care, riding, commands and roost bonds.');
-  sysMsg('<b>Dragon lesson:</b> hatch, care, ride, command, and guard with bonded dragons.');
+  row.appendChild(qBtn(action.verb,()=>advancePetTamerDragonTutorial()));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(true),true));
+  showName(action.key);
   return true;
 }
 function tryMinerTutorialTrade(){
@@ -1302,8 +1340,9 @@ function updateJobTutorialHud(){
         : {key:'RETURN PILLAR',text:'You mined a diamond and traded it for gold.',sub:'Walk into the blue return pillar to go back to town.'};
   }
   if(jobTutorialJob==='pet_tamer'){
+    const action=petTamerTutorialAction();
     copy=nearPetTamerPracticeDragon()
-      ? {key:'PRESS G',text:'Practice with the calm dragon on the ground.',sub:'This lesson explains care, riding, commands, guard roles, and the Dragon Roost.'}
+      ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:'Press G beside the practice dragon, then choose '+action.verb+'.'}
       : jobTutorialPetDragonSeen
         ? {key:'RETURN PILLAR',text:'You learned what dragons can do for a player.',sub:'Walk into the blue return pillar to go back to town.'}
         : JOB_TUTORIAL_ROOM_COPY.pet_tamer;
@@ -1326,6 +1365,7 @@ function completeJobTutorial(){
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
   jobTutorialPetDragonSeen=false;
+  jobTutorialPetDragonStep=0;
   jobTutorialReturnWarnAt=0;
   if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
@@ -1354,6 +1394,7 @@ function startJobTutorial(jobId){
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
   jobTutorialPetDragonSeen=false;
+  jobTutorialPetDragonStep=0;
   jobTutorialReturnWarnAt=0;
   player.pos.set(room.x+.5,jobTutorialSafeSpawnY(jobId,room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
@@ -1382,6 +1423,8 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialMinedDiamond=state.minedDiamond===true;
   jobTutorialTraded=state.traded===true;
   jobTutorialPetDragonSeen=state.petDragonSeen===true;
+  jobTutorialPetDragonStep=Math.max(0,Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,Number(state.petDragonStep)||0));
+  if(jobTutorialPetDragonSeen)jobTutorialPetDragonStep=PET_TAMER_TUTORIAL_ACTIONS.length;
   jobTutorialReturnWarnAt=0;
   if(player){
     player.pos.y=jobTutorialSafeSpawnY(jobId,player.pos.x||room.x+.5,player.pos.z||room.z+14.5,room.G+1.035);
@@ -1402,6 +1445,7 @@ function tickJobTutorial(now){
     jobTutorialMinedDiamond=false;
     jobTutorialTraded=false;
     jobTutorialPetDragonSeen=false;
+    jobTutorialPetDragonStep=0;
     if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
@@ -1430,7 +1474,7 @@ function tickJobTutorial(now){
     if(jobTutorialJob==='pet_tamer'&&!jobTutorialPetDragonSeen){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
-        sysMsg('Meet the grounded <b>practice dragon</b> and press <b>G</b> before leaving the Pet Tamer tutorial.');
+        sysMsg('Finish all <b>5 Pet Tamer steps</b> with the grounded practice dragon before leaving.');
       }
       return;
     }
@@ -2724,7 +2768,7 @@ function nearbyInteractionPrompt(){
   const minerTutor=nearbyMinerTutorialTrader();
   if(minerTutor)push({key:'G',title:'Garrik Flint',small:jobTutorialTraded?'Trade complete':jobTutorialMinedDiamond&&countItem(I.DIAMOND)>0?'Trade diamond for gold':'Mine a diamond first',priority:118},minerTutor.distance);
   const petPracticeDragon=nearPetTamerPracticeDragon();
-  if(petPracticeDragon)push({key:'G',title:'Practice Dragon',small:jobTutorialPetDragonSeen?'Review dragon care and riding':'Learn care, riding and commands',priority:118},petPracticeDragon.distance);
+  if(petPracticeDragon)push({key:'G',title:'Practice Dragon',small:jobTutorialPetDragonSeen?'Lesson complete':petTamerTutorialProgressLabel()+' - '+petTamerTutorialAction().key,priority:118},petPracticeDragon.distance);
   if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
   const table=nearbyTavernGameTable();
   if(table)push({key:'G',title:table.label,small:'Play tavern games',priority:94},table.distance);
@@ -3128,6 +3172,7 @@ gameContext.registerState('combat', Object.freeze({
   get jobTutorialMinedDiamond(){ return jobTutorialMinedDiamond; },
   get jobTutorialTraded(){ return jobTutorialTraded; },
   get jobTutorialPetDragonSeen(){ return jobTutorialPetDragonSeen; },
+  get jobTutorialPetDragonStep(){ return jobTutorialPetDragonStep; },
   get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
   get abilityTrainingActive(){ return abilityTrainingActive; },
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
