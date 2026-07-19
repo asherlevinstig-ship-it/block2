@@ -9026,14 +9026,20 @@ function updateRoadBirds(dt,tt){
   }
 }
 function updateSkyDragons(dt,tt){
-  if(dim!=='overworld'){for(const d of skyDragons)d.grp.visible=false;return;}
+  const petRoom=JOB_TUTORIAL_MEADOWS.pet_tamer;
+  const inPetTamerRoom=dim==='job'&&petRoom&&Math.hypot(player.pos.x-petRoom.x,player.pos.z-petRoom.z)<petRoom.R+18;
+  if(dim!=='overworld'&&!inPetTamerRoom){for(const d of skyDragons)d.grp.visible=false;return;}
   for(const d of skyDragons){
-    const near=playerOverworldDistanceSq(d.cx,d.cz)<360*360;
+    const cx=inPetTamerRoom?petRoom.x+(d.cx-(HUB.roost.x+16))*.24:d.cx;
+    const cz=inPetTamerRoom?petRoom.z+(d.cz-(HUB.roost.z+8))*.24:d.cz;
+    const cy=inPetTamerRoom?petRoom.G+26+(d.cy-TOWN.G-30)*.34:d.cy;
+    const radius=inPetTamerRoom?Math.max(14,Math.min(34,d.r*.62)):d.r;
+    const near=inPetTamerRoom||playerOverworldDistanceSq(d.cx,d.cz)<360*360;
     d.grp.visible=near;if(!near)continue;
     const a=tt*d.speed+d.phase;
     const wobble=Math.sin(tt*.55+d.phase)*2.4;
-    d.grp.position.set(d.cx+Math.cos(a)*d.r,d.cy+wobble,d.cz+Math.sin(a)*d.r*.72);
-    const tangent=Math.atan2(-Math.sin(a)*d.r,Math.cos(a)*d.r*.72);
+    d.grp.position.set(cx+Math.cos(a)*radius,cy+wobble,cz+Math.sin(a)*radius*.72);
+    const tangent=Math.atan2(-Math.sin(a)*radius,Math.cos(a)*radius*.72);
     d.grp.rotation.y=tangent+Math.PI/2;
     d.grp.rotation.z=Math.sin(tt*.38+d.phase)*.055;
     d.grp.rotation.x=Math.sin(tt*.31+d.phase)*.035;

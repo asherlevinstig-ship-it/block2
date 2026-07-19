@@ -263,6 +263,9 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(world, /name:'Ember sky dragon'/);
   assert.match(world, /function makeSkyDragon\(spec,index\)/);
   assert.match(world, /function updateSkyDragons\(dt,tt\)/);
+  assert.match(world, /const inPetTamerRoom=dim==='job'&&petRoom&&Math\.hypot\(player\.pos\.x-petRoom\.x,player\.pos\.z-petRoom\.z\)<petRoom\.R\+18/);
+  assert.match(world, /dim!=='overworld'&&!inPetTamerRoom/);
+  assert.match(world, /cx=inPetTamerRoom\?petRoom\.x\+\(d\.cx-\(HUB\.roost\.x\+16\)\)\*\.24:d\.cx/);
   assert.match(world, /playerOverworldDistanceSq\(d\.cx,d\.cz\)<360\*360/);
   assert.match(world, /"skyDragons":\{get:\(\)=>skyDragons\}/);
   assert.match(world, /"updateSkyDragons":\{get:\(\)=>updateSkyDragons\}/);
