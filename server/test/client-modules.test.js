@@ -1434,7 +1434,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
   assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
   assert.match(combat,/petTamerTutorialProgressLabel\(\)\+' - '\+petTamerTutorialAction\(\)\.key/);
-  assert.match(combat,/Finish all <b>5 Pet Tamer steps<\/b> with the grounded practice dragon before leaving/);
+  assert.match(combat,/function jobTutorialBeaconTarget\(jobId, room\)/);
+  assert.match(combat,/FOLLOW DRAGON LIGHT/);
+  assert.match(combat,/Press <b>G<\/b> beside the grounded practice dragon to start the Pet Tamer lesson/);
+  assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
+  assert.match(combat,/setTimeout\(\(\)=>\{ if\(jobTutorialActive&&jobTutorialJob==='pet_tamer'\) completeJobTutorial\(\); \}, 900\)/);
   assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO PRACTICE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
@@ -1447,6 +1451,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/const JOB_TUTORIAL_MEADOWS=Object\.freeze\(\{/);
   assert.match(world,/get JOB_TUTORIAL_MEADOWS\(\)\{ return JOB_TUTORIAL_MEADOWS; \}/);
   assert.match(world,/function buildJobTutorialMeadow\(jobId,setBlock=setB\)/);
+  assert.match(world,/if\(jobId!=='pet_tamer'\)\{/);
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
   assert.match(world,/const practiceDragon=\(ox,oz\)=>/);

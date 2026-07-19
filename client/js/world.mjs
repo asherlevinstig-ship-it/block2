@@ -965,8 +965,10 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
   const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)setBlock(x,y,z,id);};
   for(let x=cx-5;x<=cx+5;x++)for(let z=cz-5;z<=cz+5;z++)setBlock(x,G,z,ground);
   for(const [ox,oz] of [[-12,-12],[12,-12],[-12,12],[12,12]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
-  box(cx-2,G,cz+21,cx+2,G,cz+25,B.GLASS);
-  setBlock(cx,G+1,cz+23,B.LANTERN);
+  if(jobId!=='pet_tamer'){
+    box(cx-2,G,cz+21,cx+2,G,cz+25,B.GLASS);
+    setBlock(cx,G+1,cz+23,B.LANTERN);
+  }
   if(jobId==='miner'){
     for(let x=cx-17;x<=cx+17;x++)for(let z=cz-16;z<=cz+26;z++){
       const wall=Math.abs(x-cx)>=16||z===cz-16||z===cz+26;

@@ -1184,6 +1184,10 @@ function petTamerPracticeDragonPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
   return room?{x:room.x+8.5,y:room.G+1.03,z:room.z+8.5}:null;
 }
+function jobTutorialBeaconTarget(jobId, room){
+  if(jobId==='pet_tamer')return petTamerPracticeDragonPos();
+  return room?{x:room.x,y:room.G+1.035,z:room.z+23}:null;
+}
 function nearPetTamerPracticeDragon(range=4.5){
   const p=petTamerPracticeDragonPos();
   if(!p||!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||!player)return null;
@@ -1219,6 +1223,8 @@ function advancePetTamerDragonTutorial(){
   if(jobTutorialPetDragonSeen){
     showName('Dragon tutorial complete');
     closeQWin(true);
+    sysMsg('<b>Pet Tamer lesson complete.</b> Returning you to Town of Beginnings.');
+    setTimeout(()=>{ if(jobTutorialActive&&jobTutorialJob==='pet_tamer') completeJobTutorial(); }, 900);
   }else{
     openPetTamerDragonTutorialUI();
   }
@@ -1351,17 +1357,18 @@ function updateJobTutorialHud(){
     copy=nearPetTamerPracticeDragon()
       ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:'Press G beside the practice dragon, then choose '+action.verb+'.'}
       : jobTutorialPetDragonSeen
-        ? {key:'RETURN PILLAR',text:'You learned what dragons can do for a player.',sub:'Walk into the blue return pillar to go back to town.'}
-        : JOB_TUTORIAL_ROOM_COPY.pet_tamer;
+        ? {key:'DRAGON LESSON COMPLETE',text:'You learned the basic dragon loop.',sub:'The return pillar is hidden for now while this room is being tested.'}
+        : {key:'FOLLOW DRAGON LIGHT',text:'Follow the pillar of light to the grounded practice dragon.',sub:'Stand beside the dragon and press G to start the step-by-step lesson.'};
   }
-  const nearReturn=room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
+  const beaconTarget=jobTutorialBeaconTarget(jobTutorialJob,room);
+  const nearReturn=jobTutorialJob!=='pet_tamer'&&room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
+  const nearPetDragon=jobTutorialJob==='pet_tamer'&&beaconTarget&&player&&Math.hypot(player.pos.x-beaconTarget.x,player.pos.z-beaconTarget.z)<4.8;
   const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
-  const petBlockedReturn=jobTutorialJob==='pet_tamer'&&!jobTutorialPetDragonSeen;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?(minerBlockedReturn?'FINISH TRADE':petBlockedReturn?'MEET DRAGON':'RETURN TO TOWN'):copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':petBlockedReturn?'Meet the grounded dragon and press G before leaving.':'Step into the pillar to return to Town of Beginnings.'):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':petBlockedReturn?'The Pet Tamer loop is: bond -> care -> command -> travel and protect.':'Your job is equipped. You can switch later at the Job Board.'):copy.sub)+'</div>';
+    +'<div class="tutkey">'+escHTML(nearReturn?(minerBlockedReturn?'FINISH TRADE':'RETURN TO TOWN'):nearPetDragon?petTamerTutorialAction().key:copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?petTamerTutorialProgressLabel()+': press G to work with the dragon.':copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?'Choose the lesson action in the dragon tutorial window.':copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -1413,7 +1420,8 @@ function startJobTutorial(jobId){
   updateJobTutorialHud();
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
-  sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
+  if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the grounded practice dragon, then press G beside it.');
+  else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();
   return true;
 }
@@ -1461,8 +1469,9 @@ function tickJobTutorial(now){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
   if(!room) return;
   updateMinerTutorialTrader(now);
-  const target={x:room.x,z:room.z+23};
-  const y=jobTutorialWalkY(target.x,target.z,room.G+1.035);
+  const target=jobTutorialBeaconTarget(jobTutorialJob,room);
+  if(!target)return;
+  const y=jobTutorialJob==='pet_tamer'?(target.y||room.G+1.035):jobTutorialWalkY(target.x,target.z,room.G+1.035);
   tutorialPillarGroup.visible=true;
   tutorialPillarGroup.position.set(target.x,y+4,target.z);
   tutorialBeam.material.opacity=.3+.18*Math.sin(now*.004);
@@ -1470,18 +1479,18 @@ function tickJobTutorial(now){
   const s=1+.08*Math.sin(now*.006);
   tutorialRing.scale.set(s,s,s);
   updateJobTutorialHud();
+  if(jobTutorialJob==='pet_tamer'){
+    if(player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<4.8&&now>jobTutorialReturnWarnAt&&!jobTutorialPetDragonSeen){
+      jobTutorialReturnWarnAt=now+2200;
+      sysMsg('Press <b>G</b> beside the grounded practice dragon to start the Pet Tamer lesson.');
+    }
+    return;
+  }
   if(player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<2.6){
     if(jobTutorialJob==='miner'&&!jobTutorialTraded){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
         sysMsg('Mine a diamond and trade it with <b>Garrik</b> before leaving the Miner tutorial.');
-      }
-      return;
-    }
-    if(jobTutorialJob==='pet_tamer'&&!jobTutorialPetDragonSeen){
-      if(now>jobTutorialReturnWarnAt){
-        jobTutorialReturnWarnAt=now+1800;
-        sysMsg('Finish all <b>5 Pet Tamer steps</b> with the grounded practice dragon before leaving.');
       }
       return;
     }
