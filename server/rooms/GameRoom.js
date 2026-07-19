@@ -6,7 +6,7 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
@@ -445,11 +445,15 @@ class GameRoom extends Room {
       const token = this.tokens.get(client.sessionId);
       if (!token || !m) return;
       const now = Date.now();
-      if (now - (this.lastSaveMsg.get(client.sessionId) || 0) < 5000) return;
       let raw; try { raw = JSON.stringify(m); } catch (e) { return; }
       if (raw.length > 20000) return;
-      this.lastSaveMsg.set(client.sessionId, now);
       const existing = this.profiles.get(token) || defaultProfile();
+      const incomingActiveRoom = sanitizeActiveRoom(m.activeRoom);
+      const existingActiveRoom = sanitizeActiveRoom(existing.activeRoom);
+      const roomStateChanged = JSON.stringify(incomingActiveRoom || null) !== JSON.stringify(existingActiveRoom || null);
+      const roomStateSave = !!incomingActiveRoom || !!existingActiveRoom;
+      if (now - (this.lastSaveMsg.get(client.sessionId) || 0) < 5000 && !(roomStateSave && roomStateChanged)) return;
+      this.lastSaveMsg.set(client.sessionId, now);
       const prof = mergeClientSave(existing, m);
       if (existing.noPersist) prof.noPersist = true;   // a failed-load session stays non-persistable across saves
       const p = this.state.players.get(client.sessionId);
@@ -950,6 +954,10 @@ class GameRoom extends Room {
       p.dragonHatchedAt = this.publicDragonHatchedAt(prof);
       p.cosmetics = this.publicCosmetics(prof);
       p.x = prof.pos[0]; p.y = prof.pos[1] + .01; p.z = prof.pos[2];
+      if (prof.activeRoom && prof.activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[prof.activeRoom.job]) {
+        p.dim = 'tutorial';
+        p.dgn = this.tutorialSpaceId(client, 'job_' + prof.activeRoom.job);
+      }
     } else {
       p.x = W.TOWN.TC + .5 + (Math.random() * 4 - 2);
       p.y = W.TOWN.G + 1;
@@ -1516,7 +1524,35 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     const rec = client && this.profileFor(client);
     const kind = m && String(m.kind || '');
-    if (!p || !rec || !['onboarding', 'ability'].includes(kind)) return false;
+    if (!p || !rec || !['onboarding', 'ability', 'job'].includes(kind)) return false;
+    if (kind === 'job') {
+      const job = m && typeof m.job === 'string' ? m.job : '';
+      const room = JOB_TUTORIAL_ROOMS[job];
+      if (!room) {
+        client.send('tutorialDimension', { active: false, kind, reason: 'invalid_job' });
+        return false;
+      }
+      if (p.dgn && p.dim !== 'tutorial') {
+        client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
+        return false;
+      }
+      const spawn = sanitizeActiveRoomPosition({ dim: 'job', job }, [room.x + .5, room.g + 1.05, room.z + 14.5])
+        || [room.x + .5, room.g + 1.05, room.z + 14.5];
+      p.dim = 'tutorial';
+      p.dgn = this.tutorialSpaceId(client, 'job_' + job);
+      p.mount = '';
+      p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
+      rec.prof.activeRoom = sanitizeActiveRoom({
+        dim: 'job',
+        job,
+        minedDiamond: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.minedDiamond === true,
+        traded: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.traded === true,
+      });
+      rec.prof.pos = spawn;
+      this.dirtyPlayers.add(rec.token);
+      client.send('tutorialDimension', { active: true, kind, job, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
     if (p.dgn && p.dim !== 'tutorial') {
       client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
       return false;
@@ -1540,6 +1576,8 @@ class GameRoom extends Room {
   leaveTutorialDimension(client, forcedPos = null) {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial') return false;
+    const rec = client && this.profileFor(client);
+    const wasJobTutorial = p.dgn && /^tutorial-job_/.test(p.dgn);
     const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
     const pos = forcedPos
       ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
@@ -1549,6 +1587,11 @@ class GameRoom extends Room {
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
     if (ret && Number.isFinite(ret.yaw)) p.yaw = ret.yaw;
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
+    if (wasJobTutorial && rec && rec.prof) {
+      rec.prof.activeRoom = null;
+      rec.prof.pos = [p.x, p.y, p.z];
+      this.dirtyPlayers.add(rec.token);
+    }
     client.send('tutorialDimension', { active: false, x: p.x, y: p.y, z: p.z });
     return true;
   }
@@ -1560,8 +1603,9 @@ class GameRoom extends Room {
   resumeTutorialDimension(client) {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
-    const kind = p.dgn.includes('-ability-') ? 'ability' : 'onboarding';
-    client.send('tutorialDimension', { active: true, kind, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
+    const jobMatch = p.dgn.match(/^tutorial-job_([a-z]+)-/);
+    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : 'onboarding';
+    client.send('tutorialDimension', { active: true, kind, job: jobMatch && jobMatch[1] || undefined, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
     return true;
   }
 
@@ -2082,6 +2126,7 @@ class GameRoom extends Room {
     }
   }
   spaceSolid(dgn) {
+    if (dgn && /^tutorial-job_/.test(String(dgn))) return () => false;
     if (dgn && typeof this.eventSpaceSolid === 'function') {
       const eventSolid = this.eventSpaceSolid(dgn);
       if (eventSolid) return eventSolid;

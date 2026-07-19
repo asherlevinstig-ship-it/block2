@@ -61,7 +61,7 @@ const { GameRoom, claimGlobalWorld, releaseGlobalWorld, skyshipSnapshot, SKYSHIP
 const { Gate, Mob } = require('../schema');
 const { BIOME_HOSTILE, BOSS_REWARD_BY_RANK, BREACH_CLEANUP_REWARD_BY_RANK, RANGED_ENEMY_KINDS, TOOL_INFO, ARMOR_INFO, DEITY_LEVEL, DEITY_POWER_IDS, shadeMitigation, fangDamage, moteRegen, spriteForageChance } = require('../rooms/constants');
 const { createEconomyLedger, recordEconomyGold, summarizeEconomyGold } = require('../economy-telemetry');
-const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
+const { defaultProfile, mergeClientSave, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, sanitizeChests, sanitizeIncubations, sanitizeGates, sanitizeTeams, sanitizeGuilds, JsonStore, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
 const GUARDIAN_POS = { x: W.TOWN.TC + .5, z: W.TOWN.TC - 24.5 };
 const SMITH_POS = W.townPos(78.5, 50, 'forge');
 const GUILD_RECEPTION_POS = W.townPos(54.5, 26.5, 'guild');
@@ -7170,6 +7170,23 @@ test('onboarding and ability tutorials use private server spaces and restore the
   assert.equal(ap.dim, 'overworld');
   assert.equal(ap.dgn, '');
   assert.deepEqual([ap.x, ap.y, ap.z], returnPos);
+
+  const jobRoom = makeRoom(), miner = makeClient('miner');
+  const { prof: minerProfile } = seedPlayer(jobRoom, miner, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5, lvl: 2 });
+  jobRoom.clients = [miner];
+  assert.equal(jobRoom.handleTutorialEnter(miner, { kind: 'job', job: 'miner' }), true);
+  const mp = jobRoom.state.players.get(miner.sessionId);
+  assert.equal(mp.dim, 'tutorial');
+  assert.match(mp.dgn, /^tutorial-job_miner-/);
+  const minerRoom = JOB_TUTORIAL_ROOMS.miner;
+  assert.deepEqual(minerProfile.activeRoom, { dim: 'job', job: 'miner', minedDiamond: false, traded: false });
+  assert.deepEqual(minerProfile.pos, [minerRoom.x + .5, minerRoom.g + 1.05, minerRoom.z + 14.5]);
+  assert.equal(jobRoom.spaceSolid(mp.dgn)(mp.x, mp.y, mp.z), false, 'private job rooms are locally simulated and do not use overworld collision');
+  assert.equal(miner.sent.some(e => e.type === 'tutorialDimension' && e.msg.active && e.msg.kind === 'job' && e.msg.job === 'miner'), true);
+  assert.equal(jobRoom.leaveTutorialDimension(miner), true);
+  assert.equal(mp.dim, 'overworld');
+  assert.equal(mp.dgn, '');
+  assert.equal(minerProfile.activeRoom, null);
 });
 
 test('restart recovery ejects safely and refunds consumed private gate currency once', async () => {

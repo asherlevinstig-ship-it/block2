@@ -1348,7 +1348,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
   assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
-  assert.match(combat,/const minimal=onboardingActive&&dim==='tutorial';/);
+  assert.match(combat,/const minimal=\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
   assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
   assert.match(styles,/body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
@@ -1403,9 +1403,11 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(dimensions,/dim='job'/);
   assert.match(dimensions,/tutorialEnter',\{kind:'job',job:jobId\}/);
   assert.match(networking,/activeRoom=dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob/);
+  assert.match(networking,/const JOB_TUTORIAL_RESUME_KEY='bc_active_job_tutorial_room_v1'/);
+  assert.match(networking,/function readJobTutorialResume\(\)/);
   assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job\)/);
   assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);
-  assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2])'), 'job room is rebuilt before restored position is applied');
+  assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);
   assert.match(frame,/combatApi\.openLevel2JobChoice\(\)/);
   assert.match(frame,/tickJobTutorial\(now\)/);

@@ -983,9 +983,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('trainingReset', ()=>{if(dim==='tutorial')resetTrainingMeadowLocal();});
     room.onMessage('tutorialDimension', m=>{
       if(m&&m.active){
-        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability');
+        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job');
         if(matching&&m.spaceId) NET.dgn=String(m.spaceId);
-      }else if(dim==='tutorial'||dim==='ability'){
+      }else if(dim==='tutorial'||dim==='ability'||dim==='job'){
         NET.dgn='';
       }
     });
@@ -2250,16 +2250,24 @@ function netRestoreProfile(m){
     cosmeticUnlocks=Array.isArray(m.cosmeticUnlocks)?m.cosmeticUnlocks.filter(v=>v==='cartographers_mantle'):[];
     equippedCosmetics=clampEquippedCosmetics(m.equippedCosmetics);
     globalThis.BlockcraftTreasureMap=null;if(m.treasureMap&&Array.isArray(m.treasureMap.targets)){const stage=Math.max(0,m.treasureMap.stage|0),targetId=m.treasureMap.targets[stage];if(targetId){globalThis.BlockcraftTreasureMap={id:m.treasureMap.id,kind:m.treasureMap.kind||'treasure',stage,total:m.treasureMap.targets.length,targetId,clue:'Follow the current ink mark and investigate with G.',rewardGold:m.treasureMap.rewardGold|0};hintedDiscoveryIds.add(targetId);}}
-    const activeRoom=m&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
+    const serverActiveRoom=m&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
+    const localActiveRoom=!serverActiveRoom?readJobTutorialResume():null;
+    const activeRoom=serverActiveRoom||localActiveRoom;
     const restoreJobRoom=activeRoom&&activeRoom.dim==='job'&&JOBS[activeRoom.job]?activeRoom:null;
     if(restoreJobRoom){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job);
     }
-    if(Array.isArray(m.pos) && !onboardingActive){
-      player.pos.set(m.pos[0], m.pos[1]+.01, m.pos[2]);
+    const restorePos=restoreJobRoom&&Array.isArray(restoreJobRoom.pos)?restoreJobRoom.pos:m.pos;
+    if(Array.isArray(restorePos) && !onboardingActive){
+      player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
     }
-    if(restoreJobRoom&&combatApi.resumeJobTutorial) combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
+    if(restoreJobRoom&&combatApi.resumeJobTutorial){
+      combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
+      storeJobTutorialResume(restoreJobRoom,player?[player.pos.x,player.pos.y,player.pos.z]:restoreJobRoom.pos);
+    }else{
+      storeJobTutorialResume(null,null);
+    }
     if(m&&m.meditationGrowth&&typeof m.meditationGrowth==='object'&&typeof meditationGrowth!=='undefined'){
       meditationGrowth=m.meditationGrowth;
     }
@@ -2278,7 +2286,7 @@ function netRestoreProfile(m){
     } else if(Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0) awardFirstVillagerQuestBonus();
     if(gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     syncLocalTutorialsToServer();
-    startTownGuidance();
+    if(!restoreJobRoom&&dim==='overworld')startTownGuidance();
     if(typeof refreshProgressionDirectorNotice==='function')refreshProgressionDirectorNotice();
     if(progressionFocus&&!ONBOARD.isSeen())setTimeout(()=>ONBOARD.showFirstPromotion(),80);
     eventLog((m.name||'Hunter')+' returned — progress restored');
@@ -2643,6 +2651,36 @@ function farmRejected(m){
   else if(r==='ripe') sysMsg('That crop is not ready');
   else sysMsg('Farming action failed');
 }
+const JOB_TUTORIAL_RESUME_KEY='bc_active_job_tutorial_room_v1';
+function currentAuthSessionToken(){
+  try{return String(localStorage.getItem('blockcraft.auth.session')||'').trim();}catch(e){return '';}
+}
+function storeJobTutorialResume(activeRoom,pos){
+  try{
+    if(!activeRoom){
+      localStorage.removeItem(JOB_TUTORIAL_RESUME_KEY);
+      return;
+    }
+    localStorage.setItem(JOB_TUTORIAL_RESUME_KEY,JSON.stringify({
+      auth:currentAuthSessionToken(),
+      activeRoom,
+      pos:Array.isArray(pos)?pos:null,
+      at:Date.now(),
+    }));
+  }catch(e){}
+}
+function readJobTutorialResume(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(JOB_TUTORIAL_RESUME_KEY)||'null');
+    if(!raw||raw.auth!==currentAuthSessionToken()||Date.now()-(raw.at||0)>24*60*60*1000)return null;
+    const activeRoom=raw.activeRoom&&typeof raw.activeRoom==='object'?raw.activeRoom:null;
+    if(!activeRoom||activeRoom.dim!=='job'||!JOBS[activeRoom.job])return null;
+    return {
+      ...activeRoom,
+      pos:Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null,
+    };
+  }catch(e){return null;}
+}
 function netSnapshot(){
   const activeRoom=dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob
     ? {
@@ -2652,11 +2690,13 @@ function netSnapshot(){
         traded:combatState.jobTutorialTraded===true,
       }
     : null;
+  const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;
+  storeJobTutorialResume(activeRoom,pos);
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
     sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
     activeRoom,
-    pos:activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null,
+    pos,
   };
 }
 

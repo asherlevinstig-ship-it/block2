@@ -441,6 +441,7 @@ function finishMine(){
     showName('Diamond mined');
     eventLog('Miner tutorial - diamond mined.');
     updateJobTutorialHud();
+    sendProfileSaveNow();
   }
   questMine(m.id);
   SFX.breakBlk(info?info.cls:null);
@@ -1195,6 +1196,7 @@ function tryMinerTutorialTrade(){
   updateJobTutorialHud();
   eventLog('Miner tutorial - traded diamond for '+MINER_TUTORIAL_TRADE_GOLD+' gold.');
   sysMsg('<b>Garrik Flint:</b> Fine stone. Here is <b>'+MINER_TUTORIAL_TRADE_GOLD+' gold</b>. Miners turn deep finds into town money.');
+  sendProfileSaveNow();
   return true;
 }
 function grantJobTutorialKit(jobId){
@@ -1326,6 +1328,7 @@ function resumeJobTutorial(jobId,state={}){
   updateMinerTutorialTrader();
   updateJobTutorialHud();
   eventLog('Resumed '+job.name+' tutorial room.');
+  sendProfileSaveNow();
   return true;
 }
 function tickJobTutorial(now){
@@ -1913,7 +1916,7 @@ function refreshPlayUi(){
   overlay.classList.toggle('hidden', showHud);
   document.body.classList.toggle('claim-mode', !!claimMode);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
-  const minimal=onboardingActive&&dim==='tutorial';
+  const minimal=(onboardingActive&&dim==='tutorial')||(jobTutorialActive&&dim==='job');
   const calm=calmTownHud();
   document.body.classList.toggle('calm-town', showHud&&calm);
   document.getElementById('hotbar').classList.toggle('hidden', !showHud);
