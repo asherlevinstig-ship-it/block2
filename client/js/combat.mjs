@@ -69,8 +69,10 @@ const legacyCombatBindings={
   "onboardingRoute":{get:()=>onboardingRoute,set:value=>{onboardingRoute=value;}},
   "onboardingStep":{get:()=>onboardingStep,set:value=>{onboardingStep=value;}},
   "openTownTutorialsUI":{get:()=>openTownTutorialsUI},
+  "openLevel2JobChoice":{get:()=>openLevel2JobChoice},
   "overlay":{get:()=>overlay},
   "pathChoiceOpen":{get:()=>pathChoiceOpen,set:value=>{pathChoiceOpen=value;}},
+  "jobChoiceOpen":{get:()=>jobChoiceOpen,set:value=>{jobChoiceOpen=value;}},
   "player":{get:()=>player},
   "prepareOnboardingStep":{get:()=>prepareOnboardingStep},
   "raycast":{get:()=>raycast},
@@ -86,6 +88,7 @@ const legacyCombatBindings={
   "setAuthStatus":{get:()=>setAuthStatus},
   "setWorldLoadingStatus":{get:()=>setWorldLoadingStatus},
   "shouldOfferTownJobGuidance":{get:()=>shouldOfferTownJobGuidance},
+  "shouldOpenLevel2JobChoice":{get:()=>shouldOpenLevel2JobChoice},
   "shouldOpenLevel2PathChoice":{get:()=>shouldOpenLevel2PathChoice},
   "showAbilityAwakening":{get:()=>showAbilityAwakening},
   "showPathSelection":{get:()=>showPathSelection},
@@ -554,6 +557,7 @@ function cancelOnboardingForProfileRestore(){
   tutorialDummyGroup.visible=false;
 }
 let pathChoiceOpen=false;
+let jobChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
 const onboardingFlags={sprint:false,arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
@@ -710,6 +714,31 @@ function shouldOfferTownJobGuidance(){
   // The first quest now reveals one system at a time: reward -> path -> ability
   // training -> optional town tutorials.
   return firstQuestMilestoneComplete() && !!S.path && abilityTutorialDone() && !townTutorialsDone();
+}
+const LEVEL2_JOB_CHOICE_KEY='bc_level2_job_choice_seen_v1';
+const JOB_TUTORIAL_STEPS=Object.freeze({
+  miner:{room:'Quarry Training Cavern',target:()=>HUB.quarry,button:'FIND QUARRY',theme:'stone',art:'PICK',beats:['Follow cave lights','Mine safe ore seams','Read hidden route markers']},
+  farmer:{room:'Greenhouse Practice Plot',target:()=>HUB.farm,button:'FIND FARM',theme:'leaf',art:'SEED',beats:['Hoe soil','Plant seeds','Harvest food for town']},
+  cook:{room:'Tavern Kitchen Lesson',target:()=>HUB.tavern,button:'FIND KITCHEN',theme:'gold',art:'PAN',beats:['Gather ingredients','Cook meals','Make dungeon buffs']},
+  blacksmith:{room:'Forge Lesson Bay',target:()=>HUB.smith,button:'FIND FORGE',theme:'ember',art:'ANVIL',beats:['Smelt ingots','Repair tools','Upgrade gear']},
+  monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
+});
+function level2JobChoiceSeen(){
+  try{return localStorage.getItem(LEVEL2_JOB_CHOICE_KEY)==='1';}catch(e){return false;}
+}
+function setLevel2JobChoiceSeen(){
+  try{localStorage.setItem(LEVEL2_JOB_CHOICE_KEY,'1');}catch(e){}
+}
+function jobTutorialInfo(jobId){
+  return JOB_TUTORIAL_STEPS[jobId]||null;
+}
+function jobTutorialStepId(jobId){
+  return JOB_TUTORIAL_STEPS[jobId]?'job_'+jobId:'job';
+}
+function jobTutorialTarget(jobId){
+  const info=jobTutorialInfo(jobId);
+  if(info&&typeof info.target==='function')return info.target();
+  return HUB.jobs;
 }
 function onboardingKind(){
   const s=ONBOARDING_STEPS[onboardingStep];
@@ -1106,6 +1135,14 @@ function townTutorialInfo(step){
     farText:'Choose what to learn next.', nearText:'Choose what to learn next.',
     farSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.', nearSub:'Open the Town Tutorials menu for Job Board, Tavern, or Land Claim guidance.'
   };
+  if(String(step||'').startsWith('job_')){
+    const jobId=String(step).slice(4), info=jobTutorialInfo(jobId), j=JOBS[jobId]||null, target=jobTutorialTarget(jobId);
+    return {
+      pill:(j?j.name:'Job')+' Tutorial - '+(info?info.room:'Training Room'), target, near:5.2, farKey:info&&info.button||'FIND ROOM', nearKey:'G / Right Click',
+      farText:'Follow the pillar of light to the '+(info?info.room:'training room')+'.', nearText:'Enter the '+(j?j.name:'job')+' training room.',
+      farSub:j?j.desc:'Learn this job with a short practice loop.', nearSub:'This room will teach the first real '+(j?j.name:'job')+' loop.'
+    };
+  }
   return {
     pill:'Town Step 1 - Accept First Quest', target:HUB.guide, near:4.2, farKey:'FIND LIGHT', nearKey:'G / Right Click',
     farText:'Find the pillar of light at Mara Vale.', nearText:'Talk to Mara and press ACCEPT.',
@@ -1128,6 +1165,11 @@ function renderTownTutorialOptions(force=false){
   const styleButton=document.createElement('button'); styleButton.textContent='CHOOSE';
   styleButton.onpointerdown=e=>{e.preventDefault();e.stopPropagation();if(globalThis.BlockcraftPlayerStyleGuide)globalThis.BlockcraftPlayerStyleGuide.open();};
   styleRow.appendChild(styleButton);townChoicesEl.appendChild(styleRow);
+  const jobRow=document.createElement('div'); jobRow.className='tcrow job-choice';
+  const jobText=document.createElement('div'); jobText.innerHTML='<div class="tcname">JOB PATHS</div><div class="tcdesc">Open the big Level 2 job cards and choose a training room.</div>'; jobRow.appendChild(jobText);
+  const jobButton=document.createElement('button'); jobButton.textContent='OPEN';
+  jobButton.onpointerdown=e=>{e.preventDefault();e.stopPropagation();openLevel2JobChoice(true);};
+  jobRow.appendChild(jobButton);townChoicesEl.appendChild(jobRow);
   for(const [step,label,desc,ready] of choices){
     const active=townGuidanceActive&&townGuidanceStep===step;
     const row=document.createElement('div'); row.className='tcrow'+(active?' active':'');
@@ -1190,6 +1232,88 @@ function guideTownTutorialChoice(step, ready=true){
   lockFallback=true;
   try{ renderer.domElement.requestPointerLock(); }catch(e){}
   refreshPlayUi();
+}
+function jobChoiceCardHTML(id){
+  const j=JOBS[id], info=jobTutorialInfo(id), prog=jobXpIntoLevel(jobXpFor(id)), hooks=JOB_SYSTEM.gameplayHooks(id,prog.lvl).slice(0,2), active=playerJob===id;
+  return '<article class="job-choice-card '+(active?'active ':'')+(info&&info.theme||'')+'" data-job="'+id+'" style="--job-col:'+j.col+';--job-glow:'+hexToRgba(j.col,.34)+'">'
+    +'<div class="job-choice-art"><i></i><b>'+escHTML(info&&info.art||j.name.slice(0,3).toUpperCase())+'</b><span></span></div>'
+    +'<div class="job-choice-tag">'+escHTML(info&&info.room||'Training Room')+'</div>'
+    +'<h2>'+escHTML(j.name)+'</h2>'
+    +'<p>'+escHTML(j.desc)+'</p>'
+    +'<ul>'+[...(info&&info.beats||[]),...hooks].slice(0,4).map(line=>'<li>'+escHTML(line)+'</li>').join('')+'</ul>'
+    +'<button type="button">'+(active?'START '+escHTML(j.name).toUpperCase()+' TUTORIAL':'CHOOSE '+escHTML(j.name).toUpperCase())+'</button>'
+    +'</article>';
+}
+function closeLevel2JobChoice(){
+  jobChoiceOpen=false;
+  pathSelectEl.classList.add('hidden');
+  pathSelectEl.classList.remove('jobselect');
+  document.body.classList.remove('path-selecting');
+  lockFallback=true;
+  locked=true;
+  try{ renderer.domElement.requestPointerLock(); }catch(e){ enterPlayFallback(); }
+  refreshPlayUi();
+}
+function guideJobTutorialChoice(jobId){
+  const info=jobTutorialInfo(jobId);
+  if(!info || !JOBS[jobId]) return false;
+  setTownTutorialChoice(jobTutorialStepId(jobId));
+  townGuidanceActive=true;
+  const target=jobTutorialTarget(jobId);
+  const y=surfaceY(target.x,target.z);
+  tutorialPillarGroup.visible=true;
+  tutorialPillarGroup.position.set(target.x,y+4,target.z);
+  updateTownGuidanceHud();
+  renderTownTutorialOptions();
+  showName(JOBS[jobId].name+' tutorial');
+  eventLog('Job tutorial started - '+JOBS[jobId].name+' training room.');
+  return true;
+}
+function chooseJobFromLevel2Banner(jobId){
+  if(!JOBS[jobId]||jobId==='adventurer') return;
+  setLevel2JobChoiceSeen();
+  if(typeof chooseJob==='function') chooseJob(jobId,jobId);
+  else if(NET.on&&NET.room) NET.room.send('setJob',{job:jobId});
+  else playerJob=jobId;
+  closeLevel2JobChoice();
+  guideJobTutorialChoice(jobId);
+  sysMsg('<b>'+escHTML(JOBS[jobId].name)+' chosen.</b><br>Follow the pillar of light to the '+escHTML(jobTutorialInfo(jobId).room)+'.');
+  refreshAppearanceDummy();
+  if(!NET.on||!NET.room){ sendPlayerMetaNow(); sendProfileSaveNow(); }
+}
+function shouldOpenLevel2JobChoice(){
+  const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
+  return !!(S&&S.lvl>=2&&!playerJob&&!level2JobChoiceSeen()&&shouldOfferTownJobGuidance()&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
+}
+function openLevel2JobChoice(force=false){
+  if(!force && !shouldOpenLevel2JobChoice()) return false;
+  if(!pathSelectEl||!pathPanelEl) return false;
+  jobChoiceOpen=true;
+  pathChoiceOpen=false;
+  onboardingActive=false;
+  document.body.classList.remove('onboarding');
+  document.body.classList.add('path-selecting');
+  pathSelectEl.classList.add('jobselect');
+  tutorialEl.classList.add('hidden');
+  tutorialPillarGroup.visible=false;
+  tutorialDummyGroup.visible=false;
+  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
+  lockFallback=false; locked=false;
+  const ids=['miner','farmer','cook','blacksmith','monk'];
+  pathPanelEl.innerHTML='<div class="job-choice-kicker">LEVEL 2 - CHOOSE YOUR FIRST JOB TUTORIAL</div>'
+    +'<h1>WHAT KIND OF HERO DO YOU WANT TO BE?</h1>'
+    +'<div class="pathintro">Pick a job card to equip that profession and follow a pillar of light to its practice room. You can switch jobs later at the Job Board, so this is guidance, not a permanent lock.</div>'
+    +'<div id="jobchoicecards">'+ids.map(jobChoiceCardHTML).join('')+'</div>'
+    +'<div id="pathnote">Jobs are for different player styles: exploring, crafting, farming, cooking, support, and gear-making all matter.</div>'
+    +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CHOOSE LATER</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
+  pathSelectEl.classList.remove('hidden');
+  refreshPlayUi();
+  pathPanelEl.querySelectorAll('.job-choice-card').forEach(card=>card.addEventListener('click',()=>chooseJobFromLevel2Banner(card.dataset.job)));
+  const later=document.getElementById('jobchoicelater');
+  if(later)later.addEventListener('click',()=>{setLevel2JobChoiceSeen();closeLevel2JobChoice();renderTownTutorialOptions(true);});
+  const board=document.getElementById('jobchoiceboard');
+  if(board)board.addEventListener('click',()=>{setLevel2JobChoiceSeen();closeLevel2JobChoice();openJobsUI();});
+  return true;
 }
 function startTownGuidance(){
   // Profile restoration can finish after the initial town-guidance boot pass. If the
@@ -1287,7 +1411,7 @@ function tickTownGuidance(now){
   }
   if(townGuidanceStep==='quest' && (quest || playerJob)){ clearTownGuidance(); return; }
   if(townGuidanceStep==='job' && (jobContract || regionalContract)){ clearTownJobGuidance(); return; }
-  if(onboardingActive || pathChoiceOpen || uiShellState.qOpen || dim!=='overworld'){
+  if(onboardingActive || pathChoiceOpen || jobChoiceOpen || uiShellState.qOpen || dim!=='overworld'){
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
     return;
@@ -1361,13 +1485,15 @@ function pathCardHTML(key){
 function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const firstQuestRewardPending=!!(npcQuestChains&&Number(npcQuestChains['Mara Vale']||0)>=1&&!serverFirstQuestComplete);
-  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
   pathChoiceOpen=true;
+  jobChoiceOpen=false;
   onboardingActive=false;
   document.body.classList.remove('onboarding');
   document.body.classList.add('path-selecting');
+  pathSelectEl.classList.remove('jobselect');
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
@@ -1387,6 +1513,7 @@ function showPathSelection(){
     const path=card.dataset.path;
     if(!setAbilityPath(path,{message:false})) return;
     pathSelectEl.classList.add('hidden');
+    pathSelectEl.classList.remove('jobselect');
     document.body.classList.remove('path-selecting');
     pathChoiceOpen=false;
     refreshPlayUi();
@@ -1623,7 +1750,7 @@ if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.prev
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
   if(hasLock) lockFallback=false;
-  else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen)lockFallback=true;
+  else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen)lockFallback=true;
   locked = hasLock || lockFallback;
   refreshPlayUi();
 });
@@ -1653,7 +1780,7 @@ addEventListener('keydown', e=>{
     closeDevResetPanel();
     return;
   }
-  if(e.code==='KeyO' && !e.repeat && !pathChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive()){
+  if(e.code==='KeyO' && !e.repeat && !pathChoiceOpen && !jobChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive()){
     e.preventDefault();
     if(uiShellState.qOpen && questLogOpen) closeQWin();
     else if(!uiShellState.qOpen) openQuestLogUI();
@@ -1661,7 +1788,7 @@ addEventListener('keydown', e=>{
   }
   if(globalThis.chatTyping) return;
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
-  if(pathChoiceOpen){
+  if(pathChoiceOpen || jobChoiceOpen){
     e.preventDefault();
     return;
   }
@@ -2140,7 +2267,7 @@ function nearFellowshipWeatherVane(range=3.6){
   return dim==='overworld' && hasFellowshipProject('weather_vane') && Math.hypot(player.pos.x-(HUB.guild.x+3.65), player.pos.z-(HUB.guild.z-2.45))<range;
 }
 function interactionPromptActive(){
-  return locked&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!onboardingActive&&!pathChoiceOpen&&!globalThis.chatTyping;
+  return locked&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!globalThis.chatTyping;
 }
 function nearbyGuardian(range=7.8){
   if(dim!=='overworld')return false;
@@ -2586,6 +2713,7 @@ gameContext.registerState('combat', Object.freeze({
   get inputLocked(){ return locked; },
   get uiOpen(){ return uiOpen; },
   get pathChoiceOpen(){ return pathChoiceOpen; },
+  get jobChoiceOpen(){ return jobChoiceOpen; },
   get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
   get abilityTrainingActive(){ return abilityTrainingActive; },
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
@@ -2599,6 +2727,8 @@ gameContext.registerModule('combat', Object.freeze({
   secondaryAction,
   stopPrimaryAction,
   showPathSelection,
+  openLevel2JobChoice,
+  shouldOpenLevel2JobChoice,
   showAbilityAwakening,
   startAbilityTraining,
   nearbyTavernGameTable,

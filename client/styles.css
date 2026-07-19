@@ -135,6 +135,26 @@
   .pathselect-card button{position:relative;width:100%;font-family:inherit;font-size:12px;letter-spacing:2px;padding:11px 12px;border-radius:6px;background:var(--path-col);color:#07101a;border:0;border-bottom:4px solid rgba(0,0,0,.28);cursor:pointer}
   .pathselect-card .current{position:absolute;right:14px;top:14px;font-size:10px;letter-spacing:2px;color:#ffd24a;border:1px solid rgba(255,210,74,.6);border-radius:999px;padding:4px 8px;background:rgba(255,210,74,.08)}
   #pathnote{margin-top:18px;font-size:11px;letter-spacing:1px;color:#7f93aa}
+  #pathselect.jobselect{background:radial-gradient(circle at 50% 18%,rgba(255,210,74,.18),transparent 30%),radial-gradient(circle at 15% 80%,rgba(134,239,172,.1),transparent 24%),linear-gradient(180deg,rgba(5,10,18,.94),rgba(7,8,15,.98));z-index:16}
+  #pathselect.jobselect #pathpanel{width:min(1180px,calc(100vw - 38px));border-color:rgba(255,210,74,.68);box-shadow:0 0 50px rgba(255,210,74,.25),0 0 80px rgba(79,216,255,.12),inset 0 0 58px rgba(255,210,74,.06);background:linear-gradient(155deg,rgba(14,17,28,.97),rgba(8,13,23,.99));padding:28px}
+  #pathselect.jobselect #pathpanel h1{font-size:28px;letter-spacing:6px;color:#fff4c2;text-shadow:0 0 18px rgba(255,210,74,.55)}
+  .job-choice-kicker{display:inline-block;margin-bottom:10px;padding:6px 10px;border:1px solid rgba(255,210,74,.48);border-radius:999px;background:rgba(255,210,74,.08);color:#ffd24a;font-size:10px;letter-spacing:3px;text-transform:uppercase}
+  #jobchoicecards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:20px;text-align:left}
+  .job-choice-card{position:relative;display:grid;grid-template-rows:auto auto auto auto 1fr auto;gap:8px;min-height:365px;padding:12px;border:1px solid color-mix(in srgb,var(--job-col) 48%,transparent);border-radius:10px;background:linear-gradient(180deg,color-mix(in srgb,var(--job-col) 16%,rgba(20,20,28,.94)),rgba(7,9,15,.96));box-shadow:inset 0 0 22px var(--job-glow);overflow:hidden;cursor:pointer;transition:transform .16s,border-color .16s,box-shadow .16s}
+  .job-choice-card:before{content:"";position:absolute;inset:-35% -20% auto;height:70%;background:radial-gradient(circle,var(--job-glow),transparent 58%);opacity:.72;pointer-events:none}
+  .job-choice-card:hover{transform:translateY(-5px);border-color:var(--job-col);box-shadow:0 0 28px var(--job-glow),inset 0 0 28px color-mix(in srgb,var(--job-col) 20%,transparent)}
+  .job-choice-card.active:after{content:"ACTIVE";position:absolute;right:10px;top:10px;padding:4px 7px;border:1px solid rgba(255,255,255,.38);border-radius:999px;background:rgba(0,0,0,.38);font-size:8px;letter-spacing:1.5px;color:#fff}
+  .job-choice-art{position:relative;height:118px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(0,0,0,.18));display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .job-choice-art i{position:absolute;width:92px;height:92px;border:10px solid color-mix(in srgb,var(--job-col) 62%,transparent);border-radius:22px;transform:rotate(45deg);box-shadow:0 0 22px var(--job-glow)}
+  .job-choice-art b{position:relative;display:flex;align-items:center;justify-content:center;width:82px;height:74px;border-radius:16px;background:rgba(2,5,10,.72);border:1px solid var(--job-col);color:var(--job-col);font-size:14px;letter-spacing:1px;text-shadow:0 0 12px currentColor;text-align:center}
+  .job-choice-art span{position:absolute;left:12px;right:12px;bottom:12px;height:8px;border-radius:999px;background:linear-gradient(90deg,transparent,var(--job-col),transparent);opacity:.58}
+  .job-choice-tag{position:relative;font-size:9px;letter-spacing:1.7px;color:#ffd98a;text-transform:uppercase}
+  .job-choice-card h2{position:relative;margin:0;color:var(--job-col);font-size:17px;letter-spacing:2px;text-shadow:0 0 12px var(--job-glow)}
+  .job-choice-card p{position:relative;margin:0;color:#e6f2ff;font-size:12px;line-height:1.42}
+  .job-choice-card ul{position:relative;display:flex;flex-direction:column;gap:6px;list-style:none;margin:0;padding:0}
+  .job-choice-card li{font-size:10px;line-height:1.35;color:#aebfd5;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)}
+  .job-choice-card button{position:relative;width:100%;align-self:end;font-family:inherit;font-size:10px;letter-spacing:1.8px;padding:10px;border:0;border-radius:6px;background:var(--job-col);color:#06101a;border-bottom:4px solid rgba(0,0,0,.28);cursor:pointer}
+  .job-choice-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px}.job-choice-actions button{font-family:inherit;font-size:11px;letter-spacing:2px;padding:10px 14px;border-radius:6px;border:1px solid rgba(255,210,74,.48);background:rgba(74,52,14,.54);color:#ffe39a;cursor:pointer}.job-choice-actions button:hover{border-color:#fff1aa;box-shadow:0 0 14px rgba(255,210,74,.2)}
   body.path-selecting #chatlog,body.path-selecting #sysmsgs,body.path-selecting #rewardfeed,body.path-selecting #hotbar,body.path-selecting #stats,body.path-selecting #abilities,body.path-selecting #dragonhud,body.path-selecting #familiarhud,body.path-selecting #currentquest,body.path-selecting #landmap,body.path-selecting #eventhud,body.path-selecting #coachhud,body.path-selecting #crosshair,body.path-selecting #tutorialhud{display:none!important}
   #devreset{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,5,10,.72);backdrop-filter:blur(6px);color:#eef7ff}
   #devreset.hidden{display:none}
@@ -148,7 +168,9 @@
   .devresetactions{display:flex;justify-content:flex-end;gap:8px}
   .devresetactions button{font-family:inherit;font-size:12px;letter-spacing:2px;padding:10px 14px;border-radius:5px;border:1px solid rgba(255,255,255,.16);background:#162133;color:#dceaff;cursor:pointer}
   .devresetactions #devresetgo{background:#6b241f;border-color:#ff695c;color:#fff}
+  @media (max-width:1080px){#jobchoicecards{grid-template-columns:repeat(2,minmax(0,1fr))}.job-choice-card{min-height:310px}}
   @media (max-width:920px){#pathcards{grid-template-columns:1fr}.pathselect-card{min-height:0}#pathpanel{padding:22px}#pathpanel h1{font-size:22px;letter-spacing:5px}}
+  @media (max-width:640px){#jobchoicecards{grid-template-columns:1fr}.job-choice-card{min-height:0}.job-choice-art{height:96px}#pathselect.jobselect #pathpanel{padding:18px}#pathselect.jobselect #pathpanel h1{font-size:19px;letter-spacing:3px}}
   #awakeningwin{position:fixed;inset:0;z-index:13;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 30%,rgba(139,92,246,.24),transparent 30%),radial-gradient(circle at 50% 60%,rgba(79,216,255,.14),transparent 34%),linear-gradient(180deg,rgba(3,7,14,.96),rgba(5,8,16,.99));backdrop-filter:blur(9px);color:#eaf6ff;text-align:center}
   #awakeningpanel{width:min(820px,calc(100vw - 48px));border:1px solid rgba(255,210,74,.62);border-radius:16px;background:linear-gradient(160deg,rgba(12,22,44,.96),rgba(8,10,22,.98));box-shadow:0 0 56px rgba(255,210,74,.22),0 0 90px rgba(79,216,255,.16),inset 0 0 56px rgba(255,210,74,.06);padding:38px 42px;position:relative;overflow:hidden}
   #awakeningpanel:before{content:"";position:absolute;left:12%;right:12%;top:0;height:3px;background:linear-gradient(90deg,transparent,#4fd8ff,#ffd24a,#b88cff,transparent)}
@@ -906,6 +928,7 @@
   #townchoices .tcs{font-size:9px;letter-spacing:1.5px;color:#8fb8d8;margin-bottom:8px}
   #townchoices .tcrow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px;border-top:1px solid rgba(79,216,255,.14)}
   #townchoices .tcrow.active{background:rgba(79,216,255,.08);border-left:2px solid #4fd8ff}
+  #townchoices .tcrow.job-choice{background:linear-gradient(90deg,rgba(255,210,74,.12),rgba(134,239,172,.06));border-left:2px solid #ffd24a}
   #townchoices .tcname{font-size:11px;color:#fff3c4}.tcdesc{font-size:9px;color:#91a8c5;margin-top:3px;line-height:1.35}
   #townchoices button{font-family:inherit;font-size:9px;letter-spacing:1.5px;padding:6px 9px;background:#16345e;color:#9fd8ff;border:1px solid #4fd8ff;border-radius:4px;cursor:pointer}
   #townchoices button:hover{background:#1f477c}

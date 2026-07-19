@@ -3579,7 +3579,7 @@ function queueGateUnlockCutscene(){
 }
 function tryStartQueuedGateCutscene(){
   if(!gateCutscenePending || gateCutsceneSeen() || !gateSystemUnlocked()) return false;
-  if(cutscene || dim!=='overworld' || qOpen || uiOpen || statOpen || pathChoiceOpen || abilityAwakeningOpen || abilityTrainingActive) return false;
+  if(cutscene || dim!=='overworld' || qOpen || uiOpen || statOpen || pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen || abilityTrainingActive) return false;
   if(startGateUnlockCutscene(false)){ gateCutscenePending=false; markGateCutsceneSeen(); return true; }
   return false;
 }
@@ -4321,7 +4321,7 @@ function smartSuggestionsAllowed(){
   if(abilityAwakeningOpen || abilityTrainingActive) return false;
   if(!overlay || !overlay.classList.contains('hidden')) return false;
   if(!(locked || lockFallback)) return false;
-  if(onboardingActive || pathChoiceOpen || claimMode || uiOpen || statOpen || qOpen) return false;
+  if(onboardingActive || pathChoiceOpen || jobChoiceOpen || claimMode || uiOpen || statOpen || qOpen) return false;
   if(rewardWin && !rewardWin.classList.contains('hidden')) return false;
   return true;
 }

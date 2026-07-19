@@ -66,6 +66,7 @@ const legacyMenuBindings={
   "clearShardHazards":{get:()=>clearShardHazards},
   "closeQWin":{get:()=>closeQWin},
   "closeUI":{get:()=>closeUI},
+  "chooseJob":{get:()=>chooseJob},
   "comboBump":{get:()=>comboBump},
   "comboN":{get:()=>comboN},
   "completeAegisBounty":{get:()=>completeAegisBounty},

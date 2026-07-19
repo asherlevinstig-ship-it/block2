@@ -1356,6 +1356,31 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.doesNotMatch(styles,/body\.onboarding[^\{]*#currentquest/);
 });
 
+test('level two job chooser presents five profession tutorial cards',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(combat,/const LEVEL2_JOB_CHOICE_KEY='bc_level2_job_choice_seen_v1'/);
+  assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
+  for(const job of ['miner','farmer','cook','blacksmith','monk']) assert.match(combat,new RegExp(`${job}:\\{room:`));
+  assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
+  assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
+  assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
+  assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk'\]/);
+  assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
+  assert.match(combat,/jobTutorialStepId\(jobId\)/);
+  assert.match(combat,/Follow the pillar of light to the/);
+  assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);
+  assert.match(frame,/combatApi\.openLevel2JobChoice\(\)/);
+  assert.match(menus,/"chooseJob":\{get:\(\)=>chooseJob\}/);
+  assert.match(styles,/#pathselect\.jobselect/);
+  assert.match(styles,/#jobchoicecards\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(styles,/\.job-choice-card/);
+  assert.match(styles,/\.job-choice-art/);
+  assert.match(styles,/#townchoices \.tcrow\.job-choice/);
+});
+
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
@@ -1405,7 +1430,7 @@ test('quest log hotkey works while gameplay overlay is hidden even without point
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(combat,/function gameplayInputActive\(\)\{\s*return locked\|\|overlay\.classList\.contains\('hidden'\);\s*\}/);
-  assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat && !pathChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive\(\)\)\{/);
+  assert.match(combat,/if\(e\.code==='KeyO' && !e\.repeat && !pathChoiceOpen && !jobChoiceOpen && !claimMode && !uiOpen && !statOpen && gameplayInputActive\(\)\)\{/);
   assert.match(combat,/else if\(!uiShellState\.qOpen\) openQuestLogUI\(\);/);
   assert.match(combat,/if\(e\.code==='KeyO'[\s\S]*return;\s*\}\s*if\(globalThis\.chatTyping\) return;/);
   assert.doesNotMatch(combat,/else if\(locked && !uiOpen && !statOpen\) openQuestLogUI\(\);/);
