@@ -62,6 +62,13 @@ export function createNetworkSession({
       localStorage.removeItem('bc_token');
       localStorage.setItem('bc_name',name);
     }catch(e){}
+    try{
+      // Browser logins should restore persistent player state through a fresh room join.
+      // Colyseus reconnect tokens are only reliable for live socket recovery, and stale
+      // saved tokens can surface noisy /matchmake/reconnect 522s before fallback runs.
+      sessionStorage.removeItem('bc_reconnect_token');
+      sessionStorage.removeItem('bc_reconnect_token:auth');
+    }catch(e){}
     beforeConnect();
     controller.connect(name);
   }

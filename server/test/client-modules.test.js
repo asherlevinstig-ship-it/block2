@@ -2681,6 +2681,54 @@ test('network session fresh joins prefer main before a saved overflow shard', as
   }
 });
 
+test('network session clears stale saved room reconnect tokens before login connect', async () => {
+  const previousLocalStorage = globalThis.localStorage;
+  const local = new Map();
+  const session = new Map([
+    ['bc_reconnect_token', 'stale-room-token'],
+    ['bc_reconnect_token:auth', 'stale-auth-token'],
+  ]);
+  const removed = [];
+  globalThis.localStorage = {
+    getItem: key => local.get(key) || '',
+    setItem: (key, value) => local.set(key, value),
+    removeItem: key => local.delete(key),
+  };
+  try {
+    const { createNetworkSession } = await clientModule('network-session.mjs');
+    const network = createNetworkSession({
+      createController: () => ({ state: {}, connect(name) { removed.push(['connect', name]); } }),
+      Client: class {},
+      endpoint: () => 'ws://test',
+      sessionStorage: {
+        getItem: key => session.get(key) || '',
+        setItem: (key, value) => session.set(key, value),
+        removeItem: key => { removed.push(['remove', key]); session.delete(key); },
+      },
+      attachRoom() {},
+      unavailable() {},
+      interrupted() {},
+      reconnectAttempt() {},
+      restored() {},
+      failure() {},
+      getPlayerName: () => 'Dylan Lynee',
+      authToken: () => 'fresh-auth-token',
+      beforeConnect() { removed.push(['beforeConnect']); },
+    });
+    network.connect();
+    assert.equal(session.get('bc_reconnect_token'), undefined);
+    assert.equal(session.get('bc_reconnect_token:auth'), undefined);
+    assert.deepEqual(removed, [
+      ['remove', 'bc_reconnect_token'],
+      ['remove', 'bc_reconnect_token:auth'],
+      ['beforeConnect'],
+      ['connect', 'Dylan Lynee'],
+    ]);
+  } finally {
+    globalThis.localStorage = previousLocalStorage;
+  }
+});
+
 test('network controller bounds a hung live reconnect and falls back to a fresh join', async () => {
   const attached = [], events = [];
   const first = { reconnectionToken: 'live:token', onLeave(fn) { this.leaveHandler = fn; } };
