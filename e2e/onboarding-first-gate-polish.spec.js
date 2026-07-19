@@ -48,6 +48,12 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTutorialDone)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().objectiveAction)).toMatchObject({
+    label:'CHOOSE JOB',
+    type:'choose_job',
+  });
+  await page.locator('#jobchoicelater').click();
+  await expect(page.locator('#pathselect')).toBeHidden();
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('Road Ready');

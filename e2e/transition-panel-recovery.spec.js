@@ -89,7 +89,7 @@ async function completeFirstHandsToReward(page) {
 
 test('first-session transition panels recover after reload and tracker clicks', async ({ page }) => {
   test.setTimeout(150_000);
-  await registerFreshHunter(page, 'transition_recovery');
+  await registerFreshHunter(page, 'trans_rec');
   await finishTraining(page);
   await completeFirstHandsToReward(page);
 
@@ -113,9 +113,7 @@ test('first-session transition panels recover after reload and tracker clicks', 
     await reloadAndPlay(page);
     await openQuestLog(page);
     await expectRecoveryHub(page, 'Choose Path', 'CHOOSE PATH');
-    if (!(await page.locator('#pathselect').evaluate(el => !el.classList.contains('hidden')))) {
-      await clickRecoveryHub(page, 'CHOOSE PATH');
-    }
+    await clickRecoveryHub(page, 'CHOOSE PATH');
     await page.locator('.pathselect-card[data-path="shadow"]').click();
   });
 
@@ -127,11 +125,7 @@ test('first-session transition panels recover after reload and tracker clicks', 
     await reloadAndPlay(page);
     await openQuestLog(page);
     await expectRecoveryHub(page, 'Start Awakening', 'START AWAKENING');
-    if (await page.locator('#awakeningwin').evaluate(el => !el.classList.contains('hidden'))) {
-      await page.locator('#awakeningbegin').click();
-    } else {
-      await clickRecoveryHub(page, 'START AWAKENING');
-    }
+    await clickRecoveryHub(page, 'START AWAKENING');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
   });
 

@@ -774,13 +774,15 @@ function transitionPanelState(){
   const path=document.getElementById('pathselect');
   const awakening=document.getElementById('awakeningwin');
   const rewardOpen=!!(reward&&!reward.classList.contains('hidden'));
-  const pathOpen=!!(path&&!path.classList.contains('hidden'));
+  const jobOpen=!!(path&&!path.classList.contains('hidden')&&path.classList.contains('jobselect'));
+  const pathOpen=!!(path&&!path.classList.contains('hidden')&&!jobOpen);
   const awakeningOpen=!!(awakening&&!awakening.classList.contains('hidden'));
-  return {rewardOpen,pathOpen,awakeningOpen};
+  return {rewardOpen,pathOpen,jobOpen,awakeningOpen};
 }
 function transitionRecoveryAction(){
   const panels=transitionPanelState();
   if(panels.rewardOpen) return {type:'continue_panel',label:'CONTINUE'};
+  if(panels.jobOpen || combatState.jobChoiceOpen) return {type:'choose_job',label:'CHOOSE JOB'};
   if(panels.pathOpen || (S&&S.lvl>=2&&!S.path)) return {type:'choose_path',label:'CHOOSE PATH'};
   if(panels.awakeningOpen || (S&&S.lvl>=2&&S.path&&combatState.abilityReady&&!combatState.abilityTutorialDone&&!combatState.abilityTrainingActive)) return {type:'start_awakening',label:'START AWAKENING'};
   if(combatState.abilityTrainingActive) return {type:'use_ability',label:combatState.abilityTrainingUsed?'FINISH TRAINING':'USE ABILITY'};
@@ -886,6 +888,12 @@ function handleObjectiveAction(action,btn){
     sysMsg('<b>Choose Path:</b> finish the current panel, then choose your combat path.');
     return;
   }
+  if(action==='choose_job'){
+    if(combatState.jobChoiceOpen || transitionPanelState().jobOpen){ sysMsg('<b>Choose Job:</b> pick a job tutorial card, choose later, or open the Job Board.'); return; }
+    if(combatApi.openLevel2JobChoice&&combatApi.openLevel2JobChoice(true)) return;
+    sysMsg('<b>Choose Job:</b> open the Job Board when you are ready to try a profession.');
+    return;
+  }
   if(action==='start_awakening'){
     if(transitionPanelState().awakeningOpen){ const b=document.getElementById('awakeningbegin'); if(b){ b.click(); return; } }
     if(combatApi.showAbilityAwakening&&combatApi.showAbilityAwakening()) return;
@@ -958,6 +966,7 @@ function currentObjective(){
   const transition=transitionRecoveryAction();
   if(transition){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
+    if(transition.type==='choose_job') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
     if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};
     if(transition.type==='start_awakening') return {label:'Ability Awakening', text:'Start ability training for your chosen path'};
     if(transition.type==='use_ability') return {label:'Ability Training', text:combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'};

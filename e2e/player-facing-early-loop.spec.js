@@ -114,6 +114,9 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTutorialDone)).toBe(true);
+    await expectTrackerAction(page, 'CHOOSE JOB', 'choose_job');
+    await page.locator('#jobchoicelater').click();
+    await expect(page.locator('#pathselect')).toBeHidden();
 
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'accept', giver: 'Mara Vale', role: 'guide' }));
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'completeRoadReady' }));

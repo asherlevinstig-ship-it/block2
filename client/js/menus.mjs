@@ -4016,6 +4016,14 @@ function panelVisible(id){
   const el=document.getElementById(id);
   return !!(el&&!el.classList.contains('hidden'));
 }
+function jobChoicePanelVisible(){
+  const el=document.getElementById('pathselect');
+  return !!(el&&!el.classList.contains('hidden')&&el.classList.contains('jobselect'));
+}
+function pathChoicePanelVisible(){
+  const el=document.getElementById('pathselect');
+  return !!(el&&!el.classList.contains('hidden')&&!el.classList.contains('jobselect'));
+}
 function continueOpenTransitionPanel(){
   const button=document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('trainingcontinue')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
   if(button)button.click();
@@ -4031,16 +4039,31 @@ function continueOpenTransitionPanel(){
   return !!button;
 }
 function openPathRecovery(){
-  if(panelVisible('pathselect')){sysMsg('<b>Choose Path:</b> select Shadow, Mage, or Guardian to unlock your first ability.');return true;}
+  if(pathChoicePanelVisible()){
+    closeQWin(false);
+    sysMsg('<b>Choose Path:</b> select Shadow, Mage, or Guardian to unlock your first ability.');
+    return true;
+  }
   closeQWin(false);
   if(combatApi.showPathSelection&&combatApi.showPathSelection())return true;
   sysMsg('<b>Choose Path:</b> finish the current panel, then choose your combat path.');
   return false;
 }
+function openJobChoiceRecovery(){
+  if(jobChoicePanelVisible()||combatState.jobChoiceOpen){
+    closeQWin(false);
+    sysMsg('<b>Choose Job:</b> pick a job tutorial card, choose later, or open the Job Board.');
+    return true;
+  }
+  closeQWin(false);
+  if(combatApi.openLevel2JobChoice&&combatApi.openLevel2JobChoice(true))return true;
+  openJobsUI();
+  return true;
+}
 function startAwakeningRecovery(){
   if(panelVisible('awakeningwin')){
     const button=document.getElementById('awakeningbegin');
-    if(button){button.click();return true;}
+    if(button){closeQWin(false);button.click();return true;}
   }
   closeQWin(false);
   if(combatApi.showAbilityAwakening&&combatApi.showAbilityAwakening())return true;
@@ -4059,7 +4082,8 @@ function openLandRecovery(){
 }
 function recoveryHubInfo(){
   if(panelVisible('rewardwin'))return {title:'Reward Pending',status:'Continue the open reward or milestone panel to unlock the next step.',where:'Open reward panel',button:'CONTINUE',action:continueOpenTransitionPanel};
-  if(panelVisible('pathselect')||(S&&S.lvl>=2&&!S.path))return {title:'Choose Path',status:'Pick Shadow, Mage, or Guardian. This unlocks your first ability and the awakening lesson.',where:'Combat path selection',button:'CHOOSE PATH',action:openPathRecovery};
+  if(jobChoicePanelVisible()||combatState.jobChoiceOpen)return {title:'Choose Job Tutorial',status:'Pick a job tutorial card, choose later, or open the Job Board. Jobs guide play style but do not lock your character.',where:'Job tutorial choice',button:'CHOOSE JOB',action:openJobChoiceRecovery};
+  if(pathChoicePanelVisible()||(S&&S.lvl>=2&&!S.path))return {title:'Choose Path',status:'Pick Shadow, Mage, or Guardian. This unlocks your first ability and the awakening lesson.',where:'Combat path selection',button:'CHOOSE PATH',action:openPathRecovery};
   if(panelVisible('awakeningwin')||(S&&S.lvl>=2&&S.path&&combatState.abilityReady&&!combatState.abilityTutorialDone&&!combatState.abilityTrainingActive))return {title:'Start Awakening',status:'Begin the ability lesson for your chosen path so Q becomes part of your real combat loop.',where:'Ability meadow',button:'START AWAKENING',action:startAwakeningRecovery};
   if(combatState.abilityTrainingActive)return {title:'Ability Training',status:combatState.abilityTrainingUsed?'Finish the training meadow and return to town.':'Use your Q ability in the training meadow.',where:'Ability meadow',button:combatState.abilityTrainingUsed?'FINISH TRAINING':'USE ABILITY',action:useAbilityTrainingRecovery};
   if(quest&&questDone())return {title:'Turn In Quest',status:'Your active story objective is complete. Return to '+escHTML(quest.giver||'the quest giver')+'.',where:quest.giver||'Quest giver',button:'SHOW QUEST',action:()=>sysMsg('<b>Turn in:</b> follow the trail back to '+escHTML(quest&&quest.giver||'the quest giver')+'.')};
