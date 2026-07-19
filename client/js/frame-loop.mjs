@@ -1624,11 +1624,11 @@ function tick(now){
   tickJobTutorial(now);
   tickTownGuidance(now);
   tickLandBoundaryToast(now);
-  if(shouldOpenLevel2PathChoice()) showPathSelection();
+  if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice()){
+    combatApi.openLevel2JobChoice();
+  }else if(shouldOpenLevel2PathChoice()) showPathSelection();
   else if(!cutscene && !abilityTrainingActive && !abilityAwakeningOpen && abilityHudAvailable() && !abilityTutorialDone()){
     if(!runLevel2CutsceneThenTutorial()) showAbilityAwakening();
-  }else if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice()){
-    combatApi.openLevel2JobChoice();
   }
   if(!cutscene) tryStartQueuedGateCutscene();
   renderEventHud();

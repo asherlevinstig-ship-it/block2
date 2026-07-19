@@ -1365,7 +1365,9 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(combat,/const LEVEL2_JOB_CHOICE_KEY='bc_level2_job_choice_seen_v1'/);
-  assert.match(networking,/localStorage\.removeItem\('bc_level2_job_choice_seen_v1'\)/);
+  assert.match(combat,/function forceLevel2JobChoice\(\)/);
+  assert.match(networking,/combatApi\.forceLevel2JobChoice\(\)/);
+  assert.ok(frame.indexOf('combatApi.shouldOpenLevel2JobChoice')<frame.indexOf('shouldOpenLevel2PathChoice()'), 'job chooser is checked before path chooser');
   assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
   assert.match(combat,/const JOB_TUTORIAL_ROOM_COPY=Object\.freeze\(\{/);
   assert.match(combat,/MINER_TUTORIAL_TRADE_GOLD=45/);

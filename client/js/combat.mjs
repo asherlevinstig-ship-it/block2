@@ -572,6 +572,7 @@ function cancelOnboardingForProfileRestore(){
 let pathChoiceOpen=false;
 let jobChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
+let level2JobChoiceForced=false;
 const onboardingFlags={sprint:false,arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
   markSubjectFocus:()=>{if(onboardingActive&&onboardingArrived&&onboardingKind()==='subject')onboardingFlags.subject=true;},
@@ -751,6 +752,11 @@ function level2JobChoiceSeen(){
 }
 function setLevel2JobChoiceSeen(){
   try{localStorage.setItem(LEVEL2_JOB_CHOICE_KEY,'1');}catch(e){}
+  level2JobChoiceForced=false;
+}
+function forceLevel2JobChoice(){
+  level2JobChoiceForced=true;
+  try{localStorage.removeItem(LEVEL2_JOB_CHOICE_KEY);}catch(e){}
 }
 function jobTutorialInfo(jobId){
   return JOB_TUTORIAL_STEPS[jobId]||null;
@@ -1523,7 +1529,8 @@ function chooseJobFromLevel2Banner(jobId){
 }
 function shouldOpenLevel2JobChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
-  return !!(S&&S.lvl>=2&&!playerJob&&!level2JobChoiceSeen()&&shouldOfferTownJobGuidance()&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
+  const guidanceReady=level2JobChoiceForced||shouldOfferTownJobGuidance();
+  return !!(S&&S.lvl>=2&&!playerJob&&!level2JobChoiceSeen()&&guidanceReady&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
 }
 function openLevel2JobChoice(force=false){
   if(!force && !shouldOpenLevel2JobChoice()) return false;
@@ -1725,7 +1732,7 @@ function pathCardHTML(key){
 function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const firstQuestRewardPending=!!(npcQuestChains&&Number(npcQuestChains['Mara Vale']||0)>=1&&!serverFirstQuestComplete);
-  return !!(S && S.lvl>=2 && !S.path && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  return !!(S && S.lvl>=2 && !S.path && !level2JobChoiceForced && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
   pathChoiceOpen=true;
@@ -2973,6 +2980,7 @@ gameContext.registerModule('combat', Object.freeze({
   stopPrimaryAction,
   showPathSelection,
   openLevel2JobChoice,
+  forceLevel2JobChoice,
   shouldOpenLevel2JobChoice,
   startJobTutorial,
   showAbilityAwakening,

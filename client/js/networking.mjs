@@ -2116,7 +2116,7 @@ function netRestoreProfile(m){
   try{
     applyServerTutorials(m&&m.tutorials);
     if(m&&m.forceJobChoice===true){
-      try{localStorage.removeItem('bc_level2_job_choice_seen_v1');}catch(e){}
+      if(combatApi.forceLevel2JobChoice)combatApi.forceLevel2JobChoice();
     }
     applyDeityState(m&&m.deity);
     updateServerInventorySnapshot(m&&m.inv);
