@@ -9477,6 +9477,7 @@ gameContext.registerState('world', Object.freeze({
   get activeObjectives(){ return activeObjectives; },
   get event(){ return Object.freeze({id:eventId,active:eventMode,grid:eventWorld}); },
   get skyshipJourney(){ return skyshipJourney; },
+  get JOB_TUTORIAL_MEADOWS(){ return JOB_TUTORIAL_MEADOWS; },
 }));
 gameContext.registerModule('world', Object.freeze({
   getBlock:getB,

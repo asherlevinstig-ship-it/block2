@@ -1426,6 +1426,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/addTemporaryJobTutorialTool\(I\.DIA_PICK\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='miner'&&m\.id===B\.DIAMOND_ORE/);
   assert.match(combat,/jobTutorialSafeSpawnY\(jobId,room\.x\+\.5,room\.z\+14\.5,room\.G\+1\.035\)/);
+  assert.match(combat,/function jobTutorialInitialYaw\(jobId, room, x, z\)/);
+  assert.match(combat,/player\.yaw=jobTutorialInitialYaw\(jobId,room,player\.pos\.x,player\.pos\.z\)/);
   assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
@@ -1443,6 +1445,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/enterJobTutorialRoom\(jobId\)/);
   assert.match(combat,/exitJobTutorialRoom\(\)/);
   assert.match(world,/const JOB_TUTORIAL_MEADOWS=Object\.freeze\(\{/);
+  assert.match(world,/get JOB_TUTORIAL_MEADOWS\(\)\{ return JOB_TUTORIAL_MEADOWS; \}/);
   assert.match(world,/function buildJobTutorialMeadow\(jobId,setBlock=setB\)/);
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
@@ -1460,6 +1463,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job\)/);
   assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);
   assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');
+  assert.match(frame,/worldState\.JOB_TUTORIAL_MEADOWS&&worldState\.JOB_TUTORIAL_MEADOWS\.pet_tamer/);
+  assert.match(frame,/tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);
   assert.match(frame,/combatApi\.openLevel2JobChoice\(\)/);
   assert.match(frame,/tickJobTutorial\(now\)/);

@@ -1642,6 +1642,13 @@ function updateInfoHud(held){
 }
 let last=performance.now();
 const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,...worldApi.particleBudgetStats()})});
+function tickPetTamerTutorialVisuals(now, dt){
+  if(!networkingApi.tickPetTamerTutorialDragons)return;
+  const petRoom=(worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS.pet_tamer)||null;
+  const petTamerActive=dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob==='pet_tamer';
+  networkingApi.tickPetTamerTutorialDragons(petTamerActive, petRoom, now, dt);
+  if(networkingApi.tickPetTamerTutorialGroundDragon)networkingApi.tickPetTamerTutorialGroundDragon(petTamerActive, petRoom, now, dt);
+}
 function tick(now){
   requestAnimationFrame(tick);
   const dt=Math.max(0,Math.min((now-last)/1000,.05)); last=now;
@@ -1673,6 +1680,7 @@ function tick(now){
   tickDragonIncubationMeshes(now);
   tickPerchedDragons(now, dt);
   tickFamiliars(now, dt);
+  tickPetTamerTutorialVisuals(now, dt);
   tickWatchfulShade(now);
   updateFamiliarHUD();
   if(cutscene) tickCutscene(now, dt);   // cinematic drives its own camera, regardless of pointer-lock
@@ -1834,12 +1842,6 @@ function tick(now){
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
     if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);
-    if(networkingApi.tickPetTamerTutorialDragons){
-      const petRoom=(worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS.pet_tamer)||null;
-      const petTamerActive=dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob==='pet_tamer';
-      networkingApi.tickPetTamerTutorialDragons(petTamerActive, petRoom, now, dt);
-      if(networkingApi.tickPetTamerTutorialGroundDragon) networkingApi.tickPetTamerTutorialGroundDragon(petTamerActive, petRoom, now, dt);
-    }
     tickDragonRoost(now, dt);
 
     if(worldState.skyshipJourney&&worldState.skyshipJourney.boarded&&worldState.skyshipJourney.phase==='flight'&&skyShip){

@@ -1327,6 +1327,13 @@ function jobTutorialSafeSpawnY(jobId,x,z,fallbackY){
   }
   return jobTutorialWalkY(x,z,fallbackY);
 }
+function jobTutorialInitialYaw(jobId, room, x, z){
+  if(jobId==='pet_tamer'&&room){
+    const tx=room.x+8.5, tz=room.z+8.5;
+    return Math.atan2(-(tx-x),-(tz-z));
+  }
+  return Math.PI;
+}
 function updateJobTutorialHud(){
   if(!jobTutorialActive||dim!=='job'){tutorialEl.classList.add('hidden');return;}
   const job=JOBS[jobTutorialJob]||{name:'Job'};
@@ -1398,7 +1405,7 @@ function startJobTutorial(jobId){
   jobTutorialReturnWarnAt=0;
   player.pos.set(room.x+.5,jobTutorialSafeSpawnY(jobId,room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
-  player.yaw=Math.PI;
+  player.yaw=jobTutorialInitialYaw(jobId,room,player.pos.x,player.pos.z);
   player.pitch=0;
   updateVisibleChunks(true);
   grantJobTutorialKit(jobId);
