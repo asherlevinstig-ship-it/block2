@@ -3619,7 +3619,10 @@ const NPC_ROLES=[
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
   {name:'Bryn Notice',shortName:'Bryn',role:'job_mentor',title:'Job Board Helper',personality:'clear, encouraging, points with both hands',
    work:[HUB.jobs.x-2.2,HUB.jobs.z+.8],home:[HUB.jobs.x,HUB.jobs.z],static:true,
-   line:'The board is your loop when you feel stuck: pick a job, take one contract, finish it, then come back for XP, gold, and profession progress.'},
+   line:'The board is your loop when you feel stuck: pick a job, take one contract, finish it, then come back for XP, gold, and profession progress. Milo beside me can send you back into any worker tutorial.'},
+  {name:'Milo Waywright',shortName:'Milo',role:'worker_tutor',title:'Worker Tutor',personality:'upbeat, patient, carries six different tool belts',
+   work:[HUB.jobs.x+.25,HUB.jobs.z+3.25],home:[HUB.jobs.x,HUB.jobs.z],static:true,
+   line:'Want to try a different worker path? I can send you to Miner, Farmer, Cook, Blacksmith, Monk, or Pet Tamer practice rooms any time.'},
   {name:'Orin Mapwell',shortName:'Orin',role:'cartographer',title:'Royal Cartographer',personality:'curious, ink-stained, delighted by blank spaces',
    work:[HUB.cartographer.x,HUB.cartographer.z],home:[HUB.cartographer.x,HUB.cartographer.z],static:true,
    line:'A blank map is not empty. It is asking you a question. Bring me honest roads and I will make them remembered.',
@@ -4638,7 +4641,7 @@ function makeNpcNameplate(name, role, color){
 function npcRoleColor(role){
   return role==='smith'?'#ffb45e':role==='scholar'?'#7dd3fc':role==='quartermaster'?'#ffd24a':
     role==='warden'?'#d8f2ff':role==='guide'?'#9ad26b':role==='bartender'||role==='cook'?'#ffd24a':
-    role==='guild_receptionist'||role==='job_mentor'?'#f2c75c':role==='stablemaster'||role==='skyship_attendant'?'#66f0ff':role==='miner'?'#b8c0cc':role==='farmer'?'#86efac':role==='monk'?'#7dd3fc':'#e8dcc0';
+    role==='guild_receptionist'||role==='job_mentor'||role==='worker_tutor'?'#f2c75c':role==='stablemaster'||role==='skyship_attendant'?'#66f0ff':role==='miner'?'#b8c0cc':role==='farmer'?'#86efac':role==='monk'?'#7dd3fc':'#e8dcc0';
 }
 function attachNpcNameplate(v, y){
   if(!v||!v.grp) return;

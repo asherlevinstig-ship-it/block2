@@ -226,6 +226,7 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
     ['cartographer', 'Royal Cartographer'],
     ['road_warden', 'roads and regional contracts'],
     ['job_mentor', 'Job Board'],
+    ['worker_tutor', 'worker tutorial selector'],
     ['skyship_attendant', 'Westwind Skyport'],
   ]) {
     assert.match(world, new RegExp(`role:'${role}'`), `${area} needs an explainer NPC`);
@@ -233,6 +234,8 @@ test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   assert.match(world, /fixedY:HUB\.skyport\.y\+1/);
   assert.match(world, /Number\.isFinite\(def\.fixedY\)\?def\.fixedY:TOWN\.G\+1/);
   assert.match(combat, /vill\.role==='job_mentor'/);
+  assert.match(combat, /vill\.role==='worker_tutor'/);
+  assert.match(combat, /openLevel2JobChoice\(true\)/);
   assert.match(combat, /vill\.role==='scholar'/);
   assert.match(combat, /Dungeon Shards open Gates/);
   assert.match(combat, /vill\.role==='skyship_attendant'/);
@@ -1394,10 +1397,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
-  assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
+  assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO PRACTICE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
   assert.match(combat,/startJobTutorial\(jobId\)/);
+  assert.match(combat,/Milo at the Job Board/);
   assert.match(combat,/teleport straight to a private practice room/);
   assert.match(combat,/enterJobTutorialRoom\(jobId\)/);
   assert.match(combat,/exitJobTutorialRoom\(\)/);

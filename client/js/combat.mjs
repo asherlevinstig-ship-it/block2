@@ -1596,9 +1596,9 @@ function openLevel2JobChoice(force=false){
   if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
   lockFallback=false; locked=false;
   const ids=['miner','farmer','cook','blacksmith','monk','pet_tamer'];
-  pathPanelEl.innerHTML='<div class="job-choice-kicker">LEVEL 2 - CHOOSE YOUR FIRST JOB TUTORIAL</div>'
-    +'<h1>WHAT KIND OF HERO DO YOU WANT TO BE?</h1>'
-    +'<div class="pathintro">Pick a job card to equip that profession and teleport straight to a private practice room. You can switch jobs later at the Job Board, so this is guidance, not a permanent lock.</div>'
+  pathPanelEl.innerHTML='<div class="job-choice-kicker">WORKER TUTORIALS - PICK OR REPLAY A PATH</div>'
+    +'<h1>WHAT KIND OF HERO DO YOU WANT TO PRACTICE?</h1>'
+    +'<div class="pathintro">Pick a job card to equip that profession and teleport straight to a private practice room. You can switch jobs or replay tutorials later with Milo at the Job Board, so this is guidance, not a permanent lock.</div>'
     +'<div id="jobchoicecards">'+ids.map(jobChoiceCardHTML).join('')+'</div>'
     +'<div id="pathnote">Jobs are for different player styles: exploring, crafting, farming, cooking, support, and gear-making all matter.</div>'
     +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CHOOSE LATER</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
@@ -2989,8 +2989,12 @@ function interactWithVillager(vill){
     openShardUI();
   }
   else if(vill.role==='job_mentor'){
-    sysMsg('<b>'+escHTML(vill.name||'Job Board Helper')+':</b> "Pick one clear contract, finish it, then claim the reward here. Jobs change how you play: Miner surveys, Cook hunts and feeds, Blacksmith improves gear, Farmer grows supplies, Monk restores focus."');
+    sysMsg('<b>'+escHTML(vill.name||'Job Board Helper')+':</b> "Pick one clear contract, finish it, then claim the reward here. Jobs change how you play. If you want to try a worker tutorial, talk to <b>Milo</b> beside the board."');
     openJobsUI();
+  }
+  else if(vill.role==='worker_tutor'){
+    sysMsg('<b>'+escHTML(vill.name||'Worker Tutor')+':</b> "Choose any worker tutorial. I will equip that job and send you straight to its practice room."');
+    openLevel2JobChoice(true);
   }
   else if(vill.role==='skyship_attendant'){
     sysMsg('<b>'+escHTML(vill.name||'Westwind Travel Clerk')+':</b> "The Westwind flies to distant regions. Reach <b>S-Rank</b>, bring <b>1,000 gold</b>, then stand at the gangway and press <b>G</b> to board."');
