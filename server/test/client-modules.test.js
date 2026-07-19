@@ -255,6 +255,20 @@ test('wild pet familiar discovery is taught through hunting and familiar UI', ()
   assert.match(jobs, /Rare pet collars can drop from rabbits, deer, and boars/);
 });
 
+test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  assert.match(world, /const skyDragons=\[\]/);
+  assert.match(world, /const SKY_DRAGON_SPECS=Object\.freeze\(\[/);
+  assert.match(world, /name:'Ember sky dragon'/);
+  assert.match(world, /function makeSkyDragon\(spec,index\)/);
+  assert.match(world, /function updateSkyDragons\(dt,tt\)/);
+  assert.match(world, /playerOverworldDistanceSq\(d\.cx,d\.cz\)<360\*360/);
+  assert.match(world, /"skyDragons":\{get:\(\)=>skyDragons\}/);
+  assert.match(world, /"updateSkyDragons":\{get:\(\)=>updateSkyDragons\}/);
+  assert.match(frame, /updateSkyDragons\(dt,now\/1000\)/);
+});
+
 test('Town systems use district anchors instead of stale compact-town coordinates', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');

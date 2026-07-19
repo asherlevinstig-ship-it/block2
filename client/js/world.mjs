@@ -8890,6 +8890,54 @@ for(let i=0;i<roadBreadcrumbs.length;i+=3){
   grp.position.set(b.x,b.y+12+(i%4)*1.3,b.z);scene.add(grp);
   roadBirds.push({grp,cx:b.x,cy:b.y+12+(i%4)*1.3,cz:b.z,phase:hash2(b.x,b.z)*Math.PI*2,r:5+hash2(b.z,b.x)*4,wings:[left,right]});
 }
+const skyDragons=[];
+const SKY_DRAGON_SPECS=Object.freeze([
+  {name:'Ember sky dragon',x:HUB.roost.x+16,z:HUB.roost.z+8,y:TOWN.G+43,r:30,speed:.090,scale:1.25,body:'#9b341f',hi:'#f97316',dark:'#4a140d',wing:'#fbbf24'},
+  {name:'Frost sky dragon',x:HUB.skyport.x-20,z:HUB.skyport.z-18,y:TOWN.G+55,r:46,speed:.060,scale:1.08,body:'#7dd3fc',hi:'#e0f7ff',dark:'#1e3a8a',wing:'#bae6fd'},
+  {name:'Verdant sky dragon',x:HUB.roost.x+42,z:HUB.roost.z-36,y:TOWN.G+37,r:26,speed:.105,scale:.95,body:'#3f8f46',hi:'#86efac',dark:'#14532d',wing:'#bbf7d0'},
+  {name:'Storm sky dragon',x:TOWN.TC+8,z:TOWN.TC-72,y:TOWN.G+62,r:58,speed:.048,scale:1.16,body:'#475569',hi:'#cbd5e1',dark:'#111827',wing:'#a78bfa'},
+  {name:'Hatchling patrol',x:HUB.roost.x-10,z:HUB.roost.z+22,y:TOWN.G+30,r:17,speed:.140,scale:.68,body:'#b45309',hi:'#fde68a',dark:'#7c2d12',wing:'#fed7aa'},
+]);
+function makeSkyDragon(spec,index){
+  const grp=new THREE.Group();
+  grp.name=spec.name||'Sky Dragon';
+  grp.scale.setScalar(spec.scale||1);
+  grp.frustumCulled=false;
+  const bodyM=voxelMats(spec.body,spec.hi,spec.dark,'#10070a');
+  const bellyM=voxelMats(shadeHex(spec.body,1.28),shadeHex(spec.hi,1.1),shadeHex(spec.dark,.9),'#12080a');
+  const wingM=voxelMats(spec.wing,shadeHex(spec.wing,1.2),shadeHex(spec.dark,1.1),'#0f172a');
+  const hornM=voxelMats('#f8fafc','#ffffff','#94a3b8','#334155');
+  const eyeM=glowVoxelMats('#67e8f9','#ffffff','#0891b2','#a7f3ff',1.1);
+  const wings=[];
+  addBox(grp,[2.35,.58,.76],[0,0,0],bodyM);
+  addBox(grp,[1.05,.72,.82],[0,.08,-.58],bellyM);
+  addBox(grp,[.58,.36,.8],[0,.16,-1.15],bodyM,[.08,0,0]);
+  addBox(grp,[.86,.52,.62],[0,.2,-1.76],bodyM);
+  addBox(grp,[.2,.16,.12],[-.24,.3,-2.09],eyeM);
+  addBox(grp,[.2,.16,.12],[.24,.3,-2.09],eyeM);
+  addBox(grp,[.16,.55,.16],[-.32,.72,-1.82],hornM,[.52,0,-.25]);
+  addBox(grp,[.16,.55,.16],[.32,.72,-1.82],hornM,[.52,0,.25]);
+  for(let i=0;i<5;i++){
+    const s=1-i*.13;
+    addBox(grp,[.68*s,.36*s,.74],[0,.05-i*.035,.66+i*.55],i%2?bellyM:bodyM,[0,0,Math.sin(index+i)*.06]);
+  }
+  addBox(grp,[.36,.2,1.05],[0,-.02,3.62],bodyM,[0,0,.08]);
+  addBox(grp,[1.0,.08,.45],[0,.03,4.08],wingM,[0,0,.16]);
+  for(const side of [-1,1]){
+    const wing=new THREE.Group();
+    wing.position.set(side*.82,.16,-.28);
+    grp.add(wing);
+    wings.push(wing);
+    addBox(wing,[2.65,.08,.22],[side*1.3,.03,-.28],hornM,[0,side*.08,side*.1]);
+    addBox(wing,[2.45,.055,1.12],[side*1.35,-.05,.25],wingM,[.03,side*.16,side*-.16]);
+    addBox(wing,[1.65,.06,.88],[side*1.18,-.1,.86],wingM,[.08,side*.1,side*-.32]);
+    addBox(wing,[.14,.12,1.28],[side*.42,-.02,.46],bodyM,[.12,0,side*.22]);
+    for(let f=0;f<3;f++) addBox(wing,[.12,.05,.62],[side*(1.1+f*.5),-.11,.9+f*.16],hornM,[.12,0,side*(-.28-f*.08)]);
+  }
+  scene.add(grp);
+  return {grp,wings,cx:spec.x,cy:spec.y,cz:spec.z,r:spec.r||30,speed:spec.speed||.08,phase:hash2(spec.x+index*17,spec.z-index*11)*Math.PI*2,scale:spec.scale||1};
+}
+for(let i=0;i<SKY_DRAGON_SPECS.length;i++) skyDragons.push(makeSkyDragon(SKY_DRAGON_SPECS[i],i));
 function emitOne(e){
   if(e.type==='fire'){
     const heat=Math.random();
@@ -8975,6 +9023,26 @@ function updateRoadBirds(dt,tt){
     b.grp.visible=near;if(!near)continue;
     const a=tt*.22+b.phase;b.grp.position.set(b.cx+Math.cos(a)*b.r,b.cy+Math.sin(tt*.7+b.phase)*1.2,b.cz+Math.sin(a)*b.r);
     b.grp.rotation.y=-a;const flap=Math.sin(tt*7+b.phase)*.65;b.wings[0].rotation.z=flap;b.wings[1].rotation.z=-flap;
+  }
+}
+function updateSkyDragons(dt,tt){
+  if(dim!=='overworld'){for(const d of skyDragons)d.grp.visible=false;return;}
+  for(const d of skyDragons){
+    const near=playerOverworldDistanceSq(d.cx,d.cz)<360*360;
+    d.grp.visible=near;if(!near)continue;
+    const a=tt*d.speed+d.phase;
+    const wobble=Math.sin(tt*.55+d.phase)*2.4;
+    d.grp.position.set(d.cx+Math.cos(a)*d.r,d.cy+wobble,d.cz+Math.sin(a)*d.r*.72);
+    const tangent=Math.atan2(-Math.sin(a)*d.r,Math.cos(a)*d.r*.72);
+    d.grp.rotation.y=tangent+Math.PI/2;
+    d.grp.rotation.z=Math.sin(tt*.38+d.phase)*.055;
+    d.grp.rotation.x=Math.sin(tt*.31+d.phase)*.035;
+    const flap=Math.sin(tt*(2.7+d.speed*18)+d.phase)*(.34+.08*d.scale);
+    for(let i=0;i<d.wings.length;i++){
+      const side=i===0?-1:1;
+      d.wings[i].rotation.z=side*(.12+flap);
+      d.wings[i].rotation.x=.05+Math.sin(tt*1.7+d.phase+i)*.04;
+    }
   }
 }
 let tavernNightEffectsSuspended=false;
@@ -9688,6 +9756,7 @@ const legacyWorldBindings={
   "showDungeonReward":{get:()=>showDungeonReward},
   "showJobPerk":{get:()=>showJobPerk},
   "sky":{get:()=>sky},
+  "skyDragons":{get:()=>skyDragons},
   "skyShip":{get:()=>skyShip,set:value=>{skyShip=value;}},
   "skyshipJourney":{get:()=>skyshipJourney,set:value=>{skyshipJourney=value;}},
   "sleepEl":{get:()=>sleepEl},
@@ -9762,6 +9831,7 @@ const legacyWorldBindings={
   "updateLandMinimap":{get:()=>updateLandMinimap},
   "updateParticles":{get:()=>updateParticles},
   "updateRoadBirds":{get:()=>updateRoadBirds},
+  "updateSkyDragons":{get:()=>updateSkyDragons},
   "refreshRoadSafetyScenes":{get:()=>refreshRoadSafetyScenes},
   "roadSafetySceneGroup":{get:()=>roadSafetySceneGroup},
   "updateTavernNightEffects":{get:()=>updateTavernNightEffects},

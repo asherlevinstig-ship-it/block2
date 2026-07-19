@@ -1961,6 +1961,7 @@ function tick(now){
   updateDamageNumbers(dt);
   updateEmitters(dt);
   updateRoadBirds(dt,now/1000);
+  updateSkyDragons(dt,now/1000);
   updateTavernNightEffects(dt, now);
   tickExplorationPresentation(now,dt);
   { // flame flicker
