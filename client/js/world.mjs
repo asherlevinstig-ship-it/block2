@@ -1005,6 +1005,25 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
   }else if(jobId==='pet_tamer'){
     const ring=(rad,id)=>{for(let x=cx-rad;x<=cx+rad;x++)for(let z=cz-rad;z<=cz+rad;z++){const d=Math.hypot(x-cx,z-cz);if(d>=rad-.7&&d<=rad+.7)setBlock(x,G,z,id);}};
     const disk=(ox,oz,rad,id,y=G)=>{for(let x=cx+ox-rad;x<=cx+ox+rad;x++)for(let z=cz+oz-rad;z<=cz+oz+rad;z++)if(Math.hypot(x-(cx+ox),z-(cz+oz))<=rad)setBlock(x,y,z,id);};
+    const practiceDragon=(ox,oz)=>{
+      const x=cx+ox,z=cz+oz;
+      for(let dx=-6;dx<=6;dx++)for(let dz=-5;dz<=5;dz++)if(Math.abs(dx)+Math.abs(dz)<10)setBlock(x+dx,G,z+dz,B.GRASS);
+      box(x-2,G+1,z-1,x+2,G+2,z+1,B.LEAVES);
+      box(x-1,G+2,z+2,x+1,G+3,z+3,B.LEAVES);
+      box(x-1,G+3,z+4,x+1,G+4,z+5,B.LEAVES);
+      setBlock(x-1,G+3,z+5,B.DIAMOND_ORE);
+      setBlock(x+1,G+3,z+5,B.DIAMOND_ORE);
+      setBlock(x-1,G+5,z+4,B.SAND);
+      setBlock(x+1,G+5,z+4,B.SAND);
+      for(const sx of [-1,1]){
+        box(x+sx*3,G+2,z-1,x+sx*5,G+3,z+2,B.GLASS);
+        for(const dz of [-1,1])box(x+sx,G+1,z+dz,x+sx,G+2,z+dz,B.LOG);
+      }
+      box(x-1,G+1,z-4,x+1,G+1,z-2,B.LOG);
+      box(x,G+1,z-7,x,G+1,z-5,B.LOG);
+      setBlock(x,G+3,z-2,B.LANTERN);
+      setBlock(x,G+1,z+7,B.TABLE);
+    };
     disk(0,0,18,B.GRASS);
     ring(19,B.COBBLE);
     ring(33,B.PLANKS);
@@ -1035,6 +1054,7 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx-4,G+2,cz+21,B.CHEST);
     setBlock(cx+4,G+2,cz+21,B.TABLE);
     setBlock(cx,G+2,cz+22,B.EGG_INSULATOR);
+    practiceDragon(9,8);
     for(const [ox,oz] of [[-18,-12],[18,-12],[-16,13],[16,13]]){
       for(let y=G+1;y<=G+4;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
       for(let lx=-3;lx<=3;lx++)for(let lz=-3;lz<=3;lz++)if(Math.abs(lx)+Math.abs(lz)<5)setBlock(cx+ox+lx,G+5,cz+oz+lz,B.LEAVES);

@@ -1444,6 +1444,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/function buildJobTutorialMeadow\(jobId,setBlock=setB\)/);
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
+  assert.match(world,/const practiceDragon=\(ox,oz\)=>/);
+  assert.match(world,/practiceDragon\(9,8\)/);
   assert.match(dimensions,/function generateJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function enterJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);
