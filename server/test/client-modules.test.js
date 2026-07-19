@@ -1385,6 +1385,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   for(const job of ['miner','farmer','cook','blacksmith','monk','pet_tamer']) assert.match(combat,new RegExp(`${job}:\\{room:`));
   assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
+  assert.match(combat,/function openTownTutorialsUI\(\)/);
+  assert.match(combat,/setTownTutorialChoice\('menu'\)/);
+  assert.match(combat,/filter\(c=>force\|\|!townTutorialStepDone\(c\[0\]\)\)/);
+  assert.match(combat,/completed\?'REPLAY':'BEGIN'/);
   assert.match(combat,/function startJobTutorial\(jobId\)/);
   assert.match(combat,/function tickJobTutorial\(now\)/);
   assert.match(combat,/function tryMinerTutorialTrade\(\)/);

@@ -1448,13 +1448,13 @@ function townTutorialInfo(step){
 const townChoicesEl=document.getElementById('townchoices');
 function renderTownTutorialOptions(force=false){
   if(!townChoicesEl) return;
-  if(!shouldOfferTownJobGuidance() || onboardingActive || pathChoiceOpen || townGuidanceSequenceHold || (rewardWin&&!rewardWin.classList.contains('hidden'))){ townChoicesEl.classList.add('hidden'); return; }
+  if((!force&&!shouldOfferTownJobGuidance()) || onboardingActive || pathChoiceOpen || townGuidanceSequenceHold || (rewardWin&&!rewardWin.classList.contains('hidden'))){ townChoicesEl.classList.add('hidden'); return; }
   const firstLandPrice=landPrice(TOWN.TC,TOWN.TC+TOWN.HS+9);
   const choices=[
     ['job','JOB BOARD','Learn jobs, contracts, and guild exploration work.',true],
     ['tavern','TAVERN',gold>=5?'Visit Greta and buy an item.':'Earn 5 gold, then visit Greta and buy an item.',gold>=5],
     ['land','BUY LAND',gold>=firstLandPrice?'Leave town and buy a wilderness title.':'Earn about '+firstLandPrice+' gold, then buy a wilderness title.',gold>=firstLandPrice]
-  ].filter(c=>!townTutorialStepDone(c[0]));
+  ].filter(c=>force||!townTutorialStepDone(c[0]));
   townChoicesEl.innerHTML='<div class="tct">TOWN TUTORIALS</div><div class="tcs">CHOOSE WHAT TO LEARN NEXT</div>';
   const styleRow=document.createElement('div'); styleRow.className='tcrow player-style';
   const styleText=document.createElement('div'); styleText.innerHTML='<div class="tcname">CHOOSE PLAYSTYLE</div><div class="tcdesc">Pick fighter, builder, farmer, miner, social, collector, explorer, or learner guidance.</div>'; styleRow.appendChild(styleText);
@@ -1468,9 +1468,10 @@ function renderTownTutorialOptions(force=false){
   jobRow.appendChild(jobButton);townChoicesEl.appendChild(jobRow);
   for(const [step,label,desc,ready] of choices){
     const active=townGuidanceActive&&townGuidanceStep===step;
+    const completed=townTutorialStepDone(step);
     const row=document.createElement('div'); row.className='tcrow'+(active?' active':'');
     const text=document.createElement('div'); text.innerHTML='<div class="tcname">'+escHTML(label)+'</div><div class="tcdesc">'+escHTML(desc)+'</div>'; row.appendChild(text);
-    const button=document.createElement('button'); button.textContent=active?'ACTIVE':'BEGIN';
+    const button=document.createElement('button'); button.textContent=active?'ACTIVE':(completed?'REPLAY':'BEGIN');
     button.onpointerdown=e=>{
       e.preventDefault();
       e.stopPropagation();
@@ -1483,7 +1484,11 @@ function renderTownTutorialOptions(force=false){
 }
 function openTownTutorialsUI(){
   if(uiShellState.qOpen) closeQWin(true);
+  if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
+  townGuidanceActive=true;
+  setTownTutorialChoice('menu');
   renderTownTutorialOptions(true);
+  showName('Choose a town tutorial');
   return;
   openQWin('management');
   qpanelEl.innerHTML='';
