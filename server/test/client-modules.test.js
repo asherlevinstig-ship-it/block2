@@ -1373,8 +1373,10 @@ test('level two job chooser presents five profession tutorial cards',()=>{
   assert.match(combat,/function startJobTutorial\(jobId\)/);
   assert.match(combat,/function tickJobTutorial\(now\)/);
   assert.match(combat,/function tryMinerTutorialTrade\(\)/);
+  assert.match(combat,/function jobTutorialWalkY\(x,z,fallbackY\)/);
   assert.match(combat,/addTemporaryJobTutorialTool\(I\.DIA_PICK\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='miner'&&m\.id===B\.DIAMOND_ORE/);
+  assert.match(combat,/jobTutorialWalkY\(target\.x,target\.z,room\.G\+1\.035\)/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk'\]/);

@@ -1207,6 +1207,15 @@ function grantJobTutorialKit(jobId){
   }
   refreshHUD();
 }
+function jobTutorialWalkY(x,z,fallbackY){
+  const bx=Math.floor(x), bz=Math.floor(z);
+  for(let y=1;y<WH-2;y++){
+    if(isSolid(getB(bx,y,bz))&&!isSolid(getB(bx,y+1,bz))&&!isSolid(getB(bx,y+2,bz))){
+      return y+1.035;
+    }
+  }
+  return fallbackY;
+}
 function updateJobTutorialHud(){
   if(!jobTutorialActive||dim!=='job'){tutorialEl.classList.add('hidden');return;}
   const job=JOBS[jobTutorialJob]||{name:'Job'};
@@ -1262,7 +1271,7 @@ function startJobTutorial(jobId){
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
   jobTutorialReturnWarnAt=0;
-  player.pos.set(room.x+.5,room.G+2,room.z+14.5);
+  player.pos.set(room.x+.5,jobTutorialWalkY(room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
@@ -1291,7 +1300,7 @@ function tickJobTutorial(now){
   if(!room) return;
   updateMinerTutorialTrader(now);
   const target={x:room.x,z:room.z+23};
-  const y=surfaceY(target.x,target.z);
+  const y=jobTutorialWalkY(target.x,target.z,room.G+1.035);
   tutorialPillarGroup.visible=true;
   tutorialPillarGroup.position.set(target.x,y+4,target.z);
   tutorialBeam.material.opacity=.3+.18*Math.sin(now*.004);
