@@ -1235,7 +1235,8 @@ test('restored Mara progress clears provisional first-quest town guidance', asyn
   const networkingSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(networkingSource, /const JOB_SYSTEM=globalThis\.BlockcraftJobSystem/);
   assert.match(combatSource, /const JOB_SYSTEM=globalThis\.BlockcraftJobSystem/);
-  assert.match(combatSource, /townGuidanceStep==='quest'\s*&&\s*\(quest\s*\|\|\s*firstQuestMilestoneComplete\(\)\)/);
+  assert.match(combatSource, /townGuidanceStep==='quest'\s*&&\s*\(quest\s*\|\|\s*firstQuestMilestoneComplete\(\)\s*\|\|\s*playerJob\s*\|\|\s*\(S&&S\.lvl>=2\)\)/);
+  assert.match(combatSource, /!firstQuestMilestoneComplete\(\) && !quest && !playerJob && !\(S&&S\.lvl>=2\)/);
   assert.match(combatSource, /townGuidanceActive=false;[\s\S]*tutorialPillarGroup\.visible=false;[\s\S]*tutorialEl\.classList\.add\('hidden'\)/);
 });
 
@@ -2968,6 +2969,9 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function debugObjectiveHudSummary\(obj\)/);
   assert.match(frame,/BlockcraftTrace\('ui\.objective-hud'/);
   assert.match(frame,/hud:debugObjectiveHudSummary\(currentObjectiveHud\(\)\)/);
+  assert.match(frame,/if\(townGuidanceActive&&!jobContract\)\{\s*const tutorial=tutorialObjective\(\);/);
+  assert.match(frame,/if\(townGuidanceActive&&!jobContract\)return null;/);
+  assert.match(frame,/coordsEl\.innerHTML=rows\.join\(''\);\s*refreshObjectiveTracker\(\);/);
   assert.match(frame,/localStoryObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('story','manhunt'\),'Story'\)/);
   assert.match(frame,/localJobObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('job'\),'Job'\)/);
   assert.match(frame,/localGuildObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('guild'\),'Guild'\)/);

@@ -704,7 +704,6 @@ function idleObjectiveLine(){
 }
 function nextBestObjectiveLine(){
   if(dim==='dungeon'||dim==='event'||dim==='gatecutscene')return null;
-  if(townGuidanceActive&&!jobContract)return null;
   const transition=transitionRecoveryAction();
   if(transition){
     const title=transition.type==='continue_panel'?'Continue Reward':
@@ -713,6 +712,10 @@ function nextBestObjectiveLine(){
       transition.type==='use_ability'?'Ability Training':'Continue';
     const text=transition.type==='use_ability'?(combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'):'Finish the open step so the next objective can appear';
     return objectiveLine('transition','Now',title,text,transition);
+  }
+  if(townGuidanceActive&&!jobContract){
+    const tutorial=tutorialObjective();
+    if(tutorial)return objectiveLine('tutorial','Guide',tutorial.label,tutorial.text,{type:'follow_marker',label:'FOLLOW MARKER'});
   }
   const localJob=localJobObjectiveLine();
   if(localJob)return localJob;
@@ -856,6 +859,7 @@ function objectiveHudHTML(obj){
 function currentObjectiveHud(){
   const unified=unifiedObjectiveHud();
   if(unified)return unified;
+  if(townGuidanceActive&&!jobContract)return null;
   const current=currentObjective();
   return current?{...current,label:'Next Best Action'}:null;
 }
@@ -1634,16 +1638,7 @@ function updateInfoHud(held){
   }
   if(utilityEquipped('feather_step')) rows.push('<div class="statuschip utility"><i class="ico">F</i><span>Feather</span><b>Landing guard</b></div>');
   coordsEl.innerHTML=rows.join('');
-  const obj=currentObjectiveHud();
-  if(currentQuestEl){
-    if(obj){
-      currentQuestEl.classList.remove('hidden');
-      currentQuestEl.innerHTML=objectiveHudHTML(obj);
-    } else {
-      currentQuestEl.classList.add('hidden');
-      currentQuestEl.innerHTML='';
-    }
-  }
+  refreshObjectiveTracker();
 }
 let last=performance.now();
 const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,...worldApi.particleBudgetStats()})});

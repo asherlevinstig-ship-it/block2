@@ -1612,12 +1612,13 @@ function startTownGuidance(){
   // authoritative profile already has a quest (or has claimed the first milestone),
   // retire the provisional "Town Step 1" prompt instead of leaving it pointing at
   // Mara and making a returning hunter appear to have reset.
-  if(townGuidanceStep==='quest' && (quest || firstQuestMilestoneComplete())){
+  if(townGuidanceStep==='quest' && (quest || firstQuestMilestoneComplete() || playerJob || (S&&S.lvl>=2))){
     townGuidanceActive=false;
     tutorialEl.classList.add('hidden');
     tutorialPillarGroup.visible=false;
+    return;
   }
-  if(!firstQuestMilestoneComplete() && !quest){
+  if(!firstQuestMilestoneComplete() && !quest && !playerJob && !(S&&S.lvl>=2)){
     townGuidanceStep='quest';
     townGuidanceActive=true;
     updateTownGuidanceHud();
@@ -1686,7 +1687,7 @@ function tickTownGuidance(now){
   // Meadow and ability tutorials own the shared tutorial HUD/pillar. Town
   // guidance must not start or hide their instructions while either is active.
   if(onboardingActive || abilityTrainingActive || jobTutorialActive) return;
-  if(townGuidanceActive && townGuidanceStep==='quest' && (quest || firstQuestMilestoneComplete())){
+  if(townGuidanceActive && townGuidanceStep==='quest' && (quest || firstQuestMilestoneComplete() || playerJob || (S&&S.lvl>=2))){
     townGuidanceActive=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
