@@ -115,6 +115,7 @@ test('first-session transition panels recover after reload and tracker clicks', 
     await expectRecoveryHub(page, 'Choose Path', 'CHOOSE PATH');
     await clickRecoveryHub(page, 'CHOOSE PATH');
     await page.locator('.pathselect-card[data-path="shadow"]').click();
+    await expect(page.locator('#overlay')).toBeHidden();
   });
 
   await test.step('awakening can be resumed and started after reload', async () => {

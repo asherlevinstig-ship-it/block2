@@ -1804,6 +1804,9 @@ function showPathSelection(){
     pathSelectEl.classList.remove('jobselect');
     document.body.classList.remove('path-selecting');
     pathChoiceOpen=false;
+    lockFallback=true;
+    locked=true;
+    try{ renderer.domElement.requestPointerLock(); }catch(e){}
     refreshPlayUi();
     sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
     if(S.lvl>=2 && !abilityTutorialDone()){
@@ -1912,7 +1915,10 @@ function calmTownHud(){
   return !onboardingActive && dim==='overworld' && player && isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
 }
 function refreshPlayUi(){
-  const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode;
+  const transitionModalOpen = pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen ||
+    !!(pathSelectEl && !pathSelectEl.classList.contains('hidden')) ||
+    !!(awakeningWin && !awakeningWin.classList.contains('hidden'));
+  const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode || transitionModalOpen;
   overlay.classList.toggle('hidden', showHud);
   document.body.classList.toggle('claim-mode', !!claimMode);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
@@ -2038,7 +2044,7 @@ if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.prev
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
   if(hasLock) lockFallback=false;
-  else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen)lockFallback=true;
+  else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
   locked = hasLock || lockFallback;
   refreshPlayUi();
 });
