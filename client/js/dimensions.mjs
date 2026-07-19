@@ -1787,7 +1787,7 @@ function refreshTorchMeshes(){
 function applyDim(){
   townGroup.visible = dim==='overworld';
   if(roadSafetySceneGroup)roadSafetySceneGroup.visible=dim==='overworld';
-  cropGroup.visible = dim==='overworld' || dim==='tutorial';
+  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job';
   const underground = dim==='dungeon' || dim==='gatecutscene';
   cloudGroup.visible = !underground;
   sky.visible = !underground;
@@ -1796,6 +1796,7 @@ function applyDim(){
   else if(dim==='event'){ scene.fog.near=45; scene.fog.far=150; }
   else if(dim==='tutorial'){ scene.fog.near=30; scene.fog.far=100; }
   else if(dim==='ability'){ scene.fog.near=28; scene.fog.far=92; }
+  else if(dim==='job'){ scene.fog.near=32; scene.fog.far=105; }
   else if(dim==='gatecutscene'){ scene.fog.near=18; scene.fog.far=115; scene.fog.color.set(0x151022); }
   else { scene.fog.near=8; scene.fog.far=36; }
 }
@@ -1899,6 +1900,65 @@ function exitAbilityRoom(){
     player.vel.set(0,0,0);
   }
   abilityRoomReturn=null;
+  if(NET.on&&NET.room) NET.room.send('tutorialExit',{});
+}
+let jobTutorialRoomReturn=null, jobTutorialRoomJob='';
+function generateJobTutorialRoom(jobId){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobId]||JOB_TUTORIAL_MEADOWS.miner;
+  const {x:cx,z:cz,G,R}=room;
+  const minX=Math.floor(cx-R-8),maxX=Math.ceil(cx+R+8),minZ=Math.floor(cz-R-8),maxZ=Math.ceil(cz+R+8);
+  const w=new DimensionGrid({kind:'tutorial',id:'job_'+jobId,originX:minX,originZ:minZ,width:maxX-minX+1,height:WH,depth:maxZ-minZ+1,empty:B.AIR,outside:B.AIR});
+  buildJobTutorialMeadow(jobId,(x,y,z,v)=>w.setB(x,y,z,v));
+  for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){
+    const d=Math.hypot(x-cx,z-cz);
+    if(d>R && d<=R+6){
+      const y=G-Math.max(0,Math.round((d-R)*.8));
+      for(let yy=1;yy<y;yy++) w.setB(x,yy,z,yy<y-3?B.STONE:B.DIRT);
+      w.setB(x,y,z,d>R+3?B.STONE:B.GRASS);
+    }
+  }
+  return w;
+}
+function enterJobTutorialRoom(jobId){
+  if(!JOB_TUTORIAL_MEADOWS||!JOB_TUTORIAL_MEADOWS[jobId]) return false;
+  if(dim==='job'&&jobTutorialRoomJob===jobId) return true;
+  if(dim!=='overworld'&&dim!=='job') return false;
+  if(dim!=='job') jobTutorialRoomReturn={world, pos:player.pos.clone(), yaw:player.yaw, pitch:player.pitch};
+  else {
+    tutorialDummyGroup.visible=false;
+    tutorialPillarGroup.visible=false;
+  }
+  for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
+  if(mounted){ mounted=false; mountKind=''; if(localMountObj) localMountObj.visible=false; }
+  owWorld=(jobTutorialRoomReturn&&jobTutorialRoomReturn.world)||owWorld||world;
+  world=generateJobTutorialRoom(jobId);
+  dim='job';
+  jobTutorialRoomJob=jobId;
+  NET.dgn=localTutorialSpaceId('job_'+jobId);
+  world.id=NET.dgn;
+  rebuildAllChunks(); refreshTorchMeshes(); applyDim();
+  if(NET.on&&NET.room) NET.room.send('tutorialEnter',{kind:'job',job:jobId});
+  return true;
+}
+function exitJobTutorialRoom(){
+  if(dim!=='job') return;
+  tutorialDummyGroup.visible=false;
+  tutorialPillarGroup.visible=false;
+  for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
+  const ret=jobTutorialRoomReturn;
+  world=(ret&&ret.world)||owWorld||world;
+  dim='overworld';
+  owWorld=world;
+  NET.dgn='';
+  rebuildAllChunks(); refreshTorchMeshes(); applyDim();
+  if(ret&&player){
+    player.pos.copy(ret.pos);
+    player.yaw=ret.yaw;
+    player.pitch=ret.pitch;
+    player.vel.set(0,0,0);
+  }
+  jobTutorialRoomReturn=null;
+  jobTutorialRoomJob='';
   if(NET.on&&NET.room) NET.room.send('tutorialExit',{});
 }
 function spawnDungeonMob(x,z,boss,ri){
@@ -2090,10 +2150,13 @@ gameContext.registerState('dimensions', Object.freeze({
   get gate(){ return gate; },
   get exitPortal(){ return exitPortal; },
   get overworldGrid(){ return owWorld; },
+  get jobTutorialRoomJob(){ return jobTutorialRoomJob; },
 }));
 gameContext.registerModule('dimensions', Object.freeze({
   enterDungeon,
   exitDungeon,
+  enterJobTutorialRoom,
+  exitJobTutorialRoom,
   rebuild:rebuildAllChunks,
   tickGates,
 }));
@@ -2124,19 +2187,24 @@ const legacyDimensionsBindings={
   "enterAbilityRoom":{get:()=>enterAbilityRoom},
   "enterDungeon":{get:()=>enterDungeon},
   "enterDungeonRoomWith":{get:()=>enterDungeonRoomWith},
+  "enterJobTutorialRoom":{get:()=>enterJobTutorialRoom},
   "enterOnboardingRoom":{get:()=>enterOnboardingRoom},
   "equippedArmor":{get:()=>equippedArmor},
   "exitAbilityRoom":{get:()=>exitAbilityRoom},
   "exitDungeon":{get:()=>exitDungeon},
+  "exitJobTutorialRoom":{get:()=>exitJobTutorialRoom},
   "exitOnboardingRoom":{get:()=>exitOnboardingRoom},
   "exitPortal":{get:()=>exitPortal,set:value=>{exitPortal=value;}},
   "frostbiteChakramVfx":{get:()=>frostbiteChakramVfx},
   "gate":{get:()=>gate,set:value=>{gate=value;}},
   "gateCompass":{get:()=>gateCompass},
   "gateKindLabel":{get:()=>gateKindLabel},
+  "generateJobTutorialRoom":{get:()=>generateJobTutorialRoom},
   "gravityBowVfx":{get:()=>gravityBowVfx},
   "hex01":{get:()=>hex01},
   "legendaryWeaponCd":{get:()=>legendaryWeaponCd},
+  "jobTutorialRoomJob":{get:()=>jobTutorialRoomJob,set:value=>{jobTutorialRoomJob=value;}},
+  "jobTutorialRoomReturn":{get:()=>jobTutorialRoomReturn,set:value=>{jobTutorialRoomReturn=value;}},
   "leviathanStormVfx":{get:()=>leviathanStormVfx},
   "makeBlackholeVisual":{get:()=>makeBlackholeVisual},
   "makeGateMesh":{get:()=>makeGateMesh},

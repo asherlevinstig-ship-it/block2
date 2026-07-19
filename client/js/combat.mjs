@@ -5,6 +5,7 @@ const gameContext=window.BlockcraftGameContext;
 const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
+const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoom=dimensionsApi.exitJobTutorialRoom;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
 const BLOCK_PLACE_REACH=8;
 
@@ -73,6 +74,8 @@ const legacyCombatBindings={
   "overlay":{get:()=>overlay},
   "pathChoiceOpen":{get:()=>pathChoiceOpen,set:value=>{pathChoiceOpen=value;}},
   "jobChoiceOpen":{get:()=>jobChoiceOpen,set:value=>{jobChoiceOpen=value;}},
+  "jobTutorialActive":{get:()=>jobTutorialActive,set:value=>{jobTutorialActive=value;}},
+  "jobTutorialJob":{get:()=>jobTutorialJob,set:value=>{jobTutorialJob=value;}},
   "player":{get:()=>player},
   "prepareOnboardingStep":{get:()=>prepareOnboardingStep},
   "raycast":{get:()=>raycast},
@@ -89,6 +92,7 @@ const legacyCombatBindings={
   "setWorldLoadingStatus":{get:()=>setWorldLoadingStatus},
   "shouldOfferTownJobGuidance":{get:()=>shouldOfferTownJobGuidance},
   "shouldOpenLevel2JobChoice":{get:()=>shouldOpenLevel2JobChoice},
+  "startJobTutorial":{get:()=>startJobTutorial},
   "shouldOpenLevel2PathChoice":{get:()=>shouldOpenLevel2PathChoice},
   "showAbilityAwakening":{get:()=>showAbilityAwakening},
   "showPathSelection":{get:()=>showPathSelection},
@@ -99,6 +103,7 @@ const legacyCombatBindings={
   "syncLocalTutorialsToServer":{get:()=>syncLocalTutorialsToServer},
   "tickAbilityTraining":{get:()=>tickAbilityTraining},
   "tickFurnaces":{get:()=>tickFurnaces},
+  "tickJobTutorial":{get:()=>tickJobTutorial},
   "tickLavaBorder":{get:()=>tickLavaBorder},
   "tickOnboarding":{get:()=>tickOnboarding},
   "tickTownGuidance":{get:()=>tickTownGuidance},
@@ -723,6 +728,14 @@ const JOB_TUTORIAL_STEPS=Object.freeze({
   blacksmith:{room:'Forge Lesson Bay',target:()=>HUB.smith,button:'FIND FORGE',theme:'ember',art:'ANVIL',beats:['Smelt ingots','Repair tools','Upgrade gear']},
   monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
 });
+const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
+  miner:{key:'WOOD PICKAXE',text:'Mine the safe ore seam and notice how hidden routes and ore veins make Miner different.',sub:'Practice on the ore wall, then walk into the blue return pillar.'},
+  farmer:{key:'WOODEN HOE',text:'Hoe, seed, and harvest practice crops so Farmer feels like the town food engine.',sub:'Use the plot rows, then walk into the blue return pillar.'},
+  cook:{key:'KITCHEN STATIONS',text:'Use meals to create combat, stamina, and travel support for other players.',sub:'Inspect the table, furnace, and campfire, then walk into the blue return pillar.'},
+  blacksmith:{key:'FORGE BAY',text:'Repair, smelt, and upgrade gear so dungeon loot becomes long-term progression.',sub:'Inspect the forge stations, then walk into the blue return pillar.'},
+  monk:{key:'FOCUS CIRCLE',text:'Meditation grows support power and restores resources more strongly in the hall.',sub:'Stand in the focus circle, then walk into the blue return pillar.'},
+});
+let jobTutorialActive=false, jobTutorialJob='';
 function level2JobChoiceSeen(){
   try{return localStorage.getItem(LEVEL2_JOB_CHOICE_KEY)==='1';}catch(e){return false;}
 }
@@ -745,7 +758,7 @@ function onboardingKind(){
   return s&&s.kind||'';
 }
 function tutorialSafe(){
-  return (onboardingActive && dim==='tutorial') || (abilityTrainingActive && dim==='ability');
+  return (onboardingActive && dim==='tutorial') || (abilityTrainingActive && dim==='ability') || (jobTutorialActive && dim==='job');
 }
 function abilityTutorialDone(){
   try{return serverTutorials.ability>=2||localStorage.getItem('bc_ability_tutorial_done_v2')==='1';}catch(e){return serverTutorials.ability>=2;}
@@ -1078,6 +1091,90 @@ function tickAbilityTraining(now){
   updateAbilityTrainingHud();
   if(abilityTrainingFinishAt && now>=abilityTrainingFinishAt) completeAbilityTraining();
 }
+function grantJobTutorialKit(jobId){
+  if(jobId==='miner'){
+    ensureOnboardingItem(I.WOOD_PICK,1);
+    selectItemForOnboarding(I.WOOD_PICK);
+  }else if(jobId==='farmer'){
+    ensureOnboardingItem(I.WOOD_HOE,1);
+    ensureOnboardingItem(I.WHEAT_SEEDS,4);
+    selectItemForOnboarding(I.WOOD_HOE);
+  }else if(jobId==='cook'){
+    ensureOnboardingItem(I.WHEAT,3);
+    ensureOnboardingItem(I.COOKED_MEAT,1);
+  }else if(jobId==='blacksmith'){
+    ensureOnboardingItem(B.IRON_ORE,1);
+    ensureOnboardingItem(I.COAL,1);
+  }
+  refreshHUD();
+}
+function updateJobTutorialHud(){
+  if(!jobTutorialActive||dim!=='job'){tutorialEl.classList.add('hidden');return;}
+  const job=JOBS[jobTutorialJob]||{name:'Job'};
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
+  const copy=JOB_TUTORIAL_ROOM_COPY[jobTutorialJob]||{key:'PRACTICE',text:'Try the job loop in this room.',sub:'Walk into the blue return pillar when done.'};
+  const nearReturn=room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
+  tutorialEl.classList.remove('hidden');
+  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
+    +'<div class="tutkey">'+escHTML(nearReturn?'RETURN TO TOWN':copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?'Step into the pillar to return to Town of Beginnings.':copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?'Your job is equipped. You can switch later at the Job Board.':copy.sub)+'</div>';
+}
+function completeJobTutorial(){
+  if(!jobTutorialActive) return;
+  const jobId=jobTutorialJob, job=JOBS[jobId]||{name:'Job'};
+  jobTutorialActive=false;
+  jobTutorialJob='';
+  tutorialEl.classList.add('hidden');
+  tutorialPillarGroup.visible=false;
+  completeTownTutorialStep(jobTutorialStepId(jobId));
+  exitJobTutorialRoom();
+  hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
+  renderBars();
+  sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> Keep an eye on the Next Best Action panel for useful work.');
+  showName(job.name+' ready');
+  refreshPlayUi();
+}
+function startJobTutorial(jobId){
+  const job=JOBS[jobId], room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobId]||null;
+  if(!job||!room||typeof enterJobTutorialRoom!=='function'||!enterJobTutorialRoom(jobId)){
+    return guideJobTutorialChoice(jobId);
+  }
+  townGuidanceActive=false;
+  tutorialPillarGroup.visible=false;
+  tutorialDummyGroup.visible=false;
+  pathChoiceOpen=false;
+  jobChoiceOpen=false;
+  jobTutorialActive=true;
+  jobTutorialJob=jobId;
+  player.pos.set(room.x+.5,room.G+2,room.z+14.5);
+  player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  updateVisibleChunks(true);
+  grantJobTutorialKit(jobId);
+  updateJobTutorialHud();
+  showName(job.name+' tutorial room');
+  eventLog('Entered '+job.name+' tutorial room.');
+  sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
+  return true;
+}
+function tickJobTutorial(now){
+  if(!jobTutorialActive) return;
+  if(dim!=='job'){ jobTutorialActive=false; tutorialPillarGroup.visible=false; tutorialEl.classList.add('hidden'); return; }
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
+  if(!room) return;
+  const target={x:room.x,z:room.z+23};
+  const y=surfaceY(target.x,target.z);
+  tutorialPillarGroup.visible=true;
+  tutorialPillarGroup.position.set(target.x,y+4,target.z);
+  tutorialBeam.material.opacity=.3+.18*Math.sin(now*.004);
+  tutorialRing.position.y=-3.92+Math.sin(now*.005)*.08;
+  const s=1+.08*Math.sin(now*.006);
+  tutorialRing.scale.set(s,s,s);
+  updateJobTutorialHud();
+  if(player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<2.6) completeJobTutorial();
+}
 function updateTownGuidanceHud(){
   if(!townGuidanceActive){tutorialEl.classList.add('hidden');return;}
   const step=townGuidanceStep||'quest';
@@ -1276,14 +1373,13 @@ function chooseJobFromLevel2Banner(jobId){
   else if(NET.on&&NET.room) NET.room.send('setJob',{job:jobId});
   else playerJob=jobId;
   closeLevel2JobChoice();
-  guideJobTutorialChoice(jobId);
-  sysMsg('<b>'+escHTML(JOBS[jobId].name)+' chosen.</b><br>Follow the pillar of light to the '+escHTML(jobTutorialInfo(jobId).room)+'.');
+  startJobTutorial(jobId);
   refreshAppearanceDummy();
   if(!NET.on||!NET.room){ sendPlayerMetaNow(); sendProfileSaveNow(); }
 }
 function shouldOpenLevel2JobChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
-  return !!(S&&S.lvl>=2&&!playerJob&&!level2JobChoiceSeen()&&shouldOfferTownJobGuidance()&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
+  return !!(S&&S.lvl>=2&&!playerJob&&!level2JobChoiceSeen()&&shouldOfferTownJobGuidance()&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
 }
 function openLevel2JobChoice(force=false){
   if(!force && !shouldOpenLevel2JobChoice()) return false;
@@ -1302,7 +1398,7 @@ function openLevel2JobChoice(force=false){
   const ids=['miner','farmer','cook','blacksmith','monk'];
   pathPanelEl.innerHTML='<div class="job-choice-kicker">LEVEL 2 - CHOOSE YOUR FIRST JOB TUTORIAL</div>'
     +'<h1>WHAT KIND OF HERO DO YOU WANT TO BE?</h1>'
-    +'<div class="pathintro">Pick a job card to equip that profession and follow a pillar of light to its practice room. You can switch jobs later at the Job Board, so this is guidance, not a permanent lock.</div>'
+    +'<div class="pathintro">Pick a job card to equip that profession and teleport straight to a private practice room. You can switch jobs later at the Job Board, so this is guidance, not a permanent lock.</div>'
     +'<div id="jobchoicecards">'+ids.map(jobChoiceCardHTML).join('')+'</div>'
     +'<div id="pathnote">Jobs are for different player styles: exploring, crafting, farming, cooking, support, and gear-making all matter.</div>'
     +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CHOOSE LATER</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
@@ -1393,7 +1489,7 @@ function clearTownGuidance(){
 function tickTownGuidance(now){
   // Meadow and ability tutorials own the shared tutorial HUD/pillar. Town
   // guidance must not start or hide their instructions while either is active.
-  if(onboardingActive || abilityTrainingActive) return;
+  if(onboardingActive || abilityTrainingActive || jobTutorialActive) return;
   if(townGuidanceActive && townGuidanceStep==='quest' && (quest || firstQuestMilestoneComplete())){
     townGuidanceActive=false;
     tutorialPillarGroup.visible=false;
@@ -2714,6 +2810,8 @@ gameContext.registerState('combat', Object.freeze({
   get uiOpen(){ return uiOpen; },
   get pathChoiceOpen(){ return pathChoiceOpen; },
   get jobChoiceOpen(){ return jobChoiceOpen; },
+  get jobTutorialActive(){ return jobTutorialActive; },
+  get jobTutorialJob(){ return jobTutorialJob; },
   get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
   get abilityTrainingActive(){ return abilityTrainingActive; },
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
@@ -2729,6 +2827,7 @@ gameContext.registerModule('combat', Object.freeze({
   showPathSelection,
   openLevel2JobChoice,
   shouldOpenLevel2JobChoice,
+  startJobTutorial,
   showAbilityAwakening,
   startAbilityTraining,
   nearbyTavernGameTable,

@@ -1358,21 +1358,36 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
 
 test('level two job chooser presents five profession tutorial cards',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(combat,/const LEVEL2_JOB_CHOICE_KEY='bc_level2_job_choice_seen_v1'/);
   assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
+  assert.match(combat,/const JOB_TUTORIAL_ROOM_COPY=Object\.freeze\(\{/);
   for(const job of ['miner','farmer','cook','blacksmith','monk']) assert.match(combat,new RegExp(`${job}:\\{room:`));
   assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
   assert.match(combat,/function openLevel2JobChoice\(force=false\)/);
+  assert.match(combat,/function startJobTutorial\(jobId\)/);
+  assert.match(combat,/function tickJobTutorial\(now\)/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO BE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
-  assert.match(combat,/jobTutorialStepId\(jobId\)/);
-  assert.match(combat,/Follow the pillar of light to the/);
+  assert.match(combat,/startJobTutorial\(jobId\)/);
+  assert.match(combat,/teleport straight to a private practice room/);
+  assert.match(combat,/enterJobTutorialRoom\(jobId\)/);
+  assert.match(combat,/exitJobTutorialRoom\(\)/);
+  assert.match(world,/const JOB_TUTORIAL_MEADOWS=Object\.freeze\(\{/);
+  assert.match(world,/function buildJobTutorialMeadow\(jobId,setBlock=setB\)/);
+  assert.match(dimensions,/function generateJobTutorialRoom\(jobId\)/);
+  assert.match(dimensions,/function enterJobTutorialRoom\(jobId\)/);
+  assert.match(dimensions,/function exitJobTutorialRoom\(\)/);
+  assert.match(dimensions,/dim='job'/);
+  assert.match(dimensions,/tutorialEnter',\{kind:'job',job:jobId\}/);
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);
   assert.match(frame,/combatApi\.openLevel2JobChoice\(\)/);
+  assert.match(frame,/tickJobTutorial\(now\)/);
   assert.match(menus,/"chooseJob":\{get:\(\)=>chooseJob\}/);
   assert.match(styles,/#pathselect\.jobselect/);
   assert.match(styles,/#jobchoicecards\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);

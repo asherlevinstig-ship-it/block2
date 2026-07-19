@@ -1621,6 +1621,7 @@ function tick(now){
   tickFurnaces(dt);
   tickOnboarding(now);
   tickAbilityTraining(now);
+  tickJobTutorial(now);
   tickTownGuidance(now);
   tickLandBoundaryToast(now);
   if(shouldOpenLevel2PathChoice()) showPathSelection();

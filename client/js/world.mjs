@@ -869,6 +869,13 @@ const LAVA_BORDER_WIDTH=12, LAVA_BORDER_TOP=WH-2;
 const WORLD_TC=WX/2, WORLD_TOWN_HS=72, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
+const JOB_TUTORIAL_MEADOWS=Object.freeze({
+  miner:{x:610,z:925,G:18,R:34,ground:B.STONE},
+  farmer:{x:690,z:925,G:18,R:34,ground:B.GRASS},
+  cook:{x:770,z:925,G:18,R:34,ground:B.PLANKS},
+  blacksmith:{x:850,z:925,G:18,R:34,ground:B.COBBLE},
+  monk:{x:930,z:925,G:18,R:34,ground:B.GRASS},
+});
 const {DimensionGrid}=window.BlockcraftDimensions;
 let world = new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
 const inWorld = (x,y,z)=> x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
@@ -901,6 +908,10 @@ function biomeAt(x,z){
 }
 function isTrainingMeadowLand(x,z,pad=0){return Math.hypot(x-TRAINING_MEADOW.x,z-TRAINING_MEADOW.z)<=TRAINING_MEADOW.R+pad;}
 function isAbilityMeadowLand(x,z,pad=0){return Math.hypot(x-ABILITY_MEADOW.x,z-ABILITY_MEADOW.z)<=ABILITY_MEADOW.R+pad;}
+function isJobTutorialMeadowLand(jobId,x,z,pad=0){
+  const room=JOB_TUTORIAL_MEADOWS[jobId];
+  return !!room&&Math.hypot(x-room.x,z-room.z)<=room.R+pad;
+}
 function buildTrainingMeadow(setBlock=setB){
   const {x:cx,z:cz,G,R}=TRAINING_MEADOW;
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
@@ -937,6 +948,47 @@ function buildAbilityMeadow(setBlock=setB){
   }
   for(let x=cx-4;x<=cx+4;x++)for(let z=cz-4;z<=cz+4;z++)setBlock(x,G,z,B.GRASS);
   for(let x=cx-2;x<=cx+2;x++)for(let z=cz-2;z<=cz+2;z++)setBlock(x,G,z,B.COBBLE);
+}
+function buildJobTutorialMeadow(jobId,setBlock=setB){
+  const room=JOB_TUTORIAL_MEADOWS[jobId]||JOB_TUTORIAL_MEADOWS.miner;
+  const {x:cx,z:cz,G,R,ground}=room;
+  for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
+    if(!inWorld(x,0,z)||!isJobTutorialMeadowLand(jobId,x,z))continue;
+    const d=Math.hypot(x-cx,z-cz), edge=Math.max(0,Math.min(1,(R-d)/8));
+    const gy=G+(edge<1?Math.round((terrainHeight(x,z)-G)*(1-edge)):0);
+    for(let y=1;y<gy-3;y++)setBlock(x,y,z,B.STONE);
+    for(let y=Math.max(1,gy-3);y<gy;y++)setBlock(x,y,z,ground===B.STONE||ground===B.COBBLE?B.STONE:B.DIRT);
+    setBlock(x,gy,z,ground);
+    for(let y=gy+1;y<WH;y++)setBlock(x,y,z,B.AIR);
+  }
+  const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)setBlock(x,y,z,id);};
+  for(let x=cx-5;x<=cx+5;x++)for(let z=cz-5;z<=cz+5;z++)setBlock(x,G,z,ground);
+  for(const [ox,oz] of [[-12,-12],[12,-12],[-12,12],[12,12]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
+  box(cx-2,G,cz+21,cx+2,G,cz+25,B.GLASS);
+  setBlock(cx,G+1,cz+23,B.LANTERN);
+  if(jobId==='miner'){
+    box(cx-14,G,cz-12,cx+14,G,cz-4,B.COBBLE);
+    for(let x=cx-12;x<=cx+12;x+=4){setBlock(x,G+1,cz-8,B.STONE);setBlock(x,G+2,cz-8,(x-cx)%8===0?B.IRON_ORE:B.COAL_ORE);}
+    for(let z=cz-2;z<=cz+16;z+=5){setBlock(cx-2,G+1,z,B.TORCH);setBlock(cx+2,G+1,z,B.TORCH);}
+  }else if(jobId==='farmer'){
+    for(let x=cx-12;x<=cx+12;x++)for(let z=cz-10;z<=cz-4;z++){
+      if(z===cz-7)setBlock(x,G,z,B.WATER);
+      else{setBlock(x,G,z,B.FARMLAND); if((x+z)&1)setBlock(x,G+1,z,B.WHEAT_3);}
+    }
+    setBlock(cx-14,G+1,cz-7,B.CHEST);
+  }else if(jobId==='cook'){
+    box(cx-12,G,cz-10,cx+12,G,cz+6,B.PLANKS);
+    for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-8,B.FURNACE);setBlock(x,G+1,cz-2,B.TABLE);}
+    setBlock(cx,G+1,cz+4,B.CAMPFIRE); setBlock(cx+5,G+1,cz+4,B.CHEST);
+  }else if(jobId==='blacksmith'){
+    box(cx-13,G,cz-11,cx+13,G,cz+7,B.COBBLE);
+    for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-9,B.FURNACE);setBlock(x,G+1,cz-4,B.IRON_ORE);}
+    setBlock(cx,G+1,cz+2,B.TABLE); setBlock(cx+4,G+1,cz+2,B.CAMPFIRE); setBlock(cx-4,G+1,cz+2,B.CHEST);
+  }else if(jobId==='monk'){
+    for(let r=0;r<=9;r++)for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++)if(Math.abs(Math.hypot(x-cx,z-cz)-r)<.72)setBlock(x,G,z,r%3?B.GRASS:B.COBBLE);
+    for(const [ox,oz] of [[0,-8],[8,0],[0,8],[-8,0]]){setBlock(cx+ox,G+1,cz+oz,B.LANTERN);setBlock(cx+ox,G,cz+oz,B.GLASS);}
+    setBlock(cx,G+1,cz,B.CAMPFIRE);
+  }
 }
 const DANGER_RINGS=[
   {min:0,name:'Green Frontier',threat:'Ring I - common enemies - standard yields'},
@@ -9328,6 +9380,7 @@ const legacyWorldBindings={
   "BREAK":{get:()=>BREAK},
   "buffs":{get:()=>buffs},
   "buildAbilityMeadow":{get:()=>buildAbilityMeadow},
+  "buildJobTutorialMeadow":{get:()=>buildJobTutorialMeadow},
   "buildTrainingMeadow":{get:()=>buildTrainingMeadow},
   "burst":{get:()=>burst},
   "camera":{get:()=>camera},
@@ -9445,6 +9498,7 @@ const legacyWorldBindings={
   "isInsideTavern":{get:()=>isInsideTavern},
   "isLavaBorderLand":{get:()=>isLavaBorderLand},
   "isLightBlock":{get:()=>isLightBlock},
+  "isJobTutorialMeadowLand":{get:()=>isJobTutorialMeadowLand},
   "isOnboardingBuildPlacement":{get:()=>isOnboardingBuildPlacement},
   "isSolid":{get:()=>isSolid},
   "isTownLand":{get:()=>isTownLand},
@@ -9467,6 +9521,7 @@ const legacyWorldBindings={
   "jobPerkText":{get:()=>jobPerkText},
   "jobPerkTier":{get:()=>jobPerkTier},
   "JOBS":{get:()=>JOBS},
+  "JOB_TUTORIAL_MEADOWS":{get:()=>JOB_TUTORIAL_MEADOWS},
   "jobTitleFor":{get:()=>jobTitleFor},
   "jobXp":{get:()=>jobXp,set:value=>{jobXp=value;}},
   "jobXpByJob":{get:()=>jobXpByJob,set:value=>{jobXpByJob=value;}},
