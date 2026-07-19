@@ -1834,6 +1834,10 @@ function tick(now){
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
     if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);
+    if(networkingApi.tickPetTamerTutorialDragons){
+      const petRoom=(worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS.pet_tamer)||null;
+      networkingApi.tickPetTamerTutorialDragons(dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob==='pet_tamer', petRoom, now, dt);
+    }
     tickDragonRoost(now, dt);
 
     if(worldState.skyshipJourney&&worldState.skyshipJourney.boarded&&worldState.skyshipJourney.phase==='flight'&&skyShip){

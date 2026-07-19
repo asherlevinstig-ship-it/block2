@@ -65,7 +65,7 @@ const JOB_TUTORIAL_ROOMS = Object.freeze({
   cook: Object.freeze({ x: 770, z: 925, g: 18, r: 34 }),
   blacksmith: Object.freeze({ x: 850, z: 925, g: 18, r: 34 }),
   monk: Object.freeze({ x: 930, z: 925, g: 18, r: 34 }),
-  pet_tamer: Object.freeze({ x: 1010, z: 925, g: 18, r: 34 }),
+  pet_tamer: Object.freeze({ x: 500, z: 925, g: 22, r: 52 }),
 });
 function sanitizeMountUnlocks(list) {
   const out = [];

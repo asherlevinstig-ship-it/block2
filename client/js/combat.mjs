@@ -737,7 +737,7 @@ const JOB_TUTORIAL_STEPS=Object.freeze({
   cook:{room:'Tavern Kitchen Lesson',target:()=>HUB.tavern,button:'FIND KITCHEN',theme:'gold',art:'PAN',beats:['Gather ingredients','Cook meals','Make dungeon buffs']},
   blacksmith:{room:'Forge Lesson Bay',target:()=>HUB.smith,button:'FIND FORGE',theme:'ember',art:'ANVIL',beats:['Smelt ingots','Repair tools','Upgrade gear']},
   monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
-  pet_tamer:{room:'Companion Pen Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND PEN',theme:'leaf',art:'PAW',beats:['Track wild pets','Use collars and charms','Care for active familiars']},
+  pet_tamer:{room:'Dragon Roost Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND ROOST',theme:'leaf',art:'PAW',beats:['Watch dragon flight paths','Use collars and charms','Care for active familiars']},
 });
 const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   miner:{key:'DIAMOND PICKAXE',text:'Mine one diamond from the cave seam, then trade it with Garrik for gold.',sub:'This diamond pickaxe is tutorial-only. Aim at the blue ore wall and hold F / left click.'},
@@ -745,7 +745,7 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   cook:{key:'KITCHEN STATIONS',text:'Use meals to create combat, stamina, and travel support for other players.',sub:'Inspect the table, furnace, and campfire, then walk into the blue return pillar.'},
   blacksmith:{key:'FORGE BAY',text:'Repair, smelt, and upgrade gear so dungeon loot becomes long-term progression.',sub:'Inspect the forge stations, then walk into the blue return pillar.'},
   monk:{key:'FOCUS CIRCLE',text:'Meditation grows support power and restores resources more strongly in the hall.',sub:'Stand in the focus circle, then walk into the blue return pillar.'},
-  pet_tamer:{key:'COMPANION PEN',text:'Pet Tamers find wild pets, use collars or charms, and keep companions cared for.',sub:'Check the pen, craft treats later, then walk into the blue return pillar.'},
+  pet_tamer:{key:'DRAGON ROOST',text:'Pet Tamers begin by watching dragons, reading movement, and learning how companions behave.',sub:'Explore the roost, look up at the flock, then walk into the blue return pillar.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
 let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;

@@ -875,7 +875,7 @@ const JOB_TUTORIAL_MEADOWS=Object.freeze({
   cook:{x:770,z:925,G:18,R:34,ground:B.PLANKS},
   blacksmith:{x:850,z:925,G:18,R:34,ground:B.COBBLE},
   monk:{x:930,z:925,G:18,R:34,ground:B.GRASS},
-  pet_tamer:{x:1010,z:925,G:18,R:34,ground:B.GRASS},
+  pet_tamer:{x:500,z:925,G:22,R:52,ground:B.GRASS},
 });
 const {DimensionGrid}=window.BlockcraftDimensions;
 let world = new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
@@ -1003,16 +1003,49 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     for(const [ox,oz] of [[0,-8],[8,0],[0,8],[-8,0]]){setBlock(cx+ox,G+1,cz+oz,B.LANTERN);setBlock(cx+ox,G,cz+oz,B.GLASS);}
     setBlock(cx,G+1,cz,B.CAMPFIRE);
   }else if(jobId==='pet_tamer'){
-    for(let x=cx-13;x<=cx+13;x++)for(let z=cz-11;z<=cz+11;z++){
-      const fence=Math.abs(x-cx)===13||Math.abs(z-cz)===11;
-      if(fence&&(Math.abs(x-cx)>2||z!==cz+11))setBlock(x,G+1,z,B.LOG);
+    const ring=(rad,id)=>{for(let x=cx-rad;x<=cx+rad;x++)for(let z=cz-rad;z<=cz+rad;z++){const d=Math.hypot(x-cx,z-cz);if(d>=rad-.7&&d<=rad+.7)setBlock(x,G,z,id);}};
+    const disk=(ox,oz,rad,id,y=G)=>{for(let x=cx+ox-rad;x<=cx+ox+rad;x++)for(let z=cz+oz-rad;z<=cz+oz+rad;z++)if(Math.hypot(x-(cx+ox),z-(cz+oz))<=rad)setBlock(x,y,z,id);};
+    disk(0,0,18,B.GRASS);
+    ring(19,B.COBBLE);
+    ring(33,B.PLANKS);
+    for(let a=0;a<Math.PI*2;a+=Math.PI/4){
+      const x=Math.round(cx+Math.cos(a)*27), z=Math.round(cz+Math.sin(a)*27);
+      box(x-1,G,z-1,x+1,G,z+1,B.PLANKS);
+      for(let y=G+1;y<=G+5;y++)setBlock(x,y,z,B.LOG);
+      setBlock(x,G+6,z,B.LANTERN);
+      setBlock(x+Math.round(Math.cos(a)*2),G+5,z+Math.round(Math.sin(a)*2),B.GLASS);
     }
-    for(let x=cx-5;x<=cx+5;x++)for(let z=cz-4;z<=cz+4;z++)setBlock(x,G,z,B.GRASS);
-    for(const [ox,oz,id] of [[-7,-3,B.PLANKS],[7,-3,B.PLANKS],[-5,5,B.WATER],[5,5,B.WATER]])setBlock(cx+ox,G+1,cz+oz,id);
-    setBlock(cx,G+1,cz-8,B.CHEST);
-    setBlock(cx+3,G+1,cz-8,B.TABLE);
-    for(let y=G+1;y<=G+3;y++)setBlock(cx-9,y,cz+7,B.LOG);
-    for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)if(Math.abs(ox)+Math.abs(oz)<4)setBlock(cx-9+ox,G+4,cz+7+oz,B.LEAVES);
+    for(let a=0;a<Math.PI*2;a+=Math.PI/6){
+      const x=Math.round(cx+Math.cos(a)*38), z=Math.round(cz+Math.sin(a)*38);
+      disk(x-cx,z-cz,5,a%2?B.GRASS:B.PLANKS);
+      for(let y=G+1;y<=G+3;y++)setBlock(x,y,z,B.LOG);
+      box(x-2,G+4,z-2,x+2,G+4,z+2,B.PLANKS);
+      setBlock(x,G+5,z,B.LANTERN);
+    }
+    for(let x=cx-30;x<=cx+30;x++)for(let z=cz-2;z<=cz+2;z++)setBlock(x,G,z,B.COBBLE);
+    for(let z=cz-32;z<=cz+28;z++)for(let x=cx-2;x<=cx+2;x++)setBlock(x,G,z,B.COBBLE);
+    for(let x=cx-8;x<=cx+8;x++)for(let z=cz-8;z<=cz+8;z++){
+      const d=Math.hypot(x-cx,z-cz);
+      if(d<=7&&d>=3)setBlock(x,G,z,B.WATER);
+      else if(d<3)setBlock(x,G,z,B.GLASS);
+    }
+    box(cx-7,G+1,cz+18,cx+7,G+1,cz+24,B.PLANKS);
+    for(const [ox,oz] of [[-7,18],[7,18],[-7,24],[7,24]])for(let y=G+2;y<=G+5;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
+    box(cx-5,G+5,cz+20,cx+5,G+5,cz+24,B.LEAVES);
+    setBlock(cx-4,G+2,cz+21,B.CHEST);
+    setBlock(cx+4,G+2,cz+21,B.TABLE);
+    setBlock(cx,G+2,cz+22,B.EGG_INSULATOR);
+    for(const [ox,oz] of [[-18,-12],[18,-12],[-16,13],[16,13]]){
+      for(let y=G+1;y<=G+4;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
+      for(let lx=-3;lx<=3;lx++)for(let lz=-3;lz<=3;lz++)if(Math.abs(lx)+Math.abs(lz)<5)setBlock(cx+ox+lx,G+5,cz+oz+lz,B.LEAVES);
+    }
+    for(let z=cz-44;z<=cz-34;z++)for(let x=cx-7;x<=cx+7;x++){
+      const edge=Math.abs(x-cx)===7||z===cz-44||z===cz-34;
+      if(edge)setBlock(x,G+1,z,B.LOG); else setBlock(x,G,z,B.GRASS);
+    }
+    setBlock(cx,G+1,cz-39,B.CHEST);
+    setBlock(cx-4,G+1,cz-39,B.CAMPFIRE);
+    setBlock(cx+4,G+1,cz-39,B.LANTERN);
   }
 }
 const DANGER_RINGS=[
