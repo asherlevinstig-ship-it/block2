@@ -1055,6 +1055,7 @@ let dragonRoostSig='', dragonRoostNextRefresh=0;
 const companionDragons={};
 let companionDragonSig='', companionDragonNextRefresh=0;
 const petTamerTutorialDragons=[];
+let petTamerTutorialGroundDragon=null;
 const PET_TAMER_TUTORIAL_TYPES=['ember','verdant','frost','storm','void','verdant','ember','frost','storm','void','ember','verdant'];
 const DRAGON_ROOST_SLOTS=(()=>{
   const slots=[];
@@ -1070,6 +1071,46 @@ function clearPetTamerTutorialDragons(){
   while(petTamerTutorialDragons.length){
     const rec=petTamerTutorialDragons.pop();
     if(rec&&rec.group){ scene.remove(rec.group); disposeObjectTree(rec.group); }
+  }
+}
+function petTamerPracticeDragonSpot(room){
+  if(!room)return null;
+  return {x:(room.x||0)+8.5,y:(room.G||room.g||18)+1.03,z:(room.z||0)+8.5,yaw:-Math.PI*.62,type:'verdant'};
+}
+function clearPetTamerTutorialGroundDragon(){
+  if(!petTamerTutorialGroundDragon)return;
+  scene.remove(petTamerTutorialGroundDragon.group);
+  disposeObjectTree(petTamerTutorialGroundDragon.group);
+  petTamerTutorialGroundDragon=null;
+}
+function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
+  if(!active||!room||dim!=='job'){ clearPetTamerTutorialGroundDragon(); return; }
+  const spot=petTamerPracticeDragonSpot(room);
+  if(!spot)return;
+  if(!petTamerTutorialGroundDragon){
+    const group=new THREE.Group();
+    const dragon=makeMount('dragon:'+spot.type, 3, dragonSpecialization(spot.type));
+    dragon.scale.setScalar(.7);
+    dragon.userData.baseCompanionScale=.7;
+    dragon.rotation.y=Math.PI;
+    group.add(dragon);
+    const tag=makeDragonNameplate('Practice Dragon', 'Pet Tamer Lesson', '#9ad26b');
+    tag.position.set(0,1.75,0);
+    tag.scale.set(1.65,.72,1);
+    group.add(tag);
+    scene.add(group);
+    petTamerTutorialGroundDragon={group,dragon,tag,type:spot.type,phase:Math.random()*8,aura:0};
+  }
+  const rec=petTamerTutorialGroundDragon;
+  rec.group.visible=true;
+  rec.group.position.set(spot.x, spot.y+.035*Math.sin(now*.002+rec.phase), spot.z);
+  rec.group.rotation.y=spot.yaw+.06*Math.sin(now*.0017+rec.phase);
+  rec.group.rotation.z=.018*Math.sin(now*.0021+rec.phase);
+  animateMountWings(rec.group, now*.18+rec.phase*1000);
+  rec.aura+=(dt||0.016);
+  if(rec.aura>.09){
+    rec.aura=0;
+    emitDragonAura(rec.group.position, rec.type, .035, rec);
   }
 }
 function tickPetTamerTutorialDragons(active, room, now, dt=0.016){
@@ -2945,6 +2986,7 @@ function netRemoveRemote(sid){
     tickDragonRoost,
     tickCompanionDragons,
     tickPetTamerTutorialDragons,
+    tickPetTamerTutorialGroundDragon,
     DRAGON_PERCH_SLOTS_C,
     perchedDragons,
     perchKeysAt,

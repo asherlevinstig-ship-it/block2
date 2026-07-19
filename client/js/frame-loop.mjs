@@ -1836,7 +1836,9 @@ function tick(now){
     if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);
     if(networkingApi.tickPetTamerTutorialDragons){
       const petRoom=(worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS.pet_tamer)||null;
-      networkingApi.tickPetTamerTutorialDragons(dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob==='pet_tamer', petRoom, now, dt);
+      const petTamerActive=dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob==='pet_tamer';
+      networkingApi.tickPetTamerTutorialDragons(petTamerActive, petRoom, now, dt);
+      if(networkingApi.tickPetTamerTutorialGroundDragon) networkingApi.tickPetTamerTutorialGroundDragon(petTamerActive, petRoom, now, dt);
     }
     tickDragonRoost(now, dt);
 

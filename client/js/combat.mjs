@@ -737,7 +737,7 @@ const JOB_TUTORIAL_STEPS=Object.freeze({
   cook:{room:'Tavern Kitchen Lesson',target:()=>HUB.tavern,button:'FIND KITCHEN',theme:'gold',art:'PAN',beats:['Gather ingredients','Cook meals','Make dungeon buffs']},
   blacksmith:{room:'Forge Lesson Bay',target:()=>HUB.smith,button:'FIND FORGE',theme:'ember',art:'ANVIL',beats:['Smelt ingots','Repair tools','Upgrade gear']},
   monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
-  pet_tamer:{room:'Dragon Roost Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND ROOST',theme:'leaf',art:'PAW',beats:['Watch dragon flight paths','Use collars and charms','Care for active familiars']},
+  pet_tamer:{room:'Dragon Roost Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND ROOST',theme:'leaf',art:'PAW',beats:['Meet a grounded dragon','Care, ride, and command','Learn roost bonds and roles']},
 });
 const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   miner:{key:'DIAMOND PICKAXE',text:'Mine one diamond from the cave seam, then trade it with Garrik for gold.',sub:'This diamond pickaxe is tutorial-only. Aim at the blue ore wall and hold F / left click.'},
@@ -745,10 +745,10 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   cook:{key:'KITCHEN STATIONS',text:'Use meals to create combat, stamina, and travel support for other players.',sub:'Inspect the table, furnace, and campfire, then walk into the blue return pillar.'},
   blacksmith:{key:'FORGE BAY',text:'Repair, smelt, and upgrade gear so dungeon loot becomes long-term progression.',sub:'Inspect the forge stations, then walk into the blue return pillar.'},
   monk:{key:'FOCUS CIRCLE',text:'Meditation grows support power and restores resources more strongly in the hall.',sub:'Stand in the focus circle, then walk into the blue return pillar.'},
-  pet_tamer:{key:'DRAGON ROOST',text:'Pet Tamers begin by watching dragons, reading movement, and learning how companions behave.',sub:'Explore the roost, look up at the flock, then walk into the blue return pillar.'},
+  pet_tamer:{key:'MEET DRAGON',text:'Walk to the grounded practice dragon and press G beside it.',sub:'The flying dragons show the roost. The calm dragon on the ground teaches care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialPetDragonSeen=false, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
 const MINER_TUTORIAL_TRADE_GOLD=45;
 function level2JobChoiceSeen(){
   try{return localStorage.getItem(LEVEL2_JOB_CHOICE_KEY)==='1';}catch(e){return false;}
@@ -1173,6 +1173,50 @@ function nearbyMinerTutorialTrader(range=4.2){
   const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
   return d<=range?{...p,distance:d}:null;
 }
+function petTamerPracticeDragonPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
+  return room?{x:room.x+8.5,y:room.G+1.03,z:room.z+8.5}:null;
+}
+function nearPetTamerPracticeDragon(range=4.5){
+  const p=petTamerPracticeDragonPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||!player)return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
+function openPetTamerDragonTutorialUI(){
+  if(!nearPetTamerPracticeDragon(5.2))return false;
+  jobTutorialPetDragonSeen=true;
+  updateJobTutorialHud();
+  if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
+  if(uiOpen) closeUI(false);
+  openQWin('management');
+  qpanelEl.innerHTML='';
+  const h=document.createElement('h2'); h.textContent='DRAGON PRACTICE'; qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='WHAT A DRAGON CAN DO'; qpanelEl.appendChild(sub);
+  const intro=document.createElement('p'); intro.className='qtext';
+  intro.innerHTML='A dragon is a long-term companion, not just a decoration. Hatch one from an egg, raise its bond, then use it to travel, guard, fight, and support your group.';
+  qpanelEl.appendChild(intro);
+  const rows=[
+    ['CARE','Feed Dragon Treats to increase happiness and bond. Happier dragons recover abilities faster.'],
+    ['RIDE','Adult dragons can be summoned and mounted. Riding helps travel and gives access to dragon movement and breath abilities.'],
+    ['COMMAND','Set a dragon to follow, stay at a post, guard you, or rest. Roles gain mastery over time.'],
+    ['PROTECT','Guard dragons can help defend you and make dangerous routes feel less lonely.'],
+    ['ROOST','The Dragon Roost is where you hatch eggs, manage bonds, rename dragons, and check progression.'],
+  ];
+  for(const [label,text] of rows){
+    const r=document.createElement('div'); r.className='shoprow';
+    const mark=document.createElement('b'); mark.style.color='#9ad26b'; mark.style.fontSize='22px'; mark.textContent=label[0]; r.appendChild(mark);
+    const body=document.createElement('span'); body.innerHTML='<b>'+escHTML(label)+'</b><br><small>'+escHTML(text)+'</small>'; r.appendChild(body);
+    qpanelEl.appendChild(r);
+  }
+  const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
+  row.appendChild(qBtn('DRAGON BONDS',()=>openDragonBondUI()));
+  row.appendChild(qBtn('FINISH LESSON',()=>closeQWin(true),true));
+  showName('Dragon lesson learned');
+  eventLog('Pet Tamer tutorial - learned dragon care, riding, commands and roost bonds.');
+  sysMsg('<b>Dragon lesson:</b> hatch, care, ride, command, and guard with bonded dragons.');
+  return true;
+}
 function tryMinerTutorialTrade(){
   if(!nearbyMinerTutorialTrader())return false;
   if(jobTutorialTraded){
@@ -1257,13 +1301,21 @@ function updateJobTutorialHud(){
         ? {key:'GARRIK FLINT',text:'Take the diamond to Garrik and press G to trade it for gold.',sub:'He is waiting on the wooden platform inside this cave.'}
         : {key:'RETURN PILLAR',text:'You mined a diamond and traded it for gold.',sub:'Walk into the blue return pillar to go back to town.'};
   }
+  if(jobTutorialJob==='pet_tamer'){
+    copy=nearPetTamerPracticeDragon()
+      ? {key:'PRESS G',text:'Practice with the calm dragon on the ground.',sub:'This lesson explains care, riding, commands, guard roles, and the Dragon Roost.'}
+      : jobTutorialPetDragonSeen
+        ? {key:'RETURN PILLAR',text:'You learned what dragons can do for a player.',sub:'Walk into the blue return pillar to go back to town.'}
+        : JOB_TUTORIAL_ROOM_COPY.pet_tamer;
+  }
   const nearReturn=room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
   const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
+  const petBlockedReturn=jobTutorialJob==='pet_tamer'&&!jobTutorialPetDragonSeen;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?(minerBlockedReturn?'FINISH TRADE':'RETURN TO TOWN'):copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':'Step into the pillar to return to Town of Beginnings.'):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':'Your job is equipped. You can switch later at the Job Board.'):copy.sub)+'</div>';
+    +'<div class="tutkey">'+escHTML(nearReturn?(minerBlockedReturn?'FINISH TRADE':petBlockedReturn?'MEET DRAGON':'RETURN TO TOWN'):copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':petBlockedReturn?'Meet the grounded dragon and press G before leaving.':'Step into the pillar to return to Town of Beginnings.'):copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':petBlockedReturn?'The Pet Tamer loop is: bond -> care -> command -> travel and protect.':'Your job is equipped. You can switch later at the Job Board.'):copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -1273,6 +1325,7 @@ function completeJobTutorial(){
   jobTutorialJob='';
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
+  jobTutorialPetDragonSeen=false;
   jobTutorialReturnWarnAt=0;
   if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
@@ -1300,6 +1353,7 @@ function startJobTutorial(jobId){
   jobTutorialJob=jobId;
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
+  jobTutorialPetDragonSeen=false;
   jobTutorialReturnWarnAt=0;
   player.pos.set(room.x+.5,jobTutorialSafeSpawnY(jobId,room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
@@ -1327,6 +1381,7 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialJob=jobId;
   jobTutorialMinedDiamond=state.minedDiamond===true;
   jobTutorialTraded=state.traded===true;
+  jobTutorialPetDragonSeen=state.petDragonSeen===true;
   jobTutorialReturnWarnAt=0;
   if(player){
     player.pos.y=jobTutorialSafeSpawnY(jobId,player.pos.x||room.x+.5,player.pos.z||room.z+14.5,room.G+1.035);
@@ -1346,6 +1401,7 @@ function tickJobTutorial(now){
     jobTutorialActive=false;
     jobTutorialMinedDiamond=false;
     jobTutorialTraded=false;
+    jobTutorialPetDragonSeen=false;
     if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
@@ -1368,6 +1424,13 @@ function tickJobTutorial(now){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
         sysMsg('Mine a diamond and trade it with <b>Garrik</b> before leaving the Miner tutorial.');
+      }
+      return;
+    }
+    if(jobTutorialJob==='pet_tamer'&&!jobTutorialPetDragonSeen){
+      if(now>jobTutorialReturnWarnAt){
+        jobTutorialReturnWarnAt=now+1800;
+        sysMsg('Meet the grounded <b>practice dragon</b> and press <b>G</b> before leaving the Pet Tamer tutorial.');
       }
       return;
     }
@@ -2660,6 +2723,8 @@ function nearbyInteractionPrompt(){
   if(nearFellowshipWeatherVane())push({key:'G',title:'Fellowship Weather Vane',small:'Review weather sites and sky planning',priority:100},0);
   const minerTutor=nearbyMinerTutorialTrader();
   if(minerTutor)push({key:'G',title:'Garrik Flint',small:jobTutorialTraded?'Trade complete':jobTutorialMinedDiamond&&countItem(I.DIAMOND)>0?'Trade diamond for gold':'Mine a diamond first',priority:118},minerTutor.distance);
+  const petPracticeDragon=nearPetTamerPracticeDragon();
+  if(petPracticeDragon)push({key:'G',title:'Practice Dragon',small:jobTutorialPetDragonSeen?'Review dragon care and riding':'Learn care, riding and commands',priority:118},petPracticeDragon.distance);
   if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
   const table=nearbyTavernGameTable();
   if(table)push({key:'G',title:table.label,small:'Play tavern games',priority:94},table.distance);
@@ -2837,6 +2902,7 @@ function secondaryAction(){
   if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(tryMinerTutorialTrade()) return;
+  if(openPetTamerDragonTutorialUI()) return;
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
   if(toggleMeditation()) return;
@@ -3061,6 +3127,7 @@ gameContext.registerState('combat', Object.freeze({
   get jobTutorialJob(){ return jobTutorialJob; },
   get jobTutorialMinedDiamond(){ return jobTutorialMinedDiamond; },
   get jobTutorialTraded(){ return jobTutorialTraded; },
+  get jobTutorialPetDragonSeen(){ return jobTutorialPetDragonSeen; },
   get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
   get abilityTrainingActive(){ return abilityTrainingActive; },
   get abilityTrainingUsed(){ return abilityTrainingUsed; },

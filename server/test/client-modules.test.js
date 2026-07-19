@@ -258,6 +258,8 @@ test('wild pet familiar discovery is taught through hunting and familiar UI', ()
 test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   assert.match(world, /const skyDragons=\[\]/);
   assert.match(world, /const SKY_DRAGON_SPECS=Object\.freeze\(\[/);
   assert.match(world, /name:'Ember sky dragon'/);
@@ -270,6 +272,10 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(world, /"skyDragons":\{get:\(\)=>skyDragons\}/);
   assert.match(world, /"updateSkyDragons":\{get:\(\)=>updateSkyDragons\}/);
   assert.match(frame, /updateSkyDragons\(dt,now\/1000\)/);
+  assert.match(companions, /function tickPetTamerTutorialGroundDragon\(active, room, now, dt=0\.016\)/);
+  assert.match(companions, /Practice Dragon/);
+  assert.match(networking, /tickPetTamerTutorialGroundDragon/);
+  assert.match(frame, /networkingApi\.tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
 });
 
 test('Town systems use district anchors instead of stale compact-town coordinates', () => {
@@ -1412,6 +1418,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function startJobTutorial\(jobId\)/);
   assert.match(combat,/function tickJobTutorial\(now\)/);
   assert.match(combat,/function tryMinerTutorialTrade\(\)/);
+  assert.match(combat,/function openPetTamerDragonTutorialUI\(\)/);
+  assert.match(combat,/function nearPetTamerPracticeDragon\(range=4\.5\)/);
   assert.match(combat,/function jobTutorialWalkY\(x,z,fallbackY\)/);
   assert.match(combat,/function jobTutorialSafeSpawnY\(jobId,x,z,fallbackY\)/);
   assert.match(combat,/function resumeJobTutorial\(jobId,state=\{\}\)/);
@@ -1421,6 +1429,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
+  assert.match(combat,/WHAT A DRAGON CAN DO/);
+  assert.match(combat,/Meet the grounded <b>practice dragon<\/b> and press <b>G<\/b> before leaving/);
+  assert.match(combat,/Practice Dragon',small:jobTutorialPetDragonSeen\?'Review dragon care and riding':'Learn care, riding and commands'/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO PRACTICE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
