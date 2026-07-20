@@ -226,14 +226,24 @@ class AuthService {
       throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
     }
     const profile = raw ? sanitizeProfile(raw) : null;
+    const details = body && body.details === true;
+    const summary = profile ? {
+      exists: true,
+      name: profile.name,
+      nameSet: profile.nameSet === true,
+      level: profile.S && profile.S.lvl || 1,
+    } : { exists: false, name: '', nameSet: false, level: 1 };
+    if (profile && details) {
+      summary.job = profile.job || '';
+      summary.gold = profile.gold | 0;
+      summary.activeRoom = profile.activeRoom || null;
+      summary.inv = (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 }));
+      summary.mountUnlocks = Array.isArray(profile.mountUnlocks) ? [...profile.mountUnlocks] : [];
+      summary.dragonHatchedAt = profile.dragonHatchedAt || {};
+    }
     return {
       account,
-      profile: profile ? {
-        exists: true,
-        name: profile.name,
-        nameSet: profile.nameSet === true,
-        level: profile.S && profile.S.lvl || 1,
-      } : { exists: false, name: '', nameSet: false, level: 1 },
+      profile: summary,
     };
   }
 
