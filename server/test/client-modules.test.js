@@ -279,6 +279,9 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(companions, /typeof practice\.hatched==='function'&&!practice\.hatched\(\)/);
   assert.match(companions, /group\.name='petTamerHatchedDragon'/);
   assert.match(companions, /group\.userData\.blockcraftKind='hatchedTutorialDragon'/);
+  assert.match(companions, /rec\.group\.userData\.tutorialRole='follow'/);
+  assert.match(companions, /tutorialRole==='stay'&&rec\.group\.userData\.tutorialStaySpot/);
+  assert.match(companions, /emitDragonTrail\(rec\.group\.position, rec\.group\.rotation\.y\+Math\.PI/);
   assert.match(companions, /globalThis\.__petTamerPracticeDragon=group/);
 });
 
@@ -1474,6 +1477,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/worldState\.removeDragonIncubationMesh/);
   assert.match(combat,/function completePetTamerApproachIfReady\(now\)/);
   assert.match(combat,/function commandPetTamerPracticeDragon\(\)/);
+  assert.match(combat,/if\(g&&g\.visible&&g\.position\)return \{x:g\.position\.x,y:g\.position\.y,z:g\.position\.z\}/);
+  assert.match(combat,/g\.userData\.tutorialStaySpot=\{x:g\.position\.x,y:g\.position\.y,z:g\.position\.z,yaw:g\.rotation\.y\|\|0\}/);
+  assert.match(combat,/g\.userData\.tutorialRole='follow'/);
+  assert.match(combat,/Your dragon will now follow you/);
   assert.match(combat,/function mountPetTamerPracticeDragon\(\)/);
   assert.match(combat,/function finishPetTamerRoostLesson\(\)/);
   assert.match(combat,/mounted=true;\s*mountKind='dragon:verdant'/);
@@ -1534,8 +1541,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   const social = fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
   assert.match(social,/BlockcraftPetTamerPractice/);
   assert.match(social,/function renderTutorialDragonWheel\(practice\)/);
-  assert.match(social,/YOUR HATCHED DRAGON/);
+  assert.match(social,/HATCHED DRAGON/);
   assert.match(social,/TUTORIAL BOND/);
+  assert.match(social,/STAY<\/b><span>Ask your hatchling to wait/);
+  assert.match(social,/FOLLOWING YOU/);
+  assert.match(social,/STAY SET/);
   assert.match(social,/typeof practice\.hatched==='function'&&practice\.hatched\(\)/);
   assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8'),/EGG HATCH/);
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);

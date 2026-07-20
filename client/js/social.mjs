@@ -181,7 +181,7 @@ function renderDragonSelector(type){
 }
 function renderTutorialDragonWheel(practice){
   const status=practice&&typeof practice.status==='function'?practice.status():{};
-  chatWheelModeEl.textContent='YOUR HATCHED DRAGON';
+  chatWheelModeEl.textContent='HATCHED DRAGON';
   const center=chatWheelEl.querySelector('.wheelcenter span');
   if(center)center.innerHTML='<span class="drole">TUTORIAL BOND</span><span>'+escHTML(status.key||'DRAGON LESSON')+'</span><span>'+escHTML(status.detail||'Stay close to your dragon')+'</span>';
   const commandReady=practice&&typeof practice.commandAvailable==='function'&&practice.commandAvailable();
@@ -195,7 +195,7 @@ function renderTutorialDragonWheel(practice){
     });
   }else{
     const step=Number(status.step)||0;
-    const label=step>=4?'USE Z TO RIDE':step>=2?'FINISH CURRENT STEP':'KEEP BONDING';
+    const label=step>=4?'STAY SET':step>=2?'FOLLOWING YOU':'KEEP BONDING';
     action.innerHTML='<b>'+escHTML(label)+'</b><span>'+escHTML(status.near?'Follow the lesson prompt':'Stand beside your dragon')+'</span>';
     action.addEventListener('click',()=>closeDragonCommandWheel(true));
   }

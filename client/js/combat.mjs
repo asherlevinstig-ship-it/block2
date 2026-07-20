@@ -1186,6 +1186,8 @@ function nearbyMinerTutorialTrader(range=4.2){
   return d<=range?{...p,distance:d}:null;
 }
 function petTamerPracticeDragonPos(){
+  const g=globalThis.__petTamerPracticeDragon;
+  if(g&&g.visible&&g.position)return {x:g.position.x,y:g.position.y,z:g.position.z};
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
   return room?{x:room.x+8.5,y:room.G+1.03,z:room.z+8.5}:null;
 }
@@ -1445,7 +1447,10 @@ function commandPetTamerPracticeDragon(){
     return true;
   }
   const g=globalThis.__petTamerPracticeDragon;
-  if(g)g.userData.tutorialRole='stay';
+  if(g){
+    g.userData.tutorialRole='stay';
+    g.userData.tutorialStaySpot={x:g.position.x,y:g.position.y,z:g.position.z,yaw:g.rotation.y||0};
+  }
   completePetTamerDragonTutorialStep('command');
   sysMsg('Good. Now press <b>Z</b> beside the dragon to mount it, then ride forward with <b>WASD</b>.');
   return true;
@@ -1544,7 +1549,9 @@ function performPetTamerDragonTutorialAction(){
       return true;
     }
     completePetTamerDragonTutorialStep('feed');
-    sysMsg('Good. Press <b>Shift+Tab</b> beside the dragon to practise a Stay command.');
+    const g=globalThis.__petTamerPracticeDragon;
+    if(g)g.userData.tutorialRole='follow';
+    sysMsg('Good. Your dragon will now follow you. Press <b>Shift+Tab</b> beside it, then choose <b>Stay</b>.');
     return true;
   }
   if(step===3){

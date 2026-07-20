@@ -1109,20 +1109,42 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
     tag.position.set(0,1.75,0);
     tag.scale.set(1.65,.72,1);
     group.add(tag);
+    group.position.set(spot.x,spot.y,spot.z);
     scene.add(group);
     petTamerTutorialGroundDragon={group,dragon,tag,type:spot.type,phase:Math.random()*8,aura:0};
     globalThis.__petTamerPracticeDragon=group;
   }
   const rec=petTamerTutorialGroundDragon;
+  const status=practice&&typeof practice.status==='function'?practice.status():{};
+  if(Number(status.step)===3&&rec.group.userData.tutorialRole!=='stay')rec.group.userData.tutorialRole='follow';
   rec.group.visible=true;
-  rec.group.position.set(spot.x, spot.y+.035*Math.sin(now*.002+rec.phase), spot.z);
-  rec.group.rotation.y=spot.yaw+.06*Math.sin(now*.0017+rec.phase);
+  let tx=spot.x, ty=spot.y, tz=spot.z, yaw=spot.yaw, following=false;
+  if(rec.group.userData.tutorialRole==='stay'&&rec.group.userData.tutorialStaySpot){
+    const s=rec.group.userData.tutorialStaySpot;
+    tx=s.x; ty=s.y; tz=s.z; yaw=s.yaw||yaw;
+  }else if(rec.group.userData.tutorialRole==='follow'&&player&&player.pos){
+    const pyaw=player.yaw||0;
+    tx=player.pos.x-Math.sin(pyaw)*3.2+Math.cos(pyaw)*1.35;
+    ty=player.pos.y;
+    tz=player.pos.z-Math.cos(pyaw)*3.2-Math.sin(pyaw)*1.35;
+    following=true;
+  }
+  const lerp=Math.min(1,(dt||0.016)*(following?4.8:7.5));
+  rec.group.position.x+=(tx-rec.group.position.x)*lerp;
+  rec.group.position.y+=(ty+.035*Math.sin(now*.002+rec.phase)-rec.group.position.y)*Math.min(1,(dt||0.016)*7);
+  rec.group.position.z+=(tz-rec.group.position.z)*lerp;
+  if(following){
+    const dx=(player.pos.x||0)-rec.group.position.x, dz=(player.pos.z||0)-rec.group.position.z;
+    yaw=Math.atan2(dx,dz);
+  }
+  rec.group.rotation.y=yaw+.06*Math.sin(now*.0017+rec.phase);
   rec.group.rotation.z=.018*Math.sin(now*.0021+rec.phase);
-  animateMountWings(rec.group, now*.18+rec.phase*1000);
+  animateMountWings(rec.group, now*(following?.46:.18)+rec.phase*1000);
   rec.aura+=(dt||0.016);
   if(rec.aura>.09){
     rec.aura=0;
     emitDragonAura(rec.group.position, rec.type, .035, rec);
+    if(following)emitDragonTrail(rec.group.position, rec.group.rotation.y+Math.PI, rec.type, dt||0.016, rec);
   }
 }
 function tickPetTamerTutorialDragons(active, room, now, dt=0.016){
