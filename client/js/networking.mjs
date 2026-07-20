@@ -2952,7 +2952,7 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
   react:(type,mood)=>COMPANIONS.dragonReaction ? COMPANIONS.dragonReaction(type,mood) : false,
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
@@ -4470,6 +4470,7 @@ const netTick=createNetworkFramePump({
   mountLift,
   ensureRemoteMount,
   animateMountWings,
+  animateDragonMotion,
   emitDragonAura,
   dragonType,
   emitDragonTrail,

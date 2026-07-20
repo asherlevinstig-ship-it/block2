@@ -72,6 +72,18 @@ const DRAGON_SHAPES={
   storm:{body:[.82,.66,2.12], chest:[.6,.44,.34], neck:[.38,.56,.78], head:[.44,.42,.64], snout:[.32,.26,.34], wing:1.24, wingDrop:.12, tail:1.16, spine:1.05, horns:'fork', fin:'bolt', aura:'spark'},
   void:{body:[.76,.68,2.3], chest:[.56,.44,.34], neck:[.36,.7,.88], head:[.46,.44,.66], snout:[.32,.26,.36], wing:1.14, wingDrop:.2, tail:1.42, spine:1.2, horns:'void', fin:'void', aura:'void'},
 };
+function rememberDragonPart(mesh){
+  if(mesh&&!mesh.userData.dragonBase){
+    mesh.userData.dragonBase={x:mesh.position.x,y:mesh.position.y,z:mesh.position.z,rx:mesh.rotation.x,ry:mesh.rotation.y,rz:mesh.rotation.z};
+  }
+  return mesh;
+}
+function poseDragonPart(mesh, y=0, rx=0, ry=0, rz=0, x=0, z=0){
+  const b=mesh&&mesh.userData&&mesh.userData.dragonBase;
+  if(!b)return;
+  mesh.position.set(b.x+x,b.y+y,b.z+z);
+  mesh.rotation.set(b.rx+rx,b.ry+ry,b.rz+rz);
+}
 // species-colored glow trailing from the wingtips and tail of a flying dragon
 function emitDragonTrail(pos, yaw, type, dt, holder){
   holder._trailAcc=(holder._trailAcc||0)+dt;
@@ -152,9 +164,10 @@ function makeDragonMount(type, bondLevel=1, specialization=''){
   const strapM=voxelMats('#17100a','#2a1a10','#090604','#050302');
   const toothM=voxelMats('#e8e0c8','#fff8e8','#9a9074','#5a523e');
   const accent=glowVoxelMats(d.membrane[0],d.membrane[1],d.membrane[2],d.membrane[3],1.05);
-  addBox(grp,sh.body,[0,1.3,0],scale);                    // body
+  const anim={legs:[],feet:[],tail:[],body:null,chest:null,neck:null,head:null,snout:null};
+  anim.body=rememberDragonPart(addBox(grp,sh.body,[0,1.3,0],scale));                    // body
   addBox(grp,[sh.body[0]*.72,0.38,sh.body[2]*.86],[0,1.0,0],belly); // belly
-  addBox(grp,sh.chest,[0,1.36,.88],scale,[-.18,0,0]);      // chest plate
+  anim.chest=rememberDragonPart(addBox(grp,sh.chest,[0,1.36,.88],scale,[-.18,0,0]));      // chest plate
   addBox(grp,[sh.body[0]*.9,.13,.18],[0,1.73,.42],dark,[.28,0,0]);
   addBox(grp,[sh.body[0]*.82,.12,.16],[0,1.72,-.22],dark,[.18,0,0]);
   for(let i=0;i<4;i++){
@@ -163,18 +176,20 @@ function makeDragonMount(type, bondLevel=1, specialization=''){
   const lh=0.85;
   for(const sx of [-1,1]) for(const sz of [-1,1]){
     addBox(grp,[0.3,0.32,0.34],[sx*0.36,0.92,sz*0.52],scale,[sz*.12,0,sx*.04]); // shoulder/haunch
-    addBox(grp,[0.22,lh,0.26],[sx*0.34, lh/2, sz*0.58], dark);     // legs
-    addBox(grp,[0.18,0.26,0.22],[sx*0.34,0.38,sz*0.74],scale,[sz*.16,0,0]);      // ankle scale
-    addBox(grp,[0.28,0.13,0.34],[sx*0.34,0.065,sz*0.66], dark);    // clawed feet
+    const leg=rememberDragonPart(addBox(grp,[0.22,lh,0.26],[sx*0.34, lh/2, sz*0.58], dark));     // legs
+    const ankle=rememberDragonPart(addBox(grp,[0.18,0.26,0.22],[sx*0.34,0.38,sz*0.74],scale,[sz*.16,0,0]));      // ankle scale
+    const foot=rememberDragonPart(addBox(grp,[0.28,0.13,0.34],[sx*0.34,0.065,sz*0.66], dark));    // clawed feet
+    anim.legs.push({leg,ankle,foot,sx,sz,phase:(sx>0?0:Math.PI)+(sz>0?Math.PI*.45:0)});
+    anim.feet.push(foot);
     addBox(grp,[0.08,0.06,0.16],[sx*0.34,0.15,sz*0.84],horn);      // toe claw
     addBox(grp,[0.06,0.05,0.12],[sx*0.22,0.14,sz*0.86],horn,[0,sx*.16,0]);
     addBox(grp,[0.06,0.05,0.12],[sx*0.46,0.14,sz*0.86],horn,[0,-sx*.16,0]);
   }
-  addBox(grp,sh.neck,[0,1.76,1.0],scale,[-0.55,0,0]);      // neck
+  anim.neck=rememberDragonPart(addBox(grp,sh.neck,[0,1.76,1.0],scale,[-0.55,0,0]));      // neck
   addBox(grp,[sh.neck[0]*.82,.18,sh.neck[2]*.76],[0,1.63,1.05],belly,[-.55,0,0]);
-  addBox(grp,sh.head,[0,2.13,1.5],scale);                  // head
+  anim.head=rememberDragonPart(addBox(grp,sh.head,[0,2.13,1.5],scale));                  // head
   addBox(grp,[sh.head[0]*.96,.14,.42],[0,2.29,1.32],dark,[-.1,0,0]); // brow ridge
-  addBox(grp,sh.snout,[0,2.06,1.88],dark);                 // snout
+  anim.snout=rememberDragonPart(addBox(grp,sh.snout,[0,2.06,1.88],dark));                 // snout
   addBox(grp,[sh.snout[0]*.72,.12,sh.snout[2]*.72],[0,1.91,1.84],belly,[.08,0,0]); // lower jaw
   addBox(grp,[.09,.08,.16],[-.28,2.11,1.66],scale,[0,0,-.18]);
   addBox(grp,[.09,.08,.16],[ .28,2.11,1.66],scale,[0,0,.18]);
@@ -212,9 +227,9 @@ function makeDragonMount(type, bondLevel=1, specialization=''){
     const z=.9+i*.22, y=1.82+i*.16;
     addBox(grp,[.09,.18,.1],[0,y,z],horn,[-.45,0,0]);
   }
-  addBox(grp,[0.36,0.34,0.95*sh.tail],[0,1.22,-1.1],scale,[0.22,0,0]); // tail base
-  addBox(grp,[0.22,0.22,0.85*sh.tail],[0,0.98,-1.78],scale,[0.4,0,0]); // tail mid
-  addBox(grp,[0.14,0.14,0.46*sh.tail],[0,0.78,-2.32],dark,[0.56,0,0]); // tail whip
+  anim.tail.push(rememberDragonPart(addBox(grp,[0.36,0.34,0.95*sh.tail],[0,1.22,-1.1],scale,[0.22,0,0]))); // tail base
+  anim.tail.push(rememberDragonPart(addBox(grp,[0.22,0.22,0.85*sh.tail],[0,0.98,-1.78],scale,[0.4,0,0]))); // tail mid
+  anim.tail.push(rememberDragonPart(addBox(grp,[0.14,0.14,0.46*sh.tail],[0,0.78,-2.32],dark,[0.56,0,0]))); // tail whip
   if(sh.fin==='leaf'){
     addBox(grp,[0.58,0.08,0.34],[0,0.8,-2.25],membrane,[0,.35,0]);
     addBox(grp,[0.34,0.06,0.24],[-.22,0.92,-2.36],membrane,[0,.72,.25]);
@@ -321,6 +336,8 @@ function makeDragonMount(type, bondLevel=1, specialization=''){
   }
   grp.scale.setScalar(d.size||1);
   grp.userData.wings=wings;
+  grp.userData.dragonAnim=anim;
+  grp.userData.dragonAnimPhase=Math.random()*Math.PI*2;
   grp.userData.dragonType=type;
   grp.userData.wingBeat=type==='storm'?6.3:type==='void'?3.5:type==='frost'?4.2:5;
   grp.userData.wingAmp=type==='storm'?.72:type==='verdant'?.42:type==='void'?.52:.58;
@@ -336,6 +353,40 @@ function animateMountWings(obj, now){
   w[1].rotation.z= tuck+flap;   // right wing
   w[0].rotation.x=Math.sin(now/1000*beat*.5)*.08;
   w[1].rotation.x=Math.sin(now/1000*beat*.5)*.08;
+}
+function animateDragonMotion(obj, now, dt=0.016, mode='idle', speed=0, bank=0){
+  if(!obj)return;
+  const anim=obj.userData&&obj.userData.dragonAnim;
+  const phase=(obj.userData&&obj.userData.dragonAnimPhase)||0;
+  const moving=Math.max(0,Math.min(1,Number(speed)||0));
+  const flying=mode==='flight'||mode==='mountedFlight'||mode==='sky';
+  const resting=mode==='rest';
+  const wingClock=now*(flying?(1.05+moving*.65):(resting?.18:(moving>.08?.42:.24)))+phase*1000;
+  animateMountWings(obj, wingClock);
+  if(!anim)return;
+  const t=now/1000+phase;
+  const walk=t*(6.8+moving*5.2);
+  const bob=flying?Math.sin(t*3.2)*(.04+moving*.035):(moving>.08?Math.abs(Math.sin(walk))*.07:(resting?Math.sin(t*.75)*.012:Math.sin(t*1.35)*.02));
+  const bodyPitch=flying?-.08-moving*.05+Math.sin(t*2.2)*.025:(moving>.08?Math.sin(walk)*.025:(resting?.055:0));
+  const bodyBank=Math.max(-.22,Math.min(.22,bank||0))+(flying?Math.sin(t*1.7)*.035:0);
+  poseDragonPart(anim.body,bob,bodyPitch,0,bodyBank);
+  poseDragonPart(anim.chest,bob*.75,bodyPitch*.65,0,bodyBank*.45);
+  poseDragonPart(anim.neck,bob*.55,flying?.08+Math.sin(t*2.4)*.045:(moving>.08?Math.sin(walk+.4)*.035:Math.sin(t*1.25)*.025),0,0);
+  poseDragonPart(anim.head,bob*.55,flying?.06+Math.sin(t*2.8)*.05:(moving>.08?Math.sin(walk+.8)*.05:Math.sin(t*1.45)*.035),0,Math.sin(t*1.8)*.018);
+  poseDragonPart(anim.snout,bob*.5,flying?.04+Math.sin(t*2.8)*.035:(moving>.08?Math.sin(walk+.9)*.035:Math.sin(t*1.45)*.022),0,0);
+  if(anim.legs)for(const part of anim.legs){
+    const stride=Math.sin(walk+part.phase);
+    const lift=Math.max(0,stride)*.11*moving;
+    const fold=flying?-.55+part.sz*.12:stride*.34*moving;
+    const tuck=flying?part.sz*.08:0;
+    poseDragonPart(part.leg,lift,fold,0,part.sx*.035*moving,0,tuck);
+    poseDragonPart(part.ankle,lift*.72,fold*.55,0,0,0,tuck*.85);
+    poseDragonPart(part.foot,lift*.45,fold*.25,0,0,0,tuck);
+  }
+  if(anim.tail)for(let i=0;i<anim.tail.length;i++){
+    const tailWave=Math.sin(t*(flying?3.4:(moving>.08?4.8:1.6))+i*.7)*(.08+i*.055+moving*.05);
+    poseDragonPart(anim.tail[i],bob*.25-i*.01,flying?.12+i*.035:Math.sin(walk*.5+i)*.035*moving,tailWave,tailWave*.35);
+  }
 }
 function ensureRemoteMount(r, kind){
   if(r.mountObj && r.mountKind!==kind){ r.grp.remove(r.mountObj); r.mountObj=null; r.mountKind=''; }
@@ -1036,7 +1087,8 @@ function tickLocalMount(now, dt){
     localMountObj.position.set(player.pos.x, player.pos.y, player.pos.z);
     localMountObj.rotation.y=player.yaw+Math.PI;
     if(isDragon(mountKind)){
-      animateMountWings(localMountObj, now);
+      const flySpeed=Math.min(1,Math.hypot(player.vx||0,player.vz||0)/12);
+      animateDragonMotion(localMountObj, now, dt, 'mountedFlight', flySpeed, 0);
       localMountObj.position.y+=Math.sin(now/1000*2.2)*0.06;   // gentle hover bob
       emitDragonAura(player.pos, dragonType(mountKind), dt||0, localMountObj.userData);
       emitDragonTrail(player.pos, player.yaw+Math.PI, dragonType(mountKind), dt||0, localMountObj.userData);
@@ -1117,6 +1169,10 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
   const rec=petTamerTutorialGroundDragon;
   const status=practice&&typeof practice.status==='function'?practice.status():{};
   if(Number(status.step)===3&&rec.group.userData.tutorialRole!=='stay')rec.group.userData.tutorialRole='follow';
+  if(mounted&&isDragon(mountKind)&&Number(status.step)===4){
+    rec.group.visible=false;
+    return;
+  }
   rec.group.visible=true;
   let tx=spot.x, ty=spot.y, tz=spot.z, yaw=spot.yaw, following=false;
   if(rec.group.userData.tutorialRole==='stay'&&rec.group.userData.tutorialStaySpot){
@@ -1130,6 +1186,7 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
     following=true;
   }
   const lerp=Math.min(1,(dt||0.016)*(following?4.8:7.5));
+  const prevX=rec.group.position.x, prevZ=rec.group.position.z;
   rec.group.position.x+=(tx-rec.group.position.x)*lerp;
   rec.group.position.y+=(ty+.035*Math.sin(now*.002+rec.phase)-rec.group.position.y)*Math.min(1,(dt||0.016)*7);
   rec.group.position.z+=(tz-rec.group.position.z)*lerp;
@@ -1139,7 +1196,8 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
   }
   rec.group.rotation.y=yaw+.06*Math.sin(now*.0017+rec.phase);
   rec.group.rotation.z=.018*Math.sin(now*.0021+rec.phase);
-  animateMountWings(rec.group, now*(following?.46:.18)+rec.phase*1000);
+  const walkSpeed=Math.min(1,Math.hypot(rec.group.position.x-prevX,rec.group.position.z-prevZ)/Math.max(.001,dt||0.016)/5);
+  animateDragonMotion(rec.dragon, now+rec.phase*1000, dt, following&&walkSpeed>.04?'walk':'idle', walkSpeed, 0);
   rec.aura+=(dt||0.016);
   if(rec.aura>.09){
     rec.aura=0;
@@ -1181,7 +1239,7 @@ function tickPetTamerTutorialDragons(active, room, now, dt=0.016){
     rec.group.position.set(x,y,z);
     rec.group.rotation.y=Math.atan2(nx-x,nz-z);
     rec.group.rotation.z=Math.sin(t*1.7)*.12;
-    animateMountWings(rec.group, now*(.86+rec.speed*.22)+rec.phase*1000);
+    animateDragonMotion(rec.group, now+rec.phase*1000, dt, 'sky', .86, Math.sin(t*1.7)*.32);
     emitDragonTrail(rec.group.position, rec.group.rotation.y+Math.PI, rec.type, dt, rec);
     if(i%3===0) emitDragonAura(rec.group.position, rec.type, dt, rec);
   }
@@ -1579,12 +1637,14 @@ function tickCompanionDragons(now, dt){
     const jitter=motion.jitter?Math.sin(now/260+rec.phase)*motion.jitter:0;
     const tx=owner.x+sx+bx+Math.cos(yaw)*jitter, ty=owner.y, tz=owner.z+sz+bz-Math.sin(yaw)*jitter;
     const moveRate=(resting?3.2:(young?6.5:5.5))*motion.move;
+    const prevX=rec.group.position.x, prevZ=rec.group.position.z;
     rec.group.position.x+=(tx-rec.group.position.x)*Math.min(1,dt*moveRate);
     rec.group.position.y+=(ty-rec.group.position.y)*Math.min(1,dt*7);
     rec.group.position.z+=(tz-rec.group.position.z)*Math.min(1,dt*moveRate);
     const dx=owner.x-rec.group.position.x, dz=owner.z-rec.group.position.z;
     rec.group.rotation.y=rec.role==='stay'?yaw:Math.atan2(dx,dz);
-    animateMountWings(rec.dragon, now*(rec.role==='guard' ? .72 : (rec.role==='rest' ? .22 : (young ? .86 : .48)))*motion.wing+rec.phase*1000);
+    const dragonMoveSpeed=Math.min(1,Math.hypot(rec.group.position.x-prevX,rec.group.position.z-prevZ)/Math.max(.001,dt)/4.6);
+    animateDragonMotion(rec.dragon, now*motion.wing+rec.phase*1000, dt, resting?'rest':(dragonMoveSpeed>.05?'walk':'idle'), dragonMoveSpeed, motion.tilt||0);
     const bob=(rec.stage==='baby' ? .115 : (rec.stage==='juvenile' ? .07 : (resting ? .018 : .045)))*motion.bob;
     rec.dragon.position.y=Math.max(resting?-.035:0,Math.sin(now/1000*(rec.stage==='baby'?2.7:1.6)+rec.phase)*bob);
     rec.dragon.rotation.z=(rec.stage==='baby'?Math.sin(now/1000*3.1+rec.phase)*.035:(resting?Math.sin(now/1000*.9+rec.phase)*.012:0))+(motion.tilt||0);
@@ -1664,7 +1724,7 @@ function tickDragonRoost(now, dt){
     if(!d) continue;
     const stage=perch.userData.stage||'adult';
     const baby=stage==='baby', juvenile=stage==='juvenile';
-    animateMountWings(d, now*(baby?1.05:(juvenile?.72:.45))+perch.userData.phase*1000);
+    animateDragonMotion(d, now+perch.userData.phase*1000, dt, baby?'walk':'idle', baby?.35:(juvenile?.18:.06), 0);
     const t=now/1000+perch.userData.phase;
     d.position.y=baby?Math.max(0,Math.sin(t*2.8))*.13:(juvenile?Math.sin(t*1.8)*.065:Math.sin(t*1.1)*.035);
     d.rotation.z=baby?Math.sin(t*3.4)*.035:(juvenile?Math.sin(t*1.7)*.018:0);
@@ -1706,7 +1766,7 @@ function removePerchedDragon(key){
 function tickPerchedDragons(now, dt){
   for(const k in perchedDragons){
     const e=perchedDragons[k];
-    animateMountWings(e.group, now*0.6);                 // slow idle wing flutter
+    animateDragonMotion(e.group, now, dt, 'idle', .08, 0);
     e.group.position.y = e.y + Math.sin(now/1000*1.6 + e.slot)*0.04;
     if(e.loveUntil>now){                                 // hearts while smitten
       e.heartAcc=(e.heartAcc||0)+dt;
@@ -2949,6 +3009,7 @@ function netRemoveRemote(sid){
     mountLift,
     mountEye,
     animateMountWings,
+    animateDragonMotion,
     ensureRemoteMount,
     applyMount,
     toggleMount,

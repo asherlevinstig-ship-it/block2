@@ -7,6 +7,7 @@ export function createNetworkFramePump({
   mountLift,
   ensureRemoteMount,
   animateMountWings,
+  animateDragonMotion,
   emitDragonAura,
   dragonType,
   emitDragonTrail,
@@ -70,7 +71,8 @@ export function createNetworkFramePump({
       ensureRemoteMount(r,ref.mount||'');
       const moving=Math.hypot(mvx,mvz)>.08;
       if(r.mountObj&&isDragon(ref.mount)){
-        animateMountWings(r.mountObj,now);
+        if(animateDragonMotion)animateDragonMotion(r.mountObj,now,stepDt,'mountedFlight',moving?.85:.28,0);
+        else animateMountWings(r.mountObj,now);
         emitDragonAura({x:p.x,y:p.y-lift,z:p.z},dragonType(ref.mount),stepDt,r);
         if(moving) emitDragonTrail({x:p.x,y:p.y-lift,z:p.z},r.grp.rotation.y,dragonType(ref.mount),stepDt,r);
       }
