@@ -2735,6 +2735,11 @@ function readJobTutorialResume(){
       if(room&&(Math.hypot(pos[0]-room.x,pos[2]-room.z)>room.R+5||pos[1]<room.G-2)){
         pos=[room.x+room.spawn.dx+.5,room.G+1.05,room.z+room.spawn.dz+.5];
       }
+    }else if(activeRoom.dim==='job'&&pos){
+      const room=worldState&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job];
+      if(room&&(Math.hypot(pos[0]-room.x,pos[2]-room.z)>room.R+5||pos[1]<room.G-2)){
+        pos=[room.x+.5,room.G+1.05,room.z+14.5];
+      }
     }
     return {
       ...activeRoom,

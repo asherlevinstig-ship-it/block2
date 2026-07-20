@@ -242,6 +242,8 @@ function makeRoom() {
   room.prospectAt = new Map();
   room.bossContrib = new Map();
   room.dungeonLobbies = new Map();
+  room.skyshipPassengers = new Map();
+  room.deathDrops = new Map();
   room.blackholeCd = new Map();
   room.legendaryCd = new Map();
   room.dragonBreathCd = new Map();
@@ -7171,6 +7173,36 @@ test('completed onboarding is persisted immediately for refresh-safe restore', a
   assert.equal(saved[0].profile.tutorials.onboarding, TUTORIAL_VERSIONS.onboarding);
   assert.deepEqual(saved[0].profile.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
   assert.equal(room.dirtyPlayers.has(token), false);
+});
+
+test('cached active room profiles are normalized before spawning on join', async () => {
+  const room = makeRoom(), client = makeClient('cached-taming-land');
+  const token = 'student_905061';
+  const cached = defaultProfile('Dylan Lynee');
+  cached.activeRoom = { dim: 'taming_land' };
+  cached.pos = [500.5, 16, 514.5];
+  room.profiles.set(token, cached);
+  room.store = {
+    async loadPlayer() {
+      throw new Error('cached profile should not load from store');
+    },
+  };
+
+  await room.onJoin(client, { name: 'Dylan Lynee' }, {
+    id: token,
+    displayName: 'Dylan Lynee',
+    accountType: 'student',
+    role: 'student',
+  });
+
+  const prof = room.profiles.get(token);
+  const p = room.state.players.get(client.sessionId);
+  assert.deepEqual(prof.activeRoom, { dim: 'taming_land' });
+  assert.deepEqual(prof.pos, [420.5, 21.05, 907.5]);
+  assert.equal(p.dim, 'tutorial');
+  assert.equal(p.dgn, 'taming_land');
+  assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [420.5, 21.06, 907.5]);
+  assert.equal(room.dirtyPlayers.has(token), true);
 });
 
 test('registered profiles receive a town map backfill without losing current progress', () => {

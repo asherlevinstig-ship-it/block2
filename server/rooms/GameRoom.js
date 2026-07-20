@@ -887,6 +887,24 @@ class GameRoom extends Room {
         this.profiles.set(token, prof);
         this.dirtyPlayers.add(token);
       }
+      if (prof && !prof.noPersist) {
+        const beforeRoom = JSON.stringify({ activeRoom: prof.activeRoom || null, pos: prof.pos || null });
+        prof = sanitizeProfile(prof);
+        const afterRoom = JSON.stringify({ activeRoom: prof.activeRoom || null, pos: prof.pos || null });
+        this.profiles.set(token, prof);
+        if (beforeRoom !== afterRoom) {
+          this.dirtyPlayers.add(token);
+          recordIdentityTrace('room.join.profile_sanitized', {
+            room: 'overworld',
+            shardId: String(this.shardId || 'main'),
+            sidHash: shortHash(client.sessionId),
+            token,
+            profileSource,
+            before: beforeRoom,
+            after: afterRoom,
+          });
+        }
+      }
       if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
@@ -935,6 +953,8 @@ class GameRoom extends Room {
         name: prof.name,
         nameSet: prof.nameSet === true,
         level: prof.S && prof.S.lvl || 1,
+        activeRoom: prof.activeRoom || null,
+        pos: Array.isArray(prof.pos) ? prof.pos.slice(0, 3) : null,
         noPersist: prof.noPersist === true,
       } : null,
       playerName: p.name,
