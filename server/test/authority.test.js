@@ -566,6 +566,30 @@ test('profile merge persists only bounded job tutorial room resume state', () =>
   assert.equal(rejected.activeRoom, null);
 });
 
+test('profile merge persists pet tamer and taming land room resume state', () => {
+  const current = defaultProfile('Tamer');
+  const pet = mergeClientSave(current, {
+    activeRoom: { dim: 'job', job: 'pet_tamer', petDragonSeen: false, petDragonStep: 4 },
+    pos: [500.5, 23.05, 931.5],
+  });
+  assert.deepEqual(pet.activeRoom, {
+    dim: 'job',
+    job: 'pet_tamer',
+    minedDiamond: false,
+    traded: false,
+    petDragonSeen: false,
+    petDragonStep: 4,
+  });
+  assert.deepEqual(pet.pos, [500.5, 23.05, 931.5]);
+
+  const taming = mergeClientSave(current, {
+    activeRoom: { dim: 'taming_land' },
+    pos: [420.5, 21.05, 907.5],
+  });
+  assert.deepEqual(taming.activeRoom, { dim: 'taming_land' });
+  assert.deepEqual(taming.pos, [420.5, 21.05, 907.5]);
+});
+
 test('profile merge rejects client job and jobXp changes', () => {
   const current = defaultProfile('Worker');
   const merged = mergeClientSave(current, { job: 'miner', jobXp: 42 });
@@ -7275,6 +7299,22 @@ test('onboarding and ability tutorials use private server spaces and restore the
   assert.equal(mp.dim, 'overworld');
   assert.equal(mp.dgn, '');
   assert.equal(minerProfile.activeRoom, null);
+
+  const tamerRoom = makeRoom(), tamer = makeClient('taming-room');
+  const { prof: tamerProfile } = seedPlayer(tamerRoom, tamer, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5, lvl: 2 });
+  tamerRoom.clients = [tamer];
+  assert.equal(tamerRoom.handleTutorialEnter(tamer, { kind: 'taming_land' }), true);
+  const tp = tamerRoom.state.players.get(tamer.sessionId);
+  assert.equal(tp.dim, 'tutorial');
+  assert.match(tp.dgn, /^tutorial-taming_land-/);
+  tp.x = 430.5; tp.y = 22.25; tp.z = 918.5;
+  assert.equal(tamerRoom.persistActiveRoomPose(tamer, tamerProfile, tp), true);
+  assert.deepEqual(tamerProfile.activeRoom, { dim: 'taming_land' });
+  assert.deepEqual(tamerProfile.pos, [430.5, 22.25, 918.5]);
+  assert.equal(tamerRoom.resumeTutorialDimension(tamer), true);
+  assert.equal(tamer.sent.some(e => e.type === 'tutorialDimension' && e.msg.active && e.msg.kind === 'taming_land'), true);
+  assert.equal(tamerRoom.leaveTutorialDimension(tamer), true);
+  assert.equal(tamerProfile.activeRoom, null);
 });
 
 test('restart recovery ejects safely and refunds consumed private gate currency once', async () => {

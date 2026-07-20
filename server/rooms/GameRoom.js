@@ -469,10 +469,8 @@ class GameRoom extends Room {
         p.path = prof.S.path;
         p.job = JOB_IDS.has(prof.job) ? prof.job : '';
         p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
-        if (prof.activeRoom) {
-          // Bounded private-room positions come from mergeClientSave(); the
-          // server's overworld pose may be stale or clamped against the wrong map.
-        } else if (!p.dgn) prof.pos = [p.x, p.y, p.z];
+        if (prof.activeRoom) this.persistActiveRoomPose(client, prof, p);
+        else if (!p.dgn) prof.pos = [p.x, p.y, p.z];
         else {
           const prev = this.profiles.get(token);
           if (prev) prof.pos = prev.pos;
@@ -963,6 +961,9 @@ class GameRoom extends Room {
       if (prof.activeRoom && prof.activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[prof.activeRoom.job]) {
         p.dim = 'tutorial';
         p.dgn = this.tutorialSpaceId(client, 'job_' + prof.activeRoom.job);
+      } else if (prof.activeRoom && prof.activeRoom.dim === 'taming_land') {
+        p.dim = 'tutorial';
+        p.dgn = this.tutorialSpaceId(client, 'taming_land');
       }
     } else {
       p.x = W.TOWN.TC + .5 + (Math.random() * 4 - 2);
@@ -1058,7 +1059,10 @@ class GameRoom extends Room {
     if (token) {
       const prof = this.profiles.get(token);
       if (prof) {
-        if (p && !wasInDungeon && !prof.activeRoom) prof.pos = [p.x, p.y, p.z];
+        if (p && !wasInDungeon) {
+          if (prof.activeRoom) this.persistActiveRoomPose(client, prof, p);
+          else prof.pos = [p.x, p.y, p.z];
+        }
         this.syncProfileVitals(client, prof);
         this.dirtyPlayers.add(token);
       }
@@ -1526,11 +1530,38 @@ class GameRoom extends Room {
     return 'tutorial-' + kind + '-' + String(client && client.sessionId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
   }
 
+  persistActiveRoomPose(client, prof, p) {
+    const activeRoom = sanitizeActiveRoom(prof && prof.activeRoom);
+    if (!activeRoom || !p) return false;
+    const pos = sanitizeActiveRoomPosition(activeRoom, [p.x, p.y, p.z]);
+    if (!pos) return false;
+    prof.activeRoom = activeRoom;
+    prof.pos = pos;
+    return true;
+  }
+
   handleTutorialEnter(client, m) {
     const p = client && this.state.players.get(client.sessionId);
     const rec = client && this.profileFor(client);
     const kind = m && String(m.kind || '');
-    if (!p || !rec || !['onboarding', 'ability', 'job'].includes(kind)) return false;
+    if (!p || !rec || !['onboarding', 'ability', 'job', 'taming_land'].includes(kind)) return false;
+    if (kind === 'taming_land') {
+      if (p.dgn && p.dim !== 'tutorial') {
+        client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
+        return false;
+      }
+      const activeRoom = sanitizeActiveRoom({ dim: 'taming_land' });
+      const spawn = sanitizeActiveRoomPosition(activeRoom, [420.5, 21.05, 907.5]) || [420.5, 21.05, 907.5];
+      p.dim = 'tutorial';
+      p.dgn = this.tutorialSpaceId(client, 'taming_land');
+      p.mount = '';
+      p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
+      rec.prof.activeRoom = activeRoom;
+      rec.prof.pos = spawn;
+      this.dirtyPlayers.add(rec.token);
+      client.send('tutorialDimension', { active: true, kind, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
     if (kind === 'job') {
       const job = m && typeof m.job === 'string' ? m.job : '';
       const room = JOB_TUTORIAL_ROOMS[job];
@@ -1553,6 +1584,8 @@ class GameRoom extends Room {
         job,
         minedDiamond: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.minedDiamond === true,
         traded: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.traded === true,
+        petDragonSeen: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.petDragonSeen === true,
+        petDragonStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.petDragonStep : 0,
       });
       rec.prof.pos = spawn;
       this.dirtyPlayers.add(rec.token);
@@ -1584,6 +1617,7 @@ class GameRoom extends Room {
     if (!p || p.dim !== 'tutorial') return false;
     const rec = client && this.profileFor(client);
     const wasJobTutorial = p.dgn && /^tutorial-job_/.test(p.dgn);
+    const wasTamingLand = p.dgn && /^tutorial-taming_land-/.test(p.dgn);
     const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
     const pos = forcedPos
       ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
@@ -1593,7 +1627,7 @@ class GameRoom extends Room {
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
     if (ret && Number.isFinite(ret.yaw)) p.yaw = ret.yaw;
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
-    if (wasJobTutorial && rec && rec.prof) {
+    if ((wasJobTutorial || wasTamingLand) && rec && rec.prof) {
       rec.prof.activeRoom = null;
       rec.prof.pos = [p.x, p.y, p.z];
       this.dirtyPlayers.add(rec.token);
@@ -1610,7 +1644,7 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
     const jobMatch = p.dgn.match(/^tutorial-job_([a-z]+)-/);
-    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : 'onboarding';
+    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn.includes('-taming_land-') ? 'taming_land' : 'onboarding';
     client.send('tutorialDimension', { active: true, kind, job: jobMatch && jobMatch[1] || undefined, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
     return true;
   }

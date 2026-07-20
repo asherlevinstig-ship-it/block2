@@ -997,9 +997,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('trainingReset', ()=>{if(dim==='tutorial')resetTrainingMeadowLocal();});
     room.onMessage('tutorialDimension', m=>{
       if(m&&m.active){
-        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job');
+        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job')||(m.kind==='taming_land'&&dim==='taming_land');
         if(matching&&m.spaceId) NET.dgn=String(m.spaceId);
-      }else if(dim==='tutorial'||dim==='ability'||dim==='job'){
+      }else if(dim==='tutorial'||dim==='ability'||dim==='job'||dim==='taming_land'){
         NET.dgn='';
       }
     });
@@ -2303,10 +2303,13 @@ function netRestoreProfile(m){
     const localActiveRoom=!serverActiveRoom?readJobTutorialResume():null;
     const activeRoom=serverActiveRoom||localActiveRoom;
     const restoreJobRoom=activeRoom&&activeRoom.dim==='job'&&JOBS[activeRoom.job]?activeRoom:null;
+    const restoreTamingLand=activeRoom&&activeRoom.dim==='taming_land'?activeRoom:null;
     if(restoreJobRoom){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job);
+    }else if(restoreTamingLand){
+      if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true});
     }
-    const restorePos=restoreJobRoom&&Array.isArray(restoreJobRoom.pos)?restoreJobRoom.pos:m.pos;
+    const restorePos=(restoreJobRoom||restoreTamingLand)&&Array.isArray(activeRoom.pos)?activeRoom.pos:m.pos;
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
@@ -2314,6 +2317,8 @@ function netRestoreProfile(m){
     if(restoreJobRoom&&combatApi.resumeJobTutorial){
       combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
       storeJobTutorialResume(restoreJobRoom,player?[player.pos.x,player.pos.y,player.pos.z]:restoreJobRoom.pos);
+    }else if(restoreTamingLand){
+      storeJobTutorialResume(restoreTamingLand,player?[player.pos.x,player.pos.y,player.pos.z]:restoreTamingLand.pos);
     }else{
       storeJobTutorialResume(null,null);
     }
@@ -2335,7 +2340,7 @@ function netRestoreProfile(m){
     } else if(Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0) awardFirstVillagerQuestBonus();
     if(gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     syncLocalTutorialsToServer();
-    if(!restoreJobRoom&&dim==='overworld')startTownGuidance();
+    if(!restoreJobRoom&&!restoreTamingLand&&dim==='overworld')startTownGuidance();
     if(typeof refreshProgressionDirectorNotice==='function')refreshProgressionDirectorNotice();
     if(progressionFocus&&!ONBOARD.isSeen())setTimeout(()=>ONBOARD.showFirstPromotion(),80);
     eventLog((m.name||'Hunter')+' returned — progress restored');
@@ -2723,7 +2728,7 @@ function readJobTutorialResume(){
     const raw=JSON.parse(localStorage.getItem(JOB_TUTORIAL_RESUME_KEY)||'null');
     if(!raw||raw.auth!==currentAuthSessionToken()||Date.now()-(raw.at||0)>24*60*60*1000)return null;
     const activeRoom=raw.activeRoom&&typeof raw.activeRoom==='object'?raw.activeRoom:null;
-    if(!activeRoom||activeRoom.dim!=='job'||!JOBS[activeRoom.job])return null;
+    if(!activeRoom||!((activeRoom.dim==='job'&&JOBS[activeRoom.job])||activeRoom.dim==='taming_land'))return null;
     return {
       ...activeRoom,
       pos:Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null,
@@ -2740,6 +2745,8 @@ function netSnapshot(){
         petDragonSeen:combatState.jobTutorialPetDragonSeen===true,
         petDragonStep:Math.max(0,Math.min(5,Number(combatState.jobTutorialPetDragonStep)||0)),
       }
+    : dimensionsState.kind==='taming_land'
+      ? {dim:'taming_land'}
     : null;
   const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;
   storeJobTutorialResume(activeRoom,pos);

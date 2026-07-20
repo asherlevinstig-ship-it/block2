@@ -1998,7 +1998,12 @@ function ensureTamingLandExitPortal(){
 function enterTamingLand(){
   if(dim==='taming_land')return true;
   if(dim!=='overworld')return false;
-  tamingLandReturn={world,pos:player.pos.clone(),yaw:player.yaw,pitch:player.pitch};
+  const opts=arguments[0]||{};
+  const resume=!!(opts&&opts.resume);
+  const returnPos=resume&&HUB&&HUB.tamingPortal
+    ? new THREE.Vector3(HUB.tamingPortal.x,TOWN.G+1,HUB.tamingPortal.z+3.5)
+    : player.pos.clone();
+  tamingLandReturn={world,pos:returnPos,yaw:resume?Math.PI:player.yaw,pitch:resume?0:player.pitch};
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
   if(mounted){mounted=false;mountKind='';if(localMountObj)localMountObj.visible=false;}
   owWorld=world;

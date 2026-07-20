@@ -67,6 +67,7 @@ const JOB_TUTORIAL_ROOMS = Object.freeze({
   monk: Object.freeze({ x: 930, z: 925, g: 18, r: 34 }),
   pet_tamer: Object.freeze({ x: 500, z: 925, g: 22, r: 52 }),
 });
+const TAMING_LAND_ROOM = Object.freeze({ x: 420, z: 925, g: 20, r: 68 });
 function sanitizeMountUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (let k of list) {
@@ -460,19 +461,25 @@ function cleanShortText(v, fallback, max) {
 function sanitizeActiveRoom(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const dim = typeof raw.dim === 'string' ? raw.dim : '';
+  if (dim === 'taming_land') return { dim: 'taming_land' };
   const job = typeof raw.job === 'string' ? raw.job : '';
   if (dim !== 'job' || !JOB_TUTORIAL_ROOM_IDS.has(job)) return null;
-  return {
+  const out = {
     dim: 'job',
     job,
     minedDiamond: raw.minedDiamond === true,
     traded: raw.traded === true,
   };
+  if (job === 'pet_tamer') {
+    out.petDragonSeen = raw.petDragonSeen === true;
+    out.petDragonStep = clampI(raw.petDragonStep, 0, 5);
+  }
+  return out;
 }
 
 function sanitizeActiveRoomPosition(activeRoom, pos) {
   if (!activeRoom || !Array.isArray(pos) || pos.length !== 3 || pos.some(v => !isFinite(+v))) return null;
-  const room = JOB_TUTORIAL_ROOMS[activeRoom.job];
+  const room = activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
   if (!room) return null;
   const x = clampF(pos[0], room.x - room.r - 8, room.x + room.r + 8);
   const y = clampF(pos[1], 1, 80);
