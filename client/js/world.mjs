@@ -1048,8 +1048,10 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     box(cx-5,G+5,cz+20,cx+5,G+5,cz+24,B.LEAVES);
     setBlock(cx-4,G+2,cz+21,B.CHEST);
     setBlock(cx+4,G+2,cz+21,B.TABLE);
-    setBlock(cx,G+2,cz+22,B.EGG_INSULATOR);
     dragonLandingPad(9,8);
+    setBlock(cx,G,cz+8,B.COBBLE);
+    setBlock(cx,G+1,cz+8,B.EGG_INSULATOR);
+    for(let y=G+2;y<=G+6;y++)setBlock(cx,y,cz+8,B.AIR);
     for(const [ox,oz] of [[-18,-12],[18,-12],[-16,13],[16,13]]){
       for(let y=G+1;y<=G+4;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
       for(let lx=-3;lx<=3;lx++)for(let lz=-3;lz<=3;lz++)if(Math.abs(lx)+Math.abs(lz)<5)setBlock(cx+ox+lx,G+5,cz+oz+lz,B.LEAVES);

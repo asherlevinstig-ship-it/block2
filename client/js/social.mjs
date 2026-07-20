@@ -188,16 +188,16 @@ function renderDragonCommandWheel(){
   if(!type){
     const practice=globalThis.BlockcraftPetTamerPractice;
     if(practice&&typeof practice.commandAvailable==='function'&&practice.commandAvailable()){
-      chatWheelModeEl.textContent='PRACTICE DRAGON';
+      chatWheelModeEl.textContent='YOUR DRAGON';
       const action=document.createElement('button');action.type='button';action.className='wheelitem selected';
-      action.innerHTML='<b>STAY</b><span>Save a practice post</span>';
+      action.innerHTML='<b>STAY</b><span>Ask your hatchling to wait</span>';
       action.style.left='215px';action.style.top='72px';
       action.addEventListener('click',()=>{
         const done=typeof practice.commandStay==='function'&&practice.commandStay();
         closeDragonCommandWheel(!!done);
       });
       chatWheelItemsEl.appendChild(action);
-      const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Tutorial bond active';
+      const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Fresh tutorial bond';
       return;
     }
     chatWheelModeEl.textContent='DRAGON';

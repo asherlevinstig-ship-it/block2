@@ -273,11 +273,12 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(world, /"updateSkyDragons":\{get:\(\)=>updateSkyDragons\}/);
   assert.match(frame, /updateSkyDragons\(dt,now\/1000\)/);
   assert.match(companions, /function tickPetTamerTutorialGroundDragon\(active, room, now, dt=0\.016\)/);
-  assert.match(companions, /Practice Dragon/);
   assert.match(networking, /tickPetTamerTutorialGroundDragon/);
   assert.match(frame, /networkingApi\.tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
-  assert.match(companions, /group\.name='petTamerPracticeDragon'/);
-  assert.match(companions, /group\.userData\.blockcraftKind='practiceDragon'/);
+  assert.match(companions, /Your Hatched Dragon/);
+  assert.match(companions, /typeof practice\.hatched==='function'&&!practice\.hatched\(\)/);
+  assert.match(companions, /group\.name='petTamerHatchedDragon'/);
+  assert.match(companions, /group\.userData\.blockcraftKind='hatchedTutorialDragon'/);
   assert.match(companions, /globalThis\.__petTamerPracticeDragon=group/);
 });
 
@@ -1463,6 +1464,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/commandStay:commandPetTamerPracticeDragon/);
   assert.match(combat,/PET_TAMER_TUTORIAL_HATCH_MS=3000/);
   assert.match(combat,/function petTamerPracticeInsulatorPos\(\)/);
+  assert.match(combat,/by:\(room\.G\+1\)\|0,bz:\(room\.z\+8\)\|0/);
   assert.match(combat,/function startPetTamerTutorialEggHatch\(\)/);
   assert.match(combat,/tutorial:true/);
   assert.match(combat,/syncPetTamerTutorialEggTimer\(\)/);
@@ -1474,6 +1476,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function mountPetTamerPracticeDragon\(\)/);
   assert.match(combat,/function finishPetTamerRoostLesson\(\)/);
   assert.match(combat,/mounted=true;\s*mountKind='dragon:verdant'/);
+  assert.match(combat,/hatched:\(\)=>!!\(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&jobTutorialPetDragonStep>0/);
   assert.match(combat,/ridden>=7/);
   assert.match(combat,/nearPetTamerPracticeRoost\(5\.2\)/);
   assert.match(combat,/if\(performPetTamerDragonTutorialAction\(\)\) return/);
@@ -1512,6 +1515,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/const dragonLandingPad=\(ox,oz\)=>/);
   assert.match(world,/for\(let y=G\+1;y<=G\+7;y\+\+\)setBlock\(x\+dx,y,z\+dz,B\.AIR\)/);
   assert.match(world,/dragonLandingPad\(9,8\)/);
+  assert.match(world,/setBlock\(cx,G\+1,cz\+8,B\.EGG_INSULATOR\)/);
   assert.match(dimensions,/function generateJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function enterJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);

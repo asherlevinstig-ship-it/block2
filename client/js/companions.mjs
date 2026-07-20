@@ -1086,21 +1086,26 @@ function clearPetTamerTutorialGroundDragon(){
 }
 function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
   if(!active||!room||dim!=='job'){ clearPetTamerTutorialGroundDragon(); return; }
+  const practice=globalThis.BlockcraftPetTamerPractice;
+  if(practice&&typeof practice.hatched==='function'&&!practice.hatched()){
+    clearPetTamerTutorialGroundDragon();
+    return;
+  }
   const spot=petTamerPracticeDragonSpot(room);
   if(!spot)return;
   if(!petTamerTutorialGroundDragon){
     const group=new THREE.Group();
-    group.name='petTamerPracticeDragon';
-    group.userData.kind='petTamerPracticeDragon';
-    group.userData.blockcraftKind='practiceDragon';
+    group.name='petTamerHatchedDragon';
+    group.userData.kind='petTamerHatchedDragon';
+    group.userData.blockcraftKind='hatchedTutorialDragon';
     const dragon=makeMount('dragon:'+spot.type, 3, dragonSpecialization(spot.type));
     dragon.scale.setScalar(.7);
     dragon.userData.baseCompanionScale=.7;
-    dragon.userData.kind='petTamerPracticeDragonBody';
-    dragon.userData.blockcraftKind='practiceDragonBody';
+    dragon.userData.kind='petTamerHatchedDragonBody';
+    dragon.userData.blockcraftKind='hatchedTutorialDragonBody';
     dragon.rotation.y=Math.PI;
     group.add(dragon);
-    const tag=makeDragonNameplate('Practice Dragon', 'Pet Tamer Lesson', '#9ad26b');
+    const tag=makeDragonNameplate('Your Hatched Dragon', 'Fresh Tutorial Bond', '#9ad26b');
     tag.position.set(0,1.75,0);
     tag.scale.set(1.65,.72,1);
     group.add(tag);
