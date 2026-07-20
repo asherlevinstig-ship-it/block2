@@ -71,5 +71,11 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
   const harvest = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
   expect(harvest).toMatchObject({ ok: true, debug: { step: 3, harvest: { id: 0 } } });
   expect(harvest.debug.inventory.wheat).toBeGreaterThanOrEqual(1);
+  await expect(page.locator('#tutorialhud')).toContainText('LISS BARLEY');
+
+  const beforeSale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold);
+  const sale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
+  expect(sale).toMatchObject({ ok: true, done: true, debug: { step: 4, traded: true } });
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBeGreaterThan(beforeSale);
   await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
 });

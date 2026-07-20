@@ -1512,6 +1512,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
   assert.match(combat,/const FARMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
+  assert.match(combat,/SELL WHEAT/);
+  assert.match(combat,/FARMER_TUTORIAL_WHEAT_GOLD=18/);
+  assert.match(combat,/function tryFarmerTutorialTrade\(\)/);
+  assert.match(combat,/function updateFarmerTutorialTrader\(now=performance\.now\(\)\)/);
   assert.match(combat,/function farmerTutorialTargetPos\(\)/);
   assert.match(combat,/function noteFarmerTutorialAction\(action\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&isJobTutorialMeadowLand\('farmer',hit\.x,hit\.z,2\)/);
@@ -1519,7 +1523,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/noteFarmerTutorialAction\('plant'\)/);
   assert.match(combat,/noteFarmerTutorialAction\('harvest'\)/);
   assert.match(combat,/get jobTutorialFarmerStep\(\)\{ return jobTutorialFarmerStep; \}/);
-  assert.match(networking,/farmerStep:Math\.max\(0,Math\.min\(3,Number\(combatState\.jobTutorialFarmerStep\)\|\|0\)\)/);
+  assert.match(networking,/farmerStep:Math\.max\(0,Math\.min\(4,Number\(combatState\.jobTutorialFarmerStep\)\|\|0\)\)/);
   assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
   assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
   assert.match(combat,/function performPetTamerDragonTutorialAction\(\)/);

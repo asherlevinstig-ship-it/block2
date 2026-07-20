@@ -752,15 +752,16 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 const MINER_TUTORIAL_TRADE_GOLD=45;
+const FARMER_TUTORIAL_WHEAT_GOLD=18;
 const PET_TAMER_TUTORIAL_HATCH_MS=3000;
 const FARMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'TILL SOIL',title:'Prepare Soil',verb:'HOE + G',purpose:'Select the wooden hoe, aim at the brown practice soil, then press G to turn it into farmland.',done:'You prepared soil. Farmers create usable land before anything can grow.'},
   {key:'PLANT SEEDS',title:'Plant',verb:'SEEDS + G',purpose:'Select Wheat Seeds, aim at empty farmland, then press G to plant.',done:'You planted wheat. Seeds become food, cooking materials, and town supply.'},
   {key:'HARVEST WHEAT',title:'Harvest',verb:'G',purpose:'Aim at mature golden wheat and press G to harvest it.',done:'You harvested wheat. The farmer loop feeds cooking, trading, and job contracts.'},
-  {key:'RETURN',title:'Return',verb:'BLUE PILLAR',purpose:'Walk into the blue return pillar to go back to Town of Beginnings.',done:'Farmer basics complete.'},
+  {key:'SELL WHEAT',title:'Sell Wheat',verb:'LISS + G',purpose:'Take one wheat to Liss Barley and press G to trade it for gold.',done:'You sold wheat for gold. Farmers turn food into the town economy.'},
 ]);
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'HATCH EGG',title:'Hatching',verb:'EGG + G',purpose:'Select the Verdant Dragon Egg, press G at the Egg Insulator, then claim it when ready.',done:'Your tutorial egg hatches quickly, showing how dragons begin.'},
@@ -1193,6 +1194,41 @@ function nearbyMinerTutorialTrader(range=4.2){
   const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
   return d<=range?{...p,distance:d}:null;
 }
+function farmerTutorialTraderPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.farmer;
+  return room?{x:room.x+.5,y:room.G+1,z:room.z+12.5}:null;
+}
+function ensureFarmerTutorialTrader(){
+  if(tutorialFarmerTrader)return tutorialFarmerTrader;
+  if(typeof makeVillager==='function'){
+    tutorialFarmerTrader={...makeVillager('#7aaa55','#355334',true),role:'farmer',name:'Liss Barley',shortName:'Liss',title:'Wheat Buyer',phase:Math.random()*10};
+    if(typeof attachNpcNameplate==='function')attachNpcNameplate(tutorialFarmerTrader);
+    tutorialFarmerTrader.grp.visible=false;
+    scene.add(tutorialFarmerTrader.grp);
+  }else{
+    const grp=new THREE.Group();
+    const mat=new THREE.MeshLambertMaterial({color:0x7aaa55});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(.7,1.2,.35),mat);body.position.y=.85;grp.add(body);
+    tutorialFarmerTrader={grp,phase:0,name:'Liss Barley',title:'Wheat Buyer'};
+    grp.visible=false;scene.add(grp);
+  }
+  return tutorialFarmerTrader;
+}
+function updateFarmerTutorialTrader(now=performance.now()){
+  const actor=ensureFarmerTutorialTrader(), p=farmerTutorialTraderPos();
+  if(!actor||!p)return;
+  const visible=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&jobTutorialFarmerStep>=3;
+  actor.grp.visible=visible;
+  if(!visible)return;
+  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
+  actor.grp.rotation.y=Math.PI;
+}
+function nearbyFarmerTutorialTrader(range=4.2){
+  const p=farmerTutorialTraderPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='farmer'||dim!=='job'||jobTutorialFarmerStep<3)return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
 function farmerTutorialAction(){
   return FARMER_TUTORIAL_ACTIONS[Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length-1,jobTutorialFarmerStep|0))]||FARMER_TUTORIAL_ACTIONS[0];
 }
@@ -1206,25 +1242,29 @@ function farmerTutorialTargetPos(){
   if(step<=0)return {x:room.x-10.5,y:room.G+1.035,z:room.z-12.5};
   if(step===1)return {x:room.x+.5,y:room.G+1.035,z:room.z-7.5};
   if(step===2)return {x:room.x+10.5,y:room.G+1.035,z:room.z-7.5};
+  if(step===3)return farmerTutorialTraderPos()||{x:room.x+.5,y:room.G+1.035,z:room.z+12.5};
   return {x:room.x,y:room.G+1.035,z:room.z+23};
 }
 function noteFarmerTutorialAction(action){
   if(!jobTutorialActive||jobTutorialJob!=='farmer'||dim!=='job')return false;
   const step=jobTutorialFarmerStep|0;
-  const expected=step===0?'till':step===1?'plant':step===2?'harvest':'';
+  const expected=step===0?'till':step===1?'plant':step===2?'harvest':step===3?'trade':'';
   if(action!==expected)return false;
   const lesson=farmerTutorialAction();
   eventLog('Farmer tutorial - '+lesson.title+': '+lesson.done);
   sysMsg('<b>Farmer lesson:</b> '+escHTML(lesson.done));
   burst(player.pos.x,player.pos.y+1,player.pos.z,[.53,.94,.67],22,2.2,2.0,.65);
   ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.0,0x86efac,.55);
-  jobTutorialFarmerStep=Math.min(FARMER_TUTORIAL_ACTIONS.length-1,jobTutorialFarmerStep+1);
+  jobTutorialFarmerStep=Math.min(FARMER_TUTORIAL_ACTIONS.length,jobTutorialFarmerStep+1);
   if(jobTutorialFarmerStep===1)selectItemForOnboarding(I.WHEAT_SEEDS);
   else if(jobTutorialFarmerStep===2)sysMsg('Now follow the pillar to the <b>mature wheat</b> and press <b>G</b> to harvest.');
-  else if(jobTutorialFarmerStep>=3){
+  else if(jobTutorialFarmerStep===3){
+    sysMsg('Good harvest. Follow the pillar to <b>Liss Barley</b> and press <b>G</b> to sell one wheat for gold.');
+  }
+  else if(jobTutorialFarmerStep>=4){
     SFX.level&&SFX.level();
-    showName('Farmer loop complete');
-    sysMsg('Good harvest. Walk into the <b>blue return pillar</b> to leave the Farmer tutorial.');
+    showName('Farmer trade complete');
+    sysMsg('Good trade. Walk into the <b>blue return pillar</b> to leave the Farmer tutorial.');
   }
   updateJobTutorialHud();
   sendProfileSaveNow();
@@ -1236,6 +1276,7 @@ function farmerTutorialVisualDebug(){
   const till={x:room.x-11,y:room.G,z:room.z-13};
   const plant={x:room.x,y:room.G,z:room.z-7};
   const harvest={x:room.x+10,y:room.G+1,z:room.z-7};
+  const trader=farmerTutorialTraderPos();
   const target=farmerTutorialTargetPos();
   return {
     active:!!jobTutorialActive,
@@ -1245,6 +1286,8 @@ function farmerTutorialVisualDebug(){
     till:{...till,id:getB(till.x,till.y,till.z)},
     plant:{...plant,id:getB(plant.x,plant.y,plant.z),above:getB(plant.x,plant.y+1,plant.z)},
     harvest:{...harvest,id:getB(harvest.x,harvest.y,harvest.z)},
+    trader,
+    traded:!!jobTutorialTraded,
     inventory:{hoe:countItem(I.WOOD_HOE),seeds:countItem(I.WHEAT_SEEDS),wheat:countItem(I.WHEAT)}
   };
 }
@@ -1262,6 +1305,11 @@ function performFarmerTutorialStepForTest(){
     hit={x:room.x,y:room.G,z:room.z-7};
   }else if(step===2){
     hit={x:room.x+10,y:room.G+1,z:room.z-7};
+  }else if(step===3){
+    const trader=farmerTutorialTraderPos();
+    if(trader)player.pos.set(trader.x,jobTutorialWalkY(trader.x,trader.z,room.G+1.035),trader.z+1.8);
+    const ok=tryFarmerTutorialTrade();
+    return {ok,done:jobTutorialFarmerStep>=4,debug:farmerTutorialVisualDebug()};
   }else{
     return {ok:true,done:true,debug:farmerTutorialVisualDebug()};
   }
@@ -1766,6 +1814,38 @@ function tryMinerTutorialTrade(){
   sendProfileSaveNow();
   return true;
 }
+function tryFarmerTutorialTrade(){
+  if(!nearbyFarmerTutorialTrader())return false;
+  if(jobTutorialTraded){
+    sysMsg('<b>Liss Barley:</b> Nice sale. Follow the blue return pillar when you are ready.');
+    return true;
+  }
+  if(jobTutorialFarmerStep<3){
+    sysMsg('<b>Liss Barley:</b> Grow and harvest one <b>wheat</b> first, then bring it here.');
+    updateJobTutorialHud();
+    return true;
+  }
+  if(countItem(I.WHEAT)<=0){
+    sysMsg('<b>Liss Barley:</b> I cannot see wheat in your bag. Harvest the golden crop first.');
+    updateJobTutorialHud();
+    return true;
+  }
+  if(!inventoryModel.remove(I.WHEAT,1)){
+    sysMsg('<b>Liss Barley:</b> I cannot see wheat in your bag.');
+    return true;
+  }
+  gold+=FARMER_TUTORIAL_WHEAT_GOLD;
+  jobTutorialTraded=true;
+  rewardGain('gold',FARMER_TUTORIAL_WHEAT_GOLD,'Gold');
+  gainJobXP('farmer',8,'tutorial sale');
+  SFX.coin&&SFX.coin();
+  refreshHUD();
+  eventLog('Farmer tutorial - sold wheat for '+FARMER_TUTORIAL_WHEAT_GOLD+' gold.');
+  noteFarmerTutorialAction('trade');
+  sysMsg('<b>Liss Barley:</b> Fresh wheat. Here is <b>'+FARMER_TUTORIAL_WHEAT_GOLD+' gold</b>. Farmers feed the town and earn from the harvest.');
+  sendProfileSaveNow();
+  return true;
+}
 function grantJobTutorialKit(jobId){
   if(jobId==='miner'){
     addTemporaryJobTutorialTool(I.DIA_PICK);
@@ -1828,8 +1908,10 @@ function updateJobTutorialHud(){
   }
   if(jobTutorialJob==='farmer'){
     const action=farmerTutorialAction();
-    copy=jobTutorialFarmerStep>=3
-      ? {key:'RETURN PILLAR',text:'You tilled soil, planted seeds, and harvested wheat.',sub:'Walk into the blue return pillar to go back to town.'}
+    copy=jobTutorialFarmerStep>=4
+      ? {key:'RETURN PILLAR',text:'You tilled, planted, harvested, and sold wheat for gold.',sub:'Walk into the blue return pillar to go back to town.'}
+      : jobTutorialFarmerStep===3
+        ? {key:'LISS BARLEY',text:'Take one wheat to Liss Barley and press G to sell it for gold.',sub:'She is waiting beside the field path. This completes the farmer economy loop.'}
       : {key:action.key,text:farmerTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the real Farmer loop: prepare soil, plant seed, harvest food.'};
   }
   if(jobTutorialJob==='pet_tamer'){
@@ -1852,13 +1934,13 @@ function updateJobTutorialHud(){
   const nearReturn=jobTutorialJob!=='pet_tamer'&&room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
   const nearPetDragon=jobTutorialJob==='pet_tamer'&&beaconTarget&&player&&Math.hypot(player.pos.x-beaconTarget.x,player.pos.z-beaconTarget.z)<4.8;
   const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
-  const farmerBlockedReturn=jobTutorialJob==='farmer'&&jobTutorialFarmerStep<3;
+  const farmerBlockedReturn=jobTutorialJob==='farmer'&&jobTutorialFarmerStep<4;
   const returnBlocked=minerBlockedReturn||farmerBlockedReturn;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
     +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':'FINISH FARMING'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?'Till soil, plant seeds, and harvest wheat before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?'Follow the green pillar back to the current Farmer lesson.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -1880,6 +1962,7 @@ function completeJobTutorial(){
   jobTutorialPetEggType='verdant';
   jobTutorialReturnWarnAt=0;
   if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
+  if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   completeTownTutorialStep(jobTutorialStepId(jobId));
@@ -1920,6 +2003,7 @@ function startJobTutorial(jobId){
   updateVisibleChunks(true);
   grantJobTutorialKit(jobId);
   updateMinerTutorialTrader();
+  updateFarmerTutorialTrader();
   updateJobTutorialHud();
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
@@ -1941,7 +2025,7 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialJob=jobId;
   jobTutorialMinedDiamond=state.minedDiamond===true;
   jobTutorialTraded=state.traded===true;
-  jobTutorialFarmerStep=jobId==='farmer'?Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length-1,Number(state.farmerStep)||0)):0;
+  jobTutorialFarmerStep=jobId==='farmer'?Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length,Number(state.farmerStep)||0)):0;
   jobTutorialPetDragonSeen=state.petDragonSeen===true;
   jobTutorialPetDragonStep=Math.max(0,Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,Number(state.petDragonStep)||0));
   if(jobTutorialPetDragonSeen)jobTutorialPetDragonStep=PET_TAMER_TUTORIAL_ACTIONS.length;
@@ -1959,6 +2043,7 @@ function resumeJobTutorial(jobId,state={}){
   }
   grantJobTutorialKit(jobId);
   updateMinerTutorialTrader();
+  updateFarmerTutorialTrader();
   updateJobTutorialHud();
   eventLog('Resumed '+job.name+' tutorial room.');
   sendProfileSaveNow();
@@ -1982,6 +2067,7 @@ function tickJobTutorial(now){
     jobTutorialPetEggReadyAt=0;
     jobTutorialPetEggType='verdant';
     if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
+    if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
     return;
@@ -1989,6 +2075,7 @@ function tickJobTutorial(now){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
   if(!room) return;
   updateMinerTutorialTrader(now);
+  updateFarmerTutorialTrader(now);
   const target=jobTutorialBeaconTarget(jobTutorialJob,room);
   if(!target)return;
   const y=jobTutorialJob==='pet_tamer'?(target.y||room.G+1.035):jobTutorialWalkY(target.x,target.z,room.G+1.035);
@@ -2035,7 +2122,7 @@ function tickJobTutorial(now){
       }
       return;
     }
-    if(jobTutorialJob==='farmer'&&jobTutorialFarmerStep<3){
+    if(jobTutorialJob==='farmer'&&jobTutorialFarmerStep<4){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
         const action=farmerTutorialAction();
@@ -3349,8 +3436,10 @@ function nearbyInteractionPrompt(){
   if(nearFellowshipWeatherVane())push({key:'G',title:'Fellowship Weather Vane',small:'Review weather sites and sky planning',priority:100},0);
   const minerTutor=nearbyMinerTutorialTrader();
   if(minerTutor)push({key:'G',title:'Garrik Flint',small:jobTutorialTraded?'Trade complete':jobTutorialMinedDiamond&&countItem(I.DIAMOND)>0?'Trade diamond for gold':'Mine a diamond first',priority:118},minerTutor.distance);
+  const farmerTutor=nearbyFarmerTutorialTrader();
+  if(farmerTutor)push({key:'G',title:'Liss Barley',small:jobTutorialTraded?'Wheat sold':countItem(I.WHEAT)>0?'Sell wheat for gold':'Harvest wheat first',priority:118},farmerTutor.distance);
   const farmerTarget=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'?farmerTutorialTargetPos():null;
-  if(farmerTarget&&jobTutorialFarmerStep<3&&player){
+  if(farmerTarget&&jobTutorialFarmerStep<4&&player){
     const fd=Math.hypot(player.pos.x-farmerTarget.x,player.pos.z-farmerTarget.z);
     if(fd<4.8){
       const action=farmerTutorialAction();
@@ -3542,6 +3631,7 @@ function secondaryAction(){
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
   if(nearTamingLandExit()){ exitTamingLand(); return; }
   if(tryMinerTutorialTrade()) return;
+  if(tryFarmerTutorialTrade()) return;
   if(performPetTamerDragonTutorialAction()) return;
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
