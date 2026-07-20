@@ -7179,6 +7179,9 @@ test('cached active room profiles are normalized before spawning on join', async
   const room = makeRoom(), client = makeClient('cached-taming-land');
   const token = 'student_905061';
   const cached = defaultProfile('Dylan Lynee');
+  cached.nameSet = true;
+  cached.job = 'monk';
+  cached.npcQuestChains = { 'Mara Vale': 1 };
   cached.activeRoom = { dim: 'taming_land' };
   cached.pos = [500.5, 16, 514.5];
   room.profiles.set(token, cached);

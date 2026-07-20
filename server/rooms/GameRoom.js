@@ -910,21 +910,21 @@ class GameRoom extends Room {
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
-      if (this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
+      if (!prof.activeRoom && this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
       if (this.ensureTownMapBackfill(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
       const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
-      if (returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
+      if (!prof.activeRoom && returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
       // Move profiles saved at the old cramped plaza spawn into the new open
       // arrival point so returning players receive the same readable opening.
-      if (returningOrLegacyProfile && Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
+      if (!prof.activeRoom && returningOrLegacyProfile && Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
       const openingMaraStep=prof.npcQuestChains&&(prof.npcQuestChains['Mara Vale']|0)||0;
-      if (returningOrLegacyProfile && (prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
+      if (!prof.activeRoom && returningOrLegacyProfile && (prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
         prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
         this.dirtyPlayers.add(token);
       }
