@@ -5355,6 +5355,63 @@ function openPlayerTradeUI(target,opts={}){
   row.appendChild(qBtn('GOLD ONLY',()=>{selectedRef.current=null;itemCount.max='0';itemCount.value='0';summary.innerHTML='<b>No item selected</b><br><small>Offer gold only, or click an item below.</small>';[...qpanelEl.querySelectorAll('.trade-slot')].forEach(el=>el.classList.remove('picked'));},true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
+function dragonLoanName(type){
+  const custom=COMPANIONS&&COMPANIONS.dragonNames&&COMPANIONS.dragonNames[type];
+  if(custom)return custom;
+  const d=DRAGON_TYPES&&DRAGON_TYPES[type];
+  return d?(d.name||type):type;
+}
+function activeDragonLoans(){
+  return COMPANIONS&&Array.isArray(COMPANIONS.dragonLoans)?COMPANIONS.dragonLoans.filter(l=>l&&l.status==='active'):[];
+}
+function dragonLoanReturnForTarget(target){
+  const name=String(target&&target.name||'').toLowerCase();
+  return activeDragonLoans().find(l=>{
+    const role=String(l.role||'');
+    const other=role==='tamer'?String(l.ownerName||''):role==='owner'?String(l.tamerName||''):'';
+    return other&&other.toLowerCase()===name;
+  })||null;
+}
+function dragonLoanOwnedTypes(){
+  const borrowed=new Set(activeDragonLoans().filter(l=>l.role==='tamer').map(l=>l.type));
+  const unlocks=COMPANIONS&&Array.isArray(COMPANIONS.dragonUnlocks)?COMPANIONS.dragonUnlocks:[];
+  return unlocks.filter(t=>DRAGON_TYPES[t]&&!borrowed.has(t)&&(!COMPANIONS.dragonIsAdult||COMPANIONS.dragonIsAdult(t)));
+}
+function openDragonLoanUI(target){
+  if(!NET.on||!NET.room){sysMsg('Dragon loans require the live world server.');return;}
+  const types=dragonLoanOwnedTypes();
+  if(!types.length){sysMsg('You need an adult dragon that is not already loaned out.');return;}
+  if(uiOpen)closeUI(false);
+  openQWin('commerce');qpanelEl.innerHTML='';
+  qpanelEl.dataset.modal='dragon-loan';
+  const h=document.createElement('h2');h.textContent='DRAGON TRAINING LOAN';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent='WITH '+String(target&&target.name||'HUNTER').toUpperCase();qpanelEl.appendChild(sub);
+  const intro=document.createElement('p');intro.className='qtext';
+  intro.innerHTML='Lend one adult dragon to a <b>Pet Tamer</b>. They pay gold now, train it for up to <b>12 real hours</b>, then it returns automatically or by manual return.';
+  qpanelEl.appendChild(intro);
+  let chosen=types[0];
+  const chips=document.createElement('div');chips.className='qrow';qpanelEl.appendChild(chips);
+  const renderChips=()=>{
+    chips.innerHTML='';
+    for(const type of types){
+      const btn=qBtn(dragonLoanName(type).toUpperCase(),()=>{chosen=type;renderChips();},chosen!==type);
+      btn.classList.toggle('active',chosen===type);
+      chips.appendChild(btn);
+    }
+  };
+  renderChips();
+  const fee=tradeNumberInput(25,1,1000000);
+  const form=document.createElement('div');form.className='trade-gold-row';
+  const label=document.createElement('span');label.innerHTML='<b>TAMER FEE</b><small>The Pet Tamer pays this before receiving the dragon.</small>';
+  form.appendChild(label);form.appendChild(fee);qpanelEl.appendChild(form);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('SEND LOAN OFFER',()=>{
+    const goldFee=Math.max(1,Math.min(1000000,Number(fee.value)||0));
+    NET.room.send('dragonLoanOffer',{targetSid:target.sid,targetName:String(target.name||''),type:chosen,gold:goldFee});
+    closeQWin();
+  }));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
 function openPlayerSocialUI(target){
   if(!NET.on||!NET.room){sysMsg('Player social actions require the live world server.');return;}
   target=target||(typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null);
@@ -5368,8 +5425,55 @@ function openPlayerSocialUI(target){
   qpanelEl.appendChild(intro);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('TRADE',()=>openPlayerTradeUI(target)));
+  if(dragonLoanOwnedTypes().length)row.appendChild(qBtn('LOAN DRAGON',()=>openDragonLoanUI(target),true));
+  const returnLoan=dragonLoanReturnForTarget(target);
+  if(returnLoan)row.appendChild(qBtn('RETURN DRAGON',()=>{NET.room.send('dragonLoanReturn',{loanId:returnLoan.id});closeQWin();},true));
   row.appendChild(qBtn('ADD FRIEND',()=>{NET.room.send('friendAdd',{targetSid:target.sid});closeQWin();},true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+}
+function applyDragonLoanPending(m){
+  sysMsg('Dragon loan offer sent to <b>'+escHTML(String(m&&m.toName||'Hunter'))+'</b> for <b>'+Math.max(0,(m&&m.feeGold)|0)+'g</b>.',{tier:'minor',title:'Dragon Loan'});
+}
+function applyDragonLoanOffer(m){
+  if(!m||!m.id)return;
+  if(statOpen){statOpen=false;statEl.classList.add('hidden');}
+  if(uiOpen)closeUI(false);
+  if(qOpen)closeQWin(false);
+  showName('DRAGON LOAN OFFER');
+  if(SFX.level)SFX.level();
+  openQWin('commerce');qpanelEl.innerHTML='';
+  qpanelEl.dataset.modal='dragon-loan-offer';
+  const h=document.createElement('h2');h.textContent='DRAGON LOAN OFFER';qpanelEl.appendChild(h);
+  const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' OFFERS '+dragonLoanName(m.type).toUpperCase();qpanelEl.appendChild(sub);
+  const p=document.createElement('p');p.className='qtext';
+  p.innerHTML='Pay <b>'+Math.max(0,(m.feeGold|0)).toLocaleString('en-US')+'g</b> now to train this dragon for up to <b>12 real hours</b>. The dragon returns automatically or when you return it manually.'+
+    (playerJob==='pet_tamer'?'':'<br><br><b>Requires Pet Tamer job.</b>');
+  qpanelEl.appendChild(p);
+  const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
+  row.appendChild(qBtn('ACCEPT LOAN',()=>{NET.room.send('dragonLoanAccept',{loanId:m.id});closeQWin();}));
+  row.appendChild(qBtn('DECLINE',()=>{NET.room.send('dragonLoanCancel',{loanId:m.id});closeQWin();},true));
+}
+function applyDragonLoanResult(m){
+  if(!m||m.ok===false){applyDragonLoanReject(m);return;}
+  SFX.coin();
+  const loan=m.loan||{};
+  sysMsg('<b>Dragon loan accepted.</b><br>'+escHTML(dragonLoanName(loan.type))+' is with '+escHTML(loan.role==='owner'?String(loan.tamerName||'the tamer'):String(loan.ownerName||'the owner'))+' until '+new Date(loan.dueAt||Date.now()).toLocaleString()+'.',{tier:'major',title:'Dragon Loan'});
+}
+function applyDragonLoanReject(m){
+  const reason=String(m&&m.reason||'invalid');
+  const text={
+    target:'No nearby hunter found.',rate:'Slow down before sending another loan.',range:'Move closer for a dragon loan.',unowned:'That dragon is not available to loan.',young:'That dragon is still too young.',nested:'Recall the dragon from the nest first.',loaned:'That dragon is already loaned out.',targetOwned:'That Pet Tamer already has that dragon type.',job:'The receiver must equip Pet Tamer.',fee:'Set a gold fee first.',targetGold:'The Pet Tamer does not have enough gold.',gold:'Not enough gold.',missing:'That loan offer expired.',offline:'That hunter went offline.',expired:'That loan offer expired.'
+  }[reason]||'Dragon loan failed.';
+  SFX.error();
+  sysMsg(text,{tier:'minor',title:'Dragon Loan'});
+}
+function applyDragonLoanCancel(){
+  sysMsg('Dragon loan cancelled.',{tier:'minor',title:'Dragon Loan'});
+}
+function applyDragonLoanReturn(m){
+  const loan=m&&m.loan||{};
+  SFX.level();
+  sysMsg('<b>'+escHTML(dragonLoanName(loan.type))+'</b> returned from training.',{tier:'major',title:'Dragon Loan'});
 }
 function applyTradePending(m){
   if(qOpen&&qMode==='commerce')closeQWin(true);

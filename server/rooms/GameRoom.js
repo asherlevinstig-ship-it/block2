@@ -357,6 +357,10 @@ class GameRoom extends Room {
     this.onMessage('setDragonRole', (client, m) => this.handleSetDragonRole(client, m));
     this.onMessage('chooseDragonSpecialization', (client, m) => this.handleChooseDragonSpecialization(client, m));
     this.onMessage('startDragonTraining', (client, m) => this.handleStartDragonTraining(client, m));
+    this.onMessage('dragonLoanOffer', (client, m) => this.handleDragonLoanOffer(client, m));
+    this.onMessage('dragonLoanAccept', (client, m) => this.handleDragonLoanAccept(client, m));
+    this.onMessage('dragonLoanCancel', (client, m) => this.handleDragonLoanCancel(client, m));
+    this.onMessage('dragonLoanReturn', (client, m) => this.handleDragonLoanReturn(client, m));
     this.onMessage('perchDragon', (client, m) => this.handlePerchDragon(client, m));
     this.onMessage('recallDragon', (client, m) => this.handleRecallDragon(client, m));
     this.onMessage('feedDragon', (client, m) => this.handleFeedDragon(client, m));
@@ -944,15 +948,16 @@ class GameRoom extends Room {
       p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
       p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
       p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], prof.armor).type.id : '';
-      p.dragons = Array.isArray(prof.mountUnlocks)
-        ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
+      const mountUnlocks = this.effectiveMountUnlocksFor ? this.effectiveMountUnlocksFor(token, prof) : prof.mountUnlocks;
+      p.dragons = Array.isArray(mountUnlocks)
+        ? mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
         : '';
-      p.dragonNames = this.publicDragonNames(prof);
-      p.dragonGenders = this.publicDragonGenders(prof);
-      p.dragonPersonalities = this.publicDragonPersonalities(prof);
-      p.dragonRoles = this.publicDragonRoles(prof);
-      p.dragonStaySpots = this.publicDragonStaySpots(prof);
-      p.dragonHatchedAt = this.publicDragonHatchedAt(prof);
+      p.dragonNames = this.publicDragonNames(prof, token);
+      p.dragonGenders = this.publicDragonGenders(prof, token);
+      p.dragonPersonalities = this.publicDragonPersonalities(prof, token);
+      p.dragonRoles = this.publicDragonRoles(prof, token);
+      p.dragonStaySpots = this.publicDragonStaySpots(prof, token);
+      p.dragonHatchedAt = this.publicDragonHatchedAt(prof, token);
       p.cosmetics = this.publicCosmetics(prof);
       p.x = prof.pos[0]; p.y = prof.pos[1] + .01; p.z = prof.pos[2];
       if (prof.activeRoom && prof.activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[prof.activeRoom.job]) {
@@ -3045,15 +3050,17 @@ class GameRoom extends Room {
     p.name = prof.name || p.name;
     p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
     p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], prof.armor).type.id : '';
-    p.dragons = Array.isArray(prof.mountUnlocks)
-      ? prof.mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
+    const token = this.tokens.get(client.sessionId) || '';
+    const mountUnlocks = this.effectiveMountUnlocksFor ? this.effectiveMountUnlocksFor(token, prof) : prof.mountUnlocks;
+    p.dragons = Array.isArray(mountUnlocks)
+      ? mountUnlocks.filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)).join(',')
       : '';
-    p.dragonNames = this.publicDragonNames(prof);
-    p.dragonGenders = this.publicDragonGenders(prof);
-    p.dragonPersonalities = this.publicDragonPersonalities(prof);
-    p.dragonRoles = this.publicDragonRoles(prof);
-    p.dragonStaySpots = this.publicDragonStaySpots(prof);
-    p.dragonHatchedAt = this.publicDragonHatchedAt(prof);
+    p.dragonNames = this.publicDragonNames(prof, token);
+    p.dragonGenders = this.publicDragonGenders(prof, token);
+    p.dragonPersonalities = this.publicDragonPersonalities(prof, token);
+    p.dragonRoles = this.publicDragonRoles(prof, token);
+    p.dragonStaySpots = this.publicDragonStaySpots(prof, token);
+    p.dragonHatchedAt = this.publicDragonHatchedAt(prof, token);
     p.cosmetics = this.publicCosmetics(prof);
     p.invisible = !!(this.isAdminClient(client) ? client._deityActive && client._deityActive.invisibility : prof.deity && prof.deity.active && prof.deity.active.invisibility && this.hasDeityPower(client, prof, 'invisibility'));
   }
@@ -3121,7 +3128,42 @@ class GameRoom extends Room {
     this.normalizeQuestLifecycles(client, prof);
     this.ensureDeityState(prof);
     this.refreshSystemIntroductions(prof);
-    return { ...prof, deity: this.deityPayloadFor(client, prof), activeObjectives: this.activeQuestObjectives(client, prof) };
+    const token = client ? this.tokens.get(client.sessionId) || '' : '';
+    if (this.reconcileDragonLoansForProfile) this.reconcileDragonLoansForProfile(token, prof);
+    const mountUnlocks = this.effectiveMountUnlocksFor ? this.effectiveMountUnlocksFor(token, prof) : prof.mountUnlocks;
+    const parsePublic = text => {
+      try {
+        const obj = JSON.parse(text || '{}');
+        return obj && typeof obj === 'object' ? obj : {};
+      } catch (_) { return {}; }
+    };
+    const publicField = field => {
+      const out = {};
+      for (const type of this.publicDragonTypes(prof, token)) {
+        const source = this.publicDragonSource(prof, token, type);
+        const src = source.prof && source.prof[field] && typeof source.prof[field] === 'object' ? source.prof[field] : {};
+        if (src[type] == null) continue;
+        out[type] = src[type] && typeof src[type] === 'object' ? { ...src[type] } : src[type];
+      }
+      return out;
+    };
+    return {
+      ...prof,
+      mountUnlocks,
+      dragonNames: parsePublic(this.publicDragonNames(prof, token)),
+      dragonGenders: parsePublic(this.publicDragonGenders(prof, token)),
+      dragonPersonalities: parsePublic(this.publicDragonPersonalities(prof, token)),
+      dragonRoles: parsePublic(this.publicDragonRoles(prof, token)),
+      dragonStaySpots: parsePublic(this.publicDragonStaySpots(prof, token)),
+      dragonHatchedAt: parsePublic(this.publicDragonHatchedAt(prof, token)),
+      dragonCare: publicField('dragonCare'),
+      dragonBondXp: publicField('dragonBondXp'),
+      dragonRoleMastery: publicField('dragonRoleMastery'),
+      dragonSpecializations: publicField('dragonSpecializations'),
+      dragonLoans: this.publicDragonLoansFor ? this.publicDragonLoansFor(token, prof) : [],
+      deity: this.deityPayloadFor(client, prof),
+      activeObjectives: this.activeQuestObjectives(client, prof),
+    };
   }
   tradeItemName(id) {
     id |= 0;
@@ -4025,14 +4067,24 @@ class GameRoom extends Room {
       this.sendSpace(drop.dgn || '', 'deathDropTaken', { id, by: rec.prof.name || 'A hunter', item: { id: item.id, count: item.count || 1, label: drop.label }, dgn: drop.dgn || '' });
     }
   }
-  publicDragonNames(prof) {
-    const out = {};
-    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
+  publicDragonTypes(prof, token = '') {
+    const unlocks = this.effectiveMountUnlocksFor ? this.effectiveMountUnlocksFor(token, prof) : (prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : []);
+    return new Set((Array.isArray(unlocks) ? unlocks : [])
       .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
-    const names = prof && prof.dragonNames && typeof prof.dragonNames === 'object' ? prof.dragonNames : {};
+  }
+  publicDragonSource(prof, token, type) {
+    const access = this.dragonPublicProfileFor ? this.dragonPublicProfileFor(token, prof, type) : null;
+    return access && access.prof ? access : { prof, loan: null, borrowed: false };
+  }
+  publicDragonNames(prof, token = '') {
+    const out = {};
+    const owned = this.publicDragonTypes(prof, token);
     for (const type of owned) {
+      const source = this.publicDragonSource(prof, token, type);
+      const names = source.prof && source.prof.dragonNames && typeof source.prof.dragonNames === 'object' ? source.prof.dragonNames : {};
+      const fallback = source.loan && source.loan.dragonName || '';
       const name = cleanDragonName(names[type], '');
-      if (name) out[type] = name;
+      if (name || fallback) out[type] = name || fallback;
     }
     return JSON.stringify(out);
   }
@@ -4057,11 +4109,13 @@ class GameRoom extends Room {
     prof.dragonGenders[type] = gender;
     return gender;
   }
-  publicDragonGenders(prof) {
+  publicDragonGenders(prof, token = '') {
     const out = {};
-    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
-      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
-    for (const type of owned) out[type] = this.ensureDragonGender(prof, type);
+    const owned = this.publicDragonTypes(prof, token);
+    for (const type of owned) {
+      const source = this.publicDragonSource(prof, token, type);
+      out[type] = source.prof ? this.ensureDragonGender(source.prof, type, source.loan && source.loan.gender || '') : this.defaultDragonGender(type);
+    }
     return JSON.stringify(out);
   }
   ensureDragonPersonality(prof, type, preferred = '') {
@@ -4073,11 +4127,13 @@ class GameRoom extends Room {
     prof.dragonPersonalities[type] = personality;
     return personality;
   }
-  publicDragonPersonalities(prof) {
+  publicDragonPersonalities(prof, token = '') {
     const out = {};
-    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
-      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
-    for (const type of owned) out[type] = this.ensureDragonPersonality(prof, type);
+    const owned = this.publicDragonTypes(prof, token);
+    for (const type of owned) {
+      const source = this.publicDragonSource(prof, token, type);
+      out[type] = source.prof ? this.ensureDragonPersonality(source.prof, type, source.loan && source.loan.personality || '') : this.defaultDragonPersonality(type);
+    }
     return JSON.stringify(out);
   }
   ensureDragonRole(prof, type, preferred = '') {
@@ -4089,11 +4145,13 @@ class GameRoom extends Room {
     prof.dragonRoles[type] = role;
     return role;
   }
-  publicDragonRoles(prof) {
+  publicDragonRoles(prof, token = '') {
     const out = {};
-    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
-      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
-    for (const type of owned) out[type] = this.ensureDragonRole(prof, type);
+    const owned = this.publicDragonTypes(prof, token);
+    for (const type of owned) {
+      const source = this.publicDragonSource(prof, token, type);
+      out[type] = source.prof ? this.ensureDragonRole(source.prof, type) : 'follow';
+    }
     return JSON.stringify(out);
   }
   setDragonStaySpot(prof, type, p) {
@@ -4108,13 +4166,14 @@ class GameRoom extends Room {
     prof.dragonStaySpots[type] = spot;
     return spot;
   }
-  publicDragonStaySpots(prof) {
+  publicDragonStaySpots(prof, token = '') {
     const out = {};
-    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
-      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
-    const spots = prof && prof.dragonStaySpots && typeof prof.dragonStaySpots === 'object' ? prof.dragonStaySpots : {};
+    const owned = this.publicDragonTypes(prof, token);
     for (const type of owned) {
-      const role = this.ensureDragonRole(prof, type);
+      const source = this.publicDragonSource(prof, token, type);
+      const sourceProf = source.prof || prof;
+      const spots = sourceProf && sourceProf.dragonStaySpots && typeof sourceProf.dragonStaySpots === 'object' ? sourceProf.dragonStaySpots : {};
+      const role = this.ensureDragonRole(sourceProf, type);
       const s = spots[type];
       if (role === 'stay' && s && typeof s === 'object') out[type] = {
         x: Math.max(-100000, Math.min(100000, Number(s.x) || 0)),
@@ -4144,11 +4203,13 @@ class GameRoom extends Room {
     const age = this.dragonAgeMs(prof, type, now);
     return age >= DRAGON_GROW_MS ? 'adult' : (age >= DRAGON_JUVENILE_MS ? 'juvenile' : 'baby');
   }
-  publicDragonHatchedAt(prof) {
+  publicDragonHatchedAt(prof, token = '') {
     const out = {};
-    const owned = new Set((prof && Array.isArray(prof.mountUnlocks) ? prof.mountUnlocks : [])
-      .filter(isDragonMount).map(dragonMountType).filter(t => DRAGON_TYPE_SET.has(t)));
-    for (const type of owned) out[type] = this.ensureDragonHatchedAt(prof, type);
+    const owned = this.publicDragonTypes(prof, token);
+    for (const type of owned) {
+      const source = this.publicDragonSource(prof, token, type);
+      out[type] = source.prof ? this.ensureDragonHatchedAt(source.prof, type, source.loan && source.loan.hatchedAt || null) : (source.loan && source.loan.hatchedAt || 0);
+    }
     return JSON.stringify(out);
   }
   dragonCareFor(prof, type) {

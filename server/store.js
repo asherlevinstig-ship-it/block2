@@ -228,6 +228,36 @@ function sanitizeDragonHatchedAt(hatchedAt, unlocks = []) {
   for (const type of owned) out[type] = raw[type] == null ? 0 : clampI(raw[type], 0, 4102444800000);
   return out;
 }
+function sanitizeDragonLoans(loans) {
+  const out = [];
+  if (!Array.isArray(loans)) return out;
+  for (const raw of loans.slice(-24)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const type = DRAGON_SPECIES.has(raw.type) ? raw.type : '';
+    const ownerToken = cleanToken(raw.ownerToken);
+    const tamerToken = cleanToken(raw.tamerToken);
+    if (!type || !ownerToken || !tamerToken || ownerToken === tamerToken) continue;
+    const status = ['active', 'returned', 'expired', 'cancelled'].includes(raw.status) ? raw.status : 'active';
+    out.push({
+      id: cleanShortText(raw.id, '', 64).replace(/[^A-Za-z0-9_:-]/g, ''),
+      type,
+      ownerToken,
+      ownerName: cleanName(raw.ownerName),
+      tamerToken,
+      tamerName: cleanName(raw.tamerName),
+      feeGold: clampI(raw.feeGold, 0, 1000000),
+      startedAt: clampI(raw.startedAt, 0, 4102444800000),
+      dueAt: clampI(raw.dueAt, 0, 4102444800000),
+      endedAt: clampI(raw.endedAt, 0, 4102444800000),
+      status,
+      dragonName: cleanShortText(raw.dragonName, '', 18),
+      gender: DRAGON_GENDERS.has(raw.gender) ? raw.gender : '',
+      personality: DRAGON_PERSONALITIES.has(raw.personality) ? raw.personality : '',
+      hatchedAt: clampI(raw.hatchedAt, 0, 4102444800000),
+    });
+  }
+  return out.filter(loan => loan.id).slice(-24);
+}
 const JOB_IDS = new Set(['', ...JOB_SYSTEM.JOB_IDS]);
 const PROFESSION_IDS = JOB_SYSTEM.PROFESSION_IDS;
 const JOB_XP_IDS = JOB_SYSTEM.JOB_IDS;
@@ -383,6 +413,7 @@ function defaultProfile(name) {
     dragonRoles: {},
     dragonStaySpots: {},
     dragonHatchedAt: {},
+    dragonLoans: [],
     discoveries: [],
     claimedDiscoveries: [],
     explorationMilestones: [],
@@ -900,6 +931,7 @@ function sanitizeProfile(p) {
   out.dragonRoles = sanitizeDragonRoles(p.dragonRoles, out.mountUnlocks);
   out.dragonStaySpots = sanitizeDragonStaySpots(p.dragonStaySpots, out.mountUnlocks);
   out.dragonHatchedAt = sanitizeDragonHatchedAt(p.dragonHatchedAt, out.mountUnlocks);
+  out.dragonLoans = sanitizeDragonLoans(p.dragonLoans);
   const cleanDiscoveryList = list => Array.isArray(list) ? [...new Set(list.filter(v => typeof v === 'string' && /^(discovery|major|minor)_[A-Za-z0-9_]+$/.test(v)).slice(0, 512))] : [];
   out.discoveries = cleanDiscoveryList(p.discoveries);
   out.claimedDiscoveries = cleanDiscoveryList(p.claimedDiscoveries);

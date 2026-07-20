@@ -275,6 +275,7 @@ function makeRoom() {
   room.deathDropSeq = 0;
   room.trades = new Map();
   room.tradeSeq = 0;
+  room.initDragonState();
   room.animalSpawnAcc = 0;
   room.worldProgress = { highestGateRankCleared: -1, roadSafety: 50, roadSafetyUpdatedAt: Date.now(), cropKinds: {} };
   room.teamMgr = new (require('../teams').TeamManager)(5);
@@ -378,6 +379,10 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function applyTradePending[\s\S]*closeQWin\(true\)/);
   assert.match(menus, /function qBtn[\s\S]*b\.type='button'[\s\S]*e\.preventDefault\(\); e\.stopPropagation\(\);/);
   assert.match(menus, /function openPlayerSocialUI/);
+  assert.match(menus, /function openDragonLoanUI/);
+  assert.match(menus, /NET\.room\.send\('dragonLoanOffer'/);
+  assert.match(menus, /NET\.room\.send\('dragonLoanAccept'/);
+  assert.match(menus, /NET\.room\.send\('dragonLoanReturn'/);
   assert.match(menus, /friendAdd/);
   assert.match(menus, /tradeAccept/);
   assert.match(menus, /else if\(!NET\.on\) addItem\(B\.SAND,1\)/);
@@ -385,6 +390,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(networking, /room\.onMessage\('tradeOfferBroadcast'/);
   assert.match(networking, /room\.onMessage\('tradeInventory'/);
   assert.match(networking, /room\.onMessage\('tradeResult'/);
+  assert.match(networking, /room\.onMessage\('dragonLoanOffer'/);
+  assert.match(networking, /room\.onMessage\('dragonLoanResult'/);
   assert.match(networking, /room\.onMessage\('friendResult'/);
   assert.match(gameRoom, /profileRequest[\s\S]*reason === 'trade'[\s\S]*sendTradeInventory\(client, rec\.prof\);[\s\S]*return;/);
   assert.match(gameRoom, /awardGrant\(client, grant\)[\s\S]*this\.syncPlayerProfile\(client, rec\.prof\);[\s\S]*this\.sendTradeInventory\(client, rec\.prof\);/);
@@ -5410,6 +5417,87 @@ test('player trade reports what the server saw when an offered item is missing',
   assert.equal(alice.sent.at(-1).msg.reason, 'empty');
   assert.equal(alice.sent.at(-1).msg.itemId, W.B.SAND);
   assert.equal(alice.sent.at(-1).msg.serverSlotId, 0);
+});
+
+test('dragon training loan transfers gold and grants the pet tamer temporary dragon access', () => {
+  const room = makeRoom(), owner = makeClient('dragon_owner'), tamer = makeClient('dragon_tamer');
+  const { token: ownerToken, prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 10, x: 20, z: 20, mount: 'dragon:ember' });
+  const { token: tamerToken, prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 80, x: 21, z: 20 });
+  ownerProf.mountUnlocks = ['dragon:ember'];
+  ownerProf.dragonNames = { ember: 'Cinder' };
+  ownerProf.dragonRoleMastery = { ember: { follow: 0, guard: 0, stay: 0, rest: 0 } };
+  tamerProf.job = 'pet_tamer';
+  room.clients = [owner, tamer];
+
+  room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'ember', gold: 35 });
+  const offer = tamer.sent.find(e => e.type === 'dragonLoanOffer');
+  assert.ok(offer, 'pet tamer receives dragon loan offer');
+  room.handleDragonLoanAccept(tamer, { loanId: offer.msg.id });
+
+  assert.equal(ownerProf.gold, 45);
+  assert.equal(tamerProf.gold, 45);
+  assert.equal(room.state.players.get(owner.sessionId).mount, '', 'owner is dismounted when the dragon is loaned');
+  assert.equal(room.hasMountUnlock(owner, 'dragon:ember'), false, 'owner cannot use the dragon during the active loan');
+  assert.equal(room.hasMountUnlock(tamer, 'dragon:ember'), true, 'tamer can use the borrowed dragon');
+  assert.equal(ownerProf.dragonLoans[0].tamerToken, tamerToken);
+  assert.equal(tamerProf.dragonLoans[0].ownerToken, ownerToken);
+  assert.equal(tamerProf.dragonLoans[0].dueAt - tamerProf.dragonLoans[0].startedAt, 12 * 60 * 60 * 1000);
+  const payload = room.profilePayload(tamer, tamerProf);
+  assert.ok(payload.mountUnlocks.includes('dragon:ember'));
+  assert.equal(payload.dragonNames.ember, 'Cinder');
+
+  room.handleStartDragonTraining(tamer, { type: 'ember', role: 'follow' });
+  const tr = room.dragonTraining.get(tamer.sessionId);
+  tr.progress = tr.need;
+  room.tickDragonTraining(Date.now(), 1);
+  assert.equal(ownerProf.dragonRoleMastery.ember.follow, 6, 'tamer training improves the owner dragon');
+});
+
+test('dragon training loan rejects non-tamers and duplicate dragon types', () => {
+  const room = makeRoom(), owner = makeClient('loan_owner'), other = makeClient('loan_other');
+  const { prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, x: 20, z: 20 });
+  const { prof: otherProf } = seedPlayer(room, other, { name: 'Other', gold: 100, x: 21, z: 20 });
+  ownerProf.mountUnlocks = ['dragon:frost'];
+  room.clients = [owner, other];
+
+  room.handleDragonLoanOffer(owner, { targetSid: other.sessionId, type: 'frost', gold: 20 });
+  assert.equal(owner.sent.at(-1).type, 'dragonLoanReject');
+  assert.equal(owner.sent.at(-1).msg.reason, 'job');
+
+  otherProf.job = 'pet_tamer';
+  otherProf.mountUnlocks = ['dragon:frost'];
+  room.handleDragonLoanOffer(owner, { targetSid: other.sessionId, type: 'frost', gold: 20 });
+  assert.equal(owner.sent.at(-1).type, 'dragonLoanReject');
+  assert.equal(owner.sent.at(-1).msg.reason, 'targetOwned');
+});
+
+test('dragon training loan can be returned manually and expires after twelve hours', () => {
+  const room = makeRoom(), owner = makeClient('return_owner'), tamer = makeClient('return_tamer');
+  const { token: ownerToken, prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, x: 20, z: 20 });
+  const { token: tamerToken, prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, x: 21, z: 20, mount: 'dragon:storm' });
+  ownerProf.mountUnlocks = ['dragon:storm'];
+  tamerProf.job = 'pet_tamer';
+  room.clients = [owner, tamer];
+
+  room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'storm', gold: 10 });
+  const offer = tamer.sent.find(e => e.type === 'dragonLoanOffer');
+  room.handleDragonLoanAccept(tamer, { loanId: offer.msg.id });
+  const loanId = tamerProf.dragonLoans[0].id;
+  room.handleDragonLoanReturn(tamer, { loanId });
+  assert.equal(ownerProf.dragonLoans[0].status, 'returned');
+  assert.equal(tamerProf.dragonLoans[0].status, 'returned');
+  assert.equal(room.state.players.get(tamer.sessionId).mount, '', 'borrowed dragon is dismounted on return');
+  assert.equal(room.hasMountUnlock(owner, 'dragon:storm'), true);
+  assert.equal(room.hasMountUnlock(tamer, 'dragon:storm'), false);
+
+  const past = Date.now() - 1;
+  const expired = { id: 'dl_expired', type: 'ember', ownerToken, tamerToken, ownerName: 'Owner', tamerName: 'Tamer', feeGold: 5, startedAt: past - 12 * 60 * 60 * 1000, dueAt: past, endedAt: 0, status: 'active' };
+  ownerProf.mountUnlocks = ['dragon:ember'];
+  ownerProf.dragonLoans = [{ ...expired }];
+  tamerProf.dragonLoans = [{ ...expired }];
+  assert.equal(room.hasMountUnlock(tamer, 'dragon:ember'), false, 'expired loans stop granting borrowed access');
+  assert.equal(ownerProf.dragonLoans[0].status, 'expired');
+  assert.equal(room.hasMountUnlock(owner, 'dragon:ember'), true, 'expired loans restore owner access');
 });
 
 test('town friendship creates a mutual persistent friend link', () => {

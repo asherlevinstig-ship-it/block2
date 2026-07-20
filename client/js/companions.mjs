@@ -414,6 +414,7 @@ let dragonRoleMastery={};          // type -> role -> XP earned by using dragon 
 let dragonSpecializations={};      // type -> scout/defender/sage once chosen at high bond
 let dragonTrainingState=null;       // active server-authoritative role drill progress
 let dragonChallenges={};           // server-owned daily bond challenge state
+let dragonLoans=[];                // active/recent dragon training loans from the server
 let dragonRoleReadyAt={};         // type:role -> local HUD cooldown estimate after authoritative role events
 let dragonRoleActivity={};        // type -> {role,text,until} short-lived live HUD activity label
 let dragonMapFocus={type:'',until:0}; // short-lived map highlight requested from command UI
@@ -3143,6 +3144,8 @@ function netRemoveRemote(sid){
     set dragonSpecializations(value){ dragonSpecializations=value&&typeof value==='object'?value:{}; },
     get dragonChallenges(){ return dragonChallenges; },
     set dragonChallenges(value){ dragonChallenges=value&&typeof value==='object'?value:{}; },
+    get dragonLoans(){ return dragonLoans; },
+    set dragonLoans(value){ dragonLoans=Array.isArray(value)?value:[]; },
     get dragonNames(){ return dragonNames; },
     set dragonNames(value){ dragonNames=value; },
     get dragonGenders(){ return dragonGenders; },

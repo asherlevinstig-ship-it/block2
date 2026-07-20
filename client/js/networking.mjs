@@ -1034,6 +1034,18 @@ function netAttachRoom(room,name,client){
     room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
     room.onMessage('tradeReject', m=>applyTradeReject(m));
     room.onMessage('tradeCancel', m=>applyTradeCancel(m));
+    const receiveDragonLoanOffer=m=>{
+      if(m&&m.toSid&&m.toSid!==room.sessionId)return;
+      applyDragonLoanOffer(m);
+      eventFeed('[Dragon]',String(m&&m.fromName||'Hunter')+' offered a dragon training loan.',{key:'dragonloan:'+String(m&&m.id||''),cooldown:0});
+    };
+    room.onMessage('dragonLoanOffer', receiveDragonLoanOffer);
+    room.onMessage('dragonLoanOfferBroadcast', receiveDragonLoanOffer);
+    room.onMessage('dragonLoanPending', m=>applyDragonLoanPending(m));
+    room.onMessage('dragonLoanResult', m=>{applyDragonLoanResult(m);if(m&&m.ok)eventFeed('[Dragon]','Dragon training loan accepted.',{key:'dragonloan:accepted:'+String(m&&m.loan&&m.loan.id||''),cooldown:0});});
+    room.onMessage('dragonLoanReject', m=>applyDragonLoanReject(m));
+    room.onMessage('dragonLoanCancel', m=>applyDragonLoanCancel(m));
+    room.onMessage('dragonLoanReturn', m=>{applyDragonLoanReturn(m);eventFeed('[Dragon]','Dragon training loan returned.',{key:'dragonloan:return:'+String(m&&m.loan&&m.loan.id||''),cooldown:0});});
     room.onMessage('friendResult', m=>{applyFriendResult(m);if(m&&m.ok&&m.action!=='already')eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});});
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
@@ -2215,6 +2227,7 @@ function netRestoreProfile(m){
       for(const t in m.dragonSpecializations) if(DRAGON_TYPES[t]&&['scout','defender','sage'].includes(m.dragonSpecializations[t])) COMPANIONS.dragonSpecializations[t]=m.dragonSpecializations[t];
     }
     COMPANIONS.dragonChallenges=m.dragonChallenges&&typeof m.dragonChallenges==='object'?m.dragonChallenges:{};
+    COMPANIONS.dragonLoans=Array.isArray(m.dragonLoans)?m.dragonLoans:[];
     COMPANIONS.dragonNames={};
     if(m.dragonNames && typeof m.dragonNames==='object'){
       for(const t in m.dragonNames) if(DRAGON_TYPES[t]){

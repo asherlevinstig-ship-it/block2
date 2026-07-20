@@ -14,8 +14,10 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout, DRAGON_GROW_MS } = require('../store');
 const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
+const DRAGON_LOAN_MS = 12 * 60 * 60 * 1000;
+const DRAGON_LOAN_MAX_FEE = 1000000;
 
 class DragonsMixin {
   // Dragon incubation and nesting state, co-located with the mixin that owns it.
@@ -25,14 +27,302 @@ class DragonsMixin {
     this.nestDragons = new Map();        // "x,y,z#slot" -> { type, token, loveUntil, breedCdUntil, breedAccum }
     this.dragonFollowBondTravel = new Map();
     this.dragonTraining = new Map();      // sessionId -> { type, role, progress, need, lastX, lastZ, until }
+    this.dragonLoanOffers = new Map();    // offerId -> pending dragon training loan
+    this.dragonLoanSeq = 0;
+  }
+
+  normalizeDragonLoans(prof) {
+    if (!prof || typeof prof !== 'object') return [];
+    const out = [];
+    const raw = Array.isArray(prof.dragonLoans) ? prof.dragonLoans : [];
+    for (const loan of raw.slice(-24)) {
+      if (!loan || typeof loan !== 'object') continue;
+      const type = typeof loan.type === 'string' && DRAGON_TYPE_SET.has(loan.type) ? loan.type : '';
+      const ownerToken = cleanToken(loan.ownerToken);
+      const tamerToken = cleanToken(loan.tamerToken);
+      const id = typeof loan.id === 'string' ? loan.id.replace(/[^A-Za-z0-9_:-]/g, '').slice(0, 64) : '';
+      if (!id || !type || !ownerToken || !tamerToken || ownerToken === tamerToken) continue;
+      const status = ['active', 'returned', 'expired', 'cancelled'].includes(loan.status) ? loan.status : 'active';
+      out.push({
+        id, type, ownerToken, tamerToken, status,
+        ownerName: typeof loan.ownerName === 'string' ? loan.ownerName.slice(0, 16) : 'Hunter',
+        tamerName: typeof loan.tamerName === 'string' ? loan.tamerName.slice(0, 16) : 'Hunter',
+        feeGold: Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, loan.feeGold | 0)),
+        startedAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.startedAt) || 0))),
+        dueAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.dueAt) || 0))),
+        endedAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.endedAt) || 0))),
+        dragonName: typeof loan.dragonName === 'string' ? loan.dragonName.slice(0, 18) : '',
+        gender: loan.gender === 'male' || loan.gender === 'female' ? loan.gender : '',
+        personality: ['bold', 'gentle', 'proud', 'playful', 'skittish', 'hungry'].includes(loan.personality) ? loan.personality : '',
+        hatchedAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.hatchedAt) || 0))),
+      });
+    }
+    prof.dragonLoans = out;
+    return out;
+  }
+
+  dragonLoanStatus(loan, now = Date.now()) {
+    if (!loan || loan.status !== 'active') return loan && loan.status || '';
+    return loan.dueAt && now >= loan.dueAt ? 'expired' : 'active';
+  }
+
+  reconcileDragonLoansForProfile(token, prof, now = Date.now()) {
+    const loans = this.normalizeDragonLoans(prof);
+    let changed = false;
+    for (const loan of loans) {
+      if (loan.status === 'active' && loan.dueAt && now >= loan.dueAt) {
+        loan.status = 'expired';
+        loan.endedAt = now;
+        changed = true;
+        const otherToken = token === loan.ownerToken ? loan.tamerToken : token === loan.tamerToken ? loan.ownerToken : '';
+        const otherProf = otherToken && this.profiles && this.profiles.get(otherToken);
+        if (otherProf) {
+          const otherLoans = this.normalizeDragonLoans(otherProf);
+          const otherLoan = otherLoans.find(row => row.id === loan.id);
+          if (otherLoan && otherLoan.status === 'active') {
+            otherLoan.status = 'expired';
+            otherLoan.endedAt = now;
+            if (this.dirtyPlayers) this.dirtyPlayers.add(otherToken);
+          }
+        }
+      }
+    }
+    if (changed && token && this.dirtyPlayers) this.dirtyPlayers.add(token);
+    return loans;
+  }
+
+  activeDragonLoansFor(token, prof, now = Date.now()) {
+    token = cleanToken(token);
+    return this.reconcileDragonLoansForProfile(token, prof, now)
+      .filter(loan => loan.status === 'active' && (!loan.dueAt || now < loan.dueAt) && (loan.ownerToken === token || loan.tamerToken === token));
+  }
+
+  effectiveMountUnlocksFor(token, prof, now = Date.now()) {
+    const base = Array.isArray(prof && prof.mountUnlocks) ? [...new Set(prof.mountUnlocks)] : [];
+    const loans = this.activeDragonLoansFor(token, prof, now);
+    const outgoing = new Set(loans.filter(loan => loan.ownerToken === token).map(loan => 'dragon:' + loan.type));
+    const out = base.filter(kind => !outgoing.has(kind));
+    for (const loan of loans) {
+      if (loan.tamerToken !== token) continue;
+      const kind = 'dragon:' + loan.type;
+      if (!out.includes(kind)) out.push(kind);
+    }
+    return out;
+  }
+
+  activeDragonLoanForType(token, prof, type, role = '', now = Date.now()) {
+    if (!DRAGON_TYPE_SET.has(type)) return null;
+    const loans = this.activeDragonLoansFor(token, prof, now);
+    return loans.find(loan => loan.type === type && (!role || loan[role + 'Token'] === token)) || null;
+  }
+
+  dragonPublicProfileFor(token, prof, type) {
+    const kind = 'dragon:' + type;
+    const own = Array.isArray(prof && prof.mountUnlocks) && prof.mountUnlocks.includes(kind);
+    const outgoing = this.activeDragonLoanForType(token, prof, type, 'owner');
+    if (own && !outgoing) return { token, prof, borrowed: false, loan: null };
+    const incoming = this.activeDragonLoanForType(token, prof, type, 'tamer');
+    if (incoming) {
+      const ownerProf = this.profiles && this.profiles.get(incoming.ownerToken);
+      return { token: incoming.ownerToken, prof: ownerProf || prof, borrowed: true, loan: incoming };
+    }
+    return { token, prof, borrowed: false, loan: null };
+  }
+
+  dragonAccessForClient(client, type, requireOwnerLoaded = true) {
+    const rec = this.profileFor(client);
+    if (!rec || !DRAGON_TYPE_SET.has(type)) return null;
+    const kind = 'dragon:' + type;
+    const own = Array.isArray(rec.prof.mountUnlocks) && rec.prof.mountUnlocks.includes(kind);
+    const outgoing = this.activeDragonLoanForType(rec.token, rec.prof, type, 'owner');
+    if (own && !outgoing) return { token: rec.token, prof: rec.prof, ownerRec: rec, clientRec: rec, borrowed: false, loan: null };
+    const incoming = this.activeDragonLoanForType(rec.token, rec.prof, type, 'tamer');
+    if (!incoming) return null;
+    const ownerProf = this.profiles && this.profiles.get(incoming.ownerToken);
+    if (!ownerProf && requireOwnerLoaded) return null;
+    return {
+      token: incoming.ownerToken,
+      prof: ownerProf || rec.prof,
+      ownerRec: ownerProf ? { token: incoming.ownerToken, prof: ownerProf } : null,
+      clientRec: rec,
+      borrowed: true,
+      loan: incoming,
+    };
+  }
+
+  dragonLoanSnapshot(ownerProf, type) {
+    return {
+      dragonName: ownerProf && ownerProf.dragonNames && ownerProf.dragonNames[type] || '',
+      gender: this.ensureDragonGender(ownerProf, type),
+      personality: this.ensureDragonPersonality(ownerProf, type),
+      hatchedAt: this.ensureDragonHatchedAt(ownerProf, type),
+    };
+  }
+
+  mirrorDragonLoan(loan, ownerRec, tamerRec) {
+    for (const rec of [ownerRec, tamerRec]) {
+      if (!rec || !rec.prof) continue;
+      const list = this.normalizeDragonLoans(rec.prof);
+      const i = list.findIndex(row => row.id === loan.id);
+      if (i >= 0) list[i] = { ...list[i], ...loan };
+      else list.push({ ...loan });
+      rec.prof.dragonLoans = list.slice(-24);
+      if (this.dirtyPlayers) this.dirtyPlayers.add(rec.token);
+    }
+  }
+
+  publicDragonLoan(loan, token) {
+    if (!loan) return null;
+    return {
+      id: loan.id,
+      type: loan.type,
+      status: this.dragonLoanStatus(loan),
+      role: loan.ownerToken === token ? 'owner' : loan.tamerToken === token ? 'tamer' : '',
+      ownerName: loan.ownerName || 'Hunter',
+      tamerName: loan.tamerName || 'Hunter',
+      feeGold: loan.feeGold | 0,
+      startedAt: loan.startedAt || 0,
+      dueAt: loan.dueAt || 0,
+      endedAt: loan.endedAt || 0,
+      dragonName: loan.dragonName || '',
+    };
+  }
+
+  publicDragonLoansFor(token, prof) {
+    return this.reconcileDragonLoansForProfile(token, prof).map(loan => this.publicDragonLoan(loan, token)).filter(Boolean);
+  }
+
+  dirtyAndSyncDragonAccess(client, access) {
+    if (!access) return;
+    if (access.token && this.dirtyPlayers) this.dirtyPlayers.add(access.token);
+    if (access.borrowed && access.clientRec && access.clientRec.token && this.dirtyPlayers) this.dirtyPlayers.add(access.clientRec.token);
+    const ownerClient = access.borrowed && access.token ? this.clients.find(c => this.tokens.get(c.sessionId) === access.token) : null;
+    if (ownerClient && access.prof) this.syncPlayerProfile(ownerClient, access.prof);
+    if (client && access.clientRec && access.clientRec.prof) this.syncPlayerProfile(client, access.clientRec.prof);
+  }
+
+  handleDragonLoanOffer(client, m = {}) {
+    const ownerRec = this.profileFor(client);
+    const target = this.findTradeTarget ? this.findTradeTarget(client, m) : null;
+    const tamerRec = target && this.profileFor(target);
+    const reject = (reason, extra = {}) => client.send('dragonLoanReject', { reason, ...extra });
+    if (!ownerRec || !target || !tamerRec || target === client) return reject('target');
+    if (this.rateLimited && this.rateLimited(client, 'dragonLoan', 3, 8)) return reject('rate');
+    if (this.tradePlayersClose && !this.tradePlayersClose(client, target)) return reject('range', this.tradeDistanceInfo ? this.tradeDistanceInfo(client, target) : {});
+    const type = typeof m.type === 'string' ? m.type : '';
+    const kind = 'dragon:' + type;
+    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(ownerRec.prof.mountUnlocks) || !ownerRec.prof.mountUnlocks.includes(kind)) return reject('unowned');
+    if (!this.isDragonAdult(ownerRec.prof, type)) return reject('young', { type, stage: this.dragonStage(ownerRec.prof, type) });
+    if (this.dragonIsNested(ownerRec.token, type)) return reject('nested', { type });
+    if (this.activeDragonLoanForType(ownerRec.token, ownerRec.prof, type, 'owner')) return reject('loaned', { type });
+    if (this.effectiveMountUnlocksFor(tamerRec.token, tamerRec.prof).includes(kind)) return reject('targetOwned', { type, targetName: tamerRec.prof.name || 'Hunter' });
+    if (tamerRec.prof.job !== 'pet_tamer') return reject('job', { targetName: tamerRec.prof.name || 'Hunter' });
+    const feeGold = Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, m.gold | 0));
+    if (feeGold <= 0) return reject('fee');
+    if ((tamerRec.prof.gold | 0) < feeGold) return reject('targetGold', { targetName: tamerRec.prof.name || 'Hunter' });
+    const id = 'dl_' + (++this.dragonLoanSeq) + '_' + Date.now().toString(36);
+    const ownerName = (this.state.players.get(client.sessionId) || {}).name || ownerRec.prof.name || 'Hunter';
+    const tamerName = (this.state.players.get(target.sessionId) || {}).name || tamerRec.prof.name || 'Hunter';
+    const snapshot = this.dragonLoanSnapshot(ownerRec.prof, type);
+    const offer = {
+      id, type, ownerSid: client.sessionId, tamerSid: target.sessionId,
+      ownerToken: ownerRec.token, tamerToken: tamerRec.token, ownerName, tamerName,
+      feeGold, createdAt: Date.now(), ...snapshot,
+    };
+    if (!this.dragonLoanOffers) this.dragonLoanOffers = new Map();
+    this.dragonLoanOffers.set(id, offer);
+    client.send('dragonLoanPending', { ...offer, toSid: target.sessionId, toName: tamerName });
+    const payload = { ...offer, fromSid: client.sessionId, fromName: ownerName, toSid: target.sessionId };
+    target.send('dragonLoanOffer', payload);
+    if (typeof this.broadcast === 'function') this.broadcast('dragonLoanOfferBroadcast', payload);
+  }
+
+  handleDragonLoanAccept(client, m = {}) {
+    const id = String(m.loanId || m.id || '');
+    const offer = this.dragonLoanOffers && this.dragonLoanOffers.get(id);
+    const reject = (reason, extra = {}) => client.send('dragonLoanReject', { reason, id, ...extra });
+    if (!offer || offer.tamerSid !== client.sessionId) return reject('missing');
+    const owner = this.clients.find(c => c.sessionId === offer.ownerSid);
+    const ownerRec = owner && this.profileFor(owner), tamerRec = this.profileFor(client);
+    if (!owner || !ownerRec || !tamerRec) { this.dragonLoanOffers.delete(id); return reject('offline'); }
+    if (Date.now() - offer.createdAt > 45000) { this.dragonLoanOffers.delete(id); return reject('expired'); }
+    if (this.tradePlayersClose && !this.tradePlayersClose(owner, client)) return reject('range');
+    if (tamerRec.prof.job !== 'pet_tamer') return reject('job');
+    if ((tamerRec.prof.gold | 0) < (offer.feeGold | 0)) return reject('gold');
+    const kind = 'dragon:' + offer.type;
+    if (!Array.isArray(ownerRec.prof.mountUnlocks) || !ownerRec.prof.mountUnlocks.includes(kind)) return reject('unowned');
+    if (this.effectiveMountUnlocksFor(tamerRec.token, tamerRec.prof).includes(kind)) return reject('targetOwned');
+    if (this.activeDragonLoanForType(ownerRec.token, ownerRec.prof, offer.type, 'owner')) return reject('loaned');
+    const now = Date.now();
+    const loan = {
+      id, type: offer.type, ownerToken: ownerRec.token, tamerToken: tamerRec.token,
+      ownerName: offer.ownerName, tamerName: offer.tamerName, feeGold: offer.feeGold | 0,
+      startedAt: now, dueAt: now + DRAGON_LOAN_MS, endedAt: 0, status: 'active',
+      dragonName: offer.dragonName || '', gender: offer.gender || '', personality: offer.personality || '', hatchedAt: offer.hatchedAt || 0,
+    };
+    tamerRec.prof.gold = Math.max(0, (tamerRec.prof.gold | 0) - loan.feeGold);
+    ownerRec.prof.gold = Math.min(1e9, (ownerRec.prof.gold | 0) + loan.feeGold);
+    this.mirrorDragonLoan(loan, ownerRec, tamerRec);
+    const ownerPlayer = this.state.players.get(owner.sessionId);
+    if (ownerPlayer && ownerPlayer.mount === kind) ownerPlayer.mount = '';
+    this.dragonLoanOffers.delete(id);
+    this.syncPlayerProfile(owner, ownerRec.prof);
+    this.syncPlayerProfile(client, tamerRec.prof);
+    this.sendProfile(owner, ownerRec.prof);
+    this.sendProfile(client, tamerRec.prof);
+    if (this.recordEconomyGold) {
+      this.recordEconomyGold(client, -loan.feeGold, 'dragon_loan', 'dragon_training_fee', { loanId: id, owner: owner.sessionId });
+      this.recordEconomyGold(owner, loan.feeGold, 'dragon_loan', 'dragon_training_fee_received', { loanId: id, tamer: client.sessionId });
+    }
+    owner.send('dragonLoanResult', { ok: true, action: 'accepted', loan: this.publicDragonLoan(loan, ownerRec.token) });
+    client.send('dragonLoanResult', { ok: true, action: 'accepted', loan: this.publicDragonLoan(loan, tamerRec.token) });
+  }
+
+  handleDragonLoanCancel(client, m = {}) {
+    const id = String(m.loanId || m.id || '');
+    const offer = this.dragonLoanOffers && this.dragonLoanOffers.get(id);
+    if (!offer || (offer.ownerSid !== client.sessionId && offer.tamerSid !== client.sessionId)) return;
+    this.dragonLoanOffers.delete(id);
+    const otherSid = offer.ownerSid === client.sessionId ? offer.tamerSid : offer.ownerSid;
+    const other = this.clients.find(c => c.sessionId === otherSid);
+    client.send('dragonLoanCancel', { id, reason: 'cancelled' });
+    if (other) other.send('dragonLoanCancel', { id, reason: 'cancelled' });
+  }
+
+  handleDragonLoanReturn(client, m = {}) {
+    const rec = this.profileFor(client);
+    const id = String(m.loanId || m.id || '');
+    const reject = reason => client.send('dragonLoanReject', { reason, id });
+    if (!rec || !id) return reject('missing');
+    const list = this.normalizeDragonLoans(rec.prof);
+    const loan = list.find(row => row.id === id && row.status === 'active' && (row.ownerToken === rec.token || row.tamerToken === rec.token));
+    if (!loan) return reject('missing');
+    const ownerProf = this.profiles.get(loan.ownerToken), tamerProf = this.profiles.get(loan.tamerToken);
+    if (!ownerProf || !tamerProf) return reject('offline');
+    const now = Date.now();
+    const returned = { ...loan, status: 'returned', endedAt: now };
+    this.mirrorDragonLoan(returned, { token: loan.ownerToken, prof: ownerProf }, { token: loan.tamerToken, prof: tamerProf });
+    const owner = this.clients.find(c => this.tokens.get(c.sessionId) === loan.ownerToken);
+    const tamer = this.clients.find(c => this.tokens.get(c.sessionId) === loan.tamerToken);
+    if (tamer) {
+      const p = this.state.players.get(tamer.sessionId);
+      if (p && p.mount === 'dragon:' + loan.type) p.mount = '';
+    }
+    if (owner) { this.syncPlayerProfile(owner, ownerProf); this.sendProfile(owner, ownerProf); owner.send('dragonLoanReturn', { loan: this.publicDragonLoan(returned, loan.ownerToken) }); }
+    if (tamer) { this.syncPlayerProfile(tamer, tamerProf); this.sendProfile(tamer, tamerProf); tamer.send('dragonLoanReturn', { loan: this.publicDragonLoan(returned, loan.tamerToken) }); }
   }
 
   hasMountUnlock(client, kind) {
     const rec = this.profileFor(client);
-    if (!rec || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind)) return false;
-    if (!isDragonMount(kind)) return true;
+    if (!rec) return false;
+    if (!isDragonMount(kind)) return !!(Array.isArray(rec.prof.mountUnlocks) && rec.prof.mountUnlocks.includes(kind));
     const type = dragonMountType(kind);
-    return this.isDragonAdult(rec.prof, type);
+    const access = this.dragonAccessForClient(client, type, false);
+    if (!access) return false;
+    if (!isDragonMount(kind)) return true;
+    if (access.prof) return this.isDragonAdult(access.prof, type);
+    const hatchedAt = access.loan && access.loan.hatchedAt || 0;
+    return hatchedAt ? Date.now() - hatchedAt >= DRAGON_GROW_MS : true;
   }
   hasFamiliarUnlock(client, kind) {
     const rec = this.profileFor(client);
@@ -380,24 +670,23 @@ class DragonsMixin {
     const p = this.state.players.get(client && client.sessionId);
     if (!p || !this.isPlayerAlive(client)) return client.send('dragonRecallReject', { reason: 'invalid' });
     const type = typeof m.type === 'string' ? m.type : '';
-    const kind = 'dragon:' + type;
-    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+    const access = this.dragonAccessForClient(client, type);
+    if (!DRAGON_TYPE_SET.has(type) || !access)
       return client.send('dragonRecallReject', { reason: 'unowned' });
-    if (!this.isDragonAdult(rec.prof, type)) return client.send('dragonRecallReject', { reason: 'young', type, stage: this.dragonStage(rec.prof, type) });
+    if (!this.isDragonAdult(access.prof, type)) return client.send('dragonRecallReject', { reason: 'young', type, stage: this.dragonStage(access.prof, type) });
     if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '')) return client.send('dragonRecallReject', { reason: 'overworld' });
-    if (this.dragonIsNested(rec.token, type)) return client.send('dragonRecallReject', { reason: 'nested', type });
-    const role = this.ensureDragonRole(rec.prof, type);
-    const hasPost = !!(rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[type]);
+    if (this.dragonIsNested(access.token, type)) return client.send('dragonRecallReject', { reason: 'nested', type });
+    const role = this.ensureDragonRole(access.prof, type);
+    const hasPost = !!(access.prof.dragonStaySpots && access.prof.dragonStaySpots[type]);
     if (role === 'stay' && hasPost && m.clearStaySpot !== true) return client.send('dragonRecallReject', { reason: 'stay', type });
     let clearedStaySpot = false;
     if (hasPost && m.clearStaySpot === true) {
-      delete rec.prof.dragonStaySpots[type];
+      delete access.prof.dragonStaySpots[type];
       clearedStaySpot = true;
     }
-    if (role === 'stay') rec.prof.dragonRoles[type] = 'follow';
-    this.dirtyPlayers.add(rec.token);
-    this.syncPlayerProfile(client, rec.prof);
-    client.send('dragonRecallResult', { type, role: this.ensureDragonRole(rec.prof, type), clearedStaySpot, x: p.x, y: p.y, z: p.z });
+    if (role === 'stay') access.prof.dragonRoles[type] = 'follow';
+    this.dirtyAndSyncDragonAccess(client, access);
+    client.send('dragonRecallResult', { type, role: this.ensureDragonRole(access.prof, type), clearedStaySpot, x: p.x, y: p.y, z: p.z });
     this.sendSpace(p.dgn || '', 'fx', { t: 'dragonRecall', kind: type, x: p.x, y: p.y, z: p.z, owner: client.sessionId, clearedStaySpot, dgn: p.dgn || '' });
   }
   handleFeedDragon(client, m) {
@@ -432,17 +721,16 @@ class DragonsMixin {
     const rec = this.profileFor(client);
     if (!rec || !m || !this.isPlayerAlive(client)) return client.send('feedDragonReject', { reason: 'invalid' });
     const type = typeof m.type === 'string' ? m.type : '';
-    const kind = 'dragon:' + type;
-    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+    const access = this.dragonAccessForClient(client, type);
+    if (!access)
       return client.send('feedDragonReject', { reason: 'unowned' });
     const slot = Math.max(0, Math.min(35, m.slot | 0));
     if (!this.consumeSlotItem(rec.prof, slot, I.DRAGON_TREAT, 1)) return client.send('feedDragonReject', { reason: 'treat' });
-    const sage = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage';
-    const care = this.feedDragonCare(rec.prof, type, (this.isDragonAdult(rec.prof, type) ? 12 : 18) + (sage ? 4 : 0));
-    const bond = this.awardDragonBondXp(rec.prof, type, this.isDragonAdult(rec.prof, type) ? 10 : 16, 'care');
+    const sage = this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage';
+    const care = this.feedDragonCare(access.prof, type, (this.isDragonAdult(access.prof, type) ? 12 : 18) + (sage ? 4 : 0));
+    const bond = this.awardDragonBondXp(access.prof, type, this.isDragonAdult(access.prof, type) ? 10 : 16, 'care');
     const now = Date.now();
-    this.dirtyPlayers.add(rec.token);
-    this.syncPlayerProfile(client, rec.prof);
+    this.dirtyAndSyncDragonAccess(client, access);
     client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : now, bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null, careOnly: true });
   }
   handleSetDragonRole(client, m) {
@@ -451,19 +739,18 @@ class DragonsMixin {
     if (!rec || !p || !m || !this.isPlayerAlive(client)) return client.send('dragonRoleReject', { reason: 'invalid' });
     const type = typeof m.type === 'string' ? m.type : '';
     const role = typeof m.role === 'string' ? m.role : '';
-    const kind = 'dragon:' + type;
-    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+    const access = this.dragonAccessForClient(client, type);
+    if (!access)
       return client.send('dragonRoleReject', { reason: 'unowned' });
     if (!['follow', 'stay', 'guard', 'rest'].includes(role)) return client.send('dragonRoleReject', { reason: 'role' });
     const clearOnly = role === 'stay' && m.clearStaySpot === true;
-    if ((role === 'guard' || role === 'stay') && !this.isDragonAdult(rec.prof, type)) return client.send('dragonRoleReject', { reason: 'young', type, role, stage: this.dragonStage(rec.prof, type) });
+    if ((role === 'guard' || role === 'stay') && !this.isDragonAdult(access.prof, type)) return client.send('dragonRoleReject', { reason: 'young', type, role, stage: this.dragonStage(access.prof, type) });
     if (role === 'stay' && !clearOnly && (p.dgn || '')) return client.send('dragonRoleReject', { reason: 'overworld' });
-    this.ensureDragonRole(rec.prof, type, role);
-    const staySpot = role === 'stay' && !clearOnly ? this.setDragonStaySpot(rec.prof, type, p) : null;
-    const clearStaySpot = clearOnly || (role !== 'stay' && !!(rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[type]));
-    if (clearStaySpot && rec.prof.dragonStaySpots) delete rec.prof.dragonStaySpots[type];
-    this.dirtyPlayers.add(rec.token);
-    this.syncPlayerProfile(client, rec.prof);
+    this.ensureDragonRole(access.prof, type, role);
+    const staySpot = role === 'stay' && !clearOnly ? this.setDragonStaySpot(access.prof, type, p) : null;
+    const clearStaySpot = clearOnly || (role !== 'stay' && !!(access.prof.dragonStaySpots && access.prof.dragonStaySpots[type]));
+    if (clearStaySpot && access.prof.dragonStaySpots) delete access.prof.dragonStaySpots[type];
+    this.dirtyAndSyncDragonAccess(client, access);
     client.send('dragonRoleResult', { type, role, staySpot, clearStaySpot });
   }
   handleChooseDragonSpecialization(client, m) {
@@ -497,16 +784,17 @@ class DragonsMixin {
     const p = this.state.players.get(client && client.sessionId);
     if (!rec || !p || !m || !this.isPlayerAlive(client)) return client.send('dragonTrainingReject', { reason: 'invalid' });
     const type = typeof m.type === 'string' ? m.type : '';
-    const role = typeof m.role === 'string' ? m.role : this.ensureDragonRole(rec.prof, type);
+    const access = this.dragonAccessForClient(client, type);
+    const role = typeof m.role === 'string' ? m.role : access ? this.ensureDragonRole(access.prof, type) : '';
     const kind = 'dragon:' + type, spec = this.dragonTrainingSpec(role);
-    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(kind))
+    if (!DRAGON_TYPE_SET.has(type) || !access)
       return client.send('dragonTrainingReject', { reason: 'unowned' });
     if (!spec || !['follow', 'guard', 'stay', 'rest'].includes(role)) return client.send('dragonTrainingReject', { reason: 'role' });
-    if (!this.isDragonAdult(rec.prof, type)) return client.send('dragonTrainingReject', { reason: 'young', type, role, stage: this.dragonStage(rec.prof, type) });
+    if (!this.isDragonAdult(access.prof, type)) return client.send('dragonTrainingReject', { reason: 'young', type, role, stage: this.dragonStage(access.prof, type) });
     if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '')) return client.send('dragonTrainingReject', { reason: 'overworld' });
-    if (this.dragonIsNested(rec.token, type)) return client.send('dragonTrainingReject', { reason: 'nested' });
+    if (this.dragonIsNested(access.token, type)) return client.send('dragonTrainingReject', { reason: 'nested' });
     if (role === 'stay') {
-      const s = rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[type];
+      const s = access.prof.dragonStaySpots && access.prof.dragonStaySpots[type];
       if (!s || !Number.isFinite(Number(s.x)) || !Number.isFinite(Number(s.z))) return client.send('dragonTrainingReject', { reason: 'post' });
     }
     if (!this.dragonTraining) this.dragonTraining = new Map();
@@ -526,28 +814,29 @@ class DragonsMixin {
     for (const [sid, tr] of [...this.dragonTraining.entries()]) {
       const client = this.clients.find(c => c.sessionId === sid), rec = client && this.profileFor(client), p = this.state.players.get(sid);
       if (!client || !rec || !p || !this.isPlayerAlive(client) || now > (tr.until || 0)) { this.cancelDragonTrainingFor(sid, 'expired'); continue; }
-      if ((p.dim || 'overworld') !== 'overworld' || (p.dgn || '') || this.dragonIsNested(rec.token, tr.type)) { this.cancelDragonTrainingFor(sid, 'interrupted'); continue; }
+      const access = this.dragonAccessForClient(client, tr.type);
+      if (!access || (p.dim || 'overworld') !== 'overworld' || (p.dgn || '') || this.dragonIsNested(access.token, tr.type)) { this.cancelDragonTrainingFor(sid, 'interrupted'); continue; }
       const role = tr.role;
       if (role === 'follow') {
         const step = Math.hypot((p.x || 0) - (tr.lastX || p.x || 0), (p.z || 0) - (tr.lastZ || p.z || 0));
         tr.lastX = p.x; tr.lastZ = p.z;
         if (!p.mount && step >= .03 && step <= 12) tr.progress += step;
       } else if (role === 'stay') {
-        const s = rec.prof.dragonStaySpots && rec.prof.dragonStaySpots[tr.type];
+        const s = access.prof.dragonStaySpots && access.prof.dragonStaySpots[tr.type];
         if (!s || Math.hypot((p.x || 0) - Number(s.x), (p.z || 0) - Number(s.z)) > 18) { client.send('dragonTrainingUpdate', { type: tr.type, role, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit, waiting: 'post' }); continue; }
         tr.progress += Math.max(0, dt || 0);
       } else if (role === 'guard') {
         if (p.mount && isDragonMount(p.mount)) { client.send('dragonTrainingUpdate', { type: tr.type, role, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit, waiting: 'dismount' }); continue; }
         tr.progress += Math.max(0, dt || 0);
       } else if (role === 'rest') {
-        const care = this.dragonCareFor(rec.prof, tr.type);
+        const care = this.dragonCareFor(access.prof, tr.type);
         if (care && care.happiness >= 95) { client.send('dragonTrainingUpdate', { type: tr.type, role, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit, waiting: 'calm' }); continue; }
         tr.progress += Math.max(0, dt || 0);
       }
       if (tr.progress >= tr.need) {
-        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, tr.type, role, tr.award || 1) : null;
-        const bond = this.awardDragonBondXp(rec.prof, tr.type, 2, role);
-        this.dirtyPlayers.add(rec.token);
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(access.prof, tr.type, role, tr.award || 1) : null;
+        const bond = this.awardDragonBondXp(access.prof, tr.type, 2, role);
+        this.dirtyAndSyncDragonAccess(client, access);
         client.send('dragonTrainingComplete', { type: tr.type, role, title: tr.title, progress: tr.need, need: tr.need, unit: tr.unit, roleMastery: mastery, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
         this.dragonTraining.delete(sid);
       } else {
@@ -561,14 +850,14 @@ class DragonsMixin {
     if (!rec || !p || !m || !this.isPlayerAlive(client)) return client.send('feedDragonReject', { reason: 'invalid' });
     if (!isDragonMount(p.mount)) return client.send('feedDragonReject', { reason: 'mount' });
     const type = dragonMountType(p.mount);
-    if (!DRAGON_TYPE_SET.has(type) || !Array.isArray(rec.prof.mountUnlocks) || !rec.prof.mountUnlocks.includes(p.mount))
+    const access = this.dragonAccessForClient(client, type);
+    if (!DRAGON_TYPE_SET.has(type) || !access)
       return client.send('feedDragonReject', { reason: 'unowned' });
     const slot = Math.max(0, Math.min(35, m.slot | 0));
     if (!this.consumeSlotItem(rec.prof, slot, I.DRAGON_TREAT, 1)) return client.send('feedDragonReject', { reason: 'treat' });
-    const care = this.feedDragonCare(rec.prof, type, 20 + (this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage' ? 4 : 0));
-    const bond = this.awardDragonBondXp(rec.prof, type, 18, 'care');
-    this.dirtyPlayers.add(rec.token);
-    this.syncPlayerProfile(client, rec.prof);
+    const care = this.feedDragonCare(access.prof, type, 20 + (this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 4 : 0));
+    const bond = this.awardDragonBondXp(access.prof, type, 18, 'care');
+    this.dirtyAndSyncDragonAccess(client, access);
     client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : Date.now(), bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
     this.sendSpace(p.dgn || '', 'fx', { t: 'dragonCare', kind: type, x: p.x, y: p.y, z: p.z, happiness: care ? care.happiness : 0, dgn: p.dgn || '' });
   }
@@ -603,18 +892,19 @@ class DragonsMixin {
       const rec = this.profileFor(client);
       const p = this.state.players.get(client.sessionId);
       if (!rec || !p || !Array.isArray(rec.prof.mountUnlocks)) continue;
-      for (const kind of rec.prof.mountUnlocks) {
+      for (const kind of this.effectiveMountUnlocksFor(rec.token, rec.prof, now)) {
         if (!isDragonMount(kind)) continue;
         const type = dragonMountType(kind);
-        if (!DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(rec.prof, type) !== 'rest') continue;
-        if (!this.isDragonAdult(rec.prof, type, now) || this.dragonIsNested(rec.token, type) || p.mount === kind) continue;
-        const cap = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage' ? 90 : baseCap;
-        const care = this.dragonCareFor(rec.prof, type);
+        const access = this.dragonAccessForClient(client, type);
+        if (!access || !DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(access.prof, type) !== 'rest') continue;
+        if (!this.isDragonAdult(access.prof, type, now) || this.dragonIsNested(access.token, type) || p.mount === kind) continue;
+        const cap = this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 90 : baseCap;
+        const care = this.dragonCareFor(access.prof, type);
         if (!care || care.happiness >= cap) continue;
-        const key = rec.token + ':' + type;
-        const personality = this.ensureDragonPersonality(rec.prof, type);
-        const restMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(rec.prof, type, 'rest') : 1;
-        const rate = (personality === 'gentle' ? perSecond * 1.25 : perSecond) * (1 + Math.max(0, restMastery - 1) * .08) * (this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'sage' ? 1.25 : 1);
+        const key = access.token + ':' + type;
+        const personality = this.ensureDragonPersonality(access.prof, type);
+        const restMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(access.prof, type, 'rest') : 1;
+        const rate = (personality === 'gentle' ? perSecond * 1.25 : perSecond) * (1 + Math.max(0, restMastery - 1) * .08) * (this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 1.25 : 1);
         let acc = (this.dragonRestAcc.get(key) || 0) + Math.max(0, dt || 0) * rate;
         const gain = Math.min(cap - care.happiness, Math.floor(acc));
         if (gain <= 0) { this.dragonRestAcc.set(key, acc); continue; }
@@ -622,9 +912,9 @@ class DragonsMixin {
         care.happiness = Math.min(cap, care.happiness + gain);
         care.fedAt = now;
         this.dragonRestAcc.set(key, acc);
-        const bond = this.awardDragonBondXp(rec.prof, type, 1, 'rest');
-        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, type, 'rest', gain) : null;
-        this.dirtyPlayers.add(rec.token);
+        const bond = this.awardDragonBondXp(access.prof, type, 1, 'rest');
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(access.prof, type, 'rest', gain) : null;
+        this.dirtyAndSyncDragonAccess(client, access);
         client.send('dragonCare', { type, happiness: care.happiness, fedAt: care.fedAt, rest: true, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null, roleMastery: mastery });
         this.sendSpace(p.dgn || '', 'fx', { t: 'dragonRest', kind: type, x: p.x, y: p.y, z: p.z, owner: client.sessionId, gain, happiness: care.happiness, masteryLevel: mastery ? mastery.level : restMastery, dgn: p.dgn || '' });
       }
@@ -637,11 +927,12 @@ class DragonsMixin {
       const p = this.state.players.get(client.sessionId);
       if (!rec || !p || !Array.isArray(rec.prof.mountUnlocks)) continue;
       const movingInWorld = (p.dim || 'overworld') === 'overworld' && !(p.dgn || '') && !p.mount && this.isPlayerAlive(client);
-      for (const kind of rec.prof.mountUnlocks) {
+      for (const kind of this.effectiveMountUnlocksFor(rec.token, rec.prof, now)) {
         if (!isDragonMount(kind)) continue;
         const type = dragonMountType(kind);
-        if (!DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(rec.prof, type) !== 'follow') continue;
-        const key = rec.token + ':' + type;
+        const access = this.dragonAccessForClient(client, type);
+        if (!access || !DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(access.prof, type) !== 'follow') continue;
+        const key = access.token + ':' + type;
         let travel = this.dragonFollowBondTravel.get(key);
         if (!travel || !movingInWorld) {
           this.dragonFollowBondTravel.set(key, { x: p.x, z: p.z, dist: travel ? travel.dist || 0 : 0, lastAward: travel ? travel.lastAward || 0 : 0 });
@@ -649,13 +940,13 @@ class DragonsMixin {
         }
         const step = Math.hypot(p.x - travel.x, p.z - travel.z);
         travel.x = p.x; travel.z = p.z;
-        if (!this.isDragonAdult(rec.prof, type, now) || this.dragonIsNested(rec.token, type) || step < 0.05 || step > 12) {
+        if (!this.isDragonAdult(access.prof, type, now) || this.dragonIsNested(access.token, type) || step < 0.05 || step > 12) {
           this.dragonFollowBondTravel.set(key, travel);
           continue;
         }
         travel.dist = Math.min(240, (travel.dist || 0) + step);
-        const followMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(rec.prof, type, 'follow') : 1;
-        const scout = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'scout';
+        const followMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(access.prof, type, 'follow') : 1;
+        const scout = this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'scout';
         const needDist = Math.max(70, (120 - Math.max(0, followMastery - 1) * 8) * (scout ? .9 : 1));
         const needMs = Math.max(26000, (45000 - Math.max(0, followMastery - 1) * 2500) * (scout ? .9 : 1));
         if (travel.dist < needDist || now - (travel.lastAward || 0) < needMs) {
@@ -664,10 +955,10 @@ class DragonsMixin {
         }
         travel.dist -= needDist;
         travel.lastAward = now;
-        const bond = this.awardDragonBondXp(rec.prof, type, 1, 'follow');
-        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, type, 'follow', 1) : null;
+        const bond = this.awardDragonBondXp(access.prof, type, 1, 'follow');
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(access.prof, type, 'follow', 1) : null;
         this.dragonFollowBondTravel.set(key, travel);
-        this.dirtyPlayers.add(rec.token);
+        this.dirtyAndSyncDragonAccess(client, access);
         client.send('dragonBond', { type, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, reason: 'follow', dragonChallenge: bond ? bond.challenge : null, roleMastery: mastery });
       }
     }
@@ -678,23 +969,25 @@ class DragonsMixin {
       const client = this.clients.find(c => c.sessionId === sid);
       const rec = client && this.profileFor(client);
       if (!client || !rec || !this.isPlayerAlive(client)) return;
-      const unlocks = Array.isArray(rec.prof.mountUnlocks) ? rec.prof.mountUnlocks : [];
+      const unlocks = this.effectiveMountUnlocksFor(rec.token, rec.prof, now);
       for (const kind of unlocks) {
         if (!isDragonMount(kind)) continue;
         const type = dragonMountType(kind);
-        const role = this.ensureDragonRole(rec.prof, type);
+        const access = this.dragonAccessForClient(client, type);
+        if (!access) continue;
+        const role = this.ensureDragonRole(access.prof, type);
         if (!DRAGON_TYPE_SET.has(type) || (role !== 'guard' && role !== 'stay')) continue;
-        if (!this.isDragonAdult(rec.prof, type, now) || this.dragonIsNested(rec.token, type)) continue;
+        if (!this.isDragonAdult(access.prof, type, now) || this.dragonIsNested(access.token, type)) continue;
         if (p.mount === kind || (role === 'guard' && isDragonMount(p.mount))) continue;
-        const spots = rec.prof.dragonStaySpots && typeof rec.prof.dragonStaySpots === 'object' ? rec.prof.dragonStaySpots : {};
+        const spots = access.prof.dragonStaySpots && typeof access.prof.dragonStaySpots === 'object' ? access.prof.dragonStaySpots : {};
         const spot = role === 'stay' ? spots[type] : null;
         if (role === 'stay' && (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.z)))) continue;
         const anchor = role === 'stay' ? { x: Number(spot.x), y: Number(spot.y) || p.y, z: Number(spot.z), dgn: '' } : p;
         if (role === 'stay' && !this.dragonStayPostActive(anchor)) continue;
         const key = sid + ':' + type + ':' + role;
         if (now < (this.dragonGuardCd.get(key) || 0)) continue;
-        const masteryLevel = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(rec.prof, type, role) : 1;
-        const defender = this.dragonSpecialization && this.dragonSpecialization(rec.prof, type) === 'defender';
+        const masteryLevel = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(access.prof, type, role) : 1;
+        const defender = this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'defender';
         let best = null, bestId = '', bd = (role === 'stay' ? 9.5 : 7.5) + Math.max(0, masteryLevel - 1) * .35 + (defender ? 1 : 0);
         this.state.mobs.forEach((mob, id) => {
           const meta = this.mobMeta[id];
@@ -703,8 +996,8 @@ class DragonsMixin {
           if (d < bd) { bd = d; best = mob; bestId = id; }
         });
         if (!best) continue;
-        const level = this.dragonBondLevel(rec.prof, type);
-        const personality = this.ensureDragonPersonality(rec.prof, type);
+        const level = this.dragonBondLevel(access.prof, type);
+        const personality = this.ensureDragonPersonality(access.prof, type);
         const cooldownBase = role === 'stay'
           ? (personality === 'bold' ? 8500 : personality === 'gentle' ? 10500 : 9500)
           : (personality === 'bold' ? 3800 : personality === 'gentle' ? 5200 : 4600);
@@ -712,9 +1005,9 @@ class DragonsMixin {
         this.dragonGuardCd.set(key, now + cooldown);
         const damage = (role === 'stay' ? this.dragonStayDamage(type, level) : this.dragonGuardDamage(type, level)) + Math.floor(Math.max(0, masteryLevel - 1) / 2) + (defender ? 1 : 0);
         this.damageMobByAbility(client, bestId, best, damage);
-        const bond = this.awardDragonBondXp(rec.prof, type, role === 'stay' ? (personality === 'bold' ? 2 : 1) : (personality === 'bold' ? 3 : 2), role);
-        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(rec.prof, type, role, 1) : null;
-        this.dirtyPlayers.add(rec.token);
+        const bond = this.awardDragonBondXp(access.prof, type, role === 'stay' ? (personality === 'bold' ? 2 : 1) : (personality === 'bold' ? 3 : 2), role);
+        const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(access.prof, type, role, 1) : null;
+        this.dirtyAndSyncDragonAccess(client, access);
         client.send('dragonBond', { type, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, reason: role, dragonChallenge: bond ? bond.challenge : null, roleMastery: mastery });
         this.sendSpace(anchor.dgn || '', 'fx', { t: 'dragonGuard', kind: type, role, x: best.x, y: best.y + .8, z: best.z, postX: anchor.x, postY: anchor.y, postZ: anchor.z, owner: sid, damage, bondGained: bond ? bond.gained : 0, masteryLevel: mastery ? mastery.level : masteryLevel, dgn: anchor.dgn || '' });
       }
