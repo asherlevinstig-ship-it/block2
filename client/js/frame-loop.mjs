@@ -702,8 +702,11 @@ function idleObjectiveLine(){
   if(inTown)return objectiveLine('progression','Next','Choose Work','Open your Quest Log or visit the Job Board for the clearest task',{type:'questlog',label:'OPEN QUEST LOG'});
   return objectiveLine('progression','Next','Find A Lead','Return to town, follow a landmark, or open your Quest Log',{type:'questlog',label:'OPEN QUEST LOG'});
 }
+function tutorialRoomHudSuppressed(){
+  return dim==='job'||dimensionsState.kind==='job'||(combatState.jobTutorialActive&&combatState.jobTutorialJob);
+}
 function nextBestObjectiveLine(){
-  if(dim==='dungeon'||dim==='event'||dim==='gatecutscene')return null;
+  if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return null;
   const transition=transitionRecoveryAction();
   if(transition){
     const title=transition.type==='continue_panel'?'Continue Reward':
@@ -736,7 +739,7 @@ function nextBestObjectiveLine(){
   return progression||idleObjectiveLine();
 }
 function unifiedObjectiveList(){
-  if(dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
+  if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
   if((townGuidanceActive&&!jobContract)||transitionRecoveryAction())return [];
   const lines=[];
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
@@ -857,6 +860,7 @@ function objectiveHudHTML(obj){
   return ONBOARD.objectiveHudHTML(action?{...obj,actionHTML:trackerActionButton(action)}:obj);
 }
 function currentObjectiveHud(){
+  if(tutorialRoomHudSuppressed())return null;
   const unified=unifiedObjectiveHud();
   if(unified)return unified;
   if(townGuidanceActive&&!jobContract)return null;
@@ -886,6 +890,11 @@ function debugObjectiveHudSummary(obj){
 let lastObjectiveHudDebugSig='';
 function refreshObjectiveTracker(){
   if(!currentQuestEl)return;
+  if(tutorialRoomHudSuppressed()){
+    currentQuestEl.classList.add('hidden');
+    currentQuestEl.innerHTML='';
+    return;
+  }
   const obj=currentObjectiveHud();
   if(obj){
     currentQuestEl.classList.remove('hidden');
@@ -1407,7 +1416,7 @@ function updateDungeonCoordination(now){
 }
 function updateOverworldActivityTracker(){
   if(!activityTrackerEl)return;
-  if(dim!=='overworld'||onboardingActive){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');return;}
+  if(tutorialRoomHudSuppressed()||dim!=='overworld'||onboardingActive){displayedRegionalOpportunity=null;activityTrackerEl.classList.add('hidden');activityTrackerEl.innerHTML='';return;}
   const a=overworldActivity||{};
   const acceptedRegionalContract=clampRegionalContract(regionalContract);
   const trail=a.trailSense&&(!a.trailSense.expiresAt||a.trailSense.expiresAt>Date.now())?a.trailSense:null;

@@ -109,6 +109,7 @@
   body.claim-mode #tutorialhud,body.claim-mode #coachhud,body.claim-mode #currentquest,body.claim-mode #activitytracker,body.claim-mode #townchoices,body.claim-mode #eventhud,body.claim-mode #landmap{display:none!important}
   body.tutorial-hud-active #coachhud,body.tutorial-hud-active #activitytracker,body.tutorial-hud-active #townchoices{display:none!important}
   body.coach-hud-active #activitytracker,body.coach-hud-active #townchoices{display:none!important}
+  body.job-tutorial-room #currentquest,body.job-tutorial-room #activitytracker,body.job-tutorial-room #townchoices,body.job-tutorial-room #eventhud,body.job-tutorial-room #locationhud,body.job-tutorial-room #landmap{display:none!important}
   #tutorialhud{position:fixed;left:50%;top:70px;transform:translateX(-50%);width:min(520px,calc(100vw - 32px));z-index:9;pointer-events:none;text-align:center;color:#eaf6ff;text-shadow:0 2px 2px #000;background:linear-gradient(160deg,rgba(7,14,28,.9),rgba(10,22,34,.82));border:1px solid rgba(79,216,255,.62);box-shadow:0 0 22px rgba(79,216,255,.22),inset 0 0 24px rgba(79,216,255,.06);border-radius:9px;padding:9px 14px}
   #tutorialhud .tutpill{font-size:11px;letter-spacing:3px;color:#9ad26b;text-transform:uppercase;margin-bottom:8px}
   #tutorialhud .tutkey{display:inline-block;font-size:18px;letter-spacing:3px;color:#102015;background:#9ad26b;border-bottom:3px solid #4d7a36;border-radius:6px;padding:5px 12px;margin:1px 0 6px;text-shadow:none}

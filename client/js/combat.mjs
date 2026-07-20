@@ -501,12 +501,14 @@ function layoutRightHudStack(){
 function syncHudLayerState(){
   const tutorialVisible=!!(tutorialEl&&!tutorialEl.classList.contains('hidden'));
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
+  const jobTutorialRoom=dim==='job'||dimensionsState.kind==='job';
   const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset'].some(id=>{
     const el=document.getElementById(id);
     if(!el) return false;
     return id==='ui' ? el.classList.contains('open') : !el.classList.contains('hidden');
   });
   document.body.classList.toggle('game-modal-open', gameModalOpen);
+  document.body.classList.toggle('job-tutorial-room', jobTutorialRoom);
   document.body.classList.toggle('tutorial-hud-active', tutorialVisible);
   document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen);
   layoutRightHudStack();

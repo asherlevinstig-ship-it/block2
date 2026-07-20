@@ -1378,6 +1378,8 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/const rightHudStackIds=\['currentquest','activitytracker','townchoices'\]/);
   assert.match(combat,/function layoutRightHudStack\(\)\{/);
   assert.match(combat,/document\.body\.classList\.toggle\('game-modal-open', gameModalOpen\);/);
+  assert.match(combat,/const jobTutorialRoom=dim==='job'\|\|dimensionsState\.kind==='job';/);
+  assert.match(combat,/document\.body\.classList\.toggle\('job-tutorial-room', jobTutorialRoom\);/);
   assert.match(combat,/function syncHudLayerState\(\)\{/);
   assert.match(combat,/MutationObserver\(syncHudLayerState\)/);
   assert.match(combat,/document\.body\.classList\.toggle\('tutorial-hud-active', tutorialVisible\);/);
@@ -1389,6 +1391,11 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
   assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
   assert.match(styles,/body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
+  assert.match(styles,/body\.job-tutorial-room #currentquest,body\.job-tutorial-room #activitytracker,body\.job-tutorial-room #townchoices,body\.job-tutorial-room #eventhud,body\.job-tutorial-room #locationhud,body\.job-tutorial-room #landmap\{display:none!important\}/);
+  assert.match(frame,/function tutorialRoomHudSuppressed\(\)\{/);
+  assert.match(frame,/if\(tutorialRoomHudSuppressed\(\)\|\|dim==='dungeon'\|\|dim==='event'\|\|dim==='gatecutscene'\)return null;/);
+  assert.match(frame,/if\(tutorialRoomHudSuppressed\(\)\|\|dim==='dungeon'\|\|dim==='event'\|\|dim==='gatecutscene'\)return \[\];/);
+  assert.match(frame,/if\(tutorialRoomHudSuppressed\(\)\)\{\s*currentQuestEl\.classList\.add\('hidden'\);\s*currentQuestEl\.innerHTML='';\s*return;\s*\}/);
   assert.doesNotMatch(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #currentquest/);
   assert.doesNotMatch(styles,/body\.onboarding[^\{]*#currentquest/);
 });
