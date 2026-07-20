@@ -1438,6 +1438,12 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
   assert.match(combat,/function performPetTamerDragonTutorialAction\(\)/);
   assert.match(combat,/function consumeSelectedDragonTreatForTutorial\(\)/);
+  assert.match(combat,/PET_TAMER_TUTORIAL_HATCH_MS=3000/);
+  assert.match(combat,/function petTamerPracticeInsulatorPos\(\)/);
+  assert.match(combat,/function startPetTamerTutorialEggHatch\(\)/);
+  assert.match(combat,/addTemporaryJobTutorialItem\(I\.EGG_VERDANT,1,true\)/);
+  assert.match(combat,/worldState\.syncDragonIncubationMesh/);
+  assert.match(combat,/worldState\.removeDragonIncubationMesh/);
   assert.match(combat,/function completePetTamerApproachIfReady\(now\)/);
   assert.match(combat,/function commandPetTamerPracticeDragon\(\)/);
   assert.match(combat,/function mountPetTamerPracticeDragon\(\)/);
@@ -1451,7 +1457,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/if\(mountPetTamerPracticeDragon\(\)\) return; toggleMount\(\)/);
   assert.match(combat,/petTamerTutorialProgressLabel\(\)\+' - '\+petTamerTutorialAction\(\)\.key/);
   assert.match(combat,/function jobTutorialBeaconTarget\(jobId, room\)/);
+  assert.match(combat,/FOLLOW EGG LIGHT/);
   assert.match(combat,/FOLLOW DRAGON LIGHT/);
+  assert.match(combat,/HATCH EGG/);
+  assert.match(combat,/EGG \+ G/);
   assert.match(combat,/WALK CLOSE/);
   assert.match(combat,/SHIFT\+TAB/);
   assert.match(combat,/Z \+ WASD/);

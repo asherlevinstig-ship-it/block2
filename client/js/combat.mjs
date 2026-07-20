@@ -737,7 +737,7 @@ const JOB_TUTORIAL_STEPS=Object.freeze({
   cook:{room:'Tavern Kitchen Lesson',target:()=>HUB.tavern,button:'FIND KITCHEN',theme:'gold',art:'PAN',beats:['Gather ingredients','Cook meals','Make dungeon buffs']},
   blacksmith:{room:'Forge Lesson Bay',target:()=>HUB.smith,button:'FIND FORGE',theme:'ember',art:'ANVIL',beats:['Smelt ingots','Repair tools','Upgrade gear']},
   monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
-  pet_tamer:{room:'Dragon Roost Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND ROOST',theme:'leaf',art:'PAW',beats:['Meet a grounded dragon','Care, ride, and command','Learn roost bonds and roles']},
+  pet_tamer:{room:'Dragon Roost Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND ROOST',theme:'leaf',art:'PAW',beats:['Hatch a fast practice egg','Care, ride, and command','Learn roost bonds and roles']},
 });
 const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   miner:{key:'DIAMOND PICKAXE',text:'Mine one diamond from the cave seam, then trade it with Garrik for gold.',sub:'This diamond pickaxe is tutorial-only. Aim at the blue ore wall and hold F / left click.'},
@@ -745,13 +745,15 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   cook:{key:'KITCHEN STATIONS',text:'Use meals to create combat, stamina, and travel support for other players.',sub:'Inspect the table, furnace, and campfire, then walk into the blue return pillar.'},
   blacksmith:{key:'FORGE BAY',text:'Repair, smelt, and upgrade gear so dungeon loot becomes long-term progression.',sub:'Inspect the forge stations, then walk into the blue return pillar.'},
   monk:{key:'FOCUS CIRCLE',text:'Meditation grows support power and restores resources more strongly in the hall.',sub:'Stand in the focus circle, then walk into the blue return pillar.'},
-  pet_tamer:{key:'MEET DRAGON',text:'Walk to the grounded practice dragon and stay close until it trusts you.',sub:'The flying dragons show the roost. The calm dragon on the ground teaches care, riding, commands, and bonds.'},
+  pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
 let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
-let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0;
+let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
+const PET_TAMER_TUTORIAL_HATCH_MS=3000;
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
+  {key:'HATCH EGG',title:'Hatching',verb:'EGG + G',purpose:'Select the Verdant Dragon Egg, press G at the Egg Insulator, then claim it when ready.',done:'The practice egg hatches quickly, showing how dragons begin.'},
   {key:'MEET DRAGON',title:'Approach',verb:'WALK CLOSE',purpose:'Walk beside the grounded dragon and stay close until it trusts you.',done:'The practice dragon accepts your approach.'},
   {key:'FEED TREAT',title:'Care',verb:'SELECT TREAT + G',purpose:'Select the Dragon Treat on your hotbar, then press G beside the dragon to feed it.',done:'The dragon accepts the treat. Happiness and bond are the first Pet Tamer loop.'},
   {key:'COMMAND',title:'Roles',verb:'SHIFT+TAB',purpose:'Press Shift+Tab beside the dragon to practise the Stay command shortcut.',done:'The dragon lowers its head. Follow, Stay, Guard, and Rest are role commands.'},
@@ -1185,13 +1187,26 @@ function petTamerPracticeDragonPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
   return room?{x:room.x+8.5,y:room.G+1.03,z:room.z+8.5}:null;
 }
+function petTamerPracticeInsulatorPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
+  return room?{x:room.x+.5,y:room.G+2,z:room.z+22.5,bx:room.x|0,by:(room.G+2)|0,bz:(room.z+22)|0}:null;
+}
 function petTamerPracticeRoostPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
   return room?{x:room.x,y:room.G+1.035,z:room.z+22}:null;
 }
 function jobTutorialBeaconTarget(jobId, room){
-  if(jobId==='pet_tamer')return jobTutorialPetDragonStep>=4?petTamerPracticeRoostPos():petTamerPracticeDragonPos();
+  if(jobId==='pet_tamer'){
+    if(jobTutorialPetDragonStep===0)return petTamerPracticeInsulatorPos();
+    return jobTutorialPetDragonStep>=5?petTamerPracticeRoostPos():petTamerPracticeDragonPos();
+  }
   return room?{x:room.x,y:room.G+1.035,z:room.z+23}:null;
+}
+function nearPetTamerPracticeInsulator(range=5.0){
+  const p=petTamerPracticeInsulatorPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||!player)return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
 }
 function nearPetTamerPracticeDragon(range=4.5){
   const p=petTamerPracticeDragonPos();
@@ -1210,20 +1225,22 @@ function petTamerTutorialAction(){
 }
 function petTamerTutorialPromptKey(){
   const step=jobTutorialPetDragonStep|0;
-  if(step===0)return 'WALK';
-  if(step===1)return 'G';
-  if(step===2)return 'Shift+Tab';
-  if(step===3)return 'Z';
-  if(step>=4)return 'B';
+  if(step===0)return 'G';
+  if(step===1)return 'WALK';
+  if(step===2)return 'G';
+  if(step===3)return 'Shift+Tab';
+  if(step===4)return 'Z';
+  if(step>=5)return 'B';
   return 'G';
 }
 function petTamerTutorialPromptSub(){
   const step=jobTutorialPetDragonStep|0;
-  if(step===0)return 'Stay close to build trust';
-  if(step===1)return 'Use selected Dragon Treat';
-  if(step===2)return 'Practise Stay command';
-  if(step===3)return jobTutorialPetDragonTutorialMount?'Ride forward with WASD':'Mount practice dragon';
-  if(step>=4)return 'Open dragon bonds at the roost';
+  if(step===0)return jobTutorialPetEggStarted?'Wait for the fast hatch, then press G to claim':'Use selected Verdant Dragon Egg';
+  if(step===1)return 'Stay close to build trust';
+  if(step===2)return 'Use selected Dragon Treat';
+  if(step===3)return 'Practise Stay command';
+  if(step===4)return jobTutorialPetDragonTutorialMount?'Ride forward with WASD':'Mount practice dragon';
+  if(step>=5)return 'Open dragon bonds at the roost';
   return 'Dragon lesson';
 }
 function petTamerTutorialProgressLabel(){
@@ -1248,6 +1265,21 @@ function clearPetTamerTutorialMount(){
   jobTutorialPetDragonTutorialMount=false;
   jobTutorialPetDragonRideStart=null;
   jobTutorialPetDragonNearSince=0;
+}
+function clearPetTamerTutorialEgg(){
+  const p=petTamerPracticeInsulatorPos();
+  if(p&&worldState.removeDragonIncubationMesh)worldState.removeDragonIncubationMesh(p.bx,p.by,p.bz);
+  jobTutorialPetEggStarted=false;
+  jobTutorialPetEggReadyAt=0;
+}
+function petTamerPracticeEggFx(kind='hatch'){
+  const p=petTamerPracticeInsulatorPos();
+  if(!p)return;
+  const col=kind==='ready'?[.75,1,.45]:[.42,1,.68];
+  burst(p.x,p.y+1.1,p.z,col,kind==='ready'?22:44,kind==='ready'?2.4:3.4,kind==='ready'?2.0:3.6,.72);
+  ringPulse(p.x,p.y+.04,p.z,kind==='ready'?2.1:3.3,0x9ad26b,.65);
+  if(kind==='hatch'&&SFX.boom)SFX.boom();
+  else if(SFX.level)SFX.level();
 }
 function consumeSelectedDragonTreatForTutorial(){
   const s=inv[selected];
@@ -1277,9 +1309,63 @@ function selectDragonTreatForTutorial(){
   refreshHUD();
   return !!(inv[selected]&&inv[selected].id===I.DRAGON_TREAT);
 }
+function addTemporaryJobTutorialItem(id,count=1,select=false){
+  let left=Math.max(1,count|0);
+  for(let i=0;i<36&&left>0;i++){
+    const s=inv[i], max=stackMax(id);
+    if(s&&s.id===id&&s.source==='job_tutorial'&&s.tutorialOnly&&s.count<max){
+      const add=Math.min(left,max-s.count);
+      s.count+=add; left-=add;
+    }
+  }
+  for(let i=0;i<36&&left>0;i++){
+    if(!inv[i]){
+      const stack=newStack(id,Math.min(left,stackMax(id)));
+      stack.source='job_tutorial';
+      stack.tutorialOnly=true;
+      inv[i]=stack;
+      left-=stack.count;
+    }
+  }
+  if(select)selectItemForOnboarding(id);
+  refreshHUD();
+  return left<=0;
+}
+function selectedDragonEggTypeForTutorial(){
+  const s=inv[selected];
+  return s&&DRAGON_EGG_TO_TYPE[s.id]?DRAGON_EGG_TO_TYPE[s.id]:'';
+}
+function consumeSelectedDragonEggForTutorial(){
+  const s=inv[selected];
+  if(!s||!DRAGON_EGG_TO_TYPE[s.id])return false;
+  s.count--;
+  if(s.count<=0)inv[selected]=null;
+  refreshHUD();
+  if(uiOpen)renderUI();
+  return true;
+}
+function startPetTamerTutorialEggHatch(){
+  if(jobTutorialPetEggStarted)return true;
+  const p=petTamerPracticeInsulatorPos();
+  const type=selectedDragonEggTypeForTutorial()||'verdant';
+  if(!p)return false;
+  if(!consumeSelectedDragonEggForTutorial())return false;
+  const now=Date.now();
+  jobTutorialPetEggStarted=true;
+  jobTutorialPetEggReadyAt=now+PET_TAMER_TUTORIAL_HATCH_MS;
+  if(worldState.syncDragonIncubationMesh)worldState.syncDragonIncubationMesh({
+    x:p.bx,y:p.by,z:p.bz,type,eggId:(DRAGON_TYPES[type]&&DRAGON_TYPES[type].egg)||I.EGG_VERDANT,
+    startedAt:now,finishAt:jobTutorialPetEggReadyAt,incubationMs:PET_TAMER_TUTORIAL_HATCH_MS
+  });
+  petTamerPracticeEggFx('ready');
+  sysMsg('The tutorial egg warms quickly. Wait for <b>READY</b>, then press <b>G</b> again to claim the hatchling.');
+  updateJobTutorialHud();
+  return true;
+}
 function completePetTamerDragonTutorialStep(kind='happy'){
   const action=petTamerTutorialAction();
-  petTamerPracticeDragonFx(kind);
+  if(kind==='egg')petTamerPracticeEggFx('hatch');
+  else petTamerPracticeDragonFx(kind);
   eventLog('Pet Tamer tutorial - '+action.title+': '+action.done);
   sysMsg('<b>Pet Tamer lesson:</b> '+escHTML(action.done));
   jobTutorialPetDragonStep=Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,jobTutorialPetDragonStep+1);
@@ -1296,7 +1382,7 @@ function completePetTamerDragonTutorialStep(kind='happy'){
   }
 }
 function completePetTamerApproachIfReady(now){
-  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==0)return false;
+  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==1)return false;
   const near=nearPetTamerPracticeDragon(4.2);
   if(!near){jobTutorialPetDragonNearSince=0;return false;}
   if(!jobTutorialPetDragonNearSince){
@@ -1312,7 +1398,7 @@ function completePetTamerApproachIfReady(now){
   return false;
 }
 function commandPetTamerPracticeDragon(){
-  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==2)return false;
+  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==3)return false;
   if(!nearPetTamerPracticeDragon(5.2)){
     sysMsg('Stand beside the grounded <b>Practice Dragon</b>, then press <b>Shift+Tab</b> to command it.');
     return true;
@@ -1324,7 +1410,7 @@ function commandPetTamerPracticeDragon(){
   return true;
 }
 function mountPetTamerPracticeDragon(){
-  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==3)return false;
+  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==4)return false;
   if(!nearPetTamerPracticeDragon(5.2)){
     sysMsg('Stand beside the grounded <b>Practice Dragon</b>, then press <b>Z</b> to mount it.');
     return true;
@@ -1341,7 +1427,7 @@ function mountPetTamerPracticeDragon(){
   return true;
 }
 function finishPetTamerRoostLesson(){
-  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep<4)return false;
+  if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep<5)return false;
   if(!nearPetTamerPracticeRoost(5.2)){
     sysMsg('Follow the pillar to the <b>roost station</b>, then press <b>B</b> to open dragon bonds.');
     return true;
@@ -1352,7 +1438,36 @@ function finishPetTamerRoostLesson(){
 function performPetTamerDragonTutorialAction(){
   if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job')return false;
   const step=jobTutorialPetDragonStep|0;
-  if(step>=4){
+  if(step===0){
+    if(!nearPetTamerPracticeInsulator(5.4)){
+      sysMsg('Stand beside the <b>Egg Insulator</b>, select the Verdant Dragon Egg, then press <b>G</b>.');
+      return true;
+    }
+    if(!jobTutorialPetEggStarted){
+      if(!selectedDragonEggTypeForTutorial()){
+        if(countItem(I.EGG_VERDANT)<=0)addTemporaryJobTutorialItem(I.EGG_VERDANT,1,true);
+        sysMsg('Select the <b>Verdant Dragon Egg</b> on your hotbar, then press <b>G</b> at the Egg Insulator.');
+        return true;
+      }
+      if(!startPetTamerTutorialEggHatch()){
+        sysMsg('Select the <b>Verdant Dragon Egg</b> on your hotbar, then press <b>G</b> at the Egg Insulator.');
+      }
+      return true;
+    }
+    const left=jobTutorialPetEggReadyAt-Date.now();
+    if(left>0){
+      sysMsg('The egg is incubating fast - <b>'+Math.max(1,Math.ceil(left/1000))+'s</b> left.');
+      return true;
+    }
+    const p=petTamerPracticeInsulatorPos();
+    if(p&&worldState.removeDragonIncubationMesh)worldState.removeDragonIncubationMesh(p.bx,p.by,p.bz);
+    jobTutorialPetEggStarted=false;
+    jobTutorialPetEggReadyAt=0;
+    completePetTamerDragonTutorialStep('egg');
+    sysMsg('Now follow the pillar to the grounded practice dragon and stay close to calm it.');
+    return true;
+  }
+  if(step>=5){
     sysMsg('Use the dragon shortcut here: press <b>B</b> at the roost station to finish.');
     return true;
   }
@@ -1360,11 +1475,11 @@ function performPetTamerDragonTutorialAction(){
     sysMsg('Stand beside the grounded <b>Practice Dragon</b> first.');
     return true;
   }
-  if(step===0){
+  if(step===1){
     sysMsg('Stay close to the dragon for a moment. No button needed for approach.');
     return true;
   }
-  if(step===1){
+  if(step===2){
     if(!inv[selected]||inv[selected].id!==I.DRAGON_TREAT){
       if(countItem(I.DRAGON_TREAT)<=0)ensureOnboardingItem(I.DRAGON_TREAT,1);
       sysMsg('Select the <b>Dragon Treat</b> on your hotbar, then press <b>G</b> to feed it.');
@@ -1378,11 +1493,11 @@ function performPetTamerDragonTutorialAction(){
     sysMsg('Good. Press <b>Shift+Tab</b> beside the dragon to practise a Stay command.');
     return true;
   }
-  if(step===2){
+  if(step===3){
     sysMsg('Use the command shortcut: press <b>Shift+Tab</b> beside the dragon.');
     return true;
   }
-  if(step===3){
+  if(step===4){
     sysMsg('Use the mount shortcut: press <b>Z</b> beside the dragon.');
     return true;
   }
@@ -1405,11 +1520,12 @@ function openPetTamerDragonTutorialUI(){
   intro.innerHTML='<b>'+escHTML(action.key)+'</b><br>'+escHTML(action.purpose);
   qpanelEl.appendChild(intro);
   const rows=[
-    ['1','Meet the dragon calmly so the bond starts with trust.'],
-    ['2','Feed a treat to learn happiness and bond growth.'],
-    ['3','Practice a command so the dragon has a job.'],
-    ['4','Learn riding so dragons become travel partners.'],
-    ['5','Use the Roost to hatch, name, manage, and grow dragons.'],
+    ['1','Place and hatch a practice egg so dragons have an origin.'],
+    ['2','Meet the dragon calmly so the bond starts with trust.'],
+    ['3','Feed a treat to learn happiness and bond growth.'],
+    ['4','Practice a command so the dragon has a job.'],
+    ['5','Learn riding so dragons become travel partners.'],
+    ['6','Use the Roost to hatch, name, manage, and grow dragons.'],
   ];
   for(const [label,text] of rows){
     const r=document.createElement('div'); r.className='shoprow';
@@ -1468,8 +1584,8 @@ function grantJobTutorialKit(jobId){
     ensureOnboardingItem(B.IRON_ORE,1);
     ensureOnboardingItem(I.COAL,1);
   }else if(jobId==='pet_tamer'){
-    ensureOnboardingItem(I.DRAGON_TREAT,1);
-    selectItemForOnboarding(I.DRAGON_TREAT);
+    addTemporaryJobTutorialItem(I.EGG_VERDANT,1,true);
+    addTemporaryJobTutorialItem(I.DRAGON_TREAT,1,false);
   }
   refreshHUD();
 }
@@ -1516,15 +1632,19 @@ function updateJobTutorialHud(){
   }
   if(jobTutorialJob==='pet_tamer'){
     const action=petTamerTutorialAction();
-    copy=jobTutorialPetDragonStep>=4&&nearPetTamerPracticeRoost()
+    copy=jobTutorialPetDragonStep===0&&nearPetTamerPracticeInsulator()
+      ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:petTamerTutorialPromptSub()+'. The hatch is sped up for this lesson.'}
+      : jobTutorialPetDragonStep>=5&&nearPetTamerPracticeRoost()
       ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:'Press B at the roost station to finish through dragon bonds.'}
       : nearPetTamerPracticeDragon()
       ? {key:action.key,text:petTamerTutorialProgressLabel()+': '+action.purpose,sub:petTamerTutorialPromptSub()+'. No checklist buttons.'}
       : jobTutorialPetDragonSeen
-        ? {key:'DRAGON LESSON COMPLETE',text:'You learned the basic dragon loop.',sub:'The return pillar is hidden for now while this room is being tested.'}
-        : jobTutorialPetDragonStep>=4
+        ? {key:'DRAGON LESSON COMPLETE',text:'You learned the basic dragon loop.',sub:'Returning you to Town of Beginnings.'}
+        : jobTutorialPetDragonStep>=5
           ? {key:'FOLLOW ROOST LIGHT',text:'Follow the pillar of light to the roost station.',sub:'Press B there to finish the tutorial.'}
-          : {key:'FOLLOW DRAGON LIGHT',text:'Follow the pillar of light to the grounded practice dragon.',sub:'Walk beside the dragon to start the lesson.'};
+          : jobTutorialPetDragonStep===0
+            ? {key:'FOLLOW EGG LIGHT',text:'Follow the pillar of light to the Egg Insulator.',sub:'Select the Verdant Dragon Egg and press G there.'}
+            : {key:'FOLLOW DRAGON LIGHT',text:'Follow the pillar of light to the grounded practice dragon.',sub:'Walk beside the dragon to continue the lesson.'};
   }
   const beaconTarget=jobTutorialBeaconTarget(jobTutorialJob,room);
   const nearReturn=jobTutorialJob!=='pet_tamer'&&room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
@@ -1540,6 +1660,7 @@ function completeJobTutorial(){
   if(!jobTutorialActive) return;
   const jobId=jobTutorialJob, job=JOBS[jobId]||{name:'Job'};
   clearPetTamerTutorialMount();
+  clearPetTamerTutorialEgg();
   clearJobTutorialTemporaryItems();
   jobTutorialActive=false;
   jobTutorialJob='';
@@ -1549,6 +1670,8 @@ function completeJobTutorial(){
   jobTutorialPetDragonStep=0;
   jobTutorialPetDragonRideStart=null;
   jobTutorialPetDragonNearSince=0;
+  jobTutorialPetEggStarted=false;
+  jobTutorialPetEggReadyAt=0;
   jobTutorialReturnWarnAt=0;
   if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
@@ -1581,6 +1704,7 @@ function startJobTutorial(jobId){
   jobTutorialPetDragonRideStart=null;
   jobTutorialPetDragonNearSince=0;
   clearPetTamerTutorialMount();
+  clearPetTamerTutorialEgg();
   jobTutorialReturnWarnAt=0;
   player.pos.set(room.x+.5,jobTutorialSafeSpawnY(jobId,room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
@@ -1592,7 +1716,7 @@ function startJobTutorial(jobId){
   updateJobTutorialHud();
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
-  if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the grounded practice dragon, then stay close to calm it.');
+  if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the Egg Insulator, then hatch the practice egg.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();
   return true;
@@ -1614,7 +1738,10 @@ function resumeJobTutorial(jobId,state={}){
   if(jobTutorialPetDragonSeen)jobTutorialPetDragonStep=PET_TAMER_TUTORIAL_ACTIONS.length;
   jobTutorialPetDragonRideStart=null;
   jobTutorialPetDragonNearSince=0;
+  jobTutorialPetEggStarted=false;
+  jobTutorialPetEggReadyAt=0;
   clearPetTamerTutorialMount();
+  clearPetTamerTutorialEgg();
   jobTutorialReturnWarnAt=0;
   if(player){
     player.pos.y=jobTutorialSafeSpawnY(jobId,player.pos.x||room.x+.5,player.pos.z||room.z+14.5,room.G+1.035);
@@ -1632,12 +1759,16 @@ function tickJobTutorial(now){
   if(dim!=='job'){
     clearJobTutorialTemporaryItems();
     clearPetTamerTutorialMount();
+    clearPetTamerTutorialEgg();
     jobTutorialActive=false;
     jobTutorialMinedDiamond=false;
     jobTutorialTraded=false;
     jobTutorialPetDragonSeen=false;
     jobTutorialPetDragonStep=0;
     jobTutorialPetDragonRideStart=null;
+    jobTutorialPetDragonNearSince=0;
+    jobTutorialPetEggStarted=false;
+    jobTutorialPetEggReadyAt=0;
     if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
@@ -1658,7 +1789,12 @@ function tickJobTutorial(now){
   updateJobTutorialHud();
   if(jobTutorialJob==='pet_tamer'){
     if(completePetTamerApproachIfReady(now)) return;
-    if(jobTutorialPetDragonStep===3&&jobTutorialPetDragonTutorialMount&&jobTutorialPetDragonRideStart&&player&&player.pos){
+    if(jobTutorialPetDragonStep===0&&jobTutorialPetEggStarted&&jobTutorialPetEggReadyAt&&Date.now()>=jobTutorialPetEggReadyAt&&now>jobTutorialReturnWarnAt){
+      jobTutorialReturnWarnAt=now+1600;
+      petTamerPracticeEggFx('ready');
+      sysMsg('The practice egg is <b>READY</b>. Press <b>G</b> at the insulator to hatch it.');
+    }
+    if(jobTutorialPetDragonStep===4&&jobTutorialPetDragonTutorialMount&&jobTutorialPetDragonRideStart&&player&&player.pos){
       const ridden=Math.hypot(player.pos.x-jobTutorialPetDragonRideStart.x,player.pos.z-jobTutorialPetDragonRideStart.z);
       if(ridden>=7){
         clearPetTamerTutorialMount();
@@ -1670,7 +1806,7 @@ function tickJobTutorial(now){
     if(player&&Math.hypot(player.pos.x-target.x,player.pos.z-target.z)<4.8&&now>jobTutorialReturnWarnAt&&!jobTutorialPetDragonSeen){
       jobTutorialReturnWarnAt=now+2200;
       const action=petTamerTutorialAction();
-      sysMsg(jobTutorialPetDragonStep>=4?'Press <b>B</b> at the roost station to finish.':'<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
+      sysMsg(jobTutorialPetDragonStep>=5?'Press <b>B</b> at the roost station to finish.':'<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
     }
     return;
   }
@@ -2973,9 +3109,11 @@ function nearbyInteractionPrompt(){
   const minerTutor=nearbyMinerTutorialTrader();
   if(minerTutor)push({key:'G',title:'Garrik Flint',small:jobTutorialTraded?'Trade complete':jobTutorialMinedDiamond&&countItem(I.DIAMOND)>0?'Trade diamond for gold':'Mine a diamond first',priority:118},minerTutor.distance);
   const petPracticeRoost=nearPetTamerPracticeRoost();
-  if(petPracticeRoost)push({key:'B',title:'Practice Roost',small:jobTutorialPetDragonSeen?'Lesson complete':'Open dragon bonds to finish',priority:119},petPracticeRoost.distance);
+  if(petPracticeRoost&&jobTutorialPetDragonStep>=5)push({key:'B',title:'Practice Roost',small:jobTutorialPetDragonSeen?'Lesson complete':'Open dragon bonds to finish',priority:119},petPracticeRoost.distance);
+  const petPracticeInsulator=nearPetTamerPracticeInsulator();
+  if(petPracticeInsulator&&jobTutorialPetDragonStep===0)push({key:'G',title:'Practice Egg',small:jobTutorialPetEggStarted?(Date.now()>=jobTutorialPetEggReadyAt?'Claim the hatchling':'Fast incubation running'):'Use Verdant Dragon Egg',priority:119},petPracticeInsulator.distance);
   const petPracticeDragon=nearPetTamerPracticeDragon();
-  if(petPracticeDragon&&jobTutorialPetDragonStep<4)push({key:petTamerTutorialPromptKey(),title:'Practice Dragon',small:jobTutorialPetDragonSeen?'Lesson complete':petTamerTutorialProgressLabel()+' - '+petTamerTutorialAction().key,priority:118},petPracticeDragon.distance);
+  if(petPracticeDragon&&jobTutorialPetDragonStep>0&&jobTutorialPetDragonStep<5)push({key:petTamerTutorialPromptKey(),title:'Practice Dragon',small:jobTutorialPetDragonSeen?'Lesson complete':petTamerTutorialProgressLabel()+' - '+petTamerTutorialAction().key,priority:118},petPracticeDragon.distance);
   if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
   const table=nearbyTavernGameTable();
   if(table)push({key:'G',title:table.label,small:'Play tavern games',priority:94},table.distance);
