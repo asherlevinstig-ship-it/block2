@@ -2036,6 +2036,15 @@ scene.add(insulatorGroup);
 const insulatorMeshes = {};
 const dragonIncubationMeshes = {};
 const CROP_GROW_MS = 15000;
+const cropTimerOverrides = {};
+function cropKey(x,y,z){ return (x|0)+','+(y|0)+','+(z|0); }
+function cropStageLabel(id, kind=''){
+  const prefix=kind==='windseed'?'WINDSEED':'WHEAT';
+  if(id===B.WHEAT_1)return prefix+' SPROUT';
+  if(id===B.WHEAT_2)return prefix+' GROWING';
+  if(id===B.WHEAT_3)return 'READY';
+  return prefix;
+}
 function removeInsulatorMesh(x,y,z, removeIncubation=false){
   const k=x+','+y+','+z, m=insulatorMeshes[k];
   if(m){ insulatorGroup.remove(m); delete insulatorMeshes[k]; }
@@ -2247,68 +2256,153 @@ function removeCropMesh(x,y,z){
   const k=x+','+y+','+z, m=cropMeshes[k];
   if(m){ cropGroup.remove(m); delete cropMeshes[k]; }
 }
-function drawCropTimer(canvas, progress){
+function drawCropTimer(canvas, seconds=0, done=false, label='GROW', progress=0){
   const ctx=canvas.getContext('2d');
-  const p=Math.max(0,Math.min(1,progress||0));
-  ctx.clearRect(0,0,64,64);
-  ctx.fillStyle='rgba(16,20,18,.72)';
-  ctx.beginPath(); ctx.arc(32,32,24,0,Math.PI*2); ctx.fill();
-  ctx.lineWidth=6;
-  ctx.strokeStyle='rgba(246,220,111,.28)';
-  ctx.beginPath(); ctx.arc(32,32,20,-Math.PI/2,Math.PI*1.5); ctx.stroke();
-  ctx.strokeStyle=p>.98?'#aaff75':'#f0cf4f';
-  ctx.beginPath(); ctx.arc(32,32,20,-Math.PI/2,-Math.PI/2+Math.PI*2*p); ctx.stroke();
-  ctx.fillStyle=p>.98?'#d8ff9a':'#f7e69a';
-  ctx.beginPath(); ctx.arc(32,32,4,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='rgba(255,255,255,.7)';
+  const w=canvas.width||192, h=canvas.height||72, p=Math.max(0,Math.min(1,done?1:progress||0));
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='rgba(7,13,10,.80)';
+  ctx.fillRect(5,7,w-10,h-14);
+  ctx.strokeStyle=done?'#b7ff8a':'#86efac';
   ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(32,32); ctx.lineTo(32,18); ctx.stroke();
+  ctx.strokeRect(5.5,7.5,w-11,h-15);
+  const cx=38, cy=h/2, r=21;
+  ctx.strokeStyle='rgba(246,220,111,.28)';
+  ctx.lineWidth=5;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle=done?'#b7ff8a':'#ffd45a';
+  ctx.lineCap='round';
+  ctx.beginPath(); ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+Math.PI*2*p); ctx.stroke();
+  ctx.lineCap='butt';
+  ctx.fillStyle=done?'#d8ff9a':'#eaf6ff';
+  ctx.font='13px monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(done?'OK':String(Math.max(0,Math.ceil(seconds))),cx,cy);
+  ctx.textAlign='left';
+  ctx.font='15px monospace';
+  ctx.fillText(done?'READY TO HARVEST':String(label||'GROW').slice(0,14),72,25);
+  ctx.fillStyle=done?'#b7ff8a':'#ffd45a';
+  ctx.font='11px monospace';
+  ctx.fillText(done?'PRESS G':'GROWING',72,47);
 }
 function makeCropTimerSprite(){
   const canvas=document.createElement('canvas');
-  canvas.width=64; canvas.height=64;
-  drawCropTimer(canvas,0);
+  canvas.width=192; canvas.height=72;
+  drawCropTimer(canvas,0,false);
   const tex=new THREE.CanvasTexture(canvas);
   tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.LinearFilter;
   const mat=new THREE.SpriteMaterial({map:tex, transparent:true, opacity:.92, depthWrite:false});
   const spr=new THREE.Sprite(mat);
-  spr.scale.set(.42,.42,1);
-  spr.userData={canvas, tex, last:-1};
+  spr.scale.set(1.45,.54,1);
+  spr.userData={canvas, tex, last:-1, progressKey:-1, doneLast:false};
   return spr;
 }
-function syncCropMesh(x,y,z,id){
+function updateCropTimerVisual(x,y,z,opts={}){
+  const k=cropKey(x,y,z), currentId=getB(x|0,y|0,z|0), timerId=isCropBlock(opts.id|0)?opts.id|0:currentId;
+  if(!isCropBlock(currentId)&&isCropBlock(timerId)){
+    const nowEpoch=Date.now();
+    const growMs=Math.max(1000,Number(opts.growMs||opts.duration||opts.timerDuration)||CROP_GROW_MS);
+    const finishAt=Number(opts.finishAt)||nowEpoch+growMs;
+    const startedAt=Number(opts.startedAt)||Math.max(nowEpoch,finishAt-growMs);
+    cropTimerOverrides[k]={
+      timerStartedAt:startedAt,
+      timerFinishAt:finishAt,
+      timerDuration:Math.max(1000,finishAt-startedAt),
+      timerLabel:opts.label||cropStageLabel(timerId,opts.kind),
+      autoGrowTo:opts.autoGrowTo||0,
+      tutorial:opts.tutorial===true,
+    };
+    return true;
+  }
+  const id=currentId;
+  if(!isCropBlock(id)){ delete cropTimerOverrides[k]; return false; }
+  const nowEpoch=Date.now();
+  const growMs=Math.max(1000,Number(opts.growMs||opts.duration||opts.timerDuration)||CROP_GROW_MS);
+  const finishAt=Number(opts.finishAt)||nowEpoch+growMs;
+  const startedAt=Number(opts.startedAt)||Math.max(nowEpoch,finishAt-growMs);
+  const data={
+    timerStartedAt:startedAt,
+    timerFinishAt:finishAt,
+    timerDuration:Math.max(1000,finishAt-startedAt),
+    timerLabel:opts.label||cropStageLabel(id,opts.kind),
+    autoGrowTo:opts.autoGrowTo||0,
+    tutorial:opts.tutorial===true,
+  };
+  cropTimerOverrides[k]=data;
+  const group=cropMeshes[k]||null;
+  if(!group){ syncCropMesh(x,y,z,id); return true; }
+  Object.assign(group.userData,data);
+  let timer=group.userData.timer;
+  if(!timer){
+    timer=makeCropTimerSprite();
+    const h=id===B.WHEAT_1?.42:id===B.WHEAT_2?.68:.92;
+    timer.position.set(0,Math.max(1.22,h+.64),0);
+    timer.userData.baseY=timer.position.y;
+    if(data.tutorial)timer.scale.set(1.9,.72,1);
+    group.userData.timer=timer;
+    group.add(timer);
+  }
+  timer.userData.last=-999;
+  timer.userData.progressKey=-1;
+  return true;
+}
+function syncCropMesh(x,y,z,id,opts={}){
   removeCropMesh(x,y,z);
-  if(!isCropBlock(id)) return;
+  const key=cropKey(x,y,z);
+  if(!isCropBlock(id)){ delete cropTimerOverrides[key]; return; }
   const h=id===B.WHEAT_1?.42:id===B.WHEAT_2?.68:.92;
   const group=new THREE.Group();
   const geo=new THREE.PlaneGeometry(.78,h);
   const a=new THREE.Mesh(geo,cropMats[id]), b=new THREE.Mesh(geo,cropMats[id]);
   a.position.y=h/2; b.position.y=h/2; b.rotation.y=Math.PI/2;
   group.add(a,b);
-  group.userData={cropId:id, timerStarted:performance.now(), timerDuration:CROP_GROW_MS};
+  const override=Object.assign({},cropTimerOverrides[key]||{},opts||{});
+  const nowEpoch=Date.now();
+  const growMs=Math.max(1000,Number(override.growMs||override.duration||override.timerDuration)||CROP_GROW_MS);
+  const finishAt=Number(override.finishAt||override.timerFinishAt)||nowEpoch+growMs;
+  const startedAt=Number(override.startedAt||override.timerStartedAt)||Math.max(nowEpoch,finishAt-growMs);
+  group.userData={cropId:id, timerStartedAt:startedAt, timerFinishAt:finishAt, timerDuration:Math.max(1000,finishAt-startedAt), timerLabel:override.label||override.timerLabel||cropStageLabel(id,override.kind), autoGrowTo:override.autoGrowTo||0, tutorial:override.tutorial===true};
   if(id!==B.WHEAT_3){
     const timer=makeCropTimerSprite();
-    timer.position.set(0,Math.max(1.05,h+.36),0);
+    timer.position.set(0,Math.max(1.22,h+.64),0);
+    timer.userData.baseY=timer.position.y;
+    if(group.userData.tutorial)timer.scale.set(1.9,.72,1);
     group.userData.timer=timer;
     group.add(timer);
   }
   group.position.set(x+.5,y,z+.5);
   cropGroup.add(group);
-  cropMeshes[x+','+y+','+z]=group;
+  cropMeshes[key]=group;
 }
 function tickCropTimers(now){
   for(const k in cropMeshes){
     const group=cropMeshes[k], timer=group&&group.userData&&group.userData.timer;
     if(!timer) continue;
     const ud=group.userData;
-    const p=(now-(ud.timerStarted||now))/(ud.timerDuration||CROP_GROW_MS);
-    const step=Math.floor(Math.max(0,Math.min(1,p))*40);
-    if(step!==timer.userData.last){
-      timer.userData.last=step;
-      drawCropTimer(timer.userData.canvas,step/40);
+    const duration=Math.max(1000,Number(ud.timerDuration)||CROP_GROW_MS);
+    const finishAt=Number(ud.timerFinishAt)||Date.now()+duration;
+    const startedAt=Number(ud.timerStartedAt)||finishAt-duration;
+    const seconds=Math.max(0,(finishAt-Date.now())/1000);
+    const p=Math.max(0,Math.min(1,(Date.now()-startedAt)/duration));
+    const done=seconds<=0;
+    if(done&&ud.autoGrowTo&&isCropBlock(ud.autoGrowTo)){
+      const [x,y,z]=k.split(',').map(Number);
+      setB(x,y,z,ud.autoGrowTo);
+      delete cropTimerOverrides[k];
+      syncCropMesh(x,y,z,ud.autoGrowTo);
+      rebuildAround(x,z);
+      continue;
+    }
+    const whole=Math.ceil(seconds), progressKey=Math.floor(p*100);
+    if(whole!==timer.userData.last||progressKey!==timer.userData.progressKey||done!==timer.userData.doneLast){
+      timer.userData.last=whole;
+      timer.userData.progressKey=progressKey;
+      timer.userData.doneLast=done;
+      drawCropTimer(timer.userData.canvas,seconds,done,ud.timerLabel||cropStageLabel(ud.cropId),p);
       timer.userData.tex.needsUpdate=true;
     }
-    timer.material.opacity=p>=1?.98:.86;
+    timer.material.opacity=done?.98:.9;
+    timer.position.y=(timer.userData.baseY||timer.position.y)+Math.sin(now*.004+(group.position.x+group.position.z)*.1)*.04;
   }
 }
 const chunkMeshes = {};
@@ -9884,6 +9978,7 @@ gameContext.registerModule('world', Object.freeze({
   resetParticleBudget,
   particleBudgetStats,
   buildTamingLand,
+  updateCropTimerVisual,
   syncInsulatorMesh,
   ensureInsulatorMesh,
   syncDragonIncubationMesh,

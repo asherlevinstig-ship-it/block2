@@ -5824,6 +5824,18 @@ class GameRoom extends Room {
     this.state.edits.set(x + ',' + y + ',' + z, id);
     this.dirtyWorld = true;
   }
+  broadcastCropTimer(x, y, z, id, startedAt, finishAt, kind = 'wheat') {
+    if (id !== W.B.WHEAT_1 && id !== W.B.WHEAT_2) return;
+    const duration = Math.max(1000, Number(finishAt) - Number(startedAt));
+    this.broadcast('cropTimer', {
+      x, y, z,
+      id,
+      kind: kind === 'windseed' ? 'windseed' : 'wheat',
+      startedAt,
+      finishAt,
+      growMs: duration,
+    });
+  }
   handleFarm(client, m) {
     const p = this.state.players.get(client.sessionId);
     const rec = this.profileFor(client);
@@ -5868,9 +5880,13 @@ class GameRoom extends Room {
       if (windseed) this.worldProgress.cropKinds[key] = kind;
       else delete this.worldProgress.cropKinds[key];
       this.dirtyWorldProgress = true;
-      this.cropTimers.set(key, Date.now() + this.cropGrowMs(farmerLevel));
+      const startedAt = Date.now();
+      const growMs = this.cropGrowMs(farmerLevel);
+      const finishAt = startedAt + growMs;
+      this.cropTimers.set(key, finishAt);
+      this.broadcastCropTimer(x, y, z, W.B.WHEAT_1, startedAt, finishAt, kind);
       this.recordFarmProgress(client, action);
-      return client.send('farmResult', { action, x, y, z, slot, seedId, kind });
+      return client.send('farmResult', { action, x, y, z, slot, seedId, kind, id: W.B.WHEAT_1, startedAt, finishAt, growMs });
     }
     if (action === 'fertilize') {
       if (farmerLevel < farmerRules.fieldcraftLevel) return client.send('farmReject', { reason: 'farmer_level', level: farmerRules.fieldcraftLevel });
@@ -5881,10 +5897,16 @@ class GameRoom extends Room {
       this.setWorldBlock(x, y, z, next);
       const key = x + ',' + y + ',' + z;
       const meta = this.cropMeta.get(key) || { kind: (this.worldProgress.cropKinds || {})[key] || 'wheat' };
+      let startedAt = Date.now(), growMs = 0, finishAt = 0;
       if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
-      else this.cropTimers.set(key, Date.now() + this.cropGrowMs(farmerLevel));
+      else {
+        growMs = this.cropGrowMs(farmerLevel);
+        finishAt = startedAt + growMs;
+        this.cropTimers.set(key, finishAt);
+        this.broadcastCropTimer(x, y, z, next, startedAt, finishAt, meta.kind);
+      }
       this.grantJobXp(client, 'farmer', 2);
-      return client.send('farmResult', { action, x, y, z, slot, id: next, kind: meta.kind, ripe: next === W.B.WHEAT_3 });
+      return client.send('farmResult', { action, x, y, z, slot, id: next, kind: meta.kind, ripe: next === W.B.WHEAT_3, startedAt, finishAt, growMs });
     }
     if (action === 'harvest') {
       if (id !== W.B.WHEAT_3) return client.send('farmReject', { reason: 'ripe' });
@@ -5934,11 +5956,19 @@ class GameRoom extends Room {
       if (due > now) return;
       const next = id === W.B.WHEAT_1 ? W.B.WHEAT_2 : W.B.WHEAT_3;
       const meta = this.cropMeta.get(key);
+      let nextDue = 0, stageGrowMs = 0;
       if (next === W.B.WHEAT_3) this.cropTimers.delete(key);
-      else this.cropTimers.set(key, now + this.cropGrowMs(meta && meta.level));
-      grow.push({ x, y, z, id: next });
+      else {
+        stageGrowMs = this.cropGrowMs(meta && meta.level);
+        nextDue = now + stageGrowMs;
+        this.cropTimers.set(key, nextDue);
+      }
+      grow.push({ x, y, z, id: next, kind: meta && meta.kind || (this.worldProgress.cropKinds || {})[key] || 'wheat', startedAt: now, finishAt: nextDue, growMs: stageGrowMs });
     });
-    for (const g of grow.slice(0, 32)) this.setWorldBlock(g.x, g.y, g.z, g.id);
+    for (const g of grow.slice(0, 32)) {
+      this.setWorldBlock(g.x, g.y, g.z, g.id);
+      if (g.id !== W.B.WHEAT_3) this.broadcastCropTimer(g.x, g.y, g.z, g.id, g.startedAt, g.finishAt, g.kind);
+    }
   }
   // dev-only inventory grant; gated behind DEV_CHEATS so production never honors it
   handleDevGive(client, text) {

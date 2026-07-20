@@ -1986,6 +1986,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('landClaimTrustNotice', m=>applyLandClaimTrustNotice(m));
     room.onMessage('landClaimTrustReject', m=>landClaimTrustRejected(m));
     room.onMessage('farmResult', m=>applyFarmResult(m));
+    room.onMessage('cropTimer', m=>{
+      if(m&&worldApi.updateCropTimerVisual)worldApi.updateCropTimerVisual(m.x|0,m.y|0,m.z|0,m);
+    });
     room.onMessage('farmReject', m=>farmRejected(m));
     room.onMessage('foodResult', m=>{applyFoodResult(m);if(m&&ITEMS[m.id])eventFeed('[Food]','Ate '+feedItemName(m.id)+(m.buff?'. Well Fed active.':'.'),{key:'food:'+m.id,cooldown:2500});});
     room.onMessage('foodBuff', m=>{
@@ -2681,6 +2684,15 @@ function applyFarmResult(m){
     const s=inv[i];
     const consumed=m.action==='fertilize'?I.COMPOST:(m.seedId||I.WHEAT_SEEDS);
     if(s && s.id===consumed){ s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); }
+    if(!m.ripe&&worldApi.updateCropTimerVisual){
+      worldApi.updateCropTimerVisual(m.x|0,m.y|0,m.z|0,{
+        id:m.id||B.WHEAT_1,
+        kind:m.kind||'wheat',
+        startedAt:m.startedAt,
+        finishAt:m.finishAt,
+        growMs:m.growMs,
+      });
+    }
   }
   if(m.action==='plant'&&m.kind==='windseed'){
     SFX.success();

@@ -3150,7 +3150,9 @@ function farmAction(hit){
     if(s.id===I.WINDSEED && jobLevelFromXp(jobXpFor('farmer'))<JOB_SYSTEM.FARMER_RULES.windseedLevel){sysMsg('Farmer Lv 5 is required to cultivate <b>Prairie Windseeds</b>');return true;}
     if(NET.on && !tutorialMeadowFarm && !tutorialFarmerFarm) NET.room.send('farm',{action:'plant',x:hit.x,y:hit.y+1,z:hit.z,slot:selected});
     else {
-      setB(hit.x,hit.y+1,hit.z,B.WHEAT_1); syncCropMesh(hit.x,hit.y+1,hit.z,B.WHEAT_1);
+      setB(hit.x,hit.y+1,hit.z,B.WHEAT_1);
+      const cropTimer= tutorialFarmerFarm ? {growMs:5000,label:'WHEAT SPROUT',autoGrowTo:B.WHEAT_3,tutorial:true} : {};
+      syncCropMesh(hit.x,hit.y+1,hit.z,B.WHEAT_1,cropTimer);
       s.count--; if(s.count<=0) inv[selected]=null; refreshHUD();
       gainJobXP('farmer',1,'plant');
       jobContractProgress('farm', 1, I.WHEAT_SEEDS);

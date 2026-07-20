@@ -51,6 +51,21 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
 
   const plant = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
   expect(plant).toMatchObject({ ok: true, debug: { step: 2, plant: { above: 23 } } });
+  const cropTimer = await page.evaluate(() => {
+    const debug = window.__BLOCKCRAFT_E2E__.farmerTutorialVisualDebug();
+    const key = `${debug.plant.x},${debug.plant.y + 1},${debug.plant.z}`;
+    const group = globalThis.cropMeshes && globalThis.cropMeshes[key];
+    const timer = group && group.userData && group.userData.timer;
+    return {
+      exists: !!timer,
+      duration: group && group.userData && group.userData.timerDuration,
+      autoGrowTo: group && group.userData && group.userData.autoGrowTo,
+      scaleX: timer && timer.scale && timer.scale.x,
+      scaleY: timer && timer.scale && timer.scale.y,
+    };
+  });
+  expect(cropTimer).toMatchObject({ exists: true, duration: 5000, autoGrowTo: 25 });
+  expect(cropTimer.scaleX).toBeGreaterThan(1.5);
   await expect(page.locator('#tutorialhud')).toContainText('HARVEST WHEAT');
 
   const harvest = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
