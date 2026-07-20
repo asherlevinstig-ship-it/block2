@@ -2309,6 +2309,10 @@ function netRestoreProfile(m){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job);
     }else if(restoreTamingLand){
       if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true});
+    }else if(serverHasActiveRoom&&dim==='job'&&dimensionsApi.exitJobTutorialRoom){
+      dimensionsApi.exitJobTutorialRoom();
+    }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
+      dimensionsApi.exitTamingLand();
     }
     const restorePos=(restoreJobRoom||restoreTamingLand)&&Array.isArray(activeRoom.pos)?activeRoom.pos:m.pos;
     if(Array.isArray(restorePos) && !onboardingActive){

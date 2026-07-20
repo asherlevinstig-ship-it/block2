@@ -40,7 +40,7 @@ const CLUSTERS = {
     'dirtyFurnaces', 'dirtyIncubations', 'dirtyGates', 'dirtyTeams', 'dirtyGuilds', 'dirtyNests',
     'dirtyPlayers', 'lastSaveMsg',
   ],
-  initDragonState: ['dragonFollowBondTravel', 'dragonIncubations', 'dragonTraining', 'nestDragons'],
+  initDragonState: ['dragonFollowBondTravel', 'dragonIncubations', 'dragonLoanOffers', 'dragonLoanSeq', 'dragonTraining', 'nestDragons'],
 };
 
 for (const [method, expected] of Object.entries(CLUSTERS)) {
