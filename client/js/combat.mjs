@@ -1195,6 +1195,13 @@ function petTamerPracticeInsulatorPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
   return room?{x:room.x+.5,y:room.G+1,z:room.z+8.5,bx:room.x|0,by:(room.G+1)|0,bz:(room.z+8)|0}:null;
 }
+function syncPetTamerPracticeInsulatorVisual(){
+  const p=petTamerPracticeInsulatorPos();
+  if(!p)return false;
+  if(worldApi.ensureInsulatorMesh)worldApi.ensureInsulatorMesh(p.bx,p.by,p.bz,B.EGG_INSULATOR);
+  else if(worldApi.syncInsulatorMesh)worldApi.syncInsulatorMesh(p.bx,p.by,p.bz,B.EGG_INSULATOR);
+  return true;
+}
 function petTamerPracticeRoostPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
   return room?{x:room.x-34,y:room.G+1.035,z:room.z+34}:null;
@@ -1311,7 +1318,7 @@ function clearPetTamerTutorialMount(){
 }
 function clearPetTamerTutorialEgg(){
   const p=petTamerPracticeInsulatorPos();
-  if(p&&worldState.removeDragonIncubationMesh)worldState.removeDragonIncubationMesh(p.bx,p.by,p.bz);
+  if(p&&worldApi.removeDragonIncubationMesh)worldApi.removeDragonIncubationMesh(p.bx,p.by,p.bz);
   jobTutorialPetEggStarted=false;
   jobTutorialPetEggReadyAt=0;
   jobTutorialPetEggType='verdant';
@@ -1319,11 +1326,12 @@ function clearPetTamerTutorialEgg(){
 function syncPetTamerTutorialEggTimer(){
   if(!jobTutorialPetEggStarted||!jobTutorialPetEggReadyAt)return false;
   const p=petTamerPracticeInsulatorPos();
-  if(!p||!worldState.syncDragonIncubationMesh)return false;
+  if(!p||!worldApi.syncDragonIncubationMesh)return false;
+  syncPetTamerPracticeInsulatorVisual();
   const key=p.bx+','+p.by+','+p.bz;
-  if(worldState.dragonIncubationMeshes&&worldState.dragonIncubationMeshes[key])return true;
+  if(worldApi.dragonIncubationMeshes&&worldApi.dragonIncubationMeshes[key])return true;
   const type=jobTutorialPetEggType||'verdant';
-  worldState.syncDragonIncubationMesh({
+  worldApi.syncDragonIncubationMesh({
     x:p.bx,y:p.by,z:p.bz,type,eggId:(DRAGON_TYPES[type]&&DRAGON_TYPES[type].egg)||I.EGG_VERDANT,
     startedAt:jobTutorialPetEggReadyAt-PET_TAMER_TUTORIAL_HATCH_MS,finishAt:jobTutorialPetEggReadyAt,
     incubationMs:PET_TAMER_TUTORIAL_HATCH_MS,tutorial:true
@@ -1435,7 +1443,8 @@ function startPetTamerTutorialEggHatch(){
   jobTutorialPetEggStarted=true;
   jobTutorialPetEggReadyAt=now+PET_TAMER_TUTORIAL_HATCH_MS;
   jobTutorialPetEggType=type;
-  if(worldState.syncDragonIncubationMesh)worldState.syncDragonIncubationMesh({
+  syncPetTamerPracticeInsulatorVisual();
+  if(worldApi.syncDragonIncubationMesh)worldApi.syncDragonIncubationMesh({
     x:p.bx,y:p.by,z:p.bz,type,eggId:(DRAGON_TYPES[type]&&DRAGON_TYPES[type].egg)||I.EGG_VERDANT,
     startedAt:now,finishAt:jobTutorialPetEggReadyAt,incubationMs:PET_TAMER_TUTORIAL_HATCH_MS,tutorial:true
   });
@@ -1558,7 +1567,7 @@ function performPetTamerDragonTutorialAction(){
       return true;
     }
     const p=petTamerPracticeInsulatorPos();
-    if(p&&worldState.removeDragonIncubationMesh)worldState.removeDragonIncubationMesh(p.bx,p.by,p.bz);
+    if(p&&worldApi.removeDragonIncubationMesh)worldApi.removeDragonIncubationMesh(p.bx,p.by,p.bz);
     jobTutorialPetEggStarted=false;
     jobTutorialPetEggReadyAt=0;
     jobTutorialPetEggType='verdant';
@@ -1894,7 +1903,10 @@ function tickJobTutorial(now){
   if(jobTutorialJob==='pet_tamer'){
     updatePetTamerFlightRing(now);
     if(jobTutorialPetDragonStep<=2)ensurePetTamerTutorialTreat(false);
-    if(jobTutorialPetDragonStep===0&&jobTutorialPetEggStarted)syncPetTamerTutorialEggTimer();
+    if(jobTutorialPetDragonStep===0){
+      syncPetTamerPracticeInsulatorVisual();
+      if(jobTutorialPetEggStarted)syncPetTamerTutorialEggTimer();
+    }
     if(completePetTamerApproachIfReady(now)) return;
     if(jobTutorialPetDragonStep===0&&jobTutorialPetEggStarted&&jobTutorialPetEggReadyAt&&Date.now()>=jobTutorialPetEggReadyAt&&now>jobTutorialReturnWarnAt){
       jobTutorialReturnWarnAt=now+1600;
@@ -3625,6 +3637,8 @@ gameContext.registerState('combat', Object.freeze({
   get jobTutorialTraded(){ return jobTutorialTraded; },
   get jobTutorialPetDragonSeen(){ return jobTutorialPetDragonSeen; },
   get jobTutorialPetDragonStep(){ return jobTutorialPetDragonStep; },
+  get jobTutorialPetEggStarted(){ return jobTutorialPetEggStarted; },
+  get jobTutorialPetEggReadyAt(){ return jobTutorialPetEggReadyAt; },
   get abilityAwakeningOpen(){ return abilityAwakeningOpen; },
   get abilityTrainingActive(){ return abilityTrainingActive; },
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
@@ -3643,6 +3657,19 @@ gameContext.registerModule('combat', Object.freeze({
   shouldOpenLevel2JobChoice,
   startJobTutorial,
   resumeJobTutorial,
+  performPetTamerDragonTutorialAction,
+  petTamerVisualDebug:()=>{
+    const p=petTamerPracticeInsulatorPos();
+    return {
+      active:!!jobTutorialActive,
+      job:jobTutorialJob,
+      step:jobTutorialPetDragonStep|0,
+      eggStarted:!!jobTutorialPetEggStarted,
+      eggReadyAt:jobTutorialPetEggReadyAt||0,
+      insulator:p,
+      egg:p&&worldApi.dragonIncubationVisualDebug?worldApi.dragonIncubationVisualDebug(p.bx,p.by,p.bz):null
+    };
+  },
   showAbilityAwakening,
   startAbilityTraining,
   nearbyTavernGameTable,

@@ -1491,8 +1491,12 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/tutorial:true/);
   assert.match(combat,/syncPetTamerTutorialEggTimer\(\)/);
   assert.match(combat,/addTemporaryJobTutorialItem\(I\.EGG_VERDANT,1,true\)/);
-  assert.match(combat,/worldState\.syncDragonIncubationMesh/);
-  assert.match(combat,/worldState\.removeDragonIncubationMesh/);
+  assert.match(combat,/function syncPetTamerPracticeInsulatorVisual\(\)/);
+  assert.match(combat,/worldApi\.ensureInsulatorMesh\(p\.bx,p\.by,p\.bz,B\.EGG_INSULATOR\)/);
+  assert.match(combat,/worldApi\.syncDragonIncubationMesh\(\{/);
+  assert.match(combat,/petTamerVisualDebug:\(\)=>/);
+  assert.match(frame,/petTamerVisualDebug:\(\)=>combatApi\.petTamerVisualDebug/);
+  assert.match(combat,/worldApi\.removeDragonIncubationMesh/);
   assert.match(combat,/function completePetTamerApproachIfReady\(now\)/);
   assert.match(combat,/function commandPetTamerPracticeDragon\(\)/);
   assert.match(combat,/if\(g&&g\.visible&&g\.position\)return \{x:g\.position\.x,y:g\.position\.y,z:g\.position\.z\}/);
@@ -1552,6 +1556,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/const exitX=cx-34, exitZ=cz\+34/);
   assert.match(combat,/return room\?\{x:room\.x-34,y:room\.G\+1\.035,z:room\.z\+34\}:null/);
   assert.match(world,/function drawIncubationTimer\(canvas, seconds, done, label='HATCH', progress=0\)/);
+  assert.match(world,/ensureInsulatorMesh/);
+  assert.match(world,/dragonIncubationVisualDebug/);
   assert.match(world,/const eggScale=m\.tutorial\?1\.55:1/);
   assert.match(world,/tutorialHalo=new THREE\.Mesh\(new THREE\.TorusGeometry\(\.72,\.045,10,40\),haloMat\)/);
   assert.match(world,/timer\.position\.set\(0,2\.8,0\)/);
@@ -1575,9 +1581,13 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(social,/function renderTutorialDragonWheel\(practice\)/);
   assert.match(social,/HATCHED DRAGON/);
   assert.match(social,/TUTORIAL BOND/);
-  assert.match(social,/STAY<\/b><span>Ask your hatchling to wait/);
+  assert.match(social,/tutorial-command-ready/);
+  assert.match(social,/STAY<\/b><span>Click to set post/);
+  assert.match(social,/command-clicked/);
   assert.match(social,/FOLLOWING YOU/);
   assert.match(social,/STAY SET/);
+  assert.match(styles,/dragonStayPulse/);
+  assert.match(styles,/dragonStayClick/);
   assert.match(social,/typeof practice\.hatched==='function'&&practice\.hatched\(\)/);
   assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8'),/EGG HATCH/);
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);

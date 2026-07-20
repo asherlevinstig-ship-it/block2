@@ -185,13 +185,14 @@ function renderTutorialDragonWheel(practice){
   const center=chatWheelEl.querySelector('.wheelcenter span');
   if(center)center.innerHTML='<span class="drole">TUTORIAL BOND</span><span>'+escHTML(status.key||'DRAGON LESSON')+'</span><span>'+escHTML(status.detail||'Stay close to your dragon')+'</span>';
   const commandReady=practice&&typeof practice.commandAvailable==='function'&&practice.commandAvailable();
-  const action=document.createElement('button');action.type='button';action.className='wheelitem selected'+(commandReady?'':' dim');
+  const action=document.createElement('button');action.type='button';action.className='wheelitem selected'+(commandReady?' tutorial-command-ready':' dim');
   action.style.left='215px';action.style.top='72px';
   if(commandReady){
-    action.innerHTML='<b>STAY</b><span>Ask your hatchling to wait</span>';
+    action.innerHTML='<b>STAY</b><span>Click to set post</span>';
     action.addEventListener('click',()=>{
+      action.classList.add('command-clicked');
       const done=typeof practice.commandStay==='function'&&practice.commandStay();
-      closeDragonCommandWheel(!!done);
+      setTimeout(()=>closeDragonCommandWheel(!!done),done?170:0);
     });
   }else{
     const step=Number(status.step)||0;

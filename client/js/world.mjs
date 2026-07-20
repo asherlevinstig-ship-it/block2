@@ -1971,6 +1971,13 @@ function syncInsulatorMesh(x,y,z,id){
   insulatorGroup.add(group);
   insulatorMeshes[x+','+y+','+z]=group;
 }
+function ensureInsulatorMesh(x,y,z,id=B.EGG_INSULATOR){
+  const key=x+','+y+','+z;
+  if(id!==B.EGG_INSULATOR){ removeInsulatorMesh(x,y,z,true); return false; }
+  if(insulatorMeshes[key]) return true;
+  syncInsulatorMesh(x,y,z,id);
+  return true;
+}
 const DRAGON_EGG_COLORS={
   [I.DRAGON_EGG]:{shell:0xc85a2e, speck:0xffcf5a},
   [I.EGG_VERDANT]:{shell:0x64b96a, speck:0xcaff8b},
@@ -9575,6 +9582,26 @@ gameContext.registerModule('world', Object.freeze({
   inOverworldBattle,
   resetParticleBudget,
   particleBudgetStats,
+  syncInsulatorMesh,
+  ensureInsulatorMesh,
+  syncDragonIncubationMesh,
+  removeDragonIncubationMesh,
+  get dragonIncubationMeshes(){ return dragonIncubationMeshes; },
+  dragonIncubationVisualDebug:(x,y,z)=>{
+    const key=incubationKey(x|0,y|0,z|0), group=dragonIncubationMeshes[key];
+    if(!group)return {exists:false,key};
+    const ud=group.userData||{}, timer=ud.timer||null;
+    return {
+      exists:true,
+      key,
+      visible:group.visible!==false,
+      childCount:group.children.length,
+      tutorial:!!ud.tutorial,
+      ready:!!ud.ready,
+      position:{x:group.position.x,y:group.position.y,z:group.position.z},
+      timer:timer?{visible:timer.visible!==false,y:timer.position.y,scaleX:timer.scale.x,scaleY:timer.scale.y,hasCanvas:!!(timer.userData&&timer.userData.canvas)}:null
+    };
+  },
   tradeTargetUnderCrosshair,
   townSocialTargetNear,
 }));
