@@ -3343,7 +3343,8 @@ class GameRoom extends Room {
   }
   tradePlayersClose(a, b, range = 8) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
-    return !!(pa && pb && !pa.dgn && !pb.dgn && Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
+    return !!(pa && pb && !pa.dgn && !pb.dgn && this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z) &&
+      Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
   }
   tradeDistanceInfo(a, b) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
@@ -3373,9 +3374,7 @@ class GameRoom extends Room {
     return best;
   }
   socialPlayersCloseInTown(a, b, range = 8) {
-    const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
-    return !!(pa && pb && !pa.dgn && !pb.dgn && this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z) &&
-      Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
+    return this.tradePlayersClose(a, b, range);
   }
   handleFriendAdd(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');

@@ -8568,6 +8568,7 @@ function remoteUnderCrosshair(range=4.4){
 }
 function tradeTargetUnderCrosshair(range=4.8){
   if(!NET.on||!NET.room||!NET.remotes) return null;
+  if(dim!=='overworld'||!player||!isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))) return null;
   const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
   const o=new THREE.Vector3(player.pos.x,player.pos.y+player.eye,player.pos.z);
   let best=null, bd=range;
@@ -8577,6 +8578,7 @@ function tradeTargetUnderCrosshair(range=4.8){
     if(!r||!r.grp||!r.grp.visible) continue;
     const ref=r.ref;
     if(ref&&ref.dgn) continue;
+    if(!isTownLand(Math.floor(r.grp.position.x),Math.floor(r.grp.position.z))) continue;
     v.set(r.grp.position.x-o.x, r.grp.position.y+1.0-o.y, r.grp.position.z-o.z);
     const t=v.dot(dir);
     if(t<0||t>range) continue;

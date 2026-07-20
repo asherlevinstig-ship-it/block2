@@ -5421,11 +5421,11 @@ function openPlayerSocialUI(target){
   const h=document.createElement('h2');h.textContent='NEARBY HUNTER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(target.name||'Hunter').toUpperCase();qpanelEl.appendChild(sub);
   const intro=document.createElement('p');intro.className='qtext';
-  intro.innerHTML='Choose what to do with this nearby player. Social actions are only available inside <b>Town of Beginnings</b>.';
+  intro.innerHTML='Choose what to do with this nearby player. Trade, friends, and pet training are only available when both players are close together inside <b>Town of Beginnings</b>.';
   qpanelEl.appendChild(intro);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('TRADE',()=>openPlayerTradeUI(target)));
-  if(dragonLoanOwnedTypes().length)row.appendChild(qBtn('LOAN DRAGON',()=>openDragonLoanUI(target),true));
+  if(dragonLoanOwnedTypes().length)row.appendChild(qBtn('TRAIN MY PET',()=>openDragonLoanUI(target),true));
   const returnLoan=dragonLoanReturnForTarget(target);
   if(returnLoan)row.appendChild(qBtn('RETURN DRAGON',()=>{NET.room.send('dragonLoanReturn',{loanId:returnLoan.id});closeQWin();},true));
   row.appendChild(qBtn('ADD FRIEND',()=>{NET.room.send('friendAdd',{targetSid:target.sid});closeQWin();},true));

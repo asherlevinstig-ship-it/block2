@@ -356,6 +356,10 @@ function itemCount(prof, id) {
   return (prof.inv || []).reduce((n, s) => n + (s && s.id === id ? s.count : 0), 0);
 }
 
+function townPlayerPos(dx = 0, dz = 0) {
+  return { x: W.TOWN.TC + dx, z: W.TOWN.TC + dz, y: W.TOWN.G + 1 };
+}
+
 function readClientModule(rel) {
   return fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', rel), 'utf8');
 }
@@ -367,10 +371,12 @@ test('client modules expose and route player trading actions', () => {
   const networking = readClientModule('networking.mjs');
   const gameRoom = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   assert.match(world, /function tradeTargetUnderCrosshair/);
+  assert.match(world, /if\(dim!=='overworld'\|\|!player\|\|!isTownLand\(Math\.floor\(player\.pos\.x\),Math\.floor\(player\.pos\.z\)\)\) return null;/);
   assert.match(world, /function townSocialTargetNear/);
   assert.match(world, /"tradeTargetUnderCrosshair":\{get:\(\)=>tradeTargetUnderCrosshair\}/);
   assert.match(world, /"townSocialTargetNear":\{get:\(\)=>townSocialTargetNear\}/);
   assert.match(combat, /KeyE[\s\S]*townSocialTargetNear[\s\S]*openPlayerSocialUI[\s\S]*openPlayerTradeUI/);
+  assert.match(combat, /Trade, add friend, or train pet/);
   assert.match(menus, /function openPlayerTradeUI/);
   assert.match(menus, /player-trade-sync/);
   assert.match(menus, /function tradeInventoryPicker/);
@@ -381,6 +387,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function applyTradePending[\s\S]*closeQWin\(true\)/);
   assert.match(menus, /function qBtn[\s\S]*b\.type='button'[\s\S]*e\.preventDefault\(\); e\.stopPropagation\(\);/);
   assert.match(menus, /function openPlayerSocialUI/);
+  assert.match(menus, /pet training are only available when both players are close together inside/);
+  assert.match(menus, /TRAIN MY PET/);
   assert.match(menus, /function openDragonLoanUI/);
   assert.match(menus, /NET\.room\.send\('dragonLoanOffer'/);
   assert.match(menus, /NET\.room\.send\('dragonLoanAccept'/);
@@ -5340,8 +5348,8 @@ test('addRewardItem treats weapons and armor as individual durable gear', () => 
 
 test('player trade transfers an offered item for responder gold', () => {
   const room = makeRoom(), alice = makeClient('alice'), bob = makeClient('bob');
-  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 4 }], x: 20, z: 20 });
-  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 50, inv: [], x: 21, z: 20 });
+  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 4 }], ...townPlayerPos(0, 0) });
+  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 50, inv: [], ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
   const broadcasts = [];
   room.broadcast = (type, msg) => broadcasts.push({ type, msg });
@@ -5362,8 +5370,8 @@ test('player trade transfers an offered item for responder gold', () => {
 
 test('player trade can be accepted without an item or gold in return', () => {
   const room = makeRoom(), alice = makeClient('gift_alice'), bob = makeClient('gift_bob');
-  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 3 }], x: 20, z: 20 });
-  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 0, inv: [], x: 21, z: 20 });
+  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 2, inv: [{ id: I.BREAD, count: 3 }], ...townPlayerPos(0, 0) });
+  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 0, inv: [], ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 2, gold: 0 });
@@ -5380,8 +5388,8 @@ test('player trade can be accepted without an item or gold in return', () => {
 
 test('player trade supports item-for-item swaps', () => {
   const room = makeRoom(), alice = makeClient('swap_alice'), bob = makeClient('swap_bob');
-  const { prof: aProf } = seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
-  const { prof: bProf } = seedPlayer(room, bob, { inv: [{ id: I.IRON_INGOT, count: 3 }], x: 21, z: 20 });
+  const { prof: aProf } = seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], ...townPlayerPos(0, 0) });
+  const { prof: bProf } = seedPlayer(room, bob, { inv: [{ id: I.IRON_INGOT, count: 3 }], ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });
@@ -5396,8 +5404,8 @@ test('player trade supports item-for-item swaps', () => {
 
 test('player trade validates range before creating an offer', () => {
   const room = makeRoom(), alice = makeClient('far_alice'), bob = makeClient('far_bob');
-  seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
-  seedPlayer(room, bob, { inv: [], x: 60, z: 20 });
+  seedPlayer(room, alice, { inv: [{ id: I.BREAD, count: 1 }], ...townPlayerPos(0, 0) });
+  seedPlayer(room, bob, { inv: [], ...townPlayerPos(40, 0) });
   room.clients = [alice, bob];
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });
@@ -5408,10 +5416,28 @@ test('player trade validates range before creating an offer', () => {
   assert.equal(alice.sent.at(-1).msg.distance, 40);
 });
 
+test('player trade and pet training loans require town proximity', () => {
+  const room = makeRoom(), owner = makeClient('outside_owner'), tamer = makeClient('outside_tamer');
+  const { prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
+  const { prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, x: 21, z: 20 });
+  ownerProf.mountUnlocks = ['dragon:ember'];
+  tamerProf.job = 'pet_tamer';
+  room.clients = [owner, tamer];
+
+  room.handleTradeOffer(owner, { targetSid: tamer.sessionId, slot: 0, count: 1, gold: 0 });
+  assert.equal(room.trades.size, 0);
+  assert.equal(owner.sent.at(-1).type, 'tradeReject');
+  assert.equal(owner.sent.at(-1).msg.reason, 'range');
+
+  room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'ember', gold: 10 });
+  assert.equal(owner.sent.at(-1).type, 'dragonLoanReject');
+  assert.equal(owner.sent.at(-1).msg.reason, 'range');
+});
+
 test('player trade can resolve a nearby named target when the client session id is stale', () => {
   const room = makeRoom(), alice = makeClient('name_alice'), bob = makeClient('name_bob');
-  seedPlayer(room, alice, { name: 'Alice', inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
-  seedPlayer(room, bob, { name: 'Dylan', inv: [], x: 21, z: 20 });
+  seedPlayer(room, alice, { name: 'Alice', inv: [{ id: I.BREAD, count: 1 }], ...townPlayerPos(0, 0) });
+  seedPlayer(room, bob, { name: 'Dylan', inv: [], ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
   const broadcasts = [];
   room.broadcast = (type, msg) => broadcasts.push({ type, msg });
@@ -5425,8 +5451,8 @@ test('player trade can resolve a nearby named target when the client session id 
 
 test('player trade recovers stackable block offers when the client slot is stale', () => {
   const room = makeRoom(), alice = makeClient('stale_slot_alice'), bob = makeClient('stale_slot_bob');
-  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 0, inv: [null, { id: W.B.SAND, count: 3 }], x: 20, z: 20 });
-  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 25, inv: [], x: 21, z: 20 });
+  const { prof: aProf } = seedPlayer(room, alice, { name: 'Alice', gold: 0, inv: [null, { id: W.B.SAND, count: 3 }], ...townPlayerPos(0, 0) });
+  const { prof: bProf } = seedPlayer(room, bob, { name: 'Bob', gold: 25, inv: [], ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, itemId: W.B.SAND, count: 1, gold: 0 });
@@ -5445,8 +5471,8 @@ test('player trade recovers stackable block offers when the client slot is stale
 
 test('player trade reports what the server saw when an offered item is missing', () => {
   const room = makeRoom(), alice = makeClient('missing_item_alice'), bob = makeClient('missing_item_bob');
-  seedPlayer(room, alice, { name: 'Alice', gold: 0, inv: [], x: 20, z: 20 });
-  seedPlayer(room, bob, { name: 'Bob', gold: 25, inv: [], x: 21, z: 20 });
+  seedPlayer(room, alice, { name: 'Alice', gold: 0, inv: [], ...townPlayerPos(0, 0) });
+  seedPlayer(room, bob, { name: 'Bob', gold: 25, inv: [], ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, itemId: W.B.SAND, count: 1, gold: 0 });
@@ -5460,8 +5486,8 @@ test('player trade reports what the server saw when an offered item is missing',
 
 test('dragon training loan transfers gold and grants the pet tamer temporary dragon access', () => {
   const room = makeRoom(), owner = makeClient('dragon_owner'), tamer = makeClient('dragon_tamer');
-  const { token: ownerToken, prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 10, x: 20, z: 20, mount: 'dragon:ember' });
-  const { token: tamerToken, prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 80, x: 21, z: 20 });
+  const { token: ownerToken, prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 10, mount: 'dragon:ember', ...townPlayerPos(0, 0) });
+  const { token: tamerToken, prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 80, ...townPlayerPos(1, 0) });
   ownerProf.mountUnlocks = ['dragon:ember'];
   ownerProf.dragonNames = { ember: 'Cinder' };
   ownerProf.dragonRoleMastery = { ember: { follow: 0, guard: 0, stay: 0, rest: 0 } };
@@ -5494,8 +5520,8 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
 
 test('dragon training loan rejects non-tamers and duplicate dragon types', () => {
   const room = makeRoom(), owner = makeClient('loan_owner'), other = makeClient('loan_other');
-  const { prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, x: 20, z: 20 });
-  const { prof: otherProf } = seedPlayer(room, other, { name: 'Other', gold: 100, x: 21, z: 20 });
+  const { prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, ...townPlayerPos(0, 0) });
+  const { prof: otherProf } = seedPlayer(room, other, { name: 'Other', gold: 100, ...townPlayerPos(1, 0) });
   ownerProf.mountUnlocks = ['dragon:frost'];
   room.clients = [owner, other];
 
@@ -5512,8 +5538,8 @@ test('dragon training loan rejects non-tamers and duplicate dragon types', () =>
 
 test('dragon training loan can be returned manually and expires after twelve hours', () => {
   const room = makeRoom(), owner = makeClient('return_owner'), tamer = makeClient('return_tamer');
-  const { token: ownerToken, prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, x: 20, z: 20 });
-  const { token: tamerToken, prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, x: 21, z: 20, mount: 'dragon:storm' });
+  const { token: ownerToken, prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, ...townPlayerPos(0, 0) });
+  const { token: tamerToken, prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, mount: 'dragon:storm', ...townPlayerPos(1, 0) });
   ownerProf.mountUnlocks = ['dragon:storm'];
   tamerProf.job = 'pet_tamer';
   room.clients = [owner, tamer];
@@ -5578,8 +5604,8 @@ test('player trade full inventory swap simulates outgoing slots before rejecting
   const bInv = Array.from({ length: 36 }, (_, i) => ({ id: I.COAL + i, count: 1 }));
   aInv[0] = { id: I.IRON_SWORD, count: 1, dur: 251, rarity: 'rare' };
   bInv[0] = { id: I.WOOD_SWORD, count: 1, dur: 59, rarity: 'common' };
-  const { prof: aProf } = seedPlayer(room, alice, { inv: aInv, x: 20, z: 20 });
-  const { prof: bProf } = seedPlayer(room, bob, { inv: bInv, x: 21, z: 20 });
+  const { prof: aProf } = seedPlayer(room, alice, { inv: aInv, ...townPlayerPos(0, 0) });
+  const { prof: bProf } = seedPlayer(room, bob, { inv: bInv, ...townPlayerPos(1, 0) });
   room.clients = [alice, bob];
 
   room.handleTradeOffer(alice, { targetSid: bob.sessionId, slot: 0, count: 1, gold: 0 });

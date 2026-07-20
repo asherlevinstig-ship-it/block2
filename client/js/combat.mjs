@@ -3225,7 +3225,7 @@ function nearbyInteractionPrompt(){
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at Level '+MEDITATION_UNLOCK_LEVEL),priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
-  if(socialTarget)push({key:'E',title:String(socialTarget.name||'Hunter'),small:'Trade or add friend',priority:111},socialTarget.distance||0);
+  if(socialTarget)push({key:'E',title:String(socialTarget.name||'Hunter'),small:'Trade, add friend, or train pet',priority:111},socialTarget.distance||0);
   const readyClaim=claimReadyQuestAtServicePrompt();
   if(readyClaim)push(readyClaim,0);
   if(nearFellowshipWeeklyCache())push({key:'G',title:'Fellowship Weekly Cache',small:'Claim unlocked rewards',priority:104},0);
