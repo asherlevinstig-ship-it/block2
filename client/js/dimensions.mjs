@@ -1803,6 +1803,7 @@ function applyDim(){
 }
 let onboardingRoomReturn=null;
 function localTutorialSpaceId(kind){
+  if(kind==='taming_land')return 'taming_land';
   return 'tutorial-'+kind+'-'+(NET.room&&NET.room.sessionId||'local');
 }
 function generateOnboardingRoom(){

@@ -7306,7 +7306,7 @@ test('onboarding and ability tutorials use private server spaces and restore the
   assert.equal(tamerRoom.handleTutorialEnter(tamer, { kind: 'taming_land' }), true);
   const tp = tamerRoom.state.players.get(tamer.sessionId);
   assert.equal(tp.dim, 'tutorial');
-  assert.match(tp.dgn, /^tutorial-taming_land-/);
+  assert.equal(tp.dgn, 'taming_land');
   tp.x = 430.5; tp.y = 22.25; tp.z = 918.5;
   assert.equal(tamerRoom.persistActiveRoomPose(tamer, tamerProfile, tp), true);
   assert.deepEqual(tamerProfile.activeRoom, { dim: 'taming_land' });
@@ -7315,6 +7315,21 @@ test('onboarding and ability tutorials use private server spaces and restore the
   assert.equal(tamer.sent.some(e => e.type === 'tutorialDimension' && e.msg.active && e.msg.kind === 'taming_land'), true);
   assert.equal(tamerRoom.leaveTutorialDimension(tamer), true);
   assert.equal(tamerProfile.activeRoom, null);
+
+  const sharedRoom = makeRoom(), one = makeClient('tamer-one'), two = makeClient('tamer-two');
+  const visibleOne = new Set(), visibleTwo = new Set();
+  one.view = { add: p => visibleOne.add(p), remove: p => visibleOne.delete(p) };
+  two.view = { add: p => visibleTwo.add(p), remove: p => visibleTwo.delete(p) };
+  seedPlayer(sharedRoom, one, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5, lvl: 2 });
+  seedPlayer(sharedRoom, two, { x: W.TOWN.TC + 2.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5, lvl: 2 });
+  sharedRoom.clients = [one, two];
+  assert.equal(sharedRoom.handleTutorialEnter(one, { kind: 'taming_land' }), true);
+  assert.equal(sharedRoom.handleTutorialEnter(two, { kind: 'taming_land' }), true);
+  assert.equal(sharedRoom.state.players.get(one.sessionId).dgn, 'taming_land');
+  assert.equal(sharedRoom.state.players.get(two.sessionId).dgn, 'taming_land');
+  sharedRoom.updateGameInterestViews();
+  assert.equal(visibleOne.has(sharedRoom.state.players.get(two.sessionId)), true, 'Taming Land players share one multiplayer space');
+  assert.equal(visibleTwo.has(sharedRoom.state.players.get(one.sessionId)), true, 'Taming Land players are mutually visible');
 });
 
 test('restart recovery ejects safely and refunds consumed private gate currency once', async () => {

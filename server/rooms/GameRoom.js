@@ -1527,6 +1527,7 @@ class GameRoom extends Room {
   }
 
   tutorialSpaceId(client, kind) {
+    if (kind === 'taming_land') return 'taming_land';
     return 'tutorial-' + kind + '-' + String(client && client.sessionId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
   }
 
@@ -1617,7 +1618,7 @@ class GameRoom extends Room {
     if (!p || p.dim !== 'tutorial') return false;
     const rec = client && this.profileFor(client);
     const wasJobTutorial = p.dgn && /^tutorial-job_/.test(p.dgn);
-    const wasTamingLand = p.dgn && /^tutorial-taming_land-/.test(p.dgn);
+    const wasTamingLand = p.dgn === 'taming_land';
     const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
     const pos = forcedPos
       ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
@@ -1644,7 +1645,7 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
     const jobMatch = p.dgn.match(/^tutorial-job_([a-z]+)-/);
-    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn.includes('-taming_land-') ? 'taming_land' : 'onboarding';
+    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn === 'taming_land' ? 'taming_land' : 'onboarding';
     client.send('tutorialDimension', { active: true, kind, job: jobMatch && jobMatch[1] || undefined, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
     return true;
   }
