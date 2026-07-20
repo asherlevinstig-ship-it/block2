@@ -1420,6 +1420,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const companions=fs.readFileSync(path.join(__dirname,'..','..','client','js','companions.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
@@ -1468,6 +1469,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/commandStay:commandPetTamerPracticeDragon/);
   assert.match(combat,/PET_TAMER_TUTORIAL_HATCH_MS=3000/);
   assert.match(combat,/function petTamerPracticeInsulatorPos\(\)/);
+  assert.match(combat,/function petTamerPracticeFlightRingPos\(\)/);
+  assert.match(combat,/function ensurePetTamerFlightRing\(\)/);
+  assert.match(combat,/function updatePetTamerFlightRing\(now=performance\.now\(\)\)/);
+  assert.match(combat,/function throughPetTamerFlightRing\(\)/);
   assert.match(combat,/by:\(room\.G\+1\)\|0,bz:\(room\.z\+8\)\|0/);
   assert.match(combat,/function startPetTamerTutorialEggHatch\(\)/);
   assert.match(combat,/tutorial:true/);
@@ -1485,7 +1490,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function finishPetTamerRoostLesson\(\)/);
   assert.match(combat,/mounted=true;\s*mountKind='dragon:verdant'/);
   assert.match(combat,/hatched:\(\)=>!!\(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&jobTutorialPetDragonStep>0/);
-  assert.match(combat,/ridden>=7/);
+  assert.match(combat,/Hold <b>Shift<\/b> to climb through the green ring/);
+  assert.match(combat,/if\(throughPetTamerFlightRing\(\)\)/);
+  assert.match(combat,/Good flight\. Follow the pillar/);
   assert.match(combat,/nearPetTamerPracticeRoost\(5\.2\)/);
   assert.match(combat,/if\(performPetTamerDragonTutorialAction\(\)\) return/);
   assert.match(combat,/if\(e\.shiftKey && commandPetTamerPracticeDragon\(\)\) return/);
@@ -1500,8 +1507,13 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/EGG \+ G/);
   assert.match(combat,/WALK CLOSE/);
   assert.match(combat,/SHIFT\+TAB/);
-  assert.match(combat,/Z \+ WASD/);
+  assert.match(combat,/FLY RING/);
+  assert.match(combat,/Z \+ SHIFT/);
   assert.match(combat,/B AT ROOST/);
+  assert.match(frame,/Dragon flight naturally glides downward\. Hold Shift to climb/);
+  assert.match(frame,/const dragonClimbing=sprintKey/);
+  assert.match(frame,/const targetVy=dragonClimbing\?8\.4:-2\.8/);
+  assert.match(companions,/Shift climbs, release to glide down/);
   assert.match(combat,/Press B at the roost station/);
   assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
   assert.match(combat,/setTimeout\(\(\)=>\{ if\(jobTutorialActive&&jobTutorialJob==='pet_tamer'\) completeJobTutorial\(\); \}, 900\)/);

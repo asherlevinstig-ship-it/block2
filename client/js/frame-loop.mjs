@@ -1773,10 +1773,18 @@ function tick(now){
     }
     wasInWater=feetWater;
     if(flying){
-      // Divine/dragon flight: no gravity. Space climbs, Shift descends, otherwise hover.
-      const climb=(keys['Space']?1:0)-((keys['ShiftLeft']||keys['ShiftRight'])?1:0);
-      if(climb!==0) player.vel.y=climb*9;
-      else player.vel.y += (0-player.vel.y)*Math.min(1,dt*8);
+      if(mounted && isDragon(mountKind)){
+        // Dragon flight naturally glides downward. Hold Shift to climb.
+        const dragonClimbing=sprintKey;
+        const targetVy=dragonClimbing?8.4:-2.8;
+        const accel=dragonClimbing?7.5:3.2;
+        player.vel.y += (targetVy-player.vel.y)*Math.min(1,dt*accel);
+        player.onGround=false;
+      }else{
+        const climb=(keys['Space']?1:0)-((keys['ShiftLeft']||keys['ShiftRight'])?1:0);
+        if(climb!==0) player.vel.y=climb*9;
+        else player.vel.y += (0-player.vel.y)*Math.min(1,dt*8);
+      }
       if(deityFlying&&Math.random()<dt*22){
         spawnParticle({x:player.pos.x+(Math.random()-.5)*.9,y:player.pos.y+.05+Math.random()*.55,z:player.pos.z+(Math.random()-.5)*.9,
           vx:(Math.random()-.5)*.35,vy:-.25-Math.random()*.45,vz:(Math.random()-.5)*.35,life:.55,grav:-.05,r:1,g:.82,b:.34});

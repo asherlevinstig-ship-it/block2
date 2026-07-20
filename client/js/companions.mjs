@@ -732,7 +732,7 @@ function applyMount(kind){       // kind '' dismounts
   if(NET.room) NET.room.send('mount', {kind});
   if(isDragon(kind)){
     const d=DRAGON_TYPES[dragonType(kind)];
-    showName((d?d.name:'Dragon')+' — Space up, Shift down'+(dragonUnlocks.length>1?', X to cycle':', X to dismiss'));
+    showName((d?d.name:'Dragon')+' — Shift climbs, release to glide down'+(dragonUnlocks.length>1?', X to cycle':', X to dismiss'));
   } else showName('Mounted up — press Z to dismount');
   questSystemCheck();
 }
