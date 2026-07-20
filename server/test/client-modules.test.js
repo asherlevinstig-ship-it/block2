@@ -1511,6 +1511,15 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
+  assert.match(combat,/const FARMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
+  assert.match(combat,/function farmerTutorialTargetPos\(\)/);
+  assert.match(combat,/function noteFarmerTutorialAction\(action\)/);
+  assert.match(combat,/jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&isJobTutorialMeadowLand\('farmer',hit\.x,hit\.z,2\)/);
+  assert.match(combat,/noteFarmerTutorialAction\('till'\)/);
+  assert.match(combat,/noteFarmerTutorialAction\('plant'\)/);
+  assert.match(combat,/noteFarmerTutorialAction\('harvest'\)/);
+  assert.match(combat,/get jobTutorialFarmerStep\(\)\{ return jobTutorialFarmerStep; \}/);
+  assert.match(networking,/farmerStep:Math\.max\(0,Math\.min\(3,Number\(combatState\.jobTutorialFarmerStep\)\|\|0\)\)/);
   assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
   assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
   assert.match(combat,/function performPetTamerDragonTutorialAction\(\)/);
@@ -1589,6 +1598,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/if\(jobId!=='pet_tamer'\)\{/);
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
+  assert.match(world,/for\(let x=cx-14;x<=cx-7;x\+\+\)for\(let z=cz-15;z<=cz-10;z\+\+\)/);
+  assert.match(world,/setBlock\(cx\+15,G\+1,cz-2,B\.CAMPFIRE\)/);
   assert.match(world,/const dragonLandingPad=\(ox,oz\)=>/);
   assert.match(world,/for\(let y=G\+1;y<=G\+7;y\+\+\)setBlock\(x\+dx,y,z\+dz,B\.AIR\)/);
   assert.match(world,/dragonLandingPad\(9,8\)/);
@@ -1893,9 +1904,10 @@ test('onboarding farming uses the G action inside the tutorial meadow',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(combat,/const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand\(hit\.x,hit\.z,2\);/);
-  assert.match(combat,/if\(dim!=='overworld'&&!tutorialMeadowFarm\) return false;/);
-  assert.match(combat,/const townFarmWorksite=!tutorialMeadowFarm&&dim==='overworld'&&isTownFarmWorksite\(hit\.x,hit\.z\);/);
-  assert.match(combat,/if\(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere\(hit\.x,hit\.z\)\)/);
+  assert.match(combat,/const tutorialFarmerFarm=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&isJobTutorialMeadowLand\('farmer',hit\.x,hit\.z,2\);/);
+  assert.match(combat,/if\(dim!=='overworld'&&!tutorialMeadowFarm&&!tutorialFarmerFarm\) return false;/);
+  assert.match(combat,/const townFarmWorksite=!tutorialMeadowFarm&&!tutorialFarmerFarm&&dim==='overworld'&&isTownFarmWorksite\(hit\.x,hit\.z\);/);
+  assert.match(combat,/if\(!tutorialMeadowFarm&&!tutorialFarmerFarm&&!townFarmWorksite&&!canBuildHere\(hit\.x,hit\.z\)\)/);
   assert.match(world,/function isTownFarmWorksite\(x,z\)/);
   assert.match(world,/"isTownFarmWorksite":\{get:\(\)=>isTownFarmWorksite\}/);
   assert.match(combat,/if\(onboardingActive&&tutorialMeadowFarm&&onboardingKind\(\)==='farm'\) onboardingFlags\.farmed=true;/);

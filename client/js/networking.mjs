@@ -2759,6 +2759,7 @@ function netSnapshot(){
         job:combatState.jobTutorialJob,
         minedDiamond:combatState.jobTutorialMinedDiamond===true,
         traded:combatState.jobTutorialTraded===true,
+        farmerStep:Math.max(0,Math.min(3,Number(combatState.jobTutorialFarmerStep)||0)),
         petDragonSeen:combatState.jobTutorialPetDragonSeen===true,
         petDragonStep:Math.max(0,Math.min(5,Number(combatState.jobTutorialPetDragonStep)||0)),
       }

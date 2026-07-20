@@ -77,6 +77,7 @@ const legacyCombatBindings={
   "jobChoiceOpen":{get:()=>jobChoiceOpen,set:value=>{jobChoiceOpen=value;}},
   "jobTutorialActive":{get:()=>jobTutorialActive,set:value=>{jobTutorialActive=value;}},
   "jobTutorialJob":{get:()=>jobTutorialJob,set:value=>{jobTutorialJob=value;}},
+  "jobTutorialFarmerStep":{get:()=>jobTutorialFarmerStep},
   "player":{get:()=>player},
   "prepareOnboardingStep":{get:()=>prepareOnboardingStep},
   "raycast":{get:()=>raycast},
@@ -751,10 +752,16 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 const MINER_TUTORIAL_TRADE_GOLD=45;
 const PET_TAMER_TUTORIAL_HATCH_MS=3000;
+const FARMER_TUTORIAL_ACTIONS=Object.freeze([
+  {key:'TILL SOIL',title:'Prepare Soil',verb:'HOE + G',purpose:'Select the wooden hoe, aim at the brown practice soil, then press G to turn it into farmland.',done:'You prepared soil. Farmers create usable land before anything can grow.'},
+  {key:'PLANT SEEDS',title:'Plant',verb:'SEEDS + G',purpose:'Select Wheat Seeds, aim at empty farmland, then press G to plant.',done:'You planted wheat. Seeds become food, cooking materials, and town supply.'},
+  {key:'HARVEST WHEAT',title:'Harvest',verb:'G',purpose:'Aim at mature golden wheat and press G to harvest it.',done:'You harvested wheat. The farmer loop feeds cooking, trading, and job contracts.'},
+  {key:'RETURN',title:'Return',verb:'BLUE PILLAR',purpose:'Walk into the blue return pillar to go back to Town of Beginnings.',done:'Farmer basics complete.'},
+]);
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'HATCH EGG',title:'Hatching',verb:'EGG + G',purpose:'Select the Verdant Dragon Egg, press G at the Egg Insulator, then claim it when ready.',done:'Your tutorial egg hatches quickly, showing how dragons begin.'},
   {key:'MEET HATCHLING',title:'Approach',verb:'WALK CLOSE',purpose:'Walk beside your hatched dragon and stay close until it trusts you.',done:'Your hatched dragon accepts your approach.'},
@@ -1186,6 +1193,43 @@ function nearbyMinerTutorialTrader(range=4.2){
   const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
   return d<=range?{...p,distance:d}:null;
 }
+function farmerTutorialAction(){
+  return FARMER_TUTORIAL_ACTIONS[Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length-1,jobTutorialFarmerStep|0))]||FARMER_TUTORIAL_ACTIONS[0];
+}
+function farmerTutorialProgressLabel(){
+  return 'Step '+Math.min(FARMER_TUTORIAL_ACTIONS.length,jobTutorialFarmerStep+1)+' / '+FARMER_TUTORIAL_ACTIONS.length;
+}
+function farmerTutorialTargetPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.farmer;
+  if(!room)return null;
+  const step=jobTutorialFarmerStep|0;
+  if(step<=0)return {x:room.x-10.5,y:room.G+1.035,z:room.z-12.5};
+  if(step===1)return {x:room.x+.5,y:room.G+1.035,z:room.z-7.5};
+  if(step===2)return {x:room.x+10.5,y:room.G+1.035,z:room.z-7.5};
+  return {x:room.x,y:room.G+1.035,z:room.z+23};
+}
+function noteFarmerTutorialAction(action){
+  if(!jobTutorialActive||jobTutorialJob!=='farmer'||dim!=='job')return false;
+  const step=jobTutorialFarmerStep|0;
+  const expected=step===0?'till':step===1?'plant':step===2?'harvest':'';
+  if(action!==expected)return false;
+  const lesson=farmerTutorialAction();
+  eventLog('Farmer tutorial - '+lesson.title+': '+lesson.done);
+  sysMsg('<b>Farmer lesson:</b> '+escHTML(lesson.done));
+  burst(player.pos.x,player.pos.y+1,player.pos.z,[.53,.94,.67],22,2.2,2.0,.65);
+  ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.0,0x86efac,.55);
+  jobTutorialFarmerStep=Math.min(FARMER_TUTORIAL_ACTIONS.length-1,jobTutorialFarmerStep+1);
+  if(jobTutorialFarmerStep===1)selectItemForOnboarding(I.WHEAT_SEEDS);
+  else if(jobTutorialFarmerStep===2)sysMsg('Now follow the pillar to the <b>mature wheat</b> and press <b>G</b> to harvest.');
+  else if(jobTutorialFarmerStep>=3){
+    SFX.level&&SFX.level();
+    showName('Farmer loop complete');
+    sysMsg('Good harvest. Walk into the <b>blue return pillar</b> to leave the Farmer tutorial.');
+  }
+  updateJobTutorialHud();
+  sendProfileSaveNow();
+  return true;
+}
 function petTamerPracticeDragonPos(){
   const g=globalThis.__petTamerPracticeDragon;
   if(g&&g.visible&&g.position)return {x:g.position.x,y:g.position.y,z:g.position.z};
@@ -1245,6 +1289,7 @@ function throughPetTamerFlightRing(){
   return !!(p&&player&&Math.hypot(player.pos.x-p.x,player.pos.y-p.y,player.pos.z-p.z)<2.75);
 }
 function jobTutorialBeaconTarget(jobId, room){
+  if(jobId==='farmer')return farmerTutorialTargetPos();
   if(jobId==='pet_tamer'){
     if(jobTutorialPetDragonStep===0)return petTamerPracticeInsulatorPos();
     if(jobTutorialPetDragonStep===4&&jobTutorialPetDragonTutorialMount)return petTamerPracticeFlightRingPos();
@@ -1741,6 +1786,12 @@ function updateJobTutorialHud(){
         ? {key:'GARRIK FLINT',text:'Take the diamond to Garrik and press G to trade it for gold.',sub:'He is waiting on the wooden platform inside this cave.'}
         : {key:'RETURN PILLAR',text:'You mined a diamond and traded it for gold.',sub:'Walk into the blue return pillar to go back to town.'};
   }
+  if(jobTutorialJob==='farmer'){
+    const action=farmerTutorialAction();
+    copy=jobTutorialFarmerStep>=3
+      ? {key:'RETURN PILLAR',text:'You tilled soil, planted seeds, and harvested wheat.',sub:'Walk into the blue return pillar to go back to town.'}
+      : {key:action.key,text:farmerTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the real Farmer loop: prepare soil, plant seed, harvest food.'};
+  }
   if(jobTutorialJob==='pet_tamer'){
     const action=petTamerTutorialAction();
     copy=jobTutorialPetDragonStep===0&&nearPetTamerPracticeInsulator()
@@ -1761,11 +1812,13 @@ function updateJobTutorialHud(){
   const nearReturn=jobTutorialJob!=='pet_tamer'&&room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
   const nearPetDragon=jobTutorialJob==='pet_tamer'&&beaconTarget&&player&&Math.hypot(player.pos.x-beaconTarget.x,player.pos.z-beaconTarget.z)<4.8;
   const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
+  const farmerBlockedReturn=jobTutorialJob==='farmer'&&jobTutorialFarmerStep<3;
+  const returnBlocked=minerBlockedReturn||farmerBlockedReturn;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?(minerBlockedReturn?'FINISH TRADE':'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
+    +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':'FINISH FARMING'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?'Till soil, plant seeds, and harvest wheat before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?'Follow the green pillar back to the current Farmer lesson.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -1777,6 +1830,7 @@ function completeJobTutorial(){
   jobTutorialJob='';
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
+  jobTutorialFarmerStep=0;
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
   jobTutorialPetDragonRideStart=null;
@@ -1811,6 +1865,7 @@ function startJobTutorial(jobId){
   jobTutorialJob=jobId;
   jobTutorialMinedDiamond=false;
   jobTutorialTraded=false;
+  jobTutorialFarmerStep=0;
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
   jobTutorialPetDragonRideStart=null;
@@ -1829,6 +1884,7 @@ function startJobTutorial(jobId){
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
   if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the open Egg Insulator, then hatch your tutorial egg.');
+  else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();
   return true;
@@ -1845,6 +1901,7 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialJob=jobId;
   jobTutorialMinedDiamond=state.minedDiamond===true;
   jobTutorialTraded=state.traded===true;
+  jobTutorialFarmerStep=jobId==='farmer'?Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length-1,Number(state.farmerStep)||0)):0;
   jobTutorialPetDragonSeen=state.petDragonSeen===true;
   jobTutorialPetDragonStep=Math.max(0,Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,Number(state.petDragonStep)||0));
   if(jobTutorialPetDragonSeen)jobTutorialPetDragonStep=PET_TAMER_TUTORIAL_ACTIONS.length;
@@ -1876,6 +1933,7 @@ function tickJobTutorial(now){
     jobTutorialActive=false;
     jobTutorialMinedDiamond=false;
     jobTutorialTraded=false;
+    jobTutorialFarmerStep=0;
     jobTutorialPetDragonSeen=false;
     jobTutorialPetDragonStep=0;
     jobTutorialPetDragonRideStart=null;
@@ -1934,6 +1992,14 @@ function tickJobTutorial(now){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
         sysMsg('Mine a diamond and trade it with <b>Garrik</b> before leaving the Miner tutorial.');
+      }
+      return;
+    }
+    if(jobTutorialJob==='farmer'&&jobTutorialFarmerStep<3){
+      if(now>jobTutorialReturnWarnAt){
+        jobTutorialReturnWarnAt=now+1800;
+        const action=farmerTutorialAction();
+        sysMsg('<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
       }
       return;
     }
@@ -3007,15 +3073,16 @@ function damageHeldToolLocal(){
 function farmAction(hit){
   if(!hit) return false;
   const tutorialMeadowFarm=onboardingActive&&dim==='tutorial'&&isTrainingMeadowLand(hit.x,hit.z,2);
-  if(dim!=='overworld'&&!tutorialMeadowFarm) return false;
-  const townFarmWorksite=!tutorialMeadowFarm&&dim==='overworld'&&isTownFarmWorksite(hit.x,hit.z);
+  const tutorialFarmerFarm=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&isJobTutorialMeadowLand('farmer',hit.x,hit.z,2);
+  if(dim!=='overworld'&&!tutorialMeadowFarm&&!tutorialFarmerFarm) return false;
+  const townFarmWorksite=!tutorialMeadowFarm&&!tutorialFarmerFarm&&dim==='overworld'&&isTownFarmWorksite(hit.x,hit.z);
   const s=inv[selected];
   if(hit.id===B.WHEAT_3){
-    if(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!tutorialFarmerFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
-    if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'harvest',x:hit.x,y:hit.y,z:hit.z,slot:selected});
+    if(NET.on && !tutorialMeadowFarm && !tutorialFarmerFarm) NET.room.send('farm',{action:'harvest',x:hit.x,y:hit.y,z:hit.z,slot:selected});
     else {
       setB(hit.x,hit.y,hit.z,B.AIR); removeCropMesh(hit.x,hit.y,hit.z); rebuildAround(hit.x,hit.z);
       addItem(I.WHEAT,1); addItem(I.WHEAT_SEEDS,1+((Math.random()*2)|0));
@@ -3025,6 +3092,7 @@ function farmAction(hit){
       }
       gainJobXP('farmer',5,'harvest');
       jobContractProgress('farm', 1, B.WHEAT_3);
+      if(tutorialFarmerFarm) noteFarmerTutorialAction('harvest');
     }
     if(onboardingActive&&tutorialMeadowFarm&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.breakBlk(null); vmSwing(); return true;
@@ -3035,31 +3103,33 @@ function farmAction(hit){
     SFX.place(); vmSwing(); return true;
   }
   if(s && (s.id===I.WHEAT_SEEDS || s.id===I.WINDSEED) && hit.id===B.FARMLAND && getB(hit.x,hit.y+1,hit.z)===B.AIR){
-    if(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!tutorialFarmerFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,s.id);
       return true;
     }
     if(s.id===I.WINDSEED && jobLevelFromXp(jobXpFor('farmer'))<JOB_SYSTEM.FARMER_RULES.windseedLevel){sysMsg('Farmer Lv 5 is required to cultivate <b>Prairie Windseeds</b>');return true;}
-    if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'plant',x:hit.x,y:hit.y+1,z:hit.z,slot:selected});
+    if(NET.on && !tutorialMeadowFarm && !tutorialFarmerFarm) NET.room.send('farm',{action:'plant',x:hit.x,y:hit.y+1,z:hit.z,slot:selected});
     else {
       setB(hit.x,hit.y+1,hit.z,B.WHEAT_1); syncCropMesh(hit.x,hit.y+1,hit.z,B.WHEAT_1);
       s.count--; if(s.count<=0) inv[selected]=null; refreshHUD();
       gainJobXP('farmer',1,'plant');
       jobContractProgress('farm', 1, I.WHEAT_SEEDS);
+      if(tutorialFarmerFarm) noteFarmerTutorialAction('plant');
     }
     if(onboardingActive&&tutorialMeadowFarm&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.place(); vmSwing(); return true;
   }
   if(heldToolClass('hoe') && (hit.id===B.GRASS || hit.id===B.DIRT) && getB(hit.x,hit.y+1,hit.z)===B.AIR){
-    if(!tutorialMeadowFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
+    if(!tutorialMeadowFarm&&!tutorialFarmerFarm&&!townFarmWorksite&&!canBuildHere(hit.x,hit.z)){
       showLandEditDenied(hit.x,hit.z,'farm',hit.y,hit.id);
       return true;
     }
-    if(NET.on && !tutorialMeadowFarm) NET.room.send('farm',{action:'till',x:hit.x,y:hit.y,z:hit.z,slot:selected});
+    if(NET.on && !tutorialMeadowFarm && !tutorialFarmerFarm) NET.room.send('farm',{action:'till',x:hit.x,y:hit.y,z:hit.z,slot:selected});
     else {
       setB(hit.x,hit.y,hit.z,B.FARMLAND); rebuildAround(hit.x,hit.z); damageHeldToolLocal();
       gainJobXP('farmer',1,'till');
       jobContractProgress('farm', 1, B.FARMLAND);
+      if(tutorialFarmerFarm) noteFarmerTutorialAction('till');
     }
     if(onboardingActive&&tutorialMeadowFarm&&onboardingKind()==='farm') onboardingFlags.farmed=true;
     SFX.place(); vmSwing(); return true;
@@ -3237,6 +3307,14 @@ function nearbyInteractionPrompt(){
   if(nearFellowshipWeatherVane())push({key:'G',title:'Fellowship Weather Vane',small:'Review weather sites and sky planning',priority:100},0);
   const minerTutor=nearbyMinerTutorialTrader();
   if(minerTutor)push({key:'G',title:'Garrik Flint',small:jobTutorialTraded?'Trade complete':jobTutorialMinedDiamond&&countItem(I.DIAMOND)>0?'Trade diamond for gold':'Mine a diamond first',priority:118},minerTutor.distance);
+  const farmerTarget=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'?farmerTutorialTargetPos():null;
+  if(farmerTarget&&jobTutorialFarmerStep<3&&player){
+    const fd=Math.hypot(player.pos.x-farmerTarget.x,player.pos.z-farmerTarget.z);
+    if(fd<4.8){
+      const action=farmerTutorialAction();
+      push({key:action.verb,title:action.key,small:farmerTutorialProgressLabel(),priority:118},fd);
+    }
+  }
   const petPracticeRoost=nearPetTamerPracticeRoost();
   if(petPracticeRoost&&jobTutorialPetDragonStep>=5)push({key:'B',title:'Practice Roost',small:jobTutorialPetDragonSeen?'Lesson complete':'Open dragon bonds to finish',priority:119},petPracticeRoost.distance);
   const petPracticeInsulator=nearPetTamerPracticeInsulator();
@@ -3648,6 +3726,7 @@ gameContext.registerState('combat', Object.freeze({
   get jobTutorialJob(){ return jobTutorialJob; },
   get jobTutorialMinedDiamond(){ return jobTutorialMinedDiamond; },
   get jobTutorialTraded(){ return jobTutorialTraded; },
+  get jobTutorialFarmerStep(){ return jobTutorialFarmerStep; },
   get jobTutorialPetDragonSeen(){ return jobTutorialPetDragonSeen; },
   get jobTutorialPetDragonStep(){ return jobTutorialPetDragonStep; },
   get jobTutorialPetEggStarted(){ return jobTutorialPetEggStarted; },

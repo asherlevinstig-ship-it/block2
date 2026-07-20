@@ -1053,11 +1053,35 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx-3,G+1,cz+10,B.CHEST);
     setBlock(cx+3,G+1,cz+10,B.TABLE);
   }else if(jobId==='farmer'){
-    for(let x=cx-12;x<=cx+12;x++)for(let z=cz-10;z<=cz-4;z++){
-      if(z===cz-7)setBlock(x,G,z,B.WATER);
-      else{setBlock(x,G,z,B.FARMLAND); if((x+z)&1)setBlock(x,G+1,z,B.WHEAT_3);}
+    const clear=(x,z,top=G+5)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
+    const path=(z1,z2)=>{for(let z=z1;z<=z2;z++)for(let x=cx-2;x<=cx+2;x++){setBlock(x,G,z,B.PLANKS);clear(x,z);}};
+    path(cz-18,cz+22);
+    for(let x=cx-18;x<=cx+18;x++)for(let z=cz-3;z<=cz-1;z++){setBlock(x,G,z,B.PLANKS);clear(x,z);}
+    for(let x=cx-14;x<=cx-7;x++)for(let z=cz-15;z<=cz-10;z++){
+      setBlock(x,G,z,(x+z)%3===0?B.DIRT:B.GRASS);
+      clear(x,z);
     }
-    setBlock(cx-14,G+1,cz-7,B.CHEST);
+    for(let x=cx-4;x<=cx+5;x++)for(let z=cz-10;z<=cz-5;z++){
+      setBlock(x,G,z,z===cz-8?B.WATER:B.FARMLAND);
+      clear(x,z);
+      if(z!==cz-8)setBlock(x,G+1,z,B.AIR);
+    }
+    for(let x=cx+8;x<=cx+15;x++)for(let z=cz-10;z<=cz-5;z++){
+      setBlock(x,G,z,z===cz-8?B.WATER:B.FARMLAND);
+      clear(x,z);
+      if(z!==cz-8)setBlock(x,G+1,z,B.WHEAT_3);
+    }
+    for(let z=cz-17;z<=cz+18;z+=5){
+      setBlock(cx-18,G+1,z,B.LOG);setBlock(cx-18,G+2,z,B.LANTERN);
+      setBlock(cx+18,G+1,z,B.LOG);setBlock(cx+18,G+2,z,B.LANTERN);
+    }
+    for(let x=cx-18;x<=cx+18;x+=6){
+      setBlock(x,G+1,cz-18,B.LOG);
+      setBlock(x,G+2,cz-18,B.LEAVES);
+    }
+    setBlock(cx-15,G+1,cz-7,B.CHEST);
+    setBlock(cx-5,G+1,cz-2,B.TABLE);
+    setBlock(cx+15,G+1,cz-2,B.CAMPFIRE);
   }else if(jobId==='cook'){
     box(cx-12,G,cz-10,cx+12,G,cz+6,B.PLANKS);
     for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-8,B.FURNACE);setBlock(x,G+1,cz-2,B.TABLE);}
