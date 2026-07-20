@@ -1456,6 +1456,7 @@ function petTamerPracticeCommandAvailable(){
 globalThis.BlockcraftPetTamerPractice={
   active:()=>!!(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&!jobTutorialPetDragonSeen),
   hatched:()=>!!(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&jobTutorialPetDragonStep>0&&!jobTutorialPetDragonSeen),
+  status:()=>({step:jobTutorialPetDragonStep|0,key:petTamerTutorialAction().key,detail:petTamerTutorialPromptSub(),near:!!nearPetTamerPracticeDragon(5.2)}),
   commandAvailable:petTamerPracticeCommandAvailable,
   commandStay:commandPetTamerPracticeDragon,
   protectTreatUse:protectPetTamerTutorialTreatUse,

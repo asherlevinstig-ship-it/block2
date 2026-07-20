@@ -179,6 +179,28 @@ function renderDragonSelector(type){
   });
   chatWheelItemsEl.appendChild(select);
 }
+function renderTutorialDragonWheel(practice){
+  const status=practice&&typeof practice.status==='function'?practice.status():{};
+  chatWheelModeEl.textContent='YOUR HATCHED DRAGON';
+  const center=chatWheelEl.querySelector('.wheelcenter span');
+  if(center)center.innerHTML='<span class="drole">TUTORIAL BOND</span><span>'+escHTML(status.key||'DRAGON LESSON')+'</span><span>'+escHTML(status.detail||'Stay close to your dragon')+'</span>';
+  const commandReady=practice&&typeof practice.commandAvailable==='function'&&practice.commandAvailable();
+  const action=document.createElement('button');action.type='button';action.className='wheelitem selected'+(commandReady?'':' dim');
+  action.style.left='215px';action.style.top='72px';
+  if(commandReady){
+    action.innerHTML='<b>STAY</b><span>Ask your hatchling to wait</span>';
+    action.addEventListener('click',()=>{
+      const done=typeof practice.commandStay==='function'&&practice.commandStay();
+      closeDragonCommandWheel(!!done);
+    });
+  }else{
+    const step=Number(status.step)||0;
+    const label=step>=4?'USE Z TO RIDE':step>=2?'FINISH CURRENT STEP':'KEEP BONDING';
+    action.innerHTML='<b>'+escHTML(label)+'</b><span>'+escHTML(status.near?'Follow the lesson prompt':'Stand beside your dragon')+'</span>';
+    action.addEventListener('click',()=>closeDragonCommandWheel(true));
+  }
+  chatWheelItemsEl.appendChild(action);
+}
 function renderDragonCommandWheel(){
   if(!dragonWheel)return;
   chatWheelEl.classList.add('dragonwheel');
@@ -187,17 +209,8 @@ function renderDragonCommandWheel(){
   dragonWheel.type=type;
   if(!type){
     const practice=globalThis.BlockcraftPetTamerPractice;
-    if(practice&&typeof practice.commandAvailable==='function'&&practice.commandAvailable()){
-      chatWheelModeEl.textContent='YOUR DRAGON';
-      const action=document.createElement('button');action.type='button';action.className='wheelitem selected';
-      action.innerHTML='<b>STAY</b><span>Ask your hatchling to wait</span>';
-      action.style.left='215px';action.style.top='72px';
-      action.addEventListener('click',()=>{
-        const done=typeof practice.commandStay==='function'&&practice.commandStay();
-        closeDragonCommandWheel(!!done);
-      });
-      chatWheelItemsEl.appendChild(action);
-      const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Fresh tutorial bond';
+    if(practice&&typeof practice.hatched==='function'&&practice.hatched()){
+      renderTutorialDragonWheel(practice);
       return;
     }
     chatWheelModeEl.textContent='DRAGON';

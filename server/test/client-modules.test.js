@@ -1461,6 +1461,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function protectPetTamerTutorialTreatUse\(\)/);
   assert.match(combat,/function ensurePetTamerTutorialTreat\(select=false\)/);
   assert.match(combat,/globalThis\.BlockcraftPetTamerPractice=\{/);
+  assert.match(combat,/status:\(\)=>\(\{step:jobTutorialPetDragonStep\|0,key:petTamerTutorialAction\(\)\.key,detail:petTamerTutorialPromptSub\(\),near:!!nearPetTamerPracticeDragon\(5\.2\)\}\)/);
   assert.match(combat,/commandStay:commandPetTamerPracticeDragon/);
   assert.match(combat,/PET_TAMER_TUTORIAL_HATCH_MS=3000/);
   assert.match(combat,/function petTamerPracticeInsulatorPos\(\)/);
@@ -1530,7 +1531,12 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');
   assert.match(frame,/worldState\.JOB_TUTORIAL_MEADOWS&&worldState\.JOB_TUTORIAL_MEADOWS\.pet_tamer/);
   assert.match(frame,/tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
-  assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8'),/BlockcraftPetTamerPractice/);
+  const social = fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
+  assert.match(social,/BlockcraftPetTamerPractice/);
+  assert.match(social,/function renderTutorialDragonWheel\(practice\)/);
+  assert.match(social,/YOUR HATCHED DRAGON/);
+  assert.match(social,/TUTORIAL BOND/);
+  assert.match(social,/typeof practice\.hatched==='function'&&practice\.hatched\(\)/);
   assert.match(fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8'),/EGG HATCH/);
   assert.match(frame,/combatApi\.shouldOpenLevel2JobChoice/);
   assert.match(frame,/combatApi\.openLevel2JobChoice\(\)/);
