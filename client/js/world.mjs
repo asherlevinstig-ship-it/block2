@@ -4617,28 +4617,86 @@ Object.defineProperty(globalThis,'BlockcraftTownLayout',{value:Object.freeze({
 
 function makeTamingLandPortalDecor(){
   const grp=new THREE.Group();
-  const moss=voxelMats('#244f31','#4ade80','#11351d','#07140c');
-  const stone=voxelMats('#64748b','#94a3b8','#334155','#111827');
-  const gold=glowVoxelMats('#9efc72','#dcff9c','#4d7c0f','#ecfccb',.8);
-  addBox(grp,[.85,4.7,.85],[-1.75,2.35,0],stone);
-  addBox(grp,[.85,4.7,.85],[1.75,2.35,0],stone);
-  addBox(grp,[4.35,.75,.85],[0,4.55,0],stone);
-  addBox(grp,[3.05,.18,.18],[0,1.05,-.18],moss);
-  addBox(grp,[3.05,.18,.18],[0,3.92,-.18],moss);
-  addBox(grp,[.18,2.9,.18],[-1.28,2.5,-.18],moss);
-  addBox(grp,[.18,2.9,.18],[1.28,2.5,-.18],moss);
-  const mat=new THREE.MeshBasicMaterial({color:0x9efc72,transparent:true,opacity:.33,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-  const veil=new THREE.Mesh(new THREE.PlaneGeometry(2.55,2.95),mat);
-  veil.position.set(0,2.52,-.22);
+  const stone=voxelMats('#596776','#8fa1b5','#303a46','#131a22');
+  const stoneDark=voxelMats('#334155','#64748b','#1f2937','#0f172a');
+  const moss=voxelMats('#24543a','#5fe086','#12331f','#07160c');
+  const bark=voxelMats('#5a3a20','#8b6238','#302011','#160d07');
+  const rune=glowVoxelMats('#57f287','#dcff9c','#14733b','#bbf7d0',1.2);
+  const makePortalTexture=()=>{
+    const c=document.createElement('canvas'); c.width=96; c.height=128; const g=c.getContext('2d');
+    const bg=g.createLinearGradient(0,0,96,128);
+    bg.addColorStop(0,'rgba(18,120,105,.72)');
+    bg.addColorStop(.45,'rgba(105,255,214,.62)');
+    bg.addColorStop(1,'rgba(16,90,130,.72)');
+    g.fillStyle=bg; g.fillRect(0,0,96,128);
+    const core=g.createRadialGradient(48,64,6,48,64,62);
+    core.addColorStop(0,'rgba(235,255,238,.46)');
+    core.addColorStop(.38,'rgba(150,255,218,.26)');
+    core.addColorStop(1,'rgba(22,80,70,0)');
+    g.fillStyle=core; g.fillRect(0,0,96,128);
+    g.strokeStyle='rgba(236,255,216,.72)'; g.lineWidth=3;
+    for(let i=0;i<5;i++){g.beginPath();g.arc(48,64,20+i*8,-1.1+i*.38,2.0+i*.38);g.stroke();}
+    g.strokeStyle='rgba(95,211,255,.42)'; g.lineWidth=2;
+    for(let i=0;i<7;i++){g.beginPath();g.moveTo(8+i*13,0);g.bezierCurveTo(34+i*3,34,8+i*9,70,52+i*5,128);g.stroke();}
+    g.fillStyle='rgba(255,255,210,.72)';
+    for(let i=0;i<26;i++){const x=(i*37)%92+2,y=(i*53)%124+2,s=i%3+1;g.fillRect(x,y,s,s);}
+    const tex=new THREE.CanvasTexture(c); tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+    return tex;
+  };
+  const portalTex=makePortalTexture();
+  const portalMat=new THREE.MeshBasicMaterial({map:portalTex,color:0xffffff,transparent:true,opacity:.78,depthWrite:false,side:THREE.DoubleSide});
+  const portalMistMat=new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.18,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  const portalCoreMat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0xa7f3d0,transparent:true,opacity:.22,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending});
+  const stones=[
+    [-2.28,2.55,.05,.92,5.1,.92,stone], [2.28,2.55,.05,.92,5.1,.92,stone],
+    [-1.35,5.18,.05,.98,.92,.94,stone], [0,5.32,.05,1.05,.88,.94,stoneDark], [1.35,5.18,.05,.98,.92,.94,stone],
+    [-2.35,.38,.05,1.25,.72,1.15,stoneDark], [2.35,.38,.05,1.25,.72,1.15,stoneDark],
+    [0,.28,.05,3.7,.48,1.05,stoneDark],
+  ];
+  for(const [x,y,z,w,h,d,m] of stones)addBox(grp,[w,h,d],[x,y,z],m);
+  for(const [x,y] of [[-2.84,1.02],[-2.84,2.14],[-2.84,3.26],[-2.84,4.38],[2.84,1.02],[2.84,2.14],[2.84,3.26],[2.84,4.38]])
+    addBox(grp,[.28,.5,.18],[x,y,-.52],stoneDark);
+  for(const [x,y,s] of [[-2.28,1.62,0],[-2.28,3.62,1],[2.28,1.62,1],[2.28,3.62,0],[-.7,5.78,1],[.7,5.78,0]])
+    addBox(grp,[.38,.38,.28],[x,y,-.58],s?rune:moss,[0,0,.785]);
+  addBox(grp,[4.55,.22,.22],[0,1.02,-.58],bark);
+  addBox(grp,[4.55,.22,.22],[0,4.58,-.58],bark);
+  addBox(grp,[.22,3.72,.22],[-1.72,2.8,-.6],bark);
+  addBox(grp,[.22,3.72,.22],[1.72,2.8,-.6],bark);
+  for(const [x,y] of [[-1.62,4.9],[-.65,5.02],[.42,4.98],[1.42,4.86],[-1.86,3.25],[1.86,2.2]])
+    addBox(grp,[.44,.2,.18],[x,y,-.76],moss,[0,0,(x<0?-.32:.32)]);
+  const veil=new THREE.Mesh(new THREE.PlaneGeometry(3.42,4.18),portalMat);
+  veil.position.set(0,2.76,-.72);
   grp.add(veil);
-  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.55,.06,8,48),new THREE.MeshBasicMaterial({color:0xdcff9c,transparent:true,opacity:.72,depthWrite:false,blending:THREE.AdditiveBlending}));
-  ring.position.set(0,2.52,-.28);
-  grp.add(ring);
-  for(const [x,y] of [[-2.35,.35],[2.35,.35],[-2.15,4.9],[2.15,4.9]])addBox(grp,[.28,.28,.28],[x,y,0],gold);
+  const veilBack=new THREE.Mesh(new THREE.PlaneGeometry(3.28,4.0),portalMistMat);
+  veilBack.position.set(0,2.76,-.79);
+  veilBack.rotation.z=.05;
+  grp.add(veilBack);
+  const core=new THREE.Sprite(portalCoreMat);
+  core.position.set(0,2.75,-.92);
+  core.scale.set(4.1,4.9,1);
+  grp.add(core);
+  const rings=[];
+  for(const [rx,ry,rr,col,op] of [[0,2.76,1.75,0xdcff9c,.82],[0,2.76,1.32,0x7dd3fc,.52],[0,2.76,.82,0xbbf7d0,.42]]){
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(rr,.035,8,72),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:op,depthWrite:false,blending:THREE.AdditiveBlending}));
+    ring.position.set(rx,ry,-.96);
+    grp.add(ring);
+    rings.push(ring);
+  }
+  const motes=[];
+  for(let i=0;i<18;i++){
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:i%3?0x9efcce:0x7dd3fc,transparent:true,opacity:.18,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+    const px=(hash2(i*17,31)-.5)*2.7, py=1.0+hash2(i*41,73)*3.5;
+    sp.position.set(px,py,-1.02);
+    sp.scale.set(.34,.34,1);
+    grp.add(sp);
+    motes.push({sp,px,py,phase:hash2(i*97,13)*Math.PI*2});
+  }
+  for(const [x,y] of [[-3.08,.38],[3.08,.38],[-2.82,5.18],[2.82,5.18]])addBox(grp,[.36,.36,.36],[x,y,-.48],rune);
   const label=makeTextSprite('TAMING LAND','#9efc72');
-  label.position.set(0,5.45,0);
+  label.position.set(0,6.1,-.36);
+  label.scale.set(3.05,1.45,1);
   grp.add(label);
-  grp.userData={veil,ring,phase:Math.random()*Math.PI*2};
+  grp.userData={veil,veilBack,core,rings,motes,phase:Math.random()*Math.PI*2,emitAcc:0};
   grp.position.set(HUB.tamingPortal.x,TOWN.G+1,HUB.tamingPortal.z);
   grp.rotation.y=Math.PI;
   townGroup.add(grp);
@@ -9160,8 +9218,54 @@ function updateCentralFountainVisual(dt){
       life:.38+Math.random()*.28,grav:5.5,r:.68,g:.86,b:1});
   }
 }
+function updateTamingLandPortalVisual(dt){
+  const p=tamingLandTownPortal;
+  if(!p)return;
+  const near=dim==='overworld'&&playerOverworldDistanceSq(HUB.tamingPortal.x,HUB.tamingPortal.z)<95*95;
+  p.visible=near;
+  if(!near)return;
+  const data=p.userData||{},t=performance.now()/1000+(data.phase||0);
+  if(data.veil){
+    data.veil.material.opacity=.66+.08*Math.sin(t*2.1);
+    data.veil.scale.set(1+.018*Math.sin(t*1.4),1+.012*Math.cos(t*1.7),1);
+  }
+  if(data.veilBack){
+    data.veilBack.material.opacity=.15+.05*Math.cos(t*2.7);
+    data.veilBack.rotation.z=.05+.035*Math.sin(t*.8);
+  }
+  if(data.core){
+    data.core.material.opacity=.18+.08*Math.sin(t*1.9);
+    data.core.rotation.z=t*.11;
+    const pulse=1+.045*Math.sin(t*2.4);
+    data.core.scale.set(4.1*pulse,4.9*pulse,1);
+  }
+  if(Array.isArray(data.rings)){
+    data.rings.forEach((ring,i)=>{
+      ring.rotation.z=(i%2?-1:1)*t*(.18+i*.07);
+      ring.material.opacity=(i? .4:.68)+.08*Math.sin(t*(1.2+i*.3)+i);
+      const s=1+.035*Math.sin(t*(1.6+i*.25)+i*.7);
+      ring.scale.set(s,s,1);
+    });
+  }
+  if(Array.isArray(data.motes)){
+    data.motes.forEach((m,i)=>{
+      const a=t*.55+m.phase;
+      m.sp.position.x=m.px+Math.sin(a+i)*.16;
+      m.sp.position.y=1+((m.py-1+t*.32+i*.07)%3.7);
+      m.sp.material.opacity=.12+.18*(.5+.5*Math.sin(t*2.5+m.phase));
+    });
+  }
+  data.emitAcc=(data.emitAcc||0)+dt;
+  if(data.emitAcc>.08){
+    data.emitAcc=0;
+    const x=HUB.tamingPortal.x+(Math.random()-.5)*2.8,z=HUB.tamingPortal.z-.65,y=TOWN.G+2+Math.random()*3.2;
+    spawnParticle({x,y,z,vx:(Math.random()-.5)*.16,vy:.18+Math.random()*.28,vz:-.08-Math.random()*.12,
+      life:.7+Math.random()*.35,grav:-.05,r:.58,g:1,b:.78,priority:1});
+  }
+}
 function updateEmitters(dt){
   updateCentralFountainVisual(dt);
+  updateTamingLandPortalVisual(dt);
   const night=tavernNightLevel();
   for(const e of emitters){
     if(dim!=='overworld'||Math.hypot(player.pos.x-e.x,player.pos.z-e.z)>(e.maxDist||105)){e.acc=0;continue;}

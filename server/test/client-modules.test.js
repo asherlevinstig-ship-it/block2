@@ -219,6 +219,9 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(world, /function buildTamingLand\(setBlock=setB\)/);
   assert.match(world, /setBlock\(cx\+ox,G\+1,cz\+oz,B\.EGG_INSULATOR\)/);
   assert.match(world, /function makeTamingLandPortalDecor\(\)/);
+  assert.match(world, /const makePortalTexture=\(\)=>/);
+  assert.match(world, /function updateTamingLandPortalVisual\(dt\)/);
+  assert.match(world, /updateTamingLandPortalVisual\(dt\)/);
   assert.match(world, /addTownInteractLabel\('Taming Land Portal'/);
   assert.match(world, /inTamingLand=dim==='taming_land'/);
   assert.match(dimensions, /function generateTamingLandRoom\(\)/);
