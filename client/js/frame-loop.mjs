@@ -345,6 +345,9 @@ function currentLocationInfo(){
   if(dim==='ability'){
     return { cls:'event', name:'Ability Training Room', meta:'Private tutorial instance' };
   }
+  if(dim==='taming_land'){
+    return { cls:'event', name:'Taming Land', meta:'Dragon and familiar sanctuary - press G at the green portal to return' };
+  }
   if(dim==='tutorial' && onboardingActive && isTrainingMeadowLand(player.pos.x,player.pos.z,4)){
     return { cls:'town', name:'Hunter Training Meadow', meta:'Safe training grounds' };
   }
@@ -384,6 +387,8 @@ function currentLocationInfo(){
     return { cls:'town', name:'Town Farm', meta:'Farmer contracts and crop work' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<22){
+    if(HUB.tamingPortal&&Math.hypot(player.pos.x-HUB.tamingPortal.x, player.pos.z-HUB.tamingPortal.z)<6)
+      return { cls:'town', name:'Taming Land Portal', meta:'Press G to visit the dragon and familiar sanctuary' };
     return { cls:'town', name:'Dragon Roost', meta:'Bonded dragons perch here - press B for bonds' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.shrine.x, player.pos.z-HUB.shrine.z)<9){
@@ -1006,6 +1011,7 @@ function currentObjective(){
     const text=serverEvent&&serverEvent.kind==='king' ? 'Hold the crown longer than every team'+left : 'Reach the finish before time runs out'+left;
     return {label:'Current Goal', text};
   }
+  if(dim==='taming_land') return {label:'Taming Land', text:'Explore the sanctuary, then press G at the green return portal to go back to town'};
   const transition=transitionRecoveryAction();
   if(transition){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
@@ -1034,6 +1040,8 @@ function currentObjective(){
     return {label:'Current Goal', text:'Speak with Liss for farmer work'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.shrine.x, player.pos.z-HUB.shrine.z)<9)
     return {label:'Current Goal', text:inMeditationSpot()?'Meditate with G / right-click':'Stand inside the Meditation Hall to meditate'};
+  if(dim==='overworld' && HUB.tamingPortal && Math.hypot(player.pos.x-HUB.tamingPortal.x, player.pos.z-HUB.tamingPortal.z)<7)
+    return {label:'Current Goal', text:'Press G at the Taming Land portal to visit the dragon and familiar sanctuary'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.guardian.x, player.pos.z-HUB.guardian.z)<9)
     return {label:'Current Goal', text:'Speak with the Aegis Guardian'};
   if(gate) return {label:'Current Goal', text:RANKS[gate.rank].n+'-Rank '+gateKindLabel(gate.kind)+' Gate - '+gateCompass()};
@@ -2237,6 +2245,10 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     completeTownTutorialStep:step=>completeTownTutorialStep(step),
     startJobTutorial:jobId=>combatApi.startJobTutorial?combatApi.startJobTutorial(jobId):false,
     resumeJobTutorial:(jobId,state={})=>combatApi.resumeJobTutorial?combatApi.resumeJobTutorial(jobId,state):false,
+    enterTamingLand:()=>dimensionsApi.enterTamingLand?dimensionsApi.enterTamingLand():false,
+    exitTamingLand:()=>dimensionsApi.exitTamingLand?dimensionsApi.exitTamingLand():false,
+    walkToTamingPortal:()=>e2eWalkTo({x:HUB.tamingPortal.x,y:TOWN.G+1,z:HUB.tamingPortal.z}),
+    walkToTamingExit:()=>e2eWalkTo({x:TAMING_LAND.x+TAMING_LAND.exit.dx+.5,y:TAMING_LAND.G+1,z:TAMING_LAND.z+TAMING_LAND.exit.dz+.5}),
     petTamerTutorialAction:()=>combatApi.performPetTamerDragonTutorialAction?combatApi.performPetTamerDragonTutorialAction():false,
     useFirstAbility:()=>cast(0),
     walkOutsideTown:e2ePositionOutsideTown,

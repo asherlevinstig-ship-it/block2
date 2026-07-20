@@ -1787,7 +1787,7 @@ function refreshTorchMeshes(){
 function applyDim(){
   townGroup.visible = dim==='overworld';
   if(roadSafetySceneGroup)roadSafetySceneGroup.visible=dim==='overworld';
-  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job';
+  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job' || dim==='taming_land';
   const underground = dim==='dungeon' || dim==='gatecutscene';
   cloudGroup.visible = !underground;
   sky.visible = !underground;
@@ -1797,6 +1797,7 @@ function applyDim(){
   else if(dim==='tutorial'){ scene.fog.near=30; scene.fog.far=100; }
   else if(dim==='ability'){ scene.fog.near=28; scene.fog.far=92; }
   else if(dim==='job'){ scene.fog.near=32; scene.fog.far=105; }
+  else if(dim==='taming_land'){ scene.fog.near=38; scene.fog.far=130; scene.fog.color.set(0x9ed7ff); }
   else if(dim==='gatecutscene'){ scene.fog.near=18; scene.fog.far=115; scene.fog.color.set(0x151022); }
   else { scene.fog.near=8; scene.fog.far=36; }
 }
@@ -1960,6 +1961,82 @@ function exitJobTutorialRoom(){
   jobTutorialRoomReturn=null;
   jobTutorialRoomJob='';
   if(NET.on&&NET.room) NET.room.send('tutorialExit',{});
+}
+let tamingLandReturn=null, tamingLandExitPortal=null;
+function generateTamingLandRoom(){
+  const room=TAMING_LAND;
+  const {x:cx,z:cz,G,R}=room;
+  const minX=Math.floor(cx-R-8),maxX=Math.ceil(cx+R+8),minZ=Math.floor(cz-R-8),maxZ=Math.ceil(cz+R+8);
+  const w=new DimensionGrid({kind:'taming_land',id:'taming_land',originX:minX,originZ:minZ,width:maxX-minX+1,height:WH,depth:maxZ-minZ+1,empty:B.AIR,outside:B.AIR});
+  worldApi.buildTamingLand((x,y,z,v)=>w.setB(x,y,z,v));
+  for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){
+    const d=Math.hypot(x-cx,z-cz);
+    if(d>R&&d<=R+6){
+      const y=G-Math.max(0,Math.round((d-R)*.8));
+      for(let yy=1;yy<y;yy++)w.setB(x,yy,z,yy<y-3?B.STONE:B.DIRT);
+      w.setB(x,y,z,d>R+3?B.LEAVES:B.GRASS);
+    }
+  }
+  return w;
+}
+function tamingLandSpawn(){
+  return {x:TAMING_LAND.x+TAMING_LAND.spawn.dx+.5,y:TAMING_LAND.G+1.05,z:TAMING_LAND.z+TAMING_LAND.spawn.dz+.5};
+}
+function tamingLandExitPoint(){
+  return {x:TAMING_LAND.x+TAMING_LAND.exit.dx+.5,y:TAMING_LAND.G+1.05,z:TAMING_LAND.z+TAMING_LAND.exit.dz+.5};
+}
+function ensureTamingLandExitPortal(){
+  if(tamingLandExitPortal){scene.remove(tamingLandExitPortal);tamingLandExitPortal=null;}
+  const exit=tamingLandExitPoint();
+  tamingLandExitPortal=makeGateMesh(0x9efc72);
+  tamingLandExitPortal.position.set(exit.x,exit.y,exit.z);
+  const label=makeTextSprite('RETURN TO TOWN','#9efc72');
+  label.position.set(0,2.65,0);
+  tamingLandExitPortal.add(label);
+  scene.add(tamingLandExitPortal);
+}
+function enterTamingLand(){
+  if(dim==='taming_land')return true;
+  if(dim!=='overworld')return false;
+  tamingLandReturn={world,pos:player.pos.clone(),yaw:player.yaw,pitch:player.pitch};
+  for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  if(mounted){mounted=false;mountKind='';if(localMountObj)localMountObj.visible=false;}
+  owWorld=world;
+  world=generateTamingLandRoom();
+  dim='taming_land';
+  NET.dgn=localTutorialSpaceId('taming_land');
+  world.id=NET.dgn;
+  rebuildAllChunks();refreshTorchMeshes();applyDim();ensureTamingLandExitPortal();
+  const spawn=tamingLandSpawn();
+  player.pos.set(spawn.x,spawn.y,spawn.z);
+  player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  if(NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'taming_land'});
+  SFX.portal();
+  sysMsg('<b>Taming Land:</b> a peaceful sanctuary for eggs, familiars, and dragon practice. Use the green return portal to go back to town.');
+  return true;
+}
+function exitTamingLand(){
+  if(dim!=='taming_land')return false;
+  SFX.portal();
+  for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  if(tamingLandExitPortal){scene.remove(tamingLandExitPortal);tamingLandExitPortal=null;}
+  const ret=tamingLandReturn;
+  world=(ret&&ret.world)||owWorld||world;
+  dim='overworld';
+  owWorld=world;
+  NET.dgn='';
+  rebuildAllChunks();refreshTorchMeshes();applyDim();
+  if(ret&&player){
+    player.pos.copy(ret.pos);
+    player.yaw=ret.yaw;
+    player.pitch=ret.pitch;
+    player.vel.set(0,0,0);
+  }
+  tamingLandReturn=null;
+  if(NET.on&&NET.room)NET.room.send('tutorialExit',{});
+  return true;
 }
 function spawnDungeonMob(x,z,boss,ri){
   const mul=RANKS[ri].mul;
@@ -2151,12 +2228,15 @@ gameContext.registerState('dimensions', Object.freeze({
   get exitPortal(){ return exitPortal; },
   get overworldGrid(){ return owWorld; },
   get jobTutorialRoomJob(){ return jobTutorialRoomJob; },
+  get tamingLandExitPortal(){ return tamingLandExitPortal; },
 }));
 gameContext.registerModule('dimensions', Object.freeze({
   enterDungeon,
   exitDungeon,
   enterJobTutorialRoom,
   exitJobTutorialRoom,
+  enterTamingLand,
+  exitTamingLand,
   rebuild:rebuildAllChunks,
   tickGates,
 }));
@@ -2189,17 +2269,20 @@ const legacyDimensionsBindings={
   "enterDungeonRoomWith":{get:()=>enterDungeonRoomWith},
   "enterJobTutorialRoom":{get:()=>enterJobTutorialRoom},
   "enterOnboardingRoom":{get:()=>enterOnboardingRoom},
+  "enterTamingLand":{get:()=>enterTamingLand},
   "equippedArmor":{get:()=>equippedArmor},
   "exitAbilityRoom":{get:()=>exitAbilityRoom},
   "exitDungeon":{get:()=>exitDungeon},
   "exitJobTutorialRoom":{get:()=>exitJobTutorialRoom},
   "exitOnboardingRoom":{get:()=>exitOnboardingRoom},
+  "exitTamingLand":{get:()=>exitTamingLand},
   "exitPortal":{get:()=>exitPortal,set:value=>{exitPortal=value;}},
   "frostbiteChakramVfx":{get:()=>frostbiteChakramVfx},
   "gate":{get:()=>gate,set:value=>{gate=value;}},
   "gateCompass":{get:()=>gateCompass},
   "gateKindLabel":{get:()=>gateKindLabel},
   "generateJobTutorialRoom":{get:()=>generateJobTutorialRoom},
+  "generateTamingLandRoom":{get:()=>generateTamingLandRoom},
   "gravityBowVfx":{get:()=>gravityBowVfx},
   "hex01":{get:()=>hex01},
   "legendaryWeaponCd":{get:()=>legendaryWeaponCd},

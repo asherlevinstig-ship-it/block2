@@ -189,7 +189,7 @@ test('Town of Beginnings gives every public building or worksite a physical sign
   assert.match(world, /TOWN_BUILDING_SIGNS\.forEach\(makeTownBuildingSign\)/);
   for (const title of [
     'GUILD HALL', 'TAVERN & INN', 'SMITHY', 'MEDITATION HALL', 'DRAGON ROOST',
-    'WESTWIND SKYPORT', 'MARKET STALLS', 'FARM PLOTS', 'QUARRY WORK', 'DUNGEON SHARD', 'AEGIS SHRINE',
+    'TAMING LAND', 'WESTWIND SKYPORT', 'MARKET STALLS', 'FARM PLOTS', 'QUARRY WORK', 'DUNGEON SHARD', 'AEGIS SHRINE',
   ]) {
     assert.match(world, new RegExp(`title:'${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   }
@@ -206,6 +206,34 @@ test('Town of Beginnings gives every public building or worksite a physical sign
   assert.doesNotMatch(world, /title:'SMITHY'[\s\S]*?x:dpx\(72\.7,'forge'\),z:dpz\(46\.6,'forge'\)/);
   assert.doesNotMatch(world, /title:'MEDITATION HALL'[\s\S]*?x:dpx\(43\.8,'shrine'\),z:dpz\(57\.15,'shrine'\)/);
   assert.doesNotMatch(world, /title:'DRAGON ROOST'[\s\S]*?x:dpx\(87\.15,'roost'\),z:dpz\(61\.5,'roost'\)/);
+});
+
+test('Taming Land is a dedicated client realm reached from a town portal', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+
+  assert.match(world, /const TAMING_LAND=Object\.freeze/);
+  assert.match(world, /tamingPortal: \{ x: dpx\(86, 'roost'\), z: dpz\(78, 'roost'\) \}/);
+  assert.match(world, /function buildTamingLand\(setBlock=setB\)/);
+  assert.match(world, /setBlock\(cx\+ox,G\+1,cz\+oz,B\.EGG_INSULATOR\)/);
+  assert.match(world, /function makeTamingLandPortalDecor\(\)/);
+  assert.match(world, /addTownInteractLabel\('Taming Land Portal'/);
+  assert.match(world, /inTamingLand=dim==='taming_land'/);
+  assert.match(dimensions, /function generateTamingLandRoom\(\)/);
+  assert.match(dimensions, /kind:'taming_land',id:'taming_land'/);
+  assert.match(dimensions, /function enterTamingLand\(\)/);
+  assert.match(dimensions, /function exitTamingLand\(\)/);
+  assert.match(dimensions, /NET\.dgn=localTutorialSpaceId\('taming_land'\)/);
+  assert.match(dimensions, /makeTextSprite\('RETURN TO TOWN','#9efc72'\)/);
+  assert.match(combat, /function nearTamingLandPortal\(range=5\.8\)/);
+  assert.match(combat, /title:'Taming Land Portal'/);
+  assert.match(combat, /if\(nearTamingLandPortal\(\)\)\{ enterTamingLand\(\); return; \}/);
+  assert.match(combat, /if\(nearTamingLandExit\(\)\)\{ exitTamingLand\(\); return; \}/);
+  assert.match(frame, /if\(dim==='taming_land'\)\{/);
+  assert.match(frame, /enterTamingLand:\(\)=>dimensionsApi\.enterTamingLand/);
+  assert.match(frame, /walkToTamingPortal:\(\)=>e2eWalkTo/);
 });
 
 test('Town of Beginnings has explainer NPC helpers for major areas', () => {
@@ -266,8 +294,9 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(world, /function makeSkyDragon\(spec,index\)/);
   assert.match(world, /function updateSkyDragons\(dt,tt\)/);
   assert.match(world, /const inPetTamerRoom=dim==='job'&&petRoom&&Math\.hypot\(player\.pos\.x-petRoom\.x,player\.pos\.z-petRoom\.z\)<petRoom\.R\+18/);
-  assert.match(world, /dim!=='overworld'&&!inPetTamerRoom/);
-  assert.match(world, /cx=inPetTamerRoom\?petRoom\.x\+\(d\.cx-\(HUB\.roost\.x\+16\)\)\*\.24:d\.cx/);
+  assert.match(world, /const inTamingLand=dim==='taming_land'/);
+  assert.match(world, /dim!=='overworld'&&!inPetTamerRoom&&!inTamingLand/);
+  assert.match(world, /cx=inTamingLand\?TAMING_LAND\.x\+\(d\.cx-\(HUB\.roost\.x\+16\)\)\*\.42:inPetTamerRoom\?/);
   assert.match(world, /playerOverworldDistanceSq\(d\.cx,d\.cz\)<360\*360/);
   assert.match(world, /"skyDragons":\{get:\(\)=>skyDragons\}/);
   assert.match(world, /"updateSkyDragons":\{get:\(\)=>updateSkyDragons\}/);

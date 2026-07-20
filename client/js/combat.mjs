@@ -5,6 +5,7 @@ const gameContext=window.BlockcraftGameContext;
 const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
+const enterTamingLand=dimensionsApi.enterTamingLand,exitTamingLand=dimensionsApi.exitTamingLand;
 const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoom=dimensionsApi.exitJobTutorialRoom;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
 const BLOCK_PLACE_REACH=8;
@@ -3175,6 +3176,14 @@ function nearbyGuardian(range=7.8){
   if(dim!=='overworld')return false;
   return Math.hypot(player.pos.x-HUB.guardian.x, player.pos.z-HUB.guardian.z)<range;
 }
+function nearTamingLandPortal(range=5.8){
+  return dim==='overworld'&&HUB.tamingPortal&&Math.hypot(player.pos.x-HUB.tamingPortal.x,player.pos.z-HUB.tamingPortal.z)<range;
+}
+function nearTamingLandExit(range=4.4){
+  if(dim!=='taming_land'||!TAMING_LAND)return false;
+  const x=TAMING_LAND.x+TAMING_LAND.exit.dx+.5,z=TAMING_LAND.z+TAMING_LAND.exit.dz+.5;
+  return Math.hypot(player.pos.x-x,player.pos.z-z)<range;
+}
 function nearbyVillager(range=3.6){
   if(dim!=='overworld'||!Array.isArray(villagers))return null;
   let best=null,bd=range;
@@ -3211,6 +3220,8 @@ function nearbyInteractionPrompt(){
     const d=Math.hypot(exitPortal.position.x-player.pos.x,exitPortal.position.z-player.pos.z);
     if(d<2.8)push({key:'G',title:'Dungeon Exit',small:'Return to the overworld',priority:120},d);
   }
+  if(nearTamingLandPortal())push({key:'G',title:'Taming Land Portal',small:'Travel to the dragon and familiar sanctuary',priority:119},0);
+  if(nearTamingLandExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at Level '+MEDITATION_UNLOCK_LEVEL),priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
@@ -3408,6 +3419,8 @@ function interactAncientCityDiscovery(s){
 function secondaryAction(){
   if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
+  if(nearTamingLandPortal()){ enterTamingLand(); return; }
+  if(nearTamingLandExit()){ exitTamingLand(); return; }
   if(tryMinerTutorialTrade()) return;
   if(performPetTamerDragonTutorialAction()) return;
   if(tryBoardSkyship()) return;
@@ -3682,6 +3695,8 @@ gameContext.registerModule('combat', Object.freeze({
   nearFellowshipPantryShelf,
   nearFellowshipWeatherVane,
   nearbyAncientCityInteractable,
+  nearTamingLandPortal,
+  nearTamingLandExit,
 }));
 
 
