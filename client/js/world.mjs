@@ -1972,7 +1972,7 @@ const DRAGON_INCUBATION_MS=30000;
 const DRAGON_INCUBATION_MS_BY_TYPE={ ember:30000, verdant:35000, frost:45000, storm:60000, void:90000 };
 function dragonIncubationMs(type){ return DRAGON_INCUBATION_MS_BY_TYPE[type]||DRAGON_INCUBATION_MS; }
 function incubationKey(x,y,z){ return x+','+y+','+z; }
-function drawIncubationTimer(canvas, seconds, done){
+function drawIncubationTimer(canvas, seconds, done, label='HATCH'){
   const ctx=canvas.getContext('2d');
   ctx.clearRect(0,0,160,48);
   ctx.fillStyle='rgba(7,10,18,.78)';
@@ -1984,7 +1984,7 @@ function drawIncubationTimer(canvas, seconds, done){
   ctx.font='14px monospace';
   ctx.textAlign='center';
   ctx.textBaseline='middle';
-  ctx.fillText(done?'READY - CLAIM':('HATCH '+Math.max(0,Math.ceil(seconds))+'s'),80,23);
+  ctx.fillText(done?'READY - CLAIM':(String(label||'HATCH').slice(0,10)+' '+Math.max(0,Math.ceil(seconds))+'s'),80,23);
 }
 function makeIncubationTimerSprite(){
   const canvas=document.createElement('canvas');
@@ -2043,13 +2043,16 @@ function syncDragonIncubationMesh(m){
   add(.07,.07,.09,.11,.72,.17,speck);
   add(.62,.04,.62,0,.5,0,glow);
   const timer=makeIncubationTimerSprite();
-  timer.position.set(0,1.45,0);
+  if(m.tutorial){
+    timer.position.set(0,1.95,0);
+    timer.scale.set(2.35,.7,1);
+  }else timer.position.set(0,1.45,0);
   group.add(timer);
   const readyBeam=makeReadyBeam(col.speck);
   readyBeam.visible=!!m.ready;
   group.add(readyBeam);
   group.position.set(x+.5,y,z+.5);
-  group.userData={finishAt:m.finishAt||Date.now(), startedAt:m.startedAt||Date.now(), eggId, type:m.type||'', gender:m.gender==='female'?'female':'male', ready:!!m.ready, timer, readyBeam, readyFxAcc:0};
+  group.userData={finishAt:m.finishAt||Date.now(), startedAt:m.startedAt||Date.now(), eggId, type:m.type||'', gender:m.gender==='female'?'female':'male', ready:!!m.ready, tutorial:!!m.tutorial, timer, readyBeam, readyFxAcc:0};
   insulatorGroup.add(group);
   dragonIncubationMeshes[incubationKey(x,y,z)]=group;
 }
@@ -2086,7 +2089,7 @@ function tickDragonIncubationMeshes(now){
     const whole=Math.ceil(seconds);
     if(whole!==timer.userData.last){
       timer.userData.last=whole;
-      drawIncubationTimer(timer.userData.canvas, seconds, done);
+      drawIncubationTimer(timer.userData.canvas, seconds, done, ud.tutorial?'EGG HATCH':'HATCH');
       timer.userData.tex.needsUpdate=true;
     }
   }

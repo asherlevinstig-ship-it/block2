@@ -186,6 +186,20 @@ function renderDragonCommandWheel(){
   const type=dragonWheel.type||dragonWheelTarget();
   dragonWheel.type=type;
   if(!type){
+    const practice=globalThis.BlockcraftPetTamerPractice;
+    if(practice&&typeof practice.commandAvailable==='function'&&practice.commandAvailable()){
+      chatWheelModeEl.textContent='PRACTICE DRAGON';
+      const action=document.createElement('button');action.type='button';action.className='wheelitem selected';
+      action.innerHTML='<b>STAY</b><span>Save a practice post</span>';
+      action.style.left='215px';action.style.top='72px';
+      action.addEventListener('click',()=>{
+        const done=typeof practice.commandStay==='function'&&practice.commandStay();
+        closeDragonCommandWheel(!!done);
+      });
+      chatWheelItemsEl.appendChild(action);
+      const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Tutorial bond active';
+      return;
+    }
     chatWheelModeEl.textContent='DRAGON';
     const empty=document.createElement('button');empty.type='button';empty.className='wheelitem selected';empty.textContent='NO BONDED DRAGONS';
     empty.style.left='215px';empty.style.top='72px';empty.addEventListener('click',()=>closeDragonCommandWheel(true));chatWheelItemsEl.appendChild(empty);

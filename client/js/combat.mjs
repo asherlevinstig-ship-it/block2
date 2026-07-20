@@ -751,7 +751,7 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
 });
 let jobTutorialActive=false, jobTutorialJob='';
 let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null;
-let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0;
+let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant';
 const MINER_TUTORIAL_TRADE_GOLD=45;
 const PET_TAMER_TUTORIAL_HATCH_MS=3000;
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
@@ -1237,7 +1237,7 @@ function petTamerTutorialPromptKey(){
 }
 function petTamerTutorialPromptSub(){
   const step=jobTutorialPetDragonStep|0;
-  if(step===0)return jobTutorialPetEggStarted?'Wait for the fast hatch, then press G to claim':'Use selected Verdant Dragon Egg';
+  if(step===0)return jobTutorialPetEggStarted?'Watch the fast hatch timer above the egg, then press G to claim':'Use selected Verdant Dragon Egg';
   if(step===1)return 'Stay close to build trust';
   if(step===2)return 'Use selected Dragon Treat';
   if(step===3)return 'Practise Stay command';
@@ -1273,6 +1273,21 @@ function clearPetTamerTutorialEgg(){
   if(p&&worldState.removeDragonIncubationMesh)worldState.removeDragonIncubationMesh(p.bx,p.by,p.bz);
   jobTutorialPetEggStarted=false;
   jobTutorialPetEggReadyAt=0;
+  jobTutorialPetEggType='verdant';
+}
+function syncPetTamerTutorialEggTimer(){
+  if(!jobTutorialPetEggStarted||!jobTutorialPetEggReadyAt)return false;
+  const p=petTamerPracticeInsulatorPos();
+  if(!p||!worldState.syncDragonIncubationMesh)return false;
+  const key=p.bx+','+p.by+','+p.bz;
+  if(worldState.dragonIncubationMeshes&&worldState.dragonIncubationMeshes[key])return true;
+  const type=jobTutorialPetEggType||'verdant';
+  worldState.syncDragonIncubationMesh({
+    x:p.bx,y:p.by,z:p.bz,type,eggId:(DRAGON_TYPES[type]&&DRAGON_TYPES[type].egg)||I.EGG_VERDANT,
+    startedAt:jobTutorialPetEggReadyAt-PET_TAMER_TUTORIAL_HATCH_MS,finishAt:jobTutorialPetEggReadyAt,
+    incubationMs:PET_TAMER_TUTORIAL_HATCH_MS,tutorial:true
+  });
+  return true;
 }
 function petTamerPracticeEggFx(kind='hatch'){
   const p=petTamerPracticeInsulatorPos();
@@ -1292,8 +1307,31 @@ function consumeSelectedDragonTreatForTutorial(){
   if(uiOpen)renderUI();
   return true;
 }
+function shouldProtectPetTamerTutorialTreat(){
+  return !!(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&!jobTutorialPetDragonSeen&&jobTutorialPetDragonStep<=2);
+}
+function ensurePetTamerTutorialTreat(select=false){
+  if(!shouldProtectPetTamerTutorialTreat())return false;
+  if(countItem(I.DRAGON_TREAT)<=0){
+    addTemporaryJobTutorialItem(I.DRAGON_TREAT,1,select);
+    sysMsg('<b>Tutorial safety:</b> Here is another Dragon Treat. Save it for the grounded practice dragon.');
+    return true;
+  }
+  if(select)selectDragonTreatForTutorial();
+  return false;
+}
+function protectPetTamerTutorialTreatUse(){
+  if(!shouldProtectPetTamerTutorialTreat())return false;
+  const held=inv[selected];
+  if(held&&held.id===I.DRAGON_TREAT&&jobTutorialPetDragonStep<2){
+    sysMsg('Save the <b>Dragon Treat</b> for the care step. First hatch the egg and meet the practice dragon.');
+    return true;
+  }
+  ensurePetTamerTutorialTreat(false);
+  return false;
+}
 function selectDragonTreatForTutorial(){
-  if(countItem(I.DRAGON_TREAT)<=0)ensureOnboardingItem(I.DRAGON_TREAT,1);
+  if(countItem(I.DRAGON_TREAT)<=0)addTemporaryJobTutorialItem(I.DRAGON_TREAT,1,false);
   if(inv[selected]&&inv[selected].id===I.DRAGON_TREAT)return true;
   const slot=findInvSlot(I.DRAGON_TREAT);
   if(slot<0)return false;
@@ -1355,9 +1393,10 @@ function startPetTamerTutorialEggHatch(){
   const now=Date.now();
   jobTutorialPetEggStarted=true;
   jobTutorialPetEggReadyAt=now+PET_TAMER_TUTORIAL_HATCH_MS;
+  jobTutorialPetEggType=type;
   if(worldState.syncDragonIncubationMesh)worldState.syncDragonIncubationMesh({
     x:p.bx,y:p.by,z:p.bz,type,eggId:(DRAGON_TYPES[type]&&DRAGON_TYPES[type].egg)||I.EGG_VERDANT,
-    startedAt:now,finishAt:jobTutorialPetEggReadyAt,incubationMs:PET_TAMER_TUTORIAL_HATCH_MS
+    startedAt:now,finishAt:jobTutorialPetEggReadyAt,incubationMs:PET_TAMER_TUTORIAL_HATCH_MS,tutorial:true
   });
   petTamerPracticeEggFx('ready');
   sysMsg('The tutorial egg warms quickly. Wait for <b>READY</b>, then press <b>G</b> again to claim the hatchling.');
@@ -1411,6 +1450,16 @@ function commandPetTamerPracticeDragon(){
   sysMsg('Good. Now press <b>Z</b> beside the dragon to mount it, then ride forward with <b>WASD</b>.');
   return true;
 }
+function petTamerPracticeCommandAvailable(){
+  return !!(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&jobTutorialPetDragonStep===3&&!jobTutorialPetDragonSeen);
+}
+globalThis.BlockcraftPetTamerPractice={
+  active:()=>!!(jobTutorialActive&&jobTutorialJob==='pet_tamer'&&dim==='job'&&!jobTutorialPetDragonSeen),
+  commandAvailable:petTamerPracticeCommandAvailable,
+  commandStay:commandPetTamerPracticeDragon,
+  protectTreatUse:protectPetTamerTutorialTreatUse,
+  ensureTreat:ensurePetTamerTutorialTreat
+};
 function mountPetTamerPracticeDragon(){
   if(!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||jobTutorialPetDragonStep!==4)return false;
   if(!nearPetTamerPracticeDragon(5.2)){
@@ -1465,6 +1514,7 @@ function performPetTamerDragonTutorialAction(){
     if(p&&worldState.removeDragonIncubationMesh)worldState.removeDragonIncubationMesh(p.bx,p.by,p.bz);
     jobTutorialPetEggStarted=false;
     jobTutorialPetEggReadyAt=0;
+    jobTutorialPetEggType='verdant';
     completePetTamerDragonTutorialStep('egg');
     sysMsg('Now follow the pillar to the grounded practice dragon and stay close to calm it.');
     return true;
@@ -1483,7 +1533,7 @@ function performPetTamerDragonTutorialAction(){
   }
   if(step===2){
     if(!inv[selected]||inv[selected].id!==I.DRAGON_TREAT){
-      if(countItem(I.DRAGON_TREAT)<=0)ensureOnboardingItem(I.DRAGON_TREAT,1);
+      ensurePetTamerTutorialTreat(true);
       sysMsg('Select the <b>Dragon Treat</b> on your hotbar, then press <b>G</b> to feed it.');
       return true;
     }
@@ -1674,6 +1724,7 @@ function completeJobTutorial(){
   jobTutorialPetDragonNearSince=0;
   jobTutorialPetEggStarted=false;
   jobTutorialPetEggReadyAt=0;
+  jobTutorialPetEggType='verdant';
   jobTutorialReturnWarnAt=0;
   if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
@@ -1742,6 +1793,7 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialPetDragonNearSince=0;
   jobTutorialPetEggStarted=false;
   jobTutorialPetEggReadyAt=0;
+  jobTutorialPetEggType='verdant';
   clearPetTamerTutorialMount();
   clearPetTamerTutorialEgg();
   jobTutorialReturnWarnAt=0;
@@ -1771,6 +1823,7 @@ function tickJobTutorial(now){
     jobTutorialPetDragonNearSince=0;
     jobTutorialPetEggStarted=false;
     jobTutorialPetEggReadyAt=0;
+    jobTutorialPetEggType='verdant';
     if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
@@ -1790,6 +1843,8 @@ function tickJobTutorial(now){
   tutorialRing.scale.set(s,s,s);
   updateJobTutorialHud();
   if(jobTutorialJob==='pet_tamer'){
+    if(jobTutorialPetDragonStep<=2)ensurePetTamerTutorialTreat(false);
+    if(jobTutorialPetDragonStep===0&&jobTutorialPetEggStarted)syncPetTamerTutorialEggTimer();
     if(completePetTamerApproachIfReady(now)) return;
     if(jobTutorialPetDragonStep===0&&jobTutorialPetEggStarted&&jobTutorialPetEggReadyAt&&Date.now()>=jobTutorialPetEggReadyAt&&now>jobTutorialReturnWarnAt){
       jobTutorialReturnWarnAt=now+1600;
@@ -3301,6 +3356,7 @@ function secondaryAction(){
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
   if(heldRC && heldRC.id===I.REPAIR_KIT){ useRepairKit(selected); return; }
+  if(heldRC && heldRC.id===I.DRAGON_TREAT && protectPetTamerTutorialTreatUse()) return;
   if(heldRC && DRAGON_EGG_TO_TYPE[heldRC.id]!==undefined){ hatchDragonEgg(selected); return; }
   if(heldRC && FAMILIAR_BY_SIGIL[heldRC.id]){ bindFamiliarItem(selected); return; }
   if(heldRC && heldRC.id===I.DRAGON_TREAT && feedMountedDragon(selected)) return;
