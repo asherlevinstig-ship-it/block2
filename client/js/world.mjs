@@ -7125,10 +7125,11 @@ function escHTML(v){
   return String(v).replace(/[&<>"']/g, ch=>({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
 }
 // Tiered notice channel: 'minor' (compact ambient line), 'notice' (default), 'major'
-// (gold alert). At most SYS_MAX_VISIBLE toasts show at once — repeats coalesce into an
-// xN counter, overflow queues (majors and notices only; ambient lines just drop).
-const SYS_MAX_VISIBLE=4, SYS_QUEUE_MAX=8;
-const sysActive=[], sysPending=[];
+// (gold alert). Keep the top of the screen calm: repeats coalesce, burst noise
+// falls back to the chat/event log, and only a couple of notices show at once.
+const SYS_MAX_VISIBLE=2, SYS_QUEUE_MAX=5, SYS_BURST_WINDOW_MS=900, SYS_RECENT_COOLDOWN_MS=1800;
+const sysActive=[], sysPending=[], sysSpawnedAt=[];
+const sysRecent=new Map();
 sysEl.setAttribute('aria-live','polite');
 const rewardFeedEl=document.getElementById('rewardfeed');
 const rewardGainActive=new Map();
@@ -7152,7 +7153,7 @@ function rewardGain(kind, amount, label, opts={}){
   const entry={el,amount,value:el.querySelector('span'),timer:0};
   entry.value.textContent='+'+amount.toLocaleString('en-US')+' '+label;
   rewardGainActive.set(key,entry);rewardFeedEl.appendChild(el);
-  while(rewardFeedEl.children.length>4){
+  while(rewardFeedEl.children.length>3){
     const first=rewardFeedEl.firstElementChild;
     const found=[...rewardGainActive.entries()].find(([,v])=>v.el===first);
     if(found){clearTimeout(found[1].timer);rewardGainActive.delete(found[0]);}
@@ -7171,7 +7172,7 @@ function removeRewardGain(entry){
 function sysMsg(html, opts){
   opts=typeof opts==='string'?{tier:opts}:(opts||{});
   const tier=opts.tier==='minor'||opts.tier==='major'?opts.tier:'notice';
-  const key=tier+'|'+html;
+  const key=tier+'|'+html, now=Date.now(), clean=sysCleanText(html);
   const dup=sysActive.find(t=>t.key===key);
   if(dup){
     dup.count++;
@@ -7181,12 +7182,34 @@ function sysMsg(html, opts){
     armSysHide(dup);
     return;
   }
+  const recentAt=sysRecent.get(key)||0;
+  if(recentAt&&now-recentAt<SYS_RECENT_COOLDOWN_MS)return;
+  sysRecent.set(key,now);
+  if(sysRecent.size>80){
+    const cutoff=now-10000;
+    for(const [k,t] of sysRecent)if(t<cutoff)sysRecent.delete(k);
+  }
+  const burst=sysBursting(now);
+  if(burst&&tier!=='major'){
+    if(clean)eventLog(clean,opts.title?'['+opts.title+']':'[Notice]');
+    return;
+  }
   if(sysActive.length>=SYS_MAX_VISIBLE){
     if(tier==='minor') return;
-    if(sysPending.length<SYS_QUEUE_MAX) sysPending.push({html,tier,title:opts.title});
+    const pendingDup=sysPending.find(t=>t.key===key);
+    if(pendingDup){ pendingDup.count=(pendingDup.count||1)+1; return; }
+    if(sysPending.length<SYS_QUEUE_MAX) sysPending.push({html,tier,title:opts.title,key,count:1});
+    else if(clean)eventLog(clean,opts.title?'['+opts.title+']':'[Notice]');
     return;
   }
   spawnSysToast(html,tier,opts.title);
+}
+function sysCleanText(html){
+  return String(html||'').replace(/<br\s*\/?>/gi,' ').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,180);
+}
+function sysBursting(now=Date.now()){
+  while(sysSpawnedAt.length&&now-sysSpawnedAt[0]>SYS_BURST_WINDOW_MS)sysSpawnedAt.shift();
+  return sysSpawnedAt.length>=SYS_MAX_VISIBLE;
 }
 function spawnSysToast(html,tier,title){
   const d=document.createElement('div'); d.className='sysmsg '+tier;
@@ -7199,6 +7222,7 @@ function spawnSysToast(html,tier,title){
   document.body.classList.add('system-notice-active');
   const t={el:d,key:tier+'|'+html,count:1,tier,hideTimer:0};
   sysActive.push(t);
+  const now=Date.now();sysSpawnedAt.push(now);while(sysSpawnedAt.length&&now-sysSpawnedAt[0]>SYS_BURST_WINDOW_MS)sysSpawnedAt.shift();
   requestAnimationFrame(()=>{ d.style.opacity=1; d.style.transform='translateY(0)'; });
   armSysHide(t);
 }

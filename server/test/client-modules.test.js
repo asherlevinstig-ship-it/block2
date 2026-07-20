@@ -1400,6 +1400,18 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.doesNotMatch(styles,/body\.onboarding[^\{]*#currentquest/);
 });
 
+test('achievement notices are capped and burst-safe',()=>{
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  assert.match(world,/const SYS_MAX_VISIBLE=2, SYS_QUEUE_MAX=5, SYS_BURST_WINDOW_MS=900, SYS_RECENT_COOLDOWN_MS=1800/);
+  assert.match(world,/const sysActive=\[\], sysPending=\[\], sysSpawnedAt=\[\];/);
+  assert.match(world,/const sysRecent=new Map\(\);/);
+  assert.match(world,/function sysCleanText\(html\)\{/);
+  assert.match(world,/function sysBursting\(now=Date\.now\(\)\)\{/);
+  assert.match(world,/if\(burst&&tier!=='major'\)\{/);
+  assert.match(world,/if\(pendingDup\)\{ pendingDup\.count=\(pendingDup\.count\|\|1\)\+1; return; \}/);
+  assert.match(world,/while\(rewardFeedEl\.children\.length>3\)\{/);
+});
+
 test('level two job chooser presents six profession tutorial cards',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
