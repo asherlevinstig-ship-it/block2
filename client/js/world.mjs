@@ -1043,11 +1043,19 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
       if(d<=7&&d>=3)setBlock(x,G,z,B.WATER);
       else if(d<3)setBlock(x,G,z,B.GLASS);
     }
-    box(cx-7,G+1,cz+18,cx+7,G+1,cz+24,B.PLANKS);
-    for(const [ox,oz] of [[-7,18],[7,18],[-7,24],[7,24]])for(let y=G+2;y<=G+5;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
-    box(cx-5,G+5,cz+20,cx+5,G+5,cz+24,B.LEAVES);
-    setBlock(cx-4,G+2,cz+21,B.CHEST);
-    setBlock(cx+4,G+2,cz+21,B.TABLE);
+    const exitX=cx-34, exitZ=cz+34;
+    for(let x=exitX-8;x<=exitX+8;x++)for(let z=exitZ-8;z<=exitZ+8;z++){
+      const d=Math.hypot(x-exitX,z-exitZ);
+      if(d<=8){
+        setBlock(x,G,z,d>6.4?B.COBBLE:B.PLANKS);
+        for(let y=G+1;y<=G+8;y++)setBlock(x,y,z,B.AIR);
+      }
+    }
+    for(const [ox,oz] of [[-7,-7],[7,-7],[-7,7],[7,7]])for(let y=G+1;y<=G+5;y++)setBlock(exitX+ox,y,exitZ+oz,B.LOG);
+    box(exitX-5,G+5,exitZ-5,exitX+5,G+5,exitZ+5,B.LEAVES);
+    setBlock(exitX,G+1,exitZ,B.LANTERN);
+    setBlock(exitX-4,G+1,exitZ,B.CHEST);
+    setBlock(exitX+4,G+1,exitZ,B.TABLE);
     dragonLandingPad(9,8);
     setBlock(cx,G,cz+8,B.COBBLE);
     setBlock(cx,G+1,cz+8,B.EGG_INSULATOR);
@@ -1974,30 +1982,45 @@ const DRAGON_INCUBATION_MS=30000;
 const DRAGON_INCUBATION_MS_BY_TYPE={ ember:30000, verdant:35000, frost:45000, storm:60000, void:90000 };
 function dragonIncubationMs(type){ return DRAGON_INCUBATION_MS_BY_TYPE[type]||DRAGON_INCUBATION_MS; }
 function incubationKey(x,y,z){ return x+','+y+','+z; }
-function drawIncubationTimer(canvas, seconds, done, label='HATCH'){
+function drawIncubationTimer(canvas, seconds, done, label='HATCH', progress=0){
   const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,160,48);
+  const w=canvas.width||192, h=canvas.height||72, p=Math.max(0,Math.min(1,done?1:progress||0));
+  ctx.clearRect(0,0,w,h);
   ctx.fillStyle='rgba(7,10,18,.78)';
-  ctx.fillRect(4,6,152,34);
+  ctx.fillRect(5,7,w-10,h-14);
   ctx.strokeStyle=done?'#b7ff8a':'#8fe8ff';
   ctx.lineWidth=2;
-  ctx.strokeRect(4.5,6.5,151,33);
+  ctx.strokeRect(5.5,7.5,w-11,h-15);
+  const cx=38, cy=h/2, r=21;
+  ctx.strokeStyle='rgba(255,255,255,.18)';
+  ctx.lineWidth=5;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  ctx.strokeStyle=done?'#b7ff8a':'#ffd45a';
+  ctx.lineCap='round';
+  ctx.beginPath(); ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+Math.PI*2*p); ctx.stroke();
+  ctx.lineCap='butt';
   ctx.fillStyle=done?'#d8ff9a':'#eaf6ff';
-  ctx.font='14px monospace';
+  ctx.font='13px monospace';
   ctx.textAlign='center';
   ctx.textBaseline='middle';
-  ctx.fillText(done?'READY - CLAIM':(String(label||'HATCH').slice(0,10)+' '+Math.max(0,Math.ceil(seconds))+'s'),80,23);
+  ctx.fillText(done?'GO':String(Math.max(0,Math.ceil(seconds))),cx,cy);
+  ctx.textAlign='left';
+  ctx.font='15px monospace';
+  ctx.fillText(done?'READY TO CLAIM':String(label||'HATCH').slice(0,13),72,25);
+  ctx.fillStyle=done?'#b7ff8a':'#ffd45a';
+  ctx.font='11px monospace';
+  ctx.fillText(done?'PRESS G':'FAST HATCHING',72,47);
 }
 function makeIncubationTimerSprite(){
   const canvas=document.createElement('canvas');
-  canvas.width=160; canvas.height=48;
+  canvas.width=192; canvas.height=72;
   drawIncubationTimer(canvas,0,false);
   const tex=new THREE.CanvasTexture(canvas);
   tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.LinearFilter;
   const mat=new THREE.SpriteMaterial({map:tex, transparent:true, opacity:.95, depthWrite:false});
   const spr=new THREE.Sprite(mat);
-  spr.scale.set(1.45,.44,1);
-  spr.userData={canvas, tex, last:-999};
+  spr.scale.set(1.75,.66,1);
+  spr.userData={canvas, tex, last:-999, progressKey:-1, doneLast:false};
   return spr;
 }
 function makeReadyBeam(color){
@@ -2039,22 +2062,31 @@ function syncDragonIncubationMesh(m){
     const mesh=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz), mat);
     mesh.position.set(px,py,pz); group.add(mesh); return mesh;
   };
-  add(.34,.42,.34,0,.82,0,shell);
-  add(.24,.18,.24,0,.54,0,shell);
-  add(.08,.08,.09,-.09,.9,.16,speck);
-  add(.07,.07,.09,.11,.72,.17,speck);
-  add(.62,.04,.62,0,.5,0,glow);
+  const eggScale=m.tutorial?1.55:1;
+  add(.34*eggScale,.42*eggScale,.34*eggScale,0,.82*eggScale,0,shell);
+  add(.24*eggScale,.18*eggScale,.24*eggScale,0,.54*eggScale,0,shell);
+  add(.08*eggScale,.08*eggScale,.09*eggScale,-.09*eggScale,.9*eggScale,.16*eggScale,speck);
+  add(.07*eggScale,.07*eggScale,.09*eggScale,.11*eggScale,.72*eggScale,.17*eggScale,speck);
+  add(.62*eggScale,.04,.62*eggScale,0,.5*eggScale,0,glow);
+  let tutorialHalo=null;
+  if(m.tutorial){
+    const haloMat=new THREE.MeshBasicMaterial({color:col.speck,transparent:true,opacity:.46,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+    tutorialHalo=new THREE.Mesh(new THREE.TorusGeometry(.72,.045,10,40),haloMat);
+    tutorialHalo.rotation.x=Math.PI/2;
+    tutorialHalo.position.y=.52;
+    group.add(tutorialHalo);
+  }
   const timer=makeIncubationTimerSprite();
   if(m.tutorial){
-    timer.position.set(0,1.95,0);
-    timer.scale.set(2.35,.7,1);
+    timer.position.set(0,2.8,0);
+    timer.scale.set(3.0,1.12,1);
   }else timer.position.set(0,1.45,0);
   group.add(timer);
   const readyBeam=makeReadyBeam(col.speck);
   readyBeam.visible=!!m.ready;
   group.add(readyBeam);
   group.position.set(x+.5,y,z+.5);
-  group.userData={finishAt:m.finishAt||Date.now(), startedAt:m.startedAt||Date.now(), eggId, type:m.type||'', gender:m.gender==='female'?'female':'male', ready:!!m.ready, tutorial:!!m.tutorial, timer, readyBeam, readyFxAcc:0};
+  group.userData={finishAt:m.finishAt||Date.now(), startedAt:m.startedAt||Date.now(), eggId, type:m.type||'', gender:m.gender==='female'?'female':'male', ready:!!m.ready, tutorial:!!m.tutorial, timer, readyBeam, tutorialHalo, readyFxAcc:0};
   insulatorGroup.add(group);
   dragonIncubationMeshes[incubationKey(x,y,z)]=group;
 }
@@ -2064,6 +2096,18 @@ function tickDragonIncubationMeshes(now){
     group.rotation.y += ud.ready ? 0.026 : 0.012;
     const seconds=ud.ready ? 0 : Math.max(0,((ud.finishAt||now)-Date.now())/1000);
     const done=ud.ready || seconds<=0;
+    const duration=Math.max(1,(ud.finishAt||now)-(ud.startedAt||now));
+    const progress=done?1:Math.max(0,Math.min(1,(Date.now()-(ud.startedAt||Date.now()))/duration));
+    if(ud.tutorial){
+      const pulse=1+Math.sin(now*.006)*.025;
+      group.scale.set(pulse,pulse,pulse);
+      if(ud.tutorialHalo){
+        ud.tutorialHalo.rotation.z+=.035;
+        ud.tutorialHalo.material.opacity=.34+Math.sin(now*.005)*.12;
+        ud.tutorialHalo.scale.setScalar(1+Math.sin(now*.007)*.08);
+      }
+      if(timer)timer.position.y=2.82+Math.sin(now*.004)*.08;
+    }
     if(done && !ud.ready){
       ud.ready=true;
       if(timer) timer.userData.last=-999;
@@ -2089,9 +2133,12 @@ function tickDragonIncubationMeshes(now){
     }
     if(!timer) continue;
     const whole=Math.ceil(seconds);
-    if(whole!==timer.userData.last){
+    const progressKey=Math.floor(progress*100);
+    if(whole!==timer.userData.last||progressKey!==timer.userData.progressKey||done!==timer.userData.doneLast){
       timer.userData.last=whole;
-      drawIncubationTimer(timer.userData.canvas, seconds, done, ud.tutorial?'EGG HATCH':'HATCH');
+      timer.userData.progressKey=progressKey;
+      timer.userData.doneLast=done;
+      drawIncubationTimer(timer.userData.canvas, seconds, done, ud.tutorial?'EGG HATCH':'HATCH', progress);
       timer.userData.tex.needsUpdate=true;
     }
   }

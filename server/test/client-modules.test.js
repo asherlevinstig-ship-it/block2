@@ -285,6 +285,8 @@ test('Dragon Roost skyline has animated atmospheric flying dragons', () => {
   assert.match(companions, /typeof practice\.hatched==='function'&&!practice\.hatched\(\)/);
   assert.match(companions, /group\.name='petTamerHatchedDragon'/);
   assert.match(companions, /group\.userData\.blockcraftKind='hatchedTutorialDragon'/);
+  assert.match(companions, /dragon\.rotation\.y=0/);
+  assert.match(companions, /const dx=\(tx\|\|0\)-rec\.group\.position\.x, dz=\(tz\|\|0\)-rec\.group\.position\.z/);
   assert.match(companions, /rec\.group\.userData\.tutorialRole='follow'/);
   assert.match(companions, /tutorialRole==='stay'&&rec\.group\.userData\.tutorialStaySpot/);
   assert.match(companions, /if\(mounted&&isDragon\(mountKind\)&&Number\(status\.step\)===4\)/);
@@ -1547,6 +1549,13 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/for\(let y=G\+1;y<=G\+7;y\+\+\)setBlock\(x\+dx,y,z\+dz,B\.AIR\)/);
   assert.match(world,/dragonLandingPad\(9,8\)/);
   assert.match(world,/setBlock\(cx,G\+1,cz\+8,B\.EGG_INSULATOR\)/);
+  assert.match(world,/const exitX=cx-34, exitZ=cz\+34/);
+  assert.match(combat,/return room\?\{x:room\.x-34,y:room\.G\+1\.035,z:room\.z\+34\}:null/);
+  assert.match(world,/function drawIncubationTimer\(canvas, seconds, done, label='HATCH', progress=0\)/);
+  assert.match(world,/const eggScale=m\.tutorial\?1\.55:1/);
+  assert.match(world,/tutorialHalo=new THREE\.Mesh\(new THREE\.TorusGeometry\(\.72,\.045,10,40\),haloMat\)/);
+  assert.match(world,/timer\.position\.set\(0,2\.8,0\)/);
+  assert.match(world,/const progressKey=Math\.floor\(progress\*100\)/);
   assert.match(dimensions,/function generateJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function enterJobTutorialRoom\(jobId\)/);
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);

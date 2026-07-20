@@ -1155,7 +1155,7 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
     dragon.userData.baseCompanionScale=.7;
     dragon.userData.kind='petTamerHatchedDragonBody';
     dragon.userData.blockcraftKind='hatchedTutorialDragonBody';
-    dragon.rotation.y=Math.PI;
+    dragon.rotation.y=0;
     group.add(dragon);
     const tag=makeDragonNameplate('Your Hatched Dragon', 'Fresh Tutorial Bond', '#9ad26b');
     tag.position.set(0,1.75,0);
@@ -1191,7 +1191,7 @@ function tickPetTamerTutorialGroundDragon(active, room, now, dt=0.016){
   rec.group.position.y+=(ty+.035*Math.sin(now*.002+rec.phase)-rec.group.position.y)*Math.min(1,(dt||0.016)*7);
   rec.group.position.z+=(tz-rec.group.position.z)*lerp;
   if(following){
-    const dx=(player.pos.x||0)-rec.group.position.x, dz=(player.pos.z||0)-rec.group.position.z;
+    const dx=(tx||0)-rec.group.position.x, dz=(tz||0)-rec.group.position.z;
     yaw=Math.atan2(dx,dz);
   }
   rec.group.rotation.y=yaw+.06*Math.sin(now*.0017+rec.phase);

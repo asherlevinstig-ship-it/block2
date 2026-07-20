@@ -1197,7 +1197,7 @@ function petTamerPracticeInsulatorPos(){
 }
 function petTamerPracticeRoostPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
-  return room?{x:room.x,y:room.G+1.035,z:room.z+22}:null;
+  return room?{x:room.x-34,y:room.G+1.035,z:room.z+34}:null;
 }
 function petTamerPracticeFlightRingPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer;
