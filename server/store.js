@@ -471,6 +471,11 @@ function sanitizeActiveRoom(raw) {
     traded: raw.traded === true,
   };
   if (job === 'farmer') out.farmerStep = clampI(raw.farmerStep, 0, 4);
+  if (job === 'cook') {
+    out.cookStep = clampI(raw.cookStep, 0, 4);
+    out.cookStartedAt = clampI(raw.cookStartedAt, 0, 4102444800000);
+    out.cookReadyAt = clampI(raw.cookReadyAt, 0, 4102444800000);
+  }
   if (job === 'pet_tamer') {
     out.petDragonSeen = raw.petDragonSeen === true;
     out.petDragonStep = clampI(raw.petDragonStep, 0, 5);

@@ -1524,6 +1524,16 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/noteFarmerTutorialAction\('harvest'\)/);
   assert.match(combat,/get jobTutorialFarmerStep\(\)\{ return jobTutorialFarmerStep; \}/);
   assert.match(networking,/farmerStep:Math\.max\(0,Math\.min\(4,Number\(combatState\.jobTutorialFarmerStep\)\|\|0\)\)/);
+  assert.match(combat,/const COOK_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
+  assert.match(combat,/COOK_TUTORIAL_COOK_MS=5000/);
+  assert.match(combat,/function tryCookTutorialAction\(\)/);
+  assert.match(combat,/function cookTutorialTargetPos\(\)/);
+  assert.match(combat,/function updateCookTutorialTimer\(now=performance\.now\(\)\)/);
+  assert.match(combat,/function nearbyCookTutorialTrader\(range=4\.2\)/);
+  assert.match(combat,/Pippa Hearth/);
+  assert.match(combat,/get jobTutorialCookStep\(\)\{ return jobTutorialCookStep; \}/);
+  assert.match(frame,/cookTutorialAction:\(\)=>combatApi\.performCookTutorialStepForTest/);
+  assert.match(networking,/cookStep:Math\.max\(0,Math\.min\(4,Number\(combatState\.jobTutorialCookStep\)\|\|0\)\)/);
   assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
   assert.match(combat,/function advancePetTamerDragonTutorial\(\)/);
   assert.match(combat,/function performPetTamerDragonTutorialAction\(\)/);

@@ -1083,9 +1083,22 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx-5,G+1,cz-2,B.TABLE);
     setBlock(cx+15,G+1,cz-2,B.CAMPFIRE);
   }else if(jobId==='cook'){
-    box(cx-12,G,cz-10,cx+12,G,cz+6,B.PLANKS);
-    for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-8,B.FURNACE);setBlock(x,G+1,cz-2,B.TABLE);}
-    setBlock(cx,G+1,cz+4,B.CAMPFIRE); setBlock(cx+5,G+1,cz+4,B.CHEST);
+    const clear=(x,z,top=G+7)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
+    box(cx-15,G,cz-13,cx+15,G,cz+15,B.PLANKS);
+    for(let x=cx-15;x<=cx+15;x++)for(let z=cz-13;z<=cz+15;z++)clear(x,z);
+    for(let x=cx-15;x<=cx+15;x++){setBlock(x,G,cz-13,B.COBBLE);setBlock(x,G,cz+15,B.COBBLE);}
+    for(let z=cz-13;z<=cz+15;z++){setBlock(cx-15,G,z,B.COBBLE);setBlock(cx+15,G,z,B.COBBLE);}
+    for(let x=cx-12;x<=cx+12;x+=4){
+      setBlock(x,G+1,cz-10,B.FURNACE);
+      setBlock(x,G+2,cz-10,B.CAMPFIRE);
+    }
+    for(let x=cx-12;x<=cx-4;x+=4)setBlock(x,G+1,cz-2,B.TABLE);
+    setBlock(cx,G+1,cz+4,B.CAMPFIRE);
+    setBlock(cx-1,G,cz+4,B.BRICK);setBlock(cx,G,cz+4,B.BRICK);setBlock(cx+1,G,cz+4,B.BRICK);
+    setBlock(cx+5,G+1,cz+4,B.CHEST);
+    setBlock(cx+10,G+1,cz+10,B.TABLE);
+    setBlock(cx+6,G+1,cz+12,B.LANTERN);
+    setBlock(cx+12,G+1,cz+12,B.CHEST);
   }else if(jobId==='blacksmith'){
     box(cx-13,G,cz-11,cx+13,G,cz+7,B.COBBLE);
     for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-9,B.FURNACE);setBlock(x,G+1,cz-4,B.IRON_ORE);}
