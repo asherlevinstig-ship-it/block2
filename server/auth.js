@@ -5,6 +5,7 @@ const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
+const { I, JOB_IDS, ITEM_NAMES } = require('./rooms/constants');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -15,6 +16,28 @@ const b64url = buf => Buffer.from(buf).toString('base64url');
 const cleanUsername = value => String(value || '').trim().toLowerCase();
 const validUsername = value => /^[a-z0-9_]{3,24}$/.test(value);
 const cleanDisplayName = value => String(value || 'Hunter').replace(/[<>]/g, '').trim().slice(0, 16) || 'Hunter';
+const INV_MAX = 36;
+const KNOWN_ITEM_IDS = new Set(Object.values(I).filter(Number.isFinite));
+
+function grantProfileItem(profile, id, count) {
+  const itemId = Math.max(1, Math.round(Number(id) || 0));
+  const qty = Math.max(1, Math.min(999, Math.round(Number(count) || 1)));
+  if (!KNOWN_ITEM_IDS.has(itemId) && !ITEM_NAMES[itemId]) throw Object.assign(new Error('Unknown item id.'), { status: 400, code: 'item' });
+  const inv = Array.isArray(profile.inv) ? profile.inv : [];
+  for (const slot of inv) {
+    if (slot && slot.id === itemId && !slot.gear && !slot.rarity && !slot.dur) {
+      slot.count = Math.max(1, Math.min(999, (slot.count | 0) + qty));
+      profile.inv = inv;
+      return;
+    }
+  }
+  const empty = inv.findIndex(slot => !slot);
+  const next = { id: itemId, count: qty };
+  if (empty >= 0) inv[empty] = next;
+  else if (inv.length < INV_MAX) inv.push(next);
+  else throw Object.assign(new Error('Inventory is full.'), { status: 409, code: 'inventory_full' });
+  profile.inv = inv;
+}
 
 function parseCookies(header) {
   const out = {};
@@ -303,6 +326,48 @@ class AuthService {
     };
   }
 
+  async patchPlayerProfile(body) {
+    const account = await this.resolveAccountForReset(body);
+    if (!account || !account.id) throw Object.assign(new Error('Account not found.'), { status: 404, code: 'account' });
+    const store = this.getProfileStore();
+    let profile = null;
+    try {
+      const raw = await store.loadPlayer(account.id);
+      profile = raw ? sanitizeProfile(raw) : defaultProfile(account.displayName || account.username || 'Hunter');
+    } catch (e) {
+      throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
+    }
+
+    const job = String(body && body.job || '').trim().toLowerCase();
+    if (job) {
+      if (!JOB_IDS.has(job)) throw Object.assign(new Error('Unknown job.'), { status: 400, code: 'job' });
+      profile.job = job;
+      profile.forceJobChoice = false;
+      profile.jobXpByJob = profile.jobXpByJob && typeof profile.jobXpByJob === 'object' ? profile.jobXpByJob : {};
+      for (const id of JOB_IDS) if (id) profile.jobXpByJob[id] = Math.max(0, profile.jobXpByJob[id] | 0);
+      profile.jobXp = Math.max(0, profile.jobXpByJob[job] | 0);
+    }
+
+    const grants = Array.isArray(body && body.grantItems) ? body.grantItems : [];
+    for (const item of grants) grantProfileItem(profile, item && item.id, item && item.count);
+
+    profile = sanitizeProfile(profile);
+    await store.savePlayer(account.id, profile);
+    const liveRoomsUpdated = await updateLivePlayerProfiles(account.id, { replaceProfile: profile });
+    return {
+      account,
+      liveRoomsUpdated,
+      profile: {
+        exists: true,
+        name: profile.name,
+        nameSet: profile.nameSet === true,
+        level: profile.S && profile.S.lvl || 1,
+        job: profile.job || '',
+        inv: (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 })),
+      },
+    };
+  }
+
   async saveHunterName(account, name) {
     const publicAccount = this.publicAccount(account);
     if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
@@ -542,6 +607,17 @@ class AuthService {
         res.json({ ok: true, account: result.account, profile: result.profile, liveRoomsUpdated: result.liveRoomsUpdated });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Level two reset failed.' });
+      }
+    });
+    app.post('/auth/admin/player-profile/patch', async (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      try {
+        const result = await this.patchPlayerProfile(req.body);
+        res.json({ ok: true, account: result.account, profile: result.profile, liveRoomsUpdated: result.liveRoomsUpdated });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile patch failed.' });
       }
     });
     app.get('/auth/admin/identity-trace', (req, res) => {
