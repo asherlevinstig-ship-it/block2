@@ -2301,8 +2301,9 @@ function netRestoreProfile(m){
     globalThis.BlockcraftTreasureMap=null;if(m.treasureMap&&Array.isArray(m.treasureMap.targets)){const stage=Math.max(0,m.treasureMap.stage|0),targetId=m.treasureMap.targets[stage];if(targetId){globalThis.BlockcraftTreasureMap={id:m.treasureMap.id,kind:m.treasureMap.kind||'treasure',stage,total:m.treasureMap.targets.length,targetId,clue:'Follow the current ink mark and investigate with G.',rewardGold:m.treasureMap.rewardGold|0};hintedDiscoveryIds.add(targetId);}}
     const serverHasActiveRoom=!!(m&&Object.prototype.hasOwnProperty.call(m,'activeRoom'));
     const serverActiveRoom=serverHasActiveRoom&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
+    const runtimeActiveRoom=serverHasActiveRoom&&!serverActiveRoom?currentRuntimeActiveRoom():null;
     const localActiveRoom=!serverHasActiveRoom?readJobTutorialResume():null;
-    const activeRoom=serverActiveRoom||localActiveRoom;
+    const activeRoom=serverActiveRoom||runtimeActiveRoom||localActiveRoom;
     const restoreJobRoom=activeRoom&&activeRoom.dim==='job'&&JOBS[activeRoom.job]?activeRoom:null;
     const restoreTamingLand=activeRoom&&activeRoom.dim==='taming_land'?activeRoom:null;
     if(restoreJobRoom){
@@ -2752,20 +2753,29 @@ function readJobTutorialResume(){
     };
   }catch(e){return null;}
 }
+function currentRuntimeActiveRoom(){
+  if(dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob){
+    const room={
+      dim:'job',
+      job:combatState.jobTutorialJob,
+      minedDiamond:combatState.jobTutorialMinedDiamond===true,
+      traded:combatState.jobTutorialTraded===true,
+      farmerStep:Math.max(0,Math.min(3,Number(combatState.jobTutorialFarmerStep)||0)),
+      petDragonSeen:combatState.jobTutorialPetDragonSeen===true,
+      petDragonStep:Math.max(0,Math.min(5,Number(combatState.jobTutorialPetDragonStep)||0)),
+    };
+    if(player&&player.pos)room.pos=[player.pos.x,player.pos.y,player.pos.z];
+    return room;
+  }
+  if(dimensionsState.kind==='taming_land'){
+    const room={dim:'taming_land'};
+    if(player&&player.pos)room.pos=[player.pos.x,player.pos.y,player.pos.z];
+    return room;
+  }
+  return null;
+}
 function netSnapshot(){
-  const activeRoom=dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob
-    ? {
-        dim:'job',
-        job:combatState.jobTutorialJob,
-        minedDiamond:combatState.jobTutorialMinedDiamond===true,
-        traded:combatState.jobTutorialTraded===true,
-        farmerStep:Math.max(0,Math.min(3,Number(combatState.jobTutorialFarmerStep)||0)),
-        petDragonSeen:combatState.jobTutorialPetDragonSeen===true,
-        petDragonStep:Math.max(0,Math.min(5,Number(combatState.jobTutorialPetDragonStep)||0)),
-      }
-    : dimensionsState.kind==='taming_land'
-      ? {dim:'taming_land'}
-    : null;
+  const activeRoom=currentRuntimeActiveRoom();
   const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;
   storeJobTutorialResume(activeRoom,pos);
   return {

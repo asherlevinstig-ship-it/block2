@@ -470,6 +470,7 @@ function sanitizeActiveRoom(raw) {
     minedDiamond: raw.minedDiamond === true,
     traded: raw.traded === true,
   };
+  if (job === 'farmer') out.farmerStep = clampI(raw.farmerStep, 0, 3);
   if (job === 'pet_tamer') {
     out.petDragonSeen = raw.petDragonSeen === true;
     out.petDragonStep = clampI(raw.petDragonStep, 0, 5);

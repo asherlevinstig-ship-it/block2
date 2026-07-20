@@ -2243,6 +2243,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     finishOnboarding:()=>completeOnboarding(),
     completeOnboardingStep:e2eCompleteOnboardingStep,
     completeTownTutorialStep:step=>completeTownTutorialStep(step),
+    openJobChoice:()=>combatApi.openLevel2JobChoice?combatApi.openLevel2JobChoice(true):false,
     startJobTutorial:jobId=>combatApi.startJobTutorial?combatApi.startJobTutorial(jobId):false,
     resumeJobTutorial:(jobId,state={})=>combatApi.resumeJobTutorial?combatApi.resumeJobTutorial(jobId,state):false,
     farmerTutorialVisualDebug:()=>combatApi.farmerTutorialVisualDebug?combatApi.farmerTutorialVisualDebug():null,

@@ -23,7 +23,11 @@ async function registerFarmer(page) {
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
   await page.locator('#trainingcontinue').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.startJobTutorial('farmer'))).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.openJobChoice())).toBe(true);
+  await expect(page.locator('#pathselect.jobselect')).toBeVisible();
+  await page.locator('.job-choice-card[data-job="farmer"]').click();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
+  await page.waitForTimeout(2500);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
 }
 

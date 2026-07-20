@@ -1605,6 +1605,7 @@ class GameRoom extends Room {
         job,
         minedDiamond: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.minedDiamond === true,
         traded: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.traded === true,
+        farmerStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.farmerStep : 0,
         petDragonSeen: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.petDragonSeen === true,
         petDragonStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.petDragonStep : 0,
       });

@@ -1618,7 +1618,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(dimensions,/function exitJobTutorialRoom\(\)/);
   assert.match(dimensions,/dim='job'/);
   assert.match(dimensions,/tutorialEnter',\{kind:'job',job:jobId\}/);
-  assert.match(networking,/activeRoom=dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob/);
+  assert.match(networking,/function currentRuntimeActiveRoom\(\)\{/);
+  assert.match(networking,/if\(dimensionsState\.kind==='job'&&combatState\.jobTutorialActive&&combatState\.jobTutorialJob\)\{/);
+  assert.match(networking,/const runtimeActiveRoom=serverHasActiveRoom&&!serverActiveRoom\?currentRuntimeActiveRoom\(\):null/);
+  assert.match(networking,/const activeRoom=serverActiveRoom\|\|runtimeActiveRoom\|\|localActiveRoom/);
   assert.match(networking,/const JOB_TUTORIAL_RESUME_KEY='bc_active_job_tutorial_room_v1'/);
   assert.match(networking,/petDragonStep:Math\.max\(0,Math\.min\(5,Number\(combatState\.jobTutorialPetDragonStep\)\|\|0\)\)/);
   assert.match(networking,/function readJobTutorialResume\(\)/);
