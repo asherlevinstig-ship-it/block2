@@ -2245,6 +2245,8 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     completeTownTutorialStep:step=>completeTownTutorialStep(step),
     startJobTutorial:jobId=>combatApi.startJobTutorial?combatApi.startJobTutorial(jobId):false,
     resumeJobTutorial:(jobId,state={})=>combatApi.resumeJobTutorial?combatApi.resumeJobTutorial(jobId,state):false,
+    farmerTutorialVisualDebug:()=>combatApi.farmerTutorialVisualDebug?combatApi.farmerTutorialVisualDebug():null,
+    farmerTutorialAction:()=>combatApi.performFarmerTutorialStepForTest?combatApi.performFarmerTutorialStepForTest():{ok:false,reason:'missing farmer tutorial hook'},
     enterTamingLand:()=>dimensionsApi.enterTamingLand?dimensionsApi.enterTamingLand():false,
     exitTamingLand:()=>dimensionsApi.exitTamingLand?dimensionsApi.exitTamingLand():false,
     walkToTamingPortal:()=>e2eWalkTo({x:HUB.tamingPortal.x,y:TOWN.G+1,z:HUB.tamingPortal.z}),

@@ -1230,6 +1230,46 @@ function noteFarmerTutorialAction(action){
   sendProfileSaveNow();
   return true;
 }
+function farmerTutorialVisualDebug(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.farmer;
+  if(!room)return null;
+  const till={x:room.x-11,y:room.G,z:room.z-13};
+  const plant={x:room.x,y:room.G,z:room.z-7};
+  const harvest={x:room.x+10,y:room.G+1,z:room.z-7};
+  const target=farmerTutorialTargetPos();
+  return {
+    active:!!jobTutorialActive,
+    job:jobTutorialJob,
+    step:jobTutorialFarmerStep|0,
+    target,
+    till:{...till,id:getB(till.x,till.y,till.z)},
+    plant:{...plant,id:getB(plant.x,plant.y,plant.z),above:getB(plant.x,plant.y+1,plant.z)},
+    harvest:{...harvest,id:getB(harvest.x,harvest.y,harvest.z)},
+    inventory:{hoe:countItem(I.WOOD_HOE),seeds:countItem(I.WHEAT_SEEDS),wheat:countItem(I.WHEAT)}
+  };
+}
+function performFarmerTutorialStepForTest(){
+  if(!jobTutorialActive||jobTutorialJob!=='farmer'||dim!=='job')return {ok:false,reason:'not in farmer tutorial',debug:farmerTutorialVisualDebug()};
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.farmer;
+  if(!room)return {ok:false,reason:'missing farmer room',debug:null};
+  const step=jobTutorialFarmerStep|0;
+  let hit=null;
+  if(step===0){
+    selectItemForOnboarding(I.WOOD_HOE);
+    hit={x:room.x-11,y:room.G,z:room.z-13};
+  }else if(step===1){
+    selectItemForOnboarding(I.WHEAT_SEEDS);
+    hit={x:room.x,y:room.G,z:room.z-7};
+  }else if(step===2){
+    hit={x:room.x+10,y:room.G+1,z:room.z-7};
+  }else{
+    return {ok:true,done:true,debug:farmerTutorialVisualDebug()};
+  }
+  player.pos.set(hit.x+.5,jobTutorialWalkY(hit.x+.5,hit.z+.5,room.G+1.035),hit.z+2.2);
+  hit.id=getB(hit.x,hit.y,hit.z);
+  const ok=farmAction(hit);
+  return {ok,done:false,debug:farmerTutorialVisualDebug()};
+}
 function petTamerPracticeDragonPos(){
   const g=globalThis.__petTamerPracticeDragon;
   if(g&&g.visible&&g.position)return {x:g.position.x,y:g.position.y,z:g.position.z};
@@ -3749,6 +3789,8 @@ gameContext.registerModule('combat', Object.freeze({
   shouldOpenLevel2JobChoice,
   startJobTutorial,
   resumeJobTutorial,
+  farmerTutorialVisualDebug,
+  performFarmerTutorialStepForTest,
   performPetTamerDragonTutorialAction,
   petTamerVisualDebug:()=>{
     const p=petTamerPracticeInsulatorPos();
