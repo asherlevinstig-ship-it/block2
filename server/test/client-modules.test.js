@@ -1611,6 +1611,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(networking,/const JOB_TUTORIAL_RESUME_KEY='bc_active_job_tutorial_room_v1'/);
   assert.match(networking,/petDragonStep:Math\.max\(0,Math\.min\(5,Number\(combatState\.jobTutorialPetDragonStep\)\|\|0\)\)/);
   assert.match(networking,/function readJobTutorialResume\(\)/);
+  assert.match(networking,/const serverHasActiveRoom=!!\(m&&Object\.prototype\.hasOwnProperty\.call\(m,'activeRoom'\)\)/);
+  assert.match(networking,/const localActiveRoom=!serverHasActiveRoom\?readJobTutorialResume\(\):null/);
   assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job\)/);
   assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);
   assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');

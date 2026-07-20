@@ -2299,8 +2299,9 @@ function netRestoreProfile(m){
     cosmeticUnlocks=Array.isArray(m.cosmeticUnlocks)?m.cosmeticUnlocks.filter(v=>v==='cartographers_mantle'):[];
     equippedCosmetics=clampEquippedCosmetics(m.equippedCosmetics);
     globalThis.BlockcraftTreasureMap=null;if(m.treasureMap&&Array.isArray(m.treasureMap.targets)){const stage=Math.max(0,m.treasureMap.stage|0),targetId=m.treasureMap.targets[stage];if(targetId){globalThis.BlockcraftTreasureMap={id:m.treasureMap.id,kind:m.treasureMap.kind||'treasure',stage,total:m.treasureMap.targets.length,targetId,clue:'Follow the current ink mark and investigate with G.',rewardGold:m.treasureMap.rewardGold|0};hintedDiscoveryIds.add(targetId);}}
-    const serverActiveRoom=m&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
-    const localActiveRoom=!serverActiveRoom?readJobTutorialResume():null;
+    const serverHasActiveRoom=!!(m&&Object.prototype.hasOwnProperty.call(m,'activeRoom'));
+    const serverActiveRoom=serverHasActiveRoom&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
+    const localActiveRoom=!serverHasActiveRoom?readJobTutorialResume():null;
     const activeRoom=serverActiveRoom||localActiveRoom;
     const restoreJobRoom=activeRoom&&activeRoom.dim==='job'&&JOBS[activeRoom.job]?activeRoom:null;
     const restoreTamingLand=activeRoom&&activeRoom.dim==='taming_land'?activeRoom:null;
