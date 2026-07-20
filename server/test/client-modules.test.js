@@ -218,6 +218,14 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(world, /tamingPortal: \{ x: dpx\(86, 'roost'\), z: dpz\(78, 'roost'\) \}/);
   assert.match(world, /function buildTamingLand\(setBlock=setB\)/);
   assert.match(world, /setBlock\(cx\+ox,G\+1,cz\+oz,B\.EGG_INSULATOR\)/);
+  assert.match(world, /const TAMING_LAND_SUNS=Object\.freeze/);
+  assert.match(world, /function updateTamingLandSky\(dt,th\)/);
+  assert.match(world, /skyUniforms\.tamingMix\.value=active\?1:0/);
+  assert.match(world, /Taming Land mode/);
+  assert.match(world, /B\.TERRACOTTA/);
+  assert.match(world, /B\.ICE/);
+  assert.match(world, /B\.DIAMOND_ORE/);
+  assert.match(world, /G\+7,z,B\.LEAVES/);
   assert.match(world, /function makeTamingLandPortalDecor\(\)/);
   assert.match(world, /const makePortalTexture=\(\)=>/);
   assert.match(world, /function updateTamingLandPortalVisual\(dt\)/);

@@ -954,39 +954,66 @@ function buildAbilityMeadow(setBlock=setB){
 }
 function buildTamingLand(setBlock=setB){
   const {x:cx,z:cz,G,R}=TAMING_LAND;
+  const clearColumn=(x,z,top=G+13)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
+  const setFlat=(x,z,id=B.GRASS,under=B.DIRT)=>{
+    for(let y=1;y<G-4;y++)setBlock(x,y,z,B.STONE);
+    for(let y=Math.max(1,G-4);y<G;y++)setBlock(x,y,z,under);
+    setBlock(x,G,z,id);
+    clearColumn(x,z);
+  };
+  const isNear=(x,z,ox,oz,r)=>Math.hypot(x-(cx+ox),z-(cz+oz))<=r;
+  const eggPads=[[-14,-4],[14,-4],[-14,12],[14,12],[0,6]];
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTamingLand(x,z))continue;
-    const d=Math.hypot(x-cx,z-cz), edge=Math.max(0,Math.min(1,(R-d)/11));
-    const gy=G+(edge<1?Math.round((terrainHeight(x,z)-G)*(1-edge)):0);
+    const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz),edge=Math.max(0,Math.min(1,(R-d)/11));
+    const mainPath=(Math.abs(dx)<=3&&z>=cz-32&&z<=cz+32)||(Math.abs(dz)<=3&&x>=cx-28&&x<=cx+28);
+    const safe=mainPath||isNear(x,z,TAMING_LAND.spawn.dx,TAMING_LAND.spawn.dz,8)||isNear(x,z,TAMING_LAND.exit.dx,TAMING_LAND.exit.dz,8)||isNear(x,z,0,0,12)||eggPads.some(([ox,oz])=>isNear(x,z,ox,oz,4));
+    const roll=Math.sin((x+17)*.17)+Math.cos((z-9)*.13)+Math.sin((x+z)*.071);
+    const ridge=Math.max(0,Math.sin((dx-dz)*.16))*2.2+Math.max(0,Math.cos((dx+dz)*.11))*1.6;
+    let gy=G+(safe?0:Math.max(0,Math.min(8,Math.round((roll+ridge-1.05)*1.25))));
+    if(edge<1) gy=G+Math.round((terrainHeight(x,z)-G)*(1-edge));
+    const northeast=dx>12&&dz<6, west=dx<-18, south=dz>18;
+    const top=northeast?(hash2(x,z)>.58?B.RED_SAND:B.TERRACOTTA):west?(hash2(x,z)>.64?B.ICE:B.SNOW):south?(hash2(x,z)>.72?B.LEAVES:B.GRASS):B.GRASS;
+    const under=top===B.RED_SAND||top===B.TERRACOTTA?B.TERRACOTTA:top===B.SNOW||top===B.ICE?B.STONE:B.DIRT;
     for(let y=1;y<gy-4;y++)setBlock(x,y,z,B.STONE);
-    for(let y=Math.max(1,gy-4);y<gy;y++)setBlock(x,y,z,B.DIRT);
-    setBlock(x,gy,z,B.GRASS);
+    for(let y=Math.max(1,gy-4);y<gy;y++)setBlock(x,y,z,under);
+    setBlock(x,gy,z,top);
     for(let y=gy+1;y<WH;y++)setBlock(x,y,z,B.AIR);
   }
-  const box=(x1,y1,z1,x2,y2,z2,id)=>{for(let x=Math.min(x1,x2);x<=Math.max(x1,x2);x++)for(let y=Math.min(y1,y2);y<=Math.max(y1,y2);y++)for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)setBlock(x,y,z,id);};
-  for(let x=cx-10;x<=cx+10;x++)for(let z=cz-24;z<=cz+28;z++)setBlock(x,G,z,B.GRASS);
-  for(let x=cx-26;x<=cx+26;x++)for(let z=cz-2;z<=cz+2;z++)setBlock(x,G,z,B.COBBLE);
-  for(let z=cz-30;z<=cz+30;z++)for(let x=cx-2;x<=cx+2;x++)setBlock(x,G,z,B.COBBLE);
-  for(const [ox,oz] of [[-18,-18],[18,-18],[-22,15],[22,15],[-9,30],[9,30]]){
+  for(let x=cx-10;x<=cx+10;x++)for(let z=cz-24;z<=cz+28;z++)setFlat(x,z,B.GRASS);
+  for(let x=cx-28;x<=cx+28;x++)for(let z=cz-2;z<=cz+2;z++)setFlat(x,z,(Math.abs(x-cx)%7===0)?B.GLASS:B.COBBLE,B.STONE);
+  for(let z=cz-32;z<=cz+32;z++)for(let x=cx-2;x<=cx+2;x++)setFlat(x,z,(Math.abs(z-cz)%7===0)?B.GLASS:B.COBBLE,B.STONE);
+  for(const [ox,oz] of [[-18,-18],[18,-18],[-22,15],[22,15],[-9,30],[9,30],[-34,-2],[34,8]]){
     const tx=cx+ox,tz=cz+oz;
     for(let y=G+1;y<=G+5;y++)setBlock(tx,y,tz,B.LOG);
-    for(let lx=-3;lx<=3;lx++)for(let lz=-3;lz<=3;lz++)for(let ly=4;ly<=7;ly++)
-      if(Math.abs(lx)+Math.abs(lz)+Math.abs(ly-5)<8)setBlock(tx+lx,G+ly,tz+lz,B.LEAVES);
+    for(let lx=-3;lx<=3;lx++)for(let lz=-3;lz<=3;lz++)for(let ly=4;ly<=8;ly++)
+      if(Math.abs(lx)+Math.abs(lz)+Math.abs(ly-5)<8)setBlock(tx+lx,G+ly,tz+lz,hash2(tx+lx,tz+lz)>.78?B.GLASS:B.LEAVES);
   }
-  for(const [ox,oz] of [[-14,-4],[14,-4],[-14,12],[14,12],[0,6]]){
-    box(cx+ox-2,G,cz+oz-2,cx+ox+2,G,cz+oz+2,B.PLANKS);
+  for(const [ox,oz] of eggPads){
+    for(let x=cx+ox-3;x<=cx+ox+3;x++)for(let z=cz+oz-3;z<=cz+oz+3;z++)setFlat(x,z,Math.hypot(x-(cx+ox),z-(cz+oz))>2.6?B.COBBLE:B.PLANKS,B.STONE);
     setBlock(cx+ox,G+1,cz+oz,B.EGG_INSULATOR);
-    for(const [px,pz] of [[-2,-2],[2,-2],[-2,2],[2,2]])setBlock(cx+ox+px,G+1,cz+oz+pz,B.LANTERN);
+    for(const [px,pz] of [[-3,-3],[3,-3],[-3,3],[3,3]]){setBlock(cx+ox+px,G+1,cz+oz+pz,B.LANTERN);setBlock(cx+ox+px,G,cz+oz+pz,B.GLASS);}
   }
-  for(let x=cx-38;x<=cx-24;x++)for(let z=cz+20;z<=cz+34;z++){
-    const d=Math.hypot(x-(cx-31),z-(cz+27));
-    if(d<7){setBlock(x,G,z,B.WATER);for(let y=G-2;y<G;y++)setBlock(x,y,z,B.SAND);}
+  for(let x=cx-42;x<=cx-22;x++)for(let z=cz+18;z<=cz+38;z++){
+    const d=Math.hypot(x-(cx-32),z-(cz+28));
+    if(d<9){setFlat(x,z,d<7?B.WATER:B.SAND,B.SAND);}
   }
-  for(let x=cx+24;x<=cx+38;x++)for(let z=cz-34;z<=cz-20;z++){
-    const d=Math.hypot(x-(cx+31),z-(cz-27));
-    if(d<7){setBlock(x,G,z,B.WATER);for(let y=G-2;y<G;y++)setBlock(x,y,z,B.SAND);}
+  for(let x=cx+22;x<=cx+42;x++)for(let z=cz-38;z<=cz-18;z++){
+    const d=Math.hypot(x-(cx+32),z-(cz-28));
+    if(d<9){setFlat(x,z,d<7?B.WATER:B.ICE,B.STONE);}
   }
-  box(cx-4,G,cz+TAMING_LAND.exit.dz-2,cx+4,G,cz+TAMING_LAND.exit.dz+2,B.GLASS);
+  for(const [ox,oz,h,top] of [[-37,-9,7,B.ICE],[-30,-14,5,B.GLASS],[31,3,8,B.DIAMOND_ORE],[38,12,6,B.GLASS],[-5,-34,9,B.LANTERN],[8,35,7,B.GLASS]]){
+    for(let y=1;y<=h;y++)setBlock(cx+ox,G+y,cz+oz,y===h?top:(y%3===0?B.GLASS:B.STONE));
+    setBlock(cx+ox,G+h+1,cz+oz,B.LANTERN);
+  }
+  for(const [ox,oz] of [[-24,29],[-18,35],[25,-31],[31,-24],[34,24],[-36,-25]]){
+    for(let x=cx+ox-3;x<=cx+ox+3;x++)for(let z=cz+oz-3;z<=cz+oz+3;z++)if(Math.hypot(x-(cx+ox),z-(cz+oz))<=3){
+      setBlock(x,G+7,z,B.LEAVES);
+      if(Math.abs(x-(cx+ox))+Math.abs(z-(cz+oz))<3)setBlock(x,G+8,z,B.GRASS);
+    }
+    setBlock(cx+ox,G+9,cz+oz,B.LANTERN);
+  }
+  for(let x=cx-6;x<=cx+6;x++)for(let z=cz+TAMING_LAND.exit.dz-3;z<=cz+TAMING_LAND.exit.dz+3;z++)setFlat(x,z,B.GLASS,B.STONE);
   setBlock(cx,G+1,cz+TAMING_LAND.exit.dz,B.LANTERN);
 }
 function buildJobTutorialMeadow(jobId,setBlock=setB){
@@ -3915,7 +3942,7 @@ function applyDayCycleSync(m){
 const sstep=(a,b,x)=>{ x=Math.min(1,Math.max(0,(x-a)/(b-a))); return x*x*(3-2*x); };
 
 // gradient sky dome with sun disc, halo, moon and twilight scattering
-const skyUniforms={ sunDir:{value:new THREE.Vector3(0,1,0)} };
+const skyUniforms={ sunDir:{value:new THREE.Vector3(0,1,0)}, tamingMix:{value:0} };
 const skyMat=new THREE.ShaderMaterial({
   uniforms: skyUniforms,
   side: THREE.BackSide,
@@ -3929,6 +3956,7 @@ const skyMat=new THREE.ShaderMaterial({
   fragmentShader: `
     varying vec3 vDir;
     uniform vec3 sunDir;
+    uniform float tamingMix;
     void main(){
       vec3 d = normalize(vDir);
       vec3 s = normalize(sunDir);
@@ -3953,6 +3981,15 @@ const skyMat=new THREE.ShaderMaterial({
       float ma = max(dot(d, -s), 0.0);
       col += vec3(0.86, 0.89, 0.96) * smoothstep(0.99955, 0.99985, ma) * (1.0 - dayF);
       col += vec3(0.55, 0.62, 0.78) * pow(ma, 300.0) * 0.35 * (1.0 - dayF);
+      vec3 tamZen = vec3(0.31, 0.12, 0.58);
+      vec3 tamHor = vec3(0.20, 0.82, 0.92);
+      vec3 tamRose = vec3(1.0, 0.40, 0.78);
+      vec3 tamGold = vec3(1.0, 0.78, 0.28);
+      float tamH = pow(1.0 - max(d.y, 0.0), 1.15);
+      vec3 tam = mix(tamZen, tamHor, tamH);
+      tam += tamRose * pow(max(dot(d, normalize(vec3(-0.65, 0.38, 0.28))), 0.0), 9.0) * 0.42;
+      tam += tamGold * pow(max(dot(d, normalize(vec3(0.42, 0.62, -0.36))), 0.0), 16.0) * 0.35;
+      col = mix(col, tam, tamingMix);
       gl_FragColor = vec4(col, 1.0);
     }`
 });
@@ -3989,6 +4026,41 @@ glowTexCanvas.width=glowTexCanvas.height=64;
   g.fillStyle=gr; g.fillRect(0,0,64,64);
 }
 const glowMat=new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas), color:0xffb45e, transparent:true, opacity:0, depthWrite:false, blending:THREE.AdditiveBlending});
+const tamingLandSkyGroup=new THREE.Group();
+tamingLandSkyGroup.visible=false;
+scene.add(tamingLandSkyGroup);
+const TAMING_LAND_SUNS=Object.freeze([
+  {angle:1.55,height:76,dist:116,size:26,color:0xffd46a,halo:0xff8bd1,speed:.022},
+  {angle:1.22,height:58,dist:112,size:17,color:0xa7f3ff,halo:0x67e8f9,speed:-.018},
+  {angle:1.88,height:96,dist:122,size:14,color:0xc4ff7a,halo:0x9efc72,speed:.030},
+]);
+for(const spec of TAMING_LAND_SUNS){
+  const root=new THREE.Group();
+  const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:spec.halo,transparent:true,opacity:.56,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending,fog:false}));
+  const core=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:spec.color,transparent:true,opacity:.94,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending,fog:false}));
+  halo.scale.set(spec.size*2.6,spec.size*2.6,1);
+  core.scale.set(spec.size,spec.size,1);
+  halo.renderOrder=-1;core.renderOrder=0;
+  root.userData={spec,halo,core};
+  root.add(halo,core);
+  tamingLandSkyGroup.add(root);
+}
+function updateTamingLandSky(dt,th){
+  const active=dim==='taming_land';
+  tamingLandSkyGroup.visible=active;
+  skyUniforms.tamingMix.value=active?1:0;
+  if(!active)return;
+  tamingLandSkyGroup.position.copy(camera.position);
+  const t=(typeof performance!=='undefined'?performance.now():Date.now())*.001;
+  for(let i=0;i<tamingLandSkyGroup.children.length;i++){
+    const root=tamingLandSkyGroup.children[i],spec=root.userData.spec;
+    const a=spec.angle+th*.12+t*spec.speed;
+    root.position.set(Math.cos(a)*spec.dist,spec.height+Math.sin(a*1.7+i)*8,Math.sin(a)*spec.dist);
+    const breathe=.5+.5*Math.sin(t*(1.3+i*.22));
+    root.userData.halo.material.opacity=.42+breathe*.2;
+    root.userData.core.material.opacity=.84+breathe*.12;
+  }
+}
 for(const [lx,lz] of [[TOWN.TC-6,TOWN.TC-6],[TOWN.TC+6,TOWN.TC-6],[TOWN.TC-6,TOWN.TC+6],[TOWN.TC+6,TOWN.TC+6]]){
   const sp=new THREE.Sprite(glowMat);
   sp.position.set(lx+.5, TOWN.G+4.5, lz+.5);
@@ -6058,9 +6130,32 @@ function updateDayNight(dt){
   // dome and stars ride with the camera
   sky.position.copy(camera.position);
   stars.position.copy(camera.position);
+  updateTamingLandSky(dt,th);
 
   // dungeon dimension overrides the surface lighting
-  if(dim==='dungeon'){
+  if(dim==='taming_land'){
+    // Taming Land mode uses a bright magical sky instead of the shared day cycle.
+    gDayF=1;
+    _sunDir.set(-0.38,0.86,0.34).normalize();
+    skyUniforms.sunDir.value.copy(_sunDir);
+    matOpaque.color.set(0xd8ffd7);
+    matTrans.color.set(0xe8e0ff);
+    cloudMat.color.set(0xffd6f3);
+    cloudMat.opacity=.36;
+    scene.fog.near=34;
+    scene.fog.far=150;
+    scene.fog.color.set(0x77c8ee);
+    SKY.copy(scene.fog.color);
+    starMat.opacity=.22;
+    glowMat.opacity=.45;
+    sun.intensity=.36;
+    sun.color.set(0xffe8a6);
+    sun.position.set(camera.position.x-76,camera.position.y+118,camera.position.z+44);
+    hemi.intensity=1.32;
+    hemi.color.set(0xffd7ff);
+    hemi.groundColor.set(0x4f7a8f);
+  }
+  else if(dim==='dungeon'){
     const mood=new THREE.Color(dungeonMoodColor(dungeon));
     const dungeonTheme=dungeon&&dungeon.definition&&dungeon.definition.theme;
     const tint=new THREE.Color(0x8a8198).lerp(mood,.35);
