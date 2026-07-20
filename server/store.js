@@ -67,7 +67,7 @@ const JOB_TUTORIAL_ROOMS = Object.freeze({
   monk: Object.freeze({ x: 930, z: 925, g: 18, r: 34 }),
   pet_tamer: Object.freeze({ x: 500, z: 925, g: 22, r: 52 }),
 });
-const TAMING_LAND_ROOM = Object.freeze({ x: 420, z: 925, g: 20, r: 68 });
+const TAMING_LAND_ROOM = Object.freeze({ x: 420, z: 925, g: 20, r: 68, spawnDx: 0, spawnDz: -18 });
 function sanitizeMountUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (let k of list) {
@@ -481,9 +481,11 @@ function sanitizeActiveRoomPosition(activeRoom, pos) {
   if (!activeRoom || !Array.isArray(pos) || pos.length !== 3 || pos.some(v => !isFinite(+v))) return null;
   const room = activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
   if (!room) return null;
-  const x = clampF(pos[0], room.x - room.r - 8, room.x + room.r + 8);
+  const spawn = [room.x + (room.spawnDx || 0) + .5, room.g + 1.05, room.z + (room.spawnDz == null ? 14 : room.spawnDz) + .5];
+  const x = clampF(pos[0], room.x - room.r - 6, room.x + room.r + 6);
   const y = clampF(pos[1], 1, 80);
-  const z = clampF(pos[2], room.z - room.r - 8, room.z + room.r + 8);
+  const z = clampF(pos[2], room.z - room.r - 6, room.z + room.r + 6);
+  if (Math.hypot(x - room.x, z - room.z) > room.r + 5 || y < room.g - 2) return spawn;
   return [x, y, z];
 }
 

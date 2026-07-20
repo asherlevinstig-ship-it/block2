@@ -2729,9 +2729,16 @@ function readJobTutorialResume(){
     if(!raw||raw.auth!==currentAuthSessionToken()||Date.now()-(raw.at||0)>24*60*60*1000)return null;
     const activeRoom=raw.activeRoom&&typeof raw.activeRoom==='object'?raw.activeRoom:null;
     if(!activeRoom||!((activeRoom.dim==='job'&&JOBS[activeRoom.job])||activeRoom.dim==='taming_land'))return null;
+    let pos=Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null;
+    if(activeRoom.dim==='taming_land'&&pos){
+      const room=worldState&&worldState.TAMING_LAND;
+      if(room&&(Math.hypot(pos[0]-room.x,pos[2]-room.z)>room.R+5||pos[1]<room.G-2)){
+        pos=[room.x+room.spawn.dx+.5,room.G+1.05,room.z+room.spawn.dz+.5];
+      }
+    }
     return {
       ...activeRoom,
-      pos:Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null,
+      pos,
     };
   }catch(e){return null;}
 }

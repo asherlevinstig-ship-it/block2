@@ -557,7 +557,7 @@ test('profile merge persists only bounded job tutorial room resume state', () =>
     pos: [9999, -50, -999],
   });
   assert.deepEqual(clamped.activeRoom, { dim: 'job', job: 'miner', minedDiamond: false, traded: false });
-  assert.deepEqual(clamped.pos, [652, 1, 883]);
+  assert.deepEqual(clamped.pos, [610.5, 19.05, 939.5]);
 
   const rejected = mergeClientSave(resumed, {
     activeRoom: { dim: 'dungeon', job: 'miner' },
@@ -588,6 +588,19 @@ test('profile merge persists pet tamer and taming land room resume state', () =>
   });
   assert.deepEqual(taming.activeRoom, { dim: 'taming_land' });
   assert.deepEqual(taming.pos, [420.5, 21.05, 907.5]);
+
+  const staleTownPosition = mergeClientSave(current, {
+    activeRoom: { dim: 'taming_land' },
+    pos: [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5],
+  });
+  assert.deepEqual(staleTownPosition.activeRoom, { dim: 'taming_land' });
+  assert.deepEqual(staleTownPosition.pos, [420.5, 21.05, 907.5], 'stale/outside Taming Land positions restore to the safe spawn');
+
+  const underFloor = mergeClientSave(current, {
+    activeRoom: { dim: 'taming_land' },
+    pos: [420.5, 3, 907.5],
+  });
+  assert.deepEqual(underFloor.pos, [420.5, 21.05, 907.5], 'under-floor Taming Land positions recover to the safe spawn');
 });
 
 test('profile merge rejects client job and jobXp changes', () => {
