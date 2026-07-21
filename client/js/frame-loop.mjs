@@ -2254,6 +2254,8 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     farmerTutorialAction:()=>combatApi.performFarmerTutorialStepForTest?combatApi.performFarmerTutorialStepForTest():{ok:false,reason:'missing farmer tutorial hook'},
     cookTutorialVisualDebug:()=>combatApi.cookTutorialVisualDebug?combatApi.cookTutorialVisualDebug():null,
     cookTutorialAction:()=>combatApi.performCookTutorialStepForTest?combatApi.performCookTutorialStepForTest():{ok:false,reason:'missing cook tutorial hook'},
+    blacksmithTutorialVisualDebug:()=>combatApi.blacksmithTutorialVisualDebug?combatApi.blacksmithTutorialVisualDebug():null,
+    blacksmithTutorialAction:()=>combatApi.performBlacksmithTutorialStepForTest?combatApi.performBlacksmithTutorialStepForTest():{ok:false,reason:'missing blacksmith tutorial hook'},
     enterTamingLand:()=>dimensionsApi.enterTamingLand?dimensionsApi.enterTamingLand():false,
     exitTamingLand:()=>dimensionsApi.exitTamingLand?dimensionsApi.exitTamingLand():false,
     walkToTamingPortal:()=>e2eWalkTo({x:HUB.tamingPortal.x,y:TOWN.G+1,z:HUB.tamingPortal.z}),

@@ -2776,6 +2776,8 @@ function currentRuntimeActiveRoom(){
       traded:combatState.jobTutorialTraded===true,
       farmerStep:Math.max(0,Math.min(4,Number(combatState.jobTutorialFarmerStep)||0)),
       cookStep:Math.max(0,Math.min(4,Number(combatState.jobTutorialCookStep)||0)),
+      blacksmithStep:Math.max(0,Math.min(3,Number(combatState.jobTutorialBlacksmithStep)||0)),
+      blacksmithCraftedArmor:combatState.jobTutorialBlacksmithCraftedArmor&&typeof combatState.jobTutorialBlacksmithCraftedArmor==='object'?combatState.jobTutorialBlacksmithCraftedArmor:null,
       cookStartedAt:Math.max(0,Number(combatState.jobTutorialCookStartedAt)||0),
       cookReadyAt:Math.max(0,Number(combatState.jobTutorialCookReadyAt)||0),
       petDragonSeen:combatState.jobTutorialPetDragonSeen===true,

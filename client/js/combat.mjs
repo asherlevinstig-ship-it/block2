@@ -80,6 +80,7 @@ const legacyCombatBindings={
   "jobTutorialJob":{get:()=>jobTutorialJob,set:value=>{jobTutorialJob=value;}},
   "jobTutorialFarmerStep":{get:()=>jobTutorialFarmerStep},
   "jobTutorialCookStep":{get:()=>jobTutorialCookStep},
+  "jobTutorialBlacksmithStep":{get:()=>jobTutorialBlacksmithStep},
   "player":{get:()=>player},
   "prepareOnboardingStep":{get:()=>prepareOnboardingStep},
   "raycast":{get:()=>raycast},
@@ -281,11 +282,26 @@ function gearProfileFor(stack){
   if(!info)return null;
   return GEAR_SYSTEM.profile({tier:info.tier,legendary:!!item.legendary},stack);
 }
+function blacksmithArmorCraftBonusValue(maxMana=maxMp()){
+  return Math.max(0,Math.min(.35,(Math.max(20,Number(maxMana)||20)-20)/180));
+}
+function blacksmithRarityName(id){
+  const r=GEAR_SYSTEM&&Array.isArray(GEAR_SYSTEM.RARITIES)?GEAR_SYSTEM.RARITIES.find(v=>v.id===id):null;
+  return r?r.name:(id?String(id).replace(/_/g,' '):'Common');
+}
 function applyBlacksmithCraftPerk(stack){
   if(!stack || playerJob!=='blacksmith') return stack;
-  const info=ITEMS[stack.id]&&ITEMS[stack.id].tool;
+  const item=ITEMS[stack.id], info=item&&(item.tool||item.armor);
   if(!info) return stack;
   const tier=jobPerkTier('blacksmith');
+  if(item.armor){
+    const rarity=GEAR_SYSTEM.rollRarity(Math.random(),blacksmithArmorCraftBonusValue()).id;
+    stack.rarity=rarity;
+    stack.armorType=stack.armorType||info.armorType||'vanguard';
+    stack.dur=armorMaxDur(stack)||info.dur;
+    showJobPerk('blacksmith',blacksmithRarityName(rarity)+' armor');
+    return stack;
+  }
   if(!tier) return stack;
   const bonus=Math.max(1, Math.round(info.dur*(.08+tier*.04)));
   stack.dur=Math.min(toolMaxDur(stack),(stack.dur==null?toolMaxDur(stack):stack.dur)+bonus);
@@ -754,11 +770,12 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialCookTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 const MINER_TUTORIAL_TRADE_GOLD=45;
 const FARMER_TUTORIAL_WHEAT_GOLD=18;
 const COOK_TUTORIAL_MEAL_GOLD=24;
+const BLACKSMITH_TUTORIAL_ARMOR_GOLD=54;
 const COOK_TUTORIAL_COOK_MS=5000;
 const PET_TAMER_TUTORIAL_HATCH_MS=3000;
 const FARMER_TUTORIAL_ACTIONS=Object.freeze([
@@ -772,6 +789,11 @@ const COOK_TUTORIAL_ACTIONS=Object.freeze([
   {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Take bread and cooked meat to the hearth, then press G to start a fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
   {key:'CLAIM MEAL',title:'Claim Meal',verb:'HEARTH + G',purpose:'When the timer says ready, press G at the hearth to claim a Hearty Sandwich.',done:'You made a Hearty Sandwich. Strong meals support travel, Gates, and recovery.'},
   {key:'SELL MEAL',title:'Sell Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
+]);
+const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
+  {key:'CRAFT CHAINMAIL',title:'Craft Armor',verb:'FORGE + G',purpose:'Stand at the forge bench and press G to craft Chainmail Armor from seven iron ingots and one coal.',done:'You forged Chainmail Armor. Blacksmith craft quality improves with your max mana pool.'},
+  {key:'CHECK QUALITY',title:'Inspect Quality',verb:'FORGE + G',purpose:'Press G at the forge bench to inspect the armour rarity and learn why mana matters.',done:'You checked the craft quality. Larger mana pools give better armour rarity rolls.'},
+  {key:'SELL ARMOR',title:'Sell Armor',verb:'TOBIN + G',purpose:'Take the finished armour to Tobin Forgehand and press G to sell it for gold.',done:'You sold the armour. Blacksmiths turn materials into gear, repairs, upgrades, and trade value.'},
 ]);
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'HATCH EGG',title:'Hatching',verb:'EGG + G',purpose:'Select the Verdant Dragon Egg, press G at the Egg Insulator, then claim it when ready.',done:'Your tutorial egg hatches quickly, showing how dragons begin.'},
@@ -1600,6 +1622,200 @@ function performCookTutorialStepForTest(){
   const ok=tryCookTutorialAction();
   return {ok,done:jobTutorialCookStep>=4,debug:cookTutorialVisualDebug()};
 }
+function blacksmithTutorialForgePos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
+  return room?{x:room.x+.5,y:room.G+1,z:room.z+1.5}:null;
+}
+function blacksmithTutorialTraderPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
+  return room?{x:room.x+9.5,y:room.G+1,z:room.z+11.5}:null;
+}
+function ensureBlacksmithTutorialTrader(){
+  if(tutorialBlacksmithTrader)return tutorialBlacksmithTrader;
+  if(typeof makeVillager==='function'){
+    tutorialBlacksmithTrader={...makeVillager('#8b4a2e','#332018',true),role:'blacksmith',name:'Tobin Forgehand',shortName:'Tobin',title:'Forge Buyer',phase:Math.random()*10};
+    if(typeof attachNpcNameplate==='function')attachNpcNameplate(tutorialBlacksmithTrader);
+    tutorialBlacksmithTrader.grp.visible=false;
+    scene.add(tutorialBlacksmithTrader.grp);
+  }else{
+    const grp=new THREE.Group();
+    const mat=new THREE.MeshLambertMaterial({color:0x8b4a2e});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(.7,1.2,.35),mat);body.position.y=.85;grp.add(body);
+    tutorialBlacksmithTrader={grp,phase:0,name:'Tobin Forgehand',title:'Forge Buyer'};
+    grp.visible=false;scene.add(grp);
+  }
+  return tutorialBlacksmithTrader;
+}
+function updateBlacksmithTutorialTrader(now=performance.now()){
+  const actor=ensureBlacksmithTutorialTrader(), p=blacksmithTutorialTraderPos();
+  if(!actor||!p)return;
+  const visible=jobTutorialActive&&jobTutorialJob==='blacksmith'&&dim==='job'&&jobTutorialBlacksmithStep>=2;
+  actor.grp.visible=visible;
+  if(!visible)return;
+  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
+  actor.grp.rotation.y=Math.PI;
+}
+function nearBlacksmithTutorialForge(range=4.6){
+  const p=blacksmithTutorialForgePos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job')return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
+function nearbyBlacksmithTutorialTrader(range=4.2){
+  const p=blacksmithTutorialTraderPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job'||jobTutorialBlacksmithStep<2)return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
+function blacksmithTutorialAction(){
+  return BLACKSMITH_TUTORIAL_ACTIONS[Math.max(0,Math.min(BLACKSMITH_TUTORIAL_ACTIONS.length-1,jobTutorialBlacksmithStep|0))]||BLACKSMITH_TUTORIAL_ACTIONS[0];
+}
+function blacksmithTutorialProgressLabel(){
+  return 'Step '+Math.min(BLACKSMITH_TUTORIAL_ACTIONS.length,jobTutorialBlacksmithStep+1)+' / '+BLACKSMITH_TUTORIAL_ACTIONS.length;
+}
+function blacksmithTutorialTargetPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
+  if(!room)return null;
+  const step=jobTutorialBlacksmithStep|0;
+  if(step<=1)return blacksmithTutorialForgePos();
+  if(step===2)return blacksmithTutorialTraderPos();
+  return {x:room.x,y:room.G+1.035,z:room.z+23};
+}
+function ensureBlacksmithTutorialSupplies(){
+  const ingots=countItem(I.IRON_INGOT), coal=countItem(I.COAL);
+  if(jobTutorialBlacksmithStep<=0&&ingots<7)addTemporaryJobTutorialItem(I.IRON_INGOT,7-ingots,false);
+  if(jobTutorialBlacksmithStep<=0&&coal<1)addTemporaryJobTutorialItem(I.COAL,1-coal,false);
+  refreshHUD();
+}
+function blacksmithTutorialArmorSlot(){
+  for(let i=0;i<inv.length;i++){
+    const s=inv[i];
+    if(s&&s.id===I.CHAIN_ARMOR&&s.source==='job_tutorial'&&s.tutorialOnly)return i;
+  }
+  return -1;
+}
+function blacksmithTutorialArmorStack(){
+  const slot=blacksmithTutorialArmorSlot();
+  return slot>=0?inv[slot]:null;
+}
+function createBlacksmithTutorialArmorStack(){
+  const stack=newStack(I.CHAIN_ARMOR,1);
+  stack.source='job_tutorial';
+  stack.tutorialOnly=true;
+  stack.armorType=stack.armorType||'vanguard';
+  const rarity=GEAR_SYSTEM.rollRarity(Math.random(),blacksmithArmorCraftBonusValue()).id;
+  stack.rarity=rarity;
+  stack.dur=armorMaxDur(stack)||((ITEMS[I.CHAIN_ARMOR]&&ITEMS[I.CHAIN_ARMOR].armor&&ITEMS[I.CHAIN_ARMOR].armor.dur)||420);
+  return stack;
+}
+function addBlacksmithTutorialArmor(){
+  let slot=blacksmithTutorialArmorSlot();
+  if(slot<0)slot=inv.findIndex(s=>!s);
+  if(slot<0){sysMsg('Make one inventory slot free for the armour craft.');return null;}
+  const stack=createBlacksmithTutorialArmorStack();
+  inv[slot]=stack;
+  noteRecipeSeen(I.CHAIN_ARMOR);
+  jobTutorialBlacksmithCraftedArmor={rarity:stack.rarity,maxMana:maxMp(),bonus:blacksmithArmorCraftBonusValue(),slot};
+  refreshHUD();
+  if(uiOpen)renderUI();
+  return stack;
+}
+function advanceBlacksmithTutorial(action){
+  const lesson=blacksmithTutorialAction();
+  eventLog('Blacksmith tutorial - '+lesson.title+': '+lesson.done);
+  sysMsg('<b>Blacksmith lesson:</b> '+escHTML(lesson.done));
+  burst(player.pos.x,player.pos.y+1,player.pos.z,[1,.44,.16],26,2.3,2.0,.7);
+  ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.1,0xff8a3d,.6);
+  if(action==='craft')jobTutorialBlacksmithStep=1;
+  else if(action==='inspect')jobTutorialBlacksmithStep=2;
+  else if(action==='trade'){
+    jobTutorialBlacksmithStep=3;
+    jobTutorialTraded=true;
+    SFX.level&&SFX.level();
+    showName('Blacksmith trade complete');
+  }
+  updateJobTutorialHud();
+  sendProfileSaveNow();
+}
+function tryBlacksmithTutorialAction(){
+  if(!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job')return false;
+  ensureBlacksmithTutorialSupplies();
+  const step=jobTutorialBlacksmithStep|0;
+  if(step===0){
+    if(!nearBlacksmithTutorialForge())return false;
+    if(countItem(I.IRON_INGOT)<7||countItem(I.COAL)<1){sysMsg('The forge needs <b>7 iron ingots</b> and <b>1 coal</b>.');return true;}
+    if(!inventoryModel.remove(I.IRON_INGOT,7)||!inventoryModel.remove(I.COAL,1)){
+      sysMsg('The forge could not take the ingots and coal. Try again beside the forge bench.');
+      return true;
+    }
+    const armor=addBlacksmithTutorialArmor();
+    if(!armor)return true;
+    gainJobXP('blacksmith',14,'tutorial craft');
+    jobContractProgress('smith',1,I.CHAIN_ARMOR);
+    refreshHUD();
+    SFX.success&&SFX.success();
+    advanceBlacksmithTutorial('craft');
+    sysMsg('Crafted <b>'+escHTML(blacksmithRarityName(armor.rarity))+' Chainmail Armor</b>. Press <b>G</b> at the forge again to inspect the quality roll.');
+    return true;
+  }
+  if(step===1){
+    if(!nearBlacksmithTutorialForge())return false;
+    const armor=blacksmithTutorialArmorStack();
+    if(!armor){addBlacksmithTutorialArmor();}
+    const stack=blacksmithTutorialArmorStack();
+    const rarity=stack&&stack.rarity||'common', bonus=Math.round(blacksmithArmorCraftBonusValue()*100);
+    jobTutorialBlacksmithCraftedArmor={rarity,maxMana:maxMp(),bonus:blacksmithArmorCraftBonusValue(),slot:blacksmithTutorialArmorSlot()};
+    SFX.success&&SFX.success();
+    advanceBlacksmithTutorial('inspect');
+    sysMsg('<b>Quality check:</b> Your max mana is <b>'+maxMp()+'</b>, giving a <b>+'+bonus+'%</b> Blacksmith quality bonus. This armour rolled <b>'+escHTML(blacksmithRarityName(rarity))+'</b>.');
+    return true;
+  }
+  if(step===2){
+    if(!nearbyBlacksmithTutorialTrader())return false;
+    let slot=blacksmithTutorialArmorSlot();
+    if(slot<0){addBlacksmithTutorialArmor();slot=blacksmithTutorialArmorSlot();}
+    if(slot<0){sysMsg('<b>Tobin Forgehand:</b> Bring me the armour from the forge first.');return true;}
+    const armor=inv[slot], rarity=armor&&armor.rarity||'common';
+    inv[slot]=null;
+    gold+=BLACKSMITH_TUTORIAL_ARMOR_GOLD;
+    rewardGain('gold',BLACKSMITH_TUTORIAL_ARMOR_GOLD,'Gold');
+    gainJobXP('blacksmith',10,'tutorial sale');
+    jobContractProgress('sell',1,I.CHAIN_ARMOR);
+    refreshHUD();
+    SFX.coin&&SFX.coin();
+    eventLog('Blacksmith tutorial - sold '+blacksmithRarityName(rarity)+' Chainmail Armor for '+BLACKSMITH_TUTORIAL_ARMOR_GOLD+' gold.');
+    advanceBlacksmithTutorial('trade');
+    sysMsg('<b>Tobin Forgehand:</b> Clean work. Here is <b>'+BLACKSMITH_TUTORIAL_ARMOR_GOLD+' gold</b>. Blacksmiths sell gear, repair equipment, and improve dungeon loot.');
+    return true;
+  }
+  return false;
+}
+function blacksmithTutorialVisualDebug(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
+  if(!room)return null;
+  const forge=blacksmithTutorialForgePos(), trader=blacksmithTutorialTraderPos(), target=blacksmithTutorialTargetPos();
+  const armor=blacksmithTutorialArmorStack();
+  return {
+    active:!!jobTutorialActive,
+    job:jobTutorialJob,
+    step:jobTutorialBlacksmithStep|0,
+    target,
+    forge,
+    trader,
+    traded:!!jobTutorialTraded,
+    crafted:jobTutorialBlacksmithCraftedArmor,
+    armor:armor?{id:armor.id,rarity:armor.rarity||'common',dur:armor.dur,slot:blacksmithTutorialArmorSlot()}:null,
+    inventory:{ingots:countItem(I.IRON_INGOT),coal:countItem(I.COAL),chainArmor:countItem(I.CHAIN_ARMOR)}
+  };
+}
+function performBlacksmithTutorialStepForTest(){
+  if(!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job')return {ok:false,reason:'not in blacksmith tutorial',debug:blacksmithTutorialVisualDebug()};
+  const target=blacksmithTutorialTargetPos();
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
+  if(target&&room)player.pos.set(target.x,jobTutorialWalkY(target.x,target.z,room.G+1.035),target.z+1.7);
+  const ok=tryBlacksmithTutorialAction();
+  return {ok,done:jobTutorialBlacksmithStep>=3,debug:blacksmithTutorialVisualDebug()};
+}
 function petTamerPracticeDragonPos(){
   const g=globalThis.__petTamerPracticeDragon;
   if(g&&g.visible&&g.position)return {x:g.position.x,y:g.position.y,z:g.position.z};
@@ -1661,6 +1877,7 @@ function throughPetTamerFlightRing(){
 function jobTutorialBeaconTarget(jobId, room){
   if(jobId==='farmer')return farmerTutorialTargetPos();
   if(jobId==='cook')return cookTutorialTargetPos();
+  if(jobId==='blacksmith')return blacksmithTutorialTargetPos();
   if(jobId==='pet_tamer'){
     if(jobTutorialPetDragonStep===0)return petTamerPracticeInsulatorPos();
     if(jobTutorialPetDragonStep===4&&jobTutorialPetDragonTutorialMount)return petTamerPracticeFlightRingPos();
@@ -2141,8 +2358,9 @@ function grantJobTutorialKit(jobId){
     ensureOnboardingItem(I.COOKED_MEAT,1);
     selectItemForOnboarding(I.WHEAT);
   }else if(jobId==='blacksmith'){
-    ensureOnboardingItem(B.IRON_ORE,1);
-    ensureOnboardingItem(I.COAL,1);
+    addTemporaryJobTutorialItem(I.IRON_INGOT,7,false);
+    addTemporaryJobTutorialItem(I.COAL,1,false);
+    selectItemForOnboarding(I.IRON_INGOT);
   }else if(jobId==='pet_tamer'){
     addTemporaryJobTutorialItem(I.EGG_VERDANT,1,true);
     addTemporaryJobTutorialItem(I.DRAGON_TREAT,1,false);
@@ -2208,6 +2426,16 @@ function updateJobTutorialHud(){
         ? {key:'CLAIM MEAL',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the hearth timer above the campfire.',sub:'The tutorial timer is fast; normal food work still uses recipes and kitchen prep.'}
       : {key:action.key,text:cookTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Cook loop: ingredients become food, food becomes buffs and gold.'};
   }
+  if(jobTutorialJob==='blacksmith'){
+    const action=blacksmithTutorialAction();
+    copy=jobTutorialBlacksmithStep>=3
+      ? {key:'RETURN PILLAR',text:'You crafted armour, inspected its rarity, and sold it for gold.',sub:'Walk into the blue return pillar to go back to town.'}
+      : jobTutorialBlacksmithStep===2
+        ? {key:'TOBIN FORGEHAND',text:'Take the Chainmail Armor to Tobin Forgehand and press G to sell it for gold.',sub:'This completes the blacksmith economy loop.'}
+        : jobTutorialBlacksmithStep===1
+          ? {key:'CHECK QUALITY',text:'Press G at the forge bench to inspect your armour rarity roll.',sub:'Blacksmith armour rarity gets a bonus from your max mana pool.'}
+          : {key:action.key,text:blacksmithTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Blacksmith loop: materials become armour, armour quality scales with mana, armour sells for gold.'};
+  }
   if(jobTutorialJob==='pet_tamer'){
     const action=petTamerTutorialAction();
     copy=jobTutorialPetDragonStep===0&&nearPetTamerPracticeInsulator()
@@ -2230,12 +2458,13 @@ function updateJobTutorialHud(){
   const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
   const farmerBlockedReturn=jobTutorialJob==='farmer'&&jobTutorialFarmerStep<4;
   const cookBlockedReturn=jobTutorialJob==='cook'&&jobTutorialCookStep<4;
-  const returnBlocked=minerBlockedReturn||farmerBlockedReturn||cookBlockedReturn;
+  const blacksmithBlockedReturn=jobTutorialJob==='blacksmith'&&jobTutorialBlacksmithStep<3;
+  const returnBlocked=minerBlockedReturn||farmerBlockedReturn||cookBlockedReturn||blacksmithBlockedReturn;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':'FINISH COOKING'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
+    +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':cookBlockedReturn?'FINISH COOKING':'FINISH FORGING'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'Sell the armour to Tobin before leaving.':'Craft and inspect armour before leaving.'):'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The blacksmith loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -2249,6 +2478,8 @@ function completeJobTutorial(){
   jobTutorialTraded=false;
   jobTutorialFarmerStep=0;
   jobTutorialCookStep=0;
+  jobTutorialBlacksmithStep=0;
+  jobTutorialBlacksmithCraftedArmor=null;
   clearCookTutorialTimer();
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
@@ -2261,6 +2492,7 @@ function completeJobTutorial(){
   if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
   if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
   if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
+  if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   completeTownTutorialStep(jobTutorialStepId(jobId));
@@ -2288,6 +2520,8 @@ function startJobTutorial(jobId){
   jobTutorialTraded=false;
   jobTutorialFarmerStep=0;
   jobTutorialCookStep=0;
+  jobTutorialBlacksmithStep=0;
+  jobTutorialBlacksmithCraftedArmor=null;
   clearCookTutorialTimer();
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
@@ -2305,12 +2539,14 @@ function startJobTutorial(jobId){
   updateMinerTutorialTrader();
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();
+  updateBlacksmithTutorialTrader();
   updateJobTutorialHud();
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
   if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the open Egg Insulator, then hatch your tutorial egg.');
   else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
   else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the prep table. Press <b>G</b> to start turning wheat into real food.');
+  else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the forge bench. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();
   return true;
@@ -2329,6 +2565,8 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialTraded=state.traded===true;
   jobTutorialFarmerStep=jobId==='farmer'?Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length,Number(state.farmerStep)||0)):0;
   jobTutorialCookStep=jobId==='cook'?Math.max(0,Math.min(COOK_TUTORIAL_ACTIONS.length,Number(state.cookStep)||0)):0;
+  jobTutorialBlacksmithStep=jobId==='blacksmith'?Math.max(0,Math.min(BLACKSMITH_TUTORIAL_ACTIONS.length,Number(state.blacksmithStep)||0)):0;
+  jobTutorialBlacksmithCraftedArmor=state.blacksmithCraftedArmor&&typeof state.blacksmithCraftedArmor==='object'?state.blacksmithCraftedArmor:null;
   jobTutorialCookStartedAt=0;
   jobTutorialCookReadyAt=0;
   if(jobId==='cook'&&state.cookReadyAt&&jobTutorialCookStep===2){
@@ -2355,6 +2593,7 @@ function resumeJobTutorial(jobId,state={}){
   updateMinerTutorialTrader();
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();
+  updateBlacksmithTutorialTrader();
   updateCookTutorialTimer();
   updateJobTutorialHud();
   eventLog('Resumed '+job.name+' tutorial room.');
@@ -2372,6 +2611,8 @@ function tickJobTutorial(now){
     jobTutorialTraded=false;
     jobTutorialFarmerStep=0;
     jobTutorialCookStep=0;
+    jobTutorialBlacksmithStep=0;
+    jobTutorialBlacksmithCraftedArmor=null;
     clearCookTutorialTimer();
     jobTutorialPetDragonSeen=false;
     jobTutorialPetDragonStep=0;
@@ -2383,6 +2624,7 @@ function tickJobTutorial(now){
     if(tutorialMinerTrader)tutorialMinerTrader.grp.visible=false;
     if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
     if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
+    if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
     return;
@@ -2392,6 +2634,7 @@ function tickJobTutorial(now){
   updateMinerTutorialTrader(now);
   updateFarmerTutorialTrader(now);
   updateCookTutorialTrader(now);
+  updateBlacksmithTutorialTrader(now);
   updateCookTutorialTimer(now);
   const target=jobTutorialBeaconTarget(jobTutorialJob,room);
   if(!target)return;
@@ -2451,6 +2694,14 @@ function tickJobTutorial(now){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
         const action=cookTutorialAction();
+        sysMsg('<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
+      }
+      return;
+    }
+    if(jobTutorialJob==='blacksmith'&&jobTutorialBlacksmithStep<3){
+      if(now>jobTutorialReturnWarnAt){
+        jobTutorialReturnWarnAt=now+1800;
+        const action=blacksmithTutorialAction();
         sysMsg('<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
       }
       return;
@@ -3766,6 +4017,8 @@ function nearbyInteractionPrompt(){
   if(farmerTutor)push({key:'G',title:'Liss Barley',small:jobTutorialTraded?'Wheat sold':countItem(I.WHEAT)>0?'Sell wheat for gold':'Harvest wheat first',priority:118},farmerTutor.distance);
   const cookTrader=nearbyCookTutorialTrader();
   if(cookTrader)push({key:'G',title:'Pippa Hearth',small:jobTutorialTraded?'Meal sold':countItem(I.HEARTY_SANDWICH)>0?'Sell meal for gold':'Claim meal first',priority:118},cookTrader.distance);
+  const blacksmithTrader=nearbyBlacksmithTutorialTrader();
+  if(blacksmithTrader)push({key:'G',title:'Tobin Forgehand',small:jobTutorialTraded?'Armour sold':blacksmithTutorialArmorStack()?'Sell armour for gold':'Craft armour first',priority:118},blacksmithTrader.distance);
   const farmerTarget=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'?farmerTutorialTargetPos():null;
   if(farmerTarget&&jobTutorialFarmerStep<4&&player){
     const fd=Math.hypot(player.pos.x-farmerTarget.x,player.pos.z-farmerTarget.z);
@@ -3780,6 +4033,14 @@ function nearbyInteractionPrompt(){
     if(cd<4.8){
       const action=cookTutorialAction();
       push({key:action.verb,title:action.key,small:cookTutorialProgressLabel(),priority:118},cd);
+    }
+  }
+  const blacksmithTarget=jobTutorialActive&&jobTutorialJob==='blacksmith'&&dim==='job'?blacksmithTutorialTargetPos():null;
+  if(blacksmithTarget&&jobTutorialBlacksmithStep<3&&player){
+    const bd=Math.hypot(player.pos.x-blacksmithTarget.x,player.pos.z-blacksmithTarget.z);
+    if(bd<4.8){
+      const action=blacksmithTutorialAction();
+      push({key:action.verb,title:action.key,small:blacksmithTutorialProgressLabel(),priority:118},bd);
     }
   }
   const petPracticeRoost=nearPetTamerPracticeRoost();
@@ -3969,6 +4230,7 @@ function secondaryAction(){
   if(tryMinerTutorialTrade()) return;
   if(tryFarmerTutorialTrade()) return;
   if(tryCookTutorialAction()) return;
+  if(tryBlacksmithTutorialAction()) return;
   if(performPetTamerDragonTutorialAction()) return;
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
@@ -4197,6 +4459,8 @@ gameContext.registerState('combat', Object.freeze({
   get jobTutorialTraded(){ return jobTutorialTraded; },
   get jobTutorialFarmerStep(){ return jobTutorialFarmerStep; },
   get jobTutorialCookStep(){ return jobTutorialCookStep; },
+  get jobTutorialBlacksmithStep(){ return jobTutorialBlacksmithStep; },
+  get jobTutorialBlacksmithCraftedArmor(){ return jobTutorialBlacksmithCraftedArmor; },
   get jobTutorialCookStartedAt(){ return jobTutorialCookStartedAt; },
   get jobTutorialCookReadyAt(){ return jobTutorialCookReadyAt; },
   get jobTutorialPetDragonSeen(){ return jobTutorialPetDragonSeen; },
@@ -4225,6 +4489,8 @@ gameContext.registerModule('combat', Object.freeze({
   performFarmerTutorialStepForTest,
   cookTutorialVisualDebug,
   performCookTutorialStepForTest,
+  blacksmithTutorialVisualDebug,
+  performBlacksmithTutorialStepForTest,
   performPetTamerDragonTutorialAction,
   petTamerVisualDebug:()=>{
     const p=petTamerPracticeInsulatorPos();

@@ -392,6 +392,17 @@ class EconomyMixin {
   }
   // Returns the count that could NOT be placed (0 = all placed). durOverride, when
   // given, pins the durability instead of the default/blacksmith-perk value.
+  blacksmithArmorCraftBonus(prof) {
+    if (!prof || prof.job !== 'blacksmith') return 0;
+    const maxMp = typeof this.maxMpForProfile === 'function'
+      ? this.maxMpForProfile(prof)
+      : 20 + (Math.max(1, prof.S && prof.S.int ? prof.S.int | 0 : 1) - 1) * 3;
+    return Math.max(0, Math.min(0.35, (Math.max(20, maxMp) - 20) / 180));
+  }
+  blacksmithCraftedArmorRarity(prof) {
+    if (!prof || prof.job !== 'blacksmith') return '';
+    return GEAR_SYSTEM.rollRarity(Math.random(), this.blacksmithArmorCraftBonus(prof)).id;
+  }
   addCraftedRewardItem(prof, id, count, durOverride) {
     const info = TOOL_INFO[id]||ARMOR_INFO[id];
     if (!info) return this.addRewardItem(prof, id, count);
@@ -401,13 +412,17 @@ class EconomyMixin {
     const dur = durOverride != null
       ? Math.max(1, Math.min(99999, durOverride | 0))
       : (tier ? Math.min(99999, info.dur + Math.max(1, Math.round(info.dur * (0.08 + tier * 0.04)))) : info.dur);
+    const stack = () => {
+      const armorRarity = ARMOR_INFO[id] ? this.blacksmithCraftedArmorRarity(prof) : '';
+      return { id, count: 1, dur, source:'crafted', ...(ARMOR_INFO[id]?{armorType:info.armorType||'vanguard', ...(armorRarity?{rarity:armorRarity}:{})}:{}) };
+    };
     for (let i = 0; i < prof.inv.length && left > 0; i++) {   // reuse freed holes before growing
       if (prof.inv[i]) continue;
-      prof.inv[i] = { id, count: 1, dur, source:'crafted', ...(ARMOR_INFO[id]?{armorType:info.armorType||'vanguard'}:{}) };
+      prof.inv[i] = stack();
       left--;
     }
     while (left > 0 && prof.inv.length < 36) {
-      prof.inv.push({ id, count: 1, dur, source:'crafted', ...(ARMOR_INFO[id]?{armorType:info.armorType||'vanguard'}:{}) });
+      prof.inv.push(stack());
       left--;
     }
     return left;

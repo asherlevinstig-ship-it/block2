@@ -5753,6 +5753,22 @@ test('addCraftedRewardItem reuses freed slots for crafted tools', () => {
   assert.ok(prof.inv[7] && prof.inv[7].id === I.IRON_PICK, 'the crafted tool fills the freed hole instead of being dropped');
 });
 
+test('blacksmith crafted armor gains mana-pool rarity bonus', () => {
+  const room = makeRoom();
+  const normal = { job: 'adventurer', S: { int: 1 }, inv: [null] };
+  const smith = { job: 'blacksmith', S: { int: 40 }, inv: [null] };
+  const oldRandom = Math.random;
+  try {
+    Math.random = () => 0.53;
+    room.addCraftedRewardItem(normal, I.CHAIN_ARMOR, 1);
+    room.addCraftedRewardItem(smith, I.CHAIN_ARMOR, 1);
+  } finally {
+    Math.random = oldRandom;
+  }
+  assert.equal(normal.inv[0].rarity, undefined, 'non-blacksmith crafted armor has no bonus rarity roll');
+  assert.equal(smith.inv[0].rarity, 'uncommon', 'high max mana pushes the same craft roll into the next rarity band');
+});
+
 test('taking furnace output with a full bag leaves it in the furnace (no loss)', () => {
   const room = makeRoom();
   const client = makeClient('smith');
