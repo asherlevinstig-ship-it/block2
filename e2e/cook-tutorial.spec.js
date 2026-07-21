@@ -34,6 +34,14 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
   test.setTimeout(90_000);
   await registerCook(page);
 
+  await expect(page.locator('body')).toHaveClass(/off-main-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect(page.locator('#activitytracker')).toBeHidden();
+  await expect(page.locator('#eventhud')).toBeHidden();
+  const chatLineCount = await page.locator('#chatlog .chatline').count();
+  await page.evaluate(() => window.eventLog?.('This off-main event should be suppressed.', '[Test]'));
+  await expect.poll(() => page.locator('#chatlog .chatline').count()).toBe(chatLineCount);
+
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialVisualDebug()))
     .toMatchObject({
       active: true,

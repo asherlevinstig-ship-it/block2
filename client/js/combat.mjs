@@ -522,6 +522,7 @@ function syncHudLayerState(){
   const tutorialVisible=!!(tutorialEl&&!tutorialEl.classList.contains('hidden'));
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
   const jobTutorialRoom=dim==='job'||dimensionsState.kind==='job';
+  const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
   const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset'].some(id=>{
     const el=document.getElementById(id);
     if(!el) return false;
@@ -529,6 +530,7 @@ function syncHudLayerState(){
   });
   document.body.classList.toggle('game-modal-open', gameModalOpen);
   document.body.classList.toggle('job-tutorial-room', jobTutorialRoom);
+  document.body.classList.toggle('off-main-room', offMainRoom);
   document.body.classList.toggle('tutorial-hud-active', tutorialVisible);
   document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen);
   layoutRightHudStack();
@@ -3285,7 +3287,8 @@ function refreshPlayUi(){
   overlay.classList.toggle('hidden', showHud);
   document.body.classList.toggle('claim-mode', !!claimMode);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
-  const minimal=(onboardingActive&&dim==='tutorial')||(jobTutorialActive&&dim==='job');
+  const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
+  const minimal=offMainRoom||(onboardingActive&&dim==='tutorial')||(jobTutorialActive&&dim==='job');
   const calm=calmTownHud();
   document.body.classList.toggle('calm-town', showHud&&calm);
   document.getElementById('hotbar').classList.toggle('hidden', !showHud);

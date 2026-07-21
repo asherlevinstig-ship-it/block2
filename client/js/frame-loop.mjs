@@ -228,7 +228,7 @@ function firstHandsQuestActive(){
   return !!(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands'&&!questDone());
 }
 function maybePromptRecallRecharge(now){
-  if(!NET.on||!NET.room||!locked||cutscene)return;
+  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene)return;
   if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active)return;
   if(now<nextRecallRechargeHintAt)return;
   const manaMax=Math.max(1,maxMp()),staminaMax=Math.max(1,maxSp());
@@ -708,7 +708,7 @@ function idleObjectiveLine(){
   return objectiveLine('progression','Next','Find A Lead','Return to town, follow a landmark, or open your Quest Log',{type:'questlog',label:'OPEN QUEST LOG'});
 }
 function tutorialRoomHudSuppressed(){
-  return dim==='job'||dimensionsState.kind==='job'||(combatState.jobTutorialActive&&combatState.jobTutorialJob);
+  return dim!=='overworld'||dimensionsState.kind!=='overworld'||(combatState.jobTutorialActive&&combatState.jobTutorialJob);
 }
 function nextBestObjectiveLine(){
   if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return null;

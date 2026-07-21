@@ -7701,6 +7701,7 @@ function armSysHide(t){
   },dur);
 }
 function eventLog(text, name='[Event]'){
+  if(dim!=='overworld')return;
   chatLine(name, text);
 }
 function itemLabel(id){
