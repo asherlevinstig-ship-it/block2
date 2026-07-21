@@ -176,11 +176,11 @@
       desc:String(def.desc||(def.type==='fetch'?`Bring ${def.need} of ${textTarget}.`:`Complete ${def.need} ${def.type} objective${def.need===1?'':'s'}.`)).replace(/\{N\}/g,String(def.need|0)),
       rewardItems:rewardItemsCopy(def.rewardItems),
       lifecycleState:String(context.lifecycleState||'offered'),
-      offeredAt:Math.max(0,context.offeredAt|0||context.now|0||Date.now()),
-      acceptedAt:Math.max(0,context.acceptedAt|0),
-      claimableAt:Math.max(0,context.claimableAt|0),
-      completedAt:Math.max(0,context.completedAt|0),
-      expiresAt:Math.max(0,context.expiresAt|0)
+      offeredAt:Math.max(0,Number(context.offeredAt)||Number(context.now)||Date.now()),
+      acceptedAt:Math.max(0,Number(context.acceptedAt)||0),
+      claimableAt:Math.max(0,Number(context.claimableAt)||0),
+      completedAt:Math.max(0,Number(context.completedAt)||0),
+      expiresAt:Math.max(0,Number(context.expiresAt)||0)
     };
     if((def.levelTarget|0)>0)quest.levelTarget=def.levelTarget|0;
     if(def.gateRank!=null)quest.gateRank=Math.max(0,Math.min(4,def.gateRank|0));

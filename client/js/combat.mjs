@@ -71,6 +71,7 @@ const legacyCombatBindings={
   "onboardingRoute":{get:()=>onboardingRoute,set:value=>{onboardingRoute=value;}},
   "onboardingStep":{get:()=>onboardingStep,set:value=>{onboardingStep=value;}},
   "openTownTutorialsUI":{get:()=>openTownTutorialsUI},
+  "closeLevel2JobChoice":{get:()=>closeLevel2JobChoice},
   "openLevel2JobChoice":{get:()=>openLevel2JobChoice},
   "overlay":{get:()=>overlay},
   "pathChoiceOpen":{get:()=>pathChoiceOpen,set:value=>{pathChoiceOpen=value;}},
@@ -1044,14 +1045,21 @@ function showAbilityAwakening(){
   locked=false;
   lockFallback=false;
   refreshPlayUi();
-  const btn=document.getElementById('awakeningbegin');
-  if(btn) btn.addEventListener('click', ()=>{
+  const beginAwakeningTraining=()=>{
     SFX.uiClick();
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.begin', { path:S.path, dim });
     awakeningWin.classList.add('hidden');
     abilityAwakeningOpen=false;
     startAbilityTraining(true);
-  });
+  };
+  const btn=document.getElementById('awakeningbegin');
+  if(btn) btn.addEventListener('click', beginAwakeningTraining);
+  awakeningPanel.onclick=e=>{
+    const b=document.getElementById('awakeningbegin');
+    if(!b || e.target===b) return;
+    const r=b.getBoundingClientRect();
+    if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom) beginAwakeningTraining();
+  };
   return true;
 }
 function startAbilityTraining(){
@@ -2670,9 +2678,10 @@ function chooseJobFromLevel2Banner(jobId){
 function shouldOpenLevel2JobChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const guidanceReady=level2JobChoiceForced||shouldOfferTownJobGuidance();
-  return !!(S&&S.lvl>=2&&!playerJob&&!level2JobChoiceSeen()&&guidanceReady&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
+  return !!(S&&S.lvl>=2&&!playerJob&&progressionFocus!=='first_d_gate'&&progressionFocus!=='next_adventurer_contract'&&!level2JobChoiceSeen()&&guidanceReady&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!globalThis.dungeonLobbyState&&!globalThis.dungeonLobbyOpen&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
 }
 function openLevel2JobChoice(force=false){
+  if(globalThis.dungeonLobbyState||globalThis.dungeonLobbyOpen) return false;
   if(!force && !shouldOpenLevel2JobChoice()) return false;
   if(!pathSelectEl||!pathPanelEl) return false;
   jobChoiceOpen=true;

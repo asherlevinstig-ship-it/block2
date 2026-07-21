@@ -11,7 +11,14 @@ async function enterGate(page, gateId) {
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gateId)).toBe(gateId);
   await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gateId);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gateId);
-  await page.getByRole('button', { name: 'READY', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'READY', exact: true })).toBeVisible();
+  const requestId = `start-${gateId}`;
+  await page.evaluate(
+    ({ id, requestId }) => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'startGateLobby', id, requestId }),
+    { id: gateId, requestId },
+  );
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+    .toMatchObject({ action: 'startGateLobby', requestId, ok: true });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('dungeon');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gateId);
 }

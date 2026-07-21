@@ -13,7 +13,7 @@ test.afterEach(async ({ page }) => {
 test('server tutorial milestones restore a returning hunter in a fresh browser', async ({ browser, page }) => {
   test.setTimeout(60_000);
   const suffix = Date.now().toString(36);
-  const username = 'tutorial_restore_' + suffix;
+  const username = 'tut_restore_' + suffix;
   const password = 'correct horse tutorial restore';
 
   await page.addInitScript(() => {

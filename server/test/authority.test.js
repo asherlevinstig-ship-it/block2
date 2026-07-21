@@ -4432,7 +4432,7 @@ test('requestDungeonStatus sends a full status only to the requesting dungeon cl
   assert.equal(room.handleDungeonStatusRequest(viewer), false, 'rapid duplicate status requests are rate-limited');
 });
 
-test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', () => {
+test('E2E dungeon load probe spreads players and emits positioned fx through interest filtering', async () => {
   const priorE2E = process.env.BLOCKCRAFT_E2E;
   process.env.BLOCKCRAFT_E2E = '1';
   try {
@@ -4443,12 +4443,12 @@ test('E2E dungeon load probe spreads players and emits positioned fx through int
     room.state.mobs.set('probe-a', dungeonMob('probe-a', inst.id, 0, 0));
     room.state.mobs.set('probe-b', dungeonMob('probe-b', inst.id, 150, 0));
 
-    assert.equal(room.handleE2EJourney(near, { action: 'positionDungeonLoadProbe', index: 0, total: 2, requestId: 'near' }), true);
-    assert.equal(room.handleE2EJourney(far, { action: 'positionDungeonLoadProbe', index: 1, total: 2, requestId: 'far' }), true);
+    assert.equal(await room.handleE2EJourney(near, { action: 'positionDungeonLoadProbe', index: 0, total: 2, requestId: 'near' }), true);
+    assert.equal(await room.handleE2EJourney(far, { action: 'positionDungeonLoadProbe', index: 1, total: 2, requestId: 'far' }), true);
     const np = room.state.players.get(near.sessionId), fp = room.state.players.get(far.sessionId);
     assert.ok(Math.hypot(np.x - fp.x, np.z - fp.z) > 100, 'probe positions create a high-spread party');
 
-    assert.equal(room.handleE2EJourney(near, { action: 'emitDungeonLoadFx', requestId: 'fx' }), true);
+    assert.equal(await room.handleE2EJourney(near, { action: 'emitDungeonLoadFx', requestId: 'fx' }), true);
     assert.equal(near.sent.some(entry => entry.type === 'fx' && entry.msg.t === 'loadProbe'), true);
     assert.equal(far.sent.some(entry => entry.type === 'fx' && entry.msg.t === 'loadProbe'), false);
     const metrics = room.dungeonInterestSnapshot();

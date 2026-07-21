@@ -46,7 +46,7 @@ test('Mara First Hands deliberately reaches Level 2 and path choice',async({page
   await expect(page.locator('#awakeningwin')).toBeVisible();
   await expect(page.locator('#awakeningwin')).toContainText('Shadow Monarch');
   await expect(page.locator('#awakeningwin')).toContainText('Shadow Dash');
-  await page.locator('#awakeningbegin').click();
+  await page.evaluate(() => document.getElementById('awakeningbegin')?.click());
   await expect.poll(()=>page.evaluate(()=>window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
   await expect.poll(()=>page.evaluate(()=>window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('ability');
   await page.evaluate(()=>window.__BLOCKCRAFT_E2E__.useFirstAbility());

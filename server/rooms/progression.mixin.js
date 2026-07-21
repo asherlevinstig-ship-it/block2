@@ -855,11 +855,11 @@ class ProgressionMixin {
       ...rebuilt,
       have: Math.max(0, Math.min(rebuilt.need | 0, q.have | 0)),
       lifecycleState: ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(q.lifecycleState) ? q.lifecycleState : 'active',
-      offeredAt: Math.max(0, q.offeredAt | 0),
-      acceptedAt: Math.max(0, q.acceptedAt | 0),
-      claimableAt: Math.max(0, q.claimableAt | 0),
-      completedAt: Math.max(0, q.completedAt | 0),
-      expiresAt: Math.max(0, q.expiresAt | 0),
+      offeredAt: Math.max(0, Number(q.offeredAt) || 0),
+      acceptedAt: Math.max(0, Number(q.acceptedAt) || 0),
+      claimableAt: Math.max(0, Number(q.claimableAt) || 0),
+      completedAt: Math.max(0, Number(q.completedAt) || 0),
+      expiresAt: Math.max(0, Number(q.expiresAt) || 0),
     };
   }
 

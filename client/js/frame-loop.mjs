@@ -713,7 +713,9 @@ function tutorialRoomHudSuppressed(){
 function nextBestObjectiveLine(){
   if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return null;
   const transition=transitionRecoveryAction();
-  if(transition){
+  const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
+  const deferOptionalJobChoice=transition&&transition.type==='choose_job'&&(story||progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract');
+  if(transition && !deferOptionalJobChoice){
     const title=transition.type==='continue_panel'?'Continue Reward':
       transition.type==='choose_path'?'Choose Path':
       transition.type==='start_awakening'?'Start Awakening':
@@ -721,14 +723,13 @@ function nextBestObjectiveLine(){
     const text=transition.type==='use_ability'?(combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'):'Finish the open step so the next objective can appear';
     return objectiveLine('transition','Now',title,text,transition);
   }
+  if(story)return story;
   if(townGuidanceActive&&!jobContract){
     const tutorial=tutorialObjective();
     if(tutorial)return objectiveLine('tutorial','Guide',tutorial.label,tutorial.text,{type:'follow_marker',label:'FOLLOW MARKER'});
   }
   const localJob=localJobObjectiveLine();
   if(localJob)return localJob;
-  const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
-  if(story)return story;
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
   if(progression&&progressionFocus&&progressionFocus!=='first_d_gate')return progression;
   const prep=gatePrepObjectiveLine();
@@ -745,7 +746,8 @@ function nextBestObjectiveLine(){
 }
 function unifiedObjectiveList(){
   if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
-  if((townGuidanceActive&&!jobContract)||transitionRecoveryAction())return [];
+  const transition=transitionRecoveryAction();
+  if((townGuidanceActive&&!jobContract)||(transition&&!(transition.type==='choose_job'&&(progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract'))))return [];
   const lines=[];
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
   if(story)lines.push(story);
@@ -801,7 +803,9 @@ function transitionRecoveryAction(){
 }
 function currentObjectiveAction(){
   const transition=transitionRecoveryAction();
-  if(transition) return transition;
+  const storyActive=!!(localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story'));
+  const deferOptionalJobChoice=transition&&transition.type==='choose_job'&&(storyActive||progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract');
+  if(transition && !deferOptionalJobChoice) return transition;
   if(jobContract){
     if(jobContractReady()) return {type:'jobs',label:'CLAIM AT JOB BOARD'};
     const craft=objectiveCraftAction('job');
@@ -1015,7 +1019,7 @@ function currentObjective(){
   const transition=transitionRecoveryAction();
   if(transition){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
-    if(transition.type==='choose_job') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
+    if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='next_adventurer_contract') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
     if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};
     if(transition.type==='start_awakening') return {label:'Ability Awakening', text:'Start ability training for your chosen path'};
     if(transition.type==='use_ability') return {label:'Ability Training', text:combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'};

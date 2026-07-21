@@ -493,7 +493,7 @@ class GameRoom extends Room {
       this.restartRecoveries.delete(token);
     });
     if (process.env.BLOCKCRAFT_E2E === '1') {
-      this.onMessage('e2eJourney', (client, m) => this.handleE2EJourney(client, m));
+      this.onMessage('e2eJourney', async (client, m) => this.handleE2EJourney(client, m));
     }
 
     this.onMessage('teamCreate', (client, m) => {
@@ -1680,7 +1680,7 @@ class GameRoom extends Room {
     return true;
   }
 
-  handleE2EJourney(client, m) {
+  async handleE2EJourney(client, m) {
     if (process.env.BLOCKCRAFT_E2E !== '1') return false;
     const rec = this.profileFor(client);
     const action = m && String(m.action || '');
@@ -1904,6 +1904,11 @@ class GameRoom extends Room {
         const c = this.clients.find(cl => cl.sessionId === sid);
         if (c) this.enterGateInstance(c, gate, inst);
       }
+      for (const sid of lobby.members) {
+        const token = this.tokens.get(sid);
+        const prof = token && this.profiles.get(token);
+        if (token && prof) await this.savePlayerProfileNow(token, prof);
+      }
       this.dungeonLobbies.delete(id);
       client.send('e2eJourneyResult', { action, requestId, ok: true, id, members: lobby.members.size });
       return true;
@@ -1934,6 +1939,8 @@ class GameRoom extends Room {
     if (action === 'prepareFirstGateFailure') {
       rec.prof.S.lvl = Math.max(3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
+      rec.prof.firstQuestRewardClaimed = true;
+      rec.prof.e2eSkipFirstQuestRewardPresentation = true;
       rec.prof.npcQuestChains['Mara Vale'] = 2;
       rec.prof.activeNpcQuest = this.buildNpcQuest(rec.prof, 'Mara Vale', 'guide');
       if (!rec.prof.activeNpcQuest || !this.ensurePublicGateRank(0)) return false;
@@ -2069,7 +2076,12 @@ class GameRoom extends Room {
       return this.progressionChanged(client, 'e2eJourney', { action });
     }
     if (action === 'completeRoadReady' && q.type === 'kill') {
-      while ((q.have | 0) < (q.need | 0)) this.recordKillProgress(client);
+      q.have = Math.max(q.need | 0, q.have | 0);
+      q.lifecycleState = 'claimable';
+      q.claimableAt = Date.now();
+      this.dirtyPlayers.add(rec.token);
+      client.send('npcQuest', { action: 'progress', quest: q });
+      if (this.activeQuestObjectives) client.send('progressionFocus', { focus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
       return true;
     }
     if (action === 'failFirstGate' && q.type === 'gate' && (q.gateRank | 0) === 0) {
@@ -3218,6 +3230,7 @@ class GameRoom extends Room {
       dragonSpecializations: publicField('dragonSpecializations'),
       dragonLoans: this.publicDragonLoansFor ? this.publicDragonLoansFor(token, prof) : [],
       deity: this.deityPayloadFor(client, prof),
+      e2eSkipFirstQuestRewardPresentation: prof.e2eSkipFirstQuestRewardPresentation === true,
       activeObjectives: this.activeQuestObjectives(client, prof),
     };
   }
@@ -3764,14 +3777,19 @@ class GameRoom extends Room {
   }
   activeQuestObjectives(client, prof) {
     const objectives = [];
-    const lifecycleFor = (state, src = {}) => ({
-      state: ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(state) ? state : 'active',
-      offeredAt: Math.max(0, Number(src.offeredAt) || 0),
-      acceptedAt: Math.max(0, Number(src.acceptedAt) || 0),
-      claimableAt: Math.max(0, Number(src.claimableAt) || 0),
-      completedAt: Math.max(0, Number(src.completedAt) || 0),
-      expiresAt: Math.max(0, Number(src.expiresAt) || 0),
-    });
+    const lifecycleFor = (state, src = {}) => {
+      const normalizedState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(state) ? state : 'active';
+      const offeredAt = Math.max(0, Number(src.offeredAt) || 0);
+      const acceptedAt = Math.max(0, Number(src.acceptedAt) || 0);
+      return {
+        state: normalizedState,
+        offeredAt,
+        acceptedAt: normalizedState === 'offered' ? acceptedAt : (acceptedAt || offeredAt),
+        claimableAt: Math.max(0, Number(src.claimableAt) || 0),
+        completedAt: Math.max(0, Number(src.completedAt) || 0),
+        expiresAt: Math.max(0, Number(src.expiresAt) || 0),
+      };
+    };
     const rewardPayload = reward => {
       if (!reward || typeof reward !== 'object') return null;
       const items = Array.isArray(reward.items)

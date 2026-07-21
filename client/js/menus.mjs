@@ -55,6 +55,7 @@ const legacyMenuBindings={
   "awardFirstVillagerQuestBonus":{get:()=>awardFirstVillagerQuestBonus},
   "showFirstVillagerReward":{get:()=>showFirstVillagerReward},
   "firstQuestRewardPresentationSeen":{get:()=>firstQuestRewardPresentationSeen},
+  "markFirstQuestRewardPresentationSeen":{get:()=>markFirstQuestRewardPresentationSeen},
   "bartender":{get:()=>bartender},
   "blacksmithServiceRejected":{get:()=>blacksmithServiceRejected},
   "bleedStacks":{get:()=>bleedStacks,set:value=>{bleedStacks=value;}},
@@ -2646,6 +2647,7 @@ function completeNpcChainStep(q){
 const FIRST_VILLAGER_BONUS_KEY='bc_first_villager_quest_bonus_v1';
 const FIRST_QUEST_REWARD_PRESENTED_KEY='bc_first_quest_reward_presented_v1';
 function firstQuestRewardPresentationSeen(){try{return localStorage.getItem(FIRST_QUEST_REWARD_PRESENTED_KEY)==='1';}catch{return false;}}
+function markFirstQuestRewardPresentationSeen(){try{localStorage.setItem(FIRST_QUEST_REWARD_PRESENTED_KEY,'1');}catch{}}
 function firstVillagerBonusClaimed(){
   try{ return localStorage.getItem(FIRST_VILLAGER_BONUS_KEY)==='1'; }catch(e){ return false; }
 }
@@ -3040,6 +3042,7 @@ function openQWin(mode='dialog'){
   qpanelEl.className=mode;
   qpanelEl.dataset.modal=mode;
   qwinEl.classList.remove('trade-offer-open');
+  qwinEl.classList.remove('gate-lobby-open');
   qwinEl.classList.remove('hidden');
   refreshPlayUi();
 }
@@ -3049,6 +3052,7 @@ function closeQWin(relock=true){
   qOpen=false; qMode=''; regionalContractsOpen=false; utilityPanelOpen=false; questLogOpen=false; guildHallOpen=false; dungeonLobbyOpen=false; qwinEl.classList.add('hidden');
   qpanelEl.dataset.modal='';
   qwinEl.classList.remove('trade-offer-open');
+  qwinEl.classList.remove('gate-lobby-open');
   if(relock) renderer.domElement.requestPointerLock();
   else {
     overlay.classList.remove('hidden');
@@ -3319,10 +3323,26 @@ function gatePreviewLocal(rank,kind){
 function openDungeonLobbyUI(){
   if(!dungeonLobbyState) return;
   openQWin('dialog'); dungeonLobbyOpen=true; qpanelEl.innerHTML='';
+  qwinEl.classList.add('gate-lobby-open');
+  qpanelEl.classList.add('gate-lobby-panel');
   const ri=Math.max(0,Math.min(4,dungeonLobbyState.rank|0));
   const h=document.createElement('h2');h.textContent='GATE LOBBY';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.innerHTML=RANKS[ri].n+'-RANK '+gateKindLabel(dungeonLobbyState.kind||'public').toUpperCase()+' GATE &middot; READY '+((dungeonLobbyState.readyCount|0)||0)+'/'+((dungeonLobbyState.needed|0)||0);qpanelEl.appendChild(sub);
-  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Gather at the portal, inspect your loadout, then step through together. Readiness advice never blocks entry; the gate opens when every hunter confirms.<br><br><b>Boss clear reward: '+Math.max(0,dungeonLobbyState.rewardXp|0).toLocaleString('en-US')+' Hunter XP</b> plus gold, materials, and key drops.';qpanelEl.appendChild(intro);
+  const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='Gather at the portal, inspect your loadout, then step through together. Readiness advice never blocks entry; the gate opens when every hunter confirms.<br><br><b>Boss clear reward: '+Math.max(0,dungeonLobbyState.rewardXp|0).toLocaleString('en-US')+' Hunter XP</b> plus gold, materials, and key drops.';
+  const mineSid=NET.room&&NET.room.sessionId;
+  const members=Array.isArray(dungeonLobbyState.members)?dungeonLobbyState.members:[];
+  let mineReady=false,mineReadiness=null;
+  for(const m of members){
+    if(m.sid===mineSid){mineReady=!!m.ready;mineReadiness=m.readiness||null;break;}
+  }
+  const actionRow=document.createElement('div');actionRow.className='qrow gate-lobby-primary-actions';
+  const readyButton=qBtn(mineReady?'UNREADY':(dungeonLobbyState.canReady?'READY':'MOVE TO GATE ('+Math.ceil(dungeonLobbyState.youDistance||0)+'m)'),()=>requestDungeonReady(!mineReady));
+  if(!mineReady&&!dungeonLobbyState.canReady)readyButton.disabled=true;
+  actionRow.appendChild(readyButton);
+  if(dungeonLobbyState.canAdvertise)actionRow.appendChild(qBtn(dungeonLobbyState.advertised?'STOP SEARCH':'FIND PARTY',()=>requestDungeonMatchmaking(!dungeonLobbyState.advertised)));
+  actionRow.appendChild(qBtn('LEAVE LOBBY',()=>{requestDungeonLobbyLeave();dungeonLobbyState=null;closeQWin();},true));
+  qpanelEl.appendChild(actionRow);
+  qpanelEl.appendChild(intro);
   const preview=dungeonLobbyState.preview;
   if(preview){
     const party=preview.recommendedParty||[1,1],levels=preview.enemyLevels||[1,1],boss=preview.boss||{},rewards=preview.rewards||{};
@@ -3349,11 +3369,7 @@ function openDungeonLobbyUI(){
       (expectations.length?'<small>Expected: '+expectations.map(escHTML).join(', ')+'</small>':'');
     qpanelEl.appendChild(block);
   }
-  const mineSid=NET.room&&NET.room.sessionId;
-  const members=Array.isArray(dungeonLobbyState.members)?dungeonLobbyState.members:[];
-  let mineReady=false,mineReadiness=null;
   for(const m of members){
-    if(m.sid===mineSid){mineReady=!!m.ready;mineReadiness=m.readiness||null;}
     const row=document.createElement('div');row.className='shoprow';
     const prep=m.readiness||{status:'UNKNOWN',score:0,total:4};
     row.innerHTML='<span><b style="color:#f2c75c">'+escHTML(m.name||'Hunter')+'</b>'+((m.leader)?' <small style="opacity:.75">leader</small>':'')+'<br><small>'+escHTML(m.role||'Striker')+' - '+escHTML(m.roleNote||'Flexible striker; prep determines role.')+'</small><br><small style="color:'+(prep.ready?'#9be76d':'#ffad66')+'">'+escHTML(prep.status)+' '+(prep.score|0)+'/'+(prep.total|0)+(m.rankFit==='under'?' - UNDER RANK':m.rankFit==='over'?' - OVERQUALIFIED':'')+'</small></span><b style="color:'+(m.ready?'#9be76d':'#f2a65c')+'">'+(m.ready?'CONFIRMED':'WAITING')+'</b>';
@@ -3380,11 +3396,6 @@ function openDungeonLobbyUI(){
     qpanelEl.appendChild(match);
   }
   const row=document.createElement('div');row.className='qrow';
-  const readyButton=qBtn(mineReady?'UNREADY':(dungeonLobbyState.canReady?'READY':'MOVE TO GATE ('+Math.ceil(dungeonLobbyState.youDistance||0)+'m)'),()=>requestDungeonReady(!mineReady));
-  if(!mineReady&&!dungeonLobbyState.canReady)readyButton.disabled=true;
-  row.appendChild(readyButton);
-  if(dungeonLobbyState.canAdvertise)row.appendChild(qBtn(dungeonLobbyState.advertised?'STOP SEARCH':'FIND PARTY',()=>requestDungeonMatchmaking(!dungeonLobbyState.advertised)));
-  row.appendChild(qBtn('LEAVE LOBBY',()=>{requestDungeonLobbyLeave();dungeonLobbyState=null;closeQWin();},true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
 }

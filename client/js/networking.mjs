@@ -1261,7 +1261,7 @@ function netAttachRoom(room,name,client){
       else if(m.action==='progress'&&quest&&questDone())sysMsg(quest.giver==='Mara Vale'&&quest.title==='First Hands'
         ? '<b>First Hands complete.</b> Follow the gold trail back to <b>Mara Vale</b>.'
         : '<b>'+escHTML(quest.title||'Town quest')+'</b> complete - return to '+escHTML(quest.giver)+'.');
-      refreshHUD();if(qOpen)closeQWin();
+      refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();if(qOpen)closeQWin();
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.npcQuest.applied', { action:m.action });
     });
     room.onMessage('progressionMilestoneReward', m=>{
@@ -1490,6 +1490,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('dungeonPing', m=>{if(globalThis.applyDungeonPing)globalThis.applyDungeonPing(m);});
     room.onMessage('dungeonLobby', m=>{
       dungeonLobbyState=m;
+      if(typeof closeLevel2JobChoice==='function') closeLevel2JobChoice();
       openDungeonLobbyUI();
     });
     room.onMessage('dungeonMatchmaking', m=>{
@@ -2295,6 +2296,7 @@ function netRestoreProfile(m){
     {const today=new Date().toISOString().slice(0,10);tavernTokenRemaining=m.tavernTokenDay===today?Math.max(0,100-(m.tavernTokenBoughtToday|0)):100;}
     serverFirstQuestComplete=m.firstQuestRewardClaimed===true;
     firstQuestRewardRequestPending=false;
+    if(m.e2eSkipFirstQuestRewardPresentation&&typeof markFirstQuestRewardPresentationSeen==='function') markFirstQuestRewardPresentationSeen();
     if(typeof m.highestGateRankCleared==='number') highestGateRankCleared=Math.max(-1,Math.min(4,m.highestGateRankCleared|0));
     discoveredIds.clear();if(Array.isArray(m.discoveries))for(const id of m.discoveries)if(typeof id==='string')discoveredIds.add(id);
     claimedDiscoveryIds.clear();if(Array.isArray(m.claimedDiscoveries))for(const id of m.claimedDiscoveries)if(typeof id==='string')claimedDiscoveryIds.add(id);

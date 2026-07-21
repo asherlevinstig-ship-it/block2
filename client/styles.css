@@ -26,6 +26,9 @@
   #encounterprompt .key{display:inline-grid;place-items:center;min-width:26px;height:24px;margin-right:9px;border:1px solid #7dd3fc;border-radius:4px;background:#163247;color:#fff;font-weight:bold}#encounterprompt small{margin-left:9px;color:#9fc4d8}
   #encounterprompt.danger{border-color:rgba(255,98,71,.75);color:#ffd6cc}
   .gate-preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:10px 0}.gate-preview-card{padding:9px;border:1px solid rgba(242,199,92,.2);border-radius:5px;background:rgba(0,0,0,.2);font-size:12px;line-height:1.45}.gate-preview-card b{color:#f2c75c}
+  .gate-preview-grid,.gate-preview-card,.gate-party-readiness,.gate-readiness-list{pointer-events:none}
+  .gate-lobby-primary-actions{position:sticky;top:0;z-index:30;margin:6px 0 12px;padding:10px 0 12px;background:linear-gradient(180deg,rgba(7,12,20,.98),rgba(7,12,20,.92));border-bottom:1px solid rgba(255,210,74,.18);box-shadow:0 10px 16px rgba(0,0,0,.24)}
+  .gate-lobby-primary-actions .qbtn{position:relative;z-index:31}
   .gate-party-readiness{display:grid;gap:5px;margin:10px 0 12px;padding:10px;border:1px solid rgba(125,211,252,.26);border-radius:6px;background:rgba(6,16,28,.58);font-size:11px;line-height:1.4}.gate-party-readiness b{color:#bfeaff;letter-spacing:1px}.gate-party-readiness span{color:#d8e6f4}.gate-party-readiness small{display:block;color:#9fb0c6}.gate-party-readiness .ok{color:#9be76d}.gate-party-readiness .warn{color:#ffad66}
   body.cutscene #gateprompt,body.path-selecting #gateprompt,body.system-notice-active #gateprompt{display:none!important}
   /* RPG bars */
@@ -174,7 +177,8 @@
   @media (max-width:640px){#jobchoicecards{grid-template-columns:1fr}.job-choice-card{min-height:0}.job-choice-art{height:96px}#pathselect.jobselect #pathpanel{padding:18px}#pathselect.jobselect #pathpanel h1{font-size:19px;letter-spacing:3px}}
   #awakeningwin{position:fixed;inset:0;z-index:13;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 30%,rgba(139,92,246,.24),transparent 30%),radial-gradient(circle at 50% 60%,rgba(79,216,255,.14),transparent 34%),linear-gradient(180deg,rgba(3,7,14,.96),rgba(5,8,16,.99));backdrop-filter:blur(9px);color:#eaf6ff;text-align:center}
   #awakeningpanel{width:min(820px,calc(100vw - 48px));border:1px solid rgba(255,210,74,.62);border-radius:16px;background:linear-gradient(160deg,rgba(12,22,44,.96),rgba(8,10,22,.98));box-shadow:0 0 56px rgba(255,210,74,.22),0 0 90px rgba(79,216,255,.16),inset 0 0 56px rgba(255,210,74,.06);padding:38px 42px;position:relative;overflow:hidden}
-  #awakeningpanel:before{content:"";position:absolute;left:12%;right:12%;top:0;height:3px;background:linear-gradient(90deg,transparent,#4fd8ff,#ffd24a,#b88cff,transparent)}
+  #awakeningpanel:before{content:"";position:absolute;left:12%;right:12%;top:0;height:3px;background:linear-gradient(90deg,transparent,#4fd8ff,#ffd24a,#b88cff,transparent);pointer-events:none}
+  #awakeningpanel>*{position:relative;z-index:1}
   #awakeningpanel .awpill{font-size:12px;letter-spacing:5px;color:#ffd24a;text-transform:uppercase;text-shadow:0 0 14px rgba(255,210,74,.8);margin-bottom:14px}
   #awakeningpanel h1{font-size:34px;letter-spacing:8px;color:#fff5c4;text-shadow:0 0 22px rgba(255,210,74,.55);margin:0 0 16px}
   #awakeningpanel .awtext{font-size:17px;line-height:1.55;color:#dcecff;margin:0 auto 22px;max-width:670px}
@@ -182,7 +186,7 @@
   #awakeningpanel .awicon{width:54px;height:54px;border-radius:12px;display:flex;align-items:center;justify-content:center;border:1px solid currentColor;background:rgba(0,0,0,.28);font-size:32px;text-shadow:0 0 12px currentColor;grid-row:span 2}
   #awakeningpanel .awname{font-size:16px;letter-spacing:2px;color:#fff}
   #awakeningpanel .awsub{font-size:12px;color:#9fb8d8;line-height:1.4}
-  #awakeningpanel button{font-family:inherit;font-size:14px;letter-spacing:3px;padding:13px 28px;background:#9ad26b;color:#102015;border:0;border-bottom:4px solid #4d7a36;border-radius:7px;cursor:pointer}
+  #awakeningpanel button{position:relative;z-index:5;pointer-events:auto;display:inline-block;font-family:inherit;font-size:14px;letter-spacing:3px;padding:13px 28px;background:#9ad26b;color:#102015;border:0;border-bottom:4px solid #4d7a36;border-radius:7px;cursor:pointer}
   #awakeningpanel button:hover{background:#b1e37e}
   #eventhud{position:fixed;top:8px;left:50%;transform:translateX(-50%);width:clamp(420px,44vw,660px);max-width:calc(100vw - 500px);display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:7px;background:rgba(7,10,18,.82);border:1px solid rgba(184,140,255,.36);box-shadow:0 6px 18px rgba(0,0,0,.32),inset 0 0 12px rgba(255,255,255,.025);border-radius:6px;padding:4px 7px;color:#efe7ff;z-index:8}
   #eventhud.idle{border-color:rgba(145,164,189,.32);box-shadow:0 5px 16px rgba(0,0,0,.28),inset 0 0 10px rgba(145,164,189,.035)}
@@ -472,7 +476,7 @@
   .objective-craft:hover{filter:brightness(1.12)}
   #qpanel h2{text-align:center;letter-spacing:5px;color:#ffd24a;text-shadow:0 0 10px rgba(255,210,74,.7);font-size:18px;margin-bottom:4px}
   #qpanel .sub2{text-align:center;font-size:10px;letter-spacing:3px;color:#b8985e;margin-bottom:8px}
-  .qtext{font-size:13px;line-height:1.55;margin:10px 0 14px;color:#e8dcc0}
+  .qtext{position:relative;z-index:1;pointer-events:none;font-size:13px;line-height:1.55;margin:10px 0 14px;color:#e8dcc0}
   .npc-dialogue-shell{display:grid;grid-template-rows:auto minmax(104px,auto) auto;gap:0;min-height:250px;background:radial-gradient(circle at 18% 0,rgba(255,210,74,.12),transparent 34%),linear-gradient(180deg,rgba(9,18,31,.86),rgba(8,10,15,.96));color:#f3ead6}
   .npc-dialogue-head{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;align-items:center;padding:16px 20px 14px;border-bottom:1px solid rgba(255,210,74,.34);background:linear-gradient(90deg,rgba(255,210,74,.14),rgba(10,20,35,.42))}
   .npc-dialogue-portrait{display:grid;place-items:center;width:64px;height:64px;border:2px solid rgba(255,226,151,.76);border-radius:6px;background:linear-gradient(145deg,#2b1b11,#0d1726);color:#ffe39a;font-size:24px;font-weight:900;letter-spacing:1px;text-shadow:0 0 12px rgba(255,210,74,.7);box-shadow:inset 0 0 20px rgba(255,210,74,.08),0 0 18px rgba(0,0,0,.45)}
@@ -502,7 +506,7 @@
   .mara-reward b{width:100%;color:#ffd24a;letter-spacing:1px;text-transform:uppercase;font-size:10px}
   .mara-reward span{background:rgba(255,210,74,.14);border:1px solid rgba(255,210,74,.28);border-radius:999px;padding:4px 8px;color:#fff3c4}
   #qpanel.management .qtext{color:#d8e8ff}
-  .qrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .qrow{position:relative;z-index:2;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
   .qbtn{font-family:inherit;font-size:12px;letter-spacing:2px;padding:8px 18px;background:#5a4014;color:#ffd24a;border:1px solid #d8a020;border-radius:4px;cursor:pointer;margin-top:6px}
   .qbtn:hover{background:#6e5020}
   .trade-builder{display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:14px;margin:12px 0 10px;align-items:start}

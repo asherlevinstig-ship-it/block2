@@ -1052,7 +1052,7 @@ class DungeonMixin {
     const found = this.findGateForPlayer(client, m);
     const g = found.gate;
     if (!p || !g) return client.send('gateReject', { reason: found.reason || 'locked' });
-    if (this.rateLimited(client, 'action', 5, 10)) return client.send('gateReject', { reason: 'rate' });
+    if (this.rateLimited(client, 'dungeonReady', 5, 10)) return client.send('gateReject', { reason: 'rate' });
     if (!this.dungeonLobbies) this.dungeonLobbies = new Map();
     this.leaveDungeonLobby(client.sessionId, false);
     let lobby = this.dungeonLobbies.get(g.id);
