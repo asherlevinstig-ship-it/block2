@@ -1083,22 +1083,65 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx-5,G+1,cz-2,B.TABLE);
     setBlock(cx+15,G+1,cz-2,B.CAMPFIRE);
   }else if(jobId==='cook'){
-    const clear=(x,z,top=G+7)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
-    box(cx-15,G,cz-13,cx+15,G,cz+15,B.PLANKS);
-    for(let x=cx-15;x<=cx+15;x++)for(let z=cz-13;z<=cz+15;z++)clear(x,z);
-    for(let x=cx-15;x<=cx+15;x++){setBlock(x,G,cz-13,B.COBBLE);setBlock(x,G,cz+15,B.COBBLE);}
-    for(let z=cz-13;z<=cz+15;z++){setBlock(cx-15,G,z,B.COBBLE);setBlock(cx+15,G,z,B.COBBLE);}
-    for(let x=cx-12;x<=cx+12;x+=4){
-      setBlock(x,G+1,cz-10,B.FURNACE);
-      setBlock(x,G+2,cz-10,B.CAMPFIRE);
+    const clear=(x,z,top=G+9)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
+    const floorId=(x,z)=>((x+z)&1)?B.PLANKS:B.COBBLE;
+    const isDoor=(x,z)=>z===cz+16&&x>=cx-2&&x<=cx+2;
+    const isWindow=(x,z,y)=>y===G+3&&(
+      (z===cz-15&&[cx-10,cx-2,cx+6].includes(x))||
+      (x===cx-16&&[cz-8,cz+2,cz+10].includes(z))||
+      (x===cx+16&&[cz-8,cz+2,cz+10].includes(z))
+    );
+    for(let x=cx-16;x<=cx+16;x++)for(let z=cz-15;z<=cz+16;z++){
+      for(let y=G-3;y<G;y++)setBlock(x,y,z,B.STONE);
+      setBlock(x,G,z,floorId(x,z));
+      clear(x,z,G+9);
     }
-    for(let x=cx-12;x<=cx-4;x+=4)setBlock(x,G+1,cz-2,B.TABLE);
+    for(let x=cx-16;x<=cx+16;x++)for(let z=cz-15;z<=cz+16;z++){
+      const wall=x===cx-16||x===cx+16||z===cz-15||z===cz+16;
+      if(wall&&!isDoor(x,z)){
+        for(let y=G+1;y<=G+5;y++)setBlock(x,y,z,isWindow(x,z,y)?B.GLASS:((y===G+1||y===G+5)?B.LOG:B.PLANKS));
+      }
+      if((x===cx-16||x===cx+16)&&(z===cz-15||z===cz+16))for(let y=G+1;y<=G+6;y++)setBlock(x,y,z,B.LOG);
+      if(isDoor(x,z)){
+        setBlock(x,G,z,B.COBBLE);
+        for(let y=G+1;y<=G+4;y++)setBlock(x,y,z,B.AIR);
+      }
+    }
+    for(let x=cx-17;x<=cx+17;x++)for(let z=cz-16;z<=cz+17;z++){
+      const edge=x===cx-17||x===cx+17||z===cz-16||z===cz+17;
+      setBlock(x,G+6,z,edge?B.LOG:B.PLANKS);
+      if(!edge&&((x+z)%5===0))setBlock(x,G+7,z,B.PLANKS);
+    }
+    for(let z=cz+17;z<=cz+23;z++)for(let x=cx-2;x<=cx+2;x++){setBlock(x,G,z,B.COBBLE);clear(x,z,G+6);}
+
+    // Prep counters: the active table at (cx-8, cz-2) matches cookTutorialPrepPos().
+    for(let x=cx-12;x<=cx-4;x++)setBlock(x,G+1,cz-2,(x===cx-8)?B.TABLE:B.PLANKS);
+    for(let x=cx-12;x<=cx-4;x+=4){setBlock(x,G+1,cz-4,B.CHEST);setBlock(x,G+2,cz-4,B.LANTERN);}
+    for(let z=cz-11;z<=cz-6;z+=2){setBlock(cx-13,G+1,z,B.CHEST);setBlock(cx-13,G+2,z,z===cz-9?B.WHEAT_3:B.PLANKS);}
+
+    // Hearth and oven line: the active hearth at (cx, cz+4) matches cookTutorialHearthPos().
+    for(let x=cx-8;x<=cx+8;x+=4){
+      setBlock(x,G+1,cz-11,B.FURNACE);
+      setBlock(x,G+2,cz-11,B.CAMPFIRE);
+      setBlock(x,G+3,cz-11,B.BRICK);
+    }
+    box(cx-3,G,cz+3,cx+3,G,cz+5,B.BRICK);
     setBlock(cx,G+1,cz+4,B.CAMPFIRE);
-    setBlock(cx-1,G,cz+4,B.BRICK);setBlock(cx,G,cz+4,B.BRICK);setBlock(cx+1,G,cz+4,B.BRICK);
-    setBlock(cx+5,G+1,cz+4,B.CHEST);
-    setBlock(cx+10,G+1,cz+10,B.TABLE);
-    setBlock(cx+6,G+1,cz+12,B.LANTERN);
+    setBlock(cx-2,G+1,cz+4,B.FURNACE);
+    setBlock(cx+2,G+1,cz+4,B.FURNACE);
+    for(const [ox,oz] of [[-5,4],[5,4],[-5,7],[5,7]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
+
+    // Tavern counter and sale corner where Pippa appears for the final step.
+    for(let x=cx+5;x<=cx+13;x++)setBlock(x,G+1,cz+10,x===cx+10?B.TABLE:B.PLANKS);
+    for(let z=cz+8;z<=cz+13;z++)setBlock(cx+13,G+1,z,B.PLANKS);
+    setBlock(cx+8,G+1,cz+12,B.CHEST);
+    setBlock(cx+10,G+1,cz+13,B.LANTERN);
     setBlock(cx+12,G+1,cz+12,B.CHEST);
+
+    // Warm tavern dressing without blocking the tutorial route.
+    for(const [ox,oz] of [[-11,11],[-7,11],[-3,11],[1,11]]){setBlock(cx+ox,G+1,cz+oz,B.TABLE);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
+    for(const [ox,oz] of [[-14,-13],[14,-13],[-14,14],[14,14],[-2,15],[2,15]])setBlock(cx+ox,G+1,cz+oz,B.LANTERN);
+    for(const [ox,oz] of [[-14,-2],[-14,2],[14,-2],[14,2]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.PLANKS);}
   }else if(jobId==='blacksmith'){
     box(cx-13,G,cz-11,cx+13,G,cz+7,B.COBBLE);
     for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-9,B.FURNACE);setBlock(x,G+1,cz-4,B.IRON_ORE);}
