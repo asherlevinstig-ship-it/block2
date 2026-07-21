@@ -808,6 +808,29 @@
   #armorwarning.armor-critical{color:#ff786b;border-color:#ff5145;background:rgba(30,5,7,.9);animation:armorCritical .75s infinite alternate}
   @keyframes armorCritical{to{box-shadow:0 0 22px rgba(255,60,48,.5);transform:translateX(-50%) scale(1.04)}}
   #sleepfade{position:fixed;inset:0;background:#000;opacity:0;transition:opacity 1s;pointer-events:none;z-index:7}
+  #portaltransition{position:fixed;inset:0;z-index:46;display:grid;place-items:center;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 52%,rgba(125,211,252,.18),transparent 21%),radial-gradient(circle at 50% 50%,rgba(154,210,107,.10),transparent 42%),rgba(3,7,14,.08);transition:opacity .22s ease;overflow:hidden}
+  #portaltransition.active{opacity:1;pointer-events:auto}
+  #portaltransition:before,#portaltransition:after{content:"";position:absolute;left:50%;top:50%;width:42vmin;height:42vmin;border:2px solid rgba(125,211,252,.55);border-radius:50%;transform:translate(-50%,-50%) scale(.28);opacity:0;box-shadow:0 0 28px rgba(125,211,252,.35),inset 0 0 28px rgba(154,210,107,.18)}
+  #portaltransition.active:before{animation:portalRing .82s ease-out forwards}
+  #portaltransition.active:after{animation:portalRing .82s .12s ease-out forwards;border-color:rgba(255,210,74,.42)}
+  #portaltransition.arrived:before,#portaltransition.arrived:after{animation:portalArrive .45s ease-out forwards}
+  #portaltransition.dungeon{background:radial-gradient(circle at 50% 52%,rgba(184,140,255,.22),transparent 22%),radial-gradient(circle at 50% 50%,rgba(60,17,90,.24),transparent 48%),rgba(2,2,8,.28)}
+  #portaltransition.dungeon:before,#portaltransition.dungeon:after{border-color:rgba(184,140,255,.62);box-shadow:0 0 34px rgba(184,140,255,.35),inset 0 0 28px rgba(79,216,255,.14)}
+  #portaltransition .portalwarp{position:absolute;left:50%;top:50%;width:175vmax;height:175vmax;transform:translate(-50%,-50%) scale(.12) rotate(0deg);opacity:0;background:conic-gradient(from 0deg,transparent 0 18deg,rgba(125,211,252,.28) 22deg 34deg,transparent 38deg 70deg,rgba(154,210,107,.22) 74deg 88deg,transparent 92deg 130deg,rgba(255,210,74,.18) 134deg 146deg,transparent 150deg 360deg);filter:blur(1px)}
+  #portaltransition.active .portalwarp{animation:portalWarp .74s ease-in forwards}
+  #portaltransition.arrived .portalwarp{animation:portalUnwarp .42s ease-out forwards}
+  .portaltransition-copy{position:relative;z-index:1;display:grid;gap:8px;text-align:center;transform:translateY(8px);opacity:0;color:#f3fbff;text-shadow:0 2px 0 #000,0 0 18px rgba(125,211,252,.45)}
+  #portaltransition.active .portaltransition-copy{animation:portalCopyIn .22s .08s ease forwards}
+  #portaltransition.arrived .portaltransition-copy{animation:portalCopyOut .25s ease forwards}
+  .portaltransition-copy b{font-size:23px;letter-spacing:7px;text-transform:uppercase;color:#dff8ff}
+  .portaltransition-copy span{font-size:11px;letter-spacing:2px;color:#b8cbe0;text-transform:uppercase}
+  @keyframes portalRing{0%{opacity:0;transform:translate(-50%,-50%) scale(.22)}28%{opacity:1}100%{opacity:.18;transform:translate(-50%,-50%) scale(3.8)}}
+  @keyframes portalArrive{0%{opacity:.6;transform:translate(-50%,-50%) scale(3.1)}100%{opacity:0;transform:translate(-50%,-50%) scale(.42)}}
+  @keyframes portalWarp{0%{opacity:0;transform:translate(-50%,-50%) scale(.08) rotate(0deg)}35%{opacity:.9}100%{opacity:.74;transform:translate(-50%,-50%) scale(.88) rotate(185deg)}}
+  @keyframes portalUnwarp{0%{opacity:.74;transform:translate(-50%,-50%) scale(.88) rotate(185deg)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.22) rotate(250deg)}}
+  @keyframes portalCopyIn{to{opacity:1;transform:translateY(0)}}
+  @keyframes portalCopyOut{to{opacity:0;transform:translateY(-8px)}}
+  @media (prefers-reduced-motion:reduce){#portaltransition,#portaltransition .portalwarp,#portaltransition:before,#portaltransition:after,.portaltransition-copy{animation:none!important;transition:opacity .12s ease!important}}
   #locationhud{position:fixed;top:10px;left:10px;min-width:250px;max-width:min(390px,calc(100vw - 40px));color:#eef6ff;background:linear-gradient(135deg,rgba(8,14,24,.9),rgba(10,22,34,.82));border:1px solid rgba(79,216,255,.5);box-shadow:0 0 18px rgba(79,216,255,.18), inset 0 0 20px rgba(79,216,255,.06);border-radius:7px;padding:9px 11px;z-index:7;pointer-events:none}
   #locationhud .zone{font-size:13px;letter-spacing:2px;color:#d8f2ff;text-shadow:0 0 8px rgba(79,216,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #locationhud .meta{margin-top:3px;font-size:10px;letter-spacing:1.5px;color:#94abc4;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

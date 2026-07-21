@@ -1806,6 +1806,40 @@ function localTutorialSpaceId(kind){
   if(kind==='taming_land')return 'taming_land';
   return 'tutorial-'+kind+'-'+(NET.room&&NET.room.sessionId||'local');
 }
+let portalTransitionActive=false;
+function runPortalTransition(opts, swap){
+  opts=opts||{};
+  if(opts.instant||opts.resume||portalTransitionActive){
+    swap&&swap();
+    return true;
+  }
+  const wrap=document.getElementById('portaltransition');
+  const titleEl=document.getElementById('portaltransitiontitle');
+  const subEl=document.getElementById('portaltransitionsub');
+  if(!wrap){
+    swap&&swap();
+    return true;
+  }
+  portalTransitionActive=true;
+  if(titleEl)titleEl.textContent=String(opts.title||'Crossing');
+  if(subEl)subEl.textContent=String(opts.subtitle||'The world folds around you');
+  wrap.className='';
+  if(opts.kind)wrap.classList.add(opts.kind);
+  void wrap.offsetWidth;
+  wrap.classList.add('active');
+  if(typeof SFX!=='undefined'&&SFX.portal)SFX.portal();
+  setTimeout(()=>{
+    try{ swap&&swap(); }
+    finally{
+      wrap.classList.add('arrived');
+      setTimeout(()=>{
+        wrap.classList.remove('active','arrived','dungeon','taming');
+        portalTransitionActive=false;
+      },460);
+    }
+  },320);
+  return true;
+}
 function generateOnboardingRoom(){
   const {x:cx,z:cz,G,R}=TRAINING_MEADOW;
   const minX=Math.floor(cx-R-8),maxX=Math.ceil(cx+R+8),minZ=Math.floor(cz-R-8),maxZ=Math.ceil(cz+R+8);
@@ -2000,6 +2034,9 @@ function enterTamingLand(){
   if(dim==='taming_land')return true;
   if(dim!=='overworld')return false;
   const opts=arguments[0]||{};
+  if(!opts.instant&&!opts.resume){
+    return runPortalTransition({title:'Taming Land',subtitle:'Crossing into the dragon sanctuary',kind:'taming'},()=>enterTamingLand({instant:true}));
+  }
   const resume=!!(opts&&opts.resume);
   const returnPos=resume&&HUB&&HUB.tamingPortal
     ? new THREE.Vector3(HUB.tamingPortal.x,TOWN.G+1,HUB.tamingPortal.z+3.5)
@@ -2019,13 +2056,15 @@ function enterTamingLand(){
   player.yaw=Math.PI;
   player.pitch=0;
   if(NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'taming_land'});
-  SFX.portal();
   sysMsg('<b>Taming Land:</b> a peaceful sanctuary for eggs, familiars, and dragon practice. Use the green return portal to go back to town.');
   return true;
 }
 function exitTamingLand(){
+  const opts=arguments[0]||{};
   if(dim!=='taming_land')return false;
-  SFX.portal();
+  if(!opts.instant&&!opts.resume){
+    return runPortalTransition({title:'Town of Beginnings',subtitle:'Returning from Taming Land',kind:'taming'},()=>exitTamingLand({instant:true}));
+  }
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
   if(tamingLandExitPortal){scene.remove(tamingLandExitPortal);tamingLandExitPortal=null;}
   const ret=tamingLandReturn;
@@ -2103,8 +2142,8 @@ function enterDungeon(){
     {back:{x:gate.x, y:gate.y, z:gate.z}, shard:gate.shard||null, localMobs:true, cleared:false});
 }
 function beginDungeon(ri, seed, editLog, opts){
-  sleepEl.style.opacity=1;
-  setTimeout(()=>{
+  opts=opts||{};
+  const doSwap=()=>{
     if(gate){ scene.remove(gate.grp); gate=null; }
     clearNetGates();
     dungeon=generateDungeon(ri, seed, opts.dungeonId);
@@ -2139,16 +2178,15 @@ function beginDungeon(ri, seed, editLog, opts){
       for(const s of dungeon.spawns) spawnDungeonMob(s.x, s.z, false, ri);
       spawnDungeonMob(dungeon.bossRoom.x, dungeon.bossRoom.z, true, ri);
     }
-    SFX.portal();
     const dungeonName=dungeon.definition&&dungeon.definition.name;
     sysMsg('You have entered <b>'+(dungeonName||RANKS[ri].n+'-Rank Gate')+'</b>. Slay the boss');
     sleepEl.style.opacity=0;
-  }, 700);
+  };
+  runPortalTransition({title:'Gate Opened',subtitle:'Entering '+(RANKS[ri]&&RANKS[ri].n||'Hunter')+'-Rank Dungeon',kind:'dungeon',instant:opts.instant},doSwap);
 }
 function exitDungeon(instant){
   const doSwap=()=>{
     if(!dungeon) return;
-    SFX.portal();
     clearShardHazards();
     clearDungeonDecor();
     if(!dungeon.cleared) sysMsg('You <b>fled</b> the gate');
@@ -2171,7 +2209,7 @@ function exitDungeon(instant){
     if(!instant) sleepEl.style.opacity=0;
   };
   if(instant) doSwap();
-  else { sleepEl.style.opacity=1; setTimeout(doSwap, 700); }
+  else runPortalTransition({title:'Returning',subtitle:'Leaving the dungeon through the Gate',kind:'dungeon'},doSwap);
 }
 function onBossKilled(){
   if(!dungeon||dungeon.cleared) return;
