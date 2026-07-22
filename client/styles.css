@@ -114,14 +114,25 @@
   body.coach-hud-active #activitytracker,body.coach-hud-active #townchoices{display:none!important}
   body.job-tutorial-room #currentquest,body.job-tutorial-room #activitytracker,body.job-tutorial-room #townchoices,body.job-tutorial-room #eventhud,body.job-tutorial-room #locationhud,body.job-tutorial-room #landmap{display:none!important}
   body.off-main-room #currentquest,body.off-main-room #activitytracker,body.off-main-room #townchoices,body.off-main-room #eventhud,body.off-main-room #landmap{display:none!important}
-  #tutorialhud{position:fixed;left:50%;top:70px;transform:translateX(-50%);width:min(520px,calc(100vw - 32px));z-index:9;pointer-events:none;text-align:center;color:#eaf6ff;text-shadow:0 2px 2px #000;background:linear-gradient(160deg,rgba(7,14,28,.9),rgba(10,22,34,.82));border:1px solid rgba(79,216,255,.62);box-shadow:0 0 22px rgba(79,216,255,.22),inset 0 0 24px rgba(79,216,255,.06);border-radius:9px;padding:9px 14px}
-  #tutorialhud .tutpill{font-size:11px;letter-spacing:3px;color:#9ad26b;text-transform:uppercase;margin-bottom:8px}
-  #tutorialhud .tutkey{display:inline-block;font-size:18px;letter-spacing:3px;color:#102015;background:#9ad26b;border-bottom:3px solid #4d7a36;border-radius:6px;padding:5px 12px;margin:1px 0 6px;text-shadow:none}
+  #tutorialhud{position:fixed;left:50%;top:58px;transform:translateX(-50%);width:min(690px,calc(100vw - 32px));z-index:9;pointer-events:none;text-align:left;color:#eaf6ff;text-shadow:0 2px 2px #000;background:linear-gradient(160deg,rgba(7,14,28,.94),rgba(10,22,34,.88));border:1px solid rgba(79,216,255,.62);box-shadow:0 0 22px rgba(79,216,255,.22),inset 0 0 24px rgba(79,216,255,.06);border-radius:9px;padding:12px 16px}
+  #tutorialhud:before{content:"";position:absolute;left:14px;right:14px;top:0;height:2px;background:linear-gradient(90deg,transparent,#9ad26b,#4fd8ff,transparent);opacity:.85}
+  #tutorialhud .tuthead{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:8px}
+  #tutorialhud .tutpill{font-size:10px;letter-spacing:3px;color:#9ad26b;text-transform:uppercase;margin-bottom:3px}
+  #tutorialhud .tutroom{font-size:9px;letter-spacing:1.8px;color:#9fb0c6;text-transform:uppercase}
+  #tutorialhud .tutdistance{min-width:92px;text-align:right;font-size:10px;letter-spacing:1px;color:#ffd24a;text-transform:uppercase}
+  #tutorialhud .tutkey{display:inline-block;font-size:19px;letter-spacing:3px;color:#102015;background:#9ad26b;border-bottom:3px solid #4d7a36;border-radius:6px;padding:5px 12px;margin:1px 0 8px;text-shadow:none;box-shadow:0 0 14px rgba(154,210,107,.35)}
+  #tutorialhud .tutsteps{display:flex;gap:5px;flex-wrap:wrap;margin:0 0 9px}
+  #tutorialhud .tutsteps span{display:flex;align-items:center;gap:5px;min-height:22px;padding:3px 7px;border:1px solid rgba(159,176,198,.24);background:rgba(4,8,16,.44);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:#8293aa}
+  #tutorialhud .tutsteps i{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border:1px solid currentColor;font-style:normal;font-size:9px}
+  #tutorialhud .tutsteps span.done{color:#9ad26b;border-color:rgba(154,210,107,.35);background:rgba(36,87,47,.26)}
+  #tutorialhud .tutsteps span.current{color:#ffd24a;border-color:rgba(255,210,74,.62);background:rgba(98,73,18,.38);box-shadow:0 0 10px rgba(255,210,74,.16)}
+  #tutorialhud .tutsteps span.locked{opacity:.62}
   #tutorialhud .tutprogress{display:grid;grid-template-columns:minmax(96px,auto) auto;align-items:end;justify-content:center;gap:9px;margin:2px 0 8px;color:#eaf6ff;text-shadow:0 3px 0 #000}
   #tutorialhud .tutprogress b{font-size:42px;line-height:.95;color:#ffd24a;font-variant-numeric:tabular-nums;text-shadow:0 3px 0 #000,0 0 16px rgba(255,210,74,.58)}
   #tutorialhud .tutprogress span{padding-bottom:5px;font-size:10px;letter-spacing:2px;color:#9ad26b}
   #tutorialhud .tuttext{font-size:15px;line-height:1.35;color:#f3fbff}
   #tutorialhud .tutsub{margin-top:6px;font-size:10px;color:#9fb0c6;letter-spacing:.7px}
+  #rewardpanel.job-tutorial-complete .rnote{border-color:rgba(154,210,107,.38);background:rgba(8,34,22,.45)}
   body.onboarding #chatlog,body.onboarding #sysmsgs,body.onboarding #rewardfeed,body.onboarding #stats,body.onboarding #abilities,body.onboarding #dragonhud,body.onboarding #familiarhud,body.onboarding #activitytracker,body.onboarding #landmap,body.onboarding #eventhud,body.onboarding #coachhud{display:none!important}
   #pathselect{position:fixed;inset:0;z-index:12;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 18%,rgba(79,216,255,.16),transparent 32%),linear-gradient(180deg,rgba(3,7,14,.94),rgba(5,8,14,.98));backdrop-filter:blur(8px);color:#d8f2ff}
   #pathpanel{width:min(1080px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;text-align:center;border:1px solid rgba(79,216,255,.55);border-radius:14px;background:linear-gradient(160deg,rgba(10,20,38,.96),rgba(6,9,18,.98));box-shadow:0 0 44px rgba(79,216,255,.35),inset 0 0 50px rgba(79,216,255,.07);padding:34px}

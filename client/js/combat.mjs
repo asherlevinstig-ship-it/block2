@@ -2637,6 +2637,90 @@ function jobTutorialInitialYaw(jobId, room, x, z){
   }
   return Math.PI;
 }
+function jobTutorialActionList(jobId){
+  if(jobId==='farmer')return FARMER_TUTORIAL_ACTIONS;
+  if(jobId==='cook')return COOK_TUTORIAL_ACTIONS;
+  if(jobId==='blacksmith')return BLACKSMITH_TUTORIAL_ACTIONS;
+  if(jobId==='monk')return MONK_TUTORIAL_ACTIONS;
+  if(jobId==='pet_tamer')return PET_TAMER_TUTORIAL_ACTIONS;
+  if(jobId==='miner')return [
+    {key:'MINE DIAMOND',title:'Mine Ore',verb:'PICKAXE',purpose:'Mine the diamond ore seam.'},
+    {key:'TRADE GEM',title:'Trade Gem',verb:'GARRIK + G',purpose:'Trade the diamond to Garrik Flint.'},
+  ];
+  return [];
+}
+function jobTutorialCurrentStep(jobId){
+  if(jobId==='miner')return jobTutorialTraded?2:jobTutorialMinedDiamond?1:0;
+  if(jobId==='farmer')return Math.max(0,Math.min(FARMER_TUTORIAL_ACTIONS.length,jobTutorialFarmerStep|0));
+  if(jobId==='cook')return Math.max(0,Math.min(COOK_TUTORIAL_ACTIONS.length,jobTutorialCookStep|0));
+  if(jobId==='blacksmith')return Math.max(0,Math.min(BLACKSMITH_TUTORIAL_ACTIONS.length,jobTutorialBlacksmithStep|0));
+  if(jobId==='monk')return Math.max(0,Math.min(MONK_TUTORIAL_ACTIONS.length,jobTutorialMonkStep|0));
+  if(jobId==='pet_tamer')return Math.max(0,Math.min(PET_TAMER_TUTORIAL_ACTIONS.length,jobTutorialPetDragonSeen?PET_TAMER_TUTORIAL_ACTIONS.length:jobTutorialPetDragonStep|0));
+  return 0;
+}
+function jobTutorialChipsHTML(jobId){
+  const actions=jobTutorialActionList(jobId);
+  if(!actions.length)return '';
+  const cur=jobTutorialCurrentStep(jobId);
+  return '<div class="tutsteps">'+actions.map((action,i)=>{
+    const cls=i<cur?'done':i===cur?'current':'locked';
+    return '<span class="'+cls+'"><i>'+(i+1)+'</i>'+escHTML(action.title||action.key||('Step '+(i+1)))+'</span>';
+  }).join('')+'</div>';
+}
+function jobTutorialDistanceText(target){
+  if(!target||!player||!player.pos)return '';
+  const d=Math.hypot(player.pos.x-target.x,player.pos.z-target.z);
+  if(d<4.5)return 'You are in position';
+  return Math.ceil(d)+'m to target';
+}
+function jobTutorialRewardRows(jobId){
+  const job=JOBS[jobId]||{name:'Job'};
+  const rows=[{label:job.name+' Basics',value:'Unlocked'}];
+  if(jobId==='miner')rows.push({label:'Gold',value:'+'+MINER_TUTORIAL_TRADE_GOLD});
+  else if(jobId==='farmer')rows.push({label:'Gold',value:'+'+FARMER_TUTORIAL_WHEAT_GOLD});
+  else if(jobId==='cook')rows.push({label:'Gold',value:'+'+COOK_TUTORIAL_MEAL_GOLD});
+  else if(jobId==='blacksmith')rows.push({label:'Gold',value:'+'+BLACKSMITH_TUTORIAL_ARMOR_GOLD});
+  else if(jobId==='monk')rows.push({label:'Focus Loop',value:'Practised'});
+  else if(jobId==='pet_tamer')rows.push({label:'Dragon Care',value:'Practised'});
+  rows.push({label:'Town Role',value:'Ready'});
+  return rows;
+}
+function jobTutorialRewardText(jobId){
+  if(jobId==='miner')return 'You can now turn underground finds into gold, maps, ores, and hidden routes.';
+  if(jobId==='farmer')return 'You can now grow the food chain that supports cooks, trading, and town supply.';
+  if(jobId==='cook')return 'You can now turn ingredients into meals that support travel, Gates, and recovery.';
+  if(jobId==='blacksmith')return 'You can now turn raw materials into gear value, repairs, upgrades, and trade goods.';
+  if(jobId==='monk')return 'You can now understand focus spaces. Meditation growth unlocks later in the Meditation Hall.';
+  if(jobId==='pet_tamer')return 'You can now understand the dragon loop: hatch, care, command, ride, and roost.';
+  return 'You have finished this job lesson.';
+}
+function showJobTutorialCompletionReward(jobId){
+  if(!rewardWin||!rewardPanel)return false;
+  const job=JOBS[jobId]||{name:'Job'};
+  const rows=jobTutorialRewardRows(jobId).map(r=>typeof rewardLineHTML==='function'?rewardLineHTML(r):'<div class="rline"><span>'+escHTML(r.label)+'</span><b>'+escHTML(r.value)+'</b></div>').join('');
+  rewardPanel.className='earned promotion job-tutorial-complete';
+  rewardPanel.innerHTML=
+    '<h2>'+escHTML(job.name).toUpperCase()+' LESSON COMPLETE</h2>'+
+    '<div class="rsub">JOB TUTORIAL FINISHED</div>'+
+    '<div class="rewardloot">'+rows+'</div>'+
+    '<div class="rnote"><b>What this job is for:</b><br>'+escHTML(jobTutorialRewardText(jobId))+'</div>'+
+    '<button id="jobtutorialrewardclose">BACK TO TOWN</button>';
+  rewardWin.classList.remove('hidden');
+  rewardWin.classList.add('promotion-open');
+  rewardWin.style.pointerEvents='auto';
+  rewardWin.style.zIndex='40';
+  const btn=document.getElementById('jobtutorialrewardclose');
+  if(btn)btn.onclick=()=>{
+    rewardWin.classList.add('hidden');
+    rewardWin.classList.remove('promotion-open');
+    rewardWin.style.pointerEvents='';
+    rewardWin.style.zIndex='';
+    lockFallback=true;
+    locked=true;
+    refreshPlayUi();
+  };
+  return true;
+}
 function updateJobTutorialHud(){
   if(!jobTutorialActive||dim!=='job'){tutorialEl.classList.add('hidden');return;}
   const job=JOBS[jobTutorialJob]||{name:'Job'};
@@ -2703,6 +2787,7 @@ function updateJobTutorialHud(){
             : {key:'FOLLOW DRAGON LIGHT',text:'Follow the pillar of light to your hatched dragon.',sub:'Walk beside the dragon to continue the lesson.'};
   }
   const beaconTarget=jobTutorialBeaconTarget(jobTutorialJob,room);
+  const distanceText=jobTutorialDistanceText(beaconTarget);
   const nearReturn=jobTutorialJob!=='pet_tamer'&&room&&player&&Math.hypot(player.pos.x-room.x,player.pos.z-(room.z+23))<4.2;
   const nearPetDragon=jobTutorialJob==='pet_tamer'&&beaconTarget&&player&&Math.hypot(player.pos.x-beaconTarget.x,player.pos.z-beaconTarget.z)<4.8;
   const minerBlockedReturn=jobTutorialJob==='miner'&&!jobTutorialTraded;
@@ -2711,11 +2796,15 @@ function updateJobTutorialHud(){
   const blacksmithBlockedReturn=jobTutorialJob==='blacksmith'&&jobTutorialBlacksmithStep<3;
   const monkBlockedReturn=jobTutorialJob==='monk'&&jobTutorialMonkStep<2;
   const returnBlocked=minerBlockedReturn||farmerBlockedReturn||cookBlockedReturn||blacksmithBlockedReturn||monkBlockedReturn;
+  const keyText=nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':cookBlockedReturn?'FINISH COOKING':blacksmithBlockedReturn?'FINISH FORGING':'FINISH FOCUS'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key;
+  const mainText=nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'Sell the armour to Tobin before leaving.':'Craft and inspect armour before leaving.'):monkBlockedReturn?'Start focus in the circle and hold still before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text;
+  const subText=nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The blacksmith loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):monkBlockedReturn?'The monk loop is: enter a calm space -> answer/hold focus -> restore and support.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub;
   tutorialEl.classList.remove('hidden');
-  tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':cookBlockedReturn?'FINISH COOKING':blacksmithBlockedReturn?'FINISH FORGING':'FINISH FOCUS'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'Sell the armour to Tobin before leaving.':'Craft and inspect armour before leaving.'):monkBlockedReturn?'Start focus in the circle and hold still before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The blacksmith loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):monkBlockedReturn?'The monk loop is: enter a calm space -> answer/hold focus -> restore and support.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
+  tutorialEl.innerHTML='<div class="tuthead"><div><div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div><div class="tutroom">'+escHTML((JOB_TUTORIAL_STEPS[jobTutorialJob]&&JOB_TUTORIAL_STEPS[jobTutorialJob].room)||'Private Lesson')+'</div></div><div class="tutdistance">'+escHTML(distanceText)+'</div></div>'
+    +'<div class="tutkey">'+escHTML(keyText)+'</div>'
+    +jobTutorialChipsHTML(jobTutorialJob)
+    +'<div class="tuttext">'+escHTML(mainText)+'</div>'
+    +'<div class="tutsub">'+escHTML(subText)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -2754,6 +2843,7 @@ function completeJobTutorial(){
   hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
   renderBars();
   sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> Keep an eye on the Next Best Action panel for useful work.');
+  showJobTutorialCompletionReward(jobId);
   showName(job.name+' ready');
   refreshPlayUi();
   sendProfileSaveNow();
