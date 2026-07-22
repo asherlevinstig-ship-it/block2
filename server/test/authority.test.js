@@ -395,6 +395,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function appendDragonLoanStatusPanel/);
   assert.match(menus, /RETURN NOW/);
   assert.match(menus, /dragonLoanTimeLeftText/);
+  assert.match(menus, /trainingDrills/);
+  assert.match(menus, /BORROWED TRAINING/);
   assert.match(menus, /TRAIN MY PET/);
   assert.match(menus, /function openDragonLoanUI/);
   assert.match(menus, /NET\.room\.send\('dragonLoanOffer'/);
@@ -409,6 +411,9 @@ test('client modules expose and route player trading actions', () => {
   assert.match(networking, /room\.onMessage\('tradeResult'/);
   assert.match(networking, /room\.onMessage\('dragonLoanOffer'/);
   assert.match(networking, /room\.onMessage\('dragonLoanResult'/);
+  assert.match(networking, /room\.onMessage\('dragonTrainingLoanProgress'/);
+  assert.match(networking, /function applyDragonLoanSnapshot/);
+  assert.match(networking, /Borrowed training/);
   assert.match(networking, /room\.onMessage\('friendResult'/);
   assert.match(gameRoom, /profileRequest[\s\S]*reason === 'trade'[\s\S]*sendTradeInventory\(client, rec\.prof\);[\s\S]*return;/);
   assert.match(gameRoom, /awardGrant\(client, grant\)[\s\S]*this\.syncPlayerProfile\(client, rec\.prof\);[\s\S]*this\.sendTradeInventory\(client, rec\.prof\);/);
@@ -5592,6 +5597,17 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
   tr.progress = tr.need;
   room.tickDragonTraining(Date.now(), 1);
   assert.equal(ownerProf.dragonRoleMastery.ember.follow, 6, 'tamer training improves the owner dragon');
+  assert.equal(ownerProf.dragonLoans[0].trainingDrills, 1, 'loan tracks completed training drills for the owner');
+  assert.equal(tamerProf.dragonLoans[0].trainingDrills, 1, 'loan tracks completed training drills for the tamer');
+  assert.equal(ownerProf.dragonLoans[0].trainingXp, 8, 'loan tracks role mastery and bond gains');
+  assert.equal(tamerProf.dragonLoans[0].trainingXp, 8);
+  const ownerLoanProgress = owner.sent.find(e => e.type === 'dragonTrainingLoanProgress');
+  assert.ok(ownerLoanProgress, 'owner is notified when their loaned dragon improves');
+  assert.equal(ownerLoanProgress.msg.loanTraining.trainingDrills, 1);
+  assert.equal(ownerLoanProgress.msg.loanTraining.trainingXp, 8);
+  const tamerTrainingComplete = tamer.sent.find(e => e.type === 'dragonTrainingComplete' && e.msg.loanTraining);
+  assert.ok(tamerTrainingComplete, 'tamer receives borrowed training completion details');
+  assert.equal(tamerTrainingComplete.msg.loanTraining.ownerName, 'Owner');
   assert.equal(tamerProf.jobContract.have, 2, 'completed dragon training advances Pet Tamer care contracts');
   assert.equal(tamerProf.jobContract.lifecycleState, 'claimable');
 });

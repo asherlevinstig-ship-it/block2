@@ -251,6 +251,8 @@ function sanitizeDragonLoans(loans) {
       dueAt: clampI(raw.dueAt, 0, 4102444800000),
       endedAt: clampI(raw.endedAt, 0, 4102444800000),
       status,
+      trainingXp: clampI(raw.trainingXp, 0, 1000000),
+      trainingDrills: clampI(raw.trainingDrills, 0, 10000),
       dragonName: cleanShortText(raw.dragonName, '', 18),
       gender: DRAGON_GENDERS.has(raw.gender) ? raw.gender : '',
       personality: DRAGON_PERSONALITIES.has(raw.personality) ? raw.personality : '',

@@ -59,6 +59,8 @@ class DragonsMixin {
         startedAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.startedAt) || 0))),
         dueAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.dueAt) || 0))),
         endedAt: Math.max(0, Math.min(4102444800000, Math.round(Number(loan.endedAt) || 0))),
+        trainingXp: Math.max(0, Math.min(1000000, loan.trainingXp | 0)),
+        trainingDrills: Math.max(0, Math.min(10000, loan.trainingDrills | 0)),
         dragonName: typeof loan.dragonName === 'string' ? loan.dragonName.slice(0, 18) : '',
         gender: loan.gender === 'male' || loan.gender === 'female' ? loan.gender : '',
         personality: ['bold', 'gentle', 'proud', 'playful', 'skittish', 'hungry'].includes(loan.personality) ? loan.personality : '',
@@ -192,6 +194,8 @@ class DragonsMixin {
       startedAt: loan.startedAt || 0,
       dueAt: loan.dueAt || 0,
       endedAt: loan.endedAt || 0,
+      trainingXp: loan.trainingXp | 0,
+      trainingDrills: loan.trainingDrills | 0,
       dragonName: loan.dragonName || '',
     };
   }
@@ -266,6 +270,7 @@ class DragonsMixin {
       id, type: offer.type, ownerToken: ownerRec.token, tamerToken: tamerRec.token,
       ownerName: offer.ownerName, tamerName: offer.tamerName, feeGold: offer.feeGold | 0,
       startedAt: now, dueAt: now + DRAGON_LOAN_MS, endedAt: 0, status: 'active',
+      trainingXp: 0, trainingDrills: 0,
       dragonName: offer.dragonName || '', gender: offer.gender || '', personality: offer.personality || '', hatchedAt: offer.hatchedAt || 0,
     };
     tamerRec.prof.gold = Math.max(0, (tamerRec.prof.gold | 0) - loan.feeGold);
@@ -319,6 +324,32 @@ class DragonsMixin {
     }
     if (owner) { this.syncPlayerProfile(owner, ownerProf); this.sendProfile(owner, ownerProf); owner.send('dragonLoanReturn', { loan: this.publicDragonLoan(returned, loan.ownerToken) }); }
     if (tamer) { this.syncPlayerProfile(tamer, tamerProf); this.sendProfile(tamer, tamerProf); tamer.send('dragonLoanReturn', { loan: this.publicDragonLoan(returned, loan.tamerToken) }); }
+  }
+
+  recordBorrowedDragonTraining(access, role, mastery, bond) {
+    if (!access || !access.borrowed || !access.loan) return null;
+    const ownerRec = access.ownerRec;
+    const tamerRec = access.clientRec;
+    if (!ownerRec || !ownerRec.prof || !tamerRec || !tamerRec.prof) return null;
+    const gained = Math.max(0, (mastery && mastery.gained) | 0);
+    const bondGained = Math.max(0, (bond && bond.gained) | 0);
+    const patch = {
+      ...access.loan,
+      trainingXp: Math.min(1000000, (access.loan.trainingXp | 0) + gained + bondGained),
+      trainingDrills: Math.min(10000, (access.loan.trainingDrills | 0) + 1),
+    };
+    this.mirrorDragonLoan(patch, ownerRec, tamerRec);
+    return {
+      loan: this.publicDragonLoan(patch, tamerRec.token),
+      ownerLoan: this.publicDragonLoan(patch, ownerRec.token),
+      ownerName: patch.ownerName || 'Owner',
+      tamerName: patch.tamerName || 'Pet Tamer',
+      trainingXp: patch.trainingXp | 0,
+      trainingDrills: patch.trainingDrills | 0,
+      masteryGained: gained,
+      bondGained,
+      role,
+    };
   }
 
   hasMountUnlock(client, kind) {
@@ -847,9 +878,15 @@ class DragonsMixin {
       if (tr.progress >= tr.need) {
         const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(access.prof, tr.type, role, tr.award || 1) : null;
         const bond = this.awardDragonBondXp(access.prof, tr.type, 2, role);
+        const loanTraining = this.recordBorrowedDragonTraining(access, role, mastery, bond);
         this.dirtyAndSyncDragonAccess(client, access);
         this.awardPetTamerCare(client, 1, 12, 0);
-        client.send('dragonTrainingComplete', { type: tr.type, role, title: tr.title, progress: tr.need, need: tr.need, unit: tr.unit, roleMastery: mastery, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
+        const result = { type: tr.type, role, title: tr.title, progress: tr.need, need: tr.need, unit: tr.unit, roleMastery: mastery, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null, loanTraining };
+        client.send('dragonTrainingComplete', result);
+        if (loanTraining && access.ownerRec && access.ownerRec.token) {
+          const ownerClient = this.clients.find(c => this.tokens.get(c.sessionId) === access.ownerRec.token);
+          if (ownerClient) ownerClient.send('dragonTrainingLoanProgress', { ...result, loanTraining: { ...loanTraining, loan: loanTraining.ownerLoan } });
+        }
         this.dragonTraining.delete(sid);
       } else {
         client.send('dragonTrainingUpdate', { type: tr.type, role, title: tr.title, progress: Math.floor(tr.progress), need: tr.need, unit: tr.unit });

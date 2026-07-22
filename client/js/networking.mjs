@@ -1988,6 +1988,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonRecallReject', m=>dragonRecallRejected(m));
     room.onMessage('dragonTrainingUpdate', m=>applyDragonTrainingUpdate(m));
     room.onMessage('dragonTrainingComplete', m=>applyDragonTrainingComplete(m));
+    room.onMessage('dragonTrainingLoanProgress', m=>applyDragonTrainingLoanProgress(m));
     room.onMessage('dragonTrainingCancel', m=>{ if(COMPANIONS.clearDragonTraining) COMPANIONS.clearDragonTraining(m); sysMsg('Dragon training '+(((m&&m.reason)||'cancelled'))+'.'); });
     room.onMessage('dragonTrainingReject', m=>dragonTrainingRejected(m));
     room.onMessage('editReject', m=>netEditReject(m));
@@ -2570,16 +2571,42 @@ function applyDragonTrainingUpdate(m){
   if(m.started) showName((m.title||'Dragon Drill')+' started');
   if(qOpen && typeof openDragonInteractUI==='function') openDragonInteractUI(m.type);
 }
+function applyDragonLoanSnapshot(loan){
+  if(!loan||!loan.id||!COMPANIONS||!Array.isArray(COMPANIONS.dragonLoans))return false;
+  const next=COMPANIONS.dragonLoans.slice();
+  const i=next.findIndex(l=>l&&l.id===loan.id);
+  if(i>=0)next[i]={...next[i],...loan};
+  else next.push(loan);
+  COMPANIONS.dragonLoans=next.slice(-24);
+  return true;
+}
 function applyDragonTrainingComplete(m){
   if(!m || !DRAGON_TYPES[m.type]) return;
+  if(m.loanTraining&&m.loanTraining.loan)applyDragonLoanSnapshot(m.loanTraining.loan);
   if(COMPANIONS.applyDragonTrainingComplete) COMPANIONS.applyDragonTrainingComplete(m);
   applyDragonBondXpUpdate(m, m.role||'training');
   if(COMPANIONS.dragonReaction) COMPANIONS.dragonReaction(m.type,m.role==='rest'?'rest':(m.role==='guard'?'guard':'happy'));
   showName((m.title||'Dragon Drill')+' complete');
   const masteryTitle=COMPANIONS.dragonRoleMasteryTitle ? COMPANIONS.dragonRoleMasteryTitle(m.type,m.role) : '';
-  sysMsg('<b>'+escHTML(m.title||'Dragon training')+'</b> complete. Mastery improved for <b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b>'+(masteryTitle?' - <b>'+escHTML(masteryTitle)+'</b>.':'.'));
+  const loanText=m.loanTraining?'<br><b>Borrowed training:</b> this progress is saved back to '+escHTML((m.loanTraining&&m.loanTraining.ownerName)||'the owner')+'.':'';
+  sysMsg('<b>'+escHTML(m.title||'Dragon training')+'</b> complete. Mastery improved for <b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b>'+(masteryTitle?' - <b>'+escHTML(masteryTitle)+'</b>.':'.')+loanText);
   eventFeed('[Dragon]',String(m.title||'Dragon training')+' complete for '+DRAGON_TYPES[m.type].name+'.',{key:'dragon:training:'+m.type+':'+String(m.title||''),cooldown:0});
   if(qOpen && typeof openDragonInteractUI==='function') openDragonInteractUI(m.type);
+}
+function applyDragonTrainingLoanProgress(m){
+  if(!m || !DRAGON_TYPES[m.type]) return;
+  if(m.loanTraining&&m.loanTraining.loan)applyDragonLoanSnapshot(m.loanTraining.loan);
+  if(m.roleMastery && COMPANIONS.applyDragonRoleMasteryUpdate) COMPANIONS.applyDragonRoleMasteryUpdate({type:m.type,...m.roleMastery});
+  applyDragonBondXpUpdate(m, m.role||'training');
+  const lt=m.loanTraining||{};
+  const tamer=String(lt.tamerName||'Pet Tamer');
+  const drills=Math.max(0,lt.trainingDrills|0);
+  const xp=Math.max(0,lt.trainingXp|0);
+  if(COMPANIONS.addDragonActivity) COMPANIONS.addDragonActivity(m.type,'Loan training progress',tamer+' completed '+(m.title||'a drill'));
+  showName(DRAGON_TYPES[m.type].name+' trained by '+tamer);
+  sysMsg('<b>'+escHTML(tamer)+'</b> completed <b>'+escHTML(m.title||'Dragon training')+'</b> with your <b>'+escHTML(DRAGON_TYPES[m.type].name)+'</b>.<br>Loan progress: <b>'+drills+'</b> drill'+(drills===1?'':'s')+', <b>+'+xp+'</b> total training.');
+  eventFeed('[Dragon]',tamer+' trained your '+DRAGON_TYPES[m.type].name+'.',{key:'dragon:loan-progress:'+m.type+':'+drills,cooldown:0});
+  refreshHUD(); if(uiOpen) renderUI();
 }
 function dragonRoleRejected(m){
   SFX.error();

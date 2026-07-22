@@ -5152,7 +5152,8 @@ function appendDragonLoanStatusPanel(parent){
     const other=loan.role==='owner'?String(loan.tamerName||'Pet Tamer'):String(loan.ownerName||'Owner');
     const verb=loan.role==='owner'?'loaned to':'borrowed from';
     const fee=Math.max(0,loan.feeGold|0);
-    line.innerHTML='<span>'+escHTML(dragonLoanName(loan.type))+' '+escHTML(verb)+' <b>'+escHTML(other)+'</b><br><small>'+dragonLoanTimeLeftText(loan.dueAt)+' left'+(fee?' - '+fee.toLocaleString('en-US')+'g fee':'')+'</small></span>';
+    const trained=(loan.trainingDrills|0)>0?(' - '+(loan.trainingDrills|0)+' drill'+((loan.trainingDrills|0)===1?'':'s')+' - +'+Math.max(0,loan.trainingXp|0)+' training'):' - no drills yet';
+    line.innerHTML='<span>'+escHTML(dragonLoanName(loan.type))+' '+escHTML(verb)+' <b>'+escHTML(other)+'</b><br><small>'+dragonLoanTimeLeftText(loan.dueAt)+' left'+(fee?' - '+fee.toLocaleString('en-US')+'g fee':'')+escHTML(trained)+'</small></span>';
     const btn=qBtn('RETURN NOW',()=>{if(NET.on&&NET.room)NET.room.send('dragonLoanReturn',{loanId:loan.id});setTimeout(openDragonBondUI,180);},true);
     line.appendChild(btn);
     panel.appendChild(line);
@@ -5183,8 +5184,11 @@ function openDragonBondUI(){
     const icon=iconNode(d.egg); icon.className='bondicon'; card.appendChild(icon);
     const body=document.createElement('div'); card.appendChild(body);
     const name=document.createElement('div'); name.className='bondname';
+    const loan=dragonLoanForType(d.id);
+    const borrowed=loan&&loan.role==='tamer';
+    const loanedOut=loan&&loan.role==='owner';
     const adult=isOwned?dragonIsAdult(d.id):false;
-    name.innerHTML='<b style="color:'+d.membrane[1]+'">'+escHTML(isOwned?dragonDisplayName(d.id):d.name)+'</b><span>'+escHTML(isOwned?(active?'MOUNTED':dragonStageLabel(d.id).toUpperCase()):'UNHATCHED')+'</span>';
+    name.innerHTML='<b style="color:'+d.membrane[1]+'">'+escHTML(isOwned?dragonDisplayName(d.id):d.name)+'</b><span>'+escHTML(isOwned?(borrowed?'BORROWED TRAINING':loanedOut?'ON LOAN':active?'MOUNTED':dragonStageLabel(d.id).toUpperCase()):'UNHATCHED')+'</span>';
     body.appendChild(name);
     const happy=isOwned?dragonHappiness(d.id):0;
     const ability=DRAGON_ABILITIES[d.id]||DRAGON_ABILITIES.ember;
@@ -5192,7 +5196,7 @@ function openDragonBondUI(){
     meta.innerHTML=
       'Ability: <b>'+escHTML(ability.name)+'</b> - '+escHTML((ability.cd||0)+'s base cooldown')+'<br>'+
       'Rarity: <b>'+escHTML(dragonRarityLabel(d.id))+'</b> - hatch '+Math.ceil(dragonIncubationMs(d.id)/1000)+'s - flight '+(d.fly||0).toFixed(1)+'<br>'+
-      (isOwned ? 'Gender: <b>'+escHTML(dragonGenderLabel(d.id))+'</b> - Personality: <b>'+escHTML(dragonPersonalityLabel(d.id))+'</b><br>'+escHTML(dragonPersonalityHint(d.id))+'<br>Role: <b>'+escHTML(dragonRoleLabel(d.id))+'</b> - '+escHTML(dragonRoleHint(d.id))+'<br>Age: <b>'+escHTML(dragonGrowthText(d.id))+'</b> - growth '+dragonGrowthPercent(d.id)+'%<br>'+escHTML(dragonBondSummary(d.id))+'<br>'+escHTML(dragonBondRewardText(d.id))+'<br>Care: <b>'+escHTML(dragonBondStatus(d.id))+'</b> - happiness '+happy+'/100' : 'Source: hatch a '+escHTML(d.name+' Egg'));
+      (isOwned ? (borrowed?'Owner: <b>'+escHTML(loan.ownerName||'Owner')+'</b> - training loan<br>':loanedOut?'Loaned to: <b>'+escHTML(loan.tamerName||'Pet Tamer')+'</b><br>':'Owner: <b>'+escHTML(localDisplayName())+'</b><br>')+'Gender: <b>'+escHTML(dragonGenderLabel(d.id))+'</b> - Personality: <b>'+escHTML(dragonPersonalityLabel(d.id))+'</b><br>'+escHTML(dragonPersonalityHint(d.id))+'<br>Role: <b>'+escHTML(dragonRoleLabel(d.id))+'</b> - '+escHTML(dragonRoleHint(d.id))+'<br>Age: <b>'+escHTML(dragonGrowthText(d.id))+'</b> - growth '+dragonGrowthPercent(d.id)+'%<br>'+escHTML(dragonBondSummary(d.id))+'<br>'+escHTML(dragonBondRewardText(d.id))+'<br>Care: <b>'+escHTML(dragonBondStatus(d.id))+'</b> - happiness '+happy+'/100' : 'Source: hatch a '+escHTML(d.name+' Egg'));
     body.appendChild(meta);
     const bar=document.createElement('div'); bar.className='bondbar';
     const fill=document.createElement('i'); fill.style.width=(isOwned?dragonBondPercent(d.id):0)+'%'; bar.appendChild(fill); body.appendChild(bar);
@@ -5402,6 +5406,9 @@ function dragonLoanName(type){
 }
 function activeDragonLoans(){
   return COMPANIONS&&Array.isArray(COMPANIONS.dragonLoans)?COMPANIONS.dragonLoans.filter(l=>l&&l.status==='active'):[];
+}
+function dragonLoanForType(type, role=''){
+  return activeDragonLoans().find(l=>l&&l.type===type&&(!role||l.role===role))||null;
 }
 function dragonLoanReturnForTarget(target){
   const name=String(target&&target.name||'').toLowerCase();
