@@ -115,6 +115,21 @@ const FIRST_TUTORIAL_CONTRACT_TYPE = Object.freeze({
   monk: 'meditate',
   pet_tamer: 'tame',
 });
+const FIRST_TUTORIAL_CONTRACT_NEED = Object.freeze({
+  miner: 8,
+  farmer: 3,
+  cook: 1,
+  blacksmith: 1,
+  monk: 30,
+  pet_tamer: 1,
+});
+const FIRST_TUTORIAL_STARTER_KITS = Object.freeze({
+  miner: Object.freeze({ tools: Object.freeze([I.WOOD_PICK]), stacks: Object.freeze([]), title: 'Miner starter kit' }),
+  farmer: Object.freeze({ tools: Object.freeze([I.WOOD_HOE]), stacks: Object.freeze([Object.freeze({ id: I.WHEAT_SEEDS, count: 8 })]), title: 'Farmer starter kit' }),
+  cook: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([Object.freeze({ id: I.WHEAT, count: 3 })]), title: 'Cook starter kit' }),
+  blacksmith: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([Object.freeze({ id: I.IRON_INGOT, count: 1 }), Object.freeze({ id: I.STICK, count: 1 }), Object.freeze({ id: W.B.PLANKS, count: 1 })]), title: 'Blacksmith starter kit' }),
+  pet_tamer: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([Object.freeze({ id: I.DRAGON_TREAT, count: 1 })]), title: 'Pet Tamer starter kit' }),
+});
 
 const NPC_QUEST_CHAINS = NPC_QUEST_REGISTRY.createNpcQuestChains({ B: W.B, I });
 const NPC_QUEST_CHAIN_ERRORS = NPC_QUEST_REGISTRY.validateNpcQuestChains(NPC_QUEST_CHAINS);
@@ -538,7 +553,8 @@ class ProgressionMixin {
   seedFirstTutorialJobContract(client, requestedJob = '') {
     const rec = this.profileFor(client);
     const job = typeof requestedJob === 'string' ? requestedJob : '';
-    if (!rec || !JOB_SYSTEM.PROFESSION_IDS.includes(job) || rec.prof.job !== job || rec.prof.jobContract) return null;
+    if (!rec || !JOB_SYSTEM.PROFESSION_IDS.includes(job) || rec.prof.jobContract) return null;
+    if (rec.prof.job !== job) rec.prof.job = job;
     const xpMap = ensureJobXpMap(rec.prof);
     const level = Math.max(1, rec.prof.S ? rec.prof.S.lvl | 0 : 1);
     const type = FIRST_TUTORIAL_CONTRACT_TYPE[job] || '';
@@ -550,6 +566,7 @@ class ProgressionMixin {
       ...base,
       id: ['job', job, 'tutorial', now, base.type].join('_'),
       job,
+      need: Math.max(1, Math.min(base.need | 0, FIRST_TUTORIAL_CONTRACT_NEED[job] || (base.need | 0) || 1)),
       have: 0,
       rewardXp: hunterXpForActivity(level, 'job_contract'),
       lifecycleState: 'active',
@@ -566,9 +583,52 @@ class ProgressionMixin {
     rec.prof.jobContractOfferJob = job;
     if (!rec.prof.jobContractOfferBoards || typeof rec.prof.jobContractOfferBoards !== 'object') rec.prof.jobContractOfferBoards = {};
     rec.prof.jobContractOfferBoards[job] = { at: now, offers: [] };
+    this.grantFirstTutorialJobStarterKit(client, job);
     this.dirtyPlayers.add(rec.token);
     client.send('jobProgress', { job, jobXp: xpMap[job] | 0, contract });
     return contract;
+  }
+
+  grantFirstTutorialJobStarterKit(client, job) {
+    const rec = this.profileFor(client);
+    const kit = FIRST_TUTORIAL_STARTER_KITS[job];
+    if (!rec || !rec.prof || !kit) return [];
+    const prof = rec.prof;
+    if (!Array.isArray(prof.progressionMilestoneRewards)) prof.progressionMilestoneRewards = [];
+    const key = `tutorial-job-starter:${job}`;
+    if (prof.progressionMilestoneRewards.includes(key)) return [];
+    const delivered = [];
+    let blocked = false;
+    for (const id of kit.tools || []) {
+      const hasTool = Array.isArray(prof.inv) && prof.inv.some(s => s && (s.id | 0) === (id | 0));
+      if (hasTool) continue;
+      if (typeof this.ensureProfileTool === 'function' && this.ensureProfileTool(prof, id | 0)) delivered.push({ id: id | 0, count: 1 });
+      else blocked = true;
+    }
+    for (const stack of kit.stacks || []) {
+      const id = stack.id | 0;
+      const target = Math.max(1, stack.count | 0);
+      const before = typeof this.profileItemCount === 'function' ? this.profileItemCount(prof, id) : 0;
+      if (before >= target) continue;
+      if (typeof this.ensureProfileStack === 'function' && this.ensureProfileStack(prof, id, target)) {
+        delivered.push({ id, count: Math.max(0, target - before) });
+      } else blocked = true;
+    }
+    if (blocked) return delivered;
+    prof.progressionMilestoneRewards.push(key);
+    if (delivered.length) {
+      this.dirtyPlayers.add(rec.token);
+      client.send('progressionMilestoneReward', {
+        key,
+        title: kit.title || 'Starter kit',
+        text: 'A small real-world kit for your first job contract.',
+        items: delivered,
+        modal: false,
+        subtitle: 'FIRST REAL SHIFT',
+        action: 'CONTINUE',
+      });
+    }
+    return delivered;
   }
 
   minerUndergroundTarget(type, salt = 0) {

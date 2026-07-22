@@ -77,6 +77,14 @@ const getB = (x, y, z) => worldGrid.getB(x, y, z);
 const setB = (x, y, z, v) => worldGrid.setB(x, y, z, v);
 const isSolid = id => !NON_SOLID.has(id);
 
+function buildTownFarmWorksite(setBlock, groundY = TOWN.G) {
+  const fx = HUB.farm.x | 0, fz = HUB.farm.z | 0;
+  for (let x = fx - 3; x <= fx + 3; x++) for (let z = fz - 2; z <= fz + 2; z++) {
+    setBlock(x, groundY, z, B.FARMLAND);
+    setBlock(x, groundY + 1, z, ((x + z) & 1) ? B.WHEAT_3 : B.AIR);
+  }
+}
+
 function hash2(x, z) {
   let n = (x * 374761393 + z * 668265263) >>> 0;
   n = Math.imul(n ^ (n >>> 13), 1274126177) >>> 0;
@@ -830,6 +838,7 @@ function buildTown() {
   }
   buildGuildHallBase(setB);
   buildSkyportBlocks(setB);
+  buildTownFarmWorksite(setB, G);
   // Reopen gate approaches after every district has been generated. Without
   // this final pass, the dragon pen can overwrite the east gate corridor.
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -918,6 +927,7 @@ function createWorld() {
     }
     buildGuildHallBase(setLocal);
     buildSkyportBlocks(setLocal);
+    buildTownFarmWorksite(setLocal, G);
   };
   const generateLocal = () => {
     buf.fill(B.AIR);

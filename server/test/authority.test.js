@@ -7253,8 +7253,23 @@ test('job tutorial completion seeds one first real profession contract', () => {
     assert.equal(prof.jobContract.job, job);
     assert.equal(prof.jobContract.type, type);
     assert.equal(prof.jobContract.lifecycleState, 'active');
+    assert.equal(prof.jobContract.need <= (job === 'miner' ? 8 : job === 'farmer' ? 3 : job === 'monk' ? 30 : 1), true);
     assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.job === job), true);
   }
+});
+
+test('job tutorial completion equips the job before seeding the first contract', () => {
+  const room = makeRoom(), client = makeClient('tutorial_contract_race');
+  const { prof } = seedPlayer(room, client, { lvl: 2 });
+  prof.job = '';
+
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'townJob', version: TUTORIAL_VERSIONS.townJob, job: 'farmer' }), true);
+  assert.equal(prof.job, 'farmer');
+  assert.equal(prof.jobContract.job, 'farmer');
+  assert.equal(prof.jobContract.type, 'farm');
+  assert.equal(prof.jobContract.need, 3);
+  assert.equal(prof.inv.some(s => s && s.id === I.WOOD_HOE && s.dur > 0), true);
+  assert.equal(itemCount(prof, I.WHEAT_SEEDS) >= 8, true);
 });
 
 test('job tutorial completion does not replace an active contract', () => {
@@ -8360,6 +8375,9 @@ test('authoritative room world generates biome blocks', () => {
   assert.equal(w.getB(35, 20, 90), W.B.CACTUS);
   assert.notEqual(w.getB(W.TRAINING_MEADOW.x + 30, W.TRAINING_MEADOW.G + 1, W.TRAINING_MEADOW.z - 12), W.B.TABLE,
     'the tutorial table is no longer baked into the shared overworld');
+  const fx = W.HUB.farm.x | 0, fz = W.HUB.farm.z | 0;
+  assert.equal(w.getB(fx, W.TOWN.G, fz), W.B.FARMLAND);
+  assert.equal(w.getB(fx, W.TOWN.G + 1, fz), W.B.WHEAT_3);
 });
 
 test('regional landmark layout is deterministic, distributed, and includes every requested archetype', () => {

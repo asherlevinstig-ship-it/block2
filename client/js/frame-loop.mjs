@@ -2274,6 +2274,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     walkToMara:e2ePositionAtMara,
     walkToTavern:()=>e2eWalkTo({x:HUB.tavern.x,y:TOWN.G+1,z:HUB.tavern.z},7.5),
     walkToJobs:()=>e2eWalkTo({x:HUB.jobs.x,y:TOWN.G+1,z:HUB.jobs.z}),
+    walkToFarm:()=>e2eWalkTo({x:HUB.farm.x,y:TOWN.G+1,z:HUB.farm.z},3),
     usePrepRepairKit:()=>{const slot=inv.findIndex(s=>s&&s.id===I.REPAIR_KIT);return slot>=0&&useRepairKit(slot);},
     useDungeonExit:e2eUseDungeonExit,
     fleeDungeon:e2eFleeDungeon,

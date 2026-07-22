@@ -2663,8 +2663,8 @@ function completeJobTutorial(){
   if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
-  completeTownTutorialStep(jobTutorialStepId(jobId),{job:jobId});
   exitJobTutorialRoom();
+  completeTownTutorialStep('job',{job:jobId});
   hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
   renderBars();
   sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> Keep an eye on the Next Best Action panel for useful work.');

@@ -2684,6 +2684,8 @@ function landClaimTrustRejected(m){
 }
 function applyFarmResult(m){
   if(!m) return;
+  globalThis.__BLOCKCRAFT_LAST_FARM_RESULT__=JSON.parse(JSON.stringify(m));
+  globalThis.__BLOCKCRAFT_LAST_FARM_REJECT__=null;
   if(m.action==='till'){ gainJobXP('farmer',1,'till'); jobContractProgress('farm', 1, B.FARMLAND); eventFeed('[Farm]','Tilled soil at '+(m.x|0)+', '+(m.z|0)+'.',{key:'farm:till:'+((m.x|0))+','+((m.z|0)),cooldown:4000}); }
   if(m.action==='plant'){ gainJobXP('farmer',1,'plant'); jobContractProgress('farm', 1, I.WHEAT_SEEDS); eventFeed('[Farm]','Planted '+(m.kind==='windseed'?'Prairie Windseed':'wheat')+'.',{key:'farm:plant:'+((m.x|0))+','+((m.z|0)),cooldown:4000}); }
   if(m.action==='harvest'){ gainJobXP('farmer',5,'harvest'); jobContractProgress('farm', 1, B.WHEAT_3); eventFeed('[Farm]','Harvested '+(m.kind==='windseed'?'Prairie Windseed crop':'wheat')+(m.golden?' and found Golden Wheat':'')+'.',{key:'farm:harvest:'+((m.x|0))+','+((m.z|0)),cooldown:3000}); }
@@ -2720,6 +2722,7 @@ function applyFarmResult(m){
   }else if(m.action==='harvest'&&m.bonus)showJobPerk('farmer','bonus wheat');
 }
 function farmRejected(m){
+  globalThis.__BLOCKCRAFT_LAST_FARM_REJECT__=JSON.parse(JSON.stringify(m||{}));
   SFX.error();
   const r=(m&&m.reason)||'invalid';
   if(r==='protected') sysMsg('That land is protected');

@@ -79,3 +79,94 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBeGreaterThan(beforeSale);
   await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
 });
+
+test('farmer tutorial returns to town with a persistent starter contract that can progress', async ({ page }) => {
+  test.setTimeout(90_000);
+  await registerFarmer(page);
+
+  for (let step = 0; step < 4; step++) {
+    const result = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
+    expect(result.ok).toBe(true);
+  }
+  await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+
+  await page.evaluate(() => {
+    const target = window.__BLOCKCRAFT_E2E__.farmerTutorialVisualDebug().target;
+    window.player.pos.set(target.x, target.y, target.z);
+  });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract)).toMatchObject({
+    job: 'farmer',
+    type: 'farm',
+    have: 0,
+  });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventorySlot(172))).toBeGreaterThanOrEqual(0);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(176))).toBeGreaterThanOrEqual(8);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToFarm())).toBe(true);
+  const before = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+  const farmed = await page.evaluate(async beforeHave => {
+    const world = window.BlockcraftGameContext.requireModule('world');
+    const hoeSlot = window.__BLOCKCRAFT_E2E__.inventorySlot(172);
+    const seedSlot = window.__BLOCKCRAFT_E2E__.inventorySlot(176);
+    if (hoeSlot < 0) return { ok: false, reason: 'missing hoe' };
+    const farm = window.HUB && window.HUB.farm;
+    if (!farm) return { ok: false, reason: 'missing farm hub' };
+    const baseX = Math.round(farm.x), baseZ = Math.round(farm.z);
+    const groundY = window.TOWN ? window.TOWN.G : 15;
+    let action = null;
+    for (let radius = 0; radius <= 8 && !action; radius++) {
+      for (let dx = -radius; dx <= radius && !action; dx++) {
+        for (let dz = -radius; dz <= radius && !action; dz++) {
+          const x = baseX + dx, z = baseZ + dz, y = groundY;
+          const id = world.getBlock(x, y, z);
+          const above = world.getBlock(x, y + 1, z);
+          if (!window.isTownFarmWorksite(x, z)) continue;
+          if ((id === 1 || id === 2) && above === 0) {
+            action = { type: 'till', x, y, z, slot: hoeSlot, id, above };
+          } else if (id === 22 && above === 0 && seedSlot >= 0) {
+            action = { type: 'plant', x, y: y + 1, z, slot: seedSlot, id, above };
+          } else if (above === 25) {
+            action = { type: 'harvest', x, y: y + 1, z, slot: 0, id, above };
+          }
+        }
+      }
+    }
+    if (!action) {
+      const sample = [];
+      for (let x = baseX - 3; x <= baseX + 3; x++) {
+        for (let z = baseZ - 2; z <= baseZ + 2; z++) {
+          const y = groundY;
+          sample.push({ x, y, z, inFarm: window.isTownFarmWorksite(x, z), id: world.getBlock(x, y, z), above: world.getBlock(x, y + 1, z) });
+        }
+      }
+      return { ok: false, reason: 'missing valid farm action', base: { x: baseX, z: baseZ }, sample };
+    }
+    window.__BLOCKCRAFT_E2E__.send('farm', { action: action.type, x: action.x, y: action.y, z: action.z, slot: action.slot });
+    const startedAt = Date.now();
+    let status = window.__BLOCKCRAFT_E2E__.status();
+    while (Date.now() - startedAt < 2500 && status.contract && status.contract.have <= beforeHave) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      status = window.__BLOCKCRAFT_E2E__.status();
+    }
+    return {
+      ok: !!status.contract && status.contract.have > beforeHave,
+      action,
+      contract: status.contract,
+      reject: status.lastProgressionReject,
+      farmResult: globalThis.__BLOCKCRAFT_LAST_FARM_RESULT__ || null,
+      farmReject: globalThis.__BLOCKCRAFT_LAST_FARM_REJECT__ || null,
+    };
+  }, before.have);
+  expect(farmed.ok, JSON.stringify(farmed)).toBe(true);
+  expect(farmed.contract).toMatchObject({ job: 'farmer', type: 'farm' });
+  expect(farmed.contract.have).toBeGreaterThan(before.have);
+
+  await page.reload();
+  await page.locator('#playbtn').click();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract)).toMatchObject({
+    job: 'farmer',
+    type: 'farm',
+    have: farmed.contract.have,
+  });
+});
