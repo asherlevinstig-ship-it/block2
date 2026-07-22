@@ -2055,7 +2055,7 @@ function enterTamingLand(){
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
-  if(NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'taming_land'});
+  if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'taming_land'});
   sysMsg('<b>Taming Land:</b> a peaceful sanctuary for eggs, familiars, and dragon practice. Use the green return portal to go back to town.');
   return true;
 }

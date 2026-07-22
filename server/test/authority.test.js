@@ -371,7 +371,9 @@ test('client modules expose and route player trading actions', () => {
   const networking = readClientModule('networking.mjs');
   const gameRoom = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   assert.match(world, /function tradeTargetUnderCrosshair/);
-  assert.match(world, /if\(dim!=='overworld'\|\|!player\|\|!isTownLand\(Math\.floor\(player\.pos\.x\),Math\.floor\(player\.pos\.z\)\)\) return null;/);
+  assert.match(world, /function playerCanUseSocialSpaceAt/);
+  assert.match(world, /function remoteCanUseSocialSpaceAt/);
+  assert.match(world, /dim==='taming_land'&&dgn==='taming_land'/);
   assert.match(world, /function townSocialTargetNear/);
   assert.match(world, /"tradeTargetUnderCrosshair":\{get:\(\)=>tradeTargetUnderCrosshair\}/);
   assert.match(world, /"townSocialTargetNear":\{get:\(\)=>townSocialTargetNear\}/);
@@ -387,7 +389,7 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function applyTradePending[\s\S]*closeQWin\(true\)/);
   assert.match(menus, /function qBtn[\s\S]*b\.type='button'[\s\S]*e\.preventDefault\(\); e\.stopPropagation\(\);/);
   assert.match(menus, /function openPlayerSocialUI/);
-  assert.match(menus, /pet training are only available when both players are close together inside/);
+  assert.match(menus, /Town of Beginnings[\s\S]*Taming Land/);
   assert.match(menus, /TRAIN MY PET/);
   assert.match(menus, /function openDragonLoanUI/);
   assert.match(menus, /NET\.room\.send\('dragonLoanOffer'/);
@@ -5456,7 +5458,7 @@ test('player trade validates range before creating an offer', () => {
   assert.equal(alice.sent.at(-1).msg.distance, 40);
 });
 
-test('player trade and pet training loans require town proximity', () => {
+test('player trade and pet training loans require shared social-space proximity', () => {
   const room = makeRoom(), owner = makeClient('outside_owner'), tamer = makeClient('outside_tamer');
   const { prof: ownerProf } = seedPlayer(room, owner, { name: 'Owner', gold: 0, inv: [{ id: I.BREAD, count: 1 }], x: 20, z: 20 });
   const { prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, x: 21, z: 20 });
@@ -5472,6 +5474,24 @@ test('player trade and pet training loans require town proximity', () => {
   room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'ember', gold: 10 });
   assert.equal(owner.sent.at(-1).type, 'dragonLoanReject');
   assert.equal(owner.sent.at(-1).msg.reason, 'range');
+
+  const ownerPlayer = room.state.players.get(owner.sessionId);
+  const tamerPlayer = room.state.players.get(tamer.sessionId);
+  ownerPlayer.dim = 'tutorial'; ownerPlayer.dgn = 'taming_land'; ownerPlayer.x = 420; ownerPlayer.y = 22; ownerPlayer.z = 907;
+  tamerPlayer.dim = 'tutorial'; tamerPlayer.dgn = 'taming_land'; tamerPlayer.x = 422; tamerPlayer.y = 22; tamerPlayer.z = 907;
+
+  room.handleTradeOffer(owner, { targetSid: tamer.sessionId, slot: 0, count: 1, gold: 0 });
+  assert.equal(room.trades.size, 1, 'nearby players can trade in shared Taming Land');
+  assert.equal(tamer.sent.some(e => e.type === 'tradeOffer'), true);
+
+  room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'ember', gold: 10 });
+  assert.equal(tamer.sent.some(e => e.type === 'dragonLoanOffer'), true, 'nearby players can offer pet training in shared Taming Land');
+
+  tamerPlayer.dgn = 'other_tutorial_space';
+  room.handleTradeOffer(owner, { targetSid: tamer.sessionId, slot: 0, count: 1, gold: 0 });
+  assert.equal(owner.sent.at(-1).type, 'tradeReject');
+  assert.equal(owner.sent.at(-1).msg.reason, 'range');
+  assert.equal(owner.sent.at(-1).msg.sameSpace, false);
 });
 
 test('player trade can resolve a nearby named target when the client session id is stale', () => {

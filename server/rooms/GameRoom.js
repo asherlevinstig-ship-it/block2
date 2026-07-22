@@ -3413,8 +3413,14 @@ class GameRoom extends Room {
   }
   tradePlayersClose(a, b, range = 8) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
-    return !!(pa && pb && !pa.dgn && !pb.dgn && this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z) &&
+    return !!(pa && pb && this.playersShareSocialSpace(pa, pb) &&
       Math.hypot(pa.x - pb.x, pa.z - pb.z) <= range && Math.abs((pa.y || 0) - (pb.y || 0)) <= 6);
+  }
+  playersShareSocialSpace(pa, pb) {
+    if (!pa || !pb) return false;
+    const aDgn = String(pa.dgn || ''), bDgn = String(pb.dgn || '');
+    if (!aDgn && !bDgn) return this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z);
+    return aDgn === 'taming_land' && bDgn === 'taming_land' && String(pa.dim || '') === 'tutorial' && String(pb.dim || '') === 'tutorial';
   }
   tradeDistanceInfo(a, b) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
@@ -3422,6 +3428,7 @@ class GameRoom extends Room {
     return {
       distance: Math.round(Math.hypot((pa.x || 0) - (pb.x || 0), (pa.z || 0) - (pb.z || 0)) * 10) / 10,
       yDelta: Math.round(Math.abs((pa.y || 0) - (pb.y || 0)) * 10) / 10,
+      sameSpace: this.playersShareSocialSpace(pa, pb),
     };
   }
   findTradeTarget(client, m = {}) {

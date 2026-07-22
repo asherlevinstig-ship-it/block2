@@ -2343,7 +2343,7 @@ function netRestoreProfile(m){
     if(restoreJobRoom){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job);
     }else if(restoreTamingLand){
-      if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true});
+      if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true,serverSynced:serverHasActiveRoom});
     }else if(serverHasActiveRoom&&dim==='job'&&dimensionsApi.exitJobTutorialRoom){
       dimensionsApi.exitJobTutorialRoom();
     }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
