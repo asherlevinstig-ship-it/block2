@@ -1,5 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const {
+  craftAndWaitForProgress,
+  expectStarterContract,
+  reloadAndExpectContract,
+} = require('./helpers/job-contract-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -77,4 +82,28 @@ test('pet tamer tutorial displays egg timer and highlights the Stay command', as
   });
   expect(clicked).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.petTamerVisualDebug().step)).toBe(4);
+
+  await page.evaluate(() => {
+    window.__BLOCKCRAFT_E2E__.resumeJobTutorial('pet_tamer', { petDragonStep: 5 });
+    const debug = window.__BLOCKCRAFT_E2E__.petTamerVisualDebug();
+    if (!debug || !debug.roost) throw new Error('missing pet tamer roost debug');
+    window.player.pos.set(debug.roost.x, debug.roost.y, debug.roost.z);
+  });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.petTamerVisualDebug().step)).toBe(5);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.petTamerFinishRoost())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension), {
+    timeout: 5_000,
+  }).toBe('overworld');
+
+  await expectStarterContract(page, { job: 'pet_tamer', type: 'pet_care', have: 0 });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(190))).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(180))).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(101))).toBeGreaterThanOrEqual(1);
+
+  const before = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+  const after = await craftAndWaitForProgress(page, [180, 180, 101, 0, 0, 0, 0, 0, 0], before.have);
+  expect(after).toMatchObject({ job: 'pet_tamer', type: 'pet_care' });
+  expect(after.have).toBeGreaterThan(before.have);
+
+  await reloadAndExpectContract(page, { job: 'pet_tamer', type: 'pet_care', have: after.have });
 });

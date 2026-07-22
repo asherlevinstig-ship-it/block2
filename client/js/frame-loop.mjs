@@ -2267,6 +2267,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     walkToTamingPortal:()=>e2eWalkTo({x:HUB.tamingPortal.x,y:TOWN.G+1,z:HUB.tamingPortal.z}),
     walkToTamingExit:()=>e2eWalkTo({x:TAMING_LAND.x+TAMING_LAND.exit.dx+.5,y:TAMING_LAND.G+1,z:TAMING_LAND.z+TAMING_LAND.exit.dz+.5}),
     petTamerTutorialAction:()=>combatApi.performPetTamerDragonTutorialAction?combatApi.performPetTamerDragonTutorialAction():false,
+    petTamerFinishRoost:()=>combatApi.finishPetTamerRoostLessonForTest?combatApi.finishPetTamerRoostLessonForTest():false,
     useFirstAbility:()=>cast(0),
     walkOutsideTown:e2ePositionOutsideTown,
     walkToFirstGate:e2eWalkToFirstGate,

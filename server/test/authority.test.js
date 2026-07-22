@@ -7241,7 +7241,7 @@ test('job tutorial completion seeds one first real profession contract', () => {
     cook: 'cook',
     blacksmith: 'smith',
     monk: 'meditate',
-    pet_tamer: 'tame',
+    pet_tamer: 'pet_care',
   };
   for (const [job, type] of Object.entries(expectedTypes)) {
     const room = makeRoom(), client = makeClient('tutorial_contract_' + job);
@@ -7254,6 +7254,11 @@ test('job tutorial completion seeds one first real profession contract', () => {
     assert.equal(prof.jobContract.type, type);
     assert.equal(prof.jobContract.lifecycleState, 'active');
     assert.equal(prof.jobContract.need <= (job === 'miner' ? 8 : job === 'farmer' ? 3 : job === 'monk' ? 30 : 1), true);
+    if (job === 'pet_tamer') {
+      assert.equal(itemCount(prof, I.DRAGON_TREAT) >= 1, true);
+      assert.equal(itemCount(prof, I.COOKED_MEAT) >= 2, true);
+      assert.equal(itemCount(prof, I.COAL) >= 1, true);
+    }
     assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.job === job), true);
   }
 });

@@ -113,7 +113,7 @@ const FIRST_TUTORIAL_CONTRACT_TYPE = Object.freeze({
   cook: 'cook',
   blacksmith: 'smith',
   monk: 'meditate',
-  pet_tamer: 'tame',
+  pet_tamer: 'pet_care',
 });
 const FIRST_TUTORIAL_CONTRACT_NEED = Object.freeze({
   miner: 8,
@@ -128,7 +128,11 @@ const FIRST_TUTORIAL_STARTER_KITS = Object.freeze({
   farmer: Object.freeze({ tools: Object.freeze([I.WOOD_HOE]), stacks: Object.freeze([Object.freeze({ id: I.WHEAT_SEEDS, count: 8 })]), title: 'Farmer starter kit' }),
   cook: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([Object.freeze({ id: I.WHEAT, count: 3 })]), title: 'Cook starter kit' }),
   blacksmith: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([Object.freeze({ id: I.IRON_INGOT, count: 1 }), Object.freeze({ id: I.STICK, count: 1 }), Object.freeze({ id: W.B.PLANKS, count: 1 })]), title: 'Blacksmith starter kit' }),
-  pet_tamer: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([Object.freeze({ id: I.DRAGON_TREAT, count: 1 })]), title: 'Pet Tamer starter kit' }),
+  pet_tamer: Object.freeze({ tools: Object.freeze([]), stacks: Object.freeze([
+    Object.freeze({ id: I.DRAGON_TREAT, count: 1 }),
+    Object.freeze({ id: I.COOKED_MEAT, count: 2 }),
+    Object.freeze({ id: I.COAL, count: 1 }),
+  ]), title: 'Pet Tamer starter kit' }),
 });
 
 const NPC_QUEST_CHAINS = NPC_QUEST_REGISTRY.createNpcQuestChains({ B: W.B, I });

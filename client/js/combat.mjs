@@ -2443,6 +2443,7 @@ function minerTutorialVisualDebug(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
   const ore=room?{x:room.x,y:room.G+2,z:room.z-13,id:getB(room.x,room.G+2,room.z-13)}:null;
   const trader=minerTutorialTraderPos();
+  const target=room?{x:room.x,y:room.G+1.035,z:room.z+23}:null;
   return {
     active:!!jobTutorialActive,
     job:jobTutorialJob,
@@ -2450,6 +2451,7 @@ function minerTutorialVisualDebug(){
     traded:!!jobTutorialTraded,
     ore,
     trader,
+    target,
     inventory:{diamond:countItem(I.DIAMOND)},
   };
 }
@@ -4806,6 +4808,7 @@ gameContext.registerModule('combat', Object.freeze({
   performMonkTutorialStepForTest,
   startMonkTutorialFocusForTest,
   performPetTamerDragonTutorialAction,
+  finishPetTamerRoostLessonForTest:finishPetTamerRoostLesson,
   petTamerVisualDebug:()=>{
     const p=petTamerPracticeInsulatorPos();
     return {
@@ -4815,6 +4818,9 @@ gameContext.registerModule('combat', Object.freeze({
       eggStarted:!!jobTutorialPetEggStarted,
       eggReadyAt:jobTutorialPetEggReadyAt||0,
       insulator:p,
+      dragon:petTamerPracticeDragonPos(),
+      roost:petTamerPracticeRoostPos(),
+      target:jobTutorialBeaconTarget('pet_tamer', JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.pet_tamer),
       egg:p&&worldApi.dragonIncubationVisualDebug?worldApi.dragonIncubationVisualDebug(p.bx,p.by,p.bz):null
     };
   },

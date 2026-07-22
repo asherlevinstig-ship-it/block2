@@ -1,5 +1,11 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const {
+  craftAndWaitForProgress,
+  expectStarterContract,
+  reloadAndExpectContract,
+  returnFromJobTutorial,
+} = require('./helpers/job-contract-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -72,4 +78,15 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
   expect(sale).toMatchObject({ ok: true, done: true, debug: { step: 4, traded: true } });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBeGreaterThan(beforeSale);
   await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+
+  await returnFromJobTutorial(page, 'cookTutorialVisualDebug');
+  await expectStarterContract(page, { job: 'cook', type: 'cook', have: 0 });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventoryCount(177))).toBeGreaterThanOrEqual(3);
+
+  const before = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+  const after = await craftAndWaitForProgress(page, [177, 177, 177, 0, 0, 0, 0, 0, 0], before.have);
+  expect(after).toMatchObject({ job: 'cook', type: 'cook' });
+  expect(after.have).toBeGreaterThan(before.have);
+
+  await reloadAndExpectContract(page, { job: 'cook', type: 'cook', have: after.have });
 });

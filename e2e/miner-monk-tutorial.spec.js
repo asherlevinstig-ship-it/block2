@@ -1,5 +1,11 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const {
+  expectStarterContract,
+  reloadAndExpectContract,
+  returnFromJobTutorial,
+  waitForContractProgress,
+} = require('./helpers/job-contract-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -64,6 +70,43 @@ test('miner tutorial persists through reload then mines and sells a diamond', as
   expect(sold).toMatchObject({ ok: true, done: true, debug: { traded: true, inventory: { diamond: 0 } } });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBeGreaterThan(beforeSale);
   await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+
+  await returnFromJobTutorial(page, 'minerTutorialVisualDebug');
+  await expectStarterContract(page, { job: 'miner', type: 'mine', have: 0 });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.inventorySlot(110))).toBeGreaterThanOrEqual(0);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkOutsideTown())).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().inTown)).toBe(false);
+
+  const before = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+  const realMine = await page.evaluate(beforeHave => {
+    const world = window.BlockcraftGameContext.requireModule('world');
+    const pos = window.__BLOCKCRAFT_E2E__.selfPosition();
+    const slot = window.__BLOCKCRAFT_E2E__.inventorySlot(110);
+    if (!pos || slot < 0) return { ok: false, reason: 'missing player or pickaxe', pos, slot };
+    const allowed = new Set([3, 8, 10]);
+    const cx = Math.floor(pos.x), cy = Math.floor(pos.y), cz = Math.floor(pos.z);
+    for (let radius = 0; radius <= 8; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
+          const x = cx + dx, z = cz + dz;
+          if (Math.hypot(x + 0.5 - pos.x, z + 0.5 - pos.z) > 9.5) continue;
+          for (let y = cy - 1; y >= Math.max(2, cy - 16); y--) {
+            const id = world.getBlock(x, y, z);
+            if (!allowed.has(id)) continue;
+            window.__BLOCKCRAFT_E2E__.send('edit', { x, y, z, id: 0, slot });
+            return { ok: true, action: { x, y, z, id, slot }, beforeHave };
+          }
+        }
+      }
+    }
+    return { ok: false, reason: 'no mineable block nearby', pos };
+  }, before.have);
+  expect(realMine.ok, JSON.stringify(realMine)).toBe(true);
+  const after = await waitForContractProgress(page, before.have);
+  expect(after).toMatchObject({ job: 'miner', type: 'mine' });
+  expect(after.have).toBeGreaterThan(before.have);
+
+  await reloadAndExpectContract(page, { job: 'miner', type: 'mine', have: after.have });
 });
 
 test('monk tutorial persists through reload and completes the timed focus loop', async ({ page }) => {
@@ -83,4 +126,8 @@ test('monk tutorial persists through reload and completes the timed focus loop',
     timeout: 8_000,
   }).toBe(2);
   await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+
+  await returnFromJobTutorial(page, 'monkTutorialVisualDebug');
+  await expectStarterContract(page, { job: 'monk', type: 'meditate', have: 0 });
+  await reloadAndExpectContract(page, { job: 'monk', type: 'meditate', have: 0 });
 });
