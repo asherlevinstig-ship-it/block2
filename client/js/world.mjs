@@ -1502,6 +1502,7 @@ generateWorld();
 
 // ---------------- Town of Beginnings ----------------
 const TOWN = { TC: WX/2, HS: 72, G: 15 }; // center, wall half-size, ground level
+const TOWN_RETURN_SPAWN = Object.freeze({ x: TOWN.TC + 14.5, y: TOWN.G + 2, z: TOWN.TC + 27.5 });
 const OLD_TOWN_TC = 64;
 const TOWN_SPACING = 1.14;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
@@ -7571,7 +7572,7 @@ function leaveEventDimension(m){
     netFlushPending();
     rebuildAllChunks(); refreshTorchMeshes(); applyDim();
   }
-  player.pos.set(Number(m&&m.x)||TOWN.TC+.5, Number(m&&m.y)||TOWN.G+2, Number(m&&m.z)||TOWN.TC+14.5);
+  player.pos.set(Number(m&&m.x)||TOWN_RETURN_SPAWN.x, Number(m&&m.y)||TOWN_RETURN_SPAWN.y, Number(m&&m.z)||TOWN_RETURN_SPAWN.z);
   player.vel.set(0,0,0);
 }
 function leaveParkourEvent(m){leaveEventDimension(m);}
@@ -8137,7 +8138,7 @@ function die(){
   }
   if(dim==='dungeon') exitDungeon(true);
   showDeathScreen(deathCauseText(lastDamageSource),'Returning to the Town of Beginnings');
-  player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+14.5);
+  player.pos.set(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.y, TOWN_RETURN_SPAWN.z);
   player.vel.set(0,0,0);
   hp=maxHp(); sp=maxSp(); hunger=maxHunger();
   renderBars();

@@ -302,7 +302,7 @@ class DungeonRoom extends GameRoom {
     if (!p || !p.dgn || !p.spirit || !hp || hp.hp > 0) return false;
     const inst = this.instance || this.instances[p.dgn];
     const rec = this.profileFor(client);
-    const town = { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 };
+    const town = { x: W.TOWN.TC + 14.5, y: W.TOWN.G + 2, z: W.TOWN.TC + 27.5 };
     const result = inst ? this.dungeonResultPayload(inst, 'failed', 'wipe') : null;
     const dgn = p.dgn;
     p.spirit = false;
@@ -388,7 +388,7 @@ class DungeonRoom extends GameRoom {
       at: now,
     });
     const result = this.dungeonResultPayload(inst, 'failed', 'breach');
-    const tx = W.TOWN.TC + .5, ty = W.TOWN.G + 2, tz = W.TOWN.TC + 14.5;
+    const tx = W.TOWN.TC + 14.5, ty = W.TOWN.G + 2, tz = W.TOWN.TC + 27.5;
     for (const sid of [...inst.players]) {
       const p = this.state.players.get(sid);
       if (p) { p.x = tx; p.y = ty; p.z = tz; p.dgn = ''; p.dim = 'overworld'; }

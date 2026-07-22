@@ -1868,7 +1868,7 @@ function tick(now){
     } else if(!player.onGround) stepAcc=1.6;
     // --- end water & jump physics ---
     tickLavaBorder(now);
-    if(player.pos.y<-12){ player.pos.set(TOWN.TC+.5, TOWN.G+2, TOWN.TC+14.5); player.vel.set(0,0,0); }
+    if(player.pos.y<-12){ player.pos.set(TOWN.TC+14.5, TOWN.G+2, TOWN.TC+27.5); player.vel.set(0,0,0); }
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
     if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);

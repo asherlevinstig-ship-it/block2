@@ -96,6 +96,26 @@ const OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS = Math.max(2, Number(process.env.OVE
 const GAME_DUNGEON_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.GAME_DUNGEON_MOB_INTEREST_RADIUS || 28));
 const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST_RADIUS, Number(process.env.GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40));
 const JOIN_SNAPSHOT_DELAY_MS = Math.max(0, Number(process.env.JOIN_SNAPSHOT_DELAY_MS || 100));
+const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + 14.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 27.5 });
+
+function townReturnArray(y = TOWN_RETURN_SPAWN.y) {
+  return [TOWN_RETURN_SPAWN.x, y, TOWN_RETURN_SPAWN.z];
+}
+
+function townReturnPoint(y = TOWN_RETURN_SPAWN.y) {
+  return { x: TOWN_RETURN_SPAWN.x, y, z: TOWN_RETURN_SPAWN.z };
+}
+
+function isLegacyUnsafeTownReturn(pos) {
+  if (!Array.isArray(pos) || pos.length < 3) return false;
+  const x = Number(pos[0]), y = Number(pos[1]), z = Number(pos[2]);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return true;
+  const inTown = Math.abs((x | 0) - W.TOWN.TC) <= W.TOWN.HS + 2 && Math.abs((z | 0) - W.TOWN.TC) <= W.TOWN.HS + 2;
+  if (!inTown) return false;
+  const oldArrival = Math.hypot(x - (W.TOWN.TC + .5), z - (W.TOWN.TC + 14.5));
+  const oldControlsSpawn = Math.hypot(x - (W.TOWN.TC + .5), z - (W.TOWN.TC + 7.5));
+  return y < W.TOWN.G + .75 || oldArrival < 10 || oldControlsSpawn < 3;
+}
 
 function angleDelta(a, b) {
   let d = (Number(a) || 0) - (Number(b) || 0);
@@ -916,18 +936,22 @@ class GameRoom extends Room {
       if (this.ensureTownMapBackfill(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
       const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
       if (!prof.activeRoom && returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
-        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+        prof.pos = townReturnArray();
         this.dirtyPlayers.add(token);
       }
       // Move profiles saved at the old cramped plaza spawn into the new open
       // arrival point so returning players receive the same readable opening.
       if (!prof.activeRoom && returningOrLegacyProfile && Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
-        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+        prof.pos = townReturnArray();
         this.dirtyPlayers.add(token);
       }
       const openingMaraStep=prof.npcQuestChains&&(prof.npcQuestChains['Mara Vale']|0)||0;
       if (!prof.activeRoom && returningOrLegacyProfile && (prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
-        prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+        prof.pos = townReturnArray();
+        this.dirtyPlayers.add(token);
+      }
+      if (!prof.activeRoom && returningOrLegacyProfile && isLegacyUnsafeTownReturn(prof.pos)) {
+        prof.pos = townReturnArray();
         this.dirtyPlayers.add(token);
       }
       client._mutedComms = new Set(prof.mutedPlayers || []);
@@ -936,7 +960,7 @@ class GameRoom extends Room {
         const feetBlocked = W.isSolid(this.world.getB(bx, by, bz));
         const headBlocked = W.isSolid(this.world.getB(bx, by + 1, bz));
         if (feetBlocked || headBlocked) {
-          prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+          prof.pos = townReturnArray();
           this.dirtyPlayers.add(token);
         }
       }
@@ -988,9 +1012,9 @@ class GameRoom extends Room {
         p.dgn = this.tutorialSpaceId(client, 'taming_land');
       }
     } else {
-      p.x = W.TOWN.TC + .5 + (Math.random() * 4 - 2);
-      p.y = W.TOWN.G + 1;
-      p.z = W.TOWN.TC + 14.5 + (Math.random() * 2 - 1);
+      p.x = TOWN_RETURN_SPAWN.x + (Math.random() * 4 - 2);
+      p.y = TOWN_RETURN_SPAWN.y;
+      p.z = TOWN_RETURN_SPAWN.z + (Math.random() * 2 - 1);
     }
     this.state.players.set(client.sessionId, p);
     this.updateClientGameInterestView(client);
@@ -1475,7 +1499,7 @@ class GameRoom extends Room {
     }
     rec.prof.tutorials[tutorial] = Math.max(rec.prof.tutorials[tutorial] | 0, expected);
     if (tutorial === 'onboarding') {
-      const spawn = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+      const spawn = townReturnArray();
       rec.prof.pos = spawn;
       this.ensureTownMapIntroduction(rec.prof);
       this.leaveTutorialDimension(client, spawn);
@@ -1507,7 +1531,7 @@ class GameRoom extends Room {
   moveCompletedTutorialProfileToTown(prof) {
     if (!prof || !prof.tutorials || (prof.tutorials.onboarding | 0) < TUTORIAL_VERSIONS.onboarding) return false;
     if (!Array.isArray(prof.pos) || !W.isTrainingMeadowLand(prof.pos[0], prof.pos[2], 4)) return false;
-    prof.pos = [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5];
+    prof.pos = townReturnArray();
     return true;
   }
 
@@ -1657,7 +1681,7 @@ class GameRoom extends Room {
     const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
     const pos = forcedPos
       ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
-      : (ret || { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5 });
+      : (ret || townReturnPoint());
     p.dim = 'overworld';
     p.dgn = '';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
@@ -4076,7 +4100,7 @@ class GameRoom extends Room {
     };
     const limbo = { id, index: 0, items, death, startedAt: Date.now() };
     this.deathLimbo.set(client.sessionId, limbo);
-    p.x = W.TOWN.TC + .5; p.y = W.TOWN.G + 72; p.z = W.TOWN.TC + .5; p.dgn = '';
+    p.x = TOWN_RETURN_SPAWN.x; p.y = W.TOWN.G + 72; p.z = TOWN_RETURN_SPAWN.z; p.dgn = '';
     this.pvel.set(client.sessionId, { x: 0, z: 0 });
     this.dirtyPlayers.add(rec.token);
     this.sendProfile(client, rec.prof);
@@ -4153,8 +4177,9 @@ class GameRoom extends Room {
     const p = this.state.players.get(client.sessionId);
     if (limbo.index >= limbo.items.length) {
       this.deathLimbo.delete(client.sessionId);
-      if (p) { p.x = W.TOWN.TC + .5; p.y = W.TOWN.G + 2; p.z = W.TOWN.TC + 14.5; p.dgn = ''; }
-      client.send('deathLimboComplete', { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 });
+      const town = townReturnPoint(W.TOWN.G + 2);
+      if (p) { p.x = town.x; p.y = town.y; p.z = town.z; p.dgn = ''; }
+      client.send('deathLimboComplete', town);
     } else client.send('deathLimboQuestion', this.publicDeathLimbo(limbo, p));
   }
   collectDeathDrops(client) {
@@ -5023,7 +5048,7 @@ class GameRoom extends Room {
     const dgn = p.dgn;
     const inst = this.instances[dgn];
     const rec = this.profileFor(client);
-    const town = { x: W.TOWN.TC + .5, y: W.TOWN.G + 2, z: W.TOWN.TC + 14.5 };
+    const town = townReturnPoint(W.TOWN.G + 2);
     let result = null;
     p.spirit = false;
     this.ejectFromDungeon(client.sessionId);
