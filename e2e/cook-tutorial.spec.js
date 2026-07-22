@@ -36,6 +36,16 @@ async function registerCook(page) {
   await page.waitForTimeout(1500);
 }
 
+async function reloadAndResume(page) {
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase || ''), { timeout: 60_000 }).toBe('ready');
+  await page.locator('#playbtn').click();
+  if (await page.locator('#huntersetup:not(.hidden)').count()) {
+    throw new Error('reload unexpectedly asked for hunter name');
+  }
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout: 25_000 }).toBe(true);
+}
+
 test('cook tutorial teaches prep, timed cooking, claim, and sale with real food items', async ({ page }) => {
   test.setTimeout(90_000);
   await registerCook(page);
@@ -89,4 +99,35 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
   expect(after.have).toBeGreaterThan(before.have);
 
   await claimReadyContractAndExpectBoard(page, 'cook');
+});
+
+test('cook tutorial resumes the private kitchen and hearth timer after refresh', async ({ page }) => {
+  test.setTimeout(90_000);
+  await registerCook(page);
+
+  const prep = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
+  expect(prep).toMatchObject({ ok: true, debug: { step: 1 } });
+  const start = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
+  expect(start).toMatchObject({ ok: true, debug: { step: 2, timer: { exists: true, visible: true, duration: 5000 } } });
+
+  await reloadAndResume(page);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
+  await expect(page.locator('body')).toHaveClass(/job-tutorial-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect(page.locator('#activitytracker')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialVisualDebug()))
+    .toMatchObject({
+      active: true,
+      job: 'cook',
+      step: 2,
+      timer: {
+        exists: true,
+        visible: true,
+        duration: 5000,
+      },
+    });
+
+  const claim = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
+  expect(claim).toMatchObject({ ok: true, debug: { step: 3 } });
+  expect(claim.debug.inventory.sandwich).toBeGreaterThanOrEqual(1);
 });

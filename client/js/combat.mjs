@@ -1341,6 +1341,30 @@ function farmerTutorialVisualDebug(){
     inventory:{hoe:countItem(I.WOOD_HOE),seeds:countItem(I.WHEAT_SEEDS),wheat:countItem(I.WHEAT)}
   };
 }
+function restoreFarmerTutorialFieldState(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.farmer;
+  if(!room||!jobTutorialActive||jobTutorialJob!=='farmer'||dim!=='job')return;
+  const step=jobTutorialFarmerStep|0;
+  const till={x:room.x-11,y:room.G,z:room.z-13};
+  const plant={x:room.x,y:room.G,z:room.z-7};
+  const harvest={x:room.x+10,y:room.G+1,z:room.z-7};
+  if(step>=1){
+    setB(till.x,till.y,till.z,B.FARMLAND);
+    setB(till.x,till.y+1,till.z,B.AIR);
+    rebuildAround(till.x,till.z);
+  }
+  if(step>=2){
+    setB(plant.x,plant.y,plant.z,B.FARMLAND);
+    setB(plant.x,plant.y+1,plant.z,B.WHEAT_1);
+    syncCropMesh(plant.x,plant.y+1,plant.z,B.WHEAT_1,{growMs:5000,label:'WHEAT SPROUT',autoGrowTo:B.WHEAT_3,tutorial:true});
+    rebuildAround(plant.x,plant.z);
+  }
+  if(step>=3){
+    setB(harvest.x,harvest.y,harvest.z,B.AIR);
+    removeCropMesh(harvest.x,harvest.y,harvest.z);
+    rebuildAround(harvest.x,harvest.z);
+  }
+}
 function performFarmerTutorialStepForTest(){
   if(!jobTutorialActive||jobTutorialJob!=='farmer'||dim!=='job')return {ok:false,reason:'not in farmer tutorial',debug:farmerTutorialVisualDebug()};
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.farmer;
@@ -2766,6 +2790,7 @@ function resumeJobTutorial(jobId,state={}){
     player.vel.set(0,0,0);
   }
   grantJobTutorialKit(jobId);
+  if(jobId==='farmer')restoreFarmerTutorialFieldState();
   updateMinerTutorialTrader();
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();

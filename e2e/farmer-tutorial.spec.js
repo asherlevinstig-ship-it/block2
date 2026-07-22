@@ -35,9 +35,27 @@ async function registerFarmer(page) {
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
 }
 
+async function reloadAndResume(page) {
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase || ''), { timeout: 60_000 }).toBe('ready');
+  await page.locator('#playbtn').click();
+  if (await page.locator('#huntersetup:not(.hidden)').count()) {
+    throw new Error('reload unexpectedly asked for hunter name');
+  }
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout: 25_000 }).toBe(true);
+}
+
 test('farmer tutorial teaches till, plant, and harvest with real farming actions', async ({ page }) => {
   test.setTimeout(90_000);
   await registerFarmer(page);
+
+  await expect(page.locator('body')).toHaveClass(/off-main-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect(page.locator('#activitytracker')).toBeHidden();
+  await expect(page.locator('#eventhud')).toBeHidden();
+  const chatLineCount = await page.locator('#chatlog .chatline').count();
+  await page.evaluate(() => window.eventLog?.('This farmer room event should be suppressed.', '[Test]'));
+  await expect.poll(() => page.locator('#chatlog .chatline').count()).toBe(chatLineCount);
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialVisualDebug()))
     .toMatchObject({
@@ -82,6 +100,32 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
   expect(sale).toMatchObject({ ok: true, done: true, debug: { step: 4, traded: true } });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBeGreaterThan(beforeSale);
   await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+});
+
+test('farmer tutorial resumes in the private room after refresh', async ({ page }) => {
+  test.setTimeout(90_000);
+  await registerFarmer(page);
+
+  const till = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
+  expect(till).toMatchObject({ ok: true, debug: { step: 1 } });
+  const plant = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
+  expect(plant).toMatchObject({ ok: true, debug: { step: 2, plant: { above: 23 } } });
+
+  await reloadAndResume(page);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
+  await expect(page.locator('body')).toHaveClass(/job-tutorial-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialVisualDebug()))
+    .toMatchObject({
+      active: true,
+      job: 'farmer',
+      step: 2,
+      plant: { above: 23 },
+      harvest: { id: 25 },
+    });
+
+  const harvest = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
+  expect(harvest).toMatchObject({ ok: true, debug: { step: 3 } });
 });
 
 test('farmer tutorial returns to town with a persistent starter contract that can progress', async ({ page }) => {
