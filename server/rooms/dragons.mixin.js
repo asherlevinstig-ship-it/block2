@@ -31,6 +31,14 @@ class DragonsMixin {
     this.dragonLoanSeq = 0;
   }
 
+  awardPetTamerCare(client, count = 1, xp = 4, target = 0) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof || rec.prof.job !== 'pet_tamer') return false;
+    if (typeof this.grantJobXp === 'function') this.grantJobXp(client, 'pet_tamer', Math.max(1, xp | 0));
+    if (typeof this.progressJobContract === 'function') this.progressJobContract(client, 'pet_care', Math.max(1, count | 0), target | 0);
+    return true;
+  }
+
   normalizeDragonLoans(prof) {
     if (!prof || typeof prof !== 'object') return [];
     const out = [];
@@ -274,6 +282,7 @@ class DragonsMixin {
       this.recordEconomyGold(client, -loan.feeGold, 'dragon_loan', 'dragon_training_fee', { loanId: id, owner: owner.sessionId });
       this.recordEconomyGold(owner, loan.feeGold, 'dragon_loan', 'dragon_training_fee_received', { loanId: id, tamer: client.sessionId });
     }
+    this.awardPetTamerCare(client, 1, 10, 0);
     owner.send('dragonLoanResult', { ok: true, action: 'accepted', loan: this.publicDragonLoan(loan, ownerRec.token) });
     client.send('dragonLoanResult', { ok: true, action: 'accepted', loan: this.publicDragonLoan(loan, tamerRec.token) });
   }
@@ -710,6 +719,7 @@ class DragonsMixin {
     const bond = this.awardDragonBondXp(rec.prof, n.type, 12, 'care');
     this.dirtyPlayers.add(rec.token);
     this.syncPlayerProfile(client, rec.prof);
+    this.awardPetTamerCare(client, 1, 6, I.DRAGON_TREAT);
     n.loveUntil = now + DRAGON_LOVE_MS;
     this.dirtyNests = true;
     const [coord, slotStr] = key.split('#');
@@ -731,6 +741,7 @@ class DragonsMixin {
     const bond = this.awardDragonBondXp(access.prof, type, this.isDragonAdult(access.prof, type) ? 10 : 16, 'care');
     const now = Date.now();
     this.dirtyAndSyncDragonAccess(client, access);
+    this.awardPetTamerCare(client, 1, 6, I.DRAGON_TREAT);
     client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : now, bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null, careOnly: true });
   }
   handleSetDragonRole(client, m) {
@@ -837,6 +848,7 @@ class DragonsMixin {
         const mastery = this.awardDragonRoleMastery ? this.awardDragonRoleMastery(access.prof, tr.type, role, tr.award || 1) : null;
         const bond = this.awardDragonBondXp(access.prof, tr.type, 2, role);
         this.dirtyAndSyncDragonAccess(client, access);
+        this.awardPetTamerCare(client, 1, 12, 0);
         client.send('dragonTrainingComplete', { type: tr.type, role, title: tr.title, progress: tr.need, need: tr.need, unit: tr.unit, roleMastery: mastery, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
         this.dragonTraining.delete(sid);
       } else {
@@ -858,6 +870,7 @@ class DragonsMixin {
     const care = this.feedDragonCare(access.prof, type, 20 + (this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 4 : 0));
     const bond = this.awardDragonBondXp(access.prof, type, 18, 'care');
     this.dirtyAndSyncDragonAccess(client, access);
+    this.awardPetTamerCare(client, 1, 6, I.DRAGON_TREAT);
     client.send('feedDragonResult', { slot, type, happiness: care ? care.happiness : 0, fedAt: care ? care.fedAt : Date.now(), bondXp: bond ? bond.xp : 0, bondLevel: bond ? bond.level : 1, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
     this.sendSpace(p.dgn || '', 'fx', { t: 'dragonCare', kind: type, x: p.x, y: p.y, z: p.z, happiness: care ? care.happiness : 0, dgn: p.dgn || '' });
   }

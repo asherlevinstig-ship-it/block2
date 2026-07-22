@@ -5532,6 +5532,7 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
   ownerProf.dragonNames = { ember: 'Cinder' };
   ownerProf.dragonRoleMastery = { ember: { follow: 0, guard: 0, stay: 0, rest: 0 } };
   tamerProf.job = 'pet_tamer';
+  tamerProf.jobContract = { job: 'pet_tamer', type: 'pet_care', need: 2, have: 0, rewardGold: 30, rewardJobXp: 30, rewardXp: 0, title: 'Stable Kindness', desc: 'Care for companions.' };
   room.clients = [owner, tamer];
 
   room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'ember', gold: 35 });
@@ -5541,6 +5542,7 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
 
   assert.equal(ownerProf.gold, 45);
   assert.equal(tamerProf.gold, 45);
+  assert.equal(tamerProf.jobContract.have, 1, 'accepting a paid dragon loan counts as Pet Tamer care work');
   assert.equal(room.state.players.get(owner.sessionId).mount, '', 'owner is dismounted when the dragon is loaned');
   assert.equal(room.hasMountUnlock(owner, 'dragon:ember'), false, 'owner cannot use the dragon during the active loan');
   assert.equal(room.hasMountUnlock(tamer, 'dragon:ember'), true, 'tamer can use the borrowed dragon');
@@ -5556,6 +5558,8 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
   tr.progress = tr.need;
   room.tickDragonTraining(Date.now(), 1);
   assert.equal(ownerProf.dragonRoleMastery.ember.follow, 6, 'tamer training improves the owner dragon');
+  assert.equal(tamerProf.jobContract.have, 2, 'completed dragon training advances Pet Tamer care contracts');
+  assert.equal(tamerProf.jobContract.lifecycleState, 'claimable');
 });
 
 test('dragon training loan rejects non-tamers and duplicate dragon types', () => {
