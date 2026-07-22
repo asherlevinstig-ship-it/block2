@@ -799,6 +799,7 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
 let jobTutorialActive=false, jobTutorialJob='';
 let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
+let jobTutorialAmbienceNextAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
 const FARMER_TUTORIAL_WHEAT_GOLD=18;
 const COOK_TUTORIAL_MEAL_GOLD=24;
@@ -2081,6 +2082,45 @@ function jobTutorialBeaconTarget(jobId, room){
   }
   return room?{x:room.x,y:room.G+1.035,z:room.z+23}:null;
 }
+function jobTutorialSparkle(x,y,z,col,spread=.7,up=.55,life=.55){
+  spawnParticle({x:x+(Math.random()-.5)*spread,y:y+Math.random()*.35,z:z+(Math.random()-.5)*spread,
+    vx:(Math.random()-.5)*.18,vy:up+Math.random()*.45,vz:(Math.random()-.5)*.18,
+    life:life+Math.random()*.25,grav:0,r:col[0],g:col[1],b:col[2],priority:1});
+}
+function tickJobTutorialAmbience(now,room){
+  if(now<jobTutorialAmbienceNextAt||!room)return;
+  jobTutorialAmbienceNextAt=now+190+Math.random()*180;
+  const cx=room.x,cz=room.z,G=room.G,job=jobTutorialJob;
+  if(job==='miner'){
+    const seam=[[-8,-13],[0,-13],[8,-13],[-14,3],[14,11]][Math.floor(Math.random()*5)];
+    jobTutorialSparkle(cx+seam[0]+.5,G+2.2+Math.random()*1.2,cz+seam[1]+.5,[.38,.95,1],.8,.24,.7);
+    if(Math.random()<.32)burst(cx+(Math.random()-.5)*14,G+5.9,cz-4+Math.random()*20,[.35,.35,.36],3,.45,.12,.55,1);
+    if(Math.random()<.18)ringPulse(cx+.5,G+.08,cz+7.5,1.1,0x7dd3fc,.28);
+  }else if(job==='farmer'){
+    const patch=jobTutorialFarmerStep<2?[-9,-8]:(jobTutorialFarmerStep<3?[10,-8]:[1,8]);
+    jobTutorialSparkle(cx+patch[0]+(Math.random()-.5)*5,G+1.05,cz+patch[1]+(Math.random()-.5)*4,[.52,.94,.4],1.2,.35,.75);
+    if(Math.random()<.28)flatDiscVfx(cx-8+Math.random()*3-1.5,G+.07,cz+7+Math.random()*3-1.5,0x86efac,.35,.32,Math.PI/2);
+  }else if(job==='cook'){
+    const heat=jobTutorialCookStep>=1?[0,4]:[-8,-2];
+    jobTutorialSparkle(cx+heat[0]+.5,G+1.55,cz+heat[1]+.5,[1,.68,.28],.55,.72,.55);
+    if(Math.random()<.45)jobTutorialSparkle(cx+heat[0]+.5,G+2.05,cz+heat[1]+.5,[.92,.9,.78],.8,.85,.85);
+    if(jobTutorialCookStep===2&&Math.random()<.22)ringPulse(cx+.5,G+1.08,cz+4.5,.7,0xffd45a,.25);
+  }else if(job==='blacksmith'){
+    const forge=blacksmithTutorialForgePos()||{x:cx+.5,y:G+1,z:cz+1.5};
+    jobTutorialSparkle(forge.x,G+1.35,forge.z,[1,.34,.08],.75,1.0,.45);
+    if(Math.random()<.35)burst(forge.x,G+1.2,forge.z,[1,.48,.12],4,1.15,1.5,.38,1);
+    if(Math.random()<.18)ringPulse(forge.x,G+.08,forge.z,1.05,0xff8a3d,.25);
+  }else if(job==='monk'){
+    const a=Math.random()*Math.PI*2,r=1.8+Math.random()*7.5,x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
+    jobTutorialSparkle(x,G+1.1+Math.random()*1.1,z,[.55,.86,1],.45,.28,1.15);
+    if(Math.random()<.3)ringPulse(cx+.5,G+.08,cz+.5,1.7+Math.random()*4.4,0x7dd3fc,.45);
+  }else if(job==='pet_tamer'){
+    const dragon=petTamerPracticeDragonPos();
+    if(dragon)jobTutorialSparkle(dragon.x,dragon.y+1.8,dragon.z,[.58,1,.42],1.6,.35,.8);
+    if(Math.random()<.3)jobTutorialSparkle(cx+8.5,G+6.2,cz-5.5,[.52,.94,1],2.4,.25,.95);
+    if(Math.random()<.2)ringPulse(cx+8.5,G+6.2,cz-5.5,2.2,0x9ad26b,.35);
+  }
+}
 function nearPetTamerPracticeInsulator(range=5.0){
   const p=petTamerPracticeInsulatorPos();
   if(!p||!jobTutorialActive||jobTutorialJob!=='pet_tamer'||dim!=='job'||!player)return null;
@@ -2877,6 +2917,7 @@ function startJobTutorial(jobId){
   clearPetTamerTutorialMount();
   clearPetTamerTutorialEgg();
   jobTutorialReturnWarnAt=0;
+  jobTutorialAmbienceNextAt=0;
   player.pos.set(room.x+.5,jobTutorialSafeSpawnY(jobId,room.x+.5,room.z+14.5,room.G+1.035),room.z+14.5);
   player.vel.set(0,0,0);
   player.yaw=jobTutorialInitialYaw(jobId,room,player.pos.x,player.pos.z);
@@ -2935,6 +2976,7 @@ function resumeJobTutorial(jobId,state={}){
   clearPetTamerTutorialEgg();
   if(jobId!=='cook')clearCookTutorialTimer();
   jobTutorialReturnWarnAt=0;
+  jobTutorialAmbienceNextAt=0;
   if(player){
     player.pos.y=jobTutorialSafeSpawnY(jobId,player.pos.x||room.x+.5,player.pos.z||room.z+14.5,room.G+1.035);
     player.vel.set(0,0,0);
@@ -2987,6 +3029,7 @@ function tickJobTutorial(now){
   }
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobTutorialJob]||null;
   if(!room) return;
+  tickJobTutorialAmbience(now,room);
   updateMinerTutorialTrader(now);
   updateFarmerTutorialTrader(now);
   updateCookTutorialTrader(now);
