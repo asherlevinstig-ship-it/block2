@@ -3717,9 +3717,12 @@ const VILL_SKIN=[['#caa074','#a6794a'],['#b8895c','#946338'],['#e0b88c','#b88a5e
 function shadeHex(hex, amt){
   const n=parseInt(String(hex||'#000000').replace('#',''),16);
   if(!Number.isFinite(n)) return hex;
-  const r=Math.max(0,Math.min(255,((n>>16)&255)+amt));
-  const g=Math.max(0,Math.min(255,((n>>8)&255)+amt));
-  const b=Math.max(0,Math.min(255,(n&255)+amt));
+  const delta=Number(amt)||0;
+  const useMultiplier=Math.abs(delta)>0&&Math.abs(delta)<=4&&!Number.isInteger(delta);
+  const channel=v=>Math.round(Math.max(0,Math.min(255,useMultiplier?v*delta:v+delta)));
+  const r=channel((n>>16)&255);
+  const g=channel((n>>8)&255);
+  const b=channel(n&255);
   return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 function matCol(col, emissive, intensity){
