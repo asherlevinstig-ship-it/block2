@@ -1499,6 +1499,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function startJobTutorial\(jobId\)/);
   assert.match(combat,/function tickJobTutorial\(now\)/);
   assert.match(combat,/function tryMinerTutorialTrade\(\)/);
+  assert.match(combat,/function performMinerTutorialStepForTest\(\)/);
   assert.match(combat,/function openPetTamerDragonTutorialUI\(\)/);
   assert.match(combat,/function nearPetTamerPracticeDragon\(range=4\.5\)/);
   assert.match(combat,/function jobTutorialWalkY\(x,z,fallbackY\)/);
@@ -1540,7 +1541,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function tryMonkTutorialAction\(\)/);
   assert.match(combat,/function updateMonkTutorialFocus\(now=performance\.now\(\)\)/);
   assert.match(combat,/function performMonkTutorialStepForTest\(\)/);
+  assert.match(combat,/function startMonkTutorialFocusForTest\(\)/);
   assert.match(combat,/FINISH FOCUS/);
+  assert.match(frame,/minerTutorialAction:\(\)=>combatApi\.performMinerTutorialStepForTest/);
+  assert.match(frame,/monkTutorialAction:\(\)=>combatApi\.performMonkTutorialStepForTest/);
+  assert.match(frame,/monkTutorialStartFocus:\(\)=>combatApi\.startMonkTutorialFocusForTest/);
   assert.match(networking,/monkStep:Math\.max\(0,Math\.min\(2,Number\(combatState\.jobTutorialMonkStep\)\|\|0\)\)/);
   assert.match(networking,/monkStartedAt:Math\.max\(0,Number\(combatState\.jobTutorialMonkStartedAt\)\|\|0\)/);
   assert.match(combat,/const PET_TAMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);

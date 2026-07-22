@@ -1932,6 +1932,14 @@ function performMonkTutorialStepForTest(){
   updateMonkTutorialFocus();
   return {ok,done:jobTutorialMonkStep>=2,debug:monkTutorialVisualDebug()};
 }
+function startMonkTutorialFocusForTest(){
+  if(!jobTutorialActive||jobTutorialJob!=='monk'||dim!=='job')return {ok:false,reason:'not in monk tutorial',debug:monkTutorialVisualDebug()};
+  const target=monkTutorialFocusPos();
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
+  if(target&&room)player.pos.set(target.x,jobTutorialWalkY(target.x,target.z,room.G+1.035),target.z+1.2);
+  const ok=tryMonkTutorialAction();
+  return {ok,done:jobTutorialMonkStep>=2,debug:monkTutorialVisualDebug()};
+}
 function petTamerPracticeDragonPos(){
   const g=globalThis.__petTamerPracticeDragon;
   if(g&&g.visible&&g.position)return {x:g.position.x,y:g.position.y,z:g.position.z};
@@ -2430,6 +2438,36 @@ function tryMinerTutorialTrade(){
   sysMsg('<b>Garrik Flint:</b> Fine stone. Here is <b>'+MINER_TUTORIAL_TRADE_GOLD+' gold</b>. Miners turn deep finds into town money.');
   sendProfileSaveNow();
   return true;
+}
+function minerTutorialVisualDebug(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  const ore=room?{x:room.x,y:room.G+2,z:room.z-13,id:getB(room.x,room.G+2,room.z-13)}:null;
+  const trader=minerTutorialTraderPos();
+  return {
+    active:!!jobTutorialActive,
+    job:jobTutorialJob,
+    minedDiamond:!!jobTutorialMinedDiamond,
+    traded:!!jobTutorialTraded,
+    ore,
+    trader,
+    inventory:{diamond:countItem(I.DIAMOND)},
+  };
+}
+function performMinerTutorialStepForTest(){
+  if(!jobTutorialActive||jobTutorialJob!=='miner'||dim!=='job')return {ok:false,reason:'not in miner tutorial',debug:minerTutorialVisualDebug()};
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  if(!room)return {ok:false,reason:'missing miner room',debug:minerTutorialVisualDebug()};
+  if(!jobTutorialMinedDiamond){
+    const x=room.x,y=room.G+2,z=room.z-13;
+    player.pos.set(x+.5,jobTutorialWalkY(x+.5,z+2.5,room.G+1.035),z+2.5);
+    mining={x,y,z,id:B.DIAMOND_ORE,progress:1,total:1,willDrop:true,effective:true};
+    finishMine();
+    return {ok:!!jobTutorialMinedDiamond,done:false,debug:minerTutorialVisualDebug()};
+  }
+  const trader=minerTutorialTraderPos();
+  if(trader)player.pos.set(trader.x,jobTutorialWalkY(trader.x,trader.z,room.G+1.035),trader.z+1.7);
+  const ok=tryMinerTutorialTrade();
+  return {ok,done:!!jobTutorialTraded,debug:minerTutorialVisualDebug()};
 }
 function tryFarmerTutorialTrade(){
   if(!nearbyFarmerTutorialTrader())return false;
@@ -4756,6 +4794,8 @@ gameContext.registerModule('combat', Object.freeze({
   shouldOpenLevel2JobChoice,
   startJobTutorial,
   resumeJobTutorial,
+  minerTutorialVisualDebug,
+  performMinerTutorialStepForTest,
   farmerTutorialVisualDebug,
   performFarmerTutorialStepForTest,
   cookTutorialVisualDebug,
@@ -4764,6 +4804,7 @@ gameContext.registerModule('combat', Object.freeze({
   performBlacksmithTutorialStepForTest,
   monkTutorialVisualDebug,
   performMonkTutorialStepForTest,
+  startMonkTutorialFocusForTest,
   performPetTamerDragonTutorialAction,
   petTamerVisualDebug:()=>{
     const p=petTamerPracticeInsulatorPos();
