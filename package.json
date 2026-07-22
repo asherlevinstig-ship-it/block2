@@ -14,6 +14,7 @@
     "test:integration": "node server/test/integration.test.js",
     "test:e2e": "playwright test",
     "test:event": "node tools/event-smoke-test.js",
+    "test:pet-tamer": "node tools/pet-tamer-flow-smoke-test.js",
     "test:load": "node tools/load-test.js",
     "test:load:shards": "node tools/shard-load-test.js",
     "test:load:dungeons": "node tools/dungeon-load-test.js",
