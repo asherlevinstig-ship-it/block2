@@ -520,6 +520,12 @@
   .trade-error-panel{margin:10px 0;padding:10px 12px;border:1px solid rgba(251,113,133,.58);border-radius:7px;background:rgba(80,18,28,.56);color:#ffd4dc;font-size:11px;line-height:1.45}
   .trade-error-panel b{color:#fff}
   .trade-error-panel small{display:block;margin-top:4px;color:#ffc0ca}
+  .dragon-loan-status{border-color:rgba(79,216,255,.42);background:linear-gradient(135deg,rgba(18,45,68,.72),rgba(5,12,24,.78));color:#dff6ff}
+  .dragon-loan-status>b{display:block;margin-bottom:7px;color:#ffd24a;letter-spacing:1.6px;text-transform:uppercase}
+  .dragon-loan-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid rgba(255,255,255,.1)}
+  .dragon-loan-row:first-of-type{border-top:0}
+  .dragon-loan-row small{color:#a8d8ff}
+  .dragon-loan-row .qbtn{margin:0;padding:6px 10px;font-size:9px}
   .trade-selected-summary b,.trade-gold-row b{display:block;color:#ffd24a;font-size:12px;letter-spacing:1.1px}
   .trade-selected-summary small,.trade-gold-row small{display:block;margin-top:3px;color:#b9c8d6;font-size:10px;line-height:1.35}
   .trade-control-row,.trade-gold-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px}

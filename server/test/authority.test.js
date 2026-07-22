@@ -390,6 +390,11 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function qBtn[\s\S]*b\.type='button'[\s\S]*e\.preventDefault\(\); e\.stopPropagation\(\);/);
   assert.match(menus, /function openPlayerSocialUI/);
   assert.match(menus, /Town of Beginnings[\s\S]*Taming Land/);
+  assert.match(menus, /function nearbyPlayerIsPetTamer/);
+  assert.match(menus, /nearbyPlayerIsPetTamer\(target\)&&dragonLoanOwnedTypes\(\)\.length/);
+  assert.match(menus, /function appendDragonLoanStatusPanel/);
+  assert.match(menus, /RETURN NOW/);
+  assert.match(menus, /dragonLoanTimeLeftText/);
   assert.match(menus, /TRAIN MY PET/);
   assert.match(menus, /function openDragonLoanUI/);
   assert.match(menus, /NET\.room\.send\('dragonLoanOffer'/);
@@ -5558,7 +5563,16 @@ test('dragon training loan transfers gold and grants the pet tamer temporary dra
   room.handleDragonLoanOffer(owner, { targetSid: tamer.sessionId, type: 'ember', gold: 35 });
   const offer = tamer.sent.find(e => e.type === 'dragonLoanOffer');
   assert.ok(offer, 'pet tamer receives dragon loan offer');
+  assert.equal(offer.msg.feeGold, 35);
+  assert.equal(offer.msg.ownerName, 'Owner');
+  assert.equal(offer.msg.tamerName, 'Tamer');
   room.handleDragonLoanAccept(tamer, { loanId: offer.msg.id });
+  const ownerResult = owner.sent.find(e => e.type === 'dragonLoanResult' && e.msg.ok);
+  const tamerResult = tamer.sent.find(e => e.type === 'dragonLoanResult' && e.msg.ok);
+  assert.equal(ownerResult.msg.loan.role, 'owner');
+  assert.equal(tamerResult.msg.loan.role, 'tamer');
+  assert.equal(ownerResult.msg.loan.tamerName, 'Tamer');
+  assert.equal(tamerResult.msg.loan.ownerName, 'Owner');
 
   assert.equal(ownerProf.gold, 45);
   assert.equal(tamerProf.gold, 45);
