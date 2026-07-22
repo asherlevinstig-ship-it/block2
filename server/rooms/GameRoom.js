@@ -432,6 +432,7 @@ class GameRoom extends Room {
     this.onMessage('trainingReset', (client) => this.handleTutorialEnter(client, { kind: 'onboarding' }));
     this.onMessage('tutorialEnter', (client, m) => this.handleTutorialEnter(client, m));
     this.onMessage('tutorialExit', (client) => this.handleTutorialExit(client));
+    this.onMessage('jobTutorialProgress', (client, m) => this.handleJobTutorialProgress(client, m));
     this.onMessage('landClaimBuy', (client, m) => this.handleLandClaimBuy(client, m));
     this.onMessage('landClaimRename', (client, m) => this.handleLandClaimRename(client, m));
     this.onMessage('landClaimTrust', (client, m) => this.handleLandClaimTrust(client, m));
@@ -1674,6 +1675,27 @@ class GameRoom extends Room {
     p.mount = '';
     p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
     client.send('tutorialDimension', { active: true, kind, spaceId, ...spawn });
+    return true;
+  }
+
+  handleJobTutorialProgress(client, m) {
+    const rec = client && this.profileFor(client);
+    const p = client && this.state.players.get(client.sessionId);
+    if (!rec || !rec.prof || !p || p.dim !== 'tutorial') return false;
+    const current = sanitizeActiveRoom(rec.prof.activeRoom);
+    const job = m && typeof m.job === 'string' ? m.job : '';
+    if (!current || current.dim !== 'job' || !job || current.job !== job) return false;
+    const next = sanitizeActiveRoom({
+      ...current,
+      ...m,
+      dim: 'job',
+      job,
+    });
+    if (!next || next.dim !== 'job' || next.job !== current.job) return false;
+    rec.prof.activeRoom = next;
+    this.persistActiveRoomPose(client, rec.prof, p);
+    this.dirtyPlayers.add(rec.token);
+    this.savePlayerProfileNow(rec.token, rec.prof);
     return true;
   }
 

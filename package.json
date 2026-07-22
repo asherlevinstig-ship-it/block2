@@ -15,7 +15,7 @@
     "test:e2e": "playwright test",
     "test:event": "node tools/event-smoke-test.js",
     "test:pet-tamer": "node tools/pet-tamer-flow-smoke-test.js",
-    "test:tutorial-jobs": "playwright test e2e/farmer-tutorial.spec.js e2e/cook-tutorial.spec.js",
+    "test:tutorial-jobs": "playwright test e2e/farmer-tutorial.spec.js e2e/cook-tutorial.spec.js e2e/miner-monk-tutorial.spec.js e2e/blacksmith-tutorial.spec.js",
     "test:load": "node tools/load-test.js",
     "test:load:shards": "node tools/shard-load-test.js",
     "test:load:dungeons": "node tools/dungeon-load-test.js",

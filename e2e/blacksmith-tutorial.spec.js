@@ -36,9 +36,28 @@ async function registerBlacksmith(page) {
   await page.waitForTimeout(1500);
 }
 
+async function reloadAndResume(page) {
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase || ''), { timeout: 60_000 }).toBe('ready');
+  await page.locator('#playbtn').click();
+  if (await page.locator('#huntersetup:not(.hidden)').count()) {
+    throw new Error('reload unexpectedly asked for hunter name');
+  }
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected), { timeout: 25_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
+}
+
 test('blacksmith tutorial teaches armor crafting, mana quality, and selling', async ({ page }) => {
   test.setTimeout(90_000);
   await registerBlacksmith(page);
+
+  await expect(page.locator('body')).toHaveClass(/off-main-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect(page.locator('#activitytracker')).toBeHidden();
+  await expect(page.locator('#eventhud')).toBeHidden();
+  const chatLineCount = await page.locator('#chatlog .chatline').count();
+  await page.evaluate(() => window.eventLog?.('This blacksmith room event should be suppressed.', '[Test]'));
+  await expect.poll(() => page.locator('#chatlog .chatline').count()).toBe(chatLineCount);
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.blacksmithTutorialVisualDebug()))
     .toMatchObject({
@@ -53,6 +72,19 @@ test('blacksmith tutorial teaches armor crafting, mana quality, and selling', as
   expect(craft).toMatchObject({ ok: true, debug: { step: 1 } });
   expect(craft.debug.armor).toMatchObject({ id: 212 });
   expect(craft.debug.armor.rarity).toBeTruthy();
+  await expect(page.locator('#tutorialhud')).toContainText('CHECK QUALITY');
+
+  await reloadAndResume(page);
+  await expect(page.locator('body')).toHaveClass(/job-tutorial-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.blacksmithTutorialVisualDebug()))
+    .toMatchObject({
+      active: true,
+      job: 'blacksmith',
+      step: 1,
+      armor: { id: 212 },
+      inventory: { chainArmor: 1 },
+    });
   await expect(page.locator('#tutorialhud')).toContainText('CHECK QUALITY');
 
   const inspect = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.blacksmithTutorialAction());

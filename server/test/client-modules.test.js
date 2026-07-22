@@ -1654,12 +1654,12 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(networking,/petDragonStep:Math\.max\(0,Math\.min\(5,Number\(combatState\.jobTutorialPetDragonStep\)\|\|0\)\)/);
   assert.match(networking,/function readJobTutorialResume\(\)/);
   assert.match(networking,/const serverHasActiveRoom=!!\(m&&Object\.prototype\.hasOwnProperty\.call\(m,'activeRoom'\)\)/);
-  assert.match(networking,/const localActiveRoom=!serverHasActiveRoom\?readJobTutorialResume\(\):null/);
-  assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job\)/);
+  assert.match(networking,/const localActiveRoom=readJobTutorialResume\(\)/);
+  assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job,\{serverSynced:!!serverActiveRoom\}\)/);
   assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);
   assert.match(networking,/serverHasActiveRoom&&dim==='job'&&dimensionsApi\.exitJobTutorialRoom/);
   assert.match(networking,/serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi\.exitTamingLand/);
-  assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job)')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');
+  assert.ok(networking.indexOf('dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job,{serverSynced:!!serverActiveRoom})')<networking.indexOf('player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2])'), 'job room is rebuilt before restored position is applied');
   assert.match(frame,/worldState\.JOB_TUTORIAL_MEADOWS&&worldState\.JOB_TUTORIAL_MEADOWS\.pet_tamer/);
   assert.match(frame,/tickPetTamerTutorialGroundDragon\(petTamerActive, petRoom, now, dt\)/);
   const social = fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');

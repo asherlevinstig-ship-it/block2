@@ -338,6 +338,26 @@ function scanRecipeInventory(){
 function addItem(id, count){
   return inventoryModel.add(id,count);
 }
+function sendJobTutorialProgressNow(){
+  if(!NET.on||!NET.room||!jobTutorialActive||!jobTutorialJob||dim!=='job')return;
+  try{
+    NET.room.send('jobTutorialProgress',{
+      job:jobTutorialJob,
+      minedDiamond:jobTutorialMinedDiamond===true,
+      traded:jobTutorialTraded===true,
+      farmerStep:Math.max(0,Math.min(4,Number(jobTutorialFarmerStep)||0)),
+      cookStep:Math.max(0,Math.min(4,Number(jobTutorialCookStep)||0)),
+      cookStartedAt:Math.max(0,Number(jobTutorialCookStartedAt)||0),
+      cookReadyAt:Math.max(0,Number(jobTutorialCookReadyAt)||0),
+      blacksmithStep:Math.max(0,Math.min(3,Number(jobTutorialBlacksmithStep)||0)),
+      blacksmithCraftedArmor:jobTutorialBlacksmithCraftedArmor&&typeof jobTutorialBlacksmithCraftedArmor==='object'?jobTutorialBlacksmithCraftedArmor:null,
+      monkStep:Math.max(0,Math.min(2,Number(jobTutorialMonkStep)||0)),
+      monkStartedAt:Math.max(0,Number(jobTutorialMonkStartedAt)||0),
+      petDragonSeen:jobTutorialPetDragonSeen===true,
+      petDragonStep:Math.max(0,Math.min(5,Number(jobTutorialPetDragonStep)||0)),
+    });
+  }catch(e){}
+}
 function addCraftedItem(id, count){
   if(ITEMS[id] && (ITEMS[id].tool||ITEMS[id].armor)){
     noteRecipeSeen(id);
@@ -466,6 +486,7 @@ function finishMine(){
     eventLog('Miner tutorial - diamond mined.');
     updateJobTutorialHud();
     sendProfileSaveNow();
+    sendJobTutorialProgressNow();
   }
   questMine(m.id);
   SFX.breakBlk(info?info.cls:null);
@@ -1318,6 +1339,7 @@ function noteFarmerTutorialAction(action){
   }
   updateJobTutorialHud();
   sendProfileSaveNow();
+  sendJobTutorialProgressNow();
   return true;
 }
 function farmerTutorialVisualDebug(){
@@ -1563,6 +1585,7 @@ function advanceCookTutorial(action){
   }
   updateJobTutorialHud();
   sendProfileSaveNow();
+  sendJobTutorialProgressNow();
 }
 function tryCookTutorialAction(){
   if(!jobTutorialActive||jobTutorialJob!=='cook'||dim!=='job')return false;
@@ -1755,6 +1778,26 @@ function addBlacksmithTutorialArmor(){
   if(uiOpen)renderUI();
   return stack;
 }
+function restoreBlacksmithTutorialState(){
+  if(!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job')return;
+  if((jobTutorialBlacksmithStep|0)>=1&&(jobTutorialBlacksmithStep|0)<3&&!blacksmithTutorialArmorStack()){
+    const saved=jobTutorialBlacksmithCraftedArmor&&typeof jobTutorialBlacksmithCraftedArmor==='object'?jobTutorialBlacksmithCraftedArmor:null;
+    let slot=saved&&Number.isFinite(+saved.slot)?Math.max(0,Math.min(inv.length-1,+saved.slot|0)):-1;
+    if(slot<0||inv[slot])slot=inv.findIndex(s=>!s);
+    if(slot<0){sysMsg('Make one inventory slot free to restore the tutorial armour.');return;}
+    const stack=newStack(I.CHAIN_ARMOR,1);
+    stack.source='job_tutorial';
+    stack.tutorialOnly=true;
+    stack.armorType=stack.armorType||'vanguard';
+    stack.rarity=(saved&&saved.rarity)||'common';
+    stack.dur=armorMaxDur(stack)||((ITEMS[I.CHAIN_ARMOR]&&ITEMS[I.CHAIN_ARMOR].armor&&ITEMS[I.CHAIN_ARMOR].armor.dur)||420);
+    inv[slot]=stack;
+    noteRecipeSeen(I.CHAIN_ARMOR);
+    jobTutorialBlacksmithCraftedArmor={rarity:stack.rarity,maxMana:(saved&&saved.maxMana)||maxMp(),bonus:(saved&&Number.isFinite(+saved.bonus)?+saved.bonus:blacksmithArmorCraftBonusValue()),slot};
+    refreshHUD();
+    if(uiOpen)renderUI();
+  }
+}
 function advanceBlacksmithTutorial(action){
   const lesson=blacksmithTutorialAction();
   eventLog('Blacksmith tutorial - '+lesson.title+': '+lesson.done);
@@ -1771,6 +1814,7 @@ function advanceBlacksmithTutorial(action){
   }
   updateJobTutorialHud();
   sendProfileSaveNow();
+  sendJobTutorialProgressNow();
 }
 function tryBlacksmithTutorialAction(){
   if(!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job')return false;
@@ -1888,6 +1932,7 @@ function completeMonkTutorialFocus(){
   sysMsg('<b>Monk lesson:</b> Focus complete. At E-Rank Level 4, Meditation Hall focus restores mana and stamina and can grow your mana pool.');
   updateJobTutorialHud();
   sendProfileSaveNow();
+  sendJobTutorialProgressNow();
   return true;
 }
 function updateMonkTutorialFocus(now=performance.now()){
@@ -1902,6 +1947,7 @@ function updateMonkTutorialFocus(now=performance.now()){
     }
     updateJobTutorialHud();
     sendProfileSaveNow();
+    sendJobTutorialProgressNow();
     return true;
   }
   if(monkTutorialRemainingMs()<=0)return completeMonkTutorialFocus();
@@ -1921,6 +1967,7 @@ function tryMonkTutorialAction(){
     sysMsg('<b>Monk lesson:</b> Hold still in the focus circle for <b>'+Math.ceil(MONK_TUTORIAL_FOCUS_MS/1000)+' seconds</b>.');
     updateJobTutorialHud();
     sendProfileSaveNow();
+    sendJobTutorialProgressNow();
     return true;
   }
   if(jobTutorialMonkStep===1){
@@ -2247,6 +2294,7 @@ function completePetTamerDragonTutorialStep(kind='happy'){
   jobTutorialPetDragonSeen=jobTutorialPetDragonStep>=PET_TAMER_TUTORIAL_ACTIONS.length;
   updateJobTutorialHud();
   sendProfileSaveNow();
+  sendJobTutorialProgressNow();
   if(jobTutorialPetDragonSeen){
     showName('Dragon tutorial complete');
     closeQWin(true);
@@ -2461,6 +2509,7 @@ function tryMinerTutorialTrade(){
   eventLog('Miner tutorial - traded diamond for '+MINER_TUTORIAL_TRADE_GOLD+' gold.');
   sysMsg('<b>Garrik Flint:</b> Fine stone. Here is <b>'+MINER_TUTORIAL_TRADE_GOLD+' gold</b>. Miners turn deep finds into town money.');
   sendProfileSaveNow();
+  sendJobTutorialProgressNow();
   return true;
 }
 function minerTutorialVisualDebug(){
@@ -2478,6 +2527,17 @@ function minerTutorialVisualDebug(){
     target,
     inventory:{diamond:countItem(I.DIAMOND)},
   };
+}
+function restoreMinerTutorialState(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  if(!room||!jobTutorialActive||jobTutorialJob!=='miner'||dim!=='job')return;
+  if(jobTutorialMinedDiamond&&!jobTutorialTraded&&countItem(I.DIAMOND)<=0){
+    addTemporaryJobTutorialItem(I.DIAMOND,1,false);
+  }
+  if(jobTutorialMinedDiamond){
+    setB(room.x,room.G+2,room.z-13,B.AIR);
+    rebuildAround(room.x,room.z-13);
+  }
 }
 function performMinerTutorialStepForTest(){
   if(!jobTutorialActive||jobTutorialJob!=='miner'||dim!=='job')return {ok:false,reason:'not in miner tutorial',debug:minerTutorialVisualDebug()};
@@ -2790,7 +2850,9 @@ function resumeJobTutorial(jobId,state={}){
     player.vel.set(0,0,0);
   }
   grantJobTutorialKit(jobId);
+  if(jobId==='miner')restoreMinerTutorialState();
   if(jobId==='farmer')restoreFarmerTutorialFieldState();
+  if(jobId==='blacksmith')restoreBlacksmithTutorialState();
   updateMinerTutorialTrader();
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();

@@ -45,11 +45,19 @@ async function chooseJob(page, jobId) {
 
 async function reloadAndExpectJobRoom(page, jobId) {
   await page.reload();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.gamePhase || ''), { timeout: 60_000 }).toBe('ready');
   await expect(page.locator('#playbtn')).toBeEnabled();
   await page.locator('#playbtn').click();
+  if (await page.locator('#huntersetup:not(.hidden)').count()) {
+    throw new Error('reload unexpectedly asked for hunter name');
+  }
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('job');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().job)).toBe(jobId);
+  await expect(page.locator('body')).toHaveClass(/job-tutorial-room/);
+  await expect(page.locator('#currentquest')).toBeHidden();
+  await expect(page.locator('#activitytracker')).toBeHidden();
+  await expect(page.locator('#eventhud')).toBeHidden();
 }
 
 test('miner tutorial persists through reload then mines and sells a diamond', async ({ page }) => {
@@ -64,6 +72,11 @@ test('miner tutorial persists through reload then mines and sells a diamond', as
 
   const mined = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.minerTutorialAction());
   expect(mined).toMatchObject({ ok: true, done: false, debug: { minedDiamond: true, inventory: { diamond: 1 } } });
+  await expect(page.locator('#tutorialhud')).toContainText('GARRIK FLINT');
+
+  await reloadAndExpectJobRoom(page, 'miner');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.minerTutorialVisualDebug()))
+    .toMatchObject({ active: true, job: 'miner', minedDiamond: true, traded: false, inventory: { diamond: 1 } });
   await expect(page.locator('#tutorialhud')).toContainText('GARRIK FLINT');
 
   const beforeSale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold);
@@ -162,6 +175,14 @@ test('monk tutorial persists through reload and completes the timed focus loop',
   const started = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialStartFocus());
   expect(started).toMatchObject({ ok: true, done: false, debug: { step: 1, near: true } });
   await expect(page.locator('#tutorialhud')).toContainText('HOLD STILL');
+
+  await reloadAndExpectJobRoom(page, 'monk');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialVisualDebug()))
+    .toMatchObject({ active: true, job: 'monk', step: 0 });
+  await expect(page.locator('#tutorialhud')).toContainText('START FOCUS');
+
+  const restarted = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialAction());
+  expect(restarted).toMatchObject({ ok: true, done: true, debug: { step: 2 } });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialVisualDebug().step), {
     timeout: 8_000,
   }).toBe(2);

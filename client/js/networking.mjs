@@ -2340,12 +2340,26 @@ function netRestoreProfile(m){
     const serverHasActiveRoom=!!(m&&Object.prototype.hasOwnProperty.call(m,'activeRoom'));
     const serverActiveRoom=serverHasActiveRoom&&m.activeRoom&&typeof m.activeRoom==='object'?m.activeRoom:null;
     const runtimeActiveRoom=serverHasActiveRoom&&!serverActiveRoom?currentRuntimeActiveRoom():null;
-    const localActiveRoom=!serverHasActiveRoom?readJobTutorialResume():null;
+    const localActiveRoom=readJobTutorialResume();
+    const jobRoomProgress=room=>{
+      if(!room||room.dim!=='job')return 0;
+      if(room.job==='miner')return (room.traded?2:room.minedDiamond?1:0);
+      if(room.job==='farmer')return Math.max(0,Number(room.farmerStep)||0);
+      if(room.job==='cook')return Math.max(0,Number(room.cookStep)||0);
+      if(room.job==='blacksmith')return Math.max(0,Number(room.blacksmithStep)||0);
+      if(room.job==='monk')return Math.max(0,Number(room.monkStep)||0);
+      if(room.job==='pet_tamer')return Math.max(0,Number(room.petDragonStep)||0)+(room.petDragonSeen?10:0);
+      return 0;
+    };
     const activeRoom=serverActiveRoom||runtimeActiveRoom||localActiveRoom;
-    const restoreJobRoom=activeRoom&&activeRoom.dim==='job'&&JOBS[activeRoom.job]?activeRoom:null;
-    const restoreTamingLand=activeRoom&&activeRoom.dim==='taming_land'?activeRoom:null;
+    let mergedActiveRoom=activeRoom;
+    if(mergedActiveRoom&&localActiveRoom&&mergedActiveRoom.dim==='job'&&localActiveRoom.dim==='job'&&mergedActiveRoom.job===localActiveRoom.job&&jobRoomProgress(localActiveRoom)>jobRoomProgress(mergedActiveRoom)){
+      mergedActiveRoom={...mergedActiveRoom,...localActiveRoom};
+    }
+    const restoreJobRoom=mergedActiveRoom&&mergedActiveRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[mergedActiveRoom.job]?mergedActiveRoom:null;
+    const restoreTamingLand=mergedActiveRoom&&mergedActiveRoom.dim==='taming_land'?mergedActiveRoom:null;
     if(restoreJobRoom){
-      if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job);
+      if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job,{serverSynced:!!serverActiveRoom});
     }else if(restoreTamingLand){
       if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true,serverSynced:serverHasActiveRoom});
     }else if(serverHasActiveRoom&&dim==='job'&&dimensionsApi.exitJobTutorialRoom){
@@ -2353,7 +2367,7 @@ function netRestoreProfile(m){
     }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
       dimensionsApi.exitTamingLand();
     }
-    const restorePos=(restoreJobRoom||restoreTamingLand)&&Array.isArray(activeRoom.pos)?activeRoom.pos:m.pos;
+    const restorePos=(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos;
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
@@ -2808,9 +2822,9 @@ function storeJobTutorialResume(activeRoom,pos){
 function readJobTutorialResume(){
   try{
     const raw=JSON.parse(localStorage.getItem(JOB_TUTORIAL_RESUME_KEY)||'null');
-    if(!raw||raw.auth!==currentAuthSessionToken()||Date.now()-(raw.at||0)>24*60*60*1000)return null;
+    if(!raw||(raw.auth&&raw.auth!==currentAuthSessionToken())||Date.now()-(raw.at||0)>24*60*60*1000)return null;
     const activeRoom=raw.activeRoom&&typeof raw.activeRoom==='object'?raw.activeRoom:null;
-    if(!activeRoom||!((activeRoom.dim==='job'&&JOBS[activeRoom.job])||activeRoom.dim==='taming_land'))return null;
+    if(!activeRoom||!((activeRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job])||activeRoom.dim==='taming_land'))return null;
     let pos=Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null;
     if(activeRoom.dim==='taming_land'&&pos){
       const room=worldState&&worldState.TAMING_LAND;
@@ -2860,7 +2874,8 @@ function currentRuntimeActiveRoom(){
 function netSnapshot(){
   const activeRoom=currentRuntimeActiveRoom();
   const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;
-  storeJobTutorialResume(activeRoom,pos);
+  if(activeRoom)storeJobTutorialResume(activeRoom,pos);
+  else if(NET.profileReady===true)storeJobTutorialResume(null,null);
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
     sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),

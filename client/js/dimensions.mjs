@@ -1956,6 +1956,7 @@ function generateJobTutorialRoom(jobId){
   return w;
 }
 function enterJobTutorialRoom(jobId){
+  const opts=arguments[1]||{};
   if(!JOB_TUTORIAL_MEADOWS||!JOB_TUTORIAL_MEADOWS[jobId]) return false;
   if(dim==='job'&&jobTutorialRoomJob===jobId) return true;
   if(dim!=='overworld'&&dim!=='job') return false;
@@ -1973,7 +1974,7 @@ function enterJobTutorialRoom(jobId){
   NET.dgn=localTutorialSpaceId('job_'+jobId);
   world.id=NET.dgn;
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
-  if(NET.on&&NET.room) NET.room.send('tutorialEnter',{kind:'job',job:jobId});
+  if(NET.on&&NET.room&&!opts.serverSynced) NET.room.send('tutorialEnter',{kind:'job',job:jobId});
   return true;
 }
 function exitJobTutorialRoom(){
