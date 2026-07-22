@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 const {
+  claimReadyContractAndExpectBoard,
   craftAndWaitForProgress,
   expectStarterContract,
-  reloadAndExpectContract,
   returnFromJobTutorial,
 } = require('./helpers/job-contract-flow.cjs');
 
@@ -77,5 +77,5 @@ test('blacksmith tutorial teaches armor crafting, mana quality, and selling', as
   expect(after).toMatchObject({ job: 'blacksmith', type: 'smith' });
   expect(after.have).toBeGreaterThan(before.have);
 
-  await reloadAndExpectContract(page, { job: 'blacksmith', type: 'smith', have: after.have });
+  await claimReadyContractAndExpectBoard(page, 'blacksmith');
 });

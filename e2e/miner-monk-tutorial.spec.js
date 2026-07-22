@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 const {
+  claimReadyContractAndExpectBoard,
+  e2eJourney,
   expectStarterContract,
-  reloadAndExpectContract,
   returnFromJobTutorial,
   waitForContractProgress,
 } = require('./helpers/job-contract-flow.cjs');
@@ -106,7 +107,46 @@ test('miner tutorial persists through reload then mines and sells a diamond', as
   expect(after).toMatchObject({ job: 'miner', type: 'mine' });
   expect(after.have).toBeGreaterThan(before.have);
 
-  await reloadAndExpectContract(page, { job: 'miner', type: 'mine', have: after.have });
+  const usedMineBlocks = new Set([`${realMine.action.x},${realMine.action.y},${realMine.action.z}`]);
+  for (let attempts = 0; attempts < 12; attempts++) {
+    const current = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+    if (current && current.have >= current.need) break;
+    const beforeLoop = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+    const nextMine = await page.evaluate(used => {
+      const usedBlocks = new Set(Array.isArray(used) ? used : []);
+      const world = window.BlockcraftGameContext.requireModule('world');
+      const pos = window.__BLOCKCRAFT_E2E__.selfPosition();
+      const slot = window.__BLOCKCRAFT_E2E__.inventorySlot(110);
+      if (!pos || slot < 0) return { ok: false, reason: 'missing player or pickaxe', pos, slot };
+      const allowed = new Set([3, 8]);
+      const cx = Math.floor(pos.x), cy = Math.floor(pos.y), cz = Math.floor(pos.z);
+      for (let radius = 0; radius <= 10; radius++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          for (let dz = -radius; dz <= radius; dz++) {
+            const x = cx + dx, z = cz + dz;
+            if (Math.hypot(x + 0.5 - pos.x, z + 0.5 - pos.z) > 9.5) continue;
+            for (let y = cy - 1; y >= Math.max(2, cy - 20); y--) {
+              const key = `${x},${y},${z}`;
+              const id = world.getBlock(x, y, z);
+              if (!allowed.has(id) || usedBlocks.has(key)) continue;
+              window.__BLOCKCRAFT_E2E__.send('edit', { x, y, z, id: 0, slot });
+              return { ok: true, key, action: { x, y, z, id, slot } };
+            }
+          }
+        }
+      }
+      return { ok: false, reason: 'no unused mineable block nearby', used: usedBlocks.size, pos };
+    }, [...usedMineBlocks]);
+    expect(nextMine.ok, JSON.stringify(nextMine)).toBe(true);
+    usedMineBlocks.add(nextMine.key);
+    await waitForContractProgress(page, beforeLoop.have);
+  }
+
+  await expect.poll(() => page.evaluate(() => {
+    const contract = window.__BLOCKCRAFT_E2E__.status().contract;
+    return contract && contract.have >= contract.need;
+  })).toBe(true);
+  await claimReadyContractAndExpectBoard(page, 'miner');
 });
 
 test('monk tutorial persists through reload and completes the timed focus loop', async ({ page }) => {
@@ -129,5 +169,21 @@ test('monk tutorial persists through reload and completes the timed focus loop',
 
   await returnFromJobTutorial(page, 'monkTutorialVisualDebug');
   await expectStarterContract(page, { job: 'monk', type: 'meditate', have: 0 });
-  await reloadAndExpectContract(page, { job: 'monk', type: 'meditate', have: 0 });
+  const prep = await e2eJourney(page, 'prepareMeditationContract');
+  await page.evaluate(({ x, y, z }) => window.player.pos.set(x, y, z), prep);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBeGreaterThanOrEqual(4);
+
+  for (let attempts = 0; attempts < 8; attempts++) {
+    const current = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+    if (current && current.have >= current.need) break;
+    const beforeLoop = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+    await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('meditateTick', {}));
+    await waitForContractProgress(page, beforeLoop.have, 4000);
+    await page.waitForTimeout(2100);
+  }
+  await expect.poll(() => page.evaluate(() => {
+    const contract = window.__BLOCKCRAFT_E2E__.status().contract;
+    return contract && contract.have >= contract.need;
+  })).toBe(true);
+  await claimReadyContractAndExpectBoard(page, 'monk');
 });

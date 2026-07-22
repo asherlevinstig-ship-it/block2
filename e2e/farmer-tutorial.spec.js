@@ -1,5 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
+const {
+  claimReadyContractAndExpectBoard,
+  waitForContractProgress,
+} = require('./helpers/job-contract-flow.cjs');
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
@@ -161,12 +165,42 @@ test('farmer tutorial returns to town with a persistent starter contract that ca
   expect(farmed.contract).toMatchObject({ job: 'farmer', type: 'farm' });
   expect(farmed.contract.have).toBeGreaterThan(before.have);
 
-  await page.reload();
-  await page.locator('#playbtn').click();
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract)).toMatchObject({
-    job: 'farmer',
-    type: 'farm',
-    have: farmed.contract.have,
-  });
+  for (let attempts = 0; attempts < 5; attempts++) {
+    const current = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+    if (current && current.have >= current.need) break;
+    const beforeLoop = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
+    const progressed = await page.evaluate(async beforeHave => {
+      const world = window.BlockcraftGameContext.requireModule('world');
+      const hoeSlot = window.__BLOCKCRAFT_E2E__.inventorySlot(172);
+      const seedSlot = window.__BLOCKCRAFT_E2E__.inventorySlot(176);
+      const farm = window.HUB && window.HUB.farm;
+      const baseX = Math.round(farm.x), baseZ = Math.round(farm.z);
+      const groundY = window.TOWN ? window.TOWN.G : 15;
+      let action = null;
+      for (let radius = 0; radius <= 9 && !action; radius++) {
+        for (let dx = -radius; dx <= radius && !action; dx++) {
+          for (let dz = -radius; dz <= radius && !action; dz++) {
+            const x = baseX + dx, z = baseZ + dz, y = groundY;
+            const id = world.getBlock(x, y, z);
+            const above = world.getBlock(x, y + 1, z);
+            if (!window.isTownFarmWorksite(x, z)) continue;
+            if (above === 25) action = { type: 'harvest', x, y: y + 1, z, slot: 0 };
+            else if (id === 22 && above === 0 && seedSlot >= 0) action = { type: 'plant', x, y: y + 1, z, slot: seedSlot };
+            else if ((id === 1 || id === 2) && above === 0 && hoeSlot >= 0) action = { type: 'till', x, y, z, slot: hoeSlot };
+          }
+        }
+      }
+      if (!action) return { ok: false, reason: 'missing follow-up farm action' };
+      window.__BLOCKCRAFT_E2E__.send('farm', { action: action.type, x: action.x, y: action.y, z: action.z, slot: action.slot });
+      return { ok: true, action, beforeHave };
+    }, beforeLoop.have);
+    expect(progressed.ok, JSON.stringify(progressed)).toBe(true);
+    await waitForContractProgress(page, beforeLoop.have);
+  }
+
+  await expect.poll(() => page.evaluate(() => {
+    const contract = window.__BLOCKCRAFT_E2E__.status().contract;
+    return contract && contract.have >= contract.need;
+  })).toBe(true);
+  await claimReadyContractAndExpectBoard(page, 'farmer');
 });

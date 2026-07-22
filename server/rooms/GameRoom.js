@@ -1801,6 +1801,24 @@ class GameRoom extends Room {
       client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z });
       return true;
     }
+    if (action === 'prepareMeditationContract') {
+      const p = this.state.players.get(client.sessionId);
+      const requestId = String(m && m.requestId || '').slice(0, 32);
+      if (!p) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      rec.prof.S.lvl = Math.max(4, rec.prof.S.lvl | 0);
+      rec.prof.job = 'monk';
+      p.x = W.HUB.meditate.x; p.y = W.TOWN.G + 1; p.z = W.HUB.meditate.z;
+      p.dim = 'overworld'; p.dgn = '';
+      rec.prof.pos = [p.x, p.y, p.z];
+      this.syncPlayerProfile(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      this.sendProfile(client, rec.prof);
+      client.send('e2eJourneyResult', { action, requestId, ok: true, level: rec.prof.S.lvl | 0, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
     if (action === 'positionDungeonLoadProbe') {
       const p = this.state.players.get(client.sessionId);
       const inst = p && p.dgn && this.instances[p.dgn];

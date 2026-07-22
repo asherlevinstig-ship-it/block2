@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 const {
+  claimReadyContractAndExpectBoard,
   craftAndWaitForProgress,
   expectStarterContract,
-  reloadAndExpectContract,
   returnFromJobTutorial,
 } = require('./helpers/job-contract-flow.cjs');
 
@@ -88,5 +88,5 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
   expect(after).toMatchObject({ job: 'cook', type: 'cook' });
   expect(after.have).toBeGreaterThan(before.have);
 
-  await reloadAndExpectContract(page, { job: 'cook', type: 'cook', have: after.have });
+  await claimReadyContractAndExpectBoard(page, 'cook');
 });

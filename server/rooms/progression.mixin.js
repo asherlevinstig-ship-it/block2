@@ -783,6 +783,12 @@ class ProgressionMixin {
         this.ensurePublicGateRank(1);
       }
       rec.prof.jobContract = null;
+      rec.prof.jobContractOffers = [];
+      rec.prof.jobContractOffersAt = 0;
+      rec.prof.jobContractOfferJob = c.job;
+      if (rec.prof.jobContractOfferBoards && typeof rec.prof.jobContractOfferBoards === 'object' && rec.prof.jobContractOfferBoards[c.job]) {
+        rec.prof.jobContractOfferBoards[c.job] = { at: 0, offers: [] };
+      }
       if (this.sendQuestRewardSummary) this.sendQuestRewardSummary(client, {
         source: 'job',
         questType: 'job',

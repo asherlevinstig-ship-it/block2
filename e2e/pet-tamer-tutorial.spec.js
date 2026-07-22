@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { registerAndPlay } = require('./helpers/auth-flow.cjs');
 const {
+  claimReadyContractAndExpectBoard,
   craftAndWaitForProgress,
   expectStarterContract,
-  reloadAndExpectContract,
 } = require('./helpers/job-contract-flow.cjs');
 
 test.afterEach(async ({ page }) => {
@@ -105,5 +105,5 @@ test('pet tamer tutorial displays egg timer and highlights the Stay command', as
   expect(after).toMatchObject({ job: 'pet_tamer', type: 'pet_care' });
   expect(after.have).toBeGreaterThan(before.have);
 
-  await reloadAndExpectContract(page, { job: 'pet_tamer', type: 'pet_care', have: after.have });
+  await claimReadyContractAndExpectBoard(page, 'pet_tamer');
 });
