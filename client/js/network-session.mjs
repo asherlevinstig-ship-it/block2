@@ -11,6 +11,8 @@ export function createNetworkSession({
   reconnectFallback,
   restored,
   failure,
+  joinAttempt,
+  joinRetry,
   getPlayerName,
   authToken,
   beforeConnect,
@@ -52,6 +54,8 @@ export function createNetworkSession({
     onReconnectFallback:reconnectFallback,
     onRestored:restored,
     onFailure:failure,
+    onJoinAttempt:joinAttempt,
+    onJoinRetry:joinRetry,
     authToken,
   });
   const state=controller.state;

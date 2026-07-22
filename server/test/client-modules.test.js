@@ -2833,13 +2833,51 @@ test('network controller retries when a fresh room join never settles', async ()
     joinTimeout: 10, joinAttempts: 2,
     sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
     onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onJoinAttempt: info => events.push(['joinAttempt', info.attempt, info.shardId]),
+    onJoinRetry: info => events.push(['joinRetry', info.attempt, /timed out/i.test(String(info.error && info.error.message || info.error))]),
     onRestored() {}, onFailure(error) { throw error; },
   });
   controller.connect('Hunter');
   await new Promise(resolve => setTimeout(resolve, 300));
-  assert.deepEqual(events, [['join', 1], ['join', 2]]);
+  assert.deepEqual(events, [
+    ['joinAttempt', 1, 'main'],
+    ['join', 1],
+    ['joinRetry', 1, true],
+    ['joinAttempt', 2, 'main'],
+    ['join', 2],
+  ]);
   assert.deepEqual(attached, [fresh]);
   assert.equal(controller.state.on, true);
+  assert.equal(controller.state.connecting, false);
+  assert.equal(controller.state.joinAttempts, 2);
+});
+
+test('network controller ignores duplicate connect calls while matchmaking is in flight', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const events = [];
+  let resolveJoin;
+  const room = { reconnectionToken: 'fresh:token', onLeave() {} };
+  class Client {
+    joinOrCreate(name, options) {
+      events.push(['join', name, options.name]);
+      return new Promise(resolve => { resolveJoin = () => resolve(room); });
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
+    onRestored() {}, onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(controller.state.connecting, true);
+  assert.deepEqual(events, [['join', 'blockcraft', 'Hunter']]);
+  resolveJoin();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(controller.state.room, room);
+  assert.equal(controller.state.connecting, false);
 });
 
 test('network controller tries the next overworld shard and returns to it after dungeon rooms', async () => {

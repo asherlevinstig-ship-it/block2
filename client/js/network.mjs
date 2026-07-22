@@ -1,7 +1,7 @@
 import { reconnectWithBackoff, wait } from './reconnect.mjs';
 
 export function createNetworkController(options) {
-  const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, pendingDungeonPartyStatus: null, reconnecting: false, attachCount: 0, tried: false, roomName: options.roomName, shardId: '' };
+  const state = { on: false, room: null, tod: null, remotes: {}, lastMove: 0, lastMeta: '', lastSave: 0, lastSnap: '', pending: [], dgn: '', pendingDungeonStatus: null, pendingDungeonPartyStatus: null, reconnecting: false, connecting: false, attachCount: 0, tried: false, roomName: options.roomName, shardId: '', joinAttempts: 0, lastJoinError: '' };
   let stopped = false;
   // Multi-room (DungeonRoom 2c): the live client and player name are retained so the controller
   // can leave the primary room and join a secondary one (the dungeon) and back, reusing the same
@@ -37,15 +37,19 @@ export function createNetworkController(options) {
       text.includes('capacity');
   }
 
-  async function joinRoomWithRetries(start) {
+  async function joinRoomWithRetries(start, meta = {}) {
     let lastError = null;
     for (let attempt = 1; attempt <= joinAttempts; attempt++) {
       if (attempt > 1) await retryWait(250 * 2 ** (attempt - 2));
+      state.joinAttempts++;
+      if (options.onJoinAttempt) options.onJoinAttempt({ ...meta, attempt });
       try {
         return await roomWithTimeout(start, joinTimeout, 'Room join timed out');
       } catch (error) {
         lastError = error;
+        state.lastJoinError = String(error && (error.message || error.reason || error.code) || error || 'join failed');
         if (shardCapacityError(error)) throw error;
+        if (attempt < joinAttempts && options.onJoinRetry) options.onJoinRetry({ ...meta, attempt, error });
       }
     }
     throw lastError || new Error('Room join failed');
@@ -91,7 +95,10 @@ export function createNetworkController(options) {
       const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
       const authOptions = authToken ? { authToken } : {};
       try {
-        const room = await joinRoomWithRetries(() => client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }));
+        const room = await joinRoomWithRetries(
+          () => client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }),
+          { roomName: options.roomName, shardAttempt, shardId: joinOptions.shardId || 'main' },
+        );
         primaryJoinOptions = { ...joinOptions };
         state.shardId = String(joinOptions.shardId || 'main');
         if (options.onPrimaryJoinOptions) options.onPrimaryJoinOptions(primaryJoinOptions);
@@ -111,6 +118,7 @@ export function createNetworkController(options) {
     state.on = true;
     state.room = room;
     state.reconnecting = false;
+    state.connecting = false;
     state.attachCount++;
     // Colyseus 0.17 added automatic Room reconnection. Blockcraft already owns a
     // bounded reconnect/fresh-join policy here, including UI state and room-switch
@@ -153,6 +161,7 @@ export function createNetworkController(options) {
   function fail(error) {
     state.tried = false;
     state.on = false;
+    state.connecting = false;
     options.onFailure(error);
   }
 
@@ -160,8 +169,15 @@ export function createNetworkController(options) {
     if (state.tried) return;
     stopped = false;
     state.tried = true;
+    state.connecting = true;
+    state.joinAttempts = 0;
+    state.lastJoinError = '';
     currentName = name;
-    if (!options.Client) return options.onUnavailable();
+    if (!options.Client) {
+      state.connecting = false;
+      state.tried = false;
+      return options.onUnavailable();
+    }
     const client = new options.Client(options.endpoint());
     const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
     try {
@@ -185,6 +201,7 @@ export function createNetworkController(options) {
     stopped = true;
     state.on = false;
     state.reconnecting = false;
+    state.connecting = false;
     state.tried = false;
     const room = state.room;
     state.room = null;
@@ -196,6 +213,7 @@ export function createNetworkController(options) {
   function pauseReconnect() {
     stopped = true;
     state.reconnecting = false;
+    state.connecting = false;
   }
 
   // Leave the current room (consented, no auto-reconnect) and join `roomName` with `joinOptions`,
@@ -209,6 +227,7 @@ export function createNetworkController(options) {
     const cur = state.room;
     state.room = null;            // so the leaving room's onLeave->reconnect short-circuits
     state.on = false;
+    state.connecting = true;
     if (cur) { try { await cur.leave(); } catch (_) {} }
     try {
       const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
@@ -217,10 +236,12 @@ export function createNetworkController(options) {
       const room = await client.joinOrCreate(roomName, { name: currentName, ...joinOptions, ...authOptions });
       switching = false;
       state.roomName = roomName;
+      state.connecting = false;
       attach(room, currentName, client);
       return room;
     } catch (e) {
       switching = false;
+      state.connecting = false;
       if (roomName === primaryRoomName) { fail(e); return null; }
       return returnToPrimary();   // couldn't reach the dungeon room — go back to the overworld
     }

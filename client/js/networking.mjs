@@ -825,6 +825,27 @@ function connectionNotice(kind, attempt=0){
     setWorldLoadingStatus('Connection lost - reconnecting...');
   }else if(kind==='attempt'){
     setWorldLoadingStatus('Reconnecting to world... attempt '+attempt);
+  }else if(kind==='joinAttempt'){
+    const info=attempt&&typeof attempt==='object'?attempt:{};
+    const n=Math.max(1,info.attempt|0);
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.join.attempt', {
+      attempt:n,
+      shardAttempt:Math.max(0,info.shardAttempt|0),
+      shardId:String(info.shardId||'main'),
+      roomName:String(info.roomName||'blockcraft'),
+    });
+    setWorldLoadingStatus(n>1?'World is busy - retrying connection... attempt '+n:'Connecting to world server...');
+  }else if(kind==='joinRetry'){
+    const info=attempt&&typeof attempt==='object'?attempt:{};
+    const reason=String(info.error&&info.error.message||info.error||'join failed');
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.join.retry', {
+      attempt:Math.max(1,info.attempt|0),
+      shardAttempt:Math.max(0,info.shardAttempt|0),
+      shardId:String(info.shardId||'main'),
+      reason,
+    });
+    eventFeed('[Network]','World connection hiccup - retrying safely.',{key:'network:join-retry',cooldown:12000});
+    setWorldLoadingStatus('World connection hiccup - retrying safely...');
   }else if(kind==='resumeFallback'){
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.resume.fallback', { reason:String(attempt&&attempt.message||attempt||'') });
     eventLog('Saved reconnect failed - rejoining the world fresh','[Network]');
@@ -860,6 +881,8 @@ const SESSION=createNetworkSession({
   reconnectFallback:e=>connectionNotice('reconnectFallback',e),
   restored:()=>connectionNotice('restored'),
   failure:netConnectionFailed,
+  joinAttempt:m=>connectionNotice('joinAttempt',m),
+  joinRetry:m=>connectionNotice('joinRetry',m),
   getPlayerName:()=>document.getElementById('playername').value,
   authToken:()=>{
     try{return String(localStorage.getItem('blockcraft.auth.session')||'').trim();}catch(e){return '';}
