@@ -107,6 +107,14 @@ const HOMESTEAD_WORK_ORDER_SPECS = Object.freeze([
   Object.freeze({ type: 'craft', job: 'cook', target: I.BREAD, need: 3, rewardGold: 22, rewardJobXp: 18, title: 'Pantry Ledger', desc: 'Set aside travel bread for the next dungeon run.' }),
   Object.freeze({ type: 'craft', job: 'blacksmith', target: I.REPAIR_KIT, need: 1, rewardGold: 30, rewardJobXp: 22, title: 'Tool Bench Reserve', desc: 'Add a repair kit to the homestead supplies.' }),
 ]);
+const FIRST_TUTORIAL_CONTRACT_TYPE = Object.freeze({
+  miner: 'mine',
+  farmer: 'farm',
+  cook: 'cook',
+  blacksmith: 'smith',
+  monk: 'meditate',
+  pet_tamer: 'tame',
+});
 
 const NPC_QUEST_CHAINS = NPC_QUEST_REGISTRY.createNpcQuestChains({ B: W.B, I });
 const NPC_QUEST_CHAIN_ERRORS = NPC_QUEST_REGISTRY.validateNpcQuestChains(NPC_QUEST_CHAINS);
@@ -525,6 +533,42 @@ class ProgressionMixin {
     const pool = contractPools(job, scale, level);
     if (!pool.length) return null;
     return { ...pool[(Math.random() * pool.length) | 0], job, have: 0, rewardXp: hunterXpForActivity(level, 'job_contract') };
+  }
+
+  seedFirstTutorialJobContract(client, requestedJob = '') {
+    const rec = this.profileFor(client);
+    const job = typeof requestedJob === 'string' ? requestedJob : '';
+    if (!rec || !JOB_SYSTEM.PROFESSION_IDS.includes(job) || rec.prof.job !== job || rec.prof.jobContract) return null;
+    const xpMap = ensureJobXpMap(rec.prof);
+    const level = Math.max(1, rec.prof.S ? rec.prof.S.lvl | 0 : 1);
+    const type = FIRST_TUTORIAL_CONTRACT_TYPE[job] || '';
+    const pool = contractPools(job, JOB_SYSTEM.contractScaleFromXp(xpMap[job]), level);
+    const base = pool.find(c => c.type === type) || pool[0];
+    if (!base) return null;
+    const now = Date.now();
+    const contract = this.decorateMinerUndergroundOffer({
+      ...base,
+      id: ['job', job, 'tutorial', now, base.type].join('_'),
+      job,
+      have: 0,
+      rewardXp: hunterXpForActivity(level, 'job_contract'),
+      lifecycleState: 'active',
+      acceptedAt: now,
+      difficulty: 'starter',
+      difficultyLabel: 'First Real Shift',
+      estimate: job === 'monk' && level < 4 ? 'Unlocks fully at Level 4' : 'About 5 minutes',
+      offeredAt: now,
+      expiresAt: now + JOB_SYSTEM.OFFER_REFRESH_MS,
+    }, rec, now);
+    rec.prof.jobContract = contract;
+    rec.prof.jobContractOffers = [];
+    rec.prof.jobContractOffersAt = 0;
+    rec.prof.jobContractOfferJob = job;
+    if (!rec.prof.jobContractOfferBoards || typeof rec.prof.jobContractOfferBoards !== 'object') rec.prof.jobContractOfferBoards = {};
+    rec.prof.jobContractOfferBoards[job] = { at: now, offers: [] };
+    this.dirtyPlayers.add(rec.token);
+    client.send('jobProgress', { job, jobXp: xpMap[job] | 0, contract });
+    return contract;
   }
 
   minerUndergroundTarget(type, salt = 0) {

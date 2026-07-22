@@ -7234,6 +7234,40 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   assert.deepEqual(affected.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 14.5]);
 });
 
+test('job tutorial completion seeds one first real profession contract', () => {
+  const expectedTypes = {
+    miner: 'mine',
+    farmer: 'farm',
+    cook: 'cook',
+    blacksmith: 'smith',
+    monk: 'meditate',
+    pet_tamer: 'tame',
+  };
+  for (const [job, type] of Object.entries(expectedTypes)) {
+    const room = makeRoom(), client = makeClient('tutorial_contract_' + job);
+    const { prof } = seedPlayer(room, client, { lvl: job === 'monk' ? 4 : 2 });
+    prof.job = job;
+
+    assert.equal(room.handleTutorialComplete(client, { tutorial: 'townJob', version: TUTORIAL_VERSIONS.townJob, job }), true);
+    assert.equal(prof.tutorials.townJob, TUTORIAL_VERSIONS.townJob);
+    assert.equal(prof.jobContract.job, job);
+    assert.equal(prof.jobContract.type, type);
+    assert.equal(prof.jobContract.lifecycleState, 'active');
+    assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.job === job), true);
+  }
+});
+
+test('job tutorial completion does not replace an active contract', () => {
+  const room = makeRoom(), client = makeClient('tutorial_contract_active');
+  const { prof } = seedPlayer(room, client, { lvl: 2 });
+  prof.job = 'farmer';
+  prof.jobContract = { job: 'farmer', type: 'farm', need: 3, have: 1, rewardGold: 10, rewardJobXp: 10, rewardXp: 0, title: 'Existing Field Work', desc: 'Already active.' };
+
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'townJob', version: TUTORIAL_VERSIONS.townJob, job: 'farmer' }), true);
+  assert.equal(prof.jobContract.title, 'Existing Field Work');
+  assert.equal(prof.jobContract.have, 1);
+});
+
 test('completed onboarding is persisted immediately for refresh-safe restore', async () => {
   const room = makeRoom(), client = makeClient('tutorial_persist');
   const { token, prof } = seedPlayer(room, client);

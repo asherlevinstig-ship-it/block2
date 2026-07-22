@@ -575,10 +575,10 @@ function applyServerTutorials(raw){
     if(['job','tavern','land'].every(key=>townDone[key]))localStorage.setItem('bc_town_tutorials_done_v1','1');
   }catch(e){}
 }
-function markTutorialComplete(tutorial,version){
+function markTutorialComplete(tutorial,version,extra={}){
   if(!TUTORIAL_VERSIONS[tutorial]||version!==TUTORIAL_VERSIONS[tutorial])return;
   serverTutorials[tutorial]=Math.max(serverTutorials[tutorial]|0,version);
-  if(NET.on&&NET.room)NET.room.send('tutorialComplete',{tutorial,version});
+  if(NET.on&&NET.room)NET.room.send('tutorialComplete',{tutorial,version,...extra});
 }
 function syncLocalTutorialsToServer(){
   const completed={
@@ -704,7 +704,7 @@ function townTutorialStepDone(step){
   if(tutorial&&serverTutorials[tutorial]>=1)return true;
   try{return !!JSON.parse(localStorage.getItem('bc_town_tutorial_steps_v1')||'{}')[step];}catch(e){return false;}
 }
-function completeTownTutorialStep(step){
+function completeTownTutorialStep(step,extra={}){
   const tutorial={job:'townJob',tavern:'townTavern',land:'townLand'}[step];
   if(!tutorial)return false;
   try{
@@ -713,7 +713,7 @@ function completeTownTutorialStep(step){
     localStorage.setItem('bc_town_tutorial_steps_v1',JSON.stringify(done));
     if(['job','tavern','land'].every(k=>done[k])) localStorage.setItem('bc_town_tutorials_done_v1','1');
   }catch(e){}
-  markTutorialComplete(tutorial,1);
+  markTutorialComplete(tutorial,1,extra);
   renderTownTutorialOptions();
   return true;
 }
@@ -2663,7 +2663,7 @@ function completeJobTutorial(){
   if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
-  completeTownTutorialStep(jobTutorialStepId(jobId));
+  completeTownTutorialStep(jobTutorialStepId(jobId),{job:jobId});
   exitJobTutorialRoom();
   hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
   renderBars();

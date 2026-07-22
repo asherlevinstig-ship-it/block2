@@ -1487,6 +1487,10 @@ class GameRoom extends Room {
     } else if (tutorial === 'ability') {
       this.leaveTutorialDimension(client);
     }
+    const starterJob = tutorial === 'townJob' && m && typeof m.job === 'string' ? m.job : '';
+    const starterContract = starterJob && typeof this.seedFirstTutorialJobContract === 'function'
+      ? this.seedFirstTutorialJobContract(client, starterJob)
+      : null;
     this.dirtyPlayers.add(rec.token);
     this.savePlayerProfileNow(rec.token, rec.prof);
     client.send('tutorialProgress', {
@@ -1494,6 +1498,7 @@ class GameRoom extends Room {
       tutorial,
       version: expected,
       tutorials: { ...rec.prof.tutorials },
+      starterContract,
     });
     this.sendProfile(client, rec.prof);
     return true;
