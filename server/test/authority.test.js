@@ -569,6 +569,46 @@ test('profile merge persists only bounded job tutorial room resume state', () =>
   assert.deepEqual(clamped.activeRoom, { dim: 'job', job: 'miner', minedDiamond: false, traded: false });
   assert.deepEqual(clamped.pos, [610.5, 19.05, 939.5]);
 
+  const cook = mergeClientSave(current, {
+    activeRoom: { dim: 'job', job: 'cook', cookStep: 2, cookStartedAt: 100, cookReadyAt: 5000 },
+    pos: [770.5, 19.05, 939.5],
+  });
+  assert.deepEqual(cook.activeRoom, {
+    dim: 'job',
+    job: 'cook',
+    minedDiamond: false,
+    traded: false,
+    cookStep: 2,
+    cookStartedAt: 100,
+    cookReadyAt: 5000,
+  });
+
+  const blacksmith = mergeClientSave(current, {
+    activeRoom: { dim: 'job', job: 'blacksmith', blacksmithStep: 2, blacksmithCraftedArmor: { rarity: 'rare', maxMana: 42, bonus: .12, slot: 5 } },
+    pos: [850.5, 19.05, 939.5],
+  });
+  assert.deepEqual(blacksmith.activeRoom, {
+    dim: 'job',
+    job: 'blacksmith',
+    minedDiamond: false,
+    traded: false,
+    blacksmithStep: 2,
+    blacksmithCraftedArmor: { rarity: 'rare', maxMana: 42, bonus: .12, slot: 5 },
+  });
+
+  const monk = mergeClientSave(current, {
+    activeRoom: { dim: 'job', job: 'monk', monkStep: 1, monkStartedAt: 1234 },
+    pos: [930.5, 19.05, 925.5],
+  });
+  assert.deepEqual(monk.activeRoom, {
+    dim: 'job',
+    job: 'monk',
+    minedDiamond: false,
+    traded: false,
+    monkStep: 1,
+    monkStartedAt: 1234,
+  });
+
   const rejected = mergeClientSave(resumed, {
     activeRoom: { dim: 'dungeon', job: 'miner' },
     pos: [610.5, 19, 939.5],

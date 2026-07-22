@@ -477,6 +477,22 @@ function sanitizeActiveRoom(raw) {
     out.cookStartedAt = clampI(raw.cookStartedAt, 0, 4102444800000);
     out.cookReadyAt = clampI(raw.cookReadyAt, 0, 4102444800000);
   }
+  if (job === 'blacksmith') {
+    out.blacksmithStep = clampI(raw.blacksmithStep, 0, 3);
+    if (raw.blacksmithCraftedArmor && typeof raw.blacksmithCraftedArmor === 'object') {
+      const armor = raw.blacksmithCraftedArmor;
+      out.blacksmithCraftedArmor = {
+        rarity: cleanShortText(armor.rarity, 'common', 24),
+        maxMana: clampI(armor.maxMana, 0, 1000000),
+        bonus: clampF(armor.bonus, 0, 1),
+        slot: clampI(armor.slot, -1, INV_MAX - 1),
+      };
+    }
+  }
+  if (job === 'monk') {
+    out.monkStep = clampI(raw.monkStep, 0, 2);
+    out.monkStartedAt = clampI(raw.monkStartedAt, 0, 4102444800000);
+  }
   if (job === 'pet_tamer') {
     out.petDragonSeen = raw.petDragonSeen === true;
     out.petDragonStep = clampI(raw.petDragonStep, 0, 5);

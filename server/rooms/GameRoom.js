@@ -1608,6 +1608,13 @@ class GameRoom extends Room {
         minedDiamond: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.minedDiamond === true,
         traded: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.traded === true,
         farmerStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.farmerStep : 0,
+        cookStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.cookStep : 0,
+        cookStartedAt: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.cookStartedAt : 0,
+        cookReadyAt: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.cookReadyAt : 0,
+        blacksmithStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.blacksmithStep : 0,
+        blacksmithCraftedArmor: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.blacksmithCraftedArmor : null,
+        monkStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.monkStep : 0,
+        monkStartedAt: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.monkStartedAt : 0,
         petDragonSeen: rec.prof.activeRoom && rec.prof.activeRoom.job === job && rec.prof.activeRoom.petDragonSeen === true,
         petDragonStep: rec.prof.activeRoom && rec.prof.activeRoom.job === job ? rec.prof.activeRoom.petDragonStep : 0,
       });

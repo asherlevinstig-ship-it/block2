@@ -13,7 +13,7 @@
     farmer:Object.freeze({name:'Farmer',icon:'☘',col:'#86efac',role:'Crops and food supply',desc:'Progress by tilling, planting, and harvesting crops.',perkName:'Green Thumb',perk:'Chance for bonus wheat on harvest.'}),
     cook:Object.freeze({name:'Cook',icon:'♨',col:'#fbbf24',role:'Meals and tavern goods',desc:'Progress by cooking, baking, preparing meals, and selling food.',perkName:'Batch Cooking',perk:'Chance to create extra meals while cooking.'}),
     blacksmith:Object.freeze({name:'Blacksmith',icon:'⚒',col:'#fb923c',role:'Gear, tools, repair',desc:'Progress by crafting equipment, smelting ingots, and repairing gear.',perkName:'Tempered Craft',perk:'Crafted tools gain durability; repair kits restore more.'}),
-    monk:Object.freeze({name:'Monk',icon:'◇',col:'#7dd3fc',role:'Meditation and support',desc:'Progress by meditating in the Meditation Hall from Level 4 onward.',perkName:'Hall Focus',perk:'Meditation grants short focus buffs and long-term body growth.'}),
+    monk:Object.freeze({name:'Monk',icon:'◇',col:'#7dd3fc',role:'Meditation and support',desc:'Progress by meditating in the Meditation Hall from E-Rank Level 4 onward.',perkName:'Hall Focus',perk:'Meditation grants short focus buffs and long-term mana growth.'}),
     pet_tamer:Object.freeze({name:'Pet Tamer',icon:'P',col:'#f9a8d4',role:'Familiars and animal care',desc:'Progress by finding wild pets, crafting treats, caring for companions, and helping players bond familiars.',perkName:'Kindred Bond',perk:'Improves familiar discovery, treat rewards, and companion support.'}),
   });
   const TITLES = Object.freeze({
@@ -148,7 +148,7 @@
     repair:['Obtain Repair Kits.','Use one on a damaged tool.','Each successful repair advances the contract.'],
     upgrade:['Bring an eligible sword, pick, or forged weapon to Tobin.','Upgrade, reforge, reroll, or masterwork the item at the forge.','Each successful improvement advances the contract.'],
     salvage:['Bring unwanted non-legendary weapons or armor to Tobin.','Unlock protected gear first, then salvage it at the smithy.','Each successful salvage advances the contract.'],
-    meditate:['Reach Level 4, then go inside the Meditation Hall circle.','Use the meditation interaction and remain focused.','Accumulated focus time advances the contract and complete sessions build body-growth benchmarks.'],
+    meditate:['Reach E-Rank Level 4, then go inside the Meditation Hall circle.','Use the meditation interaction and remain focused.','Accumulated focus time advances the contract and complete sessions build mana-pool benchmarks.'],
   });
   const OFFER_REFRESH_MS = 15 * 60 * 1000;
   // Contracts supplement the XP earned while doing their objective. Material-heavy
@@ -275,7 +275,7 @@
       if(lvl>=FARMER_RULES.windseedLevel)hooks.push('Windseed crops produce richer harvests.');
       if(lvl>=FARMER_RULES.fieldcraftLevel)hooks.push('Fieldcraft speeds crop growth and unlocks compost acceleration.');
     }else if(job==='monk'){
-      hooks.push('Restore mana and stamina in the Meditation Hall, then build permanent HP, stamina, and food-cap breakthroughs.');
+      hooks.push('Restore mana and stamina in the Meditation Hall, then build controlled permanent mana-pool breakthroughs.');
       if(lvl>=MONK_RULES.regenLevel)hooks.push('Restoring Focus heals and restores resources while meditating.');
       if(lvl>=MONK_RULES.stoneLevel)hooks.push('Stone Focus reduces incoming damage.');
       if(lvl>=MONK_RULES.auraLevel)hooks.push('Shared Tranquillity supports nearby party members.');

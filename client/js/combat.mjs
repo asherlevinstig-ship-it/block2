@@ -83,6 +83,8 @@ const legacyCombatBindings={
   "jobTutorialFarmerStep":{get:()=>jobTutorialFarmerStep},
   "jobTutorialCookStep":{get:()=>jobTutorialCookStep},
   "jobTutorialBlacksmithStep":{get:()=>jobTutorialBlacksmithStep},
+  "jobTutorialMonkStep":{get:()=>jobTutorialMonkStep},
+  "jobTutorialMonkStartedAt":{get:()=>jobTutorialMonkStartedAt},
   "player":{get:()=>player},
   "prepareOnboardingStep":{get:()=>prepareOnboardingStep},
   "raycast":{get:()=>raycast},
@@ -762,7 +764,7 @@ const JOB_TUTORIAL_STEPS=Object.freeze({
   farmer:{room:'Greenhouse Practice Plot',target:()=>HUB.farm,button:'FIND FARM',theme:'leaf',art:'SEED',beats:['Hoe soil','Plant seeds','Harvest food for town']},
   cook:{room:'Tavern Kitchen Lesson',target:()=>HUB.tavern,button:'FIND KITCHEN',theme:'gold',art:'PAN',beats:['Gather ingredients','Cook meals','Make dungeon buffs']},
   blacksmith:{room:'Forge Lesson Bay',target:()=>HUB.smith,button:'FIND FORGE',theme:'ember',art:'ANVIL',beats:['Smelt ingots','Repair tools','Upgrade gear']},
-  monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow max stats']},
+  monk:{room:'Meditation Hall Circle',target:()=>HUB.shrine,button:'FIND HALL',theme:'sky',art:'FOCUS',beats:['Hold focus','Restore resources','Grow mana pool']},
   pet_tamer:{room:'Dragon Roost Lesson',target:()=>HUB.roost||HUB.stables||HUB.jobs,button:'FIND ROOST',theme:'leaf',art:'PAW',beats:['Hatch your tutorial egg','Care, ride, and command','Learn roost bonds and roles']},
 });
 const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
@@ -770,11 +772,11 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   farmer:{key:'WOODEN HOE',text:'Hoe, seed, and harvest practice crops so Farmer feels like the town food engine.',sub:'Use the plot rows, then walk into the blue return pillar.'},
   cook:{key:'KITCHEN STATIONS',text:'Use meals to create combat, stamina, and travel support for other players.',sub:'Inspect the table, furnace, and campfire, then walk into the blue return pillar.'},
   blacksmith:{key:'FORGE BAY',text:'Repair, smelt, and upgrade gear so dungeon loot becomes long-term progression.',sub:'Inspect the forge stations, then walk into the blue return pillar.'},
-  monk:{key:'FOCUS CIRCLE',text:'Meditation grows support power and restores resources more strongly in the hall.',sub:'Stand in the focus circle, then walk into the blue return pillar.'},
+  monk:{key:'FOCUS CIRCLE',text:'Stand in the focus circle, press G, then hold still until the focus completes.',sub:'This practice room teaches the loop. Full Meditation Hall growth unlocks at E-Rank Level 4.'},
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 const MINER_TUTORIAL_TRADE_GOLD=45;
 const FARMER_TUTORIAL_WHEAT_GOLD=18;
@@ -798,6 +800,11 @@ const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
   {key:'CRAFT CHAINMAIL',title:'Craft Armor',verb:'FORGE + G',purpose:'Stand at the forge bench and press G to craft Chainmail Armor from seven iron ingots and one coal.',done:'You forged Chainmail Armor. Blacksmith craft quality improves with your max mana pool.'},
   {key:'CHECK QUALITY',title:'Inspect Quality',verb:'FORGE + G',purpose:'Press G at the forge bench to inspect the armour rarity and learn why mana matters.',done:'You checked the craft quality. Larger mana pools give better armour rarity rolls.'},
   {key:'SELL ARMOR',title:'Sell Armor',verb:'TOBIN + G',purpose:'Take the finished armour to Tobin Forgehand and press G to sell it for gold.',done:'You sold the armour. Blacksmiths turn materials into gear, repairs, upgrades, and trade value.'},
+]);
+const MONK_TUTORIAL_FOCUS_MS=5000;
+const MONK_TUTORIAL_ACTIONS=Object.freeze([
+  {key:'START FOCUS',title:'Begin Focus',verb:'CIRCLE + G',purpose:'Stand inside the focus circle and press G to start a short meditation channel.',done:'You began focus. Monks create calm windows before the support effect arrives.'},
+  {key:'HOLD STILL',title:'Hold Focus',verb:'STAY STILL',purpose:'Stay in the focus circle until the timer completes.',done:'You held focus. At E-Rank Level 4, this becomes real Meditation Hall support and mana growth.'},
 ]);
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'HATCH EGG',title:'Hatching',verb:'EGG + G',purpose:'Select the Verdant Dragon Egg, press G at the Egg Insulator, then claim it when ready.',done:'Your tutorial egg hatches quickly, showing how dragons begin.'},
@@ -1820,6 +1827,111 @@ function performBlacksmithTutorialStepForTest(){
   const ok=tryBlacksmithTutorialAction();
   return {ok,done:jobTutorialBlacksmithStep>=3,debug:blacksmithTutorialVisualDebug()};
 }
+function monkTutorialFocusPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
+  return room?{x:room.x,y:room.G+1.035,z:room.z}:null;
+}
+function nearMonkTutorialFocus(range=5.4){
+  const p=monkTutorialFocusPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='monk'||dim!=='job'||!player)return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
+function monkTutorialAction(){
+  return MONK_TUTORIAL_ACTIONS[Math.max(0,Math.min(MONK_TUTORIAL_ACTIONS.length-1,jobTutorialMonkStep|0))]||MONK_TUTORIAL_ACTIONS[0];
+}
+function monkTutorialProgressLabel(){
+  return 'Step '+Math.min(MONK_TUTORIAL_ACTIONS.length,jobTutorialMonkStep+1)+' / '+MONK_TUTORIAL_ACTIONS.length;
+}
+function monkTutorialTargetPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
+  if(!room)return null;
+  return jobTutorialMonkStep>=2?{x:room.x,y:room.G+1.035,z:room.z+23}:monkTutorialFocusPos();
+}
+function monkTutorialRemainingMs(){
+  return Math.max(0,jobTutorialMonkStartedAt+MONK_TUTORIAL_FOCUS_MS-Date.now());
+}
+function completeMonkTutorialFocus(){
+  if(jobTutorialMonkStep>=2)return false;
+  jobTutorialMonkStep=2;
+  jobTutorialMonkStartedAt=0;
+  gainJobXP('monk',8,'tutorial focus');
+  burst(player.pos.x,player.pos.y+1,player.pos.z,[.49,.83,.99],28,2.8,2.2,.6);
+  ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.8,0x7dd3fc,.7);
+  SFX.success&&SFX.success();
+  SFX.meditate&&SFX.meditate(false);
+  eventLog('Monk tutorial - held focus in the meditation circle.');
+  sysMsg('<b>Monk lesson:</b> Focus complete. At E-Rank Level 4, Meditation Hall focus restores mana and stamina and can grow your mana pool.');
+  updateJobTutorialHud();
+  sendProfileSaveNow();
+  return true;
+}
+function updateMonkTutorialFocus(now=performance.now()){
+  if(!jobTutorialActive||jobTutorialJob!=='monk'||dim!=='job'||jobTutorialMonkStep!==1)return false;
+  if(!nearMonkTutorialFocus(6.2)){
+    jobTutorialMonkStep=0;
+    jobTutorialMonkStartedAt=0;
+    SFX.meditate&&SFX.meditate(false);
+    if(now>jobTutorialReturnWarnAt){
+      jobTutorialReturnWarnAt=now+1800;
+      sysMsg('You stepped out of the focus circle. Return to the circle and press <b>G</b> to begin again.');
+    }
+    updateJobTutorialHud();
+    sendProfileSaveNow();
+    return true;
+  }
+  if(monkTutorialRemainingMs()<=0)return completeMonkTutorialFocus();
+  return false;
+}
+function tryMonkTutorialAction(){
+  if(!jobTutorialActive||jobTutorialJob!=='monk'||dim!=='job')return false;
+  if(!nearMonkTutorialFocus(5.8)){
+    sysMsg('Stand inside the <b>focus circle</b>, then press <b>G</b>.');
+    return true;
+  }
+  if(jobTutorialMonkStep===0){
+    jobTutorialMonkStep=1;
+    jobTutorialMonkStartedAt=Date.now();
+    SFX.meditate&&SFX.meditate(true);
+    eventLog('Monk tutorial - started focus.');
+    sysMsg('<b>Monk lesson:</b> Hold still in the focus circle for <b>'+Math.ceil(MONK_TUTORIAL_FOCUS_MS/1000)+' seconds</b>.');
+    updateJobTutorialHud();
+    sendProfileSaveNow();
+    return true;
+  }
+  if(jobTutorialMonkStep===1){
+    const left=monkTutorialRemainingMs();
+    if(left>0){
+      sysMsg('Keep holding focus - <b>'+Math.ceil(left/1000)+'s</b> left.');
+      return true;
+    }
+    return completeMonkTutorialFocus();
+  }
+  sysMsg('Focus complete. Follow the blue return pillar to Town of Beginnings.');
+  return true;
+}
+function monkTutorialVisualDebug(){
+  return {
+    active:!!jobTutorialActive,
+    job:jobTutorialJob,
+    step:jobTutorialMonkStep|0,
+    focus:monkTutorialFocusPos(),
+    target:monkTutorialTargetPos(),
+    startedAt:jobTutorialMonkStartedAt||0,
+    remainingMs:monkTutorialRemainingMs(),
+    near:!!nearMonkTutorialFocus(5.8),
+  };
+}
+function performMonkTutorialStepForTest(){
+  if(!jobTutorialActive||jobTutorialJob!=='monk'||dim!=='job')return {ok:false,reason:'not in monk tutorial',debug:monkTutorialVisualDebug()};
+  const target=monkTutorialTargetPos();
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
+  if(target&&room)player.pos.set(target.x,jobTutorialWalkY(target.x,target.z,room.G+1.035),target.z+1.2);
+  const ok=tryMonkTutorialAction();
+  if(jobTutorialMonkStep===1)jobTutorialMonkStartedAt=Date.now()-MONK_TUTORIAL_FOCUS_MS-50;
+  updateMonkTutorialFocus();
+  return {ok,done:jobTutorialMonkStep>=2,debug:monkTutorialVisualDebug()};
+}
 function petTamerPracticeDragonPos(){
   const g=globalThis.__petTamerPracticeDragon;
   if(g&&g.visible&&g.position)return {x:g.position.x,y:g.position.y,z:g.position.z};
@@ -1882,6 +1994,7 @@ function jobTutorialBeaconTarget(jobId, room){
   if(jobId==='farmer')return farmerTutorialTargetPos();
   if(jobId==='cook')return cookTutorialTargetPos();
   if(jobId==='blacksmith')return blacksmithTutorialTargetPos();
+  if(jobId==='monk')return monkTutorialTargetPos();
   if(jobId==='pet_tamer'){
     if(jobTutorialPetDragonStep===0)return petTamerPracticeInsulatorPos();
     if(jobTutorialPetDragonStep===4&&jobTutorialPetDragonTutorialMount)return petTamerPracticeFlightRingPos();
@@ -2436,9 +2549,18 @@ function updateJobTutorialHud(){
       ? {key:'RETURN PILLAR',text:'You crafted armour, inspected its rarity, and sold it for gold.',sub:'Walk into the blue return pillar to go back to town.'}
       : jobTutorialBlacksmithStep===2
         ? {key:'TOBIN FORGEHAND',text:'Take the Chainmail Armor to Tobin Forgehand and press G to sell it for gold.',sub:'This completes the blacksmith economy loop.'}
-        : jobTutorialBlacksmithStep===1
+      : jobTutorialBlacksmithStep===1
           ? {key:'CHECK QUALITY',text:'Press G at the forge bench to inspect your armour rarity roll.',sub:'Blacksmith armour rarity gets a bonus from your max mana pool.'}
           : {key:action.key,text:blacksmithTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Blacksmith loop: materials become armour, armour quality scales with mana, armour sells for gold.'};
+  }
+  if(jobTutorialJob==='monk'){
+    const action=monkTutorialAction();
+    const left=Math.ceil(monkTutorialRemainingMs()/1000);
+    copy=jobTutorialMonkStep>=2
+      ? {key:'RETURN PILLAR',text:'You held focus in the circle and learned the Monk support loop.',sub:'Walk into the blue return pillar to go back to town.'}
+      : jobTutorialMonkStep===1
+        ? {key:'HOLD STILL',text:left>0?'Hold focus in the circle for '+left+' more seconds.':'Focus is ready. Press G or stay still to complete.',sub:'Full Meditation Hall focus unlocks at E-Rank Level 4 and can grow your mana pool.'}
+        : {key:action.key,text:monkTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Monk loop: calm focus becomes restoration, buffs, and long-term mana growth.'};
   }
   if(jobTutorialJob==='pet_tamer'){
     const action=petTamerTutorialAction();
@@ -2463,12 +2585,13 @@ function updateJobTutorialHud(){
   const farmerBlockedReturn=jobTutorialJob==='farmer'&&jobTutorialFarmerStep<4;
   const cookBlockedReturn=jobTutorialJob==='cook'&&jobTutorialCookStep<4;
   const blacksmithBlockedReturn=jobTutorialJob==='blacksmith'&&jobTutorialBlacksmithStep<3;
-  const returnBlocked=minerBlockedReturn||farmerBlockedReturn||cookBlockedReturn||blacksmithBlockedReturn;
+  const monkBlockedReturn=jobTutorialJob==='monk'&&jobTutorialMonkStep<2;
+  const returnBlocked=minerBlockedReturn||farmerBlockedReturn||cookBlockedReturn||blacksmithBlockedReturn||monkBlockedReturn;
   tutorialEl.classList.remove('hidden');
   tutorialEl.innerHTML='<div class="tutpill">'+escHTML(job.name)+' Tutorial Room</div>'
-    +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':cookBlockedReturn?'FINISH COOKING':'FINISH FORGING'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
-    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'Sell the armour to Tobin before leaving.':'Craft and inspect armour before leaving.'):'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
-    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The blacksmith loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
+    +'<div class="tutkey">'+escHTML(nearReturn?(returnBlocked?(minerBlockedReturn?'FINISH TRADE':farmerBlockedReturn?'FINISH FARMING':cookBlockedReturn?'FINISH COOKING':blacksmithBlockedReturn?'FINISH FORGING':'FINISH FOCUS'):'RETURN TO TOWN'):nearPetDragon?petTamerTutorialPromptKey():copy.key)+'</div>'
+    +'<div class="tuttext">'+escHTML(nearReturn?(minerBlockedReturn?'Mine a diamond and trade it with Garrik before leaving.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'Sell wheat to Liss Barley before leaving.':'Till soil, plant seeds, and harvest wheat before leaving.'):cookBlockedReturn?(jobTutorialCookStep>=3?'Sell the meal to Pippa Hearth before leaving.':'Prep bread, start the hearth timer, and claim your meal before leaving.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'Sell the armour to Tobin before leaving.':'Craft and inspect armour before leaving.'):monkBlockedReturn?'Start focus in the circle and hold still before leaving.':'Step into the pillar to return to Town of Beginnings.'):nearPetDragon?(petTamerTutorialProgressLabel()+': '+petTamerTutorialAction().purpose):copy.text)+'</div>'
+    +'<div class="tutsub">'+escHTML(nearReturn?(minerBlockedReturn?'The miner loop is: mine valuable ore -> trade for gold -> return.':farmerBlockedReturn?(jobTutorialFarmerStep>=3?'The farmer loop is: grow food -> sell food -> earn gold.':'Follow the green pillar back to the current Farmer lesson.'):cookBlockedReturn?(jobTutorialCookStep>=3?'The cook loop is: prepare food -> sell food -> support the town.':'Follow the green pillar back to the current Cook station.'):blacksmithBlockedReturn?(jobTutorialBlacksmithStep>=2?'The blacksmith loop is: craft gear -> sell or equip it -> improve the party.':'Follow the green pillar back to the forge bench.'):monkBlockedReturn?'The monk loop is: enter a calm space -> answer/hold focus -> restore and support.':'Your job is equipped. You can switch later at the Job Board.'):nearPetDragon?petTamerTutorialPromptSub():copy.sub)+'</div>';
 }
 function completeJobTutorial(){
   if(!jobTutorialActive) return;
@@ -2484,7 +2607,10 @@ function completeJobTutorial(){
   jobTutorialCookStep=0;
   jobTutorialBlacksmithStep=0;
   jobTutorialBlacksmithCraftedArmor=null;
+  jobTutorialMonkStep=0;
+  jobTutorialMonkStartedAt=0;
   clearCookTutorialTimer();
+  SFX.meditate&&SFX.meditate(false);
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
   jobTutorialPetDragonRideStart=null;
@@ -2526,7 +2652,10 @@ function startJobTutorial(jobId){
   jobTutorialCookStep=0;
   jobTutorialBlacksmithStep=0;
   jobTutorialBlacksmithCraftedArmor=null;
+  jobTutorialMonkStep=0;
+  jobTutorialMonkStartedAt=0;
   clearCookTutorialTimer();
+  SFX.meditate&&SFX.meditate(false);
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
   jobTutorialPetDragonRideStart=null;
@@ -2551,6 +2680,7 @@ function startJobTutorial(jobId){
   else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
   else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the prep table. Press <b>G</b> to start turning wheat into real food.');
   else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the forge bench. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
+  else if(jobId==='monk')sysMsg('<b>Monk chosen.</b><br>Follow the pillar of light to the focus circle. Press <b>G</b>, then hold still.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();
   return true;
@@ -2571,6 +2701,8 @@ function resumeJobTutorial(jobId,state={}){
   jobTutorialCookStep=jobId==='cook'?Math.max(0,Math.min(COOK_TUTORIAL_ACTIONS.length,Number(state.cookStep)||0)):0;
   jobTutorialBlacksmithStep=jobId==='blacksmith'?Math.max(0,Math.min(BLACKSMITH_TUTORIAL_ACTIONS.length,Number(state.blacksmithStep)||0)):0;
   jobTutorialBlacksmithCraftedArmor=state.blacksmithCraftedArmor&&typeof state.blacksmithCraftedArmor==='object'?state.blacksmithCraftedArmor:null;
+  jobTutorialMonkStep=jobId==='monk'?Math.max(0,Math.min(MONK_TUTORIAL_ACTIONS.length,Number(state.monkStep)||0)):0;
+  jobTutorialMonkStartedAt=jobId==='monk'?Math.max(0,Number(state.monkStartedAt)||0):0;
   jobTutorialCookStartedAt=0;
   jobTutorialCookReadyAt=0;
   if(jobId==='cook'&&state.cookReadyAt&&jobTutorialCookStep===2){
@@ -2617,7 +2749,10 @@ function tickJobTutorial(now){
     jobTutorialCookStep=0;
     jobTutorialBlacksmithStep=0;
     jobTutorialBlacksmithCraftedArmor=null;
+    jobTutorialMonkStep=0;
+    jobTutorialMonkStartedAt=0;
     clearCookTutorialTimer();
+    SFX.meditate&&SFX.meditate(false);
     jobTutorialPetDragonSeen=false;
     jobTutorialPetDragonStep=0;
     jobTutorialPetDragonRideStart=null;
@@ -2640,6 +2775,7 @@ function tickJobTutorial(now){
   updateCookTutorialTrader(now);
   updateBlacksmithTutorialTrader(now);
   updateCookTutorialTimer(now);
+  updateMonkTutorialFocus(now);
   const target=jobTutorialBeaconTarget(jobTutorialJob,room);
   if(!target)return;
   const y=jobTutorialJob==='pet_tamer'?(target.y||room.G+1.035):jobTutorialWalkY(target.x,target.z,room.G+1.035);
@@ -2706,6 +2842,14 @@ function tickJobTutorial(now){
       if(now>jobTutorialReturnWarnAt){
         jobTutorialReturnWarnAt=now+1800;
         const action=blacksmithTutorialAction();
+        sysMsg('<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
+      }
+      return;
+    }
+    if(jobTutorialJob==='monk'&&jobTutorialMonkStep<2){
+      if(now>jobTutorialReturnWarnAt){
+        jobTutorialReturnWarnAt=now+1800;
+        const action=monkTutorialAction();
         sysMsg('<b>'+escHTML(action.key)+':</b> '+escHTML(action.purpose));
       }
       return;
@@ -4159,6 +4303,14 @@ function nearbyInteractionPrompt(){
       push({key:action.verb,title:action.key,small:blacksmithTutorialProgressLabel(),priority:118},bd);
     }
   }
+  const monkTarget=jobTutorialActive&&jobTutorialJob==='monk'&&dim==='job'?monkTutorialTargetPos():null;
+  if(monkTarget&&jobTutorialMonkStep<2&&player){
+    const md=Math.hypot(player.pos.x-monkTarget.x,player.pos.z-monkTarget.z);
+    if(md<5.4){
+      const action=monkTutorialAction();
+      push({key:action.verb,title:action.key,small:jobTutorialMonkStep===1?('Focus '+Math.ceil(monkTutorialRemainingMs()/1000)+'s'):monkTutorialProgressLabel(),priority:118},md);
+    }
+  }
   const petPracticeRoost=nearPetTamerPracticeRoost();
   if(petPracticeRoost&&jobTutorialPetDragonStep>=5)push({key:'B',title:'Practice Roost',small:jobTutorialPetDragonSeen?'Lesson complete':'Open dragon bonds to finish',priority:119},petPracticeRoost.distance);
   const petPracticeInsulator=nearPetTamerPracticeInsulator();
@@ -4347,6 +4499,7 @@ function secondaryAction(){
   if(tryFarmerTutorialTrade()) return;
   if(tryCookTutorialAction()) return;
   if(tryBlacksmithTutorialAction()) return;
+  if(tryMonkTutorialAction()) return;
   if(performPetTamerDragonTutorialAction()) return;
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
@@ -4577,6 +4730,8 @@ gameContext.registerState('combat', Object.freeze({
   get jobTutorialCookStep(){ return jobTutorialCookStep; },
   get jobTutorialBlacksmithStep(){ return jobTutorialBlacksmithStep; },
   get jobTutorialBlacksmithCraftedArmor(){ return jobTutorialBlacksmithCraftedArmor; },
+  get jobTutorialMonkStep(){ return jobTutorialMonkStep; },
+  get jobTutorialMonkStartedAt(){ return jobTutorialMonkStartedAt; },
   get jobTutorialCookStartedAt(){ return jobTutorialCookStartedAt; },
   get jobTutorialCookReadyAt(){ return jobTutorialCookReadyAt; },
   get jobTutorialPetDragonSeen(){ return jobTutorialPetDragonSeen; },
@@ -4607,6 +4762,8 @@ gameContext.registerModule('combat', Object.freeze({
   performCookTutorialStepForTest,
   blacksmithTutorialVisualDebug,
   performBlacksmithTutorialStepForTest,
+  monkTutorialVisualDebug,
+  performMonkTutorialStepForTest,
   performPetTamerDragonTutorialAction,
   petTamerVisualDebug:()=>{
     const p=petTamerPracticeInsulatorPos();
