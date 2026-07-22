@@ -119,6 +119,10 @@ const legacyMenuBindings={
   "refreshProgressionDirectorNotice":{get:()=>refreshProgressionDirectorNotice},
   "openDragonBondUI":{get:()=>openDragonBondUI},
   "openDragonInteractUI":{get:()=>openDragonInteractUI},
+  "openPetTamerServicesUI":{get:()=>openPetTamerServicesUI},
+  "applyPetTamerServices":{get:()=>applyPetTamerServices},
+  "applyPetTamerPing":{get:()=>applyPetTamerPing},
+  "applyPetTamerPingResult":{get:()=>applyPetTamerPingResult},
   "openDragonProgressionUI":{get:()=>openDragonProgressionUI},
   "openDungeonLobbyUI":{get:()=>openDungeonLobbyUI},
   "openGuardianUI":{get:()=>openGuardianUI},
@@ -4841,6 +4845,104 @@ function renameDragonPrompt(type){
     sysMsg('Your dragon is now named <b>'+escHTML(next)+'</b>');
   }
 }
+let petTamerServiceState={services:[],advertised:false,stopped:false,reason:'',updatedAt:0};
+function petTamerRoomLabel(s){
+  const dim=String(s&&s.dim||'overworld'),dgn=String(s&&s.dgn||'');
+  if(dgn==='taming_land'||dim==='taming_land')return 'Taming Land';
+  if(dgn)return 'Dungeon shard';
+  if(dim==='taming')return 'Taming Land';
+  if(dim==='pet_tamer_tutorial')return 'Pet Tamer Tutorial';
+  if(dim==='farmer_tutorial')return 'Farmer Tutorial';
+  if(dim==='cook_tutorial')return 'Cook Tutorial';
+  if(dim==='miner_tutorial')return 'Miner Tutorial';
+  return 'Town / Overworld';
+}
+function requestPetTamerServices(action='list', extra={}){
+  if(!NET.on||!NET.room){ sysMsg('Pet Tamer services require the live world server.'); return false; }
+  NET.room.send('petTamerService',{action,...extra});
+  return true;
+}
+function applyPetTamerServices(m){
+  if(!m)return;
+  petTamerServiceState={
+    services:Array.isArray(m.services)?m.services:[],
+    advertised:!!m.advertised || (petTamerServiceState.advertised && !m.stopped),
+    stopped:!!m.stopped,
+    reason:String(m.reason||''),
+    updatedAt:Date.now(),
+  };
+  if(m.ok===false&&m.reason==='job')sysMsg('Only <b>Pet Tamers</b> can advertise dragon training services.',{tier:'minor',title:'Pet Tamer Services'});
+  if(qModalIs('pet-tamer-services'))setTimeout(()=>openPetTamerServicesUI(false),80);
+}
+function applyPetTamerPing(m){
+  if(!m)return;
+  const name=escHTML(String(m.fromName||'Hunter'));
+  const where=escHTML(petTamerRoomLabel(m));
+  sysMsg('<b>'+name+'</b> is looking for a Pet Tamer.<br>They are in <b>'+where+'</b> near X '+Math.round(Number(m.x)||0)+', Z '+Math.round(Number(m.z)||0)+'. Meet them to arrange a dragon-training loan.',{tier:'major',title:'Pet Tamer Help'});
+}
+function applyPetTamerPingResult(m){
+  if(m&&m.ok){
+    sysMsg('Ping sent to <b>'+escHTML(String(m.targetName||'Pet Tamer'))+'</b>. Meet beside each other, press <b>E</b>, then choose <b>Train My Pet</b>.',{tier:'minor',title:'Pet Tamer Services'});
+    return;
+  }
+  sysMsg('That Pet Tamer is no longer available.',{tier:'minor',title:'Pet Tamer Services'});
+}
+function openPetTamerServicesUI(shouldRequest=true){
+  if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
+  if(uiOpen) closeUI(false);
+  openQWin('management');
+  qpanelEl.innerHTML='';
+  qpanelEl.dataset.modal='pet-tamer-services';
+  const h=document.createElement('h2'); h.textContent='PET TAMER SERVICES'; qpanelEl.appendChild(h);
+  const sub=document.createElement('div'); sub.className='sub2';
+  sub.textContent='ONLINE TRAINERS - DRAGON LOANS - 12 HOUR TRAINING';
+  qpanelEl.appendChild(sub);
+  const intro=document.createElement('p'); intro.className='qtext';
+  intro.innerHTML='Use this board to find online Pet Tamers. A trainer can advertise a fee; an owner can ping them, meet nearby, then use <b>E - Train My Pet</b> to create the real gold-for-training loan.';
+  qpanelEl.appendChild(intro);
+  if(playerJob==='pet_tamer'){
+    const panel=document.createElement('div'); panel.className='trade-error-panel';
+    panel.innerHTML='<b>Advertise your service</b><br><small>Owners will see your fee and current room while you are online.</small>';
+    const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px';
+    const price=document.createElement('input'); price.type='number'; price.min='0'; price.max='1000000'; price.step='10'; price.value='100'; price.style.width='130px'; price.setAttribute('aria-label','Training fee');
+    const note=document.createElement('input'); note.type='text'; note.maxLength=80; note.placeholder='Short note'; note.value='Training drills and care'; note.style.minWidth='260px'; note.setAttribute('aria-label','Service note');
+    row.appendChild(price); row.appendChild(note);
+    row.appendChild(qBtn('ADVERTISE',()=>requestPetTamerServices('advertise',{price:Number(price.value)||0,note:note.value||''})));
+    row.appendChild(qBtn('STOP LISTING',()=>requestPetTamerServices('stop'),true));
+    panel.appendChild(row);
+    qpanelEl.appendChild(panel);
+  }
+  const services=petTamerServiceState.services||[];
+  const list=document.createElement('div'); list.className='bondgrid'; qpanelEl.appendChild(list);
+  if(!services.length){
+    const none=document.createElement('p'); none.className='qtext';
+    none.innerHTML=NET.on?'No Pet Tamers are advertising right now. Check again later or ask in chat.':'Connect to the live server to see online Pet Tamers.';
+    qpanelEl.appendChild(none);
+  } else {
+    for(const s of services){
+      const card=document.createElement('div'); card.className='bondcard';
+      const icon=document.createElement('div'); icon.className='bondicon'; icon.textContent='T'; card.appendChild(icon);
+      const body=document.createElement('div'); card.appendChild(body);
+      const name=document.createElement('div'); name.className='bondname';
+      const own=NET&&NET.room&&s.sid===NET.room.sessionId;
+      name.innerHTML='<b>'+escHTML(String(s.name||'Pet Tamer'))+'</b><span>'+(own?'YOUR LISTING':'ONLINE TAMER')+'</span>';
+      body.appendChild(name);
+      const meta=document.createElement('div'); meta.className='bondmeta';
+      meta.innerHTML='Fee: <b>'+Math.max(0,s.price|0).toLocaleString('en-US')+'g</b><br>Location: <b>'+escHTML(petTamerRoomLabel(s))+'</b> - X '+Math.round(Number(s.x)||0)+', Z '+Math.round(Number(s.z)||0)+'<br>Active loans: <b>'+Math.max(0,s.activeLoans|0)+'</b><br>'+escHTML(String(s.note||'Ready to train dragons.'));
+      body.appendChild(meta);
+      const actions=document.createElement('div'); actions.className='bondactions'; body.appendChild(actions);
+      actions.appendChild(qBtn(own?'YOUR SERVICE':'PING TAMER',()=>own?sysMsg('This is your own Pet Tamer listing.'):requestPetTamerServices('ping',{targetSid:s.sid}),own));
+      actions.appendChild(qBtn('HOW LOANS WORK',()=>sysMsg('Stand beside the Pet Tamer, press <b>E</b>, choose <b>Train My Pet</b>, pick an adult dragon, then set the gold fee. The tamer pays the fee and keeps the dragon for training up to 12 real hours.',{tier:'minor',title:'Dragon Loans'}),true));
+      list.appendChild(card);
+    }
+  }
+  const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
+  row.appendChild(qBtn('REFRESH',()=>requestPetTamerServices()));
+  row.appendChild(qBtn('DRAGON BONDS',()=>openDragonBondUI(),true));
+  row.appendChild(qBtn('STABLEMASTER',()=>openStablemasterUI(),true));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+  if(shouldRequest)requestPetTamerServices();
+}
 function openStablemasterUI(v={name:'Rook Emberstall'}){
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   if(uiOpen) closeUI(false);
@@ -4897,6 +4999,7 @@ function openStablemasterUI(v={name:'Rook Emberstall'}){
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('ROOST QUEST', ()=>openQuestUI({...v, role:'roost', questSource:'npc'})));
   row.appendChild(qBtn('DRAGON BONDS', ()=>openDragonBondUI()));
+  row.appendChild(qBtn('TAMER SERVICES', ()=>openPetTamerServicesUI()));
   row.appendChild(qBtn('COMMANDS', ()=>openDragonCommandUI()));
   row.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI(), !dragonUnlocks.length));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
@@ -5033,6 +5136,7 @@ function openDragonProgressionUI(){
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('BONDS', ()=>openDragonBondUI()));
+  row.appendChild(qBtn('TAMER SERVICES', ()=>openPetTamerServicesUI(), true));
   row.appendChild(qBtn('COMMANDS', ()=>openDragonCommandUI(), !dragonUnlocks.length));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
@@ -5266,6 +5370,7 @@ function openDragonBondUI(){
     fgrid.appendChild(card);
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
+  row.appendChild(qBtn('TAMER SERVICES', ()=>openPetTamerServicesUI()));
   row.appendChild(qBtn('COMMANDS', ()=>openDragonCommandUI(), !dragonUnlocks.length));
   row.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI(), !dragonUnlocks.length));
   row.appendChild(qBtn('CRAFT TREATS', ()=>openCraftingFromNpc()));
@@ -8487,12 +8592,16 @@ gameContext.registerModule('menus', Object.freeze({
   openCrafting:openCraftingFromNpc,
   openPlayerTrade:openPlayerTradeUI,
   openPlayerSocial:openPlayerSocialUI,
+  openPetTamerServices:openPetTamerServicesUI,
   applyTradeOffer,
   applyTradePending,
   applyTradeResult,
   applyTradeReject,
   applyTradeCancel,
   applyFriendResult,
+  applyPetTamerServices,
+  applyPetTamerPing,
+  applyPetTamerPingResult,
   trackerCraftAction:objectiveTrackerCraftAction,
   activateCraftShortcut:activateObjectiveCraftShortcut,
 }));

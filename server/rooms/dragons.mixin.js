@@ -29,6 +29,7 @@ class DragonsMixin {
     this.dragonTraining = new Map();      // sessionId -> { type, role, progress, need, lastX, lastZ, until }
     this.dragonLoanOffers = new Map();    // offerId -> pending dragon training loan
     this.dragonLoanSeq = 0;
+    this.petTamerServices = new Map();    // sessionId -> { enabled, price, note, updatedAt }
   }
 
   awardPetTamerCare(client, count = 1, xp = 4, target = 0) {
@@ -202,6 +203,86 @@ class DragonsMixin {
 
   publicDragonLoansFor(token, prof) {
     return this.reconcileDragonLoansForProfile(token, prof).map(loan => this.publicDragonLoan(loan, token)).filter(Boolean);
+  }
+
+  petTamerServiceRows(now = Date.now()) {
+    if (!this.petTamerServices) this.petTamerServices = new Map();
+    const rows = [];
+    for (const client of this.clients || []) {
+      const service = this.petTamerServices.get(client.sessionId);
+      if (!service || service.enabled !== true) continue;
+      const rec = this.profileFor(client);
+      if (!rec || !rec.prof || rec.prof.job !== 'pet_tamer') continue;
+      const p = this.state && this.state.players && this.state.players.get(client.sessionId);
+      rows.push({
+        sid: client.sessionId,
+        name: (p && p.name) || rec.prof.name || 'Pet Tamer',
+        job: rec.prof.job || '',
+        price: Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, service.price | 0)),
+        note: typeof service.note === 'string' ? service.note.slice(0, 80) : '',
+        dim: (p && p.dim) || 'overworld',
+        dgn: (p && p.dgn) || '',
+        x: p ? Math.round(Number(p.x) || 0) : 0,
+        z: p ? Math.round(Number(p.z) || 0) : 0,
+        activeLoans: this.activeDragonLoansFor(rec.token, rec.prof, now).filter(loan => loan.tamerToken === rec.token).length,
+        updatedAt: service.updatedAt || now,
+      });
+    }
+    rows.sort((a, b) => (a.price - b.price) || String(a.name).localeCompare(String(b.name)));
+    return rows;
+  }
+
+  sendPetTamerServices(client, extra = {}) {
+    client.send('petTamerServices', { ok: true, services: this.petTamerServiceRows(), ...extra });
+  }
+
+  broadcastPetTamerServices(extra = {}) {
+    if (typeof this.broadcast === 'function') this.broadcast('petTamerServices', { ok: true, services: this.petTamerServiceRows(), ...extra });
+  }
+
+  handlePetTamerService(client, m = {}) {
+    const rec = this.profileFor(client);
+    const action = String(m && m.action || 'list');
+    if (!this.petTamerServices) this.petTamerServices = new Map();
+    if (action === 'advertise') {
+      if (!rec || !rec.prof || rec.prof.job !== 'pet_tamer') {
+        return client.send('petTamerServices', { ok: false, reason: 'job', services: this.petTamerServiceRows() });
+      }
+      const price = Math.max(0, Math.min(DRAGON_LOAN_MAX_FEE, Number(m.price) || 0)) | 0;
+      const note = typeof m.note === 'string' ? m.note.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+      this.petTamerServices.set(client.sessionId, { enabled: true, price, note, updatedAt: Date.now() });
+      this.sendPetTamerServices(client, { advertised: true });
+      this.broadcastPetTamerServices({ updated: true });
+      return;
+    }
+    if (action === 'stop') {
+      this.petTamerServices.delete(client.sessionId);
+      this.sendPetTamerServices(client, { stopped: true });
+      this.broadcastPetTamerServices({ updated: true });
+      return;
+    }
+    if (action === 'ping') {
+      const targetSid = String(m.targetSid || '');
+      const target = (this.clients || []).find(c => c.sessionId === targetSid);
+      const targetRec = target && this.profileFor(target);
+      if (!rec || !target || !targetRec || !targetRec.prof || targetRec.prof.job !== 'pet_tamer') {
+        return client.send('petTamerPingResult', { ok: false, reason: 'target', targetSid });
+      }
+      const p = this.state && this.state.players && this.state.players.get(client.sessionId);
+      const tp = this.state && this.state.players && this.state.players.get(target.sessionId);
+      const fromName = (p && p.name) || rec.prof.name || 'Hunter';
+      const targetName = (tp && tp.name) || targetRec.prof.name || 'Pet Tamer';
+      target.send('petTamerPing', {
+        fromSid: client.sessionId,
+        fromName,
+        x: p ? Math.round(Number(p.x) || 0) : 0,
+        z: p ? Math.round(Number(p.z) || 0) : 0,
+        dim: (p && p.dim) || 'overworld',
+      });
+      client.send('petTamerPingResult', { ok: true, targetSid, targetName });
+      return;
+    }
+    this.sendPetTamerServices(client);
   }
 
   dirtyAndSyncDragonAccess(client, access) {

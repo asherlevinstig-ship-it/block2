@@ -381,6 +381,7 @@ class GameRoom extends Room {
     this.onMessage('dragonLoanAccept', (client, m) => this.handleDragonLoanAccept(client, m));
     this.onMessage('dragonLoanCancel', (client, m) => this.handleDragonLoanCancel(client, m));
     this.onMessage('dragonLoanReturn', (client, m) => this.handleDragonLoanReturn(client, m));
+    this.onMessage('petTamerService', (client, m) => this.handlePetTamerService(client, m));
     this.onMessage('perchDragon', (client, m) => this.handlePerchDragon(client, m));
     this.onMessage('recallDragon', (client, m) => this.handleRecallDragon(client, m));
     this.onMessage('feedDragon', (client, m) => this.handleFeedDragon(client, m));
@@ -1095,6 +1096,10 @@ class GameRoom extends Room {
     if (typeof this.refundTavernBlackjack === 'function') this.refundTavernBlackjack(client, 'disconnect');
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
+    if (this.petTamerServices) {
+      this.petTamerServices.delete(client.sessionId);
+      this.broadcastPetTamerServices({ updated: true });
+    }
     if (this.cancelTradesFor) this.cancelTradesFor(client.sessionId, 'offline');
     this.detachTeamSession(client.sessionId);
     const p = this.state.players.get(client.sessionId);

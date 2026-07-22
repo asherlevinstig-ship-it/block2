@@ -395,6 +395,10 @@ test('client modules expose and route player trading actions', () => {
   assert.match(menus, /function appendDragonLoanStatusPanel/);
   assert.match(menus, /RETURN NOW/);
   assert.match(menus, /dragonLoanTimeLeftText/);
+  assert.match(menus, /function openPetTamerServicesUI/);
+  assert.match(menus, /PET TAMER SERVICES/);
+  assert.match(menus, /NET\.room\.send\('petTamerService'/);
+  assert.match(menus, /function applyPetTamerPing/);
   assert.match(menus, /trainingDrills/);
   assert.match(menus, /BORROWED TRAINING/);
   assert.match(menus, /TRAIN MY PET/);
@@ -411,6 +415,8 @@ test('client modules expose and route player trading actions', () => {
   assert.match(networking, /room\.onMessage\('tradeResult'/);
   assert.match(networking, /room\.onMessage\('dragonLoanOffer'/);
   assert.match(networking, /room\.onMessage\('dragonLoanResult'/);
+  assert.match(networking, /room\.onMessage\('petTamerServices'/);
+  assert.match(networking, /room\.onMessage\('petTamerPing'/);
   assert.match(networking, /room\.onMessage\('dragonTrainingLoanProgress'/);
   assert.match(networking, /function applyDragonLoanSnapshot/);
   assert.match(networking, /Borrowed training/);
@@ -5502,6 +5508,48 @@ test('player trade and pet training loans require shared social-space proximity'
   assert.equal(owner.sent.at(-1).type, 'tradeReject');
   assert.equal(owner.sent.at(-1).msg.reason, 'range');
   assert.equal(owner.sent.at(-1).msg.sameSpace, false);
+});
+
+test('pet tamer service board lists online tamers and delivers owner pings', () => {
+  const room = makeRoom(), owner = makeClient('service_owner'), tamer = makeClient('service_tamer'), miner = makeClient('service_miner');
+  seedPlayer(room, owner, { name: 'Owner', ...townPlayerPos(0, 0) });
+  const { prof: tamerProf } = seedPlayer(room, tamer, { name: 'Tamer', gold: 100, ...townPlayerPos(3, 2) });
+  const { prof: minerProf } = seedPlayer(room, miner, { name: 'Miner', ...townPlayerPos(4, 4) });
+  tamerProf.job = 'pet_tamer';
+  minerProf.job = 'miner';
+  room.clients = [owner, tamer, miner];
+
+  room.handlePetTamerService(miner, { action: 'advertise', price: 5 });
+  assert.equal(miner.sent.at(-1).type, 'petTamerServices');
+  assert.equal(miner.sent.at(-1).msg.ok, false);
+  assert.equal(miner.sent.at(-1).msg.reason, 'job');
+
+  room.handlePetTamerService(tamer, { action: 'advertise', price: 75, note: 'training drills <fast>' });
+  const advertised = tamer.sent.at(-1);
+  assert.equal(advertised.type, 'petTamerServices');
+  assert.equal(advertised.msg.advertised, true);
+  assert.equal(advertised.msg.services.length, 1);
+  assert.equal(advertised.msg.services[0].name, 'Tamer');
+  assert.equal(advertised.msg.services[0].price, 75);
+  assert.equal(advertised.msg.services[0].note, 'training drills fast');
+
+  room.handlePetTamerService(owner, { action: 'list' });
+  const listing = owner.sent.at(-1);
+  assert.equal(listing.type, 'petTamerServices');
+  assert.equal(listing.msg.services[0].sid, tamer.sessionId);
+  assert.equal(listing.msg.services[0].dim, 'overworld');
+
+  room.handlePetTamerService(owner, { action: 'ping', targetSid: tamer.sessionId });
+  assert.equal(owner.sent.at(-1).type, 'petTamerPingResult');
+  assert.equal(owner.sent.at(-1).msg.ok, true);
+  const ping = tamer.sent.find(e => e.type === 'petTamerPing');
+  assert.ok(ping, 'advertised tamer receives the owner ping');
+  assert.equal(ping.msg.fromName, 'Owner');
+
+  room.handlePetTamerService(tamer, { action: 'stop' });
+  assert.equal(room.petTamerServices.has(tamer.sessionId), false);
+  room.handlePetTamerService(owner, { action: 'list' });
+  assert.equal(owner.sent.at(-1).msg.services.length, 0);
 });
 
 test('player trade can resolve a nearby named target when the client session id is stale', () => {

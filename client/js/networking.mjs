@@ -1069,6 +1069,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('dragonLoanReject', m=>applyDragonLoanReject(m));
     room.onMessage('dragonLoanCancel', m=>applyDragonLoanCancel(m));
     room.onMessage('dragonLoanReturn', m=>{applyDragonLoanReturn(m);eventFeed('[Dragon]','Dragon training loan returned.',{key:'dragonloan:return:'+String(m&&m.loan&&m.loan.id||''),cooldown:0});});
+    room.onMessage('petTamerServices', m=>applyPetTamerServices(m));
+    room.onMessage('petTamerPing', m=>{applyPetTamerPing(m);eventFeed('[Pet Tamer]',String(m&&m.fromName||'Hunter')+' is looking for dragon training help.',{key:'pettamer:ping:'+String(m&&m.fromSid||''),cooldown:3000});});
+    room.onMessage('petTamerPingResult', m=>applyPetTamerPingResult(m));
     room.onMessage('friendResult', m=>{applyFriendResult(m);if(m&&m.ok&&m.action!=='already')eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});});
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
