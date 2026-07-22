@@ -10,7 +10,7 @@
     "format:check": "node tools/check-format.js && git diff --check",
     "audit": "npm audit --audit-level=high",
     "check": "npm run lint && npm run format:check && npm test && npm run audit",
-    "test": "node --test server/test/authority.test.js server/test/auth-integration.test.js server/test/auth.test.js server/test/client-modules.test.js server/test/metrics-registry.test.js server/test/persistence-failure.test.js server/test/progression-balance.test.js server/test/recall-room.test.js server/test/recall-system.test.js server/test/schema.test.js server/test/security-headers.test.js server/test/startup-config.test.js server/test/state-clusters.test.js server/test/store-selection.test.js",
+    "test": "node --test server/test/authority.test.js server/test/auth-integration.test.js server/test/auth.test.js server/test/client-modules.test.js server/test/meditation-growth.test.js server/test/metrics-registry.test.js server/test/persistence-failure.test.js server/test/progression-balance.test.js server/test/recall-room.test.js server/test/recall-system.test.js server/test/schema.test.js server/test/security-headers.test.js server/test/startup-config.test.js server/test/state-clusters.test.js server/test/store-selection.test.js",
     "test:integration": "node server/test/integration.test.js",
     "test:e2e": "playwright test",
     "test:event": "node tools/event-smoke-test.js",

@@ -14,7 +14,7 @@ const networkModule=gameContext.requireService('network');
 const renderingModule=gameContext.requireService('rendering');
 const onboardingModule=gameContext.requireService('onboarding');
 const {createAuthController}=authModule;
-const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,hunterXpForActivity,nextHunterRankLevel,rankProgressForLevel,xpNeedForLevel,PROGRESSION_FOCUS_STATES}=progressionModule;
+const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,hunterRankLevelForGlobalLevel,hunterRankLevelLabel,hunterXpForActivity,nextHunterRankLevel,rankProgressForLevel,xpNeedForLevel,PROGRESSION_FOCUS_STATES}=progressionModule;
 const {createInventoryModel,createEquipmentModel}=inventoryModule;
 const {createQuestModel}=questJobModule;
 const {createNetworkController}=networkModule;
@@ -6464,15 +6464,15 @@ const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
-let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,mp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let activeObjectives=[];
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
 let highestGateRankCleared=-1;
 let armorSlot=null;
-const meditationBonus=(key)=>Math.max(0,Math.min(key==='sp'?80:40,(meditationGrowth&&Number.isFinite(+meditationGrowth[key])?+meditationGrowth[key]:0)|0));
+const meditationBonus=(key)=>Math.max(0,Math.min(key==='sp'?80:key==='mp'?80:40,(meditationGrowth&&Number.isFinite(+meditationGrowth[key])?+meditationGrowth[key]:0)|0));
 const maxHp=()=>20+(S.vit-1)*2+meditationBonus('hp');
-const maxMp=()=>20+(S.int-1)*3;
+const maxMp=()=>20+(S.int-1)*3+meditationBonus('mp');
 const maxSp=()=>100+(S.agi-1)*4+meditationBonus('sp');
 const maxHunger=()=>100+meditationBonus('hunger');
 const xpNeed=()=>xpNeedForLevel(S.lvl);
@@ -6490,6 +6490,13 @@ function hunterRankLetter(ri){ return HUNTER_RANK_LETTERS[Math.max(0,Math.min(5,
 function localPlayerHunterRankIndex(){ return playerHunterRankIndex(S.lvl,highestGateRankCleared); }
 function playerRankName(lvl=S.lvl, cleared=-1){ return hunterRankLetter(playerHunterRankIndex(lvl, cleared))+'-Rank Hunter'; }
 function localPlayerRankName(){ return playerRankName(S.lvl, highestGateRankCleared); }
+function hunterRankLevel(lvl=S.lvl){ return hunterRankLevelForGlobalLevel(lvl); }
+function hunterRankLevelText(lvl=S.lvl, opts={}){ return hunterRankLevelLabel(lvl, opts); }
+function hunterStandingText(lvl=S.lvl){ return hunterRankLevelText(lvl)+' Hunter'; }
+function nextHunterRankText(rank=localPlayerHunterRankIndex()){
+  const level=nextHunterRankLevel(rank);
+  return level ? hunterRankLevelText(level)+' begins' : 'Top Hunter rank';
+}
 function currentRankProgress(){ return rankProgressForLevel(S.lvl,S.xp); }
 function gateSystemUnlocked(){ return ((S&&S.lvl)|0) >= 3; }
 function gateCutsceneSeen(){ try{ return serverTutorials.gate>=1||localStorage.getItem('bc_gatecut_v1')==='1'; }catch(e){ return serverTutorials.gate>=1; } }
@@ -8010,7 +8017,7 @@ const barEls={
 };
 function renderBars(){
   document.body.classList.toggle('level-two-hud',S.lvl>=2);
-  barEls.lvl.textContent=S.lvl;
+  barEls.lvl.textContent=hunterRankLetter(localPlayerHunterRankIndex())+hunterRankLevel();
   barEls.hp.style.width=Math.max(0,hp/maxHp()*100)+'%';
   barEls.hpT.textContent='HP '+Math.ceil(hp)+'/'+maxHp();
   barEls.mp.style.width=Math.max(0,mp/maxMp()*100)+'%';
@@ -8023,7 +8030,7 @@ function renderBars(){
   if(barEls.xpT)barEls.xpT.textContent=Math.floor(S.xp).toLocaleString('en-US')+' / '+xpNeed().toLocaleString('en-US')+' XP';
   const rankProgress=currentRankProgress();
   barEls.xp.parentElement.title=rankProgress.maxRank
-    ? 'S-Rank Hunter · '+Math.floor(S.xp)+' / '+xpNeed()+' XP to next level'
+    ? 'S-Rank Hunter · '+Math.floor(S.xp)+' / '+xpNeed()+' XP to next rank level'
     : hunterRankLetter(rankProgress.nextRank)+'-Rank in '+rankProgress.remaining.toLocaleString('en-US')+' Hunter XP';
 }
 renderBars();
@@ -10204,6 +10211,9 @@ const legacyWorldBindings={
   "hunger":{get:()=>hunger,set:value=>{hunger=value;}},
   "hungerAcc":{get:()=>hungerAcc,set:value=>{hungerAcc=value;}},
   "hunterRankLetter":{get:()=>hunterRankLetter},
+  "hunterRankLevel":{get:()=>hunterRankLevel},
+  "hunterRankLevelText":{get:()=>hunterRankLevelText},
+  "hunterStandingText":{get:()=>hunterStandingText},
   "I":{get:()=>I},
   "iceLockVfx":{get:()=>iceLockVfx},
   "iconCanvas":{get:()=>iconCanvas},
@@ -10257,6 +10267,7 @@ const legacyWorldBindings={
   "localPlayerHunterRankIndex":{get:()=>localPlayerHunterRankIndex},
   "localPlayerRankIndex":{get:()=>localPlayerRankIndex},
   "localPlayerRankName":{get:()=>localPlayerRankName},
+  "nextHunterRankText":{get:()=>nextHunterRankText},
   "makeJobContract":{get:()=>makeJobContract},
   "makeVillager":{get:()=>makeVillager},
   "makeZombie":{get:()=>makeZombie},
@@ -10267,7 +10278,7 @@ const legacyWorldBindings={
   "maxMp":{get:()=>maxMp},
   "maxSp":{get:()=>maxSp},
   "meditateJobAcc":{get:()=>meditateJobAcc,set:value=>{meditateJobAcc=value;}},
-  "meditationGrowth":{get:()=>meditationGrowth,set:value=>{meditationGrowth=value&&typeof value==='object'?value:{completed:0,next:3,hp:0,sp:0,hunger:0};}},
+  "meditationGrowth":{get:()=>meditationGrowth,set:value=>{meditationGrowth=value&&typeof value==='object'?value:{completed:0,next:3,hp:0,mp:0,sp:0,hunger:0};}},
   "meditateMat":{get:()=>meditateMat},
   "meditateRing":{get:()=>meditateRing},
   "mobs":{get:()=>mobs},

@@ -1167,6 +1167,14 @@
   #recallfallback{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;pointer-events:auto}#recallfallback.hidden,#recallfeedback.hidden{display:none}
   .recallchoice{min-height:52px;border:1px solid var(--answer);border-radius:8px;padding:8px 12px;background:rgba(4,10,22,.92);color:#fff;font:700 14px system-ui;box-shadow:inset 4px 0 var(--answer),0 0 14px color-mix(in srgb,var(--answer) 25%,transparent);cursor:pointer}.recallchoice:hover,.recallchoice:focus{background:color-mix(in srgb,var(--answer) 18%,#07101f);outline:2px solid #fff}
   #recallfeedback{margin-top:10px;padding:10px;border-radius:7px;font:700 14px/1.4 system-ui}#recallfeedback.correct{display:block;color:#b9ffd8;background:rgba(16,185,129,.18);border:1px solid #34d399}#recallfeedback.wrong{display:block;color:#ffe3e3;background:rgba(239,68,68,.2);border:1px solid #fb7185}
+  #recallhud.meditation-recall{border-color:rgba(125,211,252,.72);background:radial-gradient(circle at 50% 0,rgba(125,211,252,.18),transparent 38%),linear-gradient(160deg,rgba(7,19,30,.97),rgba(12,17,34,.96));box-shadow:0 0 34px rgba(125,211,252,.22),inset 0 0 28px rgba(154,210,107,.08)}
+  .meditation-fill-input{width:100%;box-sizing:border-box;border:1px solid rgba(125,211,252,.72);border-radius:7px;background:rgba(3,12,24,.94);color:#f5fbff;padding:13px 14px;font:800 16px system-ui;text-align:center;letter-spacing:1px;outline:none}
+  .meditation-fill-input:focus{border-color:#9ad26b;box-shadow:0 0 18px rgba(154,210,107,.24)}
+  .meditationhelp{grid-column:1/-1;color:#b9cbe0;font:800 11px system-ui;letter-spacing:1.2px;text-transform:uppercase}
+  .meditationsort{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+  .meditationsort-chip{min-height:48px;border:1px solid rgba(125,211,252,.58);border-radius:8px;background:rgba(5,14,27,.94);color:#eaf8ff;font:900 13px system-ui;cursor:pointer;box-shadow:inset 0 0 14px rgba(125,211,252,.08)}
+  .meditationsort-chip:hover,.meditationsort-chip:focus{border-color:#ffd24a;background:rgba(38,29,8,.94);outline:2px solid rgba(255,210,74,.42)}
+  .meditation-submit{grid-column:1/-1;justify-self:center;min-width:190px}
   #recallflash{position:fixed;inset:0;z-index:31;pointer-events:none;opacity:0;transition:opacity .18s;background:radial-gradient(circle,rgba(52,211,153,.42),rgba(16,185,129,.08) 45%,transparent 70%)}#recallflash.show{opacity:1}#recallflash.wrong{background:radial-gradient(circle,rgba(251,113,133,.48),rgba(127,29,29,.2) 48%,transparent 72%);animation:recallshake .32s linear 2}@keyframes recallshake{25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
   @media(max-width:620px){#recallhud{top:10px}#recallquestion{font-size:16px}}
   /* keep the wide top-center banners usable on narrow windows */

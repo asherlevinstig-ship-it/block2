@@ -399,6 +399,8 @@ class GameRoom extends Room {
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
     this.onMessage('homesteadWorkOrder', (client, m) => this.handleHomesteadWorkOrder(client, m));
     this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
+    this.onMessage('meditationChallenge', (client) => this.handleMeditationChallenge(client));
+    this.onMessage('meditationAnswer', (client, m) => this.handleMeditationAnswer(client, m));
     this.onMessage('meditationComplete', (client, m) => this.handleMeditationComplete(client, m));
     this.onMessage('equipArmor', (client, m) => this.handleEquipArmor(client, m));
     this.onMessage('equipWeapon', (client, m) => this.handleEquipWeapon(client, m));
@@ -4419,7 +4421,8 @@ class GameRoom extends Room {
   }
   maxMpForProfile(prof) {
     const intv = prof && prof.S ? Math.max(1, prof.S.int | 0) : 1;
-    return 20 + (intv - 1) * 3;
+    const growth = sanitizeMeditationGrowth(prof && prof.meditationGrowth, prof && prof.S && prof.S.lvl || 1);
+    return 20 + (intv - 1) * 3 + growth.mp;
   }
   maxStaminaForProfile(prof) {
     const agi = prof && prof.S ? Math.max(1, prof.S.agi | 0) : 1;

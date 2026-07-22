@@ -14,7 +14,7 @@ import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
 import {backendWsUrl} from './config.mjs';
-import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,isDeityLevel} from './progression.mjs';
+import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,hunterRankLevelLabel,isDeityLevel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -162,8 +162,8 @@ function showLevelUpReveal(m){
   const nextRankLevel=Math.max(0,(m&&m.nextRankLevel)|0);
   ensureLevelUpRevealStyles();
   const card=document.createElement('div');card.className='level-up-reveal';card.setAttribute('role','status');card.setAttribute('aria-live','polite');
-  const levelLine=levels>1?'Level '+fromLevel+' -> '+level:'Level '+level;
-  const nextLine=nextRankLevel?'Next rank at Level '+nextRankLevel:'Mastery rank reached';
+  const levelLine=levels>1?hunterRankLevelLabel(fromLevel)+' → '+hunterRankLevelLabel(level):hunterRankLevelLabel(level);
+  const nextLine=nextRankLevel?hunterRankLevelLabel(nextRankLevel)+' begins':'Mastery rank reached';
   const xp=Number.isFinite(Number(m&&m.xp))?Math.max(0,(m.xp|0)):0;
   const nextXp=Number.isFinite(Number(m&&m.nextXp))?Math.max(0,(m.nextXp|0)):0;
   card.innerHTML='<small>LEVEL UP</small><h3>'+escHTML(levelLine)+'</h3><p>Your hunter grew stronger. Spend stat points when you are ready.</p><div class="level-up-rewards">'
@@ -184,8 +184,8 @@ function showLevelUpReveal(m){
   setTimeout(()=>{card.classList.add('leaving');setTimeout(()=>card.remove(),360);},4300);
   SFX.level();
   rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700});
-  showName('LEVEL '+level);
-  sysMsg('<b>Level '+level+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
+  showName(hunterRankLevelLabel(level).toUpperCase());
+  sysMsg('<b>'+hunterRankLevelLabel(level,{long:true})+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
 }
 function showDeityAscension(m){
   applyDeityState({unlocked:true,ascendedAt:Date.now(),powers:m&&m.powers,choices:m&&m.choices});
@@ -194,7 +194,7 @@ function showDeityAscension(m){
   const powerText=deityState.powers.length?deityState.powers.map(deityPowerName).join(', '):'Choose one in Status';
   const card=document.createElement('div');card.className='level-up-reveal deity';card.setAttribute('role','status');card.setAttribute('aria-live','assertive');
   card.innerHTML='<small>ASCENSION UNLOCKED</small><h3>DEITY</h3><p>S-Rank Level 10 reached. Your hunter has crossed into divine power.</p><div class="level-up-rewards">'
-    +'<div class="level-up-reward"><span>THRESHOLD</span><b>Level '+level+'</b></div>'
+    +'<div class="level-up-reward"><span>THRESHOLD</span><b>'+hunterRankLevelLabel(level)+'</b></div>'
     +'<div class="level-up-reward"><span>STATE</span><b>Deity</b></div>'
     +'<div class="level-up-reward"><span>POWER</span><b>'+escHTML(powerText)+'</b></div>'
     +'<div class="level-up-reward"><span>OPEN STATS</span><b>Press C</b></div>'
@@ -1057,12 +1057,12 @@ function netAttachRoom(room,name,client){
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
     room.onMessage('tutorialProgress', m=>{if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);});
     room.onMessage('firstPromotionAck', m=>{if(m&&m.ok)ONBOARD.setSeen(true);});
-    room.onMessage('levelUp', m=>{showLevelUpReveal(m);eventFeed('[Progress]','You reached Hunter Level '+Math.max(1,(m&&m.level)|0)+'. Spend stat points with C.',{key:'level:'+((m&&m.level)|0),cooldown:0});});
+    room.onMessage('levelUp', m=>{showLevelUpReveal(m);eventFeed('[Progress]','You reached '+hunterRankLevelLabel(Math.max(1,(m&&m.level)|0))+'. Spend stat points with C.',{key:'level:'+((m&&m.level)|0),cooldown:0});});
     room.onMessage('rankUp', m=>{
       presentMajor(()=>{SFX.level();ONBOARD.showRankPromotion(m);});
       eventFeed('[Progress]','Hunter rank advanced to '+String(m&&m.rankName||'a new rank')+'.',{key:'rank:'+String(m&&m.rankName||''),cooldown:0});
     });
-    room.onMessage('deityAscended', m=>{showDeityAscension(m);eventFeed('[Deity]','You ascended into Deity power at Level '+Math.max(DEITY_LEVEL,(m&&m.level)|0)+'.',{key:'deity:ascended',cooldown:0});});
+    room.onMessage('deityAscended', m=>{showDeityAscension(m);eventFeed('[Deity]','You ascended into Deity power at '+hunterRankLevelLabel(Math.max(DEITY_LEVEL,(m&&m.level)|0))+'.',{key:'deity:ascended',cooldown:0});});
     room.onMessage('deityPowerResult', m=>{
       if(m&&m.deity)applyDeityState(m.deity);
       if(!m||m.ok===false){
@@ -2014,7 +2014,13 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('meditationGrowth', m=>{
       if(globalThis.BlockcraftApplyMeditationGrowth)globalThis.BlockcraftApplyMeditationGrowth(m);
-      if(m&&m.ok!==false)eventFeed('[Meditation]','Meditation benchmark reached. '+String(m.statName||m.stat||'Body')+' increased.',{key:'meditation:growth:'+String(m&&m.stat||m&&m.statName||Date.now()),cooldown:0});
+      if(m&&m.ok!==false&&m.award)eventFeed('[Meditation]','Meditation benchmark reached. '+String(m.statName||m.award.stat||'Mana')+' increased.',{key:'meditation:growth:'+String(m.award.stat||Date.now()),cooldown:0});
+    });
+    room.onMessage('meditationQuestion', m=>{
+      if(globalThis.BlockcraftShowMeditationQuestion)globalThis.BlockcraftShowMeditationQuestion(m);
+    });
+    room.onMessage('meditationAnswerResult', m=>{
+      if(globalThis.BlockcraftApplyMeditationAnswer)globalThis.BlockcraftApplyMeditationAnswer(m);
     });
     room.onMessage('prospectResult',m=>{showProspectMarkers(m);eventFeed('[Miner]','Ore Sense marked nearby underground opportunities.',{key:'prospect:'+String(m&&m.x||'')+':'+String(m&&m.z||''),cooldown:4000});});
     room.onMessage('prospectReject',m=>{
@@ -2888,7 +2894,7 @@ function makeNameTag(text, col, team, teamColr, opts){
   g.strokeText(text,160,36);
   g.fillStyle=accent; g.fillText(text,160,36);
 
-  const pillText='Lv '+lvl+'  '+rank+(jobLabel?'  ·  '+jobLabel:'');
+  const pillText=hunterRankLevelLabel(lvl)+'  '+rank+(jobLabel?'  ·  '+jobLabel:'');
   const pillW=jobLabel?196:130, pillX=(320-pillW)/2;
   fitCanvasText(g,pillText,pillW-8,11,'bold');
   roundedRect(g,pillX,44,pillW,18,5);

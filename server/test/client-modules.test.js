@@ -1261,8 +1261,9 @@ test('first D-rank clear produces a one-time repeatable-loop handoff', async () 
     title: 'C-RANK HUNTER',
     gateAccess: 'C-RANK GATES',
     level: 21,
+    rankLevel: 1,
     statPoints: 3,
-    next: 'B-Rank begins at Level 31',
+    next: 'B-Rank Level 1 begins',
   });
   assert.equal(rankPromotionDetails({ fromRank: 2, rank: 2 }), null);
 });
@@ -1444,7 +1445,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
   assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
-  assert.match(combat,/const minimal=\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
+  assert.match(combat,/const minimal=offMainRoom\|\|\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
   assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
   assert.match(styles,/body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
@@ -2446,6 +2447,17 @@ test('rank progress counts all level XP remaining to the next Hunter rank', asyn
   assert.equal(midD.earned, xpNeedForLevel(11) + xpNeedForLevel(12) + 25);
   assert.equal(midD.remaining, dRequired - midD.earned);
   assert.equal(rankProgressForLevel(HUNTER_RANK_LEVELS.at(-1), 999).maxRank, true);
+});
+
+test('hunter rank level labels use rank-local levels', async () => {
+  const { hunterRankLevelForGlobalLevel, hunterRankLevelLabel, hunterRankLabelForLevel } = await clientModule('progression.mjs');
+  assert.equal(hunterRankLevelForGlobalLevel(1), 1);
+  assert.equal(hunterRankLevelForGlobalLevel(10), 10);
+  assert.equal(hunterRankLevelForGlobalLevel(11), 1);
+  assert.equal(hunterRankLevelForGlobalLevel(60), 10);
+  assert.equal(hunterRankLabelForLevel(21), 'C-Rank');
+  assert.equal(hunterRankLevelLabel(11), 'D-Rank Lv 1');
+  assert.equal(hunterRankLevelLabel(60, { long: true }), 'S-Rank Level 10');
 });
 
 test('progression focus states stay identical across client and server', async () => {

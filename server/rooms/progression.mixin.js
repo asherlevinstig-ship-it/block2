@@ -70,6 +70,28 @@ const PROGRESSION_MILESTONE_REWARDS = Object.freeze({
     items: Object.freeze([Object.freeze({ id: I.BREAD, count: 2 })]),
   }),
 });
+const MEDITATION_CHALLENGES = Object.freeze([
+  Object.freeze({ type: 'fill_gap', prompt: 'A variable stores a value that can ____ while a program runs.', answers: Object.freeze(['change', 'vary', 'be changed']), explanation: 'Variables are named storage for values that can change during a program.' }),
+  Object.freeze({ type: 'fill_gap', prompt: 'In a sentence, a verb usually describes an ____.', answers: Object.freeze(['action']), explanation: 'Verbs often describe actions, states, or occurrences.' }),
+  Object.freeze({ type: 'fill_gap', prompt: 'Plants use light energy to make ____ during photosynthesis.', answers: Object.freeze(['glucose', 'sugar']), explanation: 'Photosynthesis uses light energy to make glucose from carbon dioxide and water.' }),
+  Object.freeze({ type: 'sort', prompt: 'Sort these steps into a simple algorithm order.', choices: Object.freeze(['Start', 'Input', 'Process', 'Output']), explanation: 'A basic algorithm begins, receives input, processes it, then produces output.' }),
+  Object.freeze({ type: 'sort', prompt: 'Sort these numbers from smallest to largest.', choices: Object.freeze(['2', '5', '8', '13']), explanation: 'Ascending order goes from the smallest value to the largest.' }),
+  Object.freeze({ type: 'sort', prompt: 'Sort the food chain from producer to predator.', choices: Object.freeze(['Grass', 'Rabbit', 'Fox', 'Wolf']), explanation: 'Energy passes from producer to herbivore and then to predators.' }),
+]);
+function cleanMeditationAnswer(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function meditationChallengeForClient(client) {
+  const base = MEDITATION_CHALLENGES[Math.floor(Math.random() * MEDITATION_CHALLENGES.length)];
+  const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
+  if (base.type === 'sort') {
+    const ordered = base.choices.map((text, i) => ({ id: String.fromCharCode(97 + i), text }));
+    const shuffled = ordered.slice().sort(() => Math.random() - .5);
+    if (shuffled.every((c, i) => c.id === ordered[i].id)) shuffled.push(shuffled.shift());
+    return { id, type: 'sort', prompt: base.prompt, choices: shuffled, correct: ordered.map(c => c.id), explanation: base.explanation };
+  }
+  return { id, type: 'fill_gap', prompt: base.prompt, answers: base.answers, explanation: base.explanation };
+}
 const PROFESSION_MILESTONE_STARTERS = Object.freeze({
   'blacksmith:2': Object.freeze({ title: 'Basic Reforge Supplies', text: 'Tobin sets aside iron for your first reforge. Try it on a sword, axe, or pick.', items: Object.freeze([Object.freeze({ id: I.IRON_INGOT, count: 1 })]) }),
   'farmer:5': Object.freeze({ title: 'Prairie Windseed Starter', text: 'Plant these in farmland to try Windseed Cultivation immediately.', items: Object.freeze([Object.freeze({ id: I.WINDSEED, count: 2 })]) }),
@@ -772,6 +794,67 @@ class ProgressionMixin {
     return true;
   }
 
+  meditationAccessReason(client) {
+    const rec = this.profileFor(client);
+    const p = this.state.players.get(client.sessionId);
+    if (!rec || !p || p.dgn) return 'invalid';
+    if (((rec.prof.S && rec.prof.S.lvl) | 0) < 4) return 'level';
+    const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
+    if (Math.hypot(p.x - sx, p.z - sz) > 9) return 'range';
+    return '';
+  }
+
+  ensureMeditationChallenges() {
+    if (!this.meditationChallenges) this.meditationChallenges = new Map();
+    return this.meditationChallenges;
+  }
+
+  handleMeditationChallenge(client) {
+    const reason = this.meditationAccessReason(client);
+    if (reason) return client.send('meditationQuestion', { ok: false, reason });
+    if (this.rateLimited(client, 'meditationChallenge', 1, 3)) return client.send('meditationQuestion', { ok: false, reason: 'rate' });
+    const challenge = meditationChallengeForClient(client);
+    const record = {
+      id: challenge.id,
+      type: challenge.type,
+      acceptedAt: 0,
+      createdAt: Date.now(),
+      explanation: challenge.explanation || '',
+      answer: challenge.type === 'sort'
+        ? challenge.correct.join('|')
+        : challenge.answers.map(cleanMeditationAnswer),
+    };
+    this.ensureMeditationChallenges().set(client.sessionId, record);
+    const payload = { ok: true, id: challenge.id, type: challenge.type, prompt: challenge.prompt, explanation: challenge.explanation };
+    if (challenge.type === 'sort') payload.choices = challenge.choices;
+    client.send('meditationQuestion', payload);
+    return true;
+  }
+
+  handleMeditationAnswer(client, message = {}) {
+    const reason = this.meditationAccessReason(client);
+    if (reason) return client.send('meditationAnswerResult', { ok: false, correct: false, reason });
+    const record = this.ensureMeditationChallenges().get(client.sessionId);
+    if (!record || record.id !== String(message && message.id || '') || Date.now() - record.createdAt > 60000) {
+      return client.send('meditationAnswerResult', { ok: false, correct: false, reason: 'expired' });
+    }
+    let correct = false;
+    if (record.type === 'sort') {
+      const order = Array.isArray(message.order) ? message.order.map(v => String(v || '')).join('|') : '';
+      correct = order === record.answer;
+    } else {
+      correct = record.answer.includes(cleanMeditationAnswer(message.answer));
+    }
+    if (correct) {
+      record.acceptedAt = Date.now();
+      client.send('meditationAnswerResult', { ok: true, correct: true, id: record.id, explanation: record.explanation });
+    } else {
+      this.ensureMeditationChallenges().delete(client.sessionId);
+      client.send('meditationAnswerResult', { ok: true, correct: false, explanation: record.explanation, reason: 'wrong' });
+    }
+    return true;
+  }
+
   handleMeditationComplete(client, message = {}) {
     const rec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);
@@ -782,6 +865,8 @@ class ProgressionMixin {
     const seconds = Math.max(0, Math.min(120, message && message.seconds | 0));
     if (seconds < 8) return client.send('meditationGrowth', { ok: false, reason: 'short' });
     if (this.rateLimited(client, 'meditationComplete', 1, 6)) return client.send('meditationGrowth', { ok: false, reason: 'rate' });
+    const challenge = this.ensureMeditationChallenges().get(client.sessionId);
+    if (!challenge || !challenge.acceptedAt || Date.now() - challenge.acceptedAt > 90000) return client.send('meditationGrowth', { ok: false, reason: 'question' });
     const prof = rec.prof;
     const before = sanitizeMeditationGrowth(prof.meditationGrowth, prof.S && prof.S.lvl || 1);
     const growth = { ...before, completed: before.completed + 1 };
@@ -789,9 +874,7 @@ class ProgressionMixin {
     if (growth.completed >= growth.next) {
       const caps = meditationGrowthCapsForLevel(prof.S && prof.S.lvl || 1);
       const choices = [];
-      if (growth.hp < caps.hp) choices.push({ stat: 'hp', amount: 1 });
-      if (growth.sp < caps.sp) choices.push({ stat: 'sp', amount: 2 });
-      if (growth.hunger < caps.hunger) choices.push({ stat: 'hunger', amount: 1 });
+      if (growth.mp < caps.mp) choices.push({ stat: 'mp', amount: 1 });
       if (choices.length) {
         award = choices[Math.floor(Math.random() * choices.length)];
         growth[award.stat] = Math.min(caps[award.stat], growth[award.stat] + award.amount);
@@ -802,12 +885,19 @@ class ProgressionMixin {
     prof.meditationGrowth = sanitizeMeditationGrowth(growth, prof.S && prof.S.lvl || 1);
     if (award) {
       const vitals = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : prof.vitals || {};
-      prof.vitals = { ...vitals, hp: Math.min(this.maxHpForProfile(prof), (vitals.hp || this.maxHpForProfile(prof)) + (award.stat === 'hp' ? award.amount : 0)), sp: Math.min(this.maxStaminaForProfile(prof), (vitals.sp || this.maxStaminaForProfile(prof)) + (award.stat === 'sp' ? award.amount : 0)), hunger: Math.min(this.maxHungerForProfile(prof), (vitals.hunger || this.maxHungerForProfile(prof)) + (award.stat === 'hunger' ? award.amount : 0)) };
+      prof.vitals = {
+        ...vitals,
+        hp: Math.min(this.maxHpForProfile(prof), (vitals.hp || this.maxHpForProfile(prof)) + (award.stat === 'hp' ? award.amount : 0)),
+        mp: Math.min(this.maxMpForProfile(prof), (vitals.mp || this.maxMpForProfile(prof)) + (award.stat === 'mp' ? award.amount : 0)),
+        sp: Math.min(this.maxStaminaForProfile(prof), (vitals.sp || this.maxStaminaForProfile(prof)) + (award.stat === 'sp' ? award.amount : 0)),
+        hunger: Math.min(this.maxHungerForProfile(prof), (vitals.hunger || this.maxHungerForProfile(prof)) + (award.stat === 'hunger' ? award.amount : 0)),
+      };
       prof.vitalsSavedAt = Date.now();
       if (typeof this.ensurePlayerHp === 'function') this.ensurePlayerHp(client);
       if (typeof this.ensurePlayerHunger === 'function') this.ensurePlayerHunger(client);
       if (typeof this.ensureAbilityState === 'function') this.ensureAbilityState(client);
     }
+    this.ensureMeditationChallenges().delete(client.sessionId);
     this.dirtyPlayers.add(rec.token);
     client.send('meditationGrowth', { ok: true, completed: true, growth: prof.meditationGrowth, award, capped });
     this.sendProfile ? this.sendProfile(client, prof) : client.send('profile', prof);

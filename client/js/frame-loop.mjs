@@ -6,7 +6,6 @@ import {api as menusApi,state as menusState} from './menus.mjs';
 import {api as networkingApi,state as networkingState} from './networking.mjs';
 import {createPerformanceDiagnostics} from './performance-budget.mjs';
 import {biomeStatus} from './biome-status.mjs';
-import {DEITY_LEVEL} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 const player=combatState.player,inv=combatState.inventory;
@@ -1281,7 +1280,7 @@ function updateUtilityWorldFeedback(now,dt){
 function rankHudProgress(){
   const progress=currentRankProgress();
   if(globalThis.BlockcraftDeityState&&globalThis.BlockcraftDeityState.unlocked)return {label:'Ascension',value:'Deity'};
-  if(progress.maxRank)return {label:'Hunter Rank',value:'S-Rank - Deity at Lv '+DEITY_LEVEL};
+  if(progress.maxRank)return {label:'Hunter Rank',value:'S-Rank - Deity at S-Rank Lv 10'};
   return {
     label:'Next Rank',
     value:hunterRankLetter(progress.nextRank)+' in '+progress.remaining.toLocaleString('en-US')+' XP',
@@ -1742,14 +1741,16 @@ function tick(now){
     }
     if(isMeditating){
       f=0; s=0; player.vel.set(0,0,0);
-      meditateJobAcc+=dt;
-      while(meditateJobAcc>=5){
-        meditateJobAcc-=5;
-        if(NET.on&&NET.room) NET.room.send('meditateTick',{});
-        else { gainJobXP('monk', 2, 'meditate'); jobContractProgress('meditate', 5, 0); }
-        if(!NET.on){
-          const mt=jobPerkTier('monk'),seconds=(JOB_SYSTEM.MONK_RULES.durationByTier[mt]||0);
-          if(mt){buffs.regen=Math.max(buffs.regen,seconds);if(mt>=2)buffs.spd=Math.max(buffs.spd,seconds);if(mt>=3)buffs.stone=Math.max(buffs.stone,seconds);showJobPerk('monk','focus buff');}
+      if(meditationFocusReady){
+        meditateJobAcc+=dt;
+        while(meditateJobAcc>=5){
+          meditateJobAcc-=5;
+          if(NET.on&&NET.room) NET.room.send('meditateTick',{});
+          else { gainJobXP('monk', 2, 'meditate'); jobContractProgress('meditate', 5, 0); }
+          if(!NET.on){
+            const mt=jobPerkTier('monk'),seconds=(JOB_SYSTEM.MONK_RULES.durationByTier[mt]||0);
+            if(mt){buffs.regen=Math.max(buffs.regen,seconds);if(mt>=2)buffs.spd=Math.max(buffs.spd,seconds);if(mt>=3)buffs.stone=Math.max(buffs.stone,seconds);showJobPerk('monk','focus buff');}
+          }
         }
       }
     }

@@ -14,6 +14,7 @@ export const PROGRESSION_FOCUS_STATES = Object.freeze([
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);
 export const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
+export const HUNTER_RANK_LETTERS = 'EDCBAS';
 export const DEITY_LEVEL = 60;
 export const DEITY_POWER_DEFS = Object.freeze([
   { id: 'flight', name: 'Flight', desc: 'Rise, hover, and travel through the world without falling.' },
@@ -37,6 +38,33 @@ export function hunterRankIndexForLevel(level) {
   let rank = 0;
   for (let i = 1; i < HUNTER_RANK_LEVELS.length; i++) if (lvl >= HUNTER_RANK_LEVELS[i]) rank = i;
   return rank;
+}
+
+export function hunterRankLetter(rank) {
+  return HUNTER_RANK_LETTERS[Math.max(0, Math.min(HUNTER_RANK_LETTERS.length - 1, rank | 0))] || 'E';
+}
+
+export function hunterRankLevelForGlobalLevel(level) {
+  const lvl = Math.max(1, level | 0);
+  const rank = hunterRankIndexForLevel(lvl);
+  const start = HUNTER_RANK_LEVELS[rank] || 1;
+  return Math.max(1, Math.min(10, lvl - start + 1));
+}
+
+export function hunterRankLabelForLevel(level) {
+  return hunterRankLetter(hunterRankIndexForLevel(level)) + '-Rank';
+}
+
+export function hunterRankLevelLabel(level, opts = {}) {
+  const rank = hunterRankLabelForLevel(level);
+  const local = hunterRankLevelForGlobalLevel(level);
+  const sep = opts.long ? ' Level ' : ' Lv ';
+  return rank + sep + local;
+}
+
+export function nextHunterRankLabel(rank) {
+  const next = Math.max(0, Math.min(HUNTER_RANK_LEVELS.length - 1, (rank | 0) + 1));
+  return hunterRankLetter(next) + '-Rank';
 }
 
 export function gateRankIndexForLevel(level) {

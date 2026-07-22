@@ -339,7 +339,7 @@ function hunterRankIndexForLevel(level = 1) {
 
 function meditationGrowthCapsForLevel(level = 1) {
   const rank = hunterRankIndexForLevel(level);
-  return { hp: 4 + rank * 4, sp: 8 + rank * 8, hunger: 4 + rank * 4, rank };
+  return { hp: 4 + rank * 4, mp: 6 + rank * 6, sp: 8 + rank * 8, hunger: 4 + rank * 4, rank };
 }
 
 function sanitizeMeditationGrowth(raw, level = 1) {
@@ -358,6 +358,7 @@ function sanitizeMeditationGrowth(raw, level = 1) {
     completed,
     next,
     hp: clampI(src.hp, 0, caps.hp),
+    mp: clampI(src.mp, 0, caps.mp),
     sp: clampI(src.sp, 0, caps.sp),
     hunger: clampI(src.hunger, 0, caps.hunger),
   };
@@ -402,7 +403,7 @@ function defaultProfile(name) {
     shadowArmy: [],
     abilitySpec: '',
     deity: { unlocked: false, ascendedAt: 0, chosenPower: '', powers: [], active: {} },
-    meditationGrowth: { completed: 0, next: 3, hp: 0, sp: 0, hunger: 0 },
+    meditationGrowth: { completed: 0, next: 3, hp: 0, mp: 0, sp: 0, hunger: 0 },
     dragonCare: {},
     dragonBondXp: {},
     dragonRoleMastery: {},
@@ -1004,7 +1005,7 @@ function sanitizeProfile(p) {
   out.vitalsSavedAt = clampI(p.vitalsSavedAt, 0, 4102444800000);
   const rawVitals = p.vitals && typeof p.vitals === 'object' ? p.vitals : p;
   const maxHp = 20 + (out.S.vit - 1) * 2 + out.meditationGrowth.hp;
-  const maxMp = 20 + (out.S.int - 1) * 3;
+  const maxMp = 20 + (out.S.int - 1) * 3 + out.meditationGrowth.mp;
   const maxSp = 100 + (out.S.agi - 1) * 4 + out.meditationGrowth.sp;
   const maxHunger = 100 + out.meditationGrowth.hunger;
   const trustedVitals = out.vitalsSavedAt > 0;

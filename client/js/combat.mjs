@@ -1,6 +1,7 @@
 import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {apiUrl} from './config.mjs';
+import {hunterRankLevelLabel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -45,6 +46,7 @@ const legacyCombatBindings={
   "inv":{get:()=>inv},
   "inventoryModel":{get:()=>inventoryModel,set:value=>{inventoryModel=value;}},
   "isMeditating":{get:()=>isMeditating,set:value=>{isMeditating=value;}},
+  "meditationFocusReady":{get:()=>meditationFocusReady,set:value=>{meditationFocusReady=!!value;}},
   "itemNameWithPlus":{get:()=>itemNameWithPlus},
   "keys":{get:()=>keys},
   "landTutorialRoute":{get:()=>landTutorialRoute},
@@ -3641,7 +3643,13 @@ function primaryAction(){
 }
 const MEDITATION_UNLOCK_LEVEL=4;
 const MEDITATION_COMPLETE_SECONDS=8;
-let isMeditating=false, meditateStartedAt=0, meditationPrevView=null;
+let isMeditating=false, meditateStartedAt=0, meditationPrevView=null, meditationFocusReady=false, meditationChallenge=null, meditationSortOrder=[];
+const meditationHud=document.getElementById('recallhud');
+const meditationSubjectEl=document.getElementById('recallsubject');
+const meditationTimeEl=document.getElementById('recalltime');
+const meditationQuestionEl=document.getElementById('recallquestion');
+const meditationFallbackEl=document.getElementById('recallfallback');
+const meditationFeedbackEl=document.getElementById('recallfeedback');
 function inMeditationSpot(){
   const x=player.pos.x, z=player.pos.z;
   const zone=globalThis.TOWN_INTERACTION_ZONES&&globalThis.TOWN_INTERACTION_ZONES.meditation || (globalThis.HUB&&globalThis.HUB.meditate);
@@ -3657,6 +3665,7 @@ function normalizeMeditationGrowth(raw=meditationGrowth){
     completed:Math.max(0,Math.min(100000,src.completed|0)),
     next:Math.max(3,Math.min(100000,src.next|0||3)),
     hp:Math.max(0,Math.min(40,src.hp|0)),
+    mp:Math.max(0,Math.min(80,src.mp|0)),
     sp:Math.max(0,Math.min(80,src.sp|0)),
     hunger:Math.max(0,Math.min(40,src.hunger|0)),
   };
@@ -3676,34 +3685,133 @@ function applyMeditationGrowthPayload(m){
   if(m.ok===false){
     const r=String(m.reason||'');
     SFX.error&&SFX.error();
-    if(r==='level')sysMsg('Meditation unlocks at <b>Level '+MEDITATION_UNLOCK_LEVEL+'</b>.',{tier:'minor',title:'Meditation'});
+    if(r==='level')sysMsg('Meditation unlocks at <b>'+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL,{long:true})+'</b>.',{tier:'minor',title:'Meditation'});
     else if(r==='range')sysMsg('Meditation only works inside the <b>Meditation Hall</b>.',{tier:'minor',title:'Meditation'});
     else if(r==='short')sysMsg('Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds to complete meditation.',{tier:'minor',title:'Meditation'});
+    else if(r==='question')sysMsg('Answer the <b>focus question</b> before completing meditation.',{tier:'minor',title:'Meditation'});
     return;
   }
   if(!m.growth)return;
   meditationGrowth=normalizeMeditationGrowth(m.growth);
   if(m.award&&m.award.stat){
-    const labels={hp:'Max HP',sp:'Max SP',hunger:'Max Food'};
+    const labels={hp:'Max HP',mp:'Max MP',sp:'Max SP',hunger:'Max Food'};
     const amount=Math.max(1,m.award.amount|0),label=labels[m.award.stat]||'Body';
     if(m.award.stat==='hp')hp=Math.min(maxHp(),hp+amount);
+    else if(m.award.stat==='mp')mp=Math.min(maxMp(),mp+amount);
     else if(m.award.stat==='sp')sp=Math.min(maxSp(),sp+amount);
     else if(m.award.stat==='hunger')hunger=Math.min(maxHunger(),hunger+amount);
     renderBars();refreshHUD();
     SFX.level&&SFX.level();
     rewardGain('rare',amount,label,{icon:'ZEN',duration:2600});
-    sysMsg('<b>Meditation breakthrough!</b> '+escHTML(label)+' increased by <b>+'+amount+'</b>. Next benchmark: '+meditationGrowth.next+' complete meditations.',{tier:'major',title:'Meditation'});
+    sysMsg('<b>Meditation breakthrough!</b> '+escHTML(label)+' increased by <b>+'+amount+'</b>. Next benchmark: '+meditationGrowth.next+' complete focus sessions.',{tier:'major',title:'Meditation'});
   }else if(m.capped){
     sysMsg('Your meditation growth is capped for this Hunter rank. Rank up to grow further.',{tier:'minor',title:'Meditation'});
   }else if(m.completed){
-    sysMsg('Meditation recorded: <b>'+meditationGrowth.completed+'</b> / '+meditationGrowth.next+' toward your next body breakthrough.',{tier:'minor',title:'Meditation'});
+    sysMsg('Meditation recorded: <b>'+meditationGrowth.completed+'</b> / '+meditationGrowth.next+' toward your next mana-pool breakthrough.',{tier:'minor',title:'Meditation'});
   }
 }
 globalThis.BlockcraftApplyMeditationGrowth=applyMeditationGrowthPayload;
+function clearMeditationQuestion(){
+  meditationChallenge=null; meditationSortOrder=[];
+  if(meditationFallbackEl){meditationFallbackEl.innerHTML='';meditationFallbackEl.classList.add('hidden');}
+  if(meditationFeedbackEl){meditationFeedbackEl.textContent='';meditationFeedbackEl.className='hidden';}
+  if(meditationHud){meditationHud.classList.remove('meditation-recall');meditationHud.classList.add('hidden');}
+  document.body.classList.remove('recall-active');
+}
+function meditationLocalChallenge(){
+  return {ok:true,id:'local-'+Date.now(),type:'fill_gap',prompt:'A calm mind can expand your ____ pool.',localAnswers:['mana','mp'],explanation:'Meditation trains focus, and focus expands maximum mana.'};
+}
+function renderMeditationSort(){
+  if(!meditationFallbackEl||!meditationChallenge)return;
+  meditationFallbackEl.innerHTML='';
+  const help=document.createElement('div');help.className='meditationhelp';help.textContent='Click tiles to move them into the correct order.';
+  meditationFallbackEl.appendChild(help);
+  const list=document.createElement('div');list.className='meditationsort';meditationFallbackEl.appendChild(list);
+  meditationSortOrder.forEach((choice,index)=>{
+    const b=document.createElement('button');b.className='meditationsort-chip';b.type='button';b.textContent=(index+1)+'. '+choice.text;
+    b.onclick=()=>{
+      if(meditationSortOrder.length>1){
+        const next=(index+1)%meditationSortOrder.length;
+        const tmp=meditationSortOrder[index];meditationSortOrder[index]=meditationSortOrder[next];meditationSortOrder[next]=tmp;
+        renderMeditationSort();
+      }
+    };
+    list.appendChild(b);
+  });
+  const submit=document.createElement('button');submit.className='recallchoice meditation-submit';submit.type='button';submit.textContent='SUBMIT ORDER';submit.onclick=submitMeditationAnswer;
+  meditationFallbackEl.appendChild(submit);
+}
+function showMeditationQuestion(m){
+  if(!isMeditating)return;
+  if(!meditationHud||!meditationFallbackEl||!meditationQuestionEl)return;
+  if(!m||m.ok===false){
+    const r=String(m&&m.reason||'');
+    sysMsg(r==='level'?'Meditation unlocks at <b>'+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL,{long:true})+'</b>.':r==='range'?'Stand inside the <b>Meditation Hall</b> circle.':'Meditation focus is not ready yet.',{tier:'minor',title:'Meditation'});
+    stopMeditation({silent:true});
+    return;
+  }
+  meditationChallenge=m; meditationFocusReady=false; meditationSortOrder=[];
+  if(document.pointerLockElement&&document.exitPointerLock)try{document.exitPointerLock();}catch(e){}
+  meditationHud.classList.add('meditation-recall');
+  meditationHud.classList.remove('hidden');
+  document.body.classList.add('recall-active');
+  if(meditationSubjectEl)meditationSubjectEl.textContent='MEDITATION FOCUS';
+  if(meditationTimeEl)meditationTimeEl.textContent=m.type==='sort'?'SORT':'FILL';
+  meditationQuestionEl.textContent=String(m.prompt||'Complete the focus question.');
+  meditationFeedbackEl.className='hidden';meditationFeedbackEl.textContent='';
+  meditationFallbackEl.innerHTML='';
+  meditationFallbackEl.classList.remove('hidden');
+  if(m.type==='sort'){
+    meditationSortOrder=Array.isArray(m.choices)?m.choices.map(c=>({id:String(c.id||''),text:String(c.text||'')})):[];
+    renderMeditationSort();
+  }else{
+    const input=document.createElement('input');input.className='meditation-fill-input';input.type='text';input.placeholder='Type the missing word';input.autocomplete='off';
+    input.addEventListener('keydown',e=>{if(e.key==='Enter')submitMeditationAnswer();e.stopPropagation();});
+    const submit=document.createElement('button');submit.className='recallchoice meditation-submit';submit.type='button';submit.textContent='SUBMIT FOCUS';submit.onclick=submitMeditationAnswer;
+    meditationFallbackEl.append(input,submit);
+    setTimeout(()=>input.focus(),40);
+  }
+}
+function submitMeditationAnswer(){
+  if(!isMeditating||!meditationChallenge)return;
+  if(meditationChallenge.localAnswers){
+    const input=meditationFallbackEl&&meditationFallbackEl.querySelector('.meditation-fill-input');
+    const answer=String(input&&input.value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+    applyMeditationAnswerResult({ok:true,correct:meditationChallenge.localAnswers.includes(answer),explanation:meditationChallenge.explanation});
+    return;
+  }
+  if(!NET.on||!NET.room)return;
+  if(meditationChallenge.type==='sort')NET.room.send('meditationAnswer',{id:meditationChallenge.id,order:meditationSortOrder.map(c=>c.id)});
+  else {
+    const input=meditationFallbackEl&&meditationFallbackEl.querySelector('.meditation-fill-input');
+    NET.room.send('meditationAnswer',{id:meditationChallenge.id,answer:String(input&&input.value||'')});
+  }
+  meditationFallbackEl.querySelectorAll('button,input').forEach(el=>el.disabled=true);
+}
+function applyMeditationAnswerResult(m){
+  if(!isMeditating)return;
+  if(!m||m.correct!==true){
+    meditationFeedbackEl.textContent='Focus slipped. '+(m&&m.explanation?m.explanation:'Try another meditation when ready.');
+    meditationFeedbackEl.className='wrong';
+    SFX.error&&SFX.error();
+    setTimeout(()=>stopMeditation({silent:true}),1200);
+    return;
+  }
+  meditationFocusReady=true;
+  meditateStartedAt=performance.now();
+  meditationFeedbackEl.textContent='Focus locked. Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds. '+(m.explanation||'');
+  meditationFeedbackEl.className='correct';
+  if(meditationFallbackEl){meditationFallbackEl.innerHTML='';meditationFallbackEl.classList.add('hidden');}
+  SFX.level&&SFX.level();
+  sysMsg('Focus locked. Hold still to deepen your mana pool.',{tier:'minor',title:'Meditation'});
+}
+globalThis.BlockcraftShowMeditationQuestion=showMeditationQuestion;
+globalThis.BlockcraftApplyMeditationAnswer=applyMeditationAnswerResult;
 function startMeditation(){
   if(!meditationPrevView) meditationPrevView={ yaw:player.yaw, pitch:player.pitch };
   isMeditating=true;
-  meditateStartedAt=performance.now();
+  meditationFocusReady=false;
+  meditateStartedAt=0;
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=-0.18;
@@ -3722,13 +3830,18 @@ function startMeditation(){
   meditateJobAcc=0;
   applyMeditationCamera();
   SFX.meditate(true);
-  sysMsg('You settle into meditation inside the <b>Meditation Hall</b>. Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds.');
+  sysMsg('You settle into meditation. Answer the <b>focus question</b>, then hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds.');
   ringPulse(player.pos.x,TOWN.G+1.08,player.pos.z,1.4,0x7dd3fc,.55);
   glowFlash(player.pos.x,TOWN.G+1.4,player.pos.z,0x7dd3fc,2.2,.45);
+  if(NET.on&&NET.room&&NET.room.name==='blockcraft')NET.room.send('meditationChallenge',{});
+  else showMeditationQuestion(meditationLocalChallenge());
 }
-function stopMeditation(){
+function stopMeditation(opts={}){
   if(!isMeditating) return;
   isMeditating=false;
+  const wasReady=meditationFocusReady;
+  meditationFocusReady=false;
+  clearMeditationQuestion();
   if(meditationOwnedAppearance && !appearancePreviewActive){
     disposeAppearanceDummy();
   } else if(appearancePreviewActive && appearanceBackDummy) {
@@ -3740,7 +3853,7 @@ function stopMeditation(){
     meditationPrevView=null;
   }
   SFX.meditate(false);
-  const secs=Math.floor((performance.now()-meditateStartedAt)/1000);
+  const secs=wasReady&&meditateStartedAt?Math.floor((performance.now()-meditateStartedAt)/1000):0;
   if(secs>=MEDITATION_COMPLETE_SECONDS){
     if(NET.on&&NET.room&&NET.room.name==='blockcraft')NET.room.send('meditationComplete',{seconds:secs});
     else {
@@ -3748,7 +3861,7 @@ function stopMeditation(){
       meditationGrowth.next=nextMeditationBenchmark(meditationGrowth.completed);
       sysMsg('Meditation complete. Progress will persist when connected to the world server.',{tier:'minor',title:'Meditation'});
     }
-  }else sysMsg('Meditation ended. Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds to progress.');
+  }else if(!opts.silent) sysMsg(wasReady?'Meditation ended. Hold still for '+MEDITATION_COMPLETE_SECONDS+' seconds to progress.':'Meditation ended before focus locked.');
 }
 function applyMeditationCamera(){
   const r=4.2;
@@ -3760,7 +3873,7 @@ function toggleMeditation(){
   if(!inMeditationSpot()) return false;
   if(!meditationUnlocked()){
     SFX.error&&SFX.error();
-    sysMsg('Meditation unlocks at <b>Level '+MEDITATION_UNLOCK_LEVEL+'</b>. Return to the Meditation Hall after more training.',{tier:'minor',title:'Meditation'});
+    sysMsg('Meditation unlocks at <b>'+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL,{long:true})+'</b>. Return to the Meditation Hall after more training.',{tier:'minor',title:'Meditation'});
     return true;
   }
   startMeditation();
@@ -4002,7 +4115,7 @@ function nearbyInteractionPrompt(){
   if(nearTamingLandPortal())push({key:'G',title:'Taming Land Portal',small:'Travel to the dragon and familiar sanctuary',priority:119},0);
   if(nearTamingLandExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
-  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at Level '+MEDITATION_UNLOCK_LEVEL),priority:112},0);
+  if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at '+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL)),priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
   if(socialTarget)push({key:'E',title:String(socialTarget.name||'Hunter'),small:'Trade, add friend, or train pet',priority:111},socialTarget.distance||0);
   const readyClaim=claimReadyQuestAtServicePrompt();

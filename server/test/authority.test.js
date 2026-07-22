@@ -6648,21 +6648,25 @@ test('Zen Master meditation shares focus only with nearby party members', () => 
   assert.equal(room.monkAuraAt.get(monk.sessionId) > 0, true);
 });
 
-test('Meditation Hall completions unlock at level four and grow rank-capped body stats', () => {
+test('Meditation Hall completions unlock at level four and grow rank-capped mana', () => {
   const room = makeRoom(), novice = makeClient('med-novice'), adept = makeClient('med-adept');
   room.clients = [novice, adept];
   const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
   seedPlayer(room, novice, { x: sx, z: sz, lvl: 3 });
   const { prof, token } = seedPlayer(room, adept, { x: sx, z: sz, lvl: 4 });
-  prof.meditationGrowth = { completed: 2, next: 3, hp: 0, sp: 0, hunger: 0 };
+  prof.meditationGrowth = { completed: 2, next: 3, hp: 0, mp: 0, sp: 0, hunger: 0 };
   room.handleMeditationComplete(novice, { seconds: 8 });
   assert.equal(novice.sent.at(-1).msg.reason, 'level');
+  room.handleMeditationChallenge(adept);
+  const challenge = room.meditationChallenges.get(adept.sessionId);
+  if (challenge.type === 'sort') room.handleMeditationAnswer(adept, { id: challenge.id, order: challenge.answer.split('|') });
+  else room.handleMeditationAnswer(adept, { id: challenge.id, answer: challenge.answer[0] });
   room.handleMeditationComplete(adept, { seconds: 8 });
   const msg = adept.sent.find(e => e.type === 'meditationGrowth' && e.msg.ok);
   assert.equal(msg.msg.growth.completed, 3);
   assert.equal(msg.msg.growth.next, 8);
   assert.equal(!!msg.msg.award, true);
-  assert.equal(msg.msg.growth.hp + msg.msg.growth.sp + msg.msg.growth.hunger > 0, true);
+  assert.equal(msg.msg.growth.mp, 1);
   assert.equal(room.dirtyPlayers.has(token), true);
 });
 

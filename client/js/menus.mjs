@@ -3,6 +3,7 @@ import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {api as combatApi,state as combatState} from './combat.mjs';
 import {api as hudApi,state as hudState} from './hud.mjs';
 import {recipeFootprint,shapedIngredientIds,recipeNeedCounts} from './crafting-domain.mjs';
+import {hunterRankLevelForGlobalLevel,hunterRankLevelLabel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -4262,12 +4263,12 @@ function progressionRoadmap(){
   return [
     {id:'foundations',title:'Hunter Foundations',requirement:'Begin the training meadow',eligible:true,action:'Complete movement, combat, gathering and Recall training.',where:'Training Meadow'},
     {id:'story',title:'Mara’s Story',requirement:'Finish initial training',eligible:!onboardingActive,action:'Accept and continue Mara’s current story quest.',where:'Mara Vale'},
-    {id:'combat_path',title:'Combat Path',requirement:'Reach Level 2',eligible:S.lvl>=2,action:S.lvl>=2?'Choose your first combat path.':'Continue Mara’s field work to reach Level 2.',where:'Character progression'},
-    {id:'gates',title:'Ranked Gates',requirement:'Reach Level 3',eligible:S.lvl>=3,action:S.lvl>=3?'Complete Mara’s First Gate quest.':'Complete Road Ready and reach Level 3.',where:'Mara → wilderness Gate'},
+    {id:'combat_path',title:'Combat Path',requirement:'Reach E-Rank Level 2',eligible:S.lvl>=2,action:S.lvl>=2?'Choose your first combat path.':'Continue Mara’s field work to reach E-Rank Level 2.',where:'Character progression'},
+    {id:'gates',title:'Ranked Gates',requirement:'Reach E-Rank Level 3',eligible:S.lvl>=3,action:S.lvl>=3?'Complete Mara’s First Gate quest.':'Complete Road Ready and reach E-Rank Level 3.',where:'Mara → wilderness Gate'},
     {id:'jobs',title:'Jobs and Contracts',requirement:'Clear an E-Rank Gate',eligible:highestGateRankCleared>=0,action:'Choose one profession and complete its introductory contract.',where:'Job Board'},
     {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
     {id:'mounts',title:'Mounts',requirement:'Reach C-Rank progression',eligible:rank>=2,action:'Complete the first bonded-mount lesson.',where:'Dragon Roost'},
-    {id:'specialisation',title:'Specialisation',requirement:'Reach C-Rank / Level 21',eligible:rank>=2&&S.lvl>=21,action:'Review and choose carefully: this combat-path specialisation is permanent.',where:'Mara Vale'},
+    {id:'specialisation',title:'Specialisation',requirement:'Reach C-Rank Level 1',eligible:rank>=2&&S.lvl>=21,action:'Review and choose carefully: this combat-path specialisation is permanent.',where:'Mara Vale'},
     {id:'roads',title:'Road Warden Region',requirement:'Reach B-Rank',eligible:rank>=3,action:'Accept one regional contract and follow its road tracker.',where:'Road Patrol'},
     {id:'fellowships',title:'Fellowships',requirement:'Reach A-Rank',eligible:rank>=4,action:'Join or establish a fellowship.',where:'Fellowship Hall'},
     {id:'dragon_mastery',title:'Dragon Mastery',requirement:'Reach S-Rank',eligible:rank>=5,action:'Learn incubation, care, mounted abilities and breeding.',where:'Rook Emberstall · Dragon Roost'},
@@ -4293,8 +4294,8 @@ const HUNTER_RANK_UNLOCKS=[
   ['Western Frontier','Dragon mastery','S-Rank endgame'],
 ];
 function rankJourneyLevelText(rank){
-  const start=HUNTER_RANK_STARTS[rank]||1;
-  return rank>=5?'Mastery Level '+Math.max(1,S.lvl-start+1):'Rank Level '+Math.max(1,Math.min(10,S.lvl-start+1))+'/10';
+  const level=hunterRankLevelForGlobalLevel(S.lvl);
+  return rank>=5?'S-Rank Level '+level+'/10':'Rank Level '+level+'/10';
 }
 function openRankJourneyUI(){
   openQWin('management');qpanelEl.innerHTML='';
@@ -4303,11 +4304,11 @@ function openRankJourneyUI(){
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='HUNTER '+letter+'-RANK · '+rankJourneyLevelText(rank).toUpperCase();qpanelEl.appendChild(sub);
   const hero=document.createElement('div');hero.className='rank-journey-hero rank-'+letter.toLowerCase();
   const levelPct=Math.max(0,Math.min(100,Math.round((S.xp/Math.max(1,levelNeed))*100)));
-  hero.innerHTML='<div class="rj-emblem"><span>'+escHTML(letter)+'</span></div><div class="rj-hero-copy"><small>CURRENT STANDING</small><h3>'+escHTML(letter)+'-RANK · LEVEL '+S.lvl+'</h3><b>'+escHTML(rankJourneyLevelText(rank))+'</b><div class="rj-levelbar"><i style="width:'+levelPct+'%"></i></div><span>'+Math.floor(S.xp).toLocaleString('en-US')+' / '+levelNeed.toLocaleString('en-US')+' XP to Level '+(S.lvl+1)+'</span></div>';
+  hero.innerHTML='<div class="rj-emblem"><span>'+escHTML(letter)+'</span></div><div class="rj-hero-copy"><small>CURRENT STANDING</small><h3>'+escHTML(hunterRankLevelLabel(S.lvl,{long:true}))+'</h3><b>'+escHTML(rankJourneyLevelText(rank))+'</b><div class="rj-levelbar"><i style="width:'+levelPct+'%"></i></div><span>'+Math.floor(S.xp).toLocaleString('en-US')+' / '+levelNeed.toLocaleString('en-US')+' XP to '+escHTML(hunterRankLevelLabel(S.lvl+1,{long:true}))+'</span></div>';
   qpanelEl.appendChild(hero);
   const promotion=document.createElement('div');promotion.className='rank-promotion-track'+(progress.maxRank?' max':'');
   if(progress.maxRank)promotion.innerHTML='<small>RANK PROGRESS</small><h3>S-RANK ACHIEVED</h3><p>Further levels award stat points and advance mastery.</p>';
-  else promotion.innerHTML='<small>PROMOTION TARGET</small><h3>'+hunterRankLetter(progress.nextRank)+'-RANK AT LEVEL '+progress.nextRankLevel+'</h3><div class="rj-promotionbar"><i style="width:'+Math.round(progress.progress*100)+'%"></i></div><div><b>'+progress.remaining.toLocaleString('en-US')+' XP remaining</b><span>'+Math.round(progress.progress*100)+'% complete</span></div>';
+  else promotion.innerHTML='<small>PROMOTION TARGET</small><h3>'+hunterRankLetter(progress.nextRank)+'-RANK LEVEL 1</h3><div class="rj-promotionbar"><i style="width:'+Math.round(progress.progress*100)+'%"></i></div><div><b>'+progress.remaining.toLocaleString('en-US')+' XP remaining</b><span>'+Math.round(progress.progress*100)+'% complete</span></div>';
   qpanelEl.appendChild(promotion);
   const unlocks=document.createElement('div');unlocks.className='rank-unlocks';
   const nextRank=progress.maxRank?rank:progress.nextRank;
@@ -5947,7 +5948,7 @@ function professionNowHTML(jobId,level=jobLevelFromXp(jobXpFor(jobId))){
     return line(active?'Gather gold and iron for reforging.':'Equip Blacksmith to use forge services.');
   }
   if(jobId==='monk'){
-    if((S&&S.lvl|0)<4)return line('Reach Hunter Level 4 to unlock Meditation Hall focus.');
+    if((S&&S.lvl|0)<4)return line('Reach '+hunterRankLevelLabel(4,{long:true})+' to unlock Meditation Hall focus.');
     if(active&&level>=JOB_SYSTEM.MONK_RULES.regenLevel)return line('Stand in the Meditation Hall and press G/right-click to refresh focus.',true);
     return line(active?'Reach Monk Lv 4 to make meditation grant focus.':'Equip Monk before meditating for profession focus.');
   }
@@ -5995,7 +5996,7 @@ function openMonkRitualUI(){
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='MONK LV '+level+' · SABLE VENN';qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   const line=(need,title,text)=>'<b style="color:'+(level>=need?'#7dd3fc':'#7f93aa')+'">Lv '+need+' · '+title+(level>=need?' · UNLOCKED':' · LOCKED')+'</b><br><small>'+text+'</small>';
-  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Reach Hunter Level 4, stand inside the Meditation Hall circle, then press <b>G</b> or right-click to meditate. Complete sessions build permanent HP, SP, or Food-cap breakthroughs. Moving ends meditation.</small>';qpanelEl.appendChild(p);
+  p.innerHTML=professionNowHTML('monk',level)+'<br><br>'+[line(rules.regenLevel,'Restoring Focus','Meditation restores HP, MP, and SP while renewing a regeneration blessing.'),line(rules.speedLevel,'Flowing Focus','Adds 25% movement speed while focused.'),line(rules.stoneLevel,'Stone Focus','Reduces incoming damage by 35% while focused.'),line(rules.auraLevel,'Shared Tranquillity','Every 15 seconds, nearby party members receive your complete focus and resource support.')].join('<br><br>')+'<br><br><small>Reach '+hunterRankLevelLabel(4,{long:true})+', stand inside the Meditation Hall circle, then press <b>G</b> or right-click to meditate. Complete focus questions and stillness milestones to grow your permanent mana pool. Moving ends meditation.</small>';qpanelEl.appendChild(p);
   const active=document.createElement('p');active.className='qtext';const activeText=[buffs.regen>0?'Restoration '+Math.ceil(buffs.regen)+'s':'',buffs.spd>0?'Flow '+Math.ceil(buffs.spd)+'s':'',buffs.stone>0?'Stone '+Math.ceil(buffs.stone)+'s':''].filter(Boolean).join(' · ');active.innerHTML='<b>Active focus:</b> '+(activeText||'None');qpanelEl.appendChild(active);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);row.appendChild(qBtn('MONK WORK',()=>openJobsUI('monk','Meditation')));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }

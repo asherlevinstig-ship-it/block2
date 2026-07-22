@@ -1,5 +1,5 @@
 import {api as worldApi,state as worldState} from './world.mjs';
-import {DEITY_LEVEL,DEITY_POWER_DEFS} from './progression.mjs';
+import {DEITY_LEVEL,DEITY_POWER_DEFS,hunterRankLevelLabel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -523,7 +523,7 @@ function castArmorPower(){
 function cast(i){
   const path=activeAbilityPath();
   if(!path){ if(S.lvl>=2) sysMsg('Press <b>C</b> to choose your path first'); return; }
-  if(!BETA_ABILITY_TEST && S.lvl<AB_UNLOCK[i]){ sysMsg('Unlocks at <b>Level '+AB_UNLOCK[i]+'</b>'); return; }
+  if(!BETA_ABILITY_TEST && S.lvl<AB_UNLOCK[i]){ sysMsg('Unlocks at <b>'+hunterRankLevelLabel(AB_UNLOCK[i],{long:true})+'</b>'); return; }
   const a=PATHS[path].ab[i];
   const manaCost=abilityManaCost(a),cooldown=abilityCooldown(a);
   if(a.passive){ sysMsg('<b>'+a.n+'</b> is passive'); return; }
@@ -921,29 +921,29 @@ function renderStat(){
   h+='<div class="stat-grid">';
   h+='<div class="srow"><span>CLASS</span><b>'+(S.path?PATHS[S.path].name:'None &mdash; Unawakened')+'</b></div>';
   h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
-  h+='<div class="srow"><span>LEVEL</span><b>'+S.lvl+'</b></div>';
+  h+='<div class="srow"><span>HUNTER LEVEL</span><b>'+hunterRankLevelLabel(S.lvl,{long:true})+'</b></div>';
   const deity=globalThis.BlockcraftDeityState;
   if(deity&&deity.unlocked){
     const powerNames=(Array.isArray(deity.powers)?deity.powers:[]).map(id=>(DEITY_POWER_DEFS.find(p=>p.id===id)||{}).name||String(id).replace(/_/g,' '));
     h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">DEITY'+(deity.admin?' ADMIN':'')+' &middot; '+escHTML(powerNames.join(', ')||'Choose one power')+'</b></div>';
   }else if(S.lvl>=51){
-    h+='<div class="srow"><span>ASCENSION</span><b>S-Rank Level 10 at Lv '+DEITY_LEVEL+'</b></div>';
+    h+='<div class="srow"><span>ASCENSION</span><b>S-Rank Level 10</b></div>';
   }
   const rankIdx=localPlayerRankIndex(), hunterRankIdx=localPlayerHunterRankIndex();
   const nextLvl=nextRankLevel(hunterRankIdx);
   const rankProgress=currentRankProgress();
   const clearedGate=highestGateRankCleared>=0 ? gateRankLetter(highestGateRankCleared)+' cleared' : 'none cleared';
-  h+='<div class="srow"><span>PLAYER RANK</span><b style="color:#d8f2ff">'+localPlayerRankName()+'</b></div>';
-  h+='<div class="srow"><span>GATE ACCESS</span><b>'+gateRankLetter(rankIdx)+'-Rank available &middot; '+clearedGate+(nextLvl?' &middot; next Hunter rank at Lv '+nextLvl:' &middot; top Hunter rank')+'</b></div>';
+  h+='<div class="srow"><span>PLAYER RANK</span><b style="color:#d8f2ff">'+hunterRankLevelLabel(S.lvl)+' Hunter</b></div>';
+  h+='<div class="srow"><span>GATE ACCESS</span><b>'+gateRankLetter(rankIdx)+'-Rank available &middot; '+clearedGate+(nextLvl?' &middot; '+hunterRankLevelLabel(nextLvl)+' begins':' &middot; top Hunter rank')+'</b></div>';
   h+='<div class="srow"><span>XP</span><b>'+Math.floor(S.xp)+' / '+xpNeed()+'</b></div>';
   h+='</div>';
   if(rankProgress.maxRank){
     const deityUnlocked=deity&&deity.unlocked;
     const deityPct=deityUnlocked?100:Math.max(0,Math.min(100,Math.round(((S.lvl-51)/(DEITY_LEVEL-51))*100)));
-    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are awake. Choose one permanent power, then use it from this panel.':'Hunter XP still advances levels and stat points. Reach S-Rank Level 10 at Lv '+DEITY_LEVEL+' to become Deity.')+'</p></div>';
+    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are awake. Choose one permanent power, then use it from this panel.':'Hunter XP still advances rank levels and stat points. Reach S-Rank Level 10 to become Deity.')+'</p></div>';
   }else{
     const nextLetter=hunterRankLetter(rankProgress.nextRank);
-    h+='<div class="rankjourney"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK AT LEVEL '+rankProgress.nextRankLevel+'</b></div>'+
+    h+='<div class="rankjourney"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK BEGINS</b></div>'+
       '<div class="rjbar"><i style="width:'+Math.round(rankProgress.progress*100)+'%"></i></div>'+
       '<div class="rjcount"><b>'+rankProgress.remaining.toLocaleString('en-US')+' HUNTER XP REMAINING</b><span>'+rankProgress.earned.toLocaleString('en-US')+' / '+rankProgress.required.toLocaleString('en-US')+'</span></div>'+
       '<p>Earn Hunter XP your way: town quests, job and Guild contracts, Gates, server events, or hostile threats. Gate clears award XP; rank advances when your level crosses the threshold.</p></div>';
@@ -991,7 +991,7 @@ function renderStat(){
     P.ab.forEach((a,i)=>{
       const got=S.lvl>=AB_UNLOCK[i];
       h+='<div class="ablist"><span'+(got?'':' class="dim"')+'>'+['Q','R','F'][i]+' &middot; '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span>'
-        +'<span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at Level '+AB_UNLOCK[i])+'</span></div>';
+        +'<span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i]))+'</span></div>';
     });
     const rank=ABILITY_PROGRESSION.rankForLevel(S.lvl),evolution=ABILITY_PROGRESSION.EVOLUTION[S.path];
     h+='<div class="sub2" style="margin-top:14px;color:'+P.col+'">RANK EVOLUTION</div>';

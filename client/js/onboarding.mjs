@@ -68,9 +68,10 @@ export function rankPromotionDetails(message) {
     title: `${letter}-RANK HUNTER`,
     gateAccess: `${'EDCBA'[gateRank]}-RANK GATES`,
     level: Math.max(1, message.level | 0),
+    rankLevel: Math.max(1, Math.min(rank >= 5 ? 10 : 10, Math.max(1, (message.level | 0) - ([1,11,21,31,41,51][rank] || 1) + 1))),
     statPoints: Math.max(0, message.statPoints | 0),
     next: nextRankLevel
-      ? `${'EDCBAS'[rank + 1]}-Rank begins at Level ${nextRankLevel}`
+      ? `${'EDCBAS'[rank + 1]}-Rank Level 1 begins`
       : 'Maximum Hunter rank achieved',
   };
 }
@@ -131,7 +132,7 @@ export function createOnboardingUI(deps) {
       label: 'Progression Path', text: 'Visit the Job Board and take your first repeatable contract', target: HUB.jobs,
       path: { now: 'Take a contract', next: 'Then climb E-rank toward promotion', why: 'Contracts become the repeatable path between Gates', step: 8, total: 8 },
     };
-    if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through contracts, quests, Gates, events, and hostile threats. D-Rank begins at Level 11.', target: HUB.jobs };
+    if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through contracts, quests, Gates, events, and hostile threats. D-Rank begins after E-Rank Level 10.', target: HUB.jobs };
     if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract', target: HUB.jobs };
     if (focus === 'first_promotion_contract') return { label: 'First Promotion', text: "Take Mara's Field Work from the Job Board", target: HUB.jobs };
     if (focus === 'first_d_gate') {
@@ -298,7 +299,7 @@ export function createOnboardingUI(deps) {
       '<h2>' + escHTML(details.title) + '</h2>' +
       '<div class="rusub">RANK EARNED THROUGH HUNTER XP</div>' +
       '<div class="rurewards">' +
-        '<div class="rureward"><span>LEVEL REACHED</span><b>LEVEL ' + details.level + '</b></div>' +
+        '<div class="rureward"><span>HUNTER LEVEL</span><b>' + escHTML(details.letter) + '-RANK LEVEL ' + details.rankLevel + '</b></div>' +
         '<div class="rureward"><span>GATE ACCESS</span><b>' + escHTML(details.gateAccess) + '</b></div>' +
         '<div class="rureward"><span>STAT POINTS EARNED</span><b>+' + details.statPoints + '</b></div>' +
       '</div>' +
