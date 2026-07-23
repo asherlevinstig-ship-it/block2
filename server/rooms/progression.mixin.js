@@ -123,6 +123,56 @@ const FIRST_TUTORIAL_CONTRACT_NEED = Object.freeze({
   monk: 30,
   pet_tamer: 1,
 });
+const FIRST_TUTORIAL_CONTRACT_OVERRIDES = Object.freeze({
+  miner: Object.freeze({
+    title: 'First Quarry Shift',
+    desc: 'Mine 8 useful blocks at the quarry or in a nearby cave, then claim your first Miner pay at the Job Board.',
+    focus: 'learn the quarry-to-board loop',
+    reward: 'stone supply, Miner XP, and a reason to revisit caves',
+    location: 'Quarry Work',
+    nextAction: 'Mine quarry stone or cave blocks',
+  }),
+  farmer: Object.freeze({
+    title: 'First Field Shift',
+    desc: 'Till soil, plant seeds, or harvest wheat 3 times at the town farm, then claim your Farmer pay at the Job Board.',
+    focus: 'learn the crop cycle',
+    reward: 'food economy progress and Farmer XP',
+    location: 'Farm Plots',
+    nextAction: 'Use the hoe and seeds at the farm',
+  }),
+  cook: Object.freeze({
+    title: 'First Kitchen Order',
+    desc: 'Cook or craft 1 food item for the tavern kitchen, then claim your Cook pay at the Job Board.',
+    focus: 'turn ingredients into food',
+    reward: 'Cook XP and food economy progress',
+    location: 'Tavern & Inn',
+    nextAction: 'Cook food at a kitchen station',
+  }),
+  blacksmith: Object.freeze({
+    title: 'First Forge Order',
+    desc: 'Craft, smelt, repair, upgrade, or salvage 1 forge item at the smithy, then claim your Blacksmith pay at the Job Board.',
+    focus: 'make gear useful',
+    reward: 'Blacksmith XP and gear economy progress',
+    location: 'Smithy',
+    nextAction: 'Use the smithy forge or workbench',
+  }),
+  monk: Object.freeze({
+    title: 'First Quiet Vigil',
+    desc: 'Hold 30 seconds of focus in the Meditation Hall, then claim your Monk pay at the Job Board.',
+    focus: 'learn calm resource recovery',
+    reward: 'Monk XP and meditation growth progress',
+    location: 'Meditation Hall',
+    nextAction: 'Meditate inside the hall circle',
+  }),
+  pet_tamer: Object.freeze({
+    title: 'First Care Shift',
+    desc: 'Prepare 1 companion care item or feed a dragon treat, then claim your Pet Tamer pay at the Job Board.',
+    focus: 'care for companions',
+    reward: 'Pet Tamer XP and dragon-care practice',
+    location: 'Dragon Roost',
+    nextAction: 'Craft or use a companion treat',
+  }),
+});
 const FIRST_TUTORIAL_STARTER_KITS = Object.freeze({
   miner: Object.freeze({ tools: Object.freeze([I.WOOD_PICK]), stacks: Object.freeze([]), title: 'Miner starter kit' }),
   farmer: Object.freeze({ tools: Object.freeze([I.WOOD_HOE]), stacks: Object.freeze([Object.freeze({ id: I.WHEAT_SEEDS, count: 8 })]), title: 'Farmer starter kit' }),
@@ -566,8 +616,10 @@ class ProgressionMixin {
     const base = pool.find(c => c.type === type) || pool[0];
     if (!base) return null;
     const now = Date.now();
+    const starter = FIRST_TUTORIAL_CONTRACT_OVERRIDES[job] || {};
     const contract = this.decorateMinerUndergroundOffer({
       ...base,
+      ...starter,
       id: ['job', job, 'tutorial', now, base.type].join('_'),
       job,
       need: Math.max(1, Math.min(base.need | 0, FIRST_TUTORIAL_CONTRACT_NEED[job] || (base.need | 0) || 1)),
@@ -590,6 +642,16 @@ class ProgressionMixin {
     this.grantFirstTutorialJobStarterKit(client, job);
     this.dirtyPlayers.add(rec.token);
     client.send('jobProgress', { job, jobXp: xpMap[job] | 0, contract });
+    if (this.sendQuestOutcome) this.sendQuestOutcome(client, {
+      source: 'job',
+      questType: 'job',
+      title: contract.title || 'First Real Shift',
+      outcome: 'accepted',
+      reason: 'tutorial_complete',
+      location: contract.location || 'Job Board',
+      text: contract.nextAction || contract.desc || 'Follow your first job contract.',
+      noReward: true,
+    });
     return contract;
   }
 

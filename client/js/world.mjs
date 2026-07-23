@@ -6741,6 +6741,11 @@ function makeJobContract(jobId){
 function jobContractReady(){ return !!(jobContract && jobContract.have>=jobContract.need); }
 function jobContractNextHint(job,level=jobLevelFromXp(jobXpFor(job)),milestones=[],graduation=false){
   if(graduation)return 'Next: use the graduation kit to prep your first D-rank gate.';
+  const active=jobContract&&jobContract.job===job&&!jobContractReady()?jobContract:null;
+  if(active&&active.nextAction){
+    const action=String(active.nextAction||'').trim().replace(/^next:\s*/i,'');
+    if(action)return 'Next: '+action.replace(/[.!?]*$/,'')+'.';
+  }
   const latest=Array.isArray(milestones)&&milestones.length?milestones[milestones.length-1]:null;
   const lvl=Math.max(1,level|0);
   if(latest&&job==='farmer')return latest.level>=10?'Next: try Compost on a growing crop.':'Next: plant Prairie Windseed on farmland.';
