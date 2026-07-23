@@ -47,6 +47,11 @@ test('pet tamer tutorial displays egg timer and highlights the Stay command', as
     job: 'pet_tamer',
     step: 0,
     eggStarted: true,
+    stationGuide: {
+      exists: true,
+      visible: true,
+      count: 6,
+    },
     egg: {
       exists: true,
       tutorial: true,
@@ -67,6 +72,11 @@ test('pet tamer tutorial displays egg timer and highlights the Stay command', as
   });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.petTamerVisualDebug().step)).toBe(3);
   await expect.poll(() => page.evaluate(() => !!window.__petTamerPracticeDragon)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.petTamerVisualDebug().stationGuide)).toMatchObject({
+    exists: true,
+    visible: true,
+    count: 6,
+  });
   await page.evaluate(() => {
     const dragon = window.__petTamerPracticeDragon;
     window.player.pos.set(dragon.position.x + 0.8, dragon.position.y + 0.04, dragon.position.z + 0.8);

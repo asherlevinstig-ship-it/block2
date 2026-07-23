@@ -1391,6 +1391,23 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
       if(d<=7&&d>=3)setBlock(x,G,z,B.WATER);
       else if(d<3)setBlock(x,G,z,B.GLASS);
     }
+    // Guided floor route: egg insulator -> bonded dragon -> command post -> flight ring -> roost station.
+    box(cx-4,G,cz+5,cx+4,G,cz+11,B.PLANKS);
+    for(let x=cx-4;x<=cx+4;x++)for(let z=cz+5;z<=cz+11;z++){
+      if(Math.abs(x-cx)===4||z===cz+5||z===cz+11)setBlock(x,G,z,B.COBBLE);
+      for(let y=G+1;y<=G+7;y++)if(!(x===cx&&z===cz+8&&y===G+1))setBlock(x,y,z,B.AIR);
+    }
+    for(let x=cx;x<=cx+10;x++)for(let z=cz+6;z<=cz+10;z++)if(Math.abs(z-(cz+8))<=1||x%3===0)setBlock(x,G,z,x>cx+5?B.GRASS:B.PLANKS);
+    box(cx+5,G,cz-9,cx+13,G,cz-3,B.GLASS);
+    for(let x=cx+5;x<=cx+13;x++)for(let z=cz-9;z<=cz-3;z++){
+      if(Math.abs(x-(cx+9))>=4||Math.abs(z-(cz-6))>=3)setBlock(x,G,z,B.COBBLE);
+      for(let y=G+1;y<=G+9;y++)setBlock(x,y,z,B.AIR);
+    }
+    for(let x=cx-34;x<=cx;x++)for(let z=cz+32;z<=cz+36;z++)setBlock(x,G,z,x%4===0?B.GLASS:B.PLANKS);
+    for(const [sx,sz,id] of [[cx,cz+8,B.LANTERN],[cx+9,cz+8,B.LANTERN],[cx+9,cz-6,B.LANTERN],[cx-34,cz+34,B.LANTERN]]){
+      setBlock(sx-2,G+1,sz-2,id);
+      setBlock(sx+2,G+1,sz+2,id);
+    }
     const exitX=cx-34, exitZ=cz+34;
     for(let x=exitX-8;x<=exitX+8;x++)for(let z=exitZ-8;z<=exitZ+8;z++){
       const d=Math.hypot(x-exitX,z-exitZ);

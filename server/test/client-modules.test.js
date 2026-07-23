@@ -1644,6 +1644,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function petTamerPracticeInsulatorPos\(\)/);
   assert.match(combat,/function petTamerPracticeFlightRingPos\(\)/);
   assert.match(combat,/function ensurePetTamerFlightRing\(\)/);
+  assert.match(combat,/function ensurePetTamerTutorialStationGuide\(\)/);
+  assert.match(combat,/label:'1 EGG'/);
+  assert.match(combat,/label:'6 ROOST'/);
   assert.match(combat,/function updatePetTamerFlightRing\(now=performance\.now\(\)\)/);
   assert.match(combat,/function throughPetTamerFlightRing\(\)/);
   assert.match(combat,/by:\(room\.G\+1\)\|0,bz:\(room\.z\+8\)\|0/);
@@ -1678,8 +1681,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/if\(mountPetTamerPracticeDragon\(\)\) return; toggleMount\(\)/);
   assert.match(combat,/petTamerTutorialProgressLabel\(\)\+' - '\+petTamerTutorialAction\(\)\.key/);
   assert.match(combat,/function jobTutorialBeaconTarget\(jobId, room\)/);
-  assert.match(combat,/FOLLOW EGG LIGHT/);
-  assert.match(combat,/FOLLOW DRAGON LIGHT/);
+  assert.match(combat,/FOLLOW STATION 1/);
+  assert.match(combat,/FOLLOW DRAGON STATIONS/);
   assert.match(combat,/HATCH EGG/);
   assert.match(combat,/EGG \+ G/);
   assert.match(combat,/WALK CLOSE/);
@@ -1719,6 +1722,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/Guided floor route: diamond seam -> bag check -> Garrik trade deck -> return pillar/);
   assert.match(world,/for\(let z=cz-14;z<=cz\+23;z\+\+\)for\(let x=cx-2;x<=cx\+2;x\+\+\)setBlock\(x,G,z,z<cz-7\?B\.COBBLE:z<cz\+4\?B\.PLANKS:z<cz\+13\?B\.COBBLE:B\.GLASS\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
+  assert.match(world,/Guided floor route: egg insulator -> bonded dragon -> command post -> flight ring -> roost station/);
   assert.match(world,/for\(let x=cx-14;x<=cx-7;x\+\+\)for\(let z=cz-15;z<=cz-10;z\+\+\)/);
   assert.match(world,/Guided floor route: tilling patch -> planting bed -> ready wheat -> farm stand -> return pillar/);
   assert.match(world,/for\(let x=cx-4;x<=cx\+5;x\+\+\)\{setBlock\(x,G\+1,cz-4,B\.LOG\);if\(x%2===0\)setBlock\(x,G\+2,cz-4,B\.LANTERN\);\}/);
