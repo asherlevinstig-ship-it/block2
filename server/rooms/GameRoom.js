@@ -3867,6 +3867,23 @@ class GameRoom extends Room {
   }
   activeQuestObjectives(client, prof) {
     const objectives = [];
+    const chapterOneStep = objective => {
+      const id = String(objective && objective.id || '');
+      const title = String(objective && objective.title || '');
+      const source = String(objective && objective.source || '');
+      const job = objective && objective.jobContract;
+      let step = 0;
+      if (id === 'npc:Mara Vale:0' || title === 'First Hands') step = 1;
+      else if (id === 'npc:Mara Vale:1' || id === 'progression:first_road_ready' || title === 'Road Ready') step = 2;
+      else if (id === 'npc:Mara Vale:2' || id === 'progression:first_e_gate' || title === 'The First Gate' || title === 'First E-rank Gate') step = 3;
+      else if (id === 'progression:first_craft_station') step = 4;
+      else if (id === 'progression:first_land_claim') step = 5;
+      else if (id === 'progression:first_claim_expand') step = 6;
+      else if (id === 'progression:first_base_setup') step = 7;
+      else if (id === 'progression:first_profession_contract' || (source === 'job' && job && (job.difficulty === 'starter' || job.difficultyLabel === 'First Real Shift'))) step = 8;
+      if (!step) return null;
+      return { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step, total: 8 };
+    };
     const lifecycleFor = (state, src = {}) => {
       const normalizedState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(state) ? state : 'active';
       const offeredAt = Math.max(0, Number(src.offeredAt) || 0);
@@ -3924,6 +3941,7 @@ class GameRoom extends Room {
           current: Math.max(0, Math.min(999999, objective.progress.current | 0)),
           required: Math.max(1, Math.min(999999, objective.progress.required | 0 || 1)),
         } : null,
+        chapter: objective.chapter || chapterOneStep(objective),
         priority: Math.max(0, Math.min(999, objective.priority | 0 || 100)),
         serverOwned: objective.serverOwned !== false,
         reward: rewardPayload(objective.reward),
@@ -3999,6 +4017,7 @@ class GameRoom extends Room {
       id: `job:${job.id || job.job || 'contract'}`,
       source: 'job',
       questType: 'job',
+      jobContract: job,
       title: job.title || 'Job Contract',
       status: (job.have | 0) >= (job.need | 0) ? 'claimable' : 'active',
       text: job.desc || 'Complete the job contract.',

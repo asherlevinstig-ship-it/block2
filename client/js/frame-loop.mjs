@@ -601,8 +601,8 @@ function serverObjectiveProgressParts(o){
   const p=o&&o.progress;
   return p&&Number.isFinite(p.current)&&Number.isFinite(p.required)?objectiveProgressParts(p.current,p.required):null;
 }
-function objectiveLine(kind,label,title,text,action,progress=null){
-  return {kind,label,title:title||label,text:text||'',action,progress};
+function objectiveLine(kind,label,title,text,action,progress=null,meta=null){
+  return {kind,label,title:title||label,text:text||'',action,progress,...(meta&&typeof meta==='object'?meta:{})};
 }
 function currentPlayerStyleGuide(){
   if(menusApi.playerStyleGuide){
@@ -679,7 +679,7 @@ function localGuildObjectiveLine(){
 }
 function serverObjectiveLine(o,labelOverride=''){
   if(!o)return null;
-  return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o));
+  return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o),{chapter:o.chapter||null,serverObjective:o});
 }
 function gatePrepTargetRank(){
   if(menusApi.nextGatePrepRank){
@@ -844,10 +844,11 @@ function objectiveHudHTML(obj){
     const line=obj.line;
     const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
     const progressText=line.progress?'<em>'+line.progress.current+'/'+line.progress.required+'</em>':'';
+    const chapter=line.chapter?'<div class="chapter-kicker">'+escHTML(line.chapter.title||'Chapter')+(line.chapter.step?'<span>'+Math.max(1,line.chapter.step|0)+'/'+Math.max(1,line.chapter.total|0)+'</span>':'')+'</div>':'';
     return '<div class="qt">Next Best Action</div><div class="objective-list next-best-list">'+
       '<div class="objective-line next-best '+escHTML(line.kind||'objective')+'">'+
         '<div class="olabel">'+escHTML(line.label||'Next')+'</div>'+
-        '<div class="obody"><b>'+escHTML(line.title||'Next Step')+'</b><span>'+escHTML(line.text||'')+'</span>'+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
+        '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Next Step')+'</b><span>'+escHTML(line.text||'')+'</span>'+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
         '<div class="oact">'+progressText+trackerActionButton(line.action)+'</div>'+
       '</div>'+
     '</div>';
@@ -856,9 +857,10 @@ function objectiveHudHTML(obj){
     const rows=obj.lines.map(line=>{
       const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
       const progressText=line.progress?'<em>'+line.progress.current+'/'+line.progress.required+'</em>':'';
+      const chapter=line.chapter?'<div class="chapter-kicker">'+escHTML(line.chapter.title||'Chapter')+(line.chapter.step?'<span>'+Math.max(1,line.chapter.step|0)+'/'+Math.max(1,line.chapter.total|0)+'</span>':'')+'</div>':'';
       return '<div class="objective-line '+escHTML(line.kind||'objective')+'">'+
         '<div class="olabel">'+escHTML(line.label||'Objective')+'</div>'+
-        '<div class="obody"><b>'+escHTML(line.title||'Objective')+'</b><span>'+escHTML(line.text||'')+'</span>'+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
+        '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Objective')+'</b><span>'+escHTML(line.text||'')+'</span>'+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
         '<div class="oact">'+progressText+trackerActionButton(line.action)+'</div>'+
       '</div>';
     }).join('');
@@ -891,6 +893,7 @@ function debugObjectiveHudSummary(obj){
       text:line.text||'',
       action:line.action?{type:line.action.type||'',label:line.action.label||''}:null,
       progress:line.progress||null,
+      chapter:line.chapter||null,
       serverObjective:server?{id:server.id||'',source:server.source||'',status:server.status||'',title:server.title||''}:null,
     }:null,
   };

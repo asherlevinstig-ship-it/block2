@@ -938,6 +938,8 @@
   #currentquest .objective-line:first-child{border-top:0}
   #currentquest .olabel{font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:#ffd24a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #currentquest .obody{display:grid;gap:2px;min-width:0}
+  #currentquest .chapter-kicker{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:8px;letter-spacing:1.3px;text-transform:uppercase;color:#9ad26b}
+  #currentquest .chapter-kicker span{display:inline-block;flex:0 0 auto;font-size:8px;line-height:1;color:#ffd24a;border:1px solid rgba(255,210,74,.35);border-radius:999px;padding:2px 5px;background:rgba(255,210,74,.08)}
   #currentquest .obody b{font-size:11px;color:#fff3c4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #currentquest .obody span{font-size:10px;line-height:1.25;color:#b8c7d8;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   #currentquest .obar{height:3px;margin-top:2px;border-radius:999px;background:rgba(0,0,0,.36);overflow:hidden;border:1px solid rgba(255,210,74,.12)}
@@ -1256,6 +1258,8 @@
     #currentquest .objective-line{grid-template-columns:36px minmax(0,1fr);gap:4px 6px;padding:5px 0}
     #currentquest .olabel{font-size:7px;letter-spacing:.9px}
     #currentquest .obody b{font-size:10px}
+    #currentquest .chapter-kicker{font-size:7px;letter-spacing:.9px}
+    #currentquest .chapter-kicker span{font-size:7px;padding:1px 4px}
     #currentquest .obody span{font-size:9px;line-height:1.2;-webkit-line-clamp:1}
     #currentquest .oact{grid-column:2;grid-row:2;display:flex;align-items:center;justify-content:space-between;justify-self:stretch;gap:5px;max-width:none}
     #currentquest .oact em{font-size:8px;white-space:nowrap}
@@ -1282,6 +1286,7 @@
     #currentquest{width:50vw;max-width:50vw}
     #currentquest .objective-line{grid-template-columns:30px minmax(0,1fr);gap:3px 5px}
     #currentquest .obody span{display:none}
+    #currentquest .chapter-kicker{display:none}
     #currentquest .oact{grid-column:1 / -1}
     #currentquest .oact .qaction{max-width:118px}
     #coords{top:46px}

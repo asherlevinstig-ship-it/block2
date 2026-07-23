@@ -32,6 +32,15 @@
     if(!type&&!label)return null;
     return {type,label};
   }
+  function chapterOf(chapter){
+    if(!chapter||typeof chapter!=='object')return null;
+    const id=clean(chapter.id||'', '', 48);
+    const title=clean(chapter.title||'', '', 80);
+    const step=Math.max(0,Math.min(99,chapter.step|0));
+    const total=Math.max(step||1,Math.min(99,chapter.total|0||step||1));
+    if(!id&&!title)return null;
+    return {id,title,step,total};
+  }
   function defaultAction(o,category,status){
     if(o&&o.action)return actionOf(o.action);
     if(status==='claimable'||status==='complete'){
@@ -81,6 +90,7 @@
       questLogAction,
       hudText:hudTextFor({...input,category},status,progress),
       progress,
+      chapter:chapterOf(input.chapter),
       priority:Math.max(0,Math.min(999,input.priority|0||100)),
       serverOwned:input.serverOwned!==false,
     };

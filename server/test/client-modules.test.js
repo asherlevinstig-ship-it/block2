@@ -1108,6 +1108,7 @@ test('browser and server share authoritative quest objective descriptors', () =>
     text: 'Return to town.',
     location: 'Mara Vale',
     progress: { current: 2, required: 2 },
+    chapter: { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 8 },
     reward: { gold: 10, xp: 20 },
     action: { type: 'turn_in', label: 'TURN IN TO MARA' },
   });
@@ -1117,6 +1118,7 @@ test('browser and server share authoritative quest objective descriptors', () =>
   assert.equal(normalized.claimAction.type, 'turn_in');
   assert.match(normalized.hudText, /Complete/);
   assert.deepEqual(normalized.progress, { current: 2, required: 2 });
+  assert.deepEqual(normalized.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 8 });
 });
 
 test('NPC story and manhunt quests come from one validated authoring registry', () => {
@@ -3355,6 +3357,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(styles,/\.objective-list\.next-best-list/);
   assert.match(styles,/\.objective-line/);
   assert.match(styles,/\.objective-line\.next-best/);
+  assert.match(frame,/chapter-kicker/);
+  assert.match(styles,/\.chapter-kicker/);
   assert.match(styles,/\.questcard\.prep-loop/);
   assert.match(styles,/\.gate-prep-mini/);
   assert.match(styles,/#currentquest \.objective-line\.prep/);

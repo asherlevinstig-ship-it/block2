@@ -1716,6 +1716,11 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.progressionFocus, 'first_road_ready');
+  {
+    const payload = client.sent.find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_road_ready').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_road_ready');
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 2, total: 8 });
+  }
 
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
   assert.equal(prof.progressionFocus, 'first_road_ready');
@@ -1729,6 +1734,11 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   room.recordGateProgress(client, 0);
   room.handleNpcQuest(client, { action: 'claim' });
   assert.equal(prof.progressionFocus, 'first_craft_station');
+  {
+    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_craft_station').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_craft_station');
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 4, total: 8 });
+  }
   assert.equal(prof.progressionMilestoneRewards.includes('first_e_gate'), true);
   const firstGateReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'first_e_gate');
   assert.equal(!!firstGateReward, true);
@@ -1776,6 +1786,11 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   room.handleWorldEdit(client, { x: 22, y: 10, z: 20, id: W.B.TABLE });
   assert.equal(prof.progressionFocus, 'first_profession_contract');
   assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_profession_contract'), true);
+  {
+    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_profession_contract').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_profession_contract');
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 8, total: 8 });
+  }
   const baseReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'base_setup');
   assert.equal(!!baseReward, true);
   assert.equal(baseReward.msg.title, 'Base Established');
@@ -7352,6 +7367,8 @@ test('job tutorial completion seeds one first real profession contract', () => {
     assert.equal(prof.jobContract.type, type);
     assert.equal(prof.jobContract.lifecycleState, 'active');
     assert.equal(prof.jobContract.need <= (job === 'miner' ? 8 : job === 'farmer' ? 3 : job === 'monk' ? 30 : 1), true);
+    const starterObjective = room.activeQuestObjectives(client, prof).find(o => o.source === 'job' && o.title === prof.jobContract.title);
+    assert.deepEqual(starterObjective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 8, total: 8 });
     if (job === 'pet_tamer') {
       assert.equal(itemCount(prof, I.DRAGON_TREAT) >= 1, true);
       assert.equal(itemCount(prof, I.COOKED_MEAT) >= 2, true);
