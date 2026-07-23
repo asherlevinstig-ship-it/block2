@@ -1163,8 +1163,19 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     }
     for(let z=cz+17;z<=cz+23;z++)for(let x=cx-2;x<=cx+2;x++){setBlock(x,G,z,B.COBBLE);clear(x,z,G+6);}
 
+    // Guided floor route: prep -> hearth -> serving counter -> return pillar.
+    for(let x=cx-8;x<=cx;x++)setBlock(x,G,cz-2,B.TERRACOTTA);
+    for(let z=cz-2;z<=cz+4;z++)setBlock(cx,G,z,B.TERRACOTTA);
+    for(let x=cx;x<=cx+8;x++)setBlock(x,G,cz+4,B.TERRACOTTA);
+    for(let z=cz+4;z<=cz+12;z++)setBlock(cx+8,G,z,B.TERRACOTTA);
+    for(let z=cz+12;z<=cz+23;z++)setBlock(cx+8,G,z,z>cz+18?B.COBBLE:B.TERRACOTTA);
+    for(let x=cx;x<=cx+8;x++)setBlock(x,G,cz+23,B.COBBLE);
+
     // Prep counters: the active table at (cx-8, cz-2) matches cookTutorialPrepPos().
     for(let x=cx-12;x<=cx-4;x++)setBlock(x,G+1,cz-2,(x===cx-8)?B.TABLE:B.PLANKS);
+    for(let x=cx-10;x<=cx-6;x++)for(let z=cz-4;z<=cz;z++)if(!(x===cx-8&&z===cz-2))setBlock(x,G,z,B.TERRACOTTA);
+    setBlock(cx-9,G+1,cz-1,B.WHEAT_3);
+    setBlock(cx-7,G+1,cz-1,B.TERRACOTTA);
     for(let x=cx-12;x<=cx-4;x+=4){setBlock(x,G+1,cz-4,B.CHEST);setBlock(x,G+2,cz-4,B.LANTERN);}
     for(let z=cz-11;z<=cz-6;z+=2){setBlock(cx-13,G+1,z,B.CHEST);setBlock(cx-13,G+2,z,z===cz-9?B.WHEAT_3:B.PLANKS);}
 
@@ -1178,14 +1189,20 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx,G+1,cz+4,B.CAMPFIRE);
     setBlock(cx-2,G+1,cz+4,B.FURNACE);
     setBlock(cx+2,G+1,cz+4,B.FURNACE);
+    for(let x=cx-2;x<=cx+2;x++)for(let z=cz+2;z<=cz+6;z++)setBlock(x,G,z,B.TERRACOTTA);
+    setBlock(cx-1,G+2,cz+3,B.LANTERN);
+    setBlock(cx+1,G+2,cz+3,B.LANTERN);
     for(const [ox,oz] of [[-5,4],[5,4],[-5,7],[5,7]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
 
     // Tavern counter and sale corner where Pippa appears for the final step.
     for(let x=cx+5;x<=cx+13;x++)setBlock(x,G+1,cz+10,x===cx+10?B.TABLE:B.PLANKS);
     for(let z=cz+8;z<=cz+13;z++)setBlock(cx+13,G+1,z,B.PLANKS);
+    for(let x=cx+6;x<=cx+11;x++)for(let z=cz+11;z<=cz+14;z++)setBlock(x,G,z,B.TERRACOTTA);
     setBlock(cx+8,G+1,cz+12,B.CHEST);
     setBlock(cx+10,G+1,cz+13,B.LANTERN);
     setBlock(cx+12,G+1,cz+12,B.CHEST);
+    setBlock(cx+7,G+1,cz+11,B.TERRACOTTA);
+    setBlock(cx+9,G+1,cz+11,B.LOG);
 
     // Warm tavern dressing without blocking the tutorial route.
     for(const [ox,oz] of [[-11,11],[-7,11],[-3,11],[1,11]]){setBlock(cx+ox,G+1,cz+oz,B.TABLE);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
@@ -1193,6 +1210,8 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     for(const [ox,oz] of [[-14,-2],[-14,2],[14,-2],[14,2]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.PLANKS);}
     for(let z=cz-13;z<=cz+13;z+=6)box(cx-15,G+5,z,cx+15,G+5,z,B.LOG);
     for(const [ox,oz] of [[-4,-10],[0,-10],[4,-10],[7,-2],[11,-2],[-9,3],[-5,3]])crateStack(cx+ox,cz+oz,1);
+    for(const [ox,oz] of [[-12,5],[-12,8],[-12,11]]){setBlock(cx+ox,G+1,cz+oz,B.CHEST);setBlock(cx+ox,G+2,cz+oz,B.PLANKS);}
+    for(const [ox,oz] of [[11,-8],[11,-5],[11,-2]]){setBlock(cx+ox,G+1,cz+oz,B.FURNACE);setBlock(cx+ox,G+2,cz+oz,B.BRICK);}
     for(const [ox,oz] of [[-10,6],[-6,6],[-2,6],[2,6]]){setBlock(cx+ox,G+1,cz+6,B.PLANKS);setBlock(cx+ox,G+2,cz+6,B.CHEST);}
     box(cx-3,G+1,cz-14,cx+3,G+1,cz-14,B.PLANKS);
     for(const ox of [-2,0,2])setBlock(cx+ox,G+2,cz-14,B.LANTERN);

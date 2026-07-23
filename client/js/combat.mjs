@@ -822,10 +822,10 @@ const FARMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'SELL WHEAT',title:'Sell Wheat',verb:'LISS + G',purpose:'Take one wheat to Liss Barley and press G to trade it for gold.',done:'You sold wheat for gold. Farmers turn food into the town economy.'},
 ]);
 const COOK_TUTORIAL_ACTIONS=Object.freeze([
-  {key:'PREP BREAD',title:'Prepare Bread',verb:'TABLE + G',purpose:'Stand at the prep table and press G to turn three wheat into bread.',done:'You prepared bread. Cooks convert farm supplies into useful meals.'},
-  {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Take bread and cooked meat to the hearth, then press G to start a fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
+  {key:'PREP BREAD',title:'Prepare Bread',verb:'PREP TABLE + G',purpose:'Stand on the yellow prep mat and press G to turn three wheat into bread.',done:'You prepared bread. Cooks convert farm supplies into useful meals.'},
+  {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Carry bread and cooked meat to the glowing hearth, then press G to start a fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
   {key:'CLAIM MEAL',title:'Claim Meal',verb:'HEARTH + G',purpose:'When the timer says ready, press G at the hearth to claim a Hearty Sandwich.',done:'You made a Hearty Sandwich. Strong meals support travel, Gates, and recovery.'},
-  {key:'SELL MEAL',title:'Sell Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
+  {key:'SELL MEAL',title:'Sell Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
 ]);
 const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
   {key:'CRAFT CHAINMAIL',title:'Craft Armor',verb:'FORGE + G',purpose:'Stand at the forge bench and press G to craft Chainmail Armor from seven iron ingots and one coal.',done:'You forged Chainmail Armor. Blacksmith craft quality improves with your max mana pool.'},
@@ -1597,6 +1597,10 @@ function updateCookTutorialTimer(now=performance.now()){
   spr.material.opacity=done?.98:.92;
   const scale=done?2.35:2.15;
   spr.scale.set(scale,.8*(scale/2.15),1);
+  if(done && now>jobTutorialReturnWarnAt){
+    jobTutorialReturnWarnAt=now+1800;
+    ringPulse(p.x,p.y+.08,p.z,1.5,0xb7ff8a,.5);
+  }
 }
 function ensureCookTutorialSupplies(){
   if(jobTutorialCookStep<=0&&countItem(I.WHEAT)<3){
@@ -1616,7 +1620,8 @@ function ensureCookTutorialSupplies(){
 function advanceCookTutorial(action){
   const lesson=cookTutorialAction();
   eventLog('Cook tutorial - '+lesson.title+': '+lesson.done);
-  sysMsg('<b>Cook lesson:</b> '+escHTML(lesson.done));
+  const next=action==='prep'?'Next: follow the pillar to the hearth.':action==='start'?'Next: wait for the hearth timer to finish.':action==='claim'?'Next: bring the sandwich to Pippa at the counter.':action==='trade'?'Cook loop complete: return through the blue pillar.':'';
+  sysMsg('<b>Cook lesson:</b> '+escHTML(lesson.done)+(next?'<br>'+escHTML(next):''));
   jobTutorialLessonMoment(lesson.title,cookTutorialTargetPos(),[1,.72,.26],0xffd45a);
   burst(player.pos.x,player.pos.y+1,player.pos.z,[1,.72,.26],24,2.2,2.0,.65);
   ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.0,0xffd45a,.55);
@@ -1625,6 +1630,7 @@ function advanceCookTutorial(action){
     selectItemForOnboarding(I.BREAD);
   }else if(action==='start'){
     jobTutorialCookStep=2;
+    jobTutorialReturnWarnAt=0;
   }else if(action==='claim'){
     jobTutorialCookStep=3;
   }else if(action==='trade'){
@@ -2856,7 +2862,7 @@ function updateJobTutorialHud(){
       : jobTutorialCookStep===3
         ? {key:'PIPPA HEARTH',text:'Take the Hearty Sandwich to Pippa Hearth and press G to sell it for gold.',sub:'This completes the cook economy loop.'}
       : jobTutorialCookStep===2
-        ? {key:'CLAIM MEAL',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the hearth timer above the campfire.',sub:'The tutorial timer is fast; normal food work still uses recipes and kitchen prep.'}
+        ? {key:'CLAIM MEAL',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the Hades-style hearth timer above the campfire.',sub:'The tutorial timer is fast; normal food work still uses recipes and kitchen prep.'}
       : {key:action.key,text:cookTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Cook loop: ingredients become food, food becomes buffs and gold.'};
   }
   if(jobTutorialJob==='blacksmith'){
@@ -3005,7 +3011,7 @@ function startJobTutorial(jobId){
   eventLog('Entered '+job.name+' tutorial room.');
   if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the open Egg Insulator, then hatch your tutorial egg.');
   else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
-  else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the prep table. Press <b>G</b> to start turning wheat into real food.');
+  else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the yellow prep station. Press <b>G</b> to start turning wheat into real food.');
   else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the forge bench. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
   else if(jobId==='monk')sysMsg('<b>Monk chosen.</b><br>Follow the pillar of light to the focus circle. Press <b>G</b>, then hold still.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
