@@ -1306,6 +1306,38 @@ function netAttachRoom(room,name,client){
       SFX.error();sysMsg(text);
       if(qOpen&&qMode==='management')openLandClaimsUI();
     });
+    room.onMessage('homesteadUpgrade',m=>{
+      homesteadUpgrades=clampHomesteadUpgrades(m&&m.upgrades);
+      if(qOpen&&qMode==='management')openLandClaimsUI();
+      refreshHUD();
+    });
+    room.onMessage('homesteadUpgradeResult',m=>{
+      homesteadUpgrades=clampHomesteadUpgrades(m&&m.upgrades);
+      if(typeof (m&&m.gold)==='number')gold=Math.max(0,m.gold|0);
+      SFX.success();
+      const action=String(m&&m.action||'');
+      if(action==='set_spawn'){
+        sysMsg('Home spawn set inside your <b>Homestead</b>.');
+        eventFeed('[Homestead]','Home spawn set.',{key:'homestead:spawn',cooldown:1000});
+      }else{
+        const title=String(m&&m.title||'Homestead upgrade');
+        rewardGain('item',1,title,{icon:'HOME'});
+        sysMsg('<b>'+escHTML(title)+'</b> added to your Homestead.');
+        eventFeed('[Homestead]',title+' added.',{key:'homestead:upgrade:'+String(m&&m.id||''),cooldown:1000});
+      }
+      refreshHUD();renderBars();if(qOpen&&qMode==='management')openLandClaimsUI();
+    });
+    room.onMessage('homesteadUpgradeReject',m=>{
+      const reason=m&&m.reason;
+      const text=reason==='homestead'?'Stand inside your editable 3-tile Homestead to manage upgrades.'
+        :reason==='owner'?'Only the Homestead owner can choose upgrades.'
+        :reason==='gold'?'Not enough gold for that Homestead upgrade.'
+        :reason==='owned'?'That Homestead upgrade is already owned.'
+        :reason==='rate'?'Slow down a moment before using Homestead upgrades again.'
+        :'That Homestead upgrade could not be applied.';
+      SFX.error();sysMsg(text);
+      if(qOpen&&qMode==='management')openLandClaimsUI();
+    });
     room.onMessage('questRewardSummary', m=>{
       appendQuestHistoryLocal({...(m||{}),outcome:'completed',reason:'claimed',location:m&&m.claimLocation});
       const line=questRewardSummaryLine(m);
@@ -2413,6 +2445,7 @@ function netRestoreProfile(m){
     jobXp=jobXpFor(playerJob||'adventurer');
     jobContract=clampJobContract(m.jobContract);
     homesteadWorkOrder=clampHomesteadWorkOrder(m.homesteadWorkOrder);
+    homesteadUpgrades=clampHomesteadUpgrades(m.homesteadUpgrades);
     jobContractOffers=Array.isArray(m.jobContractOffers)?m.jobContractOffers.map(clampJobContract).filter(Boolean):[];
     jobContractOffersJob=String(m.jobContractOfferJob||'');
     jobContractRefreshAt=Math.max(0,Number(m.jobContractOffersAt)||0)+JOB_SYSTEM.OFFER_REFRESH_MS;

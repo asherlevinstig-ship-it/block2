@@ -3720,9 +3720,82 @@ function clampHomesteadWorkOrder(order){
     contributors,
   };
 }
+function clampHomesteadUpgrades(raw){
+  const src=raw&&typeof raw==='object'?raw:{};
+  const home=Array.isArray(src.homeSpawn)&&src.homeSpawn.length>=3
+    ? [Number(src.homeSpawn[0])||0,Number(src.homeSpawn[1])||0,Number(src.homeSpawn[2])||0]
+    : null;
+  const specs=Array.isArray(src.specs)?src.specs:[];
+  return {
+    storage:Math.max(0,Math.min(1,src.storage|0)),
+    comfort:Math.max(0,Math.min(1,src.comfort|0)),
+    rest:Math.max(0,Math.min(1,src.rest|0)),
+    homeSpawn:home,
+    updatedAt:Math.max(0,Number(src.updatedAt)||0),
+    specs,
+  };
+}
 function sendHomesteadWorkOrder(action){
   if(!NET.on||!NET.room){ sysMsg('Homestead work orders require the <b>multiplayer server</b>'); return; }
   NET.room.send('homesteadWorkOrder',{action});
+}
+function sendHomesteadUpgrade(action,id=''){
+  if(!NET.on||!NET.room){ sysMsg('Homestead upgrades require the <b>multiplayer server</b>'); return; }
+  NET.room.send('homesteadUpgrade',{action,id});
+}
+function homesteadUpgradeSpecs(){
+  const fallback=[
+    {id:'storage',title:'Sturdy Storage',desc:'Homestead chests expand from 18 to 27 slots.',benefit:'+9 slots in each owned Homestead chest',costGold:0,max:1},
+    {id:'comfort',title:'Warm Lights',desc:'Your lit Homestead feels safer and more alive.',benefit:'Comfort marker for future room bonuses',costGold:0,max:1},
+    {id:'rest',title:'Rest Corner',desc:'Recover HP, mana, stamina, and hunger while logged out.',benefit:'Small offline recovery',costGold:0,max:1},
+  ];
+  const server=homesteadUpgrades&&Array.isArray(homesteadUpgrades.specs)?homesteadUpgrades.specs:[];
+  return (server.length?server:fallback).map(s=>({
+    id:String(s.id||''),
+    title:String(s.title||'Upgrade').slice(0,60),
+    desc:String(s.desc||'Improve your Homestead.').slice(0,160),
+    benefit:String(s.benefit||'Homestead benefit').slice(0,120),
+    costGold:Math.max(0,s.costGold|0),
+    max:Math.max(1,s.max|0),
+  })).filter(s=>s.id);
+}
+function appendHomesteadUpgradePanel(panel, btn, canManage=true){
+  const title=document.createElement('div');
+  title.className='sub2 homestead-upgrades-title';
+  title.textContent='HOMESTEAD UPGRADES';
+  panel.appendChild(title);
+  const intro=document.createElement('p');
+  intro.className='qtext homestead-upgrades-copy';
+  intro.textContent=canManage
+    ? 'Choose one starter upgrade now. More rooms and deeper upgrades can build from this later.'
+    : 'Homestead upgrades are managed by the owner.';
+  panel.appendChild(intro);
+  const grid=document.createElement('div');
+  grid.className='homestead-upgrade-grid';
+  const upgrades=clampHomesteadUpgrades(homesteadUpgrades);
+  for(const spec of homesteadUpgradeSpecs()){
+    const level=Math.max(0,Math.min(spec.max,upgrades[spec.id]|0));
+    const owned=level>=spec.max;
+    const card=document.createElement('article');
+    card.className='homestead-upgrade-card'+(owned?' owned':'');
+    const cost=spec.costGold>0?spec.costGold+'g':'Free';
+    card.innerHTML='<small>'+(owned?'OWNED':'STARTER')+'</small><b>'+escHTML(spec.title)+'</b><p>'+escHTML(spec.desc)+'</p><em>'+escHTML(spec.benefit)+'</em><span>Cost: '+escHTML(cost)+'</span>';
+    if(canManage){
+      const action=btn(owned?'OWNED':'ADD UPGRADE',()=>sendHomesteadUpgrade('buy',spec.id));
+      action.disabled=owned;
+      card.appendChild(action);
+    }
+    grid.appendChild(card);
+  }
+  panel.appendChild(grid);
+  if(canManage){
+    const home=document.createElement('div');
+    home.className='homestead-home-row';
+    const current=upgrades.homeSpawn;
+    home.innerHTML='<span><b>HOME SPAWN</b><small>'+(current?'Set at '+Math.round(current[0])+', '+Math.round(current[1])+', '+Math.round(current[2]):'Not set yet')+'</small></span>';
+    home.appendChild(btn('SET HOME SPAWN',()=>sendHomesteadUpgrade('set_spawn')));
+    panel.appendChild(home);
+  }
 }
 function appendHomesteadWorkOrderPanel(panel, btn, canCreate=true){
   const title=document.createElement('div');
@@ -3828,6 +3901,10 @@ function openLandClaimsUI(focusX=null, focusZ=null){
   if(focusX!=null&&focusZ!=null) landClaimPanelFocus=landKey(focusX|0,focusZ|0);
   const owned=landClaimEntries(c=>c.own);
   const shared=landClaimEntries(c=>!c.own&&c.canEdit&&c.status!=='abandoned');
+  if(progressionFocus==='first_homestead_upgrade'&&!landClaimPanelFocus){
+    const current=landClaimStatusAt(Math.floor(player.pos.x),Math.floor(player.pos.z),Math.floor(player.pos.y));
+    if(current.kind==='own') landClaimPanelFocus=landKey(current.x,current.z);
+  }
   const focus=landClaimPanelFocus&&landClaims.get(landClaimPanelFocus);
   const focusOwn=focus&&focus.own;
   open('management');
@@ -3882,7 +3959,10 @@ function openLandClaimsUI(focusX=null, focusZ=null){
       groupRow.appendChild(btn('CLEAR AREA',()=>renameLandClaim(fx,fz,'',true)));
       panel.appendChild(groupRow);
     }
-    if(homesteadScope) appendHomesteadWorkOrderPanel(panel, btn);
+    if(homesteadScope){
+      appendHomesteadUpgradePanel(panel, btn);
+      appendHomesteadWorkOrderPanel(panel, btn);
+    }
     const trustedTitle=document.createElement('div'); trustedTitle.className='sub2'; trustedTitle.textContent='TRUSTED HUNTERS'; panel.appendChild(trustedTitle);
     if(!focus.allowed.length){ const empty=document.createElement('p'); empty.className='qtext'; empty.textContent='No one else can edit this claim yet.'; panel.appendChild(empty); }
     for(const entry of focus.allowed){
@@ -6750,7 +6830,7 @@ const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
-let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,mp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,mp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,homesteadUpgrades={storage:0,comfort:0,rest:0,homeSpawn:null,updatedAt:0,specs:[]},jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let activeObjectives=[];
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
@@ -10446,6 +10526,7 @@ const legacyWorldBindings={
   "claimJobContract":{get:()=>claimJobContract},
   "claimMode":{get:()=>claimMode,set:value=>{claimMode=value;}},
   "claimMouse":{get:()=>claimMouse,set:value=>{claimMouse=value;}},
+  "clampHomesteadUpgrades":{get:()=>clampHomesteadUpgrades},
   "clampHomesteadWorkOrder":{get:()=>clampHomesteadWorkOrder},
   "clampJobContract":{get:()=>clampJobContract},
   "clampRegionalContract":{get:()=>clampRegionalContract},
@@ -10561,6 +10642,7 @@ const legacyWorldBindings={
   "itemLabel":{get:()=>itemLabel},
   "economyRecapHTML":{get:()=>economyRecapHTML},
   "ITEMS":{get:()=>ITEMS},
+  "homesteadUpgrades":{get:()=>homesteadUpgrades,set:value=>{homesteadUpgrades=clampHomesteadUpgrades(value);}},
   "homesteadWorkOrder":{get:()=>homesteadWorkOrder,set:value=>{homesteadWorkOrder=value;}},
   "jobContract":{get:()=>jobContract,set:value=>{jobContract=value;}},
   "jobContractOffers":{get:()=>jobContractOffers,set:value=>{jobContractOffers=value;}},

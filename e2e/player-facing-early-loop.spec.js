@@ -142,7 +142,8 @@ function chapterCheckpointMismatch(actual, expected = {}) {
   if (expected.title !== undefined && actual.title !== expected.title) return `title expected ${expected.title} got ${actual.title}: ${JSON.stringify(actual)}`;
   if (expected.actionLabel !== undefined && (!actual.action || actual.action.label !== expected.actionLabel)) return `action label expected ${expected.actionLabel}: ${JSON.stringify(actual)}`;
   if (expected.actionType !== undefined && (!actual.action || actual.action.type !== expected.actionType)) return `action type expected ${expected.actionType}: ${JSON.stringify(actual)}`;
-  if (expected.chapterStep !== undefined && (!actual.chapter || actual.chapter.step !== expected.chapterStep || actual.chapter.total !== 8)) return `chapter step expected ${expected.chapterStep}/8: ${JSON.stringify(actual)}`;
+  const expectedTotal = expected.chapterTotal || 9;
+  if (expected.chapterStep !== undefined && (!actual.chapter || actual.chapter.step !== expected.chapterStep || actual.chapter.total !== expectedTotal)) return `chapter step expected ${expected.chapterStep}/${expectedTotal}: ${JSON.stringify(actual)}`;
   const textChecks = expected.textIncludes == null ? [] : Array.isArray(expected.textIncludes) ? expected.textIncludes : [expected.textIncludes];
   for (const text of textChecks) if (!actual.text.includes(text) && !actual.rawText.includes(text)) return `text missing ${text}: ${JSON.stringify(actual)}`;
   if (expected.activeObjectiveId && !actual.activeObjectives.some(o => o.id === expected.activeObjectiveId)) return `missing active objective ${expected.activeObjectiveId}: ${JSON.stringify(actual)}`;
@@ -452,13 +453,29 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().landClaimOverlay)).toBe(true);
     await closeOpenPanels(page);
 
+    await prepareFocus(page, 'first_homestead_upgrade');
+    await expectChapterCheckpoint(page, qualityAudit, 'homestead upgrade', {
+      focus: 'first_homestead_upgrade',
+      title: 'Homestead Upgrade',
+      actionLabel: 'OPEN HOMESTEAD',
+      actionType: 'land',
+      chapterStep: 8,
+      textIncludes: 'first upgrade',
+    });
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('first upgrade');
+    await clickTrackerAction(page, 'OPEN HOMESTEAD', 'land');
+    recordAuditPanel(qualityAudit, 'homestead upgrade panel', 'land');
+    await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
+    await expect(page.locator('#qpanel')).toContainText('HOMESTEAD UPGRADES');
+    await closeOpenPanels(page);
+
     await prepareFocus(page, 'first_profession_contract');
     await expectChapterCheckpoint(page, qualityAudit, 'first profession contract handoff', {
       focus: 'first_profession_contract',
       title: 'First Contract',
       actionLabel: 'OPEN JOB BOARD',
       actionType: 'jobs',
-      chapterStep: 8,
+      chapterStep: 9,
       textIncludes: 'first profession or Adventurer contract',
     });
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('first profession or Adventurer contract');
@@ -479,7 +496,7 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       title: 'First Contract',
       actionLabel: 'OPEN JOB BOARD',
       actionType: 'jobs',
-      chapterStep: 8,
+      chapterStep: 9,
     });
     await expectTrackerAction(page, 'OPEN JOB BOARD', 'jobs');
   });

@@ -52,7 +52,7 @@ const REWARD_ITEMS = { coal: 101, iron: 102, dia: 103 };
 // client whitelist can't drift from the server.
 const PROGRESSION_FOCUS_STATES = Object.freeze([
   'first_town_map', 'first_road_ready', 'first_e_gate',
-  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
+  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);
 const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);

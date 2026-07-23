@@ -105,15 +105,15 @@ export function createOnboardingUI(deps) {
     };
     if (focus === 'first_craft_station') return {
       label: 'Progression Path', text: 'Craft a Crafting Table or Furnace so your base has a real work station', target: HUB.smith,
-      path: { now: 'Craft a station', next: 'Then claim land', why: 'Your first dungeon should pay forward into a safer home base', step: 4, total: 6 },
+      path: { now: 'Craft a station', next: 'Then claim land', why: 'Your first dungeon should pay forward into a safer home base', step: 4, total: 9 },
     };
     if (focus === 'first_land_claim') return {
       label: 'Progression Path', text: 'Leave town, press L, and buy your first land claim for a protected base', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
-      path: { now: 'Claim your first land', next: 'Then expand it to 3 connected tiles', why: 'Protect your home before repeatable field work', step: 5, total: 7 },
+      path: { now: 'Claim your first land', next: 'Then expand it to 3 connected tiles', why: 'Protect your home before repeatable field work', step: 5, total: 9 },
     };
     if (focus === 'first_claim_expand') return {
       label: 'Progression Path', text: 'Expand your protected base to 3 connected land claims. Adjacent expansion gets a discount.', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
-      path: { now: 'Expand to 3 connected claims', next: 'Then establish your base', why: 'A real base needs enough protected room for storage, light, and a station', step: 6, total: 8 },
+      path: { now: 'Expand to 3 connected claims', next: 'Then establish your base', why: 'A real base needs enough protected room for storage, light, and a station', step: 6, total: 9 },
     };
     if (focus === 'first_base_setup') {
       const base = typeof baseSetupStatus === 'function' ? baseSetupStatus() : null;
@@ -125,19 +125,23 @@ export function createOnboardingUI(deps) {
       const missing = checks.filter(c => !c.done);
       const next = missing[0]
         ? { ...missing[0], hint: 'These only count inside editable claimed land.' }
-        : { id: 'contract', hint: 'Base established. Take your first profession contract from the Job Board.' };
+        : { id: 'upgrade', hint: 'Base established. Choose your first Homestead upgrade from Land Claims.' };
       return {
         label: 'Progression Path',
-        text: base && base.ready ? 'Base established - visit the Job Board and take your first profession contract' : 'Inside claimed land, place a chest, a torch or lantern, and a Crafting Table or Furnace',
+        text: base && base.ready ? 'Base established - choose your first Homestead upgrade from Land Claims' : 'Inside claimed land, place a chest, a torch or lantern, and a Crafting Table or Furnace',
         target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
         checklist: checks,
         prep: { next },
-        path: { now: 'Place storage, light, and a station', next: 'Then take a contract', why: 'Your first base should become a usable home before repeatable field work', step: 7, total: 8 },
+        path: { now: 'Place storage, light, and a station', next: 'Then choose a Homestead upgrade', why: 'Your first base should become a usable home before repeatable field work', step: 7, total: 9 },
       };
     }
+    if (focus === 'first_homestead_upgrade') return {
+      label: 'Progression Path', text: 'Open Land Claims while standing in your Homestead and choose your first upgrade', target: { x: HUB.northGate ? HUB.northGate.x : HUB.jobs.x, z: HUB.northGate ? HUB.northGate.z : HUB.jobs.z },
+      path: { now: 'Choose a Homestead upgrade', next: 'Then take a contract', why: 'A home base should give a clear practical benefit before repeatable work begins', step: 8, total: 9 },
+    };
     if (focus === 'first_profession_contract') return {
       label: 'Progression Path', text: 'Visit the Job Board and take your first repeatable contract', target: HUB.jobs,
-      path: { now: 'Take a contract', next: 'Then climb E-rank toward promotion', why: 'Contracts become the repeatable path between Gates', step: 8, total: 8 },
+      path: { now: 'Take a contract', next: 'Then climb E-rank toward promotion', why: 'Contracts become the repeatable path between Gates', step: 9, total: 9 },
     };
     if (focus === 'e_rank_climb') return { label: 'E-Rank Journey', text: 'Build Hunter XP through contracts, quests, Gates, events, and hostile threats. D-Rank begins after E-Rank Level 10.', target: HUB.jobs };
     if (focus === 'first_promotion_job') return { label: 'First Promotion', text: 'Visit the Job Board and take your first Hunter contract', target: HUB.jobs };

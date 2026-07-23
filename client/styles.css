@@ -628,6 +628,22 @@
   #qpanel.management .land-name-row b{display:block;color:#ffd24a;font-size:10px;letter-spacing:1.5px}
   #qpanel.management .land-name-row small{display:block;margin-top:2px;color:#b9c9d8;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #qpanel.management .land-name-row .qbtn{margin:0;padding:5px 10px;font-size:9px}
+  #qpanel.management .homestead-upgrades-title{margin-top:16px}
+  #qpanel.management .homestead-upgrades-copy{text-align:left;color:#c9d9e8}
+  #qpanel.management .homestead-upgrade-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px;margin:8px 0 12px}
+  #qpanel.management .homestead-upgrade-card{display:grid;grid-template-rows:auto auto 1fr auto auto auto;gap:5px;min-width:0;padding:10px;border:1px solid rgba(79,216,255,.2);border-radius:8px;background:linear-gradient(135deg,rgba(8,18,27,.84),rgba(9,14,21,.9));box-shadow:inset 0 0 18px rgba(79,216,255,.05)}
+  #qpanel.management .homestead-upgrade-card.owned{border-color:rgba(154,210,107,.42);background:linear-gradient(135deg,rgba(24,48,27,.78),rgba(8,18,27,.9))}
+  #qpanel.management .homestead-upgrade-card small{color:#8fd8ff;font-size:8px;letter-spacing:1.7px;text-transform:uppercase}
+  #qpanel.management .homestead-upgrade-card b{color:#ffd24a;font-size:13px;line-height:1.25}
+  #qpanel.management .homestead-upgrade-card p{margin:0;color:#d5e5f5;font-size:11px;line-height:1.35}
+  #qpanel.management .homestead-upgrade-card em{font-style:normal;color:#9ee68b;font-size:10px;line-height:1.35}
+  #qpanel.management .homestead-upgrade-card span{color:#9fb8ca;font-size:10px}
+  #qpanel.management .homestead-upgrade-card .qbtn{justify-self:start;margin:2px 0 0;padding:6px 10px;font-size:9px}
+  #qpanel.management .homestead-home-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin:6px 0 12px;padding:9px 10px;border:1px solid rgba(255,210,74,.2);border-radius:6px;background:rgba(255,210,74,.055)}
+  #qpanel.management .homestead-home-row span{min-width:0}
+  #qpanel.management .homestead-home-row b{display:block;color:#ffd24a;font-size:10px;letter-spacing:1.5px}
+  #qpanel.management .homestead-home-row small{display:block;margin-top:2px;color:#b9c9d8;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #qpanel.management .homestead-home-row .qbtn{margin:0;padding:5px 10px;font-size:9px}
   #qpanel.management .land-quicktrust{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
   #qpanel.management .land-quicktrust>b{display:block;margin-bottom:5px;color:#8fd8ff;font-size:9px;letter-spacing:1.6px}
   #qpanel.management .landtrustrow{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.05)}

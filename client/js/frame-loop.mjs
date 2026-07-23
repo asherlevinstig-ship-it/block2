@@ -574,6 +574,7 @@ function serverObjectiveHudText(o){
     'progression:first_land_claim':'Leave town and buy one protected wilderness tile',
     'progression:first_claim_expand':'Buy two connected tiles beside your first claim to make a 3-tile Homestead',
     'progression:first_base_setup':'Inside your Homestead: place storage, light, and a station',
+    'progression:first_homestead_upgrade':'Choose your first Homestead upgrade from Land Claims',
     'progression:first_profession_contract':'Take your first profession or Adventurer contract at the Job Board'
   };
   if(legacy[o.id])return legacy[o.id];
@@ -710,6 +711,7 @@ function progressionObjectiveFallback(){
   if(progressionFocus==='first_land_claim')return objectiveLine('progression','Next','First Claim','Leave town and buy one protected wilderness tile',{type:'land',label:'CLAIM LAND'});
   if(progressionFocus==='first_claim_expand')return objectiveLine('progression','Next','Expand Claim','Buy two connected tiles beside your first claim to make a 3-tile Homestead',{type:'land',label:'EXPAND LAND'});
   if(progressionFocus==='first_base_setup')return objectiveLine('progression','Next','Base Setup','Inside your Homestead: place storage, light, and a station',{type:'land',label:'OPEN LAND'});
+  if(progressionFocus==='first_homestead_upgrade')return objectiveLine('progression','Next','Homestead Upgrade','Your Homestead is ready. Choose your first upgrade from Land Claims',{type:'land',label:'OPEN HOMESTEAD'});
   if(progressionFocus==='first_craft_station'){
     const craft=objectiveCraftAction('what_next');
     return objectiveLine('progression','Next','Craft Station','Craft your first table or furnace',craft||{type:'questlog',label:'OPEN QUEST LOG'});
@@ -799,7 +801,7 @@ function transitionPanelActuallyOpen(type){
 function shouldDeferTransitionAction(transition,{story=null,job=null}={}){
   if(!transition)return false;
   if(transition.type==='continue_panel'||transition.type==='use_ability')return false;
-  const baseOnboardingFocus=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup'].includes(progressionFocus);
+  const baseOnboardingFocus=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
   if(transition.type==='choose_job')return !!story || baseOnboardingFocus || progressionFocus==='first_d_gate' || progressionFocus==='next_adventurer_contract';
   if(transitionPanelActuallyOpen(transition.type))return false;
   if(transition.type==='choose_path'||transition.type==='start_awakening'){
@@ -920,7 +922,7 @@ function currentObjectiveAction(){
     const craft=objectiveCraftAction('what_next');
     if(craft) return craft;
   }
-  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup') return {type:'land',label:'CLAIM LAND'};
+  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade') return {type:'land',label:progressionFocus==='first_homestead_upgrade'?'OPEN HOMESTEAD':'CLAIM LAND'};
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'jobs',label:'OPEN JOB BOARD'};
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next');
@@ -1072,6 +1074,7 @@ function handleObjectiveAction(action,btn){
     worldApi.toggleLandClaims&&worldApi.toggleLandClaims(true);
     worldApi.openLandClaims&&worldApi.openLandClaims();
     if(progressionFocus==='first_base_setup') sysMsg('<b>Base setup:</b> build inside the highlighted Homestead. Place storage, light, and a station to finish.');
+    else if(progressionFocus==='first_homestead_upgrade') sysMsg('<b>Homestead upgrade:</b> stand in your base and choose a starter upgrade.');
     else sysMsg('<b>Land claiming:</b> choose an available tile near your base. The overlay shows owned, shared, and wilderness land.');
     return;
   }
@@ -1308,7 +1311,7 @@ function utilityCompassTarget(){
     return mara?{label:'Mara',x:mara.x,z:mara.z}:null;
   }
   if(progressionFocus==='first_craft_station') return {label:'Crafting',x:HUB.smith.x,z:HUB.smith.z};
-  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup') return {label:'Claim Land',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
+  if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade') return {label:progressionFocus==='first_homestead_upgrade'?'Homestead':'Claim Land',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
   if(progressionFocus==='first_profession_contract'){
     const handoff=professionHandoffObjective();
     return handoff&&handoff.target ? handoff.target : {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};

@@ -419,6 +419,7 @@ class GameRoom extends Room {
     this.onMessage('setJob', (client, m) => this.handleSetJob(client, m));
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
     this.onMessage('homesteadWorkOrder', (client, m) => this.handleHomesteadWorkOrder(client, m));
+    this.onMessage('homesteadUpgrade', (client, m) => this.handleHomesteadUpgrade(client, m));
     this.onMessage('meditateTick', (client) => this.handleMeditateTick(client));
     this.onMessage('meditationChallenge', (client) => this.handleMeditationChallenge(client));
     this.onMessage('meditationAnswer', (client, m) => this.handleMeditationAnswer(client, m));
@@ -930,6 +931,7 @@ class GameRoom extends Room {
         }
       }
       if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
+      if (this.applyHomesteadOfflineRest && this.applyHomesteadOfflineRest(prof)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
@@ -2096,8 +2098,15 @@ class GameRoom extends Room {
       rec.prof.progressionFocus = focus;
       rec.prof.activeNpcQuest = null;
       rec.prof.jobContract = null;
+      if (['first_base_setup', 'first_homestead_upgrade'].includes(focus)) {
+        const p = this.state.players.get(client.sessionId);
+        for (const key of ['20,20', '21,20', '22,20']) {
+          this.landClaims.set(key, { owner: rec.token, name: rec.prof.name || 'Hunter', price: 50, boughtAt: Date.now(), allowed: [] });
+        }
+        if (p) { p.dgn = ''; p.x = 20.5; p.y = W.terrainHeight(20, 20) + 1.05; p.z = 20.5; }
+      }
       if (noGold) rec.prof.gold = 0;
-      else if (['first_land_claim', 'first_claim_expand', 'first_base_setup'].includes(focus)) rec.prof.gold = Math.max(rec.prof.gold | 0, 500);
+      else if (['first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade'].includes(focus)) rec.prof.gold = Math.max(rec.prof.gold | 0, 500);
       if (focus === 'first_craft_station' && noMaterials) {
         const clearIds = new Set([W.B.LOG, W.B.PLANKS, W.B.COBBLE, W.B.TABLE, W.B.FURNACE]);
         rec.prof.inv = (Array.isArray(rec.prof.inv) ? rec.prof.inv : []).map(stack => stack && clearIds.has(stack.id | 0) ? null : stack);
@@ -3915,9 +3924,10 @@ class GameRoom extends Room {
       else if (id === 'progression:first_land_claim') step = 5;
       else if (id === 'progression:first_claim_expand') step = 6;
       else if (id === 'progression:first_base_setup') step = 7;
-      else if (id === 'progression:first_profession_contract' || (source === 'job' && job && (job.difficulty === 'starter' || job.difficultyLabel === 'First Real Shift'))) step = 8;
+      else if (id === 'progression:first_homestead_upgrade') step = 8;
+      else if (id === 'progression:first_profession_contract' || (source === 'job' && job && (job.difficulty === 'starter' || job.difficultyLabel === 'First Real Shift'))) step = 9;
       if (!step) return null;
-      return { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step, total: 8 };
+      return { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step, total: 9 };
     };
     const lifecycleFor = (state, src = {}) => {
       const normalizedState = ['offered', 'active', 'claimable', 'completed', 'failed', 'expired'].includes(state) ? state : 'active';
@@ -4112,6 +4122,7 @@ class GameRoom extends Room {
       first_land_claim: ['progression:first_land_claim', 'progression', 'First Land Claim', 'Leave town, press L, and buy one protected wilderness tile for your first safe build area.', 'Land Claims', 'land', 'CLAIM LAND', 50],
       first_claim_expand: ['progression:first_claim_expand', 'progression', 'Expand Claim', 'Buy two connected tiles beside your first claim to make a 3-tile Homestead.', 'Land Claims', 'land', 'EXPAND LAND', 50],
       first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Inside your Homestead, place storage, light, and a station.', 'Claimed land', 'land', 'OPEN LAND', 50],
+      first_homestead_upgrade: ['progression:first_homestead_upgrade', 'progression', 'Homestead Upgrade', 'Your Homestead is ready. Open Land Claims while standing in your base and choose your first upgrade.', 'Your Homestead', 'land', 'OPEN HOMESTEAD', 50],
       first_profession_contract: ['progression:first_profession_contract', 'progression', 'First Contract', 'Take your first profession or Adventurer contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', 'Use contracts, gates, and field work to grow toward D-rank.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
       first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
@@ -4292,7 +4303,7 @@ class GameRoom extends Room {
     const p = this.state.players.get(client.sessionId);
     if (limbo.index >= limbo.items.length) {
       this.deathLimbo.delete(client.sessionId);
-      const town = townReturnPoint(W.TOWN.G + 2);
+      const town = this.homesteadHomePointForProfile && this.homesteadHomePointForProfile(rec.prof) || townReturnPoint(W.TOWN.G + 2);
       if (p) { p.x = town.x; p.y = town.y; p.z = town.z; p.dgn = ''; }
       client.send('deathLimboComplete', town);
     } else client.send('deathLimboQuestion', this.publicDeathLimbo(limbo, p));

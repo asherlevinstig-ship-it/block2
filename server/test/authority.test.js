@@ -1757,7 +1757,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   {
     const payload = client.sent.find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_road_ready').msg;
     const objective = payload.activeObjectives.find(o => o.id === 'progression:first_road_ready');
-    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 2, total: 8 });
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 2, total: 9 });
     assert.equal(objective.priority, 12, 'Chapter 1 progression stays ahead of optional side systems');
   }
 
@@ -1776,7 +1776,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   {
     const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_craft_station').msg;
     const objective = payload.activeObjectives.find(o => o.id === 'progression:first_craft_station');
-    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 4, total: 8 });
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 4, total: 9 });
     assert.equal(objective.priority, 12);
   }
   assert.equal(prof.progressionMilestoneRewards.includes('first_e_gate'), true);
@@ -1847,21 +1847,34 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
     assert.deepEqual(objective.checklist.map(c => [c.id, c.done]), [['storage', true], ['light', true], ['station', false]]);
   }
   room.handleWorldEdit(client, { x: 22, y: 10, z: 20, id: W.B.TABLE });
-  assert.equal(prof.progressionFocus, 'first_profession_contract');
-  assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_profession_contract'), true);
+  assert.equal(prof.progressionFocus, 'first_homestead_upgrade');
+  assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_homestead_upgrade'), true);
   {
-    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_profession_contract').msg;
-    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_profession_contract');
-    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 8, total: 8 });
+    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_homestead_upgrade').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_homestead_upgrade');
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 8, total: 9 });
     assert.equal(objective.priority, 12);
   }
   const baseReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'base_setup');
   assert.equal(!!baseReward, true);
   assert.equal(baseReward.msg.title, 'Base Established');
   assert.equal(baseReward.msg.subtitle, 'HOME BASE READY');
-  assert.equal(baseReward.msg.action, 'TAKE FIRST CONTRACT');
+  assert.equal(baseReward.msg.action, 'CHOOSE FIRST UPGRADE');
   assert.equal(itemCount(prof, I.REPAIR_KIT), 1);
   assert.equal(itemCount(prof, I.BREAD), 4);
+
+  const p = room.state.players.get(client.sessionId);
+  p.x = 20.5; p.y = 11; p.z = 20.5;
+  room.handleHomesteadUpgrade(client, { action: 'buy', id: 'storage' });
+  assert.equal(prof.homesteadUpgrades.storage, 1);
+  assert.equal(client.sent.at(-1).type, 'progressionFocus');
+  assert.equal(client.sent.at(-1).msg.progressionFocus, 'first_profession_contract');
+  {
+    const payload = client.sent.at(-1).msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_profession_contract');
+    assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 9, total: 9 });
+    assert.equal(objective.priority, 12);
+  }
 
   room.handleJobContract(client, { action: 'take', job: 'adventurer' });
   assert.equal(prof.progressionFocus, 'e_rank_climb');
@@ -6649,8 +6662,44 @@ test('base setup milestone requires storage light and station inside editable cl
   room.handleWorldEdit(client, { x: 21, y: 10, z: 20, id: W.B.TORCH });
   assert.equal(prof.progressionFocus, 'first_base_setup');
   room.handleWorldEdit(client, { x: 22, y: 10, z: 20, id: W.B.TABLE });
-  assert.equal(prof.progressionFocus, 'first_profession_contract');
+  assert.equal(prof.progressionFocus, 'first_homestead_upgrade');
   assert.equal(prof.progressionMilestoneRewards.includes('base_setup'), true);
+});
+
+test('homestead upgrades advance onboarding and expand owned homestead chest capacity', () => {
+  const room = makeRoom();
+  const client = makeClient('home_upgrade');
+  const { prof } = seedPlayer(room, client, {
+    token: 'home_upgrade_token_123',
+    name: 'Homeowner',
+    x: 20.5,
+    y: 11,
+    z: 20.5,
+  });
+  prof.progressionFocus = 'first_homestead_upgrade';
+  for (const key of ['20,20', '21,20', '22,20']) {
+    room.landClaims.set(key, { owner: 'home_upgrade_token_123', name: 'Homeowner', price: 50, boughtAt: 1 });
+  }
+  room.world.setB(20, 10, 20, W.B.CHEST);
+  room.createPlacedChest(client, 'overworld:20,10,20', 'personal');
+
+  room.handleChestOpen(client, { x: 20, y: 10, z: 20 });
+  assert.equal(client.sent.at(-1).type, 'chestState');
+  assert.equal(client.sent.at(-1).msg.slots.length, 18);
+
+  room.handleHomesteadUpgrade(client, { action: 'buy', id: 'storage' });
+  assert.equal(prof.homesteadUpgrades.storage, 1);
+  assert.equal(prof.progressionFocus, 'first_profession_contract');
+  assert.equal(client.sent.some(e => e.type === 'homesteadUpgradeResult' && e.msg.id === 'storage'), true);
+
+  room.handleChestOpen(client, { x: 20, y: 10, z: 20 });
+  assert.equal(client.sent.at(-1).type, 'chestState');
+  assert.equal(client.sent.at(-1).msg.slots.length, 27);
+
+  room.handleHomesteadUpgrade(client, { action: 'set_spawn' });
+  assert.deepEqual(prof.homesteadUpgrades.homeSpawn.map(v => Math.round(v * 10) / 10), [20.5, 11, 20.5]);
+  assert.equal(client.sent.at(-1).type, 'homesteadUpgradeResult');
+  assert.equal(client.sent.at(-1).msg.id, 'home_spawn');
 });
 
 test('land claim owners can rename claims and clients receive titles', () => {
@@ -7437,7 +7486,7 @@ test('job tutorial completion seeds one first real profession contract', () => {
     assert.equal(prof.jobContract.lifecycleState, 'active');
     assert.equal(prof.jobContract.need <= (job === 'miner' ? 8 : job === 'farmer' ? 3 : job === 'monk' ? 30 : 1), true);
     const starterObjective = room.activeQuestObjectives(client, prof).find(o => o.source === 'job' && o.title === prof.jobContract.title);
-    assert.deepEqual(starterObjective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 8, total: 8 });
+    assert.deepEqual(starterObjective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 9, total: 9 });
     if (job === 'pet_tamer') {
       assert.equal(itemCount(prof, I.DRAGON_TREAT) >= 1, true);
       assert.equal(itemCount(prof, I.COOKED_MEAT) >= 2, true);

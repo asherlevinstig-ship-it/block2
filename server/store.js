@@ -44,7 +44,7 @@ const ARMOR_IDS = new Set([137, 183, 184, 211, 212, 213]);
 // must stay in lockstep with PROGRESSION_FOCUS_STATES in rooms/constants.js.
 const PROGRESSION_FOCUS_STATES = new Set([
   'first_town_map', 'first_road_ready', 'first_e_gate',
-  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_profession_contract',
+  'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
   'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
 ]);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
@@ -377,6 +377,7 @@ function defaultProfile(name) {
     jobXpByJob: { adventurer: 0, miner: 0, farmer: 0, cook: 0, blacksmith: 0, monk: 0, pet_tamer: 0 },
     jobContract: null,
     homesteadWorkOrder: null,
+    homesteadUpgrades: sanitizeHomesteadUpgrades(null),
     jobContractOffers: [],
     jobContractOffersAt: 0,
     jobContractOfferJob: '',
@@ -584,6 +585,24 @@ function sanitizeHomesteadWorkOrder(c) {
     offeredAt: clampI(c.offeredAt, 0, Number.MAX_SAFE_INTEGER),
     completedAt: clampI(c.completedAt, 0, Number.MAX_SAFE_INTEGER),
     contributors,
+  };
+}
+
+function sanitizeHomesteadUpgrades(raw) {
+  const src = raw && typeof raw === 'object' ? raw : {};
+  const home = Array.isArray(src.homeSpawn) && src.homeSpawn.length >= 3
+    ? [
+      clampF(src.homeSpawn[0], 0, 1000),
+      clampF(src.homeSpawn[1], 1, 80),
+      clampF(src.homeSpawn[2], 0, 1000),
+    ]
+    : null;
+  return {
+    storage: clampI(src.storage, 0, 1),
+    comfort: clampI(src.comfort, 0, 1),
+    rest: clampI(src.rest, 0, 1),
+    homeSpawn: home,
+    updatedAt: clampI(src.updatedAt, 0, Number.MAX_SAFE_INTEGER),
   };
 }
 
@@ -861,6 +880,7 @@ function sanitizeProfile(p) {
   out.jobXp = out.jobXpByJob[out.job || 'adventurer']; // compatibility snapshot for older clients
   out.jobContract = sanitizeJobContract(p.jobContract);
   out.homesteadWorkOrder = sanitizeHomesteadWorkOrder(p.homesteadWorkOrder);
+  out.homesteadUpgrades = sanitizeHomesteadUpgrades(p.homesteadUpgrades);
   out.jobContractOffers = (Array.isArray(p.jobContractOffers) ? p.jobContractOffers : []).slice(0,3).map(sanitizeJobContract).filter(Boolean);
   out.jobContractOffersAt = clampI(p.jobContractOffersAt, 0, Number.MAX_SAFE_INTEGER);
   out.jobContractOfferJob = JOB_XP_IDS.includes(p.jobContractOfferJob) ? p.jobContractOfferJob : '';

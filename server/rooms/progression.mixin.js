@@ -61,10 +61,10 @@ const PROGRESSION_MILESTONE_REWARDS = Object.freeze({
   }),
   base_setup: Object.freeze({
     title: 'Base Established',
-    text: 'Your protected base now has storage, light, and a working station. Take a contract when you are ready.',
+    text: 'Your protected base now has storage, light, and a working station. Choose your first Homestead upgrade to make it useful.',
     modal: true,
     subtitle: 'HOME BASE READY',
-    action: 'TAKE FIRST CONTRACT',
+    action: 'CHOOSE FIRST UPGRADE',
     items: Object.freeze([Object.freeze({ id: I.REPAIR_KIT, count: 1 }), Object.freeze({ id: I.BREAD, count: 2 })]),
   }),
   first_contract: Object.freeze({
@@ -110,6 +110,32 @@ const HOMESTEAD_WORK_ORDER_SPECS = Object.freeze([
   Object.freeze({ type: 'craft', job: 'cook', target: I.BREAD, need: 3, rewardGold: 22, rewardJobXp: 18, title: 'Pantry Ledger', desc: 'Set aside travel bread for the next dungeon run.' }),
   Object.freeze({ type: 'craft', job: 'blacksmith', target: I.REPAIR_KIT, need: 1, rewardGold: 30, rewardJobXp: 22, title: 'Tool Bench Reserve', desc: 'Add a repair kit to the homestead supplies.' }),
 ]);
+const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
+  storage: Object.freeze({
+    id: 'storage',
+    title: 'Sturdy Storage',
+    desc: 'Homestead chests expand from 18 to 27 slots.',
+    benefit: '+9 slots in each owned Homestead chest',
+    costGold: 0,
+    max: 1,
+  }),
+  comfort: Object.freeze({
+    id: 'comfort',
+    title: 'Warm Lights',
+    desc: 'Your lit Homestead feels safer and more alive.',
+    benefit: 'Comfort marker for future room bonuses',
+    costGold: 0,
+    max: 1,
+  }),
+  rest: Object.freeze({
+    id: 'rest',
+    title: 'Rest Corner',
+    desc: 'Recover HP, mana, stamina, and hunger while logged out.',
+    benefit: 'Small offline recovery',
+    costGold: 0,
+    max: 1,
+  }),
+});
 const FIRST_TUTORIAL_CONTRACT_TYPE = Object.freeze({
   miner: 'mine',
   farmer: 'farm',
@@ -197,6 +223,78 @@ function contractPools(job, scale, level) {
 }
 
 class ProgressionMixin {
+  cleanHomesteadUpgrades(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const home = Array.isArray(src.homeSpawn) && src.homeSpawn.length >= 3
+      ? [Number(src.homeSpawn[0]) || 0, Number(src.homeSpawn[1]) || 0, Number(src.homeSpawn[2]) || 0]
+      : null;
+    return {
+      storage: Math.max(0, Math.min(1, src.storage | 0)),
+      comfort: Math.max(0, Math.min(1, src.comfort | 0)),
+      rest: Math.max(0, Math.min(1, src.rest | 0)),
+      homeSpawn: home && W.inWorld(Math.floor(home[0]), Math.floor(home[1]), Math.floor(home[2])) ? home : null,
+      updatedAt: Math.max(0, Number(src.updatedAt) || 0),
+    };
+  }
+
+  publicHomesteadUpgradeSpecs() {
+    return Object.values(HOMESTEAD_UPGRADE_SPECS).map(spec => ({ ...spec }));
+  }
+
+  homesteadUpgradePayload(prof, ctx = null, action = 'status', extra = {}) {
+    const upgrades = this.cleanHomesteadUpgrades(prof && prof.homesteadUpgrades);
+    return {
+      action,
+      upgrades,
+      specs: this.publicHomesteadUpgradeSpecs(),
+      own: !!(ctx && ctx.own),
+      groupSize: ctx && ctx.group ? ctx.group.length : 0,
+      ...extra,
+    };
+  }
+
+  sendHomesteadUpgradeStatus(client, action = 'status', extra = {}, ctx = null) {
+    const rec = this.profileFor(client);
+    ctx = ctx || this.homesteadContextForClient(client);
+    if (!rec || !rec.prof) return false;
+    client.send('homesteadUpgrade', this.homesteadUpgradePayload(rec.prof, ctx, action, extra));
+    return true;
+  }
+
+  homesteadHomePointForProfile(prof) {
+    const upgrades = this.cleanHomesteadUpgrades(prof && prof.homesteadUpgrades);
+    const home = upgrades.homeSpawn;
+    if (!home) return null;
+    const x = Math.floor(home[0]), y = Math.floor(home[1]), z = Math.floor(home[2]);
+    if (!W.inWorld(x, y, z) || !this.world) return null;
+    const feetBlocked = W.isSolid(this.world.getB(x, y, z));
+    const headBlocked = W.isSolid(this.world.getB(x, y + 1, z));
+    if (feetBlocked || headBlocked) return null;
+    return { x: home[0], y: home[1], z: home[2] };
+  }
+
+  applyHomesteadOfflineRest(prof) {
+    if (!prof || !prof.homesteadUpgrades || (prof.homesteadUpgrades.rest | 0) <= 0 || !(prof.vitalsSavedAt > 0)) return false;
+    const savedAt = Math.max(0, Number(prof.vitalsSavedAt) || 0);
+    const elapsedMs = Math.max(0, Date.now() - savedAt);
+    if (elapsedMs < 10 * 60 * 1000) return false;
+    const hours = Math.min(8, elapsedMs / 3600000);
+    const current = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : (prof.vitals || {});
+    const maxHp = this.maxHpForProfile ? this.maxHpForProfile(prof) : 20;
+    const maxMp = this.maxMpForProfile ? this.maxMpForProfile(prof) : 20;
+    const maxSp = this.maxStaminaForProfile ? this.maxStaminaForProfile(prof) : 100;
+    const maxHunger = this.maxHungerForProfile ? this.maxHungerForProfile(prof) : 100;
+    const next = {
+      hp: Math.min(maxHp, Math.max(1, (current.hp || maxHp) + Math.ceil(hours * 6))),
+      mp: Math.min(maxMp, Math.max(0, (current.mp || 0) + Math.ceil(hours * 6))),
+      sp: Math.min(maxSp, Math.max(0, (current.sp || 0) + Math.ceil(hours * 20))),
+      hunger: Math.min(maxHunger, Math.max(0, (current.hunger || 0) + Math.ceil(hours * 8))),
+    };
+    const changed = next.hp !== current.hp || next.mp !== current.mp || next.sp !== current.sp || next.hunger !== current.hunger;
+    if (changed) prof.vitals = next;
+    return changed;
+  }
+
   homesteadContextForClient(client) {
     const actorRec = this.profileFor(client);
     const p = this.state.players.get(client.sessionId);
@@ -216,6 +314,45 @@ class ProgressionMixin {
       own: actorRec.token === ownerToken,
       claim,
     };
+  }
+
+  handleHomesteadUpgrade(client, m) {
+    const action = m && typeof m.action === 'string' ? m.action : '';
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof) return client.send('homesteadUpgradeReject', { reason: 'profile' });
+    if (this.rateLimited(client, 'homesteadUpgrade', 6, 12)) return client.send('homesteadUpgradeReject', { reason: 'rate' });
+    const ctx = this.homesteadContextForClient(client);
+    if (!ctx || !ctx.own) return client.send('homesteadUpgradeReject', { reason: ctx ? 'owner' : 'homestead' });
+    rec.prof.homesteadUpgrades = this.cleanHomesteadUpgrades(rec.prof.homesteadUpgrades);
+    if (action === 'status') return this.sendHomesteadUpgradeStatus(client, 'status', {}, ctx);
+    if (action === 'set_spawn') {
+      const p = this.state.players.get(client.sessionId);
+      if (!p) return client.send('homesteadUpgradeReject', { reason: 'profile' });
+      rec.prof.homesteadUpgrades.homeSpawn = [p.x, p.y, p.z];
+      rec.prof.homesteadUpgrades.updatedAt = Date.now();
+      this.dirtyPlayers.add(rec.token);
+      client.send('homesteadUpgradeResult', this.homesteadUpgradePayload(rec.prof, ctx, 'set_spawn', { id: 'home_spawn' }));
+      return true;
+    }
+    if (action !== 'buy') return client.send('homesteadUpgradeReject', { reason: 'action' });
+    const id = String(m && m.id || '');
+    const spec = HOMESTEAD_UPGRADE_SPECS[id];
+    if (!spec) return client.send('homesteadUpgradeReject', { reason: 'upgrade' });
+    const current = Math.max(0, rec.prof.homesteadUpgrades[id] | 0);
+    if (current >= spec.max) return client.send('homesteadUpgradeReject', { reason: 'owned', id });
+    const costGold = Math.max(0, spec.costGold | 0);
+    if ((rec.prof.gold | 0) < costGold) return client.send('homesteadUpgradeReject', { reason: 'gold', id, costGold, gold: rec.prof.gold | 0 });
+    if (costGold) {
+      rec.prof.gold -= costGold;
+      if (this.recordEconomyGold) this.recordEconomyGold(client, -costGold, 'homestead_sink', 'upgrade', { id });
+    }
+    rec.prof.homesteadUpgrades[id] = current + 1;
+    rec.prof.homesteadUpgrades.updatedAt = Date.now();
+    this.dirtyPlayers.add(rec.token);
+    client.send('homesteadUpgradeResult', this.homesteadUpgradePayload(rec.prof, ctx, 'buy', { id, title: spec.title, costGold, gold: rec.prof.gold | 0 }));
+    if (rec.prof.progressionFocus === 'first_homestead_upgrade') this.advanceProgressionDirector(client, 'homestead_upgrade_chosen', { profile: false });
+    else if (this.activeQuestObjectives) client.send('progressionFocus', { progressionFocus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
+    return true;
   }
 
   homesteadGroupForClient(client) {
@@ -514,7 +651,8 @@ class ProgressionMixin {
     else if (event === 'crafted_station' && prof.progressionFocus === 'first_craft_station') next = hasExpandedLand() ? 'first_base_setup' : hasLand() ? 'first_claim_expand' : 'first_land_claim';
     else if (event === 'land_claimed' && ['first_craft_station', 'first_land_claim'].includes(prof.progressionFocus)) next = hasExpandedLand() ? 'first_base_setup' : 'first_claim_expand';
     else if (event === 'land_claimed' && ['first_claim_expand', 'first_land_claim'].includes(prof.progressionFocus) && hasExpandedLand()) next = 'first_base_setup';
-    else if (event === 'base_setup_completed' && prof.progressionFocus === 'first_base_setup') next = 'first_profession_contract';
+    else if (event === 'base_setup_completed' && prof.progressionFocus === 'first_base_setup') next = 'first_homestead_upgrade';
+    else if (event === 'homestead_upgrade_chosen' && prof.progressionFocus === 'first_homestead_upgrade') next = 'first_profession_contract';
     else if (event === 'job_contract_taken' && prof.progressionFocus === 'first_profession_contract') next = 'e_rank_climb';
     if (next === prof.progressionFocus) return false;
     if (!next && event !== 'job_contract_taken') return false;

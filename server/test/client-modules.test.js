@@ -3487,6 +3487,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/TURN IN TO MARA/);
   assert.match(frame,/CLAIM LAND/);
   assert.match(frame,/FIND GATE/);
+  assert.match(frame,/first_homestead_upgrade/);
   assert.match(frame,/first_profession_contract'\|\|progressionFocus==='first_promotion_job/);
   assert.match(frame,/toggleLandClaims&&worldApi\.toggleLandClaims\(true\)/);
   assert.match(frame,/no nearby Gate is currently tracked/);
@@ -3560,6 +3561,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(networking,/landClaimTrustNotice/);
   assert.match(networking,/landClaimRefresh/);
   assert.match(networking,/homesteadWorkOrder/);
+  assert.match(networking,/homesteadUpgradeResult/);
   assert.match(networking,/Homestead ledger/);
   assert.match(networking,/Homestead assist/);
   assert.match(networking,/Protection active for/);

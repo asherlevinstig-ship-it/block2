@@ -134,7 +134,7 @@ class EconomyMixin {
   normalizeChestRecord(key, raw, client) {
     const info = this.parseChestKey(key);
     const isObj = raw && typeof raw === 'object' && !Array.isArray(raw);
-    const slots = (Array.isArray(raw) ? raw : (isObj && Array.isArray(raw.slots) ? raw.slots : [])).slice(0, 18).map(s => {
+    const slots = (Array.isArray(raw) ? raw : (isObj && Array.isArray(raw.slots) ? raw.slots : [])).slice(0, 27).map(s => {
       if (!s || typeof s !== 'object') return null;
       return { id: Math.max(0, Math.min(999, s.id | 0)), count: Math.max(1, Math.min(64, s.count | 0)) };
     });
@@ -852,8 +852,26 @@ class EconomyMixin {
   getChestState(key) {
     return this.getChestRecord(key).slots;
   }
+  ensureHomesteadChestCapacity(client, key, rec = null) {
+    const info = this.parseChestKey(key);
+    const record = rec || this.getChestRecord(key);
+    if (!info || info.space !== 'overworld' || !record || record.scope !== 'personal' || !record.owner || !this.world) return record;
+    const claim = this.landClaimFor && this.landClaimFor(info.x, info.z);
+    if (!claim || claim.owner !== record.owner || this.isLandClaimAbandoned(claim)) return record;
+    const group = this.connectedOwnedLandClaims ? this.connectedOwnedLandClaims(info.x, info.z, record.owner) : [];
+    if (!group || group.length < 3) return record;
+    const prof = this.profiles && this.profiles.get(record.owner);
+    const upgrades = this.cleanHomesteadUpgrades ? this.cleanHomesteadUpgrades(prof && prof.homesteadUpgrades) : {};
+    const wanted = upgrades.storage ? 27 : 18;
+    if (Array.isArray(record.slots) && record.slots.length < wanted) {
+      while (record.slots.length < wanted) record.slots.push(null);
+      if (key.startsWith('overworld:')) this.dirtyChests = true;
+    }
+    return record;
+  }
   sendChest(client, key) {
     const rec = this.getChestRecord(key);
+    this.ensureHomesteadChestCapacity(client, key, rec);
     const slots = rec.slots.map(s => s ? { ...s } : null);
     client.send('chestState', {
       key,
@@ -915,6 +933,7 @@ class EconomyMixin {
     if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
     if (this.rateLimited(client, 'chestBatch', 3, 6)) return client.send('chestReject', { reason: 'rate' });
     const mode = m.mode === 'materials' ? 'materials' : 'matching';
+    this.ensureHomesteadChestCapacity(client, key);
     const slots = this.getChestState(key);
     const chestIds = new Set(slots.filter(Boolean).map(s => s.id | 0));
     const prof = rec.prof;
@@ -968,6 +987,7 @@ class EconomyMixin {
     if (!key || !rec || !m || !this.canAccessChest(client, key)) return client.send('chestReject', { reason: this.chestAccessRejectReason(client, key) });
     if (this.rateLimited(client, 'chest', 10, 20)) return client.send('chestReject', { reason: 'rate' });
     const id = m.id | 0, count = Math.max(1, Math.min(64, m.count | 0 || 1));
+    this.ensureHomesteadChestCapacity(client, key);
     const slots = this.getChestState(key);
     // place into the chest first, then consume exactly what it accepted — never refund a
     // full count after a partial deposit (which would duplicate the overflow).
