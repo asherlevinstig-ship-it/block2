@@ -66,29 +66,29 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
       hearth: { id: 33 },
       stationGuide: { exists: true, visible: true, count: 5 },
     });
-  await expect(page.locator('#tutorialhud')).toContainText('PREP STATION');
+  await expect(page.locator('#tutorialhud')).toContainText('1 PREP');
 
   const prep = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(prep).toMatchObject({ ok: true, debug: { step: 1 } });
   expect(prep.debug.inventory.bread).toBeGreaterThanOrEqual(1);
-  await expect(page.locator('#tutorialhud')).toContainText('START HEARTH');
+  await expect(page.locator('#tutorialhud')).toContainText('2 HEARTH');
 
   const start = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(start).toMatchObject({ ok: true, debug: { step: 2, timer: { exists: true, visible: true, duration: 5000 } } });
   expect(start.debug.timer.scaleX).toBeGreaterThan(2);
-  await expect(page.locator('#tutorialhud')).toContainText('HEARTH TIMER');
+  await expect(page.locator('#tutorialhud')).toContainText('3 CLAIM');
 
   await page.waitForTimeout(5200);
   const claim = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(claim).toMatchObject({ ok: true, debug: { step: 3 } });
   expect(claim.debug.inventory.sandwich).toBeGreaterThanOrEqual(1);
-  await expect(page.locator('#tutorialhud')).toContainText('SERVE PIPPA');
+  await expect(page.locator('#tutorialhud')).toContainText('4 SERVE');
 
   const beforeSale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold);
   const sale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(sale).toMatchObject({ ok: true, done: true, debug: { step: 4, traded: true } });
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold)).toBeGreaterThan(beforeSale);
-  await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+  await expect(page.locator('#tutorialhud')).toContainText('5 EXIT');
 
   await returnFromJobTutorial(page, 'cookTutorialVisualDebug');
   await expectStarterContract(page, { job: 'cook', type: 'cook', have: 0 });

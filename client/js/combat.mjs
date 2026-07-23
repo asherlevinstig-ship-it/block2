@@ -830,10 +830,10 @@ const FARMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'SELL WHEAT',title:'Sell Wheat',verb:'LISS + G',purpose:'Take one wheat to Liss Barley at the farm stand and press G to trade it for gold.',done:'You sold wheat for gold. Farmers turn food into the town economy.'},
 ]);
 const COOK_TUTORIAL_ACTIONS=Object.freeze([
-  {key:'PREP BREAD',title:'Prepare Bread',verb:'PREP + G',purpose:'Stand on the yellow prep station and press G to turn three wheat into bread.',done:'You prepared bread. Cooks convert farm supplies into useful meals.'},
-  {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Carry bread and cooked meat to the glowing hearth, then press G to start the fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
-  {key:'CLAIM MEAL',title:'Claim Meal',verb:'HEARTH + G',purpose:'When the timer says ready, press G at the hearth to claim a Hearty Sandwich.',done:'You made a Hearty Sandwich. Strong meals support travel, Gates, and recovery.'},
-  {key:'SERVE MEAL',title:'Serve Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
+  {key:'PREP BREAD',title:'Prepare Bread',verb:'PREP + G',purpose:'Follow station 1 PREP, stand on the yellow counter mat, and press G to turn three wheat into bread.',done:'You prepared bread. Cooks convert farm supplies into useful meals.'},
+  {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Follow station 2 HEARTH with bread and cooked meat, then press G to start the fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
+  {key:'CLAIM MEAL',title:'Claim Meal',verb:'HEARTH + G',purpose:'Stay at station 3 CLAIM. When the timer says ready, press G at the hearth to collect a Hearty Sandwich.',done:'You made a Hearty Sandwich. Strong meals support travel, Gates, and recovery.'},
+  {key:'SERVE MEAL',title:'Serve Meal',verb:'PIPPA + G',purpose:'Follow station 4 SERVE to Pippa Hearth and press G to sell the sandwich for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
 ]);
 const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
   {key:'FORGE CHAINMAIL',title:'Forge Armor',verb:'FORGE + G',purpose:'Stand on the orange forge mat and press G to spend seven iron ingots plus coal on Chainmail Armor.',done:'You forged Chainmail Armor. The armour now needs a quality check before Tobin will buy it.'},
@@ -1636,7 +1636,7 @@ function ensureCookTutorialStationGuide(){
     {step:1,label:'2 HEARTH',color:'#ff8a3d',pos:cookTutorialHearthPos},
     {step:2,label:'3 CLAIM',color:'#b7ff8a',pos:cookTutorialHearthPos},
     {step:3,label:'4 SERVE',color:'#ffd24a',pos:cookTutorialTraderPos},
-    {step:4,label:'EXIT',color:'#9ad26b',pos:cookTutorialExitPos},
+    {step:4,label:'5 EXIT',color:'#9ad26b',pos:cookTutorialExitPos},
   ];
   for(const spec of specs){
     const sprite=makeJobTutorialStationSprite(spec.label,spec.color);
@@ -1692,6 +1692,14 @@ function cookTutorialAction(){
 }
 function cookTutorialProgressLabel(){
   return 'Step '+Math.min(COOK_TUTORIAL_ACTIONS.length,jobTutorialCookStep+1)+' / '+COOK_TUTORIAL_ACTIONS.length;
+}
+function cookTutorialStepSub(){
+  const step=jobTutorialCookStep|0;
+  if(step===0)return 'Station 1 teaches the first cook verb: prep raw farm supply into a usable ingredient.';
+  if(step===1)return 'Station 2 teaches that cooks combine ingredients and start a timed hearth.';
+  if(step===2)return Date.now()>=jobTutorialCookReadyAt?'Station 3 is ready. Press G to claim the meal.':'Station 3 shows the meal timer above the hearth so waiting feels visible.';
+  if(step===3)return 'Station 4 teaches the town economy: useful meals can feed friends or be sold for gold.';
+  return 'Station 5 returns you to town with the Cook job equipped.';
 }
 function cookTutorialTargetPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.cook;
@@ -1789,7 +1797,7 @@ function ensureCookTutorialSupplies(){
 function advanceCookTutorial(action){
   const lesson=cookTutorialAction();
   eventLog('Cook tutorial - '+lesson.title+': '+lesson.done);
-  const next=action==='prep'?'Next: follow the pillar to the hearth.':action==='start'?'Next: wait for the hearth timer to finish.':action==='claim'?'Next: bring the sandwich to Pippa at the counter.':action==='trade'?'Cook loop complete: return through the blue pillar.':'';
+  const next=action==='prep'?'Next: follow station 2 HEARTH.':action==='start'?'Next: stay at station 3 CLAIM and watch the hearth timer.':action==='claim'?'Next: bring the sandwich to station 4 SERVE, Pippa at the counter.':action==='trade'?'Cook loop complete: follow station 5 EXIT back to town.':'';
   sysMsg('<b>Cook lesson:</b> '+escHTML(lesson.done)+(next?'<br>'+escHTML(next):''));
   jobTutorialLessonMoment(lesson.title,cookTutorialTargetPos(),[1,.72,.26],0xffd45a);
   burst(player.pos.x,player.pos.y+1,player.pos.z,[1,.72,.26],24,2.2,2.0,.65);
@@ -1807,6 +1815,8 @@ function advanceCookTutorial(action){
     jobTutorialTraded=true;
     SFX.level&&SFX.level();
     showName('Cook trade complete');
+    rewardGain('rare',1,'Cook Loop Learned',{icon:'MEAL',duration:2600});
+    ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,3.05,0xffd24a,.85);
   }
   updateJobTutorialHud();
   sendProfileSaveNow();
@@ -3331,14 +3341,14 @@ function updateJobTutorialHud(){
   if(jobTutorialJob==='cook'){
     const action=cookTutorialAction();
     copy=jobTutorialCookStep>=4
-      ? {key:'RETURN PILLAR',text:'You prepped, cooked, claimed, and sold a meal for gold.',sub:'Walk into the blue return pillar to go back to town.'}
+      ? {key:'5 EXIT',text:'You prepped, cooked, claimed, and sold a meal for gold.',sub:'Walk into station 5, the blue return pillar, to go back to town.'}
       : jobTutorialCookStep===3
-        ? {key:'SERVE PIPPA',text:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G.',sub:'This completes the cook economy loop: ingredients become useful meals, meals become gold.'}
+        ? {key:'4 SERVE',text:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G.',sub:cookTutorialStepSub()}
       : jobTutorialCookStep===2
-        ? {key:'HEARTH TIMER',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the Hades-style hearth timer above the campfire.',sub:'Timers make cooking feel physical: prep first, wait briefly, then claim the finished food.'}
+        ? {key:'3 CLAIM',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the Hades-style hearth timer above the campfire.',sub:cookTutorialStepSub()}
       : jobTutorialCookStep===1
-        ? {key:'START HEARTH',text:cookTutorialProgressLabel()+': '+action.purpose,sub:'The hearth turns prepared ingredients into meals for buffs, travel, recovery, and sales.'}
-        : {key:'PREP STATION',text:cookTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Cook loop: ingredients become food, food becomes buffs and gold.'};
+        ? {key:'2 HEARTH',text:cookTutorialProgressLabel()+': '+action.purpose,sub:cookTutorialStepSub()}
+        : {key:'1 PREP',text:cookTutorialProgressLabel()+': '+action.purpose,sub:cookTutorialStepSub()};
   }
   if(jobTutorialJob==='blacksmith'){
     const action=blacksmithTutorialAction();
@@ -3498,7 +3508,7 @@ function startJobTutorial(jobId){
   eventLog('Entered '+job.name+' tutorial room.');
   if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow numbered station <b>1 EGG</b> to the open Egg Insulator, then hatch your tutorial egg.');
   else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
-  else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the yellow prep station. Press <b>G</b> to start turning wheat into real food.');
+  else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow numbered station <b>1 PREP</b> to the yellow counter mat. Press <b>G</b> to turn wheat into real food.');
   else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the orange forge station. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
   else if(jobId==='monk')sysMsg('<b>Monk chosen.</b><br>Follow the pillar of light to the blue focus circle. Press <b>G</b>, then hold still and watch the focus timer.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');

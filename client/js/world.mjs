@@ -1196,6 +1196,10 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     for(let x=cx-11;x<=cx-5;x++)for(let z=cz-5;z<=cz+1;z++)setBlock(x,G,z,B.SAND);
     for(let x=cx-12;x<=cx-4;x++)setBlock(x,G+1,cz-2,(x===cx-8)?B.TABLE:B.PLANKS);
     for(let x=cx-10;x<=cx-6;x++)for(let z=cz-4;z<=cz;z++)if(!(x===cx-8&&z===cz-2))setBlock(x,G,z,B.TERRACOTTA);
+    box(cx-10,G,cz-1,cx-6,G,cz+1,B.SAND);
+    setBlock(cx-8,G+1,cz+1,B.TABLE);
+    setBlock(cx-11,G+1,cz-1,B.WHEAT_3);
+    setBlock(cx-5,G+1,cz-1,B.SAND);
     setBlock(cx-9,G+1,cz-1,B.WHEAT_3);
     setBlock(cx-7,G+1,cz-1,B.TERRACOTTA);
     setBlock(cx-10,G+1,cz+1,B.CHEST);
@@ -1210,6 +1214,8 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
       setBlock(x,G+2,cz-11,B.CAMPFIRE);
       setBlock(x,G+3,cz-11,B.BRICK);
     }
+    box(cx-4,G,cz+1,cx+4,G,cz+7,B.BRICK);
+    for(let x=cx-3;x<=cx+3;x++)for(let z=cz+2;z<=cz+6;z++)if(Math.abs(x-cx)===3||Math.abs(z-(cz+4))===2)setBlock(x,G,z,B.TERRACOTTA);
     box(cx-3,G,cz+3,cx+3,G,cz+5,B.BRICK);
     setBlock(cx,G+1,cz+4,B.CAMPFIRE);
     setBlock(cx-2,G+1,cz+4,B.FURNACE);
@@ -1225,6 +1231,7 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     for(let x=cx+6;x<=cx+12;x++)for(let z=cz+9;z<=cz+14;z++)setBlock(x,G,z,z>=cz+11?B.PLANKS:B.TERRACOTTA);
     for(let x=cx+5;x<=cx+13;x++)setBlock(x,G+1,cz+10,x===cx+10?B.TABLE:B.PLANKS);
     for(let z=cz+8;z<=cz+13;z++)setBlock(cx+13,G+1,z,B.PLANKS);
+    for(let x=cx+6;x<=cx+12;x+=2){setBlock(x,G+2,cz+10,B.LANTERN);setBlock(x,G+1,cz+9,B.SAND);}
     setBlock(cx+8,G+1,cz+12,B.CHEST);
     setBlock(cx+10,G+1,cz+13,B.LANTERN);
     setBlock(cx+12,G+1,cz+12,B.CHEST);

@@ -1601,10 +1601,12 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function updateCookTutorialTimer\(now=performance\.now\(\)\)/);
   assert.match(combat,/function updateCookTutorialStationGuide\(now=performance\.now\(\)\)/);
   assert.match(combat,/function nearbyCookTutorialTrader\(range=4\.2\)/);
+  assert.match(combat,/function cookTutorialStepSub\(\)/);
   assert.match(combat,/Watch the Hades-style hearth timer/);
-  assert.match(combat,/PREP STATION/);
-  assert.match(combat,/SERVE PIPPA/);
-  assert.match(combat,/yellow prep station/);
+  assert.match(combat,/1 PREP/);
+  assert.match(combat,/4 SERVE/);
+  assert.match(combat,/5 EXIT/);
+  assert.match(combat,/yellow counter mat/);
   assert.match(combat,/jobTutorialLessonMoment\(lesson\.title,cookTutorialTargetPos\(\),\[1,\.72,\.26\],0xffd45a\)/);
   assert.match(combat,/reactJobTutorialTrader\(tutorialCookTrader,cookTutorialTraderPos\(\),'Meal sold',\[1,\.72,\.26\]\)/);
   assert.match(combat,/Pippa Hearth/);
