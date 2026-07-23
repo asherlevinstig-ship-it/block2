@@ -3748,7 +3748,7 @@ class GameRoom extends Room {
     if (source === 'story' || source === 'manhunt') {
       if (title === 'First Hands') return 'Speak to Mara again for Road Ready, then start preparing for your first Gate.';
       if (title === 'Road Ready') return 'Use the Compass path to find and clear the first E-rank Gate.';
-      if (title === 'The First Gate') return 'Claim your reward, choose a profession loop, then prepare for D-rank Gates.';
+      if (title === 'The First Gate') return 'Use the payoff supplies to craft your first station, then claim land and build a safe base.';
       return 'Open the Quest Log or follow the marked NPC for the next story beat.';
     }
     if (source === 'guild') {

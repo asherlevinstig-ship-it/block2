@@ -33,7 +33,7 @@ const GRADUATION_REWARD = Object.freeze([
 const PROGRESSION_MILESTONE_REWARDS = Object.freeze({
   first_e_gate: Object.freeze({
     title: 'First Dungeon Cleared',
-    text: 'The E-rank Gate paid for your first workshop. Build a station before the next push.',
+    text: 'The E-rank Gate paid for your first workshop. Use the supplies to craft a table or furnace, then start your protected base.',
     modal: true,
     subtitle: 'FIRST E-RANK GATE PAYOFF',
     action: 'CRAFT FIRST STATION',

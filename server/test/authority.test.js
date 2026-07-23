@@ -2019,6 +2019,9 @@ test('Mara quests guarantee levels 2 and 3 before opening the first E-rank gate'
   assert.equal(prof.S.lvl, 5, 'the first Gate advances E-rank without skipping its ten-level journey');
   assert.equal(prof.progressionFocus, 'first_craft_station', 'the first dungeon now hands off to station/base building');
   assert.equal(prof.utilityUnlocks.includes('feather_step'), true, 'the first dungeon unlocks Feather Step before the base-building climb phase');
+  const firstGateReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'first_e_gate');
+  assert.match(firstGateReward.msg.text, /craft a table or furnace/);
+  assert.match(client.sent.find(e => e.type === 'questRewardSummary' && e.msg.title === 'The First Gate').msg.nextStep, /craft your first station/);
 });
 
 test('first quest bonus requires authoritative Mara completion and is single-claim', () => {

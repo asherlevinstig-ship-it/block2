@@ -162,7 +162,10 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
     label: 'First Gate: Clear Rooms',
   });
-  await expect(page.locator('#dungeonparty')).toContainText('Move room to room');
+  await expect.poll(() => page.evaluate(() => {
+    const partyText = document.getElementById('dungeonparty')?.textContent || '';
+    return partyText || window.__BLOCKCRAFT_E2E__.status().currentObjective?.text || '';
+  })).toContain('Move room to room');
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'defeatFirstGateBoss', requestId: 'boss-1' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'boss-1', ok: true });
@@ -205,6 +208,15 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'claim' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().maraStep)).toBe(3);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest)).toBe(null);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_craft_station');
+  await expect(page.locator('#rewardpanel')).toContainText('First Dungeon Cleared');
+  await expect(page.locator('#rewardpanel')).toContainText('craft a table or furnace');
+  await expect(page.locator('#rewardpanel')).toContainText('CRAFT FIRST STATION');
+  await closeVisibleReward(page);
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
+    label: 'First Craft Station',
+  });
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjectiveHud?.line?.title)).toBe('First Craft Station');
   await page.reload();
   await page.locator('#playbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);

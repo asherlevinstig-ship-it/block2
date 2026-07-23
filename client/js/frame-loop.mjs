@@ -799,10 +799,11 @@ function transitionPanelActuallyOpen(type){
 function shouldDeferTransitionAction(transition,{story=null,job=null}={}){
   if(!transition)return false;
   if(transition.type==='continue_panel'||transition.type==='use_ability')return false;
-  if(transition.type==='choose_job')return !!story || progressionFocus==='first_d_gate' || progressionFocus==='next_adventurer_contract';
+  const baseOnboardingFocus=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup'].includes(progressionFocus);
+  if(transition.type==='choose_job')return !!story || baseOnboardingFocus || progressionFocus==='first_d_gate' || progressionFocus==='next_adventurer_contract';
   if(transitionPanelActuallyOpen(transition.type))return false;
   if(transition.type==='choose_path'||transition.type==='start_awakening'){
-    return !!story || !!job || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
+    return !!story || !!job || baseOnboardingFocus || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
   }
   return false;
 }
@@ -1142,10 +1143,10 @@ function currentObjective(){
   }
   const job=jobContractObjective();
   if(job) return job;
-  const guided=tutorialObjective();
-  if(guided) return guided;
   const server=serverObjectiveHud();
   if(server) return server;
+  const guided=tutorialObjective();
+  if(guided) return guided;
   const story=questObjective();
   if(story) return story;
   const guild=guildContractObjective();
