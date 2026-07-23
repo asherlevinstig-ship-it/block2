@@ -64,6 +64,9 @@ test('accepted job contract points to action, progresses, returns to board, and 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToJobs());
   await page.evaluate(() => window.openJobsUI?.('', 'Adventurer'));
   await expect(page.locator('#qpanel')).toContainText('JOB BOARD');
+  await expect(page.locator('#qpanel')).toContainText('Beginner Recommended');
+  await expect(page.locator('#qpanel')).toContainText('How to complete');
+  await expect(page.locator('#qpanel')).toContainText('START CONTRACT');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().jobContractOffers)).toEqual(
     expect.arrayContaining([expect.objectContaining({ title: "Mara's Field Work" })]),
   );
@@ -133,7 +136,7 @@ test('accepted job contract points to action, progresses, returns to board, and 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToJobs());
   await clickTrackerAction(page, 'CLAIM AT JOB BOARD', 'jobs');
   await expect(page.locator('#qpanel')).toContainText('Mara');
-  await page.locator('#qpanel button').filter({ hasText: /^CLAIM$/ }).first().click();
+  await page.locator('#qpanel button').filter({ hasText: /^CLAIM REWARD$/ }).first().click();
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract)).toBe(null);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().jobXp)).toBeGreaterThan(0);

@@ -652,7 +652,12 @@
   .shoprow.job-offer-card{align-items:start;grid-template-columns:minmax(0,1fr) auto;gap:12px;border-bottom-color:rgba(159,216,255,.16);background:linear-gradient(90deg,rgba(79,216,255,.055),rgba(0,0,0,0))}
   .shoprow.job-offer-card>b{display:none}
   .job-offer-main{display:grid;gap:7px;min-width:0}.job-offer-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.job-offer-head>b{width:auto!important;text-align:left!important;color:#fff3c4!important;font-size:14px}.job-offer-head em{font-style:normal;font-size:8px;letter-spacing:1.3px;text-transform:uppercase;padding:3px 6px;border:1px solid rgba(159,216,255,.32);border-radius:4px;color:#9fd7ff;background:rgba(8,20,34,.7)}.job-offer-head em.quick{color:#b9f6c6;border-color:rgba(134,239,172,.38)}.job-offer-head em.demanding{color:#ffc391;border-color:rgba(251,146,60,.42)}
+  .job-offer-badge{justify-self:start;padding:4px 7px;border:1px solid rgba(154,210,107,.55);border-radius:5px;background:rgba(154,210,107,.14);color:#d8f8c8;font-size:8px;letter-spacing:1.4px;text-transform:uppercase}
   .job-offer-main p{margin:0;color:#cbd6e4;font-size:11px;line-height:1.35}.job-offer-need{display:flex;align-items:baseline;gap:6px;color:#9fb0c6;font-size:10px}.job-offer-need>b{width:auto!important;color:#ffd24a!important;font-size:17px}.job-offer-need i{margin-left:auto;font-style:normal;color:#7f93aa}
+  .job-contract-steps{display:grid;gap:5px;padding:8px;border:1px solid rgba(255,210,74,.16);border-radius:6px;background:rgba(255,210,74,.055)}
+  .job-contract-steps>b{width:auto!important;text-align:left!important;color:#ffe39a!important;font-size:10px;letter-spacing:1.4px;text-transform:uppercase}
+  .job-contract-steps ol{margin:0;padding-left:18px;color:#d7e4f2;font-size:10px;line-height:1.35}
+  .job-contract-steps li{padding:1px 0}
   .job-offer-loop{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.job-offer-loop span,.job-offer-rewards span{padding:6px 7px;border:1px solid rgba(255,255,255,.09);border-radius:5px;background:rgba(0,0,0,.18)}.job-offer-loop small{display:block;margin-bottom:3px;color:#7dd3fc;font-size:7px;letter-spacing:1.4px}.job-offer-loop b{display:block;width:auto!important;text-align:left!important;color:#e8f5ff!important;font-size:10px;line-height:1.25}
   .job-offer-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.job-offer-rewards span{color:#b9c8d8;font-size:10px}.job-offer-rewards b{width:auto!important;color:#ffd24a!important;text-align:left!important;font-size:13px}
   .job-board-v2{display:grid;gap:12px;margin-top:10px}
@@ -666,6 +671,7 @@
   .job-board-tabs{display:flex;gap:7px;flex-wrap:wrap;padding:2px 0}
   .job-board-tabs .qbtn{margin:0;padding:7px 12px}
   .job-board-section{display:grid;gap:8px;padding:11px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(7,15,26,.44)}
+  .job-board-section.beginner-recommended{border-color:rgba(154,210,107,.42);background:linear-gradient(135deg,rgba(154,210,107,.13),rgba(7,15,26,.56));box-shadow:inset 0 0 22px rgba(154,210,107,.055)}
   .job-board-section-title{color:#ffd24a}
   .job-board-current{display:grid;gap:8px;padding:11px;border:1px solid rgba(159,216,255,.18);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.075),rgba(0,0,0,.14))}
   .job-board-current.ready{border-color:rgba(154,210,107,.42);background:linear-gradient(135deg,rgba(154,210,107,.12),rgba(0,0,0,.14))}
@@ -686,6 +692,7 @@
   .job-board-note{margin:0;color:#b8c8d8;font-size:11px;line-height:1.35}.job-board-note.muted{color:#7f93aa}
   .job-board-offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
   .job-board-offer-card{display:grid;gap:9px;padding:10px;border:1px solid rgba(159,216,255,.16);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.06),rgba(0,0,0,.16))}
+  .job-board-offer-card.recommended{border-color:rgba(154,210,107,.5);background:linear-gradient(135deg,rgba(154,210,107,.12),rgba(6,16,25,.34))}
   .job-board-offer-card .qbtn{justify-self:start;margin:0}
   .job-profession-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
   .job-profession-card{display:grid;gap:8px;align-content:start;padding:10px;border:1px solid rgba(255,255,255,.1);border-radius:7px;background:rgba(0,0,0,.16)}

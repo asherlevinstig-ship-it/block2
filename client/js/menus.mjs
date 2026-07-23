@@ -6088,16 +6088,33 @@ function jobOfferRewardHTML(offer){
     '<span><b>'+Math.max(0,offer.rewardJobXp|0)+'</b> job XP</span>'+
   '</div>';
 }
-function jobOfferCardHTML(offer){
+function jobContractStepsHTML(c){
+  const steps=(JOB_SYSTEM.guideSteps?JOB_SYSTEM.guideSteps(c&&c.type):jobContractGuideLines(c)).slice(0,3);
+  if(!steps.length)return '';
+  return '<div class="job-contract-steps"><b>How to complete</b><ol>'+steps.map(line=>'<li>'+escHTML(line)+'</li>').join('')+'</ol></div>';
+}
+function chooseBeginnerRecommendedOffer(offers,offerJob){
+  offers=Array.isArray(offers)?offers:[];
+  if(!offers.length)return null;
+  const starter=offers.find(o=>o&&o.title==="Mara's Field Work");
+  if(starter)return starter;
+  const quickForJob=offers.find(o=>o&&o.job===offerJob&&o.difficulty==='quick');
+  if(quickForJob)return quickForJob;
+  const quick=offers.find(o=>o&&o.difficulty==='quick');
+  return quick||offers[0];
+}
+function jobOfferCardHTML(offer,opts={}){
   const difficulty=offer.difficulty==='quick'?'quick':offer.difficulty==='demanding'?'demanding':'balanced';
   const estimate=offer.estimate||'Flexible duration';
   const party=offer.party||'Solo';
   return '<div class="job-offer-main">'+
+    (opts.recommended?'<small class="job-offer-badge">BEGINNER RECOMMENDED</small>':'')+
     '<div class="job-offer-head"><b>'+escHTML(offer.title||'Job Contract')+'</b><em class="'+difficulty+'">'+escHTML(offer.difficultyLabel||offer.difficulty||'Offer')+'</em></div>'+
     '<p>'+escHTML(offer.desc||'Complete the work order.')+'</p>'+
     '<div class="job-offer-need"><b>'+Math.max(1,offer.need|0)+'</b><span>required</span><i>'+escHTML(estimate)+' / '+escHTML(party)+'</i></div>'+
     contractTagHTML(offer)+
     contractBestForHTML(offer)+
+    jobContractStepsHTML(offer)+
     jobOfferLoopHTML(offer)+
     jobOfferRewardHTML(offer)+
   '</div>';
@@ -6232,7 +6249,7 @@ function jobBoardRewardLine(c){
 function jobBoardCurrentContractHTML(c){
   if(!c)return '<div class="job-board-current empty"><small>CURRENT WORK</small><b>No active contract</b><p>Pick one clear task below. You can hold one job contract at a time.</p></div>';
   const def=JOBS[c.job]||JOBS.adventurer, ready=jobContractReady();
-  return '<div class="job-board-current '+(ready?'ready':'')+'"><small>CURRENT WORK</small><div class="job-board-current-head"><b style="color:'+def.col+'">'+escHTML(c.title)+'</b><em>'+(ready?'READY TO CLAIM':escHTML((c.difficultyLabel||c.difficulty||'Active').toUpperCase()))+'</em></div><p>'+escHTML(c.desc)+'</p>'+jobBoardProgressHTML(c.have,c.need)+contractTagHTML(c)+contractBestForHTML(c)+jobBoardRewardLine(c)+'<small class="job-board-hint">'+escHTML(jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job))))+'</small></div>';
+  return '<div class="job-board-current '+(ready?'ready':'')+'"><small>CURRENT WORK</small><div class="job-board-current-head"><b style="color:'+def.col+'">'+escHTML(c.title)+'</b><em>'+(ready?'READY TO CLAIM':escHTML((c.difficultyLabel||c.difficulty||'Active').toUpperCase()))+'</em></div><p>'+escHTML(c.desc)+'</p>'+jobBoardProgressHTML(c.have,c.need)+contractTagHTML(c)+contractBestForHTML(c)+jobContractStepsHTML(c)+jobBoardRewardLine(c)+'<small class="job-board-hint">'+escHTML(jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job))))+'</small></div>';
 }
 function openJobsUILegacy(focusJob='', sourceTitle=''){
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
@@ -6389,7 +6406,7 @@ function openJobsUI(focusJob='', sourceTitle=''){
   currentSection.innerHTML='<div class="job-board-section-title">Current Work</div>'+jobBoardCurrentContractHTML(c);
   const actions=document.createElement('div');
   actions.className='job-board-actions';
-  if(c&&jobContractReady())actions.appendChild(qBtn('CLAIM',()=>claimJobContract()));
+  if(c&&jobContractReady())actions.appendChild(qBtn('CLAIM REWARD',()=>claimJobContract()));
   else if(c){
     actions.appendChild(qBtn('GUIDE',()=>openJobContractGuide(c)));
     actions.appendChild(qBtn('ABANDON',()=>{
@@ -6401,21 +6418,37 @@ function openJobsUI(focusJob='', sourceTitle=''){
   shell.appendChild(currentSection);
 
   if(!c&&jobContractOffersJob===offerJob){
+    const beginnerOffer=chooseBeginnerRecommendedOffer(jobContractOffers,offerJob);
+    if(beginnerOffer){
+      const beginnerSection=document.createElement('section');
+      beginnerSection.className='job-board-section beginner-recommended';
+      beginnerSection.innerHTML='<div class="job-board-section-title">Beginner Recommended</div><p class="job-board-note">Start here if you want one clear, safe contract for what you are doing now.</p>';
+      const card=document.createElement('div');
+      card.className='job-offer-card job-board-offer-card recommended';
+      card.innerHTML=jobOfferCardHTML(beginnerOffer,{recommended:true});
+      card.appendChild(qBtn('START CONTRACT',()=>{
+        if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:beginnerOffer.id});return;}
+        jobContract={...beginnerOffer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
+      }));
+      beginnerSection.appendChild(card);
+      shell.appendChild(beginnerSection);
+    }
     const offersSection=document.createElement('section');
     offersSection.className='job-board-section';
-    offersSection.innerHTML='<div class="job-board-section-title">Available Contracts</div>';
+    offersSection.innerHTML='<div class="job-board-section-title">More Contracts</div>';
     const intro=document.createElement('p');
     intro.className='job-board-note';
-    intro.textContent=jobContractOffers.length?'Choose one '+offerDef.name+' contract. Offers refresh together; abandoning work does not reroll the board.':(Date.now()<jobContractRefreshAt?'This rotation has been used. New '+offerDef.name+' offers arrive when the board refreshes.':'Waiting for offers...');
+    const otherOffers=jobContractOffers.filter(o=>!beginnerOffer||o.id!==beginnerOffer.id);
+    intro.textContent=otherOffers.length?'Other '+offerDef.name+' contracts are available if you want a different activity.':(jobContractOffers.length?'That beginner pick is the clearest contract in this rotation.':Date.now()<jobContractRefreshAt?'This rotation has been used. New '+offerDef.name+' offers arrive when the board refreshes.':'Waiting for offers...');
     offersSection.appendChild(intro);
     const offersGrid=document.createElement('div');
     offersGrid.className='job-board-offers';
     offersSection.appendChild(offersGrid);
-    for(const offer of jobContractOffers){
+    for(const offer of otherOffers){
       const card=document.createElement('div');
       card.className='job-offer-card job-board-offer-card';
       card.innerHTML=jobOfferCardHTML(offer);
-      card.appendChild(qBtn('ACCEPT',()=>{
+      card.appendChild(qBtn('START CONTRACT',()=>{
         if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:offer.id});return;}
         jobContract={...offer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
       }));
