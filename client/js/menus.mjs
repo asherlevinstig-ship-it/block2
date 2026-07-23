@@ -2686,6 +2686,19 @@ function firstQuestMilestoneComplete(){
   return NET.on ? serverFirstQuestComplete : firstVillagerBonusClaimed();
 }
 let townGuidanceSequenceHold=false;
+function hunterAwakeningStepsHTML(active){
+  const steps=[
+    ['reward','Quest Complete'],
+    ['path','Choose Path'],
+    ['ability','Train Ability'],
+    ['job','Try A Job']
+  ];
+  const activeIndex=Math.max(0,steps.findIndex(s=>s[0]===active));
+  return '<div class="awakening-flow-steps" aria-label="Hunter Awakening progress">'+steps.map((s,i)=>{
+    const cls=i<activeIndex?'done':i===activeIndex?'active':'';
+    return '<span class="'+cls+'"><b>'+(i+1)+'</b>'+s[1]+'</span>';
+  }).join('')+'</div>';
+}
 function showFirstVillagerReward(onContinue){
   if(!rewardWin||!rewardPanel) return;
   townGuidanceSequenceHold=true;
@@ -2700,11 +2713,13 @@ function showFirstVillagerReward(onContinue){
   };
   rewardPanel.className='earned';
   rewardPanel.innerHTML=
+    '<div class="awpill">Hunter Awakening 1 / 4</div>'+
+    hunterAwakeningStepsHTML('reward')+
     '<h2>FIRST QUEST COMPLETE</h2>'+
     '<div class="rsub">THE TOWN RECOGNISES YOUR PROGRESS</div>'+
     '<div class="rewardloot">'+rewardLineHTML({label:'Gold',value:'+100'})+'</div>'+
-    '<div class="rnote">You reached Level 2. Continue to choose your awakening.</div>'+
-    '<button id="rewardclose">CONTINUE</button>';
+    '<div class="rnote">You reached Level 2. Next you will choose a combat path, learn your first ability, then optionally try a job room.</div>'+
+    '<button id="rewardclose">CHOOSE PATH</button>';
   rewardWin.classList.remove('hidden');
   const btn=document.getElementById('rewardclose');
   if(btn) btn.onclick=continueSequence;

@@ -1079,23 +1079,45 @@ function beginOnboarding(){
 function abilityHudAvailable(){
   return !!(S && S.lvl>=2);
 }
+function hunterAwakeningStepsHTML(active){
+  const steps=[
+    ['reward','Quest Complete'],
+    ['path','Choose Path'],
+    ['ability','Train Ability'],
+    ['job','Try A Job']
+  ];
+  const activeIndex=Math.max(0,steps.findIndex(s=>s[0]===active));
+  return '<div class="awakening-flow-steps" aria-label="Hunter Awakening progress">'+steps.map((s,i)=>{
+    const cls=i<activeIndex?'done':i===activeIndex?'active':'';
+    return '<span class="'+cls+'"><b>'+(i+1)+'</b>'+s[1]+'</span>';
+  }).join('')+'</div>';
+}
+function portalTransitionVisible(){
+  const el=document.getElementById('portaltransition');
+  return !!(el && el.classList.contains('active'));
+}
 function showAbilityAwakening(){
   if(abilityAwakeningOpen || abilityTrainingActive || abilityTutorialDone() || !S.path || !abilityHudAvailable()) return false;
   if(onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
+  if(portalTransitionVisible()){
+    setTimeout(()=>showAbilityAwakening(), 650);
+    return false;
+  }
   abilityAwakeningOpen=true;
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.open', { path:S.path, dim });
   const P=PATHS[S.path]||PATHS.shadow;
   const first=P.ab[0];
-  awakeningPanel.innerHTML='<div class="awpill">Level 2 Reached</div>'
-    +'<h1>ABILITY AWAKENED</h1>'
+  awakeningPanel.innerHTML='<div class="awpill">Hunter Awakening 3 / 4</div>'
+    +hunterAwakeningStepsHTML('ability')
+    +'<h1>YOUR FIRST ABILITY WAKES</h1>'
     +'<h2 style="color:'+P.col+';margin:4px 0 10px">'+escHTML(P.name)+'</h2>'
-    +'<div class="awtext">Your permanent hunter path is now <b>'+escHTML(P.name)+'</b>. You have unlocked your first combat ability, and the ability hotbar is now part of your HUD.</div>'
+    +'<div class="awtext">Your permanent hunter path is now <b>'+escHTML(P.name)+'</b>. Step into a short training meadow, cast your first ability once, then return to Road Ready.</div>'
     +'<div class="awability" style="color:'+P.col+'">'
       +'<div class="awicon">'+escHTML(first.g)+'</div>'
       +'<div class="awname">'+escHTML('Q - '+first.n)+'</div>'
       +'<div class="awsub">'+escHTML(first.txt)+'<br>R unlocks at Level 5. H unlocks at Level 8.</div>'
     +'</div>'
-    +'<div><button id="awakeningbegin" type="button">BEGIN ABILITY TRAINING</button></div>';
+    +'<div class="awakening-actions"><button id="awakeningbegin" type="button">ENTER TRAINING MEADOW</button></div>';
   awakeningWin.classList.remove('hidden');
   if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
   locked=false;
@@ -3397,12 +3419,13 @@ function openLevel2JobChoice(force=false){
   if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
   lockFallback=false; locked=false;
   const ids=['miner','farmer','cook','blacksmith','monk','pet_tamer'];
-  pathPanelEl.innerHTML='<div class="job-choice-kicker">WORKER TUTORIALS - PICK OR REPLAY A PATH</div>'
-    +'<h1>WHAT KIND OF HERO DO YOU WANT TO PRACTICE?</h1>'
-    +'<div class="pathintro">Pick a job card to equip that profession and teleport straight to a private practice room. You can switch jobs or replay tutorials later with Milo at the Job Board, so this is guidance, not a permanent lock.</div>'
+  pathPanelEl.innerHTML='<div class="job-choice-kicker">Hunter Awakening 4 / 4 - Optional profession trial</div>'
+    +hunterAwakeningStepsHTML('job')
+    +'<h1>TRY A WORKER PATH</h1>'
+    +'<div class="pathintro">Combat is only one way to play. Pick a job card to equip that profession and teleport straight to a private practice room, or continue Road Ready and choose later with Milo at the Job Board.</div>'
     +'<div id="jobchoicecards">'+ids.map(jobChoiceCardHTML).join('')+'</div>'
     +'<div id="pathnote">Jobs are for different player styles: exploring, crafting, farming, cooking, support, and gear-making all matter.</div>'
-    +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CHOOSE LATER</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
+    +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CONTINUE ROAD READY</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
   pathSelectEl.classList.remove('hidden');
   refreshPlayUi();
   pathPanelEl.querySelectorAll('.job-choice-card').forEach(card=>card.addEventListener('click',()=>chooseJobFromLevel2Banner(card.dataset.job)));
@@ -3600,9 +3623,10 @@ function showPathSelection(){
   lockFallback=false; locked=false;
   const awakeningChoice=S.lvl>=2 && !S.path;
   pathPanelEl.innerHTML=
-    '<h1>'+(awakeningChoice?'LEVEL 2 - CHOOSE YOUR AWAKENING':'CHOOSE YOUR PATH')+'</h1>'+
+    (awakeningChoice?'<div class="job-choice-kicker">Hunter Awakening 2 / 4</div>'+hunterAwakeningStepsHTML('path'):'')+
+    '<h1>'+(awakeningChoice?'CHOOSE YOUR HUNTER PATH':'CHOOSE YOUR PATH')+'</h1>'+
     '<div class="pathintro">'+(awakeningChoice
-      ? 'You reached Level 2, but you do not have a combat path yet. Choose one now to unlock your first ability, then you will be taken to the ability meadow.'
+      ? 'This is the second step of your awakening. Choose the combat style that matches how you want to help a party; your first ability opens immediately after this.'
       : 'Training is complete. Before you enter the Town of Beginnings, choose the combat path that fits how you want to play. Your path defines your main ability style and future unlocks.')+'</div>'+
     '<div id="pathcards">'+Object.keys(PATHS).map(pathCardHTML).join('')+'</div>'+
     '<div id="pathnote">You can inspect your path later from the Status window with <b>C</b>. Choose carefully: this becomes part of your hunter profile.</div>';

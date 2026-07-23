@@ -1627,7 +1627,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/rewardGain\('rare',1,job\.name\+' Lesson',\{icon:'JOB',duration:3000\}\)/);
   assert.match(combat,/burst\(player\.pos\.x,player\.pos\.y\+1,player\.pos\.z,jobTutorialColorArr\(jobId\),42,3\.4,3\.3,\.85\)/);
   assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
-  assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO PRACTICE\?/);
+  assert.match(combat,/TRY A WORKER PATH/);
+  assert.match(combat,/Hunter Awakening 4 \/ 4 - Optional profession trial/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
   assert.match(combat,/startJobTutorial\(jobId\)/);

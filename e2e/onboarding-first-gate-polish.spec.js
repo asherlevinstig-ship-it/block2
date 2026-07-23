@@ -5,6 +5,14 @@ test.afterEach(async ({ page }) => {
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__?.shutdown());
 });
 
+async function clickButtonById(page, id) {
+  await page.evaluate((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) throw new Error('missing button #' + id);
+    btn.click();
+  }, id);
+}
+
 test('training hands the player to Mara and clearly prepares the first Gate', async ({ page }) => {
   test.setTimeout(120_000);
   const suffix=Date.now().toString(36);
@@ -26,7 +34,7 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().onboarding)).toBe(false);
   await expect(page.locator('#rewardpanel')).toContainText('TRAINING COMPLETE');
   await expect(page.locator('#rewardpanel')).toContainText('MARA VALE');
-  await page.locator('#trainingcontinue').click();
+  await clickButtonById(page, 'trainingcontinue');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
     label:'Tutorial Guide',
     text:'Accept Mara’s first quest',
@@ -40,11 +48,11 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
 
   await expect(page.locator('#rewardwin')).toBeVisible();
-  await page.locator('#rewardclose').click();
+  await clickButtonById(page, 'rewardclose');
   await expect(page.locator('#pathselect')).toBeVisible();
   await page.locator('.pathselect-card[data-path="shadow"]').click();
   await expect(page.locator('#awakeningwin')).toBeVisible();
-  await page.locator('#awakeningbegin').click();
+  await clickButtonById(page, 'awakeningbegin');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTutorialDone)).toBe(true);

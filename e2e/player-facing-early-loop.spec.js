@@ -76,8 +76,8 @@ function recordAuditPanel(audit, name, kind) {
   audit.manualPanels.push({ name, kind, atMs: auditElapsedMs(audit) });
 }
 
-function recordAuditModal(audit, name, kind) {
-  audit.modalInterruptions.push({ name, kind, atMs: auditElapsedMs(audit) });
+function recordAuditModal(audit, name, kind, sequence = '') {
+  audit.modalInterruptions.push({ name, kind, sequence, atMs: auditElapsedMs(audit) });
 }
 
 function qualityIssuesFrom(audit, trace = []) {
@@ -106,6 +106,9 @@ function qualityIssuesFrom(audit, trace = []) {
   const distinctHudTexts = new Set(hudTexts);
   if (hudEvents.length > 80) issues.push(`HUD changed too often during Chapter 1 route (${hudEvents.length} updates).`);
   if (distinctHudTexts.size > 36) issues.push(`HUD displayed too many distinct objective texts (${distinctHudTexts.size}).`);
+  const hunterAwakening = (audit.modalInterruptions || []).filter(m => m.sequence === 'hunter_awakening');
+  if (hunterAwakening.length && hunterAwakening.length !== 4) issues.push(`Hunter Awakening should read as one four-step sequence, found ${hunterAwakening.length} steps.`);
+  if (hunterAwakening.length && new Set(hunterAwakening.map(m => m.kind)).size !== hunterAwakening.length) issues.push('Hunter Awakening has duplicate modal steps.');
   return issues;
 }
 
@@ -115,12 +118,14 @@ async function buildQualityAuditReport(page, audit) {
   const hudTexts = hudEvents.map(e => e.data && e.data.text || '').filter(Boolean);
   const distinctHudTexts = [...new Set(hudTexts)];
   const issues = qualityIssuesFrom(audit, trace);
+  const modalSequences = [...new Set((audit.modalInterruptions || []).map(m => m.sequence || m.kind))];
   return {
     route: 'Chapter 1: Town of Beginnings',
     elapsedMs: auditElapsedMs(audit),
     checkpointCount: audit.checkpoints.length,
     checkpoints: audit.checkpoints,
     modalInterruptions: audit.modalInterruptions,
+    modalSequences,
     manualPanels: audit.manualPanels,
     hudChurn: {
       updates: hudEvents.length,
@@ -242,21 +247,25 @@ test('player-facing early loop tracker gives a clear next action at each milesto
   await test.step('first dungeon objective points at the gate, not D-rank prep', async () => {
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest', { action: 'claim' }));
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().level)).toBe(2);
-    recordAuditModal(qualityAudit, 'first quest reward', 'reward');
+    await expect(page.locator('#rewardpanel')).toContainText('Hunter Awakening 1 / 4');
+    recordAuditModal(qualityAudit, 'first quest reward', 'reward', 'hunter_awakening');
     await clickButtonById(page, 'rewardclose');
-    recordAuditModal(qualityAudit, 'path selection', 'path_choice');
+    await expect(page.locator('#pathpanel')).toContainText('Hunter Awakening 2 / 4');
+    recordAuditModal(qualityAudit, 'path selection', 'path_choice', 'hunter_awakening');
     await page.locator('.pathselect-card[data-path="shadow"]').click();
     await expect(page.locator('#overlay')).toBeHidden();
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.debugTrace().map(e => e.event))).toEqual(
       expect.arrayContaining(['path.select.click', 'path.select.closed', 'ability.awakening.open']),
     );
-    recordAuditModal(qualityAudit, 'ability awakening', 'ability');
+    await expect(page.locator('#awakeningpanel')).toContainText('Hunter Awakening 3 / 4');
+    recordAuditModal(qualityAudit, 'ability awakening', 'ability', 'hunter_awakening');
     await clickButtonById(page, 'awakeningbegin');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTraining)).toBe(true);
     await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useFirstAbility());
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().abilityTutorialDone)).toBe(true);
     await expectTrackerAction(page, 'CHOOSE JOB', 'choose_job');
-    recordAuditModal(qualityAudit, 'optional job chooser', 'job_choice');
+    await expect(page.locator('#pathpanel')).toContainText('Hunter Awakening 4 / 4');
+    recordAuditModal(qualityAudit, 'optional job chooser', 'job_choice', 'hunter_awakening');
     await page.locator('#jobchoicelater').click();
     await expect(page.locator('#pathselect')).toBeHidden();
     await expectChapterCheckpoint(page, qualityAudit, 'road ready objective', {
