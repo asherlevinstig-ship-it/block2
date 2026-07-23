@@ -149,13 +149,20 @@ test('client celebrates the first completed job contract with clear next actions
 
   assert.match(networking, /const openFirstShiftCompletePanel=\(m,c,summary\)=>/);
   assert.match(networking, /FIRST SHIFT COMPLETE/);
+  assert.match(networking, /Career Started/);
+  assert.match(networking, /first-shift-crest/);
+  assert.match(networking, /first-shift-loop/);
+  assert.match(networking, /career started/);
   assert.match(networking, /TAKE ANOTHER CONTRACT/);
   assert.match(networking, /TRY JOB TUTORIAL/);
   assert.match(networking, /OPEN QUEST LOG/);
   assert.match(networking, /m&&m\.firstShiftComplete\)openFirstShiftCompletePanel/);
   assert.match(networking, /!\(m\.type==='jobContract'&&m\.action==='claim'&&m\.firstShiftComplete\)/);
   assert.match(styles, /\.first-shift-panel/);
+  assert.match(styles, /\.first-shift-crest/);
+  assert.match(styles, /\.first-shift-loop/);
   assert.match(styles, /\.first-shift-rewards/);
+  assert.match(styles, /@keyframes firstShiftSpark/);
 });
 
 test('job tutorial completion presents a first real shift handoff', () => {

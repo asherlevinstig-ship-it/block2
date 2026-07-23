@@ -1132,18 +1132,38 @@ function netAttachRoom(room,name,client){
     let holdFirstShiftPanelRefresh=false;
     const openFirstShiftCompletePanel=(m,c,summary)=>{
       if(typeof openQWin!=='function'||!qpanelEl)return false;
+      const jobId=c.job||playerJob||'adventurer',jobMeta=JOBS[jobId]||{};
       holdFirstShiftPanelRefresh=true;
       openQWin('management');
       qpanelEl.innerHTML='';
       const shell=document.createElement('div');shell.className='first-shift-panel';
+      shell.dataset.job=jobId;
+      shell.style.setProperty('--job-color',jobMeta.col||'#ffd24a');
+      const burstEl=document.createElement('div');burstEl.className='first-shift-burst';
+      for(let i=0;i<14;i++){
+        const spark=document.createElement('i');
+        spark.style.setProperty('--a',((i/14)*360).toFixed(1)+'deg');
+        spark.style.setProperty('--d',(52+Math.random()*74).toFixed(0)+'px');
+        spark.style.setProperty('--t',(760+Math.random()*340).toFixed(0)+'ms');
+        burstEl.appendChild(spark);
+      }
+      shell.appendChild(burstEl);
       const badge=document.createElement('div');badge.className='first-shift-badge';badge.textContent='FIRST SHIFT COMPLETE';shell.appendChild(badge);
+      const crest=document.createElement('div');crest.className='first-shift-crest';
+      crest.innerHTML='<i>'+escHTML(jobMeta.icon||'J')+'</i><span><small>Career Started</small><b>'+escHTML(summary.jobName||jobMeta.name||'Job')+'</b></span>';
+      shell.appendChild(crest);
       const h=document.createElement('h2');h.textContent='WORK CLAIMED';shell.appendChild(h);
       const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(summary.title||'Contract').toUpperCase()+' - '+String(summary.jobName||'Job').toUpperCase();shell.appendChild(sub);
-      const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='You finished your first paid shift. The game has saved your reward and your next step is now clearer.';shell.appendChild(intro);
+      const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='You finished your first paid shift. Your reward is saved, your profession has started, and the HUD now points to useful work instead of more setup.';shell.appendChild(intro);
+      const loop=document.createElement('div');loop.className='first-shift-loop';
+      loop.innerHTML='<span><small>1 LEARNED</small><b>Tutorial complete</b></span><span><small>2 EARNED</small><b>Real work paid</b></span><span><small>3 NEXT</small><b>Choose your rhythm</b></span>';
+      shell.appendChild(loop);
       const rewards=document.createElement('div');rewards.className='first-shift-rewards';
       const addReward=(label,value,kind='')=>{
         if(!value)return;
-        const card=document.createElement('span');card.className=kind;card.innerHTML='<small>'+escHTML(label)+'</small><b>'+escHTML(value)+'</b>';rewards.appendChild(card);
+        const card=document.createElement('span');card.className=kind;
+        card.innerHTML='<i>'+escHTML(kind==='gold'?'G':kind==='xp'?'XP':kind==='job'?(jobMeta.icon||'JOB'):kind==='perk'?'PERK':kind==='items'?'ITEM':'+')+'</i><small>'+escHTML(label)+'</small><b>'+escHTML(value)+'</b>';
+        rewards.appendChild(card);
       };
       addReward('Gold',m.rewardGold?('+'+(m.rewardGold|0)+'g'):'','gold');
       addReward('Hunter XP',m.rewardXp?('+'+(m.rewardXp|0)):'','xp');
@@ -1159,12 +1179,24 @@ function netAttachRoom(room,name,client){
       shell.appendChild(rewards);
       const next=document.createElement('p');next.className='qtext first-shift-next';next.innerHTML='<b>Next Best Action:</b> '+escHTML(summary.next||'Take another contract or try a job tutorial.');shell.appendChild(next);
       const row=document.createElement('div');row.className='qrow first-shift-actions';
-      row.appendChild(qBtn('TAKE ANOTHER CONTRACT',()=>openJobsUI(c.job==='adventurer'?'adventurer':(c.job||playerJob||''))));
+      const another=qBtn('TAKE ANOTHER CONTRACT',()=>openJobsUI(c.job==='adventurer'?'adventurer':(c.job||playerJob||'')));
+      another.classList.add('primary');
+      row.appendChild(another);
       row.appendChild(qBtn('TRY JOB TUTORIAL',()=>openTownTutorialsUI()));
       row.appendChild(qBtn('OPEN QUEST LOG',()=>openQuestLogUI()));
       row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
       shell.appendChild(row);
       qpanelEl.appendChild(shell);
+      if(typeof SFX!=='undefined'&&SFX&&SFX.level)SFX.level();
+      if(typeof rewardGain==='function')rewardGain('rare',1,(summary.jobName||jobMeta.name||'Job')+' career started',{icon:jobMeta.icon||'JOB',duration:3200});
+      if(typeof showName==='function')showName('FIRST SHIFT COMPLETE');
+      if(player&&player.pos){
+        const col=String(jobMeta.col||'#ffd24a').replace('#','');
+        const hex=parseInt(col,16);
+        const rgb=Number.isFinite(hex)?[((hex>>16)&255)/255,((hex>>8)&255)/255,(hex&255)/255]:[1,.82,.25];
+        if(typeof burst==='function')burst(player.pos.x,player.pos.y+1.15,player.pos.z,rgb,38,3.5,3.2,.85);
+        if(typeof ringPulse==='function')ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,3.1,Number.isFinite(hex)?hex:0xffd24a,.8);
+      }
       return true;
     };
     const presentJobContractClaim=(m)=>{
