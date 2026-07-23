@@ -482,6 +482,7 @@ function finishMine(){
     if(NET.on)addItem(I.DIAMOND,1);
     jobTutorialMinedDiamond=true;
     SFX.level&&SFX.level();
+    jobTutorialLessonMoment('Diamond found',{x:m.x+.5,y:m.y+1.15,z:m.z+.5},[.35,.92,1],0x7dd3fc);
     showName('Diamond mined');
     eventLog('Miner tutorial - diamond mined.');
     updateJobTutorialHud();
@@ -1251,14 +1252,36 @@ function ensureMinerTutorialTrader(){
   }
   return tutorialMinerTrader;
 }
+function updateJobTutorialTraderActor(actor,p,visible,now=performance.now(),baseRot=Math.PI){
+  if(!actor||!p)return;
+  actor.grp.visible=visible;
+  if(!visible)return;
+  const t=now/1000, react=Math.max(0,(actor.reactUntil||0)-now);
+  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025+(react?Math.sin(t*18)*.08:0),p.z);
+  const want=player&&player.pos?Math.atan2(player.pos.x-p.x,player.pos.z-p.z):baseRot;
+  actor.grp.rotation.y+=angDiff(want,actor.grp.rotation.y)*Math.min(1,react?0.35:0.08);
+  if(actor.head)actor.head.rotation.y=Math.sin(t*1.8+(actor.phase||0))*.12;
+  if(actor.arms){
+    const wave=react?Math.sin(t*22)*.7:0;
+    actor.arms[0].rotation.x=react?-.85-wave*.25:0;
+    actor.arms[1].rotation.x=react?-.85+wave*.25:0;
+    actor.arms[0].rotation.z=react?.28:0;
+    actor.arms[1].rotation.z=react?-.28:0;
+  }
+}
+function reactJobTutorialTrader(actor,pos,label,col=[1,.82,.28]){
+  if(actor)actor.reactUntil=performance.now()+1100;
+  if(pos){
+    burst(pos.x,pos.y+1.2,pos.z,col,24,2.3,2.4,.62);
+    ringPulse(pos.x,pos.y+.06,pos.z,2.1,0xffd24a,.55);
+  }
+  if(label)showName(label);
+}
 function updateMinerTutorialTrader(now=performance.now()){
   const actor=ensureMinerTutorialTrader(), p=minerTutorialTraderPos();
   if(!actor||!p)return;
   const visible=jobTutorialActive&&jobTutorialJob==='miner'&&dim==='job';
-  actor.grp.visible=visible;
-  if(!visible)return;
-  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
-  actor.grp.rotation.y=Math.PI;
+  updateJobTutorialTraderActor(actor,p,visible,now);
 }
 function nearbyMinerTutorialTrader(range=4.2){
   const p=minerTutorialTraderPos();
@@ -1290,10 +1313,7 @@ function updateFarmerTutorialTrader(now=performance.now()){
   const actor=ensureFarmerTutorialTrader(), p=farmerTutorialTraderPos();
   if(!actor||!p)return;
   const visible=jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&jobTutorialFarmerStep>=3;
-  actor.grp.visible=visible;
-  if(!visible)return;
-  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
-  actor.grp.rotation.y=Math.PI;
+  updateJobTutorialTraderActor(actor,p,visible,now);
 }
 function nearbyFarmerTutorialTrader(range=4.2){
   const p=farmerTutorialTraderPos();
@@ -1325,6 +1345,7 @@ function noteFarmerTutorialAction(action){
   const lesson=farmerTutorialAction();
   eventLog('Farmer tutorial - '+lesson.title+': '+lesson.done);
   sysMsg('<b>Farmer lesson:</b> '+escHTML(lesson.done));
+  jobTutorialLessonMoment(lesson.title,farmerTutorialTargetPos(),[.53,.94,.67],0x86efac);
   burst(player.pos.x,player.pos.y+1,player.pos.z,[.53,.94,.67],22,2.2,2.0,.65);
   ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.0,0x86efac,.55);
   jobTutorialFarmerStep=Math.min(FARMER_TUTORIAL_ACTIONS.length,jobTutorialFarmerStep+1);
@@ -1447,10 +1468,7 @@ function updateCookTutorialTrader(now=performance.now()){
   const actor=ensureCookTutorialTrader(), p=cookTutorialTraderPos();
   if(!actor||!p)return;
   const visible=jobTutorialActive&&jobTutorialJob==='cook'&&dim==='job'&&jobTutorialCookStep>=3;
-  actor.grp.visible=visible;
-  if(!visible)return;
-  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
-  actor.grp.rotation.y=Math.PI;
+  updateJobTutorialTraderActor(actor,p,visible,now);
 }
 function nearbyCookTutorialTrader(range=4.2){
   const p=cookTutorialTraderPos();
@@ -1569,6 +1587,7 @@ function advanceCookTutorial(action){
   const lesson=cookTutorialAction();
   eventLog('Cook tutorial - '+lesson.title+': '+lesson.done);
   sysMsg('<b>Cook lesson:</b> '+escHTML(lesson.done));
+  jobTutorialLessonMoment(lesson.title,cookTutorialTargetPos(),[1,.72,.26],0xffd45a);
   burst(player.pos.x,player.pos.y+1,player.pos.z,[1,.72,.26],24,2.2,2.0,.65);
   ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.0,0xffd45a,.55);
   if(action==='prep'){
@@ -1644,6 +1663,7 @@ function tryCookTutorialAction(){
     gainJobXP('cook',8,'tutorial sale');
     jobContractProgress('sell',1,I.HEARTY_SANDWICH);
     SFX.coin&&SFX.coin();
+    reactJobTutorialTrader(tutorialCookTrader,cookTutorialTraderPos(),'Meal sold',[1,.72,.26]);
     refreshHUD();
     eventLog('Cook tutorial - sold Hearty Sandwich for '+COOK_TUTORIAL_MEAL_GOLD+' gold.');
     advanceCookTutorial('trade');
@@ -1709,10 +1729,7 @@ function updateBlacksmithTutorialTrader(now=performance.now()){
   const actor=ensureBlacksmithTutorialTrader(), p=blacksmithTutorialTraderPos();
   if(!actor||!p)return;
   const visible=jobTutorialActive&&jobTutorialJob==='blacksmith'&&dim==='job'&&jobTutorialBlacksmithStep>=2;
-  actor.grp.visible=visible;
-  if(!visible)return;
-  actor.grp.position.set(p.x,p.y+Math.sin(now*.002+(actor.phase||0))*.025,p.z);
-  actor.grp.rotation.y=Math.PI;
+  updateJobTutorialTraderActor(actor,p,visible,now);
 }
 function nearBlacksmithTutorialForge(range=4.6){
   const p=blacksmithTutorialForgePos();
@@ -1803,6 +1820,7 @@ function advanceBlacksmithTutorial(action){
   const lesson=blacksmithTutorialAction();
   eventLog('Blacksmith tutorial - '+lesson.title+': '+lesson.done);
   sysMsg('<b>Blacksmith lesson:</b> '+escHTML(lesson.done));
+  jobTutorialLessonMoment(lesson.title,blacksmithTutorialTargetPos(),[1,.44,.16],0xff8a3d);
   burst(player.pos.x,player.pos.y+1,player.pos.z,[1,.44,.16],26,2.3,2.0,.7);
   ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.1,0xff8a3d,.6);
   if(action==='craft')jobTutorialBlacksmithStep=1;
@@ -1863,6 +1881,7 @@ function tryBlacksmithTutorialAction(){
     jobContractProgress('sell',1,I.CHAIN_ARMOR);
     refreshHUD();
     SFX.coin&&SFX.coin();
+    reactJobTutorialTrader(tutorialBlacksmithTrader,blacksmithTutorialTraderPos(),'Armour sold',[1,.44,.16]);
     eventLog('Blacksmith tutorial - sold '+blacksmithRarityName(rarity)+' Chainmail Armor for '+BLACKSMITH_TUTORIAL_ARMOR_GOLD+' gold.');
     advanceBlacksmithTutorial('trade');
     sysMsg('<b>Tobin Forgehand:</b> Clean work. Here is <b>'+BLACKSMITH_TUTORIAL_ARMOR_GOLD+' gold</b>. Blacksmiths sell gear, repair equipment, and improve dungeon loot.');
@@ -1925,6 +1944,7 @@ function completeMonkTutorialFocus(){
   jobTutorialMonkStep=2;
   jobTutorialMonkStartedAt=0;
   gainJobXP('monk',8,'tutorial focus');
+  jobTutorialLessonMoment('Focus complete',monkTutorialFocusPos(),[.49,.83,.99],0x7dd3fc);
   burst(player.pos.x,player.pos.y+1,player.pos.z,[.49,.83,.99],28,2.8,2.2,.6);
   ringPulse(player.pos.x,player.pos.y+.06,player.pos.z,2.8,0x7dd3fc,.7);
   SFX.success&&SFX.success();
@@ -2086,6 +2106,22 @@ function jobTutorialSparkle(x,y,z,col,spread=.7,up=.55,life=.55){
   spawnParticle({x:x+(Math.random()-.5)*spread,y:y+Math.random()*.35,z:z+(Math.random()-.5)*spread,
     vx:(Math.random()-.5)*.18,vy:up+Math.random()*.45,vz:(Math.random()-.5)*.18,
     life:life+Math.random()*.25,grav:0,r:col[0],g:col[1],b:col[2],priority:1});
+}
+function jobTutorialLessonMoment(label,pos,col=[.9,.9,.9],ring=0x9ad26b){
+  const p=pos||{x:player.pos.x,y:player.pos.y+1,z:player.pos.z};
+  const x=Number(p.x)||player.pos.x, y=Number(p.y)||player.pos.y+1, z=Number(p.z)||player.pos.z;
+  burst(x,y+.35,z,col,28,2.7,2.7,.72);
+  ringPulse(x,Math.max(0,y-.88),z,2.25,ring,.58);
+  if(label)showName(label);
+}
+function jobTutorialColorArr(jobId){
+  if(jobId==='miner')return [.62,.68,.74];
+  if(jobId==='farmer')return [.53,.94,.67];
+  if(jobId==='cook')return [.98,.75,.14];
+  if(jobId==='blacksmith')return [.98,.57,.24];
+  if(jobId==='monk')return [.49,.83,.99];
+  if(jobId==='pet_tamer')return [.98,.66,.83];
+  return [.8,.95,1];
 }
 function tickJobTutorialAmbience(now,room){
   if(now<jobTutorialAmbienceNextAt||!room)return;
@@ -2544,6 +2580,7 @@ function tryMinerTutorialTrade(){
   rewardGain('gold',MINER_TUTORIAL_TRADE_GOLD,'Gold');
   gainJobXP('miner',10,'tutorial trade');
   SFX.coin&&SFX.coin();
+  reactJobTutorialTrader(tutorialMinerTrader,minerTutorialTraderPos(),'Trade accepted',[.35,.92,1]);
   refreshHUD();
   updateJobTutorialHud();
   eventLog('Miner tutorial - traded diamond for '+MINER_TUTORIAL_TRADE_GOLD+' gold.');
@@ -2620,6 +2657,7 @@ function tryFarmerTutorialTrade(){
   rewardGain('gold',FARMER_TUTORIAL_WHEAT_GOLD,'Gold');
   gainJobXP('farmer',8,'tutorial sale');
   SFX.coin&&SFX.coin();
+  reactJobTutorialTrader(tutorialFarmerTrader,farmerTutorialTraderPos(),'Wheat sold',[.53,.94,.67]);
   refreshHUD();
   eventLog('Farmer tutorial - sold wheat for '+FARMER_TUTORIAL_WHEAT_GOLD+' gold.');
   noteFarmerTutorialAction('trade');
@@ -2882,6 +2920,10 @@ function completeJobTutorial(){
   completeTownTutorialStep('job',{job:jobId});
   hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
   renderBars();
+  SFX.treasure&&SFX.treasure();
+  rewardGain('rare',1,job.name+' Lesson',{icon:'JOB',duration:3000});
+  burst(player.pos.x,player.pos.y+1,player.pos.z,jobTutorialColorArr(jobId),42,3.4,3.3,.85);
+  ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,3.2,0xffd24a,.8);
   sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> Keep an eye on the Next Best Action panel for useful work.');
   showJobTutorialCompletionReward(jobId);
   showName(job.name+' ready');

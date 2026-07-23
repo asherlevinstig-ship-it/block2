@@ -1500,6 +1500,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/completed\?'REPLAY':'BEGIN'/);
   assert.match(combat,/function startJobTutorial\(jobId\)/);
   assert.match(combat,/function tickJobTutorial\(now\)/);
+  assert.match(combat,/function jobTutorialLessonMoment\(label,pos,col=\[\.9,\.9,\.9\],ring=0x9ad26b\)/);
+  assert.match(combat,/function updateJobTutorialTraderActor\(actor,p,visible,now=performance\.now\(\),baseRot=Math\.PI\)/);
+  assert.match(combat,/function reactJobTutorialTrader\(actor,pos,label,col=\[1,\.82,\.28\]\)/);
+  assert.match(combat,/actor\.reactUntil=performance\.now\(\)\+1100/);
   assert.match(combat,/function tryMinerTutorialTrade\(\)/);
   assert.match(combat,/function performMinerTutorialStepForTest\(\)/);
   assert.match(combat,/function openPetTamerDragonTutorialUI\(\)/);
@@ -1509,6 +1513,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function resumeJobTutorial\(jobId,state=\{\}\)/);
   assert.match(combat,/addTemporaryJobTutorialTool\(I\.DIA_PICK\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='miner'&&m\.id===B\.DIAMOND_ORE/);
+  assert.match(combat,/jobTutorialLessonMoment\('Diamond found',\{x:m\.x\+\.5,y:m\.y\+1\.15,z:m\.z\+\.5\},\[\.35,\.92,1\],0x7dd3fc\)/);
   assert.match(combat,/jobTutorialSafeSpawnY\(jobId,room\.x\+\.5,room\.z\+14\.5,room\.G\+1\.035\)/);
   assert.match(combat,/function jobTutorialInitialYaw\(jobId, room, x, z\)/);
   assert.match(combat,/player\.yaw=jobTutorialInitialYaw\(jobId,room,player\.pos\.x,player\.pos\.z\)/);
@@ -1522,6 +1527,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function updateFarmerTutorialTrader\(now=performance\.now\(\)\)/);
   assert.match(combat,/function farmerTutorialTargetPos\(\)/);
   assert.match(combat,/function noteFarmerTutorialAction\(action\)/);
+  assert.match(combat,/jobTutorialLessonMoment\(lesson\.title,farmerTutorialTargetPos\(\),\[\.53,\.94,\.67\],0x86efac\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&isJobTutorialMeadowLand\('farmer',hit\.x,hit\.z,2\)/);
   assert.match(combat,/noteFarmerTutorialAction\('till'\)/);
   assert.match(combat,/noteFarmerTutorialAction\('plant'\)/);
@@ -1534,6 +1540,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function cookTutorialTargetPos\(\)/);
   assert.match(combat,/function updateCookTutorialTimer\(now=performance\.now\(\)\)/);
   assert.match(combat,/function nearbyCookTutorialTrader\(range=4\.2\)/);
+  assert.match(combat,/jobTutorialLessonMoment\(lesson\.title,cookTutorialTargetPos\(\),\[1,\.72,\.26\],0xffd45a\)/);
+  assert.match(combat,/reactJobTutorialTrader\(tutorialCookTrader,cookTutorialTraderPos\(\),'Meal sold',\[1,\.72,\.26\]\)/);
   assert.match(combat,/Pippa Hearth/);
   assert.match(combat,/get jobTutorialCookStep\(\)\{ return jobTutorialCookStep; \}/);
   assert.match(frame,/cookTutorialAction:\(\)=>combatApi\.performCookTutorialStepForTest/);
@@ -1544,6 +1552,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function updateMonkTutorialFocus\(now=performance\.now\(\)\)/);
   assert.match(combat,/function performMonkTutorialStepForTest\(\)/);
   assert.match(combat,/function startMonkTutorialFocusForTest\(\)/);
+  assert.match(combat,/jobTutorialLessonMoment\('Focus complete',monkTutorialFocusPos\(\),\[\.49,\.83,\.99\],0x7dd3fc\)/);
   assert.match(combat,/FINISH FOCUS/);
   assert.match(frame,/minerTutorialAction:\(\)=>combatApi\.performMinerTutorialStepForTest/);
   assert.match(frame,/monkTutorialAction:\(\)=>combatApi\.performMonkTutorialStepForTest/);
@@ -1613,6 +1622,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/Press B at the roost station/);
   assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
   assert.match(combat,/setTimeout\(\(\)=>\{ if\(jobTutorialActive&&jobTutorialJob==='pet_tamer'\) completeJobTutorial\(\); \}, 900\)/);
+  assert.match(combat,/rewardGain\('rare',1,job\.name\+' Lesson',\{icon:'JOB',duration:3000\}\)/);
+  assert.match(combat,/burst\(player\.pos\.x,player\.pos\.y\+1,player\.pos\.z,jobTutorialColorArr\(jobId\),42,3\.4,3\.3,\.85\)/);
   assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
   assert.match(combat,/WHAT KIND OF HERO DO YOU WANT TO PRACTICE\?/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
