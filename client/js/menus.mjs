@@ -1219,6 +1219,7 @@ function renderUI(){
 const SFX=(()=>{
   const MASTER_VOLUME=.18;
   const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08, FOREST_MUSIC_VOLUME=.075, BATTLE_MUSIC_VOLUME=.095;
+  const TUTORIAL_MUSIC_VOLUME=.055, TUTORIAL_COOK_VOLUME=.06, TUTORIAL_FORGE_VOLUME=.052, TUTORIAL_MONK_VOLUME=.05;
   const MUSIC_FADE_IN=1.8, MUSIC_FADE_OUT=5.5, MUSIC_SILENCE=.002;
   let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null, forestMusic=null, battleMusic=null;
   let activeMusicMode='none';
@@ -1233,9 +1234,18 @@ const SFX=(()=>{
     }).catch(()=>{});
     return audio;
   }
-  function nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle){
+  function tutorialMusicMode(job){
+    if(job==='cook')return 'tutorial_cook';
+    if(job==='blacksmith')return 'tutorial_blacksmith';
+    if(job==='monk')return 'tutorial_monk';
+    if(job==='miner'||job==='farmer'||job==='pet_tamer')return 'tutorial_forest';
+    return '';
+  }
+  function nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob=''){
     if(muted||inCutscene)return 'none';
     if(inMenu)return 'menu';
+    const tutorial=tutorialMusicMode(tutorialJob);
+    if(tutorial)return tutorial;
     if(inTavern)return 'tavern';
     if(inBattle)return 'battle';
     if(inTown)return 'town';
@@ -1369,18 +1379,31 @@ function noise(dur,vol,fc,q,delay,type){
     whine(){ osc('sine',540,780,.13,.08); osc('sine',780,430,.16,.07,.11); },
     whisper(){ noise(.5,.07,1700,1.5,0,'bandpass'); osc('sine',170,120,.5,.04); },
     portal(){ noise(.6,.4,520,1.5); osc('sine',200,700,.6,.25); },
-    tick(dt, fireD, nightF, outdoor, inTown, inTavern, inMenu, inCutscene, inBattle=false){
+    debugMusic(){
+      return {
+        activeMusicMode,
+        muted,
+        volumes:{
+          menu:menuMusic?menuMusic.volume:0,
+          town:townMusic?townMusic.volume:0,
+          tavern:tavernMusic?tavernMusic.volume:0,
+          forest:forestMusic?forestMusic.volume:0,
+          battle:battleMusic?battleMusic.volume:0,
+        },
+      };
+    },
+    tick(dt, fireD, nightF, outdoor, inTown, inTavern, inMenu, inCutscene, inBattle=false, tutorialJob=''){
       if(!ctx) return;
       const ft=Math.max(0, 1-fireD/9)*.4;
       fireVol+= (ft-fireVol)*Math.min(1,dt*4);
       const rl=typeof weatherLerp==='number'?weatherLerp:0;                 // world.mjs weather intensity
       windGain.gain.value=muted?0:(outdoor? .014+gDayF*.008+rl*.02 : .003); // storms gust harder
       if(rainGain)rainGain.gain.value=muted||!outdoor?0:rl*.05;
-      activeMusicMode=nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle);
-      updateMusicTrack(menuMusic, activeMusicMode==='menu', MENU_MUSIC_VOLUME, dt);
-      updateMusicTrack(townMusic, activeMusicMode==='town', TOWN_MUSIC_VOLUME, dt);
-      updateMusicTrack(tavernMusic, activeMusicMode==='tavern', TAVERN_MUSIC_VOLUME, dt);
-      updateMusicTrack(forestMusic, activeMusicMode==='forest', FOREST_MUSIC_VOLUME, dt);
+      activeMusicMode=nextMusicMode(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob);
+      updateMusicTrack(menuMusic, activeMusicMode==='menu'||activeMusicMode==='tutorial_monk', activeMusicMode==='tutorial_monk'?TUTORIAL_MONK_VOLUME:MENU_MUSIC_VOLUME, dt);
+      updateMusicTrack(townMusic, activeMusicMode==='town'||activeMusicMode==='tutorial_blacksmith', activeMusicMode==='tutorial_blacksmith'?TUTORIAL_FORGE_VOLUME:TOWN_MUSIC_VOLUME, dt);
+      updateMusicTrack(tavernMusic, activeMusicMode==='tavern'||activeMusicMode==='tutorial_cook', activeMusicMode==='tutorial_cook'?TUTORIAL_COOK_VOLUME:TAVERN_MUSIC_VOLUME, dt);
+      updateMusicTrack(forestMusic, activeMusicMode==='forest'||activeMusicMode==='tutorial_forest', activeMusicMode==='tutorial_forest'?TUTORIAL_MUSIC_VOLUME:FOREST_MUSIC_VOLUME, dt);
       updateMusicTrack(battleMusic, activeMusicMode==='battle', BATTLE_MUSIC_VOLUME, dt);
       if(!muted && fireVol>.04){
         popT-=dt;

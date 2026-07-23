@@ -121,14 +121,15 @@ test('client performance diagnostics separates update and render timing', async 
 
 test('client soundtrack manager selects one exclusive music mode', () => {
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
-  assert.match(menus, /function nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle\)/);
-  assert.match(menus, /if\(muted\|\|inCutscene\)return 'none';\s*if\(inMenu\)return 'menu';\s*if\(inTavern\)return 'tavern';\s*if\(inBattle\)return 'battle';\s*if\(inTown\)return 'town';\s*if\(outdoor\)return 'forest';/);
-  assert.match(menus, /activeMusicMode=nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle\);/);
-  assert.match(menus, /updateMusicTrack\(menuMusic, activeMusicMode==='menu'/);
-  assert.match(menus, /updateMusicTrack\(townMusic, activeMusicMode==='town'/);
-  assert.match(menus, /updateMusicTrack\(tavernMusic, activeMusicMode==='tavern'/);
+  assert.match(menus, /function tutorialMusicMode\(job\)/);
+  assert.match(menus, /function nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob=''\)/);
+  assert.match(menus, /const tutorial=tutorialMusicMode\(tutorialJob\);\s*if\(tutorial\)return tutorial;/);
+  assert.match(menus, /activeMusicMode=nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob\);/);
+  assert.match(menus, /updateMusicTrack\(menuMusic, activeMusicMode==='menu'\|\|activeMusicMode==='tutorial_monk'/);
+  assert.match(menus, /updateMusicTrack\(townMusic, activeMusicMode==='town'\|\|activeMusicMode==='tutorial_blacksmith'/);
+  assert.match(menus, /updateMusicTrack\(tavernMusic, activeMusicMode==='tavern'\|\|activeMusicMode==='tutorial_cook'/);
   assert.match(menus, /forestMusic=createMusic\('audio\/ancientforest\.mp3'\);/);
-  assert.match(menus, /updateMusicTrack\(forestMusic, activeMusicMode==='forest'/);
+  assert.match(menus, /updateMusicTrack\(forestMusic, activeMusicMode==='forest'\|\|activeMusicMode==='tutorial_forest'/);
   assert.match(menus, /battleMusic=createMusic\('audio\/battle\.mp3'\);/);
   assert.match(menus, /updateMusicTrack\(battleMusic, activeMusicMode==='battle'/);
   assert.match(menus, /if\(!active&&audio\.volume<MUSIC_SILENCE\)/);
@@ -425,7 +426,8 @@ test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => 
   assert.match(world, /if\(m\.ref&&\(m\.ref\.dgn\|\|''\)\)return false;/);
   assert.match(world, /BATTLE_MUSIC_STATES\.has\(state\)/);
   assert.match(world, /inOverworldBattle,/);
-  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\)\);/);
+  assert.match(frame, /const tutorialJob=dim==='job'&&combatState\.jobTutorialActive \? combatState\.jobTutorialJob : '';/);
+  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob\);/);
 });
 
 test('client renders Deity power effects and stealth shimmer states', () => {

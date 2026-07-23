@@ -2030,7 +2030,8 @@ function tick(now){
     }
     const inTown=dim==='overworld' && isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
     const inMenu=overlay && !overlay.classList.contains('hidden');
-    SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle());
+    const tutorialJob=dim==='job'&&combatState.jobTutorialActive ? combatState.jobTutorialJob : '';
+    SFX.tick(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern(), inMenu, !!cutscene, worldApi.inOverworldBattle(), tutorialJob);
   }
   tickGates(dt, now);
   tickAbilities(dt, now/1000);
