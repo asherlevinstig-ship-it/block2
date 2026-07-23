@@ -1664,6 +1664,14 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/Guided floor route: entry path -> blue focus circle -> return pillar/);
   assert.match(world,/setBlock\(cx\+ox,G,cz\+oz,B\.GLASS\)/);
   assert.match(world,/box\(cx-4,G,cz-15,cx\+4,G,cz-13,B\.WATER\)/);
+  assert.match(combat,/function jobTutorialDrift\(x,y,z,col,spread=\.8,up=\.25,life=1\.0,grav=-\.05\)/);
+  assert.match(combat,/function jobTutorialFallingParticle\(x,y,z,col,spread=\.5,life=\.9\)/);
+  assert.match(combat,/jobTutorialFallingParticle\(cx-10\+Math\.random\(\)\*20,G\+6\.7,cz-12\+Math\.random\(\)\*31,\[\.55,\.61,\.68\]/);
+  assert.match(combat,/jobTutorialDrift\(cx-3\+Math\.random\(\)\*18,G\+1\.25,cz-12\+Math\.random\(\)\*12,\[\.82,1,\.55\]/);
+  assert.match(combat,/jobTutorialDrift\(cx\+heat\[0\]\+\.5,G\+2\.25,cz\+heat\[1\]\+\.5,\[\.94,\.9,\.78\]/);
+  assert.match(combat,/jobTutorialDrift\(forge\.x\+\.4,G\+2\.15,forge\.z,\[\.32,\.27,\.23\]/);
+  assert.match(combat,/jobTutorialMonkStep===1&&Math\.random\(\)<\.28/);
+  assert.match(combat,/flatDiscVfx\(cx\+8\.5\+\(Math\.random\(\)-\.5\)\*9,G\+\.06,cz\+8\.5\+\(Math\.random\(\)-\.5\)\*7,0x14532d/);
   assert.match(world,/const dragonLandingPad=\(ox,oz\)=>/);
   assert.match(world,/for\(let y=G\+1;y<=G\+7;y\+\+\)setBlock\(x\+dx,y,z\+dz,B\.AIR\)/);
   assert.match(world,/dragonLandingPad\(9,8\)/);

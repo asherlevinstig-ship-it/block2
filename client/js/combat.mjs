@@ -2215,6 +2215,16 @@ function jobTutorialSparkle(x,y,z,col,spread=.7,up=.55,life=.55){
     vx:(Math.random()-.5)*.18,vy:up+Math.random()*.45,vz:(Math.random()-.5)*.18,
     life:life+Math.random()*.25,grav:0,r:col[0],g:col[1],b:col[2],priority:1});
 }
+function jobTutorialDrift(x,y,z,col,spread=.8,up=.25,life=1.0,grav=-.05){
+  spawnParticle({x:x+(Math.random()-.5)*spread,y:y+Math.random()*.25,z:z+(Math.random()-.5)*spread,
+    vx:(Math.random()-.5)*.14,vy:up+Math.random()*.22,vz:(Math.random()-.5)*.14,
+    life:life+Math.random()*.45,grav,r:col[0],g:col[1],b:col[2],priority:1});
+}
+function jobTutorialFallingParticle(x,y,z,col,spread=.5,life=.9){
+  spawnParticle({x:x+(Math.random()-.5)*spread,y,z:z+(Math.random()-.5)*spread,
+    vx:(Math.random()-.5)*.06,vy:-.08-Math.random()*.18,vz:(Math.random()-.5)*.06,
+    life:life+Math.random()*.35,grav:.18,r:col[0],g:col[1],b:col[2],priority:1});
+}
 function jobTutorialLessonMoment(label,pos,col=[.9,.9,.9],ring=0x9ad26b){
   const p=pos||{x:player.pos.x,y:player.pos.y+1,z:player.pos.z};
   const x=Number(p.x)||player.pos.x, y=Number(p.y)||player.pos.y+1, z=Number(p.z)||player.pos.z;
@@ -2240,29 +2250,41 @@ function tickJobTutorialAmbience(now,room){
     jobTutorialSparkle(cx+seam[0]+.5,G+2.2+Math.random()*1.2,cz+seam[1]+.5,[.38,.95,1],.8,.24,.7);
     if(Math.random()<.32)burst(cx+(Math.random()-.5)*14,G+5.9,cz-4+Math.random()*20,[.35,.35,.36],3,.45,.12,.55,1);
     if(Math.random()<.18)ringPulse(cx+.5,G+.08,cz+7.5,1.1,0x7dd3fc,.28);
+    if(Math.random()<.22)jobTutorialFallingParticle(cx-10+Math.random()*20,G+6.7,cz-12+Math.random()*31,[.55,.61,.68],.35,1.1);
+    if(Math.random()<.16)jobTutorialSparkle(cx-13.5+Math.random()*27,G+1.35,cz-6+Math.random()*23,[.45,.68,.95],.45,.08,.55);
   }else if(job==='farmer'){
     const patch=jobTutorialFarmerStep<2?[-9,-8]:(jobTutorialFarmerStep<3?[10,-8]:[1,8]);
     jobTutorialSparkle(cx+patch[0]+(Math.random()-.5)*5,G+1.05,cz+patch[1]+(Math.random()-.5)*4,[.52,.94,.4],1.2,.35,.75);
     if(Math.random()<.28)flatDiscVfx(cx-8+Math.random()*3-1.5,G+.07,cz+7+Math.random()*3-1.5,0x86efac,.35,.32,Math.PI/2);
+    if(Math.random()<.3)jobTutorialDrift(cx-3+Math.random()*18,G+1.25,cz-12+Math.random()*12,[.82,1,.55],1.1,.18,1.1,-.02);
+    if(Math.random()<.18)jobTutorialSparkle(cx+12+Math.random()*5,G+1.25,cz-8+(Math.random()-.5)*5,[.72,1,.66],.9,.18,.85);
   }else if(job==='cook'){
     const heat=jobTutorialCookStep>=1?[0,4]:[-8,-2];
     jobTutorialSparkle(cx+heat[0]+.5,G+1.55,cz+heat[1]+.5,[1,.68,.28],.55,.72,.55);
     if(Math.random()<.45)jobTutorialSparkle(cx+heat[0]+.5,G+2.05,cz+heat[1]+.5,[.92,.9,.78],.8,.85,.85);
     if(jobTutorialCookStep===2&&Math.random()<.22)ringPulse(cx+.5,G+1.08,cz+4.5,.7,0xffd45a,.25);
+    if(Math.random()<.3)jobTutorialDrift(cx+heat[0]+.5,G+2.25,cz+heat[1]+.5,[.94,.9,.78],.55,.34,1.15,-.12);
+    if(Math.random()<.18)jobTutorialSparkle(cx+9+Math.random()*4,G+1.4,cz+11+Math.random()*3,[1,.82,.38],.75,.18,.7);
   }else if(job==='blacksmith'){
     const forge=blacksmithTutorialForgePos()||{x:cx+.5,y:G+1,z:cz+1.5};
     jobTutorialSparkle(forge.x,G+1.35,forge.z,[1,.34,.08],.75,1.0,.45);
     if(Math.random()<.35)burst(forge.x,G+1.2,forge.z,[1,.48,.12],4,1.15,1.5,.38,1);
     if(Math.random()<.18)ringPulse(forge.x,G+.08,forge.z,1.05,0xff8a3d,.25);
+    if(Math.random()<.26)jobTutorialDrift(forge.x+.4,G+2.15,forge.z,[.32,.27,.23],.65,.32,1.25,-.05);
+    if(Math.random()<.2)jobTutorialSparkle(cx+8+Math.random()*4,G+2.05,cz+2,[1,.7,.22],.7,.24,.55);
   }else if(job==='monk'){
     const a=Math.random()*Math.PI*2,r=1.8+Math.random()*7.5,x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
     jobTutorialSparkle(x,G+1.1+Math.random()*1.1,z,[.55,.86,1],.45,.28,1.15);
     if(Math.random()<.3)ringPulse(cx+.5,G+.08,cz+.5,1.7+Math.random()*4.4,0x7dd3fc,.45);
+    if(Math.random()<.24)jobTutorialDrift(cx+Math.cos(a)*(r*.6),G+1.6,cz+Math.sin(a)*(r*.6),[.68,.92,1],.35,.12,1.4,-.02);
+    if(jobTutorialMonkStep===1&&Math.random()<.28)ringPulse(cx+.5,G+.1,cz+.5,.9+Math.random()*1.4,0xa7f3d0,.38);
   }else if(job==='pet_tamer'){
     const dragon=petTamerPracticeDragonPos();
     if(dragon)jobTutorialSparkle(dragon.x,dragon.y+1.8,dragon.z,[.58,1,.42],1.6,.35,.8);
     if(Math.random()<.3)jobTutorialSparkle(cx+8.5,G+6.2,cz-5.5,[.52,.94,1],2.4,.25,.95);
     if(Math.random()<.2)ringPulse(cx+8.5,G+6.2,cz-5.5,2.2,0x9ad26b,.35);
+    if(Math.random()<.22)flatDiscVfx(cx+8.5+(Math.random()-.5)*9,G+.06,cz+8.5+(Math.random()-.5)*7,0x14532d,.55,.42,Math.PI/2);
+    if(Math.random()<.18)jobTutorialSparkle(cx-6+Math.random()*28,G+4.5+Math.random()*5,cz-18+Math.random()*22,[.72,1,.82],1.8,.08,1.05);
   }
 }
 function nearPetTamerPracticeInsulator(range=5.0){
