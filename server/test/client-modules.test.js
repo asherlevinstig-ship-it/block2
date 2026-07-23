@@ -1615,9 +1615,12 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/MONK_TUTORIAL_FOCUS_MS=5000/);
   assert.match(combat,/function tryMonkTutorialAction\(\)/);
   assert.match(combat,/function updateMonkTutorialFocus\(now=performance\.now\(\)\)/);
+  assert.match(combat,/function updateMonkTutorialStationGuide\(now=performance\.now\(\)\)/);
   assert.match(combat,/function drawMonkTutorialTimer\(canvas, seconds=0, done=false, progress=0\)/);
   assert.match(combat,/FOCUS TIMER/);
   assert.match(combat,/Focus Restored/);
+  assert.match(combat,/FOCUS CIRCLE/);
+  assert.match(combat,/RESTORE COMPLETE/);
   assert.match(combat,/blue focus circle/);
   assert.match(combat,/function performMonkTutorialStepForTest\(\)/);
   assert.match(combat,/function startMonkTutorialFocusForTest\(\)/);
@@ -1733,8 +1736,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/Guided floor route: forge mat -> blue quality bench -> Tobin counter -> return pillar/);
   assert.match(world,/for\(let x=cx\+4;x<=cx\+9;x\+\+\)for\(let z=cz\+4;z<=cz\+7;z\+\+\)setBlock\(x,G,z,B\.GLASS\)/);
   assert.match(world,/setBlock\(cx\+9,G\+1,cz\+13,B\.LANTERN\)/);
-  assert.match(world,/Guided floor route: entry path -> blue focus circle -> return pillar/);
+  assert.match(world,/Guided floor route: entry path -> blue focus circle -> restore dais -> return pillar/);
   assert.match(world,/setBlock\(cx\+ox,G,cz\+oz,B\.GLASS\)/);
+  assert.match(world,/for\(let x=cx-4;x<=cx\+4;x\+\+\)for\(let z=cz\+6;z<=cz\+11;z\+\+\)/);
   assert.match(world,/box\(cx-4,G,cz-15,cx\+4,G,cz-13,B\.WATER\)/);
   assert.match(combat,/function jobTutorialDrift\(x,y,z,col,spread=\.8,up=\.25,life=1\.0,grav=-\.05\)/);
   assert.match(combat,/function jobTutorialFallingParticle\(x,y,z,col,spread=\.5,life=\.9\)/);

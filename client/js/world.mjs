@@ -1321,13 +1321,19 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
       clear(x,z,G+8);
       for(let y=G-2;y<G;y++)setBlock(x,y,z,B.DIRT);
     }
-    // Guided floor route: entry path -> blue focus circle -> return pillar.
+    // Guided floor route: entry path -> blue focus circle -> restore dais -> return pillar.
     for(let z=cz+14;z>=cz;z--)for(let x=cx-2;x<=cx+2;x++)setBlock(x,G,z,z%2?B.COBBLE:B.GLASS);
     for(let z=cz;z<=cz+23;z++)for(let x=cx-1;x<=cx+1;x++)setBlock(x,G,z,z>cz+17?B.COBBLE:B.GLASS);
+    for(let z=cz;z<=cz+23;z+=4){setBlock(cx-3,G+1,z,B.LANTERN);setBlock(cx+3,G+1,z,B.LANTERN);}
     for(let x=cx-5;x<=cx+5;x++)for(let z=cz-5;z<=cz+5;z++){
       const d=Math.hypot(x-cx,z-cz);
-      if(d<=5)setBlock(x,G,z,d>=4.1?B.GLASS:(d<=1.6?B.SAND:B.GRASS));
+      if(d<=5)setBlock(x,G,z,d>=4.1?B.GLASS:(d<=1.6?B.SAND:(d>=3.2?B.COBBLE:B.GRASS)));
     }
+    for(let x=cx-4;x<=cx+4;x++)for(let z=cz+6;z<=cz+11;z++){
+      const d=Math.hypot(x-cx,z-(cz+8.5));
+      if(d<=4.2)setBlock(x,G,z,d>3.2?B.GLASS:B.SAND);
+    }
+    for(const [ox,oz] of [[-4,8],[4,8],[0,5],[0,12]]){setBlock(cx+ox,G+1,cz+oz,B.LANTERN);setBlock(cx+ox,G+2,cz+oz,B.GLASS);}
     for(let r=7;r<=16;r+=3)for(let a=0;a<Math.PI*2;a+=Math.PI/16){
       const x=Math.round(cx+Math.cos(a)*r),z=Math.round(cz+Math.sin(a)*r);
       if(Math.hypot(x-cx,z-cz)>=5.7)setBlock(x,G,z,r%2?B.COBBLE:B.SAND);

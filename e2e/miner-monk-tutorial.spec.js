@@ -166,27 +166,27 @@ test('monk tutorial persists through reload and completes the timed focus loop',
   test.setTimeout(90_000);
   await registerReadyHunter(page, 'monk_audit', 'MonkAudit');
   await chooseJob(page, 'monk');
-  await expect(page.locator('#tutorialhud')).toContainText('START FOCUS');
+  await expect(page.locator('#tutorialhud')).toContainText('FOCUS CIRCLE');
 
   await reloadAndExpectJobRoom(page, 'monk');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialVisualDebug()))
-    .toMatchObject({ active: true, job: 'monk', step: 0 });
+    .toMatchObject({ active: true, job: 'monk', step: 0, stationGuide: { exists: true, visible: true, count: 4 } });
 
   const started = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialStartFocus());
-  expect(started).toMatchObject({ ok: true, done: false, debug: { step: 1, near: true, timerVisible: true } });
+  expect(started).toMatchObject({ ok: true, done: false, debug: { step: 1, near: true, timerVisible: true, stationGuide: { exists: true, visible: true, count: 4 } } });
   await expect(page.locator('#tutorialhud')).toContainText('HOLD STILL');
 
   await reloadAndExpectJobRoom(page, 'monk');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialVisualDebug()))
-    .toMatchObject({ active: true, job: 'monk', step: 0 });
-  await expect(page.locator('#tutorialhud')).toContainText('START FOCUS');
+    .toMatchObject({ active: true, job: 'monk', step: 0, stationGuide: { exists: true, visible: true, count: 4 } });
+  await expect(page.locator('#tutorialhud')).toContainText('FOCUS CIRCLE');
 
   const restarted = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialAction());
   expect(restarted).toMatchObject({ ok: true, done: true, debug: { step: 2 } });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialVisualDebug().step), {
     timeout: 8_000,
   }).toBe(2);
-  await expect(page.locator('#tutorialhud')).toContainText('RETURN PILLAR');
+  await expect(page.locator('#tutorialhud')).toContainText('RESTORE COMPLETE');
 
   await returnFromJobTutorial(page, 'monkTutorialVisualDebug');
   await expectStarterContract(page, { job: 'monk', type: 'meditate', have: 0 });

@@ -814,7 +814,7 @@ const JOB_CHOICE_PROFILES=Object.freeze({
   pet_tamer:{recommended:'Recommended for pet lovers, dragon riders, and companion trainers.',preview:'DRAGON BOND'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialMinerStationGuide=null, tutorialFarmerStationGuide=null, tutorialCookStationGuide=null, tutorialBlacksmithStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialMinerStationGuide=null, tutorialFarmerStationGuide=null, tutorialCookStationGuide=null, tutorialBlacksmithStationGuide=null, tutorialMonkStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 let jobTutorialAmbienceNextAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
@@ -2192,6 +2192,14 @@ function monkTutorialFocusPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
   return room?{x:room.x,y:room.G+1.035,z:room.z}:null;
 }
+function monkTutorialRestorePos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
+  return room?{x:room.x,y:room.G+1.035,z:room.z+8.5}:null;
+}
+function monkTutorialExitPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
+  return room?{x:room.x,y:room.G+1,z:room.z+23}:null;
+}
 function nearMonkTutorialFocus(range=5.4){
   const p=monkTutorialFocusPos();
   if(!p||!jobTutorialActive||jobTutorialJob!=='monk'||dim!=='job'||!player)return null;
@@ -2207,10 +2215,50 @@ function monkTutorialProgressLabel(){
 function monkTutorialTargetPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.monk;
   if(!room)return null;
-  return jobTutorialMonkStep>=2?{x:room.x,y:room.G+1.035,z:room.z+23}:monkTutorialFocusPos();
+  return jobTutorialMonkStep>=2?monkTutorialExitPos():monkTutorialFocusPos();
 }
 function monkTutorialRemainingMs(){
   return Math.max(0,jobTutorialMonkStartedAt+MONK_TUTORIAL_FOCUS_MS-Date.now());
+}
+function ensureMonkTutorialStationGuide(){
+  if(tutorialMonkStationGuide)return tutorialMonkStationGuide;
+  const group=new THREE.Group();
+  const specs=[
+    {step:0,label:'1 FOCUS',color:'#7dd3fc',pos:monkTutorialFocusPos},
+    {step:1,label:'2 HOLD',color:'#bae6fd',pos:monkTutorialFocusPos},
+    {step:2,label:'3 RESTORE',color:'#a7f3d0',pos:monkTutorialRestorePos},
+    {step:3,label:'EXIT',color:'#9ad26b',pos:monkTutorialExitPos},
+  ];
+  for(const spec of specs){
+    const sprite=makeJobTutorialStationSprite(spec.label,spec.color);
+    sprite.userData=spec;
+    group.add(sprite);
+  }
+  group.visible=false;
+  scene.add(group);
+  tutorialMonkStationGuide=group;
+  return group;
+}
+function hideMonkTutorialStationGuide(){
+  if(tutorialMonkStationGuide)tutorialMonkStationGuide.visible=false;
+}
+function updateMonkTutorialStationGuide(now=performance.now()){
+  const group=ensureMonkTutorialStationGuide();
+  const visible=!!(jobTutorialActive&&jobTutorialJob==='monk'&&dim==='job');
+  group.visible=visible;
+  if(!visible)return;
+  const current=jobTutorialMonkStep>=2?3:(jobTutorialMonkStep===1?1:0);
+  for(const sprite of group.children){
+    const spec=sprite.userData||{}, p=typeof spec.pos==='function'?spec.pos():null;
+    if(!p){sprite.visible=false;continue;}
+    const step=spec.step|0, active=step===current, complete=step<current;
+    sprite.visible=active||complete||step===current+1;
+    if(!sprite.visible)continue;
+    sprite.position.set(p.x,p.y+(active?2.82:2.42)+Math.sin(now*.004+(step||0))*.055,p.z);
+    sprite.material.opacity=active?.98:(complete?.58:.44);
+    const base=active?1.16:1;
+    sprite.scale.set((step===2?3.35:2.9)*base,1.3*base,1);
+  }
 }
 function drawMonkTutorialTimer(canvas, seconds=0, done=false, progress=0){
   const ctx=canvas.getContext('2d'), w=canvas.width||208, h=canvas.height||76, p=Math.max(0,Math.min(1,done?1:progress||0));
@@ -2292,6 +2340,7 @@ function completeMonkTutorialFocus(){
   sysMsg('<b>Monk lesson:</b> Focus complete. In the real Meditation Hall, this restores mana and stamina. At E-Rank Level 4, completed focus sessions can slowly grow your mana pool.');
   updateJobTutorialHud();
   updateMonkTutorialTimer();
+  updateMonkTutorialStationGuide();
   sendProfileSaveNow();
   sendJobTutorialProgressNow();
   return true;
@@ -2344,6 +2393,7 @@ function tryMonkTutorialAction(){
   return true;
 }
 function monkTutorialVisualDebug(){
+  const guide=tutorialMonkStationGuide;
   return {
     active:!!jobTutorialActive,
     job:jobTutorialJob,
@@ -2354,6 +2404,7 @@ function monkTutorialVisualDebug(){
     remainingMs:monkTutorialRemainingMs(),
     near:!!nearMonkTutorialFocus(5.8),
     timerVisible:!!(tutorialMonkTimer&&tutorialMonkTimer.visible),
+    stationGuide:guide?{exists:true,visible:!!guide.visible,count:guide.children.length}: {exists:false},
   };
 }
 function performMonkTutorialStepForTest(){
@@ -3257,10 +3308,10 @@ function updateJobTutorialHud(){
     const action=monkTutorialAction();
     const left=Math.ceil(monkTutorialRemainingMs()/1000);
     copy=jobTutorialMonkStep>=2
-      ? {key:'RETURN PILLAR',text:'You held focus, restored your resources, and learned the Monk support loop.',sub:'Walk into the blue return pillar to go back to town.'}
+      ? {key:'RESTORE COMPLETE',text:'The focus wave restored your resources. Follow station EXIT back to town.',sub:'At E-Rank Level 4, real Meditation Hall focus can slowly grow your mana pool without making players overpowered.'}
       : jobTutorialMonkStep===1
-        ? {key:'HOLD STILL',text:left>0?'Hold focus in the blue circle for '+left+' more seconds.':'Focus is ready. Press G or stay still to complete.',sub:'Watch the floating focus timer. Full Meditation Hall focus unlocks at E-Rank Level 4 and can grow your mana pool.'}
-        : {key:action.key,text:monkTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Monk loop: calm focus becomes restoration, support buffs, and long-term mana growth.'};
+        ? {key:'HOLD STILL',text:left>0?'Stay inside station 2 while the focus timer counts down: '+left+'s left.':'Focus is ready. Press G or stay still to complete.',sub:'Watch the floating timer. The Monk loop rewards patience, support, and calm timing.'}
+        : {key:'FOCUS CIRCLE',text:monkTutorialProgressLabel()+': '+action.purpose,sub:'Step onto station 1 and press G. Full Meditation Hall growth unlocks at E-Rank Level 4.'};
   }
   if(jobTutorialJob==='pet_tamer'){
     const action=petTamerTutorialAction();
@@ -3330,6 +3381,7 @@ function completeJobTutorial(){
   if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
   if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
   hideMinerTutorialStationGuide();
+  hideMonkTutorialStationGuide();
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   exitJobTutorialRoom();
@@ -3392,6 +3444,7 @@ function startJobTutorial(jobId){
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();
   updateBlacksmithTutorialTrader();
+  updateMonkTutorialStationGuide();
   updateJobTutorialHud();
   showName(job.name+' tutorial room');
   eventLog('Entered '+job.name+' tutorial room.');
@@ -3457,6 +3510,7 @@ function resumeJobTutorial(jobId,state={}){
   updateBlacksmithTutorialTrader();
   updateCookTutorialTimer();
   updateMonkTutorialTimer();
+  updateMonkTutorialStationGuide();
   updateJobTutorialHud();
   eventLog('Resumed '+job.name+' tutorial room.');
   sendProfileSaveNow();
@@ -3495,6 +3549,7 @@ function tickJobTutorial(now){
     hideFarmerTutorialStationGuide();
     hideCookTutorialStationGuide();
     hideBlacksmithTutorialStationGuide();
+    hideMonkTutorialStationGuide();
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
     return;
@@ -3512,6 +3567,7 @@ function tickJobTutorial(now){
   updateBlacksmithTutorialStationGuide(now);
   updateCookTutorialTimer(now);
   updateMonkTutorialTimer(now);
+  updateMonkTutorialStationGuide(now);
   updateMonkTutorialFocus(now);
   const target=jobTutorialBeaconTarget(jobTutorialJob,room);
   if(!target)return;
