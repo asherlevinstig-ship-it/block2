@@ -158,6 +158,23 @@ test('client celebrates the first completed job contract with clear next actions
   assert.match(styles, /\.first-shift-rewards/);
 });
 
+test('job tutorial completion presents a first real shift handoff', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+
+  assert.match(combat, /const JOB_TUTORIAL_FIRST_MISSIONS=Object\.freeze\(\{/);
+  assert.match(combat, /FIRST REAL SHIFT UNLOCKED/);
+  assert.match(combat, /OPEN JOB BOARD/);
+  assert.match(combat, /FOLLOW FIRST SHIFT/);
+  assert.match(combat, /openJobsUI\(jobId,mission\.title\)/);
+  assert.match(networking, /const starter=clampJobContract\(m&&m\.starterContract\)/);
+  assert.match(networking, /progressionFocus='first_profession_contract'/);
+  assert.match(networking, /First real .* shift ready/);
+  assert.match(styles, /\.job-tutorial-mission/);
+  assert.match(styles, /\.job-tutorial-actions/);
+});
+
 test('Town of Beginnings removes NPC cottages in favor of open districts', () => {
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
@@ -1664,7 +1681,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/Press B at the roost station/);
   assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
   assert.match(combat,/jobTutorialHandoff\(jobId\)/);
-  assert.match(combat,/Next town step/);
+  assert.match(combat,/Next Best Action/);
   assert.match(combat,/setTimeout\(\(\)=>\{ if\(jobTutorialActive&&jobTutorialJob==='pet_tamer'\) completeJobTutorial\(\); \}, 900\)/);
   assert.match(combat,/rewardGain\('rare',1,job\.name\+' Lesson',\{icon:'JOB',duration:3000\}\)/);
   assert.match(combat,/burst\(player\.pos\.x,player\.pos\.y\+1,player\.pos\.z,jobTutorialColorArr\(jobId\),42,3\.4,3\.3,\.85\)/);

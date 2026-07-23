@@ -7385,6 +7385,8 @@ test('job tutorial completion seeds one first real profession contract', () => {
       assert.equal(itemCount(prof, I.COAL) >= 1, true);
     }
     assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.job === job), true);
+    assert.equal(client.sent.some(e => e.type === 'questOutcome' && e.msg.reason === 'tutorial_complete' && e.msg.title === prof.jobContract.title), true);
+    assert.equal(client.sent.some(e => e.type === 'tutorialProgress' && e.msg.starterContract && e.msg.starterContract.job === job && e.msg.starterContract.difficultyLabel === 'First Real Shift'), true);
   }
 });
 

@@ -1081,7 +1081,23 @@ function netAttachRoom(room,name,client){
       refreshHUD(); refreshPlayUi();
     });
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
-    room.onMessage('tutorialProgress', m=>{if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);});
+    room.onMessage('tutorialProgress', m=>{
+      if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);
+      const starter=clampJobContract(m&&m.starterContract);
+      if(starter){
+        jobContract=starter;
+        if(starter.job&&starter.job!=='adventurer')playerJob=starter.job;
+        progressionFocus='first_profession_contract';
+        jobContractOffers=[];
+        jobContractOffersJob=starter.job||playerJob||'';
+        jobContractRefreshAt=0;
+        clearTownJobGuidance();
+        showName((starter.title||'First Real Shift')+' accepted');
+        eventFeed('[Job]','First real '+(((JOBS[starter.job]&&JOBS[starter.job].name)||starter.job||'job'))+' shift ready: '+String(starter.title||'Contract')+'.',{key:'job-tutorial-starter:'+String(starter.job||''),cooldown:0});
+        refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();
+        if(qOpen&&qMode==='management')openJobsUI(starter.job||playerJob||'');
+      }
+    });
     room.onMessage('firstPromotionAck', m=>{if(m&&m.ok)ONBOARD.setSeen(true);});
     room.onMessage('levelUp', m=>{showLevelUpReveal(m);eventFeed('[Progress]','You reached '+hunterRankLevelLabel(Math.max(1,(m&&m.level)|0))+'. Spend stat points with C.',{key:'level:'+((m&&m.level)|0),cooldown:0});});
     room.onMessage('rankUp', m=>{

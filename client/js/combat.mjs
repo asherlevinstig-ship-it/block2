@@ -2906,6 +2906,18 @@ function jobTutorialRewardText(jobId){
   if(handoff)return handoff.text;
   return 'You have finished this job lesson.';
 }
+const JOB_TUTORIAL_FIRST_MISSIONS=Object.freeze({
+  miner:{title:'First Quarry Shift',target:'Quarry Work',action:'Mine 8 useful blocks',kit:'Wooden Pickaxe'},
+  farmer:{title:'First Field Shift',target:'Farm Plots',action:'Till, plant, or harvest 3 times',kit:'Wooden Hoe + Wheat Seeds'},
+  cook:{title:'First Kitchen Order',target:'Tavern Kitchen',action:'Cook 1 food item',kit:'Wheat starter'},
+  blacksmith:{title:'First Forge Order',target:'Smithy',action:'Craft, smelt, repair, upgrade, or salvage 1 item',kit:'Iron, Stick, Planks'},
+  monk:{title:'First Quiet Vigil',target:'Meditation Hall',action:'Hold 30 seconds of focus',kit:'Support contract ready'},
+  pet_tamer:{title:'First Care Shift',target:'Dragon Roost',action:'Prepare or use 1 companion care item',kit:'Dragon Treat + Meat'},
+});
+function jobTutorialFirstMission(jobId){
+  const handoff=jobTutorialHandoff(jobId)||{};
+  return JOB_TUTORIAL_FIRST_MISSIONS[jobId]||{title:handoff.title||'First Real Shift',target:handoff.target||'Job Board',action:'Follow your first real job contract',kit:'Starter kit'};
+}
 function jobTutorialHandoff(jobId){
   const handoff=JOB_TUTORIAL_HANDOFFS[jobId]||null;
   if(!handoff)return null;
@@ -2921,30 +2933,45 @@ function jobTutorialHandoff(jobId){
 function showJobTutorialCompletionReward(jobId){
   if(!rewardWin||!rewardPanel)return false;
   const job=JOBS[jobId]||{name:'Job'};
-  const handoff=jobTutorialHandoff(jobId);
+  const mission=jobTutorialFirstMission(jobId);
   const rows=jobTutorialRewardRows(jobId).map(r=>typeof rewardLineHTML==='function'?rewardLineHTML(r):'<div class="rline"><span>'+escHTML(r.label)+'</span><b>'+escHTML(r.value)+'</b></div>').join('');
   rewardPanel.className='earned promotion job-tutorial-complete';
   rewardPanel.innerHTML=
     '<h2>'+escHTML(job.name).toUpperCase()+' LESSON COMPLETE</h2>'+
-    '<div class="rsub">JOB TUTORIAL FINISHED</div>'+
+    '<div class="rsub">FIRST REAL SHIFT UNLOCKED</div>'+
     '<div class="rewardloot">'+rows+'</div>'+
-    '<div class="rnote"><b>What this job is for:</b><br>'+escHTML(jobTutorialRewardText(jobId))+'</div>'+
-    (handoff?'<div class="rnote"><b>Next town step:</b><br>'+escHTML(handoff.title)+' - '+escHTML(handoff.target)+'</div>':'')+
-    '<button id="jobtutorialrewardclose">BACK TO TOWN</button>';
+    '<div class="job-tutorial-mission">'+
+      '<span><small>FIRST MISSION</small><b>'+escHTML(mission.title)+'</b></span>'+
+      '<span><small>WHERE</small><b>'+escHTML(mission.target)+'</b></span>'+
+      '<span><small>DO THIS</small><b>'+escHTML(mission.action)+'</b></span>'+
+      '<span><small>STARTER HELP</small><b>'+escHTML(mission.kit)+'</b></span>'+
+    '</div>'+
+    '<div class="rnote"><b>Why this matters:</b><br>'+escHTML(jobTutorialRewardText(jobId))+'</div>'+
+    '<div class="rnote first-shift-next"><b>Next Best Action:</b><br>Open the Job Board, check the active '+escHTML(job.name)+' contract, then follow the HUD marker to '+escHTML(mission.target)+'.</div>'+
+    '<div class="job-tutorial-actions">'+
+      '<button id="jobtutorialopenboard">OPEN JOB BOARD</button>'+
+      '<button id="jobtutorialfollow">FOLLOW FIRST SHIFT</button>'+
+      '<button id="jobtutorialrewardclose">CLOSE</button>'+
+    '</div>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
   rewardWin.style.pointerEvents='auto';
   rewardWin.style.zIndex='40';
-  const btn=document.getElementById('jobtutorialrewardclose');
-  if(btn)btn.onclick=()=>{
+  const closeReward=(relock=true)=>{
     rewardWin.classList.add('hidden');
     rewardWin.classList.remove('promotion-open');
     rewardWin.style.pointerEvents='';
     rewardWin.style.zIndex='';
-    lockFallback=true;
-    locked=true;
+    lockFallback=!!relock;
+    locked=!!relock;
     refreshPlayUi();
   };
+  const board=document.getElementById('jobtutorialopenboard');
+  if(board)board.onclick=()=>{closeReward(false);setTimeout(()=>openJobsUI(jobId,mission.title),NET&&NET.on&&(!jobContract||jobContract.job!==jobId)?250:0);};
+  const follow=document.getElementById('jobtutorialfollow');
+  if(follow)follow.onclick=()=>{closeReward(true);showName(mission.title);refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();};
+  const btn=document.getElementById('jobtutorialrewardclose');
+  if(btn)btn.onclick=()=>closeReward(true);
   return true;
 }
 function updateJobTutorialHud(){
@@ -3074,6 +3101,8 @@ function completeJobTutorial(){
   burst(player.pos.x,player.pos.y+1,player.pos.z,jobTutorialColorArr(jobId),42,3.4,3.3,.85);
   ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,3.2,0xffd24a,.8);
   const handoff=jobTutorialHandoff(jobId);
+  playerJob=jobId;
+  progressionFocus='first_profession_contract';
   sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> '+escHTML(handoff&&handoff.text||'Open the Job Board for your next useful town task.'));
   if(handoff)eventLog(handoff.event);
   showJobTutorialCompletionReward(jobId);

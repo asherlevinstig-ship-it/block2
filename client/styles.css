@@ -717,6 +717,13 @@
   .first-shift-rewards b{display:block!important;width:auto!important;text-align:center!important;color:#fff3c4!important;font-size:15px!important;line-height:1.25}
   .first-shift-next{padding:10px 12px;border:1px solid rgba(154,210,107,.28);border-radius:7px;background:rgba(154,210,107,.075)}
   .first-shift-actions .qbtn{min-width:160px}
+  .job-tutorial-mission{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0}
+  .job-tutorial-mission span{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid rgba(255,210,74,.2);border-radius:8px;background:linear-gradient(145deg,rgba(255,210,74,.08),rgba(5,14,25,.55));box-shadow:inset 0 0 16px rgba(255,210,74,.045)}
+  .job-tutorial-mission small{color:#8fd8ff;font-size:8px;letter-spacing:1.6px;text-transform:uppercase}
+  .job-tutorial-mission b{width:auto!important;text-align:left!important;color:#fff3c4!important;font-size:12px!important;line-height:1.25}
+  .job-tutorial-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .job-tutorial-actions button{min-width:160px;border:1px solid rgba(255,210,74,.72);border-radius:6px;background:#684611;color:#ffe39a;padding:10px 14px;font-family:inherit;font-weight:bold;letter-spacing:2px;cursor:pointer}
+  .job-tutorial-actions button:hover{border-color:#fff0a8;box-shadow:0 0 16px rgba(255,210,74,.22)}
   .shoprow b{color:#ffd24a;width:48px;text-align:right}
   #qpanel.commerce .shoprow b,#qpanel.management .shoprow b{width:auto}
   #qpanel.management .shoprow .utility-icon{width:30px;text-align:center}
@@ -1267,7 +1274,7 @@
     #qpanel.management .shoprow.job-offer-card .qbtn{grid-column:1;justify-self:start}
     .job-offer-loop,.job-offer-rewards{grid-template-columns:1fr}
     .job-offer-need{flex-wrap:wrap}.job-offer-need i{margin-left:0;width:100%}
-    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.first-shift-rewards{grid-template-columns:1fr}
+    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.first-shift-rewards,.job-tutorial-mission{grid-template-columns:1fr}
     .job-board-current-head{align-items:flex-start;flex-direction:column;gap:4px}
     #locationhud{top:8px;left:8px;min-width:0;width:190px;max-width:34vw;padding:7px 9px}
     #locationhud .zone{font-size:11px;letter-spacing:1.3px}
