@@ -1059,8 +1059,11 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(menusSource,/Group Friendly/);
   assert.match(menusSource,/function jobOfferCardHTML/);
   assert.match(menusSource,/function jobBoardCurrentContractHTML/);
+  assert.match(menusSource,/function jobBoardNextActionHTML/);
   assert.match(menusSource,/function jobBoardMilestoneSummaryHTML/);
   assert.match(menusSource,/job-board-v2/);
+  assert.match(menusSource,/job-board-contract-body/);
+  assert.match(menusSource,/job-board-claim-button/);
   assert.match(menusSource,/job-profession-grid/);
   const liveJobBoard=menusSource.slice(menusSource.indexOf('function openJobsUI('),menusSource.indexOf('function iconNode('));
   assert.match(liveJobBoard,/Current Work/);

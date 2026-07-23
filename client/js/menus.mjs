@@ -6271,10 +6271,15 @@ function jobBoardProgressHTML(current,required){
 function jobBoardRewardLine(c){
   return '<div class="job-board-rewards"><span><b>'+Math.max(0,c.rewardGold|0)+'</b> gold</span><span><b>'+Math.max(0,c.rewardXp|0)+'</b> Hunter XP</span><span><b>'+Math.max(0,c.rewardJobXp|0)+'</b> job XP</span></div>';
 }
+function jobBoardNextActionHTML(c,ready=jobContractReady()){
+  if(!c)return '<div class="job-board-next-action empty"><small>NEXT BEST ACTION</small><b>Choose one contract</b><span>Start with a recommended pick if you want the cleanest route.</span></div>';
+  const text=ready?'Return here and claim the reward.':jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job)));
+  return '<div class="job-board-next-action '+(ready?'ready':'')+'"><small>NEXT BEST ACTION</small><b>'+escHTML(ready?'Claim reward':'Follow contract route')+'</b><span>'+escHTML(text)+'</span></div>';
+}
 function jobBoardCurrentContractHTML(c){
-  if(!c)return '<div class="job-board-current empty"><small>CURRENT WORK</small><b>No active contract</b><p>Pick one clear task below. You can hold one job contract at a time.</p></div>';
+  if(!c)return '<div class="job-board-current empty"><small>CURRENT WORK</small><b>No active contract</b><p>Pick one clear task below. You can hold one job contract at a time.</p>'+jobBoardNextActionHTML(null,false)+'</div>';
   const def=JOBS[c.job]||JOBS.adventurer, ready=jobContractReady();
-  return '<div class="job-board-current '+(ready?'ready':'')+'"><small>CURRENT WORK</small><div class="job-board-current-head"><b style="color:'+def.col+'">'+escHTML(c.title)+'</b><em>'+(ready?'READY TO CLAIM':escHTML((c.difficultyLabel||c.difficulty||'Active').toUpperCase()))+'</em></div><p>'+escHTML(c.desc)+'</p>'+jobBoardProgressHTML(c.have,c.need)+contractTagHTML(c)+contractBestForHTML(c)+jobContractStepsHTML(c)+jobBoardRewardLine(c)+'<small class="job-board-hint">'+escHTML(jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job))))+'</small></div>';
+  return '<div class="job-board-current '+(ready?'ready':'')+'"><small>CURRENT WORK</small><div class="job-board-current-head"><b style="color:'+def.col+'">'+escHTML(c.title)+'</b><em>'+(ready?'READY TO CLAIM':escHTML((c.difficultyLabel||c.difficulty||'Active').toUpperCase()))+'</em></div><p>'+escHTML(c.desc)+'</p><div class="job-board-contract-body"><div class="job-board-contract-main">'+jobBoardProgressHTML(c.have,c.need)+contractTagHTML(c)+contractBestForHTML(c)+jobContractStepsHTML(c)+'</div><aside class="job-board-contract-side">'+jobBoardNextActionHTML(c,ready)+jobBoardRewardLine(c)+'</aside></div></div>';
 }
 function openJobsUILegacy(focusJob='', sourceTitle=''){
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
@@ -6427,11 +6432,15 @@ function openJobsUI(focusJob='', sourceTitle=''){
   jobContract=clampJobContract(jobContract);
   const c=jobContract;
   const currentSection=document.createElement('section');
-  currentSection.className='job-board-section';
+  currentSection.className='job-board-section job-board-claim-desk '+(c&&jobContractReady()?'ready':'');
   currentSection.innerHTML='<div class="job-board-section-title">Current Work</div>'+jobBoardCurrentContractHTML(c);
   const actions=document.createElement('div');
   actions.className='job-board-actions';
-  if(c&&jobContractReady())actions.appendChild(qBtn('CLAIM REWARD',()=>claimJobContract()));
+  if(c&&jobContractReady()){
+    const claim=qBtn('CLAIM REWARD',()=>claimJobContract());
+    claim.classList.add('job-board-claim-button');
+    actions.appendChild(claim);
+  }
   else if(c){
     actions.appendChild(qBtn('GUIDE',()=>openJobContractGuide(c)));
     actions.appendChild(qBtn('ABANDON',()=>{

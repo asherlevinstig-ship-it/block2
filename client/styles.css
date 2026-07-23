@@ -671,24 +671,39 @@
   .job-board-tabs{display:flex;gap:7px;flex-wrap:wrap;padding:2px 0}
   .job-board-tabs .qbtn{margin:0;padding:7px 12px}
   .job-board-section{display:grid;gap:8px;padding:11px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(7,15,26,.44)}
+  .job-board-claim-desk{position:relative;overflow:hidden;border-color:rgba(159,216,255,.18);background:linear-gradient(135deg,rgba(8,22,38,.74),rgba(3,8,15,.58))}
+  .job-board-claim-desk:before{content:"";position:absolute;inset:-70px -50px auto;height:120px;background:radial-gradient(circle at 22% 0,rgba(95,215,255,.16),transparent 62%);pointer-events:none}
+  .job-board-claim-desk.ready{border-color:rgba(255,210,74,.5);box-shadow:0 0 24px rgba(255,210,74,.08),inset 0 0 28px rgba(154,210,107,.06)}
+  .job-board-claim-desk.ready:before{background:radial-gradient(circle at 25% 0,rgba(255,210,74,.24),transparent 64%)}
+  .job-board-claim-desk>*{position:relative}
   .job-board-section.beginner-recommended{border-color:rgba(154,210,107,.42);background:linear-gradient(135deg,rgba(154,210,107,.13),rgba(7,15,26,.56));box-shadow:inset 0 0 22px rgba(154,210,107,.055)}
   .job-board-section-title{color:#ffd24a}
-  .job-board-current{display:grid;gap:8px;padding:11px;border:1px solid rgba(159,216,255,.18);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.075),rgba(0,0,0,.14))}
-  .job-board-current.ready{border-color:rgba(154,210,107,.42);background:linear-gradient(135deg,rgba(154,210,107,.12),rgba(0,0,0,.14))}
+  .job-board-current{display:grid;gap:10px;padding:13px;border:1px solid rgba(159,216,255,.2);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.075),rgba(0,0,0,.14))}
+  .job-board-current.ready{border-color:rgba(255,210,74,.58);background:linear-gradient(135deg,rgba(255,210,74,.13),rgba(154,210,107,.08),rgba(0,0,0,.14))}
   .job-board-current.empty{border-style:dashed;opacity:.88}
   .job-board-current>small,.job-board-hint{color:#8fd8ff;font-size:9px;letter-spacing:1.6px;text-transform:uppercase}
   .job-board-current>b{width:auto!important;text-align:left!important;color:#fff3c4;font-size:15px}
   .job-board-current p{margin:0;color:#cbd6e4;font-size:12px;line-height:1.35}
   .job-board-current-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .job-board-current-head b{width:auto!important;text-align:left!important;color:#fff3c4;font-size:15px}
-  .job-board-current-head em{font-style:normal;color:#d8f8c8;font-size:9px;letter-spacing:1.4px;text-transform:uppercase}
-  .job-board-progress{height:10px;margin:0}
+  .job-board-current-head b{width:auto!important;text-align:left!important;color:#fff3c4;font-size:17px}
+  .job-board-current-head em{font-style:normal;color:#d8f8c8;font-size:9px;letter-spacing:1.4px;text-transform:uppercase;padding:4px 7px;border:1px solid rgba(154,210,107,.32);border-radius:5px;background:rgba(154,210,107,.08)}
+  .job-board-current.ready .job-board-current-head em{color:#fff1a8;border-color:rgba(255,210,74,.68);background:rgba(255,210,74,.16);box-shadow:0 0 18px rgba(255,210,74,.16)}
+  .job-board-contract-body{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(220px,.65fr);gap:10px;align-items:start}
+  .job-board-contract-main,.job-board-contract-side{display:grid;gap:8px;min-width:0}
+  .job-board-next-action{display:grid;gap:4px;padding:10px;border:1px solid rgba(125,211,252,.2);border-radius:7px;background:rgba(7,18,30,.72)}
+  .job-board-next-action small{color:#8fd8ff;font-size:8px;letter-spacing:1.7px;text-transform:uppercase}
+  .job-board-next-action b{width:auto!important;text-align:left!important;color:#fff3c4!important;font-size:13px!important}
+  .job-board-next-action span{color:#cbd6e4;font-size:10px;line-height:1.35}
+  .job-board-next-action.ready{border-color:rgba(255,210,74,.52);background:linear-gradient(135deg,rgba(255,210,74,.14),rgba(0,0,0,.16))}
+  .job-board-next-action.ready b{color:#fff1a8!important;text-shadow:0 0 12px rgba(255,210,74,.3)}
+  .job-board-progress{height:14px;margin:0}
   .job-board-progress.small{height:7px;margin:7px 0 5px}
-  .job-board-progress span{position:absolute;inset:0;display:grid;place-items:center;color:#eaf6ff;font-size:8px;text-shadow:0 1px 2px #000}
+  .job-board-progress span{position:absolute;inset:0;display:grid;place-items:center;color:#eaf6ff;font-size:9px;text-shadow:0 1px 2px #000}
   .job-board-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
   .job-board-rewards span{padding:7px;border:1px solid rgba(255,255,255,.09);border-radius:5px;background:rgba(0,0,0,.18);color:#b9c8d8;font-size:10px}
   .job-board-rewards b{width:auto!important;text-align:left!important;color:#ffd24a;font-size:13px}
   .job-board-actions{display:flex;gap:7px;flex-wrap:wrap}.job-board-actions .qbtn{margin:0}
+  .job-board-actions .job-board-claim-button{border-color:#ffd24a;background:linear-gradient(180deg,rgba(255,210,74,.32),rgba(126,85,8,.92));color:#fff1a8;box-shadow:0 0 18px rgba(255,210,74,.24)}
   .job-board-note{margin:0;color:#b8c8d8;font-size:11px;line-height:1.35}.job-board-note.muted{color:#7f93aa}
   .job-recommend-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
   .job-recommend-card{display:grid;grid-template-rows:1fr auto;gap:8px;min-width:0;padding:10px;border:1px solid rgba(159,216,255,.18);border-radius:7px;background:linear-gradient(145deg,rgba(6,19,33,.82),rgba(0,0,0,.22));box-shadow:inset 0 0 18px rgba(79,216,255,.035)}
@@ -1293,7 +1308,7 @@
     #qpanel.management .shoprow.job-offer-card .qbtn{grid-column:1;justify-self:start}
     .job-offer-loop,.job-offer-rewards{grid-template-columns:1fr}
     .job-offer-need{flex-wrap:wrap}.job-offer-need i{margin-left:0;width:100%}
-    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.job-recommend-grid,.first-shift-rewards,.job-tutorial-mission{grid-template-columns:1fr}
+    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.job-recommend-grid,.job-board-contract-body,.first-shift-rewards,.job-tutorial-mission{grid-template-columns:1fr}
     .job-board-current-head{align-items:flex-start;flex-direction:column;gap:4px}
     #locationhud{top:8px;left:8px;min-width:0;width:190px;max-width:34vw;padding:7px 9px}
     #locationhud .zone{font-size:11px;letter-spacing:1.3px}
