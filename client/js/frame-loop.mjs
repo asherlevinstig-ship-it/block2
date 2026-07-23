@@ -664,7 +664,8 @@ function localStoryObjectiveLine(){
   else if(quest.type==='gate')action={type:'find_gate',label:'FIND GATE'};
   else action=objectiveCraftAction('story')||{type:'questlog',label:'QUEST LOG'};
   const progress=quest.need?objectiveProgressParts(quest.have||countItem(quest.item)||0,quest.need):null;
-  return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress);
+  const chapter=quest.giver==='Mara Vale'&&quest.chainStep>=0&&quest.chainStep<=2?chapterOneMeta((quest.chainStep|0)+1):null;
+  return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress,{chapter});
 }
 function localJobObjectiveLine(){
   const c=clampJobContract(jobContract),job=jobContractObjective();
