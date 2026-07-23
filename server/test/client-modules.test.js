@@ -1049,6 +1049,12 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(menusSource,/function jobContractStepsHTML/);
   assert.match(menusSource,/JOB_SYSTEM\.guideSteps/);
   assert.match(menusSource,/function chooseBeginnerRecommendedOffer/);
+  assert.match(menusSource,/function contractRecommendationRows/);
+  assert.match(menusSource,/function recommendationCardHTML/);
+  assert.match(menusSource,/Quick Work/);
+  assert.match(menusSource,/Best For Your Job/);
+  assert.match(menusSource,/Adventure Option/);
+  assert.match(menusSource,/Group Friendly/);
   assert.match(menusSource,/function jobOfferCardHTML/);
   assert.match(menusSource,/function jobBoardCurrentContractHTML/);
   assert.match(menusSource,/function jobBoardMilestoneSummaryHTML/);
@@ -1056,8 +1062,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(menusSource,/job-profession-grid/);
   const liveJobBoard=menusSource.slice(menusSource.indexOf('function openJobsUI('),menusSource.indexOf('function iconNode('));
   assert.match(liveJobBoard,/Current Work/);
-  assert.match(liveJobBoard,/Beginner Recommended/);
-  assert.match(liveJobBoard,/More Contracts/);
+  assert.match(liveJobBoard,/Recommended Picks/);
+  assert.match(liveJobBoard,/All Contracts/);
   assert.match(liveJobBoard,/START CONTRACT/);
   assert.match(liveJobBoard,/CLAIM REWARD/);
   assert.match(liveJobBoard,/Choose A Trade/);
@@ -1070,6 +1076,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(menusSource,/job-offer-card/);
   assert.match(menusSource,/contractTagHTML\(offer\)/);
   const cssSource=fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(cssSource,/\.job-recommend-grid/);
+  assert.match(cssSource,/\.job-recommend-card/);
   assert.match(cssSource,/\.contract-tags/);
   assert.match(cssSource,/\.contract-best/);
   assert.match(cssSource,/\.job-offer-card/);

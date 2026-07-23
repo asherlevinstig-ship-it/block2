@@ -64,8 +64,11 @@ test('accepted job contract points to action, progresses, returns to board, and 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToJobs());
   await page.evaluate(() => window.openJobsUI?.('', 'Adventurer'));
   await expect(page.locator('#qpanel')).toContainText('JOB BOARD');
-  await expect(page.locator('#qpanel')).toContainText('Beginner Recommended');
+  await expect(page.locator('#qpanel')).toContainText('Recommended Picks');
+  await expect(page.locator('#qpanel')).toContainText('Quick Work');
+  await expect(page.locator('#qpanel')).toContainText('All Contracts');
   await expect(page.locator('#qpanel')).toContainText('How to complete');
+  await expect(page.locator('#qpanel')).toContainText('START');
   await expect(page.locator('#qpanel')).toContainText('START CONTRACT');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().jobContractOffers)).toEqual(
     expect.arrayContaining([expect.objectContaining({ title: "Mara's Field Work" })]),

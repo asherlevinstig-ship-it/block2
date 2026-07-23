@@ -690,6 +690,14 @@
   .job-board-rewards b{width:auto!important;text-align:left!important;color:#ffd24a;font-size:13px}
   .job-board-actions{display:flex;gap:7px;flex-wrap:wrap}.job-board-actions .qbtn{margin:0}
   .job-board-note{margin:0;color:#b8c8d8;font-size:11px;line-height:1.35}.job-board-note.muted{color:#7f93aa}
+  .job-recommend-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+  .job-recommend-card{display:grid;grid-template-rows:1fr auto;gap:8px;min-width:0;padding:10px;border:1px solid rgba(159,216,255,.18);border-radius:7px;background:linear-gradient(145deg,rgba(6,19,33,.82),rgba(0,0,0,.22));box-shadow:inset 0 0 18px rgba(79,216,255,.035)}
+  .job-recommend-card.quick{border-color:rgba(134,239,172,.34);background:linear-gradient(145deg,rgba(24,70,42,.34),rgba(0,0,0,.2))}
+  .job-recommend-card.best{border-color:rgba(255,210,74,.34);background:linear-gradient(145deg,rgba(88,62,12,.34),rgba(0,0,0,.2))}
+  .job-recommend-card.adventure{border-color:rgba(125,211,252,.34);background:linear-gradient(145deg,rgba(15,55,76,.34),rgba(0,0,0,.2))}
+  .job-recommend-card.group{border-color:rgba(195,154,255,.34);background:linear-gradient(145deg,rgba(58,39,86,.34),rgba(0,0,0,.2))}
+  .job-recommend-main{display:grid;gap:5px;min-width:0}.job-recommend-main small{color:#8fd8ff;font-size:8px;letter-spacing:1.8px;text-transform:uppercase}.job-recommend-main b{width:auto!important;text-align:left!important;color:#fff3c4!important;font-size:13px!important;line-height:1.2}.job-recommend-main p{margin:0;color:#cbd6e4;font-size:10px;line-height:1.35}.job-recommend-main em{font-style:normal;color:#9fb0c6;font-size:9px}
+  .job-recommend-card .qbtn{width:100%;min-width:0;padding:7px 8px;margin:0}
   .job-board-offers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
   .job-board-offer-card{display:grid;gap:9px;padding:10px;border:1px solid rgba(159,216,255,.16);border-radius:7px;background:linear-gradient(135deg,rgba(79,216,255,.06),rgba(0,0,0,.16))}
   .job-board-offer-card.recommended{border-color:rgba(154,210,107,.5);background:linear-gradient(135deg,rgba(154,210,107,.12),rgba(6,16,25,.34))}
@@ -1285,7 +1293,7 @@
     #qpanel.management .shoprow.job-offer-card .qbtn{grid-column:1;justify-self:start}
     .job-offer-loop,.job-offer-rewards{grid-template-columns:1fr}
     .job-offer-need{flex-wrap:wrap}.job-offer-need i{margin-left:0;width:100%}
-    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.first-shift-rewards,.job-tutorial-mission{grid-template-columns:1fr}
+    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.job-recommend-grid,.first-shift-rewards,.job-tutorial-mission{grid-template-columns:1fr}
     .job-board-current-head{align-items:flex-start;flex-direction:column;gap:4px}
     #locationhud{top:8px;left:8px;min-width:0;width:190px;max-width:34vw;padding:7px 9px}
     #locationhud .zone{font-size:11px;letter-spacing:1.3px}
