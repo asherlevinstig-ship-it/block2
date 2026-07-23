@@ -571,9 +571,9 @@ function serverObjectiveHudText(o){
   }
   if(o.hudText)return o.hudText;
   const legacy={
-    'progression:first_land_claim':'Leave town and buy your first land claim',
-    'progression:first_claim_expand':'Expand your protected base to 3 connected land claims',
-    'progression:first_base_setup':'Inside claimed land: place storage, light, and a station',
+    'progression:first_land_claim':'Leave town and buy one protected wilderness tile',
+    'progression:first_claim_expand':'Buy two connected tiles beside your first claim to make a 3-tile Homestead',
+    'progression:first_base_setup':'Inside your Homestead: place storage, light, and a station',
     'progression:first_profession_contract':'Take your first profession or Adventurer contract at the Job Board'
   };
   if(legacy[o.id])return legacy[o.id];
@@ -707,9 +707,9 @@ function serverObjectiveBySource(...sources){
     .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0] || null;
 }
 function progressionObjectiveFallback(){
-  if(progressionFocus==='first_land_claim')return objectiveLine('progression','Next','First Claim','Leave town and buy your first land claim',{type:'land',label:'CLAIM LAND'});
-  if(progressionFocus==='first_claim_expand')return objectiveLine('progression','Next','Expand Claim','Expand your protected base to 3 connected land claims',{type:'land',label:'CLAIM LAND'});
-  if(progressionFocus==='first_base_setup')return objectiveLine('progression','Next','Base Setup','Inside claimed land: place storage, light, and a station',{type:'land',label:'CLAIM LAND'});
+  if(progressionFocus==='first_land_claim')return objectiveLine('progression','Next','First Claim','Leave town and buy one protected wilderness tile',{type:'land',label:'CLAIM LAND'});
+  if(progressionFocus==='first_claim_expand')return objectiveLine('progression','Next','Expand Claim','Buy two connected tiles beside your first claim to make a 3-tile Homestead',{type:'land',label:'EXPAND LAND'});
+  if(progressionFocus==='first_base_setup')return objectiveLine('progression','Next','Base Setup','Inside your Homestead: place storage, light, and a station',{type:'land',label:'OPEN LAND'});
   if(progressionFocus==='first_craft_station'){
     const craft=objectiveCraftAction('what_next');
     return objectiveLine('progression','Next','Craft Station','Craft your first table or furnace',craft||{type:'questlog',label:'OPEN QUEST LOG'});
@@ -2375,6 +2375,7 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     petTamerVisualDebug:()=>combatApi.petTamerVisualDebug?combatApi.petTamerVisualDebug():null,
     inventoryCount:id=>inventoryModel.count(id),
     inventorySlot:id=>inventoryModel.slots.findIndex(stack=>stack&&stack.id===id),
+    landTutorialTarget:()=>{const info=combatApi.townTutorialInfo?combatApi.townTutorialInfo('land'):null,t=info&&info.target,x=t&&Number.isFinite(Number(t.x))?Math.round(Number(t.x)):null,z=t&&Number.isFinite(Number(t.z))?Math.round(Number(t.z)):null;return x!==null&&z!==null?{x,z}:{x:TOWN.TC,z:TOWN.TC-TOWN.HS-9};},
     clearInventoryItems:ids=>{const clear=new Set((Array.isArray(ids)?ids:[]).map(id=>id|0));for(let i=0;i<inv.length;i++)if(inv[i]&&clear.has(inv[i].id|0))inv[i]=null;refreshHUD();return true;},
     isDungeonSpirit:()=>{const p=NET.room&&NET.room.state&&NET.room.state.players&&NET.room.state.players.get(NET.room.sessionId);return !!(p&&p.spirit);},
     hasLocalSpiritVisual:()=>!!globalThis.BlockcraftLocalSpiritFxActive,

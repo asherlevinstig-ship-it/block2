@@ -53,10 +53,10 @@ const PROGRESSION_MILESTONE_REWARDS = Object.freeze({
   }),
   land_claim: Object.freeze({
     title: 'First Claim Secured',
-    text: 'This land is yours: you can build here, untrusted hunters cannot edit it, and wilderness outside remains open.',
+    text: 'This tile is protected. You can safely build here, and untrusted hunters cannot edit it. Buy two connected tiles next to turn it into a Homestead.',
     modal: true,
     subtitle: 'YOUR FIRST PROTECTED BASE',
-    action: 'PLACE STORAGE AND LIGHT',
+    action: 'EXPAND TO HOMESTEAD',
     items: Object.freeze([Object.freeze({ id: W.B.CHEST, count: 1 }), Object.freeze({ id: W.B.TORCH, count: 8 })]),
   }),
   base_setup: Object.freeze({

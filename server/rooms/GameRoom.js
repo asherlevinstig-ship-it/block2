@@ -2097,6 +2097,7 @@ class GameRoom extends Room {
       rec.prof.activeNpcQuest = null;
       rec.prof.jobContract = null;
       if (noGold) rec.prof.gold = 0;
+      else if (['first_land_claim', 'first_claim_expand', 'first_base_setup'].includes(focus)) rec.prof.gold = Math.max(rec.prof.gold | 0, 500);
       if (focus === 'first_craft_station' && noMaterials) {
         const clearIds = new Set([W.B.LOG, W.B.PLANKS, W.B.COBBLE, W.B.TABLE, W.B.FURNACE]);
         rec.prof.inv = (Array.isArray(rec.prof.inv) ? rec.prof.inv : []).map(stack => stack && clearIds.has(stack.id | 0) ? null : stack);
@@ -2107,6 +2108,40 @@ class GameRoom extends Room {
       this.dirtyPlayers.add(rec.token);
       client.send('e2eJourneyResult', { action, requestId: String(m && m.requestId || ''), ok: true, focus });
       return this.progressionChanged(client, 'e2eJourney', { action, focus });
+    }
+    if (action === 'claimProgressionLand') {
+      const requestId = String(m && m.requestId || '');
+      const p = this.state.players.get(client.sessionId);
+      if (!p) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      const requested = Number.isFinite(Number(m && m.x)) && Number.isFinite(Number(m && m.z))
+        ? [[Number(m.x) | 0, Number(m.z) | 0]]
+        : [];
+      const candidates = requested.concat([
+        [20, 20], [21, 20], [22, 20], [23, 20], [24, 20],
+        [20, 21], [20, 22], [20, 23], [20, 24],
+      ]);
+      const pick = candidates.find(([x, z]) => {
+        if (x < 0 || z < 0 || x >= W.WX || z >= W.WX) return false;
+        if (W.isLavaBorderLand(x, z) || this.isTownProtected(x, z)) return false;
+        const existing = this.landClaims && this.landClaims.get(this.landKey(x, z));
+        return !existing || this.isLandClaimAbandoned(existing);
+      });
+      if (!pick) {
+        client.send('e2eJourneyResult', { action, requestId, ok: false });
+        return false;
+      }
+      const [x, z] = pick;
+      rec.prof.gold = Math.max(rec.prof.gold | 0, 500);
+      p.dgn = '';
+      p.x = x + 0.5;
+      p.y = Math.max(2, W.terrainHeight(x, z) + 1.05);
+      p.z = z + 0.5;
+      this.handleLandClaimBuy(client, { x, z });
+      client.send('e2eJourneyResult', { action, requestId, ok: true, x, z });
+      return true;
     }
     if (action === 'completeMaraFieldWork') {
       const c = rec.prof.jobContract;
@@ -4066,9 +4101,9 @@ class GameRoom extends Room {
       first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Road Ready from Mara, use the starter sword, and prove you can survive outside town.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
       first_e_gate: ['progression:first_e_gate', 'progression', 'First E-rank Gate', 'Accept Mara\'s Gate briefing, then follow the cinematic E-rank Gate marker into your first dungeon.', 'Wilderness Gate', 'find_gate', 'FIND GATE', 50],
       first_craft_station: ['progression:first_craft_station', 'progression', 'First Craft Station', 'Craft a Crafting Table or Furnace.', 'Crafting menu', 'craft', 'CRAFT STATION', 50],
-      first_land_claim: ['progression:first_land_claim', 'progression', 'First Land Claim', 'Buy protected land for your first base.', 'Land Claims', 'land', 'CLAIM LAND', 50],
-      first_claim_expand: ['progression:first_claim_expand', 'progression', 'Expand Claim', 'Expand your claim to at least three connected tiles.', 'Land Claims', 'land', 'EXPAND LAND', 50],
-      first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Place storage, light, and a station inside claimed land.', 'Claimed land', 'land', 'OPEN LAND', 50],
+      first_land_claim: ['progression:first_land_claim', 'progression', 'First Land Claim', 'Leave town, press L, and buy one protected wilderness tile for your first safe build area.', 'Land Claims', 'land', 'CLAIM LAND', 50],
+      first_claim_expand: ['progression:first_claim_expand', 'progression', 'Expand Claim', 'Buy two connected tiles beside your first claim to make a 3-tile Homestead.', 'Land Claims', 'land', 'EXPAND LAND', 50],
+      first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Inside your Homestead, place storage, light, and a station.', 'Claimed land', 'land', 'OPEN LAND', 50],
       first_profession_contract: ['progression:first_profession_contract', 'progression', 'First Contract', 'Take your first profession or Adventurer contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', 'Use contracts, gates, and field work to grow toward D-rank.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
       first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],

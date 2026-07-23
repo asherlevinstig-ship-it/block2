@@ -1812,8 +1812,9 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   assert.equal(landReward.msg.modal, true);
   assert.equal(landReward.msg.title, 'First Claim Secured');
   assert.equal(landReward.msg.subtitle, 'YOUR FIRST PROTECTED BASE');
-  assert.equal(landReward.msg.action, 'PLACE STORAGE AND LIGHT');
-  assert.match(landReward.msg.text, /untrusted hunters cannot edit/);
+  assert.equal(landReward.msg.action, 'EXPAND TO HOMESTEAD');
+  assert.match(landReward.msg.text, /safely build here/);
+  assert.match(landReward.msg.text, /Buy two connected tiles/);
   assert.equal(itemCount(prof, W.B.CHEST), 1);
   assert.equal(itemCount(prof, W.B.TORCH), 24);
 

@@ -377,7 +377,7 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       actionLabel: 'CLAIM LAND',
       actionType: 'land',
       chapterStep: 5,
-      textIncludes: 'Buy protected land',
+      textIncludes: 'protected wilderness tile',
     });
     await clickTrackerAction(page, 'CLAIM LAND', 'land');
     recordAuditPanel(qualityAudit, 'land claim shortfall panel', 'land');
@@ -394,12 +394,27 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       actionType: 'land',
       chapterStep: 5,
     });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Buy protected land');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('protected wilderness tile');
     await clickTrackerAction(page, 'CLAIM LAND', 'land');
     recordAuditPanel(qualityAudit, 'first land claim panel', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().landClaimOverlay)).toBe(true);
     await closeOpenPanels(page);
+
+    await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'claimProgressionLand', requestId: 'claim-first-land' }));
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({
+      requestId: 'claim-first-land',
+      ok: true,
+    });
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_claim_expand');
+    await expect(page.locator('#rewardpanel')).toContainText('First Claim Secured');
+    await expect(page.locator('#rewardpanel')).toContainText('safely build here');
+    await expect(page.locator('#rewardpanel')).toContainText('EXPAND TO HOMESTEAD');
+    await clickButtonById(page, 'milestonecontinue');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
+      label: 'Expand Claim',
+    });
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('3-tile Homestead');
 
     await prepareFocus(page, 'first_claim_expand');
     await expectChapterCheckpoint(page, qualityAudit, 'expand claim', {
@@ -408,9 +423,9 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       actionLabel: 'EXPAND LAND',
       actionType: 'land',
       chapterStep: 6,
-      textIncludes: 'three connected tiles',
+      textIncludes: '3-tile Homestead',
     });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('three connected tiles');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('3-tile Homestead');
     await clickTrackerAction(page, 'EXPAND LAND', 'land');
     recordAuditPanel(qualityAudit, 'expand land claim panel', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
@@ -424,9 +439,9 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       actionLabel: 'OPEN LAND',
       actionType: 'land',
       chapterStep: 7,
-      textIncludes: 'inside claimed land',
+      textIncludes: 'Homestead',
     });
-    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('inside claimed land');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('Homestead');
     await clickTrackerAction(page, 'OPEN LAND', 'land');
     recordAuditPanel(qualityAudit, 'base setup land panel', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');

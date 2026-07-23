@@ -2796,12 +2796,13 @@ function landClaimRejected(m){
   else if(r==='owned') sysMsg('That land is already claimed');
   else if(r==='gold'){
     const price=(m&&m.price)||landPrice(claimHover&&claimHover.x||0,claimHover&&claimHover.z||0);
-    sysMsg('Not enough <b>gold</b>: need '+price+', have '+gold+'. Earn gold from quests, hunting, contracts, or selling spare materials.');
+    const have=Number.isFinite(Number(m&&m.gold))?Math.max(0,Number(m.gold)|0):gold;
+    sysMsg('Not enough <b>gold</b>: need '+price+', have '+have+'. Earn gold from quests, hunting, contracts, or selling spare materials.');
   }
   else if(r==='range') sysMsg('Move closer before claiming that land');
   else sysMsg('Land claim failed');
   const detail=r==='town'?'Town tiles are protected — choose a tile marked Available.':
-    r==='gold'?'This tile costs '+((m&&m.price)||landPrice(claimHover&&claimHover.x||0,claimHover&&claimHover.z||0))+' gold; you have '+gold+'.':
+    r==='gold'?'This tile costs '+((m&&m.price)||landPrice(claimHover&&claimHover.x||0,claimHover&&claimHover.z||0))+' gold; you have '+(Number.isFinite(Number(m&&m.gold))?Math.max(0,Number(m.gold)|0):gold)+'.':
     r==='owned'?'That tile already belongs to someone — choose another Available tile.':
     r==='range'?'That tile is too far from your character — choose a closer Available tile.':'Land purchase rejected: '+r+'.';
   eventLog(detail,'[Land]');
