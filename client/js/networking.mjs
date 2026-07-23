@@ -1129,9 +1129,10 @@ function netAttachRoom(room,name,client){
       const starterCount=Array.isArray(m.milestoneStarterItems)?m.milestoneStarterItems.reduce((sum,it)=>sum+Math.max(0,it&&it.count|0),0):0;
       const starterLine=starterCount?'Starter items granted: '+starterCount:'';
       const next=jobContractNextHint(job,m.jobLevelAfter|0,milestones,!!m.graduation);
+      const nextEventText=String(next||'Take another contract.').replace(/^next:\s*/i,'');
       sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
       showName(title+' complete');
-      eventFeed('[Job]',title+' complete. '+parts.join(', ')+'. Next: '+next,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
+      eventFeed('[Job]',title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
     };
     bindProgressionMessages(room,{
       getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},setContract:v=>{jobContract=v;},clampContract:clampJobContract,

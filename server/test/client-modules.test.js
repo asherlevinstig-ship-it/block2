@@ -1071,6 +1071,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/const presentJobContractClaim/);
   assert.match(networkingSource,/Starter items granted:/);
   assert.match(networkingSource,/jobContractNextHint\(job,m\.jobLevelAfter/);
+  assert.ok(networkingSource.includes("const nextEventText=String(next||'Take another contract.').replace(/^next:\\s*/i,'');"));
+  assert.ok(networkingSource.includes("eventFeed('[Job]',title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText"));
   assert.match(networkingSource,/ready to claim/);
   assert.match(networkingSource,/Dungeon gold:/);
   assert.match(networkingSource,/Contract payout/);
