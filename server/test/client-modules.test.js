@@ -1710,9 +1710,13 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/setBlock\(cx-9,G\+1,cz-1,B\.WHEAT_3\)/);
   assert.match(world,/setBlock\(cx\+9,G\+1,cz\+11,B\.LOG\)/);
   assert.match(combat,/Stand on the orange forge mat/);
+  assert.match(combat,/function blacksmithTutorialInspectPos\(\)/);
+  assert.match(combat,/function updateBlacksmithTutorialStationGuide\(now=performance\.now\(\)\)/);
+  assert.match(combat,/QUALITY BENCH/);
   assert.match(combat,/Rarity revealed:/);
   assert.match(combat,/rewardGain\('rare',1,rarityName\+' Armor',\{icon:'GEAR',duration:2800\}\)/);
-  assert.match(world,/Guided floor route: forge mat -> inspection bench -> Tobin counter -> return pillar/);
+  assert.match(world,/Guided floor route: forge mat -> blue quality bench -> Tobin counter -> return pillar/);
+  assert.match(world,/for\(let x=cx\+4;x<=cx\+9;x\+\+\)for\(let z=cz\+4;z<=cz\+7;z\+\+\)setBlock\(x,G,z,B\.GLASS\)/);
   assert.match(world,/setBlock\(cx\+9,G\+1,cz\+13,B\.LANTERN\)/);
   assert.match(world,/Guided floor route: entry path -> blue focus circle -> return pillar/);
   assert.match(world,/setBlock\(cx\+ox,G,cz\+oz,B\.GLASS\)/);

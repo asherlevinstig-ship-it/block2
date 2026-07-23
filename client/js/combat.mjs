@@ -814,7 +814,7 @@ const JOB_CHOICE_PROFILES=Object.freeze({
   pet_tamer:{recommended:'Recommended for pet lovers, dragon riders, and companion trainers.',preview:'DRAGON BOND'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null, tutorialMonkTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialBlacksmithStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 let jobTutorialAmbienceNextAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
@@ -836,8 +836,8 @@ const COOK_TUTORIAL_ACTIONS=Object.freeze([
   {key:'SELL MEAL',title:'Sell Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
 ]);
 const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
-  {key:'CRAFT CHAINMAIL',title:'Craft Armor',verb:'FORGE + G',purpose:'Stand on the orange forge mat and press G to craft Chainmail Armor from seven iron ingots and one coal.',done:'You forged Chainmail Armor. Blacksmith craft quality improves with your max mana pool.'},
-  {key:'CHECK QUALITY',title:'Inspect Quality',verb:'INSPECTION + G',purpose:'Stay at the forge inspection bench and press G to reveal the armour rarity roll.',done:'You revealed the craft quality. Larger mana pools give better armour rarity rolls.'},
+  {key:'FORGE CHAINMAIL',title:'Forge Armor',verb:'FORGE + G',purpose:'Stand on the orange forge mat and press G to spend seven iron ingots plus coal on Chainmail Armor.',done:'You forged Chainmail Armor. The armour now needs a quality check before Tobin will buy it.'},
+  {key:'INSPECT QUALITY',title:'Inspect Quality',verb:'BENCH + G',purpose:'Follow the blue quality bench and press G to reveal the armour rarity roll from your mana pool.',done:'You revealed the craft quality. Larger mana pools give better armour rarity rolls.'},
   {key:'SELL ARMOR',title:'Sell Armor',verb:'TOBIN + G',purpose:'Take the finished armour along the orange floor route to Tobin Forgehand and press G to sell it for gold.',done:'You sold the armour. Blacksmiths turn materials into gear, repairs, upgrades, and trade value.'},
 ]);
 const MONK_TUTORIAL_FOCUS_MS=5000;
@@ -1749,9 +1749,64 @@ function blacksmithTutorialForgePos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
   return room?{x:room.x+.5,y:room.G+1,z:room.z+1.5}:null;
 }
+function blacksmithTutorialInspectPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
+  return room?{x:room.x+6.5,y:room.G+1,z:room.z+5.5}:null;
+}
 function blacksmithTutorialTraderPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
   return room?{x:room.x+9.5,y:room.G+1,z:room.z+11.5}:null;
+}
+function makeJobTutorialStationSprite(text,color){
+  if(typeof makeTextSprite==='function')return makeTextSprite(text,color);
+  const canvas=document.createElement('canvas');canvas.width=160;canvas.height=72;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='rgba(5,10,16,.78)';ctx.fillRect(8,16,144,38);
+  ctx.strokeStyle=color;ctx.lineWidth=3;ctx.strokeRect(8.5,16.5,143,37);
+  fitCanvasText(ctx,text,126,22,'bold');ctx.fillStyle=color;ctx.textAlign='center';ctx.fillText(text,80,42);
+  const tex=new THREE.CanvasTexture(canvas);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+  const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
+  sprite.scale.set(2.9,1.3,1);
+  return sprite;
+}
+function ensureBlacksmithTutorialStationGuide(){
+  if(tutorialBlacksmithStationGuide)return tutorialBlacksmithStationGuide;
+  const group=new THREE.Group();
+  const specs=[
+    {step:0,label:'1 FORGE',color:'#ff8a3d',pos:blacksmithTutorialForgePos},
+    {step:1,label:'2 QUALITY',color:'#7dd3fc',pos:blacksmithTutorialInspectPos},
+    {step:2,label:'3 SELL',color:'#ffd24a',pos:blacksmithTutorialTraderPos},
+    {step:3,label:'EXIT',color:'#9ad26b',pos:()=>{const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;return room?{x:room.x,y:room.G+1,z:room.z+23}:null;}},
+  ];
+  for(const spec of specs){
+    const sprite=makeJobTutorialStationSprite(spec.label,spec.color);
+    sprite.userData=spec;
+    group.add(sprite);
+  }
+  group.visible=false;
+  scene.add(group);
+  tutorialBlacksmithStationGuide=group;
+  return group;
+}
+function hideBlacksmithTutorialStationGuide(){
+  if(tutorialBlacksmithStationGuide)tutorialBlacksmithStationGuide.visible=false;
+}
+function updateBlacksmithTutorialStationGuide(now=performance.now()){
+  const group=ensureBlacksmithTutorialStationGuide();
+  const visible=!!(jobTutorialActive&&jobTutorialJob==='blacksmith'&&dim==='job');
+  group.visible=visible;
+  if(!visible)return;
+  const current=Math.max(0,Math.min(3,jobTutorialBlacksmithStep|0));
+  for(const sprite of group.children){
+    const spec=sprite.userData||{}, p=typeof spec.pos==='function'?spec.pos():null;
+    if(!p){sprite.visible=false;continue;}
+    sprite.visible=true;
+    const active=(spec.step|0)===current, complete=(spec.step|0)<current;
+    sprite.position.set(p.x,p.y+(active?2.95:2.55)+Math.sin(now*.004+(spec.step||0))*.06,p.z);
+    sprite.material.opacity=active?.98:(complete?.62:.38);
+    const base=active?1.18:1;
+    sprite.scale.set(2.9*base,1.3*base,1);
+  }
 }
 function ensureBlacksmithTutorialTrader(){
   if(tutorialBlacksmithTrader)return tutorialBlacksmithTrader;
@@ -1781,6 +1836,12 @@ function nearBlacksmithTutorialForge(range=4.6){
   const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
   return d<=range?{...p,distance:d}:null;
 }
+function nearBlacksmithTutorialInspection(range=4.2){
+  const p=blacksmithTutorialInspectPos();
+  if(!p||!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job'||jobTutorialBlacksmithStep<1)return null;
+  const d=Math.hypot(player.pos.x-p.x,player.pos.z-p.z);
+  return d<=range?{...p,distance:d}:null;
+}
 function nearbyBlacksmithTutorialTrader(range=4.2){
   const p=blacksmithTutorialTraderPos();
   if(!p||!jobTutorialActive||jobTutorialJob!=='blacksmith'||dim!=='job'||jobTutorialBlacksmithStep<2)return null;
@@ -1797,7 +1858,8 @@ function blacksmithTutorialTargetPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
   if(!room)return null;
   const step=jobTutorialBlacksmithStep|0;
-  if(step<=1)return blacksmithTutorialForgePos();
+  if(step<=0)return blacksmithTutorialForgePos();
+  if(step===1)return blacksmithTutorialInspectPos();
   if(step===2)return blacksmithTutorialTraderPos();
   return {x:room.x,y:room.G+1.035,z:room.z+23};
 }
@@ -1897,11 +1959,11 @@ function tryBlacksmithTutorialAction(){
     refreshHUD();
     SFX.success&&SFX.success();
     advanceBlacksmithTutorial('craft');
-    sysMsg('Crafted <b>'+escHTML(blacksmithRarityName(armor.rarity))+' Chainmail Armor</b>. Stay at the inspection bench and press <b>G</b> again to reveal why it rolled that rarity.');
+    sysMsg('Crafted <b>'+escHTML(blacksmithRarityName(armor.rarity))+' Chainmail Armor</b>. Follow the <b>blue Quality Bench</b> marker and press <b>G</b> to reveal why it rolled that rarity.');
     return true;
   }
   if(step===1){
-    if(!nearBlacksmithTutorialForge())return false;
+    if(!nearBlacksmithTutorialInspection())return false;
     const armor=blacksmithTutorialArmorStack();
     if(!armor){addBlacksmithTutorialArmor();}
     const stack=blacksmithTutorialArmorStack();
@@ -1912,7 +1974,7 @@ function tryBlacksmithTutorialAction(){
     const rarityName=blacksmithRarityName(rarity);
     showName(rarityName+' Armor');
     rewardGain('rare',1,rarityName+' Armor',{icon:'GEAR',duration:2800});
-    sysMsg('<b>Rarity revealed:</b> Your max mana is <b>'+maxMp()+'</b>, giving a <b>+'+bonus+'%</b> Blacksmith quality bonus. This armour rolled <b>'+escHTML(rarityName)+'</b>. Follow the orange route to Tobin.');
+    sysMsg('<b>Rarity revealed:</b> Your max mana is <b>'+maxMp()+'</b>, giving a <b>+'+bonus+'%</b> Blacksmith quality bonus. This armour rolled <b>'+escHTML(rarityName)+'</b>. Follow the gold sell marker to Tobin.');
     return true;
   }
   if(step===2){
@@ -1939,7 +2001,7 @@ function tryBlacksmithTutorialAction(){
 function blacksmithTutorialVisualDebug(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.blacksmith;
   if(!room)return null;
-  const forge=blacksmithTutorialForgePos(), trader=blacksmithTutorialTraderPos(), target=blacksmithTutorialTargetPos();
+  const forge=blacksmithTutorialForgePos(), inspect=blacksmithTutorialInspectPos(), trader=blacksmithTutorialTraderPos(), target=blacksmithTutorialTargetPos();
   const armor=blacksmithTutorialArmorStack();
   return {
     active:!!jobTutorialActive,
@@ -1947,6 +2009,7 @@ function blacksmithTutorialVisualDebug(){
     step:jobTutorialBlacksmithStep|0,
     target,
     forge,
+    inspect,
     trader,
     traded:!!jobTutorialTraded,
     crafted:jobTutorialBlacksmithCraftedArmor,
@@ -2275,11 +2338,14 @@ function tickJobTutorialAmbience(now,room){
     if(Math.random()<.18)jobTutorialSparkle(cx+9+Math.random()*4,G+1.4,cz+11+Math.random()*3,[1,.82,.38],.75,.18,.7);
   }else if(job==='blacksmith'){
     const forge=blacksmithTutorialForgePos()||{x:cx+.5,y:G+1,z:cz+1.5};
+    const inspect=blacksmithTutorialInspectPos()||{x:cx+6.5,y:G+1,z:cz+5.5};
+    const sell=blacksmithTutorialTraderPos()||{x:cx+9.5,y:G+1,z:cz+11.5};
     jobTutorialSparkle(forge.x,G+1.35,forge.z,[1,.34,.08],.75,1.0,.45);
     if(Math.random()<.35)burst(forge.x,G+1.2,forge.z,[1,.48,.12],4,1.15,1.5,.38,1);
-    if(Math.random()<.18)ringPulse(forge.x,G+.08,forge.z,1.05,0xff8a3d,.25);
+    if(Math.random()<.18)ringPulse((jobTutorialBlacksmithStep|0)===0?forge.x:((jobTutorialBlacksmithStep|0)===1?inspect.x:sell.x),G+.08,(jobTutorialBlacksmithStep|0)===0?forge.z:((jobTutorialBlacksmithStep|0)===1?inspect.z:sell.z),1.05,(jobTutorialBlacksmithStep|0)===1?0x7dd3fc:0xff8a3d,.25);
     if(Math.random()<.26)jobTutorialDrift(forge.x+.4,G+2.15,forge.z,[.32,.27,.23],.65,.32,1.25,-.05);
-    if(Math.random()<.2)jobTutorialSparkle(cx+8+Math.random()*4,G+2.05,cz+2,[1,.7,.22],.7,.24,.55);
+    if(Math.random()<.28)jobTutorialSparkle(inspect.x+(Math.random()-.5)*2.6,G+1.75,inspect.z+(Math.random()-.5)*2,[.45,.86,1],.7,.24,.75);
+    if(Math.random()<.2)jobTutorialSparkle(sell.x+(Math.random()-.5)*2.4,G+1.75,sell.z+(Math.random()-.5)*2,[1,.82,.28],.7,.24,.55);
   }else if(job==='monk'){
     const a=Math.random()*Math.PI*2,r=1.8+Math.random()*7.5,x=cx+Math.cos(a)*r,z=cz+Math.sin(a)*r;
     jobTutorialSparkle(x,G+1.1+Math.random()*1.1,z,[.55,.86,1],.45,.28,1.15);
@@ -3011,8 +3077,8 @@ function updateJobTutorialHud(){
       : jobTutorialBlacksmithStep===2
         ? {key:'TOBIN FORGEHAND',text:'Follow the orange floor route to Tobin Forgehand and press G to sell the Chainmail Armor.',sub:'This completes the blacksmith economy loop: materials become valued gear.'}
       : jobTutorialBlacksmithStep===1
-          ? {key:'CHECK QUALITY',text:'Press G at the inspection bench to reveal your armour rarity roll.',sub:'Blacksmith armour rarity gets a bonus from your max mana pool.'}
-          : {key:action.key,text:blacksmithTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Blacksmith loop: materials become armour, rarity scales with mana, armour sells for gold.'};
+          ? {key:'QUALITY BENCH',text:'Move to the blue Quality Bench and press G to reveal your armour rarity roll.',sub:'Blacksmith armour rarity gets a bonus from your max mana pool.'}
+          : {key:action.key,text:blacksmithTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Blacksmith loop: materials become armour, mana influences quality, gear becomes gold.'};
   }
   if(jobTutorialJob==='monk'){
     const action=monkTutorialAction();
@@ -3249,6 +3315,7 @@ function tickJobTutorial(now){
     if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
     if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
     if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
+    hideBlacksmithTutorialStationGuide();
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
     return;
@@ -3260,6 +3327,7 @@ function tickJobTutorial(now){
   updateFarmerTutorialTrader(now);
   updateCookTutorialTrader(now);
   updateBlacksmithTutorialTrader(now);
+  updateBlacksmithTutorialStationGuide(now);
   updateCookTutorialTimer(now);
   updateMonkTutorialTimer(now);
   updateMonkTutorialFocus(now);

@@ -1241,30 +1241,39 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     }
     for(let z=cz-14;z<=cz+15;z+=5){box(cx-17,G+6,z,cx+17,G+6,z,B.LOG);setBlock(cx-15,G+4,z,B.LANTERN);setBlock(cx+15,G+4,z,B.LANTERN);}
 
-    // Guided floor route: forge mat -> inspection bench -> Tobin counter -> return pillar.
-    for(let z=cz-1;z<=cz+11;z++)setBlock(cx,G,z,B.TERRACOTTA);
-    for(let x=cx;x<=cx+9;x++)setBlock(x,G,cz+11,B.TERRACOTTA);
+    // Guided floor route: forge mat -> blue quality bench -> Tobin counter -> return pillar.
+    for(let z=cz-1;z<=cz+3;z++)setBlock(cx,G,z,B.TERRACOTTA);
+    for(let x=cx;x<=cx+7;x++)setBlock(x,G,cz+4,x>=cx+4?B.GLASS:B.TERRACOTTA);
+    for(let z=cz+4;z<=cz+11;z++)setBlock(cx+7,G,z,z<=cz+7?B.GLASS:B.TERRACOTTA);
+    for(let x=cx+7;x<=cx+9;x++)setBlock(x,G,cz+11,B.TERRACOTTA);
     for(let z=cz+11;z<=cz+23;z++)setBlock(cx+9,G,z,z>cz+18?B.COBBLE:B.TERRACOTTA);
     for(let x=cx;x<=cx+9;x++)setBlock(x,G,cz+23,B.COBBLE);
 
-    // Forge station: active interaction is still blacksmithTutorialForgePos().
+    // Forge station: heavy heat, anvils, and an obvious orange action mat.
     for(let x=cx-4;x<=cx+4;x++)for(let z=cz-2;z<=cz+4;z++)setBlock(x,G,z,B.TERRACOTTA);
     box(cx-5,G+1,cz-1,cx+5,G+1,cz-1,B.BRICK);
+    box(cx-4,G+1,cz+4,cx+2,G+1,cz+4,B.BRICK);
     setBlock(cx,G+1,cz+1,B.TABLE);
     setBlock(cx-2,G+1,cz+1,B.FURNACE);
     setBlock(cx+2,G+1,cz+1,B.CAMPFIRE);
     setBlock(cx-2,G+2,cz+1,B.CAMPFIRE);
     setBlock(cx+2,G+2,cz+1,B.LANTERN);
+    setBlock(cx-1,G+1,cz+2,B.IRON_ORE);
+    setBlock(cx+1,G+1,cz+2,B.COAL_ORE);
     for(const [ox,oz] of [[-4,-3],[4,-3],[-4,5],[4,5]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
 
-    // Material racks and rarity inspection props around the same forge target.
+    // Material racks and a separate blue quality bench for the mana/rarity lesson.
     for(const [ox,oz,id] of [[-13,-9,B.COAL_ORE],[-10,-9,B.IRON_ORE],[-7,-9,B.DIAMOND_ORE],[8,-9,B.IRON_ORE],[11,-9,B.COAL_ORE],[14,-9,B.IRON_ORE]]){setBlock(cx+ox,G+1,cz+oz,id);setBlock(cx+ox,G+2,cz+oz,B.PLANKS);}
     for(let x=cx+5;x<=cx+11;x++){setBlock(x,G+1,cz+2,B.IRON_ORE);setBlock(x,G+2,cz+2,x===cx+8?B.DIAMOND_ORE:B.COAL_ORE);}
     box(cx-12,G,cz+3,cx-9,G,cz+6,B.WATER);
     setBlock(cx-8,G+1,cz+4,B.LANTERN);
+    for(let x=cx+4;x<=cx+9;x++)for(let z=cz+4;z<=cz+7;z++)setBlock(x,G,z,B.GLASS);
+    box(cx+4,G+1,cz+7,cx+9,G+1,cz+7,B.PLANKS);
     setBlock(cx+5,G+1,cz+5,B.GLASS);
     setBlock(cx+6,G+1,cz+5,B.TABLE);
     setBlock(cx+7,G+1,cz+5,B.GLASS);
+    setBlock(cx+6,G+2,cz+5,B.LANTERN);
+    for(const [ox,oz,id] of [[4,4,B.COAL_ORE],[8,4,B.IRON_ORE],[4,6,B.DIAMOND_ORE],[8,6,B.GLASS]])setBlock(cx+ox,G+1,cz+oz,id);
 
     // Tobin's sale counter where tutorialBlacksmithTrader appears.
     for(let x=cx+5;x<=cx+13;x++)setBlock(x,G+1,cz+10,x===cx+9?B.TABLE:B.PLANKS);
@@ -1274,6 +1283,7 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx+9,G+1,cz+13,B.LANTERN);
     setBlock(cx+11,G+1,cz+12,B.CHEST);
     setBlock(cx+12,G+1,cz+9,B.FURNACE);
+    for(let x=cx+7;x<=cx+11;x++)setBlock(x,G,cz+10,B.BRICK);
 
     for(const [ox,oz,h] of [[-14,10,2],[-11,10,1],[-8,11,1],[3,13,1],[6,14,2],[12,15,1]])crateStack(cx+ox,cz+oz,h);
     for(let x=cx-14;x<=cx+14;x+=7){lampPost(x,cz-13,3);lampPost(x,cz+15,3);}

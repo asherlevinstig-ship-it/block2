@@ -66,13 +66,13 @@ test('blacksmith tutorial teaches armor crafting, mana quality, and selling', as
       step: 0,
       inventory: { ingots: 7, coal: 1 },
     });
-  await expect(page.locator('#tutorialhud')).toContainText('CRAFT CHAINMAIL');
+  await expect(page.locator('#tutorialhud')).toContainText('FORGE CHAINMAIL');
 
   const craft = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.blacksmithTutorialAction());
   expect(craft).toMatchObject({ ok: true, debug: { step: 1 } });
   expect(craft.debug.armor).toMatchObject({ id: 212 });
   expect(craft.debug.armor.rarity).toBeTruthy();
-  await expect(page.locator('#tutorialhud')).toContainText('CHECK QUALITY');
+  await expect(page.locator('#tutorialhud')).toContainText('QUALITY BENCH');
 
   await reloadAndResume(page);
   await expect(page.locator('body')).toHaveClass(/job-tutorial-room/);
@@ -85,7 +85,7 @@ test('blacksmith tutorial teaches armor crafting, mana quality, and selling', as
       armor: { id: 212 },
       inventory: { chainArmor: 1 },
     });
-  await expect(page.locator('#tutorialhud')).toContainText('CHECK QUALITY');
+  await expect(page.locator('#tutorialhud')).toContainText('QUALITY BENCH');
 
   const inspect = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.blacksmithTutorialAction());
   expect(inspect).toMatchObject({ ok: true, debug: { step: 2 } });
