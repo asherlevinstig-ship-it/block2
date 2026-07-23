@@ -806,7 +806,7 @@ const JOB_CHOICE_PROFILES=Object.freeze({
   pet_tamer:{recommended:'Recommended for pet lovers, dragon riders, and companion trainers.',preview:'DRAGON BOND'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null, tutorialMonkTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 let jobTutorialAmbienceNextAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
@@ -834,8 +834,8 @@ const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
 ]);
 const MONK_TUTORIAL_FOCUS_MS=5000;
 const MONK_TUTORIAL_ACTIONS=Object.freeze([
-  {key:'START FOCUS',title:'Begin Focus',verb:'CIRCLE + G',purpose:'Stand inside the focus circle and press G to start a short meditation channel.',done:'You began focus. Monks create calm windows before the support effect arrives.'},
-  {key:'HOLD STILL',title:'Hold Focus',verb:'STAY STILL',purpose:'Stay in the focus circle until the timer completes.',done:'You held focus. At E-Rank Level 4, this becomes real Meditation Hall support and mana growth.'},
+  {key:'START FOCUS',title:'Begin Focus',verb:'CIRCLE + G',purpose:'Stand inside the blue focus circle and press G to begin a short meditation channel.',done:'You began focus. Monks create calm windows before restoration arrives.'},
+  {key:'HOLD STILL',title:'Hold Focus',verb:'STAY STILL',purpose:'Stay inside the circle until the focus timer completes above you.',done:'You held focus. At E-Rank Level 4, Meditation Hall focus restores resources and can grow your mana pool.'},
 ]);
 const PET_TAMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'HATCH EGG',title:'Hatching',verb:'EGG + G',purpose:'Select the Verdant Dragon Egg, press G at the Egg Insulator, then claim it when ready.',done:'Your tutorial egg hatches quickly, showing how dragons begin.'},
@@ -1978,6 +1978,71 @@ function monkTutorialTargetPos(){
 function monkTutorialRemainingMs(){
   return Math.max(0,jobTutorialMonkStartedAt+MONK_TUTORIAL_FOCUS_MS-Date.now());
 }
+function drawMonkTutorialTimer(canvas, seconds=0, done=false, progress=0){
+  const ctx=canvas.getContext('2d'), w=canvas.width||208, h=canvas.height||76, p=Math.max(0,Math.min(1,done?1:progress||0));
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='rgba(5,18,31,.82)';
+  ctx.fillRect(5,7,w-10,h-14);
+  ctx.strokeStyle=done?'#c7fff4':'#7dd3fc';
+  ctx.lineWidth=2;
+  ctx.strokeRect(5.5,7.5,w-11,h-15);
+  const cx=40, cy=h/2, r=22;
+  ctx.strokeStyle='rgba(255,255,255,.16)';
+  ctx.lineWidth=5;
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+  ctx.strokeStyle=done?'#a7f3d0':'#7dd3fc';
+  ctx.lineCap='round';
+  ctx.beginPath();ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+Math.PI*2*p);ctx.stroke();
+  ctx.lineCap='butt';
+  ctx.fillStyle=done?'#dffdf7':'#e0f2fe';
+  ctx.font='13px monospace';
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.fillText(done?'DONE':String(Math.max(0,Math.ceil(seconds))),cx,cy);
+  ctx.textAlign='left';
+  ctx.font='15px monospace';
+  ctx.fillText(done?'FOCUS LOCKED':'FOCUS TIMER',78,25);
+  ctx.fillStyle=done?'#a7f3d0':'#bae6fd';
+  ctx.font='11px monospace';
+  ctx.fillText(done?'RETURN READY':'HOLD STILL',78,49);
+}
+function ensureMonkTutorialTimer(){
+  if(tutorialMonkTimer)return tutorialMonkTimer;
+  const canvas=document.createElement('canvas');canvas.width=208;canvas.height=76;
+  drawMonkTutorialTimer(canvas,0,false,0);
+  const tex=new THREE.CanvasTexture(canvas);
+  tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.LinearFilter;
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.95,depthWrite:false}));
+  spr.scale.set(2.35,.86,1);
+  spr.visible=false;
+  spr.userData={canvas,tex,last:-999,progressKey:-1,doneLast:false};
+  scene.add(spr);
+  tutorialMonkTimer=spr;
+  return spr;
+}
+function clearMonkTutorialTimer(){
+  if(tutorialMonkTimer)tutorialMonkTimer.visible=false;
+}
+function updateMonkTutorialTimer(now=performance.now()){
+  const spr=ensureMonkTutorialTimer(), p=monkTutorialFocusPos();
+  const visible=!!(jobTutorialActive&&jobTutorialJob==='monk'&&dim==='job'&&(jobTutorialMonkStep===1||jobTutorialMonkStep>=2));
+  spr.visible=visible;
+  if(!visible||!p)return;
+  spr.position.set(p.x,p.y+2.72+Math.sin(now*.0038)*.05,p.z);
+  const started=jobTutorialMonkStartedAt||Date.now(), dur=MONK_TUTORIAL_FOCUS_MS;
+  const seconds=jobTutorialMonkStep>=2?0:Math.max(0,(started+dur-Date.now())/1000);
+  const done=jobTutorialMonkStep>=2||seconds<=0;
+  const progress=done?1:Math.max(0,Math.min(1,(Date.now()-started)/dur));
+  const whole=Math.ceil(seconds), progressKey=Math.floor(progress*100);
+  if(whole!==spr.userData.last||progressKey!==spr.userData.progressKey||done!==spr.userData.doneLast){
+    spr.userData.last=whole;spr.userData.progressKey=progressKey;spr.userData.doneLast=done;
+    drawMonkTutorialTimer(spr.userData.canvas,seconds,done,progress);
+    spr.userData.tex.needsUpdate=true;
+  }
+  spr.material.opacity=done?.98:.9;
+  const scale=done?2.55:2.35;
+  spr.scale.set(scale,.86*(scale/2.35),1);
+}
 function completeMonkTutorialFocus(){
   if(jobTutorialMonkStep>=2)return false;
   jobTutorialMonkStep=2;
@@ -1989,8 +2054,10 @@ function completeMonkTutorialFocus(){
   SFX.success&&SFX.success();
   SFX.meditate&&SFX.meditate(false);
   eventLog('Monk tutorial - held focus in the meditation circle.');
-  sysMsg('<b>Monk lesson:</b> Focus complete. At E-Rank Level 4, Meditation Hall focus restores mana and stamina and can grow your mana pool.');
+  rewardGain('rare',1,'Focus Restored',{icon:'ZEN',duration:2400});
+  sysMsg('<b>Monk lesson:</b> Focus complete. In the real Meditation Hall, this restores mana and stamina. At E-Rank Level 4, completed focus sessions can slowly grow your mana pool.');
   updateJobTutorialHud();
+  updateMonkTutorialTimer();
   sendProfileSaveNow();
   sendJobTutorialProgressNow();
   return true;
@@ -2026,6 +2093,7 @@ function tryMonkTutorialAction(){
     eventLog('Monk tutorial - started focus.');
     sysMsg('<b>Monk lesson:</b> Hold still in the focus circle for <b>'+Math.ceil(MONK_TUTORIAL_FOCUS_MS/1000)+' seconds</b>.');
     updateJobTutorialHud();
+    updateMonkTutorialTimer();
     sendProfileSaveNow();
     sendJobTutorialProgressNow();
     return true;
@@ -2051,6 +2119,7 @@ function monkTutorialVisualDebug(){
     startedAt:jobTutorialMonkStartedAt||0,
     remainingMs:monkTutorialRemainingMs(),
     near:!!nearMonkTutorialFocus(5.8),
+    timerVisible:!!(tutorialMonkTimer&&tutorialMonkTimer.visible),
   };
 }
 function performMonkTutorialStepForTest(){
@@ -2882,10 +2951,10 @@ function updateJobTutorialHud(){
     const action=monkTutorialAction();
     const left=Math.ceil(monkTutorialRemainingMs()/1000);
     copy=jobTutorialMonkStep>=2
-      ? {key:'RETURN PILLAR',text:'You held focus in the circle and learned the Monk support loop.',sub:'Walk into the blue return pillar to go back to town.'}
+      ? {key:'RETURN PILLAR',text:'You held focus, restored your resources, and learned the Monk support loop.',sub:'Walk into the blue return pillar to go back to town.'}
       : jobTutorialMonkStep===1
-        ? {key:'HOLD STILL',text:left>0?'Hold focus in the circle for '+left+' more seconds.':'Focus is ready. Press G or stay still to complete.',sub:'Full Meditation Hall focus unlocks at E-Rank Level 4 and can grow your mana pool.'}
-        : {key:action.key,text:monkTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Monk loop: calm focus becomes restoration, buffs, and long-term mana growth.'};
+        ? {key:'HOLD STILL',text:left>0?'Hold focus in the blue circle for '+left+' more seconds.':'Focus is ready. Press G or stay still to complete.',sub:'Watch the floating focus timer. Full Meditation Hall focus unlocks at E-Rank Level 4 and can grow your mana pool.'}
+        : {key:action.key,text:monkTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Monk loop: calm focus becomes restoration, support buffs, and long-term mana growth.'};
   }
   if(jobTutorialJob==='pet_tamer'){
     const action=petTamerTutorialAction();
@@ -2940,6 +3009,7 @@ function completeJobTutorial(){
   jobTutorialMonkStep=0;
   jobTutorialMonkStartedAt=0;
   clearCookTutorialTimer();
+  clearMonkTutorialTimer();
   SFX.meditate&&SFX.meditate(false);
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
@@ -2990,6 +3060,7 @@ function startJobTutorial(jobId){
   jobTutorialMonkStep=0;
   jobTutorialMonkStartedAt=0;
   clearCookTutorialTimer();
+  clearMonkTutorialTimer();
   SFX.meditate&&SFX.meditate(false);
   jobTutorialPetDragonSeen=false;
   jobTutorialPetDragonStep=0;
@@ -3016,7 +3087,7 @@ function startJobTutorial(jobId){
   else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
   else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the yellow prep station. Press <b>G</b> to start turning wheat into real food.');
   else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the orange forge station. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
-  else if(jobId==='monk')sysMsg('<b>Monk chosen.</b><br>Follow the pillar of light to the focus circle. Press <b>G</b>, then hold still.');
+  else if(jobId==='monk')sysMsg('<b>Monk chosen.</b><br>Follow the pillar of light to the blue focus circle. Press <b>G</b>, then hold still and watch the focus timer.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();
   return true;
@@ -3056,6 +3127,7 @@ function resumeJobTutorial(jobId,state={}){
   clearPetTamerTutorialMount();
   clearPetTamerTutorialEgg();
   if(jobId!=='cook')clearCookTutorialTimer();
+  if(jobId!=='monk')clearMonkTutorialTimer();
   jobTutorialReturnWarnAt=0;
   jobTutorialAmbienceNextAt=0;
   if(player){
@@ -3071,6 +3143,7 @@ function resumeJobTutorial(jobId,state={}){
   updateCookTutorialTrader();
   updateBlacksmithTutorialTrader();
   updateCookTutorialTimer();
+  updateMonkTutorialTimer();
   updateJobTutorialHud();
   eventLog('Resumed '+job.name+' tutorial room.');
   sendProfileSaveNow();
@@ -3092,6 +3165,7 @@ function tickJobTutorial(now){
     jobTutorialMonkStep=0;
     jobTutorialMonkStartedAt=0;
     clearCookTutorialTimer();
+    clearMonkTutorialTimer();
     SFX.meditate&&SFX.meditate(false);
     jobTutorialPetDragonSeen=false;
     jobTutorialPetDragonStep=0;
@@ -3116,6 +3190,7 @@ function tickJobTutorial(now){
   updateCookTutorialTrader(now);
   updateBlacksmithTutorialTrader(now);
   updateCookTutorialTimer(now);
+  updateMonkTutorialTimer(now);
   updateMonkTutorialFocus(now);
   const target=jobTutorialBeaconTarget(jobTutorialJob,room);
   if(!target)return;

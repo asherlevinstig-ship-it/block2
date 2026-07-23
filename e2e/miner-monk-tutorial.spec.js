@@ -173,7 +173,7 @@ test('monk tutorial persists through reload and completes the timed focus loop',
     .toMatchObject({ active: true, job: 'monk', step: 0 });
 
   const started = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.monkTutorialStartFocus());
-  expect(started).toMatchObject({ ok: true, done: false, debug: { step: 1, near: true } });
+  expect(started).toMatchObject({ ok: true, done: false, debug: { step: 1, near: true, timerVisible: true } });
   await expect(page.locator('#tutorialhud')).toContainText('HOLD STILL');
 
   await reloadAndExpectJobRoom(page, 'monk');

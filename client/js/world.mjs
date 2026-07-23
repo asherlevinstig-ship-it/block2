@@ -1278,20 +1278,37 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     for(const [ox,oz,h] of [[-14,10,2],[-11,10,1],[-8,11,1],[3,13,1],[6,14,2],[12,15,1]])crateStack(cx+ox,cz+oz,h);
     for(let x=cx-14;x<=cx+14;x+=7){lampPost(x,cz-13,3);lampPost(x,cz+15,3);}
   }else if(jobId==='monk'){
-    for(let r=0;r<=9;r++)for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++)if(Math.abs(Math.hypot(x-cx,z-cz)-r)<.72)setBlock(x,G,z,r%3?B.GRASS:B.COBBLE);
-    for(const [ox,oz] of [[0,-8],[8,0],[0,8],[-8,0]]){setBlock(cx+ox,G+1,cz+oz,B.LANTERN);setBlock(cx+ox,G,cz+oz,B.GLASS);}
-    setBlock(cx,G+1,cz,B.CAMPFIRE);
-    floorDisk(0,0,15,B.GRASS);
-    for(let r=5;r<=14;r+=3)for(let a=0;a<Math.PI*2;a+=Math.PI/10){
-      const x=Math.round(cx+Math.cos(a)*r),z=Math.round(cz+Math.sin(a)*r);
-      if(Math.hypot(x-cx,z-cz)>=4.5)setBlock(x,G,z,r%2?B.COBBLE:B.SAND);
+    const clear=(x,z,top=G+8)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
+    floorDisk(0,0,18,B.GRASS);
+    for(let x=cx-20;x<=cx+20;x++)for(let z=cz-20;z<=cz+25;z++)if(Math.hypot(x-cx,z-cz)<=21){
+      clear(x,z,G+8);
+      for(let y=G-2;y<G;y++)setBlock(x,y,z,B.DIRT);
     }
-    box(cx-3,G,cz-14,cx+3,G,cz-12,B.WATER);
-    box(cx-14,G,cz-3,cx-12,G,cz+3,B.WATER);
-    for(const [ox,oz] of [[-16,-16],[16,-16],[-16,16],[16,16]])smallTree(cx+ox,cz+oz,5);
-    for(const [ox,oz] of [[-6,-12],[6,-12],[-12,-6],[12,-6],[-12,6],[12,6],[-6,12],[6,12]])lampPost(cx+ox,cz+oz,2,B.COBBLE);
-    box(cx-2,G+1,cz+12,cx+2,G+1,cz+12,B.PLANKS);
-    for(const ox of [-2,0,2])setBlock(cx+ox,G+2,cz+12,B.LANTERN);
+    // Guided floor route: entry path -> blue focus circle -> return pillar.
+    for(let z=cz+14;z>=cz;z--)for(let x=cx-2;x<=cx+2;x++)setBlock(x,G,z,z%2?B.COBBLE:B.GLASS);
+    for(let z=cz;z<=cz+23;z++)for(let x=cx-1;x<=cx+1;x++)setBlock(x,G,z,z>cz+17?B.COBBLE:B.GLASS);
+    for(let x=cx-5;x<=cx+5;x++)for(let z=cz-5;z<=cz+5;z++){
+      const d=Math.hypot(x-cx,z-cz);
+      if(d<=5)setBlock(x,G,z,d>=4.1?B.GLASS:(d<=1.6?B.SAND:B.GRASS));
+    }
+    for(let r=7;r<=16;r+=3)for(let a=0;a<Math.PI*2;a+=Math.PI/16){
+      const x=Math.round(cx+Math.cos(a)*r),z=Math.round(cz+Math.sin(a)*r);
+      if(Math.hypot(x-cx,z-cz)>=5.7)setBlock(x,G,z,r%2?B.COBBLE:B.SAND);
+    }
+    setBlock(cx,G+1,cz,B.CAMPFIRE);
+    for(const [ox,oz] of [[0,-7],[7,0],[0,7],[-7,0]]){
+      setBlock(cx+ox,G,cz+oz,B.GLASS);
+      setBlock(cx+ox,G+1,cz+oz,B.LANTERN);
+    }
+    for(const [ox,oz] of [[-11,-11],[11,-11],[-11,11],[11,11],[-15,0],[15,0],[0,-15],[0,15]])lampPost(cx+ox,cz+oz,2,B.COBBLE);
+    box(cx-4,G,cz-15,cx+4,G,cz-13,B.WATER);
+    box(cx-15,G,cz-4,cx-13,G,cz+4,B.WATER);
+    box(cx+13,G,cz-4,cx+15,G,cz+4,B.WATER);
+    for(const [ox,oz] of [[-18,-18],[18,-18],[-18,18],[18,18],[-8,-18],[8,-18],[-18,8],[18,8]])smallTree(cx+ox,cz+oz,5);
+    box(cx-5,G+1,cz+11,cx+5,G+1,cz+11,B.PLANKS);
+    for(const ox of [-4,0,4]){setBlock(cx+ox,G+2,cz+11,B.LANTERN);setBlock(cx+ox,G+1,cz+13,B.TABLE);}
+    box(cx-4,G+1,cz-10,cx+4,G+1,cz-10,B.PLANKS);
+    for(const ox of [-3,0,3])setBlock(cx+ox,G+2,cz-10,B.LANTERN);
   }else if(jobId==='pet_tamer'){
     const ring=(rad,id)=>{for(let x=cx-rad;x<=cx+rad;x++)for(let z=cz-rad;z<=cz+rad;z++){const d=Math.hypot(x-cx,z-cz);if(d>=rad-.7&&d<=rad+.7)setBlock(x,G,z,id);}};
     const disk=(ox,oz,rad,id,y=G)=>{for(let x=cx+ox-rad;x<=cx+ox+rad;x++)for(let z=cz+oz-rad;z<=cz+oz+rad;z++)if(Math.hypot(x-(cx+ox),z-(cz+oz))<=rad)setBlock(x,y,z,id);};
