@@ -1795,7 +1795,11 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   assert.equal(prof.progressionFocus, 'first_land_claim');
   assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_land_claim'), true);
   assert.equal(prof.progressionMilestoneRewards.includes('craft_station'), true);
-  assert.equal(client.sent.some(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'craft_station'), true);
+  const stationReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'craft_station');
+  assert.equal(!!stationReward, true);
+  assert.equal(stationReward.msg.modal, true);
+  assert.equal(stationReward.msg.action, 'CLAIM FIRST LAND');
+  assert.match(stationReward.msg.text, /press L, and claim protected land/);
   assert.equal(itemCount(prof, W.B.TORCH), 16);
   assert.equal(itemCount(prof, I.BREAD), 2);
 

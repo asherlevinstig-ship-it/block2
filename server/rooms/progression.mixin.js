@@ -45,7 +45,10 @@ const PROGRESSION_MILESTONE_REWARDS = Object.freeze({
   }),
   craft_station: Object.freeze({
     title: 'Station Built',
-    text: 'Your base can now grow into a workshop.',
+    text: 'Your first station is ready. Leave town, press L, and claim protected land for your starter base.',
+    modal: true,
+    subtitle: 'FIRST WORKSHOP STEP',
+    action: 'CLAIM FIRST LAND',
     items: Object.freeze([Object.freeze({ id: W.B.TORCH, count: 8 }), Object.freeze({ id: I.BREAD, count: 2 })]),
   }),
   land_claim: Object.freeze({

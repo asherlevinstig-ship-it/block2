@@ -359,6 +359,16 @@ test('player-facing early loop tracker gives a clear next action at each milesto
       craftResult: { out: [13, 1] },
     });
     await closeOpenPanels(page);
+    await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('craft', { w: 2, cells: [7, 7, 7, 7] }));
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('first_land_claim');
+    await expect(page.locator('#rewardpanel')).toContainText('Station Built');
+    await expect(page.locator('#rewardpanel')).toContainText('press L');
+    await expect(page.locator('#rewardpanel')).toContainText('CLAIM FIRST LAND');
+    await clickButtonById(page, 'milestonecontinue');
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
+      label: 'First Land Claim',
+    });
+    await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjectiveHud?.line?.title)).toBe('First Land Claim');
 
     await prepareFocus(page, 'first_land_claim', { noGold: true });
     await expectChapterCheckpoint(page, qualityAudit, 'first land claim no gold', {
