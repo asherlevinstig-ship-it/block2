@@ -141,5 +141,8 @@ test('accepted job contract points to action, progresses, returns to board, and 
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract)).toBe(null);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().jobXp)).toBeGreaterThan(0);
+  await expect(page.locator('#qpanel')).toContainText('FIRST SHIFT COMPLETE');
+  await expect(page.locator('#qpanel')).toContainText('WORK CLAIMED');
+  await expect(page.locator('#qpanel button')).toContainText(['TAKE ANOTHER CONTRACT', 'TRY JOB TUTORIAL', 'OPEN QUEST LOG', 'CLOSE']);
   await expect(page.locator('#currentquest')).toContainText('Next Best Action');
 });

@@ -143,6 +143,21 @@ test('client soundtrack mp3 assets exist for every referenced music mode', () =>
   }
 });
 
+test('client celebrates the first completed job contract with clear next actions', () => {
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+
+  assert.match(networking, /const openFirstShiftCompletePanel=\(m,c,summary\)=>/);
+  assert.match(networking, /FIRST SHIFT COMPLETE/);
+  assert.match(networking, /TAKE ANOTHER CONTRACT/);
+  assert.match(networking, /TRY JOB TUTORIAL/);
+  assert.match(networking, /OPEN QUEST LOG/);
+  assert.match(networking, /m&&m\.firstShiftComplete\)openFirstShiftCompletePanel/);
+  assert.match(networking, /!\(m\.type==='jobContract'&&m\.action==='claim'&&m\.firstShiftComplete\)/);
+  assert.match(styles, /\.first-shift-panel/);
+  assert.match(styles, /\.first-shift-rewards/);
+});
+
 test('Town of Beginnings removes NPC cottages in favor of open districts', () => {
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
@@ -1081,7 +1096,7 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(networkingSource,/Starter items granted:/);
   assert.match(networkingSource,/jobContractNextHint\(job,m\.jobLevelAfter/);
   assert.ok(networkingSource.includes("const nextEventText=String(next||'Take another contract.').replace(/^next:\\s*/i,'');"));
-  assert.ok(networkingSource.includes("eventFeed('[Job]',title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText"));
+  assert.ok(networkingSource.includes("eventFeed('[Job]',(m&&m.firstShiftComplete?'First shift complete: ':'')+title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText"));
   assert.match(networkingSource,/ready to claim/);
   assert.match(networkingSource,/Dungeon gold:/);
   assert.match(networkingSource,/Contract payout/);

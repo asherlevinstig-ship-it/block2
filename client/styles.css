@@ -705,6 +705,18 @@
   .job-board-milestones{display:grid;gap:2px;margin-top:3px;padding-top:5px;border-top:1px solid rgba(255,255,255,.07)}
   .job-board-milestones span{color:#d9b66f;font-size:10px;line-height:1.25}
   .job-board-footer{margin-top:10px!important}
+  .first-shift-panel{display:grid;gap:12px;margin:2px 0;text-align:center}
+  .first-shift-badge{justify-self:center;padding:7px 12px;border:1px solid rgba(255,210,74,.62);border-radius:999px;background:linear-gradient(90deg,rgba(255,210,74,.18),rgba(154,210,107,.12));color:#fff1a8;font-size:10px;letter-spacing:3px;text-shadow:0 0 12px rgba(255,210,74,.55)}
+  .first-shift-panel h2{margin:0;color:#fff3c4!important;text-shadow:0 0 18px rgba(255,210,74,.45)!important}
+  .first-shift-panel .qtext{max-width:650px;margin:0 auto;color:#d8e8ff}
+  .first-shift-rewards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:4px 0}
+  .first-shift-rewards span{min-width:0;padding:12px 10px;border:1px solid rgba(159,216,255,.18);border-radius:8px;background:linear-gradient(145deg,rgba(7,20,34,.82),rgba(0,0,0,.18));box-shadow:inset 0 0 18px rgba(79,216,255,.045)}
+  .first-shift-rewards span.gold{border-color:rgba(255,210,74,.32);background:linear-gradient(145deg,rgba(82,55,10,.38),rgba(0,0,0,.16))}
+  .first-shift-rewards span.perk,.first-shift-rewards span.items{border-color:rgba(195,154,255,.32);background:linear-gradient(145deg,rgba(67,41,99,.32),rgba(0,0,0,.16))}
+  .first-shift-rewards small{display:block;margin-bottom:5px;color:#8fd8ff;font-size:9px;letter-spacing:1.7px;text-transform:uppercase}
+  .first-shift-rewards b{display:block!important;width:auto!important;text-align:center!important;color:#fff3c4!important;font-size:15px!important;line-height:1.25}
+  .first-shift-next{padding:10px 12px;border:1px solid rgba(154,210,107,.28);border-radius:7px;background:rgba(154,210,107,.075)}
+  .first-shift-actions .qbtn{min-width:160px}
   .shoprow b{color:#ffd24a;width:48px;text-align:right}
   #qpanel.commerce .shoprow b,#qpanel.management .shoprow b{width:auto}
   #qpanel.management .shoprow .utility-icon{width:30px;text-align:center}
@@ -1255,7 +1267,7 @@
     #qpanel.management .shoprow.job-offer-card .qbtn{grid-column:1;justify-self:start}
     .job-offer-loop,.job-offer-rewards{grid-template-columns:1fr}
     .job-offer-need{flex-wrap:wrap}.job-offer-need i{margin-left:0;width:100%}
-    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards{grid-template-columns:1fr}
+    .job-board-summary,.job-board-offers,.job-profession-grid,.job-board-rewards,.first-shift-rewards{grid-template-columns:1fr}
     .job-board-current-head{align-items:flex-start;flex-direction:column;gap:4px}
     #locationhud{top:8px;left:8px;min-width:0;width:190px;max-width:34vw;padding:7px 9px}
     #locationhud .zone{font-size:11px;letter-spacing:1.3px}

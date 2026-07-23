@@ -844,6 +844,9 @@ class ProgressionMixin {
         rec.prof.progressionFocus = 'first_d_gate';
         this.ensurePublicGateRank(1);
       }
+      const milestoneRewards = Array.isArray(rec.prof.progressionMilestoneRewards) ? rec.prof.progressionMilestoneRewards : (rec.prof.progressionMilestoneRewards = []);
+      const firstShiftComplete = !milestoneRewards.includes('first_shift_complete');
+      if (firstShiftComplete) milestoneRewards.push('first_shift_complete');
       rec.prof.jobContract = null;
       rec.prof.jobContractOffers = [];
       rec.prof.jobContractOffersAt = 0;
@@ -866,7 +869,7 @@ class ProgressionMixin {
         inventoryOverflow: false,
       });
       return this.progressionChanged(client, 'jobContract', {
-        action, contract: c, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, milestoneStarterItems, graduation,
+        action, contract: c, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, milestoneStarterItems, graduation, firstShiftComplete,
         rewardItems: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
       });
     } else return this.progressionReject(client, 'jobContract', 'action');

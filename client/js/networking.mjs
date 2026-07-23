@@ -1113,6 +1113,44 @@ function netAttachRoom(room,name,client){
       sysMsg('<b>'+escHTML(jobName)+' Level '+(idMilestone.level|0)+'</b> reached<br><b>'+escHTML(idMilestone.title)+' unlocked:</b> '+escHTML(idMilestone.desc)+(reward?'<br><b>Reward:</b> '+escHTML(reward):''));
       eventFeed('[Job]',jobName+' reached Level '+(idMilestone.level|0)+': '+String(idMilestone.title||reward)+'.',{key:'job:'+job+':'+(idMilestone.level|0),cooldown:0});
     };
+    let holdFirstShiftPanelRefresh=false;
+    const openFirstShiftCompletePanel=(m,c,summary)=>{
+      if(typeof openQWin!=='function'||!qpanelEl)return false;
+      holdFirstShiftPanelRefresh=true;
+      openQWin('management');
+      qpanelEl.innerHTML='';
+      const shell=document.createElement('div');shell.className='first-shift-panel';
+      const badge=document.createElement('div');badge.className='first-shift-badge';badge.textContent='FIRST SHIFT COMPLETE';shell.appendChild(badge);
+      const h=document.createElement('h2');h.textContent='WORK CLAIMED';shell.appendChild(h);
+      const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(summary.title||'Contract').toUpperCase()+' - '+String(summary.jobName||'Job').toUpperCase();shell.appendChild(sub);
+      const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='You finished your first paid shift. The game has saved your reward and your next step is now clearer.';shell.appendChild(intro);
+      const rewards=document.createElement('div');rewards.className='first-shift-rewards';
+      const addReward=(label,value,kind='')=>{
+        if(!value)return;
+        const card=document.createElement('span');card.className=kind;card.innerHTML='<small>'+escHTML(label)+'</small><b>'+escHTML(value)+'</b>';rewards.appendChild(card);
+      };
+      addReward('Gold',m.rewardGold?('+'+(m.rewardGold|0)+'g'):'','gold');
+      addReward('Hunter XP',m.rewardXp?('+'+(m.rewardXp|0)):'','xp');
+      addReward(summary.jobName+' XP',m.rewardJobXp?('+'+(m.rewardJobXp|0)):'','job');
+      if(summary.levelLine)addReward('Progress',summary.levelLine,'level');
+      for(const milestone of Array.isArray(m.milestones)?m.milestones:[]){
+        const reward=milestone.reward||JOB_SYSTEM.milestoneReward(c.job,milestone.level)||'Profession perk';
+        addReward('New Perk','Lv '+(milestone.level|0)+' - '+String(milestone.title||reward),'perk');
+      }
+      const itemRewards=Array.isArray(m.rewardItems)?m.rewardItems:[];
+      const itemText=itemRewards.map(it=>((ITEMS[it.id]&&ITEMS[it.id].name)||'Item')+' x'+Math.max(1,it.count|0)).join(', ');
+      addReward('Items',itemText,'items');
+      shell.appendChild(rewards);
+      const next=document.createElement('p');next.className='qtext first-shift-next';next.innerHTML='<b>Next Best Action:</b> '+escHTML(summary.next||'Take another contract or try a job tutorial.');shell.appendChild(next);
+      const row=document.createElement('div');row.className='qrow first-shift-actions';
+      row.appendChild(qBtn('TAKE ANOTHER CONTRACT',()=>openJobsUI(c.job==='adventurer'?'adventurer':(c.job||playerJob||''))));
+      row.appendChild(qBtn('TRY JOB TUTORIAL',()=>openTownTutorialsUI()));
+      row.appendChild(qBtn('OPEN QUEST LOG',()=>openQuestLogUI()));
+      row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
+      shell.appendChild(row);
+      qpanelEl.appendChild(shell);
+      return true;
+    };
     const presentJobContractClaim=(m)=>{
       const c=clampJobContract(m&&m.contract)||{};
       const job=m&&m.job||c.job||playerJob||'adventurer';
@@ -1132,7 +1170,8 @@ function netAttachRoom(room,name,client){
       const nextEventText=String(next||'Take another contract.').replace(/^next:\s*/i,'');
       sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
       showName(title+' complete');
-      eventFeed('[Job]',title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
+      eventFeed('[Job]',(m&&m.firstShiftComplete?'First shift complete: ':'')+title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
+      if(m&&m.firstShiftComplete)openFirstShiftCompletePanel(m,c,{title,jobName,levelLine,next});
     };
     bindProgressionMessages(room,{
       getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},currentContract:()=>jobContract,setContract:v=>{jobContract=v;},clampContract:clampJobContract,
@@ -1155,14 +1194,14 @@ function netAttachRoom(room,name,client){
           if(m.rewardXp)rewardGain('xp',m.rewardXp,'Hunter XP');
           if(m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
           SFX.coin();presentJobContractClaim(m);
-          for(const milestone of Array.isArray(m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
-          if(m.graduation)setTimeout(()=>ONBOARD.showFieldWorkGraduation(),40);
+          if(!m.firstShiftComplete)for(const milestone of Array.isArray(m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
+          if(m.graduation&&!m.firstShiftComplete)setTimeout(()=>ONBOARD.showFieldWorkGraduation(),40);
         }
         if(m.type==='jobContract'&&m.action==='take')clearTownJobGuidance();
         if(m.type==='job'&&m.job){sysMsg('You are now working as a <b>'+escHTML(JOBS[m.job]&&JOBS[m.job].name||m.job)+'</b>.'+(jobContract&&jobContract.job!=='adventurer'&&jobContract.job!==m.job?'<br>Your '+escHTML((JOBS[jobContract.job]&&JOBS[jobContract.job].name)||jobContract.job)+' contract is paused until you switch back.':''));eventFeed('[Job]','You switched job to '+((JOBS[m.job]&&JOBS[m.job].name)||m.job)+'.',{key:'job:set:'+m.job,cooldown:2000});}
-        if((m.type==='job'||m.type==='jobContract')&&qOpen)openJobsUI(m.job||playerJob);
+        if((m.type==='job'||m.type==='jobContract')&&qOpen&&!(m.type==='jobContract'&&m.action==='claim'&&m.firstShiftComplete))openJobsUI(m.job||playerJob);
       },
-      refresh:()=>{renderBars();renderStat();refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();refreshAppearanceDummy();if(qOpen&&qMode==='management')openJobsUI();},
+      refresh:()=>{renderBars();renderStat();refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();refreshAppearanceDummy();if(qOpen&&qMode==='management'){if(holdFirstShiftPanelRefresh)holdFirstShiftPanelRefresh=false;else openJobsUI();}},
     });
     room.onMessage('jobContractOffers',m=>{
       jobContractOffers=Array.isArray(m&&m.offers)?m.offers.map(clampJobContract).filter(Boolean):[];

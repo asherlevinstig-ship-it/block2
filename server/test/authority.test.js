@@ -923,11 +923,18 @@ test('jobs and repeatable contracts are created progressed and claimed only by t
   assert.equal(prof.jobContract.have, 2);
   assert.equal(prof.jobXp, 4, 'validated mining grants profession XP');
   room.handleJobContract(client, { action: 'claim' });
+  const firstClaim = client.sent.findLast(e=>e.type==='progressionResult'&&e.msg.type==='jobContract'&&e.msg.action==='claim');
   assert.equal(prof.jobContract, null);
   assert.equal(prof.gold, 30);
   assert.equal(prof.jobXp, 20);
   assert.equal(prof.S.lvl, 2);
   assert.equal(prof.S.xp, 23, 'contract Hunter XP uses the shared level-up transaction');
+  assert.equal(firstClaim.msg.firstShiftComplete, true);
+  assert.equal(prof.progressionMilestoneRewards.includes('first_shift_complete'), true);
+  prof.jobContract = { job: 'miner', type: 'mine', target: W.B.STONE, need: 1, have: 1, rewardGold: 10, rewardJobXp: 10, rewardXp: 0, title: 'Second Shift', desc: 'Mine stone.' };
+  room.handleJobContract(client, { action: 'claim' });
+  const secondClaim = client.sent.findLast(e=>e.type==='progressionResult'&&e.msg.type==='jobContract'&&e.msg.action==='claim');
+  assert.equal(secondClaim.msg.firstShiftComplete, false);
 });
 
 test('Hunter career and trade professions keep independent XP while one profession is equipped', () => {
