@@ -1489,6 +1489,14 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.ok(frame.indexOf('combatApi.shouldOpenLevel2JobChoice')<frame.indexOf('shouldOpenLevel2PathChoice()'), 'job chooser is checked before path chooser');
   assert.match(combat,/const JOB_TUTORIAL_STEPS=Object\.freeze\(\{/);
   assert.match(combat,/const JOB_TUTORIAL_ROOM_COPY=Object\.freeze\(\{/);
+  assert.match(combat,/const JOB_TUTORIAL_HANDOFFS=Object\.freeze\(\{/);
+  assert.match(combat,/Quarry Contract/);
+  assert.match(combat,/Farm Supply Task/);
+  assert.match(combat,/Tavern Meal Shift/);
+  assert.match(combat,/Forge Work Order/);
+  assert.match(combat,/Meditation Hall focus unlocks at E-Rank Level 4/);
+  assert.match(combat,/Roost Care Route/);
+  assert.match(combat,/function jobTutorialHandoff\(jobId\)/);
   assert.match(combat,/MINER_TUTORIAL_TRADE_GOLD=45/);
   for(const job of ['miner','farmer','cook','blacksmith','monk','pet_tamer']) assert.match(combat,new RegExp(`${job}:\\{room:`));
   assert.match(combat,/function shouldOpenLevel2JobChoice\(\)/);
@@ -1629,6 +1637,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(companions,/Shift climbs, release to glide down/);
   assert.match(combat,/Press B at the roost station/);
   assert.match(combat,/Pet Tamer lesson complete\.<\/b> Returning you to Town of Beginnings/);
+  assert.match(combat,/jobTutorialHandoff\(jobId\)/);
+  assert.match(combat,/Next town step/);
   assert.match(combat,/setTimeout\(\(\)=>\{ if\(jobTutorialActive&&jobTutorialJob==='pet_tamer'\) completeJobTutorial\(\); \}, 900\)/);
   assert.match(combat,/rewardGain\('rare',1,job\.name\+' Lesson',\{icon:'JOB',duration:3000\}\)/);
   assert.match(combat,/burst\(player\.pos\.x,player\.pos\.y\+1,player\.pos\.z,jobTutorialColorArr\(jobId\),42,3\.4,3\.3,\.85\)/);
@@ -3343,6 +3353,13 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/chapter:starterJobChapter\(c\)/);
   assert.match(frame,/localGuildObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('guild'\),'Guild'\)/);
   assert.match(frame,/serverObjectiveLine\(serverObjectiveBySource\('progression'\),'Next'\)\|\|progressionObjectiveFallback\(\)/);
+  assert.match(frame,/function professionHandoffObjective\(\)/);
+  assert.match(frame,/Open the Job Board for your first mining contract/);
+  assert.match(frame,/Open the Job Board for a farm supply task/);
+  assert.match(frame,/Open the Job Board for a cooking contract/);
+  assert.match(frame,/Open the Job Board for a forge order/);
+  assert.match(frame,/Meditation Hall growth unlocks at E-Rank Level 4/);
+  assert.match(frame,/Open the Job Board for pet care work/);
   assert.match(frame,/obj\.unified&&Array\.isArray\(obj\.lines\)/);
   assert.match(frame,/obj\.nextBest&&obj\.line/);
   assert.match(frame,/class="objective-line /);

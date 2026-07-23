@@ -797,6 +797,14 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   monk:{key:'FOCUS CIRCLE',text:'Stand in the focus circle, press G, then hold still until the focus completes.',sub:'This practice room teaches the loop. Full Meditation Hall growth unlocks at E-Rank Level 4.'},
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
+const JOB_TUTORIAL_HANDOFFS=Object.freeze({
+  miner:{title:'Quarry Contract',text:'Return to the quarry board at the Job Board for your first mining contract: ore seams, hidden routes, and map clues.',target:'Quarry work board',event:'Miner handoff: quarry board and mining contracts unlocked.'},
+  farmer:{title:'Farm Supply Task',text:'Head to the farm plots through the Job Board and take a food supply task. Farmers keep cooks, traders, and town stores stocked.',target:'Farm plots',event:'Farmer handoff: farm supply contracts unlocked.'},
+  cook:{title:'Tavern Meal Shift',text:'Go to the tavern counter through the Job Board for your first meal contract. Cooks turn ingredients into buffs, recovery, and gold.',target:'Tavern counter',event:'Cook handoff: tavern meal contracts unlocked.'},
+  blacksmith:{title:'Forge Work Order',text:'Visit Tobin at the forge through the Job Board for repair, upgrade, and sell orders. Blacksmiths turn materials into better gear.',target:'Tobin Forgehand',event:'Blacksmith handoff: forge work orders unlocked.'},
+  monk:{title:'Meditation Hall',text:'Meditation Hall focus unlocks at E-Rank Level 4. Until then, use the Job Board for support contracts and return when your focus training opens.',target:'Meditation Hall',event:'Monk handoff: Meditation Hall growth is introduced for level 4.'},
+  pet_tamer:{title:'Roost Care Route',text:'Travel to Taming Land or the Dragon Roost through the Job Board to start care contracts, egg work, and dragon training services.',target:'Dragon Roost',event:'Pet Tamer handoff: roost and Taming Land work unlocked.'},
+});
 const JOB_CHOICE_PROFILES=Object.freeze({
   miner:{recommended:'Recommended for explorers, collectors, and secret-route hunters.',preview:'CAVE ROUTE'},
   farmer:{recommended:'Recommended for builders, suppliers, and calm town-life players.',preview:'GROW FOOD'},
@@ -2894,17 +2902,26 @@ function jobTutorialRewardRows(jobId){
   return rows;
 }
 function jobTutorialRewardText(jobId){
-  if(jobId==='miner')return 'You can now turn underground finds into gold, maps, ores, and hidden routes.';
-  if(jobId==='farmer')return 'You can now grow the food chain that supports cooks, trading, and town supply.';
-  if(jobId==='cook')return 'You can now turn ingredients into meals that support travel, Gates, and recovery.';
-  if(jobId==='blacksmith')return 'You can now turn raw materials into gear value, repairs, upgrades, and trade goods.';
-  if(jobId==='monk')return 'You can now understand focus spaces. Meditation growth unlocks later in the Meditation Hall.';
-  if(jobId==='pet_tamer')return 'You can now understand the dragon loop: hatch, care, command, ride, and roost.';
+  const handoff=jobTutorialHandoff(jobId);
+  if(handoff)return handoff.text;
   return 'You have finished this job lesson.';
+}
+function jobTutorialHandoff(jobId){
+  const handoff=JOB_TUTORIAL_HANDOFFS[jobId]||null;
+  if(!handoff)return null;
+  if(jobId==='monk'&&S&&S.lvl>=4){
+    return {
+      ...handoff,
+      text:'Return to the Meditation Hall and press G in the focus circle. Monk focus restores resources and can slowly grow your mana pool.',
+      event:'Monk handoff: Meditation Hall focus is ready.'
+    };
+  }
+  return handoff;
 }
 function showJobTutorialCompletionReward(jobId){
   if(!rewardWin||!rewardPanel)return false;
   const job=JOBS[jobId]||{name:'Job'};
+  const handoff=jobTutorialHandoff(jobId);
   const rows=jobTutorialRewardRows(jobId).map(r=>typeof rewardLineHTML==='function'?rewardLineHTML(r):'<div class="rline"><span>'+escHTML(r.label)+'</span><b>'+escHTML(r.value)+'</b></div>').join('');
   rewardPanel.className='earned promotion job-tutorial-complete';
   rewardPanel.innerHTML=
@@ -2912,6 +2929,7 @@ function showJobTutorialCompletionReward(jobId){
     '<div class="rsub">JOB TUTORIAL FINISHED</div>'+
     '<div class="rewardloot">'+rows+'</div>'+
     '<div class="rnote"><b>What this job is for:</b><br>'+escHTML(jobTutorialRewardText(jobId))+'</div>'+
+    (handoff?'<div class="rnote"><b>Next town step:</b><br>'+escHTML(handoff.title)+' - '+escHTML(handoff.target)+'</div>':'')+
     '<button id="jobtutorialrewardclose">BACK TO TOWN</button>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
@@ -3055,9 +3073,11 @@ function completeJobTutorial(){
   rewardGain('rare',1,job.name+' Lesson',{icon:'JOB',duration:3000});
   burst(player.pos.x,player.pos.y+1,player.pos.z,jobTutorialColorArr(jobId),42,3.4,3.3,.85);
   ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,3.2,0xffd24a,.8);
-  sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> Keep an eye on the Next Best Action panel for useful work.');
+  const handoff=jobTutorialHandoff(jobId);
+  sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> '+escHTML(handoff&&handoff.text||'Open the Job Board for your next useful town task.'));
+  if(handoff)eventLog(handoff.event);
   showJobTutorialCompletionReward(jobId);
-  showName(job.name+' ready');
+  showName(handoff&&handoff.title||job.name+' ready');
   refreshPlayUi();
   sendProfileSaveNow();
 }

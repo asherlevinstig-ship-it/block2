@@ -537,12 +537,16 @@ function serverObjectiveProgressText(o){
 }
 function serverObjectiveHudText(o){
   if(!o)return '';
+  if(o.id==='progression:first_profession_contract'){
+    const handoff=professionHandoffObjective();
+    if(handoff&&handoff.text)return handoff.text;
+  }
   if(o.hudText)return o.hudText;
   const legacy={
     'progression:first_land_claim':'Leave town and buy your first land claim',
     'progression:first_claim_expand':'Expand your protected base to 3 connected land claims',
     'progression:first_base_setup':'Inside claimed land: place storage, light, and a station',
-    'progression:first_profession_contract':'Take your first repeatable contract at the Job Board'
+    'progression:first_profession_contract':'Take your first profession or Adventurer contract at the Job Board'
   };
   if(legacy[o.id])return legacy[o.id];
   const prefix=serverObjectiveProgressText(o);
@@ -604,6 +608,44 @@ function serverObjectiveProgressParts(o){
 function objectiveLine(kind,label,title,text,action,progress=null,meta=null){
   return {kind,label,title:title||label,text:text||'',action,progress,...(meta&&typeof meta==='object'?meta:{})};
 }
+function professionHandoffObjective(){
+  const job=String(playerJob||'');
+  if(job==='miner')return {
+    title:'Quarry Contract',
+    text:'Open the Job Board for your first mining contract, then head to the quarry for ore seams, hidden routes, and map clues.',
+    target:{label:'Quarry',x:HUB.quarry.x,z:HUB.quarry.z}
+  };
+  if(job==='farmer')return {
+    title:'Farm Supply Task',
+    text:'Open the Job Board for a farm supply task, then work the farm plots to grow food for cooks, traders, and town stores.',
+    target:{label:'Farm',x:HUB.farm.x,z:HUB.farm.z}
+  };
+  if(job==='cook')return {
+    title:'Tavern Meal Shift',
+    text:'Open the Job Board for a cooking contract, then use the tavern counter to turn ingredients into buffs, recovery, and gold.',
+    target:{label:'Tavern',x:HUB.tavern.x,z:HUB.tavern.z}
+  };
+  if(job==='blacksmith')return {
+    title:'Forge Work Order',
+    text:'Open the Job Board for a forge order, then visit Tobin to repair, upgrade, craft, or sell gear.',
+    target:{label:'Forge',x:HUB.smith.x,z:HUB.smith.z}
+  };
+  if(job==='monk')return S&&S.lvl>=4 ? {
+    title:'Meditation Hall',
+    text:'Return to the Meditation Hall and press G in the focus circle to restore resources and train long-term mana growth.',
+    target:{label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z}
+  } : {
+    title:'Support Contract',
+    text:'Meditation Hall growth unlocks at E-Rank Level 4. For now, open the Job Board for your first support contract.',
+    target:{label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z}
+  };
+  if(job==='pet_tamer')return {
+    title:'Roost Care Route',
+    text:'Open the Job Board for pet care work, then travel to Taming Land or the Dragon Roost for eggs, bonds, and training services.',
+    target:{label:'Dragon Roost',x:HUB.roost.x,z:HUB.roost.z}
+  };
+  return null;
+}
 function currentPlayerStyleGuide(){
   if(menusApi.playerStyleGuide){
     const guide=menusApi.playerStyleGuide();
@@ -645,7 +687,9 @@ function progressionObjectiveFallback(){
     return objectiveLine('progression','Next','Craft Station','Craft your first table or furnace',craft||{type:'questlog',label:'OPEN QUEST LOG'});
   }
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
-    return objectiveLine('progression','Next','Profession Work','Take or claim repeatable work at the Job Board',{type:'jobs',label:'OPEN JOB BOARD'});
+    const handoff=professionHandoffObjective();
+    if(handoff)return objectiveLine('progression','Next',handoff.title,handoff.text,{type:'jobs',label:'OPEN JOB BOARD'});
+    return objectiveLine('progression','Next','Profession Work','Take your first profession or Adventurer contract at the Job Board',{type:'jobs',label:'OPEN JOB BOARD'});
   }
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next'),prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
@@ -1197,7 +1241,10 @@ function utilityCompassTarget(){
   }
   if(progressionFocus==='first_craft_station') return {label:'Crafting',x:HUB.smith.x,z:HUB.smith.z};
   if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup') return {label:'Claim Land',x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
-  if(progressionFocus==='first_profession_contract') return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
+  if(progressionFocus==='first_profession_contract'){
+    const handoff=professionHandoffObjective();
+    return handoff&&handoff.target ? handoff.target : {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
+  }
   if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
