@@ -1629,6 +1629,9 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialPetDragonStep\(\)\{ return jobTutorialPetDragonStep; \}/);
   assert.match(combat,/TRY A WORKER PATH/);
   assert.match(combat,/Hunter Awakening 4 \/ 4 - Optional profession trial/);
+  assert.match(combat,/const JOB_CHOICE_PROFILES=Object\.freeze\(\{/);
+  assert.match(combat,/Recommended for pet lovers, dragon riders, and companion trainers/);
+  assert.match(combat,/job\.name\+' Chosen'/);
   assert.match(combat,/ids=\['miner','farmer','cook','blacksmith','monk','pet_tamer'\]/);
   assert.match(combat,/chooseJobFromLevel2Banner\(card\.dataset\.job\)/);
   assert.match(combat,/startJobTutorial\(jobId\)/);
@@ -1697,9 +1700,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(frame,/tickJobTutorial\(now\)/);
   assert.match(menus,/"chooseJob":\{get:\(\)=>chooseJob\}/);
   assert.match(styles,/#pathselect\.jobselect/);
-  assert.match(styles,/#jobchoicecards\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(styles,/#jobchoicecards\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(styles,/\.job-choice-card/);
   assert.match(styles,/\.job-choice-art/);
+  assert.match(styles,/\.job-choice-scene\.pet_tamer/);
+  assert.match(styles,/\.job-choice-recommended/);
   assert.match(styles,/#townchoices \.tcrow\.job-choice/);
 });
 

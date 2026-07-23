@@ -797,6 +797,14 @@ const JOB_TUTORIAL_ROOM_COPY=Object.freeze({
   monk:{key:'FOCUS CIRCLE',text:'Stand in the focus circle, press G, then hold still until the focus completes.',sub:'This practice room teaches the loop. Full Meditation Hall growth unlocks at E-Rank Level 4.'},
   pet_tamer:{key:'HATCH EGG',text:'Use the tutorial dragon egg on the Egg Insulator to hatch it quickly.',sub:'The flying dragons show the roost. This room teaches eggs, hatching, care, riding, commands, and bonds.'},
 });
+const JOB_CHOICE_PROFILES=Object.freeze({
+  miner:{recommended:'Recommended for explorers, collectors, and secret-route hunters.',preview:'CAVE ROUTE'},
+  farmer:{recommended:'Recommended for builders, suppliers, and calm town-life players.',preview:'GROW FOOD'},
+  cook:{recommended:'Recommended for support players who like preparing buffs for friends.',preview:'BUFF MEALS'},
+  blacksmith:{recommended:'Recommended for gear makers, upgrade chasers, and loot fixers.',preview:'FORGE GEAR'},
+  monk:{recommended:'Recommended for patient support players who like restoring groups.',preview:'FOCUS AURA'},
+  pet_tamer:{recommended:'Recommended for pet lovers, dragon riders, and companion trainers.',preview:'DRAGON BOND'},
+});
 let jobTutorialActive=false, jobTutorialJob='';
 let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
@@ -3353,11 +3361,13 @@ function guideTownTutorialChoice(step, ready=true){
 }
 function jobChoiceCardHTML(id){
   const j=JOBS[id], info=jobTutorialInfo(id), prog=jobXpIntoLevel(jobXpFor(id)), hooks=JOB_SYSTEM.gameplayHooks(id,prog.lvl).slice(0,2), active=playerJob===id;
+  const profile=JOB_CHOICE_PROFILES[id]||{recommended:'Recommended for curious hunters who want a different way to help.',preview:'TRY JOB'};
   return '<article class="job-choice-card '+(active?'active ':'')+(info&&info.theme||'')+'" data-job="'+id+'" style="--job-col:'+j.col+';--job-glow:'+hexToRgba(j.col,.34)+'">'
-    +'<div class="job-choice-art"><i></i><b>'+escHTML(info&&info.art||j.name.slice(0,3).toUpperCase())+'</b><span></span></div>'
+    +'<div class="job-choice-art"><div class="job-choice-scene '+id+'" aria-hidden="true"><i></i><i></i><i></i><i></i></div><b>'+escHTML(profile.preview)+'</b><span></span></div>'
     +'<div class="job-choice-tag">'+escHTML(info&&info.room||'Training Room')+'</div>'
     +'<h2>'+escHTML(j.name)+'</h2>'
     +'<p>'+escHTML(j.desc)+'</p>'
+    +'<div class="job-choice-recommended">'+escHTML(profile.recommended)+'</div>'
     +'<ul>'+[...(info&&info.beats||[]),...hooks].slice(0,4).map(line=>'<li>'+escHTML(line)+'</li>').join('')+'</ul>'
     +'<button type="button">'+(active?'START '+escHTML(j.name).toUpperCase()+' TUTORIAL':'CHOOSE '+escHTML(j.name).toUpperCase())+'</button>'
     +'</article>';
@@ -3389,11 +3399,19 @@ function guideJobTutorialChoice(jobId){
 }
 function chooseJobFromLevel2Banner(jobId){
   if(!JOBS[jobId]||jobId==='adventurer') return;
+  const job=JOBS[jobId];
   setLevel2JobChoiceSeen();
   if(typeof chooseJob==='function') chooseJob(jobId,jobId);
   else if(NET.on&&NET.room) NET.room.send('setJob',{job:jobId});
   else playerJob=jobId;
   closeLevel2JobChoice();
+  if(typeof SFX!=='undefined'&&SFX.level) SFX.level();
+  rewardGain('rare',1,job.name+' Chosen',{icon:'JOB',duration:2400});
+  if(player){
+    burst(player.pos.x,player.pos.y+1,player.pos.z,jobTutorialColorArr(jobId),34,3.1,3.1,.82);
+    ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,2.8,0xffd24a,.72);
+  }
+  showName(job.name+' chosen - tutorial starting');
   startJobTutorial(jobId);
   refreshAppearanceDummy();
   if(!NET.on||!NET.room){ sendPlayerMetaNow(); sendProfileSaveNow(); }
