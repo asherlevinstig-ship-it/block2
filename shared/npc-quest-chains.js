@@ -48,8 +48,8 @@
     return freezeChains({
       'Mara Vale':[
         {title:'First Hands', type:'fetch', item:B.LOG, need:6, desc:'Gather {N} logs beyond the walls. This first field task will take you to Level 2.', gold:16, xp:28, levelTarget:2},
-        {title:'Road Ready', type:'kill', need:3, desc:'Take this wooden sword and defeat {N} monsters beyond town. Return ready for Level 3 and your first Gate.', gold:24, xp:47, levelTarget:3},
-        {title:'The First Gate', type:'gate', need:1, gateRank:0, desc:'An E-rank Gate has opened for you. Find it, clear it, and return to Mara.', gold:50, xp:60},
+        {title:'Road Ready', type:'kill', need:3, desc:'Mara hands you a wooden sword. Use it to defeat {N} monsters beyond town, then return ready for Level 3 and your first Gate.', gold:24, xp:47, levelTarget:3, objectiveText:'Use Mara\'s wooden sword to defeat 3 hostile monsters beyond the walls.', objectiveLocation:'Wilderness outside town'},
+        {title:'The First Gate', type:'gate', need:1, gateRank:0, desc:'Your first E-rank Gate has opened. Check your health, bring food if you have it, enter the glowing Gate, defeat its boss, and return to Mara.', gold:50, xp:60, objectiveText:'Find the cinematic E-rank Gate marker, enter when ready, and defeat the dungeon boss.', objectiveLocation:'First E-rank Gate', objectiveAction:{type:'find_gate',label:'FIND GATE'}},
         {title:'A Better Sense', type:'utility', utility:'compass', need:1, desc:'Earn and equip a utility. Start with Compass Sense from a Guild Contract, then return to Mara.', gold:42, xp:58},
         {title:'Meat Becomes Gold', type:'sell', item:I.MONSTER_MEAT, need:1, desc:'Go hunting, bring Monster Meat to Greta at the tavern, and sell {N} piece for gold.', gold:38, xp:54, rewardItems:[{id:I.SHADOW_SIGIL,count:1}]},
         {title:'A Shadow Companion', type:'familiar', familiar:'shade', need:1, desc:'Use the Shadow Sigil Mara gave you to bind Shade, then return. Press K to call it afterward.', gold:52, xp:72, rewardItems:[{id:B.EGG_INSULATOR,count:1},{id:I.DRAGON_EGG,count:1}]},

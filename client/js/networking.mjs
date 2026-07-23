@@ -1375,6 +1375,10 @@ function netAttachRoom(room,name,client){
         if(townGuidanceActive&&townGuidanceStep==='quest') clearTownGuidance();
         SFX.quest();
         if(quest.giver==='Mara Vale'&&quest.title==='First Hands') sysMsg('<b>Quest accepted: First Hands.</b> Leave through the <b>north gate</b> and gather 6 logs.');
+        else if(quest.giver==='Mara Vale'&&quest.title==='The First Gate'){
+          sysMsg('<b>The First Gate accepted.</b><br>Check your health, bring food if you have it, then follow the bright E-rank Gate marker.');
+          setTimeout(()=>{ if(typeof openFirstGateBriefing==='function') openFirstGateBriefing(quest); },80);
+        }
         else sysMsg('<b>'+escHTML(quest.title||'Town quest')+'</b> accepted from '+escHTML(quest.giver)+'.');
         eventFeed('[Quest]','Accepted '+String(quest.title||'Town quest')+' from '+String(quest.giver||'a quest giver')+'.',{key:'npc-accept:'+String(quest.id||quest.title||''),cooldown:0});
         if(Array.isArray(m.grantedItems)&&m.grantedItems.some(item=>item&&item.id===I.WOOD_SWORD)){

@@ -1264,6 +1264,16 @@ globalThis.resolveRegionalOpportunity=(id='')=>{
   trackedRegionalOpportunity=null;displayedRegionalOpportunity=null;return true;
 };
 function utilityCompassTarget(){
+  if(dim==='overworld'&&quest&&quest.type==='gate'){
+    const rank=Math.max(0,quest.gateRank|0), gates=NET.room&&NET.room.state&&NET.room.state.gates;
+    let target=null;
+    if(gates&&gates.forEach)gates.forEach(g=>{
+      if(!g||!g.active||(g.rank|0)!==rank)return;
+      const d=Math.hypot(g.x-player.pos.x,g.z-player.pos.z);
+      if(!target||d<target.d)target={label:rank===0?'First E-rank Gate':'Gate',x:g.x,z:g.z,d};
+    });
+    if(target)return {label:target.label,x:target.x,z:target.z};
+  }
   const trail=dim==='overworld'&&overworldActivity&&overworldActivity.trailSense;
   if(trail&&Number.isFinite(trail.x)&&Number.isFinite(trail.z)&&(!trail.expiresAt||trail.expiresAt>Date.now())){
     return {label:trail.kind==='breach'?'Breach Trail':'Trail Sense',x:trail.x,z:trail.z};

@@ -1129,6 +1129,31 @@ function netFirstGate(){
   }
   return NET.room.state.gate || null;
 }
+function decorateFirstPublicGate(local){
+  if(!local||!local.grp||local.firstGateDecor||(local.rank|0)!==0||(local.kind||'public')!=='public')return;
+  local.firstGateDecor=true;
+  const group=new THREE.Group();
+  const mat=new THREE.MeshBasicMaterial({color:0x8cff9a,transparent:true,opacity:.34,blending:THREE.AdditiveBlending,depthWrite:false});
+  const gold=new THREE.MeshBasicMaterial({color:0xffd24a,transparent:true,opacity:.82,blending:THREE.AdditiveBlending,depthWrite:false});
+  const base=new THREE.Mesh(new THREE.RingGeometry(1.9,2.35,44),mat);
+  base.rotation.x=-Math.PI/2;base.position.y=.08;group.add(base);
+  for(const x of [-2.05,2.05]){
+    const pylon=new THREE.Mesh(new THREE.CylinderGeometry(.08,.14,2.8,6),gold);
+    pylon.position.set(x,1.42,0);group.add(pylon);
+    const flame=new THREE.Mesh(new THREE.SphereGeometry(.22,8,6),mat);
+    flame.position.set(x,2.98,0);group.add(flame);
+  }
+  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=72;
+  const cx=canvas.getContext('2d');
+  cx.fillStyle='rgba(5,14,20,.8)';cx.fillRect(8,10,240,52);
+  cx.strokeStyle='#8cff9a';cx.lineWidth=4;cx.strokeRect(8,10,240,52);
+  cx.font='bold 24px Courier New';cx.textAlign='center';cx.fillStyle='#eaffc8';cx.fillText('FIRST GATE',128,42);
+  const tex=new THREE.CanvasTexture(canvas);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+  const banner=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false}));
+  banner.position.y=5.05;banner.scale.set(4.1,1.15,1);group.add(banner);
+  local.grp.add(group);
+  local.firstGateAura=group;
+}
 function netMirrorGate(){
   if(dim!=='overworld') return;
   if(!gateSystemUnlocked()){
@@ -1154,6 +1179,7 @@ function netMirrorGate(){
         burst(g.x, g.y+1.5, g.z, local.colArr, 30, 3, 3, .9);
       }
       local.x=g.x; local.y=g.y; local.z=g.z; local.dungeonId=g.dungeonId||''; local.rank=g.rank; local.kind=g.kind||'public'; local.shard=shard; local.expiresAt=g.expiresAt||0;
+      decorateFirstPublicGate(local);
       setGateLabel(local);
       local.grp.position.set(g.x,g.y,g.z);
     });

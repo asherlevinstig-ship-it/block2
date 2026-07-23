@@ -4063,8 +4063,8 @@ class GameRoom extends Room {
   progressionObjective(focus) {
     const map = {
       first_town_map: ['progression:first_town_map', 'progression', 'Town Map', 'Pick up a Town of Beginnings map from Orin Mapwell.', 'Orin Mapwell', 'cartographer', 'VISIT ORIN', 45],
-      first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Mara\'s combat lesson.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
-      first_e_gate: ['progression:first_e_gate', 'progression', 'First E-rank Gate', 'Clear Mara\'s first E-rank Gate.', 'Wilderness Gate', 'find_gate', 'FIND GATE', 50],
+      first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Road Ready from Mara, use the starter sword, and prove you can survive outside town.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
+      first_e_gate: ['progression:first_e_gate', 'progression', 'First E-rank Gate', 'Accept Mara\'s Gate briefing, then follow the cinematic E-rank Gate marker into your first dungeon.', 'Wilderness Gate', 'find_gate', 'FIND GATE', 50],
       first_craft_station: ['progression:first_craft_station', 'progression', 'First Craft Station', 'Craft a Crafting Table or Furnace.', 'Crafting menu', 'craft', 'CRAFT STATION', 50],
       first_land_claim: ['progression:first_land_claim', 'progression', 'First Land Claim', 'Buy protected land for your first base.', 'Land Claims', 'land', 'CLAIM LAND', 50],
       first_claim_expand: ['progression:first_claim_expand', 'progression', 'Expand Claim', 'Expand your claim to at least three connected tiles.', 'Land Claims', 'land', 'EXPAND LAND', 50],

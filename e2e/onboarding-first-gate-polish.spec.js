@@ -74,5 +74,11 @@ test('training hands the player to Mara and clearly prepares the first Gate', as
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('npcQuest',{action:'accept',giver:'Mara Vale',role:'guide'}));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().quest?.title)).toBe('The First Gate');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().firstGate)).toMatchObject({rank:0,kind:'public'});
+  await expect(page.locator('#qpanel')).toContainText('FIRST DUNGEON BRIEFING');
+  await expect(page.locator('#qpanel')).toContainText('THE FIRST E-RANK GATE');
+  await expect(page.locator('#qpanel')).toContainText('If you fail, you return safely');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.text)).toContain('E-rank Gate');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().compassTarget)).toMatchObject({
+    label:'First E-rank Gate',
+  });
 });

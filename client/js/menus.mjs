@@ -135,6 +135,7 @@ const legacyMenuBindings={
   "openCartographerUI":{get:()=>openCartographerUI},
   "openCosmeticsUI":{get:()=>openCosmeticsUI},
   "openJobsUI":{get:()=>openJobsUI},
+  "openFirstGateBriefing":{get:()=>openFirstGateBriefing},
   "openQuestLogUI":{get:()=>openQuestLogUI},
   "openQuestUI":{get:()=>openQuestUI},
   "openQWin":{get:()=>openQWin},
@@ -2962,6 +2963,32 @@ function maraQuestCue(q){
   else if(q.type==='familiar') showName('Use the Shadow Sigil, then press K');
   else if(q.type==='mount') showName('Place the Egg Insulator, then use the Dragon Egg');
   else if(q.type==='mount_use') showName('Press X to summon and ride your dragon');
+}
+function openFirstGateBriefing(q){
+  if(!q || q.giver!=='Mara Vale' || q.title!=='The First Gate') return false;
+  openQWin('dialog');
+  qpanelEl.innerHTML='';
+  const panel=document.createElement('div');
+  panel.className='first-gate-briefing';
+  panel.innerHTML=
+    '<div class="fgb-kicker">MARA VALE - FIRST DUNGEON BRIEFING</div>'+
+    '<h2>THE FIRST E-RANK GATE</h2>'+
+    '<p>The Gate is real now. You do not need perfect gear, but you should know the rules before stepping through.</p>'+
+    '<div class="fgb-checks">'+
+      '<span><b>1</b> Follow the bright Gate marker outside town.</span>'+
+      '<span><b>2</b> Bring food if you have it. A party is optional.</span>'+
+      '<span><b>3</b> Defeat the boss, then exit and report back to Mara.</span>'+
+      '<span><b>!</b> If you fail, you return safely and can try again.</span>'+
+    '</div>'+
+    '<div class="fgb-note">This is the first dungeon milestone. It teaches Gates before the game opens wider.</div>';
+  qpanelEl.appendChild(panel);
+  const row=document.createElement('div');
+  row.className='qrow';
+  row.appendChild(qBtn('FIND FIRST GATE',()=>{ closeQWin(); sysMsg('<b>First Gate:</b> follow the bright Gate marker. You can enter alone or with friends.'); },true));
+  row.appendChild(qBtn('OPEN QUEST LOG',()=>openQuestLogUI()));
+  row.appendChild(qBtn('CLOSE',()=>closeQWin()));
+  qpanelEl.appendChild(row);
+  return true;
 }
 function requestAegisBounty(offer){
   if(!NET.on||!NET.room){ sysMsg('Aegis bounties require other online players.'); return false; }
