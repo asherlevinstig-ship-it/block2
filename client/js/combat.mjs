@@ -828,9 +828,9 @@ const COOK_TUTORIAL_ACTIONS=Object.freeze([
   {key:'SELL MEAL',title:'Sell Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
 ]);
 const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
-  {key:'CRAFT CHAINMAIL',title:'Craft Armor',verb:'FORGE + G',purpose:'Stand at the forge bench and press G to craft Chainmail Armor from seven iron ingots and one coal.',done:'You forged Chainmail Armor. Blacksmith craft quality improves with your max mana pool.'},
-  {key:'CHECK QUALITY',title:'Inspect Quality',verb:'FORGE + G',purpose:'Press G at the forge bench to inspect the armour rarity and learn why mana matters.',done:'You checked the craft quality. Larger mana pools give better armour rarity rolls.'},
-  {key:'SELL ARMOR',title:'Sell Armor',verb:'TOBIN + G',purpose:'Take the finished armour to Tobin Forgehand and press G to sell it for gold.',done:'You sold the armour. Blacksmiths turn materials into gear, repairs, upgrades, and trade value.'},
+  {key:'CRAFT CHAINMAIL',title:'Craft Armor',verb:'FORGE + G',purpose:'Stand on the orange forge mat and press G to craft Chainmail Armor from seven iron ingots and one coal.',done:'You forged Chainmail Armor. Blacksmith craft quality improves with your max mana pool.'},
+  {key:'CHECK QUALITY',title:'Inspect Quality',verb:'INSPECTION + G',purpose:'Stay at the forge inspection bench and press G to reveal the armour rarity roll.',done:'You revealed the craft quality. Larger mana pools give better armour rarity rolls.'},
+  {key:'SELL ARMOR',title:'Sell Armor',verb:'TOBIN + G',purpose:'Take the finished armour along the orange floor route to Tobin Forgehand and press G to sell it for gold.',done:'You sold the armour. Blacksmiths turn materials into gear, repairs, upgrades, and trade value.'},
 ]);
 const MONK_TUTORIAL_FOCUS_MS=5000;
 const MONK_TUTORIAL_ACTIONS=Object.freeze([
@@ -1889,7 +1889,7 @@ function tryBlacksmithTutorialAction(){
     refreshHUD();
     SFX.success&&SFX.success();
     advanceBlacksmithTutorial('craft');
-    sysMsg('Crafted <b>'+escHTML(blacksmithRarityName(armor.rarity))+' Chainmail Armor</b>. Press <b>G</b> at the forge again to inspect the quality roll.');
+    sysMsg('Crafted <b>'+escHTML(blacksmithRarityName(armor.rarity))+' Chainmail Armor</b>. Stay at the inspection bench and press <b>G</b> again to reveal why it rolled that rarity.');
     return true;
   }
   if(step===1){
@@ -1901,7 +1901,10 @@ function tryBlacksmithTutorialAction(){
     jobTutorialBlacksmithCraftedArmor={rarity,maxMana:maxMp(),bonus:blacksmithArmorCraftBonusValue(),slot:blacksmithTutorialArmorSlot()};
     SFX.success&&SFX.success();
     advanceBlacksmithTutorial('inspect');
-    sysMsg('<b>Quality check:</b> Your max mana is <b>'+maxMp()+'</b>, giving a <b>+'+bonus+'%</b> Blacksmith quality bonus. This armour rolled <b>'+escHTML(blacksmithRarityName(rarity))+'</b>.');
+    const rarityName=blacksmithRarityName(rarity);
+    showName(rarityName+' Armor');
+    rewardGain('rare',1,rarityName+' Armor',{icon:'GEAR',duration:2800});
+    sysMsg('<b>Rarity revealed:</b> Your max mana is <b>'+maxMp()+'</b>, giving a <b>+'+bonus+'%</b> Blacksmith quality bonus. This armour rolled <b>'+escHTML(rarityName)+'</b>. Follow the orange route to Tobin.');
     return true;
   }
   if(step===2){
@@ -2870,10 +2873,10 @@ function updateJobTutorialHud(){
     copy=jobTutorialBlacksmithStep>=3
       ? {key:'RETURN PILLAR',text:'You crafted armour, inspected its rarity, and sold it for gold.',sub:'Walk into the blue return pillar to go back to town.'}
       : jobTutorialBlacksmithStep===2
-        ? {key:'TOBIN FORGEHAND',text:'Take the Chainmail Armor to Tobin Forgehand and press G to sell it for gold.',sub:'This completes the blacksmith economy loop.'}
+        ? {key:'TOBIN FORGEHAND',text:'Follow the orange floor route to Tobin Forgehand and press G to sell the Chainmail Armor.',sub:'This completes the blacksmith economy loop: materials become valued gear.'}
       : jobTutorialBlacksmithStep===1
-          ? {key:'CHECK QUALITY',text:'Press G at the forge bench to inspect your armour rarity roll.',sub:'Blacksmith armour rarity gets a bonus from your max mana pool.'}
-          : {key:action.key,text:blacksmithTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Blacksmith loop: materials become armour, armour quality scales with mana, armour sells for gold.'};
+          ? {key:'CHECK QUALITY',text:'Press G at the inspection bench to reveal your armour rarity roll.',sub:'Blacksmith armour rarity gets a bonus from your max mana pool.'}
+          : {key:action.key,text:blacksmithTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Blacksmith loop: materials become armour, rarity scales with mana, armour sells for gold.'};
   }
   if(jobTutorialJob==='monk'){
     const action=monkTutorialAction();
@@ -3012,7 +3015,7 @@ function startJobTutorial(jobId){
   if(jobId==='pet_tamer')sysMsg('<b>Pet Tamer chosen.</b><br>Follow the pillar of light to the open Egg Insulator, then hatch your tutorial egg.');
   else if(jobId==='farmer')sysMsg('<b>Farmer chosen.</b><br>Follow the pillar of light to the soil patch. Select the wooden hoe, aim at the ground, then press <b>G</b>.');
   else if(jobId==='cook')sysMsg('<b>Cook chosen.</b><br>Follow the pillar of light to the yellow prep station. Press <b>G</b> to start turning wheat into real food.');
-  else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the forge bench. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
+  else if(jobId==='blacksmith')sysMsg('<b>Blacksmith chosen.</b><br>Follow the pillar of light to the orange forge station. Press <b>G</b> to craft Chainmail Armor from ingots and coal.');
   else if(jobId==='monk')sysMsg('<b>Monk chosen.</b><br>Follow the pillar of light to the focus circle. Press <b>G</b>, then hold still.');
   else sysMsg('<b>'+escHTML(job.name)+' chosen.</b><br>You have been moved to a private '+escHTML(jobTutorialInfo(jobId).room)+'. Practice here, then walk into the blue return pillar.');
   sendProfileSaveNow();

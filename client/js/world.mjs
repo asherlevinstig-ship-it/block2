@@ -1216,26 +1216,67 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     box(cx-3,G+1,cz-14,cx+3,G+1,cz-14,B.PLANKS);
     for(const ox of [-2,0,2])setBlock(cx+ox,G+2,cz-14,B.LANTERN);
   }else if(jobId==='blacksmith'){
-    box(cx-13,G,cz-11,cx+13,G,cz+7,B.COBBLE);
-    for(let x=cx-8;x<=cx+8;x+=4){setBlock(x,G+1,cz-9,B.FURNACE);setBlock(x,G+1,cz-4,B.IRON_ORE);}
-    setBlock(cx,G+1,cz+2,B.TABLE); setBlock(cx+4,G+1,cz+2,B.CAMPFIRE); setBlock(cx-4,G+1,cz+2,B.CHEST);
-    box(cx-16,G,cz-14,cx+16,G,cz+13,B.COBBLE);
-    for(let x=cx-14;x<=cx+14;x+=7){
-      lampPost(x,cz-13,3);
-      lampPost(x,cz+12,3);
+    const clear=(x,z,top=G+9)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
+    for(let x=cx-18;x<=cx+18;x++)for(let z=cz-15;z<=cz+17;z++){
+      for(let y=G-3;y<G;y++)setBlock(x,y,z,B.STONE);
+      setBlock(x,G,z,((x+z)&1)?B.COBBLE:B.STONE);
+      clear(x,z,G+9);
     }
-    box(cx-7,G+1,cz-1,cx+7,G+1,cz-1,B.BRICK);
+    for(let x=cx-18;x<=cx+18;x++){
+      for(let y=G+1;y<=G+4;y++){
+        setBlock(x,y,cz-15,(x%5===0&&y===G+3)?B.GLASS:((y===G+1||y===G+4)?B.LOG:B.BRICK));
+        setBlock(x,y,cz+17,(x>=cx+7&&x<=cx+11&&y<=G+3)?B.AIR:((y===G+1||y===G+4)?B.LOG:B.BRICK));
+      }
+    }
+    for(let z=cz-15;z<=cz+17;z++){
+      for(let y=G+1;y<=G+4;y++){
+        setBlock(cx-18,y,z,(z%6===0&&y===G+3)?B.GLASS:((y===G+1||y===G+4)?B.LOG:B.BRICK));
+        setBlock(cx+18,y,z,(z%6===0&&y===G+3)?B.GLASS:((y===G+1||y===G+4)?B.LOG:B.BRICK));
+      }
+    }
+    for(const [ox,oz] of [[-18,-15],[18,-15],[-18,17],[18,17]])for(let y=G+1;y<=G+6;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
+    for(let x=cx-19;x<=cx+19;x++)for(let z=cz-16;z<=cz+18;z++){
+      const edge=x===cx-19||x===cx+19||z===cz-16||z===cz+18;
+      setBlock(x,G+5,z,edge?B.LOG:B.PLANKS);
+    }
+    for(let z=cz-14;z<=cz+15;z+=5){box(cx-17,G+6,z,cx+17,G+6,z,B.LOG);setBlock(cx-15,G+4,z,B.LANTERN);setBlock(cx+15,G+4,z,B.LANTERN);}
+
+    // Guided floor route: forge mat -> inspection bench -> Tobin counter -> return pillar.
+    for(let z=cz-1;z<=cz+11;z++)setBlock(cx,G,z,B.TERRACOTTA);
+    for(let x=cx;x<=cx+9;x++)setBlock(x,G,cz+11,B.TERRACOTTA);
+    for(let z=cz+11;z<=cz+23;z++)setBlock(cx+9,G,z,z>cz+18?B.COBBLE:B.TERRACOTTA);
+    for(let x=cx;x<=cx+9;x++)setBlock(x,G,cz+23,B.COBBLE);
+
+    // Forge station: active interaction is still blacksmithTutorialForgePos().
+    for(let x=cx-4;x<=cx+4;x++)for(let z=cz-2;z<=cz+4;z++)setBlock(x,G,z,B.TERRACOTTA);
+    box(cx-5,G+1,cz-1,cx+5,G+1,cz-1,B.BRICK);
     setBlock(cx,G+1,cz+1,B.TABLE);
     setBlock(cx-2,G+1,cz+1,B.FURNACE);
     setBlock(cx+2,G+1,cz+1,B.CAMPFIRE);
-    box(cx+5,G+1,cz-3,cx+9,G+1,cz-3,B.IRON_ORE);
-    box(cx+5,G+2,cz-3,cx+9,G+2,cz-3,B.COAL_ORE);
-    box(cx-11,G,cz+3,cx-8,G,cz+6,B.WATER);
-    for(const [ox,oz,id] of [[-10,-9,B.COAL_ORE],[-7,-9,B.IRON_ORE],[-4,-9,B.DIAMOND_ORE],[8,-8,B.IRON_ORE],[11,-8,B.COAL_ORE]]){setBlock(cx+ox,G+1,cz+oz,id);setBlock(cx+ox,G+2,cz+oz,B.PLANKS);}
-    for(const [ox,oz,h] of [[-12,10,2],[-9,10,1],[7,10,1],[10,10,2]])crateStack(cx+ox,cz+oz,h);
-    for(const [ox,oz] of [[-14,-12],[14,-12],[-14,12],[14,12]])for(let y=G+1;y<=G+5;y++)setBlock(cx+ox,y,cz+oz,B.LOG);
-    box(cx-14,G+5,cz-12,cx+14,G+5,cz+12,B.PLANKS);
-    for(let x=cx-12;x<=cx+12;x+=4)setBlock(x,G+6,cz-10,B.BRICK);
+    setBlock(cx-2,G+2,cz+1,B.CAMPFIRE);
+    setBlock(cx+2,G+2,cz+1,B.LANTERN);
+    for(const [ox,oz] of [[-4,-3],[4,-3],[-4,5],[4,5]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
+
+    // Material racks and rarity inspection props around the same forge target.
+    for(const [ox,oz,id] of [[-13,-9,B.COAL_ORE],[-10,-9,B.IRON_ORE],[-7,-9,B.DIAMOND_ORE],[8,-9,B.IRON_ORE],[11,-9,B.COAL_ORE],[14,-9,B.IRON_ORE]]){setBlock(cx+ox,G+1,cz+oz,id);setBlock(cx+ox,G+2,cz+oz,B.PLANKS);}
+    for(let x=cx+5;x<=cx+11;x++){setBlock(x,G+1,cz+2,B.IRON_ORE);setBlock(x,G+2,cz+2,x===cx+8?B.DIAMOND_ORE:B.COAL_ORE);}
+    box(cx-12,G,cz+3,cx-9,G,cz+6,B.WATER);
+    setBlock(cx-8,G+1,cz+4,B.LANTERN);
+    setBlock(cx+5,G+1,cz+5,B.GLASS);
+    setBlock(cx+6,G+1,cz+5,B.TABLE);
+    setBlock(cx+7,G+1,cz+5,B.GLASS);
+
+    // Tobin's sale counter where tutorialBlacksmithTrader appears.
+    for(let x=cx+5;x<=cx+13;x++)setBlock(x,G+1,cz+10,x===cx+9?B.TABLE:B.PLANKS);
+    for(let z=cz+8;z<=cz+13;z++)setBlock(cx+13,G+1,z,B.PLANKS);
+    for(let x=cx+6;x<=cx+12;x++)for(let z=cz+10;z<=cz+13;z++)setBlock(x,G,z,B.TERRACOTTA);
+    setBlock(cx+7,G+1,cz+12,B.CHEST);
+    setBlock(cx+9,G+1,cz+13,B.LANTERN);
+    setBlock(cx+11,G+1,cz+12,B.CHEST);
+    setBlock(cx+12,G+1,cz+9,B.FURNACE);
+
+    for(const [ox,oz,h] of [[-14,10,2],[-11,10,1],[-8,11,1],[3,13,1],[6,14,2],[12,15,1]])crateStack(cx+ox,cz+oz,h);
+    for(let x=cx-14;x<=cx+14;x+=7){lampPost(x,cz-13,3);lampPost(x,cz+15,3);}
   }else if(jobId==='monk'){
     for(let r=0;r<=9;r++)for(let x=cx-r;x<=cx+r;x++)for(let z=cz-r;z<=cz+r;z++)if(Math.abs(Math.hypot(x-cx,z-cz)-r)<.72)setBlock(x,G,z,r%3?B.GRASS:B.COBBLE);
     for(const [ox,oz] of [[0,-8],[8,0],[0,8],[-8,0]]){setBlock(cx+ox,G+1,cz+oz,B.LANTERN);setBlock(cx+ox,G,cz+oz,B.GLASS);}
