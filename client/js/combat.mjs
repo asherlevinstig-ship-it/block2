@@ -3287,10 +3287,10 @@ function showJobTutorialCompletionReward(jobId){
       '<span><small>STARTER HELP</small><b>'+escHTML(mission.kit)+'</b></span>'+
     '</div>'+
     '<div class="rnote"><b>Why this matters:</b><br>'+escHTML(jobTutorialRewardText(jobId))+'</div>'+
-    '<div class="rnote first-shift-next"><b>Next Best Action:</b><br>Open the Job Board, check the active '+escHTML(job.name)+' contract, then follow the HUD marker to '+escHTML(mission.target)+'.</div>'+
+    '<div class="rnote first-shift-next"><b>Next Best Action:</b><br>Follow the HUD marker to '+escHTML(mission.target)+'. The Job Board already knows this is your first '+escHTML(job.name)+' shift.</div>'+
     '<div class="job-tutorial-actions">'+
-      '<button id="jobtutorialopenboard">OPEN JOB BOARD</button>'+
       '<button id="jobtutorialfollow">FOLLOW FIRST SHIFT</button>'+
+      '<button id="jobtutorialopenboard">OPEN JOB BOARD</button>'+
       '<button id="jobtutorialrewardclose">CLOSE</button>'+
     '</div>';
   rewardWin.classList.remove('hidden');
@@ -3451,7 +3451,7 @@ function completeJobTutorial(){
   ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,3.2,0xffd24a,.8);
   const handoff=jobTutorialHandoff(jobId);
   playerJob=jobId;
-  progressionFocus='first_profession_contract';
+  progressionFocus='e_rank_climb';
   sysMsg('<b>'+escHTML(job.name)+' tutorial complete.</b> '+escHTML(handoff&&handoff.text||'Open the Job Board for your next useful town task.'));
   if(handoff)eventLog(handoff.event);
   showJobTutorialCompletionReward(jobId);

@@ -642,6 +642,9 @@ class ProgressionMixin {
     this.grantFirstTutorialJobStarterKit(client, job);
     this.dirtyPlayers.add(rec.token);
     client.send('jobProgress', { job, jobXp: xpMap[job] | 0, contract });
+    if (rec.prof.progressionFocus === 'first_profession_contract') {
+      this.advanceProgressionDirector(client, 'job_contract_taken', { profile: false });
+    }
     if (this.sendQuestOutcome) this.sendQuestOutcome(client, {
       source: 'job',
       questType: 'job',

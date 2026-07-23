@@ -169,7 +169,7 @@ test('job tutorial completion presents a first real shift handoff', () => {
   assert.match(combat, /FOLLOW FIRST SHIFT/);
   assert.match(combat, /openJobsUI\(jobId,mission\.title\)/);
   assert.match(networking, /const starter=clampJobContract\(m&&m\.starterContract\)/);
-  assert.match(networking, /progressionFocus='first_profession_contract'/);
+  assert.match(networking, /progressionFocus='e_rank_climb'/);
   assert.match(networking, /First real .* shift ready/);
   assert.match(styles, /\.job-tutorial-mission/);
   assert.match(styles, /\.job-tutorial-actions/);

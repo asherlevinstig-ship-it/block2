@@ -7370,9 +7370,11 @@ test('job tutorial completion seeds one first real profession contract', () => {
     const room = makeRoom(), client = makeClient('tutorial_contract_' + job);
     const { prof } = seedPlayer(room, client, { lvl: job === 'monk' ? 4 : 2 });
     prof.job = job;
+    prof.progressionFocus = 'first_profession_contract';
 
     assert.equal(room.handleTutorialComplete(client, { tutorial: 'townJob', version: TUTORIAL_VERSIONS.townJob, job }), true);
     assert.equal(prof.tutorials.townJob, TUTORIAL_VERSIONS.townJob);
+    assert.equal(prof.progressionFocus, 'e_rank_climb');
     assert.equal(prof.jobContract.job, job);
     assert.equal(prof.jobContract.type, type);
     assert.equal(prof.jobContract.lifecycleState, 'active');
@@ -7385,6 +7387,8 @@ test('job tutorial completion seeds one first real profession contract', () => {
       assert.equal(itemCount(prof, I.COAL) >= 1, true);
     }
     assert.equal(client.sent.some(e => e.type === 'jobProgress' && e.msg.contract && e.msg.contract.job === job), true);
+    assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'e_rank_climb'), true);
+    assert.equal(prof.progressionMilestoneRewards.includes('first_contract'), true);
     assert.equal(client.sent.some(e => e.type === 'questOutcome' && e.msg.reason === 'tutorial_complete' && e.msg.title === prof.jobContract.title), true);
     assert.equal(client.sent.some(e => e.type === 'tutorialProgress' && e.msg.starterContract && e.msg.starterContract.job === job && e.msg.starterContract.difficultyLabel === 'First Real Shift'), true);
   }

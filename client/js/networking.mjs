@@ -1087,7 +1087,7 @@ function netAttachRoom(room,name,client){
       if(starter){
         jobContract=starter;
         if(starter.job&&starter.job!=='adventurer')playerJob=starter.job;
-        progressionFocus='first_profession_contract';
+        progressionFocus='e_rank_climb';
         jobContractOffers=[];
         jobContractOffersJob=starter.job||playerJob||'';
         jobContractRefreshAt=0;
