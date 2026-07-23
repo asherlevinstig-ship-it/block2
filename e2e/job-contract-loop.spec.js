@@ -101,7 +101,8 @@ test('accepted job contract points to action, progresses, returns to board, and 
     type: 'follow_marker',
   });
   try {
-    await expect(page.locator('#currentquest')).toContainText('follow marker');
+    await expect(page.locator('#currentquest')).toContainText('Defeat hostile creatures outside town.');
+    await expect(page.locator('#currentquest')).toContainText('FOLLOW MARKER');
   } catch (error) {
     const status = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status());
     console.log('objective status', JSON.stringify({

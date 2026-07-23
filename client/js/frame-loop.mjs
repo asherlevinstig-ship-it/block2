@@ -493,8 +493,34 @@ function jobContractDestinationLabel(c){
   if(jobContractReady())return 'Job Board';
   if(c.targetName)return c.targetName;
   if(c.location)return c.location;
-    const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Crafting or kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall'};
+  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Quarry caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen or crafting station',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall',tame:'Wild pet trails',pet_care:'Dragon Roost'};
   return labels[c.type]||'contract marker';
+}
+function jobContractActionText(c){
+  if(!c)return 'Follow the marker and complete the contract action.';
+  const target=c.target&&ITEMS[c.target]&&ITEMS[c.target].name||c.target&&B&&Object.keys(B).find(k=>B[k]===c.target)||'';
+  const targetPart=target?' '+target:'';
+  const text={
+    kill:'Defeat hostile creatures outside town.',
+    hunt:'Hunt wild animals outside town for kitchen supplies.',
+    gate:'Enter and clear an active Gate.',
+    event:'Join and finish a public server event.',
+    mine:'Equip a pickaxe and mine'+targetPart+'.',
+    cave_survey:'Follow cave markers underground and record survey pulses.',
+    ancient_map:'Follow ancient map clues below the surface and investigate with G.',
+    treasure:'Follow treasure clues and press G at the marked cache.',
+    farm:'Till soil, plant seeds, or harvest mature crops.',
+    cook:'Craft or cook the requested food item.',
+    sell:'Sell prepared food at the tavern counter.',
+    smith:'Craft, smelt, or prepare forge supplies.',
+    repair:'Use Repair Kits on damaged tools.',
+    upgrade:'Improve eligible weapons or tools at Tobin.',
+    salvage:'Salvage unwanted non-legendary gear at Tobin.',
+    meditate:'Stand in the Meditation Hall circle and meditate.',
+    tame:'Bind a familiar with a collar, sigil, charm, or totem.',
+    pet_care:'Craft treats, feed dragons, or care for companions.',
+  }[c.type];
+  return text||'Follow the contract description.';
 }
 function jobContractCompassTarget(c=clampJobContract(jobContract)){
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
@@ -507,6 +533,8 @@ function jobContractCompassTarget(c=clampJobContract(jobContract)){
   if(c.type==='mine'||c.type==='cave_survey'||c.type==='ancient_map'||c.type==='treasure')return {label:jobContractDestinationLabel(c),x:HUB.quarry.x,z:HUB.quarry.z};
   if(c.type==='gate')return gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   if(c.type==='kill'||c.type==='hunt')return {label:jobContractDestinationLabel(c),x:HUB.northGate.x,z:HUB.northGate.z-15};
+  if(c.type==='tame')return {label:'Wild pet trails',x:HUB.northGate.x+12,z:HUB.northGate.z-18};
+  if(c.type==='pet_care')return {label:'Dragon Roost',x:HUB.roost.x,z:HUB.roost.z};
   return null;
 }
 function jobContractObjective(){
@@ -515,7 +543,7 @@ function jobContractObjective(){
   if(jobContractReady()) return {label:'Job Contract', text:'Claim reward: '+c.title};
   if(c.type==='cave_survey') return {label:'Miner Contract', text:'Survey underground cave routes '+Math.min(c.need,c.have)+'/'+c.need};
   if(c.type==='ancient_map') return {label:'Miner Contract', text:'Complete Ancient City map clues '+Math.min(c.need,c.have)+'/'+c.need};
-  return {label:'Job Contract', text:c.title+' '+Math.min(c.need,c.have)+'/'+c.need+' - follow marker to '+jobContractDestinationLabel(c)};
+  return {label:'Job Contract', text:c.title+' '+Math.min(c.need,c.have)+'/'+c.need+' at '+jobContractDestinationLabel(c)+' - '+jobContractActionText(c)};
 }
 function activeObjectiveList(){
   const list=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(activeObjectives):activeObjectives;

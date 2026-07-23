@@ -4714,6 +4714,21 @@ function blockInteractionPrompt(hit){
   if(hit.id===B.WHEAT_3)return {key:'G',title:'Ripe Wheat',small:'Use the action key to harvest',priority:58};
   return null;
 }
+function activeJobContractPrompt(){
+  const c=clampJobContract(jobContract);
+  if(!c||jobContractReady()||(c.job!=='adventurer'&&c.job!==playerJob))return null;
+  const near=(hub,range=7)=>hub&&Math.hypot(player.pos.x-hub.x,player.pos.z-hub.z)<range;
+  const progress=Math.min(c.need|0,c.have|0)+'/'+Math.max(1,c.need|0);
+  const titled=title=>title+' '+progress;
+  if(c.type==='farm'&&near(HUB.farm,12))return {key:'G',title:titled('Farm Contract'),small:'Till, plant, or harvest crops for this contract',priority:101};
+  if((c.type==='cook'||c.type==='sell')&&near(HUB.tavern,9))return {key:c.type==='sell'?'G':'C',title:titled(c.type==='sell'?'Tavern Sale':'Cook Contract'),small:c.type==='sell'?'Sell the requested food at the tavern counter':'Open recipes or use the kitchen to make food',priority:101};
+  if(['smith','repair','upgrade','salvage'].includes(c.type)&&near(HUB.smith,9))return {key:'G',title:titled('Forge Contract'),small:c.type==='repair'?'Repair damaged tools with kits':c.type==='upgrade'?'Improve eligible gear at Tobin':c.type==='salvage'?'Salvage unwanted gear':'Craft or smelt forge supplies',priority:101};
+  if(c.type==='meditate'&&near(HUB.shrine,9))return {key:'G',title:titled('Meditation Contract'),small:'Meditate inside the hall circle to advance focus time',priority:101};
+  if(['mine','cave_survey','ancient_map','treasure'].includes(c.type)&&near(HUB.quarry,14))return {key:c.type==='mine'?'LMB':'G',title:titled(c.type==='mine'?'Mining Contract':'Miner Route'),small:c.type==='mine'?'Mine stone or ore with a pickaxe':'Follow underground clues and investigate markers',priority:101};
+  if(['kill','hunt','tame'].includes(c.type)&&dim==='overworld'&&!isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return {key:c.type==='tame'?'K':'LMB',title:titled(c.type==='hunt'?'Hunting Contract':c.type==='tame'?'Taming Contract':'Combat Contract'),small:c.type==='hunt'?'Hunt wild animals outside town':c.type==='tame'?'Use a collar or sigil, then call your familiar':'Defeat hostile creatures outside town',priority:101};
+  if(c.type==='pet_care'&&(near(HUB.roost,12)||nearTamingLandPortal()))return {key:'G',title:titled('Pet Care Contract'),small:'Feed dragons, craft treats, or care for companions',priority:101};
+  return null;
+}
 function nearbyInteractionPrompt(){
   if(!interactionPromptActive())return null;
   const candidates=[];
@@ -4734,6 +4749,7 @@ function nearbyInteractionPrompt(){
   if(socialTarget)push({key:'E',title:String(socialTarget.name||'Hunter'),small:'Trade, add friend, or train pet',priority:111},socialTarget.distance||0);
   const readyClaim=claimReadyQuestAtServicePrompt();
   if(readyClaim)push(readyClaim,0);
+  push(activeJobContractPrompt(),0);
   if(nearFellowshipWeeklyCache())push({key:'G',title:'Fellowship Weekly Cache',small:'Claim unlocked rewards',priority:104},0);
   if(nearFellowshipNoticeBoard())push({key:'G',title:'Fellowship Notice Board',small:'View pinned objectives',priority:102},0);
   if(nearRecallLectern())push({key:'G',title:'Fellowship Study Lectern',small:'Open Recall mastery and practice',priority:100},0);

@@ -3343,6 +3343,10 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function nextBestObjectiveLine\(\)/);
   assert.match(frame,/function unifiedObjectiveHud\(\)/);
   assert.match(frame,/function jobContractCompassTarget/);
+  assert.match(frame,/function jobContractActionText/);
+  assert.match(frame,/Till soil, plant seeds, or harvest mature crops/);
+  assert.match(frame,/Equip a pickaxe and mine/);
+  assert.match(frame,/at '\+jobContractDestinationLabel\(c\)\+'\ - '\+jobContractActionText\(c\)/);
   assert.match(frame,/const jobTarget=jobContractCompassTarget\(\);\s*if\(jobTarget\)return jobTarget;/);
   assert.match(frame,/type:'follow_marker',label:'FOLLOW MARKER'/);
   assert.match(frame,/if\(action==='follow_marker'\)/);
@@ -3404,6 +3408,11 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/Quest Log opened for context/);
   assert.match(combat,/function claimReadyQuestAtService\(\)/);
   assert.match(combat,/function nearbyInteractionPrompt\(\)/);
+  assert.match(combat,/function activeJobContractPrompt\(\)/);
+  assert.match(combat,/Farm Contract/);
+  assert.match(combat,/Mining Contract/);
+  assert.match(combat,/Tavern Sale/);
+  assert.match(combat,/Forge Contract/);
   assert.match(combat,/function nearbyVillager\(range=3\.6\)/);
   assert.match(combat,/guardianUnderCrosshair\(8\)\|\|nearbyGuardian\(\)/);
   assert.match(combat,/villagerUnderCrosshair\(4\.5\)\|\|nearbyVillager\(3\.7\)/);
@@ -3440,6 +3449,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/SYSTEM JOURNEY · ONE INTRODUCTION AT A TIME/);
   assert.match(menus,/OPTIONAL · Tavern Games/);
   assert.match(networking,/m\.systemIntroductions/);
+  assert.match(networking,/onContractProgress/);
+  assert.match(networking,/job-contract-progress/);
   assert.match(networking,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
   assert.match(networking,/QUEST_OBJECTIVES\.normalizeObjectiveList/);
   assert.match(networking,/progressionMilestoneReward/);

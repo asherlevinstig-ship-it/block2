@@ -6848,11 +6848,14 @@ function jobContractProgress(kind, n=1, target=0, opts={}){
     if(!(type==='mine' && [B.STONE,B.COBBLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.BRICK,B.CONCRETE,B.TERRACOTTA].includes(target))) return false;
     if(type!=='mine' || ![B.STONE,B.COBBLE].includes(jobContract.target)) return false;
   }
+  const beforeHave=jobContract.have|0;
   jobContract.have=Math.min(jobContract.need, jobContract.have+Math.max(1,Math.round(n||1)));
   if(jobContractReady()){
     SFX.level();
     if(!opts.silentReady)sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));
     showName('Contract complete');
+  } else if(jobContract.have>beforeHave){
+    showName((jobContract.title||'Contract')+' '+jobContract.have+'/'+jobContract.need);
   }
   refreshHUD();
   return true;

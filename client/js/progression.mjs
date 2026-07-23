@@ -137,9 +137,15 @@ export function bindProgressionMessages(room, api) {
     if (!message) return;
     const before = api.jobLevel(api.getJobXp(message.job));
     const wasReady = api.contractReady();
+    const beforeContract = api.clampContract ? api.clampContract(message.previousContract || api.currentContract && api.currentContract()) : null;
     if (message.jobXpByJob) api.setJobXpMap(message.jobXpByJob);
     if (typeof message.jobXp === 'number') api.setJobXp(Math.max(0, message.jobXp | 0), message.job);
     api.setContract(api.clampContract(message.contract));
+    const afterContract = api.clampContract(message.contract);
+    if (api.onContractProgress && beforeContract && afterContract && beforeContract.id === afterContract.id) {
+      const beforeHave = Math.max(0, beforeContract.have | 0), afterHave = Math.max(0, afterContract.have | 0);
+      if (afterHave > beforeHave) api.onContractProgress(afterContract, beforeHave, afterHave);
+    }
     const after = api.jobLevel(api.getJobXp(message.job));
     const milestones = Array.isArray(message.milestones) ? message.milestones : [];
     const presented = new Set();

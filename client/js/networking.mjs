@@ -1135,11 +1135,17 @@ function netAttachRoom(room,name,client){
       eventFeed('[Job]',title+' complete. '+(parts.join(', ')||'Rewards claimed')+'. Next: '+nextEventText,{key:'job-contract-claim:'+String(c.id||title),cooldown:0});
     };
     bindProgressionMessages(room,{
-      getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},setContract:v=>{jobContract=v;},clampContract:clampJobContract,
+      getJobXp:id=>jobXpFor(id||playerJob||'adventurer'),setJobXp:(v,id)=>{jobXpByJob[id||playerJob||'adventurer']=v;jobXp=jobXpFor(playerJob||'adventurer');},setJobXpMap:v=>{for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(v&&v[id])|0);jobXp=jobXpFor(playerJob||'adventurer');},currentContract:()=>jobContract,setContract:v=>{jobContract=v;},clampContract:clampJobContract,
       jobLevel:jobLevelFromXp,contractReady:jobContractReady,
       onJobLevel:(level,id)=>{const milestone=JOB_SYSTEM.milestoneAt(id,level);if(milestone)presentJobMilestone(id,milestone);else{SFX.level();sysMsg('<b>'+escHTML((JOBS[id]&&JOBS[id].name)||'Job')+' Level '+level+'</b> reached');eventFeed('[Job]',((JOBS[id]&&JOBS[id].name)||'Job')+' reached Level '+level+'.',{key:'job:'+id+':'+level,cooldown:0});}},
       onJobMilestone:(id,milestone)=>presentJobMilestone(id,milestone),
       onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));},
+      onContractProgress:(c,beforeHave,afterHave)=>{
+        const title=String(c&&c.title||'Contract');
+        const need=Math.max(1,c&&c.need|0);
+        showName(title+' '+Math.min(need,afterHave)+'/'+need);
+        eventFeed('[Job]',title+' progress '+Math.min(need,afterHave)+'/'+need+'.',{key:'job-contract-progress:'+String(c&&c.id||title)+':'+afterHave,cooldown:1200});
+      },
       reconcileArmor:()=>{cursorStack=null;renderCursor();if(uiOpen)renderUI();},
       reject:why=>{globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__=why;sysMsg(why);SFX.error();},
       accept:m=>{
