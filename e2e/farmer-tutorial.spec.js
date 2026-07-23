@@ -53,9 +53,8 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
   await expect(page.locator('#currentquest')).toBeHidden();
   await expect(page.locator('#activitytracker')).toBeHidden();
   await expect(page.locator('#eventhud')).toBeHidden();
-  const chatLineCount = await page.locator('#chatlog .chatline').count();
   await page.evaluate(() => window.eventLog?.('This farmer room event should be suppressed.', '[Test]'));
-  await expect.poll(() => page.locator('#chatlog .chatline').count()).toBe(chatLineCount);
+  await expect(page.locator('#chatlog .chatline', { hasText: 'This farmer room event should be suppressed.' })).toHaveCount(0);
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialVisualDebug()))
     .toMatchObject({
@@ -64,12 +63,14 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
       step: 0,
       plant: { id: 22, above: 0 },
       harvest: { id: 25 },
+      stationGuide: { exists: true, visible: true, count: 5 },
     });
+  await expect(page.locator('#tutorialhud')).toContainText('TILLING PATCH');
   expect([1, 2]).toContain((await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialVisualDebug())).till.id);
 
   const till = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
   expect(till).toMatchObject({ ok: true, debug: { step: 1, till: { id: 22 } } });
-  await expect(page.locator('#tutorialhud')).toContainText('PLANT SEEDS');
+  await expect(page.locator('#tutorialhud')).toContainText('PLANTING BED');
 
   const plant = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
   expect(plant).toMatchObject({ ok: true, debug: { step: 2, plant: { above: 23 } } });
@@ -88,12 +89,12 @@ test('farmer tutorial teaches till, plant, and harvest with real farming actions
   });
   expect(cropTimer).toMatchObject({ exists: true, duration: 5000, autoGrowTo: 25 });
   expect(cropTimer.scaleX).toBeGreaterThan(1.5);
-  await expect(page.locator('#tutorialhud')).toContainText('HARVEST WHEAT');
+  await expect(page.locator('#tutorialhud')).toContainText('READY WHEAT');
 
   const harvest = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());
   expect(harvest).toMatchObject({ ok: true, debug: { step: 3, harvest: { id: 0 } } });
   expect(harvest.debug.inventory.wheat).toBeGreaterThanOrEqual(1);
-  await expect(page.locator('#tutorialhud')).toContainText('LISS BARLEY');
+  await expect(page.locator('#tutorialhud')).toContainText('SELL TO LISS');
 
   const beforeSale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold);
   const sale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.farmerTutorialAction());

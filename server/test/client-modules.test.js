@@ -1578,8 +1578,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/FARMER_TUTORIAL_WHEAT_GOLD=18/);
   assert.match(combat,/function tryFarmerTutorialTrade\(\)/);
   assert.match(combat,/function updateFarmerTutorialTrader\(now=performance\.now\(\)\)/);
+  assert.match(combat,/function updateFarmerTutorialStationGuide\(now=performance\.now\(\)\)/);
   assert.match(combat,/function farmerTutorialTargetPos\(\)/);
   assert.match(combat,/function noteFarmerTutorialAction\(action\)/);
+  assert.match(combat,/TILLING PATCH/);
+  assert.match(combat,/SELL TO LISS/);
   assert.match(combat,/jobTutorialLessonMoment\(lesson\.title,farmerTutorialTargetPos\(\),\[\.53,\.94,\.67\],0x86efac\)/);
   assert.match(combat,/jobTutorialActive&&jobTutorialJob==='farmer'&&dim==='job'&&isJobTutorialMeadowLand\('farmer',hit\.x,hit\.z,2\)/);
   assert.match(combat,/noteFarmerTutorialAction\('till'\)/);
@@ -1708,6 +1711,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
   assert.match(world,/for\(let x=cx-14;x<=cx-7;x\+\+\)for\(let z=cz-15;z<=cz-10;z\+\+\)/);
+  assert.match(world,/Guided floor route: tilling patch -> planting bed -> ready wheat -> farm stand -> return pillar/);
+  assert.match(world,/for\(let x=cx-4;x<=cx\+5;x\+\+\)\{setBlock\(x,G\+1,cz-4,B\.LOG\);if\(x%2===0\)setBlock\(x,G\+2,cz-4,B\.LANTERN\);\}/);
   assert.match(world,/setBlock\(cx\+15,G\+1,cz-2,B\.CAMPFIRE\)/);
   assert.match(world,/Guided floor route: yellow prep station -> hearth timer -> serving counter -> return pillar/);
   assert.match(world,/for\(let x=cx-11;x<=cx-5;x\+\+\)for\(let z=cz-5;z<=cz\+1;z\+\+\)setBlock\(x,G,z,B\.SAND\)/);

@@ -1091,21 +1091,28 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     const clear=(x,z,top=G+5)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)setBlock(x,y,z,B.AIR);};
     const path=(z1,z2)=>{for(let z=z1;z<=z2;z++)for(let x=cx-2;x<=cx+2;x++){setBlock(x,G,z,B.PLANKS);clear(x,z);}};
     path(cz-18,cz+22);
+    // Guided floor route: tilling patch -> planting bed -> ready wheat -> farm stand -> return pillar.
     for(let x=cx-18;x<=cx+18;x++)for(let z=cz-3;z<=cz-1;z++){setBlock(x,G,z,B.PLANKS);clear(x,z);}
+    for(let x=cx-11;x<=cx+1;x++)setBlock(x,G,cz-3,x<=cx-6?B.DIRT:B.PLANKS);
+    for(let x=cx;x<=cx+11;x++)setBlock(x,G,cz-3,x>=cx+6?B.FARMLAND:B.PLANKS);
+    for(let z=cz-3;z<=cz+12;z++)setBlock(cx,G,z,z>=cz+8?B.PLANKS:B.GRASS);
     for(let x=cx-14;x<=cx-7;x++)for(let z=cz-15;z<=cz-10;z++){
       setBlock(x,G,z,(x+z)%3===0?B.DIRT:B.GRASS);
       clear(x,z);
     }
+    for(let x=cx-14;x<=cx-7;x++){setBlock(x,G,cz-9,B.LOG);setBlock(x,G+1,cz-9,B.LEAVES);}
     for(let x=cx-4;x<=cx+5;x++)for(let z=cz-10;z<=cz-5;z++){
       setBlock(x,G,z,z===cz-8?B.WATER:B.FARMLAND);
       clear(x,z);
       if(z!==cz-8)setBlock(x,G+1,z,B.AIR);
     }
+    for(let x=cx-4;x<=cx+5;x++){setBlock(x,G+1,cz-4,B.LOG);if(x%2===0)setBlock(x,G+2,cz-4,B.LANTERN);}
     for(let x=cx+8;x<=cx+15;x++)for(let z=cz-10;z<=cz-5;z++){
       setBlock(x,G,z,z===cz-8?B.WATER:B.FARMLAND);
       clear(x,z);
       if(z!==cz-8)setBlock(x,G+1,z,B.WHEAT_3);
     }
+    for(let x=cx+8;x<=cx+15;x++){setBlock(x,G+1,cz-4,B.LOG);if(x%2===0)setBlock(x,G+2,cz-4,B.WHEAT_3);}
     for(let z=cz-17;z<=cz+18;z+=5){
       setBlock(cx-18,G+1,z,B.LOG);setBlock(cx-18,G+2,z,B.LANTERN);
       setBlock(cx+18,G+1,z,B.LOG);setBlock(cx+18,G+2,z,B.LANTERN);
@@ -1117,6 +1124,11 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx-15,G+1,cz-7,B.CHEST);
     setBlock(cx-5,G+1,cz-2,B.TABLE);
     setBlock(cx+15,G+1,cz-2,B.CAMPFIRE);
+    for(let x=cx-4;x<=cx+4;x++)for(let z=cz+10;z<=cz+14;z++)setBlock(x,G,z,B.PLANKS);
+    for(let x=cx-3;x<=cx+3;x++)setBlock(x,G+1,cz+10,x===cx?B.TABLE:B.PLANKS);
+    setBlock(cx-2,G+1,cz+12,B.CHEST);
+    setBlock(cx+2,G+1,cz+12,B.WHEAT_3);
+    setBlock(cx,G+2,cz+11,B.LANTERN);
     for(const [ox,oz] of [[-16,8],[-10,12],[11,9],[16,14]])smallTree(cx+ox,cz+oz,4);
     for(let z=cz-16;z<=cz+16;z++){
       if(z===cz-3||z===cz-2||z===cz-1)continue;
