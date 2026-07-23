@@ -3312,7 +3312,7 @@ function updateLandMinimap(){
   if(mapUtility&&overworldActivity){
     const dynamic=(s,col,size)=>{if(!s||!Number.isFinite(s.x)||!Number.isFinite(s.z)||miniMap&&!worldMap&&!nearPlayer(s))return;const x=mapPx(s.x),z=mapPz(s.z);landMapCtx.fillStyle=col;landMapCtx.fillRect(x-Math.floor(size/2),z-Math.floor(size/2),size,size);};
     const jobTarget=jobContractGuidanceTarget();
-    if(jobTarget)dynamic(jobTarget.target,'#9fd7ff',5);
+    if(jobTarget)dynamic(jobTarget.target,jobTarget.colorHex||'#9fd7ff',jobTarget.ready?7:5);
     dynamic(overworldActivity.caravan,overworldActivity.caravan&&overworldActivity.caravan.state==='ambushed'?'#ff5d48':'#f6c764',4);
     dynamic(overworldActivity.encounter,overworldActivity.encounter&&overworldActivity.encounter.type==='wounded_hunter'?'#7edc9a':'#ff7b57',4);
     dynamic(overworldActivity.gateBreach,'#ff2f2f',5);
@@ -4597,10 +4597,21 @@ function jobContractRouteTo(target){
     ? [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},northGate,target]
     : townRouteTo(target,'north');
 }
+function jobContractColor(c=jobContract,readyOverride=false){
+  const type=String(c&&c.type||'');
+  if(c&&(readyOverride||((c.have|0)>=(c.need|0))))return {hex:'#ffd24a',rgb:0xffd24a};
+  if(type==='farm')return {hex:'#86efac',rgb:0x86efac};
+  if(type==='cook'||type==='sell')return {hex:'#fbbf24',rgb:0xfbbf24};
+  if(type==='smith'||type==='repair'||type==='upgrade'||type==='salvage')return {hex:'#fb923c',rgb:0xfb923c};
+  if(type==='meditate')return {hex:'#7dd3fc',rgb:0x7dd3fc};
+  if(type==='hunt'||type==='kill')return {hex:'#f9a8d4',rgb:0xf9a8d4};
+  if(type==='mine'||type==='cave_survey'||type==='ancient_map'||type==='treasure')return {hex:'#9ca3af',rgb:0x9ca3af};
+  return {hex:'#9fd7ff',rgb:0x9fd7ff};
+}
 function jobContractGuidanceTarget(){
   const c=clampJobContract(jobContract);
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
-  if(jobContractReady())return {kind:'job-claim',color:0xffd24a,target:HUB.jobs,route:townRouteTo(HUB.jobs,'north')};
+  if(jobContractReady())return {kind:'job-claim',color:0xffd24a,colorHex:'#ffd24a',ready:true,target:HUB.jobs,route:townRouteTo(HUB.jobs,'north'),label:'Job Board - claim reward'};
   let target=null;
   if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))target={x:c.targetX,z:c.targetZ};
   else if(c.type==='farm')target=HUB.farm;
@@ -4611,8 +4622,8 @@ function jobContractGuidanceTarget(){
   else if(c.type==='gate')target=gate?{x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   else if(c.type==='kill'||c.type==='hunt')target=firstHandsLoggingTarget();
   if(!target)return null;
-  const color=c.type==='farm'?0x86efac:c.type==='cook'||c.type==='sell'?0xffd24a:c.type==='smith'||c.type==='repair'||c.type==='upgrade'||c.type==='salvage'?0xffb45e:c.type==='meditate'?0x7dd3fc:0x9fd7ff;
-  return {kind:'job-'+c.type,color,target,route:jobContractRouteTo(target),label:jobContractTargetLabel(c)};
+  const col=jobContractColor(c,ready);
+  return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:jobContractTargetLabel(c)};
 }
 function maraQuestGuidanceTarget(q){
   if(!q || q.source==='guardian') return null;
@@ -6903,6 +6914,30 @@ function jobContractNextHint(job,level=jobLevelFromXp(jobXpFor(job)),milestones=
   if(job==='pet_tamer')return 'Next: search wild pet trails, craft treats, or bind a familiar.';
   return 'Next: take another contract or prep for the next gate.';
 }
+function jobContractMoment(c=jobContract,beforeHave=0,afterHave=0,opts={}){
+  c=clampJobContract(c);
+  if(!c)return false;
+  const title=String(c.title||'Contract');
+  const need=Math.max(1,c.need|0);
+  const have=Math.max(0,Math.min(need,afterHave|0));
+  const ready=!!opts.ready || have>=need;
+  const col=jobContractColor(c);
+  if(ready){
+    showName('READY TO CLAIM - '+title);
+    if(!opts.silentReady)sysMsg('<b>'+escHTML(title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(c.job,jobLevelFromXp(jobXpFor(c.job)))));
+  }else if(have>(beforeHave|0)){
+    showName(title+' '+have+'/'+need);
+  }
+  if(player&&player.pos){
+    const y=(player.pos.y||0)+1.05;
+    burst(player.pos.x,y,player.pos.z,col.rgb,ready?34:16,ready?1.8:1.15);
+    ringPulse(player.pos.x,y+.05,player.pos.z,ready?2.6:1.6,col.rgb,ready?1.1:.65);
+  }
+  if(ready&&HUB&&HUB.jobs){
+    ringPulse(HUB.jobs.x,TOWN.G+.1,HUB.jobs.z,3.2,0xffd24a,1.2);
+  }
+  return true;
+}
 function jobContractProgress(kind, n=1, target=0, opts={}){
   if(NET.on) return false; // authoritative progress arrives from validated server actions
   if(!jobContract || (jobContract.job!=='adventurer'&&jobContract.job!==playerJob) || !JOBS[jobContract.job]) return false;
@@ -6919,10 +6954,9 @@ function jobContractProgress(kind, n=1, target=0, opts={}){
   jobContract.have=Math.min(jobContract.need, jobContract.have+Math.max(1,Math.round(n||1)));
   if(jobContractReady()){
     SFX.level();
-    if(!opts.silentReady)sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));
-    showName('Contract complete');
+    jobContractMoment(jobContract,beforeHave,jobContract.have,opts);
   } else if(jobContract.have>beforeHave){
-    showName((jobContract.title||'Contract')+' '+jobContract.have+'/'+jobContract.need);
+    jobContractMoment(jobContract,beforeHave,jobContract.have,opts);
   }
   refreshHUD();
   return true;
@@ -10501,6 +10535,7 @@ const legacyWorldBindings={
   "jobContractOffersJob":{get:()=>jobContractOffersJob,set:value=>{jobContractOffersJob=value;}},
   "jobContractRefreshAt":{get:()=>jobContractRefreshAt,set:value=>{jobContractRefreshAt=value;}},
   "jobContractNextHint":{get:()=>jobContractNextHint},
+  "jobContractMoment":{get:()=>jobContractMoment},
   "jobContractProgress":{get:()=>jobContractProgress},
   "jobContractReady":{get:()=>jobContractReady},
   "jobLevelFromXp":{get:()=>jobLevelFromXp},

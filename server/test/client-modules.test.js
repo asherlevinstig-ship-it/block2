@@ -1018,10 +1018,12 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(worldSource, /function craftProfessionOutcome/);
   assert.match(worldSource, /function presentProfessionCraftOutcome/);
   assert.match(worldSource, /function jobContractNextHint/);
+  assert.match(worldSource, /function jobContractColor/);
   assert.match(worldSource, /function jobContractGuidanceTarget/);
+  assert.match(worldSource, /function jobContractMoment/);
   assert.match(worldSource, /function jobContractRouteTo/);
   assert.match(worldSource, /const jobTarget=jobContractGuidanceTarget\(\);\s*if\(jobTarget\)return jobTarget;\s*if\(!isTownLand/);
-  assert.match(worldSource, /dynamic\(jobTarget\.target,'#9fd7ff',5\)/);
+  assert.match(worldSource, /dynamic\(jobTarget\.target,jobTarget\.colorHex\|\|'#9fd7ff',jobTarget\.ready\?7:5\)/);
   assert.match(worldSource, /function economyRecapHTML/);
   assert.match(worldSource, /function goldDeltaHTML/);
   assert.match(worldSource, /silentReady/);
@@ -3526,6 +3528,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(menus,/OPTIONAL · Tavern Games/);
   assert.match(networking,/m\.systemIntroductions/);
   assert.match(networking,/onContractProgress/);
+  assert.match(networking,/worldApi\.jobContractMoment/);
   assert.match(networking,/job-contract-progress/);
   assert.match(networking,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
   assert.match(networking,/QUEST_OBJECTIVES\.normalizeObjectiveList/);

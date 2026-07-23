@@ -1226,12 +1226,17 @@ function netAttachRoom(room,name,client){
       jobLevel:jobLevelFromXp,contractReady:jobContractReady,
       onJobLevel:(level,id)=>{const milestone=JOB_SYSTEM.milestoneAt(id,level);if(milestone)presentJobMilestone(id,milestone);else{SFX.level();sysMsg('<b>'+escHTML((JOBS[id]&&JOBS[id].name)||'Job')+' Level '+level+'</b> reached');eventFeed('[Job]',((JOBS[id]&&JOBS[id].name)||'Job')+' reached Level '+level+'.',{key:'job:'+id+':'+level,cooldown:0});}},
       onJobMilestone:(id,milestone)=>presentJobMilestone(id,milestone),
-      onContractReady:()=>{SFX.level();sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));},
+      onContractReady:()=>{
+        SFX.level();
+        if(worldApi.jobContractMoment)worldApi.jobContractMoment(jobContract,Math.max(0,(jobContract&&jobContract.need|0)-1),jobContract&&jobContract.need|0,{ready:true});
+        else{showName('READY TO CLAIM');sysMsg('<b>'+escHTML(jobContract.title)+'</b> ready to claim.<br>'+escHTML(jobContractNextHint(jobContract.job,jobLevelFromXp(jobXpFor(jobContract.job)))));}
+      },
       onContractProgress:(c,beforeHave,afterHave)=>{
         const title=String(c&&c.title||'Contract');
         const need=Math.max(1,c&&c.need|0);
-        showName(title+' '+Math.min(need,afterHave)+'/'+need);
-        eventFeed('[Job]',title+' progress '+Math.min(need,afterHave)+'/'+need+'.',{key:'job-contract-progress:'+String(c&&c.id||title)+':'+afterHave,cooldown:1200});
+        if(worldApi.jobContractMoment)worldApi.jobContractMoment(c,beforeHave,afterHave,{network:true});
+        else showName(title+' '+Math.min(need,afterHave)+'/'+need);
+        eventFeed('[Job]','Contract progress: '+title+' '+Math.min(need,afterHave)+'/'+need+'.',{key:'job-contract-progress:'+String(c&&c.id||title)+':'+afterHave,cooldown:1200});
       },
       reconcileArmor:()=>{cursorStack=null;renderCursor();if(uiOpen)renderUI();},
       reject:why=>{globalThis.__BLOCKCRAFT_LAST_PROGRESSION_REJECT__=why;sysMsg(why);SFX.error();},
