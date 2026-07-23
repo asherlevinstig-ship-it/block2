@@ -792,12 +792,26 @@ function idleObjectiveLine(){
 function tutorialRoomHudSuppressed(){
   return dim!=='overworld'||dimensionsState.kind!=='overworld'||(combatState.jobTutorialActive&&combatState.jobTutorialJob);
 }
+function transitionPanelActuallyOpen(type){
+  const panels=transitionPanelState();
+  return type==='choose_job'&&panels.jobOpen || type==='choose_path'&&panels.pathOpen || type==='start_awakening'&&panels.awakeningOpen || type==='continue_panel'&&panels.rewardOpen;
+}
+function shouldDeferTransitionAction(transition,{story=null,job=null}={}){
+  if(!transition)return false;
+  if(transition.type==='continue_panel'||transition.type==='use_ability')return false;
+  if(transitionPanelActuallyOpen(transition.type))return false;
+  if(transition.type==='choose_job')return !!story || progressionFocus==='first_d_gate' || progressionFocus==='next_adventurer_contract';
+  if(transition.type==='choose_path'||transition.type==='start_awakening'){
+    return !!story || !!job || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
+  }
+  return false;
+}
 function nextBestObjectiveLine(){
   if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return null;
   const transition=transitionRecoveryAction();
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
-  const deferOptionalJobChoice=transition&&transition.type==='choose_job'&&(story||progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract');
-  if(transition && !deferOptionalJobChoice){
+  const localJob=localJobObjectiveLine();
+  if(transition && !shouldDeferTransitionAction(transition,{story,job:localJob})){
     const title=transition.type==='continue_panel'?'Continue Reward':
       transition.type==='choose_path'?'Choose Path':
       transition.type==='start_awakening'?'Start Awakening':
@@ -812,7 +826,6 @@ function nextBestObjectiveLine(){
   }
   const chapterProgression=chapterProgressionObjectiveLine();
   if(chapterProgression)return chapterProgression;
-  const localJob=localJobObjectiveLine();
   if(localJob)return localJob;
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
   if(progression&&progressionFocus&&progressionFocus!=='first_d_gate')return progression;
@@ -831,9 +844,10 @@ function nextBestObjectiveLine(){
 function unifiedObjectiveList(){
   if(tutorialRoomHudSuppressed()||dim==='dungeon'||dim==='event'||dim==='gatecutscene')return [];
   const transition=transitionRecoveryAction();
-  if((townGuidanceActive&&!jobContract)||(transition&&!(transition.type==='choose_job'&&(progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract'))))return [];
   const lines=[];
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
+  const job=localJobObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('job'),'Job');
+  if((townGuidanceActive&&!jobContract)||(transition&&!shouldDeferTransitionAction(transition,{story,job})))return [];
   if(story)lines.push(story);
   const chapterProgression=chapterProgressionObjectiveLine();
   if(chapterProgression)lines.push(chapterProgression);
@@ -841,7 +855,6 @@ function unifiedObjectiveList(){
   if(prep)lines.push(prep);
   const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
   if(aegis)lines.push(aegis);
-  const job=localJobObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('job'),'Job');
   if(job)lines.push(job);
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)lines.push(guild);
@@ -890,8 +903,7 @@ function transitionRecoveryAction(){
 function currentObjectiveAction(){
   const transition=transitionRecoveryAction();
   const storyActive=!!(localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story'));
-  const deferOptionalJobChoice=transition&&transition.type==='choose_job'&&(storyActive||progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract');
-  if(transition && !deferOptionalJobChoice) return transition;
+  if(transition && !shouldDeferTransitionAction(transition,{story:storyActive,job:!!jobContract})) return transition;
   if(jobContract){
     if(jobContractReady()) return {type:'jobs',label:'CLAIM AT JOB BOARD'};
     const craft=objectiveCraftAction('job');
@@ -1106,7 +1118,8 @@ function currentObjective(){
   }
   if(dim==='taming_land') return {label:'Taming Land', text:'Explore the sanctuary, then press G at the green return portal to go back to town'};
   const transition=transitionRecoveryAction();
-  if(transition){
+  const deferTransition=shouldDeferTransitionAction(transition,{story:!!quest||!!serverObjectiveBySource('story','manhunt'),job:!!jobContract});
+  if(transition&&!deferTransition){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
     if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='next_adventurer_contract') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
     if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};

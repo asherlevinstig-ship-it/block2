@@ -4301,13 +4301,14 @@ function progressionRoadmap(){
   // Keep this overview safe on a brand-new profile. Companion, mount and guild
   // state live in separately loaded modules; their server-recorded introduction
   // flags are the authoritative cross-module signal here.
-  const has=id=>introduced.has(id)||id==='story'&&maraStep>0||id==='combat_path'&&!!S.path||id==='gates'&&highestGateRankCleared>=0||id==='jobs'&&(!!playerJob||!!jobContract)||id==='roads'&&(roadWardenRep>0||!!regionalContract);
+  const jobProgress=!!jobContract || jobXpFor('adventurer')>0 || (!!playerJob&&jobXpFor(playerJob)>0);
+  const has=id=>introduced.has(id)||id==='story'&&maraStep>0||id==='jobs'&&jobProgress||id==='combat_path'&&!!S.path||id==='gates'&&highestGateRankCleared>=0||id==='roads'&&(roadWardenRep>0||!!regionalContract);
   return [
     {id:'foundations',title:'Hunter Foundations',requirement:'Begin the training meadow',eligible:true,action:'Complete movement, combat, gathering and Recall training.',where:'Training Meadow'},
     {id:'story',title:'Mara’s Story',requirement:'Finish initial training',eligible:!onboardingActive,action:'Accept and continue Mara’s current story quest.',where:'Mara Vale'},
-    {id:'combat_path',title:'Combat Path',requirement:'Reach E-Rank Level 2',eligible:S.lvl>=2,action:S.lvl>=2?'Choose your first combat path.':'Continue Mara’s field work to reach E-Rank Level 2.',where:'Character progression'},
-    {id:'gates',title:'Ranked Gates',requirement:'Reach E-Rank Level 3',eligible:S.lvl>=3,action:S.lvl>=3?'Complete Mara’s First Gate quest.':'Complete Road Ready and reach E-Rank Level 3.',where:'Mara → wilderness Gate'},
-    {id:'jobs',title:'Jobs and Contracts',requirement:'Clear an E-Rank Gate',eligible:highestGateRankCleared>=0,action:'Choose one profession and complete its introductory contract.',where:'Job Board'},
+    {id:'jobs',title:'Jobs and Contracts',requirement:'Reach E-Rank Level 2',eligible:S.lvl>=2&&!onboardingActive,action:!playerJob?'Choose one job tutorial, then take your first real contract.':jobContract?'Complete and claim your active contract.':'Take your first real contract at the Job Board.',where:!playerJob?'Job choice cards':'Job Board'},
+    {id:'combat_path',title:'Combat Path',requirement:'Complete your first job contract',eligible:S.lvl>=2&&(jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
+    {id:'gates',title:'Ranked Gates',requirement:'Finish Mara’s first town arc and a starter job contract',eligible:S.lvl>=3&&(jobProgress||progressionFocus==='first_d_gate'||highestGateRankCleared>=0),action:'Prepare supplies, then complete Mara’s first Gate invitation.',where:'Mara → wilderness Gate'},
     {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
     {id:'mounts',title:'Mounts',requirement:'Reach C-Rank progression',eligible:rank>=2,action:'Complete the first bonded-mount lesson.',where:'Dragon Roost'},
     {id:'specialisation',title:'Specialisation',requirement:'Reach C-Rank Level 1',eligible:rank>=2&&S.lvl>=21,action:'Review and choose carefully: this combat-path specialisation is permanent.',where:'Mara Vale'},
@@ -4318,10 +4319,25 @@ function progressionRoadmap(){
   ].map(entry=>({...entry,introduced:has(entry.id)}));
 }
 function whatNextQuestLogCard(){
-  const next=progressionRoadmap().find(entry=>!entry.introduced);
+  const next=progressionDirectorCandidate() || progressionRoadmap().find(entry=>!entry.introduced);
   if(!next)return questLogCardHTML('What Next?','Core journey complete','Choose contracts, events, exploration or social goals.','Your choice',true,objectiveCraftShortcutsHTML('what_next'));
   const status=(next.eligible?'READY - ':'LOCKED - ')+next.action;
   return questLogCardHTML('What Next?',next.title,status,next.eligible?next.where:next.requirement,next.eligible,objectiveCraftShortcutsHTML('what_next'));
+}
+function earlyJourneyActive(){
+  return localPlayerHunterRankIndex()===0 && highestGateRankCleared<0;
+}
+function questLogCardsHTML(serverCards,historyOnly){
+  if(serverCards&&historyOnly)return serverCards;
+  const early=earlyJourneyActive(),cards=[];
+  if(serverCards)cards.push(serverCards);
+  cards.push(safeQuestLogCard('What Next?',whatNextQuestLogCard));
+  if(!serverCards)cards.push(safeQuestLogCard('Story Quests',storyQuestLogCard));
+  if(onboardingActive||quest||progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate')cards.push(safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard));
+  if(!early||progressionFocus==='first_d_gate'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
+  if(!early||S.lvl>=3)cards.push(safeQuestLogCard('First Style',playerStyleGuideQuestLogCard));
+  if(!early)cards.push(safeQuestLogCard('Aegis Trial',aegisQuestLogCard));
+  return cards.filter(Boolean).join('');
 }
 function progressionRoadmapHTML(){
   return '<div class="progression-roadmap"><div class="sub2">SYSTEM JOURNEY · ONE INTRODUCTION AT A TIME</div>'+progressionRoadmap().map(entry=>'<div class="progression-step '+(entry.introduced?'done':entry.eligible?'ready':'locked')+'"><i>'+(entry.introduced?'✓':entry.eligible?'→':'🔒')+'</i><span><b>'+escHTML(entry.title)+'</b><small>'+(entry.introduced?'Introduced':entry.eligible?'Ready now · '+escHTML(entry.where):escHTML(entry.requirement))+'</small></span></div>').join('')+'<div class="progression-optional"><b>OPTIONAL · Tavern Games</b><small>Introduced contextually by entering the tavern; never required for Hunter progression.</small></div></div>';
@@ -4359,7 +4375,15 @@ function openRankJourneyUI(){
   const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('QUEST LOG',()=>openQuestLogUI()));row.appendChild(qBtn('JOBS',()=>openJobsUI()));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
 }
 const DIRECTED_SYSTEMS=new Set(['story','combat_path','gates','jobs','familiars','mounts','specialisation','roads','fellowships','dragon_mastery','frontier']);
-function progressionDirectorCandidate(){return progressionRoadmap().find(entry=>DIRECTED_SYSTEMS.has(entry.id)&&!entry.introduced&&entry.eligible)||null;}
+const DIRECTED_SYSTEM_PRIORITY=['story','jobs','combat_path','gates','familiars','mounts','specialisation','roads','fellowships','dragon_mastery','frontier'];
+function progressionDirectorCandidate(){
+  const roadmap=progressionRoadmap();
+  for(const id of DIRECTED_SYSTEM_PRIORITY){
+    const entry=roadmap.find(e=>e.id===id);
+    if(entry&&DIRECTED_SYSTEMS.has(entry.id)&&!entry.introduced&&entry.eligible)return entry;
+  }
+  return roadmap.find(entry=>DIRECTED_SYSTEMS.has(entry.id)&&!entry.introduced&&entry.eligible)||null;
+}
 function progressionGuideStorage(key,value){
   try{if(value===undefined)return localStorage.getItem(key)||'';if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);}catch{}return '';
 }
@@ -4613,20 +4637,7 @@ function openQuestLogUI(){
   const grid=document.createElement('div'); grid.className='questgrid';
   const serverCards=safeQuestLogCard('Server Objectives',serverObjectiveQuestLogCards);
   const historyOnly=questLogFilter==='completed'||questLogFilter==='failed';
-  grid.innerHTML=serverCards&&historyOnly?serverCards:serverCards?[
-    serverCards,
-    safeQuestLogCard('First Style',playerStyleGuideQuestLogCard),
-    safeQuestLogCard('Gate Prep',gatePrepLoopCard),
-    safeQuestLogCard('What Next?',whatNextQuestLogCard),
-    safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard),
-  ].join(''):[
-    safeQuestLogCard('First Style',playerStyleGuideQuestLogCard),
-    safeQuestLogCard('Gate Prep',gatePrepLoopCard),
-    safeQuestLogCard('What Next?',whatNextQuestLogCard),
-    safeQuestLogCard('Story Quests',storyQuestLogCard),
-    safeQuestLogCard('Aegis Trial',aegisQuestLogCard),
-    safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard),
-  ].join('');
+  grid.innerHTML=questLogCardsHTML(serverCards,historyOnly);
   qpanelEl.appendChild(grid);
   bindQuestLogFilters(qpanelEl);
   bindGatePrepActions(qpanelEl);
@@ -4639,7 +4650,7 @@ function openQuestLogUI(){
   const row=document.createElement('div'); row.className='qrow';
   row.appendChild(qBtn('CHOOSE STYLE',()=>openPlayerStyleGuideUI()));
   row.appendChild(qBtn('RANK JOURNEY',()=>openRankJourneyUI()));
-  row.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
+  if(!earlyJourneyActive())row.appendChild(qBtn('DISCOVERY JOURNAL',()=>openDiscoveryJournalUI()));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
 }
