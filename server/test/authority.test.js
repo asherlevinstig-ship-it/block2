@@ -937,6 +937,37 @@ test('jobs and repeatable contracts are created progressed and claimed only by t
   assert.equal(secondClaim.msg.firstShiftComplete, false);
 });
 
+test('claiming the first tutorial profession shift points back to Mara and the first Gate', () => {
+  const room = makeRoom(), client = makeClient('starter_shift_bridge');
+  const { prof } = seedPlayer(room, client, { lvl: 2 });
+  prof.npcQuestChains['Mara Vale'] = 1;
+  prof.progressionFocus = 'e_rank_climb';
+  prof.job = 'miner';
+  prof.jobContract = {
+    job: 'miner',
+    type: 'mine',
+    target: W.B.STONE,
+    need: 1,
+    have: 1,
+    rewardGold: 20,
+    rewardJobXp: 12,
+    rewardXp: 25,
+    title: 'First Stone Shift',
+    desc: 'Mine one stone.',
+    difficulty: 'starter',
+    difficultyLabel: 'First Real Shift',
+  };
+  room.handleJobContract(client, { action: 'claim' });
+  const claim = client.sent.findLast(e => e.type === 'progressionResult' && e.msg.type === 'jobContract' && e.msg.action === 'claim');
+  const summary = client.sent.find(e => e.type === 'questRewardSummary' && e.msg.title === 'First Stone Shift');
+  assert.equal(prof.jobContract, null);
+  assert.equal(claim.msg.firstShiftComplete, true);
+  assert.equal(claim.msg.firstGateBridgeFocus, 'first_road_ready');
+  assert.match(claim.msg.nextStep, /Mara Vale.*Road Ready/i);
+  assert.equal(prof.progressionFocus, 'first_road_ready');
+  assert.match(summary.msg.nextStep, /first E-rank Gate/i);
+});
+
 test('Hunter career and trade professions keep independent XP while one profession is equipped', () => {
   const room = makeRoom(), client = makeClient('dual_track_worker');
   const { prof } = seedPlayer(room, client);

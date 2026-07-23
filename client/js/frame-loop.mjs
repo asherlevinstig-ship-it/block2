@@ -799,8 +799,8 @@ function transitionPanelActuallyOpen(type){
 function shouldDeferTransitionAction(transition,{story=null,job=null}={}){
   if(!transition)return false;
   if(transition.type==='continue_panel'||transition.type==='use_ability')return false;
-  if(transitionPanelActuallyOpen(transition.type))return false;
   if(transition.type==='choose_job')return !!story || progressionFocus==='first_d_gate' || progressionFocus==='next_adventurer_contract';
+  if(transitionPanelActuallyOpen(transition.type))return false;
   if(transition.type==='choose_path'||transition.type==='start_awakening'){
     return !!story || !!job || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
   }

@@ -1138,6 +1138,7 @@ function netAttachRoom(room,name,client){
       qpanelEl.innerHTML='';
       const shell=document.createElement('div');shell.className='first-shift-panel';
       shell.dataset.job=jobId;
+      const gateBridge=!!(m&&m.firstGateBridgeFocus);
       shell.style.setProperty('--job-color',jobMeta.col||'#ffd24a');
       const burstEl=document.createElement('div');burstEl.className='first-shift-burst';
       for(let i=0;i<14;i++){
@@ -1154,9 +1155,9 @@ function netAttachRoom(room,name,client){
       shell.appendChild(crest);
       const h=document.createElement('h2');h.textContent='WORK CLAIMED';shell.appendChild(h);
       const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(summary.title||'Contract').toUpperCase()+' - '+String(summary.jobName||'Job').toUpperCase();shell.appendChild(sub);
-      const intro=document.createElement('p');intro.className='qtext';intro.innerHTML='You finished your first paid shift. Your reward is saved, your profession has started, and the HUD now points to useful work instead of more setup.';shell.appendChild(intro);
+      const intro=document.createElement('p');intro.className='qtext';intro.innerHTML=gateBridge?'You finished your first paid shift. Your reward is saved, your profession has started, and Mara can now move you toward your first E-rank Gate.':'You finished your first paid shift. Your reward is saved, your profession has started, and the HUD now points to useful work instead of more setup.';shell.appendChild(intro);
       const loop=document.createElement('div');loop.className='first-shift-loop';
-      loop.innerHTML='<span><small>1 LEARNED</small><b>Tutorial complete</b></span><span><small>2 EARNED</small><b>Real work paid</b></span><span><small>3 NEXT</small><b>Choose your rhythm</b></span>';
+      loop.innerHTML='<span><small>1 LEARNED</small><b>Tutorial complete</b></span><span><small>2 EARNED</small><b>Real work paid</b></span><span><small>3 NEXT</small><b>'+escHTML(gateBridge?'Meet Mara':'Choose your rhythm')+'</b></span>';
       shell.appendChild(loop);
       const rewards=document.createElement('div');rewards.className='first-shift-rewards';
       const addReward=(label,value,kind='')=>{
@@ -1214,7 +1215,7 @@ function netAttachRoom(room,name,client){
         : jobName+' progress advanced';
       const starterCount=Array.isArray(m.milestoneStarterItems)?m.milestoneStarterItems.reduce((sum,it)=>sum+Math.max(0,it&&it.count|0),0):0;
       const starterLine=starterCount?'Starter items granted: '+starterCount:'';
-      const next=jobContractNextHint(job,m.jobLevelAfter|0,milestones,!!m.graduation);
+      const next=m&&m.nextStep?String(m.nextStep):jobContractNextHint(job,m.jobLevelAfter|0,milestones,!!m.graduation);
       const nextEventText=String(next||'Take another contract.').replace(/^next:\s*/i,'');
       sysMsg('<b>'+escHTML(title)+' complete:</b> '+escHTML(parts.join(', ')||'Rewards claimed')+'<br>'+escHTML(levelLine)+(starterLine?'<br>'+escHTML(starterLine):'')+'<br>'+escHTML(next));
       showName(title+' complete');

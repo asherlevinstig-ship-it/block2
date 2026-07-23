@@ -658,6 +658,15 @@ class ProgressionMixin {
     return contract;
   }
 
+  firstGateBridgeFocus(prof) {
+    if (!prof || prof.activeNpcQuest) return '';
+    const chains = prof.npcQuestChains && typeof prof.npcQuestChains === 'object' ? prof.npcQuestChains : {};
+    const maraStep = Math.max(0, chains['Mara Vale'] | 0);
+    const highestGateRankCleared = Number.isFinite(Number(prof.highestGateRankCleared)) ? (Number(prof.highestGateRankCleared) | 0) : -1;
+    if (highestGateRankCleared >= 0) return '';
+    return maraStep >= 2 ? 'first_e_gate' : 'first_road_ready';
+  }
+
   grantFirstTutorialJobStarterKit(client, job) {
     const rec = this.profileFor(client);
     const kit = FIRST_TUTORIAL_STARTER_KITS[job];
@@ -850,6 +859,12 @@ class ProgressionMixin {
       const milestoneRewards = Array.isArray(rec.prof.progressionMilestoneRewards) ? rec.prof.progressionMilestoneRewards : (rec.prof.progressionMilestoneRewards = []);
       const firstShiftComplete = !milestoneRewards.includes('first_shift_complete');
       if (firstShiftComplete) milestoneRewards.push('first_shift_complete');
+      const starterShift = !graduation && firstShiftComplete && (c.difficulty === 'starter' || c.difficultyLabel === 'First Real Shift');
+      const firstGateBridgeFocus = starterShift ? this.firstGateBridgeFocus(rec.prof) : '';
+      if (firstGateBridgeFocus) {
+        rec.prof.progressionFocus = firstGateBridgeFocus;
+        if (firstGateBridgeFocus === 'first_e_gate') this.ensurePublicGateRank(0);
+      }
       rec.prof.jobContract = null;
       rec.prof.jobContractOffers = [];
       rec.prof.jobContractOffersAt = 0;
@@ -870,9 +885,17 @@ class ProgressionMixin {
         items: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
         claimLocation: 'Job Board',
         inventoryOverflow: false,
+        nextStep: graduation ? 'D-Rank Prep: craft armor, pack food, check repairs, then clear a D-rank Gate.'
+          : firstGateBridgeFocus === 'first_e_gate' ? 'Return to Mara Vale and accept The First Gate.'
+          : firstGateBridgeFocus === 'first_road_ready' ? 'Return to Mara Vale for Road Ready, then your first E-rank Gate.'
+          : undefined,
       });
       return this.progressionChanged(client, 'jobContract', {
-        action, contract: c, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, milestoneStarterItems, graduation, firstShiftComplete,
+        action, contract: c, rewardGold, rewardXp, rewardJobXp: Math.max(0, c.rewardJobXp | 0), job: c.job, jobLevelBefore, jobLevelAfter, milestones, milestoneStarterItems, graduation, firstShiftComplete, firstGateBridgeFocus,
+        nextStep: graduation ? 'D-Rank Prep: craft armor, pack food, check repairs, then clear a D-rank Gate.'
+          : firstGateBridgeFocus === 'first_e_gate' ? 'Return to Mara Vale and accept The First Gate.'
+          : firstGateBridgeFocus === 'first_road_ready' ? 'Return to Mara Vale for Road Ready, then your first E-rank Gate.'
+          : '',
         rewardItems: graduation ? GRADUATION_REWARD.map(r => ({ id: r.id, count: r.count })) : [],
       });
     } else return this.progressionReject(client, 'jobContract', 'action');
