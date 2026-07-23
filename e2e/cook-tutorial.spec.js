@@ -54,9 +54,8 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
   await expect(page.locator('#currentquest')).toBeHidden();
   await expect(page.locator('#activitytracker')).toBeHidden();
   await expect(page.locator('#eventhud')).toBeHidden();
-  const chatLineCount = await page.locator('#chatlog .chatline').count();
   await page.evaluate(() => window.eventLog?.('This off-main event should be suppressed.', '[Test]'));
-  await expect.poll(() => page.locator('#chatlog .chatline').count()).toBe(chatLineCount);
+  await expect(page.locator('#chatlog .chatline', { hasText: 'This off-main event should be suppressed.' })).toHaveCount(0);
 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialVisualDebug()))
     .toMatchObject({
@@ -65,7 +64,9 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
       step: 0,
       prep: { id: 13 },
       hearth: { id: 33 },
+      stationGuide: { exists: true, visible: true, count: 5 },
     });
+  await expect(page.locator('#tutorialhud')).toContainText('PREP STATION');
 
   const prep = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(prep).toMatchObject({ ok: true, debug: { step: 1 } });
@@ -75,13 +76,13 @@ test('cook tutorial teaches prep, timed cooking, claim, and sale with real food 
   const start = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(start).toMatchObject({ ok: true, debug: { step: 2, timer: { exists: true, visible: true, duration: 5000 } } });
   expect(start.debug.timer.scaleX).toBeGreaterThan(2);
-  await expect(page.locator('#tutorialhud')).toContainText('CLAIM MEAL');
+  await expect(page.locator('#tutorialhud')).toContainText('HEARTH TIMER');
 
   await page.waitForTimeout(5200);
   const claim = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());
   expect(claim).toMatchObject({ ok: true, debug: { step: 3 } });
   expect(claim.debug.inventory.sandwich).toBeGreaterThanOrEqual(1);
-  await expect(page.locator('#tutorialhud')).toContainText('PIPPA HEARTH');
+  await expect(page.locator('#tutorialhud')).toContainText('SERVE PIPPA');
 
   const beforeSale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold);
   const sale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.cookTutorialAction());

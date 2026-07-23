@@ -1592,8 +1592,11 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/function tryCookTutorialAction\(\)/);
   assert.match(combat,/function cookTutorialTargetPos\(\)/);
   assert.match(combat,/function updateCookTutorialTimer\(now=performance\.now\(\)\)/);
+  assert.match(combat,/function updateCookTutorialStationGuide\(now=performance\.now\(\)\)/);
   assert.match(combat,/function nearbyCookTutorialTrader\(range=4\.2\)/);
   assert.match(combat,/Watch the Hades-style hearth timer/);
+  assert.match(combat,/PREP STATION/);
+  assert.match(combat,/SERVE PIPPA/);
   assert.match(combat,/yellow prep station/);
   assert.match(combat,/jobTutorialLessonMoment\(lesson\.title,cookTutorialTargetPos\(\),\[1,\.72,\.26\],0xffd45a\)/);
   assert.match(combat,/reactJobTutorialTrader\(tutorialCookTrader,cookTutorialTraderPos\(\),'Meal sold',\[1,\.72,\.26\]\)/);
@@ -1706,7 +1709,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
   assert.match(world,/for\(let x=cx-14;x<=cx-7;x\+\+\)for\(let z=cz-15;z<=cz-10;z\+\+\)/);
   assert.match(world,/setBlock\(cx\+15,G\+1,cz-2,B\.CAMPFIRE\)/);
-  assert.match(world,/Guided floor route: prep -> hearth -> serving counter -> return pillar/);
+  assert.match(world,/Guided floor route: yellow prep station -> hearth timer -> serving counter -> return pillar/);
+  assert.match(world,/for\(let x=cx-11;x<=cx-5;x\+\+\)for\(let z=cz-5;z<=cz\+1;z\+\+\)setBlock\(x,G,z,B\.SAND\)/);
   assert.match(world,/setBlock\(cx-9,G\+1,cz-1,B\.WHEAT_3\)/);
   assert.match(world,/setBlock\(cx\+9,G\+1,cz\+11,B\.LOG\)/);
   assert.match(combat,/Stand on the orange forge mat/);

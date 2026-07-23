@@ -814,7 +814,7 @@ const JOB_CHOICE_PROFILES=Object.freeze({
   pet_tamer:{recommended:'Recommended for pet lovers, dragon riders, and companion trainers.',preview:'DRAGON BOND'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialBlacksmithStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialCookStationGuide=null, tutorialBlacksmithStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 let jobTutorialAmbienceNextAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
@@ -830,10 +830,10 @@ const FARMER_TUTORIAL_ACTIONS=Object.freeze([
   {key:'SELL WHEAT',title:'Sell Wheat',verb:'LISS + G',purpose:'Take one wheat to Liss Barley and press G to trade it for gold.',done:'You sold wheat for gold. Farmers turn food into the town economy.'},
 ]);
 const COOK_TUTORIAL_ACTIONS=Object.freeze([
-  {key:'PREP BREAD',title:'Prepare Bread',verb:'PREP TABLE + G',purpose:'Stand on the yellow prep mat and press G to turn three wheat into bread.',done:'You prepared bread. Cooks convert farm supplies into useful meals.'},
-  {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Carry bread and cooked meat to the glowing hearth, then press G to start a fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
+  {key:'PREP BREAD',title:'Prepare Bread',verb:'PREP + G',purpose:'Stand on the yellow prep station and press G to turn three wheat into bread.',done:'You prepared bread. Cooks convert farm supplies into useful meals.'},
+  {key:'START HEARTH',title:'Start Cooking',verb:'HEARTH + G',purpose:'Carry bread and cooked meat to the glowing hearth, then press G to start the fast kitchen timer.',done:'The hearth is cooking. Watch the timer above it.'},
   {key:'CLAIM MEAL',title:'Claim Meal',verb:'HEARTH + G',purpose:'When the timer says ready, press G at the hearth to claim a Hearty Sandwich.',done:'You made a Hearty Sandwich. Strong meals support travel, Gates, and recovery.'},
-  {key:'SELL MEAL',title:'Sell Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
+  {key:'SERVE MEAL',title:'Serve Meal',verb:'PIPPA + G',purpose:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G to sell it for gold.',done:'You sold a meal for gold. Cook turns gathered ingredients into town value.'},
 ]);
 const BLACKSMITH_TUTORIAL_ACTIONS=Object.freeze([
   {key:'FORGE CHAINMAIL',title:'Forge Armor',verb:'FORGE + G',purpose:'Stand on the orange forge mat and press G to spend seven iron ingots plus coal on Chainmail Armor.',done:'You forged Chainmail Armor. The armour now needs a quality check before Tobin will buy it.'},
@@ -1508,6 +1508,51 @@ function updateCookTutorialTrader(now=performance.now()){
   const visible=jobTutorialActive&&jobTutorialJob==='cook'&&dim==='job'&&jobTutorialCookStep>=3;
   updateJobTutorialTraderActor(actor,p,visible,now);
 }
+function cookTutorialExitPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.cook;
+  return room?{x:room.x,y:room.G+1,z:room.z+23}:null;
+}
+function ensureCookTutorialStationGuide(){
+  if(tutorialCookStationGuide)return tutorialCookStationGuide;
+  const group=new THREE.Group();
+  const specs=[
+    {step:0,label:'1 PREP',color:'#ffd45a',pos:cookTutorialPrepPos},
+    {step:1,label:'2 HEARTH',color:'#ff8a3d',pos:cookTutorialHearthPos},
+    {step:2,label:'3 CLAIM',color:'#b7ff8a',pos:cookTutorialHearthPos},
+    {step:3,label:'4 SERVE',color:'#ffd24a',pos:cookTutorialTraderPos},
+    {step:4,label:'EXIT',color:'#9ad26b',pos:cookTutorialExitPos},
+  ];
+  for(const spec of specs){
+    const sprite=makeJobTutorialStationSprite(spec.label,spec.color);
+    sprite.userData=spec;
+    group.add(sprite);
+  }
+  group.visible=false;
+  scene.add(group);
+  tutorialCookStationGuide=group;
+  return group;
+}
+function hideCookTutorialStationGuide(){
+  if(tutorialCookStationGuide)tutorialCookStationGuide.visible=false;
+}
+function updateCookTutorialStationGuide(now=performance.now()){
+  const group=ensureCookTutorialStationGuide();
+  const visible=!!(jobTutorialActive&&jobTutorialJob==='cook'&&dim==='job');
+  group.visible=visible;
+  if(!visible)return;
+  const current=Math.max(0,Math.min(4,jobTutorialCookStep|0));
+  for(const sprite of group.children){
+    const spec=sprite.userData||{}, p=typeof spec.pos==='function'?spec.pos():null;
+    if(!p){sprite.visible=false;continue;}
+    const step=spec.step|0, active=step===current, complete=step<current;
+    sprite.visible=step===current||complete||step===current+1;
+    if(!sprite.visible)continue;
+    sprite.position.set(p.x,p.y+(active?2.9:2.45)+Math.sin(now*.004+(step||0))*.055,p.z);
+    sprite.material.opacity=active?.98:(complete?.58:.42);
+    const base=active?1.16:1;
+    sprite.scale.set(2.9*base,1.3*base,1);
+  }
+}
 function nearbyCookTutorialTrader(range=4.2){
   const p=cookTutorialTraderPos();
   if(!p||!jobTutorialActive||jobTutorialJob!=='cook'||dim!=='job'||jobTutorialCookStep<3)return null;
@@ -1539,7 +1584,7 @@ function cookTutorialTargetPos(){
   if(step<=0)return cookTutorialPrepPos();
   if(step===1||step===2)return cookTutorialHearthPos();
   if(step===3)return cookTutorialTraderPos();
-  return {x:room.x,y:room.G+1.035,z:room.z+23};
+  return cookTutorialExitPos();
 }
 function drawCookTutorialTimer(canvas, seconds=0, done=false, progress=0){
   const ctx=canvas.getContext('2d'), w=canvas.width||192, h=canvas.height||72, p=Math.max(0,Math.min(1,done?1:progress||0));
@@ -1724,6 +1769,7 @@ function cookTutorialVisualDebug(){
   const trader=cookTutorialTraderPos();
   const target=cookTutorialTargetPos();
   const timer=tutorialCookTimer;
+  const guide=tutorialCookStationGuide;
   return {
     active:!!jobTutorialActive,
     job:jobTutorialJob,
@@ -1733,6 +1779,7 @@ function cookTutorialVisualDebug(){
     hearth,
     trader,
     traded:!!jobTutorialTraded,
+    stationGuide:guide?{exists:true,visible:!!guide.visible,count:guide.children.length}: {exists:false},
     timer:timer?{exists:true,visible:!!timer.visible,duration:jobTutorialCookReadyAt&&jobTutorialCookStartedAt?jobTutorialCookReadyAt-jobTutorialCookStartedAt:0,scaleX:timer.scale&&timer.scale.x,done:!!(jobTutorialCookReadyAt&&Date.now()>=jobTutorialCookReadyAt)}:{exists:false},
     inventory:{wheat:countItem(I.WHEAT),bread:countItem(I.BREAD),meat:countItem(I.COOKED_MEAT),sandwich:countItem(I.HEARTY_SANDWICH)}
   };
@@ -3065,10 +3112,12 @@ function updateJobTutorialHud(){
     copy=jobTutorialCookStep>=4
       ? {key:'RETURN PILLAR',text:'You prepped, cooked, claimed, and sold a meal for gold.',sub:'Walk into the blue return pillar to go back to town.'}
       : jobTutorialCookStep===3
-        ? {key:'PIPPA HEARTH',text:'Take the Hearty Sandwich to Pippa Hearth and press G to sell it for gold.',sub:'This completes the cook economy loop.'}
+        ? {key:'SERVE PIPPA',text:'Take the Hearty Sandwich to Pippa Hearth at the serving counter and press G.',sub:'This completes the cook economy loop: ingredients become useful meals, meals become gold.'}
       : jobTutorialCookStep===2
-        ? {key:'CLAIM MEAL',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the Hades-style hearth timer above the campfire.',sub:'The tutorial timer is fast; normal food work still uses recipes and kitchen prep.'}
-      : {key:action.key,text:cookTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Cook loop: ingredients become food, food becomes buffs and gold.'};
+        ? {key:'HEARTH TIMER',text:Date.now()>=jobTutorialCookReadyAt?'The hearth timer is ready. Press G at the hearth to claim the meal.':'Watch the Hades-style hearth timer above the campfire.',sub:'Timers make cooking feel physical: prep first, wait briefly, then claim the finished food.'}
+      : jobTutorialCookStep===1
+        ? {key:'START HEARTH',text:cookTutorialProgressLabel()+': '+action.purpose,sub:'The hearth turns prepared ingredients into meals for buffs, travel, recovery, and sales.'}
+        : {key:'PREP STATION',text:cookTutorialProgressLabel()+': '+action.purpose,sub:'This teaches the Cook loop: ingredients become food, food becomes buffs and gold.'};
   }
   if(jobTutorialJob==='blacksmith'){
     const action=blacksmithTutorialAction();
@@ -3315,6 +3364,7 @@ function tickJobTutorial(now){
     if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
     if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
     if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
+    hideCookTutorialStationGuide();
     hideBlacksmithTutorialStationGuide();
     tutorialPillarGroup.visible=false;
     tutorialEl.classList.add('hidden');
@@ -3326,6 +3376,7 @@ function tickJobTutorial(now){
   updateMinerTutorialTrader(now);
   updateFarmerTutorialTrader(now);
   updateCookTutorialTrader(now);
+  updateCookTutorialStationGuide(now);
   updateBlacksmithTutorialTrader(now);
   updateBlacksmithTutorialStationGuide(now);
   updateCookTutorialTimer(now);

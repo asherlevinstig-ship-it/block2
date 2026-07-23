@@ -1163,19 +1163,23 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     }
     for(let z=cz+17;z<=cz+23;z++)for(let x=cx-2;x<=cx+2;x++){setBlock(x,G,z,B.COBBLE);clear(x,z,G+6);}
 
-    // Guided floor route: prep -> hearth -> serving counter -> return pillar.
-    for(let x=cx-8;x<=cx;x++)setBlock(x,G,cz-2,B.TERRACOTTA);
-    for(let z=cz-2;z<=cz+4;z++)setBlock(cx,G,z,B.TERRACOTTA);
-    for(let x=cx;x<=cx+8;x++)setBlock(x,G,cz+4,B.TERRACOTTA);
-    for(let z=cz+4;z<=cz+12;z++)setBlock(cx+8,G,z,B.TERRACOTTA);
+    // Guided floor route: yellow prep station -> hearth timer -> serving counter -> return pillar.
+    for(let x=cx-8;x<=cx;x++)setBlock(x,G,cz-2,x<=cx-4?B.SAND:B.TERRACOTTA);
+    for(let z=cz-2;z<=cz+4;z++)setBlock(cx,G,z,z>=cz+2?B.BRICK:B.TERRACOTTA);
+    for(let x=cx;x<=cx+8;x++)setBlock(x,G,cz+4,x<=cx+3?B.BRICK:B.TERRACOTTA);
+    for(let z=cz+4;z<=cz+12;z++)setBlock(cx+8,G,z,z>=cz+10?B.PLANKS:B.TERRACOTTA);
     for(let z=cz+12;z<=cz+23;z++)setBlock(cx+8,G,z,z>cz+18?B.COBBLE:B.TERRACOTTA);
     for(let x=cx;x<=cx+8;x++)setBlock(x,G,cz+23,B.COBBLE);
 
     // Prep counters: the active table at (cx-8, cz-2) matches cookTutorialPrepPos().
+    for(let x=cx-11;x<=cx-5;x++)for(let z=cz-5;z<=cz+1;z++)setBlock(x,G,z,B.SAND);
     for(let x=cx-12;x<=cx-4;x++)setBlock(x,G+1,cz-2,(x===cx-8)?B.TABLE:B.PLANKS);
     for(let x=cx-10;x<=cx-6;x++)for(let z=cz-4;z<=cz;z++)if(!(x===cx-8&&z===cz-2))setBlock(x,G,z,B.TERRACOTTA);
     setBlock(cx-9,G+1,cz-1,B.WHEAT_3);
     setBlock(cx-7,G+1,cz-1,B.TERRACOTTA);
+    setBlock(cx-10,G+1,cz+1,B.CHEST);
+    setBlock(cx-6,G+1,cz+1,B.CHEST);
+    setBlock(cx-8,G+2,cz-3,B.LANTERN);
     for(let x=cx-12;x<=cx-4;x+=4){setBlock(x,G+1,cz-4,B.CHEST);setBlock(x,G+2,cz-4,B.LANTERN);}
     for(let z=cz-11;z<=cz-6;z+=2){setBlock(cx-13,G+1,z,B.CHEST);setBlock(cx-13,G+2,z,z===cz-9?B.WHEAT_3:B.PLANKS);}
 
@@ -1189,15 +1193,17 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
     setBlock(cx,G+1,cz+4,B.CAMPFIRE);
     setBlock(cx-2,G+1,cz+4,B.FURNACE);
     setBlock(cx+2,G+1,cz+4,B.FURNACE);
+    setBlock(cx,G+2,cz+4,B.LANTERN);
     for(let x=cx-2;x<=cx+2;x++)for(let z=cz+2;z<=cz+6;z++)setBlock(x,G,z,B.TERRACOTTA);
     setBlock(cx-1,G+2,cz+3,B.LANTERN);
     setBlock(cx+1,G+2,cz+3,B.LANTERN);
+    for(const [ox,oz] of [[-3,2],[3,2],[-3,6],[3,6]])setBlock(cx+ox,G+1,cz+oz,B.BRICK);
     for(const [ox,oz] of [[-5,4],[5,4],[-5,7],[5,7]]){setBlock(cx+ox,G+1,cz+oz,B.LOG);setBlock(cx+ox,G+2,cz+oz,B.LANTERN);}
 
     // Tavern counter and sale corner where Pippa appears for the final step.
+    for(let x=cx+6;x<=cx+12;x++)for(let z=cz+9;z<=cz+14;z++)setBlock(x,G,z,z>=cz+11?B.PLANKS:B.TERRACOTTA);
     for(let x=cx+5;x<=cx+13;x++)setBlock(x,G+1,cz+10,x===cx+10?B.TABLE:B.PLANKS);
     for(let z=cz+8;z<=cz+13;z++)setBlock(cx+13,G+1,z,B.PLANKS);
-    for(let x=cx+6;x<=cx+11;x++)for(let z=cz+11;z<=cz+14;z++)setBlock(x,G,z,B.TERRACOTTA);
     setBlock(cx+8,G+1,cz+12,B.CHEST);
     setBlock(cx+10,G+1,cz+13,B.LANTERN);
     setBlock(cx+12,G+1,cz+12,B.CHEST);
