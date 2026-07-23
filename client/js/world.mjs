@@ -1058,16 +1058,25 @@ function buildJobTutorialMeadow(jobId,setBlock=setB){
       for(let y=G+1;y<=G+7;y++)setBlock(x,y,z,wall||y===G+7?B.STONE:B.AIR);
     }
     for(let x=cx-5;x<=cx+5;x++)for(let y=G+1;y<=G+5;y++)setBlock(x,y,cz-16,B.AIR);
+    // Guided floor route: diamond seam -> bag check -> Garrik trade deck -> return pillar.
+    for(let z=cz-14;z<=cz+23;z++)for(let x=cx-2;x<=cx+2;x++)setBlock(x,G,z,z<cz-7?B.COBBLE:z<cz+4?B.PLANKS:z<cz+13?B.COBBLE:B.GLASS);
+    for(let x=cx-4;x<=cx+4;x++)for(let z=cz-15;z<=cz-11;z++)setBlock(x,G,z,Math.abs(x-cx)<=1?B.GLASS:B.COBBLE);
+    for(let x=cx-3;x<=cx+3;x++)for(let z=cz-7;z<=cz-4;z++)setBlock(x,G,z,B.PLANKS);
     for(let x=cx-8;x<=cx+8;x+=4){
       setBlock(x,G+1,cz-13,B.STONE);
       setBlock(x,G+2,cz-13,Math.abs(x-cx)<=4?B.DIAMOND_ORE:B.IRON_ORE);
       setBlock(x,G+3,cz-13,B.COAL_ORE);
     }
     setBlock(cx,G+2,cz-13,B.DIAMOND_ORE);
+    for(const sx of [-5,5]){setBlock(cx+sx,G+1,cz-13,B.LOG);setBlock(cx+sx,G+2,cz-13,B.LANTERN);}
+    setBlock(cx,G+1,cz-5,B.CHEST);
+    setBlock(cx+2,G+1,cz-5,B.TABLE);
     for(let z=cz-9;z<=cz+21;z+=6){setBlock(cx-6,G+1,z,B.TORCH);setBlock(cx+6,G+1,z,B.TORCH);}
     box(cx-4,G,cz+7,cx+4,G,cz+12,B.PLANKS);
+    for(let x=cx-4;x<=cx+4;x++){setBlock(x,G+1,cz+7,B.LOG);setBlock(x,G+1,cz+12,B.LOG);}
     setBlock(cx-3,G+1,cz+10,B.CHEST);
     setBlock(cx+3,G+1,cz+10,B.TABLE);
+    setBlock(cx,G+2,cz+8,B.LANTERN);
     for(let z=cz-8;z<=cz+20;z+=7){
       for(const sx of [-10,10]){
         for(let y=G+1;y<=G+5;y++)setBlock(cx+sx,y,z,B.LOG);

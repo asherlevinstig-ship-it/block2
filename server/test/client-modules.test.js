@@ -1573,6 +1573,10 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(combat,/get jobTutorialMinedDiamond\(\)\{ return jobTutorialMinedDiamond; \}/);
   assert.match(combat,/get jobTutorialTraded\(\)\{ return jobTutorialTraded; \}/);
   assert.match(combat,/Mine a diamond and trade it with <b>Garrik<\/b> before leaving/);
+  assert.match(combat,/function updateMinerTutorialStationGuide\(now=performance\.now\(\)\)/);
+  assert.match(combat,/function minerTutorialTargetPos\(\)/);
+  assert.match(combat,/MINE SEAM/);
+  assert.match(combat,/TRADE GARRIK/);
   assert.match(combat,/const FARMER_TUTORIAL_ACTIONS=Object\.freeze\(\[/);
   assert.match(combat,/SELL WHEAT/);
   assert.match(combat,/FARMER_TUTORIAL_WHEAT_GOLD=18/);
@@ -1709,6 +1713,8 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(world,/function buildJobTutorialMeadow\(jobId,setBlock=setB\)/);
   assert.match(world,/if\(jobId!=='pet_tamer'\)\{/);
   assert.match(world,/setBlock\(x,G\+2,cz-13,Math\.abs\(x-cx\)<=4\?B\.DIAMOND_ORE:B\.IRON_ORE\)/);
+  assert.match(world,/Guided floor route: diamond seam -> bag check -> Garrik trade deck -> return pillar/);
+  assert.match(world,/for\(let z=cz-14;z<=cz\+23;z\+\+\)for\(let x=cx-2;x<=cx\+2;x\+\+\)setBlock\(x,G,z,z<cz-7\?B\.COBBLE:z<cz\+4\?B\.PLANKS:z<cz\+13\?B\.COBBLE:B\.GLASS\)/);
   assert.match(world,/box\(cx-4,G,cz\+7,cx\+4,G,cz\+12,B\.PLANKS\)/);
   assert.match(world,/for\(let x=cx-14;x<=cx-7;x\+\+\)for\(let z=cz-15;z<=cz-10;z\+\+\)/);
   assert.match(world,/Guided floor route: tilling patch -> planting bed -> ready wheat -> farm stand -> return pillar/);

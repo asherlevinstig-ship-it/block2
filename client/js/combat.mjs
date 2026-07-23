@@ -814,7 +814,7 @@ const JOB_CHOICE_PROFILES=Object.freeze({
   pet_tamer:{recommended:'Recommended for pet lovers, dragon riders, and companion trainers.',preview:'DRAGON BOND'},
 });
 let jobTutorialActive=false, jobTutorialJob='';
-let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialFarmerStationGuide=null, tutorialCookStationGuide=null, tutorialBlacksmithStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
+let jobTutorialMinedDiamond=false, jobTutorialTraded=false, jobTutorialFarmerStep=0, jobTutorialCookStep=0, jobTutorialBlacksmithStep=0, jobTutorialBlacksmithCraftedArmor=null, jobTutorialMonkStep=0, jobTutorialMonkStartedAt=0, jobTutorialCookStartedAt=0, jobTutorialCookReadyAt=0, jobTutorialPetDragonSeen=false, jobTutorialPetDragonStep=0, jobTutorialReturnWarnAt=0, tutorialMinerTrader=null, tutorialFarmerTrader=null, tutorialCookTrader=null, tutorialBlacksmithTrader=null, tutorialMinerStationGuide=null, tutorialFarmerStationGuide=null, tutorialCookStationGuide=null, tutorialBlacksmithStationGuide=null, tutorialCookTimer=null, tutorialMonkTimer=null;
 let jobTutorialPetDragonRideStart=null, jobTutorialPetDragonTutorialMount=false, jobTutorialPetDragonNearSince=0, jobTutorialPetEggStarted=false, jobTutorialPetEggReadyAt=0, jobTutorialPetEggType='verdant', jobTutorialPetFlightRing=null;
 let jobTutorialAmbienceNextAt=0;
 const MINER_TUTORIAL_TRADE_GOLD=45;
@@ -1274,6 +1274,23 @@ function minerTutorialTraderPos(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
   return room?{x:room.x+.5,y:room.G+1,z:room.z+9.5}:null;
 }
+function minerTutorialOrePos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  return room?{x:room.x+.5,y:room.G+2.6,z:room.z-12.55}:null;
+}
+function minerTutorialCollectPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  return room?{x:room.x+.5,y:room.G+1.25,z:room.z-5.5}:null;
+}
+function minerTutorialExitPos(){
+  const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
+  return room?{x:room.x,y:room.G+1,z:room.z+23}:null;
+}
+function minerTutorialTargetPos(){
+  if(!jobTutorialMinedDiamond)return minerTutorialOrePos();
+  if(!jobTutorialTraded)return minerTutorialTraderPos();
+  return minerTutorialExitPos();
+}
 function ensureMinerTutorialTrader(){
   if(tutorialMinerTrader)return tutorialMinerTrader;
   if(typeof makeVillager==='function'){
@@ -1320,6 +1337,46 @@ function updateMinerTutorialTrader(now=performance.now()){
   if(!actor||!p)return;
   const visible=jobTutorialActive&&jobTutorialJob==='miner'&&dim==='job';
   updateJobTutorialTraderActor(actor,p,visible,now);
+}
+function ensureMinerTutorialStationGuide(){
+  if(tutorialMinerStationGuide)return tutorialMinerStationGuide;
+  const group=new THREE.Group();
+  const specs=[
+    {step:0,label:'1 MINE',color:'#7dd3fc',pos:minerTutorialOrePos},
+    {step:1,label:'2 BAG',color:'#f6d06f',pos:minerTutorialCollectPos},
+    {step:2,label:'3 TRADE',color:'#a7b0ba',pos:minerTutorialTraderPos},
+    {step:3,label:'EXIT',color:'#9ad26b',pos:minerTutorialExitPos},
+  ];
+  for(const spec of specs){
+    const sprite=makeJobTutorialStationSprite(spec.label,spec.color);
+    sprite.userData=spec;
+    group.add(sprite);
+  }
+  group.visible=false;
+  scene.add(group);
+  tutorialMinerStationGuide=group;
+  return group;
+}
+function hideMinerTutorialStationGuide(){
+  if(tutorialMinerStationGuide)tutorialMinerStationGuide.visible=false;
+}
+function updateMinerTutorialStationGuide(now=performance.now()){
+  const group=ensureMinerTutorialStationGuide();
+  const visible=!!(jobTutorialActive&&jobTutorialJob==='miner'&&dim==='job');
+  group.visible=visible;
+  if(!visible)return;
+  const current=jobTutorialTraded?3:(jobTutorialMinedDiamond?2:0);
+  for(const sprite of group.children){
+    const spec=sprite.userData||{}, p=typeof spec.pos==='function'?spec.pos():null;
+    if(!p){sprite.visible=false;continue;}
+    const step=spec.step|0, active=step===current, complete=step<current;
+    sprite.visible=step===current||complete||step===current+1;
+    if(!sprite.visible)continue;
+    sprite.position.set(p.x,p.y+(active?2.15:1.75)+Math.sin(now*.004+(step||0))*.055,p.z);
+    sprite.material.opacity=active?.98:(complete?.58:.46);
+    const base=active?1.16:1;
+    sprite.scale.set(2.9*base,1.3*base,1);
+  }
 }
 function nearbyMinerTutorialTrader(range=4.2){
   const p=minerTutorialTraderPos();
@@ -2376,6 +2433,7 @@ function throughPetTamerFlightRing(){
   return !!(p&&player&&Math.hypot(player.pos.x-p.x,player.pos.y-p.y,player.pos.z-p.z)<2.75);
 }
 function jobTutorialBeaconTarget(jobId, room){
+  if(jobId==='miner')return minerTutorialTargetPos();
   if(jobId==='farmer')return farmerTutorialTargetPos();
   if(jobId==='cook')return cookTutorialTargetPos();
   if(jobId==='blacksmith')return blacksmithTutorialTargetPos();
@@ -2426,7 +2484,7 @@ function tickJobTutorialAmbience(now,room){
     const seam=[[-8,-13],[0,-13],[8,-13],[-14,3],[14,11]][Math.floor(Math.random()*5)];
     jobTutorialSparkle(cx+seam[0]+.5,G+2.2+Math.random()*1.2,cz+seam[1]+.5,[.38,.95,1],.8,.24,.7);
     if(Math.random()<.32)burst(cx+(Math.random()-.5)*14,G+5.9,cz-4+Math.random()*20,[.35,.35,.36],3,.45,.12,.55,1);
-    if(Math.random()<.18)ringPulse(cx+.5,G+.08,cz+7.5,1.1,0x7dd3fc,.28);
+    if(Math.random()<.2){const p=minerTutorialTargetPos();if(p)ringPulse(p.x,G+.08,p.z,jobTutorialMinedDiamond?1.2:1.35,jobTutorialTraded?0x9ad26b:0x7dd3fc,.28);}
     if(Math.random()<.22)jobTutorialFallingParticle(cx-10+Math.random()*20,G+6.7,cz-12+Math.random()*31,[.55,.61,.68],.35,1.1);
     if(Math.random()<.16)jobTutorialSparkle(cx-13.5+Math.random()*27,G+1.35,cz-6+Math.random()*23,[.45,.68,.95],.45,.08,.55);
   }else if(job==='farmer'){
@@ -2904,7 +2962,8 @@ function minerTutorialVisualDebug(){
   const room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS.miner;
   const ore=room?{x:room.x,y:room.G+2,z:room.z-13,id:getB(room.x,room.G+2,room.z-13)}:null;
   const trader=minerTutorialTraderPos();
-  const target=room?{x:room.x,y:room.G+1.035,z:room.z+23}:null;
+  const target=minerTutorialTargetPos();
+  const guide=tutorialMinerStationGuide;
   return {
     active:!!jobTutorialActive,
     job:jobTutorialJob,
@@ -2913,6 +2972,7 @@ function minerTutorialVisualDebug(){
     ore,
     trader,
     target,
+    stationGuide:guide?{exists:true,visible:!!guide.visible,count:guide.children.length}: {exists:false},
     inventory:{diamond:countItem(I.DIAMOND)},
   };
 }
@@ -3154,9 +3214,9 @@ function updateJobTutorialHud(){
   let copy=JOB_TUTORIAL_ROOM_COPY[jobTutorialJob]||{key:'PRACTICE',text:'Try the job loop in this room.',sub:'Walk into the blue return pillar when done.'};
   if(jobTutorialJob==='miner'){
     copy=!jobTutorialMinedDiamond
-      ? JOB_TUTORIAL_ROOM_COPY.miner
+      ? {key:'MINE SEAM',text:'Follow station 1 to the blue diamond seam, select the tutorial pickaxe, then hold F / left click.',sub:'The bright ore wall teaches the Miner loop: spot value, mine safely, bring the find back.'}
       : !jobTutorialTraded
-        ? {key:'GARRIK FLINT',text:'Take the diamond to Garrik and press G to trade it for gold.',sub:'He is waiting on the wooden platform inside this cave.'}
+        ? {key:'TRADE GARRIK',text:'Your diamond is in your bag. Follow station 3 to Garrik Flint and press G to trade it for gold.',sub:'He is waiting on the timber trading platform inside this cave.'}
         : {key:'RETURN PILLAR',text:'You mined a diamond and traded it for gold.',sub:'Walk into the blue return pillar to go back to town.'};
   }
   if(jobTutorialJob==='farmer'){
@@ -3269,6 +3329,7 @@ function completeJobTutorial(){
   if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
   if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
   if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
+  hideMinerTutorialStationGuide();
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   exitJobTutorialRoom();
@@ -3327,6 +3388,7 @@ function startJobTutorial(jobId){
   updateVisibleChunks(true);
   grantJobTutorialKit(jobId);
   updateMinerTutorialTrader();
+  updateMinerTutorialStationGuide();
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();
   updateBlacksmithTutorialTrader();
@@ -3389,6 +3451,7 @@ function resumeJobTutorial(jobId,state={}){
   if(jobId==='farmer')restoreFarmerTutorialFieldState();
   if(jobId==='blacksmith')restoreBlacksmithTutorialState();
   updateMinerTutorialTrader();
+  updateMinerTutorialStationGuide();
   updateFarmerTutorialTrader();
   updateCookTutorialTrader();
   updateBlacksmithTutorialTrader();
@@ -3428,6 +3491,7 @@ function tickJobTutorial(now){
     if(tutorialFarmerTrader)tutorialFarmerTrader.grp.visible=false;
     if(tutorialCookTrader)tutorialCookTrader.grp.visible=false;
     if(tutorialBlacksmithTrader)tutorialBlacksmithTrader.grp.visible=false;
+    hideMinerTutorialStationGuide();
     hideFarmerTutorialStationGuide();
     hideCookTutorialStationGuide();
     hideBlacksmithTutorialStationGuide();
@@ -3439,6 +3503,7 @@ function tickJobTutorial(now){
   if(!room) return;
   tickJobTutorialAmbience(now,room);
   updateMinerTutorialTrader(now);
+  updateMinerTutorialStationGuide(now);
   updateFarmerTutorialTrader(now);
   updateFarmerTutorialStationGuide(now);
   updateCookTutorialTrader(now);

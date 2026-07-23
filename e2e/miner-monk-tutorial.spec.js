@@ -64,20 +64,20 @@ test('miner tutorial persists through reload then mines and sells a diamond', as
   test.setTimeout(90_000);
   await registerReadyHunter(page, 'miner_audit', 'MinerAudit');
   await chooseJob(page, 'miner');
-  await expect(page.locator('#tutorialhud')).toContainText('DIAMOND PICKAXE');
+  await expect(page.locator('#tutorialhud')).toContainText('MINE SEAM');
 
   await reloadAndExpectJobRoom(page, 'miner');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.minerTutorialVisualDebug()))
-    .toMatchObject({ active: true, job: 'miner', minedDiamond: false, traded: false, ore: { id: 17 } });
+    .toMatchObject({ active: true, job: 'miner', minedDiamond: false, traded: false, ore: { id: 17 }, stationGuide: { exists: true, visible: true, count: 4 } });
 
   const mined = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.minerTutorialAction());
   expect(mined).toMatchObject({ ok: true, done: false, debug: { minedDiamond: true, inventory: { diamond: 1 } } });
-  await expect(page.locator('#tutorialhud')).toContainText('GARRIK FLINT');
+  await expect(page.locator('#tutorialhud')).toContainText('TRADE GARRIK');
 
   await reloadAndExpectJobRoom(page, 'miner');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.minerTutorialVisualDebug()))
-    .toMatchObject({ active: true, job: 'miner', minedDiamond: true, traded: false, inventory: { diamond: 1 } });
-  await expect(page.locator('#tutorialhud')).toContainText('GARRIK FLINT');
+    .toMatchObject({ active: true, job: 'miner', minedDiamond: true, traded: false, inventory: { diamond: 1 }, stationGuide: { exists: true, visible: true, count: 4 } });
+  await expect(page.locator('#tutorialhud')).toContainText('TRADE GARRIK');
 
   const beforeSale = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gold);
   const sold = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.minerTutorialAction());
