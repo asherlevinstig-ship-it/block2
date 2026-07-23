@@ -48,7 +48,14 @@ export function isOnboardingTreeLog(x, y, z, meadow) {
 
 export function gateMilestoneHandoff(message, earned = true) {
   const firstClear = message && message.firstClear;
-  if (!earned || !firstClear || (firstClear.rank | 0) !== 1) return null;
+  if (!earned || !firstClear) return null;
+  const rank = firstClear.rank | 0;
+  if (rank === 0) return {
+    label: 'FIRST GATE CLEARED',
+    text: 'You cleared your first E-rank Gate. Exit through the portal, return to Mara, and claim the quest to open the base-building path.',
+    action: 'RETURN TO MARA',
+  };
+  if (rank !== 1) return null;
   return {
     label: 'ADVENTURER LOOP UNLOCKED',
     text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Each rank now contains 10 levels; higher ranks demand increasingly greater mastery.',

@@ -1601,6 +1601,7 @@ function netAttachRoom(room,name,client){
       NET.dgn=m.id;
       const shard=(m.shardPlus>0)?{plus:m.shardPlus, name:m.shardName||'', mods:(m.shardMods||'').split(',').filter(Boolean)}:null;
       beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, dungeonId:m.dungeonId||'', shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
+      globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();
       eventFeed('[Dungeon]','Entered '+RANKS[Math.max(0,Math.min(RANKS.length-1,(m.rank|0)))].n+'-Rank '+gateKindLabel(m.kind||'public')+' Gate.',{key:'dungeon:enter:'+String(m.id||''),cooldown:0});
     });
     room.onMessage('shardAttuneResult', m=>{
@@ -1614,7 +1615,7 @@ function netAttachRoom(room,name,client){
       sysMsg(r==='space'?'No room for a gate here — move to open ground':
              r==='item'?'You have no shard in that slot':'Could not attune that shard');
     });
-    room.onMessage('dungeonStatus', m=>applyDungeonStatus(m));
+    room.onMessage('dungeonStatus', m=>{applyDungeonStatus(m);globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();});
     room.onMessage('dungeonPartyStatus', m=>applyDungeonPartyStatus(m));
     room.onMessage('dungeonRoomCleared', m=>announceDungeonRoomCleared(m));
     room.onMessage('dungeonPing', m=>{if(globalThis.applyDungeonPing)globalThis.applyDungeonPing(m);});
@@ -1653,7 +1654,7 @@ function netAttachRoom(room,name,client){
       sysMsg('<b>D-rank prep check:</b> missing '+escHTML(label)+'.<br>'+escHTML(hint),{tier:'minor',title:'Gate Prep'});
     });
     room.onMessage('dedit', m=>{ if(dim==='dungeon') netWriteEdit(m.x, m.y, m.z, m.id); });
-    room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); announceDungeonClearHandoff(m); } });
+    room.onMessage('gateCleared', m=>{ if(dungeon){ dungeon.cleared=true; questGate(m&&m.rank==null?dungeon.rank:m.rank); announceDungeonClearHandoff(m); globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker(); } });
     room.onMessage('dungeonSpirit', m=>{
       COMPANIONS.activeFamiliar='';
       hp=0;sp=0;renderBars();

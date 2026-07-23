@@ -1310,14 +1310,18 @@ test('browser and server consume one shared safeguarded comms ruleset', () => {
   assert.deepEqual(serverCommsRules.phraseIdsFor('gate').slice(0, 3), ['gate_ready','gate_need_one','gate_enter']);
 });
 
-test('first D-rank clear produces a one-time repeatable-loop handoff', async () => {
+test('first Gate clears produce the right onboarding handoffs', async () => {
   const { gateMilestoneHandoff, rankPromotionDetails } = await clientModule('onboarding.mjs');
+  assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 0, nextRank: 1 } }, true), {
+    label: 'FIRST GATE CLEARED',
+    text: 'You cleared your first E-rank Gate. Exit through the portal, return to Mara, and claim the quest to open the base-building path.',
+    action: 'RETURN TO MARA',
+  });
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 1, nextRank: 2 } }, true), {
     label: 'ADVENTURER LOOP UNLOCKED',
     text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Each rank now contains 10 levels; higher ranks demand increasingly greater mastery.',
     action: 'TRACK NEXT CONTRACT',
   });
-  assert.equal(gateMilestoneHandoff({ firstClear: { rank: 0 } }, true), null);
   assert.equal(gateMilestoneHandoff({ firstClear: { rank: 1 } }, false), null);
   assert.equal(gateMilestoneHandoff({}, true), null);
   assert.deepEqual(rankPromotionDetails({

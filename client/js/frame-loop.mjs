@@ -901,6 +901,7 @@ function transitionRecoveryAction(){
   return null;
 }
 function currentObjectiveAction(){
+  if(dim==='dungeon') return null;
   const transition=transitionRecoveryAction();
   const storyActive=!!(localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story'));
   if(transition && !shouldDeferTransitionAction(transition,{story:storyActive,job:!!jobContract})) return transition;
@@ -970,6 +971,10 @@ function objectiveHudHTML(obj){
 }
 function currentObjectiveHud(){
   if(tutorialRoomHudSuppressed())return null;
+  if(dim==='dungeon'){
+    const dungeonObj=currentObjective();
+    return dungeonObj?{...dungeonObj,label:'Next Best Action'}:null;
+  }
   const unified=unifiedObjectiveHud();
   if(unified)return unified;
   if(townGuidanceActive&&!jobContract)return null;
@@ -1103,6 +1108,15 @@ function currentObjective(){
   if(dim==='gatecutscene') return {label:'Gate Vision', text:'The first dungeon reveals itself'};
   if(dim==='dungeon'){
     const st=dungeon&&dungeon.status;
+    if(st&&Array.isArray(st.party)){
+      const me=dungeonStatusMember(st,NET.room&&NET.room.sessionId);
+      const runState=dungeonObjectiveState(st,me,Math.max(0,st.remainingChests|0));
+      if(runState)return {label:runState.label||'Current Goal', text:runState.text||''};
+    }
+    if(firstGateQuestDungeon()){
+      if(dungeon&&dungeon.cleared)return {label:'First Gate Cleared', text:'First Gate cleared. Exit through the portal and return to Mara for the next step.'};
+      return {label:'First Gate: Clear Rooms', text:'Move room to room. Defeat enemies to open the boss route.'};
+    }
     const boss=st?(st.cleared?'Cleared':st.bossAlive?'Boss alive':'Boss down'):(dungeon&&dungeon.cleared?'Cleared':'Boss alive');
     const chests=st?(' - chests '+st.remainingChests):'';
     let party=st&&st.party?st.party.length:1;
@@ -1437,22 +1451,29 @@ function dungeonStatusMember(status,sid){
   if(!status||!Array.isArray(status.party)||!sid)return null;
   return status.party.find(m=>m&&m.sid===sid)||null;
 }
+function firstGateQuestDungeon(){
+  return dim==='dungeon'&&dungeon&&((dungeon.rank|0)===0)&&(quest&&quest.giver==='Mara Vale'&&quest.title==='The First Gate');
+}
+function firstGateDungeonActive(status){
+  return firstGateQuestDungeon()&&status;
+}
 function dungeonObjectiveState(status,me,chestCount){
-  if(status.wipe||status.party.length>0&&status.aliveCount===0)return {cls:'danger',label:'Party Wiped',text:'Return to town, repair, and challenge another Gate.',target:status.exit,targetLabel:'Exit'};
-  if(me&&me.spirit)return {cls:'danger',label:'Spirit Form',text:'Stay as spirit for party credit, or return to town now to repair and restock.',target:nearestDungeonAlly(status,me),targetLabel:'Ally'};
-  if(me&&me.downed)return {cls:'danger',label:'Downed',text:'Hold position while allies finish the fight or return safely.',target:nearestDungeonAlly(status,me),targetLabel:'Ally'};
+  const firstGate=firstGateDungeonActive(status);
+  if(status.wipe||status.party.length>0&&status.aliveCount===0)return {cls:'danger',label:firstGate?'First Gate Failed':'Party Wiped',text:firstGate?'You are safe. Return to town, restock if needed, and try the first Gate again.':'Return to town, repair, and challenge another Gate.',target:status.exit,targetLabel:'Exit'};
+  if(me&&me.spirit)return {cls:'danger',label:'Spirit Form',text:firstGate?'Stay for credit if the party can still finish, or return safely and retry.':'Stay as spirit for party credit, or return to town now to repair and restock.',target:nearestDungeonAlly(status,me),targetLabel:'Ally'};
+  if(me&&me.downed)return {cls:'danger',label:'Downed',text:firstGate?'Hold position. If the run fails, you keep your gear and can retry.':'Hold position while allies finish the fight or return safely.',target:nearestDungeonAlly(status,me),targetLabel:'Ally'};
   if(status.cleared){
     const chest=chestCount>0?nearestDungeonChest(status):null;
-    return {cls:'cleared',label:'Boss Defeated',text:chestCount>0?'Boss down. Open remaining chests, then exit through the portal.':'Boss down. Exit through the portal to return safely.',target:chest||status.exit,targetLabel:chest?'Chest':'Exit'};
+    return {cls:'cleared',label:firstGate?'First Gate Cleared':'Boss Defeated',text:firstGate?(chestCount>0?'First Gate cleared. Open optional chests, then exit and return to Mara.':'First Gate cleared. Exit through the portal and return to Mara for the next step.'):(chestCount>0?'Boss down. Open remaining chests, then exit through the portal.':'Boss down. Exit through the portal to return safely.'),target:chest||status.exit,targetLabel:chest?'Chest':'Exit'};
   }
   if(status.bossAlive){
-    if(status.bossGateState==='locked')return {cls:'active',label:'Boss Locked',text:'Clear rooms to open the boss route.',target:status.bossRoom,targetLabel:'Boss'};
+    if(status.bossGateState==='locked')return {cls:'active',label:firstGate?'First Gate: Clear Rooms':'Boss Locked',text:firstGate?'Move room to room. Defeat enemies to open the boss route.':'Clear rooms to open the boss route.',target:status.bossRoom,targetLabel:'Boss'};
     const contrib=Math.max(0,me&&me.contribution|0);
-    if(contrib<=0)return {cls:'active',label:'Boss Open',text:'Hit the boss to qualify for reward, then stay near the fight.',target:status.bossRoom,targetLabel:'Boss'};
-    return {cls:'active',label:'Boss Open',text:'Reward eligible. Stay near the boss and finish the fight.',target:status.bossRoom,targetLabel:'Boss'};
+    if(contrib<=0)return {cls:'active',label:firstGate?'First Gate: Boss Open':'Boss Open',text:firstGate?'Hit the boss at least once, then stay near the fight to earn the clear.':'Hit the boss to qualify for reward, then stay near the fight.',target:status.bossRoom,targetLabel:'Boss'};
+    return {cls:'active',label:firstGate?'First Gate: Finish Boss':'Boss Open',text:firstGate?'You are reward eligible. Finish the boss, then return to Mara.':'Reward eligible. Stay near the boss and finish the fight.',target:status.bossRoom,targetLabel:'Boss'};
   }
   const chest=chestCount>0?nearestDungeonChest(status):null;
-  return {cls:'active',label:'Regroup',text:chestCount>0?'Boss down. Open remaining chests, then exit through the portal.':'Boss down. Exit through the portal to complete the run.',target:chest||status.exit,targetLabel:chest?'Chest':'Exit'};
+  return {cls:'active',label:firstGate?'First Gate: Exit':'Regroup',text:firstGate?(chestCount>0?'Boss down. Open optional chests, then exit and return to Mara.':'Boss down. Exit through the portal and return to Mara.'):(chestCount>0?'Boss down. Open remaining chests, then exit through the portal.':'Boss down. Exit through the portal to complete the run.'),target:chest||status.exit,targetLabel:chest?'Chest':'Exit'};
 }
 function nearestDungeonAlly(status,me){
   if(!status||!Array.isArray(status.party))return null;
