@@ -1720,6 +1720,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
     const payload = client.sent.find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_road_ready').msg;
     const objective = payload.activeObjectives.find(o => o.id === 'progression:first_road_ready');
     assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 2, total: 8 });
+    assert.equal(objective.priority, 12, 'Chapter 1 progression stays ahead of optional side systems');
   }
 
   room.handleNpcQuest(client, { action: 'accept', giver: 'Mara Vale', role: 'guide' });
@@ -1738,6 +1739,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
     const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_craft_station').msg;
     const objective = payload.activeObjectives.find(o => o.id === 'progression:first_craft_station');
     assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 4, total: 8 });
+    assert.equal(objective.priority, 12);
   }
   assert.equal(prof.progressionMilestoneRewards.includes('first_e_gate'), true);
   const firstGateReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'first_e_gate');
@@ -1790,6 +1792,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
     const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_profession_contract').msg;
     const objective = payload.activeObjectives.find(o => o.id === 'progression:first_profession_contract');
     assert.deepEqual(objective.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 8, total: 8 });
+    assert.equal(objective.priority, 12);
   }
   const baseReward = client.sent.find(e => e.type === 'progressionMilestoneReward' && e.msg.key === 'base_setup');
   assert.equal(!!baseReward, true);

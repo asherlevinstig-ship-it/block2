@@ -670,7 +670,7 @@ function localJobObjectiveLine(){
   const c=clampJobContract(jobContract),job=jobContractObjective();
   if(!c||!job)return null;
   const action=jobContractReady()?{type:'jobs',label:'CLAIM AT JOB BOARD'}:(objectiveCraftAction('job')||{type:'follow_marker',label:'FOLLOW MARKER'});
-  return objectiveLine('job','Job',job.label,job.text,action,objectiveProgressParts(c.have,c.need));
+  return objectiveLine('job','Job',job.label,job.text,action,objectiveProgressParts(c.have,c.need),{chapter:starterJobChapter(c)});
 }
 function localGuildObjectiveLine(){
   const c=clampRegionalContract(regionalContract),guild=guildContractObjective();
@@ -680,6 +680,16 @@ function localGuildObjectiveLine(){
 function serverObjectiveLine(o,labelOverride=''){
   if(!o)return null;
   return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o),{chapter:o.chapter||null,serverObjective:o});
+}
+function chapterOneMeta(step=8){
+  return {id:'chapter_1_town_beginnings',title:'Chapter 1: Town of Beginnings',step:Math.max(1,step|0),total:8};
+}
+function starterJobChapter(c){
+  return c&&(c.difficulty==='starter'||c.difficultyLabel==='First Real Shift')?chapterOneMeta(8):null;
+}
+function chapterProgressionObjectiveLine(){
+  const line=serverObjectiveLine(serverObjectiveBySource('progression'),'Next');
+  return line&&line.chapter?line:null;
 }
 function gatePrepTargetRank(){
   if(menusApi.nextGatePrepRank){
@@ -727,6 +737,8 @@ function nextBestObjectiveLine(){
     const tutorial=tutorialObjective();
     if(tutorial)return objectiveLine('tutorial','Guide',tutorial.label,tutorial.text,{type:'follow_marker',label:'FOLLOW MARKER'});
   }
+  const chapterProgression=chapterProgressionObjectiveLine();
+  if(chapterProgression)return chapterProgression;
   const localJob=localJobObjectiveLine();
   if(localJob)return localJob;
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
@@ -750,6 +762,8 @@ function unifiedObjectiveList(){
   const lines=[];
   const story=localStoryObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('story','manhunt'),'Story');
   if(story)lines.push(story);
+  const chapterProgression=chapterProgressionObjectiveLine();
+  if(chapterProgression)lines.push(chapterProgression);
   const prep=gatePrepObjectiveLine();
   if(prep)lines.push(prep);
   const aegis=!story||story.kind!=='aegis'?serverObjectiveLine(serverObjectiveBySource('aegis'),'Aegis'):null;
@@ -759,7 +773,7 @@ function unifiedObjectiveList(){
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)lines.push(guild);
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
-  if(progression)lines.push(progression);
+  if(progression&&progression!==chapterProgression)lines.push(progression);
   const seen=new Set();
   return lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,4);
 }

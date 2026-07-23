@@ -3285,6 +3285,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function serverObjectiveHudText\(o\)/);
   assert.match(frame,/function serverObjectiveHudAction\(o\)/);
   assert.match(frame,/const explicit=o\.hudAction\|\|o\.claimAction\|\|o\.action/);
+  assert.match(frame,/function chapterProgressionObjectiveLine\(\)/);
+  assert.match(frame,/function starterJobChapter\(c\)/);
   assert.match(frame,/function unifiedObjectiveList\(\)/);
   assert.match(frame,/function nextBestObjectiveLine\(\)/);
   assert.match(frame,/function unifiedObjectiveHud\(\)/);
@@ -3306,6 +3308,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/coordsEl\.innerHTML=rows\.join\(''\);\s*refreshObjectiveTracker\(\);/);
   assert.match(frame,/localStoryObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('story','manhunt'\),'Story'\)/);
   assert.match(frame,/localJobObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('job'\),'Job'\)/);
+  assert.match(frame,/if\(chapterProgression\)return chapterProgression;/);
+  assert.match(frame,/chapter:starterJobChapter\(c\)/);
   assert.match(frame,/localGuildObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('guild'\),'Guild'\)/);
   assert.match(frame,/serverObjectiveLine\(serverObjectiveBySource\('progression'\),'Next'\)\|\|progressionObjectiveFallback\(\)/);
   assert.match(frame,/obj\.unified&&Array\.isArray\(obj\.lines\)/);

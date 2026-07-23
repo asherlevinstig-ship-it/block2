@@ -3920,13 +3920,17 @@ class GameRoom extends Room {
       if (!objective || !objective.id || !objective.title) return;
       const status = ['offered', 'active', 'complete', 'claimable', 'failed'].includes(objective.status) ? objective.status : 'active';
       const category = String(objective.category || objective.source || 'quest').slice(0, 32);
+      const source = String(objective.source || 'quest').slice(0, 32);
+      const chapter = objective.chapter || chapterOneStep(objective);
+      const rawPriority = Math.max(0, Math.min(999, objective.priority | 0 || 100));
+      const priority = chapter && source === 'progression' ? Math.min(rawPriority, 12) : rawPriority;
       const action = objective.action && typeof objective.action === 'object' ? {
         type: String(objective.action.type || '').slice(0, 32),
         label: String(objective.action.label || '').slice(0, 32),
       } : null;
       const payload = {
         id: String(objective.id).slice(0, 96),
-        source: String(objective.source || 'quest').slice(0, 32),
+        source,
         category,
         questType: String(objective.questType || objective.source || 'quest').slice(0, 32),
         title: String(objective.title).slice(0, 80),
@@ -3941,8 +3945,8 @@ class GameRoom extends Room {
           current: Math.max(0, Math.min(999999, objective.progress.current | 0)),
           required: Math.max(1, Math.min(999999, objective.progress.required | 0 || 1)),
         } : null,
-        chapter: objective.chapter || chapterOneStep(objective),
-        priority: Math.max(0, Math.min(999, objective.priority | 0 || 100)),
+        chapter,
+        priority,
         serverOwned: objective.serverOwned !== false,
         reward: rewardPayload(objective.reward),
         lifecycle: lifecycleFor(objective.lifecycle && objective.lifecycle.state || (status === 'claimable' ? 'claimable' : status === 'complete' ? 'completed' : status), objective.lifecycle || objective),
