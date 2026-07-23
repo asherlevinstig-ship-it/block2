@@ -1823,11 +1823,29 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   room.handleLandClaimBuy(client, { x: 22, z: 20 });
   assert.equal(prof.progressionFocus, 'first_base_setup');
   assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_base_setup'), true);
+  {
+    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_base_setup').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_base_setup');
+    assert.deepEqual(objective.progress, { current: 0, required: 3 });
+    assert.deepEqual(objective.checklist.map(c => [c.id, c.done]), [['storage', false], ['light', false], ['station', false]]);
+  }
 
   room.handleWorldEdit(client, { x: 20, y: 10, z: 20, id: W.B.CHEST });
   assert.equal(prof.progressionFocus, 'first_base_setup');
+  {
+    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_base_setup').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_base_setup');
+    assert.deepEqual(objective.progress, { current: 1, required: 3 });
+    assert.deepEqual(objective.checklist.map(c => [c.id, c.done]), [['storage', true], ['light', false], ['station', false]]);
+  }
   room.handleWorldEdit(client, { x: 21, y: 10, z: 20, id: W.B.TORCH });
   assert.equal(prof.progressionFocus, 'first_base_setup');
+  {
+    const payload = [...client.sent].reverse().find(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_base_setup').msg;
+    const objective = payload.activeObjectives.find(o => o.id === 'progression:first_base_setup');
+    assert.deepEqual(objective.progress, { current: 2, required: 3 });
+    assert.deepEqual(objective.checklist.map(c => [c.id, c.done]), [['storage', true], ['light', true], ['station', false]]);
+  }
   room.handleWorldEdit(client, { x: 22, y: 10, z: 20, id: W.B.TABLE });
   assert.equal(prof.progressionFocus, 'first_profession_contract');
   assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_profession_contract'), true);

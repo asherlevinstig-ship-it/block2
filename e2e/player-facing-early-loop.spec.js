@@ -445,6 +445,10 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await clickTrackerAction(page, 'OPEN LAND', 'land');
     recordAuditPanel(qualityAudit, 'base setup land panel', 'land');
     await expect(page.locator('#qpanel')).toContainText('LAND CLAIMS');
+    await expect(page.locator('#qpanel')).toContainText('Starter Base Checklist');
+    await expect(page.locator('#qpanel')).toContainText('Storage placed');
+    await expect(page.locator('#qpanel')).toContainText('Light placed');
+    await expect(page.locator('#qpanel')).toContainText('Station placed');
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().landClaimOverlay)).toBe(true);
     await closeOpenPanels(page);
 

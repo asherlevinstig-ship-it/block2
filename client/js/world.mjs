@@ -3001,16 +3001,42 @@ function baseSetupStatus(){
   ];
   return status;
 }
+function baseSetupChecklistHTML(status=baseSetupStatus()){
+  const checks=status&&Array.isArray(status.checks)?status.checks:[
+    {id:'storage',label:'Storage',done:false},
+    {id:'light',label:'Light',done:false},
+    {id:'station',label:'Station',done:false},
+  ];
+  const done=checks.filter(c=>c.done).length;
+  const next=checks.find(c=>!c.done);
+  return '<div class="base-setup-card">'
+    +'<div class="base-setup-head"><b>Starter Base Checklist</b><span>'+done+'/'+checks.length+'</span></div>'
+    +'<p>Build inside your protected Homestead. Only your owned/shared claim tiles count.</p>'
+    +'<div class="base-setup-checks">'+checks.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label)+' placed</span></div>').join('')+'</div>'
+    +'<small>'+(status&&status.ready?'Ready: your base is established.':'Next: place '+escHTML((next&&next.label||'the remaining block').toLowerCase())+' inside your highlighted claim.')+'</small>'
+    +'</div>';
+}
 function explainBaseSetupPlacement(x,z,y,blockId){
-  if(progressionFocus!=='first_base_setup'||!BASE_SETUP_BLOCKS_C.has(blockId|0)) return false;
+  if(progressionFocus!=='first_base_setup') return false;
   const s=landClaimStatusAt(x,z,y,blockId);
-  if(!s||(s.kind!=='available'&&s.kind!=='abandoned')) return false;
+  const counted=BASE_SETUP_BLOCKS_C.has(blockId|0);
+  if(counted && (!s || s.kind==='available' || s.kind==='abandoned')){
+    const now=Date.now();
+    if(now-baseSetupPlacementNoticeAt<2500) return true;
+    baseSetupPlacementNoticeAt=now;
+    const name=ITEMS[blockId]&&ITEMS[blockId].name?ITEMS[blockId].name:'that block';
+    sysMsg('Base setup: place <b>'+escHTML(name)+'</b> inside your claimed land.');
+    eventLog('Base setup blocks only count inside editable claimed land. Press L to show your claims.','[Land]');
+    return true;
+  }
+  if(!s||(s.kind!=='own'&&s.kind!=='shared')) return false;
   const now=Date.now();
   if(now-baseSetupPlacementNoticeAt<2500) return true;
   baseSetupPlacementNoticeAt=now;
   const name=ITEMS[blockId]&&ITEMS[blockId].name?ITEMS[blockId].name:'that block';
-  sysMsg('Base setup: place <b>'+escHTML(name)+'</b> inside your claimed land.');
-  eventLog('Base setup blocks only count inside editable claimed land. Press L to show your claims.','[Land]');
+  if(counted) sysMsg('Base setup: <b>'+escHTML(name)+'</b> counts here. Checklist will update after the server confirms it.');
+  else sysMsg('Base setup: <b>'+escHTML(name)+'</b> can be placed here, but it does not count. Use storage, light, and a station.');
+  eventLog(counted?'Base setup placement submitted inside claimed land.':'That block is fine for building, but Base Setup needs storage, light, and a station.','[Land]');
   return true;
 }
 function landClaimStatusAt(x,z,y=player?player.pos.y:0,blockId=0){
@@ -3798,6 +3824,7 @@ function appendCurrentLandPanel(panel, btn, close){
 function openLandClaimsUI(focusX=null, focusZ=null){
   const open=globalThis.openQWin, panel=globalThis.qpanelEl, btn=globalThis.qBtn, close=globalThis.closeQWin;
   if(typeof open!=='function'||!panel||typeof btn!=='function'||typeof close!=='function'){ sysMsg('Claim management is not ready yet'); return; }
+  if(progressionFocus==='first_base_setup'&&!landClaimOverlay) toggleLandClaimOverlay(true);
   if(focusX!=null&&focusZ!=null) landClaimPanelFocus=landKey(focusX|0,focusZ|0);
   const owned=landClaimEntries(c=>c.own);
   const shared=landClaimEntries(c=>!c.own&&c.canEdit&&c.status!=='abandoned');
@@ -3814,6 +3841,11 @@ function openLandClaimsUI(focusX=null, focusZ=null){
   const firstClaim=document.createElement('p'); firstClaim.className='qtext';
   firstClaim.innerHTML=firstLandClaimGuidanceHTML();
   panel.appendChild(firstClaim);
+  if(progressionFocus==='first_base_setup'){
+    const setup=document.createElement('div');
+    setup.innerHTML=baseSetupChecklistHTML();
+    panel.appendChild(setup.firstChild);
+  }
   const overlayRow=document.createElement('div'); overlayRow.className='land-overlay-row';
   const overlayBtn=btn(landClaimOverlay?'HIDE CLAIMS':'SHOW CLAIMS',()=>{toggleLandClaimOverlay();openLandClaimsUI(focusX,focusZ);});
   overlayBtn.classList.toggle('selected',landClaimOverlay);

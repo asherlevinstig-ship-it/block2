@@ -437,7 +437,10 @@ class ProgressionMixin {
   checkBaseSetupProgress(client) {
     const rec = this.profileFor(client);
     if (!rec || !rec.prof || rec.prof.progressionFocus !== 'first_base_setup') return false;
-    if (!this.hasBaseSetup(client)) return false;
+    if (!this.hasBaseSetup(client)) {
+      if (this.activeQuestObjectives) client.send('progressionFocus', { focus: rec.prof.progressionFocus || '', progressionFocus: rec.prof.progressionFocus || '', activeObjectives: this.activeQuestObjectives(client, rec.prof) });
+      return false;
+    }
     return this.advanceProgressionDirector(client, 'base_setup_completed', { profile: false });
   }
 

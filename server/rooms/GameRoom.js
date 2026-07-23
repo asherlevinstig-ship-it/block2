@@ -3976,6 +3976,14 @@ class GameRoom extends Room {
         claimAction: objective.claimAction || null,
         hudAction: objective.hudAction || action,
         questLogAction: objective.questLogAction || action,
+        hudText: objective.hudText || '',
+        checklist: Array.isArray(objective.checklist)
+          ? objective.checklist.slice(0, 8).map(c => ({
+            id: String(c && c.id || '').slice(0, 32),
+            label: String(c && c.label || 'Check').slice(0, 64),
+            done: !!(c && c.done),
+          }))
+          : null,
         progress: objective.progress && typeof objective.progress === 'object' ? {
           current: Math.max(0, Math.min(999999, objective.progress.current | 0)),
           required: Math.max(1, Math.min(999999, objective.progress.required | 0 || 1)),
@@ -4091,11 +4099,11 @@ class GameRoom extends Room {
       priority: 40,
       lifecycle: lifecycleFor(guild.ready || (guild.have | 0) >= (guild.need | 0) ? 'claimable' : 'active', guild),
     });
-    const progression = this.progressionObjective(prof.progressionFocus);
+    const progression = this.progressionObjective(prof.progressionFocus, client);
     if (progression) add(progression);
     return objectives.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
   }
-  progressionObjective(focus) {
+  progressionObjective(focus, client = null) {
     const map = {
       first_town_map: ['progression:first_town_map', 'progression', 'Town Map', 'Pick up a Town of Beginnings map from Orin Mapwell.', 'Orin Mapwell', 'cartographer', 'VISIT ORIN', 45],
       first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Road Ready from Mara, use the starter sword, and prove you can survive outside town.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
@@ -4113,11 +4121,26 @@ class GameRoom extends Room {
     };
     const spec = map[focus];
     if (!spec) return null;
-    return {
+    const objective = {
       id: spec[0], source: spec[1], title: spec[2], status: 'active', text: spec[3],
       location: spec[4], action: { type: spec[5], label: spec[6] }, priority: spec[7],
       progress: null, serverOwned: true,
     };
+    if (focus === 'first_base_setup' && client) {
+      const status = this.baseSetupStatusForClient ? this.baseSetupStatusForClient(client) : { storage: false, light: false, station: false };
+      const checks = [
+        { id: 'storage', label: 'Storage placed', done: !!status.storage },
+        { id: 'light', label: 'Light placed', done: !!status.light },
+        { id: 'station', label: 'Station placed', done: !!status.station },
+      ];
+      objective.progress = { current: checks.filter(c => c.done).length, required: checks.length };
+      objective.checklist = checks;
+      const missing = checks.filter(c => !c.done).map(c => c.label.replace(' placed', '').toLowerCase());
+      objective.hudText = missing.length
+        ? 'Inside your Homestead, place: ' + missing.join(', ') + '.'
+        : 'Base checks complete. Claim your Base Established reward.';
+    }
+    return objective;
   }
   refreshSystemIntroductions(prof) {
     if (!prof) return [];
