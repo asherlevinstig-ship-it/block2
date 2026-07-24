@@ -786,6 +786,41 @@ function netLegendaryFx(m){
     showName('Void Anchor');
   }
 }
+function addTempRootMesh(mesh,life=1.15){
+  scene.add(mesh);
+  beams.push({mesh,life,dispose:true});
+  return mesh;
+}
+function rootTendrilMesh(x,y,z,len,yaw,thick,color,life){
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(thick,thick*.72,len),new THREE.MeshLambertMaterial({color,transparent:true,opacity:.95}));
+  mesh.position.set(x,y,z);
+  mesh.rotation.set((Math.random()-.5)*.12,yaw,(Math.random()-.5)*.08);
+  mesh.scale.y=.65+Math.random()*.55;
+  return addTempRootMesh(mesh,life);
+}
+function rootClutchVfx(x,y,z,radius=5.8){
+  const rootColors=[0x2f4f24,0x3f6a2b,0x5b7f32,0x16351d];
+  for(let i=0;i<26;i++){
+    const a=i/26*Math.PI*2+(Math.random()-.5)*.22;
+    const dist=.7+Math.random()*radius*.94;
+    const len=.7+Math.random()*1.25;
+    const mid=dist-len*.45;
+    rootTendrilMesh(x+Math.cos(a)*mid,y+.08,z+Math.sin(a)*mid,len,a+Math.PI/2,.07+Math.random()*.08,rootColors[i%rootColors.length],1.0+Math.random()*.38);
+  }
+  for(let i=0;i<17;i++){
+    const a=i/17*Math.PI*2+Math.random()*.3, dist=.8+Math.random()*radius*.82;
+    const bx=x+Math.cos(a)*dist,bz=z+Math.sin(a)*dist;
+    for(let h=0;h<3;h++){
+      const height=.65+h*.18+Math.random()*.38;
+      const root=new THREE.Mesh(new THREE.CylinderGeometry(.035+h*.006,.095+h*.015,height,6),new THREE.MeshLambertMaterial({color:rootColors[(i+h)%rootColors.length],transparent:true,opacity:.96}));
+      root.position.set(bx+Math.sin(a+h)*.13,y+height*.48,bz+Math.cos(a-h)*.13);
+      root.rotation.z=Math.cos(a+h)*.42;
+      root.rotation.x=Math.sin(a-h)*.42;
+      addTempRootMesh(root,1.2+Math.random()*.42);
+    }
+    if(i%2===0)ringPulse(bx,y+.1,bz,.38+Math.random()*.3,0x14532d,.58);
+  }
+}
 function netAbilityFx(m){
   const x=m.x||player.pos.x, y=m.y||player.pos.y, z=m.z||player.pos.z;
   SFX.cast();
@@ -814,6 +849,7 @@ function netAbilityFx(m){
     ringPulse(x,y+.1,z,2.6,0x14532d,.6);
     glowFlash(x,y+.85,z,0x22c55e,4.8,.28);
     burst(x,y+.5,z,[.18,.8,.28],56,5.7,2.0,.72);
+    rootClutchVfx(x,y,z,5.8);
     for(let i=0;i<13;i++){
       const a=i/13*Math.PI*2+Math.random()*.2, r=1.0+Math.random()*4.6;
       const bx=x+Math.cos(a)*r, bz=z+Math.sin(a)*r;

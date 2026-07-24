@@ -1297,6 +1297,15 @@ test('client prediction applies Arcanist mana and cooldown discounts',()=>{
   assert.match(source,/abCd\[i\]\/abilityCooldown\(a\)/);
 });
 
+test('Rootsnare VFX renders a physical root field, not just particles',()=>{
+  const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
+  assert.match(visuals,/function rootClutchVfx\(x,y,z,radius=5\.8\)/);
+  assert.match(visuals,/for\(let i=0;i<26;i\+\+\)/);
+  assert.match(visuals,/rootTendrilMesh/);
+  assert.match(visuals,/new THREE\.CylinderGeometry\(\.035\+h\*\.006,\s*\.095\+h\*\.015,\s*height,\s*6\)/);
+  assert.match(visuals,/rootClutchVfx\(x,y,z,5\.8\)/);
+});
+
 test('browser and server consume one shared safeguarded comms ruleset', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'comms-rules.js'), 'utf8');
   const context = vm.createContext({});
