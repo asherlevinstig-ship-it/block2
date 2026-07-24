@@ -2794,6 +2794,8 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(combat, /btn\.id='adminpreviewmodel'/);
   assert.match(combat, /adminPreviewModel\.classList\.toggle\('hidden',!admin\)/);
   assert.match(combat, /grant\.equip=true/);
+  assert.match(combat, /profileRequest',\{reason:'admin_patch'\}/);
+  assert.match(combat, /it will not appear in the bag/);
   assert.match(companions + networking, /BlockcraftAppearancePreview/);
   assert.match(world, /function pixelMaterialTextures\(col\)/);
   assert.match(world, /bumpScale:\.012/);

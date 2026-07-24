@@ -1555,6 +1555,8 @@ class GameRoom extends Room {
           p.y = Array.isArray(next.pos) ? next.pos[1] || p.y : p.y;
           p.z = Array.isArray(next.pos) ? next.pos[2] || p.z : p.z;
           p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(next.appearance));
+          p.armorId = next.armor && ARMOR_INFO[next.armor.id] ? next.armor.id : 0;
+          p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], next.armor).type.id : '';
         }
         const vitals = this.cleanProfileVitals(next);
         const maxHp = this.maxHpForProfile(next);

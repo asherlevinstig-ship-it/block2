@@ -395,7 +395,7 @@ function readClientModule(rel) {
   return fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', rel), 'utf8');
 }
 
-test('live admin profile updates replace cached mana state before the next vitals save', () => {
+test('live admin profile updates replace cached mana and armor state before the next vitals save', () => {
   const room = makeRoom();
   const client = makeClient('admin_mana_live');
   const { token, prof } = seedPlayer(room, client, { lvl: 8 });
@@ -404,15 +404,24 @@ test('live admin profile updates replace cached mana state before the next vital
   prof.vitalsSavedAt = Date.now();
   room.clients = [client];
   room.abilityState.set(client.sessionId, { mp: 3, maxMp: 77, cds: { stale: 1 }, last: 1 });
-  const replacement = sanitizeProfile({ ...prof, vitals: { ...prof.vitals, mp: 18 }, vitalsSavedAt: Date.now() });
+  const replacement = sanitizeProfile({
+    ...prof,
+    armor: { id: I.LEGEND_ARMOR, count: 1, armorType: 'aegis', rarity: 'mythic', dur: 1800, source: 'admin' },
+    vitals: { ...prof.vitals, mp: 18 },
+    vitalsSavedAt: Date.now(),
+  });
 
   assert.equal(room.updateLivePlayerProfile(token, { replaceProfile: replacement }), true);
 
   const st = room.abilityState.get(client.sessionId);
+  const livePlayer = room.state.players.get(client.sessionId);
   assert.equal(st.mp, 18);
+  assert.equal(livePlayer.armorId, I.LEGEND_ARMOR);
+  assert.equal(livePlayer.armorType, 'aegis');
   assert.equal(room.playerHp.get(client.sessionId).max, room.maxHpForProfile(replacement));
   assert.equal(room.syncProfileVitals(client, room.profiles.get(token)).mp, 18);
   assert.equal(client.sent.some(e => e.type === 'abilitySync' && e.msg.mp === 18), true);
+  assert.equal(client.sent.some(e => e.type === 'profile' && e.msg.armor && e.msg.armor.id === I.LEGEND_ARMOR), true);
 });
 
 test('client modules expose and route player trading actions', () => {

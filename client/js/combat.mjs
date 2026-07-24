@@ -4580,6 +4580,15 @@ function buildAdminPatch(){
   if(active||passive.length)patch.utilityLoadout={active,passive};
   return patch;
 }
+function describeAdminGrantResult(patch,result){
+  const grants=Array.isArray(patch&&patch.grantItems)?patch.grantItems:[];
+  const grant=grants[0], id=grant&&grant.id|0, item=id&&ITEMS&&ITEMS[id];
+  if(!grant||!item)return '';
+  const name=itemNameWithPlus({id, count:1, armorType:grant.armorType||'', rarity:grant.rarity||''});
+  if(item.armor&&grant.equip)return ' Equipped '+name+' in the armor slot; it will not appear in the bag.';
+  if(item.armor)return ' Added '+name+' to inventory. Equip it from the armor slot.';
+  return ' Added '+name+' to inventory.';
+}
 function closeDevResetPanel(){
   if(!devReset)return;
   devReset.classList.add('hidden');
@@ -4634,7 +4643,8 @@ async function runAdminPatch(){
     const result=await AUTH_UI.adminPatchPlayer({target,token,patch});
     populateAdminFields(result.profile);
     setAdminInspectOut(result.profile||result);
-    setDevResetStatus('Profile updated live: '+((result.account&&result.account.id)||target)+'.','ok');
+    if(NET.on&&NET.room&&NET.room.name==='blockcraft')NET.room.send('profileRequest',{reason:'admin_patch'});
+    setDevResetStatus('Profile updated live: '+((result.account&&result.account.id)||target)+'.'+describeAdminGrantResult(patch,result),'ok');
   }catch(e){
     setDevResetStatus(e.message||'Patch failed','bad');
   }finally{
