@@ -370,7 +370,7 @@ class CombatMixin {
       fx.durationMs = buffs.pantherUntil - now;
     }
     this.sendSpace(p.dgn || '', 'fx', fx);
-    client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp });
+    client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp, durationMs: fx.durationMs || 0 });
   }
   healVerdantAlly(client, p, radius, amount) {
     const team = this.cleanTeamId(p.team);

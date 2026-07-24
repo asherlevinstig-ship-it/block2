@@ -2595,6 +2595,7 @@ function abilityResolved(m){
     else if(m.reason==='mana')sysMsg('Not enough <b>mana</b> to deploy your shadows.');
   }
   if(typeof m.mp==='number') mp=Math.max(0,Math.min(maxMp(),m.mp));
+  if(m.kind==='panther'&&globalThis.BlockcraftPantherFormFx)globalThis.BlockcraftPantherFormFx(m.durationMs||14000);
   renderBars(); updateAbilityHUD();
 }
 function dragonAbilityRejected(m){

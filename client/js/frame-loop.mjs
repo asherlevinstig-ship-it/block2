@@ -46,6 +46,11 @@ const partyCompassGroup=new THREE.Group();
 const partyCompassBeam=new THREE.Mesh(new THREE.CylinderGeometry(.13,.32,6.5,10,1,true),new THREE.MeshBasicMaterial({color:0xd7b5ff,transparent:true,opacity:.18,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
 const partyCompassRing=new THREE.Mesh(new THREE.TorusGeometry(1.25,.065,8,40),new THREE.MeshBasicMaterial({color:0xd7b5ff,transparent:true,opacity:.8,depthWrite:false,blending:THREE.AdditiveBlending}));
 partyCompassBeam.position.y=3.25;partyCompassRing.rotation.x=Math.PI/2;partyCompassRing.position.y=.12;partyCompassGroup.add(partyCompassBeam,partyCompassRing);partyCompassGroup.visible=false;scene.add(partyCompassGroup);
+const pantherOverlay=document.createElement('div');
+pantherOverlay.id='pantherformfx';
+pantherOverlay.setAttribute('aria-hidden','true');
+pantherOverlay.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:42;opacity:0;background:radial-gradient(circle at 50% 55%,rgba(134,239,172,.2),rgba(20,83,45,.12) 32%,rgba(2,6,23,0) 67%),linear-gradient(90deg,rgba(5,46,22,.34),rgba(0,0,0,0) 18%,rgba(0,0,0,0) 82%,rgba(5,46,22,.34));mix-blend-mode:screen;transition:opacity .12s ease';
+document.body.appendChild(pantherOverlay);
 const featherStepLandings=[];
 const dungeonSpiritMarkers=new Map();
 const treasureClueGroup=new THREE.Group();
@@ -88,6 +93,52 @@ function showFeatherStepLandingFx(m={}){
   ring.rotation.x=Math.PI/2;pulse.rotation.x=Math.PI/2;ring.position.y=.09;pulse.position.y=.1;beam.position.y=.95;
   group.add(ring,pulse,beam);group.position.set(player.pos.x,player.pos.y+.03,player.pos.z);scene.add(group);
   featherStepLandings.push({group,ring,pulse,beam,created:performance.now(),expires:performance.now()+900});
+}
+const PANTHER_FORM={eye:0.82,height:1.04,width:0.26,speed:7.45,shiftMs:900};
+let pantherLocalUntil=0,pantherShiftStart=-1e9,pantherShiftMs=PANTHER_FORM.shiftMs,pantherProwlT=0;
+function pantherFormActive(now=performance.now()){
+  return pantherLocalUntil>now || !!(buffs&&buffs.panther>0);
+}
+function setLocalPantherForm(durationMs=14000){
+  const now=performance.now(),dur=Math.max(1000,Number(durationMs)||14000);
+  const nextUntil=now+dur;
+  const duplicate=pantherLocalUntil>now&&Math.abs(pantherLocalUntil-nextUntil)<650&&now-pantherShiftStart<650;
+  pantherLocalUntil=Math.max(pantherLocalUntil,nextUntil);
+  if(buffs)buffs.panther=Math.max(Number(buffs.panther)||0,dur/1000);
+  if(duplicate)return;
+  pantherShiftStart=now;
+  pantherShiftMs=Math.min(1400,Math.max(450,dur*.16));
+  camShake=Math.max(camShake,.34);
+  showName('Panther Form');
+  ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,1.25,0x22c55e,.45);
+  ringPulse(player.pos.x,player.pos.y+.1,player.pos.z,2.3,0x052e16,.62);
+  glowFlash(player.pos.x,player.pos.y+.85,player.pos.z,0x22c55e,4.5,.38);
+  burst(player.pos.x,player.pos.y+.7,player.pos.z,[.08,.92,.35],42,3.6,2.4,.7);
+  if(SFX&&SFX.growl)SFX.growl();else if(SFX&&SFX.cast)SFX.cast();
+}
+globalThis.BlockcraftPantherFormFx=setLocalPantherForm;
+function tickLocalPantherForm(now,dt,moving){
+  const active=pantherFormActive(now);
+  const targetEye=active?PANTHER_FORM.eye:1.62,targetHeight=active?PANTHER_FORM.height:1.8,targetWidth=active?PANTHER_FORM.width:.3;
+  const ease=Math.min(1,dt*(active?8:5));
+  player.eye+=(targetEye-player.eye)*ease;
+  player.h+=(targetHeight-player.h)*ease;
+  player.w+=(targetWidth-player.w)*ease;
+  if(buffs&&buffs.panther>0)buffs.panther=Math.max(0,buffs.panther-dt);
+  const shiftT=Math.max(0,Math.min(1,(now-pantherShiftStart)/Math.max(1,pantherShiftMs)));
+  const shiftGlow=shiftT<1?Math.sin(shiftT*Math.PI):0;
+  const ending=active&&pantherLocalUntil-now<1200?Math.max(0,(pantherLocalUntil-now)/1200):1;
+  pantherOverlay.style.opacity=String(Math.max(0,Math.min(.72,shiftGlow*.72+(active?0.16*ending:0))));
+  if(!active)return {active:false,shiftGlow:0,bob:0,tilt:0};
+  pantherProwlT+=dt*(moving?10.8:2.1);
+  const bob=(moving?Math.sin(pantherProwlT)*.045:Math.sin(pantherProwlT*.7)*.012);
+  const tilt=moving?Math.sin(pantherProwlT*.5)*.025:0;
+  if(Math.random()<dt*(shiftGlow?42:(moving?16:5))){
+    const side=(Math.random()-.5)*1.25,forward=.25+Math.random()*.8;
+    const sx=Math.sin(player.yaw),cz=Math.cos(player.yaw),px=player.pos.x-sx*forward+cz*side,pz=player.pos.z-cz*forward-sx*side;
+    spawnParticle({x:px,y:player.pos.y+.12+Math.random()*.45,z:pz,vx:(Math.random()-.5)*.35,vy:.18+Math.random()*.48,vz:(Math.random()-.5)*.35,life:.45+Math.random()*.35,grav:-.04,r:.17,g:.92,b:.38,priority:2});
+  }
+  return {active:true,shiftGlow,bob,tilt};
 }
 function tickFeatherStepLandingFx(now){
   for(let i=featherStepLandings.length-1;i>=0;i--){
@@ -1989,7 +2040,8 @@ function tick(now){
     const deityFlying=!mounted&&deityActive&&deityActive.flight===true;
     const flying = deityFlying || (mounted && isDragon(mountKind));
     const outOfFood=!mounted && hunger<=0;
-    const sprint=sprintKey && (f!==0||s!==0) && sp>1 && !mounted && !outOfFood;
+    const pantherMove=pantherFormActive(now)&&!mounted&&(f!==0||s!==0);
+    const sprint=pantherMove || (sprintKey && (f!==0||s!==0) && sp>1 && !mounted && !outOfFood);
     if(onboardingActive&&onboardingArrived&&onboardingKind()==='sprint'&&sprint){
       onboardingFlags.sprint=true;
       updateOnboardingHud();
@@ -1998,10 +2050,10 @@ function tick(now){
     if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,f!==0||s!==0,dt);
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
-    if(sprint) sp=Math.max(0,sp-stCost(3.5)*armorStamina*dt);
+    if(sprint&&!pantherMove) sp=Math.max(0,sp-stCost(3.5)*armorStamina*dt);
     const dragFly=flying?(deityFlying?12:((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13)):0;
-    const baseSpd=flying?dragFly:(mounted?9.6:(sprint?6.2:4.3));
-    const speed=baseSpd*(outOfFood?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
+    const baseSpd=flying?dragFly:(mounted?9.6:(pantherMove?PANTHER_FORM.speed:(sprint?6.2:4.3)));
+    const speed=baseSpd*(outOfFood&&!pantherMove?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
     const sin=Math.sin(player.yaw), cos=Math.cos(player.yaw);
     let vx=(-sin*f + cos*s), vz=(-cos*f - sin*s);
     const len=Math.hypot(vx,vz)||1;
@@ -2043,9 +2095,9 @@ function tick(now){
     if(wantJump){
       const canJump = player.onGround || (!feetWater && now-lastGroundT<120);  // coyote time
       if(canJump){
-        player.vel.y=mounted?9.4:8.2; player.onGround=false;
+        player.vel.y=mounted?9.4:(pantherFormActive(now)?9.05:8.2); player.onGround=false;
         lastGroundT=-1e9; jumpPressT=-1e9;
-        if(!mounted && sp>0) sp=Math.max(0,sp-stCost(5)*armorStamina);
+        if(!mounted && !pantherFormActive(now) && sp>0) sp=Math.max(0,sp-stCost(5)*armorStamina);
       } else if(feetWater && !player.onGround){
         // swim up: accelerate, and keep thrusting while breaching the surface
         player.vel.y=Math.min(player.vel.y+30*dt, waistWater?3.6:4.6);
@@ -2102,7 +2154,8 @@ function tick(now){
     if(player.pos.y<-12){ player.pos.set(TOWN.TC+14.5, TOWN.G+2, TOWN.TC+27.5); player.vel.set(0,0,0); }
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
-    if(networkingApi.tickLocalPantherFormVisual) networkingApi.tickLocalPantherFormVisual(now, dt, !!(buffs.panther>0));
+    const pantherView=tickLocalPantherForm(now,dt,f!==0||s!==0);
+    if(networkingApi.tickLocalPantherFormVisual) networkingApi.tickLocalPantherFormVisual(now, dt, pantherView.active);
     if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);
     tickDragonRoost(now, dt);
 
@@ -2113,9 +2166,9 @@ function tick(now){
     } else if(cutscene){
       /* camera is driven by tickCutscene at the top of the frame */
     } else {
-    camera.position.set(player.pos.x, player.pos.y+player.eye+(mounted?mountEye(mountKind):0), player.pos.z);
+    camera.position.set(player.pos.x, player.pos.y+player.eye+(mounted?mountEye(mountKind):0)+(pantherView&&pantherView.bob||0), player.pos.z);
     camera.rotation.order='YXZ';
-    camera.rotation.set(player.pitch, player.yaw, 0);
+    camera.rotation.set(player.pitch-(pantherView&&pantherView.shiftGlow||0)*.08, player.yaw, pantherView&&pantherView.tilt||0);
     if(isMeditating){
       applyMeditationCamera();
     }

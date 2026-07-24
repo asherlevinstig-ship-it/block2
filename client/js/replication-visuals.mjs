@@ -832,7 +832,9 @@ function netAbilityFx(m){
     }
     showName('Rootsnare');
   } else if(m.kind==='panther'){
-    if(!(m.sid&&NET.room&&m.sid===NET.room.sessionId)){
+    if(m.sid&&NET.room&&m.sid===NET.room.sessionId){
+      if(globalThis.BlockcraftPantherFormFx)globalThis.BlockcraftPantherFormFx(m.durationMs||14000);
+    } else {
       const r=m.sid&&NET.remotes&&NET.remotes[m.sid], api=companions&&companions();
       if(r&&api&&api.applyPantherFormVisual)api.applyPantherFormVisual(r,m.durationMs||14000);
       ringPulse(x,y+.08,z,1.4,0x22c55e,.45);

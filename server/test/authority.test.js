@@ -2226,6 +2226,7 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   st.cds['verdant:2']=0;st.mp=80;
   room.handleAbility(healer,{path:'verdant',slot:2});
   assert.ok((room.abilityBuffs.get(healer.sessionId).pantherUntil||0)>Date.now(),'Panther Form is stored as an authoritative buff');
+  assert.equal(healer.sent.some(e=>e.type==='abilityResult'&&e.msg.kind==='panther'&&e.msg.durationMs>13000),true,'Panther Form tells the local client how long the first-person transformation lasts');
   assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
 });
 

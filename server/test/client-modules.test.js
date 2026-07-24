@@ -1467,10 +1467,10 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
 
 test('basic jumping is not blocked by empty stamina',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
-  assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:8\.2;/);
+  assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:\(pantherFormActive\(now\)\?9\.05:8\.2\);/);
   assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
-  assert.match(frame,/if\(!mounted && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
-  assert.match(frame,/if\(sprint\) sp=Math\.max\(0,sp-stCost\(3\.5\)\*armorStamina\*dt\);/);
+  assert.match(frame,/if\(!mounted && !pantherFormActive\(now\) && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
+  assert.match(frame,/if\(sprint&&!pantherMove\) sp=Math\.max\(0,sp-stCost\(3\.5\)\*armorStamina\*dt\);/);
   assert.doesNotMatch(frame,/sp<maxSp\(\).*stCost/);
 });
 
@@ -2644,7 +2644,7 @@ test('client restore and movement use persisted vitals and empty-hunger slowdown
   assert.doesNotMatch(networking, /hp=maxHp\(\); mp=maxMp\(\); sp=maxSp\(\); hunger=maxHunger\(\);/);
   assert.match(frameLoop, /const outOfFood=!mounted && hunger<=0/);
   assert.match(frameLoop, /const sprint=.*&&\s*!outOfFood/);
-  assert.match(frameLoop, /baseSpd\*\(outOfFood\?0\.62:1\)/);
+  assert.match(frameLoop, /baseSpd\*\(outOfFood&&!pantherMove\?0\.62:1\)/);
   assert.match(dimensions, /if\(S\.lvl<3 && hunger<maxHunger\(\)\)/);
   assert.doesNotMatch(dimensions, /local:starvation/);
 });
