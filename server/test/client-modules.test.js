@@ -2768,7 +2768,13 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(auth, /ccpresetbar/);
   assert.match(auth, /RANDOMIZE/);
   assert.match(auth, /RESET/);
+  assert.match(auth, /BlockcraftAppearancePreview/);
+  assert.match(auth, /preview\.show\(\)/);
+  assert.match(auth, /finishAppearancePreview\(true\)/);
   assert.match(networking, /hairStyle:custom\?custom\.hairStyle:'windswept'/);
+  assert.match(networking, /BlockcraftAppearancePreview/);
+  assert.match(networking, /showAppearanceInspectionStand/);
+  assert.match(networking, /previewAppearanceDraft/);
   assert.match(companions, /const hairStyle=\['windswept','cropped','long','braided'\]/);
   assert.match(companions, /outfitStyle==='wanderer'/);
   assert.match(styles, /\.ccstage/);

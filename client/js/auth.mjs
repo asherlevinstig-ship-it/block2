@@ -87,6 +87,21 @@ export function createAuthController({ user, password, playerName, status, play,
     });
   }
 
+  function updateAppearancePreview(mode) {
+    if (mode !== 'mirror') return;
+    try {
+      const preview = globalThis.BlockcraftAppearancePreview;
+      if (preview && preview.draft) preview.draft(draftAppearance);
+    } catch (_) {}
+  }
+
+  function finishAppearancePreview(commit = false) {
+    try {
+      const preview = globalThis.BlockcraftAppearancePreview;
+      if (preview && preview.finish) preview.finish(commit);
+    } catch (_) {}
+  }
+
   function renderCharacterCreator(mode = 'setup') {
     if (!creator || !appearanceSystem) return;
     const p = appearanceSystem.PALETTES;
@@ -111,27 +126,32 @@ export function createAuthController({ user, password, playerName, status, play,
       '<div class="ccactions"><button type="button" id="ccrandom">RANDOMIZE</button><button type="button" id="ccreset">RESET</button>'+(mode === 'mirror' ? '<button type="button" id="ccsave">SAVE LOOK</button><button type="button" id="cccancel">CLOSE</button>' : '')+'</div>';
     creator.querySelectorAll('.ccswatch').forEach(btn => btn.addEventListener('click', () => {
       draftAppearance = sanitizeAppearance({ ...draftAppearance, [btn.dataset.key]: btn.dataset.color });
+      updateAppearancePreview(mode);
       renderCharacterCreator(mode);
     }));
     creator.querySelectorAll('.ccstyle').forEach(btn => btn.addEventListener('click', () => {
       draftAppearance = sanitizeAppearance({ ...draftAppearance, [btn.dataset.key]: btn.dataset.value });
+      updateAppearancePreview(mode);
       renderCharacterCreator(mode);
     }));
     creator.querySelectorAll('.ccpreset').forEach(btn => btn.addEventListener('click', () => {
       const preset = presets.find(p => p.id === btn.dataset.preset);
       if (preset) {
         draftAppearance = sanitizeAppearance(preset.look);
+        updateAppearancePreview(mode);
         renderCharacterCreator(mode);
       }
     }));
     const random = creator.querySelector('#ccrandom');
     if (random) random.addEventListener('click', () => {
       draftAppearance = randomAppearance();
+      updateAppearancePreview(mode);
       renderCharacterCreator(mode);
     });
     const reset = creator.querySelector('#ccreset');
     if (reset) reset.addEventListener('click', () => {
       draftAppearance = sanitizeAppearance(appearanceSystem.DEFAULT);
+      updateAppearancePreview(mode);
       renderCharacterCreator(mode);
     });
     const save = creator.querySelector('#ccsave');
@@ -148,8 +168,10 @@ export function createAuthController({ user, password, playerName, status, play,
 
   function closeAppearanceEditor() {
     if (!creator) return;
+    const wasMirror = creator.dataset.mode === 'mirror';
     creator.classList.remove('floating');
     if (typeof document !== 'undefined') document.body.classList.remove('game-modal-open');
+    if (wasMirror) finishAppearancePreview(false);
     mountCharacterCreator('setup');
     creator.classList.toggle('hidden', !!(state.gameProfile && state.gameProfile.nameSet));
     creator.dataset.mode = 'setup';
@@ -167,6 +189,13 @@ export function createAuthController({ user, password, playerName, status, play,
     creator.classList.toggle('floating', mode === 'mirror');
     if (typeof document !== 'undefined') document.body.classList.toggle('game-modal-open', mode === 'mirror');
     renderCharacterCreator(mode);
+    if (mode === 'mirror') {
+      try {
+        const preview = globalThis.BlockcraftAppearancePreview;
+        if (preview && preview.show) preview.show();
+      } catch (_) {}
+      updateAppearancePreview(mode);
+    }
     return true;
   }
 
@@ -459,6 +488,7 @@ export function createAuthController({ user, password, playerName, status, play,
     setAppearance(state.gameProfile.appearance);
     render();
     if (options.mirror) {
+      finishAppearancePreview(true);
       setStatus('APPEARANCE SAVED', 'ok');
       closeAppearanceEditor();
     }

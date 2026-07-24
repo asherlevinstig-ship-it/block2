@@ -3264,6 +3264,7 @@ const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailC
 var appearanceDummy=null, appearanceBackDummy=null;
 let appearancePreviewActive=false, meditationOwnedAppearance=false;
 let playerCustomAppearance=APPEARANCE_SYSTEM&&APPEARANCE_SYSTEM.sanitizeAppearance?APPEARANCE_SYSTEM.sanitizeAppearance(null):null;
+let appearancePreviewSnapshot=null;
 let cosmeticUnlocks=[];
 let equippedCosmetics=[];
 const COSMETIC_DEFS={
@@ -3332,6 +3333,16 @@ function buildAppearanceDummy(){
   scene.add(d.grp);
   return d;
 }
+function showAppearanceInspectionStand(silent=false){
+  appearancePreviewActive=true;
+  if(!appearanceDummy){
+    appearanceDummy=buildAppearanceDummy();
+    appearanceBackDummy=buildAppearanceDummy();
+  }
+  updateAppearanceDummy(0, performance.now(), true);
+  if(!silent) sysMsg('Appearance inspection stand placed in front of you.');
+  return true;
+}
 function disposeAppearanceDummy(){
   if(appearanceDummy) scene.remove(appearanceDummy.grp);
   if(appearanceBackDummy) scene.remove(appearanceBackDummy.grp);
@@ -3352,6 +3363,27 @@ function toggleAppearanceDummy(){
     sysMsg('Appearance preview: front and back views');
   }
 }
+function previewAppearanceDraft(value){
+  if(!APPEARANCE_SYSTEM||!APPEARANCE_SYSTEM.sanitizeAppearance) return false;
+  if(!appearancePreviewSnapshot) appearancePreviewSnapshot=playerCustomAppearance;
+  playerCustomAppearance=parseReplicatedAppearance(value);
+  showAppearanceInspectionStand(true);
+  refreshAppearanceDummy();
+  return true;
+}
+function finishAppearanceDraftPreview(commit=false){
+  if(!commit&&appearancePreviewSnapshot){
+    playerCustomAppearance=appearancePreviewSnapshot;
+    refreshAppearanceDummy();
+  }
+  appearancePreviewSnapshot=null;
+  return true;
+}
+Object.defineProperty(globalThis,'BlockcraftAppearancePreview',{value:Object.freeze({
+  show:showAppearanceInspectionStand,
+  draft:previewAppearanceDraft,
+  finish:finishAppearanceDraftPreview,
+}),configurable:true});
 function refreshAppearanceDummy(){
   if(!appearanceDummy) return;
   const sig=appearanceSignature();
