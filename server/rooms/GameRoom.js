@@ -41,6 +41,16 @@ function releaseGlobalWorld(room) {
   for (const [id, active] of activeGlobalRooms) if (active === room) activeGlobalRooms.delete(id);
 }
 
+function elapsedMs(start) {
+  return Math.round((performance.now() - start) * 10) / 10;
+}
+
+function logRoomLifecycle(event, data = {}) {
+  const payload = { event, at: new Date().toISOString(), ...data };
+  try { console.log('[room-lifecycle] ' + JSON.stringify(payload)); }
+  catch (_) { console.log('[room-lifecycle] ' + event); }
+}
+
 function headerValue(headers, name) {
   if (!headers) return '';
   if (typeof headers.get === 'function') return headers.get(name) || '';
@@ -167,9 +177,12 @@ class GameRoom extends Room {
   }
 
   async onCreate(options = {}) {
+    const createStartedAt = performance.now();
     this.shardId = cleanShardId(options.shardId);
-    claimGlobalWorld(this, this.shardId);
+    logRoomLifecycle('overworld.create.start', { shardId: this.shardId || 'main' });
     try {
+    claimGlobalWorld(this, this.shardId);
+    logRoomLifecycle('overworld.create.claimed', { shardId: this.shardId || 'main', elapsedMs: elapsedMs(createStartedAt) });
     this.maxClients = Math.max(1, Math.min(64, Number(process.env.BLOCKCRAFT_SHARD_MAX_CLIENTS || 16) | 0));
     if (typeof this.setMetadata === 'function') this.setMetadata({ shardId: this.shardId });
     this.bootId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
@@ -177,6 +190,7 @@ class GameRoom extends Room {
     this.economyLedger = createEconomyLedger();
     this.world = W.createWorld();
     this.world.generate();
+    logRoomLifecycle('overworld.create.world_generated', { roomId: this.roomId || '', shardId: this.shardId || 'main', elapsedMs: elapsedMs(createStartedAt) });
 
     // ---- persistence ----
     this.store = this.monitorStore(createStore({ shardId: this.shardId }));
@@ -691,7 +705,23 @@ class GameRoom extends Room {
       this.recordTick(performance.now() - t0);
     }, 100); // 10 Hz
     registerRoom(this, 'overworld', { shardId: this.shardId || 'main' });
+    logRoomLifecycle('overworld.create.ready', {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      maxClients: this.maxClients,
+      restoredEdits: applied,
+      skippedCentralCourt,
+      players: this.state.players.size,
+      mobs: this.state.mobs.size,
+      elapsedMs: elapsedMs(createStartedAt),
+    });
     } catch (e) {
+      logRoomLifecycle('overworld.create.fail', {
+        roomId: this.roomId || '',
+        shardId: this.shardId || 'main',
+        elapsedMs: elapsedMs(createStartedAt),
+        error: e && e.message || String(e),
+      });
       releaseGlobalWorld(this);
       throw e;
     }
@@ -864,6 +894,15 @@ class GameRoom extends Room {
   }
 
   async onJoin(client, options, auth) {
+    const joinStartedAt = performance.now();
+    logRoomLifecycle('overworld.join.start', {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client && client.sessionId),
+      clientsBefore: this.clients.length,
+      accountType: String(auth && auth.accountType || '').toLowerCase(),
+      role: String(auth && auth.role || '').toLowerCase(),
+    });
     this.monitorClient(client);
     this.initGameInterestView(client);
     client.send('shard', { id: this.shardId || 'main', maxClients: this.maxClients });
@@ -1021,6 +1060,19 @@ class GameRoom extends Room {
       p.z = TOWN_RETURN_SPAWN.z + (Math.random() * 2 - 1);
     }
     this.state.players.set(client.sessionId, p);
+    logRoomLifecycle('overworld.join.profile_applied', {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client.sessionId),
+      profileSource,
+      playerName: p.name,
+      level: p.lvl || 1,
+      job: p.job || '',
+      path: p.path || '',
+      dim: p.dim || '',
+      dgn: p.dgn || '',
+      elapsedMs: elapsedMs(joinStartedAt),
+    });
     this.updateClientGameInterestView(client);
     if (prof && prof.skyshipTransit) {
       const tr = prof.skyshipTransit, now = Date.now();
@@ -1068,11 +1120,30 @@ class GameRoom extends Room {
       this.sendWeather(client);
       this.sendGuildHallSync(client);
       this.broadcast('chat', { name: '[System]', text: joined.name + (prof ? ' has returned' : ' has entered the world') });
+      logRoomLifecycle('overworld.join.ready', {
+        roomId: this.roomId || '',
+        shardId: this.shardId || 'main',
+        sidHash: shortHash(client.sessionId),
+        playerName: joined.name,
+        clientsNow: this.clients.length,
+        playersNow: this.state.players.size,
+        dim: joined.dim || '',
+        dgn: joined.dgn || '',
+        elapsedMs: elapsedMs(joinStartedAt),
+      });
     }, JOIN_SNAPSHOT_DELAY_MS);
   }
 
 
   async onLeave(client, code) {
+    logRoomLifecycle('overworld.leave.start', {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client && client.sessionId),
+      code,
+      clientsBefore: this.clients.length,
+      playersBefore: this.state.players.size,
+    });
     // A process shutdown is not a voluntary dungeon exit. Keep the live
     // attempt marker intact so onDispose can flush it for next-boot recovery.
     if (matchMaker && matchMaker.state === matchMaker.MatchMakerState.SHUTTING_DOWN) return;
@@ -1196,6 +1267,14 @@ class GameRoom extends Room {
     this.state.players.delete(client.sessionId);
     try { await this.flush(); }   // persist the departing player's final state now (README: flush on each departure)
     catch (e) { console.warn('[persist] leave flush failed:', e.message); }
+    logRoomLifecycle('overworld.leave.finalized', {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client && client.sessionId),
+      playerName: p && p.name || '',
+      playersNow: this.state.players.size,
+      dirtyPlayers: this.dirtyPlayers ? this.dirtyPlayers.size : 0,
+    });
   }
 
   // Persistence bookkeeping. Persistence has no mixin (flush() and the onCreate
@@ -1379,6 +1458,12 @@ class GameRoom extends Room {
   }
 
   async onDispose() {
+    logRoomLifecycle('overworld.dispose.start', {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      clients: this.clients ? this.clients.length : 0,
+      players: this.state && this.state.players ? this.state.players.size : 0,
+    });
     try { await this.flush(); }
     finally {
       if (this.unregisterProfileResetHandler) {
@@ -1391,6 +1476,10 @@ class GameRoom extends Room {
       }
       unregisterRoom(this);
       releaseGlobalWorld(this);
+      logRoomLifecycle('overworld.dispose.finalized', {
+        roomId: this.roomId || '',
+        shardId: this.shardId || 'main',
+      });
     }
   }
 

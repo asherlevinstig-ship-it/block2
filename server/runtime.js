@@ -3,7 +3,7 @@ const express = require('express');
 const { Encoder } = require('@colyseus/schema');
 const { validateStartup } = require('./startup-config');
 const { securityHeaders } = require('./security-headers');
-const { metricsHttpHandler } = require('./metrics-registry');
+const { metricsHttpHandler, readinessHttpHandler } = require('./metrics-registry');
 
 Encoder.BUFFER_SIZE = 256 * 1024;
 
@@ -20,9 +20,12 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
   app.use(securityHeaders({ production: config.production }));
   app.get('/healthz', (_req, res) => res.json({
     ok: true,
+    uptimeSec: Math.round(process.uptime() * 100) / 100,
     storage: config.storage,
     authBackend: String(process.env.AUTH_BACKEND || 'file').toLowerCase(),
+    readyPath: '/readyz',
   }));
+  app.get('/readyz', readinessHttpHandler());
   getAuthService().attach(app);
 
   if (process.env.BLOCKCRAFT_E2E === '1') {

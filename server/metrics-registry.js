@@ -221,6 +221,71 @@ function metricsSnapshot() {
   };
 }
 
+function duplicateOverworldShards(shards) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const shard of shards || []) {
+    const id = shard.shardId || 'main';
+    if (seen.has(id)) duplicates.add(id);
+    seen.add(id);
+  }
+  return [...duplicates].sort();
+}
+
+function readinessSnapshot({ maxEventLoopP99Ms = 500, maxHeapUsedMb = 850 } = {}) {
+  const snapshot = metricsSnapshot();
+  const duplicateShards = duplicateOverworldShards(snapshot.shards);
+  const issues = [];
+  if (duplicateShards.length) issues.push({ code: 'duplicate_overworld_shard', shards: duplicateShards });
+  if (snapshot.eventLoop.p99Ms > maxEventLoopP99Ms) {
+    issues.push({ code: 'event_loop_lag', p99Ms: snapshot.eventLoop.p99Ms, limitMs: maxEventLoopP99Ms });
+  }
+  if (snapshot.memory.heapUsedMb > maxHeapUsedMb) {
+    issues.push({ code: 'heap_pressure', heapUsedMb: snapshot.memory.heapUsedMb, limitMb: maxHeapUsedMb });
+  }
+  return {
+    ok: issues.length === 0,
+    at: snapshot.at,
+    pid: snapshot.pid,
+    uptimeSec: snapshot.uptimeSec,
+    issues,
+    eventLoop: snapshot.eventLoop,
+    memory: snapshot.memory,
+    totals: {
+      rooms: snapshot.totals.rooms,
+      clients: snapshot.totals.clients,
+      players: snapshot.totals.players,
+      mobs: snapshot.totals.mobs,
+      persistenceFailures: snapshot.totals.persistenceFailures,
+      tickOverBudget: snapshot.totals.tickOverBudget,
+      unexpectedDisconnects: snapshot.totals.unexpectedDisconnects,
+      outboundBytesPerClientPerSecond: snapshot.totals.outboundBytesPerClientPerSecond,
+    },
+    shards: snapshot.shards.map(shard => ({
+      shardId: shard.shardId,
+      roomId: shard.roomId,
+      clients: shard.clients,
+      players: shard.players,
+      maxClients: shard.maxClients,
+      tickAvgMs: shard.tickAvgMs,
+      tickMaxMs: shard.tickMaxMs,
+      persistenceFailures: shard.persistenceFailures,
+      unexpectedDisconnects: shard.unexpectedDisconnects,
+    })),
+    dungeons: snapshot.dungeons.map(dungeon => ({
+      gateId: dungeon.gateId,
+      roomId: dungeon.roomId,
+      clients: dungeon.clients,
+      players: dungeon.players,
+      maxClients: dungeon.maxClients,
+      tickAvgMs: dungeon.tickAvgMs,
+      tickMaxMs: dungeon.tickMaxMs,
+      persistenceFailures: dungeon.persistenceFailures,
+      unexpectedDisconnects: dungeon.unexpectedDisconnects,
+    })),
+  };
+}
+
 function tokenFromRequest(req) {
   const auth = req && req.headers && String(req.headers.authorization || '');
   const bearer = auth.match(/^Bearer\s+(.+)$/i);
@@ -237,4 +302,20 @@ function metricsHttpHandler({ token = '', production = false, allowMissingToken 
   };
 }
 
-module.exports = { registerRoom, unregisterRoom, metricsSnapshot, metricsHttpHandler, _activeRooms: activeRooms };
+function readinessHttpHandler(options = {}) {
+  return (_req, res) => {
+    const snapshot = readinessSnapshot(options);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(snapshot.ok ? 200 : 503).json(snapshot);
+  };
+}
+
+module.exports = {
+  registerRoom,
+  unregisterRoom,
+  metricsSnapshot,
+  metricsHttpHandler,
+  readinessSnapshot,
+  readinessHttpHandler,
+  _activeRooms: activeRooms,
+};

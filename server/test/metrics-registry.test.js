@@ -1,6 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { registerRoom, unregisterRoom, metricsSnapshot, metricsHttpHandler, _activeRooms } = require('../metrics-registry');
+const {
+  registerRoom,
+  unregisterRoom,
+  metricsSnapshot,
+  metricsHttpHandler,
+  readinessSnapshot,
+  readinessHttpHandler,
+  _activeRooms,
+} = require('../metrics-registry');
 
 function fakeRoom({ roomId = 'room-a', type = 'overworld', shardId = 'main', gateId = '', clients = 0, players = 0, mobs = 0 } = {}) {
   return {
@@ -140,4 +148,42 @@ test('metrics endpoint requires configured tokens and production token setup', (
   const unsafeProduction = mockResponse();
   metricsHttpHandler({ production: true })({ headers: {} }, unsafeProduction);
   assert.equal(unsafeProduction.statusCode, 403);
+});
+
+test('readiness snapshot exposes compact live room health', () => {
+  _activeRooms.clear();
+  const main = fakeRoom({ roomId: 'ow-main', shardId: 'main', clients: 2, players: 2, mobs: 8 });
+  const dungeon = fakeRoom({ roomId: 'dgn-1', type: 'dungeon', gateId: 'gate-a', clients: 4, players: 4, mobs: 12 });
+  registerRoom(main, 'overworld', { shardId: 'main' });
+  registerRoom(dungeon, 'dungeon', { gateId: 'gate-a' });
+
+  const snapshot = readinessSnapshot({ maxEventLoopP99Ms: Number.POSITIVE_INFINITY, maxHeapUsedMb: Number.POSITIVE_INFINITY });
+  assert.equal(snapshot.ok, true);
+  assert.equal(snapshot.totals.rooms, 2);
+  assert.equal(snapshot.totals.clients, 6);
+  assert.equal(snapshot.shards.length, 1);
+  assert.equal(snapshot.shards[0].shardId, 'main');
+  assert.equal(snapshot.dungeons.length, 1);
+  assert.equal(snapshot.dungeons[0].gateId, 'gate-a');
+
+  unregisterRoom(main);
+  unregisterRoom(dungeon);
+});
+
+test('readiness endpoint returns 503 when duplicate overworld shards are active', () => {
+  _activeRooms.clear();
+  const first = fakeRoom({ roomId: 'ow-main-a', shardId: 'main', clients: 1, players: 1 });
+  const second = fakeRoom({ roomId: 'ow-main-b', shardId: 'main', clients: 1, players: 1 });
+  registerRoom(first, 'overworld', { shardId: 'main' });
+  registerRoom(second, 'overworld', { shardId: 'main' });
+
+  const response = mockResponse();
+  readinessHttpHandler({ maxEventLoopP99Ms: Number.POSITIVE_INFINITY, maxHeapUsedMb: Number.POSITIVE_INFINITY })({}, response);
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.body.ok, false);
+  assert.deepEqual(response.body.issues.map(issue => issue.code), ['duplicate_overworld_shard']);
+  assert.equal(response.headers['Cache-Control'], 'no-store');
+
+  unregisterRoom(first);
+  unregisterRoom(second);
 });
