@@ -223,7 +223,12 @@ export function createAuthController({ user, password, playerName, status, play,
   }
 
   function adminFallbackUrl(path) {
-    return path;
+    try {
+      const host = location && location.hostname;
+      return host === 'localhost' || host === '127.0.0.1' || host === '::1' ? path : '';
+    } catch (_) {
+      return '';
+    }
   }
 
   async function adminFetch(path, options) {
@@ -232,13 +237,20 @@ export function createAuthController({ user, password, playerName, status, play,
     try {
       return await request(primary, options);
     } catch (primaryError) {
-      if (primary === fallback) throw primaryError;
+      if (!fallback || primary === fallback) throw primaryError;
       try {
         return await request(fallback, options);
       } catch (_) {
         throw new Error('Could not reach admin server at ' + primary);
       }
     }
+  }
+
+  function adminHeaders(token) {
+    const headers = { 'Content-Type': 'application/json' };
+    const adminToken = String(token || '').trim();
+    if (adminToken) headers['x-admin-reset-token'] = adminToken;
+    return authHeaders(headers);
   }
 
   async function resetPlayerProfile({ target, token } = {}) {
@@ -252,7 +264,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const res = await adminFetch('/auth/admin/reset-player', {
       method: 'POST',
       credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
+      headers: adminHeaders(adminToken),
       body: JSON.stringify(body),
     });
     let data = {};
@@ -282,7 +294,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const res = await adminFetch(url, {
       method: 'POST',
       credentials: 'include',
-      headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
+      headers: adminHeaders(adminToken),
       body: JSON.stringify({ ...targetBody, ...(body || {}) }),
     });
     let data = {};

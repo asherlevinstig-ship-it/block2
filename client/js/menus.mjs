@@ -1266,9 +1266,19 @@ const SFX=(()=>{
       if(!audio.paused)audio.pause();
     }
   }
+  function hasAudioGesture(){
+    try{
+      const activation=navigator.userActivation;
+      return !!(activation && (activation.isActive || activation.hasBeenActive));
+    }catch(e){
+      return false;
+    }
+  }
   function init(){
     if(ctx) return;
+    if(!hasAudioGesture()) return;
     try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+    if(ctx.state==='suspended') ctx.resume().catch(()=>{});
     master=ctx.createGain(); master.gain.value=MASTER_VOLUME; master.connect(ctx.destination);
     nbuf=ctx.createBuffer(1, ctx.sampleRate*2, ctx.sampleRate);
     const d=nbuf.getChannelData(0);

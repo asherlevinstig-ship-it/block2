@@ -1201,7 +1201,7 @@ function startAbilityTraining(){
   updateAbilityTrainingHud();
   lockFallback=true;
   locked=true;
-  try{ renderer.domElement.requestPointerLock(); }catch(e){ enterPlayFallback(); }
+  requestPointerLockSafe(enterPlayFallback);
   refreshPlayUi();
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.training.start.ok', { path:S.path, dim });
   return true;
@@ -3894,7 +3894,7 @@ function guideTownTutorialChoice(step, ready=true){
   showName('Tutorial started: '+(step==='job'?'Job Board':step==='tavern'?'Tavern':'Buy Land'));
   eventLog('Town tutorial started - find the light pillar.');
   lockFallback=true;
-  try{ renderer.domElement.requestPointerLock(); }catch(e){}
+  requestPointerLockSafe(null);
   refreshPlayUi();
 }
 function jobChoiceCardHTML(id){
@@ -3917,7 +3917,7 @@ function closeLevel2JobChoice(){
   document.body.classList.remove('path-selecting');
   lockFallback=true;
   locked=true;
-  try{ renderer.domElement.requestPointerLock(); }catch(e){ enterPlayFallback(); }
+  requestPointerLockSafe(enterPlayFallback);
   refreshPlayUi();
 }
 function guideJobTutorialChoice(jobId){
@@ -4128,7 +4128,7 @@ function finishOnboardingToTown(){
   lockFallback=true;
   locked=true;
   try{
-    renderer.domElement.requestPointerLock();
+    requestPointerLockSafe(enterPlayFallback);
     setTimeout(()=>{ if(document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
   }catch(e){
     enterPlayFallback();
@@ -4198,7 +4198,7 @@ function showPathSelection(){
     pathChoiceOpen=false;
     lockFallback=true;
     locked=true;
-    try{ renderer.domElement.requestPointerLock(); }catch(e){}
+    requestPointerLockSafe(null);
     refreshPlayUi();
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
     sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
@@ -4354,6 +4354,24 @@ function enterPlayFallback(){
   locked=true;
   refreshPlayUi();
 }
+function hasUserGesture(){
+  try{
+    const activation=navigator.userActivation;
+    return !!(activation && activation.isActive);
+  }catch(e){
+    return false;
+  }
+}
+function requestPointerLockSafe(onFail=enterPlayFallback){
+  try{
+    const result=renderer.domElement.requestPointerLock();
+    if(result&&typeof result.catch==='function') result.catch(()=>{ if(onFail) onFail(); });
+    return true;
+  }catch(e){
+    if(onFail) onFail();
+    return false;
+  }
+}
 const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn,apiUrl});
 const AUTH=AUTH_UI.state;
 const setAuthStatus=(text,kind='')=>AUTH_UI.setStatus(text,kind);
@@ -4382,10 +4400,10 @@ async function startPlaying(create=false){
   lockFallback=false;
   locked=true;
   refreshPlayUi();
-  try{
-    renderer.domElement.requestPointerLock();
+  if(hasUserGesture()){
+    requestPointerLockSafe(enterPlayFallback);
     setTimeout(()=>{ if(document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
-  }catch(e){
+  }else{
     enterPlayFallback();
   }
 }
@@ -4399,7 +4417,7 @@ checkAuth().then(account=>{
 function primeMenuAudio(){ if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
-playbtn.addEventListener('click', ()=>startPlaying(false));
+playbtn.addEventListener('click', ()=>{ primeMenuAudio(); startPlaying(false); });
 logoutbtn.addEventListener('click',async()=>{
   const rankContinue=document.getElementById('rankupcontinue');
   if(rankContinue)rankContinue.click();
