@@ -2103,6 +2103,8 @@ class GameRoom extends Room {
         for (const key of ['20,20', '21,20', '22,20']) {
           this.landClaims.set(key, { owner: rec.token, name: rec.prof.name || 'Hunter', price: 50, boughtAt: Date.now(), allowed: [] });
         }
+        this.dirtyLandClaims = true;
+        this.sendLandClaims(client);
         if (p) { p.dgn = ''; p.x = 20.5; p.y = W.terrainHeight(20, 20) + 1.05; p.z = 20.5; }
       }
       if (noGold) rec.prof.gold = 0;

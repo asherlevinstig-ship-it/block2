@@ -1171,7 +1171,7 @@ test('browser and server share authoritative quest objective descriptors', () =>
     text: 'Return to town.',
     location: 'Mara Vale',
     progress: { current: 2, required: 2 },
-    chapter: { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 8 },
+    chapter: { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 9 },
     reward: { gold: 10, xp: 20 },
     action: { type: 'turn_in', label: 'TURN IN TO MARA' },
   });
@@ -1181,7 +1181,7 @@ test('browser and server share authoritative quest objective descriptors', () =>
   assert.equal(normalized.claimAction.type, 'turn_in');
   assert.match(normalized.hudText, /Complete/);
   assert.deepEqual(normalized.progress, { current: 2, required: 2 });
-  assert.deepEqual(normalized.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 8 });
+  assert.deepEqual(normalized.chapter, { id: 'chapter_1_town_beginnings', title: 'Chapter 1: Town of Beginnings', step: 1, total: 9 });
 });
 
 test('NPC story and manhunt quests come from one validated authoring registry', () => {

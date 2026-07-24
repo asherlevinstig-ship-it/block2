@@ -757,7 +757,7 @@ function serverObjectiveLine(o,labelOverride=''){
   return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o),{chapter:o.chapter||null,checklist:Array.isArray(o.checklist)?o.checklist:null,serverObjective:o});
 }
 function chapterOneMeta(step=8){
-  return {id:'chapter_1_town_beginnings',title:'Chapter 1: Town of Beginnings',step:Math.max(1,step|0),total:8};
+  return {id:'chapter_1_town_beginnings',title:'Chapter 1: Town of Beginnings',step:Math.max(1,step|0),total:9};
 }
 function starterJobChapter(c){
   return c&&(c.difficulty==='starter'||c.difficultyLabel==='First Real Shift')?chapterOneMeta(8):null;
