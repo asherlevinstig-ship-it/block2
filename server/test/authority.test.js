@@ -208,6 +208,23 @@ test('server startup prewarms the main overworld before player matchmaking', () 
   assert.match(local, /await gameServer\.listen\(PORT\);[\s\S]*await prewarmOverworldRoom\(config\)/);
 });
 
+test('same-account browser refresh replaces the stale overworld session', async () => {
+  const room = Object.create(GameRoom.prototype);
+  const finalized = [];
+  room.roomId = 'room-main';
+  room.shardId = 'main';
+  room.clients = [{ sessionId: 'old_sid' }, { sessionId: 'other_sid' }, { sessionId: 'new_sid' }];
+  room.tokens = new Map([
+    ['old_sid', 'student_1'],
+    ['other_sid', 'student_2'],
+  ]);
+  room.finalizeLeave = async client => finalized.push(client.sessionId);
+
+  await room.replaceExistingSessionForToken('student_1', { sessionId: 'new_sid' });
+
+  assert.deepEqual(finalized, ['old_sid']);
+});
+
 test('economy telemetry records bounded signed gold flow summaries', () => {
   const ledger = createEconomyLedger(2);
   assert.equal(recordEconomyGold(ledger, { amount: 0, category: 'noop', source: 'ignored' }), null);

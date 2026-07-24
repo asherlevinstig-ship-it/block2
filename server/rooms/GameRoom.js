@@ -910,7 +910,10 @@ class GameRoom extends Room {
     client._accountType = String(auth && auth.accountType || '').toLowerCase();
     const token = cleanToken(auth && auth.id);
     if (!token) throw new Error('authenticated account required');
-    if (token) this.tokens.set(client.sessionId, token);
+    if (token) {
+      await this.replaceExistingSessionForToken(token, client);
+      this.tokens.set(client.sessionId, token);
+    }
     let prof = null;
     let profileSource = 'none';
     if (token) {
@@ -1132,6 +1135,25 @@ class GameRoom extends Room {
         elapsedMs: elapsedMs(joinStartedAt),
       });
     }, JOIN_SNAPSHOT_DELAY_MS);
+  }
+
+
+  async replaceExistingSessionForToken(token, joiningClient) {
+    const clean = cleanToken(token);
+    const joiningSid = joiningClient && joiningClient.sessionId;
+    if (!clean || !joiningSid || !this.tokens) return;
+    for (const [sid, existingToken] of [...this.tokens.entries()]) {
+      if (sid === joiningSid || existingToken !== clean) continue;
+      const existingClient = (this.clients || []).find(c => c && c.sessionId === sid) || { sessionId: sid };
+      logRoomLifecycle('overworld.join.replace_existing_session', {
+        roomId: this.roomId || '',
+        shardId: this.shardId || 'main',
+        oldSidHash: shortHash(sid),
+        newSidHash: shortHash(joiningSid),
+        token: clean,
+      });
+      await this.finalizeLeave(existingClient);
+    }
   }
 
 
