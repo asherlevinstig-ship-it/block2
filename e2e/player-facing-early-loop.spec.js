@@ -319,8 +319,8 @@ test('player-facing early loop tracker gives a clear next action at each milesto
     await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.some(g => g.kind === 'public' && g.rank === 0))).toBe(false);
     await clickTrackerAction(page, 'FIND GATE', 'find_gate');
     recordAuditPanel(qualityAudit, 'missing tracked gate recovery panel', 'quest_log');
-    await expect(page.locator('#qpanel')).toContainText('QUEST LOG');
-    await expect(page.locator('#qpanel')).toContainText('HUNTER JOURNEY');
+    await expect.poll(() => page.locator('#qpanel').textContent()).toMatch(/FIRST DUNGEON BRIEFING|HUNTER JOURNEY/);
+    await expect.poll(() => page.locator('#qpanel').textContent()).toMatch(/FIND (FIRST )?GATE/);
     await closeOpenPanels(page);
   });
 

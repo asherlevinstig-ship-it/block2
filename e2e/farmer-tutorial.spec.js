@@ -163,23 +163,23 @@ test('farmer tutorial returns to town with a persistent starter contract that ca
     const baseX = Math.round(farm.x), baseZ = Math.round(farm.z);
     const groundY = window.TOWN ? window.TOWN.G : 15;
     let action = null;
-    for (let radius = 0; radius <= 8 && !action; radius++) {
-      for (let dx = -radius; dx <= radius && !action; dx++) {
-        for (let dz = -radius; dz <= radius && !action; dz++) {
+    const playerPos = window.player && window.player.pos ? window.player.pos : { x: baseX + 0.5, z: baseZ + 0.5 };
+    const candidates = [];
+    for (let radius = 0; radius <= 8; radius++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dz = -radius; dz <= radius; dz++) {
           const x = baseX + dx, z = baseZ + dz, y = groundY;
+          if (Math.hypot(x + 0.5 - playerPos.x, z + 0.5 - playerPos.z) > 7.75) continue;
           const id = world.getBlock(x, y, z);
           const above = world.getBlock(x, y + 1, z);
           if (!window.isTownFarmWorksite(x, z)) continue;
-          if ((id === 1 || id === 2) && above === 0) {
-            action = { type: 'till', x, y, z, slot: hoeSlot, id, above };
-          } else if (id === 22 && above === 0 && seedSlot >= 0) {
-            action = { type: 'plant', x, y: y + 1, z, slot: seedSlot, id, above };
-          } else if (above === 25) {
-            action = { type: 'harvest', x, y: y + 1, z, slot: 0, id, above };
-          }
+          if (above === 25) candidates.push({ priority: 0, type: 'harvest', x, y: y + 1, z, slot: 0, id, above });
+          else if ((id === 1 || id === 2) && above === 0) candidates.push({ priority: 1, type: 'till', x, y, z, slot: hoeSlot, id, above });
+          else if (id === 22 && above === 0 && seedSlot >= 0) candidates.push({ priority: 2, type: 'plant', x, y: y + 1, z, slot: seedSlot, id, above });
         }
       }
     }
+    action = candidates.sort((a, b) => a.priority - b.priority)[0] || null;
     if (!action) {
       const sample = [];
       for (let x = baseX - 3; x <= baseX + 3; x++) {
@@ -222,19 +222,23 @@ test('farmer tutorial returns to town with a persistent starter contract that ca
       const baseX = Math.round(farm.x), baseZ = Math.round(farm.z);
       const groundY = window.TOWN ? window.TOWN.G : 15;
       let action = null;
-      for (let radius = 0; radius <= 9 && !action; radius++) {
-        for (let dx = -radius; dx <= radius && !action; dx++) {
-          for (let dz = -radius; dz <= radius && !action; dz++) {
+      const playerPos = window.player && window.player.pos ? window.player.pos : { x: baseX + 0.5, z: baseZ + 0.5 };
+      const candidates = [];
+      for (let radius = 0; radius <= 8; radius++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          for (let dz = -radius; dz <= radius; dz++) {
             const x = baseX + dx, z = baseZ + dz, y = groundY;
+            if (Math.hypot(x + 0.5 - playerPos.x, z + 0.5 - playerPos.z) > 7.75) continue;
             const id = world.getBlock(x, y, z);
             const above = world.getBlock(x, y + 1, z);
             if (!window.isTownFarmWorksite(x, z)) continue;
-            if (above === 25) action = { type: 'harvest', x, y: y + 1, z, slot: 0 };
-            else if (id === 22 && above === 0 && seedSlot >= 0) action = { type: 'plant', x, y: y + 1, z, slot: seedSlot };
-            else if ((id === 1 || id === 2) && above === 0 && hoeSlot >= 0) action = { type: 'till', x, y, z, slot: hoeSlot };
+            if (above === 25) candidates.push({ priority: 0, type: 'harvest', x, y: y + 1, z, slot: 0 });
+            else if ((id === 1 || id === 2) && above === 0 && hoeSlot >= 0) candidates.push({ priority: 1, type: 'till', x, y, z, slot: hoeSlot });
+            else if (id === 22 && above === 0 && seedSlot >= 0) candidates.push({ priority: 2, type: 'plant', x, y: y + 1, z, slot: seedSlot });
           }
         }
       }
+      action = candidates.sort((a, b) => a.priority - b.priority)[0] || null;
       if (!action) return { ok: false, reason: 'missing follow-up farm action' };
       window.__BLOCKCRAFT_E2E__.send('farm', { action: action.type, x: action.x, y: action.y, z: action.z, slot: action.slot });
       return { ok: true, action, beforeHave };

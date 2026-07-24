@@ -39,8 +39,14 @@ test('a normal boss drops a shard that opens and rewards a complete sharded run'
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', {
     action: 'prepareERankDungeon', dungeonId: 'abandoned_mine', requestId: 'prepare-normal',
   }));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === 'abandoned_mine'))).toBeTruthy();
-  const normalGate = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.dungeonId === 'abandoned_mine'));
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
+    .toMatchObject({ requestId: 'prepare-normal', ok: true, dungeonId: 'abandoned_mine' });
+  const normalGate = await page.evaluate(() => {
+    const result = window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult;
+    return window.__BLOCKCRAFT_E2E__.status().gates.find(g => g.id === result.id);
+  });
+  expect(normalGate).toBeTruthy();
+  expect(normalGate.kind).not.toBe('shard');
   await enterGate(page, normalGate.id);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'defeatERankBoss', requestId: 'normal-clear' }));
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult))
