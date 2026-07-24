@@ -219,11 +219,26 @@ export function createAuthController({ user, password, playerName, status, play,
   }
 
   function adminApiUrl(path) {
-    try {
-      const local = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
-      if (local) return path;
-    } catch (_) {}
     return apiUrl(path);
+  }
+
+  function adminFallbackUrl(path) {
+    return path;
+  }
+
+  async function adminFetch(path, options) {
+    const primary = adminApiUrl(path);
+    const fallback = adminFallbackUrl(path);
+    try {
+      return await request(primary, options);
+    } catch (primaryError) {
+      if (primary === fallback) throw primaryError;
+      try {
+        return await request(fallback, options);
+      } catch (_) {
+        throw new Error('Could not reach admin server at ' + primary);
+      }
+    }
   }
 
   async function resetPlayerProfile({ target, token } = {}) {
@@ -234,7 +249,7 @@ export function createAuthController({ user, password, playerName, status, play,
         : state.account && state.account.id ? { accountId: state.account.id }
           : {};
     if (!body.email && !body.accountId) throw new Error('Sign in or enter an email/account id');
-    const res = await request(adminApiUrl('/auth/admin/reset-player'), {
+    const res = await adminFetch('/auth/admin/reset-player', {
       method: 'POST',
       credentials: 'include',
       headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
@@ -264,7 +279,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const adminToken = String(token || '').trim();
     const targetBody = adminTargetBody(target);
     if (!targetBody.email && !targetBody.accountId) throw new Error('Sign in or enter an email/account id');
-    const res = await request(adminApiUrl(url), {
+    const res = await adminFetch(url, {
       method: 'POST',
       credentials: 'include',
       headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
