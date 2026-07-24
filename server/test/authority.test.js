@@ -194,6 +194,11 @@ test('only one room may own each overworld shard persistence lease', () => {
   releaseGlobalWorld(overflow);
 });
 
+test('overworld room stays warm to avoid concurrent first-join room creation races', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  assert.match(source, /this\.autoDispose\s*=\s*false/);
+});
+
 test('economy telemetry records bounded signed gold flow summaries', () => {
   const ledger = createEconomyLedger(2);
   assert.equal(recordEconomyGold(ledger, { amount: 0, category: 'noop', source: 'ignored' }), null);

@@ -178,6 +178,7 @@ class GameRoom extends Room {
   async onCreate(options = {}) {
     const createStartedAt = performance.now();
     this.shardId = cleanShardId(options.shardId);
+    this.autoDispose = false;
     logRoomLifecycle('overworld.create.start', { shardId: this.shardId || 'main' });
     try {
     claimGlobalWorld(this, this.shardId);
