@@ -112,6 +112,13 @@ export function createAuthController({ user, password, playerName, status, play,
     return !!(state.gameProfile && state.gameProfile.nameSet);
   }
 
+  function isAdminAccount() {
+    const account = state.account || {};
+    const username = String(account.username || '').trim().toLowerCase();
+    const role = String(account.role || account.accountType || '').trim().toLowerCase();
+    return username === 'asherlevin85@gmail.com' || role === 'admin';
+  }
+
   function setStatus(text, kind = '') {
     status.textContent = text || '';
     status.className = kind;
@@ -214,7 +221,6 @@ export function createAuthController({ user, password, playerName, status, play,
   async function resetPlayerProfile({ target, token } = {}) {
     const value = String(target || '').trim();
     const adminToken = String(token || '').trim();
-    if (!adminToken) throw new Error('Admin reset token required');
     const body = value && value.includes('@') ? { email: value }
       : value ? { accountId: value }
         : state.account && state.account.id ? { accountId: state.account.id }
@@ -248,7 +254,6 @@ export function createAuthController({ user, password, playerName, status, play,
 
   async function adminRequest(url, { target, token, body = {} } = {}) {
     const adminToken = String(token || '').trim();
-    if (!adminToken) throw new Error('Admin token required');
     const targetBody = adminTargetBody(target);
     if (!targetBody.email && !targetBody.accountId) throw new Error('Sign in or enter an email/account id');
     const res = await request(apiUrl(url), {
@@ -330,5 +335,5 @@ export function createAuthController({ user, password, playerName, status, play,
   }
 
   setAppearance(null);
-  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, resetPlayerProfile, adminInspectPlayer, adminPatchPlayer, saveHunterName, saveHunterProfile, saveAppearance, openAppearanceEditor, closeAppearanceEditor, currentAppearance: () => sanitizeAppearance(draftAppearance) };
+  return { state, setStatus, render, json, check, authenticate, signOut, expire, requireHunterName, hasHunterName, isAdminAccount, resetPlayerProfile, adminInspectPlayer, adminPatchPlayer, saveHunterName, saveHunterProfile, saveAppearance, openAppearanceEditor, closeAppearanceEditor, currentAppearance: () => sanitizeAppearance(draftAppearance) };
 }

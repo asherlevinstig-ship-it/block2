@@ -176,9 +176,15 @@
     <h2 id="devresettitle">Player Profile Editor</h2>
     <p>Inspect and patch live player game profiles. Reset still deletes game progress only; school login remains in MySQL.</p>
     <input id="devresettarget" maxlength="255" placeholder="EMAIL OR ACCOUNT ID">
-    <input id="devresettoken" type="password" maxlength="256" placeholder="ADMIN RESET TOKEN">
+    <input id="devresettoken" type="password" maxlength="256" placeholder="ADMIN RESET TOKEN (FALLBACK)">
     <div class="admineditgrid">
-      <input id="adminitemid" maxlength="8" placeholder="ITEM ID">
+      <input id="adminlevel" maxlength="3" placeholder="LEVEL">
+      <input id="admingold" maxlength="10" placeholder="GOLD">
+      <input id="adminxp" maxlength="10" placeholder="HUNTER XP">
+      <input id="adminstatpoints" maxlength="4" placeholder="STAT POINTS">
+      <select id="adminitemid" aria-label="Item to grant">
+        <option value="">GRANT ITEM</option>
+      </select>
       <input id="adminitemcount" maxlength="4" placeholder="COUNT">
       <select id="adminabilitypath" aria-label="Ability path">
         <option value="">ABILITY PATH</option>

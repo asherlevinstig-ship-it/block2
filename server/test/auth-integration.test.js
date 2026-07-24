@@ -271,6 +271,19 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(body.account.username, 'dylan.lynee@st-ignatius.example');
     assert.deepEqual(body.profile, { exists: true, name: 'Admin_Levin', nameSet: true, level: 1 });
 
+    const adminSession = await f.auth.issueSession({
+      id: 'teacher_1',
+      username: 'asherlevin85@gmail.com',
+      displayName: 'Asher',
+      role: 'teacher',
+    });
+    const sessionLookup = await f.request('/auth/admin/player-profile', jsonPost(
+      { email: 'dylan.lynee@st-ignatius.example' },
+      { Authorization: 'Bearer ' + adminSession },
+    ));
+    assert.equal(sessionLookup.status, 200);
+    assert.equal((await sessionLookup.json()).account.id, 'student_42');
+
     const renamed = await f.request('/auth/admin/player-profile/name', jsonPost(
       { email: 'dylan.lynee@st-ignatius.example', name: 'Dylan Lynee' },
       { 'x-admin-reset-token': 'admin-secret' },
@@ -300,6 +313,10 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     const patched = await f.request('/auth/admin/player-profile/patch', jsonPost(
       {
         email: 'dylan.lynee@st-ignatius.example',
+        level: 12,
+        gold: 777,
+        xp: 456,
+        statPoints: 9,
         job: 'pet_tamer',
         jobXp: 123,
         abilityPath: 'verdant',
@@ -312,6 +329,10 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     ));
     assert.equal(patched.status, 200);
     const patchedBody = await patched.json();
+    assert.equal(patchedBody.profile.level, 12);
+    assert.equal(patchedBody.profile.gold, 777);
+    assert.equal(patchedBody.profile.xp, 456);
+    assert.equal(patchedBody.profile.statPoints, 9);
     assert.equal(patchedBody.profile.job, 'pet_tamer');
     assert.equal(patchedBody.profile.jobXp, 123);
     assert.equal(patchedBody.profile.jobXpByJob.pet_tamer, 123);
@@ -320,6 +341,10 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.deepEqual(patchedBody.profile.utilityUnlocks, ['compass', 'trail_sense']);
     assert.deepEqual(patchedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.deepEqual(patchedBody.profile.inv, [{ id: 185, count: 1 }]);
+    assert.equal(profiles.get('student_42').S.lvl, 12);
+    assert.equal(profiles.get('student_42').S.xp, 456);
+    assert.equal(profiles.get('student_42').S.pts, 9);
+    assert.equal(profiles.get('student_42').gold, 777);
     assert.equal(profiles.get('student_42').job, 'pet_tamer');
     assert.equal(profiles.get('student_42').jobXp, 123);
     assert.equal(profiles.get('student_42').jobXpByJob.pet_tamer, 123);

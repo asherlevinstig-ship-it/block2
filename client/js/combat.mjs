@@ -526,6 +526,10 @@ const devResetCancel=document.getElementById('devresetcancel');
 const adminInspectGo=document.getElementById('admininspectgo');
 const adminPatchGo=document.getElementById('adminpatchgo');
 const adminInspectOut=document.getElementById('admininspectout');
+const adminLevel=document.getElementById('adminlevel');
+const adminGold=document.getElementById('admingold');
+const adminXp=document.getElementById('adminxp');
+const adminStatPoints=document.getElementById('adminstatpoints');
 const adminItemId=document.getElementById('adminitemid');
 const adminItemCount=document.getElementById('adminitemcount');
 const adminAbilityPath=document.getElementById('adminabilitypath');
@@ -4406,6 +4410,26 @@ function setDevResetStatus(text,kind=''){
   devResetStatus.textContent=text||'';
   devResetStatus.className=kind;
 }
+function populateAdminItemOptions(){
+  if(!adminItemId||adminItemId.dataset.ready)return;
+  const rows=Object.entries(ITEMS||{})
+    .map(([id,item])=>({id:Number(id)||0,name:String(item&&item.name||'Item '+id)}))
+    .filter(row=>row.id>0&&row.name)
+    .sort((a,b)=>a.name.localeCompare(b.name)||a.id-b.id);
+  for(const row of rows){
+    const opt=document.createElement('option');
+    opt.value=String(row.id);
+    opt.textContent=row.name+'  #'+row.id;
+    adminItemId.appendChild(opt);
+  }
+  adminItemId.dataset.ready='1';
+}
+function syncAdminTokenField(){
+  if(!devResetToken)return;
+  const admin=!!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount());
+  devResetToken.placeholder=admin?'SIGNED IN ADMIN - TOKEN OPTIONAL':'ADMIN RESET TOKEN';
+  devResetToken.classList.toggle('admin-recognized',admin);
+}
 function setAdminInspectOut(data){
   if(!adminInspectOut)return;
   if(!data){adminInspectOut.classList.add('hidden');adminInspectOut.textContent='';return;}
@@ -4417,6 +4441,10 @@ function adminCsv(value){
 }
 function populateAdminFields(profile){
   if(!profile)return;
+  if(adminLevel)adminLevel.value=String(profile.level||1);
+  if(adminGold)adminGold.value=String(profile.gold||0);
+  if(adminXp)adminXp.value=String(profile.xp||0);
+  if(adminStatPoints)adminStatPoints.value=String(profile.statPoints||0);
   if(adminAbilityPath)adminAbilityPath.value=profile.path||'';
   if(adminAbilitySpec)adminAbilitySpec.value=profile.abilitySpec||'';
   if(adminJob)adminJob.value=profile.job||'adventurer';
@@ -4428,6 +4456,10 @@ function populateAdminFields(profile){
 }
 function buildAdminPatch(){
   const patch={};
+  if(adminLevel&&String(adminLevel.value||'').trim())patch.level=Math.max(1,Number(adminLevel.value)||1);
+  if(adminGold&&String(adminGold.value||'').trim())patch.gold=Math.max(0,Number(adminGold.value)||0);
+  if(adminXp&&String(adminXp.value||'').trim())patch.xp=Math.max(0,Number(adminXp.value)||0);
+  if(adminStatPoints&&String(adminStatPoints.value||'').trim())patch.statPoints=Math.max(0,Number(adminStatPoints.value)||0);
   const itemId=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
   const itemCount=Math.max(1,Number(adminItemCount&&adminItemCount.value||1)|0);
   if(itemId)patch.grantItems=[{id:itemId,count:itemCount}];
@@ -4450,13 +4482,15 @@ function closeDevResetPanel(){
 }
 function openDevResetPanel(){
   if(!devReset)return;
+  populateAdminItemOptions();
+  syncAdminTokenField();
   if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
   lockFallback=false;locked=false;refreshPlayUi();
   const account=AUTH&&AUTH.account;
   if(devResetTarget&&!devResetTarget.value)devResetTarget.value=account&&account.id||authuser.value||'';
   try{if(devResetToken&&!devResetToken.value)devResetToken.value=sessionStorage.getItem('bc_admin_reset_token')||'';}catch(e){}
   devReset.classList.remove('hidden');
-  setDevResetStatus('Inspect, patch, or reset a live player game profile.');
+  setDevResetStatus(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()?'Admin account recognized. Token is optional.':'Inspect, patch, or reset a live player game profile.');
   setTimeout(()=>{if(devResetTarget)devResetTarget.focus();},0);
 }
 async function runAdminInspect(){

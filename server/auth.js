@@ -25,6 +25,7 @@ const JOB_XP_MAX = 1000000000;
 const JOB_XP_IDS = [...JOB_IDS].filter(Boolean);
 const cleanAdminId = value => String(value || '').trim().toLowerCase();
 const clampJobXp = value => Math.max(0, Math.min(JOB_XP_MAX, Math.round(Number(value) || 0)));
+const clampAdminInt = (value, min, max) => Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
 
 function hasOwn(obj, key) {
   return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
@@ -96,6 +97,26 @@ function applyAdminUtilities(profile, body) {
   } else {
     profile.utilityLoadout = sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks);
   }
+}
+
+function adminProfileSummary(profile) {
+  return {
+    exists: true,
+    name: profile.name,
+    nameSet: profile.nameSet === true,
+    level: profile.S && profile.S.lvl || 1,
+    xp: profile.S && profile.S.xp || 0,
+    statPoints: profile.S && profile.S.pts || 0,
+    gold: profile.gold | 0,
+    path: profile.S && profile.S.path || '',
+    abilitySpec: profile.abilitySpec || '',
+    job: profile.job || '',
+    jobXp: profile.jobXp | 0,
+    jobXpByJob: { ...(profile.jobXpByJob || {}) },
+    utilityUnlocks: Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [],
+    utilityLoadout: sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks),
+    inv: (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 })),
+  };
 }
 
 function grantProfileItem(profile, id, count) {
@@ -230,6 +251,25 @@ class AuthService {
     return out;
   }
 
+  adminEmails() {
+    const raw = String(this.env && this.env.ADMIN_EMAILS || process.env.ADMIN_EMAILS || 'asherlevin85@gmail.com');
+    return new Set(raw.split(',').map(cleanUsername).filter(Boolean));
+  }
+
+  isAdminAccount(account) {
+    if (!account) return false;
+    const role = cleanAdminId(account.role || account.accountType);
+    return role === 'admin' || this.adminEmails().has(cleanUsername(account.username || account.email));
+  }
+
+  authorizeAdmin(req) {
+    const expected = String(this.env && this.env.ADMIN_RESET_TOKEN || process.env.ADMIN_RESET_TOKEN || '');
+    const provided = String(req.headers['x-admin-reset-token'] || req.query && req.query.token || '');
+    if (expected && provided === expected) return true;
+    const account = this.authenticateRequest(req);
+    return this.isAdminAccount(account);
+  }
+
   getProfileStore() {
     if (this.profileStore) return this.profileStore;
     this.profileStore = createStore({ shardId: 'main', env: this.env });
@@ -313,16 +353,8 @@ class AuthService {
       level: profile.S && profile.S.lvl || 1,
     } : { exists: false, name: '', nameSet: false, level: 1 };
     if (profile && details) {
-      summary.path = profile.S && profile.S.path || '';
-      summary.abilitySpec = profile.abilitySpec || '';
-      summary.job = profile.job || '';
-      summary.jobXp = profile.jobXp | 0;
-      summary.jobXpByJob = { ...(profile.jobXpByJob || {}) };
-      summary.utilityUnlocks = Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [];
-      summary.utilityLoadout = sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks);
-      summary.gold = profile.gold | 0;
+      Object.assign(summary, adminProfileSummary(profile));
       summary.activeRoom = profile.activeRoom || null;
-      summary.inv = (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 }));
       summary.mountUnlocks = Array.isArray(profile.mountUnlocks) ? [...profile.mountUnlocks] : [];
       summary.dragonHatchedAt = profile.dragonHatchedAt || {};
     }
@@ -434,6 +466,18 @@ class AuthService {
     }
 
     const patch = body || {};
+    profile.S = profile.S && typeof profile.S === 'object' ? profile.S : {};
+    if (hasOwn(patch, 'level')) {
+      const before = Math.max(1, profile.S.lvl | 0);
+      const next = clampAdminInt(patch.level, 1, 60);
+      profile.S.lvl = next;
+      if (next > before) profile.S.pts = clampAdminInt((profile.S.pts | 0) + (next - before), 0, 999);
+    }
+    if (hasOwn(patch, 'xp')) profile.S.xp = clampAdminInt(patch.xp, 0, JOB_XP_MAX);
+    if (hasOwn(patch, 'statPoints')) profile.S.pts = clampAdminInt(patch.statPoints, 0, 999);
+    if (hasOwn(patch, 'gold')) profile.gold = clampAdminInt(patch.gold, 0, JOB_XP_MAX);
+    if (hasOwn(patch, 'addGold')) profile.gold = clampAdminInt((profile.gold | 0) + Number(patch.addGold || 0), 0, JOB_XP_MAX);
+
     const nextPath = hasOwn(patch, 'abilityPath') ? resolveAdminAbilityPath(patch.abilityPath)
       : hasOwn(patch, 'path') ? resolveAdminAbilityPath(patch.path)
         : profile.S && profile.S.path || '';
@@ -463,18 +507,7 @@ class AuthService {
       account,
       liveRoomsUpdated,
       profile: {
-        exists: true,
-        name: profile.name,
-        nameSet: profile.nameSet === true,
-        level: profile.S && profile.S.lvl || 1,
-        path: profile.S && profile.S.path || '',
-        abilitySpec: profile.abilitySpec || '',
-        job: profile.job || '',
-        jobXp: profile.jobXp | 0,
-        jobXpByJob: { ...(profile.jobXpByJob || {}) },
-        utilityUnlocks: Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [],
-        utilityLoadout: sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks),
-        inv: (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 })),
+        ...adminProfileSummary(profile),
       },
     };
   }
@@ -735,9 +768,7 @@ class AuthService {
       }
     });
     app.post('/auth/admin/reset-player', async (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       try {
         const result = await this.resetPlayerProfile(req.body);
         res.json({ ok: true, account: result.account, liveRoomsReset: result.liveRoomsReset });
@@ -746,9 +777,7 @@ class AuthService {
       }
     });
     app.post('/auth/admin/player-profile', async (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       try {
         const result = await this.inspectPlayerProfile(req.body);
         res.json({ ok: true, account: result.account, profile: result.profile });
@@ -757,9 +786,7 @@ class AuthService {
       }
     });
     app.post('/auth/admin/player-profile/name', async (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       try {
         const result = await this.setPlayerProfileName(req.body);
         res.json({ ok: true, account: result.account, profile: result.profile });
@@ -768,9 +795,7 @@ class AuthService {
       }
     });
     app.post('/auth/admin/player-profile/level-two-job-choice', async (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       try {
         const result = await this.resetPlayerToLevelTwoJobChoice(req.body);
         res.json({ ok: true, account: result.account, profile: result.profile, liveRoomsUpdated: result.liveRoomsUpdated });
@@ -779,9 +804,7 @@ class AuthService {
       }
     });
     app.post('/auth/admin/player-profile/patch', async (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       try {
         const result = await this.patchPlayerProfile(req.body);
         res.json({ ok: true, account: result.account, profile: result.profile, liveRoomsUpdated: result.liveRoomsUpdated });
@@ -790,27 +813,19 @@ class AuthService {
       }
     });
     app.get('/auth/admin/identity-trace', (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || req.query && req.query.token || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       res.json({ ok: true, events: recentIdentityTrace() });
     });
     app.post('/auth/admin/identity-trace/clear', (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       res.json({ ok: true, cleared: clearIdentityTrace() });
     });
     app.get('/auth/admin/room-lifecycle', (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || req.query && req.query.token || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       res.json({ ok: true, events: recentRoomLifecycleTrace() });
     });
     app.post('/auth/admin/room-lifecycle/clear', (req, res) => {
-      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
-      const provided = String(req.headers['x-admin-reset-token'] || '');
-      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      if (!this.authorizeAdmin(req)) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       res.json({ ok: true, cleared: clearRoomLifecycleTrace() });
     });
     app.post('/auth/logout', async (req, res) => {
