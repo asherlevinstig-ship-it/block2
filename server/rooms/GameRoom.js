@@ -1556,6 +1556,10 @@ class GameRoom extends Room {
           p.z = Array.isArray(next.pos) ? next.pos[2] || p.z : p.z;
           p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(next.appearance));
         }
+        const vitals = this.cleanProfileVitals(next);
+        const maxMp = this.maxMpForProfile(next);
+        this.abilityState.set(client.sessionId, { mp: vitals.mp, maxMp, cds: {}, last: Date.now() });
+        this.sendAbilitySync(client, this.abilityState.get(client.sessionId));
         client.send('accountProfileUpdated', { ok: true, reason: 'level_two_job_choice' });
         this.sendProfile(client, next);
       }

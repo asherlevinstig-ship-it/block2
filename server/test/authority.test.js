@@ -395,6 +395,25 @@ function readClientModule(rel) {
   return fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', rel), 'utf8');
 }
 
+test('live admin profile updates replace cached mana state before the next vitals save', () => {
+  const room = makeRoom();
+  const client = makeClient('admin_mana_live');
+  const { token, prof } = seedPlayer(room, client, { lvl: 8 });
+  prof.S.int = 20;
+  prof.vitals = { hp: 20, mp: 4, sp: 100, hunger: 100 };
+  prof.vitalsSavedAt = Date.now();
+  room.clients = [client];
+  room.abilityState.set(client.sessionId, { mp: 3, maxMp: 77, cds: { stale: 1 }, last: 1 });
+  const replacement = sanitizeProfile({ ...prof, vitals: { ...prof.vitals, mp: 18 }, vitalsSavedAt: Date.now() });
+
+  assert.equal(room.updateLivePlayerProfile(token, { replaceProfile: replacement }), true);
+
+  const st = room.abilityState.get(client.sessionId);
+  assert.equal(st.mp, 18);
+  assert.equal(room.syncProfileVitals(client, room.profiles.get(token)).mp, 18);
+  assert.equal(client.sent.some(e => e.type === 'abilitySync' && e.msg.mp === 18), true);
+});
+
 test('client modules expose and route player trading actions', () => {
   const world = readClientModule('world.mjs');
   const combat = readClientModule('combat.mjs');
