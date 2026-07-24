@@ -37,6 +37,8 @@ export function createNetworkSession({
     endpoint,
     roomName:'blockcraft',
     shardAttempts:16,
+    joinAttempts:12,
+    joinRetryMaxDelay:4000,
     resumeTimeout:2600,
     liveReconnectTimeout:2200,
     reconnectAttempts:1,

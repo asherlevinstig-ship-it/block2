@@ -3121,6 +3121,48 @@ test('network controller waits for a booting main shard before trying overflow s
   ]);
 });
 
+test('network controller treats Colyseus gateway matchmake errors as quiet bounded retries', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const events = [], retries = [], delays = [];
+  const main = { reconnectionToken: 'main:token', onLeave() {} };
+  let attempts = 0;
+  class Client {
+    async joinOrCreate(name, options) {
+      events.push(['join', name, options.shardId || '']);
+      if (++attempts < 5) throw new Error('matchmake failed with status 523');
+      return main;
+    }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    joinAttempts: 5, shardAttempts: 1, joinRetryDelay: 250, joinRetryMaxDelay: 1000, wait: async ms => delays.push(ms),
+    primaryJoinOptions: () => ({ shardId: 'main' }),
+    onJoinRetry: info => retries.push({ attempt: info.attempt, shardId: info.shardId, quiet: info.quiet }),
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(controller.state.room, main);
+  assert.equal(controller.state.shardId, 'main');
+  assert.deepEqual(events, [
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+    ['join', 'blockcraft', 'main'],
+  ]);
+  assert.deepEqual(retries, [
+    { attempt: 1, shardId: 'main', quiet: true },
+    { attempt: 2, shardId: 'main', quiet: true },
+    { attempt: 3, shardId: 'main', quiet: true },
+    { attempt: 4, shardId: 'main', quiet: true },
+  ]);
+  assert.deepEqual(delays, [250, 500, 1000, 1000]);
+});
+
 test('network session fresh joins prefer main before a saved overflow shard', async () => {
   const previousLocalStorage = globalThis.localStorage;
   const local = new Map([['bc_shard_id', 'shard-2']]);
@@ -3154,6 +3196,8 @@ test('network session fresh joins prefer main before a saved overflow shard', as
     assert.equal(captured.primaryJoinOptions({ name: 'Hunter', attempt: 1 }).shardId, 'shard-2');
     assert.equal(captured.resumeTimeout, 2600);
     assert.equal(captured.liveReconnectTimeout, 2200);
+    assert.equal(captured.joinAttempts, 12);
+    assert.equal(captured.joinRetryMaxDelay, 4000);
     assert.equal(captured.reconnectAttempts, 1);
   } finally {
     globalThis.localStorage = previousLocalStorage;

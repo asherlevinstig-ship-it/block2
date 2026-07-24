@@ -21,6 +21,8 @@ export function createNetworkController(options) {
   const joinAttempts = Math.max(1, options.joinAttempts | 0 || 6);
   const liveReconnectTimeout = Math.max(1, options.liveReconnectTimeout | 0 || 4000);
   const reconnectAttempts = Math.max(1, options.reconnectAttempts | 0 || 2);
+  const joinRetryDelay = Math.max(0, options.joinRetryDelay | 0 || 250);
+  const joinRetryMaxDelay = Math.max(joinRetryDelay, options.joinRetryMaxDelay | 0 || 4000);
   const retryWait = options.wait || wait;
 
   function errorMessage(error) {
@@ -44,10 +46,23 @@ export function createNetworkController(options) {
       text.includes('persistence writer');
   }
 
+  function transientGatewayError(error) {
+    const text = errorMessage(error);
+    return text.includes('502') ||
+      text.includes('522') ||
+      text.includes('523') ||
+      text.includes('524') ||
+      text.includes('bad gateway') ||
+      text.includes('gateway timeout') ||
+      text.includes('service unavailable') ||
+      text.includes('failed to fetch') ||
+      text.includes('networkerror');
+  }
+
   async function joinRoomWithRetries(start, meta = {}) {
     let lastError = null;
     for (let attempt = 1; attempt <= joinAttempts; attempt++) {
-      if (attempt > 1) await retryWait(250 * 2 ** (attempt - 2));
+      if (attempt > 1) await retryWait(Math.min(joinRetryMaxDelay, joinRetryDelay * 2 ** (attempt - 2)));
       state.joinAttempts++;
       if (options.onJoinAttempt) options.onJoinAttempt({ ...meta, attempt });
       try {
@@ -57,7 +72,7 @@ export function createNetworkController(options) {
         state.lastJoinError = String(error && (error.message || error.reason || error.code) || error || 'join failed');
         if (shardCapacityError(error)) throw error;
         if (attempt < joinAttempts && options.onJoinRetry) {
-          options.onJoinRetry({ ...meta, attempt, error, quiet: mainShardBootingError(error) });
+          options.onJoinRetry({ ...meta, attempt, error, quiet: mainShardBootingError(error) || transientGatewayError(error) });
         }
       }
     }
