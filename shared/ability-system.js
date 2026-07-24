@@ -35,7 +35,7 @@
       abilities:Object.freeze([
         Object.freeze({name:'Verdant Mend',glyph:'+',kind:'mend',mp:14,sp:0,cdMs:9000,range:9,txt:'Heal the weakest nearby ally, or yourself if alone'}),
         Object.freeze({name:'Rootsnare',glyph:'*',kind:'roots',mp:20,sp:0,cdMs:15000,radius:5.8,txt:'Entangle nearby foes with roots and nature damage'}),
-        Object.freeze({name:'Panther Form',glyph:'P',kind:'panther',mp:28,sp:10,cdMs:32000,txt:'Shift into a swift melee hunter for 14s'}),
+        Object.freeze({name:'Panther Form',glyph:'P',kind:'panther',mp:18,sp:4,cdMs:32000,txt:'Shift into a swift melee hunter for 14s'}),
       ])}),
   });
   // Level curve keeps casters relevant against ranked gates: x1.0 at level 1
