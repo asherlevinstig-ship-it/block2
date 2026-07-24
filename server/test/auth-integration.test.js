@@ -393,6 +393,25 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(detailedBody.profile.armor.id, 137);
     assert.equal(detailedBody.profile.armor.armorType, 'aegis');
 
+    const allArmor = await f.request('/auth/admin/player-profile/patch', jsonPost(
+      {
+        email: 'dylan.lynee@st-ignatius.example',
+        grantItems: [
+          { id: 211, count: 1, armorType: 'scout' },
+          { id: 212, count: 1, armorType: 'vanguard' },
+          { id: 136, count: 1, armorType: 'vanguard' },
+          { id: 184, count: 1, armorType: 'bulwark' },
+          { id: 213, count: 1, armorType: 'scout' },
+          { id: 137, count: 1, armorType: 'aegis' },
+        ],
+      },
+      { 'x-admin-reset-token': 'admin-secret' },
+    ));
+    assert.equal(allArmor.status, 200);
+    const allArmorBody = await allArmor.json();
+    assert.deepEqual(allArmorBody.profile.inv.map(s => s.id), [185, 211, 212, 136, 184, 213, 137]);
+    assert.equal(profiles.get('student_42').armor.id, 137, 'bulk armor grant does not replace equipped armor');
+
     const badSpec = await f.request('/auth/admin/player-profile/patch', jsonPost(
       { email: 'dylan.lynee@st-ignatius.example', abilityPath: 'mage', abilitySpec: 'grovekeeper' },
       { 'x-admin-reset-token': 'admin-secret' },

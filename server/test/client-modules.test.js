@@ -2793,6 +2793,9 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(networkPump, /animateAvatarCape\(r,now,moving\?\.85:\(ref\.mount\?\.25:\.06\),stride,stepDt\)/);
   assert.match(combat, /btn\.id='adminpreviewmodel'/);
   assert.match(combat, /adminPreviewModel\.classList\.toggle\('hidden',!admin\)/);
+  assert.match(combat, /id="admingrantallarmor"/);
+  assert.match(combat, /function adminArmorGrantList\(\)/);
+  assert.match(combat, /Added all armor sets to inventory/);
   assert.match(combat, /grant\.equip=true/);
   assert.match(combat, /profileRequest',\{reason:'admin_patch'\}/);
   assert.match(combat, /it will not appear in the bag/);

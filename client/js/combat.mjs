@@ -531,7 +531,8 @@ function ensureAdminExtendedControls(){
     wrap.innerHTML=
       '<label>Armor type<select id="adminarmortype"><option value="">Default</option><option value="scout">Scout</option><option value="vanguard">Vanguard</option><option value="bulwark">Bulwark</option><option value="aegis">Aegis</option></select></label>'+
       '<label>Rarity<select id="admingearrarity"><option value="">Default</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="mythic">Mythic</option></select></label>'+
-      '<label class="admincheck"><input id="adminequiparmor" type="checkbox"> Equip armor now</label>';
+      '<label class="admincheck"><input id="adminequiparmor" type="checkbox"> Equip armor now</label>'+
+      '<label class="admincheck adminspan"><input id="admingrantallarmor" type="checkbox"> Grant all armor to inventory</label>';
     while(wrap.firstChild)grid.insertBefore(wrap.firstChild,pathLabel||null);
   }
   if(actions&&!document.getElementById('adminpreviewmodel')){
@@ -560,6 +561,7 @@ const adminItemCount=document.getElementById('adminitemcount');
 const adminArmorType=document.getElementById('adminarmortype');
 const adminGearRarity=document.getElementById('admingearrarity');
 const adminEquipArmor=document.getElementById('adminequiparmor');
+const adminGrantAllArmor=document.getElementById('admingrantallarmor');
 const adminPreviewModel=document.getElementById('adminpreviewmodel');
 const adminAbilityPath=document.getElementById('adminabilitypath');
 const adminAbilitySpec=document.getElementById('adminabilityspec');
@@ -4501,6 +4503,16 @@ function adminItemIsArmor(id){
   const item=ITEMS&&ITEMS[id];
   return !!(item&&item.armor);
 }
+function adminArmorGrantList(){
+  return [
+    {id:I.HIDE_ARMOR,armorType:'scout'},
+    {id:I.CHAIN_ARMOR,armorType:'vanguard'},
+    {id:I.IRON_ARMOR,armorType:'vanguard'},
+    {id:I.DIA_ARMOR,armorType:'bulwark'},
+    {id:I.STORMGLASS_ARMOR,armorType:'scout'},
+    {id:I.LEGEND_ARMOR,armorType:'aegis'},
+  ].filter(g=>g.id&&ITEMS&&ITEMS[g.id]);
+}
 function syncAdminGearFields(){
   const id=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
   const armor=adminItemIsArmor(id);
@@ -4560,7 +4572,13 @@ function buildAdminPatch(){
   if(adminMaxStamina&&String(adminMaxStamina.value||'').trim())patch.maxSp=Math.max(1,Number(adminMaxStamina.value)||1);
   const itemId=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
   const itemCount=Math.max(1,Number(adminItemCount&&adminItemCount.value||1)|0);
-  if(itemId){
+  if(adminGrantAllArmor&&adminGrantAllArmor.checked){
+    patch.grantItems=adminArmorGrantList().map(grant=>({
+      ...grant,
+      count:1,
+      ...(adminGearRarity&&adminGearRarity.value?{rarity:adminGearRarity.value}:{}),
+    }));
+  }else if(itemId){
     const grant={id:itemId,count:itemCount};
     if(adminItemIsArmor(itemId)){
       if(adminArmorType&&adminArmorType.value)grant.armorType=adminArmorType.value;
@@ -4582,6 +4600,7 @@ function buildAdminPatch(){
 }
 function describeAdminGrantResult(patch,result){
   const grants=Array.isArray(patch&&patch.grantItems)?patch.grantItems:[];
+  if(grants.length>1&&grants.every(g=>adminItemIsArmor(g&&g.id|0)))return ' Added all armor sets to inventory.';
   const grant=grants[0], id=grant&&grant.id|0, item=id&&ITEMS&&ITEMS[id];
   if(!grant||!item)return '';
   const name=itemNameWithPlus({id, count:1, armorType:grant.armorType||'', rarity:grant.rarity||''});
