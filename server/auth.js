@@ -31,6 +31,22 @@ function hasOwn(obj, key) {
   return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+function adminMaxHp(profile) {
+  const growth = profile && profile.meditationGrowth || {};
+  return 20 + ((profile && profile.S && profile.S.vit || 1) - 1) * 2 + (growth.hp || 0);
+}
+
+function adminMaxMp(profile) {
+  const growth = profile && profile.meditationGrowth || {};
+  return 20 + ((profile && profile.S && profile.S.int || 1) - 1) * 3 + (growth.mp || 0);
+}
+
+function applyAdminMaxStat(profile, key, requestedMax, base, perPoint, growthKey) {
+  const growth = profile && profile.meditationGrowth || {};
+  const want = clampAdminInt(requestedMax, 1, JOB_XP_MAX);
+  profile.S[key] = clampAdminInt(Math.ceil((want - (growth[growthKey] || 0) - base) / perPoint) + 1, 1, 999);
+}
+
 function resolveAdminAbilityPath(value) {
   const path = cleanAdminId(value);
   if (!path) return '';
@@ -113,6 +129,8 @@ function adminProfileSummary(profile) {
     job: profile.job || '',
     jobXp: profile.jobXp | 0,
     jobXpByJob: { ...(profile.jobXpByJob || {}) },
+    maxHp: adminMaxHp(profile),
+    maxMp: adminMaxMp(profile),
     vitals: profile.vitals && typeof profile.vitals === 'object' ? {
       hp: Number(profile.vitals.hp) || 0,
       mp: Number(profile.vitals.mp) || 0,
@@ -483,6 +501,8 @@ class AuthService {
     if (hasOwn(patch, 'statPoints')) profile.S.pts = clampAdminInt(patch.statPoints, 0, 999);
     if (hasOwn(patch, 'gold')) profile.gold = clampAdminInt(patch.gold, 0, JOB_XP_MAX);
     if (hasOwn(patch, 'addGold')) profile.gold = clampAdminInt((profile.gold | 0) + Number(patch.addGold || 0), 0, JOB_XP_MAX);
+    if (hasOwn(patch, 'maxHp')) applyAdminMaxStat(profile, 'vit', patch.maxHp, 20, 2, 'hp');
+    if (hasOwn(patch, 'maxMp')) applyAdminMaxStat(profile, 'int', patch.maxMp, 20, 3, 'mp');
     if (hasOwn(patch, 'vitals')) {
       if (!patch.vitals || typeof patch.vitals !== 'object' || Array.isArray(patch.vitals)) {
         throw Object.assign(new Error('vitals must be an object.'), { status: 400, code: 'vitals' });

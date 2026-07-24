@@ -174,27 +174,30 @@
   <div id="devresetpanel">
     <div class="drpill">ADMIN TOOLS</div>
     <h2 id="devresettitle">Player Profile Editor</h2>
-    <p>Inspect and patch live profiles. Reset deletes game progress only.</p>
+    <p>Patch live profiles.</p>
     <label>Player to edit<input id="devresettarget" maxlength="255"></label>
     <label>Admin token<input id="devresettoken" type="password" maxlength="256"></label>
     <div class="admineditgrid">
       <label>Hunter level<input id="adminlevel" maxlength="3"></label>
       <label>Gold<input id="admingold" maxlength="10"></label>
       <label>Hunter XP<input id="adminxp" maxlength="10"></label>
-      <label>Stat points<input id="adminstatpoints" maxlength="4"></label>
-      <label>Current mana<input id="adminmana" maxlength="10"></label>
+      <label>Stat pts<input id="adminstatpoints" maxlength="4"></label>
+      <label>Current HP<input id="adminhealth" maxlength="10"></label>
+      <label>Max HP<input id="adminmaxhealth" maxlength="10"></label>
+      <label>Mana<input id="adminmana" maxlength="10"></label>
+      <label>Max mana<input id="adminmaxmana" maxlength="10"></label>
       <label>Item count<input id="adminitemcount" maxlength="4"></label>
-      <label class="adminspan">Grant item<select id="adminitemid" aria-label="Item to grant">
+      <label class="adminspan">Grant item<select id="adminitemid">
         <option value="">Choose item</option>
       </select></label>
-      <label>Ability path<select id="adminabilitypath" aria-label="Ability path">
+      <label>Ability path<select id="adminabilitypath">
         <option value="">No change</option>
         <option value="shadow">Shadow Monarch</option>
         <option value="mage">Arcane Magus</option>
         <option value="guardian">Iron Guardian</option>
         <option value="verdant">Verdant Shifter</option>
       </select></label>
-      <label>Specialization<select id="adminabilityspec" aria-label="Ability specialization">
+      <label>Specialization<select id="adminabilityspec">
         <option value="">No change</option>
         <option value="assassin">Assassin</option>
         <option value="commander">Commander</option>
@@ -205,7 +208,7 @@
         <option value="grovekeeper">Grovekeeper</option>
         <option value="nightstalker">Nightstalker</option>
       </select></label>
-      <label>Active job<select id="adminjob" aria-label="Job">
+      <label>Active job<select id="adminjob">
         <option value="">No change</option>
         <option value="adventurer">Adventurer</option>
         <option value="miner">Miner</option>

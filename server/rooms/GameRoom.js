@@ -1557,6 +1557,8 @@ class GameRoom extends Room {
           p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(next.appearance));
         }
         const vitals = this.cleanProfileVitals(next);
+        const maxHp = this.maxHpForProfile(next);
+        this.playerHp.set(client.sessionId, { hp: vitals.hp, max: maxHp });
         const maxMp = this.maxMpForProfile(next);
         this.abilityState.set(client.sessionId, { mp: vitals.mp, maxMp, cds: {}, last: Date.now() });
         this.sendAbilitySync(client, this.abilityState.get(client.sessionId));

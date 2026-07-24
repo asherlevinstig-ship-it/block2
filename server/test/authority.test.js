@@ -410,6 +410,7 @@ test('live admin profile updates replace cached mana state before the next vital
 
   const st = room.abilityState.get(client.sessionId);
   assert.equal(st.mp, 18);
+  assert.equal(room.playerHp.get(client.sessionId).max, room.maxHpForProfile(replacement));
   assert.equal(room.syncProfileVitals(client, room.profiles.get(token)).mp, 18);
   assert.equal(client.sent.some(e => e.type === 'abilitySync' && e.msg.mp === 18), true);
 });
