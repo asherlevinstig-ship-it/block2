@@ -2763,6 +2763,7 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const networkPump = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network-frame-pump.mjs'), 'utf8');
   assert.deepEqual(appearance.sanitizeAppearance({ hairStyle: 'long', outfitStyle: 'coat', accessory: 'scarf' }).hairStyle, 'long');
   assert.equal(appearance.sanitizeAppearance({ hairStyle: 'bad', outfitStyle: 'bad', accessory: 'bad' }).hairStyle, appearance.DEFAULT.hairStyle);
   assert.match(auth, /const presets = \[/);
@@ -2783,6 +2784,11 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(companions, /tabard panel separated from torso/);
   assert.match(companions, /raised trouser front panel/);
   assert.match(companions, /raised sleeve layer/);
+  assert.match(companions, /function animateAvatarCape\(avatar, now, speed=0, stride=0, dt=0\.016\)/);
+  assert.match(companions, /const upperCape=addCapePanel\(cape/);
+  assert.match(companions, /capeSegments\.push\(\{group, baseY:y, baseX:rotX, baseZ:rotZ/);
+  assert.match(networking, /animateAvatarCape\(dmy, now, moving\?\.85:\.08, sw, dt\)/);
+  assert.match(networkPump, /animateAvatarCape\(r,now,moving\?\.85:\(ref\.mount\?\.25:\.06\),stride,stepDt\)/);
   assert.match(world, /function pixelMaterialTextures\(col\)/);
   assert.match(world, /bumpScale:\.012/);
   assert.match(networking, /shadeHex\(look\.skin,12\)/);

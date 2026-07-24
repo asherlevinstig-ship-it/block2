@@ -2460,9 +2460,27 @@ function familiarBoundLocal(kind){
   questSystemCheck();
 }
 
+function animateAvatarCape(avatar, now, speed=0, stride=0, dt=0.016){
+  if(!avatar||!avatar.capeSegments||!avatar.capeSegments.length)return;
+  const t=now/1000+(avatar.phase||0);
+  const move=Math.max(0,Math.min(1,speed||0));
+  for(let i=0;i<avatar.capeSegments.length;i++){
+    const p=avatar.capeSegments[i], g=p&&p.group;
+    if(!g)continue;
+    const wave=Math.sin(t*(2.2+move*4.2)+p.phase+stride*.45);
+    const side=Math.sin(t*(1.4+move*2.2)+p.phase*.7);
+    const targetX=p.baseX+move*(.16+p.lag*.2)+wave*(.018+p.lag*.05);
+    const targetZ=p.baseZ+side*(.006+p.lag*.028);
+    const targetY=wave*(.003+p.lag*.012);
+    g.rotation.x+=(targetX-g.rotation.x)*Math.min(1,dt*12);
+    g.rotation.z+=(targetZ-g.rotation.z)*Math.min(1,dt*10);
+    g.position.y=p.baseY+targetY;
+  }
+}
+
 function makeRemoteAvatar(look){
   look=look||playerAppearance();
-  const grp=new THREE.Group(), legs=[], arms=[], hair=[], blink=[], idle=[], aegisGlow=[];
+  const grp=new THREE.Group(), legs=[], arms=[], hair=[], blink=[], idle=[], aegisGlow=[], capeSegments=[];
   const armorId=look.armorId|0;
   const armorType=gearSystem.ARMOR_ARCHETYPES[look.armorType]
     ?look.armorType:(armorId===137?'aegis':armorId===184?'bulwark':armorId?'vanguard':'');
@@ -2697,41 +2715,50 @@ function makeRemoteAvatar(look){
     addBox(torso,[.22,.18,.1],[0,-.45,-.17],aegisRuneM);       // central faulds plate
     addBox(torso,[.22,.05,.1],[0,-.36,-.175],capeTrimM);       // faulds gilt edge
   }
-  // flowing cape/cloak — cloth for hunters, a gilded royal mantle with legendary armor
+  function addCapePanel(parent,w,h,d,x,y,z,mat,rotX=0,rotZ=0){
+    const group=new THREE.Group(); group.position.set(x,y,z); group.rotation.x=rotX; group.rotation.z=rotZ; parent.add(group);
+    addBox(group,[w,h,d],[0,-h/2,0],mat);
+    capeSegments.push({group, baseY:y, baseX:rotX, baseZ:rotZ, phase:capeSegments.length*.83, lag:(capeSegments.length+1)/5});
+    return group;
+  }
+  function addCapePanelTrim(panel,w,h,mat){
+    addBox(panel,[.045,h,.065],[-w/2+.025,-h/2,.018],mat);
+    addBox(panel,[.045,h,.065],[w/2-.025,-h/2,.018],mat);
+  }
+  // segmented flowing cape/cloak - cloth for hunters, a gilded royal mantle with legendary armor
   const cape=new THREE.Group(); cape.position.set(0,.22,.15); torso.add(cape); idle.push(cape);
   addBox(cape,[isBulwark?.78:.62,isBulwark?.22:.17,isBulwark?.13:.1],[0,.1,.0],hasAegis?capeTrimM:(isBulwark?bulwarkArmorM:capeM)); // shoulder mantle
-  addBox(cape,[.5,.42,.05],[0,-.2,.04],capeM,[.07,0,0]);            // upper drape
+  const upperCape=addCapePanel(cape,.5,.42,.05,0,.01,.04,capeM,.07); // upper cloth hinge
   if(!isScout){
-    addBox(cape,[.54,.42,.05],[0,-.6,.1],capeM,[.13,0,0]);         // mid drape
-    addBox(cape,[.58,.42,.05],[0,-1.0,.18],capeM,[.19,0,0]);       // lower drape
-    addBox(cape,[.52,.2,.05],[0,-1.26,.26],capeM,[.24,0,0]);       // flared hem
+    const midCape=addCapePanel(cape,.54,.42,.05,0,-.39,.1,capeM,.13);      // mid cloth hinge
+    const lowerCape=addCapePanel(cape,.58,.42,.05,0,-.79,.18,capeM,.19);   // lower cloth hinge
+    const hemCape=addCapePanel(cape,.52,.2,.05,0,-1.16,.26,capeM,.24);     // flared hem hinge
+    addBox(hemCape,[.5,.055,.06],[0,-.19,.025],capeTrimM);
+    addCapePanelTrim(midCape,.54,.42,hasAegis?capeTrimM:scarfM);
+    addCapePanelTrim(lowerCape,.58,.42,hasAegis?capeTrimM:scarfM);
   } else {
-    addBox(cape,[.46,.22,.045],[0,-.48,.09],capeM,[.12,0,0]);     // short mobile cloak
+    const scoutCape=addCapePanel(cape,.46,.22,.045,0,-.37,.09,capeM,.12); // short mobile cloak hinge
+    addCapePanelTrim(scoutCape,.46,.22,scoutArmorM);
   }
+  addCapePanelTrim(upperCape,.5,.42,hasAegis?capeTrimM:(isScout?scoutArmorM:scarfM));
   if(hasAegis){
-    addBox(cape,[.05,1.9,.06],[-.27,-.5,.13],capeTrimM,[.13,0,0]); // gold trim rails
-    addBox(cape,[.05,1.9,.06],[.27,-.5,.13],capeTrimM,[.13,0,0]);
-    addBox(cape,[.5,.06,.06],[0,-1.32,.27],capeTrimM,[.24,0,0]);   // gold hem band
     addBox(cape,[.22,.22,.05],[0,-.08,.03],gemM);                  // Aegis sigil clasp
     addBox(cape,[.15,.06,.08],[0,.15,-.02],gemM);                  // collar gem
   } else if(isScout) {
-    addBox(cape,[.04,.72,.05],[-.23,-.17,.07],scoutArmorM,[.1,0,0]);
-    addBox(cape,[.04,.72,.05],[.23,-.17,.07],scoutArmorM,[.1,0,0]);
     addBox(cape,[.16,.08,.07],[0,.12,-.01],metalM);
   } else {
-    addBox(cape,[.05,1.7,.06],[-.25,-.42,.1],scarfM,[.13,0,0]);    // cloth edge stitching
-    addBox(cape,[.05,1.7,.06],[.25,-.42,.1],scarfM,[.13,0,0]);
     addBox(cape,[.16,.1,.07],[0,.12,-.01],metalM);                 // cloak clasp
   }
   if(hasCartographerMantle){
     addBox(cape,[.9,.18,.13],[0,.2,-.02],cartoGoldM);              // royal cartographer shoulder yoke
     addBox(cape,[.58,.08,.08],[0,.3,-.08],cartoLightM);            // sky-blue collar inlay
-    addBox(cape,[.72,.5,.055],[0,-.2,.02],cartoClothM,[.06,0,0]);
-    addBox(cape,[.82,.62,.055],[0,-.7,.1],cartoClothM,[.13,0,0]);
-    addBox(cape,[.76,.34,.055],[0,-1.18,.22],cartoClothM,[.2,0,0]);
-    addBox(cape,[.06,1.55,.065],[-.38,-.48,.12],cartoGoldM,[.12,0,0]);
-    addBox(cape,[.06,1.55,.065],[.38,-.48,.12],cartoGoldM,[.12,0,0]);
-    addBox(cape,[.66,.06,.065],[0,-1.38,.3],cartoGoldM,[.22,0,0]);
+    const mapUpper=addCapePanel(cape,.72,.5,.055,0,.05,.02,cartoClothM,.06);
+    const mapMid=addCapePanel(cape,.82,.62,.055,0,-.43,.1,cartoClothM,.13);
+    const mapLow=addCapePanel(cape,.76,.34,.055,0,-1.0,.22,cartoClothM,.2);
+    addCapePanelTrim(mapUpper,.72,.5,cartoGoldM);
+    addCapePanelTrim(mapMid,.82,.62,cartoGoldM);
+    addCapePanelTrim(mapLow,.76,.34,cartoGoldM);
+    addBox(mapLow,[.66,.06,.065],[0,-.33,.04],cartoGoldM);          // gold hem band
     addBox(cape,[.28,.2,.07],[0,-.52,.165],cartoLightM,[.13,0,0]); // map patch
     addBox(cape,[.2,.04,.08],[0,-.52,.205],cartoInkM,[.13,0,.15]);
     addBox(cape,[.04,.16,.08],[-.06,-.52,.21],cartoInkM,[.13,0,0]);
@@ -2888,7 +2915,7 @@ function makeRemoteAvatar(look){
     }
   }
   grp.add(blobShadow(1));
-  return {grp, legs, arms, head, look, hair, blink, idle, sword, aegisGlow};
+  return {grp, legs, arms, head, look, hair, blink, idle, sword, aegisGlow, cape, capeSegments};
 }
 function makePantherAvatar(){
   const grp=new THREE.Group(), legs=[], mats=[];
@@ -3298,6 +3325,7 @@ function netRemoveRemote(sid){
     bindFamiliarItem,
     familiarBoundLocal,
     makeRemoteAvatar,
+    animateAvatarCape,
     makePantherAvatar,
     applyPantherFormVisual,
     clearPantherFormVisual,

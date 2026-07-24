@@ -3263,7 +3263,7 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
   react:(type,mood)=>COMPANIONS.dragonReaction ? COMPANIONS.dragonReaction(type,mood) : false,
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
@@ -3444,6 +3444,7 @@ function poseAppearanceDummy(dmy, x, y, z, rot, dt, now, snap, backView){
   if(dmy.sword) dmy.sword.rotation.z=Math.sin(idleT*1.3)*.006;
   if(buffs.dmg>0) shadowWeaponPulse(dmy,.8);
   if(dmy.idle) for(let i=0;i<dmy.idle.length;i++) dmy.idle[i].rotation.z=Math.sin(idleT*1.2+i)*.0015;
+  animateAvatarCape(dmy, now, moving?.85:.08, sw, dt);
   pulseAegisGlow(dmy, now);
   if(dmy.blink){
     const blinkNow=(Math.sin(idleT*.95)>0.992);
@@ -3481,6 +3482,7 @@ function poseMeditationDummy(dmy, dt, now, snap){
   if(dmy.sword) dmy.sword.visible=false;
   dmy.grp.position.y=y+breath;
   if(dmy.idle) for(let i=0;i<dmy.idle.length;i++) dmy.idle[i].rotation.z=Math.sin(t*.9+i)*.002;
+  animateAvatarCape(dmy, now, .04, 0, dt);
   pulseAegisGlow(dmy, now);
   if(meditateRing){
     meditateMat.opacity=.1+.05*Math.sin(t*1.2);
@@ -4833,6 +4835,7 @@ const netTick=createNetworkFramePump({
   dragonType,
   emitDragonTrail,
   pulseAegisGlow,
+  animateAvatarCape,
   tickSpiritVisual,
   tickPantherFormVisual,
   tickLocalSpiritVisual,
