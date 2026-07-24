@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const express = require('express');
 const { AuthService } = require('../auth');
+const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
 
 async function fixture({ production = false, trustProxy = 1, clientOrigin = '', profileStore, authOptions = {}, env = {} } = {}) {
   const previousEnv = process.env.NODE_ENV;
@@ -325,6 +326,18 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     const cleared = await f.request('/auth/admin/identity-trace/clear', jsonPost({}, { 'x-admin-reset-token': 'admin-secret' }));
     assert.equal(cleared.status, 200);
     assert.equal((await cleared.json()).ok, true);
+
+    recordRoomLifecycleTrace('test.room.ready', { roomId: 'room-a', shardId: 'main' });
+    const deniedRoomTrace = await f.request('/auth/admin/room-lifecycle');
+    assert.equal(deniedRoomTrace.status, 403);
+    const roomTrace = await f.request('/auth/admin/room-lifecycle', { headers: { 'x-admin-reset-token': 'admin-secret' } });
+    assert.equal(roomTrace.status, 200);
+    const roomTraceBody = await roomTrace.json();
+    assert.equal(roomTraceBody.ok, true);
+    assert.equal(roomTraceBody.events.some(event => event.type === 'test.room.ready' && event.roomId === 'room-a'), true);
+    const roomTraceCleared = await f.request('/auth/admin/room-lifecycle/clear', jsonPost({}, { 'x-admin-reset-token': 'admin-secret' }));
+    assert.equal(roomTraceCleared.status, 200);
+    assert.equal((await roomTraceCleared.json()).ok, true);
   } finally { await f.close(); }
 });
 

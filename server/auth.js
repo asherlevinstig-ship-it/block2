@@ -5,6 +5,7 @@ const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
+const { clearRoomLifecycleTrace, recentRoomLifecycleTrace } = require('./room-lifecycle-trace');
 const { I, JOB_IDS, ITEM_NAMES } = require('./rooms/constants');
 
 const COOKIE = 'bc_session';
@@ -641,6 +642,18 @@ class AuthService {
       const provided = String(req.headers['x-admin-reset-token'] || '');
       if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
       res.json({ ok: true, cleared: clearIdentityTrace() });
+    });
+    app.get('/auth/admin/room-lifecycle', (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || req.query && req.query.token || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      res.json({ ok: true, events: recentRoomLifecycleTrace() });
+    });
+    app.post('/auth/admin/room-lifecycle/clear', (req, res) => {
+      const expected = String(process.env.ADMIN_RESET_TOKEN || '');
+      const provided = String(req.headers['x-admin-reset-token'] || '');
+      if (!expected || provided !== expected) return res.status(403).json({ ok: false, error: 'Forbidden.' });
+      res.json({ ok: true, cleared: clearRoomLifecycleTrace() });
     });
     app.post('/auth/logout', async (req, res) => {
       const sid = parseCookies(req.headers.cookie)[COOKIE];

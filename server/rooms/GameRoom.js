@@ -21,6 +21,7 @@ const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summariz
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { registerProfileResetHandler, registerProfileUpdateHandler } = require('../profile-reset');
 const { accountSummary, recordIdentityTrace, shortHash } = require('../identity-trace');
+const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -46,9 +47,7 @@ function elapsedMs(start) {
 }
 
 function logRoomLifecycle(event, data = {}) {
-  const payload = { event, at: new Date().toISOString(), ...data };
-  try { console.log('[room-lifecycle] ' + JSON.stringify(payload)); }
-  catch (_) { console.log('[room-lifecycle] ' + event); }
+  return recordRoomLifecycleTrace(event, data);
 }
 
 function headerValue(headers, name) {
