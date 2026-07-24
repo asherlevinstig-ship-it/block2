@@ -2254,6 +2254,9 @@ test('top-screen smart hints dismiss themselves after thirty seconds',()=>{
   assert.match(networking,/SMART_SUGGESTION_VISIBLE_MS=30000/);
   assert.match(networking,/expiresAt:performance\.now\(\)\+SMART_SUGGESTION_VISIBLE_MS/);
   assert.match(networking,/now>=smartSuggestion\.expiresAt[\s\S]*markSmartSuggestionDone\(smartSuggestion\.id\)[\s\S]*hideSmartSuggestion\(\)/);
+  assert.match(networking,/function objectiveNeedsHudPriority\(\)\{/);
+  assert.match(networking,/kind==='story' \|\| kind==='tutorial' \|\| kind==='transition'/);
+  assert.match(networking,/if\(objectiveNeedsHudPriority\(\)\) return false;/);
 });
 
 test('regional road safety stays in the bottom-left event log instead of the side tracker',()=>{

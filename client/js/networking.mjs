@@ -4635,6 +4635,11 @@ function activeCoachObjective(){
   }catch(e){}
   return null;
 }
+function objectiveNeedsHudPriority(){
+  const obj=activeCoachObjective();
+  const kind=String(obj&&obj.kind||'').toLowerCase();
+  return kind==='story' || kind==='tutorial' || kind==='transition';
+}
 function smartSuggestionCandidates(){
   const out=[];
   const obj=activeCoachObjective();
@@ -4710,6 +4715,7 @@ function smartSuggestionsAllowed(){
   if(!(locked || lockFallback)) return false;
   if(onboardingActive || pathChoiceOpen || jobChoiceOpen || claimMode || uiOpen || statOpen || qOpen) return false;
   if(rewardWin && !rewardWin.classList.contains('hidden')) return false;
+  if(objectiveNeedsHudPriority()) return false;
   return true;
 }
 function showSmartSuggestion(s){
