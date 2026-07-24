@@ -2796,6 +2796,14 @@ test('play flow does not overwrite an existing server hunter name from the input
   assert.match(combatSource, /await AUTH_UI\.saveHunterName\(hunterName\);/);
 });
 
+test('stored signed-in sessions auto-resume into the live room after refresh', () => {
+  const combatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  assert.match(combatSource, /checkAuth\(\)\.then\(account=>\{/);
+  assert.match(combatSource, /account && AUTH_UI\.hasHunterName\(\) && !NET\.tried/);
+  assert.match(combatSource, /setAuthStatus\('RESTORING GAME\.\.\.'\);/);
+  assert.match(combatSource, /startPlaying\(false\);/);
+});
+
 test('rendering runtime owns renderer initialization resize and draw', async () => {
   const { createRenderingRuntime } = await clientModule('rendering.mjs');
   const calls = [], canvas = {};

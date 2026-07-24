@@ -4374,7 +4374,12 @@ async function startPlaying(create=false){
   }
 }
 try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
-checkAuth();
+checkAuth().then(account=>{
+  if(account && AUTH_UI.hasHunterName() && !NET.tried){
+    setAuthStatus('RESTORING GAME...');
+    startPlaying(false);
+  }
+}).catch(()=>{});
 function primeMenuAudio(){ if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
