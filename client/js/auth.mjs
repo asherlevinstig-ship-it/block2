@@ -21,6 +21,16 @@ export function createAuthController({ user, password, playerName, status, play,
     return el;
   }
 
+  function mirrorOpen() {
+    return !!(creator && creator.dataset.mode === 'mirror' && creator.classList.contains('floating'));
+  }
+
+  function mountCharacterCreator(mode = 'setup') {
+    if (!creator) return;
+    const target = mode === 'mirror' && typeof document !== 'undefined' ? document.body : hunterSetup;
+    if (target && creator.parentElement !== target) target.appendChild(creator);
+  }
+
   function esc(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch]);
   }
@@ -67,6 +77,7 @@ export function createAuthController({ user, password, playerName, status, play,
     if (!creator) return;
     creator.classList.remove('floating');
     if (typeof document !== 'undefined') document.body.classList.remove('game-modal-open');
+    mountCharacterCreator('setup');
     creator.classList.toggle('hidden', !!(state.gameProfile && state.gameProfile.nameSet));
     creator.dataset.mode = 'setup';
     renderCharacterCreator('setup');
@@ -77,6 +88,7 @@ export function createAuthController({ user, password, playerName, status, play,
     if (mode === 'mirror' && typeof document !== 'undefined') {
       try { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); } catch (_) {}
     }
+    mountCharacterCreator(mode);
     setAppearance(state.gameProfile && state.gameProfile.appearance || draftAppearance);
     creator.classList.remove('hidden');
     creator.classList.toggle('floating', mode === 'mirror');
@@ -129,6 +141,7 @@ export function createAuthController({ user, password, playerName, status, play,
 
   function render() {
     const signed = !!state.account;
+    const editingMirror = mirrorOpen();
     user.classList.toggle('hidden', signed);
     password.classList.toggle('hidden', signed);
     if (hunterSetup) hunterSetup.classList.toggle('hidden', !signed || hasHunterName());
@@ -141,8 +154,15 @@ export function createAuthController({ user, password, playerName, status, play,
       else setStatus('CHOOSE YOUR HUNTER NAME');
     }
     if (creator) {
-      creator.classList.toggle('hidden', !signed || hasHunterName());
-      renderCharacterCreator('setup');
+      if (editingMirror) {
+        mountCharacterCreator('mirror');
+        creator.classList.remove('hidden');
+        renderCharacterCreator('mirror');
+      } else {
+        mountCharacterCreator('setup');
+        creator.classList.toggle('hidden', !signed || hasHunterName());
+        renderCharacterCreator('setup');
+      }
     }
   }
 

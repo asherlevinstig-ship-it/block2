@@ -2748,6 +2748,14 @@ test('auth controller logs into the typed account instead of reusing a different
   }
 });
 
+test('mirror appearance editor stays mounted outside the login setup flow', () => {
+  const auth = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
+  assert.match(auth, /function mountCharacterCreator\(mode = 'setup'\)/);
+  assert.match(auth, /const target = mode === 'mirror' && typeof document !== 'undefined' \? document\.body : hunterSetup;/);
+  assert.match(auth, /if \(editingMirror\) \{\s*mountCharacterCreator\('mirror'\);[\s\S]*renderCharacterCreator\('mirror'\);/);
+  assert.match(auth, /mountCharacterCreator\('setup'\);[\s\S]*creator\.dataset\.mode = 'setup';/);
+});
+
 test('auth controller clears stale hunter name when the signed-in account has no profile name', async () => {
   const previousLocalStorage = globalThis.localStorage;
   const previousSessionStorage = globalThis.sessionStorage;
