@@ -6,9 +6,10 @@ const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitiz
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
 const { clearRoomLifecycleTrace, recentRoomLifecycleTrace } = require('./room-lifecycle-trace');
-const { I, JOB_IDS, ITEM_NAMES, ABILITY_SYSTEM, UTILITY_IDS } = require('./rooms/constants');
+const { I, JOB_IDS, ITEM_NAMES, ABILITY_SYSTEM, UTILITY_IDS, ARMOR_INFO, TOOL_INFO } = require('./rooms/constants');
 const APPEARANCE_SYSTEM = require('../shared/appearance-system');
 const ABILITY_PROGRESSION = require('../shared/ability-progression');
+const GEAR_SYSTEM = require('../shared/gear-system');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -145,24 +146,51 @@ function adminProfileSummary(profile) {
     } : { hp: 0, mp: 0, sp: 0, hunger: 0 },
     utilityUnlocks: Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [],
     utilityLoadout: sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks),
-    inv: (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 })),
+    armor: profile.armor ? { ...profile.armor, count: 1 } : null,
+    inv: (profile.inv || []).filter(Boolean).map(slot => ({ ...slot, count: slot.count || 1 })),
   };
 }
 
-function grantProfileItem(profile, id, count) {
-  const itemId = Math.max(1, Math.round(Number(id) || 0));
-  const qty = Math.max(1, Math.min(999, Math.round(Number(count) || 1)));
-  if (!KNOWN_ITEM_IDS.has(itemId) && !ITEM_NAMES[itemId]) throw Object.assign(new Error('Unknown item id.'), { status: 400, code: 'item' });
+function adminGearStack(raw) {
+  const itemId = Math.max(1, Math.round(Number(raw && raw.id) || 0));
+  const info = ARMOR_INFO[itemId] || TOOL_INFO[itemId] || null;
+  if (!KNOWN_ITEM_IDS.has(itemId) && !ITEM_NAMES[itemId] && !info) throw Object.assign(new Error('Unknown item id.'), { status: 400, code: 'item' });
+  const qty = Math.max(1, Math.min(info ? 1 : 999, Math.round(Number(raw && raw.count) || 1)));
+  const stack = { id: itemId, count: qty };
+  if (info) {
+    stack.count = 1;
+    stack.dur = Math.max(1, Math.min(99999, Math.round(Number(raw && raw.dur) || info.dur || 1)));
+    stack.source = 'admin';
+  }
+  if (ARMOR_INFO[itemId]) {
+    const type = String(raw && raw.armorType || ARMOR_INFO[itemId].armorType || 'vanguard').trim();
+    stack.armorType = GEAR_SYSTEM.ARMOR_ARCHETYPES[type] ? type : ARMOR_INFO[itemId].armorType || 'vanguard';
+  }
+  if (GEAR_SYSTEM.RARITIES.some(r => r.id === String(raw && raw.rarity || ''))) stack.rarity = String(raw.rarity);
+  if (GEAR_SYSTEM.RANKS.some((r, i) => i < 6 && r.id === String(raw && raw.gearRank || ''))) stack.gearRank = String(raw.gearRank);
+  if (raw && raw.locked === true) stack.locked = true;
+  return stack;
+}
+
+function grantProfileItem(profile, rawOrId, count) {
+  const raw = rawOrId && typeof rawOrId === 'object' ? rawOrId : { id: rawOrId, count };
+  const next = adminGearStack(raw);
+  const itemId = next.id;
+  const qty = next.count;
+  if (raw && raw.equip === true) {
+    if (!ARMOR_INFO[itemId]) throw Object.assign(new Error('Only armor can be equipped by admin grant.'), { status: 400, code: 'equip' });
+    profile.armor = { ...next, count: 1 };
+    return;
+  }
   const inv = Array.isArray(profile.inv) ? profile.inv : [];
   for (const slot of inv) {
-    if (slot && slot.id === itemId && !slot.gear && !slot.rarity && !slot.dur) {
+    if (!ARMOR_INFO[itemId] && !TOOL_INFO[itemId] && slot && slot.id === itemId && !slot.gear && !slot.rarity && !slot.dur) {
       slot.count = Math.max(1, Math.min(999, (slot.count | 0) + qty));
       profile.inv = inv;
       return;
     }
   }
   const empty = inv.findIndex(slot => !slot);
-  const next = { id: itemId, count: qty };
   if (empty >= 0) inv[empty] = next;
   else if (inv.length < INV_MAX) inv.push(next);
   else throw Object.assign(new Error('Inventory is full.'), { status: 409, code: 'inventory_full' });
@@ -541,7 +569,7 @@ class AuthService {
     if (hasOwn(patch, 'utilityUnlocks') || hasOwn(patch, 'grantUtilities') || hasOwn(patch, 'revokeUtilities') || hasOwn(patch, 'utilityLoadout')) applyAdminUtilities(profile, patch);
 
     const grants = Array.isArray(patch && patch.grantItems) ? patch.grantItems : [];
-    for (const item of grants) grantProfileItem(profile, item && item.id, item && item.count);
+    for (const item of grants) grantProfileItem(profile, item);
 
     profile = sanitizeProfile(profile);
     await store.savePlayer(account.id, profile);

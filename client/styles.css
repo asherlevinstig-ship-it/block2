@@ -203,13 +203,15 @@
   #devreset label{display:block;margin:0 0 10px;color:#7dd3fc;font-size:10px;letter-spacing:2px;text-transform:uppercase}
   .admineditgrid label{margin:0}
   .admineditgrid .adminspan{grid-column:1/-1}
+  .admineditgrid .admincheck{display:flex;align-items:center;gap:9px;min-height:43px;border:1px solid rgba(125,211,252,.34);border-radius:6px;padding:8px 12px;background:#07111d;color:#dff7ff;letter-spacing:1.6px}
+  .admineditgrid .admincheck input{width:auto;height:auto;margin:0;accent-color:#7dd3fc}
   #admininspectout{max-height:170px;overflow:auto;margin:2px 0 11px;padding:10px;border:1px solid rgba(125,211,252,.24);border-radius:5px;background:#050b12;color:#bde8ff;font-size:10px;line-height:1.45;white-space:pre-wrap;user-select:text}
   #admininspectout.hidden{display:none}
   #devresetstatus{min-height:18px;margin:3px 0 11px;color:#ffcf9a;font-size:11px;line-height:1.4}
   #devresetstatus.ok{color:#9be76d}#devresetstatus.bad{color:#ff8f8f}
   .devresetactions{display:flex;justify-content:flex-end;gap:8px}
   .devresetactions button{font-family:inherit;font-size:12px;letter-spacing:2px;padding:10px 14px;border-radius:5px;border:1px solid rgba(255,255,255,.16);background:#162133;color:#dceaff;cursor:pointer}
-  .devresetactions #admininspectgo,.devresetactions #adminpatchgo{background:#12314a;border-color:#7dd3fc;color:#dff7ff}
+  .devresetactions #admininspectgo,.devresetactions #adminpatchgo,.devresetactions #adminpreviewmodel{background:#12314a;border-color:#7dd3fc;color:#dff7ff}
   .devresetactions #devresetgo{background:#6b241f;border-color:#ff695c;color:#fff}
   @media(max-width:560px){.admineditgrid{grid-template-columns:1fr}.devresetactions{flex-wrap:wrap}.devresetactions button{flex:1 1 42%}}
   .character-creator{margin-top:10px;padding:12px;border:1px solid rgba(125,211,252,.32);border-radius:8px;background:linear-gradient(180deg,rgba(5,13,24,.68),rgba(4,10,18,.58));color:#dceaff;text-align:left}

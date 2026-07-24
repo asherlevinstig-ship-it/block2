@@ -522,6 +522,25 @@ const devResetTarget=document.getElementById('devresettarget');
 const devResetToken=document.getElementById('devresettoken');
 const devResetStatus=document.getElementById('devresetstatus');
 const devResetGo=document.getElementById('devresetgo');
+function ensureAdminExtendedControls(){
+  const grid=document.querySelector('#devreset .admineditgrid');
+  const actions=document.querySelector('#devreset .devresetactions');
+  const pathLabel=document.getElementById('adminabilitypath')&&document.getElementById('adminabilitypath').closest('label');
+  if(grid&&!document.getElementById('adminarmortype')){
+    const wrap=document.createElement('div');
+    wrap.innerHTML=
+      '<label>Armor type<select id="adminarmortype"><option value="">Default</option><option value="scout">Scout</option><option value="vanguard">Vanguard</option><option value="bulwark">Bulwark</option><option value="aegis">Aegis</option></select></label>'+
+      '<label>Rarity<select id="admingearrarity"><option value="">Default</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="mythic">Mythic</option></select></label>'+
+      '<label class="admincheck"><input id="adminequiparmor" type="checkbox"> Equip armor now</label>';
+    while(wrap.firstChild)grid.insertBefore(wrap.firstChild,pathLabel||null);
+  }
+  if(actions&&!document.getElementById('adminpreviewmodel')){
+    const btn=document.createElement('button');
+    btn.id='adminpreviewmodel';btn.type='button';btn.textContent='MODEL';
+    actions.insertBefore(btn,document.getElementById('adminpatchgo')||devResetGo||null);
+  }
+}
+ensureAdminExtendedControls();
 const devResetCancel=document.getElementById('devresetcancel');
 const adminInspectGo=document.getElementById('admininspectgo');
 const adminPatchGo=document.getElementById('adminpatchgo');
@@ -538,6 +557,10 @@ const adminStamina=document.getElementById('adminstamina');
 const adminMaxStamina=document.getElementById('adminmaxstamina');
 const adminItemId=document.getElementById('adminitemid');
 const adminItemCount=document.getElementById('adminitemcount');
+const adminArmorType=document.getElementById('adminarmortype');
+const adminGearRarity=document.getElementById('admingearrarity');
+const adminEquipArmor=document.getElementById('adminequiparmor');
+const adminPreviewModel=document.getElementById('adminpreviewmodel');
 const adminAbilityPath=document.getElementById('adminabilitypath');
 const adminAbilitySpec=document.getElementById('adminabilityspec');
 const adminJob=document.getElementById('adminjob');
@@ -4436,6 +4459,25 @@ function setDevResetStatus(text,kind=''){
 }
 function populateAdminItemOptions(){
   if(!adminItemId||adminItemId.dataset.ready)return;
+  const armorRows=[
+    [I.HIDE_ARMOR,'Hide Armor - Scout'],
+    [I.CHAIN_ARMOR,'Chain Armor - Vanguard'],
+    [I.IRON_ARMOR,'Iron Armor - Vanguard'],
+    [I.DIA_ARMOR,'Diamond Armor - Bulwark'],
+    [I.STORMGLASS_ARMOR,'Stormglass Armor - Scout'],
+    [I.LEGEND_ARMOR,'Legendary Aegis Armor - Aegis'],
+  ].filter(row=>row[0]&&ITEMS[row[0]]);
+  if(armorRows.length){
+    const group=document.createElement('optgroup');
+    group.label='Armor presets';
+    for(const [id,name] of armorRows){
+      const opt=document.createElement('option');
+      opt.value=String(id);
+      opt.textContent=name+'  #'+id;
+      group.appendChild(opt);
+    }
+    adminItemId.appendChild(group);
+  }
   const rows=Object.entries(ITEMS||{})
     .map(([id,item])=>({id:Number(id)||0,name:String(item&&item.name||'Item '+id)}))
     .filter(row=>row.id>0&&row.name)
@@ -4453,6 +4495,24 @@ function syncAdminTokenField(){
   const admin=!!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount());
   devResetToken.placeholder=admin?'SIGNED IN ADMIN - TOKEN OPTIONAL':'ADMIN RESET TOKEN';
   devResetToken.classList.toggle('admin-recognized',admin);
+  if(adminPreviewModel)adminPreviewModel.classList.toggle('hidden',!admin);
+}
+function adminItemIsArmor(id){
+  const item=ITEMS&&ITEMS[id];
+  return !!(item&&item.armor);
+}
+function syncAdminGearFields(){
+  const id=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
+  const armor=adminItemIsArmor(id);
+  if(adminArmorType)adminArmorType.disabled=!armor;
+  if(adminEquipArmor)adminEquipArmor.disabled=!armor;
+  if(!armor&&adminEquipArmor)adminEquipArmor.checked=false;
+  if(armor&&adminArmorType&&!adminArmorType.value){
+    if(id===I.HIDE_ARMOR||id===I.STORMGLASS_ARMOR)adminArmorType.value='scout';
+    else if(id===I.DIA_ARMOR)adminArmorType.value='bulwark';
+    else if(id===I.LEGEND_ARMOR)adminArmorType.value='aegis';
+    else adminArmorType.value='vanguard';
+  }
 }
 function setAdminInspectOut(data){
   if(!adminInspectOut)return;
@@ -4500,7 +4560,15 @@ function buildAdminPatch(){
   if(adminMaxStamina&&String(adminMaxStamina.value||'').trim())patch.maxSp=Math.max(1,Number(adminMaxStamina.value)||1);
   const itemId=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
   const itemCount=Math.max(1,Number(adminItemCount&&adminItemCount.value||1)|0);
-  if(itemId)patch.grantItems=[{id:itemId,count:itemCount}];
+  if(itemId){
+    const grant={id:itemId,count:itemCount};
+    if(adminItemIsArmor(itemId)){
+      if(adminArmorType&&adminArmorType.value)grant.armorType=adminArmorType.value;
+      if(adminEquipArmor&&adminEquipArmor.checked)grant.equip=true;
+    }
+    if(adminGearRarity&&adminGearRarity.value)grant.rarity=adminGearRarity.value;
+    patch.grantItems=[grant];
+  }
   if(adminAbilityPath&&adminAbilityPath.value)patch.abilityPath=adminAbilityPath.value;
   if(adminAbilitySpec&&adminAbilitySpec.value)patch.abilitySpec=adminAbilitySpec.value;
   if(adminJob&&adminJob.value)patch.job=adminJob.value;
@@ -4522,10 +4590,14 @@ function openDevResetPanel(){
   if(!devReset)return;
   populateAdminItemOptions();
   syncAdminTokenField();
+  syncAdminGearFields();
   if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
   lockFallback=false;locked=false;refreshPlayUi();
   const account=AUTH&&AUTH.account;
-  if(devResetTarget&&!devResetTarget.value)devResetTarget.value=account&&account.id||authuser.value||'';
+  if(devResetTarget&&!devResetTarget.value){
+    const email=String(account&&account.username||authuser.value||'').trim();
+    devResetTarget.value=email.toLowerCase()==='asherlevin85@gmail.com'?'asherlevin85@gmail.com':(account&&account.id||email);
+  }
   try{if(devResetToken&&!devResetToken.value)devResetToken.value=sessionStorage.getItem('bc_admin_reset_token')||'';}catch(e){}
   devReset.classList.remove('hidden');
   setDevResetStatus(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()?'Admin account recognized. Token is optional.':'Inspect, patch, or reset a live player game profile.');
@@ -4597,6 +4669,15 @@ async function runDevReset(){
 if(devResetCancel)devResetCancel.addEventListener('click',closeDevResetPanel);
 if(adminInspectGo)adminInspectGo.addEventListener('click',runAdminInspect);
 if(adminPatchGo)adminPatchGo.addEventListener('click',runAdminPatch);
+if(adminItemId)adminItemId.addEventListener('change',syncAdminGearFields);
+if(adminPreviewModel)adminPreviewModel.addEventListener('click',()=>{
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Model preview is admin-only.','bad');return;}
+  const preview=globalThis.BlockcraftAppearancePreview;
+  if(preview&&preview.show){
+    preview.show();
+    setDevResetStatus('Admin model preview placed in front of you.','ok');
+  }else setDevResetStatus('Model preview is not ready yet. Enter the world first.','bad');
+});
 if(devResetGo)devResetGo.addEventListener('click',runDevReset);
 if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});

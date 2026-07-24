@@ -327,7 +327,10 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
         vitals: { hp: 40, mp: 14, sp: 120 },
         utilityUnlocks: ['compass', 'trail_sense'],
         utilityLoadout: { active: 'trail_sense', passive: ['compass'] },
-        grantItems: [{ id: 185, count: 1 }],
+        grantItems: [
+          { id: 185, count: 1 },
+          { id: 137, count: 1, armorType: 'aegis', rarity: 'mythic', equip: true },
+        ],
       },
       { 'x-admin-reset-token': 'admin-secret' },
     ));
@@ -370,6 +373,11 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.deepEqual(profiles.get('student_42').utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.equal(profiles.get('student_42').forceJobChoice, false);
     assert.deepEqual(profiles.get('student_42').inv, [{ id: 185, count: 1 }]);
+    assert.equal(profiles.get('student_42').armor.id, 137);
+    assert.equal(profiles.get('student_42').armor.armorType, 'aegis');
+    assert.equal(profiles.get('student_42').armor.rarity, 'mythic');
+    assert.equal(profiles.get('student_42').armor.source, 'admin');
+    assert.ok(profiles.get('student_42').armor.dur > 0);
 
     const detailed = await f.request('/auth/admin/player-profile', jsonPost(
       { email: 'dylan.lynee@st-ignatius.example', details: true },
@@ -382,6 +390,8 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(detailedBody.profile.abilitySpec, 'grovekeeper');
     assert.deepEqual(detailedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.deepEqual(detailedBody.profile.inv, [{ id: 185, count: 1 }]);
+    assert.equal(detailedBody.profile.armor.id, 137);
+    assert.equal(detailedBody.profile.armor.armorType, 'aegis');
 
     const badSpec = await f.request('/auth/admin/player-profile/patch', jsonPost(
       { email: 'dylan.lynee@st-ignatius.example', abilityPath: 'mage', abilitySpec: 'grovekeeper' },

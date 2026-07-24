@@ -2761,9 +2761,11 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   const auth = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const networkPump = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'network-frame-pump.mjs'), 'utf8');
+  const index = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   assert.deepEqual(appearance.sanitizeAppearance({ hairStyle: 'long', outfitStyle: 'coat', accessory: 'scarf' }).hairStyle, 'long');
   assert.equal(appearance.sanitizeAppearance({ hairStyle: 'bad', outfitStyle: 'bad', accessory: 'bad' }).hairStyle, appearance.DEFAULT.hairStyle);
   assert.match(auth, /const presets = \[/);
@@ -2789,6 +2791,10 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(companions, /capeSegments\.push\(\{group, baseY:y, baseX:rotX, baseZ:rotZ/);
   assert.match(networking, /animateAvatarCape\(dmy, now, moving\?\.85:\.08, sw, dt\)/);
   assert.match(networkPump, /animateAvatarCape\(r,now,moving\?\.85:\(ref\.mount\?\.25:\.06\),stride,stepDt\)/);
+  assert.match(combat, /btn\.id='adminpreviewmodel'/);
+  assert.match(combat, /adminPreviewModel\.classList\.toggle\('hidden',!admin\)/);
+  assert.match(combat, /grant\.equip=true/);
+  assert.match(companions + networking, /BlockcraftAppearancePreview/);
   assert.match(world, /function pixelMaterialTextures\(col\)/);
   assert.match(world, /bumpScale:\.012/);
   assert.match(networking, /shadeHex\(look\.skin,12\)/);
