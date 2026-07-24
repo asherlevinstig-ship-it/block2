@@ -1834,6 +1834,8 @@ function runPortalTransition(opts, swap){
       wrap.classList.add('arrived');
       setTimeout(()=>{
         wrap.classList.remove('active','arrived','dungeon','taming');
+        if(titleEl)titleEl.textContent='';
+        if(subEl)subEl.textContent='';
         portalTransitionActive=false;
       },460);
     }

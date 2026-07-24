@@ -219,7 +219,7 @@
   #awakeningpanel .awakening-actions{position:relative;z-index:7;pointer-events:auto}
   #awakeningpanel button{position:relative;z-index:5;pointer-events:auto;display:inline-block;font-family:inherit;font-size:14px;letter-spacing:3px;padding:13px 28px;background:#9ad26b;color:#102015;border:0;border-bottom:4px solid #4d7a36;border-radius:7px;cursor:pointer}
   #awakeningpanel button:hover{background:#b1e37e}
-  #eventhud{position:fixed;top:8px;left:50%;transform:translateX(-50%);width:clamp(420px,44vw,660px);max-width:calc(100vw - 500px);display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:7px;background:rgba(7,10,18,.82);border:1px solid rgba(184,140,255,.36);box-shadow:0 6px 18px rgba(0,0,0,.32),inset 0 0 12px rgba(255,255,255,.025);border-radius:6px;padding:4px 7px;color:#efe7ff;z-index:8}
+  #eventhud{position:fixed;top:8px;left:50%;transform:translateX(-50%);width:clamp(360px,36vw,560px);max-width:calc(100vw - 560px);display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:7px;background:rgba(7,10,18,.74);border:1px solid rgba(184,140,255,.28);box-shadow:0 6px 14px rgba(0,0,0,.24),inset 0 0 10px rgba(255,255,255,.02);border-radius:6px;padding:4px 7px;color:#efe7ff;z-index:8}
   #eventhud.idle{border-color:rgba(145,164,189,.32);box-shadow:0 5px 16px rgba(0,0,0,.28),inset 0 0 10px rgba(145,164,189,.035)}
   #eventhud.queue{border-color:rgba(255,210,74,.5);box-shadow:0 6px 18px rgba(0,0,0,.32),inset 0 0 10px rgba(255,210,74,.05)}
   #eventhud.joined{border-color:rgba(154,210,107,.56);box-shadow:0 6px 18px rgba(0,0,0,.32),inset 0 0 10px rgba(154,210,107,.06)}
@@ -957,6 +957,7 @@
   #portaltransition.active .portalwarp{animation:portalWarp .74s ease-in forwards}
   #portaltransition.arrived .portalwarp{animation:portalUnwarp .42s ease-out forwards}
   .portaltransition-copy{position:relative;z-index:1;display:grid;gap:8px;text-align:center;transform:translateY(8px);opacity:0;color:#f3fbff;text-shadow:0 2px 0 #000,0 0 18px rgba(125,211,252,.45)}
+  #portaltransition:not(.active):not(.arrived) .portaltransition-copy{visibility:hidden}
   #portaltransition.active .portaltransition-copy{animation:portalCopyIn .22s .08s ease forwards}
   #portaltransition.arrived .portaltransition-copy{animation:portalCopyOut .25s ease forwards}
   .portaltransition-copy b{font-size:23px;letter-spacing:7px;text-transform:uppercase;color:#dff8ff}
@@ -1029,7 +1030,7 @@
   .statuschip.utility.active .ico{background:rgba(125,211,252,.16);border-color:rgba(125,211,252,.55);color:#9fd8ff}
   .statuschip.utility.urgent{border-color:rgba(255,143,163,.42);box-shadow:0 8px 20px rgba(255,80,110,.12)}
   .statuschip.utility.urgent .ico{background:rgba(255,143,163,.16);border-color:rgba(255,143,163,.6);color:#ffb7c5}
-  #currentquest{position:fixed;right:14px;top:282px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:auto;color:#f7ecbf;text-shadow:1px 1px 0 #000;background:linear-gradient(135deg,rgba(30,22,10,.86),rgba(10,14,24,.82));border:1px solid rgba(255,210,74,.5);box-shadow:0 0 18px rgba(255,210,74,.18), inset 0 0 20px rgba(255,210,74,.05);border-radius:7px;padding:10px 12px}
+  #currentquest{position:fixed;right:14px;top:282px;width:314px;max-width:calc(100vw - 28px);z-index:7;pointer-events:auto;color:#f7ecbf;text-shadow:1px 1px 0 #000;background:linear-gradient(135deg,rgba(30,22,10,.78),rgba(10,14,24,.76));border:1px solid rgba(255,210,74,.38);box-shadow:0 0 14px rgba(255,210,74,.12), inset 0 0 16px rgba(255,210,74,.035);border-radius:7px;padding:9px 11px}
   #currentquest .qt{font-size:10px;letter-spacing:2px;color:#ffd24a;text-transform:uppercase;margin-bottom:4px}
   #currentquest .qv{font-size:13px;line-height:1.35;color:#fff3c4}
   #currentquest .pathstrip{display:grid;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,210,74,.2);color:#d8e3f1;text-shadow:none}

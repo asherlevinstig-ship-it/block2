@@ -3778,7 +3778,7 @@ function townTutorialInfo(step){
   }
   return {
     pill:'Town Step 1 - Accept First Quest', target:HUB.guide, near:4.2, farKey:'FIND LIGHT', nearKey:'G / Right Click',
-    farText:'Find the pillar of light at Mara Vale.', nearText:'Talk to Mara and press ACCEPT.',
+    farText:'Find the light pillar at Mara Vale.', nearText:'Talk to Mara and press ACCEPT.',
     farSub:'The green ! marks a quest offer. Nothing gives XP until you explicitly accept it.', nearSub:'Accept Mara’s first quest so your tracker shows a real objective before you leave town.'
   };
 }
@@ -3876,7 +3876,7 @@ function guideTownTutorialChoice(step, ready=true){
   updateTownGuidanceHud();
   renderTownTutorialOptions();
   showName('Tutorial started: '+(step==='job'?'Job Board':step==='tavern'?'Tavern':'Buy Land'));
-  eventLog('Town tutorial started — find the pillar of light.');
+  eventLog('Town tutorial started - find the light pillar.');
   lockFallback=true;
   try{ renderer.domElement.requestPointerLock(); }catch(e){}
   refreshPlayUi();
@@ -4204,7 +4204,7 @@ function updateOnboardingHud(){
   if(!onboardingActive){tutorialEl.classList.add('hidden');return;}
   const s=ONBOARDING_STEPS[Math.min(onboardingStep,ONBOARDING_STEPS.length-1)];
   tutorialEl.classList.remove('hidden');
-  const lockedText=onboardingArrived?s.text:'Find the pillar of light for '+s.pillar+'.';
+  const lockedText=onboardingArrived?s.text:'Find the light pillar for '+s.pillar+'.';
   const key=onboardingArrived?s.key:'FIND LIGHT';
   let sub=s.sub;
   let progress='';

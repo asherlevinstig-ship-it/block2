@@ -4776,7 +4776,18 @@ function serverObjectiveGuidanceTarget(o){
   const source=String(o.source||'');
   const loc=String(o.location||'').toLowerCase();
   const title=String(o.title||'').toLowerCase();
+  const text=String(o.text||o.hudText||'').toLowerCase();
   const gate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(title.includes('first hands') || text.includes('gather logs')){
+    const p=o.progress||{};
+    const current=Number.isFinite(p.current)?p.current:countItem(B.LOG);
+    const required=Number.isFinite(p.required)?Math.max(1,p.required):6;
+    if(current>=required || o.status==='claimable' || o.status==='complete'){
+      return {kind:'server-first-hands-return',color:0xffd24a,target:HUB.guide,route:[{x:player.pos.x,z:player.pos.z},{x:HUB.northGate.x,z:HUB.northGate.z+1.2},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
+    }
+    const target=firstHandsLoggingTarget();
+    return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate,target]};
+  }
   if(action==='jobs'||source==='job'||loc.includes('job board')){
     return {kind:'server-jobs',color:0x8bbf5a,target:HUB.jobs,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.jobs]};
   }
@@ -9752,14 +9763,13 @@ function isInsideTavern(){
 }
 const tavernNightObjects=[], tavernNightLights=[], shrineCandleLights=[];
 
-// ambient emitters: hearth fire, forge embers, chimney smoke, fountain splash
+// ambient emitters: hearth fire, forge embers, and chimney smoke
 const TG=TOWN.G;
 const emitters=[
   {x:HUB.tavernHearth.x, y:TG+1.35, z:HUB.tavernHearth.z, type:'fire',   rate:26, nightOnly:true, maxDist:36}, // tavern hearth
   {x:HUB.tavernChimney.x, y:TG+12.7, z:HUB.tavernChimney.z,  type:'smoke',  rate:4,  nightOnly:true, maxDist:28}, // tavern chimney
   {x:HUB.forgeFire.x, y:TG+1.5,  z:HUB.forgeFire.z,  type:'fire',   rate:10, maxDist:30}, // smithy forge
   {x:HUB.forgeChimney.x, y:TG+9.6,  z:HUB.forgeChimney.z,  type:'smoke',  rate:2.2, maxDist:16},  // smithy chimney
-  {x:tp(64), y:TG+1.75,  z:tp(64),  type:'splash', rate:7, maxDist:34}, // low plaza fountain
 ];
 function createCentralFountainVisual(){
   const root=new THREE.Group();
@@ -9898,12 +9908,6 @@ function updateCentralFountainVisual(dt){
   f.rippleA.scale.setScalar(1+.035*Math.sin(t*2.1));
   f.rippleB.scale.setScalar(1+.025*Math.cos(t*1.8));
   f.jet.material.opacity=.42+.12*Math.sin(t*3.8);
-  if(Math.random()<dt*10){
-    const a=Math.random()*Math.PI*2, r=.2+Math.random()*.45;
-    spawnParticle({x:tp(64)+Math.cos(a)*r,y:TG+2.05,z:tp(64)+Math.sin(a)*r,
-      vx:Math.cos(a)*(.08+Math.random()*.18),vy:.25+Math.random()*.38,vz:Math.sin(a)*(.08+Math.random()*.18),
-      life:.38+Math.random()*.28,grav:5.5,r:.68,g:.86,b:1});
-  }
 }
 function updateTamingLandPortalVisual(dt){
   const p=tamingLandTownPortal;
