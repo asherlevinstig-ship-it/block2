@@ -82,14 +82,19 @@ export function createNetworkFramePump({
       const pantherActive=tickPantherFormVisual&&tickPantherFormVisual(r,now,stepDt,moving);
       let stride=0;
       if(pantherActive){
-        if(r.legs)for(const leg of r.legs)leg.rotation.x=0;
+        if(r.legs)for(const leg of r.legs){leg.rotation.x=0;leg.position.y=.72;}
         if(r.arms)for(const arm of r.arms)arm.rotation.x=0;
       }else if(ref.mount){
+        r.legs[0].position.y=.72;
+        r.legs[1].position.y=.72;
         r.legs[0].rotation.x=-.95;
         r.legs[1].rotation.x=-.95;
         stride=.35;
       }else{
-        const sw=moving?Math.sin(now/1000*8+r.phase)*.55:r.legs[0].rotation.x*.9;
+        const walkSwing=moving?Math.sin(now/1000*8+r.phase):0;
+        const sw=moving?walkSwing*.38:r.legs[0].rotation.x*.9;
+        r.legs[0].position.y=.72-Math.max(0,walkSwing)*.035;
+        r.legs[1].position.y=.72-Math.max(0,-walkSwing)*.035;
         r.legs[0].rotation.x=sw;
         r.legs[1].rotation.x=-sw;
         stride=sw;

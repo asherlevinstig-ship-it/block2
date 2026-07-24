@@ -3430,12 +3430,15 @@ function poseAppearanceDummy(dmy, x, y, z, rot, dt, now, snap, backView){
   }
   dmy.grp.rotation.y += angDiff(rot, dmy.grp.rotation.y)*Math.min(1,dt*10);
   const moving=Math.hypot(player.vx||0, player.vz||0)>.08;
-  const sw=moving?Math.sin(now/1000*8+dmy.phase)*.55:Math.sin(now/1000*1.5)*(backView?-.018:.025);
+  const walkSwing=moving?Math.sin(now/1000*8+dmy.phase):0;
+  const sw=moving?walkSwing*.38:Math.sin(now/1000*1.5)*(backView?-.018:.025);
   const idleT=now/1000+dmy.phase;
   const breath=Math.sin(idleT*1.6)*.004;
   dmy.grp.position.y += breath;
   if(dmy.legs&&dmy.legs.length>=2){
     dmy.legs[0].position.x=-.13; dmy.legs[1].position.x=.13;
+    dmy.legs[0].position.y=.72-Math.max(0,walkSwing)*.035;
+    dmy.legs[1].position.y=.72-Math.max(0,-walkSwing)*.035;
     dmy.legs[0].rotation.set(sw,0,0);
     dmy.legs[1].rotation.set(-sw,0,0);
   }
