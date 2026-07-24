@@ -2533,10 +2533,14 @@ function makeRemoteAvatar(look){
   const head=new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.5),[skinM[0],skinM[1],skinM[2],skinM[3],faceM,skinM[5]]);
   head.position.y=1.72; grp.add(head);
   hair.push(addBox(head,[.54,.09,.54],[0,.3,0],hairM));       // blond top hair cap
+  hair.push(addBox(head,[.44,.055,.48],[0,.36,-.01],voxelMats(look.hairLight,'#fff7b8',look.hair,look.hairDark))); // stepped top layer
+  hair.push(addBox(head,[.34,.045,.42],[-.06,.405,-.03],hairM));
   hair.push(addBox(head,[.16,.08,.1],[-.22,.2,-.25],hairM));  // separated fringe chunks
   hair.push(addBox(head,[.11,.105,.1],[-.04,.18,-.255],hairM));
   hair.push(addBox(head,[.09,.065,.08],[.13,.22,-.25],hairM));
   hair.push(addBox(head,[.08,.05,.08],[.25,.18,-.25],hairM));
+  hair.push(addBox(head,[.07,.12,.085],[-.32,.12,-.2],hairM));
+  hair.push(addBox(head,[.06,.1,.08],[.31,.13,-.17],hairM));
   addBox(head,[.08,.035,.08],[-.22,.255,-.27],voxelMats(look.hairLight,'#fff7b8',look.hair,look.hairDark)); // top highlights
   addBox(head,[.09,.03,.08],[.06,.255,-.27],voxelMats(look.hairLight,'#fff7b8',look.hair,look.hairDark));
   addBox(head,[.36,.035,.09],[0,.135,-.265],browM);           // hair shadow under fringe
@@ -2545,6 +2549,7 @@ function makeRemoteAvatar(look){
     hair.push(addBox(head,[.085,hairStyle==='long'?.4:.28,.17],[.29,hairStyle==='long' ? -.08 : -.01,.02],hairM));
     hair.push(addBox(head,[.42,hairStyle==='long'?.24:.16,.1],[0,hairStyle==='long' ? .02 : .08,.31],hairM));     // layered back hair, not one slab
     hair.push(addBox(head,[.34,hairStyle==='long'?.24:.14,.11],[0,hairStyle==='long' ? -.18 : -.08,.32],hairM));
+    hair.push(addBox(head,[.24,hairStyle==='long'?.18:.1,.12],[0,hairStyle==='long' ? -.36 : -.18,.34],hairM));
     hair.push(addBox(head,[.13,.11,.12],[-.13,hairStyle==='long' ? -.31 : -.19,.33],hairM));
     hair.push(addBox(head,[.13,.1,.12],[.13,hairStyle==='long' ? -.31 : -.19,.33],hairM));
   }
@@ -2554,14 +2559,6 @@ function makeRemoteAvatar(look){
   }
   if(accessory==='ribbon') addBox(head,[.14,.06,.08],[0,-.03,.38],trimM);              // small rear ribbon/accent
   if(accessory==='headband') addBox(head,[.56,.045,.56],[0,.14,0],trimM);
-  if(accessory==='scarf'&&!hasAegis){
-    addBox(torso,[.5,.12,.34],[0,.36,-.03],scarfM);
-    addBox(torso,[.12,.42,.08],[.22,.13,-.22],scarfM,[0,0,-.08]);
-  }
-  if(outfitStyle==='wanderer'&&!hasArmor){
-    addBox(torso,[.66,.78,.055],[0,-.05,.2],capeM,[.05,0,0]);
-    addBox(torso,[.52,.07,.06],[0,.31,.24],capeTrimM);
-  }
   if(hasAegis){
     const aura=new THREE.Sprite(new THREE.SpriteMaterial({
       map:new THREE.CanvasTexture(glowTexCanvas), color:0xffd24a, transparent:true,
@@ -2594,14 +2591,21 @@ function makeRemoteAvatar(look){
   const torso=new THREE.Group(); torso.position.y=1.08; grp.add(torso);
   idle.push(torso);
   addBox(torso,[.56,outfitStyle==='coat'?.86:.7,.28],[0,outfitStyle==='coat' ? -.08 : 0,0],shirtM);
+  addBox(torso,[.58,outfitStyle==='coat'?.82:.62,.045],[0,outfitStyle==='coat' ? -.09 : -.01,-.185],shirtDarkM); // raised cloth shell with tiny shadow gap
   addBox(torso,[.7,.16,.32],[0,.28,0],shirtDarkM);            // shoulders
+  addBox(torso,[.74,.08,.36],[0,.39,-.015],trimM);            // raised shoulder lip
+  addBox(torso,[.2,.08,.34],[-.41,.38,-.005],trimM);          // shoulder cap depth
+  addBox(torso,[.2,.08,.34],[.41,.38,-.005],trimM);
   addBox(torso,[.22,.08,.31],[0,.39,-.03],trimM);             // collar trim
   addBox(torso,[.09,.14,.38],[-.28,.36,.04],packDarkM,[.18,0,0]); // strap connector over shoulder
   addBox(torso,[.09,.14,.38],[.28,.36,.04],packDarkM,[.18,0,0]);
   addBox(torso,[.12,.08,.35],[-.37,.3,0],guardM);             // tiny shoulder clip
   addBox(torso,[.12,.08,.35],[.37,.3,0],guardM);
   if(isScout){
-    addBox(torso,[.36,.35,.045],[0,.07,-.2],scoutArmorM);
+    addBox(torso,[.38,.37,.065],[0,.07,-.225],scoutArmorM);
+    addBox(torso,[.34,.04,.075],[0,.27,-.255],trimM);          // bevel edge
+    addBox(torso,[.04,.31,.075],[-.2,.06,-.255],trimM);
+    addBox(torso,[.04,.31,.075],[.2,.06,-.255],trimM);
     addBox(torso,[.54,.07,.3],[0,.34,0],scoutArmorM);
     addBox(torso,[.09,.065,.29],[-.34,.35,0],scoutArmorM);
     addBox(torso,[.09,.065,.29],[.34,.35,0],scoutArmorM);
@@ -2609,13 +2613,19 @@ function makeRemoteAvatar(look){
     addBox(torso,[.05,.29,.065],[.15,.06,-.23],trimM,[0,0,.18]);
   } else if(isVanguard){
     const armorM=hasDiaArmor?diaArmorM:ironArmorM;
-    addBox(torso,[.44,.48,.065],[0,.03,-.205],armorM);
+    addBox(torso,[.46,.5,.085],[0,.03,-.225],armorM);
+    addBox(torso,[.42,.045,.095],[0,.28,-.265],metalM);        // top bevel
+    addBox(torso,[.045,.42,.095],[-.25,.03,-.265],metalM);
+    addBox(torso,[.045,.42,.095],[.25,.03,-.265],metalM);
     addBox(torso,[.7,.13,.34],[0,.34,0],armorM);
     addBox(torso,[.14,.1,.36],[-.42,.35,0],armorM);
     addBox(torso,[.14,.1,.36],[.42,.35,0],armorM);
     addBox(torso,[.18,.09,.075],[0,.09,-.25],metalM,[0,0,.785]);
   } else if(isBulwark){
-    addBox(torso,[.58,.61,.1],[0,.01,-.22],bulwarkArmorM);
+    addBox(torso,[.6,.63,.12],[0,.01,-.245],bulwarkArmorM);
+    addBox(torso,[.52,.055,.13],[0,.31,-.3],ironArmorM);
+    addBox(torso,[.055,.5,.13],[-.31,.02,-.3],ironArmorM);
+    addBox(torso,[.055,.5,.13],[.31,.02,-.3],ironArmorM);
     addBox(torso,[.9,.2,.43],[0,.39,0],bulwarkArmorM);
     addBox(torso,[.24,.18,.45],[-.5,.4,0],bulwarkArmorM);
     addBox(torso,[.24,.18,.45],[.5,.4,0],bulwarkArmorM);
@@ -2623,6 +2633,15 @@ function makeRemoteAvatar(look){
     addBox(torso,[.48,.08,.08],[0,-.25,-.29],ironArmorM);
     addBox(torso,[.2,.18,.1],[-.19,-.4,-.18],bulwarkArmorM);
     addBox(torso,[.2,.18,.1],[.19,-.4,-.18],bulwarkArmorM);
+  }
+  if(accessory==='scarf'&&!hasAegis){
+    addBox(torso,[.52,.13,.36],[0,.36,-.055],scarfM);
+    addBox(torso,[.12,.42,.08],[.22,.13,-.24],scarfM,[0,0,-.08]);
+    addBox(torso,[.08,.32,.07],[-.2,.17,-.235],scarfM,[0,0,.08]);
+  }
+  if(outfitStyle==='wanderer'&&!hasArmor){
+    addBox(torso,[.66,.78,.055],[0,-.05,.205],capeM,[.05,0,0]);
+    addBox(torso,[.52,.07,.06],[0,.31,.245],capeTrimM);
   }
   if(hasAegis){
     addBox(torso,[.34,.44,.055],[0,.04,-.19],aegisM);          // visible front breastplate
@@ -2633,16 +2652,22 @@ function makeRemoteAvatar(look){
   }
   addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[-.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);           // front coat trim
   addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);
+  addBox(torso,[.035,outfitStyle==='coat'?.72:.58,.035],[-.19,outfitStyle==='coat' ? -.09 : -.01,-.218],shirtDarkM); // darker edge pixels as geometry
+  addBox(torso,[.035,outfitStyle==='coat'?.72:.58,.035],[.19,outfitStyle==='coat' ? -.09 : -.01,-.218],shirtDarkM);
   addBox(torso,[.34,.12,.04],[0,outfitStyle==='coat' ? -.48 : -.36,-.18],trimM);            // tunic split hem
   // layered tabard down the front (richer clothing; sits under the breastplate when armored)
-  addBox(torso,[outfitStyle==='tabard'?.36:.26,outfitStyle==='tabard'?.78:.66,.05],[0,outfitStyle==='tabard' ? -.08 : -.02,-.165],tabardM);         // tabard panel
+  addBox(torso,[outfitStyle==='tabard'?.36:.26,outfitStyle==='tabard'?.78:.66,.07],[0,outfitStyle==='tabard' ? -.08 : -.02,-.235],tabardM);         // tabard panel separated from torso
   addBox(torso,[.05,.66,.06],[-.12,-.02,-.17],trimM);         // tabard edge braid
   addBox(torso,[.05,.66,.06],[.12,-.02,-.17],trimM);
+  addBox(torso,[.025,.58,.075],[-.165,-.04,-.272],shirtDarkM);
+  addBox(torso,[.025,.58,.075],[.165,-.04,-.272],shirtDarkM);
   addBox(torso,[.22,.06,.06],[0,.28,-.17],trimM);             // tabard top hem
   addBox(torso,[outfitStyle==='tabard'?.34:.26,.12,.05],[0,outfitStyle==='tabard' ? -.47 : -.36,-.175],tabardM,[.16,0,0]); // flared tabard skirt
   addBox(torso,[.09,.09,.07],[0,-.04,-.182],metalM);          // chest brooch
-  addBox(torso,[.62,.1,.32],[0,-.08,-.01],beltM);             // belt
-  addBox(torso,[.12,.12,.34],[0,-.08,-.19],metalM);           // buckle
+  addBox(torso,[.64,.12,.35],[0,-.08,-.025],beltM);             // raised belt
+  addBox(torso,[.12,.13,.39],[0,-.08,-.22],metalM);           // buckle proud of belt
+  addBox(torso,[.035,.08,.38],[-.17,-.08,-.23],metalM);       // pixel buckle prongs
+  addBox(torso,[.035,.08,.38],[.17,-.08,-.23],metalM);
   addBox(torso,[.5,.1,.3],[0,-.38,0],shirtDarkM);             // tunic hem
   addBox(torso,[.065,.62,.055],[-.23,.04,-.18],packDarkM);    // front shoulder straps
   addBox(torso,[.065,.62,.055],[.23,.04,-.18],packDarkM);
@@ -2721,16 +2746,23 @@ function makeRemoteAvatar(look){
   for(const sx of [-.13,.13]){
     const leg=new THREE.Group(); leg.position.set(sx,.72,0);
     addBox(leg,[.2,.62,.2],[0,.1,0],pantsM);
-    addBox(leg,[.2,.07,.21],[0,-.22,-.01],trimM);             // knee/hem wrap
+    addBox(leg,[.22,.24,.045],[0,.16,-.115],pantsM);          // raised trouser front panel
+    addBox(leg,[.22,.07,.22],[0,-.22,-.025],trimM);           // knee/hem wrap
+    addBox(leg,[.23,.045,.23],[0,.41,-.01],trimM);            // upper trouser seam
+    addBox(leg,[.045,.5,.21],[sx<0?-.1:.1,.06,-.012],trimM); // side seam silhouette
     if(hasAegis) addBox(leg,[.22,.11,.23],[0,-.12,-.01],aegisTrimM);
-    if(isBulwark) addBox(leg,[.23,.26,.12],[0,-.15,-.12],bulwarkArmorM);
-    if(isScout) addBox(leg,[.21,.07,.22],[0,-.12,-.02],scoutArmorM);
+    if(isBulwark){
+      addBox(leg,[.24,.27,.14],[0,-.15,-.14],bulwarkArmorM);
+      addBox(leg,[.18,.045,.15],[0,.01,-.19],ironArmorM);
+    }
+    if(isScout) addBox(leg,[.22,.08,.24],[0,-.12,-.035],scoutArmorM);
     addBox(leg,[.22,.085,.22],[0,-.405,0],bootM);             // shorter ankle boot
     if(hasAegis) addBox(leg,[.24,.06,.24],[0,-.35,-.02],aegisM);
     addBox(leg,[.25,.07,.32],[0,-.49,-.08],bootM);            // foot block
     addBox(leg,[.26,.04,.34],[0,-.54,-.08],soleM);            // pale shoe trim
     addBox(leg,[.27,.03,.35],[0,-.58,-.08],packDarkM);        // dark sole
     addBox(leg,[.23,.1,.23],[0,-.33,-.005],bootM);            // boot cuff fold
+    addBox(leg,[.25,.045,.25],[0,-.285,-.025],trimM);         // trouser cuff over boot
     addBox(leg,[.05,.18,.22],[0,-.42,-.09],trimM);            // boot lace strip
     if(hasAegis){
       addBox(leg,[.23,.32,.12],[0,-.16,-.12],aegisM);         // shin greave
@@ -2743,17 +2775,23 @@ function makeRemoteAvatar(look){
     const arm=new THREE.Group(); arm.position.set(sx,1.12,sx<0?-.03:.03);
     arm.rotation.z=sx<0?.08:-.08;
     addBox(arm,[.17,.44,.17],[0,.06,0],shirtM);
-    addBox(arm,[.18,.12,.18],[0,-.2,0],trimM);                // purple cuff band
+    addBox(arm,[.19,.32,.045],[0,.04,-.105],shirtM);          // raised sleeve layer
+    addBox(arm,[.2,.08,.2],[0,.28,0],shirtDarkM);             // shoulder sleeve seam
+    addBox(arm,[.2,.13,.2],[0,-.2,-.005],trimM);              // cuff band with depth
+    addBox(arm,[.04,.34,.18],[sx<0?-.085:.085,.04,-.005],trimM); // sleeve side stitching
     if(hasAegis){
-      addBox(arm,[.22,.24,.22],[0,-.15,0],aegisM);             // chunky armor bracer
-      addBox(arm,[.16,.11,.24],[0,-.17,-.03],aegisRuneM);
+      addBox(arm,[.23,.25,.24],[0,-.15,-.015],aegisM);          // chunky armor bracer
+      addBox(arm,[.17,.12,.26],[0,-.17,-.06],aegisRuneM);
+      addBox(arm,[.22,.045,.25],[0,-.005,-.06],capeTrimM);      // bracer bevel
     } else if(isBulwark){
-      addBox(arm,[.23,.3,.24],[0,-.12,0],bulwarkArmorM);
-      addBox(arm,[.18,.08,.25],[0,-.2,-.04],ironArmorM);
+      addBox(arm,[.24,.31,.25],[0,-.12,-.02],bulwarkArmorM);
+      addBox(arm,[.19,.08,.27],[0,-.2,-.07],ironArmorM);
+      addBox(arm,[.19,.045,.25],[0,.05,-.07],ironArmorM);
     } else if(isVanguard){
-      addBox(arm,[.19,.18,.2],[0,-.15,0],hasDiaArmor?diaArmorM:ironArmorM);
+      addBox(arm,[.2,.19,.21],[0,-.15,-.015],hasDiaArmor?diaArmorM:ironArmorM);
+      addBox(arm,[.18,.04,.22],[0,-.04,-.05],metalM);
     } else if(isScout){
-      addBox(arm,[.18,.08,.19],[0,-.2,0],scoutArmorM);
+      addBox(arm,[.19,.09,.2],[0,-.2,-.015],scoutArmorM);
     }
     addBox(arm,[.18,.16,.18],[0,-.34,0],skinM);               // hand
     addBox(arm,[.06,.08,.08],[sx<0?.1:-.1,-.34,-.02],skinM);  // thumb

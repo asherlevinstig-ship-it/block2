@@ -2762,6 +2762,7 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
   const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   assert.deepEqual(appearance.sanitizeAppearance({ hairStyle: 'long', outfitStyle: 'coat', accessory: 'scarf' }).hairStyle, 'long');
   assert.equal(appearance.sanitizeAppearance({ hairStyle: 'bad', outfitStyle: 'bad', accessory: 'bad' }).hairStyle, appearance.DEFAULT.hairStyle);
   assert.match(auth, /const presets = \[/);
@@ -2777,6 +2778,14 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(networking, /previewAppearanceDraft/);
   assert.match(companions, /const hairStyle=\['windswept','cropped','long','braided'\]/);
   assert.match(companions, /outfitStyle==='wanderer'/);
+  assert.ok(companions.indexOf("if(accessory==='scarf'&&!hasAegis)") > companions.indexOf('const torso=new THREE.Group()'), 'scarf accessory is mounted after the torso exists');
+  assert.match(companions, /raised cloth shell with tiny shadow gap/);
+  assert.match(companions, /tabard panel separated from torso/);
+  assert.match(companions, /raised trouser front panel/);
+  assert.match(companions, /raised sleeve layer/);
+  assert.match(world, /function pixelMaterialTextures\(col\)/);
+  assert.match(world, /bumpScale:\.012/);
+  assert.match(networking, /shadeHex\(look\.skin,12\)/);
   assert.match(styles, /\.ccstage/);
   assert.match(styles, /\.ccstylegrid/);
 });

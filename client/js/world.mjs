@@ -4104,8 +4104,38 @@ function shadeHex(hex, amt){
   const b=channel(n&255);
   return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
+const pixelMaterialTextureCache=new Map();
+function pixelMaterialTextures(col){
+  const key=String(col||'#000000').toLowerCase();
+  if(pixelMaterialTextureCache.has(key)) return pixelMaterialTextureCache.get(key);
+  const base=key[0]==='#'?key:'#000000';
+  const light=shadeHex(base,14), dark=shadeHex(base,-18), edge=shadeHex(base,-34);
+  const c=document.createElement('canvas'); c.width=c.height=16;
+  const g=c.getContext('2d');
+  g.fillStyle=base; g.fillRect(0,0,16,16);
+  for(let y=0;y<16;y++)for(let x=0;x<16;x++){
+    if(x===0||y===0||x===15||y===15) g.fillStyle=edge;
+    else if(((x*13+y*7+x*y)&15)===0) g.fillStyle=light;
+    else if(((x*5+y*11)&13)===0) g.fillStyle=dark;
+    else continue;
+    g.fillRect(x,y,1,1);
+  }
+  const bump=document.createElement('canvas'); bump.width=bump.height=16;
+  const b=bump.getContext('2d');
+  b.fillStyle='#808080'; b.fillRect(0,0,16,16);
+  b.fillStyle='#707070'; b.fillRect(0,0,16,1); b.fillRect(0,0,1,16); b.fillRect(15,0,1,16); b.fillRect(0,15,16,1);
+  b.fillStyle='#8a8a8a';
+  for(let i=2;i<14;i+=4){ b.fillRect(i,3,1,1); b.fillRect(15-i,11,1,1); }
+  const tex=new THREE.CanvasTexture(c), bumpTex=new THREE.CanvasTexture(bump);
+  tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+  bumpTex.magFilter=THREE.NearestFilter; bumpTex.minFilter=THREE.NearestFilter;
+  const out={map:tex,bumpMap:bumpTex};
+  pixelMaterialTextureCache.set(key,out);
+  return out;
+}
 function matCol(col, emissive, intensity){
-  const m=new THREE.MeshLambertMaterial({color:new THREE.Color(col)});
+  const tex=pixelMaterialTextures(col);
+  const m=new THREE.MeshLambertMaterial({color:new THREE.Color(0xffffff),map:tex.map,bumpMap:tex.bumpMap,bumpScale:.012});
   if(emissive){
     m.emissive=new THREE.Color(emissive);
     m.emissiveIntensity=intensity==null?.35:intensity;

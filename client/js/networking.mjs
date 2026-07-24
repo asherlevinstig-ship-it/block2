@@ -3216,14 +3216,19 @@ function faceTexture(look){
   return npcTex(g=>{
     g.fillStyle=look.skin; g.fillRect(0,0,16,16);
     g.fillStyle=look.skinDark; g.fillRect(0,12,16,4); g.fillRect(0,4,2,8); g.fillRect(14,4,2,8);
+    g.fillStyle=shadeHex(look.skin,12); g.fillRect(3,4,1,1); g.fillRect(12,5,1,1); g.fillRect(5,10,1,1);
+    g.fillStyle=shadeHex(look.skin,-16); g.fillRect(2,9,1,1); g.fillRect(13,9,1,1); g.fillRect(8,12,1,1);
     g.fillStyle=look.hairLight; g.fillRect(0,0,16,2);
     g.fillStyle=look.hair; g.fillRect(0,2,5,3); g.fillRect(11,2,5,3); g.fillRect(2,1,4,4); g.fillRect(8,1,5,3);
     g.fillStyle=look.hairDark; g.fillRect(0,5,2,5); g.fillRect(14,5,2,5);
+    g.fillRect(3,5,1,1); g.fillRect(9,4,1,1); g.fillRect(12,5,1,1);
+    g.fillStyle=look.hairLight; g.fillRect(4,2,1,1); g.fillRect(10,2,1,1);
     g.fillStyle=look.face; g.fillRect(4,6,2,2); g.fillRect(10,6,2,2);
     g.fillStyle='#f4e0c4'; g.fillRect(6,6,1,1); g.fillRect(12,6,1,1);
     g.fillStyle=look.nose; g.fillRect(7,8,2,1);
     g.fillStyle='#5e2f28'; g.fillRect(6,11,4,1);
     g.fillStyle='rgba(255,180,160,.35)'; g.fillRect(2,10,2,1); g.fillRect(12,10,2,1);
+    g.fillStyle=shadeHex(look.trim||look.scarf||'#8f6aa7',-18); g.fillRect(0,15,16,1); g.fillRect(1,14,1,1); g.fillRect(14,14,1,1);
   });
 }
 const REPLICATION_VISUALS=createReplicationVisuals({NET,player,familiarReaction:kind=>COMPANIONS.familiarReaction(kind),companions:()=>COMPANIONS});
