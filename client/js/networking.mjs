@@ -3178,8 +3178,9 @@ function appearanceForPath(path, customInput){
 }
 function playerAppearance(){
   const look=appearanceForPath(S.path,playerCustomAppearance);
-  look.armorId=armorSlot?armorSlot.id:0;
-  look.armorType=armorSlot?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
+  const armor=armorSlot&&ITEMS[armorSlot.id]&&ITEMS[armorSlot.id].armor?armorSlot:null;
+  look.armorId=armor?armor.id:0;
+  look.armorType=armor?GEAR_SYSTEM.armorProfile(ITEMS[armor.id].armor,armor).type.id:'';
   look.heldId=displayHeldId();
   look.cosmetics=[...equippedCosmetics];
   return look;
