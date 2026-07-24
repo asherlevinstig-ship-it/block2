@@ -838,14 +838,16 @@ function connectionNotice(kind, attempt=0){
   }else if(kind==='joinRetry'){
     const info=attempt&&typeof attempt==='object'?attempt:{};
     const reason=String(info.error&&info.error.message||info.error||'join failed');
+    const quiet=info.quiet===true;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.join.retry', {
       attempt:Math.max(1,info.attempt|0),
       shardAttempt:Math.max(0,info.shardAttempt|0),
       shardId:String(info.shardId||'main'),
       reason,
+      quiet,
     });
-    eventFeed('[Network]','World connection hiccup - retrying safely.',{key:'network:join-retry',cooldown:12000});
-    setWorldLoadingStatus('World connection hiccup - retrying safely...');
+    if(!quiet)eventFeed('[Network]','World connection hiccup - retrying safely.',{key:'network:join-retry',cooldown:12000});
+    setWorldLoadingStatus(quiet?'Joining the active world...':'World connection hiccup - retrying safely...');
   }else if(kind==='resumeFallback'){
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.resume.fallback', { reason:String(attempt&&attempt.message||attempt||'') });
     eventLog('Saved reconnect failed - rejoining the world fresh','[Network]');

@@ -37,6 +37,13 @@ export function createNetworkController(options) {
       text.includes('capacity');
   }
 
+  function mainShardBootingError(error) {
+    const text = errorMessage(error);
+    return text.includes('blockcraft overworld shard') &&
+      text.includes('already active') &&
+      text.includes('persistence writer');
+  }
+
   async function joinRoomWithRetries(start, meta = {}) {
     let lastError = null;
     for (let attempt = 1; attempt <= joinAttempts; attempt++) {
@@ -49,7 +56,9 @@ export function createNetworkController(options) {
         lastError = error;
         state.lastJoinError = String(error && (error.message || error.reason || error.code) || error || 'join failed');
         if (shardCapacityError(error)) throw error;
-        if (attempt < joinAttempts && options.onJoinRetry) options.onJoinRetry({ ...meta, attempt, error });
+        if (attempt < joinAttempts && options.onJoinRetry) {
+          options.onJoinRetry({ ...meta, attempt, error, quiet: mainShardBootingError(error) });
+        }
       }
     }
     throw lastError || new Error('Room join failed');

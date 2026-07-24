@@ -3081,7 +3081,7 @@ test('network controller tries the next overworld shard and returns to it after 
 
 test('network controller waits for a booting main shard before trying overflow shards', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
-  const events = [], selected = [];
+  const events = [], selected = [], retries = [];
   const main = { reconnectionToken: 'main:token', onLeave() {} };
   let mainAttempts = 0;
   class Client {
@@ -3097,6 +3097,7 @@ test('network controller waits for a booting main shard before trying overflow s
     joinAttempts: 4, shardAttempts: 2, wait: async () => {},
     primaryJoinOptions: ({ attempt }) => ({ shardId: attempt === 0 ? 'main' : 'shard-2' }),
     onPrimaryJoinOptions: options => selected.push(options.shardId),
+    onJoinRetry: info => retries.push({ attempt: info.attempt, shardId: info.shardId, quiet: info.quiet }),
     sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
     onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
     onFailure(error) { throw error; },
@@ -3112,6 +3113,11 @@ test('network controller waits for a booting main shard before trying overflow s
     ['join', 'blockcraft', 'main'],
     ['join', 'blockcraft', 'main'],
     ['join', 'blockcraft', 'main'],
+  ]);
+  assert.deepEqual(retries, [
+    { attempt: 1, shardId: 'main', quiet: true },
+    { attempt: 2, shardId: 'main', quiet: true },
+    { attempt: 3, shardId: 'main', quiet: true },
   ]);
 });
 
