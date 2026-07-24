@@ -2474,6 +2474,9 @@ function makeRemoteAvatar(look){
   const hasDiaArmor=(look.armorId|0)===184;
   const heldKind=equipmentKind(look.heldId);
   const hasCartographerMantle=Array.isArray(look.cosmetics)&&look.cosmetics.includes('cartographers_mantle');
+  const hairStyle=['windswept','cropped','long','braided'].includes(look.hairStyle)?look.hairStyle:'windswept';
+  const outfitStyle=['tunic','coat','tabard','wanderer'].includes(look.outfitStyle)?look.outfitStyle:'tunic';
+  const accessory=['ribbon','headband','scarf','none'].includes(look.accessory)?look.accessory:'ribbon';
   const skinM=voxelMats(look.skin, shadeHex(look.skin,18), look.skinDark, look.skinShadow);
   const faceM=lam(faceTexture(look));
   const hairM=voxelMats(look.hair, look.hairLight, look.hairDark, look.hairDark);
@@ -2537,13 +2540,28 @@ function makeRemoteAvatar(look){
   addBox(head,[.08,.035,.08],[-.22,.255,-.27],voxelMats(look.hairLight,'#fff7b8',look.hair,look.hairDark)); // top highlights
   addBox(head,[.09,.03,.08],[.06,.255,-.27],voxelMats(look.hairLight,'#fff7b8',look.hair,look.hairDark));
   addBox(head,[.36,.035,.09],[0,.135,-.265],browM);           // hair shadow under fringe
-  hair.push(addBox(head,[.085,.3,.17],[-.29,-.02,.02],hairM)); // side hair depth
-  hair.push(addBox(head,[.085,.28,.17],[.29,-.01,.02],hairM));
-  hair.push(addBox(head,[.42,.16,.1],[0,.08,.31],hairM));     // layered back hair, not one slab
-  hair.push(addBox(head,[.34,.14,.11],[0,-.08,.32],hairM));
-  hair.push(addBox(head,[.13,.11,.12],[-.13,-.19,.33],hairM));
-  hair.push(addBox(head,[.13,.1,.12],[.13,-.19,.33],hairM));
-  addBox(head,[.14,.06,.08],[0,-.03,.38],trimM);              // small rear ribbon/accent
+  if(hairStyle!=='cropped'){
+    hair.push(addBox(head,[.085,hairStyle==='long'?.42:.3,.17],[-.29,hairStyle==='long' ? -.08 : -.02,.02],hairM)); // side hair depth
+    hair.push(addBox(head,[.085,hairStyle==='long'?.4:.28,.17],[.29,hairStyle==='long' ? -.08 : -.01,.02],hairM));
+    hair.push(addBox(head,[.42,hairStyle==='long'?.24:.16,.1],[0,hairStyle==='long' ? .02 : .08,.31],hairM));     // layered back hair, not one slab
+    hair.push(addBox(head,[.34,hairStyle==='long'?.24:.14,.11],[0,hairStyle==='long' ? -.18 : -.08,.32],hairM));
+    hair.push(addBox(head,[.13,.11,.12],[-.13,hairStyle==='long' ? -.31 : -.19,.33],hairM));
+    hair.push(addBox(head,[.13,.1,.12],[.13,hairStyle==='long' ? -.31 : -.19,.33],hairM));
+  }
+  if(hairStyle==='braided'){
+    hair.push(addBox(head,[.11,.52,.12],[.32,-.18,.2],hairM,[0,0,-.08]));
+    hair.push(addBox(head,[.095,.14,.11],[.34,-.48,.19],trimM,[0,0,-.08]));
+  }
+  if(accessory==='ribbon') addBox(head,[.14,.06,.08],[0,-.03,.38],trimM);              // small rear ribbon/accent
+  if(accessory==='headband') addBox(head,[.56,.045,.56],[0,.14,0],trimM);
+  if(accessory==='scarf'&&!hasAegis){
+    addBox(torso,[.5,.12,.34],[0,.36,-.03],scarfM);
+    addBox(torso,[.12,.42,.08],[.22,.13,-.22],scarfM,[0,0,-.08]);
+  }
+  if(outfitStyle==='wanderer'&&!hasArmor){
+    addBox(torso,[.66,.78,.055],[0,-.05,.2],capeM,[.05,0,0]);
+    addBox(torso,[.52,.07,.06],[0,.31,.24],capeTrimM);
+  }
   if(hasAegis){
     const aura=new THREE.Sprite(new THREE.SpriteMaterial({
       map:new THREE.CanvasTexture(glowTexCanvas), color:0xffd24a, transparent:true,
@@ -2575,7 +2593,7 @@ function makeRemoteAvatar(look){
 
   const torso=new THREE.Group(); torso.position.y=1.08; grp.add(torso);
   idle.push(torso);
-  addBox(torso,[.56,.7,.28],[0,0,0],shirtM);
+  addBox(torso,[.56,outfitStyle==='coat'?.86:.7,.28],[0,outfitStyle==='coat' ? -.08 : 0,0],shirtM);
   addBox(torso,[.7,.16,.32],[0,.28,0],shirtDarkM);            // shoulders
   addBox(torso,[.22,.08,.31],[0,.39,-.03],trimM);             // collar trim
   addBox(torso,[.09,.14,.38],[-.28,.36,.04],packDarkM,[.18,0,0]); // strap connector over shoulder
@@ -2613,15 +2631,15 @@ function makeRemoteAvatar(look){
     addBox(torso,[.16,.1,.38],[-.43,.35,0],aegisTrimM);
     addBox(torso,[.16,.1,.38],[.43,.35,0],aegisTrimM);
   }
-  addBox(torso,[.08,.64,.04],[-.12,.0,-.18],trimM);           // front coat trim
-  addBox(torso,[.08,.64,.04],[.12,.0,-.18],trimM);
-  addBox(torso,[.34,.12,.04],[0,-.36,-.18],trimM);            // tunic split hem
+  addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[-.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);           // front coat trim
+  addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);
+  addBox(torso,[.34,.12,.04],[0,outfitStyle==='coat' ? -.48 : -.36,-.18],trimM);            // tunic split hem
   // layered tabard down the front (richer clothing; sits under the breastplate when armored)
-  addBox(torso,[.26,.66,.05],[0,-.02,-.165],tabardM);         // tabard panel
+  addBox(torso,[outfitStyle==='tabard'?.36:.26,outfitStyle==='tabard'?.78:.66,.05],[0,outfitStyle==='tabard' ? -.08 : -.02,-.165],tabardM);         // tabard panel
   addBox(torso,[.05,.66,.06],[-.12,-.02,-.17],trimM);         // tabard edge braid
   addBox(torso,[.05,.66,.06],[.12,-.02,-.17],trimM);
   addBox(torso,[.22,.06,.06],[0,.28,-.17],trimM);             // tabard top hem
-  addBox(torso,[.26,.12,.05],[0,-.36,-.175],tabardM,[.16,0,0]); // flared tabard skirt
+  addBox(torso,[outfitStyle==='tabard'?.34:.26,.12,.05],[0,outfitStyle==='tabard' ? -.47 : -.36,-.175],tabardM,[.16,0,0]); // flared tabard skirt
   addBox(torso,[.09,.09,.07],[0,-.04,-.182],metalM);          // chest brooch
   addBox(torso,[.62,.1,.32],[0,-.08,-.01],beltM);             // belt
   addBox(torso,[.12,.12,.34],[0,-.08,-.19],metalM);           // buckle

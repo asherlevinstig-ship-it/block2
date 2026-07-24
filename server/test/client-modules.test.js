@@ -2756,6 +2756,25 @@ test('mirror appearance editor stays mounted outside the login setup flow', () =
   assert.match(auth, /mountCharacterCreator\('setup'\);[\s\S]*creator\.dataset\.mode = 'setup';/);
 });
 
+test('appearance creator exposes style presets and avatar style dimensions', () => {
+  const appearance = require('../../shared/appearance-system');
+  const auth = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const companions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'companions.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.deepEqual(appearance.sanitizeAppearance({ hairStyle: 'long', outfitStyle: 'coat', accessory: 'scarf' }).hairStyle, 'long');
+  assert.equal(appearance.sanitizeAppearance({ hairStyle: 'bad', outfitStyle: 'bad', accessory: 'bad' }).hairStyle, appearance.DEFAULT.hairStyle);
+  assert.match(auth, /const presets = \[/);
+  assert.match(auth, /ccpresetbar/);
+  assert.match(auth, /RANDOMIZE/);
+  assert.match(auth, /RESET/);
+  assert.match(networking, /hairStyle:custom\?custom\.hairStyle:'windswept'/);
+  assert.match(companions, /const hairStyle=\['windswept','cropped','long','braided'\]/);
+  assert.match(companions, /outfitStyle==='wanderer'/);
+  assert.match(styles, /\.ccstage/);
+  assert.match(styles, /\.ccstylegrid/);
+});
+
 test('auth controller clears stale hunter name when the signed-in account has no profile name', async () => {
   const previousLocalStorage = globalThis.localStorage;
   const previousSessionStorage = globalThis.sessionStorage;

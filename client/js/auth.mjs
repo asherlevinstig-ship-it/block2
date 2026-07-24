@@ -35,32 +35,105 @@ export function createAuthController({ user, password, playerName, status, play,
     return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch]);
   }
 
+  const colorNames = {
+    '#8a5a3c':'Umber', '#a96f46':'Copper', '#c98952':'Honey', '#e0ad76':'Sand', '#f0c997':'Rose', '#6b3f2c':'Walnut',
+    '#2b1b14':'Black', '#5a3320':'Brown', '#8b5a2b':'Auburn', '#e7d574':'Blond', '#d6d9e6':'Silver', '#7b3f63':'Wine',
+    '#185f68':'Teal', '#315f9f':'Blue', '#3b7f52':'Green', '#6b4a9c':'Violet', '#7a3d38':'Amber', '#1f2937':'Slate',
+    '#26283f':'Night', '#3a6ea8':'Azure', '#7d3155':'Rosewood', '#14532d':'Grove', '#7c2d12':'Ember', '#374151':'Steel',
+    '#17182a':'Ink', '#24324a':'Navy', '#2f3326':'Olive', '#3a2a1e':'Leather', '#321f2c':'Plum', '#111827':'Black',
+    '#8f6aa7':'Aether', '#9bdcff':'Sky', '#ffd27a':'Gold', '#65d982':'Leaf', '#ff9a42':'Flame', '#f472b6':'Bloom',
+  };
+  const styleLabels = {
+    hairStyle:{ windswept:'Windswept', cropped:'Cropped', long:'Long', braided:'Braided' },
+    outfitStyle:{ tunic:'Tunic', coat:'Coat', tabard:'Tabard', wanderer:'Wanderer' },
+    accessory:{ ribbon:'Ribbon', headband:'Headband', scarf:'Scarf', none:'None' },
+  };
+  const presets = [
+    { id:'ranger', name:'Grove Ranger', look:{ skin:'#c98952', hair:'#5a3320', face:'#3b7f52', shirt:'#14532d', pants:'#2f3326', accent:'#65d982', hairStyle:'braided', outfitStyle:'wanderer', accessory:'scarf' } },
+    { id:'knight', name:'Gate Knight', look:{ skin:'#e0ad76', hair:'#2b1b14', face:'#315f9f', shirt:'#26283f', pants:'#17182a', accent:'#ffd27a', hairStyle:'cropped', outfitStyle:'tabard', accessory:'headband' } },
+    { id:'arcanist', name:'Arcane Adept', look:{ skin:'#f0c997', hair:'#d6d9e6', face:'#6b4a9c', shirt:'#3a6ea8', pants:'#24324a', accent:'#9bdcff', hairStyle:'long', outfitStyle:'coat', accessory:'ribbon' } },
+    { id:'shadow', name:'Night Hunter', look:{ skin:'#8a5a3c', hair:'#7b3f63', face:'#1f2937', shirt:'#374151', pants:'#111827', accent:'#f472b6', hairStyle:'windswept', outfitStyle:'coat', accessory:'none' } },
+  ];
+
+  function optionLabel(key, value) {
+    return (styleLabels[key] && styleLabels[key][value]) || String(value || '').replace(/_/g, ' ');
+  }
+
   function paletteButton(key, color) {
     const selected = draftAppearance[key] === color ? ' selected' : '';
-    return '<button type="button" class="ccswatch'+selected+'" data-key="'+esc(key)+'" data-color="'+esc(color)+'" style="--swatch:'+esc(color)+'" aria-label="'+esc(key)+' '+esc(color)+'"></button>';
+    const name = colorNames[String(color || '').toLowerCase()] || color;
+    return '<button type="button" class="ccswatch'+selected+'" data-key="'+esc(key)+'" data-color="'+esc(color)+'" style="--swatch:'+esc(color)+'" aria-label="'+esc(key)+' '+esc(name)+'" title="'+esc(name)+'"><i></i><span>'+esc(name)+'</span></button>';
+  }
+
+  function styleButton(key, value) {
+    const selected = draftAppearance[key] === value ? ' selected' : '';
+    return '<button type="button" class="ccstyle'+selected+'" data-key="'+esc(key)+'" data-value="'+esc(value)+'">'+esc(optionLabel(key, value))+'</button>';
+  }
+
+  function previewFigure(side) {
+    const back = side === 'back';
+    return '<div class="ccpreview '+(back?'back':'front')+'" style="--skin:'+esc(draftAppearance.skin)+';--hair:'+esc(draftAppearance.hair)+';--eyes:'+esc(draftAppearance.face)+';--shirt:'+esc(draftAppearance.shirt)+';--pants:'+esc(draftAppearance.pants)+';--accent:'+esc(draftAppearance.accent)+'" data-hair="'+esc(draftAppearance.hairStyle)+'" data-outfit="'+esc(draftAppearance.outfitStyle)+'" data-accessory="'+esc(draftAppearance.accessory)+'">'+
+      '<i class="ccshadow"></i><i class="cccape"></i><i class="cclegs"></i><i class="cctunic"></i><i class="cctabard"></i><i class="ccbelt"></i><i class="ccscarf"></i><i class="ccheadpix"></i><i class="cchair"></i><i class="cchair2"></i><i class="cceyes"></i><i class="ccheadband"></i><i class="ccaccent"></i>'+
+    '</div>';
+  }
+
+  function randomAppearance() {
+    const p = appearanceSystem.PALETTES;
+    const o = appearanceSystem.OPTIONS || {};
+    const pick = list => list[Math.floor(Math.random() * list.length)];
+    return sanitizeAppearance({
+      skin:pick(p.skin), hair:pick(p.hair), face:pick(p.face), shirt:pick(p.shirt), pants:pick(p.pants), accent:pick(p.accent),
+      hairStyle:pick(o.hairStyle || ['windswept']), outfitStyle:pick(o.outfitStyle || ['tunic']), accessory:pick(o.accessory || ['ribbon']),
+    });
   }
 
   function renderCharacterCreator(mode = 'setup') {
     if (!creator || !appearanceSystem) return;
     const p = appearanceSystem.PALETTES;
+    const o = appearanceSystem.OPTIONS || {};
     creator.dataset.mode = mode;
     creator.innerHTML =
-      '<div class="cchead"><b>'+(mode === 'mirror' ? 'MIRROR APPEARANCE' : 'CUSTOMIZE YOUR HUNTER')+'</b><span>Saved to your profile</span></div>'+
+      '<div class="cchead"><div><small>'+(mode === 'mirror' ? 'CRAFTED MIRROR' : 'HUNTER REGISTRY')+'</small><b>'+(mode === 'mirror' ? 'REFINE YOUR LOOK' : 'CUSTOMIZE YOUR HUNTER')+'</b></div><span>Saved to your profile</span></div>'+
       '<div class="ccbody">'+
-        '<div class="ccpreview" style="--skin:'+esc(draftAppearance.skin)+';--hair:'+esc(draftAppearance.hair)+';--eyes:'+esc(draftAppearance.face)+';--shirt:'+esc(draftAppearance.shirt)+';--pants:'+esc(draftAppearance.pants)+';--accent:'+esc(draftAppearance.accent)+'">'+
-          '<i class="ccshadow"></i><i class="cclegs"></i><i class="cctunic"></i><i class="ccbelt"></i><i class="ccheadpix"></i><i class="cchair"></i><i class="cceyes"></i><i class="ccaccent"></i>'+
-        '</div>'+
+        '<div class="ccstage"><div class="ccmirrorglow"></div><div class="ccfigures">'+previewFigure('front')+previewFigure('back')+'</div><div class="cclookname">'+esc(optionLabel('hairStyle', draftAppearance.hairStyle))+' / '+esc(optionLabel('outfitStyle', draftAppearance.outfitStyle))+'</div></div>'+
         '<div class="cccontrols">'+
-          [['skin','Skin'],['hair','Hair'],['face','Eyes'],['shirt','Coat'],['pants','Pants'],['accent','Accent']].map(([key,label])=>
-            '<div class="ccrow"><span>'+label+'</span><div>'+p[key].map(color=>paletteButton(key,color)).join('')+'</div></div>'
+          '<div class="ccpresetbar">'+presets.map(preset=>'<button type="button" class="ccpreset" data-preset="'+esc(preset.id)+'">'+esc(preset.name)+'</button>').join('')+'</div>'+
+          [['skin','Skin tone'],['hair','Hair color'],['face','Eye color'],['shirt','Coat color'],['pants','Pants'],['accent','Accent glow']].map(([key,label])=>
+            '<div class="ccrow"><span>'+label+'</span><div class="ccswatches">'+p[key].map(color=>paletteButton(key,color)).join('')+'</div></div>'
           ).join('')+
+          '<div class="ccstylegrid">'+
+            '<div class="ccstylegroup"><span>Hair style</span><div>'+(o.hairStyle||[]).map(v=>styleButton('hairStyle',v)).join('')+'</div></div>'+
+            '<div class="ccstylegroup"><span>Outfit</span><div>'+(o.outfitStyle||[]).map(v=>styleButton('outfitStyle',v)).join('')+'</div></div>'+
+            '<div class="ccstylegroup"><span>Accessory</span><div>'+(o.accessory||[]).map(v=>styleButton('accessory',v)).join('')+'</div></div>'+
+          '</div>'+
         '</div>'+
       '</div>'+
-      (mode === 'mirror' ? '<div class="ccactions"><button type="button" id="ccsave">SAVE LOOK</button><button type="button" id="cccancel">CLOSE</button></div>' : '');
+      '<div class="ccactions"><button type="button" id="ccrandom">RANDOMIZE</button><button type="button" id="ccreset">RESET</button>'+(mode === 'mirror' ? '<button type="button" id="ccsave">SAVE LOOK</button><button type="button" id="cccancel">CLOSE</button>' : '')+'</div>';
     creator.querySelectorAll('.ccswatch').forEach(btn => btn.addEventListener('click', () => {
       draftAppearance = sanitizeAppearance({ ...draftAppearance, [btn.dataset.key]: btn.dataset.color });
       renderCharacterCreator(mode);
     }));
+    creator.querySelectorAll('.ccstyle').forEach(btn => btn.addEventListener('click', () => {
+      draftAppearance = sanitizeAppearance({ ...draftAppearance, [btn.dataset.key]: btn.dataset.value });
+      renderCharacterCreator(mode);
+    }));
+    creator.querySelectorAll('.ccpreset').forEach(btn => btn.addEventListener('click', () => {
+      const preset = presets.find(p => p.id === btn.dataset.preset);
+      if (preset) {
+        draftAppearance = sanitizeAppearance(preset.look);
+        renderCharacterCreator(mode);
+      }
+    }));
+    const random = creator.querySelector('#ccrandom');
+    if (random) random.addEventListener('click', () => {
+      draftAppearance = randomAppearance();
+      renderCharacterCreator(mode);
+    });
+    const reset = creator.querySelector('#ccreset');
+    if (reset) reset.addEventListener('click', () => {
+      draftAppearance = sanitizeAppearance(appearanceSystem.DEFAULT);
+      renderCharacterCreator(mode);
+    });
     const save = creator.querySelector('#ccsave');
     if (save) save.addEventListener('click', () => saveAppearance(draftAppearance, { mirror: true }).catch(e => setStatus(e.message || 'COULD NOT SAVE APPEARANCE', 'bad')));
     const cancel = creator.querySelector('#cccancel');

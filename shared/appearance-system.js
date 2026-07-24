@@ -19,11 +19,24 @@
     shirt:PALETTES.shirt[0],
     pants:PALETTES.pants[0],
     accent:PALETTES.accent[0],
+    hairStyle:'windswept',
+    outfitStyle:'tunic',
+    accessory:'ribbon',
+  });
+  const OPTIONS=Object.freeze({
+    hairStyle:Object.freeze(['windswept','cropped','long','braided']),
+    outfitStyle:Object.freeze(['tunic','coat','tabard','wanderer']),
+    accessory:Object.freeze(['ribbon','headband','scarf','none']),
   });
   function pick(key,value){
     const list=PALETTES[key]||[];
     const v=String(value||'').toLowerCase();
     return list.find(c=>c.toLowerCase()===v)||DEFAULT[key];
+  }
+  function pickOption(key,value){
+    const list=OPTIONS[key]||[];
+    const v=String(value||'').trim().toLowerCase();
+    return list.includes(v)?v:DEFAULT[key];
   }
   function sanitizeAppearance(input){
     const src=input&&typeof input==='object'?input:{};
@@ -34,11 +47,14 @@
       shirt:pick('shirt',src.shirt),
       pants:pick('pants',src.pants),
       accent:pick('accent',src.accent),
+      hairStyle:pickOption('hairStyle',src.hairStyle),
+      outfitStyle:pickOption('outfitStyle',src.outfitStyle),
+      accessory:pickOption('accessory',src.accessory),
     };
   }
   function sameAppearance(a,b){
     const x=sanitizeAppearance(a),y=sanitizeAppearance(b);
     return Object.keys(DEFAULT).every(k=>x[k]===y[k]);
   }
-  return Object.freeze({PALETTES,DEFAULT,sanitizeAppearance,sameAppearance});
+  return Object.freeze({PALETTES,OPTIONS,DEFAULT,sanitizeAppearance,sameAppearance});
 });

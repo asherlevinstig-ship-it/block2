@@ -3171,6 +3171,9 @@ function appearanceForPath(path, customInput){
     beltBuckle:'#d0a348',
     trim:custom?custom.accent:(path==='mage'?'#9bdcff':path==='shadow'?'#9b6be8':path==='guardian'?'#d49a42':path==='verdant'?'#65d982':'#8f6aa7'),
     scarf:custom?shadeHex(custom.accent,32):(path==='mage'?'#bfe8ff':path==='shadow'?'#b8a0ff':path==='guardian'?'#ffd27a':path==='verdant'?'#bbf7d0':'#7d3155'),
+    hairStyle:custom?custom.hairStyle:'windswept',
+    outfitStyle:custom?custom.outfitStyle:'tunic',
+    accessory:custom?custom.accessory:'ribbon',
   };
 }
 function playerAppearance(){
