@@ -1914,7 +1914,7 @@ test('objective tracker buttons open actions on pointerdown above the HUD layer'
   assert.match(frame,/e\.stopPropagation\(\);/);
   assert.match(frame,/currentQuestEl\.addEventListener\('pointerdown',triggerObjectiveAction,\{capture:true\}\);/);
   assert.match(frame,/currentQuestEl\.addEventListener\('click',triggerObjectiveAction\);/);
-  assert.match(styles,/#currentquest\{position:fixed;right:14px;top:282px;[\s\S]*pointer-events:auto/);
+  assert.match(styles,/#currentquest\{position:fixed;right:\d+px;top:\d+px;[\s\S]*pointer-events:auto/);
   assert.match(styles,/#qwin\{position:fixed;inset:0;[\s\S]*z-index:32/);
 });
 

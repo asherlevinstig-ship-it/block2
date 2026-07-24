@@ -938,13 +938,18 @@ function updateAbilityHUD(){
     d.classList.toggle('locked',locked);
     d.querySelector('.lk').textContent=locked?('Lv'+AB_UNLOCK[i]):'';
     const cd=a.passive ? swCd/60 : abCd[i]/abilityCooldown(a);
+    d.classList.toggle('cooldown',!locked&&cd>0.01);
+    d.classList.toggle('ready',!locked&&cd<=0.01);
     d.querySelector('.cdov').style.height=(Math.max(0,Math.min(1,cd))*100)+'%';
   });
   if(equippedAegisArmor()){
     const d=abSlots[idx]; if(!d) return;
     d.classList.remove('locked');
     d.querySelector('.lk').textContent='';
-    d.querySelector('.cdov').style.height=(Math.max(0,Math.min(1,armorCd/28))*100)+'%';
+    const cd=Math.max(0,Math.min(1,armorCd/28));
+    d.classList.toggle('cooldown',cd>0.01);
+    d.classList.toggle('ready',cd<=0.01);
+    d.querySelector('.cdov').style.height=(cd*100)+'%';
     idx++;
   }
   const lw=selectedLegendaryWeapon();
@@ -953,7 +958,10 @@ function updateAbilityHUD(){
     d.classList.remove('locked');
     d.querySelector('.lk').textContent='';
     const cd=lw.kind==='blackhole' ? blackholeCd : Math.max(0,(legendaryWeaponCd[lw.kind]||0)-performance.now()/1000);
-    d.querySelector('.cdov').style.height=(Math.max(0,Math.min(1,cd/(lw.info.legendary.cd||10)))*100)+'%';
+    const pct=Math.max(0,Math.min(1,cd/(lw.info.legendary.cd||10)));
+    d.classList.toggle('cooldown',pct>0.01);
+    d.classList.toggle('ready',pct<=0.01);
+    d.querySelector('.cdov').style.height=(pct*100)+'%';
   }
 }
 
