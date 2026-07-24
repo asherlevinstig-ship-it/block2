@@ -5555,7 +5555,12 @@ function secondaryAction(){
   const heldRC=inv[selected];
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
-  if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && AUTH_UI.openAppearanceEditor){ AUTH_UI.openAppearanceEditor('mirror'); return; }
+  if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && AUTH_UI.openAppearanceEditor){
+    if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
+    lockFallback=false; locked=false; refreshPlayUi();
+    AUTH_UI.openAppearanceEditor('mirror');
+    return;
+  }
   if(heldRC && heldRC.id===I.REPAIR_KIT){ useRepairKit(selected); return; }
   if(heldRC && heldRC.id===I.DRAGON_TREAT && protectPetTamerTutorialTreatUse()) return;
   if(heldRC && DRAGON_EGG_TO_TYPE[heldRC.id]!==undefined){ hatchDragonEgg(selected); return; }

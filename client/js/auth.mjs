@@ -74,6 +74,9 @@ export function createAuthController({ user, password, playerName, status, play,
 
   function openAppearanceEditor(mode = 'mirror') {
     if (!creator) return false;
+    if (mode === 'mirror' && typeof document !== 'undefined') {
+      try { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); } catch (_) {}
+    }
     setAppearance(state.gameProfile && state.gameProfile.appearance || draftAppearance);
     creator.classList.remove('hidden');
     creator.classList.toggle('floating', mode === 'mirror');

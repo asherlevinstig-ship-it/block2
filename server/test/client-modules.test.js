@@ -3271,6 +3271,8 @@ test('network session clears stale saved room reconnect tokens before login conn
 
 test('network controller bounds a hung live reconnect and falls back to a fresh join', async () => {
   const attached = [], events = [];
+  const storage = new Map();
+  const removed = [];
   const first = { reconnectionToken: 'live:token', onLeave(fn) { this.leaveHandler = fn; } };
   const fresh = { reconnectionToken: 'fresh:token', onLeave(fn) { this.leaveHandler = fn; } };
   let joins = 0;
@@ -3289,19 +3291,27 @@ test('network controller bounds a hung live reconnect and falls back to a fresh 
   const controller = createNetworkController({
     Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
     liveReconnectTimeout: 10, reconnectAttempts: 1, joinTimeout: 10, joinAttempts: 1,
-    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    sessionStorage: {
+      getItem: key => storage.get(key) || '',
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: key => { removed.push(key); storage.delete(key); },
+    },
     onAttach: room => attached.push(room), onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {},
     onReconnectFallback: error => events.push(['reconnectFallback', /timed out/i.test(String(error && error.message || error))]),
     onRestored() {}, onFailure(error) { throw error; },
   });
   controller.connect('Hunter');
   await new Promise(resolve => setTimeout(resolve, 0));
+  storage.set('resume:auth', 'session-token');
   first.leaveHandler();
   await new Promise(resolve => setTimeout(resolve, 30));
   assert.deepEqual(events, [['join', 1], ['reconnect', 'live:token'], ['reconnectFallback', true], ['join', 2]]);
   assert.deepEqual(attached, [first, fresh]);
   assert.equal(controller.state.room, fresh);
   assert.equal(controller.state.on, true);
+  assert.deepEqual(removed, ['resume', 'resume:auth']);
+  assert.equal(storage.get('resume'), 'fresh:token');
+  assert.equal(storage.get('resume:auth'), undefined);
 });
 
 test('multiplayer avatars use authenticated profile names and unflipped replicated yaw', () => {

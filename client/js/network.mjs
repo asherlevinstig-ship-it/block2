@@ -59,6 +59,14 @@ export function createNetworkController(options) {
       text.includes('networkerror');
   }
 
+  function clearStoredReconnectSession() {
+    try {
+      if (!options.tokenKey) return;
+      options.sessionStorage.removeItem(options.tokenKey);
+      options.sessionStorage.removeItem(options.tokenKey + ':auth');
+    } catch (_) {}
+  }
+
   async function joinRoomWithRetries(start, meta = {}) {
     let lastError = null;
     for (let attempt = 1; attempt <= joinAttempts; attempt++) {
@@ -105,7 +113,7 @@ export function createNetworkController(options) {
       resumeTimeout,
       'Session resume timed out',
     ).catch(error => {
-      try { options.sessionStorage.removeItem(options.tokenKey); } catch (_) {}
+      clearStoredReconnectSession();
       if (options.onResumeFallback) options.onResumeFallback(error);
       return joinFresh();
     });
@@ -166,7 +174,7 @@ export function createNetworkController(options) {
       ),
       { attempts: reconnectAttempts, baseDelay: 250, onAttempt: options.onReconnectAttempt },
     ).catch(error => {
-      try { options.sessionStorage.removeItem(options.tokenKey); } catch (_) {}
+      clearStoredReconnectSession();
       if (options.onReconnectFallback) options.onReconnectFallback(error);
       return joinFresh(client, name);
     }).then(next => {
