@@ -199,6 +199,15 @@ test('overworld room stays warm to avoid concurrent first-join room creation rac
   assert.match(source, /this\.autoDispose\s*=\s*false/);
 });
 
+test('server startup prewarms the main overworld before player matchmaking', () => {
+  const prewarm = fs.readFileSync(path.join(__dirname, '..', 'room-prewarm.js'), 'utf8');
+  const cloud = fs.readFileSync(path.join(__dirname, '..', 'cloud.js'), 'utf8');
+  const local = fs.readFileSync(path.join(__dirname, '..', 'index.js'), 'utf8');
+  assert.match(prewarm, /matchMaker\.createRoom\('blockcraft',\s*\{\s*shardId/);
+  assert.match(cloud, /beforeListen:[\s\S]*prewarmOverworldRoom\(await runtime\)/);
+  assert.match(local, /await gameServer\.listen\(PORT\);[\s\S]*await prewarmOverworldRoom\(config\)/);
+});
+
 test('economy telemetry records bounded signed gold flow summaries', () => {
   const ledger = createEconomyLedger(2);
   assert.equal(recordEconomyGold(ledger, { amount: 0, category: 'noop', source: 'ignored' }), null);

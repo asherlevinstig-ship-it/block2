@@ -4,6 +4,7 @@ const express = require('express');
 const { Server } = require('@colyseus/core');
 const { WebSocketTransport } = require('@colyseus/ws-transport');
 const { prepareRuntime, attachHttpRoutes } = require('./runtime');
+const { prewarmOverworldRoom } = require('./room-prewarm');
 
 async function main() {
   const config = await prepareRuntime();
@@ -27,6 +28,7 @@ async function main() {
 
   const PORT = process.env.PORT || 2567;
   await gameServer.listen(PORT);
+  await prewarmOverworldRoom(config);
   if (typeof process.send === 'function') process.send('ready');
   console.log('Blockcraft server running — open http://localhost:' + PORT);
 }
