@@ -218,6 +218,14 @@ export function createAuthController({ user, password, playerName, status, play,
     setStatus('SIGNED OUT');
   }
 
+  function adminApiUrl(path) {
+    try {
+      const local = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+      if (local) return path;
+    } catch (_) {}
+    return apiUrl(path);
+  }
+
   async function resetPlayerProfile({ target, token } = {}) {
     const value = String(target || '').trim();
     const adminToken = String(token || '').trim();
@@ -226,7 +234,7 @@ export function createAuthController({ user, password, playerName, status, play,
         : state.account && state.account.id ? { accountId: state.account.id }
           : {};
     if (!body.email && !body.accountId) throw new Error('Sign in or enter an email/account id');
-    const res = await request(apiUrl('/auth/admin/reset-player'), {
+    const res = await request(adminApiUrl('/auth/admin/reset-player'), {
       method: 'POST',
       credentials: 'include',
       headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
@@ -256,7 +264,7 @@ export function createAuthController({ user, password, playerName, status, play,
     const adminToken = String(token || '').trim();
     const targetBody = adminTargetBody(target);
     if (!targetBody.email && !targetBody.accountId) throw new Error('Sign in or enter an email/account id');
-    const res = await request(apiUrl(url), {
+    const res = await request(adminApiUrl(url), {
       method: 'POST',
       credentials: 'include',
       headers: authHeaders({ 'Content-Type': 'application/json', 'x-admin-reset-token': adminToken }),
