@@ -39,7 +39,7 @@ function activeAbilityPath(){
   return BETA_ABILITY_TEST ? (betaAbilityPath||S.path||'shadow') : (S.path||'');
 }
 function cycleBetaAbilityPath(){
-  const paths=['shadow','mage','guardian'];
+  const paths=Object.keys(PATHS);
   const cur=activeAbilityPath();
   betaAbilityPath=paths[(paths.indexOf(cur)+1+paths.length)%paths.length];
   renderAbilities(); updateAbilityHUD();
@@ -552,7 +552,7 @@ function sendAbilityRequest(path,i,a){
   mp-=abilityManaCost(a); sp=Math.max(0,sp-a.sp); abCd[i]=abilityCooldown(a);
   // predict movement/buff feedback locally; the Shadow Soldier is server-simulated
   // in multiplayer (a real replicated mob), so slot 2 no longer spawns a local ghost
-  if((path==='shadow' && (i===0||i===1)) || (path==='guardian' && i===0)){
+  if((path==='shadow' && (i===0||i===1)) || (path==='guardian' && i===0) || (path==='verdant' && i===2)){
     doAbility(path,i);
   }
   SFX.cast();
@@ -560,6 +560,30 @@ function sendAbilityRequest(path,i,a){
 }
 function abilityManaCost(a){return a.mp*(abilitySpec==='arcanist'&&ABILITY_PROGRESSION.rankForLevel(S.lvl)>=2?.85:1);}
 function abilityCooldown(a){return a.cd*(abilitySpec==='arcanist'&&ABILITY_PROGRESSION.rankForLevel(S.lvl)>=2?.85:1);}
+function verdantMendVfx(x,y,z,scale=1){
+  healingPlusVfx(x,y+.05,z,.75,.72*scale);
+  ringPulse(x,y+.08,z,1.6*scale,0x22c55e,.45);
+  glowFlash(x,y+1,z,0x86efac,3.2*scale,.34);
+  burst(x,y+1,z,[.25,1,.42],22,2.4*scale,2.4,.62);
+}
+function rootSnareVfx(x,y,z,radius=5.8){
+  SFX.cast();
+  ringPulse(x,y+.08,z,radius,0x22c55e,.55);
+  ringPulse(x,y+.1,z,Math.max(1.2,radius*.45),0x14532d,.6);
+  for(let k=0;k<42;k++){
+    const a=Math.random()*Math.PI*2, r=.8+Math.random()*radius;
+    spawnParticle({x:x+Math.cos(a)*r,y:y+.1+Math.random()*.8,z:z+Math.sin(a)*r,
+      vx:-Math.cos(a)*.5,vy:.8+Math.random()*1.3,vz:-Math.sin(a)*.5,life:.65+Math.random()*.35,grav:1.1,r:.18,g:.78,b:.28});
+  }
+}
+function pantherFormVfx(x,y,z){
+  SFX.cast();
+  shadowCastScreen('panther');
+  ringPulse(x,y+.08,z,1.4,0x22c55e,.45);
+  ringPulse(x,y+.1,z,2.2,0x052e16,.6);
+  glowFlash(x,y+1,z,0x22c55e,4.0,.3);
+  burst(x,y+1,z,[.05,.9,.35],34,3,2.2,.62);
+}
 // solo block destruction on ability impact (mirrors the server's breakBlocksInRadius)
 const ABILITY_BREAKABLE_C=new Set([B.GRASS,B.DIRT,B.STONE,B.SAND,B.LOG,B.LEAVES,B.PLANKS,B.COBBLE,B.GLASS,B.BRICK,B.TABLE,B.COAL_ORE,B.IRON_ORE,B.DIAMOND_ORE,B.CONCRETE,B.TORCH,B.BED,B.FARMLAND,B.WHEAT_1,B.WHEAT_2,B.WHEAT_3,B.SNOW,B.ICE,B.RED_SAND,B.TERRACOTTA,B.CACTUS,B.LANTERN,B.CAMPFIRE,B.EGG_INSULATOR]);
 function breakAbilityBlocks(x,y,z,radius,maxBreaks){
@@ -641,7 +665,7 @@ function doAbility(path,i){
       damageMob(mob,(18+(S.int-1)*.8)*(abilitySpec==='elementalist'?1.15:1),null);
       breakAbilityBlocks(mob.grp.position.x,mob.grp.position.y+.5,mob.grp.position.z,1.4,5);
     }
-  } else {
+  } else if(path==='guardian'){
     if(i===0){
       if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('iron');
       shadowCastScreen('iron');
@@ -662,12 +686,36 @@ function doAbility(path,i){
       }
       breakAbilityBlocks(px,py+.2,pz,2.8,16);
     }
+  } else if(path==='verdant'){
+    if(i===0){
+      verdantMendVfx(px,py,pz,1);
+      hp=Math.min(maxHp(),hp+Math.round((9+(S.int-1)*.45)*(abilitySpec==='grovekeeper'?1.25:1)));
+      renderBars();
+      sysMsg('<b>Verdant Mend</b>: life blooms');
+    } else if(i===1){
+      rootSnareVfx(px,py,pz,5.8);
+      for(const m of [...mobs]){
+        const d2=Math.hypot(m.grp.position.x-px, m.grp.position.z-pz);
+        if(d2<5.8){
+          m.slowT=Math.max(m.slowT||0,abilitySpec==='grovekeeper'?6.5:5.25);
+          iceLockVfx(m.grp.position.x,m.grp.position.y,m.grp.position.z);
+          damageMob(m,(5+(S.int-1)*.35)*(abilitySpec==='grovekeeper'?1.1:1),null);
+        }
+      }
+      if(abilitySpec==='grovekeeper'){ hp=Math.min(maxHp(),hp+4); renderBars(); }
+      breakAbilityBlocks(px,py+.15,pz,1.6,6);
+    } else {
+      pantherFormVfx(px,py,pz);
+      buffs.panther=abilitySpec==='nightstalker'?18:14;
+      buffs.spd=Math.max(buffs.spd,abilitySpec==='nightstalker'?18:14);
+      sysMsg('<b>Panther Form</b>: claws and moonlight answer');
+    }
   }
 }
 function shadowCastScreen(kind){
   const el=document.getElementById('shadowcastfx');if(!el)return;
   el.className='';void el.offsetWidth;el.className=kind;
-  const durations={dash:360,umbral:850,iron:740,shockwave:500,secondwind:1080};
+  const durations={dash:360,umbral:850,iron:740,shockwave:500,secondwind:1080,panther:900};
   setTimeout(()=>{if(el.className===kind)el.className='';},durations[kind]||700);
 }
 Object.defineProperty(globalThis,'BlockcraftAbilityScreen',{value:Object.freeze({play:shadowCastScreen}),configurable:true});
@@ -714,10 +762,13 @@ function tickAbilities(dt,t){
   blackholeCd=Math.max(0,blackholeCd-dt);
   buffs.spd=Math.max(0,buffs.spd-dt);
   buffs.stone=Math.max(0,buffs.stone-dt);
+  buffs.panther=Math.max(0,(buffs.panther||0)-dt);
   buffs.gather=Math.max(0,(buffs.gather||0)-dt);
   if(buffs.regen>0){ buffs.regen=Math.max(0,buffs.regen-dt); hp=Math.min(maxHp(),hp+2*dt); }
   if(buffs.dmg>0 && Math.random()<dt*2.2) umbralEdgeVfx(player.pos.x,player.pos.y,player.pos.z,.34,player.yaw);
   if(buffs.armor>0 && Math.random()<dt*3.5) guardShellVfx(player.pos.x,player.pos.y,player.pos.z,.32);
+  if(buffs.panther>0 && Math.random()<dt*5) spawnParticle({x:player.pos.x+(Math.random()-.5)*.8,y:player.pos.y+.2+Math.random()*1.2,z:player.pos.z+(Math.random()-.5)*.8,
+    vx:(Math.random()-.5)*.6,vy:.35+Math.random()*.5,vz:(Math.random()-.5)*.6,life:.45,grav:.2,r:.08,g:.85,b:.28});
   if(S.lvl<3 && hunger<maxHunger()){
     hunger=maxHunger();hungerAcc=0;starvationAcc=0;renderBars();
   }else if(!NET.on && locked && hp>0 && !sleeping && !tutorialSafe()){
@@ -998,8 +1049,9 @@ function renderStat(){
     evolution.forEach((text,i)=>{const live=ABILITY_PROGRESSION.IMPLEMENTED_RANKS[i],earned=i<=rank;h+='<div class="ablist"><span'+(earned&&live?'':' class="dim"')+'>'+ABILITY_PROGRESSION.RANKS[i]+'-RANK'+(!live?' · ROADMAP':'')+'</span><span class="dim">'+text+(!live?' · not yet available':'')+'</span></div>';});
     const specs=ABILITY_PROGRESSION.SPECIALIZATIONS[S.path];
     if(rank>=2){
-      h+='<div class="sub2" style="margin-top:14px">SPECIALIZATION'+(abilitySpec?' &mdash; PERMANENT':' &mdash; CHOOSE ONE PERMANENT PATH')+'</div>';
-      for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec'+(chosen?' selected':'')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+'</p></div>';}
+      const specReady=abilitySpec||highestGateRankCleared>=2;
+      h+='<div class="sub2" style="margin-top:14px">SPECIALIZATION'+(abilitySpec?' &mdash; PERMANENT':specReady?' &mdash; CHOOSE ONE PERMANENT PATH':' &mdash; CLEAR A C-RANK TRIAL')+'</div>';
+      for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec'+(chosen?' selected':'')+(specReady?'':' locked')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+(specReady?'':' Clear a C-rank Gate positioning trial first.')+'</p></div>';}
     }
   }
   statPanel.innerHTML=h;
@@ -1013,7 +1065,7 @@ function renderStat(){
   }));
   statPanel.querySelectorAll('.pathcard').forEach(c=>c.addEventListener('click',()=>{
     if(c.dataset.deityChoice){if(NET.on&&NET.room)NET.room.send('deityPowerChoose',{power:c.dataset.deityChoice});return;}
-    if(c.dataset.spec){if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:c.dataset.spec});return;}
+    if(c.dataset.spec){if(!abilitySpec&&highestGateRankCleared<2){sysMsg('Clear a <b>C-rank Gate</b> trial before choosing a specialization.');return;}if(!abilitySpec&&NET.on&&NET.room)NET.room.send('abilitySpec',{spec:c.dataset.spec});return;}
     setAbilityPath(c.dataset.path);
   }));
   statPanel.querySelectorAll('button[data-deity-use]').forEach(b=>b.addEventListener('click',()=>{
@@ -2284,6 +2336,7 @@ gameContext.registerModule('dimensions', Object.freeze({
   exitJobTutorialRoom,
   enterTamingLand,
   exitTamingLand,
+  openStat,
   rebuild:rebuildAllChunks,
   tickGates,
 }));

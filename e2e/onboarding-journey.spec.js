@@ -299,33 +299,34 @@ test('training leads through Mara, promotion, preparation, and the first D-rank 
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().e2eJourneyResult)).toMatchObject({ requestId: 'd-clear', ok: true });
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonCleared)).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(1);
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('next_adventurer_contract');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('c_rank_climb');
   const rankProgress = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().rankProgress);
   expect(rankProgress).toMatchObject({ rank: 1, nextRank: 2, nextRankLevel: 21, maxRank: false });
   expect(rankProgress.remaining).toBeGreaterThan(0);
-  await expect(page.locator('#rewardpanel')).toContainText('ADVENTURER LOOP UNLOCKED');
-  await expect(page.locator('#rewardpanel')).toContainText('all grant Hunter XP');
+  await expect(page.locator('#rewardpanel')).toContainText('C-RANK CLIMB UNLOCKED');
+  await expect(page.locator('#rewardpanel')).toContainText('D-rank Gates');
   await expect(page.locator('#rewardpanel')).toContainText('C key secured');
   await expect(page.locator('#rewardpanel')).toContainText('Reach C-Rank Hunter through XP');
-  await expect(page.locator('#rewardclose')).toHaveText('TRACK NEXT CONTRACT');
+  await expect(page.locator('#rewardclose')).toHaveText('C PREP CHECK');
   await closeVisibleReward(page);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.useDungeonExit())).toBe(true);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().compassTarget)).toMatchObject({ label: 'Board' });
   await expect(page.locator('#coords')).toContainText('C in');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective)).toMatchObject({
-    label: 'Next Adventurer Contract', text: 'Return to repeatable Adventurer contracts.',
+    label: 'C-rank Climb',
+    text: 'Build Hunter XP through rotating Adventurer contracts, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.',
   });
 
   await page.reload();
   await page.locator('#playbtn').click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__?.status().connected)).toBe(true);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('next_adventurer_contract');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('c_rank_climb');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().highestGateRankCleared)).toBe(1);
-  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('Next Adventurer Contract');
+  expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().currentObjective?.label)).toBe('C-rank Climb');
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.walkToJobs())).toBe(true);
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('jobContract', { action: 'take' }));
-  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('');
+  await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().progressionFocus)).toBe('c_rank_climb');
   const rotating = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().contract);
   expect(rotating.title).not.toBe("Mara's Field Work");
   expect(['kill', 'gate', 'event']).toContain(rotating.type);

@@ -346,9 +346,78 @@ class CombatMixin {
     } else if (def.kind === 'shockwave') {
       this.damageMobsInRadius(client,p.x,p.y+.4,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('shockwave',rec.prof.S)*(spec==='juggernaut'&&rank>=2?1.25:1),{knock:spec==='juggernaut'&&rank>=2?4.8:3.8});
       this.breakBlocksInRadius(client, p.x, p.y + .2, p.z, 2.8, 16);
+    } else if (def.kind === 'mend') {
+      const result = this.healVerdantAlly(client, p, def.range || 9, ABILITY_SYSTEM.abilityDamage('mend', rec.prof.S) * (spec === 'grovekeeper' && rank >= 2 ? 1.25 : 1));
+      fx.targetSid = result.sid || '';
+      fx.heal = result.heal | 0;
+      if (spec === 'grovekeeper' && rank >= 2 && result.sid) {
+        const targetClient = this.clients.find(c => c.sessionId === result.sid);
+        if (targetClient) {
+          const buffs = this.abilityBuffs.get(result.sid) || {};
+          buffs.verdantRegenUntil = now + 6000;
+          this.abilityBuffs.set(result.sid, buffs);
+        }
+      }
+    } else if (def.kind === 'roots') {
+      const damage = ABILITY_SYSTEM.abilityDamage('roots', rec.prof.S) * (spec === 'grovekeeper' && rank >= 2 ? 1.1 : 1);
+      this.damageMobsInRadius(client, p.x, p.y + .45, p.z, def.radius, damage, { slow: spec === 'grovekeeper' && rank >= 2 ? 6.5 : 5.25, stun: .55 });
+      if (spec === 'grovekeeper' && rank >= 2) this.healVerdantAllies(client, p, def.radius, 4);
+      this.breakBlocksInRadius(client, p.x, p.y + .15, p.z, 1.6, 6);
+    } else if (def.kind === 'panther') {
+      const buffs = this.abilityBuffs.get(client.sessionId) || {};
+      buffs.pantherUntil = now + (spec === 'nightstalker' && rank >= 2 ? 18000 : 14000);
+      this.abilityBuffs.set(client.sessionId, buffs);
+      fx.durationMs = buffs.pantherUntil - now;
     }
     this.sendSpace(p.dgn || '', 'fx', fx);
     client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp });
+  }
+  healVerdantAlly(client, p, radius, amount) {
+    const team = this.cleanTeamId(p.team);
+    let best = null;
+    for (const c of this.clients) {
+      const op = this.state.players.get(c.sessionId);
+      if (!op || (op.dgn || '') !== (p.dgn || '')) continue;
+      if (team && this.cleanTeamId(op.team) !== team) continue;
+      if (Math.hypot(op.x - p.x, op.z - p.z) > radius) continue;
+      const hp = this.ensurePlayerHp(c), missing = Math.max(0, hp.max - hp.hp);
+      if (missing <= 0) continue;
+      const pct = hp.hp / Math.max(1, hp.max);
+      if (!best || pct < best.pct || (pct === best.pct && c.sessionId !== client.sessionId)) best = { client: c, hp, pct };
+    }
+    if (!best) best = { client, hp: this.ensurePlayerHp(client), pct: 1 };
+    const before = best.hp.hp;
+    best.hp.hp = Math.min(best.hp.max, best.hp.hp + amount);
+    const heal = Math.round(best.hp.hp - before);
+    if (heal > 0) {
+      best.client.send('hurt', { n: -heal, reason: 'verdant_mend', hp: best.hp.hp, maxHp: best.hp.max });
+      const rec = this.profileFor(best.client);
+      if (rec) {
+        this.syncProfileVitals(best.client, rec.prof);
+        this.dirtyPlayers.add(rec.token);
+      }
+      if (best.client.sessionId !== client.sessionId && p.dgn) this.recordBossSupport(client, p.dgn, heal);
+    }
+    return { sid: best.client.sessionId, heal };
+  }
+  healVerdantAllies(client, p, radius, amount) {
+    const team = this.cleanTeamId(p.team);
+    let healingDone = 0;
+    for (const c of this.clients) {
+      const op = this.state.players.get(c.sessionId);
+      if (!op || (op.dgn || '') !== (p.dgn || '')) continue;
+      if (team && this.cleanTeamId(op.team) !== team) continue;
+      if (Math.hypot(op.x - p.x, op.z - p.z) > radius) continue;
+      const hp = this.ensurePlayerHp(c), before = hp.hp;
+      hp.hp = Math.min(hp.max, hp.hp + amount);
+      const heal = Math.round(hp.hp - before);
+      if (heal > 0) {
+        c.send('hurt', { n: -heal, reason: 'verdant_roots', hp: hp.hp, maxHp: hp.max });
+        if (c.sessionId !== client.sessionId) healingDone += heal;
+      }
+    }
+    if (p.dgn && healingDone > 0) this.recordBossSupport(client, p.dgn, healingDone);
+    return healingDone;
   }
   shadowSpiritRank(mob,meta={}){
     if(mob&&mob.kind==='boss'&&mob.dgn&&this.instances&&this.instances[mob.dgn])return Math.max(0,Math.min(5,this.instances[mob.dgn].rank|0));
@@ -1047,15 +1116,21 @@ class CombatMixin {
   }
   setPath(client, path) {
     const rec = this.profileFor(client);
-    if (!rec || rec.prof.S.path || rec.prof.S.lvl < 2) return;
+    if (!rec || rec.prof.S.path || rec.prof.S.lvl < 2 || !ABILITY_PATHS[path]) return;
     rec.prof.S.path = path;
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
   }
   setAbilitySpecialization(client,spec){
     const rec=this.profileFor(client);
-    if(!rec||rec.prof.abilitySpec||ABILITY_PROGRESSION.rankForLevel(rec.prof.S.lvl)<2||!ABILITY_PROGRESSION.validSpecialization(rec.prof.S.path,spec))return client.send('abilitySpecReject',{reason:'invalid'});
-    rec.prof.abilitySpec=spec;this.dirtyPlayers.add(rec.token);client.send('abilitySpecResult',{spec,path:rec.prof.S.path});
+    const prof=rec&&rec.prof;
+    const trialCleared=!!(prof&&((prof.highestGateRankCleared|0)>=2||prof.progressionFocus==='c_rank_specialization'));
+    if(!prof||prof.abilitySpec||ABILITY_PROGRESSION.rankForLevel(prof.S.lvl)<2||!trialCleared||!ABILITY_PROGRESSION.validSpecialization(prof.S.path,spec))return client.send('abilitySpecReject',{reason:'invalid'});
+    prof.abilitySpec=spec;
+    if(prof.progressionFocus==='c_rank_specialization')prof.progressionFocus='b_rank_pressure';
+    this.dirtyPlayers.add(rec.token);
+    client.send('abilitySpecResult',{spec,path:prof.S.path,progressionFocus:prof.progressionFocus||''});
+    if(this.activeQuestObjectives)client.send('progressionFocus',{focus:prof.progressionFocus||'',progressionFocus:prof.progressionFocus||'',activeObjectives:this.activeQuestObjectives(client,prof)});
   }
   alertPack(mobId) {
     const meta = this.mobMeta[mobId];

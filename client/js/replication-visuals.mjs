@@ -1,7 +1,7 @@
 import {mobDistanceTierSq,consumeEntityStep} from './performance-budget.mjs';
 import {disposeObjectTree} from './three-disposal.mjs';
 
-export function createReplicationVisuals({NET,player,familiarReaction=()=>{}}){
+export function createReplicationVisuals({NET,player,familiarReaction=()=>{},companions=()=>null}){
 // ---- server mobs: kind-aware models, state-driven telegraph animation ----
 const ANIMAL_BASE_KIND={prairie_hare:'rabbit',forest_stag:'deer',dune_hare:'rabbit',ridge_boar:'boar',frost_stag:'deer',mire_boar:'boar',pack_mule:'deer'};
 function isAnimalKind(kind){ return kind==='deer'||kind==='boar'||kind==='rabbit'||!!ANIMAL_BASE_KIND[kind]; }
@@ -802,6 +802,27 @@ function netAbilityFx(m){
     if(!(m.sid&&NET.room&&m.sid===NET.room.sessionId))animateRemoteGuardianCast(m);
     shockwaveEarthVfx(x,y,z,true);
     showName('Shockwave');
+  } else if(m.kind==='mend'){
+    healingPlusVfx(x,y+.05,z,.8,.8);
+    ringPulse(x,y+.08,z,1.6,0x22c55e,.45);
+    glowFlash(x,y+1,z,0x86efac,3.2,.34);
+    burst(x,y+1,z,[.25,1,.42],22,2.4,2.4,.62);
+    showName('Verdant Mend');
+  } else if(m.kind==='roots'){
+    ringPulse(x,y+.08,z,5.8,0x22c55e,.55);
+    ringPulse(x,y+.1,z,2.6,0x14532d,.6);
+    burst(x,y+.5,z,[.18,.8,.28],36,5.4,1.8,.65);
+    showName('Rootsnare');
+  } else if(m.kind==='panther'){
+    if(!(m.sid&&NET.room&&m.sid===NET.room.sessionId)){
+      const r=m.sid&&NET.remotes&&NET.remotes[m.sid], api=companions&&companions();
+      if(r&&api&&api.applyPantherFormVisual)api.applyPantherFormVisual(r,m.durationMs||14000);
+      ringPulse(x,y+.08,z,1.4,0x22c55e,.45);
+      ringPulse(x,y+.1,z,2.2,0x052e16,.6);
+      glowFlash(x,y+1,z,0x22c55e,4.0,.3);
+      burst(x,y+1,z,[.05,.9,.35],34,3,2.2,.62);
+    }
+    showName('Panther Form');
   } else if(m.kind==='buff'||m.kind==='armor'||m.kind==='dash'||m.kind==='summon'){
     // the caster already played these locally as prediction — this echo is for spectators
     if(m.sid&&NET.room&&m.sid===NET.room.sessionId)return;

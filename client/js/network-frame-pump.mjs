@@ -13,6 +13,7 @@ export function createNetworkFramePump({
   emitDragonTrail,
   pulseAegisGlow,
   tickSpiritVisual,
+  tickPantherFormVisual,
   tickLocalSpiritVisual,
   updateTag:netUpdateTag,
 }){
@@ -77,7 +78,11 @@ export function createNetworkFramePump({
         if(moving) emitDragonTrail({x:p.x,y:p.y-lift,z:p.z},r.grp.rotation.y,dragonType(ref.mount),stepDt,r);
       }
       if(tickSpiritVisual)tickSpiritVisual(r,now);
-      if(ref.mount){
+      const pantherActive=tickPantherFormVisual&&tickPantherFormVisual(r,now,stepDt,moving);
+      if(pantherActive){
+        if(r.legs)for(const leg of r.legs)leg.rotation.x=0;
+        if(r.arms)for(const arm of r.arms)arm.rotation.x=0;
+      }else if(ref.mount){
         r.legs[0].rotation.x=-.95;
         r.legs[1].rotation.x=-.95;
       }else{

@@ -18,6 +18,8 @@ const { canonicalDungeonId } = require('../shared/dungeon-pools');
 const JOB_SYSTEM = require('../shared/job-system');
 const GEAR_SYSTEM = require('../shared/gear-system');
 const SHADOW_ARMY = require('../shared/shadow-army');
+const ABILITY_SYSTEM = require('../shared/ability-system');
+const APPEARANCE_SYSTEM = require('../shared/appearance-system');
 const ABILITY_PROGRESSION = require('../shared/ability-progression');
 const FAMILIAR_SYSTEM = require('../shared/familiar-system');
 const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials');
@@ -45,7 +47,7 @@ const ARMOR_IDS = new Set([137, 183, 184, 211, 212, 213]);
 const PROGRESSION_FOCUS_STATES = new Set([
   'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
-  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'next_adventurer_contract',
 ]);
 // earnable mounts that persist on the profile, stored as 'dragon:<type>'
 const MOUNT_UNLOCK_IDS = new Set(['dragon:ember', 'dragon:verdant', 'dragon:frost', 'dragon:storm', 'dragon:void']);
@@ -371,6 +373,7 @@ function defaultProfile(name) {
   return {
     name: cleanName(name),
     nameSet: chosenName,
+    appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null),
     S: { lvl: 1, xp: 0, pts: 0, str: 1, agi: 1, vit: 1, int: 1, path: '' },
     job: '',
     jobXp: 0,
@@ -599,6 +602,10 @@ function sanitizeHomesteadUpgrades(raw) {
     : null;
   return {
     storage: clampI(src.storage, 0, 1),
+    forge: clampI(src.forge, 0, 1),
+    kitchen: clampI(src.kitchen, 0, 1),
+    meditation: clampI(src.meditation, 0, 1),
+    stable: clampI(src.stable, 0, 1),
     comfort: clampI(src.comfort, 0, 1),
     rest: clampI(src.rest, 0, 1),
     homeSpawn: home,
@@ -851,6 +858,7 @@ function sanitizeProfile(p) {
   if (!p || typeof p !== 'object') return defaultProfile();
   const out = {};
   out.name = cleanName(p.name);
+  out.appearance = APPEARANCE_SYSTEM.sanitizeAppearance(p.appearance);
   const S = p.S || {};
   out.S = {
     lvl: clampI(S.lvl, 1, 999),
@@ -860,7 +868,7 @@ function sanitizeProfile(p) {
     agi: clampI(S.agi, 1, 999),
     vit: clampI(S.vit, 1, 999),
     int: clampI(S.int, 1, 999),
-    path: ['', 'shadow', 'mage', 'guardian'].includes(S.path) ? S.path : '',
+    path: S.path && ABILITY_SYSTEM.PATHS[S.path] ? S.path : '',
   };
   out.nameSet = p.nameSet === true || (p.nameSet == null && (
     out.name !== 'Hunter'
@@ -1033,7 +1041,10 @@ function sanitizeProfile(p) {
     .filter(v => typeof v === 'string' && /^[a-z_]{2,32}$/.test(v)).slice(0, 32))];
   out.progressionMilestoneRewards = [...new Set((Array.isArray(p.progressionMilestoneRewards) ? p.progressionMilestoneRewards : [])
     .filter(v => typeof v === 'string' && /^[a-z_]{2,32}$/.test(v)).slice(0, 32))];
-  if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'next_adventurer_contract';
+  if (out.progressionFocus === 'first_d_gate' && out.highestGateRankCleared >= 1) out.progressionFocus = 'c_rank_climb';
+  if (out.progressionFocus === 'c_rank_climb' && (out.highestGateRankCleared >= 2 || (out.S.lvl | 0) >= HUNTER_RANK_LEVELS[2])) out.progressionFocus = out.abilitySpec ? 'b_rank_pressure' : 'c_rank_specialization';
+  if (out.progressionFocus === 'c_rank_specialization' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
+  if (out.progressionFocus === 'next_adventurer_contract' && out.abilitySpec) out.progressionFocus = 'b_rank_pressure';
   if (out.progressionFocus === 'e_rank_climb' && out.S.lvl >= 11) out.progressionFocus = out.job === 'adventurer' ? 'first_promotion_contract' : 'first_promotion_job';
   if (['first_profession_contract', 'next_adventurer_contract'].includes(out.progressionFocus) && out.jobContract) out.progressionFocus = '';
   out.firstPromotionSeen = p.firstPromotionSeen === true;

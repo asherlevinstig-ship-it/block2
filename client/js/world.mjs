@@ -273,6 +273,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   HIDE_ARMOR:211, CHAIN_ARMOR:212, STORMGLASS_ARMOR:213,
   ANCIENT_FRAGMENT:214, ECHO_GLYPH:215, RELIC_ARMOR_PIECE:216, TOWN_MAP:217,
   CAT_COLLAR:218, DOG_COLLAR:219, WOLF_COLLAR:220,
+  APPEARANCE_MIRROR:221,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -710,6 +711,23 @@ ITEMS[I.TOWN_MAP]={name:'Town Map',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,
 "..pBBb..gGGp..",
 "..pppppppppppp..",
 "................"],{p:'#d7b45d',G:'#8ecf72',g:'#4c8f45',b:'#4777a8',B:'#7db7e8',r:'#7a4a25',R:'#b78342',Y:'#ffd86a'}))};
+ITEMS[I.APPEARANCE_MIRROR]={name:'Hunter Mirror',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
+"................",
+"..ssssssssssss..",
+".siiiiiiiiiiss.",
+"siwwwwwwwwwwiis",
+"siwdddddddddwis",
+"siwdllllllllwis",
+"siwdllllggllwis",
+"siwdllllggllwis",
+"siwdllllllllwis",
+"siwdddddddddwis",
+"siiwwwwwwwwiis",
+".ssiiiiiiiiis.",
+"..ssssssssss...",
+"......bb.......",
+".....bbbb......",
+"................"],{s:'#6b7280',i:'#d1d5db',w:'#f8fafc',d:'#7dd3fc',l:'#bae6fd',g:'#ffffff',b:'#5c2c24'}))};
 ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
 const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
@@ -778,6 +796,7 @@ const RECIPES = [
   {shape:["c","s"], keys:{c:I.COAL, s:I.STICK}, out:[B.TORCH,8]},
   {shape:["c","s"], keys:{c:I.CHARCOAL, s:I.STICK}, out:[B.TORCH,8]},
   {shapeless:[B.TORCH,I.IRON_INGOT], out:[B.LANTERN,1]},
+  {shapeless:[B.GLASS,I.IRON_INGOT], out:[I.APPEARANCE_MIRROR,1]},
   {shapeless:[I.STICK,I.STICK,B.LOG,I.COAL], out:[B.CAMPFIRE,1]},
   {shapeless:[I.STICK,I.STICK,B.LOG,I.CHARCOAL], out:[B.CAMPFIRE,1]},
   {shapeless:[I.IRON_INGOT,I.STICK,B.PLANKS], out:[I.REPAIR_KIT,1]},
@@ -3728,6 +3747,10 @@ function clampHomesteadUpgrades(raw){
   const specs=Array.isArray(src.specs)?src.specs:[];
   return {
     storage:Math.max(0,Math.min(1,src.storage|0)),
+    forge:Math.max(0,Math.min(1,src.forge|0)),
+    kitchen:Math.max(0,Math.min(1,src.kitchen|0)),
+    meditation:Math.max(0,Math.min(1,src.meditation|0)),
+    stable:Math.max(0,Math.min(1,src.stable|0)),
     comfort:Math.max(0,Math.min(1,src.comfort|0)),
     rest:Math.max(0,Math.min(1,src.rest|0)),
     homeSpawn:home,
@@ -3745,8 +3768,12 @@ function sendHomesteadUpgrade(action,id=''){
 }
 function homesteadUpgradeSpecs(){
   const fallback=[
-    {id:'storage',title:'Sturdy Storage',desc:'Homestead chests expand from 18 to 27 slots.',benefit:'+9 slots in each owned Homestead chest',costGold:0,max:1},
-    {id:'comfort',title:'Warm Lights',desc:'Your lit Homestead feels safer and more alive.',benefit:'Comfort marker for future room bonuses',costGold:0,max:1},
+    {id:'storage',title:'Storage Room',desc:'Turn one claimed room into sorted shelves and bigger chests.',benefit:'+9 slots in each owned Homestead chest',costGold:0,max:1},
+    {id:'forge',title:'Forge Room',desc:'Set up a proper tool bench for repairs, smithing, and metal stock.',benefit:'+25% Blacksmith XP from Homestead work orders',costGold:0,max:1},
+    {id:'kitchen',title:'Kitchen',desc:'Build a working pantry so cooked supplies matter between Gates.',benefit:'+25% Cook XP from Homestead work orders',costGold:0,max:1},
+    {id:'meditation',title:'Meditation Corner',desc:'Keep a quiet corner for focus, breath, and safer recovery.',benefit:'+25% Monk XP from Homestead work orders and stronger offline mana/stamina rest',costGold:0,max:1},
+    {id:'stable',title:'Stable / Nest',desc:'Make a calm resting place for companions and dragons.',benefit:'+25% Pet Tamer XP from Homestead work orders and better dragon rest',costGold:0,max:1},
+    {id:'comfort',title:'Warm Lights',desc:'Your lit Homestead feels safer and more alive.',benefit:'Legacy comfort marker',costGold:0,max:1},
     {id:'rest',title:'Rest Corner',desc:'Recover HP, mana, stamina, and hunger while logged out.',benefit:'Small offline recovery',costGold:0,max:1},
   ];
   const server=homesteadUpgrades&&Array.isArray(homesteadUpgrades.specs)?homesteadUpgrades.specs:[];
@@ -3767,7 +3794,7 @@ function appendHomesteadUpgradePanel(panel, btn, canManage=true){
   const intro=document.createElement('p');
   intro.className='qtext homestead-upgrades-copy';
   intro.textContent=canManage
-    ? 'Choose one starter upgrade now. More rooms and deeper upgrades can build from this later.'
+    ? 'Choose starter rooms for storage, crafting, recovery, and companion care.'
     : 'Homestead upgrades are managed by the owner.';
   panel.appendChild(intro);
   const grid=document.createElement('div');
@@ -5635,7 +5662,7 @@ function townQuestMarkerState(sp){
   if(!type)return '';
   const obj=serviceObjectiveFor(type);
   if(obj)return ((obj.status==='claimable'||obj.status==='complete')?'turnin:':'offer:')+npcQuestMarkerSourceForObjective(obj);
-  if(type==='jobs'&&(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'))return 'offer:job';
+  if(type==='jobs'&&(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='next_adventurer_contract'))return 'offer:job';
   if(type==='guild_contracts'&&(progressionFocus==='first_road_ready'||progressionFocus==='first_guild_contract'))return 'offer:guild';
   return '';
 }
@@ -6841,7 +6868,7 @@ const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const JOBS=JOB_SYSTEM.JOBS;
-let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,mp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,homesteadUpgrades={storage:0,comfort:0,rest:0,homeSpawn:null,updatedAt:0,specs:[]},jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
+let playerJob='', jobXp=0, jobXpByJob={adventurer:0,miner:0,farmer:0,cook:0,blacksmith:0,monk:0,pet_tamer:0}, meditateJobAcc=0, meditationGrowth={completed:0,next:3,hp:0,mp:0,sp:0,hunger:0}, jobContract=null,homesteadWorkOrder=null,homesteadUpgrades={storage:0,forge:0,kitchen:0,meditation:0,stable:0,comfort:0,rest:0,homeSpawn:null,updatedAt:0,specs:[]},jobContractOffers=[],jobContractOffersJob='',jobContractRefreshAt=0,regionalContract=null, regionalContractOffers=[],roadWardenRep=0,roadSafety=50;
 let activeObjectives=[];
 let progressionFocus='';   // firstPromotionSeen/Shown now live in the onboarding module (ONBOARD)
 let utilityUnlocks=[], utilityLoadout={active:'', passive:[]}, overworldActivity=null;
@@ -7216,7 +7243,7 @@ const stCost=n=>n*Math.max(.5,1-0.02*(S.agi-1));
 const XP_MINE={[B.COAL_ORE]:4,[B.IRON_ORE]:6,[B.DIAMOND_ORE]:15,[B.LOG]:1,[B.STONE]:.4};
 let hp=maxHp(), mp=maxMp(), sp=maxSp(), hunger=maxHunger();
 let lastHurt=-99, lastLavaHurt=-99, regenAcc=0, attackCd=0, blackholeCd=0, suppressMine=false, sleeping=false, swCd=0, sprintingNow=false, hungerAcc=0, starvationAcc=0;
-const buffs={dmg:0, armor:0, spd:0, stone:0, regen:0, aegis:0, gather:0};
+const buffs={dmg:0, armor:0, spd:0, stone:0, regen:0, aegis:0, gather:0, panther:0};
 
 const dmgEl=document.getElementById('dmgflash');
 const sleepEl=document.getElementById('sleepfade');
@@ -8423,23 +8450,34 @@ const barEls={
   hu:document.querySelector('#stats .hub i'), huT:document.querySelector('#stats .hub span'),
   xp:document.querySelector('#stats .xpb i'), xpT:document.getElementById('xptext'),
 };
+let renderBarsSig='', renderBarsLevelTwo=null;
 function renderBars(){
-  document.body.classList.toggle('level-two-hud',S.lvl>=2);
-  barEls.lvl.textContent=hunterRankLetter(localPlayerHunterRankIndex())+hunterRankLevel();
-  barEls.hp.style.width=Math.max(0,hp/maxHp()*100)+'%';
-  barEls.hpT.textContent='HP '+Math.ceil(hp)+'/'+maxHp();
-  barEls.mp.style.width=Math.max(0,mp/maxMp()*100)+'%';
-  barEls.mpT.textContent='MP '+Math.floor(mp)+'/'+maxMp();
-  barEls.sp.style.width=Math.max(0,sp/maxSp()*100)+'%';
-  barEls.spT.textContent='SP '+Math.floor(sp)+'/'+maxSp();
-  barEls.hu.style.width=Math.max(0,hunger/maxHunger()*100)+'%';
-  barEls.huT.textContent='FOOD '+Math.floor(hunger)+'/'+maxHunger();
-  barEls.xp.style.width=Math.min(100,S.xp/xpNeed()*100)+'%';
-  if(barEls.xpT)barEls.xpT.textContent=Math.floor(S.xp).toLocaleString('en-US')+' / '+xpNeed().toLocaleString('en-US')+' XP';
+  const levelTwo=S.lvl>=2;
+  const hpMax=maxHp(), mpMax=maxMp(), spMax=maxSp(), hungerMax=maxHunger(), xpMax=xpNeed();
+  const hpNow=Math.ceil(hp), mpNow=Math.floor(mp), spNow=Math.floor(sp), hungerNow=Math.floor(hunger), xpNow=Math.floor(S.xp);
+  const levelText=hunterRankLetter(localPlayerHunterRankIndex())+hunterRankLevel();
+  const hpWidth=Math.max(0,hp/hpMax*100).toFixed(2), mpWidth=Math.max(0,mp/mpMax*100).toFixed(2), spWidth=Math.max(0,sp/spMax*100).toFixed(2);
+  const hungerWidth=Math.max(0,hunger/hungerMax*100).toFixed(2), xpWidth=Math.min(100,S.xp/xpMax*100).toFixed(2);
   const rankProgress=currentRankProgress();
-  barEls.xp.parentElement.title=rankProgress.maxRank
-    ? 'S-Rank Hunter · '+Math.floor(S.xp)+' / '+xpNeed()+' XP to next rank level'
+  const xpTitle=rankProgress.maxRank
+    ? 'S-Rank Hunter · '+xpNow+' / '+xpMax+' XP to next rank level'
     : hunterRankLetter(rankProgress.nextRank)+'-Rank in '+rankProgress.remaining.toLocaleString('en-US')+' Hunter XP';
+  const sig=[levelTwo,levelText,hpNow,hpMax,mpNow,mpMax,spNow,spMax,hungerNow,hungerMax,xpNow,xpMax,hpWidth,mpWidth,spWidth,hungerWidth,xpWidth,xpTitle].join('|');
+  if(sig===renderBarsSig)return;
+  renderBarsSig=sig;
+  if(levelTwo!==renderBarsLevelTwo){renderBarsLevelTwo=levelTwo;document.body.classList.toggle('level-two-hud',levelTwo);}
+  barEls.lvl.textContent=levelText;
+  barEls.hp.style.width=hpWidth+'%';
+  barEls.hpT.textContent='HP '+hpNow+'/'+hpMax;
+  barEls.mp.style.width=mpWidth+'%';
+  barEls.mpT.textContent='MP '+mpNow+'/'+mpMax;
+  barEls.sp.style.width=spWidth+'%';
+  barEls.spT.textContent='SP '+spNow+'/'+spMax;
+  barEls.hu.style.width=hungerWidth+'%';
+  barEls.huT.textContent='FOOD '+hungerNow+'/'+hungerMax;
+  barEls.xp.style.width=xpWidth+'%';
+  if(barEls.xpT)barEls.xpT.textContent=xpNow.toLocaleString('en-US')+' / '+xpMax.toLocaleString('en-US')+' XP';
+  barEls.xp.parentElement.title=xpTitle;
 }
 renderBars();
 function gainXP(n){
@@ -9252,6 +9290,10 @@ function attackMob(mob){
   const cost=stCost(4);
   let mult=1+0.06*(S.str-1);
   if(buffs.dmg>0) mult*=1.6;
+  if(buffs.panther>0){
+    const spec=globalThis.BlockcraftAbilityProgressionState&&globalThis.BlockcraftAbilityProgressionState.get?globalThis.BlockcraftAbilityProgressionState.get():'';
+    mult*=spec==='nightstalker'?1.45:1.25;
+  }
   if(sp<cost) mult*=0.5;                        // exhausted swings hit weaker
   sp=Math.max(0,sp-cost);
   const s=inv[selected];

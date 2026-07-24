@@ -1,7 +1,7 @@
 // Server events (skyship, day cycle, parkour, king-of-the-hill, PvP bounty) and the
 // guild hall. Lifted verbatim out of GameRoom.js and mixed into its prototype.
 const {
-  AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, BETA_EVENT_TEST, CARAVAN_ACTIVE_MS, DAY_MS, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS,
+  ABILITY_PATHS, AEGIS_BOUNTY_MS, AEGIS_BOUNTY_RANGE, BETA_EVENT_TEST, CARAVAN_ACTIVE_MS, DAY_MS, EVENT_ACTIVE_MS, EVENT_CARAVAN, EVENT_FIRST_DELAY_MS,
   EVENT_IDLE_JITTER_MS, EVENT_IDLE_MIN_MS, EVENT_KING, EVENT_PARKOUR, EVENT_QUEUE_MS, EVENT_REWARD_TOKENS,
   EVENT_TEST_QUEUE_MS, GUILD_DECOR_BLOCKS, GUILD_FLOOR_MAX, GUILD_HALL, I, KING_ACTIVE_MS, KING_ARENA_SIZE,
   KING_CROWN_PICKUP_RADIUS, KING_HIT_RANGE, KING_RESPAWN_MS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD,
@@ -977,12 +977,12 @@ class EventsMixin {
         members: [],
         count: 0,
         power: 0,
-        paths: { shadow: 0, mage: 0, guardian: 0 },
+        paths: Object.fromEntries(Object.keys(ABILITY_PATHS).map(path => [path, 0])),
       }));
       const ordered = solos.slice().sort((a, b) => this.eventAbilityBalanceValue(b) - this.eventAbilityBalanceValue(a) || a.localeCompare(b));
       for (const sid of ordered) {
         const p = this.state.players.get(sid);
-        const path = p && ['shadow', 'mage', 'guardian'].includes(p.path) ? p.path : '';
+        const path = p && ABILITY_PATHS[p.path] ? p.path : '';
         const eligible = squads.filter(squad => squad.count < EVENT_TEAM_MAX);
         eligible.sort((a, b) =>
           (a.count - b.count)

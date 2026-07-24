@@ -7,6 +7,7 @@ const path = require('path');
 const express = require('express');
 const { AuthService } = require('../auth');
 const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
+const APPEARANCE_SYSTEM = require('../../shared/appearance-system');
 
 async function fixture({ production = false, trustProxy = 1, clientOrigin = '', profileStore, authOptions = {}, env = {} } = {}) {
   const previousEnv = process.env.NODE_ENV;
@@ -40,6 +41,7 @@ async function fixture({ production = false, trustProxy = 1, clientOrigin = '', 
 
 const jsonPost = (body, headers = {}) => ({ method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 const sessionCookie = response => response.headers.get('set-cookie').split(';', 1)[0];
+const defaultAppearance = APPEARANCE_SYSTEM.sanitizeAppearance(null);
 
 test('HTTPS proxy headers produce secure cookies and plaintext production auth is rejected', { concurrency: false }, async () => {
   const f = await fixture({ production: true });
@@ -86,11 +88,11 @@ test('auth responses include the saved hunter-name setup state', { concurrency: 
     const registered = await f.request('/auth/register', jsonPost({ username: 'profile_user', password: 'long enough password' }));
     assert.equal(registered.status, 200);
     const body = await registered.json();
-    assert.deepEqual(body.gameProfile, { name: 'Mara', nameSet: true });
+    assert.deepEqual(body.gameProfile, { name: 'Mara', nameSet: true, appearance: defaultAppearance });
     const cookie = sessionCookie(registered);
     const me = await f.request('/auth/me', { headers: { cookie } });
     assert.equal(me.status, 200);
-    assert.deepEqual((await me.json()).gameProfile, { name: 'Mara', nameSet: true });
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Mara', nameSet: true, appearance: defaultAppearance });
   } finally { await f.close(); }
 });
 
@@ -107,15 +109,15 @@ test('hunter name setup is persisted before joining the world', { concurrency: f
     const registeredBody = await registered.json();
     const accountId = registeredBody.account.id;
     const cookie = sessionCookie(registered);
-    assert.deepEqual(registeredBody.gameProfile, { name: '', nameSet: false });
+    assert.deepEqual(registeredBody.gameProfile, { name: '', nameSet: false, appearance: defaultAppearance });
 
     const saved = await f.request('/auth/profile/name', jsonPost({ name: 'Kirito' }, { cookie }));
     assert.equal(saved.status, 200);
-    assert.deepEqual((await saved.json()).gameProfile, { name: 'Kirito', nameSet: true });
+    assert.deepEqual((await saved.json()).gameProfile, { name: 'Kirito', nameSet: true, appearance: defaultAppearance });
 
     const me = await f.request('/auth/me', { headers: { cookie } });
     assert.equal(me.status, 200);
-    assert.deepEqual((await me.json()).gameProfile, { name: 'Kirito', nameSet: true });
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Kirito', nameSet: true, appearance: defaultAppearance });
     assert.equal(profiles.get(accountId).name, 'Kirito');
     assert.equal(profiles.get(accountId).nameSet, true);
   } finally { await f.close(); }
@@ -168,13 +170,13 @@ test('bearer session token authenticates cross-site auth requests when cookies a
       { origin, 'x-forwarded-proto': 'https', Authorization: 'Bearer ' + loginBody.sessionToken },
     ));
     assert.equal(saved.status, 200);
-    assert.deepEqual((await saved.json()).gameProfile, { name: 'Admin_Levin', nameSet: true });
+    assert.deepEqual((await saved.json()).gameProfile, { name: 'Admin_Levin', nameSet: true, appearance: defaultAppearance });
 
     const me = await f.request('/auth/me', {
       headers: { origin, 'x-forwarded-proto': 'https', Authorization: 'Bearer ' + loginBody.sessionToken },
     });
     assert.equal(me.status, 200);
-    assert.deepEqual((await me.json()).gameProfile, { name: 'Admin_Levin', nameSet: true });
+    assert.deepEqual((await me.json()).gameProfile, { name: 'Admin_Levin', nameSet: true, appearance: defaultAppearance });
   } finally { await f.close(); }
 });
 
@@ -296,14 +298,35 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(profiles.get('student_42').tutorials.townJob, 0);
 
     const patched = await f.request('/auth/admin/player-profile/patch', jsonPost(
-      { email: 'dylan.lynee@st-ignatius.example', job: 'pet_tamer', grantItems: [{ id: 185, count: 1 }] },
+      {
+        email: 'dylan.lynee@st-ignatius.example',
+        job: 'pet_tamer',
+        jobXp: 123,
+        abilityPath: 'verdant',
+        abilitySpec: 'grovekeeper',
+        utilityUnlocks: ['compass', 'trail_sense'],
+        utilityLoadout: { active: 'trail_sense', passive: ['compass'] },
+        grantItems: [{ id: 185, count: 1 }],
+      },
       { 'x-admin-reset-token': 'admin-secret' },
     ));
     assert.equal(patched.status, 200);
     const patchedBody = await patched.json();
     assert.equal(patchedBody.profile.job, 'pet_tamer');
+    assert.equal(patchedBody.profile.jobXp, 123);
+    assert.equal(patchedBody.profile.jobXpByJob.pet_tamer, 123);
+    assert.equal(patchedBody.profile.path, 'verdant');
+    assert.equal(patchedBody.profile.abilitySpec, 'grovekeeper');
+    assert.deepEqual(patchedBody.profile.utilityUnlocks, ['compass', 'trail_sense']);
+    assert.deepEqual(patchedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.deepEqual(patchedBody.profile.inv, [{ id: 185, count: 1 }]);
     assert.equal(profiles.get('student_42').job, 'pet_tamer');
+    assert.equal(profiles.get('student_42').jobXp, 123);
+    assert.equal(profiles.get('student_42').jobXpByJob.pet_tamer, 123);
+    assert.equal(profiles.get('student_42').S.path, 'verdant');
+    assert.equal(profiles.get('student_42').abilitySpec, 'grovekeeper');
+    assert.deepEqual(profiles.get('student_42').utilityUnlocks, ['compass', 'trail_sense']);
+    assert.deepEqual(profiles.get('student_42').utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.equal(profiles.get('student_42').forceJobChoice, false);
     assert.deepEqual(profiles.get('student_42').inv, [{ id: 185, count: 1 }]);
 
@@ -314,7 +337,16 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(detailed.status, 200);
     const detailedBody = await detailed.json();
     assert.equal(detailedBody.profile.job, 'pet_tamer');
+    assert.equal(detailedBody.profile.path, 'verdant');
+    assert.equal(detailedBody.profile.abilitySpec, 'grovekeeper');
+    assert.deepEqual(detailedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.deepEqual(detailedBody.profile.inv, [{ id: 185, count: 1 }]);
+
+    const badSpec = await f.request('/auth/admin/player-profile/patch', jsonPost(
+      { email: 'dylan.lynee@st-ignatius.example', abilityPath: 'mage', abilitySpec: 'grovekeeper' },
+      { 'x-admin-reset-token': 'admin-secret' },
+    ));
+    assert.equal(badSpec.status, 400);
 
     const deniedTrace = await f.request('/auth/admin/identity-trace');
     assert.equal(deniedTrace.status, 403);
@@ -377,6 +409,6 @@ test('student registration endpoint creates a MySQL-backed session', { concurren
     assert.equal(body.account.schoolId, '42');
     assert.equal(body.account.yearGroup, 'Year 9');
     assert.equal(body.yearGroupSaved, true);
-    assert.deepEqual(body.gameProfile, { name: '', nameSet: false });
+    assert.deepEqual(body.gameProfile, { name: '', nameSet: false, appearance: defaultAppearance });
   } finally { await f.close(); }
 });

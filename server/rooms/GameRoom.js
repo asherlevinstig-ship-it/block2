@@ -15,7 +15,9 @@ const QUEST_OBJECTIVES = require('../../shared/quest-objectives');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
+const APPEARANCE_SYSTEM = require('../../shared/appearance-system');
 const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainRequestedPublicGateRanks } = require('./dungeon-handoff');
+const { gateReadinessForProfile } = require('./gate-readiness');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
@@ -64,8 +66,8 @@ function authRequestFromColyseus(options, context) {
 }
 
 const {
-  ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
-  BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
+  ABILITY_PATHS, ANIMAL_BASE_KIND, ANIMAL_KINDS, ARMOR_INFO, BETA_FARM_TEST, BIOME_COLLECTIBLE, BOSS_CONTRIB_MS,
+  BOSS_REWARD_BY_RANK, BOSS_REWARD_RANGE, CROP_GROW_MS, DANGER_RINGS, DAY_MS, DRAGON_EGG_OF, DRAGON_TYPE_SET, EVENT_FIRST_DELAY_MS,
   EVENT_KING, FOOD_VALUES, GUILD_BOARD_POS, HUNTER_RANK_LEVELS, DEITY_LEVEL, DEITY_POWER_IDS, I, JOB_IDS, LAND_BASE_PRICE, LAND_FREE_RADIUS,
   ITEM_NAMES, LAND_ABANDONED_MS, LAND_DORMANT_MS, LAND_NEAR_TOWN_BONUS, LAND_PRICE_FADE, LAND_VISIT_REFRESH_MS, MAX_HUNGER, MINE_REQUIRE, RANGED_ENEMY_KINDS, SHARD_ITEM_IDS,
   PROGRESSION_FOCUS_STATES, SHARD_TIERS, SKYSHIP_AWAY_MS, SKYSHIP_BOARD_GOLD, SKYSHIP_BOARD_RANK, SKYSHIP_CYCLE_MS, SKYSHIP_DOCK_MS,
@@ -424,12 +426,13 @@ class GameRoom extends Room {
           this.dirtyPlayers.add(rec.token);
         }
       }
-      if (['shadow', 'mage', 'guardian'].includes(m.path)) this.setPath(client, m.path);
+      if (m.path && ABILITY_PATHS[m.path]) this.setPath(client, m.path);
       p.heldId = clampN(m.heldId, 0, 999) | 0;
     });
 
     this.onMessage('spendStat', (client, m) => this.handleSpendStat(client, m));
     this.onMessage('abilitySpec',(client,m)=>this.setAbilitySpecialization(client,String(m&&m.spec||'')));
+    this.onMessage('appearance', (client, m) => this.handleAppearanceChange(client, m));
     this.onMessage('setJob', (client, m) => this.handleSetJob(client, m));
     this.onMessage('jobContract', (client, m) => this.handleJobContract(client, m));
     this.onMessage('homesteadWorkOrder', (client, m) => this.handleHomesteadWorkOrder(client, m));
@@ -1551,6 +1554,7 @@ class GameRoom extends Room {
           p.x = Array.isArray(next.pos) ? next.pos[0] || p.x : p.x;
           p.y = Array.isArray(next.pos) ? next.pos[1] || p.y : p.y;
           p.z = Array.isArray(next.pos) ? next.pos[2] || p.z : p.z;
+          p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(next.appearance));
         }
         client.send('accountProfileUpdated', { ok: true, reason: 'level_two_job_choice' });
         this.sendProfile(client, next);
@@ -1571,11 +1575,21 @@ class GameRoom extends Room {
       prof.nameSet = true;
       changed = true;
     }
+    if (patch.appearance && typeof patch.appearance === 'object') {
+      const nextAppearance = APPEARANCE_SYSTEM.sanitizeAppearance(patch.appearance);
+      if (!APPEARANCE_SYSTEM.sameAppearance(prof.appearance, nextAppearance)) {
+        prof.appearance = nextAppearance;
+        changed = true;
+      }
+    }
     if (!changed) return false;
     for (const client of [...(this.clients || [])]) {
       if (this.tokens.get(client.sessionId) !== id) continue;
       const p = this.state.players.get(client.sessionId);
-      if (p && prof.name) p.name = prof.name;
+      if (p) {
+        if (prof.name) p.name = prof.name;
+        p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(prof.appearance));
+      }
       this.sendProfile(client, prof);
     }
     if (this.dirtyPlayers) this.dirtyPlayers.add(id);
@@ -2204,7 +2218,7 @@ class GameRoom extends Room {
       rec.prof.tutorials.ability = TUTORIAL_VERSIONS.ability;
       rec.prof.tutorials.intro = TUTORIAL_VERSIONS.intro;
       rec.prof.tutorials.gate = TUTORIAL_VERSIONS.gate;
-      rec.prof.S.lvl = Math.max(focus === 'first_d_gate' ? HUNTER_RANK_LEVELS[1] : 3, rec.prof.S.lvl | 0);
+      rec.prof.S.lvl = Math.max(['first_d_gate', 'c_rank_climb'].includes(focus) ? HUNTER_RANK_LEVELS[1] : 3, rec.prof.S.lvl | 0);
       rec.prof.S.path = rec.prof.S.path || 'shadow';
       rec.prof.progressionFocus = focus;
       rec.prof.activeNpcQuest = null;
@@ -2454,6 +2468,10 @@ class GameRoom extends Room {
     dmg += this.meleeProfile(p, sid).bonus;     // equipped weapon, validated server-side
     const buffs = this.abilityBuffs.get(sid);
     if (buffs && buffs.umbralUntil > Date.now()) dmg *= 1.6;
+    if (buffs && buffs.pantherUntil > Date.now()) {
+      const token = this.tokens.get(sid), rec = token && this.profiles.get(token);
+      dmg *= rec && rec.prof && rec.prof.abilitySpec === 'nightstalker' ? 1.45 : 1.25;
+    }
     if (buffs && buffs.mealMightUntil > Date.now()) dmg *= JOB_SYSTEM.COOK_RULES.mightMultiplier;
     return dmg;
   }
@@ -3370,7 +3388,24 @@ class GameRoom extends Room {
     p.dragonStaySpots = this.publicDragonStaySpots(prof, token);
     p.dragonHatchedAt = this.publicDragonHatchedAt(prof, token);
     p.cosmetics = this.publicCosmetics(prof);
+    p.appearance = JSON.stringify(APPEARANCE_SYSTEM.sanitizeAppearance(prof.appearance));
     p.invisible = !!(this.isAdminClient(client) ? client._deityActive && client._deityActive.invisibility : prof.deity && prof.deity.active && prof.deity.active.invisibility && this.hasDeityPower(client, prof, 'invisibility'));
+  }
+  handleAppearanceChange(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || !rec.prof || rec.prof.noPersist) {
+      if (client) client.send('appearanceResult', { ok: false, reason: 'profile' });
+      return false;
+    }
+    const nextAppearance = APPEARANCE_SYSTEM.sanitizeAppearance(m && m.appearance);
+    rec.prof.appearance = nextAppearance;
+    this.dirtyPlayers.add(rec.token);
+    this.savePlayerProfileNow(rec.token, rec.prof);
+    const p = this.state.players.get(client.sessionId);
+    if (p) p.appearance = JSON.stringify(nextAppearance);
+    this.sendProfile(client, rec.prof);
+    client.send('appearanceResult', { ok: true, appearance: nextAppearance });
+    return true;
   }
   sendProfile(client, prof) {
     if (!client || !prof) return false;
@@ -4086,6 +4121,7 @@ class GameRoom extends Room {
         type: String(objective.action.type || '').slice(0, 32),
         label: String(objective.action.label || '').slice(0, 32),
       } : null;
+      if (action && objective.action.rank != null) action.rank = Math.max(0, Math.min(4, objective.action.rank | 0));
       const payload = {
         id: String(objective.id).slice(0, 96),
         source,
@@ -4240,14 +4276,17 @@ class GameRoom extends Room {
       e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', 'Use contracts, gates, and field work to grow toward D-rank.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
       first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       first_promotion_contract: ['progression:first_promotion_contract', 'progression', 'Promotion Contract', 'Take the first Adventurer promotion contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
-      first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare armor, food, repair supplies, and clear a D-rank Gate.', 'Gate prep', 'quest_log', 'OPEN PREP', 50],
-      next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'Next Adventurer Contract', 'Return to repeatable Adventurer contracts.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
+      first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare for the first D-rank Gate and its ranged-volley lesson: iron weapon, iron armor, three food, a healthy utility tool, and a D-rank key. Then clear the Gate.', 'Gate prep', 'quest_log', 'OPEN PREP', 50],
+      c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', 'Build Hunter XP through rotating Adventurer contracts, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
+      c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
+      b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Your specialization makes you a regional anchor. Stabilize roads, contain Gate breaches, and build toward B-rank Gates.', 'Regional pressure', 'jobs', 'OPEN JOB BOARD', 70],
+      next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'C-rank Loop', 'Your C-rank specialization is set. Use rotating Adventurer contracts, higher Gates, events, and field threats to keep climbing.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
     };
     const spec = map[focus];
     if (!spec) return null;
     const objective = {
       id: spec[0], source: spec[1], title: spec[2], status: 'active', text: spec[3],
-      location: spec[4], action: { type: spec[5], label: spec[6] }, priority: spec[7],
+      location: spec[4], action: { type: spec[5], label: spec[6], ...(spec[8] == null ? {} : { rank: spec[8] | 0 }) }, priority: spec[7],
       progress: null, serverOwned: true,
     };
     if (focus === 'first_base_setup' && client) {
@@ -4263,6 +4302,116 @@ class GameRoom extends Room {
       objective.hudText = missing.length
         ? 'Inside your Homestead, place: ' + missing.join(', ') + '.'
         : 'Base checks complete. Claim your Base Established reward.';
+    }
+    if (focus === 'first_d_gate' && client) {
+      const rec = this.profileFor(client);
+      const readiness = gateReadinessForProfile(rec && rec.prof || {}, 1);
+      const hasDKey = !!(rec && rec.prof && (
+        (this.countItem && this.countItem(rec.prof, I.SOLO_KEY_D) > 0) ||
+        (this.countItem && this.countItem(rec.prof, I.TEAM_KEY_D) > 0)
+      ));
+      const checks = [
+        ...readiness.checks.map(c => ({ id: c.id, label: c.label, done: !!c.done })),
+        { id: 'key', label: 'D-rank key', done: hasDKey },
+      ];
+      const done = checks.filter(c => c.done).length;
+      const missing = checks.filter(c => !c.done).map(c => c.label.toLowerCase());
+      objective.progress = { current: done, required: checks.length };
+      objective.checklist = checks;
+      objective.hudText = done >= checks.length
+        ? 'Ready. Find and clear a D-rank Gate to unlock the rotating Adventurer loop.'
+        : 'D-rank Gate prep missing: ' + missing.slice(0, 2).join(', ') + (missing.length > 2 ? ', and ' + (missing.length - 2) + ' more.' : '.');
+      objective.reward = {
+        xp: BOSS_REWARD_BY_RANK[1].xp,
+        gold: BOSS_REWARD_BY_RANK[1].gold,
+        items: [
+          { id: I.SOLO_KEY_C, count: 1 },
+          { id: I.IRON_INGOT, count: 6 },
+          { id: I.DIAMOND, count: 2 },
+        ],
+        note: 'C key secured on first D clear',
+      };
+    }
+    if (focus === 'c_rank_climb' && client) {
+      const rec = this.profileFor(client);
+      const prof = rec && rec.prof || {};
+      const S = prof.S || {};
+      const start = HUNTER_RANK_LEVELS[1], target = HUNTER_RANK_LEVELS[2];
+      let required = 0, earned = 0;
+      for (let level = start; level < target; level++) {
+        const need = xpNeedForLevel(level);
+        required += need;
+        if ((S.lvl | 0) > level) earned += need;
+        else if ((S.lvl | 0) === level) earned += Math.max(0, Math.min(need, Math.floor(Number(S.xp) || 0)));
+      }
+      const readiness = gateReadinessForProfile(prof, 2);
+      const checks = [
+        { id: 'd_clear', label: 'D-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 1 },
+        { id: 'contracts', label: 'Rotating Adventurer work unlocked', done: (prof.adventurerContractsCompleted | 0) >= 1 },
+        { id: 'c_ready', label: 'C-rank kit checked', done: readiness.ready },
+        { id: 'c_gate', label: 'C-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 2 },
+      ];
+      objective.progress = { current: Math.max(0, Math.min(required, earned)), required: Math.max(1, required) };
+      objective.checklist = checks;
+      objective.action = readiness.ready
+        ? { type: 'find_gate', label: 'FIND C GATE', rank: 2 }
+        : { type: 'gate_prep', label: 'C PREP CHECK', rank: 2 };
+      objective.hudText = readiness.ready
+        ? 'C-rank kit is ready. Find or open a C-rank Gate and practice the positioning check.'
+        : 'C-rank climb: earn Hunter XP and fix prep - ' + (readiness.next && readiness.next.label ? readiness.next.label : 'open the prep check') + '.';
+      objective.reward = {
+        xp: BOSS_REWARD_BY_RANK[2].xp,
+        gold: BOSS_REWARD_BY_RANK[2].gold,
+        items: [{ id: I.SOLO_KEY_B, count: 1 }, { id: I.DIAMOND, count: 4 }],
+        note: 'B key path starts after C clear',
+      };
+    }
+    if (focus === 'b_rank_pressure' && client) {
+      const rec = this.profileFor(client);
+      const prof = rec && rec.prof || {};
+      const S = prof.S || {};
+      const hunterRank = hunterRankIndexForLevel(S.lvl | 0);
+      const activeBreaches = this.gateBreaches && this.gateBreaches.size || 0;
+      const roadSafety = this.worldProgress && Number.isFinite(Number(this.worldProgress.roadSafety)) ? this.worldProgress.roadSafety | 0 : 50;
+      const readinessRank = hunterRank >= 3 ? 3 : 2;
+      const readiness = gateReadinessForProfile(prof, readinessRank);
+      const pressure = Math.max(0, Math.min(100, Math.round(activeBreaches * 28 + Math.max(0, 65 - roadSafety) + Math.max(0, 3 - ((prof.highestGateRankCleared | 0) - 1)) * 8)));
+      const checks = [
+        { id: 'spec', label: 'Specialization chosen', done: !!prof.abilitySpec },
+        { id: 'c_gate', label: 'C-rank Gate cleared', done: (prof.highestGateRankCleared | 0) >= 2 },
+        { id: 'breaches', label: 'No active Gate breaches', done: activeBreaches <= 0 },
+        { id: 'roads', label: 'Regional roads stable', done: roadSafety >= 65 },
+        { id: 'b_ready', label: 'B-rank kit path checked', done: hunterRank >= 3 ? readiness.ready : (prof.S && (prof.S.lvl | 0) >= HUNTER_RANK_LEVELS[2]) },
+      ];
+      objective.progress = { current: Math.max(0, 100 - pressure), required: 100 };
+      objective.checklist = checks;
+      if (activeBreaches > 0) {
+        objective.action = { type: 'regional_track', label: 'TRACK BREACH' };
+        objective.location = 'Gate breach';
+        objective.hudText = activeBreaches + ' active Gate breach' + (activeBreaches === 1 ? '' : 'es') + ' destabilizing the roads. Track and contain the escaped boss.';
+      } else if (hunterRank >= 3 && !readiness.ready) {
+        objective.action = { type: 'gate_prep', label: 'B PREP CHECK', rank: 3 };
+        objective.location = 'Gate prep';
+        objective.hudText = 'B-rank Gate access is opening. Fix prep: ' + (readiness.next && readiness.next.label ? readiness.next.label : 'open the prep check') + '.';
+      } else if (hunterRank >= 3) {
+        objective.action = { type: 'find_gate', label: 'FIND B GATE', rank: 3 };
+        objective.location = 'B-rank Gate';
+        objective.hudText = 'Pressure is contained. Find a B-rank Gate and test your specialization under heavier threats.';
+      } else if ((prof.roadWardenRep | 0) < 3 || roadSafety < 65) {
+        objective.action = { type: 'guild_contracts', label: 'ROAD WARDEN' };
+        objective.location = 'Guild Board';
+        objective.hudText = 'Build B-rank footing through Road Warden contracts, regional trouble, and safer roads.';
+      } else {
+        objective.action = { type: 'jobs', label: 'OPEN JOB BOARD' };
+        objective.location = 'Job Board';
+        objective.hudText = 'Keep the pressure down with rotating Adventurer work, C-rank Gates, events, and regional cleanup.';
+      }
+      objective.reward = {
+        xp: hunterXpForActivity(Math.max(HUNTER_RANK_LEVELS[2], S.lvl | 0), 'guild_contract'),
+        gold: BOSS_REWARD_BY_RANK[Math.min(3, readinessRank)].gold,
+        items: [{ id: I.DIAMOND, count: 4 }, { id: I.IRON_INGOT, count: 8 }],
+        note: 'B-rank pressure rewards scale through Gates and regional cleanup',
+      };
     }
     return objective;
   }
@@ -4875,6 +5024,7 @@ class GameRoom extends Room {
     const incoming=Math.max(0,Number(amount)||0);
     const buffs = this.abilityBuffs.get(client.sessionId);
     if (buffs && buffs.ironUntil > Date.now()) amount *= .5;
+    if (buffs && buffs.pantherUntil > Date.now()) amount *= .85;
     if (buffs && buffs.monkStoneUntil > Date.now()) amount *= (1 - JOB_SYSTEM.MONK_RULES.stoneMitigation);
     const rec = this.profileFor(client);
     const armorStack = rec && rec.prof && rec.prof.armor;
@@ -5325,6 +5475,7 @@ class GameRoom extends Room {
       if (hp.hp <= 0) continue;
       const focus = this.abilityBuffs.get(client.sessionId);
       if (focus && focus.monkRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + JOB_SYSTEM.MONK_RULES.regenPerSecond * dt);
+      if (focus && focus.verdantRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + 1.5 * dt);
       const rec = this.profileFor(client);
       if (rec && this.hungerProtectedForProfile(rec.prof)) {
         const beforeProtected = Math.ceil(h.hunger);
@@ -6498,7 +6649,7 @@ class GameRoom extends Room {
       if (c) this.regenAbilityState(c, abilityNow);
     });
     this.abilityBuffs.forEach((b, sid) => {
-      if ((b.umbralUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
+      if ((b.umbralUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
     });
     this.updatePlayerHunger(dt);
     this.tickBiomeStatuses(dt);

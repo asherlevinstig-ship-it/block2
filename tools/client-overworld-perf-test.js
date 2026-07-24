@@ -79,6 +79,7 @@ async function seed(dataDir, totalClients) {
       const offsetX = (i % 4) * 4;
       const offsetZ = Math.floor(i / 4) * 4;
       profile.name = name;
+      profile.nameSet = true;
       profile.pos = [baseX + offsetX + 0.5, W.terrainHeight(baseX + offsetX, baseZ + offsetZ) + 2, baseZ + offsetZ + 0.5];
       profile.inv[0] = { id: W.B.DIRT, count: 64 };
       await store.savePlayer(account.id, profile);

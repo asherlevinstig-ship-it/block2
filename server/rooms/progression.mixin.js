@@ -109,13 +109,48 @@ const HOMESTEAD_WORK_ORDER_SPECS = Object.freeze([
   Object.freeze({ type: 'stock', job: 'blacksmith', target: W.B.TORCH, need: 8, rewardGold: 20, rewardJobXp: 16, title: 'Lantern Reserve', desc: 'Keep spare torches ready so the homestead stays workable at night.' }),
   Object.freeze({ type: 'craft', job: 'cook', target: I.BREAD, need: 3, rewardGold: 22, rewardJobXp: 18, title: 'Pantry Ledger', desc: 'Set aside travel bread for the next dungeon run.' }),
   Object.freeze({ type: 'craft', job: 'blacksmith', target: I.REPAIR_KIT, need: 1, rewardGold: 30, rewardJobXp: 22, title: 'Tool Bench Reserve', desc: 'Add a repair kit to the homestead supplies.' }),
+  Object.freeze({ type: 'craft', job: 'cook', target: I.TRAIL_RATION, need: 1, rewardGold: 34, rewardJobXp: 26, title: 'Kitchen Travel Packs', desc: 'Stock a trail ration so gate teams leave with real meals.' }),
+  Object.freeze({ type: 'stock', job: 'monk', target: W.B.LANTERN, need: 2, rewardGold: 28, rewardJobXp: 24, title: 'Quiet Corner Lamps', desc: 'Bring soft lanterns for a meditation corner.' }),
+  Object.freeze({ type: 'craft', job: 'pet_tamer', target: I.DRAGON_TREAT, need: 1, rewardGold: 32, rewardJobXp: 26, title: 'Nest Care Basket', desc: 'Prepare a dragon treat for the stable or nest.' }),
 ]);
 const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
   storage: Object.freeze({
     id: 'storage',
-    title: 'Sturdy Storage',
-    desc: 'Homestead chests expand from 18 to 27 slots.',
+    title: 'Storage Room',
+    desc: 'Turn one claimed room into sorted shelves and bigger chests.',
     benefit: '+9 slots in each owned Homestead chest',
+    costGold: 0,
+    max: 1,
+  }),
+  forge: Object.freeze({
+    id: 'forge',
+    title: 'Forge Room',
+    desc: 'Set up a proper tool bench for repairs, smithing, and metal stock.',
+    benefit: '+25% Blacksmith XP from Homestead work orders',
+    costGold: 0,
+    max: 1,
+  }),
+  kitchen: Object.freeze({
+    id: 'kitchen',
+    title: 'Kitchen',
+    desc: 'Build a working pantry so cooked supplies matter between Gates.',
+    benefit: '+25% Cook XP from Homestead work orders',
+    costGold: 0,
+    max: 1,
+  }),
+  meditation: Object.freeze({
+    id: 'meditation',
+    title: 'Meditation Corner',
+    desc: 'Keep a quiet corner for focus, breath, and safer recovery.',
+    benefit: '+25% Monk XP from Homestead work orders and stronger offline mana/stamina rest',
+    costGold: 0,
+    max: 1,
+  }),
+  stable: Object.freeze({
+    id: 'stable',
+    title: 'Stable / Nest',
+    desc: 'Make a calm resting place for companions and dragons.',
+    benefit: '+25% Pet Tamer XP from Homestead work orders and better dragon rest',
     costGold: 0,
     max: 1,
   }),
@@ -123,7 +158,7 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
     id: 'comfort',
     title: 'Warm Lights',
     desc: 'Your lit Homestead feels safer and more alive.',
-    benefit: 'Comfort marker for future room bonuses',
+    benefit: 'Legacy comfort marker',
     costGold: 0,
     max: 1,
   }),
@@ -230,6 +265,10 @@ class ProgressionMixin {
       : null;
     return {
       storage: Math.max(0, Math.min(1, src.storage | 0)),
+      forge: Math.max(0, Math.min(1, src.forge | 0)),
+      kitchen: Math.max(0, Math.min(1, src.kitchen | 0)),
+      meditation: Math.max(0, Math.min(1, src.meditation | 0)),
+      stable: Math.max(0, Math.min(1, src.stable | 0)),
       comfort: Math.max(0, Math.min(1, src.comfort | 0)),
       rest: Math.max(0, Math.min(1, src.rest | 0)),
       homeSpawn: home && W.inWorld(Math.floor(home[0]), Math.floor(home[1]), Math.floor(home[2])) ? home : null,
@@ -274,11 +313,13 @@ class ProgressionMixin {
   }
 
   applyHomesteadOfflineRest(prof) {
-    if (!prof || !prof.homesteadUpgrades || (prof.homesteadUpgrades.rest | 0) <= 0 || !(prof.vitalsSavedAt > 0)) return false;
+    const upgrades = this.cleanHomesteadUpgrades(prof && prof.homesteadUpgrades);
+    if (!prof || upgrades.rest <= 0 || !(prof.vitalsSavedAt > 0)) return false;
     const savedAt = Math.max(0, Number(prof.vitalsSavedAt) || 0);
     const elapsedMs = Math.max(0, Date.now() - savedAt);
     if (elapsedMs < 10 * 60 * 1000) return false;
     const hours = Math.min(8, elapsedMs / 3600000);
+    const focusRest = upgrades.meditation > 0 ? 1.35 : 1;
     const current = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : (prof.vitals || {});
     const maxHp = this.maxHpForProfile ? this.maxHpForProfile(prof) : 20;
     const maxMp = this.maxMpForProfile ? this.maxMpForProfile(prof) : 20;
@@ -286,8 +327,8 @@ class ProgressionMixin {
     const maxHunger = this.maxHungerForProfile ? this.maxHungerForProfile(prof) : 100;
     const next = {
       hp: Math.min(maxHp, Math.max(1, (current.hp || maxHp) + Math.ceil(hours * 6))),
-      mp: Math.min(maxMp, Math.max(0, (current.mp || 0) + Math.ceil(hours * 6))),
-      sp: Math.min(maxSp, Math.max(0, (current.sp || 0) + Math.ceil(hours * 20))),
+      mp: Math.min(maxMp, Math.max(0, (current.mp || 0) + Math.ceil(hours * 6 * focusRest))),
+      sp: Math.min(maxSp, Math.max(0, (current.sp || 0) + Math.ceil(hours * 20 * focusRest))),
       hunger: Math.min(maxHunger, Math.max(0, (current.hunger || 0) + Math.ceil(hours * 8))),
     };
     const changed = next.hp !== current.hp || next.mp !== current.mp || next.sp !== current.sp || next.hunger !== current.hunger;
@@ -456,6 +497,18 @@ class ProgressionMixin {
     return amount;
   }
 
+  homesteadRoomBonusForJob(upgrades, job) {
+    const byJob = {
+      blacksmith: { id: 'forge', label: 'Forge Room' },
+      cook: { id: 'kitchen', label: 'Kitchen' },
+      monk: { id: 'meditation', label: 'Meditation Corner' },
+      pet_tamer: { id: 'stable', label: 'Stable / Nest' },
+    };
+    const spec = byJob[job];
+    if (!spec || !upgrades || (upgrades[spec.id] | 0) <= 0) return null;
+    return { ...spec, percent: 25, multiplier: .25 };
+  }
+
   sendHomesteadWorkOrder(client, action = 'sync', extra = {}, ctx = null) {
     ctx = ctx || this.homesteadContextForClient(client);
     const rec = ctx && ctx.ownerRec;
@@ -514,10 +567,12 @@ class ProgressionMixin {
       const xpMap = ensureJobXpMap(rec.prof);
       const job = JOB_XP_IDS.includes(order.job) ? order.job : 'miner';
       const rewardGold = Math.max(0, order.rewardGold | 0);
-      const rewardJobXp = Math.max(0, order.rewardJobXp | 0);
+      const baseRewardJobXp = Math.max(0, order.rewardJobXp | 0);
+      const roomBonus = this.homesteadRoomBonusForJob(this.cleanHomesteadUpgrades(rec.prof.homesteadUpgrades), job);
+      const rewardJobXp = roomBonus ? Math.max(0, Math.round(baseRewardJobXp * (1 + roomBonus.multiplier))) : baseRewardJobXp;
       const jobLevelBefore = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
       rec.prof.gold = Math.min(1e9, (rec.prof.gold | 0) + rewardGold);
-      if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'contract_faucet', 'homestead_work_order', { job, title: order.title || '' });
+      if (this.recordEconomyGold) this.recordEconomyGold(client, rewardGold, 'contract_faucet', 'homestead_work_order', { job, title: order.title || '', roomBonus: roomBonus && roomBonus.id || '' });
       xpMap[job] = Math.max(0, (xpMap[job] | 0) + rewardJobXp);
       const jobLevelAfter = JOB_SYSTEM.jobLevelFromXp(xpMap[job] | 0);
       const milestones = JOB_SYSTEM.milestonesFor(job)
@@ -533,6 +588,8 @@ class ProgressionMixin {
         order: completed,
         rewardGold,
         rewardJobXp,
+        baseRewardJobXp,
+        roomBonus,
         job,
         jobXp: xpMap[job] | 0,
         jobXpByJob: xpMap,
@@ -655,7 +712,7 @@ class ProgressionMixin {
     else if (event === 'homestead_upgrade_chosen' && prof.progressionFocus === 'first_homestead_upgrade') next = 'first_profession_contract';
     else if (event === 'job_contract_taken' && prof.progressionFocus === 'first_profession_contract') next = 'e_rank_climb';
     if (next === prof.progressionFocus) return false;
-    if (!next && event !== 'job_contract_taken') return false;
+    if (!next) return false;
     prof.progressionFocus = next;
     this.dirtyPlayers.add(rec.token);
     if (event === 'crafted_station') this.grantProgressionMilestoneReward(client, 'craft_station');
@@ -1695,7 +1752,11 @@ class ProgressionMixin {
     this.progressJobContract(client, 'gate', 1, 0);
     this.progressNpcQuest(client, 'gate', 1, rank);
     if (rec && rec.prof.progressionFocus === 'first_d_gate' && (rank | 0) >= 1) {
-      rec.prof.progressionFocus = 'next_adventurer_contract';
+      rec.prof.progressionFocus = 'c_rank_climb';
+      this.dirtyPlayers.add(rec.token);
+      this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
+    } else if (rec && rec.prof.progressionFocus === 'c_rank_climb' && (rank | 0) >= 2) {
+      rec.prof.progressionFocus = rec.prof.abilitySpec ? 'b_rank_pressure' : 'c_rank_specialization';
       this.dirtyPlayers.add(rec.token);
       this.sendProfile ? this.sendProfile(client, rec.prof) : client.send('profile', rec.prof);
     }

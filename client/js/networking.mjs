@@ -19,6 +19,7 @@ const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
+const APPEARANCE_SYSTEM=globalThis.BlockcraftAppearanceSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
 const player=combatState.player,inv=combatState.inventory;
 const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
@@ -1043,6 +1044,13 @@ function netAttachRoom(room,name,client){
       netRestoreProfile(m);NET.profileReady=true;
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
     });
+    room.onMessage('appearanceResult', m=>{
+      if(m&&m.ok&&m.appearance){
+        playerCustomAppearance=parseReplicatedAppearance(m.appearance);
+        refreshAppearanceDummy();
+        sysMsg('Appearance saved.');
+      }else if(m&&m.ok===false)sysMsg('Appearance save failed: <b>'+escHTML(String(m.reason||'profile'))+'</b>.');
+    });
     room.onMessage('inventorySortResult', m=>applyInventorySortResult(m));
     room.onMessage('tradeInventory', m=>{
       updateServerInventorySnapshot(m&&m.inv);
@@ -1291,8 +1299,9 @@ function netAttachRoom(room,name,client){
       if(m&&m.rewardGold)rewardGain('gold',m.rewardGold,'Gold');
       if(m&&m.rewardJobXp)rewardGain('item',m.rewardJobXp,((JOBS[m.job]&&JOBS[m.job].name)||'Job')+' XP',{icon:'JOB'});
       SFX.coin();
-      sysMsg('Homestead work order claimed'+(m&&m.rewardGold?'<br>'+economyRecapHTML(m.rewardGold|0,gold,'Homestead contract payout'):'.'));
-      eventFeed('[Homestead]','Work order claimed'+(m&&m.rewardGold?' for '+(m.rewardGold|0)+' gold':'')+(m&&m.rewardJobXp?' and '+(m.rewardJobXp|0)+' Job XP':'')+'.',{key:'homestead:workorder:'+String(m&&m.id||Date.now()),cooldown:0});
+      const roomBonus=m&&m.roomBonus&&m.roomBonus.label?(' <span class="ok">+'+(m.roomBonus.percent|0)+'% '+escHTML(m.roomBonus.label)+'</span>'):'';
+      sysMsg('Homestead work order claimed'+roomBonus+(m&&m.rewardGold?'<br>'+economyRecapHTML(m.rewardGold|0,gold,'Homestead contract payout'):'.'));
+      eventFeed('[Homestead]','Work order claimed'+(m&&m.rewardGold?' for '+(m.rewardGold|0)+' gold':'')+(m&&m.rewardJobXp?' and '+(m.rewardJobXp|0)+' Job XP':'')+(m&&m.roomBonus&&m.roomBonus.label?' with '+m.roomBonus.label:'')+'.',{key:'homestead:workorder:'+String(m&&m.id||Date.now()),cooldown:0});
       for(const milestone of Array.isArray(m&&m.milestones)?m.milestones:[])presentJobMilestone(m.job,milestone);
       refreshHUD();renderBars();if(qOpen&&qMode==='management')openLandClaimsUI();
     });
@@ -2107,7 +2116,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('abilityReject', m=>abilityRejected(m));
     room.onMessage('abilityResult', m=>abilityResolved(m));
-    room.onMessage('abilitySpecResult',m=>{if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m&&m.spec);showName('SPECIALIZATION AWAKENED');eventFeed('[Abilities]','Specialization awakened: '+String((m&&m.spec)||'new path')+'.',{key:'ability:spec:'+String((m&&m.spec)||''),cooldown:0});if(statOpen)renderStat();});
+    room.onMessage('abilitySpecResult',m=>{if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m&&m.spec);const focus=String(m&&m.progressionFocus||'');if(PROGRESSION_FOCUS_STATES.includes(focus))progressionFocus=focus;showName('SPECIALIZATION AWAKENED');eventFeed('[Abilities]','Specialization awakened: '+String((m&&m.spec)||'new path')+'.',{key:'ability:spec:'+String((m&&m.spec)||''),cooldown:0});if(statOpen)renderStat();refreshHUD();});
     room.onMessage('abilitySpecReject',()=>sysMsg('That specialization cannot be changed.'));
     room.onMessage('shadowSpirit',m=>{
       if(!m)return;
@@ -2350,6 +2359,8 @@ function netRestoreProfile(m){
       if(nameInput)nameInput.value=profileName;
       try{localStorage.setItem('bc_name',profileName);}catch(e){}
     }
+    playerCustomAppearance=parseReplicatedAppearance(m&&m.appearance);
+    if(AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile)AUTH_UI.state.gameProfile.appearance=playerCustomAppearance;
     if(!onboardingDone()){
       if(!onboardingActive) beginOnboarding();
       eventLog('Tutorial active - saved profile ignored until training is complete');
@@ -2360,7 +2371,7 @@ function netRestoreProfile(m){
     if(m.S){
       S.lvl=m.S.lvl||1; S.xp=m.S.xp||0; S.pts=m.S.pts||0;
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
-      S.path=['shadow','mage','guardian'].includes(m.S.path)?m.S.path:'';
+      S.path=m.S.path&&PATHS[m.S.path]?m.S.path:'';
     }
     if(globalThis.BlockcraftAbilityProgressionState)globalThis.BlockcraftAbilityProgressionState.set(m.abilitySpec||'');
     if(Array.isArray(m.inv)){
@@ -3134,36 +3145,35 @@ function makeNameTag(text, col, team, teamColr, opts){
   sp.scale.set(1.6,.48,1); sp.position.y=2.34; sp.renderOrder=20;
   return sp;
 }
-function appearanceForPath(path){
+function appearanceForPath(path, customInput){
   path=path&&PATHS[path]?path:'';
-  const shirt=path?PATHS[path].col:'#3a6ea8';
-  const dark=path?shadeHex(shirt,-34):'#2e5a8a';
-  const light=path?shadeHex(shirt,34):'#5a96c7';
+  const custom=APPEARANCE_SYSTEM&&APPEARANCE_SYSTEM.sanitizeAppearance?APPEARANCE_SYSTEM.sanitizeAppearance(customInput):null;
+  const shirt=custom?custom.shirt:(path?PATHS[path].col:'#3a6ea8');
   return {
-    skin:'#c98952',
-    skinDark:'#a9693f',
-    skinShadow:'#805032',
-    face:'#185f68',
-    nose:'#7a432e',
-    hair:'#e7d574',
-    hairLight:'#fff099',
-    hairDark:'#b68142',
-    shirt:path?'#24152f':'#26283f',
-    shirtLight:path?shadeHex(PATHS[path].col,18):'#3b4268',
-    shirtDark:path?'#170c20':'#191a2c',
-    shirtShadow:path?'#0f0816':'#11111e',
-    pants:'#17182a',
-    pantsDark:'#0e0e18',
+    skin:custom?custom.skin:'#c98952',
+    skinDark:shadeHex(custom?custom.skin:'#c98952',-20),
+    skinShadow:shadeHex(custom?custom.skin:'#c98952',-38),
+    face:custom?custom.face:'#185f68',
+    nose:shadeHex(custom?custom.skin:'#c98952',-42),
+    hair:custom?custom.hair:'#e7d574',
+    hairLight:shadeHex(custom?custom.hair:'#e7d574',28),
+    hairDark:shadeHex(custom?custom.hair:'#e7d574',-36),
+    shirt,
+    shirtLight:shadeHex(shirt,26),
+    shirtDark:shadeHex(shirt,-32),
+    shirtShadow:shadeHex(shirt,-48),
+    pants:custom?custom.pants:'#17182a',
+    pantsDark:shadeHex(custom?custom.pants:'#17182a',-30),
     boot:'#5a2628',
     bootLight:'#7a3838',
     belt:'#5c2c24',
     beltBuckle:'#d0a348',
-    trim:path==='mage'?'#9bdcff':path==='shadow'?'#9b6be8':path==='guardian'?'#d49a42':'#8f6aa7',
-    scarf:path==='mage'?'#bfe8ff':path==='shadow'?'#b8a0ff':path==='guardian'?'#ffd27a':'#7d3155',
+    trim:custom?custom.accent:(path==='mage'?'#9bdcff':path==='shadow'?'#9b6be8':path==='guardian'?'#d49a42':path==='verdant'?'#65d982':'#8f6aa7'),
+    scarf:custom?shadeHex(custom.accent,32):(path==='mage'?'#bfe8ff':path==='shadow'?'#b8a0ff':path==='guardian'?'#ffd27a':path==='verdant'?'#bbf7d0':'#7d3155'),
   };
 }
 function playerAppearance(){
-  const look=appearanceForPath(S.path);
+  const look=appearanceForPath(S.path,playerCustomAppearance);
   look.armorId=armorSlot?armorSlot.id:0;
   look.armorType=armorSlot?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
   look.heldId=displayHeldId();
@@ -3171,7 +3181,7 @@ function playerAppearance(){
   return look;
 }
 function remoteAppearance(ref){
-  const look=appearanceForPath(ref&&ref.path);
+  const look=appearanceForPath(ref&&ref.path,parseReplicatedAppearance(ref&&ref.appearance));
   look.armorId=ref?(ref.armorId|0):0;
   look.armorType=ref&&GEAR_SYSTEM.ARMOR_ARCHETYPES[ref.armorType]?ref.armorType:'';
   look.heldId=ref?(ref.heldId|0):0;
@@ -3212,7 +3222,7 @@ function faceTexture(look){
     g.fillStyle='rgba(255,180,160,.35)'; g.fillRect(2,10,2,1); g.fillRect(12,10,2,1);
   });
 }
-const REPLICATION_VISUALS=createReplicationVisuals({NET,player,familiarReaction:kind=>COMPANIONS.familiarReaction(kind)});
+const REPLICATION_VISUALS=createReplicationVisuals({NET,player,familiarReaction:kind=>COMPANIONS.familiarReaction(kind),companions:()=>COMPANIONS});
 const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,dragonCommandFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate}=REPLICATION_VISUALS;
 
 const COMPANIONS=createCompanionSystem({
@@ -3244,11 +3254,12 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
   react:(type,mood)=>COMPANIONS.dragonReaction ? COMPANIONS.dragonReaction(type,mood) : false,
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,netRemoveRemote}=COMPANIONS;
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
 let appearancePreviewActive=false, meditationOwnedAppearance=false;
+let playerCustomAppearance=APPEARANCE_SYSTEM&&APPEARANCE_SYSTEM.sanitizeAppearance?APPEARANCE_SYSTEM.sanitizeAppearance(null):null;
 let cosmeticUnlocks=[];
 let equippedCosmetics=[];
 const COSMETIC_DEFS={
@@ -3271,6 +3282,14 @@ function clampEquippedCosmetics(list){
     if(COSMETIC_DEFS[id]&&owned.has(id)&&!out.includes(id)) out.push(id);
   }
   return out;
+}
+function parseReplicatedAppearance(value){
+  if(!APPEARANCE_SYSTEM||!APPEARANCE_SYSTEM.sanitizeAppearance)return null;
+  if(value&&typeof value==='object')return APPEARANCE_SYSTEM.sanitizeAppearance(value);
+  if(typeof value==='string'&&value){
+    try{return APPEARANCE_SYSTEM.sanitizeAppearance(JSON.parse(value));}catch(e){}
+  }
+  return APPEARANCE_SYSTEM.sanitizeAppearance(null);
 }
 function cosmeticUnlocked(id){ return cosmeticUnlocks.includes(id); }
 function cosmeticEquipped(id){ return equippedCosmetics.includes(id); }
@@ -3301,7 +3320,7 @@ function appearanceSignature(){
   const held=inv[selected]?inv[selected].id:0;
   const armor=armorSlot?armorSlot.id:0;
   const armorType=armorSlot&&ITEMS[armorSlot.id]&&ITEMS[armorSlot.id].armor?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
-  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), equippedCosmetics.join(',')].join('|');
+  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), JSON.stringify(playerCustomAppearance||{}), equippedCosmetics.join(',')].join('|');
 }
 function buildAppearanceDummy(){
   const d={...makeRemoteAvatar(playerAppearance()), phase:Math.random()*10, sig:'', tag:null};
@@ -4774,6 +4793,7 @@ const netTick=createNetworkFramePump({
   emitDragonTrail,
   pulseAegisGlow,
   tickSpiritVisual,
+  tickPantherFormVisual,
   tickLocalSpiritVisual,
   updateTag:netUpdateTag,
 });
@@ -4789,6 +4809,7 @@ gameContext.registerModule('networking', Object.freeze({
   connect:netConnect,
   tick:netTick,
   tickCompanionDragons,
+  tickLocalPantherFormVisual,
   tickPetTamerTutorialDragons,
   tickPetTamerTutorialGroundDragon,
   snapshot:netSnapshot,

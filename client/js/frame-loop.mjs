@@ -610,10 +610,13 @@ function serverObjectiveHudAction(o){
   const explicit=o.hudAction||o.claimAction||o.action;
   const type=explicit&&explicit.type||'';
   if(type==='turn_in')return {type:'turn_in',label:objectiveTurnInLabel(o),location:o.location||'',source:o.source||''};
-  if(type==='find_gate')return {type:'find_gate',label:explicit.label||'FIND GATE'};
+  if(type==='find_gate')return {type:'find_gate',label:explicit.label||'FIND GATE',rank:explicit.rank};
   if(type==='jobs')return {type:'jobs',label:explicit.label||(o.status==='claimable'?'CLAIM AT JOB BOARD':'OPEN JOB BOARD')};
   if(type==='guild_contracts')return {type:'guild_contracts',label:explicit.label||(o.status==='claimable'?'CLAIM GUILD CONTRACT':'OPEN GUILD CONTRACTS')};
   if(type==='land')return {type:'land',label:explicit.label||'CLAIM LAND'};
+  if(type==='gate_prep')return {type:'gate_prep',label:explicit.label||'PREP CHECK',rank:explicit.rank==null?gatePrepTargetRank():explicit.rank|0};
+  if(type==='choose_spec')return {type:'choose_spec',label:explicit.label||'CHOOSE SPEC'};
+  if(type==='regional_track')return {type:'regional_track',label:explicit.label||'TRACK'};
   if(type==='craft'){
     const craft=objectiveCraftAction('what_next');
     return craft || {type:'questlog',label:explicit.label||'OPEN QUEST LOG'};
@@ -721,6 +724,24 @@ function progressionObjectiveFallback(){
     if(handoff)return objectiveLine('progression','Next',handoff.title,handoff.text,{type:'jobs',label:'OPEN JOB BOARD'});
     return objectiveLine('progression','Next','Profession Work','Take your first profession or Adventurer contract at the Job Board',{type:'jobs',label:'OPEN JOB BOARD'});
   }
+  if(progressionFocus==='c_rank_climb'){
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
+    const rankProgress=currentRankProgress&&currentRankProgress();
+    const progress=rankProgress&&rankProgress.nextRank===2?objectiveProgressParts(rankProgress.earned,rankProgress.required):null;
+    return objectiveLine('progression','Next','C-rank Climb',prep&&prep.ready?'Ready - find or open a C-rank Gate':'Earn Hunter XP and prep for C-rank positioning checks',prep&&prep.ready?{type:'find_gate',label:'FIND C GATE',rank:2}:{type:'gate_prep',label:'C PREP CHECK',rank:2},progress);
+  }
+  if(progressionFocus==='c_rank_specialization'){
+    return objectiveLine('progression','Next','C-rank Specialization','Choose one permanent specialization for your combat path',{type:'choose_spec',label:'CHOOSE SPEC'});
+  }
+  if(progressionFocus==='b_rank_pressure'){
+    const pressure=overworldActivity&&overworldActivity.gateBreach;
+    if(pressure)return objectiveLine('progression','Next','Gate Pressure','A Gate breach is active. Track and contain the escaped boss before roads worsen',{type:'regional_track',label:'TRACK BREACH'});
+    const rank=midgameGateRank(),rankName=RANKS[rank]&&RANKS[rank].n||'C';
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(rank);
+    if(prep&&!prep.ready)return objectiveLine('progression','Next','Gate Pressure',rankName+'-Rank pressure is rising. Fix your Gate kit before the next clear',{type:'gate_prep',label:rankName+' PREP CHECK',rank});
+    if(gate)return objectiveLine('progression','Next','Gate Pressure','Clear higher-rank Gates, Road Warden work, and regional trouble to stabilize the climb',{type:'find_gate',label:'FIND GATE',rank});
+    return objectiveLine('progression','Next','Gate Pressure','No breach is active. Take Adventurer or Road Warden work so B-rank pressure keeps moving',{type:'jobs',label:'OPEN JOB BOARD'});
+  }
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next'),prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
     return objectiveLine('progression','Next','D-Rank Prep',prep&&prep.ready?'Ready - find and clear a D-rank Gate':'Prepare food, gear, repairs, and a D-rank key',craft||(prep&&prep.ready?{type:'find_gate',label:'FIND GATE'}:{type:'questlog',label:'OPEN GATE PREP'}));
@@ -773,6 +794,7 @@ function gatePrepTargetRank(){
   }
   if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
   if(progressionFocus==='first_d_gate')return 1;
+  if(progressionFocus==='c_rank_climb')return 2;
   return -1;
 }
 function gatePrepObjectiveLine(){
@@ -784,6 +806,38 @@ function gatePrepObjectiveLine(){
   const next=prep.next?'Next: '+prep.next.label:'Ready - find or join a Gate';
   const action=prep.ready?{type:'find_gate',label:'FIND GATE'}:{type:'gate_prep',label:'PREP CHECK',rank};
   return objectiveLine('prep','Prep',rankName+'-Rank Prep',prep.status+' '+prep.score+'/'+prep.total+' - '+next,action,objectiveProgressParts(prep.score,prep.total));
+}
+function postDRankGuidanceReady(){
+  return !!(dim==='overworld'&&highestGateRankCleared>=1&&!quest&&!jobContract&&!clampRegionalContract(regionalContract)&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure');
+}
+function midgameGateRank(){
+  if(menusApi.nextGatePrepRank){
+    const rank=menusApi.nextGatePrepRank();
+    if(rank>=0)return Math.max(1,Math.min(4,rank|0));
+  }
+  return Math.max(1,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():1));
+}
+function midgameObjectiveLine(){
+  if(!postDRankGuidanceReady())return null;
+  const rank=midgameGateRank(),rankName=RANKS[rank]&&RANKS[rank].n||'?';
+  const prep=menusApi.gateReadiness&&menusApi.gateReadiness(rank);
+  if(prep&&!prep.ready){
+    const missing=prep.next&&prep.next.label?prep.next.label:'your kit';
+    return objectiveLine('midgame','Next','Sharpen '+rankName+'-Rank Kit',rankName+'-Rank Gates are open. '+prep.status+' '+prep.score+'/'+prep.total+' - fix '+missing,{type:'gate_prep',label:'PREP CHECK',rank},objectiveProgressParts(prep.score,prep.total),{target:{label:'Gate Prep',x:HUB.smith.x,z:HUB.smith.z}});
+  }
+  if(gate&&((gate.rank|0)<=rank||!prep)){
+    return objectiveLine('midgame','Next','Clear a '+(RANKS[gate.rank]&&RANKS[gate.rank].n||rankName)+'-Rank Gate','You are between contracts. Inspect the nearby Gate, rally if needed, then clear the boss for loot and Hunter XP',{type:'find_gate',label:'FIND GATE'},null,{target:{label:'Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}});
+  }
+  const opportunity=typeof nearbyRegionalOpportunity==='function'?nearbyRegionalOpportunity():null;
+  if(opportunity&&opportunity.distance<120){
+    return objectiveLine('midgame','Next','Handle Regional Trouble',opportunity.title+' nearby - track it for Road Warden progress, loot, and safer roads',{type:'regional_track',label:opportunity.tracked?'CLEAR TRACK':'TRACK'},null,{target:{label:opportunity.title,x:opportunity.x,z:opportunity.z}});
+  }
+  const level=S&&S.lvl|0,rankProgress=currentRankProgress&&currentRankProgress();
+  const nextRankName=rankProgress&&rankProgress.nextRank!=null&&RANKS[rankProgress.nextRank]?RANKS[rankProgress.nextRank].n+'-Rank':'the next rank';
+  const progressText=rankProgress&&!rankProgress.maxRank
+    ? 'Current climb: '+rankName+'-Rank toward '+nextRankName+'. '
+    : '';
+  return objectiveLine('midgame','Next','Take Rotating Adventurer Work',progressText+'Open the Job Board for Gates, patrols, events, and field contracts so the rank climb keeps moving',{type:'jobs',label:'OPEN JOB BOARD'},null,{target:{label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z},level});
 }
 function idleObjectiveLine(){
   if(dim!=='overworld')return null;
@@ -802,10 +856,10 @@ function shouldDeferTransitionAction(transition,{story=null,job=null}={}){
   if(!transition)return false;
   if(transition.type==='continue_panel'||transition.type==='use_ability')return false;
   const baseOnboardingFocus=['first_craft_station','first_land_claim','first_claim_expand','first_base_setup','first_homestead_upgrade'].includes(progressionFocus);
-  if(transition.type==='choose_job')return !!story || baseOnboardingFocus || progressionFocus==='first_d_gate' || progressionFocus==='next_adventurer_contract';
+  if(transition.type==='choose_job')return !!story || baseOnboardingFocus || progressionFocus==='first_d_gate' || progressionFocus==='c_rank_climb' || progressionFocus==='b_rank_pressure' || progressionFocus==='next_adventurer_contract';
   if(transitionPanelActuallyOpen(transition.type))return false;
   if(transition.type==='choose_path'||transition.type==='start_awakening'){
-    return !!story || !!job || baseOnboardingFocus || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
+    return !!story || !!job || baseOnboardingFocus || progressionFocus==='first_profession_contract' || progressionFocus==='first_promotion_job' || progressionFocus==='first_promotion_contract' || progressionFocus==='c_rank_climb' || progressionFocus==='b_rank_pressure' || progressionFocus==='next_adventurer_contract' || progressionFocus==='first_d_gate';
   }
   return false;
 }
@@ -840,6 +894,8 @@ function nextBestObjectiveLine(){
   if(job)return job;
   const guild=localGuildObjectiveLine()||serverObjectiveLine(serverObjectiveBySource('guild'),'Guild');
   if(guild)return guild;
+  const midgame=midgameObjectiveLine();
+  if(midgame)return midgame;
   const style=playerStyleObjectiveLine();
   if(style)return style;
   return progression||idleObjectiveLine();
@@ -863,6 +919,8 @@ function unifiedObjectiveList(){
   if(guild)lines.push(guild);
   const progression=serverObjectiveLine(serverObjectiveBySource('progression'),'Next')||progressionObjectiveFallback();
   if(progression&&progression!==chapterProgression)lines.push(progression);
+  const midgame=midgameObjectiveLine();
+  if(midgame)lines.push(midgame);
   const seen=new Set();
   return lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,4);
 }
@@ -924,12 +982,20 @@ function currentObjectiveAction(){
   }
   if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup'||progressionFocus==='first_homestead_upgrade') return {type:'land',label:progressionFocus==='first_homestead_upgrade'?'OPEN HOMESTEAD':'CLAIM LAND'};
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract') return {type:'jobs',label:'OPEN JOB BOARD'};
+  if(progressionFocus==='c_rank_specialization') return {type:'choose_spec',label:'CHOOSE SPEC'};
+  if(progressionFocus==='b_rank_pressure') return progressionObjectiveFallback().action || {type:'jobs',label:'OPEN JOB BOARD'};
+  if(progressionFocus==='c_rank_climb'){
+    const prep=menusApi.gateReadiness&&menusApi.gateReadiness(2);
+    return prep&&prep.ready?{type:'find_gate',label:'FIND C GATE',rank:2}:{type:'gate_prep',label:'C PREP CHECK',rank:2};
+  }
   if(progressionFocus==='first_d_gate'){
     const craft=objectiveCraftAction('what_next');
     if(craft) return craft;
     const prep=ONBOARD.dRankPrepStatus&&ONBOARD.dRankPrepStatus();
     return prep&&prep.ready ? {type:'find_gate',label:'FIND GATE'} : {type:'questlog',label:'OPEN GATE PREP'};
   }
+  const midgame=midgameObjectiveLine();
+  if(midgame&&midgame.action)return midgame.action;
   if(quest&&!questDone()){
     if(quest.type==='gate') return {type:'find_gate',label:'FIND GATE'};
     const craft=objectiveCraftAction('story');
@@ -1082,8 +1148,19 @@ function handleObjectiveAction(action,btn){
     menusApi.openGatePrep&&menusApi.openGatePrep(+(btn.dataset.rank||0));
     return;
   }
+  if(action==='choose_spec'){
+    if(dimensionsApi.openStat){dimensionsApi.openStat();return;}
+    sysMsg('<b>Specialization:</b> open Character and choose one permanent path specialization.');
+    return;
+  }
   if(action==='player_style'){
     menusApi.openPlayerStyleGuide&&menusApi.openPlayerStyleGuide();
+    return;
+  }
+  if(action==='regional_track'){
+    if(globalThis.toggleRegionalOpportunityTracking&&globalThis.toggleRegionalOpportunityTracking())return;
+    menusApi.openRegionalContracts&&menusApi.openRegionalContracts();
+    sysMsg('<b>Regional work:</b> no nearby trouble is ready to track. Open Guild Contracts for Road Warden leads.');
     return;
   }
   if(action==='questlog'){menusApi.openQuestLog&&menusApi.openQuestLog();return;}
@@ -1141,7 +1218,7 @@ function currentObjective(){
   const deferTransition=shouldDeferTransitionAction(transition,{story:!!quest||!!serverObjectiveBySource('story','manhunt'),job:!!jobContract});
   if(transition&&!deferTransition){
     if(transition.type==='continue_panel') return {label:'Reward Pending', text:'Continue the open reward panel to unlock the next step'};
-    if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='next_adventurer_contract') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
+    if(transition.type==='choose_job'&&progressionFocus!=='first_d_gate'&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure'&&progressionFocus!=='next_adventurer_contract') return {label:'Job Tutorial Choice', text:'Choose a first job tutorial, choose later, or open the Job Board'};
     if(transition.type==='choose_path') return {label:'Path Choice', text:'Choose a combat path to unlock your first ability'};
     if(transition.type==='start_awakening') return {label:'Ability Awakening', text:'Start ability training for your chosen path'};
     if(transition.type==='use_ability') return {label:'Ability Training', text:combatState.abilityTrainingUsed?'Finish the training meadow':'Use your Q ability in the training meadow'};
@@ -1316,7 +1393,16 @@ function utilityCompassTarget(){
     const handoff=professionHandoffObjective();
     return handoff&&handoff.target ? handoff.target : {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
-  if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract'){
+  if(progressionFocus==='c_rank_specialization')return {label:'Aegis',x:HUB.guardian.x,z:HUB.guardian.z};
+  if(progressionFocus==='b_rank_pressure'){
+    const midgame=midgameObjectiveLine();
+    if(midgame&&midgame.target)return midgame.target;
+    const breach=overworldActivity&&overworldActivity.gateBreach;
+    if(breach)return {label:'Breach',x:breach.x,z:breach.z};
+    if(gate)return {label:'Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC};
+    return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
+  }
+  if(progressionFocus==='e_rank_climb'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='c_rank_climb'||progressionFocus==='next_adventurer_contract'){
     return {label:'Board',x:HUB.jobs.x,z:HUB.jobs.z};
   }
   if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
@@ -1330,6 +1416,8 @@ function utilityCompassTarget(){
     const prep=ONBOARD.dRankPrepStatus();
     if(prep.next.target)return {label:'D Prep',x:prep.next.target.x,z:prep.next.target.z};
   }
+  const midgame=midgameObjectiveLine();
+  if(midgame&&midgame.target)return midgame.target;
   const style=currentPlayerStyleGuide();
   if(style){
     const target=playerStyleTargetPoint(style.target);
@@ -2014,6 +2102,7 @@ function tick(now){
     if(player.pos.y<-12){ player.pos.set(TOWN.TC+14.5, TOWN.G+2, TOWN.TC+27.5); player.vel.set(0,0,0); }
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
+    if(networkingApi.tickLocalPantherFormVisual) networkingApi.tickLocalPantherFormVisual(now, dt, !!(buffs.panther>0));
     if(networkingApi.tickCompanionDragons) networkingApi.tickCompanionDragons(now, dt);
     tickDragonRoost(now, dt);
 

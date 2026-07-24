@@ -11,7 +11,7 @@ export const PROGRESSION_ERRORS = Object.freeze({
 export const PROGRESSION_FOCUS_STATES = Object.freeze([
   'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
-  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'next_adventurer_contract',
 ]);
 export const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 export const HUNTER_RANK_LETTERS = 'EDCBAS';

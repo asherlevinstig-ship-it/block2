@@ -7,7 +7,7 @@ class Player extends Schema {
     this.yaw = 0;
     this.name = 'Hunter';
     this.lvl = 1;
-    this.path = '';          // '', 'shadow', 'mage', 'guardian'
+    this.path = '';          // ability path id, e.g. 'shadow', 'mage', 'guardian', 'verdant'
     this.job = '';           // '', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk', 'pet_tamer'
     this.jobLvl = 0;         // profession level for nameplates
     this.dim = 'overworld';  // overworld | dungeon | tutorial | event
@@ -25,6 +25,7 @@ class Player extends Schema {
     this.dragonStaySpots = ''; // JSON map type -> saved overworld stay position
     this.dragonHatchedAt = ''; // JSON map type -> hatch timestamp; 0 means legacy/adult dragon
     this.cosmetics = '';     // CSV of public cosmetic unlock ids
+    this.appearance = '';    // JSON public hunter appearance palette
     this.familiar = '';      // active familiar ('' = none, 'shade' = Shade manifested)
     this.familiarTier = 0;   // public visual tier of the active familiar
     this.spirit = false;     // defeated inside a dungeon; fixed in place until the player quits
@@ -34,7 +35,7 @@ class Player extends Schema {
 defineTypes(Player, {
   x: 'float32', y: 'float32', z: 'float32', yaw: 'float32',
   name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
-  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean', invisible:'boolean',
+  heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', appearance: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean', invisible:'boolean',
 });
 
 class Team extends Schema {

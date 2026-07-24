@@ -53,7 +53,7 @@ const REWARD_ITEMS = { coal: 101, iron: 102, dia: 103 };
 const PROGRESSION_FOCUS_STATES = Object.freeze([
   'first_town_map', 'first_road_ready', 'first_e_gate',
   'first_craft_station', 'first_land_claim', 'first_claim_expand', 'first_base_setup', 'first_homestead_upgrade', 'first_profession_contract',
-  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'next_adventurer_contract',
+  'e_rank_climb', 'first_promotion_job', 'first_promotion_contract', 'first_d_gate', 'c_rank_climb', 'c_rank_specialization', 'b_rank_pressure', 'next_adventurer_contract',
 ]);
 const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
 const DEITY_LEVEL = 60;
@@ -108,6 +108,7 @@ const I = {
   HIDE_ARMOR: 211, CHAIN_ARMOR: 212, STORMGLASS_ARMOR: 213,
   ANCIENT_FRAGMENT: 214, ECHO_GLYPH: 215, RELIC_ARMOR_PIECE: 216, TOWN_MAP: 217,
   CAT_COLLAR: 218, DOG_COLLAR: 219, WOLF_COLLAR: 220,
+  APPEARANCE_MIRROR: 221,
 };
 // Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
@@ -563,7 +564,7 @@ const ITEM_NAMES = {
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
   [I.ANCIENT_FRAGMENT]: 'Ancient Fragment', [I.ECHO_GLYPH]: 'Echo Glyph', [I.RELIC_ARMOR_PIECE]: 'Relic Armor Piece',
-  [I.TOWN_MAP]: 'Town Map',
+  [I.TOWN_MAP]: 'Town Map', [I.APPEARANCE_MIRROR]: 'Hunter Mirror',
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
   [I.CAT_COLLAR]: 'Cat Collar', [I.DOG_COLLAR]: 'Dog Collar', [I.WOLF_COLLAR]: 'Wolf Collar',
@@ -595,6 +596,7 @@ const RECIPES = [
   { shape: ['c', 's'], keys: { c: I.COAL, s: I.STICK }, out: [W.B.TORCH, 8] },
   { shape: ['c', 's'], keys: { c: I.CHARCOAL, s: I.STICK }, out: [W.B.TORCH, 8] },
   { shapeless: [W.B.TORCH, I.IRON_INGOT], out: [W.B.LANTERN, 1] },
+  { shapeless: [W.B.GLASS, I.IRON_INGOT], out: [I.APPEARANCE_MIRROR, 1] },
   { shapeless: [I.STICK, I.STICK, W.B.LOG, I.COAL], out: [W.B.CAMPFIRE, 1] },
   { shapeless: [I.STICK, I.STICK, W.B.LOG, I.CHARCOAL], out: [W.B.CAMPFIRE, 1] },
   { shapeless: [I.IRON_INGOT, I.STICK, W.B.PLANKS], out: [I.REPAIR_KIT, 1] },

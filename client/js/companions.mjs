@@ -2834,8 +2834,134 @@ function makeRemoteAvatar(look){
   grp.add(blobShadow(1));
   return {grp, legs, arms, head, look, hair, blink, idle, sword, aegisGlow};
 }
+function makePantherAvatar(){
+  const grp=new THREE.Group(), legs=[], mats=[];
+  const reg=m=>{mats.push(m);return m;};
+  const fur=reg(voxelMats('#07110b','#17351f','#020604','#000000'));
+  const furHi=reg(voxelMats('#102818','#245335','#07110b','#020604'));
+  const leaf=reg(glowVoxelMats('#16a34a','#86efac','#052e16','#22c55e',.95));
+  const eye=reg(glowVoxelMats('#bbf7d0','#f0fff4','#22c55e','#86efac',1.2));
+  const claw=reg(voxelMats('#d8f5dc','#ffffff','#6f846f','#3d4d3d'));
+  const add=(parent,size,pos,mat,rot)=>addBox(parent,size,pos,mat,rot);
+  const body=new THREE.Group();body.position.y=.68;grp.add(body);
+  add(body,[.62,.42,1.18],[0,0,0],fur);
+  add(body,[.5,.18,.88],[0,.24,-.05],furHi);
+  add(body,[.46,.22,.36],[0,.02,-.58],furHi);
+  const head=new THREE.Group();head.position.set(0,.78,-.86);grp.add(head);
+  add(head,[.44,.36,.46],[0,0,0],fur);
+  add(head,[.32,.2,.38],[0,-.04,-.35],furHi);
+  add(head,[.16,.1,.16],[0,-.08,-.58],fur);
+  for(const sx of [-.16,.16]){
+    add(head,[.08,.18,.08],[sx,.24,-.08],furHi,[0,0,sx>0?-.45:.45]);
+    add(head,[.075,.06,.035],[sx,.03,-.245],eye);
+  }
+  add(head,[.08,.05,.035],[0,-.15,-.62],claw);
+  for(const sx of [-.24,.24])for(const z of [-.36,.36]){
+    const leg=new THREE.Group();leg.position.set(sx,.62,z);grp.add(leg);
+    add(leg,[.16,.42,.16],[0,-.2,0],fur);
+    add(leg,[.15,.2,.18],[0,-.5,z<0?-.04:.04],furHi,[z<0?.18:-.18,0,0]);
+    add(leg,[.2,.09,.26],[0,-.66,z<0?-.08:.08],fur);
+    add(leg,[.045,.035,.08],[-.06,-.71,z<0?-.2:.2],claw);
+    add(leg,[.045,.035,.08],[.06,-.71,z<0?-.2:.2],claw);
+    legs.push(leg);
+  }
+  const tail=new THREE.Group();tail.position.set(0,.78,.66);grp.add(tail);
+  add(tail,[.14,.14,.78],[0,.02,.34],furHi,[.08,0,0]);
+  add(tail,[.12,.12,.38],[0,.08,.88],leaf,[.18,0,0]);
+  const collar=new THREE.Mesh(new THREE.TorusGeometry(.34,.025,6,28),new THREE.MeshBasicMaterial({color:0x22c55e,transparent:true,opacity:.68,depthWrite:false}));
+  collar.rotation.x=Math.PI/2;collar.position.set(0,.82,-.72);grp.add(collar);
+  grp.add(blobShadow(1.25));
+  grp.userData.pantherVisual=true;
+  return {grp,legs,head,tail,body,mats,phase:Math.random()*10,panther:true};
+}
+function posePantherAvatar(panther, now, dt, moving=false){
+  if(!panther||!panther.grp)return;
+  if(!Number.isFinite(panther.baseY))panther.baseY=panther.grp.position.y;
+  const t=now/1000+(panther.phase||0),stride=moving?Math.sin(t*10)*.62:Math.sin(t*1.7)*.04;
+  for(let i=0;i<(panther.legs||[]).length;i++){
+    const front=i<2;
+    panther.legs[i].rotation.x=(front?stride:-stride)*(i%2?-1:1);
+    panther.legs[i].position.y=.62+(moving?Math.max(0,Math.sin(t*10+i))*-.025:0);
+  }
+  if(panther.head){
+    panther.head.rotation.y=Math.sin(t*1.2)*.08;
+    panther.head.rotation.x=-.05+Math.sin(t*1.6)*.025;
+  }
+  if(panther.body)panther.body.rotation.x=Math.sin(t*1.8)*.015;
+  if(panther.tail){
+    panther.tail.rotation.y=Math.sin(t*2.4)*.26;
+    panther.tail.rotation.x=.12+Math.sin(t*1.7)*.08;
+  }
+  panther.grp.position.y=panther.baseY+Math.sin(t*2.2)*.002;
+}
+function setPantherHiddenParts(r, hide){
+  if(!r||!r.grp)return;
+  if(hide){
+    if(!r.pantherHiddenParts){
+      r.pantherHiddenParts=[];
+      for(const child of r.grp.children){
+        if(child===r.tag||child.userData&&child.userData.pantherVisual||child===r.mountObj)continue;
+        r.pantherHiddenParts.push(child);
+      }
+    }
+    for(const child of r.pantherHiddenParts)child.visible=false;
+    if(r.tag)r.tag.position.y=1.55;
+  }else{
+    for(const child of r.pantherHiddenParts||[])child.visible=true;
+    r.pantherHiddenParts=null;
+    if(r.tag)r.tag.position.y=2.65;
+  }
+}
+function applyPantherFormVisual(r,durationMs=14000){
+  if(!r||!r.grp)return;
+  const now=performance.now();
+  r.pantherUntil=Math.max(r.pantherUntil||0,now+Math.max(1000,durationMs|0));
+  if(!r.pantherVisual){
+    r.pantherVisual=makePantherAvatar();
+    r.pantherVisual.grp.position.y=.02;
+    r.grp.add(r.pantherVisual.grp);
+  }
+  setPantherHiddenParts(r,true);
+}
+function clearPantherFormVisual(r){
+  if(!r)return;
+  setPantherHiddenParts(r,false);
+  if(r.pantherVisual){
+    disposeObjectTree(r.pantherVisual.grp);
+    r.pantherVisual=null;
+  }
+  r.pantherUntil=0;
+}
+function tickPantherFormVisual(r,now,dt,moving=false){
+  if(!r)return false;
+  const active=(r.pantherUntil||0)>now;
+  if(!active){if(r.pantherVisual)clearPantherFormVisual(r);return false;}
+  if(!r.pantherVisual)applyPantherFormVisual(r,Math.max(1000,r.pantherUntil-now));
+  setPantherHiddenParts(r,true);
+  posePantherAvatar(r.pantherVisual,now,dt,moving);
+  return true;
+}
+let localPantherVisual=null;
+function tickLocalPantherFormVisual(now,dt,active=false){
+  if(!active){
+    if(localPantherVisual){disposeObjectTree(localPantherVisual.grp);localPantherVisual=null;}
+    return;
+  }
+  if(!localPantherVisual){
+    localPantherVisual=makePantherAvatar();
+    scene.add(localPantherVisual.grp);
+  }
+  const moving=Math.hypot(player.vx||0,player.vz||0)>.08;
+  localPantherVisual.grp.visible=!mounted;
+  localPantherVisual.grp.position.set(player.pos.x,player.pos.y+.02,player.pos.z);
+  localPantherVisual.baseY=localPantherVisual.grp.position.y;
+  localPantherVisual.grp.rotation.y=player.yaw+Math.PI;
+  posePantherAvatar(localPantherVisual,now,dt,moving);
+  if(Math.random()<dt*8)spawnParticle({x:player.pos.x+(Math.random()-.5)*.9,y:player.pos.y+.18+Math.random()*.35,z:player.pos.z+(Math.random()-.5)*.9,
+    vx:(Math.random()-.5)*.25,vy:.35+Math.random()*.35,vz:(Math.random()-.5)*.25,life:.65,grav:-.12,r:.12,g:.85,b:.32});
+}
 function equipmentSignatureFrom(ref){
-  return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, (ref&&ref.armorType)||'', ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0, (ref&&ref.cosmetics)||''].join('|');
+  return [(ref&&ref.path)||'', ref?(ref.armorId|0):0, (ref&&ref.armorType)||'', ref?(ref.heldId|0):0, (ref&&ref.job)||'', ref?(ref.jobLvl|0):0, (ref&&ref.cosmetics)||'', (ref&&ref.appearance)||''].join('|');
 }
 function makeSpiritDiscTexture(){
   const c=document.createElement('canvas');c.width=c.height=96;
@@ -2952,7 +3078,7 @@ function netAddRemote(sid, ref){
 function netRefreshRemoteAvatar(sid, r){
   const sig=equipmentSignatureFrom(r.ref);
   if(sig===r.equipSig) return;
-  const pos=r.grp.position.clone(), rot=r.grp.rotation.y, tag=r.tag;
+  const pos=r.grp.position.clone(), rot=r.grp.rotation.y, tag=r.tag, pantherUntil=r.pantherUntil||0;
   scene.remove(r.grp);
   const fresh=makeRemoteAvatar(remoteAppearance(r.ref));
   Object.assign(r, fresh);
@@ -2962,9 +3088,13 @@ function netRefreshRemoteAvatar(sid, r){
   r.mountObj=null;                  // rebuilt fresh by ensureRemoteMount next frame
   r.invisibilityVisual=null;
   r.spiritVisual=null;
+  r.pantherVisual=null;
+  r.pantherHiddenParts=null;
+  r.pantherUntil=pantherUntil;
   r.tag=null; r.tagText='';
   scene.add(r.grp);
   netUpdateTag(r);
+  if(pantherUntil>performance.now())applyPantherFormVisual(r,pantherUntil-performance.now());
 }
 function netUpdateTag(r){
   const pathCol=r.ref.path && PATHS[r.ref.path] ? PATHS[r.ref.path].col : '#ffffff';
@@ -3112,6 +3242,11 @@ function netRemoveRemote(sid){
     bindFamiliarItem,
     familiarBoundLocal,
     makeRemoteAvatar,
+    makePantherAvatar,
+    applyPantherFormVisual,
+    clearPantherFormVisual,
+    tickPantherFormVisual,
+    tickLocalPantherFormVisual,
     netAddRemote,
     netRefreshRemoteAvatar,
     netUpdateTag,

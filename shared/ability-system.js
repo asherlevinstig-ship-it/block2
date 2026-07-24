@@ -30,18 +30,28 @@
         Object.freeze({name:'Shockwave',glyph:'◎',kind:'shockwave',mp:18,sp:15,cdMs:12000,radius:5.5,txt:'Slam the ground to blast nearby foes away'}),
         Object.freeze({name:'Second Wind',glyph:'✚',kind:'passive',mp:0,sp:0,cdMs:60000,txt:'Auto-heal when near death'}),
       ])}),
+    verdant:Object.freeze({name:'Verdant Shifter',color:'#22c55e',
+      desc:'Heal allies, bind foes in living roots, and hunt as a panther.',
+      abilities:Object.freeze([
+        Object.freeze({name:'Verdant Mend',glyph:'+',kind:'mend',mp:14,sp:0,cdMs:9000,range:9,txt:'Heal the weakest nearby ally, or yourself if alone'}),
+        Object.freeze({name:'Rootsnare',glyph:'*',kind:'roots',mp:20,sp:0,cdMs:15000,radius:5.8,txt:'Entangle nearby foes with roots and nature damage'}),
+        Object.freeze({name:'Panther Form',glyph:'P',kind:'panther',mp:28,sp:10,cdMs:32000,txt:'Shift into a swift melee hunter for 14s'}),
+      ])}),
   });
   // Level curve keeps casters relevant against ranked gates: x1.0 at level 1
   // (identical to the historical tuning) rising ~5%/level to ~x1.95 at level 20.
   function levelPower(lvl){return 1+Math.max(0,(lvl|0)-1)*.05;}
   function abilityDamage(kind,stats){
     const s=stats||{};
-    const lvl=Math.max(1,s.lvl|0),intel=Math.max(1,s.int|0),str=Math.max(1,s.str|0);
+    const lvl=Math.max(1,s.lvl|0),intel=Math.max(1,s.int|0),str=Math.max(1,s.str|0),agi=Math.max(1,s.agi|0);
     if(kind==='soldier')return 4+lvl*.3;                 // the soldier carries its own level scaling
+    if(kind==='mend')return (9+(intel-1)*.45)*levelPower(lvl);
     const base=kind==='fireball'?8+(intel-1)*.6
       :kind==='frost'?6+(intel-1)*.4
       :kind==='lightning'?18+(intel-1)*.8
       :kind==='shockwave'?5+(str-1)*.3
+      :kind==='roots'?5+(intel-1)*.35
+      :kind==='panther'?3+(str-1)*.18+(agi-1)*.35
       :0;
     return base*levelPower(lvl);
   }

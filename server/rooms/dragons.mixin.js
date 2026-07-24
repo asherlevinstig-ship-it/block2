@@ -1029,13 +1029,15 @@ class DragonsMixin {
         const access = this.dragonAccessForClient(client, type);
         if (!access || !DRAGON_TYPE_SET.has(type) || this.ensureDragonRole(access.prof, type) !== 'rest') continue;
         if (!this.isDragonAdult(access.prof, type, now) || this.dragonIsNested(access.token, type) || p.mount === kind) continue;
-        const cap = this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 90 : baseCap;
+        const homesteadUpgrades = typeof this.cleanHomesteadUpgrades === 'function' ? this.cleanHomesteadUpgrades(access.prof && access.prof.homesteadUpgrades) : {};
+        const stableRest = (homesteadUpgrades.stable | 0) > 0;
+        const cap = Math.min(95, (this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 90 : baseCap) + (stableRest ? 5 : 0));
         const care = this.dragonCareFor(access.prof, type);
         if (!care || care.happiness >= cap) continue;
         const key = access.token + ':' + type;
         const personality = this.ensureDragonPersonality(access.prof, type);
         const restMastery = typeof this.dragonRoleMasteryLevel === 'function' ? this.dragonRoleMasteryLevel(access.prof, type, 'rest') : 1;
-        const rate = (personality === 'gentle' ? perSecond * 1.25 : perSecond) * (1 + Math.max(0, restMastery - 1) * .08) * (this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 1.25 : 1);
+        const rate = (personality === 'gentle' ? perSecond * 1.25 : perSecond) * (1 + Math.max(0, restMastery - 1) * .08) * (this.dragonSpecialization && this.dragonSpecialization(access.prof, type) === 'sage' ? 1.25 : 1) * (stableRest ? 1.15 : 1);
         let acc = (this.dragonRestAcc.get(key) || 0) + Math.max(0, dt || 0) * rate;
         const gain = Math.min(cap - care.happiness, Math.floor(acc));
         if (gain <= 0) { this.dragonRestAcc.set(key, acc); continue; }

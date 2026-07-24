@@ -1318,9 +1318,9 @@ test('first Gate clears produce the right onboarding handoffs', async () => {
     action: 'RETURN TO MARA',
   });
   assert.deepEqual(gateMilestoneHandoff({ firstClear: { rank: 1, nextRank: 2 } }, true), {
-    label: 'ADVENTURER LOOP UNLOCKED',
-    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Each rank now contains 10 levels; higher ranks demand increasingly greater mastery.',
-    action: 'TRACK NEXT CONTRACT',
+    label: 'C-RANK CLIMB UNLOCKED',
+    text: 'Contracts, D-rank Gates, events, regional trouble, and C-rank prep checks now push you toward C-rank positioning fights.',
+    action: 'C PREP CHECK',
   });
   assert.equal(gateMilestoneHandoff({ firstClear: { rank: 1 } }, false), null);
   assert.equal(gateMilestoneHandoff({}, true), null);
@@ -2793,7 +2793,7 @@ test('auth controller clears stale hunter name when the signed-in account has no
 test('play flow does not overwrite an existing server hunter name from the input field', () => {
   const combatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   assert.match(combatSource, /if\(!AUTH_UI\.hasHunterName\(\)\)\{/);
-  assert.match(combatSource, /await AUTH_UI\.saveHunterName\(hunterName\);/);
+  assert.match(combatSource, /await AUTH_UI\.saveHunterProfile\(hunterName, AUTH_UI\.currentAppearance\(\)\);/);
 });
 
 test('stored signed-in sessions auto-resume into the live room after refresh', () => {
@@ -3534,6 +3534,24 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/const obj=currentObjectiveHud\(\);/);
   assert.match(frame,/progression:first_land_claim/);
   assert.match(frame,/OPEN GATE PREP/);
+  assert.match(frame,/progressionFocus==='c_rank_climb'/);
+  assert.match(frame,/c_rank_specialization/);
+  assert.match(frame,/b_rank_pressure/);
+  assert.match(frame,/C-rank Climb/);
+  assert.match(frame,/C-rank Specialization/);
+  assert.match(frame,/Gate Pressure/);
+  assert.match(frame,/C PREP CHECK/);
+  assert.match(frame,/CHOOSE SPEC/);
+  assert.match(frame,/TRACK BREACH/);
+  assert.match(menus,/C-rank Recovery/);
+  assert.match(menus,/C-rank Specialization/);
+  assert.match(menus,/Gate Pressure/);
+  assert.match(frame,/function postDRankGuidanceReady\(\)/);
+  assert.match(frame,/function midgameObjectiveLine\(\)/);
+  assert.match(frame,/Sharpen '\+rankName\+'-Rank Kit/);
+  assert.match(frame,/Take Rotating Adventurer Work/);
+  assert.match(frame,/Handle Regional Trouble/);
+  assert.match(frame,/action==='regional_track'/);
   assert.match(frame,/function transitionRecoveryAction\(/);
   assert.match(frame,/continue_panel/);
   assert.match(frame,/choose_path/);

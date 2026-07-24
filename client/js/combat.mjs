@@ -523,6 +523,18 @@ const devResetToken=document.getElementById('devresettoken');
 const devResetStatus=document.getElementById('devresetstatus');
 const devResetGo=document.getElementById('devresetgo');
 const devResetCancel=document.getElementById('devresetcancel');
+const adminInspectGo=document.getElementById('admininspectgo');
+const adminPatchGo=document.getElementById('adminpatchgo');
+const adminInspectOut=document.getElementById('admininspectout');
+const adminItemId=document.getElementById('adminitemid');
+const adminItemCount=document.getElementById('adminitemcount');
+const adminAbilityPath=document.getElementById('adminabilitypath');
+const adminAbilitySpec=document.getElementById('adminabilityspec');
+const adminJob=document.getElementById('adminjob');
+const adminJobXp=document.getElementById('adminjobxp');
+const adminUtilities=document.getElementById('adminutilities');
+const adminUtilityActive=document.getElementById('adminutilityactive');
+const adminUtilityPassive=document.getElementById('adminutilitypassive');
 const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
@@ -3941,7 +3953,7 @@ function chooseJobFromLevel2Banner(jobId){
 function shouldOpenLevel2JobChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const guidanceReady=level2JobChoiceForced||shouldOfferTownJobGuidance();
-  return !!(S&&S.lvl>=2&&!playerJob&&progressionFocus!=='first_d_gate'&&progressionFocus!=='next_adventurer_contract'&&!level2JobChoiceSeen()&&guidanceReady&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!globalThis.dungeonLobbyState&&!globalThis.dungeonLobbyOpen&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
+  return !!(S&&S.lvl>=2&&!playerJob&&progressionFocus!=='first_d_gate'&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure'&&progressionFocus!=='next_adventurer_contract'&&!level2JobChoiceSeen()&&guidanceReady&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!globalThis.dungeonLobbyState&&!globalThis.dungeonLobbyOpen&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
 }
 function openLevel2JobChoice(force=false){
   if(globalThis.dungeonLobbyState||globalThis.dungeonLobbyOpen) return false;
@@ -4353,10 +4365,10 @@ async function startPlaying(create=false){
     const hunterName=AUTH_UI.requireHunterName();
     if(!hunterName)return;
     try{
-      setAuthStatus('SAVING HUNTER NAME...');
-      await AUTH_UI.saveHunterName(hunterName);
+      setAuthStatus('SAVING HUNTER PROFILE...');
+      await AUTH_UI.saveHunterProfile(hunterName, AUTH_UI.currentAppearance());
     }catch(e){
-      setAuthStatus(e.message||'COULD NOT SAVE HUNTER NAME','bad');
+      setAuthStatus(e.message||'COULD NOT SAVE HUNTER PROFILE','bad');
       return;
     }
   }
@@ -4394,10 +4406,47 @@ function setDevResetStatus(text,kind=''){
   devResetStatus.textContent=text||'';
   devResetStatus.className=kind;
 }
+function setAdminInspectOut(data){
+  if(!adminInspectOut)return;
+  if(!data){adminInspectOut.classList.add('hidden');adminInspectOut.textContent='';return;}
+  adminInspectOut.classList.remove('hidden');
+  adminInspectOut.textContent=JSON.stringify(data,null,2);
+}
+function adminCsv(value){
+  return String(value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+}
+function populateAdminFields(profile){
+  if(!profile)return;
+  if(adminAbilityPath)adminAbilityPath.value=profile.path||'';
+  if(adminAbilitySpec)adminAbilitySpec.value=profile.abilitySpec||'';
+  if(adminJob)adminJob.value=profile.job||'adventurer';
+  if(adminJobXp)adminJobXp.value=String(profile.jobXp||0);
+  if(adminUtilities)adminUtilities.value=(profile.utilityUnlocks||[]).join(', ');
+  const loadout=profile.utilityLoadout||{};
+  if(adminUtilityActive)adminUtilityActive.value=loadout.active||'';
+  if(adminUtilityPassive)adminUtilityPassive.value=(loadout.passive||[]).join(', ');
+}
+function buildAdminPatch(){
+  const patch={};
+  const itemId=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
+  const itemCount=Math.max(1,Number(adminItemCount&&adminItemCount.value||1)|0);
+  if(itemId)patch.grantItems=[{id:itemId,count:itemCount}];
+  if(adminAbilityPath&&adminAbilityPath.value)patch.abilityPath=adminAbilityPath.value;
+  if(adminAbilitySpec&&adminAbilitySpec.value)patch.abilitySpec=adminAbilitySpec.value;
+  if(adminJob&&adminJob.value)patch.job=adminJob.value;
+  if(adminJobXp&&String(adminJobXp.value||'').trim())patch.jobXp=Math.max(0,Number(adminJobXp.value)||0);
+  const utilities=adminCsv(adminUtilities&&adminUtilities.value);
+  if(utilities.length)patch.utilityUnlocks=utilities;
+  const active=String(adminUtilityActive&&adminUtilityActive.value||'').trim().toLowerCase();
+  const passive=adminCsv(adminUtilityPassive&&adminUtilityPassive.value);
+  if(active||passive.length)patch.utilityLoadout={active,passive};
+  return patch;
+}
 function closeDevResetPanel(){
   if(!devReset)return;
   devReset.classList.add('hidden');
   setDevResetStatus('');
+  setAdminInspectOut(null);
 }
 function openDevResetPanel(){
   if(!devReset)return;
@@ -4407,8 +4456,46 @@ function openDevResetPanel(){
   if(devResetTarget&&!devResetTarget.value)devResetTarget.value=account&&account.id||authuser.value||'';
   try{if(devResetToken&&!devResetToken.value)devResetToken.value=sessionStorage.getItem('bc_admin_reset_token')||'';}catch(e){}
   devReset.classList.remove('hidden');
-  setDevResetStatus('Reset deletes the game save, then the next login runs first-time onboarding.');
+  setDevResetStatus('Inspect, patch, or reset a live player game profile.');
   setTimeout(()=>{if(devResetTarget)devResetTarget.focus();},0);
+}
+async function runAdminInspect(){
+  if(!adminInspectGo)return;
+  const target=devResetTarget&&devResetTarget.value||'';
+  const token=devResetToken&&devResetToken.value||'';
+  adminInspectGo.disabled=true;
+  setDevResetStatus('Inspecting...');
+  try{
+    try{sessionStorage.setItem('bc_admin_reset_token',token);}catch(e){}
+    const result=await AUTH_UI.adminInspectPlayer({target,token,details:true});
+    populateAdminFields(result.profile);
+    setAdminInspectOut(result.profile||result);
+    setDevResetStatus('Loaded '+((result.account&&result.account.id)||target)+'.','ok');
+  }catch(e){
+    setDevResetStatus(e.message||'Inspect failed','bad');
+  }finally{
+    adminInspectGo.disabled=false;
+  }
+}
+async function runAdminPatch(){
+  if(!adminPatchGo)return;
+  const target=devResetTarget&&devResetTarget.value||'';
+  const token=devResetToken&&devResetToken.value||'';
+  const patch=buildAdminPatch();
+  if(!Object.keys(patch).length){setDevResetStatus('Fill at least one edit field before applying.','bad');return;}
+  adminPatchGo.disabled=true;
+  setDevResetStatus('Applying...');
+  try{
+    try{sessionStorage.setItem('bc_admin_reset_token',token);}catch(e){}
+    const result=await AUTH_UI.adminPatchPlayer({target,token,patch});
+    populateAdminFields(result.profile);
+    setAdminInspectOut(result.profile||result);
+    setDevResetStatus('Profile updated live: '+((result.account&&result.account.id)||target)+'.','ok');
+  }catch(e){
+    setDevResetStatus(e.message||'Patch failed','bad');
+  }finally{
+    adminPatchGo.disabled=false;
+  }
 }
 async function runDevReset(){
   if(!devResetGo)return;
@@ -4436,6 +4523,8 @@ async function runDevReset(){
   }
 }
 if(devResetCancel)devResetCancel.addEventListener('click',closeDevResetPanel);
+if(adminInspectGo)adminInspectGo.addEventListener('click',runAdminInspect);
+if(adminPatchGo)adminPatchGo.addEventListener('click',runAdminPatch);
 if(devResetGo)devResetGo.addEventListener('click',runDevReset);
 if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});
@@ -5394,6 +5483,7 @@ function secondaryAction(){
   const heldRC=inv[selected];
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
+  if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && AUTH_UI.openAppearanceEditor){ AUTH_UI.openAppearanceEditor('mirror'); return; }
   if(heldRC && heldRC.id===I.REPAIR_KIT){ useRepairKit(selected); return; }
   if(heldRC && heldRC.id===I.DRAGON_TREAT && protectPetTamerTutorialTreatUse()) return;
   if(heldRC && DRAGON_EGG_TO_TYPE[heldRC.id]!==undefined){ hatchDragonEgg(selected); return; }

@@ -57,9 +57,9 @@ export function gateMilestoneHandoff(message, earned = true) {
   };
   if (rank !== 1) return null;
   return {
-    label: 'ADVENTURER LOOP UNLOCKED',
-    text: 'Contracts, Gates, quests, events, and hostile threats all grant Hunter XP. Each rank now contains 10 levels; higher ranks demand increasingly greater mastery.',
-    action: 'TRACK NEXT CONTRACT',
+    label: 'C-RANK CLIMB UNLOCKED',
+    text: 'Contracts, D-rank Gates, events, regional trouble, and C-rank prep checks now push you toward C-rank positioning fights.',
+    action: 'C PREP CHECK',
   };
 }
 
@@ -150,6 +150,9 @@ export function createOnboardingUI(deps) {
       const prep = dRankPrepStatus();
       return { label: 'D-Rank Preparation', text: prep.next.text, checklist: prep.checks, prep };
     }
+    if (focus === 'c_rank_climb') return { label: 'C-rank Climb', text: 'Earn Hunter XP through rotating Adventurer contracts, D-rank Gates, events, regional trouble, and C-rank prep checks.', target: HUB.jobs };
+    if (focus === 'c_rank_specialization') return { label: 'C-rank Specialization', text: 'Choose one permanent specialization for your combat path.', target: HUB.guardian };
+    if (focus === 'b_rank_pressure') return { label: 'Gate Pressure', text: 'Contain Gate breaches, clear higher-rank Gates, and use Road Warden or Adventurer work to stabilize the B-rank climb.', target: HUB.jobs };
     if (focus === 'next_adventurer_contract') return { label: 'Adventurer Contracts', text: 'Return to the Job Board and take your next rotating contract', target: HUB.jobs };
     return null;
   }
@@ -261,7 +264,7 @@ export function createOnboardingUI(deps) {
 
   function showFirstPromotion() {
     const focus = getFocus();
-    if (!['first_promotion_job','first_promotion_contract','first_d_gate','next_adventurer_contract'].includes(focus)) return false;
+    if (!['first_promotion_job','first_promotion_contract','first_d_gate','c_rank_climb','c_rank_specialization','b_rank_pressure','next_adventurer_contract'].includes(focus)) return false;
     if (!rewardWin || !rewardPanel || firstPromotionSeen || firstPromotionShown) return false;
     firstPromotionShown = true;
     const hasKey = countItem(I.SOLO_KEY_D) > 0;

@@ -3339,6 +3339,7 @@ function gateReadinessLocal(rank){
 function nextGatePrepRank(){
   if(quest&&quest.type==='gate'&&quest.gateRank!=null)return Math.max(0,Math.min(4,quest.gateRank|0));
   if(progressionFocus==='first_d_gate')return 1;
+  if(progressionFocus==='c_rank_climb')return 2;
   if(S&&S.lvl>=3)return Math.max(0,Math.min(4,localPlayerHunterRankIndex?localPlayerHunterRankIndex():0));
   return -1;
 }
@@ -4176,6 +4177,9 @@ function recoveryHubInfo(){
   if(progressionFocus==='first_town_map')return {title:'Town Map',status:'Visit Orin Mapwell and take a Town of Beginnings map. Once you own it, select it on the hotbar and right-click to open it.',where:'Orin Mapwell',button:'VISIT ORIN',action:()=>{if(NET.on&&NET.room)NET.room.send('cartographer',{action:'status'});else sysMsg('Find Orin Mapwell at the cartographer table.');}};
   if(progressionFocus==='first_land_claim'||progressionFocus==='first_claim_expand'||progressionFocus==='first_base_setup')return {title:'Land Claim Recovery',status:progressionFocus==='first_base_setup'?'Open Land Claims and place storage, light, and a station inside editable claimed land.':'Open Land Claims and buy or expand protected land.',where:'Land Claims',button:'CLAIM LAND',action:openLandRecovery};
   if(progressionFocus==='first_profession_contract'||progressionFocus==='first_promotion_job'||progressionFocus==='first_promotion_contract'||progressionFocus==='next_adventurer_contract')return {title:'Contract Recovery',status:'Open the Job Board and choose, finish, or claim the next usable contract.',where:'Job Board',button:'OPEN JOB BOARD',action:()=>openJobsUI()};
+  if(progressionFocus==='c_rank_climb')return {title:'C-rank Recovery',status:'Use the C-rank prep check, then earn Hunter XP through Adventurer contracts, D-rank Gates, events, regional trouble, and a first C-rank Gate.',where:'Gate Prep',button:'C PREP CHECK',action:()=>openGatePrepUI(2)};
+  if(progressionFocus==='c_rank_specialization')return {title:'C-rank Specialization',status:'Your C-rank positioning trial is cleared. Open Character and choose one permanent specialization for your combat path.',where:'Character',button:'CHOOSE SPEC',action:()=>{if(globalThis.openStat)globalThis.openStat();}};
+  if(progressionFocus==='b_rank_pressure')return {title:'Gate Pressure',status:'Contain Gate breaches, clear higher-rank Gates, and take Road Warden or Adventurer work so the B-rank climb stays active.',where:'Job Board / Guild Board',button:'OPEN JOB BOARD',action:()=>openJobsUI()};
   const craft=objectiveTrackerCraftAction('what_next');
   if(craft)return {title:'Crafting Recovery',status:'Open the next useful recipe. Missing materials will show with a concrete gather route.',where:'Crafting menu',button:craft.label,action:()=>activateObjectiveCraftShortcut(craft.outputId,craft.kind)};
   return null;
@@ -4334,7 +4338,7 @@ function progressionRoadmap(){
     {id:'foundations',title:'Hunter Foundations',requirement:'Begin the training meadow',eligible:true,action:'Complete movement, combat, gathering and Recall training.',where:'Training Meadow'},
     {id:'story',title:'Mara’s Story',requirement:'Finish initial training',eligible:!onboardingActive,action:'Accept and continue Mara’s current story quest.',where:'Mara Vale'},
     {id:'jobs',title:'Jobs and Contracts',requirement:'Reach E-Rank Level 2',eligible:S.lvl>=2&&!onboardingActive,action:!playerJob?'Choose one job tutorial, then take your first real contract.':jobContract?'Complete and claim your active contract.':'Take your first real contract at the Job Board.',where:!playerJob?'Job choice cards':'Job Board'},
-    {id:'combat_path',title:'Combat Path',requirement:'Complete your first job contract',eligible:S.lvl>=2&&(jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
+    {id:'combat_path',title:'Combat Path',requirement:'Complete your first job contract',eligible:S.lvl>=2&&(jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
     {id:'gates',title:'Ranked Gates',requirement:'Finish Mara’s first town arc and a starter job contract',eligible:S.lvl>=3&&(jobProgress||progressionFocus==='first_d_gate'||highestGateRankCleared>=0),action:'Prepare supplies, then complete Mara’s first Gate invitation.',where:'Mara → wilderness Gate'},
     {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
     {id:'mounts',title:'Mounts',requirement:'Reach C-Rank progression',eligible:rank>=2,action:'Complete the first bonded-mount lesson.',where:'Dragon Roost'},
@@ -4361,7 +4365,7 @@ function questLogCardsHTML(serverCards,historyOnly){
   cards.push(safeQuestLogCard('What Next?',whatNextQuestLogCard));
   if(!serverCards)cards.push(safeQuestLogCard('Story Quests',storyQuestLogCard));
   if(onboardingActive||quest||progressionFocus==='first_road_ready'||progressionFocus==='first_e_gate')cards.push(safeQuestLogCard('Tutorial Guide',tutorialQuestLogCard));
-  if(!early||progressionFocus==='first_d_gate'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
+  if(!early||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||(quest&&quest.type==='gate'))cards.push(safeQuestLogCard('Gate Prep',gatePrepLoopCard));
   if(!early||S.lvl>=3)cards.push(safeQuestLogCard('First Style',playerStyleGuideQuestLogCard));
   if(!early)cards.push(safeQuestLogCard('Aegis Trial',aegisQuestLogCard));
   return cards.filter(Boolean).join('');

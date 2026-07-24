@@ -1368,13 +1368,35 @@ test('claiming the first adventurer contract permanently unlocks the rotating po
   assert.equal(itemCount(prof, I.REPAIR_KIT), 1, 'graduation includes tool-care supplies');
   assert.equal(prof.utilityUnlocks.includes('compass'), true, 'graduation unlocks the utility required by Mara\'s next quest');
   assert.equal(prof.progressionFocus, 'first_d_gate');
+  const dObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:first_d_gate');
+  assert.equal(dObjective.title, 'D-rank Gate Prep');
+  assert.equal(dObjective.progress.required, 5);
+  assert.equal(dObjective.checklist.some(c => c.id === 'key'), true);
   room.recordGateProgress(client, 0);
   assert.equal(prof.progressionFocus, 'first_d_gate', 'another E clear does not finish D-rank preparation');
   room.recordGateProgress(client, 1);
-  assert.equal(prof.progressionFocus, 'next_adventurer_contract', 'clearing D-rank points back to the repeatable loop');
-  assert.equal(sanitizeProfile(prof).progressionFocus, 'next_adventurer_contract');
+  assert.equal(prof.progressionFocus, 'c_rank_climb', 'clearing D-rank starts the C-rank climb scaffold');
+  const cObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:c_rank_climb');
+  assert.equal(cObjective.title, 'C-rank Climb');
+  assert.equal(cObjective.progress.required > cObjective.progress.current, true);
+  assert.equal(cObjective.checklist.some(c => c.id === 'c_ready'), true);
+  assert.equal(['gate_prep', 'find_gate'].includes(cObjective.action.type), true);
+  assert.equal(sanitizeProfile(prof).progressionFocus, 'c_rank_climb');
+  room.recordGateProgress(client, 2);
+  assert.equal(prof.progressionFocus, 'c_rank_specialization', 'clearing C-rank opens the specialization payoff');
+  prof.S.path = 'shadow';
+  prof.S.lvl = 21;
+  const specObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:c_rank_specialization');
+  assert.equal(specObjective.title, 'C-rank Specialization');
+  assert.equal(specObjective.action.type, 'choose_spec');
+  room.setAbilitySpecialization(client, 'commander');
+  assert.equal(prof.abilitySpec, 'commander');
+  assert.equal(prof.progressionFocus, 'b_rank_pressure', 'choosing a specialization starts the Gate Pressure loop');
+  const pressureObjective = room.activeQuestObjectives(client, prof).find(o => o.id === 'progression:b_rank_pressure');
+  assert.equal(pressureObjective.title, 'Gate Pressure');
+  assert.equal(['jobs', 'guild_contracts', 'gate_prep', 'find_gate', 'regional_track'].includes(pressureObjective.action.type), true);
   room.handleJobContract(client, { action: 'take' });
-  assert.equal(prof.progressionFocus, '');
+  assert.equal(prof.progressionFocus, 'b_rank_pressure');
   assert.notEqual(prof.jobContract.title, "Mara's Field Work");
   assert.equal(sanitizeProfile(prof).adventurerContractsCompleted, 1);
   assert.notEqual(room.makeServerJobContract(prof).title, "Mara's Field Work");
@@ -2118,15 +2140,24 @@ test('combat path is chosen once only after the authoritative level 2 unlock', (
   assert.equal(prof.S.path, 'shadow');
   room.setPath(client, 'mage');
   assert.equal(prof.S.path, 'shadow', 'the persisted path cannot be replaced');
+  const bad = makeClient('bad_path_owner');
+  const { prof: badProf } = seedPlayer(room, bad, { lvl: 2 });
+  room.setPath(bad, 'not_a_path');
+  assert.equal(badProf.S.path, '', 'unknown paths are rejected by the server');
 });
 
 test('C-rank specialization is server-owned, path-valid, and permanent',()=>{
   const room=makeRoom(),client=makeClient('specialist');
   const {prof}=seedPlayer(room,client,{lvl:21});prof.S.path='shadow';
+  room.setAbilitySpecialization(client,'commander');
+  assert.equal(prof.abilitySpec,'','a specialization requires the C-rank positioning trial');
+  prof.highestGateRankCleared=2;
+  prof.progressionFocus='c_rank_specialization';
   room.setAbilitySpecialization(client,'warden');
   assert.equal(prof.abilitySpec,'','a specialization from another path is rejected');
   room.setAbilitySpecialization(client,'commander');
   assert.equal(prof.abilitySpec,'commander');
+  assert.equal(prof.progressionFocus,'b_rank_pressure');
   assert.equal(client.sent.some(e=>e.type==='profile'),false,'choosing a specialization must not trigger a destructive full-profile restore');
   room.setAbilitySpecialization(client,'assassin');
   assert.equal(prof.abilitySpec,'commander','the permanent choice cannot be replaced');
@@ -2152,6 +2183,30 @@ test('Arcanist can cast using its discounted server mana and cooldown',()=>{
   room.handleAbility(client,{path:'mage',slot:1});
   assert.ok(st.mp>1.2&&st.mp<1.4,'22 MP Frost Nova costs 18.7 MP without passive regeneration');
   assert.ok(st.cds['mage:1']-Date.now()<=11900,'14s cooldown is reduced to about 11.9s');
+});
+
+test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',()=>{
+  const room=makeRoom(),healer=makeClient('verdant_healer'),ally=makeClient('verdant_ally');
+  const {prof}=seedPlayer(room,healer,{lvl:21,x:20,z:20,team:'party'});prof.S.path='verdant';prof.S.int=18;prof.S.str=12;prof.S.agi=16;
+  seedPlayer(room,ally,{lvl:8,x:22,z:20,team:'party',hp:5});
+  room.clients=[healer,ally];
+  let st=room.ensureAbilityState(healer);st.mp=80;st.last=Date.now();
+  room.handleAbility(healer,{path:'verdant',slot:0});
+  assert.ok(room.playerHp.get(ally.sessionId).hp>5,'Mend heals the weakest nearby ally before the caster');
+  assert.equal(ally.sent.some(e=>e.type==='hurt'&&e.msg.reason==='verdant_mend'),true);
+
+  const mob=new Mob();mob.kind='zombie';mob.x=23;mob.y=10;mob.z=20;mob.hp=30;mob.maxHp=30;room.state.mobs.set('rooted',mob);
+  room.mobMeta.rooted=room.freshMeta(23,20,3,1.5,'zombie',0,true);
+  st.cds['verdant:1']=0;st.mp=80;
+  room.handleAbility(healer,{path:'verdant',slot:1});
+  assert.ok(room.mobMeta.rooted.slowT>=5,'Rootsnare applies a long slow/root window');
+  assert.ok(room.state.mobs.get('rooted').hp<30,'Rootsnare deals nature damage');
+
+  const baseline=room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId);
+  st.cds['verdant:2']=0;st.mp=80;
+  room.handleAbility(healer,{path:'verdant',slot:2});
+  assert.ok((room.abilityBuffs.get(healer.sessionId).pantherUntil||0)>Date.now(),'Panther Form is stored as an authoritative buff');
+  assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
 });
 
 test('utility loadout can equip only server-earned utilities', () => {
@@ -3365,7 +3420,7 @@ test('server frost nova applies a visible slow state to affected mobs', () => {
 test('shared ability system: one tuning table serves both sides, with level-scaled damage', () => {
   const ABILITY = require('../../shared/ability-system');
   const { ABILITY_PATHS, ABILITY_UNLOCK } = require('../rooms/constants');
-  for (const pathId of ['shadow', 'mage', 'guardian']) {
+  for (const pathId of ['shadow', 'mage', 'guardian', 'verdant']) {
     assert.equal(ABILITY_PATHS[pathId].length, 3);
     ABILITY_PATHS[pathId].forEach((def, i) => {
       const src = ABILITY.PATHS[pathId].abilities[i];
@@ -3379,6 +3434,8 @@ test('shared ability system: one tuning table serves both sides, with level-scal
   assert.equal(ABILITY.abilityDamage('fireball', { lvl: 1, int: 1 }), 8, 'level 1 matches the historical tuning');
   assert.equal(ABILITY.abilityDamage('lightning', { lvl: 1, int: 1 }), 18);
   assert.equal(ABILITY.abilityDamage('shockwave', { lvl: 1, str: 1 }), 5);
+  assert.equal(ABILITY.abilityDamage('roots', { lvl: 1, int: 1 }), 5);
+  assert.equal(ABILITY.abilityDamage('mend', { lvl: 1, int: 1 }), 9);
   const early = ABILITY.abilityDamage('fireball', { lvl: 1, int: 10 });
   const late = ABILITY.abilityDamage('fireball', { lvl: 20, int: 10 });
   assert.equal(Math.abs(late / early - ABILITY.levelPower(20)) < 1e-9, true, 'damage rises with hunter level');
@@ -6666,6 +6723,58 @@ test('trusted hunters can contribute to a homestead work order from their own st
   assert.equal(ownerProf.jobXpByJob.miner, 20);
 });
 
+test('homestead room upgrades persist and boost matching work order XP', () => {
+  const cleaned = sanitizeProfile({
+    homesteadUpgrades: {
+      storage: 1,
+      forge: 1,
+      kitchen: 1,
+      meditation: 1,
+      stable: 1,
+      comfort: 1,
+      rest: 1,
+      homeSpawn: [20.5, 11, 20.5],
+    },
+  }).homesteadUpgrades;
+  assert.equal(cleaned.forge, 1);
+  assert.equal(cleaned.kitchen, 1);
+  assert.equal(cleaned.meditation, 1);
+  assert.equal(cleaned.stable, 1);
+
+  const room = makeRoom();
+  const owner = makeClient('forge_room_owner');
+  const { prof } = seedPlayer(room, owner, {
+    token: 'forge_room_owner_token_123',
+    name: 'Smith',
+    x: 20.5,
+    z: 20.5,
+  });
+  for (const key of ['20,20', '21,20', '22,20']) {
+    room.landClaims.set(key, { owner: 'forge_room_owner_token_123', name: 'Smith', price: 50, boughtAt: 1 });
+  }
+  prof.homesteadUpgrades.forge = 1;
+  prof.homesteadWorkOrder = {
+    id: 'forge_room_order',
+    type: 'craft',
+    job: 'blacksmith',
+    target: I.REPAIR_KIT,
+    need: 1,
+    have: 1,
+    rewardGold: 10,
+    rewardJobXp: 20,
+    title: 'Tool Bench Reserve',
+    desc: 'Test supplies.',
+  };
+
+  room.handleHomesteadWorkOrder(owner, { action: 'claim' });
+  assert.equal(prof.homesteadWorkOrder, null);
+  assert.equal(prof.jobXpByJob.blacksmith, 25);
+  assert.equal(owner.sent.at(-1).type, 'homesteadWorkOrderResult');
+  assert.equal(owner.sent.at(-1).msg.baseRewardJobXp, 20);
+  assert.equal(owner.sent.at(-1).msg.rewardJobXp, 25);
+  assert.equal(owner.sent.at(-1).msg.roomBonus.id, 'forge');
+});
+
 test('base setup milestone requires storage light and station inside editable claimed land', () => {
   const room = makeRoom();
   const client = makeClient('base_builder');
@@ -9181,7 +9290,7 @@ test('ability-balanced King event squads never exceed the dungeon party cap of f
   room.clients = clients;
   clients.forEach((client, i) => {
     const seeded = seedPlayer(room, client, { token: 'solo_cap_token_' + i + '_123', name: 'Solo ' + i, lvl: 2 + i });
-    const paths = ['shadow', 'mage', 'guardian'];
+    const paths = ['shadow', 'mage', 'guardian', 'verdant'];
     seeded.prof.S.path = paths[i % paths.length];
     room.state.players.get(client.sessionId).path = seeded.prof.S.path;
   });

@@ -2,11 +2,13 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
-const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS } = require('./store');
+const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
 const { clearRoomLifecycleTrace, recentRoomLifecycleTrace } = require('./room-lifecycle-trace');
-const { I, JOB_IDS, ITEM_NAMES } = require('./rooms/constants');
+const { I, JOB_IDS, ITEM_NAMES, ABILITY_SYSTEM, UTILITY_IDS } = require('./rooms/constants');
+const APPEARANCE_SYSTEM = require('../shared/appearance-system');
+const ABILITY_PROGRESSION = require('../shared/ability-progression');
 
 const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -19,6 +21,82 @@ const validUsername = value => /^[a-z0-9_]{3,24}$/.test(value);
 const cleanDisplayName = value => String(value || 'Hunter').replace(/[<>]/g, '').trim().slice(0, 16) || 'Hunter';
 const INV_MAX = 36;
 const KNOWN_ITEM_IDS = new Set(Object.values(I).filter(Number.isFinite));
+const JOB_XP_MAX = 1000000000;
+const JOB_XP_IDS = [...JOB_IDS].filter(Boolean);
+const cleanAdminId = value => String(value || '').trim().toLowerCase();
+const clampJobXp = value => Math.max(0, Math.min(JOB_XP_MAX, Math.round(Number(value) || 0)));
+
+function hasOwn(obj, key) {
+  return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function resolveAdminAbilityPath(value) {
+  const path = cleanAdminId(value);
+  if (!path) return '';
+  if (!ABILITY_SYSTEM.PATHS[path]) throw Object.assign(new Error('Unknown ability path.'), { status: 400, code: 'ability_path' });
+  return path;
+}
+
+function resolveAdminAbilitySpec(path, value) {
+  const spec = cleanAdminId(value);
+  if (!spec) return '';
+  if (!path || !ABILITY_PROGRESSION.validSpecialization(path, spec)) {
+    throw Object.assign(new Error('Unknown specialization for that ability path.'), { status: 400, code: 'ability_spec' });
+  }
+  return spec;
+}
+
+function applyAdminJobXp(profile, body) {
+  profile.jobXpByJob = profile.jobXpByJob && typeof profile.jobXpByJob === 'object' ? profile.jobXpByJob : {};
+  for (const id of JOB_XP_IDS) profile.jobXpByJob[id] = clampJobXp(profile.jobXpByJob[id]);
+  const patch = body && body.jobXpByJob && typeof body.jobXpByJob === 'object' && !Array.isArray(body.jobXpByJob) ? body.jobXpByJob : null;
+  if (patch) {
+    for (const [rawId, rawXp] of Object.entries(patch)) {
+      const id = cleanAdminId(rawId);
+      if (!JOB_IDS.has(id) || !id) throw Object.assign(new Error('Unknown job XP id.'), { status: 400, code: 'job_xp' });
+      profile.jobXpByJob[id] = clampJobXp(rawXp);
+    }
+  }
+  if (hasOwn(body, 'jobXp')) {
+    const active = profile.job || 'adventurer';
+    profile.jobXpByJob[active] = clampJobXp(body.jobXp);
+  }
+  profile.jobXp = clampJobXp(profile.jobXpByJob[profile.job || 'adventurer']);
+}
+
+function applyAdminUtilities(profile, body) {
+  let unlocks = sanitizeUtilityUnlocks(profile.utilityUnlocks);
+  if (hasOwn(body, 'utilityUnlocks')) {
+    if (!Array.isArray(body.utilityUnlocks)) throw Object.assign(new Error('utilityUnlocks must be an array.'), { status: 400, code: 'utility' });
+    for (const id of body.utilityUnlocks) if (!UTILITY_IDS.has(cleanAdminId(id))) throw Object.assign(new Error('Unknown utility.'), { status: 400, code: 'utility' });
+    unlocks = sanitizeUtilityUnlocks(body.utilityUnlocks.map(cleanAdminId));
+  }
+  if (Array.isArray(body && body.grantUtilities)) {
+    for (const raw of body.grantUtilities) {
+      const id = cleanAdminId(raw);
+      if (!UTILITY_IDS.has(id)) throw Object.assign(new Error('Unknown utility.'), { status: 400, code: 'utility' });
+      if (!unlocks.includes(id)) unlocks.push(id);
+    }
+  }
+  if (Array.isArray(body && body.revokeUtilities)) {
+    const remove = new Set();
+    for (const raw of body.revokeUtilities) {
+      const id = cleanAdminId(raw);
+      if (!UTILITY_IDS.has(id)) throw Object.assign(new Error('Unknown utility.'), { status: 400, code: 'utility' });
+      remove.add(id);
+    }
+    unlocks = unlocks.filter(id => !remove.has(id));
+  }
+  profile.utilityUnlocks = sanitizeUtilityUnlocks(unlocks);
+  if (hasOwn(body, 'utilityLoadout')) {
+    if (!body.utilityLoadout || typeof body.utilityLoadout !== 'object' || Array.isArray(body.utilityLoadout)) {
+      throw Object.assign(new Error('utilityLoadout must be an object.'), { status: 400, code: 'utility_loadout' });
+    }
+    profile.utilityLoadout = sanitizeUtilityLoadout(body.utilityLoadout, profile.utilityUnlocks);
+  } else {
+    profile.utilityLoadout = sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks);
+  }
+}
 
 function grantProfileItem(profile, id, count) {
   const itemId = Math.max(1, Math.round(Number(id) || 0));
@@ -160,7 +238,7 @@ class AuthService {
 
   async publicGameProfile(account) {
     const id = account && account.id;
-    if (!id) return { name: '', nameSet: false };
+    if (!id) return { name: '', nameSet: false, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
     try {
       const raw = await this.getProfileStore().loadPlayer(id);
       if (!raw) {
@@ -168,7 +246,7 @@ class AuthService {
           account: accountSummary(account),
           profile: { exists: false, name: '', nameSet: false, level: 1 },
         });
-        return { name: '', nameSet: false };
+        return { name: '', nameSet: false, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
       }
       const profile = sanitizeProfile(raw);
       recordIdentityTrace('auth.profile.lookup', {
@@ -180,7 +258,7 @@ class AuthService {
           level: profile.S && profile.S.lvl || 1,
         },
       });
-      return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true };
+      return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
     } catch (e) {
       console.warn('[auth] game profile lookup failed:', e.message);
       recordIdentityTrace('auth.profile.lookup_failed', {
@@ -235,7 +313,13 @@ class AuthService {
       level: profile.S && profile.S.lvl || 1,
     } : { exists: false, name: '', nameSet: false, level: 1 };
     if (profile && details) {
+      summary.path = profile.S && profile.S.path || '';
+      summary.abilitySpec = profile.abilitySpec || '';
       summary.job = profile.job || '';
+      summary.jobXp = profile.jobXp | 0;
+      summary.jobXpByJob = { ...(profile.jobXpByJob || {}) };
+      summary.utilityUnlocks = Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [];
+      summary.utilityLoadout = sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks);
       summary.gold = profile.gold | 0;
       summary.activeRoom = profile.activeRoom || null;
       summary.inv = (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 }));
@@ -349,17 +433,27 @@ class AuthService {
       throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
     }
 
-    const job = String(body && body.job || '').trim().toLowerCase();
-    if (job) {
-      if (!JOB_IDS.has(job)) throw Object.assign(new Error('Unknown job.'), { status: 400, code: 'job' });
-      profile.job = job;
-      profile.forceJobChoice = false;
-      profile.jobXpByJob = profile.jobXpByJob && typeof profile.jobXpByJob === 'object' ? profile.jobXpByJob : {};
-      for (const id of JOB_IDS) if (id) profile.jobXpByJob[id] = Math.max(0, profile.jobXpByJob[id] | 0);
-      profile.jobXp = Math.max(0, profile.jobXpByJob[job] | 0);
+    const patch = body || {};
+    const nextPath = hasOwn(patch, 'abilityPath') ? resolveAdminAbilityPath(patch.abilityPath)
+      : hasOwn(patch, 'path') ? resolveAdminAbilityPath(patch.path)
+        : profile.S && profile.S.path || '';
+    if (hasOwn(patch, 'abilityPath') || hasOwn(patch, 'path')) {
+      profile.S = profile.S && typeof profile.S === 'object' ? profile.S : {};
+      profile.S.path = nextPath;
+      if (!nextPath || !ABILITY_PROGRESSION.validSpecialization(nextPath, profile.abilitySpec)) profile.abilitySpec = '';
     }
+    if (hasOwn(patch, 'abilitySpec')) profile.abilitySpec = resolveAdminAbilitySpec(nextPath, patch.abilitySpec);
 
-    const grants = Array.isArray(body && body.grantItems) ? body.grantItems : [];
+    if (hasOwn(patch, 'job')) {
+      const job = cleanAdminId(patch.job);
+      if (!JOB_IDS.has(job)) throw Object.assign(new Error('Unknown job.'), { status: 400, code: 'job' });
+      profile.job = job === 'adventurer' ? '' : job;
+      profile.forceJobChoice = false;
+    }
+    if (hasOwn(patch, 'job') || hasOwn(patch, 'jobXp') || hasOwn(patch, 'jobXpByJob')) applyAdminJobXp(profile, patch);
+    if (hasOwn(patch, 'utilityUnlocks') || hasOwn(patch, 'grantUtilities') || hasOwn(patch, 'revokeUtilities') || hasOwn(patch, 'utilityLoadout')) applyAdminUtilities(profile, patch);
+
+    const grants = Array.isArray(patch && patch.grantItems) ? patch.grantItems : [];
     for (const item of grants) grantProfileItem(profile, item && item.id, item && item.count);
 
     profile = sanitizeProfile(profile);
@@ -373,7 +467,13 @@ class AuthService {
         name: profile.name,
         nameSet: profile.nameSet === true,
         level: profile.S && profile.S.lvl || 1,
+        path: profile.S && profile.S.path || '',
+        abilitySpec: profile.abilitySpec || '',
         job: profile.job || '',
+        jobXp: profile.jobXp | 0,
+        jobXpByJob: { ...(profile.jobXpByJob || {}) },
+        utilityUnlocks: Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [],
+        utilityLoadout: sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks),
         inv: (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 })),
       },
     };
@@ -395,7 +495,45 @@ class AuthService {
     profile.nameSet = true;
     await store.savePlayer(publicAccount.id, profile);
     await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true });
-    return { name: clean, nameSet: true };
+    return { name: clean, nameSet: true, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
+  }
+
+  async saveHunterAppearance(account, appearance) {
+    const publicAccount = this.publicAccount(account);
+    if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
+    const nextAppearance = APPEARANCE_SYSTEM.sanitizeAppearance(appearance);
+    const store = this.getProfileStore();
+    let profile = null;
+    try {
+      const existing = await store.loadPlayer(publicAccount.id);
+      profile = existing ? sanitizeProfile(existing) : defaultProfile(publicAccount.displayName || publicAccount.username || 'Hunter');
+    }
+    catch (e) { throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' }); }
+    profile.appearance = nextAppearance;
+    await store.savePlayer(publicAccount.id, profile);
+    await updateLivePlayerProfiles(publicAccount.id, { appearance: nextAppearance });
+    return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, appearance: nextAppearance };
+  }
+
+  async saveHunterProfile(account, body) {
+    const publicAccount = this.publicAccount(account);
+    if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
+    const clean = cleanDisplayName(body && body.name);
+    if (!clean || clean === 'Hunter') throw Object.assign(new Error('Choose your hunter name.'), { status: 400, code: 'name' });
+    const nextAppearance = APPEARANCE_SYSTEM.sanitizeAppearance(body && body.appearance);
+    const store = this.getProfileStore();
+    let profile = null;
+    try {
+      const existing = await store.loadPlayer(publicAccount.id);
+      profile = existing ? sanitizeProfile(existing) : defaultProfile(clean);
+    }
+    catch (e) { throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' }); }
+    profile.name = clean;
+    profile.nameSet = true;
+    profile.appearance = nextAppearance;
+    await store.savePlayer(publicAccount.id, profile);
+    await updateLivePlayerProfiles(publicAccount.id, { name: clean, nameSet: true, appearance: nextAppearance });
+    return { name: clean, nameSet: true, appearance: nextAppearance };
   }
 
   async register(username, password, displayName) {
@@ -571,6 +709,26 @@ class AuthService {
       if (!account) return res.status(401).json({ ok: false });
       try {
         const gameProfile = await this.saveHunterName(account, req.body && req.body.name);
+        res.json({ ok: true, gameProfile });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile update failed.' });
+      }
+    });
+    app.post('/auth/profile/appearance', async (req, res) => {
+      const account = this.authenticateRequest(req);
+      if (!account) return res.status(401).json({ ok: false });
+      try {
+        const gameProfile = await this.saveHunterAppearance(account, req.body && req.body.appearance);
+        res.json({ ok: true, gameProfile });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Appearance update failed.' });
+      }
+    });
+    app.post('/auth/profile', async (req, res) => {
+      const account = this.authenticateRequest(req);
+      if (!account) return res.status(401).json({ ok: false });
+      try {
+        const gameProfile = await this.saveHunterProfile(account, req.body || {});
         res.json({ ok: true, gameProfile });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile update failed.' });
