@@ -569,11 +569,29 @@ function verdantMendVfx(x,y,z,scale=1){
 function rootSnareVfx(x,y,z,radius=5.8){
   SFX.cast();
   ringPulse(x,y+.08,z,radius,0x22c55e,.55);
+  ringPulse(x,y+.09,z,radius*.72,0x86efac,.5);
   ringPulse(x,y+.1,z,Math.max(1.2,radius*.45),0x14532d,.6);
-  for(let k=0;k<42;k++){
+  glowFlash(x,y+.85,z,0x22c55e,4.8,.28);
+  for(let k=0;k<70;k++){
     const a=Math.random()*Math.PI*2, r=.8+Math.random()*radius;
     spawnParticle({x:x+Math.cos(a)*r,y:y+.1+Math.random()*.8,z:z+Math.sin(a)*r,
       vx:-Math.cos(a)*.5,vy:.8+Math.random()*1.3,vz:-Math.sin(a)*.5,life:.65+Math.random()*.35,grav:1.1,r:.18,g:.78,b:.28});
+  }
+  for(let i=0;i<13;i++){
+    const a=i/13*Math.PI*2+Math.random()*.2, r=1.0+Math.random()*(radius-1.2);
+    const bx=x+Math.cos(a)*r, bz=z+Math.sin(a)*r;
+    ringPulse(bx,y+.1,bz,.35+Math.random()*.22,0x14532d,.5);
+    for(let h=0;h<6;h++){
+      spawnParticle({x:bx+Math.sin(h*.95+a)*.12,y:y+.08+h*.18,z:bz+Math.cos(h*.95+a)*.12,
+        vx:Math.sin(a+h)*.08,vy:.42+Math.random()*.18,vz:Math.cos(a+h)*.08,
+        life:.75+Math.random()*.35,grav:.45,r:.18,g:.55,b:.16});
+    }
+  }
+  for(let k=0;k<28;k++){
+    const a=Math.random()*Math.PI*2, r=radius*(.25+Math.random()*.75);
+    spawnParticle({x:x+Math.cos(a)*r,y:y+.22,z:z+Math.sin(a)*r,
+      vx:(Math.random()-.5)*.22,vy:.22+Math.random()*.5,vz:(Math.random()-.5)*.22,
+      life:.9+Math.random()*.55,grav:-.15,r:.52,g:1,b:.44});
   }
 }
 function pantherFormVfx(x,y,z){
