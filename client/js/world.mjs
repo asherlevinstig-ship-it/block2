@@ -6501,8 +6501,12 @@ let soloWeatherUntil=0, soloBoltAt=0, windX=0, windZ=0;
 function applyWeather(m){ setLocalWeather((m&&m.kind)||'clear', true); }
 function setLocalWeather(kind, announce){
   if(kind!=='rain'&&kind!=='storm')kind='clear';
-  if(kind===weather)return;
+  if(kind===weather){
+    if(announce&&globalThis.BlockcraftExplorationFx&&globalThis.BlockcraftExplorationFx.weatherChanged)globalThis.BlockcraftExplorationFx.weatherChanged(kind,kind);
+    return;
+  }
   const prev=weather; weather=kind;
+  if(globalThis.BlockcraftExplorationFx&&globalThis.BlockcraftExplorationFx.weatherChanged)globalThis.BlockcraftExplorationFx.weatherChanged(kind,prev);
   const wa=Math.random()*6.283, ws=kind==='storm'?3.6:kind==='rain'?1.2:0;   // fresh wind each front
   windX=Math.cos(wa)*ws; windZ=Math.sin(wa)*ws;
   if(announce&&dim!=='tutorial')sysMsg(

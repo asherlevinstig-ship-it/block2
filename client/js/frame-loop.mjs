@@ -193,6 +193,7 @@ const weatherDiscoveryReq={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'cle
 const weatherDiscoveryName={rain_bloom:'RAINWAKE BLOOM',storm_crystal:'STORMGLASS',sun_dial:'SUN DIAL'};
 const weatherDiscoveryItem={rain_bloom:'Rainwake Petals',storm_crystal:'Stormglass Shards',sun_dial:'Solar Glyphs'};
 const weatherDiscoveryAction={rain_bloom:'gather',storm_crystal:'harvest',sun_dial:'read'};
+let weatherDiscoveryQuietUntil=0;
 function weatherLabelFor(kind,active){return active?weatherDiscoveryName[kind]:'DORMANT: '+weatherDiscoveryReq[kind].toUpperCase();}
 function makeWeatherDiscoveryFx(s){
   const color={rain_bloom:0x67d6ff,storm_crystal:0xb79cff,sun_dial:0xffd24a}[s.type]||0xffffff;
@@ -203,6 +204,19 @@ function makeWeatherDiscoveryFx(s){
   halo.rotation.x=Math.PI/2;halo.position.y=.2;beam.position.y=2.35;label.position.y=3.05;
   group.add(halo,beam,label);group.position.set(s.x+.5,s.y+1.05,s.z+.5);group.userData={halo,beam,label,type:s.type,phase:Math.random()*10};
   scene.add(group);weatherDiscoveryFx.set(s.id,group);return group;
+}
+function disposeWeatherDiscoveryFx(){
+  weatherDiscoveryFx.forEach(g=>{
+    scene.remove(g);
+    g.traverse(o=>{
+      if(o.geometry)o.geometry.dispose();
+      if(o.material){
+        if(o.material.map)o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
+  });
+  weatherDiscoveryFx.clear();
 }
 function tickExplorationPresentation(now,dt){
   const map=globalThis.BlockcraftTreasureMap,site=map&&map.targetId?[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])].find(s=>s.id===map.targetId):null;
@@ -217,19 +231,20 @@ function tickExplorationPresentation(now,dt){
     retitleSprite(treasureLabel,dist<(site.radius||8)+5?'PRESS G TO SOLVE':'TREASURE CLUE','#ffd24a');
     if(dist<70&&Math.random()<dt*13)spawnParticle({x:site.x+.5+(Math.random()-.5)*2.8,y:y+.4+Math.random()*7,z:site.z+.5+(Math.random()-.5)*2.8,vx:(Math.random()-.5)*.25,vy:.6+Math.random()*.6,vz:(Math.random()-.5)*.25,life:.8,grav:-.15,r:1,g:.78,b:.22});
   }
-  if(dim!=='overworld'){
+  if(dim!=='overworld'||now<weatherDiscoveryQuietUntil){
     weatherDiscoveryFx.forEach(g=>g.visible=false);
     return;
   }
   const currentWeather=weather||'clear';
+  const weatherSense=utilityUnlocked('weather_sense');
   for(const s of smallDiscoveries){
     const req=weatherDiscoveryReq[s.type];if(!req)continue;
     const dist=Math.hypot(player.pos.x-s.x,player.pos.z-s.z);
     const g=weatherDiscoveryFx.get(s.id)||makeWeatherDiscoveryFx(s),ud=g.userData,active=currentWeather===req;
-    g.visible=dist<85;
+    g.visible=dist<(weatherSense?85:42);
     if(!g.visible)continue;
     const pulse=.5+.5*Math.sin(now*.004+ud.phase);
-    ud.halo.visible=active||dist<12;ud.beam.visible=active;ud.label.visible=dist<13;
+    ud.halo.visible=active||dist<12;ud.beam.visible=active&&(weatherSense||dist<28);ud.label.visible=dist<13;
     ud.halo.rotation.z+=dt*(active?1.8:.55);ud.halo.scale.setScalar(active?1.08+pulse*.32:.86+pulse*.05);
     ud.halo.material.opacity=active?.36+pulse*.42:.18;ud.beam.material.opacity=active?.12+pulse*.2:0;
     retitleSprite(ud.label,weatherLabelFor(s.type,active),active?'#eafcff':'#8fa1b2');
@@ -253,6 +268,13 @@ globalThis.BlockcraftExplorationFx={
     const site=nearbySmallDiscovery(10);if(!site)return;
     const y=surfaceY(site.x,site.z),col=type==='rain_bloom'?[.38,.72,1]:type==='storm_crystal'?[.75,.55,1]:[1,.82,.24];
     burst(site.x+.5,y+1.1,site.z+.5,col,10,1.5,1.6,.38);
+  },
+  weatherChanged(){
+    disposeWeatherDiscoveryFx();
+    weatherDiscoveryHintCooldowns.clear();
+    lastWeatherDiscoveryPromptWeather=null;
+    weatherDiscoveryQuietUntil=performance.now()+9000;
+    nextWeatherDiscoveryHintAt=weatherDiscoveryQuietUntil+2500;
   }
 };
 function applyDungeonPing(message){
