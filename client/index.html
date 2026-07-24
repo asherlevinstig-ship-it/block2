@@ -175,29 +175,31 @@
     <div class="drpill">ADMIN TOOLS</div>
     <h2 id="devresettitle">Player Profile Editor</h2>
     <p>Patch live profiles.</p>
-    <label>Player to edit<input id="devresettarget" maxlength="255"></label>
-    <label>Admin token<input id="devresettoken" type="password" maxlength="256"></label>
+    <label>Player<input id="devresettarget" maxlength="255"></label>
+    <label>Token<input id="devresettoken" type="password" maxlength="256"></label>
     <div class="admineditgrid">
-      <label>Hunter level<input id="adminlevel" maxlength="3"></label>
+      <label>Level<input id="adminlevel" maxlength="3"></label>
       <label>Gold<input id="admingold" maxlength="10"></label>
       <label>Hunter XP<input id="adminxp" maxlength="10"></label>
       <label>Stat pts<input id="adminstatpoints" maxlength="4"></label>
-      <label>Current HP<input id="adminhealth" maxlength="10"></label>
-      <label>Max HP<input id="adminmaxhealth" maxlength="10"></label>
-      <label>Mana<input id="adminmana" maxlength="10"></label>
-      <label>Max mana<input id="adminmaxmana" maxlength="10"></label>
-      <label>Item count<input id="adminitemcount" maxlength="4"></label>
+      <label>HP<input id="adminhealth"></label>
+      <label>Max HP<input id="adminmaxhealth"></label>
+      <label>Mana<input id="adminmana"></label>
+      <label>Max mana<input id="adminmaxmana"></label>
+      <label>Stam<input id="adminstamina"></label>
+      <label>Max stam<input id="adminmaxstamina"></label>
+      <label>Count<input id="adminitemcount" maxlength="4"></label>
       <label class="adminspan">Grant item<select id="adminitemid">
         <option value="">Choose item</option>
       </select></label>
-      <label>Ability path<select id="adminabilitypath">
+      <label>Path<select id="adminabilitypath">
         <option value="">No change</option>
         <option value="shadow">Shadow Monarch</option>
         <option value="mage">Arcane Magus</option>
         <option value="guardian">Iron Guardian</option>
         <option value="verdant">Verdant Shifter</option>
       </select></label>
-      <label>Specialization<select id="adminabilityspec">
+      <label>Spec<select id="adminabilityspec">
         <option value="">No change</option>
         <option value="assassin">Assassin</option>
         <option value="commander">Commander</option>
@@ -208,7 +210,7 @@
         <option value="grovekeeper">Grovekeeper</option>
         <option value="nightstalker">Nightstalker</option>
       </select></label>
-      <label>Active job<select id="adminjob">
+      <label>Job<select id="adminjob">
         <option value="">No change</option>
         <option value="adventurer">Adventurer</option>
         <option value="miner">Miner</option>
@@ -218,8 +220,8 @@
         <option value="monk">Monk</option>
         <option value="pet_tamer">Pet Tamer</option>
       </select></label>
-      <label>Active job XP<input id="adminjobxp" maxlength="10"></label>
-      <label class="adminspan">Unlocked utilities<input id="adminutilities" maxlength="160" placeholder="compass, trail_sense"></label>
+      <label>Job XP<input id="adminjobxp" maxlength="10"></label>
+      <label class="adminspan">Utilities<input id="adminutilities" maxlength="160" placeholder="compass, trail_sense"></label>
       <label>Active utility<input id="adminutilityactive" maxlength="32"></label>
       <label>Passive utilities<input id="adminutilitypassive" maxlength="120"></label>
     </div>

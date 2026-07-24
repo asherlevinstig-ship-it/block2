@@ -41,6 +41,11 @@ function adminMaxMp(profile) {
   return 20 + ((profile && profile.S && profile.S.int || 1) - 1) * 3 + (growth.mp || 0);
 }
 
+function adminMaxSp(profile) {
+  const growth = profile && profile.meditationGrowth || {};
+  return 100 + ((profile && profile.S && profile.S.agi || 1) - 1) * 4 + (growth.sp || 0);
+}
+
 function applyAdminMaxStat(profile, key, requestedMax, base, perPoint, growthKey) {
   const growth = profile && profile.meditationGrowth || {};
   const want = clampAdminInt(requestedMax, 1, JOB_XP_MAX);
@@ -131,6 +136,7 @@ function adminProfileSummary(profile) {
     jobXpByJob: { ...(profile.jobXpByJob || {}) },
     maxHp: adminMaxHp(profile),
     maxMp: adminMaxMp(profile),
+    maxSp: adminMaxSp(profile),
     vitals: profile.vitals && typeof profile.vitals === 'object' ? {
       hp: Number(profile.vitals.hp) || 0,
       mp: Number(profile.vitals.mp) || 0,
@@ -503,6 +509,7 @@ class AuthService {
     if (hasOwn(patch, 'addGold')) profile.gold = clampAdminInt((profile.gold | 0) + Number(patch.addGold || 0), 0, JOB_XP_MAX);
     if (hasOwn(patch, 'maxHp')) applyAdminMaxStat(profile, 'vit', patch.maxHp, 20, 2, 'hp');
     if (hasOwn(patch, 'maxMp')) applyAdminMaxStat(profile, 'int', patch.maxMp, 20, 3, 'mp');
+    if (hasOwn(patch, 'maxSp')) applyAdminMaxStat(profile, 'agi', patch.maxSp, 100, 4, 'sp');
     if (hasOwn(patch, 'vitals')) {
       if (!patch.vitals || typeof patch.vitals !== 'object' || Array.isArray(patch.vitals)) {
         throw Object.assign(new Error('vitals must be an object.'), { status: 400, code: 'vitals' });
