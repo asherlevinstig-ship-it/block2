@@ -192,14 +192,16 @@
   body.path-selecting #chatlog,body.path-selecting #sysmsgs,body.path-selecting #rewardfeed,body.path-selecting #hotbar,body.path-selecting #stats,body.path-selecting #abilities,body.path-selecting #dragonhud,body.path-selecting #familiarhud,body.path-selecting #currentquest,body.path-selecting #landmap,body.path-selecting #eventhud,body.path-selecting #coachhud,body.path-selecting #crosshair,body.path-selecting #tutorialhud{display:none!important}
   #devreset{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,5,10,.72);backdrop-filter:blur(6px);color:#eef7ff}
   #devreset.hidden{display:none}
-  #devresetpanel{width:min(620px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:22px;border:1px solid rgba(125,211,252,.65);border-radius:8px;background:linear-gradient(180deg,rgba(18,20,28,.98),rgba(8,10,16,.98));box-shadow:0 20px 70px rgba(0,0,0,.65),inset 0 0 24px rgba(125,211,252,.05)}
+  #devresetpanel{width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:22px;border:1px solid rgba(125,211,252,.65);border-radius:8px;background:linear-gradient(180deg,rgba(18,20,28,.98),rgba(8,10,16,.98));box-shadow:0 20px 70px rgba(0,0,0,.65),inset 0 0 24px rgba(125,211,252,.05)}
   #devreset .drpill{margin-bottom:8px;color:#7dd3fc;font-size:10px;letter-spacing:3px}
   #devreset h2{margin:0 0 8px;color:#fff;font-size:18px;letter-spacing:2px}
   #devreset p{margin:0 0 14px;color:#aebbd0;font-size:12px;line-height:1.45}
-  #devreset input,#devreset select{width:100%;height:38px;margin:0 0 9px;padding:0 11px;border:1px solid rgba(125,211,252,.42);border-radius:5px;background:#07111d;color:#eaf6ff;font-family:inherit;font-size:12px;letter-spacing:1px;user-select:text}
+  #devreset input,#devreset select{width:100%;height:38px;margin:0;padding:0 11px;border:1px solid rgba(125,211,252,.42);border-radius:5px;background:#07111d;color:#eaf6ff;font-family:inherit;font-size:12px;letter-spacing:1px;user-select:text}
   #devreset select{appearance:none;background:#07111d;color:#bde8ff}
   #devreset input.admin-recognized{border-color:rgba(154,210,107,.72);background:#081711;color:#c8ffa7}
-  .admineditgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 9px;margin-top:2px}
+  .admineditgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin-top:10px}
+  #devreset label{display:block;margin:0 0 10px;color:#7dd3fc;font-size:10px;letter-spacing:2px;text-transform:uppercase}
+  .admineditgrid label{margin:0}
   .admineditgrid .adminspan{grid-column:1/-1}
   #admininspectout{max-height:170px;overflow:auto;margin:2px 0 11px;padding:10px;border:1px solid rgba(125,211,252,.24);border-radius:5px;background:#050b12;color:#bde8ff;font-size:10px;line-height:1.45;white-space:pre-wrap;user-select:text}
   #admininspectout.hidden{display:none}

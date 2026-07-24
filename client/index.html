@@ -174,27 +174,28 @@
   <div id="devresetpanel">
     <div class="drpill">ADMIN TOOLS</div>
     <h2 id="devresettitle">Player Profile Editor</h2>
-    <p>Inspect and patch live player game profiles. Reset still deletes game progress only; school login remains in MySQL.</p>
-    <input id="devresettarget" maxlength="255" placeholder="EMAIL OR ACCOUNT ID">
-    <input id="devresettoken" type="password" maxlength="256" placeholder="ADMIN RESET TOKEN (FALLBACK)">
+    <p>Inspect and patch live profiles. Reset deletes game progress only.</p>
+    <label>Player to edit<input id="devresettarget" maxlength="255"></label>
+    <label>Admin token<input id="devresettoken" type="password" maxlength="256"></label>
     <div class="admineditgrid">
-      <input id="adminlevel" maxlength="3" placeholder="LEVEL">
-      <input id="admingold" maxlength="10" placeholder="GOLD">
-      <input id="adminxp" maxlength="10" placeholder="HUNTER XP">
-      <input id="adminstatpoints" maxlength="4" placeholder="STAT POINTS">
-      <select id="adminitemid" aria-label="Item to grant">
-        <option value="">GRANT ITEM</option>
-      </select>
-      <input id="adminitemcount" maxlength="4" placeholder="COUNT">
-      <select id="adminabilitypath" aria-label="Ability path">
-        <option value="">ABILITY PATH</option>
+      <label>Hunter level<input id="adminlevel" maxlength="3"></label>
+      <label>Gold<input id="admingold" maxlength="10"></label>
+      <label>Hunter XP<input id="adminxp" maxlength="10"></label>
+      <label>Stat points<input id="adminstatpoints" maxlength="4"></label>
+      <label>Current mana<input id="adminmana" maxlength="10"></label>
+      <label>Item count<input id="adminitemcount" maxlength="4"></label>
+      <label class="adminspan">Grant item<select id="adminitemid" aria-label="Item to grant">
+        <option value="">Choose item</option>
+      </select></label>
+      <label>Ability path<select id="adminabilitypath" aria-label="Ability path">
+        <option value="">No change</option>
         <option value="shadow">Shadow Monarch</option>
         <option value="mage">Arcane Magus</option>
         <option value="guardian">Iron Guardian</option>
         <option value="verdant">Verdant Shifter</option>
-      </select>
-      <select id="adminabilityspec" aria-label="Ability specialization">
-        <option value="">SPECIALIZATION</option>
+      </select></label>
+      <label>Specialization<select id="adminabilityspec" aria-label="Ability specialization">
+        <option value="">No change</option>
         <option value="assassin">Assassin</option>
         <option value="commander">Commander</option>
         <option value="elementalist">Elementalist</option>
@@ -203,9 +204,9 @@
         <option value="warden">Warden</option>
         <option value="grovekeeper">Grovekeeper</option>
         <option value="nightstalker">Nightstalker</option>
-      </select>
-      <select id="adminjob" aria-label="Job">
-        <option value="">JOB</option>
+      </select></label>
+      <label>Active job<select id="adminjob" aria-label="Job">
+        <option value="">No change</option>
         <option value="adventurer">Adventurer</option>
         <option value="miner">Miner</option>
         <option value="farmer">Farmer</option>
@@ -213,11 +214,11 @@
         <option value="blacksmith">Blacksmith</option>
         <option value="monk">Monk</option>
         <option value="pet_tamer">Pet Tamer</option>
-      </select>
-      <input id="adminjobxp" maxlength="10" placeholder="ACTIVE JOB XP">
-      <input id="adminutilities" class="adminspan" maxlength="160" placeholder="UNLOCK UTILITIES: compass, trail_sense">
-      <input id="adminutilityactive" maxlength="32" placeholder="ACTIVE UTILITY">
-      <input id="adminutilitypassive" maxlength="120" placeholder="PASSIVE UTILITIES">
+      </select></label>
+      <label>Active job XP<input id="adminjobxp" maxlength="10"></label>
+      <label class="adminspan">Unlocked utilities<input id="adminutilities" maxlength="160" placeholder="compass, trail_sense"></label>
+      <label>Active utility<input id="adminutilityactive" maxlength="32"></label>
+      <label>Passive utilities<input id="adminutilitypassive" maxlength="120"></label>
     </div>
     <div id="devresetstatus"></div>
     <pre id="admininspectout" class="hidden"></pre>

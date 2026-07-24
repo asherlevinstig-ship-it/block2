@@ -113,6 +113,12 @@ function adminProfileSummary(profile) {
     job: profile.job || '',
     jobXp: profile.jobXp | 0,
     jobXpByJob: { ...(profile.jobXpByJob || {}) },
+    vitals: profile.vitals && typeof profile.vitals === 'object' ? {
+      hp: Number(profile.vitals.hp) || 0,
+      mp: Number(profile.vitals.mp) || 0,
+      sp: Number(profile.vitals.sp) || 0,
+      hunger: Number(profile.vitals.hunger) || 0,
+    } : { hp: 0, mp: 0, sp: 0, hunger: 0 },
     utilityUnlocks: Array.isArray(profile.utilityUnlocks) ? [...profile.utilityUnlocks] : [],
     utilityLoadout: sanitizeUtilityLoadout(profile.utilityLoadout, profile.utilityUnlocks),
     inv: (profile.inv || []).filter(Boolean).map(slot => ({ id: slot.id, count: slot.count || 1 })),
@@ -477,6 +483,16 @@ class AuthService {
     if (hasOwn(patch, 'statPoints')) profile.S.pts = clampAdminInt(patch.statPoints, 0, 999);
     if (hasOwn(patch, 'gold')) profile.gold = clampAdminInt(patch.gold, 0, JOB_XP_MAX);
     if (hasOwn(patch, 'addGold')) profile.gold = clampAdminInt((profile.gold | 0) + Number(patch.addGold || 0), 0, JOB_XP_MAX);
+    if (hasOwn(patch, 'vitals')) {
+      if (!patch.vitals || typeof patch.vitals !== 'object' || Array.isArray(patch.vitals)) {
+        throw Object.assign(new Error('vitals must be an object.'), { status: 400, code: 'vitals' });
+      }
+      profile.vitals = profile.vitals && typeof profile.vitals === 'object' ? profile.vitals : {};
+      for (const key of ['hp', 'mp', 'sp', 'hunger']) {
+        if (hasOwn(patch.vitals, key)) profile.vitals[key] = Math.max(0, Number(patch.vitals[key]) || 0);
+      }
+      profile.vitalsSavedAt = Date.now();
+    }
 
     const nextPath = hasOwn(patch, 'abilityPath') ? resolveAdminAbilityPath(patch.abilityPath)
       : hasOwn(patch, 'path') ? resolveAdminAbilityPath(patch.path)

@@ -321,6 +321,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
         jobXp: 123,
         abilityPath: 'verdant',
         abilitySpec: 'grovekeeper',
+        vitals: { mp: 14 },
         utilityUnlocks: ['compass', 'trail_sense'],
         utilityLoadout: { active: 'trail_sense', passive: ['compass'] },
         grantItems: [{ id: 185, count: 1 }],
@@ -338,6 +339,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(patchedBody.profile.jobXpByJob.pet_tamer, 123);
     assert.equal(patchedBody.profile.path, 'verdant');
     assert.equal(patchedBody.profile.abilitySpec, 'grovekeeper');
+    assert.equal(patchedBody.profile.vitals.mp, 14);
     assert.deepEqual(patchedBody.profile.utilityUnlocks, ['compass', 'trail_sense']);
     assert.deepEqual(patchedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.deepEqual(patchedBody.profile.inv, [{ id: 185, count: 1 }]);
@@ -348,6 +350,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(profiles.get('student_42').job, 'pet_tamer');
     assert.equal(profiles.get('student_42').jobXp, 123);
     assert.equal(profiles.get('student_42').jobXpByJob.pet_tamer, 123);
+    assert.equal(profiles.get('student_42').vitals.mp, 14);
     assert.equal(profiles.get('student_42').S.path, 'verdant');
     assert.equal(profiles.get('student_42').abilitySpec, 'grovekeeper');
     assert.deepEqual(profiles.get('student_42').utilityUnlocks, ['compass', 'trail_sense']);

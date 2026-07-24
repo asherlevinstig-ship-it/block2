@@ -530,6 +530,7 @@ const adminLevel=document.getElementById('adminlevel');
 const adminGold=document.getElementById('admingold');
 const adminXp=document.getElementById('adminxp');
 const adminStatPoints=document.getElementById('adminstatpoints');
+const adminMana=document.getElementById('adminmana');
 const adminItemId=document.getElementById('adminitemid');
 const adminItemCount=document.getElementById('adminitemcount');
 const adminAbilityPath=document.getElementById('adminabilitypath');
@@ -4463,6 +4464,7 @@ function populateAdminFields(profile){
   if(adminGold)adminGold.value=String(profile.gold||0);
   if(adminXp)adminXp.value=String(profile.xp||0);
   if(adminStatPoints)adminStatPoints.value=String(profile.statPoints||0);
+  if(adminMana)adminMana.value=String(profile.vitals&&Number.isFinite(+profile.vitals.mp)?Math.floor(+profile.vitals.mp):'');
   if(adminAbilityPath)adminAbilityPath.value=profile.path||'';
   if(adminAbilitySpec)adminAbilitySpec.value=profile.abilitySpec||'';
   if(adminJob)adminJob.value=profile.job||'adventurer';
@@ -4478,6 +4480,7 @@ function buildAdminPatch(){
   if(adminGold&&String(adminGold.value||'').trim())patch.gold=Math.max(0,Number(adminGold.value)||0);
   if(adminXp&&String(adminXp.value||'').trim())patch.xp=Math.max(0,Number(adminXp.value)||0);
   if(adminStatPoints&&String(adminStatPoints.value||'').trim())patch.statPoints=Math.max(0,Number(adminStatPoints.value)||0);
+  if(adminMana&&String(adminMana.value||'').trim())patch.vitals={mp:Math.max(0,Number(adminMana.value)||0)};
   const itemId=Math.max(0,Number(adminItemId&&adminItemId.value||0)|0);
   const itemCount=Math.max(1,Number(adminItemCount&&adminItemCount.value||1)|0);
   if(itemId)patch.grantItems=[{id:itemId,count:itemCount}];
