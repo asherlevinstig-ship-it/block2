@@ -2486,6 +2486,7 @@ function makeRemoteAvatar(look){
     ?look.armorType:(armorId===137?'aegis':armorId===184?'bulwark':armorId?'vanguard':'');
   const hasArmor=armorId>0;
   const isScout=hasArmor&&armorType==='scout';
+  const isRobe=hasArmor&&armorType==='robe';
   const isVanguard=hasArmor&&armorType==='vanguard';
   const isBulwark=hasArmor&&armorType==='bulwark';
   const hasAegis=hasArmor&&armorType==='aegis';
@@ -2539,8 +2540,15 @@ function makeRemoteAvatar(look){
   const cheekM=voxelMats('#d99568','#e8aa7d','#9f6546','#865139');
   const gloveM=voxelMats('#3a2a1e','#523a28','#241710','#180e08');
   const tabardM=voxelMats(look.scarf, shadeHex(look.scarf,22), shadeHex(look.scarf,-42), shadeHex(look.scarf,-56));
+  const robeBase=armorId===224?'#155e75':armorId===223?'#4c1d95':'#365314';
+  const robeLight=armorId===224?'#38bdf8':armorId===223?'#8b5cf6':'#84cc16';
+  const robeTrim=armorId===224?'#d8b4fe':armorId===223?'#67e8f9':'#fef3c7';
+  const robeShadow=armorId===224?'#083344':armorId===223?'#1e1b4b':'#1a2e05';
+  const robeM=voxelMats(robeBase,robeLight,robeShadow,shadeHex(robeShadow,-18));
+  const robeDarkM=voxelMats(robeShadow,robeBase,shadeHex(robeShadow,-16),shadeHex(robeShadow,-28));
+  const robeTrimM=voxelMats(robeTrim,shadeHex(robeTrim,20),shadeHex(robeTrim,-36),shadeHex(robeTrim,-48));
   const capeM=hasAegis?voxelMats('#46286f','#6e46b0','#281544','#190d2b')
-                      :voxelMats(look.scarf, shadeHex(look.scarf,16), shadeHex(look.scarf,-44), shadeHex(look.scarf,-58));
+                      :isRobe?robeM:voxelMats(look.scarf, shadeHex(look.scarf,16), shadeHex(look.scarf,-44), shadeHex(look.scarf,-58));
   const capeTrimM=voxelMats('#caa23e','#f4d27a','#8a6a1e','#5e4712');
   const gemM=glowVoxelMats('#33dcff','#c4f6ff','#1888ad','#33dcff',1.2);
   const cartoClothM=voxelMats('#1f5f78','#55c7d8','#123949','#0b2530');
@@ -2611,14 +2619,21 @@ function makeRemoteAvatar(look){
   addBox(torso,[.56,outfitStyle==='coat'?.86:.7,.28],[0,outfitStyle==='coat' ? -.08 : 0,0],shirtM);
   addBox(torso,[.58,outfitStyle==='coat'?.82:.62,.045],[0,outfitStyle==='coat' ? -.09 : -.01,-.185],shirtDarkM); // raised cloth shell with tiny shadow gap
   addBox(torso,[.7,.16,.32],[0,.28,0],shirtDarkM);            // shoulders
-  addBox(torso,[.74,.08,.36],[0,.39,-.015],trimM);            // raised shoulder lip
-  addBox(torso,[.2,.08,.34],[-.41,.38,-.005],trimM);          // shoulder cap depth
-  addBox(torso,[.2,.08,.34],[.41,.38,-.005],trimM);
-  addBox(torso,[.22,.08,.31],[0,.39,-.03],trimM);             // collar trim
-  addBox(torso,[.09,.14,.38],[-.28,.36,.04],packDarkM,[.18,0,0]); // strap connector over shoulder
-  addBox(torso,[.09,.14,.38],[.28,.36,.04],packDarkM,[.18,0,0]);
-  addBox(torso,[.12,.08,.35],[-.37,.3,0],guardM);             // tiny shoulder clip
-  addBox(torso,[.12,.08,.35],[.37,.3,0],guardM);
+  if(isRobe){
+    addBox(torso,[.66,.12,.34],[0,.34,-.02],robeDarkM);       // soft cloth yoke, not pauldrons
+    addBox(torso,[.42,.1,.33],[0,.4,-.035],robeTrimM);        // folded collar
+    addBox(torso,[.08,.12,.32],[-.31,.31,-.01],robeM,[0,0,.12]);
+    addBox(torso,[.08,.12,.32],[.31,.31,-.01],robeM,[0,0,-.12]);
+  }else{
+    addBox(torso,[.74,.08,.36],[0,.39,-.015],trimM);          // raised shoulder lip
+    addBox(torso,[.2,.08,.34],[-.41,.38,-.005],trimM);        // shoulder cap depth
+    addBox(torso,[.2,.08,.34],[.41,.38,-.005],trimM);
+    addBox(torso,[.22,.08,.31],[0,.39,-.03],trimM);           // collar trim
+    addBox(torso,[.09,.14,.38],[-.28,.36,.04],packDarkM,[.18,0,0]); // strap connector over shoulder
+    addBox(torso,[.09,.14,.38],[.28,.36,.04],packDarkM,[.18,0,0]);
+    addBox(torso,[.12,.08,.35],[-.37,.3,0],guardM);           // tiny shoulder clip
+    addBox(torso,[.12,.08,.35],[.37,.3,0],guardM);
+  }
   if(isScout){
     addBox(torso,[.38,.37,.065],[0,.07,-.225],scoutArmorM);
     addBox(torso,[.34,.04,.075],[0,.27,-.255],trimM);          // bevel edge
@@ -2668,29 +2683,61 @@ function makeRemoteAvatar(look){
     addBox(torso,[.16,.1,.38],[-.43,.35,0],aegisTrimM);
     addBox(torso,[.16,.1,.38],[.43,.35,0],aegisTrimM);
   }
-  addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[-.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);           // front coat trim
-  addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);
-  addBox(torso,[.035,outfitStyle==='coat'?.72:.58,.035],[-.19,outfitStyle==='coat' ? -.09 : -.01,-.218],shirtDarkM); // darker edge pixels as geometry
-  addBox(torso,[.035,outfitStyle==='coat'?.72:.58,.035],[.19,outfitStyle==='coat' ? -.09 : -.01,-.218],shirtDarkM);
-  addBox(torso,[.34,.12,.04],[0,outfitStyle==='coat' ? -.48 : -.36,-.18],trimM);            // tunic split hem
-  // layered tabard down the front (richer clothing; sits under the breastplate when armored)
-  addBox(torso,[outfitStyle==='tabard'?.36:.26,outfitStyle==='tabard'?.78:.66,.07],[0,outfitStyle==='tabard' ? -.08 : -.02,-.235],tabardM);         // tabard panel separated from torso
-  addBox(torso,[.05,.66,.06],[-.12,-.02,-.17],trimM);         // tabard edge braid
-  addBox(torso,[.05,.66,.06],[.12,-.02,-.17],trimM);
-  addBox(torso,[.025,.58,.075],[-.165,-.04,-.272],shirtDarkM);
-  addBox(torso,[.025,.58,.075],[.165,-.04,-.272],shirtDarkM);
-  addBox(torso,[.22,.06,.06],[0,.28,-.17],trimM);             // tabard top hem
-  addBox(torso,[outfitStyle==='tabard'?.34:.26,.12,.05],[0,outfitStyle==='tabard' ? -.47 : -.36,-.175],tabardM,[.16,0,0]); // flared tabard skirt
-  addBox(torso,[.09,.09,.07],[0,-.04,-.182],metalM);          // chest brooch
-  addBox(torso,[.64,.12,.35],[0,-.08,-.025],beltM);             // raised belt
-  addBox(torso,[.12,.13,.39],[0,-.08,-.22],metalM);           // buckle proud of belt
-  addBox(torso,[.035,.08,.38],[-.17,-.08,-.23],metalM);       // pixel buckle prongs
-  addBox(torso,[.035,.08,.38],[.17,-.08,-.23],metalM);
-  addBox(torso,[.5,.1,.3],[0,-.38,0],shirtDarkM);             // tunic hem
-  addBox(torso,[.065,.62,.055],[-.23,.04,-.18],packDarkM);    // front shoulder straps
-  addBox(torso,[.065,.62,.055],[.23,.04,-.18],packDarkM);
-  addBox(torso,[.07,.34,.08],[-.31,.09,.07],packDarkM,[0,0,.16]); // over-shoulder strap turn
-  addBox(torso,[.07,.34,.08],[.31,.09,.07],packDarkM,[0,0,-.16]);
+  if(isRobe){
+    addBox(torso,[.62,.82,.06],[0,-.08,-.242],robeM);         // outer robe body, floats off shirt
+    addBox(torso,[.24,.78,.075],[-.13,-.08,-.292],robeDarkM); // left cloth fold
+    addBox(torso,[.24,.78,.075],[.13,-.08,-.292],robeDarkM);  // right cloth fold
+    addBox(torso,[.055,.82,.085],[-.33,-.08,-.275],robeTrimM);
+    addBox(torso,[.055,.82,.085],[.33,-.08,-.275],robeTrimM);
+    addBox(torso,[.4,.08,.09],[0,.28,-.305],robeTrimM);       // embroidered chest band
+    addBox(torso,[.13,.13,.1],[0,.08,-.34],robeTrimM,[0,0,.785]);
+    addBox(torso,[.72,.18,.34],[0,-.44,-.02],robeM,[.08,0,0]); // cloth skirt flare
+    addBox(torso,[.64,.08,.36],[0,-.55,-.03],robeTrimM,[.12,0,0]);
+    addBox(torso,[.5,.72,.055],[0,-.08,.205],robeDarkM,[.04,0,0]); // rear robe layer
+  }
+  if(isRobe){
+    addBox(torso,[.065,.68,.045],[-.18,-.08,-.36],robeTrimM); // robe front seam
+    addBox(torso,[.065,.68,.045],[.18,-.08,-.36],robeTrimM);
+    addBox(torso,[.025,.6,.06],[-.275,-.08,-.355],robeDarkM); // darker cloth edge pixels
+    addBox(torso,[.025,.6,.06],[.275,-.08,-.355],robeDarkM);
+    addBox(torso,[.22,.05,.055],[0,.2,-.36],robeTrimM);       // collar embroidery
+    addBox(torso,[.2,.46,.045],[0,-.1,-.385],robeM);          // center robe panel
+    addBox(torso,[.12,.38,.055],[0,-.13,-.42],robeDarkM);
+    addBox(torso,[.68,.08,.055],[0,-.5,-.34],robeTrimM,[.1,0,0]); // soft lower hem
+  }else{
+    addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[-.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);           // front coat trim
+    addBox(torso,[.08,outfitStyle==='coat'?.78:.64,.04],[.12,outfitStyle==='coat' ? -.07 : .0,-.18],trimM);
+    addBox(torso,[.035,outfitStyle==='coat'?.72:.58,.035],[-.19,outfitStyle==='coat' ? -.09 : -.01,-.218],shirtDarkM); // darker edge pixels as geometry
+    addBox(torso,[.035,outfitStyle==='coat'?.72:.58,.035],[.19,outfitStyle==='coat' ? -.09 : -.01,-.218],shirtDarkM);
+    addBox(torso,[.34,.12,.04],[0,outfitStyle==='coat' ? -.48 : -.36,-.18],trimM);            // tunic split hem
+    // layered tabard down the front (richer clothing; sits under the breastplate when armored)
+    addBox(torso,[outfitStyle==='tabard'?.36:.26,outfitStyle==='tabard'?.78:.66,.07],[0,outfitStyle==='tabard' ? -.08 : -.02,-.235],tabardM);         // tabard panel separated from torso
+    addBox(torso,[.05,.66,.06],[-.12,-.02,-.17],trimM);         // tabard edge braid
+    addBox(torso,[.05,.66,.06],[.12,-.02,-.17],trimM);
+    addBox(torso,[.025,.58,.075],[-.165,-.04,-.272],shirtDarkM);
+    addBox(torso,[.025,.58,.075],[.165,-.04,-.272],shirtDarkM);
+    addBox(torso,[.22,.06,.06],[0,.28,-.17],trimM);             // tabard top hem
+    addBox(torso,[outfitStyle==='tabard'?.34:.26,.12,.05],[0,outfitStyle==='tabard' ? -.47 : -.36,-.175],tabardM,[.16,0,0]); // flared tabard skirt
+  }
+  if(isRobe){
+    addBox(torso,[.1,.1,.075],[0,-.04,-.252],robeTrimM);      // embroidered robe knot
+    addBox(torso,[.7,.11,.34],[0,-.1,-.045],robeTrimM);       // cloth sash
+    addBox(torso,[.24,.2,.06],[-.16,-.22,-.255],robeTrimM,[0,0,.18]);
+    addBox(torso,[.22,.18,.06],[.16,-.2,-.255],robeDarkM,[0,0,-.18]);
+  }else{
+    addBox(torso,[.09,.09,.07],[0,-.04,-.182],metalM);        // chest brooch
+    addBox(torso,[.64,.12,.35],[0,-.08,-.025],beltM);         // raised belt
+    addBox(torso,[.12,.13,.39],[0,-.08,-.22],metalM);         // buckle proud of belt
+    addBox(torso,[.035,.08,.38],[-.17,-.08,-.23],metalM);     // pixel buckle prongs
+    addBox(torso,[.035,.08,.38],[.17,-.08,-.23],metalM);
+  }
+  addBox(torso,[isRobe ? .68 : .5,.1,.3],[0,-.38,0],isRobe?robeDarkM:shirtDarkM); // tunic or robe hem
+  if(!isRobe){
+    addBox(torso,[.065,.62,.055],[-.23,.04,-.18],packDarkM);  // front shoulder straps
+    addBox(torso,[.065,.62,.055],[.23,.04,-.18],packDarkM);
+    addBox(torso,[.07,.34,.08],[-.31,.09,.07],packDarkM,[0,0,.16]); // over-shoulder strap turn
+    addBox(torso,[.07,.34,.08],[.31,.09,.07],packDarkM,[0,0,-.16]);
+  }
   if(hasAegis){
     addBox(torso,[.5,.58,.075],[0,.02,-.245],aegisM);          // bold front chestplate
     addBox(torso,[.34,.2,.06],[0,.21,-.285],aegisM,[-.18,0,0]); // sculpted upper bevel
@@ -2727,25 +2774,30 @@ function makeRemoteAvatar(look){
   }
   // segmented flowing cape/cloak - cloth for hunters, a gilded royal mantle with legendary armor
   const cape=new THREE.Group(); cape.position.set(0,.22,.15); torso.add(cape); idle.push(cape);
-  addBox(cape,[isBulwark?.78:.62,isBulwark?.22:.17,isBulwark?.13:.1],[0,.1,.0],hasAegis?capeTrimM:(isBulwark?bulwarkArmorM:capeM)); // shoulder mantle
-  const upperCape=addCapePanel(cape,.5,.42,.05,0,.01,.04,capeM,.07); // upper cloth hinge
+  const mantleW=isRobe ? .58 : (isBulwark ? .78 : .62),mantleH=isRobe ? .12 : (isBulwark ? .22 : .17),mantleD=isRobe ? .08 : (isBulwark ? .13 : .1);
+  const upperW=isRobe ? .58 : .5,clothH=isRobe ? .46 : .42;
+  addBox(cape,[mantleW,mantleH,mantleD],[0,.1,.0],hasAegis?capeTrimM:(isBulwark?bulwarkArmorM:capeM)); // shoulder mantle
+  const upperCape=addCapePanel(cape,upperW,clothH,.05,0,.01,.04,capeM,.07); // upper cloth hinge
   if(!isScout){
-    const midCape=addCapePanel(cape,.54,.42,.05,0,-.39,.1,capeM,.13);      // mid cloth hinge
-    const lowerCape=addCapePanel(cape,.58,.42,.05,0,-.79,.18,capeM,.19);   // lower cloth hinge
-    const hemCape=addCapePanel(cape,.52,.2,.05,0,-1.16,.26,capeM,.24);     // flared hem hinge
-    addBox(hemCape,[.5,.055,.06],[0,-.19,.025],capeTrimM);
-    addCapePanelTrim(midCape,.54,.42,hasAegis?capeTrimM:scarfM);
-    addCapePanelTrim(lowerCape,.58,.42,hasAegis?capeTrimM:scarfM);
+    const midW=isRobe ? .64 : .54,lowW=isRobe ? .7 : .58,hemW=isRobe ? .62 : .52;
+    const midCape=addCapePanel(cape,midW,clothH,.05,0,-.39,.1,capeM,.13);      // mid cloth hinge
+    const lowerCape=addCapePanel(cape,lowW,clothH,.05,0,-.79,.18,capeM,.19);   // lower cloth hinge
+    const hemCape=addCapePanel(cape,hemW,.2,.05,0,-1.16,.26,capeM,.24);     // flared hem hinge
+    addBox(hemCape,[isRobe ? .6 : .5,.055,.06],[0,-.19,.025],isRobe?robeTrimM:capeTrimM);
+    addCapePanelTrim(midCape,midW,clothH,hasAegis?capeTrimM:(isRobe?robeTrimM:scarfM));
+    addCapePanelTrim(lowerCape,lowW,clothH,hasAegis?capeTrimM:(isRobe?robeTrimM:scarfM));
   } else {
     const scoutCape=addCapePanel(cape,.46,.22,.045,0,-.37,.09,capeM,.12); // short mobile cloak hinge
     addCapePanelTrim(scoutCape,.46,.22,scoutArmorM);
   }
-  addCapePanelTrim(upperCape,.5,.42,hasAegis?capeTrimM:(isScout?scoutArmorM:scarfM));
+  addCapePanelTrim(upperCape,upperW,clothH,hasAegis?capeTrimM:(isScout?scoutArmorM:isRobe?robeTrimM:scarfM));
   if(hasAegis){
     addBox(cape,[.22,.22,.05],[0,-.08,.03],gemM);                  // Aegis sigil clasp
     addBox(cape,[.15,.06,.08],[0,.15,-.02],gemM);                  // collar gem
   } else if(isScout) {
     addBox(cape,[.16,.08,.07],[0,.12,-.01],metalM);
+  } else if(isRobe) {
+    addBox(cape,[.2,.08,.07],[0,.12,-.01],robeTrimM);
   } else {
     addBox(cape,[.16,.1,.07],[0,.12,-.01],metalM);                 // cloak clasp
   }
