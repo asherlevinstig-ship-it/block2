@@ -1239,9 +1239,12 @@ test('weapons share E-to-Legendary ranks and Common-to-Mythic rarity rules', () 
   assert.ok(uniqueSword.cooldownMs<sword.cooldownMs);
   const uniqueArmor=sharedGear.armorProfile({tier:3,dur:480},{unique:'voidweave_harness',armorType:'scout'});
   const scoutArmor=sharedGear.armorProfile({tier:3,dur:480},{armorType:'scout'});
+  const robeArmor=sharedGear.armorProfile({tier:3,dur:360,armorType:'robe',projectileMagicMultiplier:1.16},{armorType:'robe'});
   assert.equal(uniqueArmor.unique.name,'Voidweave Harness');
   assert.ok(uniqueArmor.moveMultiplier>scoutArmor.moveMultiplier);
   assert.ok(uniqueArmor.staminaCostMultiplier<scoutArmor.staminaCostMultiplier);
+  assert.equal(robeArmor.type.id,'robe');
+  assert.ok(robeArmor.projectileMagicMultiplier>1);
   assert.ok(axe.damage>sword.damage&&axe.dps<sword.dps);
   const first=sharedGear.nextMomentum({},1000,'mob-a'),second=sharedGear.nextMomentum(first,1100,'mob-a');
   assert.equal(first.stacks,1);assert.equal(second.stacks,2);

@@ -119,6 +119,9 @@ const I = {
   HIDE_ARMOR: 211,
   CHAIN_ARMOR: 212,
   STORMGLASS_ARMOR: 213,
+  APPRENTICE_ROBE: 222,
+  ARCWEAVE_ROBE: 223,
+  STORMWEAVE_ROBE: 224,
   DRAGON_EGG: 185,
   EGG_VERDANT: 186,
   EGG_FROST: 187,
@@ -3410,20 +3413,22 @@ test('server fireball ability simulates projectile impact before damaging mobs a
   const { prof } = seedPlayer(room, client, { lvl: 8 });
   prof.S.path = 'mage';
   prof.S.int = 28;
+  prof.armor = { id: I.STORMWEAVE_ROBE, dur: 620, armorType: 'robe' };
   room.clients = [client];
   room.sendSpace = (dgn, type, msg) => client.send(type, msg);
   room.world.setB(23, 11, 20, W.B.STONE);
-  room.state.mobs.set('m1', { x: 23, y: 10, z: 20, yaw: 0, hp: 30, maxHp: 30, kind: 'zombie', dgn: '', state: '' });
+  room.state.mobs.set('m1', { x: 23, y: 10, z: 20, yaw: 0, hp: 60, maxHp: 60, kind: 'zombie', dgn: '', state: '' });
   room.mobMeta.m1 = room.freshMeta(23, 20, 3, 1.5, 'zombie', 0, true);
 
   room.handleAbility(client, { path: 'mage', slot: 0, targetId: 'm1', dx: 1, dy: 0, dz: 0 });
 
   assert.equal(room.sFireballs.length, 1);
-  assert.equal(room.state.mobs.get('m1').hp, 30);
+  assert.ok(room.sFireballs[0].damage > 26, 'stormweave robe boosts projectile magic damage');
+  assert.equal(room.state.mobs.get('m1').hp, 60);
   assert.equal(room.world.getB(23, 11, 20), W.B.STONE);
   for (let i = 0; i < 6 && room.sFireballs.length; i++) room.update(0.1);
 
-  assert.equal(room.state.mobs.get('m1').hp < 30, true);
+  assert.equal(room.state.mobs.get('m1').hp < 60, true);
   assert.equal(room.world.getB(23, 11, 20), W.B.AIR);
   assert.equal(client.sent.some(e => e.type === 'abilitySync'), true);
   assert.equal(client.sent.some(e => e.type === 'arrow' && e.msg.fireball), true);

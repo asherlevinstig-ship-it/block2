@@ -529,10 +529,10 @@ function ensureAdminExtendedControls(){
   if(grid&&!document.getElementById('adminarmortype')){
     const wrap=document.createElement('div');
     wrap.innerHTML=
-      '<label>Armor type<select id="adminarmortype"><option value="">Default</option><option value="scout">Scout</option><option value="vanguard">Vanguard</option><option value="bulwark">Bulwark</option><option value="aegis">Aegis</option></select></label>'+
+      '<label>Armor type<select id="adminarmortype"><option value="">Default</option><option value="scout">Scout</option><option value="robe">Caster Robe</option><option value="vanguard">Vanguard</option><option value="bulwark">Bulwark</option><option value="aegis">Aegis</option></select></label>'+
       '<label>Rarity<select id="admingearrarity"><option value="">Default</option><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="mythic">Mythic</option></select></label>'+
       '<label class="admincheck"><input id="adminequiparmor" type="checkbox"> Equip armor now</label>'+
-      '<label class="admincheck adminspan"><input id="admingrantallarmor" type="checkbox"> Grant all armor to inventory</label>';
+      '<label class="admincheck adminspan"><input id="admingrantallarmor" type="checkbox"> Grant all armor and robes to inventory</label>';
     while(wrap.firstChild)grid.insertBefore(wrap.firstChild,pathLabel||null);
   }
   if(actions&&!document.getElementById('adminpreviewmodel')){
@@ -4463,15 +4463,18 @@ function populateAdminItemOptions(){
   if(!adminItemId||adminItemId.dataset.ready)return;
   const armorRows=[
     [I.HIDE_ARMOR,'Hide Armor - Scout'],
+    [I.APPRENTICE_ROBE,'Apprentice Robe - Projectile magic'],
     [I.CHAIN_ARMOR,'Chain Armor - Vanguard'],
     [I.IRON_ARMOR,'Iron Armor - Vanguard'],
+    [I.ARCWEAVE_ROBE,'Arcweave Robe - Projectile magic'],
     [I.DIA_ARMOR,'Diamond Armor - Bulwark'],
     [I.STORMGLASS_ARMOR,'Stormglass Armor - Scout'],
+    [I.STORMWEAVE_ROBE,'Stormweave Robe - Projectile magic'],
     [I.LEGEND_ARMOR,'Legendary Aegis Armor - Aegis'],
   ].filter(row=>row[0]&&ITEMS[row[0]]);
   if(armorRows.length){
     const group=document.createElement('optgroup');
-    group.label='Armor presets';
+    group.label='Armor and robe presets';
     for(const [id,name] of armorRows){
       const opt=document.createElement('option');
       opt.value=String(id);
@@ -4506,10 +4509,13 @@ function adminItemIsArmor(id){
 function adminArmorGrantList(){
   return [
     {id:I.HIDE_ARMOR,armorType:'scout'},
+    {id:I.APPRENTICE_ROBE,armorType:'robe'},
     {id:I.CHAIN_ARMOR,armorType:'vanguard'},
     {id:I.IRON_ARMOR,armorType:'vanguard'},
+    {id:I.ARCWEAVE_ROBE,armorType:'robe'},
     {id:I.DIA_ARMOR,armorType:'bulwark'},
     {id:I.STORMGLASS_ARMOR,armorType:'scout'},
+    {id:I.STORMWEAVE_ROBE,armorType:'robe'},
     {id:I.LEGEND_ARMOR,armorType:'aegis'},
   ].filter(g=>g.id&&ITEMS&&ITEMS[g.id]);
 }
@@ -4519,8 +4525,9 @@ function syncAdminGearFields(){
   if(adminArmorType)adminArmorType.disabled=!armor;
   if(adminEquipArmor)adminEquipArmor.disabled=!armor;
   if(!armor&&adminEquipArmor)adminEquipArmor.checked=false;
-  if(armor&&adminArmorType&&!adminArmorType.value){
+  if(armor&&adminArmorType){
     if(id===I.HIDE_ARMOR||id===I.STORMGLASS_ARMOR)adminArmorType.value='scout';
+    else if(id===I.APPRENTICE_ROBE||id===I.ARCWEAVE_ROBE||id===I.STORMWEAVE_ROBE)adminArmorType.value='robe';
     else if(id===I.DIA_ARMOR)adminArmorType.value='bulwark';
     else if(id===I.LEGEND_ARMOR)adminArmorType.value='aegis';
     else adminArmorType.value='vanguard';
@@ -4600,7 +4607,7 @@ function buildAdminPatch(){
 }
 function describeAdminGrantResult(patch,result){
   const grants=Array.isArray(patch&&patch.grantItems)?patch.grantItems:[];
-  if(grants.length>1&&grants.every(g=>adminItemIsArmor(g&&g.id|0)))return ' Added all armor sets to inventory.';
+  if(grants.length>1&&grants.every(g=>adminItemIsArmor(g&&g.id|0)))return ' Added all armor sets to inventory, plus caster robes.';
   const grant=grants[0], id=grant&&grant.id|0, item=id&&ITEMS&&ITEMS[id];
   if(!grant||!item)return '';
   const name=itemNameWithPlus({id, count:1, armorType:grant.armorType||'', rarity:grant.rarity||''});

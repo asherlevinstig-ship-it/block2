@@ -12,7 +12,7 @@ const REQUIREMENTS = [
   { weapon: 4, weaponPlus: 2, armor: 5, food: 6, tool: 4, health: .90 },
 ];
 const LEGENDARY_WEAPONS = new Set(Object.keys(LEGENDARY_CRAFTS).map(Number).filter(id => id !== I.LEGEND_ARMOR));
-const ARMOR_TIER = { [I.HIDE_ARMOR]: 2, [I.CHAIN_ARMOR]: 3, [I.IRON_ARMOR]: 3, [I.DIA_ARMOR]: 4, [I.STORMGLASS_ARMOR]: 4, [I.LEGEND_ARMOR]: 5 };
+const ARMOR_TIER = { [I.HIDE_ARMOR]: 2, [I.APPRENTICE_ROBE]: 2, [I.CHAIN_ARMOR]: 3, [I.IRON_ARMOR]: 3, [I.ARCWEAVE_ROBE]: 3, [I.DIA_ARMOR]: 4, [I.STORMGLASS_ARMOR]: 4, [I.STORMWEAVE_ROBE]: 4, [I.LEGEND_ARMOR]: 5 };
 const TIER_NAME = ['Basic', 'Wood', 'Stone', 'Iron', 'Diamond', 'Legendary'];
 const PARTY_BY_RANK = [[1, 1], [1, 2], [2, 3], [3, 4], [4, 4]];
 const BOSS_IDENTITY_BY_RANK = [
@@ -24,7 +24,7 @@ const BOSS_IDENTITY_BY_RANK = [
 ];
 const HINTS_BY_ID = Object.freeze({
   weapon: 'Craft or carry an iron-tier sword or axe at Tobin\'s smithy.',
-  armor: 'Craft or equip Chainmail, Iron, Diamond, or better armor before entering.',
+  armor: 'Craft or equip Chainmail, Iron, robes, Diamond, or better gear before entering.',
   food: 'Buy food from Greta or cook meals until you have enough rations.',
   tool: 'Repair or craft a healthy pick, shovel, or hoe for dungeon utility.',
 });

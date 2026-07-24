@@ -109,6 +109,7 @@ const I = {
   ANCIENT_FRAGMENT: 214, ECHO_GLYPH: 215, RELIC_ARMOR_PIECE: 216, TOWN_MAP: 217,
   CAT_COLLAR: 218, DOG_COLLAR: 219, WOLF_COLLAR: 220,
   APPEARANCE_MIRROR: 221,
+  APPRENTICE_ROBE: 222, ARCWEAVE_ROBE: 223, STORMWEAVE_ROBE: 224,
 };
 // Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
@@ -146,10 +147,13 @@ const LEGENDARY_CRAFTS = {
 };
 const ARMOR_INFO = {
   [I.HIDE_ARMOR]: { tier: 2, armorType:'scout', mitigation: .08, dur: 260 },
+  [I.APPRENTICE_ROBE]: { tier: 2, armorType:'robe', mitigation: .045, dur: 220, projectileMagicMultiplier: 1.10 },
   [I.CHAIN_ARMOR]: { tier: 3, armorType:'vanguard', mitigation: .11, dur: 420 },
   [I.IRON_ARMOR]: { tier: 3, armorType:'vanguard', mitigation: .12, dur: 480 },
+  [I.ARCWEAVE_ROBE]: { tier: 3, armorType:'robe', mitigation: .07, dur: 360, projectileMagicMultiplier: 1.16 },
   [I.DIA_ARMOR]: { tier: 4, armorType:'bulwark', mitigation: .16, dur: 900 },
   [I.STORMGLASS_ARMOR]: { tier: 4, armorType:'scout', mitigation: .15, dur: 760 },
+  [I.STORMWEAVE_ROBE]: { tier: 4, armorType:'robe', mitigation: .09, dur: 620, projectileMagicMultiplier: 1.22 },
   [I.LEGEND_ARMOR]: { tier: 5, armorType:'aegis', legendary: true, mitigation: .20, dur: 1800 },
 };
 const SOLO_KEYS = [I.SOLO_KEY_E, I.SOLO_KEY_D, I.SOLO_KEY_C, I.SOLO_KEY_B, I.SOLO_KEY_A];
@@ -565,6 +569,7 @@ const ITEM_NAMES = {
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
   [I.ANCIENT_FRAGMENT]: 'Ancient Fragment', [I.ECHO_GLYPH]: 'Echo Glyph', [I.RELIC_ARMOR_PIECE]: 'Relic Armor Piece',
   [I.TOWN_MAP]: 'Town Map', [I.APPEARANCE_MIRROR]: 'Hunter Mirror',
+  [I.APPRENTICE_ROBE]: 'Apprentice Robe', [I.ARCWEAVE_ROBE]: 'Arcweave Robe', [I.STORMWEAVE_ROBE]: 'Stormweave Robe',
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
   [I.CAT_COLLAR]: 'Cat Collar', [I.DOG_COLLAR]: 'Dog Collar', [I.WOLF_COLLAR]: 'Wolf Collar',
@@ -636,10 +641,13 @@ for (const m in TOOL_MAT_ITEMS) {
   RECIPES.push({ shape: ['MM', '.s', '.s'], keys: { M, s }, out: [I[m + '_HOE'], 1], mirror: true });
 }
 RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.MONSTER_MEAT }, out: [I.HIDE_ARMOR, 1] });
+RECIPES.push({ shape: ['W.W', 'WWW', 'WWW'], keys: { W: I.WHEAT }, out: [I.APPRENTICE_ROBE, 1] });
 RECIPES.push({ shape: ['I.I', 'ICI', 'III'], keys: { I: I.IRON_INGOT, C: I.COAL }, out: [I.CHAIN_ARMOR, 1] });
+RECIPES.push({ shape: ['W.W', 'WGW', 'WWW'], keys: { W: I.WHEAT, G: I.GEODE }, out: [I.ARCWEAVE_ROBE, 1] });
 RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.IRON_INGOT }, out: [I.IRON_ARMOR, 1] });
 RECIPES.push({ shape: ['M.M', 'MMM', 'MMM'], keys: { M: I.DIAMOND }, out: [I.DIA_ARMOR, 1] });
 RECIPES.push({ shape: ['S.S', 'SDS', 'SSS'], keys: { S: I.STORMGLASS, D: I.DIAMOND }, out: [I.STORMGLASS_ARMOR, 1] });
+RECIPES.push({ shape: ['S.S', 'SGS', 'SSS'], keys: { S: I.STORMGLASS, G: I.SOLAR_GLYPH }, out: [I.STORMWEAVE_ROBE, 1] });
 const MINE_DROPS = {
   [W.B.GRASS]: { item: W.B.DIRT, count: 1 },
   [W.B.GLASS]: null,

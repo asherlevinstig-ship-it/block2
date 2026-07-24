@@ -85,6 +85,10 @@ function equippedAegisArmor(){
   const armor=equippedArmor();
   return armor && ITEMS[armor.id].armor.power==='aegis' ? armor : null;
 }
+function projectileMagicMultiplier(){
+  const armor=equippedArmor(), info=armor&&ITEMS[armor.id].armor;
+  return info ? (GEAR_SYSTEM.armorProfile(info,armor).projectileMagicMultiplier||1) : 1;
+}
 function removeEquippedArmorCopies(){
   const armor=equippedArmor();
   if(!armor) return false;
@@ -819,7 +823,7 @@ function tickAbilities(dt,t){
         const d2=Math.hypot(m.grp.position.x-pos.x, m.grp.position.z-pos.z);
         if(d2<2.8){
           const kb=d2>0.01?new THREE.Vector3((m.grp.position.x-pos.x)/d2*2,0,(m.grp.position.z-pos.z)/d2*2):null;
-          damageMob(m, 8+(S.int-1)*.6, kb);
+          damageMob(m, (8+(S.int-1)*.6)*projectileMagicMultiplier(), kb);
         }
       }
       scene.remove(p.grp);
@@ -1040,7 +1044,8 @@ function renderStat(){
   }
   const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
   const armorProfile=armor?GEAR_SYSTEM.armorProfile(armorInfo,armor):null;
-  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
+  const robeMagic=armorProfile&&armorProfile.projectileMagicMultiplier>1?' &middot; +'+Math.round((armorProfile.projectileMagicMultiplier-1)*100)+'% projectile magic':'';
+  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost'+robeMagic+' &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
   h+='<div class="srow"><span>STAT POINTS</span><b>'+S.pts+'</b></div>';
   for(const [k,nm,fx] of ATTRS)
     h+='<div class="attr"><span class="nm">'+nm+' &middot; '+S[k]+'</span><span class="fx">'+fx+'</span><button data-attr="'+k+'" '+(S.pts<=0?'disabled':'')+'>+</button></div>';

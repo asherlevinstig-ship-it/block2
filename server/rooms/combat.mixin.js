@@ -2,7 +2,7 @@
 // area damage helpers, and kill / mine / loot rewards. Lifted verbatim out of
 // GameRoom.js and mixed into its prototype.
 const {
-  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_BASE_KIND, ANIMAL_LOOT, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
+  ABILITY_BREAKABLE, ABILITY_PATHS, ABILITY_SYSTEM, ABILITY_UNLOCK, ANIMAL_BASE_KIND, ANIMAL_LOOT, ARMOR_INFO, BETA_LEGENDARY_TEST, BIOME_COLLECTIBLE,
   DANGER_RINGS, DRAGON_BREATH, DRAGON_BREATH_CD_MS, DRAGON_BREATH_RANGE, DRAGON_BREATH_SPEED, DRAGON_TYPE_SET,
   I, KEY_LOOT, MINE_DROPS, PET_FAMILIAR_DROPS, REWARD_ITEMS, dangerRingAt, dragonMountType, isDragonMount, jobPerkChance,
   keyForRank, spriteForageChance, spriteBonusDrops, dogExtraMeatChance, wolfHostileXpBonus,
@@ -580,6 +580,13 @@ class CombatMixin {
     this.sendSpace(dgn, 'fx', fx);
     client.send('dragonAbilityResult', { type, cd: Math.ceil(cd / 1000), happiness: care.happiness | 0, bondXp: bond ? bond.xp : undefined, bondLevel: bond ? bond.level : undefined, bondGained: bond ? bond.gained : 0, dragonChallenge: bond ? bond.challenge : null });
   }
+  projectileMagicMultiplierFor(client) {
+    const rec = client && this.profileFor(client);
+    const armorStack = rec && rec.prof && rec.prof.armor;
+    const armorInfo = armorStack && ARMOR_INFO[armorStack.id];
+    if (!armorInfo) return 1;
+    return GEAR_SYSTEM.armorProfile(armorInfo, armorStack).projectileMagicMultiplier || 1;
+  }
   spawnAbilityFireball(client, p, m, def, prof) {
     let dx = Number(m.dx), dy = Number(m.dy), dz = Number(m.dz);
     const len = Math.hypot(dx, dy, dz) || 1;
@@ -592,7 +599,7 @@ class CombatMixin {
       life: Math.max(.5, (def.range || 24) / speed),
       dgn: p.dgn || '',
       caster: client.sessionId,
-      damage: ABILITY_SYSTEM.abilityDamage('fireball',prof&&prof.S)*(prof&&prof.abilitySpec==='elementalist'?1.15:1),
+      damage: ABILITY_SYSTEM.abilityDamage('fireball',prof&&prof.S)*(prof&&prof.abilitySpec==='elementalist'?1.15:1)*this.projectileMagicMultiplierFor(client),
       radius: def.radius || 3,
     };
     this.sFireballs.push(fb);

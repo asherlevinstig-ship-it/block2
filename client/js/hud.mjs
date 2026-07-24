@@ -65,6 +65,7 @@ function itemTooltipText(stack){
     lines.push('Armor: -'+Math.round(armor.mitigation*100)+'% damage');
     lines.push('Movement: '+Math.round(armor.moveMultiplier*100)+'%');
     lines.push('Sprint/jump stamina: '+Math.round(armor.staminaCostMultiplier*100)+'%');
+    if(armor.projectileMagicMultiplier>1)lines.push('Projectile magic: +'+Math.round((armor.projectileMagicMultiplier-1)*100)+'% damage');
     lines.push('Durability: '+(stack.dur==null?armor.maxDur:stack.dur)+' / '+armor.maxDur);
   }
   if(info.legendary) lines.push('Legendary ability: '+info.legendary.kind+' · '+(info.legendary.cd||0)+'s cooldown');
