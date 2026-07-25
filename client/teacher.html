@@ -8,6 +8,9 @@
 </head>
 <body class="teacher-page-body" data-page="teacher">
   <main id="teacherapp" aria-label="Teacher dashboard"></main>
-  <script type="module" src="/js/teacher-tools.mjs"></script>
+  <script type="importmap">
+    {"imports":{"vue":"https://esm.sh/vue@3.5.18/dist/vue.esm-browser.prod.js"}}
+  </script>
+  <script type="module" src="/js/teacher-dashboard.mjs"></script>
 </body>
 </html>
