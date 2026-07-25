@@ -107,6 +107,17 @@ test('teacher game-question endpoints require a teacher session and expose game 
       assert.equal(query.subjectId, '5');
       return [{ id: 44, subjectId: 5, prompt: 'What is an algorithm?', answers: ['Steps', 'Code', 'A wire', 'A password'], correct: 0 }];
     },
+    async analytics(account, query) {
+      assert.equal(account.id, 'teacher_7');
+      assert.equal(query.subjectId, '5');
+      return {
+        windowDays: 30,
+        classId: null,
+        totals: { attempts: 3, correct: 2, accuracy: 67 },
+        students: [{ id: 9, name: 'Learner', email: 'learner@example.test', attempts: 3, correct: 2, accuracy: 67, lastAttemptAt: '2026-07-25 10:00:00' }],
+        questions: [{ id: 44, topic: 'Algorithms', prompt: 'What is an algorithm?', attempts: 3, correct: 2, accuracy: 67 }],
+      };
+    },
     async createQuestion(account, body) {
       assert.equal(account.id, 'teacher_7');
       return { id: 45, subjectId: body.subjectId, prompt: body.prompt, answers: body.answers, correct: body.correct };
@@ -126,6 +137,13 @@ test('teacher game-question endpoints require a teacher session and expose game 
     const questions = await f.request('/auth/teacher/game-questions?subjectId=5', { headers: { Authorization: 'Bearer ' + teacherSid } });
     assert.equal(questions.status, 200);
     assert.equal((await questions.json()).questions[0].id, 44);
+
+    const analytics = await f.request('/auth/teacher/analytics?subjectId=5', { headers: { Authorization: 'Bearer ' + teacherSid } });
+    assert.equal(analytics.status, 200);
+    const analyticsBody = await analytics.json();
+    assert.equal(analyticsBody.analytics.totals.accuracy, 67);
+    assert.equal(analyticsBody.analytics.students[0].name, 'Learner');
+    assert.equal(analyticsBody.analytics.questions[0].id, 44);
 
     const created = await f.request('/auth/teacher/game-questions', jsonPost({
       subjectId: 5,

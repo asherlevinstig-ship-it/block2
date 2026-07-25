@@ -79,6 +79,25 @@ class MySqlGameQuestionStore {
       KEY idx_game_question_school (school_id),
       KEY idx_game_question_topic (topic)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS game_question_attempt (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      school_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      class_id INT UNSIGNED NULL,
+      question_id INT UNSIGNED NOT NULL,
+      student_id INT UNSIGNED NULL,
+      account_id VARCHAR(96) NOT NULL DEFAULT '',
+      answer_index TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      correct TINYINT(1) NOT NULL DEFAULT 0,
+      duration_ms INT UNSIGNED NOT NULL DEFAULT 0,
+      source VARCHAR(32) NOT NULL DEFAULT 'game',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_gqa_subject_created (subject_id, created_at),
+      KEY idx_gqa_student (student_id, subject_id),
+      KEY idx_gqa_question (question_id),
+      KEY idx_gqa_class (class_id, subject_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     this.ready = true;
   }
 
@@ -261,6 +280,86 @@ class MySqlGameQuestionStore {
       [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, existing.id],
     );
     return this.getQuestion(account, existing.id);
+  }
+
+  async analytics(account, query = {}) {
+    await this.ensureSchema();
+    const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
+    await this.assertTeacherSubject(account, subjectId);
+    const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
+    const days = clampInt(query.days || 30, 1, 365);
+    const params = [subjectId, days];
+    let attemptWhere = 'gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
+    if (classId) { attemptWhere += ' AND gqa.class_id = ?'; params.push(classId); }
+    const [studentRows] = await this.getPool().execute(
+      `SELECT
+         COALESCE(gqa.student_id, 0) AS student_id,
+         COALESCE(s.name, s.email, gqa.account_id, 'Unknown student') AS student_name,
+         COALESCE(s.email, '') AS student_email,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct,
+         MAX(gqa.created_at) AS last_attempt_at
+       FROM game_question_attempt gqa
+       LEFT JOIN students s ON s.id = gqa.student_id
+       WHERE ${attemptWhere}
+       GROUP BY COALESCE(gqa.student_id, 0), student_name, student_email
+       ORDER BY attempts DESC, student_name ASC
+       LIMIT 200`,
+      params,
+    );
+    const [questionRows] = await this.getPool().execute(
+      `SELECT
+         gq.id,
+         gq.topic,
+         gq.stage,
+         gq.prompt,
+         gq.review_status,
+         COUNT(gqa.id) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question gq
+       LEFT JOIN game_question_attempt gqa
+         ON gqa.question_id = gq.id
+        AND gqa.subject_id = gq.subject_id
+        AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        ${classId ? 'AND gqa.class_id = ?' : ''}
+       WHERE gq.subject_id = ?
+       GROUP BY gq.id, gq.topic, gq.stage, gq.prompt, gq.review_status
+       ORDER BY attempts DESC, gq.updated_at DESC
+       LIMIT 200`,
+      classId ? [days, classId, subjectId] : [days, subjectId],
+    );
+    const normalize = row => {
+      const attempts = Number(row.attempts) || 0;
+      const correct = Number(row.correct) || 0;
+      return { attempts, correct, accuracy: attempts ? Math.round((correct / attempts) * 100) : 0 };
+    };
+    const students = (studentRows || []).map(row => ({
+      id: Number(row.student_id) || 0,
+      name: String(row.student_name || 'Unknown student'),
+      email: String(row.student_email || ''),
+      lastAttemptAt: row.last_attempt_at || null,
+      ...normalize(row),
+    }));
+    const questions = (questionRows || []).map(row => ({
+      id: Number(row.id) || 0,
+      topic: String(row.topic || ''),
+      stage: String(row.stage || ''),
+      prompt: String(row.prompt || ''),
+      reviewStatus: String(row.review_status || 'draft'),
+      ...normalize(row),
+    }));
+    const totals = students.reduce((acc, row) => {
+      acc.attempts += row.attempts;
+      acc.correct += row.correct;
+      return acc;
+    }, { attempts: 0, correct: 0 });
+    return {
+      windowDays: days,
+      classId: classId || null,
+      totals: { ...totals, accuracy: totals.attempts ? Math.round((totals.correct / totals.attempts) * 100) : 0 },
+      students,
+      questions,
+    };
   }
 }
 

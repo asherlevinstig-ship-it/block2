@@ -1,4 +1,5 @@
-import { createApp, computed, onMounted, reactive } from 'vue';
+import { createApp, computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import Chart from 'chart.js/auto';
 import { apiUrl } from './config.mjs';
 
 const sessionKey = 'blockcraft.auth.session';
@@ -61,10 +62,12 @@ createApp({
       subjects: [],
       classes: [],
       questions: [],
+      analytics: { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 },
       selectedId: 0,
       subjectId: '',
       classId: '',
       status: '',
+      analyticsDays: 30,
       search: '',
       view: 'overview',
       loading: true,
@@ -88,12 +91,17 @@ createApp({
       approved: state.questions.filter(q => q.reviewStatus === 'approved').length,
       active: state.questions.filter(q => q.active).length,
     }));
+    const studentRows = computed(() => (state.analytics.students || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
+    const questionRows = computed(() => (state.analytics.questions || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
     const dashboardLinks = computed(() => [
       { id: 'questions', title: 'Questions', value: stats.value.total, detail: stats.value.draft + ' draft / ' + stats.value.approved + ' approved' },
-      { id: 'students', title: 'Students', value: state.classes.length, detail: 'Class lists and answered questions' },
-      { id: 'activity', title: 'Weekly Activity', value: stats.value.active, detail: 'Usage, correctness, and play time' },
+      { id: 'students', title: 'Student Analysis', value: studentRows.value.length, detail: state.analytics.totals.accuracy + '% average accuracy' },
+      { id: 'question-analysis', title: 'Question Analysis', value: questionRows.value.length, detail: state.analytics.totals.attempts + ' attempts' },
       { id: 'review', title: 'Review Queue', value: stats.value.reviewed, detail: 'Teacher-reviewed game questions' },
     ]);
+    const studentChart = ref(null);
+    const questionChart = ref(null);
+    const chartRefs = { students: null, questions: null };
 
     function setError(message) {
       state.error = message || '';
@@ -131,8 +139,14 @@ createApp({
     }
 
     function openView(view) {
-      state.view = view === 'questions' ? 'questions' : 'overview';
+      state.view = ['questions', 'students', 'question-analysis'].includes(view) ? view : 'overview';
       setNotice('');
+    }
+
+    function editQuestionFromAnalysis(row) {
+      const full = state.questions.find(question => Number(question.id) === Number(row && row.id));
+      openView('questions');
+      if (full) fillForm(full);
     }
 
     async function loadAccount() {
@@ -159,12 +173,17 @@ createApp({
     async function loadSubjectData() {
       if (!state.subjectId) return;
       const query = '?subjectId=' + encodeURIComponent(state.subjectId) + (state.status ? '&reviewStatus=' + encodeURIComponent(state.status) : '');
-      const [classesData, questionsData] = await Promise.all([
+      const analyticsQuery = '?subjectId=' + encodeURIComponent(state.subjectId)
+        + (state.classId ? '&classId=' + encodeURIComponent(state.classId) : '')
+        + '&days=' + encodeURIComponent(state.analyticsDays);
+      const [classesData, questionsData, analyticsData] = await Promise.all([
         requestJson('/auth/teacher/classes?subjectId=' + encodeURIComponent(state.subjectId)),
         requestJson('/auth/teacher/game-questions' + query),
+        requestJson('/auth/teacher/analytics' + analyticsQuery),
       ]);
       state.classes = classesData.classes || [];
       state.questions = (questionsData.questions || []).map(cleanQuestion);
+      state.analytics = analyticsData.analytics || state.analytics;
       if (state.selectedId && !selectedQuestion.value) newQuestion();
     }
 
@@ -199,9 +218,9 @@ createApp({
       state.loading = true;
       try {
         await loadSubjectData();
-        setNotice('Filter applied.');
+        setNotice('View refreshed.');
       } catch (e) {
-        setError(e.message || 'Could not load questions.');
+        setError(e.message || 'Could not refresh teacher dashboard.');
       } finally {
         state.loading = false;
       }
@@ -250,18 +269,67 @@ createApp({
       }
     }
 
+    function destroyChart(key) {
+      if (chartRefs[key]) {
+        chartRefs[key].destroy();
+        chartRefs[key] = null;
+      }
+    }
+
+    function renderCharts() {
+      nextTick(() => {
+        if (!studentChart.value) destroyChart('students');
+        if (!questionChart.value) destroyChart('questions');
+        if (studentChart.value) {
+          destroyChart('students');
+          const rows = studentRows.value.slice(0, 10).reverse();
+          chartRefs.students = new Chart(studentChart.value, {
+            type: 'bar',
+            data: {
+              labels: rows.map(row => row.name),
+              datasets: [{ label: 'Accuracy %', data: rows.map(row => row.accuracy), backgroundColor: '#7dd3fc' }],
+            },
+            options: { indexAxis: 'y', responsive: true, scales: { x: { min: 0, max: 100 } }, plugins: { legend: { display: false } } },
+          });
+        }
+        if (questionChart.value) {
+          destroyChart('questions');
+          const rows = questionRows.value.slice(0, 10).reverse();
+          chartRefs.questions = new Chart(questionChart.value, {
+            type: 'bar',
+            data: {
+              labels: rows.map(row => row.topic || ('#' + row.id)),
+              datasets: [{ label: 'Accuracy %', data: rows.map(row => row.accuracy), backgroundColor: '#a3e635' }],
+            },
+            options: { indexAxis: 'y', responsive: true, scales: { x: { min: 0, max: 100 } }, plugins: { legend: { display: false } } },
+          });
+        }
+      });
+    }
+
+    watch(() => [state.view, state.analytics], renderCharts, { deep: true });
+    onUnmounted(() => {
+      destroyChart('students');
+      destroyChart('questions');
+    });
+
     onMounted(refreshAll);
 
     return {
       state,
       selectedSubject,
       filteredQuestions,
+      studentRows,
+      questionRows,
       stats,
       dashboardLinks,
+      studentChart,
+      questionChart,
       refreshAll,
       changeSubject,
       changeStatus,
       openView,
+      editQuestionFromAnalysis,
       fillForm,
       newQuestion,
       saveQuestion,
@@ -278,6 +346,8 @@ createApp({
         <nav class="teacher-vue-nav" aria-label="Teacher dashboard">
           <button type="button" :class="{ active: state.view === 'overview' }" @click="openView('overview')">Overview</button>
           <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')">Questions</button>
+          <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')">Student Analysis</button>
+          <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')">Question Analysis</button>
         </nav>
         <label>
           Subject
@@ -289,11 +359,20 @@ createApp({
         </label>
         <label>
           Class
-          <select v-model="state.classId">
+          <select v-model="state.classId" @change="changeStatus">
             <option value="">All classes</option>
             <option v-for="row in state.classes" :key="row.id" :value="String(row.id)">
               {{ row.joinCode ? row.name + ' - ' + row.joinCode : row.name }}
             </option>
+          </select>
+        </label>
+        <label>
+          Analysis window
+          <select v-model.number="state.analyticsDays" @change="changeStatus">
+            <option :value="7">Last 7 days</option>
+            <option :value="30">Last 30 days</option>
+            <option :value="90">Last 90 days</option>
+            <option :value="180">Last 180 days</option>
           </select>
         </label>
         <label>
@@ -312,7 +391,7 @@ createApp({
         <header class="teacher-vue-topbar">
           <div>
             <span>{{ selectedSubject ? selectedSubject.name : 'Teacher workspace' }}</span>
-            <h1>{{ state.view === 'questions' ? 'Questions' : 'Dashboard' }}</h1>
+            <h1>{{ state.view === 'questions' ? 'Questions' : state.view === 'students' ? 'Student Analysis' : state.view === 'question-analysis' ? 'Question Analysis' : 'Dashboard' }}</h1>
           </div>
           <button type="button" @click="refreshAll" :disabled="state.loading">Refresh</button>
         </header>
@@ -335,12 +414,64 @@ createApp({
             type="button"
             class="teacher-vue-card"
             @click="openView(link.id)"
-            :disabled="link.id !== 'questions'"
+            :disabled="link.id === 'review'"
           >
             <span>{{ link.title }}</span>
             <strong>{{ link.value }}</strong>
             <i>{{ link.detail }}</i>
           </button>
+        </section>
+
+        <section class="teacher-vue-analysis" v-else-if="state.view === 'students'">
+          <div class="teacher-vue-chart">
+            <div>
+              <span>Lowest accuracy first</span>
+              <strong>{{ state.analytics.totals.accuracy }}%</strong>
+              <i>{{ state.analytics.totals.correct }} correct from {{ state.analytics.totals.attempts }} attempts</i>
+            </div>
+            <canvas ref="studentChart" aria-label="Student accuracy chart"></canvas>
+          </div>
+          <div class="teacher-vue-analysis-table">
+            <div class="teacher-vue-analysis-row head">
+              <span>Student</span>
+              <span>Attempts</span>
+              <span>Accuracy</span>
+              <span>Last active</span>
+            </div>
+            <div class="teacher-vue-analysis-row" v-for="row in studentRows" :key="row.id || row.name">
+              <span>{{ row.name }}<small>{{ row.email || 'Game account' }}</small></span>
+              <strong>{{ row.attempts }}</strong>
+              <strong>{{ row.accuracy }}%</strong>
+              <i>{{ row.lastAttemptAt || 'No attempts' }}</i>
+            </div>
+            <div class="teacher-vue-empty" v-if="!studentRows.length">No student attempt data for this subject yet.</div>
+          </div>
+        </section>
+
+        <section class="teacher-vue-analysis" v-else-if="state.view === 'question-analysis'">
+          <div class="teacher-vue-chart">
+            <div>
+              <span>Questions that need attention</span>
+              <strong>{{ questionRows.length }}</strong>
+              <i>Sorted by accuracy, then attempt count</i>
+            </div>
+            <canvas ref="questionChart" aria-label="Question accuracy chart"></canvas>
+          </div>
+          <div class="teacher-vue-analysis-table">
+            <div class="teacher-vue-analysis-row head">
+              <span>Question</span>
+              <span>Topic</span>
+              <span>Attempts</span>
+              <span>Accuracy</span>
+            </div>
+            <button class="teacher-vue-analysis-row action" type="button" v-for="row in questionRows" :key="row.id" @click="editQuestionFromAnalysis(row)">
+              <span>{{ row.prompt }}<small>{{ row.stage || row.reviewStatus }}</small></span>
+              <span>{{ row.topic || 'No topic' }}</span>
+              <strong>{{ row.attempts }}</strong>
+              <strong>{{ row.accuracy }}%</strong>
+            </button>
+            <div class="teacher-vue-empty" v-if="!questionRows.length">No question attempt data for this subject yet.</div>
+          </div>
         </section>
 
         <section class="teacher-vue-workspace" v-else>

@@ -883,6 +883,16 @@ class AuthService {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load game questions.' });
       }
     });
+    app.get('/auth/teacher/analytics', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const analytics = await this.getGameQuestionStore().analytics(account, req.query || {});
+        res.json({ ok: true, analytics });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load teacher analytics.' });
+      }
+    });
     app.post('/auth/teacher/game-questions', async (req, res) => {
       const account = this.authorizeTeacher(req);
       if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
