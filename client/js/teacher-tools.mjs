@@ -11,6 +11,7 @@ const state = {
   open: false,
   busy: false,
 };
+const standalone = typeof document !== 'undefined' && !!document.body && document.body.dataset.page === 'teacher';
 
 function byId(id) {
   return typeof document === 'undefined' ? null : document.getElementById(id);
@@ -21,18 +22,20 @@ function ensureShell() {
   if (!desk && typeof document !== 'undefined' && document.body) {
     desk = document.createElement('div');
     desk.id = 'teacherdesk';
-    desk.className = 'hidden';
+    desk.className = standalone ? 'teacher-page' : 'hidden';
     desk.setAttribute('role', 'dialog');
     desk.setAttribute('aria-modal', 'true');
     desk.setAttribute('aria-labelledby', 'teacherdesktitle');
-    document.body.appendChild(desk);
+    const mount = byId('teacherapp') || document.body;
+    mount.appendChild(desk);
   }
   if (!desk || desk.dataset.ready === '1') return;
+  if (standalone) desk.classList.add('teacher-page');
   desk.innerHTML =
     '<div class="teacherdesk-shell">' +
       '<header class="teacherdesk-header">' +
         '<div><div class="teacherdesk-kicker">TEACHER TOOLS</div><h2 id="teacherdesktitle">Game Question Bank</h2></div>' +
-        '<div class="teacherdesk-actions"><button id="teacherrefresh" type="button">REFRESH</button><button id="teacherclose" type="button">CLOSE</button></div>' +
+        '<div class="teacherdesk-actions"><button id="teacherrefresh" type="button">REFRESH</button><button id="teacherclose" type="button">' + (standalone ? 'BACK TO GAME' : 'CLOSE') + '</button></div>' +
       '</header>' +
       '<section class="teacherdesk-toolbar" aria-label="Teacher dashboard filters">' +
         '<label>Subject<select id="teachersubject"></select></label>' +
@@ -88,7 +91,7 @@ function ensureEntryButton() {
 
 function initElements() {
   ensureShell();
-  ensureEntryButton();
+  if (!standalone) ensureEntryButton();
   for (const id of [
     'teacherdeskbtn', 'teacherdesk', 'teacherclose', 'teacherrefresh', 'teachersubject', 'teacherclass',
     'teacherstatusfilter', 'teachersearch', 'teacherquestioncount', 'teacherdraftcount', 'teacherapprovedcount',
@@ -97,7 +100,7 @@ function initElements() {
     'teacheranswer1', 'teacheranswer2', 'teacheranswer3', 'teacherexplanation', 'teacherdeskstatus',
     'teacherclear', 'teachersavecopy',
   ]) els[id] = byId(id);
-  return !!(els.teacherdeskbtn && els.teacherdesk && els.teacherquestionform);
+  return !!((standalone || els.teacherdeskbtn) && els.teacherdesk && els.teacherquestionform);
 }
 
 function storedSession() {
@@ -361,7 +364,7 @@ async function openDesk() {
     return;
   }
   state.open = true;
-  els.teacherdesk.classList.remove('hidden');
+  if (!standalone) els.teacherdesk.classList.remove('hidden');
   try { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); } catch (_) {}
   document.body.classList.add('game-modal-open');
   try {
@@ -373,12 +376,16 @@ async function openDesk() {
 
 function closeDesk() {
   state.open = false;
+  if (standalone) {
+    location.href = './';
+    return;
+  }
   els.teacherdesk.classList.add('hidden');
   document.body.classList.remove('game-modal-open');
 }
 
 function bindEvents() {
-  els.teacherdeskbtn.addEventListener('click', openDesk);
+  if (els.teacherdeskbtn) els.teacherdeskbtn.addEventListener('click', () => { location.href = './teacher.html'; });
   els.teacherclose.addEventListener('click', closeDesk);
   els.teacherrefresh.addEventListener('click', () => loadSubjectData().catch(e => setStatus(e.message || 'Refresh failed.', 'bad')));
   els.teachersubject.addEventListener('change', () => { clearForm(); loadSubjectData().catch(e => setStatus(e.message || 'Could not load subject.', 'bad')); });
@@ -400,9 +407,10 @@ export function initTeacherTools() {
   if (!initElements()) return null;
   bindEvents();
   updateEntryButton();
-  checkAccount().catch(() => updateEntryButton());
+  if (standalone) openDesk().catch(e => setStatus(e.message || 'Could not load teacher dashboard.', 'bad'));
+  else checkAccount().catch(() => updateEntryButton());
   setInterval(() => {
-    if (!state.open) checkAccount().catch(() => updateEntryButton());
+    if (!state.open && !standalone) checkAccount().catch(() => updateEntryButton());
   }, 5000);
   return { state, open: openDesk, close: closeDesk, refresh: loadSubjectData };
 }

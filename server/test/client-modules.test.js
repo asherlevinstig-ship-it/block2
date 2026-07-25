@@ -620,6 +620,7 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
 
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const teacherHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'teacher.html'), 'utf8');
   const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
@@ -664,10 +665,15 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.doesNotMatch(registerJs, /form\.school/);
   assert.match(authSource, /localStorage\.setItem\(sessionKey/);
   assert.match(authSource, /Authorization: 'Bearer ' \+ token/);
+  assert.match(teacherHtml, /data-page="teacher"/);
+  assert.match(teacherHtml, /\/js\/teacher-tools\.mjs/);
+  assert.match(teacherHtml, /id="teacherapp"/);
   assert.match(boot, /'\.\/teacher-tools\.mjs'/);
   const teacherToolsSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'teacher-tools.mjs'), 'utf8');
   assert.match(teacherToolsSource, /desk\.id = 'teacherdesk'/);
   assert.match(teacherToolsSource, /button\.id = 'teacherdeskbtn'/);
+  assert.match(teacherToolsSource, /location\.href = '\.\/teacher\.html'/);
+  assert.match(teacherToolsSource, /body\.dataset\.page === 'teacher'/);
   assert.match(teacherToolsSource, /id="teacherquestionform"/);
   assert.match(teacherToolsSource, /blockcraft\.auth\.session/);
   assert.match(teacherToolsSource, /Authorization: 'Bearer ' \+ token/);
@@ -676,6 +682,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherToolsSource, /\/auth\/teacher\/game-questions/);
   assert.match(teacherToolsSource, /Game questions need four unique answers|Add four unique answer choices/);
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(stylesSource, /\.teacher-page-body/);
+  assert.match(stylesSource, /#teacherdesk\.teacher-page/);
   assert.match(stylesSource, /#teacherdesk/);
   assert.match(stylesSource, /\.teacherdesk-main/);
   assert.match(html, /id="huntersetup" class="hunter-setup hidden"/);
