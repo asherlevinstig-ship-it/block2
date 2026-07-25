@@ -675,7 +675,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherLinkSource, /location\.href = '\.\/teacher\.html'/);
   const teacherDashboardSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'teacher-dashboard.mjs'), 'utf8');
   assert.match(teacherDashboardSource, /import \{ createApp, computed, onMounted, reactive \} from 'vue'/);
-  assert.match(teacherDashboardSource, /Question Studio/);
+  assert.match(teacherDashboardSource, /<strong>Dashboard<\/strong>/);
+  assert.match(teacherDashboardSource, /state\.view === 'questions' \? 'Questions' : 'Dashboard'/);
+  assert.match(teacherDashboardSource, /title: 'Questions'/);
+  assert.match(teacherDashboardSource, /@click="openView\(link\.id\)"/);
   assert.match(teacherDashboardSource, /blockcraft\.auth\.session/);
   assert.match(teacherDashboardSource, /Authorization: 'Bearer ' \+ token/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/subjects/);
@@ -685,6 +688,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
   assert.match(stylesSource, /\.teacher-vue-shell/);
+  assert.match(stylesSource, /\.teacher-vue-overview/);
+  assert.match(stylesSource, /\.teacher-vue-card/);
   assert.match(stylesSource, /\.teacher-vue-workspace/);
   assert.match(html, /id="huntersetup" class="hunter-setup hidden"/);
   assert.match(html, /id="gearrewardwin"/);

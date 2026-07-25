@@ -66,6 +66,7 @@ createApp({
       classId: '',
       status: '',
       search: '',
+      view: 'overview',
       loading: true,
       saving: false,
       error: '',
@@ -87,6 +88,12 @@ createApp({
       approved: state.questions.filter(q => q.reviewStatus === 'approved').length,
       active: state.questions.filter(q => q.active).length,
     }));
+    const dashboardLinks = computed(() => [
+      { id: 'questions', title: 'Questions', value: stats.value.total, detail: stats.value.draft + ' draft / ' + stats.value.approved + ' approved' },
+      { id: 'students', title: 'Students', value: state.classes.length, detail: 'Class lists and answered questions' },
+      { id: 'activity', title: 'Weekly Activity', value: stats.value.active, detail: 'Usage, correctness, and play time' },
+      { id: 'review', title: 'Review Queue', value: stats.value.reviewed, detail: 'Teacher-reviewed game questions' },
+    ]);
 
     function setError(message) {
       state.error = message || '';
@@ -117,8 +124,14 @@ createApp({
     }
 
     function newQuestion() {
+      state.view = 'questions';
       state.selectedId = 0;
       state.form = emptyForm();
+      setNotice('');
+    }
+
+    function openView(view) {
+      state.view = view === 'questions' ? 'questions' : 'overview';
       setNotice('');
     }
 
@@ -244,9 +257,11 @@ createApp({
       selectedSubject,
       filteredQuestions,
       stats,
+      dashboardLinks,
       refreshAll,
       changeSubject,
       changeStatus,
+      openView,
       fillForm,
       newQuestion,
       saveQuestion,
@@ -258,8 +273,12 @@ createApp({
         <a class="teacher-vue-back" href="./">Back to game</a>
         <div class="teacher-vue-brand">
           <span>TEACHER</span>
-          <strong>Question Studio</strong>
+          <strong>Dashboard</strong>
         </div>
+        <nav class="teacher-vue-nav" aria-label="Teacher dashboard">
+          <button type="button" :class="{ active: state.view === 'overview' }" @click="openView('overview')">Overview</button>
+          <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')">Questions</button>
+        </nav>
         <label>
           Subject
           <select v-model="state.subjectId" @change="changeSubject">
@@ -292,8 +311,8 @@ createApp({
       <main class="teacher-vue-main">
         <header class="teacher-vue-topbar">
           <div>
-            <span>{{ selectedSubject ? 'Subject workspace' : 'Teacher workspace' }}</span>
-            <h1>{{ selectedSubject ? selectedSubject.name : 'Question Bank' }}</h1>
+            <span>{{ selectedSubject ? selectedSubject.name : 'Teacher workspace' }}</span>
+            <h1>{{ state.view === 'questions' ? 'Questions' : 'Dashboard' }}</h1>
           </div>
           <button type="button" @click="refreshAll" :disabled="state.loading">Refresh</button>
         </header>
@@ -309,7 +328,22 @@ createApp({
         <div class="teacher-vue-status bad" v-if="state.error">{{ state.error }}</div>
         <div class="teacher-vue-status ok" v-else-if="state.notice">{{ state.notice }}</div>
 
-        <section class="teacher-vue-workspace">
+        <section class="teacher-vue-overview" v-if="state.view === 'overview'">
+          <button
+            v-for="link in dashboardLinks"
+            :key="link.id"
+            type="button"
+            class="teacher-vue-card"
+            @click="openView(link.id)"
+            :disabled="link.id !== 'questions'"
+          >
+            <span>{{ link.title }}</span>
+            <strong>{{ link.value }}</strong>
+            <i>{{ link.detail }}</i>
+          </button>
+        </section>
+
+        <section class="teacher-vue-workspace" v-else>
           <div class="teacher-vue-list">
             <div class="teacher-vue-list-head">
               <label>Search<input v-model="state.search" maxlength="96" placeholder="Topic, spec, or question"></label>
