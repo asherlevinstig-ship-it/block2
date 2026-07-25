@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
+const { MySqlGameQuestionStore } = require('./mysql-game-questions');
 const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
@@ -231,6 +232,7 @@ class AuthService {
     this.pendingRegistrations = new Set();
     this.writeQueue = Promise.resolve();
     this.profileStore = Object.prototype.hasOwnProperty.call(options, 'profileStore') ? options.profileStore : null;
+    this.gameQuestionStore = Object.prototype.hasOwnProperty.call(options, 'gameQuestionStore') ? options.gameQuestionStore : null;
     this.env = options.env || process.env;
     this.reloadSessionsOnMiss = Object.prototype.hasOwnProperty.call(options, 'reloadSessionsOnMiss') ? options.reloadSessionsOnMiss : !!this.authBackend;
     fs.mkdirSync(this.dir, { recursive: true });
@@ -332,6 +334,19 @@ class AuthService {
     if (this.profileStore) return this.profileStore;
     this.profileStore = createStore({ shardId: 'main', env: this.env });
     return this.profileStore;
+  }
+
+  getGameQuestionStore() {
+    if (this.gameQuestionStore) return this.gameQuestionStore;
+    this.gameQuestionStore = new MySqlGameQuestionStore({ authBackend: this.authBackend });
+    return this.gameQuestionStore;
+  }
+
+  authorizeTeacher(req) {
+    const account = this.authenticateRequest(req);
+    if (!account) return false;
+    if (account.accountType !== 'teacher' && cleanAdminId(account.role) !== 'teacher' && cleanAdminId(account.role) !== 'admin') return false;
+    return account;
   }
 
   async publicGameProfile(account) {
@@ -836,6 +851,56 @@ class AuthService {
         res.json({ ok: true, gameProfile });
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile update failed.' });
+      }
+    });
+    app.get('/auth/teacher/subjects', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const subjects = await this.getGameQuestionStore().listSubjects(account);
+        res.json({ ok: true, subjects });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load subjects.' });
+      }
+    });
+    app.get('/auth/teacher/classes', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const classes = await this.getGameQuestionStore().listClasses(account, req.query && (req.query.subjectId || req.query.subject_id));
+        res.json({ ok: true, classes });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load classes.' });
+      }
+    });
+    app.get('/auth/teacher/game-questions', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const questions = await this.getGameQuestionStore().listQuestions(account, req.query || {});
+        res.json({ ok: true, questions });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load game questions.' });
+      }
+    });
+    app.post('/auth/teacher/game-questions', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const question = await this.getGameQuestionStore().createQuestion(account, req.body || {});
+        res.json({ ok: true, question });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not save game question.' });
+      }
+    });
+    app.post('/auth/teacher/game-questions/:id', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const question = await this.getGameQuestionStore().updateQuestion(account, req.params && req.params.id, req.body || {});
+        res.json({ ok: true, question });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not update game question.' });
       }
     });
     app.post('/auth/admin/reset-player', async (req, res) => {

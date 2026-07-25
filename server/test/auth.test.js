@@ -6,6 +6,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const { AuthService } = require('../auth');
 const { MySqlAuthBackend, normalizeBcryptHash } = require('../mysql-auth');
+const { MySqlGameQuestionStore } = require('../mysql-game-questions');
 
 test('accounts use scrypt hashes and verified server sessions', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-'));
@@ -338,4 +339,78 @@ test('MySQL student registration rejects email domains without a matching school
     yearGroup: 'Year 8',
     password: 'correct horse student',
   }), /could not find a school/);
+});
+
+test('MySQL game question store creates the game_question table and teacher-owned questions', async () => {
+  const calls = [];
+  let inserted = null;
+  const pool = {
+    async execute(sql, params = []) {
+      calls.push({ sql, params });
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/FROM subjects/i.test(sql) && /LIMIT 1/i.test(sql)) return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
+      if (/^INSERT INTO game_question/i.test(sql)) {
+        inserted = { sql, params };
+        return [{ insertId: 44 }];
+      }
+      if (/FROM game_question gq/i.test(sql) && /WHERE gq\.id = \?/i.test(sql)) return [[{
+        id: 44,
+        school_id: 12,
+        subject_id: 5,
+        subject_name: 'Computer Science',
+        subject_code: 'CS',
+        teacher_id: 7,
+        topic: 'Algorithms',
+        stage: 'KS3',
+        difficulty: 2,
+        spec: 'game-recall',
+        prompt: 'Which step should an algorithm make clear?',
+        answers: JSON.stringify(['Input', 'Decoration', 'Luck', 'Noise']),
+        correct_index: 0,
+        explanation: 'Algorithms need clear inputs and steps so they can be followed.',
+        review_status: 'teacher-reviewed',
+        is_active: 1,
+      }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const account = { id: 'teacher_7', accountType: 'teacher', role: 'teacher', schoolId: '12' };
+  const question = await store.createQuestion(account, {
+    subjectId: 5,
+    topic: 'Algorithms',
+    stage: 'KS3',
+    difficulty: 2,
+    spec: 'game-recall',
+    prompt: 'Which step should an algorithm make clear?',
+    answers: ['Input', 'Decoration', 'Luck', 'Noise'],
+    correct: 0,
+    explanation: 'Algorithms need clear inputs and steps so they can be followed.',
+    reviewStatus: 'teacher-reviewed',
+  });
+  assert.equal(question.id, 44);
+  assert.equal(question.subjectId, 5);
+  assert.equal(question.reviewStatus, 'teacher-reviewed');
+  assert.deepEqual(question.answers, ['Input', 'Decoration', 'Luck', 'Noise']);
+  assert.match(calls[0].sql, /CREATE TABLE IF NOT EXISTS game_question/);
+  assert.match(inserted.sql, /INSERT INTO game_question/);
+  assert.equal(inserted.params[0], 12);
+  assert.equal(inserted.params[1], 5);
+  assert.equal(inserted.params[2], 7);
+});
+
+test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {
+  const store = new MySqlGameQuestionStore({ pool: { async execute() { return [[]]; } } });
+  await assert.rejects(
+    () => store.listSubjects({ id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' }),
+    /Teacher account required/,
+  );
+  assert.throws(
+    () => store.normalizeQuestionPatch({
+      prompt: 'What is a good test question?',
+      answers: ['A', 'A', 'B', 'C'],
+      explanation: 'Duplicate answers should not pass validation.',
+    }),
+    /four unique answers/,
+  );
 });

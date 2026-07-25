@@ -96,6 +96,48 @@ test('auth responses include the saved hunter-name setup state', { concurrency: 
   } finally { await f.close(); }
 });
 
+test('teacher game-question endpoints require a teacher session and expose game questions', { concurrency: false }, async () => {
+  const gameQuestionStore = {
+    async listSubjects(account) {
+      assert.equal(account.id, 'teacher_7');
+      return [{ id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 }];
+    },
+    async listQuestions(account, query) {
+      assert.equal(account.id, 'teacher_7');
+      assert.equal(query.subjectId, '5');
+      return [{ id: 44, subjectId: 5, prompt: 'What is an algorithm?', answers: ['Steps', 'Code', 'A wire', 'A password'], correct: 0 }];
+    },
+    async createQuestion(account, body) {
+      assert.equal(account.id, 'teacher_7');
+      return { id: 45, subjectId: body.subjectId, prompt: body.prompt, answers: body.answers, correct: body.correct };
+    },
+  };
+  const f = await fixture({ authOptions: { gameQuestionStore } });
+  try {
+    const studentSid = await f.auth.issueSession({ id: 'student_9', username: 'learner@example.test', displayName: 'Learner', accountType: 'student', role: 'student' });
+    const student = await f.request('/auth/teacher/subjects', { headers: { Authorization: 'Bearer ' + studentSid } });
+    assert.equal(student.status, 403);
+
+    const teacherSid = await f.auth.issueSession({ id: 'teacher_7', username: 'teacher@example.test', displayName: 'Teacher', accountType: 'teacher', role: 'teacher', schoolId: '12' });
+    const subjects = await f.request('/auth/teacher/subjects', { headers: { Authorization: 'Bearer ' + teacherSid } });
+    assert.equal(subjects.status, 200);
+    assert.deepEqual((await subjects.json()).subjects, [{ id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 }]);
+
+    const questions = await f.request('/auth/teacher/game-questions?subjectId=5', { headers: { Authorization: 'Bearer ' + teacherSid } });
+    assert.equal(questions.status, 200);
+    assert.equal((await questions.json()).questions[0].id, 44);
+
+    const created = await f.request('/auth/teacher/game-questions', jsonPost({
+      subjectId: 5,
+      prompt: 'What is an algorithm?',
+      answers: ['Steps', 'Code', 'A wire', 'A password'],
+      correct: 0,
+    }, { Authorization: 'Bearer ' + teacherSid }));
+    assert.equal(created.status, 200);
+    assert.equal((await created.json()).question.id, 45);
+  } finally { await f.close(); }
+});
+
 test('hunter name setup is persisted before joining the world', { concurrency: false }, async () => {
   const profiles = new Map();
   const profileStore = {

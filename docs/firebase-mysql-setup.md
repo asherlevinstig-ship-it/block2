@@ -86,6 +86,28 @@ For existing students whose `students.email` is not a school-domain email addres
 
 Teacher/admin logins use the `teachers` table first. The bridge preserves `teachers.role` values such as `teacher` or `admin`, resolves the school from `teachers.school_id`, then falls back to `teachers.domain` and the login email domain.
 
+## 5a. Game Question Bank
+
+The game owns a separate MySQL table named `game_question`. This is intentional:
+assessment `questions` remain for formal tests and markbooks, while
+`game_question` powers Recall, quests, and other in-game learning moments.
+
+The Node server creates `game_question` on first teacher-tool use when
+`AUTH_BACKEND=mysql` is configured. Rows link back to the existing school model:
+
+- `subjects.id`
+- `teachers.id`
+- optional `schools.id`
+
+Teacher access is checked through existing `teacher_subjects` and
+`class_subject_teachers` relationships. The teacher API lives under:
+
+- `GET /auth/teacher/subjects`
+- `GET /auth/teacher/classes?subjectId=...`
+- `GET /auth/teacher/game-questions?subjectId=...`
+- `POST /auth/teacher/game-questions`
+- `POST /auth/teacher/game-questions/:id`
+
 If your old PHP app uses `DB_SERVER=localhost`, that usually means "localhost from the web-hosting server", not from your Windows machine. For local testing you need either:
 
 - the real external MySQL hostname from your hosting panel, with your current IP allowlisted for remote MySQL, or
