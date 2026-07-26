@@ -97,6 +97,7 @@ test('auth responses include the saved hunter-name setup state', { concurrency: 
 });
 
 test('teacher game-question endpoints require a teacher session and expose game questions', { concurrency: false }, async () => {
+  const sentMail = [];
   const gameQuestionStore = {
     async listSubjects(account) {
       assert.equal(account.id, 'teacher_7');
@@ -122,8 +123,27 @@ test('teacher game-question endpoints require a teacher session and expose game 
       assert.equal(account.id, 'teacher_7');
       return { id: 45, subjectId: body.subjectId, prompt: body.prompt, answers: body.answers, correct: body.correct };
     },
+    async createCurriculumRequest(account, body) {
+      assert.equal(account.id, 'teacher_7');
+      assert.equal(body.subjectId, '5');
+      assert.equal(body.title, 'Year 8 networks');
+      assert.equal(body.files.length, 1);
+      assert.equal(body.files[0].originalName, 'organiser.pdf');
+      assert.ok(fs.existsSync(body.files[0].path));
+      return { id: 91, subjectId: 5, subjectName: 'Computer Science', title: body.title, topics: body.topics, syllabus: body.syllabus, notes: body.notes, files: body.files };
+    },
+    async markCurriculumNotification(account, requestId, sent, email) {
+      assert.equal(account.id, 'teacher_7');
+      assert.equal(requestId, 91);
+      assert.equal(sent, true);
+      assert.equal(email, 'asherlevin85@gmail.com');
+    },
   };
-  const f = await fixture({ authOptions: { gameQuestionStore } });
+  const f = await fixture({ authOptions: {
+    gameQuestionStore,
+    env: { SMTP_HOST: 'mail.siteground.test', SMTP_PORT: '465', SMTP_USER: 'notify@test.school', SMTP_PASS: 'secret', CURRICULUM_NOTIFY_TO: 'asherlevin85@gmail.com' },
+    mailTransportFactory: () => ({ async sendMail(message) { sentMail.push(message); return { accepted: [message.to] }; } }),
+  } });
   try {
     const studentSid = await f.auth.issueSession({ id: 'student_9', username: 'learner@example.test', displayName: 'Learner', accountType: 'student', role: 'student' });
     const student = await f.request('/auth/teacher/subjects', { headers: { Authorization: 'Bearer ' + studentSid } });
@@ -153,6 +173,25 @@ test('teacher game-question endpoints require a teacher session and expose game 
     }, { Authorization: 'Bearer ' + teacherSid }));
     assert.equal(created.status, 200);
     assert.equal((await created.json()).question.id, 45);
+
+    const curriculumForm = new FormData();
+    curriculumForm.set('subjectId', '5');
+    curriculumForm.set('title', 'Year 8 networks');
+    curriculumForm.set('topics', 'DNS, routers, packets');
+    curriculumForm.set('syllabus', 'KS3 networks');
+    curriculumForm.set('notes', 'Use short retrieval questions.');
+    curriculumForm.append('files', new Blob(['pdf content'], { type: 'application/pdf' }), 'organiser.pdf');
+    const curriculum = await f.request('/auth/teacher/curriculum-requests', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + teacherSid },
+      body: curriculumForm,
+    });
+    assert.equal(curriculum.status, 200);
+    const curriculumBody = await curriculum.json();
+    assert.equal(curriculumBody.submission.id, 91);
+    assert.equal(curriculumBody.notification.sent, true);
+    assert.equal(sentMail.length, 1);
+    assert.match(sentMail[0].text, /DNS, routers, packets/);
   } finally { await f.close(); }
 });
 

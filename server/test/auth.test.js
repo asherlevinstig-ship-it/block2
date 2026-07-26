@@ -348,6 +348,7 @@ test('MySQL game question store creates the game_question table and teacher-owne
     async execute(sql, params = []) {
       calls.push({ sql, params });
       if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
       if (/FROM subjects/i.test(sql) && /LIMIT 1/i.test(sql)) return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
       if (/^INSERT INTO game_question/i.test(sql)) {
         inserted = { sql, params };
@@ -404,6 +405,7 @@ test('MySQL game question store records Recall attempts for student analytics', 
   const pool = {
     async execute(sql, params = []) {
       if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
       if (/SELECT id, school_id FROM subjects/i.test(sql)) return [[{ id: 5, school_id: 12 }]];
       if (/SELECT id FROM game_question/i.test(sql)) return [[]];
       if (/^INSERT INTO game_question_attempt/i.test(sql)) {

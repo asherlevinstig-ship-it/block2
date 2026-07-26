@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
+const nodemailer = require('nodemailer');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { MySqlGameQuestionStore } = require('./mysql-game-questions');
 const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout } = require('./store');
@@ -28,6 +30,19 @@ const JOB_XP_IDS = [...JOB_IDS].filter(Boolean);
 const cleanAdminId = value => String(value || '').trim().toLowerCase();
 const clampJobXp = value => Math.max(0, Math.min(JOB_XP_MAX, Math.round(Number(value) || 0)));
 const clampAdminInt = (value, min, max) => Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
+const curriculumAllowedMime = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain',
+  'text/csv',
+  'image/png',
+  'image/jpeg',
+]);
 
 function hasOwn(obj, key) {
   return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
@@ -234,8 +249,11 @@ class AuthService {
     this.profileStore = Object.prototype.hasOwnProperty.call(options, 'profileStore') ? options.profileStore : null;
     this.gameQuestionStore = Object.prototype.hasOwnProperty.call(options, 'gameQuestionStore') ? options.gameQuestionStore : null;
     this.env = options.env || process.env;
+    this.curriculumUploadDir = options.curriculumUploadDir || path.join(this.dir, 'curriculum-uploads');
+    this.mailTransportFactory = options.mailTransportFactory || null;
     this.reloadSessionsOnMiss = Object.prototype.hasOwnProperty.call(options, 'reloadSessionsOnMiss') ? options.reloadSessionsOnMiss : !!this.authBackend;
     fs.mkdirSync(this.dir, { recursive: true });
+    fs.mkdirSync(this.curriculumUploadDir, { recursive: true });
     this.load();
     // Expired sessions and rate-limit rows are otherwise only reclaimed lazily on
     // access, so a long-running process accumulates dead entries indefinitely.
@@ -340,6 +358,66 @@ class AuthService {
     if (this.gameQuestionStore) return this.gameQuestionStore;
     this.gameQuestionStore = new MySqlGameQuestionStore({ authBackend: this.authBackend });
     return this.gameQuestionStore;
+  }
+
+  curriculumUploadMiddleware() {
+    const storage = multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, this.curriculumUploadDir),
+      filename: (_req, file, cb) => {
+        const ext = path.extname(String(file.originalname || '')).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 12);
+        cb(null, Date.now().toString(36) + '-' + crypto.randomBytes(8).toString('hex') + ext);
+      },
+    });
+    return multer({
+      storage,
+      limits: { files: 5, fileSize: 15 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (curriculumAllowedMime.has(String(file.mimetype || '').toLowerCase())) return cb(null, true);
+        return cb(Object.assign(new Error('Unsupported file type.'), { status: 400, code: 'file_type' }));
+      },
+    }).array('files', 5);
+  }
+
+  async sendCurriculumNotification(account, submission) {
+    const to = String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com').trim();
+    const host = String(this.env.SMTP_HOST || '').trim();
+    const user = String(this.env.SMTP_USER || '').trim();
+    const pass = String(this.env.SMTP_PASS || '').trim();
+    if (!to || !host || !user || !pass) return { sent: false, to, reason: 'smtp_not_configured' };
+    const port = Number(this.env.SMTP_PORT || 465);
+    const secure = String(this.env.SMTP_SECURE || '').trim()
+      ? !['0', 'false', 'no'].includes(String(this.env.SMTP_SECURE).toLowerCase())
+      : port === 465;
+    const transport = this.mailTransportFactory
+      ? this.mailTransportFactory({ host, port, secure, auth: { user, pass } })
+      : nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+    const files = (submission.files || []).map(file => '- ' + file.originalName + ' (' + Math.ceil((file.size || 0) / 1024) + ' KB)').join('\n') || '- none';
+    await transport.sendMail({
+      from: String(this.env.MAIL_FROM || user),
+      to,
+      subject: '[Blockcraft] Curriculum request: ' + submission.title,
+      text: [
+        'A teacher submitted a curriculum request.',
+        '',
+        'Teacher: ' + String(account.displayName || account.username || account.id || ''),
+        'Email: ' + String(account.username || ''),
+        'Subject: ' + String(submission.subjectName || submission.subjectId || ''),
+        'Title: ' + submission.title,
+        '',
+        'Topics:',
+        submission.topics || '(not supplied)',
+        '',
+        'Syllabus:',
+        submission.syllabus || '(not supplied)',
+        '',
+        'Notes:',
+        submission.notes || '(not supplied)',
+        '',
+        'Uploaded files:',
+        files,
+      ].join('\n'),
+    });
+    return { sent: true, to };
   }
 
   authorizeTeacher(req) {
@@ -892,6 +970,48 @@ class AuthService {
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load teacher analytics.' });
       }
+    });
+    app.post('/auth/teacher/curriculum-requests', (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      this.curriculumUploadMiddleware()(req, res, async err => {
+        if (err) return res.status(err.status || 400).json({ ok: false, code: err.code || 'upload', error: err.message || 'Upload failed.' });
+        const uploaded = (req.files || []).map(file => ({
+          originalName: file.originalname,
+          storedName: file.filename,
+          path: file.path,
+          mimeType: file.mimetype,
+          size: file.size,
+        }));
+        try {
+          const draft = {
+            subjectId: req.body && req.body.subjectId,
+            classId: req.body && req.body.classId,
+            title: req.body && req.body.title,
+            topics: req.body && req.body.topics,
+            syllabus: req.body && req.body.syllabus,
+            notes: req.body && req.body.notes,
+            files: uploaded,
+          };
+          const store = this.getGameQuestionStore();
+          const submission = await store.createCurriculumRequest(account, {
+            ...draft,
+            notificationEmail: String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com'),
+            notificationSent: false,
+          });
+          const notification = await this.sendCurriculumNotification(account, submission)
+            .catch(e => ({ sent: false, to: String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com'), reason: e && e.message || 'mail_failed' }));
+          if (typeof store.markCurriculumNotification === 'function') {
+            await store.markCurriculumNotification(account, submission.id, notification.sent, notification.to).catch(() => {});
+          }
+          submission.notificationSent = notification.sent;
+          submission.notificationEmail = notification.to;
+          res.json({ ok: true, submission, notification });
+        } catch (e) {
+          await Promise.all(uploaded.map(file => fs.promises.unlink(file.path).catch(() => {})));
+          res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not submit curriculum request.' });
+        }
+      });
     });
     app.post('/auth/teacher/game-questions', async (req, res) => {
       const account = this.authorizeTeacher(req);

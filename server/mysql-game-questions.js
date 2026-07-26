@@ -98,6 +98,25 @@ class MySqlGameQuestionStore {
       KEY idx_gqa_question (question_id),
       KEY idx_gqa_class (class_id, subject_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS teacher_curriculum_request (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      school_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      teacher_id INT UNSIGNED NOT NULL,
+      class_id INT UNSIGNED NULL,
+      title VARCHAR(160) NOT NULL DEFAULT '',
+      topics TEXT NOT NULL,
+      syllabus TEXT NOT NULL,
+      notes TEXT NOT NULL,
+      files_json LONGTEXT NOT NULL,
+      notification_email VARCHAR(255) NOT NULL DEFAULT '',
+      notification_sent TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_tcr_subject_created (subject_id, created_at),
+      KEY idx_tcr_teacher_created (teacher_id, created_at),
+      KEY idx_tcr_school_created (school_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     this.ready = true;
   }
 
@@ -280,6 +299,73 @@ class MySqlGameQuestionStore {
       [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, existing.id],
     );
     return this.getQuestion(account, existing.id);
+  }
+
+  async createCurriculumRequest(account, input = {}) {
+    await this.ensureSchema();
+    const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
+    const { teacherId, schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
+    const title = cleanText(input.title, 160);
+    const topics = cleanText(input.topics, 5000);
+    const syllabus = cleanText(input.syllabus, 5000);
+    const notes = cleanText(input.notes, 5000);
+    if (!title || title.length < 3) throw Object.assign(new Error('Add a short title for the curriculum request.'), { status: 400, code: 'title' });
+    if (!topics && !syllabus && !notes && !(Array.isArray(input.files) && input.files.length)) {
+      throw Object.assign(new Error('Add topics, syllabus notes, or at least one uploaded file.'), { status: 400, code: 'content' });
+    }
+    const files = Array.isArray(input.files) ? input.files.map(file => ({
+      originalName: cleanText(file.originalName, 255),
+      storedName: cleanText(file.storedName, 255),
+      path: cleanText(file.path, 500),
+      mimeType: cleanText(file.mimeType, 120),
+      size: clampInt(file.size, 0, 50 * 1024 * 1024),
+    })).filter(file => file.storedName && file.path) : [];
+    const classId = clampInt(input.classId || input.class_id, 0, 2147483647);
+    const notificationEmail = cleanText(input.notificationEmail, 255);
+    const [result] = await this.getPool().execute(
+      `INSERT INTO teacher_curriculum_request
+       (school_id, subject_id, teacher_id, class_id, title, topics, syllabus, notes, files_json, notification_email, notification_sent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        subject.school_id == null ? (schoolId || null) : subject.school_id,
+        subjectId,
+        teacherId,
+        classId || null,
+        title,
+        topics,
+        syllabus,
+        notes,
+        JSON.stringify(files),
+        notificationEmail,
+        input.notificationSent ? 1 : 0,
+      ],
+    );
+    return {
+      id: Number(result.insertId) || 0,
+      subjectId,
+      subjectName: String(subject.name || ''),
+      teacherId,
+      classId: classId || null,
+      title,
+      topics,
+      syllabus,
+      notes,
+      files,
+      notificationEmail,
+      notificationSent: !!input.notificationSent,
+    };
+  }
+
+  async markCurriculumNotification(account, requestId, sent, email = '') {
+    await this.ensureSchema();
+    const { teacherId } = this.teacherIds(account);
+    const id = clampInt(requestId, 1, Number.MAX_SAFE_INTEGER);
+    await this.getPool().execute(
+      `UPDATE teacher_curriculum_request
+       SET notification_sent = ?, notification_email = ?
+       WHERE id = ? AND teacher_id = ?`,
+      [sent ? 1 : 0, cleanText(email, 255), id, teacherId],
+    );
   }
 
   async recordRecallAttempt(account, input = {}) {

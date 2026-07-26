@@ -45,6 +45,14 @@ const emptyForm = () => ({
   active: true,
 });
 
+const emptyCurriculum = () => ({
+  title: '',
+  topics: '',
+  syllabus: '',
+  notes: '',
+  files: [],
+});
+
 function cleanQuestion(question) {
   return {
     ...question,
@@ -68,6 +76,7 @@ createApp({
       classId: '',
       status: '',
       analyticsDays: 30,
+      curriculum: emptyCurriculum(),
       search: '',
       view: 'overview',
       loading: true,
@@ -97,6 +106,7 @@ createApp({
       { id: 'questions', title: 'Questions', value: stats.value.total, detail: stats.value.draft + ' draft / ' + stats.value.approved + ' approved' },
       { id: 'students', title: 'Student Analysis', value: studentRows.value.length, detail: state.analytics.totals.accuracy + '% average accuracy' },
       { id: 'question-analysis', title: 'Question Analysis', value: questionRows.value.length, detail: state.analytics.totals.attempts + ' attempts' },
+      { id: 'curriculum', title: 'Curriculum Requests', value: 'Upload', detail: 'Send topics, syllabus, and organisers' },
       { id: 'review', title: 'Review Queue', value: stats.value.reviewed, detail: 'Teacher-reviewed game questions' },
     ]);
     const studentChart = ref(null);
@@ -139,7 +149,7 @@ createApp({
     }
 
     function openView(view) {
-      state.view = ['questions', 'students', 'question-analysis'].includes(view) ? view : 'overview';
+      state.view = ['questions', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
       setNotice('');
     }
 
@@ -269,6 +279,40 @@ createApp({
       }
     }
 
+    function handleCurriculumFiles(event) {
+      state.curriculum.files = Array.from(event && event.target && event.target.files || []).slice(0, 5);
+    }
+
+    function clearCurriculumRequest() {
+      state.curriculum = emptyCurriculum();
+      const fileInput = document.getElementById('teacherCurriculumFiles');
+      if (fileInput) fileInput.value = '';
+    }
+
+    async function submitCurriculumRequest() {
+      state.saving = true;
+      try {
+        if (!state.subjectId) throw new Error('Choose a subject first.');
+        const form = new FormData();
+        form.set('subjectId', state.subjectId);
+        form.set('classId', state.classId || '');
+        form.set('title', state.curriculum.title);
+        form.set('topics', state.curriculum.topics);
+        form.set('syllabus', state.curriculum.syllabus);
+        form.set('notes', state.curriculum.notes);
+        for (const file of state.curriculum.files) form.append('files', file);
+        const data = await requestJson('/auth/teacher/curriculum-requests', { method: 'POST', body: form });
+        clearCurriculumRequest();
+        setNotice(data.notification && data.notification.sent
+          ? 'Curriculum request submitted and email notification sent.'
+          : 'Curriculum request submitted. Email notification is not configured on the server yet.');
+      } catch (e) {
+        setError(e.message || 'Could not submit curriculum request.');
+      } finally {
+        state.saving = false;
+      }
+    }
+
     function destroyChart(key) {
       if (chartRefs[key]) {
         chartRefs[key].destroy();
@@ -330,6 +374,9 @@ createApp({
       changeStatus,
       openView,
       editQuestionFromAnalysis,
+      handleCurriculumFiles,
+      clearCurriculumRequest,
+      submitCurriculumRequest,
       fillForm,
       newQuestion,
       saveQuestion,
@@ -348,6 +395,7 @@ createApp({
           <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')">Questions</button>
           <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')">Student Analysis</button>
           <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')">Question Analysis</button>
+          <button type="button" :class="{ active: state.view === 'curriculum' }" @click="openView('curriculum')">Curriculum Requests</button>
         </nav>
         <label>
           Subject
@@ -391,7 +439,7 @@ createApp({
         <header class="teacher-vue-topbar">
           <div>
             <span>{{ selectedSubject ? selectedSubject.name : 'Teacher workspace' }}</span>
-            <h1>{{ state.view === 'questions' ? 'Questions' : state.view === 'students' ? 'Student Analysis' : state.view === 'question-analysis' ? 'Question Analysis' : 'Dashboard' }}</h1>
+            <h1>{{ state.view === 'questions' ? 'Questions' : state.view === 'students' ? 'Student Analysis' : state.view === 'question-analysis' ? 'Question Analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Dashboard' }}</h1>
           </div>
           <button type="button" @click="refreshAll" :disabled="state.loading">Refresh</button>
         </header>
@@ -472,6 +520,37 @@ createApp({
             </button>
             <div class="teacher-vue-empty" v-if="!questionRows.length">No question attempt data for this subject yet.</div>
           </div>
+        </section>
+
+        <section class="teacher-vue-curriculum" v-else-if="state.view === 'curriculum'">
+          <form class="teacher-vue-editor" @submit.prevent="submitCurriculumRequest">
+            <div class="teacher-vue-editor-head">
+              <div>
+                <span>Content request</span>
+                <h2>Send topics and organisers</h2>
+              </div>
+            </div>
+            <div class="teacher-vue-form-grid">
+              <label>Request title<input v-model="state.curriculum.title" maxlength="160" placeholder="Year 8 networks revision"></label>
+              <label>For class<select v-model="state.classId">
+                <option value="">All classes</option>
+                <option v-for="row in state.classes" :key="row.id" :value="String(row.id)">
+                  {{ row.joinCode ? row.name + ' - ' + row.joinCode : row.name }}
+                </option>
+              </select></label>
+            </div>
+            <label class="teacher-vue-wide">Topics to cover<textarea v-model="state.curriculum.topics" maxlength="5000" rows="5" placeholder="Algorithms: decomposition, abstraction, flowcharts..."></textarea></label>
+            <label class="teacher-vue-wide">Syllabus or exam board<textarea v-model="state.curriculum.syllabus" maxlength="5000" rows="5" placeholder="AQA GCSE Computer Science 8525, section 3.1..."></textarea></label>
+            <label class="teacher-vue-wide">Notes<textarea v-model="state.curriculum.notes" maxlength="5000" rows="4" placeholder="Common misconceptions, class priorities, preferred question style..."></textarea></label>
+            <label class="teacher-vue-wide">Knowledge organisers and files<input id="teacherCurriculumFiles" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg" @change="handleCurriculumFiles"></label>
+            <div class="teacher-vue-file-list" v-if="state.curriculum.files.length">
+              <span v-for="file in state.curriculum.files" :key="file.name + file.size">{{ file.name }}</span>
+            </div>
+            <div class="teacher-vue-actions">
+              <button type="button" @click="clearCurriculumRequest">Clear</button>
+              <button type="submit" class="teacher-vue-primary" :disabled="state.saving">Submit request</button>
+            </div>
+          </form>
         </section>
 
         <section class="teacher-vue-workspace" v-else>
