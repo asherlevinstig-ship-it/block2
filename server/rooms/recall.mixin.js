@@ -2,6 +2,7 @@ const RECALL=require('../../shared/recall-system');
 const { clampN }=require('./constants');
 const AI=require('../ai');
 const W=require('../world');
+const { getAuthService }=require('../auth');
 
 class RecallMixin{
   initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
@@ -89,8 +90,31 @@ class RecallMixin{
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
     const source=message.source==='lectern'?'lectern':'';
-    this.recallChallenges.set(client.sessionId,{id,questionId:q.id,topic:q.topic,difficulty:q.difficulty,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,ruinId,source});
+    this.recallChallenges.set(client.sessionId,{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source});
     client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
+  }
+  recordRecallAnalytics(client,challenge,answerIndex,correct,now=Date.now()){
+    const account=client&&client._account;
+    if(!account||String(account.accountType||account.role||'').toLowerCase()==='teacher')return;
+    let store=null;
+    try{const auth=getAuthService();if(!auth||!auth.authBackend)return;store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return;}
+    if(!store||typeof store.recordRecallAttempt!=='function')return;
+    const durationMs=Math.max(0,now-(challenge.startedAt||now));
+    Promise.resolve(store.recordRecallAttempt(account,{
+      subject:challenge.subject,
+      stage:challenge.stage,
+      topic:challenge.topic,
+      difficulty:challenge.difficulty,
+      spec:challenge.spec||challenge.questionId,
+      prompt:challenge.prompt,
+      answers:challenge.answers,
+      correctIndex:challenge.correct,
+      explanation:challenge.explanation,
+      answerIndex,
+      correct,
+      durationMs,
+      source:challenge.source==='lectern'?'lectern':'recall',
+    })).catch(e=>{if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] recall attempt log failed:',e&&e.message||e);});
   }
   handleRecallAnswer(client,message){
     const sid=client&&client.sessionId,challenge=sid&&this.recallChallenges.get(sid),p=sid&&this.state.players.get(sid),now=Date.now();
@@ -106,6 +130,7 @@ class RecallMixin{
       review=RECALL.reviewQuestion(rec.prof.recallMastery||{},question,correct,now);rec.prof.recallMastery=review.history;this.dirtyPlayers.add(rec.token);
       mastery=RECALL.masterySummary(review.history,rec.prof.recallSubject||'English');
     }
+    this.recordRecallAnalytics(client,challenge,index,correct,now);
     if(correct){
       const st=this.regenAbilityState(client),restore=Math.max(1,Math.ceil(st.maxMp*RECALL.RESTORE_FRACTION));
       st.mp=Math.min(st.maxMp,st.mp+restore);this.sendAbilitySync(client,st);

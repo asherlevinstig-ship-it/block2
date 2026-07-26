@@ -282,6 +282,77 @@ class MySqlGameQuestionStore {
     return this.getQuestion(account, existing.id);
   }
 
+  async recordRecallAttempt(account, input = {}) {
+    await this.ensureSchema();
+    const studentId = sourceIdFromAccount(account, 'student');
+    if (!studentId) return { recorded: false, reason: 'student' };
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const subjectName = cleanText(input.subject, 96);
+    if (!subjectName) return { recorded: false, reason: 'subject' };
+    const pool = this.getPool();
+    const [subjectRows] = await pool.execute(
+      `SELECT id, school_id FROM subjects
+       WHERE is_active = 1
+         AND (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?))
+         AND (school_id IS NULL OR ? = 0 OR school_id = ?)
+       ORDER BY CASE WHEN school_id = ? THEN 0 ELSE 1 END, id ASC
+       LIMIT 1`,
+      [subjectName, subjectName, schoolId, schoolId, schoolId],
+    );
+    const subject = subjectRows && subjectRows[0];
+    if (!subject) return { recorded: false, reason: 'subject' };
+    const subjectId = Number(subject.id) || 0;
+    const prompt = cleanText(input.prompt, 500);
+    const answers = Array.isArray(input.answers) ? input.answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
+    if (!subjectId || prompt.length < 3 || answers.length !== 4) return { recorded: false, reason: 'question' };
+    const [questionRows] = await pool.execute(
+      `SELECT id FROM game_question
+       WHERE subject_id = ? AND prompt = ?
+       ORDER BY id ASC
+       LIMIT 1`,
+      [subjectId, prompt],
+    );
+    let questionId = questionRows && questionRows[0] && Number(questionRows[0].id) || 0;
+    if (!questionId) {
+      const [result] = await pool.execute(
+        `INSERT INTO game_question
+         (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active)
+         VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, 'approved', 1)`,
+        [
+          subject.school_id == null ? (schoolId || null) : subject.school_id,
+          subjectId,
+          cleanText(input.topic, 96),
+          cleanText(input.stage, 32),
+          clampInt(input.difficulty || 1, 1, 3),
+          cleanText(input.spec || 'recall-bank', 96),
+          prompt,
+          JSON.stringify(answers),
+          clampInt(input.correctIndex, 0, 3),
+          cleanText(input.explanation || 'Recorded from a Recall question.', 800),
+        ],
+      );
+      questionId = Number(result && result.insertId) || 0;
+    }
+    if (!questionId) return { recorded: false, reason: 'question' };
+    await pool.execute(
+      `INSERT INTO game_question_attempt
+       (school_id, subject_id, class_id, question_id, student_id, account_id, answer_index, correct, duration_ms, source)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        subject.school_id == null ? (schoolId || null) : subject.school_id,
+        subjectId,
+        questionId,
+        studentId,
+        String(account.id || ''),
+        clampInt(input.answerIndex, 0, 3),
+        input.correct ? 1 : 0,
+        clampInt(input.durationMs, 0, 60 * 60 * 1000),
+        cleanText(input.source || 'recall', 32) || 'recall',
+      ],
+    );
+    return { recorded: true, subjectId, questionId, studentId };
+  }
+
   async analytics(account, query = {}) {
     await this.ensureSchema();
     const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);

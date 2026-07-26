@@ -1513,6 +1513,8 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(room,/restoreRecallStamina\(client,prof\)/);
   assert.match(room,/stamina:stamina\.restore,sp:stamina\.sp,maxSp:stamina\.maxSp/);
   assert.match(room,/staminaFraction:RECALL\.RESTORE_FRACTION/);
+  assert.match(room,/recordRecallAnalytics/);
+  assert.match(room,/recordRecallAttempt/);
   assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
   assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
   assert.match(recall,/renderBars\(\);setTimeout\(clearRecall/);

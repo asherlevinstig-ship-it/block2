@@ -399,6 +399,54 @@ test('MySQL game question store creates the game_question table and teacher-owne
   assert.equal(inserted.params[2], 7);
 });
 
+test('MySQL game question store records Recall attempts for student analytics', async () => {
+  const inserts = [];
+  const pool = {
+    async execute(sql, params = []) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT id, school_id FROM subjects/i.test(sql)) return [[{ id: 5, school_id: 12 }]];
+      if (/SELECT id FROM game_question/i.test(sql)) return [[]];
+      if (/^INSERT INTO game_question_attempt/i.test(sql)) {
+        inserts.push({ kind: 'attempt', sql, params });
+        return [{ insertId: 88 }];
+      }
+      if (/^INSERT INTO game_question/i.test(sql)) {
+        inserts.push({ kind: 'question', sql, params });
+        return [{ insertId: 44 }];
+      }
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const result = await store.recordRecallAttempt(
+    { id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' },
+    {
+      subject: 'Computer Science',
+      stage: 'KS3',
+      topic: 'Algorithms',
+      difficulty: 1,
+      spec: 'DfE-KS3-algorithms',
+      prompt: 'What is an algorithm?',
+      answers: ['Steps', 'Code', 'A wire', 'A password'],
+      correctIndex: 0,
+      answerIndex: 1,
+      correct: false,
+      durationMs: 4200,
+      source: 'recall',
+    },
+  );
+  assert.equal(result.recorded, true);
+  assert.equal(result.questionId, 44);
+  assert.equal(inserts[0].kind, 'question');
+  assert.equal(inserts[0].params[0], 12);
+  assert.equal(inserts[0].params[1], 5);
+  assert.equal(inserts[1].kind, 'attempt');
+  assert.equal(inserts[1].params[2], 44);
+  assert.equal(inserts[1].params[3], 9);
+  assert.equal(inserts[1].params[5], 1);
+  assert.equal(inserts[1].params[6], 0);
+});
+
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {
   const store = new MySqlGameQuestionStore({ pool: { async execute() { return [[]]; } } });
   await assert.rejects(

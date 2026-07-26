@@ -909,6 +909,7 @@ class GameRoom extends Room {
     this.monitorClient(client);
     this.initGameInterestView(client);
     client.send('shard', { id: this.shardId || 'main', maxClients: this.maxClients });
+    client._account = auth && typeof auth === 'object' ? { ...auth } : null;
     client._accountRole = String(auth && auth.role || '').toLowerCase();
     client._accountType = String(auth && auth.accountType || '').toLowerCase();
     const token = cleanToken(auth && auth.id);
