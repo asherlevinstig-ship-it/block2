@@ -700,7 +700,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /Add four unique answer choices/);
   const serverAuthSource = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
   assert.match(serverAuthSource, /require\('multer'\)/);
-  assert.match(serverAuthSource, /require\('nodemailer'\)/);
+  assert.match(serverAuthSource, /require\('resend'\)/);
+  assert.doesNotMatch(serverAuthSource, /SMTP_HOST/);
   assert.match(serverAuthSource, /\/auth\/teacher\/curriculum-requests/);
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);

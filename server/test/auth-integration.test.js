@@ -141,8 +141,8 @@ test('teacher game-question endpoints require a teacher session and expose game 
   };
   const f = await fixture({ authOptions: {
     gameQuestionStore,
-    env: { SMTP_HOST: 'mail.siteground.test', SMTP_PORT: '465', SMTP_USER: 'notify@test.school', SMTP_PASS: 'secret', CURRICULUM_NOTIFY_TO: 'asherlevin85@gmail.com' },
-    mailTransportFactory: () => ({ async sendMail(message) { sentMail.push(message); return { accepted: [message.to] }; } }),
+    env: { RESEND_API_KEY: 're_test_key', MAIL_FROM: 'Blockcraft <curriculum@blockcraft.test>', CURRICULUM_NOTIFY_TO: 'asherlevin85@gmail.com' },
+    emailProviderFactory: () => ({ emails: { async send(message) { sentMail.push(message); return { data: { id: 'email_1' } }; } } }),
   } });
   try {
     const studentSid = await f.auth.issueSession({ id: 'student_9', username: 'learner@example.test', displayName: 'Learner', accountType: 'student', role: 'student' });

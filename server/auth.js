@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { MySqlGameQuestionStore } = require('./mysql-game-questions');
 const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout } = require('./store');
@@ -250,7 +250,7 @@ class AuthService {
     this.gameQuestionStore = Object.prototype.hasOwnProperty.call(options, 'gameQuestionStore') ? options.gameQuestionStore : null;
     this.env = options.env || process.env;
     this.curriculumUploadDir = options.curriculumUploadDir || path.join(this.dir, 'curriculum-uploads');
-    this.mailTransportFactory = options.mailTransportFactory || null;
+    this.emailProviderFactory = options.emailProviderFactory || null;
     this.reloadSessionsOnMiss = Object.prototype.hasOwnProperty.call(options, 'reloadSessionsOnMiss') ? options.reloadSessionsOnMiss : !!this.authBackend;
     fs.mkdirSync(this.dir, { recursive: true });
     fs.mkdirSync(this.curriculumUploadDir, { recursive: true });
@@ -380,20 +380,13 @@ class AuthService {
 
   async sendCurriculumNotification(account, submission) {
     const to = String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com').trim();
-    const host = String(this.env.SMTP_HOST || '').trim();
-    const user = String(this.env.SMTP_USER || '').trim();
-    const pass = String(this.env.SMTP_PASS || '').trim();
-    if (!to || !host || !user || !pass) return { sent: false, to, reason: 'smtp_not_configured' };
-    const port = Number(this.env.SMTP_PORT || 465);
-    const secure = String(this.env.SMTP_SECURE || '').trim()
-      ? !['0', 'false', 'no'].includes(String(this.env.SMTP_SECURE).toLowerCase())
-      : port === 465;
-    const transport = this.mailTransportFactory
-      ? this.mailTransportFactory({ host, port, secure, auth: { user, pass } })
-      : nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+    const apiKey = String(this.env.RESEND_API_KEY || '').trim();
+    const from = String(this.env.MAIL_FROM || '').trim();
+    if (!to || !apiKey || !from) return { sent: false, to, reason: 'email_provider_not_configured' };
+    const provider = this.emailProviderFactory ? this.emailProviderFactory({ apiKey }) : new Resend(apiKey);
     const files = (submission.files || []).map(file => '- ' + file.originalName + ' (' + Math.ceil((file.size || 0) / 1024) + ' KB)').join('\n') || '- none';
-    await transport.sendMail({
-      from: String(this.env.MAIL_FROM || user),
+    await provider.emails.send({
+      from,
       to,
       subject: '[Blockcraft] Curriculum request: ' + submission.title,
       text: [
