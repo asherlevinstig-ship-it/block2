@@ -535,6 +535,82 @@ test('MySQL game question store counts Recall attempts toward active homework', 
   assert.equal(result.homeworkObjectives[0].questionCount, 5);
 });
 
+test('MySQL game question store credits active homework when tutorial Recall subject differs', async () => {
+  const progressWrites = [];
+  let homeworkQueries = 0;
+  const pool = {
+    async execute(sql, params = []) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT id, school_id FROM subjects/i.test(sql)) return [[{ id: 8, school_id: 12 }]];
+      if (/SELECT id FROM game_question/i.test(sql)) return [[{ id: 55 }]];
+      if (/SELECT class_id FROM students/i.test(sql)) return [[{ class_id: 3 }]];
+      if (/SELECT class_id FROM student_classes/i.test(sql)) return [[]];
+      if (/SELECT class_id FROM class_students/i.test(sql)) return [[]];
+      if (/^INSERT INTO game_question_attempt/i.test(sql)) return [{ insertId: 89 }];
+      if (/^INSERT INTO game_homework_progress/i.test(sql)) {
+        progressWrites.push({ sql, params });
+        return [{ affectedRows: 1 }];
+      }
+      if (/FROM game_homework_progress/i.test(sql)) return [[{
+        homework_id: 12,
+        period_key: 'day:2026-07-27',
+        answered_count: 1,
+        completed_at: null,
+        last_answered_at: null,
+      }]];
+      if (/FROM game_homework gh/i.test(sql)) {
+        homeworkQueries++;
+        const isSubjectFiltered = params.includes(8);
+        if (isSubjectFiltered) return [[]];
+        return [[{
+          id: 12,
+          school_id: 12,
+          subject_id: 5,
+          subject_name: 'Computer Science',
+          subject_code: 'CS',
+          teacher_id: 7,
+          class_id: 3,
+          class_name: '8A',
+          title: 'Binary practice',
+          cadence: 'daily',
+          due_date: null,
+          weekly_day: null,
+          question_count: 5,
+          status: 'live',
+          notes: '',
+        }]];
+      }
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const result = await store.recordRecallAttempt(
+    { id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' },
+    {
+      subject: 'English',
+      stage: 'KS3',
+      topic: 'Reading',
+      difficulty: 1,
+      prompt: 'What does infer mean?',
+      answers: ['Work out from clues', 'Copy exactly', 'Spell aloud', 'Draw a map'],
+      correctIndex: 0,
+      answerIndex: 0,
+      correct: true,
+      durationMs: 1800,
+      source: 'tutorial',
+    },
+  );
+  assert.equal(result.recorded, true);
+  assert.equal(homeworkQueries >= 3, true);
+  assert.equal(progressWrites.length, 1);
+  assert.equal(progressWrites[0].params[0], 12);
+  assert.equal(progressWrites[0].params[2], 5);
+  assert.equal(result.homeworkObjectives[0].answeredCount, 1);
+});
+
 test('MySQL game question store creates scheduled homework for teacher classes', async () => {
   let inserted = null;
   const pool = {

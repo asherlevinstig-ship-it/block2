@@ -723,9 +723,14 @@ class MySqlGameQuestionStore {
       .sort((a, b) => Number(a.completed) - Number(b.completed) || a.title.localeCompare(b.title));
   }
 
-  async recordHomeworkProgress(account, subjectId) {
+  async recordHomeworkProgress(account, subjectId, options = {}) {
     const now = new Date();
-    const { studentId, rows } = await this.activeHomeworkRowsForStudent(account, subjectId);
+    const { studentId, rows: subjectRows } = await this.activeHomeworkRowsForStudent(account, subjectId);
+    let rows = subjectRows;
+    if (studentId && !rows.length && options.fallbackToAnyActive) {
+      const fallback = await this.activeHomeworkRowsForStudent(account, 0);
+      rows = (fallback.rows || []).slice(0, 1);
+    }
     if (!studentId || !rows.length) return [];
     const pool = this.getPool();
     for (const row of rows) {
@@ -757,7 +762,7 @@ class MySqlGameQuestionStore {
         ],
       );
     }
-    return this.homeworkProgressForStudent(account, { subjectId });
+    return this.homeworkProgressForStudent(account, {});
   }
 
   async createCurriculumRequest(account, input = {}) {
@@ -895,7 +900,7 @@ class MySqlGameQuestionStore {
         cleanText(input.source || 'recall', 32) || 'recall',
       ],
     );
-    const homeworkObjectives = await this.recordHomeworkProgress(account, subjectId);
+    const homeworkObjectives = await this.recordHomeworkProgress(account, subjectId, { fallbackToAnyActive: true });
     return { recorded: true, subjectId, questionId, studentId, homeworkObjectives };
   }
 
