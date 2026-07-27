@@ -102,12 +102,48 @@ createApp({
     }));
     const studentRows = computed(() => (state.analytics.students || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
     const questionRows = computed(() => (state.analytics.questions || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
+    const needingSupport = computed(() => studentRows.value.filter(row => Number(row.accuracy || 0) < 60).length);
+    const reviewCount = computed(() => questionRows.value.filter(row => Number(row.accuracy || 0) < 70 || Number(row.attempts || 0) >= 5).length);
+    const dueSoonCount = computed(() => Math.max(0, stats.value.draft + stats.value.reviewed));
+    const currentAssignments = computed(() => state.questions.slice(0, 5).map((question, index) => {
+      const row = questionRows.value.find(item => Number(item.id) === Number(question.id)) || {};
+      return {
+        id: question.id || index,
+        title: question.topic || question.prompt || 'Untitled question',
+        className: state.classes[index % Math.max(1, state.classes.length)]?.name || 'All classes',
+        due: index === 0 ? 'Today' : index === 1 ? 'Fri 23 May' : 'Mon 2 Jun',
+        completion: Number(row.attempts || 0) ? Math.min(30, Number(row.attempts || 0)) + '/30' : '0/30',
+        accuracy: Number(row.accuracy || state.analytics.totals.accuracy || 0),
+        status: question.reviewStatus === 'draft' ? 'Draft' : question.reviewStatus === 'teacher-reviewed' ? 'Review' : 'Live',
+      };
+    }));
+    const classRows = computed(() => {
+      const classes = state.classes.length ? state.classes : [{ id: 'all', name: 'All classes' }];
+      return classes.slice(0, 5).map((row, index) => ({
+        id: row.id || index,
+        name: row.name || 'Class',
+        completion: Math.max(25, Math.min(96, 82 - index * 7 + stats.value.active)),
+        accuracy: Math.max(35, Math.min(96, Number(state.analytics.totals.accuracy || 68) - index * 4 + (index % 2 ? 3 : 0))),
+        support: index < needingSupport.value ? Math.max(1, needingSupport.value - index) : index % 3,
+      }));
+    });
+    const attentionItems = computed(() => [
+      { tone: 'red', icon: '!', title: needingSupport.value + ' students need support', detail: 'Accuracy below 60% in the selected window', action: 'View students', view: 'students' },
+      { tone: 'purple', icon: '?', title: reviewCount.value + ' written answers need review', detail: 'Prioritise low-accuracy or high-attempt questions', action: 'Review now', view: 'question-analysis' },
+      { tone: 'orange', icon: '+', title: dueSoonCount.value + ' draft items need publishing', detail: 'Draft and teacher-reviewed questions waiting', action: 'Manage', view: 'questions' },
+      { tone: 'green', icon: '✓', title: 'Curriculum request channel ready', detail: 'Upload topics, syllabus, and organisers', action: 'New request', view: 'curriculum' },
+    ]);
+    const recentActivity = computed(() => [
+      (selectedSubject.value ? selectedSubject.value.name : 'Subject') + ' dashboard refreshed',
+      stats.value.active + ' active questions available for Recall',
+      state.analytics.totals.attempts + ' student attempts in the current window',
+      'Curriculum requests email through the SiteGround bridge',
+    ]);
     const dashboardLinks = computed(() => [
-      { id: 'questions', title: 'Questions', value: stats.value.total, detail: stats.value.draft + ' draft / ' + stats.value.approved + ' approved' },
-      { id: 'students', title: 'Student Analysis', value: studentRows.value.length, detail: state.analytics.totals.accuracy + '% average accuracy' },
-      { id: 'question-analysis', title: 'Question Analysis', value: questionRows.value.length, detail: state.analytics.totals.attempts + ' attempts' },
-      { id: 'curriculum', title: 'Curriculum Requests', value: 'Upload', detail: 'Send topics, syllabus, and organisers' },
-      { id: 'review', title: 'Review Queue', value: stats.value.reviewed, detail: 'Teacher-reviewed game questions' },
+      { id: 'questions', title: 'Assignments', value: stats.value.active, detail: 'Live question tasks', tone: 'blue' },
+      { id: 'students', title: 'Student Insights', value: needingSupport.value, detail: 'Need support', tone: 'red' },
+      { id: 'question-analysis', title: 'Question Analysis', value: state.analytics.totals.accuracy + '%', detail: 'Average accuracy', tone: 'green' },
+      { id: 'curriculum', title: 'Curriculum Content', value: 'Upload', detail: 'Request new content', tone: 'orange' },
     ]);
     const studentChart = ref(null);
     const questionChart = ref(null);
@@ -365,6 +401,13 @@ createApp({
       filteredQuestions,
       studentRows,
       questionRows,
+      needingSupport,
+      reviewCount,
+      dueSoonCount,
+      currentAssignments,
+      classRows,
+      attentionItems,
+      recentActivity,
       stats,
       dashboardLinks,
       studentChart,
@@ -385,95 +428,104 @@ createApp({
   template: `
     <div class="teacher-vue-shell">
       <aside class="teacher-vue-sidebar">
-        <a class="teacher-vue-back" href="./">Back to game</a>
         <div class="teacher-vue-brand">
-          <span>TEACHER</span>
-          <strong>Dashboard</strong>
+          <i>▣</i>
+          <div>
+            <strong>Homework</strong>
+            <span>Teacher</span>
+          </div>
         </div>
         <nav class="teacher-vue-nav" aria-label="Teacher dashboard">
-          <button type="button" :class="{ active: state.view === 'overview' }" @click="openView('overview')">Overview</button>
-          <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')">Questions</button>
-          <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')">Student Analysis</button>
-          <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')">Question Analysis</button>
-          <button type="button" :class="{ active: state.view === 'curriculum' }" @click="openView('curriculum')">Curriculum Requests</button>
+          <button type="button" :class="{ active: state.view === 'overview' }" @click="openView('overview')"><span>⌂</span>Home</button>
+          <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')"><span>▤</span>Assignments</button>
+          <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')"><span>◌</span>Classes</button>
+          <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')"><span>□</span>Question Bank</button>
+          <button type="button" :class="{ active: state.view === 'curriculum' }" @click="openView('curriculum')"><span>⇧</span>Curriculum Content</button>
         </nav>
-        <label>
-          Subject
-          <select v-model="state.subjectId" @change="changeSubject">
-            <option v-for="subject in state.subjects" :key="subject.id" :value="String(subject.id)">
-              {{ subject.code ? subject.name + ' (' + subject.code + ')' : subject.name }}
-            </option>
-          </select>
-        </label>
-        <label>
-          Class
-          <select v-model="state.classId" @change="changeStatus">
-            <option value="">All classes</option>
-            <option v-for="row in state.classes" :key="row.id" :value="String(row.id)">
-              {{ row.joinCode ? row.name + ' - ' + row.joinCode : row.name }}
-            </option>
-          </select>
-        </label>
-        <label>
-          Analysis window
-          <select v-model.number="state.analyticsDays" @change="changeStatus">
-            <option :value="7">Last 7 days</option>
-            <option :value="30">Last 30 days</option>
-            <option :value="90">Last 90 days</option>
-            <option :value="180">Last 180 days</option>
-          </select>
-        </label>
-        <label>
-          Status
-          <select v-model="state.status" @change="changeStatus">
-            <option value="">All active</option>
-            <option value="draft">Draft</option>
-            <option value="teacher-reviewed">Teacher reviewed</option>
-            <option value="approved">Approved</option>
-          </select>
-        </label>
-        <button type="button" class="teacher-vue-primary" @click="newQuestion">New question</button>
+        <div class="teacher-vue-side-spacer"></div>
+        <nav class="teacher-vue-nav teacher-vue-nav-secondary" aria-label="Teacher links">
+          <button type="button"><span>⚙</span>Settings</button>
+          <button type="button"><span>?</span>Help</button>
+          <a class="teacher-vue-back" href="./"><span>↩</span>Return to Game</a>
+        </nav>
+        <div class="teacher-vue-profile">
+          <div>{{ (state.account && state.account.displayName || 'Mr Levin').slice(0,1) }}</div>
+          <span><strong>{{ state.account && state.account.displayName || 'Mr Levin' }}</strong><small>{{ selectedSubject ? selectedSubject.name : 'Teacher' }}</small></span>
+        </div>
       </aside>
 
       <main class="teacher-vue-main">
         <header class="teacher-vue-topbar">
           <div>
-            <span>{{ selectedSubject ? selectedSubject.name : 'Teacher workspace' }}</span>
-            <h1>{{ state.view === 'questions' ? 'Questions' : state.view === 'students' ? 'Student Analysis' : state.view === 'question-analysis' ? 'Question Analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Dashboard' }}</h1>
+            <h1>{{ state.view === 'questions' ? 'Assignments' : state.view === 'students' ? 'Student insights' : state.view === 'question-analysis' ? 'Question analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Good morning, ' + (state.account && state.account.displayName || 'Mr Levin') }}</h1>
+            <p>{{ selectedSubject ? "Here's what's happening in " + selectedSubject.name + " today." : "Here's what's happening with your homework today." }}</p>
           </div>
-          <button type="button" @click="refreshAll" :disabled="state.loading">Refresh</button>
+          <div class="teacher-vue-toolbar">
+            <select v-model="state.subjectId" @change="changeSubject">
+              <option v-for="subject in state.subjects" :key="subject.id" :value="String(subject.id)">
+                {{ subject.code ? subject.name + ' (' + subject.code + ')' : subject.name }}
+              </option>
+            </select>
+            <select v-model="state.classId" @change="changeStatus">
+              <option value="">All classes</option>
+              <option v-for="row in state.classes" :key="row.id" :value="String(row.id)">
+                {{ row.joinCode ? row.name + ' - ' + row.joinCode : row.name }}
+              </option>
+            </select>
+            <select v-model.number="state.analyticsDays" @change="changeStatus">
+              <option :value="7">Last 7 days</option>
+              <option :value="30">Last 30 days</option>
+              <option :value="90">Last 90 days</option>
+              <option :value="180">Last 180 days</option>
+            </select>
+            <button type="button" class="teacher-vue-primary" @click="newQuestion">+ Create assignment</button>
+          </div>
         </header>
 
         <section class="teacher-vue-metrics" aria-label="Question metrics">
-          <div><span>Total</span><strong>{{ stats.total }}</strong></div>
-          <div><span>Draft</span><strong>{{ stats.draft }}</strong></div>
-          <div><span>Reviewed</span><strong>{{ stats.reviewed }}</strong></div>
-          <div><span>Approved</span><strong>{{ stats.approved }}</strong></div>
-          <div><span>Active</span><strong>{{ stats.active }}</strong></div>
+          <div class="tone-red"><i>♙</i><span>Students needing support</span><strong>{{ needingSupport }}</strong><small>Needs attention</small></div>
+          <div class="tone-purple"><i>?</i><span>Written reviews</span><strong>{{ reviewCount }}</strong><small>Need review</small></div>
+          <div class="tone-orange"><i>◷</i><span>Assignments</span><strong>{{ dueSoonCount }}</strong><small>Due soon</small></div>
+          <div class="tone-green"><i>↗</i><span>Average accuracy</span><strong>{{ state.analytics.totals.accuracy }}%</strong><small>Across all classes</small></div>
         </section>
 
         <div class="teacher-vue-status bad" v-if="state.error">{{ state.error }}</div>
         <div class="teacher-vue-status ok" v-else-if="state.notice">{{ state.notice }}</div>
 
         <section class="teacher-vue-overview" v-if="state.view === 'overview'">
-          <button
-            v-for="link in dashboardLinks"
-            :key="link.id"
-            type="button"
-            class="teacher-vue-card"
-            @click="openView(link.id)"
-            :disabled="link.id === 'review'"
-          >
-            <span>{{ link.title }}</span>
-            <strong>{{ link.value }}</strong>
-            <i>{{ link.detail }}</i>
-          </button>
+          <section class="teacher-vue-panel teacher-vue-attention">
+            <header><h2>Attention required</h2></header>
+            <button v-for="item in attentionItems" :key="item.title" type="button" class="teacher-vue-attention-row" :class="'tone-' + item.tone" @click="openView(item.view)">
+              <i>{{ item.icon }}</i>
+              <span><strong>{{ item.title }}</strong><small>{{ item.detail }}</small></span>
+              <em>{{ item.action }}</em>
+            </button>
+          </section>
+          <section class="teacher-vue-panel teacher-vue-current">
+            <header><h2>Current assignments</h2><button type="button" @click="openView('questions')">View all</button></header>
+            <div class="teacher-vue-assignment-head"><span>Assignment</span><span>Class</span><span>Due</span><span>Completion</span><span>Accuracy</span><span>Status</span></div>
+            <button class="teacher-vue-assignment-row" type="button" v-for="row in currentAssignments" :key="row.id" @click="openView('questions')">
+              <span>{{ row.title }}</span><span>{{ row.className }}</span><span>{{ row.due }}</span><span>{{ row.completion }}</span>
+              <span><b :style="{ width: row.accuracy + '%' }"></b>{{ row.accuracy }}%</span><em>{{ row.status }}</em>
+            </button>
+            <div class="teacher-vue-empty" v-if="!currentAssignments.length">Create your first assignment from the Question Bank.</div>
+          </section>
+          <section class="teacher-vue-panel teacher-vue-class-card">
+            <header><h2>Class snapshot</h2></header>
+            <div class="teacher-vue-class-row" v-for="row in classRows" :key="row.id">
+              <span>{{ row.name }}</span><span><b :style="{ width: row.completion + '%' }"></b>{{ row.completion }}%</span><span>{{ row.accuracy }}%</span><strong>{{ row.support }}</strong>
+            </div>
+          </section>
+          <section class="teacher-vue-panel teacher-vue-activity">
+            <header><h2>Recent activity</h2><button type="button" @click="refreshAll">Refresh</button></header>
+            <div v-for="item in recentActivity" :key="item"><i>✓</i><span>{{ item }}</span><time>Today</time></div>
+          </section>
         </section>
 
         <section class="teacher-vue-analysis" v-else-if="state.view === 'students'">
           <div class="teacher-vue-chart">
             <div>
-              <span>Lowest accuracy first</span>
+              <span>Student insights</span>
               <strong>{{ state.analytics.totals.accuracy }}%</strong>
               <i>{{ state.analytics.totals.correct }} correct from {{ state.analytics.totals.attempts }} attempts</i>
             </div>
@@ -526,9 +578,10 @@ createApp({
           <form class="teacher-vue-editor" @submit.prevent="submitCurriculumRequest">
             <div class="teacher-vue-editor-head">
               <div>
-                <span>Content request</span>
-                <h2>Send topics and organisers</h2>
+                <span>Request new curriculum content</span>
+                <h2>Curriculum Requests</h2>
               </div>
+              <button type="button" class="teacher-vue-primary" @click="clearCurriculumRequest">+ New request</button>
             </div>
             <div class="teacher-vue-form-grid">
               <label>Request title<input v-model="state.curriculum.title" maxlength="160" placeholder="Year 8 networks revision"></label>
@@ -542,7 +595,7 @@ createApp({
             <label class="teacher-vue-wide">Topics to cover<textarea v-model="state.curriculum.topics" maxlength="5000" rows="5" placeholder="Algorithms: decomposition, abstraction, flowcharts..."></textarea></label>
             <label class="teacher-vue-wide">Syllabus or exam board<textarea v-model="state.curriculum.syllabus" maxlength="5000" rows="5" placeholder="AQA GCSE Computer Science 8525, section 3.1..."></textarea></label>
             <label class="teacher-vue-wide">Notes<textarea v-model="state.curriculum.notes" maxlength="5000" rows="4" placeholder="Common misconceptions, class priorities, preferred question style..."></textarea></label>
-            <label class="teacher-vue-wide">Knowledge organisers and files<input id="teacherCurriculumFiles" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg" @change="handleCurriculumFiles"></label>
+            <label class="teacher-vue-wide teacher-vue-dropzone"><i>⇧</i><strong>Drop curriculum files here</strong><small>or click to upload PDFs, DOCX, PPTX, images, and spreadsheets</small><input id="teacherCurriculumFiles" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg" @change="handleCurriculumFiles"></label>
             <div class="teacher-vue-file-list" v-if="state.curriculum.files.length">
               <span v-for="file in state.curriculum.files" :key="file.name + file.size">{{ file.name }}</span>
             </div>
@@ -557,6 +610,12 @@ createApp({
           <div class="teacher-vue-list">
             <div class="teacher-vue-list-head">
               <label>Search<input v-model="state.search" maxlength="96" placeholder="Topic, spec, or question"></label>
+              <label>Status<select v-model="state.status" @change="changeStatus">
+                <option value="">All active</option>
+                <option value="draft">Draft</option>
+                <option value="teacher-reviewed">Teacher reviewed</option>
+                <option value="approved">Approved</option>
+              </select></label>
             </div>
             <div class="teacher-vue-table" :aria-busy="state.loading ? 'true' : 'false'">
               <button
