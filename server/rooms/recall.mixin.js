@@ -114,7 +114,25 @@ class RecallMixin{
       correct,
       durationMs,
       source:challenge.source==='lectern'?'lectern':'recall',
-    })).catch(e=>{if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] recall attempt log failed:',e&&e.message||e);});
+    })).then(result=>{
+      const rec=typeof this.profileFor==='function'&&this.profileFor(client);
+      if(!rec||!rec.prof||!result||!Array.isArray(result.homeworkObjectives))return;
+      rec.prof.homeworkObjectives=result.homeworkObjectives;
+      if(typeof this.sendProfile==='function')this.sendProfile(client,rec.prof);
+      else client&&client.send&&client.send('homeworkProgress',{homework:result.homeworkObjectives});
+    }).catch(e=>{if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] recall attempt log failed:',e&&e.message||e);});
+  }
+  refreshHomeworkObjectives(client,prof){
+    const account=client&&client._account;
+    if(!account||String(account.accountType||account.role||'').toLowerCase()==='teacher')return;
+    let store=null;
+    try{const auth=getAuthService();if(!auth||!auth.authBackend)return;store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return;}
+    if(!store||typeof store.homeworkProgressForStudent!=='function')return;
+    Promise.resolve(store.homeworkProgressForStudent(account,{})).then(list=>{
+      if(!prof||!Array.isArray(list))return;
+      prof.homeworkObjectives=list;
+      if(typeof this.sendProfile==='function')this.sendProfile(client,prof);
+    }).catch(e=>{if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] homework progress refresh failed:',e&&e.message||e);});
   }
   handleRecallAnswer(client,message){
     const sid=client&&client.sessionId,challenge=sid&&this.recallChallenges.get(sid),p=sid&&this.state.players.get(sid),now=Date.now();

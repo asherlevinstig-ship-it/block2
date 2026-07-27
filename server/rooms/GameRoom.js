@@ -380,6 +380,7 @@ class GameRoom extends Room {
       }
       this.profileQuestTrace(client, 'profile.request', rec.prof, { reason: m && m.reason || '' });
       this.sendProfile(client, rec.prof);
+      if (typeof this.refreshHomeworkObjectives === 'function') this.refreshHomeworkObjectives(client, rec.prof);
       const hunger = this.playerHunger.get(client.sessionId);
       if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
       const recovery = this.restartRecoveries.get(rec.token);
@@ -4267,6 +4268,28 @@ class GameRoom extends Room {
       priority: 40,
       lifecycle: lifecycleFor(guild.ready || (guild.have | 0) >= (guild.need | 0) ? 'claimable' : 'active', guild),
     });
+    const homeworkList = Array.isArray(prof.homeworkObjectives) ? prof.homeworkObjectives : [];
+    for (const hw of homeworkList.slice(0, 2)) {
+      const required = Math.max(1, Math.min(100, hw && hw.questionCount | 0 || 1));
+      const current = Math.max(0, Math.min(required, hw && hw.answeredCount | 0));
+      const complete = current >= required || !!(hw && hw.completed);
+      add({
+        id: `homework:${hw && hw.id || 'active'}:${hw && hw.periodKey || 'run'}`,
+        source: 'homework',
+        category: 'homework',
+        questType: 'homework',
+        title: String(hw && hw.title || 'Homework').slice(0, 80),
+        status: complete ? 'complete' : 'active',
+        text: complete
+          ? 'Homework complete for this run.'
+          : `Answer ${required - current} more Recall question${required - current === 1 ? '' : 's'} for homework completion.`,
+        location: hw && (hw.subjectName || hw.className || hw.periodLabel) || 'Recall Cast',
+        action: complete ? null : { type: 'recall', label: 'START RECALL' },
+        progress: { current, required },
+        priority: complete ? 95 : 22,
+        lifecycle: lifecycleFor(complete ? 'completed' : 'active', { acceptedAt: Date.now(), completedAt: complete ? Date.now() : 0 }),
+      });
+    }
     const progression = this.progressionObjective(prof.progressionFocus, client);
     if (progression) add(progression);
     return objectives.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));

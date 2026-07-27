@@ -690,6 +690,7 @@ function serverObjectiveHudAction(o){
   if(type==='gate_prep')return {type:'gate_prep',label:explicit.label||'PREP CHECK',rank:explicit.rank==null?gatePrepTargetRank():explicit.rank|0};
   if(type==='choose_spec')return {type:'choose_spec',label:explicit.label||'CHOOSE SPEC'};
   if(type==='regional_track')return {type:'regional_track',label:explicit.label||'TRACK'};
+  if(type==='recall')return {type:'recall',label:explicit.label||'START RECALL'};
   if(type==='craft'){
     const craft=objectiveCraftAction('what_next');
     return craft || {type:'questlog',label:explicit.label||'OPEN QUEST LOG'};
@@ -1234,6 +1235,14 @@ function handleObjectiveAction(action,btn){
     if(globalThis.toggleRegionalOpportunityTracking&&globalThis.toggleRegionalOpportunityTracking())return;
     menusApi.openRegionalContracts&&menusApi.openRegionalContracts();
     sysMsg('<b>Regional work:</b> no nearby trouble is ready to track. Open Guild Contracts for Road Warden leads.');
+    return;
+  }
+  if(action==='recall'){
+    if(globalThis.BlockcraftRecall&&typeof globalThis.BlockcraftRecall.start==='function'){
+      globalThis.BlockcraftRecall.start();
+      return;
+    }
+    sysMsg('<b>Recall:</b> press P to answer homework questions.');
     return;
   }
   if(action==='questlog'){menusApi.openQuestLog&&menusApi.openQuestLog();return;}

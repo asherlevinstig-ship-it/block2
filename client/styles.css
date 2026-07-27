@@ -1135,6 +1135,8 @@
   #currentquest .objective-line.aegis .olabel{color:#d7b5ff}
   #currentquest .objective-line.prep .olabel{color:#7dd3fc}
   #currentquest .objective-line.transition .olabel{color:#ffdf7e}
+  #currentquest .objective-line.homework .olabel{color:#b7f7d3}
+  #currentquest .objective-line.homework .obar i{background:linear-gradient(90deg,#22c55e,#7dd3fc)}
   #currentquest .objective-line.prep .obar i{background:linear-gradient(90deg,#38bdf8,#9ad26b)}
   #currentquest .objective-line.progression .olabel{color:#9ad26b}
   #activitytracker{position:fixed;right:14px;top:402px;width:330px;max-width:calc(100vw - 28px);z-index:7;pointer-events:none;color:#dcecff;background:linear-gradient(135deg,rgba(8,18,28,.9),rgba(18,12,9,.86));border:1px solid rgba(91,194,255,.48);box-shadow:0 0 16px rgba(69,170,255,.14);border-radius:7px;padding:9px 12px}

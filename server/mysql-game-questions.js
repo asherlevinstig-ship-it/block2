@@ -22,6 +22,44 @@ const publicDate = value => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
   return cleanDate(value);
 };
+const ymdUTC = value => {
+  const d = value instanceof Date ? value : new Date(value || Date.now());
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+  return d.toISOString().slice(0, 10);
+};
+const homeworkWeekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+function homeworkPeriodKey(row, now = new Date()) {
+  const cadence = cleanHomeworkCadence(row && row.cadence);
+  if (cadence === 'daily') return 'day:' + ymdUTC(now);
+  if (cadence === 'weekly') {
+    const d = now instanceof Date ? new Date(now.getTime()) : new Date(now || Date.now());
+    const day = Number.isFinite(d.getUTCDay()) ? d.getUTCDay() : 0;
+    const target = clampInt(row && row.weekly_day, 0, 6);
+    d.setUTCDate(d.getUTCDate() - ((day - target + 7) % 7));
+    return 'week:' + ymdUTC(d);
+  }
+  return 'once';
+}
+function homeworkPeriodLabel(row) {
+  const cadence = cleanHomeworkCadence(row && row.cadence);
+  if (cadence === 'daily') return 'Today';
+  if (cadence === 'weekly') return homeworkWeekdayNames[clampInt(row && row.weekly_day, 0, 6)] || 'This week';
+  return publicDate(row && row.due_date) || 'One-off';
+}
+function publicHomeworkProgress(row, progress = {}, now = new Date()) {
+  const hw = publicHomework(row);
+  const required = clampInt(hw.questionCount, 1, 100);
+  const current = Math.min(required, clampInt(progress.answered_count ?? progress.answeredCount, 0, required));
+  return {
+    ...hw,
+    periodKey: String(progress.period_key || homeworkPeriodKey(row, now)).slice(0, 32),
+    periodLabel: homeworkPeriodLabel(row),
+    answeredCount: current,
+    completed: current >= required || !!progress.completed_at,
+    completedAt: progress.completed_at || null,
+    lastAnsweredAt: progress.last_answered_at || null,
+  };
+}
 
 function sourceIdFromAccount(account, type) {
   const id = String(account && account.id || '');
@@ -177,6 +215,24 @@ class MySqlGameQuestionStore {
       KEY idx_game_homework_teacher_due (teacher_id, due_date),
       KEY idx_game_homework_class_due (class_id, due_date),
       KEY idx_game_homework_school_due (school_id, due_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS game_homework_progress (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      homework_id BIGINT UNSIGNED NOT NULL,
+      school_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      class_id INT UNSIGNED NULL,
+      student_id INT UNSIGNED NOT NULL,
+      period_key VARCHAR(32) NOT NULL DEFAULT '',
+      answered_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      completed_at TIMESTAMP NULL,
+      last_answered_at TIMESTAMP NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_ghp_homework_student_period (homework_id, student_id, period_key),
+      KEY idx_ghp_student_subject (student_id, subject_id),
+      KEY idx_ghp_homework (homework_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     await this.ensureHomeworkColumns(pool);
     this.ready = true;
@@ -453,6 +509,122 @@ class MySqlGameQuestionStore {
     return publicHomework(rows && rows[0] || { id: Number(result.insertId || 0), subject_id: subjectId, teacher_id: teacherId, title: patch.title, cadence: patch.cadence, due_date: patch.dueDate || null, weekly_day: patch.weeklyDay, question_count: patch.questionCount, status: patch.status, notes: patch.notes });
   }
 
+  async studentClassIds(pool, studentId) {
+    const id = clampInt(studentId, 1, 2147483647);
+    const ids = new Set();
+    const queries = [
+      ['SELECT class_id FROM students WHERE id = ? LIMIT 1', [id]],
+      ['SELECT class_id FROM student_classes WHERE student_id = ?', [id]],
+      ['SELECT class_id FROM class_students WHERE student_id = ?', [id]],
+    ];
+    for (const [sql, params] of queries) {
+      try {
+        const [rows] = await pool.execute(sql, params);
+        for (const row of rows || []) {
+          const classId = clampInt(row.class_id, 0, 2147483647);
+          if (classId) ids.add(classId);
+        }
+      } catch (_) {}
+    }
+    return [...ids].slice(0, 20);
+  }
+
+  async activeHomeworkRowsForStudent(account, subjectId = 0) {
+    const studentId = sourceIdFromAccount(account, 'student');
+    if (!studentId) return { studentId: 0, rows: [] };
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const pool = this.getPool();
+    const classIds = await this.studentClassIds(pool, studentId);
+    const params = [schoolId, schoolId];
+    let where = `gh.status IN ('scheduled','live')
+      AND (gh.school_id IS NULL OR ? = 0 OR gh.school_id = ?)
+      AND (gh.class_id IS NULL OR gh.class_id = 0`;
+    if (classIds.length) {
+      where += ` OR gh.class_id IN (${classIds.map(() => '?').join(',')})`;
+      params.push(...classIds);
+    }
+    where += `)
+      AND (
+        gh.cadence IN ('daily','weekly')
+        OR gh.due_date IS NULL
+        OR gh.due_date >= CURDATE()
+      )`;
+    if (subjectId) { where += ' AND gh.subject_id = ?'; params.push(subjectId); }
+    const [rows] = await pool.execute(
+      `SELECT gh.*, s.name AS subject_name, s.code AS subject_code, c.name AS class_name
+       FROM game_homework gh
+       LEFT JOIN subjects s ON s.id = gh.subject_id
+       LEFT JOIN classes c ON c.id = gh.class_id
+       WHERE ${where}
+       ORDER BY gh.status = 'live' DESC, COALESCE(gh.due_date, '9999-12-31') ASC, gh.weekly_day ASC, gh.updated_at DESC
+       LIMIT 12`,
+      params,
+    );
+    return { studentId, rows: rows || [] };
+  }
+
+  async homeworkProgressForStudent(account, query = {}) {
+    await this.ensureSchema();
+    const subjectId = clampInt(query.subjectId || query.subject_id, 0, 2147483647);
+    const now = new Date();
+    const { studentId, rows } = await this.activeHomeworkRowsForStudent(account, subjectId);
+    if (!studentId || !rows.length) return [];
+    const keys = rows.map(row => homeworkPeriodKey(row, now));
+    const ids = rows.map(row => Number(row.id) || 0).filter(Boolean);
+    const progressBy = new Map();
+    if (ids.length) {
+      const [progressRows] = await this.getPool().execute(
+        `SELECT homework_id, period_key, answered_count, completed_at, last_answered_at
+         FROM game_homework_progress
+         WHERE student_id = ?
+           AND homework_id IN (${ids.map(() => '?').join(',')})
+           AND period_key IN (${keys.map(() => '?').join(',')})`,
+        [studentId, ...ids, ...keys],
+      );
+      for (const row of progressRows || []) progressBy.set(`${row.homework_id}:${row.period_key}`, row);
+    }
+    return rows
+      .map(row => publicHomeworkProgress(row, progressBy.get(`${row.id}:${homeworkPeriodKey(row, now)}`), now))
+      .sort((a, b) => Number(a.completed) - Number(b.completed) || a.title.localeCompare(b.title));
+  }
+
+  async recordHomeworkProgress(account, subjectId) {
+    const now = new Date();
+    const { studentId, rows } = await this.activeHomeworkRowsForStudent(account, subjectId);
+    if (!studentId || !rows.length) return [];
+    const pool = this.getPool();
+    for (const row of rows) {
+      const periodKey = homeworkPeriodKey(row, now);
+      const required = clampInt(row.question_count, 1, 100);
+      await pool.execute(
+        `INSERT INTO game_homework_progress
+         (homework_id, school_id, subject_id, class_id, student_id, period_key, answered_count, completed_at, last_answered_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, CASE WHEN 1 >= ? THEN NOW() ELSE NULL END, NOW())
+         ON DUPLICATE KEY UPDATE
+           answered_count = LEAST(?, answered_count + CASE WHEN completed_at IS NULL THEN 1 ELSE 0 END),
+           completed_at = CASE
+             WHEN completed_at IS NOT NULL THEN completed_at
+             WHEN LEAST(?, answered_count + 1) >= ? THEN NOW()
+             ELSE NULL
+           END,
+           last_answered_at = NOW()`,
+        [
+          Number(row.id) || 0,
+          row.school_id == null ? null : Number(row.school_id),
+          Number(row.subject_id) || subjectId,
+          row.class_id == null ? null : Number(row.class_id),
+          studentId,
+          periodKey,
+          required,
+          required,
+          required,
+          required,
+        ],
+      );
+    }
+    return this.homeworkProgressForStudent(account, { subjectId });
+  }
+
   async createCurriculumRequest(account, input = {}) {
     await this.ensureSchema();
     const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
@@ -588,7 +760,8 @@ class MySqlGameQuestionStore {
         cleanText(input.source || 'recall', 32) || 'recall',
       ],
     );
-    return { recorded: true, subjectId, questionId, studentId };
+    const homeworkObjectives = await this.recordHomeworkProgress(account, subjectId);
+    return { recorded: true, subjectId, questionId, studentId, homeworkObjectives };
   }
 
   async analytics(account, query = {}) {

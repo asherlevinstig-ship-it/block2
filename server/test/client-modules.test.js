@@ -3644,6 +3644,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function serverObjectiveHudText\(o\)/);
   assert.match(frame,/function serverObjectiveHudAction\(o\)/);
   assert.match(frame,/const explicit=o\.hudAction\|\|o\.claimAction\|\|o\.action/);
+  assert.match(frame,/type==='recall'/);
   assert.match(frame,/function chapterProgressionObjectiveLine\(\)/);
   assert.match(frame,/function starterJobChapter\(c\)/);
   assert.match(frame,/function unifiedObjectiveList\(\)/);
@@ -3713,6 +3714,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/Take Rotating Adventurer Work/);
   assert.match(frame,/Handle Regional Trouble/);
   assert.match(frame,/action==='regional_track'/);
+  assert.match(frame,/action==='recall'/);
+  assert.match(frame,/BlockcraftRecall\.start\(\)/);
   assert.match(frame,/function transitionRecoveryAction\(/);
   assert.match(frame,/continue_panel/);
   assert.match(frame,/choose_path/);
@@ -3760,6 +3763,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(styles,/\.questcard\.prep-loop/);
   assert.match(styles,/\.gate-prep-mini/);
   assert.match(styles,/#currentquest \.objective-line\.prep/);
+  assert.match(styles,/#currentquest \.objective-line\.homework/);
   assert.match(styles,/#currentquest \.objective-line\{grid-template-columns:36px minmax\(0,1fr\)/);
   assert.match(styles,/#currentquest \.oact\{grid-column:2;grid-row:2/);
   assert.match(styles,/#currentquest \.obody span\{display:none\}/);
