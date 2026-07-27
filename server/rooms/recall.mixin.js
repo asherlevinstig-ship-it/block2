@@ -86,10 +86,11 @@ class RecallMixin{
       if(rec&&Array.isArray(rec.prof.claimedDiscoveries)&&rec.prof.claimedDiscoveries.includes(claimKey))return client.send('recallReject',{reason:'ruin_claimed'});
       ruinId=ruin.id;
     }
+    const tutorial=this.recallTutorialSpace(p);
     const q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
-    const source=message.source==='lectern'?'lectern':'';
+    const source=message.source==='lectern'?'lectern':(tutorial?'tutorial':'');
     this.recallChallenges.set(client.sessionId,{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source});
     client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
   }
@@ -113,7 +114,7 @@ class RecallMixin{
       answerIndex,
       correct,
       durationMs,
-      source:challenge.source==='lectern'?'lectern':'recall',
+      source:challenge.source==='lectern'?'lectern':(challenge.source==='tutorial'?'tutorial':'recall'),
     })).then(result=>{
       const rec=typeof this.profileFor==='function'&&this.profileFor(client);
       if(!rec||!rec.prof||!result||!Array.isArray(result.homeworkObjectives))return;

@@ -2207,10 +2207,16 @@ test('onboarding build lesson completes after three placed planks without an ext
 test('onboarding recall lesson completes from a correct answer away from the waypoint',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  const network=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
   assert.match(combat,/markRecall:\(\)=>\{if\(onboardingActive&&onboardingKind\(\)==='recall'\)onboardingFlags\.recall=true;\}/);
   assert.match(combat,/Press P and answer one knowledge challenge\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
   assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.recall/);
   assert.match(recall,/if\(m\.correct&&globalThis\.BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markRecall\(\);/);
+  assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);\s*if\(!onboardingDone\(\)\)\{/);
+  assert.match(room,/const tutorial=this\.recallTutorialSpace\(p\);/);
+  assert.match(room,/const source=message\.source==='lectern'\?'lectern':\(tutorial\?'tutorial':''\);/);
+  assert.match(room,/challenge\.source==='tutorial'\?'tutorial':'recall'/);
 });
 
 test('onboarding material safety grants count cursor-held stacks before adding replacements',()=>{
