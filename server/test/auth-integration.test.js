@@ -141,8 +141,15 @@ test('teacher game-question endpoints require a teacher session and expose game 
   };
   const f = await fixture({ authOptions: {
     gameQuestionStore,
-    env: { RESEND_API_KEY: 're_test_key', MAIL_FROM: 'Blockcraft <curriculum@blockcraft.test>', CURRICULUM_NOTIFY_TO: 'asherlevin85@gmail.com' },
-    emailProviderFactory: () => ({ emails: { async send(message) { sentMail.push(message); return { data: { id: 'email_1' } }; } } }),
+    env: {
+      CURRICULUM_MAIL_BRIDGE_URL: 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php',
+      CURRICULUM_MAIL_BRIDGE_SECRET: 'test_bridge_secret',
+      CURRICULUM_NOTIFY_TO: 'asherlevin85@gmail.com',
+    },
+    curriculumMailBridgeFetch: async (url, options) => {
+      sentMail.push({ url, options, body: JSON.parse(options.body) });
+      return { ok: true, async text() { return '{"ok":true}'; } };
+    },
   } });
   try {
     const studentSid = await f.auth.issueSession({ id: 'student_9', username: 'learner@example.test', displayName: 'Learner', accountType: 'student', role: 'student' });
@@ -191,7 +198,10 @@ test('teacher game-question endpoints require a teacher session and expose game 
     assert.equal(curriculumBody.submission.id, 91);
     assert.equal(curriculumBody.notification.sent, true);
     assert.equal(sentMail.length, 1);
-    assert.match(sentMail[0].text, /DNS, routers, packets/);
+    assert.equal(sentMail[0].url, 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php');
+    assert.equal(sentMail[0].options.headers['X-Blockcraft-Mail-Secret'], 'test_bridge_secret');
+    assert.match(sentMail[0].body.text, /DNS, routers, packets/);
+    assert.equal(sentMail[0].body.files[0].originalName, 'organiser.pdf');
   } finally { await f.close(); }
 });
 

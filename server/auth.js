@@ -2,7 +2,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
-const { Resend } = require('resend');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { MySqlGameQuestionStore } = require('./mysql-game-questions');
 const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout } = require('./store');
@@ -250,7 +249,7 @@ class AuthService {
     this.gameQuestionStore = Object.prototype.hasOwnProperty.call(options, 'gameQuestionStore') ? options.gameQuestionStore : null;
     this.env = options.env || process.env;
     this.curriculumUploadDir = options.curriculumUploadDir || path.join(this.dir, 'curriculum-uploads');
-    this.emailProviderFactory = options.emailProviderFactory || null;
+    this.curriculumMailBridgeFetch = options.curriculumMailBridgeFetch || null;
     this.reloadSessionsOnMiss = Object.prototype.hasOwnProperty.call(options, 'reloadSessionsOnMiss') ? options.reloadSessionsOnMiss : !!this.authBackend;
     fs.mkdirSync(this.dir, { recursive: true });
     fs.mkdirSync(this.curriculumUploadDir, { recursive: true });
@@ -380,36 +379,62 @@ class AuthService {
 
   async sendCurriculumNotification(account, submission) {
     const to = String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com').trim();
-    const apiKey = String(this.env.RESEND_API_KEY || '').trim();
-    const from = String(this.env.MAIL_FROM || '').trim();
-    if (!to || !apiKey || !from) return { sent: false, to, reason: 'email_provider_not_configured' };
-    const provider = this.emailProviderFactory ? this.emailProviderFactory({ apiKey }) : new Resend(apiKey);
+    const bridgeUrl = String(this.env.CURRICULUM_MAIL_BRIDGE_URL || '').trim();
+    const bridgeSecret = String(this.env.CURRICULUM_MAIL_BRIDGE_SECRET || '').trim();
+    if (!to || !bridgeUrl || !bridgeSecret) return { sent: false, to, reason: 'mail_bridge_not_configured' };
+    const fetchImpl = this.curriculumMailBridgeFetch || globalThis.fetch;
+    if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
     const files = (submission.files || []).map(file => '- ' + file.originalName + ' (' + Math.ceil((file.size || 0) / 1024) + ' KB)').join('\n') || '- none';
-    await provider.emails.send({
-      from,
-      to,
-      subject: '[Blockcraft] Curriculum request: ' + submission.title,
-      text: [
-        'A teacher submitted a curriculum request.',
-        '',
-        'Teacher: ' + String(account.displayName || account.username || account.id || ''),
-        'Email: ' + String(account.username || ''),
-        'Subject: ' + String(submission.subjectName || submission.subjectId || ''),
-        'Title: ' + submission.title,
-        '',
-        'Topics:',
-        submission.topics || '(not supplied)',
-        '',
-        'Syllabus:',
-        submission.syllabus || '(not supplied)',
-        '',
-        'Notes:',
-        submission.notes || '(not supplied)',
-        '',
-        'Uploaded files:',
-        files,
-      ].join('\n'),
+    const text = [
+      'A teacher submitted a curriculum request.',
+      '',
+      'Teacher: ' + String(account.displayName || account.username || account.id || ''),
+      'Email: ' + String(account.username || ''),
+      'Subject: ' + String(submission.subjectName || submission.subjectId || ''),
+      'Title: ' + submission.title,
+      '',
+      'Topics:',
+      submission.topics || '(not supplied)',
+      '',
+      'Syllabus:',
+      submission.syllabus || '(not supplied)',
+      '',
+      'Notes:',
+      submission.notes || '(not supplied)',
+      '',
+      'Uploaded files:',
+      files,
+    ].join('\n');
+    const response = await fetchImpl(bridgeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Blockcraft-Mail-Secret': bridgeSecret,
+      },
+      body: JSON.stringify({
+        to,
+        subject: '[Blockcraft] Curriculum request: ' + submission.title,
+        text,
+        teacherName: String(account.displayName || account.username || account.id || ''),
+        teacherEmail: String(account.username || ''),
+        subjectName: String(submission.subjectName || ''),
+        subjectId: String(submission.subjectId || ''),
+        title: String(submission.title || ''),
+        topics: String(submission.topics || ''),
+        syllabus: String(submission.syllabus || ''),
+        notes: String(submission.notes || ''),
+        files: (submission.files || []).map(file => ({
+          originalName: String(file.originalName || ''),
+          mimeType: String(file.mimeType || ''),
+          size: Number(file.size || 0),
+        })),
+      }),
     });
+    if (!response || !response.ok) {
+      let detail = '';
+      try { detail = await response.text(); } catch (_e) {}
+      throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
+    }
     return { sent: true, to };
   }
 

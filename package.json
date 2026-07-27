@@ -41,7 +41,6 @@
     "firebase-admin": "^13.10.0",
     "multer": "^2.2.0",
     "mysql2": "^3.22.6",
-    "resend": "^6.18.0",
     "three": "^0.128.0"
   },
   "devDependencies": {
