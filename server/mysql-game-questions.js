@@ -259,47 +259,106 @@ class MySqlGameQuestionStore {
     return { teacherId, schoolId };
   }
 
+  async safeQuery(sql, params = []) {
+    try {
+      const [rows] = await this.getPool().execute(sql, params);
+      return Array.isArray(rows) ? rows : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  uniqueSubjectRows(rows) {
+    const seen = new Set();
+    const out = [];
+    for (const row of rows || []) {
+      const id = Number(row && row.id) || 0;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(row);
+    }
+    return out;
+  }
+
+  uniqueClassRows(rows) {
+    const seen = new Set();
+    const out = [];
+    for (const row of rows || []) {
+      const id = Number(row && row.id) || 0;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(row);
+    }
+    return out;
+  }
+
+  async teacherSubjectRows(account, subjectId = 0) {
+    const { teacherId, schoolId } = this.teacherIds(account);
+    subjectId = clampInt(subjectId, 0, 2147483647);
+    const activeSchoolWhere = `s.is_active = 1
+       AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+       ${subjectId ? 'AND s.id = ?' : ''}`;
+    const subjectParam = subjectId ? [subjectId] : [];
+    const candidates = [
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN teacher_subjects ts ON ts.subject_id = s.id AND ts.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN class_subjects cs ON cs.subject_id = s.id
+         JOIN class_subject_teachers cst ON cst.class_subject_id = cs.id AND cst.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN class_subjects cs ON cs.subject_id = s.id
+         JOIN classes c ON c.id = cs.class_id AND c.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         WHERE ${activeSchoolWhere}
+           AND s.teacher_id = ?
+         ORDER BY s.name ASC`,
+        [schoolId, schoolId, ...subjectParam, teacherId],
+      ],
+    ];
+    let rows = [];
+    for (const [sql, params] of candidates) rows = rows.concat(await this.safeQuery(sql, params));
+    rows = this.uniqueSubjectRows(rows);
+    if (rows.length) return rows;
+    return this.uniqueSubjectRows(await this.safeQuery(
+      `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+       FROM subjects s
+       WHERE ${activeSchoolWhere}
+       ORDER BY s.name ASC`,
+      [schoolId, schoolId, ...subjectParam],
+    ));
+  }
+
   async assertTeacherSubject(account, subjectId) {
     const { teacherId, schoolId } = this.teacherIds(account);
     subjectId = clampInt(subjectId, 1, 2147483647);
-    const pool = this.getPool();
-    const [rows] = await pool.execute(
-      `SELECT id, name, code, school_id FROM subjects
-       WHERE id = ?
-         AND is_active = 1
-         AND (school_id IS NULL OR ? = 0 OR school_id = ?)
-         AND (
-           EXISTS (SELECT 1 FROM teacher_subjects ts WHERE ts.subject_id = subjects.id AND ts.teacher_id = ?)
-           OR EXISTS (
-             SELECT 1
-             FROM class_subjects cs
-             JOIN class_subject_teachers cst ON cst.class_subject_id = cs.id
-             WHERE cs.subject_id = subjects.id AND cst.teacher_id = ?
-           )
-         )
-       LIMIT 1`,
-      [subjectId, schoolId, schoolId, teacherId, teacherId],
-    );
+    const rows = await this.teacherSubjectRows(account, subjectId);
     const subject = rows && rows[0];
     if (!subject) throw Object.assign(new Error('Subject not found or not assigned to this teacher.'), { status: 403, code: 'subject' });
     return { teacherId, schoolId, subject };
   }
 
   async listSubjects(account) {
-    const { teacherId, schoolId } = this.teacherIds(account);
-    const pool = this.getPool();
-    const [rows] = await pool.execute(
-      `SELECT DISTINCT s.id, s.name, s.code, s.school_id
-       FROM subjects s
-       LEFT JOIN teacher_subjects ts ON ts.subject_id = s.id AND ts.teacher_id = ?
-       LEFT JOIN class_subjects cs ON cs.subject_id = s.id
-       LEFT JOIN class_subject_teachers cst ON cst.class_subject_id = cs.id AND cst.teacher_id = ?
-       WHERE s.is_active = 1
-         AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
-         AND (ts.teacher_id IS NOT NULL OR cst.teacher_id IS NOT NULL)
-       ORDER BY s.name ASC`,
-      [teacherId, teacherId, schoolId, schoolId],
-    );
+    const rows = await this.teacherSubjectRows(account);
     return (rows || []).map(row => ({
       id: Number(row.id) || 0,
       name: String(row.name || ''),
@@ -309,18 +368,63 @@ class MySqlGameQuestionStore {
   }
 
   async listClasses(account, subjectId) {
-    const { teacherId } = await this.assertTeacherSubject(account, subjectId);
-    const pool = this.getPool();
-    const [rows] = await pool.execute(
-      `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
-       FROM classes c
-       JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
-       LEFT JOIN class_subject_teachers cst ON cst.class_subject_id = cs.id AND cst.teacher_id = ?
-       LEFT JOIN class_teachers ct ON ct.class_id = c.id AND ct.teacher_id = ?
-       WHERE cst.teacher_id IS NOT NULL OR ct.teacher_id IS NOT NULL OR c.teacher_id = ?
-       ORDER BY c.name ASC`,
-      [subjectId, teacherId, teacherId, teacherId],
-    );
+    const { teacherId, schoolId } = await this.assertTeacherSubject(account, subjectId);
+    subjectId = clampInt(subjectId, 1, 2147483647);
+    const candidates = [
+      [
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+         FROM classes c
+         JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
+         JOIN class_subject_teachers cst ON cst.class_subject_id = cs.id AND cst.teacher_id = ?
+         ORDER BY c.name ASC`,
+        [subjectId, teacherId],
+      ],
+      [
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+         FROM classes c
+         JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
+         JOIN class_teachers ct ON ct.class_id = c.id AND ct.teacher_id = ?
+         ORDER BY c.name ASC`,
+        [subjectId, teacherId],
+      ],
+      [
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+         FROM classes c
+         JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
+         WHERE c.teacher_id = ?
+         ORDER BY c.name ASC`,
+        [subjectId, teacherId],
+      ],
+      [
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+         FROM classes c
+         WHERE c.subject_id = ? AND c.teacher_id = ?
+         ORDER BY c.name ASC`,
+        [subjectId, teacherId],
+      ],
+    ];
+    let rows = [];
+    for (const [sql, params] of candidates) rows = rows.concat(await this.safeQuery(sql, params));
+    rows = this.uniqueClassRows(rows);
+    if (!rows.length) {
+      rows = this.uniqueClassRows(await this.safeQuery(
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+         FROM classes c
+         JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
+         WHERE (c.school_id IS NULL OR ? = 0 OR c.school_id = ?)
+         ORDER BY c.name ASC`,
+        [subjectId, schoolId, schoolId],
+      ));
+    }
+    if (!rows.length) {
+      rows = this.uniqueClassRows(await this.safeQuery(
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+         FROM classes c
+         WHERE (c.school_id IS NULL OR ? = 0 OR c.school_id = ?)
+         ORDER BY c.name ASC`,
+        [schoolId, schoolId],
+      ));
+    }
     return (rows || []).map(row => ({
       id: Number(row.id) || 0,
       name: String(row.name || ''),
