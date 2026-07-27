@@ -678,6 +678,11 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /import \{ createApp, computed, nextTick, onMounted, onUnmounted, reactive, ref, watch \} from 'vue'/);
   assert.match(teacherDashboardSource, /import Chart from 'chart\.js\/auto'/);
   assert.match(teacherDashboardSource, /<strong>Homework<\/strong>/);
+  assert.match(teacherDashboardSource, /Teacher sign in/);
+  assert.match(teacherDashboardSource, /This is checked against the existing MySQL teacher database/);
+  assert.match(teacherDashboardSource, /\/auth\/login/);
+  assert.match(teacherDashboardSource, /storeSession\(data\.sessionToken\)/);
+  assert.match(teacherDashboardSource, /This login is not linked to a teacher account/);
   assert.match(teacherDashboardSource, /Good morning/);
   assert.match(teacherDashboardSource, /Attention required/);
   assert.match(teacherDashboardSource, /Student insights/);
@@ -709,6 +714,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(serverAuthSource, /\/auth\/teacher\/curriculum-requests/);
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
+  assert.match(stylesSource, /\.teacher-login-shell/);
+  assert.match(stylesSource, /\.teacher-login-card/);
   assert.match(stylesSource, /\.teacher-vue-shell/);
   assert.match(stylesSource, /\.teacher-vue-overview/);
   assert.match(stylesSource, /\.teacher-vue-panel/);

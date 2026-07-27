@@ -8,6 +8,15 @@ function storedSession() {
   try { return typeof localStorage === 'undefined' ? '' : String(localStorage.getItem(sessionKey) || '').trim(); } catch (_) { return ''; }
 }
 
+function storeSession(token) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const clean = String(token || '').trim();
+    if (clean) localStorage.setItem(sessionKey, clean);
+    else localStorage.removeItem(sessionKey);
+  } catch (_) {}
+}
+
 function authHeaders(base = {}) {
   const token = storedSession();
   return token ? { ...base, Authorization: 'Bearer ' + token } : base;
@@ -83,6 +92,7 @@ createApp({
       saving: false,
       error: '',
       notice: '',
+      login: { username: '', password: '' },
       form: emptyForm(),
     });
 
@@ -159,6 +169,19 @@ createApp({
       if (message) state.error = '';
     }
 
+    function signOut() {
+      storeSession('');
+      state.account = null;
+      state.subjects = [];
+      state.classes = [];
+      state.questions = [];
+      state.analytics = { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 };
+      state.view = 'overview';
+      state.loading = false;
+      setNotice('');
+      setError('');
+    }
+
     function fillForm(question) {
       const q = cleanQuestion(question || {});
       state.form = {
@@ -196,10 +219,14 @@ createApp({
     }
 
     async function loadAccount() {
-      if (!storedSession()) throw new Error('Sign in from the game page first.');
+      if (!storedSession()) {
+        state.account = null;
+        return false;
+      }
       const data = await requestJson('/auth/me');
       state.account = data.account || null;
       if (!isTeacherAccount(state.account)) throw new Error('Teacher account required.');
+      return true;
     }
 
     async function loadSubjects() {
@@ -236,7 +263,11 @@ createApp({
     async function refreshAll() {
       state.loading = true;
       try {
-        await loadAccount();
+        const signedIn = await loadAccount();
+        if (!signedIn) {
+          setNotice('');
+          return;
+        }
         await loadSubjects();
         await loadSubjectData();
         setNotice('Question bank loaded.');
@@ -244,6 +275,35 @@ createApp({
         setError(e.message || 'Could not load teacher dashboard.');
       } finally {
         state.loading = false;
+      }
+    }
+
+    async function teacherLogin() {
+      state.saving = true;
+      try {
+        const username = String(state.login.username || '').trim();
+        const password = String(state.login.password || '');
+        if (!username || !password) throw new Error('Enter your teacher email and password.');
+        const data = await requestJson('/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        if (!isTeacherAccount(data.account)) {
+          storeSession('');
+          throw new Error('This login is not linked to a teacher account.');
+        }
+        storeSession(data.sessionToken);
+        state.account = data.account || null;
+        state.login.password = '';
+        await loadSubjects();
+        await loadSubjectData();
+        setNotice('Signed in as ' + String(state.account && state.account.username || username) + '.');
+      } catch (e) {
+        setError(e.message || 'Could not sign in.');
+      } finally {
+        state.loading = false;
+        state.saving = false;
       }
     }
 
@@ -413,6 +473,8 @@ createApp({
       studentChart,
       questionChart,
       refreshAll,
+      teacherLogin,
+      signOut,
       changeSubject,
       changeStatus,
       openView,
@@ -426,7 +488,33 @@ createApp({
     };
   },
   template: `
-    <div class="teacher-vue-shell">
+    <div class="teacher-login-shell" v-if="!state.account">
+      <section class="teacher-login-card">
+        <div class="teacher-vue-brand">
+          <i>▣</i>
+          <div>
+            <strong>Homework</strong>
+            <span>Teacher</span>
+          </div>
+        </div>
+        <div class="teacher-login-copy">
+          <h1>Teacher sign in</h1>
+          <p>Use your school teacher account. This is checked against the existing MySQL teacher database.</p>
+        </div>
+        <form class="teacher-login-form" @submit.prevent="teacherLogin">
+          <label>Email address<input v-model="state.login.username" type="email" autocomplete="username" placeholder="teacher@school.org"></label>
+          <label>Password<input v-model="state.login.password" type="password" autocomplete="current-password" placeholder="Your password"></label>
+          <div class="teacher-vue-status bad" v-if="state.error">{{ state.error }}</div>
+          <button type="submit" class="teacher-vue-primary" :disabled="state.saving || state.loading">{{ state.saving ? 'Signing in...' : 'Sign in' }}</button>
+        </form>
+        <div class="teacher-login-links">
+          <a href="./">Return to game</a>
+          <a href="./register.html">Student registration</a>
+        </div>
+      </section>
+    </div>
+
+    <div class="teacher-vue-shell" v-else>
       <aside class="teacher-vue-sidebar">
         <div class="teacher-vue-brand">
           <i>▣</i>
@@ -446,6 +534,7 @@ createApp({
         <nav class="teacher-vue-nav teacher-vue-nav-secondary" aria-label="Teacher links">
           <button type="button"><span>⚙</span>Settings</button>
           <button type="button"><span>?</span>Help</button>
+          <button type="button" @click="signOut"><span>⇥</span>Sign out</button>
           <a class="teacher-vue-back" href="./"><span>↩</span>Return to Game</a>
         </nav>
         <div class="teacher-vue-profile">
