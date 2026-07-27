@@ -367,6 +367,53 @@ class MySqlGameQuestionStore {
     }));
   }
 
+  async listStudentSubjects(account) {
+    await this.ensureSchema();
+    const studentId = sourceIdFromAccount(account, 'student');
+    if (!studentId) return [];
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const pool = this.getPool();
+    const classIds = await this.studentClassIds(pool, studentId);
+    let rows = [];
+    if (classIds.length) {
+      rows = rows.concat(await this.safeQuery(
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN class_subjects cs ON cs.subject_id = s.id
+         WHERE s.is_active = 1
+           AND cs.class_id IN (${classIds.map(() => '?').join(',')})
+           AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+         ORDER BY s.name ASC`,
+        [...classIds, schoolId, schoolId],
+      ));
+      rows = rows.concat(await this.safeQuery(
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN classes c ON c.subject_id = s.id
+         WHERE s.is_active = 1
+           AND c.id IN (${classIds.map(() => '?').join(',')})
+           AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+         ORDER BY s.name ASC`,
+        [...classIds, schoolId, schoolId],
+      ));
+    }
+    rows = this.uniqueSubjectRows(rows);
+    if (!rows.length) rows = this.uniqueSubjectRows(await this.safeQuery(
+      `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+       FROM subjects s
+       WHERE s.is_active = 1
+         AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+       ORDER BY s.name ASC`,
+      [schoolId, schoolId],
+    ));
+    return (rows || []).map(row => ({
+      id: Number(row.id) || 0,
+      name: String(row.name || ''),
+      code: String(row.code || ''),
+      schoolId: row.school_id == null ? null : Number(row.school_id),
+    }));
+  }
+
   async listClasses(account, subjectId) {
     const { teacherId, schoolId } = await this.assertTeacherSubject(account, subjectId);
     subjectId = clampInt(subjectId, 1, 2147483647);

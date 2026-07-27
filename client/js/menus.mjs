@@ -3154,17 +3154,38 @@ function qBtn(label, cb, dim2){
   b.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); SFX.uiClick(); cb(e); });
   return b;
 }
-const RECALL_SUBJECTS=['Computer Science','Information Technology','Religious Education','English'];
-function selectedRecallSubject(){try{const value=localStorage.getItem('bc_recall_subject');return RECALL_SUBJECTS.includes(value)?value:'English';}catch{return 'English';}}
-function openSubjectFocusUI(){
-  if(uiOpen)closeUI(false);openQWin('subject-focus');qpanelEl.innerHTML='';
+const DEFAULT_RECALL_SUBJECTS=['Computer Science','Information Technology','Religious Education','English'];
+let schoolRecallSubjects=null,schoolRecallSubjectsAt=0,schoolRecallSubjectsLoading=null;
+function subjectNames(list){return (Array.isArray(list)?list:[]).map(s=>String(s&&s.name||s||'').trim()).filter(Boolean);}
+function recallSubjectOptions(){const names=subjectNames(schoolRecallSubjects);return names.length?names:DEFAULT_RECALL_SUBJECTS;}
+function selectedRecallSubject(){const options=recallSubjectOptions();try{const value=localStorage.getItem('bc_recall_subject');return options.includes(value)?value:(options[0]||'English');}catch{return options[0]||'English';}}
+function authHeader(){try{const token=localStorage.getItem('blockcraft.auth.session')||'';return token?{Authorization:'Bearer '+token}:{};}catch{return {};}}
+async function loadSchoolRecallSubjects(force=false){
+  const now=Date.now();
+  if(!force&&schoolRecallSubjects&&now-schoolRecallSubjectsAt<5*60*1000)return schoolRecallSubjects;
+  if(schoolRecallSubjectsLoading)return schoolRecallSubjectsLoading;
+  schoolRecallSubjectsLoading=fetch('/auth/profile/subjects',{headers:authHeader(),credentials:'include'})
+    .then(r=>r.ok?r.json():Promise.reject(new Error('subjects')))
+    .then(data=>{schoolRecallSubjects=Array.isArray(data&&data.subjects)?data.subjects:[];schoolRecallSubjectsAt=Date.now();return schoolRecallSubjects;})
+    .catch(()=>{schoolRecallSubjects=schoolRecallSubjects||[];schoolRecallSubjectsAt=Date.now();return schoolRecallSubjects;})
+    .finally(()=>{schoolRecallSubjectsLoading=null;});
+  return schoolRecallSubjectsLoading;
+}
+function renderSubjectFocusUI(loading=false){
+  qpanelEl.innerHTML='';
   const title=document.createElement('h2');title.textContent='SUBJECT FOCUS';qpanelEl.appendChild(title);
   const intro=document.createElement('p');intro.className='subject-intro';intro.textContent='Choose the subject used by Recall Cast and limbo knowledge challenges.';qpanelEl.appendChild(intro);
   const mastery=globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.mastery;
   if(mastery){const card=document.createElement('div');card.className='subject-mastery';const pct=mastery.attempts?Math.round(mastery.accuracy*100):0;card.innerHTML='<small>YOUR RETRIEVAL RECORD</small><b>'+pct+'% accuracy</b><span>'+mastery.mastered+'/'+mastery.total+' topics securely learned · '+mastery.due+' due now</span>';qpanelEl.appendChild(card);}
-  const grid=document.createElement('div');grid.className='subject-grid';const current=selectedRecallSubject();
-  for(const subject of RECALL_SUBJECTS){const button=qBtn(subject,()=>{try{localStorage.setItem('bc_recall_subject',subject);}catch{}if(globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markSubjectFocus();if(NET.on&&NET.room)NET.room.send('recallSubject',{subject});sysMsg('Recall subject set to <b>'+escHTML(subject)+'</b>.');closeQWin();});button.classList.toggle('selected',subject===current);button.innerHTML='<b>'+escHTML(subject)+'</b><span>'+(subject===current?'CURRENT FOCUS':'SELECT SUBJECT')+'</span>';grid.appendChild(button);}
+  const grid=document.createElement('div');grid.className='subject-grid';const current=selectedRecallSubject(),options=recallSubjectOptions();
+  if(loading&&!subjectNames(schoolRecallSubjects).length){const note=document.createElement('p');note.className='qtext';note.textContent='Loading your assigned school subjects...';qpanelEl.appendChild(note);}
+  for(const subject of options){const button=qBtn(subject,()=>{try{localStorage.setItem('bc_recall_subject',subject);}catch{}if(globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markSubjectFocus();if(NET.on&&NET.room)NET.room.send('recallSubject',{subject});sysMsg('Recall subject set to <b>'+escHTML(subject)+'</b>.');closeQWin();});button.classList.toggle('selected',subject===current);button.innerHTML='<b>'+escHTML(subject)+'</b><span>'+(subject===current?'CURRENT FOCUS':'SELECT SUBJECT')+'</span>';grid.appendChild(button);}
   qpanelEl.appendChild(grid);const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+}
+function openSubjectFocusUI(){
+  if(uiOpen)closeUI(false);openQWin('subject-focus');
+  renderSubjectFocusUI(!schoolRecallSubjects);
+  loadSchoolRecallSubjects().then(()=>{if(qModalIs('subject-focus'))renderSubjectFocusUI(false);});
 }
 Object.defineProperty(globalThis,'BlockcraftSubjectFocus',{value:Object.freeze({open:openSubjectFocusUI}),configurable:true});
 

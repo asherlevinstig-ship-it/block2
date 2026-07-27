@@ -61,7 +61,7 @@
     Object.freeze({subject:'Religious Education',stage:'KS3',prompt:'What is a pilgrimage?',answers:['A journey to a sacred place','A religious building','A type of prayer','A moral rule'],correct:0,explanation:'A pilgrimage is a journey made for religious or spiritual reasons.'}),
     Object.freeze({subject:'Religious Education',stage:'GCSE',prompt:'Which term means belief in one God?',answers:['Monotheism','Polytheism','Atheism','Humanism'],correct:0,explanation:'Monotheism is belief in a single God.'})
   ].concat(COMPUTER_SCIENCE_BANK).map((q,index)=>Object.freeze({...q,id:q.id||'q'+String(index+1).padStart(3,'0'),topic:q.topic||TOPICS[index],difficulty:q.difficulty||(q.stage==='GCSE'?2:1),spec:q.spec||'legacy'})));
-  const SUBJECTS=Object.freeze(['Computer Science','Information Technology','Religious Education','English']);
+  const SUBJECTS=Object.freeze([...new Set(QUESTIONS.map(q=>q.subject).filter(Boolean))].sort());
   const REVIEW_INTERVALS_MS=Object.freeze([10*60*1000,24*60*60*1000,3*24*60*60*1000,7*24*60*60*1000,14*24*60*60*1000,30*24*60*60*1000]);
   const RETRY_INTERVAL_MS=2*60*1000;
   function normalizedPrompt(text){return String(text||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}

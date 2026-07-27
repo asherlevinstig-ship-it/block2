@@ -684,6 +684,35 @@ test('MySQL game question store discovers subjects and classes through class tea
   assert.deepEqual(classes, [{ id: 3, name: '8A', joinCode: 'JOIN8A', active: true }]);
 });
 
+test('MySQL game question store lists student subjects from assigned classes', async () => {
+  const queries = [];
+  const pool = {
+    async execute(sql, params = []) {
+      queries.push({ sql, params });
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT class_id FROM students/i.test(sql)) return [[{ class_id: 3 }]];
+      if (/SELECT class_id FROM student_classes/i.test(sql)) return [[]];
+      if (/SELECT class_id FROM class_students/i.test(sql)) return [[]];
+      if (/JOIN class_subjects cs ON cs.subject_id = s.id/i.test(sql)) return [[
+        { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
+        { id: 6, name: 'Maths', code: 'MATH', school_id: 12 },
+      ]];
+      if (/JOIN classes c ON c.subject_id = s.id/i.test(sql)) return [[]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const subjects = await store.listStudentSubjects({ id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' });
+  assert.deepEqual(subjects, [
+    { id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 },
+    { id: 6, name: 'Maths', code: 'MATH', schoolId: 12 },
+  ]);
+  assert.ok(queries.some(q => /class_subjects/i.test(q.sql)));
+});
+
 test('MySQL game question analytics includes class students with zero attempts', async () => {
   const pool = {
     async execute(sql, params = []) {

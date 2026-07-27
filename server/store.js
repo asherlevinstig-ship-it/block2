@@ -1024,7 +1024,7 @@ function sanitizeProfile(p) {
   out.utilityLoadout = sanitizeUtilityLoadout(p.utilityLoadout, out.utilityUnlocks);
   out.mutedPlayers = Array.isArray(p.mutedPlayers) ? [...new Set(p.mutedPlayers.map(cleanToken).filter(Boolean))].slice(0, 256) : [];
   out.friends = Array.isArray(p.friends) ? [...new Set(p.friends.map(cleanToken).filter(Boolean))].slice(0, 256) : [];
-  out.recallSubject = ['Computer Science','Information Technology','Religious Education','English'].includes(p.recallSubject) ? p.recallSubject : 'English';
+  out.recallSubject = cleanShortText(p.recallSubject, 'English', 96);
   out.recallMastery = { items: {}, lastQuestionId: '', lastTopic: '', totalAttempts: 0, totalCorrect: 0 };
   const recall = p.recallMastery && typeof p.recallMastery === 'object' ? p.recallMastery : {};
   out.recallMastery.lastQuestionId = typeof recall.lastQuestionId === 'string' ? recall.lastQuestionId.slice(0,16) : '';

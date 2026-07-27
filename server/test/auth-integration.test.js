@@ -103,6 +103,10 @@ test('teacher game-question endpoints require a teacher session and expose game 
       assert.equal(account.id, 'teacher_7');
       return [{ id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 }];
     },
+    async listStudentSubjects(account) {
+      assert.equal(account.id, 'student_9');
+      return [{ id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 }];
+    },
     async listQuestions(account, query) {
       assert.equal(account.id, 'teacher_7');
       assert.equal(query.subjectId, '5');
@@ -168,6 +172,9 @@ test('teacher game-question endpoints require a teacher session and expose game 
     const studentSid = await f.auth.issueSession({ id: 'student_9', username: 'learner@example.test', displayName: 'Learner', accountType: 'student', role: 'student' });
     const student = await f.request('/auth/teacher/subjects', { headers: { Authorization: 'Bearer ' + studentSid } });
     assert.equal(student.status, 403);
+    const studentSubjects = await f.request('/auth/profile/subjects', { headers: { Authorization: 'Bearer ' + studentSid } });
+    assert.equal(studentSubjects.status, 200);
+    assert.deepEqual((await studentSubjects.json()).subjects, [{ id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 }]);
 
     const teacherSid = await f.auth.issueSession({ id: 'teacher_7', username: 'teacher@example.test', displayName: 'Teacher', accountType: 'teacher', role: 'teacher', schoolId: '12' });
     const subjects = await f.request('/auth/teacher/subjects', { headers: { Authorization: 'Bearer ' + teacherSid } });

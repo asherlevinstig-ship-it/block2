@@ -6,13 +6,15 @@ const { getAuthService }=require('../auth');
 
 class RecallMixin{
   initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
+  cleanRecallSubject(value){return String(value||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,96);}
   recallTutorialSpace(p){
     return !!(p&&(p.dim==='tutorial'||String(p.dgn||'').startsWith('tutorial-')));
   }
   handleRecallSubject(client,message={}){
-    if(!client||!RECALL.SUBJECTS.includes(message.subject))return;
-    this.recallSubjects.set(client.sessionId,message.subject);
-    const rec=typeof this.profileFor==='function'&&this.profileFor(client);if(rec){rec.prof.recallSubject=message.subject;this.dirtyPlayers.add(rec.token);client.send('recallMastery',{subject:message.subject,...RECALL.masterySummary(rec.prof.recallMastery||{},message.subject)});}
+    const subject=this.cleanRecallSubject(message.subject);
+    if(!client||!subject)return;
+    this.recallSubjects.set(client.sessionId,subject);
+    const rec=typeof this.profileFor==='function'&&this.profileFor(client);if(rec){rec.prof.recallSubject=subject;this.dirtyPlayers.add(rec.token);client.send('recallMastery',{subject,...RECALL.masterySummary(rec.prof.recallMastery||{},subject)});}
   }
   recallStandHeight(p,x,z){
     if(this.recallTutorialSpace(p))return p.y;
@@ -75,7 +77,9 @@ class RecallMixin{
     const active=this.recallChallenges.get(client.sessionId);
     if(active&&active.expiresAt>now)return client.send('recallReject',{reason:'active'});
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);
-    const subject=RECALL.SUBJECTS.includes(message.subject)?message.subject:(this.recallSubjects.get(client.sessionId)||(rec&&rec.prof.recallSubject)||'English');
+    const requested=this.cleanRecallSubject(message.subject);
+    const stored=this.cleanRecallSubject(this.recallSubjects.get(client.sessionId)||(rec&&rec.prof.recallSubject)||'');
+    const subject=requested||stored||'English';
     this.recallSubjects.set(client.sessionId,subject);
     if(rec)rec.prof.recallSubject=subject;
     let ruinId='';

@@ -949,6 +949,17 @@ class AuthService {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Profile update failed.' });
       }
     });
+    app.get('/auth/profile/subjects', async (req, res) => {
+      const account = this.authenticateRequest(req);
+      if (!account) return res.status(401).json({ ok: false, error: 'Sign in required.' });
+      try {
+        const store = this.getGameQuestionStore();
+        const subjects = store && typeof store.listStudentSubjects === 'function' ? await store.listStudentSubjects(account) : [];
+        res.json({ ok: true, subjects });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load subjects.' });
+      }
+    });
     app.get('/auth/teacher/subjects', async (req, res) => {
       const account = this.authorizeTeacher(req);
       if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });

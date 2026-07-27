@@ -1972,7 +1972,9 @@ test('Left Alt opens subject focus while Escape only closes or releases cursor',
   assert.doesNotMatch(escapeCloseBlock,/closeUI\(false\)|closeStat\(false\)|closeQWin\(false\)/);
   assert.doesNotMatch(combat,/overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active/);
   assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
-  for(const subject of ['Computer Science','Information Technology','Religious Education','English'])assert.match(menus,new RegExp(subject));
+  assert.match(menus,/fetch\('\/auth\/profile\/subjects',\{headers:authHeader\(\),credentials:'include'\}\)/);
+  assert.match(menus,/function recallSubjectOptions\(\)\{const names=subjectNames\(schoolRecallSubjects\);return names\.length\?names:DEFAULT_RECALL_SUBJECTS;\}/);
+  assert.match(menus,/Loading your assigned school subjects/);
   assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
 });
 
