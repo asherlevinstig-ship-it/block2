@@ -17,6 +17,11 @@ const netTick=networkingApi.tick;
 // ---------------- main loop ----------------
 const coordsEl=document.getElementById('coords');
 const currentQuestEl=document.getElementById('currentquest');
+const homeworkHudEl=document.createElement('div');
+homeworkHudEl.id='homeworkhud';
+homeworkHudEl.className='hidden';
+homeworkHudEl.setAttribute('aria-live','polite');
+document.body.appendChild(homeworkHudEl);
 const locationEl=document.getElementById('locationhud');
 const activityTrackerEl=document.getElementById('activitytracker');
 const zoneNameEl=document.getElementById('zonename');
@@ -630,6 +635,32 @@ function serverObjectiveForHud(){
   return list
     .filter(o=>o.source!=='tutorial')
     .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0] || null;
+}
+function homeworkObjectiveForHud(){
+  return activeObjectiveList()
+    .filter(o=>o.source==='homework'||o.questType==='homework'||String(o.id||'').startsWith('homework:'))
+    .sort((a,b)=>(a.priority|0)-(b.priority|0)||String(a.title||'').localeCompare(String(b.title||'')))[0] || null;
+}
+function refreshHomeworkHud(){
+  if(!homeworkHudEl)return;
+  const o=homeworkObjectiveForHud(),p=o&&serverObjectiveProgressParts(o);
+  if(!o||!p){
+    homeworkHudEl.classList.add('hidden');
+    homeworkHudEl.innerHTML='';
+    return;
+  }
+  const complete=p.current>=p.required;
+  const label=complete?'Complete':'Questions';
+  const period=(o.location&&o.location!=='Recall Cast')?o.location:(o.title||'Homework');
+  homeworkHudEl.classList.toggle('complete',complete);
+  homeworkHudEl.classList.remove('hidden');
+  homeworkHudEl.innerHTML=
+    '<button type="button" data-objective-action="'+(complete?'questlog':'recall')+'">'+
+      '<span>Homework</span>'+
+      '<b>'+escHTML(String(p.current)+'/'+String(p.required))+'</b>'+
+      '<small>'+escHTML(label+' - '+period)+'</small>'+
+      '<i><em style="width:'+p.pct+'%"></em></i>'+
+    '</button>';
 }
 function serverObjectiveProgressText(o){
   const p=o&&o.progress;
@@ -1268,6 +1299,17 @@ if(currentQuestEl){
   };
   currentQuestEl.addEventListener('pointerdown',triggerObjectiveAction,{capture:true});
   currentQuestEl.addEventListener('click',triggerObjectiveAction);
+}
+if(homeworkHudEl){
+  const triggerHomeworkAction=e=>{
+    const btn=e.target&&e.target.closest&&e.target.closest('[data-objective-action]');
+    if(!btn)return;
+    e.preventDefault();
+    e.stopPropagation();
+    handleObjectiveAction(btn.dataset.objectiveAction,btn);
+  };
+  homeworkHudEl.addEventListener('pointerdown',triggerHomeworkAction,{capture:true});
+  homeworkHudEl.addEventListener('click',triggerHomeworkAction);
 }
 function currentObjective(){
   if(dim==='gatecutscene') return {label:'Gate Vision', text:'The first dungeon reveals itself'};
@@ -1931,6 +1973,7 @@ function updateEncounterPrompt(){
 }
 function updateInfoHud(held){
   document.body.classList.toggle('calm-town', (locked || uiOpen || statOpen || qOpen || claimMode) && calmTownHud());
+  refreshHomeworkHud();
   if(onboardingActive&&dim==='tutorial'){
     if(activityTrackerEl)activityTrackerEl.classList.add('hidden');
     coordsEl.innerHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>';

@@ -1606,7 +1606,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/document\.body\.classList\.toggle\('tutorial-hud-active', tutorialVisible\);/);
   assert.match(combat,/document\.body\.classList\.toggle\('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen\);/);
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
-  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
+  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
   assert.match(combat,/const minimal=offMainRoom\|\|\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
@@ -3638,6 +3638,11 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/Claim Job Reward/);
   assert.match(frame,/Claim Guild Contract/);
   assert.match(frame,/function activeObjectiveList\(\)/);
+  assert.match(frame,/const homeworkHudEl=document\.createElement\('div'\)/);
+  assert.match(frame,/function homeworkObjectiveForHud\(\)/);
+  assert.match(frame,/function refreshHomeworkHud\(\)/);
+  assert.match(frame,/homeworkHudEl\.addEventListener\('pointerdown'/);
+  assert.match(frame,/refreshHomeworkHud\(\);\s*if\(onboardingActive&&dim==='tutorial'\)/);
   assert.match(frame,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
   assert.match(frame,/QUEST_OBJECTIVES\.normalizeObjectiveList/);
   assert.match(frame,/function serverObjectiveForHud\(\)/);
@@ -3764,6 +3769,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(styles,/\.gate-prep-mini/);
   assert.match(styles,/#currentquest \.objective-line\.prep/);
   assert.match(styles,/#currentquest \.objective-line\.homework/);
+  assert.match(styles,/#homeworkhud/);
+  assert.match(styles,/#homeworkhud button/);
   assert.match(styles,/#currentquest \.objective-line\{grid-template-columns:36px minmax\(0,1fr\)/);
   assert.match(styles,/#currentquest \.oact\{grid-column:2;grid-row:2/);
   assert.match(styles,/#currentquest \.obody span\{display:none\}/);

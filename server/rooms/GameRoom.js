@@ -1180,7 +1180,10 @@ class GameRoom extends Room {
         await this.allowReconnection(client, 15);
         const token = this.tokens.get(client.sessionId);
         const profile = token && this.profiles.get(token);
-        if (profile) this.sendProfile(client, profile);
+        if (profile) {
+          this.sendProfile(client, profile);
+          if (typeof this.refreshHomeworkObjectives === 'function') this.refreshHomeworkObjectives(client, profile);
+        }
         const hunger = this.playerHunger.get(client.sessionId);
         if (hunger) client.send('hunger', { hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
         if (!this.resumeTutorialDimension(client) && !this.resumeEventParticipant(client)) this.resumeDungeonInstance(client);
