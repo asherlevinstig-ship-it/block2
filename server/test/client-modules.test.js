@@ -703,8 +703,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /\/auth\/teacher\/homework/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/curriculum-requests/);
   assert.match(teacherDashboardSource, /Questions to answer/);
-  assert.match(teacherDashboardSource, /Daily until due date/);
-  assert.match(teacherDashboardSource, /Weekly until due date/);
+  assert.match(teacherDashboardSource, /Daily until cancelled/);
+  assert.match(teacherDashboardSource, /Weekly until cancelled/);
+  assert.match(teacherDashboardSource, /Homework day/);
+  assert.match(teacherDashboardSource, /Until cancelled/);
   assert.match(teacherDashboardSource, /ref="studentChart"/);
   assert.match(teacherDashboardSource, /ref="questionChart"/);
   assert.match(teacherDashboardSource, /teacher-vue-analysis/);
@@ -731,6 +733,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(stylesSource, /\.teacher-vue-analysis-row/);
   assert.match(stylesSource, /\.teacher-vue-curriculum/);
   assert.match(stylesSource, /\.teacher-vue-homework/);
+  assert.match(stylesSource, /\.teacher-vue-schedule-note/);
   assert.match(stylesSource, /\.teacher-vue-homework-row/);
   assert.match(stylesSource, /\.teacher-vue-file-list/);
   assert.match(stylesSource, /\.teacher-vue-workspace/);

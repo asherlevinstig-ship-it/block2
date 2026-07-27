@@ -12,6 +12,7 @@ const cleanHomeworkStatus = value => {
   return ['draft', 'scheduled', 'live', 'closed'].includes(status) ? status : 'scheduled';
 };
 const clampInt = (value, min, max) => Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
+const hasOwn = (obj, key) => !!obj && Object.prototype.hasOwnProperty.call(obj, key);
 const cleanDate = value => {
   const text = String(value || '').trim().slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
@@ -67,6 +68,7 @@ function publicHomework(row) {
     title: row.title || '',
     cadence: row.cadence || 'once',
     dueDate: publicDate(row.due_date),
+    weeklyDay: row.weekly_day == null ? null : clampInt(row.weekly_day, 0, 6),
     questionCount: Number(row.question_count) || 10,
     status: row.status || 'scheduled',
     notes: row.notes || '',
@@ -163,7 +165,8 @@ class MySqlGameQuestionStore {
       class_id INT UNSIGNED NULL,
       title VARCHAR(160) NOT NULL DEFAULT '',
       cadence ENUM('once','daily','weekly') NOT NULL DEFAULT 'once',
-      due_date DATE NOT NULL,
+      due_date DATE NULL,
+      weekly_day TINYINT UNSIGNED NULL,
       question_count SMALLINT UNSIGNED NOT NULL DEFAULT 10,
       status ENUM('draft','scheduled','live','closed') NOT NULL DEFAULT 'scheduled',
       notes TEXT NOT NULL,
@@ -175,7 +178,22 @@ class MySqlGameQuestionStore {
       KEY idx_game_homework_class_due (class_id, due_date),
       KEY idx_game_homework_school_due (school_id, due_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await this.ensureHomeworkColumns(pool);
     this.ready = true;
+  }
+
+  async ensureHomeworkColumns(pool) {
+    let columns = [];
+    try {
+      const [rows] = await pool.execute('SHOW COLUMNS FROM game_homework');
+      columns = Array.isArray(rows) ? rows.map(row => String(row.Field || '').toLowerCase()) : [];
+    } catch (_) {
+      return;
+    }
+    if (!columns.includes('weekly_day')) {
+      await pool.execute('ALTER TABLE game_homework ADD COLUMN weekly_day TINYINT UNSIGNED NULL AFTER due_date');
+    }
+    await pool.execute('ALTER TABLE game_homework MODIFY COLUMN due_date DATE NULL').catch(() => {});
   }
 
   teacherIds(account) {
@@ -361,14 +379,18 @@ class MySqlGameQuestionStore {
 
   normalizeHomeworkPatch(input = {}) {
     const title = cleanText(input.title, 160);
+    const cadence = cleanHomeworkCadence(input.cadence || input.schedule);
     const dueDate = cleanDate(input.dueDate || input.due_date);
     if (title.length < 3) throw Object.assign(new Error('Add a short homework title.'), { status: 400, code: 'title' });
-    if (!dueDate) throw Object.assign(new Error('Choose a homework due date.'), { status: 400, code: 'due_date' });
+    if (cadence === 'once' && !dueDate) throw Object.assign(new Error('Choose a homework due date.'), { status: 400, code: 'due_date' });
+    const weeklyDay = hasOwn(input, 'weeklyDay') || hasOwn(input, 'weekly_day') ? clampInt(input.weeklyDay ?? input.weekly_day, 0, 6) : null;
+    if (cadence === 'weekly' && weeklyDay == null) throw Object.assign(new Error('Choose the weekly homework day.'), { status: 400, code: 'weekly_day' });
     return {
       classId: clampInt(input.classId || input.class_id, 0, 2147483647),
       title,
-      cadence: cleanHomeworkCadence(input.cadence || input.schedule),
-      dueDate,
+      cadence,
+      dueDate: cadence === 'once' ? dueDate : '',
+      weeklyDay: cadence === 'weekly' ? weeklyDay : null,
       questionCount: clampInt(input.questionCount || input.question_count || 10, 1, 100),
       status: cleanHomeworkStatus(input.status),
       notes: cleanText(input.notes, 1000),
@@ -389,7 +411,7 @@ class MySqlGameQuestionStore {
        LEFT JOIN subjects s ON s.id = gh.subject_id
        LEFT JOIN classes c ON c.id = gh.class_id
        WHERE ${where}
-       ORDER BY gh.due_date ASC, gh.updated_at DESC
+       ORDER BY COALESCE(gh.due_date, '9999-12-31') ASC, gh.weekly_day ASC, gh.updated_at DESC
        LIMIT 200`,
       params,
     );
@@ -403,8 +425,8 @@ class MySqlGameQuestionStore {
     const patch = this.normalizeHomeworkPatch(input);
     const [result] = await this.getPool().execute(
       `INSERT INTO game_homework
-       (school_id, subject_id, teacher_id, class_id, title, cadence, due_date, question_count, status, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (school_id, subject_id, teacher_id, class_id, title, cadence, due_date, weekly_day, question_count, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         subject.school_id == null ? (schoolId || null) : subject.school_id,
         subjectId,
@@ -412,7 +434,8 @@ class MySqlGameQuestionStore {
         patch.classId || null,
         patch.title,
         patch.cadence,
-        patch.dueDate,
+        patch.dueDate || null,
+        patch.weeklyDay,
         patch.questionCount,
         patch.status,
         patch.notes,
@@ -427,7 +450,7 @@ class MySqlGameQuestionStore {
        LIMIT 1`,
       [Number(result.insertId || 0)],
     );
-    return publicHomework(rows && rows[0] || { id: Number(result.insertId || 0), subject_id: subjectId, teacher_id: teacherId, title: patch.title, cadence: patch.cadence, due_date: patch.dueDate, question_count: patch.questionCount, status: patch.status, notes: patch.notes });
+    return publicHomework(rows && rows[0] || { id: Number(result.insertId || 0), subject_id: subjectId, teacher_id: teacherId, title: patch.title, cadence: patch.cadence, due_date: patch.dueDate || null, weekly_day: patch.weeklyDay, question_count: patch.questionCount, status: patch.status, notes: patch.notes });
   }
 
   async createCurriculumRequest(account, input = {}) {

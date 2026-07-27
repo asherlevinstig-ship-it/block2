@@ -122,12 +122,13 @@ test('teacher game-question endpoints require a teacher session and expose game 
     async listHomework(account, query) {
       assert.equal(account.id, 'teacher_7');
       assert.equal(query.subjectId, '5');
-      return [{ id: 12, subjectId: 5, classId: 3, className: '8A', title: 'Networks retrieval', cadence: 'weekly', dueDate: '2026-09-18', questionCount: 12, status: 'scheduled' }];
+      return [{ id: 12, subjectId: 5, classId: 3, className: '8A', title: 'Networks retrieval', cadence: 'weekly', weeklyDay: 2, dueDate: '', questionCount: 12, status: 'scheduled' }];
     },
     async createHomework(account, body) {
       assert.equal(account.id, 'teacher_7');
       assert.equal(body.subjectId, 5);
       assert.equal(body.cadence, 'daily');
+      assert.equal(body.dueDate || '', '');
       assert.equal(body.questionCount, 8);
       return { id: 13, subjectId: 5, title: body.title, cadence: body.cadence, dueDate: body.dueDate, questionCount: body.questionCount, status: 'scheduled' };
     },
@@ -192,7 +193,6 @@ test('teacher game-question endpoints require a teacher session and expose game 
       subjectId: 5,
       title: 'Daily binary practice',
       cadence: 'daily',
-      dueDate: '2026-09-21',
       questionCount: 8,
     }, { Authorization: 'Bearer ' + teacherSid }));
     assert.equal(scheduled.status, 200);

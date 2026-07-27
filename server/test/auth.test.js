@@ -474,7 +474,8 @@ test('MySQL game question store creates scheduled homework for teacher classes',
         class_name: '8A',
         title: 'Networks retrieval',
         cadence: 'weekly',
-        due_date: '2026-09-18',
+        due_date: null,
+        weekly_day: 2,
         question_count: 12,
         status: 'scheduled',
         notes: 'Focus on routers and DNS.',
@@ -485,15 +486,17 @@ test('MySQL game question store creates scheduled homework for teacher classes',
   const store = new MySqlGameQuestionStore({ pool });
   const homework = await store.createHomework(
     { id: 'teacher_7', accountType: 'teacher', role: 'teacher', schoolId: '12' },
-    { subjectId: 5, classId: 3, title: 'Networks retrieval', cadence: 'weekly', dueDate: '2026-09-18', questionCount: 12, notes: 'Focus on routers and DNS.' },
+    { subjectId: 5, classId: 3, title: 'Networks retrieval', cadence: 'weekly', weeklyDay: 2, questionCount: 12, notes: 'Focus on routers and DNS.' },
   );
   assert.equal(homework.id, 12);
   assert.equal(homework.cadence, 'weekly');
+  assert.equal(homework.weeklyDay, 2);
   assert.equal(homework.questionCount, 12);
   assert.match(inserted.sql, /INSERT INTO game_homework/);
   assert.equal(inserted.params[3], 3);
-  assert.equal(inserted.params[6], '2026-09-18');
-  assert.equal(inserted.params[7], 12);
+  assert.equal(inserted.params[6], null);
+  assert.equal(inserted.params[7], 2);
+  assert.equal(inserted.params[8], 12);
 });
 
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {

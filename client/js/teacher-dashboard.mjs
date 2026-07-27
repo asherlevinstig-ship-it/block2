@@ -67,10 +67,13 @@ const emptyHomework = () => ({
   classId: '',
   cadence: 'once',
   dueDate: '',
+  weeklyDay: 1,
   questionCount: 10,
   status: 'scheduled',
   notes: '',
 });
+
+const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function cleanQuestion(question) {
   return {
@@ -132,7 +135,7 @@ createApp({
         id: homework.id || index,
         title: homework.title || 'Untitled homework',
         className: homework.className || 'All classes',
-        due: homework.dueDate || 'No due date',
+        due: homework.cadence === 'daily' ? 'Daily until cancelled' : homework.cadence === 'weekly' ? 'Every ' + weekdayName(homework.weeklyDay) : homework.dueDate || 'No due date',
         completion: '0/' + (Number(homework.questionCount) || 10),
         accuracy: Number(state.analytics.totals.accuracy || 0),
         status: homework.cadence === 'daily' ? 'Daily' : homework.cadence === 'weekly' ? 'Weekly' : homework.status || 'Scheduled',
@@ -180,6 +183,10 @@ createApp({
     function setNotice(message) {
       state.notice = message || '';
       if (message) state.error = '';
+    }
+
+    function weekdayName(value) {
+      return weekdayNames[Math.max(0, Math.min(6, Number(value) || 0))] || 'Monday';
     }
 
     function signOut() {
@@ -373,14 +380,16 @@ createApp({
     function validateHomework() {
       if (!state.subjectId) throw new Error('Choose a subject first.');
       const title = String(state.homework.title || '').trim();
+      const cadence = state.homework.cadence || 'once';
       if (title.length < 3) throw new Error('Add a short homework title.');
-      if (!state.homework.dueDate) throw new Error('Choose a homework due date.');
+      if (cadence === 'once' && !state.homework.dueDate) throw new Error('Choose a homework due date.');
       return {
         subjectId: Number(state.subjectId),
         classId: state.homework.classId || state.classId || '',
         title,
-        cadence: state.homework.cadence || 'once',
-        dueDate: state.homework.dueDate,
+        cadence,
+        dueDate: cadence === 'once' ? state.homework.dueDate : '',
+        weeklyDay: cadence === 'weekly' ? Number(state.homework.weeklyDay) || 0 : null,
         questionCount: Number(state.homework.questionCount) || 10,
         status: state.homework.status || 'scheduled',
         notes: state.homework.notes || '',
@@ -544,6 +553,8 @@ createApp({
       saveQuestion,
       clearHomework,
       saveHomework,
+      weekdayName,
+      weekdayNames,
     };
   },
   template: `
@@ -774,10 +785,14 @@ createApp({
               </select></label>
               <label>Schedule<select v-model="state.homework.cadence">
                 <option value="once">One set by due date</option>
-                <option value="daily">Daily until due date</option>
-                <option value="weekly">Weekly until due date</option>
+                <option value="daily">Daily until cancelled</option>
+                <option value="weekly">Weekly until cancelled</option>
               </select></label>
-              <label>Due by<input v-model="state.homework.dueDate" type="date"></label>
+              <label v-if="state.homework.cadence === 'once'">Due by<input v-model="state.homework.dueDate" type="date"></label>
+              <label v-if="state.homework.cadence === 'weekly'">Homework day<select v-model.number="state.homework.weeklyDay">
+                <option v-for="(day, index) in weekdayNames" :key="day" :value="index">{{ day }}</option>
+              </select></label>
+              <div class="teacher-vue-schedule-note" v-if="state.homework.cadence === 'daily'">Runs every day until you change the status to Closed.</div>
               <label>Questions to answer<input v-model.number="state.homework.questionCount" type="number" min="1" max="100" step="1"></label>
               <label>Status<select v-model="state.homework.status">
                 <option value="scheduled">Scheduled</option>
@@ -794,12 +809,12 @@ createApp({
           </form>
           <section class="teacher-vue-panel teacher-vue-homework-list">
             <header><h2>Scheduled homework</h2><button type="button" @click="refreshAll">Refresh</button></header>
-            <div class="teacher-vue-homework-row head"><span>Title</span><span>Class</span><span>Schedule</span><span>Due</span><span>Questions</span></div>
+            <div class="teacher-vue-homework-row head"><span>Title</span><span>Class</span><span>Schedule</span><span>Runs</span><span>Questions</span></div>
             <div class="teacher-vue-homework-row" v-for="homework in state.homeworks" :key="homework.id">
               <span>{{ homework.title }}</span>
               <span>{{ homework.className || 'All classes' }}</span>
               <strong>{{ homework.cadence === 'daily' ? 'Daily' : homework.cadence === 'weekly' ? 'Weekly' : 'One set' }}</strong>
-              <span>{{ homework.dueDate }}</span>
+              <span>{{ homework.cadence === 'daily' ? 'Until cancelled' : homework.cadence === 'weekly' ? 'Every ' + weekdayName(homework.weeklyDay) : homework.dueDate }}</span>
               <i>{{ homework.questionCount }} questions</i>
             </div>
             <div class="teacher-vue-empty" v-if="!state.homeworks.length">No homework has been scheduled for this subject yet.</div>
