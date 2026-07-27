@@ -633,6 +633,37 @@ class MySqlGameQuestionStore {
     return [...ids].slice(0, 20);
   }
 
+  async studentRosterRows(account, classId = 0) {
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    classId = clampInt(classId, 0, 2147483647);
+    const schoolWhere = '(s.school_id IS NULL OR ? = 0 OR s.school_id = ?)';
+    let rows = [];
+    if (classId) {
+      const candidates = [
+        [`SELECT s.id, s.name, s.email, s.school_id FROM students s WHERE s.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id FROM students s JOIN student_classes sc ON sc.student_id = s.id WHERE sc.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id FROM students s JOIN class_students cs ON cs.student_id = s.id WHERE cs.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+      ];
+      for (const [sql, params] of candidates) rows = rows.concat(await this.safeQuery(sql, params));
+    } else if (schoolId) {
+      rows = await this.safeQuery(
+        `SELECT s.id, s.name, s.email, s.school_id
+         FROM students s
+         WHERE ${schoolWhere}
+         ORDER BY s.name ASC, s.email ASC
+         LIMIT 500`,
+        [schoolId, schoolId],
+      );
+    }
+    const seen = new Set();
+    return (rows || []).filter(row => {
+      const id = Number(row && row.id) || 0;
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }
+
   async activeHomeworkRowsForStudent(account, subjectId = 0) {
     const studentId = sourceIdFromAccount(account, 'student');
     if (!studentId) return { studentId: 0, rows: [] };
@@ -874,9 +905,19 @@ class MySqlGameQuestionStore {
     await this.assertTeacherSubject(account, subjectId);
     const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
     const days = clampInt(query.days || 30, 1, 365);
+    const rosterRows = await this.studentRosterRows(account, classId);
+    const rosterIds = rosterRows.map(row => Number(row.id) || 0).filter(Boolean);
     const params = [subjectId, days];
     let attemptWhere = 'gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
-    if (classId) { attemptWhere += ' AND gqa.class_id = ?'; params.push(classId); }
+    if (classId) {
+      attemptWhere += ' AND (gqa.class_id = ?';
+      params.push(classId);
+      if (rosterIds.length) {
+        attemptWhere += ` OR gqa.student_id IN (${rosterIds.map(() => '?').join(',')})`;
+        params.push(...rosterIds);
+      }
+      attemptWhere += ')';
+    }
     const [studentRows] = await this.getPool().execute(
       `SELECT
          COALESCE(gqa.student_id, 0) AS student_id,
@@ -890,9 +931,21 @@ class MySqlGameQuestionStore {
        WHERE ${attemptWhere}
        GROUP BY COALESCE(gqa.student_id, 0), student_name, student_email
        ORDER BY attempts DESC, student_name ASC
-       LIMIT 200`,
+      LIMIT 200`,
       params,
     );
+    let questionAttemptClassJoin = '';
+    const questionParams = [days];
+    if (classId) {
+      questionAttemptClassJoin = 'AND (gqa.class_id = ?';
+      questionParams.push(classId);
+      if (rosterIds.length) {
+        questionAttemptClassJoin += ` OR gqa.student_id IN (${rosterIds.map(() => '?').join(',')})`;
+        questionParams.push(...rosterIds);
+      }
+      questionAttemptClassJoin += ')';
+    }
+    questionParams.push(subjectId);
     const [questionRows] = await this.getPool().execute(
       `SELECT
          gq.id,
@@ -907,25 +960,48 @@ class MySqlGameQuestionStore {
          ON gqa.question_id = gq.id
         AND gqa.subject_id = gq.subject_id
         AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-        ${classId ? 'AND gqa.class_id = ?' : ''}
+        ${questionAttemptClassJoin}
        WHERE gq.subject_id = ?
        GROUP BY gq.id, gq.topic, gq.stage, gq.prompt, gq.review_status
        ORDER BY attempts DESC, gq.updated_at DESC
        LIMIT 200`,
-      classId ? [days, classId, subjectId] : [days, subjectId],
+      questionParams,
     );
     const normalize = row => {
       const attempts = Number(row.attempts) || 0;
       const correct = Number(row.correct) || 0;
       return { attempts, correct, accuracy: attempts ? Math.round((correct / attempts) * 100) : 0 };
     };
-    const students = (studentRows || []).map(row => ({
-      id: Number(row.student_id) || 0,
-      name: String(row.student_name || 'Unknown student'),
-      email: String(row.student_email || ''),
-      lastAttemptAt: row.last_attempt_at || null,
-      ...normalize(row),
-    }));
+    const byStudent = new Map();
+    for (const row of rosterRows || []) {
+      const id = Number(row.id) || 0;
+      if (!id) continue;
+      byStudent.set(id, {
+        id,
+        name: String(row.name || row.email || 'Unknown student'),
+        email: String(row.email || ''),
+        lastAttemptAt: null,
+        attempts: 0,
+        correct: 0,
+        accuracy: 0,
+      });
+    }
+    for (const row of studentRows || []) {
+      const id = Number(row.student_id) || 0;
+      const summary = {
+        id,
+        name: String(row.student_name || 'Unknown student'),
+        email: String(row.student_email || ''),
+        lastAttemptAt: row.last_attempt_at || null,
+        ...normalize(row),
+      };
+      if (id && byStudent.has(id)) byStudent.set(id, { ...byStudent.get(id), ...summary });
+      else byStudent.set(id || `unknown:${summary.name}`, summary);
+    }
+    const students = [...byStudent.values()].sort((a, b) => {
+      const support = Number(a.attempts > 0) - Number(b.attempts > 0);
+      return support || a.accuracy - b.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name);
+    });
     const questions = (questionRows || []).map(row => ({
       id: Number(row.id) || 0,
       topic: String(row.topic || ''),
