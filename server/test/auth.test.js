@@ -349,6 +349,7 @@ test('MySQL game question store creates the game_question table and teacher-owne
       calls.push({ sql, params });
       if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
       if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
       if (/FROM subjects/i.test(sql) && /LIMIT 1/i.test(sql)) return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
       if (/^INSERT INTO game_question/i.test(sql)) {
         inserted = { sql, params };
@@ -406,6 +407,7 @@ test('MySQL game question store records Recall attempts for student analytics', 
     async execute(sql, params = []) {
       if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
       if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
       if (/SELECT id, school_id FROM subjects/i.test(sql)) return [[{ id: 5, school_id: 12 }]];
       if (/SELECT id FROM game_question/i.test(sql)) return [[]];
       if (/^INSERT INTO game_question_attempt/i.test(sql)) {
@@ -447,6 +449,51 @@ test('MySQL game question store records Recall attempts for student analytics', 
   assert.equal(inserts[1].params[3], 9);
   assert.equal(inserts[1].params[5], 1);
   assert.equal(inserts[1].params[6], 0);
+});
+
+test('MySQL game question store creates scheduled homework for teacher classes', async () => {
+  let inserted = null;
+  const pool = {
+    async execute(sql, params = []) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/FROM subjects/i.test(sql) && /LIMIT 1/i.test(sql)) return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
+      if (/^INSERT INTO game_homework/i.test(sql)) {
+        inserted = { sql, params };
+        return [{ insertId: 12 }];
+      }
+      if (/FROM game_homework gh/i.test(sql) && /WHERE gh\.id = \?/i.test(sql)) return [[{
+        id: 12,
+        school_id: 12,
+        subject_id: 5,
+        subject_name: 'Computer Science',
+        subject_code: 'CS',
+        teacher_id: 7,
+        class_id: 3,
+        class_name: '8A',
+        title: 'Networks retrieval',
+        cadence: 'weekly',
+        due_date: '2026-09-18',
+        question_count: 12,
+        status: 'scheduled',
+        notes: 'Focus on routers and DNS.',
+      }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const homework = await store.createHomework(
+    { id: 'teacher_7', accountType: 'teacher', role: 'teacher', schoolId: '12' },
+    { subjectId: 5, classId: 3, title: 'Networks retrieval', cadence: 'weekly', dueDate: '2026-09-18', questionCount: 12, notes: 'Focus on routers and DNS.' },
+  );
+  assert.equal(homework.id, 12);
+  assert.equal(homework.cadence, 'weekly');
+  assert.equal(homework.questionCount, 12);
+  assert.match(inserted.sql, /INSERT INTO game_homework/);
+  assert.equal(inserted.params[3], 3);
+  assert.equal(inserted.params[6], '2026-09-18');
+  assert.equal(inserted.params[7], 12);
 });
 
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {

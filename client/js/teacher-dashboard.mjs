@@ -62,6 +62,16 @@ const emptyCurriculum = () => ({
   files: [],
 });
 
+const emptyHomework = () => ({
+  title: '',
+  classId: '',
+  cadence: 'once',
+  dueDate: '',
+  questionCount: 10,
+  status: 'scheduled',
+  notes: '',
+});
+
 function cleanQuestion(question) {
   return {
     ...question,
@@ -79,6 +89,7 @@ createApp({
       subjects: [],
       classes: [],
       questions: [],
+      homeworks: [],
       analytics: { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 },
       selectedId: 0,
       subjectId: '',
@@ -86,6 +97,7 @@ createApp({
       status: '',
       analyticsDays: 30,
       curriculum: emptyCurriculum(),
+      homework: emptyHomework(),
       search: '',
       view: 'overview',
       loading: true,
@@ -114,17 +126,16 @@ createApp({
     const questionRows = computed(() => (state.analytics.questions || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
     const needingSupport = computed(() => studentRows.value.filter(row => Number(row.accuracy || 0) < 60).length);
     const reviewCount = computed(() => questionRows.value.filter(row => Number(row.accuracy || 0) < 70 || Number(row.attempts || 0) >= 5).length);
-    const dueSoonCount = computed(() => Math.max(0, stats.value.draft + stats.value.reviewed));
-    const currentAssignments = computed(() => state.questions.slice(0, 5).map((question, index) => {
-      const row = questionRows.value.find(item => Number(item.id) === Number(question.id)) || {};
+    const dueSoonCount = computed(() => Math.max(0, state.homeworks.filter(homework => ['scheduled', 'live'].includes(String(homework.status || ''))).length));
+    const currentAssignments = computed(() => state.homeworks.slice(0, 5).map((homework, index) => {
       return {
-        id: question.id || index,
-        title: question.topic || question.prompt || 'Untitled question',
-        className: state.classes[index % Math.max(1, state.classes.length)]?.name || 'All classes',
-        due: index === 0 ? 'Today' : index === 1 ? 'Fri 23 May' : 'Mon 2 Jun',
-        completion: Number(row.attempts || 0) ? Math.min(30, Number(row.attempts || 0)) + '/30' : '0/30',
-        accuracy: Number(row.accuracy || state.analytics.totals.accuracy || 0),
-        status: question.reviewStatus === 'draft' ? 'Draft' : question.reviewStatus === 'teacher-reviewed' ? 'Review' : 'Live',
+        id: homework.id || index,
+        title: homework.title || 'Untitled homework',
+        className: homework.className || 'All classes',
+        due: homework.dueDate || 'No due date',
+        completion: '0/' + (Number(homework.questionCount) || 10),
+        accuracy: Number(state.analytics.totals.accuracy || 0),
+        status: homework.cadence === 'daily' ? 'Daily' : homework.cadence === 'weekly' ? 'Weekly' : homework.status || 'Scheduled',
       };
     }));
     const classRows = computed(() => {
@@ -140,17 +151,19 @@ createApp({
     const attentionItems = computed(() => [
       { tone: 'red', icon: '!', title: needingSupport.value + ' students need support', detail: 'Accuracy below 60% in the selected window', action: 'View students', view: 'students' },
       { tone: 'purple', icon: '?', title: reviewCount.value + ' written answers need review', detail: 'Prioritise low-accuracy or high-attempt questions', action: 'Review now', view: 'question-analysis' },
-      { tone: 'orange', icon: '+', title: dueSoonCount.value + ' draft items need publishing', detail: 'Draft and teacher-reviewed questions waiting', action: 'Manage', view: 'questions' },
+      { tone: 'orange', icon: '+', title: dueSoonCount.value + ' homework sets scheduled', detail: 'Daily, weekly, and due-date practice', action: 'Set homework', view: 'homework' },
       { tone: 'green', icon: '✓', title: 'Curriculum request channel ready', detail: 'Upload topics, syllabus, and organisers', action: 'New request', view: 'curriculum' },
     ]);
     const recentActivity = computed(() => [
       (selectedSubject.value ? selectedSubject.value.name : 'Subject') + ' dashboard refreshed',
       stats.value.active + ' active questions available for Recall',
+      state.homeworks.length + ' homework schedules ready',
       state.analytics.totals.attempts + ' student attempts in the current window',
       'Curriculum requests email through the SiteGround bridge',
     ]);
     const dashboardLinks = computed(() => [
-      { id: 'questions', title: 'Assignments', value: stats.value.active, detail: 'Live question tasks', tone: 'blue' },
+      { id: 'questions', title: 'Add Questions', value: stats.value.active, detail: 'Live question bank', tone: 'blue' },
+      { id: 'homework', title: 'Set Homework', value: state.homeworks.length, detail: 'Scheduled practice', tone: 'purple' },
       { id: 'students', title: 'Student Insights', value: needingSupport.value, detail: 'Need support', tone: 'red' },
       { id: 'question-analysis', title: 'Question Analysis', value: state.analytics.totals.accuracy + '%', detail: 'Average accuracy', tone: 'green' },
       { id: 'curriculum', title: 'Curriculum Content', value: 'Upload', detail: 'Request new content', tone: 'orange' },
@@ -175,6 +188,7 @@ createApp({
       state.subjects = [];
       state.classes = [];
       state.questions = [];
+      state.homeworks = [];
       state.analytics = { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 };
       state.view = 'overview';
       state.loading = false;
@@ -208,7 +222,7 @@ createApp({
     }
 
     function openView(view) {
-      state.view = ['questions', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
+      state.view = ['questions', 'homework', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
       setNotice('');
     }
 
@@ -249,14 +263,16 @@ createApp({
       const analyticsQuery = '?subjectId=' + encodeURIComponent(state.subjectId)
         + (state.classId ? '&classId=' + encodeURIComponent(state.classId) : '')
         + '&days=' + encodeURIComponent(state.analyticsDays);
-      const [classesData, questionsData, analyticsData] = await Promise.all([
+      const [classesData, questionsData, analyticsData, homeworkData] = await Promise.all([
         requestJson('/auth/teacher/classes?subjectId=' + encodeURIComponent(state.subjectId)),
         requestJson('/auth/teacher/game-questions' + query),
         requestJson('/auth/teacher/analytics' + analyticsQuery),
+        requestJson('/auth/teacher/homework' + analyticsQuery),
       ]);
       state.classes = classesData.classes || [];
       state.questions = (questionsData.questions || []).map(cleanQuestion);
       state.analytics = analyticsData.analytics || state.analytics;
+      state.homeworks = homeworkData.homework || [];
       if (state.selectedId && !selectedQuestion.value) newQuestion();
     }
 
@@ -354,6 +370,23 @@ createApp({
       };
     }
 
+    function validateHomework() {
+      if (!state.subjectId) throw new Error('Choose a subject first.');
+      const title = String(state.homework.title || '').trim();
+      if (title.length < 3) throw new Error('Add a short homework title.');
+      if (!state.homework.dueDate) throw new Error('Choose a homework due date.');
+      return {
+        subjectId: Number(state.subjectId),
+        classId: state.homework.classId || state.classId || '',
+        title,
+        cadence: state.homework.cadence || 'once',
+        dueDate: state.homework.dueDate,
+        questionCount: Number(state.homework.questionCount) || 10,
+        status: state.homework.status || 'scheduled',
+        notes: state.homework.notes || '',
+      };
+    }
+
     async function saveQuestion(copy = false) {
       state.saving = true;
       try {
@@ -370,6 +403,30 @@ createApp({
         setNotice(copy ? 'Saved as a new question.' : 'Question saved.');
       } catch (e) {
         setError(e.message || 'Could not save question.');
+      } finally {
+        state.saving = false;
+      }
+    }
+
+    function clearHomework() {
+      state.homework = emptyHomework();
+      state.homework.classId = state.classId || '';
+    }
+
+    async function saveHomework() {
+      state.saving = true;
+      try {
+        const body = validateHomework();
+        const data = await requestJson('/auth/teacher/homework', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        clearHomework();
+        await loadSubjectData();
+        setNotice('Homework scheduled: ' + String(data.homework && data.homework.title || body.title) + '.');
+      } catch (e) {
+        setError(e.message || 'Could not set homework.');
       } finally {
         state.saving = false;
       }
@@ -485,6 +542,8 @@ createApp({
       fillForm,
       newQuestion,
       saveQuestion,
+      clearHomework,
+      saveHomework,
     };
   },
   template: `
@@ -525,7 +584,8 @@ createApp({
         </div>
         <nav class="teacher-vue-nav" aria-label="Teacher dashboard">
           <button type="button" :class="{ active: state.view === 'overview' }" @click="openView('overview')"><span>⌂</span>Home</button>
-          <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')"><span>▤</span>Assignments</button>
+          <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')"><span>▤</span>Add Questions</button>
+          <button type="button" :class="{ active: state.view === 'homework' }" @click="openView('homework')"><span>◷</span>Set Homework</button>
           <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')"><span>◌</span>Classes</button>
           <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')"><span>□</span>Question Bank</button>
           <button type="button" :class="{ active: state.view === 'curriculum' }" @click="openView('curriculum')"><span>⇧</span>Curriculum Content</button>
@@ -546,7 +606,7 @@ createApp({
       <main class="teacher-vue-main">
         <header class="teacher-vue-topbar">
           <div>
-            <h1>{{ state.view === 'questions' ? 'Assignments' : state.view === 'students' ? 'Student insights' : state.view === 'question-analysis' ? 'Question analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Good morning, ' + (state.account && state.account.displayName || 'Mr Levin') }}</h1>
+            <h1>{{ state.view === 'questions' ? 'Add Questions' : state.view === 'homework' ? 'Set Homework' : state.view === 'students' ? 'Student insights' : state.view === 'question-analysis' ? 'Question analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Good morning, ' + (state.account && state.account.displayName || 'Mr Levin') }}</h1>
             <p>{{ selectedSubject ? "Here's what's happening in " + selectedSubject.name + " today." : "Here's what's happening with your homework today." }}</p>
           </div>
           <div class="teacher-vue-toolbar">
@@ -567,14 +627,14 @@ createApp({
               <option :value="90">Last 90 days</option>
               <option :value="180">Last 180 days</option>
             </select>
-            <button type="button" class="teacher-vue-primary" @click="newQuestion">+ Create assignment</button>
+            <button type="button" class="teacher-vue-primary" @click="state.view === 'homework' ? clearHomework() : newQuestion()">{{ state.view === 'homework' ? '+ New homework' : '+ Add question' }}</button>
           </div>
         </header>
 
         <section class="teacher-vue-metrics" aria-label="Question metrics">
           <div class="tone-red"><i>♙</i><span>Students needing support</span><strong>{{ needingSupport }}</strong><small>Needs attention</small></div>
           <div class="tone-purple"><i>?</i><span>Written reviews</span><strong>{{ reviewCount }}</strong><small>Need review</small></div>
-          <div class="tone-orange"><i>◷</i><span>Assignments</span><strong>{{ dueSoonCount }}</strong><small>Due soon</small></div>
+          <div class="tone-orange"><i>◷</i><span>Homework</span><strong>{{ dueSoonCount }}</strong><small>Scheduled</small></div>
           <div class="tone-green"><i>↗</i><span>Average accuracy</span><strong>{{ state.analytics.totals.accuracy }}%</strong><small>Across all classes</small></div>
         </section>
 
@@ -591,13 +651,13 @@ createApp({
             </button>
           </section>
           <section class="teacher-vue-panel teacher-vue-current">
-            <header><h2>Current assignments</h2><button type="button" @click="openView('questions')">View all</button></header>
-            <div class="teacher-vue-assignment-head"><span>Assignment</span><span>Class</span><span>Due</span><span>Completion</span><span>Accuracy</span><span>Status</span></div>
-            <button class="teacher-vue-assignment-row" type="button" v-for="row in currentAssignments" :key="row.id" @click="openView('questions')">
+            <header><h2>Current homework</h2><button type="button" @click="openView('homework')">View all</button></header>
+            <div class="teacher-vue-assignment-head"><span>Homework</span><span>Class</span><span>Due</span><span>Required</span><span>Accuracy</span><span>Schedule</span></div>
+            <button class="teacher-vue-assignment-row" type="button" v-for="row in currentAssignments" :key="row.id" @click="openView('homework')">
               <span>{{ row.title }}</span><span>{{ row.className }}</span><span>{{ row.due }}</span><span>{{ row.completion }}</span>
               <span><b :style="{ width: row.accuracy + '%' }"></b>{{ row.accuracy }}%</span><em>{{ row.status }}</em>
             </button>
-            <div class="teacher-vue-empty" v-if="!currentAssignments.length">Create your first assignment from the Question Bank.</div>
+            <div class="teacher-vue-empty" v-if="!currentAssignments.length">Set the first homework schedule for this subject.</div>
           </section>
           <section class="teacher-vue-panel teacher-vue-class-card">
             <header><h2>Class snapshot</h2></header>
@@ -693,6 +753,57 @@ createApp({
               <button type="submit" class="teacher-vue-primary" :disabled="state.saving">Submit request</button>
             </div>
           </form>
+        </section>
+
+        <section class="teacher-vue-homework" v-else-if="state.view === 'homework'">
+          <form class="teacher-vue-editor" @submit.prevent="saveHomework">
+            <div class="teacher-vue-editor-head">
+              <div>
+                <span>Schedule practice</span>
+                <h2>Set homework</h2>
+              </div>
+              <button type="button" class="teacher-vue-primary" @click="clearHomework">+ New homework</button>
+            </div>
+            <div class="teacher-vue-form-grid">
+              <label>Homework title<input v-model="state.homework.title" maxlength="160" placeholder="Year 8 networks retrieval"></label>
+              <label>For class<select v-model="state.homework.classId">
+                <option value="">All classes</option>
+                <option v-for="row in state.classes" :key="row.id" :value="String(row.id)">
+                  {{ row.joinCode ? row.name + ' - ' + row.joinCode : row.name }}
+                </option>
+              </select></label>
+              <label>Schedule<select v-model="state.homework.cadence">
+                <option value="once">One set by due date</option>
+                <option value="daily">Daily until due date</option>
+                <option value="weekly">Weekly until due date</option>
+              </select></label>
+              <label>Due by<input v-model="state.homework.dueDate" type="date"></label>
+              <label>Questions to answer<input v-model.number="state.homework.questionCount" type="number" min="1" max="100" step="1"></label>
+              <label>Status<select v-model="state.homework.status">
+                <option value="scheduled">Scheduled</option>
+                <option value="live">Live now</option>
+                <option value="draft">Draft</option>
+                <option value="closed">Closed</option>
+              </select></label>
+            </div>
+            <label class="teacher-vue-wide">Teacher notes<textarea v-model="state.homework.notes" maxlength="1000" rows="4" placeholder="Optional instructions or focus areas for this homework."></textarea></label>
+            <div class="teacher-vue-actions">
+              <button type="button" @click="clearHomework">Clear</button>
+              <button type="submit" class="teacher-vue-primary" :disabled="state.saving">Set homework</button>
+            </div>
+          </form>
+          <section class="teacher-vue-panel teacher-vue-homework-list">
+            <header><h2>Scheduled homework</h2><button type="button" @click="refreshAll">Refresh</button></header>
+            <div class="teacher-vue-homework-row head"><span>Title</span><span>Class</span><span>Schedule</span><span>Due</span><span>Questions</span></div>
+            <div class="teacher-vue-homework-row" v-for="homework in state.homeworks" :key="homework.id">
+              <span>{{ homework.title }}</span>
+              <span>{{ homework.className || 'All classes' }}</span>
+              <strong>{{ homework.cadence === 'daily' ? 'Daily' : homework.cadence === 'weekly' ? 'Weekly' : 'One set' }}</strong>
+              <span>{{ homework.dueDate }}</span>
+              <i>{{ homework.questionCount }} questions</i>
+            </div>
+            <div class="teacher-vue-empty" v-if="!state.homeworks.length">No homework has been scheduled for this subject yet.</div>
+          </section>
         </section>
 
         <section class="teacher-vue-workspace" v-else>

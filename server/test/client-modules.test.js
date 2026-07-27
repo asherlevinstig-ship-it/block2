@@ -688,7 +688,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /Student insights/);
   assert.match(teacherDashboardSource, /Question Analysis/);
   assert.match(teacherDashboardSource, /Curriculum Requests/);
-  assert.match(teacherDashboardSource, /title: 'Assignments'/);
+  assert.match(teacherDashboardSource, /title: 'Add Questions'/);
+  assert.match(teacherDashboardSource, /title: 'Set Homework'/);
   assert.match(teacherDashboardSource, /title: 'Student Insights'/);
   assert.match(teacherDashboardSource, /title: 'Question Analysis'/);
   assert.match(teacherDashboardSource, /title: 'Curriculum Content'/);
@@ -699,7 +700,11 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /\/auth\/teacher\/classes\?subjectId=/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/game-questions/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/analytics/);
+  assert.match(teacherDashboardSource, /\/auth\/teacher\/homework/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/curriculum-requests/);
+  assert.match(teacherDashboardSource, /Questions to answer/);
+  assert.match(teacherDashboardSource, /Daily until due date/);
+  assert.match(teacherDashboardSource, /Weekly until due date/);
   assert.match(teacherDashboardSource, /ref="studentChart"/);
   assert.match(teacherDashboardSource, /ref="questionChart"/);
   assert.match(teacherDashboardSource, /teacher-vue-analysis/);
@@ -711,6 +716,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(serverAuthSource, /X-Blockcraft-Mail-Secret/);
   assert.doesNotMatch(serverAuthSource, /SMTP_HOST/);
   assert.doesNotMatch(serverAuthSource, /require\('resend'\)/);
+  assert.match(serverAuthSource, /\/auth\/teacher\/homework/);
   assert.match(serverAuthSource, /\/auth\/teacher\/curriculum-requests/);
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
@@ -724,6 +730,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(stylesSource, /\.teacher-vue-chart/);
   assert.match(stylesSource, /\.teacher-vue-analysis-row/);
   assert.match(stylesSource, /\.teacher-vue-curriculum/);
+  assert.match(stylesSource, /\.teacher-vue-homework/);
+  assert.match(stylesSource, /\.teacher-vue-homework-row/);
   assert.match(stylesSource, /\.teacher-vue-file-list/);
   assert.match(stylesSource, /\.teacher-vue-workspace/);
   assert.match(html, /id="huntersetup" class="hunter-setup hidden"/);

@@ -989,6 +989,26 @@ class AuthService {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load teacher analytics.' });
       }
     });
+    app.get('/auth/teacher/homework', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const homework = await this.getGameQuestionStore().listHomework(account, req.query || {});
+        res.json({ ok: true, homework });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load homework.' });
+      }
+    });
+    app.post('/auth/teacher/homework', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const homework = await this.getGameQuestionStore().createHomework(account, req.body || {});
+        res.json({ ok: true, homework });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not set homework.' });
+      }
+    });
     app.post('/auth/teacher/curriculum-requests', (req, res) => {
       const account = this.authorizeTeacher(req);
       if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });

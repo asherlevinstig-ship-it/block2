@@ -3,7 +3,24 @@ const cleanStatus = value => {
   const status = String(value || 'draft').trim().toLowerCase();
   return ['draft', 'teacher-reviewed', 'approved'].includes(status) ? status : 'draft';
 };
+const cleanHomeworkCadence = value => {
+  const cadence = String(value || 'once').trim().toLowerCase();
+  return ['once', 'daily', 'weekly'].includes(cadence) ? cadence : 'once';
+};
+const cleanHomeworkStatus = value => {
+  const status = String(value || 'scheduled').trim().toLowerCase();
+  return ['draft', 'scheduled', 'live', 'closed'].includes(status) ? status : 'scheduled';
+};
 const clampInt = (value, min, max) => Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
+const cleanDate = value => {
+  const text = String(value || '').trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+};
+const publicDate = value => {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  return cleanDate(value);
+};
 
 function sourceIdFromAccount(account, type) {
   const id = String(account && account.id || '');
@@ -32,6 +49,27 @@ function publicQuestion(row) {
     explanation: row.explanation || '',
     reviewStatus: row.review_status || 'draft',
     active: Number(row.is_active) !== 0,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
+function publicHomework(row) {
+  return {
+    id: Number(row.id) || 0,
+    schoolId: row.school_id == null ? null : Number(row.school_id),
+    subjectId: Number(row.subject_id) || 0,
+    subjectName: row.subject_name || '',
+    subjectCode: row.subject_code || '',
+    teacherId: row.teacher_id == null ? null : Number(row.teacher_id),
+    classId: row.class_id == null ? null : Number(row.class_id),
+    className: row.class_name || '',
+    title: row.title || '',
+    cadence: row.cadence || 'once',
+    dueDate: publicDate(row.due_date),
+    questionCount: Number(row.question_count) || 10,
+    status: row.status || 'scheduled',
+    notes: row.notes || '',
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -116,6 +154,26 @@ class MySqlGameQuestionStore {
       KEY idx_tcr_subject_created (subject_id, created_at),
       KEY idx_tcr_teacher_created (teacher_id, created_at),
       KEY idx_tcr_school_created (school_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS game_homework (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      school_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      teacher_id INT UNSIGNED NOT NULL,
+      class_id INT UNSIGNED NULL,
+      title VARCHAR(160) NOT NULL DEFAULT '',
+      cadence ENUM('once','daily','weekly') NOT NULL DEFAULT 'once',
+      due_date DATE NOT NULL,
+      question_count SMALLINT UNSIGNED NOT NULL DEFAULT 10,
+      status ENUM('draft','scheduled','live','closed') NOT NULL DEFAULT 'scheduled',
+      notes TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_game_homework_subject_due (subject_id, due_date),
+      KEY idx_game_homework_teacher_due (teacher_id, due_date),
+      KEY idx_game_homework_class_due (class_id, due_date),
+      KEY idx_game_homework_school_due (school_id, due_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
     this.ready = true;
   }
@@ -299,6 +357,77 @@ class MySqlGameQuestionStore {
       [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, existing.id],
     );
     return this.getQuestion(account, existing.id);
+  }
+
+  normalizeHomeworkPatch(input = {}) {
+    const title = cleanText(input.title, 160);
+    const dueDate = cleanDate(input.dueDate || input.due_date);
+    if (title.length < 3) throw Object.assign(new Error('Add a short homework title.'), { status: 400, code: 'title' });
+    if (!dueDate) throw Object.assign(new Error('Choose a homework due date.'), { status: 400, code: 'due_date' });
+    return {
+      classId: clampInt(input.classId || input.class_id, 0, 2147483647),
+      title,
+      cadence: cleanHomeworkCadence(input.cadence || input.schedule),
+      dueDate,
+      questionCount: clampInt(input.questionCount || input.question_count || 10, 1, 100),
+      status: cleanHomeworkStatus(input.status),
+      notes: cleanText(input.notes, 1000),
+    };
+  }
+
+  async listHomework(account, query = {}) {
+    await this.ensureSchema();
+    const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
+    await this.assertTeacherSubject(account, subjectId);
+    const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
+    const params = [subjectId];
+    let where = 'gh.subject_id = ?';
+    if (classId) { where += ' AND gh.class_id = ?'; params.push(classId); }
+    const [rows] = await this.getPool().execute(
+      `SELECT gh.*, s.name AS subject_name, s.code AS subject_code, c.name AS class_name
+       FROM game_homework gh
+       LEFT JOIN subjects s ON s.id = gh.subject_id
+       LEFT JOIN classes c ON c.id = gh.class_id
+       WHERE ${where}
+       ORDER BY gh.due_date ASC, gh.updated_at DESC
+       LIMIT 200`,
+      params,
+    );
+    return (rows || []).map(publicHomework);
+  }
+
+  async createHomework(account, input = {}) {
+    await this.ensureSchema();
+    const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
+    const { teacherId, schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
+    const patch = this.normalizeHomeworkPatch(input);
+    const [result] = await this.getPool().execute(
+      `INSERT INTO game_homework
+       (school_id, subject_id, teacher_id, class_id, title, cadence, due_date, question_count, status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        subject.school_id == null ? (schoolId || null) : subject.school_id,
+        subjectId,
+        teacherId,
+        patch.classId || null,
+        patch.title,
+        patch.cadence,
+        patch.dueDate,
+        patch.questionCount,
+        patch.status,
+        patch.notes,
+      ],
+    );
+    const [rows] = await this.getPool().execute(
+      `SELECT gh.*, s.name AS subject_name, s.code AS subject_code, c.name AS class_name
+       FROM game_homework gh
+       LEFT JOIN subjects s ON s.id = gh.subject_id
+       LEFT JOIN classes c ON c.id = gh.class_id
+       WHERE gh.id = ?
+       LIMIT 1`,
+      [Number(result.insertId || 0)],
+    );
+    return publicHomework(rows && rows[0] || { id: Number(result.insertId || 0), subject_id: subjectId, teacher_id: teacherId, title: patch.title, cadence: patch.cadence, due_date: patch.dueDate, question_count: patch.questionCount, status: patch.status, notes: patch.notes });
   }
 
   async createCurriculumRequest(account, input = {}) {
