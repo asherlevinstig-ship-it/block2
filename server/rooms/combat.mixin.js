@@ -327,7 +327,18 @@ class CombatMixin {
       if (mob && (mob.dgn || '') === (p.dgn || '')) target = { id: targetId, mob, meta: this.mobMeta[targetId] };
     }
 
-    if (def.kind === 'buff') {
+    if (def.kind === 'dash') {
+      const dir = this.dragonAbilityDir(p, m || {});
+      const from = { x: p.x, y: p.y, z: p.z };
+      const to = this.safeDragonDashPoint(p, dir, spec === 'assassin' && rank >= 2 ? 7.5 : 6.4);
+      p.x = to.x; p.y = to.y; p.z = to.z;
+      const buffs = this.abilityBuffs.get(client.sessionId) || {};
+      buffs.shadowBurstUntil = now + (spec === 'assassin' && rank >= 2 ? 3800 : 3000);
+      this.abilityBuffs.set(client.sessionId, buffs);
+      fx.fromX = from.x; fx.fromY = from.y; fx.fromZ = from.z;
+      fx.x = p.x; fx.y = p.y; fx.z = p.z;
+      fx.durationMs = buffs.shadowBurstUntil - now;
+    } else if (def.kind === 'buff') {
       const buffs = this.abilityBuffs.get(client.sessionId) || {};
       buffs.umbralUntil = now + (spec==='assassin'&&rank>=2?12000:10000);
       this.abilityBuffs.set(client.sessionId, buffs);
@@ -360,7 +371,9 @@ class CombatMixin {
       fx.jumps = jumps;
       this.breakBlocksInRadius(client, target.mob.x, target.mob.y + .5, target.mob.z, 1.2, 4);
     } else if (def.kind === 'shockwave') {
-      this.damageMobsInRadius(client,p.x,p.y+.4,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('shockwave',rec.prof.S)*(spec==='juggernaut'&&rank>=2?1.25:1),{knock:spec==='juggernaut'&&rank>=2?4.8:3.8});
+      const guardCounter = !!((this.abilityBuffs.get(client.sessionId) || {}).ironUntil > now);
+      const hits = this.damageMobsInRadius(client,p.x,p.y+.4,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('shockwave',rec.prof.S)*(spec==='juggernaut'&&rank>=2?1.25:1)*(guardCounter?1.25:1),{knock:spec==='juggernaut'&&rank>=2?4.8:3.8,stun:guardCounter?.35:0});
+      if (guardCounter && hits.length) this.sendSpace(p.dgn||'','fx',{t:'combatReact',kind:'guardCounter',targets:hits,dgn:p.dgn||''});
       this.breakBlocksInRadius(client, p.x, p.y + .2, p.z, 2.8, 16);
     } else if (def.kind === 'mend') {
       const result = this.healVerdantAlly(client, p, def.range || 9, ABILITY_SYSTEM.abilityDamage('mend', rec.prof.S) * (spec === 'grovekeeper' && rank >= 2 ? 1.25 : 1));
@@ -625,6 +638,7 @@ class CombatMixin {
       caster: client.sessionId,
       damage: ABILITY_SYSTEM.abilityDamage('fireball',prof&&prof.S)*(prof&&prof.abilitySpec==='elementalist'?1.15:1)*this.projectileMagicMultiplierFor(client),
       radius: def.radius || 3,
+      dmgOpts: { knock: 2.2, slow: prof && prof.S && prof.S.path === 'mage' ? 1.4 : 0 },
     };
     this.sFireballs.push(fb);
     this.sendSpace(fb.dgn, 'arrow', { fireball: true, bolt: true, x: fb.x, y: fb.y, z: fb.z, vx: fb.vx, vy: fb.vy, vz: fb.vz, dgn: fb.dgn });
@@ -801,6 +815,10 @@ class CombatMixin {
         const meta = this.mobMeta[id];
         if (meta) meta.slowT = Math.max(meta.slowT || 0, opts.slow);
       }
+      if (opts.root) {
+        const meta = this.mobMeta[id];
+        if (meta) meta.rootT = Math.max(meta.rootT || 0, opts.root);
+      }
       if (opts.knock && d > .01) {
         mob.x += (mob.x - x) / d * .45;
         mob.z += (mob.z - z) / d * .45;
@@ -847,6 +865,7 @@ class CombatMixin {
     const buffs = this.abilityBuffs && this.abilityBuffs.get(sid) || {};
     const labels = {
       umbralUntil: 'umbral',
+      shadowBurstUntil: 'shadow_burst',
       ironUntil: 'iron_skin',
       pantherUntil: 'panther',
       verdantRegenUntil: 'verdant_regen',
@@ -907,6 +926,12 @@ class CombatMixin {
     let dmg = this.serverDamageFor(p, client.sessionId);
     if (panther) dmg += ABILITY_SYSTEM.abilityDamage('panther', rec && rec.prof && rec.prof.S) * .85;
     if (crit) dmg *= 1.5;
+    const classPath = rec && rec.prof && rec.prof.S && rec.prof.S.path || '';
+    const shadowBurst = classPath === 'shadow' && !!(buffs && buffs.shadowBurstUntil > now);
+    if (shadowBurst) dmg *= 1.28;
+    const executeThreshold = Math.max(10, (mob.maxHp || mob.hp || 1) * .18);
+    const executeReady = classPath === 'shadow' && (crit || shadowBurst || !!(buffs && buffs.umbralUntil > now)) && mob.hp <= executeThreshold;
+    if (executeReady) dmg *= mob.kind === 'boss' ? 1.35 : 2.25;
     if(!this.weaponMomentum)this.weaponMomentum=new Map();
     if(profile.archetype==='sword'){
       const momentum=GEAR_SYSTEM.nextMomentum(this.weaponMomentum.get(client.sessionId),now,mobId);
@@ -926,13 +951,18 @@ class CombatMixin {
       reach,
       panther,
       crit,
+      execute: executeReady,
+      classPath,
       target:{id:mobId,kind:mob.kind,state:mob.state||'',hp:Math.max(0,Math.round(mob.hp)),maxHp:Math.round(mob.maxHp||beforeHp||0)},
       damage:{raw:Math.round(rawDmg*10)/10,applied:Math.round(applied*10)/10,mitigated:Math.round(Math.max(0,rawDmg-applied)*10)/10,multiplier:Math.round(mitigationMultiplier*100)/100},
       resources:this.combatResourceSnapshot(client),
       buffs:this.combatBuffSnapshot(client.sessionId,now),
     });
-    if(crit)this.sendSpace(mob.dgn||'','fx',{t:'combatReact',kind:rec&&rec.prof&&rec.prof.S&&rec.prof.S.path==='shadow'&&mob.hp<=0?'execute':'crit',x:mob.x,y:mob.y,z:mob.z,dgn:mob.dgn||''});
+    if(crit||executeReady)this.sendSpace(mob.dgn||'','fx',{t:'combatReact',kind:executeReady?'execute':'crit',x:mob.x,y:mob.y,z:mob.z,dgn:mob.dgn||''});
     if (panther) {
+      const pantherBefore = buffs.pantherUntil || now;
+      buffs.pantherUntil = Math.min(now + 20000, Math.max(pantherBefore, now + 1200) + 600);
+      this.abilityBuffs.set(client.sessionId, buffs);
       const dgn = p.dgn || '';
       const yaw = p.yaw || 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
       const splashed = [];

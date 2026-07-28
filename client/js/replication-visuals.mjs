@@ -740,11 +740,13 @@ function netFx(m){
         ringPulse(tx,ty+.08,tz,1.12,0x42d45b,.38);
         rootClutchVfx(tx,ty,tz,1.8);
         showName('ROOTED');
-      }else if(kind==='guardBlock'){
-        ringPulse(tx,ty+.08,tz,1.45,0xfbbf24,.45);
-        glowFlash(tx,ty+1,tz,0xfbbf24,2.2,.28);
-        burst(tx,ty+.9,tz,[1,.72,.16],18,2.2,1.8,.42);
-        showName('GUARDIAN BLOCK');
+      }else if(kind==='guardBlock'||kind==='guardCounter'){
+        const counter=kind==='guardCounter';
+        ringPulse(tx,ty+.08,tz,counter?1.72:1.45,counter?0x60a5fa:0xfbbf24,.45);
+        glowFlash(tx,ty+1,tz,counter?0x93c5fd:0xfbbf24,counter?2.6:2.2,.28);
+        burst(tx,ty+.9,tz,counter?[.38,.65,1]:[1,.72,.16],counter?24:18,counter?2.9:2.2,1.8,.42);
+        camShake=Math.max(camShake,counter?.24:.16);
+        showName(counter?'GUARDIAN COUNTER':'GUARDIAN BLOCK');
       }
     }
   } else if(m.t==='pantherClaw'){

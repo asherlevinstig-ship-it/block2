@@ -5119,7 +5119,15 @@ class GameRoom extends Room {
       armor: armorFeedback,
       buffs: typeof this.combatBuffSnapshot === 'function' ? this.combatBuffSnapshot(client.sessionId) : [],
     });
-    if (p && buffs && buffs.ironUntil > Date.now()) this.sendSpace(p.dgn || '', 'fx', { t: 'combatReact', kind: 'guardBlock', x: p.x, y: p.y, z: p.z, sid: client.sessionId, dgn: p.dgn || '' });
+    const now = Date.now();
+    if (p && buffs && buffs.ironUntil > now) {
+      this.sendSpace(p.dgn || '', 'fx', { t: 'combatReact', kind: 'guardBlock', x: p.x, y: p.y, z: p.z, sid: client.sessionId, dgn: p.dgn || '' });
+      if (rec && rec.prof && rec.prof.S && rec.prof.S.path === 'guardian' && typeof this.damageMobsInRadius === 'function') {
+        const counterDamage = Math.max(2, Math.min(12, Math.round(Math.max(1, incoming - dmg) * .55)));
+        const hits = this.damageMobsInRadius(client, p.x, p.y + .8, p.z, 2.7, counterDamage, { knock: 1.25, stun: .25 });
+        if (hits.length) this.sendSpace(p.dgn || '', 'fx', { t: 'combatReact', kind: 'guardCounter', targets: hits, sid: client.sessionId, dgn: p.dgn || '' });
+      }
+    }
     // Second Wind — Iron Guardian passive, simulated where the authoritative HP lives
     if (hp.hp > 0 && hp.hp < hp.max * .25 && rec && rec.prof && rec.prof.S
         && rec.prof.S.path === 'guardian' && rec.prof.S.lvl >= 8) {
@@ -6712,7 +6720,7 @@ class GameRoom extends Room {
       if (c) this.regenAbilityState(c, abilityNow);
     });
     this.abilityBuffs.forEach((b, sid) => {
-      if ((b.umbralUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
+      if ((b.umbralUntil || 0) <= abilityNow && (b.shadowBurstUntil || 0) <= abilityNow && (b.ironUntil || 0) <= abilityNow && (b.pantherUntil || 0) <= abilityNow && (b.verdantRegenUntil || 0) <= abilityNow && (b.mealMightUntil || 0) <= abilityNow && (b.mealGatherUntil || 0) <= abilityNow && (b.monkRegenUntil || 0) <= abilityNow && (b.monkSpeedUntil || 0) <= abilityNow && (b.monkStoneUntil || 0) <= abilityNow) this.abilityBuffs.delete(sid);
     });
     this.updatePlayerHunger(dt);
     this.tickBiomeStatuses(dt);

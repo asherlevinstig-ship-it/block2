@@ -280,6 +280,7 @@ function makeRoom() {
   room.deathDrops = new Map();
   room.blackholeCd = new Map();
   room.legendaryCd = new Map();
+  room.shadowSpirits = new Map();
   room.dragonBreathCd = new Map();
   room.dragonAbilityCd = new Map();
   room.phoenixUsed = new Set();
@@ -2233,6 +2234,7 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   st.cds['verdant:1']=0;st.mp=80;
   room.handleAbility(healer,{path:'verdant',slot:1});
   assert.ok(room.mobMeta.rooted.slowT>=5,'Rootsnare applies a long slow/root window');
+  assert.ok(room.mobMeta.rooted.rootT>=5,'Rootsnare applies an authoritative root window');
   assert.ok(room.state.mobs.get('rooted').hp<30,'Rootsnare deals nature damage');
 
   const baseline=room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId);
@@ -2247,6 +2249,54 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   assert.equal(healer.sent.some(e=>e.type==='abilityResult'&&e.msg.kind==='panther'&&e.msg.durationMs>13000),true,'Panther Form tells the local client how long the first-person transformation lasts');
   assert.equal(healer.sent.some(e=>e.type==='combatDebug'&&e.msg.kind==='ability-cast'&&e.msg.ability.kind==='panther'&&e.msg.resources.spSpent===4),true,'admin combat debug shows Panther Form stamina spend');
   assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
+  const pantherMob = new Mob(); pantherMob.kind = 'zombie'; pantherMob.x = 21.8; pantherMob.y = 10; pantherMob.z = 20; pantherMob.hp = 80; pantherMob.maxHp = 80; room.state.mobs.set('panther_prey', pantherMob);
+  room.mobMeta.panther_prey = room.freshMeta(21.8, 20, 3, 1.5, 'zombie', 0, true);
+  const pantherBefore = room.abilityBuffs.get(healer.sessionId).pantherUntil;
+  room.handleAttack(healer, { id: 'panther_prey' });
+  assert.ok(room.abilityBuffs.get(healer.sessionId).pantherUntil > pantherBefore, 'Panther Claw extends mobility form uptime on successful hits');
+});
+
+test('class combat identities have distinct server-side mechanics', () => {
+  const shadowRoom = makeRoom(), shadow = makeClient('shadow_identity');
+  shadow._accountRole = 'admin';
+  const { prof: shadowProf } = seedPlayer(shadowRoom, shadow, { lvl: 12, x: 20, y: 10, z: 20 });
+  shadowProf.S.path = 'shadow'; shadowProf.S.str = 16; shadowProf.S.agi = 16;
+  shadowRoom.clients = [shadow];
+  const shadowSt = shadowRoom.ensureAbilityState(shadow); shadowSt.mp = 80; shadowSt.sp = 80; shadowSt.last = Date.now();
+  shadowRoom.handleAbility(shadow, { path: 'shadow', slot: 0, dx: 1, dy: 0, dz: 0 });
+  assert.ok((shadowRoom.abilityBuffs.get(shadow.sessionId).shadowBurstUntil || 0) > Date.now(), 'Shadow Dash opens a short burst window');
+  const shadowPlayer = shadowRoom.state.players.get(shadow.sessionId);
+  const doomed = new Mob(); doomed.kind = 'zombie'; doomed.x = shadowPlayer.x + 1.2; doomed.y = shadowPlayer.y; doomed.z = shadowPlayer.z; doomed.hp = 10; doomed.maxHp = 60;
+  shadowRoom.state.mobs.set('shadow_doomed', doomed);
+  shadowRoom.mobMeta.shadow_doomed = shadowRoom.freshMeta(doomed.x, doomed.z, 3, 1.5, 'zombie', 0, true);
+  shadowRoom.handleAttack(shadow, { id: 'shadow_doomed' });
+  assert.equal(shadowRoom.state.mobs.has('shadow_doomed'), false, 'Shadow burst executes low-health enemies');
+  assert.equal(shadow.sent.some(e => e.type === 'combatDebug' && e.msg.kind === 'melee' && e.msg.execute === true), true, 'admin combat debug exposes Shadow execute state');
+
+  const mageRoom = makeRoom(), mage = makeClient('mage_identity');
+  const { prof: mageProf } = seedPlayer(mageRoom, mage, { lvl: 12, x: 20, y: 10, z: 20 });
+  mageProf.S.path = 'mage'; mageProf.S.int = 18;
+  mageRoom.clients = [mage];
+  const mageSt = mageRoom.ensureAbilityState(mage); mageSt.mp = 80; mageSt.sp = 80; mageSt.last = Date.now();
+  mageRoom.handleAbility(mage, { path: 'mage', slot: 0, dx: 1, dy: 0, dz: 0 });
+  const fireball = mageRoom.sFireballs[0];
+  const controlled = new Mob(); controlled.kind = 'skeleton'; controlled.x = fireball.x + .4; controlled.y = fireball.y - 1; controlled.z = fireball.z; controlled.hp = 50; controlled.maxHp = 50;
+  mageRoom.state.mobs.set('mage_controlled', controlled);
+  mageRoom.mobMeta.mage_controlled = mageRoom.freshMeta(controlled.x, controlled.z, 3, 1.5, 'skeleton', 0, true);
+  mageRoom.explodeAbilityFireball(fireball);
+  assert.ok(mageRoom.mobMeta.mage_controlled.slowT >= 1.3, 'Mage Fireball leaves a brief area-control slow');
+
+  const guardRoom = makeRoom(), guardian = makeClient('guardian_identity');
+  const { prof: guardProf } = seedPlayer(guardRoom, guardian, { lvl: 12, x: 20, y: 10, z: 20, hp: 20 });
+  guardProf.S.path = 'guardian'; guardProf.S.str = 16;
+  guardRoom.clients = [guardian];
+  guardRoom.abilityBuffs.set(guardian.sessionId, { ironUntil: Date.now() + 8000 });
+  const attacker = new Mob(); attacker.kind = 'zombie'; attacker.x = 21.1; attacker.y = 10; attacker.z = 20; attacker.hp = 40; attacker.maxHp = 40;
+  guardRoom.state.mobs.set('guardian_attacker', attacker);
+  guardRoom.mobMeta.guardian_attacker = guardRoom.freshMeta(21.1, 20, 3, 1.5, 'zombie', 0, true);
+  guardRoom.hurtPlayer(guardian, 12, 'zombie', { attack: 'Melee Lunge' });
+  assert.ok(guardRoom.state.mobs.get('guardian_attacker').hp < 40, 'Guardian Iron Skin counters nearby attackers when hit');
+  assert.equal(guardian.sent.some(e => e.type === 'hurt' && e.msg.absorbed > 0), true, 'Guardian tanking still mitigates incoming damage');
 });
 
 test('mob control states alter AI decisions instead of only changing visuals', () => {
