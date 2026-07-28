@@ -2560,6 +2560,7 @@ function netRestoreProfile(m){
 function applyAbilitySync(m){
   if(!m) return;
   if(typeof m.mp==='number') mp=Math.max(0, Math.min(maxMp(), m.mp));
+  if(typeof m.sp==='number') sp=Math.max(0, Math.min(maxSp(), m.sp));
   if(m.cds && typeof m.cds==='object'){
     const path=activeAbilityPath();
     for(let i=0;i<3;i++){
@@ -2576,6 +2577,7 @@ function abilityRejected(m){
   abCd[i]=0;
   const r=(m&&m.reason)||'invalid';
   if(r==='mana') sysMsg('Not enough <b>mana</b>');
+  else if(r==='stamina') sysMsg('Not enough <b>stamina</b>');
   else if(r==='cooldown') sysMsg('Ability is still recharging');
   else if(r==='target') sysMsg('No valid target in sight');
   else if(r==='level') sysMsg('That ability is not unlocked yet');
@@ -2596,6 +2598,7 @@ function abilityResolved(m){
     else if(m.reason==='mana')sysMsg('Not enough <b>mana</b> to deploy your shadows.');
   }
   if(typeof m.mp==='number') mp=Math.max(0,Math.min(maxMp(),m.mp));
+  if(typeof m.sp==='number') sp=Math.max(0,Math.min(maxSp(),m.sp));
   if(m.kind==='panther'&&globalThis.BlockcraftPantherFormFx)globalThis.BlockcraftPantherFormFx(m.durationMs||14000);
   renderBars(); updateAbilityHUD();
 }

@@ -520,7 +520,7 @@ const ABILITY_SYSTEM = require('../../shared/ability-system');
 const ABILITY_PATHS = {};
 for (const pathId in ABILITY_SYSTEM.PATHS) {
   ABILITY_PATHS[pathId] = ABILITY_SYSTEM.PATHS[pathId].abilities.map(a => (
-    { name: a.name, mp: a.mp, cd: a.cdMs, kind: a.kind, range: a.range, radius: a.radius }
+    { name: a.name, mp: a.mp, sp: a.sp || 0, cd: a.cdMs, kind: a.kind, range: a.range, radius: a.radius }
   ));
 }
 const ABILITY_UNLOCK = ABILITY_SYSTEM.UNLOCK_LEVELS;

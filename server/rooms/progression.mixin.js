@@ -1169,9 +1169,10 @@ class ProgressionMixin {
       }
       if (level >= rules.regenLevel && targetProf && maxSp > 0) {
         const raw = targetProf.vitals && typeof targetProf.vitals === 'object' ? targetProf.vitals : {};
-        const current = Number.isFinite(+raw.sp) ? +raw.sp : maxSp;
+        const current = Number.isFinite(st && +st.sp) ? +st.sp : (Number.isFinite(+raw.sp) ? +raw.sp : maxSp);
         nextSp = Math.max(0, Math.min(maxSp, current + Math.max(1, Math.ceil(maxSp * (rules.resourceRestoreFraction || .08)))));
         spRestore = Math.max(0, Math.round(nextSp - current));
+        if (st) { st.sp = nextSp; st.maxSp = maxSp; }
         targetProf.vitals = { ...raw, sp: nextSp };
         targetProf.vitalsSavedAt = Date.now();
         if (typeof this.syncProfileVitals === 'function') this.syncProfileVitals(target, targetProf);

@@ -4940,7 +4940,7 @@ class GameRoom extends Room {
     prof.vitals = {
       hp: Math.max(1, Math.min(maxHp, Number.isFinite(hp && +hp.hp) ? +hp.hp : current.hp)),
       mp: Math.max(0, Math.min(maxMp, Number.isFinite(ability && +ability.mp) ? +ability.mp : current.mp)),
-      sp: Math.max(0, Math.min(maxSp, current.sp)),
+      sp: Math.max(0, Math.min(maxSp, Number.isFinite(ability && +ability.sp) ? +ability.sp : current.sp)),
       hunger: this.hungerProtectedForProfile(prof) ? this.maxHungerForProfile(prof) : Math.max(0, Math.min(this.maxHungerForProfile(prof), Number.isFinite(hunger && +hunger.hunger) ? +hunger.hunger : current.hunger)),
     };
     prof.vitalsSavedAt = Date.now();
@@ -4949,10 +4949,18 @@ class GameRoom extends Room {
   ensureAbilityState(client) {
     const rec = this.profileFor(client);
     const maxMp = this.maxMpForProfile(rec && rec.prof);
+    const maxSp = this.maxStaminaForProfile(rec && rec.prof);
     let st = this.abilityState.get(client.sessionId);
     if (!st) {
-      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { mp: maxMp };
-      st = { mp: Math.max(0, Math.min(maxMp, vitals.mp)), maxMp, cds: {}, last: Date.now() };
+      const vitals = rec && rec.prof ? this.cleanProfileVitals(rec.prof) : { mp: maxMp, sp: maxSp };
+      st = {
+        mp: Math.max(0, Math.min(maxMp, vitals.mp)),
+        maxMp,
+        sp: Math.max(0, Math.min(maxSp, vitals.sp)),
+        maxSp,
+        cds: {},
+        last: Date.now(),
+      };
       this.abilityState.set(client.sessionId, st);
       return st;
     }
@@ -4960,6 +4968,11 @@ class GameRoom extends Room {
       st.mp = Math.min(maxMp, Math.max(0, st.mp + (maxMp - st.maxMp)));
       st.maxMp = maxMp;
     }
+    if (st.maxSp !== maxSp) {
+      st.sp = Math.min(maxSp, Math.max(0, (Number.isFinite(+st.sp) ? +st.sp : maxSp) + (maxSp - (st.maxSp || maxSp))));
+      st.maxSp = maxSp;
+    }
+    if (!Number.isFinite(+st.sp)) st.sp = maxSp;
     return st;
   }
   regenAbilityState(client, now = Date.now()) {
@@ -4974,7 +4987,7 @@ class GameRoom extends Room {
     const now = Date.now();
     const cds = {};
     for (const k in st.cds || {}) cds[k] = Math.max(0, Math.ceil(((st.cds[k] || 0) - now) / 1000));
-    client.send('abilitySync', { mp: Math.floor(st.mp), maxMp: st.maxMp, cds });
+    client.send('abilitySync', { mp: Math.floor(st.mp), maxMp: st.maxMp, sp: Math.floor(st.sp), maxSp: st.maxSp, cds });
     const rec = this.profileFor(client);
     if (rec) {
       this.syncProfileVitals(client, rec.prof);

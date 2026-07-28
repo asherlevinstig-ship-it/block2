@@ -716,6 +716,21 @@ function netFx(m){
   } else if(m.t==='blackholePop'){
     SFX.boom(); camShake=Math.max(camShake,.42);
     burst(m.x, m.y, m.z, [.55,.18,1], 44, 5.2, 1.2, .75);
+  } else if(m.t==='pantherClaw'){
+    const targets=Array.isArray(m.targets)?m.targets.slice(0,8):[{x:m.x,y:m.y,z:m.z}];
+    for(const t of targets){
+      const tx=Number(t.x),ty=Number(t.y),tz=Number(t.z);
+      if(!Number.isFinite(tx)||!Number.isFinite(ty)||!Number.isFinite(tz))continue;
+      ringPulse(tx,ty+.08,tz,.82,0x22c55e,.28);
+      glowFlash(tx,ty+.8,tz,0x86efac,1.8,.2);
+      burst(tx,ty+.85,tz,[.1,1,.35],10,1.1,1.0,.34);
+      for(let i=0;i<3;i++){
+        const side=(i-1)*.18, yaw=Number(m.yaw)||0;
+        const sx=tx+Math.cos(yaw)*side, sz=tz-Math.sin(yaw)*side;
+        spawnParticle({x:sx,y:ty+.55+i*.18,z:sz,vx:-Math.sin(yaw)*.9,vy:.1,vz:-Math.cos(yaw)*.9,life:.22,grav:0,r:.68,g:1,b:.46});
+      }
+    }
+    showName('Panther Claw');
   } else if(m.t==='legendary'){
     netLegendaryFx(m);
   } else if(m.t==='ability'){
@@ -844,12 +859,25 @@ function netAbilityFx(m){
     burst(x,y+1,z,[.25,1,.42],22,2.4,2.4,.62);
     showName('Verdant Mend');
   } else if(m.kind==='roots'){
-    ringPulse(x,y+.08,z,5.8,0x22c55e,.55);
-    ringPulse(x,y+.09,z,4.2,0x86efac,.5);
+    const radius=Math.max(2,Number(m.radius)||5.8);
+    ringPulse(x,y+.08,z,radius,0x22c55e,.55);
+    ringPulse(x,y+.09,z,radius*.72,0x86efac,.5);
     ringPulse(x,y+.1,z,2.6,0x14532d,.6);
     glowFlash(x,y+.85,z,0x22c55e,4.8,.28);
-    burst(x,y+.5,z,[.18,.8,.28],56,5.7,2.0,.72);
-    rootClutchVfx(x,y,z,5.8);
+    burst(x,y+.5,z,[.18,.8,.28],70,radius,2.2,.78);
+    rootClutchVfx(x,y,z,radius);
+    for(const t of Array.isArray(m.targets)?m.targets.slice(0,18):[]){
+      const tx=Number(t.x),ty=Number(t.y),tz=Number(t.z);
+      if(!Number.isFinite(tx)||!Number.isFinite(ty)||!Number.isFinite(tz))continue;
+      rootClutchVfx(tx,ty,tz,1.15);
+      glowFlash(tx,ty+.8,tz,0x86efac,2.2,.24);
+      for(let h=0;h<8;h++){
+        const a=h*.78+Math.random()*.25;
+        spawnParticle({x:tx+Math.sin(a)*.28,y:ty+.08+h*.16,z:tz+Math.cos(a)*.28,
+          vx:Math.sin(a)*.08,vy:.38+Math.random()*.18,vz:Math.cos(a)*.08,
+          life:.82+Math.random()*.35,grav:.35,r:.2,g:.62,b:.18});
+      }
+    }
     for(let i=0;i<13;i++){
       const a=i/13*Math.PI*2+Math.random()*.2, r=1.0+Math.random()*4.6;
       const bx=x+Math.cos(a)*r, bz=z+Math.sin(a)*r;

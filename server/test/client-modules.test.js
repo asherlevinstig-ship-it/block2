@@ -1384,7 +1384,7 @@ test('Rootsnare VFX renders a physical root field, not just particles',()=>{
   assert.match(visuals,/for\(let i=0;i<26;i\+\+\)/);
   assert.match(visuals,/rootTendrilMesh/);
   assert.match(visuals,/new THREE\.CylinderGeometry\(\.035\+h\*\.006,\s*\.095\+h\*\.015,\s*height,\s*6\)/);
-  assert.match(visuals,/rootClutchVfx\(x,y,z,5\.8\)/);
+  assert.match(visuals,/rootClutchVfx\(x,y,z,radius\)/);
 });
 
 test('browser and server consume one shared safeguarded comms ruleset', () => {

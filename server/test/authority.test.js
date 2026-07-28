@@ -2235,9 +2235,14 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   assert.ok(room.state.mobs.get('rooted').hp<30,'Rootsnare deals nature damage');
 
   const baseline=room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId);
-  st.cds['verdant:2']=0;st.mp=80;
+  st.cds['verdant:2']=0;st.mp=80;st.sp=3;
+  room.handleAbility(healer,{path:'verdant',slot:2});
+  assert.equal(!!(room.abilityBuffs.get(healer.sessionId)&&room.abilityBuffs.get(healer.sessionId).pantherUntil>0),false,'Panther Form is blocked by server-side stamina');
+  assert.equal(healer.sent.some(e=>e.type==='abilityReject'&&e.msg.reason==='stamina'),true);
+  st.cds['verdant:2']=0;st.mp=80;st.sp=10;
   room.handleAbility(healer,{path:'verdant',slot:2});
   assert.ok((room.abilityBuffs.get(healer.sessionId).pantherUntil||0)>Date.now(),'Panther Form is stored as an authoritative buff');
+  assert.equal(st.sp,6,'Panther Form spends authoritative stamina');
   assert.equal(healer.sent.some(e=>e.type==='abilityResult'&&e.msg.kind==='panther'&&e.msg.durationMs>13000),true,'Panther Form tells the local client how long the first-person transformation lasts');
   assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
 });
@@ -3461,6 +3466,7 @@ test('shared ability system: one tuning table serves both sides, with level-scal
       const src = ABILITY.PATHS[pathId].abilities[i];
       assert.equal(def.name, src.name);
       assert.equal(def.mp, src.mp);
+      assert.equal(def.sp, src.sp || 0);
       assert.equal(def.cd, src.cdMs, 'server cooldowns stay in milliseconds');
       assert.equal(def.kind, src.kind);
     });

@@ -283,6 +283,7 @@ class CombatMixin {
     if (rec.prof.S.path && rec.prof.S.path !== path) return client.send('abilityReject', { slot, reason: 'path' });
     const spec=rec.prof.abilitySpec||'',rank=ABILITY_PROGRESSION.rankForLevel(rec.prof.S.lvl);
     const manaCost=def.mp*(spec==='arcanist'&&rank>=2?.85:1);
+    const staminaCost=Math.max(0,Number(def.sp)||0);
     const cooldown=def.cd*(spec==='arcanist'&&rank>=2?.85:1);
     const now = Date.now();
     const st = this.regenAbilityState(client, now);
@@ -295,14 +296,19 @@ class CombatMixin {
       const result=this.handleShadowArmyCast(client,p,rec,st,now,def);
       st.cds[cdKey]=result.action==='capture'?(result.attempted?now+1500:0):(result.deployed>0?now+cooldown:0);
       this.sendAbilitySync(client,st);
-      client.send('abilityResult',{path,slot,kind:def.kind,mp:Math.floor(st.mp),maxMp:st.maxMp,shadowArmy:rec.prof.shadowArmy||[],...result});
+      client.send('abilityResult',{path,slot,kind:def.kind,mp:Math.floor(st.mp),maxMp:st.maxMp,sp:Math.floor(st.sp),maxSp:st.maxSp,shadowArmy:rec.prof.shadowArmy||[],...result});
       return;
     }
     if (st.mp + .001 < manaCost) {
       this.sendAbilitySync(client, st);
       return client.send('abilityReject', { slot, reason: 'mana' });
     }
+    if (staminaCost && st.sp + .001 < staminaCost) {
+      this.sendAbilitySync(client, st);
+      return client.send('abilityReject', { slot, reason: 'stamina' });
+    }
     st.mp -= manaCost;
+    st.sp = Math.max(0, st.sp - staminaCost);
     st.cds[cdKey] = now + cooldown;
     this.sendAbilitySync(client, st);
     if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
@@ -326,7 +332,7 @@ class CombatMixin {
       this.spawnShadowSoldier(client, p, rec.prof, now);
     } else if (def.kind === 'fireball') {
       this.spawnAbilityFireball(client, p, m, def, rec.prof);
-      client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp });
+      client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp, sp: Math.floor(st.sp), maxSp: st.maxSp });
       return;
     } else if (def.kind === 'frost') {
       this.damageMobsInRadius(client,p.x,p.y+.7,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('frost',rec.prof.S)*(spec==='elementalist'&&rank>=2?1.15:1),{slow:4,stun:spec==='elementalist'&&rank>=2?.45:0});
@@ -335,6 +341,7 @@ class CombatMixin {
       if (!target || !target.meta || Math.hypot(target.mob.x - p.x, target.mob.z - p.z) > def.range ||
           !AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, target.mob.x, target.mob.y + 0.9, target.mob.z)) {
         st.mp = Math.min(st.maxMp, st.mp + manaCost);
+        st.sp = Math.min(st.maxSp, st.sp + staminaCost);
         st.cds[cdKey] = 0;
         this.sendAbilitySync(client, st);
         return client.send('abilityReject', { slot, reason: 'target' });
@@ -360,7 +367,9 @@ class CombatMixin {
       }
     } else if (def.kind === 'roots') {
       const damage = ABILITY_SYSTEM.abilityDamage('roots', rec.prof.S) * (spec === 'grovekeeper' && rank >= 2 ? 1.1 : 1);
-      this.damageMobsInRadius(client, p.x, p.y + .45, p.z, def.radius, damage, { slow: spec === 'grovekeeper' && rank >= 2 ? 6.5 : 5.25, stun: .55 });
+      const rooted = this.damageMobsInRadius(client, p.x, p.y + .45, p.z, def.radius, damage, { slow: spec === 'grovekeeper' && rank >= 2 ? 6.5 : 5.25, stun: .75 });
+      fx.targets = rooted;
+      fx.radius = def.radius;
       if (spec === 'grovekeeper' && rank >= 2) this.healVerdantAllies(client, p, def.radius, 4);
       this.breakBlocksInRadius(client, p.x, p.y + .15, p.z, 1.6, 6);
     } else if (def.kind === 'panther') {
@@ -370,7 +379,7 @@ class CombatMixin {
       fx.durationMs = buffs.pantherUntil - now;
     }
     this.sendSpace(p.dgn || '', 'fx', fx);
-    client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp, durationMs: fx.durationMs || 0 });
+    client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp, sp: Math.floor(st.sp), maxSp: st.maxSp, durationMs: fx.durationMs || 0 });
   }
   healVerdantAlly(client, p, radius, amount) {
     const team = this.cleanTeamId(p.team);
@@ -766,6 +775,7 @@ class CombatMixin {
     return jumps;
   }
   damageMobsInRadius(client, x, y, z, radius, damage, opts = {}) {
+    const hits = [];
     this.state.mobs.forEach((mob, id) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || (mob.dgn || '') !== (p.dgn || '')) return;
@@ -781,11 +791,13 @@ class CombatMixin {
         mob.z += (mob.z - z) / d * .45;
       }
       this.damageMobByAbility(client, id, mob, scaled);
+      hits.push({ id:String(id), x:mob.x, y:mob.y, z:mob.z });
       if (opts.stun) {
         const live = this.state.mobs.get(id);
         if (live) this.stunMobByAbility(id, live, opts.stun);
       }
     });
+    return hits;
   }
   damageMobByAbility(client, mobId, mob, damage) {
     if (!mob || mob.hp <= 0) return;
@@ -793,7 +805,7 @@ class CombatMixin {
     if (!this.isAnimalKind(mob.kind)) this.alertPack(String(mobId));
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, damage);
     const applied=Math.max(0,damage)*this.banditProtectionMultiplier(String(mobId),mob);
-    this.emitDamageNumber(client,mob,damage,false,mob.hp-applied<=0);
+    this.emitDamageNumber(client,mob,applied,false,mob.hp-applied<=0);
     mob.hp -= applied;
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
@@ -829,12 +841,17 @@ class CombatMixin {
     const profile = this.meleeProfile(p, client.sessionId);
     if (now - (this.lastAttackMsg.get(client.sessionId) || 0) < profile.cd) return;   // per-weapon swing cadence
     this.lastAttackMsg.set(client.sessionId, now);
-    if (Math.hypot(mob.x - p.x, mob.z - p.z) > 4.5 || Math.abs(mob.y - p.y) > 3) return;   // melee reach (3D)
+    const buffs = this.abilityBuffs.get(client.sessionId);
+    const panther = !!(buffs && buffs.pantherUntil > now);
+    const reach = panther ? 5.6 : 4.5;
+    if (Math.hypot(mob.x - p.x, mob.z - p.z) > reach || Math.abs(mob.y - p.y) > 3) return;   // melee reach (3D)
     // require line of sight, matching the mob side — no hitting through walls
     if (!AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, mob.x, mob.y + 0.9, mob.z)) return;
     if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
     const crit = mob.state === 'stun';
+    const rec = this.profileFor(client);
     let dmg = this.serverDamageFor(p, client.sessionId);
+    if (panther) dmg += ABILITY_SYSTEM.abilityDamage('panther', rec && rec.prof && rec.prof.S) * .85;
     if (crit) dmg *= 1.5;
     if(!this.weaponMomentum)this.weaponMomentum=new Map();
     if(profile.archetype==='sword'){
@@ -846,8 +863,26 @@ class CombatMixin {
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
     const applied=dmg*this.banditProtectionMultiplier(mobId,mob);
-    this.emitDamageNumber(client,mob,dmg,crit,mob.hp-applied<=0);
+    this.emitDamageNumber(client,mob,applied,crit,mob.hp-applied<=0);
     mob.hp -= applied;
+    if (panther) {
+      const dgn = p.dgn || '';
+      const yaw = p.yaw || 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+      const splashed = [];
+      this.state.mobs.forEach((other, oid) => {
+        if (String(oid) === mobId || !other || other.hp <= 0 || (other.dgn || '') !== dgn) return;
+        const dx = other.x - p.x, dz = other.z - p.z, dist = Math.hypot(dx, dz);
+        if (dist > 3.2 || Math.abs(other.y - p.y) > 2.5) return;
+        const forward = (dx * fx + dz * fz) / (dist || 1);
+        if (forward < .35) return;
+        const splash = dmg * .35 * this.banditProtectionMultiplier(String(oid), other);
+        this.emitDamageNumber(client, other, splash, false, other.hp - splash <= 0);
+        other.hp -= splash;
+        splashed.push({ id:String(oid), x:other.x, y:other.y, z:other.z });
+        if (other.hp <= 0) this.finishMobKill(client, String(oid), other);
+      });
+      this.sendSpace(dgn, 'fx', { t:'pantherClaw', x:mob.x, y:mob.y, z:mob.z, fromX:p.x, fromY:p.y+.65, fromZ:p.z, yaw, sid:client.sessionId, targets:[{id:mobId,x:mob.x,y:mob.y,z:mob.z},...splashed], dgn });
+    }
     if(mob.hp<=0)this.finishMobKill(client,mobId,mob);
     else if(profile.archetype==='axe'){
       const rule=GEAR_SYSTEM.WEAPON_IDENTITY.stagger,meta=this.mobMeta[mobId];

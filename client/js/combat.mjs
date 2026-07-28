@@ -4920,8 +4920,19 @@ function primaryAction(){
   if(tryHitTutorialDummy()){ suppressMine=true; mouseL=true; return; }
   if(selectedLegendaryWeapon() && castLegendaryWeapon()){ suppressMine=true; mouseL=false; return; }
   if(attackCd<=0){
-    const mob=mobUnderCrosshair();
-    if(mob){ attackCd=meleeSwingTime(); suppressMine=true; attackMob(mob); mouseL=true; return; }
+    const pantherMelee=buffs&&buffs.panther>0&&!mounted;
+    const mob=mobUnderCrosshair(pantherMelee?5.6:3.5);
+    if(mob){
+      attackCd=pantherMelee?Math.min(.28,meleeSwingTime()):meleeSwingTime();
+      suppressMine=true;
+      if(pantherMelee){
+        const p=mob.grp&&mob.grp.position||player.pos;
+        burst(p.x,p.y+1,p.z,[.15,1,.35],16,1.5,1.2,.42);
+        ringPulse(p.x,p.y+.08,p.z,.9,0x22c55e,.34);
+        if(globalThis.BlockcraftViewmodelFx)globalThis.BlockcraftViewmodelFx.play('panther');
+      }
+      attackMob(mob); mouseL=true; return;
+    }
     const rival=remoteUnderCrosshair();
     if(rival){
       attackCd=.45; suppressMine=true; mouseL=true;

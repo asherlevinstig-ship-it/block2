@@ -185,8 +185,12 @@ class RecallMixin{
     if(!prof||typeof this.maxStaminaForProfile!=='function')return{restore:0,sp:null,maxSp:null};
     if(typeof this.syncProfileVitals==='function')this.syncProfileVitals(client,prof);
     const maxSp=this.maxStaminaForProfile(prof),raw=prof.vitals&&typeof prof.vitals==='object'?prof.vitals:{};
-    const current=Number.isFinite(+raw.sp)?+raw.sp:maxSp,restore=Math.max(1,Math.ceil(maxSp*RECALL.RESTORE_FRACTION));
-    prof.vitals={...raw,sp:Math.max(0,Math.min(maxSp,current+restore))};
+    const st=typeof this.ensureAbilityState==='function'?this.ensureAbilityState(client):null;
+    const current=Number.isFinite(st&&+st.sp)?+st.sp:(Number.isFinite(+raw.sp)?+raw.sp:maxSp);
+    const restore=Math.max(1,Math.ceil(maxSp*RECALL.RESTORE_FRACTION));
+    const nextSp=Math.max(0,Math.min(maxSp,current+restore));
+    if(st){st.sp=nextSp;st.maxSp=maxSp;}
+    prof.vitals={...raw,sp:nextSp};
     prof.vitalsSavedAt=Date.now();
     return{restore,sp:prof.vitals.sp,maxSp};
   }
