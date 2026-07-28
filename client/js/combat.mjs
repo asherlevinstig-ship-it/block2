@@ -418,6 +418,8 @@ function tickFurnaces(dt){
 
 // ---------------- mining state ----------------
 let mouseL=false;
+let mouseR=false, placeKeyHeld=false, nextHeldPlaceAt=0;
+const BLOCK_PLACE_INITIAL_DELAY_MS=210, BLOCK_PLACE_REPEAT_MS=165;
 let mining=null; // {x,y,z,progress,total,willDrop}
 function toolFor(blockId){
   const s=inv[selected];
@@ -439,8 +441,10 @@ function startMine(hit){
     const tier = (tool && tool.cls==='pick') ? tool.tier : 0;
     if(tier < info.tier){ willDrop=false; total = info.t*3; }
   }
-  total=Math.max(total,.15);
-  mining={x:hit.x,y:hit.y,z:hit.z,id:hit.id,progress:0,total,willDrop, effective};
+  const creative=!!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount());
+  if(creative){ total=.08; willDrop=true; }
+  total=Math.max(total,creative?.08:.15);
+  mining={x:hit.x,y:hit.y,z:hit.z,id:hit.id,progress:0,total,willDrop, effective, creative};
 }
 function finishMine(){
   const m=mining; mining=null;
@@ -4722,6 +4726,7 @@ document.addEventListener('pointerlockchange', ()=>{
   if(hasLock) lockFallback=false;
   else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
   locked = hasLock || lockFallback;
+  if(!locked){ mouseR=false; placeKeyHeld=false; }
   refreshPlayUi();
 });
 document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
@@ -4893,7 +4898,7 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyR') cast(1);
     if(e.code==='KeyH') cast(2);
     if(e.code==='KeyF' && !e.repeat) primaryAction();
-    if(e.code==='KeyG' && !e.repeat) secondaryAction();
+    if(e.code==='KeyG' && !e.repeat){ placeKeyHeld=true; nextHeldPlaceAt=performance.now()+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction(); }
     if(e.code==='KeyJ' && !e.repeat){ if(!castDragonAbility()) castArmorPower(); }
     if(e.code==='KeyY' && !e.repeat) cycleBetaAbilityPath();
     if(e.code==='Semicolon' && !e.repeat) cycleBetaLegendaryWeapon();
@@ -4906,6 +4911,7 @@ function stopPrimaryAction(){ mouseL=false; mining=null; suppressMine=false; }
 addEventListener('keyup', e=>{
   keys[e.code]=false;
   if(e.code==='KeyF') stopPrimaryAction();
+  if(e.code==='KeyG') placeKeyHeld=false;
 });
 addEventListener('mousemove', e=>{
   claimMouse.x=e.clientX; claimMouse.y=e.clientY;
@@ -5808,20 +5814,24 @@ function secondaryAction(){
   }
   if(hit.id===B.BED){ trySleep(hit); return; }
   if(farmAction(hit)) return;
+  placeSelectedBlockAtHit(hit);
+}
+function placeSelectedBlockAtHit(hit){
+  if(!hit || isPlacementInteractionHit(hit)) return false;
   const s=inv[selected];
-  if(!s || ITEMS[s.id].place===undefined) return;
+  if(!s || ITEMS[s.id].place===undefined) return false;
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2];
-  if(!inWorld(px,py,pz)) return;
+  if(!inWorld(px,py,pz)) return false;
   const cur=getB(px,py,pz);
-  if(cur!==B.AIR && cur!==B.WATER) return;
+  if(cur!==B.AIR && cur!==B.WATER) return false;
   const placeId=s.id;
   if(dim==='overworld' && !canBuildHere(px,pz,py,placeId)){
     showLandEditDenied(px,pz,'build',py,placeId);
-    return;
+    return false;
   }
   if(dim==='overworld' && typeof explainBaseSetupPlacement==='function') explainBaseSetupPlacement(px,pz,py,placeId);
   setB(px,py,pz,placeId);
-  if(collides(player.pos)){ setB(px,py,pz,cur); return; }
+  if(collides(player.pos)){ setB(px,py,pz,cur); return false; }
   if(isLightBlock(placeId)) addTorchMesh(px,py,pz);
   syncInsulatorMesh(px,py,pz,placeId);
   s.count--; if(s.count<=0) inv[selected]=null;
@@ -5831,6 +5841,17 @@ function secondaryAction(){
   SFX.place(); vmSwing();
   if(onboardingActive&&onboardingArrived&&onboardingKind()==='build'&&placeId===B.PLANKS&&isOnboardingBuildPad(px,py,pz)) onboardingFlags.built=(onboardingFlags.built||0)+1;
   if(placeId===B.SAND) maybeFall(px,py,pz);
+  return true;
+}
+function heldPlaceAction(now=performance.now()){
+  if(!locked||claimMode||uiOpen||statOpen||uiShellState.qOpen||globalThis.chatTyping)return;
+  const held=mouseR||placeKeyHeld;
+  if(!held||now<nextHeldPlaceAt)return;
+  const s=inv[selected];
+  if(!s||ITEMS[s.id].place===undefined)return;
+  const hit=raycast(BLOCK_PLACE_REACH);
+  if(placeSelectedBlockAtHit(hit))nextHeldPlaceAt=now+BLOCK_PLACE_REPEAT_MS;
+  else nextHeldPlaceAt=now+BLOCK_PLACE_INITIAL_DELAY_MS;
 }
 function interactWithVillager(vill){
   if(!vill) return false;
@@ -5886,11 +5907,13 @@ addEventListener('mousedown', e=>{
     primaryAction();
   }
   else if(e.button===2){
+    mouseR=true; nextHeldPlaceAt=performance.now()+BLOCK_PLACE_INITIAL_DELAY_MS;
     secondaryAction();
   }
 });
-addEventListener('mouseup', e=>{ if(e.button===0) stopPrimaryAction(); });
+addEventListener('mouseup', e=>{ if(e.button===0) stopPrimaryAction(); if(e.button===2) mouseR=false; });
 addEventListener('contextmenu', e=> e.preventDefault());
+addEventListener('blur', ()=>{ mouseR=false; placeKeyHeld=false; });
 addEventListener('wheel', e=>{ if(locked&&isWorldPointerTarget(e.target)) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
 
 gameContext.registerState('combat', Object.freeze({
@@ -5931,6 +5954,7 @@ gameContext.registerModule('combat', Object.freeze({
   updateBuildPreview,
   primaryAction,
   secondaryAction,
+  heldPlaceAction,
   stopPrimaryAction,
   showPathSelection,
   openLevel2JobChoice,

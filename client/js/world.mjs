@@ -2801,8 +2801,22 @@ function rebuildAround(x,z){
 // highlight + crack overlay
 const highlight = new THREE.LineSegments(
   new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002,1.002,1.002)),
-  new THREE.LineBasicMaterial({color:0x111111, transparent:true, opacity:.7}));
+  new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:.92}));
 highlight.visible=false; scene.add(highlight);
+const targetFaceMat = new THREE.MeshBasicMaterial({color:0xffd24a, transparent:true, opacity:.26, depthWrite:false, side:THREE.DoubleSide});
+const targetFace = new THREE.Mesh(new THREE.PlaneGeometry(1.02,1.02), targetFaceMat);
+targetFace.visible=false; scene.add(targetFace);
+function setTargetBlockHighlight(hit){
+  if(!hit){ highlight.visible=false; targetFace.visible=false; return; }
+  highlight.visible=true;
+  highlight.position.set((hit.x|0)+.5,(hit.y|0)+.5,(hit.z|0)+.5);
+  highlight.material.opacity=.82+.1*Math.sin(performance.now()*.01);
+  const face=hit.face||[0,0,1],x=hit.x|0,y=hit.y|0,z=hit.z|0,eps=.006;
+  targetFace.visible=true; targetFace.rotation.set(0,0,0);
+  if(face[0]){ targetFace.rotation.y=Math.PI/2; targetFace.position.set(x+(face[0]>0?1+eps:-eps),y+.5,z+.5); }
+  else if(face[1]){ targetFace.rotation.x=Math.PI/2; targetFace.position.set(x+.5,y+(face[1]>0?1+eps:-eps),z+.5); }
+  else { targetFace.position.set(x+.5,y+.5,z+(face[2]>0?1+eps:-eps)); }
+}
 const buildGhostFillMat = new THREE.MeshBasicMaterial({color:0x9ad26b, transparent:true, opacity:.34, depthWrite:false});
 const buildGhostLineMat = new THREE.LineBasicMaterial({color:0x9ad26b, transparent:true, opacity:.86, depthWrite:false});
 const buildGhost = new THREE.Group();
@@ -10528,6 +10542,7 @@ gameContext.registerModule('world', Object.freeze({
   openLandClaims:openLandClaimsUI,
   toggleLandClaims:toggleLandClaimOverlay,
   setBuildGhostPreview,
+  setTargetBlockHighlight,
   ancientCityDiscoverySpecs,
   tavernGameAction,
   inOverworldBattle,

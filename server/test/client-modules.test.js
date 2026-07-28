@@ -1617,18 +1617,32 @@ test('block placement uses Minecraft-style targeted block face at build reach',(
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   assert.match(combat,/const BLOCK_PLACE_REACH=8;/);
   assert.match(combat,/const hit=raycast\(BLOCK_PLACE_REACH\);/);
   assert.match(combat,/const px=hit\.x\+hit\.face\[0\], py=hit\.y\+hit\.face\[1\], pz=hit\.z\+hit\.face\[2\];/);
   assert.match(combat,/function buildPlacementPreview\(\)\{/);
   assert.match(combat,/ITEMS\[s\.id\]\.place===undefined/);
   assert.match(combat,/worldApi\.setBuildGhostPreview\(active\?buildPlacementPreview\(\):null\);/);
+  assert.match(combat,/const BLOCK_PLACE_INITIAL_DELAY_MS=210, BLOCK_PLACE_REPEAT_MS=165;/);
+  assert.match(combat,/function placeSelectedBlockAtHit\(hit\)/);
+  assert.match(combat,/function heldPlaceAction\(now=performance\.now\(\)\)/);
+  assert.match(combat,/if\(e\.code==='KeyG' && !e\.repeat\)\{ placeKeyHeld=true; nextHeldPlaceAt=performance\.now\(\)\+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction\(\); \}/);
+  assert.match(combat,/mouseR=true; nextHeldPlaceAt=performance\.now\(\)\+BLOCK_PLACE_INITIAL_DELAY_MS;/);
+  assert.match(combat,/if\(!locked\)\{ mouseR=false; placeKeyHeld=false; \}/);
   assert.match(combat,/updateBuildPreview,/);
   assert.match(frame,/combatApi\.updateBuildPreview\(!cutscene\);/);
+  assert.match(frame,/if\(!cutscene&&combatApi\.heldPlaceAction\)combatApi\.heldPlaceAction\(now\)/);
+  assert.match(frame,/const stages=Array\.isArray\(crackTexs\)\?crackTexs\.length:4;/);
   assert.match(frame,/combatApi\.updateBuildPreview\(false\);/);
   assert.match(world,/const buildGhost = new THREE\.Group\(\);/);
   assert.match(world,/function setBuildGhostPreview\(preview\)\{/);
+  assert.match(world,/const targetFace = new THREE\.Mesh\(new THREE\.PlaneGeometry\(1\.02,1\.02\), targetFaceMat\);/);
+  assert.match(world,/function setTargetBlockHighlight\(hit\)\{/);
+  assert.match(frame,/if\(worldApi\.setTargetBlockHighlight\)worldApi\.setTargetBlockHighlight\(hit\)/);
   assert.match(world,/setBuildGhostPreview,/);
+  assert.match(menus,/10-stage procedural crack textures/);
+  assert.match(menus,/const crackTexs=Array\.from\(\{length:10\},\(_,i\)=>crackTexture\(i\)\);/);
 });
 
 test('narrow game HUD consolidates abilities, quest, status, and hotbar without clipping',()=>{

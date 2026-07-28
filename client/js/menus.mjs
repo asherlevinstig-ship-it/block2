@@ -8015,7 +8015,7 @@ function openShardUI(){
 // ---------------- mining: cracks, momentum, crits, veins, falling sand ----------------
 let camShake=0;
 
-// 4-stage procedural crack textures (deterministic random walks)
+// 10-stage procedural crack textures (deterministic random walks), matching Minecraft's readable break ramp.
 function crackTexture(stage){
   const c=document.createElement('canvas'); c.width=16; c.height=16;
   const g=c.getContext('2d');
@@ -8023,11 +8023,11 @@ function crackTexture(stage){
   const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
   g.strokeStyle='rgba(14,11,9,0.9)';
   g.lineWidth=1;
-  const cracks=2+stage*2;
+  const cracks=1+stage;
   for(let i=0;i<cracks;i++){
     let x=8+(rnd()-.5)*6, y=8+(rnd()-.5)*6;
     g.beginPath(); g.moveTo(x,y);
-    const segs=3+stage;
+    const segs=2+Math.ceil(stage*.7);
     for(let k=0;k<segs;k++){
       x+=(rnd()-.5)*7; y+=(rnd()-.5)*7;
       g.lineTo(Math.max(0,Math.min(16,x)), Math.max(0,Math.min(16,y)));
@@ -8035,12 +8035,12 @@ function crackTexture(stage){
     g.stroke();
   }
   g.fillStyle='rgba(10,8,6,0.55)';
-  for(let i=0;i<stage*3;i++) g.fillRect((rnd()*15)|0,(rnd()*15)|0,1,1);
+  for(let i=0;i<stage*2;i++) g.fillRect((rnd()*15)|0,(rnd()*15)|0,1,1);
   const tex=new THREE.CanvasTexture(c);
   tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
   return tex;
 }
-const crackTexs=[0,1,2,3].map(crackTexture);
+const crackTexs=Array.from({length:10},(_,i)=>crackTexture(i));
 
 // ---- momentum combo ----
 let comboCount=0, comboTime=0;

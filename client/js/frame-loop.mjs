@@ -2367,10 +2367,12 @@ function tick(now){
     }
     if(tipsyT>0){ tipsyT-=dt; camera.rotation.z+=Math.sin(now/420)*.028*Math.min(1,tipsyT/2); }
 
-    const hit=raycast(6);
-    if(hit){ highlight.visible=true; highlight.position.set(hit.x+.5,hit.y+.5,hit.z+.5); }
+    const hit=raycast(8);
+    if(worldApi.setTargetBlockHighlight)worldApi.setTargetBlockHighlight(hit);
+    else if(hit){ highlight.visible=true; highlight.position.set(hit.x+.5,hit.y+.5,hit.z+.5); }
     else { highlight.visible=false; }
     combatApi.updateBuildPreview(!cutscene);
+    if(!cutscene&&combatApi.heldPlaceAction)combatApi.heldPlaceAction(now);
 
     // mining (a mounted dragon breathes instead of mining while you hold the primary action)
     if(cutscene){ /* controls suspended during the cinematic */ }
@@ -2399,7 +2401,8 @@ function tick(now){
         const frac=Math.min(1, mining.progress/mining.total);
         crack.visible=true;
         crack.position.set(mining.x+.5,mining.y+.5,mining.z+.5);
-        const st=Math.min(3,Math.floor(frac*4));
+        const stages=Array.isArray(crackTexs)?crackTexs.length:4;
+        const st=Math.max(0,Math.min(stages-1,Math.floor(frac*stages)));
         if(crack.userData.st!==st){
           crack.userData.st=st;
           crackMat.map=crackTexs[st];
