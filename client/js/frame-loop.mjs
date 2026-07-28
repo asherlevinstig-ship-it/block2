@@ -102,7 +102,8 @@ function showFeatherStepLandingFx(m={}){
 const PANTHER_FORM={eye:0.68,height:0.96,width:0.24,speed:8.15,strafe:1.14,accel:46,brake:42,airAccel:12,jump:9.35,pounce:1.8,landingDip:.075,shiftMs:900};
 let pantherLocalUntil=0,pantherShiftStart=-1e9,pantherShiftMs=PANTHER_FORM.shiftMs,pantherProwlT=0;
 const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10};
-let sprintRamp=0,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0;
+const FALL_DAMAGE={safeDrop:5,featherAbsorbDrop:16,hardScale:1.25,featherScale:.5,maxDamage:18};
+let sprintRamp=0,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0,localFallPeakY=0,localFallAirborne=false;
 const movementState={grounded:false,airborne:true,swimming:false,sprinting:false,exhausted:false,panther:false,state:'airborne',speed:0,targetSpeed:0,sprintFactor:0};
 function pantherFormActive(now=performance.now()){
   return pantherLocalUntil>now || !!(buffs&&buffs.panther>0);
@@ -156,6 +157,27 @@ function updateMovementStateSnapshot(state, speed, targetSpeed, sprintFactor, gr
   state.speed=Math.round(speed*100)/100;state.targetSpeed=Math.round(targetSpeed*100)/100;state.sprintFactor=Math.round(sprintFactor*100)/100;
   state.state=panther?'panther':swimming?'swimming':state.sprinting?'sprinting':exhausted?'exhausted':grounded?'grounded':'airborne';
   globalThis.BlockcraftMovementState=state;
+}
+function localFallDamageFor(drop, featherStep=false){
+  const d=Math.max(0,Number(drop)||0);
+  if(d<=FALL_DAMAGE.safeDrop)return {damage:0,kind:'safe'};
+  if(featherStep){
+    if(d<=FALL_DAMAGE.featherAbsorbDrop)return {damage:0,kind:'absorbed'};
+    return {damage:Math.max(1,Math.ceil((d-FALL_DAMAGE.featherAbsorbDrop)*FALL_DAMAGE.featherScale)),kind:'softened'};
+  }
+  return {damage:Math.min(FALL_DAMAGE.maxDamage,Math.ceil((d-FALL_DAMAGE.safeDrop)*FALL_DAMAGE.hardScale)),kind:'hard'};
+}
+function resolveLocalFallLanding(drop, featherStep=false){
+  if(NET.on||tutorialSafe()||drop<=FALL_DAMAGE.safeDrop)return;
+  const result=localFallDamageFor(drop,featherStep);
+  if(featherStep&&result.kind!=='safe'){
+    showFeatherStepLandingFx({kind:result.kind,drop,damage:result.damage});
+    showName(result.damage>0?'Feather Step softened fall':'Feather Step absorbed fall');
+  }
+  if(result.damage>0){
+    showName('Hard landing -'+result.damage+' HP');
+    damagePlayer(result.damage,'local:fall',{fallDrop:Math.round(drop*10)/10,fallKind:result.kind});
+  }
 }
 function tryStepAssist(fromX,fromY,fromZ,dx,dz,wasGround,feetWater,flying){
   if(!wasGround||feetWater||flying||Math.hypot(dx,dz)<.03||!combatApi.collides)return false;
@@ -2260,6 +2282,7 @@ function tick(now){
     }
     const wasGround=player.onGround;
     const prevVy=player.vel.y;
+    if(wasGround){localFallPeakY=player.pos.y;localFallAirborne=false;}
     player.onGround=false;
     if(playerKb.lengthSq()>.001){
       moveAxis('x', playerKb.x*dt);
@@ -2280,16 +2303,23 @@ function tick(now){
     moveAxis('y', player.vel.y*dt);
     if(eventStartLocked()){holdEventStartPosition();player.onGround=true;}
     if(player.onGround) lastGroundT=now;
+    if(!player.onGround&&!feetWater&&!flying){
+      if(!localFallAirborne){localFallAirborne=true;localFallPeakY=player.pos.y;}
+      else localFallPeakY=Math.max(localFallPeakY,player.pos.y);
+    }
     if(player.onGround && !wasGround && prevVy<-9){             // landing feedback
       const feather=utilityEquipped('feather_step');
+      const fallDrop=Math.max(0,localFallPeakY-player.pos.y);
       const hard=!feather && prevVy<-15;
       const bid=getB(Math.floor(player.pos.x), Math.floor(player.pos.y-.5), Math.floor(player.pos.z));
       burst(player.pos.x, player.pos.y+.1, player.pos.z, BLOCK_COLORS[bid]||[.5,.5,.5], feather?4:(hard?14:7), feather?1.1:2.2, feather?.8:1.4, feather?.28:.45);
       SFX.land(hard);
       camShake=Math.max(camShake, feather?.04:(hard?.3:.14));
       landingDip=Math.max(landingDip,pantherFormActive(now)?PANTHER_FORM.landingDip:(feather?.025:(hard?.085:.045)));
+      resolveLocalFallLanding(fallDrop,feather);
       if(feather && prevVy<-15) showName('Feather Step ready');
     }
+    if(player.onGround){localFallPeakY=player.pos.y;localFallAirborne=false;}
     const planarSpeed=Math.hypot(player.vel.x,player.vel.z);
     updateMovementStateSnapshot(movementState,planarSpeed,speed,sprintFactor,player.onGround,inWater,pantherMove,exhausted);
     if(player.onGround && movementInput && planarSpeed>.25){                      // footsteps

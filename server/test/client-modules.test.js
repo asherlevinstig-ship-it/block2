@@ -1597,6 +1597,22 @@ test('panther movement has distinct camera, strafe, pounce, and landing feel',()
   assert.match(frame,/pantherFormActive\(now\)\?PANTHER_FORM\.landingDip/);
 });
 
+test('client fall damage mirrors server tuning while online authority owns HP',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/const FALL_DAMAGE=\{safeDrop:5,featherAbsorbDrop:16,hardScale:1\.25,featherScale:\.5,maxDamage:18\}/);
+  assert.match(frame,/function localFallDamageFor\(drop, featherStep=false\)/);
+  assert.match(frame,/if\(d<=FALL_DAMAGE\.safeDrop\)return \{damage:0,kind:'safe'\}/);
+  assert.match(frame,/if\(d<=FALL_DAMAGE\.featherAbsorbDrop\)return \{damage:0,kind:'absorbed'\}/);
+  assert.match(frame,/Math\.ceil\(\(d-FALL_DAMAGE\.featherAbsorbDrop\)\*FALL_DAMAGE\.featherScale\)/);
+  assert.match(frame,/Math\.min\(FALL_DAMAGE\.maxDamage,Math\.ceil\(\(d-FALL_DAMAGE\.safeDrop\)\*FALL_DAMAGE\.hardScale\)\)/);
+  assert.match(frame,/function resolveLocalFallLanding\(drop, featherStep=false\)/);
+  assert.match(frame,/if\(NET\.on\|\|tutorialSafe\(\)\|\|drop<=FALL_DAMAGE\.safeDrop\)return/);
+  assert.match(frame,/damagePlayer\(result\.damage,'local:fall'/);
+  assert.match(frame,/if\(wasGround\)\{localFallPeakY=player\.pos\.y;localFallAirborne=false;\}/);
+  assert.match(frame,/const fallDrop=Math\.max\(0,localFallPeakY-player\.pos\.y\)/);
+  assert.match(frame,/resolveLocalFallLanding\(fallDrop,feather\)/);
+});
+
 test('block placement uses Minecraft-style targeted block face at build reach',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
