@@ -2146,22 +2146,27 @@ function tick(now){
   }
 
   if(locked){
-    const lookX=(keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0);
-    const lookY=(keys['ArrowUp']?1:0)-(keys['ArrowDown']?1:0);
-    if(!cutscene && (lookX||lookY)){
+    const gameplayMoveAllowed=combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true;
+    const mouseLook=combatApi.consumeMouseLookDelta?combatApi.consumeMouseLookDelta():{x:0,y:0};
+    const lookX=gameplayMoveAllowed?((keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0)):0;
+    const lookY=gameplayMoveAllowed?((keys['ArrowUp']?1:0)-(keys['ArrowDown']?1:0)):0;
+    const mouseLookSensitivity=combatState.mouseLookSensitivity||.00215;
+    const mouseYaw=(mouseLook.x||0)*mouseLookSensitivity,mousePitch=(mouseLook.y||0)*mouseLookSensitivity;
+    if(gameplayMoveAllowed&&!cutscene && (lookX||lookY||mouseYaw||mousePitch)){
       const lookSpeed=(keys['ShiftLeft']||keys['ShiftRight'])?3.1:1.85;
-      if(onboardingActive&&onboardingArrived&&onboardingKind()==='arrows'&&lookX){
-        onboardingArrowTurn+=Math.abs(lookX*lookSpeed*dt);
+      const yawDelta=lookX*lookSpeed*dt+mouseYaw;
+      if(onboardingActive&&onboardingArrived&&onboardingKind()==='arrows'&&(lookX||mouseYaw)){
+        onboardingArrowTurn+=Math.abs(yawDelta);
         if(onboardingArrowTurn>=ONBOARDING_FULL_TURN) onboardingFlags.arrowLook=true;
         updateOnboardingHud();
       }
-      player.yaw += lookX*lookSpeed*dt;
-      player.pitch += lookY*lookSpeed*.85*dt;
+      player.yaw += yawDelta;
+      player.pitch += lookY*lookSpeed*.85*dt+mousePitch;
       player.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, player.pitch));
     }
-    const sprintKey=keys['ShiftLeft']||keys['ShiftRight'];
-    let f=(keys['KeyW']?1:0)-(keys['KeyS']?1:0);
-    let s=(keys['KeyD']?1:0)-(keys['KeyA']?1:0);
+    const sprintKey=gameplayMoveAllowed&&(keys['ShiftLeft']||keys['ShiftRight']);
+    let f=gameplayMoveAllowed?((keys['KeyW']?1:0)-(keys['KeyS']?1:0)):0;
+    let s=gameplayMoveAllowed?((keys['KeyD']?1:0)-(keys['KeyA']?1:0)):0;
     if(biomeStatus.rooted(now)){f=0;s=0;}
     if(cutscene||eventStartLocked()||(worldState.skyshipJourney&&worldState.skyshipJourney.boarded)){ f=0; s=0; player.vel.set(0,0,0); }
     if(isMeditating && (f!==0 || s!==0 || keys['Space'])){

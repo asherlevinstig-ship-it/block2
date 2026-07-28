@@ -1584,6 +1584,25 @@ test('movement feel uses smoothing, sprint curves, camera locomotion, and step a
   assert.match(frame,/state\.state=panther\?'panther':swimming\?'swimming':state\.sprinting\?'sprinting':exhausted\?'exhausted':grounded\?'grounded':'airborne'/);
 });
 
+test('mouse look returns as a strict gameplay-only camera option',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(combat,/const mouseLookDelta=\{x:0,y:0\};/);
+  assert.match(combat,/const MOUSE_LOOK_SENSITIVITY=\.00215;/);
+  assert.match(combat,/function gameplayCameraInputAllowed\(\)\{/);
+  assert.match(combat,/return !!\(locked&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!transitionModalOpen&&!globalThis\.chatTyping&&!document\.body\.classList\.contains\('game-modal-open'\)\);/);
+  assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*queueMouseLook\(e\.movementX\|\|0,e\.movementY\|\|0\);\s*\}else if\(lockFallback&&isWorldPointerTarget\(e\.target\)\)\{/);
+  assert.match(combat,/function consumeMouseLookDelta\(\)\{/);
+  assert.match(combat,/if\(!gameplayCameraInputAllowed\(\)\)\{ mouseLookDelta\.x=0; mouseLookDelta\.y=0; return \{x:0,y:0\}; \}/);
+  assert.match(combat,/consumeMouseLookDelta,/);
+  assert.match(combat,/gameplayCameraInputAllowed,/);
+  assert.match(frame,/const gameplayMoveAllowed=combatApi\.gameplayCameraInputAllowed\?combatApi\.gameplayCameraInputAllowed\(\):true;/);
+  assert.match(frame,/const mouseLook=combatApi\.consumeMouseLookDelta\?combatApi\.consumeMouseLookDelta\(\):\{x:0,y:0\};/);
+  assert.match(frame,/const mouseLookSensitivity=combatState\.mouseLookSensitivity\|\|\.00215;/);
+  assert.match(frame,/player\.yaw \+= yawDelta;/);
+  assert.match(frame,/let f=gameplayMoveAllowed\?\(\(keys\['KeyW'\]\?1:0\)-\(keys\['KeyS'\]\?1:0\)\):0;/);
+});
+
 test('panther movement has distinct camera, strafe, pounce, and landing feel',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   assert.match(frame,/const PANTHER_FORM=\{eye:0\.68,height:0\.96,width:0\.24,speed:8\.15,strafe:1\.14,accel:46,brake:42,airAccel:12,jump:9\.35,pounce:1\.8,landingDip:\.075/);

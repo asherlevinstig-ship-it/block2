@@ -514,6 +514,8 @@ function finishMine(){
 // ---------------- input & states ----------------
 const keys = {};
 let locked=false, lockFallback=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
+const mouseLookDelta={x:0,y:0};
+const MOUSE_LOOK_SENSITIVITY=.00215;
 const overlay=document.getElementById('overlay');
 const playbtn=document.getElementById('playbtn');
 const registerbtn=document.getElementById('registerbtn');
@@ -4366,6 +4368,7 @@ function refreshPlayUi(){
   updateLandMinimap();
   syncHudLayerState();
   playbtn.textContent='RESUME';
+  if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
   if(!locked) mouseL=false, mining=null;
   const debugSig=[
     overlay.classList.contains('hidden')?'overlay:hidden':'overlay:visible',
@@ -4727,6 +4730,7 @@ document.addEventListener('pointerlockchange', ()=>{
   else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
   locked = hasLock || lockFallback;
   if(!locked){ mouseR=false; placeKeyHeld=false; }
+  if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
   refreshPlayUi();
 });
 document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
@@ -4741,6 +4745,25 @@ function gameplayInputActive(){
 }
 function isWorldPointerTarget(target){
   return target===renderer.domElement||target===document.body||target===document.documentElement;
+}
+function gameplayCameraInputAllowed(){
+  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||abilityAwakeningOpen||
+    !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
+    !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
+    !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
+    !!globalThis.dungeonLobbyOpen;
+  return !!(locked&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
+}
+function queueMouseLook(dx,dy){
+  if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
+  mouseLookDelta.x+=Math.max(-160,Math.min(160,dx));
+  mouseLookDelta.y+=Math.max(-160,Math.min(160,dy));
+}
+function consumeMouseLookDelta(){
+  if(!gameplayCameraInputAllowed()){ mouseLookDelta.x=0; mouseLookDelta.y=0; return {x:0,y:0}; }
+  const out={x:mouseLookDelta.x,y:mouseLookDelta.y};
+  mouseLookDelta.x=0;mouseLookDelta.y=0;
+  return out;
 }
 addEventListener('keydown', e=>{
   if(e.code==='F9'&&!e.repeat){
@@ -4917,6 +4940,12 @@ addEventListener('mousemove', e=>{
   claimMouse.x=e.clientX; claimMouse.y=e.clientY;
   if(cursorEl){cursorEl.style.left=(e.clientX-18)+'px';cursorEl.style.top=(e.clientY-18)+'px';}
   if(claimMode) updateClaimHover();
+  if(!gameplayCameraInputAllowed())return;
+  if(document.pointerLockElement===renderer.domElement){
+    queueMouseLook(e.movementX||0,e.movementY||0);
+  }else if(lockFallback&&isWorldPointerTarget(e.target)){
+    queueMouseLook(e.movementX||0,e.movementY||0);
+  }
 });
 function primaryAction(){
   if(cutscene){ skipCutscene(); return; }
@@ -5913,7 +5942,7 @@ addEventListener('mousedown', e=>{
 });
 addEventListener('mouseup', e=>{ if(e.button===0) stopPrimaryAction(); if(e.button===2) mouseR=false; });
 addEventListener('contextmenu', e=> e.preventDefault());
-addEventListener('blur', ()=>{ mouseR=false; placeKeyHeld=false; });
+addEventListener('blur', ()=>{ mouseR=false; placeKeyHeld=false; mouseLookDelta.x=mouseLookDelta.y=0; });
 addEventListener('wheel', e=>{ if(locked&&isWorldPointerTarget(e.target)) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
 
 gameContext.registerState('combat', Object.freeze({
@@ -5924,6 +5953,8 @@ gameContext.registerState('combat', Object.freeze({
   get inventoryModel(){ return inventoryModel; },
   get equipmentModel(){ return equipmentModel; },
   get inputLocked(){ return locked; },
+  get cameraInputAllowed(){ return gameplayCameraInputAllowed(); },
+  get mouseLookSensitivity(){ return MOUSE_LOOK_SENSITIVITY; },
   get uiOpen(){ return uiOpen; },
   get pathChoiceOpen(){ return pathChoiceOpen; },
   get jobChoiceOpen(){ return jobChoiceOpen; },
@@ -5952,6 +5983,8 @@ gameContext.registerState('combat', Object.freeze({
 gameContext.registerModule('combat', Object.freeze({
   collides,
   updateBuildPreview,
+  consumeMouseLookDelta,
+  gameplayCameraInputAllowed,
   primaryAction,
   secondaryAction,
   heldPlaceAction,
