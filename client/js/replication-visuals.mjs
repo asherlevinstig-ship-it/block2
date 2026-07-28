@@ -585,8 +585,11 @@ function netFx(m){
   if(m.t==='banditCleave'){burst(m.x,m.y+.25,m.z,[1,.18,.08],34,5.2,2.2,.65);camShake=Math.max(camShake,.65);return;}
   if(m.t==='weaponStagger'){
     const color=m.boss?[1,.55,.18]:[1,.85,.35];
-    burst(m.x,m.y+.8,m.z,color,m.boss?18:11,m.boss?2.8:2.0,1.8,.35);
-    ringPulse(m.x,m.y+.08,m.z,m.boss?2.2:1.35,m.boss?0xff7a24:0xffd75e,.28);
+    burst(m.x,m.y+.8,m.z,color,m.boss?28:18,m.boss?3.5:2.4,2.0,.48);
+    ringPulse(m.x,m.y+.08,m.z,m.boss?2.8:1.7,m.boss?0xff7a24:0xffd75e,.38);
+    glowFlash(m.x,m.y+1,m.z,m.boss?0xff7a24:0xffd75e,m.boss?2.8:2.0,.24);
+    camShake=Math.max(camShake,m.boss?.22:.16);
+    showName(m.boss?'BOSS STAGGERED':'STAGGER');
     return;
   }
   if(m.t==='dragonBreath'){
@@ -716,6 +719,34 @@ function netFx(m){
   } else if(m.t==='blackholePop'){
     SFX.boom(); camShake=Math.max(camShake,.42);
     burst(m.x, m.y, m.z, [.55,.18,1], 44, 5.2, 1.2, .75);
+  } else if(m.t==='combatReact'){
+    const targets=Array.isArray(m.targets)?m.targets.slice(0,10):[{x:m.x,y:m.y,z:m.z}];
+    const kind=String(m.kind||'');
+    for(const t of targets){
+      const tx=Number(t.x),ty=Number(t.y),tz=Number(t.z);
+      if(!Number.isFinite(tx)||!Number.isFinite(ty)||!Number.isFinite(tz))continue;
+      if(kind==='crit'||kind==='execute'){
+        ringPulse(tx,ty+.08,tz,kind==='execute'?1.45:1.08,kind==='execute'?0x8b5cf6:0xffd24a,.4);
+        glowFlash(tx,ty+1,tz,kind==='execute'?0xa855f7:0xffd24a,kind==='execute'?2.8:2.2,.3);
+        burst(tx,ty+1,tz,kind==='execute'?[.55,.18,1]:[1,.78,.18],kind==='execute'?30:18,kind==='execute'?3.4:2.4,2.1,.55);
+        camShake=Math.max(camShake,kind==='execute'?.3:.2);
+        showName(kind==='execute'?'SHADOW EXECUTE':'CRITICAL');
+      }else if(kind==='frost'){
+        ringPulse(tx,ty+.08,tz,1.2,0x8eeaff,.35);
+        glowFlash(tx,ty+.9,tz,0x8eeaff,2.1,.25);
+        burst(tx,ty+.75,tz,[.55,.9,1],16,2.0,1.7,.45);
+        showName('FROST LOCK');
+      }else if(kind==='root'){
+        ringPulse(tx,ty+.08,tz,1.12,0x42d45b,.38);
+        rootClutchVfx(tx,ty,tz,1.8);
+        showName('ROOTED');
+      }else if(kind==='guardBlock'){
+        ringPulse(tx,ty+.08,tz,1.45,0xfbbf24,.45);
+        glowFlash(tx,ty+1,tz,0xfbbf24,2.2,.28);
+        burst(tx,ty+.9,tz,[1,.72,.16],18,2.2,1.8,.42);
+        showName('GUARDIAN BLOCK');
+      }
+    }
   } else if(m.t==='pantherClaw'){
     const targets=Array.isArray(m.targets)?m.targets.slice(0,8):[{x:m.x,y:m.y,z:m.z}];
     for(const t of targets){

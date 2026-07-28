@@ -1007,6 +1007,14 @@
   #armorwarning b{font-size:13px}#armorwarning span{font-size:8px;letter-spacing:1.5px}
   #armorwarning.armor-critical{color:#ff786b;border-color:#ff5145;background:rgba(30,5,7,.9);animation:armorCritical .75s infinite alternate}
   @keyframes armorCritical{to{box-shadow:0 0 22px rgba(255,60,48,.5);transform:translateX(-50%) scale(1.04)}}
+  #combatdebug{position:fixed;left:12px;bottom:190px;width:286px;max-width:calc(100vw - 24px);z-index:30;padding:9px 10px;border:1px solid rgba(125,211,252,.52);border-radius:6px;background:linear-gradient(180deg,rgba(4,9,16,.93),rgba(4,7,12,.86));box-shadow:0 10px 28px rgba(0,0,0,.38),inset 0 0 18px rgba(125,211,252,.06);color:#eaf6ff;font:10px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;text-shadow:none;pointer-events:none;transition:opacity .25s ease}
+  #combatdebug:empty{display:none}
+  #combatdebug.quiet{opacity:.45}
+  #combatdebug>b{display:block;margin-bottom:5px;color:#7dd3fc;font-size:9px;letter-spacing:2px}
+  #combatdebug section{display:grid;gap:1px;padding:5px 0;border-top:1px solid rgba(255,255,255,.08)}
+  #combatdebug strong{color:#fff;font-size:10px;letter-spacing:.8px}
+  #combatdebug em{color:#ffd24a;font-style:normal}
+  #combatdebug span{color:#aebfd4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #sleepfade{position:fixed;inset:0;background:#000;opacity:0;transition:opacity 1s;pointer-events:none;z-index:7}
   #portaltransition{position:fixed;inset:0;z-index:46;display:grid;place-items:center;pointer-events:none;opacity:0;background:radial-gradient(circle at 50% 52%,rgba(125,211,252,.18),transparent 21%),radial-gradient(circle at 50% 50%,rgba(154,210,107,.10),transparent 42%),rgba(3,7,14,.08);transition:opacity .22s ease;overflow:hidden}
   #portaltransition.active{opacity:1;pointer-events:auto}

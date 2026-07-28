@@ -307,10 +307,17 @@ class CombatMixin {
       this.sendAbilitySync(client, st);
       return client.send('abilityReject', { slot, reason: 'stamina' });
     }
+    const resourceBefore = { mp: st.mp, sp: st.sp };
     st.mp -= manaCost;
     st.sp = Math.max(0, st.sp - staminaCost);
     st.cds[cdKey] = now + cooldown;
     this.sendAbilitySync(client, st);
+    this.sendCombatDebug(client, {
+      kind: 'ability-cast',
+      ability: { path, slot, name: def.name || def.kind, kind: def.kind },
+      resources: this.combatResourceSnapshot(client, resourceBefore, st),
+      buffs: this.combatBuffSnapshot(client.sessionId, now),
+    });
     if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
 
     const fx = { t: 'ability', path, slot, kind: def.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0, sid: client.sessionId, dgn: p.dgn || '' };
@@ -335,7 +342,9 @@ class CombatMixin {
       client.send('abilityResult', { path, slot, kind: def.kind, mp: Math.floor(st.mp), maxMp: st.maxMp, sp: Math.floor(st.sp), maxSp: st.maxSp });
       return;
     } else if (def.kind === 'frost') {
-      this.damageMobsInRadius(client,p.x,p.y+.7,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('frost',rec.prof.S)*(spec==='elementalist'&&rank>=2?1.15:1),{slow:4,stun:spec==='elementalist'&&rank>=2?.45:0});
+      const frozen=this.damageMobsInRadius(client,p.x,p.y+.7,p.z,def.radius,ABILITY_SYSTEM.abilityDamage('frost',rec.prof.S)*(spec==='elementalist'&&rank>=2?1.15:1),{slow:4,stun:spec==='elementalist'&&rank>=2?.45:0});
+      fx.targets=frozen;fx.radius=def.radius;
+      if(frozen.length)this.sendSpace(p.dgn||'','fx',{t:'combatReact',kind:'frost',targets:frozen,dgn:p.dgn||''});
       this.breakBlocksInRadius(client, p.x, p.y + .4, p.z, 2.0, 8);
     } else if (def.kind === 'lightning') {
       if (!target || !target.meta || Math.hypot(target.mob.x - p.x, target.mob.z - p.z) > def.range ||
@@ -370,6 +379,7 @@ class CombatMixin {
       const rooted = this.damageMobsInRadius(client, p.x, p.y + .45, p.z, def.radius, damage, { slow: spec === 'grovekeeper' && rank >= 2 ? 6.5 : 5.25, stun: .75 });
       fx.targets = rooted;
       fx.radius = def.radius;
+      if(rooted.length)this.sendSpace(p.dgn||'','fx',{t:'combatReact',kind:'root',targets:rooted,dgn:p.dgn||''});
       if (spec === 'grovekeeper' && rank >= 2) this.healVerdantAllies(client, p, def.radius, 4);
       this.breakBlocksInRadius(client, p.x, p.y + .15, p.z, 1.6, 6);
     } else if (def.kind === 'panther') {
@@ -804,9 +814,18 @@ class CombatMixin {
     if (this.mobMeta[String(mobId)] && this.mobMeta[String(mobId)].friendly) return;
     if (!this.isAnimalKind(mob.kind)) this.alertPack(String(mobId));
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, damage);
-    const applied=Math.max(0,damage)*this.banditProtectionMultiplier(String(mobId),mob);
+    const raw=Math.max(0,damage);
+    const multiplier=this.banditProtectionMultiplier(String(mobId),mob);
+    const beforeHp=mob.hp;
+    const applied=raw*multiplier;
     this.emitDamageNumber(client,mob,applied,false,mob.hp-applied<=0);
     mob.hp -= applied;
+    this.sendCombatDebug(client,{
+      kind:'ability-hit',
+      target:{id:String(mobId),kind:mob.kind,state:mob.state||'',hp:Math.max(0,Math.round(mob.hp)),maxHp:Math.round(mob.maxHp||beforeHp||0)},
+      damage:{raw:Math.round(raw*10)/10,applied:Math.round(applied*10)/10,mitigated:Math.round(Math.max(0,raw-applied)*10)/10,multiplier:Math.round(multiplier*100)/100},
+      buffs:this.combatBuffSnapshot(client&&client.sessionId),
+    });
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
   rollPetFamiliarDrop(client, animalKind, ring = 0) {
@@ -818,6 +837,36 @@ class CombatMixin {
     if (rec && this.profileItemCount(rec.prof, drop.item) > 0) return null;
     const chance = Math.min(.16, drop.chance + Math.max(0, ring | 0) * .018);
     return Math.random() < chance ? { id: drop.item, count: 1 } : null;
+  }
+  combatBuffSnapshot(sid, now = Date.now()) {
+    const buffs = this.abilityBuffs && this.abilityBuffs.get(sid) || {};
+    const labels = {
+      umbralUntil: 'umbral',
+      ironUntil: 'iron_skin',
+      pantherUntil: 'panther',
+      verdantRegenUntil: 'verdant_regen',
+      mealMightUntil: 'meal_might',
+      monkRegenUntil: 'monk_regen',
+      monkSpeedUntil: 'monk_speed',
+      monkStoneUntil: 'stone_body',
+    };
+    return Object.entries(labels).filter(([key]) => Number(buffs[key]) > now)
+      .map(([key, id]) => ({ id, ms: Math.max(0, Math.round(Number(buffs[key]) - now)) }));
+  }
+  combatResourceSnapshot(client, before = null, after = null) {
+    const st = after || (client && this.abilityState && this.abilityState.get(client.sessionId)) || null;
+    return {
+      mp: st ? Math.floor(st.mp) : 0,
+      maxMp: st ? st.maxMp | 0 : 0,
+      sp: st ? Math.floor(st.sp) : 0,
+      maxSp: st ? st.maxSp | 0 : 0,
+      mpSpent: before && st ? Math.max(0, Math.round((before.mp - st.mp) * 10) / 10) : 0,
+      spSpent: before && st ? Math.max(0, Math.round((before.sp - st.sp) * 10) / 10) : 0,
+    };
+  }
+  sendCombatDebug(client, payload = {}) {
+    if (!client || typeof this.isAdminClient !== 'function' || !this.isAdminClient(client)) return;
+    client.send('combatDebug', { at: Date.now(), ...payload });
   }
   // Tell the attacker the actual damage their hit dealt, so the client can float a
   // number over the mob. Server-authoritative — no client-side damage prediction.
@@ -843,7 +892,7 @@ class CombatMixin {
     this.lastAttackMsg.set(client.sessionId, now);
     const buffs = this.abilityBuffs.get(client.sessionId);
     const panther = !!(buffs && buffs.pantherUntil > now);
-    const reach = panther ? 5.6 : 4.5;
+    const reach = panther ? 5.6 : 4.1;
     if (Math.hypot(mob.x - p.x, mob.z - p.z) > reach || Math.abs(mob.y - p.y) > 3) return;   // melee reach (3D)
     // require line of sight, matching the mob side — no hitting through walls
     if (!AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, mob.x, mob.y + 0.9, mob.z)) return;
@@ -862,9 +911,22 @@ class CombatMixin {
     }else this.weaponMomentum.delete(client.sessionId);
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
-    const applied=dmg*this.banditProtectionMultiplier(mobId,mob);
+    const rawDmg=dmg,mitigationMultiplier=this.banditProtectionMultiplier(mobId,mob),beforeHp=mob.hp;
+    const applied=dmg*mitigationMultiplier;
     this.emitDamageNumber(client,mob,applied,crit,mob.hp-applied<=0);
     mob.hp -= applied;
+    this.sendCombatDebug(client,{
+      kind:'melee',
+      weapon:profile.archetype||'hand',
+      reach,
+      panther,
+      crit,
+      target:{id:mobId,kind:mob.kind,state:mob.state||'',hp:Math.max(0,Math.round(mob.hp)),maxHp:Math.round(mob.maxHp||beforeHp||0)},
+      damage:{raw:Math.round(rawDmg*10)/10,applied:Math.round(applied*10)/10,mitigated:Math.round(Math.max(0,rawDmg-applied)*10)/10,multiplier:Math.round(mitigationMultiplier*100)/100},
+      resources:this.combatResourceSnapshot(client),
+      buffs:this.combatBuffSnapshot(client.sessionId,now),
+    });
+    if(crit)this.sendSpace(mob.dgn||'','fx',{t:'combatReact',kind:rec&&rec.prof&&rec.prof.S&&rec.prof.S.path==='shadow'&&mob.hp<=0?'execute':'crit',x:mob.x,y:mob.y,z:mob.z,dgn:mob.dgn||''});
     if (panther) {
       const dgn = p.dgn || '';
       const yaw = p.yaw || 0, fx = -Math.sin(yaw), fz = -Math.cos(yaw);

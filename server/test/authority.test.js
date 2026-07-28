@@ -2219,6 +2219,7 @@ test('Arcanist can cast using its discounted server mana and cooldown',()=>{
 
 test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',()=>{
   const room=makeRoom(),healer=makeClient('verdant_healer'),ally=makeClient('verdant_ally');
+  healer._accountRole='admin';
   const {prof}=seedPlayer(room,healer,{lvl:21,x:20,z:20,team:'party'});prof.S.path='verdant';prof.S.int=18;prof.S.str=12;prof.S.agi=16;
   seedPlayer(room,ally,{lvl:8,x:22,z:20,team:'party',hp:5});
   room.clients=[healer,ally];
@@ -2244,6 +2245,7 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   assert.ok((room.abilityBuffs.get(healer.sessionId).pantherUntil||0)>Date.now(),'Panther Form is stored as an authoritative buff');
   assert.equal(st.sp,6,'Panther Form spends authoritative stamina');
   assert.equal(healer.sent.some(e=>e.type==='abilityResult'&&e.msg.kind==='panther'&&e.msg.durationMs>13000),true,'Panther Form tells the local client how long the first-person transformation lasts');
+  assert.equal(healer.sent.some(e=>e.type==='combatDebug'&&e.msg.kind==='ability-cast'&&e.msg.ability.kind==='panther'&&e.msg.resources.spSpent===4),true,'admin combat debug shows Panther Form stamina spend');
   assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
 });
 

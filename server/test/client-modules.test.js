@@ -2036,6 +2036,9 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(visuals,/meleeWarn/);
   assert.match(visuals,/rangedWarn/);
   assert.match(visuals,/volleyWarn/);
+  assert.match(visuals,/combatReact/);
+  assert.match(visuals,/FROST LOCK/);
+  assert.match(visuals,/GUARDIAN BLOCK/);
   assert.match(visuals,/const deathTick=setInterval/);
   assert.match(feedback,/SLAM - LEAVE THE CIRCLE/);
   assert.match(feedback,/DODGE OUT/);
@@ -2043,7 +2046,9 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(feedback,/VOLLEY - LEAVE THE LANES/);
   assert.match(feedback,/sound\.crit/);
   assert.match(feedback,/sound\.block/);
+  assert.match(feedback,/showDebug/);
   assert.match(styles,/#deathrecap/);
+  assert.match(styles,/#combatdebug/);
   assert.match(styles,/body\.combat-hit #game canvas/);
 });
 

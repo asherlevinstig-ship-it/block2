@@ -5105,6 +5105,21 @@ class GameRoom extends Room {
       hp:hp.hp,maxHp:hp.max,lethal:hp.hp<=0,armor:armorFeedback,
       hitLabel: detail.attack || this.combatReasonLabel(reason), recentHits,
     });
+    if (typeof this.sendCombatDebug === 'function') this.sendCombatDebug(client, {
+      kind: 'incoming',
+      reason,
+      hitLabel: detail.attack || this.combatReasonLabel(reason),
+      damage: {
+        raw: Math.round(incoming),
+        applied: dmg,
+        mitigated: Math.max(0, Math.round(incoming) - dmg),
+        armorReduction: armorFeedback ? Math.round((armorFeedback.mitigation || 0) * 100) : 0,
+      },
+      player: { hp: hp.hp, maxHp: hp.max },
+      armor: armorFeedback,
+      buffs: typeof this.combatBuffSnapshot === 'function' ? this.combatBuffSnapshot(client.sessionId) : [],
+    });
+    if (p && buffs && buffs.ironUntil > Date.now()) this.sendSpace(p.dgn || '', 'fx', { t: 'combatReact', kind: 'guardBlock', x: p.x, y: p.y, z: p.z, sid: client.sessionId, dgn: p.dgn || '' });
     // Second Wind — Iron Guardian passive, simulated where the authoritative HP lives
     if (hp.hp > 0 && hp.hp < hp.max * .25 && rec && rec.prof && rec.prof.S
         && rec.prof.S.path === 'guardian' && rec.prof.S.lvl >= 8) {

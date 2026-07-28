@@ -8,7 +8,39 @@ export function armorCondition(dur,maxDur){
 export function createCombatFeedback({document,showName,sysMsg,sound}){
   const impact=document.getElementById('combatimpact'),warning=document.getElementById('armorwarning');
   const hitConfirm=document.getElementById('hitconfirm'),telegraph=document.getElementById('enemytelegraph'),abilityPulse=document.getElementById('abilitypulse');
-  let impactTimer=0,hitTimer=0,telegraphTimer=0,abilityTimer=0,lastArmorBand='sound',baseFov=0;
+  const debugPanel=document.getElementById('combatdebug');
+  let impactTimer=0,hitTimer=0,telegraphTimer=0,abilityTimer=0,debugTimer=0,lastArmorBand='sound',baseFov=0;
+  const debugRows=[];
+  const nice=s=>String(s||'').replace(/_/g,' ').replace(/\b\w/g,ch=>ch.toUpperCase());
+  const num=v=>Number.isFinite(+v)?Math.round(+v*10)/10:0;
+  const buffText=buffs=>{
+    const live=Array.isArray(buffs)?buffs:[];
+    if(!live.length)return 'Buffs none';
+    return 'Buffs '+live.slice(0,5).map(b=>nice(b.id)+' '+Math.ceil((Number(b.ms)||0)/1000)+'s').join(', ');
+  };
+  function showDebug(evt={}){
+    if(!debugPanel)return;
+    const dmg=evt.damage||{},res=evt.resources||{},target=evt.target||{},player=evt.player||{},ability=evt.ability||{};
+    let title=nice(evt.kind||'combat');
+    if(ability.name)title+=' - '+nice(ability.name);
+    else if(evt.weapon)title+=' - '+nice(evt.weapon);
+    const flags=[evt.crit?'CRIT':'',evt.panther?'PANTHER':'',evt.hitLabel||evt.reason||''].filter(Boolean).join(' / ');
+    const damageLine=dmg.raw!=null
+      ? 'DMG '+num(dmg.raw)+' -> '+num(dmg.applied)+' (-'+num(dmg.mitigated)+')'+(dmg.armorReduction?' armor '+dmg.armorReduction+'%':'')
+      : '';
+    const resourceLine=(res.maxMp||res.maxSp||res.mpSpent||res.spSpent)
+      ? 'MP '+num(res.mp)+'/'+num(res.maxMp)+' -'+num(res.mpSpent)+' | SP '+num(res.sp)+'/'+num(res.maxSp)+' -'+num(res.spSpent)
+      : '';
+    const stateLine=target.id
+      ? nice(target.kind)+' '+(target.state?nice(target.state):'Ready')+' HP '+num(target.hp)+'/'+num(target.maxHp)
+      : player.maxHp?'Player HP '+num(player.hp)+'/'+num(player.maxHp):'';
+    debugRows.unshift({title,flags,lines:[damageLine,resourceLine,stateLine,buffText(evt.buffs)].filter(Boolean)});
+    debugRows.splice(6);
+    debugPanel.innerHTML='<b>COMBAT DEBUG</b>'+debugRows.map(row=>'<section><strong>'+row.title+'</strong>'+(row.flags?'<em>'+row.flags+'</em>':'')+row.lines.map(line=>'<span>'+line+'</span>').join('')+'</section>').join('');
+    debugPanel.classList.remove('hidden');
+    clearTimeout(debugTimer);debugTimer=setTimeout(()=>debugPanel.classList.add('quiet'),9000);
+    debugPanel.classList.remove('quiet');
+  }
   function showImpact(hit={}){
     if(!impact)return;
     const damage=Math.max(0,Number(hit.n)||0),absorbed=Math.max(0,Number(hit.absorbed)||0);
@@ -50,8 +82,9 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
     if(!hitConfirm)return;
     hitConfirm.className=hit.lethal?'lethal':hit.crit?'critical':'';
     if(sound){if(hit.crit&&sound.crit)sound.crit();else if(sound.hit)sound.hit();}
-    if(document.body){document.body.classList.remove('combat-hit','combat-crit');void document.body.offsetWidth;document.body.classList.add(hit.crit?'combat-crit':'combat-hit');setTimeout(()=>document.body.classList.remove('combat-hit','combat-crit'),hit.crit?95:58);}
-    clearTimeout(hitTimer);hitTimer=setTimeout(()=>hitConfirm.classList.add('hidden'),190);
+    if(document.body){document.body.classList.remove('combat-hit','combat-crit');void document.body.offsetWidth;document.body.classList.add(hit.crit?'combat-crit':'combat-hit');setTimeout(()=>document.body.classList.remove('combat-hit','combat-crit'),hit.lethal?170:hit.crit?135:72);}
+    if(hit.crit)showName(hit.lethal?'EXECUTE':'CRITICAL HIT');
+    clearTimeout(hitTimer);hitTimer=setTimeout(()=>hitConfirm.classList.add('hidden'),hit.lethal?260:hit.crit?230:190);
   }
   function showTelegraph(fx={}){
     if(!telegraph)return;
@@ -84,5 +117,5 @@ export function createCombatFeedback({document,showName,sysMsg,sound}){
     const target=baseFov+(sprinting&&moving?4.5:0),next=camera.fov+(target-camera.fov)*(1-Math.exp(-Math.max(0,dt)*9));
     if(Math.abs(next-camera.fov)>.01){camera.fov=next;camera.updateProjectionMatrix();}
   }
-  return Object.freeze({showImpact,syncArmor,confirmHit,showTelegraph,abilityPressed,abilitySettled,updateMovement});
+  return Object.freeze({showImpact,syncArmor,confirmHit,showTelegraph,abilityPressed,abilitySettled,updateMovement,showDebug});
 }
