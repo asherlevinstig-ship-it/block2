@@ -2037,7 +2037,14 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(visuals,/rangedWarn/);
   assert.match(visuals,/volleyWarn/);
   assert.match(visuals,/combatReact/);
+  assert.match(visuals,/function markMobReaction/);
+  assert.match(visuals,/applyMobReactionPose/);
   assert.match(visuals,/FROST LOCK/);
+  assert.match(visuals,/markMobReaction\(t,'frost'/);
+  assert.match(visuals,/markMobReaction\(t,'root'/);
+  assert.match(visuals,/markMobReaction\(t,kind/);
+  assert.match(visuals,/markMobReaction\(t,'panther'/);
+  assert.match(visuals,/markMobReaction\(\{x:m\.x,y:m\.y,z:m\.z\},'stagger'/);
   assert.match(visuals,/GUARDIAN BLOCK/);
   assert.match(visuals,/const deathTick=setInterval/);
   assert.match(feedback,/SLAM - LEAVE THE CIRCLE/);

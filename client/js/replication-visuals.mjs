@@ -323,6 +323,63 @@ function netRemoveMob(id){
   const corpse=dead.grp,start=performance.now(),duration=major?900:620,startY=corpse.position.y,startScale=corpse.scale.clone();
   const deathTick=setInterval(()=>{const u=Math.min(1,(performance.now()-start)/duration);corpse.rotation.z=(dead.hitLean||1)*(Math.PI*.46)*u;corpse.position.y=startY-Math.max(0,u-.55)*.65;corpse.scale.y=Math.max(.12,startScale.y*(1-u*.35));corpse.traverse(o=>{if(o.material&&'opacity'in o.material){o.material.transparent=true;o.material.opacity=Math.max(0,1-u*u);}});if(u>=1){clearInterval(deathTick);disposeObjectTree(corpse);}},16);
 }
+function mobForReaction(t, radius=1.9){
+  const id=String(t&&t.id||'');
+  if(id){const byId=mobs.find(o=>o.net&&o.netId===id);if(byId)return byId;}
+  const tx=Number(t&&t.x),ty=Number(t&&t.y),tz=Number(t&&t.z);
+  if(!Number.isFinite(tx)||!Number.isFinite(tz))return null;
+  let best=null,bd=radius;
+  for(const mob of mobs){
+    if(!mob.net||!mob.grp||!mob.ref||(mob.ref.dgn||'')!==NET.dgn)continue;
+    const p=mob.grp.position,d=Math.hypot(p.x-tx,p.z-tz)+Math.abs((Number.isFinite(ty)?ty:p.y)-p.y)*.35;
+    if(d<bd){bd=d;best=mob;}
+  }
+  return best;
+}
+function markMobReaction(t, kind, opts={}){
+  const mob=mobForReaction(t, opts.radius || (kind==='root'?2.6:kind==='frost'?2.2:1.9));
+  if(!mob||mob.wagon||mob.orb)return;
+  const dur=opts.duration || (kind==='root'?.9:kind==='frost'?1.1:kind==='stagger'?.8:kind==='panther'?.42:.52);
+  mob.reactKind=kind;
+  mob.reactT=dur;
+  mob.reactDur=dur;
+  mob.reactPower=opts.power || 1;
+  mob.reactFromX=Number.isFinite(+opts.fromX)?+opts.fromX:null;
+  mob.reactFromZ=Number.isFinite(+opts.fromZ)?+opts.fromZ:null;
+  mob.hitT=Math.max(mob.hitT||0,Math.min(.24,dur*.36));
+  if(kind==='crit'||kind==='execute'||kind==='panther')mob.hitLean=(Math.random()<.5?-1:1)*(kind==='execute'?.28:kind==='panther'?.22:.18);
+}
+function applyMobReactionPose(m,p,t,dt){
+  if(!m.reactT)return false;
+  m.reactT=Math.max(0,m.reactT-dt);
+  const dur=Math.max(.001,m.reactDur||.5),u=1-m.reactT/dur,pow=m.reactPower||1,kind=m.reactKind||'hit';
+  const ease=Math.sin(Math.min(1,u)*Math.PI), tremor=Math.sin(t*(kind==='frost'?18:kind==='root'?10:32)+m.phase);
+  if(kind==='root'){
+    m.grp.rotation.z=tremor*.018*ease;
+    if(m.arms)for(const arm of m.arms)arm.rotation.x=.38+.18*Math.sin(t*9);
+    if(m.legs){m.legs[0].rotation.x=.12;m.legs[1].rotation.x=-.12;}
+    if(Math.random()<dt*16)spawnParticle({x:p.x+(Math.random()-.5)*.9,y:p.y+.12,z:p.z+(Math.random()-.5)*.9,vx:0,vy:.55,vz:0,life:.34,grav:0,r:.22,g:.78,b:.28});
+  }else if(kind==='frost'){
+    m.grp.rotation.z=tremor*.01*ease;
+    if(m.arms)for(const arm of m.arms)arm.rotation.x*=.82;
+    if(Math.random()<dt*22)spawnParticle({x:p.x+(Math.random()-.5)*.8,y:p.y+.35+Math.random()*1.35,z:p.z+(Math.random()-.5)*.8,vx:0,vy:.32,vz:0,life:.45,grav:0,r:.65,g:.92,b:1});
+  }else if(kind==='stagger'){
+    m.grp.rotation.z=(m.hitLean||.16)*Math.sin(u*Math.PI*3)*(1-u*.35)*pow;
+    if(m.arms){m.arms[0].rotation.x=.95;m.arms[1].rotation.x=.65;}
+    if(m.legs){m.legs[0].rotation.x=-.32;m.legs[1].rotation.x=.32;}
+  }else if(kind==='panther'){
+    const away=m.reactFromX!=null?Math.sign((p.x-m.reactFromX)*Math.cos(m.grp.rotation.y)+(p.z-m.reactFromZ)*Math.sin(m.grp.rotation.y)):m.hitLean||1;
+    m.grp.rotation.z=away*.22*Math.sin(u*Math.PI)*(1-u*.25);
+    if(m.arms){m.arms[0].rotation.x=-1.55;m.arms[1].rotation.x=.55;}
+  }else if(kind==='execute'||kind==='crit'){
+    const heavy=kind==='execute';
+    m.grp.rotation.z=(m.hitLean||.18)*Math.sin(u*Math.PI)*(heavy?1.45:1);
+    if(m.arms)for(const arm of m.arms)arm.rotation.x=heavy?1.1:.75;
+    if(heavy&&m.legs){m.legs[0].rotation.x=.48;m.legs[1].rotation.x=-.48;}
+  }
+  if(m.reactT<=0)m.reactKind='';
+  return true;
+}
 function netMobTick(m, dt, t){
   const r=m.ref, p=m.grp.position;
   if((r.hp||0)<(m.hp||0)){const lost=(m.hp||0)-(r.hp||0),ratio=lost/Math.max(1,r.maxHp||m.hp||1);m.hitT=.18+Math.min(.14,ratio*.5);m.hitLean=(Math.random()<.5?-1:1)*(.08+Math.min(.14,ratio));const flash=m.encounterUi&&m.encounterUi.hostile?[1,.25,.18]:[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(flash[0],flash[1],flash[2]));if(m.grp.visible){burst(p.x,p.y+1,p.z,flash,ratio>.2?12:7,ratio>.2?2.2:1.5,1.6,.28);if(ratio>.2)ringPulse(p.x,p.y+.08,p.z,1.15,0xffffff,.18);}}m.hp=r.hp;
@@ -486,6 +543,7 @@ function netMobTick(m, dt, t){
     if(st!=='stun')m.grp.rotation.z=(m.hitLean||.1)*Math.sin(Math.max(0,m.hitT)*18);
     if(m.hitT<=0 && st!=='stun' && st!=='frozen'){m.grp.rotation.z=0;const bc=m.baseCol||[1,1,1];m.mats.forEach(mm=>mm.color.setRGB(bc[0],bc[1],bc[2]));}
   }
+  applyMobReactionPose(m,p,t,dt);
 }
 
 // ---- server fx + projectiles (visual; damage is server-side) ----
@@ -584,6 +642,7 @@ function netFx(m){
   if(m.t==='moteBurst'){ burst(m.x, m.y, m.z, [.6,1,.5], 18, 2.2, 2.4, .55); return; }
   if(m.t==='banditCleave'){burst(m.x,m.y+.25,m.z,[1,.18,.08],34,5.2,2.2,.65);camShake=Math.max(camShake,.65);return;}
   if(m.t==='weaponStagger'){
+    markMobReaction({x:m.x,y:m.y,z:m.z},'stagger',{duration:m.boss?1.0:.72,power:m.boss?1.35:1,radius:m.boss?3.3:2.0});
     const color=m.boss?[1,.55,.18]:[1,.85,.35];
     burst(m.x,m.y+.8,m.z,color,m.boss?28:18,m.boss?3.5:2.4,2.0,.48);
     ringPulse(m.x,m.y+.08,m.z,m.boss?2.8:1.7,m.boss?0xff7a24:0xffd75e,.38);
@@ -726,17 +785,20 @@ function netFx(m){
       const tx=Number(t.x),ty=Number(t.y),tz=Number(t.z);
       if(!Number.isFinite(tx)||!Number.isFinite(ty)||!Number.isFinite(tz))continue;
       if(kind==='crit'||kind==='execute'){
+        markMobReaction(t,kind,{duration:kind==='execute'?.72:.46,power:kind==='execute'?1.35:1});
         ringPulse(tx,ty+.08,tz,kind==='execute'?1.45:1.08,kind==='execute'?0x8b5cf6:0xffd24a,.4);
         glowFlash(tx,ty+1,tz,kind==='execute'?0xa855f7:0xffd24a,kind==='execute'?2.8:2.2,.3);
         burst(tx,ty+1,tz,kind==='execute'?[.55,.18,1]:[1,.78,.18],kind==='execute'?30:18,kind==='execute'?3.4:2.4,2.1,.55);
         camShake=Math.max(camShake,kind==='execute'?.3:.2);
         showName(kind==='execute'?'SHADOW EXECUTE':'CRITICAL');
       }else if(kind==='frost'){
+        markMobReaction(t,'frost',{duration:1.05});
         ringPulse(tx,ty+.08,tz,1.2,0x8eeaff,.35);
         glowFlash(tx,ty+.9,tz,0x8eeaff,2.1,.25);
         burst(tx,ty+.75,tz,[.55,.9,1],16,2.0,1.7,.45);
         showName('FROST LOCK');
       }else if(kind==='root'){
+        markMobReaction(t,'root',{duration:1.15,radius:2.8});
         ringPulse(tx,ty+.08,tz,1.12,0x42d45b,.38);
         rootClutchVfx(tx,ty,tz,1.8);
         showName('ROOTED');
@@ -754,6 +816,7 @@ function netFx(m){
     for(const t of targets){
       const tx=Number(t.x),ty=Number(t.y),tz=Number(t.z);
       if(!Number.isFinite(tx)||!Number.isFinite(ty)||!Number.isFinite(tz))continue;
+      markMobReaction(t,'panther',{fromX:m.fromX,fromZ:m.fromZ,duration:.48});
       ringPulse(tx,ty+.08,tz,.82,0x22c55e,.28);
       glowFlash(tx,ty+.8,tz,0x86efac,1.8,.2);
       burst(tx,ty+.85,tz,[.1,1,.35],10,1.1,1.0,.34);
