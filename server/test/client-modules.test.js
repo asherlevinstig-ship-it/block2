@@ -1562,8 +1562,26 @@ test('basic jumping is not blocked by empty stamina',()=>{
   assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:\(pantherFormActive\(now\)\?9\.05:8\.2\);/);
   assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
   assert.match(frame,/if\(!mounted && !pantherFormActive\(now\) && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
-  assert.match(frame,/if\(sprint&&!pantherMove\) sp=Math\.max\(0,sp-stCost\(3\.5\)\*armorStamina\*dt\);/);
+  assert.match(frame,/sp-stCost\(3\.5\)\*armorStamina\*sprintFactor\*dt/);
   assert.doesNotMatch(frame,/sp<maxSp\(\).*stCost/);
+});
+
+test('movement feel uses smoothing, sprint curves, camera locomotion, and step assist',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/const MOVEMENT_FEEL=\{walk:4\.3,sprint:6\.2,sprintRampUp:\.25,sprintRampDown:\.18/);
+  assert.match(frame,/function approach\(current,target,rate,dt\)/);
+  assert.match(frame,/sprintRamp=approach\(sprintRamp,sprintTarget,sprintRate,dt\)/);
+  assert.match(frame,/player\.vel\.x=approach\(player\.vel\.x,targetVx,controlRate,dt\)/);
+  assert.match(frame,/player\.vel\.z=approach\(player\.vel\.z,targetVz,controlRate,dt\)/);
+  assert.match(frame,/MOVEMENT_FEEL\.airAccel/);
+  assert.match(frame,/function tryStepAssist/);
+  assert.match(frame,/combatApi\.collides/);
+  assert.match(frame,/function tickCameraLocomotion/);
+  assert.match(frame,/camera\.position\.y\+=locomotionCam\.bob/);
+  assert.match(frame,/camera\.rotation\.x\+=locomotionCam\.pitch/);
+  assert.match(frame,/camera\.rotation\.z\+=locomotionCam\.roll/);
+  assert.match(frame,/updateMovementStateSnapshot\(movementState/);
+  assert.match(frame,/state\.state=panther\?'panther':swimming\?'swimming':state\.sprinting\?'sprinting':exhausted\?'exhausted':grounded\?'grounded':'airborne'/);
 });
 
 test('block placement uses Minecraft-style targeted block face at build reach',()=>{
@@ -2755,7 +2773,7 @@ test('client restore and movement use persisted vitals and empty-hunger slowdown
   assert.match(networking, /sp:Math\.max\(0,Math\.min\(maxSp\(\),Number\(sp\)\|\|0\)\)/);
   assert.doesNotMatch(networking, /hp=maxHp\(\); mp=maxMp\(\); sp=maxSp\(\); hunger=maxHunger\(\);/);
   assert.match(frameLoop, /const outOfFood=!mounted && hunger<=0/);
-  assert.match(frameLoop, /const sprint=.*&&\s*!outOfFood/);
+  assert.match(frameLoop, /const sprintIntent=!!\(sprintKey && movementInput && !mounted && !outOfFood\)/);
   assert.match(frameLoop, /baseSpd\*\(outOfFood&&!pantherMove\?0\.62:1\)/);
   assert.match(dimensions, /if\(S\.lvl<3 && hunger<maxHunger\(\)\)/);
   assert.doesNotMatch(dimensions, /local:starvation/);

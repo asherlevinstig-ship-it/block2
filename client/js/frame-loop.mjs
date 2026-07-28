@@ -101,6 +101,9 @@ function showFeatherStepLandingFx(m={}){
 }
 const PANTHER_FORM={eye:0.82,height:1.04,width:0.26,speed:7.45,shiftMs:900};
 let pantherLocalUntil=0,pantherShiftStart=-1e9,pantherShiftMs=PANTHER_FORM.shiftMs,pantherProwlT=0;
+const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10};
+let sprintRamp=0,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0;
+const movementState={grounded:false,airborne:true,swimming:false,sprinting:false,exhausted:false,panther:false,state:'airborne',speed:0,targetSpeed:0,sprintFactor:0};
 function pantherFormActive(now=performance.now()){
   return pantherLocalUntil>now || !!(buffs&&buffs.panther>0);
 }
@@ -144,6 +147,53 @@ function tickLocalPantherForm(now,dt,moving){
     spawnParticle({x:px,y:player.pos.y+.12+Math.random()*.45,z:pz,vx:(Math.random()-.5)*.35,vy:.18+Math.random()*.48,vz:(Math.random()-.5)*.35,life:.45+Math.random()*.35,grav:-.04,r:.17,g:.92,b:.38,priority:2});
   }
   return {active:true,shiftGlow,bob,tilt};
+}
+function approach(current,target,rate,dt){
+  return current+(target-current)*(1-Math.exp(-Math.max(0,rate)*Math.max(0,dt)));
+}
+function updateMovementStateSnapshot(state, speed, targetSpeed, sprintFactor, grounded, swimming, panther, exhausted){
+  state.grounded=!!grounded;state.airborne=!grounded&&!swimming;state.swimming=!!swimming;state.panther=!!panther;state.exhausted=!!exhausted;state.sprinting=sprintFactor>.55||panther;
+  state.speed=Math.round(speed*100)/100;state.targetSpeed=Math.round(targetSpeed*100)/100;state.sprintFactor=Math.round(sprintFactor*100)/100;
+  state.state=panther?'panther':swimming?'swimming':state.sprinting?'sprinting':exhausted?'exhausted':grounded?'grounded':'airborne';
+  globalThis.BlockcraftMovementState=state;
+}
+function tryStepAssist(fromX,fromY,fromZ,dx,dz,wasGround,feetWater,flying){
+  if(!wasGround||feetWater||flying||Math.hypot(dx,dz)<.03||!combatApi.collides)return false;
+  const currentX=player.pos.x,currentY=player.pos.y,currentZ=player.pos.z;
+  const currentDist=Math.hypot(currentX-fromX,currentZ-fromZ),wantDist=Math.hypot(dx,dz);
+  if(currentDist>wantDist*.55)return false;
+  for(const stepHeight of [.52,1.02]){
+    player.pos.set(fromX,fromY+stepHeight,fromZ);
+    player.onGround=false;
+    if(combatApi.collides(player.pos))continue;
+    moveAxis('x',dx);
+    moveAxis('z',dz);
+    const steppedDist=Math.hypot(player.pos.x-fromX,player.pos.z-fromZ);
+    if(steppedDist<=currentDist+.035)continue;
+    for(let i=0;i<10&&!player.onGround;i++)moveAxis('y',-.13);
+    if(!combatApi.collides(player.pos)&&player.pos.y<=fromY+1.08){
+      landingDip=Math.max(landingDip,.018);
+      return true;
+    }
+  }
+  player.pos.set(currentX,currentY,currentZ);
+  return false;
+}
+function tickCameraLocomotion(dt, moving, grounded, swimming, sprintFactor, pantherView, f, s, planarSpeed){
+  const pantherActive=!!(pantherView&&pantherView.active);
+  const walkMix=Math.max(0,Math.min(1,(planarSpeed-1.2)/Math.max(1,MOVEMENT_FEEL.sprint-MOVEMENT_FEEL.walk)));
+  const amp=grounded&&moving&&!pantherActive?(.012+walkMix*.014+sprintFactor*.014):(swimming&&moving?.018:0);
+  const freq=swimming?5.5:(8.2+sprintFactor*3.4);
+  locomotionBobT+=dt*freq*(moving?1:.35);
+  const targetBob=amp?Math.sin(locomotionBobT)*amp+Math.abs(Math.cos(locomotionBobT*.5))*amp*.35:0;
+  locomotionBob=approach(locomotionBob,targetBob,10,dt);
+  const accel=planarSpeed-lastPlanarSpeed;lastPlanarSpeed=planarSpeed;
+  const targetPitch=grounded&&!pantherActive?Math.max(-.025,Math.min(.018,-accel*.016)):0;
+  locomotionPitch=approach(locomotionPitch,targetPitch,8,dt);
+  const targetRoll=!pantherActive?(s*.018+sprintFactor*s*.014):0;
+  locomotionRoll=approach(locomotionRoll,targetRoll,9,dt);
+  landingDip=approach(landingDip,0,9,dt);
+  return {bob:locomotionBob-landingDip,pitch:locomotionPitch,roll:locomotionRoll};
 }
 function tickFeatherStepLandingFx(now){
   for(let i=featherStepLandings.length-1;i>=0;i--){
@@ -2114,25 +2164,33 @@ function tick(now){
     const deityFlying=!mounted&&deityActive&&deityActive.flight===true;
     const flying = deityFlying || (mounted && isDragon(mountKind));
     const outOfFood=!mounted && hunger<=0;
-    const pantherMove=pantherFormActive(now)&&!mounted&&(f!==0||s!==0);
-    const sprint=pantherMove || (sprintKey && (f!==0||s!==0) && sp>1 && !mounted && !outOfFood);
-    if(onboardingActive&&onboardingArrived&&onboardingKind()==='sprint'&&sprint){
+    const movementInput=f!==0||s!==0;
+    const pantherMove=pantherFormActive(now)&&!mounted&&movementInput;
+    const sprintIntent=!!(sprintKey && movementInput && !mounted && !outOfFood);
+    const exhausted=!pantherMove&&sprintIntent&&sp<=1;
+    const sprintTarget=pantherMove?1:(sprintIntent&&sp>0?Math.max(.18,Math.min(1,sp/8)):0);
+    const sprintRate=sprintTarget>sprintRamp?1/MOVEMENT_FEEL.sprintRampUp:1/MOVEMENT_FEEL.sprintRampDown;
+    sprintRamp=approach(sprintRamp,sprintTarget,sprintRate,dt);
+    if(!movementInput&&!pantherMove)sprintRamp=approach(sprintRamp,0,10,dt);
+    const sprintFactor=pantherMove?1:sprintRamp;
+    const sprint=sprintFactor>.55||pantherMove;
+    if(onboardingActive&&onboardingArrived&&onboardingKind()==='sprint'&&sprintIntent){
       onboardingFlags.sprint=true;
       updateOnboardingHud();
     }
     sprintingNow=sprint;
-    if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,f!==0||s!==0,dt);
+    if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,movementInput,dt);
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
-    if(sprint&&!pantherMove) sp=Math.max(0,sp-stCost(3.5)*armorStamina*dt);
+    if(sprintFactor>.05&&!pantherMove&&movementInput) sp=Math.max(0,sp-stCost(3.5)*armorStamina*sprintFactor*dt);
     const dragFly=flying?(deityFlying?12:((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13)):0;
-    const baseSpd=flying?dragFly:(mounted?9.6:(pantherMove?PANTHER_FORM.speed:(sprint?6.2:4.3)));
+    const baseSpd=flying?dragFly:(mounted?9.6:(pantherMove?PANTHER_FORM.speed:(MOVEMENT_FEEL.walk+(MOVEMENT_FEEL.sprint-MOVEMENT_FEEL.walk)*sprintFactor)));
     const speed=baseSpd*(outOfFood&&!pantherMove?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
     const sin=Math.sin(player.yaw), cos=Math.cos(player.yaw);
-    let vx=(-sin*f + cos*s), vz=(-cos*f - sin*s);
-    const len=Math.hypot(vx,vz)||1;
-    vx=vx/len*speed; vz=vz/len*speed;
-    if(f===0&&s===0){vx=0;vz=0;}
+    let targetVx=(-sin*f + cos*s), targetVz=(-cos*f - sin*s);
+    const len=Math.hypot(targetVx,targetVz)||1;
+    targetVx=targetVx/len*speed; targetVz=targetVz/len*speed;
+    if(!movementInput){targetVx=0;targetVz=0;}
     // --- water & jump physics ---
     const waistWater = getB(Math.floor(player.pos.x), Math.floor(player.pos.y+0.8), Math.floor(player.pos.z))===B.WATER;
     const feetWater  = waistWater || getB(Math.floor(player.pos.x), Math.floor(player.pos.y+0.2), Math.floor(player.pos.z))===B.WATER;
@@ -2200,9 +2258,17 @@ function tick(now){
       moveAxis('z', playerKb.z*dt);
       playerKb.multiplyScalar(Math.max(0,1-dt*5));
     }
-    player.vx=vx; player.vz=vz;
-    moveAxis('x', vx*(inWater?.6:1)*dt);
-    moveAxis('z', vz*(inWater?.6:1)*dt);
+    const groundedForMove=wasGround||player.onGround||(!feetWater&&now-lastGroundT<90);
+    const controlRate=inWater?MOVEMENT_FEEL.waterAccel:(groundedForMove?(movementInput?(sprint?MOVEMENT_FEEL.groundSprintAccel:MOVEMENT_FEEL.groundAccel):MOVEMENT_FEEL.groundBrake):(movementInput?MOVEMENT_FEEL.airAccel:MOVEMENT_FEEL.airBrake));
+    player.vel.x=approach(player.vel.x,targetVx,controlRate,dt);
+    player.vel.z=approach(player.vel.z,targetVz,controlRate,dt);
+    if(!movementInput&&groundedForMove&&Math.hypot(player.vel.x,player.vel.z)<.035){player.vel.x=0;player.vel.z=0;}
+    const moveScale=inWater?.6:1,stepFromX=player.pos.x,stepFromY=player.pos.y,stepFromZ=player.pos.z;
+    const moveDx=player.vel.x*moveScale*dt,moveDz=player.vel.z*moveScale*dt;
+    player.vx=player.vel.x; player.vz=player.vel.z;
+    moveAxis('x', moveDx);
+    moveAxis('z', moveDz);
+    tryStepAssist(stepFromX,stepFromY,stepFromZ,moveDx,moveDz,wasGround,feetWater,flying);
     moveAxis('y', player.vel.y*dt);
     if(eventStartLocked()){holdEventStartPosition();player.onGround=true;}
     if(player.onGround) lastGroundT=now;
@@ -2213,10 +2279,13 @@ function tick(now){
       burst(player.pos.x, player.pos.y+.1, player.pos.z, BLOCK_COLORS[bid]||[.5,.5,.5], feather?4:(hard?14:7), feather?1.1:2.2, feather?.8:1.4, feather?.28:.45);
       SFX.land(hard);
       camShake=Math.max(camShake, feather?.04:(hard?.3:.14));
+      landingDip=Math.max(landingDip,feather?.025:(hard?.085:.045));
       if(feather && prevVy<-15) showName('Feather Step ready');
     }
-    if(player.onGround && (f!==0||s!==0)){                      // footsteps
-      stepAcc+=Math.hypot(vx,vz)*dt;
+    const planarSpeed=Math.hypot(player.vel.x,player.vel.z);
+    updateMovementStateSnapshot(movementState,planarSpeed,speed,sprintFactor,player.onGround,inWater,pantherMove,exhausted);
+    if(player.onGround && movementInput && planarSpeed>.25){                      // footsteps
+      stepAcc+=planarSpeed*dt;
       if(stepAcc>=(sprint?2.6:2.1)){
         stepAcc=0;
         const bid=getB(Math.floor(player.pos.x), Math.floor(player.pos.y-.5), Math.floor(player.pos.z));
@@ -2243,6 +2312,10 @@ function tick(now){
     camera.position.set(player.pos.x, player.pos.y+player.eye+(mounted?mountEye(mountKind):0)+(pantherView&&pantherView.bob||0), player.pos.z);
     camera.rotation.order='YXZ';
     camera.rotation.set(player.pitch-(pantherView&&pantherView.shiftGlow||0)*.08, player.yaw, pantherView&&pantherView.tilt||0);
+    const locomotionCam=tickCameraLocomotion(dt,movementInput,player.onGround,inWater,sprintFactor,pantherView,f,s,planarSpeed);
+    camera.position.y+=locomotionCam.bob;
+    camera.rotation.x+=locomotionCam.pitch;
+    camera.rotation.z+=locomotionCam.roll;
     if(isMeditating){
       applyMeditationCamera();
     }
