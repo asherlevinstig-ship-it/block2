@@ -2749,6 +2749,7 @@ test('utility feedback has readable world markers and urgent party HUD states',(
 test('utility ability screen explains slots, unlock sources, and gameplay use cases',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const hud=fs.readFileSync(path.join(__dirname,'..','..','client','js','hud.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
@@ -2763,6 +2764,12 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(menus,/PASSIVE UTILITIES/);
   assert.match(menus,/Locked utilities show exactly where to earn them/);
   assert.match(menus,/btn\.title='Unlock from: '\+u\.unlock/);
+  assert.match(dimensions,/function statUtilityKitHTML\(\)/);
+  assert.match(dimensions,/UTILITY LOADOUT/);
+  assert.match(dimensions,/Hunter Kit/);
+  assert.match(dimensions,/button\[data-utility-id\]/);
+  assert.match(dimensions,/globalThis\.toggleUtilityEquip\(id\);[\s\S]*renderStat\(\);/);
+  assert.match(dimensions,/globalThis\.useActiveUtility\(\)/);
   assert.match(hud,/utilityBarEl\.id='utilitybar'/);
   assert.match(hud,/for\(let i=0;i<4;i\+\+\)/);
   assert.match(hud,/function refreshUtilityHUD\(\)/);
@@ -2772,7 +2779,11 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(combat,/const utilityBar=document\.getElementById\('utilitybar'\);/);
   assert.match(combat,/utilityBar\.classList\.toggle\('hidden', !showHud \|\| minimal\)/);
   assert.match(networking,/utilityLoadout=clampUtilityLoadout\(m\);[\s\S]*refreshHUD\(\);/);
+  assert.match(networking,/utilityLoadout=clampUtilityLoadout\(m\);[\s\S]*if\(typeof renderStat==='function'&&statOpen\)renderStat\(\);/);
   assert.match(world,/if\(typeof refreshHUD==='function'\)refreshHUD\(\);/);
+  assert.match(styles,/\.stat-utility-kit/);
+  assert.match(styles,/\.stat-utility-slots/);
+  assert.match(styles,/\.stat-utility-card/);
   assert.match(styles,/\.utility-slots/);
   assert.match(styles,/\.shoprow\.utilityrow/);
   assert.match(styles,/#utilitybar/);

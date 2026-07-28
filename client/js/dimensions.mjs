@@ -988,6 +988,38 @@ function closeStat(relock=true){
     for(const id of ['hotbar','stats','abilities','locationhud','coords','currentquest','landmap']) document.getElementById(id).classList.add('hidden');
   }
 }
+function statUtilityDefs(){return globalThis.UTILITY_DEFS||{};}
+function statUtilityOrder(){return Array.isArray(globalThis.UTILITY_ORDER)?globalThis.UTILITY_ORDER:[];}
+function statUtilityLoadout(){const l=globalThis.utilityLoadout||{};return {active:String(l.active||''),passive:Array.isArray(l.passive)?l.passive.slice(0,3):[]};}
+function statUtilityUnlocked(id){return typeof globalThis.utilityUnlocked==='function'?globalThis.utilityUnlocked(id):false;}
+function statUtilityEquipped(id){const l=statUtilityLoadout();return l.active===id||l.passive.includes(id);}
+function statUtilitySlotHTML(id,label){
+  const defs=statUtilityDefs(),u=defs[id];
+  if(u)return '<span class="filled"><i>'+escHTML(u.icon||'')+'</i><b>'+escHTML(u.name||id)+'</b><em>'+escHTML(label)+'</em></span>';
+  return '<span class="empty"><i>-</i><b>Empty</b><em>'+escHTML(label)+'</em></span>';
+}
+function statUtilityActionLabel(id){
+  const defs=statUtilityDefs(),u=defs[id];
+  if(!u||!statUtilityUnlocked(id))return 'LOCKED';
+  if(u.slot==='active')return statUtilityLoadout().active===id?'CLEAR':'ACTIVE';
+  return statUtilityEquipped(id)?'UNEQUIP':'EQUIP';
+}
+function statUtilityKitHTML(){
+  const defs=statUtilityDefs(),order=statUtilityOrder().filter(id=>defs[id]);
+  if(!order.length)return '';
+  const loadout=statUtilityLoadout(),passive=loadout.passive.slice(0,3);
+  while(passive.length<3)passive.push('');
+  const active=loadout.active&&defs[loadout.active]?defs[loadout.active]:null;
+  const cards=order.map(id=>{
+    const u=defs[id],owned=statUtilityUnlocked(id),equipped=statUtilityEquipped(id);
+    return '<button type="button" class="stat-utility-card '+(owned?'owned':'locked')+(equipped?' equipped':'')+'" data-utility-id="'+escHTML(id)+'" '+(owned?'':'disabled title="Unlock from: '+escHTML(u.unlock||'Progression')+'"')+'>'+
+      '<i>'+escHTML(u.icon||'')+'</i><span><b>'+escHTML(u.name||id)+'</b><small>'+escHTML((u.slot==='active'?'Active':'Passive')+' - '+(u.use||u.desc||''))+'</small><em>'+statUtilityActionLabel(id)+'</em></span></button>';
+  }).join('');
+  return '<div class="stat-utility-kit"><div class="stat-utility-head"><span><small>UTILITY LOADOUT</small><b>Hunter Kit</b></span><em>Press I to use active utilities</em></div>'+
+    '<div class="stat-utility-slots">'+statUtilitySlotHTML(loadout.active,'ACTIVE')+passive.map((id,i)=>statUtilitySlotHTML(id,'PASSIVE '+(i+1))).join('')+'</div>'+
+    '<div class="stat-utility-focus">'+(active?'<b>'+escHTML(active.name)+'</b><small>'+escHTML(active.use||active.desc||'Ready from the utility hotbar.')+'</small><button type="button" data-utility-use="active">USE ACTIVE</button>':'<b>No active utility equipped</b><small>Equip Compass, Trail Sense, or another active tool here.</small><button type="button" data-utility-open="1">OPEN UTILITIES</button>')+'</div>'+
+    '<div class="stat-utility-grid">'+cards+'</div><div class="stat-utility-actions"><button type="button" data-utility-open="1">FULL UTILITY SCREEN</button></div></div>';
+}
 function renderStat(){
   const ATTRS=[
     ['str','STRENGTH','+6% melee damage per point'],
@@ -1057,6 +1089,7 @@ function renderStat(){
   h+='<div class="srow"><span>STAT POINTS</span><b>'+S.pts+'</b></div>';
   for(const [k,nm,fx] of ATTRS)
     h+='<div class="attr"><span class="nm">'+nm+' &middot; '+S[k]+'</span><span class="fx">'+fx+'</span><button data-attr="'+k+'" '+(S.pts<=0?'disabled':'')+'>+</button></div>';
+  h+=statUtilityKitHTML();
   if(!S.path){
     if(S.lvl>=2){
       h+='<div class="sub2" style="margin-top:14px">CHOOSE YOUR PATH &mdash; THIS CANNOT BE UNDONE</div>';
@@ -1102,6 +1135,17 @@ function renderStat(){
   statPanel.querySelectorAll('button[data-deity-use]').forEach(b=>b.addEventListener('click',()=>{
     if(!NET.on||!NET.room)return;
     NET.room.send('deityPowerUse',{power:b.dataset.deityUse,weather:b.dataset.weather||''});
+  }));
+  statPanel.querySelectorAll('button[data-utility-id]').forEach(b=>b.addEventListener('click',()=>{
+    const id=b.dataset.utilityId||'';
+    if(typeof globalThis.toggleUtilityEquip==='function')globalThis.toggleUtilityEquip(id);
+    renderStat();
+  }));
+  statPanel.querySelectorAll('button[data-utility-use]').forEach(b=>b.addEventListener('click',()=>{
+    if(typeof globalThis.useActiveUtility==='function')globalThis.useActiveUtility();
+  }));
+  statPanel.querySelectorAll('button[data-utility-open]').forEach(b=>b.addEventListener('click',()=>{
+    if(typeof globalThis.openUtilitiesUI==='function')globalThis.openUtilitiesUI();
   }));
   document.getElementById('statclose').addEventListener('click',()=>closeStat());
   document.getElementById('jobopen').addEventListener('click',()=>openJobsUI());

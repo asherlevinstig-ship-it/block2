@@ -1549,6 +1549,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('utilityLoadout', m=>{
       utilityLoadout=clampUtilityLoadout(m);
       renderUtilitiesUI();
+      if(typeof renderStat==='function'&&statOpen)renderStat();
       updateLandMinimap();
       refreshHUD();
     });
