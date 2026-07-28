@@ -376,7 +376,8 @@ class CombatMixin {
       }
     } else if (def.kind === 'roots') {
       const damage = ABILITY_SYSTEM.abilityDamage('roots', rec.prof.S) * (spec === 'grovekeeper' && rank >= 2 ? 1.1 : 1);
-      const rooted = this.damageMobsInRadius(client, p.x, p.y + .45, p.z, def.radius, damage, { slow: spec === 'grovekeeper' && rank >= 2 ? 6.5 : 5.25, stun: .75 });
+      const rootSeconds = spec === 'grovekeeper' && rank >= 2 ? 6.5 : 5.25;
+      const rooted = this.damageMobsInRadius(client, p.x, p.y + .45, p.z, def.radius, damage, { slow: rootSeconds, root: rootSeconds, stun: .2 });
       fx.targets = rooted;
       fx.radius = def.radius;
       if(rooted.length)this.sendSpace(p.dgn||'','fx',{t:'combatReact',kind:'root',targets:rooted,dgn:p.dgn||''});
@@ -519,6 +520,10 @@ class CombatMixin {
       if (opts.slow) {
         const meta = this.mobMeta[id];
         if (meta) meta.slowT = Math.max(meta.slowT || 0, opts.slow);
+      }
+      if (opts.root) {
+        const meta = this.mobMeta[id];
+        if (meta) meta.rootT = Math.max(meta.rootT || 0, opts.root);
       }
       if (opts.stun) {
         const live = this.state.mobs.get(id);
@@ -949,7 +954,12 @@ class CombatMixin {
     else if(profile.archetype==='axe'){
       const rule=GEAR_SYSTEM.WEAPON_IDENTITY.stagger,meta=this.mobMeta[mobId];
       if(mob.kind==='boss'){
-        if(meta)meta.weaponStaggerT=Math.max(meta.weaponStaggerT||0,rule.bossSeconds);
+        if(meta){
+          meta.weaponStaggerT=Math.max(meta.weaponStaggerT||0,rule.bossSeconds);
+          meta.stateT=Math.max(meta.stateT||0,Math.min(.75,rule.bossSeconds));
+          meta.gcd=Math.max(meta.gcd||0,.8);
+        }
+        mob.state='stun';
       }else this.stunMobByAbility(mobId,mob,rule.normalSeconds);
       client.send('weaponIdentity',{kind:'stagger',boss:mob.kind==='boss',durationMs:Math.round((mob.kind==='boss'?rule.bossSeconds:rule.normalSeconds)*1000)});
       this.sendSpace(mob.dgn||'','fx',{t:'weaponStagger',x:mob.x,y:mob.y,z:mob.z,boss:mob.kind==='boss',dgn:mob.dgn||''});

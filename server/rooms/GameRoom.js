@@ -6923,11 +6923,16 @@ class GameRoom extends Room {
       const frenzyMove = frenzied ? 1.4 : 1;
       const frenzyDmg = frenzied ? 1.35 : 1;
       meta.slowT = Math.max(0, (meta.slowT || 0) - dt);
+      meta.rootT = Math.max(0, (meta.rootT || 0) - dt);
       meta.weaponStaggerT=Math.max(0,(meta.weaponStaggerT||0)-dt);
       const weaponStaggerMove=meta.weaponStaggerT>0&&m.kind==='boss'?GEAR_SYSTEM.WEAPON_IDENTITY.stagger.bossMoveMultiplier:1;
-      const slowMove = (meta.slowT > 0 ? .4 : 1)*weaponStaggerMove;
-      if (meta.slowT > 0 && !meta.blackhole && m.state !== 'stun') m.state = 'frozen';
-      else if (m.state === 'frozen') m.state = 'chase';
+      const rootActive = meta.rootT > 0;
+      const frostActive = meta.slowT > 0 && !rootActive;
+      const statusActionMul = frostActive ? .55 : 1;
+      const slowMove = (frostActive ? .4 : 1)*weaponStaggerMove;
+      if (rootActive && !meta.blackhole && m.state !== 'stun') m.state = 'rooted';
+      else if (frostActive && !meta.blackhole && m.state !== 'stun') m.state = 'frozen';
+      else if (m.state === 'frozen' || m.state === 'rooted') m.state = 'chase';
 
       if (meta.blackhole) {
         const bh = meta.blackhole;
@@ -6955,7 +6960,7 @@ class GameRoom extends Room {
       }
       if (m.state === 'stun') {
         meta.stateT = Math.max(0, (meta.stateT || 0) - dt);
-        if (meta.stateT <= 0) m.state = meta.slowT > 0 ? 'frozen' : 'chase';
+        if (meta.stateT <= 0) m.state = rootActive ? 'rooted' : frostActive ? 'frozen' : 'chase';
         return;
       }
 
@@ -7002,7 +7007,7 @@ class GameRoom extends Room {
       }
 
       if (m.kind === 'boss') {
-        if (this.bossBrain(m, id, meta, dt, best, bd, candidates, ground, solid)) return;
+        if (this.bossBrain(m, id, meta, frostActive ? dt * statusActionMul : dt, best, bd, candidates, ground, solid)) return;
       }
 
       // ---- senses: dungeon trash sleeps until it sees someone ----
@@ -7032,8 +7037,8 @@ class GameRoom extends Room {
           if (meta.banditCaptain && best) {
             meta.commandT=(meta.commandT||0)-dt;
             if(meta.commandT<=0){meta.commandT=6;meta.rallyT=.8;this.state.mobs.forEach((o,oid)=>{const om=this.mobMeta[oid];if(om&&om.banditCampId===meta.banditCampId&&!om.surrendered){om.alert=true;om.ralliedT=5;if(m.hp<m.maxHp*.3&&!om.banditCaptain)om.retreating=true;}});}
-            if(meta.rallyT>0){meta.rallyT-=dt;m.state='rally';rooted=true;}
-            else if(meta.cleaveT>0){meta.cleaveT-=dt;m.state='captainCleave';rooted=true;if(meta.cleaveT<=0){m.state='';this.sendSpace('', 'fx',{t:'banditCleave',x:m.x,y:m.y,z:m.z,dgn:''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<=4.2&&Math.abs(target.p.y-m.y)<2.5){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.15),'bandit_captain',{attack:'Captain Cleave'});}}}}
+            if(meta.rallyT>0){meta.rallyT-=dt*statusActionMul;m.state='rally';rooted=true;}
+            else if(meta.cleaveT>0){meta.cleaveT-=dt*statusActionMul;m.state='captainCleave';rooted=true;if(meta.cleaveT<=0){m.state='';this.sendSpace('', 'fx',{t:'banditCleave',x:m.x,y:m.y,z:m.z,dgn:''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<=4.2&&Math.abs(target.p.y-m.y)<2.5){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.15),'bandit_captain',{attack:'Captain Cleave'});}}}}
             else if(meta.alert&&bd<4.2&&meta.atkCd<=0){meta.cleaveT=.9;meta.atkCd=4;m.state='captainCleave';rooted=true;this.sendSpace('', 'fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:4.2,label:'Captain Cleave',dgn:''});}
           }
           if (meta.banditPatrol && !meta.banditCaptain && m.hp <= m.maxHp * .3) {
@@ -7062,11 +7067,11 @@ class GameRoom extends Room {
 
         if (meta.alert && best && !rooted) {
           if (meta.brute && ((meta.bruteT||0)>0 || (bd<3.8&&meta.atkCd<=0))) {
-            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;this.sendSpace(m.dgn||'','fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:3.8,label:'Brute Slam',dgn:m.dgn||''});}meta.bruteT-=dt;m.state='bruteWind';rooted=true;
+            if(!(meta.bruteT>0)){meta.bruteT=1.05;meta.atkCd=4.5;this.sendSpace(m.dgn||'','fx',{t:'meleeWarn',x:m.x,y:m.y,z:m.z,radius:3.8,label:'Brute Slam',dgn:m.dgn||''});}meta.bruteT-=dt*statusActionMul;m.state='bruteWind';rooted=true;
             if(meta.bruteT<=0){m.state='';this.sendSpace(m.dgn||'','fx',{t:'biomeSlam',x:m.x,y:m.y,z:m.z,effect:'brute',dgn:m.dgn||''});for(const target of candidates){if(Math.hypot(target.p.x-m.x,target.p.z-m.z)<3.8){const c=this.clients.find(c=>c.sessionId===target.sid);if(c)this.hurtPlayer(c,Math.round(meta.dmg*1.35),meta.biomeBehavior||'brute',{attack:'Brute Slam'});}}}
           } else if (RANGED_ENEMY_KINDS.has(m.kind)) {
             if (meta.drawT > 0) {
-              meta.drawT -= dt;
+              meta.drawT -= dt*statusActionMul;
               m.state = 'draw';
               setReplicatedMobYaw(m, Math.atan2(best.p.x - m.x, best.p.z - m.z));
               rooted = true;
@@ -7096,7 +7101,7 @@ class GameRoom extends Room {
             }
           } else {                                           // zombie
             if (meta.lungeT > 0) {
-              meta.lungeT -= dt;
+              meta.lungeT -= dt*statusActionMul;
               m.state = meta.undeadRole === 'graveguard' ? 'graveWind' : (meta.biomeBehavior==='flanker'?'packWind':'windup');
               rooted = true;
               if (meta.lungeT <= 0) {
@@ -7147,7 +7152,7 @@ class GameRoom extends Room {
       } else {
         // boss in 'chase': pursue
         if ((meta.bossMeleeT || 0) > 0) {
-          meta.bossMeleeT -= dt; rooted = true; m.state = 'bossMeleeWind';
+          meta.bossMeleeT -= dt*statusActionMul; rooted = true; m.state = 'bossMeleeWind';
           if (meta.bossMeleeT <= 0) {
             m.state = 'recover'; meta.stateT = .35; meta.gcd = Math.max(meta.gcd || 0, .8);
             if (best && Math.hypot(best.p.x - m.x, best.p.z - m.z) < 2.35 && Math.abs(best.p.y - m.y) < 2.4) {
@@ -7177,7 +7182,8 @@ class GameRoom extends Room {
       }
 
       // shared movement
-      if (meta.slowT > 0 && !rooted && m.state !== 'stun' && m.state !== 'blackhole') m.state = 'frozen';
+      if (rootActive && !rooted && m.state !== 'stun' && m.state !== 'blackhole') { m.state = 'rooted'; rooted = true; }
+      else if (frostActive && !rooted && m.state !== 'stun' && m.state !== 'blackhole') m.state = 'frozen';
       const dx = tx - m.x, dz = tz - m.z, d = Math.hypot(dx, dz);
       if (!rooted && d > .12) {
         const spd = meta.speed * moveMul * frenzyMove * slowMove;

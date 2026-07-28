@@ -2249,6 +2249,45 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
 });
 
+test('mob control states alter AI decisions instead of only changing visuals', () => {
+  const rootRoom = makeRoom(), rootTarget = makeClient('root_target');
+  rootRoom.clients = [rootTarget];
+  seedPlayer(rootRoom, rootTarget, { x: 21.1, y: 10, z: 20, hp: 20 });
+  const rootPlayer = rootRoom.state.players.get(rootTarget.sessionId);
+  const rooted = { x: 20, y: 10, z: 20, yaw: 0, hp: 30, maxHp: 30, kind: 'zombie', dgn: '', state: '' };
+  rootRoom.state.mobs.set('root_ai', rooted);
+  const rootMeta = rootRoom.mobMeta.root_ai = rootRoom.freshMeta(20, 20, 3, 1.5, 'zombie', 0, true);
+  rootMeta.alert = true; rootMeta.rootT = 3; rootMeta.atkCd = 0;
+  for (let i = 0; i < 4; i++) rootRoom.simulateMob(rooted, 'root_ai', rootMeta, .35, { '': [{ p: rootPlayer, sid: rootTarget.sessionId }] });
+  assert.equal(Math.round(rooted.x * 10) / 10, 20, 'rooted mobs do not walk toward the target');
+  assert.equal(rootTarget.sent.some(e => e.type === 'hurt' && e.msg.hitLabel === 'Melee Lunge'), true, 'rooted melee mobs still attack if the player stays in range');
+
+  const frostRoom = makeRoom(), frostTarget = makeClient('frost_target');
+  frostRoom.clients = [frostTarget];
+  seedPlayer(frostRoom, frostTarget, { x: 27, y: 10, z: 20 });
+  const frostPlayer = frostRoom.state.players.get(frostTarget.sessionId);
+  const frozen = { x: 20, y: 10, z: 20, yaw: 0, hp: 30, maxHp: 30, kind: 'skeleton', dgn: '', state: '' };
+  frostRoom.state.mobs.set('frost_ai', frozen);
+  const frostMeta = frostRoom.mobMeta.frost_ai = frostRoom.freshMeta(20, 20, 3, 1.5, 'skeleton', 0, true);
+  frostMeta.alert = true; frostMeta.slowT = 2; frostMeta.drawT = .5; frostMeta.shootCd = 0; frostMeta.strafeT = 1; frostMeta.strafe = 1;
+  frostRoom.simulateMob(frozen, 'frost_ai', frostMeta, .5, { '': [{ p: frostPlayer, sid: frostTarget.sessionId }] });
+  assert.equal(frostMeta.drawT > 0, true, 'frozen ranged windups resolve slower instead of firing on the normal timer');
+
+  const staggerRoom = makeRoom(), staggerHunter = makeClient('stagger_hunter');
+  const { prof } = seedPlayer(staggerRoom, staggerHunter, { x: 20, y: 10, z: 20, lvl: 20, inv: [{ id: I.IRON_AXE, count: 1 }] });
+  prof.S.str = 20;
+  staggerRoom.clients = [staggerHunter];
+  const hunter = staggerRoom.state.players.get(staggerHunter.sessionId);
+  hunter.heldId = I.IRON_AXE;
+  const boss = new Mob(); boss.kind = 'boss'; boss.x = 21.5; boss.y = 10; boss.z = 20; boss.hp = 500; boss.maxHp = 500; boss.state = 'slamWind';
+  staggerRoom.state.mobs.set('stagger_boss', boss);
+  const bossMeta = staggerRoom.mobMeta.stagger_boss = staggerRoom.freshMeta(21.5, 20, 5, 1.4, 'boss', 0, true);
+  bossMeta.stateT = 1.1; bossMeta.gcd = 0;
+  staggerRoom.handleAttack(staggerHunter, { id: 'stagger_boss' });
+  assert.equal(boss.state, 'stun', 'axe stagger interrupts an active boss windup');
+  assert.equal(bossMeta.gcd >= .8, true, 'boss stagger forces a short recovery before the next pattern');
+});
+
 test('utility loadout can equip only server-earned utilities', () => {
   const current = defaultProfile('Wayfinder');
   current.utilityUnlocks = ['compass', 'minimap', 'trail_sense'];
@@ -4026,7 +4065,7 @@ test('sword Momentum rewards consecutive server-validated hits on one target',()
   assert.equal(room.weaponMomentum.get(client.sessionId).stacks,3);
 });
 
-test('axe Stagger interrupts normal mobs but only slows bosses',()=>{
+test('axe Stagger interrupts normal mobs and boss windups',()=>{
   const room=makeRoom(),client=makeClient('stagger_hunter'),{prof}=seedPlayer(room,client,{x:20.5,y:10,z:20.5,lvl:1});
   const p=room.state.players.get(client.sessionId);prof.inv=[{id:I.IRON_AXE,count:1,dur:251}];p.heldId=I.IRON_AXE;
   room.state.mobs.set('normal',{x:21,y:10,z:20.5,yaw:0,hp:200,maxHp:200,kind:'zombie',dgn:'',state:''});
@@ -4037,8 +4076,9 @@ test('axe Stagger interrupts normal mobs but only slows bosses',()=>{
   room.state.mobs.set('boss_target',{x:21,y:10,z:20.5,yaw:0,hp:500,maxHp:500,kind:'boss',dgn:'',state:'slamWind'});
   room.mobMeta.boss_target=room.freshMeta(21,20.5,8,1.5,'boss',1,true);
   room.lastAttackMsg.set(client.sessionId,0);room.handleAttack(client,{id:'boss_target'});
-  assert.equal(room.state.mobs.get('boss_target').state,'slamWind','boss telegraph is not cancelled');
+  assert.equal(room.state.mobs.get('boss_target').state,'stun','boss telegraph is cancelled into stagger recovery');
   assert.equal(room.mobMeta.boss_target.weaponStaggerT,GEAR_SYSTEM.WEAPON_IDENTITY.stagger.bossSeconds);
+  assert.equal(room.mobMeta.boss_target.gcd>=.8,true);
   assert.equal(client.sent.filter(e=>e.type==='weaponIdentity').at(-1).msg.boss,true);
 });
 
