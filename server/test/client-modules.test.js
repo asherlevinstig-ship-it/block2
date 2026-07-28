@@ -1670,6 +1670,7 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#currentquest\{top:8px;right:8px;width:min\(270px,58vw\)/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#coords\{top:48px;left:8px;right:auto;flex-direction:row/);
   assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
+  assert.match(css,/@media \(max-width:760px\)[\s\S]*#utilitybar\{left:50%;right:auto;bottom:172px;transform:translateX\(-50%\)/);
 });
 
 test('guided overlays suppress optional side HUD panels instead of overlapping them',()=>{
@@ -1686,7 +1687,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/document\.body\.classList\.toggle\('tutorial-hud-active', tutorialVisible\);/);
   assert.match(combat,/document\.body\.classList\.toggle\('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen\);/);
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
-  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
+  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
   assert.match(combat,/const minimal=offMainRoom\|\|\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
@@ -2748,6 +2749,9 @@ test('utility feedback has readable world markers and urgent party HUD states',(
 test('utility ability screen explains slots, unlock sources, and gameplay use cases',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const hud=fs.readFileSync(path.join(__dirname,'..','..','client','js','hud.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(world,/use:'Press I to reveal nearby road danger/);
   assert.match(world,/use:'Protects risky climbs, bridges, towers, and dungeon drops/);
@@ -2759,8 +2763,22 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(menus,/PASSIVE UTILITIES/);
   assert.match(menus,/Locked utilities show exactly where to earn them/);
   assert.match(menus,/btn\.title='Unlock from: '\+u\.unlock/);
+  assert.match(hud,/utilityBarEl\.id='utilitybar'/);
+  assert.match(hud,/for\(let i=0;i<4;i\+\+\)/);
+  assert.match(hud,/function refreshUtilityHUD\(\)/);
+  assert.match(hud,/if\(index===0&&id&&typeof globalThis\.useActiveUtility==='function'\)globalThis\.useActiveUtility\(\);/);
+  assert.match(hud,/else if\(typeof globalThis\.openUtilitiesUI==='function'\)globalThis\.openUtilitiesUI\(\);/);
+  assert.match(hud,/refreshUtilityHUD\(\);\s*updateViewModel\(\);/);
+  assert.match(combat,/const utilityBar=document\.getElementById\('utilitybar'\);/);
+  assert.match(combat,/utilityBar\.classList\.toggle\('hidden', !showHud \|\| minimal\)/);
+  assert.match(networking,/utilityLoadout=clampUtilityLoadout\(m\);[\s\S]*refreshHUD\(\);/);
+  assert.match(world,/if\(typeof refreshHUD==='function'\)refreshHUD\(\);/);
   assert.match(styles,/\.utility-slots/);
   assert.match(styles,/\.shoprow\.utilityrow/);
+  assert.match(styles,/#utilitybar/);
+  assert.match(styles,/\.utilityslot\.active\.filled/);
+  assert.match(styles,/body\.game-modal-open [^}]*#utilitybar/);
+  assert.match(styles,/body\.cutscene [^}]*#utilitybar/);
 });
 
 test('utility unlocks present a reward toast with slot outcome and open-utilities action',()=>{

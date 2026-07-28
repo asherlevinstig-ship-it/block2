@@ -1543,12 +1543,14 @@ function netAttachRoom(room,name,client){
       eventFeed('[Utility]',u.name+' unlocked'+(m&&m.equipped?' and equipped':'')+'.',{key:'utility:'+id,cooldown:0});
       renderUtilitiesUI();
       updateLandMinimap();
+      refreshHUD();
       questSystemCheck();
     });
     room.onMessage('utilityLoadout', m=>{
       utilityLoadout=clampUtilityLoadout(m);
       renderUtilitiesUI();
       updateLandMinimap();
+      refreshHUD();
     });
     room.onMessage('utilityResult', m=>{
       const id=String(m&&m.id||''),u=UTILITY_DEFS[id];

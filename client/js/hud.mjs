@@ -26,6 +26,54 @@ for(let i=0;i<9;i++){
   hotbarEl.appendChild(slot);
   hudSlots.push(slot);
 }
+const utilityBarEl=document.createElement('div');
+utilityBarEl.id='utilitybar';
+utilityBarEl.className='hidden';
+utilityBarEl.setAttribute('aria-label','Hunter kit utilities');
+document.body.appendChild(utilityBarEl);
+const utilityHudSlots=[];
+for(let i=0;i<4;i++){
+  const slot=document.createElement('button');
+  slot.type='button';
+  slot.className='utilityslot';
+  slot.dataset.index=String(i);
+  slot.innerHTML='<span class="ukey">'+(i===0?'I':'P'+i)+'</span><b>-</b><small>'+(i===0?'Active':'Passive')+'</small>';
+  utilityBarEl.appendChild(slot);
+  utilityHudSlots.push(slot);
+}
+function escHud(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function utilityDefs(){ return globalThis.UTILITY_DEFS||{}; }
+function utilityLoadoutState(){
+  const loadout=globalThis.utilityLoadout&&typeof globalThis.utilityLoadout==='object'?globalThis.utilityLoadout:{active:'',passive:[]};
+  return {active:String(loadout.active||''),passive:Array.isArray(loadout.passive)?loadout.passive.map(String).slice(0,3):[]};
+}
+function utilitySlotTip(id,slotLabel){
+  const defs=utilityDefs(),u=defs[id];
+  if(!u)return slotLabel+' utility slot\nOpen Utilities to equip a tool.';
+  const lines=[u.name,slotLabel+' utility',u.use||u.desc];
+  if(u.desc&&u.desc!==u.use)lines.push(u.desc);
+  if(u.slot==='active')lines.push('Press I to use.');
+  return lines.join('\n');
+}
+function fillUtilitySlotEl(el,id,slotLabel,index){
+  const defs=utilityDefs(),u=defs[id];
+  el.className='utilityslot '+(index===0?'active':'passive')+(u?' filled':' empty');
+  el.innerHTML='<span class="ukey">'+(index===0?'I':'P'+index)+'</span><b>'+(u?escHud(u.icon||'?'):'-')+'</b><small>'+escHud(u?u.name:slotLabel)+'</small>';
+  el.title=utilitySlotTip(id,slotLabel);
+  el.dataset.utility=id||'';
+  el.onclick=()=>{
+    if(index===0&&id&&typeof globalThis.useActiveUtility==='function')globalThis.useActiveUtility();
+    else if(typeof globalThis.openUtilitiesUI==='function')globalThis.openUtilitiesUI();
+  };
+}
+function refreshUtilityHUD(){
+  const defs=utilityDefs(),loadout=utilityLoadoutState();
+  const ids=[loadout.active,...loadout.passive];
+  while(ids.length<4)ids.push('');
+  fillUtilitySlotEl(utilityHudSlots[0],defs[ids[0]]?ids[0]:'','Active',0);
+  for(let i=1;i<4;i++)fillUtilitySlotEl(utilityHudSlots[i],defs[ids[i]]?ids[i]:'','Passive '+i,i);
+  utilityBarEl.classList.toggle('has-active',!!(ids[0]&&defs[ids[0]]));
+}
 function itemTooltipText(stack){
   if(!stack || !ITEMS[stack.id]) return '';
   const info=ITEMS[stack.id];
@@ -151,6 +199,7 @@ function refreshHUD(){
     fillSlotEl(hudSlots[i], inv[i]);
     hudSlots[i].classList.toggle('sel', i===combatState.selectedSlot);
   }
+  refreshUtilityHUD();
   updateViewModel();
   refreshAppearanceDummy();
   renderAbilities();
@@ -166,8 +215,8 @@ function selectSlot(i){
 }
 
 
-gameContext.registerState('hud',Object.freeze({slots:hudSlots,get selectedSlot(){return combatState.selectedSlot;}}));
-gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl}));
+gameContext.registerState('hud',Object.freeze({slots:hudSlots,utilitySlots:utilityHudSlots,get selectedSlot(){return combatState.selectedSlot;}}));
+gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD}));
 export const state=gameContext.requireState('hud');
 export const api=gameContext.requireModule('hud');
 export {combatApi,combatState};

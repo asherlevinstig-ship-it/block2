@@ -7061,6 +7061,7 @@ function setUtilityLoadout(next){
   utilityLoadout=clampUtilityLoadout(next);
   updateLandMinimap();
   updateInfoHud();
+  if(typeof refreshHUD==='function')refreshHUD();
   if(NET.on&&NET.room) NET.room.send('utilityLoadout', utilityLoadout);
 }
 function toggleUtilityEquip(id){

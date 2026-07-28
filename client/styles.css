@@ -25,6 +25,16 @@
   #hotbar:before,#hotbar:after{content:"";position:absolute;top:8px;bottom:8px;width:1px;background:linear-gradient(transparent,rgba(242,199,92,.42),transparent);pointer-events:none}
   #hotbar:before{left:calc(7px + 48px * 2 + 5px * 2 + 8px)}
   #hotbar:after{right:calc(7px + 48px * 3 + 5px * 3 + 8px)}
+  #utilitybar{position:fixed;right:calc(50% + 286px);bottom:13px;display:flex;gap:5px;padding:7px;background:var(--hud-bg);border:1px solid rgba(125,211,252,.42);border-radius:7px;backdrop-filter:blur(6px);box-shadow:0 8px 24px rgba(0,0,0,.4),inset 0 0 20px rgba(125,211,252,.04);z-index:8}
+  .utilityslot{width:48px;height:48px;position:relative;display:grid;grid-template-rows:1fr auto;place-items:center;border:2px solid rgba(95,114,138,.7);border-radius:5px;background:linear-gradient(180deg,rgba(11,19,30,.88),rgba(4,8,14,.82));color:#9fb0c6;font-family:inherit;text-shadow:1px 1px 0 #000;box-shadow:inset 0 0 14px rgba(255,255,255,.04);cursor:pointer;overflow:hidden}
+  .utilityslot .ukey{position:absolute;left:4px;top:3px;color:#fff;font-size:10px;font-weight:bold;letter-spacing:.5px}
+  .utilityslot b{font-size:22px;line-height:1;color:#9fb0c6;text-shadow:0 0 9px currentColor}
+  .utilityslot small{width:100%;padding:0 3px 3px;color:#8fa7bd;font-size:7px;line-height:1.05;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .utilityslot.filled{border-color:rgba(125,211,252,.6);background:linear-gradient(180deg,rgba(12,32,46,.9),rgba(5,11,18,.86))}
+  .utilityslot.filled b{color:#9fd8ff}.utilityslot.passive.filled{border-color:rgba(191,133,255,.5)}.utilityslot.passive.filled b{color:#d7b5ff}
+  .utilityslot.active.filled{box-shadow:0 0 0 1px rgba(125,211,252,.4),0 0 18px rgba(125,211,252,.22),inset 0 0 14px rgba(125,211,252,.08)}
+  .utilityslot.empty{opacity:.64;cursor:help}
+  .utilityslot:hover{filter:brightness(1.16);border-color:#ffd24a}
   #blockname{position:fixed;left:50%;bottom:128px;transform:translateX(-50%);color:#fff;text-shadow:1px 1px 0 #000;font-size:14px;letter-spacing:1px;opacity:0;transition:opacity .4s;pointer-events:none}
   #gateprompt{position:fixed;left:50%;bottom:138px;transform:translateX(-50%);z-index:16;padding:9px 14px;border:1px solid rgba(242,199,92,.65);border-radius:6px;background:linear-gradient(180deg,rgba(19,23,31,.94),rgba(8,10,15,.94));box-shadow:0 7px 24px rgba(0,0,0,.45);color:#f6e7bc;font-size:13px;letter-spacing:.35px;pointer-events:none;white-space:nowrap;text-align:center}
   #gateprompt .key{display:inline-flex;align-items:center;justify-content:center;min-width:25px;height:23px;margin-right:8px;border:1px solid #f2c75c;border-radius:4px;background:#332b17;color:#fff3bd;font-weight:bold}
@@ -120,7 +130,7 @@
   @keyframes rewardGainIn{from{opacity:0;transform:translateY(9px) scale(.94)}to{opacity:1;transform:none}}
   @keyframes rewardGainBump{50%{transform:scale(1.08);filter:brightness(1.4)}}
   body.system-notice-active #tutorialhud,body.system-notice-active #coachhud,body.system-notice-active #hint{display:none!important}
-  body.game-modal-open #tutorialhud,body.game-modal-open #coachhud,body.game-modal-open #currentquest,body.game-modal-open #homeworkhud,body.game-modal-open #activitytracker,body.game-modal-open #townchoices,body.game-modal-open #eventhud,body.game-modal-open #landmap,body.game-modal-open #coords,body.game-modal-open #locationhud,body.game-modal-open #hotbar,body.game-modal-open #stats,body.game-modal-open #abilities,body.game-modal-open #dragonhud,body.game-modal-open #familiarhud{display:none!important}
+  body.game-modal-open #tutorialhud,body.game-modal-open #coachhud,body.game-modal-open #currentquest,body.game-modal-open #homeworkhud,body.game-modal-open #activitytracker,body.game-modal-open #townchoices,body.game-modal-open #eventhud,body.game-modal-open #landmap,body.game-modal-open #coords,body.game-modal-open #locationhud,body.game-modal-open #hotbar,body.game-modal-open #utilitybar,body.game-modal-open #stats,body.game-modal-open #abilities,body.game-modal-open #dragonhud,body.game-modal-open #familiarhud{display:none!important}
   body.claim-mode #tutorialhud,body.claim-mode #coachhud,body.claim-mode #currentquest,body.claim-mode #activitytracker,body.claim-mode #townchoices,body.claim-mode #eventhud,body.claim-mode #landmap{display:none!important}
   body.tutorial-hud-active #coachhud,body.tutorial-hud-active #activitytracker,body.tutorial-hud-active #townchoices{display:none!important}
   body.coach-hud-active #activitytracker,body.coach-hud-active #townchoices{display:none!important}
@@ -145,7 +155,7 @@
   #tutorialhud .tuttext{font-size:15px;line-height:1.35;color:#f3fbff}
   #tutorialhud .tutsub{margin-top:6px;font-size:10px;color:#9fb0c6;letter-spacing:.7px}
   #rewardpanel.job-tutorial-complete .rnote{border-color:rgba(154,210,107,.38);background:rgba(8,34,22,.45)}
-  body.onboarding #chatlog,body.onboarding #sysmsgs,body.onboarding #rewardfeed,body.onboarding #stats,body.onboarding #abilities,body.onboarding #dragonhud,body.onboarding #familiarhud,body.onboarding #activitytracker,body.onboarding #landmap,body.onboarding #eventhud,body.onboarding #coachhud{display:none!important}
+  body.onboarding #chatlog,body.onboarding #sysmsgs,body.onboarding #rewardfeed,body.onboarding #stats,body.onboarding #abilities,body.onboarding #utilitybar,body.onboarding #dragonhud,body.onboarding #familiarhud,body.onboarding #activitytracker,body.onboarding #landmap,body.onboarding #eventhud,body.onboarding #coachhud{display:none!important}
   #pathselect{position:fixed;inset:0;z-index:12;display:flex;align-items:center;justify-content:center;padding:30px;background:radial-gradient(circle at 50% 18%,rgba(79,216,255,.16),transparent 32%),linear-gradient(180deg,rgba(3,7,14,.94),rgba(5,8,14,.98));backdrop-filter:blur(8px);color:#d8f2ff}
   #pathpanel{width:min(1080px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;text-align:center;border:1px solid rgba(79,216,255,.55);border-radius:14px;background:linear-gradient(160deg,rgba(10,20,38,.96),rgba(6,9,18,.98));box-shadow:0 0 44px rgba(79,216,255,.35),inset 0 0 50px rgba(79,216,255,.07);padding:34px}
   #pathpanel h1{font-size:30px;letter-spacing:9px;color:#4fd8ff;text-shadow:0 0 16px rgba(79,216,255,.85);margin-bottom:8px}
@@ -1089,7 +1099,7 @@
   #cineskip{position:absolute;bottom:13.8%;right:22px;font-size:10px;letter-spacing:2px;color:#9fb2cc;text-transform:uppercase;opacity:0;transition:opacity .5s}
   #cine.show #cineskip{opacity:.7}
   #cinefade{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s}
-  body.cutscene #sysmsgs,body.cutscene #rewardfeed,body.cutscene #chatlog,body.cutscene #hotbar,body.cutscene #stats,body.cutscene #abilities,body.cutscene #dragonhud,body.cutscene #familiarhud,body.cutscene #coords,body.cutscene #locationhud,body.cutscene #landboundarytoast,body.cutscene #utilityunlocktoast,body.cutscene #crosshair,body.cutscene #currentquest,body.cutscene #homeworkhud,body.cutscene #landmap,body.cutscene #eventhud,body.cutscene #tutorialhud,body.cutscene #coachhud{display:none!important}
+  body.cutscene #sysmsgs,body.cutscene #rewardfeed,body.cutscene #chatlog,body.cutscene #hotbar,body.cutscene #utilitybar,body.cutscene #stats,body.cutscene #abilities,body.cutscene #dragonhud,body.cutscene #familiarhud,body.cutscene #coords,body.cutscene #locationhud,body.cutscene #landboundarytoast,body.cutscene #utilityunlocktoast,body.cutscene #crosshair,body.cutscene #currentquest,body.cutscene #homeworkhud,body.cutscene #landmap,body.cutscene #eventhud,body.cutscene #tutorialhud,body.cutscene #coachhud{display:none!important}
   #coords{position:fixed;top:78px;left:10px;display:flex;flex-direction:column;gap:6px;color:#e8f0ff;text-shadow:1px 1px 0 #000;font-size:12px;z-index:7;pointer-events:none}
   .statuschip{display:grid;grid-template-columns:26px auto minmax(42px,auto);align-items:center;gap:8px;min-width:172px;background:rgba(8,14,24,.74);border:1px solid rgba(255,255,255,.13);box-shadow:0 8px 20px rgba(0,0,0,.16);border-radius:6px;padding:6px 9px}
   .statuschip .ico{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(79,216,255,.12);border:1px solid rgba(79,216,255,.38);color:#9fd8ff;font-size:11px;text-shadow:0 0 6px rgba(79,216,255,.5)}
@@ -1477,6 +1487,8 @@
     #barcol{width:min(300px,calc(100vw - 72px))}
     #hotbar{bottom:7px;max-width:calc(100vw - 12px);gap:3px;padding:4px}
     #hotbar .slot{width:calc((100vw - 54px)/9);height:calc((100vw - 54px)/9);max-width:48px;max-height:48px;min-width:35px;min-height:35px}
+    #utilitybar{left:50%;right:auto;bottom:172px;transform:translateX(-50%);gap:4px;padding:4px}
+    .utilityslot{width:40px;height:40px}.utilityslot b{font-size:18px}.utilityslot small{font-size:6px}.utilityslot .ukey{font-size:9px}
     #dragonhud{right:8px;bottom:246px;min-width:150px;max-width:200px;padding:6px 8px}
     #dragonhud .drow{grid-template-columns:minmax(0,1fr);gap:0}
     #dragonhud .dmeta{text-align:left;font-size:9px}
@@ -1498,6 +1510,7 @@
     #coords{top:46px}
     .statuschip{padding:3px 5px}.statuschip .ico{display:none}
     #abilities{bottom:112px}.abslot{width:36px;height:36px}
+    #utilitybar{bottom:154px}.utilityslot{width:34px;height:34px}.utilityslot small{display:none}
     #stats{bottom:58px}#hotbar .slot{min-width:29px;min-height:29px}
   }
   .hidden{display:none !important}
