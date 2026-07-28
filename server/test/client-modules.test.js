@@ -1559,7 +1559,7 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
 
 test('basic jumping is not blocked by empty stamina',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
-  assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:\(pantherFormActive\(now\)\?9\.05:8\.2\);/);
+  assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:\(pantherFormActive\(now\)\?PANTHER_FORM\.jump:8\.2\);/);
   assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
   assert.match(frame,/if\(!mounted && !pantherFormActive\(now\) && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
   assert.match(frame,/sp-stCost\(3\.5\)\*armorStamina\*sprintFactor\*dt/);
@@ -1582,6 +1582,19 @@ test('movement feel uses smoothing, sprint curves, camera locomotion, and step a
   assert.match(frame,/camera\.rotation\.z\+=locomotionCam\.roll/);
   assert.match(frame,/updateMovementStateSnapshot\(movementState/);
   assert.match(frame,/state\.state=panther\?'panther':swimming\?'swimming':state\.sprinting\?'sprinting':exhausted\?'exhausted':grounded\?'grounded':'airborne'/);
+});
+
+test('panther movement has distinct camera, strafe, pounce, and landing feel',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  assert.match(frame,/const PANTHER_FORM=\{eye:0\.68,height:0\.96,width:0\.24,speed:8\.15,strafe:1\.14,accel:46,brake:42,airAccel:12,jump:9\.35,pounce:1\.8,landingDip:\.075/);
+  assert.match(frame,/const sideScale=pantherMove\?PANTHER_FORM\.strafe:1/);
+  assert.match(frame,/pantherMove&&Math\.abs\(s\)>Math\.abs\(f\)\?\.08:0/);
+  assert.match(frame,/player\.vel\.x\+=targetVx\/pounceLen\*PANTHER_FORM\.pounce/);
+  assert.match(frame,/player\.vel\.z\+=targetVz\/pounceLen\*PANTHER_FORM\.pounce/);
+  assert.match(frame,/controlRate=pantherMove\?\(groundedForMove\?\(movementInput\?PANTHER_FORM\.accel:PANTHER_FORM\.brake\):PANTHER_FORM\.airAccel\)/);
+  assert.match(frame,/pantherActive\?13\.6:\(swimming\?5\.5/);
+  assert.match(frame,/pantherActive\?\(s\*\.035\)/);
+  assert.match(frame,/pantherFormActive\(now\)\?PANTHER_FORM\.landingDip/);
 });
 
 test('block placement uses Minecraft-style targeted block face at build reach',()=>{
