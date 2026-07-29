@@ -23,16 +23,39 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     bcm_json(405, ['ok' => false, 'error' => 'POST required']);
 }
 
-$expectedSecret = defined('BLOCKCRAFT_CURRICULUM_MAIL_SECRET') ? (string)BLOCKCRAFT_CURRICULUM_MAIL_SECRET : '';
-$givenSecret = (string)($_SERVER['HTTP_X_BLOCKCRAFT_MAIL_SECRET'] ?? '');
-if ($expectedSecret === '' || !hash_equals($expectedSecret, $givenSecret)) {
-    bcm_json(403, ['ok' => false, 'error' => 'Invalid mail bridge secret']);
-}
-
 $raw = file_get_contents('php://input') ?: '';
 $payload = json_decode($raw, true);
 if (!is_array($payload)) {
     bcm_json(400, ['ok' => false, 'error' => 'Invalid JSON']);
+}
+
+$expectedSecret = defined('BLOCKCRAFT_CURRICULUM_MAIL_SECRET') ? (string)BLOCKCRAFT_CURRICULUM_MAIL_SECRET : '';
+$givenSecret = (string)($_SERVER['HTTP_X_BLOCKCRAFT_MAIL_SECRET'] ?? '');
+$givenHash = $givenSecret !== '' ? hash('sha256', $givenSecret) : '';
+$secretOk = $expectedSecret !== '' && hash_equals($expectedSecret, $givenSecret);
+$hashFile = __DIR__ . '/blockcraft_curriculum_mail_secret_hash.php';
+$expectedHash = defined('BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256') ? (string)BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256 : '';
+if ($expectedHash === '' && is_readable($hashFile)) {
+    require $hashFile;
+    $expectedHash = defined('BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256') ? (string)BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256 : '';
+}
+if (!$secretOk && $expectedHash !== '' && $givenHash !== '' && hash_equals($expectedHash, $givenHash)) {
+    $secretOk = true;
+}
+if (!$secretOk && defined('BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION') && BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION) {
+    $adoptEmail = defined('BLOCKCRAFT_CURRICULUM_SECRET_ADOPT_TEACHER_EMAIL') ? strtolower((string)BLOCKCRAFT_CURRICULUM_SECRET_ADOPT_TEACHER_EMAIL) : 'asherlevin85@gmail.com';
+    $teacherEmailForAdoption = strtolower(bcm_clean($payload['teacherEmail'] ?? '', 255));
+    if ($expectedHash === '' && $givenHash !== '' && strlen($givenSecret) >= 24 && $teacherEmailForAdoption === $adoptEmail) {
+        $hashPhp = "<?php\n"
+            . "define('BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256', '" . $givenHash . "');\n";
+        if (file_put_contents($hashFile, $hashPhp, LOCK_EX) !== false) {
+            @chmod($hashFile, 0600);
+            $secretOk = true;
+        }
+    }
+}
+if (!$secretOk) {
+    bcm_json(403, ['ok' => false, 'error' => 'Invalid mail bridge secret']);
 }
 
 $to = bcm_clean($payload['to'] ?? (defined('BLOCKCRAFT_CURRICULUM_NOTIFY_TO') ? BLOCKCRAFT_CURRICULUM_NOTIFY_TO : 'asherlevin85@gmail.com'), 255);

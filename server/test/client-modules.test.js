@@ -728,12 +728,15 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /teacherCurriculumFiles/);
   assert.match(teacherDashboardSource, /Add four unique answer choices/);
   const serverAuthSource = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
+  const sitegroundMailBridge = fs.readFileSync(path.join(__dirname, '..', '..', 'deploy', 'siteground', 'blockcraft_curriculum_mail.php'), 'utf8');
   assert.match(serverAuthSource, /require\('multer'\)/);
   assert.match(serverAuthSource, /CURRICULUM_MAIL_BRIDGE_URL/);
   assert.match(serverAuthSource, /DEFAULT_CURRICULUM_MAIL_BRIDGE_URL/);
   assert.match(serverAuthSource, /BLOCKCRAFT_CURRICULUM_MAIL_SECRET/);
   assert.match(serverAuthSource, /mail_bridge_secret_not_configured/);
   assert.match(serverAuthSource, /X-Blockcraft-Mail-Secret/);
+  assert.match(sitegroundMailBridge, /BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256/);
+  assert.match(sitegroundMailBridge, /BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION/);
   assert.doesNotMatch(serverAuthSource, /SMTP_HOST/);
   assert.doesNotMatch(serverAuthSource, /require\('resend'\)/);
   assert.match(serverAuthSource, /\/auth\/teacher\/homework/);
