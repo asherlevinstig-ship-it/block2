@@ -702,6 +702,12 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /Shared subject bank/);
   assert.match(teacherDashboardSource, /one shared subject question bank/);
   assert.match(teacherDashboardSource, /added by/);
+  assert.match(teacherDashboardSource, /topicOptions = computed/);
+  assert.match(teacherDashboardSource, /stageOptions = computed/);
+  assert.match(teacherDashboardSource, /difficultyOptions = computed/);
+  assert.match(teacherDashboardSource, /v-model="state\.topicFilter"/);
+  assert.match(teacherDashboardSource, /All topics/);
+  assert.match(teacherDashboardSource, /Clear filters/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/analytics/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/homework/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/curriculum-requests/);
@@ -726,6 +732,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
   assert.match(stylesSource, /\.teacher-login-shell/);
+  assert.match(stylesSource, /\.teacher-vue-list-head\{display:grid;grid-template-columns:minmax\(170px,1fr\) repeat\(4,minmax\(110px,\.55fr\)\) auto/);
   assert.match(stylesSource, /\.teacher-login-card/);
   assert.match(stylesSource, /\.teacher-vue-shell/);
   assert.match(stylesSource, /\.teacher-vue-overview/);

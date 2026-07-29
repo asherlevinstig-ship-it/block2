@@ -99,6 +99,9 @@ createApp({
       subjectId: '',
       classId: '',
       status: '',
+      topicFilter: '',
+      stageFilter: '',
+      difficultyFilter: '',
       analyticsDays: 30,
       curriculum: emptyCurriculum(),
       homework: emptyHomework(),
@@ -114,10 +117,21 @@ createApp({
 
     const selectedSubject = computed(() => state.subjects.find(s => String(s.id) === String(state.subjectId)) || null);
     const selectedQuestion = computed(() => state.questions.find(q => q.id === state.selectedId) || null);
+    const topicOptions = computed(() => [...new Set(state.questions.map(q => String(q.topic || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const stageOptions = computed(() => [...new Set(state.questions.map(q => String(q.stage || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const difficultyOptions = computed(() => [...new Set(state.questions.map(q => Number(q.difficulty) || 1).filter(Boolean))].sort((a, b) => a - b));
     const filteredQuestions = computed(() => {
       const needle = state.search.trim().toLowerCase();
-      if (!needle) return state.questions;
-      return state.questions.filter(q => [q.topic, q.stage, q.spec, q.prompt].some(value => String(value || '').toLowerCase().includes(needle)));
+      const topic = String(state.topicFilter || '').trim().toLowerCase();
+      const stage = String(state.stageFilter || '').trim().toLowerCase();
+      const difficulty = Number(state.difficultyFilter || 0) || 0;
+      return state.questions.filter(q => {
+        if (topic && String(q.topic || '').trim().toLowerCase() !== topic) return false;
+        if (stage && String(q.stage || '').trim().toLowerCase() !== stage) return false;
+        if (difficulty && Number(q.difficulty || 0) !== difficulty) return false;
+        if (!needle) return true;
+        return [q.topic, q.stage, q.spec, q.prompt].some(value => String(value || '').toLowerCase().includes(needle));
+      });
     });
     const stats = computed(() => ({
       total: state.questions.length,
@@ -229,6 +243,15 @@ createApp({
       setNotice('');
     }
 
+    function clearQuestionFilters() {
+      state.search = '';
+      state.topicFilter = '';
+      state.stageFilter = '';
+      state.difficultyFilter = '';
+      state.selectedId = 0;
+      setNotice('');
+    }
+
     function openView(view) {
       state.view = ['questions', 'homework', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
       setNotice('');
@@ -333,6 +356,7 @@ createApp({
 
     async function changeSubject() {
       newQuestion();
+      clearQuestionFilters();
       state.loading = true;
       try {
         await loadSubjectData();
@@ -354,6 +378,11 @@ createApp({
       } finally {
         state.loading = false;
       }
+    }
+
+    function changeQuestionFilters() {
+      if (state.selectedId && !filteredQuestions.value.some(q => q.id === state.selectedId)) state.selectedId = 0;
+      setNotice('');
     }
 
     function validateForm() {
@@ -526,6 +555,9 @@ createApp({
       state,
       selectedSubject,
       filteredQuestions,
+      topicOptions,
+      stageOptions,
+      difficultyOptions,
       studentRows,
       questionRows,
       needingSupport,
@@ -544,6 +576,8 @@ createApp({
       signOut,
       changeSubject,
       changeStatus,
+      changeQuestionFilters,
+      clearQuestionFilters,
       openView,
       editQuestionFromAnalysis,
       handleCurriculumFiles,
@@ -825,13 +859,26 @@ createApp({
         <section class="teacher-vue-workspace" v-else>
           <div class="teacher-vue-list">
             <div class="teacher-vue-list-head">
-              <label>Shared subject bank<input v-model="state.search" maxlength="96" placeholder="Topic, spec, or question"></label>
+              <label>Search<input v-model="state.search" maxlength="96" placeholder="Topic, spec, or question" @input="changeQuestionFilters"></label>
+              <label>Topic<select v-model="state.topicFilter" @change="changeQuestionFilters">
+                <option value="">All topics</option>
+                <option v-for="topic in topicOptions" :key="topic" :value="topic">{{ topic }}</option>
+              </select></label>
+              <label>Stage<select v-model="state.stageFilter" @change="changeQuestionFilters">
+                <option value="">All stages</option>
+                <option v-for="stage in stageOptions" :key="stage" :value="stage">{{ stage }}</option>
+              </select></label>
+              <label>Difficulty<select v-model="state.difficultyFilter" @change="changeQuestionFilters">
+                <option value="">All difficulties</option>
+                <option v-for="difficulty in difficultyOptions" :key="difficulty" :value="String(difficulty)">D{{ difficulty }}</option>
+              </select></label>
               <label>Status<select v-model="state.status" @change="changeStatus">
                 <option value="">All active</option>
                 <option value="draft">Draft</option>
                 <option value="teacher-reviewed">Teacher reviewed</option>
                 <option value="approved">Approved</option>
               </select></label>
+              <button type="button" @click="clearQuestionFilters">Clear filters</button>
             </div>
             <div class="teacher-vue-table" :aria-busy="state.loading ? 'true' : 'false'">
               <button
