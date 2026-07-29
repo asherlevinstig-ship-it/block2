@@ -732,7 +732,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
   assert.match(stylesSource, /\.teacher-login-shell/);
-  assert.match(stylesSource, /\.teacher-vue-list-head\{display:grid;grid-template-columns:minmax\(170px,1fr\) repeat\(4,minmax\(110px,\.55fr\)\) auto/);
+  assert.match(stylesSource, /\.teacher-vue-list-head\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(stylesSource, /\.teacher-vue-list-head label:first-child\{grid-column:1\/-1\}/);
   assert.match(stylesSource, /\.teacher-login-card/);
   assert.match(stylesSource, /\.teacher-vue-shell/);
   assert.match(stylesSource, /\.teacher-vue-overview/);
