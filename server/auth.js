@@ -17,6 +17,7 @@ const COOKIE = 'bc_session';
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const SWEEP_MS = 10 * 60 * 1000;   // reclaim expired sessions and stale rate-limit rows
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 
 const b64url = buf => Buffer.from(buf).toString('base64url');
 const cleanUsername = value => String(value || '').trim().toLowerCase();
@@ -379,9 +380,11 @@ class AuthService {
 
   async sendCurriculumNotification(account, submission) {
     const to = String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com').trim();
-    const bridgeUrl = String(this.env.CURRICULUM_MAIL_BRIDGE_URL || '').trim();
+    const bridgeUrl = String(this.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_CURRICULUM_MAIL_BRIDGE_URL).trim();
     const bridgeSecret = String(this.env.CURRICULUM_MAIL_BRIDGE_SECRET || '').trim();
-    if (!to || !bridgeUrl || !bridgeSecret) return { sent: false, to, reason: 'mail_bridge_not_configured' };
+    if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
+    if (!bridgeUrl) return { sent: false, to, reason: 'mail_bridge_url_not_configured' };
+    if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };
     const fetchImpl = this.curriculumMailBridgeFetch || globalThis.fetch;
     if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
     const files = (submission.files || []).map(file => '- ' + file.originalName + ' (' + Math.ceil((file.size || 0) / 1024) + ' KB)').join('\n') || '- none';

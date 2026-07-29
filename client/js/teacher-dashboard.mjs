@@ -504,9 +504,21 @@ createApp({
         for (const file of state.curriculum.files) form.append('files', file);
         const data = await requestJson('/auth/teacher/curriculum-requests', { method: 'POST', body: form });
         clearCurriculumRequest();
-        setNotice(data.notification && data.notification.sent
-          ? 'Curriculum request submitted and email notification sent.'
-          : 'Curriculum request submitted. Email notification is not configured on the server yet.');
+        if (data.notification && data.notification.sent) {
+          setNotice('Curriculum request submitted and email notification sent.');
+        } else {
+          const reason = String(data.notification && data.notification.reason || '').replace(/^Error:\s*/i, '');
+          const detail = reason === 'mail_bridge_secret_not_configured'
+            ? 'Mail bridge secret is missing on the live server.'
+            : reason === 'mail_recipient_not_configured'
+              ? 'Notification recipient is missing on the live server.'
+              : reason === 'fetch_not_available'
+                ? 'The live server cannot make outbound mail bridge requests.'
+                : reason.startsWith('mail_bridge_failed')
+                  ? 'The SiteGround mail bridge rejected the notification.'
+                  : 'Email notification was not sent.';
+          setNotice('Curriculum request submitted. ' + detail);
+        }
       } catch (e) {
         setError(e.message || 'Could not submit curriculum request.');
       } finally {

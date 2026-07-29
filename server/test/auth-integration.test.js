@@ -159,7 +159,6 @@ test('teacher game-question endpoints require a teacher session and expose game 
   const f = await fixture({ authOptions: {
     gameQuestionStore,
     env: {
-      CURRICULUM_MAIL_BRIDGE_URL: 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php',
       CURRICULUM_MAIL_BRIDGE_SECRET: 'test_bridge_secret',
       CURRICULUM_NOTIFY_TO: 'asherlevin85@gmail.com',
     },
