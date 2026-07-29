@@ -520,13 +520,6 @@ const overlay=document.getElementById('overlay');
 const playbtn=document.getElementById('playbtn');
 const registerbtn=document.getElementById('registerbtn');
 const logoutbtn=document.getElementById('logoutbtn');
-const introCinematic=document.getElementById('introcinematic');
-const introVideo=document.getElementById('introvideo');
-const introAudio=document.getElementById('introaudio');
-const introSkip=document.getElementById('introskip');
-const introStart=document.getElementById('introstart');
-const introCount=document.getElementById('introcount');
-const introStatus=document.getElementById('introstatus');
 const authuser=document.getElementById('authuser');
 const authpass=document.getElementById('authpass');
 const authstatus=document.getElementById('authstatus');
@@ -4419,61 +4412,9 @@ function requestPointerLockSafe(onFail=enterPlayFallback){
     return false;
   }
 }
-function setupOpeningCinematic(){
-  const sources=['/assets/intro/vid1.mp4','/assets/intro/vid2.mp4'];
-  const soundtrack=introAudio;
-  if(!introCinematic||!introVideo||!sources.length)return Promise.resolve();
-  let index=0,done=false,audioStarted=false,resolveReady=()=>{};
-  const ready=new Promise(resolve=>{resolveReady=resolve;});
-  const flagGestureNeeded=()=>{
-    introCinematic.classList.add('needs-gesture');
-    if(introStart)introStart.hidden=false;
-    if(introStatus)introStatus.textContent='Click to play opening';
-  };
-  const startSoundtrack=()=>{
-    if(!soundtrack||audioStarted)return Promise.resolve();
-    audioStarted=true;
-    try{soundtrack.currentTime=0;soundtrack.volume=.9;}catch(e){}
-    const audioAttempt=soundtrack.play();
-    if(audioAttempt&&typeof audioAttempt.catch==='function')return audioAttempt.catch(()=>{audioStarted=false;flagGestureNeeded();});
-    return Promise.resolve();
-  };
-  const finish=()=>{
-    if(done)return;
-    done=true;
-    try{introVideo.pause();introVideo.removeAttribute('src');introVideo.load();}catch(e){}
-    try{if(soundtrack){soundtrack.pause();soundtrack.currentTime=0;}}catch(e){}
-    introCinematic.classList.remove('needs-gesture');
-    introCinematic.classList.add('done');
-    setTimeout(()=>introCinematic.classList.add('hidden'),460);
-    resolveReady();
-  };
-  const playCurrent=()=>{
-    if(done)return;
-    if(index>=sources.length){finish();return;}
-    introCinematic.classList.remove('needs-gesture');
-    if(introStart)introStart.hidden=true;
-    if(introCount)introCount.textContent='Opening '+(index+1)+' / '+sources.length;
-    if(introStatus)introStatus.textContent=index===0?'The world wakes':'The gates answer';
-    introVideo.src=sources[index];
-    introVideo.currentTime=0;
-    introVideo.muted=true;
-    introVideo.volume=0;
-    introVideo.playsInline=true;
-    startSoundtrack();
-    const attempt=introVideo.play();
-    if(attempt&&typeof attempt.catch==='function')attempt.catch(flagGestureNeeded);
-  };
-  introVideo.addEventListener('ended',()=>{index++;playCurrent();});
-  introVideo.addEventListener('error',()=>{index++;playCurrent();});
-  if(introSkip)introSkip.addEventListener('click',finish);
-  if(introStart)introStart.addEventListener('click',()=>{startSoundtrack();playCurrent();});
-  requestAnimationFrame(playCurrent);
-  return ready;
-}
 const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn,apiUrl});
 const AUTH=AUTH_UI.state;
-const openingCinematicReady=setupOpeningCinematic();
+const openingCinematicReady=globalThis.BlockcraftOpeningReady&&typeof globalThis.BlockcraftOpeningReady.then==='function'?globalThis.BlockcraftOpeningReady:Promise.resolve();
 const setAuthStatus=(text,kind='')=>AUTH_UI.setStatus(text,kind);
 const renderAuthState=()=>AUTH_UI.render();
 const checkAuth=()=>AUTH_UI.check();
