@@ -78,6 +78,8 @@ function publicQuestion(row) {
     subjectName: row.subject_name || '',
     subjectCode: row.subject_code || '',
     teacherId: row.teacher_id == null ? null : Number(row.teacher_id),
+    creatorName: row.creator_name || '',
+    creatorEmail: row.creator_email || '',
     topic: row.topic || '',
     stage: row.stage || '',
     difficulty: Number(row.difficulty) || 1,
@@ -506,18 +508,21 @@ class MySqlGameQuestionStore {
   async listQuestions(account, query = {}) {
     await this.ensureSchema();
     const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
-    await this.assertTeacherSubject(account, subjectId);
+    const { schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
     const topic = cleanText(query.topic, 96);
     const status = cleanStatus(query.reviewStatus || query.review_status || '');
     const params = [subjectId];
     let where = 'gq.subject_id = ?';
+    const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
+    if (scopeSchoolId) { where += ' AND (gq.school_id IS NULL OR gq.school_id = ?)'; params.push(scopeSchoolId); }
     if (topic) { where += ' AND LOWER(gq.topic) = LOWER(?)'; params.push(topic); }
     if (query.reviewStatus || query.review_status) { where += ' AND gq.review_status = ?'; params.push(status); }
     if (query.includeInactive !== true && query.include_inactive !== '1') where += ' AND gq.is_active = 1';
     const [rows] = await this.getPool().execute(
-      `SELECT gq.*, s.name AS subject_name, s.code AS subject_code
+      `SELECT gq.*, s.name AS subject_name, s.code AS subject_code, t.name AS creator_name, t.email AS creator_email
        FROM game_question gq
        LEFT JOIN subjects s ON s.id = gq.subject_id
+       LEFT JOIN teachers t ON t.id = gq.teacher_id
        WHERE ${where}
        ORDER BY gq.updated_at DESC, gq.id DESC
        LIMIT 500`,
@@ -558,16 +563,21 @@ class MySqlGameQuestionStore {
     await this.ensureSchema();
     const id = clampInt(questionId, 1, 2147483647);
     const [rows] = await this.getPool().execute(
-      `SELECT gq.*, s.name AS subject_name, s.code AS subject_code
+      `SELECT gq.*, s.name AS subject_name, s.code AS subject_code, t.name AS creator_name, t.email AS creator_email
        FROM game_question gq
        LEFT JOIN subjects s ON s.id = gq.subject_id
+       LEFT JOIN teachers t ON t.id = gq.teacher_id
        WHERE gq.id = ?
        LIMIT 1`,
       [id],
     );
     const row = rows && rows[0];
     if (!row) throw Object.assign(new Error('Game question not found.'), { status: 404, code: 'question' });
-    await this.assertTeacherSubject(account, row.subject_id);
+    const { schoolId, subject } = await this.assertTeacherSubject(account, row.subject_id);
+    const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
+    if (scopeSchoolId && row.school_id != null && Number(row.school_id) !== Number(scopeSchoolId)) {
+      throw Object.assign(new Error('Game question not found.'), { status: 404, code: 'question' });
+    }
     return publicQuestion(row);
   }
 
@@ -902,12 +912,14 @@ class MySqlGameQuestionStore {
     const prompt = cleanText(input.prompt, 500);
     const answers = Array.isArray(input.answers) ? input.answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
     if (!subjectId || prompt.length < 3 || answers.length !== 4) return { recorded: false, reason: 'question' };
+    const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
     const [questionRows] = await pool.execute(
       `SELECT id FROM game_question
        WHERE subject_id = ? AND prompt = ?
+         AND (school_id IS NULL OR ? = 0 OR school_id = ?)
        ORDER BY id ASC
        LIMIT 1`,
-      [subjectId, prompt],
+      [subjectId, prompt, scopeSchoolId, scopeSchoolId],
     );
     let questionId = questionRows && questionRows[0] && Number(questionRows[0].id) || 0;
     if (!questionId) {
@@ -954,7 +966,8 @@ class MySqlGameQuestionStore {
   async analytics(account, query = {}) {
     await this.ensureSchema();
     const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
-    await this.assertTeacherSubject(account, subjectId);
+    const { schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
+    const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
     const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
     const days = clampInt(query.days || 30, 1, 365);
     const rosterRows = await this.studentRosterRows(account, classId);
@@ -998,6 +1011,8 @@ class MySqlGameQuestionStore {
       questionAttemptClassJoin += ')';
     }
     questionParams.push(subjectId);
+    let questionWhere = 'gq.subject_id = ?';
+    if (scopeSchoolId) { questionWhere += ' AND (gq.school_id IS NULL OR gq.school_id = ?)'; questionParams.push(scopeSchoolId); }
     const [questionRows] = await this.getPool().execute(
       `SELECT
          gq.id,
@@ -1013,7 +1028,7 @@ class MySqlGameQuestionStore {
         AND gqa.subject_id = gq.subject_id
         AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
         ${questionAttemptClassJoin}
-       WHERE gq.subject_id = ?
+       WHERE ${questionWhere}
        GROUP BY gq.id, gq.topic, gq.stage, gq.prompt, gq.review_status
        ORDER BY attempts DESC, gq.updated_at DESC
        LIMIT 200`,

@@ -408,6 +408,53 @@ test('MySQL game question store creates the game_question table and teacher-owne
   assert.equal(inserted.params[2], 7);
 });
 
+test('MySQL game question store lists a shared subject question bank', async () => {
+  const calls = [];
+  const pool = {
+    async execute(sql, params = []) {
+      calls.push({ sql, params });
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_question_attempt/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      const subjectRows = teacherSubjectRows(sql);
+      if (subjectRows) return subjectRows;
+      if (/FROM game_question gq/i.test(sql) && /LEFT JOIN teachers t/i.test(sql)) return [[{
+        id: 45,
+        school_id: 12,
+        subject_id: 5,
+        subject_name: 'Computer Science',
+        subject_code: 'CS',
+        teacher_id: 9,
+        creator_name: 'Other Teacher',
+        creator_email: 'other@example.com',
+        topic: 'Networks',
+        stage: 'KS3',
+        difficulty: 1,
+        spec: 'routers',
+        prompt: 'What forwards packets between networks?',
+        answers: JSON.stringify(['Router', 'Printer', 'Speaker', 'Mouse']),
+        correct_index: 0,
+        explanation: 'Routers forward packets between networks.',
+        review_status: 'approved',
+        is_active: 1,
+      }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const account = { id: 'teacher_7', accountType: 'teacher', role: 'teacher', schoolId: '12' };
+  const questions = await store.listQuestions(account, { subjectId: 5 });
+  const listCall = calls.find(call => /FROM game_question gq/i.test(call.sql) && /ORDER BY gq\.updated_at/i.test(call.sql));
+  assert.ok(listCall);
+  assert.doesNotMatch(listCall.sql, /gq\.teacher_id\s*=\s*\?/i);
+  assert.match(listCall.sql, /gq\.subject_id = \?/);
+  assert.match(listCall.sql, /gq\.school_id IS NULL OR gq\.school_id = \?/);
+  assert.equal(questions[0].teacherId, 9);
+  assert.equal(questions[0].creatorName, 'Other Teacher');
+});
+
 test('MySQL game question store records Recall attempts for student analytics', async () => {
   const inserts = [];
   const pool = {
@@ -483,7 +530,7 @@ test('MySQL game question store counts Recall attempts toward active homework', 
       }
       if (/FROM game_homework_progress/i.test(sql)) return [[{
         homework_id: 12,
-        period_key: 'day:2026-07-27',
+        period_key: 'day:2026-07-29',
         answered_count: 1,
         completed_at: null,
         last_answered_at: null,
@@ -556,7 +603,7 @@ test('MySQL game question store credits active homework when tutorial Recall sub
       }
       if (/FROM game_homework_progress/i.test(sql)) return [[{
         homework_id: 12,
-        period_key: 'day:2026-07-27',
+        period_key: 'day:2026-07-29',
         answered_count: 1,
         completed_at: null,
         last_answered_at: null,

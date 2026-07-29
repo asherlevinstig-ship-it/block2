@@ -82,6 +82,7 @@ function cleanQuestion(question) {
     difficulty: Number(question.difficulty) || 1,
     correct: Math.max(0, Math.min(3, Number(question.correct) || 0)),
     active: question.active !== false,
+    creatorName: String(question.creatorName || question.creatorEmail || '').trim(),
   };
 }
 
@@ -159,13 +160,13 @@ createApp({
     ]);
     const recentActivity = computed(() => [
       (selectedSubject.value ? selectedSubject.value.name : 'Subject') + ' dashboard refreshed',
-      stats.value.active + ' active questions available for Recall',
+      stats.value.active + ' active shared subject-bank questions available for Recall',
       state.homeworks.length + ' homework schedules ready',
       state.analytics.totals.attempts + ' student attempts in the current window',
       'Curriculum requests email through the SiteGround bridge',
     ]);
     const dashboardLinks = computed(() => [
-      { id: 'questions', title: 'Add Questions', value: stats.value.active, detail: 'Live question bank', tone: 'blue' },
+      { id: 'questions', title: 'Add Questions', value: stats.value.active, detail: 'Shared subject bank', tone: 'blue' },
       { id: 'homework', title: 'Set Homework', value: state.homeworks.length, detail: 'Scheduled practice', tone: 'purple' },
       { id: 'students', title: 'Student Insights', value: needingSupport.value, detail: 'Need support', tone: 'red' },
       { id: 'question-analysis', title: 'Question Analysis', value: state.analytics.totals.accuracy + '%', detail: 'Average accuracy', tone: 'green' },
@@ -293,7 +294,7 @@ createApp({
         }
         await loadSubjects();
         await loadSubjectData();
-        setNotice('Question bank loaded.');
+        setNotice('Shared subject question bank loaded.');
       } catch (e) {
         setError(e.message || 'Could not load teacher dashboard.');
       } finally {
@@ -409,7 +410,7 @@ createApp({
         });
         await loadSubjectData();
         if (data.question && data.question.id) fillForm(data.question);
-        setNotice(copy ? 'Saved as a new question.' : 'Question saved.');
+        setNotice(copy ? 'Saved as a new shared subject-bank question.' : 'Shared subject-bank question saved.');
       } catch (e) {
         setError(e.message || 'Could not save question.');
       } finally {
@@ -598,7 +599,7 @@ createApp({
           <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')"><span>▤</span>Add Questions</button>
           <button type="button" :class="{ active: state.view === 'homework' }" @click="openView('homework')"><span>◷</span>Set Homework</button>
           <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')"><span>◌</span>Classes</button>
-          <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')"><span>□</span>Question Bank</button>
+          <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')"><span>□</span>Subject Bank</button>
           <button type="button" :class="{ active: state.view === 'curriculum' }" @click="openView('curriculum')"><span>⇧</span>Curriculum Content</button>
         </nav>
         <div class="teacher-vue-side-spacer"></div>
@@ -618,7 +619,7 @@ createApp({
         <header class="teacher-vue-topbar">
           <div>
             <h1>{{ state.view === 'questions' ? 'Add Questions' : state.view === 'homework' ? 'Set Homework' : state.view === 'students' ? 'Student insights' : state.view === 'question-analysis' ? 'Question analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Good morning, ' + (state.account && state.account.displayName || 'Mr Levin') }}</h1>
-            <p>{{ selectedSubject ? "Here's what's happening in " + selectedSubject.name + " today." : "Here's what's happening with your homework today." }}</p>
+            <p>{{ selectedSubject ? (state.view === 'questions' || state.view === 'question-analysis' ? selectedSubject.name + ' uses one shared subject question bank.' : "Here's what's happening in " + selectedSubject.name + " today.") : "Here's what's happening with your homework today." }}</p>
           </div>
           <div class="teacher-vue-toolbar">
             <select v-model="state.subjectId" @change="changeSubject">
@@ -824,7 +825,7 @@ createApp({
         <section class="teacher-vue-workspace" v-else>
           <div class="teacher-vue-list">
             <div class="teacher-vue-list-head">
-              <label>Search<input v-model="state.search" maxlength="96" placeholder="Topic, spec, or question"></label>
+              <label>Shared subject bank<input v-model="state.search" maxlength="96" placeholder="Topic, spec, or question"></label>
               <label>Status<select v-model="state.status" @change="changeStatus">
                 <option value="">All active</option>
                 <option value="draft">Draft</option>
@@ -843,7 +844,7 @@ createApp({
               >
                 <span>{{ question.topic || 'No topic' }}</span>
                 <strong>{{ question.prompt || 'Untitled question' }}</strong>
-                <i>{{ question.stage || 'No stage' }} / D{{ question.difficulty }} / {{ question.reviewStatus }}</i>
+                <i>{{ question.stage || 'No stage' }} / D{{ question.difficulty }} / {{ question.reviewStatus }}{{ question.creatorName ? ' / added by ' + question.creatorName : '' }}</i>
               </button>
               <div class="teacher-vue-empty" v-if="!filteredQuestions.length">
                 No questions match this view.
@@ -854,7 +855,7 @@ createApp({
           <form class="teacher-vue-editor" @submit.prevent="saveQuestion(false)">
             <div class="teacher-vue-editor-head">
               <div>
-                <span>{{ state.form.id ? 'Editing #' + state.form.id : 'New question' }}</span>
+                <span>{{ state.form.id ? 'Editing shared question #' + state.form.id : 'New shared subject-bank question' }}</span>
                 <h2>Question details</h2>
               </div>
               <label class="teacher-vue-toggle"><input type="checkbox" v-model="state.form.active"> Active</label>
@@ -900,3 +901,4 @@ createApp({
     </div>
   `,
 }).mount('#teacherapp');
+
