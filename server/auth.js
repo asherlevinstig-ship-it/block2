@@ -451,6 +451,54 @@ class AuthService {
     return { sent: true, to };
   }
 
+  async sendCurriculumCompletionNotification(account, request) {
+    const to = String(request && (request.teacherEmail || request.notificationEmail) || '').trim();
+    const bridgeUrl = String(this.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_CURRICULUM_MAIL_BRIDGE_URL).trim();
+    const bridgeSecret = String(this.env.CURRICULUM_MAIL_BRIDGE_SECRET || this.env.BLOCKCRAFT_CURRICULUM_MAIL_SECRET || '').trim();
+    if (!to) return { sent: false, to, reason: 'request_owner_email_missing' };
+    if (!bridgeUrl) return { sent: false, to, reason: 'mail_bridge_url_not_configured' };
+    if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };
+    const fetchImpl = this.curriculumMailBridgeFetch || globalThis.fetch;
+    if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
+    const title = String(request && request.title || 'Curriculum request');
+    const subjectName = String(request && request.subjectName || '');
+    const text = [
+      'Your Blockcraft curriculum request has been marked complete.',
+      '',
+      'Request: ' + title,
+      subjectName ? 'Subject: ' + subjectName : '',
+      request && request.className ? 'Class: ' + request.className : '',
+      '',
+      'You can sign in to the teacher dashboard to review the request.',
+    ].filter(line => line !== '').join('\n');
+    const response = await fetchImpl(bridgeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Blockcraft-Mail-Secret': bridgeSecret,
+      },
+      body: JSON.stringify({
+        to,
+        subject: '[Blockcraft] Curriculum request complete: ' + title,
+        text,
+        teacherName: String(request && (request.teacherName || request.teacherEmail) || ''),
+        teacherEmail: String(account && (account.username || account.email) || ''),
+        subjectName,
+        title,
+        topics: '',
+        syllabus: '',
+        notes: 'This request has been marked complete by ' + String(account && (account.displayName || account.username || account.id) || 'Blockcraft admin') + '.',
+        files: [],
+      }),
+    });
+    if (!response || !response.ok) {
+      let detail = '';
+      try { detail = await response.text(); } catch (_e) {}
+      throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
+    }
+    return { sent: true, to };
+  }
+
   authorizeTeacher(req) {
     const account = this.authenticateRequest(req);
     if (!account) return false;
@@ -1047,6 +1095,38 @@ class AuthService {
         res.download(filePath, file.originalName || file.storedName);
       } catch (e) {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not download attachment.' });
+      }
+    });
+    app.post('/auth/teacher/curriculum-requests/:id/complete', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const store = this.getGameQuestionStore();
+        if (!store || typeof store.completeCurriculumRequest !== 'function') throw Object.assign(new Error('Curriculum request not found.'), { status: 404 });
+        const request = await store.completeCurriculumRequest(account, req.params && req.params.id);
+        const notification = await this.sendCurriculumCompletionNotification(account, request)
+          .catch(e => ({ sent: false, to: String(request && request.teacherEmail || ''), reason: e && e.message || 'mail_failed' }));
+        res.json({ ok: true, request, notification });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not complete curriculum request.' });
+      }
+    });
+    app.delete('/auth/teacher/curriculum-requests/:id', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const store = this.getGameQuestionStore();
+        if (!store || typeof store.deleteCurriculumRequest !== 'function') throw Object.assign(new Error('Curriculum request not found.'), { status: 404 });
+        const deleted = await store.deleteCurriculumRequest(account, req.params && req.params.id);
+        const uploadRoot = path.resolve(this.curriculumUploadDir);
+        await Promise.all((deleted.files || []).map(file => {
+          const filePath = path.resolve(file.path || path.join(uploadRoot, file.storedName || ''));
+          if (!filePath.startsWith(uploadRoot + path.sep)) return Promise.resolve();
+          return fs.promises.unlink(filePath).catch(() => {});
+        }));
+        res.json({ ok: true, deleted: { id: deleted.id } });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not delete curriculum request.' });
       }
     });
     app.post('/auth/teacher/homework', async (req, res) => {

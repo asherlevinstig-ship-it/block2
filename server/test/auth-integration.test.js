@@ -174,6 +174,25 @@ test('teacher game-question endpoints require a teacher session and expose game 
       assert.equal(storedName, 'stored-organiser.pdf');
       return { originalName: 'organiser.pdf', storedName, mimeType: 'application/pdf', size: 11, path: attachmentPath };
     },
+    async completeCurriculumRequest(account, requestId) {
+      assert.ok(['asherlevin85@gmail.com', 'asherlevin'].includes(account.username));
+      assert.equal(String(requestId), '91');
+      return {
+        id: 91,
+        subjectName: 'Computer Science',
+        className: '8A',
+        teacherName: 'Teacher',
+        teacherEmail: 'teacher@example.test',
+        title: 'Year 8 networks',
+        status: 'done',
+        files: [{ originalName: 'organiser.pdf', storedName: 'stored-organiser.pdf', mimeType: 'application/pdf', size: 11 }],
+      };
+    },
+    async deleteCurriculumRequest(account, requestId) {
+      assert.ok(['asherlevin85@gmail.com', 'asherlevin'].includes(account.username));
+      assert.equal(String(requestId), '91');
+      return { id: 91, files: [{ path: attachmentPath, storedName: 'stored-organiser.pdf' }] };
+    },
     async markCurriculumNotification(account, requestId, sent, email) {
       assert.equal(account.id, 'teacher_7');
       assert.equal(requestId, 91);
@@ -272,11 +291,21 @@ test('teacher game-question endpoints require a teacher session and expose game 
     assert.equal(file.status, 200);
     assert.equal(file.headers.get('content-disposition').includes('organiser.pdf'), true);
     assert.equal(await file.text(), 'pdf content');
+    const completed = await f.request('/auth/teacher/curriculum-requests/91/complete', { method: 'POST', headers: { Authorization: 'Bearer ' + adminSid } });
+    assert.equal(completed.status, 200);
+    const completedBody = await completed.json();
+    assert.equal(completedBody.request.status, 'done');
+    assert.equal(completedBody.notification.sent, true);
+    assert.equal(sentMail[1].body.to, 'teacher@example.test');
+    assert.match(sentMail[1].body.subject, /complete/);
 
     const asherAliasSid = await f.auth.issueSession({ id: 'teacher_1', username: 'asherlevin', displayName: 'asherlevin', accountType: 'teacher', role: 'teacher', schoolId: '12' });
     const aliasRequests = await f.request('/auth/teacher/curriculum-requests?subjectId=5', { headers: { Authorization: 'Bearer ' + asherAliasSid } });
     assert.equal(aliasRequests.status, 200);
     assert.equal((await aliasRequests.json()).admin, true);
+    const deleted = await f.request('/auth/teacher/curriculum-requests/91', { method: 'DELETE', headers: { Authorization: 'Bearer ' + asherAliasSid } });
+    assert.equal(deleted.status, 200);
+    assert.equal(fs.existsSync(attachmentPath), false);
   } finally { await f.close(); }
 });
 

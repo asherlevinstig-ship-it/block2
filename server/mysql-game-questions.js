@@ -158,6 +158,9 @@ function publicCurriculumRequest(row) {
     })).filter(file => file.storedName),
     notificationEmail: row.notification_email || '',
     notificationSent: Number(row.notification_sent) !== 0,
+    status: row.status || 'open',
+    completedAt: row.completed_at || null,
+    completedBy: row.completed_by || '',
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -237,7 +240,11 @@ class MySqlGameQuestionStore {
       files_json LONGTEXT NOT NULL,
       notification_email VARCHAR(255) NOT NULL DEFAULT '',
       notification_sent TINYINT(1) NOT NULL DEFAULT 0,
+      status ENUM('open','done') NOT NULL DEFAULT 'open',
+      completed_at TIMESTAMP NULL,
+      completed_by VARCHAR(96) NOT NULL DEFAULT '',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
       KEY idx_tcr_subject_created (subject_id, created_at),
       KEY idx_tcr_teacher_created (teacher_id, created_at),
@@ -282,8 +289,31 @@ class MySqlGameQuestionStore {
       KEY idx_ghp_student_subject (student_id, subject_id),
       KEY idx_ghp_homework (homework_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await this.ensureCurriculumRequestColumns(pool);
     await this.ensureHomeworkColumns(pool);
     this.ready = true;
+  }
+
+  async ensureCurriculumRequestColumns(pool) {
+    let columns = [];
+    try {
+      const [rows] = await pool.execute('SHOW COLUMNS FROM teacher_curriculum_request');
+      columns = Array.isArray(rows) ? rows.map(row => String(row.Field || '').toLowerCase()) : [];
+    } catch (_) {
+      return;
+    }
+    if (!columns.includes('status')) {
+      await pool.execute("ALTER TABLE teacher_curriculum_request ADD COLUMN status ENUM('open','done') NOT NULL DEFAULT 'open' AFTER notification_sent");
+    }
+    if (!columns.includes('completed_at')) {
+      await pool.execute('ALTER TABLE teacher_curriculum_request ADD COLUMN completed_at TIMESTAMP NULL AFTER status');
+    }
+    if (!columns.includes('completed_by')) {
+      await pool.execute("ALTER TABLE teacher_curriculum_request ADD COLUMN completed_by VARCHAR(96) NOT NULL DEFAULT '' AFTER completed_at");
+    }
+    if (!columns.includes('updated_at')) {
+      await pool.execute('ALTER TABLE teacher_curriculum_request ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at');
+    }
   }
 
   async ensureHomeworkColumns(pool) {
@@ -1016,6 +1046,50 @@ class MySqlGameQuestionStore {
       mimeType: cleanText(file.mimeType, 120),
       path: cleanText(file.path, 500),
       size: clampInt(file.size, 0, 50 * 1024 * 1024),
+    };
+  }
+
+  async completeCurriculumRequest(account, requestId) {
+    await this.ensureSchema();
+    if (!isCurriculumAdminAccount(account)) throw Object.assign(new Error('Admin account required.'), { status: 403, code: 'admin' });
+    const id = clampInt(requestId, 1, Number.MAX_SAFE_INTEGER);
+    const [rows] = await this.getPool().execute(
+      `SELECT tcr.*, s.name AS subject_name, s.code AS subject_code, t.name AS teacher_name, t.email AS teacher_email, c.name AS class_name
+       FROM teacher_curriculum_request tcr
+       LEFT JOIN subjects s ON s.id = tcr.subject_id
+       LEFT JOIN teachers t ON t.id = tcr.teacher_id
+       LEFT JOIN classes c ON c.id = tcr.class_id
+       WHERE tcr.id = ?
+       LIMIT 1`,
+      [id],
+    );
+    const row = rows && rows[0];
+    if (!row) throw Object.assign(new Error('Curriculum request not found.'), { status: 404, code: 'request' });
+    await this.getPool().execute(
+      `UPDATE teacher_curriculum_request
+       SET status = 'done', completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP), completed_by = ?
+       WHERE id = ?`,
+      [cleanText(account && (account.username || account.displayName || account.id), 96), id],
+    );
+    return { ...publicCurriculumRequest({ ...row, status: 'done', completed_at: row.completed_at || new Date(), completed_by: account && (account.username || account.displayName || account.id) || '' }) };
+  }
+
+  async deleteCurriculumRequest(account, requestId) {
+    await this.ensureSchema();
+    if (!isCurriculumAdminAccount(account)) throw Object.assign(new Error('Admin account required.'), { status: 403, code: 'admin' });
+    const id = clampInt(requestId, 1, Number.MAX_SAFE_INTEGER);
+    const [rows] = await this.getPool().execute('SELECT id, files_json FROM teacher_curriculum_request WHERE id = ? LIMIT 1', [id]);
+    const row = rows && rows[0];
+    if (!row) throw Object.assign(new Error('Curriculum request not found.'), { status: 404, code: 'request' });
+    await this.getPool().execute('DELETE FROM teacher_curriculum_request WHERE id = ?', [id]);
+    let files = [];
+    try { files = JSON.parse(row.files_json || '[]'); } catch (_) {}
+    return {
+      id,
+      files: Array.isArray(files) ? files.map(file => ({
+        path: cleanText(file && file.path, 500),
+        storedName: cleanText(file && file.storedName, 255),
+      })).filter(file => file.path || file.storedName) : [],
     };
   }
 

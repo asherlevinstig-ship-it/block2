@@ -576,6 +576,38 @@ createApp({
       }
     }
 
+    async function completeCurriculumRequest(request) {
+      state.saving = true;
+      try {
+        const data = await requestJson('/auth/teacher/curriculum-requests/' + encodeURIComponent(String(request && request.id || '')) + '/complete', { method: 'POST' });
+        await loadCurriculumRequests();
+        if (data.notification && data.notification.sent) {
+          setNotice('Request marked done and teacher emailed.');
+        } else {
+          setNotice('Request marked done. Completion email was not sent.');
+        }
+      } catch (e) {
+        setError(e.message || 'Could not mark request done.');
+      } finally {
+        state.saving = false;
+      }
+    }
+
+    async function deleteCurriculumRequest(request) {
+      const title = String(request && request.title || 'this request');
+      if (typeof window !== 'undefined' && !window.confirm('Delete "' + title + '" and its uploaded files?')) return;
+      state.saving = true;
+      try {
+        await requestJson('/auth/teacher/curriculum-requests/' + encodeURIComponent(String(request && request.id || '')), { method: 'DELETE' });
+        await loadCurriculumRequests();
+        setNotice('Curriculum request deleted.');
+      } catch (e) {
+        setError(e.message || 'Could not delete request.');
+      } finally {
+        state.saving = false;
+      }
+    }
+
     function destroyChart(key) {
       if (chartRefs[key]) {
         chartRefs[key].destroy();
@@ -657,6 +689,8 @@ createApp({
       clearCurriculumRequest,
       submitCurriculumRequest,
       downloadCurriculumFile,
+      completeCurriculumRequest,
+      deleteCurriculumRequest,
       fillForm,
       newQuestion,
       saveQuestion,
@@ -853,7 +887,7 @@ createApp({
                 <p v-if="request.topics"><strong>Topics</strong>{{ request.topics }}</p>
                 <p v-if="request.syllabus"><strong>Syllabus</strong>{{ request.syllabus }}</p>
                 <p v-if="request.notes"><strong>Notes</strong>{{ request.notes }}</p>
-                <em>{{ request.teacherName || request.teacherEmail || 'Teacher' }}</em>
+                <em>{{ request.teacherName || request.teacherEmail || 'Teacher' }} · {{ request.status === 'done' ? 'Done' : 'Open' }}</em>
               </div>
               <div class="teacher-vue-request-files">
                 <strong>Attachments</strong>
@@ -862,6 +896,10 @@ createApp({
                   <small>{{ Math.ceil((file.size || 0) / 1024) }} KB</small>
                 </button>
                 <small v-if="!request.files || !request.files.length">No files attached</small>
+                <div class="teacher-vue-request-actions">
+                  <button type="button" class="done" :disabled="state.saving || request.status === 'done'" @click="completeCurriculumRequest(request)">Mark done</button>
+                  <button type="button" class="danger" :disabled="state.saving" @click="deleteCurriculumRequest(request)">Delete</button>
+                </div>
               </div>
             </article>
             <div class="teacher-vue-empty" v-if="!state.curriculumRequests.length">No curriculum requests match this subject/class filter yet.</div>

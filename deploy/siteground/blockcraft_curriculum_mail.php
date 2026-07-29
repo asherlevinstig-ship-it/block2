@@ -167,7 +167,7 @@ if (!$secretOk) {
     bcm_json(403, ['ok' => false, 'error' => 'Invalid mail bridge secret']);
 }
 
-$to = bcm_clean(defined('BLOCKCRAFT_CURRICULUM_NOTIFY_TO') ? BLOCKCRAFT_CURRICULUM_NOTIFY_TO : 'asherlevin85@gmail.com', 255);
+$to = bcm_clean($payload['to'] ?? (defined('BLOCKCRAFT_CURRICULUM_NOTIFY_TO') ? BLOCKCRAFT_CURRICULUM_NOTIFY_TO : 'asherlevin85@gmail.com'), 255);
 if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
     bcm_json(400, ['ok' => false, 'error' => 'Invalid recipient']);
 }
