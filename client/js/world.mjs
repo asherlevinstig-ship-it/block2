@@ -7087,6 +7087,19 @@ function useActiveUtility(){
   if(!NET.on||!NET.room) return sysMsg('<b>'+escHTML(u.name)+'</b> needs the server to read the world.');
   NET.room.send('utilityUse',{id});
 }
+function useUtilityHotkey(slotIndex){
+  const idx=Math.max(0,Math.min(3,slotIndex|0));
+  if(idx===0){ useActiveUtility(); return; }
+  const id=utilityLoadout.passive[idx-1],u=UTILITY_DEFS[id];
+  if(!id||!u){
+    sysMsg('Utility passive slot <b>'+idx+'</b> is empty. Open <b>Utilities</b> to equip one.');
+    if(typeof openUtilitiesUI==='function')openUtilitiesUI();
+    return;
+  }
+  showName(u.name);
+  updateLandMinimap();
+  sysMsg('<b>'+escHTML(u.name)+'</b> is running passively.<br>'+escHTML(u.use||u.desc||'This utility is active while equipped.'));
+}
 function makeJobContract(jobId){
   if(!JOBS[jobId]) return null;
   const scale=JOB_SYSTEM.contractScaleFromXp(jobXpFor(jobId));
@@ -10904,6 +10917,7 @@ const legacyWorldBindings={
   "spotlightLandClaim":{get:()=>spotlightLandClaim},
   "toggleUtilityEquip":{get:()=>toggleUtilityEquip},
   "useActiveUtility":{get:()=>useActiveUtility},
+  "useUtilityHotkey":{get:()=>useUtilityHotkey},
   "torches":{get:()=>torches},
   "torchFlameMat":{get:()=>torchFlameMat},
   "torchGlowMat":{get:()=>torchGlowMat},

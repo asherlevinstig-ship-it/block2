@@ -4927,8 +4927,9 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyJ' && !e.repeat){ if(!castDragonAbility()) castArmorPower(); }
     if(e.code==='KeyY' && !e.repeat) cycleBetaAbilityPath();
     if(e.code==='Semicolon' && !e.repeat) cycleBetaLegendaryWeapon();
-    if(e.code==='KeyI' && !e.repeat) useActiveUtility();
+    if(e.code==='KeyI' && !e.repeat){ e.preventDefault(); if(e.shiftKey&&typeof openUtilitiesUI==='function')openUtilitiesUI(); else useActiveUtility(); }
     if(e.code==='KeyN' && !e.repeat) shadowStep();
+    if(e.shiftKey&&/^Digit[123]$/.test(e.code)&&!e.repeat){ e.preventDefault(); if(typeof useUtilityHotkey==='function')useUtilityHotkey(+e.code.slice(5)); return; }
     if(e.code.startsWith('Digit')){ const n=+e.code.slice(5); if(n>=1&&n<=9) selectSlot(n-1); }
   }
 });

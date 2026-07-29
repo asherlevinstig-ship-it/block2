@@ -2772,7 +2772,11 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(dimensions,/button\[data-utility-id\]/);
   assert.match(dimensions,/globalThis\.toggleUtilityEquip\(id\);[\s\S]*renderStat\(\);/);
   assert.match(dimensions,/globalThis\.useActiveUtility\(\)/);
+  assert.match(world,/function useUtilityHotkey\(slotIndex\)/);
+  assert.match(world,/"useUtilityHotkey":\{get:\(\)=>useUtilityHotkey\}/);
   assert.match(hud,/utilityBarEl\.id='utilitybar'/);
+  assert.match(hud,/index===0\?'I':'S\+'\+index/);
+  assert.match(hud,/Hotkey: '\+hotkey/);
   assert.match(hud,/for\(let i=0;i<4;i\+\+\)/);
   assert.match(hud,/function refreshUtilityHUD\(\)/);
   assert.match(hud,/if\(index===0&&id&&typeof globalThis\.useActiveUtility==='function'\)globalThis\.useActiveUtility\(\);/);
@@ -2780,6 +2784,8 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(hud,/refreshUtilityHUD\(\);\s*updateViewModel\(\);/);
   assert.match(combat,/const utilityBar=document\.getElementById\('utilitybar'\);/);
   assert.match(combat,/utilityBar\.classList\.toggle\('hidden', !showHud \|\| minimal\)/);
+  assert.match(combat,/if\(e\.code==='KeyI' && !e\.repeat\)\{ e\.preventDefault\(\); if\(e\.shiftKey&&typeof openUtilitiesUI==='function'\)openUtilitiesUI\(\); else useActiveUtility\(\); \}/);
+  assert.match(combat,/if\(e\.shiftKey&&\/\^Digit\[123\]\$\/\.test\(e\.code\)&&!e\.repeat\)\{ e\.preventDefault\(\); if\(typeof useUtilityHotkey==='function'\)useUtilityHotkey\(\+e\.code\.slice\(5\)\); return; \}/);
   assert.match(networking,/utilityLoadout=clampUtilityLoadout\(m\);[\s\S]*refreshHUD\(\);/);
   assert.match(networking,/utilityLoadout=clampUtilityLoadout\(m\);[\s\S]*if\(typeof renderStat==='function'&&statOpen\)renderStat\(\);/);
   assert.match(world,/if\(typeof refreshHUD==='function'\)refreshHUD\(\);/);

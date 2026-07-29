@@ -37,7 +37,7 @@ for(let i=0;i<4;i++){
   slot.type='button';
   slot.className='utilityslot';
   slot.dataset.index=String(i);
-  slot.innerHTML='<span class="ukey">'+(i===0?'I':'P'+i)+'</span><b>-</b><small>'+(i===0?'Active':'Passive')+'</small>';
+  slot.innerHTML='<span class="ukey">'+(i===0?'I':'S+'+i)+'</span><b>-</b><small>'+(i===0?'Active':'Passive')+'</small>';
   utilityBarEl.appendChild(slot);
   utilityHudSlots.push(slot);
 }
@@ -49,16 +49,18 @@ function utilityLoadoutState(){
 }
 function utilitySlotTip(id,slotLabel){
   const defs=utilityDefs(),u=defs[id];
-  if(!u)return slotLabel+' utility slot\nOpen Utilities to equip a tool.';
-  const lines=[u.name,slotLabel+' utility',u.use||u.desc];
+  const index=slotLabel.startsWith('Passive ')?Number(slotLabel.split(' ')[1])||0:0;
+  const hotkey=index>0?'Shift+'+index:'I';
+  if(!u)return slotLabel+' utility slot\nHotkey: '+hotkey+'\nOpen Utilities to equip a tool.';
+  const lines=[u.name,slotLabel+' utility','Hotkey: '+hotkey,u.use||u.desc];
   if(u.desc&&u.desc!==u.use)lines.push(u.desc);
-  if(u.slot==='active')lines.push('Press I to use.');
+  if(u.slot==='active')lines.push('Press I to use. Press Shift+I to open Utilities.');
   return lines.join('\n');
 }
 function fillUtilitySlotEl(el,id,slotLabel,index){
   const defs=utilityDefs(),u=defs[id];
   el.className='utilityslot '+(index===0?'active':'passive')+(u?' filled':' empty');
-  el.innerHTML='<span class="ukey">'+(index===0?'I':'P'+index)+'</span><b>'+(u?escHud(u.icon||'?'):'-')+'</b><small>'+escHud(u?u.name:slotLabel)+'</small>';
+  el.innerHTML='<span class="ukey">'+(index===0?'I':'S+'+index)+'</span><b>'+(u?escHud(u.icon||'?'):'-')+'</b><small>'+escHud(u?u.name:slotLabel)+'</small>';
   el.title=utilitySlotTip(id,slotLabel);
   el.dataset.utility=id||'';
   el.onclick=()=>{
