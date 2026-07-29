@@ -109,6 +109,7 @@ createApp({
       questionOutcomeFilter: '',
       questionSort: 'accuracyAsc',
       analyticsScope: 'school',
+      analysisView: 'students',
       yearGroup: '',
       analyticsDays: 30,
       curriculum: emptyCurriculum(),
@@ -175,6 +176,22 @@ createApp({
     const classTopicRows = computed(() => (state.analytics.topicSummaries || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || String(a.name || '').localeCompare(String(b.name || ''))));
     const yearGroupOptions = computed(() => [...new Set([...(state.analytics.yearGroups || []), ...(state.classes || []).map(row => row.yearGroup || row.year_group)].map(value => String(value || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
     const schoolComparisonRows = computed(() => (state.analytics.schoolComparisons || []).slice().sort((a, b) => Number(b.ownSchool) - Number(a.ownSchool) || b.accuracy - a.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name)));
+    const classComparisonRows = computed(() => (state.analytics.classComparisons || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || String(a.name || '').localeCompare(String(b.name || ''))));
+    const yearGroupComparisonRows = computed(() => (state.analytics.yearGroupComparisons || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || String(a.name || '').localeCompare(String(b.name || ''))));
+    const missingHomeworkRows = computed(() => (state.analytics.missingHomework || []).slice().sort((a, b) => a.completion - b.completion || a.attempts - b.attempts || String(a.name || '').localeCompare(String(b.name || ''))));
+    const topicComparisonRows = computed(() => {
+      const breakdowns = new Map((state.analytics.topicBreakdowns || []).map(row => [String(row.name || row.id || '').toLowerCase(), row]));
+      return classTopicRows.value.map(row => {
+        const key = String(row.name || row.topic || '').toLowerCase();
+        const breakdown = breakdowns.get(key) || {};
+        return {
+          ...row,
+          classRows: Array.isArray(breakdown.class) ? breakdown.class : [],
+          yearRows: Array.isArray(breakdown.year) ? breakdown.year : [],
+          schoolRows: Array.isArray(breakdown.school) ? breakdown.school : [],
+        };
+      });
+    });
     const scopeLabel = computed(() => {
       if (state.analyticsScope === 'class') return state.classId ? 'Selected class' : 'Choose a class';
       if (state.analyticsScope === 'year') return state.yearGroup || 'Year group';
@@ -250,9 +267,16 @@ createApp({
     const dashboardLinks = computed(() => [
       { id: 'questions', title: 'Add Questions', value: stats.value.active, detail: 'Shared subject bank', tone: 'blue' },
       { id: 'homework', title: 'Set Homework', value: state.homeworks.length, detail: 'Scheduled practice', tone: 'purple' },
-      { id: 'students', title: 'Student Insights', value: needingSupport.value, detail: 'Need support', tone: 'red' },
+      { id: 'students', title: 'Analysis', value: needingSupport.value, detail: 'Students, topics, classes, schools', tone: 'red' },
       { id: 'question-analysis', title: 'Question Analysis', value: state.analytics.totals.accuracy + '%', detail: 'Average accuracy', tone: 'green' },
       { id: 'curriculum', title: 'Curriculum Content', value: 'Upload', detail: 'Request new content', tone: 'orange' },
+    ]);
+    const analysisTabs = computed(() => [
+      { id: 'students', title: 'Student Breakdown', value: studentRows.value.length },
+      { id: 'topics', title: 'Topic Breakdown', value: topicComparisonRows.value.length },
+      { id: 'classes', title: 'Class Breakdown', value: classComparisonRows.value.length },
+      { id: 'schools', title: 'School Breakdown', value: schoolComparisonRows.value.length },
+      { id: 'homework-gaps', title: 'Not Doing Homework', value: missingHomeworkRows.value.length },
     ]);
     const studentChart = ref(null);
     const questionChart = ref(null);
@@ -321,6 +345,7 @@ createApp({
       state.curriculumRequests = [];
       state.curriculumAdmin = false;
       state.analyticsScope = 'school';
+      state.analysisView = 'students';
       state.yearGroup = '';
       state.view = 'overview';
       state.loading = false;
@@ -364,6 +389,12 @@ createApp({
 
     function openView(view) {
       state.view = ['questions', 'homework', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
+      setNotice('');
+    }
+
+    function selectAnalysisView(view) {
+      state.analysisView = ['students', 'topics', 'classes', 'schools', 'homework-gaps'].includes(view) ? view : 'students';
+      state.view = 'students';
       setNotice('');
     }
 
@@ -768,6 +799,10 @@ createApp({
       classTopicRows,
       yearGroupOptions,
       schoolComparisonRows,
+      classComparisonRows,
+      yearGroupComparisonRows,
+      missingHomeworkRows,
+      topicComparisonRows,
       scopeLabel,
       classQuestionRows,
       classAttemptRows,
@@ -780,6 +815,7 @@ createApp({
       recentActivity,
       stats,
       dashboardLinks,
+      analysisTabs,
       studentChart,
       questionChart,
       refreshAll,
@@ -792,6 +828,7 @@ createApp({
       changeQuestionFilters,
       clearQuestionFilters,
       openView,
+      selectAnalysisView,
       selectStudent,
       studentKey,
       outcomeLabel,
@@ -947,8 +984,13 @@ createApp({
           </section>
         </section>
 
-        <section class="teacher-vue-analysis" v-else-if="state.view === 'students'">
-          <div class="teacher-vue-analysis-stack">
+        <section class="teacher-vue-analysis teacher-vue-analysis-wide" v-else-if="state.view === 'students'">
+          <div class="teacher-vue-analysis-tabs">
+            <button type="button" v-for="tab in analysisTabs" :key="tab.id" :class="{ active: state.analysisView === tab.id }" @click="selectAnalysisView(tab.id)">
+              <span>{{ tab.title }}</span><strong>{{ tab.value }}</strong>
+            </button>
+          </div>
+          <div class="teacher-vue-analysis-stack" v-if="state.analysisView === 'students'">
             <div class="teacher-vue-chart">
               <div>
                 <span>Student insights</span>
@@ -973,7 +1015,7 @@ createApp({
               <div class="teacher-vue-empty" v-if="!studentRows.length">No students found for this class and subject yet.</div>
             </div>
           </div>
-          <div class="teacher-vue-analysis-table teacher-vue-student-detail">
+          <div class="teacher-vue-analysis-table teacher-vue-student-detail" v-if="state.analysisView === 'students'">
             <header>
               <div>
                 <span>Selected student</span>
@@ -999,6 +1041,75 @@ createApp({
               <strong :class="{ good: row.correct, bad: !row.correct }">{{ outcomeLabel(row.correct) }}</strong>
             </div>
             <div class="teacher-vue-empty" v-if="selectedStudent && !selectedStudentAttempts.length">No question attempts for this student yet.</div>
+          </div>
+          <div class="teacher-vue-analysis-table" v-if="state.analysisView === 'topics'">
+            <header><h2>Topic breakdown</h2><button type="button" @click="refreshAll">Refresh</button></header>
+            <article class="teacher-vue-question-breakdown-card" v-for="row in topicComparisonRows" :key="row.id || row.name">
+              <div class="teacher-vue-topic-row">
+                <span>{{ row.name || row.topic || 'No topic' }}</span>
+                <strong>{{ row.correct }}</strong>
+                <strong>{{ row.wrong }}</strong>
+                <i>{{ row.accuracy }}%</i>
+              </div>
+              <div class="teacher-vue-question-breakdowns">
+                <section>
+                  <h4>By class</h4>
+                  <div v-for="item in row.classRows.slice(0, 6)" :key="'topic-class-' + row.id + '-' + item.id"><span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small></div>
+                  <em v-if="!row.classRows.length">No class data</em>
+                </section>
+                <section>
+                  <h4>By year group</h4>
+                  <div v-for="item in row.yearRows.slice(0, 6)" :key="'topic-year-' + row.id + '-' + item.id"><span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small></div>
+                  <em v-if="!row.yearRows.length">No year data</em>
+                </section>
+                <section>
+                  <h4>By school</h4>
+                  <div v-for="item in row.schoolRows.slice(0, 8)" :key="'topic-school-' + row.id + '-' + item.id" :class="{ own: item.ownSchool }"><span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small></div>
+                  <em v-if="!row.schoolRows.length">No school data</em>
+                </section>
+              </div>
+            </article>
+            <div class="teacher-vue-empty" v-if="!topicComparisonRows.length">No topic attempts yet.</div>
+          </div>
+          <div class="teacher-vue-analysis-table" v-if="state.analysisView === 'classes'">
+            <header><h2>Class breakdown</h2></header>
+            <div class="teacher-vue-analysis-row head"><span>Class</span><span>Answered</span><span>Accuracy</span><span>Active students</span></div>
+            <button class="teacher-vue-analysis-row action" type="button" v-for="row in classComparisonRows" :key="row.id" @click="state.analyticsScope = 'class'; state.classId = String(row.id); changeStatus()">
+              <span>{{ row.name }}<small>{{ row.yearGroup || 'No year group' }}</small></span>
+              <strong>{{ row.attempts }}</strong>
+              <strong>{{ row.accuracy }}%</strong>
+              <i>{{ row.activeStudents || 0 }} active</i>
+            </button>
+            <div class="teacher-vue-empty" v-if="!classComparisonRows.length">No class comparison data yet.</div>
+          </div>
+          <div class="teacher-vue-analysis-table" v-if="state.analysisView === 'schools'">
+            <header><h2>School breakdown</h2></header>
+            <div class="teacher-vue-topic-row head"><span>School</span><span>Correct</span><span>Wrong</span><span>Accuracy</span></div>
+            <div class="teacher-vue-topic-row" v-for="row in schoolComparisonRows" :key="row.id || row.name" :class="{ selected: row.ownSchool }">
+              <span>{{ row.name }}<small v-if="row.ownSchool">Your school</small></span>
+              <strong>{{ row.correct }}</strong>
+              <strong>{{ row.wrong }}</strong>
+              <i>{{ row.accuracy }}%</i>
+            </div>
+            <h3>Year groups in your school</h3>
+            <div class="teacher-vue-topic-row" v-for="row in yearGroupComparisonRows" :key="row.id">
+              <span>{{ row.name }}</span>
+              <strong>{{ row.correct }}</strong>
+              <strong>{{ row.wrong }}</strong>
+              <i>{{ row.accuracy }}%</i>
+            </div>
+            <div class="teacher-vue-empty" v-if="!schoolComparisonRows.length && !yearGroupComparisonRows.length">No school comparison data yet.</div>
+          </div>
+          <div class="teacher-vue-analysis-table" v-if="state.analysisView === 'homework-gaps'">
+            <header><h2>Students not doing homework</h2></header>
+            <div class="teacher-vue-analysis-row head"><span>Student</span><span>Progress</span><span>Accuracy</span><span>Last activity</span></div>
+            <button class="teacher-vue-analysis-row action" type="button" v-for="row in missingHomeworkRows" :key="row.id || row.email" @click="selectStudent(row); state.analysisView = 'students'">
+              <span>{{ row.name }}<small>{{ row.email || 'Game account' }}</small></span>
+              <strong>{{ row.answered }}/{{ row.required }}</strong>
+              <strong>{{ row.accuracy }}%</strong>
+              <i>{{ row.lastHomeworkAt || row.lastAttemptAt || 'No homework activity' }}</i>
+            </button>
+            <div class="teacher-vue-empty" v-if="!missingHomeworkRows.length">No active homework gaps for this scope.</div>
           </div>
         </section>
 

@@ -685,10 +685,15 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /This login is not linked to a teacher account/);
   assert.match(teacherDashboardSource, /Good morning/);
   assert.match(teacherDashboardSource, /Attention required/);
-  assert.match(teacherDashboardSource, /Student insights/);
+  assert.match(teacherDashboardSource, /Student Breakdown/);
   assert.match(teacherDashboardSource, /Topic summary/);
   assert.match(teacherDashboardSource, /Question breakdown/);
   assert.match(teacherDashboardSource, /selectedStudentAttempts/);
+  assert.match(teacherDashboardSource, /analysisTabs/);
+  assert.match(teacherDashboardSource, /Topic breakdown/);
+  assert.match(teacherDashboardSource, /Class breakdown/);
+  assert.match(teacherDashboardSource, /School breakdown/);
+  assert.match(teacherDashboardSource, /Students not doing homework/);
   assert.match(teacherDashboardSource, /classQuestionRows/);
   assert.match(teacherDashboardSource, /Has wrong answers/);
   assert.match(teacherDashboardSource, /Whole year group/);
@@ -703,7 +708,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /Curriculum Requests/);
   assert.match(teacherDashboardSource, /title: 'Add Questions'/);
   assert.match(teacherDashboardSource, /title: 'Set Homework'/);
-  assert.match(teacherDashboardSource, /title: 'Student Insights'/);
+  assert.match(teacherDashboardSource, /title: 'Analysis'/);
   assert.match(teacherDashboardSource, /title: 'Question Analysis'/);
   assert.match(teacherDashboardSource, /title: 'Curriculum Content'/);
   assert.match(teacherDashboardSource, /currentAssignments/);

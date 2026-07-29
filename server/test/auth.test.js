@@ -866,7 +866,21 @@ test('MySQL game question analytics includes class students with zero attempts',
         attempts: 4,
         correct: 3,
       }]];
-      if (/COALESCE\(gqa\.class_id, s\.class_id, 0\) AS class_id/i.test(sql)) return [[{
+      if (/FROM classes c\s+LEFT JOIN game_question_attempt gqa/i.test(sql)) return [[{
+        class_id: 3,
+        class_name: '8A',
+        year_group: 'Year 8',
+        attempts: 2,
+        correct: 1,
+        active_students: 1,
+      }]];
+      if (/COUNT\(DISTINCT gqa\.student_id\) AS active_students/i.test(sql) && /GROUP BY year_group/i.test(sql)) return [[{
+        year_group: 'Year 8',
+        attempts: 2,
+        correct: 1,
+        active_students: 1,
+      }]];
+      if (/gqa\.question_id/i.test(sql) && /COALESCE\(gqa\.class_id, s\.class_id, 0\) AS class_id/i.test(sql)) return [[{
         question_id: 44,
         class_id: 3,
         class_name: '8A',
@@ -891,6 +905,43 @@ test('MySQL game question analytics includes class students with zero attempts',
         school_name: 'River School',
         attempts: 4,
         correct: 3,
+      }]];
+      if (/COALESCE\(NULLIF\(gq\.topic, ''\), 'Uncategorised'\) AS topic/i.test(sql) && /GROUP BY topic, class_id, class_name/i.test(sql)) return [[{
+        topic: 'Binary',
+        class_id: 3,
+        class_name: '8A',
+        attempts: 2,
+        correct: 1,
+      }]];
+      if (/COALESCE\(NULLIF\(gq\.topic, ''\), 'Uncategorised'\) AS topic/i.test(sql) && /GROUP BY topic, year_group/i.test(sql)) return [[{
+        topic: 'Binary',
+        year_group: 'Year 8',
+        attempts: 2,
+        correct: 1,
+      }]];
+      if (/COALESCE\(NULLIF\(gq\.topic, ''\), 'Uncategorised'\) AS topic/i.test(sql) && /GROUP BY topic, school_id, school_name/i.test(sql)) return [[{
+        topic: 'Binary',
+        school_id: 12,
+        school_name: 'Town Academy',
+        attempts: 2,
+        correct: 1,
+      }]];
+      if (/FROM game_homework gh/i.test(sql) && /gh\.status IN/i.test(sql)) return [[{
+        id: 77,
+        school_id: 12,
+        subject_id: 5,
+        class_id: 3,
+        cadence: 'daily',
+        weekly_day: null,
+        question_count: 4,
+      }]];
+      if (/FROM game_homework_progress/i.test(sql)) return [[{
+        homework_id: 77,
+        student_id: 9,
+        period_key: 'day:2026-07-29',
+        answered_count: 1,
+        completed_at: null,
+        last_answered_at: '2026-07-29 09:00:00',
       }]];
       if (/FROM game_question_attempt gqa/i.test(sql)) return [[{
         student_id: 9,
@@ -937,6 +988,10 @@ test('MySQL game question analytics includes class students with zero attempts',
   assert.equal(question.breakdowns.class[0].name, '8A');
   assert.equal(question.breakdowns.year[0].name, 'Year 8');
   assert.equal(question.breakdowns.school.find(row => row.id === 14).accuracy, 75);
+  assert.equal(analytics.classComparisons[0].name, '8A');
+  assert.equal(analytics.yearGroupComparisons[0].name, 'Year 8');
+  assert.equal(analytics.topicBreakdowns[0].school[0].name, 'Town Academy');
+  assert.equal(analytics.missingHomework.find(row => row.id === 9).answered, 1);
 });
 
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {

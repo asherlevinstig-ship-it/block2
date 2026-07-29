@@ -533,7 +533,7 @@ class MySqlGameQuestionStore {
     subjectId = clampInt(subjectId, 1, 2147483647);
     const candidates = [
       [
-        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.year_group, c.is_active
          FROM classes c
          JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
          JOIN class_subject_teachers cst ON cst.class_subject_id = cs.id AND cst.teacher_id = ?
@@ -541,7 +541,7 @@ class MySqlGameQuestionStore {
         [subjectId, teacherId],
       ],
       [
-        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.year_group, c.is_active
          FROM classes c
          JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
          JOIN class_teachers ct ON ct.class_id = c.id AND ct.teacher_id = ?
@@ -549,7 +549,7 @@ class MySqlGameQuestionStore {
         [subjectId, teacherId],
       ],
       [
-        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.year_group, c.is_active
          FROM classes c
          JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
          WHERE c.teacher_id = ?
@@ -557,7 +557,7 @@ class MySqlGameQuestionStore {
         [subjectId, teacherId],
       ],
       [
-        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.year_group, c.is_active
          FROM classes c
          WHERE c.subject_id = ? AND c.teacher_id = ?
          ORDER BY c.name ASC`,
@@ -569,7 +569,7 @@ class MySqlGameQuestionStore {
     rows = this.uniqueClassRows(rows);
     if (!rows.length) {
       rows = this.uniqueClassRows(await this.safeQuery(
-        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
+        `SELECT DISTINCT c.id, c.name, c.join_code, c.year_group, c.is_active
          FROM classes c
          JOIN class_subjects cs ON cs.class_id = c.id AND cs.subject_id = ?
          WHERE (c.school_id IS NULL OR ? = 0 OR c.school_id = ?)
@@ -1347,6 +1347,42 @@ class MySqlGameQuestionStore {
        LIMIT 100`,
       [subjectId, days],
     );
+    const classComparisonRows = await this.safeQuery(
+      `SELECT
+         c.id AS class_id,
+         c.name AS class_name,
+         COALESCE(NULLIF(c.year_group, ''), 'No year group') AS year_group,
+         COUNT(gqa.id) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct,
+         COUNT(DISTINCT gqa.student_id) AS active_students
+       FROM classes c
+       LEFT JOIN game_question_attempt gqa
+         ON gqa.class_id = c.id
+        AND gqa.subject_id = ?
+        AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       WHERE (c.subject_id = ? OR EXISTS (SELECT 1 FROM class_subjects cs WHERE cs.class_id = c.id AND cs.subject_id = ?))
+         AND (? = 0 OR c.school_id IS NULL OR c.school_id = ?)
+       GROUP BY c.id, c.name, c.year_group
+       ORDER BY attempts DESC, c.name ASC
+       LIMIT 200`,
+      [subjectId, days, subjectId, subjectId, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
+    const yearComparisonRows = await this.safeQuery(
+      `SELECT
+         COALESCE(NULLIF(s.year_group, ''), NULLIF(c.year_group, ''), 'No year group') AS year_group,
+         COUNT(gqa.id) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct,
+         COUNT(DISTINCT gqa.student_id) AS active_students
+       FROM game_question_attempt gqa
+       LEFT JOIN students s ON s.id = gqa.student_id
+       LEFT JOIN classes c ON c.id = COALESCE(gqa.class_id, s.class_id)
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND (? = 0 OR gqa.school_id IS NULL OR gqa.school_id = ?)
+       GROUP BY year_group
+       ORDER BY attempts DESC, year_group ASC
+       LIMIT 100`,
+      [subjectId, days, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
     const questionClassRows = await this.safeQuery(
       `SELECT
          gqa.question_id,
@@ -1395,6 +1431,80 @@ class MySqlGameQuestionStore {
        LIMIT 1200`,
       [subjectId, days],
     );
+    const topicClassRows = await this.safeQuery(
+      `SELECT
+         COALESCE(NULLIF(gq.topic, ''), 'Uncategorised') AS topic,
+         COALESCE(gqa.class_id, s.class_id, 0) AS class_id,
+         COALESCE(c.name, CONCAT('Class ', COALESCE(gqa.class_id, s.class_id, 0))) AS class_name,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN game_question gq ON gq.id = gqa.question_id
+       LEFT JOIN students s ON s.id = gqa.student_id
+       LEFT JOIN classes c ON c.id = COALESCE(gqa.class_id, s.class_id)
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND (? = 0 OR gqa.school_id IS NULL OR gqa.school_id = ?)
+       GROUP BY topic, class_id, class_name
+       ORDER BY topic ASC, attempts DESC, class_name ASC
+       LIMIT 1200`,
+      [subjectId, days, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
+    const topicYearRows = await this.safeQuery(
+      `SELECT
+         COALESCE(NULLIF(gq.topic, ''), 'Uncategorised') AS topic,
+         COALESCE(NULLIF(s.year_group, ''), NULLIF(c.year_group, ''), 'No year group') AS year_group,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN game_question gq ON gq.id = gqa.question_id
+       LEFT JOIN students s ON s.id = gqa.student_id
+       LEFT JOIN classes c ON c.id = COALESCE(gqa.class_id, s.class_id)
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND (? = 0 OR gqa.school_id IS NULL OR gqa.school_id = ?)
+       GROUP BY topic, year_group
+       ORDER BY topic ASC, attempts DESC, year_group ASC
+       LIMIT 1200`,
+      [subjectId, days, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
+    const topicSchoolRows = await this.safeQuery(
+      `SELECT
+         COALESCE(NULLIF(gq.topic, ''), 'Uncategorised') AS topic,
+         COALESCE(gqa.school_id, 0) AS school_id,
+         COALESCE(sc.name, CONCAT('School ', COALESCE(gqa.school_id, 0))) AS school_name,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN game_question gq ON gq.id = gqa.question_id
+       LEFT JOIN schools sc ON sc.id = gqa.school_id
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       GROUP BY topic, school_id, school_name
+       ORDER BY topic ASC, attempts DESC, school_name ASC
+       LIMIT 1200`,
+      [subjectId, days],
+    );
+    const activeHomeworkRows = await this.safeQuery(
+      `SELECT gh.*
+       FROM game_homework gh
+       WHERE gh.subject_id = ?
+         AND gh.status IN ('scheduled','live')
+         AND (? = 0 OR gh.school_id IS NULL OR gh.school_id = ?)
+         AND (
+           gh.cadence IN ('daily','weekly')
+           OR gh.due_date IS NULL
+           OR gh.due_date >= CURDATE()
+         )
+       ORDER BY gh.status = 'live' DESC, COALESCE(gh.due_date, '9999-12-31') ASC, gh.weekly_day ASC
+       LIMIT 50`,
+      [subjectId, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
+    const activeHomeworkIds = activeHomeworkRows.map(row => Number(row.id) || 0).filter(Boolean);
+    const homeworkProgressRows = activeHomeworkIds.length ? await this.safeQuery(
+      `SELECT homework_id, student_id, period_key, answered_count, completed_at, last_answered_at
+       FROM game_homework_progress
+       WHERE subject_id = ?
+         AND homework_id IN (${activeHomeworkIds.map(() => '?').join(',')})`,
+      [subjectId, ...activeHomeworkIds],
+    ) : [];
     const normalize = row => {
       const attempts = Number(row.attempts) || 0;
       const correct = Number(row.correct) || 0;
@@ -1533,6 +1643,87 @@ class MySqlGameQuestionStore {
       ...normalize(row),
       ownSchool: scopeSchoolId ? Number(row.school_id) === Number(scopeSchoolId) : false,
     })).sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name));
+    const classComparisons = (classComparisonRows || []).map(row => ({
+      id: Number(row.class_id) || 0,
+      name: String(row.class_name || 'Class'),
+      yearGroup: String(row.year_group || ''),
+      activeStudents: Number(row.active_students) || 0,
+      ...normalize(row),
+    })).sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name));
+    const yearGroupComparisons = (yearComparisonRows || []).map(row => ({
+      id: String(row.year_group || 'No year group'),
+      name: String(row.year_group || 'No year group'),
+      activeStudents: Number(row.active_students) || 0,
+      ...normalize(row),
+    })).sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name));
+    const topicBreakdownMap = new Map();
+    const ensureTopicBreakdown = topic => {
+      const id = String(topic || 'Uncategorised');
+      if (!topicBreakdownMap.has(id)) topicBreakdownMap.set(id, { id, name: id, class: [], year: [], school: [] });
+      return topicBreakdownMap.get(id);
+    };
+    for (const row of topicClassRows || []) {
+      ensureTopicBreakdown(row.topic).class.push({
+        id: Number(row.class_id) || 0,
+        name: String(row.class_name || 'No class'),
+        ...normalize(row),
+      });
+    }
+    for (const row of topicYearRows || []) {
+      ensureTopicBreakdown(row.topic).year.push({
+        id: String(row.year_group || 'No year group'),
+        name: String(row.year_group || 'No year group'),
+        ...normalize(row),
+      });
+    }
+    for (const row of topicSchoolRows || []) {
+      ensureTopicBreakdown(row.topic).school.push({
+        id: Number(row.school_id) || 0,
+        name: String(row.school_name || 'Unknown school'),
+        ownSchool: scopeSchoolId ? Number(row.school_id) === Number(scopeSchoolId) : false,
+        ...normalize(row),
+      });
+    }
+    const topicBreakdowns = [...topicBreakdownMap.values()].map(row => ({
+      ...row,
+      class: row.class.slice(0, 8),
+      year: row.year.slice(0, 8),
+      school: row.school.slice(0, 10),
+    })).sort((a, b) => a.name.localeCompare(b.name));
+    const progressByStudentHomework = new Map();
+    for (const row of homeworkProgressRows || []) {
+      progressByStudentHomework.set(`${Number(row.student_id) || 0}:${Number(row.homework_id) || 0}:${String(row.period_key || '')}`, row);
+    }
+    const homeworkInScope = (activeHomeworkRows || []).filter(row => {
+      const homeworkClassId = Number(row.class_id) || 0;
+      if (scope === 'class' && classId) return !homeworkClassId || homeworkClassId === classId;
+      return !homeworkClassId;
+    });
+    const missingHomework = students.map(student => {
+      const requiredItems = homeworkInScope.filter(row => Number(student.id) && (!Number(row.class_id) || scope !== 'class' || Number(row.class_id) === classId));
+      const totals = requiredItems.reduce((acc, row) => {
+        const required = clampInt(row.question_count, 1, 100);
+        const progress = progressByStudentHomework.get(`${Number(student.id) || 0}:${Number(row.id) || 0}:${homeworkPeriodKey(row)}`) || {};
+        const answered = Math.min(required, clampInt(progress.answered_count, 0, required));
+        acc.required += required;
+        acc.answered += answered;
+        if (answered >= required || progress.completed_at) acc.completed += 1;
+        else acc.missing += 1;
+        acc.lastHomeworkAt = progress.last_answered_at || acc.lastHomeworkAt;
+        return acc;
+      }, { required: 0, answered: 0, completed: 0, missing: 0, lastHomeworkAt: null });
+      return {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        lastAttemptAt: student.lastAttemptAt,
+        accuracy: student.accuracy,
+        attempts: student.attempts,
+        ...totals,
+        completion: totals.required ? Math.round((totals.answered / totals.required) * 100) : 0,
+      };
+    }).filter(row => row.required > 0 && row.answered < row.required)
+      .sort((a, b) => a.completion - b.completion || a.attempts - b.attempts || a.name.localeCompare(b.name));
     const yearGroups = await this.yearGroupRows(account);
     const totals = students.reduce((acc, row) => {
       acc.attempts += row.attempts;
@@ -1557,6 +1748,10 @@ class MySqlGameQuestionStore {
       studentTopicSummaries,
       attempts,
       schoolComparisons,
+      classComparisons,
+      yearGroupComparisons,
+      topicBreakdowns,
+      missingHomework,
       yearGroups,
     };
   }
