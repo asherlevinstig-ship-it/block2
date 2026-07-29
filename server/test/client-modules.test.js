@@ -729,6 +729,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /Add four unique answer choices/);
   const serverAuthSource = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
   const sitegroundMailBridge = fs.readFileSync(path.join(__dirname, '..', '..', 'deploy', 'siteground', 'blockcraft_curriculum_mail.php'), 'utf8');
+  const sitegroundMailCron = fs.readFileSync(path.join(__dirname, '..', '..', 'deploy', 'siteground', 'blockcraft_curriculum_mail_cron.php'), 'utf8');
   assert.match(serverAuthSource, /require\('multer'\)/);
   assert.match(serverAuthSource, /CURRICULUM_MAIL_BRIDGE_URL/);
   assert.match(serverAuthSource, /DEFAULT_CURRICULUM_MAIL_BRIDGE_URL/);
@@ -740,8 +741,16 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(sitegroundMailBridge, /BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_DASHBOARD_BRIDGE/);
   assert.match(sitegroundMailBridge, /bcm_rate_limit\('global', 30, 3600\)/);
   assert.match(sitegroundMailBridge, /function bcm_log_event/);
-  assert.match(sitegroundMailBridge, /\$ok = mail\(\$to, \$subject, \$html, implode\("\\r\\n", \$headers\)\)/);
-  assert.match(sitegroundMailBridge, /senderMode/);
+  assert.match(sitegroundMailBridge, /function bcm_enqueue_mail/);
+  assert.match(sitegroundMailBridge, /function bcm_trigger_mail_worker/);
+  assert.match(sitegroundMailBridge, /blockcraft_curriculum_mail_cron\.php/);
+  assert.match(sitegroundMailBridge, /mail_queued/);
+  assert.match(sitegroundMailBridge, /siteground_cron_queue/);
+  assert.match(sitegroundMailBridge, /workerTriggered/);
+  assert.match(sitegroundMailCron, /PHP_SAPI !== 'cli'/);
+  assert.match(sitegroundMailCron, /blockcraft_curriculum_mail_queue\.jsonl/);
+  assert.match(sitegroundMailCron, /mail\(\$to, \$subject, \$html, implode\("\\r\\n", array_map\('strval', \$headers\)\)\)/);
+  assert.match(sitegroundMailCron, /mail_sent/);
   assert.match(sitegroundMailBridge, /\$to = bcm_clean\(defined\('BLOCKCRAFT_CURRICULUM_NOTIFY_TO'\)/);
   assert.doesNotMatch(serverAuthSource, /SMTP_HOST/);
   assert.doesNotMatch(serverAuthSource, /require\('resend'\)/);

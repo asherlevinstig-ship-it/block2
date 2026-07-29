@@ -26,6 +26,27 @@ function bcm_log_event(array $event): void {
     @chmod($file, 0600);
 }
 
+function bcm_enqueue_mail(array $message): string {
+    $id = bin2hex(random_bytes(8));
+    $message['id'] = $id;
+    $message['queuedAt'] = gmdate('c');
+    $message['attempts'] = 0;
+    $file = __DIR__ . '/blockcraft_curriculum_mail_queue.jsonl';
+    file_put_contents($file, json_encode($message, JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND | LOCK_EX);
+    @chmod($file, 0600);
+    return $id;
+}
+
+function bcm_trigger_mail_worker(): bool {
+    if (!function_exists('exec')) return false;
+    $php = defined('BLOCKCRAFT_CURRICULUM_PHP_BINARY') ? (string)BLOCKCRAFT_CURRICULUM_PHP_BINARY : '/usr/local/bin/php';
+    $worker = __DIR__ . '/blockcraft_curriculum_mail_cron.php';
+    if (!is_file($worker)) return false;
+    $cmd = escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' >/dev/null 2>&1 &';
+    @exec($cmd);
+    return true;
+}
+
 function bcm_rate_limit(string $bucket, int $limit, int $windowSeconds): bool {
     $key = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $bucket);
     $file = sys_get_temp_dir() . '/blockcraft_curriculum_mail_' . $key . '.json';
@@ -163,10 +184,21 @@ $headers = [
 if ($replyTo !== '') $headers[] = 'Reply-To: ' . $replyTo;
 if ($teacherEmail !== '' && filter_var($teacherEmail, FILTER_VALIDATE_EMAIL)) $headers[] = 'X-Blockcraft-Teacher: ' . $teacherEmail;
 
-$ok = mail($to, $subject, $html, implode("\r\n", $headers));
+$queueId = bcm_enqueue_mail([
+    'to' => $to,
+    'subject' => $subject,
+    'html' => $html,
+    'headers' => $headers,
+    'teacherEmail' => $teacherEmail,
+    'subjectName' => $subjectName,
+    'title' => $title,
+    'authMode' => $authMode,
+]);
+$workerTriggered = bcm_trigger_mail_worker();
 bcm_log_event([
-    'event' => 'mail_attempt',
-    'ok' => (bool)$ok,
+    'event' => 'mail_queued',
+    'ok' => true,
+    'queueId' => $queueId,
     'authMode' => $authMode,
     'to' => $to,
     'from' => $from,
@@ -174,10 +206,8 @@ bcm_log_event([
     'subjectName' => $subjectName,
     'title' => $title,
     'remoteIp' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
-    'senderMode' => 'staffflow_native_mail',
+    'senderMode' => 'siteground_cron_queue',
+    'workerTriggered' => $workerTriggered,
 ]);
-if (!$ok) {
-    bcm_json(502, ['ok' => false, 'error' => 'mail() returned false']);
-}
 
-bcm_json(200, ['ok' => true, 'sent' => true, 'to' => $to]);
+bcm_json(200, ['ok' => true, 'queued' => true, 'queueId' => $queueId, 'workerTriggered' => $workerTriggered, 'to' => $to]);
