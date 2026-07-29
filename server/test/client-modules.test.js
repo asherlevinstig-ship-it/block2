@@ -742,7 +742,12 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(sitegroundMailBridge, /bcm_rate_limit\('global', 30, 3600\)/);
   assert.match(sitegroundMailBridge, /function bcm_log_event/);
   assert.match(sitegroundMailBridge, /function bcm_enqueue_mail/);
+  assert.match(sitegroundMailBridge, /function bcm_enqueue_staffflow_mail/);
+  assert.match(sitegroundMailBridge, /staffflow_email_queue/);
+  assert.match(sitegroundMailBridge, /staffflow_mysql_queue/);
+  assert.match(sitegroundMailBridge, /cron_staffflow_daily_email\.php/);
   assert.match(sitegroundMailBridge, /function bcm_trigger_mail_worker/);
+  assert.match(sitegroundMailBridge, /function bcm_trigger_staffflow_worker/);
   assert.match(sitegroundMailBridge, /blockcraft_curriculum_mail_cron\.php/);
   assert.match(sitegroundMailBridge, /mail_queued/);
   assert.match(sitegroundMailBridge, /siteground_cron_queue/);

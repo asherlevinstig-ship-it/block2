@@ -2,6 +2,12 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/blockcraft_curriculum_mail_config.php';
+if (is_file(__DIR__ . '/staffflow_email_config.php')) {
+    require_once __DIR__ . '/staffflow_email_config.php';
+}
+if (is_file(__DIR__ . '/shared_teacher_auth.php')) {
+    require_once __DIR__ . '/shared_teacher_auth.php';
+}
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -37,12 +43,50 @@ function bcm_enqueue_mail(array $message): string {
     return $id;
 }
 
+function bcm_table_exists(PDO $pdo, string $table): bool {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
+    $stmt->execute([$table]);
+    return (int)$stmt->fetchColumn() > 0;
+}
+
+function bcm_enqueue_staffflow_mail(PDO $pdo, array $message): ?int {
+    if (!bcm_table_exists($pdo, 'staffflow_email_queue')) return null;
+    $teacherId = defined('BLOCKCRAFT_CURRICULUM_STAFFFLOW_TEACHER_ID') ? (int)BLOCKCRAFT_CURRICULUM_STAFFFLOW_TEACHER_ID : 1;
+    $unique = 'blockcraft_curriculum:' . hash('sha256', (string)($message['teacherEmail'] ?? '') . '|' . (string)($message['title'] ?? '') . '|' . gmdate('YmdHis'));
+    $stmt = $pdo->prepare(
+        "INSERT INTO staffflow_email_queue
+         (teacher_id, person_id, recipient_email, recipient_name, subject, body_text, body_html, reason, unique_key, scheduled_for)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, 'blockcraft_curriculum', ?, NOW())"
+    );
+    $stmt->execute([
+        $teacherId,
+        (string)$message['to'],
+        (string)($message['teacherName'] ?? 'Blockcraft'),
+        (string)$message['subject'],
+        (string)$message['text'],
+        (string)$message['html'],
+        $unique,
+    ]);
+    return (int)$pdo->lastInsertId();
+}
+
 function bcm_trigger_mail_worker(): bool {
     if (!function_exists('exec')) return false;
     $php = defined('BLOCKCRAFT_CURRICULUM_PHP_BINARY') ? (string)BLOCKCRAFT_CURRICULUM_PHP_BINARY : '/usr/local/bin/php';
     $worker = __DIR__ . '/blockcraft_curriculum_mail_cron.php';
     if (!is_file($worker)) return false;
     $cmd = escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' >/dev/null 2>&1 &';
+    @exec($cmd);
+    return true;
+}
+
+function bcm_trigger_staffflow_worker(): bool {
+    if (!function_exists('exec')) return false;
+    if (!defined('STAFFFLOW_CRON_SECRET')) return false;
+    $php = defined('BLOCKCRAFT_CURRICULUM_PHP_BINARY') ? (string)BLOCKCRAFT_CURRICULUM_PHP_BINARY : '/usr/local/bin/php';
+    $worker = __DIR__ . '/cron_staffflow_daily_email.php';
+    if (!is_file($worker)) return false;
+    $cmd = escapeshellcmd($php) . ' ' . escapeshellarg($worker) . ' ' . escapeshellarg((string)STAFFFLOW_CRON_SECRET) . ' >/dev/null 2>&1 &';
     @exec($cmd);
     return true;
 }
@@ -184,21 +228,41 @@ $headers = [
 if ($replyTo !== '') $headers[] = 'Reply-To: ' . $replyTo;
 if ($teacherEmail !== '' && filter_var($teacherEmail, FILTER_VALIDATE_EMAIL)) $headers[] = 'X-Blockcraft-Teacher: ' . $teacherEmail;
 
-$queueId = bcm_enqueue_mail([
+$message = [
     'to' => $to,
     'subject' => $subject,
+    'text' => $text,
     'html' => $html,
     'headers' => $headers,
+    'teacherName' => $teacherName,
     'teacherEmail' => $teacherEmail,
     'subjectName' => $subjectName,
     'title' => $title,
     'authMode' => $authMode,
-]);
-$workerTriggered = bcm_trigger_mail_worker();
+];
+$staffflowQueueId = null;
+if (isset($pdo) && $pdo instanceof PDO) {
+    try {
+        $staffflowQueueId = bcm_enqueue_staffflow_mail($pdo, $message);
+    } catch (Throwable $e) {
+        bcm_log_event([
+            'event' => 'staffflow_queue_failed',
+            'ok' => false,
+            'error' => $e->getMessage(),
+            'to' => $to,
+            'teacherEmail' => $teacherEmail,
+            'title' => $title,
+        ]);
+    }
+}
+$queueId = $staffflowQueueId !== null ? (string)$staffflowQueueId : bcm_enqueue_mail($message);
+$workerTriggered = $staffflowQueueId !== null ? bcm_trigger_staffflow_worker() : bcm_trigger_mail_worker();
+$senderMode = $staffflowQueueId !== null ? 'staffflow_mysql_queue' : 'siteground_cron_queue';
 bcm_log_event([
     'event' => 'mail_queued',
     'ok' => true,
     'queueId' => $queueId,
+    'staffflowQueueId' => $staffflowQueueId,
     'authMode' => $authMode,
     'to' => $to,
     'from' => $from,
@@ -206,8 +270,8 @@ bcm_log_event([
     'subjectName' => $subjectName,
     'title' => $title,
     'remoteIp' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
-    'senderMode' => 'siteground_cron_queue',
+    'senderMode' => $senderMode,
     'workerTriggered' => $workerTriggered,
 ]);
 
-bcm_json(200, ['ok' => true, 'queued' => true, 'queueId' => $queueId, 'workerTriggered' => $workerTriggered, 'to' => $to]);
+bcm_json(200, ['ok' => true, 'queued' => true, 'queueId' => $queueId, 'staffflowQueueId' => $staffflowQueueId, 'workerTriggered' => $workerTriggered, 'to' => $to]);
