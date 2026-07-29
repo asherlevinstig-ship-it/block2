@@ -44,7 +44,7 @@ function createOpeningReady() {
     audioStarted = true;
     try {
       if (reset) audio.currentTime = 0;
-      audio.volume = 0.9;
+      audio.volume = 0.45;
     } catch (_) {}
     const attempt = audio.play();
     if (attempt && typeof attempt.catch === 'function') {

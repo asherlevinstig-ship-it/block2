@@ -3188,6 +3188,7 @@ test('opening cinematic plays bundled videos before auto-resume', () => {
   assert.ok(index.indexOf('/js/opening-cinematic.mjs') > -1 && index.indexOf('/js/opening-cinematic.mjs') < index.indexOf('/js/boot.mjs'));
   assert.match(opening, /const sources = \['\/assets\/intro\/vid1\.mp4', '\/assets\/intro\/vid2\.mp4'\]/);
   assert.match(opening, /globalThis\.BlockcraftOpeningReady = createOpeningReady\(\)/);
+  assert.match(opening, /audio\.volume = 0\.45;/);
   assert.match(opening, /if \(audio\) audio\.loop = true;/);
   assert.match(opening, /globalThis\.BlockcraftOpeningAudio = \{/);
   assert.match(opening, /startAmbient\(\) \{[\s\S]*return startSoundtrack\(false\);/);
