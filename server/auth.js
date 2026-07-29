@@ -381,7 +381,7 @@ class AuthService {
   async sendCurriculumNotification(account, submission) {
     const to = String(this.env.CURRICULUM_NOTIFY_TO || 'asherlevin85@gmail.com').trim();
     const bridgeUrl = String(this.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_CURRICULUM_MAIL_BRIDGE_URL).trim();
-    const bridgeSecret = String(this.env.CURRICULUM_MAIL_BRIDGE_SECRET || '').trim();
+    const bridgeSecret = String(this.env.CURRICULUM_MAIL_BRIDGE_SECRET || this.env.BLOCKCRAFT_CURRICULUM_MAIL_SECRET || '').trim();
     if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
     if (!bridgeUrl) return { sent: false, to, reason: 'mail_bridge_url_not_configured' };
     if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };

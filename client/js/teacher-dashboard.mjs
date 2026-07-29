@@ -515,7 +515,9 @@ createApp({
               : reason === 'fetch_not_available'
                 ? 'The live server cannot make outbound mail bridge requests.'
                 : reason.startsWith('mail_bridge_failed')
-                  ? 'The SiteGround mail bridge rejected the notification.'
+                  ? reason.includes('Invalid mail bridge secret')
+                    ? 'Mail bridge secret does not match the SiteGround config.'
+                    : 'The SiteGround mail bridge rejected the notification.'
                   : 'Email notification was not sent.';
           setNotice('Curriculum request submitted. ' + detail);
         }

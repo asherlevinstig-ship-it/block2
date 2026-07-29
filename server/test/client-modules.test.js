@@ -715,6 +715,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /\/auth\/teacher\/homework/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/curriculum-requests/);
   assert.match(teacherDashboardSource, /mail_bridge_secret_not_configured/);
+  assert.match(teacherDashboardSource, /Mail bridge secret does not match the SiteGround config/);
   assert.match(teacherDashboardSource, /The SiteGround mail bridge rejected the notification/);
   assert.match(teacherDashboardSource, /Questions to answer/);
   assert.match(teacherDashboardSource, /Daily until cancelled/);
@@ -730,6 +731,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(serverAuthSource, /require\('multer'\)/);
   assert.match(serverAuthSource, /CURRICULUM_MAIL_BRIDGE_URL/);
   assert.match(serverAuthSource, /DEFAULT_CURRICULUM_MAIL_BRIDGE_URL/);
+  assert.match(serverAuthSource, /BLOCKCRAFT_CURRICULUM_MAIL_SECRET/);
   assert.match(serverAuthSource, /mail_bridge_secret_not_configured/);
   assert.match(serverAuthSource, /X-Blockcraft-Mail-Secret/);
   assert.doesNotMatch(serverAuthSource, /SMTP_HOST/);
