@@ -323,7 +323,43 @@ class MySqlGameQuestionStore {
         `SELECT DISTINCT s.id, s.name, s.code, s.school_id
          FROM subjects s
          JOIN class_subjects cs ON cs.subject_id = s.id
+         JOIN class_teachers ct ON ct.class_id = cs.class_id AND ct.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN class_subjects cs ON cs.subject_id = s.id
+         JOIN teacher_classes tc ON tc.class_id = cs.class_id AND tc.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN class_subjects cs ON cs.subject_id = s.id
          JOIN classes c ON c.id = cs.class_id AND c.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN classes c ON c.subject_id = s.id
+         JOIN class_teachers ct ON ct.class_id = c.id AND ct.teacher_id = ?
+         WHERE ${activeSchoolWhere}
+         ORDER BY s.name ASC`,
+        [teacherId, schoolId, schoolId, ...subjectParam],
+      ],
+      [
+        `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+         FROM subjects s
+         JOIN classes c ON c.subject_id = s.id
+         JOIN teacher_classes tc ON tc.class_id = c.id AND tc.teacher_id = ?
          WHERE ${activeSchoolWhere}
          ORDER BY s.name ASC`,
         [teacherId, schoolId, schoolId, ...subjectParam],

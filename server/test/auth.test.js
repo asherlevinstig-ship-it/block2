@@ -731,6 +731,30 @@ test('MySQL game question store discovers subjects and classes through class tea
   assert.deepEqual(classes, [{ id: 3, name: '8A', joinCode: 'JOIN8A', active: true }]);
 });
 
+test('MySQL game question store discovers multiple subjects through class_teachers ownership', async () => {
+  const queries = [];
+  const pool = {
+    async execute(sql, params = []) {
+      queries.push({ sql, params });
+      if (/JOIN class_teachers ct ON ct\.class_id = cs\.class_id AND ct\.teacher_id = \?/i.test(sql)) {
+        assert.equal(params[0], 7);
+        return [[
+          { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
+          { id: 6, name: 'Mathematics', code: 'MATH', school_id: 12 },
+        ]];
+      }
+      return [[]];
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const subjects = await store.listSubjects({ id: 'teacher_7', accountType: 'teacher', role: 'teacher', schoolId: '12' });
+  assert.deepEqual(subjects, [
+    { id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 },
+    { id: 6, name: 'Mathematics', code: 'MATH', schoolId: 12 },
+  ]);
+  assert.ok(queries.some(q => /class_teachers/i.test(q.sql)));
+});
+
 test('MySQL game question store lists student subjects from assigned classes', async () => {
   const queries = [];
   const pool = {
