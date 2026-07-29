@@ -2153,7 +2153,7 @@ function tick(now){
     const mouseLookSensitivity=combatState.mouseLookSensitivity||.00215;
     const mouseYaw=-(mouseLook.x||0)*mouseLookSensitivity,mousePitch=-(mouseLook.y||0)*mouseLookSensitivity;
     if(gameplayMoveAllowed&&!cutscene && (lookX||lookY||mouseYaw||mousePitch)){
-      const lookSpeed=(keys['ShiftLeft']||keys['ShiftRight'])?3.1:1.85;
+      const lookSpeed=(keys['ShiftLeft']||keys['ShiftRight'])?4.4:2.85;
       const yawDelta=lookX*lookSpeed*dt+mouseYaw;
       if(onboardingActive&&onboardingArrived&&onboardingKind()==='arrows'&&(lookX||mouseYaw)){
         onboardingArrowTurn+=Math.abs(yawDelta);

@@ -1600,6 +1600,7 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(frame,/const mouseLook=combatApi\.consumeMouseLookDelta\?combatApi\.consumeMouseLookDelta\(\):\{x:0,y:0\};/);
   assert.match(frame,/const mouseLookSensitivity=combatState\.mouseLookSensitivity\|\|\.00215;/);
   assert.match(frame,/const mouseYaw=-\(mouseLook\.x\|\|0\)\*mouseLookSensitivity,mousePitch=-\(mouseLook\.y\|\|0\)\*mouseLookSensitivity;/);
+  assert.match(frame,/const lookSpeed=\(keys\['ShiftLeft'\]\|\|keys\['ShiftRight'\]\)\?4\.4:2\.85;/);
   assert.match(frame,/player\.yaw \+= yawDelta;/);
   assert.match(frame,/let f=gameplayMoveAllowed\?\(\(keys\['KeyW'\]\?1:0\)-\(keys\['KeyS'\]\?1:0\)\):0;/);
 });
