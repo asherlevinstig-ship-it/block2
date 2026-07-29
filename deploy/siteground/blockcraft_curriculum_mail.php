@@ -19,6 +19,13 @@ function bcm_html(string $value): string {
     return nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8'));
 }
 
+function bcm_log_event(array $event): void {
+    $event['at'] = gmdate('c');
+    $file = __DIR__ . '/blockcraft_curriculum_mail.log';
+    file_put_contents($file, json_encode($event, JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND | LOCK_EX);
+    @chmod($file, 0600);
+}
+
 function bcm_rate_limit(string $bucket, int $limit, int $windowSeconds): bool {
     $key = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $bucket);
     $file = sys_get_temp_dir() . '/blockcraft_curriculum_mail_' . $key . '.json';
@@ -50,6 +57,7 @@ $expectedSecret = defined('BLOCKCRAFT_CURRICULUM_MAIL_SECRET') ? (string)BLOCKCR
 $givenSecret = (string)($_SERVER['HTTP_X_BLOCKCRAFT_MAIL_SECRET'] ?? '');
 $givenHash = $givenSecret !== '' ? hash('sha256', $givenSecret) : '';
 $secretOk = $expectedSecret !== '' && hash_equals($expectedSecret, $givenSecret);
+$authMode = $secretOk ? 'plain_secret' : '';
 $hashFile = __DIR__ . '/blockcraft_curriculum_mail_secret_hash.php';
 $expectedHash = defined('BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256') ? (string)BLOCKCRAFT_CURRICULUM_MAIL_SECRET_SHA256 : '';
 if ($expectedHash === '' && is_readable($hashFile)) {
@@ -58,6 +66,7 @@ if ($expectedHash === '' && is_readable($hashFile)) {
 }
 if (!$secretOk && $expectedHash !== '' && $givenHash !== '' && hash_equals($expectedHash, $givenHash)) {
     $secretOk = true;
+    $authMode = 'secret_hash';
 }
 if (!$secretOk && defined('BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION') && BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION) {
     $adoptEmail = defined('BLOCKCRAFT_CURRICULUM_SECRET_ADOPT_TEACHER_EMAIL') ? strtolower((string)BLOCKCRAFT_CURRICULUM_SECRET_ADOPT_TEACHER_EMAIL) : 'asherlevin85@gmail.com';
@@ -68,6 +77,7 @@ if (!$secretOk && defined('BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION') &&
         if (file_put_contents($hashFile, $hashPhp, LOCK_EX) !== false) {
             @chmod($hashFile, 0600);
             $secretOk = true;
+            $authMode = 'adopted_hash';
         }
     }
 }
@@ -79,9 +89,16 @@ if (!$secretOk && defined('BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_DASHBOARD_BRIDGE') &
         && bcm_rate_limit('ip_' . $remoteIp, 8, 3600)
         && bcm_rate_limit('global', 30, 3600)) {
         $secretOk = true;
+        $authMode = 'dashboard_bridge';
     }
 }
 if (!$secretOk) {
+    bcm_log_event([
+        'event' => 'reject',
+        'reason' => 'invalid_secret',
+        'remoteIp' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+        'teacherEmail' => strtolower(bcm_clean($payload['teacherEmail'] ?? '', 255)),
+    ]);
     bcm_json(403, ['ok' => false, 'error' => 'Invalid mail bridge secret']);
 }
 
@@ -146,7 +163,22 @@ $headers = [
 if ($replyTo !== '') $headers[] = 'Reply-To: ' . $replyTo;
 if ($teacherEmail !== '' && filter_var($teacherEmail, FILTER_VALIDATE_EMAIL)) $headers[] = 'X-Blockcraft-Teacher: ' . $teacherEmail;
 
-$ok = mail($to, $subject, $html, implode("\r\n", $headers));
+$extraParams = filter_var($from, FILTER_VALIDATE_EMAIL) ? '-f' . $from : '';
+$ok = $extraParams !== ''
+    ? mail($to, $subject, $html, implode("\r\n", $headers), $extraParams)
+    : mail($to, $subject, $html, implode("\r\n", $headers));
+bcm_log_event([
+    'event' => 'mail_attempt',
+    'ok' => (bool)$ok,
+    'authMode' => $authMode,
+    'to' => $to,
+    'from' => $from,
+    'teacherEmail' => $teacherEmail,
+    'subjectName' => $subjectName,
+    'title' => $title,
+    'remoteIp' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+    'usedEnvelopeSender' => $extraParams !== '',
+]);
 if (!$ok) {
     bcm_json(502, ['ok' => false, 'error' => 'mail() returned false']);
 }
