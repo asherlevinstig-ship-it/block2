@@ -2,6 +2,8 @@ export function createAuthController({ user, password, playerName, status, play,
   const state = { checked: false, account: null, gameProfile: null, busy: false };
   const cleanHunterName = value => String(value || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
   const hunterSetup = typeof document === 'undefined' ? null : document.getElementById('huntersetup');
+  const passwordWrap = password && password.closest ? password.closest('.password-wrap') : null;
+  const forgotPassword = typeof document === 'undefined' ? null : document.getElementById('forgotpass');
   const appearanceSystem = typeof globalThis === 'undefined' ? null : globalThis.BlockcraftAppearanceSystem;
   const sanitizeAppearance = value => appearanceSystem && appearanceSystem.sanitizeAppearance
     ? appearanceSystem.sanitizeAppearance(value)
@@ -247,6 +249,8 @@ export function createAuthController({ user, password, playerName, status, play,
     if (typeof document !== 'undefined' && document.body) document.body.classList.toggle('character-setup-open', signed && !hasHunterName() && !editingMirror);
     user.classList.toggle('hidden', signed);
     password.classList.toggle('hidden', signed);
+    if (passwordWrap) passwordWrap.classList.toggle('hidden', signed);
+    if (forgotPassword) forgotPassword.classList.toggle('hidden', signed);
     if (hunterSetup) hunterSetup.classList.toggle('hidden', !signed || hasHunterName());
     register.classList.add('hidden');
     register.hidden = true;
