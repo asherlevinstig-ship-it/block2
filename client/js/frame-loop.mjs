@@ -11,6 +11,7 @@ const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
+const setRecallRechargeNudge=hudApi.setRecallRechargeNudge||(()=>{});
 const NET=networkingState.connection,NETWORK=networkingState.controller,ONBOARD=networkingState.onboarding;
 const netTick=networkingApi.tick;
 /* Blockcraft frame-loop ES module. Runtime scheduling, simulation pumping, rendering, and diagnostics. */
@@ -377,14 +378,15 @@ function firstHandsQuestActive(){
   return !!(quest&&quest.giver==='Mara Vale'&&quest.title==='First Hands'&&!questDone());
 }
 function maybePromptRecallRecharge(now){
-  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene)return;
-  if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active)return;
-  if(now<nextRecallRechargeHintAt)return;
+  if(dim!=='overworld'||!NET.on||!NET.room||!locked||cutscene){setRecallRechargeNudge(false);return;}
+  if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.active){setRecallRechargeNudge(false);return;}
   const manaMax=Math.max(1,maxMp()),staminaMax=Math.max(1,maxSp());
   const manaLow=mp/manaMax<=.28,staminaLow=sp/staminaMax<=.24;
-  if(!manaLow&&!staminaLow)return;
-  nextRecallRechargeHintAt=now+10000;
+  if(!manaLow&&!staminaLow){setRecallRechargeNudge(false);return;}
   const what=manaLow&&staminaLow?'mana and stamina':manaLow?'mana':'stamina';
+  setRecallRechargeNudge(true,what);
+  if(now<nextRecallRechargeHintAt)return;
+  nextRecallRechargeHintAt=now+10000;
   showName('LOW '+what.toUpperCase()+' - PRESS P');
   sysMsg('Low <b>'+what+'</b> — press <b>P</b> for a Recall recharge question.','minor');
 }

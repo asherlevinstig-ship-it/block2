@@ -7,6 +7,7 @@ const legacyHudBindings={
   fillSlotEl:{get:()=>fillSlotEl},
   refreshHUD:{get:()=>refreshHUD},
   refreshStatPointNudge:{get:()=>refreshStatPointNudge},
+  setRecallRechargeNudge:{get:()=>setRecallRechargeNudge},
   showName:{get:()=>showName},
   selectSlot:{get:()=>selectSlot},
 };
@@ -41,6 +42,16 @@ statPointNudgeEl.innerHTML='<span>C</span><b>0 stat points</b><small>Press C to 
 document.body.appendChild(statPointNudgeEl);
 statPointNudgeEl.onclick=()=>{
   if(typeof globalThis.openStat==='function')globalThis.openStat();
+};
+const recallRechargeNudgeEl=document.createElement('button');
+recallRechargeNudgeEl.id='recallrechargenudge';
+recallRechargeNudgeEl.type='button';
+recallRechargeNudgeEl.className='hidden';
+recallRechargeNudgeEl.setAttribute('aria-label','Start Recall Cast to recharge mana and stamina');
+recallRechargeNudgeEl.innerHTML='<span>P</span><b>Low resources</b><small>Press P to recharge</small>';
+document.body.appendChild(recallRechargeNudgeEl);
+recallRechargeNudgeEl.onclick=()=>{
+  if(globalThis.BlockcraftRecall&&typeof globalThis.BlockcraftRecall.start==='function')globalThis.BlockcraftRecall.start();
 };
 const utilityHudSlots=[];
 for(let i=0;i<4;i++){
@@ -98,6 +109,12 @@ function refreshStatPointNudge(){
   statPointNudgeEl.classList.toggle('hidden',!show);
   statPointNudgeEl.innerHTML='<span>C</span><b>'+points+' stat point'+(points===1?'':'s')+'</b><small>Press C to upgrade</small>';
   statPointNudgeEl.title=show?points+' unspent stat point'+(points===1?'':'s')+'. Press C to open Character.':'No unspent stat points';
+}
+function setRecallRechargeNudge(show=false,what='resources'){
+  recallRechargeNudgeEl.classList.toggle('hidden',!show);
+  const label=String(what||'resources');
+  recallRechargeNudgeEl.innerHTML='<span>P</span><b>Low '+escHud(label)+'</b><small>Press P for Recall Cast</small>';
+  recallRechargeNudgeEl.title=show?'Low '+label+'. Press P to answer a Recall question and recharge mana/stamina.':'Resources are healthy';
 }
 function itemTooltipText(stack){
   if(!stack || !ITEMS[stack.id]) return '';
@@ -242,7 +259,7 @@ function selectSlot(i){
 
 
 gameContext.registerState('hud',Object.freeze({slots:hudSlots,utilitySlots:utilityHudSlots,get selectedSlot(){return combatState.selectedSlot;}}));
-gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD,refreshStatPointNudge}));
+gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD,refreshStatPointNudge,setRecallRechargeNudge}));
 export const state=gameContext.requireState('hud');
 export const api=gameContext.requireModule('hud');
 export {combatApi,combatState};

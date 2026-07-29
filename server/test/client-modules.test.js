@@ -1546,6 +1546,8 @@ test('low mana or stamina prompts Recall recharge without interrupting active qu
   assert.match(frame,/BlockcraftRecall&&globalThis\.BlockcraftRecall\.active/);
   assert.match(frame,/mp\/manaMax<=\.28/);
   assert.match(frame,/sp\/staminaMax<=\.24/);
+  assert.match(frame,/setRecallRechargeNudge\(true,what\)/);
+  assert.match(frame,/setRecallRechargeNudge\(false\)/);
   assert.match(frame,/nextRecallRechargeHintAt=now\+10000/);
   assert.match(frame,/showName\('LOW '\+what\.toUpperCase\(\)\+' - PRESS P'\)/);
   assert.match(frame,/press <b>P<\/b> for a Recall recharge question/);
@@ -1686,7 +1688,9 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#utilitybar\{left:50%;right:auto;bottom:172px;transform:translateX\(-50%\)/);
   assert.match(css,/#statpointnudge\{position:fixed;left:50%;bottom:146px/);
+  assert.match(css,/#recallrechargenudge\{position:fixed;left:50%;bottom:204px/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#statpointnudge\{bottom:218px/);
+  assert.match(css,/@media \(max-width:760px\)[\s\S]*#recallrechargenudge\{bottom:262px/);
 });
 
 test('guided overlays suppress optional side HUD panels instead of overlapping them',()=>{
@@ -1703,7 +1707,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/document\.body\.classList\.toggle\('tutorial-hud-active', tutorialVisible\);/);
   assert.match(combat,/document\.body\.classList\.toggle\('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen\);/);
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
-  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #statpointnudge,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
+  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #statpointnudge,body\.game-modal-open #recallrechargenudge,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
   assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
   assert.match(combat,/const minimal=offMainRoom\|\|\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
@@ -2806,6 +2810,9 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(hud,/else if\(typeof globalThis\.openUtilitiesUI==='function'\)globalThis\.openUtilitiesUI\(\);/);
   assert.match(hud,/refreshUtilityHUD\(\);\s*refreshStatPointNudge\(\);\s*updateViewModel\(\);/);
   assert.match(hud,/statPointNudgeEl\.id='statpointnudge'/);
+  assert.match(hud,/recallRechargeNudgeEl\.id='recallrechargenudge'/);
+  assert.match(hud,/function setRecallRechargeNudge\(show=false,what='resources'\)/);
+  assert.match(hud,/BlockcraftRecall&&typeof globalThis\.BlockcraftRecall\.start==='function'/);
   assert.match(hud,/currentStatPoints\(\)[\s\S]*worldState&&worldState\.stats/);
   assert.match(hud,/refreshStatPointNudge/);
   assert.match(combat,/const utilityBar=document\.getElementById\('utilitybar'\);/);
