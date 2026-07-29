@@ -740,7 +740,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(sitegroundMailBridge, /BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_DASHBOARD_BRIDGE/);
   assert.match(sitegroundMailBridge, /bcm_rate_limit\('global', 30, 3600\)/);
   assert.match(sitegroundMailBridge, /function bcm_log_event/);
-  assert.match(sitegroundMailBridge, /mail\(\$to, \$subject, \$html, implode\("\\r\\n", \$headers\), \$extraParams\)/);
+  assert.match(sitegroundMailBridge, /\$ok = mail\(\$to, \$subject, \$html, implode\("\\r\\n", \$headers\)\)/);
+  assert.match(sitegroundMailBridge, /senderMode/);
   assert.match(sitegroundMailBridge, /\$to = bcm_clean\(defined\('BLOCKCRAFT_CURRICULUM_NOTIFY_TO'\)/);
   assert.doesNotMatch(serverAuthSource, /SMTP_HOST/);
   assert.doesNotMatch(serverAuthSource, /require\('resend'\)/);

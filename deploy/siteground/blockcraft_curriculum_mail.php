@@ -163,10 +163,7 @@ $headers = [
 if ($replyTo !== '') $headers[] = 'Reply-To: ' . $replyTo;
 if ($teacherEmail !== '' && filter_var($teacherEmail, FILTER_VALIDATE_EMAIL)) $headers[] = 'X-Blockcraft-Teacher: ' . $teacherEmail;
 
-$extraParams = filter_var($from, FILTER_VALIDATE_EMAIL) ? '-f' . $from : '';
-$ok = $extraParams !== ''
-    ? mail($to, $subject, $html, implode("\r\n", $headers), $extraParams)
-    : mail($to, $subject, $html, implode("\r\n", $headers));
+$ok = mail($to, $subject, $html, implode("\r\n", $headers));
 bcm_log_event([
     'event' => 'mail_attempt',
     'ok' => (bool)$ok,
@@ -177,7 +174,7 @@ bcm_log_event([
     'subjectName' => $subjectName,
     'title' => $title,
     'remoteIp' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
-    'usedEnvelopeSender' => $extraParams !== '',
+    'senderMode' => 'staffflow_native_mail',
 ]);
 if (!$ok) {
     bcm_json(502, ['ok' => false, 'error' => 'mail() returned false']);
