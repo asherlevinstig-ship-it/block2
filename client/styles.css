@@ -545,7 +545,7 @@
   #qpanel.dialog{width:min(720px,calc(100vw - 36px));padding:0;overflow-x:hidden;overflow-y:auto;background:linear-gradient(165deg,rgba(7,12,20,.98),rgba(20,14,9,.98));border-color:rgba(255,210,74,.72);box-shadow:0 18px 60px rgba(0,0,0,.55),0 0 38px rgba(255,210,74,.22),inset 0 0 34px rgba(255,210,74,.06)}
   #qpanel.commerce{width:min(760px,calc(100vw - 36px))}
   #qwin.trade-offer-open #qpanel{border-color:#9ad26b;box-shadow:0 0 32px rgba(154,210,107,.42),0 0 80px rgba(79,216,255,.16),inset 0 0 34px rgba(154,210,107,.08)}
-  #qpanel.management{width:min(880px,calc(100vw - 36px));background:linear-gradient(160deg, rgba(17,27,42,.97), rgba(9,14,24,.97));border-color:#4fd8ff;box-shadow:0 0 28px rgba(79,216,255,.28), inset 0 0 34px rgba(79,216,255,.06);color:#d8e8ff}
+  #qpanel.management{width:min(1120px,calc(100vw - 36px));background:linear-gradient(160deg, rgba(17,27,42,.97), rgba(9,14,24,.97));border-color:#4fd8ff;box-shadow:0 0 28px rgba(79,216,255,.28), inset 0 0 34px rgba(79,216,255,.06);color:#d8e8ff}
   #qpanel.management h2{color:#4fd8ff;text-shadow:0 0 10px rgba(79,216,255,.75)}
   #qpanel.management .sub2{color:#8fb8d8}
   #qpanel.management .qbtn{background:#16345e;color:#9fd8ff;border-color:#4fd8ff}
@@ -731,33 +731,33 @@
   #qpanel.management .landtrustrow.trusted span{color:#dfffc8}
   #qpanel.management .landtrustrow .qbtn{margin:0;padding:4px 9px;font-size:9px}
   #qpanel.management .land-quicktrust>em{color:#7f93aa;font-size:10px}
-  #qpanel.management .utility-loadout-panel{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;align-items:stretch;margin:10px 0 10px;padding:10px 12px;border:1px solid rgba(191,133,255,.26);border-radius:6px;background:linear-gradient(135deg,rgba(78,49,110,.24),rgba(5,13,24,.74));box-shadow:inset 0 0 22px rgba(191,133,255,.06)}
-  #qpanel.management .utility-loadout-panel small{display:block;color:#bca7ff;font-size:10px;letter-spacing:1.5px;text-transform:uppercase}
-  #qpanel.management .utility-loadout-panel b{display:block;margin-top:3px;color:#f0e6ff;font-size:14px}
-  #qpanel.management .utility-loadout-panel em{display:block;margin-top:3px;color:#9fb8ca;font-size:11px;font-style:normal}
-  #qpanel.management .utility-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}
-  #qpanel.management .utility-slots span{min-width:0;padding:7px 8px;border:1px solid rgba(255,255,255,.13);border-radius:6px;background:rgba(255,255,255,.045)}
-  #qpanel.management .utility-slots span.filled{border-color:rgba(191,133,255,.32);background:rgba(191,133,255,.09)}
-  #qpanel.management .utility-slots i{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:5px;border:1px solid rgba(191,133,255,.42);border-radius:50%;color:#d7b5ff;font-style:normal;font-size:10px}
-  #qpanel.management .utility-slots b{display:inline;color:#eef8ff;font-size:11px;white-space:nowrap}
-  #qpanel.management .utility-slots em{margin-top:4px;color:#8fa7bd;font-size:9px;letter-spacing:1.1px}
-  #qpanel.management .utility-note{margin:8px 0 12px}
-  #qpanel.management .utility-section{margin:13px 0 5px;color:#8fd8ff;font-size:10px;letter-spacing:2px;text-transform:uppercase}
-  #qpanel.management .shoprow.utilityrow{grid-template-columns:38px minmax(0,1fr) auto;padding:10px 9px;border:1px solid rgba(79,216,255,.1);margin-bottom:6px}
-  #qpanel.management .shoprow.utilityrow.equipped{border-color:rgba(191,133,255,.3);background:linear-gradient(90deg,rgba(191,133,255,.12),rgba(79,216,255,.03))}
-  #qpanel.management .utility-icon{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid rgba(127,147,170,.35);color:#7f93aa;background:rgba(255,255,255,.04);font-size:15px}
-  #qpanel.management .utility-icon.owned{border-color:rgba(159,215,255,.35);color:#9fd7ff;background:rgba(79,216,255,.08)}
-  #qpanel.management .utility-icon.equipped{border-color:rgba(215,181,255,.55);color:#d7b5ff;background:rgba(191,133,255,.15)}
-  #qpanel.management .utility-copy{min-width:0}
-  #qpanel.management .utility-copy strong{color:#d8f2ff;margin-right:6px}
-  #qpanel.management .utility-copy small{display:block;margin-top:4px;color:#b9c9d8;line-height:1.35}
-  #qpanel.management .utility-copy .utility-use{color:#f0e6ff}
-  #qpanel.management .utility-copy .utility-unlock{color:#d9b66f}
-  #qpanel.management .utility-pill{display:inline-block;margin:0 4px 4px 0;padding:2px 6px;border:1px solid rgba(255,255,255,.14);border-radius:4px;color:#9fb8ca;font-size:9px;font-style:normal;letter-spacing:1px}
-  #qpanel.management .utility-pill.equipped{border-color:rgba(215,181,255,.38);color:#d7b5ff;background:rgba(191,133,255,.1)}
-  #qpanel.management .utility-pill.owned{border-color:rgba(154,210,107,.3);color:#bdf09f}
-  #qpanel.management .utility-pill.locked{border-color:rgba(217,182,111,.26);color:#d9b66f}
-  #qpanel.management .utility-pill.slot{border-color:rgba(79,216,255,.22);color:#9fd8ff}
+  #qpanel.management .utility-modal-shell{position:relative;margin:-10px -12px -8px;padding:22px 24px 16px;border:1px solid rgba(218,171,92,.55);border-radius:8px;background:radial-gradient(circle at 50% 0,rgba(114,84,153,.24),transparent 28%),linear-gradient(145deg,rgba(23,20,16,.96),rgba(7,11,16,.98));box-shadow:0 0 34px rgba(0,0,0,.55),inset 0 0 32px rgba(218,171,92,.055);color:#eadcc8}
+  #qpanel.management .utility-modal-shell:before,#qpanel.management .utility-modal-shell:after{content:"";position:absolute;left:18px;right:18px;height:1px;background:linear-gradient(90deg,transparent,rgba(218,171,92,.72),transparent);pointer-events:none}
+  #qpanel.management .utility-modal-shell:before{top:10px}#qpanel.management .utility-modal-shell:after{bottom:10px}
+  #qpanel.management .utility-close-x{position:absolute;right:15px;top:14px;width:38px;height:38px;border:1px solid rgba(218,171,92,.65);border-radius:50%;background:rgba(9,9,10,.78);color:#e9c78a;font:900 14px system-ui;cursor:pointer}
+  #qpanel.management .utility-title{text-align:center;margin:0 48px 18px}#qpanel.management .utility-title h2{margin:0;color:#e8c98d;text-shadow:0 0 14px rgba(188,132,255,.35);letter-spacing:8px;font-size:25px}#qpanel.management .utility-title p{margin:6px 0 0;color:#bda987;font-size:13px;letter-spacing:1px}
+  #qpanel.management .utility-loadout-panel.utility-loadout-hero{margin:0 0 14px;padding:10px;border:1px solid rgba(218,171,92,.42);border-radius:7px;background:linear-gradient(90deg,rgba(50,36,22,.48),rgba(10,12,16,.82));box-shadow:inset 0 0 18px rgba(218,171,92,.05)}
+  #qpanel.management .utility-slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+  #qpanel.management .utility-slots span{position:relative;display:grid;grid-template-columns:46px minmax(0,1fr);gap:3px 10px;align-items:center;min-width:0;min-height:72px;padding:11px 12px;border:1px solid rgba(122,100,75,.7);border-radius:4px;background:linear-gradient(135deg,rgba(21,21,22,.9),rgba(12,13,14,.92))}
+  #qpanel.management .utility-slots span.filled{border-color:rgba(188,132,255,.65);box-shadow:0 0 14px rgba(126,92,255,.16),inset 0 0 16px rgba(188,132,255,.08)}
+  #qpanel.management .utility-slots i{grid-row:1/3;display:grid;place-items:center;width:42px;height:42px;border:1px solid rgba(218,171,92,.52);border-radius:50%;color:#e6c384;background:radial-gradient(circle,rgba(80,55,32,.75),rgba(8,9,12,.9));font-style:normal;font-size:15px}
+  #qpanel.management .utility-slots b{display:block;min-width:0;color:#f5ead9;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #qpanel.management .utility-slots em{font-style:normal;color:#b7a17f;font-size:10px;letter-spacing:1.9px;text-transform:uppercase}
+  #qpanel.management .utility-modal-grid{display:grid;grid-template-columns:minmax(250px,.74fr) minmax(0,1.26fr);gap:14px;align-items:stretch}
+  #qpanel.management .utility-library-title{margin:4px 0 8px;color:#d8b46d;font-size:11px;letter-spacing:2.8px;text-transform:uppercase}
+  #qpanel.management .utility-library-list{display:grid;gap:8px;max-height:452px;overflow:auto;padding-right:4px}
+  #qpanel.management .utility-library-card{display:grid;grid-template-columns:54px minmax(0,1fr) 44px;gap:11px;align-items:center;width:100%;min-height:76px;padding:10px;border:1px solid rgba(111,91,67,.58);border-radius:5px;background:linear-gradient(135deg,rgba(18,20,22,.92),rgba(9,12,17,.94));color:#e7dccd;text-align:left;font-family:inherit;cursor:pointer}
+  #qpanel.management .utility-library-card.selected{border-color:rgba(188,132,255,.82);box-shadow:0 0 16px rgba(188,132,255,.23),inset 0 0 18px rgba(188,132,255,.09)}
+  #qpanel.management .utility-library-card.locked{opacity:.62}#qpanel.management .utility-library-card strong{display:block;color:#f4eadc;font-size:15px}#qpanel.management .utility-library-card em{display:block;margin-top:2px;color:#bca7ff;font-style:normal;font-size:10px;letter-spacing:1.3px}#qpanel.management .utility-library-card small{display:block;margin-top:4px;color:#b9ab99;font-size:11px;line-height:1.25}#qpanel.management .utility-library-card i{justify-self:end;color:#d1a663;font-style:normal;font-size:10px;letter-spacing:1px}
+  #qpanel.management .utility-medallion{display:grid;place-items:center;width:50px;height:50px;border:1px solid rgba(218,171,92,.5);border-radius:50%;color:#e7c37d;background:radial-gradient(circle,rgba(70,47,28,.8),rgba(8,9,12,.9));font-size:19px}#qpanel.management .utility-medallion.equipped{border-color:#bca7ff;color:#e7dcff;box-shadow:0 0 14px rgba(188,132,255,.32)}
+  #qpanel.management .utility-detail{display:grid;grid-template-columns:156px minmax(0,1fr);grid-template-rows:auto auto auto auto;gap:12px;padding:28px;border:1px solid rgba(111,91,67,.58);border-radius:5px;background:radial-gradient(circle at 82% 66%,rgba(126,92,255,.12),transparent 32%),linear-gradient(145deg,rgba(21,20,18,.88),rgba(8,10,14,.94));box-shadow:inset 0 0 24px rgba(218,171,92,.035)}
+  #qpanel.management .utility-detail-icon{display:grid;place-items:center;grid-row:1/3}#qpanel.management .utility-detail-icon b{display:grid;place-items:center;width:126px;height:126px;border:2px solid rgba(218,171,92,.65);border-radius:50%;color:#ead09a;background:radial-gradient(circle,rgba(87,61,39,.85),rgba(10,11,15,.96));box-shadow:0 0 28px rgba(188,132,255,.18);font-size:42px}
+  #qpanel.management .utility-detail-copy small{display:inline-block;margin-bottom:7px;padding:3px 8px;border:1px solid rgba(188,132,255,.5);border-radius:4px;color:#d7b5ff;font-size:10px;letter-spacing:1.6px}#qpanel.management .utility-detail-copy h3{margin:0 0 8px;color:#fff4e6;font-size:29px;letter-spacing:1px}#qpanel.management .utility-detail-copy p{margin:0;color:#e4d6c8;font-size:15px;line-height:1.35}
+  #qpanel.management .utility-detail-rule{grid-column:1/-1;padding-top:14px;border-top:1px solid rgba(218,171,92,.24);color:#d1c0ad;font-size:14px;font-style:italic;line-height:1.45}
+  #qpanel.management .utility-unlock-box{grid-column:1/-1;display:grid;grid-template-columns:68px minmax(0,1fr);gap:12px;align-items:center;padding:10px 12px;border:1px solid rgba(218,171,92,.18);background:rgba(218,171,92,.045)}#qpanel.management .utility-unlock-box b{color:#d8b46d;font-size:10px;letter-spacing:1.8px}#qpanel.management .utility-unlock-box span{color:#e8dbc7;font-size:12px;line-height:1.3}
+  #qpanel.management .utility-equip-button{grid-column:1/-1;justify-self:center;min-width:260px;padding:13px 22px;border:1px solid rgba(218,171,92,.72);border-radius:5px;background:linear-gradient(180deg,#55356a,#29192f);color:#f5e8d5;font-family:inherit;font-size:15px;letter-spacing:3px;cursor:pointer}#qpanel.management .utility-equip-button.equipped{background:linear-gradient(180deg,#5d3467,#241522)}#qpanel.management .utility-equip-button:disabled{opacity:.48;cursor:default}
+  #qpanel.management .utility-detail>em{grid-column:1/-1;text-align:center;color:#b9965d;font-size:12px;font-style:normal}
+  #qpanel.management .utility-footer{display:flex;justify-content:center;gap:34px;margin-top:12px;color:#b7a17f;font-size:12px}#qpanel.management .utility-footer kbd{padding:3px 7px;border:1px solid rgba(218,171,92,.52);border-radius:3px;color:#f3cc87;background:#111;font-family:inherit}
   .shoprow span{flex:1}
   .shoprow span,.shoprow small{min-width:0}
   .shoprow small.safety{display:block;margin-top:2px;color:#9fb7d0;line-height:1.25}
@@ -1436,10 +1436,14 @@
     .trade-builder{grid-template-columns:1fr}
     .trade-inventory-grid{grid-template-columns:repeat(6,48px)}
     .trade-gold-row{align-items:flex-start;flex-direction:column}
-    #qpanel.management .utility-loadout-panel{grid-template-columns:1fr}
-    #qpanel.management .utility-slots{grid-template-columns:repeat(2,minmax(0,1fr))}
-    #qpanel.management .shoprow.utilityrow{grid-template-columns:32px minmax(0,1fr)}
-    #qpanel.management .shoprow.utilityrow .qbtn{grid-column:2;justify-self:start}
+    #qpanel.management .utility-modal-shell{margin:-8px -8px;padding:18px 14px 14px}
+    #qpanel.management .utility-title{margin:0 42px 14px}#qpanel.management .utility-title h2{font-size:19px;letter-spacing:4px}
+    #qpanel.management .utility-slots{grid-template-columns:1fr}
+    #qpanel.management .utility-modal-grid{grid-template-columns:1fr}
+    #qpanel.management .utility-detail{grid-template-columns:1fr;padding:18px}
+    #qpanel.management .utility-detail-icon{grid-row:auto}#qpanel.management .utility-detail-icon b{width:92px;height:92px;font-size:31px}
+    #qpanel.management .utility-equip-button{min-width:0;width:100%}
+    #qpanel.management .utility-footer{align-items:flex-start;flex-direction:column;gap:7px}
     #qpanel.management .shoprow{grid-template-columns:32px minmax(0,1fr);align-items:start}
     #qpanel.management .shoprow .qbtn{grid-column:2;justify-self:start}
     #qpanel.management .shoprow.job-offer-card{grid-template-columns:minmax(0,1fr)}

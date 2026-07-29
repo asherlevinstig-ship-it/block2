@@ -6069,6 +6069,12 @@ function utilityLoadoutSlotHTML(id,label){
   if(id&&UTILITY_DEFS[id])return '<span class="filled"><i>'+escHTML(UTILITY_DEFS[id].icon)+'</i><b>'+escHTML(UTILITY_DEFS[id].name)+'</b><em>'+escHTML(label)+'</em></span>';
   return '<span class="empty"><i>-</i><b>Empty</b><em>'+escHTML(label)+'</em></span>';
 }
+let utilitySelectedId='';
+function utilityHotkeyText(id){
+  if(utilityLoadout.active===id)return 'I';
+  const idx=utilityLoadout.passive.indexOf(id);
+  return idx>=0?'Shift+'+(idx+1):'';
+}
 function utilityCardHTML(id,u,owned){
   const state=utilityStatusText(id),stateClass=utilityStatusClass(id),slot=utilitySlotLabel(id);
   return '<b class="utility-icon '+stateClass+'">'+escHTML(u.icon)+'</b>'+
@@ -6081,40 +6087,38 @@ function utilityCardHTML(id,u,owned){
       '<small class="utility-unlock">'+(owned?'Earned from: ':'Unlock: ')+escHTML(u.unlock)+'</small>'+
     '</span>';
 }
+function utilityLibraryCardHTML(id){
+  const u=UTILITY_DEFS[id],owned=utilityUnlocked(id),selected=id===utilitySelectedId,state=utilityStatusText(id),hotkey=utilityHotkeyText(id);
+  return '<button type="button" class="utility-library-card '+utilityStatusClass(id)+(owned?'':' locked')+(selected?' selected':'')+'" data-utility-select="'+escHTML(id)+'">'+
+    '<b class="utility-medallion '+utilityStatusClass(id)+'">'+escHTML(u.icon)+'</b><span><strong>'+escHTML(u.name)+'</strong><em>'+state+(hotkey?' - '+hotkey:'')+'</em><small>'+escHTML(u.use||u.desc)+'</small></span><i>'+(owned?(utilityEquipped(id)?'ON':''):'LOCK')+'</i></button>';
+}
+function utilityDetailHTML(id){
+  const u=UTILITY_DEFS[id]||UTILITY_DEFS[UTILITY_ORDER[0]],owned=!!u&&utilityUnlocked(id),equipped=!!u&&utilityEquipped(id),hotkey=u?utilityHotkeyText(id):'';
+  if(!u)return '';
+  return '<section class="utility-detail '+utilityStatusClass(id)+'">'+
+    '<div class="utility-detail-icon"><b>'+escHTML(u.icon)+'</b></div><div class="utility-detail-copy"><small>'+escHTML(u.slot==='active'?'ACTIVE UTILITY':'PASSIVE UTILITY')+'</small><h3>'+escHTML(u.name)+'</h3><p>'+escHTML(u.use||u.desc)+'</p></div>'+
+    '<div class="utility-detail-rule">'+escHTML(u.desc)+'</div>'+
+    '<div class="utility-unlock-box"><b>UNLOCK REQUIREMENT</b><span>'+escHTML(u.unlock)+'</span></div>'+
+    '<button type="button" class="utility-equip-button '+(equipped?'equipped':'')+'" data-utility-equip="'+escHTML(id)+'" '+(owned?'':'disabled')+'>'+(owned?utilityActionLabel(id):'LOCKED')+'</button>'+
+    '<em>'+(equipped?(hotkey?'Equipped - hotkey '+escHTML(hotkey):'Equipped'):(owned?'Ready to equip.':'Find this utility through progression.'))+'</em></section>';
+}
 function renderUtilitiesUI(){
   if(!qOpen || !utilityPanelOpen || qpanelEl.className!=='management') return;
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent='UTILITY ABILITIES'; qpanelEl.appendChild(h);
-  const sub=document.createElement('div'); sub.className='sub2'; sub.textContent='WAYFINDER TALENTS - CHOOSE HOW YOU EXPLORE'; qpanelEl.appendChild(sub);
-  const activeName=utilityLoadout.active&&UTILITY_DEFS[utilityLoadout.active]?UTILITY_DEFS[utilityLoadout.active].name:'None';
+  const ids=UTILITY_ORDER.filter(id=>UTILITY_DEFS[id]);
+  if(!utilitySelectedId||!UTILITY_DEFS[utilitySelectedId])utilitySelectedId=utilityLoadout.active||ids.find(id=>utilityUnlocked(id))||ids[0]||'';
   const passive=utilityLoadout.passive.slice(0,3);
   while(passive.length<3)passive.push('');
-  const info=document.createElement('div'); info.className='utility-loadout-panel';
-  info.innerHTML='<div><small>Current loadout</small><b>Active: '+escHTML(activeName)+'</b><em>Press I to use active utilities.</em></div>'+
-    '<div class="utility-slots">'+utilityLoadoutSlotHTML(utilityLoadout.active,'ACTIVE')+passive.map((id,i)=>utilityLoadoutSlotHTML(id,'PASSIVE '+(i+1))).join('')+'</div>';
-  qpanelEl.appendChild(info);
-  const note=document.createElement('p'); note.className='qtext utility-note';
-  note.innerHTML='Utilities are earned from different systems, then equipped as one active tool and up to <b>3 passive helpers</b>. Locked utilities show exactly where to earn them.';
-  qpanelEl.appendChild(note);
-  const renderSection=(title,ids)=>{
-    const s=document.createElement('div');s.className='utility-section';s.textContent=title;qpanelEl.appendChild(s);
-    for(const id of ids){
-      const u=UTILITY_DEFS[id], owned=utilityUnlocked(id);
-      const r=document.createElement('div'); r.className='shoprow utilityrow '+(u.slot==='active'?'active':'passive')+' '+utilityStatusClass(id)+(owned?'':' dim');
-      r.innerHTML=utilityCardHTML(id,u,owned);
-      const btn=qBtn(utilityActionLabel(id), ()=>toggleUtilityEquip(id), !owned);
-      if(!owned)btn.title='Unlock from: '+u.unlock;
-      r.appendChild(btn);
-      qpanelEl.appendChild(r);
-    }
-  };
-  renderSection('ACTIVE UTILITY',UTILITY_ORDER.filter(id=>UTILITY_DEFS[id]&&UTILITY_DEFS[id].slot==='active'));
-  renderSection('PASSIVE UTILITIES',UTILITY_ORDER.filter(id=>UTILITY_DEFS[id]&&UTILITY_DEFS[id].slot!=='active'));
-  const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
-  row.appendChild(qBtn('JOB BOARD', ()=>openJobsUI()));
-  row.appendChild(qBtn('GUILD CONTRACTS', ()=>openRegionalContractsUI()));
-  row.appendChild(qBtn('COSMETICS', ()=>openCosmeticsUI()));
-  row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
+  const shell=document.createElement('div'); shell.className='utility-modal-shell';
+  shell.innerHTML='<button type="button" class="utility-close-x" data-utility-close="1">X</button>'+
+    '<div class="utility-title"><h2>UTILITY ABILITIES</h2><p>Equip 1 active utility and up to 3 passive utilities.</p></div>'+
+    '<div class="utility-loadout-panel utility-loadout-hero"><div class="utility-slots">'+utilityLoadoutSlotHTML(utilityLoadout.active,'ACTIVE')+passive.map((id,i)=>utilityLoadoutSlotHTML(id,'PASSIVE '+(i+1))).join('')+'</div></div>'+
+    '<div class="utility-modal-grid"><aside><div class="utility-library-title">UTILITY LIBRARY</div><div class="utility-library-list">'+ids.map(utilityLibraryCardHTML).join('')+'</div></aside>'+utilityDetailHTML(utilitySelectedId)+'</div>'+
+    '<div class="utility-footer"><span><kbd>Esc</kbd> Close</span><span><kbd>I</kbd> Use active</span><span><kbd>Shift+1-3</kbd> Passive slots</span></div>';
+  qpanelEl.appendChild(shell);
+  qpanelEl.querySelectorAll('[data-utility-select]').forEach(btn=>btn.onclick=()=>{utilitySelectedId=btn.dataset.utilitySelect||'';renderUtilitiesUI();});
+  qpanelEl.querySelectorAll('[data-utility-equip]').forEach(btn=>btn.onclick=()=>{toggleUtilityEquip(btn.dataset.utilityEquip||'');renderUtilitiesUI();});
+  qpanelEl.querySelectorAll('[data-utility-close]').forEach(btn=>btn.onclick=()=>closeQWin());
 }
 function jobContractGuideLines(c){
   if(!c) return ['Choose a job contract first, then this panel will explain how to progress it.'];
