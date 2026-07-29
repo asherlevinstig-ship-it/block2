@@ -581,6 +581,7 @@ class MySqlGameQuestionStore {
       id: Number(row.id) || 0,
       name: String(row.name || ''),
       joinCode: String(row.join_code || ''),
+      ...(row.year_group ? { yearGroup: String(row.year_group || '') } : {}),
       active: Number(row.is_active) !== 0,
     }));
   }
@@ -793,25 +794,34 @@ class MySqlGameQuestionStore {
     return [...ids].slice(0, 20);
   }
 
-  async studentRosterRows(account, classId = 0) {
+  async studentRosterRows(account, classId = 0, options = {}) {
     const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
     classId = clampInt(classId, 0, 2147483647);
+    const yearGroup = cleanText(options.yearGroup || options.year_group, 50);
     const schoolWhere = '(s.school_id IS NULL OR ? = 0 OR s.school_id = ?)';
     let rows = [];
     if (classId) {
       const candidates = [
-        [`SELECT s.id, s.name, s.email, s.school_id FROM students s WHERE s.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
-        [`SELECT s.id, s.name, s.email, s.school_id FROM students s JOIN student_classes sc ON sc.student_id = s.id WHERE sc.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
-        [`SELECT s.id, s.name, s.email, s.school_id FROM students s JOIN class_students cs ON cs.student_id = s.id WHERE cs.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s WHERE s.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s JOIN student_classes sc ON sc.student_id = s.id WHERE sc.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s JOIN class_students cs ON cs.student_id = s.id WHERE cs.class_id = ? AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 500`, [classId, schoolId, schoolId]],
+      ];
+      for (const [sql, params] of candidates) rows = rows.concat(await this.safeQuery(sql, params));
+    } else if (yearGroup && schoolId) {
+      const candidates = [
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s WHERE LOWER(s.year_group) = LOWER(?) AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 1000`, [yearGroup, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s JOIN classes c ON c.id = s.class_id WHERE LOWER(c.year_group) = LOWER(?) AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 1000`, [yearGroup, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s JOIN student_classes sc ON sc.student_id = s.id JOIN classes c ON c.id = sc.class_id WHERE LOWER(c.year_group) = LOWER(?) AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 1000`, [yearGroup, schoolId, schoolId]],
+        [`SELECT s.id, s.name, s.email, s.school_id, s.year_group FROM students s JOIN class_students cs ON cs.student_id = s.id JOIN classes c ON c.id = cs.class_id WHERE LOWER(c.year_group) = LOWER(?) AND ${schoolWhere} ORDER BY s.name ASC, s.email ASC LIMIT 1000`, [yearGroup, schoolId, schoolId]],
       ];
       for (const [sql, params] of candidates) rows = rows.concat(await this.safeQuery(sql, params));
     } else if (schoolId) {
       rows = await this.safeQuery(
-        `SELECT s.id, s.name, s.email, s.school_id
+        `SELECT s.id, s.name, s.email, s.school_id, s.year_group
          FROM students s
          WHERE ${schoolWhere}
          ORDER BY s.name ASC, s.email ASC
-         LIMIT 500`,
+         LIMIT 1500`,
         [schoolId, schoolId],
       );
     }
@@ -822,6 +832,31 @@ class MySqlGameQuestionStore {
       seen.add(id);
       return true;
     });
+  }
+
+  async yearGroupRows(account) {
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    if (!schoolId) return [];
+    const rows = []
+      .concat(await this.safeQuery(
+        `SELECT DISTINCT s.year_group AS year_group
+         FROM students s
+         WHERE s.year_group IS NOT NULL AND s.year_group <> ''
+           AND (s.school_id IS NULL OR s.school_id = ?)
+         ORDER BY s.year_group ASC
+         LIMIT 40`,
+        [schoolId],
+      ))
+      .concat(await this.safeQuery(
+        `SELECT DISTINCT c.year_group AS year_group
+         FROM classes c
+         WHERE c.year_group IS NOT NULL AND c.year_group <> ''
+           AND (c.school_id IS NULL OR c.school_id = ?)
+         ORDER BY c.year_group ASC
+         LIMIT 40`,
+        [schoolId],
+      ));
+    return [...new Set(rows.map(row => cleanText(row && row.year_group, 50)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   }
 
   async activeHomeworkRowsForStudent(account, subjectId = 0) {
@@ -1185,12 +1220,14 @@ class MySqlGameQuestionStore {
     const { schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
     const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
     const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
+    const scope = ['class', 'year', 'school', 'network'].includes(String(query.scope || '').toLowerCase()) ? String(query.scope || '').toLowerCase() : classId ? 'class' : 'school';
+    const yearGroup = cleanText(query.yearGroup || query.year_group, 50);
     const days = clampInt(query.days || 30, 1, 365);
-    const rosterRows = await this.studentRosterRows(account, classId);
+    const rosterRows = scope === 'network' ? [] : await this.studentRosterRows(account, scope === 'class' ? classId : 0, { yearGroup: scope === 'year' ? yearGroup : '' });
     const rosterIds = rosterRows.map(row => Number(row.id) || 0).filter(Boolean);
     const params = [subjectId, days];
     let attemptWhere = 'gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)';
-    if (classId) {
+    if (scope === 'class' && classId) {
       attemptWhere += ' AND (gqa.class_id = ?';
       params.push(classId);
       if (rosterIds.length) {
@@ -1198,6 +1235,16 @@ class MySqlGameQuestionStore {
         params.push(...rosterIds);
       }
       attemptWhere += ')';
+    } else if (scope === 'year') {
+      if (rosterIds.length) {
+        attemptWhere += ` AND gqa.student_id IN (${rosterIds.map(() => '?').join(',')})`;
+        params.push(...rosterIds);
+      } else {
+        attemptWhere += ' AND 1 = 0';
+      }
+    } else if (scope === 'school' && scopeSchoolId) {
+      attemptWhere += ' AND (gqa.school_id IS NULL OR gqa.school_id = ?)';
+      params.push(scopeSchoolId);
     }
     const [studentRows] = await this.getPool().execute(
       `SELECT
@@ -1217,7 +1264,7 @@ class MySqlGameQuestionStore {
     );
     let questionAttemptClassJoin = '';
     const questionParams = [days];
-    if (classId) {
+    if (scope === 'class' && classId) {
       questionAttemptClassJoin = 'AND (gqa.class_id = ?';
       questionParams.push(classId);
       if (rosterIds.length) {
@@ -1225,10 +1272,20 @@ class MySqlGameQuestionStore {
         questionParams.push(...rosterIds);
       }
       questionAttemptClassJoin += ')';
+    } else if (scope === 'year') {
+      if (rosterIds.length) {
+        questionAttemptClassJoin = `AND gqa.student_id IN (${rosterIds.map(() => '?').join(',')})`;
+        questionParams.push(...rosterIds);
+      } else {
+        questionAttemptClassJoin = 'AND 1 = 0';
+      }
+    } else if (scope === 'school' && scopeSchoolId) {
+      questionAttemptClassJoin = 'AND (gqa.school_id IS NULL OR gqa.school_id = ?)';
+      questionParams.push(scopeSchoolId);
     }
     questionParams.push(subjectId);
     let questionWhere = 'gq.subject_id = ?';
-    if (scopeSchoolId) { questionWhere += ' AND (gq.school_id IS NULL OR gq.school_id = ?)'; questionParams.push(scopeSchoolId); }
+    if (scope !== 'network' && scopeSchoolId) { questionWhere += ' AND (gq.school_id IS NULL OR gq.school_id = ?)'; questionParams.push(scopeSchoolId); }
     const [questionRows] = await this.getPool().execute(
       `SELECT
          gq.id,
@@ -1275,6 +1332,20 @@ class MySqlGameQuestionStore {
        ORDER BY gqa.created_at DESC
        LIMIT 1000`,
       params,
+    );
+    const [schoolRows] = await this.getPool().execute(
+      `SELECT
+         COALESCE(gqa.school_id, 0) AS school_id,
+         COALESCE(sc.name, CONCAT('School ', COALESCE(gqa.school_id, 0))) AS school_name,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN schools sc ON sc.id = gqa.school_id
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       GROUP BY COALESCE(gqa.school_id, 0), school_name
+       ORDER BY attempts DESC, school_name ASC
+       LIMIT 100`,
+      [subjectId, days],
     );
     const normalize = row => {
       const attempts = Number(row.attempts) || 0;
@@ -1372,14 +1443,28 @@ class MySqlGameQuestionStore {
     });
     const topicSummaries = [...topicMap.values()].sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name));
     const studentTopicSummaries = [...studentTopicMap.values()].sort((a, b) => String(a.studentName || '').localeCompare(String(b.studentName || '')) || a.accuracy - b.accuracy || b.attempts - a.attempts);
+    const schoolComparisons = (schoolRows || []).map(row => ({
+      id: Number(row.school_id) || 0,
+      name: String(row.school_name || 'Unknown school'),
+      ...normalize(row),
+      ownSchool: scopeSchoolId ? Number(row.school_id) === Number(scopeSchoolId) : false,
+    })).sort((a, b) => b.accuracy - a.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name));
+    const yearGroups = await this.yearGroupRows(account);
     const totals = students.reduce((acc, row) => {
       acc.attempts += row.attempts;
       acc.correct += row.correct;
       acc.wrong += row.wrong;
       return acc;
     }, { attempts: 0, correct: 0, wrong: 0 });
+    if (scope === 'network') {
+      totals.attempts = schoolComparisons.reduce((sum, row) => sum + row.attempts, 0);
+      totals.correct = schoolComparisons.reduce((sum, row) => sum + row.correct, 0);
+      totals.wrong = schoolComparisons.reduce((sum, row) => sum + row.wrong, 0);
+    }
     return {
       windowDays: days,
+      scope,
+      yearGroup: scope === 'year' ? yearGroup : '',
       classId: classId || null,
       totals: { ...totals, accuracy: totals.attempts ? Math.round((totals.correct / totals.attempts) * 100) : 0 },
       students,
@@ -1387,6 +1472,8 @@ class MySqlGameQuestionStore {
       topicSummaries,
       studentTopicSummaries,
       attempts,
+      schoolComparisons,
+      yearGroups,
     };
   }
 }

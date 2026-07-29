@@ -855,6 +855,17 @@ test('MySQL game question analytics includes class students with zero attempts',
         answers: JSON.stringify(['Base two', 'Base ten', 'A wire', 'A password']),
         correct_index: 0,
       }]];
+      if (/LEFT JOIN schools sc ON sc\.id = gqa\.school_id/i.test(sql)) return [[{
+        school_id: 12,
+        school_name: 'Town Academy',
+        attempts: 2,
+        correct: 1,
+      }, {
+        school_id: 14,
+        school_name: 'River School',
+        attempts: 4,
+        correct: 3,
+      }]];
       if (/FROM game_question_attempt gqa/i.test(sql)) return [[{
         student_id: 9,
         student_name: 'Learner One',
@@ -894,6 +905,8 @@ test('MySQL game question analytics includes class students with zero attempts',
   assert.equal(analytics.studentTopicSummaries[0].topic, 'Binary');
   assert.equal(analytics.attempts[0].answerText, 'Base ten');
   assert.equal(analytics.attempts[0].correctAnswer, 'Base two');
+  assert.equal(analytics.schoolComparisons.length, 2);
+  assert.equal(analytics.schoolComparisons.find(row => row.id === 12).ownSchool, true);
 });
 
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {

@@ -691,6 +691,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /selectedStudentAttempts/);
   assert.match(teacherDashboardSource, /classQuestionRows/);
   assert.match(teacherDashboardSource, /Has wrong answers/);
+  assert.match(teacherDashboardSource, /Whole year group/);
+  assert.match(teacherDashboardSource, /Compare schools/);
+  assert.match(teacherDashboardSource, /schoolComparisonRows/);
+  assert.match(teacherDashboardSource, /School comparison/);
   assert.match(teacherDashboardSource, /Question Analysis/);
   assert.match(teacherDashboardSource, /Curriculum Requests/);
   assert.match(teacherDashboardSource, /title: 'Add Questions'/);

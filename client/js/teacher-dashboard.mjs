@@ -108,6 +108,8 @@ createApp({
       questionTopicFilter: '',
       questionOutcomeFilter: '',
       questionSort: 'accuracyAsc',
+      analyticsScope: 'school',
+      yearGroup: '',
       analyticsDays: 30,
       curriculum: emptyCurriculum(),
       homework: emptyHomework(),
@@ -171,6 +173,14 @@ createApp({
       return (state.analytics.attempts || []).filter(row => matchesStudent(row, student)).slice(0, 80);
     });
     const classTopicRows = computed(() => (state.analytics.topicSummaries || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || String(a.name || '').localeCompare(String(b.name || ''))));
+    const yearGroupOptions = computed(() => [...new Set([...(state.analytics.yearGroups || []), ...(state.classes || []).map(row => row.yearGroup || row.year_group)].map(value => String(value || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const schoolComparisonRows = computed(() => (state.analytics.schoolComparisons || []).slice().sort((a, b) => Number(b.ownSchool) - Number(a.ownSchool) || b.accuracy - a.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name)));
+    const scopeLabel = computed(() => {
+      if (state.analyticsScope === 'class') return state.classId ? 'Selected class' : 'Choose a class';
+      if (state.analyticsScope === 'year') return state.yearGroup || 'Year group';
+      if (state.analyticsScope === 'network') return 'All schools';
+      return 'Whole school';
+    });
     const classQuestionRows = computed(() => {
       const topic = String(state.questionTopicFilter || '').trim().toLowerCase();
       const outcome = String(state.questionOutcomeFilter || '');
@@ -289,6 +299,12 @@ createApp({
       if (state.homework.classId && !validClassIds.has(String(state.homework.classId))) state.homework.classId = '';
     }
 
+    function changeAnalyticsScope() {
+      if (state.analyticsScope !== 'class') state.classId = '';
+      if (state.analyticsScope !== 'year') state.yearGroup = '';
+      changeStatus();
+    }
+
     function signOut() {
       storeSession('');
       state.account = null;
@@ -299,6 +315,8 @@ createApp({
       state.analytics = { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 };
       state.curriculumRequests = [];
       state.curriculumAdmin = false;
+      state.analyticsScope = 'school';
+      state.yearGroup = '';
       state.view = 'overview';
       state.loading = false;
       setNotice('');
@@ -382,7 +400,9 @@ createApp({
       syncClassSelectionWithSubject();
       const query = '?subjectId=' + encodeURIComponent(state.subjectId) + (state.status ? '&reviewStatus=' + encodeURIComponent(state.status) : '');
       const analyticsQuery = '?subjectId=' + encodeURIComponent(state.subjectId)
-        + (state.classId ? '&classId=' + encodeURIComponent(state.classId) : '')
+        + '&scope=' + encodeURIComponent(state.analyticsScope)
+        + (state.analyticsScope === 'class' && state.classId ? '&classId=' + encodeURIComponent(state.classId) : '')
+        + (state.analyticsScope === 'year' && state.yearGroup ? '&yearGroup=' + encodeURIComponent(state.yearGroup) : '')
         + '&days=' + encodeURIComponent(state.analyticsDays);
       const [questionsData, analyticsData, homeworkData] = await Promise.all([
         requestJson('/auth/teacher/game-questions' + query),
@@ -741,6 +761,9 @@ createApp({
       selectedStudentTopics,
       selectedStudentAttempts,
       classTopicRows,
+      yearGroupOptions,
+      schoolComparisonRows,
+      scopeLabel,
       classQuestionRows,
       classAttemptRows,
       needingSupport,
@@ -759,6 +782,7 @@ createApp({
       signOut,
       changeSubject,
       changeStatus,
+      changeAnalyticsScope,
       loadCurriculumRequests,
       changeQuestionFilters,
       clearQuestionFilters,
@@ -851,11 +875,21 @@ createApp({
                 {{ subject.code ? subject.name + ' (' + subject.code + ')' : subject.name }}
               </option>
             </select>
-            <select v-model="state.classId" @change="changeStatus">
-              <option value="">All classes</option>
+            <select v-model="state.analyticsScope" @change="changeAnalyticsScope">
+              <option value="class">Whole class</option>
+              <option value="year">Whole year group</option>
+              <option value="school">Whole school</option>
+              <option value="network">Compare schools</option>
+            </select>
+            <select v-if="state.analyticsScope === 'class'" v-model="state.classId" @change="changeStatus">
+              <option value="">Choose class</option>
               <option v-for="row in state.classes" :key="row.id" :value="String(row.id)">
                 {{ row.joinCode ? row.name + ' - ' + row.joinCode : row.name }}
               </option>
+            </select>
+            <select v-if="state.analyticsScope === 'year'" v-model="state.yearGroup" @change="changeStatus">
+              <option value="">Choose year group</option>
+              <option v-for="year in yearGroupOptions" :key="year" :value="year">{{ year }}</option>
             </select>
             <select v-model.number="state.analyticsDays" @change="changeStatus">
               <option :value="7">Last 7 days</option>
@@ -871,7 +905,7 @@ createApp({
           <div class="tone-red"><i>♙</i><span>Students needing support</span><strong>{{ needingSupport }}</strong><small>Needs attention</small></div>
           <div class="tone-purple"><i>?</i><span>Written reviews</span><strong>{{ reviewCount }}</strong><small>Need review</small></div>
           <div class="tone-orange"><i>◷</i><span>Homework</span><strong>{{ dueSoonCount }}</strong><small>Scheduled</small></div>
-          <div class="tone-green"><i>↗</i><span>Average accuracy</span><strong>{{ state.analytics.totals.accuracy }}%</strong><small>Across all classes</small></div>
+          <div class="tone-green"><i>↗</i><span>Average accuracy</span><strong>{{ state.analytics.totals.accuracy }}%</strong><small>{{ scopeLabel }}</small></div>
         </section>
 
         <div class="teacher-vue-status bad" v-if="state.error">{{ state.error }}</div>
@@ -982,6 +1016,17 @@ createApp({
                 <i>{{ row.accuracy }}%</i>
               </div>
               <div class="teacher-vue-empty" v-if="!classTopicRows.length">No topic attempts yet.</div>
+            </div>
+            <div class="teacher-vue-analysis-table teacher-vue-school-compare">
+              <header><h2>School comparison</h2></header>
+              <div class="teacher-vue-topic-row head"><span>School</span><span>Correct</span><span>Wrong</span><span>Accuracy</span></div>
+              <div class="teacher-vue-topic-row" v-for="row in schoolComparisonRows" :key="row.id || row.name" :class="{ selected: row.ownSchool }">
+                <span>{{ row.name }}<small v-if="row.ownSchool">Your school</small></span>
+                <strong>{{ row.correct }}</strong>
+                <strong>{{ row.wrong }}</strong>
+                <i>{{ row.accuracy }}%</i>
+              </div>
+              <div class="teacher-vue-empty" v-if="!schoolComparisonRows.length">No other school data in this window yet.</div>
             </div>
           </div>
           <div class="teacher-vue-analysis-table">
