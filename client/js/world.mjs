@@ -8537,7 +8537,8 @@ function renderBars(){
   const xpTitle=rankProgress.maxRank
     ? 'S-Rank Hunter · '+xpNow+' / '+xpMax+' XP to next rank level'
     : hunterRankLetter(rankProgress.nextRank)+'-Rank in '+rankProgress.remaining.toLocaleString('en-US')+' Hunter XP';
-  const sig=[levelTwo,levelText,hpNow,hpMax,mpNow,mpMax,spNow,spMax,hungerNow,hungerMax,xpNow,xpMax,hpWidth,mpWidth,spWidth,hungerWidth,xpWidth,xpTitle].join('|');
+  const statPoints=Math.max(0,S.pts|0);
+  const sig=[levelTwo,levelText,hpNow,hpMax,mpNow,mpMax,spNow,spMax,hungerNow,hungerMax,xpNow,xpMax,statPoints,hpWidth,mpWidth,spWidth,hungerWidth,xpWidth,xpTitle].join('|');
   if(sig===renderBarsSig)return;
   renderBarsSig=sig;
   if(levelTwo!==renderBarsLevelTwo){renderBarsLevelTwo=levelTwo;document.body.classList.toggle('level-two-hud',levelTwo);}
@@ -8553,6 +8554,7 @@ function renderBars(){
   barEls.xp.style.width=xpWidth+'%';
   if(barEls.xpT)barEls.xpT.textContent=xpNow.toLocaleString('en-US')+' / '+xpMax.toLocaleString('en-US')+' XP';
   barEls.xp.parentElement.title=xpTitle;
+  if(typeof refreshStatPointNudge==='function')refreshStatPointNudge();
 }
 renderBars();
 function gainXP(n){

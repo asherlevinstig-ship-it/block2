@@ -6,6 +6,7 @@ const legacyHudBindings={
   hudSlots:{get:()=>hudSlots},
   fillSlotEl:{get:()=>fillSlotEl},
   refreshHUD:{get:()=>refreshHUD},
+  refreshStatPointNudge:{get:()=>refreshStatPointNudge},
   showName:{get:()=>showName},
   selectSlot:{get:()=>selectSlot},
 };
@@ -31,6 +32,16 @@ utilityBarEl.id='utilitybar';
 utilityBarEl.className='hidden';
 utilityBarEl.setAttribute('aria-label','Hunter kit utilities');
 document.body.appendChild(utilityBarEl);
+const statPointNudgeEl=document.createElement('button');
+statPointNudgeEl.id='statpointnudge';
+statPointNudgeEl.type='button';
+statPointNudgeEl.className='hidden';
+statPointNudgeEl.setAttribute('aria-label','Open character stats to spend stat points');
+statPointNudgeEl.innerHTML='<span>C</span><b>0 stat points</b><small>Press C to upgrade</small>';
+document.body.appendChild(statPointNudgeEl);
+statPointNudgeEl.onclick=()=>{
+  if(typeof globalThis.openStat==='function')globalThis.openStat();
+};
 const utilityHudSlots=[];
 for(let i=0;i<4;i++){
   const slot=document.createElement('button');
@@ -75,6 +86,18 @@ function refreshUtilityHUD(){
   fillUtilitySlotEl(utilityHudSlots[0],defs[ids[0]]?ids[0]:'','Active',0);
   for(let i=1;i<4;i++)fillUtilitySlotEl(utilityHudSlots[i],defs[ids[i]]?ids[i]:'','Passive '+i,i);
   utilityBarEl.classList.toggle('has-active',!!(ids[0]&&defs[ids[0]]));
+}
+function currentStatPoints(){
+  const worldState=gameContext&&gameContext.state&&gameContext.state.world;
+  const stats=worldState&&worldState.stats;
+  return Math.max(0,(stats&&stats.pts)|0);
+}
+function refreshStatPointNudge(){
+  const points=currentStatPoints();
+  const show=points>0;
+  statPointNudgeEl.classList.toggle('hidden',!show);
+  statPointNudgeEl.innerHTML='<span>C</span><b>'+points+' stat point'+(points===1?'':'s')+'</b><small>Press C to upgrade</small>';
+  statPointNudgeEl.title=show?points+' unspent stat point'+(points===1?'':'s')+'. Press C to open Character.':'No unspent stat points';
 }
 function itemTooltipText(stack){
   if(!stack || !ITEMS[stack.id]) return '';
@@ -202,6 +225,7 @@ function refreshHUD(){
     hudSlots[i].classList.toggle('sel', i===combatState.selectedSlot);
   }
   refreshUtilityHUD();
+  refreshStatPointNudge();
   updateViewModel();
   refreshAppearanceDummy();
   renderAbilities();
@@ -218,7 +242,7 @@ function selectSlot(i){
 
 
 gameContext.registerState('hud',Object.freeze({slots:hudSlots,utilitySlots:utilityHudSlots,get selectedSlot(){return combatState.selectedSlot;}}));
-gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD}));
+gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD,refreshStatPointNudge}));
 export const state=gameContext.requireState('hud');
 export const api=gameContext.requireModule('hud');
 export {combatApi,combatState};

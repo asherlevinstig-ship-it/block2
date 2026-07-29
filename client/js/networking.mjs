@@ -167,7 +167,7 @@ function showLevelUpReveal(m){
   const nextLine=nextRankLevel?hunterRankLevelLabel(nextRankLevel)+' begins':'Mastery rank reached';
   const xp=Number.isFinite(Number(m&&m.xp))?Math.max(0,(m.xp|0)):0;
   const nextXp=Number.isFinite(Number(m&&m.nextXp))?Math.max(0,(m.nextXp|0)):0;
-  card.innerHTML='<small>LEVEL UP</small><h3>'+escHTML(levelLine)+'</h3><p>Your hunter grew stronger. Spend stat points when you are ready.</p><div class="level-up-rewards">'
+  card.innerHTML='<small>LEVEL UP</small><h3>'+escHTML(levelLine)+'</h3><p>Your hunter grew stronger. Press C to spend your stat points now.</p><div class="level-up-rewards">'
     +'<div class="level-up-reward"><span>STAT POINTS</span><b>+'+statPoints+'</b></div>'
     +'<div class="level-up-reward"><span>NEXT TARGET</span><b>'+escHTML(nextLine)+'</b></div>'
     +'<div class="level-up-reward"><span>XP PROGRESS</span><b>'+xp.toLocaleString('en-US')+' / '+Math.max(1,nextXp).toLocaleString('en-US')+'</b></div>'
@@ -187,6 +187,7 @@ function showLevelUpReveal(m){
   rewardGain('rare',statPoints||1,'Stat Points',{icon:'LV',duration:2700});
   showName(hunterRankLevelLabel(level).toUpperCase());
   sysMsg('<b>'+hunterRankLevelLabel(level,{long:true})+' reached!</b> You earned <b>+'+statPoints+'</b> stat point'+(statPoints===1?'':'s')+'. Press <b>C</b> to spend them.',{tier:'major',title:'Level Up'});
+  refreshHUD();
 }
 function showDeityAscension(m){
   applyDeityState({unlocked:true,ascendedAt:Date.now(),powers:m&&m.powers,choices:m&&m.choices});
