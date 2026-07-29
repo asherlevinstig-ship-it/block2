@@ -3,10 +3,22 @@ import { apiUrl } from './js/config.mjs';
 const form = document.getElementById('registerForm');
 const status = document.getElementById('status');
 const button = document.getElementById('submitBtn');
+const password = document.getElementById('password');
+const passwordToggle = document.getElementById('passwordToggle');
 
 function setStatus(text, kind = '') {
   status.textContent = text;
   status.className = kind;
+}
+
+if (password && passwordToggle) {
+  passwordToggle.addEventListener('click', () => {
+    const visible = password.type === 'text';
+    password.type = visible ? 'password' : 'text';
+    passwordToggle.textContent = visible ? 'SHOW' : 'HIDE';
+    passwordToggle.setAttribute('aria-pressed', visible ? 'false' : 'true');
+    password.focus();
+  });
 }
 
 form.addEventListener('submit', async event => {

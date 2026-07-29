@@ -522,6 +522,7 @@ const registerbtn=document.getElementById('registerbtn');
 const logoutbtn=document.getElementById('logoutbtn');
 const authuser=document.getElementById('authuser');
 const authpass=document.getElementById('authpass');
+const authpassshow=document.getElementById('authpassshow');
 const authstatus=document.getElementById('authstatus');
 const devReset=document.getElementById('devreset');
 const devResetTarget=document.getElementById('devresettarget');
@@ -4458,6 +4459,13 @@ checkAuth().then(account=>{
 function primeMenuAudio(){ if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init(); }
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
+if(authpassshow&&authpass)authpassshow.addEventListener('click',()=>{
+  const visible=authpass.type==='text';
+  authpass.type=visible?'password':'text';
+  authpassshow.textContent=visible?'SHOW':'HIDE';
+  authpassshow.setAttribute('aria-pressed', visible?'false':'true');
+  authpass.focus();
+});
 playbtn.addEventListener('click', ()=>{ primeMenuAudio(); startPlaying(false); });
 logoutbtn.addEventListener('click',async()=>{
   const rankContinue=document.getElementById('rankupcontinue');

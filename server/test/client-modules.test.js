@@ -624,8 +624,11 @@ test('client dimensions and server consume the shared grid contract', () => {
   const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
+  const loginBgAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'bggame.png');
   const boot = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'boot.mjs'), 'utf8');
   const authSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  const combatSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const runtimeFiles = ['world.mjs', 'dimensions.mjs', 'combat.mjs', 'hud.mjs', 'menus.mjs', 'networking.mjs', 'frame-loop.mjs'];
   const runtimeSource = runtimeFiles.map(name =>
     fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', name), 'utf8')
@@ -655,13 +658,24 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.ok(Buffer.byteLength(html) < 22_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
+  assert.match(html, /id="authpassshow" class="password-toggle" type="button"/);
+  assert.match(html, /class="password-wrap"[\s\S]*id="authpass"/);
   assert.match(html, /assets\/splash-cinematic\.png/);
   assert.ok(fs.statSync(splashAsset).size > 10_000, 'splash cinematic asset is packaged with the client');
+  assert.ok(fs.statSync(loginBgAsset).size > 10_000, 'login background asset is packaged with the client');
+  assert.match(styles, /url\('\/assets\/bggame\.png'\) center\/cover no-repeat/);
+  assert.match(styles, /\.password-wrap #authpass\{width:100%;padding-right:70px\}/);
+  assert.match(combatSource, /authpassshow\.addEventListener\('click'/);
+  assert.match(combatSource, /authpass\.type=visible\?'password':'text'/);
   assert.match(registerHtml, /id="registerForm"/);
   assert.match(registerHtml, /name="yearGroup"/);
+  assert.match(registerHtml, /id="passwordToggle" class="password-toggle" type="button"/);
+  assert.match(registerHtml, /url\('\/assets\/bggame\.png'\) center\/cover no-repeat/);
   assert.doesNotMatch(registerHtml, /name="school"/);
   assert.match(registerHtml, /find your school from your email address/);
   assert.match(registerJs, /\/auth\/student\/register/);
+  assert.match(registerJs, /passwordToggle\.addEventListener\('click'/);
+  assert.match(registerJs, /password\.type = visible \? 'password' : 'text'/);
   assert.doesNotMatch(registerJs, /form\.school/);
   assert.match(authSource, /localStorage\.setItem\(sessionKey/);
   assert.match(authSource, /Authorization: 'Bearer ' \+ token/);

@@ -171,7 +171,10 @@
     <div class="panel-actions">
       <div class="account-fields">
         <input id="authuser" maxlength="255" placeholder="EMAIL" autocomplete="username">
-        <input id="authpass" type="password" maxlength="128" placeholder="PASSWORD (10+ CHARACTERS)" autocomplete="current-password">
+        <div class="password-wrap">
+          <input id="authpass" type="password" maxlength="128" placeholder="PASSWORD (10+ CHARACTERS)" autocomplete="current-password">
+          <button id="authpassshow" class="password-toggle" type="button" aria-controls="authpass" aria-pressed="false">SHOW</button>
+        </div>
         <div id="huntersetup" class="hunter-setup hidden">
           <div class="hunter-setup-title">CHOOSE YOUR HUNTER NAME</div>
           <input id="playername" maxlength="16" placeholder="HUNTER NAME" autocomplete="nickname">
