@@ -652,7 +652,7 @@ test('client dimensions and server consume the shared grid contract', () => {
     assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
     previousModule = offset;
   }
-  assert.ok(Buffer.byteLength(html) < 20_000, 'index.html remains a small markup and bootstrap shell');
+  assert.ok(Buffer.byteLength(html) < 22_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(html, /assets\/splash-cinematic\.png/);
@@ -3152,6 +3152,23 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(styles, /body\.character-setup-open #overlay\.compact \.splash-shot\{display:none\}/);
   assert.match(styles, /body\.character-setup-open \.ccbody\{grid-template-columns:minmax\(260px,300px\) minmax\(0,1fr\);align-items:start/);
   assert.match(styles, /body\.character-setup-open \.ccpresetbar\{grid-template-columns:repeat\(4,minmax\(104px,1fr\)\)\}/);
+});
+
+test('opening cinematic plays bundled videos before auto-resume', () => {
+  const index = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'vid1.mp4')));
+  assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'vid2.mp4')));
+  assert.match(index, /id="introcinematic"/);
+  assert.match(index, /id="introvideo" playsinline muted preload="auto"/);
+  assert.match(combat, /function setupOpeningCinematic\(\)\{/);
+  assert.match(combat, /const sources=\['\/assets\/intro\/vid1\.mp4','\/assets\/intro\/vid2\.mp4'\]/);
+  assert.match(combat, /introVideo\.addEventListener\('ended',\(\)=>\{index\+\+;playCurrent\(\);\}\)/);
+  assert.match(combat, /const openingCinematicReady=setupOpeningCinematic\(\)/);
+  assert.match(combat, /openingCinematicReady\.then\(\(\)=>startPlaying\(false\)\)/);
+  assert.match(styles, /#introcinematic\{position:fixed;inset:0;z-index:80/);
+  assert.match(styles, /#introvideo\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover/);
 });
 
 test('auth controller clears stale hunter name when the signed-in account has no profile name', async () => {

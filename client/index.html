@@ -80,6 +80,19 @@
 <div id="awakeningwin" class="hidden"><div id="awakeningpanel"></div></div>
 <div id="hint" class="hidden"></div>
 <div id="gateprompt" class="hidden" aria-live="polite"></div>
+<div id="introcinematic" aria-label="Opening cinematic">
+  <video id="introvideo" playsinline muted preload="auto"></video>
+  <div class="intro-vignette" aria-hidden="true"></div>
+  <div class="intro-copy">
+    <span id="introcount">Opening 1 / 2</span>
+    <b>BLOCKCRAFT</b>
+    <small id="introstatus">Opening cinematic</small>
+  </div>
+  <div class="intro-actions">
+    <button id="introstart" type="button" hidden>PLAY OPENING</button>
+    <button id="introskip" type="button">SKIP</button>
+  </div>
+</div>
 
 <div id="ui"><div id="uipanel"></div></div>
 <div id="cursoritem"></div>
