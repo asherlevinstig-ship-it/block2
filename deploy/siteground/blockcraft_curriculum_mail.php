@@ -178,9 +178,12 @@ $replyTo = defined('BLOCKCRAFT_CURRICULUM_REPLY_TO') ? (string)BLOCKCRAFT_CURRIC
 
 $title = bcm_clean($payload['title'] ?? 'Curriculum request', 160);
 $subject = bcm_clean($payload['subject'] ?? ('[Blockcraft] Curriculum request: ' . $title), 220);
+$template = bcm_clean($payload['template'] ?? 'request', 40);
 $teacherName = bcm_clean($payload['teacherName'] ?? '');
 $teacherEmail = bcm_clean($payload['teacherEmail'] ?? '', 255);
 $subjectName = bcm_clean($payload['subjectName'] ?? $payload['subjectId'] ?? '', 255);
+$className = bcm_clean($payload['className'] ?? '', 120);
+$completedBy = bcm_clean($payload['completedBy'] ?? 'Blockcraft admin', 120);
 $topics = bcm_clean($payload['topics'] ?? '');
 $syllabus = bcm_clean($payload['syllabus'] ?? '');
 $notes = bcm_clean($payload['notes'] ?? '');
@@ -197,28 +200,53 @@ foreach ($files as $file) {
 }
 
 if ($text === '') {
-    $text = "A teacher submitted a curriculum request.\n\n"
-        . "Teacher: {$teacherName}\n"
-        . "Email: {$teacherEmail}\n"
-        . "Subject: {$subjectName}\n"
-        . "Title: {$title}\n\n"
-        . "Topics:\n" . ($topics !== '' ? $topics : '(not supplied)') . "\n\n"
-        . "Syllabus:\n" . ($syllabus !== '' ? $syllabus : '(not supplied)') . "\n\n"
-        . "Notes:\n" . ($notes !== '' ? $notes : '(not supplied)') . "\n\n"
-        . "Uploaded files:\n" . ($fileLines ? implode("\n", array_map(fn($line) => '- ' . $line, $fileLines)) : '- none');
+    if ($template === 'completion') {
+        $text = "Good news - your request to have questions added to the BlockCraft homework game has been completed.\n\n"
+            . "Request: {$title}\n"
+            . ($subjectName !== '' ? "Subject: {$subjectName}\n" : '')
+            . ($className !== '' ? "Class: {$className}\n" : '')
+            . "\nMarked complete by {$completedBy}.\n\n"
+            . "You can sign in to the teacher dashboard to review it.";
+    } else {
+        $text = "A teacher submitted a curriculum request.\n\n"
+            . "Teacher: {$teacherName}\n"
+            . "Email: {$teacherEmail}\n"
+            . "Subject: {$subjectName}\n"
+            . "Title: {$title}\n\n"
+            . "Topics:\n" . ($topics !== '' ? $topics : '(not supplied)') . "\n\n"
+            . "Syllabus:\n" . ($syllabus !== '' ? $syllabus : '(not supplied)') . "\n\n"
+            . "Notes:\n" . ($notes !== '' ? $notes : '(not supplied)') . "\n\n"
+            . "Uploaded files:\n" . ($fileLines ? implode("\n", array_map(fn($line) => '- ' . $line, $fileLines)) : '- none');
+    }
 }
 
 $htmlFiles = $fileLines ? '<ul><li>' . implode('</li><li>', array_map('bcm_html', $fileLines)) . '</li></ul>' : '<p>None</p>';
-$html = '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px;">'
-    . '<div style="max-width:720px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:24px;">'
-    . '<p style="margin:0 0 8px;color:#2563eb;font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Blockcraft Curriculum Request</p>'
-    . '<h1 style="margin:0 0 18px;font-size:26px;">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1>'
-    . '<p><strong>Teacher:</strong> ' . bcm_html($teacherName) . '<br><strong>Email:</strong> ' . bcm_html($teacherEmail) . '<br><strong>Subject:</strong> ' . bcm_html($subjectName) . '</p>'
-    . '<h2 style="font-size:18px;">Topics</h2><p>' . bcm_html($topics !== '' ? $topics : '(not supplied)') . '</p>'
-    . '<h2 style="font-size:18px;">Syllabus</h2><p>' . bcm_html($syllabus !== '' ? $syllabus : '(not supplied)') . '</p>'
-    . '<h2 style="font-size:18px;">Notes</h2><p>' . bcm_html($notes !== '' ? $notes : '(not supplied)') . '</p>'
-    . '<h2 style="font-size:18px;">Uploaded Files</h2>' . $htmlFiles
-    . '</div></body></html>';
+if ($template === 'completion') {
+    $html = '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px;">'
+        . '<div style="max-width:680px;margin:0 auto;background:#fff;border:1px solid #dbeafe;border-radius:18px;padding:28px;">'
+        . '<p style="margin:0 0 10px;color:#2563eb;font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;">BlockCraft Homework Game</p>'
+        . '<h1 style="margin:0 0 14px;font-size:26px;line-height:1.2;">Your question request has been completed</h1>'
+        . '<p style="margin:0 0 20px;font-size:16px;line-height:1.55;color:#334155;">Good news - your request to have questions added to the BlockCraft homework game has been done.</p>'
+        . '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:16px;margin:0 0 20px;">'
+        . '<p style="margin:0 0 8px;"><strong>Request:</strong> ' . bcm_html($title) . '</p>'
+        . ($subjectName !== '' ? '<p style="margin:0 0 8px;"><strong>Subject:</strong> ' . bcm_html($subjectName) . '</p>' : '')
+        . ($className !== '' ? '<p style="margin:0;"><strong>Class:</strong> ' . bcm_html($className) . '</p>' : '')
+        . '</div>'
+        . '<p style="margin:0 0 4px;color:#475569;">Marked complete by ' . bcm_html($completedBy) . '.</p>'
+        . '<p style="margin:0;color:#475569;">You can sign in to the teacher dashboard to review it.</p>'
+        . '</div></body></html>';
+} else {
+    $html = '<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#f8fafc;color:#0f172a;margin:0;padding:24px;">'
+        . '<div style="max-width:720px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:24px;">'
+        . '<p style="margin:0 0 8px;color:#2563eb;font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;">Blockcraft Curriculum Request</p>'
+        . '<h1 style="margin:0 0 18px;font-size:26px;">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h1>'
+        . '<p><strong>Teacher:</strong> ' . bcm_html($teacherName) . '<br><strong>Email:</strong> ' . bcm_html($teacherEmail) . '<br><strong>Subject:</strong> ' . bcm_html($subjectName) . '</p>'
+        . '<h2 style="font-size:18px;">Topics</h2><p>' . bcm_html($topics !== '' ? $topics : '(not supplied)') . '</p>'
+        . '<h2 style="font-size:18px;">Syllabus</h2><p>' . bcm_html($syllabus !== '' ? $syllabus : '(not supplied)') . '</p>'
+        . '<h2 style="font-size:18px;">Notes</h2><p>' . bcm_html($notes !== '' ? $notes : '(not supplied)') . '</p>'
+        . '<h2 style="font-size:18px;">Uploaded Files</h2>' . $htmlFiles
+        . '</div></body></html>';
+}
 
 $headers = [
     'MIME-Version: 1.0',
@@ -238,6 +266,7 @@ $message = [
     'teacherEmail' => $teacherEmail,
     'subjectName' => $subjectName,
     'title' => $title,
+    'template' => $template,
     'authMode' => $authMode,
 ];
 $staffflowQueueId = null;

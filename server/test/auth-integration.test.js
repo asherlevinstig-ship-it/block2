@@ -297,7 +297,9 @@ test('teacher game-question endpoints require a teacher session and expose game 
     assert.equal(completedBody.request.status, 'done');
     assert.equal(completedBody.notification.sent, true);
     assert.equal(sentMail[1].body.to, 'teacher@example.test');
+    assert.equal(sentMail[1].body.template, 'completion');
     assert.match(sentMail[1].body.subject, /complete/);
+    assert.match(sentMail[1].body.text, /questions added to the BlockCraft homework game/);
 
     const asherAliasSid = await f.auth.issueSession({ id: 'teacher_1', username: 'asherlevin', displayName: 'asherlevin', accountType: 'teacher', role: 'teacher', schoolId: '12' });
     const aliasRequests = await f.request('/auth/teacher/curriculum-requests?subjectId=5', { headers: { Authorization: 'Bearer ' + asherAliasSid } });

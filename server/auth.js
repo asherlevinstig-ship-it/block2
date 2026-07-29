@@ -463,7 +463,7 @@ class AuthService {
     const title = String(request && request.title || 'Curriculum request');
     const subjectName = String(request && request.subjectName || '');
     const text = [
-      'Your Blockcraft curriculum request has been marked complete.',
+      'Good news - your request to have questions added to the BlockCraft homework game has been completed.',
       '',
       'Request: ' + title,
       subjectName ? 'Subject: ' + subjectName : '',
@@ -479,15 +479,18 @@ class AuthService {
       },
       body: JSON.stringify({
         to,
+        template: 'completion',
         subject: '[Blockcraft] Curriculum request complete: ' + title,
         text,
         teacherName: String(request && (request.teacherName || request.teacherEmail) || ''),
-        teacherEmail: String(account && (account.username || account.email) || ''),
+        teacherEmail: to,
+        completedBy: String(account && (account.displayName || account.username || account.id) || 'Blockcraft admin'),
         subjectName,
+        className: String(request && request.className || ''),
         title,
         topics: '',
         syllabus: '',
-        notes: 'This request has been marked complete by ' + String(account && (account.displayName || account.username || account.id) || 'Blockcraft admin') + '.',
+        notes: '',
         files: [],
       }),
     });

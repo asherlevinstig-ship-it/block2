@@ -776,7 +776,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(serverAuthSource, /completeCurriculumRequest/);
   assert.match(serverAuthSource, /deleteCurriculumRequest/);
   assert.match(serverAuthSource, /sendCurriculumCompletionNotification/);
+  assert.match(serverAuthSource, /template: 'completion'/);
   assert.match(sitegroundMailBridge, /\$payload\['to'\]/);
+  assert.match(sitegroundMailBridge, /Your question request has been completed/);
+  assert.match(sitegroundMailBridge, /questions added to the BlockCraft homework game/);
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
   assert.match(stylesSource, /\.teacher-login-shell/);
