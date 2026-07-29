@@ -293,6 +293,11 @@ createApp({
       return correct ? 'Correct' : 'Wrong';
     }
 
+    function questionBreakdownRows(row, key) {
+      const list = row && row.breakdowns && Array.isArray(row.breakdowns[key]) ? row.breakdowns[key] : [];
+      return list.filter(item => Number(item.attempts || 0) > 0).slice(0, key === 'school' ? 8 : 6);
+    }
+
     function syncClassSelectionWithSubject() {
       const validClassIds = new Set((state.classes || []).map(row => String(row.id)));
       if (state.classId && !validClassIds.has(String(state.classId))) state.classId = '';
@@ -790,6 +795,7 @@ createApp({
       selectStudent,
       studentKey,
       outcomeLabel,
+      questionBreakdownRows,
       editQuestionFromAnalysis,
       handleCurriculumFiles,
       clearCurriculumRequest,
@@ -1054,12 +1060,37 @@ createApp({
               <span>Correct / wrong</span>
               <span>Accuracy</span>
             </div>
-            <button class="teacher-vue-analysis-row action" type="button" v-for="row in classQuestionRows" :key="row.id" @click="editQuestionFromAnalysis(row)">
-              <span>{{ row.prompt }}<small>{{ row.stage || row.reviewStatus }}</small></span>
-              <span>{{ row.topic || 'No topic' }}</span>
-              <strong>{{ row.correct }} / {{ row.wrong || 0 }}</strong>
-              <strong>{{ row.accuracy }}%</strong>
-            </button>
+            <article class="teacher-vue-question-breakdown-card" v-for="row in classQuestionRows" :key="row.id">
+              <button class="teacher-vue-analysis-row action" type="button" @click="editQuestionFromAnalysis(row)">
+                <span>{{ row.prompt }}<small>{{ row.stage || row.reviewStatus }}</small></span>
+                <span>{{ row.topic || 'No topic' }}</span>
+                <strong>{{ row.correct }} / {{ row.wrong || 0 }}</strong>
+                <strong>{{ row.accuracy }}%</strong>
+              </button>
+              <div class="teacher-vue-question-breakdowns">
+                <section>
+                  <h4>By class</h4>
+                  <div v-for="item in questionBreakdownRows(row, 'class')" :key="'class-' + item.id + '-' + row.id">
+                    <span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small>
+                  </div>
+                  <em v-if="!questionBreakdownRows(row, 'class').length">No class data</em>
+                </section>
+                <section>
+                  <h4>By year group</h4>
+                  <div v-for="item in questionBreakdownRows(row, 'year')" :key="'year-' + item.id + '-' + row.id">
+                    <span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small>
+                  </div>
+                  <em v-if="!questionBreakdownRows(row, 'year').length">No year data</em>
+                </section>
+                <section>
+                  <h4>By school</h4>
+                  <div v-for="item in questionBreakdownRows(row, 'school')" :key="'school-' + item.id + '-' + row.id" :class="{ own: item.ownSchool }">
+                    <span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small>
+                  </div>
+                  <em v-if="!questionBreakdownRows(row, 'school').length">No school data</em>
+                </section>
+              </div>
+            </article>
             <h3>Answered attempts</h3>
             <div class="teacher-vue-answer-row head"><span>Student</span><span>Question</span><span>Answer</span><span>Result</span></div>
             <div class="teacher-vue-answer-row" v-for="row in classAttemptRows" :key="row.id">
@@ -1277,4 +1308,3 @@ createApp({
     </div>
   `,
 }).mount('#teacherapp');
-

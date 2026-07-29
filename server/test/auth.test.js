@@ -855,12 +855,38 @@ test('MySQL game question analytics includes class students with zero attempts',
         answers: JSON.stringify(['Base two', 'Base ten', 'A wire', 'A password']),
         correct_index: 0,
       }]];
-      if (/LEFT JOIN schools sc ON sc\.id = gqa\.school_id/i.test(sql)) return [[{
+      if (/LEFT JOIN schools sc ON sc\.id = gqa\.school_id/i.test(sql) && !/question_id/i.test(sql)) return [[{
         school_id: 12,
         school_name: 'Town Academy',
         attempts: 2,
         correct: 1,
       }, {
+        school_id: 14,
+        school_name: 'River School',
+        attempts: 4,
+        correct: 3,
+      }]];
+      if (/COALESCE\(gqa\.class_id, s\.class_id, 0\) AS class_id/i.test(sql)) return [[{
+        question_id: 44,
+        class_id: 3,
+        class_name: '8A',
+        attempts: 2,
+        correct: 1,
+      }]];
+      if (/AS year_group/i.test(sql) && /GROUP BY gqa\.question_id, year_group/i.test(sql)) return [[{
+        question_id: 44,
+        year_group: 'Year 8',
+        attempts: 2,
+        correct: 1,
+      }]];
+      if (/GROUP BY gqa\.question_id, school_id, school_name/i.test(sql)) return [[{
+        question_id: 44,
+        school_id: 12,
+        school_name: 'Town Academy',
+        attempts: 2,
+        correct: 1,
+      }, {
+        question_id: 44,
         school_id: 14,
         school_name: 'River School',
         attempts: 4,
@@ -907,6 +933,10 @@ test('MySQL game question analytics includes class students with zero attempts',
   assert.equal(analytics.attempts[0].correctAnswer, 'Base two');
   assert.equal(analytics.schoolComparisons.length, 2);
   assert.equal(analytics.schoolComparisons.find(row => row.id === 12).ownSchool, true);
+  const question = analytics.questions.find(row => row.id === 44);
+  assert.equal(question.breakdowns.class[0].name, '8A');
+  assert.equal(question.breakdowns.year[0].name, 'Year 8');
+  assert.equal(question.breakdowns.school.find(row => row.id === 14).accuracy, 75);
 });
 
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {

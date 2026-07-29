@@ -1347,6 +1347,54 @@ class MySqlGameQuestionStore {
        LIMIT 100`,
       [subjectId, days],
     );
+    const questionClassRows = await this.safeQuery(
+      `SELECT
+         gqa.question_id,
+         COALESCE(gqa.class_id, s.class_id, 0) AS class_id,
+         COALESCE(c.name, CONCAT('Class ', COALESCE(gqa.class_id, s.class_id, 0))) AS class_name,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN students s ON s.id = gqa.student_id
+       LEFT JOIN classes c ON c.id = COALESCE(gqa.class_id, s.class_id)
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND (? = 0 OR gqa.school_id IS NULL OR gqa.school_id = ?)
+       GROUP BY gqa.question_id, class_id, class_name
+       ORDER BY gqa.question_id ASC, attempts DESC, class_name ASC
+       LIMIT 1200`,
+      [subjectId, days, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
+    const questionYearRows = await this.safeQuery(
+      `SELECT
+         gqa.question_id,
+         COALESCE(NULLIF(s.year_group, ''), NULLIF(c.year_group, ''), 'No year group') AS year_group,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN students s ON s.id = gqa.student_id
+       LEFT JOIN classes c ON c.id = COALESCE(gqa.class_id, s.class_id)
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+         AND (? = 0 OR gqa.school_id IS NULL OR gqa.school_id = ?)
+       GROUP BY gqa.question_id, year_group
+       ORDER BY gqa.question_id ASC, attempts DESC, year_group ASC
+       LIMIT 1200`,
+      [subjectId, days, scopeSchoolId || 0, scopeSchoolId || 0],
+    );
+    const questionSchoolRows = await this.safeQuery(
+      `SELECT
+         gqa.question_id,
+         COALESCE(gqa.school_id, 0) AS school_id,
+         COALESCE(sc.name, CONCAT('School ', COALESCE(gqa.school_id, 0))) AS school_name,
+         COUNT(*) AS attempts,
+         SUM(CASE WHEN gqa.correct = 1 THEN 1 ELSE 0 END) AS correct
+       FROM game_question_attempt gqa
+       LEFT JOIN schools sc ON sc.id = gqa.school_id
+       WHERE gqa.subject_id = ? AND gqa.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+       GROUP BY gqa.question_id, school_id, school_name
+       ORDER BY gqa.question_id ASC, attempts DESC, school_name ASC
+       LIMIT 1200`,
+      [subjectId, days],
+    );
     const normalize = row => {
       const attempts = Number(row.attempts) || 0;
       const correct = Number(row.correct) || 0;
@@ -1402,6 +1450,42 @@ class MySqlGameQuestionStore {
       reviewStatus: String(row.review_status || 'draft'),
       ...normalize(row),
     }));
+    const questionBreakdowns = new Map();
+    const ensureQuestionBreakdown = questionId => {
+      const id = Number(questionId) || 0;
+      if (!questionBreakdowns.has(id)) questionBreakdowns.set(id, { class: [], year: [], school: [] });
+      return questionBreakdowns.get(id);
+    };
+    for (const row of questionClassRows || []) {
+      ensureQuestionBreakdown(row.question_id).class.push({
+        id: Number(row.class_id) || 0,
+        name: String(row.class_name || 'No class'),
+        ...normalize(row),
+      });
+    }
+    for (const row of questionYearRows || []) {
+      ensureQuestionBreakdown(row.question_id).year.push({
+        id: String(row.year_group || 'No year group'),
+        name: String(row.year_group || 'No year group'),
+        ...normalize(row),
+      });
+    }
+    for (const row of questionSchoolRows || []) {
+      ensureQuestionBreakdown(row.question_id).school.push({
+        id: Number(row.school_id) || 0,
+        name: String(row.school_name || 'Unknown school'),
+        ownSchool: scopeSchoolId ? Number(row.school_id) === Number(scopeSchoolId) : false,
+        ...normalize(row),
+      });
+    }
+    for (const question of questions) {
+      const breakdowns = questionBreakdowns.get(question.id) || { class: [], year: [], school: [] };
+      question.breakdowns = {
+        class: breakdowns.class.slice(0, 6),
+        year: breakdowns.year.slice(0, 6),
+        school: breakdowns.school.slice(0, 8),
+      };
+    }
     const topicMap = new Map();
     const studentTopicMap = new Map();
     const attempts = (attemptRows || []).map(row => {
