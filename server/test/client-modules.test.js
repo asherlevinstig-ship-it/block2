@@ -1688,6 +1688,9 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/const MOUSE_LOOK_SENSITIVITY=\.00215;/);
   assert.match(combat,/function gameplayCameraInputAllowed\(\)\{/);
   assert.match(combat,/return !!\(locked&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!transitionModalOpen&&!globalThis\.chatTyping&&!document\.body\.classList\.contains\('game-modal-open'\)\);/);
+  assert.match(combat,/let locked=false, lockFallback=false, suppressNextLockFallback=false/);
+  assert.match(combat,/function releaseGameplayCursor\(\)\{[\s\S]*suppressNextLockFallback=true;[\s\S]*lockFallback=false;[\s\S]*locked=false;[\s\S]*mouseLookDelta\.x=0;mouseLookDelta\.y=0;/);
+  assert.match(combat,/else if\(suppressNextLockFallback\)\{ lockFallback=false; suppressNextLockFallback=false; \}/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*queueMouseLook\(e\.movementX\|\|0,e\.movementY\|\|0\);\s*\}else if\(lockFallback&&isWorldPointerTarget\(e\.target\)\)\{/);
   assert.match(combat,/function consumeMouseLookDelta\(\)\{/);
   assert.match(combat,/if\(!gameplayCameraInputAllowed\(\)\)\{ mouseLookDelta\.x=0; mouseLookDelta\.y=0; return \{x:0,y:0\}; \}/);
@@ -2150,7 +2153,8 @@ test('Left Alt opens subject focus while Escape only closes or releases cursor',
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   assert.match(combat,/if\(e\.code==='AltLeft'&&!e\.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!claimMode&&!globalThis\.BlockcraftRecall\.active\)\{/);
   assert.match(combat,/if\(globalThis\.BlockcraftSubjectFocus\)globalThis\.BlockcraftSubjectFocus\.open\(\);/);
-  assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*e\.preventDefault\(\);\s*try\{ document\.exitPointerLock\(\); \}catch\(err\)\{\}\s*lockFallback=true;\s*locked=true;\s*refreshPlayUi\(\);\s*return;\s*\}/);
+  assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*e\.preventDefault\(\);\s*releaseGameplayCursor\(\);\s*return;\s*\}/);
+  assert.match(combat,/if\(lockFallback\)\{\s*e\.preventDefault\(\);\s*releaseGameplayCursor\(\);\s*return;\s*\}/);
   const escapeCloseBlock=combat.slice(combat.indexOf("if(e.code==='Escape'){\n    let closed=false;"),combat.indexOf("if(locked){",combat.indexOf("if(e.code==='Escape'){\n    let closed=false;")));
   assert.match(escapeCloseBlock,/if\(uiOpen\)\{ closeUI\(\); closed=true; \}/);
   assert.match(escapeCloseBlock,/if\(statOpen\)\{ closeStat\(\); closed=true; \}/);
