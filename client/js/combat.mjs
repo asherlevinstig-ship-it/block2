@@ -4436,6 +4436,7 @@ async function startPlaying(create=false){
       return;
     }
   }
+  if(globalThis.BlockcraftOpeningAudio&&typeof globalThis.BlockcraftOpeningAudio.stop==='function')globalThis.BlockcraftOpeningAudio.stop();
   SFX.init();
   if(!NET.tried) showWorldLoading('Preparing world...');
   netConnect();
@@ -4456,7 +4457,10 @@ checkAuth().then(account=>{
     openingCinematicReady.then(()=>startPlaying(false));
   }
 }).catch(()=>{});
-function primeMenuAudio(){ if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init(); }
+function primeMenuAudio(){
+  if(globalThis.BlockcraftOpeningAudio&&typeof globalThis.BlockcraftOpeningAudio.startAmbient==='function')globalThis.BlockcraftOpeningAudio.startAmbient();
+  if(globalThis.SFX&&globalThis.SFX.init)globalThis.SFX.init();
+}
 overlay.addEventListener('pointerdown', primeMenuAudio, {once:true});
 overlay.addEventListener('keydown', primeMenuAudio, {once:true});
 if(authpassshow&&authpass)authpassshow.addEventListener('click',()=>{

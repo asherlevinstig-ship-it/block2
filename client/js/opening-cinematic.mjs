@@ -16,6 +16,7 @@ function createOpeningReady() {
   let audioStarted = false;
   let resolveReady = () => {};
   const ready = new Promise(resolve => { resolveReady = resolve; });
+  try { if (audio) audio.loop = true; } catch (_) {}
 
   function showStart(text = 'Click to play opening with sound') {
     root.classList.add('needs-gesture');
@@ -63,7 +64,6 @@ function createOpeningReady() {
       video.removeAttribute('src');
       video.load();
     } catch (_) {}
-    stopSoundtrack();
     hideStart();
     root.classList.add('done');
     setTimeout(() => root.classList.add('hidden'), 460);
@@ -105,6 +105,17 @@ function createOpeningReady() {
     stopSoundtrack();
     playCurrent();
   }
+
+  globalThis.BlockcraftOpeningAudio = {
+    startAmbient() {
+      startedWithGesture = true;
+      return startSoundtrack(false);
+    },
+    stop: stopSoundtrack,
+    get active() {
+      return !!audioStarted;
+    },
+  };
 
   video.addEventListener('ended', () => {
     if (!startedWithGesture) {

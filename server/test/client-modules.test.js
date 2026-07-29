@@ -3188,6 +3188,10 @@ test('opening cinematic plays bundled videos before auto-resume', () => {
   assert.ok(index.indexOf('/js/opening-cinematic.mjs') > -1 && index.indexOf('/js/opening-cinematic.mjs') < index.indexOf('/js/boot.mjs'));
   assert.match(opening, /const sources = \['\/assets\/intro\/vid1\.mp4', '\/assets\/intro\/vid2\.mp4'\]/);
   assert.match(opening, /globalThis\.BlockcraftOpeningReady = createOpeningReady\(\)/);
+  assert.match(opening, /if \(audio\) audio\.loop = true;/);
+  assert.match(opening, /globalThis\.BlockcraftOpeningAudio = \{/);
+  assert.match(opening, /startAmbient\(\) \{[\s\S]*return startSoundtrack\(false\);/);
+  assert.match(opening, /stop: stopSoundtrack/);
   assert.match(opening, /video\.muted = true;/);
   assert.match(opening, /video\.volume = 0;/);
   assert.match(opening, /audio\.play\(\)/);
@@ -3195,6 +3199,8 @@ test('opening cinematic plays bundled videos before auto-resume', () => {
   assert.match(opening, /root\.addEventListener\('click'/);
   assert.match(opening, /if \(!startedWithGesture\) \{\s*index = \(index \+ 1\) % sources\.length;/);
   assert.match(combat, /const openingCinematicReady=globalThis\.BlockcraftOpeningReady&&typeof globalThis\.BlockcraftOpeningReady\.then==='function'\?globalThis\.BlockcraftOpeningReady:Promise\.resolve\(\)/);
+  assert.match(combat, /globalThis\.BlockcraftOpeningAudio&&typeof globalThis\.BlockcraftOpeningAudio\.stop==='function'\)globalThis\.BlockcraftOpeningAudio\.stop\(\);/);
+  assert.match(combat, /globalThis\.BlockcraftOpeningAudio&&typeof globalThis\.BlockcraftOpeningAudio\.startAmbient==='function'\)globalThis\.BlockcraftOpeningAudio\.startAmbient\(\);/);
   assert.match(combat, /openingCinematicReady\.then\(\(\)=>startPlaying\(false\)\)/);
   assert.match(styles, /#introcinematic\{position:fixed;inset:0;z-index:80/);
   assert.match(styles, /#introvideo\{position:absolute;inset:0;width:100%;height:100%;object-fit:cover/);
