@@ -727,6 +727,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /teacher-vue-analysis/);
   assert.match(teacherDashboardSource, /teacherCurriculumFiles/);
   assert.match(teacherDashboardSource, /isAsherAdmin/);
+  assert.match(teacherDashboardSource, /curriculumAdmin/);
+  assert.match(teacherDashboardSource, /asherlevin/);
   assert.match(teacherDashboardSource, /Admin request inbox/);
   assert.match(teacherDashboardSource, /downloadCurriculumFile/);
   assert.match(teacherDashboardSource, /curriculumRequests/);

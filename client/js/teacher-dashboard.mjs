@@ -96,6 +96,7 @@ createApp({
       homeworks: [],
       analytics: { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 },
       curriculumRequests: [],
+      curriculumAdmin: false,
       selectedId: 0,
       subjectId: '',
       classId: '',
@@ -117,8 +118,12 @@ createApp({
     });
 
     const selectedSubject = computed(() => state.subjects.find(s => String(s.id) === String(state.subjectId)) || null);
-    const isAsherAdmin = computed(() => String(state.account && (state.account.username || state.account.email) || '').trim().toLowerCase() === 'asherlevin85@gmail.com'
-      || String(state.account && (state.account.role || state.account.accountType) || '').trim().toLowerCase() === 'admin');
+    const isAsherAdmin = computed(() => {
+      const username = String(state.account && (state.account.username || state.account.email) || '').trim().toLowerCase();
+      const displayName = String(state.account && state.account.displayName || '').trim().toLowerCase();
+      const role = String(state.account && (state.account.role || state.account.accountType) || '').trim().toLowerCase();
+      return state.curriculumAdmin || role === 'admin' || ['asherlevin85@gmail.com', 'asherlevin85', 'asherlevin'].includes(username) || ['asherlevin', 'asher levin'].includes(displayName);
+    });
     const selectedQuestion = computed(() => state.questions.find(q => q.id === state.selectedId) || null);
     const topicOptions = computed(() => [...new Set(state.questions.map(q => String(q.topic || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
     const stageOptions = computed(() => [...new Set(state.questions.map(q => String(q.stage || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
@@ -222,6 +227,7 @@ createApp({
       state.homeworks = [];
       state.analytics = { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 };
       state.curriculumRequests = [];
+      state.curriculumAdmin = false;
       state.view = 'overview';
       state.loading = false;
       setNotice('');
@@ -319,15 +325,12 @@ createApp({
     }
 
     async function loadCurriculumRequests() {
-      if (!isAsherAdmin.value) {
-        state.curriculumRequests = [];
-        return;
-      }
       const params = new URLSearchParams();
       if (state.subjectId) params.set('subjectId', state.subjectId);
       if (state.classId) params.set('classId', state.classId);
       const data = await requestJson('/auth/teacher/curriculum-requests' + (params.toString() ? '?' + params.toString() : ''));
       state.curriculumRequests = data.requests || [];
+      state.curriculumAdmin = data.admin === true;
     }
 
     async function refreshAll() {
@@ -841,7 +844,7 @@ createApp({
         </section>
 
         <section class="teacher-vue-curriculum" v-else-if="state.view === 'curriculum'">
-          <section class="teacher-vue-panel teacher-vue-curriculum-inbox" v-if="isAsherAdmin">
+          <section class="teacher-vue-panel teacher-vue-curriculum-inbox" v-if="isAsherAdmin || state.curriculumRequests.length">
             <header><h2>Admin request inbox</h2><button type="button" @click="loadCurriculumRequests">Refresh</button></header>
             <article class="teacher-vue-request-card" v-for="request in state.curriculumRequests" :key="request.id">
               <div>

@@ -67,6 +67,20 @@ function sourceIdFromAccount(account, type) {
   return match ? Number(match[1]) : 0;
 }
 
+function isCurriculumAdminAccount(account) {
+  const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
+  const username = String(account && (account.username || account.email) || '').trim().toLowerCase();
+  const displayName = String(account && account.displayName || '').trim().toLowerCase();
+  const id = String(account && account.id || '').trim().toLowerCase();
+  return role === 'admin'
+    || username === 'asherlevin85@gmail.com'
+    || username === 'asherlevin85'
+    || username === 'asherlevin'
+    || displayName === 'asherlevin'
+    || displayName === 'asher levin'
+    || id === 'asherlevin';
+}
+
 function publicQuestion(row) {
   let answers = [];
   try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
@@ -939,9 +953,7 @@ class MySqlGameQuestionStore {
   async listCurriculumRequests(account, query = {}) {
     await this.ensureSchema();
     const teacherId = sourceIdFromAccount(account, 'teacher');
-    const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
-    const username = String(account && (account.username || account.email) || '').trim().toLowerCase();
-    const admin = role === 'admin' || username === 'asherlevin85@gmail.com';
+    const admin = isCurriculumAdminAccount(account);
     if (!admin && !teacherId) throw Object.assign(new Error('Teacher account required.'), { status: 403, code: 'teacher' });
     const subjectId = clampInt(query.subjectId || query.subject_id, 0, 2147483647);
     const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
@@ -976,9 +988,7 @@ class MySqlGameQuestionStore {
   async curriculumAttachment(account, requestId, storedName) {
     await this.ensureSchema();
     const teacherId = sourceIdFromAccount(account, 'teacher');
-    const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
-    const username = String(account && (account.username || account.email) || '').trim().toLowerCase();
-    const admin = role === 'admin' || username === 'asherlevin85@gmail.com';
+    const admin = isCurriculumAdminAccount(account);
     const id = clampInt(requestId, 1, Number.MAX_SAFE_INTEGER);
     const cleanStoredName = cleanText(storedName, 255);
     if (!cleanStoredName || cleanStoredName.includes('/') || cleanStoredName.includes('\\')) {

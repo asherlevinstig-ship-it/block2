@@ -151,7 +151,7 @@ test('teacher game-question endpoints require a teacher session and expose game 
       return { id: 91, subjectId: 5, subjectName: 'Computer Science', title: body.title, topics: body.topics, syllabus: body.syllabus, notes: body.notes, files: body.files };
     },
     async listCurriculumRequests(account, query) {
-      assert.equal(account.username, 'asherlevin85@gmail.com');
+      assert.ok(['asherlevin85@gmail.com', 'asherlevin'].includes(account.username));
       assert.equal(query.subjectId, '5');
       return [{
         id: 91,
@@ -272,6 +272,11 @@ test('teacher game-question endpoints require a teacher session and expose game 
     assert.equal(file.status, 200);
     assert.equal(file.headers.get('content-disposition').includes('organiser.pdf'), true);
     assert.equal(await file.text(), 'pdf content');
+
+    const asherAliasSid = await f.auth.issueSession({ id: 'teacher_1', username: 'asherlevin', displayName: 'asherlevin', accountType: 'teacher', role: 'teacher', schoolId: '12' });
+    const aliasRequests = await f.request('/auth/teacher/curriculum-requests?subjectId=5', { headers: { Authorization: 'Bearer ' + asherAliasSid } });
+    assert.equal(aliasRequests.status, 200);
+    assert.equal((await aliasRequests.json()).admin, true);
   } finally { await f.close(); }
 });
 

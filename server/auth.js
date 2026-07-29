@@ -334,10 +334,20 @@ class AuthService {
     return new Set(raw.split(',').map(cleanUsername).filter(Boolean));
   }
 
+  adminIdentifiers() {
+    const raw = String(this.env && this.env.ADMIN_IDENTIFIERS || process.env.ADMIN_IDENTIFIERS || 'asherlevin85@gmail.com,asherlevin85,asherlevin');
+    return new Set(raw.split(',').map(value => cleanAdminId(value)).filter(Boolean));
+  }
+
   isAdminAccount(account) {
     if (!account) return false;
     const role = cleanAdminId(account.role || account.accountType);
-    return role === 'admin' || this.adminEmails().has(cleanUsername(account.username || account.email));
+    const username = cleanUsername(account.username || account.email);
+    const identifiers = this.adminIdentifiers();
+    return role === 'admin'
+      || this.adminEmails().has(username)
+      || identifiers.has(cleanAdminId(username))
+      || identifiers.has(cleanAdminId(account.displayName));
   }
 
   authorizeAdmin(req) {
