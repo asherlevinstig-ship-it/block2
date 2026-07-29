@@ -2777,6 +2777,9 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(dimensions,/globalThis\.toggleUtilityEquip\(id\);[\s\S]*renderStat\(\);/);
   assert.match(dimensions,/globalThis\.useActiveUtility\(\)/);
   assert.match(world,/function useUtilityHotkey\(slotIndex\)/);
+  assert.match(world,/function utilityPassiveHotkeyMessage\(id,u\)/);
+  assert.match(world,/id==='minimap'[\s\S]*small exploration map on the HUD[\s\S]*does not need the active slot/);
+  assert.doesNotMatch(world,/is running passively/);
   assert.match(world,/"useUtilityHotkey":\{get:\(\)=>useUtilityHotkey\}/);
   assert.match(hud,/utilityBarEl\.id='utilitybar'/);
   assert.match(hud,/index===0\?'I':'S\+'\+index/);

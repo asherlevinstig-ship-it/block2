@@ -7087,6 +7087,15 @@ function useActiveUtility(){
   if(!NET.on||!NET.room) return sysMsg('<b>'+escHTML(u.name)+'</b> needs the server to read the world.');
   NET.room.send('utilityUse',{id});
 }
+function utilityPassiveHotkeyMessage(id,u){
+  if(id==='minimap')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped in a passive slot to show the small exploration map on the HUD; it does not need the active slot.';
+  if(id==='world_map')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to upgrade the HUD map into regional planning; it does not need the active slot.';
+  if(id==='compass')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to add bearing and distance hints toward your current objective.';
+  if(id==='party_compass')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to reveal party rally, ping, downed ally, and split-team guidance.';
+  if(id==='feather_step')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to soften dangerous falls automatically.';
+  if(id==='weather_sense')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to extend weather-site tracking on the map.';
+  return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped for its effect; passive utilities do not use the active slot.';
+}
 function useUtilityHotkey(slotIndex){
   const idx=Math.max(0,Math.min(3,slotIndex|0));
   if(idx===0){ useActiveUtility(); return; }
@@ -7098,7 +7107,7 @@ function useUtilityHotkey(slotIndex){
   }
   showName(u.name);
   updateLandMinimap();
-  sysMsg('<b>'+escHTML(u.name)+'</b> is running passively.<br>'+escHTML(u.use||u.desc||'This utility is active while equipped.'));
+  sysMsg(utilityPassiveHotkeyMessage(id,u));
 }
 function makeJobContract(jobId){
   if(!JOBS[jobId]) return null;
