@@ -501,15 +501,6 @@ class MySqlGameQuestionStore {
         [subjectId, schoolId, schoolId],
       ));
     }
-    if (!rows.length) {
-      rows = this.uniqueClassRows(await this.safeQuery(
-        `SELECT DISTINCT c.id, c.name, c.join_code, c.is_active
-         FROM classes c
-         WHERE (c.school_id IS NULL OR ? = 0 OR c.school_id = ?)
-         ORDER BY c.name ASC`,
-        [schoolId, schoolId],
-      ));
-    }
     return (rows || []).map(row => ({
       id: Number(row.id) || 0,
       name: String(row.name || ''),

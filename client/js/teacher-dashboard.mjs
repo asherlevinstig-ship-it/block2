@@ -204,6 +204,12 @@ createApp({
       return weekdayNames[Math.max(0, Math.min(6, Number(value) || 0))] || 'Monday';
     }
 
+    function syncClassSelectionWithSubject() {
+      const validClassIds = new Set((state.classes || []).map(row => String(row.id)));
+      if (state.classId && !validClassIds.has(String(state.classId))) state.classId = '';
+      if (state.homework.classId && !validClassIds.has(String(state.homework.classId))) state.homework.classId = '';
+    }
+
     function signOut() {
       storeSession('');
       state.account = null;
@@ -290,17 +296,18 @@ createApp({
 
     async function loadSubjectData() {
       if (!state.subjectId) return;
+      const classesData = await requestJson('/auth/teacher/classes?subjectId=' + encodeURIComponent(state.subjectId));
+      state.classes = classesData.classes || [];
+      syncClassSelectionWithSubject();
       const query = '?subjectId=' + encodeURIComponent(state.subjectId) + (state.status ? '&reviewStatus=' + encodeURIComponent(state.status) : '');
       const analyticsQuery = '?subjectId=' + encodeURIComponent(state.subjectId)
         + (state.classId ? '&classId=' + encodeURIComponent(state.classId) : '')
         + '&days=' + encodeURIComponent(state.analyticsDays);
-      const [classesData, questionsData, analyticsData, homeworkData] = await Promise.all([
-        requestJson('/auth/teacher/classes?subjectId=' + encodeURIComponent(state.subjectId)),
+      const [questionsData, analyticsData, homeworkData] = await Promise.all([
         requestJson('/auth/teacher/game-questions' + query),
         requestJson('/auth/teacher/analytics' + analyticsQuery),
         requestJson('/auth/teacher/homework' + analyticsQuery),
       ]);
-      state.classes = classesData.classes || [];
       state.questions = (questionsData.questions || []).map(cleanQuestion);
       state.analytics = analyticsData.analytics || state.analytics;
       state.homeworks = homeworkData.homework || [];
@@ -357,6 +364,8 @@ createApp({
     async function changeSubject() {
       newQuestion();
       clearQuestionFilters();
+      state.classId = '';
+      state.homework.classId = '';
       state.loading = true;
       try {
         await loadSubjectData();

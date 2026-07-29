@@ -755,6 +755,24 @@ test('MySQL game question store discovers multiple subjects through class_teache
   assert.ok(queries.some(q => /class_teachers/i.test(q.sql)));
 });
 
+test('MySQL game question store does not fall back to unrelated classes for subject filters', async () => {
+  const queries = [];
+  const pool = {
+    async execute(sql, params = []) {
+      queries.push({ sql, params });
+      if (/SELECT DISTINCT s\.id/i.test(sql) && /FROM subjects s/i.test(sql)) {
+        return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
+      }
+      if (/SELECT DISTINCT c\.id/i.test(sql) && /FROM classes c/i.test(sql)) return [[]];
+      return [[]];
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const classes = await store.listClasses({ id: 'teacher_7', accountType: 'teacher', role: 'teacher', schoolId: '12' }, 5);
+  assert.deepEqual(classes, []);
+  assert.equal(queries.some(q => /FROM classes c\s+WHERE \(c\.school_id IS NULL OR \? = 0 OR c\.school_id = \?\)/i.test(q.sql)), false);
+});
+
 test('MySQL game question store lists student subjects from assigned classes', async () => {
   const queries = [];
   const pool = {

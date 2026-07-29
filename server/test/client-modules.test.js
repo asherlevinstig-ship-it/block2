@@ -699,6 +699,9 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /\/auth\/teacher\/subjects/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/classes\?subjectId=/);
   assert.match(teacherDashboardSource, /\/auth\/teacher\/game-questions/);
+  assert.match(teacherDashboardSource, /syncClassSelectionWithSubject/);
+  assert.match(teacherDashboardSource, /state\.classId = '';\s+state\.homework\.classId = '';\s+state\.loading = true;/);
+  assert.match(teacherDashboardSource, /const classesData = await requestJson\('\/auth\/teacher\/classes\?subjectId='/);
   assert.match(teacherDashboardSource, /Shared subject bank/);
   assert.match(teacherDashboardSource, /one shared subject question bank/);
   assert.match(teacherDashboardSource, /added by/);
