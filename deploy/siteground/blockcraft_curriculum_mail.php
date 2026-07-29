@@ -19,6 +19,23 @@ function bcm_html(string $value): string {
     return nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8'));
 }
 
+function bcm_rate_limit(string $bucket, int $limit, int $windowSeconds): bool {
+    $key = preg_replace('/[^a-zA-Z0-9_.-]/', '_', $bucket);
+    $file = sys_get_temp_dir() . '/blockcraft_curriculum_mail_' . $key . '.json';
+    $now = time();
+    $rows = [];
+    if (is_readable($file)) {
+        $decoded = json_decode((string)file_get_contents($file), true);
+        if (is_array($decoded)) $rows = $decoded;
+    }
+    $rows = array_values(array_filter($rows, fn($ts) => is_int($ts) && $ts > $now - $windowSeconds));
+    if (count($rows) >= $limit) return false;
+    $rows[] = $now;
+    file_put_contents($file, json_encode($rows), LOCK_EX);
+    @chmod($file, 0600);
+    return true;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     bcm_json(405, ['ok' => false, 'error' => 'POST required']);
 }
@@ -54,11 +71,21 @@ if (!$secretOk && defined('BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_SECRET_ADOPTION') &&
         }
     }
 }
+if (!$secretOk && defined('BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_DASHBOARD_BRIDGE') && BLOCKCRAFT_CURRICULUM_MAIL_ALLOW_DASHBOARD_BRIDGE) {
+    $remoteIp = (string)($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $teacherEmailForBridge = strtolower(bcm_clean($payload['teacherEmail'] ?? '', 255));
+    $allowedTeacherEmail = defined('BLOCKCRAFT_CURRICULUM_DASHBOARD_TEACHER_EMAIL') ? strtolower((string)BLOCKCRAFT_CURRICULUM_DASHBOARD_TEACHER_EMAIL) : 'asherlevin85@gmail.com';
+    if ($teacherEmailForBridge === $allowedTeacherEmail
+        && bcm_rate_limit('ip_' . $remoteIp, 8, 3600)
+        && bcm_rate_limit('global', 30, 3600)) {
+        $secretOk = true;
+    }
+}
 if (!$secretOk) {
     bcm_json(403, ['ok' => false, 'error' => 'Invalid mail bridge secret']);
 }
 
-$to = bcm_clean($payload['to'] ?? (defined('BLOCKCRAFT_CURRICULUM_NOTIFY_TO') ? BLOCKCRAFT_CURRICULUM_NOTIFY_TO : 'asherlevin85@gmail.com'), 255);
+$to = bcm_clean(defined('BLOCKCRAFT_CURRICULUM_NOTIFY_TO') ? BLOCKCRAFT_CURRICULUM_NOTIFY_TO : 'asherlevin85@gmail.com', 255);
 if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
     bcm_json(400, ['ok' => false, 'error' => 'Invalid recipient']);
 }
