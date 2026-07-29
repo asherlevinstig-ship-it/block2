@@ -3092,6 +3092,7 @@ test('mirror appearance editor stays mounted outside the login setup flow', () =
   assert.match(auth, /const target = mode === 'mirror' && typeof document !== 'undefined' \? document\.body : hunterSetup;/);
   assert.match(auth, /if \(editingMirror\) \{\s*mountCharacterCreator\('mirror'\);[\s\S]*renderCharacterCreator\('mirror'\);/);
   assert.match(auth, /mountCharacterCreator\('setup'\);[\s\S]*creator\.dataset\.mode = 'setup';/);
+  assert.match(auth, /document\.body\.classList\.toggle\('character-setup-open', signed && !hasHunterName\(\) && !editingMirror\)/);
 });
 
 test('appearance creator exposes style presets and avatar style dimensions', () => {
@@ -3143,6 +3144,10 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(networking, /shadeHex\(look\.skin,12\)/);
   assert.match(styles, /\.ccstage/);
   assert.match(styles, /\.ccstylegrid/);
+  assert.match(styles, /body\.character-setup-open #overlay\.compact #panel\{width:min\(1120px,calc\(100vw - 36px\)\);max-height:calc\(100vh - 36px\);overflow:auto/);
+  assert.match(styles, /body\.character-setup-open #overlay\.compact \.splash-shot\{display:none\}/);
+  assert.match(styles, /body\.character-setup-open \.ccbody\{grid-template-columns:minmax\(260px,300px\) minmax\(0,1fr\);align-items:start/);
+  assert.match(styles, /body\.character-setup-open \.ccpresetbar\{grid-template-columns:repeat\(4,minmax\(104px,1fr\)\)\}/);
 });
 
 test('auth controller clears stale hunter name when the signed-in account has no profile name', async () => {

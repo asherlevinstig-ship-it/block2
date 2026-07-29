@@ -244,6 +244,7 @@ export function createAuthController({ user, password, playerName, status, play,
   function render() {
     const signed = !!state.account;
     const editingMirror = mirrorOpen();
+    if (typeof document !== 'undefined' && document.body) document.body.classList.toggle('character-setup-open', signed && !hasHunterName() && !editingMirror);
     user.classList.toggle('hidden', signed);
     password.classList.toggle('hidden', signed);
     if (hunterSetup) hunterSetup.classList.toggle('hidden', !signed || hasHunterName());
