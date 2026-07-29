@@ -1004,21 +1004,29 @@ function statUtilityActionLabel(id){
   if(u.slot==='active')return statUtilityLoadout().active===id?'CLEAR':'ACTIVE';
   return statUtilityEquipped(id)?'UNEQUIP':'EQUIP';
 }
+function statVitalHTML(label,value,max,cls){
+  const pct=Math.max(0,Math.min(100,Math.round((Number(value||0)/Math.max(1,Number(max||1)))*100)));
+  return '<div class="stat-vital '+cls+'"><span>'+label+'</span><b>'+Math.ceil(value)+'/'+max+'</b><i><em style="width:'+pct+'%"></em></i></div>';
+}
+function statPanelTitleHTML(label,extra=''){
+  return '<div class="stat-panel-title"><span>'+label+'</span>'+(extra?'<em>'+extra+'</em>':'')+'</div>';
+}
 function statUtilityKitHTML(){
   const defs=statUtilityDefs(),order=statUtilityOrder().filter(id=>defs[id]);
   if(!order.length)return '';
   const loadout=statUtilityLoadout(),passive=loadout.passive.slice(0,3);
   while(passive.length<3)passive.push('');
   const active=loadout.active&&defs[loadout.active]?defs[loadout.active]:null;
-  const cards=order.map(id=>{
+  const cards=order.slice(0,7).map(id=>{
     const u=defs[id],owned=statUtilityUnlocked(id),equipped=statUtilityEquipped(id);
     return '<button type="button" class="stat-utility-card '+(owned?'owned':'locked')+(equipped?' equipped':'')+'" data-utility-id="'+escHTML(id)+'" '+(owned?'':'disabled title="Unlock from: '+escHTML(u.unlock||'Progression')+'"')+'>'+
-      '<i>'+escHTML(u.icon||'')+'</i><span><b>'+escHTML(u.name||id)+'</b><small>'+escHTML((u.slot==='active'?'Active':'Passive')+' - '+(u.use||u.desc||''))+'</small><em>'+statUtilityActionLabel(id)+'</em></span></button>';
+      '<i>'+escHTML(u.icon||'')+'</i><span><b>'+escHTML(u.name||id)+'</b><small>'+escHTML(u.slot==='active'?'Active':'Passive')+'</small></span><em>'+statUtilityActionLabel(id)+'</em></button>';
   }).join('');
-  return '<div class="stat-utility-kit"><div class="stat-utility-head"><span><small>UTILITY LOADOUT</small><b>Hunter Kit</b></span><em>Press I to use active utilities</em></div>'+
+  return '<div class="stat-utility-kit">'+statPanelTitleHTML('UTILITY LOADOUT','Equip 1 active ability and up to 3 passive abilities')+
+    '<button type="button" class="stat-manage-utilities" data-utility-open="1">MANAGE UTILITIES</button>'+
     '<div class="stat-utility-slots">'+statUtilitySlotHTML(loadout.active,'ACTIVE')+passive.map((id,i)=>statUtilitySlotHTML(id,'PASSIVE '+(i+1))).join('')+'</div>'+
-    '<div class="stat-utility-focus">'+(active?'<b>'+escHTML(active.name)+'</b><small>'+escHTML(active.use||active.desc||'Ready from the utility hotbar.')+'</small><button type="button" data-utility-use="active">USE ACTIVE</button>':'<b>No active utility equipped</b><small>Equip Compass, Trail Sense, or another active tool here.</small><button type="button" data-utility-open="1">OPEN UTILITIES</button>')+'</div>'+
-    '<div class="stat-utility-grid">'+cards+'</div><div class="stat-utility-actions"><button type="button" data-utility-open="1">FULL UTILITY SCREEN</button></div></div>';
+    '<div class="stat-utility-focus">'+(active?'<b>'+escHTML(active.name)+'</b><small>'+escHTML(active.use||active.desc||'Ready from the utility hotbar.')+'</small><button type="button" data-utility-use="active">USE ACTIVE</button>':'<b>No active utility equipped</b><small>Equip an active utility if you want a hotkey tool.</small><button type="button" data-utility-open="1">OPEN UTILITIES</button>')+'</div>'+
+    '<div class="stat-utility-library"><small>UTILITY LIBRARY ('+order.length+')</small><div class="stat-utility-grid">'+cards+'</div></div></div>';
 }
 function renderStat(){
   const ATTRS=[
@@ -1028,48 +1036,58 @@ function renderStat(){
     ['int','INTELLIGENCE','+3 max MP, stronger spells'],
   ];
   const hunterName=escHTML(((document.getElementById('playername')&&document.getElementById('playername').value)||'Hunter').slice(0,16)||'Hunter');
-  const ji=jobXpIntoLevel(jobXp), jd=activeJob();
-  let h='<div class="stat-hero"><div><small>HUNTER PROFILE</small><h2>'+hunterName+'</h2><p>Press C or Escape to close</p></div><div class="stat-crest">'+hunterRankLetter(localPlayerHunterRankIndex())+'</div></div>';
-  h+='<div class="qrow stat-top-actions"><button id="jobopen">JOBS</button><button id="statclose">CLOSE</button></div>';
-  h+='<div class="stat-grid">';
-  h+='<div class="srow"><span>CLASS</span><b>'+(S.path?PATHS[S.path].name:'None &mdash; Unawakened')+'</b></div>';
-  h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
-  h+='<div class="srow"><span>HUNTER LEVEL</span><b>'+hunterRankLevelLabel(S.lvl,{long:true})+'</b></div>';
+  const ji=jobXpIntoLevel(jobXp), jd=activeJob(), P=S.path?PATHS[S.path]:null;
+  const pathName=P?P.name:'Unawakened', pathCol=P?P.col:'#9ad26b';
   const deity=globalThis.BlockcraftDeityState;
+  let ascensionLabel='Not ascended';
   if(deity&&deity.unlocked){
     const powerNames=(Array.isArray(deity.powers)?deity.powers:[]).map(id=>(DEITY_POWER_DEFS.find(p=>p.id===id)||{}).name||String(id).replace(/_/g,' '));
-    h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">DEITY'+(deity.admin?' ADMIN':'')+' &middot; '+escHTML(powerNames.join(', ')||'Choose one power')+'</b></div>';
-  }else if(S.lvl>=51){
-    h+='<div class="srow"><span>ASCENSION</span><b>S-Rank Level 10</b></div>';
-  }
+    ascensionLabel='DEITY'+(deity.admin?' ADMIN':'')+' &middot; '+escHTML(powerNames.join(', ')||'Choose one power');
+  }else if(S.lvl>=51) ascensionLabel='S-Rank Level 10';
   const rankIdx=localPlayerRankIndex(), hunterRankIdx=localPlayerHunterRankIndex();
   const nextLvl=nextRankLevel(hunterRankIdx);
   const rankProgress=currentRankProgress();
   const clearedGate=highestGateRankCleared>=0 ? gateRankLetter(highestGateRankCleared)+' cleared' : 'none cleared';
-  h+='<div class="srow"><span>PLAYER RANK</span><b style="color:#d8f2ff">'+hunterRankLevelLabel(S.lvl)+' Hunter</b></div>';
+  const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
+  const armorProfile=armor?GEAR_SYSTEM.armorProfile(armorInfo,armor):null;
+  const robeMagic=armorProfile&&armorProfile.projectileMagicMultiplier>1?' &middot; +'+Math.round((armorProfile.projectileMagicMultiplier-1)*100)+'% projectile magic':'';
+  const armorText=armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost'+robeMagic+' &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None';
+  let h='<div class="stat-sheet">';
+  h+='<div class="stat-sheet-header"><div class="stat-avatar" style="border-color:'+pathCol+';color:'+pathCol+'">'+(P?(P.ab[0]&&P.ab[0].g)||hunterRankLetter(hunterRankIdx):hunterRankLetter(hunterRankIdx))+'</div><div class="stat-title"><h2>'+hunterName+'</h2><small>HUNTER PROFILE</small><div class="stat-tags"><span style="color:'+pathCol+'">'+pathName+'</span><span style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jd.name:'Adventurer')+'</span><span>'+hunterRankLevelLabel(S.lvl,{long:true})+'</span></div></div><button id="statclose" class="stat-close-x" type="button">X</button></div>';
+  h+='<div class="stat-main-grid"><div class="stat-left-column">';
+  h+='<section class="stat-card stat-profile-card">'+statPanelTitleHTML('HUNTER SUMMARY')+'<div class="stat-summary-grid">';
+  h+='<div class="srow"><span>CLASS</span><b style="color:'+pathCol+'">'+pathName+'</b></div>';
+  h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
+  h+='<div class="srow"><span>HUNTER LEVEL</span><b>'+hunterRankLevelLabel(S.lvl,{long:true})+'</b></div>';
+  h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">'+ascensionLabel+'</b></div>';
+  h+='<div class="srow"><span>PLAYER RANK</span><b>'+hunterRankLevelLabel(S.lvl)+' Hunter</b></div>';
   h+='<div class="srow"><span>GATE ACCESS</span><b>'+gateRankLetter(rankIdx)+'-Rank available &middot; '+clearedGate+(nextLvl?' &middot; '+hunterRankLevelLabel(nextLvl)+' begins':' &middot; top Hunter rank')+'</b></div>';
-  h+='<div class="srow"><span>XP</span><b>'+Math.floor(S.xp)+' / '+xpNeed()+'</b></div>';
-  h+='</div>';
+  h+='</div><div class="stat-vitals">'+statVitalHTML('HP',hp,maxHp(),'hp')+statVitalHTML('MP',mp,maxMp(),'mp')+statVitalHTML('SP',sp,maxSp(),'sp')+statVitalHTML('FOOD',hunger,maxHunger(),'food')+'</div></section>';
+  h+='<section class="stat-card stat-abilities-panel">'+statPanelTitleHTML(pathName.toUpperCase(),P?'Combat abilities and active powers':'Choose your class identity');
   if(rankProgress.maxRank){
     const deityUnlocked=deity&&deity.unlocked;
     const deityPct=deityUnlocked?100:Math.max(0,Math.min(100,Math.round(((S.lvl-51)/(DEITY_LEVEL-51))*100)));
-    h+='<div class="rankjourney max"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are awake. Choose one permanent power, then use it from this panel.':'Hunter XP still advances rank levels and stat points. Reach S-Rank Level 10 to become Deity.')+'</p></div>';
+    h+='<div class="rankjourney max compact"><div class="rjhead"><span>HUNTER RANK</span><b>'+(deityUnlocked?'DEITY ASCENDED':'S-RANK ACHIEVED')+'</b></div><div class="rjbar"><i style="width:'+(deityUnlocked?100:deityPct)+'%"></i></div><p>'+(deityUnlocked?'Deity powers are awake. Choose one permanent power, then use it from this panel.':'Hunter XP still advances rank levels and stat points. Reach S-Rank Level 10 to become Deity.')+'</p></div>';
   }else{
     const nextLetter=hunterRankLetter(rankProgress.nextRank);
-    h+='<div class="rankjourney"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK BEGINS</b></div>'+
-      '<div class="rjbar"><i style="width:'+Math.round(rankProgress.progress*100)+'%"></i></div>'+
-      '<div class="rjcount"><b>'+rankProgress.remaining.toLocaleString('en-US')+' HUNTER XP REMAINING</b><span>'+rankProgress.earned.toLocaleString('en-US')+' / '+rankProgress.required.toLocaleString('en-US')+'</span></div>'+
-      '<p>Earn Hunter XP your way: town quests, job and Guild contracts, Gates, server events, or hostile threats. Gate clears award XP; rank advances when your level crosses the threshold.</p></div>';
+    h+='<div class="rankjourney compact"><div class="rjhead"><span>NEXT RANK</span><b>'+nextLetter+'-RANK BEGINS</b></div><div class="rjbar"><i style="width:'+Math.round(rankProgress.progress*100)+'%"></i></div><div class="rjcount"><b>'+rankProgress.remaining.toLocaleString('en-US')+' HUNTER XP REMAINING</b><span>'+rankProgress.earned.toLocaleString('en-US')+' / '+rankProgress.required.toLocaleString('en-US')+'</span></div></div>';
   }
-  h+='<div class="srow"><span>HP / MP / SP / Food</span><b>'+Math.ceil(hp)+'/'+maxHp()+' &middot; '+Math.floor(mp)+'/'+maxMp()+' &middot; '+Math.floor(sp)+'/'+maxSp()+' &middot; '+Math.floor(hunger)+'/'+maxHunger()+'</b></div>';
+  if(P){
+    P.ab.forEach((a,i)=>{
+      const got=S.lvl>=AB_UNLOCK[i];
+      h+='<div class="ablist stat-ability-row"><span'+(got?'':' class="dim"')+'><kbd>'+['Q','R','F'][i]+'</kbd> '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span><span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i]))+'</span></div>';
+    });
+  }else if(S.lvl>=2){
+    h+='<div class="stat-path-grid">';
+    for(const key in PATHS){const pathDef=PATHS[key];h+='<div class="pathcard" data-path="'+key+'" style="border-color:'+pathDef.col+'"><h3 style="color:'+pathDef.col+'">'+pathDef.name+'</h3><p>'+pathDef.desc+'</p><div class="abl">'+pathDef.ab.map((a,i)=>a.g+' '+a.n+' (Lv'+AB_UNLOCK[i]+')').join(' &middot; ')+'</div></div>';}
+    h+='</div>';
+  }else h+='<p class="stat-empty-copy">Reach level 2 to awaken a class path.</p>';
   if(deity&&deity.unlocked){
     const owned=new Set(Array.isArray(deity.powers)?deity.powers:[]);
     const active=deity.active||{};
     if(!owned.size&&!deity.admin){
       h+='<div class="sub2" style="margin-top:14px;color:#ffd76a">CHOOSE ONE DEITY POWER &mdash; PERMANENT</div>';
-      for(const power of DEITY_POWER_DEFS){
-        h+='<div class="pathcard deitychoice" data-deity-choice="'+power.id+'" style="border-color:#ffd76a"><h3 style="color:#ffd76a">'+escHTML(power.name)+'</h3><p>'+escHTML(power.desc)+'</p></div>';
-      }
+      for(const power of DEITY_POWER_DEFS)h+='<div class="pathcard deitychoice" data-deity-choice="'+power.id+'" style="border-color:#ffd76a"><h3 style="color:#ffd76a">'+escHTML(power.name)+'</h3><p>'+escHTML(power.desc)+'</p></div>';
     }else{
       h+='<div class="sub2" style="margin-top:14px;color:#ffd76a">DEITY POWERS</div>';
       for(const power of DEITY_POWER_DEFS){
@@ -1082,42 +1100,23 @@ function renderStat(){
       }
     }
   }
-  const armor=equippedArmor(), armorInfo=armor?ITEMS[armor.id].armor:null;
-  const armorProfile=armor?GEAR_SYSTEM.armorProfile(armorInfo,armor):null;
-  const robeMagic=armorProfile&&armorProfile.projectileMagicMultiplier>1?' &middot; +'+Math.round((armorProfile.projectileMagicMultiplier-1)*100)+'% projectile magic':'';
-  h+='<div class="srow"><span>ARMOR</span><b>'+(armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost'+robeMagic+' &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None')+'</b></div>';
-  h+='<div class="srow"><span>STAT POINTS</span><b>'+S.pts+'</b></div>';
-  for(const [k,nm,fx] of ATTRS)
-    h+='<div class="attr"><span class="nm">'+nm+' &middot; '+S[k]+'</span><span class="fx">'+fx+'</span><button data-attr="'+k+'" '+(S.pts<=0?'disabled':'')+'>+</button></div>';
-  h+=statUtilityKitHTML();
-  if(!S.path){
-    if(S.lvl>=2){
-      h+='<div class="sub2" style="margin-top:14px">CHOOSE YOUR PATH &mdash; THIS CANNOT BE UNDONE</div>';
-      for(const key in PATHS){
-        const P=PATHS[key];
-        h+='<div class="pathcard" data-path="'+key+'" style="border-color:'+P.col+'">'
-          +'<h3 style="color:'+P.col+'">'+P.name+'</h3><p>'+P.desc+'</p>'
-          +'<div class="abl">'+P.ab.map((a,i)=>a.g+' '+a.n+' (Lv'+AB_UNLOCK[i]+')').join(' &middot; ')+'</div></div>';
-      }
-    } else h+='<div class="sub2" style="margin-top:14px">REACH LEVEL 2 TO AWAKEN A PATH</div>';
-  } else {
-    const P=PATHS[S.path];
-    h+='<div class="sub2" style="margin-top:14px;color:'+P.col+'">'+P.name.toUpperCase()+' ABILITIES</div>';
-    P.ab.forEach((a,i)=>{
-      const got=S.lvl>=AB_UNLOCK[i];
-      h+='<div class="ablist"><span'+(got?'':' class="dim"')+'>'+['Q','R','F'][i]+' &middot; '+a.g+' '+a.n+(a.passive?' (passive)':'')+'</span>'
-        +'<span class="dim">'+(got ? a.txt+' &middot; '+(a.mp?a.mp+' MP ':'')+(a.sp?a.sp+' SP ':'')+'&middot; '+a.cd+'s cd' : 'Unlocks at '+hunterRankLevelLabel(AB_UNLOCK[i]))+'</span></div>';
-    });
-    const rank=ABILITY_PROGRESSION.rankForLevel(S.lvl),evolution=ABILITY_PROGRESSION.EVOLUTION[S.path];
-    h+='<div class="sub2" style="margin-top:14px;color:'+P.col+'">RANK EVOLUTION</div>';
-    evolution.forEach((text,i)=>{const live=ABILITY_PROGRESSION.IMPLEMENTED_RANKS[i],earned=i<=rank;h+='<div class="ablist"><span'+(earned&&live?'':' class="dim"')+'>'+ABILITY_PROGRESSION.RANKS[i]+'-RANK'+(!live?' · ROADMAP':'')+'</span><span class="dim">'+text+(!live?' · not yet available':'')+'</span></div>';});
-    const specs=ABILITY_PROGRESSION.SPECIALIZATIONS[S.path];
-    if(rank>=2){
-      const specReady=abilitySpec||highestGateRankCleared>=2;
-      h+='<div class="sub2" style="margin-top:14px">SPECIALIZATION'+(abilitySpec?' &mdash; PERMANENT':specReady?' &mdash; CHOOSE ONE PERMANENT PATH':' &mdash; CLEAR A C-RANK TRIAL')+'</div>';
-      for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec'+(chosen?' selected':'')+(specReady?'':' locked')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+(specReady?'':' Clear a C-rank Gate positioning trial first.')+'</p></div>';}
-    }
-  }
+  h+='<div class="stat-equipment-note"><span>ARMOR</span><b>'+armorText+'</b></div></section></div><div class="stat-right-column">'+statUtilityKitHTML()+'</div></div>';
+  h+='<div class="stat-bottom-grid"><section class="stat-card stat-attribute-panel">'+statPanelTitleHTML('STAT POINTS','Available: '+S.pts);
+  for(const [k,nm,fx] of ATTRS)h+='<div class="attr"><span class="nm">'+nm+' &middot; '+S[k]+'</span><span class="fx">'+fx+'</span><button data-attr="'+k+'" '+(S.pts<=0?'disabled':'')+'>+</button></div>';
+  h+='</section><section class="stat-card stat-rank-panel">'+statPanelTitleHTML('RANK EVOLUTION')+'<div class="stat-rank-track">';
+  const currentRank=ABILITY_PROGRESSION.rankForLevel(S.lvl);
+  for(let i=0;i<ABILITY_PROGRESSION.RANKS.length;i++)h+='<span class="stat-rank-node '+(i<=currentRank?'earned':'')+(i===currentRank?' current':'')+'"><b>'+ABILITY_PROGRESSION.RANKS[i]+'</b><small>'+ABILITY_PROGRESSION.RANKS[i]+'-RANK</small></span>';
+  h+='</div>';
+  if(P){const evolution=ABILITY_PROGRESSION.EVOLUTION[S.path]||[];evolution.forEach((text,i)=>{const live=ABILITY_PROGRESSION.IMPLEMENTED_RANKS[i],earned=i<=currentRank;h+='<div class="ablist stat-rank-row"><span'+(earned&&live?'':' class="dim"')+'>'+ABILITY_PROGRESSION.RANKS[i]+'-RANK'+(!live?' &middot; ROADMAP':'')+'</span><span class="dim">'+text+(!live?' &middot; not yet available':'')+'</span></div>';});}
+  else h+='<p class="stat-empty-copy">Choose a class path to reveal its rank evolution.</p>';
+  h+='</section><section class="stat-card stat-specialization-panel">';
+  if(P){
+    const rank=ABILITY_PROGRESSION.rankForLevel(S.lvl),specs=ABILITY_PROGRESSION.SPECIALIZATIONS[S.path];
+    h+=statPanelTitleHTML('SPECIALIZATION',abilitySpec?'Permanent choice':rank>=2?'Clear a C-rank trial':'Unlock at C-rank');
+    if(rank>=2){const specReady=abilitySpec||highestGateRankCleared>=2;h+='<div class="stat-specialization-grid">';for(const key in specs){const spec=specs[key],chosen=abilitySpec===key;h+='<div class="pathcard abilityspec stat-spec-card'+(chosen?' selected':'')+(specReady?'':' locked')+'" data-spec="'+key+'" style="border-color:'+P.col+'"><h3 style="color:'+P.col+'">'+spec.name+(chosen?' &middot; SELECTED':'')+'</h3><p>'+spec.desc+(specReady?'':' Clear a C-rank Gate positioning trial first.')+'</p></div>';}h+='</div>';}
+    else h+='<p class="stat-empty-copy">Reach C-rank to choose a permanent specialization.</p>';
+  }else h+=statPanelTitleHTML('PATH SELECTION','Available at Hunter Level 2')+'<p class="stat-empty-copy">Awaken a class path before choosing a specialization.</p>';
+  h+='</section></div></div>';
   statPanel.innerHTML=h;
   statPanel.querySelectorAll('button[data-attr]').forEach(b=>b.addEventListener('click',()=>{
     if(S.pts<=0) return;
@@ -1148,7 +1147,8 @@ function renderStat(){
     if(typeof globalThis.openUtilitiesUI==='function')globalThis.openUtilitiesUI();
   }));
   document.getElementById('statclose').addEventListener('click',()=>closeStat());
-  document.getElementById('jobopen').addEventListener('click',()=>openJobsUI());
+  const jobBtn=document.getElementById('jobopen');
+  if(jobBtn)jobBtn.addEventListener('click',()=>openJobsUI());
 }
 
 // ---------------- dungeon gates ----------------

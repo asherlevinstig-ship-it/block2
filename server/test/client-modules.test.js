@@ -2017,15 +2017,17 @@ test('level two job chooser presents six profession tutorial cards',()=>{
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
-  assert.match(dimensions,/stat-hero/);
+  assert.match(dimensions,/stat-sheet-header/);
   assert.match(dimensions,/hunterName=escHTML/);
-  assert.match(dimensions,/stat-crest/);
-  assert.match(dimensions,/stat-grid/);
-  assert.match(styles,/#statpanel\{width:min\(820px,calc\(100vw - 36px\)\)/);
-  assert.match(styles,/\.stat-hero\{display:grid/);
-  assert.match(styles,/\.stat-grid\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
-  assert.match(styles,/#statpanel \.qrow button/);
-  assert.match(styles,/@media\(max-width:680px\)[\s\S]*\.stat-grid\{grid-template-columns:1fr\}/);
+  assert.match(dimensions,/stat-main-grid/);
+  assert.match(dimensions,/stat-bottom-grid/);
+  assert.match(dimensions,/stat-abilities-panel/);
+  assert.match(dimensions,/stat-close-x/);
+  assert.match(styles,/#statpanel\{width:min\(1480px,calc\(100vw - 36px\)\)/);
+  assert.match(styles,/\.stat-sheet-header\{display:grid/);
+  assert.match(styles,/\.stat-main-grid\{display:grid;grid-template-columns:minmax\(0,1\.08fr\) minmax\(390px,\.92fr\)/);
+  assert.match(styles,/\.stat-bottom-grid\{display:grid;grid-template-columns:minmax\(300px,\.88fr\)/);
+  assert.match(styles,/@media\(max-width:1180px\)[\s\S]*\.stat-main-grid,\.stat-bottom-grid\{grid-template-columns:1fr\}/);
 });
 
 test('death drops render as timed public world loot and onboarding teaches Recall and limbo',()=>{
@@ -2772,7 +2774,7 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.doesNotMatch(utilityRender,/JOB BOARD/);
   assert.match(dimensions,/function statUtilityKitHTML\(\)/);
   assert.match(dimensions,/UTILITY LOADOUT/);
-  assert.match(dimensions,/Hunter Kit/);
+  assert.match(dimensions,/MANAGE UTILITIES/);
   assert.match(dimensions,/button\[data-utility-id\]/);
   assert.match(dimensions,/globalThis\.toggleUtilityEquip\(id\);[\s\S]*renderStat\(\);/);
   assert.match(dimensions,/globalThis\.useActiveUtility\(\)/);
