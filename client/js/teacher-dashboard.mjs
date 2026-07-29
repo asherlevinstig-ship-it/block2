@@ -189,6 +189,7 @@ createApp({
           classRows: Array.isArray(breakdown.class) ? breakdown.class : [],
           yearRows: Array.isArray(breakdown.year) ? breakdown.year : [],
           schoolRows: Array.isArray(breakdown.school) ? breakdown.school : [],
+          questionRows: questionRows.value.filter(question => String(question.topic || 'Uncategorised').trim().toLowerCase() === key).slice(0, 12),
         };
       });
     });
@@ -1068,6 +1069,16 @@ createApp({
                   <em v-if="!row.schoolRows.length">No school data</em>
                 </section>
               </div>
+              <div class="teacher-vue-topic-question-list">
+                <h4>Questions in this topic</h4>
+                <article v-for="question in row.questionRows" :key="'topic-question-' + row.id + '-' + question.id">
+                  <span>{{ question.prompt }}<small>{{ question.correct }} correct / {{ question.wrong || 0 }} wrong</small></span>
+                  <strong>{{ question.accuracy }}%</strong>
+                  <em>Class: {{ questionBreakdownRows(question, 'class').map(item => item.name + ' ' + item.accuracy + '%').join(', ') || 'no data' }}</em>
+                  <em>School: {{ questionBreakdownRows(question, 'school').map(item => item.name + ' ' + item.accuracy + '%').join(', ') || 'no data' }}</em>
+                </article>
+                <small v-if="!row.questionRows.length">No question data for this topic yet.</small>
+              </div>
             </article>
             <div class="teacher-vue-empty" v-if="!topicComparisonRows.length">No topic attempts yet.</div>
           </div>
@@ -1080,6 +1091,16 @@ createApp({
               <strong>{{ row.accuracy }}%</strong>
               <i>{{ row.activeStudents || 0 }} active</i>
             </button>
+            <h3>Question breakdown for selected class/scope</h3>
+            <article class="teacher-vue-topic-question-list">
+              <article v-for="question in classQuestionRows.slice(0, 12)" :key="'class-question-' + question.id">
+                <span>{{ question.prompt }}<small>{{ question.topic || 'No topic' }}</small></span>
+                <strong>{{ question.accuracy }}%</strong>
+                <em>{{ question.correct }} correct / {{ question.wrong || 0 }} wrong</em>
+                <em>{{ question.attempts }} answered</em>
+              </article>
+              <small v-if="!classQuestionRows.length">Choose a class or wait for question attempts.</small>
+            </article>
             <div class="teacher-vue-empty" v-if="!classComparisonRows.length">No class comparison data yet.</div>
           </div>
           <div class="teacher-vue-analysis-table" v-if="state.analysisView === 'schools'">
@@ -1098,6 +1119,24 @@ createApp({
               <strong>{{ row.wrong }}</strong>
               <i>{{ row.accuracy }}%</i>
             </div>
+            <h3>Question breakdown by school</h3>
+            <article class="teacher-vue-question-breakdown-card" v-for="question in classQuestionRows.slice(0, 12)" :key="'school-question-' + question.id">
+              <div class="teacher-vue-topic-row">
+                <span>{{ question.prompt }}<small>{{ question.topic || 'No topic' }}</small></span>
+                <strong>{{ question.correct }}</strong>
+                <strong>{{ question.wrong || 0 }}</strong>
+                <i>{{ question.accuracy }}%</i>
+              </div>
+              <div class="teacher-vue-question-breakdowns compact">
+                <section>
+                  <h4>By school</h4>
+                  <div v-for="item in questionBreakdownRows(question, 'school')" :key="'school-question-break-' + question.id + '-' + item.id" :class="{ own: item.ownSchool }">
+                    <span>{{ item.name }}</span><strong>{{ item.accuracy }}%</strong><small>{{ item.correct }}/{{ item.attempts }}</small>
+                  </div>
+                  <em v-if="!questionBreakdownRows(question, 'school').length">No school data</em>
+                </section>
+              </div>
+            </article>
             <div class="teacher-vue-empty" v-if="!schoolComparisonRows.length && !yearGroupComparisonRows.length">No school comparison data yet.</div>
           </div>
           <div class="teacher-vue-analysis-table" v-if="state.analysisView === 'homework-gaps'">
