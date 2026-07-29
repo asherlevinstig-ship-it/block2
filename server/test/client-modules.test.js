@@ -3160,10 +3160,17 @@ test('opening cinematic plays bundled videos before auto-resume', () => {
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'vid1.mp4')));
   assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'vid2.mp4')));
+  assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'opening.mp3')));
   assert.match(index, /id="introcinematic"/);
   assert.match(index, /id="introvideo" playsinline muted preload="auto"/);
+  assert.match(index, /id="introaudio" src="\/assets\/intro\/opening\.mp3" preload="auto"/);
   assert.match(combat, /function setupOpeningCinematic\(\)\{/);
   assert.match(combat, /const sources=\['\/assets\/intro\/vid1\.mp4','\/assets\/intro\/vid2\.mp4'\]/);
+  assert.match(combat, /const soundtrack=introAudio/);
+  assert.match(combat, /const startSoundtrack=\(\)=>\{/);
+  assert.match(combat, /introVideo\.muted=true;/);
+  assert.match(combat, /introVideo\.volume=0;/);
+  assert.match(combat, /soundtrack\.play\(\)/);
   assert.match(combat, /introVideo\.addEventListener\('ended',\(\)=>\{index\+\+;playCurrent\(\);\}\)/);
   assert.match(combat, /const openingCinematicReady=setupOpeningCinematic\(\)/);
   assert.match(combat, /openingCinematicReady\.then\(\(\)=>startPlaying\(false\)\)/);
