@@ -1139,7 +1139,14 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(menusSource,/function jobBoardCurrentContractHTML/);
   assert.match(menusSource,/function jobBoardNextActionHTML/);
   assert.match(menusSource,/function jobBoardMilestoneSummaryHTML/);
+  assert.match(menusSource,/function jobBoardOfferRowHTML/);
+  assert.match(menusSource,/function jobBoardSelectedContractHTML/);
+  assert.match(menusSource,/function jobBoardTradeRowHTML/);
   assert.match(menusSource,/job-board-v2/);
+  assert.match(menusSource,/job-board-layout/);
+  assert.match(menusSource,/job-board-contract-list/);
+  assert.match(menusSource,/job-board-selected-contract/);
+  assert.match(menusSource,/job-board-trades-panel/);
   assert.match(menusSource,/job-board-contract-body/);
   assert.match(menusSource,/job-board-claim-button/);
   assert.match(menusSource,/job-profession-grid/);
@@ -1149,7 +1156,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(liveJobBoard,/All Contracts/);
   assert.match(liveJobBoard,/START CONTRACT/);
   assert.match(liveJobBoard,/CLAIM REWARD/);
-  assert.match(liveJobBoard,/Choose A Trade/);
+  assert.match(liveJobBoard,/Active Trade/);
+  assert.match(liveJobBoard,/Other Trades/);
   assert.match(liveJobBoard,/<small>'\+jobPerkText\(id\)\+'<\/small>/);
   assert.doesNotMatch(liveJobBoard,/escHTML\(jobPerkText\(id\)\)/);
   assert.doesNotMatch(liveJobBoard,/GUILD CONTRACTS/);
@@ -1169,6 +1177,10 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(cssSource,/\.job-offer-loop/);
   assert.match(cssSource,/\.job-offer-rewards/);
   assert.match(cssSource,/\.job-board-summary/);
+  assert.match(cssSource,/\.job-board-layout/);
+  assert.match(cssSource,/\.job-board-contract-list/);
+  assert.match(cssSource,/\.job-board-selected-contract/);
+  assert.match(cssSource,/\.job-board-trades-panel/);
   assert.match(cssSource,/\.job-board-section\.beginner-recommended/);
   assert.match(cssSource,/\.job-board-current/);
   assert.match(cssSource,/\.job-profession-card/);

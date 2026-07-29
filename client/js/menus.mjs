@@ -6362,6 +6362,29 @@ function jobBoardCurrentContractHTML(c){
   const def=JOBS[c.job]||JOBS.adventurer, ready=jobContractReady();
   return '<div class="job-board-current '+(ready?'ready':'')+'"><small>CURRENT WORK</small><div class="job-board-current-head"><b style="color:'+def.col+'">'+escHTML(c.title)+'</b><em>'+(ready?'READY TO CLAIM':escHTML((c.difficultyLabel||c.difficulty||'Active').toUpperCase()))+'</em></div><p>'+escHTML(c.desc)+'</p><div class="job-board-contract-body"><div class="job-board-contract-main">'+jobBoardProgressHTML(c.have,c.need)+contractTagHTML(c)+contractBestForHTML(c)+jobContractStepsHTML(c)+'</div><aside class="job-board-contract-side">'+jobBoardNextActionHTML(c,ready)+jobBoardRewardLine(c)+'</aside></div></div>';
 }
+function jobBoardOfferRowHTML(offer,selected=false){
+  const def=JOBS[offer&&offer.job]||JOBS.adventurer;
+  const diff=offer.difficulty==='quick'?'quick':offer.difficulty==='demanding'?'demanding':'balanced';
+  return '<article class="job-board-offer-row '+diff+(selected?' selected':'')+'">'+
+    '<i style="color:'+def.col+'">'+escHTML(def.icon)+'</i>'+
+    '<span><b>'+escHTML(offer.title||'Job Contract')+'</b><small>'+escHTML(offer.estimate||'Flexible')+' &bull; '+escHTML(offer.party||'Solo')+'</small></span>'+
+    '<em>'+escHTML((offer.difficultyLabel||offer.type||'Offer').toUpperCase())+'</em>'+
+  '</article>';
+}
+function jobBoardSelectedContractHTML(offer,offerDef,offerWhy){
+  if(!offer)return '<div class="job-board-selected-empty"><b>No offers ready</b><p>'+escHTML(offerWhy||'Check back when the board refreshes.')+'</p></div>';
+  return '<div class="job-board-selected-hero">'+
+    '<div class="job-board-selected-head"><span><b>'+escHTML(offer.title||'Job Contract')+'</b><small>'+escHTML(offer.difficultyLabel||offer.difficulty||'Board Contract')+'</small></span><em>'+escHTML(offer.estimate||'Flexible')+' &bull; '+escHTML(offer.party||'Solo')+'</em></div>'+
+    '<p>'+escHTML(offer.desc||'Complete the work order.')+'</p>'+
+    '<div class="job-board-objective"><small>Objective</small><b>'+Math.max(1,offer.need|0)+' required</b><span>'+escHTML((JOB_SYSTEM.guideSteps?JOB_SYSTEM.guideSteps(offer.type):jobContractGuideLines(offer))[0]||'Complete the listed contract objective.')+'</span></div>'+
+    '<div class="job-board-selected-body"><div>'+jobContractStepsHTML(offer)+'</div><aside>'+jobOfferLoopHTML(offer)+jobOfferRewardHTML(offer)+'</aside></div>'+
+    '<small class="job-board-hint">'+escHTML(offerWhy||('Progress this '+offerDef.name+' route to unlock stronger job perks.'))+'</small>'+
+  '</div>';
+}
+function jobBoardTradeRowHTML(id,active=false){
+  const j=JOBS[id]||JOBS.adventurer,prog=jobXpIntoLevel(jobXpFor(id)),pct=Math.max(0,Math.min(100,Math.round((prog.xp/Math.max(1,prog.need))*100)));
+  return '<article class="job-board-trade-row '+(active?'active':'')+'"><i style="color:'+j.col+'">'+escHTML(j.icon)+'</i><span><b>'+escHTML(j.name)+'</b><small>'+escHTML(jobTitleFor(id,prog.lvl))+' &bull; Lv '+prog.lvl+'</small></span><em>'+prog.xp+' / '+prog.need+'</em><div class="job-board-progress small"><i style="width:'+pct+'%"></i><span></span></div></article>';
+}
 function openJobsUILegacy(focusJob='', sourceTitle=''){
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
@@ -6468,11 +6491,13 @@ function openJobsUI(focusJob='', sourceTitle=''){
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   openQWin('management');
+  qpanelEl.classList.add('job-board-panel');
   qpanelEl.innerHTML='';
   focusJob=JOBS[focusJob]?focusJob:'';
   const offerJob=focusJob&&JOBS[focusJob]?focusJob:'adventurer';
   const offerDef=JOBS[offerJob]||JOBS.adventurer;
   const offerProg=jobXpIntoLevel(jobXpFor(offerJob));
+  const offerPct=Math.max(0,Math.min(100,Math.round((offerProg.xp/Math.max(1,offerProg.need))*100)));
   const offerMilestone=JOB_SYSTEM.milestoneState(offerJob,offerProg.lvl).next;
   const offerWhy=offerMilestone?'Next '+offerDef.name+' milestone: Lv '+offerMilestone.level+' - '+offerMilestone.title+'.':'All core '+offerDef.name+' milestones earned.';
 
@@ -6485,22 +6510,17 @@ function openJobsUI(focusJob='', sourceTitle=''){
   qpanelEl.appendChild(sub);
 
   const shell=document.createElement('div');
-  shell.className='job-board-v2';
+  shell.className='job-board-v2 job-board-shell';
   qpanelEl.appendChild(shell);
 
   const summary=document.createElement('div');
   summary.className='job-board-summary';
   summary.innerHTML=jobBoardLevelCardHTML('adventurer','Hunter Career')+
     (playerJob?jobBoardLevelCardHTML(playerJob,'Equipped Trade'):'<article class="job-board-stat empty"><small>Equipped Trade</small><b>None chosen</b><span>Choose a profession below.</span><i><em style="width:0%"></em></i></article>')+
-    '<article class="job-board-stat"><small>Board View</small><b style="color:'+offerDef.col+'">'+escHTML(offerDef.name)+' Offers</b><span>'+escHTML(offerWhy)+'</span><i><em style="width:100%"></em></i></article>';
+    '<article class="job-board-stat"><small>Board View</small><b style="color:'+offerDef.col+'">'+escHTML(offerDef.name)+' Offers</b><span>'+escHTML(offerWhy)+'</span><i><em style="width:'+offerPct+'%"></em></i></article>';
   shell.appendChild(summary);
 
   if(!jobContract){
-    const tabs=document.createElement('div');
-    tabs.className='job-board-tabs';
-    tabs.appendChild(qBtn('HUNTER OFFERS',()=>openJobsUI('adventurer'),offerJob==='adventurer'));
-    if(playerJob)tabs.appendChild(qBtn(JOBS[playerJob].name.toUpperCase()+' OFFERS',()=>openJobsUI(playerJob),offerJob===playerJob));
-    shell.appendChild(tabs);
     if(NET.on&&NET.room&&(jobContractOffersJob!==offerJob||Date.now()>=jobContractRefreshAt))NET.room.send('jobContract',{action:'offers',job:offerJob});
     else if(!NET.on&&(jobContractOffersJob!==offerJob||!jobContractOffers.length)){
       const scale=JOB_SYSTEM.contractScaleFromXp(jobXpFor(offerJob)),baseXp=hunterXpForActivity(S.lvl,'job_contract');
@@ -6512,6 +6532,60 @@ function openJobsUI(focusJob='', sourceTitle=''){
 
   jobContract=clampJobContract(jobContract);
   const c=jobContract;
+  const boardLayout=document.createElement('div');
+  boardLayout.className='job-board-layout';
+  shell.appendChild(boardLayout);
+
+  const leftCol=document.createElement('aside');
+  leftCol.className='job-board-left';
+  boardLayout.appendChild(leftCol);
+  const centerCol=document.createElement('main');
+  centerCol.className='job-board-center';
+  boardLayout.appendChild(centerCol);
+  const rightCol=document.createElement('aside');
+  rightCol.className='job-board-right';
+  boardLayout.appendChild(rightCol);
+
+  const jobOrder=Object.keys(JOBS).filter(id=>id!=='adventurer');
+  if(focusJob)jobOrder.sort((a,b)=>(a===focusJob?-1:b===focusJob?1:0));
+  const offers=(!c&&jobContractOffersJob===offerJob)?jobContractOffers:[];
+  const selectedOffer=!c?chooseBeginnerRecommendedOffer(offers,offerJob):null;
+  const remaining=Math.max(0,jobContractRefreshAt-Date.now()),mins=Math.max(1,Math.ceil(remaining/60000));
+
+  const contractList=document.createElement('section');
+  contractList.className='job-board-section job-board-contract-list';
+  contractList.innerHTML='<div class="job-board-section-title">Available Contracts</div>';
+  const tabs=document.createElement('div');
+  tabs.className='job-board-tabs';
+  tabs.appendChild(qBtn('ALL',()=>openJobsUI('adventurer'),offerJob==='adventurer'));
+  tabs.appendChild(qBtn(JOBS.adventurer.icon,()=>openJobsUI('adventurer'),offerJob==='adventurer'));
+  if(playerJob)tabs.appendChild(qBtn(JOBS[playerJob].icon,()=>openJobsUI(playerJob),offerJob===playerJob));
+  contractList.appendChild(tabs);
+  if(offers.length){
+    for(const offer of offers){
+      const row=document.createElement('div');
+      row.className='job-board-offer-row-wrap';
+      row.innerHTML=jobBoardOfferRowHTML(offer,selectedOffer&&String(selectedOffer.id)===String(offer.id));
+      row.addEventListener('click',()=>{
+        if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:offer.id});return;}
+        jobContract={...offer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
+      });
+      contractList.appendChild(row);
+    }
+  }else{
+    const empty=document.createElement('p');
+    empty.className='job-board-note muted';
+    empty.textContent=c?'Finish or abandon the active contract before taking another.':(Date.now()<jobContractRefreshAt?'This rotation has been used. New '+offerDef.name+' offers arrive when the board refreshes.':'Waiting for offers...');
+    contractList.appendChild(empty);
+  }
+  const refresh=document.createElement('button');
+  refresh.type='button';
+  refresh.className='job-board-refresh';
+  refresh.textContent='Refresh board - '+mins+'m';
+  refresh.onclick=e=>{e.preventDefault();e.stopPropagation();SFX.uiClick();openJobsUI(offerJob,sourceTitle);};
+  contractList.appendChild(refresh);
+  leftCol.appendChild(contractList);
+
   const currentSection=document.createElement('section');
   currentSection.className='job-board-section job-board-claim-desk '+(c&&jobContractReady()?'ready':'');
   currentSection.innerHTML='<div class="job-board-section-title">Current Work</div>'+jobBoardCurrentContractHTML(c);
@@ -6530,9 +6604,9 @@ function openJobsUI(focusJob='', sourceTitle=''){
     },false));
   }
   if(actions.children.length)currentSection.appendChild(actions);
-  shell.appendChild(currentSection);
+  centerCol.appendChild(currentSection);
 
-  if(!c&&jobContractOffersJob===offerJob){
+  if(!c){
     const recommendations=contractRecommendationRows(jobContractOffers,offerJob);
     if(recommendations.length){
       const smartSection=document.createElement('section');
@@ -6552,42 +6626,41 @@ function openJobsUI(focusJob='', sourceTitle=''){
         }));
         smartGrid.appendChild(card);
       }
-      shell.appendChild(smartSection);
+      leftCol.appendChild(smartSection);
     }
-    const offersSection=document.createElement('section');
-    offersSection.className='job-board-section';
-    offersSection.innerHTML='<div class="job-board-section-title">All Contracts</div>';
-    const intro=document.createElement('p');
-    intro.className='job-board-note';
-    const otherOffers=jobContractOffers;
-    intro.textContent=otherOffers.length?'Every '+offerDef.name+' contract in this rotation remains available below.':(Date.now()<jobContractRefreshAt?'This rotation has been used. New '+offerDef.name+' offers arrive when the board refreshes.':'Waiting for offers...');
-    offersSection.appendChild(intro);
-    const offersGrid=document.createElement('div');
-    offersGrid.className='job-board-offers';
-    offersSection.appendChild(offersGrid);
-    for(const offer of otherOffers){
-      const card=document.createElement('div');
-      card.className='job-offer-card job-board-offer-card';
-      card.innerHTML=jobOfferCardHTML(offer);
-      card.appendChild(qBtn('START CONTRACT',()=>{
-        if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:offer.id});return;}
-        jobContract={...offer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
-      }));
-      offersGrid.appendChild(card);
+
+    const detailSection=document.createElement('section');
+    detailSection.className='job-board-section job-board-selected-contract';
+    detailSection.innerHTML='<div class="job-board-section-title">All Contracts</div>'+jobBoardSelectedContractHTML(selectedOffer,offerDef,offerWhy);
+    if(selectedOffer){
+      const start=qBtn('START CONTRACT',()=>{
+        if(NET.on&&NET.room){NET.room.send('jobContract',{action:'take',job:offerJob,offerId:selectedOffer.id});return;}
+        jobContract={...selectedOffer,have:0};clearTownJobGuidance();refreshHUD();openJobsUI();
+      });
+      start.classList.add('job-board-start-button');
+      detailSection.appendChild(start);
     }
-    const remaining=Math.max(0,jobContractRefreshAt-Date.now()),mins=Math.max(1,Math.ceil(remaining/60000));
-    const refresh=document.createElement('p');
-    refresh.className='job-board-note muted';
-    refresh.textContent='New offers in about '+mins+' minute'+(mins===1?'':'s')+'.';
-    offersSection.appendChild(refresh);
-    shell.appendChild(offersSection);
+    centerCol.appendChild(detailSection);
   }
 
-  const jobOrder=Object.keys(JOBS).filter(id=>id!=='adventurer');
-  if(focusJob)jobOrder.sort((a,b)=>(a===focusJob?-1:b===focusJob?1:0));
   const professionSection=document.createElement('section');
-  professionSection.className='job-board-section';
-  professionSection.innerHTML='<div class="job-board-section-title">Choose A Trade</div>';
+  professionSection.className='job-board-section job-board-trades-panel';
+  professionSection.innerHTML='<div class="job-board-section-title">Active Trade</div>';
+  if(playerJob){
+    const active=document.createElement('div');
+    active.className='job-board-active-trade';
+    active.innerHTML=jobBoardTradeRowHTML(playerJob,true)+'<p>'+escHTML((JOBS[playerJob]&&JOBS[playerJob].desc)||'Your equipped profession.')+'</p>';
+    professionSection.appendChild(active);
+  }else{
+    const emptyTrade=document.createElement('p');
+    emptyTrade.className='job-board-note muted';
+    emptyTrade.textContent='No trade equipped. Choose one below to start earning profession XP.';
+    professionSection.appendChild(emptyTrade);
+  }
+  const otherTitle=document.createElement('div');
+  otherTitle.className='job-board-section-title secondary';
+  otherTitle.textContent='Other Trades';
+  professionSection.appendChild(otherTitle);
   const professionGrid=document.createElement('div');
   professionGrid.className='job-profession-grid';
   professionSection.appendChild(professionGrid);
@@ -6600,7 +6673,7 @@ function openJobsUI(focusJob='', sourceTitle=''){
     card.appendChild(qBtn(cur?'ACTIVE':(id===focusJob?'WORK THIS JOB':'CHOOSE'),()=>{if(!cur)chooseJob(id,focusJob);},cur));
     professionGrid.appendChild(card);
   }
-  shell.appendChild(professionSection);
+  rightCol.appendChild(professionSection);
 
   const row=document.createElement('div');
   row.className='qrow job-board-footer';
