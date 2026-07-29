@@ -1250,10 +1250,47 @@ class MySqlGameQuestionStore {
        LIMIT 200`,
       questionParams,
     );
+    const [attemptRows] = await this.getPool().execute(
+      `SELECT
+         gqa.id AS attempt_id,
+         COALESCE(gqa.student_id, 0) AS student_id,
+         COALESCE(s.name, s.email, gqa.account_id, 'Unknown student') AS student_name,
+         COALESCE(s.email, '') AS student_email,
+         gqa.account_id,
+         gqa.answer_index,
+         gqa.correct,
+         gqa.duration_ms,
+         gqa.source,
+         gqa.created_at,
+         gq.id AS question_id,
+         gq.topic,
+         gq.stage,
+         gq.prompt,
+         gq.answers,
+         gq.correct_index
+       FROM game_question_attempt gqa
+       LEFT JOIN students s ON s.id = gqa.student_id
+       LEFT JOIN game_question gq ON gq.id = gqa.question_id
+       WHERE ${attemptWhere}
+       ORDER BY gqa.created_at DESC
+       LIMIT 1000`,
+      params,
+    );
     const normalize = row => {
       const attempts = Number(row.attempts) || 0;
       const correct = Number(row.correct) || 0;
-      return { attempts, correct, accuracy: attempts ? Math.round((correct / attempts) * 100) : 0 };
+      const wrong = Math.max(0, attempts - correct);
+      return { attempts, correct, wrong, accuracy: attempts ? Math.round((correct / attempts) * 100) : 0 };
+    };
+    const addSummaryAttempt = (map, key, isCorrect, patch = {}) => {
+      const id = String(key || 'Uncategorised');
+      if (!map.has(id)) map.set(id, { id, name: id, attempts: 0, correct: 0, wrong: 0, accuracy: 0, ...patch });
+      const row = map.get(id);
+      row.attempts += 1;
+      if (isCorrect) row.correct += 1;
+      else row.wrong += 1;
+      row.accuracy = row.attempts ? Math.round((row.correct / row.attempts) * 100) : 0;
+      return row;
     };
     const byStudent = new Map();
     for (const row of rosterRows || []) {
@@ -1266,6 +1303,7 @@ class MySqlGameQuestionStore {
         lastAttemptAt: null,
         attempts: 0,
         correct: 0,
+        wrong: 0,
         accuracy: 0,
       });
     }
@@ -1293,17 +1331,62 @@ class MySqlGameQuestionStore {
       reviewStatus: String(row.review_status || 'draft'),
       ...normalize(row),
     }));
+    const topicMap = new Map();
+    const studentTopicMap = new Map();
+    const attempts = (attemptRows || []).map(row => {
+      let answers = [];
+      try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
+      if (!Array.isArray(answers)) answers = [];
+      const answerIndex = clampInt(row.answer_index, 0, 3);
+      const correctIndex = clampInt(row.correct_index, 0, 3);
+      const topic = String(row.topic || 'Uncategorised');
+      const studentId = Number(row.student_id) || 0;
+      const correct = Number(row.correct) === 1;
+      addSummaryAttempt(topicMap, topic, correct, { name: topic });
+      const studentKey = `${studentId || String(row.account_id || row.student_name || 'unknown')}:${topic}`;
+      addSummaryAttempt(studentTopicMap, studentKey, correct, {
+        studentId,
+        studentName: String(row.student_name || 'Unknown student'),
+        topic,
+        name: topic,
+      });
+      return {
+        id: Number(row.attempt_id) || 0,
+        studentId,
+        studentName: String(row.student_name || 'Unknown student'),
+        studentEmail: String(row.student_email || ''),
+        accountId: String(row.account_id || ''),
+        questionId: Number(row.question_id) || 0,
+        topic,
+        stage: String(row.stage || ''),
+        prompt: String(row.prompt || ''),
+        answerIndex,
+        answerText: String(answers[answerIndex] || ''),
+        correctIndex,
+        correctAnswer: String(answers[correctIndex] || ''),
+        correct,
+        durationMs: Number(row.duration_ms) || 0,
+        source: String(row.source || ''),
+        createdAt: row.created_at || null,
+      };
+    });
+    const topicSummaries = [...topicMap.values()].sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || a.name.localeCompare(b.name));
+    const studentTopicSummaries = [...studentTopicMap.values()].sort((a, b) => String(a.studentName || '').localeCompare(String(b.studentName || '')) || a.accuracy - b.accuracy || b.attempts - a.attempts);
     const totals = students.reduce((acc, row) => {
       acc.attempts += row.attempts;
       acc.correct += row.correct;
+      acc.wrong += row.wrong;
       return acc;
-    }, { attempts: 0, correct: 0 });
+    }, { attempts: 0, correct: 0, wrong: 0 });
     return {
       windowDays: days,
       classId: classId || null,
       totals: { ...totals, accuracy: totals.attempts ? Math.round((totals.correct / totals.attempts) * 100) : 0 },
       students,
       questions,
+      topicSummaries,
+      studentTopicSummaries,
+      attempts,
     };
   }
 }

@@ -820,6 +820,41 @@ test('MySQL game question analytics includes class students with zero attempts',
       }
       if (/FROM students s JOIN student_classes/i.test(sql)) return [[]];
       if (/FROM students s JOIN class_students/i.test(sql)) return [[]];
+      if (/gqa\.id AS attempt_id/i.test(sql)) return [[{
+        attempt_id: 101,
+        student_id: 9,
+        student_name: 'Learner One',
+        student_email: 'one@example.test',
+        account_id: 'student_9',
+        answer_index: 1,
+        correct: 0,
+        duration_ms: 4200,
+        source: 'recall',
+        created_at: '2026-07-27 10:00:00',
+        question_id: 44,
+        topic: 'Binary',
+        stage: 'KS3',
+        prompt: 'What is binary?',
+        answers: JSON.stringify(['Base two', 'Base ten', 'A wire', 'A password']),
+        correct_index: 0,
+      }, {
+        attempt_id: 102,
+        student_id: 9,
+        student_name: 'Learner One',
+        student_email: 'one@example.test',
+        account_id: 'student_9',
+        answer_index: 0,
+        correct: 1,
+        duration_ms: 2500,
+        source: 'recall',
+        created_at: '2026-07-27 09:00:00',
+        question_id: 44,
+        topic: 'Binary',
+        stage: 'KS3',
+        prompt: 'What is binary?',
+        answers: JSON.stringify(['Base two', 'Base ten', 'A wire', 'A password']),
+        correct_index: 0,
+      }]];
       if (/FROM game_question_attempt gqa/i.test(sql)) return [[{
         student_id: 9,
         student_name: 'Learner One',
@@ -852,6 +887,13 @@ test('MySQL game question analytics includes class students with zero attempts',
   assert.equal(zero.accuracy, 0);
   assert.equal(analytics.totals.attempts, 2);
   assert.equal(analytics.totals.correct, 1);
+  assert.equal(analytics.totals.wrong, 1);
+  assert.deepEqual(analytics.topicSummaries.map(row => ({ name: row.name, correct: row.correct, wrong: row.wrong, accuracy: row.accuracy })), [
+    { name: 'Binary', correct: 1, wrong: 1, accuracy: 50 },
+  ]);
+  assert.equal(analytics.studentTopicSummaries[0].topic, 'Binary');
+  assert.equal(analytics.attempts[0].answerText, 'Base ten');
+  assert.equal(analytics.attempts[0].correctAnswer, 'Base two');
 });
 
 test('MySQL game question store rejects non-teacher accounts and malformed answers', async () => {

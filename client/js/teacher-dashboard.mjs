@@ -104,6 +104,10 @@ createApp({
       topicFilter: '',
       stageFilter: '',
       difficultyFilter: '',
+      selectedStudentKey: '',
+      questionTopicFilter: '',
+      questionOutcomeFilter: '',
+      questionSort: 'accuracyAsc',
       analyticsDays: 30,
       curriculum: emptyCurriculum(),
       homework: emptyHomework(),
@@ -150,6 +154,52 @@ createApp({
     }));
     const studentRows = computed(() => (state.analytics.students || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
     const questionRows = computed(() => (state.analytics.questions || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts));
+    const analyticsTopicOptions = computed(() => [...new Set([...(state.analytics.topicSummaries || []).map(row => row.name || row.topic), ...questionRows.value.map(row => row.topic)].map(value => String(value || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const selectedStudent = computed(() => {
+      const rows = studentRows.value;
+      if (!rows.length) return null;
+      return rows.find(row => studentKey(row) === state.selectedStudentKey) || rows[0];
+    });
+    const selectedStudentTopics = computed(() => {
+      const student = selectedStudent.value;
+      if (!student) return [];
+      return (state.analytics.studentTopicSummaries || []).filter(row => matchesStudent(row, student)).sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || String(a.topic || a.name || '').localeCompare(String(b.topic || b.name || '')));
+    });
+    const selectedStudentAttempts = computed(() => {
+      const student = selectedStudent.value;
+      if (!student) return [];
+      return (state.analytics.attempts || []).filter(row => matchesStudent(row, student)).slice(0, 80);
+    });
+    const classTopicRows = computed(() => (state.analytics.topicSummaries || []).slice().sort((a, b) => a.accuracy - b.accuracy || b.attempts - a.attempts || String(a.name || '').localeCompare(String(b.name || ''))));
+    const classQuestionRows = computed(() => {
+      const topic = String(state.questionTopicFilter || '').trim().toLowerCase();
+      const outcome = String(state.questionOutcomeFilter || '');
+      const rows = questionRows.value.filter(row => {
+        if (topic && String(row.topic || '').trim().toLowerCase() !== topic) return false;
+        if (outcome === 'wrong' && !(Number(row.wrong || 0) > 0)) return false;
+        if (outcome === 'correct' && !(Number(row.correct || 0) > 0)) return false;
+        if (outcome === 'unanswered' && Number(row.attempts || 0) > 0) return false;
+        return true;
+      });
+      const sort = String(state.questionSort || 'accuracyAsc');
+      return rows.sort((a, b) => {
+        if (sort === 'wrongDesc') return Number(b.wrong || 0) - Number(a.wrong || 0) || Number(b.attempts || 0) - Number(a.attempts || 0);
+        if (sort === 'attemptsDesc') return Number(b.attempts || 0) - Number(a.attempts || 0) || Number(a.accuracy || 0) - Number(b.accuracy || 0);
+        if (sort === 'topicAsc') return String(a.topic || '').localeCompare(String(b.topic || '')) || Number(a.accuracy || 0) - Number(b.accuracy || 0);
+        return Number(a.accuracy || 0) - Number(b.accuracy || 0) || Number(b.attempts || 0) - Number(a.attempts || 0);
+      });
+    });
+    const classAttemptRows = computed(() => {
+      const topic = String(state.questionTopicFilter || '').trim().toLowerCase();
+      const outcome = String(state.questionOutcomeFilter || '');
+      return (state.analytics.attempts || []).filter(row => {
+        if (topic && String(row.topic || '').trim().toLowerCase() !== topic) return false;
+        if (outcome === 'wrong' && row.correct) return false;
+        if (outcome === 'correct' && !row.correct) return false;
+        if (outcome === 'unanswered') return false;
+        return true;
+      }).slice(0, 120);
+    });
     const needingSupport = computed(() => studentRows.value.filter(row => Number(row.accuracy || 0) < 60).length);
     const reviewCount = computed(() => questionRows.value.filter(row => Number(row.accuracy || 0) < 70 || Number(row.attempts || 0) >= 5).length);
     const dueSoonCount = computed(() => Math.max(0, state.homeworks.filter(homework => ['scheduled', 'live'].includes(String(homework.status || ''))).length));
@@ -210,6 +260,27 @@ createApp({
 
     function weekdayName(value) {
       return weekdayNames[Math.max(0, Math.min(6, Number(value) || 0))] || 'Monday';
+    }
+
+    function studentKey(row) {
+      return String(row && (row.id || row.email || row.name) || '');
+    }
+
+    function matchesStudent(row, student) {
+      if (!row || !student) return false;
+      const studentId = Number(student.id) || 0;
+      if (studentId && Number(row.studentId) === studentId) return true;
+      const email = String(student.email || '').trim().toLowerCase();
+      if (email && String(row.studentEmail || '').trim().toLowerCase() === email) return true;
+      return String(row.studentName || '').trim().toLowerCase() === String(student.name || '').trim().toLowerCase();
+    }
+
+    function selectStudent(row) {
+      state.selectedStudentKey = studentKey(row);
+    }
+
+    function outcomeLabel(correct) {
+      return correct ? 'Correct' : 'Wrong';
     }
 
     function syncClassSelectionWithSubject() {
@@ -321,6 +392,7 @@ createApp({
       state.questions = (questionsData.questions || []).map(cleanQuestion);
       state.analytics = analyticsData.analytics || state.analytics;
       state.homeworks = homeworkData.homework || [];
+      if (state.selectedStudentKey && !(state.analytics.students || []).some(row => studentKey(row) === state.selectedStudentKey)) state.selectedStudentKey = '';
       if (state.selectedId && !selectedQuestion.value) newQuestion();
     }
 
@@ -664,6 +736,13 @@ createApp({
       difficultyOptions,
       studentRows,
       questionRows,
+      analyticsTopicOptions,
+      selectedStudent,
+      selectedStudentTopics,
+      selectedStudentAttempts,
+      classTopicRows,
+      classQuestionRows,
+      classAttemptRows,
       needingSupport,
       reviewCount,
       dueSoonCount,
@@ -684,6 +763,9 @@ createApp({
       changeQuestionFilters,
       clearQuestionFilters,
       openView,
+      selectStudent,
+      studentKey,
+      outcomeLabel,
       editQuestionFromAnalysis,
       handleCurriculumFiles,
       clearCurriculumRequest,
@@ -826,54 +908,122 @@ createApp({
         </section>
 
         <section class="teacher-vue-analysis" v-else-if="state.view === 'students'">
-          <div class="teacher-vue-chart">
-            <div>
-              <span>Student insights</span>
-              <strong>{{ state.analytics.totals.accuracy }}%</strong>
-              <i>{{ state.analytics.totals.correct }} correct from {{ state.analytics.totals.attempts }} attempts</i>
+          <div class="teacher-vue-analysis-stack">
+            <div class="teacher-vue-chart">
+              <div>
+                <span>Student insights</span>
+                <strong>{{ state.analytics.totals.accuracy }}%</strong>
+                <i>{{ state.analytics.totals.correct }} correct, {{ state.analytics.totals.wrong || 0 }} wrong from {{ state.analytics.totals.attempts }} attempts</i>
+              </div>
+              <canvas ref="studentChart" aria-label="Student accuracy chart"></canvas>
             </div>
-            <canvas ref="studentChart" aria-label="Student accuracy chart"></canvas>
+            <div class="teacher-vue-analysis-table">
+              <div class="teacher-vue-analysis-row head">
+                <span>Student</span>
+                <span>Attempts</span>
+                <span>Accuracy</span>
+                <span>Last active</span>
+              </div>
+              <button class="teacher-vue-analysis-row action" :class="{ selected: selectedStudent && studentKey(selectedStudent) === studentKey(row) }" type="button" v-for="row in studentRows" :key="studentKey(row)" @click="selectStudent(row)">
+                <span>{{ row.name }}<small>{{ row.email || 'Game account' }}</small></span>
+                <strong>{{ row.attempts }}</strong>
+                <strong>{{ row.accuracy }}%</strong>
+                <i>{{ row.lastAttemptAt || 'No attempts' }}</i>
+              </button>
+              <div class="teacher-vue-empty" v-if="!studentRows.length">No students found for this class and subject yet.</div>
+            </div>
           </div>
-          <div class="teacher-vue-analysis-table">
-            <div class="teacher-vue-analysis-row head">
-              <span>Student</span>
-              <span>Attempts</span>
-              <span>Accuracy</span>
-              <span>Last active</span>
+          <div class="teacher-vue-analysis-table teacher-vue-student-detail">
+            <header>
+              <div>
+                <span>Selected student</span>
+                <h2>{{ selectedStudent ? selectedStudent.name : 'Choose a student' }}</h2>
+                <small v-if="selectedStudent">{{ selectedStudent.correct }} correct · {{ selectedStudent.wrong || 0 }} wrong · {{ selectedStudent.accuracy }}%</small>
+              </div>
+            </header>
+            <h3>Topic summary</h3>
+            <div class="teacher-vue-topic-row head"><span>Topic</span><span>Correct</span><span>Wrong</span><span>Accuracy</span></div>
+            <div class="teacher-vue-topic-row" v-for="row in selectedStudentTopics" :key="row.id">
+              <span>{{ row.topic || row.name || 'No topic' }}</span>
+              <strong>{{ row.correct }}</strong>
+              <strong>{{ row.wrong }}</strong>
+              <i>{{ row.accuracy }}%</i>
             </div>
-            <div class="teacher-vue-analysis-row" v-for="row in studentRows" :key="row.id || row.name">
-              <span>{{ row.name }}<small>{{ row.email || 'Game account' }}</small></span>
-              <strong>{{ row.attempts }}</strong>
-              <strong>{{ row.accuracy }}%</strong>
-              <i>{{ row.lastAttemptAt || 'No attempts' }}</i>
+            <div class="teacher-vue-empty" v-if="selectedStudent && !selectedStudentTopics.length">No topic attempts for this student yet.</div>
+            <h3>Question breakdown</h3>
+            <div class="teacher-vue-answer-row head"><span>Question</span><span>Topic</span><span>Answer</span><span>Result</span></div>
+            <div class="teacher-vue-answer-row" v-for="row in selectedStudentAttempts" :key="row.id">
+              <span>{{ row.prompt }}<small>{{ row.createdAt || 'Recent attempt' }}</small></span>
+              <span>{{ row.topic || 'No topic' }}</span>
+              <span>{{ row.answerText || 'Answer ' + (row.answerIndex + 1) }}<small v-if="!row.correct">Correct: {{ row.correctAnswer }}</small></span>
+              <strong :class="{ good: row.correct, bad: !row.correct }">{{ outcomeLabel(row.correct) }}</strong>
             </div>
-            <div class="teacher-vue-empty" v-if="!studentRows.length">No student attempt data for this subject yet.</div>
+            <div class="teacher-vue-empty" v-if="selectedStudent && !selectedStudentAttempts.length">No question attempts for this student yet.</div>
           </div>
         </section>
 
         <section class="teacher-vue-analysis" v-else-if="state.view === 'question-analysis'">
-          <div class="teacher-vue-chart">
-            <div>
-              <span>Questions that need attention</span>
-              <strong>{{ questionRows.length }}</strong>
-              <i>Sorted by accuracy, then attempt count</i>
+          <div class="teacher-vue-analysis-stack">
+            <div class="teacher-vue-chart">
+              <div>
+                <span>Questions that need attention</span>
+                <strong>{{ classQuestionRows.length }}</strong>
+                <i>Filter by topic, outcome, and sort order</i>
+              </div>
+              <canvas ref="questionChart" aria-label="Question accuracy chart"></canvas>
             </div>
-            <canvas ref="questionChart" aria-label="Question accuracy chart"></canvas>
+            <div class="teacher-vue-analysis-table teacher-vue-topic-summary">
+              <header><h2>Topic summary</h2></header>
+              <div class="teacher-vue-topic-row head"><span>Topic</span><span>Correct</span><span>Wrong</span><span>Accuracy</span></div>
+              <div class="teacher-vue-topic-row" v-for="row in classTopicRows" :key="row.id">
+                <span>{{ row.name || row.topic || 'No topic' }}</span>
+                <strong>{{ row.correct }}</strong>
+                <strong>{{ row.wrong }}</strong>
+                <i>{{ row.accuracy }}%</i>
+              </div>
+              <div class="teacher-vue-empty" v-if="!classTopicRows.length">No topic attempts yet.</div>
+            </div>
           </div>
           <div class="teacher-vue-analysis-table">
+            <div class="teacher-vue-filter-row">
+              <label>Topic<select v-model="state.questionTopicFilter">
+                <option value="">All topics</option>
+                <option v-for="topic in analyticsTopicOptions" :key="topic" :value="topic">{{ topic }}</option>
+              </select></label>
+              <label>Result<select v-model="state.questionOutcomeFilter">
+                <option value="">All results</option>
+                <option value="wrong">Has wrong answers</option>
+                <option value="correct">Has correct answers</option>
+                <option value="unanswered">Unanswered</option>
+              </select></label>
+              <label>Sort<select v-model="state.questionSort">
+                <option value="accuracyAsc">Lowest accuracy</option>
+                <option value="wrongDesc">Most wrong</option>
+                <option value="attemptsDesc">Most answered</option>
+                <option value="topicAsc">Topic</option>
+              </select></label>
+            </div>
             <div class="teacher-vue-analysis-row head">
               <span>Question</span>
               <span>Topic</span>
-              <span>Attempts</span>
+              <span>Correct / wrong</span>
               <span>Accuracy</span>
             </div>
-            <button class="teacher-vue-analysis-row action" type="button" v-for="row in questionRows" :key="row.id" @click="editQuestionFromAnalysis(row)">
+            <button class="teacher-vue-analysis-row action" type="button" v-for="row in classQuestionRows" :key="row.id" @click="editQuestionFromAnalysis(row)">
               <span>{{ row.prompt }}<small>{{ row.stage || row.reviewStatus }}</small></span>
               <span>{{ row.topic || 'No topic' }}</span>
-              <strong>{{ row.attempts }}</strong>
+              <strong>{{ row.correct }} / {{ row.wrong || 0 }}</strong>
               <strong>{{ row.accuracy }}%</strong>
             </button>
-            <div class="teacher-vue-empty" v-if="!questionRows.length">No question attempt data for this subject yet.</div>
+            <h3>Answered attempts</h3>
+            <div class="teacher-vue-answer-row head"><span>Student</span><span>Question</span><span>Answer</span><span>Result</span></div>
+            <div class="teacher-vue-answer-row" v-for="row in classAttemptRows" :key="row.id">
+              <span>{{ row.studentName }}<small>{{ row.createdAt || 'Recent attempt' }}</small></span>
+              <span>{{ row.prompt }}<small>{{ row.topic || 'No topic' }}</small></span>
+              <span>{{ row.answerText || 'Answer ' + (row.answerIndex + 1) }}<small v-if="!row.correct">Correct: {{ row.correctAnswer }}</small></span>
+              <strong :class="{ good: row.correct, bad: !row.correct }">{{ outcomeLabel(row.correct) }}</strong>
+            </div>
+            <div class="teacher-vue-empty" v-if="!classQuestionRows.length">No questions match this analysis view.</div>
           </div>
         </section>
 
