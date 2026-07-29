@@ -98,6 +98,7 @@ test('auth responses include the saved hunter-name setup state', { concurrency: 
 
 test('teacher game-question endpoints require a teacher session and expose game questions', { concurrency: false }, async () => {
   const sentMail = [];
+  let attachmentPath = '';
   const gameQuestionStore = {
     async listSubjects(account) {
       assert.equal(account.id, 'teacher_7');
@@ -149,6 +150,30 @@ test('teacher game-question endpoints require a teacher session and expose game 
       assert.ok(fs.existsSync(body.files[0].path));
       return { id: 91, subjectId: 5, subjectName: 'Computer Science', title: body.title, topics: body.topics, syllabus: body.syllabus, notes: body.notes, files: body.files };
     },
+    async listCurriculumRequests(account, query) {
+      assert.equal(account.username, 'asherlevin85@gmail.com');
+      assert.equal(query.subjectId, '5');
+      return [{
+        id: 91,
+        subjectId: 5,
+        subjectName: 'Computer Science',
+        className: '8A',
+        teacherName: 'Teacher',
+        teacherEmail: 'teacher@example.test',
+        title: 'Year 8 networks',
+        topics: 'DNS, routers, packets',
+        syllabus: 'KS3 networks',
+        notes: 'Use short retrieval questions.',
+        files: [{ originalName: 'organiser.pdf', storedName: 'stored-organiser.pdf', mimeType: 'application/pdf', size: 11 }],
+        createdAt: '2026-07-29 10:00:00',
+      }];
+    },
+    async curriculumAttachment(account, requestId, storedName) {
+      assert.equal(account.username, 'asherlevin85@gmail.com');
+      assert.equal(String(requestId), '91');
+      assert.equal(storedName, 'stored-organiser.pdf');
+      return { originalName: 'organiser.pdf', storedName, mimeType: 'application/pdf', size: 11, path: attachmentPath };
+    },
     async markCurriculumNotification(account, requestId, sent, email) {
       assert.equal(account.id, 'teacher_7');
       assert.equal(requestId, 91);
@@ -168,6 +193,8 @@ test('teacher game-question endpoints require a teacher session and expose game 
     },
   } });
   try {
+    attachmentPath = path.join(f.auth.curriculumUploadDir, 'stored-organiser.pdf');
+    fs.writeFileSync(attachmentPath, 'pdf content');
     const studentSid = await f.auth.issueSession({ id: 'student_9', username: 'learner@example.test', displayName: 'Learner', accountType: 'student', role: 'student' });
     const student = await f.request('/auth/teacher/subjects', { headers: { Authorization: 'Bearer ' + studentSid } });
     assert.equal(student.status, 403);
@@ -234,6 +261,17 @@ test('teacher game-question endpoints require a teacher session and expose game 
     assert.equal(sentMail[0].options.headers['X-Blockcraft-Mail-Secret'], 'test_bridge_secret');
     assert.match(sentMail[0].body.text, /DNS, routers, packets/);
     assert.equal(sentMail[0].body.files[0].originalName, 'organiser.pdf');
+
+    const adminSid = await f.auth.issueSession({ id: 'teacher_1', username: 'asherlevin85@gmail.com', displayName: 'Asher Levin', accountType: 'teacher', role: 'admin', schoolId: '12' });
+    const requests = await f.request('/auth/teacher/curriculum-requests?subjectId=5', { headers: { Authorization: 'Bearer ' + adminSid } });
+    assert.equal(requests.status, 200);
+    const requestsBody = await requests.json();
+    assert.equal(requestsBody.admin, true);
+    assert.equal(requestsBody.requests[0].files[0].storedName, 'stored-organiser.pdf');
+    const file = await f.request('/auth/teacher/curriculum-requests/91/files/stored-organiser.pdf', { headers: { Authorization: 'Bearer ' + adminSid } });
+    assert.equal(file.status, 200);
+    assert.equal(file.headers.get('content-disposition').includes('organiser.pdf'), true);
+    assert.equal(await file.text(), 'pdf content');
   } finally { await f.close(); }
 });
 

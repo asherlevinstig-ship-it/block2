@@ -117,6 +117,38 @@ function publicHomework(row) {
   };
 }
 
+function publicCurriculumRequest(row) {
+  let files = [];
+  try { files = JSON.parse(row.files_json || '[]'); } catch (_) {}
+  if (!Array.isArray(files)) files = [];
+  return {
+    id: Number(row.id) || 0,
+    schoolId: row.school_id == null ? null : Number(row.school_id),
+    subjectId: Number(row.subject_id) || 0,
+    subjectName: row.subject_name || '',
+    subjectCode: row.subject_code || '',
+    teacherId: row.teacher_id == null ? null : Number(row.teacher_id),
+    teacherName: row.teacher_name || '',
+    teacherEmail: row.teacher_email || '',
+    classId: row.class_id == null ? null : Number(row.class_id),
+    className: row.class_name || '',
+    title: row.title || '',
+    topics: row.topics || '',
+    syllabus: row.syllabus || '',
+    notes: row.notes || '',
+    files: files.map(file => ({
+      originalName: cleanText(file.originalName, 255),
+      storedName: cleanText(file.storedName, 255),
+      mimeType: cleanText(file.mimeType, 120),
+      size: clampInt(file.size, 0, 50 * 1024 * 1024),
+    })).filter(file => file.storedName),
+    notificationEmail: row.notification_email || '',
+    notificationSent: Number(row.notification_sent) !== 0,
+    createdAt: row.created_at || null,
+    updatedAt: row.updated_at || null,
+  };
+}
+
 class MySqlGameQuestionStore {
   constructor(options = {}) {
     this.authBackend = options.authBackend || null;
@@ -901,6 +933,79 @@ class MySqlGameQuestionStore {
       files,
       notificationEmail,
       notificationSent: !!input.notificationSent,
+    };
+  }
+
+  async listCurriculumRequests(account, query = {}) {
+    await this.ensureSchema();
+    const teacherId = sourceIdFromAccount(account, 'teacher');
+    const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
+    const username = String(account && (account.username || account.email) || '').trim().toLowerCase();
+    const admin = role === 'admin' || username === 'asherlevin85@gmail.com';
+    if (!admin && !teacherId) throw Object.assign(new Error('Teacher account required.'), { status: 403, code: 'teacher' });
+    const subjectId = clampInt(query.subjectId || query.subject_id, 0, 2147483647);
+    const classId = clampInt(query.classId || query.class_id, 0, 2147483647);
+    const params = [];
+    const where = [];
+    if (!admin) {
+      where.push('tcr.teacher_id = ?');
+      params.push(teacherId);
+    }
+    if (subjectId) {
+      where.push('tcr.subject_id = ?');
+      params.push(subjectId);
+    }
+    if (classId) {
+      where.push('tcr.class_id = ?');
+      params.push(classId);
+    }
+    const [rows] = await this.getPool().execute(
+      `SELECT tcr.*, s.name AS subject_name, s.code AS subject_code, t.name AS teacher_name, t.email AS teacher_email, c.name AS class_name
+       FROM teacher_curriculum_request tcr
+       LEFT JOIN subjects s ON s.id = tcr.subject_id
+       LEFT JOIN teachers t ON t.id = tcr.teacher_id
+       LEFT JOIN classes c ON c.id = tcr.class_id
+       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+       ORDER BY tcr.created_at DESC, tcr.id DESC
+       LIMIT 200`,
+      params,
+    );
+    return rows.map(publicCurriculumRequest);
+  }
+
+  async curriculumAttachment(account, requestId, storedName) {
+    await this.ensureSchema();
+    const teacherId = sourceIdFromAccount(account, 'teacher');
+    const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
+    const username = String(account && (account.username || account.email) || '').trim().toLowerCase();
+    const admin = role === 'admin' || username === 'asherlevin85@gmail.com';
+    const id = clampInt(requestId, 1, Number.MAX_SAFE_INTEGER);
+    const cleanStoredName = cleanText(storedName, 255);
+    if (!cleanStoredName || cleanStoredName.includes('/') || cleanStoredName.includes('\\')) {
+      throw Object.assign(new Error('Attachment not found.'), { status: 404, code: 'file' });
+    }
+    const params = [id];
+    const ownerWhere = admin ? '' : ' AND teacher_id = ?';
+    if (!admin) {
+      if (!teacherId) throw Object.assign(new Error('Teacher account required.'), { status: 403, code: 'teacher' });
+      params.push(teacherId);
+    }
+    const [rows] = await this.getPool().execute(
+      `SELECT id, files_json FROM teacher_curriculum_request WHERE id = ?${ownerWhere} LIMIT 1`,
+      params,
+    );
+    const row = rows && rows[0];
+    if (!row) throw Object.assign(new Error('Attachment not found.'), { status: 404, code: 'file' });
+    let files = [];
+    try { files = JSON.parse(row.files_json || '[]'); } catch (_) {}
+    const file = Array.isArray(files) ? files.find(item => cleanText(item && item.storedName, 255) === cleanStoredName) : null;
+    if (!file) throw Object.assign(new Error('Attachment not found.'), { status: 404, code: 'file' });
+    return {
+      originalName: cleanText(file.originalName, 255) || cleanStoredName,
+      storedName: cleanStoredName,
+      mimeType: cleanText(file.mimeType, 120),
+      path: cleanText(file.path, 500),
+      size: clampInt(file.size, 0, 50 * 1024 * 1024),
     };
   }
 

@@ -1013,6 +1013,32 @@ class AuthService {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load homework.' });
       }
     });
+    app.get('/auth/teacher/curriculum-requests', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const store = this.getGameQuestionStore();
+        const requests = typeof store.listCurriculumRequests === 'function' ? await store.listCurriculumRequests(account, req.query || {}) : [];
+        res.json({ ok: true, requests, admin: this.isAdminAccount(account) || cleanUsername(account.username) === 'asherlevin85@gmail.com' });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load curriculum requests.' });
+      }
+    });
+    app.get('/auth/teacher/curriculum-requests/:id/files/:storedName', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const store = this.getGameQuestionStore();
+        if (!store || typeof store.curriculumAttachment !== 'function') throw Object.assign(new Error('Attachment not found.'), { status: 404 });
+        const file = await store.curriculumAttachment(account, req.params && req.params.id, req.params && req.params.storedName);
+        const uploadRoot = path.resolve(this.curriculumUploadDir);
+        const filePath = path.resolve(file.path || path.join(uploadRoot, file.storedName));
+        if (!filePath.startsWith(uploadRoot + path.sep)) throw Object.assign(new Error('Attachment not found.'), { status: 404 });
+        res.download(filePath, file.originalName || file.storedName);
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not download attachment.' });
+      }
+    });
     app.post('/auth/teacher/homework', async (req, res) => {
       const account = this.authorizeTeacher(req);
       if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });

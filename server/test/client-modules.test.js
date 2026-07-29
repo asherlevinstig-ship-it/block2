@@ -726,6 +726,10 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /ref="questionChart"/);
   assert.match(teacherDashboardSource, /teacher-vue-analysis/);
   assert.match(teacherDashboardSource, /teacherCurriculumFiles/);
+  assert.match(teacherDashboardSource, /isAsherAdmin/);
+  assert.match(teacherDashboardSource, /Admin request inbox/);
+  assert.match(teacherDashboardSource, /downloadCurriculumFile/);
+  assert.match(teacherDashboardSource, /curriculumRequests/);
   assert.match(teacherDashboardSource, /Add four unique answer choices/);
   const serverAuthSource = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
   const sitegroundMailBridge = fs.readFileSync(path.join(__dirname, '..', '..', 'deploy', 'siteground', 'blockcraft_curriculum_mail.php'), 'utf8');
@@ -761,6 +765,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.doesNotMatch(serverAuthSource, /require\('resend'\)/);
   assert.match(serverAuthSource, /\/auth\/teacher\/homework/);
   assert.match(serverAuthSource, /\/auth\/teacher\/curriculum-requests/);
+  assert.match(serverAuthSource, /curriculumAttachment/);
+  assert.match(serverAuthSource, /res\.download/);
   const stylesSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.match(stylesSource, /\.teacher-page-body/);
   assert.match(stylesSource, /\.teacher-login-shell/);

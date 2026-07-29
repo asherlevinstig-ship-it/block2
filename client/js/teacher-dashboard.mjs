@@ -95,6 +95,7 @@ createApp({
       questions: [],
       homeworks: [],
       analytics: { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 },
+      curriculumRequests: [],
       selectedId: 0,
       subjectId: '',
       classId: '',
@@ -116,6 +117,8 @@ createApp({
     });
 
     const selectedSubject = computed(() => state.subjects.find(s => String(s.id) === String(state.subjectId)) || null);
+    const isAsherAdmin = computed(() => String(state.account && (state.account.username || state.account.email) || '').trim().toLowerCase() === 'asherlevin85@gmail.com'
+      || String(state.account && (state.account.role || state.account.accountType) || '').trim().toLowerCase() === 'admin');
     const selectedQuestion = computed(() => state.questions.find(q => q.id === state.selectedId) || null);
     const topicOptions = computed(() => [...new Set(state.questions.map(q => String(q.topic || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
     const stageOptions = computed(() => [...new Set(state.questions.map(q => String(q.stage || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
@@ -218,6 +221,7 @@ createApp({
       state.questions = [];
       state.homeworks = [];
       state.analytics = { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 };
+      state.curriculumRequests = [];
       state.view = 'overview';
       state.loading = false;
       setNotice('');
@@ -314,6 +318,18 @@ createApp({
       if (state.selectedId && !selectedQuestion.value) newQuestion();
     }
 
+    async function loadCurriculumRequests() {
+      if (!isAsherAdmin.value) {
+        state.curriculumRequests = [];
+        return;
+      }
+      const params = new URLSearchParams();
+      if (state.subjectId) params.set('subjectId', state.subjectId);
+      if (state.classId) params.set('classId', state.classId);
+      const data = await requestJson('/auth/teacher/curriculum-requests' + (params.toString() ? '?' + params.toString() : ''));
+      state.curriculumRequests = data.requests || [];
+    }
+
     async function refreshAll() {
       state.loading = true;
       try {
@@ -324,6 +340,7 @@ createApp({
         }
         await loadSubjects();
         await loadSubjectData();
+        await loadCurriculumRequests();
         setNotice('Shared subject question bank loaded.');
       } catch (e) {
         setError(e.message || 'Could not load teacher dashboard.');
@@ -352,6 +369,7 @@ createApp({
         state.login.password = '';
         await loadSubjects();
         await loadSubjectData();
+        await loadCurriculumRequests();
         setNotice('Signed in as ' + String(state.account && state.account.username || username) + '.');
       } catch (e) {
         setError(e.message || 'Could not sign in.');
@@ -369,6 +387,7 @@ createApp({
       state.loading = true;
       try {
         await loadSubjectData();
+        await loadCurriculumRequests();
         setNotice('Subject loaded.');
       } catch (e) {
         setError(e.message || 'Could not load subject.');
@@ -381,6 +400,7 @@ createApp({
       state.loading = true;
       try {
         await loadSubjectData();
+        await loadCurriculumRequests();
         setNotice('View refreshed.');
       } catch (e) {
         setError(e.message || 'Could not refresh teacher dashboard.');
@@ -504,6 +524,7 @@ createApp({
         for (const file of state.curriculum.files) form.append('files', file);
         const data = await requestJson('/auth/teacher/curriculum-requests', { method: 'POST', body: form });
         clearCurriculumRequest();
+        await loadCurriculumRequests();
         if (data.notification && data.notification.sent) {
           setNotice('Curriculum request submitted and email notification sent.');
         } else {
@@ -525,6 +546,30 @@ createApp({
         setError(e.message || 'Could not submit curriculum request.');
       } finally {
         state.saving = false;
+      }
+    }
+
+    async function downloadCurriculumFile(request, file) {
+      try {
+        const requestId = encodeURIComponent(String(request && request.id || ''));
+        const storedName = encodeURIComponent(String(file && file.storedName || ''));
+        if (!requestId || !storedName) throw new Error('Attachment is missing its file reference.');
+        const res = await fetch(apiUrl('/auth/teacher/curriculum-requests/' + requestId + '/files/' + storedName), {
+          credentials: 'include',
+          headers: authHeaders(),
+        });
+        if (!res.ok) throw new Error('Could not download attachment.');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = String(file.originalName || file.storedName || 'curriculum-file');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        setError(e.message || 'Could not download attachment.');
       }
     }
 
@@ -576,6 +621,7 @@ createApp({
 
     return {
       state,
+      isAsherAdmin,
       selectedSubject,
       filteredQuestions,
       topicOptions,
@@ -599,6 +645,7 @@ createApp({
       signOut,
       changeSubject,
       changeStatus,
+      loadCurriculumRequests,
       changeQuestionFilters,
       clearQuestionFilters,
       openView,
@@ -606,6 +653,7 @@ createApp({
       handleCurriculumFiles,
       clearCurriculumRequest,
       submitCurriculumRequest,
+      downloadCurriculumFile,
       fillForm,
       newQuestion,
       saveQuestion,
@@ -793,6 +841,28 @@ createApp({
         </section>
 
         <section class="teacher-vue-curriculum" v-else-if="state.view === 'curriculum'">
+          <section class="teacher-vue-panel teacher-vue-curriculum-inbox" v-if="isAsherAdmin">
+            <header><h2>Admin request inbox</h2><button type="button" @click="loadCurriculumRequests">Refresh</button></header>
+            <article class="teacher-vue-request-card" v-for="request in state.curriculumRequests" :key="request.id">
+              <div>
+                <span>{{ request.subjectName || 'Subject' }}<small>{{ request.className || 'All classes' }} · {{ request.createdAt || 'Submitted' }}</small></span>
+                <h3>{{ request.title }}</h3>
+                <p v-if="request.topics"><strong>Topics</strong>{{ request.topics }}</p>
+                <p v-if="request.syllabus"><strong>Syllabus</strong>{{ request.syllabus }}</p>
+                <p v-if="request.notes"><strong>Notes</strong>{{ request.notes }}</p>
+                <em>{{ request.teacherName || request.teacherEmail || 'Teacher' }}</em>
+              </div>
+              <div class="teacher-vue-request-files">
+                <strong>Attachments</strong>
+                <button v-for="file in request.files" :key="file.storedName" type="button" @click="downloadCurriculumFile(request, file)">
+                  <span>{{ file.originalName || file.storedName }}</span>
+                  <small>{{ Math.ceil((file.size || 0) / 1024) }} KB</small>
+                </button>
+                <small v-if="!request.files || !request.files.length">No files attached</small>
+              </div>
+            </article>
+            <div class="teacher-vue-empty" v-if="!state.curriculumRequests.length">No curriculum requests match this subject/class filter yet.</div>
+          </section>
           <form class="teacher-vue-editor" @submit.prevent="submitCurriculumRequest">
             <div class="teacher-vue-editor-head">
               <div>
