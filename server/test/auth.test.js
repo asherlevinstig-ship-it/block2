@@ -125,6 +125,44 @@ test('MySQL auth backend validates existing teacher accounts and persists sessio
   auth.stop();
 });
 
+test('MySQL auth backend exchanges MIS teacher auth_token for a Blockcraft session account', async () => {
+  const pool = {
+    async execute(sql, params) {
+      if (/FROM teachers WHERE auth_token = \?/i.test(sql)) {
+        assert.equal(params[0], 'mis-token-1234567890abcdef');
+        return [[{
+          id: 51,
+          name: 'Demo Riverside',
+          email: 'demo@riverside.test',
+          password_hash: 'unused',
+          role: 'teacher',
+          is_active: 1,
+          school_id: 22,
+          domain: null,
+        }]];
+      }
+      if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 22, name: 'Riverside School', domain: 'riverside.test' }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-token-'));
+  const auth = new AuthService(dir, { authBackend: backend });
+  const account = await auth.loginTeacherToken('mis-token-1234567890abcdef');
+  assert.deepEqual(account, {
+    id: 'teacher_51',
+    username: 'demo@riverside.test',
+    displayName: 'Demo Riverside',
+    accountType: 'teacher',
+    role: 'teacher',
+    schoolId: '22',
+    schoolName: 'Riverside School',
+  });
+  const sid = await auth.issueSession(account);
+  assert.equal(auth.authenticateRequest({ headers: { authorization: 'Bearer ' + sid } }).id, 'teacher_51');
+  auth.stop();
+});
+
 test('MySQL auth backend preserves admin teacher role and resolves linked school', async () => {
   const hash = await bcrypt.hash('correct horse admin', 10);
   const calls = [];

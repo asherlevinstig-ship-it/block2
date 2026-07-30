@@ -80,6 +80,30 @@ class MySqlAuthBackend {
     return account;
   }
 
+  async findTeacherByAuthToken(token) {
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || cleanToken.length < 16 || cleanToken.length > 255) return null;
+    const pool = this.getPool();
+    const [rows] = await pool.execute(
+      'SELECT id, name, email, password_hash, role, is_active, school_id, domain FROM teachers WHERE auth_token = ? LIMIT 1',
+      [cleanToken],
+    );
+    const row = rows && rows[0];
+    if (!row || Number(row.is_active) === 0) return null;
+    const school = await this.schoolForTeacher(pool, row, row.email);
+    const account = {
+      id: publicId('teacher', row.id),
+      username: cleanEmail(row.email),
+      displayName: String(row.name || 'Teacher').trim().slice(0, 32) || 'Teacher',
+      accountType: 'teacher',
+      role: String(row.role || 'teacher'),
+      schoolId: school && school.id ? String(school.id) : row.school_id == null ? null : String(row.school_id),
+      sourceId: String(row.id),
+    };
+    if (school && school.name) account.schoolName = school.name;
+    return account;
+  }
+
   async findStudent(pool, email) {
     const [rows] = await pool.execute(
       'SELECT id, name, email, password_hash, school_id FROM students WHERE LOWER(email) = ? LIMIT 1',
@@ -243,6 +267,14 @@ class MySqlAuthBackend {
     if (!ok) throw Object.assign(new Error('Invalid username or password.'), { status: 401, code: 'credentials' });
     await this.touchLastLogin(account);
     delete account.passwordHash;
+    delete account.sourceId;
+    return account;
+  }
+
+  async loginTeacherToken(token) {
+    if (typeof this.findTeacherByAuthToken !== 'function') return null;
+    const account = await this.findTeacherByAuthToken(token);
+    if (!account) throw Object.assign(new Error('Invalid teacher handoff token.'), { status: 401, code: 'teacher_token' });
     delete account.sourceId;
     return account;
   }

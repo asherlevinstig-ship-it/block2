@@ -843,6 +843,15 @@ class AuthService {
     return { account, yearGroupSaved };
   }
 
+  async loginTeacherToken(token) {
+    if (!this.authBackend || typeof this.authBackend.loginTeacherToken !== 'function') {
+      throw Object.assign(new Error('Teacher handoff is not configured.'), { status: 503, code: 'teacher_token_config' });
+    }
+    const account = await this.authBackend.loginTeacherToken(token);
+    if (!account) throw Object.assign(new Error('Invalid teacher handoff token.'), { status: 401, code: 'teacher_token' });
+    return account;
+  }
+
   async login(username, password) {
     if (this.authBackend) return this.authBackend.login(username, password);
     username = cleanUsername(username);
@@ -978,6 +987,18 @@ class AuthService {
       }
     });
     app.post('/auth/login', (req, res) => complete(req, res, false));
+    app.post('/auth/teacher/token-login', async (req, res) => {
+      const token = req.body && (req.body.authToken || req.body.auth_token || req.body.token);
+      if (!this.allowAttempt(req, 'teacher-token')) return res.status(429).json({ ok: false, error: 'Too many authentication attempts.' });
+      try {
+        const account = await this.loginTeacherToken(token);
+        const sid = await this.issueSession(account);
+        res.setHeader('Set-Cookie', this.cookie(sid, req));
+        res.json({ ok: true, account: this.publicAccount(account), gameProfile: await this.publicGameProfile(account), sessionToken: sid });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Teacher handoff failed.' });
+      }
+    });
     app.get('/auth/me', async (req, res) => {
       const account = this.authenticateRequest(req);
       if (!account) return res.status(401).json({ ok: false });

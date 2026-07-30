@@ -44,6 +44,27 @@ function sameAccount(a, b) {
   return !!leftName && leftName === rightName;
 }
 
+function teacherHandoffToken() {
+  try {
+    if (typeof location === 'undefined') return '';
+    const params = new URLSearchParams(location.search || '');
+    return String(params.get('auth_token') || params.get('teacher_token') || params.get('token') || '').trim();
+  } catch (_) {
+    return '';
+  }
+}
+
+function clearTeacherHandoffToken() {
+  try {
+    if (typeof history === 'undefined' || typeof location === 'undefined') return;
+    const url = new URL(location.href);
+    url.searchParams.delete('auth_token');
+    url.searchParams.delete('teacher_token');
+    url.searchParams.delete('token');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (_) {}
+}
+
 function isTeacherAccount(account) {
   const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
   const id = String(account && account.id || '').trim().toLowerCase();
@@ -453,6 +474,24 @@ createApp({
       return true;
     }
 
+    async function consumeTeacherHandoff() {
+      const token = teacherHandoffToken();
+      if (!token) return false;
+      storeSession('');
+      const data = await requestJson('/auth/teacher/token-login', {
+        method: 'POST',
+        skipAuth: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      if (!isTeacherAccount(data.account)) throw new Error('This MIS login is not linked to a teacher account.');
+      if (data.sessionToken) storeSession(data.sessionToken);
+      state.account = data.account || null;
+      clearTeacherHandoffToken();
+      setNotice('Signed in from MIS as ' + String(state.account && (state.account.displayName || state.account.username) || 'teacher') + '.');
+      return true;
+    }
+
     async function loadSubjects() {
       const data = await requestJson('/auth/teacher/subjects');
       state.subjects = data.subjects || [];
@@ -502,7 +541,7 @@ createApp({
     async function refreshAll() {
       state.loading = true;
       try {
-        const signedIn = await loadAccount();
+        const signedIn = await consumeTeacherHandoff() || await loadAccount();
         if (!signedIn) {
           setNotice('');
           return;

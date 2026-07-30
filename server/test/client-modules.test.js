@@ -706,8 +706,14 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /const \{ skipAuth = false, \.\.\.fetchOptions \} = options \|\| \{\};/);
   assert.match(teacherDashboardSource, /headers: skipAuth \? \(fetchOptions\.headers \|\| \{\}\) : authHeaders\(fetchOptions\.headers \|\| \{\}\)/);
   assert.match(teacherDashboardSource, /function sameAccount\(a, b\)/);
+  assert.match(teacherDashboardSource, /function teacherHandoffToken\(\)/);
+  assert.match(teacherDashboardSource, /params\.get\('auth_token'\) \|\| params\.get\('teacher_token'\) \|\| params\.get\('token'\)/);
+  assert.match(teacherDashboardSource, /function clearTeacherHandoffToken\(\)/);
   assert.match(teacherDashboardSource, /cookieData = await requestJson\('\/auth\/me', \{ skipAuth: true \}\)/);
   assert.match(teacherDashboardSource, /if \(bearerData && bearerData\.account && !sameAccount\(cookieData\.account, bearerData\.account\)\) storeSession\(''\);/);
+  assert.match(teacherDashboardSource, /async function consumeTeacherHandoff\(\)/);
+  assert.match(teacherDashboardSource, /requestJson\('\/auth\/teacher\/token-login'/);
+  assert.match(teacherDashboardSource, /const signedIn = await consumeTeacherHandoff\(\) \|\| await loadAccount\(\);/);
   assert.match(teacherDashboardSource, /Sign in with a teacher account to open the dashboard/);
   assert.match(teacherDashboardSource, /await requestJson\('\/auth\/logout', \{ method: 'POST', skipAuth: true \}\)/);
   assert.match(teacherDashboardSource, /Good morning/);
