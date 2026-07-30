@@ -54,6 +54,20 @@ function teacherHandoffToken() {
   }
 }
 
+function isMisLaunch() {
+  try {
+    if (typeof location !== 'undefined') {
+      const params = new URLSearchParams(location.search || '');
+      const source = String(params.get('source') || params.get('from') || '').trim().toLowerCase();
+      if (['mis', 'assessment', 'compscigo'].includes(source)) return true;
+    }
+    if (typeof document !== 'undefined') {
+      return /(^|\.)compscigo\.com$/i.test(new URL(document.referrer || '').hostname || '');
+    }
+  } catch (_) {}
+  return false;
+}
+
 function clearTeacherHandoffToken() {
   try {
     if (typeof history === 'undefined' || typeof location === 'undefined') return;
@@ -61,6 +75,8 @@ function clearTeacherHandoffToken() {
     url.searchParams.delete('auth_token');
     url.searchParams.delete('teacher_token');
     url.searchParams.delete('token');
+    url.searchParams.delete('source');
+    url.searchParams.delete('from');
     history.replaceState(null, '', url.pathname + url.search + url.hash);
   } catch (_) {}
 }
@@ -476,7 +492,15 @@ createApp({
 
     async function consumeTeacherHandoff() {
       const token = teacherHandoffToken();
-      if (!token) return false;
+      if (!token) {
+        if (isMisLaunch()) {
+          storeSession('');
+          state.account = null;
+          clearTeacherHandoffToken();
+          setError('MIS did not provide a teacher handoff token. Please reopen Homework Game from the MIS menu.');
+        }
+        return false;
+      }
       storeSession('');
       const data = await requestJson('/auth/teacher/token-login', {
         method: 'POST',
@@ -541,7 +565,8 @@ createApp({
     async function refreshAll() {
       state.loading = true;
       try {
-        const signedIn = await consumeTeacherHandoff() || await loadAccount();
+        const usedHandoff = await consumeTeacherHandoff();
+        const signedIn = usedHandoff || (!isMisLaunch() && await loadAccount());
         if (!signedIn) {
           setNotice('');
           return;
