@@ -23,15 +23,25 @@ function authHeaders(base = {}) {
 }
 
 async function requestJson(path, options = {}) {
+  const { skipAuth = false, ...fetchOptions } = options || {};
   const res = await fetch(apiUrl(path), {
     credentials: 'include',
-    ...options,
-    headers: authHeaders(options.headers || {}),
+    ...fetchOptions,
+    headers: skipAuth ? (fetchOptions.headers || {}) : authHeaders(fetchOptions.headers || {}),
   });
   let data = {};
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) throw new Error(data.error || 'Teacher dashboard request failed.');
   return data;
+}
+
+function sameAccount(a, b) {
+  const left = String(a && a.id || '').trim().toLowerCase();
+  const right = String(b && b.id || '').trim().toLowerCase();
+  if (left && right) return left === right;
+  const leftName = String(a && (a.username || a.email) || '').trim().toLowerCase();
+  const rightName = String(b && (b.username || b.email) || '').trim().toLowerCase();
+  return !!leftName && leftName === rightName;
 }
 
 function isTeacherAccount(account) {
@@ -335,7 +345,8 @@ createApp({
       changeStatus();
     }
 
-    function signOut() {
+    async function signOut() {
+      try { await requestJson('/auth/logout', { method: 'POST', skipAuth: true }); } catch (_) {}
       storeSession('');
       state.account = null;
       state.subjects = [];
@@ -406,13 +417,39 @@ createApp({
     }
 
     async function loadAccount() {
-      if (!storedSession()) {
+      const token = storedSession();
+      let cookieData = null;
+      try { cookieData = await requestJson('/auth/me', { skipAuth: true }); } catch (_) {}
+      if (cookieData && cookieData.account) {
+        if (token) {
+          try {
+            const bearerData = await requestJson('/auth/me');
+            if (bearerData && bearerData.account && !sameAccount(cookieData.account, bearerData.account)) storeSession('');
+          } catch (_) {
+            storeSession('');
+          }
+        }
+        state.account = cookieData.account || null;
+        if (!isTeacherAccount(state.account)) {
+          storeSession('');
+          state.account = null;
+          setError('Sign in with a teacher account to open the dashboard.');
+          return false;
+        }
+        return true;
+      }
+      if (!token) {
         state.account = null;
         return false;
       }
       const data = await requestJson('/auth/me');
       state.account = data.account || null;
-      if (!isTeacherAccount(state.account)) throw new Error('Teacher account required.');
+      if (!isTeacherAccount(state.account)) {
+        storeSession('');
+        state.account = null;
+        setError('Sign in with a teacher account to open the dashboard.');
+        return false;
+      }
       return true;
     }
 

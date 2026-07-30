@@ -703,6 +703,13 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /\/auth\/login/);
   assert.match(teacherDashboardSource, /storeSession\(data\.sessionToken\)/);
   assert.match(teacherDashboardSource, /This login is not linked to a teacher account/);
+  assert.match(teacherDashboardSource, /const \{ skipAuth = false, \.\.\.fetchOptions \} = options \|\| \{\};/);
+  assert.match(teacherDashboardSource, /headers: skipAuth \? \(fetchOptions\.headers \|\| \{\}\) : authHeaders\(fetchOptions\.headers \|\| \{\}\)/);
+  assert.match(teacherDashboardSource, /function sameAccount\(a, b\)/);
+  assert.match(teacherDashboardSource, /cookieData = await requestJson\('\/auth\/me', \{ skipAuth: true \}\)/);
+  assert.match(teacherDashboardSource, /if \(bearerData && bearerData\.account && !sameAccount\(cookieData\.account, bearerData\.account\)\) storeSession\(''\);/);
+  assert.match(teacherDashboardSource, /Sign in with a teacher account to open the dashboard/);
+  assert.match(teacherDashboardSource, /await requestJson\('\/auth\/logout', \{ method: 'POST', skipAuth: true \}\)/);
   assert.match(teacherDashboardSource, /Good morning/);
   assert.match(teacherDashboardSource, /Attention required/);
   assert.match(teacherDashboardSource, /Student Breakdown/);
