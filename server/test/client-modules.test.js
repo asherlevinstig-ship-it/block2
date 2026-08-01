@@ -621,6 +621,8 @@ test('ancient city POIs generate rare deep halls, vaults, core chambers, and lor
 test('client dimensions and server consume the shared grid contract', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const teacherHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'teacher.html'), 'utf8');
+  const teacherLoginHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'teacher-login.html'), 'utf8');
+  const teacherLoginSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'teacher-login.mjs'), 'utf8');
   const registerHtml = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.html'), 'utf8');
   const registerJs = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'register.js'), 'utf8');
   const splashAsset = path.join(__dirname, '..', '..', 'client', 'assets', 'splash-cinematic.png');
@@ -690,6 +692,17 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherHtml, /"chart\.js\/auto":"https:\/\/esm\.sh\/chart\.js@4\.4\.9\/auto"/);
   assert.match(teacherHtml, /\/js\/teacher-dashboard\.mjs/);
   assert.match(teacherHtml, /id="teacherapp"/);
+  assert.match(teacherLoginHtml, /data-page="teacher-login"/);
+  assert.match(teacherLoginHtml, /id="teacherLoginForm"/);
+  assert.match(teacherLoginHtml, /id="teacherPasswordToggle" class="password-toggle" type="button"/);
+  assert.match(teacherLoginHtml, /\/js\/teacher-login\.mjs/);
+  assert.match(teacherLoginHtml, /Teacher login/);
+  assert.match(teacherLoginSource, /import \{ apiUrl \} from '\.\/config\.mjs';/);
+  assert.match(teacherLoginSource, /localStorage\.removeItem\(sessionKey\)/);
+  assert.match(teacherLoginSource, /await clearServerCookie\(\)/);
+  assert.match(teacherLoginSource, /\/auth\/login/);
+  assert.match(teacherLoginSource, /That account is not linked to a teacher dashboard/);
+  assert.match(teacherLoginSource, /location\.href = '\.\/teacher\.html\?teacher_login=1'/);
   assert.match(boot, /'\.\/teacher-link\.mjs'/);
   const teacherLinkSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'teacher-link.mjs'), 'utf8');
   assert.match(teacherLinkSource, /button\.id = 'teacherdeskbtn'/);
@@ -699,6 +712,7 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /import Chart from 'chart\.js\/auto'/);
   assert.match(teacherDashboardSource, /<strong>Homework<\/strong>/);
   assert.match(teacherDashboardSource, /Teacher sign in/);
+  assert.match(teacherDashboardSource, /Standalone teacher login/);
   assert.match(teacherDashboardSource, /This is checked against the existing MySQL teacher database/);
   assert.match(teacherDashboardSource, /\/auth\/login/);
   assert.match(teacherDashboardSource, /storeSession\(data\.sessionToken\)/);

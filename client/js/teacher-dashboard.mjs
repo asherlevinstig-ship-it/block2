@@ -972,6 +972,7 @@ createApp({
           <button type="submit" class="teacher-vue-primary" :disabled="state.saving || state.loading">{{ state.saving ? 'Signing in...' : 'Sign in' }}</button>
         </form>
         <div class="teacher-login-links">
+          <a href="./teacher-login.html">Standalone teacher login</a>
           <a href="./">Return to game</a>
           <a href="./register.html">Student registration</a>
         </div>

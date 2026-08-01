@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blockcraft Teacher Login</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="teacher-page-body teacher-standalone-login-body" data-page="teacher-login">
+  <main class="teacher-login-shell teacher-standalone-login" aria-label="Teacher login">
+    <section class="teacher-login-card">
+      <div class="teacher-vue-brand">
+        <i>□</i>
+        <div>
+          <strong>Blockcraft</strong>
+          <span>Teacher</span>
+        </div>
+      </div>
+      <div class="teacher-login-copy">
+        <h1>Teacher login</h1>
+        <p>Sign in with your school teacher account to open the Blockcraft homework dashboard.</p>
+      </div>
+      <form id="teacherLoginForm" class="teacher-login-form">
+        <label>Email address<input id="teacherEmail" type="email" autocomplete="username" placeholder="teacher@school.org" required></label>
+        <label>Password
+          <span class="teacher-password-wrap">
+            <input id="teacherPassword" type="password" autocomplete="current-password" placeholder="Your password" required>
+            <button id="teacherPasswordToggle" class="password-toggle" type="button" aria-controls="teacherPassword" aria-pressed="false">SHOW</button>
+          </span>
+        </label>
+        <div id="teacherLoginStatus" class="teacher-vue-status" aria-live="polite"></div>
+        <button id="teacherLoginButton" type="submit" class="teacher-vue-primary">Sign in</button>
+      </form>
+      <div class="teacher-login-links">
+        <a href="./teacher.html">Open dashboard</a>
+        <a href="mailto:asherlevin85@gmail.com?subject=Blockcraft%20teacher%20password%20reset">Forgot password?</a>
+        <a href="./">Return to game</a>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/js/teacher-login.mjs"></script>
+</body>
+</html>
