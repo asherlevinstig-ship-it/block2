@@ -695,9 +695,12 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherLoginHtml, /data-page="teacher-login"/);
   assert.match(teacherLoginHtml, /id="teacherLoginForm"/);
   assert.match(teacherLoginHtml, /id="teacherPasswordToggle" class="password-toggle" type="button"/);
+  assert.match(teacherLoginHtml, /id="teacherForgotPassword" href="https:\/\/compscigo\.com\/forgot_password\.php\?type=teacher&source=blockcraft"/);
   assert.match(teacherLoginHtml, /\/js\/teacher-login\.mjs/);
   assert.match(teacherLoginHtml, /Teacher login/);
   assert.match(teacherLoginSource, /import \{ apiUrl \} from '\.\/config\.mjs';/);
+  assert.match(teacherLoginSource, /const recoveryUrl = 'https:\/\/compscigo\.com\/forgot_password\.php\?type=teacher&source=blockcraft';/);
+  assert.match(teacherLoginSource, /url\.searchParams\.set\('email', username\)/);
   assert.match(teacherLoginSource, /localStorage\.removeItem\(sessionKey\)/);
   assert.match(teacherLoginSource, /await clearServerCookie\(\)/);
   assert.match(teacherLoginSource, /\/auth\/login/);

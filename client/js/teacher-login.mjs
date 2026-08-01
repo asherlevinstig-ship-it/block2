@@ -7,6 +7,8 @@ const password = document.getElementById('teacherPassword');
 const toggle = document.getElementById('teacherPasswordToggle');
 const status = document.getElementById('teacherLoginStatus');
 const submit = document.getElementById('teacherLoginButton');
+const recoveryLink = document.getElementById('teacherForgotPassword');
+const recoveryUrl = 'https://compscigo.com/forgot_password.php?type=teacher&source=blockcraft';
 
 function storeSession(token) {
   try {
@@ -91,7 +93,17 @@ function initPasswordToggle() {
   });
 }
 
+function updateRecoveryLink() {
+  if (!recoveryLink) return;
+  const username = String(email && email.value || '').trim().toLowerCase();
+  const url = new URL(recoveryUrl);
+  if (username) url.searchParams.set('email', username);
+  recoveryLink.href = url.toString();
+}
+
 storeSession('');
 clearReconnectTokens();
 initPasswordToggle();
+updateRecoveryLink();
 if (form) form.addEventListener('submit', loginTeacher);
+if (email) email.addEventListener('input', updateRecoveryLink);
