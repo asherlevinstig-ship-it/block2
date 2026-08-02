@@ -1690,11 +1690,17 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(styles,/#recallhud\.question-hall-recall/);
   assert.match(styles,/body\.question-hall-recall-open:before/);
   assert.match(combat,/if\(dim==='questions'\)releaseGameplayCursor\(\);/);
+  assert.match(combat,/function recoverQuestionHallAfterRecall\(\)/);
+  assert.match(combat,/standHeight\(player\.pos\.x,player\.pos\.z,WH-2\)/);
+  assert.match(combat,/player\.vel\.set\(0,0,0\);/);
+  assert.match(combat,/player\.onGround=true;/);
+  assert.match(combat,/globalThis\.BlockcraftQuestionHallRecovery=recoverQuestionHallAfterRecall/);
   assert.match(combat,/questionHallActive&&globalThis\.BlockcraftRecall\.questionHallActive\(\)/);
   assert.match(combat,/globalThis\.BlockcraftRecall\.closeQuestionHall\(\)/);
   assert.match(recall,/QUESTION_HALL_GOAL=10/);
   assert.match(recall,/function queueQuestionHallNext/);
   assert.match(recall,/start\(\{source:'question_hall'\}\)/);
+  assert.match(recall,/BlockcraftQuestionHallRecovery/);
   assert.match(recall,/questionHallActive:\(\)=>questionHallOpen/);
   assert.match(room,/questionHall=message\.source==='question_hall'/);
   assert.match(room,/fallback=questionHall\|\|pillars\.some/);

@@ -56,7 +56,11 @@ function start(opts={}){
   if(source==='question_hall')questionHallOpen=true;
   NET.room.send('recallStart',{yaw:player.yaw,subject:selectedSubject(),source});
 }
-function closeQuestionHall(){questionHallOpen=false;clearRecall();}
+function closeQuestionHall(){
+  const wasHall=questionHallOpen;
+  questionHallOpen=false;clearRecall();
+  if(wasHall&&typeof globalThis.BlockcraftQuestionHallRecovery==='function')globalThis.BlockcraftQuestionHallRecovery();
+}
 function queueQuestionHallNext(delay=900){
   if(!questionHallOpen)return;
   if(questionHallNextTimer)clearTimeout(questionHallNextTimer);

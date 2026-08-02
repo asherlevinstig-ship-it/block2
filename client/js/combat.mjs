@@ -4236,6 +4236,19 @@ function resumeCameraAfterArrivalChoice(){
     setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); },250);
   }catch(e){ enterPlayFallback(); }
 }
+function recoverQuestionHallAfterRecall(){
+  if(dim!=='questions'||!player)return false;
+  const y=typeof standHeight==='function'?standHeight(player.pos.x,player.pos.z,WH-2):-1;
+  if(Number.isFinite(y)&&y>1)player.pos.y=y+.035;
+  else player.pos.set(930.5,20.05,865.5);
+  player.vel.set(0,0,0);
+  player.onGround=true;
+  stopPrimaryAction();
+  resumeGameplayCamera();
+  refreshPlayUi();
+  return true;
+}
+globalThis.BlockcraftQuestionHallRecovery=recoverQuestionHallAfterRecall;
 function showFirstTownArrivalChoice(){
   if(!shouldShowFirstTownArrivalChoice())return false;
   firstTownChoiceOpen=true;
