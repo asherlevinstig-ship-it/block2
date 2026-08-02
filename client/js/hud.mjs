@@ -8,6 +8,7 @@ const legacyHudBindings={
   refreshHUD:{get:()=>refreshHUD},
   refreshStatPointNudge:{get:()=>refreshStatPointNudge},
   setRecallRechargeNudge:{get:()=>setRecallRechargeNudge},
+  showArrivalTitle:{get:()=>showArrivalTitle},
   showName:{get:()=>showName},
   selectSlot:{get:()=>selectSlot},
 };
@@ -19,7 +20,7 @@ for(const [bindingName,binding] of Object.entries(legacyHudBindings)){
 // ---------------- HUD hotbar ----------------
 const hotbarEl=document.getElementById('hotbar');
 const nameEl=document.getElementById('blockname');
-let nameTimer=null;
+let nameTimer=null, arrivalTitleTimer=null;
 const hudSlots=[];
 for(let i=0;i<9;i++){
   const slot=document.createElement('div'); slot.className='slot';
@@ -252,6 +253,28 @@ function showName(txt){
   nameEl.textContent=txt; nameEl.style.opacity=1;
   clearTimeout(nameTimer); nameTimer=setTimeout(()=>nameEl.style.opacity=0, 1200);
 }
+function showArrivalTitle(input,title='',subtitle=''){
+  const spec=input&&typeof input==='object'?input:{kicker:input,title,subtitle};
+  let el=document.getElementById('traininggroundstitle');
+  if(!el){
+    el=document.createElement('div');
+    el.id='traininggroundstitle';
+    el.setAttribute('aria-live','polite');
+    document.body.appendChild(el);
+  }
+  const kickerEl=document.createElement('span');
+  const titleEl=document.createElement('b');
+  const subEl=document.createElement('small');
+  kickerEl.textContent=String(spec.kicker||'ARRIVAL');
+  titleEl.textContent=String(spec.title||'NEW AREA');
+  subEl.textContent=String(spec.subtitle||'');
+  el.replaceChildren(kickerEl,titleEl,subEl);
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(arrivalTitleTimer);
+  arrivalTitleTimer=setTimeout(()=>el.classList.remove('show'),Math.max(1200,Number(spec.duration)||4200));
+}
 function selectSlot(i){
   combatState.selectedSlot=i; refreshHUD();
   if(inv[i]) showName(ITEMS[inv[i].id].name);
@@ -259,7 +282,7 @@ function selectSlot(i){
 
 
 gameContext.registerState('hud',Object.freeze({slots:hudSlots,utilitySlots:utilityHudSlots,get selectedSlot(){return combatState.selectedSlot;}}));
-gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD,refreshStatPointNudge,setRecallRechargeNudge}));
+gameContext.registerModule('hud',Object.freeze({refresh:refreshHUD,select:selectSlot,showName,showArrivalTitle,fillSlot:fillSlotEl,refreshUtility:refreshUtilityHUD,refreshStatPointNudge,setRecallRechargeNudge}));
 export const state=gameContext.requireState('hud');
 export const api=gameContext.requireModule('hud');
 export {combatApi,combatState};

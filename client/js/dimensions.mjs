@@ -1932,6 +1932,9 @@ function localTutorialSpaceId(kind){
   if(kind==='taming_land')return 'taming_land';
   return 'tutorial-'+kind+'-'+(NET.room&&NET.room.sessionId||'local');
 }
+function announceArrivalTitle(kicker,title,subtitle){
+  if(typeof showArrivalTitle==='function')showArrivalTitle({kicker,title,subtitle});
+}
 let portalTransitionActive=false;
 function runPortalTransition(opts, swap){
   opts=opts||{};
@@ -2042,6 +2045,7 @@ function enterAbilityRoom(){
   NET.dgn=localTutorialSpaceId('ability');
   world.id=NET.dgn;
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
+  announceArrivalTitle('AWAKENING','ABILITY MEADOW','Cast your first path power');
   if(NET.on&&NET.room) NET.room.send('tutorialEnter',{kind:'ability'});
   return true;
 }
@@ -2102,6 +2106,10 @@ function enterJobTutorialRoom(jobId){
   NET.dgn=localTutorialSpaceId('job_'+jobId);
   world.id=NET.dgn;
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
+  if(!opts.serverSynced){
+    const job=typeof JOBS!=='undefined'&&JOBS&&JOBS[jobId]||null;
+    announceArrivalTitle('JOB TUTORIAL',(job&&job.name||'JOB')+' ROOM','Practice the basics, then return to town');
+  }
   if(NET.on&&NET.room&&!opts.serverSynced) NET.room.send('tutorialEnter',{kind:'job',job:jobId});
   return true;
 }
@@ -2184,6 +2192,7 @@ function enterTamingLand(){
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
+  if(!opts.resume)announceArrivalTitle('REGION','TAMING LAND','Dragon sanctuary and familiar practice');
   if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'taming_land'});
   sysMsg('<b>Taming Land:</b> a peaceful sanctuary for eggs, familiars, and dragon practice. Use the green return portal to go back to town.');
   return true;
@@ -2209,6 +2218,7 @@ function exitTamingLand(){
     player.vel.set(0,0,0);
   }
   tamingLandReturn=null;
+  if(!opts.resume)announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   if(NET.on&&NET.room)NET.room.send('tutorialExit',{});
   return true;
 }
@@ -2308,6 +2318,7 @@ function beginDungeon(ri, seed, editLog, opts){
       spawnDungeonMob(dungeon.bossRoom.x, dungeon.bossRoom.z, true, ri);
     }
     const dungeonName=dungeon.definition&&dungeon.definition.name;
+    announceArrivalTitle('GATE',dungeonName||((RANKS[ri]&&RANKS[ri].n||'Hunter')+'-Rank Gate'),gateKindLabel(dungeon.kind||'public')+' dungeon');
     sysMsg('You have entered <b>'+(dungeonName||RANKS[ri].n+'-Rank Gate')+'</b>. Slay the boss');
     sleepEl.style.opacity=0;
   };
@@ -2335,6 +2346,7 @@ function exitDungeon(instant){
     NET.pendingDungeonStatus=null;
     NET.pendingDungeonPartyStatus=null;
     gateTimer=120;
+    announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Returned from the Gate');
     if(!instant) sleepEl.style.opacity=0;
   };
   if(instant) doSwap();
