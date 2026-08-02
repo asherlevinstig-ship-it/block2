@@ -2325,6 +2325,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);
   assert.match(combat,/if\(arrivalChoiceEl\)arrivalChoiceEl\.classList\.add\('hidden'\);\s*document\.body\.classList\.remove\('arrival-choice-open'\);\s*syncHudLayerState\(\);/);
   assert.match(combat,/function resumeCameraAfterArrivalChoice\(\)\{[\s\S]*requestPointerLockSafe\(enterPlayFallback\);/);
+  assert.doesNotMatch(combat,/function chooseFirstTownArrival\(choice\)\{[\s\S]*setTimeout\(\(\)=>ONBOARD\.showTrainingComplete\(\),120\);[\s\S]*resumeCameraAfterArrivalChoice\(\);/);
   assert.match(combat,/function settleFirstTownAdventureSpawn\(\)/);
   assert.match(combat,/for\(const code in keys\) keys\[code\]=false/);
   assert.match(combat,/player\.pitch=0/);

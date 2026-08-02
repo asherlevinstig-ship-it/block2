@@ -4327,7 +4327,6 @@ function chooseFirstTownArrival(choice){
     settleFirstTownAdventureSpawn();
   }
   startTownGuidance();
-  setTimeout(()=>ONBOARD.showTrainingComplete(),120);
   resumeCameraAfterArrivalChoice();
 }
 if(arrivalChoiceEl)arrivalChoiceEl.addEventListener('click',e=>{
