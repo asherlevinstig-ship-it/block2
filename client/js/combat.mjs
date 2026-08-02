@@ -4963,6 +4963,38 @@ function gameplayCameraResumeAllowed(){
     !!globalThis.dungeonLobbyOpen;
   return !!(overlay.classList.contains('hidden')&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
+function gameplayMovementAllowed(){
+  return !!(gameplayCameraResumeAllowed()&&!cursorReleased);
+}
+function gameplayInputDebug(reason='snapshot'){
+  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
+    !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
+    !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
+    !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
+    !!globalThis.dungeonLobbyOpen;
+  const data={
+    reason,
+    locked:!!locked,
+    lockFallback:!!lockFallback,
+    cursorReleased:!!cursorReleased,
+    pointerLocked:document.pointerLockElement===renderer.domElement,
+    pointerLockRequestPending:!!pointerLockRequestPending,
+    suppressNextLockFallback:!!suppressNextLockFallback,
+    overlayHidden:overlay.classList.contains('hidden'),
+    transitionModalOpen:!!transitionModalOpen,
+    bodyModalOpen:document.body.classList.contains('game-modal-open'),
+    firstTownChoiceOpen:!!firstTownChoiceOpen,
+    uiOpen:!!uiOpen,
+    statOpen:!!statOpen,
+    qOpen:!!uiShellState.qOpen,
+    chatTyping:!!globalThis.chatTyping,
+    cameraInputAllowed:gameplayCameraInputAllowed(),
+    movementAllowed:gameplayMovementAllowed()
+  };
+  try{document.body.dataset.inputDebug=JSON.stringify(data);}catch(e){}
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace(reason==='snapshot'?'input.snapshot':'input.blocked',data);
+  return data;
+}
 function releasePointerLockWithoutCameraFallback(markCursorReleased=true){
   suppressNextLockFallback=true;
   lockFallback=false;
@@ -5027,6 +5059,7 @@ addEventListener('keydown', e=>{
     return;
   }
   const gameInput=gameplayInputActive();
+  if(!e.repeat&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)&&!gameplayMovementAllowed())gameplayInputDebug('keydown:'+e.code);
   if(e.code==='AltLeft'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!globalThis.BlockcraftRecall.active){
     e.preventDefault();
     if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();
@@ -6276,6 +6309,8 @@ gameContext.registerModule('combat', Object.freeze({
   updateBuildPreview,
   consumeMouseLookDelta,
   gameplayCameraInputAllowed,
+  gameplayMovementAllowed,
+  gameplayInputDebug,
   releaseGameplayCursor,
   releasePointerLockWithoutCameraFallback,
   resumeGameplayCamera,

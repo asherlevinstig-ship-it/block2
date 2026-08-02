@@ -2152,8 +2152,8 @@ function tick(now){
     updateClaimHover();
   }
 
-  if(locked){
-    const gameplayMoveAllowed=combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true;
+  const gameplayMoveAllowed=combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true);
+  if(locked||gameplayMoveAllowed){
     const mouseLook=combatApi.consumeMouseLookDelta?combatApi.consumeMouseLookDelta():{x:0,y:0};
     const lookX=gameplayMoveAllowed?((keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0)):0;
     const lookY=gameplayMoveAllowed?((keys['ArrowUp']?1:0)-(keys['ArrowDown']?1:0)):0;
