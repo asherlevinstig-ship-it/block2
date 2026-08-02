@@ -228,6 +228,40 @@ test('same-account browser refresh replaces the stale overworld session', async 
   assert.deepEqual(finalized, ['old_sid']);
 });
 
+test('server event countdown survives overworld room recreation for the same shard', () => {
+  const shardId = 'countdown-refresh-test-' + Date.now();
+  const first = makeRoom();
+  first.shardId = shardId;
+  first.initEventsState();
+
+  const idleNextAt = Date.now() + 7 * 60 * 1000;
+  first.serverEvent = first.createIdleEvent(idleNextAt, 'parkour');
+  first.persistServerEventSchedule();
+
+  const second = makeRoom();
+  second.shardId = shardId;
+  second.initEventsState();
+
+  assert.equal(second.serverEvent.phase, 'idle');
+  assert.equal(second.serverEvent.kind, 'parkour');
+  assert.equal(second.serverEvent.nextAt, idleNextAt);
+
+  const queueStartsAt = Date.now() + 11 * 60 * 1000;
+  const queued = first.createParkourInstance(Date.now(), queueStartsAt);
+  queued.queue.add('old_browser_session');
+  first.eventInstances.set(queued.id, queued);
+  first.setServerEventFromInstance(queued);
+
+  const third = makeRoom();
+  third.shardId = shardId;
+  third.initEventsState();
+
+  assert.equal(third.serverEvent.phase, 'queue');
+  assert.equal(third.serverEvent.kind, 'parkour');
+  assert.equal(third.serverEvent.startsAt, queueStartsAt);
+  assert.equal(third.serverEvent.queue.size, 0, 'room-local session ids are not restored across room recreation');
+});
+
 test('economy telemetry records bounded signed gold flow summaries', () => {
   const ledger = createEconomyLedger(2);
   assert.equal(recordEconomyGold(ledger, { amount: 0, category: 'noop', source: 'ignored' }), null);

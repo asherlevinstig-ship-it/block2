@@ -25,6 +25,7 @@ const EVENT_QUEUE_EXTENSION_MS = 15000;
 const EVENT_QUEUE_CAPACITY = 8;
 const EVENT_QUEUE_NEAR_FULL = 6;
 const EVENT_TEAM_MAX = 5;
+const SERVER_EVENT_SCHEDULE_BY_SHARD = new Map();
 const FELLOWSHIP_PROJECTS = [
   { id: 'map_table', name: 'Map Table', cost: 30, desc: 'Guild scouting reports become easier to read.', perk: 'Map leads and treasure clues are your fellowship identity hook.' },
   { id: 'armory_rack', name: 'Armory Rack', cost: 45, desc: 'A shared place for repair notes, kit prep, and trophy weapons.', perk: 'Future pass: small repair convenience and weapon trophy display.' },
@@ -58,13 +59,81 @@ class EventsMixin {
     this.skyshipPassengers = new Map();
     this.dayEpoch = Date.now() - .35 * DAY_MS;
     this.sleepingPlayers = new Set();
-    this.serverEvent = this.createIdleEvent(Date.now() + EVENT_FIRST_DELAY_MS, this.pickNextServerEvent().kind);
     this.eventInstances = new Map();
     this.activeEventInstanceId = '';
     this.eventCourseBlocks = new Set();
     this.eventTransientEditKeys = new Set();
+    this.serverEvent = this.restoreServerEventSchedule()
+      || this.createIdleEvent(Date.now() + EVENT_FIRST_DELAY_MS, this.pickNextServerEvent().kind);
+    this.persistServerEventSchedule();
     this.weatherUntil = 0;
     this.nextLightningAt = 0;
+  }
+
+  serverEventScheduleKey() {
+    return String(this.shardId || 'main');
+  }
+  serverEventActiveMs(kind) {
+    return kind === EVENT_KING.kind ? KING_ACTIVE_MS : kind === EVENT_CARAVAN.kind ? CARAVAN_ACTIVE_MS : EVENT_ACTIVE_MS;
+  }
+  snapshotServerEventSchedule(evArg) {
+    const ev = evArg || this.currentEventInstance() || this.serverEvent;
+    if (!ev) return null;
+    return {
+      kind: ev.kind || EVENT_PARKOUR.kind,
+      name: ev.name || 'Server Event',
+      phase: ev.phase || 'idle',
+      id: ev.id || '',
+      nextAt: ev.nextAt || 0,
+      createdAt: ev.createdAt || 0,
+      startsAt: ev.startsAt || 0,
+      goAt: ev.goAt || 0,
+      endsAt: ev.endsAt || 0,
+      queueExtended: !!ev.queueExtended,
+      waitingForPlayers: !!ev.waitingForPlayers,
+      waitingReason: ev.waitingReason || '',
+      lastJoinAt: ev.lastJoinAt || 0,
+      courseSeed: ev.course && Number.isFinite(ev.course.seed) ? ev.course.seed : null,
+      crown: ev.crown ? { ...ev.crown } : null,
+      caravan: ev.caravan ? { ...ev.caravan, wagonId: '' } : null,
+    };
+  }
+  persistServerEventSchedule(evArg) {
+    const snap = this.snapshotServerEventSchedule(evArg);
+    if (snap) SERVER_EVENT_SCHEDULE_BY_SHARD.set(this.serverEventScheduleKey(), snap);
+  }
+  restoreServerEventSchedule(now = Date.now()) {
+    const snap = SERVER_EVENT_SCHEDULE_BY_SHARD.get(this.serverEventScheduleKey());
+    if (!snap || !snap.phase) return null;
+    if ((snap.phase === 'active' || snap.phase === 'starting' || snap.phase === 'ended') && snap.endsAt && now >= snap.endsAt + EVENT_RESULTS_MS) return null;
+    if (snap.phase === 'idle') return this.createIdleEvent(snap.nextAt || now + EVENT_FIRST_DELAY_MS, snap.kind);
+    const startsAt = snap.startsAt || snap.goAt || now + EVENT_QUEUE_MS;
+    const ev = snap.kind === EVENT_KING.kind ? this.createKingInstance(snap.createdAt || now, startsAt)
+      : snap.kind === EVENT_CARAVAN.kind ? this.createCaravanInstance(snap.createdAt || now, startsAt)
+      : this.createParkourInstance(snap.createdAt || now, startsAt);
+    if (snap.id) {
+      ev.id = snap.id;
+      const seq = Number(String(snap.id).match(/event-(\d+)/)?.[1] || 0) | 0;
+      this.eventSeq = Math.max(this.eventSeq | 0, seq);
+    }
+    ev.name = snap.name || ev.name;
+    ev.phase = snap.phase === 'ended' ? 'ended' : snap.phase;
+    ev.nextAt = snap.nextAt || 0;
+    ev.startsAt = startsAt;
+    ev.goAt = snap.goAt || 0;
+    ev.endsAt = snap.endsAt || 0;
+    ev.queueExtended = !!snap.queueExtended;
+    ev.waitingForPlayers = !!snap.waitingForPlayers;
+    ev.waitingReason = snap.waitingReason || '';
+    ev.lastJoinAt = snap.lastJoinAt || 0;
+    if (ev.kind === EVENT_PARKOUR.kind && snap.courseSeed !== null && snap.courseSeed !== undefined) ev.course = this.generateParkourCourse(snap.courseSeed);
+    if (ev.kind === EVENT_KING.kind && snap.crown) ev.crown = { ...ev.crown, ...snap.crown, holderSid: '', holderTeamId: '' };
+    if (ev.kind === EVENT_CARAVAN.kind && snap.caravan) ev.caravan = { ...ev.caravan, ...snap.caravan, wagonId: '' };
+    if (ev.phase === 'starting' && !ev.endsAt) ev.endsAt = (ev.goAt || startsAt) + this.serverEventActiveMs(ev.kind);
+    if (ev.phase === 'active' && !ev.endsAt) ev.endsAt = now + this.serverEventActiveMs(ev.kind);
+    this.eventInstances.set(ev.id, ev);
+    this.setServerEventFromInstance(ev);
+    return ev;
   }
 
   // ---- weather: server-owned like the day cycle; clients render, the server decides ----
@@ -397,6 +466,7 @@ class EventsMixin {
     if (!inst) return;
     this.serverEvent = inst;
     this.activeEventInstanceId = inst.id;
+    this.persistServerEventSchedule(inst);
   }
   eventLeaderboardPayload(inst) {
     if (inst && inst.kind === EVENT_CARAVAN.kind) {
@@ -604,6 +674,7 @@ class EventsMixin {
   broadcastEventStatus(force) {
     const ev = this.currentEventInstance() || this.serverEvent;
     if (!ev) return;
+    this.persistServerEventSchedule(ev);
     const now = Date.now();
     if (!force && now - (ev.lastSync || 0) < 1000) return;
     ev.lastSync = now;
