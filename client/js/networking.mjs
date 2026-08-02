@@ -2558,6 +2558,9 @@ function netRestoreProfile(m){
     if(progressionFocus&&!ONBOARD.isSeen())setTimeout(()=>ONBOARD.showFirstPromotion(),80);
     eventLog((m.name||'Hunter')+' returned — progress restored');
     finishWorldLoading('profile');
+    if(!restoreJobRoom&&!restoreTamingLand&&dim==='overworld'&&combatApi.shouldShowFirstTownArrivalChoice&&combatApi.shouldShowFirstTownArrivalChoice()){
+      setTimeout(()=>combatApi.showFirstTownArrivalChoice&&combatApi.showFirstTownArrivalChoice(),120);
+    }
   }catch(e){ console.warn('profile restore failed', e); finishWorldLoading('profile-error'); }
 }
 function applyAbilitySync(m){

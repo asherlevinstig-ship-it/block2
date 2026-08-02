@@ -671,7 +671,6 @@ const arrivalChoiceEl=document.getElementById('arrivalchoice');
 const awakeningWin=document.getElementById('awakeningwin');
 const awakeningPanel=document.getElementById('awakeningpanel');
 let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
-const FIRST_TOWN_CHOICE_KEY='bc_first_town_arrival_choice_v1';
 const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1,familiar:1};
 let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0,familiar:0};
 function applyServerTutorials(raw){
@@ -719,6 +718,7 @@ function cancelOnboardingForProfileRestore(){
 let pathChoiceOpen=false;
 let jobChoiceOpen=false;
 let firstTownChoiceOpen=false;
+let firstTownChoiceDismissedThisSession=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
 let level2JobChoiceForced=false;
 const onboardingFlags={sprint:false,arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
@@ -4223,11 +4223,8 @@ function finishOnboardingToTown(){
   refreshPlayUi();
   setTimeout(()=>{ finishWorldLoading('town-arrival'); if(deferArrivalChoice)showFirstTownArrivalChoice(); },720);
 }
-function firstTownArrivalChoiceSeen(){
-  try{return !!localStorage.getItem(FIRST_TOWN_CHOICE_KEY);}catch(e){return false;}
-}
 function shouldShowFirstTownArrivalChoice(){
-  return !!(arrivalChoiceEl&&!firstTownArrivalChoiceSeen());
+  return !!(arrivalChoiceEl&&onboardingDone()&&!firstTownChoiceDismissedThisSession&&!quest&&!playerJob&&!(S&&S.lvl>=2)&&!firstQuestMilestoneComplete()&&dim==='overworld');
 }
 function resumeCameraAfterArrivalChoice(){
   lockFallback=true;
@@ -4253,7 +4250,7 @@ function chooseFirstTownArrival(choice){
   if(!firstTownChoiceOpen)return;
   choice=choice==='questions'?'questions':'adventure';
   firstTownChoiceOpen=false;
-  try{localStorage.setItem(FIRST_TOWN_CHOICE_KEY,choice);}catch(e){}
+  firstTownChoiceDismissedThisSession=true;
   if(arrivalChoiceEl)arrivalChoiceEl.classList.add('hidden');
   document.body.classList.remove('arrival-choice-open');
   if(choice==='questions'){
@@ -6201,6 +6198,8 @@ gameContext.registerModule('combat', Object.freeze({
   heldPlaceAction,
   stopPrimaryAction,
   showPathSelection,
+  shouldShowFirstTownArrivalChoice,
+  showFirstTownArrivalChoice,
   openLevel2JobChoice,
   forceLevel2JobChoice,
   shouldOpenLevel2JobChoice,
