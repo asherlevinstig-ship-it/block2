@@ -207,7 +207,7 @@ function paintLavaTile(phase){
 }
 
 // ---------------- block & item registry ----------------
-const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, LOG:5, LEAVES:6, PLANKS:7, COBBLE:8, GLASS:9, WATER:10, BEDROCK:11, BRICK:12, TABLE:13, FURNACE:14, COAL_ORE:15, IRON_ORE:16, DIAMOND_ORE:17, CONCRETE:18, TORCH:19, BED:20, CHEST:21, FARMLAND:22, WHEAT_1:23, WHEAT_2:24, WHEAT_3:25, LAVA:26, SNOW:27, ICE:28, RED_SAND:29, TERRACOTTA:30, CACTUS:31, LANTERN:32, CAMPFIRE:33, EGG_INSULATOR:34 };
+const B = { AIR:0, GRASS:1, DIRT:2, STONE:3, SAND:4, LOG:5, LEAVES:6, PLANKS:7, COBBLE:8, GLASS:9, WATER:10, BEDROCK:11, BRICK:12, TABLE:13, FURNACE:14, COAL_ORE:15, IRON_ORE:16, DIAMOND_ORE:17, CONCRETE:18, TORCH:19, BED:20, CHEST:21, FARMLAND:22, WHEAT_1:23, WHEAT_2:24, WHEAT_3:25, LAVA:26, SNOW:27, ICE:28, RED_SAND:29, TERRACOTTA:30, CACTUS:31, LANTERN:32, CAMPFIRE:33, EGG_INSULATOR:34, BARRIER:35 };
 const BLOCKS = {
   [B.GRASS]:  {name:'Grass',          tiles:[[0,0],[1,0],[2,0]], solid:true, opaque:true},
   [B.DIRT]:   {name:'Dirt',           tiles:[[2,0],[2,0],[2,0]], solid:true, opaque:true},
@@ -243,6 +243,7 @@ const BLOCKS = {
   [B.LANTERN]:{name:'Lantern',        tiles:[[7,2],[7,2],[7,2]], solid:false,opaque:false, noMesh:true},
   [B.CAMPFIRE]:{name:'Campfire',      tiles:[[7,2],[7,2],[7,2]], solid:false,opaque:false, noMesh:true},
   [B.EGG_INSULATOR]:{name:'Egg Insulator',tiles:[[7,2],[7,2],[7,2]], solid:false,opaque:false, noMesh:true},
+  [B.BARRIER]:{name:'Training Boundary',tiles:[[4,1],[4,1],[4,1]], solid:true, opaque:false, noMesh:true},
 };
 const isOpaque = id => id!==B.AIR && BLOCKS[id] && BLOCKS[id].opaque;
 const isSolid  = id => id!==B.AIR && BLOCKS[id] && BLOCKS[id].solid;
@@ -390,7 +391,7 @@ function toolIcon(rows, mat){ return iconCanvas(ctx=>drawPattern(ctx, rows, {...
 const ITEMS = {}; // id -> {name, stack, icon, place?, tool?}
 for(const id in BLOCKS){
   const bid=+id;
-  if(bid===B.WATER||bid===B.LAVA||bid===B.BEDROCK||bid===B.FARMLAND||bid===B.WHEAT_1||bid===B.WHEAT_2||bid===B.WHEAT_3) continue;
+  if(bid===B.WATER||bid===B.LAVA||bid===B.BEDROCK||bid===B.BARRIER||bid===B.FARMLAND||bid===B.WHEAT_1||bid===B.WHEAT_2||bid===B.WHEAT_3) continue;
   const t=BLOCKS[bid].tiles[1];
   ITEMS[bid]={ name:BLOCKS[bid].name, stack:64, place:bid,
     icon: iconCanvas(ctx=>ctx.drawImage(atlasCanvas,t[0]*TS,t[1]*TS,TS,TS,0,0,TS,TS)) };
@@ -954,20 +955,29 @@ function buildTrainingMeadow(setBlock=setB){
     for(const [dx,dz] of [[r-1,0],[-r+1,0],[0,r-1],[0,-r+1]]){setBlock(cx+ox+dx,G+1,cz+oz+dz,B.LEAVES);setBlock(cx+ox+dx,G+2,cz+oz+dz,B.LANTERN);}
   };
   const skyline=()=>{
-    const z0=52,tower=(ox,w,h,mat=B.STONE)=>{
+    const z0=47,tower=(ox,w,h,mat=B.STONE,spire=2)=>{
       for(let x=cx+ox;x<cx+ox+w;x++)for(let z=cz+z0;z<=cz+z0+1;z++){
         flat(x,z,B.STONE,B.STONE);
         for(let y=G+1;y<=G+h;y++)setBlock(x,y,z,mat);
         if((x-(cx+ox))%3===1)for(let y=G+3;y<=G+h-2;y+=3)setBlock(x,y,z,B.GLASS);
       }
       for(let x=cx+ox-1;x<=cx+ox+w;x++)if((x-(cx+ox))%2===0)setBlock(x,G+h+1,cz+z0,B.COBBLE);
+      for(let y=G+h+2;y<=G+h+spire+1;y++)setBlock(cx+ox+Math.floor(w/2),y,cz+z0,B.BRICK);
+      setBlock(cx+ox+Math.floor(w/2),G+h+spire+2,cz+z0,B.LANTERN);
     };
-    for(let x=cx-30;x<=cx+30;x++)for(let z=cz+50;z<=cz+53;z++)if(Math.abs(x-cx)>5)flat(x,z,B.COBBLE,B.STONE);
-    tower(-28,5,8,B.COBBLE);tower(-20,6,12,B.BRICK);tower(-10,4,7,B.STONE);tower(8,4,7,B.STONE);tower(16,6,11,B.BRICK);tower(25,5,8,B.COBBLE);
-    for(const ox of [-4,4])for(let y=G+1;y<=G+9;y++){setBlock(cx+ox,y,cz+52,B.BRICK);if(y%3===0)setBlock(cx+ox,y,cz+51,B.GLASS);}
-    for(let x=cx-4;x<=cx+4;x++)if(Math.abs(x-cx)>1)setBlock(x,G+10,cz+52,B.COBBLE);
-    for(let y=G+1;y<=G+12;y++)setBlock(cx,y,cz+52,B.AIR);
-    for(const ox of [-31,31,-14,14])setBlock(cx+ox,G+10,cz+50,B.LANTERN);
+    for(let x=cx-42;x<=cx+42;x++)for(let z=cz+45;z<=cz+49;z++)if(Math.abs(x-cx)>5)flat(x,z,B.COBBLE,B.STONE);
+    tower(-41,7,12,B.COBBLE,3);tower(-30,8,17,B.BRICK,4);tower(-17,7,11,B.STONE,2);tower(10,7,11,B.STONE,2);tower(22,8,16,B.BRICK,4);tower(35,7,12,B.COBBLE,3);
+    for(const ox of [-6,6])for(let y=G+1;y<=G+13;y++){setBlock(cx+ox,y,cz+47,B.BRICK);if(y%3===0)setBlock(cx+ox,y,cz+46,B.GLASS);}
+    for(let x=cx-6;x<=cx+6;x++)if(Math.abs(x-cx)>2)setBlock(x,G+14,cz+47,B.COBBLE);
+    for(let y=G+1;y<=G+17;y++)for(let x=cx-2;x<=cx+2;x++)setBlock(x,y,cz+47,B.AIR);
+    for(const ox of [-43,43,-19,19,-6,6])setBlock(cx+ox,G+14,cz+45,B.LANTERN);
+  };
+  const invisibleBoundary=()=>{
+    for(let x=Math.floor(cx-R-2);x<=Math.ceil(cx+R+2);x++)for(let z=Math.floor(cz-R-2);z<=Math.ceil(cz+R+2);z++){
+      const d=Math.hypot(x-cx,z-cz);
+      if(d<R-1||d>R+2)continue;
+      for(let y=G+1;y<=G+13;y++)setBlock(x,y,z,B.BARRIER);
+    }
   };
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTrainingMeadowLand(x,z))continue;
@@ -1020,6 +1030,7 @@ function buildTrainingMeadow(setBlock=setB){
   }
   garden(11,22,5);garden(-19,7,4);garden(29,18,4);garden(-8,-41,5);
   skyline();
+  invisibleBoundary();
   for(const [ox,oz] of [[-46,0],[-43,18],[-18,36],[18,34],[42,14],[44,-26],[-44,-34],[32,-44]])tree(ox,oz,5+(Math.abs(ox+oz)%3),4);
 }
 function buildAbilityMeadow(setBlock=setB){

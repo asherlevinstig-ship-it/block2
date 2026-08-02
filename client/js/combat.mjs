@@ -1114,6 +1114,22 @@ function resetForFreshOnboarding(){
   renderAbilities();
   updateLandMinimap();
 }
+let trainingGroundsTitleTimer=null;
+function showTrainingGroundsArrival(){
+  let el=document.getElementById('traininggroundstitle');
+  if(!el){
+    el=document.createElement('div');
+    el.id='traininggroundstitle';
+    el.setAttribute('aria-live','polite');
+    document.body.appendChild(el);
+  }
+  el.innerHTML='<span>TUTORIAL</span><b>TRAINING GROUNDS</b><small>Follow the pillars of light</small>';
+  el.classList.remove('show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(trainingGroundsTitleTimer);
+  trainingGroundsTitleTimer=setTimeout(()=>el.classList.remove('show'),4200);
+}
 function beginOnboarding(){
   if(onboardingDone()) return;
   if(meadowTutorialDone()){
@@ -1145,6 +1161,7 @@ function beginOnboarding(){
   prepareOnboardingStep();
   document.body.classList.add('onboarding');
   updateOnboardingHud();
+  showTrainingGroundsArrival();
   showName('TUTORIAL TRAINING GROUNDS');
 }
 function abilityHudAvailable(){

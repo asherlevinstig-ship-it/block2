@@ -2408,10 +2408,10 @@ class GameRoom extends Room {
     if (!p || !m || p.dgn) return;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
     if (!W.inWorld(x, y, z)) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z));
-    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id);
+    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.BARRIER) return this.rejectEdit(client, x, y, z, this.world.getB(x, y, z), id);
     const prev = this.world.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (prev === W.B.BEDROCK || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id);
+    if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id);
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 10) return this.rejectEdit(client, x, y, z, prev, id);
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id);
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
@@ -2439,10 +2439,10 @@ class GameRoom extends Room {
     const inst = this.instances[p.dgn]; if (!inst) return;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
     if (!inst.inBounds(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
-    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
+    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.BARRIER || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
     const prev = inst.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (prev === W.B.BEDROCK) return this.rejectEdit(client, x, y, z, prev, id);
+    if (prev === W.B.BEDROCK || prev === W.B.BARRIER) return this.rejectEdit(client, x, y, z, prev, id);
     if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 10) return this.rejectEdit(client, x, y, z, prev, id);
     if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id);
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, p.dgn + ':' + x + ',' + y + ',' + z)) {
