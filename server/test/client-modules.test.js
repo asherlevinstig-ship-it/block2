@@ -1837,6 +1837,7 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/let locked=false, lockFallback=false, suppressNextLockFallback=false/);
   assert.match(combat,/function releasePointerLockWithoutCameraFallback\(markCursorReleased=true\)\{[\s\S]*suppressNextLockFallback=true;[\s\S]*lockFallback=false;[\s\S]*locked=!!markCursorReleased;[\s\S]*mouseLookDelta\.x=0;mouseLookDelta\.y=0;/);
   assert.match(combat,/function resumeGameplayCamera\(\)\{[\s\S]*if\(!gameplayCameraResumeAllowed\(\)\)return false;[\s\S]*requestPointerLockSafe\(enterPlayFallback\);/);
+  assert.match(combat,/function requestPointerLockSafe\(onFail=enterPlayFallback\)\{[\s\S]*suppressNextLockFallback=false;[\s\S]*pointerLockRequestPending=true;/);
   assert.match(combat,/else if\(suppressNextLockFallback\)\{ lockFallback=false; suppressNextLockFallback=false; \}/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*queueMouseLook\(e\.movementX\|\|0,e\.movementY\|\|0\);\s*\}else if\(lockFallback&&isWorldPointerTarget\(e\.target\)\)\{/);
   assert.match(combat,/function consumeMouseLookDelta\(\)\{/);
@@ -2310,6 +2311,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);
   assert.match(combat,/if\(arrivalChoiceEl\)arrivalChoiceEl\.classList\.add\('hidden'\);\s*document\.body\.classList\.remove\('arrival-choice-open'\);\s*syncHudLayerState\(\);/);
+  assert.match(combat,/function resumeCameraAfterArrivalChoice\(\)\{[\s\S]*requestPointerLockSafe\(enterPlayFallback\);/);
   assert.match(combat,/function settleFirstTownAdventureSpawn\(\)/);
   assert.match(combat,/for\(const code in keys\) keys\[code\]=false/);
   assert.match(combat,/player\.pitch=0/);

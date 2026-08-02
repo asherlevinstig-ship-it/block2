@@ -4233,7 +4233,7 @@ function resumeCameraAfterArrivalChoice(){
   cursorReleased=false;
   refreshPlayUi();
   try{
-    requestPointerLockSafe(null);
+    requestPointerLockSafe(enterPlayFallback);
     setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); },250);
   }catch(e){ enterPlayFallback(); }
 }
@@ -4578,6 +4578,7 @@ function hasUserGesture(){
 }
 function requestPointerLockSafe(onFail=enterPlayFallback){
   try{
+    suppressNextLockFallback=false;
     pointerLockRequestPending=true;
     const result=renderer.domElement.requestPointerLock();
     if(result&&typeof result.catch==='function') result.catch(()=>{ pointerLockRequestPending=false; if(onFail) onFail(); });
