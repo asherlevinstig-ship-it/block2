@@ -4750,9 +4750,17 @@ if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDe
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
+  const wasPlaying = locked && overlay.classList.contains('hidden');
+  const modalInputOpen = uiOpen || statOpen || uiShellState.qOpen || pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen ||
+    !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden')) ||
+    !!(awakeningWin&&!awakeningWin.classList.contains('hidden')) ||
+    !!(rewardWin&&!rewardWin.classList.contains('hidden')) ||
+    !!globalThis.dungeonLobbyOpen ||
+    document.body.classList.contains('game-modal-open');
   if(hasLock){ pointerLockRequestPending=false; lockFallback=false; suppressNextLockFallback=false; }
   else if(suppressNextLockFallback){ lockFallback=false; suppressNextLockFallback=false; }
   else if(pointerLockRequestPending&&overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
+  else if(wasPlaying&&!modalInputOpen)cursorReleased=true;
   if(!hasLock) pointerLockRequestPending=false;
   if(hasLock) cursorReleased=false;
   locked = hasLock || lockFallback || cursorReleased;
