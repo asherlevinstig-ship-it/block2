@@ -31,6 +31,10 @@ const gatePromptEl=document.getElementById('gateprompt');
 const encounterPromptEl=document.getElementById('encounterprompt');
 const dungeonPartyEl=document.getElementById('dungeonparty');
 const dungeonPingEl=document.getElementById('dungeonping');
+const HUD_UPDATE_INTERVAL_MS=125;
+let nextInfoHudAt=0,nextDungeonHudAt=0;
+let lastCoordsHudHTML='',lastCoordsHudHidden=false,lastDungeonPartyHTML='',lastDungeonPartyHidden=false;
+let lastObjectiveHudHTML='',lastObjectiveHudHidden=false;
 const landBoundaryToastEl=document.createElement('div');
 landBoundaryToastEl.id='landboundarytoast';
 landBoundaryToastEl.setAttribute('aria-live','polite');
@@ -1254,18 +1258,18 @@ function debugObjectiveHudSummary(obj){
 let lastObjectiveHudDebugSig='';
 function refreshObjectiveTracker(){
   if(!currentQuestEl)return;
+  let html='',hidden=false,obj=null;
   if(tutorialRoomHudSuppressed()){
-    currentQuestEl.classList.add('hidden');
-    currentQuestEl.innerHTML='';
-    return;
-  }
-  const obj=currentObjectiveHud();
-  if(obj){
-    currentQuestEl.classList.remove('hidden');
-    currentQuestEl.innerHTML=objectiveHudHTML(obj);
+    hidden=true;
   }else{
-    currentQuestEl.classList.add('hidden');
-    currentQuestEl.innerHTML='';
+    obj=currentObjectiveHud();
+    if(obj)html=objectiveHudHTML(obj);
+    else hidden=true;
+  }
+  if(html!==lastObjectiveHudHTML||hidden!==lastObjectiveHudHidden){
+    lastObjectiveHudHTML=html;lastObjectiveHudHidden=hidden;
+    currentQuestEl.classList.toggle('hidden',hidden);
+    if(currentQuestEl.innerHTML!==html)currentQuestEl.innerHTML=html;
   }
   if(globalThis.BlockcraftTrace){
     const summary=debugObjectiveHudSummary(obj);
@@ -2047,48 +2051,49 @@ function updateEncounterPrompt(){
 }
 function updateInfoHud(held){
   document.body.classList.toggle('calm-town', (locked || uiOpen || statOpen || qOpen || claimMode) && calmTownHud());
+  let coordsHTML='',coordsHidden=false;
   refreshHomeworkHud();
   if(onboardingActive&&dim==='tutorial'){
     if(activityTrackerEl)activityTrackerEl.classList.add('hidden');
-    coordsEl.innerHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>';
-    if(currentQuestEl){currentQuestEl.classList.add('hidden');currentQuestEl.innerHTML='';}
-    return;
-  }
-  updateOverworldActivityTracker();
-  updateEncounterPrompt();
-  if(calmTownHud()){
+    coordsHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>';
+    if(currentQuestEl){
+      lastObjectiveHudHTML='';lastObjectiveHudHidden=true;
+      currentQuestEl.classList.add('hidden');
+      if(currentQuestEl.innerHTML!=='')currentQuestEl.innerHTML='';
+    }
+  }else{
+    updateOverworldActivityTracker();
+    updateEncounterPrompt();
     const rank=rankHudProgress();
-    coordsEl.innerHTML=[
+    const rows=[
       '<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>',
       '<div class="statuschip gold"><i class="ico">G</i><span>Gold</span><b>'+escHTML(String(gold|0))+'</b></div>',
       '<div class="statuschip rank"><i class="ico">R</i><span>'+escHTML(rank.label)+'</span><b>'+escHTML(rank.value)+'</b></div>'
-    ].join('');
-    if(currentQuestEl){
-      refreshObjectiveTracker();
+    ];
+    if(!calmTownHud()){
+      if(utilityEquipped('compass')){
+        const t=utilityCompassTarget();
+        if(t) rows.push('<div class="statuschip utility"><i class="ico">C</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(utilityTargetHudLine(t))+'</b></div>');
+      }
+      if(utilityEquipped('party_compass')){
+        const t=partyCompassTarget();
+        if(t) rows.push('<div class="statuschip utility'+utilityPriorityClass(t.priority)+'"><i class="ico">P</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(utilityTargetHudLine(t))+'</b></div>');
+      }
+      if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
+        const rally=dungeonLobbyState.rally,distance=Math.round(Math.hypot(rally.x-player.pos.x,rally.z-player.pos.z));
+        rows.push('<div class="statuschip utility"><i class="ico">G</i><span>Gate Rally</span><b>'+escHTML(bearingLabelTo(rally.x,rally.z)+' · '+distance+'m')+'</b></div>');
+      }
+      if(utilityEquipped('feather_step')) rows.push('<div class="statuschip utility"><i class="ico">F</i><span>Feather</span><b>Landing guard</b></div>');
     }
-    return;
+    coordsHTML=rows.join('');
+    if(currentQuestEl)refreshObjectiveTracker();
   }
-  const rank=rankHudProgress();
-  const rows=[
-    '<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>',
-    '<div class="statuschip gold"><i class="ico">G</i><span>Gold</span><b>'+escHTML(String(gold|0))+'</b></div>',
-    '<div class="statuschip rank"><i class="ico">R</i><span>'+escHTML(rank.label)+'</span><b>'+escHTML(rank.value)+'</b></div>'
-  ];
-  if(utilityEquipped('compass')){
-    const t=utilityCompassTarget();
-    if(t) rows.push('<div class="statuschip utility"><i class="ico">C</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(utilityTargetHudLine(t))+'</b></div>');
+  if(coordsHTML!==lastCoordsHudHTML||coordsHidden!==lastCoordsHudHidden){
+    lastCoordsHudHTML=coordsHTML;lastCoordsHudHidden=coordsHidden;
+    coordsEl.classList.toggle('hidden',coordsHidden);
+    if(coordsEl.innerHTML!==coordsHTML)coordsEl.innerHTML=coordsHTML;
   }
-  if(utilityEquipped('party_compass')){
-    const t=partyCompassTarget();
-    if(t) rows.push('<div class="statuschip utility'+utilityPriorityClass(t.priority)+'"><i class="ico">P</i><span>'+escHTML(t.label)+'</span><b>'+escHTML(utilityTargetHudLine(t))+'</b></div>');
-  }
-  if(dim==='overworld'&&dungeonLobbyState&&dungeonLobbyState.rally){
-    const rally=dungeonLobbyState.rally,distance=Math.round(Math.hypot(rally.x-player.pos.x,rally.z-player.pos.z));
-    rows.push('<div class="statuschip utility"><i class="ico">G</i><span>Gate Rally</span><b>'+escHTML(bearingLabelTo(rally.x,rally.z)+' · '+distance+'m')+'</b></div>');
-  }
-  if(utilityEquipped('feather_step')) rows.push('<div class="statuschip utility"><i class="ico">F</i><span>Feather</span><b>Landing guard</b></div>');
-  coordsEl.innerHTML=rows.join('');
-  refreshObjectiveTracker();
+  return;
 }
 let last=performance.now();
 const perfDiagnostics=createPerformanceDiagnostics({renderer:rendering.renderer,getCounts:()=>({remotes:Object.keys(NET.remotes||{}).length,scene:scene.children.length,...worldApi.particleBudgetStats()})});

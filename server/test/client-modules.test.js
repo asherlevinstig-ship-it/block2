@@ -4211,7 +4211,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/hud:debugObjectiveHudSummary\(currentObjectiveHud\(\)\)/);
   assert.match(frame,/if\(townGuidanceActive&&!jobContract\)\{\s*const tutorial=tutorialObjective\(\);/);
   assert.match(frame,/if\(townGuidanceActive&&!jobContract\)return null;/);
-  assert.match(frame,/coordsEl\.innerHTML=rows\.join\(''\);\s*refreshObjectiveTracker\(\);/);
+  assert.match(frame,/coordsHTML=rows\.join\(''\);\s*if\(currentQuestEl\)refreshObjectiveTracker\(\);/);
+  assert.match(frame,/if\(coordsHTML!==lastCoordsHudHTML\|\|coordsHidden!==lastCoordsHudHidden\)\{/);
   assert.match(frame,/localStoryObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('story','manhunt'\),'Story'\)/);
   assert.match(frame,/localJobObjectiveLine\(\)\|\|serverObjectiveLine\(serverObjectiveBySource\('job'\),'Job'\)/);
   assert.match(frame,/if\(chapterProgression\)return chapterProgression;/);
@@ -4235,7 +4236,8 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/action==='guild_contracts'/);
   assert.match(frame,/action==='claim_aegis'/);
   assert.match(frame,/data-location/);
-  assert.match(frame,/const obj=currentObjectiveHud\(\);/);
+  assert.match(frame,/let html='',hidden=false,obj=null;/);
+  assert.match(frame,/obj=currentObjectiveHud\(\);/);
   assert.match(frame,/progression:first_land_claim/);
   assert.match(frame,/OPEN GATE PREP/);
   assert.match(frame,/progressionFocus==='c_rank_climb'/);
