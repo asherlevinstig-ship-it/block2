@@ -1909,6 +1909,22 @@ test('block placement uses Minecraft-style targeted block face at build reach',(
   assert.match(menus,/const crackTexs=Array\.from\(\{length:10\},\(_,i\)=>crackTexture\(i\)\);/);
 });
 
+test('secondary action prioritizes nearby characters before hotbar items',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const match=combat.match(/function secondaryAction\(\)\{([\s\S]*?)\n  const spared=mobUnderCrosshair/);
+  assert.ok(match, 'secondaryAction body is present');
+  const body=match[1];
+  const guardianIndex=body.indexOf('guardianUnderCrosshair(8)||nearbyGuardian()');
+  const villagerIndex=body.indexOf('villagerUnderCrosshair(4.5)||nearbyVillager(3.7)');
+  const dragonIndex=body.indexOf('BlockcraftDragonWorld');
+  const heldIndex=body.indexOf('const heldRC=inv[selected]');
+  assert.ok(guardianIndex >= 0 && guardianIndex < heldIndex, 'guardian interaction wins before hotbar item use');
+  assert.ok(villagerIndex >= 0 && villagerIndex < heldIndex, 'villager/NPC interaction wins before hotbar item use');
+  assert.ok(dragonIndex >= 0 && dragonIndex < heldIndex, 'nearby dragon interaction wins before hotbar item use');
+  assert.match(body,/if\(heldRC && heldRC\.id===I\.TOWN_MAP/);
+  assert.match(body,/if\(heldRC && heldRC\.id===I\.APPEARANCE_MIRROR/);
+});
+
 test('narrow game HUD consolidates abilities, quest, status, and hotbar without clipping',()=>{
   const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#abilities\{left:50%;bottom:124px;transform:translateX\(-50%\)/);

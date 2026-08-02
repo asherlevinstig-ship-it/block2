@@ -5977,6 +5977,16 @@ function secondaryAction(){
   if(tryBoardSkyship()) return;
   if(isMeditating){ stopMeditation(); return; }
   if(toggleMeditation()) return;
+  if(guardianUnderCrosshair(8)||nearbyGuardian()){ openGuardianUI(); return; }
+  const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
+  if(vill){
+    interactWithVillager(vill);
+    return;
+  }
+  const nearbyDragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
+    ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
+    : null;
+  if(nearbyDragon&&nearbyDragon.type&&typeof openDragonInteractUI==='function'){ openDragonInteractUI(nearbyDragon.type); return; }
   const heldRC=inv[selected];
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
@@ -6026,16 +6036,6 @@ function secondaryAction(){
   if(nearTavernDiceTable()){ openTavernDiceUI(); return; }
   if(nearTavernRouletteTable()){ openTavernRouletteUI(); return; }
   if(nearTavernBlackjackTable()){ openTavernBlackjackUI(); return; }
-  if(guardianUnderCrosshair(8)||nearbyGuardian()){ openGuardianUI(); return; }
-  const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
-  if(vill){
-    interactWithVillager(vill);
-    return;
-  }
-  const nearbyDragon=globalThis.BlockcraftDragonWorld&&typeof globalThis.BlockcraftDragonWorld.nearestOwned==='function'
-    ? globalThis.BlockcraftDragonWorld.nearestOwned(3.4)
-    : null;
-  if(nearbyDragon&&nearbyDragon.type&&typeof openDragonInteractUI==='function'){ openDragonInteractUI(nearbyDragon.type); return; }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
   const treasureClue=nearbyTreasureClue();
   if(treasureClue){if(NET.on&&NET.room)NET.room.send('treasureMapAdvance',{id:treasureClue.id});return;}
