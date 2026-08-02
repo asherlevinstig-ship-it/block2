@@ -588,6 +588,31 @@ const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
+const keyPromptHud=document.getElementById('keyprompthud');
+const KEY_PROMPTS=[
+  {key:'TAB',title:'Chat',text:'Open quick chat with nearby hunters'},
+  {key:'F',title:'Action',text:'Mine, attack, harvest, or use the focused action'},
+  {key:'G',title:'Interact',text:'Talk to villagers, place blocks, or use held items'},
+  {key:'E',title:'Inventory',text:'Open your bag, crafting, gear, and hotbar'},
+  {key:'SHIFT',title:'Sprint',text:'Hold while moving to run'},
+];
+let keyPromptIndex=-1,keyPromptNextAt=0;
+function keyPromptMarkup(prompt,index){
+  const dots=KEY_PROMPTS.map((_,i)=>'<i class="'+(i===index?'active':'')+'"></i>').join('');
+  return '<div class="keyart">'+escHTML(prompt.key)+'</div><div class="keycopy"><b>Press '+escHTML(prompt.key)+' - '+escHTML(prompt.title)+'</b><span>'+escHTML(prompt.text)+'</span></div><div class="keydots">'+dots+'</div>';
+}
+function updateKeyPromptHud(show=false,force=false){
+  if(!keyPromptHud)return;
+  if(!show){keyPromptHud.classList.add('hidden');return;}
+  const now=Date.now();
+  if(force||keyPromptIndex<0||now>=keyPromptNextAt){
+    keyPromptIndex=(keyPromptIndex+1)%KEY_PROMPTS.length;
+    keyPromptNextAt=now+4200;
+    keyPromptHud.innerHTML=keyPromptMarkup(KEY_PROMPTS[keyPromptIndex],keyPromptIndex);
+  }
+  keyPromptHud.classList.remove('hidden');
+}
+if(keyPromptHud)setInterval(()=>updateKeyPromptHud(!keyPromptHud.classList.contains('hidden')),1000);
 const rightHudStackIds=['currentquest','homeworkhud','activitytracker','townchoices'];
 function layoutRightHudStack(){
   const narrow=window.innerWidth<=760;
@@ -4394,6 +4419,7 @@ function refreshPlayUi(){
   document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus && !(Array.isArray(activeObjectives)&&activeObjectives.length)));
   document.getElementById('landmap').classList.toggle('hidden', true);
   document.getElementById('eventhud').classList.toggle('hidden', true);
+  updateKeyPromptHud(showHud&&!modalInputOpen&&!claimMode&&!worldLoading&&!document.body.classList.contains('portal-transitioning')&&!document.body.classList.contains('chat-open')&&!cutscene);
   hintEl.classList.add('hidden');
   updateLandMinimap();
   syncHudLayerState();

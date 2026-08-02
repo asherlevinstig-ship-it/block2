@@ -1830,6 +1830,8 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#coords\{top:48px;left:8px;right:auto;flex-direction:row/);
   assert.match(css,/#hotbar \.slot\{width:calc\(\(100vw - 54px\)\/9\)/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#utilitybar\{left:50%;right:auto;bottom:172px;transform:translateX\(-50%\)/);
+  assert.match(css,/#keyprompthud\{position:fixed;right:18px;bottom:20px/);
+  assert.match(css,/@media \(max-width:760px\)[\s\S]*#keyprompthud\{right:8px;bottom:62px/);
   assert.match(css,/#statpointnudge\{position:fixed;left:50%;bottom:146px/);
   assert.match(css,/#recallrechargenudge\{position:fixed;left:50%;bottom:204px/);
   assert.match(css,/@media \(max-width:760px\)[\s\S]*#statpointnudge\{bottom:218px/);
@@ -1837,6 +1839,7 @@ test('narrow game HUD consolidates abilities, quest, status, and hotbar without 
 });
 
 test('guided overlays suppress optional side HUD panels instead of overlapping them',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
@@ -1850,8 +1853,11 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(combat,/document\.body\.classList\.toggle\('tutorial-hud-active', tutorialVisible\);/);
   assert.match(combat,/document\.body\.classList\.toggle\('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen\);/);
   assert.match(combat,/window\.addEventListener\('resize', syncHudLayerState\);/);
-  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #statpointnudge,body\.game-modal-open #recallrechargenudge,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
-  assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
+  assert.match(html,/id="keyprompthud"/);
+  assert.match(combat,/const KEY_PROMPTS=\[/);
+  assert.match(combat,/updateKeyPromptHud\(showHud&&!modalInputOpen&&!claimMode&&!worldLoading/);
+  assert.match(styles,/body\.game-modal-open #tutorialhud,body\.game-modal-open #coachhud,body\.game-modal-open #keyprompthud,body\.game-modal-open #currentquest,body\.game-modal-open #homeworkhud,body\.game-modal-open #activitytracker,body\.game-modal-open #townchoices,body\.game-modal-open #eventhud,body\.game-modal-open #landmap,body\.game-modal-open #coords,body\.game-modal-open #locationhud,body\.game-modal-open #hotbar,body\.game-modal-open #utilitybar,body\.game-modal-open #statpointnudge,body\.game-modal-open #recallrechargenudge,body\.game-modal-open #stats,body\.game-modal-open #abilities,body\.game-modal-open #dragonhud,body\.game-modal-open #familiarhud\{display:none!important\}/);
+  assert.match(styles,/body\.claim-mode #tutorialhud,body\.claim-mode #coachhud,body\.claim-mode #keyprompthud,body\.claim-mode #currentquest,body\.claim-mode #activitytracker,body\.claim-mode #townchoices,body\.claim-mode #eventhud,body\.claim-mode #landmap\{display:none!important\}/);
   assert.match(combat,/const minimal=offMainRoom\|\|\(onboardingActive&&dim==='tutorial'\)\|\|\(jobTutorialActive&&dim==='job'\);/);
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
   assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
