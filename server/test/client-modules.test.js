@@ -447,7 +447,7 @@ test('Town Map is granted by Orin and opens as a live position item', () => {
   assert.match(menus, /function openTownMapUI\(\)/);
   assert.match(menus, /BlockcraftTownMap=\{open:openTownMapUI,isMovementOverlay:\(\)=>townMapMovementOverlay\}/);
   assert.match(menus, /setTownMapMovementOverlay\(true\)/);
-  assert.match(menus, /lockFallback=true;\s*locked=true;\s*refreshPlayUi\(\)/);
+  assert.match(menus, /releasePointerLockWithoutCameraFallback\(false\);\s*refreshPlayUi\(\)/);
   assert.doesNotMatch(menus, /const roads=\[/);
   assert.match(menus, /drawTownMapCanvas\(canvas\)/);
   assert.match(styles, /body\.town-map-open #crosshair\{display:none\}/);
@@ -1743,9 +1743,10 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/const mouseLookDelta=\{x:0,y:0\};/);
   assert.match(combat,/const MOUSE_LOOK_SENSITIVITY=\.00215;/);
   assert.match(combat,/function gameplayCameraInputAllowed\(\)\{/);
-  assert.match(combat,/return !!\(locked&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!transitionModalOpen&&!globalThis\.chatTyping&&!document\.body\.classList\.contains\('game-modal-open'\)\);/);
+  assert.match(combat,/return !!\(locked&&!cursorReleased&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!transitionModalOpen&&!globalThis\.chatTyping&&!document\.body\.classList\.contains\('game-modal-open'\)\);/);
   assert.match(combat,/let locked=false, lockFallback=false, suppressNextLockFallback=false/);
-  assert.match(combat,/function releaseGameplayCursor\(\)\{[\s\S]*suppressNextLockFallback=true;[\s\S]*lockFallback=false;[\s\S]*locked=false;[\s\S]*mouseLookDelta\.x=0;mouseLookDelta\.y=0;/);
+  assert.match(combat,/function releasePointerLockWithoutCameraFallback\(markCursorReleased=true\)\{[\s\S]*suppressNextLockFallback=true;[\s\S]*lockFallback=false;[\s\S]*locked=!!markCursorReleased;[\s\S]*mouseLookDelta\.x=0;mouseLookDelta\.y=0;/);
+  assert.match(combat,/function resumeGameplayCamera\(\)\{[\s\S]*if\(!gameplayCameraResumeAllowed\(\)\)return false;[\s\S]*requestPointerLockSafe\(enterPlayFallback\);/);
   assert.match(combat,/else if\(suppressNextLockFallback\)\{ lockFallback=false; suppressNextLockFallback=false; \}/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*queueMouseLook\(e\.movementX\|\|0,e\.movementY\|\|0\);\s*\}else if\(lockFallback&&isWorldPointerTarget\(e\.target\)\)\{/);
   assert.match(combat,/function consumeMouseLookDelta\(\)\{/);
@@ -2520,7 +2521,7 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/Whisper quick phrase/);
   assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
-  assert.match(social,/function openChat\(mode\)\{[\s\S]*if\(document\.pointerLockElement\)document\.exitPointerLock\(\);lockFallback=false;locked=false;/);
+  assert.match(social,/function openChat\(mode\)\{[\s\S]*releasePointerLockWithoutCameraFallback\(false\);/);
   assert.match(social,/for\(const eventName of \['pointerdown','mousedown','click','wheel'\]\)\{[\s\S]*chatBarEl\.addEventListener\(eventName,event=>event\.stopPropagation\(\)\);/);
   assert.match(social,/chatInEl\.addEventListener\('change',\(\)=>\{[\s\S]*sendQuickPhrase\(chatInEl\.value\);\s*closeChat\(true\);/);
   assert.match(combat,/addEventListener\('mousedown', e=>\{\s*if\(globalThis\.chatTyping\) return;/);

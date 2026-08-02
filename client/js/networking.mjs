@@ -572,7 +572,7 @@ function enterDungeonAfterCountdown(m){
   },delay);
 }
 function showDungeonSpirit(m){
-  if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();
+  releasePointerLockWithoutCameraFallback(false);
   if(!dungeonSpiritEl){
     dungeonSpiritEl=document.createElement('div');dungeonSpiritEl.id='dungeonspirit';
     dungeonSpiritEl.innerHTML='<div class="dungeonspirit-panel"><div class="dungeonspirit-kicker">SPIRIT FORM</div><h2>You have fallen</h2><div class="dungeonspirit-choice stay"><b>Stay as spirit for party credit</b><span>Remain bound here, watch allies finish the boss, and keep the group run resolving together.</span></div><div class="dungeonspirit-choice return"><b>Return to town now</b><span>Leave the dungeon immediately to repair, restock, and try another Gate.</span></div><div class="dungeonspirit-actions"><button type="button" data-action="stay">STAY AS SPIRIT</button><button type="button" data-action="return">RETURN TO TOWN</button></div></div>';
@@ -915,8 +915,8 @@ const ONBOARD=createOnboardingUI({
   getFocus:()=>progressionFocus,
   getInv:()=>inv,
   baseSetupStatus:()=>typeof baseSetupStatus==='function'?baseSetupStatus():null,
-  releasePointerLock:()=>{ if(document.pointerLockElement===renderer.domElement)document.exitPointerLock(); locked=false; lockFallback=false; },
-  restoreLock:()=>{ lockFallback=true; locked=true; },
+  releasePointerLock:()=>releasePointerLockWithoutCameraFallback(false),
+  restoreLock:()=>resumeGameplayCamera(),
   clearRewardTimer:()=>clearTimeout(rewardHideTimer),
   sendNet:(type,payload)=>{ if(NET.on&&NET.room)NET.room.send(type,payload); },
 });
@@ -931,8 +931,7 @@ function showFellowshipTutorial(m={},mode='joined'){
   if(fellowshipTutorialSeen()||!rewardWin||!rewardPanel)return false;
   markFellowshipTutorialSeen();
   clearTimeout(rewardHideTimer);
-  if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
-  locked=false;lockFallback=false;
+  releasePointerLockWithoutCameraFallback(false);
   const name=escHTML(m&&m.name||'Your Fellowship');
   rewardPanel.className='earned promotion fellowship-tutorial';
   rewardPanel.innerHTML=
@@ -949,7 +948,7 @@ function showFellowshipTutorial(m={},mode='joined'){
     '<button id="fellowshipcontinue" class="secondary">GOT IT</button>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
-  const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');lockFallback=true;locked=true;refreshPlayUi();};
+  const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');resumeGameplayCamera();};
   const open=document.getElementById('fellowshipopenhall');
   if(open)open.onclick=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'tutorial'});openGuildHallUI();refreshPlayUi();};
   const done=document.getElementById('fellowshipcontinue');
@@ -1456,13 +1455,12 @@ function netAttachRoom(room,name,client){
             '<button id="milestonecontinue">'+escHTML(m.action||'CONTINUE')+'</button>';
           rewardWin.classList.remove('hidden');
           rewardWin.classList.add('promotion-open');
-          if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
-          locked=false;lockFallback=false;refreshPlayUi();
+          releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
           const btn=document.getElementById('milestonecontinue');
           if(btn)btn.onclick=()=>{
             rewardWin.classList.add('hidden');
             rewardWin.classList.remove('promotion-open');
-            lockFallback=true;locked=true;refreshPlayUi();
+            resumeGameplayCamera();
           };
         });
       }

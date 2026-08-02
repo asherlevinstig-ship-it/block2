@@ -90,8 +90,11 @@ const legacyCombatBindings={
   "raycast":{get:()=>raycast},
   "recipeSeen":{get:()=>recipeSeen},
   "refreshPlayUi":{get:()=>refreshPlayUi},
+  "releaseGameplayCursor":{get:()=>releaseGameplayCursor},
+  "releasePointerLockWithoutCameraFallback":{get:()=>releasePointerLockWithoutCameraFallback},
   "renderTownTutorialOptions":{get:()=>renderTownTutorialOptions},
   "requestTownJobGuidance":{get:()=>requestTownJobGuidance},
+  "resumeGameplayCamera":{get:()=>resumeGameplayCamera},
   "resetAbilityTutorialDone":{get:()=>resetAbilityTutorialDone},
   "resetTrainingMeadowLocal":{get:()=>resetTrainingMeadowLocal},
   "scanRecipeInventory":{get:()=>scanRecipeInventory},
@@ -1207,9 +1210,7 @@ function showAbilityAwakening(){
     +'</div>'
     +'<div class="awakening-actions"><button id="awakeningbegin" type="button">ENTER TRAINING MEADOW</button></div>';
   awakeningWin.classList.remove('hidden');
-  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
-  locked=false;
-  lockFallback=false;
+  releasePointerLockWithoutCameraFallback(false);
   refreshPlayUi();
   const beginAwakeningTraining=()=>{
     SFX.uiClick();
@@ -4028,8 +4029,7 @@ function openLevel2JobChoice(force=false){
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
-  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
-  lockFallback=false; locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   const ids=['miner','farmer','cook','blacksmith','monk','pet_tamer'];
   pathPanelEl.innerHTML='<div class="job-choice-kicker">Hunter Awakening 4 / 4 - Optional profession trial</div>'
     +hunterAwakeningStepsHTML('job')
@@ -4231,8 +4231,7 @@ function showPathSelection(){
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
-  if(document.pointerLockElement===renderer.domElement) document.exitPointerLock();
-  lockFallback=false; locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   const awakeningChoice=S.lvl>=2 && !S.path;
   pathPanelEl.innerHTML=
     (awakeningChoice?'<div class="job-choice-kicker">Hunter Awakening 2 / 4</div>'+hunterAwakeningStepsHTML('path'):'')+
@@ -4675,8 +4674,7 @@ function openDevResetPanel(){
   populateAdminItemOptions();
   syncAdminTokenField();
   syncAdminGearFields();
-  if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
-  lockFallback=false;locked=false;refreshPlayUi();
+  releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
   const account=AUTH&&AUTH.account;
   if(devResetTarget&&!devResetTarget.value){
     const email=String(account&&account.username||authuser.value||'').trim();
@@ -4820,21 +4818,23 @@ function releasePointerLockWithoutCameraFallback(markCursorReleased=true){
   lockFallback=false;
   pointerLockRequestPending=false;
   if(markCursorReleased) cursorReleased=true;
+  locked=!!markCursorReleased;
   mouseLookDelta.x=0;mouseLookDelta.y=0;
   try{ if(document.pointerLockElement===renderer.domElement) document.exitPointerLock(); }catch(err){}
 }
 function releaseGameplayCursor(){
   releasePointerLockWithoutCameraFallback(true);
-  locked=true;
   refreshPlayUi();
 }
 function resumeGameplayCamera(){
+  if(!gameplayCameraResumeAllowed())return false;
   cursorReleased=false;
   lockFallback=false;
   locked=true;
   refreshPlayUi();
   requestPointerLockSafe(enterPlayFallback);
   setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
+  return true;
 }
 function queueMouseLook(dx,dy){
   if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
@@ -4985,6 +4985,11 @@ addEventListener('keydown', e=>{
     if(lockFallback){
       e.preventDefault();
       releaseGameplayCursor();
+      return;
+    }
+    if(gameplayCameraResumeAllowed()){
+      e.preventDefault();
+      resumeGameplayCamera();
       return;
     }
   }
@@ -5172,7 +5177,7 @@ function showMeditationQuestion(m){
     return;
   }
   meditationChallenge=m; meditationFocusReady=false; meditationSortOrder=[];
-  if(document.pointerLockElement&&document.exitPointerLock)try{document.exitPointerLock();}catch(e){}
+  releasePointerLockWithoutCameraFallback(false);
   meditationHud.classList.add('meditation-recall');
   meditationHud.classList.remove('hidden');
   document.body.classList.add('recall-active');
@@ -5801,8 +5806,7 @@ function secondaryAction(){
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
   if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && AUTH_UI.openAppearanceEditor){
-    if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
-    lockFallback=false; locked=false; refreshPlayUi();
+    releasePointerLockWithoutCameraFallback(false); refreshPlayUi();
     AUTH_UI.openAppearanceEditor('mirror');
     return;
   }
@@ -6080,6 +6084,9 @@ gameContext.registerModule('combat', Object.freeze({
   updateBuildPreview,
   consumeMouseLookDelta,
   gameplayCameraInputAllowed,
+  releaseGameplayCursor,
+  releasePointerLockWithoutCameraFallback,
+  resumeGameplayCamera,
   primaryAction,
   secondaryAction,
   heldPlaceAction,

@@ -3754,13 +3754,10 @@ function toggleClaimMode(force){
   claimRecommendMesh.visible=false;
   if(claimMode){
     claimCam.x=player.pos.x; claimCam.z=player.pos.z; claimCam.h=76;
-    try{ if(document.pointerLockElement===renderer.domElement) document.exitPointerLock(); }catch(e){}
-    lockFallback=false; locked=false;
+    releasePointerLockWithoutCameraFallback(false);
     sysMsg('<b>Land Claim Mode</b>: claiming around you, click tiles to buy');
   } else if(was && !uiOpen && !statOpen && !qOpen){
-    locked=true;
-    lockFallback=true;
-    try{ renderer.domElement.requestPointerLock(); }catch(e){}
+    resumeGameplayCamera();
   }
   refreshPlayUi();
   updateClaimOverlayVisuals();
@@ -8517,9 +8514,7 @@ function showDungeonReward(m, earned){
   rewardWin.style.pointerEvents=milestone?'auto':'';
   rewardWin.style.zIndex=milestone?'40':'';
   if(milestone){
-    if(document.pointerLockElement===renderer.domElement)document.exitPointerLock();
-    locked=false;
-    lockFallback=false;
+    releasePointerLockWithoutCameraFallback(false);
     refreshPlayUi();
   }
   const btn=document.getElementById('rewardclose');
@@ -8529,9 +8524,7 @@ function showDungeonReward(m, earned){
     rewardWin.style.pointerEvents='';
     rewardWin.style.zIndex='';
     if(resumePlay){
-      lockFallback=true;
-      locked=true;
-      refreshPlayUi();
+      resumeGameplayCamera();
     }
   };
   clearTimeout(rewardHideTimer);

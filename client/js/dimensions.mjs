@@ -972,8 +972,7 @@ let statOpen=false;
 function openStat(){
   if(!statOpen) SFX.uiOpen();
   statOpen=true;
-  if(document.pointerLockElement) document.exitPointerLock();
-  lockFallback=false; locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   statEl.classList.remove('hidden');
   refreshPlayUi();
   renderStat();
@@ -982,7 +981,7 @@ function closeStat(relock=true){
   if(statOpen) SFX.uiClose();
   statOpen=false;
   statEl.classList.add('hidden');
-  if(relock) renderer.domElement.requestPointerLock();
+  if(relock) resumeGameplayCamera();
   else {
     overlay.classList.remove('hidden');
     for(const id of ['hotbar','stats','abilities','locationhud','coords','currentquest','landmap']) document.getElementById(id).classList.add('hidden');

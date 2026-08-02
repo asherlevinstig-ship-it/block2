@@ -235,8 +235,7 @@ function openUI(mode, furnaceKey){
   uiOpen=true; uiMode=mode; uiFurnaceKey=furnaceKey||null;
   craftW = mode==='table' ? 3 : 2;
   craftCells = new Array(craftW*craftW).fill(null);
-  if(document.pointerLockElement) document.exitPointerLock();
-  lockFallback=false; locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   uiEl.classList.add('open');
   refreshPlayUi();
   if(mode==='inv'&&gearInspectSlot<0){
@@ -256,7 +255,7 @@ function closeUI(relock=true){
   uiOpen=false; uiMode=null; uiFurnaceKey=null;
   uiEl.classList.remove('open');
   refreshHUD();
-  if(relock) renderer.domElement.requestPointerLock();
+  if(relock) resumeGameplayCamera();
   else {
     overlay.classList.remove('hidden');
     for(const id of ['hotbar','stats','abilities','locationhud','coords','landmap']) document.getElementById(id).classList.add('hidden');
@@ -3121,8 +3120,7 @@ function openQWin(mode='dialog'){
   questLogOpen=false;
   guildHallOpen=false;
   dungeonLobbyOpen=false;
-  if(document.pointerLockElement) document.exitPointerLock();
-  lockFallback=false; locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   qpanelEl.className=mode;
   qpanelEl.dataset.modal=mode;
   qwinEl.classList.remove('trade-offer-open');
@@ -3137,7 +3135,7 @@ function closeQWin(relock=true){
   qpanelEl.dataset.modal='';
   qwinEl.classList.remove('trade-offer-open');
   qwinEl.classList.remove('gate-lobby-open');
-  if(relock) renderer.domElement.requestPointerLock();
+  if(relock) resumeGameplayCamera();
   else {
     overlay.classList.remove('hidden');
     for(const id of ['hotbar','stats','abilities','locationhud','coords','landmap']) document.getElementById(id).classList.add('hidden');
@@ -4561,8 +4559,7 @@ function drawTownMapCanvas(canvas){
 function openTownMapUI(){
   openQWin('management');qpanelEl.innerHTML='';
   setTownMapMovementOverlay(true);
-  lockFallback=true;
-  locked=true;
+  releasePointerLockWithoutCameraFallback(false);
   refreshPlayUi();
   const h=document.createElement('h2');h.textContent='TOWN MAP';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent='TOWN OF BEGINNINGS - LIVE POSITION';qpanelEl.appendChild(sub);

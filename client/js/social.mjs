@@ -99,12 +99,12 @@ function renderQuickChatWheel(){
 function startQuickChatWheel(){
   if(chatWheel || dragonWheel)return;
   chatTyping=true;for(const k in keys)keys[k]=false;setChatMode(chatMode);
-  if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   const ids=populateQuickChat().slice(0,COMMS_RULES.maxWheelPhrases);
   chatWheel={ids,selected:0};
   chatWheelModeEl.textContent=chatMode.toUpperCase();chatWheelEl.classList.remove('hidden');renderQuickChatWheel();
 }
-function closeQuickChatWheel(relock=false){if(!chatWheel)return;chatWheel=null;chatWheelEl.classList.add('hidden');chatTyping=false;if(relock)renderer.domElement.requestPointerLock();}
+function closeQuickChatWheel(relock=false){if(!chatWheel)return;chatWheel=null;chatWheelEl.classList.add('hidden');chatTyping=false;if(relock)resumeGameplayCamera();}
 function dragonOwnedTypes(){return COMPANIONS&&Array.isArray(COMPANIONS.dragonUnlocks)?COMPANIONS.dragonUnlocks.filter(t=>DRAGON_TYPES[t]):[];}
 function dragonWheelName(type){
   const custom=COMPANIONS&&COMPANIONS.dragonNames&&COMPANIONS.dragonNames[type];
@@ -241,7 +241,7 @@ function startDragonCommandWheel(){
   if(dragonWheel)return;
   if(chatWheel){chatWheel=null;}
   chatTyping=true;for(const k in keys)keys[k]=false;
-  if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   dragonWheel={type:dragonWheelTarget(),selected:0};
   chatWheelEl.classList.remove('hidden');renderDragonCommandWheel();
 }
@@ -249,7 +249,7 @@ function closeDragonCommandWheel(relock=false){
   if(!dragonWheel)return;
   dragonWheel=null;chatWheelEl.classList.remove('dragonwheel');chatWheelEl.classList.add('hidden');chatTyping=false;
   const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase to send';
-  if(relock)renderer.domElement.requestPointerLock();
+  if(relock)resumeGameplayCamera();
 }
 function closeAnyWheel(relock=false){
   if(dragonWheel)closeDragonCommandWheel(relock);
@@ -274,7 +274,7 @@ addEventListener('keydown',event=>{
 function openChat(mode){
   chatTyping=true;
   for(const k in keys) keys[k]=false;
-  if(document.pointerLockElement)document.exitPointerLock();lockFallback=false;locked=false;
+  releasePointerLockWithoutCameraFallback(false);
   if(mode)setChatMode(mode);else setChatMode(chatMode);
   document.body.classList.add('chat-open');
   populateQuickChat();
@@ -284,7 +284,7 @@ function closeChat(relock=false){
   chatTyping=false;
   document.body.classList.remove('chat-open','chat-whisper');
   chatInEl.blur();
-  if(relock)renderer.domElement.requestPointerLock();
+  if(relock)resumeGameplayCamera();
 }
 for(const eventName of ['pointerdown','mousedown','click','wheel']){
   chatBarEl.addEventListener(eventName,event=>event.stopPropagation());
