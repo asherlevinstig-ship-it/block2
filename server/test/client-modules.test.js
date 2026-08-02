@@ -1689,7 +1689,12 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(html,/id="recallprogress"/);
   assert.match(styles,/#recallhud\.question-hall-recall/);
   assert.match(styles,/body\.question-hall-recall-open:before/);
-  assert.match(combat,/if\(dim==='questions'\)releaseGameplayCursor\(\);/);
+  assert.match(combat,/function startQuestionHallMeditationPose\(\)/);
+  assert.match(combat,/poseMeditationDummy\(appearanceDummy,0,performance\.now\(\),true\)/);
+  assert.match(combat,/applyMeditationCamera\(\)/);
+  assert.match(combat,/const baseY=player&&player\.pos\?player\.pos\.y:TOWN\.G\+1/);
+  assert.match(combat,/if\(dim==='questions'\)\{startQuestionHallMeditationPose\(\);releaseGameplayCursor\(\);\}/);
+  assert.match(combat,/key:'P',title:'Question Hall',small:'Answer questions · ALT changes subject'/);
   assert.match(combat,/function recoverQuestionHallAfterRecall\(\)/);
   assert.match(combat,/standHeight\(player\.pos\.x,player\.pos\.z,WH-2\)/);
   assert.match(combat,/player\.vel\.set\(0,0,0\);/);
@@ -1698,6 +1703,9 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(combat,/questionHallActive&&globalThis\.BlockcraftRecall\.questionHallActive\(\)/);
   assert.match(combat,/globalThis\.BlockcraftRecall\.closeQuestionHall\(\)/);
   assert.match(recall,/QUESTION_HALL_GOAL=10/);
+  assert.match(recall,/function spawnQuestionHallAnswerMark\(correct\)/);
+  assert.match(recall,/makeTextSprite\(correct\?'✓':'✕',correct\?'#34d399':'#fb7185'\)/);
+  assert.match(recall,/function tickQuestionHallMarks\(now\)/);
   assert.match(recall,/function queueQuestionHallNext/);
   assert.match(recall,/start\(\{source:'question_hall'\}\)/);
   assert.match(recall,/BlockcraftQuestionHallRecovery/);

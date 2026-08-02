@@ -4236,6 +4236,32 @@ function resumeCameraAfterArrivalChoice(){
     setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); },250);
   }catch(e){ enterPlayFallback(); }
 }
+function startQuestionHallMeditationPose(){
+  if(dim!=='questions'||!player)return false;
+  if(!meditationPrevView)meditationPrevView={yaw:player.yaw,pitch:player.pitch};
+  isMeditating=true;
+  meditationFocusReady=false;
+  meditateStartedAt=0;
+  player.vel.set(0,0,0);
+  player.onGround=true;
+  player.yaw=Math.PI;
+  player.pitch=-0.18;
+  if(!appearanceDummy){
+    appearanceDummy=buildAppearanceDummy();
+    appearanceBackDummy=buildAppearanceDummy();
+    meditationOwnedAppearance=true;
+  }else meditationOwnedAppearance=false;
+  if(appearanceDummy){
+    appearanceDummy.grp.visible=true;
+    poseMeditationDummy(appearanceDummy,0,performance.now(),true);
+  }
+  if(appearanceBackDummy)appearanceBackDummy.grp.visible=false;
+  meditateJobAcc=0;
+  applyMeditationCamera();
+  SFX.meditate(true);
+  ringPulse(player.pos.x,player.pos.y+.08,player.pos.z,1.35,0x7dd3fc,.5);
+  return true;
+}
 function recoverQuestionHallAfterRecall(){
   if(dim!=='questions'||!player)return false;
   const y=typeof standHeight==='function'?standHeight(player.pos.x,player.pos.z,WH-2):-1;
@@ -4244,6 +4270,7 @@ function recoverQuestionHallAfterRecall(){
   player.vel.set(0,0,0);
   player.onGround=true;
   stopPrimaryAction();
+  if(isMeditating)stopMeditation({silent:true});
   resumeGameplayCamera();
   refreshPlayUi();
   return true;
@@ -5015,7 +5042,7 @@ addEventListener('keydown', e=>{
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
   if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&gameInput){
     e.preventDefault();
-    if(dim==='questions')releaseGameplayCursor();
+    if(dim==='questions'){startQuestionHallMeditationPose();releaseGameplayCursor();}
     globalThis.BlockcraftRecall.start(dim==='questions'?{source:'question_hall'}:undefined);
     return;
   }
@@ -5417,8 +5444,9 @@ function stopMeditation(opts={}){
 }
 function applyMeditationCamera(){
   const r=4.2;
-  camera.position.set(player.pos.x+Math.sin(player.yaw)*r, TOWN.G+3.05, player.pos.z+Math.cos(player.yaw)*r);
-  camera.lookAt(player.pos.x, TOWN.G+1.48, player.pos.z);
+  const baseY=player&&player.pos?player.pos.y:TOWN.G+1;
+  camera.position.set(player.pos.x+Math.sin(player.yaw)*r, baseY+2.05, player.pos.z+Math.cos(player.yaw)*r);
+  camera.lookAt(player.pos.x, baseY+.48, player.pos.z);
 }
 function toggleMeditation(){
   if(isMeditating){ stopMeditation(); return true; }
@@ -5681,6 +5709,7 @@ function nearbyInteractionPrompt(){
   }
   if(nearTamingLandPortal())push({key:'G',title:'Taming Land Portal',small:'Travel to the dragon and familiar sanctuary',priority:119},0);
   if(nearTamingLandExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
+  if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer questions · ALT changes subject',priority:118},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at '+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL)),priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;

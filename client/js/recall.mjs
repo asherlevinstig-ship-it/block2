@@ -1,5 +1,6 @@
 const hud=document.getElementById('recallhud'),subjectEl=document.getElementById('recallsubject'),timeEl=document.getElementById('recalltime'),progressEl=document.getElementById('recallprogress'),closeEl=document.getElementById('recallclose'),questionEl=document.getElementById('recallquestion'),fallbackEl=document.getElementById('recallfallback'),feedbackEl=document.getElementById('recallfeedback');
 let active=null,group=null,freezeUntil=0,answerPending=false,masterySummary=null,questionHallOpen=false,questionHallAnswered=0,questionHallNextTimer=0;
+const questionHallMarks=[];
 const colors=[0x38bdf8,0xa78bfa,0xfbbf24,0x34d399],QUESTION_HALL_GOAL=10;
 
 function clearMeshes(){if(!group)return;scene.remove(group);group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});group=null;}
@@ -19,6 +20,31 @@ function makeLabel(text,color,letter){
   const t=new THREE.CanvasTexture(c),m=new THREE.SpriteMaterial({map:t,transparent:true,depthTest:true,depthWrite:false}),s=new THREE.Sprite(m);s.scale.set(5.4,1.35,1);s.position.y=3.45;s.renderOrder=20;return s;
 }
 function resultFlash(wrong=false){let el=document.getElementById('recallflash');if(!el){el=document.createElement('div');el.id='recallflash';document.body.appendChild(el);}el.className=wrong?'wrong show':'show';setTimeout(()=>el.classList.remove('show'),650);}
+function spawnQuestionHallAnswerMark(correct){
+  if(!questionHallOpen||typeof makeTextSprite!=='function'||!player||!scene)return;
+  const sprite=makeTextSprite(correct?'✓':'✕',correct?'#34d399':'#fb7185');
+  sprite.position.set(player.pos.x,player.pos.y+2.15,player.pos.z);
+  sprite.scale.set(1.55,1.05,1);
+  sprite.userData.questionHallMark={born:performance.now(),baseY:sprite.position.y,correct};
+  scene.add(sprite);
+  questionHallMarks.push(sprite);
+}
+function tickQuestionHallMarks(now){
+  for(let i=questionHallMarks.length-1;i>=0;i--){
+    const sprite=questionHallMarks[i],data=sprite&&sprite.userData&&sprite.userData.questionHallMark;
+    const age=Math.max(0,now-(data&&data.born||now)),t=age/1250;
+    if(!sprite||t>=1){
+      if(sprite&&scene)scene.remove(sprite);
+      if(sprite&&sprite.material)try{sprite.material.dispose&&sprite.material.dispose();}catch(e){}
+      questionHallMarks.splice(i,1);
+      continue;
+    }
+    sprite.position.y=(data.baseY||sprite.position.y)+t*2.1;
+    const s=1.55+t*.8;
+    sprite.scale.set(s,1.05+t*.32,1);
+    if(sprite.material)sprite.material.opacity=1-t*.86;
+  }
+}
 function updateQuestionHallProgress(){
   if(!progressEl)return;
   const count=questionHallAnswered|0,pct=Math.min(100,Math.round(count/QUESTION_HALL_GOAL*100));
@@ -73,12 +99,14 @@ function result(m){
   const hall=questionHallOpen||!!m.questionHall,answer=active&&active.answers&&active.answers[m.correctIndex]||'';
   if(m.correct&&globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markRecall();
   if(hall){questionHallAnswered++;updateQuestionHallProgress();}
+  if(hall)spawnQuestionHallAnswerMark(!!m.correct);
   if(m.correct){const gain=Number.isFinite(+m.stamina)?Math.max(1,Math.round(+m.stamina)):Math.max(1,Math.ceil(maxSp()*(Number(m.staminaFraction)||.2)));if(Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));else sp=Math.min(maxSp(),sp+gain);resultFlash();if(m.fellowshipRenown&&globalThis.BlockcraftFellowshipEffects&&globalThis.BlockcraftFellowshipEffects.pulseRecallLecternRenown)globalThis.BlockcraftFellowshipEffects.pulseRecallLecternRenown(m.fellowshipRenown|0);showName('+'+(m.mana|0)+' MP · +'+gain+' SP'+(m.explorationGold?' · +'+m.explorationGold+' GOLD':'')+(m.fellowshipRenown?' · +'+m.fellowshipRenown+' RENOWN':''));feedbackEl.textContent='Correct. '+(m.explanation||'')+' Review '+reviewTiming(m.nextDue)+'.';feedbackEl.className='correct';sysMsg('Recall reward: <b>+'+(m.mana|0)+' MP</b> and <b>+'+gain+' SP</b>'+(m.explorationGold?' plus <b>+'+(m.explorationGold|0)+' gold</b> from the ruins.':'.')+(m.fellowshipRenown?' Fellowship study: <b>+'+(m.fellowshipRenown|0)+' Renown</b>.':'')+' '+escHTML(m.explanation||'')+' <b>Review '+reviewTiming(m.nextDue)+'.</b>');SFX.level();}
   else{if(!hall)freezeUntil=performance.now()+Math.max(0,m.freezeMs|0);resultFlash(true);if(active&&Number.isInteger(m.correctIndex)){const node=group&&group.children[m.correctIndex];if(node){node.scale.set(1.28,1.28,1.28);node.children[0].material.color.setHex(0x34d399);}}showName(hall?'TRY AGAIN':'WRONG — FROZEN');feedbackEl.textContent='Correct answer: '+answer+'. '+(m.explanation||'')+' This topic will return '+reviewTiming(m.nextDue)+'.';feedbackEl.className='wrong';sysMsg('<b>Correct answer:</b> '+escHTML(answer)+' · '+escHTML(m.explanation||'')+' <b>Returns '+reviewTiming(m.nextDue)+'.</b>');SFX.error();}
   renderBars();active=null;answerPending=false;if(hall)queueQuestionHallNext(m.correct?1150:1700);else setTimeout(clearRecall,m.correct?1800:Math.max(3500,m.freezeMs|0));
 }
 function reject(m){const r=m&&m.reason;if(r==='active')sysMsg(questionHallOpen?'Answer or close the current question.':'Choose an <b>answer pillar</b>.');else if(r==='position'){answerPending=false;sysMsg('Move fully inside the pillar to answer.');}else if(r==='ruin_claimed')sysMsg('You have already deciphered this ruin.');else if(r==='ruin_range')sysMsg('Move closer to the ancient ruins.');else clearRecall();}
 function tick(now=performance.now()){
+  tickQuestionHallMarks(now);
   if(freezeUntil>now){keys.KeyW=keys.KeyA=keys.KeyS=keys.KeyD=keys.Space=keys.ShiftLeft=keys.ShiftRight=false;player.vel.x=0;player.vel.z=0;}
   if(!active)return;
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
