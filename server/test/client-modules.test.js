@@ -2199,6 +2199,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(html,/data-arrival-choice="adventure"/);
   assert.match(html,/data-arrival-choice="questions"/);
   assert.match(styles,/#arrivalchoice/);
+  assert.match(styles,/arrival-choice-split\.png/);
   assert.match(styles,/\.arrival-choice-card:hover/);
   assert.match(styles,/\.arrival-choice-card\.questions/);
   assert.match(combat,/let firstTownChoiceDismissedThisSession=false/);

@@ -200,25 +200,13 @@
   .arrival-choice-card:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.05),rgba(0,0,0,.16) 45%,rgba(0,0,0,.68));pointer-events:none}
   .arrival-choice-card.adventure{--arrival-col:#ffd24a;--arrival-glow:rgba(255,210,74,.34)}
   .arrival-choice-card.questions{--arrival-col:#4fd8ff;--arrival-glow:rgba(79,216,255,.35)}
-  .arrival-choice-art{position:absolute;inset:0;display:block;background:linear-gradient(180deg,#2b6cbd 0%,#ffb966 47%,#7fd86b 48%,#254e25 100%);transition:transform .22s ease}
-  .arrival-choice-card:hover .arrival-choice-art,.arrival-choice-card:focus-visible .arrival-choice-art{transform:scale(1.035)}
-  .arrival-choice-card.questions .arrival-choice-art{background:linear-gradient(180deg,#1a527c 0%,#15314b 46%,#9a6733 47%,#4c2d18 100%)}
-  .arrival-choice-art i{position:absolute;display:block}
-  .arrival-choice-art .sun{right:12%;top:10%;width:70px;height:70px;border-radius:50%;background:#ffe88a;box-shadow:0 0 42px #ffd24a}
-  .arrival-choice-art .portal{left:8%;bottom:18%;width:80px;height:118px;border:12px solid #2a163f;border-radius:42px 42px 10px 10px;background:radial-gradient(circle,#d56aff,#6e2cff 60%,#180b32 62%);box-shadow:0 0 24px #b86cff}
-  .arrival-choice-art .hero{left:45%;bottom:12%;width:52px;height:126px;background:linear-gradient(#6fd0ff 0 30%,#523420 31% 62%,#15181f 63%);box-shadow:18px 10px 0 #1b1c23,-15px 14px 0 #1b1c23}
-  .arrival-choice-art .coin{width:42px;height:42px;border-radius:50%;background:#ffd24a;box-shadow:0 0 18px #ffd24a,inset -5px -5px 0 rgba(128,74,0,.28)}
-  .arrival-choice-art .c1{right:20%;bottom:28%}.arrival-choice-art .c2{left:22%;bottom:11%;transform:scale(.72)}
-  .arrival-choice-art .lamp{right:10%;top:8%;width:44px;height:54px;background:#ffbd44;clip-path:polygon(20% 0,80% 0,100% 45%,72% 100%,28% 100%,0 45%);box-shadow:0 0 22px #ffc857}
-  .arrival-choice-art .board{left:18%;top:25%;width:54%;height:33%;border:9px solid #7b4a26;background:#e9f1ff;box-shadow:0 10px 0 rgba(0,0,0,.18)}
-  .arrival-choice-art .board:after{content:"?";position:absolute;left:42%;top:14%;font-size:72px;color:#53b743;text-shadow:3px 3px 0 #25551c}
-  .arrival-choice-art .desk{right:12%;bottom:11%;width:150px;height:62px;background:#9b5d24;box-shadow:0 14px 0 #553019}
-  .arrival-choice-art .cube{right:16%;bottom:27%;width:58px;height:58px;background:#ffd24a;box-shadow:0 0 22px #ffd24a,inset -8px -8px 0 rgba(113,66,0,.24)}
-  .arrival-choice-art .cube:after{content:"?";position:absolute;left:17px;top:4px;font-size:34px;color:#fff}
-  .arrival-choice-art .book{left:24%;bottom:13%;width:86px;height:44px;background:linear-gradient(90deg,#e44b57 0 48%,#f5e6bb 49% 51%,#2d72d9 52%);box-shadow:0 8px 0 rgba(0,0,0,.2)}
-  .arrival-choice-copy{position:absolute;left:24px;right:24px;bottom:22px;z-index:2;display:grid;gap:8px;text-shadow:4px 4px 0 #030711,0 0 18px rgba(0,0,0,.7)}
-  .arrival-choice-copy b{font-size:clamp(31px,5vw,72px);line-height:.9;letter-spacing:2px;text-transform:uppercase;color:var(--arrival-col)}
-  .arrival-choice-copy small{font-size:clamp(12px,1.6vw,18px);letter-spacing:2px;text-transform:uppercase;color:#fff}
+  .arrival-choice-image{position:absolute;inset:0;display:block;background-image:url('/assets/arrival-choice-split.png');background-size:200% 100%;background-repeat:no-repeat;transition:transform .22s ease,filter .18s ease}
+  .arrival-choice-card.adventure .arrival-choice-image{background-position:left center}
+  .arrival-choice-card.questions .arrival-choice-image{background-position:right center}
+  .arrival-choice-card:hover .arrival-choice-image,.arrival-choice-card:focus-visible .arrival-choice-image{transform:scale(1.035);filter:brightness(1.06) contrast(1.04)}
+  .arrival-choice-copy{position:absolute;left:24px;right:24px;bottom:22px;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--arrival-col);border-radius:10px;background:rgba(3,7,14,.74);box-shadow:0 0 18px var(--arrival-glow);text-shadow:2px 2px 0 #030711}
+  .arrival-choice-copy b{font-size:14px;line-height:1;letter-spacing:2px;text-transform:uppercase;color:var(--arrival-col)}
+  .arrival-choice-copy small{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#fff}
   #pathpanel{width:min(1080px,calc(100vw - 48px));max-height:calc(100vh - 48px);overflow:auto;text-align:center;border:1px solid rgba(79,216,255,.55);border-radius:14px;background:linear-gradient(160deg,rgba(10,20,38,.96),rgba(6,9,18,.98));box-shadow:0 0 44px rgba(79,216,255,.35),inset 0 0 50px rgba(79,216,255,.07);padding:34px}
   #pathpanel h1{font-size:30px;letter-spacing:9px;color:#4fd8ff;text-shadow:0 0 16px rgba(79,216,255,.85);margin-bottom:8px}
   #pathpanel .pathintro{font-size:13px;line-height:1.55;letter-spacing:1px;color:#b8cbe4;max-width:760px;margin:0 auto 24px}
