@@ -590,7 +590,7 @@ const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
 const keyPromptHud=document.getElementById('keyprompthud');
 const KEY_PROMPTS=[
-  {key:'TAB',title:'Chat',text:'Open quick chat with nearby hunters'},
+  {key:'TAB',title:'Chat',text:'Open Local quick chat - press Tab again for Team / Whisper'},
   {key:'F',title:'Action',text:'Mine, attack, harvest, or use the focused action'},
   {key:'G',title:'Interact',text:'Talk to villagers, place blocks, or use held items'},
   {key:'E',title:'Inventory',text:'Open your bag, crafting, gear, and hotbar'},

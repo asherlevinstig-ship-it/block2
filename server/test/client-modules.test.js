@@ -2524,9 +2524,13 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(html,/Teams, quick comms, and closing open panels\./);
   assert.match(html,/aria-label="Quick comms phrase"/);
   assert.doesNotMatch(html,/chat commands/);
-  assert.match(social,/Nearby quick phrase/);
-  assert.match(social,/Party quick phrase/);
+  assert.match(social,/Local quick phrase/);
+  assert.match(social,/Team quick phrase/);
   assert.match(social,/Whisper quick phrase/);
+  assert.match(social,/function chatModeLabel\(\)\{return chatMode==='party'\?'TEAM':chatMode\.toUpperCase\(\);\}/);
+  assert.match(social,/setChatMode\('local'\);/);
+  assert.match(social,/Tab again for Team \/ Whisper/);
+  assert.match(combat,/Open Local quick chat - press Tab again for Team \/ Whisper/);
   assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
   assert.match(social,/function openChat\(mode\)\{[\s\S]*releasePointerLockWithoutCameraFallback\(false\);/);

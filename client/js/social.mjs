@@ -52,12 +52,13 @@ function populateWhisperTargets(){
   updateMuteButton();
 }
 function updateMuteButton(){const muted=mutedPlayers.has(chatTargetEl.value);chatMuteEl.textContent=muted?'UNMUTE':'MUTE';chatMuteEl.classList.toggle('muted',muted);}
+function chatModeLabel(){return chatMode==='party'?'TEAM':chatMode.toUpperCase();}
 function setChatMode(mode){
   chatMode=['local','party','whisper'].includes(mode)?mode:'local';
-  chatModeEl.textContent=chatMode.toUpperCase();
+  chatModeEl.textContent=chatModeLabel();
   document.body.classList.toggle('chat-whisper',chatMode==='whisper');
   if(chatMode==='whisper')populateWhisperTargets();
-  const label=chatMode==='local'?'Nearby quick phrase':chatMode==='party'?'Party quick phrase':'Whisper quick phrase';
+  const label=chatMode==='local'?'Local quick phrase':chatMode==='party'?'Team quick phrase':'Whisper quick phrase';
   chatInEl.setAttribute('aria-label',label);
   chatInEl.title=label+' - press Enter to send';
 }
@@ -86,8 +87,8 @@ function renderQuickChatWheel(){
   if(!chatWheel)return;
   chatWheelEl.classList.remove('dragonwheel');
   chatWheelItemsEl.innerHTML='';
-  chatWheelModeEl.textContent=chatMode.toUpperCase();
-  const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase to send';
+  chatWheelModeEl.textContent=chatModeLabel();
+  const center=chatWheelEl.querySelector('.wheelcenter span');if(center)center.textContent='Click a phrase - Tab again for Team / Whisper';
   const count=chatWheel.ids.length;
   chatWheel.ids.forEach((id,index)=>{
     const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('button');item.type='button';
@@ -98,11 +99,11 @@ function renderQuickChatWheel(){
 }
 function startQuickChatWheel(){
   if(chatWheel || dragonWheel)return;
-  chatTyping=true;for(const k in keys)keys[k]=false;setChatMode(chatMode);
+  chatTyping=true;for(const k in keys)keys[k]=false;setChatMode('local');
   releasePointerLockWithoutCameraFallback(false);
   const ids=populateQuickChat().slice(0,COMMS_RULES.maxWheelPhrases);
   chatWheel={ids,selected:0};
-  chatWheelModeEl.textContent=chatMode.toUpperCase();chatWheelEl.classList.remove('hidden');renderQuickChatWheel();
+  chatWheelModeEl.textContent=chatModeLabel();chatWheelEl.classList.remove('hidden');renderQuickChatWheel();
 }
 function closeQuickChatWheel(relock=false){if(!chatWheel)return;chatWheel=null;chatWheelEl.classList.add('hidden');chatTyping=false;if(relock)resumeGameplayCamera();}
 function dragonOwnedTypes(){return COMPANIONS&&Array.isArray(COMPANIONS.dragonUnlocks)?COMPANIONS.dragonUnlocks.filter(t=>DRAGON_TYPES[t]):[];}
