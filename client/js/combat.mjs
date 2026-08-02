@@ -4158,6 +4158,7 @@ function tickTownGuidance(now){
   updateTownGuidanceHud();
 }
 function finishOnboardingToTown(){
+  showWorldLoading('Traveling to Town of Beginnings...');
   onboardingActive=false;
   pathChoiceOpen=false;
   document.body.classList.remove('onboarding');
@@ -4188,6 +4189,7 @@ function finishOnboardingToTown(){
     enterPlayFallback();
   }
   refreshPlayUi();
+  setTimeout(()=>finishWorldLoading('town-arrival'),720);
 }
 function hexToRgba(hex,a){
   const m=String(hex||'').replace('#','');
@@ -4364,7 +4366,12 @@ function refreshPlayUi(){
   const transitionModalOpen = pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen ||
     !!(pathSelectEl && !pathSelectEl.classList.contains('hidden')) ||
     !!(awakeningWin && !awakeningWin.classList.contains('hidden'));
-  const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode || transitionModalOpen;
+  const networkBusy = typeof NET !== 'undefined' && !!(NET && (NET.connecting || NET.reconnecting));
+  const gameStarted = typeof NET !== 'undefined' && !!(NET && (NET.tried || NET.on || NET.connecting || NET.reconnecting));
+  const regionTransitioning = worldLoading || networkBusy || document.body.classList.contains('portal-transitioning');
+  const inActiveRoom = dim !== 'overworld' || onboardingActive || jobTutorialActive || abilityTrainingActive;
+  const suppressPauseOverlay = gameStarted || inActiveRoom || regionTransitioning;
+  const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode || transitionModalOpen || suppressPauseOverlay;
   const modalInputOpen = uiOpen || statOpen || uiShellState.qOpen || transitionModalOpen ||
     !!(rewardWin && !rewardWin.classList.contains('hidden')) ||
     !!globalThis.dungeonLobbyOpen ||

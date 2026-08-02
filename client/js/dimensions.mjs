@@ -1950,6 +1950,7 @@ function runPortalTransition(opts, swap){
     return true;
   }
   portalTransitionActive=true;
+  document.body.classList.add('portal-transitioning');
   if(titleEl)titleEl.textContent=String(opts.title||'Crossing');
   if(subEl)subEl.textContent=String(opts.subtitle||'The world folds around you');
   wrap.className='';
@@ -1966,6 +1967,8 @@ function runPortalTransition(opts, swap){
         if(titleEl)titleEl.textContent='';
         if(subEl)subEl.textContent='';
         portalTransitionActive=false;
+        document.body.classList.remove('portal-transitioning');
+        if(typeof refreshPlayUi==='function')refreshPlayUi();
       },460);
     }
   },320);
