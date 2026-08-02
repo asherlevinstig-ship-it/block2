@@ -945,6 +945,14 @@ function buildTrainingMeadow(setBlock=setB){
   const rect=(x1,z1,x2,z2,top=B.COBBLE,under=B.STONE)=>{for(let x=cx+x1;x<=cx+x2;x++)for(let z=cz+z1;z<=cz+z2;z++)flat(x,z,top,under);};
   const pillar=(ox,oz,h,mat=B.LOG,cap=B.LANTERN)=>{for(let y=G+1;y<=G+h;y++)setBlock(cx+ox,y,cz+oz,mat);if(cap)setBlock(cx+ox,G+h+1,cz+oz,cap);};
   const tree=(ox,oz,h=6,spread=4)=>{for(let y=G+1;y<=G+h;y++)setBlock(cx+ox,y,cz+oz,B.LOG);for(let lx=-spread;lx<=spread;lx++)for(let lz=-spread;lz<=spread;lz++)for(let ly=h-2;ly<=h+4;ly++){const crown=Math.abs(lx)+Math.abs(lz)+Math.abs(ly-(h+1))*1.35;if(crown<spread+3&&!(lx===0&&lz===0&&ly<=h))setBlock(cx+ox+lx,G+ly,cz+oz+lz,B.LEAVES);}setBlock(cx+ox,G+h+5,cz+oz,B.LANTERN);};
+  const garden=(ox,oz,r=4)=>{
+    for(let x=cx+ox-r;x<=cx+ox+r;x++)for(let z=cz+oz-r;z<=cz+oz+r;z++){
+      const d=Math.hypot(x-(cx+ox),z-(cz+oz));
+      if(d<=r)flat(x,z,d>r-1.15?B.COBBLE:(hash2(x,z)>.72?B.SAND:B.GRASS),d>r-1.15?B.STONE:B.DIRT);
+    }
+    setBlock(cx+ox,G,cz+oz,B.GLASS);setBlock(cx+ox,G+1,cz+oz,B.LANTERN);
+    for(const [dx,dz] of [[r-1,0],[-r+1,0],[0,r-1],[0,-r+1]]){setBlock(cx+ox+dx,G+1,cz+oz+dz,B.LEAVES);setBlock(cx+ox+dx,G+2,cz+oz+dz,B.LANTERN);}
+  };
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTrainingMeadowLand(x,z))continue;
     const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz),edge=Math.max(0,Math.min(1,(R-d)/10));
@@ -965,7 +973,11 @@ function buildTrainingMeadow(setBlock=setB){
   for(const [ox,oz,h] of [[-46,32,6],[-18,32,6],[-46,20,3],[-18,20,3]])pillar(ox,oz,h,B.LOG,h>5?B.LANTERN:B.TORCH);
   for(let x=cx-46;x<=cx-18;x++)for(let y=G+7;y<=G+8;y++)setBlock(x,y,cz+32,Math.abs(x-(cx-32))<5&&y===G+7?B.AIR:B.BRICK);
   setBlock(cx-32,G+9,cz+32,B.GLASS);setBlock(cx-32,G+10,cz+32,B.LANTERN);
+  for(let dx=-7;dx<=7;dx++){const rise=Math.max(0,3-Math.floor(Math.abs(dx)/2));setBlock(cx-32+dx,G+9+rise,cz+32,Math.abs(dx)<=1?B.GLASS:B.BRICK);}
+  for(const [dx,dz] of [[0,0],[2,0],[-2,0],[0,2],[0,-2],[3,3],[-3,3],[3,-3],[-3,-3]])setBlock(cx-32+dx,G,cz+24+dz,B.GLASS);
   tree(22,-6,10,6);for(const [ox,oz] of [[13,-7],[30,-5],[18,3],[27,3]])tree(ox,oz,4,3);
+  for(let a=0;a<32;a++){const ang=a*Math.PI*2/32,x=Math.round(cx+22+Math.cos(ang)*8),z=Math.round(cz-6+Math.sin(ang)*8);if(Math.abs(Math.sin(ang*2))>.28)setBlock(x,G,z,a%2?B.GLASS:B.COBBLE);}
+  for(const [ox,oz] of [[14,-6],[30,-6],[22,-14],[22,2]]){setBlock(cx+ox,G,cz+oz,B.GLASS);setBlock(cx+ox,G+1,cz+oz,B.LANTERN);}
   setBlock(cx+30,G+1,cz-12,B.TABLE);
   setBlock(cx+29,G+1,cz-14,B.CAMPFIRE);setBlock(cx+33,G+1,cz-12,B.CHEST);for(const [ox,oz] of [[27,-15],[33,-15],[27,-9],[33,-9]])pillar(ox,oz,3,B.LOG,B.TORCH);
   for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++)setBlock(cx+40+ox,G,cz-18+oz,B.COBBLE);
@@ -982,8 +994,15 @@ function buildTrainingMeadow(setBlock=setB){
   for(const [ox,oz,h,mat] of [[-36,-9,5,B.BRICK],[-28,-1,5,B.BRICK],[-36,1,4,B.COBBLE],[-28,-11,4,B.COBBLE]])pillar(ox,oz,h,mat,B.LANTERN);
   setBlock(cx-32,G+2,cz-6,B.GLASS);setBlock(cx-32,G+3,cz-6,B.LANTERN);
   for(let y=G+1;y<=G+9;y++){setBlock(cx-4,y,cz+40,y%3===0?B.GLASS:B.BRICK);setBlock(cx+4,y,cz+40,y%3===0?B.GLASS:B.BRICK);}
-  for(let x=cx-4;x<=cx+4;x++)setBlock(x,G+10,cz+40,B.GLASS);
-  setBlock(cx,G+4,cz+40,B.LANTERN);setBlock(cx,G+5,cz+40,B.GLASS);setBlock(cx,G+6,cz+40,B.LANTERN);
+  for(let x=cx-4;x<=cx+4;x++)if(Math.abs(x-cx)>1)setBlock(x,G+10,cz+40,B.GLASS);
+  for(let y=G+1;y<=G+14;y++)setBlock(cx,y,cz+40,B.AIR);
+  for(const ox of [-2,2]){setBlock(cx+ox,G,cz+40,B.GLASS);setBlock(cx+ox,G+1,cz+40,B.LANTERN);}
+  const lessonTargets=route.slice(1);
+  for(let i=0;i<lessonTargets.length;i++){
+    const target=lessonTargets[i],prev=route[i],dx=Math.sign(target[0]-prev[0]),dz=Math.sign(target[1]-prev[1]),px=-dz,pz=dx;
+    for(const side of [-1,1]){const lx=target[0]+px*side*4,lz=target[1]+pz*side*4;setBlock(cx+lx,G,cz+lz,B.GLASS);setBlock(cx+lx,G+1,cz+lz,B.LANTERN);}
+  }
+  garden(11,22,5);garden(-19,7,4);garden(29,18,4);garden(-8,-41,5);
   for(const [ox,oz] of [[-46,0],[-43,18],[-18,36],[18,34],[42,14],[44,-26],[-44,-34],[32,-44]])tree(ox,oz,5+(Math.abs(ox+oz)%3),4);
 }
 function buildAbilityMeadow(setBlock=setB){
@@ -2350,11 +2369,17 @@ const SKY = new THREE.Color(0x8fc4e8);
 scene.background = SKY;
 scene.fog = new THREE.Fog(SKY, 40, 110);
 const tutorialPillarGroup=new THREE.Group();
-const tutorialBeamMat=new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.32,depthWrite:false,blending:THREE.AdditiveBlending});
-const tutorialBeam=new THREE.Mesh(new THREE.CylinderGeometry(.58,.58,8,18,1,true),tutorialBeamMat);
-const tutorialRing=new THREE.Mesh(new THREE.TorusGeometry(1.35,.055,8,36),new THREE.MeshBasicMaterial({color:0x9ad26b,transparent:true,opacity:.78,depthWrite:false,blending:THREE.AdditiveBlending}));
+const tutorialBeamMat=new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.32,depthWrite:false,depthTest:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+const tutorialBeam=new THREE.Mesh(new THREE.CylinderGeometry(.34,.62,56,20,1,true),tutorialBeamMat);
+tutorialBeam.position.y=24;tutorialBeam.renderOrder=90;tutorialBeam.frustumCulled=false;
+const tutorialBeamAura=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.7,40,24,1,true),new THREE.MeshBasicMaterial({color:0x72c9ff,transparent:true,opacity:.10,depthWrite:false,depthTest:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+tutorialBeamAura.position.y=16;tutorialBeamAura.renderOrder=89;tutorialBeamAura.frustumCulled=false;
+const tutorialRing=new THREE.Mesh(new THREE.TorusGeometry(1.6,.09,10,44),new THREE.MeshBasicMaterial({color:0xb8ff8a,transparent:true,opacity:.92,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
 tutorialRing.rotation.x=Math.PI/2;
-tutorialPillarGroup.add(tutorialBeam);tutorialPillarGroup.add(tutorialRing);tutorialPillarGroup.visible=false;scene.add(tutorialPillarGroup);
+tutorialRing.renderOrder=91;tutorialRing.frustumCulled=false;
+const tutorialTargetDisc=new THREE.Mesh(new THREE.CircleGeometry(1.55,40),new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.24,depthWrite:false,depthTest:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending}));
+tutorialTargetDisc.rotation.x=-Math.PI/2;tutorialTargetDisc.position.y=-3.9;tutorialTargetDisc.renderOrder=88;
+tutorialPillarGroup.add(tutorialBeamAura,tutorialBeam,tutorialTargetDisc,tutorialRing);tutorialPillarGroup.visible=false;scene.add(tutorialPillarGroup);
 const tutorialDummyGroup=new THREE.Group();
 const dummyWoodMat=new THREE.MeshLambertMaterial({color:0x8b5a2b});
 const dummyClothMat=new THREE.MeshLambertMaterial({color:0xd7b56d});
