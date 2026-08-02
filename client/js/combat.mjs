@@ -513,7 +513,7 @@ function finishMine(){
 
 // ---------------- input & states ----------------
 const keys = {};
-let locked=false, lockFallback=false, suppressNextLockFallback=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
+let locked=false, lockFallback=false, suppressNextLockFallback=false, pointerLockRequestPending=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
 const mouseLookDelta={x:0,y:0};
 const MOUSE_LOOK_SENSITIVITY=.00215;
 const overlay=document.getElementById('overlay');
@@ -4278,7 +4278,7 @@ function updateOnboardingPillar(now){
   }
   if(!onboardingActive||dim!=='tutorial'){tutorialPillarGroup.visible=false;return;}
   const target=onboardingRoute[onboardingStep]; if(!target){tutorialPillarGroup.visible=false;return;}
-  const y=surfaceY(target.x,target.z);
+  const y=TRAINING_MEADOW?TRAINING_MEADOW.G+1.035:surfaceY(target.x,target.z);
   tutorialPillarGroup.visible=true;
   tutorialPillarGroup.position.set(target.x,y+4,target.z);
   tutorialBeam.material.opacity=.22+.12*Math.sin(now*.004);
@@ -4405,10 +4405,12 @@ function hasUserGesture(){
 }
 function requestPointerLockSafe(onFail=enterPlayFallback){
   try{
+    pointerLockRequestPending=true;
     const result=renderer.domElement.requestPointerLock();
-    if(result&&typeof result.catch==='function') result.catch(()=>{ if(onFail) onFail(); });
+    if(result&&typeof result.catch==='function') result.catch(()=>{ pointerLockRequestPending=false; if(onFail) onFail(); });
     return true;
   }catch(e){
+    pointerLockRequestPending=false;
     if(onFail) onFail();
     return false;
   }
@@ -4741,15 +4743,16 @@ if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDe
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
-  if(hasLock){ lockFallback=false; suppressNextLockFallback=false; }
+  if(hasLock){ pointerLockRequestPending=false; lockFallback=false; suppressNextLockFallback=false; }
   else if(suppressNextLockFallback){ lockFallback=false; suppressNextLockFallback=false; }
-  else if(overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
+  else if(pointerLockRequestPending&&overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
+  if(!hasLock) pointerLockRequestPending=false;
   locked = hasLock || lockFallback;
   if(!locked){ mouseR=false; placeKeyHeld=false; }
   if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
   refreshPlayUi();
 });
-document.addEventListener('pointerlockerror', ()=>{ if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
+document.addEventListener('pointerlockerror', ()=>{ pointerLockRequestPending=false; if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
 
 let hintDone=false;
 function isTextEntryTarget(target){
@@ -4769,6 +4772,14 @@ function gameplayCameraInputAllowed(){
     !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
     !!globalThis.dungeonLobbyOpen;
   return !!(locked&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
+}
+function gameplayCameraResumeAllowed(){
+  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||abilityAwakeningOpen||
+    !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
+    !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
+    !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
+    !!globalThis.dungeonLobbyOpen;
+  return !!(overlay.classList.contains('hidden')&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
 function releaseGameplayCursor(){
   suppressNextLockFallback=true;
@@ -5950,7 +5961,17 @@ addEventListener('mousedown', e=>{
     if(e.button===0) requestLandClaim();
     return;
   }
-  if(!locked) return;
+  if(!locked){
+    if(e.button===0&&gameplayCameraResumeAllowed()){
+      e.preventDefault();
+      lockFallback=false;
+      locked=true;
+      refreshPlayUi();
+      requestPointerLockSafe(enterPlayFallback);
+      setTimeout(()=>{ if(locked&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
+    }
+    return;
+  }
   if(e.button===0){
     primaryAction();
   }
