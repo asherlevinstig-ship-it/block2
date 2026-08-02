@@ -291,6 +291,8 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(dimensions, /function exitTamingLand\(\)/);
   assert.match(dimensions, /NET\.dgn=localTutorialSpaceId\('taming_land'\)/);
   assert.match(dimensions, /makeTextSprite\('RETURN TO TOWN','#9efc72'\)/);
+  assert.match(dimensions, /function placePlayerAtTownReturn\(\)/);
+  assert.match(dimensions, /NET\.room\.send\('tutorialExit',\{destination:'town'\}\)/);
   assert.match(combat, /function nearTamingLandPortal\(range=5\.8\)/);
   assert.match(combat, /function nearTownQuestionHallPortal\(range=5\.8\)/);
   assert.match(combat, /title:'Taming Land Portal'/);
@@ -325,7 +327,7 @@ test('Tutorial meadow has a Town of Beginnings portal arch', () => {
   assert.match(combat, /title:'Town Portal',small:'Enter the Town of Beginnings'/);
   assert.match(combat, /if\(nearTrainingMeadowTownPortal\(\)\)\{ if\(typeof exitOnboardingToTown==='function'\)exitOnboardingToTown\(\); return; \}/);
   assert.match(room, /this\.onMessage\('tutorialExit', \(client, m\) => this\.handleTutorialExit\(client, m\)\)/);
-  assert.match(room, /destination === 'town' \? townReturnArray\(\) : null/);
+  assert.match(room, /return this\.leaveTutorialDimension\(client, townReturnArray\(\)\)/);
 });
 
 test('Town of Beginnings has explainer NPC helpers for major areas', () => {

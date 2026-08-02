@@ -18,6 +18,7 @@ const DUNGEON_PLAYER_INTEREST_RADIUS = Number(process.env.DUNGEON_PLAYER_INTERES
 const DUNGEON_FX_INTEREST_RADIUS = Number(process.env.DUNGEON_FX_INTEREST_RADIUS || 44);
 const DUNGEON_STATUS_INTERVAL_MS = Math.max(1000, Number(process.env.DUNGEON_STATUS_INTERVAL_MS || 10000));
 const DUNGEON_PATCH_RATE_MS = Math.max(50, Number(process.env.DUNGEON_PATCH_RATE_MS || 200));
+const SAFE_TOWN_RETURN = Object.freeze([W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -277,6 +278,11 @@ class DungeonRoom extends GameRoom {
     // looks it up by token to know what to save, and a concurrent leave from another client in
     // this same instance may piggyback its own dirty token onto this flush() call.
     const prof = this.profiles.get(token);
+    if (prof) {
+      prof.activeRoom = null;
+      prof.pos = SAFE_TOWN_RETURN.slice();
+      this.dirtyPlayers.add(token);
+    }
     // A real exit — fled/cleared and switched back, or a disconnect whose reconnect window
     // elapsed — retires the crash-recovery marker armed on join. Leaving it set would make the
     // overworld room's recoverDungeonAfterRestart treat this hunter's very next return as a

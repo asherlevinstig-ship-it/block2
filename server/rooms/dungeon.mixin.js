@@ -16,6 +16,10 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { issueDungeonAdmission } = require('./dungeon-admission');
 const MAX_ACTIVE_GATE_BREACHES = 3;
+const SAFE_TOWN_RETURN = Object.freeze([W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+function safeTownReturn() {
+  return SAFE_TOWN_RETURN.slice();
+}
 
 class DungeonMixin {
   // Dungeon / gate lifecycle state, co-located with the mixin that owns it.
@@ -920,7 +924,7 @@ class DungeonMixin {
     rec.prof.dungeonRecovery = {
       gateId: g.id,
       bootId: this.bootId,
-      pos: [g.x + 1.5, g.y + .5, g.z],
+      pos: safeTownReturn(),
       enteredAt: Date.now(),
     };
     this.dirtyPlayers.add(rec.token);
@@ -1429,6 +1433,15 @@ class DungeonMixin {
     this.clearDungeonRecoveryForSid(sid);
     p.dgn = '';
     p.dim = 'overworld';
+    const town = safeTownReturn();
+    p.x = town[0]; p.y = town[1]; p.z = town[2]; p.yaw = Math.PI;
+    const token = this.tokens.get(sid);
+    const prof = token && this.profiles.get(token);
+    if (prof) {
+      prof.activeRoom = null;
+      prof.pos = town;
+      this.dirtyPlayers.add(token);
+    }
     if (!inst) return;
     inst.removePlayer(sid);
     if (inst.playerCount === 0) inst.dispose();
@@ -1441,13 +1454,16 @@ class DungeonMixin {
     this.clearDungeonRecoveryForSid(sid);
     p.dgn = '';
     p.dim = 'overworld';
-    p.x = W.TOWN.TC + .5;
-    p.y = W.TOWN.G + 2;
-    p.z = W.TOWN.TC + 14.5;
+    const town = safeTownReturn();
+    p.x = town[0];
+    p.y = town[1];
+    p.z = town[2];
+    p.yaw = Math.PI;
     const token = this.tokens.get(sid);
     const prof = token && this.profiles.get(token);
     if (prof) {
-      prof.pos = [p.x, p.y, p.z];
+      prof.activeRoom = null;
+      prof.pos = town;
       this.dirtyPlayers.add(token);
     }
     const hp = this.playerHp.get(sid);

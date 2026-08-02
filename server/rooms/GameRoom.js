@@ -1845,18 +1845,15 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial') return false;
     const rec = client && this.profileFor(client);
-    const wasJobTutorial = p.dgn && /^tutorial-job_/.test(p.dgn);
-    const wasTamingLand = p.dgn === 'taming_land';
-    const ret = this.tutorialReturns && this.tutorialReturns.get(client.sessionId);
     const pos = forcedPos
       ? { x: forcedPos[0], y: forcedPos[1], z: forcedPos[2] }
-      : (ret || townReturnPoint());
+      : townReturnPoint();
     p.dim = 'overworld';
     p.dgn = '';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
-    if (ret && Number.isFinite(ret.yaw)) p.yaw = ret.yaw;
+    p.yaw = Math.PI;
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
-    if ((forcedPos || wasJobTutorial || wasTamingLand) && rec && rec.prof) {
+    if (rec && rec.prof) {
       rec.prof.activeRoom = null;
       rec.prof.pos = [p.x, p.y, p.z];
       this.dirtyPlayers.add(rec.token);
@@ -1866,8 +1863,7 @@ class GameRoom extends Room {
   }
 
   handleTutorialExit(client, m = null) {
-    const destination = m && String(m.destination || '');
-    return this.leaveTutorialDimension(client, destination === 'town' ? townReturnArray() : null);
+    return this.leaveTutorialDimension(client, townReturnArray());
   }
 
   resumeTutorialDimension(client) {

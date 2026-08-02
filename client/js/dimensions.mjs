@@ -1939,6 +1939,14 @@ function announceArrivalTitle(kicker,title,subtitle){
 function townReturnPoint(){
   return {x:TOWN.TC+14.5,y:TOWN.G+1,z:TOWN.TC+27.5};
 }
+function placePlayerAtTownReturn(){
+  if(!player)return;
+  const town=townReturnPoint();
+  player.pos.set(town.x,town.y,town.z);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  player.vel.set(0,0,0);
+}
 let portalTransitionActive=false;
 function runPortalTransition(opts, swap){
   opts=opts||{};
@@ -2095,14 +2103,9 @@ function exitAbilityRoom(){
   owWorld=world;
   NET.dgn='';
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
-  if(ret&&player){
-    player.pos.copy(ret.pos);
-    player.yaw=ret.yaw;
-    player.pitch=ret.pitch;
-    player.vel.set(0,0,0);
-  }
+  placePlayerAtTownReturn();
   abilityRoomReturn=null;
-  if(NET.on&&NET.room) NET.room.send('tutorialExit',{});
+  if(NET.on&&NET.room) NET.room.send('tutorialExit',{destination:'town'});
 }
 let jobTutorialRoomReturn=null, jobTutorialRoomJob='';
 function generateJobTutorialRoom(jobId){
@@ -2158,15 +2161,10 @@ function exitJobTutorialRoom(){
   owWorld=world;
   NET.dgn='';
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
-  if(ret&&player){
-    player.pos.copy(ret.pos);
-    player.yaw=ret.yaw;
-    player.pitch=ret.pitch;
-    player.vel.set(0,0,0);
-  }
+  placePlayerAtTownReturn();
   jobTutorialRoomReturn=null;
   jobTutorialRoomJob='';
-  if(NET.on&&NET.room) NET.room.send('tutorialExit',{});
+  if(NET.on&&NET.room) NET.room.send('tutorialExit',{destination:'town'});
 }
 let tamingLandReturn=null, tamingLandExitPortal=null;
 const QUESTION_ROOM={x:930,z:855,G:18,R:28};
@@ -2251,12 +2249,7 @@ function exitQuestionRoom(){
   owWorld=world;
   NET.dgn='';
   rebuildAllChunks();refreshTorchMeshes();applyDim();
-  if(ret&&player){
-    player.pos.copy(ret.pos);
-    player.yaw=ret.yaw;
-    player.pitch=ret.pitch;
-    player.vel.set(0,0,0);
-  }
+  placePlayerAtTownReturn();
   questionRoomReturn=null;
   announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   return true;
@@ -2341,15 +2334,10 @@ function exitTamingLand(){
   owWorld=world;
   NET.dgn='';
   rebuildAllChunks();refreshTorchMeshes();applyDim();
-  if(ret&&player){
-    player.pos.copy(ret.pos);
-    player.yaw=ret.yaw;
-    player.pitch=ret.pitch;
-    player.vel.set(0,0,0);
-  }
+  placePlayerAtTownReturn();
   tamingLandReturn=null;
   if(!opts.resume)announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
-  if(NET.on&&NET.room)NET.room.send('tutorialExit',{});
+  if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
   return true;
 }
 function spawnDungeonMob(x,z,boss,ri){
@@ -2470,8 +2458,7 @@ function exitDungeon(instant){
     world=owWorld; dim='overworld';
     netFlushPending();
     rebuildAllChunks(); refreshTorchMeshes(); applyDim();
-    player.pos.set(dungeon.back.x+1.5, dungeon.back.y+.5, dungeon.back.z);
-    player.vel.set(0,0,0);
+    placePlayerAtTownReturn();
     dungeon=null;
     NET.pendingDungeonStatus=null;
     NET.pendingDungeonPartyStatus=null;
