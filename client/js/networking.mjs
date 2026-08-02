@@ -3276,6 +3276,8 @@ const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailC
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
+let mirrorPreviewPrompt=null;
+let mirrorPreviewMode=false;
 let appearancePreviewActive=false, meditationOwnedAppearance=false;
 let playerCustomAppearance=APPEARANCE_SYSTEM&&APPEARANCE_SYSTEM.sanitizeAppearance?APPEARANCE_SYSTEM.sanitizeAppearance(null):null;
 let appearancePreviewSnapshot=null;
@@ -3361,14 +3363,60 @@ function showAppearanceInspectionStand(silent=false){
   if(!silent) sysMsg('Appearance inspection stand placed in front of you.');
   return true;
 }
+function makeMirrorPreviewPrompt(){
+  const c=document.createElement('canvas'); c.width=512; c.height=128;
+  const g=c.getContext('2d');
+  g.textAlign='center';g.textBaseline='middle';
+  g.shadowColor='rgba(0,0,0,.75)';g.shadowBlur=10;
+  roundedRect(g,46,20,420,88,12);
+  const grad=g.createLinearGradient(46,20,46,108);
+  grad.addColorStop(0,'rgba(8,22,38,.94)');
+  grad.addColorStop(1,'rgba(4,9,18,.9)');
+  g.fillStyle=grad;g.fill();
+  g.shadowBlur=0;
+  g.strokeStyle='rgba(125,211,252,.55)';g.lineWidth=2;g.stroke();
+  g.fillStyle='#7dd3fc';g.font='bold 16px "Courier New",monospace';g.fillText('HUNTER MIRROR',256,42);
+  g.fillStyle='#fff7d6';g.font='bold 24px "Courier New",monospace';g.fillText('C  CUSTOMIZE',178,76);
+  g.fillStyle='#d8e4f2';g.fillText('ESC  DISMISS',340,76);
+  const tex=new THREE.CanvasTexture(c);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
+  sp.scale.set(3.8,.95,1);sp.renderOrder=24;sp.name='mirror-preview-prompt';
+  return sp;
+}
+function ensureMirrorPreviewPrompt(){
+  if(!mirrorPreviewPrompt){
+    mirrorPreviewPrompt=makeMirrorPreviewPrompt();
+    scene.add(mirrorPreviewPrompt);
+  }
+  return mirrorPreviewPrompt;
+}
+function clearMirrorPreviewPrompt(){
+  if(!mirrorPreviewPrompt)return;
+  scene.remove(mirrorPreviewPrompt);
+  if(mirrorPreviewPrompt.material&&mirrorPreviewPrompt.material.map)mirrorPreviewPrompt.material.map.dispose();
+  if(mirrorPreviewPrompt.material)mirrorPreviewPrompt.material.dispose();
+  mirrorPreviewPrompt=null;
+}
+function updateMirrorPreviewPrompt(){
+  if(!mirrorPreviewActive()){clearMirrorPreviewPrompt();return;}
+  const prompt=ensureMirrorPreviewPrompt();
+  const a=appearanceDummy&&appearanceDummy.grp&&appearanceDummy.grp.position;
+  const b=appearanceBackDummy&&appearanceBackDummy.grp&&appearanceBackDummy.grp.position;
+  if(a&&b)prompt.position.set((a.x+b.x)/2,Math.max(a.y,b.y)+3.65,(a.z+b.z)/2);
+  else if(a)prompt.position.set(a.x,a.y+3.65,a.z);
+  prompt.visible=true;
+}
 function showMirrorAppearancePreview(){
   showAppearanceInspectionStand(true);
+  mirrorPreviewMode=true;
+  ensureMirrorPreviewPrompt();
+  updateMirrorPreviewPrompt();
   showName('MIRROR PREVIEW');
   sysMsg('<b>Hunter Mirror:</b> previewing your current look.<br>Press <b>C</b> to customize. Press <b>Escape</b> to dismiss the mirror image.');
   return true;
 }
 function mirrorPreviewActive(){
-  return !!(appearancePreviewActive&&appearanceDummy);
+  return !!(mirrorPreviewMode&&appearancePreviewActive&&appearanceDummy);
 }
 function mirrorPreviewSparkle(){
   const models=[appearanceDummy,appearanceBackDummy].filter(Boolean);
@@ -3382,6 +3430,8 @@ function mirrorPreviewSparkle(){
 function dismissMirrorAppearancePreview(){
   if(!mirrorPreviewActive())return false;
   mirrorPreviewSparkle();
+  clearMirrorPreviewPrompt();
+  mirrorPreviewMode=false;
   appearancePreviewActive=false;
   disposeAppearanceDummy();
   showName('MIRROR IMAGE DISMISSED');
@@ -3390,12 +3440,16 @@ function dismissMirrorAppearancePreview(){
 }
 function customizeMirrorAppearancePreview(){
   if(!mirrorPreviewActive())return false;
+  clearMirrorPreviewPrompt();
+  mirrorPreviewMode=false;
   releasePointerLockWithoutCameraFallback(false);
   refreshPlayUi();
   AUTH_UI.openAppearanceEditor('mirror');
   return true;
 }
 function disposeAppearanceDummy(){
+  clearMirrorPreviewPrompt();
+  mirrorPreviewMode=false;
   if(appearanceDummy) scene.remove(appearanceDummy.grp);
   if(appearanceBackDummy) scene.remove(appearanceBackDummy.grp);
   appearanceDummy=null;
@@ -3404,10 +3458,12 @@ function disposeAppearanceDummy(){
 }
 function toggleAppearanceDummy(){
   if(appearanceDummy){
+    mirrorPreviewMode=false;
     appearancePreviewActive=false;
     disposeAppearanceDummy();
     sysMsg('Appearance preview hidden');
   } else {
+    mirrorPreviewMode=false;
     appearancePreviewActive=true;
     appearanceDummy=buildAppearanceDummy();
     appearanceBackDummy=buildAppearanceDummy();
@@ -3579,6 +3635,7 @@ function updateAppearanceDummy(dt, now, snap){
   const frontFace=Math.atan2(player.pos.x-fx, player.pos.z-fz);
   poseAppearanceDummy(appearanceDummy, fx, fy, fz, frontFace+Math.PI, dt, now, snap, false);
   poseAppearanceDummy(appearanceBackDummy, bx, by, bz, frontFace, dt, now, snap, true);
+  updateMirrorPreviewPrompt();
 }
 
 // ---- third-person ability demo bot ----

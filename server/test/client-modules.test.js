@@ -3184,9 +3184,17 @@ test('Hunter Mirror opens a model preview before customization', () => {
   assert.match(combat, /if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.dismiss\)\{[\s\S]*mirrorPreview\.dismiss\(\);/);
   assert.match(combat, /if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.customize\)\{[\s\S]*mirrorPreview\.customize\(\);/);
   assert.match(networking, /function showMirrorAppearancePreview\(\)\{/);
+  assert.match(networking, /function makeMirrorPreviewPrompt\(\)\{/);
+  assert.match(networking, /g\.fillText\('C  CUSTOMIZE',178,76\)/);
+  assert.match(networking, /g\.fillText\('ESC  DISMISS',340,76\)/);
+  assert.match(networking, /function updateMirrorPreviewPrompt\(\)\{/);
+  assert.match(networking, /updateMirrorPreviewPrompt\(\);/);
+  assert.match(networking, /let mirrorPreviewMode=false;/);
+  assert.match(networking, /return !!\(mirrorPreviewMode&&appearancePreviewActive&&appearanceDummy\);/);
   assert.match(networking, /Press <b>C<\/b> to customize\. Press <b>Escape<\/b> to dismiss the mirror image\./);
   assert.match(networking, /function dismissMirrorAppearancePreview\(\)\{/);
   assert.match(networking, /mirrorPreviewSparkle\(\);/);
+  assert.match(networking, /clearMirrorPreviewPrompt\(\);/);
   assert.match(networking, /showName\('MIRROR IMAGE DISMISSED'\)/);
   assert.match(networking, /showMirror:showMirrorAppearancePreview/);
   assert.match(networking, /customize:customizeMirrorAppearancePreview/);
