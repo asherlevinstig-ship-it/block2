@@ -1840,7 +1840,7 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
-  assert.match(combat,/const rightHudStackIds=\['currentquest','activitytracker','townchoices'\]/);
+  assert.match(combat,/const rightHudStackIds=\['currentquest','homeworkhud','activitytracker','townchoices'\]/);
   assert.match(combat,/function layoutRightHudStack\(\)\{/);
   assert.match(combat,/document\.body\.classList\.toggle\('game-modal-open', gameModalOpen\);/);
   assert.match(combat,/const jobTutorialRoom=dim==='job'\|\|dimensionsState\.kind==='job';/);
@@ -1856,6 +1856,8 @@ test('guided overlays suppress optional side HUD panels instead of overlapping t
   assert.match(frame,/if\(onboardingActive&&dim==='tutorial'\)\{/);
   assert.match(styles,/body\.tutorial-hud-active #coachhud,body\.tutorial-hud-active #activitytracker,body\.tutorial-hud-active #townchoices\{display:none!important\}/);
   assert.match(styles,/body\.coach-hud-active #activitytracker,body\.coach-hud-active #townchoices\{display:none!important\}/);
+  assert.match(styles,/#homeworkhud\{position:fixed;right:18px;top:282px/);
+  assert.match(styles,/#homeworkhud,#activitytracker,#townchoices\{right:8px;top:76px;width:min\(270px,calc\(100vw - 16px\)\);padding:7px 9px\}/);
   assert.match(styles,/body\.job-tutorial-room #currentquest,body\.job-tutorial-room #activitytracker,body\.job-tutorial-room #townchoices,body\.job-tutorial-room #eventhud,body\.job-tutorial-room #locationhud,body\.job-tutorial-room #landmap\{display:none!important\}/);
   assert.match(frame,/function tutorialRoomHudSuppressed\(\)\{/);
   assert.match(frame,/if\(tutorialRoomHudSuppressed\(\)\|\|dim==='dungeon'\|\|dim==='event'\|\|dim==='gatecutscene'\)return null;/);

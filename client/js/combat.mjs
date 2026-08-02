@@ -588,7 +588,7 @@ const cursorEl=document.getElementById('cursoritem');
 const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
-const rightHudStackIds=['currentquest','activitytracker','townchoices'];
+const rightHudStackIds=['currentquest','homeworkhud','activitytracker','townchoices'];
 function layoutRightHudStack(){
   const narrow=window.innerWidth<=760;
   let top=narrow?8:282;
@@ -601,7 +601,15 @@ function layoutRightHudStack(){
     top+=Math.ceil(el.getBoundingClientRect().height)+(narrow?8:10);
   }
 }
+let hudStateObserver=null, homeworkHudObserved=false;
 function syncHudLayerState(){
+  if(hudStateObserver&&!homeworkHudObserved){
+    const homeworkEl=document.getElementById('homeworkhud');
+    if(homeworkEl){
+      hudStateObserver.observe(homeworkEl,{attributes:true,attributeFilter:['class']});
+      homeworkHudObserved=true;
+    }
+  }
   const tutorialVisible=!!(tutorialEl&&!tutorialEl.classList.contains('hidden'));
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
   const jobTutorialRoom=dim==='job'||dimensionsState.kind==='job';
@@ -619,9 +627,12 @@ function syncHudLayerState(){
   layoutRightHudStack();
 }
 if(globalThis.MutationObserver){
-  const hudStateObserver=new MutationObserver(syncHudLayerState);
+  hudStateObserver=new MutationObserver(syncHudLayerState);
   if(tutorialEl) hudStateObserver.observe(tutorialEl,{attributes:true,attributeFilter:['class']});
   if(coachHudStateEl) hudStateObserver.observe(coachHudStateEl,{attributes:true,attributeFilter:['class']});
+  const homeworkEl=document.getElementById('homeworkhud');
+  if(homeworkEl){ hudStateObserver.observe(homeworkEl,{attributes:true,attributeFilter:['class']}); homeworkHudObserved=true; }
+  else hudStateObserver.observe(document.body,{childList:true});
   for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset']){
     const el=document.getElementById(id);
     if(el) hudStateObserver.observe(el,{attributes:true,attributeFilter:['class']});

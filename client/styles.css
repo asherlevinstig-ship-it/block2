@@ -1198,7 +1198,7 @@
   .statuschip.utility.active .ico{background:rgba(125,211,252,.16);border-color:rgba(125,211,252,.55);color:#9fd8ff}
   .statuschip.utility.urgent{border-color:rgba(255,143,163,.42);box-shadow:0 8px 20px rgba(255,80,110,.12)}
   .statuschip.utility.urgent .ico{background:rgba(255,143,163,.16);border-color:rgba(255,143,163,.6);color:#ffb7c5}
-  #homeworkhud{position:fixed;left:18px;top:146px;width:292px;max-width:calc(100vw - 28px);z-index:9;pointer-events:auto;text-shadow:none}
+  #homeworkhud{position:fixed;right:18px;top:282px;width:292px;max-width:calc(100vw - 28px);z-index:9;pointer-events:auto;text-shadow:none}
   #homeworkhud.hidden{display:none}
   #homeworkhud button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;width:100%;min-height:54px;padding:8px 11px;border:1px solid rgba(34,197,94,.58);border-radius:7px;background:linear-gradient(135deg,rgba(6,17,25,.9),rgba(7,31,21,.84));box-shadow:0 8px 22px rgba(0,0,0,.32),inset 0 0 18px rgba(34,197,94,.06);color:#ecfdf5;font-family:inherit;cursor:pointer}
   #homeworkhud button:hover{border-color:rgba(125,211,252,.75);box-shadow:0 8px 24px rgba(0,0,0,.36),0 0 14px rgba(34,197,94,.16)}
@@ -1591,7 +1591,7 @@
     #currentquest .oact{grid-column:2;grid-row:2;display:flex;align-items:center;justify-content:space-between;justify-self:stretch;gap:5px;max-width:none}
     #currentquest .oact em{font-size:8px;white-space:nowrap}
     #currentquest .oact .qaction{max-width:150px}
-    #activitytracker,#townchoices{right:8px;top:76px;width:min(270px,calc(100vw - 16px));padding:7px 9px}
+    #homeworkhud,#activitytracker,#townchoices{right:8px;top:76px;width:min(270px,calc(100vw - 16px));padding:7px 9px}
     #abilities{left:50%;bottom:124px;transform:translateX(-50%);gap:5px;z-index:8}
     .abslot{width:40px;height:40px;font-size:18px}
     #stats{bottom:68px;gap:6px}
