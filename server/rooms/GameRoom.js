@@ -1646,6 +1646,7 @@ class GameRoom extends Room {
       rec.prof.tutorials = Object.fromEntries(Object.keys(TUTORIAL_VERSIONS).map(key => [key, 0]));
     }
     rec.prof.tutorials[tutorial] = Math.max(rec.prof.tutorials[tutorial] | 0, expected);
+    const starterJob = tutorial === 'townJob' && m && typeof m.job === 'string' ? m.job : '';
     if (tutorial === 'onboarding') {
       const spawn = townReturnArray();
       rec.prof.pos = spawn;
@@ -1658,8 +1659,19 @@ class GameRoom extends Room {
       }
     } else if (tutorial === 'ability') {
       this.leaveTutorialDimension(client);
+    } else if (starterJob) {
+      const spawn = townReturnArray();
+      const p = this.state.players.get(client.sessionId);
+      if (!this.leaveTutorialDimension(client, spawn)) {
+        rec.prof.activeRoom = null;
+        rec.prof.pos = spawn;
+        if (p) {
+          p.dim = 'overworld'; p.dgn = '';
+          p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
+          p.yaw = Math.PI;
+        }
+      }
     }
-    const starterJob = tutorial === 'townJob' && m && typeof m.job === 'string' ? m.job : '';
     const starterContract = starterJob && typeof this.seedFirstTutorialJobContract === 'function'
       ? this.seedFirstTutorialJobContract(client, starterJob)
       : null;

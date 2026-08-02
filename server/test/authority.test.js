@@ -7846,6 +7846,27 @@ test('job tutorial completion equips the job before seeding the first contract',
   assert.equal(itemCount(prof, I.WHEAT_SEEDS) >= 8, true);
 });
 
+test('job tutorial completion returns players to town before profile sync', () => {
+  const room = makeRoom(), client = makeClient('tutorial_contract_return');
+  const { prof } = seedPlayer(room, client, { lvl: 2, x: 910.5, y: 18.05, z: 910.5 });
+  const p = room.state.players.get(client.sessionId);
+  p.dim = 'tutorial';
+  p.dgn = 'tutorial-job_miner-test';
+  prof.activeRoom = { dim: 'job', job: 'miner', minedDiamond: true, traded: true };
+  prof.pos = [910.5, 18.05, 910.5];
+
+  assert.equal(room.handleTutorialComplete(client, { tutorial: 'townJob', version: TUTORIAL_VERSIONS.townJob, job: 'miner' }), true);
+  assert.equal(prof.activeRoom, null);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.equal(p.dim, 'overworld');
+  assert.equal(p.dgn, '');
+  assert.equal(p.x, W.TOWN.TC + 14.5);
+  assert.equal(p.z, W.TOWN.TC + 27.5);
+  const profile = client.sent.find(e => e.type === 'profile');
+  assert.deepEqual(profile && profile.msg && profile.msg.pos, prof.pos);
+  assert.equal(profile && profile.msg && profile.msg.activeRoom, null);
+});
+
 test('job tutorial completion does not replace an active contract', () => {
   const room = makeRoom(), client = makeClient('tutorial_contract_active');
   const { prof } = seedPlayer(room, client, { lvl: 2 });
