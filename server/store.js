@@ -26,6 +26,8 @@ const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials')
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
+const APPEARANCE_MIRROR_ID = 221;
+const MIRROR_BACKFILL_RECOVERY_MS = 30 * 24 * 60 * 60 * 1000;
 const DEITY_LEVEL = 60;
 const DEITY_POWER_IDS = Object.freeze(['flight', 'day_night', 'weather', 'invisibility']);
 const HUNTER_RANK_LEVELS = Object.freeze([1, 11, 21, 31, 41, 51]);
@@ -399,7 +401,7 @@ function defaultProfile(name) {
     questHistory: [],
     aegisTrialReady: false,
     aegisTrial: null,
-    inv: [],
+    inv: [{ id: APPEARANCE_MIRROR_ID, count: 1, locked: true, source: 'starter' }],
     lootRecovery: [],
     armor: null,
     mountUnlocks: [],
@@ -455,6 +457,24 @@ function defaultProfile(name) {
     vitalsSavedAt: 0,
     pos: [64.5, 20, 71.5],
   };
+}
+
+function ensureAppearanceMirrorInventory(profile) {
+  if (!profile || !Array.isArray(profile.inv)) return null;
+  if (profile.inv.some(s => s && s.id === APPEARANCE_MIRROR_ID)) return null;
+  const mirror = { id: APPEARANCE_MIRROR_ID, count: 1, locked: true, source: 'starter' };
+  const empty = profile.inv.findIndex(s => !s);
+  if (empty >= 0) {
+    profile.inv[empty] = mirror;
+    return null;
+  }
+  if (profile.inv.length < INV_MAX) {
+    profile.inv.push(mirror);
+    return null;
+  }
+  const displaced = profile.inv[INV_MAX - 1];
+  profile.inv[INV_MAX - 1] = mirror;
+  return displaced || null;
 }
 
 function cleanName(name) {
@@ -928,6 +948,7 @@ function sanitizeProfile(p) {
   out.aegisTrialReady = p.aegisTrialReady === true;
   out.aegisTrial = sanitizeAegisTrial(p.aegisTrial);
   out.inv = [];
+  let mirrorBackfillDisplacedItem = null;
   if (Array.isArray(p.inv)) {
     for (const s of p.inv.slice(0, INV_MAX)) {
       if (!s || typeof s !== 'object') { out.inv.push(null); continue; }
@@ -945,8 +966,28 @@ function sanitizeProfile(p) {
       out.inv.push(slot);
     }
   }
+  mirrorBackfillDisplacedItem = ensureAppearanceMirrorInventory(out);
   out.lootRecovery = [];
   const now = Date.now();
+  if (mirrorBackfillDisplacedItem) {
+    const item = {
+      id: clampI(mirrorBackfillDisplacedItem.id, 0, 999),
+      count: 1,
+      acquiredAt: now,
+      expiresAt: now + MIRROR_BACKFILL_RECOVERY_MS,
+      source: 'mirror_backfill',
+    };
+    if (mirrorBackfillDisplacedItem.plus != null) item.plus = clampI(mirrorBackfillDisplacedItem.plus, 0, 3);
+    if (GEAR_SYSTEM.RANKS.some((r,i)=>i<6&&r.id===mirrorBackfillDisplacedItem.gearRank)) item.gearRank=mirrorBackfillDisplacedItem.gearRank;
+    if (GEAR_SYSTEM.ARMOR_ARCHETYPES[mirrorBackfillDisplacedItem.armorType]) item.armorType=mirrorBackfillDisplacedItem.armorType;
+    if (mirrorBackfillDisplacedItem.dur != null) item.dur = clampI(mirrorBackfillDisplacedItem.dur, 0, 99999);
+    if (GEAR_SYSTEM.RARITIES.some(r=>r.id===mirrorBackfillDisplacedItem.rarity)) item.rarity=mirrorBackfillDisplacedItem.rarity;
+    if (typeof mirrorBackfillDisplacedItem.forge === 'string' && JOB_SYSTEM.REFORGE_MODIFIERS[mirrorBackfillDisplacedItem.forge]) item.forge=mirrorBackfillDisplacedItem.forge;
+    if (mirrorBackfillDisplacedItem.masterwork === true && item.forge) item.masterwork=true;
+    if (GEAR_SYSTEM.uniqueFor(mirrorBackfillDisplacedItem)) item.unique=mirrorBackfillDisplacedItem.unique;
+    if (mirrorBackfillDisplacedItem.locked === true) item.locked=true;
+    out.lootRecovery.push(item);
+  }
   if (Array.isArray(p.lootRecovery)) {
     for (const s of p.lootRecovery.slice(0, 12)) {
       if (!s || typeof s !== 'object') continue;

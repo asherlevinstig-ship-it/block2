@@ -141,6 +141,7 @@ const I = {
   LEVIATHAN_TRIDENT: 170,
   VOID_ANCHOR: 171,
   TOWN_MAP: 217,
+  APPEARANCE_MIRROR: 221,
   SOLO_KEY_E: 150,
   SOLO_KEY_D: 151,
   TEAM_KEY_E: 155,
@@ -432,6 +433,26 @@ function townPlayerPos(dx = 0, dz = 0) {
 function readClientModule(rel) {
   return fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', rel), 'utf8');
 }
+
+test('profiles always receive one Hunter Mirror in inventory', () => {
+  const fresh = defaultProfile('Mirror Hunter');
+  assert.equal(itemCount(fresh, I.APPEARANCE_MIRROR), 1);
+  assert.equal(fresh.inv[0].locked, true);
+
+  const legacy = sanitizeProfile({ name: 'Legacy Hunter', inv: [{ id: I.BREAD, count: 2 }] });
+  assert.equal(itemCount(legacy, I.APPEARANCE_MIRROR), 1);
+  assert.equal(itemCount(legacy, I.BREAD), 2);
+
+  const resanitized = sanitizeProfile(legacy);
+  assert.equal(itemCount(resanitized, I.APPEARANCE_MIRROR), 1);
+
+  const full = sanitizeProfile({
+    name: 'Packed Hunter',
+    inv: Array.from({ length: 36 }, (_, i) => ({ id: i === 35 ? I.IRON_INGOT : I.COAL, count: 1 })),
+  });
+  assert.equal(itemCount(full, I.APPEARANCE_MIRROR), 1);
+  assert.equal(full.lootRecovery.some(s => s && s.id === I.IRON_INGOT && s.source === 'mirror_backfill'), true);
+});
 
 test('live admin profile updates replace cached mana and armor state before the next vitals save', () => {
   const room = makeRoom();
