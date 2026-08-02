@@ -953,6 +953,22 @@ function buildTrainingMeadow(setBlock=setB){
     setBlock(cx+ox,G,cz+oz,B.GLASS);setBlock(cx+ox,G+1,cz+oz,B.LANTERN);
     for(const [dx,dz] of [[r-1,0],[-r+1,0],[0,r-1],[0,-r+1]]){setBlock(cx+ox+dx,G+1,cz+oz+dz,B.LEAVES);setBlock(cx+ox+dx,G+2,cz+oz+dz,B.LANTERN);}
   };
+  const skyline=()=>{
+    const z0=52,tower=(ox,w,h,mat=B.STONE)=>{
+      for(let x=cx+ox;x<cx+ox+w;x++)for(let z=cz+z0;z<=cz+z0+1;z++){
+        flat(x,z,B.STONE,B.STONE);
+        for(let y=G+1;y<=G+h;y++)setBlock(x,y,z,mat);
+        if((x-(cx+ox))%3===1)for(let y=G+3;y<=G+h-2;y+=3)setBlock(x,y,z,B.GLASS);
+      }
+      for(let x=cx+ox-1;x<=cx+ox+w;x++)if((x-(cx+ox))%2===0)setBlock(x,G+h+1,cz+z0,B.COBBLE);
+    };
+    for(let x=cx-30;x<=cx+30;x++)for(let z=cz+50;z<=cz+53;z++)if(Math.abs(x-cx)>5)flat(x,z,B.COBBLE,B.STONE);
+    tower(-28,5,8,B.COBBLE);tower(-20,6,12,B.BRICK);tower(-10,4,7,B.STONE);tower(8,4,7,B.STONE);tower(16,6,11,B.BRICK);tower(25,5,8,B.COBBLE);
+    for(const ox of [-4,4])for(let y=G+1;y<=G+9;y++){setBlock(cx+ox,y,cz+52,B.BRICK);if(y%3===0)setBlock(cx+ox,y,cz+51,B.GLASS);}
+    for(let x=cx-4;x<=cx+4;x++)if(Math.abs(x-cx)>1)setBlock(x,G+10,cz+52,B.COBBLE);
+    for(let y=G+1;y<=G+12;y++)setBlock(cx,y,cz+52,B.AIR);
+    for(const ox of [-31,31,-14,14])setBlock(cx+ox,G+10,cz+50,B.LANTERN);
+  };
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTrainingMeadowLand(x,z))continue;
     const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz),edge=Math.max(0,Math.min(1,(R-d)/10));
@@ -1003,6 +1019,7 @@ function buildTrainingMeadow(setBlock=setB){
     for(const side of [-1,1]){const lx=target[0]+px*side*4,lz=target[1]+pz*side*4;setBlock(cx+lx,G,cz+lz,B.GLASS);setBlock(cx+lx,G+1,cz+lz,B.LANTERN);}
   }
   garden(11,22,5);garden(-19,7,4);garden(29,18,4);garden(-8,-41,5);
+  skyline();
   for(const [ox,oz] of [[-46,0],[-43,18],[-18,36],[18,34],[42,14],[44,-26],[-44,-34],[32,-44]])tree(ox,oz,5+(Math.abs(ox+oz)%3),4);
 }
 function buildAbilityMeadow(setBlock=setB){

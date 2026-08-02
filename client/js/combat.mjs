@@ -1145,6 +1145,7 @@ function beginOnboarding(){
   prepareOnboardingStep();
   document.body.classList.add('onboarding');
   updateOnboardingHud();
+  showName('TUTORIAL TRAINING GROUNDS');
 }
 function abilityHudAvailable(){
   return !!(S && S.lvl>=2);
@@ -4947,6 +4948,11 @@ addEventListener('keydown', e=>{
     if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
     if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
+    if(cursorReleased){
+      e.preventDefault();
+      resumeGameplayCamera();
+      return;
+    }
     if(onboardingActive&&onboardingArrived&&onboardingKind()==='cursor'){
       e.preventDefault();
       onboardingFlags.cursor=true;
