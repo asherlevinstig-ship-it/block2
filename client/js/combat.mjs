@@ -4231,10 +4231,11 @@ function resumeCameraAfterArrivalChoice(){
   lockFallback=true;
   locked=true;
   cursorReleased=false;
+  gameplayInputDebug('arrival.resume.start');
   refreshPlayUi();
   try{
     requestPointerLockSafe(enterPlayFallback);
-    setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); },250);
+    setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement){ gameplayInputDebug('arrival.resume.fallback-timeout'); enterPlayFallback(); } },250);
   }catch(e){ enterPlayFallback(); }
 }
 function settleFirstTownAdventureSpawn(){
@@ -4313,6 +4314,7 @@ function chooseFirstTownArrival(choice){
   if(arrivalChoiceEl)arrivalChoiceEl.classList.add('hidden');
   document.body.classList.remove('arrival-choice-open');
   syncHudLayerState();
+  gameplayInputDebug('arrival.choice',{choice});
   if(choice==='questions'){
     if(typeof enterQuestionRoom==='function'&&enterQuestionRoom()){
       sysMsg('<b>Question Hall:</b> a quiet room for learning. We can design its lesson flow next.');
@@ -4580,11 +4582,13 @@ function requestPointerLockSafe(onFail=enterPlayFallback){
   try{
     suppressNextLockFallback=false;
     pointerLockRequestPending=true;
+    gameplayInputDebug('pointerlock.request');
     const result=renderer.domElement.requestPointerLock();
-    if(result&&typeof result.catch==='function') result.catch(()=>{ pointerLockRequestPending=false; if(onFail) onFail(); });
+    if(result&&typeof result.catch==='function') result.catch(err=>{ pointerLockRequestPending=false; gameplayInputDebug('pointerlock.request.reject',{message:String(err&&err.message||err||'')}); if(onFail) onFail(); });
     return true;
   }catch(e){
     pointerLockRequestPending=false;
+    gameplayInputDebug('pointerlock.request.throw',{message:String(e&&e.message||e||'')});
     if(onFail) onFail();
     return false;
   }
@@ -4933,8 +4937,9 @@ document.addEventListener('pointerlockchange', ()=>{
   if(!locked){ mouseR=false; placeKeyHeld=false; }
   if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
   refreshPlayUi();
+  gameplayInputDebug('pointerlock.change',{hasLock,wasPlaying,modalInputOpen});
 });
-document.addEventListener('pointerlockerror', ()=>{ pointerLockRequestPending=false; if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
+document.addEventListener('pointerlockerror', ()=>{ pointerLockRequestPending=false; gameplayInputDebug('pointerlock.error'); if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
 
 let hintDone=false;
 function isTextEntryTarget(target){
@@ -4966,14 +4971,18 @@ function gameplayCameraResumeAllowed(){
 function gameplayMovementAllowed(){
   return !!(gameplayCameraResumeAllowed()&&!cursorReleased);
 }
-function gameplayInputDebug(reason='snapshot'){
+const INPUT_DEBUG_LOG_KEY='bc_input_debug_log_v1';
+const INPUT_DEBUG_LOG_LIMIT=80;
+function gameplayInputDebug(reason='snapshot',extra=null){
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
     !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
     !!globalThis.dungeonLobbyOpen;
+  const active=document.activeElement;
   const data={
     reason,
+    at:Date.now(),
     locked:!!locked,
     lockFallback:!!lockFallback,
     cursorReleased:!!cursorReleased,
@@ -4988,10 +4997,31 @@ function gameplayInputDebug(reason='snapshot'){
     statOpen:!!statOpen,
     qOpen:!!uiShellState.qOpen,
     chatTyping:!!globalThis.chatTyping,
+    bodyClass:document.body.className,
+    activeElement:active?(active.id||active.tagName||''):'',
+    keys:{
+      w:!!keys.KeyW,a:!!keys.KeyA,s:!!keys.KeyS,d:!!keys.KeyD,
+      space:!!keys.Space,shift:!!(keys.ShiftLeft||keys.ShiftRight),
+      left:!!keys.ArrowLeft,right:!!keys.ArrowRight,up:!!keys.ArrowUp,down:!!keys.ArrowDown
+    },
     cameraInputAllowed:gameplayCameraInputAllowed(),
-    movementAllowed:gameplayMovementAllowed()
+    movementAllowed:gameplayMovementAllowed(),
+    extra:extra&&typeof extra==='object'?extra:null
   };
+  const root=globalThis;
+  const log=Array.isArray(root.BlockcraftInputDebugLog)?root.BlockcraftInputDebugLog:[];
+  log.push(data);
+  while(log.length>INPUT_DEBUG_LOG_LIMIT)log.shift();
+  root.BlockcraftInputDebugLog=log;
+  root.BlockcraftLastInputDebug=data;
+  root.BlockcraftReadInputDebug=()=>({
+    latest:root.BlockcraftLastInputDebug||null,
+    log:Array.isArray(root.BlockcraftInputDebugLog)?root.BlockcraftInputDebugLog.slice():[],
+    stored:(()=>{try{return JSON.parse(localStorage.getItem(INPUT_DEBUG_LOG_KEY)||'[]');}catch(e){return []}})()
+  });
+  try{localStorage.setItem(INPUT_DEBUG_LOG_KEY,JSON.stringify(log));}catch(e){}
   try{document.body.dataset.inputDebug=JSON.stringify(data);}catch(e){}
+  if(reason!=='snapshot')console.warn('[bc-input-debug]',data);
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace(reason==='snapshot'?'input.snapshot':'input.blocked',data);
   return data;
 }

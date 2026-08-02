@@ -1839,9 +1839,16 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/function resumeGameplayCamera\(\)\{[\s\S]*if\(!gameplayCameraResumeAllowed\(\)\)return false;[\s\S]*requestPointerLockSafe\(enterPlayFallback\);/);
   assert.match(combat,/function requestPointerLockSafe\(onFail=enterPlayFallback\)\{[\s\S]*suppressNextLockFallback=false;[\s\S]*pointerLockRequestPending=true;/);
   assert.match(combat,/function gameplayMovementAllowed\(\)\{\s*return !!\(gameplayCameraResumeAllowed\(\)&&!cursorReleased\);\s*\}/);
-  assert.match(combat,/function gameplayInputDebug\(reason='snapshot'\)\{/);
+  assert.match(combat,/function gameplayInputDebug\(reason='snapshot',extra=null\)\{/);
+  assert.match(combat,/const INPUT_DEBUG_LOG_KEY='bc_input_debug_log_v1';/);
+  assert.match(combat,/root\.BlockcraftInputDebugLog=log;/);
+  assert.match(combat,/root\.BlockcraftReadInputDebug=\(\)=>\(\{/);
+  assert.match(combat,/localStorage\.setItem\(INPUT_DEBUG_LOG_KEY,JSON\.stringify\(log\)\);/);
+  assert.match(combat,/console\.warn\('\[bc-input-debug\]',data\);/);
   assert.match(combat,/document\.body\.dataset\.inputDebug=JSON\.stringify\(data\);/);
   assert.match(combat,/globalThis\.BlockcraftTrace&&globalThis\.BlockcraftTrace\(reason==='snapshot'\?'input\.snapshot':'input\.blocked',data\);/);
+  assert.match(combat,/gameplayInputDebug\('pointerlock\.change',\{hasLock,wasPlaying,modalInputOpen\}\);/);
+  assert.match(combat,/gameplayInputDebug\('pointerlock\.error'\);/);
   assert.match(combat,/else if\(suppressNextLockFallback\)\{ lockFallback=false; suppressNextLockFallback=false; \}/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*queueMouseLook\(e\.movementX\|\|0,e\.movementY\|\|0\);\s*\}else if\(lockFallback&&isWorldPointerTarget\(e\.target\)\)\{/);
   assert.match(combat,/function consumeMouseLookDelta\(\)\{/);
