@@ -74,8 +74,11 @@ class RecallMixin{
     if(!client||this.rateLimited(client,'action',4,8))return;
     const p=this.state.players.get(client.sessionId),now=Date.now();
     if(!p)return;
-    const active=this.recallChallenges.get(client.sessionId);
-    if(active&&active.expiresAt>now)return client.send('recallReject',{reason:'active'});
+    const active=this.recallChallenges.get(client.sessionId),questionHallRequest=message.source==='question_hall';
+    if(active&&active.expiresAt>now){
+      if(questionHallRequest&&active.source==='question_hall')this.recallChallenges.delete(client.sessionId);
+      else return client.send('recallReject',{reason:'active'});
+    }
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);
     const requested=this.cleanRecallSubject(message.subject);
     const stored=this.cleanRecallSubject(this.recallSubjects.get(client.sessionId)||(rec&&rec.prof.recallSubject)||'');
@@ -90,7 +93,7 @@ class RecallMixin{
       if(rec&&Array.isArray(rec.prof.claimedDiscoveries)&&rec.prof.claimedDiscoveries.includes(claimKey))return client.send('recallReject',{reason:'ruin_claimed'});
       ruinId=ruin.id;
     }
-    const tutorial=this.recallTutorialSpace(p),questionHall=message.source==='question_hall';
+    const tutorial=this.recallTutorialSpace(p),questionHall=questionHallRequest;
     const q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
