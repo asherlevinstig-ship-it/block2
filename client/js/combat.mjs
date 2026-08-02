@@ -513,7 +513,7 @@ function finishMine(){
 
 // ---------------- input & states ----------------
 const keys = {};
-let locked=false, lockFallback=false, suppressNextLockFallback=false, pointerLockRequestPending=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
+let locked=false, lockFallback=false, suppressNextLockFallback=false, pointerLockRequestPending=false, cursorReleased=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
 const mouseLookDelta={x:0,y:0};
 const MOUSE_LOOK_SENSITIVITY=.00215;
 const overlay=document.getElementById('overlay');
@@ -4350,9 +4350,14 @@ function refreshPlayUi(){
     !!(pathSelectEl && !pathSelectEl.classList.contains('hidden')) ||
     !!(awakeningWin && !awakeningWin.classList.contains('hidden'));
   const showHud = locked || uiOpen || statOpen || uiShellState.qOpen || claimMode || transitionModalOpen;
+  const modalInputOpen = uiOpen || statOpen || uiShellState.qOpen || transitionModalOpen ||
+    !!(rewardWin && !rewardWin.classList.contains('hidden')) ||
+    !!globalThis.dungeonLobbyOpen ||
+    document.body.classList.contains('game-modal-open');
+  if(modalInputOpen) releasePointerLockWithoutCameraFallback(false);
   overlay.classList.toggle('hidden', showHud);
   document.body.classList.toggle('claim-mode', !!claimMode);
-  document.getElementById('crosshair').classList.toggle('hidden', !locked || claimMode);
+  document.getElementById('crosshair').classList.toggle('hidden', !locked || cursorReleased || claimMode);
   const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
   const minimal=offMainRoom||(onboardingActive&&dim==='tutorial')||(jobTutorialActive&&dim==='job');
   const calm=calmTownHud();
@@ -4376,6 +4381,7 @@ function refreshPlayUi(){
   const debugSig=[
     overlay.classList.contains('hidden')?'overlay:hidden':'overlay:visible',
     locked?'locked':'unlocked',
+    cursorReleased?'cursor':'camera',
     lockFallback?'fallback':'nofallback',
     pathChoiceOpen?'path':'',
     jobChoiceOpen?'job':'',
@@ -4391,6 +4397,7 @@ function refreshPlayUi(){
 }
 function enterPlayFallback(){
   if(document.pointerLockElement===renderer.domElement) return;
+  cursorReleased=false;
   lockFallback=true;
   locked=true;
   refreshPlayUi();
@@ -4747,7 +4754,8 @@ document.addEventListener('pointerlockchange', ()=>{
   else if(suppressNextLockFallback){ lockFallback=false; suppressNextLockFallback=false; }
   else if(pointerLockRequestPending&&overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
   if(!hasLock) pointerLockRequestPending=false;
-  locked = hasLock || lockFallback;
+  if(hasLock) cursorReleased=false;
+  locked = hasLock || lockFallback || cursorReleased;
   if(!locked){ mouseR=false; placeKeyHeld=false; }
   if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
   refreshPlayUi();
@@ -4771,7 +4779,7 @@ function gameplayCameraInputAllowed(){
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
     !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
     !!globalThis.dungeonLobbyOpen;
-  return !!(locked&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
+  return !!(locked&&!cursorReleased&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
 function gameplayCameraResumeAllowed(){
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||abilityAwakeningOpen||
@@ -4781,13 +4789,26 @@ function gameplayCameraResumeAllowed(){
     !!globalThis.dungeonLobbyOpen;
   return !!(overlay.classList.contains('hidden')&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
-function releaseGameplayCursor(){
+function releasePointerLockWithoutCameraFallback(markCursorReleased=true){
   suppressNextLockFallback=true;
   lockFallback=false;
-  locked=false;
+  pointerLockRequestPending=false;
+  if(markCursorReleased) cursorReleased=true;
   mouseLookDelta.x=0;mouseLookDelta.y=0;
   try{ if(document.pointerLockElement===renderer.domElement) document.exitPointerLock(); }catch(err){}
+}
+function releaseGameplayCursor(){
+  releasePointerLockWithoutCameraFallback(true);
+  locked=true;
   refreshPlayUi();
+}
+function resumeGameplayCamera(){
+  cursorReleased=false;
+  lockFallback=false;
+  locked=true;
+  refreshPlayUi();
+  requestPointerLockSafe(enterPlayFallback);
+  setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
 }
 function queueMouseLook(dx,dy){
   if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
@@ -5961,14 +5982,17 @@ addEventListener('mousedown', e=>{
     if(e.button===0) requestLandClaim();
     return;
   }
+  if(cursorReleased){
+    if(e.button===0&&gameplayCameraResumeAllowed()){
+      e.preventDefault();
+      resumeGameplayCamera();
+    }
+    return;
+  }
   if(!locked){
     if(e.button===0&&gameplayCameraResumeAllowed()){
       e.preventDefault();
-      lockFallback=false;
-      locked=true;
-      refreshPlayUi();
-      requestPointerLockSafe(enterPlayFallback);
-      setTimeout(()=>{ if(locked&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
+      resumeGameplayCamera();
     }
     return;
   }
