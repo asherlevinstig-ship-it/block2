@@ -595,6 +595,8 @@ const KEY_PROMPTS=[
   {key:'F',title:'Action',text:'Mine, attack, harvest, or use the focused action'},
   {key:'G',title:'Interact',text:'Talk to villagers, place blocks, or use held items'},
   {key:'E',title:'Inventory',text:'Open your bag, crafting, gear, and hotbar'},
+  {key:'O',title:'Quest Log',text:'Open Story, What Next, Gate Prep, and active objectives'},
+  {key:'C',title:'Stats',text:'Open your character sheet, class paths, and stat points'},
   {key:'SHIFT',title:'Sprint',text:'Hold while moving to run'},
 ];
 let keyPromptIndex=-1,keyPromptNextAt=0;
