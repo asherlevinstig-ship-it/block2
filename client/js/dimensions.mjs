@@ -2539,6 +2539,8 @@ gameContext.registerModule('dimensions', Object.freeze({
   exitDungeon,
   enterJobTutorialRoom,
   exitJobTutorialRoom,
+  townReturnPoint,
+  placePlayerAtTownReturn,
   enterQuestionRoom,
   exitQuestionRoom,
   exitQuestionRoomToTown,

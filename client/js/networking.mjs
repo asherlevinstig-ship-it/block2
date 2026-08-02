@@ -74,6 +74,11 @@ function eventFeed(name,text,opts={}){
   }
   if(typeof eventLog==='function')eventLog(body,label);
 }
+function jobTutorialCompletionPanelOpen(){
+  const rewardWin=document.getElementById('rewardwin');
+  const rewardPanel=document.getElementById('rewardpanel');
+  return !!(rewardWin&&rewardPanel&&rewardPanel.classList.contains('job-tutorial-complete')&&!rewardWin.classList.contains('hidden'));
+}
 function feedItemName(id){
   return (ITEMS[id]&&ITEMS[id].name)||'Item';
 }
@@ -2522,10 +2527,13 @@ function netRestoreProfile(m){
     }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
       dimensionsApi.exitTamingLand();
     }
-    const restorePos=(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos;
+    const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand;
+    const townReturn=forceJobHandoffTownReturn&&dimensionsApi.townReturnPoint?dimensionsApi.townReturnPoint():null;
+    const restorePos=townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos;
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
+      if(forceJobHandoffTownReturn&&typeof showName==='function')showName('Town of Beginnings');
     }
     if(restoreJobRoom&&combatApi.resumeJobTutorial){
       combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
