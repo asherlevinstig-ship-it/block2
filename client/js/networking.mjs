@@ -3375,9 +3375,18 @@ function makeMirrorPreviewPrompt(){
   g.fillStyle=grad;g.fill();
   g.shadowBlur=0;
   g.strokeStyle='rgba(125,211,252,.55)';g.lineWidth=2;g.stroke();
-  g.fillStyle='#7dd3fc';g.font='bold 16px "Courier New",monospace';g.fillText('HUNTER MIRROR',256,42);
-  g.fillStyle='#fff7d6';g.font='bold 24px "Courier New",monospace';g.fillText('C  CUSTOMIZE',178,76);
-  g.fillStyle='#d8e4f2';g.fillText('ESC  DISMISS',340,76);
+  g.fillStyle='#7dd3fc';g.font='bold 16px "Courier New",monospace';g.fillText('HUNTER MIRROR',256,38);
+  g.font='bold 18px "Courier New",monospace';
+  const drawPromptRow=(key,label,y,col)=>{
+    roundedRect(g,128,y-14,54,24,6);
+    g.fillStyle='rgba(255,255,255,.09)';g.fill();
+    g.strokeStyle='rgba(255,255,255,.28)';g.lineWidth=1.5;g.stroke();
+    g.fillStyle=col;g.fillText(key,155,y);
+    g.fillStyle='#f8fafc';g.textAlign='left';g.fillText(label,196,y);
+    g.textAlign='center';
+  };
+  drawPromptRow('C','CUSTOMIZE',68,'#fff7d6');
+  drawPromptRow('ESC','DISMISS',96,'#d8e4f2');
   const tex=new THREE.CanvasTexture(c);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false,depthTest:false}));
   sp.scale.set(3.8,.95,1);sp.renderOrder=24;sp.name='mirror-preview-prompt';

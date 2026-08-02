@@ -3185,8 +3185,9 @@ test('Hunter Mirror opens a model preview before customization', () => {
   assert.match(combat, /if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.customize\)\{[\s\S]*mirrorPreview\.customize\(\);/);
   assert.match(networking, /function showMirrorAppearancePreview\(\)\{/);
   assert.match(networking, /function makeMirrorPreviewPrompt\(\)\{/);
-  assert.match(networking, /g\.fillText\('C  CUSTOMIZE',178,76\)/);
-  assert.match(networking, /g\.fillText\('ESC  DISMISS',340,76\)/);
+  assert.match(networking, /const drawPromptRow=\(key,label,y,col\)=>\{/);
+  assert.match(networking, /drawPromptRow\('C','CUSTOMIZE',68,'#fff7d6'\)/);
+  assert.match(networking, /drawPromptRow\('ESC','DISMISS',96,'#d8e4f2'\)/);
   assert.match(networking, /function updateMirrorPreviewPrompt\(\)\{/);
   assert.match(networking, /updateMirrorPreviewPrompt\(\);/);
   assert.match(networking, /let mirrorPreviewMode=false;/);
