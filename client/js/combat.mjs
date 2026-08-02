@@ -5652,6 +5652,9 @@ function nearbyGuardian(range=7.8){
 function nearTamingLandPortal(range=5.8){
   return dim==='overworld'&&HUB.tamingPortal&&Math.hypot(player.pos.x-HUB.tamingPortal.x,player.pos.z-HUB.tamingPortal.z)<range;
 }
+function nearTownQuestionHallPortal(range=5.8){
+  return dim==='overworld'&&HUB.questionPortal&&Math.hypot(player.pos.x-HUB.questionPortal.x,player.pos.z-HUB.questionPortal.z)<range;
+}
 function nearTamingLandExit(range=4.4){
   if(dim!=='taming_land'||!TAMING_LAND)return false;
   const x=TAMING_LAND.x+TAMING_LAND.exit.dx+.5,z=TAMING_LAND.z+TAMING_LAND.exit.dz+.5;
@@ -5719,6 +5722,7 @@ function nearbyInteractionPrompt(){
     if(d<2.8)push({key:'G',title:'Dungeon Exit',small:'Return to the overworld',priority:120},d);
   }
   if(nearTamingLandPortal())push({key:'G',title:'Taming Land Portal',small:'Travel to the dragon and familiar sanctuary',priority:119},0);
+  if(nearTownQuestionHallPortal())push({key:'G',title:'Question Hall Portal',small:'Travel to the study room',priority:119},0);
   if(nearTamingLandExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearTrainingMeadowTownPortal())push({key:'G',title:'Town Portal',small:'Enter the Town of Beginnings',priority:119},0);
   if(nearQuestionHallTownPortal())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
@@ -5960,6 +5964,7 @@ function secondaryAction(){
   if(gate && dim==='overworld' && Math.hypot(gate.x-player.pos.x, gate.z-player.pos.z)<=6){ enterDungeon(); return; }
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
+  if(nearTownQuestionHallPortal()){ if(typeof enterQuestionRoom==='function')enterQuestionRoom(); return; }
   if(nearTamingLandExit()){ exitTamingLand(); return; }
   if(nearTrainingMeadowTownPortal()){ if(typeof exitOnboardingToTown==='function')exitOnboardingToTown(); return; }
   if(nearQuestionHallTownPortal()){ if(typeof exitQuestionRoomToTown==='function')exitQuestionRoomToTown(); return; }

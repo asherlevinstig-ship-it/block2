@@ -1921,6 +1921,7 @@ const HUB = {
   farm: { x: dpx(56, 'farm'), z: dpz(79, 'farm') },
   roost: { x: dpx(96, 'roost'), z: dpz(65, 'roost') },
   tamingPortal: { x: dpx(86, 'roost'), z: dpz(78, 'roost') },
+  questionPortal: { x: dpx(61, 'guild'), z: dpz(37, 'guild') },
   skyport: { x: dpx(32, 'skyport'), z: dpz(64, 'skyport'), y: TOWN.G + 24 },
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
   guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
@@ -1948,6 +1949,7 @@ const TOWN_INTERACTION_ZONES = Object.freeze({
   guild: { x: HUB.guild.x, z: HUB.guild.z, radius: 8.5 },
   roost: { x: HUB.roost.x, z: HUB.roost.z, radius: 13 },
   tamingPortal: { x: HUB.tamingPortal.x, z: HUB.tamingPortal.z, radius: 5.5 },
+  questionPortal: { x: HUB.questionPortal.x, z: HUB.questionPortal.z, radius: 5.5 },
   skyportGangway: { x1: HUB.skyport.x - 15.5, x2: HUB.skyport.x - 6.5, z: HUB.skyport.z, radiusZ: 3.25 },
 });
 function isTownFarmWorksite(x,z){
@@ -5411,6 +5413,7 @@ const TOWN_BUILDING_SIGNS=Object.freeze([
   {title:'MEDITATION HALL',sub:'TOWN SHRINE',x:dpx(42.35,'shrine'),z:dpz(58.05,'shrine'),rot:0,color:'#d8f2ff'},
   {title:'DRAGON ROOST',sub:'DEN & LANDING FIELD',x:dpx(85.65,'roost'),z:dpz(60.2,'roost'),rot:-Math.PI/2,color:'#66f0ff'},
   {title:'TAMING LAND',sub:'PORTAL SANCTUARY',x:HUB.tamingPortal.x-3.1,z:HUB.tamingPortal.z+.1,rot:-Math.PI/2,color:'#9efc72'},
+  {title:'QUESTION HALL',sub:'STUDY PORTAL',x:HUB.questionPortal.x-3.1,z:HUB.questionPortal.z+.1,rot:-Math.PI/2,color:'#7dd3fc'},
   {title:'WESTWIND SKYPORT',sub:'DOCK & CARGO',x:dpx(32,'skyport'),z:dpz(55.15,'skyport'),rot:0,color:'#ffd98a'},
   {title:'MARKET STALLS',sub:'SUPPLIES',x:HUB.marketX-1.5,z:TOWN.TC-12.5,rot:Math.PI/2,color:'#ffd24a'},
   {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
@@ -5549,6 +5552,48 @@ function makeTamingLandPortalDecor(){
   return grp;
 }
 const tamingLandTownPortal=makeTamingLandPortalDecor();
+
+function makeQuestionHallPortalDecor(){
+  const grp=new THREE.Group();
+  const stone=voxelMats('#3b4b6d','#7aa7d9','#20283e','#0d1220');
+  const dark=voxelMats('#1e293b','#475569','#101827','#050914');
+  const rune=glowVoxelMats('#38bdf8','#dbeafe','#075985','#bfdbfe',1.25);
+  const texCanvas=document.createElement('canvas');texCanvas.width=96;texCanvas.height=128;
+  const g=texCanvas.getContext('2d');
+  const bg=g.createLinearGradient(0,0,96,128);
+  bg.addColorStop(0,'rgba(30,64,175,.7)');
+  bg.addColorStop(.48,'rgba(125,211,252,.68)');
+  bg.addColorStop(1,'rgba(88,28,135,.68)');
+  g.fillStyle=bg;g.fillRect(0,0,96,128);
+  g.strokeStyle='rgba(219,234,254,.68)';g.lineWidth=3;
+  for(let i=0;i<6;i++){g.beginPath();g.arc(48,64,16+i*8,.3+i*.4,4.5+i*.35);g.stroke();}
+  g.fillStyle='rgba(255,255,255,.72)';
+  for(let i=0;i<24;i++){const x=(i*29)%92+2,y=(i*47)%124+2,s=i%3+1;g.fillRect(x,y,s,s);}
+  const portalTex=new THREE.CanvasTexture(texCanvas);portalTex.magFilter=THREE.NearestFilter;portalTex.minFilter=THREE.NearestFilter;
+  const portalMat=new THREE.MeshBasicMaterial({map:portalTex,transparent:true,opacity:.76,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  for(const [x,y,w,h,m] of [[-2.05,2.3,.72,4.6,stone],[2.05,2.3,.72,4.6,stone],[-1.18,4.72,.84,.78,stone],[0,4.9,.9,.82,dark],[1.18,4.72,.84,.78,stone],[0,.25,3.9,.5,dark]])
+    addBox(grp,[w,h,.72],[x,y,0],m);
+  for(const [x,y] of [[-2.05,1.35],[-2.05,3.1],[2.05,1.35],[2.05,3.1],[-.72,5.32],[.72,5.32]])
+    addBox(grp,[.34,.34,.22],[x,y,-.48],rune,[0,0,.785]);
+  const veil=new THREE.Mesh(new THREE.PlaneGeometry(3.15,3.65),portalMat);
+  veil.position.set(0,2.45,-.58);
+  grp.add(veil);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.72,.04,8,72),new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.72,depthWrite:false,blending:THREE.AdditiveBlending}));
+  ring.position.set(0,2.45,-.65);
+  grp.add(ring);
+  const core=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x93c5fd,transparent:true,opacity:.22,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  core.position.set(0,2.45,-.72);core.scale.set(3.8,4.4,1);grp.add(core);
+  const label=makeTextSprite('QUESTION HALL','#7dd3fc');
+  label.position.set(0,5.72,-.3);
+  label.scale.set(3.25,1.45,1);
+  grp.add(label);
+  grp.userData={veil,ring,core,phase:Math.random()*Math.PI*2,emitAcc:0};
+  grp.position.set(HUB.questionPortal.x,TOWN.G+1,HUB.questionPortal.z);
+  grp.rotation.y=Math.PI;
+  townGroup.add(grp);
+  return grp;
+}
+const questionHallTownPortal=makeQuestionHallPortalDecor();
 
 function makeJobBoardDecor(){
   const grp=new THREE.Group();
@@ -5884,6 +5929,7 @@ addTownInteractLabel('Roulette Table · G', HUB.tavernRoulette.x, TOWN.G+3.65, H
 addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Taming Land Portal', HUB.tamingPortal.x, TOWN.G+5.95, HUB.tamingPortal.z, '#9efc72', 14);
+addTownInteractLabel('Question Hall Portal', HUB.questionPortal.x, TOWN.G+5.95, HUB.questionPortal.z, '#7dd3fc', 14);
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, '#f2c75c', 14);
 addTownInteractLabel('Social Mentor - Tab Chat', HUB.socialMentor.x, TOWN.G+3.75, HUB.socialMentor.z, '#82e6a7', 9);
 addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
@@ -10217,9 +10263,40 @@ function updateTamingLandPortalVisual(dt){
       life:.7+Math.random()*.35,grav:-.05,r:.58,g:1,b:.78,priority:1});
   }
 }
+function updateQuestionHallPortalVisual(dt){
+  const p=questionHallTownPortal;
+  if(!p)return;
+  const near=dim==='overworld'&&playerOverworldDistanceSq(HUB.questionPortal.x,HUB.questionPortal.z)<95*95;
+  p.visible=near;
+  if(!near)return;
+  const data=p.userData||{},t=performance.now()/1000+(data.phase||0);
+  if(data.veil){
+    data.veil.material.opacity=.62+.1*Math.sin(t*2.4);
+    data.veil.scale.set(1+.015*Math.sin(t*1.8),1+.02*Math.cos(t*1.3),1);
+  }
+  if(data.ring){
+    data.ring.rotation.z=t*.28;
+    const s=1+.045*Math.sin(t*2.1);
+    data.ring.scale.set(s,s,1);
+    data.ring.material.opacity=.58+.12*Math.sin(t*1.7);
+  }
+  if(data.core){
+    data.core.material.opacity=.18+.08*Math.sin(t*2.2);
+    const pulse=1+.05*Math.sin(t*2.7);
+    data.core.scale.set(3.8*pulse,4.4*pulse,1);
+  }
+  data.emitAcc=(data.emitAcc||0)+dt;
+  if(data.emitAcc>.09){
+    data.emitAcc=0;
+    const x=HUB.questionPortal.x+(Math.random()-.5)*2.5,z=HUB.questionPortal.z-.62,y=TOWN.G+2+Math.random()*3;
+    spawnParticle({x,y,z,vx:(Math.random()-.5)*.12,vy:.16+Math.random()*.22,vz:-.06-Math.random()*.1,
+      life:.65+Math.random()*.3,grav:-.04,r:.48,g:.82,b:1,priority:1});
+  }
+}
 function updateEmitters(dt){
   updateCentralFountainVisual(dt);
   updateTamingLandPortalVisual(dt);
+  updateQuestionHallPortalVisual(dt);
   const night=tavernNightLevel();
   for(const e of emitters){
     if(dim!=='overworld'||Math.hypot(player.pos.x-e.x,player.pos.z-e.z)>(e.maxDist||105)){e.acc=0;continue;}

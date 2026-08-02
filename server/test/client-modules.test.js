@@ -256,6 +256,7 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
 
   assert.match(world, /const TAMING_LAND=Object\.freeze/);
   assert.match(world, /tamingPortal: \{ x: dpx\(86, 'roost'\), z: dpz\(78, 'roost'\) \}/);
+  assert.match(world, /questionPortal: \{ x: dpx\(61, 'guild'\), z: dpz\(37, 'guild'\) \}/);
   assert.match(world, /function buildTamingLand\(setBlock=setB\)/);
   assert.match(world, /setBlock\(cx\+ox,G\+1,cz\+oz,B\.EGG_INSULATOR\)/);
   assert.match(world, /const TAMING_LAND_SUNS=Object\.freeze/);
@@ -267,10 +268,14 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(world, /B\.DIAMOND_ORE/);
   assert.match(world, /G\+7,z,B\.LEAVES/);
   assert.match(world, /function makeTamingLandPortalDecor\(\)/);
+  assert.match(world, /function makeQuestionHallPortalDecor\(\)/);
   assert.match(world, /const makePortalTexture=\(\)=>/);
   assert.match(world, /function updateTamingLandPortalVisual\(dt\)/);
+  assert.match(world, /function updateQuestionHallPortalVisual\(dt\)/);
   assert.match(world, /updateTamingLandPortalVisual\(dt\)/);
+  assert.match(world, /updateQuestionHallPortalVisual\(dt\)/);
   assert.match(world, /addTownInteractLabel\('Taming Land Portal'/);
+  assert.match(world, /addTownInteractLabel\('Question Hall Portal'/);
   assert.match(world, /inTamingLand=dim==='taming_land'/);
   assert.match(dimensions, /function generateTamingLandRoom\(\)/);
   assert.match(dimensions, /kind:'taming_land',id:'taming_land'/);
@@ -279,8 +284,11 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(dimensions, /NET\.dgn=localTutorialSpaceId\('taming_land'\)/);
   assert.match(dimensions, /makeTextSprite\('RETURN TO TOWN','#9efc72'\)/);
   assert.match(combat, /function nearTamingLandPortal\(range=5\.8\)/);
+  assert.match(combat, /function nearTownQuestionHallPortal\(range=5\.8\)/);
   assert.match(combat, /title:'Taming Land Portal'/);
+  assert.match(combat, /title:'Question Hall Portal'/);
   assert.match(combat, /if\(nearTamingLandPortal\(\)\)\{ enterTamingLand\(\); return; \}/);
+  assert.match(combat, /if\(nearTownQuestionHallPortal\(\)\)\{ if\(typeof enterQuestionRoom==='function'\)enterQuestionRoom\(\); return; \}/);
   assert.match(combat, /if\(nearTamingLandExit\(\)\)\{ exitTamingLand\(\); return; \}/);
   assert.match(frame, /if\(dim==='taming_land'\)\{/);
   assert.match(frame, /enterTamingLand:\(\)=>dimensionsApi\.enterTamingLand/);
