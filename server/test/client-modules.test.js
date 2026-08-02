@@ -121,22 +121,30 @@ test('client performance diagnostics separates update and render timing', async 
 
 test('client soundtrack manager selects one exclusive music mode', () => {
   const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
-  assert.match(menus, /function tutorialMusicMode\(job\)/);
-  assert.match(menus, /function nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob=''\)/);
-  assert.match(menus, /const tutorial=tutorialMusicMode\(tutorialJob\);\s*if\(tutorial\)return tutorial;/);
-  assert.match(menus, /activeMusicMode=nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob\);/);
-  assert.match(menus, /updateMusicTrack\(menuMusic, activeMusicMode==='menu'\|\|activeMusicMode==='tutorial_monk'/);
-  assert.match(menus, /updateMusicTrack\(townMusic, activeMusicMode==='town'\|\|activeMusicMode==='tutorial_blacksmith'/);
-  assert.match(menus, /updateMusicTrack\(tavernMusic, activeMusicMode==='tavern'\|\|activeMusicMode==='tutorial_cook'/);
+  const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
+  assert.match(menus, /function tutorialMusicMode\(job, dimension=''\)/);
+  assert.match(menus, /function nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob='', dimension='', inMeditation=false\)/);
+  assert.match(menus, /if\(dimension==='questions'\|\|inMeditation\)return 'questions';/);
+  assert.match(menus, /const tutorial=tutorialMusicMode\(tutorialJob,dimension\);\s*if\(tutorial\)return tutorial;/);
+  assert.match(menus, /tutorialMusic=createMusic\('audio\/tutorial\.mp3'\);/);
+  assert.match(menus, /questionsMusic=createMusic\('audio\/questions\.mp3'\);/);
+  assert.match(menus, /activeMusicMode=nextMusicMode\(inMenu, inTown, inTavern, outdoor, inCutscene, inBattle, tutorialJob, dimension, inMeditation\);/);
+  assert.match(menus, /updateMusicTrack\(menuMusic, activeMusicMode==='menu', MENU_MUSIC_VOLUME, dt\);/);
+  assert.match(menus, /updateMusicTrack\(townMusic, activeMusicMode==='town', TOWN_MUSIC_VOLUME, dt\);/);
+  assert.match(menus, /updateMusicTrack\(tavernMusic, activeMusicMode==='tavern', TAVERN_MUSIC_VOLUME, dt\);/);
   assert.match(menus, /forestMusic=createMusic\('audio\/ancientforest\.mp3'\);/);
-  assert.match(menus, /updateMusicTrack\(forestMusic, activeMusicMode==='forest'\|\|activeMusicMode==='tutorial_forest'/);
+  assert.match(menus, /updateMusicTrack\(forestMusic, activeMusicMode==='forest', FOREST_MUSIC_VOLUME, dt\);/);
   assert.match(menus, /battleMusic=createMusic\('audio\/battle\.mp3'\);/);
   assert.match(menus, /updateMusicTrack\(battleMusic, activeMusicMode==='battle'/);
+  assert.match(menus, /updateMusicTrack\(tutorialMusic, activeMusicMode==='tutorial', TUTORIAL_MUSIC_VOLUME, dt\);/);
+  assert.match(menus, /updateMusicTrack\(questionsMusic, activeMusicMode==='questions', QUESTIONS_MUSIC_VOLUME, dt\);/);
+  assert.match(frame, /const inMeditation=typeof inMeditationSpot==='function'&&inMeditationSpot\(\);/);
+  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob, dim, inMeditation\);/);
   assert.match(menus, /if\(!active&&audio\.volume<MUSIC_SILENCE\)/);
 });
 
 test('client soundtrack mp3 assets exist for every referenced music mode', () => {
-  for (const name of ['menu.mp3', 'townbg.mp3', 'tavern.mp3', 'ancientforest.mp3', 'battle.mp3']) {
+  for (const name of ['menu.mp3', 'townbg.mp3', 'tavern.mp3', 'ancientforest.mp3', 'battle.mp3', 'tutorial.mp3', 'questions.mp3']) {
     const file = path.join(__dirname, '..', '..', 'client', 'audio', name);
     assert.equal(fs.existsSync(file), true, `${name} is present for static hosting`);
     assert.ok(fs.statSync(file).size > 1000, `${name} is not an empty placeholder`);
