@@ -979,6 +979,31 @@ function buildTrainingMeadow(setBlock=setB){
       for(let y=G+1;y<=G+13;y++)setBlock(x,y,z,B.BARRIER);
     }
   };
+  const floatingBackdrop=()=>{
+    for(let x=Math.floor(cx-R-2);x<=Math.ceil(cx+R+2);x++)for(let z=Math.floor(cz-R-2);z<=Math.ceil(cz+R+2);z++){
+      const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz);
+      if(d<R-30||d>R-1)continue;
+      const rim=Math.max(0,Math.min(1,(R-d)/30)),noise=Math.sin((x+7)*.22)+Math.cos((z-11)*.19);
+      const bellyTop=G-3-Math.round(rim*4)+Math.round(noise*.45);
+      const bellyBottom=Math.max(2,G-13+Math.round(rim*5)+Math.round(noise*.35));
+      for(let y=1;y<bellyBottom;y++)setBlock(x,y,z,B.AIR);
+      for(let y=bellyBottom;y<=bellyTop;y++)setBlock(x,y,z,y>bellyTop-2?B.DIRT:B.STONE);
+    }
+    for(let x=Math.floor(cx-R-48);x<=Math.ceil(cx+R+48);x++)for(let z=Math.floor(cz-R-48);z<=Math.ceil(cz+R+48);z++){
+      const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz);
+      if(d<R+8||d>R+46)continue;
+      const fade=Math.max(0,Math.min(1,(R+46-d)/18)),shape=Math.sin((x-5)*.11)+Math.cos((z+19)*.13)+Math.sin((x+z)*.047);
+      if(fade<.35&&shape<.15)continue;
+      const y=Math.max(2,G-14+Math.round(shape*1.3)+Math.round(fade*2));
+      for(let yy=1;yy<y-2;yy++)setBlock(x,yy,z,B.STONE);
+      setBlock(x,y-2,z,B.STONE);setBlock(x,y-1,z,B.DIRT);
+      const top=hash2(x,z)>.82?B.SAND:hash2(x+13,z-9)>.88?B.COBBLE:B.GRASS;
+      setBlock(x,y,z,top);
+      for(let yy=y+1;yy<=G-3;yy++)setBlock(x,yy,z,B.AIR);
+      if(hash2(x-31,z+17)>.992)setBlock(x,y+1,z,B.LEAVES);
+      if(hash2(x+41,z-23)>.996){setBlock(x,y,z,B.WATER);setBlock(x,y+1,z,B.AIR);}
+    }
+  };
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTrainingMeadowLand(x,z))continue;
     const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz),edge=Math.max(0,Math.min(1,(R-d)/10));
@@ -991,6 +1016,7 @@ function buildTrainingMeadow(setBlock=setB){
     for(let y=ground+1;y<WH;y++)setBlock(x,y,z,B.AIR);
   }
   const route=[[-32,24],[-20,18],[-14,15],[-8,12],[4,6],[14,0],[22,-6],[30,-12],[40,-18],[10,-28],[-8,-28],[-22,-20],[-28,-14],[-32,-8],[-32,4],[0,40]];
+  floatingBackdrop();
   for(let i=0;i<route.length-1;i++){const [ax,az]=route[i], [bx,bz]=route[i+1], steps=Math.max(Math.abs(bx-ax),Math.abs(bz-az));for(let s=0;s<=steps;s++){const t=s/Math.max(1,steps), px=Math.round(ax+(bx-ax)*t), pz=Math.round(az+(bz-az)*t);for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)if(Math.abs(ox)+Math.abs(oz)<=2)flat(cx+px+ox,cz+pz+oz,(Math.abs(ox)+Math.abs(oz)===2&&hash2(cx+px+ox,cz+pz+oz)>.55)?B.SAND:B.COBBLE,B.STONE);}}
   disk(-32,24,7,B.COBBLE,B.STONE);disk(22,-6,9,B.GRASS);disk(30,-12,6,B.PLANKS,B.DIRT);disk(40,-18,5,B.COBBLE,B.STONE);disk(10,-28,7,B.GRASS);disk(-22,-20,9,B.COBBLE,B.STONE);disk(-32,-6,8,B.BRICK,B.STONE);disk(0,40,9,B.GLASS,B.STONE);
   for(let z=cz-46;z<=cz+28;z++)for(let x=cx-6;x<=cx-1;x++){const bend=Math.round(Math.sin((z-cz)*.16)*3);if(Math.abs((x-cx)-bend)<=1){flat(x,z,B.WATER,B.SAND);setBlock(x,G+1,z,B.AIR);}else if(Math.abs((x-cx)-bend)===2&&hash2(x,z)>.4)flat(x,z,B.SAND,B.DIRT);}
