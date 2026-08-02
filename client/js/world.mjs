@@ -989,20 +989,27 @@ function buildTrainingMeadow(setBlock=setB){
       for(let y=1;y<bellyBottom;y++)setBlock(x,y,z,B.AIR);
       for(let y=bellyBottom;y<=bellyTop;y++)setBlock(x,y,z,y>bellyTop-2?B.DIRT:B.STONE);
     }
-    for(let x=Math.floor(cx-R-48);x<=Math.ceil(cx+R+48);x++)for(let z=Math.floor(cz-R-48);z<=Math.ceil(cz+R+48);z++){
+    for(let x=Math.floor(cx-R-96);x<=Math.ceil(cx+R+96);x++)for(let z=Math.floor(cz-R-96);z<=Math.ceil(cz+R+96);z++){
       const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz);
-      if(d<R+8||d>R+46)continue;
-      const fade=Math.max(0,Math.min(1,(R+46-d)/18)),shape=Math.sin((x-5)*.11)+Math.cos((z+19)*.13)+Math.sin((x+z)*.047);
-      if(fade<.35&&shape<.15)continue;
-      const y=Math.max(2,G-14+Math.round(shape*1.3)+Math.round(fade*2));
+      if(d<R+38||d>R+94)continue;
+      const fade=Math.max(0,Math.min(1,(R+94-d)/24)),shape=Math.sin((x-5)*.08)+Math.cos((z+19)*.09)+Math.sin((x+z)*.031);
+      if(fade<.28&&shape<.25)continue;
+      const y=Math.max(2,Math.min(G-15,3+Math.round(shape*.9)+Math.round(fade)));
       for(let yy=1;yy<y-2;yy++)setBlock(x,yy,z,B.STONE);
       setBlock(x,y-2,z,B.STONE);setBlock(x,y-1,z,B.DIRT);
       const top=hash2(x,z)>.82?B.SAND:hash2(x+13,z-9)>.88?B.COBBLE:B.GRASS;
       setBlock(x,y,z,top);
-      for(let yy=y+1;yy<=G-3;yy++)setBlock(x,yy,z,B.AIR);
+      for(let yy=y+1;yy<=G-12;yy++)setBlock(x,yy,z,B.AIR);
       if(hash2(x-31,z+17)>.992)setBlock(x,y+1,z,B.LEAVES);
       if(hash2(x+41,z-23)>.996){setBlock(x,y,z,B.WATER);setBlock(x,y+1,z,B.AIR);}
     }
+    const cloud=(ox,oz,y,rx,rz)=>{
+      for(let x=cx+ox-rx;x<=cx+ox+rx;x++)for(let z=cz+oz-rz;z<=cz+oz+rz;z++)for(let yy=y-1;yy<=y+1;yy++){
+        const puff=((x-(cx+ox))/rx)**2+((z-(cz+oz))/rz)**2+((yy-y)/1.4)**2;
+        if(puff<=1&&(hash2(x,z)>.18||puff<.62))setBlock(x,yy,z,puff>.74?B.GLASS:B.SNOW);
+      }
+    };
+    cloud(-76,18,G-8,13,6);cloud(-58,-48,G-10,18,8);cloud(52,-55,G-9,16,7);cloud(82,12,G-8,20,8);cloud(14,78,G-11,22,9);cloud(-22,62,G-9,14,6);
   };
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTrainingMeadowLand(x,z))continue;
