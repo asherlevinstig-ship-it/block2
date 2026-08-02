@@ -4312,6 +4312,7 @@ function chooseFirstTownArrival(choice){
   firstTownChoiceDismissedThisSession=true;
   if(arrivalChoiceEl)arrivalChoiceEl.classList.add('hidden');
   document.body.classList.remove('arrival-choice-open');
+  syncHudLayerState();
   if(choice==='questions'){
     if(typeof enterQuestionRoom==='function'&&enterQuestionRoom()){
       sysMsg('<b>Question Hall:</b> a quiet room for learning. We can design its lesson flow next.');
