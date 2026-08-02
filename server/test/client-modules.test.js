@@ -2273,14 +2273,21 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);
   assert.match(combat,/enterQuestionRoom\(\)/);
+  assert.match(combat,/function nearQuestionHallTownPortal\(range=4\.8\)/);
+  assert.match(combat,/title:'Return Portal',small:'Travel back to Town of Beginnings'/);
+  assert.match(combat,/if\(nearQuestionHallTownPortal\(\)\)\{ if\(typeof exitQuestionRoomToTown==='function'\)exitQuestionRoomToTown\(\); return; \}/);
   assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n  showFirstTownArrivalChoice,/);
   assert.match(networking,/combatApi\.shouldShowFirstTownArrivalChoice&&combatApi\.shouldShowFirstTownArrivalChoice\(\)/);
   assert.match(networking,/setTimeout\(\(\)=>combatApi\.showFirstTownArrivalChoice&&combatApi\.showFirstTownArrivalChoice\(\),120\)/);
   assert.match(dimensions,/const QUESTION_ROOM=\{x:930,z:855,G:18,R:28\}/);
   assert.match(dimensions,/function generateQuestionRoom\(\)/);
+  assert.match(dimensions,/const QUESTION_HALL_TOWN_PORTAL=Object\.freeze\(\{dx:0,dz:12,range:4\.8\}\)/);
+  assert.match(dimensions,/function ensureQuestionHallTownPortal\(\)/);
+  assert.match(dimensions,/makeTextSprite\('RETURN TO TOWN','#bfeaff'\)/);
+  assert.match(dimensions,/function exitQuestionRoomToTown\(\)/);
   assert.match(dimensions,/function enterQuestionRoom\(\)/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
-  assert.match(dimensions,/enterQuestionRoom,\s*\n  exitQuestionRoom,/);
+  assert.match(dimensions,/enterQuestionRoom,\s*\n  exitQuestionRoom,\s*\n  exitQuestionRoomToTown,/);
 });
 
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{

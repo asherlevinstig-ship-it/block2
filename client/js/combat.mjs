@@ -8,7 +8,7 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
 const enterTamingLand=dimensionsApi.enterTamingLand,exitTamingLand=dimensionsApi.exitTamingLand;
 const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoom=dimensionsApi.exitJobTutorialRoom;
-const enterQuestionRoom=dimensionsApi.enterQuestionRoom;
+const enterQuestionRoom=dimensionsApi.enterQuestionRoom,exitQuestionRoomToTown=dimensionsApi.exitQuestionRoomToTown;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
 const BLOCK_PLACE_REACH=8;
 
@@ -5662,6 +5662,11 @@ function nearTrainingMeadowTownPortal(range=5.8){
   const p=trainingMeadowTownPortalPoint();
   return Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<range;
 }
+function nearQuestionHallTownPortal(range=4.8){
+  if(dim!=='questions'||typeof questionHallTownPortalPoint!=='function')return false;
+  const p=questionHallTownPortalPoint();
+  return Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<range;
+}
 function nearbyVillager(range=3.6){
   if(dim!=='overworld'||!Array.isArray(villagers))return null;
   let best=null,bd=range;
@@ -5716,6 +5721,7 @@ function nearbyInteractionPrompt(){
   if(nearTamingLandPortal())push({key:'G',title:'Taming Land Portal',small:'Travel to the dragon and familiar sanctuary',priority:119},0);
   if(nearTamingLandExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearTrainingMeadowTownPortal())push({key:'G',title:'Town Portal',small:'Enter the Town of Beginnings',priority:119},0);
+  if(nearQuestionHallTownPortal())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer questions · ALT changes subject',priority:118},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at '+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL)),priority:112},0);
@@ -5956,6 +5962,7 @@ function secondaryAction(){
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
   if(nearTamingLandExit()){ exitTamingLand(); return; }
   if(nearTrainingMeadowTownPortal()){ if(typeof exitOnboardingToTown==='function')exitOnboardingToTown(); return; }
+  if(nearQuestionHallTownPortal()){ if(typeof exitQuestionRoomToTown==='function')exitQuestionRoomToTown(); return; }
   if(tryMinerTutorialTrade()) return;
   if(tryFarmerTutorialTrade()) return;
   if(tryCookTutorialAction()) return;

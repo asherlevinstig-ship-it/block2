@@ -2170,7 +2170,11 @@ function exitJobTutorialRoom(){
 }
 let tamingLandReturn=null, tamingLandExitPortal=null;
 const QUESTION_ROOM={x:930,z:855,G:18,R:28};
-let questionRoomReturn=null;
+const QUESTION_HALL_TOWN_PORTAL=Object.freeze({dx:0,dz:12,range:4.8});
+let questionRoomReturn=null, questionHallTownPortal=null;
+function questionHallTownPortalPoint(){
+  return {x:QUESTION_ROOM.x+QUESTION_HALL_TOWN_PORTAL.dx+.5,y:QUESTION_ROOM.G+1.05,z:QUESTION_ROOM.z+QUESTION_HALL_TOWN_PORTAL.dz+.5};
+}
 function generateQuestionRoom(){
   const {x:cx,z:cz,G,R}=QUESTION_ROOM;
   const minX=Math.floor(cx-R-8),maxX=Math.ceil(cx+R+8),minZ=Math.floor(cz-R-8),maxZ=Math.ceil(cz+R+8);
@@ -2193,7 +2197,30 @@ function generateQuestionRoom(){
   for(const [x,z] of [[cx-12,cz-15],[cx+12,cz-15],[cx-12,cz+11],[cx+12,cz+11],[cx,cz-14]])set(x,G+2,z,B.LANTERN);
   set(cx,G+1,cz-13,B.CHEST);
   set(cx,G+2,cz-13,B.GLASS);
+  const px=cx+QUESTION_HALL_TOWN_PORTAL.dx,pz=cz+QUESTION_HALL_TOWN_PORTAL.dz;
+  for(let x=px-6;x<=px+6;x++)for(let z=pz-3;z<=pz+3;z++)if(Math.hypot(x-px,z-pz)<=6.8)set(x,G,z,Math.abs(x-px)<=2&&Math.abs(z-pz)<=1?B.GLASS:B.COBBLE);
+  for(const sx of [-4,4]){
+    for(let y=G+1;y<=G+8;y++)set(px+sx,y,pz,y%3===0?B.GLASS:B.BRICK);
+    for(const dz of [-2,2])for(let y=G+1;y<=G+4;y++)set(px+sx,y,pz+dz,y===G+4?B.LANTERN:B.COBBLE);
+  }
+  for(let x=px-4;x<=px+4;x++){
+    const rise=Math.max(0,2-Math.floor(Math.abs(x-px)/2));
+    for(let y=G+7;y<=G+8+rise;y++)set(x,y,pz,Math.abs(x-px)<=1&&y<G+9?B.GLASS:B.BRICK);
+  }
+  for(let y=G+1;y<=G+6;y++)for(let x=px-2;x<=px+2;x++)set(x,y,pz,B.AIR);
+  set(px,G+7,pz,B.LANTERN);
   return w;
+}
+function ensureQuestionHallTownPortal(){
+  if(questionHallTownPortal){scene.remove(questionHallTownPortal);questionHallTownPortal=null;}
+  if(dim!=='questions')return;
+  const exit=questionHallTownPortalPoint();
+  questionHallTownPortal=makeGateMesh(0x7dd3fc);
+  questionHallTownPortal.position.set(exit.x,exit.y,exit.z);
+  const label=makeTextSprite('RETURN TO TOWN','#bfeaff');
+  label.position.set(0,2.65,0);
+  questionHallTownPortal.add(label);
+  scene.add(questionHallTownPortal);
 }
 function enterQuestionRoom(){
   if(dim==='questions')return true;
@@ -2206,7 +2233,7 @@ function enterQuestionRoom(){
   dim='questions';
   NET.dgn=localTutorialSpaceId('questions');
   world.id=NET.dgn;
-  rebuildAllChunks();refreshTorchMeshes();applyDim();
+  rebuildAllChunks();refreshTorchMeshes();applyDim();ensureQuestionHallTownPortal();
   player.pos.set(QUESTION_ROOM.x+.5,QUESTION_ROOM.G+2,QUESTION_ROOM.z+10.5);
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
@@ -2217,6 +2244,7 @@ function enterQuestionRoom(){
 function exitQuestionRoom(){
   if(dim!=='questions')return false;
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  if(questionHallTownPortal){scene.remove(questionHallTownPortal);questionHallTownPortal=null;}
   const ret=questionRoomReturn;
   world=(ret&&ret.world)||owWorld||world;
   dim='overworld';
@@ -2232,6 +2260,10 @@ function exitQuestionRoom(){
   questionRoomReturn=null;
   announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   return true;
+}
+function exitQuestionRoomToTown(){
+  if(dim!=='questions')return false;
+  return runPortalTransition({title:'Town of Beginnings',subtitle:'Returning from Question Hall',kind:'taming'},()=>exitQuestionRoom());
 }
 function generateTamingLandRoom(){
   const room=TAMING_LAND;
@@ -2486,7 +2518,7 @@ function tickGates(dt, now){
     gateTimer-=dt;
     if(gateTimer<=0) spawnGate();
   }
-  for(const [g,col,local] of [[gate&&gate.grp, gate&&gate.colArr, gate], [exitPortal, [.43,.88,.42], null], [tamingLandExitPortal, [.62,.99,.45], null], [onboardingTownPortal, [.31,.85,1], null]]){
+  for(const [g,col,local] of [[gate&&gate.grp, gate&&gate.colArr, gate], [exitPortal, [.43,.88,.42], null], [tamingLandExitPortal, [.62,.99,.45], null], [onboardingTownPortal, [.31,.85,1], null], [questionHallTownPortal, [.49,.83,.99], null]]){
     if(!g) continue;
     g.userData.disc.rotation.z+=dt*1.6;
     const urgency=local?gateUrgency(local.expiresAt):'stable';
@@ -2513,6 +2545,7 @@ gameContext.registerState('dimensions', Object.freeze({
   get jobTutorialRoomJob(){ return jobTutorialRoomJob; },
   get tamingLandExitPortal(){ return tamingLandExitPortal; },
   get onboardingTownPortal(){ return onboardingTownPortal; },
+  get questionHallTownPortal(){ return questionHallTownPortal; },
 }));
 gameContext.registerModule('dimensions', Object.freeze({
   enterDungeon,
@@ -2521,6 +2554,8 @@ gameContext.registerModule('dimensions', Object.freeze({
   exitJobTutorialRoom,
   enterQuestionRoom,
   exitQuestionRoom,
+  exitQuestionRoomToTown,
+  questionHallTownPortalPoint,
   enterTamingLand,
   exitTamingLand,
   exitOnboardingToTown,
@@ -2566,6 +2601,7 @@ const legacyDimensionsBindings={
   "exitOnboardingRoom":{get:()=>exitOnboardingRoom},
   "exitOnboardingToTown":{get:()=>exitOnboardingToTown},
   "exitQuestionRoom":{get:()=>exitQuestionRoom},
+  "exitQuestionRoomToTown":{get:()=>exitQuestionRoomToTown},
   "exitTamingLand":{get:()=>exitTamingLand},
   "exitPortal":{get:()=>exitPortal,set:value=>{exitPortal=value;}},
   "frostbiteChakramVfx":{get:()=>frostbiteChakramVfx},
@@ -2574,6 +2610,7 @@ const legacyDimensionsBindings={
   "gateKindLabel":{get:()=>gateKindLabel},
   "generateJobTutorialRoom":{get:()=>generateJobTutorialRoom},
   "generateQuestionRoom":{get:()=>generateQuestionRoom},
+  "questionHallTownPortalPoint":{get:()=>questionHallTownPortalPoint},
   "generateTamingLandRoom":{get:()=>generateTamingLandRoom},
   "gravityBowVfx":{get:()=>gravityBowVfx},
   "hex01":{get:()=>hex01},
