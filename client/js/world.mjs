@@ -892,6 +892,7 @@ const CHUNK=16, WORLD_SIZE=1000, WORLD_CH=Math.ceil(WORLD_SIZE/CHUNK), WX=WORLD_
 const LAVA_BORDER_WIDTH=12, LAVA_BORDER_TOP=WH-2;
 const WORLD_TC=WX/2, WORLD_TOWN_HS=72, WORLD_TOWN_G=15;
 const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
+const TRAINING_MEADOW_TOWN_PORTAL=Object.freeze({dx:0,dz:40,range:5.8});
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
 const TAMING_LAND=Object.freeze({x:420,z:925,G:20,R:68,exit:{dx:0,dz:26},spawn:{dx:0,dz:-18}});
 const JOB_TUTORIAL_MEADOWS=Object.freeze({
@@ -933,6 +934,9 @@ function biomeAt(x,z){
   return BIO.PLAINS;
 }
 function isTrainingMeadowLand(x,z,pad=0){return Math.hypot(x-TRAINING_MEADOW.x,z-TRAINING_MEADOW.z)<=TRAINING_MEADOW.R+pad;}
+function trainingMeadowTownPortalPoint(){
+  return {x:TRAINING_MEADOW.x+TRAINING_MEADOW_TOWN_PORTAL.dx+.5,y:TRAINING_MEADOW.G+1.05,z:TRAINING_MEADOW.z+TRAINING_MEADOW_TOWN_PORTAL.dz+.5};
+}
 function isAbilityMeadowLand(x,z,pad=0){return Math.hypot(x-ABILITY_MEADOW.x,z-ABILITY_MEADOW.z)<=ABILITY_MEADOW.R+pad;}
 function isTamingLand(x,z,pad=0){return Math.hypot(x-TAMING_LAND.x,z-TAMING_LAND.z)<=TAMING_LAND.R+pad;}
 function isJobTutorialMeadowLand(jobId,x,z,pad=0){
@@ -971,6 +975,26 @@ function buildTrainingMeadow(setBlock=setB){
     for(let x=cx-6;x<=cx+6;x++)if(Math.abs(x-cx)>2)setBlock(x,G+14,cz+47,B.COBBLE);
     for(let y=G+1;y<=G+17;y++)for(let x=cx-2;x<=cx+2;x++)setBlock(x,y,cz+47,B.AIR);
     for(const ox of [-43,43,-19,19,-6,6])setBlock(cx+ox,G+14,cz+45,B.LANTERN);
+  };
+  const townPortalArch=()=>{
+    const px=cx+TRAINING_MEADOW_TOWN_PORTAL.dx,pz=cz+TRAINING_MEADOW_TOWN_PORTAL.dz;
+    for(let x=px-7;x<=px+7;x++)for(let z=pz-4;z<=pz+4;z++)if(Math.hypot(x-px,z-pz)<=7.8)flat(x,z,Math.abs(x-px)<=2&&Math.abs(z-pz)<=2?B.GLASS:B.COBBLE,B.STONE);
+    for(let x=px-2;x<=px+2;x++)for(let z=pz-1;z<=pz+1;z++){setBlock(x,G,z,B.GLASS);setBlock(x,G+1,z,B.AIR);}
+    for(const sx of [-5,5]){
+      for(let y=G+1;y<=G+10;y++){
+        setBlock(px+sx,y,pz,B.BRICK);
+        if(y%3===0){setBlock(px+sx,y,pz-1,B.GLASS);setBlock(px+sx,y,pz+1,B.GLASS);}
+      }
+      for(const dz of [-2,2])for(let y=G+1;y<=G+5;y++)setBlock(px+sx,y,pz+dz,y===G+5?B.LANTERN:B.COBBLE);
+    }
+    for(let x=px-5;x<=px+5;x++){
+      const rise=Math.max(0,3-Math.floor(Math.abs(x-px)/2));
+      for(let y=G+9;y<=G+10+rise;y++)setBlock(x,y,pz,Math.abs(x-px)<=2&&y<G+12?B.GLASS:B.BRICK);
+      if(Math.abs(x-px)>1)setBlock(x,G+11+rise,pz,B.COBBLE);
+    }
+    for(let y=G+1;y<=G+7;y++)for(let x=px-2;x<=px+2;x++)setBlock(x,y,pz,B.AIR);
+    for(const sx of [-6,6]){setBlock(px+sx,G+1,pz-3,B.LANTERN);setBlock(px+sx,G+1,pz+3,B.LANTERN);}
+    setBlock(px,G+8,pz,B.LANTERN);
   };
   const invisibleBoundary=()=>{
     for(let x=Math.floor(cx-R-2);x<=Math.ceil(cx+R+2);x++)for(let z=Math.floor(cz-R-2);z<=Math.ceil(cz+R+2);z++){
@@ -1063,6 +1087,7 @@ function buildTrainingMeadow(setBlock=setB){
   }
   garden(11,22,5);garden(-19,7,4);garden(29,18,4);garden(-8,-41,5);
   skyline();
+  townPortalArch();
   invisibleBoundary();
   for(const [ox,oz] of [[-46,0],[-43,18],[-18,36],[18,34],[42,14],[44,-26],[-44,-34],[32,-44]])tree(ox,oz,5+(Math.abs(ox+oz)%3),4);
 }
@@ -10665,6 +10690,7 @@ gameContext.registerState('world', Object.freeze({
   get skyshipJourney(){ return skyshipJourney; },
   get JOB_TUTORIAL_MEADOWS(){ return JOB_TUTORIAL_MEADOWS; },
   get TAMING_LAND(){ return TAMING_LAND; },
+  get TRAINING_MEADOW_TOWN_PORTAL(){ return TRAINING_MEADOW_TOWN_PORTAL; },
 }));
 gameContext.registerModule('world', Object.freeze({
   getBlock:getB,
@@ -10693,6 +10719,7 @@ gameContext.registerModule('world', Object.freeze({
   resetParticleBudget,
   particleBudgetStats,
   buildTamingLand,
+  trainingMeadowTownPortalPoint,
   updateCropTimerVisual,
   syncInsulatorMesh,
   ensureInsulatorMesh,
@@ -11063,6 +11090,8 @@ const legacyWorldBindings={
   "townGroup":{get:()=>townGroup},
   "tp":{get:()=>tp},
   "TRAINING_MEADOW":{get:()=>TRAINING_MEADOW},
+  "TRAINING_MEADOW_TOWN_PORTAL":{get:()=>TRAINING_MEADOW_TOWN_PORTAL},
+  "trainingMeadowTownPortalPoint":{get:()=>trainingMeadowTownPortalPoint},
   "trySleep":{get:()=>trySleep},
   "TS":{get:()=>TS},
   "tutorialBeam":{get:()=>tutorialBeam},

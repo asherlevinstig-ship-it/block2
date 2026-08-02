@@ -12,6 +12,7 @@ const WX = WORLD_SIZE, WH = 64, SEA = 13;
 const LAVA_BORDER_WIDTH = 12, LAVA_BORDER_TOP = WH - 2;
 const TOWN = { TC: WX / 2, HS: 72, G: 15 };
 const TRAINING_MEADOW = { x: 560, z: 840, G: 18, R: 58 };
+const TRAINING_MEADOW_TOWN_PORTAL = Object.freeze({ dx: 0, dz: 40, range: 5.8 });
 const OLD_TOWN_TC = 64;
 const TOWN_SPACING = 1.14;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
@@ -118,6 +119,9 @@ function biomeAt(x, z) {
 function isTrainingMeadowLand(x, z, pad = 0) {
   return Math.hypot(x - TRAINING_MEADOW.x, z - TRAINING_MEADOW.z) <= TRAINING_MEADOW.R + pad;
 }
+function trainingMeadowTownPortalPoint() {
+  return { x: TRAINING_MEADOW.x + TRAINING_MEADOW_TOWN_PORTAL.dx + .5, y: TRAINING_MEADOW.G + 1.05, z: TRAINING_MEADOW.z + TRAINING_MEADOW_TOWN_PORTAL.dz + .5 };
+}
 function buildTrainingMeadow(setBlock) {
   const { x: cx, z: cz, G, R } = TRAINING_MEADOW;
   const flat = (x, z, top = B.GRASS, under = B.DIRT) => { for (let y = 1; y < G - 4; y++) setBlock(x, y, z, B.STONE); for (let y = Math.max(1, G - 4); y < G; y++) setBlock(x, y, z, under); setBlock(x, G, z, top); for (let y = G + 1; y < WH; y++) setBlock(x, y, z, B.AIR); };
@@ -150,6 +154,26 @@ function buildTrainingMeadow(setBlock) {
     for (let x = cx - 6; x <= cx + 6; x++) if (Math.abs(x - cx) > 2) setBlock(x, G + 14, cz + 47, B.COBBLE);
     for (let y = G + 1; y <= G + 17; y++) for (let x = cx - 2; x <= cx + 2; x++) setBlock(x, y, cz + 47, B.AIR);
     for (const ox of [-43, 43, -19, 19, -6, 6]) setBlock(cx + ox, G + 14, cz + 45, B.LANTERN);
+  };
+  const townPortalArch = () => {
+    const px = cx + TRAINING_MEADOW_TOWN_PORTAL.dx, pz = cz + TRAINING_MEADOW_TOWN_PORTAL.dz;
+    for (let x = px - 7; x <= px + 7; x++) for (let z = pz - 4; z <= pz + 4; z++) if (Math.hypot(x - px, z - pz) <= 7.8) flat(x, z, Math.abs(x - px) <= 2 && Math.abs(z - pz) <= 2 ? B.GLASS : B.COBBLE, B.STONE);
+    for (let x = px - 2; x <= px + 2; x++) for (let z = pz - 1; z <= pz + 1; z++) { setBlock(x, G, z, B.GLASS); setBlock(x, G + 1, z, B.AIR); }
+    for (const sx of [-5, 5]) {
+      for (let y = G + 1; y <= G + 10; y++) {
+        setBlock(px + sx, y, pz, B.BRICK);
+        if (y % 3 === 0) { setBlock(px + sx, y, pz - 1, B.GLASS); setBlock(px + sx, y, pz + 1, B.GLASS); }
+      }
+      for (const dz of [-2, 2]) for (let y = G + 1; y <= G + 5; y++) setBlock(px + sx, y, pz + dz, y === G + 5 ? B.LANTERN : B.COBBLE);
+    }
+    for (let x = px - 5; x <= px + 5; x++) {
+      const rise = Math.max(0, 3 - Math.floor(Math.abs(x - px) / 2));
+      for (let y = G + 9; y <= G + 10 + rise; y++) setBlock(x, y, pz, Math.abs(x - px) <= 2 && y < G + 12 ? B.GLASS : B.BRICK);
+      if (Math.abs(x - px) > 1) setBlock(x, G + 11 + rise, pz, B.COBBLE);
+    }
+    for (let y = G + 1; y <= G + 7; y++) for (let x = px - 2; x <= px + 2; x++) setBlock(x, y, pz, B.AIR);
+    for (const sx of [-6, 6]) { setBlock(px + sx, G + 1, pz - 3, B.LANTERN); setBlock(px + sx, G + 1, pz + 3, B.LANTERN); }
+    setBlock(px, G + 8, pz, B.LANTERN);
   };
   const invisibleBoundary = () => {
     for (let x = Math.floor(cx - R - 2); x <= Math.ceil(cx + R + 2); x++) for (let z = Math.floor(cz - R - 2); z <= Math.ceil(cz + R + 2); z++) {
@@ -242,6 +266,7 @@ function buildTrainingMeadow(setBlock) {
   }
   garden(11, 22, 5); garden(-19, 7, 4); garden(29, 18, 4); garden(-8, -41, 5);
   skyline();
+  townPortalArch();
   invisibleBoundary();
   for (const [ox, oz] of [[-46, 0], [-43, 18], [-18, 36], [18, 34], [42, 14], [44, -26], [-44, -34], [32, -44]]) tree(ox, oz, 5 + (Math.abs(ox + oz) % 3), 4);
 }
@@ -1109,11 +1134,11 @@ function createWorld() {
 }
 
 module.exports = {
-  WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
+  WX, WH, TOWN, TOWN_SPACING, TOWN_DISTRICTS, HUB, TRAINING_MEADOW, TRAINING_MEADOW_TOWN_PORTAL, LAVA_BORDER_WIDTH, B, BIO, MAX_BLOCK_ID,
   townPos, townBlockPos,
   generate, getB, setB, idx, inWorld, isSolid, standHeight, terrainHeight, hash2, isLavaBorderLand, createWorld, worldGrid,
   biomeAt, regionalLandmarkSpecs, buildRegionalLandmarks, roadNetworkSpecs, roadBreadcrumbSpecs, buildRoadNetwork,
   SMALL_DISCOVERY_TYPES, smallDiscoverySpecs, buildSmallDiscoveries, treasureCacheSpecs, buildTreasureCaches, caveNetworkSpecs, buildCaveNetworks,
-  ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, buildTrainingMeadow,
+  ancientCitySpecs, ancientCityLootTable, ancientCityDiscoverySpecs, buildAncientCities, isTrainingMeadowLand, trainingMeadowTownPortalPoint, buildTrainingMeadow,
   buildGuildHallBase, isCentralCourtProtectedEdit, isTownFarmWorksite,
 };

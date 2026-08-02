@@ -450,7 +450,7 @@ class GameRoom extends Room {
     this.onMessage('edit', (client, m) => this.handleWorldEdit(client, m));
     this.onMessage('trainingReset', (client) => this.handleTutorialEnter(client, { kind: 'onboarding' }));
     this.onMessage('tutorialEnter', (client, m) => this.handleTutorialEnter(client, m));
-    this.onMessage('tutorialExit', (client) => this.handleTutorialExit(client));
+    this.onMessage('tutorialExit', (client, m) => this.handleTutorialExit(client, m));
     this.onMessage('jobTutorialProgress', (client, m) => this.handleJobTutorialProgress(client, m));
     this.onMessage('landClaimBuy', (client, m) => this.handleLandClaimBuy(client, m));
     this.onMessage('landClaimRename', (client, m) => this.handleLandClaimRename(client, m));
@@ -1856,7 +1856,7 @@ class GameRoom extends Room {
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
     if (ret && Number.isFinite(ret.yaw)) p.yaw = ret.yaw;
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
-    if ((wasJobTutorial || wasTamingLand) && rec && rec.prof) {
+    if ((forcedPos || wasJobTutorial || wasTamingLand) && rec && rec.prof) {
       rec.prof.activeRoom = null;
       rec.prof.pos = [p.x, p.y, p.z];
       this.dirtyPlayers.add(rec.token);
@@ -1865,8 +1865,9 @@ class GameRoom extends Room {
     return true;
   }
 
-  handleTutorialExit(client) {
-    return this.leaveTutorialDimension(client);
+  handleTutorialExit(client, m = null) {
+    const destination = m && String(m.destination || '');
+    return this.leaveTutorialDimension(client, destination === 'town' ? townReturnArray() : null);
   }
 
   resumeTutorialDimension(client) {

@@ -1928,13 +1928,16 @@ function applyDim(){
   else if(dim==='gatecutscene'){ scene.fog.near=18; scene.fog.far=115; scene.fog.color.set(0x151022); }
   else { scene.fog.near=8; scene.fog.far=36; }
 }
-let onboardingRoomReturn=null;
+let onboardingRoomReturn=null, onboardingTownPortal=null;
 function localTutorialSpaceId(kind){
   if(kind==='taming_land')return 'taming_land';
   return 'tutorial-'+kind+'-'+(NET.room&&NET.room.sessionId||'local');
 }
 function announceArrivalTitle(kicker,title,subtitle){
   if(typeof showArrivalTitle==='function')showArrivalTitle({kicker,title,subtitle});
+}
+function townReturnPoint(){
+  return {x:TOWN.TC+14.5,y:TOWN.G+1,z:TOWN.TC+27.5};
 }
 let portalTransitionActive=false;
 function runPortalTransition(opts, swap){
@@ -1999,9 +2002,20 @@ function enterOnboardingRoom(){
   dim='tutorial';
   NET.dgn=localTutorialSpaceId('onboarding');
   world.id=NET.dgn;
-  rebuildAllChunks();refreshTorchMeshes();applyDim();
+  rebuildAllChunks();refreshTorchMeshes();applyDim();ensureOnboardingTownPortal();
   if(NET.on&&NET.room) NET.room.send('tutorialEnter',{kind:'onboarding'});
   return true;
+}
+function ensureOnboardingTownPortal(){
+  if(onboardingTownPortal){scene.remove(onboardingTownPortal);onboardingTownPortal=null;}
+  if(dim!=='tutorial'||typeof trainingMeadowTownPortalPoint!=='function')return;
+  const exit=trainingMeadowTownPortalPoint();
+  onboardingTownPortal=makeGateMesh(0x4fd8ff);
+  onboardingTownPortal.position.set(exit.x,exit.y,exit.z);
+  const label=makeTextSprite('ENTER TOWN','#bfeaff');
+  label.position.set(0,2.65,0);
+  onboardingTownPortal.add(label);
+  scene.add(onboardingTownPortal);
 }
 function clearOnboardingCropMeshes(){
   for(const key of Object.keys(cropMeshes)){
@@ -2010,16 +2024,32 @@ function clearOnboardingCropMeshes(){
   }
 }
 function exitOnboardingRoom(notify=true){
+  const opts=typeof arguments[0]==='object'&&arguments[0]?arguments[0]:{notify:arguments[0]!==false};
+  const toTown=opts.destination==='town'||opts.town===true;
+  notify=opts.notify!==false;
   if(dim!=='tutorial') return;
   clearOnboardingCropMeshes();
+  if(onboardingTownPortal){scene.remove(onboardingTownPortal);onboardingTownPortal=null;}
   const ret=onboardingRoomReturn;
   world=(ret&&ret.world)||owWorld||world;
   dim='overworld';
   owWorld=world;
   NET.dgn='';
   rebuildAllChunks();refreshTorchMeshes();applyDim();
-  if(notify&&NET.on&&NET.room) NET.room.send('tutorialExit',{});
+  if(toTown&&player){
+    const town=townReturnPoint();
+    player.pos.set(town.x,town.y,town.z);
+    player.yaw=Math.PI;
+    player.pitch=0;
+    player.vel.set(0,0,0);
+    if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
+    announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Welcome to the hunter hub');
+  }else if(notify&&NET.on&&NET.room) NET.room.send('tutorialExit',{});
   onboardingRoomReturn=null;
+}
+function exitOnboardingToTown(){
+  if(dim!=='tutorial')return false;
+  return runPortalTransition({title:'Town of Beginnings',subtitle:'Entering the hunter hub',kind:'taming'},()=>exitOnboardingRoom({destination:'town'}));
 }
 let abilityRoomReturn=null;
 function generateAbilityRoom(){
@@ -2456,7 +2486,7 @@ function tickGates(dt, now){
     gateTimer-=dt;
     if(gateTimer<=0) spawnGate();
   }
-  for(const [g,col,local] of [[gate&&gate.grp, gate&&gate.colArr, gate], [exitPortal, [.43,.88,.42], null]]){
+  for(const [g,col,local] of [[gate&&gate.grp, gate&&gate.colArr, gate], [exitPortal, [.43,.88,.42], null], [tamingLandExitPortal, [.62,.99,.45], null], [onboardingTownPortal, [.31,.85,1], null]]){
     if(!g) continue;
     g.userData.disc.rotation.z+=dt*1.6;
     const urgency=local?gateUrgency(local.expiresAt):'stable';
@@ -2482,6 +2512,7 @@ gameContext.registerState('dimensions', Object.freeze({
   get overworldGrid(){ return owWorld; },
   get jobTutorialRoomJob(){ return jobTutorialRoomJob; },
   get tamingLandExitPortal(){ return tamingLandExitPortal; },
+  get onboardingTownPortal(){ return onboardingTownPortal; },
 }));
 gameContext.registerModule('dimensions', Object.freeze({
   enterDungeon,
@@ -2492,6 +2523,7 @@ gameContext.registerModule('dimensions', Object.freeze({
   exitQuestionRoom,
   enterTamingLand,
   exitTamingLand,
+  exitOnboardingToTown,
   openStat,
   rebuild:rebuildAllChunks,
   tickGates,
@@ -2532,6 +2564,7 @@ const legacyDimensionsBindings={
   "exitDungeon":{get:()=>exitDungeon},
   "exitJobTutorialRoom":{get:()=>exitJobTutorialRoom},
   "exitOnboardingRoom":{get:()=>exitOnboardingRoom},
+  "exitOnboardingToTown":{get:()=>exitOnboardingToTown},
   "exitQuestionRoom":{get:()=>exitQuestionRoom},
   "exitTamingLand":{get:()=>exitTamingLand},
   "exitPortal":{get:()=>exitPortal,set:value=>{exitPortal=value;}},

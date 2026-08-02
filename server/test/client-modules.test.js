@@ -287,6 +287,31 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   assert.match(frame, /walkToTamingPortal:\(\)=>e2eWalkTo/);
 });
 
+test('Tutorial meadow has a Town of Beginnings portal arch', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const serverWorld = fs.readFileSync(path.join(__dirname, '..', 'world.js'), 'utf8');
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+
+  assert.match(world, /const TRAINING_MEADOW_TOWN_PORTAL=Object\.freeze\(\{dx:0,dz:40,range:5\.8\}\)/);
+  assert.match(world, /function trainingMeadowTownPortalPoint\(\)/);
+  assert.match(world, /const townPortalArch=\(\)=>/);
+  assert.match(world, /townPortalArch\(\);[\s\S]*invisibleBoundary\(\);/);
+  assert.match(serverWorld, /const TRAINING_MEADOW_TOWN_PORTAL = Object\.freeze\(\{ dx: 0, dz: 40, range: 5\.8 \}\)/);
+  assert.match(serverWorld, /function trainingMeadowTownPortalPoint\(\)/);
+  assert.match(serverWorld, /townPortalArch\(\);[\s\S]*invisibleBoundary\(\);/);
+  assert.match(dimensions, /function ensureOnboardingTownPortal\(\)/);
+  assert.match(dimensions, /makeTextSprite\('ENTER TOWN','#bfeaff'\)/);
+  assert.match(dimensions, /function exitOnboardingToTown\(\)/);
+  assert.match(dimensions, /NET\.room\.send\('tutorialExit',\{destination:'town'\}\)/);
+  assert.match(combat, /function nearTrainingMeadowTownPortal\(range=5\.8\)/);
+  assert.match(combat, /title:'Town Portal',small:'Enter the Town of Beginnings'/);
+  assert.match(combat, /if\(nearTrainingMeadowTownPortal\(\)\)\{ if\(typeof exitOnboardingToTown==='function'\)exitOnboardingToTown\(\); return; \}/);
+  assert.match(room, /this\.onMessage\('tutorialExit', \(client, m\) => this\.handleTutorialExit\(client, m\)\)/);
+  assert.match(room, /destination === 'town' \? townReturnArray\(\) : null/);
+});
+
 test('Town of Beginnings has explainer NPC helpers for major areas', () => {
   const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
