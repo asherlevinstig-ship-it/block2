@@ -2309,6 +2309,10 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/finishWorldLoading\('town-arrival'\); if\(deferArrivalChoice\)showFirstTownArrivalChoice\(\);/);
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);
+  assert.match(combat,/function settleFirstTownAdventureSpawn\(\)/);
+  assert.match(combat,/for\(const code in keys\) keys\[code\]=false/);
+  assert.match(combat,/player\.pitch=0/);
+  assert.match(combat,/settleFirstTownAdventureSpawn\(\)/);
   assert.match(combat,/enterQuestionRoom\(\)/);
   assert.match(combat,/function nearQuestionHallTownPortal\(range=4\.8\)/);
   assert.match(combat,/title:'Return Portal',small:'Travel back to Town of Beginnings'/);

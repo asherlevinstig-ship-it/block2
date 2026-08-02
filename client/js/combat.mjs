@@ -4237,6 +4237,24 @@ function resumeCameraAfterArrivalChoice(){
     setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); },250);
   }catch(e){ enterPlayFallback(); }
 }
+function settleFirstTownAdventureSpawn(){
+  for(const code in keys) keys[code]=false;
+  stopPrimaryAction();
+  mouseR=false;
+  placeKeyHeld=false;
+  nextHeldPlaceAt=0;
+  mouseLookDelta.x=0;
+  mouseLookDelta.y=0;
+  if(isMeditating)stopMeditation({silent:true});
+  if(player){
+    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5);
+    player.vel.set(0,0,0);
+    player.yaw=Math.PI;
+    player.pitch=0;
+    player.onGround=true;
+  }
+  if(typeof globalThis.BlockcraftSnapGameplayCamera==='function')globalThis.BlockcraftSnapGameplayCamera();
+}
 function startQuestionHallMeditationPose(){
   if(dim!=='questions'||!player)return false;
   if(!meditationPrevView)meditationPrevView={yaw:player.yaw,pitch:player.pitch};
@@ -4303,9 +4321,7 @@ function chooseFirstTownArrival(choice){
     sysMsg('<b>Question Hall is still forming.</b> Starting in Town of Beginnings instead.');
   }
   if(player){
-    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5);
-    player.vel.set(0,0,0);
-    player.yaw=Math.PI;
+    settleFirstTownAdventureSpawn();
   }
   startTownGuidance();
   setTimeout(()=>ONBOARD.showTrainingComplete(),120);
