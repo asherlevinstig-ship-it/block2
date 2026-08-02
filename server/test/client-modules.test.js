@@ -2304,7 +2304,8 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(styles,/\.arrival-choice-card\.questions/);
   assert.match(combat,/let firstTownChoiceDismissedThisSession=false/);
   assert.match(combat,/function showFirstTownArrivalChoice\(\)/);
-  assert.match(combat,/onboardingDone\(\)&&!firstTownChoiceDismissedThisSession&&!quest&&!playerJob&&!\(S&&S\.lvl>=2\)&&!firstQuestMilestoneComplete\(\)&&dim==='overworld'/);
+  assert.match(combat,/onboardingDone\(\)&&!firstTownChoiceDismissedThisSession&&!firstQuestMilestoneComplete\(\)&&dim==='overworld'/);
+  assert.doesNotMatch(combat,/shouldShowFirstTownArrivalChoice\(\)\{[\s\S]*!quest&&!playerJob/);
   assert.match(combat,/finishWorldLoading\('town-arrival'\); if\(deferArrivalChoice\)showFirstTownArrivalChoice\(\);/);
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);

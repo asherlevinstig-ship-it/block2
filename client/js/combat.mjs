@@ -4225,7 +4225,7 @@ function finishOnboardingToTown(){
   setTimeout(()=>{ finishWorldLoading('town-arrival'); if(deferArrivalChoice)showFirstTownArrivalChoice(); },720);
 }
 function shouldShowFirstTownArrivalChoice(){
-  return !!(arrivalChoiceEl&&onboardingDone()&&!firstTownChoiceDismissedThisSession&&!quest&&!playerJob&&!(S&&S.lvl>=2)&&!firstQuestMilestoneComplete()&&dim==='overworld');
+  return !!(arrivalChoiceEl&&onboardingDone()&&!firstTownChoiceDismissedThisSession&&!firstQuestMilestoneComplete()&&dim==='overworld');
 }
 function resumeCameraAfterArrivalChoice(){
   lockFallback=true;
