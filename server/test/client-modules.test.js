@@ -1671,12 +1671,35 @@ test('Recall Cast uses the dedicated P practice hotkey',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
-  assert.match(combat,/String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'&&!e\.repeat&&gameInput[\s\S]*BlockcraftRecall\.start\(\);\s*return;/);
+  assert.match(combat,/String\(e\.key\|\|''\)\.toLowerCase\(\)==='p'&&!e\.repeat&&gameInput[\s\S]*BlockcraftRecall\.start\(dim==='questions'\?\{source:'question_hall'\}:undefined\);\s*return;/);
   assert.doesNotMatch(combat,/e\.code==='KeyI'[\s\S]*BlockcraftRecall\.start\(\)/);
   assert.match(html,/<kbd>P<\/kbd><\/div><b>Recall Cast<\/b>/);
   assert.doesNotMatch(html,/id="recallanswers"/);
-  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
+  assert.match(recall,/const source=opts&&opts\.source==='lectern'\?'lectern':\(opts&&opts\.source==='question_hall'\?'question_hall':''\)/);
   assert.doesNotMatch(room,/recallCooldowns|reason:'cooldown'/);
+});
+
+test('Question Hall opens Recall as a modal loop with progress and close',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
+  assert.match(html,/id="recallclose"/);
+  assert.match(html,/id="recallprogress"/);
+  assert.match(styles,/#recallhud\.question-hall-recall/);
+  assert.match(styles,/body\.question-hall-recall-open:before/);
+  assert.match(combat,/if\(dim==='questions'\)releaseGameplayCursor\(\);/);
+  assert.match(combat,/questionHallActive&&globalThis\.BlockcraftRecall\.questionHallActive\(\)/);
+  assert.match(combat,/globalThis\.BlockcraftRecall\.closeQuestionHall\(\)/);
+  assert.match(recall,/QUESTION_HALL_GOAL=10/);
+  assert.match(recall,/function queueQuestionHallNext/);
+  assert.match(recall,/start\(\{source:'question_hall'\}\)/);
+  assert.match(recall,/questionHallActive:\(\)=>questionHallOpen/);
+  assert.match(room,/questionHall=message\.source==='question_hall'/);
+  assert.match(room,/fallback=questionHall\|\|pillars\.some/);
+  assert.match(room,/questionHall:source==='question_hall'/);
+  assert.match(room,/const hall=challenge\.source==='question_hall',freezeMs=hall\?0:RECALL\.FREEZE_MS/);
 });
 
 test('cursor item follows the mouse without relying on a leaked module global',()=>{
@@ -2266,7 +2289,7 @@ test('Left Alt opens subject focus while Escape only closes or releases cursor',
   assert.match(menus,/fetch\('\/auth\/profile\/subjects',\{headers:authHeader\(\),credentials:'include'\}\)/);
   assert.match(menus,/function recallSubjectOptions\(\)\{const names=subjectNames\(schoolRecallSubjects\);return names\.length\?names:DEFAULT_RECALL_SUBJECTS;\}/);
   assert.match(menus,/Loading your assigned school subjects/);
-  assert.match(recall,/recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source:opts&&opts\.source==='lectern'\?'lectern':''\}/);
+  assert.match(recall,/NET\.room\.send\('recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source\}\)/);
 });
 
 test('quest log hotkey works while gameplay overlay is hidden even without pointer lock',()=>{

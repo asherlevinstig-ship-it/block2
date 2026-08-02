@@ -5002,7 +5002,8 @@ addEventListener('keydown', e=>{
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
   if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&gameInput){
     e.preventDefault();
-    globalThis.BlockcraftRecall.start();
+    if(dim==='questions')releaseGameplayCursor();
+    globalThis.BlockcraftRecall.start(dim==='questions'?{source:'question_hall'}:undefined);
     return;
   }
   if(e.code==='KeyE'){
@@ -5055,6 +5056,11 @@ addEventListener('keydown', e=>{
   if(e.code==='Escape'){
     let closed=false;
     const mirrorPreview=globalThis.BlockcraftAppearancePreview;
+    if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.questionHallActive&&globalThis.BlockcraftRecall.questionHallActive()){
+      e.preventDefault();
+      globalThis.BlockcraftRecall.closeQuestionHall();
+      return;
+    }
     if(mirrorPreview&&mirrorPreview.active&&mirrorPreview.active()&&mirrorPreview.dismiss){
       e.preventDefault();
       mirrorPreview.dismiss();

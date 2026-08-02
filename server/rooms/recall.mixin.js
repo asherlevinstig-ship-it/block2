@@ -90,13 +90,13 @@ class RecallMixin{
       if(rec&&Array.isArray(rec.prof.claimedDiscoveries)&&rec.prof.claimedDiscoveries.includes(claimKey))return client.send('recallReject',{reason:'ruin_claimed'});
       ruinId=ruin.id;
     }
-    const tutorial=this.recallTutorialSpace(p);
+    const tutorial=this.recallTutorialSpace(p),questionHall=message.source==='question_hall';
     const q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
-    const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
-    const source=message.source==='lectern'?'lectern':(tutorial?'tutorial':'');
+    const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
+    const source=message.source==='lectern'?'lectern':(questionHall?'question_hall':(tutorial?'tutorial':''));
     this.recallChallenges.set(client.sessionId,{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source});
-    client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
+    client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',questionHall:source==='question_hall',mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
   }
   recordRecallAnalytics(client,challenge,answerIndex,correct,now=Date.now()){
     const account=client&&client._account;
@@ -118,7 +118,7 @@ class RecallMixin{
       answerIndex,
       correct,
       durationMs,
-      source:challenge.source==='lectern'?'lectern':(challenge.source==='tutorial'?'tutorial':'recall'),
+      source:challenge.source==='lectern'?'lectern':(challenge.source==='question_hall'?'question_hall':(challenge.source==='tutorial'?'tutorial':'recall')),
     })).then(result=>{
       const rec=typeof this.profileFor==='function'&&this.profileFor(client);
       if(!rec||!rec.prof||!result||!Array.isArray(result.homeworkObjectives))return;
@@ -176,10 +176,11 @@ class RecallMixin{
           if(this.awardGuildRenown(client,1,'Recall Lectern study')){fellowshipRenown=1;this.recallLecternRenownAt.set(key,now);}
         }
       }
-      return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,stamina:stamina.restore,sp:stamina.sp,maxSp:stamina.maxSp,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,fellowshipRenown,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery});
+      return client.send('recallResult',{id:challenge.id,correct:true,mana:restore,stamina:stamina.restore,sp:stamina.sp,maxSp:stamina.maxSp,staminaFraction:RECALL.RESTORE_FRACTION,explorationGold,fellowshipRenown,explanation:challenge.explanation,nextDue:review&&review.record.nextDue,mastery,questionHall:challenge.source==='question_hall'});
     }
-    const frozenUntil=now+RECALL.FREEZE_MS;this.recallFrozenUntil.set(sid,frozenUntil);
-    client.send('recallResult',{id:challenge.id,correct:false,correctIndex:challenge.correct,explanation:challenge.explanation,freezeMs:RECALL.FREEZE_MS,nextDue:review&&review.record.nextDue,mastery});
+    const hall=challenge.source==='question_hall',freezeMs=hall?0:RECALL.FREEZE_MS;
+    if(!hall){const frozenUntil=now+freezeMs;this.recallFrozenUntil.set(sid,frozenUntil);}
+    client.send('recallResult',{id:challenge.id,correct:false,correctIndex:challenge.correct,explanation:challenge.explanation,freezeMs,nextDue:review&&review.record.nextDue,mastery,questionHall:hall});
   }
   restoreRecallStamina(client,prof){
     if(!prof||typeof this.maxStaminaForProfile!=='function')return{restore:0,sp:null,maxSp:null};
