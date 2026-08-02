@@ -1656,8 +1656,14 @@ test('remote player tags receive team helpers without crashing the frame loop',(
   const companions=fs.readFileSync(path.join(__dirname,'..','..','client','js','companions.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   assert.match(companions,/remoteAppearance,\s*teamCol,\s*teamName,/);
+  assert.match(companions,/const schoolId=String\(r\.ref\.schoolId\|\|''\)\.trim\(\);/);
+  assert.match(companions,/schoolId \}/);
   assert.match(networking,/teamCol:\(\.\.\.args\)=>SOCIAL\.teamCol\(\.\.\.args\)/);
   assert.match(networking,/teamName:\(\.\.\.args\)=>SOCIAL\.teamName\(\.\.\.args\)/);
+  assert.match(networking,/function localSchoolId\(\)\{/);
+  assert.match(networking,/text:'SCHOOL  '\+schoolId\.slice\(0,18\)/);
+  assert.match(networking,/const panelH=48\+rows\.length\*22;/);
+  assert.match(networking,/schoolId \}\)/);
 });
 
 test('Recall Cast uses the dedicated P practice hotkey',()=>{

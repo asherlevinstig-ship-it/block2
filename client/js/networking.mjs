@@ -3109,17 +3109,22 @@ function makeNameTag(text, col, team, teamColr, opts){
   const rank=opts.rank||playerRankName(lvl);
   const jobLabel=opts.jobTitle || (opts.job ? (opts.jobLvl ? opts.job+' '+opts.jobLvl : opts.job) : 'Adventurer');
   const schoolId=String(opts.schoolId||'').trim();
-  const c=document.createElement('canvas'); c.width=320; c.height=schoolId?116:96;
+  const rows=[
+    {kind:'rank', text:hunterRankLevelLabel(lvl)+'  '+rank, color:'#d8f8c8', fill:'rgba(154,210,107,.16)', stroke:'rgba(154,210,107,.45)'},
+  ];
+  if(jobLabel)rows.push({kind:'job', text:jobLabel, color:'#ffe6a8', fill:'rgba(255,210,74,.12)', stroke:'rgba(255,210,74,.38)'});
+  if(schoolId)rows.push({kind:'school', text:'SCHOOL  '+schoolId.slice(0,18), color:'#bae6fd', fill:'rgba(125,211,252,.13)', stroke:'rgba(125,211,252,.48)'});
+  if(team)rows.push({kind:'team', text:'TEAM  '+team, color:teamColr||'#ffd24a', fill:'rgba(255,255,255,.07)', stroke:teamColr||'#ffd24a'});
+  const panelH=48+rows.length*22;
+  const c=document.createElement('canvas'); c.width=320; c.height=panelH+28;
   const g=c.getContext('2d');
   const accent=col||'#ffffff';
-  const teamColor=teamColr||'#ffd24a';
-  const panelH=team?schoolId?90:70:schoolId?74:54;
   g.textAlign='center';
   g.shadowColor='rgba(0,0,0,.75)';
   g.shadowBlur=6;
 
-  roundedRect(g,42,12,236,panelH,8);
-  const grad=g.createLinearGradient(42,12,42,12+panelH);
+  roundedRect(g,30,12,260,panelH,8);
+  const grad=g.createLinearGradient(30,12,30,12+panelH);
   grad.addColorStop(0,'rgba(12,20,34,.92)');
   grad.addColorStop(1,'rgba(4,8,16,.86)');
   g.fillStyle=grad; g.fill();
@@ -3127,42 +3132,26 @@ function makeNameTag(text, col, team, teamColr, opts){
   g.strokeStyle='rgba(255,255,255,.18)';
   g.lineWidth=1.5; g.stroke();
   g.strokeStyle=accent;
-  g.globalAlpha=.72; g.strokeRect(49.5,19.5,221,panelH-13); g.globalAlpha=1;
+  g.globalAlpha=.72; g.strokeRect(39.5,19.5,241,panelH-13); g.globalAlpha=1;
 
-  fitCanvasText(g,text,184,17,'bold');
+  fitCanvasText(g,text,214,20,'bold');
   g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.82)';
   g.strokeText(text,160,36);
   g.fillStyle=accent; g.fillText(text,160,36);
 
-  const pillText=hunterRankLevelLabel(lvl)+'  '+rank+(jobLabel?'  ·  '+jobLabel:'');
-  const pillW=jobLabel?196:130, pillX=(320-pillW)/2;
-  fitCanvasText(g,pillText,pillW-8,11,'bold');
-  roundedRect(g,pillX,44,pillW,18,5);
-  g.fillStyle='rgba(154,210,107,.16)'; g.fill();
-  g.strokeStyle='rgba(154,210,107,.45)'; g.stroke();
-  g.fillStyle='#d8f8c8'; g.fillText(pillText,160,57);
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i], y=48+i*22, wide=row.kind==='school'?160:row.kind==='team'?196:176, x=(320-wide)/2;
+    roundedRect(g,x,y,wide,18,5);
+    g.fillStyle=row.fill; g.fill();
+    g.strokeStyle=row.stroke; g.globalAlpha=row.kind==='team'?.75:1; g.stroke(); g.globalAlpha=1;
+    fitCanvasText(g,row.text,wide-12,11,'bold');
+    g.fillStyle=row.color;
+    g.fillText(row.text,160,y+13);
+  }
 
-  if(schoolId){
-    const schoolText='SCHOOL  '+schoolId.slice(0,18);
-    roundedRect(g,92,65,136,18,5);
-    g.fillStyle='rgba(125,211,252,.13)'; g.fill();
-    g.strokeStyle='rgba(125,211,252,.48)'; g.stroke();
-    fitCanvasText(g,schoolText,118,11,'bold');
-    g.fillStyle='#bae6fd';
-    g.fillText(schoolText,160,78);
-  }
-  if(team){
-    const teamY=schoolId?85:65;
-    roundedRect(g,62,teamY,196,18,5);
-    g.fillStyle='rgba(255,255,255,.07)'; g.fill();
-    g.strokeStyle=teamColor; g.globalAlpha=.75; g.stroke(); g.globalAlpha=1;
-    fitCanvasText(g,team,142,11,'bold');
-    g.fillStyle=teamColor;
-    g.fillText('TEAM  '+team,160,teamY+13);
-  }
   const tex=new THREE.CanvasTexture(c);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false, depthTest:false}));
-  sp.scale.set(1.6,schoolId ? .58 : .48,1); sp.position.y=schoolId?2.42:2.34; sp.renderOrder=20;
+  sp.scale.set(1.6,1.6*(c.height/c.width),1); sp.position.y=2.42+(rows.length>2?.08:0); sp.renderOrder=20;
   return sp;
 }
 function appearanceForPath(path, customInput){
@@ -3346,11 +3335,15 @@ const APPEARANCE_DUMMY_GROUND_OFFSET=-0.12;
 function localDisplayName(){
   return (document.getElementById('playername').value||'Hunter').slice(0,16);
 }
+function localSchoolId(){
+  const account=AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.account;
+  return account&&account.schoolId!=null?String(account.schoolId).trim():'';
+}
 function appearanceSignature(){
   const held=inv[selected]?inv[selected].id:0;
   const armor=armorSlot?armorSlot.id:0;
   const armorType=armorSlot&&ITEMS[armorSlot.id]&&ITEMS[armorSlot.id].armor?GEAR_SYSTEM.armorProfile(ITEMS[armorSlot.id].armor,armorSlot).type.id:'';
-  return [localDisplayName(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), JSON.stringify(playerCustomAppearance||{}), equippedCosmetics.join(',')].join('|');
+  return [localDisplayName(), localSchoolId(), S.lvl, highestGateRankCleared, S.path||'', S.str, S.agi, S.vit, S.int, armor, armorType, held, playerJob||'', jobLevelFromXp(jobXp), JSON.stringify(playerCustomAppearance||{}), equippedCosmetics.join(',')].join('|');
 }
 function buildAppearanceDummy(){
   const d={...makeRemoteAvatar(playerAppearance()), phase:Math.random()*10, sig:'', tag:null};
@@ -3433,8 +3426,9 @@ function refreshAppearanceDummy(){
   const labelColor=teamId ? teamCol(teamId) : '#ffd24a';
   const jd=activeJob(), jl=playerJob?jobLevelFromXp(jobXp):0;
   const jt=playerJob?jobTitleFor(playerJob,jl):'Adventurer';
-  appearanceDummy.tag=makeNameTag(displayName, pathCol, labelTeam, labelColor, { lvl:S.lvl, rank:localPlayerRankName(), job:jd&&jd.name, jobLvl:jl, jobTitle:jt });
-  appearanceBackDummy.tag=makeNameTag(displayName, pathCol, labelTeam, labelColor, { lvl:S.lvl, rank:localPlayerRankName(), job:jd&&jd.name, jobLvl:jl, jobTitle:jt });
+  const schoolId=localSchoolId();
+  appearanceDummy.tag=makeNameTag(displayName, pathCol, labelTeam, labelColor, { lvl:S.lvl, rank:localPlayerRankName(), job:jd&&jd.name, jobLvl:jl, jobTitle:jt, schoolId });
+  appearanceBackDummy.tag=makeNameTag(displayName, pathCol, labelTeam, labelColor, { lvl:S.lvl, rank:localPlayerRankName(), job:jd&&jd.name, jobLvl:jl, jobTitle:jt, schoolId });
   appearanceDummy.grp.add(appearanceDummy.tag);
   appearanceBackDummy.grp.add(appearanceBackDummy.tag);
 }
