@@ -1280,6 +1280,8 @@ test('browser and server consume one shared profession and contract ruleset', ()
   assert.match(worldSource, /function jobContractNextHint/);
   assert.match(worldSource, /function jobContractColor/);
   assert.match(worldSource, /function jobContractGuidanceTarget/);
+  assert.match(worldSource, /const col=jobContractColor\(c,false\)/);
+  assert.doesNotMatch(worldSource, /jobContractColor\(c,ready\)/);
   assert.match(worldSource, /function jobContractMoment/);
   assert.match(worldSource, /function jobContractRouteTo/);
   assert.match(worldSource, /const jobTarget=jobContractGuidanceTarget\(\);\s*if\(jobTarget\)return jobTarget;\s*if\(!isTownLand/);

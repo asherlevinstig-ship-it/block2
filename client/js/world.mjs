@@ -4959,7 +4959,7 @@ function jobContractGuidanceTarget(){
   else if(c.type==='gate')target=gate?{x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   else if(c.type==='kill'||c.type==='hunt')target=firstHandsLoggingTarget();
   if(!target)return null;
-  const col=jobContractColor(c,ready);
+  const col=jobContractColor(c,false);
   return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:jobContractTargetLabel(c)};
 }
 function maraQuestGuidanceTarget(q){
