@@ -2189,6 +2189,29 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(styles,/#townchoices \.tcrow\.job-choice/);
 });
 
+test('first town arrival offers adventure or question room destinations',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
+  assert.match(html,/id="arrivalchoice"/);
+  assert.match(html,/data-arrival-choice="adventure"/);
+  assert.match(html,/data-arrival-choice="questions"/);
+  assert.match(styles,/#arrivalchoice/);
+  assert.match(styles,/\.arrival-choice-card:hover/);
+  assert.match(styles,/\.arrival-choice-card\.questions/);
+  assert.match(combat,/const FIRST_TOWN_CHOICE_KEY='bc_first_town_arrival_choice_v1'/);
+  assert.match(combat,/function showFirstTownArrivalChoice\(\)/);
+  assert.match(combat,/finishWorldLoading\('town-arrival'\); if\(deferArrivalChoice\)showFirstTownArrivalChoice\(\);/);
+  assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
+  assert.match(combat,/enterQuestionRoom\(\)/);
+  assert.match(dimensions,/const QUESTION_ROOM=\{x:930,z:855,G:18,R:28\}/);
+  assert.match(dimensions,/function generateQuestionRoom\(\)/);
+  assert.match(dimensions,/function enterQuestionRoom\(\)/);
+  assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
+  assert.match(dimensions,/enterQuestionRoom,\s*\n  exitQuestionRoom,/);
+});
+
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');

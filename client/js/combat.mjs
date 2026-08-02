@@ -8,6 +8,7 @@ const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
 const enterTamingLand=dimensionsApi.enterTamingLand,exitTamingLand=dimensionsApi.exitTamingLand;
 const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoom=dimensionsApi.exitJobTutorialRoom;
+const enterQuestionRoom=dimensionsApi.enterQuestionRoom;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
 const BLOCK_PLACE_REACH=8;
 
@@ -639,7 +640,7 @@ function syncHudLayerState(){
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
   const jobTutorialRoom=dim==='job'||dimensionsState.kind==='job';
   const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
-  const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset'].some(id=>{
+  const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice'].some(id=>{
     const el=document.getElementById(id);
     if(!el) return false;
     return id==='ui' ? el.classList.contains('open') : !el.classList.contains('hidden');
@@ -658,7 +659,7 @@ if(globalThis.MutationObserver){
   const homeworkEl=document.getElementById('homeworkhud');
   if(homeworkEl){ hudStateObserver.observe(homeworkEl,{attributes:true,attributeFilter:['class']}); homeworkHudObserved=true; }
   else hudStateObserver.observe(document.body,{childList:true});
-  for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset']){
+  for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice']){
     const el=document.getElementById(id);
     if(el) hudStateObserver.observe(el,{attributes:true,attributeFilter:['class']});
   }
@@ -666,9 +667,11 @@ if(globalThis.MutationObserver){
 window.addEventListener('resize', syncHudLayerState);
 const pathSelectEl=document.getElementById('pathselect');
 const pathPanelEl=document.getElementById('pathpanel');
+const arrivalChoiceEl=document.getElementById('arrivalchoice');
 const awakeningWin=document.getElementById('awakeningwin');
 const awakeningPanel=document.getElementById('awakeningpanel');
 let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
+const FIRST_TOWN_CHOICE_KEY='bc_first_town_arrival_choice_v1';
 const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1,familiar:1};
 let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0,familiar:0};
 function applyServerTutorials(raw){
@@ -715,6 +718,7 @@ function cancelOnboardingForProfileRestore(){
 }
 let pathChoiceOpen=false;
 let jobChoiceOpen=false;
+let firstTownChoiceOpen=false;
 let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
 let level2JobChoiceForced=false;
 const onboardingFlags={sprint:false,arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
@@ -4201,8 +4205,11 @@ function finishOnboardingToTown(){
   try{localStorage.setItem('bc_onboarding_done_v7','1');}catch(e){}
   markTutorialComplete('onboarding',7);
   sysMsg('<b>Training complete.</b> Welcome to the Town of Beginnings.');
-  startTownGuidance();
-  setTimeout(()=>ONBOARD.showTrainingComplete(),120);
+  const deferArrivalChoice=shouldShowFirstTownArrivalChoice();
+  if(!deferArrivalChoice){
+    startTownGuidance();
+    setTimeout(()=>ONBOARD.showTrainingComplete(),120);
+  }
   sendPlayerMetaNow();
   sendProfileSaveNow();
   lockFallback=true;
@@ -4214,8 +4221,64 @@ function finishOnboardingToTown(){
     enterPlayFallback();
   }
   refreshPlayUi();
-  setTimeout(()=>finishWorldLoading('town-arrival'),720);
+  setTimeout(()=>{ finishWorldLoading('town-arrival'); if(deferArrivalChoice)showFirstTownArrivalChoice(); },720);
 }
+function firstTownArrivalChoiceSeen(){
+  try{return !!localStorage.getItem(FIRST_TOWN_CHOICE_KEY);}catch(e){return false;}
+}
+function shouldShowFirstTownArrivalChoice(){
+  return !!(arrivalChoiceEl&&!firstTownArrivalChoiceSeen());
+}
+function resumeCameraAfterArrivalChoice(){
+  lockFallback=true;
+  locked=true;
+  cursorReleased=false;
+  refreshPlayUi();
+  try{
+    requestPointerLockSafe(null);
+    setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); },250);
+  }catch(e){ enterPlayFallback(); }
+}
+function showFirstTownArrivalChoice(){
+  if(!shouldShowFirstTownArrivalChoice())return false;
+  firstTownChoiceOpen=true;
+  document.body.classList.add('arrival-choice-open');
+  arrivalChoiceEl.classList.remove('hidden');
+  releasePointerLockWithoutCameraFallback(false);
+  syncHudLayerState();
+  refreshPlayUi();
+  return true;
+}
+function chooseFirstTownArrival(choice){
+  if(!firstTownChoiceOpen)return;
+  choice=choice==='questions'?'questions':'adventure';
+  firstTownChoiceOpen=false;
+  try{localStorage.setItem(FIRST_TOWN_CHOICE_KEY,choice);}catch(e){}
+  if(arrivalChoiceEl)arrivalChoiceEl.classList.add('hidden');
+  document.body.classList.remove('arrival-choice-open');
+  if(choice==='questions'){
+    if(typeof enterQuestionRoom==='function'&&enterQuestionRoom()){
+      sysMsg('<b>Question Hall:</b> a quiet room for learning. We can design its lesson flow next.');
+      resumeCameraAfterArrivalChoice();
+      return;
+    }
+    sysMsg('<b>Question Hall is still forming.</b> Starting in Town of Beginnings instead.');
+  }
+  if(player){
+    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5);
+    player.vel.set(0,0,0);
+    player.yaw=Math.PI;
+  }
+  startTownGuidance();
+  setTimeout(()=>ONBOARD.showTrainingComplete(),120);
+  resumeCameraAfterArrivalChoice();
+}
+if(arrivalChoiceEl)arrivalChoiceEl.addEventListener('click',e=>{
+  const card=e.target&&e.target.closest?e.target.closest('[data-arrival-choice]'):null;
+  if(!card)return;
+  e.preventDefault();
+  chooseFirstTownArrival(card.dataset.arrivalChoice);
+});
 function hexToRgba(hex,a){
   const m=String(hex||'').replace('#','');
   if(!/^[0-9a-fA-F]{6}$/.test(m)) return 'rgba(79,216,255,'+(a==null ? .3 : a)+')';
@@ -4388,7 +4451,7 @@ function calmTownHud(){
   return !onboardingActive && dim==='overworld' && player && isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z));
 }
 function refreshPlayUi(){
-  const transitionModalOpen = pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen ||
+  const transitionModalOpen = pathChoiceOpen || jobChoiceOpen || firstTownChoiceOpen || abilityAwakeningOpen ||
     !!(pathSelectEl && !pathSelectEl.classList.contains('hidden')) ||
     !!(awakeningWin && !awakeningWin.classList.contains('hidden'));
   const networkBusy = typeof NET !== 'undefined' && !!(NET && (NET.connecting || NET.reconnecting));
@@ -4798,7 +4861,7 @@ if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.prev
 document.addEventListener('pointerlockchange', ()=>{
   const hasLock = document.pointerLockElement === renderer.domElement;
   const wasPlaying = locked && overlay.classList.contains('hidden');
-  const modalInputOpen = uiOpen || statOpen || uiShellState.qOpen || pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen ||
+  const modalInputOpen = uiOpen || statOpen || uiShellState.qOpen || pathChoiceOpen || jobChoiceOpen || firstTownChoiceOpen || abilityAwakeningOpen ||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden')) ||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden')) ||
     !!(rewardWin&&!rewardWin.classList.contains('hidden')) ||
@@ -4806,7 +4869,7 @@ document.addEventListener('pointerlockchange', ()=>{
     document.body.classList.contains('game-modal-open');
   if(hasLock){ pointerLockRequestPending=false; lockFallback=false; suppressNextLockFallback=false; }
   else if(suppressNextLockFallback){ lockFallback=false; suppressNextLockFallback=false; }
-  else if(pointerLockRequestPending&&overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
+  else if(pointerLockRequestPending&&overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!firstTownChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
   else if(wasPlaying&&!modalInputOpen)cursorReleased=true;
   if(!hasLock) pointerLockRequestPending=false;
   if(hasLock) cursorReleased=false;
@@ -4829,7 +4892,7 @@ function isWorldPointerTarget(target){
   return target===renderer.domElement||target===document.body||target===document.documentElement;
 }
 function gameplayCameraInputAllowed(){
-  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||abilityAwakeningOpen||
+  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
     !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
@@ -4837,7 +4900,7 @@ function gameplayCameraInputAllowed(){
   return !!(locked&&!cursorReleased&&!claimMode&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!transitionModalOpen&&!globalThis.chatTyping&&!document.body.classList.contains('game-modal-open'));
 }
 function gameplayCameraResumeAllowed(){
-  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||abilityAwakeningOpen||
+  const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
     !!(awakeningWin&&!awakeningWin.classList.contains('hidden'))||
     !!(rewardWin&&!rewardWin.classList.contains('hidden'))||
@@ -4899,6 +4962,10 @@ addEventListener('keydown', e=>{
   }
   if(globalThis.chatTyping) return;
   if(eventStartLocked()&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) confirmEventReady();
+  if(firstTownChoiceOpen){
+    e.preventDefault();
+    return;
+  }
   if(pathChoiceOpen || jobChoiceOpen){
     e.preventDefault();
     return;
@@ -5531,7 +5598,7 @@ function nearFellowshipWeatherVane(range=3.6){
   return dim==='overworld' && hasFellowshipProject('weather_vane') && Math.hypot(player.pos.x-(HUB.guild.x+3.65), player.pos.z-(HUB.guild.z-2.45))<range;
 }
 function interactionPromptActive(){
-  return locked&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!globalThis.chatTyping;
+  return locked&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!firstTownChoiceOpen&&!globalThis.chatTyping;
 }
 function nearbyGuardian(range=7.8){
   if(dim!=='overworld')return false;

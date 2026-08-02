@@ -1913,7 +1913,7 @@ function refreshTorchMeshes(){
 function applyDim(){
   townGroup.visible = dim==='overworld';
   if(roadSafetySceneGroup)roadSafetySceneGroup.visible=dim==='overworld';
-  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job' || dim==='taming_land';
+  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job' || dim==='taming_land' || dim==='questions';
   const underground = dim==='dungeon' || dim==='gatecutscene';
   cloudGroup.visible = !underground;
   sky.visible = !underground;
@@ -1923,6 +1923,7 @@ function applyDim(){
   else if(dim==='tutorial'){ scene.fog.near=30; scene.fog.far=100; }
   else if(dim==='ability'){ scene.fog.near=28; scene.fog.far=92; }
   else if(dim==='job'){ scene.fog.near=32; scene.fog.far=105; }
+  else if(dim==='questions'){ scene.fog.near=26; scene.fog.far=96; }
   else if(dim==='taming_land'){ scene.fog.near=38; scene.fog.far=130; scene.fog.color.set(0x9ed7ff); }
   else if(dim==='gatecutscene'){ scene.fog.near=18; scene.fog.far=115; scene.fog.color.set(0x151022); }
   else { scene.fog.near=8; scene.fog.far=36; }
@@ -2138,6 +2139,70 @@ function exitJobTutorialRoom(){
   if(NET.on&&NET.room) NET.room.send('tutorialExit',{});
 }
 let tamingLandReturn=null, tamingLandExitPortal=null;
+const QUESTION_ROOM={x:930,z:855,G:18,R:28};
+let questionRoomReturn=null;
+function generateQuestionRoom(){
+  const {x:cx,z:cz,G,R}=QUESTION_ROOM;
+  const minX=Math.floor(cx-R-8),maxX=Math.ceil(cx+R+8),minZ=Math.floor(cz-R-8),maxZ=Math.ceil(cz+R+8);
+  const w=new DimensionGrid({kind:'questions',id:'question_hall',originX:minX,originZ:minZ,width:maxX-minX+1,height:WH,depth:maxZ-minZ+1,empty:B.AIR,outside:B.AIR});
+  const set=(x,y,z,v)=>w.setB(x,y,z,v);
+  for(let x=cx-R;x<=cx+R;x++)for(let z=cz-R;z<=cz+R;z++){
+    const d=Math.hypot(x-cx,z-cz);
+    if(d>R)continue;
+    for(let yy=1;yy<G;yy++)set(x,yy,z,yy<G-3?B.STONE:B.DIRT);
+    set(x,G,z,Math.abs(x-cx)<10&&z<cz+9&&z>cz-15?B.PLANKS:B.GRASS);
+    if(d>R-1.8)for(let yy=G+1;yy<=G+4;yy++)set(x,yy,z,B.BARRIER);
+  }
+  for(let x=cx-15;x<=cx+15;x++)for(let z=cz-18;z<=cz+14;z++)if(Math.abs(x-cx)===15||z===cz-18||z===cz+14)set(x,G+1,z,B.GLASS);
+  for(let x=cx-12;x<=cx+12;x++){set(x,G+5,cz-18,B.PLANKS);set(x,G+5,cz+14,B.PLANKS);}
+  for(let z=cz-18;z<=cz+14;z++){set(cx-15,G+5,z,B.PLANKS);set(cx+15,G+5,z,B.PLANKS);}
+  for(let x=cx-13;x<=cx+13;x++)for(let z=cz-16;z<=cz+12;z++)if((x+z)%3!==0)set(x,G+6,z,B.PLANKS);
+  for(let x=cx-7;x<=cx+7;x++)for(let y=G+2;y<=G+5;y++)set(x,y,cz-17,y===G+2||y===G+5?B.PLANKS:B.GLASS);
+  for(let x=cx-5;x<=cx+5;x++)for(let z=cz+5;z<=cz+7;z++)set(x,G+1,z,B.TABLE);
+  for(let x=cx-9;x<=cx+9;x+=6)for(let z=cz-8;z<=cz+2;z+=5)set(x,G+1,z,B.TABLE);
+  for(const [x,z] of [[cx-12,cz-15],[cx+12,cz-15],[cx-12,cz+11],[cx+12,cz+11],[cx,cz-14]])set(x,G+2,z,B.LANTERN);
+  set(cx,G+1,cz-13,B.CHEST);
+  set(cx,G+2,cz-13,B.GLASS);
+  return w;
+}
+function enterQuestionRoom(){
+  if(dim==='questions')return true;
+  if(dim!=='overworld')return false;
+  questionRoomReturn={world,pos:player.pos.clone(),yaw:player.yaw,pitch:player.pitch};
+  for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  if(mounted){mounted=false;mountKind='';if(localMountObj)localMountObj.visible=false;}
+  owWorld=world;
+  world=generateQuestionRoom();
+  dim='questions';
+  NET.dgn=localTutorialSpaceId('questions');
+  world.id=NET.dgn;
+  rebuildAllChunks();refreshTorchMeshes();applyDim();
+  player.pos.set(QUESTION_ROOM.x+.5,QUESTION_ROOM.G+2,QUESTION_ROOM.z+10.5);
+  player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  announceArrivalTitle('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare');
+  return true;
+}
+function exitQuestionRoom(){
+  if(dim!=='questions')return false;
+  for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  const ret=questionRoomReturn;
+  world=(ret&&ret.world)||owWorld||world;
+  dim='overworld';
+  owWorld=world;
+  NET.dgn='';
+  rebuildAllChunks();refreshTorchMeshes();applyDim();
+  if(ret&&player){
+    player.pos.copy(ret.pos);
+    player.yaw=ret.yaw;
+    player.pitch=ret.pitch;
+    player.vel.set(0,0,0);
+  }
+  questionRoomReturn=null;
+  announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
+  return true;
+}
 function generateTamingLandRoom(){
   const room=TAMING_LAND;
   const {x:cx,z:cz,G,R}=room;
@@ -2423,6 +2488,8 @@ gameContext.registerModule('dimensions', Object.freeze({
   exitDungeon,
   enterJobTutorialRoom,
   exitJobTutorialRoom,
+  enterQuestionRoom,
+  exitQuestionRoom,
   enterTamingLand,
   exitTamingLand,
   openStat,
@@ -2458,12 +2525,14 @@ const legacyDimensionsBindings={
   "enterDungeonRoomWith":{get:()=>enterDungeonRoomWith},
   "enterJobTutorialRoom":{get:()=>enterJobTutorialRoom},
   "enterOnboardingRoom":{get:()=>enterOnboardingRoom},
+  "enterQuestionRoom":{get:()=>enterQuestionRoom},
   "enterTamingLand":{get:()=>enterTamingLand},
   "equippedArmor":{get:()=>equippedArmor},
   "exitAbilityRoom":{get:()=>exitAbilityRoom},
   "exitDungeon":{get:()=>exitDungeon},
   "exitJobTutorialRoom":{get:()=>exitJobTutorialRoom},
   "exitOnboardingRoom":{get:()=>exitOnboardingRoom},
+  "exitQuestionRoom":{get:()=>exitQuestionRoom},
   "exitTamingLand":{get:()=>exitTamingLand},
   "exitPortal":{get:()=>exitPortal,set:value=>{exitPortal=value;}},
   "frostbiteChakramVfx":{get:()=>frostbiteChakramVfx},
@@ -2471,6 +2540,7 @@ const legacyDimensionsBindings={
   "gateCompass":{get:()=>gateCompass},
   "gateKindLabel":{get:()=>gateKindLabel},
   "generateJobTutorialRoom":{get:()=>generateJobTutorialRoom},
+  "generateQuestionRoom":{get:()=>generateQuestionRoom},
   "generateTamingLandRoom":{get:()=>generateTamingLandRoom},
   "gravityBowVfx":{get:()=>gravityBowVfx},
   "hex01":{get:()=>hex01},
