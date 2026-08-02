@@ -3361,6 +3361,40 @@ function showAppearanceInspectionStand(silent=false){
   if(!silent) sysMsg('Appearance inspection stand placed in front of you.');
   return true;
 }
+function showMirrorAppearancePreview(){
+  showAppearanceInspectionStand(true);
+  showName('MIRROR PREVIEW');
+  sysMsg('<b>Hunter Mirror:</b> previewing your current look.<br>Press <b>C</b> to customize. Press <b>Escape</b> to dismiss the mirror image.');
+  return true;
+}
+function mirrorPreviewActive(){
+  return !!(appearancePreviewActive&&appearanceDummy);
+}
+function mirrorPreviewSparkle(){
+  const models=[appearanceDummy,appearanceBackDummy].filter(Boolean);
+  for(const model of models){
+    const p=model.grp&&model.grp.position;
+    if(!p)continue;
+    if(typeof glowFlash==='function')glowFlash(p.x,p.y+1.15,p.z,0x7dd3fc,1.7,.22);
+    if(typeof burst==='function')burst(p.x,p.y+1.05,p.z,[.49,.83,.99],18,2.1,1.8,.5);
+  }
+}
+function dismissMirrorAppearancePreview(){
+  if(!mirrorPreviewActive())return false;
+  mirrorPreviewSparkle();
+  appearancePreviewActive=false;
+  disposeAppearanceDummy();
+  showName('MIRROR IMAGE DISMISSED');
+  sysMsg('<b>Hunter Mirror:</b> the reflection fades.');
+  return true;
+}
+function customizeMirrorAppearancePreview(){
+  if(!mirrorPreviewActive())return false;
+  releasePointerLockWithoutCameraFallback(false);
+  refreshPlayUi();
+  AUTH_UI.openAppearanceEditor('mirror');
+  return true;
+}
 function disposeAppearanceDummy(){
   if(appearanceDummy) scene.remove(appearanceDummy.grp);
   if(appearanceBackDummy) scene.remove(appearanceBackDummy.grp);
@@ -3399,6 +3433,10 @@ function finishAppearanceDraftPreview(commit=false){
 }
 Object.defineProperty(globalThis,'BlockcraftAppearancePreview',{value:Object.freeze({
   show:showAppearanceInspectionStand,
+  showMirror:showMirrorAppearancePreview,
+  active:mirrorPreviewActive,
+  dismiss:dismissMirrorAppearancePreview,
+  customize:customizeMirrorAppearancePreview,
   draft:previewAppearanceDraft,
   finish:finishAppearanceDraftPreview,
 }),configurable:true});

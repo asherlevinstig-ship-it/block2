@@ -2275,7 +2275,9 @@ test('land claim hotkey stays open after pointer lock exits and Escape closes it
 test('menu-style gameplay hotkeys are not tied directly to pointer lock',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   assert.match(combat,/const gameInput=gameplayInputActive\(\);/);
-  assert.match(combat,/if\(e\.code==='KeyC'\)\{\s*if\(statOpen\) closeStat\(\);\s*else if\(gameInput\) openStat\(\);/);
+  assert.match(combat,/if\(e\.code==='KeyC'\)\{\s*const mirrorPreview=globalThis\.BlockcraftAppearancePreview;/);
+  assert.match(combat,/if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.customize\)\{[\s\S]*mirrorPreview\.customize\(\);[\s\S]*return;/);
+  assert.match(combat,/if\(statOpen\) closeStat\(\);\s*else if\(gameInput\) openStat\(\);/);
   assert.match(combat,/if\(gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen\)\{/);
   for(const call of ['openTeamUI','openDragonBondUI','toggleMount','cycleDragon','cycleFamiliar']){
     assert.match(combat,new RegExp(call+'\\(\\); return;'));
@@ -3172,6 +3174,23 @@ test('mirror appearance editor stays mounted outside the login setup flow', () =
   assert.match(auth, /if \(editingMirror\) \{\s*mountCharacterCreator\('mirror'\);[\s\S]*renderCharacterCreator\('mirror'\);/);
   assert.match(auth, /mountCharacterCreator\('setup'\);[\s\S]*creator\.dataset\.mode = 'setup';/);
   assert.match(auth, /document\.body\.classList\.toggle\('character-setup-open', signed && !hasHunterName\(\) && !editingMirror\)/);
+});
+
+test('Hunter Mirror opens a model preview before customization', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(combat, /heldRC && heldRC\.id===I\.APPEARANCE_MIRROR && globalThis\.BlockcraftAppearancePreview&&globalThis\.BlockcraftAppearancePreview\.showMirror/);
+  assert.match(combat, /globalThis\.BlockcraftAppearancePreview\.showMirror\(\);/);
+  assert.match(combat, /if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.dismiss\)\{[\s\S]*mirrorPreview\.dismiss\(\);/);
+  assert.match(combat, /if\(mirrorPreview&&mirrorPreview\.active&&mirrorPreview\.active\(\)&&mirrorPreview\.customize\)\{[\s\S]*mirrorPreview\.customize\(\);/);
+  assert.match(networking, /function showMirrorAppearancePreview\(\)\{/);
+  assert.match(networking, /Press <b>C<\/b> to customize\. Press <b>Escape<\/b> to dismiss the mirror image\./);
+  assert.match(networking, /function dismissMirrorAppearancePreview\(\)\{/);
+  assert.match(networking, /mirrorPreviewSparkle\(\);/);
+  assert.match(networking, /showName\('MIRROR IMAGE DISMISSED'\)/);
+  assert.match(networking, /showMirror:showMirrorAppearancePreview/);
+  assert.match(networking, /customize:customizeMirrorAppearancePreview/);
+  assert.match(networking, /dismiss:dismissMirrorAppearancePreview/);
 });
 
 test('appearance creator exposes style presets and avatar style dimensions', () => {

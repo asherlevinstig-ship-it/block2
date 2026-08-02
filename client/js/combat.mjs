@@ -4963,6 +4963,12 @@ addEventListener('keydown', e=>{
     }
   }
   if(e.code==='KeyC'){
+    const mirrorPreview=globalThis.BlockcraftAppearancePreview;
+    if(mirrorPreview&&mirrorPreview.active&&mirrorPreview.active()&&mirrorPreview.customize){
+      e.preventDefault();
+      mirrorPreview.customize();
+      return;
+    }
     if(statOpen) closeStat();
     else if(gameInput) openStat();
   }
@@ -4984,6 +4990,12 @@ addEventListener('keydown', e=>{
   if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
   if(e.code==='Escape'){
     let closed=false;
+    const mirrorPreview=globalThis.BlockcraftAppearancePreview;
+    if(mirrorPreview&&mirrorPreview.active&&mirrorPreview.active()&&mirrorPreview.dismiss){
+      e.preventDefault();
+      mirrorPreview.dismiss();
+      return;
+    }
     const rankUpWin=document.getElementById('rankupwin');
     if(rankUpWin&&!rankUpWin.classList.contains('hidden')){
       const rankContinue=document.getElementById('rankupcontinue');
@@ -5836,9 +5848,8 @@ function secondaryAction(){
   const heldRC=inv[selected];
   if(heldRC && keyRank(heldRC.id)){ requestGateKeyUse(selected); return; }
   if(heldRC && heldRC.id===I.TOWN_MAP && globalThis.BlockcraftTownMap){ globalThis.BlockcraftTownMap.open(); return; }
-  if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && AUTH_UI.openAppearanceEditor){
-    releasePointerLockWithoutCameraFallback(false); refreshPlayUi();
-    AUTH_UI.openAppearanceEditor('mirror');
+  if(heldRC && heldRC.id===I.APPEARANCE_MIRROR && globalThis.BlockcraftAppearancePreview&&globalThis.BlockcraftAppearancePreview.showMirror){
+    globalThis.BlockcraftAppearancePreview.showMirror();
     return;
   }
   if(heldRC && heldRC.id===I.REPAIR_KIT){ useRepairKit(selected); return; }
