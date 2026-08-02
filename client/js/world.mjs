@@ -940,26 +940,51 @@ function isJobTutorialMeadowLand(jobId,x,z,pad=0){
 }
 function buildTrainingMeadow(setBlock=setB){
   const {x:cx,z:cz,G,R}=TRAINING_MEADOW;
+  const flat=(x,z,top=B.GRASS,under=B.DIRT)=>{for(let y=1;y<G-4;y++)setBlock(x,y,z,B.STONE);for(let y=Math.max(1,G-4);y<G;y++)setBlock(x,y,z,under);setBlock(x,G,z,top);for(let y=G+1;y<WH;y++)setBlock(x,y,z,B.AIR);};
+  const disk=(ox,oz,r,top=B.GRASS,under=B.DIRT)=>{for(let x=cx+ox-r;x<=cx+ox+r;x++)for(let z=cz+oz-r;z<=cz+oz+r;z++)if(Math.hypot(x-(cx+ox),z-(cz+oz))<=r)flat(x,z,top,under);};
+  const rect=(x1,z1,x2,z2,top=B.COBBLE,under=B.STONE)=>{for(let x=cx+x1;x<=cx+x2;x++)for(let z=cz+z1;z<=cz+z2;z++)flat(x,z,top,under);};
+  const pillar=(ox,oz,h,mat=B.LOG,cap=B.LANTERN)=>{for(let y=G+1;y<=G+h;y++)setBlock(cx+ox,y,cz+oz,mat);if(cap)setBlock(cx+ox,G+h+1,cz+oz,cap);};
+  const tree=(ox,oz,h=6,spread=4)=>{for(let y=G+1;y<=G+h;y++)setBlock(cx+ox,y,cz+oz,B.LOG);for(let lx=-spread;lx<=spread;lx++)for(let lz=-spread;lz<=spread;lz++)for(let ly=h-2;ly<=h+4;ly++){const crown=Math.abs(lx)+Math.abs(lz)+Math.abs(ly-(h+1))*1.35;if(crown<spread+3&&!(lx===0&&lz===0&&ly<=h))setBlock(cx+ox+lx,G+ly,cz+oz+lz,B.LEAVES);}setBlock(cx+ox,G+h+5,cz+oz,B.LANTERN);};
   for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++)for(let z=Math.floor(cz-R);z<=Math.ceil(cz+R);z++){
     if(!inWorld(x,0,z)||!isTrainingMeadowLand(x,z))continue;
-    const edge=Math.max(0,Math.min(1,(R-Math.hypot(x-cx,z-cz))/10));
-    const ground=G+(edge<1?Math.round((terrainHeight(x,z)-G)*(1-edge)):0);
+    const dx=x-cx,dz=z-cz,d=Math.hypot(dx,dz),edge=Math.max(0,Math.min(1,(R-d)/10));
+    const safe=Math.abs(dx)<=4&&dz>=-33&&dz<=28||Math.abs(dz+12)<=4&&dx>=-32&&dx<=40||Math.hypot(dx-22,dz+6)<=9||Math.hypot(dx+22,dz+20)<=10||Math.hypot(dx+32,dz-4)<=11||Math.hypot(dx,dz-40)<=10;
+    const lift=safe?0:Math.max(0,Math.min(7,Math.round((Math.sin((x+13)*.18)+Math.cos((z-31)*.16)+Math.sin((x-z)*.07)-.45)*1.7)));
+    const ground=edge<1?G+Math.round((terrainHeight(x,z)-G)*(1-edge)):G+lift;
     for(let y=1;y<ground-3;y++)setBlock(x,y,z,B.STONE);
     for(let y=Math.max(1,ground-3);y<ground;y++)setBlock(x,y,z,B.DIRT);
     setBlock(x,ground,z,B.GRASS);
     for(let y=ground+1;y<WH;y++)setBlock(x,y,z,B.AIR);
   }
-  const treeX=cx+22, treeZ=cz-6;
-  for(let y=G+1;y<=G+4;y++)setBlock(treeX,y,treeZ,B.LOG);
-  for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)for(let oy=3;oy<=5;oy++)
-    if(Math.abs(ox)+Math.abs(oz)+Math.abs(oy-4)<5 && !(ox===0&&oz===0&&oy<=4))
-      setBlock(treeX+ox,G+oy,treeZ+oz,B.LEAVES);
+  const route=[[-32,24],[-20,18],[-14,15],[-8,12],[4,6],[14,0],[22,-6],[30,-12],[40,-18],[10,-28],[-8,-28],[-22,-20],[-28,-14],[-32,-8],[-32,4],[0,40]];
+  for(let i=0;i<route.length-1;i++){const [ax,az]=route[i], [bx,bz]=route[i+1], steps=Math.max(Math.abs(bx-ax),Math.abs(bz-az));for(let s=0;s<=steps;s++){const t=s/Math.max(1,steps), px=Math.round(ax+(bx-ax)*t), pz=Math.round(az+(bz-az)*t);for(let ox=-2;ox<=2;ox++)for(let oz=-2;oz<=2;oz++)if(Math.abs(ox)+Math.abs(oz)<=2)flat(cx+px+ox,cz+pz+oz,(Math.abs(ox)+Math.abs(oz)===2&&hash2(cx+px+ox,cz+pz+oz)>.55)?B.SAND:B.COBBLE,B.STONE);}}
+  disk(-32,24,7,B.COBBLE,B.STONE);disk(22,-6,9,B.GRASS);disk(30,-12,6,B.PLANKS,B.DIRT);disk(40,-18,5,B.COBBLE,B.STONE);disk(10,-28,7,B.GRASS);disk(-22,-20,9,B.COBBLE,B.STONE);disk(-32,-6,8,B.BRICK,B.STONE);disk(0,40,9,B.GLASS,B.STONE);
+  for(let z=cz-46;z<=cz+28;z++)for(let x=cx-6;x<=cx-1;x++){const bend=Math.round(Math.sin((z-cz)*.16)*3);if(Math.abs((x-cx)-bend)<=1){flat(x,z,B.WATER,B.SAND);setBlock(x,G+1,z,B.AIR);}else if(Math.abs((x-cx)-bend)===2&&hash2(x,z)>.4)flat(x,z,B.SAND,B.DIRT);}
+  rect(-8,8,2,12,B.PLANKS,B.STONE);for(const ox of [-8,-4,0,2]){setBlock(cx+ox,G+1,cz+7,B.LOG);setBlock(cx+ox,G+1,cz+13,B.LOG);}
+  rect(-8,-14,2,-10,B.PLANKS,B.STONE);for(const ox of [-8,-4,0,2]){setBlock(cx+ox,G+1,cz-15,B.LOG);setBlock(cx+ox,G+1,cz-9,B.LOG);}
+  for(const [ox,oz,h] of [[-46,32,6],[-18,32,6],[-46,20,3],[-18,20,3]])pillar(ox,oz,h,B.LOG,h>5?B.LANTERN:B.TORCH);
+  for(let x=cx-46;x<=cx-18;x++)for(let y=G+7;y<=G+8;y++)setBlock(x,y,cz+32,Math.abs(x-(cx-32))<5&&y===G+7?B.AIR:B.BRICK);
+  setBlock(cx-32,G+9,cz+32,B.GLASS);setBlock(cx-32,G+10,cz+32,B.LANTERN);
+  tree(22,-6,10,6);for(const [ox,oz] of [[13,-7],[30,-5],[18,3],[27,3]])tree(ox,oz,4,3);
   setBlock(cx+30,G+1,cz-12,B.TABLE);
+  setBlock(cx+29,G+1,cz-14,B.CAMPFIRE);setBlock(cx+33,G+1,cz-12,B.CHEST);for(const [ox,oz] of [[27,-15],[33,-15],[27,-9],[33,-9]])pillar(ox,oz,3,B.LOG,B.TORCH);
   for(let ox=-1;ox<=1;ox++)for(let oz=-1;oz<=1;oz++)setBlock(cx+40+ox,G,cz-18+oz,B.COBBLE);
+  for(const [ox,oz] of [[36,-22],[44,-22],[36,-14],[44,-14]])pillar(ox,oz,3,B.COBBLE,B.LANTERN);
+  for(let x=cx+36;x<=cx+44;x++)for(const z of [cz-22,cz-14])setBlock(x,G+1,z,B.LOG);
+  for(let z=cz-22;z<=cz-14;z++)for(const x of [cx+36,cx+44])setBlock(x,G+1,z,B.LOG);
   for(let x=cx+8;x<=cx+12;x++){
     setBlock(x,G,cz-28,B.FARMLAND);
     if((x-cx)%2===0)setBlock(x,G+1,cz-28,B.WHEAT_3);
   }
+  for(let x=cx+4;x<=cx+16;x++)for(let z=cz-32;z<=cz-24;z++){if((x-cx)%3===0&&z!==cz-28){setBlock(x,G,z,B.FARMLAND);if(hash2(x,z)>.35)setBlock(x,G+1,z,B.WHEAT_3);}else if(Math.abs(z-(cz-28))===4)setBlock(x,G,z,B.LOG);}
+  setBlock(cx-22,G+1,cz-20,B.CAMPFIRE);for(const [ox,oz] of [[-30,-24],[-14,-24],[-30,-16],[-14,-16]])pillar(ox,oz,3,B.LOG,B.TORCH);
+  for(let a=0;a<32;a++){const ang=a*Math.PI*2/32, x=Math.round(cx-22+Math.cos(ang)*9), z=Math.round(cz-20+Math.sin(ang)*9);setBlock(x,G,z,a%2?B.BRICK:B.COBBLE);}
+  for(const [ox,oz,h,mat] of [[-36,-9,5,B.BRICK],[-28,-1,5,B.BRICK],[-36,1,4,B.COBBLE],[-28,-11,4,B.COBBLE]])pillar(ox,oz,h,mat,B.LANTERN);
+  setBlock(cx-32,G+2,cz-6,B.GLASS);setBlock(cx-32,G+3,cz-6,B.LANTERN);
+  for(let y=G+1;y<=G+9;y++){setBlock(cx-4,y,cz+40,y%3===0?B.GLASS:B.BRICK);setBlock(cx+4,y,cz+40,y%3===0?B.GLASS:B.BRICK);}
+  for(let x=cx-4;x<=cx+4;x++)setBlock(x,G+10,cz+40,B.GLASS);
+  setBlock(cx,G+4,cz+40,B.LANTERN);setBlock(cx,G+5,cz+40,B.GLASS);setBlock(cx,G+6,cz+40,B.LANTERN);
+  for(const [ox,oz] of [[-46,0],[-43,18],[-18,36],[18,34],[42,14],[44,-26],[-44,-34],[32,-44]])tree(ox,oz,5+(Math.abs(ox+oz)%3),4);
 }
 function buildAbilityMeadow(setBlock=setB){
   const {x:cx,z:cz,G,R}=ABILITY_MEADOW;
@@ -2857,6 +2882,7 @@ const claimHud = document.getElementById('claimhud');
 const landMapEl = document.getElementById('landmap');
 const landMapCanvas = document.getElementById('landmapcanvas');
 const landMapCtx = landMapCanvas.getContext('2d');
+let lastLandMinimapSig='';
 const claimGroup = new THREE.Group();
 claimGroup.visible = false;
 scene.add(claimGroup);
@@ -3237,7 +3263,7 @@ function firstLandClaimGuidanceHTML(){
   }
   return '<b>First claim route:</b> Recommended tile <b>'+rec.x+', '+rec.z+'</b> - '+escHTML(rec.relation)+'.<br>Price: <b>'+analysis.price+' gold</b> - You have <b>'+gold+'</b>.<br>'+escHTML(next);
 }
-function updateLandMinimap(){
+function updateLandMinimap(force=true){
   const hasOwn = editableClaimCount()>0;
   const miniMap = utilityEquipped('minimap'), worldMap = utilityEquipped('world_map');
   const mapUtility = miniMap || worldMap;
@@ -3250,6 +3276,20 @@ function updateLandMinimap(){
     ? globalThis.BlockcraftDragonMap.stayMarkers()
     : [];
   const visible = !calmTownHud() && (hasOwn || landClaimOverlay || discoveredIds.size>0 || mapUtility || (mapUtility && dragonMarkers.length>0)) && (locked || claimMode || uiOpen || statOpen || qOpen);
+  const activeTrail=overworldActivity&&overworldActivity.trailSense&&(!overworldActivity.trailSense.expiresAt||overworldActivity.trailSense.expiresAt>Date.now())?overworldActivity.trailSense:null;
+  const mapSig=[
+    visible?1:0,miniMap?1:0,worldMap?1:0,claimMode?1:0,landClaimOverlay?1:0,
+    Math.floor((player&&player.pos.x||0)/4),Math.floor((player&&player.pos.z||0)/4),
+    landClaims.size,discoveredIds.size,claimedDiscoveryIds.size,hintedDiscoveryIds.size,
+    utilityLoadout.active,utilityLoadout.passive.join('|'),weather||'',
+    overworldActivity&&overworldActivity.caravan&&overworldActivity.caravan.id||'',
+    overworldActivity&&overworldActivity.encounter&&overworldActivity.encounter.id||'',
+    overworldActivity&&overworldActivity.gateBreach&&overworldActivity.gateBreach.id||'',
+    overworldActivity&&overworldActivity.gateScar&&overworldActivity.gateScar.id||'',
+    activeTrail&&activeTrail.id||'',dragonMarkers.length,Math.floor(now/250)
+  ].join(',');
+  if(!force&&mapSig===lastLandMinimapSig)return;
+  lastLandMinimapSig=mapSig;
   landMapEl.classList.toggle('hidden', !visible);
   landMapEl.classList.toggle('worldmap', worldMap && !claimMode);
   const mt=landMapEl.querySelector('.mt');if(mt)mt.textContent=(worldMap?'WORLD MAP ':miniMap?'MINI MAP ':'EXPLORATION MAP ')+discoveredIds.size+(weatherMapped?' · WEATHER '+weatherHarvested+'/'+weatherMapped:'')+(dragonMarkers.length?' · DRAGON '+dragonMarkers.length:'');
