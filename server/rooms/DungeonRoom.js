@@ -158,6 +158,7 @@ class DungeonRoom extends GameRoom {
 
   async onJoin(client, options, auth) {
     this.monitorClient(client);
+    client._account = auth && typeof auth === 'object' ? { ...auth } : null;
     client._accountRole = String(auth && auth.role || '').toLowerCase();
     client._accountType = String(auth && auth.accountType || '').toLowerCase();
     const token = cleanToken(auth && auth.id);
@@ -184,6 +185,7 @@ class DungeonRoom extends GameRoom {
     const ey = D.standHeightIn(inst.world, ex.x, ex.z, 12);
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
+    p.schoolId = auth && auth.schoolId != null ? String(auth.schoolId).slice(0, 24) : '';
     recordIdentityTrace('room.join.profile', {
       room: 'dungeon',
       gateId: String(this.instance && this.instance.id || ''),

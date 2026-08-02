@@ -6,6 +6,7 @@ class Player extends Schema {
     this.x = 64.5; this.y = 17; this.z = 71.5;
     this.yaw = 0;
     this.name = 'Hunter';
+    this.schoolId = '';      // public school id shown on player nameplates
     this.lvl = 1;
     this.path = '';          // ability path id, e.g. 'shadow', 'mage', 'guardian', 'verdant'
     this.job = '';           // '', 'adventurer', 'miner', 'farmer', 'cook', 'blacksmith', 'monk', 'pet_tamer'
@@ -34,7 +35,7 @@ class Player extends Schema {
 }
 defineTypes(Player, {
   x: 'float32', y: 'float32', z: 'float32', yaw: 'float32',
-  name: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
+  name: 'string', schoolId: 'string', lvl: 'uint16', path: 'string', job: 'string', jobLvl: 'uint16', dim: 'string', dgn: 'string', team: 'string',
   heldId: 'uint16', armorId: 'uint16', armorType: 'string', mount: 'string', dragons: 'string', dragonNames: 'string', dragonGenders: 'string', dragonPersonalities: 'string', dragonRoles: 'string', dragonStaySpots: 'string', dragonHatchedAt: 'string', cosmetics: 'string', appearance: 'string', familiar: 'string', familiarTier:'uint8', spirit:'boolean', invisible:'boolean',
 });
 

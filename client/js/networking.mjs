@@ -3110,16 +3110,18 @@ function makeNameTag(text, col, team, teamColr, opts){
   const lvl=Math.max(1,opts.lvl|0);
   const rank=opts.rank||playerRankName(lvl);
   const jobLabel=opts.jobTitle || (opts.job ? (opts.jobLvl ? opts.job+' '+opts.jobLvl : opts.job) : 'Adventurer');
-  const c=document.createElement('canvas'); c.width=320; c.height=96;
+  const schoolId=String(opts.schoolId||'').trim();
+  const c=document.createElement('canvas'); c.width=320; c.height=schoolId?116:96;
   const g=c.getContext('2d');
   const accent=col||'#ffffff';
   const teamColor=teamColr||'#ffd24a';
+  const panelH=team?schoolId?90:70:schoolId?74:54;
   g.textAlign='center';
   g.shadowColor='rgba(0,0,0,.75)';
   g.shadowBlur=6;
 
-  roundedRect(g,42,12,236,team?70:54,8);
-  const grad=g.createLinearGradient(42,12,42,82);
+  roundedRect(g,42,12,236,panelH,8);
+  const grad=g.createLinearGradient(42,12,42,12+panelH);
   grad.addColorStop(0,'rgba(12,20,34,.92)');
   grad.addColorStop(1,'rgba(4,8,16,.86)');
   g.fillStyle=grad; g.fill();
@@ -3127,7 +3129,7 @@ function makeNameTag(text, col, team, teamColr, opts){
   g.strokeStyle='rgba(255,255,255,.18)';
   g.lineWidth=1.5; g.stroke();
   g.strokeStyle=accent;
-  g.globalAlpha=.72; g.strokeRect(49.5,19.5,221,team?57:41); g.globalAlpha=1;
+  g.globalAlpha=.72; g.strokeRect(49.5,19.5,221,panelH-13); g.globalAlpha=1;
 
   fitCanvasText(g,text,184,17,'bold');
   g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.82)';
@@ -3142,17 +3144,27 @@ function makeNameTag(text, col, team, teamColr, opts){
   g.strokeStyle='rgba(154,210,107,.45)'; g.stroke();
   g.fillStyle='#d8f8c8'; g.fillText(pillText,160,57);
 
+  if(schoolId){
+    const schoolText='SCHOOL  '+schoolId.slice(0,18);
+    roundedRect(g,92,65,136,18,5);
+    g.fillStyle='rgba(125,211,252,.13)'; g.fill();
+    g.strokeStyle='rgba(125,211,252,.48)'; g.stroke();
+    fitCanvasText(g,schoolText,118,11,'bold');
+    g.fillStyle='#bae6fd';
+    g.fillText(schoolText,160,78);
+  }
   if(team){
-    roundedRect(g,62,65,196,18,5);
+    const teamY=schoolId?85:65;
+    roundedRect(g,62,teamY,196,18,5);
     g.fillStyle='rgba(255,255,255,.07)'; g.fill();
     g.strokeStyle=teamColor; g.globalAlpha=.75; g.stroke(); g.globalAlpha=1;
     fitCanvasText(g,team,142,11,'bold');
     g.fillStyle=teamColor;
-    g.fillText('TEAM  '+team,160,78);
+    g.fillText('TEAM  '+team,160,teamY+13);
   }
   const tex=new THREE.CanvasTexture(c);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false, depthTest:false}));
-  sp.scale.set(1.6,.48,1); sp.position.y=2.34; sp.renderOrder=20;
+  sp.scale.set(1.6,schoolId ? .58 : .48,1); sp.position.y=schoolId?2.42:2.34; sp.renderOrder=20;
   return sp;
 }
 function appearanceForPath(path, customInput){

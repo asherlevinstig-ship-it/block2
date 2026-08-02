@@ -3259,11 +3259,12 @@ function netUpdateTag(r){
   const job=JOBS[r.ref.job] ? JOBS[r.ref.job].name : '';
   const jobLvl=r.ref.jobLvl|0;
   const jobTitle=JOBS[r.ref.job] ? jobTitleFor(r.ref.job, jobLvl||1) : 'Adventurer';
-  const text=r.ref.name+'|'+r.ref.lvl+'|'+rank+'|'+team+'|'+job+'|'+jobLvl+'|'+jobTitle+'|'+(spirit?1:0);
+  const schoolId=String(r.ref.schoolId||'').trim();
+  const text=r.ref.name+'|'+r.ref.lvl+'|'+rank+'|'+team+'|'+job+'|'+jobLvl+'|'+jobTitle+'|'+schoolId+'|'+(spirit?1:0);
   if(text===r.tagText) return;
   r.tagText=text;
   if(r.tag) disposeObjectTree(r.tag);
-  r.tag=makeNameTag(r.ref.name, spirit?'#9bdcff':pathCol, team, spirit?'#7dd3fc':teamCol(r.ref.team||''), { lvl:r.ref.lvl, rank:spirit?'Spirit':rank, job, jobLvl, jobTitle });
+  r.tag=makeNameTag(r.ref.name, spirit?'#9bdcff':pathCol, team, spirit?'#7dd3fc':teamCol(r.ref.team||''), { lvl:r.ref.lvl, rank:spirit?'Spirit':rank, job, jobLvl, jobTitle, schoolId });
   r.grp.add(r.tag);
 }
 function pulseAegisGlow(model, now){

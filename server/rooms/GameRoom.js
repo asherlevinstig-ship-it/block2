@@ -1019,6 +1019,7 @@ class GameRoom extends Room {
     const restartRecovery = prof ? await this.recoverDungeonAfterRestart(token, prof) : null;
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
+    p.schoolId = auth && auth.schoolId != null ? String(auth.schoolId).slice(0, 24) : '';
     recordIdentityTrace('room.join.profile', {
       room: 'overworld',
       shardId: String(this.shardId || 'main'),
@@ -1551,6 +1552,7 @@ class GameRoom extends Room {
         const p = this.state.players.get(client.sessionId);
         if (p) {
           p.name = next.name || 'Hunter';
+          p.schoolId = client._account && client._account.schoolId != null ? String(client._account.schoolId).slice(0, 24) : '';
           p.lvl = next.S && next.S.lvl || 1;
           p.job = next.job || '';
           p.jobLvl = 0;
@@ -3387,6 +3389,7 @@ class GameRoom extends Room {
     p.job = JOB_IDS.has(prof.job) ? prof.job : '';
     p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
     p.name = prof.name || p.name;
+    p.schoolId = client._account && client._account.schoolId != null ? String(client._account.schoolId).slice(0, 24) : '';
     p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
     p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], prof.armor).type.id : '';
     const token = this.tokens.get(client.sessionId) || '';
