@@ -4222,6 +4222,29 @@ class GameRoom extends Room {
         priority: 10,
         lifecycle: lifecycleFor(ready ? 'claimable' : 'active', npc),
       });
+    } else {
+      const maraOffer = typeof this.buildNpcQuest === 'function' ? this.buildNpcQuest(prof, 'Mara Vale', 'guide') : null;
+      if (maraOffer) add({
+        id: `npc:${maraOffer.giver || 'Mara Vale'}:${maraOffer.chainStep | 0}:offered`,
+        source: 'story',
+        category: 'story',
+        questType: maraOffer.questType || 'npc',
+        title: maraOffer.title || maraOffer.chainTitle || 'Main Story',
+        status: 'offered',
+        text: maraOffer.desc || maraOffer.objectiveText || 'Continue Mara Vale\'s main story.',
+        location: maraOffer.giver || 'Mara Vale',
+        action: { type: 'track_npc', label: 'TALK TO MARA' },
+        progress: null,
+        reward: {
+          gold: maraOffer.gold | 0,
+          xp: maraOffer.xp | 0,
+          jobXp: 12,
+          job: 'adventurer',
+          items: maraOffer.rewardItems || [],
+        },
+        priority: 10,
+        lifecycle: lifecycleFor('offered', maraOffer),
+      });
     }
     if (prof.aegisTrialReady) add({
       id: 'aegis:silent_bounty:claim',

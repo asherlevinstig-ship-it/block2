@@ -1691,6 +1691,22 @@ test('profile payload normalizes restored claimable quest lifecycles', () => {
   assert.equal(prof.regionalContract.lifecycleState, 'claimable');
 });
 
+test('profile payload exposes offered Mara story when no story quest is active', () => {
+  const room = makeRoom(), client = makeClient('offered_story_owner');
+  const { prof } = seedPlayer(room, client, { lvl: 3 });
+  prof.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  prof.npcQuestChains['Mara Vale'] = 1;
+  prof.activeNpcQuest = null;
+
+  const payload = room.profilePayload(client, prof);
+  const story = payload.activeObjectives.find(o => o.source === 'story');
+  assert.equal(story && story.status, 'offered');
+  assert.equal(story.title, 'Road Ready');
+  assert.equal(story.location, 'Mara Vale');
+  assert.equal(story.action.type, 'track_npc');
+  assert.equal(story.action.label, 'TALK TO MARA');
+});
+
 test('profile payload recovers terminal and malformed quest lifecycle states', () => {
   const room = makeRoom(), client = makeClient('quest_recovery_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });

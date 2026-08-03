@@ -4223,6 +4223,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function serverObjectiveHudAction\(o\)/);
   assert.match(frame,/const explicit=o\.hudAction\|\|o\.claimAction\|\|o\.action/);
   assert.match(frame,/type==='recall'/);
+  assert.match(frame,/type==='track_npc'/);
   assert.match(frame,/function chapterProgressionObjectiveLine\(\)/);
   assert.match(frame,/function starterJobChapter\(c\)/);
   assert.match(frame,/function unifiedObjectiveList\(\)/);
@@ -4236,6 +4237,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/const jobTarget=jobContractCompassTarget\(\);\s*if\(jobTarget\)return jobTarget;/);
   assert.match(frame,/type:'follow_marker',label:'FOLLOW MARKER'/);
   assert.match(frame,/if\(action==='follow_marker'\)/);
+  assert.match(frame,/if\(action==='track_npc'\)/);
   assert.match(frame,/label:'Next Best Action'/);
   assert.match(frame,/nextBest:true,line/);
   assert.match(frame,/function gatePrepObjectiveLine\(\)/);

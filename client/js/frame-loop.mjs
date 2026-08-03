@@ -800,6 +800,7 @@ function serverObjectiveHudAction(o){
   if(type==='choose_spec')return {type:'choose_spec',label:explicit.label||'CHOOSE SPEC'};
   if(type==='regional_track')return {type:'regional_track',label:explicit.label||'TRACK'};
   if(type==='recall')return {type:'recall',label:explicit.label||'START RECALL'};
+  if(type==='track_npc')return {type:'track_npc',label:explicit.label||'TRACK NPC',location:o.location||'',source:o.source||''};
   if(type==='craft'){
     const craft=objectiveCraftAction('what_next');
     return craft || {type:'questlog',label:explicit.label||'OPEN QUEST LOG'};
@@ -1367,6 +1368,12 @@ function handleObjectiveAction(action,btn){
     return;
   }
   if(action==='questlog'){menusApi.openQuestLog&&menusApi.openQuestLog();return;}
+  if(action==='track_npc'){
+    menusApi.openQuestLog&&menusApi.openQuestLog();
+    const location=btn&&btn.dataset&&btn.dataset.location || 'the story NPC';
+    sysMsg('<b>Main Story:</b> talk to '+escHTML(location)+'. Quest Log opened for context.');
+    return;
+  }
   if(action==='find_gate'){
     if(gate){sysMsg('<b>Gate target:</b> '+escHTML(RANKS[gate.rank].n+'-Rank '+gateKindLabel(gate.kind))+' Gate is '+escHTML(gateCompass())+'.');return;}
     menusApi.openQuestLog&&menusApi.openQuestLog();
