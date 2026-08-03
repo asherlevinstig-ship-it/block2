@@ -40,6 +40,45 @@ try {
     };
     window.BlockcraftTrace = (event, data) => window.BlockcraftDebug.trace(event, data);
     window.BlockcraftTrace('boot.start');
+    const actionState = { lastPointerAt: 0 };
+    const targetInfo = target => {
+      if (!target || !target.tagName) return '';
+      const tag = String(target.tagName || '').toLowerCase();
+      const id = String(target.id || '').slice(0, 40);
+      const cls = String(target.className || '').replace(/\s+/g, '.').slice(0, 60);
+      return tag + (id ? '#' + id : '') + (cls ? '.' + cls : '');
+    };
+    const inputLike = target => {
+      const tag = String(target && target.tagName || '').toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || !!(target && target.isContentEditable);
+    };
+    window.addEventListener('keydown', e => {
+      if (e.repeat) return;
+      const typedInField = inputLike(e.target);
+      window.BlockcraftTrace('player.keydown', {
+        code: e.code,
+        key: typedInField ? '' : (String(e.key || '').length <= 16 ? e.key : ''),
+        ctrl: e.ctrlKey,
+        shift: e.shiftKey,
+        alt: e.altKey,
+        target: targetInfo(e.target),
+      });
+    }, true);
+    window.addEventListener('pointerdown', e => {
+      const now = performance.now();
+      if (now - actionState.lastPointerAt < 80) return;
+      actionState.lastPointerAt = now;
+      window.BlockcraftTrace('player.pointerdown', {
+        button: e.button,
+        buttons: e.buttons,
+        x: Math.round(e.clientX || 0),
+        y: Math.round(e.clientY || 0),
+        target: targetInfo(e.target),
+      });
+    }, true);
+    document.addEventListener('visibilitychange', () => window.BlockcraftTrace('browser.visibility', { hidden: document.hidden }), true);
+    window.addEventListener('error', e => window.BlockcraftTrace('browser.error', { message: e.message, source: e.filename, line: e.lineno, column: e.colno }), true);
+    window.addEventListener('unhandledrejection', e => window.BlockcraftTrace('browser.rejection', { message: e.reason && e.reason.message || String(e.reason || '') }), true);
   })();
   const [gameContextModule, authModule, progressionModule, inventoryModule, questJobModule, networkModule, renderingModule, onboardingModule] = await Promise.all([
     import('./game-context.mjs'),

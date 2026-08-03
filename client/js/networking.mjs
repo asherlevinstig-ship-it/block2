@@ -901,6 +901,97 @@ const SESSION=createNetworkSession({
 const NETWORK=SESSION.controller;
 const NET=SESSION.state;
 let e2eJourneyResult=null;
+const bugReportBtn=document.getElementById('bugreportbtn');
+const bugReportWin=document.getElementById('bugreportwin');
+const bugReportMsg=document.getElementById('bugreportmsg');
+const bugReportMeta=document.getElementById('bugreportmeta');
+const bugReportSend=document.getElementById('bugreportsend');
+const bugReportCancel=document.getElementById('bugreportcancel');
+const bugReportStatus=document.getElementById('bugreportstatus');
+function bugReportPositionText(){
+  const snap=typeof globalThis.BlockcraftDebugSnapshot==='function'?globalThis.BlockcraftDebugSnapshot():null;
+  const pos=snap&&snap.player&&snap.player.pos || (player&&player.pos?{x:player.pos.x,y:player.pos.y,z:player.pos.z}:null);
+  const room=String(NET&&NET.roomName||NET&&NET.room&&NET.room.name||'world');
+  const dimension=String((snap&&snap.dimension)||dim||'overworld');
+  const dungeon=String((snap&&snap.dungeonId)||NET&&NET.dgn||'');
+  if(!pos)return room+' · '+dimension+(dungeon?' · '+dungeon:'');
+  const x=Math.round(Number(pos.x||0)*100)/100,y=Math.round(Number(pos.y||0)*100)/100,z=Math.round(Number(pos.z||0)*100)/100;
+  return room+' · '+dimension+(dungeon?' · '+dungeon:'')+' · x '+x+' / y '+y+' / z '+z;
+}
+function bugReportClientContext(){
+  const snap=typeof globalThis.BlockcraftDebugSnapshot==='function'?globalThis.BlockcraftDebugSnapshot():null;
+  return {
+    url: location.href,
+    viewport: { w: innerWidth|0, h: innerHeight|0, dpr: Math.round((devicePixelRatio||1)*100)/100 },
+    roomName: NET&&NET.roomName || NET&&NET.room&&NET.room.name || '',
+    profileReady: !!(NET&&NET.profileReady),
+    dimension: dim,
+    dungeonId: NET&&NET.dgn || '',
+    position: player&&player.pos ? { x:player.pos.x, y:player.pos.y, z:player.pos.z, yaw:player.yaw||0 } : null,
+    snapshot: snap,
+  };
+}
+function bugReportSetStatus(text, kind=''){
+  if(!bugReportStatus)return;
+  bugReportStatus.textContent=text||'';
+  bugReportStatus.className=kind||'';
+}
+function bugReportRefreshVisible(){
+  if(!bugReportBtn)return;
+  bugReportBtn.classList.toggle('hidden', !(NET&&NET.on&&NET.profileReady));
+}
+function openBugReport(){
+  if(!bugReportWin)return;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.open', { location:bugReportPositionText() });
+  try{ if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock(); }catch(_e){}
+  if(typeof releasePointerLockWithoutCameraFallback==='function')releasePointerLockWithoutCameraFallback(false);
+  document.body.classList.add('game-modal-open');
+  bugReportWin.classList.remove('hidden');
+  if(bugReportMeta)bugReportMeta.textContent='Attached location: '+bugReportPositionText();
+  bugReportSetStatus('', '');
+  if(bugReportMsg){ bugReportMsg.focus(); bugReportMsg.select&&bugReportMsg.select(); }
+}
+function closeBugReport(){
+  if(!bugReportWin)return;
+  bugReportWin.classList.add('hidden');
+  document.body.classList.remove('game-modal-open');
+  bugReportSetStatus('', '');
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.close');
+  if(typeof refreshPlayUi==='function')refreshPlayUi();
+}
+function sendBugReport(){
+  if(!NET||!NET.on||!NET.room){bugReportSetStatus('Not connected to the server yet.', 'bad');return;}
+  const message=String(bugReportMsg&&bugReportMsg.value||'').trim();
+  const trace=globalThis.BlockcraftDebug&&globalThis.BlockcraftDebug.dump?globalThis.BlockcraftDebug.dump().slice(-100):[];
+  bugReportSetStatus('Sending report...', '');
+  if(bugReportSend)bugReportSend.disabled=true;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.send', { hasMessage:!!message, trace:trace.length });
+  NET.room.send('bugReport', { message, clientContext: bugReportClientContext(), trace });
+}
+function applyBugReportResult(m){
+  if(bugReportSend)bugReportSend.disabled=false;
+  if(m&&m.ok){
+    bugReportSetStatus('Sent. Report ID: '+String(m.id||'saved')+(m.mailed?' · emailed':' · saved for dev review'), 'ok');
+    if(typeof sysMsg==='function')sysMsg('<b>Bug report sent.</b> Thank you — report ID <b>'+escHTML(String(m.id||''))+'</b>.');
+    if(bugReportMsg)bugReportMsg.value='';
+    setTimeout(()=>closeBugReport(),1200);
+  }else{
+    const reason=String(m&&m.reason||'failed');
+    bugReportSetStatus(reason==='rate'?'Please wait a moment before sending another report.':'Report failed. Try again in a moment.', 'bad');
+    if(typeof sysMsg==='function')sysMsg('<b>Bug report failed:</b> '+escHTML(reason));
+  }
+}
+if(bugReportBtn)bugReportBtn.addEventListener('click',openBugReport);
+if(bugReportCancel)bugReportCancel.addEventListener('click',closeBugReport);
+if(bugReportSend)bugReportSend.addEventListener('click',sendBugReport);
+if(bugReportWin)bugReportWin.addEventListener('click',e=>{if(e.target===bugReportWin)closeBugReport();});
+window.addEventListener('keydown',e=>{
+  if(e.code==='Escape'&&bugReportWin&&!bugReportWin.classList.contains('hidden')){
+    e.preventDefault();
+    e.stopPropagation();
+    closeBugReport();
+  }
+},true);
 const familiarTelemetryEl=document.getElementById('familiartelemetry');
 let familiarTelemetryOpen=false,familiarTelemetryTimer=0;
 function requestFamiliarTelemetry(){if(familiarTelemetryOpen&&NET.on&&NET.room)NET.room.send('familiarTelemetry',{});}
@@ -965,6 +1056,7 @@ const netConnect=SESSION.connect;
 
 function netAttachRoom(room,name,client){
     NET.profileReady=room&&room.name==='dungeon';
+    bugReportRefreshVisible();
     setWorldLoadingStatus('Syncing hunter profile...');
     let staleLocalMobs=0;
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net){ removeMob(i); staleLocalMobs++; }
@@ -1047,6 +1139,7 @@ function netAttachRoom(room,name,client){
         activeRoom:m&&m.activeRoom?{dim:m.activeRoom.dim,job:m.activeRoom.job}:null,
       });
       netRestoreProfile(m);NET.profileReady=true;
+      bugReportRefreshVisible();
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
     });
     room.onMessage('appearanceResult', m=>{
@@ -2307,6 +2400,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('commsMuteResult',m=>SOCIAL.applyMuteResult(m));
     room.onMessage('commsBlockList',m=>SOCIAL.applyBlockList(m));
     room.onMessage('commsReportResult',m=>chatLine('[Safety]',m&&m.ok?'Report submitted for moderator review.':m&&m.reason==='rate'?'You recently reported this player.':'Report could not be submitted.',m&&m.ok?'whisper':'blocked'));
+    room.onMessage('bugReportResult',m=>applyBugReportResult(m));
     room.onMessage('teamInvite', m=>{
       if(m&&m.id) pendingTeamInvites[m.id]=Date.now();
       sysMsg('<b>'+escHTML(m&&m.from||'A team leader')+'</b> invited you to <b>'+escHTML(m&&m.name||'a team')+'</b>. Open Teams (T) to join.');
@@ -2345,6 +2439,7 @@ function netAttachRoom(room,name,client){
 
 function netConnectionFailed(err){
   NET.tried=false;NET.on=false;locked=false;lockFallback=false;
+  bugReportRefreshVisible();
   loadscreen.classList.add('hidden');overlay.classList.remove('hidden');
   const authError=err&&/auth/i.test(String(err.message||err));
   setAuthStatus(authError?'SESSION EXPIRED - SIGN IN AGAIN':'COULD NOT JOIN THE SERVER','bad');

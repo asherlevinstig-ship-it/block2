@@ -1,4 +1,7 @@
 const { performance } = require('perf_hooks');
+const fs = require('fs/promises');
+const path = require('path');
+const crypto = require('crypto');
 const { Room, matchMaker, CloseCode } = require('@colyseus/core');
 const { StateView } = require('@colyseus/schema');
 const { State, Player, Mob, Team, Gate } = require('../schema');
@@ -24,6 +27,38 @@ const { registerRoom, unregisterRoom } = require('../metrics-registry');
 const { registerProfileResetHandler, registerProfileUpdateHandler } = require('../profile-reset');
 const { accountSummary, recordIdentityTrace, shortHash } = require('../identity-trace');
 const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
+
+const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
+const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
+const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
+
+function cleanBugText(value, max = 1600) {
+  return String(value || '')
+    .replace(/\0/g, '')
+    .replace(/[\u0001-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
+function compactBugValue(value, depth = 0) {
+  if (value == null) return value;
+  if (depth > 4) return '[truncated]';
+  if (typeof value === 'string') return cleanBugText(value, depth <= 1 ? 700 : 240);
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : 0;
+  if (typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(-80).map(v => compactBugValue(v, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, raw] of Object.entries(value).slice(0, 80)) {
+      if (BUG_REPORT_SENSITIVE_KEY.test(key)) continue;
+      out[String(key).slice(0, 48)] = compactBugValue(raw, depth + 1);
+    }
+    return out;
+  }
+  return String(value).slice(0, 120);
+}
 
 // Blockcraft is one persistent global world, not a set of independent room
 // shards. Colyseus normally creates another room when the first reaches
@@ -470,6 +505,7 @@ class GameRoom extends Room {
     this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
     this.onMessage('friendAdd', (client, m) => this.handleFriendAdd(client, m));
+    this.onMessage('bugReport', (client, m) => this.handleBugReport(client, m));
 
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
@@ -2415,6 +2451,153 @@ class GameRoom extends Room {
   // client can drive validation/broadcast work at. Returns true when throttled.
   rateLimited(client, bucket, ratePerSec, burst) {
     return consumeRateLimit(this.rateBuckets, client.sessionId, bucket, ratePerSec, burst);
+  }
+  bugReportRecipient() {
+    return cleanBugText(process.env.BUG_REPORT_NOTIFY_TO || process.env.CURRICULUM_NOTIFY_TO || DEFAULT_BUG_REPORT_TO, 160);
+  }
+  bugReportMailBridgeUrl() {
+    return cleanBugText(process.env.BUG_REPORT_MAIL_BRIDGE_URL || process.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_MAIL_BRIDGE_URL, 400);
+  }
+  bugReportMailBridgeSecret() {
+    return String(process.env.BUG_REPORT_MAIL_BRIDGE_SECRET || process.env.CURRICULUM_MAIL_BRIDGE_SECRET || process.env.BLOCKCRAFT_CURRICULUM_MAIL_SECRET || '').trim();
+  }
+  bugReportPosition(client) {
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p) return null;
+    return {
+      x: Math.round(Number(p.x || 0) * 100) / 100,
+      y: Math.round(Number(p.y || 0) * 100) / 100,
+      z: Math.round(Number(p.z || 0) * 100) / 100,
+      yaw: Math.round(Number(p.yaw || 0) * 1000) / 1000,
+      dim: String(p.dim || 'overworld').slice(0, 40),
+      dgn: String(p.dgn || '').slice(0, 80),
+    };
+  }
+  buildBugReport(client, m = {}) {
+    const rec = client && this.profileFor(client);
+    const p = client && this.state.players.get(client.sessionId);
+    const prof = rec && rec.prof;
+    const now = Date.now();
+    const trace = Array.isArray(m.trace) ? m.trace.slice(-80).map(entry => compactBugValue(entry)) : [];
+    return {
+      id: 'bug_' + now.toString(36) + '_' + crypto.randomBytes(4).toString('hex'),
+      at: now,
+      atIso: new Date(now).toISOString(),
+      to: this.bugReportRecipient(),
+      player: {
+        sessionIdHash: shortHash(client && client.sessionId),
+        tokenHash: shortHash(rec && rec.token),
+        name: cleanBugText((p && p.name) || (prof && prof.name) || 'Hunter', 80),
+        schoolId: cleanBugText(prof && prof.schoolId || client && client._account && client._account.schoolId || '', 80),
+        account: accountSummary(client && client._account),
+        level: prof && prof.S ? prof.S.lvl | 0 : 0,
+        rank: p && p.lvl | 0,
+        job: cleanBugText(prof && prof.job || p && p.job || '', 40),
+      },
+      position: this.bugReportPosition(client),
+      room: {
+        name: cleanBugText(this.roomName || this.constructor.name || 'blockcraft', 80),
+        roomId: cleanBugText(this.roomId || '', 80),
+        shardId: cleanBugText(this.shardId || 'main', 80),
+      },
+      progress: {
+        progressionFocus: cleanBugText(prof && prof.progressionFocus || '', 80),
+        quest: compactBugValue(prof && prof.activeNpcQuest || null),
+        jobContract: compactBugValue(prof && prof.jobContract || null),
+        activeRoom: compactBugValue(prof && prof.activeRoom || null),
+      },
+      message: cleanBugText(m.message, 2000),
+      clientContext: compactBugValue(m.clientContext || {}),
+      trace,
+    };
+  }
+  bugReportText(report) {
+    const pos = report.position || {};
+    return [
+      'A Blockcraft player reported a bug.',
+      '',
+      'Report ID: ' + report.id,
+      'Time: ' + report.atIso,
+      'Player: ' + (report.player.name || 'Hunter'),
+      'School ID: ' + (report.player.schoolId || '(none)'),
+      'Session hash: ' + (report.player.sessionIdHash || ''),
+      'Token hash: ' + (report.player.tokenHash || ''),
+      'Location: ' + (pos.dim || 'overworld') + (pos.dgn ? ' / ' + pos.dgn : '') + ' @ x=' + pos.x + ', y=' + pos.y + ', z=' + pos.z + ', yaw=' + pos.yaw,
+      'Room: ' + report.room.name + ' / ' + report.room.roomId + ' / shard ' + report.room.shardId,
+      '',
+      'Player message:',
+      report.message || '(no custom message)',
+      '',
+      'Progress snapshot:',
+      JSON.stringify(report.progress, null, 2),
+      '',
+      'Client context:',
+      JSON.stringify(report.clientContext, null, 2),
+      '',
+      'Recent player/client actions:',
+      JSON.stringify(report.trace, null, 2),
+    ].join('\n');
+  }
+  async saveBugReportFile(report) {
+    const dir = path.join(process.cwd(), 'data', 'bug-reports');
+    await fs.mkdir(dir, { recursive: true });
+    const file = path.join(dir, report.id + '.json');
+    await fs.writeFile(file, JSON.stringify(report, null, 2), 'utf8');
+    return file;
+  }
+  async sendBugReportMail(report) {
+    const to = report.to || this.bugReportRecipient();
+    const bridgeUrl = this.bugReportMailBridgeUrl();
+    const bridgeSecret = this.bugReportMailBridgeSecret();
+    if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
+    if (!bridgeUrl) return { sent: false, to, reason: 'mail_bridge_url_not_configured' };
+    if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };
+    const fetchImpl = this.bugReportMailBridgeFetch || globalThis.fetch;
+    if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
+    const response = await fetchImpl(bridgeUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Blockcraft-Mail-Secret': bridgeSecret,
+      },
+      body: JSON.stringify({
+        to,
+        subject: '[Blockcraft] Bug report: ' + report.id,
+        text: this.bugReportText(report),
+        bugReport: report,
+      }),
+    });
+    if (!response || !response.ok) {
+      let detail = '';
+      try { detail = await response.text(); } catch (_e) {}
+      throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
+    }
+    return { sent: true, to };
+  }
+  async handleBugReport(client, m) {
+    if (!client || this.rateLimited(client, 'bugReport', 0.05, 2)) return client && client.send('bugReportResult', { ok: false, reason: 'rate' });
+    const report = this.buildBugReport(client, m || {});
+    try {
+      await this.saveBugReportFile(report);
+      let mail = { sent: false, to: report.to, reason: 'not_attempted' };
+      try {
+        mail = await this.sendBugReportMail(report);
+      } catch (error) {
+        mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
+      }
+      console.warn('[bug-report]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, mail }));
+      client.send('bugReportResult', {
+        ok: true,
+        id: report.id,
+        to: report.to,
+        saved: true,
+        mailed: !!(mail && mail.sent),
+        mailReason: mail && mail.reason || '',
+      });
+    } catch (error) {
+      console.warn('[bug-report] failed:', error && error.message || error);
+      client.send('bugReportResult', { ok: false, reason: 'save_failed' });
+    }
   }
   editTargetInReach(p, x, y, z) {
     if (!p) return false;

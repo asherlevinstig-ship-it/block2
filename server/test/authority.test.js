@@ -416,6 +416,47 @@ function seedPlayer(room, client, opts = {}) {
   return { token, prof };
 }
 
+test('bug reports attach authoritative player location and sanitize client traces', async () => {
+  const prevBugReportTo = process.env.BUG_REPORT_NOTIFY_TO;
+  process.env.BUG_REPORT_NOTIFY_TO = 'asherlevin85@gmail.com';
+  const room = makeRoom();
+  const client = makeClient('bug-reporter');
+  room.clients.push(client);
+  const { prof } = seedPlayer(room, client, { name: 'BugHunter', x: 123.25, y: 44.5, z: 67.75 });
+  prof.schoolId = '3';
+  client._account = { id: 'acct_bug', username: 'ashertest', displayName: 'Asher Test', schoolId: '3' };
+  let savedReport = null;
+  let mailedReport = null;
+  room.saveBugReportFile = async report => { savedReport = report; return 'data/bug-reports/test.json'; };
+  room.sendBugReportMail = async report => { mailedReport = report; return { sent: true, to: report.to }; };
+
+  await room.handleBugReport(client, {
+    message: 'Closed the quest panel and spawned in the sky.',
+    clientContext: { url: 'http://localhost/game', token: 'raw-secret', nested: { password: 'hidden', safe: 'kept' } },
+    trace: [
+      { event: 'player.keydown', data: { code: 'KeyW', token: 'drop-me' } },
+      { event: 'browser.error', data: { message: 'ready is not defined' } },
+    ],
+  });
+
+  const result = client.sent.find(e => e.type === 'bugReportResult');
+  assert.equal(result.msg.ok, true);
+  assert.equal(result.msg.mailed, true);
+  assert.equal(savedReport.to, 'asherlevin85@gmail.com');
+  assert.deepEqual(savedReport.position, { x: 123.25, y: 44.5, z: 67.75, yaw: 0, dim: 'overworld', dgn: '' });
+  assert.equal(savedReport.player.name, 'BugHunter');
+  assert.equal(savedReport.player.schoolId, '3');
+  assert.equal(savedReport.message, 'Closed the quest panel and spawned in the sky.');
+  assert.equal(savedReport.clientContext.token, undefined);
+  assert.equal(savedReport.clientContext.nested.password, undefined);
+  assert.equal(savedReport.clientContext.nested.safe, 'kept');
+  assert.equal(savedReport.trace[0].data.token, undefined);
+  assert.equal(savedReport.trace[1].data.message, 'ready is not defined');
+  assert.equal(mailedReport, savedReport);
+  if (prevBugReportTo == null) delete process.env.BUG_REPORT_NOTIFY_TO;
+  else process.env.BUG_REPORT_NOTIFY_TO = prevBugReportTo;
+});
+
 function markDragonDailyClaimed(room, prof) {
   const day = room.dragonChallengeDay();
   const def = room.dragonDailyChallenge(day);

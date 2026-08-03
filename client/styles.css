@@ -47,6 +47,24 @@
   #keyprompthud .keydots i{display:block;width:5px;height:5px;border-radius:50%;background:rgba(159,216,255,.25)}
   #keyprompthud .keydots i.active{background:#ffd24a;box-shadow:0 0 8px rgba(255,210,74,.65)}
   @keyframes keyPromptSweep{0%,38%{transform:translateX(-105%)}52%,100%{transform:translateX(105%)}}
+  #bugreportbtn{position:fixed;right:18px;top:92px;z-index:12;height:34px;padding:0 12px;border:1px solid rgba(255,138,91,.72);border-radius:6px;background:linear-gradient(180deg,rgba(48,22,20,.94),rgba(16,10,13,.9));box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 16px rgba(255,138,91,.18),inset 0 0 14px rgba(255,255,255,.04);color:#ffc7ad;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
+  #bugreportbtn.hidden{display:none}
+  #bugreportbtn:hover{filter:brightness(1.16);border-color:#ffd24a;color:#fff1c2}
+  #bugreportwin{position:fixed;inset:0;z-index:92;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,7,14,.72);backdrop-filter:blur(4px)}
+  #bugreportwin.hidden{display:none}
+  #bugreportpanel{width:min(680px,calc(100vw - 36px));max-height:calc(100vh - 36px);overflow:auto;padding:22px 24px;border:1px solid rgba(255,138,91,.72);border-radius:10px;background:linear-gradient(160deg,rgba(11,18,31,.98),rgba(20,9,9,.98));box-shadow:0 18px 60px rgba(0,0,0,.58),0 0 34px rgba(255,138,91,.22),inset 0 0 28px rgba(255,255,255,.04);color:#eaf6ff;font-family:inherit;text-shadow:0 2px 0 #000}
+  #bugreportpanel .bugreport-kicker{font-size:10px;color:#ffb386;letter-spacing:2.4px;text-transform:uppercase}
+  #bugreportpanel h2{margin:6px 0 8px;color:#fff5cf;font-size:28px;letter-spacing:1.5px;text-transform:uppercase}
+  #bugreportpanel p{margin:0 0 16px;color:#b9d3df;font-size:13px;line-height:1.45}
+  #bugreportpanel label{display:block;margin:0 0 6px;color:#7dd3fc;font-size:11px;letter-spacing:1.5px;text-transform:uppercase}
+  #bugreportmsg{box-sizing:border-box;width:100%;min-height:170px;resize:vertical;padding:12px;border:1px solid rgba(125,211,252,.42);border-radius:7px;background:rgba(2,8,16,.82);color:#f4fbff;font:13px/1.45 inherit;outline:none;text-shadow:none}
+  #bugreportmsg:focus{border-color:#ffd24a;box-shadow:0 0 16px rgba(255,210,74,.2)}
+  #bugreportmeta,#bugreportstatus{margin-top:10px;color:#9fd8ff;font-size:11px;line-height:1.4}
+  #bugreportstatus.ok{color:#b7ff9b}#bugreportstatus.bad{color:#ffb0a0}
+  .bugreport-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+  .bugreport-actions button{min-width:132px;padding:10px 12px;border-radius:6px;border:1px solid rgba(255,210,74,.6);background:#6f4a10;color:#fff2bf;font:800 11px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
+  .bugreport-actions button:hover{filter:brightness(1.13)}.bugreport-actions button:disabled{opacity:.55;cursor:wait}
+  #bugreportcancel{border-color:rgba(125,211,252,.4);background:#10243a;color:#cfeeff}
   #statpointnudge{position:fixed;left:50%;bottom:146px;z-index:9;display:grid;grid-template-columns:36px minmax(0,1fr);gap:2px 9px;align-items:center;min-width:236px;max-width:calc(100vw - 36px);padding:9px 12px;border:1px solid rgba(154,210,107,.72);border-radius:7px;background:linear-gradient(135deg,rgba(28,48,20,.94),rgba(10,16,13,.9));box-shadow:0 10px 26px rgba(0,0,0,.4),0 0 22px rgba(154,210,107,.28),inset 0 0 18px rgba(154,210,107,.08);color:#ecffd8;font-family:inherit;text-align:left;text-shadow:0 2px 0 #000;transform:translateX(-50%);cursor:pointer;animation:statPointNudgePulse 1.25s ease-in-out infinite alternate}
   #statpointnudge.hidden{display:none}
   #statpointnudge span{grid-row:1 / span 2;display:grid;place-items:center;width:32px;height:32px;border:1px solid rgba(255,210,74,.78);border-radius:50%;background:#2d240f;color:#ffd24a;font-size:17px;font-weight:bold;box-shadow:0 0 12px rgba(255,210,74,.32)}
