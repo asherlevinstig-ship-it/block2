@@ -1015,10 +1015,13 @@ function applyBugReportResult(m){
   bugReportPendingId++;
   if(bugReportSend)bugReportSend.disabled=false;
   if(m&&m.ok){
-    bugReportSetStatus('Sent. Report ID: '+String(m.id||'saved')+(m.mailed?' · emailed':' · saved for dev review'), 'ok');
-    if(typeof sysMsg==='function')sysMsg('<b>Bug report sent.</b> Thank you — report ID <b>'+escHTML(String(m.id||''))+'</b>.');
+    const id=String(m.id||'saved');
+    const mailReason=String(m.mailReason||'');
+    const status=m.mailed?'Sent. Report ID: '+id+' · emailed':'Saved. Report ID: '+id+' · email not sent'+(mailReason?' ('+mailReason+')':'');
+    bugReportSetStatus(status, m.mailed?'ok':'bad');
+    if(typeof sysMsg==='function')sysMsg(m.mailed?'<b>Bug report emailed.</b> Report ID <b>'+escHTML(id)+'</b>.':'<b>Bug report saved.</b> Email not sent'+(mailReason?': <b>'+escHTML(mailReason)+'</b>':'')+'. Report ID <b>'+escHTML(id)+'</b>.');
     if(bugReportMsg)bugReportMsg.value='';
-    setTimeout(()=>closeBugReport(),1200);
+    if(m.mailed)setTimeout(()=>closeBugReport(),1200);
   }else{
     const reason=String(m&&m.reason||'failed');
     bugReportSetStatus(reason==='rate'?'Please wait a moment before sending another report.':'Report failed. Try again in a moment.', 'bad');

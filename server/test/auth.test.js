@@ -88,6 +88,9 @@ test('auth bug reports sanitize payloads and use the mail bridge', async () => {
   assert.equal(report.trace[0].data.password, undefined);
   assert.equal(fs.existsSync(path.join(dir, 'bug-reports', report.id + '.json')), true);
   assert.equal(mailed.to, 'asherlevin85@gmail.com');
+  assert.equal(mailed.teacherEmail, 'asherlevin85@gmail.com');
+  assert.equal(mailed.subjectName, 'Bug Reports');
+  assert.match(mailed.notes, /Still loading/);
   assert.match(mailed.subject, /\[Blockcraft\] Bug report:/);
   auth.stop();
 });
