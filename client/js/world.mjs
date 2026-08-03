@@ -4915,16 +4915,33 @@ function dragonPracticeTarget(){
 function firstHandsLoggingTarget(){
   return {x:HUB.northGate.x, z:HUB.northGate.z-15};
 }
+function wildPetTrailsTarget(){
+  return {x:HUB.northGate.x+12, z:HUB.northGate.z-18};
+}
 function townRouteTo(target, mid='north'){
   const midZ=mid==='south'?TOWN.TC+7:TOWN.TC-5;
   return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:midZ},target];
+}
+function petTamerContractTarget(c){
+  if(!c)return null;
+  const type=String(c.type||''),job=String(c.job||'');
+  const hay=[c.title,c.desc,c.focus,c.location,c.text,c.hudText].map(v=>String(v||'').toLowerCase()).join(' ');
+  if(type==='tame'||(job==='pet_tamer'&&/(wild pet|friendly track|collar|bond|familiar|trail|tame)/.test(hay))){
+    const p=wildPetTrailsTarget();
+    return {label:'Wild Pet Trails',x:p.x,z:p.z};
+  }
+  if(type==='pet_care'||/(dragon|roost|stable|treat|companion|care)/.test(hay)){
+    if(/treat|craft|prepare|suppl/.test(hay))return {label:'Smithy / Crafting',x:HUB.smith.x,z:HUB.smith.z};
+    return {label:'Dragon Roost',x:HUB.roost.x,z:HUB.roost.z};
+  }
+  return null;
 }
 function jobContractTargetLabel(c){
   if(!c)return 'Contract marker';
   if(jobContractReady())return 'Job Board';
   if(c.targetName)return c.targetName;
   if(c.location)return c.location;
-  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall'};
+  const labels={kill:'Wilderness roads',hunt:'Wild animal routes',gate:'Active Gate',event:'Server event',mine:'Caves and ore seams',cave_survey:'Cave entrance',ancient_map:'Ancient City clue',treasure:'Treasure clue',farm:'Town Farm',cook:'Kitchen',sell:'Tavern counter',smith:'Smithy forge',repair:'Smithy workbench',upgrade:"Tobin's forge",salvage:"Tobin's salvage bench",meditate:'Meditation Hall',tame:'Wild Pet Trails',pet_care:'Dragon Roost'};
   return labels[c.type]||'Contract marker';
 }
 function jobContractRouteTo(target){
@@ -4937,11 +4954,13 @@ function jobContractRouteTo(target){
 function jobContractColor(c=jobContract,readyOverride=false){
   const type=String(c&&c.type||'');
   if(c&&(readyOverride||((c.have|0)>=(c.need|0))))return {hex:'#ffd24a',rgb:0xffd24a};
+  if(String(c&&c.job||'')==='pet_tamer')return {hex:'#f9a8d4',rgb:0xf9a8d4};
   if(type==='farm')return {hex:'#86efac',rgb:0x86efac};
   if(type==='cook'||type==='sell')return {hex:'#fbbf24',rgb:0xfbbf24};
   if(type==='smith'||type==='repair'||type==='upgrade'||type==='salvage')return {hex:'#fb923c',rgb:0xfb923c};
   if(type==='meditate')return {hex:'#7dd3fc',rgb:0x7dd3fc};
   if(type==='hunt'||type==='kill')return {hex:'#f9a8d4',rgb:0xf9a8d4};
+  if(type==='tame'||type==='pet_care')return {hex:'#f9a8d4',rgb:0xf9a8d4};
   if(type==='mine'||type==='cave_survey'||type==='ancient_map'||type==='treasure')return {hex:'#9ca3af',rgb:0x9ca3af};
   return {hex:'#9fd7ff',rgb:0x9fd7ff};
 }
@@ -4958,9 +4977,10 @@ function jobContractGuidanceTarget(){
   else if(c.type==='mine'||c.type==='cave_survey'||c.type==='ancient_map'||c.type==='treasure')target=HUB.quarry;
   else if(c.type==='gate')target=gate?{x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{x:HUB.northGate.x,z:HUB.northGate.z+1.2};
   else if(c.type==='kill'||c.type==='hunt')target=firstHandsLoggingTarget();
+  else if(c.type==='tame'||c.type==='pet_care'||c.job==='pet_tamer')target=petTamerContractTarget(c);
   if(!target)return null;
   const col=jobContractColor(c,false);
-  return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:jobContractTargetLabel(c)};
+  return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:target.label||jobContractTargetLabel(c)};
 }
 function maraQuestGuidanceTarget(q){
   if(!q || q.source==='guardian') return null;
@@ -5012,6 +5032,11 @@ function serverObjectiveGuidanceTarget(o){
     }
     const target=firstHandsLoggingTarget();
     return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate,target]};
+  }
+  if(source==='job'&&o.status!=='claimable'&&o.status!=='complete'){
+    const contract=o.jobContract&&typeof o.jobContract==='object'?o.jobContract:null;
+    const target=petTamerContractTarget(contract||{type:String(o.questType||''),title:o.title,desc:o.text,location:o.location,text:o.text,hudText:o.hudText});
+    if(target)return {kind:'server-pet-tamer',color:0xf9a8d4,target,route:jobContractRouteTo(target),label:target.label};
   }
   if(action==='jobs'||source==='job'||loc.includes('job board')){
     return {kind:'server-jobs',color:0x8bbf5a,target:HUB.jobs,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.jobs]};

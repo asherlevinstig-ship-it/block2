@@ -2442,6 +2442,12 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(world,/function manualGuidanceTargetInfo\(\)/);
   assert.match(world,/action==='craft'\|\|loc\.includes\('crafting'\)\|\|loc\.includes\('craft station'\)\|\|title\.includes\('craft station'\)/);
   assert.match(world,/kind:'server-crafting',color:0xffb45e,target:HUB\.smith/);
+  assert.match(world,/function petTamerContractTarget\(c\)/);
+  assert.match(world,/type==='tame'/);
+  assert.match(world,/label:'Wild Pet Trails'/);
+  assert.match(world,/type==='pet_care'/);
+  assert.match(world,/label:'Dragon Roost'/);
+  assert.match(world,/kind:'server-pet-tamer',color:0xf9a8d4/);
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
