@@ -1202,6 +1202,18 @@ function trackerExpandButton(line,index){
   const key=objectiveTrackerKey(line,index),open=objectiveTrackerExpanded.has(key);
   return '<button type="button" class="oexpand" data-objective-toggle="'+escHTML(key)+'" aria-expanded="'+(open?'true':'false')+'">'+(open?'−':'+')+'</button>';
 }
+function trackerGuideButton(line,index){
+  if(!line)return '';
+  const server=line.serverObjective||null;
+  const attrs=['type="button"','class="qaction guide"','data-objective-guide="1"','data-guide-title="'+escHTML(line.title||line.label||'Objective')+'"'];
+  if(server&&server.id)attrs.push('data-guide-id="'+escHTML(server.id)+'"');
+  if(line.target&&Number.isFinite(Number(line.target.x))&&Number.isFinite(Number(line.target.z))){
+    attrs.push('data-guide-x="'+Number(line.target.x)+'"');
+    attrs.push('data-guide-z="'+Number(line.target.z)+'"');
+    attrs.push('data-guide-label="'+escHTML(line.target.label||line.title||'Objective')+'"');
+  }
+  return '<button '+attrs.join(' ')+'>GUIDE ME</button>';
+}
 function objectiveHudHTML(obj){
   if(!obj) return '';
   const checklistHTML=line=>Array.isArray(line&&line.checklist)?'<div class="prepchecklist">'+line.checklist.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label||'Check')+'</span></div>').join('')+'</div>':'';
@@ -1227,7 +1239,7 @@ function objectiveHudHTML(obj){
       return '<div class="objective-line '+escHTML(line.kind||'objective')+(expanded?' expanded':' collapsed')+'" data-objective-row="'+escHTML(key)+'">'+
         '<div class="olabel">'+escHTML(line.label||'Objective')+'</div>'+
         '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Objective')+'</b><span>'+escHTML(line.text||'')+'</span>'+checklistHTML(line)+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
-        '<div class="oact">'+progressText+trackerExpandButton(line,index)+trackerActionButton(line.action)+'</div>'+
+        '<div class="oact">'+progressText+trackerGuideButton(line,index)+trackerExpandButton(line,index)+trackerActionButton(line.action)+'</div>'+
       '</div>';
     }).join('');
     return '<div class="qt">Objective Tracker</div><div class="objective-list">'+rows+'</div>';
@@ -1388,6 +1400,24 @@ function handleObjectiveAction(action,btn){
 }
 if(currentQuestEl){
   const triggerObjectiveAction=e=>{
+    const guide=e.target&&e.target.closest&&e.target.closest('[data-objective-guide]');
+    if(guide){
+      e.preventDefault();
+      e.stopPropagation();
+      const api=globalThis.BlockcraftGuideObjective;
+      const title=guide.dataset.guideTitle||guide.dataset.guideLabel||'Objective';
+      let ok=false;
+      if(api&&guide.dataset.guideId)ok=api.setObjective(guide.dataset.guideId,title);
+      if(!ok&&api&&guide.dataset.guideX!=null&&guide.dataset.guideZ!=null){
+        ok=api.setTarget({x:Number(guide.dataset.guideX),z:Number(guide.dataset.guideZ)},guide.dataset.guideLabel||title);
+      }
+      if(ok)sysMsg('<b>Guide active:</b> follow the glowing trail for '+escHTML(title)+'.');
+      else {
+        menusApi.openQuestLog&&menusApi.openQuestLog();
+        sysMsg('<b>Guide unavailable:</b> Quest Log opened for this objective.');
+      }
+      return;
+    }
     const toggle=e.target&&e.target.closest&&e.target.closest('[data-objective-toggle]');
     if(toggle){
       e.preventDefault();

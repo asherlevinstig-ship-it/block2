@@ -5067,6 +5067,52 @@ function playerStyleGuidanceTargetInfo(){
     : [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target];
   return {kind:'player-style-'+guide.id,color,target,route};
 }
+let manualGuidanceTarget=null;
+function manualGuidanceRoute(target){
+  if(!target||!Number.isFinite(Number(target.x))||!Number.isFinite(Number(target.z)))return null;
+  const point={x:Number(target.x),z:Number(target.z)};
+  return [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},point];
+}
+function manualGuidanceTargetInfo(){
+  if(!manualGuidanceTarget)return null;
+  if(manualGuidanceTarget.expiresAt&&Date.now()>manualGuidanceTarget.expiresAt){
+    manualGuidanceTarget=null;
+    return null;
+  }
+  let info=null;
+  if(manualGuidanceTarget.id&&Array.isArray(activeObjectives)){
+    const objective=activeObjectives.find(o=>o&&String(o.id||'')===manualGuidanceTarget.id);
+    info=serverObjectiveGuidanceTarget(objective);
+  }
+  if(!info&&manualGuidanceTarget.target){
+    const route=manualGuidanceRoute(manualGuidanceTarget.target);
+    if(route)info={kind:'manual-guide',color:manualGuidanceTarget.color||0x7dd3fc,target:route[route.length-1],route};
+  }
+  if(!info){
+    manualGuidanceTarget=null;
+    return null;
+  }
+  if(info.target&&Math.hypot(player.pos.x-info.target.x,player.pos.z-info.target.z)<4.2){
+    manualGuidanceTarget=null;
+    return null;
+  }
+  return info;
+}
+Object.defineProperty(globalThis,'BlockcraftGuideObjective',{value:Object.freeze({
+  setObjective:(id,label='Objective')=>{
+    const key=String(id||'');
+    if(!key)return false;
+    manualGuidanceTarget={id:key,label:String(label||'Objective').slice(0,80),expiresAt:Date.now()+10*60*1000};
+    return !!manualGuidanceTargetInfo();
+  },
+  setTarget:(target,label='Objective')=>{
+    if(!target||!Number.isFinite(Number(target.x))||!Number.isFinite(Number(target.z)))return false;
+    manualGuidanceTarget={target:{x:Number(target.x),z:Number(target.z)},label:String(label||'Objective').slice(0,80),expiresAt:Date.now()+10*60*1000};
+    return !!manualGuidanceTargetInfo();
+  },
+  clear:()=>{manualGuidanceTarget=null;return true;},
+  current:()=>manualGuidanceTarget?{...manualGuidanceTarget}:null,
+}),configurable:true});
 function guidanceTargetInfo(){
   if(dim!=='overworld') return null;
   if(coachTrail){
@@ -5080,6 +5126,8 @@ function guidanceTargetInfo(){
       return {kind:'coach',color:coachTrail.color,target:coachTrail.target,route:[{x:player.pos.x,z:player.pos.z},coachTrail.target]};
     }
   }
+  const manualTarget=manualGuidanceTargetInfo();
+  if(manualTarget)return manualTarget;
   if(quest){
     if(questDone()){
       const p=(quest.source==='guardian') ? HUB.guardian : guidanceNpcPosition(quest.giver);

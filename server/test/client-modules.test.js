@@ -2423,15 +2423,23 @@ test('objective tracker buttons open actions on pointerdown above the HUD layer'
 test('objective tracker shows one collapsed row per available quest category with expand toggles',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(frame,/function unifiedObjectiveList\(\)/);
   assert.match(frame,/return lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
   assert.match(frame,/\.slice\(0,6\)/);
   assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);
   assert.match(frame,/const objectiveTrackerExpanded=new Set\(\);/);
+  assert.match(frame,/function trackerGuideButton\(line,index\)/);
+  assert.match(frame,/data-objective-guide="1"/);
+  assert.match(frame,/GUIDE ME/);
+  assert.match(frame,/BlockcraftGuideObjective/);
   assert.match(frame,/data-objective-toggle/);
   assert.match(frame,/objective-line '\+escHTML\(line\.kind\|\|'objective'\)\+\(expanded\?' expanded':' collapsed'\)/);
   assert.match(styles,/#currentquest \.objective-line\.collapsed \.obody span/);
   assert.match(styles,/#currentquest \.oexpand/);
+  assert.match(styles,/#currentquest \.qaction\.guide/);
+  assert.match(world,/BlockcraftGuideObjective/);
+  assert.match(world,/function manualGuidanceTargetInfo\(\)/);
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
