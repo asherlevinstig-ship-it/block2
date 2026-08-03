@@ -5023,6 +5023,9 @@ function serverObjectiveGuidanceTarget(o){
   const title=String(o.title||'').toLowerCase();
   const text=String(o.text||o.hudText||'').toLowerCase();
   const gate={x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  const isStory=source==='story'||String(o.category||'')==='story'||String(o.questType||'')==='npc';
+  const mentionsMara=loc.includes('mara')||title.includes('mara')||text.includes('mara');
+  const storyNpcAction=['track_npc','quest_log','talk_npc','talk','turn_in'].includes(action);
   if(title.includes('first hands') || text.includes('gather logs')){
     const p=o.progress||{};
     const current=Number.isFinite(p.current)?p.current:countItem(B.LOG);
@@ -5032,6 +5035,9 @@ function serverObjectiveGuidanceTarget(o){
     }
     const target=firstHandsLoggingTarget();
     return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate,target]};
+  }
+  if(isStory&&mentionsMara&&(o.status==='offered'||storyNpcAction||o.status==='claimable'||o.status==='complete')){
+    return {kind:'server-story-mara',color:0x9ad26b,target:HUB.guide,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
   }
   if(source==='job'&&o.status!=='claimable'&&o.status!=='complete'){
     const contract=o.jobContract&&typeof o.jobContract==='object'?o.jobContract:null;
@@ -5061,7 +5067,7 @@ function serverObjectiveGuidanceTarget(o){
     return {kind:'server-gate',color:0x7dd3fc,target:gate,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate]};
   }
   if(loc.includes('mara')||title.includes('road ready')){
-    const toMara=action==='quest_log'||action==='turn_in'||o.status==='claimable'||o.status==='complete';
+    const toMara=action==='track_npc'||action==='quest_log'||action==='turn_in'||o.status==='offered'||o.status==='claimable'||o.status==='complete';
     const target=toMara?HUB.guide:gate;
     const color=toMara?0x9ad26b:0x7dd3fc;
     return {kind:'server-mara',color,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},target]};

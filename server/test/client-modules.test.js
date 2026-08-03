@@ -2448,6 +2448,11 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(world,/type==='pet_care'/);
   assert.match(world,/label:'Dragon Roost'/);
   assert.match(world,/kind:'server-pet-tamer',color:0xf9a8d4/);
+  assert.match(world,/const isStory=source==='story'\|\|String\(o\.category\|\|''\)==='story'\|\|String\(o\.questType\|\|''\)==='npc'/);
+  assert.match(world,/const mentionsMara=loc\.includes\('mara'\)\|\|title\.includes\('mara'\)\|\|text\.includes\('mara'\)/);
+  assert.match(world,/o\.status==='offered'\|\|storyNpcAction\|\|o\.status==='claimable'\|\|o\.status==='complete'/);
+  assert.match(world,/kind:'server-story-mara',color:0x9ad26b,target:HUB\.guide/);
+  assert.match(world,/action==='track_npc'\|\|action==='quest_log'\|\|action==='turn_in'\|\|o\.status==='offered'/);
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
