@@ -2454,6 +2454,7 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(world,/const mentionsMara=loc\.includes\('mara'\)\|\|title\.includes\('mara'\)\|\|text\.includes\('mara'\)/);
   assert.match(world,/o\.status==='offered'\|\|storyNpcAction\|\|o\.status==='claimable'\|\|o\.status==='complete'/);
   assert.match(world,/kind:'server-story-mara',color:0x9ad26b,target:HUB\.guide/);
+  assert.ok(world.indexOf("kind:'server-story-mara'") < world.indexOf("kind:'server-first-hands-logs'"));
   assert.match(world,/action==='track_npc'\|\|action==='quest_log'\|\|action==='turn_in'\|\|o\.status==='offered'/);
 });
 

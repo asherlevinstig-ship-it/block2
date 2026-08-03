@@ -5036,6 +5036,9 @@ function serverObjectiveGuidanceTarget(o){
   const isStory=source==='story'||String(o.category||'')==='story'||String(o.questType||'')==='npc';
   const mentionsMara=loc.includes('mara')||title.includes('mara')||text.includes('mara');
   const storyNpcAction=['track_npc','quest_log','talk_npc','talk','turn_in'].includes(action);
+  if(isStory&&mentionsMara&&(o.status==='offered'||storyNpcAction||o.status==='claimable'||o.status==='complete')){
+    return {kind:'server-story-mara',color:0x9ad26b,target:HUB.guide,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
+  }
   if(title.includes('first hands') || text.includes('gather logs')){
     const p=o.progress||{};
     const current=Number.isFinite(p.current)?p.current:countItem(B.LOG);
@@ -5045,9 +5048,6 @@ function serverObjectiveGuidanceTarget(o){
     }
     const target=firstHandsLoggingTarget();
     return {kind:'server-first-hands-logs',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},gate,target]};
-  }
-  if(isStory&&mentionsMara&&(o.status==='offered'||storyNpcAction||o.status==='claimable'||o.status==='complete')){
-    return {kind:'server-story-mara',color:0x9ad26b,target:HUB.guide,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.guide]};
   }
   if(source==='job'&&o.status!=='claimable'&&o.status!=='complete'){
     const contract=o.jobContract&&typeof o.jobContract==='object'?o.jobContract:null;
