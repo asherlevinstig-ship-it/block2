@@ -2451,7 +2451,7 @@ function tick(now){
     }
     if(tipsyT>0){ tipsyT-=dt; camera.rotation.z+=Math.sin(now/420)*.028*Math.min(1,tipsyT/2); }
 
-    const hit=raycast(8);
+    const hit=raycast(4.5);
     if(worldApi.setTargetBlockHighlight)worldApi.setTargetBlockHighlight(hit);
     else if(hit){ highlight.visible=true; highlight.position.set(hit.x+.5,hit.y+.5,hit.z+.5); }
     else { highlight.visible=false; }

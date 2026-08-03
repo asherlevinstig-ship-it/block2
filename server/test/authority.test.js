@@ -6555,6 +6555,28 @@ test('placement rejects town edits and overwrites, and owns placed chests', () =
   assert.equal(room.getChestRecord('overworld:20,10,20').owner, 'builder_token_123');
 });
 
+test('building reach allows four-block vertical stacking but rejects beyond 4.5 blocks', () => {
+  const room = makeRoom();
+  const client = makeClient('vertical_builder');
+  const { prof } = seedPlayer(room, client, {
+    token: 'vertical_builder_token_123',
+    x: 20.5,
+    y: 10,
+    z: 20.5,
+    inv: [{ id: W.B.PLANKS, count: 2 }],
+  });
+  room.landClaims.set('20,20', { owner: 'vertical_builder_token_123', name: 'Builder', price: 50, boughtAt: 1 });
+
+  room.handleWorldEdit(client, { x: 20, y: 15, z: 20, id: W.B.PLANKS });
+  assert.equal(room.world.getB(20, 15, 20), W.B.PLANKS);
+  assert.equal(itemCount(prof, W.B.PLANKS), 1);
+
+  room.handleWorldEdit(client, { x: 20, y: 16, z: 20, id: W.B.PLANKS });
+  assert.equal(room.world.getB(20, 16, 20), W.B.AIR);
+  assert.equal(itemCount(prof, W.B.PLANKS), 1);
+  assert.equal(client.sent.at(-1).type, 'editReject');
+});
+
 test('unclaimed wilderness allows risky building while claims buy protected rights', () => {
   const room = makeRoom();
   const client = makeClient('claimer');

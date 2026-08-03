@@ -10,7 +10,7 @@ const enterTamingLand=dimensionsApi.enterTamingLand,exitTamingLand=dimensionsApi
 const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoom=dimensionsApi.exitJobTutorialRoom;
 const enterQuestionRoom=dimensionsApi.enterQuestionRoom,exitQuestionRoomToTown=dimensionsApi.exitQuestionRoomToTown;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
-const BLOCK_PLACE_REACH=8;
+const BLOCK_PLACE_REACH=4.5;
 
 const legacyCombatBindings={
   "isDragon":{get:()=>isDragon},

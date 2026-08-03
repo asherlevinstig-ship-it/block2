@@ -107,6 +107,8 @@ const OVERWORLD_PLAYER_INTEREST_MIN_PLAYERS = Math.max(2, Number(process.env.OVE
 const GAME_DUNGEON_MOB_INTEREST_RADIUS = Math.max(1, Number(process.env.GAME_DUNGEON_MOB_INTEREST_RADIUS || 28));
 const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST_RADIUS, Number(process.env.GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS || 40));
 const JOIN_SNAPSHOT_DELAY_MS = Math.max(0, Number(process.env.JOIN_SNAPSHOT_DELAY_MS || 100));
+const BLOCK_EDIT_REACH = 4.5;
+const PLAYER_EYE_HEIGHT = 1.62;
 const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + 14.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 27.5 });
 
 function townReturnArray(y = TOWN_RETURN_SPAWN.y) {
@@ -2414,6 +2416,10 @@ class GameRoom extends Room {
   rateLimited(client, bucket, ratePerSec, burst) {
     return consumeRateLimit(this.rateBuckets, client.sessionId, bucket, ratePerSec, burst);
   }
+  editTargetInReach(p, x, y, z) {
+    if (!p) return false;
+    return Math.hypot(x + .5 - p.x, y + .5 - (p.y + PLAYER_EYE_HEIGHT), z + .5 - p.z) <= BLOCK_EDIT_REACH;
+  }
   handleWorldEdit(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m || p.dgn) return;
@@ -2423,7 +2429,7 @@ class GameRoom extends Room {
     const prev = this.world.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
     if (prev === W.B.BEDROCK || prev === W.B.BARRIER || prev === W.B.LAVA || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, prev, id);
-    if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 10) return this.rejectEdit(client, x, y, z, prev, id);
+    if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id);
     if (W.isLavaBorderLand(x, z)) return this.rejectEdit(client, x, y, z, prev, id);
     const guildFloorEdit = this.canEditGuildFloor && this.canEditGuildFloor(client, x, y, z, id, prev);
     if (this.isTownProtected(x, z) && !guildFloorEdit) return this.rejectEdit(client, x, y, z, prev, id);
@@ -2454,7 +2460,7 @@ class GameRoom extends Room {
     const prev = inst.getB(x, y, z);
     if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
     if (prev === W.B.BEDROCK || prev === W.B.BARRIER) return this.rejectEdit(client, x, y, z, prev, id);
-    if (Math.hypot(x + .5 - p.x, z + .5 - p.z) > 10) return this.rejectEdit(client, x, y, z, prev, id);
+    if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id);
     if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id);
     if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, p.dgn + ':' + x + ',' + y + ',' + z)) {
       return this.rejectEdit(client, x, y, z, prev, id);
