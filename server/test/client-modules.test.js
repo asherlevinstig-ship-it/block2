@@ -2456,6 +2456,9 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(world,/kind:'server-story-mara',color:0x9ad26b,target:HUB\.guide/);
   assert.ok(world.indexOf("kind:'server-story-mara'") < world.indexOf("kind:'server-first-hands-logs'"));
   assert.match(world,/action==='track_npc'\|\|action==='quest_log'\|\|action==='turn_in'\|\|o\.status==='offered'/);
+  assert.match(frame,/target=\{label:'Mara Vale',x:HUB\.guide\.x,z:HUB\.guide\.z\}/);
+  assert.match(frame,/questDone\(\)\)target=\{label:quest\.giver==='Mara Vale'\?'Mara Vale':'Quest Giver',x:HUB\.guide\.x,z:HUB\.guide\.z\}/);
+  assert.ok(frame.indexOf('guide.dataset.guideX!=null') < frame.indexOf('guide.dataset.guideId)ok=api.setObjective'));
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{

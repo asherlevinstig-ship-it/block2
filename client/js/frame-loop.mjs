@@ -944,7 +944,13 @@ function localStoryObjectiveLine(){
   else action=objectiveCraftAction('story')||{type:'questlog',label:'QUEST LOG'};
   const progress=quest.need?objectiveProgressParts(quest.have||countItem(quest.item)||0,quest.need):null;
   const chapter=quest.giver==='Mara Vale'&&quest.chainStep>=0&&quest.chainStep<=2?chapterOneMeta((quest.chainStep|0)+1):null;
-  return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress,{chapter});
+  let target=null;
+  if(isAegis)target={label:'Aegis Guardian',x:HUB.guardian.x,z:HUB.guardian.z};
+  else if(questDone())target={label:quest.giver==='Mara Vale'?'Mara Vale':'Quest Giver',x:HUB.guide.x,z:HUB.guide.z};
+  else if(quest.giver==='Mara Vale'&&quest.title==='First Hands')target={label:'Logging Area',x:HUB.northGate.x,z:HUB.northGate.z-15};
+  else if(quest.type==='gate')target=gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  else if(quest.type==='kill'||quest.type==='fetch'||quest.type==='mine'||quest.type==='pvp_bounty')target={label:'Wilderness',x:HUB.northGate.x,z:HUB.northGate.z-15};
+  return objectiveLine(isAegis?'aegis':'story',isAegis?'Aegis':'Story',story.label,story.text,action,progress,{chapter,target});
 }
 function localJobObjectiveLine(){
   const c=clampJobContract(jobContract),job=jobContractObjective();
@@ -959,7 +965,13 @@ function localGuildObjectiveLine(){
 }
 function serverObjectiveLine(o,labelOverride=''){
   if(!o)return null;
-  return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'},serverObjectiveProgressParts(o),{chapter:o.chapter||null,checklist:Array.isArray(o.checklist)?o.checklist:null,serverObjective:o});
+  const action=serverObjectiveHudAction(o)||{type:'questlog',label:'QUEST LOG'};
+  const source=String(o.source||''),loc=String(o.location||'').toLowerCase(),title=String(o.title||'').toLowerCase(),text=String(o.text||o.hudText||'').toLowerCase();
+  let target=null;
+  if(source==='story'&&(loc.includes('mara')||title.includes('mara')||text.includes('mara'))&&(o.status==='offered'||o.status==='claimable'||o.status==='complete'||['track_npc','quest_log','turn_in'].includes(action.type))){
+    target={label:'Mara Vale',x:HUB.guide.x,z:HUB.guide.z};
+  }
+  return objectiveLine(o.source||'server',labelOverride||((o.source||'Objective').toUpperCase()),o.title||'Objective',serverObjectiveHudText(o),action,serverObjectiveProgressParts(o),{chapter:o.chapter||null,checklist:Array.isArray(o.checklist)?o.checklist:null,serverObjective:o,target});
 }
 function chapterOneMeta(step=8){
   return {id:'chapter_1_town_beginnings',title:'Chapter 1: Town of Beginnings',step:Math.max(1,step|0),total:9};
@@ -1407,10 +1419,10 @@ if(currentQuestEl){
       const api=globalThis.BlockcraftGuideObjective;
       const title=guide.dataset.guideTitle||guide.dataset.guideLabel||'Objective';
       let ok=false;
-      if(api&&guide.dataset.guideId)ok=api.setObjective(guide.dataset.guideId,title);
-      if(!ok&&api&&guide.dataset.guideX!=null&&guide.dataset.guideZ!=null){
+      if(api&&guide.dataset.guideX!=null&&guide.dataset.guideZ!=null){
         ok=api.setTarget({x:Number(guide.dataset.guideX),z:Number(guide.dataset.guideZ)},guide.dataset.guideLabel||title);
       }
+      if(!ok&&api&&guide.dataset.guideId)ok=api.setObjective(guide.dataset.guideId,title);
       if(ok)sysMsg('<b>Guide active:</b> follow the glowing trail for '+escHTML(title)+'.');
       else {
         menusApi.openQuestLog&&menusApi.openQuestLog();
