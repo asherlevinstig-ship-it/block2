@@ -1105,9 +1105,11 @@ function unifiedObjectiveList(){
   const midgame=midgameObjectiveLine();
   if(midgame)lines.push(midgame);
   const seen=new Set();
-  return lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,4);
+  return lines.filter(line=>{const key=line.kind+':'+line.title;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,6);
 }
 function unifiedObjectiveHud(){
+  const lines=unifiedObjectiveList();
+  if(lines.length)return {label:'Objective Tracker',text:'Active quest categories',unified:true,lines};
   const line=nextBestObjectiveLine();
   return line?{label:'Next Best Action',text:line.title||line.text||'Choose your next step',nextBest:true,line}:null;
 }
@@ -1190,6 +1192,15 @@ function e2eCurrentObjectiveAction(){
   const action=currentObjectiveAction();
   return action ? {type:action.type||'',label:action.label||'',outputId:action.outputId||0,kind:action.kind||''} : null;
 }
+const objectiveTrackerExpanded=new Set();
+function objectiveTrackerKey(line,index=0){
+  const server=line&&line.serverObjective;
+  return String(server&&server.id||'')||[line&&line.kind||'objective',line&&line.label||'',line&&line.title||'',index].join(':');
+}
+function trackerExpandButton(line,index){
+  const key=objectiveTrackerKey(line,index),open=objectiveTrackerExpanded.has(key);
+  return '<button type="button" class="oexpand" data-objective-toggle="'+escHTML(key)+'" aria-expanded="'+(open?'true':'false')+'">'+(open?'−':'+')+'</button>';
+}
 function objectiveHudHTML(obj){
   if(!obj) return '';
   const checklistHTML=line=>Array.isArray(line&&line.checklist)?'<div class="prepchecklist">'+line.checklist.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label||'Check')+'</span></div>').join('')+'</div>':'';
@@ -1207,14 +1218,15 @@ function objectiveHudHTML(obj){
     '</div>';
   }
   if(obj.unified&&Array.isArray(obj.lines)){
-    const rows=obj.lines.map(line=>{
+    const rows=obj.lines.map((line,index)=>{
+      const key=objectiveTrackerKey(line,index),expanded=objectiveTrackerExpanded.has(key);
       const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
       const progressText=line.progress?'<em>'+line.progress.current+'/'+line.progress.required+'</em>':'';
       const chapter=line.chapter?'<div class="chapter-kicker">'+escHTML(line.chapter.title||'Chapter')+(line.chapter.step?'<span>'+Math.max(1,line.chapter.step|0)+'/'+Math.max(1,line.chapter.total|0)+'</span>':'')+'</div>':'';
-      return '<div class="objective-line '+escHTML(line.kind||'objective')+'">'+
+      return '<div class="objective-line '+escHTML(line.kind||'objective')+(expanded?' expanded':' collapsed')+'" data-objective-row="'+escHTML(key)+'">'+
         '<div class="olabel">'+escHTML(line.label||'Objective')+'</div>'+
         '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Objective')+'</b><span>'+escHTML(line.text||'')+'</span>'+checklistHTML(line)+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
-        '<div class="oact">'+progressText+trackerActionButton(line.action)+'</div>'+
+        '<div class="oact">'+progressText+trackerExpandButton(line,index)+trackerActionButton(line.action)+'</div>'+
       '</div>';
     }).join('');
     return '<div class="qt">Objective Tracker</div><div class="objective-list">'+rows+'</div>';
@@ -1369,6 +1381,17 @@ function handleObjectiveAction(action,btn){
 }
 if(currentQuestEl){
   const triggerObjectiveAction=e=>{
+    const toggle=e.target&&e.target.closest&&e.target.closest('[data-objective-toggle]');
+    if(toggle){
+      e.preventDefault();
+      e.stopPropagation();
+      const key=toggle.dataset.objectiveToggle||'';
+      if(objectiveTrackerExpanded.has(key))objectiveTrackerExpanded.delete(key);
+      else objectiveTrackerExpanded.add(key);
+      lastObjectiveHudHTML='';
+      refreshObjectiveTracker();
+      return;
+    }
     const btn=e.target&&e.target.closest&&e.target.closest('[data-objective-action]');
     if(!btn) return;
     e.preventDefault();

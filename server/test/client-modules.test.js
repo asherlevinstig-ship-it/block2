@@ -2420,6 +2420,20 @@ test('objective tracker buttons open actions on pointerdown above the HUD layer'
   assert.match(styles,/#qwin\{position:fixed;inset:0;[\s\S]*z-index:32/);
 });
 
+test('objective tracker shows one collapsed row per available quest category with expand toggles',()=>{
+  const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
+  const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
+  assert.match(frame,/function unifiedObjectiveList\(\)/);
+  assert.match(frame,/return lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
+  assert.match(frame,/\.slice\(0,6\)/);
+  assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);
+  assert.match(frame,/const objectiveTrackerExpanded=new Set\(\);/);
+  assert.match(frame,/data-objective-toggle/);
+  assert.match(frame,/objective-line '\+escHTML\(line\.kind\|\|'objective'\)\+\(expanded\?' expanded':' collapsed'\)/);
+  assert.match(styles,/#currentquest \.objective-line\.collapsed \.obody span/);
+  assert.match(styles,/#currentquest \.oexpand/);
+});
+
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
