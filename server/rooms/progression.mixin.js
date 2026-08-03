@@ -142,7 +142,7 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
     id: 'meditation',
     title: 'Meditation Corner',
     desc: 'Keep a quiet corner for focus, breath, and safer recovery.',
-    benefit: '+25% Monk XP from Homestead work orders and stronger offline mana/stamina rest',
+    benefit: '+25% Monk XP from Homestead work orders and stronger active focus support',
     costGold: 0,
     max: 1,
   }),
@@ -165,8 +165,8 @@ const HOMESTEAD_UPGRADE_SPECS = Object.freeze({
   rest: Object.freeze({
     id: 'rest',
     title: 'Rest Corner',
-    desc: 'Recover HP, mana, stamina, and hunger while logged out.',
-    benefit: 'Small offline recovery',
+    desc: 'Adds a safe rest roleplay corner without refilling combat resources on logout.',
+    benefit: 'Cosmetic comfort corner',
     costGold: 0,
     max: 1,
   }),
@@ -312,28 +312,8 @@ class ProgressionMixin {
     return { x: home[0], y: home[1], z: home[2] };
   }
 
-  applyHomesteadOfflineRest(prof) {
-    const upgrades = this.cleanHomesteadUpgrades(prof && prof.homesteadUpgrades);
-    if (!prof || upgrades.rest <= 0 || !(prof.vitalsSavedAt > 0)) return false;
-    const savedAt = Math.max(0, Number(prof.vitalsSavedAt) || 0);
-    const elapsedMs = Math.max(0, Date.now() - savedAt);
-    if (elapsedMs < 10 * 60 * 1000) return false;
-    const hours = Math.min(8, elapsedMs / 3600000);
-    const focusRest = upgrades.meditation > 0 ? 1.35 : 1;
-    const current = this.cleanProfileVitals ? this.cleanProfileVitals(prof) : (prof.vitals || {});
-    const maxHp = this.maxHpForProfile ? this.maxHpForProfile(prof) : 20;
-    const maxMp = this.maxMpForProfile ? this.maxMpForProfile(prof) : 20;
-    const maxSp = this.maxStaminaForProfile ? this.maxStaminaForProfile(prof) : 100;
-    const maxHunger = this.maxHungerForProfile ? this.maxHungerForProfile(prof) : 100;
-    const next = {
-      hp: Math.min(maxHp, Math.max(1, (current.hp || maxHp) + Math.ceil(hours * 6))),
-      mp: Math.min(maxMp, Math.max(0, (current.mp || 0) + Math.ceil(hours * 6 * focusRest))),
-      sp: Math.min(maxSp, Math.max(0, (current.sp || 0) + Math.ceil(hours * 20 * focusRest))),
-      hunger: Math.min(maxHunger, Math.max(0, (current.hunger || 0) + Math.ceil(hours * 8))),
-    };
-    const changed = next.hp !== current.hp || next.mp !== current.mp || next.sp !== current.sp || next.hunger !== current.hunger;
-    if (changed) prof.vitals = next;
-    return changed;
+  applyHomesteadOfflineRest() {
+    return false;
   }
 
   homesteadContextForClient(client) {

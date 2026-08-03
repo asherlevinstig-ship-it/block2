@@ -3939,10 +3939,10 @@ function homesteadUpgradeSpecs(){
     {id:'storage',title:'Storage Room',desc:'Turn one claimed room into sorted shelves and bigger chests.',benefit:'+9 slots in each owned Homestead chest',costGold:0,max:1},
     {id:'forge',title:'Forge Room',desc:'Set up a proper tool bench for repairs, smithing, and metal stock.',benefit:'+25% Blacksmith XP from Homestead work orders',costGold:0,max:1},
     {id:'kitchen',title:'Kitchen',desc:'Build a working pantry so cooked supplies matter between Gates.',benefit:'+25% Cook XP from Homestead work orders',costGold:0,max:1},
-    {id:'meditation',title:'Meditation Corner',desc:'Keep a quiet corner for focus, breath, and safer recovery.',benefit:'+25% Monk XP from Homestead work orders and stronger offline mana/stamina rest',costGold:0,max:1},
+    {id:'meditation',title:'Meditation Corner',desc:'Keep a quiet corner for focus, breath, and safer recovery.',benefit:'+25% Monk XP from Homestead work orders and stronger active focus support',costGold:0,max:1},
     {id:'stable',title:'Stable / Nest',desc:'Make a calm resting place for companions and dragons.',benefit:'+25% Pet Tamer XP from Homestead work orders and better dragon rest',costGold:0,max:1},
     {id:'comfort',title:'Warm Lights',desc:'Your lit Homestead feels safer and more alive.',benefit:'Legacy comfort marker',costGold:0,max:1},
-    {id:'rest',title:'Rest Corner',desc:'Recover HP, mana, stamina, and hunger while logged out.',benefit:'Small offline recovery',costGold:0,max:1},
+    {id:'rest',title:'Rest Corner',desc:'Adds a safe rest roleplay corner without refilling combat resources on logout.',benefit:'Cosmetic comfort corner',costGold:0,max:1},
   ];
   const server=homesteadUpgrades&&Array.isArray(homesteadUpgrades.specs)?homesteadUpgrades.specs:[];
   return (server.length?server:fallback).map(s=>({

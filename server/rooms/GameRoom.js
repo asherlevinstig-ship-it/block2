@@ -978,7 +978,6 @@ class GameRoom extends Room {
         }
       }
       if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
-      if (this.applyHomesteadOfflineRest && this.applyHomesteadOfflineRest(prof)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
@@ -1569,7 +1568,8 @@ class GameRoom extends Room {
         const maxHp = this.maxHpForProfile(next);
         this.playerHp.set(client.sessionId, { hp: vitals.hp, max: maxHp });
         const maxMp = this.maxMpForProfile(next);
-        this.abilityState.set(client.sessionId, { mp: vitals.mp, maxMp, cds: {}, last: Date.now() });
+        const maxSp = this.maxStaminaForProfile(next);
+        this.abilityState.set(client.sessionId, { mp: vitals.mp, maxMp, sp: vitals.sp, maxSp, cds: {}, last: Date.now() });
         this.sendAbilitySync(client, this.abilityState.get(client.sessionId));
         client.send('accountProfileUpdated', { ok: true, reason: 'level_two_job_choice' });
         this.sendProfile(client, next);

@@ -685,8 +685,33 @@ test('profile merge accepts only identity and ignores every client-owned progres
   assert.equal(merged.vitals.hp, current.vitals.hp);
   assert.equal(merged.vitals.mp, current.vitals.mp);
   assert.equal(merged.vitals.hunger, current.vitals.hunger);
-  assert.equal(merged.vitals.sp, 42);
+  assert.equal(merged.vitals.sp, Math.min(current.vitals.sp, 42));
   assert.deepEqual(merged.pos, current.pos);
+});
+
+test('profile merge never lets browser snapshots refill stamina', () => {
+  const current = defaultProfile('Tired');
+  current.vitals = { hp: 20, mp: 20, sp: 12, hunger: 100 };
+  current.vitalsSavedAt = Date.now();
+
+  const refilled = mergeClientSave(current, { sp: 100 });
+  assert.equal(refilled.vitals.sp, 12, 'refresh/cold boot snapshots cannot refill stamina');
+
+  const spent = mergeClientSave(current, { sp: 4 });
+  assert.equal(spent.vitals.sp, 4, 'live snapshots may still preserve stamina that was spent client-side');
+});
+
+test('homestead rest does not refill survival vitals while offline', () => {
+  const room = makeRoom();
+  const prof = defaultProfile('No Free Rest');
+  prof.homesteadUpgrades = { rest: 1, meditation: 1 };
+  prof.vitals = { hp: 3, mp: 2, sp: 5, hunger: 6 };
+  prof.vitalsSavedAt = Date.now() - 4 * 3600000;
+
+  const changed = room.applyHomesteadOfflineRest(prof);
+
+  assert.equal(changed, false);
+  assert.deepEqual(prof.vitals, { hp: 3, mp: 2, sp: 5, hunger: 6 });
 });
 
 test('profile merge persists only bounded job tutorial room resume state', () => {
