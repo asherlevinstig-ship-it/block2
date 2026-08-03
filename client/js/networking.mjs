@@ -13,7 +13,7 @@ import {createCombatFeedback} from './combat-feedback.mjs';
 import {createOverworldResultPresenter} from './overworld-results.mjs';
 import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
-import {backendWsUrl} from './config.mjs';
+import {apiUrl,backendWsUrl} from './config.mjs';
 import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,hunterRankLevelLabel,isDeityLevel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
@@ -909,6 +909,8 @@ const bugReportSend=document.getElementById('bugreportsend');
 const bugReportCancel=document.getElementById('bugreportcancel');
 const bugReportStatus=document.getElementById('bugreportstatus');
 let bugReportPendingTimer=0;
+let bugReportFallbackTimer=0;
+let bugReportPendingId=0;
 function bugReportPositionText(){
   const snap=typeof globalThis.BlockcraftDebugSnapshot==='function'?globalThis.BlockcraftDebugSnapshot():null;
   const pos=snap&&snap.player&&snap.player.pos || (player&&player.pos?{x:player.pos.x,y:player.pos.y,z:player.pos.z}:null);
@@ -955,7 +957,9 @@ function openBugReport(){
 function closeBugReport(){
   if(!bugReportWin)return;
   clearTimeout(bugReportPendingTimer);
+  clearTimeout(bugReportFallbackTimer);
   bugReportPendingTimer=0;
+  bugReportFallbackTimer=0;
   if(bugReportSend)bugReportSend.disabled=false;
   bugReportWin.classList.add('hidden');
   document.body.classList.remove('game-modal-open');
@@ -967,20 +971,48 @@ function sendBugReport(){
   if(!NET||!NET.on||!NET.room){bugReportSetStatus('Not connected to the server yet.', 'bad');return;}
   const message=String(bugReportMsg&&bugReportMsg.value||'').trim();
   const trace=globalThis.BlockcraftDebug&&globalThis.BlockcraftDebug.dump?globalThis.BlockcraftDebug.dump().slice(-100):[];
+  const payload={ message, clientContext: bugReportClientContext(), trace };
+  const pendingId=++bugReportPendingId;
   bugReportSetStatus('Sending report...', '');
   if(bugReportSend)bugReportSend.disabled=true;
   clearTimeout(bugReportPendingTimer);
+  clearTimeout(bugReportFallbackTimer);
+  bugReportFallbackTimer=setTimeout(()=>sendBugReportHttpFallback(payload,pendingId),2500);
   bugReportPendingTimer=setTimeout(()=>{
     if(bugReportSend)bugReportSend.disabled=false;
-    bugReportSetStatus('Report saved request sent, but the server did not answer yet. You can close this panel and keep playing.', 'bad');
+    bugReportSetStatus('Server is taking too long. Trying backup route...', 'bad');
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.timeout');
   },12000);
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.send', { hasMessage:!!message, trace:trace.length });
-  NET.room.send('bugReport', { message, clientContext: bugReportClientContext(), trace });
+  NET.room.send('bugReport', payload);
+}
+async function sendBugReportHttpFallback(payload,pendingId){
+  if(pendingId!==bugReportPendingId)return;
+  const token=currentAuthSessionToken();
+  if(!token){globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.skip',{reason:'auth'});return;}
+  try{
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.start');
+    const res=await fetch(apiUrl('/auth/bug-report'),{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify(payload),
+    });
+    let data={};try{data=await res.json();}catch(_e){}
+    if(pendingId!==bugReportPendingId)return;
+    if(res.ok&&data&&data.ok)applyBugReportResult({...data,via:'http'});
+    else applyBugReportResult({ok:false,reason:data&&data.code||data&&data.error||'http_failed'});
+  }catch(e){
+    if(pendingId!==bugReportPendingId)return;
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.http.fail',{message:e&&e.message||String(e||'')});
+  }
 }
 function applyBugReportResult(m){
   clearTimeout(bugReportPendingTimer);
+  clearTimeout(bugReportFallbackTimer);
   bugReportPendingTimer=0;
+  bugReportFallbackTimer=0;
+  bugReportPendingId++;
   if(bugReportSend)bugReportSend.disabled=false;
   if(m&&m.ok){
     bugReportSetStatus('Sent. Report ID: '+String(m.id||'saved')+(m.mailed?' · emailed':' · saved for dev review'), 'ok');

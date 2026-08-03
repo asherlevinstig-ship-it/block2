@@ -59,6 +59,39 @@ test('concurrent auth saves are serialized without losing sessions', async () =>
   auth.stop();
 });
 
+test('auth bug reports sanitize payloads and use the mail bridge', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-bug-'));
+  let mailed = null;
+  const auth = new AuthService(dir, {
+    env: {
+      BUG_REPORT_NOTIFY_TO: 'asherlevin85@gmail.com',
+      BUG_REPORT_MAIL_BRIDGE_SECRET: 'secret',
+      BUG_REPORT_MAIL_BRIDGE_URL: 'https://mail.test/bridge',
+    },
+    bugReportMailBridgeFetch: async (_url, options) => {
+      mailed = JSON.parse(options.body);
+      return { ok: true };
+    },
+  });
+  const account = { id: 'student_1', username: 'asher@test.local', displayName: 'Asher', schoolId: '3' };
+  const report = auth.buildHttpBugReport(account, {
+    message: 'Still loading.',
+    clientContext: { position: { x: 5, y: 6, z: 7 }, token: 'hide', snapshot: { player: { name: 'AsherTest', level: 2, job: 'miner' } } },
+    trace: [{ event: 'player.keydown', data: { code: 'KeyP', password: 'hide' } }],
+  });
+  await auth.saveBugReportFile(report);
+  const mail = await auth.sendBugReportNotification(report);
+  assert.equal(mail.sent, true);
+  assert.equal(report.to, 'asherlevin85@gmail.com');
+  assert.equal(report.player.schoolId, '3');
+  assert.equal(report.clientContext.token, undefined);
+  assert.equal(report.trace[0].data.password, undefined);
+  assert.equal(fs.existsSync(path.join(dir, 'bug-reports', report.id + '.json')), true);
+  assert.equal(mailed.to, 'asherlevin85@gmail.com');
+  assert.match(mailed.subject, /\[Blockcraft\] Bug report:/);
+  auth.stop();
+});
+
 test('shared auth storage lets another server process accept a fresh session', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-auth-shared-'));
   const authA = new AuthService(dir, { reloadSessionsOnMiss: true });

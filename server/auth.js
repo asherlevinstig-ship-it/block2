@@ -18,6 +18,9 @@ const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 const SWEEP_MS = 10 * 60 * 1000;   // reclaim expired sessions and stale rate-limit rows
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
+const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
+const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
+const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
 
 const b64url = buf => Buffer.from(buf).toString('base64url');
 const cleanUsername = value => String(value || '').trim().toLowerCase();
@@ -30,6 +33,32 @@ const JOB_XP_IDS = [...JOB_IDS].filter(Boolean);
 const cleanAdminId = value => String(value || '').trim().toLowerCase();
 const clampJobXp = value => Math.max(0, Math.min(JOB_XP_MAX, Math.round(Number(value) || 0)));
 const clampAdminInt = (value, min, max) => Math.max(min, Math.min(max, Math.round(Number(value) || 0)));
+function cleanBugText(value, max = 1600) {
+  return String(value || '')
+    .replace(/\0/g, '')
+    .replace(/[\u0001-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+function compactBugValue(value, depth = 0) {
+  if (value == null) return value;
+  if (depth > 4) return '[truncated]';
+  if (typeof value === 'string') return cleanBugText(value, depth <= 1 ? 700 : 240);
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : 0;
+  if (typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(-80).map(v => compactBugValue(v, depth + 1));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, raw] of Object.entries(value).slice(0, 80)) {
+      if (BUG_REPORT_SENSITIVE_KEY.test(key)) continue;
+      out[String(key).slice(0, 48)] = compactBugValue(raw, depth + 1);
+    }
+    return out;
+  }
+  return String(value).slice(0, 120);
+}
 const curriculumAllowedMime = new Set([
   'application/pdf',
   'application/msword',
@@ -251,6 +280,7 @@ class AuthService {
     this.env = options.env || process.env;
     this.curriculumUploadDir = options.curriculumUploadDir || path.join(this.dir, 'curriculum-uploads');
     this.curriculumMailBridgeFetch = options.curriculumMailBridgeFetch || null;
+    this.bugReportMailBridgeFetch = options.bugReportMailBridgeFetch || null;
     this.reloadSessionsOnMiss = Object.prototype.hasOwnProperty.call(options, 'reloadSessionsOnMiss') ? options.reloadSessionsOnMiss : !!this.authBackend;
     fs.mkdirSync(this.dir, { recursive: true });
     fs.mkdirSync(this.curriculumUploadDir, { recursive: true });
@@ -494,6 +524,134 @@ class AuthService {
         files: [],
       }),
     });
+    if (!response || !response.ok) {
+      let detail = '';
+      try { detail = await response.text(); } catch (_e) {}
+      throw new Error('mail_bridge_failed' + (detail ? ': ' + detail.slice(0, 200) : ''));
+    }
+    return { sent: true, to };
+  }
+
+  bugReportRecipient() {
+    return cleanBugText(this.env.BUG_REPORT_NOTIFY_TO || this.env.CURRICULUM_NOTIFY_TO || DEFAULT_BUG_REPORT_TO, 160);
+  }
+
+  bugReportMailBridgeUrl() {
+    return cleanBugText(this.env.BUG_REPORT_MAIL_BRIDGE_URL || this.env.CURRICULUM_MAIL_BRIDGE_URL || DEFAULT_CURRICULUM_MAIL_BRIDGE_URL, 400);
+  }
+
+  bugReportMailBridgeSecret() {
+    return String(this.env.BUG_REPORT_MAIL_BRIDGE_SECRET || this.env.CURRICULUM_MAIL_BRIDGE_SECRET || this.env.BLOCKCRAFT_CURRICULUM_MAIL_SECRET || '').trim();
+  }
+
+  buildHttpBugReport(account, body = {}) {
+    const now = Date.now();
+    const context = compactBugValue(body.clientContext || {});
+    const snapshot = context && context.snapshot || {};
+    const position = context && context.position || snapshot && snapshot.player || null;
+    return {
+      id: 'bug_' + now.toString(36) + '_' + crypto.randomBytes(4).toString('hex'),
+      at: now,
+      atIso: new Date(now).toISOString(),
+      to: this.bugReportRecipient(),
+      route: 'http',
+      player: {
+        account: accountSummary(account),
+        tokenHash: shortHash(account && account.id),
+        name: cleanBugText(snapshot && snapshot.player && snapshot.player.name || account && account.displayName || account && account.username || 'Hunter', 80),
+        schoolId: cleanBugText(account && account.schoolId || '', 80),
+        level: snapshot && snapshot.player && snapshot.player.level || 0,
+        job: cleanBugText(snapshot && snapshot.player && snapshot.player.job || '', 40),
+      },
+      position: compactBugValue(position || {}),
+      room: {
+        name: cleanBugText(context && context.roomName || snapshot && snapshot.roomName || 'blockcraft', 80),
+        dim: cleanBugText(context && context.dimension || snapshot && snapshot.player && snapshot.player.dim || '', 40),
+        dgn: cleanBugText(context && context.dungeonId || '', 80),
+      },
+      progress: compactBugValue({
+        quest: snapshot && snapshot.quest || null,
+        progression: snapshot && snapshot.progression || null,
+        objective: snapshot && snapshot.objective || null,
+      }),
+      message: cleanBugText(body.message, 2000),
+      clientContext: context,
+      trace: Array.isArray(body.trace) ? body.trace.slice(-80).map(entry => compactBugValue(entry)) : [],
+    };
+  }
+
+  bugReportText(report) {
+    return [
+      'A Blockcraft player reported a bug.',
+      '',
+      'Report ID: ' + report.id,
+      'Time: ' + report.atIso,
+      'Route: ' + report.route,
+      'Player: ' + (report.player.name || 'Hunter'),
+      'School ID: ' + (report.player.schoolId || '(none)'),
+      'Account: ' + JSON.stringify(report.player.account || {}),
+      'Location: ' + JSON.stringify(report.position || {}),
+      'Room: ' + JSON.stringify(report.room || {}),
+      '',
+      'Player message:',
+      report.message || '(no custom message)',
+      '',
+      'Progress snapshot:',
+      JSON.stringify(report.progress, null, 2),
+      '',
+      'Client context:',
+      JSON.stringify(report.clientContext, null, 2),
+      '',
+      'Recent player/client actions:',
+      JSON.stringify(report.trace, null, 2),
+    ].join('\n');
+  }
+
+  async saveBugReportFile(report) {
+    const dir = path.join(this.dir, 'bug-reports');
+    await fs.promises.mkdir(dir, { recursive: true });
+    const file = path.join(dir, report.id + '.json');
+    await fs.promises.writeFile(file, JSON.stringify(report, null, 2), 'utf8');
+    return file;
+  }
+
+  async sendBugReportNotification(report) {
+    const to = report.to || this.bugReportRecipient();
+    const bridgeUrl = this.bugReportMailBridgeUrl();
+    const bridgeSecret = this.bugReportMailBridgeSecret();
+    if (!to) return { sent: false, to, reason: 'mail_recipient_not_configured' };
+    if (!bridgeUrl) return { sent: false, to, reason: 'mail_bridge_url_not_configured' };
+    if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };
+    const fetchImpl = this.bugReportMailBridgeFetch || this.curriculumMailBridgeFetch || globalThis.fetch;
+    if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timeout = null;
+    const fetchOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Blockcraft-Mail-Secret': bridgeSecret,
+      },
+      body: JSON.stringify({
+        to,
+        subject: '[Blockcraft] Bug report: ' + report.id,
+        text: this.bugReportText(report),
+        bugReport: report,
+      }),
+    };
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+      timeout = setTimeout(() => controller.abort(), BUG_REPORT_MAIL_TIMEOUT_MS);
+    }
+    let response;
+    try {
+      response = await fetchImpl(bridgeUrl, fetchOptions);
+    } catch (error) {
+      if (error && (error.name === 'AbortError' || /abort/i.test(String(error.message || '')))) return { sent: false, to, reason: 'mail_bridge_timeout' };
+      throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
     if (!response || !response.ok) {
       let detail = '';
       try { detail = await response.text(); } catch (_e) {}
@@ -955,6 +1113,7 @@ class AuthService {
       if (process.env.NODE_ENV === 'production' && !secure) return res.status(426).json({ ok: false, error: 'HTTPS is required for authentication.' });
       next();
     });
+    app.use('/auth/bug-report', require('express').json({ limit: '180kb' }));
     app.use('/auth', require('express').json({ limit: '8kb' }));
     const complete = async (req, res, create) => {
       if (!this.allowAttempt(req, req.body && req.body.username)) return res.status(429).json({ ok: false, error: 'Too many authentication attempts.' });
@@ -1003,6 +1162,25 @@ class AuthService {
       const account = this.authenticateRequest(req);
       if (!account) return res.status(401).json({ ok: false });
       res.json({ ok: true, account, gameProfile: await this.publicGameProfile(account) });
+    });
+    app.post('/auth/bug-report', async (req, res) => {
+      const account = this.authenticateRequest(req);
+      if (!account) return res.status(401).json({ ok: false, code: 'auth' });
+      try {
+        const report = this.buildHttpBugReport(account, req.body || {});
+        await this.saveBugReportFile(report);
+        let mail = { sent: false, to: report.to, reason: 'not_attempted' };
+        try {
+          mail = await this.sendBugReportNotification(report);
+        } catch (error) {
+          mail = { sent: false, to: report.to, reason: cleanBugText(error && error.message || 'mail_failed', 240) };
+        }
+        console.warn('[bug-report-http]', JSON.stringify({ id: report.id, player: report.player.name, position: report.position, mail }));
+        res.json({ ok: true, id: report.id, to: report.to, saved: true, mailed: !!(mail && mail.sent), mailReason: mail && mail.reason || '' });
+      } catch (e) {
+        console.warn('[bug-report-http] failed:', e && e.message || e);
+        res.status(500).json({ ok: false, code: 'save_failed' });
+      }
     });
     app.post('/auth/profile/name', async (req, res) => {
       const account = this.authenticateRequest(req);
