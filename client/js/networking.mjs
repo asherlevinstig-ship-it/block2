@@ -908,6 +908,7 @@ const bugReportMeta=document.getElementById('bugreportmeta');
 const bugReportSend=document.getElementById('bugreportsend');
 const bugReportCancel=document.getElementById('bugreportcancel');
 const bugReportStatus=document.getElementById('bugreportstatus');
+let bugReportPendingTimer=0;
 function bugReportPositionText(){
   const snap=typeof globalThis.BlockcraftDebugSnapshot==='function'?globalThis.BlockcraftDebugSnapshot():null;
   const pos=snap&&snap.player&&snap.player.pos || (player&&player.pos?{x:player.pos.x,y:player.pos.y,z:player.pos.z}:null);
@@ -953,6 +954,9 @@ function openBugReport(){
 }
 function closeBugReport(){
   if(!bugReportWin)return;
+  clearTimeout(bugReportPendingTimer);
+  bugReportPendingTimer=0;
+  if(bugReportSend)bugReportSend.disabled=false;
   bugReportWin.classList.add('hidden');
   document.body.classList.remove('game-modal-open');
   bugReportSetStatus('', '');
@@ -965,10 +969,18 @@ function sendBugReport(){
   const trace=globalThis.BlockcraftDebug&&globalThis.BlockcraftDebug.dump?globalThis.BlockcraftDebug.dump().slice(-100):[];
   bugReportSetStatus('Sending report...', '');
   if(bugReportSend)bugReportSend.disabled=true;
+  clearTimeout(bugReportPendingTimer);
+  bugReportPendingTimer=setTimeout(()=>{
+    if(bugReportSend)bugReportSend.disabled=false;
+    bugReportSetStatus('Report saved request sent, but the server did not answer yet. You can close this panel and keep playing.', 'bad');
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.timeout');
+  },12000);
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.send', { hasMessage:!!message, trace:trace.length });
   NET.room.send('bugReport', { message, clientContext: bugReportClientContext(), trace });
 }
 function applyBugReportResult(m){
+  clearTimeout(bugReportPendingTimer);
+  bugReportPendingTimer=0;
   if(bugReportSend)bugReportSend.disabled=false;
   if(m&&m.ok){
     bugReportSetStatus('Sent. Report ID: '+String(m.id||'saved')+(m.mailed?' · emailed':' · saved for dev review'), 'ok');

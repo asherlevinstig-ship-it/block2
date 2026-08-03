@@ -457,6 +457,24 @@ test('bug reports attach authoritative player location and sanitize client trace
   else process.env.BUG_REPORT_NOTIFY_TO = prevBugReportTo;
 });
 
+test('bug reports still acknowledge when email bridge fails', async () => {
+  const room = makeRoom();
+  const client = makeClient('bug-mail-fail');
+  seedPlayer(room, client, { name: 'MailFailHunter', x: 7, y: 8, z: 9 });
+  let savedReport = null;
+  room.saveBugReportFile = async report => { savedReport = report; return 'data/bug-reports/mail-fail.json'; };
+  room.sendBugReportMail = async () => { throw new Error('mail_bridge_timeout'); };
+
+  await room.handleBugReport(client, { message: 'Email seems stuck.' });
+
+  const result = client.sent.find(e => e.type === 'bugReportResult');
+  assert.equal(result.msg.ok, true);
+  assert.equal(result.msg.saved, true);
+  assert.equal(result.msg.mailed, false);
+  assert.equal(result.msg.mailReason, 'mail_bridge_timeout');
+  assert.equal(savedReport.position.x, 7);
+});
+
 function markDragonDailyClaimed(room, prof) {
   const day = room.dragonChallengeDay();
   const def = room.dragonDailyChallenge(day);

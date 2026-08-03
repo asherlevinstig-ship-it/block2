@@ -31,6 +31,7 @@ const { recordRoomLifecycleTrace } = require('../room-lifecycle-trace');
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
+const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
 
 function cleanBugText(value, max = 1600) {
   return String(value || '')
@@ -2554,7 +2555,9 @@ class GameRoom extends Room {
     if (!bridgeSecret) return { sent: false, to, reason: 'mail_bridge_secret_not_configured' };
     const fetchImpl = this.bugReportMailBridgeFetch || globalThis.fetch;
     if (typeof fetchImpl !== 'function') return { sent: false, to, reason: 'fetch_not_available' };
-    const response = await fetchImpl(bridgeUrl, {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let timeout = null;
+    const fetchOptions = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -2566,7 +2569,22 @@ class GameRoom extends Room {
         text: this.bugReportText(report),
         bugReport: report,
       }),
-    });
+    };
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+      timeout = setTimeout(() => controller.abort(), BUG_REPORT_MAIL_TIMEOUT_MS);
+    }
+    let response;
+    try {
+      response = await fetchImpl(bridgeUrl, fetchOptions);
+    } catch (error) {
+      if (error && (error.name === 'AbortError' || /abort/i.test(String(error.message || '')))) {
+        return { sent: false, to, reason: 'mail_bridge_timeout' };
+      }
+      throw error;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
     if (!response || !response.ok) {
       let detail = '';
       try { detail = await response.text(); } catch (_e) {}
