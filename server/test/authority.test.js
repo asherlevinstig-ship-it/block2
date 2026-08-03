@@ -1872,6 +1872,10 @@ test('unified objective descriptors include Aegis job and guild work', () => {
   assert.equal(job.category, 'job');
   assert.equal(job.status, 'active');
   assert.equal(job.hudAction.type, 'jobs');
+  assert.equal(job.job, 'adventurer');
+  assert.equal(job.contractType, 'kill');
+  assert.equal(job.jobContract.type, 'kill');
+  assert.equal(job.jobContract.title, 'Field Patrol');
   assert.deepEqual(job.progress, { current: 2, required: 3 });
   assert.deepEqual({ gold: job.reward.gold, xp: job.reward.xp, jobXp: job.reward.jobXp }, { gold: 44, xp: 55, jobXp: 12 });
   const guild = objectives.find(o => o.id === 'guild:guild_test');

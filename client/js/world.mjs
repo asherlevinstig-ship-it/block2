@@ -4936,6 +4936,25 @@ function petTamerContractTarget(c){
   }
   return null;
 }
+function jobContractTarget(c){
+  if(!c)return null;
+  if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))return {label:jobContractTargetLabel(c),x:Number(c.targetX),z:Number(c.targetZ)};
+  const type=String(c.type||'');
+  if(type==='farm')return {label:'Town Farm',x:HUB.farm.x,z:HUB.farm.z};
+  if(type==='cook')return {label:'Kitchen / Crafting',x:HUB.tavern.x,z:HUB.tavern.z};
+  if(type==='sell'){
+    const p=tavernGuidanceTarget();
+    return {label:'Tavern Counter',x:p.x,z:p.z};
+  }
+  if(type==='smith'||type==='repair'||type==='upgrade'||type==='salvage')return {label:'Smithy',x:HUB.smith.x,z:HUB.smith.z};
+  if(type==='meditate')return {label:'Meditation Hall',x:HUB.shrine.x,z:HUB.shrine.z};
+  if(type==='mine'||type==='cave_survey'||type==='ancient_map'||type==='treasure')return {label:jobContractTargetLabel(c),x:HUB.quarry.x,z:HUB.quarry.z};
+  if(type==='gate')return gate?{label:'Active Gate',x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{label:'North Gate',x:HUB.northGate.x,z:HUB.northGate.z+1.2};
+  if(type==='kill'||type==='hunt')return {label:jobContractTargetLabel(c),x:HUB.northGate.x,z:HUB.northGate.z-15};
+  const petTarget=petTamerContractTarget(c);
+  if(petTarget)return petTarget;
+  return null;
+}
 function jobContractTargetLabel(c){
   if(!c)return 'Contract marker';
   if(jobContractReady())return 'Job Board';
@@ -4968,16 +4987,7 @@ function jobContractGuidanceTarget(){
   const c=clampJobContract(jobContract);
   if(!c || (c.job!=='adventurer'&&c.job!==playerJob))return null;
   if(jobContractReady())return {kind:'job-claim',color:0xffd24a,colorHex:'#ffd24a',ready:true,target:HUB.jobs,route:townRouteTo(HUB.jobs,'north'),label:'Job Board - claim reward'};
-  let target=null;
-  if((c.targetX||c.targetZ)&&Number.isFinite(c.targetX)&&Number.isFinite(c.targetZ))target={x:c.targetX,z:c.targetZ};
-  else if(c.type==='farm')target=HUB.farm;
-  else if(c.type==='cook'||c.type==='sell')target=c.type==='sell'?tavernGuidanceTarget():HUB.tavern;
-  else if(c.type==='smith'||c.type==='repair'||c.type==='upgrade'||c.type==='salvage')target=HUB.smith;
-  else if(c.type==='meditate')target=HUB.shrine;
-  else if(c.type==='mine'||c.type==='cave_survey'||c.type==='ancient_map'||c.type==='treasure')target=HUB.quarry;
-  else if(c.type==='gate')target=gate?{x:gate.x||TOWN.TC,z:gate.z||TOWN.TC}:{x:HUB.northGate.x,z:HUB.northGate.z+1.2};
-  else if(c.type==='kill'||c.type==='hunt')target=firstHandsLoggingTarget();
-  else if(c.type==='tame'||c.type==='pet_care'||c.job==='pet_tamer')target=petTamerContractTarget(c);
+  const target=jobContractTarget(c);
   if(!target)return null;
   const col=jobContractColor(c,false);
   return {kind:'job-'+c.type,color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:target.label||jobContractTargetLabel(c)};
@@ -5041,8 +5051,12 @@ function serverObjectiveGuidanceTarget(o){
   }
   if(source==='job'&&o.status!=='claimable'&&o.status!=='complete'){
     const contract=o.jobContract&&typeof o.jobContract==='object'?o.jobContract:null;
-    const target=petTamerContractTarget(contract||{type:String(o.questType||''),title:o.title,desc:o.text,location:o.location,text:o.text,hudText:o.hudText});
-    if(target)return {kind:'server-pet-tamer',color:0xf9a8d4,target,route:jobContractRouteTo(target),label:target.label};
+    const inferred=contract||{type:String(o.contractType||o.questType||''),job:String(o.job||''),title:o.title,desc:o.text,location:o.location,text:o.text,hudText:o.hudText};
+    const target=jobContractTarget(inferred);
+    if(target){
+      const col=jobContractColor(inferred,false);
+      return {kind:'server-job-'+String(inferred.type||'contract'),color:col.rgb,colorHex:col.hex,target,route:jobContractRouteTo(target),label:target.label||jobContractTargetLabel(inferred)};
+    }
   }
   if(action==='jobs'||source==='job'||loc.includes('job board')){
     return {kind:'server-jobs',color:0x8bbf5a,target:HUB.jobs,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.jobs]};

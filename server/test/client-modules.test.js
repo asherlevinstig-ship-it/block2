@@ -2447,7 +2447,9 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(world,/label:'Wild Pet Trails'/);
   assert.match(world,/type==='pet_care'/);
   assert.match(world,/label:'Dragon Roost'/);
-  assert.match(world,/kind:'server-pet-tamer',color:0xf9a8d4/);
+  assert.match(world,/function jobContractTarget\(c\)/);
+  assert.match(world,/kind:'server-job-'\+String\(inferred\.type\|\|'contract'\)/);
+  assert.match(frame,/target:jobContractReady\(\)\?\{label:'Job Board',x:HUB\.jobs\.x,z:HUB\.jobs\.z\}:jobContractCompassTarget\(c\)/);
   assert.match(world,/const isStory=source==='story'\|\|String\(o\.category\|\|''\)==='story'\|\|String\(o\.questType\|\|''\)==='npc'/);
   assert.match(world,/const mentionsMara=loc\.includes\('mara'\)\|\|title\.includes\('mara'\)\|\|text\.includes\('mara'\)/);
   assert.match(world,/o\.status==='offered'\|\|storyNpcAction\|\|o\.status==='claimable'\|\|o\.status==='complete'/);

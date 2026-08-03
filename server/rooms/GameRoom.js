@@ -4178,6 +4178,26 @@ class GameRoom extends Room {
         reward: rewardPayload(objective.reward),
         lifecycle: lifecycleFor(objective.lifecycle && objective.lifecycle.state || (status === 'claimable' ? 'claimable' : status === 'complete' ? 'completed' : status), objective.lifecycle || objective),
       };
+      if (source === 'job' && objective.jobContract && typeof objective.jobContract === 'object') {
+        const c = objective.jobContract;
+        payload.job = String(c.job || '').slice(0, 32);
+        payload.contractType = String(c.type || '').slice(0, 32);
+        payload.jobContract = {
+          id: String(c.id || '').slice(0, 80),
+          job: payload.job,
+          type: payload.contractType,
+          title: String(c.title || objective.title || '').slice(0, 80),
+          desc: String(c.desc || objective.text || '').slice(0, 180),
+          focus: String(c.focus || '').slice(0, 80),
+          location: String(c.location || objective.location || '').slice(0, 80),
+          targetName: String(c.targetName || '').slice(0, 64),
+          targetX: Number.isFinite(c.targetX) ? c.targetX : undefined,
+          targetZ: Number.isFinite(c.targetZ) ? c.targetZ : undefined,
+          target: Number.isFinite(c.target) ? c.target : 0,
+          need: Math.max(1, Math.min(999999, c.need | 0 || 1)),
+          have: Math.max(0, Math.min(999999, c.have | 0)),
+        };
+      }
       objectives.push(QUEST_OBJECTIVES.normalizeObjective(payload) || payload);
     };
     const bounty = this.aegisBounties && client ? this.aegisBounties.get(client.sessionId) : null;

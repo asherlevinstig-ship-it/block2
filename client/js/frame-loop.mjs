@@ -950,7 +950,7 @@ function localJobObjectiveLine(){
   const c=clampJobContract(jobContract),job=jobContractObjective();
   if(!c||!job)return null;
   const action=jobContractReady()?{type:'jobs',label:'CLAIM AT JOB BOARD'}:(objectiveCraftAction('job')||{type:'follow_marker',label:'FOLLOW MARKER'});
-  return objectiveLine('job','Job',job.label,job.text,action,objectiveProgressParts(c.have,c.need),{chapter:starterJobChapter(c)});
+  return objectiveLine('job','Job',job.label,job.text,action,objectiveProgressParts(c.have,c.need),{chapter:starterJobChapter(c),target:jobContractReady()?{label:'Job Board',x:HUB.jobs.x,z:HUB.jobs.z}:jobContractCompassTarget(c)});
 }
 function localGuildObjectiveLine(){
   const c=clampRegionalContract(regionalContract),guild=guildContractObjective();
