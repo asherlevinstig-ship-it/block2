@@ -5025,6 +5025,9 @@ function serverObjectiveGuidanceTarget(o){
   if(action==='cartographer'||loc.includes('orin')||loc.includes('cartographer')||title.includes('town map')){
     return {kind:'server-cartographer',color:0xffd24a,target:HUB.cartographer,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.cartographer]};
   }
+  if(action==='craft'||loc.includes('crafting')||loc.includes('craft station')||title.includes('craft station')){
+    return {kind:'server-crafting',color:0xffb45e,target:HUB.smith,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-5},HUB.smith]};
+  }
   if(action==='land'||loc.includes('land')||loc.includes('claim')){
     const target={x:TOWN.TC,z:TOWN.TC+TOWN.HS+10};
     return {kind:'server-land',color:0x7dd3fc,target,route:[{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+7},target]};

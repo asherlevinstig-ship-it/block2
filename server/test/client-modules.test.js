@@ -2440,6 +2440,8 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(styles,/#currentquest \.qaction\.guide/);
   assert.match(world,/BlockcraftGuideObjective/);
   assert.match(world,/function manualGuidanceTargetInfo\(\)/);
+  assert.match(world,/action==='craft'\|\|loc\.includes\('crafting'\)\|\|loc\.includes\('craft station'\)\|\|title\.includes\('craft station'\)/);
+  assert.match(world,/kind:'server-crafting',color:0xffb45e,target:HUB\.smith/);
 });
 
 test('land claim hotkey stays open after pointer lock exits and Escape closes it first',()=>{
