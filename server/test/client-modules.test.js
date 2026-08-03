@@ -264,7 +264,7 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
 
   assert.match(world, /const TAMING_LAND=Object\.freeze/);
   assert.match(world, /tamingPortal: \{ x: dpx\(86, 'roost'\), z: dpz\(78, 'roost'\) \}/);
-  assert.match(world, /questionPortal: \{ x: dpx\(61, 'guild'\), z: dpz\(37, 'guild'\) \}/);
+  assert.match(world, /questionPortal: \{ x: dpx\(48, 'market'\), z: dpz\(54, 'market'\) \}/);
   assert.match(world, /function buildTamingLand\(setBlock=setB\)/);
   assert.match(world, /setBlock\(cx\+ox,G\+1,cz\+oz,B\.EGG_INSULATOR\)/);
   assert.match(world, /const TAMING_LAND_SUNS=Object\.freeze/);

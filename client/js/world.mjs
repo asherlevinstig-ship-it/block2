@@ -1921,7 +1921,7 @@ const HUB = {
   farm: { x: dpx(56, 'farm'), z: dpz(79, 'farm') },
   roost: { x: dpx(96, 'roost'), z: dpz(65, 'roost') },
   tamingPortal: { x: dpx(86, 'roost'), z: dpz(78, 'roost') },
-  questionPortal: { x: dpx(61, 'guild'), z: dpz(37, 'guild') },
+  questionPortal: { x: dpx(48, 'market'), z: dpz(54, 'market') },
   skyport: { x: dpx(32, 'skyport'), z: dpz(64, 'skyport'), y: TOWN.G + 24 },
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
   guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
