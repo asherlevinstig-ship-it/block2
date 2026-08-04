@@ -2343,7 +2343,6 @@ function tick(now){
           landingDip=Math.max(landingDip,.035);
         }
         lastGroundT=-1e9; jumpPressT=-1e9;
-        if(!mounted && !pantherFormActive(now) && sp>0) sp=Math.max(0,sp-stCost(5)*armorStamina);
       } else if(feetWater && !player.onGround){
         // swim up: accelerate, and keep thrusting while breaching the surface
         player.vel.y=Math.min(player.vel.y+30*dt, waistWater?3.6:4.6);

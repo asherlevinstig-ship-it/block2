@@ -1804,7 +1804,7 @@ test('basic jumping is not blocked by empty stamina',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   assert.match(frame,/if\(canJump\)\{\s*player\.vel\.y=mounted\?9\.4:\(pantherFormActive\(now\)\?PANTHER_FORM\.jump:8\.2\);/);
   assert.doesNotMatch(frame,/if\(canJump && \(mounted \|\| sp>=5\)\)/);
-  assert.match(frame,/if\(!mounted && !pantherFormActive\(now\) && sp>0\) sp=Math\.max\(0,sp-stCost\(5\)\*armorStamina\);/);
+  assert.doesNotMatch(frame,/sp-stCost\(5\)\*armorStamina/);
   assert.match(frame,/sp-stCost\(3\.5\)\*armorStamina\*sprintFactor\*dt/);
   assert.doesNotMatch(frame,/sp<maxSp\(\).*stCost/);
 });
