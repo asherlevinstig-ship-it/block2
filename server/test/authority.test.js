@@ -5035,18 +5035,38 @@ test('D-rank dungeon definitions widen layouts and assign signature boss styles'
 });
 
 test('ranked dungeon variants include atmosphere blocks and theme dressing', () => {
-  const scenicIds = ['abandoned_mine', 'sunken_crypt', 'mossbound_cellar', 'bone_catacombs', 'blighted_grotto', 'watchers_vault'];
-  const scenicBlocks = new Set([W.B.LANTERN, W.B.CAMPFIRE, W.B.LOG, W.B.LEAVES, W.B.WATER, W.B.GLASS, W.B.CONCRETE, W.B.TERRACOTTA, W.B.LAVA]);
-  for (const dungeonId of scenicIds) {
+  const expectedSignatureBlocks = {
+    abandoned_mine: [W.B.PLANKS, W.B.IRON_ORE],
+    sunken_crypt: [W.B.WATER, W.B.ICE],
+    mossbound_cellar: [W.B.GRASS, W.B.LEAVES],
+    bone_catacombs: [W.B.SNOW, W.B.IRON_ORE],
+    blighted_grotto: [W.B.LEAVES, W.B.WATER],
+    watchers_vault: [W.B.CONCRETE, W.B.GLASS],
+    ember_forge: [W.B.TERRACOTTA, W.B.RED_SAND],
+    forgotten_keep: [W.B.PLANKS, W.B.LOG],
+    hollow_sanctum: [W.B.SNOW, W.B.GLASS],
+    void_monastery: [W.B.CONCRETE, W.B.DIAMOND_ORE],
+    frozen_depths: [W.B.ICE, W.B.SNOW],
+    storm_bastion: [W.B.CONCRETE, W.B.IRON_ORE],
+    monarchs_tomb: [W.B.BRICK, W.B.DIAMOND_ORE],
+    abyssal_citadel: [W.B.WATER, W.B.GLASS],
+    worldscar_nexus: [W.B.TERRACOTTA, W.B.LAVA],
+  };
+  const scenicBlocks = new Set([W.B.LANTERN, W.B.CAMPFIRE, W.B.LOG, W.B.LEAVES, W.B.WATER, W.B.GLASS, W.B.CONCRETE, W.B.TERRACOTTA, W.B.LAVA, W.B.ICE, W.B.SNOW, W.B.RED_SAND]);
+  for (const dungeonId of Object.keys(expectedSignatureBlocks)) {
     const rank = DUNGEON_POOLS.findIndex(pool => pool.includes(dungeonId));
     const d = D.generateDungeon(rank, 17, dungeonId);
     let scenic = 0, lights = 0;
+    const seen = new Set();
     for (const id of d.world.data) {
+      seen.add(id);
       if (scenicBlocks.has(id)) scenic++;
       if (id === W.B.TORCH || id === W.B.LANTERN || id === W.B.CAMPFIRE) lights++;
     }
     assert.ok(scenic >= 8, dungeonId + ' should contain cosmetic atmosphere blocks');
     assert.ok(lights >= 4, dungeonId + ' should have deliberate lighting');
+    for (const id of expectedSignatureBlocks[dungeonId])
+      assert.ok(seen.has(id), dungeonId + ' should include its signature block ' + id);
   }
 });
 

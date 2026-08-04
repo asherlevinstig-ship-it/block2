@@ -1340,7 +1340,11 @@ function dungeonMods(dgn){ return dgn&&dgn.shard&&Array.isArray(dgn.shard.mods) 
 function hasAffix(dgn,name){ return dungeonMods(dgn).includes(name); }
 // dark, desaturated cousins of the rank gate colors — every rank gets its own base atmosphere
 const DUNGEON_RANK_MOOD=[0x081006,0x060e15,0x130d04,0x130704,0x120510];
-const DUNGEON_THEME_MOOD={mine:0x100b05,crypt:0x050d13,overgrown:0x071108};
+const DUNGEON_THEME_MOOD={
+  mine:0x100b05,crypt:0x050d13,overgrown:0x071108,catacombs:0x100c0a,blighted:0x0a1407,vault:0x07101a,
+  forge:0x1b0903,keep:0x100b07,sanctum:0x0a1216,void:0x070510,frozen:0x07121a,storm:0x07101c,
+  royal_tomb:0x140d08,abyssal:0x030b10,worldscar:0x16070f
+};
 function dungeonMoodColor(dgn){
   const mods=dungeonMods(dgn);
   if(mods.includes('Sanguine')||mods.includes('Grievous')||mods.includes('Bursting')) return 0x16070c;

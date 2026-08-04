@@ -44,16 +44,66 @@
       for(let z=Math.min(z1,z2);z<=Math.max(z1,z2);z++)
         dungeonSetB(w,x,y,z,id);
     }
-    function carveRoomBox(w, rm, floorId){
+    function themePalette(layout){
+      const d=layout&&layout.dressing||layout&&layout.theme||'';
+      const palettes={
+        supports:{floor:B.PLANKS,hall:B.COBBLE,trim:B.BRICK,rare:B.IRON_ORE,wall:B.STONE,pillar:B.COBBLE,light:B.LANTERN},
+        flooded:{floor:B.BRICK,hall:B.BRICK,trim:B.ICE,rare:B.GLASS,wall:B.BRICK,pillar:B.COBBLE,light:B.LANTERN},
+        overgrown:{floor:B.GRASS,hall:B.COBBLE,trim:B.LEAVES,rare:B.FARMLAND,wall:B.DIRT,pillar:B.LOG,light:B.LANTERN},
+        bones:{floor:B.BRICK,hall:B.COBBLE,trim:B.SNOW,rare:B.IRON_ORE,wall:B.BRICK,pillar:B.COBBLE,light:B.LANTERN},
+        blighted:{floor:B.DIRT,hall:B.COBBLE,trim:B.LEAVES,rare:B.COAL_ORE,wall:B.STONE,pillar:B.LOG,light:B.CAMPFIRE},
+        vault:{floor:B.CONCRETE,hall:B.CONCRETE,trim:B.GLASS,rare:B.IRON_ORE,wall:B.BRICK,pillar:B.BRICK,light:B.LANTERN},
+        forge:{floor:B.TERRACOTTA,hall:B.BRICK,trim:B.RED_SAND,rare:B.IRON_ORE,wall:B.BRICK,pillar:B.IRON_ORE,light:B.CAMPFIRE},
+        keep:{floor:B.COBBLE,hall:B.COBBLE,trim:B.PLANKS,rare:B.BRICK,wall:B.BRICK,pillar:B.LOG,light:B.TORCH},
+        sanctum:{floor:B.SNOW,hall:B.CONCRETE,trim:B.GLASS,rare:B.DIAMOND_ORE,wall:B.CONCRETE,pillar:B.GLASS,light:B.LANTERN},
+        void:{floor:B.CONCRETE,hall:B.STONE,trim:B.GLASS,rare:B.DIAMOND_ORE,wall:B.STONE,pillar:B.CONCRETE,light:B.LANTERN},
+        frozen:{floor:B.ICE,hall:B.SNOW,trim:B.SNOW,rare:B.GLASS,wall:B.ICE,pillar:B.SNOW,light:B.LANTERN},
+        storm:{floor:B.CONCRETE,hall:B.CONCRETE,trim:B.GLASS,rare:B.IRON_ORE,wall:B.CONCRETE,pillar:B.IRON_ORE,light:B.LANTERN},
+        royal_tomb:{floor:B.BRICK,hall:B.BRICK,trim:B.GLASS,rare:B.DIAMOND_ORE,wall:B.BRICK,pillar:B.BRICK,light:B.LANTERN},
+        abyssal:{floor:B.STONE,hall:B.BRICK,trim:B.GLASS,rare:B.ICE,wall:B.STONE,pillar:B.BRICK,light:B.LANTERN},
+        worldscar:{floor:B.TERRACOTTA,hall:B.CONCRETE,trim:B.GLASS,rare:B.DIAMOND_ORE,wall:B.STONE,pillar:B.IRON_ORE,light:B.CAMPFIRE},
+      };
+      return palettes[d]||{floor:layout&&layout.floor==='brick'?B.BRICK:B.COBBLE,hall:B.COBBLE,trim:B.BRICK,rare:B.STONE,wall:B.STONE,pillar:B.BRICK,light:B.TORCH};
+    }
+    function safeFloorBlock(id, fallback){
+      return NON_SOLID.has(id)?(fallback||B.COBBLE):id;
+    }
+    function roomFloorId(rm, pal){
+      const base=pal.floor||B.COBBLE;
+      if(rm.type==='shrine')return safeFloorBlock(pal.trim,base);
+      if(rm.type==='vault')return safeFloorBlock(pal.rare,base);
+      if(rm.type==='pit')return safeFloorBlock(pal.hall,base);
+      if(rm.type==='arena'||rm.type==='boss')return safeFloorBlock(base,B.COBBLE);
+      return safeFloorBlock(base,B.COBBLE);
+    }
+    function paintRoomShell(w, rm, pal, seed){
+      const wall=pal.wall||B.STONE,trim=pal.trim||B.BRICK,pillar=pal.pillar||trim,light=pal.light||B.TORCH;
+      for(let y=9;y<=Math.min(15,9+(rm.h||4));y++){
+        for(let x=rm.x-rm.rx;x<=rm.x+rm.rx;x++){
+          const alt=hash2(x*17+y*23+seed,rm.z*31)>.72?trim:wall;
+          dungeonSetB(w,x,y,rm.z-rm.rz,alt);dungeonSetB(w,x,y,rm.z+rm.rz,alt);
+        }
+        for(let z=rm.z-rm.rz;z<=rm.z+rm.rz;z++){
+          const alt=hash2(rm.x*29+y*19+seed,z*37)>.72?trim:wall;
+          dungeonSetB(w,rm.x-rm.rx,y,z,alt);dungeonSetB(w,rm.x+rm.rx,y,z,alt);
+        }
+      }
+      for(const [ox,oz] of [[-rm.rx,-rm.rz],[rm.rx,-rm.rz],[-rm.rx,rm.rz],[rm.rx,rm.rz]])
+        carveBox(w,rm.x+ox,9,rm.z+oz,rm.x+ox,Math.min(14,10+(rm.h||4)),rm.z+oz,pillar);
+      if(hash2(rm.x+seed,rm.z)>.35)for(const [ox,oz] of [[-rm.rx+1,-rm.rz+1],[rm.rx-1,rm.rz-1]])
+        dungeonSetB(w,rm.x+ox,10,rm.z+oz,light);
+    }
+    function carveRoomBox(w, rm, floorId, pal, seed=0){
       const h=rm.h||4;
       carveBox(w, rm.x-rm.rx,9,rm.z-rm.rz, rm.x+rm.rx,9+h,rm.z+rm.rz, B.AIR);
       carveBox(w, rm.x-rm.rx,8,rm.z-rm.rz, rm.x+rm.rx,8,rm.z+rm.rz, floorId||B.COBBLE);
+      if(pal)paintRoomShell(w,rm,pal,seed);
       if(rm.type==='pit' && !rm.solidFloor){
         const px=Math.max(1,rm.rx-2), pz=Math.max(1,rm.rz-2);
         carveBox(w, rm.x-px,8,rm.z-pz, rm.x+px,8,rm.z+pz, B.AIR);
         carveBox(w, rm.x-px,5,rm.z-pz, rm.x+px,7,rm.z+pz, B.AIR);
-        carveBox(w, rm.x-1,8,rm.z-rm.rz, rm.x+1,8,rm.z+rm.rz, B.COBBLE);
-        carveBox(w, rm.x-rm.rx,8,rm.z-1, rm.x+rm.rx,8,rm.z+1, B.COBBLE);
+        carveBox(w, rm.x-1,8,rm.z-rm.rz, rm.x+1,8,rm.z+rm.rz, floorId||B.COBBLE);
+        carveBox(w, rm.x-rm.rx,8,rm.z-1, rm.x+rm.rx,8,rm.z+1, floorId||B.COBBLE);
       }
       if(rm.type==='crypt'){
         for(let x=rm.x-rm.rx+1;x<=rm.x+rm.rx-1;x+=3){
@@ -66,26 +116,34 @@
         carveBox(w, rm.x-rm.rx+1,8,rm.z-1, rm.x+rm.rx-1,8,rm.z+1, B.BRICK);
       }
     }
-    function carveDungeonHall(w, ax, az, bx, bz, wide){
+    function carveDungeonHall(w, ax, az, bx, bz, wide, pal){
       const hw=wide?2:1, midX=bx, midZ=az;
+      const floor=safeFloorBlock(pal&&pal.hall,B.COBBLE),trim=safeFloorBlock(pal&&pal.trim,B.BRICK),light=pal&&pal.light||B.TORCH;
       carveBox(w, Math.min(ax,midX),9,az-hw, Math.max(ax,midX),11+(wide?1:0),az+hw, B.AIR);
       carveBox(w, midX-hw,9,Math.min(az,bz), midX+hw,11+(wide?1:0),Math.max(az,bz), B.AIR);
-      carveBox(w, Math.min(ax,midX),8,az-hw, Math.max(ax,midX),8,az+hw, B.COBBLE);
-      carveBox(w, midX-hw,8,Math.min(az,bz), midX+hw,8,Math.max(az,bz), B.COBBLE);
+      carveBox(w, Math.min(ax,midX),8,az-hw, Math.max(ax,midX),8,az+hw, floor);
+      carveBox(w, midX-hw,8,Math.min(az,bz), midX+hw,8,Math.max(az,bz), floor);
+      if(wide){
+        carveBox(w, Math.min(ax,midX),8,az-hw, Math.max(ax,midX),8,az-hw, trim);
+        carveBox(w, Math.min(ax,midX),8,az+hw, Math.max(ax,midX),8,az+hw, trim);
+        carveBox(w, midX-hw,8,Math.min(az,bz), midX-hw,8,Math.max(az,bz), trim);
+        carveBox(w, midX+hw,8,Math.min(az,bz), midX+hw,8,Math.max(az,bz), trim);
+      }
       if(wide){
         const stepX=ax<midX?1:-1;
         for(let x=ax; x!==midX; x+=stepX)
           if(Math.abs(x-ax)>2 && Math.abs(x-midX)>2 && hash2(x*11+az,bx*7+bz)<.08)
-            dungeonSetB(w,x,9,az-hw,hash2(x*17+az,bx*13+bz)<.55?B.LANTERN:B.TORCH);
+            dungeonSetB(w,x,9,az-hw,hash2(x*17+az,bx*13+bz)<.55?light:B.TORCH);
       }
     }
     function setMaybe(w,x,y,z,id){ if(id!=null) dungeonSetB(w,x,y,z,id); }
     function floorPattern(w, rm, seed, accent, rare){
+      const safeAccent=safeFloorBlock(accent, B.BRICK), safeRare=rare==null?null:safeFloorBlock(rare, safeAccent);
       for(let x=rm.x-rm.rx+1;x<=rm.x+rm.rx-1;x++)for(let z=rm.z-rm.rz+1;z<=rm.z+rm.rz-1;z++){
         const edge=Math.min(x-(rm.x-rm.rx),rm.x+rm.rx-x,z-(rm.z-rm.rz),rm.z+rm.rz-z);
         const r=hash2(x*29+seed,z*31-seed);
-        if(edge===1 && r>.58) dungeonSetB(w,x,8,z,accent);
-        else if(rare!=null && ((x+z+seed)&7)===0 && r>.68) dungeonSetB(w,x,8,z,rare);
+        if(edge===1 && r>.58) dungeonSetB(w,x,8,z,safeAccent);
+        else if(safeRare!=null && ((x+z+seed)&7)===0 && r>.68) dungeonSetB(w,x,8,z,safeRare);
       }
     }
     function cornerLights(w, rm, id){
@@ -149,36 +207,37 @@
     }
     function decorateDungeonRoom(w, rm, layout, seed, i, ri){
       const last=rm.type==='boss', dressing=layout.dressing||'', theme=layout.theme||'';
+      const pal=themePalette(layout);
       if(rm.type==='entrance'){
-        floorPattern(w,rm,seed,B.COBBLE,B.BRICK);
-        dungeonSetB(w,rm.x,9,rm.z,B.LANTERN);
+        floorPattern(w,rm,seed,pal.trim,pal.rare);
+        dungeonSetB(w,rm.x,9,rm.z,pal.light);
         return;
       }
       if(rm.type==='shrine'){
-        carveBox(w,rm.x-2,8,rm.z-2,rm.x+2,8,rm.z+2,B.BRICK);
-        dungeonSetB(w,rm.x,9,rm.z,B.LANTERN);
+        carveBox(w,rm.x-2,8,rm.z-2,rm.x+2,8,rm.z+2,safeFloorBlock(pal.trim,pal.floor));
+        dungeonSetB(w,rm.x,9,rm.z,pal.light);
         setMaybe(w,rm.x,10,rm.z,B.GLASS);
       }
       if(rm.type==='vault'||dressing==='vault'){
-        floorPattern(w,rm,seed,B.CONCRETE,B.IRON_ORE);
+        floorPattern(w,rm,seed,pal.trim,B.IRON_ORE);
         for(const [ox,oz] of [[-rm.rx+2,0],[rm.rx-2,0],[0,-rm.rz+2],[0,rm.rz-2]]){
-          dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.BRICK);
-          dungeonSetB(w,rm.x+ox,10,rm.z+oz,B.LANTERN);
+          dungeonSetB(w,rm.x+ox,9,rm.z+oz,pal.pillar);
+          dungeonSetB(w,rm.x+ox,10,rm.z+oz,pal.light);
         }
       } else if(rm.type==='crypt'||dressing==='bones'){
-        floorPattern(w,rm,seed,B.BRICK,B.COBBLE);
+        floorPattern(w,rm,seed,pal.trim,pal.rare);
         for(let x=rm.x-rm.rx+2;x<=rm.x+rm.rx-2;x+=4){
-          dungeonSetB(w,x,9,rm.z-1,B.COBBLE); dungeonSetB(w,x,9,rm.z+1,B.COBBLE);
+          dungeonSetB(w,x,9,rm.z-1,pal.pillar); dungeonSetB(w,x,9,rm.z+1,pal.pillar);
         }
       } else if(rm.type==='pit'){
-        floorPattern(w,rm,seed,B.STONE,B.COAL_ORE);
+        floorPattern(w,rm,seed,pal.trim,B.COAL_ORE);
         if(ri>=1 && hash2(rm.x+seed,rm.z)>.5) dungeonSetB(w,rm.x,6,rm.z,B.LAVA);
       } else if(rm.type==='arena'){
-        floorPattern(w,rm,seed,B.BRICK,B.CONCRETE);
+        floorPattern(w,rm,seed,pal.trim,pal.rare);
         for(const [ox,oz] of [[-rm.rx+2,-rm.rz+2],[rm.rx-2,-rm.rz+2],[-rm.rx+2,rm.rz-2],[rm.rx-2,rm.rz-2]])
           dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.CAMPFIRE);
       } else {
-        floorPattern(w,rm,seed,B.COBBLE,ri>=1?B.BRICK:B.STONE);
+        floorPattern(w,rm,seed,pal.trim,ri>=1?pal.rare:B.STONE);
       }
       if(dressing==='supports'){
         for(let z=rm.z-rm.rz+2;z<=rm.z+rm.rz-2;z+=5){
@@ -195,14 +254,45 @@
           if(hash2(x+seed,z)>.42) dungeonSetB(w,x,9,z,B.LEAVES);
         if(dressing==='blighted') for(const [ox,oz] of [[-1,0],[1,0],[0,-1],[0,1]])
           dungeonSetB(w,rm.x+ox,9,rm.z+oz,hash2(rm.x+ox+seed,rm.z+oz)>.55?B.WATER:B.LEAVES);
+      } else if(dressing==='forge'){
+        for(let x=rm.x-rm.rx+2;x<=rm.x+rm.rx-2;x+=4){
+          dungeonSetB(w,x,8,rm.z,B.RED_SAND);
+          if(hash2(x+seed,rm.z)>.45)dungeonSetB(w,x,9,rm.z,B.CAMPFIRE);
+        }
+        for(const [ox,oz] of [[-rm.rx+2,-rm.rz+2],[rm.rx-2,rm.rz-2]]) dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.IRON_ORE);
+      } else if(dressing==='keep'){
+        for(let z=rm.z-rm.rz+2;z<=rm.z+rm.rz-2;z+=5)carveBox(w,rm.x-1,9,z,rm.x+1,9,z,B.PLANKS);
+        for(const [ox,oz] of [[-rm.rx+1,0],[rm.rx-1,0]])dungeonSetB(w,rm.x+ox,10,rm.z+oz,B.TORCH);
+      } else if(dressing==='sanctum'){
+        markCircle(w,rm,Math.max(2,Math.min(4,Math.min(rm.rx,rm.rz)-2)),B.GLASS,2);
+        dungeonSetB(w,rm.x,9,rm.z,B.LANTERN);
+      } else if(dressing==='void'){
+        markCircle(w,rm,Math.max(3,Math.min(5,Math.min(rm.rx,rm.rz)-2)),B.GLASS,3);
+        if(hash2(rm.x+seed,rm.z)>.5)dungeonSetB(w,rm.x,8,rm.z,B.DIAMOND_ORE);
+      } else if(dressing==='frozen'){
+        for(let x=rm.x-rm.rx+1;x<=rm.x+rm.rx-1;x+=3) for(const z of [rm.z-rm.rz+1,rm.z+rm.rz-1])
+          dungeonSetB(w,x,9,z,hash2(x+seed,z)>.5?B.SNOW:B.ICE);
+      } else if(dressing==='storm'){
+        carveBox(w,rm.x-rm.rx+2,8,rm.z,rm.x+rm.rx-2,8,rm.z,B.GLASS);
+        carveBox(w,rm.x,8,rm.z-rm.rz+2,rm.x,8,rm.z+rm.rz-2,B.GLASS);
+      } else if(dressing==='royal_tomb'){
+        markCircle(w,rm,Math.max(3,Math.min(5,Math.min(rm.rx,rm.rz)-2)),B.GLASS,2);
+        for(const [ox,oz] of [[-2,0],[2,0],[0,-2],[0,2]])dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.BRICK);
+      } else if(dressing==='abyssal'){
+        for(let x=rm.x-rm.rx+2;x<=rm.x+rm.rx-2;x+=5)dungeonSetB(w,x,9,rm.z,B.WATER);
+        cornerLights(w,rm,B.LANTERN);
+      } else if(dressing==='worldscar'){
+        const ids=[B.ICE,B.CONCRETE,B.GLASS,B.RED_SAND,B.DIAMOND_ORE];
+        for(let a=0;a<10;a++){const ox=Math.round(Math.cos(a/10*Math.PI*2)*Math.min(5,rm.rx-2)),oz=Math.round(Math.sin(a/10*Math.PI*2)*Math.min(5,rm.rz-2));dungeonSetB(w,rm.x+ox,8,rm.z+oz,ids[(a+seed)%ids.length]);}
+        if(hash2(rm.x+seed,rm.z)>.45)dungeonSetB(w,rm.x+1,9,rm.z+1,B.LAVA);
       }
       if(last){
-        carveBox(w,rm.x-3,8,rm.z-3,rm.x+3,8,rm.z+3,B.BRICK);
+        carveBox(w,rm.x-3,8,rm.z-3,rm.x+3,8,rm.z+3,safeFloorBlock(pal.trim,pal.floor));
         decorateBossArena(w, rm, ri, seed);
         for(const [ox,oz] of [[-rm.rx+2,-rm.rz+2],[rm.rx-2,-rm.rz+2],[-rm.rx+2,rm.rz-2],[rm.rx-2,rm.rz-2]]){
-          dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.BRICK);
-          dungeonSetB(w,rm.x+ox,10,rm.z+oz,B.BRICK);
-          dungeonSetB(w,rm.x+ox,11,rm.z+oz,B.LANTERN);
+          dungeonSetB(w,rm.x+ox,9,rm.z+oz,pal.pillar);
+          dungeonSetB(w,rm.x+ox,10,rm.z+oz,pal.pillar);
+          dungeonSetB(w,rm.x+ox,11,rm.z+oz,pal.light);
         }
         if(dressing==='flooded') for(let a=0;a<12;a++){ const ox=Math.round(Math.cos(a/12*Math.PI*2)*4), oz=Math.round(Math.sin(a/12*Math.PI*2)*4); dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.WATER); }
         if(dressing==='bones') for(let a=0;a<8;a++){ const ox=Math.round(Math.cos(a/8*Math.PI*2)*5), oz=Math.round(Math.sin(a/8*Math.PI*2)*5); dungeonSetB(w,rm.x+ox,9,rm.z+oz,B.COBBLE); }
@@ -212,20 +302,28 @@
       if(theme==='ranked' && hash2(rm.x+seed,rm.z)>.8) dungeonSetB(w,rm.x,9,rm.z,B.LANTERN);
     }
 
-    function restoreDungeonMainRoute(w, rooms, seed, wideChance){
+    function restoreDungeonMainRoute(w, rooms, seed, wideChance, layout){
+      const pal=themePalette(layout||{});
       const mainRooms=rooms.filter(rm=>rm&&rm.main);
       for(let i=1;i<mainRooms.length;i++){
         const prev=mainRooms[i-1], next=mainRooms[i];
-        carveDungeonHall(w,prev.x,prev.z,next.x,next.z,hash2(i*23+seed,31)<wideChance);
+        carveDungeonHall(w,prev.x,prev.z,next.x,next.z,hash2(i*23+seed,31)<wideChance,pal);
       }
     }
-    function prepareDungeonEntrance(w, entrance){
+    function prepareDungeonEntrance(w, entrance, layout){
       if(!entrance)return;
+      const pal=themePalette(layout||{});
       // Decorations and later overlapping branches must never leave the arrival
       // point inside a block or in a one-cell pocket with no way to walk out.
-      carveBox(w,entrance.x-2,9,entrance.z-2,entrance.x+2,11,entrance.z+2,B.AIR);
-      carveBox(w,entrance.x-2,8,entrance.z-2,entrance.x+2,8,entrance.z+2,B.COBBLE);
-      dungeonSetB(w,entrance.x,12,entrance.z,B.LANTERN);
+      carveBox(w,entrance.x-2,9,entrance.z-2,entrance.x+2,16,entrance.z+2,B.AIR);
+      carveBox(w,entrance.x-2,8,entrance.z-2,entrance.x+2,8,entrance.z+2,safeFloorBlock(pal.hall,B.COBBLE));
+      dungeonSetB(w,entrance.x,16,entrance.z,pal.light||B.LANTERN);
+    }
+    function clearDungeonStandColumn(w, x, z, floorId){
+      const bx=Math.floor(x), bz=Math.floor(z);
+      if(bx<1||bz<1||bx>=w.width-1||bz>=w.depth-1)return;
+      dungeonSetB(w,bx,8,bz,safeFloorBlock(floorId,B.COBBLE));
+      carveBox(w,bx,dungeonGetB(w,bx,9,bz)===B.CHEST?10:9,bz,bx,16,bz,B.AIR);
     }
     function sealDungeonBoundary(w){
       // A carved room can approach the compact grid edge. Keep a real two-block
@@ -247,6 +345,7 @@
       seed=seed>>>0;
       const dungeonId=canonicalDungeonId(ri,seed,requestedDungeonId);
       const definition=dungeonDefinition(ri,seed,dungeonId), layout=definition.layout||{};
+      const pal=themePalette(layout);
       const w=new DungeonGrid();
       for(let x=0;x<w.width;x++)for(let z=0;z<w.depth;z++){
         w.setB(x,0,z,B.BEDROCK);
@@ -260,7 +359,7 @@
         }
         w.setB(x,17,z,B.BEDROCK);
       }
-      const count=5+ri+(layout.roomBonus||0), rooms=[], spawns=[];
+      const count=5+ri+(layout.roomBonus||0), rooms=[], spawns=[], usedMainCenters=new Set();
       let bossRoom=null;
       let cx=22, cz=22, px=cx, pz=cz;
       const roomTypes=layout.roomTypes||['guard','crypt','pit','shrine','vault'];
@@ -268,21 +367,31 @@
       const rankBossScale=[0,1,2,3,4][Math.max(0,Math.min(4,ri|0))] || 0;
       const wideChance=layout.wideChance==null?.38:Math.max(0,Math.min(1,layout.wideChance));
       for(let i=0;i<count;i++){
+        if(usedMainCenters.has(cx+','+cz)){
+          let found=false;
+          const offsets=[[17,0],[0,17],[-17,0],[0,-17],[13,13],[-13,13],[13,-13],[-13,-13],[25,7],[7,25],[-25,7],[7,-25]];
+          for(const [ox,oz] of offsets){
+            const nx=Math.min(112,Math.max(16,cx+ox)), nz=Math.min(112,Math.max(16,cz+oz)), key=nx+','+nz;
+            if(!usedMainCenters.has(key)){ cx=nx; cz=nz; found=true; break; }
+          }
+          if(!found){ cx=16+((cx+seed+i*23)%97); cz=16+((cz+(seed>>>8)+i*31)%97); }
+        }
         const last=i===count-1;
         const bossArenaScale=Math.max(bossScale,rankBossScale);
         const rx=(last?7+bossArenaScale:4+roomScale)+Math.floor(hash2(i*31+seed,7)*3)+(i%3===1?1:0);
         const rz=(last?6+bossArenaScale:3+roomScale)+Math.floor(hash2(i*19+seed,11)*3)+(i%3===2?1:0);
         const type=last?'boss':(i===0?'entrance':roomTypes[Math.floor(hash2(i*43+seed,17)*roomTypes.length)]);
         const rm={x:cx,z:cz,rx,rz,r:Math.max(rx,rz),h:last?6:(type==='shrine'?5:4),type,main:true,solidFloor:layout.solidFloors!==false};
+        usedMainCenters.add(cx+','+cz);
         if(last) rm.bossArena = bossArenaForRank(ri);
         if(last) bossRoom=rm;
         rooms.push(rm);
-        const floorId=layout.floor==='brick'||type==='shrine'?B.BRICK:B.COBBLE;
-        carveRoomBox(w, rm, floorId);
+        const floorId=roomFloorId(rm,pal);
+        carveRoomBox(w, rm, floorId, pal, seed+i*101);
         decorateDungeonRoom(w, rm, layout, seed+i*101, i, ri);
-        if(i>0) carveDungeonHall(w, px,pz,cx,cz, hash2(i*23+seed,31)<wideChance);
-        if(hash2(i*7+seed,13)<.9) w.setB(cx-rx+1,9,cz-rz+1,B.TORCH);
-        if(hash2(i*13+seed,29)<.7) w.setB(cx+rx-1,9,cz+rz-1,B.TORCH);
+        if(i>0) carveDungeonHall(w, px,pz,cx,cz, hash2(i*23+seed,31)<wideChance, pal);
+        if(hash2(i*7+seed,13)<.9) w.setB(cx-rx+1,9,cz-rz+1,pal.light||B.TORCH);
+        if(hash2(i*13+seed,29)<.7) w.setB(cx+rx-1,9,cz+rz-1,pal.light||B.TORCH);
         if(i>0 && hash2(i*19+seed,41)<.48) w.setB(cx+rx-2,9,cz-rz+2,B.CHEST);
         if(i>0 && !last){
           const n=2+ri+(type==='guard'?1:0)+(type==='arena'&&layout.waveRooms?1:0);
@@ -297,13 +406,13 @@
           const sz=cz+(alongX?Math.floor((hash2(i+seed,71)-.5)*rz):side*(rz+8));
           const sideRoom={x:sx,z:sz,rx:sr,rz:sr+(hash2(i+seed,23)<.5?1:0),r:sr+1,h:4,type:hash2(i+seed,61)<.45?'treasure':'shrine',main:false,solidFloor:layout.solidFloors!==false};
           rooms.push(sideRoom);
-          carveRoomBox(w, sideRoom, sideRoom.type==='shrine'?B.BRICK:B.COBBLE);
+          carveRoomBox(w, sideRoom, roomFloorId(sideRoom,pal), pal, seed+i*137);
           decorateDungeonRoom(w, sideRoom, layout, seed+i*137, i, ri);
-          carveDungeonHall(w,cx,cz,sx,sz,false);
+          carveDungeonHall(w,cx,cz,sx,sz,false,pal);
           if(sideRoom.type==='treasure') w.setB(sx,9,sz,B.CHEST);
           else {
-            carveBox(w,sx-1,9,sz-1,sx+1,9,sz+1,B.BRICK);
-            w.setB(sx,10,sz,B.TORCH);
+            carveBox(w,sx-1,9,sz-1,sx+1,9,sz+1,pal.trim||B.BRICK);
+            w.setB(sx,10,sz,pal.light||B.TORCH);
           }
           spawns.push({x:sx+(hash2(i*79+seed,3)-.5)*sr, z:sz+(hash2(i*83+seed,5)-.5)*sr});
         }
@@ -322,17 +431,17 @@
             if(Math.abs(ox)+Math.abs(oz)<=radius) w.setB(cx+ox,9,cz+oz,B.WATER);
         }else if(i>0&&!last&&layout.dressing==='bones'){
           for(let z=cz-rz+1;z<=cz+rz-1;z+=4){
-            carveBox(w,cx-rx+1,9,z,cx-rx+2,9,z+1,B.BRICK);
-            carveBox(w,cx+rx-2,9,z,cx+rx-1,9,z+1,B.BRICK);
+            carveBox(w,cx-rx+1,9,z,cx-rx+2,9,z+1,pal.pillar||B.BRICK);
+            carveBox(w,cx+rx-2,9,z,cx+rx-1,9,z+1,pal.pillar||B.BRICK);
           }
         }else if(i>0&&!last&&layout.dressing==='vault'){
-          carveBox(w,cx-rx+1,9,cz-rz+1,cx-rx+1,11,cz-rz+1,B.BRICK);
-          carveBox(w,cx+rx-1,9,cz-rz+1,cx+rx-1,11,cz-rz+1,B.BRICK);
-          carveBox(w,cx-rx+1,9,cz+rz-1,cx-rx+1,11,cz+rz-1,B.BRICK);
-          carveBox(w,cx+rx-1,9,cz+rz-1,cx+rx-1,11,cz+rz-1,B.BRICK);
+          carveBox(w,cx-rx+1,9,cz-rz+1,cx-rx+1,11,cz-rz+1,pal.pillar||B.BRICK);
+          carveBox(w,cx+rx-1,9,cz-rz+1,cx+rx-1,11,cz-rz+1,pal.pillar||B.BRICK);
+          carveBox(w,cx-rx+1,9,cz+rz-1,cx-rx+1,11,cz+rz-1,pal.pillar||B.BRICK);
+          carveBox(w,cx+rx-1,9,cz+rz-1,cx+rx-1,11,cz+rz-1,pal.pillar||B.BRICK);
         }else if(i>0&&layout.dressing==='supports'){
           for(const ox of [-rx+1,rx-1]){
-            w.setB(cx+ox,9,cz,B.LANTERN);
+            w.setB(cx+ox,9,cz,pal.light||B.LANTERN);
           }
         }
         px=cx; pz=cz;
@@ -355,8 +464,11 @@
       }
       // A later room can overlap an earlier corridor or the outer grid shell.
       // Reassert the critical route and arrival space after all dressing is done.
-      restoreDungeonMainRoute(w,rooms,seed,wideChance);
-      prepareDungeonEntrance(w,rooms[0]);
+      restoreDungeonMainRoute(w,rooms,seed,wideChance,layout);
+      if(bossRoom)decorateBossArena(w,bossRoom,ri,seed+(count-1)*101);
+      for(const rm of rooms) clearDungeonStandColumn(w,rm.x,rm.z,roomFloorId(rm,pal));
+      for(const spawn of spawns) clearDungeonStandColumn(w,spawn.x,spawn.z,pal.floor||B.COBBLE);
+      prepareDungeonEntrance(w,rooms[0],layout);
       sealDungeonBoundary(w);
       return {world:w,entrance:rooms[0],bossRoom:bossRoom||rooms[rooms.length-1],rooms,spawns,rank:ri,dungeonId,definition,cleared:false};
     }
