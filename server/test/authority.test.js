@@ -1392,6 +1392,14 @@ test('server fall authority damages hard landings and Feather Step absorbs sane 
   assert.equal(featherRoom.playerHp.get(feather.sessionId).hp,20,'Feather Step absorbs normal hard falls');
   assert.equal(feather.sent.some(e=>e.type==='utilityFeedback'&&e.msg.id==='feather_step'&&e.msg.kind==='absorbed'),true);
   assert.equal(feather.sent.some(e=>e.type==='hurt'&&e.msg.reason==='fall'),false);
+
+  const townRoom=makeRoom(),town=makeClient('town_landing');
+  townRoom.lastMoveMsg=new Map();seedPlayer(townRoom,town,{x:W.TOWN.TC+14.5,z:W.TOWN.TC+27.5,y:25,hp:20});
+  fallStep(townRoom,town);townRoom.handleMove(town,{x:W.TOWN.TC+14.5,y:W.TOWN.G+1,z:W.TOWN.TC+27.5,yaw:0});
+  const townY=townRoom.state.players.get(town.sessionId).y;
+  fallStep(townRoom,town);townRoom.handleMove(town,{x:W.TOWN.TC+14.5,y:townY,z:W.TOWN.TC+27.5,yaw:0});
+  assert.equal(townRoom.playerHp.get(town.sessionId).hp,20,'town sanctuary prevents fall damage');
+  assert.equal(town.sent.some(e=>e.type==='hurt'&&e.msg.reason==='fall'),false);
 });
 
 test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is protected',()=>{
@@ -3415,6 +3423,7 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
 
   const start = client.sent.find(e => e.type === 'deathLimboStart').msg;
   assert.equal(start.total, 3);
+  assert.equal(room.state.players.get(client.sessionId).y, W.TOWN.G + 1);
   assert.equal(prof.inv[0], null);
   assert.equal(prof.inv[1], null);
   assert.equal(prof.armor, null);

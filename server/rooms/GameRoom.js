@@ -163,7 +163,8 @@ function isLegacyUnsafeTownReturn(pos) {
   if (!inTown) return false;
   const oldArrival = Math.hypot(x - (W.TOWN.TC + .5), z - (W.TOWN.TC + 14.5));
   const oldControlsSpawn = Math.hypot(x - (W.TOWN.TC + .5), z - (W.TOWN.TC + 7.5));
-  return y < W.TOWN.G + .75 || oldArrival < 10 || oldControlsSpawn < 3;
+  const townReturnDrop = Math.hypot(x - TOWN_RETURN_SPAWN.x, z - TOWN_RETURN_SPAWN.z) < 8 && y > W.TOWN.G + 6;
+  return y < W.TOWN.G + .75 || oldArrival < 10 || oldControlsSpawn < 3 || townReturnDrop;
 }
 
 function angleDelta(a, b) {
@@ -4824,7 +4825,7 @@ class GameRoom extends Room {
     };
     const limbo = { id, index: 0, items, death, startedAt: Date.now() };
     this.deathLimbo.set(client.sessionId, limbo);
-    p.x = TOWN_RETURN_SPAWN.x; p.y = W.TOWN.G + 72; p.z = TOWN_RETURN_SPAWN.z; p.dgn = '';
+    p.x = TOWN_RETURN_SPAWN.x; p.y = TOWN_RETURN_SPAWN.y; p.z = TOWN_RETURN_SPAWN.z; p.dgn = '';
     this.pvel.set(client.sessionId, { x: 0, z: 0 });
     this.dirtyPlayers.add(rec.token);
     this.sendProfile(client, rec.prof);
@@ -5545,6 +5546,11 @@ class GameRoom extends Room {
   }
   resolveFallLanding(client, drop) {
     if (!client || drop <= FALL_SAFE_DROP) return;
+    const p = this.state && this.state.players && this.state.players.get(client.sessionId);
+    if (p && !p.dgn && this.isTownProtected && this.isTownProtected(p.x, p.z)) {
+      if (this.fallState) this.fallState.delete(client.sessionId);
+      return;
+    }
     const featherStep = this.utilityEquippedServer(client, 'feather_step');
     const result = this.fallDamageFor(drop, featherStep);
     if (result.damage > 0 && this.activeFamiliarIs && this.activeFamiliarIs(client, 'cat')) {
@@ -5570,6 +5576,11 @@ class GameRoom extends Room {
     if (!client || !Number.isFinite(fromY) || !Number.isFinite(toY)) return;
     if (!this.fallState) this.fallState = new Map();
     const sid = client.sessionId;
+    const p = this.state && this.state.players && this.state.players.get(sid);
+    if (p && !p.dgn && this.isTownProtected && this.isTownProtected(p.x, p.z)) {
+      this.fallState.delete(sid);
+      return;
+    }
     const dy = toY - fromY;
     const st = this.fallState.get(sid) || { peak: fromY, lastY: fromY, falling: false, fast: false };
     if (dy < -0.03) {

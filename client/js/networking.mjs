@@ -945,6 +945,7 @@ function bugReportSetStatus(text, kind=''){
 function bugReportRefreshVisible(){
   if(!bugReportBtn)return;
   bugReportBtn.classList.toggle('hidden', !(NET&&NET.on&&NET.profileReady));
+  if(globalThis.BlockcraftModal&&typeof globalThis.BlockcraftModal.sync==='function')globalThis.BlockcraftModal.sync();
 }
 function openBugReport(){
   if(!bugReportWin)return;

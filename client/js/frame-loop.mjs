@@ -174,6 +174,7 @@ function localFallDamageFor(drop, featherStep=false){
 }
 function resolveLocalFallLanding(drop, featherStep=false){
   if(NET.on||tutorialSafe()||drop<=FALL_DAMAGE.safeDrop)return;
+  if(dim==='overworld'&&isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z)))return;
   const result=localFallDamageFor(drop,featherStep);
   if(featherStep&&result.kind!=='safe'){
     showFeatherStepLandingFx({kind:result.kind,drop,damage:result.damage});
