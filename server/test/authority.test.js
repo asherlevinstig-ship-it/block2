@@ -1730,6 +1730,25 @@ test('profile payload exposes live survival vitals instead of refill defaults', 
   assert.equal(Math.round(payload.vitals.hunger), 23);
 });
 
+test('browser survival saves lower live vitals before authoritative profile sync', () => {
+  const room = makeRoom(), client = makeClient('vitals_save_lower');
+  const { prof } = seedPlayer(room, client, { hp: 20, hunger: 100, lvl: 3 });
+  prof.vitals = { hp: 20, mp: 20, sp: 100, hunger: 100 };
+  prof.vitalsSavedAt = Date.now();
+  room.abilityState.set(client.sessionId, { mp: 20, maxMp: 20, sp: 100, maxSp: 100, cds: {}, last: Date.now() });
+
+  const snapshot = { vitals: { hp: 9, mp: 4, sp: 11, hunger: 22 } };
+  const merged = mergeClientSave(prof, snapshot);
+  room.applyMergedSnapshotVitalsToLive(client, merged, snapshot, 'test');
+  room.syncProfileVitals(client, merged);
+
+  assert.deepEqual(merged.vitals, { hp: 9, mp: 4, sp: 11, hunger: 22 });
+  assert.deepEqual(room.debugLiveVitals(client).hp, { hp: 9, max: 20 });
+  assert.deepEqual(room.debugLiveVitals(client).mp, { mp: 4, max: 20 });
+  assert.deepEqual(room.debugLiveVitals(client).sp, { sp: 11, max: 100 });
+  assert.deepEqual(room.debugLiveVitals(client).hunger, { hunger: 22, max: 100 });
+});
+
 test('profile payload normalizes restored claimable quest lifecycles', () => {
   const room = makeRoom(), client = makeClient('quest_restore_owner');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 6 }] });

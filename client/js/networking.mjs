@@ -1179,6 +1179,8 @@ function netAttachRoom(room,name,client){
         level:m&&m.S&&m.S.lvl,
         path:m&&m.S&&m.S.path,
         job:m&&m.job,
+        vitals:m&&m.vitals,
+        vitalsSavedAt:m&&m.vitalsSavedAt,
         progressionFocus:m&&m.progressionFocus,
         quest:m&&m.activeNpcQuest?{giver:m.activeNpcQuest.giver,title:m.activeNpcQuest.title,have:m.activeNpcQuest.have,need:m.activeNpcQuest.need,chainStep:m.activeNpcQuest.chainStep}:null,
         maraStep:m&&m.npcQuestChains&&m.npcQuestChains['Mara Vale'],
@@ -1186,6 +1188,11 @@ function netAttachRoom(room,name,client){
         activeRoom:m&&m.activeRoom?{dim:m.activeRoom.dim,job:m.activeRoom.job}:null,
       });
       netRestoreProfile(m);NET.profileReady=true;
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied-vitals', {
+        profileVitals:m&&m.vitals,
+        localVitals:{hp,mp,sp,hunger,maxHp:maxHp(),maxMp:maxMp(),maxSp:maxSp(),maxHunger:maxHunger()},
+      });
+      try{console.info('[bc-vitals] profile applied',{profileVitals:m&&m.vitals,vitalsSavedAt:m&&m.vitalsSavedAt,localVitals:{hp,mp,sp,hunger}});}catch(e){}
       bugReportRefreshVisible();
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
     });
@@ -2354,7 +2361,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('foodReject', m=>foodRejected(m));
     room.onMessage('hunger', m=>{
-      if(tutorialSafe()){ hunger=maxHunger(); renderBars(); return; }
+      if(tutorialSafe()){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hunger',{message:m,before:hunger,after:maxHunger()});try{console.warn('[bc-vitals] tutorial hunger refill',{message:m,before:hunger,after:maxHunger()});}catch(e){} hunger=maxHunger(); renderBars(); return; }
       if(m&&typeof m.hunger==='number'){ hunger=Math.max(0,Math.min(maxHunger(),m.hunger)); renderBars(); }
     });
     room.onMessage('hungerPenalty', m=>{
@@ -2402,6 +2409,10 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('dmgnum', m=>{COMBAT_FEEDBACK.confirmHit(m);camShake=Math.max(camShake,(m&&m.lethal)?0.32:(m&&m.crit)?0.24:0.1);spawnDamageNumber(m);});
     room.onMessage('combatDebug', m=>{ if(COMBAT_FEEDBACK.showDebug)COMBAT_FEEDBACK.showDebug(m); });
+    room.onMessage('vitalsDebug', m=>{
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('server.vitals-debug',m||{});
+      try{console.info('[bc-vitals:server]',m);}catch(e){}
+    });
     room.onMessage('weaponIdentity',m=>{
       if(!m)return;
       if(m.kind==='momentum'){
@@ -2413,7 +2424,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('weather', m=>applyWeather(m));
     room.onMessage('weatherBolt', m=>weatherBoltFx(m));
     room.onMessage('hurt', m=>{
-      if(tutorialSafe() && (!m || m.n>=0)){ hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
+      if(tutorialSafe() && (!m || m.n>=0)){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hurt',{message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}});try{console.warn('[bc-vitals] tutorial hurt refill',{message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}});}catch(e){} hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
       if(m&&m.reason==='second_wind'){
         swCd=60;                                   // drive the passive's HUD cooldown
         sysMsg('<b>Second Wind</b> restores your strength');
@@ -3194,18 +3205,20 @@ function netSnapshot(){
   const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;
   if(activeRoom)storeJobTutorialResume(activeRoom,pos);
   else if(NET.profileReady===true)storeJobTutorialResume(null,null);
-  return {
-    name:(document.getElementById('playername').value||'Hunter').slice(0,16),
+  const vitals={
     hp:Math.max(0,Math.min(maxHp(),Number(hp)||0)),
     mp:Math.max(0,Math.min(maxMp(),Number(mp)||0)),
     sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
     hunger:Math.max(0,Math.min(maxHunger(),Number(hunger)||0)),
-    vitals:{
-      hp:Math.max(0,Math.min(maxHp(),Number(hp)||0)),
-      mp:Math.max(0,Math.min(maxMp(),Number(mp)||0)),
-      sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
-      hunger:Math.max(0,Math.min(maxHunger(),Number(hunger)||0)),
-    },
+  };
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.snapshot.vitals',{vitals,activeRoom,pos});
+  return {
+    name:(document.getElementById('playername').value||'Hunter').slice(0,16),
+    hp:vitals.hp,
+    mp:vitals.mp,
+    sp:vitals.sp,
+    hunger:vitals.hunger,
+    vitals,
     activeRoom,
     pos,
   };

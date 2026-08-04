@@ -558,7 +558,14 @@ class GameRoom extends Room {
           if (prev) prof.pos = prev.pos;
         }
       }
+      this.applyMergedSnapshotVitalsToLive(client, prof, m, 'save');
       this.syncProfileVitals(client, prof);
+      this.emitVitalsDebug(client, 'save.merged', {
+        snapshot: this.debugSnapshotVitals(m),
+        profile: prof.vitals,
+        live: this.debugLiveVitals(client),
+        activeRoom: prof.activeRoom || null,
+      });
       this.profiles.set(token, prof);
       this.dirtyPlayers.add(token);
     });
@@ -1071,6 +1078,8 @@ class GameRoom extends Room {
         level: prof.S && prof.S.lvl || 1,
         activeRoom: prof.activeRoom || null,
         pos: Array.isArray(prof.pos) ? prof.pos.slice(0, 3) : null,
+        vitals: prof.vitals || null,
+        vitalsSavedAt: prof.vitalsSavedAt || 0,
         noPersist: prof.noPersist === true,
       } : null,
       playerName: p.name,
@@ -1146,6 +1155,13 @@ class GameRoom extends Room {
     }
     this.ensurePlayerHp(client);
     const hunger = this.ensurePlayerHunger(client);
+    this.emitVitalsDebug(client, 'join.live-restored', {
+      source: profileSource,
+      profile: prof && prof.vitals || null,
+      vitalsSavedAt: prof && prof.vitalsSavedAt || 0,
+      live: this.debugLiveVitals(client),
+      activeRoom: prof && prof.activeRoom || null,
+    });
     if (restartRecovery) {
       this.restartRecoveries.set(token, restartRecovery);
     }
@@ -1258,6 +1274,12 @@ class GameRoom extends Room {
           else prof.pos = [p.x, p.y, p.z];
         }
         this.syncProfileVitals(client, prof);
+        this.emitVitalsDebug(client, 'leave.synced', {
+          profile: prof.vitals,
+          live: this.debugLiveVitals(client),
+          activeRoom: prof.activeRoom || null,
+          wasInDungeon,
+        });
         this.dirtyPlayers.add(token);
       }
       this.tokens.delete(client.sessionId);
@@ -3650,6 +3672,12 @@ class GameRoom extends Room {
   sendProfile(client, prof) {
     if (!client || !prof) return false;
     const payload = this.profilePayload(client, prof);
+    this.emitVitalsDebug(client, 'profile.send', {
+      profile: payload.vitals,
+      vitalsSavedAt: payload.vitalsSavedAt || 0,
+      live: this.debugLiveVitals(client),
+      activeRoom: payload.activeRoom || null,
+    });
     this.profileQuestTrace(client, 'profile.send', payload);
     client.send('profile', payload);
     return true;
@@ -5215,6 +5243,83 @@ class GameRoom extends Room {
     };
     prof.vitalsSavedAt = Date.now();
     return prof.vitals;
+  }
+  debugSnapshotVitals(snapshot) {
+    const source = snapshot && snapshot.vitals && typeof snapshot.vitals === 'object' ? snapshot.vitals : snapshot || {};
+    const out = {};
+    for (const key of ['hp', 'mp', 'sp', 'hunger']) if (Number.isFinite(+source[key])) out[key] = +source[key];
+    return out;
+  }
+  debugLiveVitals(client) {
+    if (!client) return null;
+    const hp = this.playerHp && this.playerHp.get(client.sessionId);
+    const ability = this.abilityState && this.abilityState.get(client.sessionId);
+    const hunger = this.playerHunger && this.playerHunger.get(client.sessionId);
+    return {
+      hp: hp ? { hp: hp.hp, max: hp.max } : null,
+      mp: ability ? { mp: ability.mp, max: ability.maxMp } : null,
+      sp: ability ? { sp: ability.sp, max: ability.maxSp } : null,
+      hunger: hunger ? { hunger: hunger.hunger, max: hunger.max } : null,
+    };
+  }
+  emitVitalsDebug(client, event, data = {}) {
+    if (!client) return;
+    const payload = { event, at: Date.now(), ...data };
+    try { client.send('vitalsDebug', payload); } catch (_) {}
+    logRoomLifecycle('vitals.' + event, {
+      roomId: this.roomId || '',
+      shardId: this.shardId || 'main',
+      sidHash: shortHash(client.sessionId),
+      ...data,
+    });
+  }
+  applyMergedSnapshotVitalsToLive(client, prof, snapshot, source = 'save') {
+    if (!client || !prof || !snapshot) return false;
+    const incoming = this.debugSnapshotVitals(snapshot);
+    if (!Object.keys(incoming).length) return false;
+    const current = this.cleanProfileVitals(prof);
+    if (Object.prototype.hasOwnProperty.call(incoming, 'hp')) {
+      const maxHp = this.maxHpForProfile(prof);
+      const nextHp = Math.max(1, Math.min(maxHp, current.hp));
+      const hpState = this.playerHp.get(client.sessionId);
+      if (hpState) {
+        hpState.hp = Math.min(Math.max(1, Math.min(maxHp, Number.isFinite(+hpState.hp) ? +hpState.hp : maxHp)), nextHp);
+        hpState.max = maxHp;
+      } else this.playerHp.set(client.sessionId, { hp: nextHp, max: maxHp });
+    }
+
+    const maxMp = this.maxMpForProfile(prof);
+    const maxSp = this.maxStaminaForProfile(prof);
+    if (Object.prototype.hasOwnProperty.call(incoming, 'mp') || Object.prototype.hasOwnProperty.call(incoming, 'sp')) {
+      const ability = this.abilityState.get(client.sessionId) || { mp: maxMp, maxMp, sp: maxSp, maxSp, cds: {}, last: Date.now() };
+      if (Object.prototype.hasOwnProperty.call(incoming, 'mp')) ability.mp = Math.min(Math.max(0, Math.min(maxMp, Number.isFinite(+ability.mp) ? +ability.mp : maxMp)), Math.max(0, Math.min(maxMp, current.mp)));
+      if (Object.prototype.hasOwnProperty.call(incoming, 'sp')) ability.sp = Math.min(Math.max(0, Math.min(maxSp, Number.isFinite(+ability.sp) ? +ability.sp : maxSp)), Math.max(0, Math.min(maxSp, current.sp)));
+      ability.maxMp = maxMp;
+      ability.maxSp = maxSp;
+      ability.last = Date.now();
+      if (!ability.cds || typeof ability.cds !== 'object') ability.cds = {};
+      this.abilityState.set(client.sessionId, ability);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(incoming, 'hunger')) {
+      const maxHunger = this.maxHungerForProfile(prof);
+      const nextHunger = this.hungerProtectedForProfile(prof) ? maxHunger : Math.max(0, Math.min(maxHunger, current.hunger));
+      const hungerState = this.playerHunger.get(client.sessionId);
+      if (hungerState) {
+        hungerState.hunger = this.hungerProtectedForProfile(prof)
+          ? maxHunger
+          : Math.min(Math.max(0, Math.min(maxHunger, Number.isFinite(+hungerState.hunger) ? +hungerState.hunger : maxHunger)), nextHunger);
+        hungerState.max = maxHunger;
+      } else this.playerHunger.set(client.sessionId, { hunger: nextHunger, max: maxHunger, acc: 0, syncAcc: 0 });
+    }
+
+    this.emitVitalsDebug(client, 'live.lowered-from-snapshot', {
+      source,
+      snapshot: incoming,
+      profile: prof.vitals,
+      live: this.debugLiveVitals(client),
+    });
+    return true;
   }
   ensureAbilityState(client) {
     const rec = this.profileFor(client);
