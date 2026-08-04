@@ -2569,6 +2569,7 @@ const legacyDimensionsBindings={
   "castArmorPower":{get:()=>castArmorPower},
   "castLegendaryWeapon":{get:()=>castLegendaryWeapon},
   "chronoSnapVfx":{get:()=>chronoSnapVfx},
+  "clearRoomEntitiesForSwitch":{get:()=>clearRoomEntitiesForSwitch},
   "clearNetGates":{get:()=>clearNetGates},
   "closeStat":{get:()=>closeStat},
   "cycleBetaAbilityPath":{get:()=>cycleBetaAbilityPath},

@@ -150,6 +150,7 @@ class DungeonRoom extends GameRoom {
     this.onMessage('equipArmor', (c, m) => this.handleEquipArmor(c, m));
     this.onMessage('useFood', (c, m) => this.handleUseFood(c, m));
     this.onMessage('quitDungeonSpirit', c => this.handleQuitDungeonSpirit(c));
+    this.onMessage('adminGateTeleport', (c, m) => this.handleAdminGateTeleportFromDungeon(c, m));
     this.onMessage('prospect', c => this.handleProspect(c));
     this.onMessage('useRepairKit', (c, m) => this.handleUseRepairKit(c, m));
     this.onMessage('dedit', (c, m) => this.handleDungeonEdit(c, m));   // mining inside the dungeon
@@ -332,6 +333,42 @@ class DungeonRoom extends GameRoom {
       this.dirtyPlayers.add(rec.token);
     }
     client.send('dungeonSpiritQuit', result ? { ...town, result } : town);
+    return true;
+  }
+
+  handleAdminGateTeleportFromDungeon(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminGateTeleportReject', { reason: 'admin' });
+    const p = client && this.state.players.get(client.sessionId);
+    const inst = this.instance || (p && p.dgn && this.instances[p.dgn]);
+    if (!p || !inst) return client.send('adminGateTeleportReject', { reason: 'gate' });
+    const token = this.tokens.get(client.sessionId);
+    const rec = token && this.profileFor(client);
+    const x = Number.isFinite(inst.gateX) ? inst.gateX + 2.1 : W.TOWN.TC + 14.5;
+    const z = Number.isFinite(inst.gateZ) ? inst.gateZ : W.TOWN.TC + 27.5;
+    const y = Number.isFinite(inst.gateY) ? inst.gateY + .01 : W.TOWN.G + 1.01;
+    p.dgn = '';
+    p.dim = 'overworld';
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.yaw = Math.PI;
+    p.spirit = false;
+    const hp = this.playerHp.get(client.sessionId);
+    if (hp && hp.hp <= 0) hp.hp = Math.max(1, hp.max);
+    inst.removePlayer(client.sessionId);
+    this.clearDungeonRecoveryForSid(client.sessionId);
+    if (rec && rec.prof) {
+      rec.prof.activeRoom = null;
+      rec.prof.pos = [x, y, z];
+      rec.prof.dungeonRecovery = null;
+      this.dirtyPlayers.add(rec.token);
+      if (!rec.prof.noPersist) handOff(rec.token, rec.prof);
+    }
+    client.send('adminGateTeleportResult', {
+      id: inst.id, gateId: inst.id, rank: inst.rank | 0, kind: inst.kind || 'public',
+      x, y, z, yaw: p.yaw, gateX: inst.gateX, gateY: inst.gateY, gateZ: inst.gateZ,
+      returnOverworld: true,
+    });
     return true;
   }
 

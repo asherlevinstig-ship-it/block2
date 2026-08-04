@@ -2193,6 +2193,20 @@ function netAttachRoom(room,name,client){
       if(m.reason==='town_floor')showName('Returned to safe town ground');
     });
     room.onMessage('adminGateTeleportResult', m=>{
+      if(m&&m.returnOverworld&&NETWORK&&NETWORK.returnToPrimary){
+        try{if(dimensionsApi.clearRoomEntitiesForSwitch)dimensionsApi.clearRoomEntitiesForSwitch();}catch(e){}
+        NET.dgn='';
+        NETWORK.returnToPrimary().then(()=>{
+          if(Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)){
+            player.pos.set(+m.x,+m.y,+m.z);
+            if(player.vel)player.vel.set(0,0,0);
+            if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+          }
+        });
+        sysMsg('<b>Admin teleport:</b> returning to overworld gate location.');
+        try{window.dispatchEvent(new CustomEvent('blockcraft-admin-gate-teleport',{detail:m||{}}));}catch(e){}
+        return;
+      }
       if(m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)){
         player.pos.set(+m.x,+m.y,+m.z);
         if(player.vel)player.vel.set(0,0,0);

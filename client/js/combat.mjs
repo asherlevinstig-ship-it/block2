@@ -4815,7 +4815,9 @@ function refreshAdminGateSelect(){
   const gates=adminActiveGateOptions();
   adminGateSelect.innerHTML='';
   if(!gates.length){
-    const opt=document.createElement('option');opt.value='';opt.textContent=NET&&NET.on?'No active gates':'Enter world to load gates';
+    const opt=document.createElement('option');
+    opt.value=NET&&NET.roomName==='dungeon'&&NET.dgn?NET.dgn:'';
+    opt.textContent=NET&&NET.roomName==='dungeon'&&NET.dgn?'Current dungeon gate '+NET.dgn:(NET&&NET.on?'No active gates':'Enter world to load gates');
     adminGateSelect.appendChild(opt);
     return gates;
   }
@@ -4833,7 +4835,7 @@ function runAdminGateTeleport(){
   if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Gate teleport is admin-only.','bad');return;}
   if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before teleporting to a gate.','bad');return;}
   const gates=refreshAdminGateSelect();
-  const id=String(adminGateSelect&&adminGateSelect.value||gates[0]&&gates[0].id||'');
+  const id=String(adminGateSelect&&adminGateSelect.value||gates[0]&&gates[0].id||(NET.roomName==='dungeon'&&NET.dgn)||'');
   if(!id){setDevResetStatus('No active gates to teleport to.','bad');return;}
   adminGateTeleport.disabled=true;
   setDevResetStatus('Teleporting to gate '+id+'...');
