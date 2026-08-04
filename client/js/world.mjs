@@ -4303,7 +4303,7 @@ function pixelMaterialTextures(col){
 }
 function matCol(col, emissive, intensity){
   const tex=pixelMaterialTextures(col);
-  const m=new THREE.MeshLambertMaterial({color:new THREE.Color(0xffffff),map:tex.map,bumpMap:tex.bumpMap,bumpScale:.012});
+  const m=new THREE.MeshLambertMaterial({color:new THREE.Color(0xffffff),map:tex.map});
   if(emissive){
     m.emissive=new THREE.Color(emissive);
     m.emissiveIntensity=intensity==null?.35:intensity;

@@ -934,6 +934,9 @@ function bugReportClientContext(){
     snapshot: snap,
   };
 }
+function vitalsDebugText(data){
+  try{return JSON.stringify(data);}catch(e){return String(data);}
+}
 function bugReportSetStatus(text, kind=''){
   if(!bugReportStatus)return;
   bugReportStatus.textContent=text||'';
@@ -1192,7 +1195,7 @@ function netAttachRoom(room,name,client){
         profileVitals:m&&m.vitals,
         localVitals:{hp,mp,sp,hunger,maxHp:maxHp(),maxMp:maxMp(),maxSp:maxSp(),maxHunger:maxHunger()},
       });
-      try{console.info('[bc-vitals] profile applied',{profileVitals:m&&m.vitals,vitalsSavedAt:m&&m.vitalsSavedAt,localVitals:{hp,mp,sp,hunger}});}catch(e){}
+      try{console.info('[bc-vitals] profile applied '+vitalsDebugText({profileVitals:m&&m.vitals,vitalsSavedAt:m&&m.vitalsSavedAt,localVitals:{hp,mp,sp,hunger}}));}catch(e){}
       bugReportRefreshVisible();
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
     });
@@ -2361,7 +2364,7 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('foodReject', m=>foodRejected(m));
     room.onMessage('hunger', m=>{
-      if(tutorialSafe()){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hunger',{message:m,before:hunger,after:maxHunger()});try{console.warn('[bc-vitals] tutorial hunger refill',{message:m,before:hunger,after:maxHunger()});}catch(e){} hunger=maxHunger(); renderBars(); return; }
+      if(tutorialSafe()){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hunger',{message:m,before:hunger,after:maxHunger()});try{console.warn('[bc-vitals] tutorial hunger refill '+vitalsDebugText({message:m,before:hunger,after:maxHunger()}));}catch(e){} hunger=maxHunger(); renderBars(); return; }
       if(m&&typeof m.hunger==='number'){ hunger=Math.max(0,Math.min(maxHunger(),m.hunger)); renderBars(); }
     });
     room.onMessage('hungerPenalty', m=>{
@@ -2411,7 +2414,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('combatDebug', m=>{ if(COMBAT_FEEDBACK.showDebug)COMBAT_FEEDBACK.showDebug(m); });
     room.onMessage('vitalsDebug', m=>{
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('server.vitals-debug',m||{});
-      try{console.info('[bc-vitals:server]',m);}catch(e){}
+      try{console.info('[bc-vitals:server] '+vitalsDebugText(m||{}));}catch(e){}
     });
     room.onMessage('weaponIdentity',m=>{
       if(!m)return;
@@ -2424,7 +2427,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('weather', m=>applyWeather(m));
     room.onMessage('weatherBolt', m=>weatherBoltFx(m));
     room.onMessage('hurt', m=>{
-      if(tutorialSafe() && (!m || m.n>=0)){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hurt',{message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}});try{console.warn('[bc-vitals] tutorial hurt refill',{message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}});}catch(e){} hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
+      if(tutorialSafe() && (!m || m.n>=0)){ globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.client-refill.tutorial-hurt',{message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}});try{console.warn('[bc-vitals] tutorial hurt refill '+vitalsDebugText({message:m,before:{hp,sp,hunger},after:{hp:maxHp(),sp:maxSp(),hunger:maxHunger()}}));}catch(e){} hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars(); return; }
       if(m&&m.reason==='second_wind'){
         swCd=60;                                   // drive the passive's HUD cooldown
         sysMsg('<b>Second Wind</b> restores your strength');
