@@ -1450,6 +1450,22 @@ test('gate entry moves the authoritative player to the dungeon entrance spawn',(
   assert.equal(D.standHeightIn(inst.world,p.x,p.z,12)+.01,p.y);
 });
 
+test('dungeon movement snaps transition-height packets back to the entrance floor',()=>{
+  const room=makeRoom(),client=makeClient('gate_entry_roof_guard');
+  seedPlayer(room,client,{x:500,z:430,y:16});
+  const g=makeGate('g_roof_guard',500.5,430.5,0,'public');
+  g.seed=0x9e3779b9;
+  g.dungeonId='abandoned_mine';
+  const inst=room.createInstance(g);
+  room.enterGateInstance(client,g,inst);
+  const p=room.state.players.get(client.sessionId);
+  const floor=D.standHeightIn(inst.world,p.x,p.z,12)+.01;
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  room.handleMove(client,{x:p.x,y:16,z:p.z,yaw:0});
+  assert.equal(p.y,floor);
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='dungeon_floor'),true);
+});
+
 test('admin quick gate cycles through real dungeon entry flow',()=>{
   const room=makeRoom(),admin=makeClient('quick_gate_admin'),normal=makeClient('quick_gate_normal');
   admin._accountRole='admin';

@@ -7363,6 +7363,11 @@ class GameRoom extends Room {
       return this.world.standHeight(x, z, fromY);
     };
     const townFloorStrict = !p.dgn && this.isTownProtected(sx, sz);
+    const floorY = groundAt(sx, sz, W.WH - 2);
+    if (p.dgn && !deityFlight && !buried(p.x, p.y, p.z) && floorY > 0 && sy > floorY + 2.25) {
+      sy = floorY + .01;
+      corrected = true;
+    }
     const crossesSolid = (x1, y1, z1, x2, y2, z2) => {
       const dist = Math.max(Math.hypot(x2 - x1, z2 - z1), Math.abs(y2 - y1));
       const steps = Math.ceil(dist / .35);
@@ -7386,7 +7391,6 @@ class GameRoom extends Room {
         return;
       }
     } else this.moveRejects.delete(client.sessionId);
-    const floorY = groundAt(sx, sz, W.WH - 2);
     const floorTolerance = townFloorStrict ? .35 : 2.25;
     if (!buried(p.x, p.y, p.z) && floorY > 0 && sy < floorY - floorTolerance) {
       sy = floorY + .01;
@@ -7405,7 +7409,7 @@ class GameRoom extends Room {
     const fromY = p.y;
     const yaw = clampN(m.yaw, -10, 10);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
-    if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : 'floor' });
+    if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : p.dgn ? 'dungeon_floor' : 'floor' });
     if (deityFlight && this.fallState) this.fallState.delete(client.sessionId);
     else this.trackAcceptedMoveFall(client, fromY, p.y);
     if (!p.dgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
