@@ -2571,6 +2571,8 @@ test('admin quick gate opens a ranked dungeon picker instead of auto-cycling',()
   assert.match(networking,/data-dungeon-index/);
   assert.match(networking,/NET\.room\.send\('adminQuickGate',\{index\}\)/);
   assert.match(networking,/e\.code!==['"]Digit9['"]/);
+  assert.match(networking,/const anotherModal=uiOpen\|\|statOpen\|\|menusState\.qOpen\|\|document\.body\.classList\.contains\('game-modal-open'\)/);
+  assert.doesNotMatch(networking,/uiShellState\.qOpen/);
   assert.match(combat,/BlockcraftAdminDungeonPicker&&globalThis\.BlockcraftAdminDungeonPicker\.open&&globalThis\.BlockcraftAdminDungeonPicker\.open\(\)/);
   assert.doesNotMatch(combat,/e\.code===['"]Digit9['"][\s\S]{0,420}NET\.room\.send\('adminQuickGate',\{\}\)/);
   assert.match(styles,/#admindungeonpicker/);

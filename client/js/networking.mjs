@@ -558,7 +558,7 @@ document.addEventListener('keydown',e=>{
   }
   const tag=String(e.target&&e.target.tagName||'').toLowerCase();
   const textEntry=tag==='input'||tag==='textarea'||tag==='select'||!!(e.target&&e.target.isContentEditable);
-  const anotherModal=uiOpen||statOpen||uiShellState.qOpen||document.body.classList.contains('game-modal-open');
+  const anotherModal=uiOpen||statOpen||menusState.qOpen||document.body.classList.contains('game-modal-open');
   if(e.code!=='Digit9'||e.repeat||dim==='dungeon'||textEntry||anotherModal)return;
   if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()))return;
   e.preventDefault();e.stopImmediatePropagation();openAdminDungeonPicker();
