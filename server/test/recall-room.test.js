@@ -60,3 +60,15 @@ test('recall answer pillars remain visible inside private tutorial spaces',()=>{
   assert.equal(pillars.every(p=>!p.blocked),true);
   assert.deepEqual(pillars.map(p=>p.y),[20,20,20,20]);
 });
+
+test('recall uses compact answer pillars inside low dungeon caves',()=>{
+  const room=Object.create(recall);
+  room.instances={};room.world={standHeight(){return 9;}};
+  room.spaceSolid=()=>((x,y,z)=>y>=13);
+  const p={x:10,y:9,z:20,yaw:0,dim:'dungeon',dgn:'crypt_1'};
+  const pillars=room.recallPositions(p,0);
+  assert.equal(pillars.length,4);
+  assert.equal(pillars.every(p=>!p.blocked),true);
+  assert.deepEqual(pillars.map(p=>p.y),[9,9,9,9]);
+  assert.ok(Math.hypot(pillars[0].x-p.x,pillars[0].z-p.z)<10);
+});

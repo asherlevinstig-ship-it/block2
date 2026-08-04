@@ -10,6 +10,9 @@ class RecallMixin{
   recallTutorialSpace(p){
     return !!(p&&(p.dim==='tutorial'||String(p.dgn||'').startsWith('tutorial-')));
   }
+  recallDungeonSpace(p){
+    return !!(p&&p.dim==='dungeon'&&p.dgn&&!this.recallTutorialSpace(p));
+  }
   handleRecallSubject(client,message={}){
     const subject=this.cleanRecallSubject(message.subject);
     if(!client||!subject)return;
@@ -24,9 +27,10 @@ class RecallMixin{
   }
   recallPillarClear(p,candidate){
     if(!p||!Number.isFinite(candidate.x)||!Number.isFinite(candidate.z))return false;
+    const dungeonSpace=this.recallDungeonSpace(p);
     // Relocation probes must never pull an answer back into the camera. The
     // world-space label is intentionally large enough to read at a distance.
-    if(Math.hypot(candidate.x-p.x,candidate.z-p.z)<6)return false;
+    if(Math.hypot(candidate.x-p.x,candidate.z-p.z)<(dungeonSpace?3.75:6))return false;
     if(this.recallTutorialSpace(p)){
       candidate.y=p.y;
       return true;
@@ -39,8 +43,9 @@ class RecallMixin{
     // Reserve the whole visible beam and label footprint, not merely enough
     // room for a player's body. This prevents apparently valid answers from
     // cutting through roofs, walls, trees or street furniture.
-    for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
-      for(const yy of [y+.2,y+1.5,y+3.2,y+5,y+7])if(solid(bx+dx,Math.floor(yy),bz+dz))return false;
+    const r=dungeonSpace?1:2,heights=dungeonSpace?[y+.2,y+1.5,y+2.8,y+3.6]:[y+.2,y+1.5,y+3.2,y+5,y+7];
+    for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
+      for(const yy of heights)if(solid(bx+dx,Math.floor(yy),bz+dz))return false;
     }
     if(!AI.losClear(solid,p.x,p.y+1.2,p.z,candidate.x,y+1.2,candidate.z))return false;
     candidate.y=y;
@@ -59,7 +64,13 @@ class RecallMixin{
   }
   recallPositions(p,yaw=null){
     const a=Number.isFinite(yaw)?yaw:Number.isFinite(p.yaw)?p.yaw:0,forward={x:-Math.sin(a),z:-Math.cos(a)},right={x:Math.cos(a),z:-Math.sin(a)};
-    const diamond=[
+    const dungeonSpace=this.recallDungeonSpace(p);
+    const diamond=dungeonSpace?[
+      {f:8,s:0},
+      {f:5.75,s:-4.75},
+      {f:5.75,s:4.75},
+      {f:4.25,s:0},
+    ]:[
       {f:16,s:0},     // front point
       {f:11,s:-9.5},  // left point
       {f:11,s:9.5},   // right point
@@ -96,10 +107,11 @@ class RecallMixin{
     const tutorial=this.recallTutorialSpace(p),questionHall=questionHallRequest;
     const q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
+    const dungeonRecall=this.recallDungeonSpace(p);
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
     const source=message.source==='lectern'?'lectern':(questionHall?'question_hall':(tutorial?'tutorial':''));
     this.recallChallenges.set(client.sessionId,{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source});
-    client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',questionHall:source==='question_hall',mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
+    client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',questionHall:source==='question_hall',dungeonRecall,mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
   }
   recordRecallAnalytics(client,challenge,answerIndex,correct,now=Date.now()){
     const account=client&&client._account;

@@ -12,12 +12,13 @@ function wrapLabelText(ctx,text,maxWidth,maxLines){
   if(words.join(' ').length>lines.join(' ').length&&lines.length)lines[lines.length-1]=lines[lines.length-1].replace(/.?$/,'…');
   return lines;
 }
-function makeLabel(text,color,letter){
+function makeLabel(text,color,letter,compact=false){
   const c=document.createElement('canvas');c.width=768;c.height=192;const x=c.getContext('2d');
   x.fillStyle='rgba(5,10,20,.94)';x.fillRect(6,6,756,180);x.strokeStyle=color;x.lineWidth=8;x.strokeRect(7,7,754,178);
   x.fillStyle=color;x.beginPath();x.arc(76,96,45,0,Math.PI*2);x.fill();x.fillStyle='#03111d';x.font='900 46px system-ui';x.textAlign='center';x.textBaseline='middle';x.fillText(letter,76,96);
   x.fillStyle='#fff';x.font='800 35px system-ui';x.textAlign='left';const lines=wrapLabelText(x,text,610,2),start=lines.length>1?74:96;lines.forEach((line,i)=>x.fillText(line,142,start+i*43));
-  const t=new THREE.CanvasTexture(c),m=new THREE.SpriteMaterial({map:t,transparent:true,depthTest:true,depthWrite:false}),s=new THREE.Sprite(m);s.scale.set(5.4,1.35,1);s.position.y=3.45;s.renderOrder=20;return s;
+  const t=new THREE.CanvasTexture(c),m=new THREE.SpriteMaterial({map:t,transparent:true,depthTest:true,depthWrite:false}),s=new THREE.Sprite(m);
+  s.scale.set(compact?4.1:5.4,compact?1.03:1.35,1);s.position.y=compact?2.65:3.45;s.renderOrder=20;return s;
 }
 function resultFlash(wrong=false){let el=document.getElementById('recallflash');if(!el){el=document.createElement('div');el.id='recallflash';document.body.appendChild(el);}el.className=wrong?'wrong show':'show';setTimeout(()=>el.classList.remove('show'),650);}
 function spawnQuestionHallAnswerMark(correct){
@@ -59,9 +60,11 @@ function showQuestion(m){
   clearRecall({keepQuestionHall:hall});active=m;answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
   if(hall)questionHallOpen=true;
   if(!m.fallback&&!hall)m.pillars.forEach((p,i)=>{
+    const compact=!!m.dungeonRecall||dim==='dungeon';
     const letter=String.fromCharCode(65+i),root=new THREE.Group(),mat=new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:.38,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-    const beam=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,7,24,1,true),mat),ring=new THREE.Mesh(new THREE.TorusGeometry(1.28,.12,10,36),new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:1,depthTest:true,depthWrite:false})),light=new THREE.PointLight(colors[i],1.45,10);
-    beam.position.y=3.5;ring.rotation.x=Math.PI/2;ring.position.y=.12;light.position.y=2;root.position.set(p.x,p.y,p.z);root.add(beam,ring,light,makeLabel(m.answers[i],labelColor(i),letter));root.userData.index=i;group.add(root);
+    const beamH=compact?4.2:7,beamR=compact?.72:1.05,ringR=compact?.92:1.28;
+    const beam=new THREE.Mesh(new THREE.CylinderGeometry(beamR,beamR,beamH,24,1,true),mat),ring=new THREE.Mesh(new THREE.TorusGeometry(ringR,.12,10,36),new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:1,depthTest:true,depthWrite:false})),light=new THREE.PointLight(colors[i],1.45,compact?7:10);
+    beam.position.y=beamH/2;ring.rotation.x=Math.PI/2;ring.position.y=.12;light.position.y=compact?1.7:2;root.position.set(p.x,p.y,p.z);root.add(beam,ring,light,makeLabel(m.answers[i],labelColor(i),letter,compact));root.userData.index=i;group.add(root);
   });
   if(!m.fallback&&!hall)scene.add(group);else{fallbackEl.innerHTML='';m.answers.forEach((answer,i)=>{const b=document.createElement('button');b.className='recallchoice';b.style.setProperty('--answer',labelColor(i));b.textContent=String.fromCharCode(65+i)+'  '+answer;b.onclick=()=>submitAnswer(i);fallbackEl.appendChild(b);});fallbackEl.classList.remove('hidden');}
   subjectEl.textContent=(hall?'QUESTION HALL · ':(m.ruinBonus?'RUIN INSCRIPTION · ':''))+m.stage+' · '+m.subject+(m.topic?' · '+m.topic:'');
