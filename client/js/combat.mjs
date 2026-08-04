@@ -619,7 +619,7 @@ if(keyPromptHud)setInterval(()=>updateKeyPromptHud(!keyPromptHud.classList.conta
 const rightHudStackIds=['currentquest','activitytracker','townchoices'];
 function layoutRightHudStack(){
   const narrow=window.innerWidth<=760;
-  let top=narrow?8:282;
+  let top=narrow?8:260;
   for(const id of rightHudStackIds){
     const el=document.getElementById(id);
     if(!el) continue;
@@ -632,7 +632,7 @@ function layoutRightHudStack(){
 function layoutLeftHudExtras(){
   const coords=document.getElementById('coords'),homework=document.getElementById('homeworkhud'),bug=document.getElementById('bugreportbtn');
   const narrow=window.innerWidth<=760;
-  let top=narrow?54:78;
+  let top=narrow?54:250;
   if(coords&&!coords.classList.contains('hidden')&&getComputedStyle(coords).display!=='none'){
     const r=coords.getBoundingClientRect();
     if(r.height>0)top=Math.ceil(r.bottom)+(narrow?6:8);
@@ -640,7 +640,7 @@ function layoutLeftHudExtras(){
   if(homework){
     const visible=!homework.classList.contains('hidden')&&getComputedStyle(homework).display!=='none';
     if(visible){
-      homework.style.left=(narrow?8:10)+'px';
+      homework.style.left=(narrow?8:16)+'px';
       homework.style.top=top+'px';
       top+=Math.ceil(homework.getBoundingClientRect().height)+(narrow?6:8);
     }else{
@@ -651,7 +651,7 @@ function layoutLeftHudExtras(){
   if(bug){
     const visible=!bug.classList.contains('hidden')&&getComputedStyle(bug).display!=='none';
     if(visible){
-      bug.style.left=(narrow?8:10)+'px';
+      bug.style.left=(narrow?8:16)+'px';
       bug.style.top=top+'px';
     }else{
       bug.style.left='';

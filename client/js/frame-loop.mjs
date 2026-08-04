@@ -729,16 +729,18 @@ function refreshHomeworkHud(){
     return;
   }
   const complete=p.current>=p.required;
-  const label=complete?'Complete':'Questions';
-  const period=(o.location&&o.location!=='Recall Cast')?o.location:(o.title||'Homework');
+  const period=(o.location&&o.location!=='Recall Cast')?o.location:(o.title||'Information Technology Basics');
+  const desc=o.text||o.description||'Answer questions to earn XP.';
   homeworkHudEl.classList.toggle('complete',complete);
   homeworkHudEl.classList.remove('hidden');
   homeworkHudEl.innerHTML=
-    '<button type="button" data-objective-action="'+(complete?'questlog':'recall')+'">'+
-      '<span>Homework</span>'+
-      '<b>'+escHTML(String(p.current)+'/'+String(p.required))+'</b>'+
-      '<small>'+escHTML(label+' - '+period)+'</small>'+
+    '<button type="button" data-objective-action="'+(complete?'questlog':'recall')+'" aria-label="View homework quest">'+
+      '<span class="hwkicker">Homework Quest</span>'+
+      '<strong>'+escHTML(period)+'</strong>'+
+      '<small>'+escHTML(desc)+'</small>'+
+      '<div class="hwprogress"><b>'+escHTML(String(p.current)+' / '+String(p.required))+'</b><em>Questions</em></div>'+
       '<i><em style="width:'+p.pct+'%"></em></i>'+
+      '<div class="hwfooter"><span class="hwbook">▰</span><span class="hwcta">'+(complete?'View Results':'View Quest')+'</span></div>'+
     '</button>';
 }
 function serverObjectiveProgressText(o){
@@ -1230,6 +1232,20 @@ function trackerGuideButton(line,index){
 function objectiveHudHTML(obj){
   if(!obj) return '';
   const checklistHTML=line=>Array.isArray(line&&line.checklist)?'<div class="prepchecklist">'+line.checklist.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label||'Check')+'</span></div>').join('')+'</div>':'';
+  const activeQuestCard=(line,others=0)=>{
+    const progress=line&&line.progress?line.progress:null;
+    const progressBar=progress?'<div class="activequest-progress"><b>'+progress.current+' / '+progress.required+' '+escHTML(progress.label||'')+'</b><i><em style="width:'+progress.pct+'%"></em></i></div>':'';
+    const objective=line&&line.text?line.text:'Continue the active objective.';
+    return '<div class="activequest-card '+escHTML(line&&line.kind||'objective')+'">'+
+      '<div class="activequest-head"><span>Active Quest</span><i>✦</i></div>'+
+      '<h3>'+escHTML(line&&line.title||line&&line.label||'Current Quest')+'</h3>'+
+      '<p>'+escHTML(objective)+'</p>'+
+      progressBar+
+      '<div class="activequest-current"><b>Current Objective</b><span>'+escHTML(objective)+'</span></div>'+
+      '<div class="activequest-actions">'+trackerGuideButton(line,0)+trackerActionButton({type:'questlog',label:'OPEN QUEST (O)'})+'</div>'+
+      '</div>'+
+      '<button type="button" class="otherquests-row" data-objective-toggle="__other_quests" aria-expanded="false"><span>Other Quests</span><b>'+Math.max(0,others)+'</b><i>⌄</i></button>';
+  };
   if(obj.nextBest&&obj.line){
     const line=obj.line;
     const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
@@ -1244,6 +1260,11 @@ function objectiveHudHTML(obj){
     '</div>';
   }
   if(obj.unified&&Array.isArray(obj.lines)){
+    const primary=obj.lines[0];
+    if(primary){
+      const otherCount=Math.max(0,obj.lines.length-1);
+      if(!objectiveTrackerExpanded.has('__other_quests')) return activeQuestCard(primary,otherCount);
+    }
     const rows=obj.lines.map((line,index)=>{
       const key=objectiveTrackerKey(line,index),expanded=objectiveTrackerExpanded.has(key);
       const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
@@ -2126,9 +2147,10 @@ function updateInfoHud(held){
   document.body.classList.toggle('calm-town', (locked || uiOpen || statOpen || qOpen || claimMode) && calmTownHud());
   let coordsHTML='',coordsHidden=false;
   refreshHomeworkHud();
+  const dayState=(()=>{const t=((Number(worldState.tod)||0)%1+1)%1;return t>=.23&&t<.75?'Day':'Night';})();
   if(onboardingActive&&dim==='tutorial'){
     if(activityTrackerEl)activityTrackerEl.classList.add('hidden');
-    coordsHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>';
+    coordsHTML='<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr()+' '+dayState)+'</b></div>';
     if(currentQuestEl){
       lastObjectiveHudHTML='';lastObjectiveHudHidden=true;
       currentQuestEl.classList.add('hidden');
@@ -2139,7 +2161,7 @@ function updateInfoHud(held){
     updateEncounterPrompt();
     const rank=rankHudProgress();
     const rows=[
-      '<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr())+'</b></div>',
+      '<div class="statuschip time"><i class="ico">T</i><span>Time</span><b>'+escHTML(clockStr()+' '+dayState)+'</b></div>',
       '<div class="statuschip gold"><i class="ico">G</i><span>Gold</span><b>'+escHTML(String(gold|0))+'</b></div>',
       '<div class="statuschip rank"><i class="ico">R</i><span>'+escHTML(rank.label)+'</span><b>'+escHTML(rank.value)+'</b></div>'
     ];

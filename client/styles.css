@@ -1320,6 +1320,65 @@
   #activitytracker .ar b{color:#ffd27a}#activitytracker .ar span{flex:1}#activitytracker .ar kbd{padding:2px 5px;border:1px solid rgba(255,255,255,.35);border-radius:3px;background:rgba(255,255,255,.08);color:#fff;font:700 10px ui-monospace,monospace}
   #activitytracker.danger{border-color:rgba(255,93,70,.65);box-shadow:0 0 18px rgba(255,65,35,.2)}
   #activitytracker.danger .at{color:#ff9b7f}
+  /* HUD redesign pass: dark fantasy hierarchy with clearer student quest flow */
+  #locationhud{top:14px;left:16px;width:305px;min-width:305px;padding:12px 15px;border-color:rgba(242,199,92,.58);border-radius:6px;background:linear-gradient(180deg,rgba(5,10,20,.9),rgba(2,6,13,.78));box-shadow:0 12px 34px rgba(0,0,0,.38),0 0 0 1px rgba(255,255,255,.035) inset,0 0 20px rgba(242,199,92,.08)}
+  #locationhud:before{content:"✥";display:inline-grid;place-items:center;width:28px;height:28px;margin-right:10px;border:1px solid rgba(242,199,92,.42);border-radius:6px;color:#f2c75c;background:rgba(242,199,92,.06);vertical-align:middle;text-shadow:0 0 12px rgba(242,199,92,.55)}
+  #locationhud .zone{display:inline-block;vertical-align:middle;max-width:225px;color:#ffe680;font-size:15px;letter-spacing:1.8px;text-transform:uppercase}
+  #locationhud .meta{margin:9px 0 0;padding:8px 0 0;color:#b8c7d8;font:500 12px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.4px;text-transform:none}
+  #coords{top:86px;left:16px;width:305px;gap:0;border:1px solid rgba(242,199,92,.28);border-top:0;border-radius:0 0 6px 6px;background:linear-gradient(180deg,rgba(5,10,20,.76),rgba(2,6,13,.62));box-shadow:0 14px 28px rgba(0,0,0,.24);overflow:hidden}
+  .statuschip{grid-template-columns:28px minmax(0,1fr) auto;min-width:0;width:100%;border:0;border-top:1px solid rgba(255,255,255,.08);border-radius:0;background:transparent;box-shadow:none;padding:9px 13px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;text-shadow:none}
+  .statuschip .ico{width:24px;height:24px;font:800 11px 'Courier New',monospace}
+  .statuschip span{color:#9fb1c7;font-size:12px;letter-spacing:.25px}
+  .statuschip b{color:#f5f8ff;font:700 13px system-ui,-apple-system,Segoe UI,sans-serif}
+  .statuschip.rank b{color:#dfffc8}.statuschip.gold b{color:#ffe28a}
+  #homeworkhud{width:305px;left:16px;top:255px}
+  #homeworkhud button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 12px;min-height:0;padding:14px 15px;border-color:rgba(34,197,94,.44);border-radius:7px;background:linear-gradient(160deg,rgba(5,13,23,.91),rgba(4,20,18,.82));box-shadow:0 12px 30px rgba(0,0,0,.34),inset 0 0 20px rgba(34,197,94,.045);text-align:left}
+  #homeworkhud .hwkicker{grid-column:1/-1;color:#a7f3d0;font-size:10px;letter-spacing:2px;text-transform:uppercase}
+  #homeworkhud strong{min-width:0;color:#f8fbff;font-size:15px;line-height:1.18;letter-spacing:.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #homeworkhud small{grid-column:1/-1;color:#b9c9dc;font:500 12px/1.38 system-ui,-apple-system,Segoe UI,sans-serif;white-space:normal}
+  #homeworkhud .hwprogress{grid-column:1/-1;display:flex;align-items:baseline;gap:6px;margin-top:2px;color:#eaf7ff}
+  #homeworkhud .hwprogress b{grid-column:auto;grid-row:auto;color:#fff;font:800 13px system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.3px}
+  #homeworkhud .hwprogress em{font-style:normal;color:#9fb1c7;font:600 11px system-ui,-apple-system,Segoe UI,sans-serif}
+  #homeworkhud i{grid-column:1/-1;height:6px;margin:0;border-color:rgba(125,211,252,.16)}
+  #homeworkhud .hwfooter{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:3px}
+  #homeworkhud .hwbook{display:grid;place-items:center;width:34px;height:32px;border:1px solid rgba(125,211,252,.38);border-radius:5px;background:rgba(11,32,52,.72);color:#9fd8ff;font-size:15px}
+  #homeworkhud .hwcta{justify-self:end;color:#ffe680;border:1px solid rgba(242,199,92,.55);border-radius:5px;background:rgba(58,38,10,.72);padding:8px 13px;font-size:10px;letter-spacing:1.4px}
+  #bugreportbtn{left:16px;top:430px;min-width:176px;height:38px;padding:0 14px;border-color:rgba(255,171,80,.58);background:linear-gradient(180deg,rgba(35,20,14,.9),rgba(8,9,14,.82));color:#ffd39f;font-size:10px;letter-spacing:1.5px}
+  #bugreportbtn:before{content:"⚠ ";color:#ffd24a}
+  #currentquest{right:24px;top:260px;width:345px;padding:0;border-color:rgba(242,199,92,.5);border-radius:7px;background:linear-gradient(180deg,rgba(5,11,21,.9),rgba(2,6,13,.8));box-shadow:0 14px 34px rgba(0,0,0,.42),inset 0 0 24px rgba(242,199,92,.035);text-shadow:none;overflow:hidden}
+  #currentquest .qt{padding:12px 15px;margin:0;border-bottom:1px solid rgba(242,199,92,.18);color:#ffe680;font-size:12px;letter-spacing:2px}
+  #currentquest .qv{padding:13px 15px;color:#dce8f4;font:500 13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+  .activequest-card{padding:15px 16px 14px}
+  .activequest-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;color:#ffe680;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+  .activequest-head i{display:grid;place-items:center;width:28px;height:28px;border:1px solid rgba(242,199,92,.35);border-radius:5px;background:rgba(242,199,92,.07);font-style:normal;color:#f2c75c}
+  .activequest-card h3{margin:0 0 8px;color:#ffe680;font-size:15px;line-height:1.25;letter-spacing:.5px}
+  .activequest-card p{margin:0 0 13px;color:#c5d3e4;font:500 13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+  .activequest-progress{display:grid;grid-template-columns:auto 1fr;gap:7px 10px;align-items:center;margin:2px 0 13px;color:#f8fbff;font:700 12px system-ui,-apple-system,Segoe UI,sans-serif}
+  .activequest-progress i{height:6px;border:1px solid rgba(125,211,252,.18);border-radius:999px;background:rgba(0,0,0,.34);overflow:hidden}
+  .activequest-progress i em{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#7dd3fc);box-shadow:0 0 10px rgba(34,197,94,.44)}
+  .activequest-current{display:grid;gap:5px;margin-top:7px;padding-top:10px;border-top:1px solid rgba(242,199,92,.14)}
+  .activequest-current b{color:#f2c75c;font-size:10px;letter-spacing:1.8px;text-transform:uppercase}
+  .activequest-current span{color:#dce8f4;font:500 12px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+  .activequest-actions{display:flex;gap:8px;justify-content:stretch;margin-top:13px}
+  #currentquest .activequest-actions .qaction{flex:1;max-width:none;padding:10px 12px;font-size:10px;text-align:center}
+  .otherquests-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;width:100%;padding:11px 15px;border:0;border-top:1px solid rgba(125,211,252,.18);background:rgba(9,18,31,.84);color:#ffe680;font-family:inherit;letter-spacing:1.5px;text-align:left;cursor:pointer}
+  .otherquests-row span{text-transform:uppercase}.otherquests-row b{display:grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:rgba(125,211,252,.12);border:1px solid rgba(125,211,252,.3);color:#bfeaff;font-size:10px}.otherquests-row i{font-style:normal;color:#ffd24a}
+  #currentquest .objective-list{padding:4px 14px 12px;margin:0}
+  #currentquest .objective-line{grid-template-columns:58px minmax(0,1fr) minmax(72px,max-content);padding:9px 0}
+  #activitytracker{right:24px;width:345px;border-color:rgba(125,211,252,.26);background:linear-gradient(160deg,rgba(6,14,24,.78),rgba(6,10,17,.7));box-shadow:0 10px 26px rgba(0,0,0,.26)}
+  #eventhud{top:18px;width:clamp(440px,34vw,610px);max-width:calc(100vw - 720px);padding:8px 10px;border-color:rgba(242,199,92,.55);background:linear-gradient(180deg,rgba(5,9,17,.88),rgba(2,5,10,.78));box-shadow:0 10px 28px rgba(0,0,0,.38),inset 0 0 18px rgba(242,199,92,.035)}
+  #eventhud .eventcrest{border-radius:5px}
+  #eventhud .es{color:#d8e3f1;font:500 12px system-ui,-apple-system,Segoe UI,sans-serif}
+  #eventjoin{padding:7px 11px;border-color:rgba(242,199,92,.58);background:rgba(63,42,11,.86);color:#ffe680;font-size:9px}
+  #keyprompthud{left:50%;right:auto;bottom:118px;transform:translateX(-50%);min-width:360px;max-width:min(560px,calc(100vw - 48px));border-color:rgba(242,199,92,.38);background:linear-gradient(140deg,rgba(6,11,20,.88),rgba(3,7,13,.78));box-shadow:0 14px 32px rgba(0,0,0,.36),inset 0 0 20px rgba(242,199,92,.035)}
+  #keyprompthud .keycopy span{font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:12px;color:#d8e6f4;text-shadow:none}
+  #stats{bottom:74px;gap:12px}
+  #barcol{width:min(560px,44vw);gap:5px}
+  .bar{height:18px;border-color:rgba(255,255,255,.16);border-radius:4px}
+  .bar span{font:700 12px system-ui,-apple-system,Segoe UI,sans-serif}
+  #hotbar{bottom:14px;padding:8px;border-color:rgba(242,199,92,.42)}
+  #abilities{left:calc(50% + 385px);bottom:18px}
+  #statpointnudge{left:calc(50% - 430px);bottom:74px;transform:none;min-width:235px;border-color:rgba(242,199,92,.48);background:linear-gradient(135deg,rgba(20,34,20,.88),rgba(6,10,13,.82))}
   #overworldresult{position:fixed;left:50%;top:18%;transform:translate(-50%,-12px);z-index:24;width:390px;max-width:calc(100vw - 30px);padding:15px 18px;border:1px solid rgba(125,211,252,.62);border-radius:8px;background:linear-gradient(145deg,rgba(7,18,27,.97),rgba(25,17,10,.96));box-shadow:0 16px 45px rgba(0,0,0,.55),0 0 24px rgba(56,189,248,.13);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;color:#eef8ff}
   #overworldresult.show{opacity:1;transform:translate(-50%,0)}#overworldresult .owrkicker{font-size:9px;letter-spacing:2.5px;color:#7dd3fc}#overworldresult h2{margin:4px 0 3px;font-size:20px;color:#ffd27a}#overworldresult p{margin:0 0 9px;color:#c9d8e5;font-size:12px}#owrrewards{display:flex;flex-wrap:wrap;gap:6px}#owrrewards span{padding:4px 7px;border:1px solid rgba(255,255,255,.13);border-radius:4px;background:rgba(255,255,255,.05);font-size:11px}#owrrewards b{color:#9be76d}#owrnext{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1);font-size:11px;color:#9fd7ff}
   #biomestatus{position:fixed;left:14px;top:245px;z-index:18;display:grid;gap:5px;pointer-events:none}#biomestatus.hidden{display:none}#biomestatus>div{display:grid;grid-template-columns:auto auto;gap:1px 9px;width:220px;padding:7px 9px;border:1px solid color-mix(in srgb,var(--status),transparent 42%);border-left:3px solid var(--status);border-radius:5px;background:rgba(6,12,17,.9);box-shadow:0 6px 18px rgba(0,0,0,.35)}#biomestatus b{color:var(--status);font-size:11px;letter-spacing:1px}#biomestatus span{justify-self:end;color:#fff;font-size:11px}#biomestatus small{grid-column:1/3;color:#b9c8d2;font-size:9px}

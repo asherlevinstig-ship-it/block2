@@ -509,7 +509,7 @@ test('overworld battle soundtrack is driven by hostile non-dungeon mobs', () => 
   assert.match(world, /BATTLE_MUSIC_STATES\.has\(state\)/);
   assert.match(world, /inOverworldBattle,/);
   assert.match(frame, /const tutorialJob=dim==='job'&&combatState\.jobTutorialActive \? combatState\.jobTutorialJob : '';/);
-  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob\);/);
+  assert.match(frame, /SFX\.tick\(dt, fd, 1-gDayF, dim==='overworld', inTown, isInsideTavern\(\), inMenu, !!cutscene, worldApi\.inOverworldBattle\(\), tutorialJob, dim, inMeditation\);/);
 });
 
 test('client renders Deity power effects and stealth shimmer states', () => {
