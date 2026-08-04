@@ -1315,12 +1315,8 @@ const DUNGEON_GRID_HEIGHT=DungeonRules.DUNGEON_HEIGHT;
 const carveBox=DungeonRules.carveBox;
 const generateDungeon=DungeonRules.generateDungeon;
 function rebuildAllChunks(){
-  lastVisibleChunkKey='';
-  for(const key of Object.keys(chunkMeshes)){
-    const [cx,cz]=key.split(',').map(Number);
-    disposeChunk(cx,cz);
-  }
-  updateVisibleChunks(true);
+  worldApi.clearChunks();
+  worldApi.rebuildVisible(true);
 }
 // ---------------- dungeon decoration & atmosphere (client-only cosmetics) ----------------
 const dungeonDecor=[];

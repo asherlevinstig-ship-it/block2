@@ -20,8 +20,9 @@ const LOOT_ECONOMY = require('../../shared/loot-economy');
 const RECALL = require('../../shared/recall-system');
 const APPEARANCE_SYSTEM = require('../../shared/appearance-system');
 const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainRequestedPublicGateRanks } = require('./dungeon-handoff');
+const { issueDungeonAdmission } = require('./dungeon-admission');
 const { gateReadinessForProfile } = require('./gate-readiness');
-const { DUNGEON_POOLS } = require('../../shared/dungeon-pools');
+const { DUNGEON_POOLS, dungeonDefinition } = require('../../shared/dungeon-pools');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
@@ -148,6 +149,7 @@ const BLOCK_EDIT_REACH = 4.5;
 const PLAYER_EYE_HEIGHT = 1.62;
 const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + 14.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 27.5 });
 const ADMIN_QUICK_GATE_ROTATION = Object.freeze(DUNGEON_POOLS.flatMap((ids, rank) => ids.map(dungeonId => Object.freeze({ rank, dungeonId }))));
+const adminQuickGateIndices = new Map();
 
 function townReturnArray(y = TOWN_RETURN_SPAWN.y) {
   return [TOWN_RETURN_SPAWN.x, y, TOWN_RETURN_SPAWN.z];
@@ -3413,13 +3415,12 @@ class GameRoom extends Room {
     if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminQuickGateReject', { reason: 'admin' });
     const p = this.state.players.get(client.sessionId);
     if (!p) return client.send('adminQuickGateReject', { reason: 'player' });
-    if (p.dgn) {
-      this.leaveInstance(client.sessionId);
-      return client.send('adminQuickGateExit', { reason: 'dungeon' });
-    }
-    const requested = Number.isFinite(+m.index) ? Math.max(0, +m.index | 0) : (client._adminQuickGateIndex || 0);
+    if (p.dgn) return client.send('adminQuickGateReject', { reason: 'already_inside' });
+    const token = this.tokens.get(client.sessionId);
+    if (!token) return client.send('adminQuickGateReject', { reason: 'auth' });
+    const requested = Number.isFinite(+m.index) ? Math.max(0, +m.index | 0) : (adminQuickGateIndices.get(token) || 0);
     const entry = ADMIN_QUICK_GATE_ROTATION[requested % ADMIN_QUICK_GATE_ROTATION.length] || ADMIN_QUICK_GATE_ROTATION[0];
-    client._adminQuickGateIndex = (requested + 1) % ADMIN_QUICK_GATE_ROTATION.length;
+    adminQuickGateIndices.set(token, (requested + 1) % ADMIN_QUICK_GATE_ROTATION.length);
     const g = new Gate();
     g.id = 'adminq_' + client.sessionId + '_' + Date.now().toString(36) + '_' + requested;
     g.x = Number.isFinite(p.x) ? p.x : W.TOWN.TC + 90;
@@ -3433,16 +3434,22 @@ class GameRoom extends Room {
     g.owner = this.tokens.get(client.sessionId) || '';
     g.expiresAt = Date.now() + 15 * 60 * 1000;
     g.active = true;
-    const inst = this.createInstance(g);
-    this.enterGateInstance(client, g, inst);
+    const ticket = issueDungeonAdmission(g, [token]);
+    const definition = dungeonDefinition(g.rank, g.seed, g.dungeonId);
     client.send('adminQuickGateResult', {
       id: g.id,
       index: requested % ADMIN_QUICK_GATE_ROTATION.length,
       total: ADMIN_QUICK_GATE_ROTATION.length,
       rank: g.rank,
-      dungeonId: inst.dungeonId || g.dungeonId,
-      dungeonName: inst.definition && inst.definition.name || g.dungeonId,
+      dungeonId: g.dungeonId,
+      dungeonName: definition && definition.name || g.dungeonId,
+      roomMode: 'dedicated',
     });
+    client.send('dungeonLobbyStart', this.dungeonRoomEntryPayload(g, ticket, {
+      countdownMs: 0,
+      startsAt: Date.now(),
+      finalSummary: { line: 'Admin test Gate: dedicated DungeonRoom.' },
+    }));
     return true;
   }
   landKey(x, z) {

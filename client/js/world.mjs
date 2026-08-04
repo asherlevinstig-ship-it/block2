@@ -2913,6 +2913,13 @@ function disposeChunk(cx,cz){
     if(x>=x0 && x<x0+CHUNK && z>=z0 && z<z0+CHUNK) removeInsulatorMesh(x,y,z,true);
   }
 }
+function clearChunkMeshes(){
+  lastVisibleChunkKey='';
+  for(const key of Object.keys(chunkMeshes)){
+    const [cx,cz]=key.split(',').map(Number);
+    disposeChunk(cx,cz);
+  }
+}
 const CHUNK_RENDER_RADIUS = 6;
 let lastVisibleChunkKey = '';
 function visibleChunkCenter(){
@@ -10959,6 +10966,7 @@ gameContext.registerModule('world', Object.freeze({
   setBlock:setB,
   terrainHeight,
   biomeAt,
+  clearChunks:clearChunkMeshes,
   rebuildVisible:updateVisibleChunks,
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,

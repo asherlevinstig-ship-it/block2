@@ -1489,6 +1489,7 @@ test('dungeon movement snaps transition-height packets back to the entrance floo
 });
 
 test('admin quick gate cycles through real dungeon entry flow',()=>{
+  clearDungeonAdmissions();
   const room=makeRoom(),admin=makeClient('quick_gate_admin'),normal=makeClient('quick_gate_normal');
   admin._accountRole='admin';
   seedPlayer(room,admin,{x:500,z:500,y:16});
@@ -1496,16 +1497,28 @@ test('admin quick gate cycles through real dungeon entry flow',()=>{
   room.handleAdminQuickGate(normal,{});
   assert.equal(normal.sent.some(e=>e.type==='adminQuickGateReject'&&e.msg.reason==='admin'),true);
   room.handleAdminQuickGate(admin,{});
-  let p=room.state.players.get(admin.sessionId);
+  const p=room.state.players.get(admin.sessionId);
   let result=admin.sent.find(e=>e.type==='adminQuickGateResult').msg;
-  assert.equal(p.dim,'dungeon');
+  let start=admin.sent.find(e=>e.type==='dungeonLobbyStart').msg;
+  assert.equal(p.dim,'overworld','admin shortcut does not host a legacy dungeon inside GameRoom');
+  assert.equal(p.dgn,'');
+  assert.equal(Object.keys(room.instances).length,0);
   assert.equal(result.index,0);
   assert.equal(result.dungeonId,DUNGEON_POOLS[0][0]);
-  room.leaveInstance(admin.sessionId);
+  assert.equal(result.roomMode,'dedicated');
+  assert.equal(start.mode,'room');
+  assert.equal(start.gateId,result.id);
+  assert.equal(peekDungeonAdmission(start.ticket).id,result.id);
+  admin.sent.length=0;
   room.handleAdminQuickGate(admin,{});
-  result=admin.sent.filter(e=>e.type==='adminQuickGateResult').at(-1).msg;
+  result=admin.sent.find(e=>e.type==='adminQuickGateResult').msg;
+  start=admin.sent.find(e=>e.type==='dungeonLobbyStart').msg;
   assert.equal(result.index,1);
   assert.equal(result.dungeonId,DUNGEON_POOLS[0][1]);
+  assert.equal(start.gateId,result.id);
+  assert.equal(peekDungeonAdmission(start.ticket).dungeonId,DUNGEON_POOLS[0][1]);
+  assert.equal(admin.sent.some(e=>e.type==='enterDungeon'),false,'quick Gate never uses the legacy in-room enterDungeon message');
+  clearDungeonAdmissions();
 });
 
 test('server fall authority damages hard landings and Feather Step absorbs sane drops',()=>{
