@@ -3380,6 +3380,7 @@ function updateLandMinimap(force=true){
   const hasOwn = editableClaimCount()>0;
   const miniMap = utilityEquipped('minimap'), worldMap = utilityEquipped('world_map');
   const mapUtility = miniMap || worldMap;
+  const calmTown = calmTownHud();
   const weatherMapReq={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'},currentWeather=weather||'clear',now=Date.now();
   const isWeatherDiscovery=s=>!!(s&&weatherMapReq[s.type]);
   const weatherSites=smallDiscoveries.filter(isWeatherDiscovery);
@@ -3388,7 +3389,7 @@ function updateLandMinimap(force=true){
   const dragonMarkers = globalThis.BlockcraftDragonMap && typeof globalThis.BlockcraftDragonMap.stayMarkers === 'function'
     ? globalThis.BlockcraftDragonMap.stayMarkers()
     : [];
-  const visible = !calmTownHud() && (hasOwn || landClaimOverlay || discoveredIds.size>0 || mapUtility || (mapUtility && dragonMarkers.length>0)) && (locked || claimMode || uiOpen || statOpen || qOpen);
+  const visible = (!calmTown || mapUtility) && (hasOwn || landClaimOverlay || discoveredIds.size>0 || mapUtility || (mapUtility && dragonMarkers.length>0)) && (locked || claimMode || uiOpen || statOpen || qOpen);
   const activeTrail=overworldActivity&&overworldActivity.trailSense&&(!overworldActivity.trailSense.expiresAt||overworldActivity.trailSense.expiresAt>Date.now())?overworldActivity.trailSense:null;
   const mapSig=[
     visible?1:0,miniMap?1:0,worldMap?1:0,claimMode?1:0,landClaimOverlay?1:0,
