@@ -1371,7 +1371,7 @@
   #eventhud .eventcrest{border-radius:5px}
   #eventhud .es{color:#d8e3f1;font:500 12px system-ui,-apple-system,Segoe UI,sans-serif}
   #eventjoin{padding:7px 11px;border-color:rgba(242,199,92,.58);background:rgba(63,42,11,.86);color:#ffe680;font-size:9px}
-  #keyprompthud{left:calc(50% + 410px);right:auto;bottom:56px;transform:none;min-width:220px;width:min(280px,calc(50vw - 430px));max-width:280px;z-index:10;gap:7px;padding:6px 8px 6px 6px;border-color:rgba(255,255,255,.06);background:rgba(4,8,14,.16);box-shadow:none;backdrop-filter:blur(2px)}
+  #keyprompthud{left:auto;right:24px;bottom:56px;transform:none;min-width:220px;width:280px;max-width:calc(100vw - 48px);z-index:10;gap:7px;padding:6px 8px 6px 6px;border-color:rgba(255,255,255,.06);background:rgba(4,8,14,.16);box-shadow:none;backdrop-filter:blur(2px)}
   #keyprompthud:before,#keyprompthud .keydots{display:none}
   #keyprompthud .keyart{min-width:44px;height:34px;padding:0 8px;border-radius:7px;border-bottom-width:3px;font-size:12px}
   #keyprompthud .keycopy b{font-size:10px;letter-spacing:1.4px}
