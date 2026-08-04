@@ -3196,7 +3196,16 @@ function netSnapshot(){
   else if(NET.profileReady===true)storeJobTutorialResume(null,null);
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
+    hp:Math.max(0,Math.min(maxHp(),Number(hp)||0)),
+    mp:Math.max(0,Math.min(maxMp(),Number(mp)||0)),
     sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
+    hunger:Math.max(0,Math.min(maxHunger(),Number(hunger)||0)),
+    vitals:{
+      hp:Math.max(0,Math.min(maxHp(),Number(hp)||0)),
+      mp:Math.max(0,Math.min(maxMp(),Number(mp)||0)),
+      sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
+      hunger:Math.max(0,Math.min(maxHunger(),Number(hunger)||0)),
+    },
     activeRoom,
     pos,
   };

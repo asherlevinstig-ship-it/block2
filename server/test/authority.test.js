@@ -707,13 +707,15 @@ function addKingParticipant(room, ev, name, teamId, pos) {
   return c;
 }
 
-test('profile merge accepts only identity and ignores every client-owned progression field', () => {
+test('profile merge accepts identity and bounded survival vitals while ignoring client-owned progression', () => {
   const current = defaultProfile('Old');
   current.S.lvl = 2;
   current.S.xp = 9;
   current.gold = 50;
   current.highestGateRankCleared = 1;
   current.inv = [{ id: W.B.LOG, count: 3 }];
+  current.vitals = { hp: 12, mp: 8, sp: 55, hunger: 63 };
+  current.vitalsSavedAt = Date.now();
 
   const merged = mergeClientSave(current, {
     name: '<NewName>',
@@ -740,24 +742,26 @@ test('profile merge accepts only identity and ignores every client-owned progres
   assert.equal(merged.highestGateRankCleared, 1);
   assert.deepEqual(merged.utilityUnlocks, []);
   assert.deepEqual(merged.utilityLoadout, { active: '', passive: [] });
-  assert.deepEqual(merged.inv, [{ id: W.B.LOG, count: 3 }]);
-  assert.equal(merged.vitals.hp, current.vitals.hp);
-  assert.equal(merged.vitals.mp, current.vitals.mp);
-  assert.equal(merged.vitals.hunger, current.vitals.hunger);
+  assert.equal(itemCount(merged, W.B.LOG), 3);
+  assert.equal(itemCount(merged, I.DIAMOND), 0);
+  assert.equal(itemCount(merged, I.APPEARANCE_MIRROR), 1);
+  assert.equal(merged.vitals.hp, Math.min(current.vitals.hp, 1));
+  assert.equal(merged.vitals.mp, Math.min(current.vitals.mp, 1));
+  assert.equal(merged.vitals.hunger, Math.min(current.vitals.hunger, 0));
   assert.equal(merged.vitals.sp, Math.min(current.vitals.sp, 42));
   assert.deepEqual(merged.pos, current.pos);
 });
 
-test('profile merge never lets browser snapshots refill stamina', () => {
+test('profile merge never lets browser snapshots refill survival vitals', () => {
   const current = defaultProfile('Tired');
-  current.vitals = { hp: 20, mp: 20, sp: 12, hunger: 100 };
+  current.vitals = { hp: 7, mp: 5, sp: 12, hunger: 31 };
   current.vitalsSavedAt = Date.now();
 
-  const refilled = mergeClientSave(current, { sp: 100 });
-  assert.equal(refilled.vitals.sp, 12, 'refresh/cold boot snapshots cannot refill stamina');
+  const refilled = mergeClientSave(current, { vitals: { hp: 20, mp: 20, sp: 100, hunger: 100 } });
+  assert.deepEqual(refilled.vitals, current.vitals, 'refresh/cold boot snapshots cannot refill survival vitals');
 
-  const spent = mergeClientSave(current, { sp: 4 });
-  assert.equal(spent.vitals.sp, 4, 'live snapshots may still preserve stamina that was spent client-side');
+  const spent = mergeClientSave(current, { hp: 4, mp: 3, sp: 4, hunger: 18 });
+  assert.deepEqual(spent.vitals, { hp: 4, mp: 3, sp: 4, hunger: 18 }, 'live snapshots may still preserve survival vitals spent client-side');
 });
 
 test('homestead rest does not refill survival vitals while offline', () => {

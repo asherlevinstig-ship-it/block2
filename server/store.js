@@ -1131,11 +1131,15 @@ function mergeClientSave(current, snapshot) {
   const out = sanitizeProfile(current);
   out.name = cleanName(snapshot.name || out.name);
   if (out.name && out.name !== 'Hunter') out.nameSet = true;
-  if (typeof snapshot.sp === 'number') {
-    const currentSp = Number.isFinite(+out.vitals.sp) ? +out.vitals.sp : 0;
-    out.vitals.sp = Math.min(currentSp, clampF(snapshot.sp, 0, 1000000));
-    out.vitalsSavedAt = Date.now();
+  const snapshotVitals = snapshot.vitals && typeof snapshot.vitals === 'object' ? snapshot.vitals : snapshot;
+  let mergedVitals = false;
+  for (const key of ['hp', 'mp', 'sp', 'hunger']) {
+    if (typeof snapshotVitals[key] !== 'number') continue;
+    const currentVital = Number.isFinite(+out.vitals[key]) ? +out.vitals[key] : 0;
+    out.vitals[key] = Math.min(currentVital, clampF(snapshotVitals[key], 0, 1000000));
+    mergedVitals = true;
   }
+  if (mergedVitals) out.vitalsSavedAt = Date.now();
   const activeRoom = sanitizeActiveRoom(snapshot.activeRoom);
   out.activeRoom = activeRoom;
   if (activeRoom) {
