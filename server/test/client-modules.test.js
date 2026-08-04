@@ -1150,6 +1150,18 @@ test('browser and Node adapters generate byte-identical dungeons', () => {
   assert.deepEqual(variants.map(v => v.definition.boss), ['The Foreman', 'The Drowned Regent', 'The Rootbound Keeper']);
 });
 
+test('client chunk rebuilding fully refreshes compact dungeon world meshes', () => {
+  const worldSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const dimensionsSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  assert.match(worldSource, /function worldBounds\(\)/);
+  assert.match(worldSource, /function worldChunkBounds\(\)/);
+  assert.match(worldSource, /const b=worldBounds\(\);\s*for\(let x=Math\.max\(x0,b\.minX\);x<=Math\.min\(x0\+CHUNK-1,b\.maxX\);x\+\+\)\s*for\(let y=b\.minY;y<=b\.maxY;y\+\+\)\s*for\(let z=Math\.max\(z0,b\.minZ\);z<=Math\.min\(z0\+CHUNK-1,b\.maxZ\);z\+\+\)/);
+  assert.match(worldSource, /const cb=worldChunkBounds\(\);\s*if\(cx<cb\.minCx\|\|cz<cb\.minCz\|\|cx>cb\.maxCx\|\|cz>cb\.maxCz\) return;/);
+  assert.match(worldSource, /for\(let cx=Math\.max\(cb\.minCx,c\.cx-c\.r\);cx<=Math\.min\(cb\.maxCx,c\.cx\+c\.r\);cx\+\+\)/);
+  assert.match(worldSource, /for\(let y=Math\.max\(1,b\.minY\);y<=b\.maxY;y\+\+\)/);
+  assert.match(dimensionsSource, /function rebuildAllChunks\(\)\{\s*lastVisibleChunkKey='';\s*for\(const key of Object\.keys\(chunkMeshes\)\)\{\s*const \[cx,cz\]=key\.split\(','\)\.map\(Number\);\s*disposeChunk\(cx,cz\);\s*\}\s*updateVisibleChunks\(true\);\s*\}/);
+});
+
 test('onboarding building counts a three-block stack above the stone pad', async () => {
   const { isOnboardingBuildPlacement, countOnboardingBuildBlocks } = await clientModule('onboarding.mjs');
   const meadow = { x: 100, z: 200, G: 12 };

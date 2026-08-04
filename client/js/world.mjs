@@ -908,6 +908,18 @@ let world = new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,d
 const inWorld = (x,y,z)=> x>=0&&x<WX&&y>=0&&y<WH&&z>=0&&z<WX;
 const getB = (x,y,z)=>world.getB(x,y,z);
 const setB = (x,y,z,v)=>world.setB(x,y,z,v);
+function worldBounds(){
+  return world && world.bounds ? world.bounds : {minX:0,minY:0,minZ:0,maxX:WX-1,maxY:WH-1,maxZ:WX-1};
+}
+function worldChunkBounds(){
+  const b=worldBounds();
+  return {
+    minCx:Math.floor(b.minX/CHUNK),
+    maxCx:Math.floor(b.maxX/CHUNK),
+    minCz:Math.floor(b.minZ/CHUNK),
+    maxCz:Math.floor(b.maxZ/CHUNK),
+  };
+}
 
 function hash2(x,z){ let n=(x*374761393 + z*668265263)>>>0; n=Math.imul(n^(n>>>13),1274126177)>>>0; return ((n^(n>>>16))>>>0)/4294967296; }
 function noise2(x,z){
@@ -2409,7 +2421,10 @@ function blockFaceTile(id, faceIndex, x, y, z){
 function buildChunkGeometry(cx, cz, translucentPass){
   const pos=[], nor=[], col=[], uv=[], ind=[];
   const x0=cx*CHUNK, z0=cz*CHUNK;
-  for(let x=x0;x<x0+CHUNK;x++)for(let y=0;y<WH;y++)for(let z=z0;z<z0+CHUNK;z++){
+  const b=worldBounds();
+  for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
+  for(let y=b.minY;y<=b.maxY;y++)
+  for(let z=Math.max(z0,b.minZ);z<=Math.min(z0+CHUNK-1,b.maxZ);z++){
     const id = getB(x,y,z);
     if(id===B.AIR) continue;
     const def = BLOCKS[id];
@@ -2864,7 +2879,8 @@ function tickCropTimers(now){
 }
 const chunkMeshes = {};
 function rebuildChunk(cx,cz){
-  if(cx<0||cz<0||cx>=WORLD_CH||cz>=WORLD_CH) return;
+  const cb=worldChunkBounds();
+  if(cx<cb.minCx||cz<cb.minCz||cx>cb.maxCx||cz>cb.maxCz) return;
   const key=cx+','+cz;
   const old=chunkMeshes[key];
   if(old){ for(const m of [old.opaque, old.trans]) if(m){ scene.remove(m); m.geometry.dispose(); } }
@@ -2876,9 +2892,10 @@ function rebuildChunk(cx,cz){
   chunkMeshes[key]=e;
   syncTorchesForChunk(cx,cz);
   const x0=cx*CHUNK, z0=cz*CHUNK;
-  for(let x=x0;x<Math.min(WX,x0+CHUNK);x++)
-  for(let z=z0;z<Math.min(WX,z0+CHUNK);z++)
-  for(let y=1;y<WH;y++){
+  const b=worldBounds();
+  for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
+  for(let z=Math.max(z0,b.minZ);z<=Math.min(z0+CHUNK-1,b.maxZ);z++)
+  for(let y=Math.max(1,b.minY);y<=b.maxY;y++){
     const id=getB(x,y,z);
     if(id===B.EGG_INSULATOR) syncInsulatorMesh(x,y,z,id);
   }
@@ -2909,8 +2926,9 @@ function updateVisibleChunks(force){
   if(!force && stamp===lastVisibleChunkKey) return;
   lastVisibleChunkKey=stamp;
   const wanted=new Set();
-  for(let cx=Math.max(0,c.cx-c.r);cx<=Math.min(WORLD_CH-1,c.cx+c.r);cx++)
-  for(let cz=Math.max(0,c.cz-c.r);cz<=Math.min(WORLD_CH-1,c.cz+c.r);cz++){
+  const cb=worldChunkBounds();
+  for(let cx=Math.max(cb.minCx,c.cx-c.r);cx<=Math.min(cb.maxCx,c.cx+c.r);cx++)
+  for(let cz=Math.max(cb.minCz,c.cz-c.r);cz<=Math.min(cb.maxCz,c.cz+c.r);cz++){
     const dx=cx-c.cx, dz=cz-c.cz;
     if(dx*dx+dz*dz>(c.r+.65)*(c.r+.65)) continue;
     const key=cx+','+cz;
@@ -7170,9 +7188,10 @@ function removeTorchMesh(x,y,z){
 function syncTorchesForChunk(cx,cz){
   if(typeof torches==='undefined') return;
   const x0=cx*CHUNK, z0=cz*CHUNK;
-  for(let x=x0;x<Math.min(WX,x0+CHUNK);x++)
-  for(let z=z0;z<Math.min(WX,z0+CHUNK);z++)
-  for(let y=1;y<WH;y++){
+  const b=worldBounds();
+  for(let x=Math.max(x0,b.minX);x<=Math.min(x0+CHUNK-1,b.maxX);x++)
+  for(let z=Math.max(z0,b.minZ);z<=Math.min(z0+CHUNK-1,b.maxZ);z++)
+  for(let y=Math.max(1,b.minY);y<=b.maxY;y++){
     const key=x+','+y+','+z;
     if(isLightBlock(getB(x,y,z))) addTorchMesh(x,y,z);
     else if(torches[key]) removeTorchMesh(x,y,z);
