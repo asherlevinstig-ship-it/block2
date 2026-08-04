@@ -315,7 +315,7 @@ class DungeonRoom extends GameRoom {
     p.dgn = '';
     p.dim = 'overworld';
     p.x = town.x; p.y = town.y; p.z = town.z;
-    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof);
+    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof, { full: true, policy: 'dungeon_town_full_v1' });
     if (inst) {
       inst.removePlayer(client.sessionId);
       this.sendDungeonPartyStatus(dgn);
@@ -443,7 +443,7 @@ class DungeonRoom extends GameRoom {
       }
       const client = this.clients.find(c => c.sessionId === sid);
       let vitals = null;
-      if (client && this.applyDeathRespawnVitals) vitals = this.applyDeathRespawnVitals(client, prof);
+      if (client && this.applyDeathRespawnVitals) vitals = this.applyDeathRespawnVitals(client, prof, { full: true, policy: 'dungeon_town_full_v1' });
       if (client) client.send('dungeonFailed', { reason: 'breach', result, ...(vitals || {}), x: tx, y: ty, z: tz });
     }
     return true;

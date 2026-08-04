@@ -1565,7 +1565,7 @@ class DungeonMixin {
     const hp = this.playerHp.get(sid);
     const client = this.clients.find(c => c.sessionId === sid);
     let vitals = null;
-    if (client && this.applyDeathRespawnVitals) vitals = this.applyDeathRespawnVitals(client, prof);
+    if (client && this.applyDeathRespawnVitals) vitals = this.applyDeathRespawnVitals(client, prof, { full: true, policy: 'dungeon_town_full_v1' });
     else if (hp) hp.hp = this.deathRespawnHp ? this.deathRespawnHp(hp.max) : Math.max(1, Math.ceil((hp.max || 20) * 0.25));
     if (inst) inst.removePlayer(sid);
     this.bossContrib.forEach(byPlayer => byPlayer.delete(sid));

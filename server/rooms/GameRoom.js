@@ -5363,31 +5363,32 @@ class GameRoom extends Room {
   deathRespawnHp(maxHp) {
     return Math.max(1, Math.ceil(Math.max(1, maxHp || 20) * 0.25));
   }
-  applyDeathRespawnVitals(client, prof) {
+  applyDeathRespawnVitals(client, prof, opts = {}) {
     if (!client) return null;
     const hp = this.ensurePlayerHp(client);
     const hunger = this.ensurePlayerHunger(client);
     const maxMp = this.maxMpForProfile(prof);
     const maxSp = this.maxStaminaForProfile(prof);
     const ability = this.abilityState.get(client.sessionId) || { mp: maxMp, maxMp, sp: maxSp, maxSp, cds: {}, last: Date.now() };
+    const full = !!(opts && opts.full);
     hp.max = this.maxHpForProfile(prof);
-    hp.hp = this.deathRespawnHp(hp.max);
+    hp.hp = full ? hp.max : this.deathRespawnHp(hp.max);
     hunger.max = this.maxHungerForProfile(prof);
-    if (this.hungerProtectedForProfile(prof)) hunger.hunger = hunger.max;
+    if (full || this.hungerProtectedForProfile(prof)) hunger.hunger = hunger.max;
     else hunger.hunger = Math.max(0, Math.min(hunger.max, Number.isFinite(+hunger.hunger) ? +hunger.hunger : 0));
     hunger.acc = 0;
     hunger.syncAcc = 0;
     ability.maxMp = maxMp;
     ability.maxSp = maxSp;
-    ability.mp = Math.max(0, Math.min(maxMp, Number.isFinite(+ability.mp) ? +ability.mp : 0));
-    ability.sp = Math.max(0, Math.min(maxSp, Number.isFinite(+ability.sp) ? +ability.sp : 0));
+    ability.mp = full ? maxMp : Math.max(0, Math.min(maxMp, Number.isFinite(+ability.mp) ? +ability.mp : 0));
+    ability.sp = full ? maxSp : Math.max(0, Math.min(maxSp, Number.isFinite(+ability.sp) ? +ability.sp : 0));
     ability.last = Date.now();
     if (!ability.cds || typeof ability.cds !== 'object') ability.cds = {};
     this.abilityState.set(client.sessionId, ability);
     if (prof) this.syncProfileVitals(client, prof);
     this.sendHungerSync(client, hunger);
     return {
-      respawnPolicy: 'low_vitals_v2',
+      respawnPolicy: full ? String(opts.policy || 'full_vitals_v1').slice(0, 40) : 'low_vitals_v2',
       hp: Math.ceil(hp.hp), maxHp: hp.max,
       mp: Math.ceil(ability.mp), maxMp: ability.maxMp,
       sp: Math.ceil(ability.sp), maxSp: ability.maxSp,
@@ -6063,7 +6064,7 @@ class GameRoom extends Room {
     let result = null;
     p.spirit = false;
     this.ejectFromDungeon(client.sessionId);
-    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof);
+    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof, { full: true, policy: 'dungeon_town_full_v1' });
     if (rec) {
       rec.prof.pos = [town.x, town.y, town.z];
       this.dirtyPlayers.add(rec.token);

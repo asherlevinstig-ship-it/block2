@@ -5383,8 +5383,12 @@ test('DungeonRoom timer breach exports live enemies and returns party to town', 
   assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 2, W.TOWN.TC + 27.5]);
   const failed = client.sent.find(e => e.type === 'dungeonFailed').msg;
   assert.equal(failed.reason, 'breach');
-  assert.equal(failed.respawnPolicy, 'low_vitals_v2');
-  assert.equal(failed.hp, 5);
+  assert.equal(failed.respawnPolicy, 'dungeon_town_full_v1');
+  assert.equal(failed.hp, 20);
+  assert.equal(failed.mp, 20);
+  assert.equal(failed.sp, 100);
+  assert.equal(failed.hunger, 100);
+  assert.deepEqual(prof.vitals, { hp: 20, mp: 20, sp: 100, hunger: 100 });
 });
 
 test('dungeon-handoff hands off a profile exactly once (delete-on-read)', () => {
@@ -9251,6 +9255,13 @@ test('solo dungeon death leaves a fixed spirit until the player chooses town', (
   room.handleQuitDungeonSpirit(client);
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
   assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 2, W.TOWN.TC + 27.5]);
+  const quit = client.sent.find(e => e.type === 'dungeonSpiritQuit').msg;
+  assert.equal(quit.respawnPolicy, 'dungeon_town_full_v1');
+  assert.equal(quit.hp, 20);
+  assert.equal(quit.mp, 20);
+  assert.equal(quit.sp, 100);
+  assert.equal(quit.hunger, 100);
+  assert.deepEqual(prof.vitals, { hp: 20, mp: 20, sp: 100, hunger: 100 });
   assert.equal(room.instances.g1, undefined);
   assert.equal(room.state.gates.has('g1'), false);
   assert.equal(room.state.mobs.has('m1'), false);
@@ -10266,7 +10277,7 @@ test('gates restore from persistence and flush only active unexpired gates', asy
 test('expired uncleared gates breach dungeon mobs into the overworld', () => {
   const room = makeRoom();
   const client = makeClient('breach_runner');
-  seedPlayer(room, client, { dgn: 'g1', hp: 20 });
+  const { prof } = seedPlayer(room, client, { dgn: 'g1', hp: 20 });
   room.clients = [client];
   const chats = [];
   const events = [];
@@ -10293,8 +10304,11 @@ test('expired uncleared gates breach dungeon mobs into the overworld', () => {
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
   const failed = client.sent.find(e => e.type === 'dungeonFailed').msg;
   assert.equal(failed.reason, 'breach');
-  assert.equal(failed.respawnPolicy, 'low_vitals_v2');
-  assert.equal(failed.hp, 5);
+  assert.equal(failed.respawnPolicy, 'dungeon_town_full_v1');
+  assert.equal(failed.hp, 20);
+  assert.equal(failed.mp, 20);
+  assert.equal(failed.sp, 100);
+  assert.equal(failed.hunger, 100);
   assert.equal(events.find(e => e.type === 'gateBreach').msg.count, 2);
   assert.match(chats.find(e => e.type === 'chat').msg.text, /breached into the overworld/);
 });
