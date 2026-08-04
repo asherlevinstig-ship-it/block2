@@ -2617,7 +2617,7 @@ function saveNpcQuestChains(){
   npcQuestChains=sanitizeNpcQuestChainsClient(npcQuestChains);
   try{ localStorage.setItem('bc_npc_quest_chains', JSON.stringify(npcQuestChains||{})); }catch(e){}
   if(typeof NET!=='undefined' && NET.on && NET.room && typeof netSnapshot==='function'){
-    try{ NET.room.send('save', netSnapshot()); NET.lastSave=performance.now(); }catch(e){}
+    try{ const snap=netSnapshot(); NET.room.send('save', snap); NET.lastSnap=JSON.stringify(snap); NET.lastVitalSnap=JSON.stringify(snap&&snap.vitals||{}); NET.lastSave=performance.now(); NET.lastVitalSave=NET.lastSave; }catch(e){}
   }
 }
 function applyServerNpcQuestChains(chains){
@@ -2909,7 +2909,7 @@ function awardAegisTrialLoot(){
     familiarUnlocks.push('shade');
     label='Shade Familiar';
     if(NET.on&&NET.room){
-      try{ NET.room.send('save', netSnapshot()); NET.lastSave=performance.now(); }catch(e){}
+      try{ const snap=netSnapshot(); NET.room.send('save', snap); NET.lastSnap=JSON.stringify(snap); NET.lastVitalSnap=JSON.stringify(snap&&snap.vitals||{}); NET.lastSave=performance.now(); NET.lastVitalSave=NET.lastSave; }catch(e){}
     }
   } else {
     addItem(id,1);

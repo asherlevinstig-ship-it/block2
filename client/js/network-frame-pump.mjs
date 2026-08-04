@@ -24,11 +24,24 @@ export function createNetworkFramePump({
     // profile is read-only and doesn't sync cosmetic meta) — Colyseus 0.15 disconnects a client
     // outright for an unregistered message type, so these must not reach a `dungeon` room.
     const isOverworldRoom=NET.room&&NET.room.name==='blockcraft';
-    if(isOverworldRoom&&now-(NET.lastSave||0)>10000){
-      NET.lastSave=now;
+    if(isOverworldRoom&&now-(NET.lastVitalCheck||0)>1000){
+      NET.lastVitalCheck=now;
       try{
-        const snap=JSON.stringify(netSnapshot());
-        if(snap!==NET.lastSnap){ NET.lastSnap=snap; NET.room.send('save',JSON.parse(snap)); }
+        const snap=netSnapshot();
+        const vitalSig=JSON.stringify(snap&&snap.vitals||{});
+        const dueVitalChange=vitalSig!==NET.lastVitalSnap&&now-(NET.lastVitalSave||0)>1500;
+        const dueHeartbeat=now-(NET.lastSave||0)>10000;
+        if(dueVitalChange||dueHeartbeat){
+          const serialized=JSON.stringify(snap);
+          if(serialized!==NET.lastSnap||dueVitalChange){
+            NET.lastSnap=serialized;
+            NET.lastVitalSnap=vitalSig;
+            NET.lastSave=now;
+            if(dueVitalChange)NET.lastVitalSave=now;
+            NET.room.send('save',snap);
+            globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.save.sent',{reason:dueVitalChange?'vitals':'heartbeat',vitals:snap.vitals,activeRoom:snap.activeRoom||null});
+          }
+        }
       }catch(e){}
     }
     if(dim!=='ability'&&now-NET.lastMove>80){

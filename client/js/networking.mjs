@@ -3214,7 +3214,6 @@ function netSnapshot(){
     sp:Math.max(0,Math.min(maxSp(),Number(sp)||0)),
     hunger:Math.max(0,Math.min(maxHunger(),Number(hunger)||0)),
   };
-  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.snapshot.vitals',{vitals,activeRoom,pos});
   return {
     name:(document.getElementById('playername').value||'Hunter').slice(0,16),
     hp:vitals.hp,
@@ -3225,6 +3224,25 @@ function netSnapshot(){
     activeRoom,
     pos,
   };
+}
+function netFlushSave(reason='flush'){
+  if(!NET.on||!NET.room||NET.room.name!=='blockcraft')return false;
+  try{
+    const snap=netSnapshot();
+    NET.room.send('save',snap);
+    NET.lastSnap=JSON.stringify(snap);
+    NET.lastVitalSnap=JSON.stringify(snap&&snap.vitals||{});
+    NET.lastSave=performance.now();
+    NET.lastVitalSave=NET.lastSave;
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.save.flush',{reason,vitals:snap.vitals,activeRoom:snap.activeRoom||null});
+    return true;
+  }catch(e){return false;}
+}
+if(typeof window!=='undefined'&&!window.__blockcraftVitalFlushBound){
+  window.__blockcraftVitalFlushBound=true;
+  window.addEventListener('pagehide',()=>netFlushSave('pagehide'));
+  window.addEventListener('beforeunload',()=>netFlushSave('beforeunload'));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')netFlushSave('visibility-hidden');});
 }
 
 // ---- block edit sync ----

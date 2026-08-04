@@ -539,7 +539,10 @@ class GameRoom extends Room {
       const existingActiveRoom = sanitizeActiveRoom(existing.activeRoom);
       const roomStateChanged = JSON.stringify(incomingActiveRoom || null) !== JSON.stringify(existingActiveRoom || null);
       const roomStateSave = !!incomingActiveRoom || !!existingActiveRoom;
-      if (now - (this.lastSaveMsg.get(client.sessionId) || 0) < 5000 && !(roomStateSave && roomStateChanged)) return;
+      const incomingVitals = this.debugSnapshotVitals(m);
+      const existingVitals = existing && existing.vitals && typeof existing.vitals === 'object' ? existing.vitals : {};
+      const lowerVitalSave = Object.keys(incomingVitals).some(key => Number.isFinite(+existingVitals[key]) && incomingVitals[key] < +existingVitals[key]);
+      if (now - (this.lastSaveMsg.get(client.sessionId) || 0) < 5000 && !(roomStateSave && roomStateChanged) && !lowerVitalSave) return;
       this.lastSaveMsg.set(client.sessionId, now);
       const prof = mergeClientSave(existing, m);
       if (existing.noPersist) prof.noPersist = true;   // a failed-load session stays non-persistable across saves

@@ -51,7 +51,9 @@ function sendProfileSaveNow(){
     const snap=netSnapshot();
     NET.room.send('save', snap);
     NET.lastSnap=JSON.stringify(snap);
+    NET.lastVitalSnap=JSON.stringify(snap&&snap.vitals||{});
     NET.lastSave=performance.now();
+    NET.lastVitalSave=NET.lastSave;
   }catch(e){}
 }
 function sendPlayerMetaNow(){
