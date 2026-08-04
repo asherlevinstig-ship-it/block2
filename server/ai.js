@@ -4,7 +4,7 @@
 
 const W = require('./world');
 
-const NON_SOLID = new Set([0, W.B.WATER, W.B.TORCH]);
+const NON_SOLID = new Set([0, W.B.WATER, W.B.LAVA, W.B.TORCH, W.B.LANTERN, W.B.CAMPFIRE]);
 
 // solid(x,y,z) factory for a space ('' = overworld, otherwise an instance buffer)
 function makeSolid(instWorld, overworld) {

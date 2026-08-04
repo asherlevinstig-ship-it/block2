@@ -7246,6 +7246,7 @@ class GameRoom extends Room {
     const dy = ny - p.y;
     const maxYStep = (deityFlight ? 16 : 18) * dt + (deityFlight ? 3.5 : 2.5);
     let sy = Math.abs(dy) > maxYStep ? p.y + Math.sign(dy) * maxYStep : ny;
+    let corrected = false;
     // No-clip guard: a destination that buries the player's body in solid blocks is
     // rejected, so nobody can camp inside terrain or under the map where melee, mobs,
     // and line-of-sight checks can't reach them. Two safety valves keep honest-but-
@@ -7257,6 +7258,21 @@ class GameRoom extends Room {
     const solid = this.spaceSolid(p.dgn || '');
     const buried = (x, y, z) => solid(Math.floor(x), Math.floor(y + .2), Math.floor(z))
       || solid(Math.floor(x), Math.floor(y + 1.5), Math.floor(z));
+    const inst = p.dgn ? this.instances[p.dgn] : null;
+    const groundAt = (x, z, fromY = W.WH - 2) => {
+      if (p.dgn) return inst && inst.world ? D.standHeightIn(inst.world, x, z, Math.min(12, fromY)) : -1;
+      return this.world.standHeight(x, z, fromY);
+    };
+    const townFloorStrict = !p.dgn && this.isTownProtected(sx, sz);
+    const crossesSolid = (x1, y1, z1, x2, y2, z2) => {
+      const dist = Math.max(Math.hypot(x2 - x1, z2 - z1), Math.abs(y2 - y1));
+      const steps = Math.ceil(dist / .35);
+      for (let i = 1; i < steps; i++) {
+        const f = i / steps;
+        if (buried(x1 + (x2 - x1) * f, y1 + (y2 - y1) * f, z1 + (z2 - z1) * f)) return true;
+      }
+      return false;
+    };
     if (!buried(p.x, p.y, p.z) && buried(sx, sy, sz)) {
       const rejects = (this.moveRejects.get(client.sessionId) || 0) + 1;
       const rx = clampN(nx, borderMin, borderMax), rz = clampN(nz, borderMin, borderMax);
@@ -7267,9 +7283,22 @@ class GameRoom extends Room {
         this.moveRejects.set(client.sessionId, rejects);
         this.pvel.set(client.sessionId, { x: 0, z: 0 });
         p.yaw = clampN(m.yaw, -10, 10);
+        client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'solid' });
         return;
       }
     } else this.moveRejects.delete(client.sessionId);
+    const floorY = groundAt(sx, sz, W.WH - 2);
+    const floorTolerance = townFloorStrict ? .35 : 2.25;
+    if (!buried(p.x, p.y, p.z) && floorY > 0 && sy < floorY - floorTolerance) {
+      sy = floorY + .01;
+      corrected = true;
+    }
+    if (!buried(p.x, p.y, p.z) && crossesSolid(p.x, p.y, p.z, sx, sy, sz)) {
+      this.pvel.set(client.sessionId, { x: 0, z: 0 });
+      p.yaw = clampN(m.yaw, -10, 10);
+      client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'wall' });
+      return;
+    }
     this.pvel.set(client.sessionId, {
       x: Math.max(-velCap, Math.min(velCap, (sx - p.x) / dt)),
       z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
@@ -7277,6 +7306,7 @@ class GameRoom extends Room {
     const fromY = p.y;
     const yaw = clampN(m.yaw, -10, 10);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
+    if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : 'floor' });
     if (deityFlight && this.fallState) this.fallState.delete(client.sessionId);
     else this.trackAcceptedMoveFall(client, fromY, p.y);
     if (!p.dgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);

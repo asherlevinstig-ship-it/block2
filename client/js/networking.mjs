@@ -2185,6 +2185,13 @@ function netAttachRoom(room,name,client){
     room.onMessage('eventAfk', m=>eventAfk(m));
     room.onMessage('eventCancelled', m=>eventCancelled(m));
     room.onMessage('eventTeleport', m=>applyEventTeleport(m));
+    room.onMessage('positionCorrection', m=>{
+      if(!m||!Number.isFinite(+m.x)||!Number.isFinite(+m.y)||!Number.isFinite(+m.z))return;
+      player.pos.set(+m.x,+m.y,+m.z);
+      if(player.vel)player.vel.set(0,0,0);
+      if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+      if(m.reason==='town_floor')showName('Returned to safe town ground');
+    });
     room.onMessage('eventComplete', m=>eventCompleted(m));
     room.onMessage('eventFailed', m=>eventFailed(m));
     room.onMessage('eventResult', m=>showEventResult(m));

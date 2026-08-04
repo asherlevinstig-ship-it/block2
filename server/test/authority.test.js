@@ -1372,6 +1372,31 @@ test('movement into solid terrain is rejected server-side (anti-noclip)',()=>{
   assert.equal(p.y,gy,'an embedded player can escape to valid air');
 });
 
+test('movement below valid ground is snapped back to the authoritative floor',()=>{
+  const room=makeRoom(),client=makeClient('town_floor_hunter');
+  room.lastMoveMsg=new Map();
+  const x=W.TOWN.TC+14.5,z=W.TOWN.TC+27.5,ground=room.world.standHeight(x,z,W.WH-2);
+  seedPlayer(room,client,{x,z,y:-0.94,hp:20});
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  room.handleMove(client,{x,y:-0.94,z,yaw:Math.PI});
+  const p=room.state.players.get(client.sessionId);
+  assert.equal(p.y>=ground,true,'reported below-town-floor positions are corrected upward');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),true);
+});
+
+test('movement cannot tunnel through a thin wall between valid air cells',()=>{
+  const room=makeRoom(),client=makeClient('wall_tunnel_hunter');
+  room.lastMoveMsg=new Map();
+  const y=14.05,z=150.5;
+  for(let by=14;by<=15;by++)room.world.setB(151,by,150,W.B.STONE);
+  seedPlayer(room,client,{x:150.25,z,y});
+  const p=room.state.players.get(client.sessionId);
+  room.lastMoveMsg.set(client.sessionId,Date.now()-250);
+  room.handleMove(client,{x:152.25,y,z,yaw:0});
+  assert.equal(p.x,150.25,'crossing through the wall is rejected even when the destination is air');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='wall'),true);
+});
+
 test('server fall authority damages hard landings and Feather Step absorbs sane drops',()=>{
   const hardRoom=makeRoom(),hard=makeClient('hard_landing');
   hardRoom.lastMoveMsg=new Map();seedPlayer(hardRoom,hard,{x:140,z:140,y:25,hp:20});
@@ -8173,6 +8198,26 @@ test('generated dungeons use compact instance-local grids', () => {
   for (const room of d.rooms) {
     assert.equal(room.x + room.rx < d.world.width, true, 'rooms fit the compact x extent');
     assert.equal(room.z + room.rz < d.world.depth, true, 'rooms fit the compact z extent');
+  }
+});
+
+test('generated dungeon rooms and spawns have floor and head clearance across ranks', () => {
+  const seeds = [0x11, 0x5eed1234, 0xc0ffee, 0xabcdef];
+  for (let rank = 0; rank <= 4; rank++) for (const seed of seeds) {
+    const d = D.generateDungeon(rank, seed);
+    const solid = AI.makeSolid(d.world);
+    const probes = [
+      { label: 'entrance', x: d.entrance.x, z: d.entrance.z },
+      { label: 'boss', x: d.bossRoom.x, z: d.bossRoom.z },
+      ...d.rooms.map((room, i) => ({ label: 'room-' + i, x: room.x, z: room.z })),
+      ...d.spawns.map((spawn, i) => ({ label: 'spawn-' + i, x: spawn.x, z: spawn.z })),
+    ];
+    for (const probe of probes) {
+      const y = D.standHeightIn(d.world, probe.x, probe.z, 12);
+      assert.ok(y > 0, `rank ${rank} seed ${seed} ${probe.label} has floor`);
+      assert.equal(solid(Math.floor(probe.x), Math.floor(y + .2), Math.floor(probe.z)), false, `rank ${rank} seed ${seed} ${probe.label} feet are clear`);
+      assert.equal(solid(Math.floor(probe.x), Math.floor(y + 1.5), Math.floor(probe.z)), false, `rank ${rank} seed ${seed} ${probe.label} head is clear`);
+    }
   }
 });
 
