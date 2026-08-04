@@ -2552,7 +2552,7 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(networking,/Stay as a floating spirit/);
   assert.match(networking,/floating orb-ghost/);
   assert.match(networking,/hp=0; renderBars\(\);[\s\S]*buttonLabel:'RESPAWN IN TOWN'/);
-  assert.match(networking,/dungeonSpiritQuit[\s\S]*refreshPlayUi\(\);resumeGameplayCamera\(\)/);
+  assert.match(networking,/dungeonSpiritQuit[\s\S]*NETWORK\.returnToPrimary\(\)\.then\(finishReturn\)\.catch\(finishReturn\)/);
   assert.doesNotMatch(networking,/RESPAWN AT GATE/);
   assert.match(styles,/#deathrecap/);
   assert.match(styles,/#deathrespawn/);
@@ -2562,13 +2562,17 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
 });
 
 test('admin quick gate opens a ranked dungeon picker instead of auto-cycling',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(networking,/function openAdminDungeonPicker\(\)/);
+  assert.match(networking,/BlockcraftAdminDungeonPicker=Object\.freeze/);
   assert.match(networking,/BlockcraftDungeonPools/);
   assert.match(networking,/data-dungeon-index/);
   assert.match(networking,/NET\.room\.send\('adminQuickGate',\{index\}\)/);
   assert.match(networking,/e\.code!==['"]Digit9['"]/);
+  assert.match(combat,/BlockcraftAdminDungeonPicker&&globalThis\.BlockcraftAdminDungeonPicker\.open&&globalThis\.BlockcraftAdminDungeonPicker\.open\(\)/);
+  assert.doesNotMatch(combat,/e\.code===['"]Digit9['"][\s\S]{0,420}NET\.room\.send\('adminQuickGate',\{\}\)/);
   assert.match(styles,/#admindungeonpicker/);
   assert.match(styles,/\.admindungeon-cards/);
 });

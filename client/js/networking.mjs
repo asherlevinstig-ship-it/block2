@@ -547,6 +547,11 @@ function openAdminDungeonPicker(){
   refreshPlayUi();
   return true;
 }
+globalThis.BlockcraftAdminDungeonPicker=Object.freeze({
+  open:openAdminDungeonPicker,
+  close:closeAdminDungeonPicker,
+  isOpen:()=>!!(adminDungeonPickerEl&&adminDungeonPickerEl.classList.contains('show')),
+});
 document.addEventListener('keydown',e=>{
   if(e.code==='Escape'&&adminDungeonPickerEl&&adminDungeonPickerEl.classList.contains('show')){
     e.preventDefault();e.stopImmediatePropagation();closeAdminDungeonPicker();return;
@@ -1927,10 +1932,24 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('dungeonSpiritQuit', m=>{
       hideDungeonSpirit();
-      if(dim==='dungeon')exitDungeon(true);
-      if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
-      hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();
-      setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
+      const finishReturn=()=>{
+        if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){
+          player.pos.set(m.x,m.y,m.z);
+          if(player&&player.vel)player.vel.set(0,0,0);
+        }
+        hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();
+        if(typeof overlay!=='undefined'&&overlay)overlay.classList.add('hidden');
+        if(typeof loadscreen!=='undefined'&&loadscreen)loadscreen.classList.add('hidden');
+        setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
+      };
+      if(dim==='dungeon'&&NET.roomName==='dungeon'&&NETWORK&&NETWORK.returnToPrimary){
+        NET.dgn='';
+        exitDungeon(true);
+        NETWORK.returnToPrimary().then(finishReturn).catch(finishReturn);
+      }else{
+        if(dim==='dungeon')exitDungeon(true);
+        finishReturn();
+      }
       if(m&&m.result){
         presentMajor(()=>showDungeonReward({ result:m.result, rank:m.result.rank, kind:m.result.kind, failed:true, reason:m.result.reason||'wipe' }, false));
         sysMsg(dungeonReturnRecap(m.result,false));

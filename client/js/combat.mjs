@@ -5211,9 +5211,10 @@ addEventListener('keydown', e=>{
     if(dim==='dungeon'){
       exitDungeon(true);
       showName('Returned from quick gate - press 9 again for next dungeon');
+    }else if(globalThis.BlockcraftAdminDungeonPicker&&globalThis.BlockcraftAdminDungeonPicker.open&&globalThis.BlockcraftAdminDungeonPicker.open()){
+      showName('Choose an admin dungeon gate');
     }else if(NET.on&&NET.room){
-      NET.room.send('adminQuickGate',{});
-      showName('Opening admin quick gate...');
+      showName('Dungeon picker is still loading - try 9 again');
     }else if(gateSystemUnlocked()){
       spawnGate();
       if(gate) enterDungeon(gate);
