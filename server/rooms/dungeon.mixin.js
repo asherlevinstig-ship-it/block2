@@ -902,6 +902,14 @@ class DungeonMixin {
     const base = preferred || fallback;
     const candidates = [];
     const solid = world ? AI.makeSolid(world) : null;
+    const finish = hit => {
+      const safe = hit || { x: Math.floor(fallback.x) + .5, y: 9.01, z: Math.floor(fallback.z) + .5 };
+      if (inst) {
+        inst.safeSpawn = { x: safe.x, y: safe.y, z: safe.z };
+        inst.spawnSafeRadius = this.dungeonSpawnSafeRadius ? this.dungeonSpawnSafeRadius(inst) : 9;
+      }
+      return safe;
+    };
     const push = pos => {
       if (!pos) return;
       const x = Number.isFinite(pos.x) ? pos.x : fallback.x;
@@ -921,7 +929,7 @@ class DungeonMixin {
     };
     for (const pt of candidates) {
       const hit = tryPoint(pt);
-      if (hit) return hit;
+      if (hit) return finish(hit);
     }
     const startX = Math.floor((base && base.x) || fallback.x);
     const startZ = Math.floor((base && base.z) || fallback.z);
@@ -929,16 +937,16 @@ class DungeonMixin {
       for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
         if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
         const hit = tryPoint({ x: startX + dx + .5, z: startZ + dz + .5 });
-        if (hit) return hit;
+        if (hit) return finish(hit);
       }
     }
     push(inst && inst.bossRoom);
     if (inst && Array.isArray(inst.rooms)) for (const rm of inst.rooms) push(rm);
     for (let i = 2; i < candidates.length; i++) {
       const hit = tryPoint(candidates[i]);
-      if (hit) return hit;
+      if (hit) return finish(hit);
     }
-    return { x: Math.floor(fallback.x) + .5, y: 9.01, z: Math.floor(fallback.z) + .5 };
+    return finish(null);
   }
   gateEntryPayload(g, inst) {
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
@@ -1171,6 +1179,7 @@ class DungeonMixin {
   createInstance(g) {
     const d = D.generateDungeon(g.rank, g.seed, g.dungeonId);
     const inst = new DungeonInstance(d, g, this);
+    this.dungeonSafeSpawn(inst, inst.entrance);
     inst.lootChestTotal = this.countGeneratedDungeonChests(d.world);
     inst.lootChestLocations = this.generatedDungeonChestLocations(d.world);
     this.instances[g.id] = inst;
@@ -1265,16 +1274,46 @@ class DungeonMixin {
     return inst;
   }
 
+  dungeonSafeMobPoint(inst, x, z, wbuf) {
+    let mx = x, mz = z;
+    const dgn = inst && inst.id || '';
+    if (inst && this.isInDungeonSpawnSafeZone && this.isInDungeonSpawnSafeZone(dgn, mx, mz, 1.5)) {
+      const safe = this.dungeonSpawnSafeCenter ? this.dungeonSpawnSafeCenter(inst) : null;
+      const solid = wbuf ? AI.makeSolid(wbuf) : null;
+      const clearPoint = (px, pz) => {
+        if (!solid) return true;
+        const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(wbuf, px, pz) : D.standHeightIn(wbuf, px, pz, 12);
+        return gy > 0 && !solid(Math.floor(px), Math.floor(gy + .2), Math.floor(pz)) && !solid(Math.floor(px), Math.floor(gy + 1.5), Math.floor(pz));
+      };
+      if (safe) {
+        let best = null;
+        for (let r = Math.ceil(safe.r + 2); r <= Math.ceil(safe.r + 10) && !best; r++) {
+          for (let i = 0; i < 16 && !best; i++) {
+            const a = (i / 16) * Math.PI * 2;
+            const px = Math.floor(safe.x + Math.cos(a) * r) + .5;
+            const pz = Math.floor(safe.z + Math.sin(a) * r) + .5;
+            if (!this.isInDungeonSpawnSafeZone(dgn, px, pz, 1) && clearPoint(px, pz)) best = { x: px, z: pz };
+          }
+        }
+        if (best) { mx = best.x; mz = best.z; }
+      }
+    }
+    return { x: mx, z: mz };
+  }
   addDungeonMob(dgn, x, z, kind, hp, dmg, speed, wbuf, rank) {
     const id = String(++this.mobSeq);
     const mob = new Mob();
+    const inst = this.activeDungeonInstance ? this.activeDungeonInstance(dgn) : null;
+    const safePoint = this.dungeonSafeMobPoint(inst, x, z, wbuf);
+    const mx = safePoint.x, mz = safePoint.z;
     const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(wbuf, x, z) : D.standHeightIn(wbuf, x, z, 12);
-    mob.x = x; mob.y = gy > 0 ? gy : 9; mob.z = z;
+    const mgy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(wbuf, mx, mz) : D.standHeightIn(wbuf, mx, mz, 12);
+    mob.x = mx; mob.y = mgy > 0 ? mgy : (gy > 0 ? gy : 9); mob.z = mz;
     mob.maxHp = mob.hp = hp;
     mob.kind = kind;
     mob.dgn = dgn;
     this.state.mobs.set(id, mob);
-    this.mobMeta[id] = this.freshMeta(x, z, dmg, speed, kind, rank, kind === 'boss');
+    this.mobMeta[id] = this.freshMeta(mx, mz, dmg, speed, kind, rank, kind === 'boss');
     return id;
   }
   // ---------------- shard environmental hazards (server-authored) ----------------
@@ -1287,13 +1326,15 @@ class DungeonMixin {
   spawnHazMob(inst, kind, x, z, hp, withMeta, dmg, speed) {
     const id = String(++this.mobSeq);
     const mob = new Mob();
-    const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, 12);
-    mob.x = x; mob.y = gy > 0 ? gy : 9; mob.z = z;
+    const safePoint = this.dungeonSafeMobPoint(inst, x, z, inst.world);
+    const mx = safePoint.x, mz = safePoint.z;
+    const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, mx, mz) : D.standHeightIn(inst.world, mx, mz, 12);
+    mob.x = mx; mob.y = gy > 0 ? gy : 9; mob.z = mz;
     mob.maxHp = mob.hp = hp;
     mob.kind = kind;
     mob.dgn = inst.id;
     this.state.mobs.set(id, mob);
-    if (withMeta) this.mobMeta[id] = this.freshMeta(x, z, dmg, speed, kind, inst.rank, true);
+    if (withMeta) this.mobMeta[id] = this.freshMeta(mx, mz, dmg, speed, kind, inst.rank, true);
     return { id, mob };
   }
   // hazard damage guard: only hit players still alive and inside this instance
@@ -1302,6 +1343,7 @@ class DungeonMixin {
     const p = this.state.players.get(sid);
     const hp = this.playerHp.get(sid);
     if (!p || p.dgn !== dgn || !hp || hp.hp <= 0) return;
+    if (this.isInDungeonSpawnSafeZone && this.isInDungeonSpawnSafeZone(dgn, p.x, p.z, .75)) return;
     const c = this.clients.find(cl => cl.sessionId === sid);
     if (c) this.hurtPlayer(c, dmg, reason);
   }

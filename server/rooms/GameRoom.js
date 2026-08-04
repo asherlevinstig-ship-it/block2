@@ -2731,6 +2731,22 @@ class GameRoom extends Room {
     if (this.isDungeonRoom && this.instance && (!id || this.instance.id === id)) return this.instance;
     return null;
   }
+  dungeonSpawnSafeRadius(inst = null) {
+    const raw = inst && Number.isFinite(+inst.spawnSafeRadius) ? +inst.spawnSafeRadius : 9;
+    return Math.max(6, Math.min(14, raw));
+  }
+  dungeonSpawnSafeCenter(inst) {
+    if (!inst) return null;
+    const s = inst.safeSpawn;
+    if (!s || !Number.isFinite(+s.x) || !Number.isFinite(+s.z)) return null;
+    return { x: +s.x, y: Number.isFinite(+s.y) ? +s.y : 0, z: +s.z, r: this.dungeonSpawnSafeRadius(inst) };
+  }
+  isInDungeonSpawnSafeZone(dgn, x, z, extra = 0) {
+    const inst = this.activeDungeonInstance(dgn);
+    const safe = this.dungeonSpawnSafeCenter(inst);
+    if (!safe || !Number.isFinite(+x) || !Number.isFinite(+z)) return false;
+    return Math.hypot(+x - safe.x, +z - safe.z) <= safe.r + Math.max(0, +extra || 0);
+  }
   spaceSolid(dgn) {
     if (dgn && /^tutorial-job_/.test(String(dgn))) return () => false;
     if (dgn && typeof this.eventSpaceSolid === 'function') {
@@ -7493,7 +7509,7 @@ class GameRoom extends Room {
       a.life -= dt;
       if (a.life <= 0) { this.sArrows.splice(i, 1); continue; }
       const solid = this.spaceSolid(a.dgn);
-      const targets = spaces[a.dgn] || [];
+      const targets = (spaces[a.dgn] || []).filter(s => !a.dgn || !this.isInDungeonSpawnSafeZone(a.dgn, s.p && s.p.x, s.p && s.p.z, .75));
       let done = false;
       for (let s = 0; s < 3 && !done; s++) {
         const r = AI.arrowStep(a, dt / 3, solid, targets);
@@ -7525,7 +7541,8 @@ class GameRoom extends Room {
       const solid = this.spaceSolid(m.dgn);
       const candidates = (spaces[m.dgn || ''] || []).filter(s => {
         const hp = s && this.playerHp.get(s.sid);
-        return s && s.p && s.p.invisible !== true && (!hp || hp.hp > 0);
+        return s && s.p && s.p.invisible !== true && (!hp || hp.hp > 0) &&
+          (!m.dgn || !this.isInDungeonSpawnSafeZone(m.dgn, s.p.x, s.p.z, .75));
       });
       meta.atkCd -= dt;
       // Frenzied shard affix: wounded dungeon trash gains attack and move speed
@@ -7799,6 +7816,23 @@ class GameRoom extends Room {
       if (!rooted && d > .12) {
         const spd = meta.speed * moveMul * frenzyMove * slowMove;
         let nx = m.x + dx / d * spd * dt, nz = m.z + dz / d * spd * dt;
+        if (m.dgn && this.isInDungeonSpawnSafeZone(m.dgn, nx, nz, .35)) {
+          const inst = this.activeDungeonInstance(m.dgn);
+          const safe = this.dungeonSpawnSafeCenter(inst);
+          if (safe) {
+            const ox = m.x - safe.x, oz = m.z - safe.z;
+            const len = Math.hypot(ox, oz) || 1;
+            nx = safe.x + ox / len * (safe.r + .85);
+            nz = safe.z + oz / len * (safe.r + .85);
+          }
+          meta.tx = nx;
+          meta.tz = nz;
+          meta.alert = false;
+          meta.drawT = 0;
+          meta.lungeT = 0;
+          meta.lunging = 0;
+          m.state = '';
+        }
         if (!m.dgn && !this.isAnimalKind(m.kind) && this.isTownProtected(nx, nz)) {
           const pad = W.TOWN.HS + 3;
           const ox = m.x - W.TOWN.TC, oz = m.z - W.TOWN.TC;

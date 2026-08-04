@@ -697,6 +697,58 @@ function putInstance(room, opts) {
   return inst;
 }
 
+test('dungeon spawn safe zone keeps the entry pad clear and untargetable by mobs', () => {
+  const room = makeRoom();
+  room.mobSeq = 0;
+  const gate = makeGate('spawn-safe-dgn', 72.5, 73.5, 1);
+  const inst = room.createInstance(gate);
+  const safe = room.dungeonSpawnSafeCenter(inst);
+  assert.ok(safe, 'a created dungeon records a spawn safe-zone center');
+  assert.equal(room.isInDungeonSpawnSafeZone(inst.id, safe.x, safe.z), true);
+
+  const relocatedId = room.addDungeonMob(inst.id, safe.x, safe.z, 'zombie', 12, 3, 1.2, inst.world, inst.rank);
+  const relocated = room.state.mobs.get(relocatedId);
+  assert.ok(relocated, 'the mob was created');
+  assert.equal(room.isInDungeonSpawnSafeZone(inst.id, relocated.x, relocated.z, 1), false,
+    'mobs authored on the entry pad are relocated outside the spawn safe zone');
+  const haz = room.spawnHazMob(inst, 'ghost', safe.x, safe.z, 1, true, 2, 3);
+  assert.equal(room.isInDungeonSpawnSafeZone(inst.id, haz.mob.x, haz.mob.z, 1), false,
+    'hazard-spawned dungeon mobs also relocate outside the spawn safe zone');
+
+  const client = makeClient('spawn-safe-runner');
+  room.clients.push(client);
+  seedPlayer(room, client, { dgn: inst.id, x: safe.x, y: safe.y, z: safe.z, hp: 20 });
+  inst.addPlayer(client.sessionId);
+  const p = room.state.players.get(client.sessionId);
+
+  const archerId = String(++room.mobSeq);
+  const archer = new Mob();
+  archer.x = safe.x + safe.r + 5;
+  archer.y = safe.y;
+  archer.z = safe.z;
+  archer.kind = 'skeleton';
+  archer.dgn = inst.id;
+  archer.hp = archer.maxHp = 20;
+  room.state.mobs.set(archerId, archer);
+  const meta = room.freshMeta(archer.x, archer.z, 3, 1.3, 'skeleton', inst.rank, true);
+  meta.alert = true;
+  meta.shootCd = 0;
+  meta.drawT = 0;
+  room.mobMeta[archerId] = meta;
+
+  room.simulateMob(archer, archerId, meta, .6, { [inst.id]: [{ sid: client.sessionId, p }] });
+  assert.equal(meta.drawT || 0, 0, 'dungeon mobs do not start aiming at players standing in the spawn safe zone');
+  assert.equal(room.sArrows.length, 0, 'dungeon mobs do not fire into the spawn safe zone');
+
+  room.sArrows.push({
+    x: safe.x + 4, y: safe.y + 1.4, z: safe.z,
+    vx: -16, vy: 0, vz: 0,
+    dgn: inst.id, dmg: 10, bolt: false, effect: '', life: 1,
+  });
+  room.stepProjectiles(.1, { [inst.id]: [{ sid: client.sessionId, p }] });
+  assert.equal(room.playerHp.get(client.sessionId).hp, 20, 'hostile projectiles do not damage players on the spawn pad');
+});
+
 // Register a participant on a given team at a given arena position.
 function addKingParticipant(room, ev, name, teamId, pos) {
   const c = makeClient(name);
