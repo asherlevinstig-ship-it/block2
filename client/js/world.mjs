@@ -8882,6 +8882,32 @@ function gainXP(n){
   renderBars();
 }
 let lastDamageSource='';
+let pendingServerDeathOutcomeTimer=null;
+function deathOutcomeUiVisible(){
+  const limbo=document.getElementById('deathlimbo');
+  const spirit=document.getElementById('dungeonspirit');
+  return document.body.classList.contains('death-active')
+    || !!(limbo&&limbo.classList.contains('show'))
+    || !!(spirit&&spirit.classList.contains('show'));
+}
+function clearPendingServerDeathOutcome(){
+  if(pendingServerDeathOutcomeTimer){clearTimeout(pendingServerDeathOutcomeTimer);pendingServerDeathOutcomeTimer=null;}
+}
+function scheduleServerDeathOutcomeFallback(source,detail=null){
+  clearPendingServerDeathOutcome();
+  pendingServerDeathOutcomeTimer=setTimeout(()=>{
+    pendingServerDeathOutcomeTimer=null;
+    if(hp>0||deathOutcomeUiVisible())return;
+    const recent=detail&&detail.recentHits||'';
+    showDeathScreen(deathCauseText(source),'Respawn in the Town of Beginnings, or wait for resurrection if a party ability is available.',recent,{
+      kind:'town',
+      buttonLabel:'RESPAWN IN TOWN',
+      serverRespawn:true,
+      onRespawn:()=>{hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();}
+    });
+    sysMsg('<b>You died.</b> The death state recovered locally because the server outcome did not arrive in time. Respawn to return safely to town.','minor');
+  },950);
+}
 function damagePlayer(n,source='unknown',detail=null){
   if(hp<=0 || sleeping) return;
   if(n>0) lastDamageSource=source;
@@ -8928,7 +8954,7 @@ function damagePlayer(n,source='unknown',detail=null){
   if(hp<=0){
     // In multiplayer the server follows a lethal hurt packet with the actual outcome
     // (dungeon spirit, limbo, or world death). Do not run the local solo death path first.
-    if(NET.on && String(source).startsWith('server:')) return;
+    if(NET.on && String(source).startsWith('server:')){scheduleServerDeathOutcomeFallback(source,detail);return;}
     die();
   }
 }
@@ -8988,6 +9014,7 @@ function defaultDeathRespawnDestination(kind='town'){
   return {x:TOWN_RETURN_SPAWN.x,y:TOWN_RETURN_SPAWN.y,z:TOWN_RETURN_SPAWN.z};
 }
 function showDeathScreen(cause,sub,recap='',opts={}){
+  clearPendingServerDeathOutcome();
   if(!deathEl){
     deathEl=document.createElement('div'); deathEl.id='deathscreen';
     deathEl.innerHTML='<div id="deathtint"></div><div id="deathpanel"><div id="deathtitle">YOU DIED</div><div id="deathcause"></div><div id="deathsub"></div><div id="deathrecap"></div><button id="deathrespawn" type="button">RESPAWN</button></div>';
@@ -9010,6 +9037,9 @@ function showDeathScreen(cause,sub,recap='',opts={}){
     btn.style.display=needsClick?'inline-block':'none';
   }
   deathRespawnHandler=()=>{
+    if(opts.serverRespawn!==false&&NET.on&&NET.room&&needsClick){
+      try{NET.room.send('respawnTown',{reason:opts.reason||'death_screen'});}catch(_e){}
+    }
     const destination=opts.destination===false?null:(opts.destination||defaultDeathRespawnDestination(opts.kind||'town'));
     if(destination&&player&&player.pos){
       player.pos.set(Number(destination.x)||TOWN_RETURN_SPAWN.x,Number(destination.y)||TOWN_RETURN_SPAWN.y,Number(destination.z)||TOWN_RETURN_SPAWN.z);

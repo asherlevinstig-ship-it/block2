@@ -1929,6 +1929,15 @@ function netAttachRoom(room,name,client){
         onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
       });
     });
+    room.onMessage('worldRespawn',m=>{
+      if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
+      if(m&&Number.isFinite(+m.hp))hp=Math.max(1,Math.min(maxHp(),+m.hp));else hp=maxHp();
+      if(m&&Number.isFinite(+m.mp))mp=Math.max(0,Math.min(maxMp(),+m.mp));else mp=maxMp();
+      if(m&&Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));else sp=maxSp();
+      if(m&&Number.isFinite(+m.hunger))hunger=Math.max(0,Math.min(maxHunger(),+m.hunger));else hunger=maxHunger();
+      renderBars();
+      sysMsg('<b>Respawned.</b> You returned safely to the Town of Beginnings.');
+    });
     room.onMessage('dungeonFailed', m=>{
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);

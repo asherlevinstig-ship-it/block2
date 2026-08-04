@@ -2248,8 +2248,10 @@ function tick(now){
     updateClaimHover();
   }
 
-  const gameplayMoveAllowed=combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true);
-  if(locked||gameplayMoveAllowed){
+  const deathControlLocked=hp<=0||document.body.classList.contains('death-active')||!!(document.getElementById('deathlimbo')&&document.getElementById('deathlimbo').classList.contains('show'))||!!(document.getElementById('dungeonspirit')&&document.getElementById('dungeonspirit').classList.contains('show'));
+  if(deathControlLocked&&player&&player.vel)player.vel.set(0,0,0);
+  const gameplayMoveAllowed=!deathControlLocked&&(combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true));
+  if(!deathControlLocked&&(locked||gameplayMoveAllowed)){
     const mouseLook=combatApi.consumeMouseLookDelta?combatApi.consumeMouseLookDelta():{x:0,y:0};
     const lookX=gameplayMoveAllowed?((keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0)):0;
     const lookY=gameplayMoveAllowed?((keys['ArrowUp']?1:0)-(keys['ArrowDown']?1:0)):0;

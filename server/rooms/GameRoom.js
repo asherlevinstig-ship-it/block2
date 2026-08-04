@@ -709,6 +709,7 @@ class GameRoom extends Room {
     this.onMessage('dungeonPing', (client, m) => this.handleDungeonPing(client, m));
     this.onMessage('exitGate', (client) => this.leaveInstance(client.sessionId));
     this.onMessage('quitDungeonSpirit', (client) => this.handleQuitDungeonSpirit(client));
+    this.onMessage('respawnTown', (client, m) => this.handleRespawnTown(client, m));
     this.onMessage('useGateKey', (client, m) => this.handleUseGateKey(client, m));
     this.onMessage('attuneShard', (client, m) => this.handleAttuneShard(client, m));
     this.onMessage('craft', (client, m) => this.handleCraft(client, m));
@@ -5916,6 +5917,48 @@ class GameRoom extends Room {
       this.sendDungeonStatus(dgn);
     }
     client.send('dungeonSpiritQuit', result ? { ...town, result } : town);
+    return true;
+  }
+  handleRespawnTown(client, m = {}) {
+    if (!client || this.rateLimited(client, 'respawnTown', 4, 8)) return false;
+    const p = this.state.players.get(client.sessionId);
+    if (p && p.dgn && p.spirit) return this.handleQuitDungeonSpirit(client);
+    const rec = this.profileFor(client);
+    const town = townReturnPoint(W.TOWN.G + 2);
+    const hp = this.ensurePlayerHp(client);
+    const hunger = this.ensurePlayerHunger(client);
+    const maxMp = this.maxMpForProfile(rec && rec.prof);
+    const maxSp = this.maxStaminaForProfile(rec && rec.prof);
+    const ability = this.abilityState.get(client.sessionId) || { mp: maxMp, maxMp, sp: maxSp, maxSp, cds: {}, last: Date.now() };
+    hp.hp = hp.max;
+    hunger.hunger = hunger.max;
+    hunger.acc = 0;
+    hunger.syncAcc = 0;
+    ability.mp = maxMp;
+    ability.maxMp = maxMp;
+    ability.sp = maxSp;
+    ability.maxSp = maxSp;
+    ability.last = Date.now();
+    this.abilityState.set(client.sessionId, ability);
+    if (p) {
+      p.spirit = false;
+      p.dim = 'overworld';
+      p.dgn = '';
+      p.x = town.x;
+      p.y = town.y;
+      p.z = town.z;
+      p.mount = '';
+    }
+    this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    if (rec && rec.prof) {
+      rec.prof.pos = [town.x, town.y, town.z];
+      rec.prof.activeRoom = null;
+      this.syncProfileVitals(client, rec.prof);
+      this.dirtyPlayers.add(rec.token);
+      this.sendProfile(client, rec.prof);
+    }
+    this.sendHungerSync(client, hunger);
+    client.send('worldRespawn', { ...town, reason: String(m && m.reason || 'death').slice(0, 32), hp: Math.ceil(hp.hp), maxHp: hp.max, mp: Math.ceil(ability.mp), maxMp: ability.maxMp, sp: Math.ceil(ability.sp), maxSp: ability.maxSp, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
     return true;
   }
   updatePlayerHunger(dt) {
