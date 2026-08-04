@@ -1720,7 +1720,7 @@ test('remote player tags receive team helpers without crashing the frame loop',(
   assert.match(networking,/teamCol:\(\.\.\.args\)=>SOCIAL\.teamCol\(\.\.\.args\)/);
   assert.match(networking,/teamName:\(\.\.\.args\)=>SOCIAL\.teamName\(\.\.\.args\)/);
   assert.match(networking,/function localSchoolId\(\)\{/);
-  assert.match(networking,/text:'SCHOOL  '\+schoolId\.slice\(0,18\)/);
+  assert.match(networking,/text:'SCHOOL {2}'\+schoolId\.slice\(0,18\)/);
   assert.match(networking,/const panelH=48\+rows\.length\*22;/);
   assert.match(networking,/schoolId \}\)/);
 });
@@ -1948,7 +1948,7 @@ test('block placement uses Minecraft-style targeted block face at build reach',(
 
 test('secondary action prioritizes nearby characters before hotbar items',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
-  const match=combat.match(/function secondaryAction\(\)\{([\s\S]*?)\n  const spared=mobUnderCrosshair/);
+  const match=combat.match(/function secondaryAction\(\)\{([\s\S]*?)\n {2}const spared=mobUnderCrosshair/);
   assert.ok(match, 'secondaryAction body is present');
   const body=match[1];
   const guardianIndex=body.indexOf('guardianUnderCrosshair(8)||nearbyGuardian()');
@@ -2359,7 +2359,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/function nearQuestionHallTownPortal\(range=4\.8\)/);
   assert.match(combat,/title:'Return Portal',small:'Travel back to Town of Beginnings'/);
   assert.match(combat,/if\(nearQuestionHallTownPortal\(\)\)\{ if\(typeof exitQuestionRoomToTown==='function'\)exitQuestionRoomToTown\(\); return; \}/);
-  assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n  showFirstTownArrivalChoice,/);
+  assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n {2}showFirstTownArrivalChoice,/);
   assert.match(networking,/combatApi\.shouldShowFirstTownArrivalChoice&&combatApi\.shouldShowFirstTownArrivalChoice\(\)/);
   assert.match(networking,/setTimeout\(\(\)=>combatApi\.showFirstTownArrivalChoice&&combatApi\.showFirstTownArrivalChoice\(\),120\)/);
   assert.match(dimensions,/const QUESTION_ROOM=\{x:930,z:855,G:18,R:28\}/);
@@ -2370,7 +2370,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(dimensions,/function exitQuestionRoomToTown\(\)/);
   assert.match(dimensions,/function enterQuestionRoom\(\)/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
-  assert.match(dimensions,/enterQuestionRoom,\s*\n  exitQuestionRoom,\s*\n  exitQuestionRoomToTown,/);
+  assert.match(dimensions,/enterQuestionRoom,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);
 });
 
 test('status modal presents a styled RPG character sheet instead of browser-default controls',()=>{

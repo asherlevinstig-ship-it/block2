@@ -568,7 +568,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(patchedBody.profile.vitals.sp, 120);
     assert.deepEqual(patchedBody.profile.utilityUnlocks, ['compass', 'trail_sense']);
     assert.deepEqual(patchedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
-    assert.deepEqual(patchedBody.profile.inv, [{ id: 185, count: 1 }]);
+    assert.deepEqual(patchedBody.profile.inv, [{ id: 221, count: 1, locked: true, source: 'starter' }, { id: 185, count: 1 }]);
     assert.equal(profiles.get('student_42').S.lvl, 12);
     assert.equal(profiles.get('student_42').S.xp, 456);
     assert.equal(profiles.get('student_42').S.pts, 9);
@@ -587,7 +587,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.deepEqual(profiles.get('student_42').utilityUnlocks, ['compass', 'trail_sense']);
     assert.deepEqual(profiles.get('student_42').utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
     assert.equal(profiles.get('student_42').forceJobChoice, false);
-    assert.deepEqual(profiles.get('student_42').inv, [{ id: 185, count: 1 }]);
+    assert.deepEqual(profiles.get('student_42').inv, [{ id: 221, count: 1, locked: true, source: 'starter' }, { id: 185, count: 1 }]);
     assert.equal(profiles.get('student_42').armor.id, 137);
     assert.equal(profiles.get('student_42').armor.armorType, 'aegis');
     assert.equal(profiles.get('student_42').armor.rarity, 'mythic');
@@ -604,7 +604,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     assert.equal(detailedBody.profile.path, 'verdant');
     assert.equal(detailedBody.profile.abilitySpec, 'grovekeeper');
     assert.deepEqual(detailedBody.profile.utilityLoadout, { active: 'trail_sense', passive: ['compass'] });
-    assert.deepEqual(detailedBody.profile.inv, [{ id: 185, count: 1 }]);
+    assert.deepEqual(detailedBody.profile.inv, [{ id: 221, count: 1, locked: true, source: 'starter' }, { id: 185, count: 1 }]);
     assert.equal(detailedBody.profile.armor.id, 137);
     assert.equal(detailedBody.profile.armor.armorType, 'aegis');
 
@@ -624,7 +624,7 @@ test('admin profile lookup reports the resolved account id and hunter name', { c
     ));
     assert.equal(allArmor.status, 200);
     const allArmorBody = await allArmor.json();
-    assert.deepEqual(allArmorBody.profile.inv.map(s => s.id), [185, 211, 212, 136, 184, 213, 137]);
+    assert.deepEqual(allArmorBody.profile.inv.map(s => s.id), [221, 185, 211, 212, 136, 184, 213, 137]);
     assert.equal(profiles.get('student_42').armor.id, 137, 'bulk armor grant does not replace equipped armor');
 
     const badSpec = await f.request('/auth/admin/player-profile/patch', jsonPost(
