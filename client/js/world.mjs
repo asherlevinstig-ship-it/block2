@@ -9078,6 +9078,8 @@ function showDeathScreen(cause,sub,recap='',opts={}){
     deathEl.classList.remove('show');
     document.body.classList.remove('death-active');
     deathRespawnHandler=null;
+    refreshPlayUi();
+    if(needsClick)resumeGameplayCamera();
   };
   try{if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();}catch(_e){}
   document.body.classList.add('death-active');

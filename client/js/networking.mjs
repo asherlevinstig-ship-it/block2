@@ -502,6 +502,62 @@ let deathLimboState=null,deathLimboEl=null;
 let dungeonSpiritEl=null;
 let dungeonLobbyStartTimer=null;
 let localSpiritFx=null;
+let adminDungeonPickerEl=null;
+function closeAdminDungeonPicker(resume=true){
+  if(!adminDungeonPickerEl)return;
+  adminDungeonPickerEl.classList.remove('show');
+  document.body.classList.remove('game-modal-open');
+  if(resume){refreshPlayUi();resumeGameplayCamera();}
+}
+function openAdminDungeonPicker(){
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())||dim==='dungeon'||!NET.on||!NET.room)return false;
+  const pools=globalThis.BlockcraftDungeonPools;
+  if(!pools||!Array.isArray(pools.DUNGEON_POOLS))return false;
+  if(!adminDungeonPickerEl){
+    adminDungeonPickerEl=document.createElement('div');
+    adminDungeonPickerEl.id='admindungeonpicker';
+    adminDungeonPickerEl.setAttribute('role','dialog');
+    adminDungeonPickerEl.setAttribute('aria-modal','true');
+    adminDungeonPickerEl.innerHTML='<div class="admindungeon-panel"><div class="admindungeon-head"><div><small>ADMIN GATE TESTER</small><h2>Choose a Dungeon</h2><p>Join through the same dedicated DungeonRoom flow as a live Gate.</p></div><button type="button" data-close aria-label="Close dungeon picker">ESC</button></div><div class="admindungeon-list"></div></div>';
+    adminDungeonPickerEl.addEventListener('click',e=>{
+      if(e.target===adminDungeonPickerEl||e.target.closest('[data-close]')){closeAdminDungeonPicker();return;}
+      const choice=e.target.closest('button[data-dungeon-index]');
+      if(!choice||!NET.room)return;
+      const index=Math.max(0,choice.dataset.dungeonIndex|0);
+      choice.disabled=true;
+      NET.room.send('adminQuickGate',{index});
+      closeAdminDungeonPicker(true);
+      showName('Opening selected admin Gate...');
+    });
+    (document.getElementById('game')||document.body).appendChild(adminDungeonPickerEl);
+  }
+  const list=adminDungeonPickerEl.querySelector('.admindungeon-list');
+  list.innerHTML=pools.DUNGEON_POOLS.map((ids,rank)=>{
+    const rankName=RANKS[rank]&&RANKS[rank].n||String.fromCharCode(69-rank);
+    const cards=ids.map((id,slot)=>{
+      const def=pools.dungeonDefinition(rank,slot,id)||{};
+      const index=pools.DUNGEON_POOLS.slice(0,rank).reduce((n,p)=>n+p.length,0)+slot;
+      return '<button type="button" class="admindungeon-card" data-dungeon-index="'+index+'"><span class="admindungeon-rank">'+escHTML(rankName)+'-RANK</span><b>'+escHTML(def.name||id)+'</b><em>Boss: '+escHTML(def.boss||'Gate Monarch')+'</em><span>'+escHTML(def.preview||'A shifting ranked Gate.')+'</span><strong>JOIN DUNGEON</strong></button>';
+    }).join('');
+    return '<section><h3>'+escHTML(rankName)+'-Rank Gates</h3><div class="admindungeon-cards">'+cards+'</div></section>';
+  }).join('');
+  releasePointerLockWithoutCameraFallback(false);
+  document.body.classList.add('game-modal-open');
+  adminDungeonPickerEl.classList.add('show');
+  refreshPlayUi();
+  return true;
+}
+document.addEventListener('keydown',e=>{
+  if(e.code==='Escape'&&adminDungeonPickerEl&&adminDungeonPickerEl.classList.contains('show')){
+    e.preventDefault();e.stopImmediatePropagation();closeAdminDungeonPicker();return;
+  }
+  const tag=String(e.target&&e.target.tagName||'').toLowerCase();
+  const textEntry=tag==='input'||tag==='textarea'||tag==='select'||!!(e.target&&e.target.isContentEditable);
+  const anotherModal=uiOpen||statOpen||uiShellState.qOpen||document.body.classList.contains('game-modal-open');
+  if(e.code!=='Digit9'||e.repeat||dim==='dungeon'||textEntry||anotherModal)return;
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()))return;
+  e.preventDefault();e.stopImmediatePropagation();openAdminDungeonPicker();
+},true);
 function dungeonResultTimeText(ms){
   const sec=Math.max(0,Math.round((ms||0)/1000)),min=Math.floor(sec/60),s=sec%60;
   return min+':'+String(s).padStart(2,'0');
@@ -1874,6 +1930,7 @@ function netAttachRoom(room,name,client){
       if(dim==='dungeon')exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
       hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();
+      setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
       if(m&&m.result){
         presentMajor(()=>showDungeonReward({ result:m.result, rank:m.result.rank, kind:m.result.kind, failed:true, reason:m.result.reason||'wipe' }, false));
         sysMsg(dungeonReturnRecap(m.result,false));
@@ -1908,6 +1965,7 @@ function netAttachRoom(room,name,client){
       hideDeathLimbo();
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
       hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
+      setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
       sysMsg('<b>Returned from limbo.</b> Correct answers restored items; mistakes became public drops.');
     });
     room.onMessage('deathLimboReject',m=>sysMsg((m&&m.reason)==='rate'?'Slow down.':'That limbo answer was not accepted.'));

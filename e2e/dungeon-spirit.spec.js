@@ -19,6 +19,8 @@ test('a defeated dungeon player remains immobile as a spirit until choosing town
     password: 'correct horse dungeon spirit',
     hunterName: 'SpiritTester',
   });
+  const adventure=page.locator('[data-arrival-choice="adventure"]');
+  if(await adventure.isVisible())await adventure.click();
 
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', {
     action: 'prepareERankDungeon', dungeonId: 'mossbound_cellar', requestId: 'prepare',
@@ -28,6 +30,7 @@ test('a defeated dungeon player remains immobile as a spirit until choosing town
   expect(await page.evaluate(id => window.__BLOCKCRAFT_E2E__.walkToGate(id), gate.id)).toBe(gate.id);
   await page.evaluate(id => window.__BLOCKCRAFT_E2E__.send('enterGate', { id }), gate.id);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().lobby?.gateId)).toBe(gate.id);
+  if(await adventure.isVisible())await adventure.click();
   await page.getByRole('button', { name: 'READY', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dungeonId)).toBe(gate.id);
@@ -35,14 +38,16 @@ test('a defeated dungeon player remains immobile as a spirit until choosing town
   await page.evaluate(() => window.__BLOCKCRAFT_E2E__.send('e2eJourney', { action: 'becomeDungeonSpirit', requestId: 'die' }));
   await expect(page.locator('#dungeonspirit')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.hasLocalSpiritVisual())).toBe(true);
-  await expect(page.getByRole('button', { name: 'RETURN TO TOWN' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'RESPAWN IN TOWN' })).toBeVisible();
   const deathPos = await page.evaluate(() => window.__BLOCKCRAFT_E2E__.selfPosition());
   await page.waitForTimeout(500);
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.selfPosition())).toEqual(deathPos);
   expect(await page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('dungeon');
 
-  await page.getByRole('button', { name: 'RETURN TO TOWN' }).click();
+  await page.getByRole('button', { name: 'RESPAWN IN TOWN' }).click();
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().roomName)).toBe('blockcraft');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.status().dimension)).toBe('overworld');
   await expect.poll(() => page.evaluate(() => window.__BLOCKCRAFT_E2E__.hasLocalSpiritVisual())).toBe(false);
+  await expect(page.locator('#overlay')).toBeHidden();
+  await expect(page.locator('#dungeonspirit')).toBeHidden();
 });

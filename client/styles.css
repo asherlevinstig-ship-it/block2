@@ -1619,6 +1619,18 @@
   #deathrespawn:hover{filter:brightness(1.15);border-color:#fff0ba;color:#fff}
   body.death-active #hotbar,body.death-active #stats,body.death-active #abilities,body.death-active #keyprompthud,body.death-active #currentquest,body.death-active #homeworkhud,body.death-active #activitytracker,body.death-active #bugreportbtn{display:none!important}
   @keyframes deathPulse{from{filter:saturate(1);opacity:.88}to{filter:saturate(1.35);opacity:1}}
+  #admindungeonpicker{position:fixed;inset:0;z-index:52;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(1,5,13,.76);backdrop-filter:blur(7px)}
+  #admindungeonpicker.show{display:flex}
+  .admindungeon-panel{width:min(1180px,calc(100vw - 36px));max-height:min(820px,calc(100vh - 36px));overflow:auto;border:1px solid rgba(91,200,255,.64);border-radius:14px;background:linear-gradient(155deg,rgba(5,13,27,.98),rgba(12,8,27,.98));box-shadow:0 24px 90px rgba(0,0,0,.72),0 0 42px rgba(56,189,248,.15);padding:22px;color:#e9f7ff}
+  .admindungeon-head{position:sticky;top:-22px;z-index:2;display:flex;justify-content:space-between;gap:20px;margin:-22px -22px 18px;padding:22px;background:linear-gradient(180deg,rgba(5,13,27,1) 72%,rgba(5,13,27,.92));border-bottom:1px solid rgba(91,200,255,.24)}
+  .admindungeon-head small{color:#67d5ff;font-size:10px;letter-spacing:3px}.admindungeon-head h2{margin:5px 0 3px;color:#fff1b8;font-size:28px;letter-spacing:2px}.admindungeon-head p{margin:0;color:#9db2c7;font-size:12px}
+  .admindungeon-head button{align-self:flex-start;border:1px solid rgba(148,204,235,.5);border-radius:7px;background:#10243a;color:#dff5ff;padding:9px 12px;font:800 11px inherit;letter-spacing:2px;cursor:pointer}
+  .admindungeon-list section+section{margin-top:20px}.admindungeon-list h3{margin:0 0 9px;color:#8fdfff;font-size:12px;letter-spacing:3px;text-transform:uppercase}
+  .admindungeon-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .admindungeon-card{display:flex;min-height:166px;flex-direction:column;align-items:flex-start;text-align:left;gap:7px;border:1px solid rgba(116,162,198,.3);border-radius:10px;background:linear-gradient(145deg,rgba(17,37,57,.86),rgba(12,17,33,.92));padding:14px;color:#d9e9f4;cursor:pointer;transition:transform .15s,border-color .15s,box-shadow .15s}
+  .admindungeon-card:hover{transform:translateY(-2px);border-color:#f5c451;box-shadow:0 9px 26px rgba(0,0,0,.38),inset 0 0 22px rgba(245,196,81,.06)}.admindungeon-card:disabled{opacity:.55;cursor:wait}
+  .admindungeon-card .admindungeon-rank{color:#63d7ff;font-size:9px;letter-spacing:2px}.admindungeon-card b{color:#fff3bd;font-size:16px;letter-spacing:1px}.admindungeon-card em{color:#c9a7ff;font-size:10px;font-style:normal}.admindungeon-card>span:last-of-type{flex:1;color:#9eb2c3;font-size:11px;line-height:1.5}.admindungeon-card strong{color:#ffd45c;font-size:10px;letter-spacing:2px}
+  @media(max-width:800px){.admindungeon-cards{grid-template-columns:1fr}.admindungeon-card{min-height:135px}}
   #deathlimbo{position:fixed;inset:0;z-index:46;display:none;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 25%,rgba(120,74,255,.22),transparent 42%),rgba(2,3,10,.72);backdrop-filter:blur(4px)}
   #deathlimbo.show{display:flex}
   .deathlimbo-panel{width:min(720px,calc(100vw - 36px));border:1px solid rgba(167,139,250,.75);border-radius:14px;background:linear-gradient(160deg,rgba(10,13,30,.97),rgba(30,14,42,.96));box-shadow:0 0 44px rgba(167,139,250,.28),inset 0 0 32px rgba(255,255,255,.05);padding:24px;color:#eef2ff;text-align:center}
