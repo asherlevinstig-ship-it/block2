@@ -8943,15 +8943,21 @@ function die(){
     renderBars();
     return;
   }
-  if(dim==='dungeon') exitDungeon(true);
-  showDeathScreen(deathCauseText(lastDamageSource),'Returning to the Town of Beginnings');
-  player.pos.set(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.y, TOWN_RETURN_SPAWN.z);
-  player.vel.set(0,0,0);
-  hp=maxHp(); sp=maxSp(); hunger=maxHunger();
-  renderBars();
+  const wasGate=dim==='dungeon';
+  if(wasGate) exitDungeon(true);
+  hp=0;renderBars();
+  showDeathScreen(deathCauseText(lastDamageSource),wasGate?'Respawn at the Gate':'Respawn in the Town of Beginnings','',{
+    buttonLabel:wasGate?'RESPAWN AT GATE':'RESPAWN IN TOWN',
+    onRespawn:()=>{
+      if(!wasGate)player.pos.set(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.y, TOWN_RETURN_SPAWN.z);
+      player.vel.set(0,0,0);
+      hp=maxHp(); sp=maxSp(); hunger=maxHunger();
+      renderBars();
+    }
+  });
 }
 // ---------------- death screen: a real moment instead of a 1-second toast ----------------
-let deathEl=null, deathHideTimer=0;
+let deathEl=null, deathRespawnHandler=null;
 function deathCauseText(source){
   const s=String(source||'').replace(/^server:/,'').toLowerCase();
   if(s.indexOf('boss_slam')>=0) return 'Crushed by a boss slam';
@@ -8976,20 +8982,48 @@ function deathCauseText(source){
   if(s.indexOf('pvp')>=0||s.indexOf('bounty')>=0) return 'Slain by a rival hunter';
   return 'Slain in the field';
 }
-function showDeathScreen(cause,sub,recap=''){
+function defaultDeathRespawnDestination(kind='town'){
+  if(kind==='gate')return null;
+  return {x:TOWN_RETURN_SPAWN.x,y:TOWN_RETURN_SPAWN.y,z:TOWN_RETURN_SPAWN.z};
+}
+function showDeathScreen(cause,sub,recap='',opts={}){
   if(!deathEl){
     deathEl=document.createElement('div'); deathEl.id='deathscreen';
-    deathEl.innerHTML='<div id="deathtitle">YOU DIED</div><div id="deathcause"></div><div id="deathsub"></div><div id="deathrecap"></div>';
+    deathEl.innerHTML='<div id="deathtint"></div><div id="deathpanel"><div id="deathtitle">YOU DIED</div><div id="deathcause"></div><div id="deathsub"></div><div id="deathrecap"></div><button id="deathrespawn" type="button">RESPAWN</button></div>';
     document.body.appendChild(deathEl);
+    deathEl.addEventListener('click',e=>{
+      const btn=e.target&&e.target.closest&&e.target.closest('#deathrespawn');
+      if(!btn)return;
+      e.preventDefault();e.stopPropagation();
+      if(deathRespawnHandler)deathRespawnHandler();
+    });
   }
   deathEl.querySelector('#deathcause').textContent=cause||'';
   deathEl.querySelector('#deathsub').textContent=sub||'';
   const recapEl=deathEl.querySelector('#deathrecap');
   if(recapEl) recapEl.textContent=recap?('Last hits: '+recap):'';
+  const btn=deathEl.querySelector('#deathrespawn');
+  const needsClick=opts.clickToRespawn!==false;
+  if(btn){
+    btn.textContent=opts.buttonLabel||'RESPAWN';
+    btn.style.display=needsClick?'inline-block':'none';
+  }
+  deathRespawnHandler=()=>{
+    const destination=opts.destination===false?null:(opts.destination||defaultDeathRespawnDestination(opts.kind||'town'));
+    if(destination&&player&&player.pos){
+      player.pos.set(Number(destination.x)||TOWN_RETURN_SPAWN.x,Number(destination.y)||TOWN_RETURN_SPAWN.y,Number(destination.z)||TOWN_RETURN_SPAWN.z);
+      if(player.vel)player.vel.set(0,0,0);
+    }
+    if(typeof opts.onRespawn==='function')opts.onRespawn();
+    deathEl.classList.remove('show');
+    document.body.classList.remove('death-active');
+    deathRespawnHandler=null;
+  };
+  try{if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock();}catch(_e){}
+  document.body.classList.add('death-active');
   deathEl.classList.add('show');
   camShake=Math.max(camShake,.4);
-  clearTimeout(deathHideTimer);
-  deathHideTimer=setTimeout(()=>deathEl.classList.remove('show'),2600);
+  if(!needsClick)setTimeout(()=>{if(deathRespawnHandler)deathRespawnHandler();},Math.max(900,opts.autoRespawnMs||2600));
 }
 
 // ---------------- hostile mobs (zombies, night only, outside the walls) ----------------

@@ -1879,14 +1879,24 @@ function netAttachRoom(room,name,client){
       COMPANIONS.activeFamiliar='';
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
-      hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
-      showDeathScreen('The dungeon overwhelmed you','The attempt has failed - returning to the gate',m&&m.recentHits||'');
+      if(player&&player.vel)player.vel.set(0,0,0);
+      hp=0; renderBars();
+      showDeathScreen('The dungeon overwhelmed you','The attempt has failed - respawn at the Gate',m&&m.recentHits||'',{
+        kind:'gate',
+        destination:false,
+        buttonLabel:'RESPAWN AT GATE',
+        onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
+      });
     });
     room.onMessage('deathLimboStart',m=>{
       COMPANIONS.activeFamiliar='';
       if(dim==='dungeon') exitDungeon(true);
-      hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
-      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Answer to recover your carried items',m&&m.recentHits||'');
+      hp=0; renderBars();
+      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Answer to recover your carried items',m&&m.recentHits||'',{
+        clickToRespawn:false,
+        autoRespawnMs:1400,
+        onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
+      });
       renderDeathLimbo(m);
     });
     room.onMessage('deathLimboQuestion',m=>setTimeout(()=>renderDeathLimbo(m),650));
@@ -1913,7 +1923,12 @@ function netAttachRoom(room,name,client){
     room.onMessage('deathDropReject',m=>{if((m&&m.reason)==='full')sysMsg('Bag full. Sort your bag, deposit supplies in a chest, or free one slot before looting that death drop.');});
     room.onMessage('worldDeath',m=>{
       COMPANIONS.activeFamiliar='';
-      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Returning to the Town of Beginnings',m&&m.recentHits||'');
+      hp=0; renderBars();
+      showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Respawn in the Town of Beginnings',m&&m.recentHits||'',{
+        kind:'town',
+        buttonLabel:'RESPAWN IN TOWN',
+        onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
+      });
     });
     room.onMessage('dungeonFailed', m=>{
       if(dim==='dungeon') exitDungeon(true);

@@ -2501,6 +2501,8 @@ test('menu-style gameplay hotkeys are not tied directly to pointer lock',()=>{
 test('ordinary combat exposes health, telegraphs, statuses, impact pause, and death motion',()=>{
   const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
   const feedback=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat-feedback.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(visuals,/if\(!name\)name=ref\.kind==='boss'/,'generic enemies receive readable names instead of special encounters only');
   assert.match(visuals,/textSprite\('STUNNED'/);
@@ -2528,7 +2530,15 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(feedback,/sound\.crit/);
   assert.match(feedback,/sound\.block/);
   assert.match(feedback,/showDebug/);
+  assert.match(world,/deathEl\.innerHTML='<div id="deathtint"><\/div><div id="deathpanel">/);
+  assert.match(world,/buttonLabel:wasGate\?'RESPAWN AT GATE':'RESPAWN IN TOWN'/);
+  assert.match(world,/deathRespawnHandler=\(\)=>\{/);
+  assert.match(world,/document\.body\.classList\.add\('death-active'\)/);
+  assert.match(networking,/hp=0; renderBars\(\);[\s\S]*buttonLabel:'RESPAWN IN TOWN'/);
+  assert.match(networking,/buttonLabel:'RESPAWN AT GATE'/);
   assert.match(styles,/#deathrecap/);
+  assert.match(styles,/#deathrespawn/);
+  assert.match(styles,/body\.death-active #hotbar/);
   assert.match(styles,/#combatdebug/);
   assert.match(styles,/body\.combat-hit #game canvas/);
 });
