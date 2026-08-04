@@ -1941,6 +1941,26 @@ function announceArrivalTitle(kicker,title,subtitle){
 function townReturnPoint(){
   return {x:TOWN.TC+14.5,y:TOWN.G+1,z:TOWN.TC+27.5};
 }
+function restoreOverworldReturnGrid(ret,reason='return'){
+  const candidates=[ret&&ret.world,owWorld,worldState&&worldState.grid,typeof world!=='undefined'?world:null];
+  for(const candidate of candidates){
+    if(candidate&&typeof worldApi.isOverworldGrid==='function'&&worldApi.isOverworldGrid(candidate)){
+      world=candidate;
+      if(worldState)worldState.grid=candidate;
+      owWorld=candidate;
+      return candidate;
+    }
+  }
+  const rebuilt=typeof worldApi.activateOverworldGrid==='function'?worldApi.activateOverworldGrid():null;
+  if(rebuilt){
+    world=rebuilt;
+    if(worldState)worldState.grid=rebuilt;
+    owWorld=rebuilt;
+    if(typeof console!=='undefined'&&console.warn)console.warn('[bc-dim-return] rebuilt overworld after invalid cached room grid',{reason,dim,cachedKinds:candidates.map(g=>g&&g.kind||null)});
+    return rebuilt;
+  }
+  return world;
+}
 function placePlayerAtTownReturn(){
   if(!player)return;
   const town=townReturnPoint();
@@ -2041,9 +2061,8 @@ function exitOnboardingRoom(notify=true){
   clearOnboardingCropMeshes();
   if(onboardingTownPortal){scene.remove(onboardingTownPortal);onboardingTownPortal=null;}
   const ret=onboardingRoomReturn;
-  world=(ret&&ret.world)||owWorld||world;
+  restoreOverworldReturnGrid(ret,'onboarding');
   dim='overworld';
-  owWorld=world;
   NET.dgn='';
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   if(toTown&&player){
@@ -2100,9 +2119,8 @@ function exitAbilityRoom(){
   tutorialPillarGroup.visible=false;
   for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
   const ret=abilityRoomReturn;
-  world=(ret&&ret.world)||owWorld||world;
+  restoreOverworldReturnGrid(ret,'ability');
   dim='overworld';
-  owWorld=world;
   NET.dgn='';
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
   placePlayerAtTownReturn();
@@ -2158,9 +2176,8 @@ function exitJobTutorialRoom(){
   tutorialPillarGroup.visible=false;
   for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net) removeMob(i);
   const ret=jobTutorialRoomReturn;
-  world=(ret&&ret.world)||owWorld||world;
+  restoreOverworldReturnGrid(ret,'job');
   dim='overworld';
-  owWorld=world;
   NET.dgn='';
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
   placePlayerAtTownReturn();
@@ -2246,9 +2263,8 @@ function exitQuestionRoom(){
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
   if(questionHallTownPortal){scene.remove(questionHallTownPortal);questionHallTownPortal=null;}
   const ret=questionRoomReturn;
-  world=(ret&&ret.world)||owWorld||world;
+  restoreOverworldReturnGrid(ret,'questions');
   dim='overworld';
-  owWorld=world;
   NET.dgn='';
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
@@ -2331,9 +2347,8 @@ function exitTamingLand(){
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
   if(tamingLandExitPortal){scene.remove(tamingLandExitPortal);tamingLandExitPortal=null;}
   const ret=tamingLandReturn;
-  world=(ret&&ret.world)||owWorld||world;
+  restoreOverworldReturnGrid(ret,'taming_land');
   dim='overworld';
-  owWorld=world;
   NET.dgn='';
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
@@ -2463,7 +2478,8 @@ function exitDungeon(instant){
       } else { NET.room.send('exitGate'); NET.dgn=''; }
     }
     if(exitPortal){ scene.remove(exitPortal); exitPortal=null; }
-    world=owWorld; dim='overworld';
+    restoreOverworldReturnGrid(null,'dungeon');
+    dim='overworld';
     netFlushPending();
     rebuildAllChunks(); refreshTorchMeshes(); applyDim();
     placePlayerAtTownReturn();

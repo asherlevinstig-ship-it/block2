@@ -1837,6 +1837,18 @@ function buildRegionalLandmarks(setBlock){
   }
   return specs;
 }
+function isOverworldGrid(grid=world){
+  return !!(grid&&grid.kind==='overworld');
+}
+function activateOverworldGrid(candidate){
+  if(isOverworldGrid(candidate)){
+    world=candidate;
+    return world;
+  }
+  world=new DimensionGrid({kind:'overworld',id:'global',width:WX,height:WH,depth:WX,empty:B.AIR,outside:B.AIR});
+  generateWorld();
+  return world;
+}
 function generateWorld(){
   for(let x=0;x<WX;x++)for(let z=0;z<WX;z++){
     const biome=biomeAt(x,z), h=terrainHeight(x,z);
@@ -10991,6 +11003,8 @@ gameContext.registerModule('world', Object.freeze({
   resetParticleBudget,
   particleBudgetStats,
   buildTamingLand,
+  isOverworldGrid,
+  activateOverworldGrid,
   trainingMeadowTownPortalPoint,
   updateCropTimerVisual,
   syncInsulatorMesh,
