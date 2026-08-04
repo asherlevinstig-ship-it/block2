@@ -1370,8 +1370,11 @@
   #eventhud .eventcrest{border-radius:5px}
   #eventhud .es{color:#d8e3f1;font:500 12px system-ui,-apple-system,Segoe UI,sans-serif}
   #eventjoin{padding:7px 11px;border-color:rgba(242,199,92,.58);background:rgba(63,42,11,.86);color:#ffe680;font-size:9px}
-  #keyprompthud{left:calc(50% + 268px);right:auto;bottom:88px;transform:none;min-width:300px;width:min(360px,calc(50vw - 292px));max-width:360px;z-index:10;border-color:rgba(242,199,92,.38);background:linear-gradient(140deg,rgba(6,11,20,.88),rgba(3,7,13,.78));box-shadow:0 14px 32px rgba(0,0,0,.36),inset 0 0 20px rgba(242,199,92,.035)}
-  #keyprompthud .keycopy span{font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:12px;color:#d8e6f4;text-shadow:none}
+  #keyprompthud{left:calc(50% + 330px);right:auto;bottom:68px;transform:none;min-width:250px;width:min(300px,calc(50vw - 354px));max-width:300px;z-index:10;gap:8px;padding:7px 9px 7px 7px;border-color:rgba(255,255,255,.08);background:rgba(4,8,14,.22);box-shadow:none;backdrop-filter:blur(2px)}
+  #keyprompthud:before,#keyprompthud .keydots{display:none}
+  #keyprompthud .keyart{min-width:44px;height:34px;padding:0 8px;border-radius:7px;border-bottom-width:3px;font-size:12px}
+  #keyprompthud .keycopy b{font-size:10px;letter-spacing:1.4px}
+  #keyprompthud .keycopy span{font-family:system-ui,-apple-system,Segoe UI,sans-serif;font-size:11px;color:#d8e6f4;text-shadow:none}
   #stats{bottom:82px;gap:10px}
   #barcol{width:min(500px,38vw);gap:5px}
   .bar{height:18px;border-color:rgba(255,255,255,.16);border-radius:4px}
