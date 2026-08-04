@@ -2432,7 +2432,9 @@ function beginDungeon(ri, seed, editLog, opts){
     rebuildAllChunks(); refreshTorchMeshes(); applyDim();
     const spawnX=Number.isFinite(+opts.spawnX)?+opts.spawnX:dungeon.entrance.x+.5;
     const spawnZ=Number.isFinite(+opts.spawnZ)?+opts.spawnZ:dungeon.entrance.z+.5;
-    const localGround=standHeight(spawnX,spawnZ,12);
+    const localGround=typeof DungeonRules.safeStandHeightIn==='function'
+      ?DungeonRules.safeStandHeightIn(dungeon.world,spawnX,spawnZ)
+      :standHeight(spawnX,spawnZ,12);
     const spawnY=Number.isFinite(+opts.spawnY)?+opts.spawnY:((localGround>0?localGround:9)+.01);
     player.pos.set(spawnX, spawnY, spawnZ);
     player.vel.set(0,0,0);

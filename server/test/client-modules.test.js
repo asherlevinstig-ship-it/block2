@@ -1160,6 +1160,8 @@ test('client chunk rebuilding fully refreshes compact dungeon world meshes', () 
   assert.match(worldSource, /for\(let cx=Math\.max\(cb\.minCx,c\.cx-c\.r\);cx<=Math\.min\(cb\.maxCx,c\.cx\+c\.r\);cx\+\+\)/);
   assert.match(worldSource, /for\(let y=Math\.max\(1,b\.minY\);y<=b\.maxY;y\+\+\)/);
   assert.match(dimensionsSource, /function rebuildAllChunks\(\)\{\s*lastVisibleChunkKey='';\s*for\(const key of Object\.keys\(chunkMeshes\)\)\{\s*const \[cx,cz\]=key\.split\(','\)\.map\(Number\);\s*disposeChunk\(cx,cz\);\s*\}\s*updateVisibleChunks\(true\);\s*\}/);
+  assert.match(dimensionsSource, /DungeonRules\.safeStandHeightIn\(dungeon\.world,spawnX,spawnZ\)/,
+    'local and admin dungeon entry uses the same safe authored-floor spawn rule as the server');
 });
 
 test('onboarding building counts a three-block stack above the stone pad', async () => {

@@ -212,6 +212,37 @@
       if(theme==='ranked' && hash2(rm.x+seed,rm.z)>.8) dungeonSetB(w,rm.x,9,rm.z,B.LANTERN);
     }
 
+    function restoreDungeonMainRoute(w, rooms, seed, wideChance){
+      const mainRooms=rooms.filter(rm=>rm&&rm.main);
+      for(let i=1;i<mainRooms.length;i++){
+        const prev=mainRooms[i-1], next=mainRooms[i];
+        carveDungeonHall(w,prev.x,prev.z,next.x,next.z,hash2(i*23+seed,31)<wideChance);
+      }
+    }
+    function prepareDungeonEntrance(w, entrance){
+      if(!entrance)return;
+      // Decorations and later overlapping branches must never leave the arrival
+      // point inside a block or in a one-cell pocket with no way to walk out.
+      carveBox(w,entrance.x-2,9,entrance.z-2,entrance.x+2,11,entrance.z+2,B.AIR);
+      carveBox(w,entrance.x-2,8,entrance.z-2,entrance.x+2,8,entrance.z+2,B.COBBLE);
+      dungeonSetB(w,entrance.x,12,entrance.z,B.LANTERN);
+    }
+    function sealDungeonBoundary(w){
+      // A carved room can approach the compact grid edge. Keep a real two-block
+      // shell there so the last room never opens into the grid's AIR outside.
+      const lastX=w.width-1,lastZ=w.depth-1;
+      for(let y=1;y<w.height-1;y++){
+        for(let x=0;x<w.width;x++){
+          dungeonSetB(w,x,y,0,B.BEDROCK);dungeonSetB(w,x,y,1,B.BEDROCK);
+          dungeonSetB(w,x,y,lastZ-1,B.BEDROCK);dungeonSetB(w,x,y,lastZ,B.BEDROCK);
+        }
+        for(let z=0;z<w.depth;z++){
+          dungeonSetB(w,0,y,z,B.BEDROCK);dungeonSetB(w,1,y,z,B.BEDROCK);
+          dungeonSetB(w,lastX-1,y,z,B.BEDROCK);dungeonSetB(w,lastX,y,z,B.BEDROCK);
+        }
+      }
+    }
+
     function generateDungeon(ri, seed, requestedDungeonId){
       seed=seed>>>0;
       const dungeonId=canonicalDungeonId(ri,seed,requestedDungeonId);
@@ -306,11 +337,27 @@
         }
         px=cx; pz=cz;
         const step=15+Math.floor(hash2(i+seed,3)*7);
-        if(hash2(i*3+1+seed,5)<.5) cx+=step;
-        else cz+=step;
+        const moveX=hash2(i*3+1+seed,5)<.5;
+        // Redirect at the compact-grid edge instead of clamping the next room
+        // onto the current one. Exact overlaps erased walls and created sealed
+        // lower cavities in some higher-rank layouts.
+        if(moveX){
+          if(cx+step<=112)cx+=step;
+          else if(cz+step<=112)cz+=step;
+          else cx-=step;
+        }else{
+          if(cz+step<=112)cz+=step;
+          else if(cx+step<=112)cx+=step;
+          else cz-=step;
+        }
         if(hash2(i*5+seed,17)<.35){ cx+=Math.floor((hash2(i+seed,101)-.5)*8); cz+=Math.floor((hash2(i+seed,103)-.5)*8); }
         cx=Math.min(112,Math.max(16,cx)); cz=Math.min(112,Math.max(16,cz));
       }
+      // A later room can overlap an earlier corridor or the outer grid shell.
+      // Reassert the critical route and arrival space after all dressing is done.
+      restoreDungeonMainRoute(w,rooms,seed,wideChance);
+      prepareDungeonEntrance(w,rooms[0]);
+      sealDungeonBoundary(w);
       return {world:w,entrance:rooms[0],bossRoom:bossRoom||rooms[rooms.length-1],rooms,spawns,rank:ri,dungeonId,definition,cleared:false};
     }
 
@@ -326,11 +373,26 @@
       const bx=Math.floor(x), bz=Math.floor(z);
       const width=w.width, depth=w.depth, height=w.height;
       if(bx<0||bx>=width||bz<0||bz>=depth) return -1;
-      for(let y=1;y<=9&&y<height-2;y++){
+      // Prefer the authored room floor at y=8. Scanning upward used to select
+      // sealed cavities beneath overlapping pit rooms and could spawn or route
+      // players under the playable dungeon.
+      for(let y=Math.min(9,height-3);y>=1;y--){
         if(NON_SOLID.has(dungeonGetB(w,bx,y-1,bz))) continue;
         if(!NON_SOLID.has(dungeonGetB(w,bx,y,bz))) continue;
         if(!NON_SOLID.has(dungeonGetB(w,bx,y+1,bz))) continue;
-        return y;
+        let exit=false;
+        for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx=bx+dx,nz=bz+dz;
+          if(nx<0||nx>=width||nz<0||nz>=depth)continue;
+          for(let ny=Math.max(1,y-1);ny<=Math.min(9,y+1);ny++){
+            if(NON_SOLID.has(dungeonGetB(w,nx,ny-1,nz)))continue;
+            if(!NON_SOLID.has(dungeonGetB(w,nx,ny,nz)))continue;
+            if(!NON_SOLID.has(dungeonGetB(w,nx,ny+1,nz)))continue;
+            exit=true;break;
+          }
+          if(exit)break;
+        }
+        if(exit)return y;
       }
       return -1;
     }

@@ -8380,6 +8380,40 @@ test('generated dungeon rooms and spawns have floor and head clearance across ra
   }
 });
 
+test('every dungeon pool keeps a safe entrance, sealed boundary, and reachable boss route', () => {
+  const seeds = [0, 31, 128, 318, 582, 1288, 1967, 2650, 3135];
+  const neighbors = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (let rank = 0; rank < DUNGEON_POOLS.length; rank++) for (const dungeonId of DUNGEON_POOLS[rank]) for (const seed of seeds) {
+    const d = D.generateDungeon(rank, seed, dungeonId), w = d.world;
+    const mainRoomKeys = d.rooms.filter(room => room.main).map(room => `${room.x},${room.z}`);
+    assert.equal(new Set(mainRoomKeys).size, mainRoomKeys.length,
+      `${dungeonId} seed ${seed} never stacks two main rooms at the same coordinates`);
+    const stand = (x, z) => D.safeStandHeightIn(w, x + .5, z + .5);
+    const sx = Math.floor(d.entrance.x), sz = Math.floor(d.entrance.z);
+    const startY = stand(sx, sz);
+    assert.ok(startY > 0, `${dungeonId} seed ${seed} has a safe authored-floor entrance`);
+    let exits = 0;
+    for (const [dx, dz] of neighbors) if (stand(sx + dx, sz + dz) > 0) exits++;
+    assert.ok(exits >= 2, `${dungeonId} seed ${seed} entrance has walking egress`);
+
+    const queue = [[sx, sz]], seen = new Set([`${sx},${sz}`]);
+    let touchesBoundary = false;
+    for (let cursor = 0; cursor < queue.length; cursor++) {
+      const [x, z] = queue[cursor], y = stand(x, z);
+      if (x <= 1 || z <= 1 || x >= w.width - 2 || z >= w.depth - 2) touchesBoundary = true;
+      for (const [dx, dz] of neighbors) {
+        const nx = x + dx, nz = z + dz, key = `${nx},${nz}`;
+        if (seen.has(key)) continue;
+        const ny = stand(nx, nz);
+        if (ny > 0 && Math.abs(ny - y) <= 1) { seen.add(key); queue.push([nx, nz]); }
+      }
+    }
+    assert.equal(touchesBoundary, false, `${dungeonId} seed ${seed} playable space is sealed from the AIR outside`);
+    assert.equal(seen.has(`${Math.floor(d.bossRoom.x)},${Math.floor(d.bossRoom.z)}`), true,
+      `${dungeonId} seed ${seed} boss remains walkably connected to the entrance`);
+  }
+});
+
 test('boss arenas scale by rank and advertise mechanic-supporting layouts', () => {
   const expected = ['learnable_open', 'volley_lanes', 'positioning_checks', 'control_pressure', 'layered_mechanics'];
   const layouts = expected.map((id, rank) => D.generateDungeon(rank, 0x51a7e + rank));
