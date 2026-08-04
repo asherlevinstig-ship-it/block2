@@ -106,9 +106,9 @@ function showFeatherStepLandingFx(m={}){
 }
 const PANTHER_FORM={eye:0.68,height:0.96,width:0.24,speed:8.15,strafe:1.14,accel:46,brake:42,airAccel:12,jump:9.35,pounce:1.8,landingDip:.075,shiftMs:900};
 let pantherLocalUntil=0,pantherShiftStart=-1e9,pantherShiftMs=PANTHER_FORM.shiftMs,pantherProwlT=0;
-const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10};
+const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,exhaustedWalk:.8,recoverSprintAt:.12,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10};
 const FALL_DAMAGE={safeDrop:5,featherAbsorbDrop:16,hardScale:1.25,featherScale:.5,maxDamage:18};
-let sprintRamp=0,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0,localFallPeakY=0,localFallAirborne=false;
+let sprintRamp=0,staminaExhausted=false,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0,localFallPeakY=0,localFallAirborne=false;
 const movementState={grounded:false,airborne:true,swimming:false,sprinting:false,exhausted:false,panther:false,state:'airborne',speed:0,targetSpeed:0,sprintFactor:0};
 function pantherFormActive(now=performance.now()){
   return pantherLocalUntil>now || !!(buffs&&buffs.panther>0);
@@ -2273,8 +2273,11 @@ function tick(now){
     const movementInput=f!==0||s!==0;
     const pantherMove=pantherFormActive(now)&&!mounted&&movementInput;
     const sprintIntent=!!(sprintKey && movementInput && !mounted && !outOfFood);
-    const exhausted=!pantherMove&&sprintIntent&&sp<=1;
-    const sprintTarget=pantherMove?1:(sprintIntent&&sp>0?Math.max(.18,Math.min(1,sp/8)):0);
+    if(!pantherMove&&!mounted&&sp<=1)staminaExhausted=true;
+    else if(staminaExhausted&&sp>=maxSp()*MOVEMENT_FEEL.recoverSprintAt)staminaExhausted=false;
+    const exhausted=!pantherMove&&!mounted&&staminaExhausted;
+    const sprintReady=!staminaExhausted&&sp>0;
+    const sprintTarget=pantherMove?1:(sprintIntent&&sprintReady?Math.max(.18,Math.min(1,sp/8)):0);
     const sprintRate=sprintTarget>sprintRamp?1/MOVEMENT_FEEL.sprintRampUp:1/MOVEMENT_FEEL.sprintRampDown;
     sprintRamp=approach(sprintRamp,sprintTarget,sprintRate,dt);
     if(!movementInput&&!pantherMove)sprintRamp=approach(sprintRamp,0,10,dt);
@@ -2291,7 +2294,7 @@ function tick(now){
     if(sprintFactor>.05&&!pantherMove&&movementInput) sp=Math.max(0,sp-stCost(3.5)*armorStamina*sprintFactor*dt);
     const dragFly=flying?(deityFlying?12:((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13)):0;
     const baseSpd=flying?dragFly:(mounted?9.6:(pantherMove?PANTHER_FORM.speed:(MOVEMENT_FEEL.walk+(MOVEMENT_FEEL.sprint-MOVEMENT_FEEL.walk)*sprintFactor)));
-    const speed=baseSpd*(outOfFood&&!pantherMove?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
+    const speed=baseSpd*(exhausted?MOVEMENT_FEEL.exhaustedWalk:1)*(outOfFood&&!pantherMove?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);
     const sin=Math.sin(player.yaw), cos=Math.cos(player.yaw);
     const sideScale=pantherMove?PANTHER_FORM.strafe:1;
     let targetVx=(-sin*f + cos*s*sideScale), targetVz=(-cos*f - sin*s*sideScale);

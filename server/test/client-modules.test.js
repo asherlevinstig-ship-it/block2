@@ -1811,9 +1811,13 @@ test('basic jumping is not blocked by empty stamina',()=>{
 
 test('movement feel uses smoothing, sprint curves, camera locomotion, and step assist',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
-  assert.match(frame,/const MOVEMENT_FEEL=\{walk:4\.3,sprint:6\.2,sprintRampUp:\.25,sprintRampDown:\.18/);
+  assert.match(frame,/const MOVEMENT_FEEL=\{walk:4\.3,sprint:6\.2,sprintRampUp:\.25,sprintRampDown:\.18,exhaustedWalk:\.8,recoverSprintAt:\.12/);
   assert.match(frame,/function approach\(current,target,rate,dt\)/);
   assert.match(frame,/sprintRamp=approach\(sprintRamp,sprintTarget,sprintRate,dt\)/);
+  assert.match(frame,/if\(!pantherMove&&!mounted&&sp<=1\)staminaExhausted=true;/);
+  assert.match(frame,/else if\(staminaExhausted&&sp>=maxSp\(\)\*MOVEMENT_FEEL\.recoverSprintAt\)staminaExhausted=false;/);
+  assert.match(frame,/const sprintReady=!staminaExhausted&&sp>0;/);
+  assert.match(frame,/baseSpd\*\(exhausted\?MOVEMENT_FEEL\.exhaustedWalk:1\)/);
   assert.match(frame,/player\.vel\.x=approach\(player\.vel\.x,targetVx,controlRate,dt\)/);
   assert.match(frame,/player\.vel\.z=approach\(player\.vel\.z,targetVz,controlRate,dt\)/);
   assert.match(frame,/MOVEMENT_FEEL\.airAccel/);
