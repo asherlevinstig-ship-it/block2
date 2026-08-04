@@ -5738,6 +5738,20 @@ test('a mob fires a bolt aimed at its target at the correct speed', () => {
   assert.equal(a.effect,'frost','projectiles retain their biome VFX/status identity');
 });
 
+test('projectile damage is capped and same-volley arrow hits do not stack', () => {
+  const room = makeRoom();
+  const client = makeClient('arrow-target');
+  room.clients.push(client);
+  seedPlayer(room, client, { hp: 20 });
+
+  assert.equal(room.projectileDamageFor(client, 999, 'arrow'), 7, 'ordinary arrows cannot one-shot a full-health hunter');
+  assert.equal(room.projectileHitAllowed(client, 'arrow'), true, 'first projectile hit is allowed');
+  assert.equal(room.projectileHitAllowed(client, 'arrow'), false, 'same-volley projectile hit is ignored');
+
+  room.hurtPlayer(client, room.projectileDamageFor(client, 999, 'arrow'), 'arrow', { attack: 'Arrow' });
+  assert.equal(room.playerHp.get(client.sessionId).hp, 13);
+});
+
 test('DungeonInstance encapsulates instance state plus world and edit access', () => {
   const g = { id: 'dg1', seed: 7, rank: 2, kind: 'public', shardPlus: 3, shardName: 'Glimmering', shardMods: 'Empowered,Volatile,Explosive' };
   const d = { world: new D.DungeonGrid(), bossRoom: { x: 100, z: 120 } };

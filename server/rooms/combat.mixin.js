@@ -1314,6 +1314,26 @@ class CombatMixin {
     this.sArrows.push(a);
     this.sendSpace(dgn, 'arrow', { x: a.x, y: a.y, z: a.z, vx: a.vx, vy: a.vy, vz: a.vz, bolt: !!bolt, effect:a.effect, dgn: dgn || '' });
   }
+  projectileDamageFor(client, rawDamage, reason='arrow') {
+    const hp = client && this.ensurePlayerHp(client);
+    const maxHp = Math.max(1, hp && hp.max || 20);
+    const raw = Math.max(0, Number(rawDamage) || 0);
+    const cap = String(reason || '').includes('boss') ? Math.ceil(maxHp * .45) : Math.ceil(maxHp * .35);
+    return Math.max(1, Math.min(Math.round(raw), cap));
+  }
+  projectileHitAllowed(client, reason='arrow') {
+    if (!client) return false;
+    const now = Date.now();
+    if (!this.recentProjectileHits) this.recentProjectileHits = new Map();
+    const key = client.sessionId + ':' + String(reason || 'arrow');
+    const last = this.recentProjectileHits.get(key) || 0;
+    if (now - last < 420) return false;
+    this.recentProjectileHits.set(key, now);
+    if (this.recentProjectileHits.size > 300) {
+      for (const [k, at] of this.recentProjectileHits) if (now - at > 5000) this.recentProjectileHits.delete(k);
+    }
+    return true;
+  }
 }
 
 module.exports = CombatMixin.prototype;

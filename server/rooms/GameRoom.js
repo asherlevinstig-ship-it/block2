@@ -7336,7 +7336,13 @@ class GameRoom extends Room {
         else if (r !== 'fly') {
           const c = this.clients.find(c => c.sessionId === r.hit.sid);
           const target = this.state.players.get(r.hit.sid);
-          if (c && (a.dgn || !target || !this.isTownProtected(target.x, target.z))){this.hurtPlayer(c,a.dmg,a.effect?a.effect+'_arrow':'arrow');if(a.effect)this.applyBiomeStatus(c,a.effect);}
+          if (c && (a.dgn || !target || !this.isTownProtected(target.x, target.z))){
+            const reason=a.effect?a.effect+'_arrow':'arrow';
+            if(this.projectileHitAllowed(c,reason)){
+              this.hurtPlayer(c,this.projectileDamageFor(c,a.dmg,reason),reason,{attack:a.effect?(String(a.effect).replace(/_/g,' ')+' Arrow'):'Arrow'});
+              if(a.effect)this.applyBiomeStatus(c,a.effect);
+            }
+          }
           done = true;
         }
       }
