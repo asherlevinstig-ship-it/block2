@@ -2725,14 +2725,20 @@ class GameRoom extends Room {
       if (q && (q.dgn || '') === (dgn || '')) c.send(type, msg);
     }
   }
+  activeDungeonInstance(dgn) {
+    const id = String(dgn || '');
+    if (id && this.instances && this.instances[id]) return this.instances[id];
+    if (this.isDungeonRoom && this.instance && (!id || this.instance.id === id)) return this.instance;
+    return null;
+  }
   spaceSolid(dgn) {
     if (dgn && /^tutorial-job_/.test(String(dgn))) return () => false;
     if (dgn && typeof this.eventSpaceSolid === 'function') {
       const eventSolid = this.eventSpaceSolid(dgn);
       if (eventSolid) return eventSolid;
     }
-    const inst = dgn ? this.instances[dgn] : null;
-    return AI.makeSolid(inst ? inst.world : null, this.world);
+    const inst = dgn ? this.activeDungeonInstance(dgn) : null;
+    return AI.makeSolid(inst ? inst.world : null, this.world || null);
   }
   serverDamageFor(p, sid) {
     const lvl = Math.max(1, Math.min(999, p.lvl | 0));
@@ -7361,17 +7367,18 @@ class GameRoom extends Room {
     // consecutive rejections a destination in valid air is accepted as a lag resync.
     // A buried destination is never accepted, no matter how often it is retried.
     if (!this.moveRejects) this.moveRejects = new Map();
-    const solid = this.spaceSolid(p.dgn || '');
+    const activeDgn = p.dgn || (this.isDungeonRoom && this.instance ? this.instance.id : '');
+    const solid = this.spaceSolid(activeDgn);
     const buried = (x, y, z) => solid(Math.floor(x), Math.floor(y + .2), Math.floor(z))
       || solid(Math.floor(x), Math.floor(y + 1.5), Math.floor(z));
-    const inst = p.dgn ? this.instances[p.dgn] : null;
+    const inst = activeDgn ? this.activeDungeonInstance(activeDgn) : null;
     const groundAt = (x, z, fromY = W.WH - 2) => {
-      if (p.dgn) return inst && inst.world ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, Math.min(12, fromY))) : -1;
-      return this.world.standHeight(x, z, fromY);
+      if (activeDgn) return inst && inst.world ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, Math.min(12, fromY))) : -1;
+      return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1;
     };
-    const townFloorStrict = !p.dgn && this.isTownProtected(sx, sz);
+    const townFloorStrict = !activeDgn && this.world && this.isTownProtected(sx, sz);
     const floorY = groundAt(sx, sz, W.WH - 2);
-    if (p.dgn && !deityFlight && !buried(p.x, p.y, p.z) && floorY > 0 && sy > floorY + 2.25) {
+    if (activeDgn && !deityFlight && !buried(p.x, p.y, p.z) && floorY > 0 && sy > floorY + 2.25) {
       sy = floorY + .01;
       corrected = true;
     }
@@ -7416,10 +7423,10 @@ class GameRoom extends Room {
     const fromY = p.y;
     const yaw = clampN(m.yaw, -10, 10);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
-    if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : p.dgn ? 'dungeon_floor' : 'floor' });
+    if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : activeDgn ? 'dungeon_floor' : 'floor' });
     if (deityFlight && this.fallState) this.fallState.delete(client.sessionId);
     else this.trackAcceptedMoveFall(client, fromY, p.y);
-    if (!p.dgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
+    if (!activeDgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
     this.collectDeathDrops(client);
   }
 
@@ -7494,9 +7501,9 @@ class GameRoom extends Room {
   // loop so a DungeonInstance can drive its own mobs through the same code path; behaviour is
   // unchanged. `spaces` maps dgn -> [{p,sid}] players, as built in update().
   simulateMob(m, id, meta, dt, spaces) {
-      const inst = m.dgn ? this.instances[m.dgn] : null;
+      const inst = m.dgn ? this.activeDungeonInstance(m.dgn) : null;
       if (m.dgn && !inst) return;
-      const ground = (x, z, fromY) => inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, fromY)) : this.world.standHeight(x, z, fromY);
+      const ground = (x, z, fromY) => inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, fromY)) : (this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1);
       const solid = this.spaceSolid(m.dgn);
       const candidates = (spaces[m.dgn || ''] || []).filter(s => {
         const hp = s && this.playerHp.get(s.sid);

@@ -1488,6 +1488,21 @@ test('dungeon movement snaps transition-height packets back to the entrance floo
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='dungeon_floor'),true);
 });
 
+test('DungeonRoom movement tolerates a transient blank dungeon id without an overworld world',()=>{
+  const room=makeDungeonRoom(),client=makeClient('split_room_blank_dgn_move');
+  room.isDungeonRoom=true;
+  const inst=room.createInstance({id:'split-blank-dgn',seed:0x9e3779b9,rank:0,dungeonId:'abandoned_mine',kind:'public'});
+  room.instance=inst;
+  room.world=undefined;
+  seedPlayer(room,client,{x:inst.entrance.x+.5,y:D.safeStandHeightIn(inst.world,inst.entrance.x+.5,inst.entrance.z+.5)+.01,z:inst.entrance.z+.5});
+  const p=room.state.players.get(client.sessionId);
+  p.dim='dungeon';
+  p.dgn='';
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  assert.doesNotThrow(()=>room.handleMove(client,{x:p.x+.25,y:p.y,z:p.z+.25,yaw:0}));
+  assert.ok(Number.isFinite(p.y));
+});
+
 test('admin quick gate cycles through real dungeon entry flow',()=>{
   clearDungeonAdmissions();
   const room=makeRoom(),admin=makeClient('quick_gate_admin'),normal=makeClient('quick_gate_normal');

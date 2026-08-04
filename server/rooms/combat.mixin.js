@@ -500,16 +500,17 @@ class CombatMixin {
   }
   safeDragonDashPoint(p, dir, range) {
     const dgn = p.dgn || '';
-    const inst = dgn ? this.instances[dgn] : null;
+    const inst = dgn ? (typeof this.activeDungeonInstance === 'function' ? this.activeDungeonInstance(dgn) : this.instances[dgn]) : null;
     const get = (x, y, z) => {
       if (!W.inWorld(x, y, z)) return W.B.AIR;
-      return inst ? inst.getB(x, y, z) : this.world.getB(x, y, z);
+      if (inst) return inst.getB(x, y, z);
+      return this.world && this.world.getB ? this.world.getB(x, y, z) : W.B.AIR;
     };
     let best = { x: p.x, y: p.y, z: p.z };
     for (let t = .75; t <= range; t += .45) {
       const x = Math.max(1.25, Math.min(W.WX - 1.25, p.x + dir.dx * t));
       const z = Math.max(1.25, Math.min(W.WX - 1.25, p.z + dir.dz * t));
-      const gy = dgn && inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, p.y + 6)) : this.world.standHeight(x, z, p.y + 6);
+      const gy = dgn && inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, p.y + 6)) : (this.world && this.world.standHeight ? this.world.standHeight(x, z, p.y + 6) : -1);
       const y = gy > 0 ? gy + .01 : p.y;
       if (W.isSolid(get(Math.floor(x), Math.floor(y + .45), Math.floor(z))) ||
           W.isSolid(get(Math.floor(x), Math.floor(y + 1.35), Math.floor(z)))) break;
@@ -766,8 +767,8 @@ class CombatMixin {
         const step = Math.min(dist,info.speed*dt);
         mob.x += (tx - mob.x) / dist * step;
         mob.z += (tz - mob.z) / dist * step;
-        const inst = mob.dgn ? this.instances[mob.dgn] : null;
-        const gy = inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, mob.x, mob.z) : D.standHeightIn(inst.world, mob.x, mob.z, mob.y + 2)) : this.world.standHeight(mob.x, mob.z, mob.y + 2);
+        const inst = mob.dgn ? (typeof this.activeDungeonInstance === 'function' ? this.activeDungeonInstance(mob.dgn) : this.instances[mob.dgn]) : null;
+        const gy = inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, mob.x, mob.z) : D.standHeightIn(inst.world, mob.x, mob.z, mob.y + 2)) : (this.world && this.world.standHeight ? this.world.standHeight(mob.x, mob.z, mob.y + 2) : -1);
         if (gy > 0 && Math.abs(gy - mob.y) <= 2.2) mob.y = gy;
         mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
         mob.state = 'chase';
