@@ -4214,6 +4214,7 @@ function clearTownGuidance(){
   tutorialPillarGroup.visible=false;
 }
 function tickTownGuidance(now){
+  tickQuestionHallReturnPortal(now);
   // Meadow and ability tutorials own the shared tutorial HUD/pillar. Town
   // guidance must not start or hide their instructions while either is active.
   if(onboardingActive || abilityTrainingActive || jobTutorialActive) return;
@@ -5876,6 +5877,29 @@ function nearQuestionHallTownPortal(range=4.8){
   if(dim!=='questions'||typeof questionHallTownPortalPoint!=='function')return false;
   const p=questionHallTownPortalPoint();
   return Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<range;
+}
+let questionHallReturnPortalInside=false,questionHallReturnPortalLast=0;
+function tickQuestionHallReturnPortal(now=performance.now()){
+  if(dim!=='questions'){
+    questionHallReturnPortalInside=false;
+    return false;
+  }
+  const modalOpen=uiOpen||statOpen||uiShellState.qOpen||claimMode||pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||globalThis.chatTyping||document.body.classList.contains('game-modal-open');
+  const inside=!modalOpen&&nearQuestionHallTownPortal(2.35);
+  if(!inside){
+    questionHallReturnPortalInside=false;
+    return false;
+  }
+  if(questionHallReturnPortalInside||now-questionHallReturnPortalLast<1200)return false;
+  questionHallReturnPortalInside=true;
+  questionHallReturnPortalLast=now;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('dimension.questions.portal.auto', {
+    x:Math.round((player&&player.pos&&player.pos.x||0)*1000)/1000,
+    y:Math.round((player&&player.pos&&player.pos.y||0)*1000)/1000,
+    z:Math.round((player&&player.pos&&player.pos.z||0)*1000)/1000,
+  });
+  if(typeof exitQuestionRoomToTown==='function')exitQuestionRoomToTown();
+  return true;
 }
 function nearbyVillager(range=3.6){
   if(dim!=='overworld'||!Array.isArray(villagers))return null;

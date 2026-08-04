@@ -2357,6 +2357,10 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/settleFirstTownAdventureSpawn\(\)/);
   assert.match(combat,/enterQuestionRoom\(\)/);
   assert.match(combat,/function nearQuestionHallTownPortal\(range=4\.8\)/);
+  assert.match(combat,/function tickQuestionHallReturnPortal\(now=performance\.now\(\)\)/);
+  assert.match(combat,/nearQuestionHallTownPortal\(2\.35\)/);
+  assert.match(combat,/BlockcraftTrace\('dimension\.questions\.portal\.auto'/);
+  assert.match(combat,/tickQuestionHallReturnPortal\(now\)/);
   assert.match(combat,/title:'Return Portal',small:'Travel back to Town of Beginnings'/);
   assert.match(combat,/if\(nearQuestionHallTownPortal\(\)\)\{ if\(typeof exitQuestionRoomToTown==='function'\)exitQuestionRoomToTown\(\); return; \}/);
   assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n {2}showFirstTownArrivalChoice,/);
