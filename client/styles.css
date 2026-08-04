@@ -114,7 +114,7 @@
   .xpb.xp-gain i{animation:xpGainPulse .42s ease-out}.xpb.xp-gain span{opacity:1}
   @keyframes xpGainPulse{0%{filter:brightness(2.2);box-shadow:0 0 16px #ffd24a}100%{filter:none;box-shadow:0 0 7px rgba(255,210,74,.45)}}
   body.calm-town #locationhud .meta{display:none}
-  body.calm-town #landmap{display:none!important}
+  body.calm-town #landmap:not(.map-utility){display:none!important}
   /* ability slots */
   #abilities{position:fixed;left:calc(50% + 372px);bottom:16px;display:flex;gap:7px;z-index:8}
   .abslot{width:52px;height:52px;border:2px solid #555;border-radius:7px;background:linear-gradient(180deg,rgba(10,18,28,.86),rgba(4,7,12,.8));position:relative;color:#dfe9ff;display:flex;align-items:center;justify-content:center;font-size:24px;text-shadow:0 0 10px currentColor;box-shadow:0 7px 20px rgba(0,0,0,.36),inset 0 0 16px rgba(255,255,255,.04)}

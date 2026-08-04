@@ -3379,7 +3379,8 @@ function firstLandClaimGuidanceHTML(){
 function updateLandMinimap(force=true){
   const hasOwn = editableClaimCount()>0;
   const miniMap = utilityEquipped('minimap'), worldMap = utilityEquipped('world_map');
-  const mapUtility = miniMap || worldMap;
+  const hasTownMap = typeof countItem==='function' && countItem(I.TOWN_MAP)>0;
+  const mapUtility = dim==='overworld' && (miniMap || worldMap || hasTownMap);
   const calmTown = calmTownHud();
   const weatherMapReq={rain_bloom:'rain',storm_crystal:'storm',sun_dial:'clear'},currentWeather=weather||'clear',now=Date.now();
   const isWeatherDiscovery=s=>!!(s&&weatherMapReq[s.type]);
@@ -3389,10 +3390,11 @@ function updateLandMinimap(force=true){
   const dragonMarkers = globalThis.BlockcraftDragonMap && typeof globalThis.BlockcraftDragonMap.stayMarkers === 'function'
     ? globalThis.BlockcraftDragonMap.stayMarkers()
     : [];
-  const visible = (!calmTown || mapUtility) && (hasOwn || landClaimOverlay || discoveredIds.size>0 || mapUtility || (mapUtility && dragonMarkers.length>0)) && (locked || claimMode || uiOpen || statOpen || qOpen);
+  const hudState = locked || claimMode || uiOpen || statOpen || qOpen;
+  const visible = mapUtility || (dim==='overworld' && !calmTown && (hasOwn || landClaimOverlay || discoveredIds.size>0 || (mapUtility && dragonMarkers.length>0)) && hudState);
   const activeTrail=overworldActivity&&overworldActivity.trailSense&&(!overworldActivity.trailSense.expiresAt||overworldActivity.trailSense.expiresAt>Date.now())?overworldActivity.trailSense:null;
   const mapSig=[
-    visible?1:0,miniMap?1:0,worldMap?1:0,claimMode?1:0,landClaimOverlay?1:0,
+    visible?1:0,miniMap?1:0,worldMap?1:0,hasTownMap?1:0,claimMode?1:0,landClaimOverlay?1:0,
     Math.floor((player&&player.pos.x||0)/4),Math.floor((player&&player.pos.z||0)/4),
     landClaims.size,discoveredIds.size,claimedDiscoveryIds.size,hintedDiscoveryIds.size,
     utilityLoadout.active,utilityLoadout.passive.join('|'),weather||'',
@@ -3404,9 +3406,10 @@ function updateLandMinimap(force=true){
   ].join(',');
   if(!force&&mapSig===lastLandMinimapSig)return;
   lastLandMinimapSig=mapSig;
+  landMapEl.classList.toggle('map-utility', mapUtility);
   landMapEl.classList.toggle('hidden', !visible);
   landMapEl.classList.toggle('worldmap', worldMap && !claimMode);
-  const mt=landMapEl.querySelector('.mt');if(mt)mt.textContent=(worldMap?'WORLD MAP ':miniMap?'MINI MAP ':'EXPLORATION MAP ')+discoveredIds.size+(weatherMapped?' · WEATHER '+weatherHarvested+'/'+weatherMapped:'')+(dragonMarkers.length?' · DRAGON '+dragonMarkers.length:'');
+  const mt=landMapEl.querySelector('.mt');if(mt)mt.textContent=(worldMap?'WORLD MAP ':miniMap?'MINI MAP ':hasTownMap?'TOWN MAP ':'EXPLORATION MAP ')+discoveredIds.size+(weatherMapped?' · WEATHER '+weatherHarvested+'/'+weatherMapped:'')+(dragonMarkers.length?' · DRAGON '+dragonMarkers.length:'');
   landMapCtx.clearRect(0,0,landMapCanvas.width,landMapCanvas.height);
   landMapCtx.fillStyle='#020407';
   landMapCtx.fillRect(0,0,landMapCanvas.width,landMapCanvas.height);
