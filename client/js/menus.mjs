@@ -1444,14 +1444,19 @@ function noise(dur,vol,fc,q,delay,type){
 
 // ---------------- arrows (skeleton projectiles) ----------------
 const arrows=[];
-const arrowShaftMat=new THREE.MeshBasicMaterial({color:0x8a5d33});
-const arrowHeadMat=new THREE.MeshBasicMaterial({color:0x9a9aa4});
+const arrowShaftMat=new THREE.MeshBasicMaterial({color:0xb9823d});
+const arrowHeadMat=new THREE.MeshBasicMaterial({color:0xf5f0d2});
 function spawnArrow(x,y,z,dmg,lx,ly,lz){
   const grp=new THREE.Group();
-  const shaft=new THREE.Mesh(new THREE.BoxGeometry(.045,.045,.5), arrowShaftMat);
+  const shaft=new THREE.Mesh(new THREE.BoxGeometry(.075,.075,.72), arrowShaftMat);
   grp.add(shaft);
-  const head=new THREE.Mesh(new THREE.BoxGeometry(.07,.07,.1), arrowHeadMat);
-  head.position.z=-.28; grp.add(head);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(.14,.14,.16), arrowHeadMat);
+  head.position.z=-.42; grp.add(head);
+  const fletchMat=new THREE.MeshBasicMaterial({color:0xfff2a8,transparent:true,opacity:.72,depthWrite:false});
+  for(const side of [-1,1]){
+    const f=new THREE.Mesh(new THREE.BoxGeometry(.16,.035,.18), fletchMat);
+    f.position.set(side*.09,0,.34);f.rotation.z=side*.55;grp.add(f);
+  }
   const target=new THREE.Vector3(lx!==undefined?lx:player.pos.x, ly!==undefined?ly:player.pos.y+player.eye-.2, lz!==undefined?lz:player.pos.z);
   const dir=target.sub(new THREE.Vector3(x,y,z)).normalize();
   dir.x+=(Math.random()-.5)*.07; dir.y+=(Math.random()-.5)*.05; dir.z+=(Math.random()-.5)*.07;

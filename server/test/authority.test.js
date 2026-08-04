@@ -5726,6 +5726,8 @@ test('substepping stops a fast projectile from tunneling through a thin wall', (
 test('a mob fires a bolt aimed at its target at the correct speed', () => {
   const room = makeRoom();
   room.sArrows = [];
+  const sent = [];
+  room.sendSpace = (space, type, msg) => sent.push({ space, type, msg });
   const mob = { x: 0, y: 9, z: 0 };
   room.fireArrow(mob, '', 20, 10.4, 0, 5, true, 'frost');   // bolt toward (20, 10.4, 0); no spread
 
@@ -5736,6 +5738,9 @@ test('a mob fires a bolt aimed at its target at the correct speed', () => {
   assert.equal(a.dmg, 5);
   assert.equal(a.bolt, true);
   assert.equal(a.effect,'frost','projectiles retain their biome VFX/status identity');
+  assert.equal(sent[0].type, 'arrow');
+  assert.equal(sent[0].msg.threat, 5);
+  assert.equal(typeof sent[0].msg.ring, 'number');
 });
 
 test('projectile damage is capped and same-volley arrow hits do not stack', () => {

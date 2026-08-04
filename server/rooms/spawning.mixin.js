@@ -1169,8 +1169,11 @@ class SpawningMixin {
       mob.kind = kind;
       mob.maxHp = mob.hp = Math.round(((ranged ? 8 : 10) + Math.floor((lvl - 1) * 1.5)) * cfg.hp*family.hp);
       this.state.mobs.set(id, mob);
-      const meta = this.freshMeta(x, z, Math.round((3 + Math.floor(lvl / 4)) * cfg.dmg*family.dmg), ((ranged ? 1.35 : 1.6) + Math.random() * .5)*family.speed, mob.kind, ring, true);
-      meta.arrowDmg = Math.round((2 + Math.floor(lvl / 3)) * cfg.dmg*family.dmg);
+      const ringDamageCap = [3, 5, 7, 10][ring] || 10;
+      const levelArrow = 2 + Math.floor(Math.max(1, lvl) / (ring === 0 ? 6 : 4));
+      const meta = this.freshMeta(x, z, Math.min(ringDamageCap + 1, Math.round((3 + Math.floor(lvl / 4)) * cfg.dmg*family.dmg)), ((ranged ? 1.35 : 1.6) + Math.random() * .5)*family.speed, mob.kind, ring, true);
+      meta.arrowDmg = Math.max(1, Math.min(ringDamageCap, Math.round(levelArrow * cfg.dmg*family.dmg)));
+      meta.mobLevel = lvl;
       meta.dangerRing=ring;meta.biome=biome;meta.biomeDrop=family.drop;meta.biomeBehavior=family.behavior;meta.dayActive=!!family.day;
       if(family.behavior==='brute'&&!ranged)meta.brute=true;
       if(family.behavior==='quickshot'&&ranged)meta.quickShot=true;

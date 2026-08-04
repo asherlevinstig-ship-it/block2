@@ -1305,14 +1305,17 @@ class CombatMixin {
     const sx = mob.x, sy = mob.y + (bolt ? 1.6 : 1.35), sz = mob.z;
     const d = Math.hypot(tx - sx, ty - sy, tz - sz) || 1;
     const spd = bolt ? 10 : 16;
+    const ring = dgn ? Math.max(0, mob && mob.rank || 0) : dangerRingAt(sx, sz);
+    const threat = Math.max(1, Math.round(Number(dmg) || 1));
     const a = {
       x: sx, y: sy, z: sz,
       vx: (tx - sx) / d * spd, vy: (ty - sy) / d * spd, vz: (tz - sz) / d * spd,
-      dgn: dgn || '', dmg, bolt: !!bolt, effect:String(effect||''), life: bolt ? 2.4 : 3,
+      dgn: dgn || '', dmg:threat, bolt: !!bolt, effect:String(effect||''), life: bolt ? 2.4 : 3,
+      ring,
     };
     if (!bolt) { a.vx += (Math.random() - .5) * 1.1; a.vz += (Math.random() - .5) * 1.1; }   // slight spread
     this.sArrows.push(a);
-    this.sendSpace(dgn, 'arrow', { x: a.x, y: a.y, z: a.z, vx: a.vx, vy: a.vy, vz: a.vz, bolt: !!bolt, effect:a.effect, dgn: dgn || '' });
+    this.sendSpace(dgn, 'arrow', { x: a.x, y: a.y, z: a.z, vx: a.vx, vy: a.vy, vz: a.vz, bolt: !!bolt, effect:a.effect, dgn: dgn || '', ring, threat });
   }
   projectileDamageFor(client, rawDamage, reason='arrow') {
     const hp = client && this.ensurePlayerHp(client);

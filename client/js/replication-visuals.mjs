@@ -1264,6 +1264,8 @@ function netSpikes(m){
 }
 function netSpawnProjectile(m){
   if((m.dgn||'')!==NET.dgn) return;
+  const projectileThreat=Math.max(1,Number(m.threat)||1),projectileRing=Math.max(0,Number(m.ring)||0);
+  const projectileScale=Math.min(2.25,1.15+projectileRing*.18+projectileThreat*.035);
   if(m.breath){
     const col=dragonTrailColor(m.element||'ember');
     const grp=new THREE.Group();
@@ -1283,7 +1285,9 @@ function netSpawnProjectile(m){
     SFX.cast();
   } else if(m.bolt){
     const grp=new THREE.Group();
-    grp.add(new THREE.Mesh(new THREE.BoxGeometry(.2,.2,.2), new THREE.MeshBasicMaterial({color:0x9a4fe0})));
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(.34,.34,.34), new THREE.MeshBasicMaterial({color:0xc681ff})));
+    grp.add(new THREE.Mesh(new THREE.BoxGeometry(.58,.58,.58), new THREE.MeshBasicMaterial({color:0x9a4fe0,transparent:true,opacity:.34,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending})));
+    grp.scale.setScalar(projectileScale);
     grp.position.set(m.x,m.y,m.z);
     scene.add(grp);
     arrows.push({grp, vel:new THREE.Vector3(m.vx,m.vy,m.vz), life:2.4, stuck:false, dmg:0, bolt:true, visual:true});
@@ -1293,6 +1297,11 @@ function netSpawnProjectile(m){
     const a=arrows[arrows.length-1];
     a.vel.set(m.vx,m.vy,m.vz);
     a.visual=true;
+    a.grp.scale.setScalar(projectileScale);
+    const warn=[0xfff2a8,0xffc857,0xff7a38,0xff4fd8][Math.max(0,Math.min(3,projectileRing))]||0xfff2a8;
+    const glow=new THREE.Mesh(new THREE.BoxGeometry(.18,.18,.92),new THREE.MeshBasicMaterial({color:warn,transparent:true,opacity:.42,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+    glow.renderOrder=18;a.grp.add(glow);
+    a.trailCol=[((warn>>16)&255)/255,((warn>>8)&255)/255,(warn&255)/255];
     const vfx=BIOME_VFX[EFFECT_BIOME[m.effect]];
     if(vfx){a.trailCol=vfx.col;for(const child of a.grp.children)if(child.material){child.material=child.material.clone();child.material.color.setHex(vfx.hex);}}
     SFX.bow();
