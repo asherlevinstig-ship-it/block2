@@ -507,9 +507,9 @@
   #eventresult .erbar{height:5px;margin-top:10px;border:1px solid rgba(79,216,255,.3);border-radius:999px;background:rgba(0,0,0,.45);overflow:hidden}
   #eventresult .erbar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#4fd8ff,#ffd24a);transition:width .1s linear}
   @media (max-width:620px){#eventresultpanel{padding:24px 18px}#eventresult h1{font-size:24px;letter-spacing:5px}#eventresultstats,#eventresultrewards{grid-template-columns:1fr 1fr}}
-  #rewardwin{position:fixed;right:18px;top:178px;width:360px;max-width:calc(100vw - 36px);z-index:9;pointer-events:none}
+  #rewardwin{position:fixed;right:18px;top:178px;bottom:18px;width:360px;max-width:calc(100vw - 36px);z-index:9;pointer-events:none;display:flex;align-items:flex-start}
   #rewardwin.promotion-open{z-index:62;pointer-events:auto}
-  #rewardpanel{background:linear-gradient(160deg, rgba(12,22,44,.97), rgba(6,10,22,.97));border:1px solid #4fd8ff;box-shadow:0 0 24px rgba(79,216,255,.38), inset 0 0 32px rgba(79,216,255,.07);border-radius:8px;padding:14px 16px;color:#d8e8ff;pointer-events:auto;position:relative;overflow:hidden}
+  #rewardpanel{width:100%;max-height:100%;background:linear-gradient(160deg, rgba(12,22,44,.97), rgba(6,10,22,.97));border:1px solid #4fd8ff;box-shadow:0 0 24px rgba(79,216,255,.38), inset 0 0 32px rgba(79,216,255,.07);border-radius:8px;padding:14px 16px;color:#d8e8ff;pointer-events:auto;position:relative;overflow-y:auto;overscroll-behavior:contain;scrollbar-color:rgba(79,216,255,.55) rgba(4,10,20,.45)}
   #rewardpanel:before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#4fd8ff,#ffd24a,#b88cff)}
   #rewardpanel.earned{border-color:#ffd24a;box-shadow:0 0 26px rgba(255,210,74,.28), inset 0 0 32px rgba(79,216,255,.07)}
   #rewardpanel.missed{border-color:#ff6a6a;box-shadow:0 0 22px rgba(255,80,80,.2), inset 0 0 32px rgba(255,80,80,.05)}
@@ -536,7 +536,7 @@
   .rnote{font-size:12px;line-height:1.45;color:#d8e8ff;margin-top:9px}
   .rnote b{color:#4fd8ff}
   .rbonus{margin-top:8px;padding:7px 9px;border:1px solid rgba(184,140,255,.32);background:rgba(49,28,78,.35);border-radius:5px;color:#eadfff;font-size:11px;line-height:1.35}
-  #rewardclose{margin-top:11px;font-family:inherit;font-size:11px;letter-spacing:2px;padding:6px 12px;background:#16345e;color:#4fd8ff;border:1px solid #4fd8ff;border-radius:4px;cursor:pointer}
+  #rewardclose{position:sticky;bottom:0;margin-top:11px;font-family:inherit;font-size:11px;letter-spacing:2px;padding:6px 12px;background:#16345e;color:#4fd8ff;border:1px solid #4fd8ff;border-radius:4px;cursor:pointer;box-shadow:0 -10px 18px rgba(6,10,22,.78)}
   #gearrewardwin{position:fixed;right:18px;top:142px;width:390px;max-width:calc(100vw - 36px);z-index:42;pointer-events:none}
   #gearrewardpanel{--gear-color:#4fd8ff;pointer-events:auto;color:#eaf6ff;padding:15px;background:linear-gradient(155deg,rgba(12,20,34,.98),rgba(5,9,17,.98));border:1px solid var(--gear-color);border-radius:9px;box-shadow:0 0 28px color-mix(in srgb,var(--gear-color) 34%,transparent),inset 0 0 32px rgba(255,255,255,.025);animation:gearRewardIn .22s ease-out}
   #gearrewardpanel.unique-gear{background:linear-gradient(155deg,color-mix(in srgb,var(--gear-color) 15%,rgba(12,20,34,.98)),rgba(5,9,17,.99));box-shadow:0 0 36px color-mix(in srgb,var(--gear-color) 58%,transparent),inset 0 0 42px color-mix(in srgb,var(--gear-color) 10%,transparent)}
@@ -568,7 +568,8 @@
   #rankuppanel .ruunlocks{display:flex;justify-content:center;flex-wrap:wrap;gap:7px;margin:14px 0}#rankuppanel .ruunlocks span{width:100%;font-size:9px;letter-spacing:3px;color:#8fb8d8}#rankuppanel .ruunlocks b{padding:7px 10px;border:1px solid rgba(154,210,107,.3);border-radius:999px;font-size:9px;color:#dfffc2;background:rgba(154,210,107,.08)}
   #rankupcontinue{font-family:inherit;font-size:13px;letter-spacing:3px;padding:11px 24px;background:#9ad26b;color:#102015;border:0;border-bottom:4px solid #4d7a36;border-radius:6px;cursor:pointer}
   @media (max-width:620px){#rankuppanel{padding:24px 20px}#rankuppanel .rurewards{grid-template-columns:1fr}#rankuppanel .rurank{font-size:56px}}
-  @media (max-width:980px){#eventhud{max-width:calc(100vw - 24px);width:calc(100vw - 24px);top:6px}#coachhud{max-width:calc(100vw - 36px);width:calc(100vw - 36px);top:50px;grid-template-columns:1fr auto auto}#sysmsgs{top:110px}.rewardloot{grid-template-columns:1fr}}
+  @media (max-width:980px){#eventhud{max-width:calc(100vw - 24px);width:calc(100vw - 24px);top:6px}#coachhud{max-width:calc(100vw - 36px);width:calc(100vw - 36px);top:50px;grid-template-columns:1fr auto auto}#sysmsgs{top:110px}#rewardwin{top:112px;bottom:12px}.rewardloot{grid-template-columns:1fr}}
+  @media (max-height:760px){#rewardwin{top:96px;bottom:10px}#rewardpanel{padding:12px 14px}.resultstats{grid-template-columns:1fr 1fr}.rnote,.rbonus{font-size:10px;line-height:1.35}}
   /* status window */
   #statwin{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 22%,rgba(79,216,255,.16),transparent 34%),rgba(3,7,14,.72);backdrop-filter:blur(8px);z-index:34}
   #statpanel{width:min(1480px,calc(100vw - 36px));max-height:calc(100vh - 36px);overflow-y:auto;background:radial-gradient(circle at 50% 0,rgba(118,86,28,.2),transparent 30%),linear-gradient(155deg,rgba(16,19,18,.98),rgba(5,8,13,.99));border:1px solid rgba(218,171,92,.72);box-shadow:0 18px 70px rgba(0,0,0,.66),0 0 34px rgba(218,171,92,.18),inset 0 0 42px rgba(218,171,92,.055);border-radius:8px;padding:18px;color:#eadcc8}
