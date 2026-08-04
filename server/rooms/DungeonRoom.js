@@ -184,7 +184,6 @@ class DungeonRoom extends GameRoom {
 
     const inst = this.instance;
     const ex = inst.entrance;
-    const ey = D.standHeightIn(inst.world, ex.x, ex.z, 12);
     const p = new Player();
     p.name = cleanName((prof && prof.name) || (auth && auth.displayName));
     p.schoolId = auth && auth.schoolId != null ? String(auth.schoolId).slice(0, 24) : '';
@@ -205,7 +204,8 @@ class DungeonRoom extends GameRoom {
     });
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
-    p.x = ex.x + .5; p.y = (ey > 0 ? ey : 9) + .01; p.z = ex.z + .5;
+    const spawn = this.dungeonSafeSpawn(inst, ex);
+    p.x = spawn.x; p.y = spawn.y; p.z = spawn.z;
     p.dim = 'dungeon';
     p.dgn = inst.id;
     this.state.players.set(client.sessionId, p);

@@ -2108,7 +2108,7 @@ class GameRoom extends Room {
       const step = 8;
       for (let x = w.originX + 2; x < w.originX + w.width - 2; x += step) {
         for (let z = w.originZ + 2; z < w.originZ + w.depth - 2; z += step) {
-          const y = D.standHeightIn(w, x, z, 12);
+          const y = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(w, x, z) : D.standHeightIn(w, x, z, 12);
           if (y > 0) points.push({ x, z });
         }
       }
@@ -2128,7 +2128,7 @@ class GameRoom extends Room {
       const tz = Number.isFinite(target.z) ? target.z : fallbackA.z;
       const x = tx + Math.cos(angle) * 1.4;
       const z = tz + Math.sin(angle) * 1.4;
-      const y = D.standHeightIn(inst.world, x, z, 12);
+      const y = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, 12);
       p.x = x; p.y = y > 0 ? y : p.y; p.z = z; p.dim = 'dungeon'; p.dgn = inst.id;
       client.send('e2eJourneyResult', { action, requestId, ok: true, x: p.x, y: p.y, z: p.z, separation: Math.round(best * 100) / 100 });
       return true;
@@ -7359,7 +7359,7 @@ class GameRoom extends Room {
       || solid(Math.floor(x), Math.floor(y + 1.5), Math.floor(z));
     const inst = p.dgn ? this.instances[p.dgn] : null;
     const groundAt = (x, z, fromY = W.WH - 2) => {
-      if (p.dgn) return inst && inst.world ? D.standHeightIn(inst.world, x, z, Math.min(12, fromY)) : -1;
+      if (p.dgn) return inst && inst.world ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, Math.min(12, fromY))) : -1;
       return this.world.standHeight(x, z, fromY);
     };
     const townFloorStrict = !p.dgn && this.isTownProtected(sx, sz);
@@ -7489,7 +7489,7 @@ class GameRoom extends Room {
   simulateMob(m, id, meta, dt, spaces) {
       const inst = m.dgn ? this.instances[m.dgn] : null;
       if (m.dgn && !inst) return;
-      const ground = (x, z, fromY) => inst ? D.standHeightIn(inst.world, x, z, fromY) : this.world.standHeight(x, z, fromY);
+      const ground = (x, z, fromY) => inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, fromY)) : this.world.standHeight(x, z, fromY);
       const solid = this.spaceSolid(m.dgn);
       const candidates = (spaces[m.dgn || ''] || []).filter(s => {
         const hp = s && this.playerHp.get(s.sid);

@@ -322,10 +322,22 @@
         if(!NON_SOLID.has(dungeonGetB(w,bx,y,bz))) return y+1;
       return -1;
     }
+    function safeStandHeightIn(w, x, z) {
+      const bx=Math.floor(x), bz=Math.floor(z);
+      const width=w.width, depth=w.depth, height=w.height;
+      if(bx<0||bx>=width||bz<0||bz>=depth) return -1;
+      for(let y=1;y<=9&&y<height-2;y++){
+        if(NON_SOLID.has(dungeonGetB(w,bx,y-1,bz))) continue;
+        if(!NON_SOLID.has(dungeonGetB(w,bx,y,bz))) continue;
+        if(!NON_SOLID.has(dungeonGetB(w,bx,y+1,bz))) continue;
+        return y;
+      }
+      return -1;
+    }
 
     return {
       DungeonGrid, DUNGEON_WIDTH, DUNGEON_HEIGHT, RANK_MUL,
-      dungeonGetB, dungeonSetB, carveBox, generateDungeon, standHeightIn,
+      dungeonGetB, dungeonSetB, carveBox, generateDungeon, standHeightIn, safeStandHeightIn,
     };
   }
 

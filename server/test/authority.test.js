@@ -1447,7 +1447,29 @@ test('gate entry moves the authoritative player to the dungeon entrance spawn',(
   assert.equal(p.x,payload.sx);
   assert.equal(p.y,payload.sy);
   assert.equal(p.z,payload.sz);
-  assert.equal(D.standHeightIn(inst.world,p.x,p.z,12)+.01,p.y);
+  assert.equal(D.safeStandHeightIn(inst.world,p.x,p.z)+.01,p.y);
+});
+
+test('gate entry relocates a buried dungeon entrance spawn to nearby safe ground',()=>{
+  const room=makeRoom(),client=makeClient('gate_entry_buried_spawn');
+  seedPlayer(room,client,{x:500,z:430,y:16});
+  const g=makeGate('g_buried_spawn_check',500.5,430.5,0,'public');
+  g.seed=0x5eed1234;
+  g.dungeonId='abandoned_mine';
+  const inst=room.createInstance(g);
+  const ex=inst.entrance;
+  D.dungeonSetB(inst.world,ex.x,9,ex.z,W.B.STONE);
+  D.dungeonSetB(inst.world,ex.x,10,ex.z,W.B.STONE);
+  room.enterGateInstance(client,g,inst);
+  const p=room.state.players.get(client.sessionId);
+  const payload=client.sent.find(e=>e.type==='enterDungeon').msg;
+  assert.equal(p.dim,'dungeon');
+  assert.equal(p.x,payload.sx);
+  assert.equal(p.y,payload.sy);
+  assert.equal(p.z,payload.sz);
+  assert.notDeepEqual([Math.floor(p.x),Math.floor(p.z)],[ex.x,ex.z], 'blocked entrance cell is not used');
+  assert.equal(AI.makeSolid(inst.world)(Math.floor(p.x),Math.floor(p.y+.2),Math.floor(p.z)),false);
+  assert.equal(AI.makeSolid(inst.world)(Math.floor(p.x),Math.floor(p.y+1.5),Math.floor(p.z)),false);
 });
 
 test('dungeon movement snaps transition-height packets back to the entrance floor',()=>{
@@ -1459,7 +1481,7 @@ test('dungeon movement snaps transition-height packets back to the entrance floo
   const inst=room.createInstance(g);
   room.enterGateInstance(client,g,inst);
   const p=room.state.players.get(client.sessionId);
-  const floor=D.standHeightIn(inst.world,p.x,p.z,12)+.01;
+  const floor=D.safeStandHeightIn(inst.world,p.x,p.z)+.01;
   room.lastMoveMsg.set(client.sessionId,Date.now()-100);
   room.handleMove(client,{x:p.x,y:16,z:p.z,yaw:0});
   assert.equal(p.y,floor);
@@ -5376,6 +5398,37 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
   assert.equal(prof.dungeonRecovery.bootId, 'dr-boot', 'stamped with this room process boot');
   assert.deepEqual(prof.dungeonRecovery.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5], 'return position is the safe Town of Beginnings spawn');
   assert.ok(room.dirtyPlayers.has(token), 'the armed marker is queued for persistence');
+});
+
+test('joining a DungeonRoom relocates a buried entrance spawn to safe ground', async () => {
+  const room = makeDungeonRoom();
+  const token = 'room_buried_spawn_token';
+  const prof = defaultProfile('BuriedRoomHopper');
+  room.profiles.set(token, prof);
+  const d = D.generateDungeon(0, 0x5eed1234, 'abandoned_mine');
+  D.dungeonSetB(d.world,d.entrance.x,9,d.entrance.z,W.B.STONE);
+  D.dungeonSetB(d.world,d.entrance.x,10,d.entrance.z,W.B.STONE);
+  room.instance = {
+    id: 'dr-buried-spawn', gateX: 30, gateY: 16, gateZ: 31,
+    seed: 0x5eed1234, rank: 0, dungeonId: 'abandoned_mine',
+    entrance: d.entrance, bossRoom: d.bossRoom, rooms: d.rooms, world: d.world,
+    players: new Set(),
+    addPlayer(sid) { this.players.add(sid); },
+  };
+  const client = makeClient('room_buried_spawn');
+  const ticket = issueDungeonAdmission({ id: 'dr-buried-spawn', seed: 1, rank: 0, x: 30, y: 16, z: 31 }, [token]);
+  room.admissionTicket = ticket;
+
+  await room.onJoin(client, { ticket }, { id: token, displayName: 'BuriedRoomHopper' });
+
+  const p = room.state.players.get(client.sessionId);
+  const payload = client.sent.find(e => e.type === 'enterDungeon').msg;
+  assert.equal(p.x,payload.sx);
+  assert.equal(p.y,payload.sy);
+  assert.equal(p.z,payload.sz);
+  assert.notDeepEqual([Math.floor(p.x),Math.floor(p.z)],[d.entrance.x,d.entrance.z], 'blocked entrance cell is not used');
+  assert.equal(AI.makeSolid(d.world)(Math.floor(p.x),Math.floor(p.y+.2),Math.floor(p.z)),false);
+  assert.equal(AI.makeSolid(d.world)(Math.floor(p.x),Math.floor(p.y+1.5),Math.floor(p.z)),false);
 });
 
 test('a clean DungeonRoom leave retires the crash-recovery marker it armed on entry', async () => {

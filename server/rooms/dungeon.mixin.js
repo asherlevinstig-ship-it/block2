@@ -895,14 +895,58 @@ class DungeonMixin {
       return;
     }
   }
+  dungeonSafeSpawn(inst, preferred = null) {
+    const world = inst && inst.world;
+    const fallback = (inst && (inst.entrance || inst.bossRoom)) || { x: 22, z: 22 };
+    const base = preferred || fallback;
+    const candidates = [];
+    const solid = world ? AI.makeSolid(world) : null;
+    const push = pos => {
+      if (!pos) return;
+      const x = Number.isFinite(pos.x) ? pos.x : fallback.x;
+      const z = Number.isFinite(pos.z) ? pos.z : fallback.z;
+      candidates.push({ x: Math.floor(x) + .5, z: Math.floor(z) + .5 });
+    };
+    push(base);
+    push(inst && inst.entrance);
+    const tryPoint = pt => {
+      if (!world || !solid || !Number.isFinite(pt.x) || !Number.isFinite(pt.z)) return null;
+      const y = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(world, pt.x, pt.z) : D.standHeightIn(world, pt.x, pt.z, 9);
+      if (y <= 0) return null;
+      const bx = Math.floor(pt.x), bz = Math.floor(pt.z);
+      if (solid(bx, Math.floor(y + .2), bz)) return null;
+      if (solid(bx, Math.floor(y + 1.5), bz)) return null;
+      return { x: pt.x, y: y + .01, z: pt.z };
+    };
+    for (const pt of candidates) {
+      const hit = tryPoint(pt);
+      if (hit) return hit;
+    }
+    const startX = Math.floor((base && base.x) || fallback.x);
+    const startZ = Math.floor((base && base.z) || fallback.z);
+    for (let r = 1; r <= 14; r++) {
+      for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const hit = tryPoint({ x: startX + dx + .5, z: startZ + dz + .5 });
+        if (hit) return hit;
+      }
+    }
+    push(inst && inst.bossRoom);
+    if (inst && Array.isArray(inst.rooms)) for (const rm of inst.rooms) push(rm);
+    for (let i = 2; i < candidates.length; i++) {
+      const hit = tryPoint(candidates[i]);
+      if (hit) return hit;
+    }
+    return { x: Math.floor(fallback.x) + .5, y: 9.01, z: Math.floor(fallback.z) + .5 };
+  }
   gateEntryPayload(g, inst) {
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
-    const ey = inst.world ? D.standHeightIn(inst.world, ex.x + .5, ex.z + .5, 12) : 9;
+    const spawn = this.dungeonSafeSpawn(inst, ex);
     return {
       id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
       edits: inst.edits,
       bx: g ? g.x : inst.gateX, by: g ? g.y : inst.gateY, bz: g ? g.z : inst.gateZ,
-      sx: ex.x + .5, sy: (ey > 0 ? ey : 9) + .01, sz: ex.z + .5,
+      sx: spawn.x, sy: spawn.y, sz: spawn.z,
       cleared: inst.cleared,
       shardPlus: inst.shardPlus || 0, shardName: inst.shardName || '', shardMods: inst.shardMods || '',
     };
@@ -995,10 +1039,10 @@ class DungeonMixin {
     const hp = this.ensurePlayerHp(client);
     hp.hp = hp.max;
     const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
-    const ey = inst.world ? D.standHeightIn(inst.world, ex.x + .5, ex.z + .5, 12) : 9;
-    p.x = ex.x + .5;
-    p.y = (ey > 0 ? ey : 9) + .01;
-    p.z = ex.z + .5;
+    const spawn = this.dungeonSafeSpawn(inst, ex);
+    p.x = spawn.x;
+    p.y = spawn.y;
+    p.z = spawn.z;
     p.yaw = 0;
     client.send('enterDungeon', this.gateEntryPayload(g, inst));
     return true;
@@ -1223,7 +1267,7 @@ class DungeonMixin {
   addDungeonMob(dgn, x, z, kind, hp, dmg, speed, wbuf, rank) {
     const id = String(++this.mobSeq);
     const mob = new Mob();
-    const gy = D.standHeightIn(wbuf, x, z, 12);
+    const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(wbuf, x, z) : D.standHeightIn(wbuf, x, z, 12);
     mob.x = x; mob.y = gy > 0 ? gy : 9; mob.z = z;
     mob.maxHp = mob.hp = hp;
     mob.kind = kind;
@@ -1242,7 +1286,7 @@ class DungeonMixin {
   spawnHazMob(inst, kind, x, z, hp, withMeta, dmg, speed) {
     const id = String(++this.mobSeq);
     const mob = new Mob();
-    const gy = D.standHeightIn(inst.world, x, z, 12);
+    const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, 12);
     mob.x = x; mob.y = gy > 0 ? gy : 9; mob.z = z;
     mob.maxHp = mob.hp = hp;
     mob.kind = kind;
@@ -1328,7 +1372,7 @@ class DungeonMixin {
     for (let k = 0; k < 8; k++) {
       const a = Math.random() * 6.283, d = 3 + Math.random() * 3;
       const x = anchor.p.x + Math.cos(a) * d, z = anchor.p.z + Math.sin(a) * d;
-      const gy = D.standHeightIn(inst.world, x, z, anchor.p.y + 2);
+      const gy = typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, anchor.p.y + 2);
       if (gy < 1) continue;
       const { id } = this.spawnHazMob(inst, 'orb', x, z, 2, false, 0, 0);
       inst.haz.orbs.push({ id, x, z, y: gy, fuse: 6 });

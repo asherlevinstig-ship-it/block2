@@ -509,7 +509,7 @@ class CombatMixin {
     for (let t = .75; t <= range; t += .45) {
       const x = Math.max(1.25, Math.min(W.WX - 1.25, p.x + dir.dx * t));
       const z = Math.max(1.25, Math.min(W.WX - 1.25, p.z + dir.dz * t));
-      const gy = dgn && inst ? D.standHeightIn(inst.world, x, z, p.y + 6) : this.world.standHeight(x, z, p.y + 6);
+      const gy = dgn && inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, p.y + 6)) : this.world.standHeight(x, z, p.y + 6);
       const y = gy > 0 ? gy + .01 : p.y;
       if (W.isSolid(get(Math.floor(x), Math.floor(y + .45), Math.floor(z))) ||
           W.isSolid(get(Math.floor(x), Math.floor(y + 1.35), Math.floor(z)))) break;
@@ -767,7 +767,7 @@ class CombatMixin {
         mob.x += (tx - mob.x) / dist * step;
         mob.z += (tz - mob.z) / dist * step;
         const inst = mob.dgn ? this.instances[mob.dgn] : null;
-        const gy = inst ? D.standHeightIn(inst.world, mob.x, mob.z, mob.y + 2) : this.world.standHeight(mob.x, mob.z, mob.y + 2);
+        const gy = inst ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, mob.x, mob.z) : D.standHeightIn(inst.world, mob.x, mob.z, mob.y + 2)) : this.world.standHeight(mob.x, mob.z, mob.y + 2);
         if (gy > 0 && Math.abs(gy - mob.y) <= 2.2) mob.y = gy;
         mob.yaw = Math.atan2(tx - mob.x, tz - mob.z);
         mob.state = 'chase';
