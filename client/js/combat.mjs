@@ -4582,12 +4582,13 @@ function refreshPlayUi(){
   document.getElementById('crosshair').classList.toggle('hidden', !locked || cursorReleased || claimMode);
   const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
   const minimal=offMainRoom||(onboardingActive&&dim==='tutorial')||(jobTutorialActive&&dim==='job');
+  const hideCombatVitals=minimal&&dim!=='dungeon';
   const calm=calmTownHud();
   const utilityBar=document.getElementById('utilitybar');
   document.body.classList.toggle('calm-town', showHud&&calm);
   document.getElementById('hotbar').classList.toggle('hidden', !showHud);
   if(utilityBar)utilityBar.classList.toggle('hidden', !showHud || minimal);
-  document.getElementById('stats').classList.toggle('hidden', !showHud || minimal);
+  document.getElementById('stats').classList.toggle('hidden', !showHud || hideCombatVitals);
   document.getElementById('abilities').classList.toggle('hidden', !showHud || minimal || !abilityHudAvailable());
   document.getElementById('locationhud').classList.toggle('hidden', !showHud);
   document.getElementById('coords').classList.toggle('hidden', !showHud);
