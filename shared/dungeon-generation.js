@@ -182,9 +182,8 @@
       }
       if(dressing==='supports'){
         for(let z=rm.z-rm.rz+2;z<=rm.z+rm.rz-2;z+=5){
-          dungeonSetB(w,rm.x-rm.rx+1,9,z,B.LOG); dungeonSetB(w,rm.x+rm.rx-1,9,z,B.LOG);
-          dungeonSetB(w,rm.x-rm.rx+1,10,z,B.LOG); dungeonSetB(w,rm.x+rm.rx-1,10,z,B.LOG);
-          dungeonSetB(w,rm.x,10,z,B.PLANKS);
+          dungeonSetB(w,rm.x-rm.rx+1,9,z,B.LANTERN);
+          dungeonSetB(w,rm.x+rm.rx-1,9,z,B.LANTERN);
         }
         if(hash2(rm.x+seed,rm.z)>.45) dungeonSetB(w,rm.x,9,rm.z,B.CAMPFIRE);
       } else if(dressing==='flooded'){
@@ -302,7 +301,7 @@
           carveBox(w,cx+rx-1,9,cz+rz-1,cx+rx-1,11,cz+rz-1,B.BRICK);
         }else if(i>0&&layout.dressing==='supports'){
           for(const ox of [-rx+1,rx-1]){
-            w.setB(cx+ox,9,cz,B.LOG); w.setB(cx+ox,10,cz,B.LOG); w.setB(cx+ox,11,cz,B.PLANKS);
+            w.setB(cx+ox,9,cz,B.LANTERN);
           }
         }
         px=cx; pz=cz;

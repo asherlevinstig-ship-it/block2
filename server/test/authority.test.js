@@ -4895,6 +4895,23 @@ test('ranked dungeon variants include atmosphere blocks and theme dressing', () 
   }
 });
 
+test('abandoned mine dressing does not place solid timber in player collision space', () => {
+  for (const seed of [0, 1, 7, 17, 0x5eed1234]) {
+    const d = D.generateDungeon(0, seed, 'abandoned_mine');
+    for (const rm of d.rooms) {
+      for (let x = rm.x - rm.rx + 1; x <= rm.x + rm.rx - 1; x++) {
+        for (let z = rm.z - rm.rz + 1; z <= rm.z + rm.rz - 1; z++) {
+          for (const y of [9, 10]) {
+            const id = D.dungeonGetB(d.world, x, y, z);
+            assert.notEqual(id, W.B.LOG, `solid log support at ${x},${y},${z} seed ${seed}`);
+            assert.notEqual(id, W.B.PLANKS, `solid plank support at ${x},${y},${z} seed ${seed}`);
+          }
+        }
+      }
+    }
+  }
+});
+
 test('dungeon mob targeting ignores a nearer downed hunter', () => {
   const room = makeDungeonRoom();
   const inst = putInstance(room, { id: 'target-test', world: new D.DungeonGrid() });
