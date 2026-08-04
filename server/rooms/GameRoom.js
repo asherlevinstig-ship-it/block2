@@ -410,6 +410,7 @@ class GameRoom extends Room {
     this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
     this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
+    this.onMessage('adminGateTeleport', (client, m) => this.handleAdminGateTeleport(client, m));
     this.onMessage('profileRequest', (client, m = {}) => {
       const rec = this.profileFor(client);
       if (!rec || !rec.prof) return;
@@ -3345,6 +3346,65 @@ class GameRoom extends Room {
     const dx = Math.abs((x | 0) - W.TOWN.TC);
     const dz = Math.abs((z | 0) - W.TOWN.TC);
     return dx <= W.TOWN.HS + 2 && dz <= W.TOWN.HS + 2;
+  }
+  activeGateList() {
+    const out = [];
+    if (this.state && this.state.gates && this.state.gates.forEach) {
+      this.state.gates.forEach(g => { if (g && g.active) out.push(g); });
+    }
+    return out;
+  }
+  safeGateTeleportPoint(g) {
+    const solid = this.spaceSolid('');
+    const offsets = [[2.1, 0], [-2.1, 0], [0, 2.1], [0, -2.1], [1.5, 1.5], [-1.5, 1.5], [1.5, -1.5], [-1.5, -1.5], [0, 0]];
+    for (const [ox, oz] of offsets) {
+      const x = clampN((g.x || 0) + ox, W.LAVA_BORDER_WIDTH + 1.35, W.WX - W.LAVA_BORDER_WIDTH - 1.35);
+      const z = clampN((g.z || 0) + oz, W.LAVA_BORDER_WIDTH + 1.35, W.WX - W.LAVA_BORDER_WIDTH - 1.35);
+      const y = this.world.standHeight(x, z, W.WH - 2);
+      if (y < 2) continue;
+      if (solid(Math.floor(x), Math.floor(y + .2), Math.floor(z))) continue;
+      if (solid(Math.floor(x), Math.floor(y + 1.5), Math.floor(z))) continue;
+      return { x, y: y + .01, z };
+    }
+    return { x: g.x, y: (g.y || this.world.standHeight(g.x, g.z, W.WH - 2)) + .01, z: g.z };
+  }
+  handleAdminGateTeleport(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminGateTeleportReject', { reason: 'admin' });
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return client.send('adminGateTeleportReject', { reason: 'player' });
+    const gates = this.activeGateList();
+    if (!gates.length) return client.send('adminGateTeleportReject', { reason: 'none' });
+    const id = String(m && m.id || '').trim();
+    let gate = id ? this.state.gates.get(id) : null;
+    if (!gate && Number.isFinite(+m.rank)) {
+      const rank = Math.max(0, Math.min(4, +m.rank | 0));
+      gate = gates.find(g => (g.rank | 0) === rank) || null;
+    }
+    if (!gate || !gate.active) return client.send('adminGateTeleportReject', { reason: 'gate' });
+    if (p.dgn && typeof this.ejectFromDungeon === 'function') this.ejectFromDungeon(client.sessionId);
+    const fresh = this.state.players.get(client.sessionId) || p;
+    const pos = this.safeGateTeleportPoint(gate);
+    fresh.dim = 'overworld';
+    fresh.dgn = '';
+    fresh.mount = '';
+    fresh.x = pos.x;
+    fresh.y = pos.y;
+    fresh.z = pos.z;
+    fresh.yaw = Math.atan2((gate.x || pos.x) - pos.x, (gate.z || pos.z) - pos.z);
+    this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    const token = this.tokens.get(client.sessionId);
+    const prof = token && this.profiles.get(token);
+    if (prof) {
+      prof.activeRoom = null;
+      prof.pos = [fresh.x, fresh.y, fresh.z];
+      this.dirtyPlayers.add(token);
+    }
+    client.send('adminGateTeleportResult', {
+      id: gate.id, gateId: gate.id, rank: gate.rank | 0, kind: gate.kind || 'public',
+      x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
+      gateX: gate.x, gateY: gate.y, gateZ: gate.z,
+    });
+    return true;
   }
   landKey(x, z) {
     return (x | 0) + ',' + (z | 0);

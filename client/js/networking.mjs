@@ -2192,6 +2192,22 @@ function netAttachRoom(room,name,client){
       if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
       if(m.reason==='town_floor')showName('Returned to safe town ground');
     });
+    room.onMessage('adminGateTeleportResult', m=>{
+      if(m&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)){
+        player.pos.set(+m.x,+m.y,+m.z);
+        if(player.vel)player.vel.set(0,0,0);
+        if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+      }
+      const rank=RANKS[Math.max(0,Math.min(RANKS.length-1,(m&&m.rank)|0))];
+      sysMsg('<b>Admin teleport:</b> moved to '+escHTML(rank&&rank.n||'Hunter')+'-Rank '+escHTML((m&&m.kind)||'public')+' Gate.');
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-gate-teleport',{detail:m||{}}));}catch(e){}
+    });
+    room.onMessage('adminGateTeleportReject', m=>{
+      const r=m&&m.reason;
+      const text=r==='admin'?'Gate teleport is admin-only.':r==='none'?'No active gates are currently available.':r==='gate'?'That gate is no longer active.':'Gate teleport failed.';
+      sysMsg(text);
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-gate-teleport',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
+    });
     room.onMessage('eventComplete', m=>eventCompleted(m));
     room.onMessage('eventFailed', m=>eventFailed(m));
     room.onMessage('eventResult', m=>showEventResult(m));

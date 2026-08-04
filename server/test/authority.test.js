@@ -1397,6 +1397,23 @@ test('movement cannot tunnel through a thin wall between valid air cells',()=>{
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='wall'),true);
 });
 
+test('admin gate teleport lists active gates server-side and rejects normal players',()=>{
+  const room=makeRoom(),admin=makeClient('gate_admin'),normal=makeClient('gate_normal');
+  seedPlayer(room,admin,{x:100,z:100,y:16});
+  seedPlayer(room,normal,{x:100,z:102,y:16});
+  admin._accountRole='admin';
+  const g=makeGate('g_admin_jump',180.5,190.5,2,'public');
+  room.state.gates.set(g.id,g);
+  room.handleAdminGateTeleport(normal,{id:g.id});
+  assert.equal(normal.sent.some(e=>e.type==='adminGateTeleportReject'&&e.msg.reason==='admin'),true);
+  room.handleAdminGateTeleport(admin,{id:g.id});
+  const p=room.state.players.get(admin.sessionId);
+  assert.equal(p.dgn,'');
+  assert.equal(p.dim,'overworld');
+  assert.equal(Math.hypot(p.x-g.x,p.z-g.z)<=2.2,true,'admin lands beside the selected gate');
+  assert.equal(admin.sent.some(e=>e.type==='adminGateTeleportResult'&&e.msg.id===g.id),true);
+});
+
 test('server fall authority damages hard landings and Feather Step absorbs sane drops',()=>{
   const hardRoom=makeRoom(),hard=makeClient('hard_landing');
   hardRoom.lastMoveMsg=new Map();seedPlayer(hardRoom,hard,{x:140,z:140,y:25,hp:20});

@@ -551,6 +551,14 @@ function ensureAdminExtendedControls(){
     btn.id='adminpreviewmodel';btn.type='button';btn.textContent='MODEL';
     actions.insertBefore(btn,document.getElementById('adminpatchgo')||devResetGo||null);
   }
+  if(grid&&!document.getElementById('admingateselect')){
+    const wrap=document.createElement('div');
+    wrap.innerHTML=
+      '<label class="adminspan">Teleport to gate<select id="admingateselect"><option value="">Refresh gates after entering world</option></select></label>'+
+      '<label class="admincheck"><button id="admingaterefresh" type="button">REFRESH GATES</button></label>'+
+      '<label class="admincheck"><button id="admingateteleport" type="button">TELEPORT TO GATE</button></label>';
+    while(wrap.firstChild)grid.appendChild(wrap.firstChild);
+  }
 }
 ensureAdminExtendedControls();
 const devResetCancel=document.getElementById('devresetcancel');
@@ -581,6 +589,9 @@ const adminJobXp=document.getElementById('adminjobxp');
 const adminUtilities=document.getElementById('adminutilities');
 const adminUtilityActive=document.getElementById('adminutilityactive');
 const adminUtilityPassive=document.getElementById('adminutilitypassive');
+const adminGateSelect=document.getElementById('admingateselect');
+const adminGateRefresh=document.getElementById('admingaterefresh');
+const adminGateTeleport=document.getElementById('admingateteleport');
 const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
@@ -4784,6 +4795,51 @@ function setAdminInspectOut(data){
   adminInspectOut.classList.remove('hidden');
   adminInspectOut.textContent=JSON.stringify(data,null,2);
 }
+function gateRankNameForAdmin(rank){
+  const r=RANKS&&RANKS[Math.max(0,Math.min(RANKS.length-1,rank|0))];
+  return r&&r.n?r.n:'Hunter';
+}
+function adminActiveGateOptions(){
+  const gates=NET&&NET.room&&NET.room.state&&NET.room.state.gates;
+  const out=[];
+  if(gates&&gates.forEach)gates.forEach(g=>{
+    if(!g||!g.active)return;
+    const dx=(+g.x||0)-player.pos.x,dz=(+g.z||0)-player.pos.z;
+    out.push({id:String(g.id||''),rank:g.rank|0,kind:g.kind||'public',x:+g.x||0,y:+g.y||0,z:+g.z||0,dist:Math.hypot(dx,dz),expiresAt:g.expiresAt||0});
+  });
+  out.sort((a,b)=>(a.rank-b.rank)||(a.dist-b.dist)||a.id.localeCompare(b.id));
+  return out;
+}
+function refreshAdminGateSelect(){
+  if(!adminGateSelect)return [];
+  const gates=adminActiveGateOptions();
+  adminGateSelect.innerHTML='';
+  if(!gates.length){
+    const opt=document.createElement('option');opt.value='';opt.textContent=NET&&NET.on?'No active gates':'Enter world to load gates';
+    adminGateSelect.appendChild(opt);
+    return gates;
+  }
+  for(const g of gates){
+    const opt=document.createElement('option');
+    opt.value=g.id;
+    const mins=g.expiresAt?Math.max(0,Math.ceil((g.expiresAt-Date.now())/60000)):0;
+    opt.textContent=g.id+' · '+gateRankNameForAdmin(g.rank)+'-Rank · '+g.kind+' · '+Math.round(g.dist)+'m'+(mins?' · '+mins+'m left':'');
+    adminGateSelect.appendChild(opt);
+  }
+  return gates;
+}
+function runAdminGateTeleport(){
+  if(!adminGateTeleport)return;
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Gate teleport is admin-only.','bad');return;}
+  if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before teleporting to a gate.','bad');return;}
+  const gates=refreshAdminGateSelect();
+  const id=String(adminGateSelect&&adminGateSelect.value||gates[0]&&gates[0].id||'');
+  if(!id){setDevResetStatus('No active gates to teleport to.','bad');return;}
+  adminGateTeleport.disabled=true;
+  setDevResetStatus('Teleporting to gate '+id+'...');
+  try{NET.room.send('adminGateTeleport',{id});}
+  catch(e){adminGateTeleport.disabled=false;setDevResetStatus(e&&e.message||'Gate teleport failed.','bad');}
+}
 function adminCsv(value){
   return String(value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 }
@@ -4871,6 +4927,7 @@ function openDevResetPanel(){
   populateAdminItemOptions();
   syncAdminTokenField();
   syncAdminGearFields();
+  refreshAdminGateSelect();
   releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
   const account=AUTH&&AUTH.account;
   if(devResetTarget&&!devResetTarget.value){
@@ -4950,6 +5007,8 @@ if(devResetCancel)devResetCancel.addEventListener('click',closeDevResetPanel);
 if(adminInspectGo)adminInspectGo.addEventListener('click',runAdminInspect);
 if(adminPatchGo)adminPatchGo.addEventListener('click',runAdminPatch);
 if(adminItemId)adminItemId.addEventListener('change',syncAdminGearFields);
+if(adminGateRefresh)adminGateRefresh.addEventListener('click',()=>{const gates=refreshAdminGateSelect();setDevResetStatus(gates.length?'Loaded '+gates.length+' active gate'+(gates.length===1?'':'s')+'.':'No active gates found.',gates.length?'ok':'bad');});
+if(adminGateTeleport)adminGateTeleport.addEventListener('click',runAdminGateTeleport);
 if(adminPreviewModel)adminPreviewModel.addEventListener('click',()=>{
   if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Model preview is admin-only.','bad');return;}
   const preview=globalThis.BlockcraftAppearancePreview;
@@ -4959,6 +5018,13 @@ if(adminPreviewModel)adminPreviewModel.addEventListener('click',()=>{
   }else setDevResetStatus('Model preview is not ready yet. Enter the world first.','bad');
 });
 if(devResetGo)devResetGo.addEventListener('click',runDevReset);
+window.addEventListener('blockcraft-admin-gate-teleport',e=>{
+  if(adminGateTeleport)adminGateTeleport.disabled=false;
+  const d=e&&e.detail||{};
+  if(d.ok===false){setDevResetStatus(d.reason==='none'?'No active gates found.':d.reason==='admin'?'Gate teleport is admin-only.':'Gate teleport failed.','bad');return;}
+  if(d.id||d.gateId)setDevResetStatus('Teleported to gate '+(d.id||d.gateId)+'.','ok');
+  refreshAdminGateSelect();
+});
 if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});
 document.addEventListener('pointerlockchange', ()=>{
