@@ -1294,9 +1294,13 @@ class EventsMixin {
     part.downed = false;
     part.downedUntil = 0;
     part.reviveMs = 0;
-    const hp = this.ensurePlayerHp(client);
-    hp.hp = hp.max;
-    client.send('hurt', { n: -hp.max, reason: rescued ? 'event_revive' : 'event_respawn' });
+    const rec = this.profileFor(client);
+    const vitals = this.applyDeathRespawnVitals ? this.applyDeathRespawnVitals(client, rec && rec.prof) : null;
+    client.send('hurt', {
+      n: -(vitals && vitals.hp || 1),
+      reason: rescued ? 'event_revive' : 'event_respawn',
+      ...(vitals || {}),
+    });
     if (!rescued) {
       part.deaths = (part.deaths | 0) + 1;
       this.teleportCaravanPlayer(client, {
@@ -1719,8 +1723,8 @@ class EventsMixin {
       part.downed = true;
       part.downedUntil = Date.now() + 10000;
       part.reviveMs = 0;
-      hp.hp = hp.max;
-      client.send('hurt', { n: -hp.max, reason: 'event_downed' });
+      hp.hp = 0;
+      client.send('hurt', { n: 0, reason: 'event_downed', hp: 0, maxHp: hp.max });
       this.sendSpace(ev.id, 'eventCaravanDowned', {
         sid: client.sessionId,
         name: p.name || 'Hunter',
@@ -1740,11 +1744,12 @@ class EventsMixin {
       else this.clearKingCrown(ev, p.x, p.y + 1.2, p.z);
     }
     this.playerLastHit.delete(sid);
-    hp.hp = hp.max;
+    const rec = this.profileFor(client);
+    const vitals = this.applyDeathRespawnVitals ? this.applyDeathRespawnVitals(client, rec && rec.prof) : null;
     const part = ev.participants.get(sid);
     if (part) part.respawnAt = Date.now() + KING_RESPAWN_MS;
     this.teleportKingPlayer(client, this.kingSpawnPos(ev, sid), 'respawn', ev);
-    client.send('hurt', { n: -hp.max });
+    client.send('hurt', { n: -(vitals && vitals.hp || 1), reason: 'event_respawn', ...(vitals || {}) });
     return true;
   }
   tickKingEvent(ev, now) {

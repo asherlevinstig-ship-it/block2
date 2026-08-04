@@ -442,7 +442,9 @@ class DungeonRoom extends GameRoom {
         if (this.dirtyPlayers) this.dirtyPlayers.add(token);
       }
       const client = this.clients.find(c => c.sessionId === sid);
-      if (client) client.send('dungeonFailed', { reason: 'breach', result, x: tx, y: ty, z: tz });
+      let vitals = null;
+      if (client && this.applyDeathRespawnVitals) vitals = this.applyDeathRespawnVitals(client, prof);
+      if (client) client.send('dungeonFailed', { reason: 'breach', result, ...(vitals || {}), x: tx, y: ty, z: tz });
     }
     return true;
   }

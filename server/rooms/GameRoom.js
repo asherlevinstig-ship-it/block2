@@ -5371,6 +5371,7 @@ class GameRoom extends Room {
     if (prof) this.syncProfileVitals(client, prof);
     this.sendHungerSync(client, hunger);
     return {
+      respawnPolicy: 'low_vitals_v2',
       hp: Math.ceil(hp.hp), maxHp: hp.max,
       mp: Math.ceil(ability.mp), maxMp: ability.maxMp,
       sp: Math.ceil(ability.sp), maxSp: ability.maxSp,

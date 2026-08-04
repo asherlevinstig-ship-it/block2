@@ -5329,7 +5329,10 @@ test('DungeonRoom timer breach exports live enemies and returns party to town', 
   assert.equal(payload.mobs.some(m => m.kind === 'boss'), true);
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
   assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 2, W.TOWN.TC + 27.5]);
-  assert.equal(client.sent.find(e => e.type === 'dungeonFailed').msg.reason, 'breach');
+  const failed = client.sent.find(e => e.type === 'dungeonFailed').msg;
+  assert.equal(failed.reason, 'breach');
+  assert.equal(failed.respawnPolicy, 'low_vitals_v2');
+  assert.equal(failed.hp, 5);
 });
 
 test('dungeon-handoff hands off a profile exactly once (delete-on-read)', () => {
@@ -9668,7 +9671,10 @@ test('king of the hill queues participants scores crown time and transfers crown
   room.playerHp.set(alpha.sessionId, { hp: 2, max: 20 });
   room.handleEventHit(bravo, { sid: alpha.sessionId });
   assert.equal(ev.crown.holderSid, bravo.sessionId);
-  assert.equal(room.playerHp.get(alpha.sessionId).hp, 20);
+  assert.equal(room.playerHp.get(alpha.sessionId).hp, 5);
+  const kingRespawnHurt = alpha.sent.find(e => e.type === 'hurt' && e.msg.reason === 'event_respawn');
+  assert.equal(kingRespawnHurt.msg.respawnPolicy, 'low_vitals_v2');
+  assert.equal(kingRespawnHurt.msg.hp, 5);
   assert.equal(alpha.sent.some(e => e.type === 'eventTeleport' && e.msg.kind === 'king' && e.msg.reason === 'respawn'), true);
   assert.equal(broadcasts.some(e => e.type === 'eventCrown' && e.msg.holderSid === bravo.sessionId), true);
 });
@@ -9718,6 +9724,9 @@ test('Caravan Defence stages a co-op escort, runs waves, revives allies, and rew
   room.tickCaravanEvent(ev, now + 2000);
   assert.equal(ev.participants.get(bravo.sessionId).downed, false);
   assert.equal(ev.participants.get(alpha.sessionId).revives, 1);
+  const reviveHurt = bravo.sent.find(e => e.type === 'hurt' && e.msg.reason === 'event_revive');
+  assert.equal(reviveHurt.msg.respawnPolicy, 'low_vitals_v2');
+  assert.equal(reviveHurt.msg.hp, 5);
 
   const firstEnemyId = [...ev.enemyIds][0];
   const firstEnemy = room.state.mobs.get(firstEnemyId);
@@ -10230,7 +10239,10 @@ test('expired uncleared gates breach dungeon mobs into the overworld', () => {
   assert.equal(room.state.mobs.get('boss').displayName, 'Breached Gate Boss');
   assert.equal(room.gateBreaches.get('g1').bossId, 'boss');
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
-  assert.equal(client.sent.find(e => e.type === 'dungeonFailed').msg.reason, 'breach');
+  const failed = client.sent.find(e => e.type === 'dungeonFailed').msg;
+  assert.equal(failed.reason, 'breach');
+  assert.equal(failed.respawnPolicy, 'low_vitals_v2');
+  assert.equal(failed.hp, 5);
   assert.equal(events.find(e => e.type === 'gateBreach').msg.count, 2);
   assert.match(chats.find(e => e.type === 'chat').msg.text, /breached into the overworld/);
 });

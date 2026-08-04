@@ -552,11 +552,12 @@ class DungeonMixin {
     const result = this.dungeonResultPayload(inst, 'failed', 'breach');
     for (const sid of [...inst.players]) {
       const client = this.clients.find(c => c.sessionId === sid);
-      this.ejectFromDungeon(sid);
+      const ejected = this.ejectFromDungeon(sid) || {};
       const p = this.state.players.get(sid);
       if (client) client.send('dungeonFailed', {
         reason: 'breach',
         result,
+        ...(ejected.vitals || {}),
         x: p && p.x, y: p && p.y, z: p && p.z,
       });
     }
@@ -1520,9 +1521,13 @@ class DungeonMixin {
       this.dirtyPlayers.add(token);
     }
     const hp = this.playerHp.get(sid);
-    if (hp) hp.hp = hp.max;
+    const client = this.clients.find(c => c.sessionId === sid);
+    let vitals = null;
+    if (client && this.applyDeathRespawnVitals) vitals = this.applyDeathRespawnVitals(client, prof);
+    else if (hp) hp.hp = this.deathRespawnHp ? this.deathRespawnHp(hp.max) : Math.max(1, Math.ceil((hp.max || 20) * 0.25));
     if (inst) inst.removePlayer(sid);
     this.bossContrib.forEach(byPlayer => byPlayer.delete(sid));
+    return { town, vitals };
   }
   clearDungeonInstance(dgn) {
     const inst = this.instances[dgn];
@@ -1535,11 +1540,12 @@ class DungeonMixin {
     const result = this.dungeonResultPayload(inst, 'failed', reason || 'wipe');
     for (const sid of [...inst.players]) {
       const client = this.clients.find(c => c.sessionId === sid);
-      this.ejectFromDungeon(sid);
+      const ejected = this.ejectFromDungeon(sid) || {};
       const p = this.state.players.get(sid);
       if (client) client.send('dungeonFailed', {
         reason: reason || 'wipe',
         result,
+        ...(ejected.vitals || {}),
         x: p && p.x, y: p && p.y, z: p && p.z,
       });
     }

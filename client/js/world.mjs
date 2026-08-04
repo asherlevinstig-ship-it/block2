@@ -8939,6 +8939,7 @@ function deathRespawnHp(){
 }
 function applyDeathRespawnVitals(payload=null){
   const p=payload&&typeof payload==='object'?payload:{};
+  const before={hp,mp,sp,hunger};
   hp=Number.isFinite(+p.hp)?Math.max(1,Math.min(maxHp(),+p.hp)):deathRespawnHp();
   if(Number.isFinite(+p.mp))mp=Math.max(0,Math.min(maxMp(),+p.mp));
   if(Number.isFinite(+p.sp))sp=Math.max(0,Math.min(maxSp(),+p.sp));
@@ -8946,6 +8947,9 @@ function applyDeathRespawnVitals(payload=null){
   hungerAcc=0;
   starvationAcc=0;
   renderBars();
+  const after={hp,mp,sp,hunger};
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('vitals.death_respawn.apply',{policy:p.respawnPolicy||'client_fallback_low_vitals',payload:p,before,after});
+  try{console.info('[bc-vitals] death respawn apply', {policy:p.respawnPolicy||'client_fallback_low_vitals',payload:p,before,after});}catch(e){}
 }
 function scheduleServerDeathOutcomeFallback(source,detail=null){
   clearPendingServerDeathOutcome();
