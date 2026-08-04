@@ -580,12 +580,12 @@ function showDungeonSpirit(m){
   releasePointerLockWithoutCameraFallback(false);
   if(!dungeonSpiritEl){
     dungeonSpiritEl=document.createElement('div');dungeonSpiritEl.id='dungeonspirit';
-    dungeonSpiritEl.innerHTML='<div class="dungeonspirit-panel"><div class="dungeonspirit-kicker">SPIRIT FORM</div><h2>You have fallen</h2><div class="dungeonspirit-choice stay"><b>Stay as spirit for party credit</b><span>Remain bound here, watch allies finish the boss, and keep the group run resolving together.</span></div><div class="dungeonspirit-choice return"><b>Return to town now</b><span>Leave the dungeon immediately to repair, restock, and try another Gate.</span></div><div class="dungeonspirit-actions"><button type="button" data-action="stay">STAY AS SPIRIT</button><button type="button" data-action="return">RETURN TO TOWN</button></div></div>';
+    dungeonSpiritEl.innerHTML='<div class="dungeonspirit-panel"><div class="dungeonspirit-kicker">SPIRIT FORM</div><h2>You have fallen</h2><div class="dungeonspirit-choice stay"><b>Stay as a floating spirit</b><span>Remain bound here as an orb-ghost while allies try to finish the Gate. If party recovery/revive is available, this is your chance to be brought back into the run.</span></div><div class="dungeonspirit-choice return"><b>Respawn in Town of Beginnings</b><span>Leave the Gate now and return safely to the village to repair, restock, and try again.</span></div><div class="dungeonspirit-actions"><button type="button" data-action="stay">WAIT AS SPIRIT</button><button type="button" data-action="return">RESPAWN IN TOWN</button></div></div>';
     dungeonSpiritEl.addEventListener('click',e=>{
       const btn=e.target&&e.target.closest&&e.target.closest('button[data-action]');
       if(!btn)return;
       e.stopPropagation();
-      if(btn.dataset.action==='stay'){dungeonSpiritEl.classList.add('minimized');sysMsg('<b>Staying as spirit.</b> Watch allies finish for party credit; use the return button when you want town.','minor');return;}
+      if(btn.dataset.action==='stay'){dungeonSpiritEl.classList.add('minimized');sysMsg('<b>Staying as spirit.</b> You are a floating orb-ghost. Watch for party recovery, or use Respawn in Town when you want out.','minor');return;}
       if(NET.room)NET.room.send('quitDungeonSpirit',{});
     });
     (document.getElementById('game')||document.body).appendChild(dungeonSpiritEl);
@@ -594,7 +594,7 @@ function showDungeonSpirit(m){
   if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
   ensureLocalSpiritFx();
 }
-function hideDungeonSpirit(){if(dungeonSpiritEl)dungeonSpiritEl.classList.remove('show');}
+function hideDungeonSpirit(){if(dungeonSpiritEl)dungeonSpiritEl.classList.remove('show','minimized');}
 function localSpiritTexture(){
   if(localSpiritTexture.tex)return localSpiritTexture.tex;
   const c=document.createElement('canvas');c.width=c.height=96;
@@ -1881,10 +1881,9 @@ function netAttachRoom(room,name,client){
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
       if(player&&player.vel)player.vel.set(0,0,0);
       hp=0; renderBars();
-      showDeathScreen('The dungeon overwhelmed you','The attempt has failed - respawn at the Gate',m&&m.recentHits||'',{
-        kind:'gate',
-        destination:false,
-        buttonLabel:'RESPAWN AT GATE',
+      showDeathScreen('The dungeon overwhelmed you','Respawn in the Town of Beginnings',m&&m.recentHits||'',{
+        kind:'town',
+        buttonLabel:'RESPAWN IN TOWN',
         onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
       });
     });

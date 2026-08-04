@@ -8946,10 +8946,11 @@ function die(){
   const wasGate=dim==='dungeon';
   if(wasGate) exitDungeon(true);
   hp=0;renderBars();
-  showDeathScreen(deathCauseText(lastDamageSource),wasGate?'Respawn at the Gate':'Respawn in the Town of Beginnings','',{
-    buttonLabel:wasGate?'RESPAWN AT GATE':'RESPAWN IN TOWN',
+  showDeathScreen(deathCauseText(lastDamageSource),'Respawn in the Town of Beginnings','',{
+    kind:'town',
+    buttonLabel:'RESPAWN IN TOWN',
     onRespawn:()=>{
-      if(!wasGate)player.pos.set(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.y, TOWN_RETURN_SPAWN.z);
+      player.pos.set(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.y, TOWN_RETURN_SPAWN.z);
       player.vel.set(0,0,0);
       hp=maxHp(); sp=maxSp(); hunger=maxHunger();
       renderBars();

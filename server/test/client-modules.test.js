@@ -2531,11 +2531,14 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(feedback,/sound\.block/);
   assert.match(feedback,/showDebug/);
   assert.match(world,/deathEl\.innerHTML='<div id="deathtint"><\/div><div id="deathpanel">/);
-  assert.match(world,/buttonLabel:wasGate\?'RESPAWN AT GATE':'RESPAWN IN TOWN'/);
+  assert.match(world,/showDeathScreen\(deathCauseText\(lastDamageSource\),'Respawn in the Town of Beginnings'/);
+  assert.match(world,/buttonLabel:'RESPAWN IN TOWN'/);
   assert.match(world,/deathRespawnHandler=\(\)=>\{/);
   assert.match(world,/document\.body\.classList\.add\('death-active'\)/);
+  assert.match(networking,/Stay as a floating spirit/);
+  assert.match(networking,/floating orb-ghost/);
   assert.match(networking,/hp=0; renderBars\(\);[\s\S]*buttonLabel:'RESPAWN IN TOWN'/);
-  assert.match(networking,/buttonLabel:'RESPAWN AT GATE'/);
+  assert.doesNotMatch(networking,/RESPAWN AT GATE/);
   assert.match(styles,/#deathrecap/);
   assert.match(styles,/#deathrespawn/);
   assert.match(styles,/body\.death-active #hotbar/);
