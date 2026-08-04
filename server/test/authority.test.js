@@ -3550,10 +3550,11 @@ test('familiar lifecycle dismisses on death, suspends during locked travel, and 
   room.hurtPlayer(client, 99999, 'test');
   assert.equal(p.familiar, '', 'death dismisses the active familiar');
   assert.equal(client.sent.some(e => e.type === 'familiarDismissed' && e.msg.reason === 'death'), true);
-  assert.equal(room.playerHunger.get(client.sessionId).hunger, 100, 'death restores hunger to full');
-  assert.equal(client.sent.some(e => e.type === 'hunger' && e.msg.hunger === 100), true);
+  assert.equal(room.playerHunger.get(client.sessionId).hunger, 0, 'death does not refill hunger');
+  assert.equal(client.sent.some(e => e.type === 'hunger' && e.msg.hunger === 100), false);
 
   p.familiar = 'fang';
+  room.playerHp.get(client.sessionId).hp = 10;
   room.state.mobs.set('travel_target', { x:p.x+2, y:p.y, z:p.z, yaw:0, hp:30, maxHp:30, kind:'zombie', dgn:p.dgn||'', state:'' });
   room.mobMeta.travel_target = room.freshMeta(p.x+2, p.z, 3, 1.5, 'zombie', 0, true);
   room.skyshipPassengers = new Map([[client.sessionId, { token: prof.token || 'test' }]]);
@@ -3573,9 +3574,10 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
   const room = makeRoom();
   const client = makeClient('limbo');
   const { prof } = seedPlayer(room, client, {
-    hp: 4, x: 40, y: 16, z: 40,
+    lvl: 5, hp: 4, hunger: 21, x: 40, y: 16, z: 40,
     inv: [{ id: I.BREAD, count: 2 }, { id: I.IRON_SWORD, count: 1, dur: 123, rarity: 'rare' }],
   });
+  room.abilityState.set(client.sessionId, { mp: 3, maxMp: 20, sp: 6, maxSp: 100, cds: {}, last: Date.now() });
   prof.armor = { id: I.IRON_ARMOR, count: 1, dur: 321, armorType: 'scout', rarity: 'epic' };
   room.state.players.get(client.sessionId).armorId = I.IRON_ARMOR;
   room.state.players.get(client.sessionId).armorType = 'scout';
@@ -3614,6 +3616,31 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
   assert.equal(prof.armor.rarity, 'epic');
   assert.equal(room.state.players.get(client.sessionId).armorId, I.IRON_ARMOR);
   assert.equal(client.sent.some(e => e.type === 'deathLimboComplete'), true);
+  const complete = client.sent.find(e => e.type === 'deathLimboComplete').msg;
+  assert.equal(complete.hp, 5, 'limbo returns the player alive but not full health');
+  assert.equal(complete.mp, 3, 'limbo does not refill mana');
+  assert.equal(complete.sp, 6, 'limbo does not refill stamina');
+  assert.equal(complete.hunger, 21, 'limbo does not refill food');
+});
+
+test('town respawn revives low without refilling mana stamina or food', () => {
+  const room = makeRoom();
+  const client = makeClient('respawn_no_refill');
+  const { prof } = seedPlayer(room, client, { lvl: 5, hp: 1, hunger: 18 });
+  prof.vitals = { hp: 1, mp: 4, sp: 7, hunger: 18 };
+  prof.vitalsSavedAt = Date.now();
+  room.playerHp.set(client.sessionId, { hp: 0, max: 20 });
+  room.playerHunger.set(client.sessionId, { hunger: 18, max: 100, acc: 0, syncAcc: 0 });
+  room.abilityState.set(client.sessionId, { mp: 4, maxMp: 101, sp: 7, maxSp: 100, cds: {}, last: Date.now() });
+
+  room.handleRespawnTown(client, { reason: 'test' });
+
+  const msg = client.sent.find(e => e.type === 'worldRespawn').msg;
+  assert.equal(msg.hp, 5);
+  assert.equal(msg.mp, 4);
+  assert.equal(msg.sp, 7);
+  assert.equal(msg.hunger, 18);
+  assert.deepEqual(prof.vitals, { hp: 5, mp: 4, sp: 7, hunger: 18 });
 });
 
 test('boss dragon eggs favor species the player has not hatched yet', () => {

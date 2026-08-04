@@ -315,7 +315,7 @@ class DungeonRoom extends GameRoom {
     p.dgn = '';
     p.dim = 'overworld';
     p.x = town.x; p.y = town.y; p.z = town.z;
-    hp.hp = hp.max;
+    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof);
     if (inst) {
       inst.removePlayer(client.sessionId);
       this.sendDungeonPartyStatus(dgn);
@@ -329,7 +329,7 @@ class DungeonRoom extends GameRoom {
       else if (rec.prof.progressionFocus === 'first_d_gate') requestPublicGateRank(1);
       this.dirtyPlayers.add(rec.token);
     }
-    client.send('dungeonSpiritQuit', result ? { ...town, result } : town);
+    client.send('dungeonSpiritQuit', result ? { ...town, ...vitals, result } : { ...town, ...vitals });
     return true;
   }
 

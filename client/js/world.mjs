@@ -8934,6 +8934,19 @@ function deathOutcomeUiVisible(){
 function clearPendingServerDeathOutcome(){
   if(pendingServerDeathOutcomeTimer){clearTimeout(pendingServerDeathOutcomeTimer);pendingServerDeathOutcomeTimer=null;}
 }
+function deathRespawnHp(){
+  return Math.max(1,Math.ceil(maxHp()*.25));
+}
+function applyDeathRespawnVitals(payload=null){
+  const p=payload&&typeof payload==='object'?payload:{};
+  hp=Number.isFinite(+p.hp)?Math.max(1,Math.min(maxHp(),+p.hp)):deathRespawnHp();
+  if(Number.isFinite(+p.mp))mp=Math.max(0,Math.min(maxMp(),+p.mp));
+  if(Number.isFinite(+p.sp))sp=Math.max(0,Math.min(maxSp(),+p.sp));
+  if(Number.isFinite(+p.hunger))hunger=Math.max(0,Math.min(maxHunger(),+p.hunger));
+  hungerAcc=0;
+  starvationAcc=0;
+  renderBars();
+}
 function scheduleServerDeathOutcomeFallback(source,detail=null){
   clearPendingServerDeathOutcome();
   pendingServerDeathOutcomeTimer=setTimeout(()=>{
@@ -8944,7 +8957,7 @@ function scheduleServerDeathOutcomeFallback(source,detail=null){
       kind:'town',
       buttonLabel:'RESPAWN IN TOWN',
       serverRespawn:true,
-      onRespawn:()=>{hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();}
+      onRespawn:()=>applyDeathRespawnVitals()
     });
     sysMsg('<b>You died.</b> The death state recovered locally because the server outcome did not arrive in time. Respawn to return safely to town.','minor');
   },950);
@@ -9019,8 +9032,7 @@ function die(){
     onRespawn:()=>{
       player.pos.set(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.y, TOWN_RETURN_SPAWN.z);
       player.vel.set(0,0,0);
-      hp=maxHp(); sp=maxSp(); hunger=maxHunger();
-      renderBars();
+      applyDeathRespawnVitals();
     }
   });
 }
@@ -11409,6 +11421,7 @@ const legacyWorldBindings={
   "utilityUnlocks":{get:()=>utilityUnlocks,set:value=>{utilityUnlocks=value;}},
   "overworldActivity":{get:()=>overworldActivity,set:value=>{overworldActivity=value;}},
   "showDeathScreen":{get:()=>showDeathScreen},
+  "applyDeathRespawnVitals":{get:()=>applyDeathRespawnVitals},
   "villagers":{get:()=>villagers},
   "weather":{get:()=>weather},
   "weatherBoltFx":{get:()=>weatherBoltFx},

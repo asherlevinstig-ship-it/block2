@@ -1937,7 +1937,8 @@ function netAttachRoom(room,name,client){
           player.pos.set(m.x,m.y,m.z);
           if(player&&player.vel)player.vel.set(0,0,0);
         }
-        hp=maxHp();sp=maxSp();hunger=maxHunger();renderBars();
+        if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
+        else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
         if(typeof overlay!=='undefined'&&overlay)overlay.classList.add('hidden');
         if(typeof loadscreen!=='undefined'&&loadscreen)loadscreen.classList.add('hidden');
         setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
@@ -1964,7 +1965,7 @@ function netAttachRoom(room,name,client){
       showDeathScreen('The dungeon overwhelmed you','Respawn in the Town of Beginnings',m&&m.recentHits||'',{
         kind:'town',
         buttonLabel:'RESPAWN IN TOWN',
-        onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
+        onRespawn:()=>{if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);else{hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}}
       });
     });
     room.onMessage('deathLimboStart',m=>{
@@ -1974,7 +1975,7 @@ function netAttachRoom(room,name,client){
       showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Answer to recover your carried items',m&&m.recentHits||'',{
         clickToRespawn:false,
         autoRespawnMs:1400,
-        onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
+        onRespawn:()=>renderBars()
       });
       renderDeathLimbo(m);
     });
@@ -1983,7 +1984,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('deathLimboComplete',m=>{
       hideDeathLimbo();
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
-      hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
+      if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
+      else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
       setTimeout(()=>{refreshPlayUi();resumeGameplayCamera();},0);
       sysMsg('<b>Returned from limbo.</b> Correct answers restored items; mistakes became public drops.');
     });
@@ -2007,22 +2009,20 @@ function netAttachRoom(room,name,client){
       showDeathScreen(deathCauseText('server:'+((m&&m.cause)||'combat')),'Respawn in the Town of Beginnings',m&&m.recentHits||'',{
         kind:'town',
         buttonLabel:'RESPAWN IN TOWN',
-        onRespawn:()=>{hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();}
+        onRespawn:()=>{if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);else{hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}}
       });
     });
     room.onMessage('worldRespawn',m=>{
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
-      if(m&&Number.isFinite(+m.hp))hp=Math.max(1,Math.min(maxHp(),+m.hp));else hp=maxHp();
-      if(m&&Number.isFinite(+m.mp))mp=Math.max(0,Math.min(maxMp(),+m.mp));else mp=maxMp();
-      if(m&&Number.isFinite(+m.sp))sp=Math.max(0,Math.min(maxSp(),+m.sp));else sp=maxSp();
-      if(m&&Number.isFinite(+m.hunger))hunger=Math.max(0,Math.min(maxHunger(),+m.hunger));else hunger=maxHunger();
-      renderBars();
+      if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
+      else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
       sysMsg('<b>Respawned.</b> You returned safely to the Town of Beginnings.');
     });
     room.onMessage('dungeonFailed', m=>{
       if(dim==='dungeon') exitDungeon(true);
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
-      hp=maxHp(); sp=maxSp(); hunger=maxHunger(); renderBars();
+      if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
+      else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
       if(m&&m.result)presentMajor(()=>showDungeonReward({ result:m.result, rank:m.result.rank, kind:m.result.kind, failed:true, reason:m.result.reason||m.reason||'wipe' }, false));
       sysMsg((m&&m.reason)==='breach' ? 'The Gate timer expired. Dungeon mobs breached into the overworld.' : (m&&m.reason)==='solo' ? 'The solo dungeon collapses.' : 'The party wiped. The dungeon collapses.');
       if(m&&m.result)sysMsg(dungeonReturnRecap(m.result,false));

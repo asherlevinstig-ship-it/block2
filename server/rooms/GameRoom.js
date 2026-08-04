@@ -5017,7 +5017,8 @@ class GameRoom extends Room {
       this.deathLimbo.delete(client.sessionId);
       const town = this.homesteadHomePointForProfile && this.homesteadHomePointForProfile(rec.prof) || townReturnPoint(W.TOWN.G + 2);
       if (p) { p.x = town.x; p.y = town.y; p.z = town.z; p.dgn = ''; }
-      client.send('deathLimboComplete', town);
+      const vitals = this.applyDeathRespawnVitals(client, rec.prof);
+      client.send('deathLimboComplete', { ...town, ...vitals });
     } else client.send('deathLimboQuestion', this.publicDeathLimbo(limbo, p));
   }
   collectDeathDrops(client) {
@@ -5341,6 +5342,39 @@ class GameRoom extends Room {
       mp: Math.max(0, Math.min(maxMp, trusted ? num(raw.mp, maxMp) : maxMp)),
       sp: Math.max(0, Math.min(maxSp, trusted ? num(raw.sp, maxSp) : maxSp)),
       hunger: this.hungerProtectedForProfile(prof) ? this.maxHungerForProfile(prof) : Math.max(0, Math.min(this.maxHungerForProfile(prof), trusted ? num(raw.hunger, this.maxHungerForProfile(prof)) : this.maxHungerForProfile(prof))),
+    };
+  }
+  deathRespawnHp(maxHp) {
+    return Math.max(1, Math.ceil(Math.max(1, maxHp || 20) * 0.25));
+  }
+  applyDeathRespawnVitals(client, prof) {
+    if (!client) return null;
+    const hp = this.ensurePlayerHp(client);
+    const hunger = this.ensurePlayerHunger(client);
+    const maxMp = this.maxMpForProfile(prof);
+    const maxSp = this.maxStaminaForProfile(prof);
+    const ability = this.abilityState.get(client.sessionId) || { mp: maxMp, maxMp, sp: maxSp, maxSp, cds: {}, last: Date.now() };
+    hp.max = this.maxHpForProfile(prof);
+    hp.hp = this.deathRespawnHp(hp.max);
+    hunger.max = this.maxHungerForProfile(prof);
+    if (this.hungerProtectedForProfile(prof)) hunger.hunger = hunger.max;
+    else hunger.hunger = Math.max(0, Math.min(hunger.max, Number.isFinite(+hunger.hunger) ? +hunger.hunger : 0));
+    hunger.acc = 0;
+    hunger.syncAcc = 0;
+    ability.maxMp = maxMp;
+    ability.maxSp = maxSp;
+    ability.mp = Math.max(0, Math.min(maxMp, Number.isFinite(+ability.mp) ? +ability.mp : 0));
+    ability.sp = Math.max(0, Math.min(maxSp, Number.isFinite(+ability.sp) ? +ability.sp : 0));
+    ability.last = Date.now();
+    if (!ability.cds || typeof ability.cds !== 'object') ability.cds = {};
+    this.abilityState.set(client.sessionId, ability);
+    if (prof) this.syncProfileVitals(client, prof);
+    this.sendHungerSync(client, hunger);
+    return {
+      hp: Math.ceil(hp.hp), maxHp: hp.max,
+      mp: Math.ceil(ability.mp), maxMp: ability.maxMp,
+      sp: Math.ceil(ability.sp), maxSp: ability.maxSp,
+      hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max,
     };
   }
   syncProfileVitals(client, prof) {
@@ -5983,10 +6017,8 @@ class GameRoom extends Room {
     if (p && this.handleKingPlayerDeath(client, p, hp)) return;
     if (p) this.handleAegisBountyPlayerDeath(client, p);
     const hunger = this.ensurePlayerHunger(client);
-    hunger.hunger = hunger.max;
     hunger.acc = 0;
     hunger.syncAcc = 0;
-    this.sendHungerSync(client, hunger);
     if (p && p.dgn) {
       const dgn = p.dgn;
       const inst = this.instances[dgn];
@@ -5998,7 +6030,7 @@ class GameRoom extends Room {
       client.send('dungeonSpirit', { reason:'death', cause:wipeReason, deathCause: reason, lastHit: this.combatReasonLabel(reason), recentHits: this.recentHitSummary(client), x:p.x, y:p.y, z:p.z });
       this.sendDungeonStatus(dgn);
     } else {
-      hp.hp = hp.max;
+      hp.hp = 0;
       const death = { x: p && p.x, y: p && p.y, z: p && p.z, dgn: '', cause: reason, recentHits: this.recentHitSummary(client) };
       if (!this.beginDeathLimbo(client, rec, death)) client.send('worldDeath', {reason:'death',cause:reason,lastHit:this.combatReasonLabel(reason),recentHits:this.recentHitSummary(client)});
     }
@@ -6014,6 +6046,7 @@ class GameRoom extends Room {
     let result = null;
     p.spirit = false;
     this.ejectFromDungeon(client.sessionId);
+    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof);
     if (rec) {
       rec.prof.pos = [town.x, town.y, town.z];
       this.dirtyPlayers.add(rec.token);
@@ -6028,7 +6061,7 @@ class GameRoom extends Room {
     } else if (inst) {
       this.sendDungeonStatus(dgn);
     }
-    client.send('dungeonSpiritQuit', result ? { ...town, result } : town);
+    client.send('dungeonSpiritQuit', result ? { ...town, ...vitals, result } : { ...town, ...vitals });
     return true;
   }
   handleRespawnTown(client, m = {}) {
@@ -6037,21 +6070,7 @@ class GameRoom extends Room {
     if (p && p.dgn && p.spirit) return this.handleQuitDungeonSpirit(client);
     const rec = this.profileFor(client);
     const town = townReturnPoint(W.TOWN.G + 2);
-    const hp = this.ensurePlayerHp(client);
-    const hunger = this.ensurePlayerHunger(client);
-    const maxMp = this.maxMpForProfile(rec && rec.prof);
-    const maxSp = this.maxStaminaForProfile(rec && rec.prof);
-    const ability = this.abilityState.get(client.sessionId) || { mp: maxMp, maxMp, sp: maxSp, maxSp, cds: {}, last: Date.now() };
-    hp.hp = hp.max;
-    hunger.hunger = hunger.max;
-    hunger.acc = 0;
-    hunger.syncAcc = 0;
-    ability.mp = maxMp;
-    ability.maxMp = maxMp;
-    ability.sp = maxSp;
-    ability.maxSp = maxSp;
-    ability.last = Date.now();
-    this.abilityState.set(client.sessionId, ability);
+    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof);
     if (p) {
       p.spirit = false;
       p.dim = 'overworld';
@@ -6065,12 +6084,10 @@ class GameRoom extends Room {
     if (rec && rec.prof) {
       rec.prof.pos = [town.x, town.y, town.z];
       rec.prof.activeRoom = null;
-      this.syncProfileVitals(client, rec.prof);
       this.dirtyPlayers.add(rec.token);
       this.sendProfile(client, rec.prof);
     }
-    this.sendHungerSync(client, hunger);
-    client.send('worldRespawn', { ...town, reason: String(m && m.reason || 'death').slice(0, 32), hp: Math.ceil(hp.hp), maxHp: hp.max, mp: Math.ceil(ability.mp), maxMp: ability.maxMp, sp: Math.ceil(ability.sp), maxSp: ability.maxSp, hunger: Math.ceil(hunger.hunger), maxHunger: hunger.max });
+    client.send('worldRespawn', { ...town, reason: String(m && m.reason || 'death').slice(0, 32), ...vitals });
     return true;
   }
   updatePlayerHunger(dt) {

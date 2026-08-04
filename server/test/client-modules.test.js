@@ -2556,11 +2556,16 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(world,/deathEl\.innerHTML='<div id="deathtint"><\/div><div id="deathpanel">/);
   assert.match(world,/showDeathScreen\(deathCauseText\(lastDamageSource\),'Respawn in the Town of Beginnings'/);
   assert.match(world,/buttonLabel:'RESPAWN IN TOWN'/);
+  assert.match(world,/function applyDeathRespawnVitals\(payload=null\)/);
+  assert.match(world,/deathRespawnHp\(\)/);
+  assert.doesNotMatch(world,/onRespawn:\(\)=>\{hp=maxHp\(\);sp=maxSp\(\);hunger=maxHunger\(\);renderBars\(\);\}/);
   assert.match(world,/deathRespawnHandler=\(\)=>\{/);
   assert.match(world,/document\.body\.classList\.add\('death-active'\)/);
   assert.match(networking,/Stay as a floating spirit/);
   assert.match(networking,/floating orb-ghost/);
   assert.match(networking,/hp=0; renderBars\(\);[\s\S]*buttonLabel:'RESPAWN IN TOWN'/);
+  assert.match(networking,/applyDeathRespawnVitals\(m\)/);
+  assert.doesNotMatch(networking,/worldRespawn[\s\S]*else hp=maxHp\(\)/);
   assert.match(networking,/dungeonSpiritQuit[\s\S]*NETWORK\.returnToPrimary\(\)\.then\(finishReturn\)\.catch\(finishReturn\)/);
   assert.doesNotMatch(networking,/RESPAWN AT GATE/);
   assert.match(styles,/#deathrecap/);
