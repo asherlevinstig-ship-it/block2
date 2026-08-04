@@ -1450,6 +1450,26 @@ test('gate entry moves the authoritative player to the dungeon entrance spawn',(
   assert.equal(D.standHeightIn(inst.world,p.x,p.z,12)+.01,p.y);
 });
 
+test('admin quick gate cycles through real dungeon entry flow',()=>{
+  const room=makeRoom(),admin=makeClient('quick_gate_admin'),normal=makeClient('quick_gate_normal');
+  admin._accountRole='admin';
+  seedPlayer(room,admin,{x:500,z:500,y:16});
+  seedPlayer(room,normal,{x:502,z:500,y:16});
+  room.handleAdminQuickGate(normal,{});
+  assert.equal(normal.sent.some(e=>e.type==='adminQuickGateReject'&&e.msg.reason==='admin'),true);
+  room.handleAdminQuickGate(admin,{});
+  let p=room.state.players.get(admin.sessionId);
+  let result=admin.sent.find(e=>e.type==='adminQuickGateResult').msg;
+  assert.equal(p.dim,'dungeon');
+  assert.equal(result.index,0);
+  assert.equal(result.dungeonId,DUNGEON_POOLS[0][0]);
+  room.leaveInstance(admin.sessionId);
+  room.handleAdminQuickGate(admin,{});
+  result=admin.sent.filter(e=>e.type==='adminQuickGateResult').at(-1).msg;
+  assert.equal(result.index,1);
+  assert.equal(result.dungeonId,DUNGEON_POOLS[0][1]);
+});
+
 test('server fall authority damages hard landings and Feather Step absorbs sane drops',()=>{
   const hardRoom=makeRoom(),hard=makeClient('hard_landing');
   hardRoom.lastMoveMsg=new Map();seedPlayer(hardRoom,hard,{x:140,z:140,y:25,hp:20});

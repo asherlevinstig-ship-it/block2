@@ -2222,6 +2222,14 @@ function netAttachRoom(room,name,client){
       sysMsg(text);
       try{window.dispatchEvent(new CustomEvent('blockcraft-admin-gate-teleport',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
     });
+    room.onMessage('adminQuickGateResult', m=>{
+      const rank=RANKS[Math.max(0,Math.min(RANKS.length-1,(m&&m.rank)|0))];
+      sysMsg('<b>Admin quick gate:</b> '+escHTML((m&&m.dungeonName)||'Dungeon')+' · '+escHTML(rank&&rank.n||'Hunter')+'-Rank ('+(((m&&m.index)|0)+1)+'/'+((m&&m.total)|0||1)+').');
+    });
+    room.onMessage('adminQuickGateReject', m=>{
+      sysMsg((m&&m.reason)==='admin'?'Quick gate is admin-only.':'Quick gate failed.');
+    });
+    room.onMessage('adminQuickGateExit', ()=>sysMsg('<b>Admin quick gate:</b> returned from dungeon. Press 9 again for the next test gate.'));
     room.onMessage('eventComplete', m=>eventCompleted(m));
     room.onMessage('eventFailed', m=>eventFailed(m));
     room.onMessage('eventResult', m=>showEventResult(m));

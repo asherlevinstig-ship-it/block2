@@ -21,6 +21,7 @@ const RECALL = require('../../shared/recall-system');
 const APPEARANCE_SYSTEM = require('../../shared/appearance-system');
 const { takeHandoff, isHostedGate, drainConsumedGates, drainGateBreaches, drainRequestedPublicGateRanks } = require('./dungeon-handoff');
 const { gateReadinessForProfile } = require('./gate-readiness');
+const { DUNGEON_POOLS } = require('../../shared/dungeon-pools');
 const { rateLimited: consumeRateLimit } = require('./rate-limit');
 const { createEconomyLedger, recordEconomyGold: recordEconomyGoldEvent, summarizeEconomyGold } = require('../economy-telemetry');
 const { registerRoom, unregisterRoom } = require('../metrics-registry');
@@ -146,6 +147,7 @@ const JOIN_SNAPSHOT_DELAY_MS = Math.max(0, Number(process.env.JOIN_SNAPSHOT_DELA
 const BLOCK_EDIT_REACH = 4.5;
 const PLAYER_EYE_HEIGHT = 1.62;
 const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + 14.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 27.5 });
+const ADMIN_QUICK_GATE_ROTATION = Object.freeze(DUNGEON_POOLS.flatMap((ids, rank) => ids.map(dungeonId => Object.freeze({ rank, dungeonId }))));
 
 function townReturnArray(y = TOWN_RETURN_SPAWN.y) {
   return [TOWN_RETURN_SPAWN.x, y, TOWN_RETURN_SPAWN.z];
@@ -411,6 +413,7 @@ class GameRoom extends Room {
     this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
     this.onMessage('adminGateTeleport', (client, m) => this.handleAdminGateTeleport(client, m));
+    this.onMessage('adminQuickGate', (client, m) => this.handleAdminQuickGate(client, m));
     this.onMessage('profileRequest', (client, m = {}) => {
       const rec = this.profileFor(client);
       if (!rec || !rec.prof) return;
@@ -3403,6 +3406,42 @@ class GameRoom extends Room {
       id: gate.id, gateId: gate.id, rank: gate.rank | 0, kind: gate.kind || 'public',
       x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
       gateX: gate.x, gateY: gate.y, gateZ: gate.z,
+    });
+    return true;
+  }
+  handleAdminQuickGate(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminQuickGateReject', { reason: 'admin' });
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return client.send('adminQuickGateReject', { reason: 'player' });
+    if (p.dgn) {
+      this.leaveInstance(client.sessionId);
+      return client.send('adminQuickGateExit', { reason: 'dungeon' });
+    }
+    const requested = Number.isFinite(+m.index) ? Math.max(0, +m.index | 0) : (client._adminQuickGateIndex || 0);
+    const entry = ADMIN_QUICK_GATE_ROTATION[requested % ADMIN_QUICK_GATE_ROTATION.length] || ADMIN_QUICK_GATE_ROTATION[0];
+    client._adminQuickGateIndex = (requested + 1) % ADMIN_QUICK_GATE_ROTATION.length;
+    const g = new Gate();
+    g.id = 'adminq_' + client.sessionId + '_' + Date.now().toString(36) + '_' + requested;
+    g.x = Number.isFinite(p.x) ? p.x : W.TOWN.TC + 90;
+    g.z = Number.isFinite(p.z) ? p.z : W.TOWN.TC + 90;
+    g.y = this.world.standHeight(g.x, g.z, W.WH - 2);
+    if (g.y < 2) g.y = W.TOWN.G + 1;
+    g.rank = entry.rank | 0;
+    g.seed = (0x9e3779b9 + requested * 2654435761) >>> 0;
+    g.dungeonId = entry.dungeonId;
+    g.kind = 'admin_test';
+    g.owner = this.tokens.get(client.sessionId) || '';
+    g.expiresAt = Date.now() + 15 * 60 * 1000;
+    g.active = true;
+    const inst = this.createInstance(g);
+    this.enterGateInstance(client, g, inst);
+    client.send('adminQuickGateResult', {
+      id: g.id,
+      index: requested % ADMIN_QUICK_GATE_ROTATION.length,
+      total: ADMIN_QUICK_GATE_ROTATION.length,
+      rank: g.rank,
+      dungeonId: inst.dungeonId || g.dungeonId,
+      dungeonName: inst.definition && inst.definition.name || g.dungeonId,
     });
     return true;
   }

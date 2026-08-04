@@ -5206,6 +5206,20 @@ addEventListener('keydown', e=>{
     if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();
     return;
   }
+  if(e.code==='Digit9'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()){
+    e.preventDefault();
+    if(dim==='dungeon'){
+      exitDungeon(true);
+      showName('Returned from quick gate - press 9 again for next dungeon');
+    }else if(NET.on&&NET.room){
+      NET.room.send('adminQuickGate',{});
+      showName('Opening admin quick gate...');
+    }else if(gateSystemUnlocked()){
+      spawnGate();
+      if(gate) enterDungeon(gate);
+    }
+    return;
+  }
   if(e.code==='Tab'&&!e.repeat&&gameInput){
     e.preventDefault();
     if(e.shiftKey && commandPetTamerPracticeDragon()) return;
