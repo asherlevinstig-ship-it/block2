@@ -604,7 +604,7 @@ test('MySQL game question store counts Recall attempts toward active homework', 
       }
       if (/FROM game_homework_progress/i.test(sql)) return [[{
         homework_id: 12,
-        period_key: 'day:2026-07-29',
+        period_key: params[2],
         answered_count: 1,
         completed_at: null,
         last_answered_at: null,
@@ -677,7 +677,7 @@ test('MySQL game question store credits active homework when tutorial Recall sub
       }
       if (/FROM game_homework_progress/i.test(sql)) return [[{
         homework_id: 12,
-        period_key: 'day:2026-07-29',
+        period_key: params[2],
         answered_count: 1,
         completed_at: null,
         last_answered_at: null,
@@ -885,7 +885,7 @@ test('MySQL game question analytics includes class students with zero attempts',
       if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
       const subjectRows = teacherSubjectRows(sql);
       if (subjectRows) return subjectRows;
-      if (/FROM students s WHERE s\.class_id = \?/i.test(sql)) {
+      if (/FROM students s\s+WHERE s\.class_id = \?/i.test(sql)) {
         assert.equal(params[0], 3);
         return [[
           { id: 9, name: 'Learner One', email: 'one@example.test', school_id: 12 },
@@ -1012,7 +1012,7 @@ test('MySQL game question analytics includes class students with zero attempts',
       if (/FROM game_homework_progress/i.test(sql)) return [[{
         homework_id: 77,
         student_id: 9,
-        period_key: 'day:2026-07-29',
+        period_key: `day:${new Date().toISOString().slice(0,10)}`,
         answered_count: 1,
         completed_at: null,
         last_answered_at: '2026-07-29 09:00:00',

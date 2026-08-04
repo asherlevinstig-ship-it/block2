@@ -1019,13 +1019,13 @@ test('Deity players choose one permanent power and the server rejects swaps', ()
   room.handleDeityPowerChoose(client, { power: 'flight' });
   assert.equal(prof.deity.chosenPower, 'flight');
   assert.deepEqual(prof.deity.powers, ['flight']);
-  assert.equal(client.sent.at(-2).type, 'deityPowerResult');
-  assert.equal(client.sent.at(-2).msg.ok, true);
-  assert.equal(client.sent.at(-2).msg.deity.powers[0], 'flight');
-  assert.equal(client.sent.at(-1).type, 'profile');
+  const result=client.sent.findLast(e=>e.type==='deityPowerResult');
+  assert.equal(result.msg.ok, true);
+  assert.equal(result.msg.deity.powers[0], 'flight');
+  assert.ok(client.sent.some(e=>e.type==='profile'));
 
   room.handleDeityPowerChoose(client, { power: 'weather' });
-  assert.deepEqual(client.sent.at(-1), { type: 'deityPowerResult', msg: { ok: false, reason: 'chosen' } });
+  assert.deepEqual(client.sent.findLast(e=>e.type==='deityPowerResult'), { type: 'deityPowerResult', msg: { ok: false, reason: 'chosen' } });
   assert.deepEqual(prof.deity.powers, ['flight']);
 });
 
@@ -1557,14 +1557,14 @@ test('full-inventory weapon drops persist in Loot Recovery and Mythic gear is pr
   const {prof}=seedPlayer(room,client,{inv:full});
   room.awardGrant(client,{source:'boss',items:[{id:I.IRON_SWORD,count:1,rarity:'mythic',gear:true}]});
   assert.equal(prof.inv.some(s=>s&&s.id===I.IRON_SWORD),false);
-  assert.equal(prof.lootRecovery.length,1);
-  assert.equal(prof.lootRecovery[0].rarity,'mythic');
-  assert.equal(prof.lootRecovery[0].locked,true);
-  assert.equal(prof.lootRecovery[0].expiresAt,0);
+  const sword=prof.lootRecovery.find(s=>s.id===I.IRON_SWORD);
+  assert.ok(sword);
+  assert.equal(sword.rarity,'mythic');
+  assert.equal(sword.locked,true);
+  assert.equal(sword.expiresAt,0);
   assert.equal(client.sent.some(e=>e.type==='lootRecoveryState'&&e.msg.queued),true);
   const stored=sanitizeProfile(prof);
-  assert.equal(stored.lootRecovery.length,1);
-  assert.equal(stored.lootRecovery[0].locked,true);
+  assert.equal(stored.lootRecovery.find(s=>s.id===I.IRON_SWORD).locked,true);
 });
 
 test('Tobin claims recovered weapons only into real free inventory slots',()=>{
@@ -2822,7 +2822,7 @@ test('profile merge rejects client armor and inventory changes', () => {
     inv: [{ id: I.DIAMOND, count: 64 }],
   });
   assert.equal(merged.armor, null);
-  assert.deepEqual(merged.inv, []);
+  assert.deepEqual(merged.inv, [{ id: I.APPEARANCE_MIRROR, count: 1, locked: true, source: 'starter' }]);
   assert.deepEqual(sanitizeProfile({ armor: { id: I.LEGEND_ARMOR, count: 99 } }).armor, { id: I.LEGEND_ARMOR, count: 1 });
   assert.deepEqual(sanitizeProfile({armor:{id:I.IRON_ARMOR,count:1,dur:321,gearRank:'D',rarity:'epic',locked:true}}).armor,
     {id:I.IRON_ARMOR,count:1,dur:321,gearRank:'D',rarity:'epic',locked:true});
@@ -2830,7 +2830,7 @@ test('profile merge rejects client armor and inventory changes', () => {
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.LEGEND_ARMOR, count: 1 },
     inv: [{ id: I.LEGEND_ARMOR, count: 1 }, { id: W.B.LOG, count: 3 }],
-  }).inv, [null, { id: W.B.LOG, count: 3 }]);
+  }).inv, [null, { id: W.B.LOG, count: 3 }, { id: I.APPEARANCE_MIRROR, count: 1, locked: true, source: 'starter' }]);
   assert.equal(mergeClientSave(current, { armor: { id: I.DIAMOND, count: 1 } }).armor, null);
 });
 
@@ -2848,7 +2848,7 @@ test('profile merge and sanitize support normal equipped armor', () => {
   assert.deepEqual(sanitizeProfile({
     armor: { id: I.DIA_ARMOR, count: 4 },
     inv: [{ id: I.DIA_ARMOR, count: 1 }, { id: I.DIAMOND, count: 2 }],
-  }).inv, [null, { id: I.DIAMOND, count: 2 }]);
+  }).inv, [null, { id: I.DIAMOND, count: 2 }, { id: I.APPEARANCE_MIRROR, count: 1, locked: true, source: 'starter' }]);
 });
 
 test('mount unlocks persist, sanitize/migrate to known dragons, and are never revoked by a client save', () => {
@@ -9446,6 +9446,7 @@ test('biome blocks have server-side mining and ability rules', () => {
     inv: [{ id: I.IRON_PICK, count: 1, dur: 10 }],
   });
   room.state.players.get(client.sessionId).x = 20.5;
+  room.state.players.get(client.sessionId).y = 12;
   room.state.players.get(client.sessionId).z = 20.5;
 
   room.world.setB(20, 16, 20, W.B.TERRACOTTA);

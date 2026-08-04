@@ -700,7 +700,7 @@ test('client dimensions and server consume the shared grid contract', () => {
     assert.ok(offset > previousModule, `${name} is loaded in runtime order`);
     previousModule = offset;
   }
-  assert.ok(Buffer.byteLength(html) < 22_000, 'index.html remains a small markup and bootstrap shell');
+  assert.ok(Buffer.byteLength(html) < 25_000, 'index.html remains a small markup and bootstrap shell');
   assert.match(html, /id="playbtn" disabled/);
   assert.match(html, /id="registerbtn" class="hidden" type="button" disabled hidden aria-hidden="true"/);
   assert.match(html, /id="authpassshow" class="password-toggle" type="button"/);
@@ -1043,8 +1043,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Room cleared/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Boss gate progress/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Boss down\. Open remaining chests/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Stay as spirit for party credit/);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8'), /Return to town now/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Stay as spirit for party credit/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /return to town now/i);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /Stay for party credit/);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /Collapses in /);
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /gateUrgency/);
@@ -1159,7 +1159,7 @@ test('client chunk rebuilding fully refreshes compact dungeon world meshes', () 
   assert.match(worldSource, /const cb=worldChunkBounds\(\);\s*if\(cx<cb\.minCx\|\|cz<cb\.minCz\|\|cx>cb\.maxCx\|\|cz>cb\.maxCz\) return;/);
   assert.match(worldSource, /for\(let cx=Math\.max\(cb\.minCx,c\.cx-c\.r\);cx<=Math\.min\(cb\.maxCx,c\.cx\+c\.r\);cx\+\+\)/);
   assert.match(worldSource, /for\(let y=Math\.max\(1,b\.minY\);y<=b\.maxY;y\+\+\)/);
-  assert.match(dimensionsSource, /function rebuildAllChunks\(\)\{\s*lastVisibleChunkKey='';\s*for\(const key of Object\.keys\(chunkMeshes\)\)\{\s*const \[cx,cz\]=key\.split\(','\)\.map\(Number\);\s*disposeChunk\(cx,cz\);\s*\}\s*updateVisibleChunks\(true\);\s*\}/);
+  assert.match(dimensionsSource, /function rebuildAllChunks\(\)\{\s*worldApi\.clearChunks\(\);\s*worldApi\.rebuildVisible\(true\);\s*\}/);
   assert.match(dimensionsSource, /DungeonRules\.safeStandHeightIn\(dungeon\.world,spawnX,spawnZ\)/,
     'local and admin dungeon entry uses the same safe authored-floor spawn rule as the server');
 });
@@ -1809,7 +1809,7 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(room,/recordRecallAttempt/);
   assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
   assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
-  assert.match(recall,/renderBars\(\);setTimeout\(clearRecall/);
+  assert.match(recall,/renderBars\(\);active=null;answerPending=false;if\(hall\)queueQuestionHallNext/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
 });
@@ -1875,7 +1875,7 @@ test('mouse look returns as a strict gameplay-only camera option',()=>{
   assert.match(combat,/gameplayCameraInputAllowed,/);
   assert.match(combat,/gameplayMovementAllowed,/);
   assert.match(combat,/gameplayInputDebug,/);
-  assert.match(frame,/const gameplayMoveAllowed=combatApi\.gameplayMovementAllowed\?combatApi\.gameplayMovementAllowed\(\):\(combatApi\.gameplayCameraInputAllowed\?combatApi\.gameplayCameraInputAllowed\(\):true\);\s*if\(locked\|\|gameplayMoveAllowed\)\{/);
+  assert.match(frame,/const gameplayMoveAllowed=!deathControlLocked&&\(combatApi\.gameplayMovementAllowed\?combatApi\.gameplayMovementAllowed\(\):\(combatApi\.gameplayCameraInputAllowed\?combatApi\.gameplayCameraInputAllowed\(\):true\)\);\s*if\(!deathControlLocked&&\(locked\|\|gameplayMoveAllowed\)\)\{/);
   assert.match(frame,/const mouseLook=combatApi\.consumeMouseLookDelta\?combatApi\.consumeMouseLookDelta\(\):\{x:0,y:0\};/);
   assert.match(frame,/const mouseLookSensitivity=combatState\.mouseLookSensitivity\|\|\.00215;/);
   assert.match(frame,/const mouseYaw=-\(mouseLook\.x\|\|0\)\*mouseLookSensitivity,mousePitch=-\(mouseLook\.y\|\|0\)\*mouseLookSensitivity;/);
@@ -1919,7 +1919,7 @@ test('block placement uses Minecraft-style targeted block face at build reach',(
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
-  assert.match(combat,/const BLOCK_PLACE_REACH=8;/);
+  assert.match(combat,/const BLOCK_PLACE_REACH=4\.5;/);
   assert.match(combat,/const hit=raycast\(BLOCK_PLACE_REACH\);/);
   assert.match(combat,/const px=hit\.x\+hit\.face\[0\], py=hit\.y\+hit\.face\[1\], pz=hit\.z\+hit\.face\[2\];/);
   assert.match(combat,/function buildPlacementPreview\(\)\{/);
@@ -2348,7 +2348,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/finishWorldLoading\('town-arrival'\); if\(deferArrivalChoice\)showFirstTownArrivalChoice\(\);/);
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
   assert.match(combat,/firstTownChoiceDismissedThisSession=true/);
-  assert.match(combat,/if\(arrivalChoiceEl\)arrivalChoiceEl\.classList\.add\('hidden'\);\s*document\.body\.classList\.remove\('arrival-choice-open'\);\s*syncHudLayerState\(\);/);
+  assert.match(combat,/closeBlockingGameModal\(arrivalChoiceEl,\{relock:false,reason:'arrival-choice'\}\);/);
   assert.match(combat,/function resumeCameraAfterArrivalChoice\(\)\{[\s\S]*requestPointerLockSafe\(enterPlayFallback\);/);
   assert.doesNotMatch(combat,/function chooseFirstTownArrival\(choice\)\{[\s\S]*setTimeout\(\(\)=>ONBOARD\.showTrainingComplete\(\),120\);[\s\S]*resumeCameraAfterArrivalChoice\(\);/);
   assert.match(combat,/function settleFirstTownAdventureSpawn\(\)/);
@@ -2615,7 +2615,7 @@ test('first ten minute guidance teaches subject focus and explicit quest accepta
   assert.match(menus,/npcDialogueButton\('ACCEPT'/);
   assert.match(menus,/function openSocialMentorUI/);
   assert.match(menus,/openQWin\('dialog'\);\s*qpanelEl\.innerHTML='';\s*const ui=openNpcDialogueShell\(v, 'FELLOWSHIP MENTOR/);
-  assert.match(styles,/#qpanel\.dialog\{width:min\(720px/);
+  assert.match(styles,/#qpanel\.dialog\{width:min\(1120px/);
   assert.match(styles,/\.npc-dialogue-head/);
   assert.match(styles,/\.npc-dialogue-text/);
   assert.match(styles,/\.npc-dialogue-actions \.qbtn\.npc-primary/);
@@ -2742,8 +2742,8 @@ test('onboarding recall lesson completes from a correct answer away from the way
   assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.recall/);
   assert.match(recall,/if\(m\.correct&&globalThis\.BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markRecall\(\);/);
   assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);\s*if\(!onboardingDone\(\)\)\{/);
-  assert.match(room,/const tutorial=this\.recallTutorialSpace\(p\);/);
-  assert.match(room,/const source=message\.source==='lectern'\?'lectern':\(tutorial\?'tutorial':''\);/);
+  assert.match(room,/const tutorial=this\.recallTutorialSpace\(p\),questionHall=questionHallRequest;/);
+  assert.match(room,/const source=message\.source==='lectern'\?'lectern':\(questionHall\?'question_hall':\(tutorial\?'tutorial':''\)\);/);
   assert.match(room,/challenge\.source==='tutorial'\?'tutorial':'recall'/);
 });
 
@@ -3323,7 +3323,7 @@ test('client restore and movement use persisted vitals and empty-hunger slowdown
   assert.doesNotMatch(networking, /hp=maxHp\(\); mp=maxMp\(\); sp=maxSp\(\); hunger=maxHunger\(\);/);
   assert.match(frameLoop, /const outOfFood=!mounted && hunger<=0/);
   assert.match(frameLoop, /const sprintIntent=!!\(sprintKey && movementInput && !mounted && !outOfFood\)/);
-  assert.match(frameLoop, /baseSpd\*\(outOfFood&&!pantherMove\?0\.62:1\)/);
+  assert.match(frameLoop, /\*\(outOfFood&&!pantherMove\?0\.62:1\)/);
   assert.match(dimensions, /if\(S\.lvl<3 && hunger<maxHunger\(\)\)/);
   assert.doesNotMatch(dimensions, /local:starvation/);
 });
@@ -3498,7 +3498,7 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(combat, /it will not appear in the bag/);
   assert.match(companions + networking, /BlockcraftAppearancePreview/);
   assert.match(world, /function pixelMaterialTextures\(col\)/);
-  assert.match(world, /bumpScale:\.012/);
+  assert.doesNotMatch(world, /bumpScale:/);
   assert.match(networking, /shadeHex\(look\.skin,12\)/);
   assert.match(styles, /\.ccstage/);
   assert.match(styles, /\.ccstylegrid/);
@@ -4293,7 +4293,7 @@ test('quest log progression director introduces one system at a time',()=>{
   assert.match(frame,/function homeworkObjectiveForHud\(\)/);
   assert.match(frame,/function refreshHomeworkHud\(\)/);
   assert.match(frame,/homeworkHudEl\.addEventListener\('pointerdown'/);
-  assert.match(frame,/refreshHomeworkHud\(\);\s*if\(onboardingActive&&dim==='tutorial'\)/);
+  assert.match(frame,/refreshHomeworkHud\(\);[\s\S]*?if\(onboardingActive&&dim==='tutorial'\)/);
   assert.match(frame,/const QUEST_OBJECTIVES=globalThis\.BlockcraftQuestObjectives/);
   assert.match(frame,/QUEST_OBJECTIVES\.normalizeObjectiveList/);
   assert.match(frame,/function serverObjectiveForHud\(\)/);

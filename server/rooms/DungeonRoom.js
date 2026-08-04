@@ -295,11 +295,7 @@ class DungeonRoom extends GameRoom {
     }
     // The in-memory handoff — not the store write — is what actually protects this hunter's
     // progress from GameRoom's stale cache, so it must still happen even if flush() throws.
-    try {
-      await this.flush();
-    } catch (e) {
-      console.warn('[persist] dungeon leave flush failed:', e.message);
-    }
+    await this.savePlayerProfileNow(token, prof);
     this.profiles.delete(token);
     if (prof && !prof.noPersist) handOff(token, prof);
     // empty room disposes via Colyseus autoDispose; the instance goes with it.
