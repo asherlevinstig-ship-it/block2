@@ -2426,7 +2426,11 @@ function beginDungeon(ri, seed, editLog, opts){
     if(mounted){ mounted=false; mountKind=''; if(localMountObj) localMountObj.visible=false; }  // can't ride into a dungeon
     if(editLog) for(const e of editLog) setB(e.x,e.y,e.z,e.id);
     rebuildAllChunks(); refreshTorchMeshes(); applyDim();
-    player.pos.set(dungeon.entrance.x+.5, 9.01, dungeon.entrance.z+.5);
+    const spawnX=Number.isFinite(+opts.spawnX)?+opts.spawnX:dungeon.entrance.x+.5;
+    const spawnZ=Number.isFinite(+opts.spawnZ)?+opts.spawnZ:dungeon.entrance.z+.5;
+    const localGround=standHeight(spawnX,spawnZ,12);
+    const spawnY=Number.isFinite(+opts.spawnY)?+opts.spawnY:((localGround>0?localGround:9)+.01);
+    player.pos.set(spawnX, spawnY, spawnZ);
     player.vel.set(0,0,0);
     exitPortal=makeGateMesh(0x6ee06a);
     exitPortal.position.set(dungeon.entrance.x+.5, 9, dungeon.entrance.z-dungeon.entrance.r+1.5);

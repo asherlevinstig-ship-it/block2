@@ -1805,7 +1805,7 @@ function netAttachRoom(room,name,client){
       if(dungeonLobbyOpen) closeQWin();
       NET.dgn=m.id;
       const shard=(m.shardPlus>0)?{plus:m.shardPlus, name:m.shardName||'', mods:(m.shardMods||'').split(',').filter(Boolean)}:null;
-      beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, dungeonId:m.dungeonId||'', shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
+      beginDungeon(m.rank, m.seed, m.edits, {back:{x:m.bx,y:m.by,z:m.bz}, spawnX:m.sx, spawnY:m.sy, spawnZ:m.sz, dungeonId:m.dungeonId||'', shard, localMobs:false, cleared:m.cleared, kind:m.kind||'public'});
       globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();
       eventFeed('[Dungeon]','Entered '+RANKS[Math.max(0,Math.min(RANKS.length-1,(m.rank|0)))].n+'-Rank '+gateKindLabel(m.kind||'public')+' Gate.',{key:'dungeon:enter:'+String(m.id||''),cooldown:0});
     });

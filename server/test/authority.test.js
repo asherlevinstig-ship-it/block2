@@ -1432,6 +1432,24 @@ test('admin gate teleport from DungeonRoom returns the hunter to the hosted gate
   assert.equal(admin.sent.some(e=>e.type==='adminGateTeleportResult'&&e.msg.returnOverworld===true&&e.msg.id==='g81'),true);
 });
 
+test('gate entry moves the authoritative player to the dungeon entrance spawn',()=>{
+  const room=makeRoom(),client=makeClient('gate_entry_spawn');
+  seedPlayer(room,client,{x:500,z:430,y:16});
+  const g=makeGate('g_spawn_check',500.5,430.5,1,'public');
+  g.seed=0x5eed1234;
+  g.dungeonId='abandoned_mines';
+  const inst=room.createInstance(g);
+  room.enterGateInstance(client,g,inst);
+  const p=room.state.players.get(client.sessionId);
+  const payload=client.sent.find(e=>e.type==='enterDungeon').msg;
+  assert.equal(p.dim,'dungeon');
+  assert.equal(p.dgn,g.id);
+  assert.equal(p.x,payload.sx);
+  assert.equal(p.y,payload.sy);
+  assert.equal(p.z,payload.sz);
+  assert.equal(D.standHeightIn(inst.world,p.x,p.z,12)+.01,p.y);
+});
+
 test('server fall authority damages hard landings and Feather Step absorbs sane drops',()=>{
   const hardRoom=makeRoom(),hard=makeClient('hard_landing');
   hardRoom.lastMoveMsg=new Map();seedPlayer(hardRoom,hard,{x:140,z:140,y:25,hp:20});

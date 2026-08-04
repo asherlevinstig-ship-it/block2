@@ -896,10 +896,13 @@ class DungeonMixin {
     }
   }
   gateEntryPayload(g, inst) {
+    const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
+    const ey = inst.world ? D.standHeightIn(inst.world, ex.x + .5, ex.z + .5, 12) : 9;
     return {
       id: inst.id, seed: inst.seed, dungeonId: inst.dungeonId || canonicalDungeonId(inst.rank, inst.seed), rank: inst.rank, kind: inst.kind || (g && g.kind) || 'public',
       edits: inst.edits,
       bx: g ? g.x : inst.gateX, by: g ? g.y : inst.gateY, bz: g ? g.z : inst.gateZ,
+      sx: ex.x + .5, sy: (ey > 0 ? ey : 9) + .01, sz: ex.z + .5,
       cleared: inst.cleared,
       shardPlus: inst.shardPlus || 0, shardName: inst.shardName || '', shardMods: inst.shardMods || '',
     };
@@ -991,6 +994,12 @@ class DungeonMixin {
     p.mount = '';                 // can't ride into a dungeon
     const hp = this.ensurePlayerHp(client);
     hp.hp = hp.max;
+    const ex = inst.entrance || inst.bossRoom || { x: 22, z: 22 };
+    const ey = inst.world ? D.standHeightIn(inst.world, ex.x + .5, ex.z + .5, 12) : 9;
+    p.x = ex.x + .5;
+    p.y = (ey > 0 ? ey : 9) + .01;
+    p.z = ex.z + .5;
+    p.yaw = 0;
     client.send('enterDungeon', this.gateEntryPayload(g, inst));
     return true;
   }

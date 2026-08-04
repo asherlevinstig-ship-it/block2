@@ -205,7 +205,7 @@ class DungeonRoom extends GameRoom {
     });
     p.lvl = prof.S.lvl;
     p.path = prof.S.path;
-    p.x = ex.x; p.y = ey > 0 ? ey : 9; p.z = ex.z;
+    p.x = ex.x + .5; p.y = (ey > 0 ? ey : 9) + .01; p.z = ex.z + .5;
     p.dim = 'dungeon';
     p.dgn = inst.id;
     this.state.players.set(client.sessionId, p);
