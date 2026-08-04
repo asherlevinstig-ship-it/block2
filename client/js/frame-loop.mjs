@@ -1276,7 +1276,8 @@ function objectiveHudHTML(obj){
         '<div class="oact">'+progressText+trackerGuideButton(line,index)+trackerExpandButton(line,index)+trackerActionButton(line.action)+'</div>'+
       '</div>';
     }).join('');
-    return '<div class="qt">Objective Tracker</div><div class="objective-list">'+rows+'</div>';
+    return '<div class="qt">Objective Tracker</div><div class="objective-list">'+rows+'</div>'+
+      '<button type="button" class="otherquests-row minimize" data-objective-toggle="__other_quests" aria-expanded="true"><span>Minimise Quests</span><b>−</b><i>⌃</i></button>';
   }
   const action=currentObjectiveAction(obj);
   return ONBOARD.objectiveHudHTML(action?{...obj,actionHTML:trackerActionButton(action)}:obj);

@@ -1363,6 +1363,7 @@
   #currentquest .activequest-actions .qaction{flex:1;max-width:none;padding:10px 12px;font-size:10px;text-align:center}
   .otherquests-row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:10px;width:100%;padding:11px 15px;border:0;border-top:1px solid rgba(125,211,252,.18);background:rgba(9,18,31,.84);color:#ffe680;font-family:inherit;letter-spacing:1.5px;text-align:left;cursor:pointer}
   .otherquests-row span{text-transform:uppercase}.otherquests-row b{display:grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:rgba(125,211,252,.12);border:1px solid rgba(125,211,252,.3);color:#bfeaff;font-size:10px}.otherquests-row i{font-style:normal;color:#ffd24a}
+  .otherquests-row.minimize{border-top-color:rgba(242,199,92,.2);background:rgba(6,12,21,.72);color:#bfeaff}
   #currentquest .objective-list{padding:4px 14px 12px;margin:0}
   #currentquest .objective-line{grid-template-columns:58px minmax(0,1fr) minmax(72px,max-content);padding:9px 0}
   #activitytracker{right:24px;width:345px;border-color:rgba(125,211,252,.26);background:linear-gradient(160deg,rgba(6,14,24,.78),rgba(6,10,17,.7));box-shadow:0 10px 26px rgba(0,0,0,.26)}
@@ -1370,7 +1371,7 @@
   #eventhud .eventcrest{border-radius:5px}
   #eventhud .es{color:#d8e3f1;font:500 12px system-ui,-apple-system,Segoe UI,sans-serif}
   #eventjoin{padding:7px 11px;border-color:rgba(242,199,92,.58);background:rgba(63,42,11,.86);color:#ffe680;font-size:9px}
-  #keyprompthud{left:calc(50% + 330px);right:auto;bottom:68px;transform:none;min-width:250px;width:min(300px,calc(50vw - 354px));max-width:300px;z-index:10;gap:8px;padding:7px 9px 7px 7px;border-color:rgba(255,255,255,.08);background:rgba(4,8,14,.22);box-shadow:none;backdrop-filter:blur(2px)}
+  #keyprompthud{left:calc(50% + 410px);right:auto;bottom:56px;transform:none;min-width:220px;width:min(280px,calc(50vw - 430px));max-width:280px;z-index:10;gap:7px;padding:6px 8px 6px 6px;border-color:rgba(255,255,255,.06);background:rgba(4,8,14,.16);box-shadow:none;backdrop-filter:blur(2px)}
   #keyprompthud:before,#keyprompthud .keydots{display:none}
   #keyprompthud .keyart{min-width:44px;height:34px;padding:0 8px;border-radius:7px;border-bottom-width:3px;font-size:12px}
   #keyprompthud .keycopy b{font-size:10px;letter-spacing:1.4px}
