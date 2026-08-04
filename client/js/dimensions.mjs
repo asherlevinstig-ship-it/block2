@@ -1941,13 +1941,53 @@ function announceArrivalTitle(kicker,title,subtitle){
 function townReturnPoint(){
   return {x:TOWN.TC+14.5,y:TOWN.G+1,z:TOWN.TC+27.5};
 }
+function dimDebugGrid(grid){
+  if(!grid)return null;
+  const bounds=grid.bounds||null;
+  return {
+    kind:grid.kind||'',
+    id:grid.id||'',
+    originX:Number.isFinite(grid.originX)?grid.originX:null,
+    originZ:Number.isFinite(grid.originZ)?grid.originZ:null,
+    width:Number.isFinite(grid.width)?grid.width:null,
+    depth:Number.isFinite(grid.depth)?grid.depth:null,
+    bounds:bounds?{minX:bounds.minX,minY:bounds.minY,minZ:bounds.minZ,maxX:bounds.maxX,maxY:bounds.maxY,maxZ:bounds.maxZ}:null,
+  };
+}
+function dimDebugPos(vec){
+  if(!vec)return null;
+  return {
+    x:Math.round(Number(vec.x||0)*1000)/1000,
+    y:Math.round(Number(vec.y||0)*1000)/1000,
+    z:Math.round(Number(vec.z||0)*1000)/1000,
+  };
+}
+function dimDebug(event,data={}){
+  const payload={
+    event,
+    dim,
+    dgn:NET&&NET.dgn||'',
+    roomName:NET&&NET.roomName||NET&&NET.room&&NET.room.name||'',
+    player:player&&player.pos?dimDebugPos(player.pos):null,
+    world:dimDebugGrid(typeof world!=='undefined'?world:null),
+    owWorld:dimDebugGrid(owWorld),
+    ...data,
+  };
+  globalThis.__BLOCKCRAFT_LAST_DIM_DEBUG__=payload;
+  try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('dimension.'+event,payload);}catch(_e){}
+  try{console.info('[bc-dim]',event,payload);}catch(_e){}
+  return payload;
+}
 function restoreOverworldReturnGrid(ret,reason='return'){
   const candidates=[ret&&ret.world,owWorld,worldState&&worldState.grid,typeof world!=='undefined'?world:null];
-  for(const candidate of candidates){
+  dimDebug('restore.start',{reason,returnGrid:dimDebugGrid(ret&&ret.world),candidateKinds:candidates.map(g=>g&&g.kind||null),returnPos:dimDebugPos(ret&&ret.pos)});
+  for(let i=0;i<candidates.length;i++){
+    const candidate=candidates[i];
     if(candidate&&typeof worldApi.isOverworldGrid==='function'&&worldApi.isOverworldGrid(candidate)){
       world=candidate;
       if(worldState)worldState.grid=candidate;
       owWorld=candidate;
+      dimDebug('restore.selected',{reason,sourceIndex:i,selected:dimDebugGrid(candidate)});
       return candidate;
     }
   }
@@ -1956,9 +1996,11 @@ function restoreOverworldReturnGrid(ret,reason='return'){
     world=rebuilt;
     if(worldState)worldState.grid=rebuilt;
     owWorld=rebuilt;
+    dimDebug('restore.rebuilt',{reason,rebuilt:dimDebugGrid(rebuilt),candidateKinds:candidates.map(g=>g&&g.kind||null)});
     if(typeof console!=='undefined'&&console.warn)console.warn('[bc-dim-return] rebuilt overworld after invalid cached room grid',{reason,dim,cachedKinds:candidates.map(g=>g&&g.kind||null)});
     return rebuilt;
   }
+  dimDebug('restore.failed',{reason,candidateKinds:candidates.map(g=>g&&g.kind||null)});
   return world;
 }
 function placePlayerAtTownReturn(){
@@ -1968,6 +2010,7 @@ function placePlayerAtTownReturn(){
   player.yaw=Math.PI;
   player.pitch=0;
   player.vel.set(0,0,0);
+  dimDebug('place.town_return',{town,after:dimDebugPos(player.pos)});
 }
 let portalTransitionActive=false;
 function runPortalTransition(opts, swap){
@@ -2240,9 +2283,14 @@ function ensureQuestionHallTownPortal(){
   scene.add(questionHallTownPortal);
 }
 function enterQuestionRoom(){
+  dimDebug('questions.enter.request',{allowed:dim==='overworld'});
   if(dim==='questions')return true;
-  if(dim!=='overworld')return false;
+  if(dim!=='overworld'){
+    dimDebug('questions.enter.blocked',{reason:'not_overworld'});
+    return false;
+  }
   questionRoomReturn={world,pos:player.pos.clone(),yaw:player.yaw,pitch:player.pitch};
+  dimDebug('questions.enter.capture_return',{returnGrid:dimDebugGrid(questionRoomReturn.world),returnPos:dimDebugPos(questionRoomReturn.pos)});
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
   if(mounted){mounted=false;mountKind='';if(localMountObj)localMountObj.visible=false;}
   owWorld=world;
@@ -2255,11 +2303,16 @@ function enterQuestionRoom(){
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
+  dimDebug('questions.enter.complete',{spawn:dimDebugPos(player.pos),questionGrid:dimDebugGrid(world)});
   announceArrivalTitle('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare');
   return true;
 }
 function exitQuestionRoom(){
-  if(dim!=='questions')return false;
+  dimDebug('questions.exit.request',{allowed:dim==='questions',returnGrid:dimDebugGrid(questionRoomReturn&&questionRoomReturn.world),returnPos:dimDebugPos(questionRoomReturn&&questionRoomReturn.pos)});
+  if(dim!=='questions'){
+    dimDebug('questions.exit.blocked',{reason:'not_questions'});
+    return false;
+  }
   for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
   if(questionHallTownPortal){scene.remove(questionHallTownPortal);questionHallTownPortal=null;}
   const ret=questionRoomReturn;
@@ -2269,10 +2322,12 @@ function exitQuestionRoom(){
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
   questionRoomReturn=null;
+  dimDebug('questions.exit.complete',{after:dimDebugPos(player&&player.pos),world:dimDebugGrid(world)});
   announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   return true;
 }
 function exitQuestionRoomToTown(){
+  dimDebug('questions.portal.use',{allowed:dim==='questions'});
   if(dim!=='questions')return false;
   return runPortalTransition({title:'Town of Beginnings',subtitle:'Returning from Question Hall',kind:'taming'},()=>exitQuestionRoom());
 }
