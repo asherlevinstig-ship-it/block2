@@ -2698,26 +2698,9 @@ class GameRoom extends Room {
     const inst = this.instances[p.dgn]; if (!inst) return;
     const x = m.x | 0, y = m.y | 0, z = m.z | 0, id = m.id | 0;
     if (!inst.inBounds(x, y, z)) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
-    if (id < 0 || id > W.MAX_BLOCK_ID || id === W.B.BEDROCK || id === W.B.BARRIER || id === W.B.LAVA) return this.rejectEdit(client, x, y, z, W.B.AIR, id);
-    const prev = inst.getB(x, y, z);
-    if (this.rateLimited(client, 'edit', 30, 60)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (prev === W.B.BEDROCK || prev === W.B.BARRIER) return this.rejectEdit(client, x, y, z, prev, id);
-    if (!this.editTargetInReach(p, x, y, z)) return this.rejectEdit(client, x, y, z, prev, id);
-    if (id !== W.B.AIR && prev !== W.B.AIR && prev !== W.B.WATER) return this.rejectEdit(client, x, y, z, prev, id);
-    if (prev === W.B.CHEST && id === W.B.AIR && !this.canBreakChest(client, p.dgn + ':' + x + ',' + y + ',' + z)) {
-      return this.rejectEdit(client, x, y, z, prev, id);
-    }
-    if (id !== W.B.AIR && !this.consumeForPlacement(client, id)) return this.rejectEdit(client, x, y, z, prev, id);
-    inst.setB(x, y, z, id);
-    inst.addEdit(x, y, z, id);
-    if (prev === W.B.CHEST && id === W.B.AIR) this.deleteChest(p.dgn + ':' + x + ',' + y + ',' + z);
-    if (id === W.B.CHEST) this.createPlacedChest(client, p.dgn + ':' + x + ',' + y + ',' + z, 'dungeon');
-    if (id === W.B.AIR && prev !== W.B.AIR) this.awardMine(client, prev, m.slot);
-    for (const c of this.clients) {
-      if (c.sessionId === client.sessionId) continue;
-      const q = this.state.players.get(c.sessionId);
-      if (q && q.dgn === p.dgn) c.send('dedit', { x, y, z, id });
-    }
+    // Dungeon layouts are authored encounters. Letting players mine/place here
+    // causes missing floors, invalid routes, and spawn traps in live Gates.
+    return this.rejectEdit(client, x, y, z, inst.getB(x, y, z), id, { reason: 'dungeon_locked' });
   }
   sendSpace(dgn, type, msg) {
     for (const c of this.clients) {

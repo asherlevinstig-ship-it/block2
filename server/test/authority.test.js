@@ -697,6 +697,32 @@ function putInstance(room, opts) {
   return inst;
 }
 
+test('dungeon block edits are rejected so Gate layouts remain indestructible', () => {
+  const room = makeRoom();
+  const client = makeClient('dungeon_edit_locked');
+  room.clients.push(client);
+  const d = D.generateDungeon(0, 0x5eed1234, 'sunken_crypt');
+  const inst = putInstance(room, {
+    id: 'locked_crypt',
+    rank: 0,
+    seed: 0x5eed1234,
+    world: d.world,
+    bossRoom: d.bossRoom,
+    players: [client.sessionId],
+  });
+  const x = Math.floor(d.entrance.x), y = 8, z = Math.floor(d.entrance.z);
+  const before = inst.getB(x, y, z);
+  seedPlayer(room, client, { dgn: inst.id, x: d.entrance.x, y: 9, z: d.entrance.z, hp: 20 });
+
+  room.handleDungeonEdit(client, { x, y, z, id: W.B.AIR, slot: 0 });
+
+  assert.equal(inst.getB(x, y, z), before);
+  const reject = client.sent.find(e => e.type === 'editReject');
+  assert.ok(reject, 'the client receives an authoritative edit rejection');
+  assert.equal(reject.msg.reason, 'dungeon_locked');
+  assert.equal(reject.msg.id, before);
+});
+
 test('dungeon spawn safe zone keeps the entry pad clear and untargetable by mobs', () => {
   const room = makeRoom();
   room.mobSeq = 0;
@@ -8490,6 +8516,21 @@ test('generated dungeon rooms and spawns have floor and head clearance across ra
       assert.ok(y > 0, `rank ${rank} seed ${seed} ${probe.label} has floor`);
       assert.equal(solid(Math.floor(probe.x), Math.floor(y + .2), Math.floor(probe.z)), false, `rank ${rank} seed ${seed} ${probe.label} feet are clear`);
       assert.equal(solid(Math.floor(probe.x), Math.floor(y + 1.5), Math.floor(probe.z)), false, `rank ${rank} seed ${seed} ${probe.label} head is clear`);
+    }
+  }
+});
+
+test('generated dungeon rooms keep authored floors solid across every dungeon pool', () => {
+  const seeds = [1, 17, 0x5eed1234, 987654321];
+  for (let rank = 0; rank < DUNGEON_POOLS.length; rank++) for (const dungeonId of DUNGEON_POOLS[rank]) for (const seed of seeds) {
+    const d = D.generateDungeon(rank, seed, dungeonId);
+    for (const rm of d.rooms) {
+      for (let x = rm.x - rm.rx + 1; x <= rm.x + rm.rx - 1; x++) {
+        for (let z = rm.z - rm.rz + 1; z <= rm.z + rm.rz - 1; z++) {
+          assert.equal(W.isSolid(d.world.getB(x, 8, z)), true,
+            `${dungeonId} seed ${seed} room ${rm.type} has solid authored floor at ${x},8,${z}`);
+        }
+      }
     }
   }
 });

@@ -3408,6 +3408,7 @@ function netSendEdit(x,y,z,id){
 function netEditReject(m){
   SFX.error();
   if(!m) return;
+  if(m.reason==='dungeon_locked') sysMsg('Dungeon blocks are sealed by the Gate.');
   const x=m.x|0, y=m.y|0, z=m.z|0, id=m.id|0;
   if(m.requested && m.requested!==B.AIR && ITEMS[m.requested]) addItem(m.requested, 1);
   if(isLightBlock(getB(x,y,z)) && !isLightBlock(id)) removeTorchMesh(x,y,z);

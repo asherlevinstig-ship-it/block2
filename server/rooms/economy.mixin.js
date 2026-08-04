@@ -497,8 +497,10 @@ class EconomyMixin {
     }
     return -1;
   }
-  rejectEdit(client, x, y, z, actual, requested) {
-    client.send('editReject', { x, y, z, id: actual | 0, requested: requested == null ? null : requested | 0 });
+  rejectEdit(client, x, y, z, actual, requested, extra = null) {
+    const msg = { x, y, z, id: actual | 0, requested: requested == null ? null : requested | 0 };
+    if (extra && typeof extra === 'object') Object.assign(msg, extra);
+    client.send('editReject', msg);
   }
   trimGrid(cells, w) {
     let minX = w, minY = w, maxX = -1, maxY = -1;

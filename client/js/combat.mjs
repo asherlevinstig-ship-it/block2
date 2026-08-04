@@ -435,6 +435,11 @@ function meleeSwingTime(){
   return (tool && tool.cls==='axe') ? .55 : .35;   // axes swing slower (matches the server cadence); everything else standard
 }
 function startMine(hit){
+  if(dim==='dungeon'){
+    mining=null;
+    sysMsg('Dungeon blocks are sealed by the Gate.');
+    return;
+  }
   const info=BREAK[hit.id];
   if(!info){ mining=null; return; }
   const tool=toolFor(hit.id);
@@ -5807,7 +5812,8 @@ function buildPlacementPreview(){
   if(!hit || isPlacementInteractionHit(hit)) return null;
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2], placeId=s.id;
   const cur=inWorld(px,py,pz)?getB(px,py,pz):B.BEDROCK;
-  const valid=inWorld(px,py,pz)
+  const valid=dim!=='dungeon'
+    && inWorld(px,py,pz)
     && (cur===B.AIR || cur===B.WATER)
     && !(dim==='overworld' && !canBuildHere(px,pz,py,placeId))
     && !placementIntersectsPlayer(px,py,pz,placeId);
@@ -6342,6 +6348,10 @@ function placeSelectedBlockAtHit(hit){
   if(!hit || isPlacementInteractionHit(hit)) return false;
   const s=inv[selected];
   if(!s || ITEMS[s.id].place===undefined) return false;
+  if(dim==='dungeon'){
+    sysMsg('Dungeon blocks are sealed by the Gate.');
+    return false;
+  }
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2];
   if(!inWorld(px,py,pz)) return false;
   const cur=getB(px,py,pz);

@@ -48,7 +48,7 @@
       const h=rm.h||4;
       carveBox(w, rm.x-rm.rx,9,rm.z-rm.rz, rm.x+rm.rx,9+h,rm.z+rm.rz, B.AIR);
       carveBox(w, rm.x-rm.rx,8,rm.z-rm.rz, rm.x+rm.rx,8,rm.z+rm.rz, floorId||B.COBBLE);
-      if(rm.type==='pit'){
+      if(rm.type==='pit' && !rm.solidFloor){
         const px=Math.max(1,rm.rx-2), pz=Math.max(1,rm.rz-2);
         carveBox(w, rm.x-px,8,rm.z-pz, rm.x+px,8,rm.z+pz, B.AIR);
         carveBox(w, rm.x-px,5,rm.z-pz, rm.x+px,7,rm.z+pz, B.AIR);
@@ -273,7 +273,7 @@
         const rx=(last?7+bossArenaScale:4+roomScale)+Math.floor(hash2(i*31+seed,7)*3)+(i%3===1?1:0);
         const rz=(last?6+bossArenaScale:3+roomScale)+Math.floor(hash2(i*19+seed,11)*3)+(i%3===2?1:0);
         const type=last?'boss':(i===0?'entrance':roomTypes[Math.floor(hash2(i*43+seed,17)*roomTypes.length)]);
-        const rm={x:cx,z:cz,rx,rz,r:Math.max(rx,rz),h:last?6:(type==='shrine'?5:4),type,main:true};
+        const rm={x:cx,z:cz,rx,rz,r:Math.max(rx,rz),h:last?6:(type==='shrine'?5:4),type,main:true,solidFloor:layout.solidFloors!==false};
         if(last) rm.bossArena = bossArenaForRank(ri);
         if(last) bossRoom=rm;
         rooms.push(rm);
@@ -295,7 +295,7 @@
           const sr=3+Math.floor(hash2(i*41+seed,3)*2);
           const sx=cx+(alongX?side*(rx+8):Math.floor((hash2(i+seed,91)-.5)*rx));
           const sz=cz+(alongX?Math.floor((hash2(i+seed,71)-.5)*rz):side*(rz+8));
-          const sideRoom={x:sx,z:sz,rx:sr,rz:sr+(hash2(i+seed,23)<.5?1:0),r:sr+1,h:4,type:hash2(i+seed,61)<.45?'treasure':'shrine',main:false};
+          const sideRoom={x:sx,z:sz,rx:sr,rz:sr+(hash2(i+seed,23)<.5?1:0),r:sr+1,h:4,type:hash2(i+seed,61)<.45?'treasure':'shrine',main:false,solidFloor:layout.solidFloors!==false};
           rooms.push(sideRoom);
           carveRoomBox(w, sideRoom, sideRoom.type==='shrine'?B.BRICK:B.COBBLE);
           decorateDungeonRoom(w, sideRoom, layout, seed+i*137, i, ri);
