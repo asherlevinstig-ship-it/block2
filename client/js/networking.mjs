@@ -1094,9 +1094,11 @@ function showFellowshipTutorial(m={},mode='joined'){
     '<button id="fellowshipcontinue" class="secondary">GOT IT</button>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
-  const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');resumeGameplayCamera();};
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+  releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
+  const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();resumeGameplayCamera();};
   const open=document.getElementById('fellowshipopenhall');
-  if(open)open.onclick=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'tutorial'});openGuildHallUI();refreshPlayUi();};
+  if(open)open.onclick=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();if(NET.on&&NET.room)NET.room.send('guildHallRequest',{source:'tutorial'});openGuildHallUI();refreshPlayUi();};
   const done=document.getElementById('fellowshipcontinue');
   if(done)done.onclick=close;
   return true;
@@ -1610,11 +1612,13 @@ function netAttachRoom(room,name,client){
             '<button id="milestonecontinue">'+escHTML(m.action||'CONTINUE')+'</button>';
           rewardWin.classList.remove('hidden');
           rewardWin.classList.add('promotion-open');
+          if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
           releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
           const btn=document.getElementById('milestonecontinue');
           if(btn)btn.onclick=()=>{
             rewardWin.classList.add('hidden');
             rewardWin.classList.remove('promotion-open');
+            if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
             resumeGameplayCamera();
           };
         });

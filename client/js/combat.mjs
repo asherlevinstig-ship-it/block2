@@ -642,7 +642,7 @@ function syncHudLayerState(){
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
   const jobTutorialRoom=dim==='job'||dimensionsState.kind==='job';
   const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
-  const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice'].some(id=>{
+  const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice','rewardwin','rankupwin','gearrewardwin'].some(id=>{
     const el=document.getElementById(id);
     if(!el) return false;
     return id==='ui' ? el.classList.contains('open') : !el.classList.contains('hidden');
@@ -661,12 +661,40 @@ if(globalThis.MutationObserver){
   const homeworkEl=document.getElementById('homeworkhud');
   if(homeworkEl){ hudStateObserver.observe(homeworkEl,{attributes:true,attributeFilter:['class']}); homeworkHudObserved=true; }
   else hudStateObserver.observe(document.body,{childList:true});
-  for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice']){
+  for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice','rewardwin','rankupwin','gearrewardwin']){
     const el=document.getElementById(id);
     if(el) hudStateObserver.observe(el,{attributes:true,attributeFilter:['class']});
   }
 }
 window.addEventListener('resize', syncHudLayerState);
+function openBlockingGameModal(el,reason='modal'){
+  if(!el)return false;
+  if(overlay)overlay.classList.add('hidden');
+  if(loadscreen)loadscreen.classList.add('hidden');
+  document.body.classList.add('game-modal-open');
+  el.classList.remove('hidden');
+  releasePointerLockWithoutCameraFallback(false);
+  syncHudLayerState();
+  refreshPlayUi();
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('modal.blocking.open',{reason,id:el.id||''});
+  return true;
+}
+function closeBlockingGameModal(el,{relock=true,reason='modal'}={}){
+  if(el)el.classList.add('hidden');
+  syncHudLayerState();
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('modal.blocking.close',{reason,id:el&&el.id||'',relock:!!relock});
+  if(relock){
+    lockFallback=true;
+    locked=true;
+    requestPointerLockSafe(enterPlayFallback);
+  }
+  refreshPlayUi();
+}
+globalThis.BlockcraftModal=Object.freeze({
+  open:openBlockingGameModal,
+  close:closeBlockingGameModal,
+  sync:syncHudLayerState,
+});
 const pathSelectEl=document.getElementById('pathselect');
 const pathPanelEl=document.getElementById('pathpanel');
 const arrivalChoiceEl=document.getElementById('arrivalchoice');
@@ -1238,13 +1266,11 @@ function showAbilityAwakening(){
       +'<div class="awsub">'+escHTML(first.txt)+'<br>R unlocks at Level 5. H unlocks at Level 8.</div>'
     +'</div>'
     +'<div class="awakening-actions"><button id="awakeningbegin" type="button">ENTER TRAINING MEADOW</button></div>';
-  awakeningWin.classList.remove('hidden');
-  releasePointerLockWithoutCameraFallback(false);
-  refreshPlayUi();
+  openBlockingGameModal(awakeningWin,'ability-awakening');
   const beginAwakeningTraining=()=>{
     SFX.uiClick();
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ability.awakening.begin', { path:S.path, dim });
-    awakeningWin.classList.add('hidden');
+    closeBlockingGameModal(awakeningWin,{relock:false,reason:'ability-awakening'});
     abilityAwakeningOpen=false;
     startAbilityTraining(true);
   };
@@ -3398,15 +3424,14 @@ function showJobTutorialCompletionReward(jobId){
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
   rewardWin.style.pointerEvents='auto';
-  rewardWin.style.zIndex='40';
+  rewardWin.style.zIndex='62';
+  openBlockingGameModal(rewardWin,'job-tutorial-reward');
   const closeReward=(relock=true)=>{
     rewardWin.classList.add('hidden');
     rewardWin.classList.remove('promotion-open');
     rewardWin.style.pointerEvents='';
     rewardWin.style.zIndex='';
-    lockFallback=!!relock;
-    locked=!!relock;
-    refreshPlayUi();
+    closeBlockingGameModal(rewardWin,{relock,reason:'job-tutorial-reward'});
   };
   const board=document.getElementById('jobtutorialopenboard');
   if(board)board.onclick=()=>{closeReward(false);setTimeout(()=>openJobsUI(jobId,mission.title),NET&&NET.on&&(!jobContract||jobContract.job!==jobId)?250:0);};
@@ -3998,13 +4023,9 @@ function jobChoiceCardHTML(id){
 }
 function closeLevel2JobChoice(){
   jobChoiceOpen=false;
-  pathSelectEl.classList.add('hidden');
   pathSelectEl.classList.remove('jobselect');
   document.body.classList.remove('path-selecting');
-  lockFallback=true;
-  locked=true;
-  requestPointerLockSafe(enterPlayFallback);
-  refreshPlayUi();
+  closeBlockingGameModal(pathSelectEl,{relock:true,reason:'job-choice'});
 }
 function guideJobTutorialChoice(jobId){
   const info=jobTutorialInfo(jobId);
@@ -4058,7 +4079,6 @@ function openLevel2JobChoice(force=false){
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
-  releasePointerLockWithoutCameraFallback(false);
   const ids=['miner','farmer','cook','blacksmith','monk','pet_tamer'];
   pathPanelEl.innerHTML='<div class="job-choice-kicker">Hunter Awakening 4 / 4 - Optional profession trial</div>'
     +hunterAwakeningStepsHTML('job')
@@ -4067,8 +4087,7 @@ function openLevel2JobChoice(force=false){
     +'<div id="jobchoicecards">'+ids.map(jobChoiceCardHTML).join('')+'</div>'
     +'<div id="pathnote">Jobs are for different player styles: exploring, crafting, farming, cooking, support, and gear-making all matter.</div>'
     +'<div class="job-choice-actions"><button id="jobchoicelater" type="button">CONTINUE ROAD READY</button><button id="jobchoiceboard" type="button">OPEN JOB BOARD</button></div>';
-  pathSelectEl.classList.remove('hidden');
-  refreshPlayUi();
+  openBlockingGameModal(pathSelectEl,'job-choice');
   pathPanelEl.querySelectorAll('.job-choice-card').forEach(card=>card.addEventListener('click',()=>chooseJobFromLevel2Banner(card.dataset.job)));
   const later=document.getElementById('jobchoicelater');
   if(later)later.addEventListener('click',()=>{setLevel2JobChoiceSeen();closeLevel2JobChoice();renderTownTutorialOptions(true);});
@@ -4303,9 +4322,7 @@ function showFirstTownArrivalChoice(){
   firstTownChoiceOpen=true;
   document.body.classList.add('arrival-choice-open');
   arrivalChoiceEl.classList.remove('hidden');
-  releasePointerLockWithoutCameraFallback(false);
-  syncHudLayerState();
-  refreshPlayUi();
+  openBlockingGameModal(arrivalChoiceEl,'arrival-choice');
   return true;
 }
 function chooseFirstTownArrival(choice){
@@ -4315,7 +4332,7 @@ function chooseFirstTownArrival(choice){
   firstTownChoiceDismissedThisSession=true;
   if(arrivalChoiceEl)arrivalChoiceEl.classList.add('hidden');
   document.body.classList.remove('arrival-choice-open');
-  syncHudLayerState();
+  closeBlockingGameModal(arrivalChoiceEl,{relock:false,reason:'arrival-choice'});
   gameplayInputDebug('arrival.choice',{choice});
   if(choice==='questions'){
     if(typeof enterQuestionRoom==='function'&&enterQuestionRoom()){
@@ -4377,7 +4394,6 @@ function showPathSelection(){
   tutorialEl.classList.add('hidden');
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
-  releasePointerLockWithoutCameraFallback(false);
   const awakeningChoice=S.lvl>=2 && !S.path;
   pathPanelEl.innerHTML=
     (awakeningChoice?'<div class="job-choice-kicker">Hunter Awakening 2 / 4</div>'+hunterAwakeningStepsHTML('path'):'')+
@@ -4387,20 +4403,15 @@ function showPathSelection(){
       : 'Training is complete. Before you enter the Town of Beginnings, choose the combat path that fits how you want to play. Your path defines your main ability style and future unlocks.')+'</div>'+
     '<div id="pathcards">'+Object.keys(PATHS).map(pathCardHTML).join('')+'</div>'+
     '<div id="pathnote">You can inspect your path later from the Status window with <b>C</b>. Choose carefully: this becomes part of your hunter profile.</div>';
-  pathSelectEl.classList.remove('hidden');
-  refreshPlayUi();
+  openBlockingGameModal(pathSelectEl,'path-choice');
   pathPanelEl.querySelectorAll('.pathselect-card').forEach(card=>card.addEventListener('click',()=>{
     const path=card.dataset.path;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.click', { path, beforePath:S&&S.path });
     if(!setAbilityPath(path,{message:false})) return;
-    pathSelectEl.classList.add('hidden');
     pathSelectEl.classList.remove('jobselect');
     document.body.classList.remove('path-selecting');
     pathChoiceOpen=false;
-    lockFallback=true;
-    locked=true;
-    requestPointerLockSafe(null);
-    refreshPlayUi();
+    closeBlockingGameModal(pathSelectEl,{relock:true,reason:'path-choice'});
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.closed', { path, afterPath:S&&S.path });
     sysMsg('Path chosen: <b>'+PATHS[path].name+'</b>. Welcome to the Town of Beginnings.');
     if(S.lvl>=2 && !abilityTutorialDone()){
@@ -6345,6 +6356,8 @@ gameContext.registerModule('combat', Object.freeze({
   releaseGameplayCursor,
   releasePointerLockWithoutCameraFallback,
   resumeGameplayCamera,
+  openBlockingGameModal,
+  closeBlockingGameModal,
   primaryAction,
   secondaryAction,
   heldPlaceAction,

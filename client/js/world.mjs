@@ -8679,8 +8679,9 @@ function showDungeonReward(m, earned){
   rewardWin.classList.remove('hidden');
   rewardWin.classList.toggle('promotion-open',!!milestone);
   rewardWin.style.pointerEvents=milestone?'auto':'';
-  rewardWin.style.zIndex=milestone?'40':'';
+  rewardWin.style.zIndex=milestone?'62':'';
   if(milestone){
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     releasePointerLockWithoutCameraFallback(false);
     refreshPlayUi();
   }
@@ -8690,6 +8691,7 @@ function showDungeonReward(m, earned){
     rewardWin.classList.remove('promotion-open');
     rewardWin.style.pointerEvents='';
     rewardWin.style.zIndex='';
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     if(resumePlay){
       resumeGameplayCamera();
     }

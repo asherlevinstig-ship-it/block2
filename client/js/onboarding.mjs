@@ -222,11 +222,13 @@ export function createOnboardingUI(deps) {
       '<div class="rnote"><b>Your next three steps:</b><br>Follow the green light to Mara, accept your first field quest, then return at Level 2 to awaken your combat path.</div>' +
       '<button id="trainingcontinue">MEET MARA</button>';
     rewardWin.classList.remove('hidden');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     clearRewardTimer();
     const btn = document.getElementById('trainingcontinue');
     if (btn) btn.onclick = () => {
       rewardWin.classList.add('hidden');
+      if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
       restoreLock();
       refreshPlayUi();
     };
@@ -250,12 +252,14 @@ export function createOnboardingUI(deps) {
       '<button id="graduationcontinue">TRACK D-RANK GATE</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     clearRewardTimer();
     const btn = document.getElementById('graduationcontinue');
     if (btn) btn.onclick = () => {
       rewardWin.classList.add('hidden');
       rewardWin.classList.remove('promotion-open');
+      if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
       restoreLock();
       refreshPlayUi();
     };
@@ -282,6 +286,7 @@ export function createOnboardingUI(deps) {
       '<button id="promotioncontinue">TRACK NEXT STEP</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     clearRewardTimer();
     const btn = document.getElementById('promotioncontinue');
@@ -289,6 +294,7 @@ export function createOnboardingUI(deps) {
       firstPromotionSeen = true;
       rewardWin.classList.add('hidden');
       rewardWin.classList.remove('promotion-open');
+      if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
       sendNet('ackFirstPromotion', {});
       restoreLock();
       refreshPlayUi();
@@ -321,10 +327,12 @@ export function createOnboardingUI(deps) {
       '<div class="runext"><b>Next target:</b> ' + escHTML(details.next) + '.<br>Keep earning Hunter XP from quests, contracts, Gates, events, and hostile threats.</div>' +
       '<button id="rankupcontinue">CONTINUE</button>';
     rankUpWin.classList.remove('hidden');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     const btn = document.getElementById('rankupcontinue');
     if (btn) btn.onclick = () => {
       rankUpWin.classList.add('hidden');
+      if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
       if (!rewardWin || rewardWin.classList.contains('hidden')) restoreLock();
     };
     return true;
