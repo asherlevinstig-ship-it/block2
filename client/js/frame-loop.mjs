@@ -2226,6 +2226,11 @@ function updateEncounterPrompt(){
   encounterPromptEl.textContent=danger?'Caravan Under Attack · defeat the attacking bandits':accepted?'Escort Accepted · remain near the convoy':'G · Talk to Caravan Merchant · escort work available';
   encounterPromptEl.classList.remove('hidden');
 }
+function equippedFishingRod(){
+  const slot=Math.max(0,Math.min(8,(combatState&&combatState.selectedSlot)|0));
+  const held=inv&&inv[slot];
+  return !!(held&&held.id===I.FISHING_ROD);
+}
 function nearbyFishingWaterPrompt(){
   if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active()){
     return globalThis.BlockcraftFishing.prompt();
@@ -2234,8 +2239,9 @@ function nearbyFishingWaterPrompt(){
   if(dim!=='fishing_lake'&&dim!=='overworld')return null;
   const water=nearbyFishingWaterInfo();
   if(!water)return null;
-  const hasRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
-  if(!hasRod)return {key:'CRAFT',title:'Need a Fishing Rod',small:'Craft one at a Crafting Table: 3 sticks + 1 wheat.'};
+  const ownsRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
+  if(!ownsRod)return {key:'CRAFT',title:'Need a Fishing Rod',small:'Craft one at a Crafting Table: 3 sticks + 1 wheat.'};
+  if(!equippedFishingRod())return {key:'ROD',title:'Equip Fishing Rod',small:'Put the rod in your hotbar and select it to fish.'};
   return {key:'G',title:'Cast Fishing Rod',small:'Aim at water or ripples. Uses stamina.'};
 }
 function nearbyFishingWaterInfo(radius=7){
@@ -2299,7 +2305,7 @@ function fishingCastQuality(water){
 }
 function startFishingCast(){
   if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive)return false;
-  if(typeof countItem!=='function'||countItem(I.FISHING_ROD)<=0)return false;
+  if(!equippedFishingRod())return false;
   const water=nearbyFishingWaterInfo(8);
   if(!water)return false;
   if(sp<4){
@@ -2496,9 +2502,7 @@ function fishingRodTipWorld(){
   );
 }
 function updateFishingRodVisual(v,now,dt,active){
-  const hasRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
-  const nearby=!active&&locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&hasRod&&nearbyFishingWaterInfo()!=null;
-  v.rodGroup.visible=active||nearby;
+  v.rodGroup.visible=active&&equippedFishingRod();
   if(!v.rodGroup.visible)return;
   const forward=new THREE.Vector3();camera.getWorldDirection(forward).normalize();
   const right=new THREE.Vector3().crossVectors(forward,camera.up).normalize();
