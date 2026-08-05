@@ -5281,6 +5281,22 @@ addEventListener('keydown', e=>{
     return;
   }
   const gameInput=gameplayInputActive();
+  if(!e.repeat&&gameInput&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()&&globalThis.BlockcraftDirectorCamera){
+    const director=globalThis.BlockcraftDirectorCamera;
+    if(e.code==='F10'){
+      e.preventDefault();
+      director.toggle();
+      return;
+    }
+    if(director.active&&director.active()){
+      if(e.code==='F6'){e.preventDefault();director.cycle();return;}
+      if(e.code==='F7'){e.preventDefault();director.cleanHud();return;}
+      if(e.code==='BracketLeft'){e.preventDefault();director.distance(-.75);return;}
+      if(e.code==='BracketRight'){e.preventDefault();director.distance(.75);return;}
+      if(e.code==='Minus'||e.code==='NumpadSubtract'){e.preventDefault();director.height(-.35);return;}
+      if(e.code==='Equal'||e.code==='NumpadAdd'){e.preventDefault();director.height(.35);return;}
+    }
+  }
   if(!e.repeat&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)&&!gameplayMovementAllowed())gameplayInputDebug('keydown:'+e.code);
   if(e.code==='AltLeft'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!globalThis.BlockcraftRecall.active){
     e.preventDefault();
