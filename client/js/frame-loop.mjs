@@ -157,75 +157,34 @@ function tickLocalPantherForm(now,dt,moving){
 function approach(current,target,rate,dt){
   return current+(target-current)*(1-Math.exp(-Math.max(0,rate)*Math.max(0,dt)));
 }
-let lastFishingCameraDebugAt=0,lastFishingCameraPitch=player.pitch,lastFishingCameraHeartbeatAt=0;
-function fishingRoomActiveForDebug(){
-  return dimensionsState.kind==='fishing_lake'||dim==='fishing_lake';
+function approachAngle(current,target,rate,dt){
+  const delta=Math.atan2(Math.sin(target-current),Math.cos(target-current));
+  return current+delta*(1-Math.exp(-Math.max(0,rate)*Math.max(0,dt)));
 }
+let cameraYaw=player.yaw,cameraPitch=player.pitch;
+let lastFishingCameraDebugAt=0,lastFishingCameraPitch=player.pitch,lastFishingHeartbeatAt=0;
 function fishingCameraDebug(reason,extra={},now=performance.now()){
-  if(!fishingRoomActiveForDebug())return;
-  if(reason==='look-update'&&now-lastFishingCameraDebugAt<160)return;
+  if(dimensionsState.kind!=='fishing_lake')return;
+  if(reason==='look-update'&&now-lastFishingCameraDebugAt<180)return;
   lastFishingCameraDebugAt=now;
-  const root=globalThis;
-  const data={
+  const payload={
     reason,
     at:Date.now(),
     tickNow:Math.round(now),
     pos:player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)}:null,
     vel:player&&player.vel?{x:+player.vel.x.toFixed(3),y:+player.vel.y.toFixed(3),z:+player.vel.z.toFixed(3)}:null,
-    yaw:player&&Number.isFinite(player.yaw)?+player.yaw.toFixed(5):null,
-    pitch:player&&Number.isFinite(player.pitch)?+player.pitch.toFixed(5):null,
-    camera:typeof camera!=='undefined'&&camera&&camera.rotation?{x:+camera.rotation.x.toFixed(5),y:+camera.rotation.y.toFixed(5),z:+camera.rotation.z.toFixed(5)}:null,
-    locked:!!locked,
+    yaw:player&&Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,
+    pitch:player&&Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null,
+    camera:(typeof camera!=='undefined'&&camera&&camera.rotation)?{x:+camera.rotation.x.toFixed(4),y:+camera.rotation.y.toFixed(4),z:+camera.rotation.z.toFixed(4)}:null,
     inputLocked:!!combatState.inputLocked,
     cursorReleased:!!combatState.cursorReleased,
     cameraInputAllowed:combatState.cameraInputAllowed,
     movementAllowed:combatState.movementAllowed,
     bodyClass:document.body.className,
-    activeFishing:!!(root.BlockcraftFishing&&root.BlockcraftFishing.active&&root.BlockcraftFishing.active()),
-    fishingPhase:root.BlockcraftFishing&&root.BlockcraftFishing.state&&root.BlockcraftFishing.state.phase||'',
     extra
   };
-  const log=Array.isArray(root.BlockcraftFishingCameraDebugLog)?root.BlockcraftFishingCameraDebugLog:[];
-  log.push(data); while(log.length>180)log.shift();
-  root.BlockcraftFishingCameraDebugLog=log;
-  root.BlockcraftLastFishingCameraDebug=data;
-  root.BlockcraftReadFishingCameraDebug=()=>({latest:root.BlockcraftLastFishingCameraDebug||null,log:Array.isArray(root.BlockcraftFishingCameraDebugLog)?root.BlockcraftFishingCameraDebugLog.slice():[]});
-  root.BlockcraftCopyFishingCameraDebug=()=>{
-    const payload=JSON.stringify(root.BlockcraftReadFishingCameraDebug(),null,2);
-    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(payload).catch(()=>{});
-    console.log(payload);
-    return payload;
-  };
-  try{root.BlockcraftTrace&&root.BlockcraftTrace('fishing.camera-debug',data);}catch(e){}
-  if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-camera-debug]',data);
-}
-let nextFishingLakeBoundsDebugAt=0;
-function fishingLakeRoomDef(){
-  return worldState&&worldState.FISHING_LAKE||{x:345,z:925,G:18,R:62,spawn:{dx:0,dz:-23}};
-}
-function fishingLakeSafePoint(){
-  const lake=fishingLakeRoomDef(),spawn=lake&&lake.spawn||{dx:0,dz:-23};
-  return {x:(lake&&lake.x||345)+(spawn.dx||0)+.5,y:(lake&&lake.G||18)+1.05,z:(lake&&lake.z||925)+(spawn.dz||0)+.5};
-}
-function enforceFishingLakeBounds(now=performance.now()){
-  if(dim!=='fishing_lake'||!player||!player.pos)return false;
-  const lake=fishingLakeRoomDef();
-  const lx=Number(lake&&lake.x)||345,lz=Number(lake&&lake.z)||925,lg=Number(lake&&lake.G)||18,lr=Number(lake&&lake.R)||62;
-  const dx=player.pos.x-lx,dz=player.pos.z-lz;
-  const outside=Math.hypot(dx,dz)>lr+10||player.pos.y<lg-4||player.pos.y>lg+34;
-  if(!outside)return false;
-  const before={x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null};
-  const safe=fishingLakeSafePoint();
-  player.pos.set(safe.x,safe.y,safe.z);
-  if(player.vel)player.vel.set(0,0,0);
-  player.yaw=Math.PI;
-  player.pitch=0;
-  if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'fishingLakeBounds');
-  if(now>=nextFishingLakeBoundsDebugAt){
-    nextFishingLakeBoundsDebugAt=now+1200;
-    fishingCameraDebug('bounds-rescue',{before,safe,room:{x:lx,z:lz,g:lg,r:lr}},now);
-  }
-  return true;
+  if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-camera-debug]',payload);
+  try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.camera-debug',payload);}catch(e){}
 }
 function updateMovementStateSnapshot(state, speed, targetSpeed, sprintFactor, grounded, swimming, panther, exhausted){
   state.grounded=!!grounded;state.airborne=!grounded&&!swimming;state.swimming=!!swimming;state.panther=!!panther;state.exhausted=!!exhausted;state.sprinting=sprintFactor>.55||panther;
@@ -1993,8 +1952,9 @@ function dungeonNavLine(state){
 }
 function updateDungeonCoordination(now){
   const status=dim==='dungeon'&&dungeon&&dungeon.status;
+  let partyHTML='',partyHidden=false;
   if(!status||!Array.isArray(status.party)){
-    dungeonPartyEl.classList.add('hidden');dungeonPartyEl.innerHTML='';
+    partyHidden=true;
     updateDungeonSpiritMarkers(null,now);
   }else{
     const mine=NET.room&&NET.room.sessionId;
@@ -2011,7 +1971,7 @@ function updateDungeonCoordination(now){
     const summary=runCard+'<div class="partysummary"><span>'+alive+' alive</span><span>'+spirits+' spirit'+(spirits===1?'':'s')+'</span>'+(returned?'<span>'+returned+' returned</span>':'')+'</div>';
     const warning=(status.wipe||status.party.length>0&&alive===0)?'<div class="partywipe">PARTY WIPED · CHOOSE RETURN TO TOWN</div>':'';
     const returnedCard=returned?'<div class="partycard returned"><div class="partyline"><b>Returned to Town</b><small>'+returned+'/'+total+'</small></div><div class="partyline"><small>Left the dungeon instance</small><span class="partycontrib">Safe</span></div></div>':'';
-    dungeonPartyEl.innerHTML='<div class="partytitle">GATE PARTY · F1 GROUP · F2 BOSS · F3 LOOT</div>'+summary+warning+status.party.map(member=>{
+    partyHTML='<div class="partytitle">GATE PARTY · F1 GROUP · F2 BOSS · F3 LOOT</div>'+summary+warning+status.party.map(member=>{
       let distance=0;
       if(member.sid!==mine){const remote=NET.remotes[member.sid],ref=remote&&remote.ref,pos=ref||member;distance=Number.isFinite(pos.x)&&Number.isFinite(pos.z)?Math.round(Math.hypot((pos.x||0)-player.pos.x,(pos.z||0)-player.pos.z)):0;}
       const hp=Math.max(0,member.hp|0),max=Math.max(1,member.maxHp|0),pct=Math.max(0,Math.min(100,hp/max*100));
@@ -2020,8 +1980,12 @@ function updateDungeonCoordination(now){
       const where=member.sid===mine?'YOU':(member.spirit?'SPIRIT · ':'')+distance+'m';
       return '<div class="partycard'+stateClass+'"><div class="partyline"><b>'+escHTML(member.name||'Hunter')+'</b><small>'+escHTML(member.role||'Striker')+' · '+where+'</small></div><div class="partyhp"><i style="width:'+pct+'%"></i></div><div class="partyline"><small>'+state+(member.spirit?' · bound in place':member.downed?'':' · '+hp+'/'+max+' HP')+'</small><span class="partycontrib">Boss '+Math.max(0,member.contribution|0)+'</span></div></div>';
     }).join('')+returnedCard;
-    dungeonPartyEl.classList.remove('hidden');
     updateDungeonSpiritMarkers(status,now);
+  }
+  if(partyHTML!==lastDungeonPartyHTML||partyHidden!==lastDungeonPartyHidden){
+    lastDungeonPartyHTML=partyHTML;lastDungeonPartyHidden=partyHidden;
+    dungeonPartyEl.classList.toggle('hidden',partyHidden);
+    if(dungeonPartyEl.innerHTML!==partyHTML)dungeonPartyEl.innerHTML=partyHTML;
   }
   if(!activeDungeonPing||dim!=='dungeon'||now>=activeDungeonPing.expires){
     activeDungeonPing=null;dungeonPingGroup.visible=false;dungeonPingEl.classList.add('hidden');return;
@@ -2191,11 +2155,6 @@ function updateEncounterPrompt(){
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
     return;
   }
-  if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active()){
-    encounterPromptEl.classList.add('hidden');
-    encounterPromptEl.innerHTML='';
-    return;
-  }
   const fishingPrompt=nearbyFishingWaterPrompt();
   if(fishingPrompt){
     encounterPromptEl.classList.remove('danger','hidden');
@@ -2231,10 +2190,51 @@ function updateEncounterPrompt(){
   encounterPromptEl.textContent=danger?'Caravan Under Attack · defeat the attacking bandits':accepted?'Escort Accepted · remain near the convoy':'G · Talk to Caravan Merchant · escort work available';
   encounterPromptEl.classList.remove('hidden');
 }
+let nextFishingLakeBoundsDebugAt=0;
+function fishingLakeRoomDef(){
+  return worldState&&worldState.FISHING_LAKE||{x:345,z:925,G:18,R:62,spawn:{dx:0,dz:-23}};
+}
+function fishingLakeSafePoint(){
+  const lake=fishingLakeRoomDef(),spawn=lake&&lake.spawn||{dx:0,dz:-23};
+  return {x:(lake&&lake.x||345)+(spawn.dx||0)+.5,y:(lake&&lake.G||18)+1.05,z:(lake&&lake.z||925)+(spawn.dz||0)+.5};
+}
+function enforceFishingLakeBounds(now=performance.now()){
+  if(dim!=='fishing_lake'||!player||!player.pos)return false;
+  const lake=fishingLakeRoomDef();
+  const lx=Number(lake&&lake.x)||345,lz=Number(lake&&lake.z)||925,lg=Number(lake&&lake.G)||18,lr=Number(lake&&lake.R)||62;
+  const dx=player.pos.x-lx,dz=player.pos.z-lz;
+  const outside=Math.hypot(dx,dz)>lr+10||player.pos.y<lg-4||player.pos.y>lg+34;
+  if(!outside)return false;
+  const before={x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null};
+  const safe=fishingLakeSafePoint();
+  player.pos.set(safe.x,safe.y,safe.z);
+  if(player.vel)player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'fishingLakeBounds');
+  if(now>=nextFishingLakeBoundsDebugAt){
+    nextFishingLakeBoundsDebugAt=now+1200;
+    fishingCameraDebug('bounds-rescue',{before,safe,room:{x:lx,z:lz,g:lg,r:lr}},now);
+  }
+  return true;
+}
 function equippedFishingRod(){
   const slot=Math.max(0,Math.min(8,(combatState&&combatState.selectedSlot)|0));
   const held=inv&&inv[slot];
   return !!(held&&held.id===I.FISHING_ROD);
+}
+function fishingRodHotbarSlot(){
+  if(!inv)return -1;
+  for(let s=0;s<9;s++)if(inv[s]&&inv[s].id===I.FISHING_ROD)return s;
+  return -1;
+}
+function ensureFishingRodEquipped(){
+  if(equippedFishingRod())return true;
+  const slot=fishingRodHotbarSlot();
+  if(slot<0)return false;
+  if(typeof selectSlot==='function')selectSlot(slot);
+  else if(combatState)combatState.selectedSlot=slot;
+  return equippedFishingRod();
 }
 function nearbyFishingWaterPrompt(){
   if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active()){
@@ -2242,12 +2242,12 @@ function nearbyFishingWaterPrompt(){
   }
   if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive)return null;
   if(dim!=='fishing_lake'&&dim!=='overworld')return null;
-  const water=nearbyFishingWaterInfo();
+  const water=nearbyFishingWaterInfo(12);
   if(!water)return null;
   const ownsRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
   if(!ownsRod)return {key:'CRAFT',title:'Need a Fishing Rod',small:'Craft one at a Crafting Table: 3 sticks + 1 wheat.'};
-  if(!equippedFishingRod())return {key:'ROD',title:'Equip Fishing Rod',small:'Put the rod in your hotbar and select it to fish.'};
-  return {key:'G',title:'Cast Fishing Rod',small:'Aim at water or ripples. Uses stamina.'};
+  if(fishingRodHotbarSlot()<0)return {key:'ROD',title:'Equip Fishing Rod',small:'Move the rod into your hotbar (1-9) to fish.'};
+  return {key:'G',title:'Cast Fishing Rod',small:'Aim at the water, then move the target with WASD. Uses stamina.'};
 }
 function nearbyFishingWaterInfo(radius=7){
   if(dim!=='fishing_lake'&&dim!=='overworld')return null;
@@ -2341,7 +2341,7 @@ function fishingCastQuality(water){
   return Math.max(.08,Math.min(1,distanceScore*.42+aimScore*.3+depthScore*.16+rippleLuck*.12));
 }
 
-const FISHING_CAST_PLACE_RADIUS=10.5;
+const FISHING_CAST_PLACE_RADIUS=12;
 function fishingWaterAtPoint(x,z,search=1.6){
   if(dim!=='fishing_lake'&&dim!=='overworld')return null;
   const px=Math.floor(x),pz=Math.floor(z),py=Math.floor(player.pos.y),r=Math.max(1,Math.ceil(search));
@@ -2371,11 +2371,11 @@ function beginFishingCastPlacement(){
     document.body.classList.remove('game-modal-open');
     fishingTargetDebug('aim.closed-stray-qwin',{reason:'fishing-start'});
   }
-  if(!equippedFishingRod())return false;
-  const water=nearbyFishingWaterInfo(8);
+  if(!ensureFishingRodEquipped())return false;
+  const water=nearbyFishingWaterInfo(12);
   if(!water)return false;
   const now=performance.now();
-  Object.assign(fishingState,{phase:'aim',fish:null,startedAt:now,nextAt:0,biteAt:0,hookUntil:0,castQuality:fishingCastQuality(water),tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'Move the target with WASD. Press G to cast, Escape to cancel.',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:{x:player.pos.x,z:player.pos.z},castVisualStart:now});
+  Object.assign(fishingState,{phase:'aim',fish:null,startedAt:now,nextAt:0,biteAt:0,hookUntil:0,castQuality:fishingCastQuality(water),tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'Move the target with WASD. Press G to cast, Escape to cancel.',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:{x:player.pos.x,z:player.pos.z},aimCursor:{x:water.x,z:water.z},castVisualStart:now});
   if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'fishingAim');
   if(player&&player.vel)player.vel.set(0,0,0);
   fishingTargetDebug('aim.begin',{water:{x:+water.x.toFixed(3),y:+water.y.toFixed(3),z:+water.z.toFixed(3),dist:+water.dist.toFixed(3)}});
@@ -2389,7 +2389,7 @@ function confirmFishingCast(){
   if(sp<4){showName('Too exhausted to cast');sysMsg('Fishing needs a little stamina. Rest before casting.','minor');return true;}
   sp=Math.max(0,sp-4); renderBars();
   const q=fishingCastQuality(water),fish=fishByCastQuality(q),now=performance.now();
-  Object.assign(fishingState,{phase:'wait',fish,startedAt:now,nextAt:now+500+Math.random()*850,biteAt:now+1250+Math.random()*1900-q*650,hookUntil:0,castQuality:q,tension:28,progress:0,fishStamina:fish.stamina,burstAt:now+900+Math.random()*1200,biteCue:'Line settles...',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:null,castVisualStart:now});
+  Object.assign(fishingState,{phase:'wait',fish,startedAt:now,nextAt:now+500+Math.random()*850,biteAt:now+1250+Math.random()*1900-q*650,hookUntil:0,castQuality:q,tension:28,progress:0,fishStamina:fish.stamina,burstAt:now+900+Math.random()*1200,biteCue:'Line settles...',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:null,aimCursor:null,castVisualStart:now});
   setFishingTargetScreenHud(false);
   fishingTargetDebug('aim.confirm',{quality:+q.toFixed(3),fish:fish&&fish.id});
   showName(q>.78?'Perfect cast':'Cast');
@@ -2399,7 +2399,7 @@ function confirmFishingCast(){
 }
 function cancelFishingPlacement(){
   if(fishingState.phase!=='aim')return false;
-  Object.assign(fishingState,{phase:'idle',fish:null,target:null,aimOrigin:null,biteCue:'',castQuality:0});
+  Object.assign(fishingState,{phase:'idle',fish:null,target:null,aimOrigin:null,aimCursor:null,biteCue:'',castQuality:0});
   document.body.classList.remove('fishing-placement-active');
   setFishingHud('');
   setFishingTargetScreenHud(false);
@@ -2408,20 +2408,29 @@ function cancelFishingPlacement(){
   return true;
 }
 function updateFishingPlacementTarget(dt){
-  if(fishingState.phase!=='aim'||!fishingState.target)return;
+  if(fishingState.phase!=='aim')return;
   if(player&&player.vel)player.vel.set(0,0,0);
   const f=(keys.KeyW?1:0)-(keys.KeyS?1:0),s=(keys.KeyD?1:0)-(keys.KeyA?1:0);
   if(!f&&!s)return;
-  const yaw=Number(player.yaw)||0,sin=Math.sin(yaw),cos=Math.cos(yaw),speed=((keys.ShiftLeft||keys.ShiftRight)?5.4:3.4)*dt;
-  const tx=fishingState.target.x+(sin*f+cos*s)*speed,tz=fishingState.target.z+(cos*f-sin*s)*speed;
   const origin=fishingState.aimOrigin||{x:player.pos.x,z:player.pos.z};
-  let dx=tx-origin.x,dz=tz-origin.z,dist=Math.hypot(dx,dz),cx=tx,cz=tz;
+  // The visible target snaps to a water block each frame, so movement is accumulated on a
+  // separate free-floating cursor; snapping the cursor itself would freeze WASD in place.
+  if(!fishingState.aimCursor){
+    const t=fishingState.target;
+    fishingState.aimCursor=t?{x:t.x,z:t.z}:{x:origin.x,z:origin.z};
+  }
+  const yaw=Number(player.yaw)||0,sin=Math.sin(yaw),cos=Math.cos(yaw),speed=((keys.ShiftLeft||keys.ShiftRight)?7.2:4.6)*dt;
+  let cx=fishingState.aimCursor.x+(sin*f+cos*s)*speed,cz=fishingState.aimCursor.z+(cos*f-sin*s)*speed;
+  const dx=cx-origin.x,dz=cz-origin.z,dist=Math.hypot(dx,dz);
   if(dist>FISHING_CAST_PLACE_RADIUS){cx=origin.x+dx/dist*FISHING_CAST_PLACE_RADIUS;cz=origin.z+dz/dist*FISHING_CAST_PLACE_RADIUS;}
-  const water=fishingWaterAtPoint(cx,cz,1.8);
-  if(water&&water.dist<=FISHING_CAST_PLACE_RADIUS+1.5){
+  fishingState.aimCursor={x:cx,z:cz};
+  const water=fishingWaterAtPoint(cx,cz,2.4);
+  if(water){
     fishingState.target={x:water.x,y:water.y+.18,z:water.z};
     fishingState.castQuality=fishingCastQuality(water);
-    fishingState.biteCue='Target set: '+Math.round(water.dist)+'m - quality '+Math.round(fishingState.castQuality*100)+'%. Press G to cast.';
+    fishingState.biteCue='Target set: '+Math.round(water.dist)+'m · quality '+Math.round(fishingState.castQuality*100)+'%. G to cast · Esc to cancel.';
+  }else{
+    fishingState.biteCue='Off the water · move the target back over the lake.';
   }
 }
 
@@ -2857,18 +2866,18 @@ function tick(now){
       player.yaw += yawDelta;
       player.pitch += lookY*lookSpeed*.85*dt+mousePitch;
       player.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, player.pitch));
-      if(fishingRoomActiveForDebug()){
+      if(dimensionsState.kind==='fishing_lake'){
         const pitchJump=Math.abs(player.pitch-lastFishingCameraPitch);
         if(Math.abs(player.pitch)>1.35||Math.abs(mousePitch)>0.08||Math.abs(mouseYaw)>0.08||pitchJump>.18){
           fishingCameraDebug('look-update',{mouseLook,lookX,lookY,mouseYaw:+mouseYaw.toFixed(5),mousePitch:+mousePitch.toFixed(5),pitchJump:+pitchJump.toFixed(4),gameplayMoveAllowed,cutscene},now);
         }
       }
     }
-    if(fishingRoomActiveForDebug()&&now-lastFishingCameraHeartbeatAt>1000){
-      lastFishingCameraHeartbeatAt=now;
-      fishingCameraDebug('heartbeat',{gameplayMoveAllowed,deathControlLocked,locked:!!locked,keys:{w:!!keys.KeyW,a:!!keys.KeyA,s:!!keys.KeyS,d:!!keys.KeyD,shift:!!(keys.ShiftLeft||keys.ShiftRight)}},now);
+    if(dimensionsState.kind==='fishing_lake'&&now-lastFishingHeartbeatAt>1000){
+      lastFishingHeartbeatAt=now;
+      fishingCameraDebug('heartbeat',{gameplayMoveAllowed,deathControlLocked,locked:!!locked,mouseLook,keys:{w:!!keys.KeyW,a:!!keys.KeyA,s:!!keys.KeyS,d:!!keys.KeyD,shift:!!(keys.ShiftLeft||keys.ShiftRight)}},now);
     }
-    if(fishingRoomActiveForDebug())lastFishingCameraPitch=player.pitch;
+    if(dimensionsState.kind==='fishing_lake')lastFishingCameraPitch=player.pitch;
     const sprintKey=gameplayMoveAllowed&&(keys['ShiftLeft']||keys['ShiftRight']);
     let f=gameplayMoveAllowed?((keys['KeyW']?1:0)-(keys['KeyS']?1:0)):0;
     let s=gameplayMoveAllowed?((keys['KeyD']?1:0)-(keys['KeyA']?1:0)):0;
@@ -3060,8 +3069,10 @@ function tick(now){
       /* camera is driven by tickCutscene at the top of the frame */
     } else {
     camera.position.set(player.pos.x, player.pos.y+player.eye+(mounted?mountEye(mountKind):0)+(pantherView&&pantherView.bob||0), player.pos.z);
+    cameraYaw=approachAngle(cameraYaw,player.yaw,18,dt);
+    cameraPitch=approach(cameraPitch,player.pitch,18,dt);
     camera.rotation.order='YXZ';
-    camera.rotation.set(player.pitch-(pantherView&&pantherView.shiftGlow||0)*.08, player.yaw, pantherView&&pantherView.tilt||0);
+    camera.rotation.set(cameraPitch-(pantherView&&pantherView.shiftGlow||0)*.08, cameraYaw, pantherView&&pantherView.tilt||0);
     const locomotionCam=tickCameraLocomotion(dt,movementInput,player.onGround,inWater,sprintFactor,pantherView,f,s,planarSpeed);
     camera.position.y+=locomotionCam.bob;
     camera.rotation.x+=locomotionCam.pitch;
@@ -3164,11 +3175,15 @@ function tick(now){
     }
     tickQuestTimers();
     updateLocationHud();
-    updateInfoHud(held);
+    if(now>=nextInfoHudAt){nextInfoHudAt=now+HUD_UPDATE_INTERVAL_MS;updateInfoHud(held);}
   } else { crack.visible=false; combatApi.updateBuildPreview(false); }
   updateGatePrompt();
   updateGateRally(now);
-  updateDungeonCoordination(now);
+  if(now>=nextDungeonHudAt){nextDungeonHudAt=now+HUD_UPDATE_INTERVAL_MS;updateDungeonCoordination(now);}
+  else if(activeDungeonPing&&dim==='dungeon'&&now<activeDungeonPing.expires){
+    dungeonPingGroup.visible=true;dungeonPingGroup.position.set(activeDungeonPing.x||0,(activeDungeonPing.y||8)+.1,activeDungeonPing.z||0);
+    const pulse=1+Math.sin(now*.009)*.18;dungeonPingRing.scale.setScalar(pulse);dungeonPingRing.rotation.z=now*.001;
+  }
   updateUtilityWorldFeedback(now,dt);
 
   tickVillagers(dt, now/1000);
@@ -3194,7 +3209,6 @@ function tick(now){
   }
   attackCd-=dt;
   netTick(dt, now);
-  enforceFishingLakeBounds(now);
   tickArrows(dt);
   tickMining(dt);
   tickFalling(dt);
@@ -3238,7 +3252,7 @@ function tick(now){
   cloudGroup.children.forEach((c,i)=>{ c.position.x += dt*(.6+ i*.04); if(c.position.x>WX+20) c.position.x=-20; });
   updateVisibleChunks(false);
   if(worldApi.tickLandClaimOverlay) worldApi.tickLandClaimOverlay();
-  updateLandMinimap();
+  updateLandMinimap(false);
   updateBossUI();
   perfDiagnostics.beginRender(performance.now());
   rendering.render();

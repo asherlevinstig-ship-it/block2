@@ -525,7 +525,7 @@ function finishMine(){
 const keys = {};
 let locked=false, lockFallback=false, suppressNextLockFallback=false, pointerLockRequestPending=false, cursorReleased=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
 const mouseLookDelta={x:0,y:0};
-const MOUSE_LOOK_SENSITIVITY=.00215;
+const MOUSE_LOOK_SENSITIVITY=.00175;
 let mouseLookSuppressedUntil=0;
 const overlay=document.getElementById('overlay');
 const playbtn=document.getElementById('playbtn');
@@ -5096,8 +5096,7 @@ function gameplayMovementAllowed(){
 const INPUT_DEBUG_LOG_KEY='bc_input_debug_log_v1';
 const INPUT_DEBUG_LOG_LIMIT=80;
 const FISHING_INPUT_DEBUG_LOG_KEY='bc_fishing_input_debug_log_v1';
-const FISHING_INPUT_DEBUG_LIMIT=80;
-let lastFishingInputConsoleAt=0;
+const FISHING_INPUT_DEBUG_LIMIT=120;
 function fishingInputDebug(reason='snapshot',extra=null){
   if(dim!=='fishing_lake' && !(extra&&extra.force))return null;
   const active=document.activeElement;
@@ -5141,14 +5140,7 @@ function fishingInputDebug(reason='snapshot',extra=null){
   };
   try{localStorage.setItem(FISHING_INPUT_DEBUG_LOG_KEY,JSON.stringify(log));}catch(e){}
   try{document.body.dataset.fishingDebug=JSON.stringify(data);}catch(e){}
-  if(globalThis.BlockcraftVerboseDebug){
-    const now=performance.now();
-    const noisy=reason==='mousemove.raw'||reason==='mouse.consume-suppressed'||reason==='mouse.suppressed';
-    if(!noisy||now-lastFishingInputConsoleAt>650){
-      lastFishingInputConsoleAt=now;
-      console.warn('[bc-fishing-debug]',JSON.stringify(data));
-    }
-  }
+  if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-debug]',JSON.stringify(data));
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.input-debug',data);
   return data;
 }
@@ -6616,6 +6608,7 @@ gameContext.registerModule('combat', Object.freeze({
   collides,
   updateBuildPreview,
   consumeMouseLookDelta,
+  suppressMouseLook,
   gameplayCameraInputAllowed,
   gameplayMovementAllowed,
   gameplayInputDebug,
