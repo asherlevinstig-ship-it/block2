@@ -2274,7 +2274,7 @@ const FISHING_FISH=[
   {id:'ambusher',name:'Ambusher Pike',chance:.06,hook:520,stamina:88,power:1.45,reel:.82,reward:3,style:'calm, then one violent escape'},
   {id:'bottom',name:'Rockbelly Bottom-Dweller',chance:.02,hook:900,stamina:96,power:1.12,reel:.72,reward:3,style:'dives toward rocks'}
 ];
-const fishingState={phase:'idle',fish:null,startedAt:0,nextAt:0,biteAt:0,hookUntil:0,castQuality:0,tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:null,castVisualStart:0};
+const fishingState={phase:'idle',fish:null,startedAt:0,nextAt:0,biteAt:0,hookUntil:0,castQuality:0,tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:null,castVisualStart:0,aimOrigin:null};
 let fishingHudEl=null;
 let fishingVisuals=null;
 function fishingHud(){
@@ -2303,25 +2303,81 @@ function fishingCastQuality(water){
   const rippleLuck=Math.random()<(.18+distanceScore*.16)?1:0;
   return Math.max(.08,Math.min(1,distanceScore*.42+aimScore*.3+depthScore*.16+rippleLuck*.12));
 }
-function startFishingCast(){
+
+const FISHING_CAST_PLACE_RADIUS=10.5;
+function fishingWaterAtPoint(x,z,search=1.6){
+  if(dim!=='fishing_lake'&&dim!=='overworld')return null;
+  const px=Math.floor(x),pz=Math.floor(z),py=Math.floor(player.pos.y),r=Math.max(1,Math.ceil(search));
+  let best=null;
+  const yaw=Number(player.yaw)||0,fx=Math.sin(yaw),fz=Math.cos(yaw);
+  for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
+    if(dx*dx+dz*dz>(search+.75)*(search+.75))continue;
+    for(let dy=-5;dy<=3;dy++){
+      if(getB(px+dx,py+dy,pz+dz)!==B.WATER)continue;
+      const wx=px+dx+.5,wz=pz+dz+.5,wy=py+dy+.5;
+      const dist=Math.hypot(wx-player.pos.x,wz-player.pos.z);
+      const align=dist>.01?((wx-player.pos.x)/dist*fx+(wz-player.pos.z)/dist*fz):0;
+      const depth=Math.max(1,Math.min(5,player.pos.y-wy+2));
+      const close=Math.hypot(wx-x,wz-z);
+      const score=1-close*.55+depth*.05;
+      if(!best||score>best.score)best={x:wx,y:wy,z:wz,dist,align,depth,score};
+      break;
+    }
+  }
+  return best;
+}
+function beginFishingCastPlacement(){
   if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive)return false;
   if(!equippedFishingRod())return false;
   const water=nearbyFishingWaterInfo(8);
   if(!water)return false;
-  if(sp<4){
-    showName('Too exhausted to cast');
-    sysMsg('Fishing needs a little stamina. Rest before casting.','minor');
-    return true;
-  }
-  sp=Math.max(0,sp-4); renderBars();
-  const q=fishingCastQuality(water);
-  const fish=fishByCastQuality(q);
   const now=performance.now();
-  Object.assign(fishingState,{phase:'wait',fish,startedAt:now,nextAt:now+500+Math.random()*850,biteAt:now+1250+Math.random()*1900-q*650,hookUntil:0,castQuality:q,tension:28,progress:0,fishStamina:fish.stamina,burstAt:now+900+Math.random()*1200,biteCue:'Line settles...',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},castVisualStart:now});
+  Object.assign(fishingState,{phase:'aim',fish:null,startedAt:now,nextAt:0,biteAt:0,hookUntil:0,castQuality:fishingCastQuality(water),tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'Move the target with WASD. Press G to cast, Escape to cancel.',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:{x:player.pos.x,z:player.pos.z},castVisualStart:now});
+  if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'fishingAim');
+  if(player&&player.vel)player.vel.set(0,0,0);
+  showName('Choose Cast Spot');
+  return true;
+}
+function confirmFishingCast(){
+  if(fishingState.phase!=='aim')return false;
+  const water=fishingWaterAtPoint(fishingState.target&&fishingState.target.x||player.pos.x,fishingState.target&&fishingState.target.z||player.pos.z,1.7);
+  if(!water){showName('Place target on water');return true;}
+  if(sp<4){showName('Too exhausted to cast');sysMsg('Fishing needs a little stamina. Rest before casting.','minor');return true;}
+  sp=Math.max(0,sp-4); renderBars();
+  const q=fishingCastQuality(water),fish=fishByCastQuality(q),now=performance.now();
+  Object.assign(fishingState,{phase:'wait',fish,startedAt:now,nextAt:now+500+Math.random()*850,biteAt:now+1250+Math.random()*1900-q*650,hookUntil:0,castQuality:q,tension:28,progress:0,fishStamina:fish.stamina,burstAt:now+900+Math.random()*1200,biteCue:'Line settles...',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:null,castVisualStart:now});
   showName(q>.78?'Perfect cast':'Cast');
   if(SFX&&SFX.splash)SFX.splash(false);
   burst(water.x,water.y+.25,water.z,[.35,.72,1],8+Math.floor(q*10),1.4,1.1,.35);
   return true;
+}
+function cancelFishingPlacement(){
+  if(fishingState.phase!=='aim')return false;
+  Object.assign(fishingState,{phase:'idle',fish:null,target:null,aimOrigin:null,biteCue:'',castQuality:0});
+  setFishingHud('');
+  showName('Cast cancelled');
+  return true;
+}
+function updateFishingPlacementTarget(dt){
+  if(fishingState.phase!=='aim'||!fishingState.target)return;
+  if(player&&player.vel)player.vel.set(0,0,0);
+  const f=(keys.KeyW?1:0)-(keys.KeyS?1:0),s=(keys.KeyD?1:0)-(keys.KeyA?1:0);
+  if(!f&&!s)return;
+  const yaw=Number(player.yaw)||0,sin=Math.sin(yaw),cos=Math.cos(yaw),speed=((keys.ShiftLeft||keys.ShiftRight)?5.4:3.4)*dt;
+  const tx=fishingState.target.x+(sin*f+cos*s)*speed,tz=fishingState.target.z+(cos*f-sin*s)*speed;
+  const origin=fishingState.aimOrigin||{x:player.pos.x,z:player.pos.z};
+  let dx=tx-origin.x,dz=tz-origin.z,dist=Math.hypot(dx,dz),cx=tx,cz=tz;
+  if(dist>FISHING_CAST_PLACE_RADIUS){cx=origin.x+dx/dist*FISHING_CAST_PLACE_RADIUS;cz=origin.z+dz/dist*FISHING_CAST_PLACE_RADIUS;}
+  const water=fishingWaterAtPoint(cx,cz,1.8);
+  if(water&&water.dist<=FISHING_CAST_PLACE_RADIUS+1.5){
+    fishingState.target={x:water.x,y:water.y+.18,z:water.z};
+    fishingState.castQuality=fishingCastQuality(water);
+    fishingState.biteCue='Target set: '+Math.round(water.dist)+'m - quality '+Math.round(fishingState.castQuality*100)+'%. Press G to cast.';
+  }
+}
+
+function startFishingCast(){
+  return beginFishingCastPlacement();
 }
 function hookFishing(){
   const now=performance.now();
@@ -2368,6 +2424,7 @@ function loseFishing(reason){
 }
 function fishingPrompt(){
   const p=fishingState.phase,f=fishingState.fish;
+  if(p==='aim')return {key:'WASD',title:'Choose Cast Spot',small:fishingState.biteCue||'Move target on water. G casts - Escape cancels.'};
   if(p==='wait')return {key:'WAIT',title:'Watch the Bobber',small:fishingState.biteCue||'Ignore small nibbles. Hook the real pull with G.'};
   if(p==='bite')return {key:'G',title:'BITE - Set Hook!',small:fishingState.biteCue||'Press G now.'};
   if(p==='fight')return {key:'F',title:'Hold F to Reel',small:'Release F when tension is high. Keep it out of red.'};
@@ -2377,6 +2434,12 @@ function fishingPrompt(){
 function fishingHudHTML(){
   const p=fishingState.phase,f=fishingState.fish;
   if(p==='idle'||p==='cooldown')return '';
+  if(p==='aim'){
+    const q=Math.max(0,Math.min(100,(fishingState.castQuality||0)*100));
+    return '<div style="display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:8px"><b style="letter-spacing:.16em;color:#7dd3fc">CHOOSE CAST SPOT</b><span>G cast - Esc cancel</span></div>'+
+      '<div style="font-size:13px;color:#bfdbfe;margin-bottom:8px">'+escHTML(fishingState.biteCue||'Move the glowing target with WASD.')+'</div>'+
+      '<div>Cast Quality <span style="float:right">'+Math.round(q)+'%</span><div style="height:8px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden"><i style="display:block;height:100%;width:'+q+'%;background:#22d3ee"></i></div></div>';
+  }
   const tension=Math.max(0,Math.min(100,fishingState.tension));
   const progress=Math.max(0,Math.min(100,fishingState.progress));
   const fishStam=Math.max(0,Math.min(100,(fishingState.fishStamina/(f&&f.stamina||100))*100));
@@ -2391,6 +2454,12 @@ function fishingHudHTML(){
 }
 function tickFishing(now,dt){
   if(fishingState.phase==='cooldown'&&now>=fishingState.nextAt)fishingState.phase='idle';
+  if(fishingState.phase==='aim'){
+    updateFishingPlacementTarget(dt);
+    tickFishingVisuals(now,dt);
+    setFishingHud(fishingHudHTML());
+    return;
+  }
   if(fishingState.phase==='wait'){
     if(now>=fishingState.biteAt){
       fishingState.phase='bite';
@@ -2549,16 +2618,20 @@ globalThis.BlockcraftFishing={
   prompt:fishingPrompt,
   start:startFishingCast,
   hook:hookFishing,
+  placementActive:()=>fishingState.phase==='aim',
   handleKeyDown(code){
     if(code==='KeyG'){
+      if(fishingState.phase==='aim')return confirmFishingCast();
       if(fishingState.phase==='idle'||fishingState.phase==='cooldown')return startFishingCast();
       if(fishingState.phase==='wait'||fishingState.phase==='bite'||fishingState.phase==='land')return hookFishing();
       return fishingState.phase==='fight';
     }
+    if(code==='Escape')return cancelFishingPlacement();
+    if(['KeyW','KeyA','KeyS','KeyD'].includes(code))return fishingState.phase==='aim';
     if(code==='KeyF')return fishingState.phase==='fight';
     return false;
   },
-  handleKeyUp(code){ if(code==='KeyF')fishingState.reelHeld=false; return fishingState.phase==='fight'; },
+  handleKeyUp(code){ if(code==='KeyF')fishingState.reelHeld=false; return fishingState.phase==='fight'||fishingState.phase==='aim'; },
   tick:tickFishing,
   state:fishingState
 };
@@ -2670,7 +2743,9 @@ function tick(now){
 
   const deathControlLocked=hp<=0||document.body.classList.contains('death-active')||!!(document.getElementById('deathlimbo')&&document.getElementById('deathlimbo').classList.contains('show'))||!!(document.getElementById('dungeonspirit')&&document.getElementById('dungeonspirit').classList.contains('show'));
   if(deathControlLocked&&player&&player.vel)player.vel.set(0,0,0);
-  const gameplayMoveAllowed=!deathControlLocked&&(combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true));
+  const fishingPlacementLocked=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.placementActive&&globalThis.BlockcraftFishing.placementActive());
+  if(fishingPlacementLocked&&player&&player.vel)player.vel.set(0,0,0);
+  const gameplayMoveAllowed=!deathControlLocked&&!fishingPlacementLocked&&(combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true));
   if(!deathControlLocked&&(locked||gameplayMoveAllowed)){
     const mouseLook=combatApi.consumeMouseLookDelta?combatApi.consumeMouseLookDelta():{x:0,y:0};
     const lookX=gameplayMoveAllowed?((keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0)):0;

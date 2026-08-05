@@ -5387,6 +5387,7 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyX' && !e.repeat){ e.preventDefault(); cycleDragon(); return; }
     if(e.code==='KeyK' && !e.repeat){ e.preventDefault(); cycleFamiliar(); return; }
   }
+  if(e.code==='Escape'&&globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyDown&&globalThis.BlockcraftFishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
   if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
   if(e.code==='Escape'){
     let closed=false;
