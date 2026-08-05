@@ -22,6 +22,12 @@ const ENEMY_FAMILY_COLORS={
 const BIOME_HOSTILE_KIND={gale_stalker:'plains',wind_archer:'plains',rootbound:'forest',briar_archer:'forest',dune_husk:'desert',sun_archer:'desert',redclaw:'mesa',amber_archer:'mesa',frost_wight:'snowy',ice_archer:'snowy',mirewalker:'swamp',bog_archer:'swamp'};
 const BIOME_VFX={plains:{hex:0xc9f56a,col:[.79,.96,.42]},forest:{hex:0x5ca63c,col:[.36,.65,.24]},desert:{hex:0xffc447,col:[1,.77,.28]},mesa:{hex:0xe0522d,col:[.88,.32,.18]},snowy:{hex:0x8eeaff,col:[.56,.92,1]},swamp:{hex:0x83a94b,col:[.51,.66,.29]}};
 const BOSS_CONCEPT_STYLE={
+  foreman:{accent:0xff9f2e,particle:'ember',rate:18,scale:1.08,float:0,weapon:'quarry drill'},
+  regent:{accent:0x38bdf8,particle:'bubble',rate:18,scale:1.06,float:.04,weapon:'tidal crown'},
+  rootkeeper:{accent:0x42d45b,particle:'leaf',rate:15,scale:1.14,float:0,weapon:'root antlers'},
+  ossuary:{accent:0xd8d2bc,particle:'bone',rate:13,scale:1.08,float:0,weapon:'bone reliquary'},
+  blight:{accent:0x9cff3a,particle:'spore',rate:22,scale:1.06,float:.02,weapon:'fungal crown'},
+  watcher:{accent:0x9b7cff,particle:'rift',rate:18,scale:1.07,float:.035,weapon:'vault eye'},
   cinder_smith:{accent:0xff5a1e,particle:'ember',rate:22,scale:1.08,float:0,weapon:'molten hammer'},
   castellan:{accent:0xf4c95d,particle:'smoke',rate:12,scale:1.08,float:0,weapon:'key halberd'},
   choir:{accent:0xa5f3fc,particle:'shard',rate:18,scale:1.03,float:.035,orbit:true,weapon:'crystal staff'},
@@ -90,7 +96,17 @@ function tintModel(m,col){
   m.baseCol=col;
   for(const mm of m.mats)if(mm&&mm.color)mm.color.setRGB(col[0],col[1],col[2]);
 }
+function brightenBossBody(m,hex){
+  if(!m||!m.mats)return;
+  const c=new THREE.Color(hex);
+  for(const mm of m.mats){
+    if(!mm||!mm.color)continue;
+    mm.color.lerp(c,.38);
+    if(mm.emissive){mm.emissive.copy(c);mm.emissiveIntensity=.26;}
+  }
+}
 function material(hex,glow=false){ return glow?new THREE.MeshBasicMaterial({color:hex}):new THREE.MeshLambertMaterial({color:hex}); }
+function additiveMat(hex,opacity=.75){return new THREE.MeshBasicMaterial({color:hex,transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false});}
 function attachBox(parent,size,pos,hex,rot=[0,0,0],glow=false){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]),material(hex,glow));
   mesh.position.set(pos[0],pos[1],pos[2]);mesh.rotation.set(rot[0],rot[1],rot[2]);parent.add(mesh);return mesh;
@@ -165,6 +181,24 @@ function attachRiftFragments(parent,hex,count=9,radius=1.1){
     markBossGlow(frag,1);parent.add(frag);
   }
 }
+function attachBossReadableSilhouette(m,style,hex){
+  const g=m&&m.grp;if(!g)return;
+  const glow=additiveMat(hex,.78),solid=material(hex,true);
+  const box=(size,pos,rot=[0,0,0],mat=glow)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]),mat);mesh.position.set(pos[0],pos[1],pos[2]);mesh.rotation.set(rot[0],rot[1],rot[2]);mesh.userData.bossGlow=.7;g.add(mesh);return mesh;};
+  if(style==='choir'){for(const sx of [-1,1])for(let i=0;i<5;i++)box([.08,.9,.08],[sx*(.58+i*.16),1.18+i*.1,-.42],[.25,0,sx*(.45+i*.13)]);}
+  else if(style==='rift_monarch'){box([.18,2.2,.18],[0,1.1,-.46],[0,0,0]);attachRiftFragments(g,hex,14,1.55);}
+  else if(style==='thunder_warden'){box([.12,2.3,.12],[.52,1.55,-.38],[.18,0,-.18]);box([.44,.1,.12],[.52,2.65,-.38],[0,0,-.18]);}
+  else if(style==='rime_giant'){for(const sx of [-1,1])box([.14,.9,.14],[sx*.42,2.08,-.22],[0,0,sx*.7]);box([.7,.12,.16],[0,1.95,-.42],[0,0,0]);}
+  else if(style==='cinder_smith'||style==='foreman'){box([.34,.34,.72],[.64,1.12,-.36],[.2,0,-.35]);box([.08,1.35,.08],[.46,1.25,-.3],[0,0,.22]);}
+  else if(style==='castellan'){for(const sx of [-.62,0,.62]){box([.2,.9,.2],[sx,1.78,-.46]);box([.32,.12,.24],[sx,2.28,-.46]);}}
+  else if(style==='buried_monarch'){for(const sx of [-.5,-.25,0,.25,.5])box([.08,.7,.08],[sx,2.02,-.34],[0,0,sx*.8]);}
+  else if(style==='abyssal_gatekeeper'){for(const sx of [-.72,-.42,.42,.72])box([.1,1.1,.1],[sx,1.45,-.45],[.35,0,sx>0?-.7:.7]);}
+  else if(style==='void_prior'){box([.85,1.28,.08],[0,1.1,-.48],[-.08,0,0],additiveMat(0x1b1038,.72));box([.48,.48,.1],[0,1.86,-.44],[0,0,0],solid);}
+  else if(style==='rootkeeper'){for(const sx of [-.56,-.28,.28,.56])box([.08,.9,.08],[sx,1.98,-.34],[0,0,sx>0?-1:1]);}
+  else if(style==='regent'){for(const sx of [-.44,0,.44])box([.08,.9,.08],[sx,1.92,-.34],[0,0,sx*.5]);}
+  else if(style==='ossuary'){for(const sx of [-.45,-.18,.18,.45])box([.08,.8,.08],[sx,1.82,-.36],[0,0,sx*.65],additiveMat(0xf8fafc,.72));}
+  else if(style==='watcher'){const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.055,8,32),glow);ring.position.set(0,1.58,-.46);ring.rotation.x=Math.PI/2;ring.userData.bossGlow=1.2;g.add(ring);}
+}
 function decorateDungeonVariant(m,ref){
   const v=ref.variant||'';if(!v||!m||m.dungeonVariant)return;m.dungeonVariant=v;
   const bossy=v.includes('guard')||v==='graveguard';
@@ -202,12 +236,12 @@ function decorateDungeonVariant(m,ref){
 function decorateBossStyle(m,ref){
   const s=ref.bossStyle||'';if(!m||!m.boss||!s||m.bossDecoratedStyle)return;m.bossDecoratedStyle=s;
   const styles={
-    foreman:{col:[.82,.42,.18],hex:0xff8a2a,parts:()=>{if(m.head){attachBox(m.head,[.46,.09,.38],[0,.34,.02],0x6e4a26);attachBox(m.head,[.16,.1,.06],[0,.34,.31],0xffc85a,[0,0,0],true);}for(const sx of [-.44,.44])attachBox(m.grp,[.16,.55,.16],[sx,1.35,-.12],0x704321);}},
-    regent:{col:[.22,.7,.95],hex:0x38bdf8,parts:()=>{if(m.head)for(const sx of [-.2,0,.2])attachBox(m.head,[.07,sx? .18:.26,.07],[sx,.43,.05],0x78d5e8,[0,0,sx>0?-.25:sx<0?.25:0]);}},
-    rootkeeper:{col:[.28,.72,.28],hex:0x42d45b,parts:()=>{if(m.head)for(const sx of [-.2,.2])attachBox(m.head,[.08,.46,.08],[sx,.47,.02],0x355f2b,[0,0,sx>0?-.7:.7]);for(const sx of [-.25,.25])attachBox(m.grp,[.07,.75,.07],[sx,1.15,-.32],0x355f2b,[-.3,0,sx]);}},
-    ossuary:{col:[.78,.68,.45],hex:0xd8d2bc,parts:()=>{if(m.head)for(const sx of [-.24,-.08,.08,.24])attachBox(m.head,[.06,.32,.06],[sx,.44,.04],0xd8d2bc,[0,0,sx*.9]);for(let i=0;i<5;i++)attachBox(m.grp,[.08,.34-i*.035,.08],[0,1.58-i*.18,-.28],0xd8d2bc,[.35,0,0]);}},
-    blight:{col:[.42,.92,.22],hex:0x9cff3a,parts:()=>{if(m.head){for(const sx of [-.18,.18]){const cap=new THREE.Mesh(new THREE.SphereGeometry(.17,8,5,0,Math.PI*2,0,Math.PI/2),material(0x9cff3a));cap.position.set(sx,.4,.04);m.head.add(cap);}}}},
-    watcher:{col:[.58,.42,.95],hex:0x9b7cff,parts:()=>{if(m.head)attachBox(m.head,[.5,.1,.08],[0,.04,.31],0x9b7cff,[0,0,0],true);for(const sx of [-.5,.5])attachBox(m.grp,[.24,.38,.2],[sx,1.5,.02],0x5b4b88);}},
+    foreman:{col:[.82,.42,.18],hex:0xff8a2a,parts:()=>{if(m.head){attachBox(m.head,[.5,.12,.42],[0,.34,.02],0x6e4a26);markBossGlow(attachBox(m.head,[.2,.12,.07],[0,.34,.31],0xffc85a,[0,0,0],true),1.1);}for(const sx of [-.5,.5])attachBox(m.grp,[.28,.5,.32],[sx,1.36,.02],0x704321);if(m.arms&&m.arms[0]){const drill=new THREE.Mesh(new THREE.ConeGeometry(.22,.95,6),material(0xffc85a,true));drill.position.set(0,-.05,1.08);drill.rotation.x=Math.PI/2;m.arms[0].add(markBossGlow(drill,1.2));}for(const sx of [-.33,.33])attachBox(m.grp,[.12,.95,.12],[sx,1.18,-.32],0x5b3b1e,[-.18,0,sx]);}},
+    regent:{col:[.22,.7,.95],hex:0x38bdf8,parts:()=>{if(m.head){attachCrown(m.head,0x0e7490,0x67e8f9);for(const sx of [-.22,0,.22])markBossGlow(attachBox(m.head,[.07,sx?.22:.34,.07],[sx,.49,.05],0x78d5e8,[0,0,sx>0?-.25:sx<0?.25:0],true),.8);}attachTatteredRobe(m.grp,0x0f3d56,0x38bdf8,.82,.9);attachFloatingShards(m.grp,0x38bdf8,7,1.08,.9);if(m.arms&&m.arms[1])attachStaff(m.arms[1],0x075985,0x67e8f9,'orb');}},
+    rootkeeper:{col:[.28,.72,.28],hex:0x42d45b,parts:()=>{if(m.head){for(const sx of [-.25,.25])attachBox(m.head,[.1,.62,.1],[sx,.55,.02],0x355f2b,[0,0,sx>0?-.85:.85]);for(const sx of [-.42,.42])attachBox(m.head,[.08,.38,.08],[sx,.46,.02],0x42d45b,[0,0,sx>0?-1.2:1.2],true);}for(const sx of [-.38,0,.38])attachBox(m.grp,[.09,1.1,.09],[sx,1.18,-.36],0x355f2b,[-.28,0,sx]);attachTentacles(m.grp,0x254b24,5,.46);}},
+    ossuary:{col:[.78,.68,.45],hex:0xd8d2bc,parts:()=>{if(m.head){attachBox(m.head,[.36,.32,.09],[0,.03,.31],0xd8d2bc);for(const sx of [-.28,-.12,.12,.28])attachBox(m.head,[.06,.38,.06],[sx,.48,.04],0xf4ecd2,[0,0,sx*.9],true);}for(let i=0;i<7;i++)attachBox(m.grp,[.09,.42-i*.035,.09],[0,1.72-i*.16,-.3],0xd8d2bc,[.35,0,0]);for(const sx of [-.48,.48])attachBox(m.grp,[.24,.62,.1],[sx,1.32,.24],0xf4ecd2,[0,0,sx*.35]);if(m.arms&&m.arms[1])attachStaff(m.arms[1],0xd8d2bc,0xf8fafc,'cross');}},
+    blight:{col:[.42,.92,.22],hex:0x9cff3a,parts:()=>{if(m.head){for(const sx of [-.2,0,.2]){const cap=new THREE.Mesh(new THREE.SphereGeometry(.17+(sx?0:.05),8,5,0,Math.PI*2,0,Math.PI/2),material(0x9cff3a,true));cap.position.set(sx,.42,.04);markBossGlow(cap,1);m.head.add(cap);}}attachTentacles(m.grp,0x375f1d,8,.5);attachTatteredRobe(m.grp,0x1a2e05,0x9cff3a,.76,.78);}},
+    watcher:{col:[.58,.42,.95],hex:0x9b7cff,parts:()=>{if(m.head){markBossGlow(attachBox(m.head,[.54,.2,.1],[0,.04,.31],0x9b7cff,[0,0,0],true),1.4);attachBox(m.head,[.18,.18,.12],[0,.04,.38],0xe9d5ff,[0,0,0],true);}for(const sx of [-.58,.58])attachBox(m.grp,[.3,.44,.26],[sx,1.5,.02],0x5b4b88);attachRiftFragments(m.grp,0x9b7cff,6,1.05);if(m.arms&&m.arms[0])attachStaff(m.arms[0],0x312e81,0xc084fc,'orb');}},
     cinder_smith:{col:[.95,.34,.12],hex:0xff5a1e,parts:()=>{if(m.head){attachBox(m.head,[.52,.18,.4],[0,.34,.02],0x24120d);markBossGlow(attachBox(m.head,[.28,.12,.08],[0,.06,.31],0xff5a1e,[0,0,0],true),1.25);attachBox(m.head,[.12,.18,.08],[-.18,.43,.02],0x525252);attachBox(m.head,[.12,.18,.08],[.18,.43,.02],0x525252);}attachBox(m.grp,[.42,.42,.14],[0,1.22,.32],0x2a1410);markBossGlow(attachBox(m.grp,[.26,.34,.16],[0,1.22,.39],0xff5a1e,[0,0,0],true),1.35);for(const sx of [-.52,.52])attachBox(m.grp,[.26,.5,.34],[sx,1.38,.02],0x3a2f2b);if(m.arms&&m.arms[1])attachHammer(m.arms[1],0x2f2420,0xff6a1c);attachTatteredRobe(m.grp,0x3b1611,0xff8a2a,.58,.72);}},
     castellan:{col:[.48,.48,.56],hex:0xf4c95d,parts:()=>{if(m.head){attachBox(m.head,[.56,.34,.48],[0,.18,.02],0x2d2d34);markBossGlow(attachBox(m.head,[.24,.18,.08],[0,.14,.3],0xff8a2a,[0,0,0],true),.9);for(const sx of [-.24,0,.24])attachBox(m.head,[.08,.28,.08],[sx,.48,.04],0xc9a13b,[0,0,sx*.8]);}for(const sx of [-.56,.56]){attachBox(m.grp,[.34,.34,.36],[sx,1.55,.02],0x35343d);attachBox(m.grp,[.18,.42,.16],[sx,1.82,.02],0xc9a13b);}attachTatteredRobe(m.grp,0x2b173c,0xc9a13b,.72,.86);if(m.arms&&m.arms[0])attachStaff(m.arms[0],0x3b3328,0xf4c95d,'spear');attachChain(m.grp,-.42,-.24,0x1b1714,6);attachChain(m.grp,.42,-.24,0x1b1714,6);}},
     choir:{col:[.72,.9,1],hex:0x9eeaff,parts:()=>{if(m.head){for(const sx of [-.18,0,.18])markBossGlow(attachBox(m.head,[.06,.34,.06],[sx,.44,.05],0xdff8ff,[0,0,sx*-1.1],true),1.1);attachBox(m.head,[.32,.38,.08],[0,.05,.32],0xf8fbff,[0,0,0],true);}attachTatteredRobe(m.grp,0x4c1d95,0xa5f3fc,.8,1);for(const sx of [-.48,-.26,.26,.48])markBossGlow(attachBox(m.grp,[.08,.9,.08],[sx,1.2,-.34],0xa5f3fc,[.45,0,sx],true),.8);attachFloatingShards(m.grp,0x9eeaff,8,1.05,1);if(m.arms&&m.arms[0])attachStaff(m.arms[0],0xdff8ff,0xc084fc,'orb');markCrystalHalo(m.grp,0x9eeaff,1.1);}},
@@ -221,7 +255,7 @@ function decorateBossStyle(m,ref){
   };
   const spec=styles[s];if(!spec)return;tintModel(m,spec.col);spec.parts();
   const concept=BOSS_CONCEPT_STYLE[s];
-  if(concept){m.grp.scale.multiplyScalar(concept.scale||1);m.conceptFx=concept;m.conceptFloatBase=NaN;m.conceptOrbit=m.grp.children.filter(ch=>ch&&ch.userData&&ch.userData.bossOrbit);}
+  if(concept){brightenBossBody(m,concept.accent);attachBossReadableSilhouette(m,s,concept.accent);m.grp.scale.multiplyScalar(concept.scale||1);m.conceptFx=concept;m.conceptFloatBase=NaN;m.conceptOrbit=m.grp.children.filter(ch=>ch&&ch.userData&&ch.userData.bossOrbit);}
   const aura=new THREE.Mesh(new THREE.TorusGeometry(1.22,.045,8,42),new THREE.MeshBasicMaterial({color:spec.hex,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false}));
   aura.rotation.x=Math.PI/2;aura.position.y=.09;m.grp.add(aura);m.styleAura=aura;
 }
@@ -265,6 +299,9 @@ function tickBossConceptFx(m,dt,t,tier=0){
   else if(kind==='sand')spawnParticle({x:p.x+Math.cos(a)*(1+Math.random()),y:p.y+.12,z:p.z+Math.sin(a)*(1+Math.random()),vx:-Math.cos(a)*.45,vy:.16,vz:-Math.sin(a)*.45,life:.55,grav:.2,r:.94,g:.7,b:.22});
   else if(kind==='bubble')spawnParticle({x,y,z,vx:(Math.random()-.5)*.08,vy:.48,vz:(Math.random()-.5)*.08,life:.75,grav:-.04,r:.18,g:.85,b:.92});
   else if(kind==='rift')spawnParticle({x,y,z,vx:(Math.random()-.5)*.9,vy:.4,vz:(Math.random()-.5)*.9,life:.38,grav:0,r:.95,g:.25,b:.9});
+  else if(kind==='leaf')spawnParticle({x,y,z,vx:(Math.random()-.5)*.35,vy:.28,vz:(Math.random()-.5)*.35,life:.65,grav:.05,r:.32,g:.9,b:.22});
+  else if(kind==='bone')spawnParticle({x,y,z,vx:(Math.random()-.5)*.25,vy:.22,vz:(Math.random()-.5)*.25,life:.55,grav:.08,r:.86,g:.82,b:.68});
+  else if(kind==='spore')spawnParticle({x,y,z,vx:(Math.random()-.5)*.18,vy:.42,vz:(Math.random()-.5)*.18,life:.7,grav:-.03,r:.62,g:1,b:.22});
 }
 const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',wounded_hunter:'Wounded Hunter',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon',gale_stalker:'Gale Stalker',wind_archer:'Wind Archer',rootbound:'Rootbound',briar_archer:'Briar Archer',dune_husk:'Dune Husk',sun_archer:'Sun Archer',redclaw:'Redclaw',amber_archer:'Amber Archer',frost_wight:'Frost Wight',ice_archer:'Ice Archer',mirewalker:'Mirewalker',bog_archer:'Bog Archer'};
 const BIOME_NAME_COLOR={plains:'#d8f58c',forest:'#8fcf69',desert:'#ffd36a',mesa:'#ff8968',snowy:'#b9f4ff',swamp:'#a8ca72'};
@@ -1588,7 +1625,7 @@ function showDungeonBossGallery(){
   if(!defs.length)return false;
   const yaw=Number(player&&player.yaw)||0,px=Number(player&&player.pos&&player.pos.x)||0,py=Number(player&&player.pos&&player.pos.y)||9,pz=Number(player&&player.pos&&player.pos.z)||0;
   const fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw);
-  const cols=5,gapX=3.15,gapZ=3.65,start=(cols-1)*-.5,baseDist=8.5;
+  const cols=4,gapX=5.2,gapZ=5.4,start=(cols-1)*-.5,baseDist=10.5;
   defs.forEach((entry,i)=>{
     const col=i%cols,row=Math.floor(i/cols),x=px+fx*(baseDist+row*gapZ)+rx*((start+col)*gapX),z=pz+fz*(baseDist+row*gapZ)+rz*((start+col)*gapX);
     const ref={kind:'boss',bossStyle:entry.def&&entry.def.combat&&entry.def.combat.bossStyle||'',displayName:entry.def&&entry.def.boss||'Gate Monarch',hp:100,maxHp:100,state:''};
