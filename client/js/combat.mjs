@@ -5139,7 +5139,7 @@ function fishingInputDebug(reason='snapshot',extra=null){
   };
   try{localStorage.setItem(FISHING_INPUT_DEBUG_LOG_KEY,JSON.stringify(log));}catch(e){}
   try{document.body.dataset.fishingDebug=JSON.stringify(data);}catch(e){}
-  console.warn('[bc-fishing-debug]',JSON.stringify(data));
+  if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-debug]',JSON.stringify(data));
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.input-debug',data);
   return data;
 }
@@ -5191,7 +5191,7 @@ function gameplayInputDebug(reason='snapshot',extra=null){
   });
   try{localStorage.setItem(INPUT_DEBUG_LOG_KEY,JSON.stringify(log));}catch(e){}
   try{document.body.dataset.inputDebug=JSON.stringify(data);}catch(e){}
-  if(reason!=='snapshot')console.warn('[bc-input-debug]',data);
+  if(reason!=='snapshot'&&globalThis.BlockcraftVerboseDebug)console.warn('[bc-input-debug]',data);
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace(reason==='snapshot'?'input.snapshot':'input.blocked',data);
   return data;
 }

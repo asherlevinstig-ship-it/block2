@@ -90,7 +90,7 @@ function fishingNetworkDebug(reason,extra={}){
     bodyClass:document.body.className,
     extra
   };
-  console.warn('[bc-fishing-debug]',JSON.stringify(payload));
+  if(reason==='positionCorrection'||globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-debug]',JSON.stringify(payload));
   try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.network-debug',payload);}catch(e){}
   return payload;
 }

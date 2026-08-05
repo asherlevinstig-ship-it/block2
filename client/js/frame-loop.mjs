@@ -197,7 +197,7 @@ function fishingCameraDebug(reason,extra={},now=performance.now()){
     return payload;
   };
   try{root.BlockcraftTrace&&root.BlockcraftTrace('fishing.camera-debug',data);}catch(e){}
-  console.warn('[bc-fishing-camera-debug]',data);
+  if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-camera-debug]',data);
 }
 let nextFishingLakeBoundsDebugAt=0;
 function fishingLakeRoomDef(){
