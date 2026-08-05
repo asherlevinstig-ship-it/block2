@@ -157,6 +157,48 @@ function tickLocalPantherForm(now,dt,moving){
 function approach(current,target,rate,dt){
   return current+(target-current)*(1-Math.exp(-Math.max(0,rate)*Math.max(0,dt)));
 }
+let lastFishingCameraDebugAt=0,lastFishingCameraPitch=player.pitch,lastFishingCameraHeartbeatAt=0;
+function fishingRoomActiveForDebug(){
+  return dimensionsState.kind==='fishing_lake'||dim==='fishing_lake';
+}
+function fishingCameraDebug(reason,extra={},now=performance.now()){
+  if(!fishingRoomActiveForDebug())return;
+  if(reason==='look-update'&&now-lastFishingCameraDebugAt<160)return;
+  lastFishingCameraDebugAt=now;
+  const root=globalThis;
+  const data={
+    reason,
+    at:Date.now(),
+    tickNow:Math.round(now),
+    pos:player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)}:null,
+    vel:player&&player.vel?{x:+player.vel.x.toFixed(3),y:+player.vel.y.toFixed(3),z:+player.vel.z.toFixed(3)}:null,
+    yaw:player&&Number.isFinite(player.yaw)?+player.yaw.toFixed(5):null,
+    pitch:player&&Number.isFinite(player.pitch)?+player.pitch.toFixed(5):null,
+    camera:typeof camera!=='undefined'&&camera&&camera.rotation?{x:+camera.rotation.x.toFixed(5),y:+camera.rotation.y.toFixed(5),z:+camera.rotation.z.toFixed(5)}:null,
+    locked:!!locked,
+    inputLocked:!!combatState.inputLocked,
+    cursorReleased:!!combatState.cursorReleased,
+    cameraInputAllowed:combatState.cameraInputAllowed,
+    movementAllowed:combatState.movementAllowed,
+    bodyClass:document.body.className,
+    activeFishing:!!(root.BlockcraftFishing&&root.BlockcraftFishing.active&&root.BlockcraftFishing.active()),
+    fishingPhase:root.BlockcraftFishing&&root.BlockcraftFishing.state&&root.BlockcraftFishing.state.phase||'',
+    extra
+  };
+  const log=Array.isArray(root.BlockcraftFishingCameraDebugLog)?root.BlockcraftFishingCameraDebugLog:[];
+  log.push(data); while(log.length>180)log.shift();
+  root.BlockcraftFishingCameraDebugLog=log;
+  root.BlockcraftLastFishingCameraDebug=data;
+  root.BlockcraftReadFishingCameraDebug=()=>({latest:root.BlockcraftLastFishingCameraDebug||null,log:Array.isArray(root.BlockcraftFishingCameraDebugLog)?root.BlockcraftFishingCameraDebugLog.slice():[]});
+  root.BlockcraftCopyFishingCameraDebug=()=>{
+    const payload=JSON.stringify(root.BlockcraftReadFishingCameraDebug(),null,2);
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(payload).catch(()=>{});
+    console.log(payload);
+    return payload;
+  };
+  try{root.BlockcraftTrace&&root.BlockcraftTrace('fishing.camera-debug',data);}catch(e){}
+  console.warn('[bc-fishing-camera-debug]',data);
+}
 function updateMovementStateSnapshot(state, speed, targetSpeed, sprintFactor, grounded, swimming, panther, exhausted){
   state.grounded=!!grounded;state.airborne=!grounded&&!swimming;state.swimming=!!swimming;state.panther=!!panther;state.exhausted=!!exhausted;state.sprinting=sprintFactor>.55||panther;
   state.speed=Math.round(speed*100)/100;state.targetSpeed=Math.round(targetSpeed*100)/100;state.sprintFactor=Math.round(sprintFactor*100)/100;
@@ -2569,7 +2611,18 @@ function tick(now){
       player.yaw += yawDelta;
       player.pitch += lookY*lookSpeed*.85*dt+mousePitch;
       player.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, player.pitch));
+      if(fishingRoomActiveForDebug()){
+        const pitchJump=Math.abs(player.pitch-lastFishingCameraPitch);
+        if(Math.abs(player.pitch)>1.35||Math.abs(mousePitch)>0.08||Math.abs(mouseYaw)>0.08||pitchJump>.18){
+          fishingCameraDebug('look-update',{mouseLook,lookX,lookY,mouseYaw:+mouseYaw.toFixed(5),mousePitch:+mousePitch.toFixed(5),pitchJump:+pitchJump.toFixed(4),gameplayMoveAllowed,cutscene},now);
+        }
+      }
     }
+    if(fishingRoomActiveForDebug()&&now-lastFishingCameraHeartbeatAt>1000){
+      lastFishingCameraHeartbeatAt=now;
+      fishingCameraDebug('heartbeat',{gameplayMoveAllowed,deathControlLocked,locked:!!locked,keys:{w:!!keys.KeyW,a:!!keys.KeyA,s:!!keys.KeyS,d:!!keys.KeyD,shift:!!(keys.ShiftLeft||keys.ShiftRight)}},now);
+    }
+    if(fishingRoomActiveForDebug())lastFishingCameraPitch=player.pitch;
     const sprintKey=gameplayMoveAllowed&&(keys['ShiftLeft']||keys['ShiftRight']);
     let f=gameplayMoveAllowed?((keys['KeyW']?1:0)-(keys['KeyS']?1:0)):0;
     let s=gameplayMoveAllowed?((keys['KeyD']?1:0)-(keys['KeyA']?1:0)):0;
