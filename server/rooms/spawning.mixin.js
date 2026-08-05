@@ -43,6 +43,15 @@ class SpawningMixin {
       regent: 'control',
       ossuary: 'control',
       blight: 'graveRing',
+      cinder: 'spikes',
+      castellan: 'volley',
+      choir: 'graveRing',
+      prior: 'control',
+      rime: 'slam',
+      thunder: 'charge',
+      buried: 'ossuary',
+      abyssal: 'control',
+      rift: 'charge',
     }[pat];
     if (follow && follow !== pat) meta.layeredNext = follow;
   }
@@ -256,6 +265,93 @@ class SpawningMixin {
       if (meta.stateT <= 0 && !best) { m.state = 'recover'; meta.stateT = .5; }
       return true;
     }
+    if (st === 'cinderWind' || st === 'castellanWind' || st === 'choirWind' || st === 'priorWind' || st === 'rimeWind' || st === 'thunderWind' || st === 'buriedWind' || st === 'abyssalWind' || st === 'riftWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        const style = String(meta.bossStyle || '');
+        const targets = meta.signatureTargets || [];
+        this.sendSpace(m.dgn, 'fx', { t: 'bossStyleBurst', style, x: m.x, y: m.y, z: m.z, targets, dx: meta.cdx || 0, dz: meta.cdz || 1, dgn: m.dgn || '' });
+        if (st === 'cinderWind') {
+          const zones = targets.length ? targets : [{ x: m.x, z: m.z }];
+          for (const target of zones) for (const s of candidates) {
+            if (Math.hypot(s.p.x - target.x, s.p.z - target.z) <= 2.15) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) this.hurtPlayer(c, Math.max(2, meta.slamDmg - 1), 'cinder_flames', { attack: 'Molten Forge' });
+            }
+          }
+        } else if (st === 'castellanWind') {
+          for (const s of candidates) {
+            const dist = Math.hypot(s.p.x - m.x, s.p.z - m.z);
+            if (dist >= 2.5 && dist <= 6.8) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) this.hurtPlayer(c, Math.max(2, meta.slamDmg - 1), 'castellan_keep', { attack: 'Rune of the Keep' });
+            }
+          }
+          this.bossSummon(m, { ...meta, forceWave: true });
+        } else if (st === 'choirWind' && best) {
+          const bd2 = bd || 1, bx = (best.p.x - m.x) / bd2, bz = (best.p.z - m.z) / bd2, by = ((best.p.y + 1.2) - (m.y + 1.8)) / bd2;
+          for (const off of [-.72, -.48, -.24, 0, .24, .48, .72]) {
+            const ca = Math.cos(off), sa = Math.sin(off);
+            this.fireArrow(m, m.dgn, m.x + (bx * ca - bz * sa) * 12, m.y + 1.8 + by * 12, m.z + (bx * sa + bz * ca) * 12, 4 + meta.rank, true);
+          }
+        } else if (st === 'priorWind') {
+          for (const target of targets) for (const s of candidates) {
+            if (Math.hypot(s.p.x - target.x, s.p.z - target.z) <= 2.4) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) { this.hurtPlayer(c, Math.max(1, meta.slamDmg - 4), 'prior_silence', { attack: 'Sacred Silence' }); this.applyBiomeStatus(c, 'venom'); }
+            }
+          }
+        } else if (st === 'rimeWind') {
+          for (const s of candidates) {
+            const vx = s.p.x - m.x, vz = s.p.z - m.z, dist = Math.hypot(vx, vz) || 1, dot = (vx / dist) * (meta.cdx || 0) + (vz / dist) * (meta.cdz || 1);
+            if (dist <= 8.5 && dot > .45) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) { this.hurtPlayer(c, Math.max(2, meta.slamDmg - 1), 'rime_icebreaker', { attack: 'Icebreaker Smash' }); this.applyBiomeStatus(c, 'frost'); }
+            }
+          }
+        } else if (st === 'thunderWind') {
+          for (const s of candidates) {
+            const vx = s.p.x - m.x, vz = s.p.z - m.z, along = vx * (meta.cdx || 0) + vz * (meta.cdz || 1), perp = Math.abs(vx * (meta.cdz || 1) - vz * (meta.cdx || 0));
+            if (along >= 0 && along <= 11 && perp <= 1.35) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) this.hurtPlayer(c, meta.slamDmg + 2, 'thunder_spear', { attack: 'Lightning Spear' });
+            }
+          }
+        } else if (st === 'buriedWind') {
+          for (const s of candidates) {
+            const dist = Math.hypot(s.p.x - m.x, s.p.z - m.z);
+            if (dist >= 2.8 && dist <= 8.4) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) this.hurtPlayer(c, Math.max(2, meta.slamDmg - 1), 'buried_sandstorm', { attack: 'Sandstorm Walls' });
+            }
+          }
+          this.bossSummon(m, { ...meta, forceWave: true });
+        } else if (st === 'abyssalWind') {
+          for (const target of targets) for (const s of candidates) {
+            if (Math.hypot(s.p.x - target.x, s.p.z - target.z) <= 2.3) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (!c) continue;
+              const p = this.state.players.get(s.sid);
+              if (p) { p.x += (m.x - p.x) * .22; p.z += (m.z - p.z) * .22; }
+              this.hurtPlayer(c, Math.max(2, meta.slamDmg - 2), 'abyssal_tentacle', { attack: 'Tentacle Drag' });
+              this.applyBiomeStatus(c, 'frost');
+            }
+          }
+        } else if (st === 'riftWind' && best) {
+          const a = Math.atan2(best.p.x - m.x, best.p.z - m.z) + Math.PI + (Math.random() < .5 ? -.75 : .75);
+          const nx = best.p.x + Math.sin(a) * 3.4, nz = best.p.z + Math.cos(a) * 3.4, gy = ground(nx, nz, m.y + 2);
+          if (gy > 0 && !solid(nx, Math.floor(gy + 1), nz)) { m.x = nx; m.y = gy; m.z = nz; }
+          for (const s of candidates) {
+            if (Math.hypot(s.p.x - m.x, s.p.z - m.z) <= 3.4) {
+              const c = this.clients.find(client => client.sessionId === s.sid);
+              if (c) this.hurtPlayer(c, meta.slamDmg, 'rift_tear', { attack: 'Reality Tear' });
+            }
+          }
+        }
+        this.bossRecover(m, meta, .8, 3.15, haste);
+      }
+      return true;
+    }
     if (st === 'stun') {
       if (meta.stateT <= 0) { m.state = 'chase'; meta.gcd = 1.2; }
       return true;
@@ -281,6 +377,15 @@ class SpawningMixin {
       if (rank >= 1 && meta.bossStyle === 'ossuary' && bd < 16) picks.push('ossuary');
       if (rank >= 1 && meta.bossStyle === 'blight' && bd < 15) picks.push('blight');
       if (rank >= 1 && meta.bossStyle === 'watcher' && bd > 5 && bd < 20) picks.push('watcher');
+      if (rank >= 2 && meta.bossStyle === 'cinder_smith' && bd < 15) picks.push('cinder');
+      if (rank >= 2 && meta.bossStyle === 'castellan' && bd < 16) picks.push('castellan');
+      if (rank >= 2 && meta.bossStyle === 'choir' && bd > 5 && bd < 20) picks.push('choir');
+      if (rank >= 3 && meta.bossStyle === 'void_prior' && bd < 15) picks.push('prior');
+      if (rank >= 3 && meta.bossStyle === 'rime_giant' && bd < 12) picks.push('rime');
+      if (rank >= 3 && meta.bossStyle === 'thunder_warden' && bd > 4 && bd < 18) picks.push('thunder');
+      if (rank >= 4 && meta.bossStyle === 'buried_monarch' && bd < 17) picks.push('buried');
+      if (rank >= 4 && meta.bossStyle === 'abyssal_gatekeeper' && bd < 15) picks.push('abyssal');
+      if (rank >= 4 && meta.bossStyle === 'rift_monarch' && bd < 18) picks.push('rift');
       if (rank >= 3 && bd < 13) picks.push('control');
       if (picks.length) {
         const combos = {
@@ -290,6 +395,15 @@ class SpawningMixin {
           ossuary: ['volley', 'ossuary', 'charge', 'slam'],
           blight: ['blight', 'graveRing', 'charge', 'slam'],
           watcher: ['watcher', 'charge', 'volley', 'slam'],
+          cinder_smith: ['cinder', 'slam', 'spikes', 'charge'],
+          castellan: ['castellan', 'volley', 'charge', 'slam'],
+          choir: ['choir', 'graveRing', 'volley', 'slam'],
+          void_prior: ['prior', 'control', 'graveRing', 'charge'],
+          rime_giant: ['rime', 'slam', 'charge', 'spikes'],
+          thunder_warden: ['thunder', 'charge', 'volley', 'slam'],
+          buried_monarch: ['buried', 'ossuary', 'graveRing', 'slam'],
+          abyssal_gatekeeper: ['abyssal', 'regent', 'control', 'slam'],
+          rift_monarch: ['rift', 'watcher', 'charge', 'spikes'],
         };
         const combo = combos[meta.bossStyle];
         let pat = meta.forcePat || '';
@@ -343,6 +457,12 @@ class SpawningMixin {
           m.state = 'watcherWind'; meta.stateT = .9 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'growl', dgn: m.dgn || '' });
           this.sendSpace(m.dgn, 'fx', { t: 'volleyWarn', id, dx: meta.cdx, dz: meta.cdz, wide: true, dgn: m.dgn || '' });
+        } else if (['cinder', 'castellan', 'choir', 'prior', 'rime', 'thunder', 'buried', 'abyssal', 'rift'].includes(pat)) {
+          const stateByPat = { cinder: 'cinderWind', castellan: 'castellanWind', choir: 'choirWind', prior: 'priorWind', rime: 'rimeWind', thunder: 'thunderWind', buried: 'buriedWind', abyssal: 'abyssalWind', rift: 'riftWind' };
+          m.state = stateByPat[pat]; meta.stateT = ({ cinder: 1.05, castellan: 1.25, choir: .9, prior: 1.05, rime: 1.15, thunder: .85, buried: 1.35, abyssal: 1.05, rift: .75 }[pat] || 1) * haste;
+          meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, pat === 'castellan' || pat === 'buried' ? 6 : 5);
+          if (!meta.signatureTargets.length && best) meta.signatureTargets = [{ x: best.p.x, z: best.p.z }];
+          this.sendSpace(m.dgn, 'fx', { t: 'bossStyleWarn', style: meta.bossStyle || '', pat, x: m.x, y: m.y, z: m.z, targets: meta.signatureTargets, dx: meta.cdx, dz: meta.cdz, dgn: m.dgn || '' });
         } else {
           m.state = pat === 'root' ? 'rootWind' : 'foremanWind'; meta.stateT = (pat === 'root' ? 1 : 1.15) * haste;
           meta.signatureTargets = candidates.map(s => ({ x: s.p.x, z: s.p.z })).slice(0, 4);

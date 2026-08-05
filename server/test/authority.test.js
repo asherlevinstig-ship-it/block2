@@ -5343,6 +5343,30 @@ test('E-rank boss style defers signatures while preserving deterministic combo a
   assert.equal(meta.patternStep, 2);
 });
 
+test('new concept bosses choose unique signature combat patterns', () => {
+  const cases = [
+    ['cinder_smith', 2, 'cinderWind', 8],
+    ['castellan', 2, 'castellanWind', 8],
+    ['choir', 2, 'choirWind', 8],
+    ['void_prior', 3, 'priorWind', 8],
+    ['rime_giant', 3, 'rimeWind', 8],
+    ['thunder_warden', 3, 'thunderWind', 8],
+    ['buried_monarch', 4, 'buriedWind', 8],
+    ['abyssal_gatekeeper', 4, 'abyssalWind', 8],
+    ['rift_monarch', 4, 'riftWind', 8],
+  ];
+  for (const [style, rank, expected, dist] of cases) {
+    const room = makeDungeonRoom();
+    const inst = putInstance(room, { id: 'sig-' + style, world: new D.DungeonGrid() });
+    const boss = { x: 20, y: 9, z: 20, yaw: 0, hp: 100, maxHp: 100, kind: 'boss', dgn: inst.id, state: 'chase', enraged: false };
+    const meta = room.freshMeta(20, 20, 5, 1.3, 'boss', rank, true);
+    meta.bossStyle = style; meta.gcd = 0; meta.sum1 = true; meta.sum2 = true; meta.woke = true;
+    const target = { sid: 'hunter', p: { x: 20 + dist, y: 9, z: 20 } };
+    assert.equal(room.bossBrain(boss, 'boss-' + style, meta, .1, target, dist, [target], () => 9, () => false), true);
+    assert.equal(boss.state, expected, style + ' should use its signature pattern');
+  }
+});
+
 test('The Foreman summons a charger and a skeleton instead of a generic wave', () => {
   const room = makeDungeonRoom();
   const inst = putInstance(room, { id: 'foreman-wave', world: new D.DungeonGrid() });

@@ -161,6 +161,15 @@ function gateEncounterPreview(gate, layout = null) {
     ossuary: 'Escalating skeleton wave attack',
     blight: 'Blighted root control zones',
     watcher: 'Ranged crossfire volleys',
+    cinder_smith: 'Molten forge zones',
+    castellan: 'Rune-of-the-keep ring and sentries',
+    choir: 'Wide crystal shard barrage',
+    void_prior: 'Sacred silence curse zones',
+    rime_giant: 'Icebreaker cone',
+    thunder_warden: 'Lightning spear line',
+    buried_monarch: 'Sandstorm wall and tomb guardians',
+    abyssal_gatekeeper: 'Tentacle drag zones',
+    rift_monarch: 'Reality-tear blink explosion',
   };
   const bossStyle = definition.combat && definition.combat.bossStyle;
   if (signatureTraits[bossStyle]) traits.push(signatureTraits[bossStyle]);

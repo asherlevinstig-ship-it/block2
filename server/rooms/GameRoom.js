@@ -5568,6 +5568,9 @@ class GameRoom extends Room {
       boss_charge: 'Boss Charge', boss_spikes: 'Ground Spikes', grave_ring: 'Grave Ring',
       falling_rock: 'Falling Rock', keeper_roots: 'Keeper Roots', boss_control_roots: 'Control Roots', drowned_tide: 'Drowned Tide',
       ossuary_wave: 'Ossuary Wave', blighted_roots: 'Blighted Roots', bandit_captain: 'Captain Cleave',
+      cinder_flames: 'Molten Forge', castellan_keep: 'Rune of the Keep', prior_silence: 'Sacred Silence',
+      rime_icebreaker: 'Icebreaker Smash', thunder_spear: 'Lightning Spear', buried_sandstorm: 'Sandstorm Walls',
+      abyssal_tentacle: 'Tentacle Drag', rift_tear: 'Reality Tear',
       caravan_bandit: 'Caravan Bandit', brute: 'Brute Slam', flanker: 'Pack Lunge',
       quickshot: 'Quick Shot', mire_poison: 'Mire Poison', fall: 'Hard Landing',
     };

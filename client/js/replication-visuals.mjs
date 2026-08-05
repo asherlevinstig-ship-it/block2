@@ -363,7 +363,7 @@ function tickEncounterReadability(m,dt,t){
   if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
   if(r.state==='retreat'){u.label.material.color.set(0xffd26b);if(u.ring)u.ring.material.color.set(0xffc34d);}else if(u.ring)u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
   if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
-  else if(u.tell){const warning=['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind'].includes(r.state);u.tell.visible=warning;if(u.attackStatus)u.attackStatus.visible=warning;if(u.stunStatus)u.stunStatus.visible=r.state==='stun';if(u.frozenStatus)u.frozenStatus.visible=r.state==='frozen';if(warning){const charge=Math.min(1,(m.aT||0)/(r.state==='captainCleave'?.9:.7));u.tell.scale.setScalar(.72+charge*.28+Math.sin(t*18)*.025);u.tell.material.opacity=.42+charge*.5;}}
+  else if(u.tell){const warning=['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind'].includes(r.state);u.tell.visible=warning;if(u.attackStatus)u.attackStatus.visible=warning;if(u.stunStatus)u.stunStatus.visible=r.state==='stun';if(u.frozenStatus)u.frozenStatus.visible=r.state==='frozen';if(warning){const charge=Math.min(1,(m.aT||0)/(r.state==='captainCleave'?.9:.7));u.tell.scale.setScalar(.72+charge*.28+Math.sin(t*18)*.025);u.tell.material.opacity=.42+charge*.5;}}
   if(m.wagon){const wreck=r.kind==='caravan_wreck',damaged=pct<.65,critical=pct<.3;m.grp.rotation.z=wreck?.22:0;if(m.mats[0])m.mats[0].color.set(wreck?0x34271f:critical?0x49301f:damaged?0x5b3822:0x704321);if((damaged||wreck)&&m.grp.visible&&Math.random()<dt*(wreck?18:critical?14:6))spawnParticle({x:m.grp.position.x+(Math.random()-.5),y:m.grp.position.y+1.2,z:m.grp.position.z+(Math.random()-.5),vx:(Math.random()-.5)*.25,vy:.8,vz:(Math.random()-.5)*.25,life:1,grav:-.1,r:.28,g:.28,b:.28});}
 }
 function makeCaravanWagon(wrecked){
@@ -639,7 +639,7 @@ function netMobTick(m, dt, t){
   const st=r.state||'';
   if(st!==m.lastState){
     m.lastState=st; m.aT=0;
-    if(['bruteWind','packWind','graveWind','captainCleave','slamWind','bossMeleeWind','graveRingWind','chargeWind','volleyWind','spikeWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind'].includes(st)&&
+    if(['bruteWind','packWind','graveWind','captainCleave','slamWind','bossMeleeWind','graveRingWind','chargeWind','volleyWind','spikeWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind'].includes(st)&&
        m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<11&&
        (m.boss||m.elite||m.kind==='bandit_captain'||m.kind==='bandit_brute'||m.kind==='redclaw'||m.kind==='gale_stalker'))SFX.slamWarn();
     if(st==='draw'&&m.kind==='sun_archer'&&m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<14)ringPulse(p.x,p.y+.08,p.z,.72,0xffd34f,.22);
@@ -698,8 +698,8 @@ function netMobTick(m, dt, t){
       if(Math.random()<dt*10)
           spawnParticle({x:p.x+m.cdx*k2*1.35, y:p.y+.15, z:p.z+m.cdz*k2*1.35,
           vx:0, vy:.5, vz:0, life:.3, grav:0, r:.85, g:.55, b:.15});
-  } else if(st==='foremanWind'||st==='regentWind'||st==='rootWind'||st==='controlWind'||st==='ossuaryWind'||st==='blightWind'||st==='watcherWind'){
-    const col=st==='foremanWind'?[.9,.45,.16]:st==='regentWind'?[.18,.7,1]:(st==='rootWind'||st==='controlWind')?[.25,.85,.32]:st==='ossuaryWind'?[.78,.68,.45]:st==='blightWind'?[.45,.95,.2]:[.68,.45,1];
+  } else if(st==='foremanWind'||st==='regentWind'||st==='rootWind'||st==='controlWind'||st==='ossuaryWind'||st==='blightWind'||st==='watcherWind'||st==='cinderWind'||st==='castellanWind'||st==='choirWind'||st==='priorWind'||st==='rimeWind'||st==='thunderWind'||st==='buriedWind'||st==='abyssalWind'||st==='riftWind'){
+    const col=st==='foremanWind'||st==='cinderWind'?[.9,.45,.16]:st==='regentWind'||st==='abyssalWind'?[.18,.7,1]:st==='thunderWind'?[.25,.82,1]:st==='rimeWind'||st==='choirWind'?[.64,.94,1]:(st==='rootWind'||st==='controlWind')?[.25,.85,.32]:st==='ossuaryWind'||st==='castellanWind'||st==='buriedWind'?[.78,.68,.45]:st==='blightWind'?[.45,.95,.2]:[.68,.45,1];
     m.arms[0].rotation.x=m.arms[1].rotation.x=-1.35;
     if(Math.random()<dt*38)spawnParticle({x:p.x+(Math.random()-.5)*2.4,y:p.y+.15+Math.random()*2,z:p.z+(Math.random()-.5)*2.4,vx:0,vy:.45,vz:0,life:.4,grav:0,r:col[0],g:col[1],b:col[2]});
   } else if(st==='stun'){
@@ -933,6 +933,33 @@ function netFx(m){
     showName('Drowned Tide - leave the outer ring!');
   } else if(m.t==='tideBurst'){
     ringPulse(m.x,m.y+.08,m.z,7,0x38bdf8,.4);burst(m.x,m.y+.2,m.z,[.15,.65,1],34,6,1.5,.55);camShake=Math.max(camShake,.3);
+  } else if(m.t==='bossStyleWarn'){
+    SFX.slamWarn();
+    const colors={cinder_smith:0xff5a1e,castellan:0xf4c95d,choir:0xa5f3fc,void_prior:0x7c3aed,rime_giant:0x8eeaff,thunder_warden:0x38bdf8,buried_monarch:0xfacc15,abyssal_gatekeeper:0x22d3ee,rift_monarch:0xf472b6};
+    const labels={cinder_smith:'Molten Forge - leave the fire!',castellan:'Rune of the Keep - avoid the walls!',choir:'Shard Barrage - leave the lanes!',void_prior:'Sacred Silence - move!',rime_giant:'Icebreaker - get out of the cone!',thunder_warden:'Lightning Spear - sidestep!',buried_monarch:'Sandstorm Walls - find the pocket!',abyssal_gatekeeper:'Tentacle Drag - move!',rift_monarch:'Reality Tear - scatter!'};
+    const col=colors[m.style]||0xffd45c,pat=m.pat||'';
+    if(pat==='choir'||pat==='thunder'||pat==='rime'){
+      const dx=m.dx||0,dz=m.dz||1,w=pat==='choir'?1.05:pat==='rime'?1.2:.36;
+      for(const off of pat==='choir'?[-.72,-.36,0,.36,.72]:[-w,0,w]){
+        const ca=Math.cos(off),sa=Math.sin(off),vx=dx*ca-dz*sa,vz=dx*sa+dz*ca;
+        energyTrailVfx(m.x,m.y+1.25,m.z,m.x+vx*(pat==='thunder'?12:9),m.y+1.25,m.z+vz*(pat==='thunder'?12:9),col,.045,.75,.72);
+      }
+    }else if(pat==='buried'||pat==='castellan'){
+      ringPulse(m.x,m.y+.08,m.z,pat==='buried'?8.4:6.8,col,1.25);ringPulse(m.x,m.y+.09,m.z,pat==='buried'?2.8:2.5,0x1b1208,1.25);
+    }else if(pat==='rift'){
+      ringPulse(m.x,m.y+.08,m.z,3.4,col,1.05);
+      for(let i=0;i<12;i++){const a=i/12*6.283,r=1.2+(i%3)*.55;spawnParticle({x:m.x+Math.cos(a)*r,y:m.y+.45+(i%4)*.3,z:m.z+Math.sin(a)*r,vx:0,vy:.18,vz:0,life:.75,grav:0,r:.95,g:.25,b:.9});}
+    }else{
+      for(const q of m.targets||[])ringPulse(q.x,9.08,q.z,pat==='prior'||pat==='abyssal'?2.4:2.15,col,1.05);
+    }
+    showName(labels[m.style]||'Boss signature - move!');
+  } else if(m.t==='bossStyleBurst'){
+    const c={cinder_smith:[1,.34,.08],castellan:[.95,.75,.36],choir:[.64,.94,1],void_prior:[.48,.25,.92],rime_giant:[.72,.94,1],thunder_warden:[.32,.82,1],buried_monarch:[.95,.7,.22],abyssal_gatekeeper:[.18,.85,.92],rift_monarch:[.95,.25,.9]}[m.style]||[1,.85,.35];
+    const hex=new THREE.Color(c[0],c[1],c[2]).getHex();
+    if(m.targets&&m.targets.length)for(const q of m.targets){burst(q.x,9.35,q.z,c,20,2.6,2.5,.55);ringPulse(q.x,9.08,q.z,2.2,hex,.32);}
+    burst(m.x,m.y+1,m.z,c,34,5.6,3.2,.72);ringPulse(m.x,m.y+.08,m.z,m.style==='buried_monarch'?8:m.style==='castellan'?6.8:3.4,hex,.38);
+    if(m.style==='thunder_warden')addLightningBeam(m.x,m.y+2,m.z,m.x+(m.dx||0)*10,m.y+1.2,m.z+(m.dz||1)*10,.9);
+    camShake=Math.max(camShake,.42);
   } else if(m.t==='graveRing'){
     SFX.boom(); camShake=Math.max(camShake,.42);
     ringPulse(m.x,m.y+.08,m.z,6.2,0x7c3aed,.42);

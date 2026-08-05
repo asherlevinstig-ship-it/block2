@@ -2535,6 +2535,11 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(visuals,/meleeWarn/);
   assert.match(visuals,/rangedWarn/);
   assert.match(visuals,/volleyWarn/);
+  assert.match(visuals,/bossStyleWarn/);
+  assert.match(visuals,/bossStyleBurst/);
+  assert.match(visuals,/cinderWind/);
+  assert.match(visuals,/thunderWind/);
+  assert.match(visuals,/riftWind/);
   assert.match(visuals,/combatReact/);
   assert.match(visuals,/function markMobReaction/);
   assert.match(visuals,/applyMobReactionPose/);
@@ -2558,6 +2563,8 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(world,/buttonLabel:'RESPAWN IN TOWN'/);
   assert.match(world,/function applyDeathRespawnVitals\(payload=null\)/);
   assert.match(world,/deathRespawnHp\(\)/);
+  assert.match(world,/cinder_flames/);
+  assert.match(world,/rift_tear/);
   assert.doesNotMatch(world,/onRespawn:\(\)=>\{hp=maxHp\(\);sp=maxSp\(\);hunger=maxHunger\(\);renderBars\(\);\}/);
   assert.match(world,/deathRespawnHandler=\(\)=>\{/);
   assert.match(world,/document\.body\.classList\.add\('death-active'\)/);

@@ -9053,6 +9053,14 @@ function deathCauseText(source){
   if(s.indexOf('keeper_roots')>=0||s.indexOf('blighted_roots')>=0) return 'Snared by roots';
   if(s.indexOf('drowned_tide')>=0) return 'Swept away by the Drowned Tide';
   if(s.indexOf('ossuary_wave')>=0) return 'Shattered by the ossuary wave';
+  if(s.indexOf('cinder_flames')>=0) return 'Consumed by the Cinder Smithâ€™s forge';
+  if(s.indexOf('castellan_keep')>=0) return 'Crushed by the Hollow Castellanâ€™s keep';
+  if(s.indexOf('prior_silence')>=0) return 'Judged by the Silent Prior';
+  if(s.indexOf('rime_icebreaker')>=0) return 'Frozen by the Rimebound Giant';
+  if(s.indexOf('thunder_spear')>=0) return 'Pierced by the Thunder Warden';
+  if(s.indexOf('buried_sandstorm')>=0) return 'Buried by the Monarchâ€™s sandstorm';
+  if(s.indexOf('abyssal_tentacle')>=0) return 'Dragged under by the Abyssal Gatekeeper';
+  if(s.indexOf('rift_tear')>=0) return 'Unmade by the Rift Monarch';
   if(s.indexOf('arrow')>=0||s.indexOf('quickshot')>=0) return 'Shot by a ranged enemy';
   if(s.indexOf('brute')>=0) return 'Crushed by a brute slam';
   if(s.indexOf('flanker')>=0) return 'Taken down by a pack lunge';
@@ -9193,7 +9201,7 @@ const mobs=[];
 let mobSpawnT=2;
 const BATTLE_MUSIC_CLOSE_RANGE=7;
 const BATTLE_MUSIC_ACTIVE_RANGE=22;
-const BATTLE_MUSIC_STATES=new Set(['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind']);
+const BATTLE_MUSIC_STATES=new Set(['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind']);
 function isBattleMusicMob(m){
   if(!m||!m.grp||m.shadowAlly||m.demoDummy||m.animal||m.kind==='shadow_soldier')return false;
   if(m.dungeon||m.boss&&dim==='dungeon')return false;
