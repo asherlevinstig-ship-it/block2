@@ -2444,6 +2444,22 @@ function tickFishing(now,dt){
 }
 function makeFishingVisuals(){
   if(fishingVisuals)return fishingVisuals;
+  const rodGroup=new THREE.Group();
+  rodGroup.name='fishing-rod-worldspace';
+  const woodMat=new THREE.MeshLambertMaterial({color:0x7c4a21});
+  const wrapMat=new THREE.MeshLambertMaterial({color:0xd6b15f});
+  const reelMat=new THREE.MeshLambertMaterial({color:0xd7e7f7,emissive:0x111827});
+  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.018,.034,1.18,8),woodMat);
+  rod.position.set(0,.2,0);rod.rotation.z=-.34;
+  const tip=new THREE.Mesh(new THREE.CylinderGeometry(.007,.014,.42,8),woodMat);
+  tip.position.set(.21,.82,0);tip.rotation.z=-.56;
+  const grip=new THREE.Mesh(new THREE.CylinderGeometry(.045,.052,.25,8),wrapMat);
+  grip.position.set(-.18,-.34,0);grip.rotation.z=-.34;
+  const reel=new THREE.Mesh(new THREE.TorusGeometry(.072,.012,8,18),reelMat);
+  reel.position.set(-.045,-.1,.05);reel.rotation.y=Math.PI/2;
+  const tipAnchor=new THREE.Object3D();tipAnchor.position.set(.36,1.03,0);
+  rodGroup.add(rod,tip,grip,reel,tipAnchor);
+  rodGroup.visible=false;rodGroup.frustumCulled=false;scene.add(rodGroup);
   const lineMat=new THREE.LineBasicMaterial({color:0xdaf7ff,transparent:true,opacity:.82});
   const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),lineMat);
   line.name='fishing-line';
@@ -2463,10 +2479,15 @@ function makeFishingVisuals(){
   bobberGroup.add(bobTop,bobBot,ring);
   bobberGroup.visible=false;
   scene.add(bobberGroup);
-  fishingVisuals={line,bobberGroup,ring};
+  fishingVisuals={rodGroup,rod,tip,grip,reel,tipAnchor,line,bobberGroup,ring};
   return fishingVisuals;
 }
 function fishingRodTipWorld(){
+  const v=makeFishingVisuals();
+  if(v&&v.tipAnchor&&v.rodGroup&&v.rodGroup.visible){
+    v.rodGroup.updateMatrixWorld(true);
+    return v.tipAnchor.getWorldPosition(new THREE.Vector3());
+  }
   const yaw=Number(player.yaw)||0;
   return new THREE.Vector3(
     player.pos.x+Math.sin(yaw)*.55+Math.cos(yaw)*.34,
@@ -2474,9 +2495,32 @@ function fishingRodTipWorld(){
     player.pos.z+Math.cos(yaw)*.55-Math.sin(yaw)*.34
   );
 }
+function updateFishingRodVisual(v,now,dt,active){
+  const hasRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
+  const nearby=!active&&locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&hasRod&&nearbyFishingWaterInfo()!=null;
+  v.rodGroup.visible=active||nearby;
+  if(!v.rodGroup.visible)return;
+  const forward=new THREE.Vector3();camera.getWorldDirection(forward).normalize();
+  const right=new THREE.Vector3().crossVectors(forward,camera.up).normalize();
+  const up=new THREE.Vector3().copy(camera.up).normalize();
+  const castAge=(now-(fishingState.castVisualStart||now))/1000;
+  const cast=Math.max(0,1-Math.min(1,castAge/.55));
+  const fight=fishingState.phase==='fight'?1:0;
+  const reel=!!(keys&&keys.KeyF)&&fight;
+  const base=new THREE.Vector3().copy(camera.position)
+    .addScaledVector(forward,.82-cast*.08)
+    .addScaledVector(right,.44)
+    .addScaledVector(up,-.42+cast*.08+Math.sin(now*.012)*.01);
+  v.rodGroup.position.copy(base);
+  v.rodGroup.rotation.order='YXZ';
+  v.rodGroup.rotation.set((Number(player.pitch)||0)-.86-cast*.48-fight*.1,(Number(player.yaw)||0)-.22,-.42-cast*.85+fight*.13+Math.sin(now*.02)*(reel?.055:.018));
+  v.tip.rotation.z=-.56-(fishingState.tension||0)/100*.24-fight*.08;
+  v.reel.rotation.x+=dt*(reel?18:2.8);
+}
 function tickFishingVisuals(now,dt){
   const v=makeFishingVisuals();
   const active=fishingState.phase&&fishingState.phase!=='idle'&&fishingState.phase!=='cooldown';
+  updateFishingRodVisual(v,now,dt,active);
   v.line.visible=active&&!!fishingState.target;
   v.bobberGroup.visible=active&&!!fishingState.target;
   const fight=fishingState.phase==='fight'?1:0;
