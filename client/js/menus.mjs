@@ -7273,7 +7273,8 @@ function vmAbility(kind){
 Object.defineProperty(globalThis,'BlockcraftViewmodelFx',{value:Object.freeze({play:vmAbility}),configurable:true});
 function vmTick(dt, now){
   if(!vmReady) return;
-  vm.visible=!isMeditating && !cutscene;
+  const fishingActive=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active());
+  vm.visible=!isMeditating && !cutscene && !fishingActive;
   vmSwingT=Math.max(0,vmSwingT-dt*4.2);
   vmDip=Math.max(0,vmDip-dt*1.4);
   const dx2=player.pos.x-vmPX, dz2=player.pos.z-vmPZ;
