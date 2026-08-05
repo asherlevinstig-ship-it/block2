@@ -2191,6 +2191,11 @@ function updateEncounterPrompt(){
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
     return;
   }
+  if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active()){
+    encounterPromptEl.classList.add('hidden');
+    encounterPromptEl.innerHTML='';
+    return;
+  }
   const fishingPrompt=nearbyFishingWaterPrompt();
   if(fishingPrompt){
     encounterPromptEl.classList.remove('danger','hidden');
@@ -2290,8 +2295,10 @@ function fishingHud(){
 }
 function setFishingHud(html){
   const el=fishingHud();
-  el.classList.toggle('hidden',!html);
-  if(html&&el.innerHTML!==html)el.innerHTML=html;
+  const show=!!html;
+  el.classList.toggle('hidden',!show);
+  document.body.classList.toggle('fishing-placement-active',fishingState.phase==='aim');
+  if(show&&el.innerHTML!==html)el.innerHTML=html;
 }
 function fishingTargetScreenHud(){
   if(fishingTargetScreenEl)return fishingTargetScreenEl;
@@ -2305,8 +2312,9 @@ function fishingTargetScreenHud(){
 }
 function setFishingTargetScreenHud(show,x=0,y=0,text='⬥ CAST TARGET'){
   const el=fishingTargetScreenHud();
-  el.classList.toggle('hidden',!show);
-  if(!show)return;
+  const shouldShow=show&&fishingState.phase==='aim';
+  el.classList.toggle('hidden',!shouldShow);
+  if(!shouldShow)return;
   const margin=26;
   const clampedX=Math.max(margin,Math.min(innerWidth-margin,Number(x)||innerWidth*.5));
   const clampedY=Math.max(margin,Math.min(innerHeight-margin,Number(y)||innerHeight*.5));
@@ -2392,6 +2400,7 @@ function confirmFishingCast(){
 function cancelFishingPlacement(){
   if(fishingState.phase!=='aim')return false;
   Object.assign(fishingState,{phase:'idle',fish:null,target:null,aimOrigin:null,biteCue:'',castQuality:0});
+  document.body.classList.remove('fishing-placement-active');
   setFishingHud('');
   setFishingTargetScreenHud(false);
   fishingTargetDebug('aim.cancel');
@@ -2455,12 +2464,16 @@ function completeFishing(){
   showName('Landed: '+f.name);
   sysMsg('Fishing: caught <b>'+escHTML(f.name)+'</b> x'+count+'.','good');
   Object.assign(fishingState,{phase:'cooldown',nextAt:performance.now()+900,fish:null,target:null});
+  document.body.classList.remove('fishing-placement-active');
+  setFishingTargetScreenHud(false);
 }
 function loseFishing(reason){
   const f=fishingState.fish;
   showName(reason||'Fish escaped');
   if(f)sysMsg('Fishing: '+escHTML(f.name)+' escaped. Watch tension and hook timing.','minor');
   Object.assign(fishingState,{phase:'cooldown',nextAt:performance.now()+850,fish:null,reelHeld:false,target:null});
+  document.body.classList.remove('fishing-placement-active');
+  setFishingTargetScreenHud(false);
 }
 function fishingPrompt(){
   const p=fishingState.phase,f=fishingState.fish;
@@ -2476,8 +2489,8 @@ function fishingHudHTML(){
   if(p==='idle'||p==='cooldown')return '';
   if(p==='aim'){
     const q=Math.max(0,Math.min(100,(fishingState.castQuality||0)*100));
-    return '<div style="display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:8px"><b style="letter-spacing:.16em;color:#7dd3fc">CHOOSE CAST SPOT</b><span>G cast - Esc cancel</span></div>'+
-      '<div style="font-size:13px;color:#bfdbfe;margin-bottom:8px">'+escHTML(fishingState.biteCue||'Move the glowing target with WASD.')+'</div>'+
+    return '<div style="display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:6px"><b style="letter-spacing:.16em;color:#7dd3fc">CHOOSE CAST SPOT</b><span>WASD target · G cast · Esc cancel</span></div>'+
+      '<div style="font-size:12px;color:#bfdbfe;margin-bottom:7px">'+escHTML(fishingState.biteCue||'Move the glowing target with WASD.')+'</div>'+
       '<div>Cast Quality <span style="float:right">'+Math.round(q)+'%</span><div style="height:8px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden"><i style="display:block;height:100%;width:'+q+'%;background:#22d3ee"></i></div></div>';
   }
   const tension=Math.max(0,Math.min(100,fishingState.tension));
@@ -2493,7 +2506,7 @@ function fishingHudHTML(){
     '</div>';
 }
 function tickFishing(now,dt){
-  if(fishingState.phase==='cooldown'&&now>=fishingState.nextAt){fishingState.phase='idle';setFishingTargetScreenHud(false);}
+  if(fishingState.phase==='cooldown'&&now>=fishingState.nextAt){fishingState.phase='idle';document.body.classList.remove('fishing-placement-active');setFishingTargetScreenHud(false);}
   if(fishingState.phase==='aim'){
     updateFishingPlacementTarget(dt);
     tickFishingVisuals(now,dt);
@@ -2654,8 +2667,8 @@ function tickFishingVisuals(now,dt){
   const v=makeFishingVisuals();
   const active=fishingState.phase&&fishingState.phase!=='idle'&&fishingState.phase!=='cooldown';
   updateFishingRodVisual(v,now,dt,active);
-  v.line.visible=active&&!!fishingState.target;
-  v.bobberGroup.visible=active&&!!fishingState.target;
+  v.line.visible=active&&!!fishingState.target&&fishingState.phase!=='aim';
+  v.bobberGroup.visible=active&&!!fishingState.target&&fishingState.phase!=='aim';
   if(v.targetGroup)v.targetGroup.visible=fishingState.phase==='aim'&&!!fishingState.target;
   const fight=fishingState.phase==='fight'?1:0;
   const bite=fishingState.phase==='bite'?1:0;
@@ -2666,7 +2679,7 @@ function tickFishingVisuals(now,dt){
   const flee=fight?Math.sin(now*.0027)*(fishingState.fish&&fishingState.fish.power||1)*.18:0;
   v.bobberGroup.position.set(target.x+flee,target.y+bob,target.z+Math.cos(now*.0022)*flee);
   if(v.targetGroup){
-    v.targetGroup.position.set(target.x,target.y+.22,target.z);
+    v.targetGroup.position.set(target.x,target.y+.08,target.z);
     v.targetGroup.rotation.y=now*.002;
     const pulse=1+Math.sin(now*.009)*.1;
     v.targetRing.scale.setScalar(pulse);
@@ -2687,7 +2700,7 @@ function tickFishingVisuals(now,dt){
   v.ring.scale.setScalar(1+(bite?.45:0)+Math.sin(now*.008)*.08);
   v.ring.material.opacity=bite?.65:.28;
   const start=fishingRodTipWorld();
-  const end=fishingState.phase==='aim'&&v.targetGroup?v.targetGroup.position:v.bobberGroup.position;
+  const end=v.bobberGroup.position;
   const pos=v.line.geometry.attributes.position;
   pos.setXYZ(0,start.x,start.y,start.z);
   pos.setXYZ(1,end.x,end.y,end.z);

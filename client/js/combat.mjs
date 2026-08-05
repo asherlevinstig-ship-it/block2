@@ -4603,7 +4603,8 @@ function refreshPlayUi(){
   document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus && !(Array.isArray(activeObjectives)&&activeObjectives.length)));
   document.getElementById('landmap').classList.toggle('hidden', true);
   document.getElementById('eventhud').classList.toggle('hidden', true);
-  updateKeyPromptHud(showHud&&!modalInputOpen&&!claimMode&&!worldLoading&&!document.body.classList.contains('portal-transitioning')&&!document.body.classList.contains('chat-open')&&!cutscene);
+  const fishingActive=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active());
+  updateKeyPromptHud(showHud&&!fishingActive&&!modalInputOpen&&!claimMode&&!worldLoading&&!document.body.classList.contains('portal-transitioning')&&!document.body.classList.contains('chat-open')&&!cutscene);
   hintEl.classList.add('hidden');
   updateLandMinimap();
   syncHudLayerState();
