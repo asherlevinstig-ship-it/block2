@@ -561,7 +561,10 @@ class GameRoom extends Room {
         p.path = prof.S.path;
         p.job = JOB_IDS.has(prof.job) ? prof.job : '';
         p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
-        if (prof.activeRoom) this.persistActiveRoomPose(client, prof, p);
+        if (prof.activeRoom) {
+          this.syncLiveActiveRoomPlayer(client, prof, p);
+          this.persistActiveRoomPose(client, prof, p);
+        }
         else if (!p.dgn) prof.pos = [p.x, p.y, p.z];
         else {
           const prev = this.profiles.get(token);
@@ -1820,6 +1823,33 @@ class GameRoom extends Room {
     if (kind === 'taming_land') return 'taming_land';
     if (kind === 'fishing_lake') return 'fishing_lake';
     return 'tutorial-' + kind + '-' + String(client && client.sessionId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
+  }
+
+  syncLiveActiveRoomPlayer(client, prof, p) {
+    const activeRoom = sanitizeActiveRoom(prof && prof.activeRoom);
+    if (!activeRoom || !p) return false;
+    let kind = '', fallback = null;
+    if (activeRoom.dim === 'fishing_lake') {
+      kind = 'fishing_lake';
+      fallback = [345.5, 19.001, 902.5];
+    } else if (activeRoom.dim === 'taming_land') {
+      kind = 'taming_land';
+      fallback = [420.5, 21.05, 907.5];
+    } else if (activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[activeRoom.job]) {
+      kind = 'job_' + activeRoom.job;
+      const room = JOB_TUTORIAL_ROOMS[activeRoom.job];
+      fallback = [room.x + .5, room.g + 1.05, room.z + 14.5];
+    } else return false;
+    const expectedDgn = this.tutorialSpaceId(client, kind);
+    if (p.dim === 'tutorial' && p.dgn === expectedDgn) return false;
+    const spawn = sanitizeActiveRoomPosition(activeRoom, Array.isArray(prof.pos) ? prof.pos : fallback) || fallback;
+    p.dim = 'tutorial';
+    p.dgn = expectedDgn;
+    p.mount = '';
+    p.x = spawn[0];
+    p.y = spawn[1];
+    p.z = spawn[2];
+    return true;
   }
 
   persistActiveRoomPose(client, prof, p) {

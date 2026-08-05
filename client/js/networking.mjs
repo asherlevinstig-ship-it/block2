@@ -2856,10 +2856,13 @@ function netRestoreProfile(m){
     const restoreFishingLake=mergedActiveRoom&&mergedActiveRoom.dim==='fishing_lake'?mergedActiveRoom:null;
     if(restoreJobRoom){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job,{serverSynced:!!serverActiveRoom});
+      else if(!serverHasActiveRoom&&NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'job',job:restoreJobRoom.job});
     }else if(restoreTamingLand){
       if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true,serverSynced:serverHasActiveRoom});
+      else if(!serverHasActiveRoom&&NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'taming_land'});
     }else if(restoreFishingLake){
       if(dim!=='fishing_lake'&&dimensionsApi.enterFishingLake) dimensionsApi.enterFishingLake({resume:true,serverSynced:serverHasActiveRoom});
+      else if(!serverHasActiveRoom&&NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'fishing_lake'});
     }else if(serverHasActiveRoom&&dim==='job'&&dimensionsApi.exitJobTutorialRoom){
       dimensionsApi.exitJobTutorialRoom();
     }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
