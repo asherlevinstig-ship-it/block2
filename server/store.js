@@ -27,6 +27,7 @@ const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials')
 // ---------------- validation ----------------
 const INV_MAX = 36;
 const APPEARANCE_MIRROR_ID = 221;
+const FISHING_ROD_ID = 225;
 const MIRROR_BACKFILL_RECOVERY_MS = 30 * 24 * 60 * 60 * 1000;
 const DEITY_LEVEL = 60;
 const DEITY_POWER_IDS = Object.freeze(['flight', 'day_night', 'weather', 'invisibility']);
@@ -476,6 +477,48 @@ function ensureAppearanceMirrorInventory(profile) {
   const displaced = profile.inv[INV_MAX - 1];
   profile.inv[INV_MAX - 1] = mirror;
   return displaced || null;
+}
+
+function cleanAdminGrantId(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9@._-]/g, '');
+}
+
+function isAsherAdminAccount(account) {
+  if (!account || typeof account !== 'object') return false;
+  const ids = new Set([
+    cleanAdminGrantId(account.id),
+    cleanAdminGrantId(account.username),
+    cleanAdminGrantId(account.email),
+    cleanAdminGrantId(account.displayName),
+  ]);
+  return ids.has('teacher_1')
+    || ids.has('asherlevin85@gmail.com')
+    || ids.has('asherlevin85')
+    || ids.has('asherlevin');
+}
+
+function ensureInventoryItem(profile, item) {
+  if (!profile || !item || !item.id) return false;
+  if (!Array.isArray(profile.inv)) profile.inv = [];
+  if (profile.inv.some(slot => slot && (slot.id | 0) === (item.id | 0))) return false;
+  const slot = { id: clampI(item.id, 0, 999), count: clampI(item.count == null ? 1 : item.count, 1, 64) };
+  if (item.locked === true) slot.locked = true;
+  if (typeof item.source === 'string' && item.source) slot.source = cleanShortText(item.source, 'admin', 32);
+  const empty = profile.inv.findIndex(s => !s);
+  if (empty >= 0) {
+    profile.inv[empty] = slot;
+    return true;
+  }
+  if (profile.inv.length < INV_MAX) {
+    profile.inv.push(slot);
+    return true;
+  }
+  return false;
+}
+
+function ensureAsherAdminFishingRod(profile, account) {
+  if (!isAsherAdminAccount(account)) return false;
+  return ensureInventoryItem(profile, { id: FISHING_ROD_ID, count: 1, source: 'admin' });
 }
 
 function cleanName(name) {
@@ -1806,4 +1849,4 @@ function createStore(options = {}) {
   return new Json(env.DATA_DIR, { shardId: options.shardId });
 }
 
-module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };
+module.exports = { createStore, JsonStore, FirebaseStore, cleanShardId, sanitizeProfile, sanitizeWorldProgress, sanitizeLandClaims, mergeClientSave, defaultProfile, sanitizeChests, sanitizeFurnaces, sanitizeIncubations, sanitizeNestDragons, sanitizeGates, sanitizeTeams, sanitizeGuilds, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, sanitizeCosmeticUnlocks, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, meditationGrowthCapsForLevel, cleanToken, sanitizeActiveRoom, sanitizeActiveRoomPosition, ensureAsherAdminFishingRod, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS };

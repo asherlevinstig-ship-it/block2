@@ -4,7 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const { createConfiguredAuthBackend } = require('./mysql-auth');
 const { MySqlGameQuestionStore } = require('./mysql-game-questions');
-const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout } = require('./store');
+const { createStore, sanitizeProfile, defaultProfile, TUTORIAL_VERSIONS, sanitizeUtilityUnlocks, sanitizeUtilityLoadout, ensureAsherAdminFishingRod } = require('./store');
 const { resetLivePlayerProfiles, updateLivePlayerProfiles } = require('./profile-reset');
 const { accountSummary, clearIdentityTrace, recentIdentityTrace, recordIdentityTrace, shortHash } = require('./identity-trace');
 const { clearRoomLifecycleTrace, recentRoomLifecycleTrace } = require('./room-lifecycle-trace');
@@ -688,6 +688,9 @@ class AuthService {
         return { name: '', nameSet: false, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
       }
       const profile = sanitizeProfile(raw);
+      if (ensureAsherAdminFishingRod(profile, account)) {
+        await this.getProfileStore().savePlayer(id, profile);
+      }
       recordIdentityTrace('auth.profile.lookup', {
         account: accountSummary(account),
         profile: {

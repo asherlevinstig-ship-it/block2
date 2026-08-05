@@ -9,7 +9,7 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS } = require('../store');
+const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS, ensureAsherAdminFishingRod } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
@@ -1035,6 +1035,7 @@ class GameRoom extends Room {
         }
       }
       if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
+      if (ensureAsherAdminFishingRod(prof, auth)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);

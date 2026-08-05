@@ -1,7 +1,7 @@
 const { matchMaker, CloseCode } = require('@colyseus/core');
 const { StateView } = require('@colyseus/schema');
 const { State, Player } = require('../schema');
-const { createStore, sanitizeProfile, cleanToken, defaultProfile } = require('../store');
+const { createStore, sanitizeProfile, cleanToken, defaultProfile, ensureAsherAdminFishingRod } = require('../store');
 const D = require('../dungeon');
 const { GameRoom } = require('./GameRoom');
 const W = require('../world');
@@ -182,6 +182,7 @@ class DungeonRoom extends GameRoom {
     }
     this.tokens.set(client.sessionId, token);
     if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
+    if (ensureAsherAdminFishingRod(prof, auth)) this.dirtyPlayers.add(token);
 
     const inst = this.instance;
     const ex = inst.entrance;
