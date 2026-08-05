@@ -2593,6 +2593,23 @@ test('admin quick gate opens a ranked dungeon picker instead of auto-cycling',()
   assert.match(styles,/\.admindungeon-cards/);
 });
 
+test('admin zero hotkey opens a dungeon boss model gallery',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const visuals=fs.readFileSync(path.join(__dirname,'..','..','client','js','replication-visuals.mjs'),'utf8');
+  assert.match(combat,/e\.code===['"]Digit0['"][\s\S]{0,260}AUTH_UI&&AUTH_UI\.isAdminAccount&&AUTH_UI\.isAdminAccount\(\)/);
+  assert.match(combat,/BlockcraftAdminBossGallery/);
+  assert.match(combat,/showName\('Dungeon boss model gallery'\)/);
+  assert.match(networking,/BlockcraftAdminBossGallery=Object\.freeze/);
+  assert.match(networking,/showDungeonBossGallery/);
+  assert.match(visuals,/function showDungeonBossGallery\(\)/);
+  assert.match(visuals,/BlockcraftDungeonPools/);
+  assert.match(visuals,/makeGateBoss\(\)/);
+  assert.match(visuals,/decorateBossStyle\(model,ref\)/);
+  for (const style of ['cinder_smith','castellan','choir','void_prior','rime_giant','thunder_warden','buried_monarch','abyssal_gatekeeper','rift_monarch'])
+    assert.match(visuals,new RegExp(style.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\{'));
+});
+
 test('first ten minute guidance teaches subject focus and explicit quest acceptance',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');

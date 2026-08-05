@@ -5214,6 +5214,13 @@ addEventListener('keydown', e=>{
     if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();
     return;
   }
+  if(e.code==='Digit0'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()){
+    e.preventDefault();
+    const gallery=globalThis.BlockcraftAdminBossGallery;
+    if(gallery&&gallery.show&&gallery.show())showName('Dungeon boss model gallery');
+    else showName('Boss gallery is still loading');
+    return;
+  }
   if(e.code==='Digit9'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()){
     e.preventDefault();
     if(dim==='dungeon'){

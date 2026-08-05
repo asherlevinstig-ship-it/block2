@@ -3592,7 +3592,12 @@ function faceTexture(look){
   });
 }
 const REPLICATION_VISUALS=createReplicationVisuals({NET,player,familiarReaction:kind=>COMPANIONS.familiarReaction(kind),companions:()=>COMPANIONS});
-const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,dragonCommandFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate}=REPLICATION_VISUALS;
+const {isAnimalKind,netAddMob,netRemoveMob,netMobTick,netFx,netDragonAbilityFx,netDragonCareFx,dragonCommandFx,addLightningBeam,netSpawnProjectile,netBiomeStatusFx,netBiomeHitFx,netMirrorGate,showDungeonBossGallery,clearDungeonBossGallery}=REPLICATION_VISUALS;
+globalThis.BlockcraftAdminBossGallery=Object.freeze({
+  show:()=>showDungeonBossGallery(),
+  clear:()=>clearDungeonBossGallery(),
+  toggle:()=>showDungeonBossGallery(),
+});
 
 const COMPANIONS=createCompanionSystem({
   NET,

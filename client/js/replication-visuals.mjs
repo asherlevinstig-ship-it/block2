@@ -127,14 +127,33 @@ function decorateBossStyle(m,ref){
     ossuary:{col:[.78,.68,.45],hex:0xd8d2bc,parts:()=>{if(m.head)for(const sx of [-.24,-.08,.08,.24])attachBox(m.head,[.06,.32,.06],[sx,.44,.04],0xd8d2bc,[0,0,sx*.9]);for(let i=0;i<5;i++)attachBox(m.grp,[.08,.34-i*.035,.08],[0,1.58-i*.18,-.28],0xd8d2bc,[.35,0,0]);}},
     blight:{col:[.42,.92,.22],hex:0x9cff3a,parts:()=>{if(m.head){for(const sx of [-.18,.18]){const cap=new THREE.Mesh(new THREE.SphereGeometry(.17,8,5,0,Math.PI*2,0,Math.PI/2),material(0x9cff3a));cap.position.set(sx,.4,.04);m.head.add(cap);}}}},
     watcher:{col:[.58,.42,.95],hex:0x9b7cff,parts:()=>{if(m.head)attachBox(m.head,[.5,.1,.08],[0,.04,.31],0x9b7cff,[0,0,0],true);for(const sx of [-.5,.5])attachBox(m.grp,[.24,.38,.2],[sx,1.5,.02],0x5b4b88);}},
+    cinder_smith:{col:[.95,.34,.12],hex:0xff5a1e,parts:()=>{if(m.head)attachBox(m.head,[.48,.12,.36],[0,.36,.02],0x3a1a12);for(const sx of [-.44,.44])attachBox(m.grp,[.18,.5,.18],[sx,1.32,-.12],0x7c2d12);if(m.arms&&m.arms[1])attachBox(m.arms[1],[.42,.18,.26],[0,-.04,.92],0xff8a2a,[0,0,.2],true);}},
+    castellan:{col:[.48,.48,.56],hex:0xf4c95d,parts:()=>{if(m.head){attachBox(m.head,[.54,.08,.46],[0,.35,.02],0xc9a13b);for(const sx of [-.2,.2])attachBox(m.head,[.08,.26,.08],[sx,.48,.04],0xc9a13b,[0,0,sx>0?-.35:.35]);}for(const sx of [-.52,.52])attachBox(m.grp,[.24,.5,.28],[sx,1.42,.02],0x5a5170);}},
+    choir:{col:[.72,.9,1],hex:0x9eeaff,parts:()=>{if(m.head)for(const sx of [-.18,0,.18])attachBox(m.head,[.06,.28,.06],[sx,.43,.05],0xdff8ff,[0,0,sx*-1.1],true);markCrystalHalo(m.grp,0x9eeaff);}},
+    void_prior:{col:[.34,.24,.58],hex:0x7c3aed,parts:()=>{if(m.head)attachBox(m.head,[.42,.08,.08],[0,.08,.31],0xb394ff,[0,0,0],true);for(const sx of [-.28,.28])attachBox(m.grp,[.08,.72,.08],[sx,1.54,-.26],0x170b2e,[.28,0,sx]);}},
+    rime_giant:{col:[.55,.84,1],hex:0x8eeaff,parts:()=>{if(m.head)for(const sx of [-.24,0,.24])attachBox(m.head,[.08,.42,.08],[sx,.46,.02],0xc9f6ff,[0,0,sx*.75],true);for(const sx of [-.5,.5])attachBox(m.grp,[.2,.58,.2],[sx,1.46,.02],0x5bbce0);m.grp.scale.multiplyScalar(1.1);}},
+    thunder_warden:{col:[.42,.5,.9],hex:0x7dd3fc,parts:()=>{if(m.head)attachBox(m.head,[.5,.08,.08],[0,.07,.31],0x7dd3fc,[0,0,0],true);for(const sx of [-.42,.42])attachBox(m.grp,[.08,.8,.08],[sx,1.45,-.22],0x9eeaff,[.45,0,sx*.5],true);}},
+    buried_monarch:{col:[.72,.5,.28],hex:0xfacc15,parts:()=>{if(m.head){attachBox(m.head,[.56,.1,.5],[0,.34,.02],0xc9a13b);for(const sx of [-.24,-.08,.08,.24])attachBox(m.head,[.06,.3,.06],[sx,.5,.06],0xfacc15,[0,0,sx*.7],true);}attachBox(m.grp,[.7,.12,.18],[0,1.58,-.18],0xc9a13b);}},
+    abyssal_gatekeeper:{col:[.12,.42,.55],hex:0x22d3ee,parts:()=>{if(m.head)attachBox(m.head,[.48,.08,.08],[0,.05,.31],0x67e8f9,[0,0,0],true);for(const sx of [-.36,.36])attachBox(m.grp,[.08,.7,.08],[sx,1.38,-.26],0x083344,[.4,0,sx*.5]);markCrystalHalo(m.grp,0x22d3ee,.72);}},
+    rift_monarch:{col:[.65,.22,.72],hex:0xf472b6,parts:()=>{if(m.head){attachBox(m.head,[.5,.1,.08],[0,.06,.31],0xf472b6,[0,0,0],true);for(const sx of [-.22,.22])attachBox(m.head,[.08,.48,.08],[sx,.5,.02],0x1e1b4b,[0,0,sx>0?-1:1]);}markCrystalHalo(m.grp,0xf472b6,1.08);if(m.arms&&m.arms[0])attachBox(m.arms[0],[.12,.12,.5],[0,-.04,.92],0x38bdf8,[0,0,.6],true);}},
     ancient_warden:{col:[.06,.22,.26],hex:0x35d0c8,parts:()=>{if(m.head){attachBox(m.head,[.56,.12,.1],[0,.06,.32],0x78fff2,[0,0,0],true);for(const sx of [-.24,.24])attachBox(m.head,[.08,.5,.08],[sx,.42,.02],0x0f2f35,[0,0,sx>0?-.28:.28]);}for(const sx of [-.52,.52])attachBox(m.grp,[.22,.72,.24],[sx,1.38,.02],0x12353a);attachBox(m.grp,[.7,.12,.16],[0,1.62,-.18],0x35d0c8,[0,0,0],true);}},
   };
   const spec=styles[s];if(!spec)return;tintModel(m,spec.col);spec.parts();
   const aura=new THREE.Mesh(new THREE.TorusGeometry(1.22,.045,8,42),new THREE.MeshBasicMaterial({color:spec.hex,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false}));
   aura.rotation.x=Math.PI/2;aura.position.y=.09;m.grp.add(aura);m.styleAura=aura;
 }
+function markCrystalHalo(parent,hex,scale=1){
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(.62*scale,.035,6,30),new THREE.MeshBasicMaterial({color:hex,transparent:true,opacity:.58,blending:THREE.AdditiveBlending,depthWrite:false}));
+  ring.rotation.x=Math.PI/2;ring.position.y=1.78;parent.add(ring);
+  for(let i=0;i<4;i++){
+    const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.09*scale),new THREE.MeshBasicMaterial({color:hex,transparent:true,opacity:.86,depthWrite:false}));
+    const a=i/4*Math.PI*2;gem.position.set(Math.cos(a)*.62*scale,1.78,Math.sin(a)*.62*scale);parent.add(gem);
+  }
+}
 const ENCOUNTER_NAMES={bandit:'Bandit',bandit_archer:'Bandit Archer',bandit_shield:'Shield Bandit',bandit_scout:'Bandit Scout',bandit_brute:'Bandit Brute',bandit_captain:'Bandit Captain',caravan_guard:'Caravan Guard',caravan_merchant:'Road Merchant',wounded_hunter:'Wounded Hunter',pack_mule:'Pack Mule',caravan_wagon:'Merchant Wagon',caravan_wreck:'Wrecked Wagon',gale_stalker:'Gale Stalker',wind_archer:'Wind Archer',rootbound:'Rootbound',briar_archer:'Briar Archer',dune_husk:'Dune Husk',sun_archer:'Sun Archer',redclaw:'Redclaw',amber_archer:'Amber Archer',frost_wight:'Frost Wight',ice_archer:'Ice Archer',mirewalker:'Mirewalker',bog_archer:'Bog Archer'};
 const BIOME_NAME_COLOR={plains:'#d8f58c',forest:'#8fcf69',desert:'#ffd36a',mesa:'#ff8968',snowy:'#b9f4ff',swamp:'#a8ca72'};
+const BOSS_GALLERY_RANK_LABELS=['E','D','C','B','A'];
+let bossGallery=[];
 function textSprite(text,color='#ffffff',scale=1){
   const cv=document.createElement('canvas');cv.width=256;cv.height=64;const cx=cv.getContext('2d');cx.font='bold 26px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.strokeStyle='rgba(0,0,0,.9)';cx.lineWidth=7;cx.strokeText(text,128,32);cx.fillStyle=color;cx.fillText(text,128,32);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true,depthTest:false}));sp.scale.set(2.8*scale,.7*scale,1);return sp;
@@ -1417,6 +1436,48 @@ function netMirrorGate(){
   gate=closest;
 }
 
+function clearDungeonBossGallery(){
+  if(!bossGallery.length)return false;
+  for(const entry of bossGallery){
+    if(entry&&entry.grp)scene.remove(entry.grp);
+    if(entry&&entry.grp)disposeObjectTree(entry.grp);
+  }
+  bossGallery=[];
+  return true;
+}
+function showDungeonBossGallery(){
+  const pools=globalThis.BlockcraftDungeonPools;
+  if(!pools||!Array.isArray(pools.DUNGEON_POOLS))return false;
+  clearDungeonBossGallery();
+  const defs=[];
+  pools.DUNGEON_POOLS.forEach((ids,rank)=>ids.forEach((id,slot)=>{
+    const def=pools.dungeonDefinition?pools.dungeonDefinition(rank,slot,id):(pools.DUNGEON_DEFINITIONS&&pools.DUNGEON_DEFINITIONS[id])||{};
+    defs.push({rank,id,def});
+  }));
+  if(!defs.length)return false;
+  const yaw=Number(player&&player.yaw)||0,px=Number(player&&player.pos&&player.pos.x)||0,py=Number(player&&player.pos&&player.pos.y)||9,pz=Number(player&&player.pos&&player.pos.z)||0;
+  const fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw);
+  const cols=5,gapX=3.15,gapZ=3.65,start=(cols-1)*-.5,baseDist=8.5;
+  defs.forEach((entry,i)=>{
+    const col=i%cols,row=Math.floor(i/cols),x=px+fx*(baseDist+row*gapZ)+rx*((start+col)*gapX),z=pz+fz*(baseDist+row*gapZ)+rz*((start+col)*gapX);
+    const ref={kind:'boss',bossStyle:entry.def&&entry.def.combat&&entry.def.combat.bossStyle||'',displayName:entry.def&&entry.def.boss||'Gate Monarch',hp:100,maxHp:100,state:''};
+    const model=makeGateBoss();model.boss=true;model.ref=ref;model.hp=100;model.kind='boss';model.phase=i*.41;
+    model.grp.scale.setScalar(1.15+(entry.rank*.035));
+    decorateBossStyle(model,ref);
+    model.grp.position.set(x,py,z);
+    model.grp.rotation.y=Math.atan2(px-x,pz-z);
+    const label=textSprite((BOSS_GALLERY_RANK_LABELS[entry.rank]||'?')+' · '+(entry.def&&entry.def.boss||entry.id), '#ffe58a', .72);
+    label.position.y=3.25;model.grp.add(label);
+    const sub=textSprite(entry.def&&entry.def.name||entry.id, '#9eeaff', .52);
+    sub.position.y=2.82;model.grp.add(sub);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(1.18,.035,8,36),new THREE.MeshBasicMaterial({color:0xffd45c,transparent:true,opacity:.42,depthWrite:false}));
+    ring.rotation.x=Math.PI/2;ring.position.y=.06;model.grp.add(ring);
+    scene.add(model.grp);
+    bossGallery.push(model);
+  });
+  return bossGallery.length;
+}
+
 
   return Object.freeze({
     isAnimalKind,
@@ -1432,5 +1493,7 @@ function netMirrorGate(){
     netBiomeStatusFx,
     netBiomeHitFx,
     netMirrorGate,
+    showDungeonBossGallery,
+    clearDungeonBossGallery,
   });
 }
