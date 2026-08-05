@@ -2554,7 +2554,18 @@ function makeFishingVisuals(){
   bobberGroup.add(bobTop,bobBot,ring);
   bobberGroup.visible=false;
   scene.add(bobberGroup);
-  fishingVisuals={rodGroup,rod,tip,grip,reel,tipAnchor,line,bobberGroup,ring};
+  const targetGroup=new THREE.Group();
+  targetGroup.name='fishing-cast-target';
+  const targetMat=new THREE.MeshBasicMaterial({color:0x22d3ee,transparent:true,opacity:.88,depthWrite:false,blending:THREE.AdditiveBlending});
+  const targetRing=new THREE.Mesh(new THREE.TorusGeometry(.72,.035,8,56),targetMat);
+  targetRing.rotation.x=Math.PI/2;
+  const targetInner=new THREE.Mesh(new THREE.TorusGeometry(.24,.018,8,36),targetMat);
+  targetInner.rotation.x=Math.PI/2;targetInner.position.y=.03;
+  const targetBeam=new THREE.Mesh(new THREE.CylinderGeometry(.035,.12,1.1,10,1,true),targetMat);
+  targetBeam.position.y=.55;
+  targetGroup.add(targetRing,targetInner,targetBeam);
+  targetGroup.visible=false;targetGroup.frustumCulled=false;scene.add(targetGroup);
+  fishingVisuals={rodGroup,rod,tip,grip,reel,tipAnchor,line,bobberGroup,ring,targetGroup,targetRing,targetInner,targetBeam};
   return fishingVisuals;
 }
 function fishingRodTipWorld(){
@@ -2579,6 +2590,7 @@ function updateFishingRodVisual(v,now,dt,active){
   const castAge=(now-(fishingState.castVisualStart||now))/1000;
   const cast=Math.max(0,1-Math.min(1,castAge/.55));
   const fight=fishingState.phase==='fight'?1:0;
+  const aim=fishingState.phase==='aim'?1:0;
   const reel=!!(keys&&keys.KeyF)&&fight;
   const base=new THREE.Vector3().copy(camera.position)
     .addScaledVector(forward,.82-cast*.08)
@@ -2586,7 +2598,13 @@ function updateFishingRodVisual(v,now,dt,active){
     .addScaledVector(up,-.42+cast*.08+Math.sin(now*.012)*.01);
   v.rodGroup.position.copy(base);
   v.rodGroup.rotation.order='YXZ';
-  v.rodGroup.rotation.set((Number(player.pitch)||0)-.86-cast*.48-fight*.1,(Number(player.yaw)||0)-.22,-.42-cast*.85+fight*.13+Math.sin(now*.02)*(reel?.055:.018));
+  let rodYaw=Number(player.yaw)||0,rodPitch=Number(player.pitch)||0;
+  if(aim&&fishingState.target){
+    const dx=fishingState.target.x-base.x,dz=fishingState.target.z-base.z,dy=fishingState.target.y+.3-base.y,h=Math.max(.001,Math.hypot(dx,dz));
+    rodYaw=Math.atan2(dx,dz);
+    rodPitch=Math.atan2(dy,h);
+  }
+  v.rodGroup.rotation.set(rodPitch-.86-cast*.48-fight*.1,rodYaw-.22,-.42-cast*.85+fight*.13+aim*.28+Math.sin(now*.02)*(reel?.055:.018));
   v.tip.rotation.z=-.56-(fishingState.tension||0)/100*.24-fight*.08;
   v.reel.rotation.x+=dt*(reel?18:2.8);
 }
@@ -2596,17 +2614,27 @@ function tickFishingVisuals(now,dt){
   updateFishingRodVisual(v,now,dt,active);
   v.line.visible=active&&!!fishingState.target;
   v.bobberGroup.visible=active&&!!fishingState.target;
+  if(v.targetGroup)v.targetGroup.visible=fishingState.phase==='aim'&&!!fishingState.target;
   const fight=fishingState.phase==='fight'?1:0;
   const bite=fishingState.phase==='bite'?1:0;
   if(!fishingState.target)return;
   const target=fishingState.target;
-  const bob=Math.sin(now*.006)*.035+(bite?Math.sin(now*.04)*.09:0)+(fight?Math.sin(now*.014)*.055:0);
+  const aim=fishingState.phase==='aim'?1:0;
+  const bob=aim?Math.sin(now*.006)*.018:Math.sin(now*.006)*.035+(bite?Math.sin(now*.04)*.09:0)+(fight?Math.sin(now*.014)*.055:0);
   const flee=fight?Math.sin(now*.0027)*(fishingState.fish&&fishingState.fish.power||1)*.18:0;
   v.bobberGroup.position.set(target.x+flee,target.y+bob,target.z+Math.cos(now*.0022)*flee);
+  if(v.targetGroup){
+    v.targetGroup.position.set(target.x,target.y+.03,target.z);
+    v.targetGroup.rotation.y=now*.002;
+    const pulse=1+Math.sin(now*.009)*.1;
+    v.targetRing.scale.setScalar(pulse);
+    v.targetInner.scale.setScalar(1.15-pulse*.12);
+    v.targetBeam.material.opacity=aim?.42:.18;
+  }
   v.ring.scale.setScalar(1+(bite?.45:0)+Math.sin(now*.008)*.08);
   v.ring.material.opacity=bite?.65:.28;
   const start=fishingRodTipWorld();
-  const end=v.bobberGroup.position;
+  const end=fishingState.phase==='aim'&&v.targetGroup?v.targetGroup.position:v.bobberGroup.position;
   const pos=v.line.geometry.attributes.position;
   pos.setXYZ(0,start.x,start.y,start.z);
   pos.setXYZ(1,end.x,end.y,end.z);
