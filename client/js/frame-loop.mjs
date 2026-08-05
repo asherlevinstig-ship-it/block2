@@ -2284,7 +2284,7 @@ function fishingHud(){
   fishingHudEl=document.createElement('div');
   fishingHudEl.id='fishinghud';
   fishingHudEl.className='hidden';
-  fishingHudEl.style.cssText='position:fixed;left:50%;bottom:238px;transform:translateX(-50%);z-index:45;min-width:min(560px,80vw);max-width:80vw;padding:14px 18px;border:1px solid rgba(95,210,255,.65);border-radius:14px;background:rgba(4,13,24,.72);box-shadow:0 0 22px rgba(34,211,238,.18);color:#e8fbff;font-family:inherit;pointer-events:none;text-shadow:0 2px 2px #000;';
+  fishingHudEl.style.cssText='position:fixed;left:50%;bottom:292px;transform:translateX(-50%);z-index:78;min-width:min(560px,80vw);max-width:80vw;padding:14px 18px;border:1px solid rgba(95,210,255,.65);border-radius:14px;background:rgba(4,13,24,.72);box-shadow:0 0 22px rgba(34,211,238,.18);color:#e8fbff;font-family:inherit;pointer-events:none;text-shadow:0 2px 2px #000;';
   document.body.appendChild(fishingHudEl);
   return fishingHudEl;
 }
@@ -2298,17 +2298,20 @@ function fishingTargetScreenHud(){
   fishingTargetScreenEl=document.createElement('div');
   fishingTargetScreenEl.id='fishingtargethud';
   fishingTargetScreenEl.className='hidden';
-  fishingTargetScreenEl.style.cssText='position:fixed;z-index:44;min-width:92px;padding:6px 9px;border:1px solid rgba(34,211,238,.86);border-radius:999px;background:rgba(3,12,22,.72);box-shadow:0 0 18px rgba(34,211,238,.4);color:#dffbff;font-size:11px;letter-spacing:1.5px;text-align:center;text-shadow:0 2px 0 #000;pointer-events:none;transform:translate(-50%,-50%);';
-  fishingTargetScreenEl.innerHTML='CAST TARGET';
+  fishingTargetScreenEl.style.cssText='position:fixed;z-index:92;min-width:92px;padding:6px 9px;border:1px solid rgba(34,211,238,.86);border-radius:999px;background:rgba(3,12,22,.72);box-shadow:0 0 18px rgba(34,211,238,.4);color:#dffbff;font-size:11px;letter-spacing:1.5px;text-align:center;text-shadow:0 2px 0 #000;pointer-events:none;transform:translate(-50%,-50%);';
+  fishingTargetScreenEl.innerHTML='⬥ CAST TARGET';
   document.body.appendChild(fishingTargetScreenEl);
   return fishingTargetScreenEl;
 }
-function setFishingTargetScreenHud(show,x=0,y=0,text='CAST TARGET'){
+function setFishingTargetScreenHud(show,x=0,y=0,text='⬥ CAST TARGET'){
   const el=fishingTargetScreenHud();
   el.classList.toggle('hidden',!show);
   if(!show)return;
-  el.style.left=Math.round(x)+'px';
-  el.style.top=Math.round(y)+'px';
+  const margin=26;
+  const clampedX=Math.max(margin,Math.min(innerWidth-margin,Number(x)||innerWidth*.5));
+  const clampedY=Math.max(margin,Math.min(innerHeight-margin,Number(y)||innerHeight*.5));
+  el.style.left=Math.round(clampedX)+'px';
+  el.style.top=Math.round(clampedY)+'px';
   if(el.innerHTML!==text)el.innerHTML=text;
 }
 function fishingTargetDebug(reason,extra={},now=performance.now()){
@@ -2354,6 +2357,12 @@ function fishingWaterAtPoint(x,z,search=1.6){
 }
 function beginFishingCastPlacement(){
   if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive)return false;
+  const strayQ=document.getElementById('qwin');
+  if(strayQ&&!strayQ.classList.contains('hidden')){
+    strayQ.classList.add('hidden');
+    document.body.classList.remove('game-modal-open');
+    fishingTargetDebug('aim.closed-stray-qwin',{reason:'fishing-start'});
+  }
   if(!equippedFishingRod())return false;
   const water=nearbyFishingWaterInfo(8);
   if(!water)return false;
@@ -2587,16 +2596,18 @@ function makeFishingVisuals(){
   scene.add(bobberGroup);
   const targetGroup=new THREE.Group();
   targetGroup.name='fishing-cast-target';
-  const targetMat=new THREE.MeshBasicMaterial({color:0x22d3ee,transparent:true,opacity:.88,depthWrite:false,blending:THREE.AdditiveBlending});
-  const targetRing=new THREE.Mesh(new THREE.TorusGeometry(.72,.035,8,56),targetMat);
+  const targetMat=new THREE.MeshBasicMaterial({color:0x22d3ee,transparent:true,opacity:.98,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending});
+  const targetRing=new THREE.Mesh(new THREE.TorusGeometry(1.05,.052,8,72),targetMat);
   targetRing.rotation.x=Math.PI/2;
-  const targetInner=new THREE.Mesh(new THREE.TorusGeometry(.24,.018,8,36),targetMat);
+  const targetInner=new THREE.Mesh(new THREE.TorusGeometry(.36,.026,8,48),targetMat);
   targetInner.rotation.x=Math.PI/2;targetInner.position.y=.03;
-  const targetBeam=new THREE.Mesh(new THREE.CylinderGeometry(.035,.12,1.1,10,1,true),targetMat);
-  targetBeam.position.y=.55;
-  targetGroup.add(targetRing,targetInner,targetBeam);
+  const targetBeam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.18,1.65,12,1,true),targetMat);
+  targetBeam.position.y=.82;
+  const targetCore=new THREE.Mesh(new THREE.SphereGeometry(.18,14,10),targetMat);
+  targetCore.position.y=.08;
+  targetGroup.add(targetRing,targetInner,targetBeam,targetCore);
   targetGroup.visible=false;targetGroup.frustumCulled=false;scene.add(targetGroup);
-  fishingVisuals={rodGroup,rod,tip,grip,reel,tipAnchor,line,bobberGroup,ring,targetGroup,targetRing,targetInner,targetBeam};
+  fishingVisuals={rodGroup,rod,tip,grip,reel,tipAnchor,line,bobberGroup,ring,targetGroup,targetRing,targetInner,targetBeam,targetCore};
   return fishingVisuals;
 }
 function fishingRodTipWorld(){
@@ -2660,12 +2671,13 @@ function tickFishingVisuals(now,dt){
     const pulse=1+Math.sin(now*.009)*.1;
     v.targetRing.scale.setScalar(pulse);
     v.targetInner.scale.setScalar(1.15-pulse*.12);
-    v.targetBeam.material.opacity=aim?.62:.18;
+    if(v.targetCore)v.targetCore.scale.setScalar(.9+Math.sin(now*.012)*.22);
+    v.targetBeam.material.opacity=aim?.82:.18;
     if(aim){
       const projected=new THREE.Vector3(target.x,target.y+1.15,target.z).project(camera);
       const onScreen=projected.z>-1&&projected.z<1&&projected.x>=-1.25&&projected.x<=1.25&&projected.y>=-1.25&&projected.y<=1.25;
       const sx=(projected.x*.5+.5)*innerWidth,sy=(-projected.y*.5+.5)*innerHeight;
-      setFishingTargetScreenHud(onScreen,sx,sy,'CAST TARGET');
+      setFishingTargetScreenHud(true,sx,sy,onScreen?'⬥ CAST TARGET':'⬥ TARGET OFF-SCREEN');
       if(now-lastFishingTargetDebugAt>900){
         lastFishingTargetDebugAt=now;
         fishingTargetDebug('aim.visible',{targetGroupVisible:!!v.targetGroup.visible,bobberVisible:!!v.bobberGroup.visible,onScreen,screen:{x:Math.round(sx),y:Math.round(sy)},camera:{x:+camera.position.x.toFixed(3),y:+camera.position.y.toFixed(3),z:+camera.position.z.toFixed(3)}} ,now);

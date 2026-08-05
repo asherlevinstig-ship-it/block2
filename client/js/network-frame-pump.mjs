@@ -64,7 +64,7 @@ export function createNetworkFramePump({
           NET.lastFishingMoveDebugAt=now;
           try{
             globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.move.sent',NET.lastMoveSent);
-            if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-move-sent]',JSON.stringify(NET.lastMoveSent));
+            if(globalThis.BlockcraftVerboseNetworkDebug)console.warn('[bc-fishing-move-sent]',JSON.stringify(NET.lastMoveSent));
           }catch(e){}
         }
       }
