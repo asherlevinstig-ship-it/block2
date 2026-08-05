@@ -526,6 +526,7 @@ const keys = {};
 let locked=false, lockFallback=false, suppressNextLockFallback=false, pointerLockRequestPending=false, cursorReleased=false, uiOpen=false, uiMode=null, uiFurnaceKey=null;
 const mouseLookDelta={x:0,y:0};
 const MOUSE_LOOK_SENSITIVITY=.00215;
+let mouseLookSuppressedUntil=0;
 const overlay=document.getElementById('overlay');
 const playbtn=document.getElementById('playbtn');
 const registerbtn=document.getElementById('registerbtn');
@@ -5131,9 +5132,14 @@ function fishingInputDebug(reason='snapshot',extra=null){
     input:root.BlockcraftReadInputDebug?root.BlockcraftReadInputDebug():null,
     stored:(()=>{try{return JSON.parse(localStorage.getItem(FISHING_INPUT_DEBUG_LOG_KEY)||'[]');}catch(e){return []}})()
   });
+  root.BlockcraftCopyFishingDebug=()=>{
+    const text=JSON.stringify(root.BlockcraftReadFishingDebug(),null,2);
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text);
+    return text;
+  };
   try{localStorage.setItem(FISHING_INPUT_DEBUG_LOG_KEY,JSON.stringify(log));}catch(e){}
   try{document.body.dataset.fishingDebug=JSON.stringify(data);}catch(e){}
-  console.warn('[bc-fishing-debug]',data);
+  console.warn('[bc-fishing-debug]',JSON.stringify(data));
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.input-debug',data);
   return data;
 }
@@ -5213,6 +5219,11 @@ function resumeGameplayCamera(){
   return true;
 }
 function queueMouseLook(dx,dy){
+  if(performance.now()<mouseLookSuppressedUntil){
+    mouseLookDelta.x=0;mouseLookDelta.y=0;
+    if(dim==='fishing_lake')fishingInputDebug('mouse.suppressed',{dx,dy,suppressedUntil:Math.round(mouseLookSuppressedUntil)});
+    return;
+  }
   if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
   mouseLookDelta.x+=Math.max(-160,Math.min(160,dx));
   mouseLookDelta.y+=Math.max(-160,Math.min(160,dy));
@@ -5221,6 +5232,11 @@ function queueMouseLook(dx,dy){
   }
 }
 function consumeMouseLookDelta(){
+  if(performance.now()<mouseLookSuppressedUntil){
+    mouseLookDelta.x=0;mouseLookDelta.y=0;
+    if(dim==='fishing_lake')fishingInputDebug('mouse.consume-suppressed',{suppressedUntil:Math.round(mouseLookSuppressedUntil)});
+    return {x:0,y:0};
+  }
   if(!gameplayCameraInputAllowed()){ mouseLookDelta.x=0; mouseLookDelta.y=0; return {x:0,y:0}; }
   const out={x:mouseLookDelta.x,y:mouseLookDelta.y};
   mouseLookDelta.x=0;mouseLookDelta.y=0;
@@ -5228,6 +5244,11 @@ function consumeMouseLookDelta(){
     fishingInputDebug('mouse.consume',{out});
   }
   return out;
+}
+function suppressMouseLook(ms=700,reason='manual'){
+  mouseLookDelta.x=0;mouseLookDelta.y=0;
+  mouseLookSuppressedUntil=Math.max(mouseLookSuppressedUntil,performance.now()+Math.max(0,Number(ms)||0));
+  fishingInputDebug('mouse.suppress-start',{ms,reason,suppressedUntil:Math.round(mouseLookSuppressedUntil)});
 }
 addEventListener('keydown', e=>{
   if(e.code==='F9'&&!e.repeat){

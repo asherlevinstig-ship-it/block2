@@ -3,6 +3,12 @@ import {DEITY_LEVEL,DEITY_POWER_DEFS,hunterRankLevelLabel} from './progression.m
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
+function suppressRoomMouseLook(ms,reason){
+  try{
+    const api=gameContext&&gameContext.requireModule&&gameContext.requireModule('combat');
+    if(api&&api.suppressMouseLook)api.suppressMouseLook(ms,reason);
+  }catch(e){}
+}
 /* Blockcraft dimensions runtime module. Ability spaces, dungeon dimensions, gates, decoration, and dimension HUD state.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
  */
@@ -2529,6 +2535,7 @@ function enterFishingLake(){
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
+  suppressRoomMouseLook(900,'enterFishingLake');
   if(!opts.resume)announceArrivalTitle('REGION','FISHING LAKE','Peaceful waters, docks, and fishing practice');
   if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'fishing_lake'});
   sysMsg('<b>Fishing Lake:</b> a peaceful fishing room. Walk the docks and use the blue return portal to go back to town.');

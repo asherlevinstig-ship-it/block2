@@ -90,7 +90,7 @@ function fishingNetworkDebug(reason,extra={}){
     bodyClass:document.body.className,
     extra
   };
-  console.warn('[bc-fishing-debug]',payload);
+  console.warn('[bc-fishing-debug]',JSON.stringify(payload));
   try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.network-debug',payload);}catch(e){}
   return payload;
 }
@@ -2880,6 +2880,7 @@ function netRestoreProfile(m){
       player.vel.set(0,0,0);
       player.yaw=Math.PI;
       player.pitch=0;
+      if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'restoreFishingLake');
       fishingNetworkDebug('restore.safe-dock',{restoreFishingLake,serverActiveRoom,serverHasActiveRoom,before});
     }
     if(restoreJobRoom&&combatApi.resumeJobTutorial){
