@@ -2874,14 +2874,20 @@ function netRestoreProfile(m){
     }else if(restoreFishingLake&&!onboardingActive){
       const lake=worldState&&worldState.FISHING_LAKE;
       const before=player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
-      if(lake&&lake.spawn){
+      const lakeX=Number(lake&&lake.x)||345,lakeZ=Number(lake&&lake.z)||925,lakeG=Number(lake&&lake.G)||18,lakeR=Number(lake&&lake.R)||62;
+      const alreadySafe=dim==='fishing_lake'&&player&&player.pos&&Math.hypot(player.pos.x-lakeX,player.pos.z-lakeZ)<=lakeR+10&&player.pos.y>=lakeG-4&&player.pos.y<=lakeG+34;
+      if(!alreadySafe&&lake&&lake.spawn){
         player.pos.set(lake.x+lake.spawn.dx+.5,lake.G+1.05,lake.z+lake.spawn.dz+.5);
+        player.vel.set(0,0,0);
+        player.yaw=Math.PI;
+        player.pitch=0;
+        if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'restoreFishingLake');
+        fishingNetworkDebug('restore.safe-dock',{restoreFishingLake,serverActiveRoom,serverHasActiveRoom,before});
+      }else if(!alreadySafe){
+        player.vel.set(0,0,0);
+        if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'restoreFishingLakeNoSpawn');
+        fishingNetworkDebug('restore.safe-dock-missing-spawn',{restoreFishingLake,serverActiveRoom,serverHasActiveRoom,before});
       }
-      player.vel.set(0,0,0);
-      player.yaw=Math.PI;
-      player.pitch=0;
-      if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'restoreFishingLake');
-      fishingNetworkDebug('restore.safe-dock',{restoreFishingLake,serverActiveRoom,serverHasActiveRoom,before});
     }
     if(restoreJobRoom&&combatApi.resumeJobTutorial){
       combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
