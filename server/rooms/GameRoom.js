@@ -2752,7 +2752,7 @@ class GameRoom extends Room {
     return Math.hypot(+x - safe.x, +z - safe.z) <= safe.r + Math.max(0, +extra || 0);
   }
   spaceSolid(dgn) {
-    if (dgn && /^tutorial-job_/.test(String(dgn))) return () => false;
+    if (dgn && (/^tutorial-job_/.test(String(dgn)) || dgn === 'taming_land' || dgn === 'fishing_lake')) return () => false;
     if (dgn && typeof this.eventSpaceSolid === 'function') {
       const eventSolid = this.eventSpaceSolid(dgn);
       if (eventSolid) return eventSolid;
@@ -7409,13 +7409,15 @@ class GameRoom extends Room {
     // consecutive rejections a destination in valid air is accepted as a lag resync.
     // A buried destination is never accepted, no matter how often it is retried.
     if (!this.moveRejects) this.moveRejects = new Map();
-    const activeDgn = p.dgn || (this.isDungeonRoom && this.instance ? this.instance.id : '');
-    const solid = this.spaceSolid(activeDgn);
+    const rawDgn = p.dgn || (this.isDungeonRoom && this.instance ? this.instance.id : '');
+    const inst = rawDgn ? this.activeDungeonInstance(rawDgn) : null;
+    const activeDgn = inst ? rawDgn : '';
+    const solid = this.spaceSolid(rawDgn);
     const buried = (x, y, z) => solid(Math.floor(x), Math.floor(y + .2), Math.floor(z))
       || solid(Math.floor(x), Math.floor(y + 1.5), Math.floor(z));
-    const inst = activeDgn ? this.activeDungeonInstance(activeDgn) : null;
     const groundAt = (x, z, fromY = W.WH - 2) => {
       if (activeDgn) return inst && inst.world ? (typeof D.safeStandHeightIn === 'function' ? D.safeStandHeightIn(inst.world, x, z) : D.standHeightIn(inst.world, x, z, Math.min(12, fromY))) : -1;
+      if (rawDgn) return -1;
       return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1;
     };
     const townFloorStrict = !activeDgn && this.world && this.isTownProtected(sx, sz);
@@ -7468,7 +7470,7 @@ class GameRoom extends Room {
     if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : activeDgn ? 'dungeon_floor' : 'floor' });
     if (deityFlight && this.fallState) this.fallState.delete(client.sessionId);
     else this.trackAcceptedMoveFall(client, fromY, p.y);
-    if (!activeDgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
+    if (!rawDgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);
     this.collectDeathDrops(client);
   }
 

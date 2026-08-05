@@ -2445,11 +2445,12 @@ function generateFishingLakeRoom(){
     const shore=isLake(x,z);
     const rim=d>R-1.8;
     const noise=Math.sin((x+11)*.17)+Math.cos((z-7)*.13);
-    let top=rim?B.COBBLE:(shore?B.WATER:(Math.abs(lakeA(x,z)-1)<.28||Math.abs(lakeB(x,z)-1)<.26?B.SAND:(noise>1.15?B.LEAVES:B.GRASS)));
+    let top=rim?B.COBBLE:(shore?B.SAND:(Math.abs(lakeA(x,z)-1)<.28||Math.abs(lakeB(x,z)-1)<.26?B.SAND:(noise>1.15?B.LEAVES:B.GRASS)));
     flat(x,z,top,top===B.SAND?B.SAND:B.DIRT);
     if(shore){
-      set(x,G-1,z,B.SAND);
-      set(x,G,z,B.WATER);
+      set(x,G-2,z,B.SAND);
+      set(x,G-1,z,B.WATER);
+      set(x,G,z,B.AIR);
       set(x,G+1,z,B.AIR);
     }
     if(rim)for(let y=G+1;y<=G+5;y++)set(x,y,z,B.BARRIER);
