@@ -72,6 +72,7 @@ const JOB_TUTORIAL_ROOMS = Object.freeze({
   pet_tamer: Object.freeze({ x: 500, z: 925, g: 22, r: 52 }),
 });
 const TAMING_LAND_ROOM = Object.freeze({ x: 420, z: 925, g: 20, r: 68, spawnDx: 0, spawnDz: -18 });
+const FISHING_LAKE_ROOM = Object.freeze({ x: 345, z: 925, g: 18, r: 62, spawnDx: 0, spawnDz: -23 });
 function sanitizeMountUnlocks(list) {
   const out = [];
   if (Array.isArray(list)) for (let k of list) {
@@ -489,6 +490,7 @@ function sanitizeActiveRoom(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const dim = typeof raw.dim === 'string' ? raw.dim : '';
   if (dim === 'taming_land') return { dim: 'taming_land' };
+  if (dim === 'fishing_lake') return { dim: 'fishing_lake' };
   const job = typeof raw.job === 'string' ? raw.job : '';
   if (dim !== 'job' || !JOB_TUTORIAL_ROOM_IDS.has(job)) return null;
   const out = {
@@ -528,7 +530,7 @@ function sanitizeActiveRoom(raw) {
 
 function sanitizeActiveRoomPosition(activeRoom, pos) {
   if (!activeRoom || !Array.isArray(pos) || pos.length !== 3 || pos.some(v => !isFinite(+v))) return null;
-  const room = activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
+  const room = activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : activeRoom.dim === 'fishing_lake' ? FISHING_LAKE_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
   if (!room) return null;
   const spawn = [room.x + (room.spawnDx || 0) + .5, room.g + 1.05, room.z + (room.spawnDz == null ? 14 : room.spawnDz) + .5];
   const x = clampF(pos[0], room.x - room.r - 6, room.x + room.r + 6);

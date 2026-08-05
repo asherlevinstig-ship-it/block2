@@ -7,6 +7,7 @@ const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const rebuildAllChunks=dimensionsApi.rebuild,enterDungeon=dimensionsApi.enterDungeon,exitDungeon=dimensionsApi.exitDungeon;
 const enterTamingLand=dimensionsApi.enterTamingLand,exitTamingLand=dimensionsApi.exitTamingLand;
+const enterFishingLake=dimensionsApi.enterFishingLake,exitFishingLake=dimensionsApi.exitFishingLake;
 const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoom=dimensionsApi.exitJobTutorialRoom;
 const enterQuestionRoom=dimensionsApi.enterQuestionRoom,exitQuestionRoomToTown=dimensionsApi.exitQuestionRoomToTown;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
@@ -5878,10 +5879,18 @@ function nearTamingLandPortal(range=5.8){
 function nearTownQuestionHallPortal(range=5.8){
   return dim==='overworld'&&HUB.questionPortal&&Math.hypot(player.pos.x-HUB.questionPortal.x,player.pos.z-HUB.questionPortal.z)<range;
 }
+function nearFishingLakePortal(range=5.8){
+  return dim==='overworld'&&HUB.fishingPortal&&Math.hypot(player.pos.x-HUB.fishingPortal.x,player.pos.z-HUB.fishingPortal.z)<range;
+}
 function nearTamingLandExit(range=4.4){
   if(dim!=='taming_land'||!TAMING_LAND)return false;
   const x=TAMING_LAND.x+TAMING_LAND.exit.dx+.5,z=TAMING_LAND.z+TAMING_LAND.exit.dz+.5;
   return Math.hypot(player.pos.x-x,player.pos.z-z)<range;
+}
+function nearFishingLakeExit(range=4.4){
+  if(dim!=='fishing_lake'||!worldState.FISHING_LAKE||typeof dimensionsApi.fishingLakeExitPoint!=='function')return false;
+  const p=dimensionsApi.fishingLakeExitPoint();
+  return Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<range;
 }
 function nearTrainingMeadowTownPortal(range=5.8){
   if(dim!=='tutorial'||typeof trainingMeadowTownPortalPoint!=='function')return false;
@@ -5969,7 +5978,9 @@ function nearbyInteractionPrompt(){
   }
   if(nearTamingLandPortal())push({key:'G',title:'Taming Land Portal',small:'Travel to the dragon and familiar sanctuary',priority:119},0);
   if(nearTownQuestionHallPortal())push({key:'G',title:'Question Hall Portal',small:'Travel to the study room',priority:119},0);
+  if(nearFishingLakePortal())push({key:'G',title:'Fishing Lake Portal',small:'Travel to peaceful waters and docks',priority:119},0);
   if(nearTamingLandExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
+  if(nearFishingLakeExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearTrainingMeadowTownPortal())push({key:'G',title:'Town Portal',small:'Enter the Town of Beginnings',priority:119},0);
   if(nearQuestionHallTownPortal())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer questions · ALT changes subject',priority:118},0);
@@ -6211,7 +6222,9 @@ function secondaryAction(){
   if(dim==='dungeon' && exitPortal && Math.hypot(exitPortal.position.x-player.pos.x, exitPortal.position.z-player.pos.z)<2.8){ exitDungeon(false); return; }
   if(nearTamingLandPortal()){ enterTamingLand(); return; }
   if(nearTownQuestionHallPortal()){ if(typeof enterQuestionRoom==='function')enterQuestionRoom(); return; }
+  if(nearFishingLakePortal()){ if(typeof enterFishingLake==='function')enterFishingLake(); return; }
   if(nearTamingLandExit()){ exitTamingLand(); return; }
+  if(nearFishingLakeExit()){ if(typeof exitFishingLake==='function')exitFishingLake(); return; }
   if(nearTrainingMeadowTownPortal()){ if(typeof exitOnboardingToTown==='function')exitOnboardingToTown(); return; }
   if(nearQuestionHallTownPortal()){ if(typeof exitQuestionRoomToTown==='function')exitQuestionRoomToTown(); return; }
   if(tryMinerTutorialTrade()) return;

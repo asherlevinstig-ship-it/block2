@@ -1919,7 +1919,7 @@ function refreshTorchMeshes(){
 function applyDim(){
   townGroup.visible = dim==='overworld';
   if(roadSafetySceneGroup)roadSafetySceneGroup.visible=dim==='overworld';
-  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job' || dim==='taming_land' || dim==='questions';
+  cropGroup.visible = dim==='overworld' || dim==='tutorial' || dim==='job' || dim==='taming_land' || dim==='questions' || dim==='fishing_lake';
   const underground = dim==='dungeon' || dim==='gatecutscene';
   cloudGroup.visible = !underground;
   sky.visible = !underground;
@@ -1931,12 +1931,14 @@ function applyDim(){
   else if(dim==='job'){ scene.fog.near=32; scene.fog.far=105; }
   else if(dim==='questions'){ scene.fog.near=26; scene.fog.far=96; }
   else if(dim==='taming_land'){ scene.fog.near=38; scene.fog.far=130; scene.fog.color.set(0x9ed7ff); }
+  else if(dim==='fishing_lake'){ scene.fog.near=42; scene.fog.far=145; scene.fog.color.set(0x9ed7ff); }
   else if(dim==='gatecutscene'){ scene.fog.near=18; scene.fog.far=115; scene.fog.color.set(0x151022); }
   else { scene.fog.near=8; scene.fog.far=36; }
 }
 let onboardingRoomReturn=null, onboardingTownPortal=null;
 function localTutorialSpaceId(kind){
   if(kind==='taming_land')return 'taming_land';
+  if(kind==='fishing_lake')return 'fishing_lake';
   return 'tutorial-'+kind+'-'+(NET.room&&NET.room.sessionId||'local');
 }
 function announceArrivalTitle(kicker,title,subtitle){
@@ -2233,6 +2235,7 @@ function exitJobTutorialRoom(){
   if(NET.on&&NET.room) NET.room.send('tutorialExit',{destination:'town'});
 }
 let tamingLandReturn=null, tamingLandExitPortal=null;
+let fishingLakeReturn=null, fishingLakeExitPortal=null;
 const QUESTION_ROOM={x:930,z:855,G:18,R:28};
 const QUESTION_HALL_TOWN_PORTAL=Object.freeze({dx:0,dz:12,range:4.8});
 let questionRoomReturn=null, questionHallTownPortal=null;
@@ -2412,6 +2415,139 @@ function exitTamingLand(){
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
   tamingLandReturn=null;
+  if(!opts.resume)announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
+  if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
+  return true;
+}
+const FISHING_LAKE_FALLBACK=Object.freeze({x:345,z:925,G:18,R:62,exit:{dx:0,dz:30},spawn:{dx:0,dz:-23}});
+function fishingLakeRoom(){
+  return worldState&&worldState.FISHING_LAKE||FISHING_LAKE_FALLBACK;
+}
+function generateFishingLakeRoom(){
+  const room=fishingLakeRoom();
+  const {x:cx,z:cz,G,R}=room;
+  const minX=Math.floor(cx-R-9),maxX=Math.ceil(cx+R+9),minZ=Math.floor(cz-R-9),maxZ=Math.ceil(cz+R+9);
+  const w=new DimensionGrid({kind:'fishing_lake',id:'fishing_lake',originX:minX,originZ:minZ,width:maxX-minX+1,height:WH,depth:maxZ-minZ+1,empty:B.AIR,outside:B.AIR});
+  const set=(x,y,z,v)=>w.setB(x,y,z,v);
+  const clear=(x,z,top=G+13)=>{for(let y=G+1;y<=Math.min(WH-1,top);y++)set(x,y,z,B.AIR);};
+  const flat=(x,z,top=B.GRASS,under=B.DIRT)=>{
+    for(let y=1;y<G-5;y++)set(x,y,z,B.STONE);
+    for(let y=Math.max(1,G-5);y<G;y++)set(x,y,z,under);
+    set(x,G,z,top);
+    clear(x,z);
+  };
+  const lakeA=(x,z)=>Math.pow((x-cx)/22,2)+Math.pow((z-(cz-1))/18,2);
+  const lakeB=(x,z)=>Math.pow((x-(cx+16))/16,2)+Math.pow((z-(cz+7))/14,2);
+  const isLake=(x,z)=>lakeA(x,z)<1||lakeB(x,z)<1;
+  for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){
+    const d=Math.hypot(x-cx,z-cz);
+    if(d>R+5)continue;
+    const shore=isLake(x,z);
+    const rim=d>R-1.8;
+    const noise=Math.sin((x+11)*.17)+Math.cos((z-7)*.13);
+    let top=rim?B.COBBLE:(shore?B.WATER:(Math.abs(lakeA(x,z)-1)<.28||Math.abs(lakeB(x,z)-1)<.26?B.SAND:(noise>1.15?B.LEAVES:B.GRASS)));
+    flat(x,z,top,top===B.SAND?B.SAND:B.DIRT);
+    if(shore){
+      set(x,G-1,z,B.SAND);
+      set(x,G,z,B.WATER);
+      set(x,G+1,z,B.AIR);
+    }
+    if(rim)for(let y=G+1;y<=G+5;y++)set(x,y,z,B.BARRIER);
+  }
+  // Main dock and fishing fingers.
+  for(let z=cz-28;z<=cz+11;z++)for(let x=cx-3;x<=cx+3;x++)flat(x,z,B.PLANKS,B.STONE);
+  for(const z of [cz-8,cz+2,cz+10]){
+    for(let x=cx-18;x<=cx+18;x++)if(Math.abs(x-cx)>3)flat(x,z,B.PLANKS,B.STONE);
+    for(const x of [cx-18,cx+18,cx-10,cx+10]){set(x,G+1,z-1,B.LOG);set(x,G+2,z-1,B.LANTERN);set(x,G+1,z+1,B.LOG);}
+  }
+  // Return portal plaza.
+  const ex=cx+(room.exit&&room.exit.dx||0),ez=cz+(room.exit&&room.exit.dz||30);
+  for(let x=ex-7;x<=ex+7;x++)for(let z=ez-5;z<=ez+5;z++)if(Math.hypot(x-ex,z-ez)<7.4)flat(x,z,Math.abs(x-ex)<=2&&Math.abs(z-ez)<=1?B.GLASS:B.COBBLE,B.STONE);
+  for(const sx of [-4,4]){
+    for(let y=G+1;y<=G+7;y++)set(ex+sx,y,ez,y%2?B.LOG:B.COBBLE);
+    set(ex+sx,G+8,ez,B.LANTERN);
+  }
+  for(let x=ex-4;x<=ex+4;x++)for(let y=G+6;y<=G+8;y++)if(y===G+8||Math.abs(x-ex)>2)set(x,y,ez,B.LOG);
+  for(let y=G+1;y<=G+6;y++)for(let x=ex-2;x<=ex+2;x++)set(x,y,ez,B.AIR);
+  // Trees, reeds and camp details.
+  const tree=(tx,tz,h=5)=>{
+    for(let y=G+1;y<=G+h;y++)set(tx,y,tz,B.LOG);
+    for(let lx=-3;lx<=3;lx++)for(let lz=-3;lz<=3;lz++)for(let ly=h-2;ly<=h+3;ly++)
+      if(Math.abs(lx)+Math.abs(lz)+Math.abs(ly-h)<7)set(tx+lx,G+ly,tz+lz,B.LEAVES);
+  };
+  for(const [ox,oz,h] of [[-34,-24,6],[31,-22,5],[-38,18,5],[36,24,6],[-18,34,5],[24,36,5]])tree(cx+ox,cz+oz,h);
+  for(const [ox,oz] of [[-22,-2],[-19,8],[26,-6],[31,5],[6,24],[-9,21],[-26,15],[21,18]]){
+    flat(cx+ox,cz+oz,B.SAND,B.SAND);
+    set(cx+ox,G+1,cz+oz,B.LEAVES);
+  }
+  for(const [ox,oz] of [[-10,-25],[10,-25],[-20,-10],[22,12],[0,20]]){set(cx+ox,G+1,cz+oz,B.LANTERN);set(cx+ox,G,cz+oz,B.GLASS);}
+  set(cx-7,G+1,cz-24,B.CHEST);
+  set(cx+7,G+1,cz-24,B.CAMPFIRE);
+  return w;
+}
+function fishingLakeSpawn(){
+  const r=fishingLakeRoom();
+  return {x:r.x+(r.spawn&&r.spawn.dx||0)+.5,y:r.G+1.05,z:r.z+(r.spawn&&r.spawn.dz||-23)+.5};
+}
+function fishingLakeExitPoint(){
+  const r=fishingLakeRoom();
+  return {x:r.x+(r.exit&&r.exit.dx||0)+.5,y:r.G+1.05,z:r.z+(r.exit&&r.exit.dz||30)+.5};
+}
+function ensureFishingLakeExitPortal(){
+  if(fishingLakeExitPortal){scene.remove(fishingLakeExitPortal);fishingLakeExitPortal=null;}
+  const exit=fishingLakeExitPoint();
+  fishingLakeExitPortal=makeGateMesh(0x4fd8ff);
+  fishingLakeExitPortal.position.set(exit.x,exit.y,exit.z);
+  const label=makeTextSprite('RETURN TO TOWN','#bff7ff');
+  label.position.set(0,2.65,0);
+  fishingLakeExitPortal.add(label);
+  scene.add(fishingLakeExitPortal);
+}
+function enterFishingLake(){
+  if(dim==='fishing_lake')return true;
+  if(dim!=='overworld')return false;
+  const opts=arguments[0]||{};
+  if(!opts.instant&&!opts.resume){
+    return runPortalTransition({title:'Fishing Lake',subtitle:'Crossing to the quiet waters',kind:'taming'},()=>enterFishingLake({instant:true}));
+  }
+  const resume=!!opts.resume;
+  const returnPos=resume&&HUB&&HUB.fishingPortal
+    ? new THREE.Vector3(HUB.fishingPortal.x,TOWN.G+1,HUB.fishingPortal.z+3.5)
+    : player.pos.clone();
+  fishingLakeReturn={world,pos:returnPos,yaw:resume?Math.PI:player.yaw,pitch:resume?0:player.pitch};
+  for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  if(mounted){mounted=false;mountKind='';if(localMountObj)localMountObj.visible=false;}
+  owWorld=world;
+  world=generateFishingLakeRoom();
+  dim='fishing_lake';
+  NET.dgn=localTutorialSpaceId('fishing_lake');
+  world.id=NET.dgn;
+  rebuildAllChunks();refreshTorchMeshes();applyDim();ensureFishingLakeExitPortal();
+  const spawn=fishingLakeSpawn();
+  player.pos.set(spawn.x,spawn.y,spawn.z);
+  player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  if(!opts.resume)announceArrivalTitle('REGION','FISHING LAKE','Peaceful waters, docks, and fishing practice');
+  if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'fishing_lake'});
+  sysMsg('<b>Fishing Lake:</b> a peaceful fishing room. Walk the docks and use the blue return portal to go back to town.');
+  return true;
+}
+function exitFishingLake(){
+  const opts=arguments[0]||{};
+  if(dim!=='fishing_lake')return false;
+  if(!opts.instant&&!opts.resume){
+    return runPortalTransition({title:'Town of Beginnings',subtitle:'Returning from Fishing Lake',kind:'taming'},()=>exitFishingLake({instant:true}));
+  }
+  for(let i=mobs.length-1;i>=0;i--)if(!mobs[i].net)removeMob(i);
+  if(fishingLakeExitPortal){scene.remove(fishingLakeExitPortal);fishingLakeExitPortal=null;}
+  const ret=fishingLakeReturn;
+  restoreOverworldReturnGrid(ret,'fishing_lake');
+  dim='overworld';
+  NET.dgn='';
+  rebuildAllChunks();refreshTorchMeshes();applyDim();
+  placePlayerAtTownReturn();
+  fishingLakeReturn=null;
   if(!opts.resume)announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
   return true;
@@ -2614,6 +2750,7 @@ gameContext.registerState('dimensions', Object.freeze({
   get overworldGrid(){ return owWorld; },
   get jobTutorialRoomJob(){ return jobTutorialRoomJob; },
   get tamingLandExitPortal(){ return tamingLandExitPortal; },
+  get fishingLakeExitPortal(){ return fishingLakeExitPortal; },
   get onboardingTownPortal(){ return onboardingTownPortal; },
   get questionHallTownPortal(){ return questionHallTownPortal; },
 }));
@@ -2630,6 +2767,9 @@ gameContext.registerModule('dimensions', Object.freeze({
   questionHallTownPortalPoint,
   enterTamingLand,
   exitTamingLand,
+  enterFishingLake,
+  exitFishingLake,
+  fishingLakeExitPoint,
   exitOnboardingToTown,
   openStat,
   rebuild:rebuildAllChunks,
@@ -2667,6 +2807,7 @@ const legacyDimensionsBindings={
   "enterOnboardingRoom":{get:()=>enterOnboardingRoom},
   "enterQuestionRoom":{get:()=>enterQuestionRoom},
   "enterTamingLand":{get:()=>enterTamingLand},
+  "enterFishingLake":{get:()=>enterFishingLake},
   "equippedArmor":{get:()=>equippedArmor},
   "exitAbilityRoom":{get:()=>exitAbilityRoom},
   "exitDungeon":{get:()=>exitDungeon},
@@ -2676,6 +2817,7 @@ const legacyDimensionsBindings={
   "exitQuestionRoom":{get:()=>exitQuestionRoom},
   "exitQuestionRoomToTown":{get:()=>exitQuestionRoomToTown},
   "exitTamingLand":{get:()=>exitTamingLand},
+  "exitFishingLake":{get:()=>exitFishingLake},
   "exitPortal":{get:()=>exitPortal,set:value=>{exitPortal=value;}},
   "frostbiteChakramVfx":{get:()=>frostbiteChakramVfx},
   "gate":{get:()=>gate,set:value=>{gate=value;}},
@@ -2685,6 +2827,8 @@ const legacyDimensionsBindings={
   "generateQuestionRoom":{get:()=>generateQuestionRoom},
   "questionHallTownPortalPoint":{get:()=>questionHallTownPortalPoint},
   "generateTamingLandRoom":{get:()=>generateTamingLandRoom},
+  "generateFishingLakeRoom":{get:()=>generateFishingLakeRoom},
+  "fishingLakeExitPoint":{get:()=>fishingLakeExitPoint},
   "gravityBowVfx":{get:()=>gravityBowVfx},
   "hex01":{get:()=>hex01},
   "legendaryWeaponCd":{get:()=>legendaryWeaponCd},

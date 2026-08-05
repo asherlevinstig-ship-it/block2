@@ -504,6 +504,9 @@ function currentLocationInfo(){
   if(dim==='taming_land'){
     return { cls:'event', name:'Taming Land', meta:'Dragon and familiar sanctuary - press G at the green portal to return' };
   }
+  if(dim==='fishing_lake'){
+    return { cls:'event', name:'Fishing Lake', meta:'Peaceful fishing waters - press G at the blue portal to return' };
+  }
   if(dim==='tutorial' && onboardingActive && isTrainingMeadowLand(player.pos.x,player.pos.z,4)){
     return { cls:'town', name:'Hunter Training Meadow', meta:'Safe training grounds' };
   }
@@ -1511,6 +1514,7 @@ function currentObjective(){
     return {label:'Current Goal', text};
   }
   if(dim==='taming_land') return {label:'Taming Land', text:'Explore the sanctuary, then press G at the green return portal to go back to town'};
+  if(dim==='fishing_lake') return {label:'Fishing Lake', text:'Walk the docks and press G at the blue return portal to go back to town'};
   const transition=transitionRecoveryAction();
   const deferTransition=shouldDeferTransitionAction(transition,{story:!!quest||!!serverObjectiveBySource('story','manhunt'),job:!!jobContract});
   if(transition&&!deferTransition){
@@ -1542,6 +1546,8 @@ function currentObjective(){
     return {label:'Current Goal', text:inMeditationSpot()?'Meditate with G / right-click':'Stand inside the Meditation Hall to meditate'};
   if(dim==='overworld' && HUB.tamingPortal && Math.hypot(player.pos.x-HUB.tamingPortal.x, player.pos.z-HUB.tamingPortal.z)<7)
     return {label:'Current Goal', text:'Press G at the Taming Land portal to visit the dragon and familiar sanctuary'};
+  if(dim==='overworld' && HUB.fishingPortal && Math.hypot(player.pos.x-HUB.fishingPortal.x, player.pos.z-HUB.fishingPortal.z)<7)
+    return {label:'Current Goal', text:'Press G at the Fishing Lake portal to visit the peaceful fishing room'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.guardian.x, player.pos.z-HUB.guardian.z)<9)
     return {label:'Current Goal', text:'Speak with the Aegis Guardian'};
   if(gate) return {label:'Current Goal', text:RANKS[gate.rank].n+'-Rank '+gateKindLabel(gate.kind)+' Gate - '+gateCompass()};

@@ -1120,6 +1120,9 @@ class GameRoom extends Room {
       } else if (prof.activeRoom && prof.activeRoom.dim === 'taming_land') {
         p.dim = 'tutorial';
         p.dgn = this.tutorialSpaceId(client, 'taming_land');
+      } else if (prof.activeRoom && prof.activeRoom.dim === 'fishing_lake') {
+        p.dim = 'tutorial';
+        p.dgn = this.tutorialSpaceId(client, 'fishing_lake');
       }
     } else {
       p.x = TOWN_RETURN_SPAWN.x + (Math.random() * 4 - 2);
@@ -1811,6 +1814,7 @@ class GameRoom extends Room {
 
   tutorialSpaceId(client, kind) {
     if (kind === 'taming_land') return 'taming_land';
+    if (kind === 'fishing_lake') return 'fishing_lake';
     return 'tutorial-' + kind + '-' + String(client && client.sessionId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
   }
 
@@ -1828,7 +1832,7 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     const rec = client && this.profileFor(client);
     const kind = m && String(m.kind || '');
-    if (!p || !rec || !['onboarding', 'ability', 'job', 'taming_land'].includes(kind)) return false;
+    if (!p || !rec || !['onboarding', 'ability', 'job', 'taming_land', 'fishing_lake'].includes(kind)) return false;
     if (kind === 'taming_land') {
       if (p.dgn && p.dim !== 'tutorial') {
         client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
@@ -1838,6 +1842,23 @@ class GameRoom extends Room {
       const spawn = sanitizeActiveRoomPosition(activeRoom, [420.5, 21.05, 907.5]) || [420.5, 21.05, 907.5];
       p.dim = 'tutorial';
       p.dgn = this.tutorialSpaceId(client, 'taming_land');
+      p.mount = '';
+      p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
+      rec.prof.activeRoom = activeRoom;
+      rec.prof.pos = spawn;
+      this.dirtyPlayers.add(rec.token);
+      client.send('tutorialDimension', { active: true, kind, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
+      return true;
+    }
+    if (kind === 'fishing_lake') {
+      if (p.dgn && p.dim !== 'tutorial') {
+        client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
+        return false;
+      }
+      const activeRoom = sanitizeActiveRoom({ dim: 'fishing_lake' });
+      const spawn = sanitizeActiveRoomPosition(activeRoom, [345.5, 19.05, 902.5]) || [345.5, 19.05, 902.5];
+      p.dim = 'tutorial';
+      p.dgn = this.tutorialSpaceId(client, 'fishing_lake');
       p.mount = '';
       p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
       rec.prof.activeRoom = activeRoom;
@@ -1954,7 +1975,7 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
     const jobMatch = p.dgn.match(/^tutorial-job_([a-z]+)-/);
-    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn === 'taming_land' ? 'taming_land' : 'onboarding';
+    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn === 'taming_land' ? 'taming_land' : p.dgn === 'fishing_lake' ? 'fishing_lake' : 'onboarding';
     client.send('tutorialDimension', { active: true, kind, job: jobMatch && jobMatch[1] || undefined, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
     return true;
   }
@@ -4023,7 +4044,7 @@ class GameRoom extends Room {
     if (!pa || !pb) return false;
     const aDgn = String(pa.dgn || ''), bDgn = String(pb.dgn || '');
     if (!aDgn && !bDgn) return this.isTownProtected(pa.x, pa.z) && this.isTownProtected(pb.x, pb.z);
-    return aDgn === 'taming_land' && bDgn === 'taming_land' && String(pa.dim || '') === 'tutorial' && String(pb.dim || '') === 'tutorial';
+    return (aDgn === 'taming_land' || aDgn === 'fishing_lake') && aDgn === bDgn && String(pa.dim || '') === 'tutorial' && String(pb.dim || '') === 'tutorial';
   }
   tradeDistanceInfo(a, b) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);

@@ -895,6 +895,7 @@ const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const TRAINING_MEADOW_TOWN_PORTAL=Object.freeze({dx:0,dz:40,range:5.8});
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
 const TAMING_LAND=Object.freeze({x:420,z:925,G:20,R:68,exit:{dx:0,dz:26},spawn:{dx:0,dz:-18}});
+const FISHING_LAKE=Object.freeze({x:345,z:925,G:18,R:62,exit:{dx:0,dz:30},spawn:{dx:0,dz:-23}});
 const JOB_TUTORIAL_MEADOWS=Object.freeze({
   miner:{x:610,z:925,G:18,R:34,ground:B.STONE},
   farmer:{x:690,z:925,G:18,R:34,ground:B.GRASS},
@@ -1946,6 +1947,7 @@ const HUB = {
   roost: { x: dpx(96, 'roost'), z: dpz(65, 'roost') },
   tamingPortal: { x: dpx(86, 'roost'), z: dpz(78, 'roost') },
   questionPortal: { x: dpx(48, 'market'), z: dpz(54, 'market') },
+  fishingPortal: { x: dpx(61, 'farm'), z: dpz(61, 'farm') },
   skyport: { x: dpx(32, 'skyport'), z: dpz(64, 'skyport'), y: TOWN.G + 24 },
   guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
   guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
@@ -1974,6 +1976,7 @@ const TOWN_INTERACTION_ZONES = Object.freeze({
   roost: { x: HUB.roost.x, z: HUB.roost.z, radius: 13 },
   tamingPortal: { x: HUB.tamingPortal.x, z: HUB.tamingPortal.z, radius: 5.5 },
   questionPortal: { x: HUB.questionPortal.x, z: HUB.questionPortal.z, radius: 5.5 },
+  fishingPortal: { x: HUB.fishingPortal.x, z: HUB.fishingPortal.z, radius: 5.5 },
   skyportGangway: { x1: HUB.skyport.x - 15.5, x2: HUB.skyport.x - 6.5, z: HUB.skyport.z, radiusZ: 3.25 },
 });
 function isTownFarmWorksite(x,z){
@@ -5551,6 +5554,7 @@ const TOWN_BUILDING_SIGNS=Object.freeze([
   {title:'DRAGON ROOST',sub:'DEN & LANDING FIELD',x:dpx(85.65,'roost'),z:dpz(60.2,'roost'),rot:-Math.PI/2,color:'#66f0ff'},
   {title:'TAMING LAND',sub:'PORTAL SANCTUARY',x:HUB.tamingPortal.x-3.1,z:HUB.tamingPortal.z+.1,rot:-Math.PI/2,color:'#9efc72'},
   {title:'QUESTION HALL',sub:'STUDY PORTAL',x:HUB.questionPortal.x-3.1,z:HUB.questionPortal.z+.1,rot:-Math.PI/2,color:'#7dd3fc'},
+  {title:'FISHING LAKE',sub:'PEACEFUL WATERS',x:HUB.fishingPortal.x-3.1,z:HUB.fishingPortal.z+.1,rot:-Math.PI/2,color:'#67e8f9'},
   {title:'WESTWIND SKYPORT',sub:'DOCK & CARGO',x:dpx(32,'skyport'),z:dpz(55.15,'skyport'),rot:0,color:'#ffd98a'},
   {title:'MARKET STALLS',sub:'SUPPLIES',x:HUB.marketX-1.5,z:TOWN.TC-12.5,rot:Math.PI/2,color:'#ffd24a'},
   {title:'FARM PLOTS',sub:'FOOD WORK',x:HUB.farm.x,z:HUB.farm.z-4.25,rot:0,color:'#86efac'},
@@ -5731,6 +5735,45 @@ function makeQuestionHallPortalDecor(){
   return grp;
 }
 const questionHallTownPortal=makeQuestionHallPortalDecor();
+
+function makeFishingLakePortalDecor(){
+  const grp=new THREE.Group();
+  const wood=voxelMats('#4a2b13','#8b5a2b','#2b170b','#120905');
+  const stone=voxelMats('#2e5266','#76d7e6','#15303b','#07151d');
+  const glow=glowVoxelMats('#22d3ee','#ecfeff','#0e7490','#cffafe',1.1);
+  const texCanvas=document.createElement('canvas');texCanvas.width=96;texCanvas.height=128;
+  const g=texCanvas.getContext('2d');
+  const bg=g.createLinearGradient(0,0,96,128);
+  bg.addColorStop(0,'rgba(14,165,233,.58)');
+  bg.addColorStop(.5,'rgba(34,211,238,.72)');
+  bg.addColorStop(1,'rgba(8,47,73,.68)');
+  g.fillStyle=bg;g.fillRect(0,0,96,128);
+  g.strokeStyle='rgba(236,254,255,.55)';g.lineWidth=3;
+  for(let y=18;y<116;y+=18){g.beginPath();for(let x=0;x<=96;x+=8){const yy=y+Math.sin(x*.18+y*.07)*4; if(x===0)g.moveTo(x,yy);else g.lineTo(x,yy);}g.stroke();}
+  g.fillStyle='rgba(255,255,255,.7)';
+  for(let i=0;i<20;i++){const x=(i*31)%92+2,y=(i*43)%124+2,s=i%2+1;g.fillRect(x,y,s,s);}
+  const portalTex=new THREE.CanvasTexture(texCanvas);portalTex.magFilter=THREE.NearestFilter;portalTex.minFilter=THREE.NearestFilter;
+  const portalMat=new THREE.MeshBasicMaterial({map:portalTex,transparent:true,opacity:.7,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  for(const [x,y,w,h,m] of [[-2.1,2.2,.62,4.4,wood],[2.1,2.2,.62,4.4,wood],[0,.18,4.5,.36,stone],[-1.2,4.65,.86,.64,wood],[0,4.88,1.05,.7,stone],[1.2,4.65,.86,.64,wood]])
+    addBox(grp,[w,h,.72],[x,y,0],m);
+  for(const [x,y] of [[-2.1,1.2],[-2.1,3.05],[2.1,1.2],[2.1,3.05],[0,5.25]])
+    addBox(grp,[.34,.34,.22],[x,y,-.48],glow);
+  const veil=new THREE.Mesh(new THREE.PlaneGeometry(3.28,3.55),portalMat);
+  veil.position.set(0,2.42,-.58);
+  grp.add(veil);
+  const core=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x67e8f9,transparent:true,opacity:.2,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
+  core.position.set(0,2.35,-.7);core.scale.set(4,4.4,1);grp.add(core);
+  const label=makeTextSprite('FISHING LAKE','#67e8f9');
+  label.position.set(0,5.72,-.3);
+  label.scale.set(3.15,1.4,1);
+  grp.add(label);
+  grp.userData={veil,core,phase:Math.random()*Math.PI*2,emitAcc:0};
+  grp.position.set(HUB.fishingPortal.x,TOWN.G+1,HUB.fishingPortal.z);
+  grp.rotation.y=Math.PI;
+  townGroup.add(grp);
+  return grp;
+}
+const fishingLakeTownPortal=makeFishingLakePortalDecor();
 
 function makeJobBoardDecor(){
   const grp=new THREE.Group();
@@ -6067,6 +6110,7 @@ addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Taming Land Portal', HUB.tamingPortal.x, TOWN.G+5.95, HUB.tamingPortal.z, '#9efc72', 14);
 addTownInteractLabel('Question Hall Portal', HUB.questionPortal.x, TOWN.G+5.95, HUB.questionPortal.z, '#7dd3fc', 14);
+addTownInteractLabel('Fishing Lake Portal', HUB.fishingPortal.x, TOWN.G+5.95, HUB.fishingPortal.z, '#67e8f9', 14);
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, '#f2c75c', 14);
 addTownInteractLabel('Social Mentor - Tab Chat', HUB.socialMentor.x, TOWN.G+3.75, HUB.socialMentor.z, '#82e6a7', 9);
 addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
@@ -9731,6 +9775,7 @@ function playerCanUseSocialSpaceAt(x,z){
   const dgn=String(NET&&NET.dgn||'');
   if(dim==='overworld'&&!dgn) return isTownLand(Math.floor(x),Math.floor(z));
   if(dim==='taming_land'&&dgn==='taming_land') return true;
+  if(dim==='fishing_lake'&&dgn==='fishing_lake') return true;
   return false;
 }
 function remoteCanUseSocialSpaceAt(ref,x,z){
@@ -9738,6 +9783,7 @@ function remoteCanUseSocialSpaceAt(ref,x,z){
   const remoteDgn=String(ref&&ref.dgn||'');
   if(dim==='overworld'&&!localDgn&&!remoteDgn) return isTownLand(Math.floor(x),Math.floor(z));
   if(dim==='taming_land'&&localDgn==='taming_land'&&remoteDgn==='taming_land') return true;
+  if(dim==='fishing_lake'&&localDgn==='fishing_lake'&&remoteDgn==='fishing_lake') return true;
   return false;
 }
 function damageMob(mob, dmg, kbv){
@@ -10523,10 +10569,35 @@ function updateQuestionHallPortalVisual(dt){
       life:.65+Math.random()*.3,grav:-.04,r:.48,g:.82,b:1,priority:1});
   }
 }
+function updateFishingLakePortalVisual(dt){
+  const p=fishingLakeTownPortal;
+  if(!p)return;
+  const near=dim==='overworld'&&playerOverworldDistanceSq(HUB.fishingPortal.x,HUB.fishingPortal.z)<95*95;
+  p.visible=near;
+  if(!near)return;
+  const data=p.userData||{},t=performance.now()/1000+(data.phase||0);
+  if(data.veil){
+    data.veil.material.opacity=.56+.1*Math.sin(t*2.15);
+    data.veil.scale.set(1+.018*Math.sin(t*1.4),1+.026*Math.cos(t*1.2),1);
+  }
+  if(data.core){
+    data.core.material.opacity=.16+.08*Math.sin(t*2.4);
+    const pulse=1+.045*Math.sin(t*2);
+    data.core.scale.set(4*pulse,4.4*pulse,1);
+  }
+  data.emitAcc=(data.emitAcc||0)+dt;
+  if(data.emitAcc>.11){
+    data.emitAcc=0;
+    const x=HUB.fishingPortal.x+(Math.random()-.5)*2.6,z=HUB.fishingPortal.z-.62,y=TOWN.G+1.8+Math.random()*2.4;
+    spawnParticle({x,y,z,vx:(Math.random()-.5)*.1,vy:.1+Math.random()*.16,vz:-.04-Math.random()*.08,
+      life:.7+Math.random()*.35,grav:-.02,r:.38,g:.86,b:1,priority:1});
+  }
+}
 function updateEmitters(dt){
   updateCentralFountainVisual(dt);
   updateTamingLandPortalVisual(dt);
   updateQuestionHallPortalVisual(dt);
+  updateFishingLakePortalVisual(dt);
   const night=tavernNightLevel();
   for(const e of emitters){
     if(dim!=='overworld'||Math.hypot(player.pos.x-e.x,player.pos.z-e.z)>(e.maxDist||105)){e.acc=0;continue;}
@@ -10997,6 +11068,7 @@ gameContext.registerState('world', Object.freeze({
   get skyshipJourney(){ return skyshipJourney; },
   get JOB_TUTORIAL_MEADOWS(){ return JOB_TUTORIAL_MEADOWS; },
   get TAMING_LAND(){ return TAMING_LAND; },
+  get FISHING_LAKE(){ return FISHING_LAKE; },
   get TRAINING_MEADOW_TOWN_PORTAL(){ return TRAINING_MEADOW_TOWN_PORTAL; },
 }));
 gameContext.registerModule('world', Object.freeze({
@@ -11390,6 +11462,7 @@ const legacyWorldBindings={
   "torchGlowMat":{get:()=>torchGlowMat},
   "TOWN":{get:()=>TOWN},
   "TAMING_LAND":{get:()=>TAMING_LAND},
+  "FISHING_LAKE":{get:()=>FISHING_LAKE},
   "TOWN_INTERACTION_ZONES":{get:()=>TOWN_INTERACTION_ZONES},
   "shadeHex":{get:()=>shadeHex},
   "fitCanvasText":{get:()=>fitCanvasText},

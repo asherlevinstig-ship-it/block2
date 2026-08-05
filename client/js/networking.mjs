@@ -1234,9 +1234,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('trainingReset', ()=>{if(dim==='tutorial')resetTrainingMeadowLocal();});
     room.onMessage('tutorialDimension', m=>{
       if(m&&m.active){
-        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job')||(m.kind==='taming_land'&&dim==='taming_land');
+        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job')||(m.kind==='taming_land'&&dim==='taming_land')||(m.kind==='fishing_lake'&&dim==='fishing_lake');
         if(matching&&m.spaceId) NET.dgn=String(m.spaceId);
-      }else if(dim==='tutorial'||dim==='ability'||dim==='job'||dim==='taming_land'){
+      }else if(dim==='tutorial'||dim==='ability'||dim==='job'||dim==='taming_land'||dim==='fishing_lake'){
         NET.dgn='';
       }
     });
@@ -2828,18 +2828,23 @@ function netRestoreProfile(m){
     }
     const restoreJobRoom=mergedActiveRoom&&mergedActiveRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[mergedActiveRoom.job]?mergedActiveRoom:null;
     const restoreTamingLand=mergedActiveRoom&&mergedActiveRoom.dim==='taming_land'?mergedActiveRoom:null;
+    const restoreFishingLake=mergedActiveRoom&&mergedActiveRoom.dim==='fishing_lake'?mergedActiveRoom:null;
     if(restoreJobRoom){
       if(dim!=='job'||dimensionsState.jobTutorialRoomJob!==restoreJobRoom.job) dimensionsApi.enterJobTutorialRoom(restoreJobRoom.job,{serverSynced:!!serverActiveRoom});
     }else if(restoreTamingLand){
       if(dim!=='taming_land'&&dimensionsApi.enterTamingLand) dimensionsApi.enterTamingLand({resume:true,serverSynced:serverHasActiveRoom});
+    }else if(restoreFishingLake){
+      if(dim!=='fishing_lake'&&dimensionsApi.enterFishingLake) dimensionsApi.enterFishingLake({resume:true,serverSynced:serverHasActiveRoom});
     }else if(serverHasActiveRoom&&dim==='job'&&dimensionsApi.exitJobTutorialRoom){
       dimensionsApi.exitJobTutorialRoom();
     }else if(serverHasActiveRoom&&dim==='taming_land'&&dimensionsApi.exitTamingLand){
       dimensionsApi.exitTamingLand();
+    }else if(serverHasActiveRoom&&dim==='fishing_lake'&&dimensionsApi.exitFishingLake){
+      dimensionsApi.exitFishingLake();
     }
-    const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand;
+    const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand&&!restoreFishingLake;
     const townReturn=forceJobHandoffTownReturn&&dimensionsApi.townReturnPoint?dimensionsApi.townReturnPoint():null;
-    const restorePos=townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos;
+    const restorePos=townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand||restoreFishingLake)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos;
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
@@ -3310,10 +3315,15 @@ function readJobTutorialResume(){
     const raw=JSON.parse(localStorage.getItem(JOB_TUTORIAL_RESUME_KEY)||'null');
     if(!raw||(raw.auth&&raw.auth!==currentAuthSessionToken())||Date.now()-(raw.at||0)>24*60*60*1000)return null;
     const activeRoom=raw.activeRoom&&typeof raw.activeRoom==='object'?raw.activeRoom:null;
-    if(!activeRoom||!((activeRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job])||activeRoom.dim==='taming_land'))return null;
+    if(!activeRoom||!((activeRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job])||activeRoom.dim==='taming_land'||activeRoom.dim==='fishing_lake'))return null;
     let pos=Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null;
     if(activeRoom.dim==='taming_land'&&pos){
       const room=worldState&&worldState.TAMING_LAND;
+      if(room&&(Math.hypot(pos[0]-room.x,pos[2]-room.z)>room.R+5||pos[1]<room.G-2)){
+        pos=[room.x+room.spawn.dx+.5,room.G+1.05,room.z+room.spawn.dz+.5];
+      }
+    }else if(activeRoom.dim==='fishing_lake'&&pos){
+      const room=worldState&&worldState.FISHING_LAKE;
       if(room&&(Math.hypot(pos[0]-room.x,pos[2]-room.z)>room.R+5||pos[1]<room.G-2)){
         pos=[room.x+room.spawn.dx+.5,room.G+1.05,room.z+room.spawn.dz+.5];
       }
@@ -3352,6 +3362,11 @@ function currentRuntimeActiveRoom(){
   }
   if(dimensionsState.kind==='taming_land'){
     const room={dim:'taming_land'};
+    if(player&&player.pos)room.pos=[player.pos.x,player.pos.y,player.pos.z];
+    return room;
+  }
+  if(dimensionsState.kind==='fishing_lake'){
+    const room={dim:'fishing_lake'};
     if(player&&player.pos)room.pos=[player.pos.x,player.pos.y,player.pos.z];
     return room;
   }
