@@ -74,6 +74,26 @@ function eventFeed(name,text,opts={}){
   }
   if(typeof eventLog==='function')eventLog(body,label);
 }
+function fishingNetworkDebug(reason,extra={}){
+  if(dimensionsState.kind!=='fishing_lake'&&!(extra&&extra.force))return;
+  const canvas=worldState.renderer&&worldState.renderer.domElement;
+  const payload={
+    reason,
+    at:Date.now(),
+    dim:dimensionsState.kind,
+    dgn:NET&&NET.dgn||'',
+    pos:player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)}:null,
+    vel:player&&player.vel?{x:+player.vel.x.toFixed(3),y:+player.vel.y.toFixed(3),z:+player.vel.z.toFixed(3)}:null,
+    yaw:player&&Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,
+    pitch:player&&Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null,
+    pointerLocked:!!canvas&&document.pointerLockElement===canvas,
+    bodyClass:document.body.className,
+    extra
+  };
+  console.warn('[bc-fishing-debug]',payload);
+  try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.network-debug',payload);}catch(e){}
+  return payload;
+}
 function jobTutorialCompletionPanelOpen(){
   const rewardWin=document.getElementById('rewardwin');
   const rewardPanel=document.getElementById('rewardpanel');
@@ -2268,9 +2288,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('eventTeleport', m=>applyEventTeleport(m));
     room.onMessage('positionCorrection', m=>{
       if(!m||!Number.isFinite(+m.x)||!Number.isFinite(+m.y)||!Number.isFinite(+m.z))return;
+      const before=dimensionsState.kind==='fishing_lake'&&player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
       player.pos.set(+m.x,+m.y,+m.z);
       if(player.vel)player.vel.set(0,0,0);
       if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+      fishingNetworkDebug('positionCorrection',{message:m,before});
       if(m.reason==='town_floor')showName('Returned to safe town ground');
     });
     room.onMessage('adminGateTeleportResult', m=>{
@@ -2851,12 +2873,14 @@ function netRestoreProfile(m){
       if(forceJobHandoffTownReturn&&typeof showName==='function')showName('Town of Beginnings');
     }else if(restoreFishingLake&&!onboardingActive){
       const lake=worldState&&worldState.FISHING_LAKE;
+      const before=player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
       if(lake&&lake.spawn){
         player.pos.set(lake.x+lake.spawn.dx+.5,lake.G+1.05,lake.z+lake.spawn.dz+.5);
       }
       player.vel.set(0,0,0);
       player.yaw=Math.PI;
       player.pitch=0;
+      fishingNetworkDebug('restore.safe-dock',{restoreFishingLake,serverActiveRoom,serverHasActiveRoom,before});
     }
     if(restoreJobRoom&&combatApi.resumeJobTutorial){
       combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);

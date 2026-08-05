@@ -5093,6 +5093,50 @@ function gameplayMovementAllowed(){
 }
 const INPUT_DEBUG_LOG_KEY='bc_input_debug_log_v1';
 const INPUT_DEBUG_LOG_LIMIT=80;
+const FISHING_INPUT_DEBUG_LOG_KEY='bc_fishing_input_debug_log_v1';
+const FISHING_INPUT_DEBUG_LIMIT=120;
+function fishingInputDebug(reason='snapshot',extra=null){
+  if(dim!=='fishing_lake' && !(extra&&extra.force))return null;
+  const active=document.activeElement;
+  const data={
+    reason,
+    at:Date.now(),
+    dim,
+    dgn:NET&&NET.dgn||'',
+    pos:player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3)}:null,
+    vel:player&&player.vel?{x:+player.vel.x.toFixed(3),y:+player.vel.y.toFixed(3),z:+player.vel.z.toFixed(3)}:null,
+    yaw:player&&Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,
+    pitch:player&&Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null,
+    locked:!!locked,
+    lockFallback:!!lockFallback,
+    cursorReleased:!!cursorReleased,
+    pointerLocked:document.pointerLockElement===renderer.domElement,
+    pointerLockRequestPending:!!pointerLockRequestPending,
+    cameraInputAllowed:gameplayCameraInputAllowed(),
+    movementAllowed:gameplayMovementAllowed(),
+    mouseLook:{x:+mouseLookDelta.x.toFixed(3),y:+mouseLookDelta.y.toFixed(3)},
+    bodyClass:document.body.className,
+    activeElement:active?(active.id||active.tagName||''):'',
+    extra:extra&&typeof extra==='object'?extra:null
+  };
+  const root=globalThis;
+  const log=Array.isArray(root.BlockcraftFishingInputDebugLog)?root.BlockcraftFishingInputDebugLog:[];
+  log.push(data);
+  while(log.length>FISHING_INPUT_DEBUG_LIMIT)log.shift();
+  root.BlockcraftFishingInputDebugLog=log;
+  root.BlockcraftLastFishingInputDebug=data;
+  root.BlockcraftReadFishingDebug=()=>({
+    latest:root.BlockcraftLastFishingInputDebug||null,
+    log:Array.isArray(root.BlockcraftFishingInputDebugLog)?root.BlockcraftFishingInputDebugLog.slice():[],
+    input:root.BlockcraftReadInputDebug?root.BlockcraftReadInputDebug():null,
+    stored:(()=>{try{return JSON.parse(localStorage.getItem(FISHING_INPUT_DEBUG_LOG_KEY)||'[]');}catch(e){return []}})()
+  });
+  try{localStorage.setItem(FISHING_INPUT_DEBUG_LOG_KEY,JSON.stringify(log));}catch(e){}
+  try{document.body.dataset.fishingDebug=JSON.stringify(data);}catch(e){}
+  console.warn('[bc-fishing-debug]',data);
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.input-debug',data);
+  return data;
+}
 function gameplayInputDebug(reason='snapshot',extra=null){
   const transitionModalOpen=pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     !!(pathSelectEl&&!pathSelectEl.classList.contains('hidden'))||
@@ -5172,11 +5216,17 @@ function queueMouseLook(dx,dy){
   if(!Number.isFinite(dx)||!Number.isFinite(dy))return;
   mouseLookDelta.x+=Math.max(-160,Math.min(160,dx));
   mouseLookDelta.y+=Math.max(-160,Math.min(160,dy));
+  if(dim==='fishing_lake'&&(Math.abs(dx)>18||Math.abs(dy)>18||Math.abs(mouseLookDelta.y)>120||Math.abs(player.pitch)>1.35)){
+    fishingInputDebug('mouse.queue',{dx,dy});
+  }
 }
 function consumeMouseLookDelta(){
   if(!gameplayCameraInputAllowed()){ mouseLookDelta.x=0; mouseLookDelta.y=0; return {x:0,y:0}; }
   const out={x:mouseLookDelta.x,y:mouseLookDelta.y};
   mouseLookDelta.x=0;mouseLookDelta.y=0;
+  if(dim==='fishing_lake'&&(Math.abs(out.x)>18||Math.abs(out.y)>18||Math.abs(player.pitch)>1.35)){
+    fishingInputDebug('mouse.consume',{out});
+  }
   return out;
 }
 addEventListener('keydown', e=>{
@@ -5404,6 +5454,9 @@ addEventListener('mousemove', e=>{
   claimMouse.x=e.clientX; claimMouse.y=e.clientY;
   if(cursorEl){cursorEl.style.left=(e.clientX-18)+'px';cursorEl.style.top=(e.clientY-18)+'px';}
   if(claimMode) updateClaimHover();
+  if(dim==='fishing_lake'&&(Math.abs(e.movementX||0)>18||Math.abs(e.movementY||0)>18||!gameplayCameraInputAllowed())){
+    fishingInputDebug('mousemove.raw',{movementX:e.movementX||0,movementY:e.movementY||0,target:e.target&&(e.target.id||e.target.tagName||''),allowed:gameplayCameraInputAllowed()});
+  }
   if(!gameplayCameraInputAllowed())return;
   if(document.pointerLockElement===renderer.domElement){
     queueMouseLook(e.movementX||0,e.movementY||0);
