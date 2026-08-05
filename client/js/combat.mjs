@@ -5454,8 +5454,14 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyQ') cast(0);
     if(e.code==='KeyR') cast(1);
     if(e.code==='KeyH') cast(2);
-    if(e.code==='KeyF' && !e.repeat) primaryAction();
-    if(e.code==='KeyG' && !e.repeat){ placeKeyHeld=true; nextHeldPlaceAt=performance.now()+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction(); }
+    if(e.code==='KeyF' && !e.repeat){
+      if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyDown&&globalThis.BlockcraftFishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
+      primaryAction();
+    }
+    if(e.code==='KeyG' && !e.repeat){
+      if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyDown&&globalThis.BlockcraftFishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
+      placeKeyHeld=true; nextHeldPlaceAt=performance.now()+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction();
+    }
     if(e.code==='KeyJ' && !e.repeat){ if(!castDragonAbility()) castArmorPower(); }
     if(e.code==='KeyY' && !e.repeat) cycleBetaAbilityPath();
     if(e.code==='Semicolon' && !e.repeat) cycleBetaLegendaryWeapon();
@@ -5468,8 +5474,14 @@ addEventListener('keydown', e=>{
 function stopPrimaryAction(){ mouseL=false; mining=null; suppressMine=false; }
 addEventListener('keyup', e=>{
   keys[e.code]=false;
-  if(e.code==='KeyF') stopPrimaryAction();
-  if(e.code==='KeyG') placeKeyHeld=false;
+  if(e.code==='KeyF'){
+    if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyUp)globalThis.BlockcraftFishing.handleKeyUp(e.code);
+    stopPrimaryAction();
+  }
+  if(e.code==='KeyG'){
+    if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyUp)globalThis.BlockcraftFishing.handleKeyUp(e.code);
+    placeKeyHeld=false;
+  }
 });
 addEventListener('mousemove', e=>{
   claimMouse.x=e.clientX; claimMouse.y=e.clientY;
