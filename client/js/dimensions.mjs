@@ -2494,7 +2494,7 @@ function generateFishingLakeRoom(){
 }
 function fishingLakeSpawn(){
   const r=fishingLakeRoom();
-  return {x:r.x+(r.spawn&&r.spawn.dx||0)+.5,y:r.G+1.05,z:r.z+(r.spawn&&r.spawn.dz||-23)+.5};
+  return {x:r.x+(r.spawn&&r.spawn.dx||0)+.5,y:r.G+1.001,z:r.z+(r.spawn&&r.spawn.dz||-23)+.5};
 }
 function fishingLakeExitPoint(){
   const r=fishingLakeRoom();

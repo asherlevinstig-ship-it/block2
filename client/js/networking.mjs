@@ -2877,7 +2877,7 @@ function netRestoreProfile(m){
       const lakeX=Number(lake&&lake.x)||345,lakeZ=Number(lake&&lake.z)||925,lakeG=Number(lake&&lake.G)||18,lakeR=Number(lake&&lake.R)||62;
       const alreadySafe=dim==='fishing_lake'&&player&&player.pos&&Math.hypot(player.pos.x-lakeX,player.pos.z-lakeZ)<=lakeR+10&&player.pos.y>=lakeG-4&&player.pos.y<=lakeG+34;
       if(!alreadySafe&&lake&&lake.spawn){
-        player.pos.set(lake.x+lake.spawn.dx+.5,lake.G+1.05,lake.z+lake.spawn.dz+.5);
+        player.pos.set(lake.x+lake.spawn.dx+.5,lake.G+1.001,lake.z+lake.spawn.dz+.5);
         player.vel.set(0,0,0);
         player.yaw=Math.PI;
         player.pitch=0;
@@ -3366,7 +3366,7 @@ function readJobTutorialResume(){
     }else if(activeRoom.dim==='fishing_lake'&&pos){
       const room=worldState&&worldState.FISHING_LAKE;
       if(room&&(Math.hypot(pos[0]-room.x,pos[2]-room.z)>room.R+5||pos[1]<room.G-2)){
-        pos=[room.x+room.spawn.dx+.5,room.G+1.05,room.z+room.spawn.dz+.5];
+        pos=[room.x+room.spawn.dx+.5,room.G+1.001,room.z+room.spawn.dz+.5];
       }
     }else if(activeRoom.dim==='job'&&pos){
       const room=worldState&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job];

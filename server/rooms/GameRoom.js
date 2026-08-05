@@ -1124,7 +1124,7 @@ class GameRoom extends Room {
       } else if (prof.activeRoom && prof.activeRoom.dim === 'fishing_lake') {
         p.dim = 'tutorial';
         p.dgn = this.tutorialSpaceId(client, 'fishing_lake');
-        p.x = 345.5; p.y = 19.05; p.z = 902.5;
+        p.x = 345.5; p.y = 19.001; p.z = 902.5;
         prof.pos = [p.x, p.y, p.z];
         this.dirtyPlayers.add(token);
       }
@@ -1827,7 +1827,7 @@ class GameRoom extends Room {
     if (!activeRoom || !p) return false;
     if (activeRoom.dim === 'fishing_lake') {
       prof.activeRoom = activeRoom;
-      prof.pos = [345.5, 19.05, 902.5];
+      prof.pos = [345.5, 19.001, 902.5];
       return true;
     }
     const pos = sanitizeActiveRoomPosition(activeRoom, [p.x, p.y, p.z]);
@@ -1865,7 +1865,7 @@ class GameRoom extends Room {
         return false;
       }
       const activeRoom = sanitizeActiveRoom({ dim: 'fishing_lake' });
-      const spawn = sanitizeActiveRoomPosition(activeRoom, [345.5, 19.05, 902.5]) || [345.5, 19.05, 902.5];
+      const spawn = sanitizeActiveRoomPosition(activeRoom, [345.5, 19.001, 902.5]) || [345.5, 19.001, 902.5];
       p.dim = 'tutorial';
       p.dgn = this.tutorialSpaceId(client, 'fishing_lake');
       p.mount = '';
