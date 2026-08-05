@@ -199,6 +199,34 @@ function fishingCameraDebug(reason,extra={},now=performance.now()){
   try{root.BlockcraftTrace&&root.BlockcraftTrace('fishing.camera-debug',data);}catch(e){}
   console.warn('[bc-fishing-camera-debug]',data);
 }
+let nextFishingLakeBoundsDebugAt=0;
+function fishingLakeRoomDef(){
+  return worldState&&worldState.FISHING_LAKE||{x:345,z:925,G:18,R:62,spawn:{dx:0,dz:-23}};
+}
+function fishingLakeSafePoint(){
+  const lake=fishingLakeRoomDef(),spawn=lake&&lake.spawn||{dx:0,dz:-23};
+  return {x:(lake&&lake.x||345)+(spawn.dx||0)+.5,y:(lake&&lake.G||18)+1.05,z:(lake&&lake.z||925)+(spawn.dz||0)+.5};
+}
+function enforceFishingLakeBounds(now=performance.now()){
+  if(dim!=='fishing_lake'||!player||!player.pos)return false;
+  const lake=fishingLakeRoomDef();
+  const lx=Number(lake&&lake.x)||345,lz=Number(lake&&lake.z)||925,lg=Number(lake&&lake.G)||18,lr=Number(lake&&lake.R)||62;
+  const dx=player.pos.x-lx,dz=player.pos.z-lz;
+  const outside=Math.hypot(dx,dz)>lr+10||player.pos.y<lg-4||player.pos.y>lg+34;
+  if(!outside)return false;
+  const before={x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null};
+  const safe=fishingLakeSafePoint();
+  player.pos.set(safe.x,safe.y,safe.z);
+  if(player.vel)player.vel.set(0,0,0);
+  player.yaw=Math.PI;
+  player.pitch=0;
+  if(combatApi&&combatApi.suppressMouseLook)combatApi.suppressMouseLook(900,'fishingLakeBounds');
+  if(now>=nextFishingLakeBoundsDebugAt){
+    nextFishingLakeBoundsDebugAt=now+1200;
+    fishingCameraDebug('bounds-rescue',{before,safe,room:{x:lx,z:lz,g:lg,r:lr}},now);
+  }
+  return true;
+}
 function updateMovementStateSnapshot(state, speed, targetSpeed, sprintFactor, grounded, swimming, panther, exhausted){
   state.grounded=!!grounded;state.airborne=!grounded&&!swimming;state.swimming=!!swimming;state.panther=!!panther;state.exhausted=!!exhausted;state.sprinting=sprintFactor>.55||panther;
   state.speed=Math.round(speed*100)/100;state.targetSpeed=Math.round(targetSpeed*100)/100;state.sprintFactor=Math.round(sprintFactor*100)/100;
@@ -2557,6 +2585,7 @@ function tick(now){
   tickAbilityTraining(now);
   tickJobTutorial(now);
   if(globalThis.BlockcraftFishing)globalThis.BlockcraftFishing.tick(now,dt);
+  enforceFishingLakeBounds(now);
   tickTownGuidance(now);
   tickLandBoundaryToast(now);
   if(!cutscene && combatApi.shouldOpenLevel2JobChoice && combatApi.shouldOpenLevel2JobChoice()){
@@ -2948,6 +2977,7 @@ function tick(now){
   }
   attackCd-=dt;
   netTick(dt, now);
+  enforceFishingLakeBounds(now);
   tickArrows(dt);
   tickMining(dt);
   tickFalling(dt);
