@@ -2611,6 +2611,11 @@ test('admin zero hotkey opens a dungeon boss model gallery',()=>{
   assert.match(visuals,/function attachTentacles/);
   assert.match(visuals,/function brightenBossBody/);
   assert.match(visuals,/function attachBossReadableSilhouette/);
+  assert.match(visuals,/function applyBossBodyPlan/);
+  assert.match(visuals,/applyBossBodyPlan\(m,s,spec\.hex\)/);
+  assert.match(visuals,/style===['"]rime_giant['"][\s\S]{0,260}m\.grp\.scale\.set\(1\.35,1\.3,1\.25\)/);
+  assert.match(visuals,/style===['"]choir['"][\s\S]{0,260}m\.grp\.scale\.set\(\.86,1\.28,\.86\)/);
+  assert.match(visuals,/style===['"]rift_monarch['"][\s\S]{0,260}legs\.forEach/);
   assert.match(visuals,/function tickBossConceptFx/);
   assert.match(visuals,/function tickDungeonBossGalleryFrame/);
   assert.match(visuals,/model\.galleryPreview=true/);

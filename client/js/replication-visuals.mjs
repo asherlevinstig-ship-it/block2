@@ -199,6 +199,34 @@ function attachBossReadableSilhouette(m,style,hex){
   else if(style==='ossuary'){for(const sx of [-.45,-.18,.18,.45])box([.08,.8,.08],[sx,1.82,-.36],[0,0,sx*.65],additiveMat(0xf8fafc,.72));}
   else if(style==='watcher'){const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.055,8,32),glow);ring.position.set(0,1.58,-.46);ring.rotation.x=Math.PI/2;ring.userData.bossGlow=1.2;g.add(ring);}
 }
+function scalePart(part,scale,pos){
+  if(!part)return;
+  part.scale.set(scale[0],scale[1],scale[2]);
+  if(pos)part.position.set(pos[0],pos[1],pos[2]);
+}
+function bossPlanBox(m,size,pos,hex,rot=[0,0,0],glow=false){
+  const b=attachBox(m.grp,size,pos,hex,rot,glow);
+  if(glow)markBossGlow(b,1);
+  return b;
+}
+function applyBossBodyPlan(m,style,hex){
+  if(!m||!m.grp||m.bossBodyPlan)return;m.bossBodyPlan=style;
+  const arms=m.arms||[],legs=m.legs||[],head=m.head;
+  if(style==='cinder_smith'){scalePart(head,[1.18,.86,1.12],[0,1.58,.04]);arms.forEach((a,i)=>scalePart(a,[i?1.75:1.05,1.2,1.55],[i? .46:-.42,1.23,.08]));legs.forEach((l,i)=>scalePart(l,[1.35,.78,1.25],[i?.23:-.23,.64,0]));bossPlanBox(m,[1.05,.36,.5],[0,1.05,.03],0x2a1410);m.grp.scale.set(1.18,.9,1.08);}
+  else if(style==='castellan'){scalePart(head,[1.05,1.28,1.05],[0,1.86,.02]);arms.forEach((a,i)=>scalePart(a,[.92,1.55,.95],[i?.54:-.54,1.36,.06]));legs.forEach((l,i)=>scalePart(l,[.95,1.2,.9],[i?.2:-.2,.78,0]));for(const x of [-.38,0,.38])bossPlanBox(m,[.22,1.65,.24],[x,1.42,-.34],0x2d2d34);m.grp.scale.set(1.05,1.18,1.02);}
+  else if(style==='choir'){scalePart(head,[.72,1.35,.72],[0,1.95,.05]);arms.forEach((a,i)=>scalePart(a,[.56,1.75,.56],[i?.42:-.42,1.38,.08]));legs.forEach((l,i)=>scalePart(l,[.48,1.35,.48],[i?.12:-.12,.72,0]));bossPlanBox(m,[.45,1.35,.28],[0,1.02,.02],0x4c1d95);m.grp.scale.set(.86,1.28,.86);}
+  else if(style==='void_prior'){scalePart(head,[1.05,1.45,1.05],[0,1.9,.02]);arms.forEach((a,i)=>scalePart(a,[.62,1.95,.62],[i?.48:-.48,1.32,.05]));legs.forEach((l,i)=>scalePart(l,[.24,.28,.24],[i?.08:-.08,.32,0]));bossPlanBox(m,[.9,1.55,.34],[0,.88,.02],0x080712);m.grp.scale.set(.92,1.22,.92);}
+  else if(style==='rime_giant'){scalePart(head,[1.35,1.12,1.25],[0,1.78,.03]);arms.forEach((a,i)=>scalePart(a,[1.85,1.55,1.75],[i?.62:-.62,1.18,.08]));legs.forEach((l,i)=>scalePart(l,[1.55,1.2,1.45],[i?.28:-.28,.7,0]));bossPlanBox(m,[1.15,.95,.55],[0,1.08,.02],0x334155);m.grp.scale.set(1.35,1.3,1.25);}
+  else if(style==='thunder_warden'){scalePart(head,[1.15,1.25,1.1],[0,1.9,.02]);arms.forEach((a,i)=>scalePart(a,[1.28,1.85,1.2],[i?.56:-.56,1.32,.06]));legs.forEach((l,i)=>scalePart(l,[1.05,1.35,1.02],[i?.2:-.2,.72,0]));bossPlanBox(m,[.82,1.15,.42],[0,1.18,.03],0x1f2937);m.grp.scale.set(1.08,1.34,1.08);}
+  else if(style==='buried_monarch'){scalePart(head,[.92,1.08,.86],[0,1.9,.03]);arms.forEach((a,i)=>scalePart(a,[.72,1.7,.72],[i?.48:-.48,1.28,.06]));legs.forEach((l,i)=>scalePart(l,[.65,1.45,.62],[i?.16:-.16,.72,0]));bossPlanBox(m,[.54,1.05,.28],[0,1.02,.02],0x8a5a18);m.grp.scale.set(.92,1.26,.9);}
+  else if(style==='abyssal_gatekeeper'){scalePart(head,[1.42,1.05,1.28],[0,1.62,.03]);arms.forEach((a,i)=>scalePart(a,[1.75,1.28,1.6],[i?.64:-.64,1.18,.08]));legs.forEach((l,i)=>scalePart(l,[1.22,.75,1.18],[i?.24:-.24,.58,0]));bossPlanBox(m,[1.05,.9,.55],[0,.98,.03],0x083344);m.grp.scale.set(1.22,1.02,1.16);}
+  else if(style==='rift_monarch'){scalePart(head,[1.05,1.2,1.05],[0,2.04,.03]);arms.forEach((a,i)=>scalePart(a,[.8,1.95,.8],[i?.54:-.54,1.42,.05]));legs.forEach((l,i)=>scalePart(l,[.12,.12,.12],[i?.04:-.04,.22,0]));bossPlanBox(m,[.76,1.15,.28],[0,1.16,.02],0x1e1b4b);m.grp.scale.set(.98,1.22,.98);}
+  else if(style==='foreman'){scalePart(head,[1.08,.82,1.06],[0,1.54,.03]);arms.forEach((a,i)=>scalePart(a,[i?1.2:1.8,1.1,1.55],[i?.42:-.5,1.16,.08]));legs.forEach((l,i)=>scalePart(l,[1.22,.72,1.12],[i?.22:-.22,.58,0]));bossPlanBox(m,[.98,.48,.48],[0,1.0,.03],0x5b3b1e);m.grp.scale.set(1.16,.9,1.08);}
+  else if(style==='regent'){scalePart(head,[.86,1.16,.86],[0,1.92,.03]);arms.forEach((a,i)=>scalePart(a,[.58,1.8,.58],[i?.46:-.46,1.34,.06]));legs.forEach((l,i)=>scalePart(l,[.32,.48,.32],[i?.1:-.1,.42,0]));bossPlanBox(m,[.62,1.1,.28],[0,1.02,.02],0x0f3d56,[0,0,0],true);m.grp.scale.set(.9,1.18,.9);}
+  else if(style==='rootkeeper'){scalePart(head,[1.18,1.08,1.1],[0,1.72,.03]);arms.forEach((a,i)=>scalePart(a,[1.45,1.75,1.18],[i?.58:-.58,1.18,.06]));legs.forEach((l,i)=>scalePart(l,[.75,1.55,.75],[i?.22:-.22,.66,0]));bossPlanBox(m,[.78,1.15,.42],[0,.98,.02],0x254b24);m.grp.scale.set(1.08,1.2,1.05);}
+  else if(style==='ossuary'){scalePart(head,[.95,.95,.86],[0,1.82,.03]);arms.forEach((a,i)=>scalePart(a,[.7,1.6,.65],[i?.44:-.44,1.22,.06]));legs.forEach((l,i)=>scalePart(l,[.58,1.45,.55],[i?.15:-.15,.66,0]));bossPlanBox(m,[.5,1.05,.24],[0,1.0,.03],0xd8d2bc,[0,0,0],true);m.grp.scale.set(.88,1.18,.86);}
+  else if(style==='watcher'){scalePart(head,[1.45,1.1,1.35],[0,1.72,.03]);arms.forEach((a,i)=>scalePart(a,[.42,1.45,.42],[i?.58:-.58,1.2,.06]));legs.forEach((l,i)=>scalePart(l,[.22,.18,.22],[i?.06:-.06,.28,0]));bossPlanBox(m,[.7,.7,.22],[0,1.18,.06],0x312e81,[0,0,0],true);m.grp.scale.set(1.0,1.02,1);}
+}
 function decorateDungeonVariant(m,ref){
   const v=ref.variant||'';if(!v||!m||m.dungeonVariant)return;m.dungeonVariant=v;
   const bossy=v.includes('guard')||v==='graveguard';
@@ -253,7 +281,7 @@ function decorateBossStyle(m,ref){
     rift_monarch:{col:[.65,.22,.72],hex:0xf472b6,parts:()=>{if(m.head){attachCrown(m.head,0x2e1065,0xf472b6);markBossGlow(attachBox(m.head,[.38,.12,.08],[0,.06,.31],0xf472b6,[0,0,0],true),1.4);}attachTatteredRobe(m.grp,0x1e1b4b,0xf472b6,.86,1.08);for(const sx of [-.34,.34])attachBox(m.grp,[.09,.72,.09],[sx,1.5,-.22],0x3b0764,[.3,0,sx>0?-.8:.8]);markCrystalHalo(m.grp,0xf472b6,1.12);attachRiftFragments(m.grp,0xf472b6,10,1.25);if(m.arms&&m.arms[0])attachStaff(m.arms[0],0x312e81,0xf472b6,'orb');}},
     ancient_warden:{col:[.06,.22,.26],hex:0x35d0c8,parts:()=>{if(m.head){attachBox(m.head,[.56,.12,.1],[0,.06,.32],0x78fff2,[0,0,0],true);for(const sx of [-.24,.24])attachBox(m.head,[.08,.5,.08],[sx,.42,.02],0x0f2f35,[0,0,sx>0?-.28:.28]);}for(const sx of [-.52,.52])attachBox(m.grp,[.22,.72,.24],[sx,1.38,.02],0x12353a);attachBox(m.grp,[.7,.12,.16],[0,1.62,-.18],0x35d0c8,[0,0,0],true);}},
   };
-  const spec=styles[s];if(!spec)return;tintModel(m,spec.col);spec.parts();
+  const spec=styles[s];if(!spec)return;tintModel(m,spec.col);applyBossBodyPlan(m,s,spec.hex);spec.parts();
   const concept=BOSS_CONCEPT_STYLE[s];
   if(concept){brightenBossBody(m,concept.accent);attachBossReadableSilhouette(m,s,concept.accent);m.grp.scale.multiplyScalar(concept.scale||1);m.conceptFx=concept;m.conceptFloatBase=NaN;m.conceptOrbit=m.grp.children.filter(ch=>ch&&ch.userData&&ch.userData.bossOrbit);}
   const aura=new THREE.Mesh(new THREE.TorusGeometry(1.22,.045,8,42),new THREE.MeshBasicMaterial({color:spec.hex,transparent:true,opacity:.55,blending:THREE.AdditiveBlending,depthWrite:false}));
