@@ -2121,6 +2121,12 @@ function updateEncounterPrompt(){
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
     return;
   }
+  const fishingPrompt=nearbyFishingWaterPrompt();
+  if(fishingPrompt){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">'+escHTML(fishingPrompt.key)+'</span><b>'+escHTML(fishingPrompt.title)+'</b><small>'+escHTML(fishingPrompt.small)+'</small>';
+    return;
+  }
   if(dim!=='overworld'||!overworldActivity){encounterPromptEl.classList.add('hidden');encounterPromptEl.innerHTML='';return;}
   const breach=overworldActivity.gateBreach;
   if(breach){
@@ -2149,6 +2155,22 @@ function updateEncounterPrompt(){
   const rc=clampRegionalContract(regionalContract),accepted=rc&&rc.type==='road_escort'&&(!rc.targetId||rc.targetId===c.id);
   encounterPromptEl.textContent=danger?'Caravan Under Attack · defeat the attacking bandits':accepted?'Escort Accepted · remain near the convoy':'G · Talk to Caravan Merchant · escort work available';
   encounterPromptEl.classList.remove('hidden');
+}
+function nearbyFishingWaterPrompt(){
+  if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive)return null;
+  if(dim!=='fishing_lake'&&dim!=='overworld')return null;
+  const px=Math.floor(player.pos.x),py=Math.floor(player.pos.y),pz=Math.floor(player.pos.z);
+  let nearWater=false;
+  for(let dx=-4;dx<=4&&!nearWater;dx++)for(let dz=-4;dz<=4&&!nearWater;dz++){
+    if(dx*dx+dz*dz>18)continue;
+    for(let dy=-3;dy<=1;dy++){
+      if(getB(px+dx,py+dy,pz+dz)===B.WATER){nearWater=true;break;}
+    }
+  }
+  if(!nearWater)return null;
+  const hasRod=typeof countItem==='function'&&countItem(I.FISHING_ROD)>0;
+  if(!hasRod)return {key:'CRAFT',title:'Need a Fishing Rod',small:'Craft one at a Crafting Table: 3 sticks + 1 wheat.'};
+  return {key:'ROD',title:'Fishing Rod Ready',small:'Fishing will use stamina - casting mechanic coming next.'};
 }
 function updateInfoHud(held){
   document.body.classList.toggle('calm-town', (locked || uiOpen || statOpen || qOpen || claimMode) && calmTownHud());

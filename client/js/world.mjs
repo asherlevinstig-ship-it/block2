@@ -276,6 +276,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   CAT_COLLAR:218, DOG_COLLAR:219, WOLF_COLLAR:220,
   APPEARANCE_MIRROR:221,
   APPRENTICE_ROBE:222, ARCWEAVE_ROBE:223, STORMWEAVE_ROBE:224,
+  FISHING_ROD:225,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -732,6 +733,23 @@ ITEMS[I.APPEARANCE_MIRROR]={name:'Hunter Mirror',stack:1,icon:iconCanvas(ctx=>dr
 "................"],{s:'#6b7280',i:'#d1d5db',w:'#f8fafc',d:'#7dd3fc',l:'#bae6fd',g:'#ffffff',b:'#5c2c24'}))};
 ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
 "................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
+ITEMS[I.FISHING_ROD]={name:'Fishing Rod',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
+".............lll",
+"............l...",
+"...........l....",
+"..........l.....",
+".........s......",
+"........s.......",
+".......s........",
+"......s.........",
+".....s..........",
+"....s...........",
+"...s............",
+"..s.............",
+".s..............",
+"s...............",
+"................",
+"................"],{s:'#8a5d33',l:'#dff8ff'}))};
 const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
 
 const TOOL_DEFS = [
@@ -804,6 +822,7 @@ const RECIPES = [
   {shapeless:[I.IRON_INGOT,I.STICK,B.PLANKS], out:[I.REPAIR_KIT,1]},
   {shape:["LLL","PPP"], keys:{L:B.LEAVES, P:B.PLANKS}, out:[B.BED,1]},
   {shape:["PPP","P P","PPP"], keys:{P:B.PLANKS}, out:[B.CHEST,1]},
+  {shape:["..s",".sW","s.."], keys:{s:I.STICK, W:I.WHEAT}, out:[I.FISHING_ROD,1]},
 ];
 const TOOL_MAT_ITEMS = { WOOD:B.PLANKS, STONE:B.COBBLE, IRON:I.IRON_INGOT, DIA:I.DIAMOND };
 for(const m in TOOL_MAT_ITEMS){

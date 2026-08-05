@@ -110,6 +110,7 @@ const I = {
   CAT_COLLAR: 218, DOG_COLLAR: 219, WOLF_COLLAR: 220,
   APPEARANCE_MIRROR: 221,
   APPRENTICE_ROBE: 222, ARCWEAVE_ROBE: 223, STORMWEAVE_ROBE: 224,
+  FISHING_ROD: 225,
 };
 // Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
@@ -568,7 +569,7 @@ const ITEM_NAMES = {
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
   [I.ANCIENT_FRAGMENT]: 'Ancient Fragment', [I.ECHO_GLYPH]: 'Echo Glyph', [I.RELIC_ARMOR_PIECE]: 'Relic Armor Piece',
-  [I.TOWN_MAP]: 'Town Map', [I.APPEARANCE_MIRROR]: 'Hunter Mirror',
+  [I.TOWN_MAP]: 'Town Map', [I.APPEARANCE_MIRROR]: 'Hunter Mirror', [I.FISHING_ROD]: 'Fishing Rod',
   [I.APPRENTICE_ROBE]: 'Apprentice Robe', [I.ARCWEAVE_ROBE]: 'Arcweave Robe', [I.STORMWEAVE_ROBE]: 'Stormweave Robe',
   [I.SHADOW_SIGIL]: 'Shadow Sigil', [I.FANG_TOTEM]: 'Fang Totem',
   [I.MOTE_CHARM]: 'Lifebloom Charm', [I.FORAGE_CHARM]: "Forager's Charm",
@@ -607,6 +608,7 @@ const RECIPES = [
   { shapeless: [I.IRON_INGOT, I.STICK, W.B.PLANKS], out: [I.REPAIR_KIT, 1] },
   { shape: ['LLL', 'PPP'], keys: { L: W.B.LEAVES, P: W.B.PLANKS }, out: [W.B.BED, 1] },
   { shape: ['PPP', 'P P', 'PPP'], keys: { P: W.B.PLANKS }, out: [W.B.CHEST, 1] },
+  { shape: ['..s', '.sW', 's..'], keys: { s: I.STICK, W: I.WHEAT }, out: [I.FISHING_ROD, 1] },
   { shapeless: [I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 1] },
   { shape: ['WWW'], keys: { W: I.WHEAT }, out: [I.BREAD, 1] },
   { shapeless: [I.COOKED_MEAT, I.COOKED_MEAT, I.COAL], out: [I.DRAGON_TREAT, 2] },
