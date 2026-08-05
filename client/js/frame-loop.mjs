@@ -2374,28 +2374,6 @@ function tickFishing(now,dt){
 }
 function makeFishingVisuals(){
   if(fishingVisuals)return fishingVisuals;
-  const rodGroup=new THREE.Group();
-  rodGroup.name='fishing-rod-viewmodel';
-  const woodMat=new THREE.MeshLambertMaterial({color:0x7c4a21});
-  const wrapMat=new THREE.MeshLambertMaterial({color:0xd6b15f});
-  const reelMat=new THREE.MeshLambertMaterial({color:0xd7e7f7});
-  const rod=new THREE.Mesh(new THREE.CylinderGeometry(.018,.034,1.15,8),woodMat);
-  rod.position.set(0,.22,0);
-  rod.rotation.z=-.33;
-  const tip=new THREE.Mesh(new THREE.CylinderGeometry(.008,.014,.34,8),woodMat);
-  tip.position.set(.2,.77,0);
-  tip.rotation.z=-.54;
-  const grip=new THREE.Mesh(new THREE.CylinderGeometry(.045,.05,.22,8),wrapMat);
-  grip.position.set(-.18,-.32,0);
-  grip.rotation.z=-.33;
-  const reel=new THREE.Mesh(new THREE.TorusGeometry(.07,.012,8,16),reelMat);
-  reel.position.set(-.05,-.08,.045);
-  reel.rotation.y=Math.PI/2;
-  rodGroup.add(rod,tip,grip,reel);
-  rodGroup.position.set(.42,-.48,-.78);
-  rodGroup.rotation.set(.12,-.2,-.38);
-  rodGroup.visible=false;
-  camera.add(rodGroup);
   const lineMat=new THREE.LineBasicMaterial({color:0xdaf7ff,transparent:true,opacity:.82});
   const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),lineMat);
   line.name='fishing-line';
@@ -2415,31 +2393,24 @@ function makeFishingVisuals(){
   bobberGroup.add(bobTop,bobBot,ring);
   bobberGroup.visible=false;
   scene.add(bobberGroup);
-  fishingVisuals={rodGroup,rod,tip,grip,reel,line,bobberGroup,ring};
+  fishingVisuals={line,bobberGroup,ring};
   return fishingVisuals;
 }
 function fishingRodTipWorld(){
-  const v=new THREE.Vector3(.18,.24,-.86);
-  v.applyMatrix4(camera.matrixWorld);
-  return v;
+  const yaw=Number(player.yaw)||0;
+  return new THREE.Vector3(
+    player.pos.x+Math.sin(yaw)*.55+Math.cos(yaw)*.34,
+    player.pos.y+player.eye-.18,
+    player.pos.z+Math.cos(yaw)*.55-Math.sin(yaw)*.34
+  );
 }
 function tickFishingVisuals(now,dt){
   const v=makeFishingVisuals();
   const active=fishingState.phase&&fishingState.phase!=='idle'&&fishingState.phase!=='cooldown';
-  const rodReady=!active&&locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&typeof countItem==='function'&&countItem(I.FISHING_ROD)>0&&nearbyFishingWaterInfo()!=null;
-  v.rodGroup.visible=active||rodReady;
   v.line.visible=active&&!!fishingState.target;
   v.bobberGroup.visible=active&&!!fishingState.target;
-  if(!v.rodGroup.visible)return;
-  const t=(now-(fishingState.castVisualStart||now))/1000;
-  const cast=Math.max(0,1-Math.min(1,t/.55));
   const fight=fishingState.phase==='fight'?1:0;
   const bite=fishingState.phase==='bite'?1:0;
-  const reel=!!(keys&&keys.KeyF)&&fight;
-  v.rodGroup.position.set(.42,-.48,-.78);
-  v.rodGroup.rotation.set(.12-cast*.42+fight*.08+Math.sin(now*.012)*.015,.16-cast*.22,-.38-cast*.75+fight*.16+Math.sin(now*.02)*(reel?.055:.018));
-  v.tip.rotation.z=-.54-(fishingState.tension||0)/100*.22-fight*.08;
-  v.reel.rotation.x+=dt*(reel?18:2.5);
   if(!fishingState.target)return;
   const target=fishingState.target;
   const bob=Math.sin(now*.006)*.035+(bite?Math.sin(now*.04)*.09:0)+(fight?Math.sin(now*.014)*.055:0);
