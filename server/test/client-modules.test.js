@@ -2606,6 +2606,14 @@ test('admin zero hotkey opens a dungeon boss model gallery',()=>{
   assert.match(visuals,/BlockcraftDungeonPools/);
   assert.match(visuals,/makeGateBoss\(\)/);
   assert.match(visuals,/decorateBossStyle\(model,ref\)/);
+  assert.match(visuals,/BOSS_CONCEPT_STYLE/);
+  assert.match(visuals,/function attachHammer/);
+  assert.match(visuals,/function attachTentacles/);
+  assert.match(visuals,/function tickBossConceptFx/);
+  assert.match(visuals,/function tickDungeonBossGalleryFrame/);
+  assert.match(visuals,/model\.galleryPreview=true/);
+  assert.match(visuals,/requestAnimationFrame\(tickDungeonBossGalleryFrame\)/);
+  assert.match(visuals,/userData\.bossOrbit/);
   for (const style of ['cinder_smith','castellan','choir','void_prior','rime_giant','thunder_warden','buried_monarch','abyssal_gatekeeper','rift_monarch'])
     assert.match(visuals,new RegExp(style.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\{'));
 });
