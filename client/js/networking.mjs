@@ -2844,17 +2844,27 @@ function netRestoreProfile(m){
     }
     const forceJobHandoffTownReturn=jobTutorialCompletionPanelOpen()&&!restoreJobRoom&&!restoreTamingLand&&!restoreFishingLake;
     const townReturn=forceJobHandoffTownReturn&&dimensionsApi.townReturnPoint?dimensionsApi.townReturnPoint():null;
-    const restorePos=townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand||restoreFishingLake)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos;
+    const restorePos=restoreFishingLake?null:(townReturn?[townReturn.x,townReturn.y,townReturn.z]:(restoreJobRoom||restoreTamingLand)&&Array.isArray(mergedActiveRoom.pos)?mergedActiveRoom.pos:m.pos);
     if(Array.isArray(restorePos) && !onboardingActive){
       player.pos.set(restorePos[0], restorePos[1]+.01, restorePos[2]);
       player.vel.set(0,0,0);
       if(forceJobHandoffTownReturn&&typeof showName==='function')showName('Town of Beginnings');
+    }else if(restoreFishingLake&&!onboardingActive){
+      const lake=worldState&&worldState.FISHING_LAKE;
+      if(lake&&lake.spawn){
+        player.pos.set(lake.x+lake.spawn.dx+.5,lake.G+1.05,lake.z+lake.spawn.dz+.5);
+      }
+      player.vel.set(0,0,0);
+      player.yaw=Math.PI;
+      player.pitch=0;
     }
     if(restoreJobRoom&&combatApi.resumeJobTutorial){
       combatApi.resumeJobTutorial(restoreJobRoom.job,restoreJobRoom);
       storeJobTutorialResume(restoreJobRoom,player?[player.pos.x,player.pos.y,player.pos.z]:restoreJobRoom.pos);
     }else if(restoreTamingLand){
       storeJobTutorialResume(restoreTamingLand,player?[player.pos.x,player.pos.y,player.pos.z]:restoreTamingLand.pos);
+    }else if(restoreFishingLake){
+      storeJobTutorialResume(restoreFishingLake,null);
     }else{
       storeJobTutorialResume(null,null);
     }
@@ -3367,7 +3377,6 @@ function currentRuntimeActiveRoom(){
   }
   if(dimensionsState.kind==='fishing_lake'){
     const room={dim:'fishing_lake'};
-    if(player&&player.pos)room.pos=[player.pos.x,player.pos.y,player.pos.z];
     return room;
   }
   return null;

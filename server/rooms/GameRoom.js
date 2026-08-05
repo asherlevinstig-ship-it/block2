@@ -1123,6 +1123,9 @@ class GameRoom extends Room {
       } else if (prof.activeRoom && prof.activeRoom.dim === 'fishing_lake') {
         p.dim = 'tutorial';
         p.dgn = this.tutorialSpaceId(client, 'fishing_lake');
+        p.x = 345.5; p.y = 19.05; p.z = 902.5;
+        prof.pos = [p.x, p.y, p.z];
+        this.dirtyPlayers.add(token);
       }
     } else {
       p.x = TOWN_RETURN_SPAWN.x + (Math.random() * 4 - 2);
@@ -1821,6 +1824,11 @@ class GameRoom extends Room {
   persistActiveRoomPose(client, prof, p) {
     const activeRoom = sanitizeActiveRoom(prof && prof.activeRoom);
     if (!activeRoom || !p) return false;
+    if (activeRoom.dim === 'fishing_lake') {
+      prof.activeRoom = activeRoom;
+      prof.pos = [345.5, 19.05, 902.5];
+      return true;
+    }
     const pos = sanitizeActiveRoomPosition(activeRoom, [p.x, p.y, p.z]);
     if (!pos) return false;
     prof.activeRoom = activeRoom;

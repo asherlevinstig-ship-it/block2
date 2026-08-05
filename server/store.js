@@ -533,6 +533,7 @@ function sanitizeActiveRoomPosition(activeRoom, pos) {
   const room = activeRoom.dim === 'taming_land' ? TAMING_LAND_ROOM : activeRoom.dim === 'fishing_lake' ? FISHING_LAKE_ROOM : JOB_TUTORIAL_ROOMS[activeRoom.job];
   if (!room) return null;
   const spawn = [room.x + (room.spawnDx || 0) + .5, room.g + 1.05, room.z + (room.spawnDz == null ? 14 : room.spawnDz) + .5];
+  if (activeRoom.dim === 'fishing_lake') return spawn;
   const x = clampF(pos[0], room.x - room.r - 6, room.x + room.r + 6);
   const y = clampF(pos[1], 1, 80);
   const z = clampF(pos[2], room.z - room.r - 6, room.z + room.r + 6);
