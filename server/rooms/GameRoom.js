@@ -7454,7 +7454,17 @@ class GameRoom extends Room {
         this.moveRejects.set(client.sessionId, rejects);
         this.pvel.set(client.sessionId, { x: 0, z: 0 });
         p.yaw = clampN(m.yaw, -10, 10);
-        client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'solid' });
+        client.send('positionCorrection', {
+          x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'solid',
+          requested: { x: nx, y: ny, z: nz },
+          attempted: { x: sx, y: sy, z: sz },
+          floorY,
+          rawDgn,
+          activeDgn,
+          rejects,
+          buriedNow: buried(p.x, p.y, p.z),
+          buriedAttempt: buried(sx, sy, sz)
+        });
         return;
       }
     } else this.moveRejects.delete(client.sessionId);
@@ -7466,7 +7476,15 @@ class GameRoom extends Room {
     if (!buried(p.x, p.y, p.z) && crossesSolid(p.x, p.y, p.z, sx, sy, sz)) {
       this.pvel.set(client.sessionId, { x: 0, z: 0 });
       p.yaw = clampN(m.yaw, -10, 10);
-      client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'wall' });
+      client.send('positionCorrection', {
+        x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'wall',
+        requested: { x: nx, y: ny, z: nz },
+        attempted: { x: sx, y: sy, z: sz },
+        floorY,
+        rawDgn,
+        activeDgn,
+        buriedNow: buried(p.x, p.y, p.z)
+      });
       return;
     }
     this.pvel.set(client.sessionId, {
@@ -7476,7 +7494,16 @@ class GameRoom extends Room {
     const fromY = p.y;
     const yaw = clampN(m.yaw, -10, 10);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
-    if (corrected) client.send('positionCorrection', { x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: townFloorStrict ? 'town_floor' : activeDgn ? 'dungeon_floor' : 'floor' });
+    if (corrected) client.send('positionCorrection', {
+      x: p.x, y: p.y, z: p.z, yaw: p.yaw,
+      reason: townFloorStrict ? 'town_floor' : activeDgn ? 'dungeon_floor' : 'floor',
+      requested: { x: nx, y: ny, z: nz },
+      attempted: { x: sx, y: sy, z: sz },
+      floorY,
+      rawDgn,
+      activeDgn,
+      buriedNow: buried(p.x, p.y, p.z)
+    });
     if (deityFlight && this.fallState) this.fallState.delete(client.sessionId);
     else this.trackAcceptedMoveFall(client, fromY, p.y);
     if (!rawDgn) this.refreshLandClaimVisit(client, Math.floor(p.x), Math.floor(p.z), now);

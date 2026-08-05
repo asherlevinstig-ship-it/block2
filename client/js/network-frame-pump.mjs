@@ -46,7 +46,28 @@ export function createNetworkFramePump({
     }
     if(dim!=='ability'&&now-NET.lastMove>80){
       NET.lastMove=now;
-      NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw});
+      const movePayload={x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw};
+      NET.lastMoveSent={
+        at:Date.now(),
+        now:Math.round(now),
+        dim:typeof dim==='string'?dim:'',
+        dgn:NET.dgn||'',
+        x:+movePayload.x.toFixed(3),
+        y:+movePayload.y.toFixed(3),
+        z:+movePayload.z.toFixed(3),
+        yaw:Number.isFinite(movePayload.yaw)?+movePayload.yaw.toFixed(4):null
+      };
+      NET.room.send('move',movePayload);
+      if((typeof dim==='string'&&dim==='fishing_lake')||NET.dgn==='fishing_lake'){
+        const lastLog=NET.lastFishingMoveDebugAt||0;
+        if(now-lastLog>450){
+          NET.lastFishingMoveDebugAt=now;
+          try{
+            globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('fishing.move.sent',NET.lastMoveSent);
+            console.warn('[bc-fishing-move-sent]',JSON.stringify(NET.lastMoveSent));
+          }catch(e){}
+        }
+      }
       const heldId=displayHeldId();
       const meta=[S.path||'',heldId].join('|');
       if(isOverworldRoom&&meta!==NET.lastMeta){

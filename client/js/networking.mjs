@@ -2289,10 +2289,13 @@ function netAttachRoom(room,name,client){
     room.onMessage('positionCorrection', m=>{
       if(!m||!Number.isFinite(+m.x)||!Number.isFinite(+m.y)||!Number.isFinite(+m.z))return;
       const before=dimensionsState.kind==='fishing_lake'&&player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
+      const lastSent=NET&&NET.lastMoveSent?{...NET.lastMoveSent}:null;
       player.pos.set(+m.x,+m.y,+m.z);
       if(player.vel)player.vel.set(0,0,0);
       if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
-      fishingNetworkDebug('positionCorrection',{message:m,before});
+      const after=dimensionsState.kind==='fishing_lake'&&player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
+      const delta=before?{x:+((+m.x)-before.x).toFixed(3),y:+((+m.y)-before.y).toFixed(3),z:+((+m.z)-before.z).toFixed(3)}:null;
+      fishingNetworkDebug('positionCorrection',{message:m,before,after,delta,lastSent});
       if(m.reason==='town_floor')showName('Returned to safe town ground');
     });
     room.onMessage('adminGateTeleportResult', m=>{
