@@ -3214,9 +3214,9 @@ class GameRoom extends Room {
     if (!p) return;
     if (p.dgn && p.dgn !== 'fishing_lake') return;                 // no fishing inside dungeons/other rooms
     if (!(Array.isArray(rec.prof.inv) && rec.prof.inv.some(s => s && s.id === I.FISHING_ROD))) return; // must own a rod
-    const tier = Math.max(1, Math.min(3, (m && m.tier) | 0 || 1));
+    const tier = Math.max(1, Math.min(4, (m && m.tier) | 0 || 1));
     const count = Math.max(1, Math.min(4, (m && m.count) | 0 || 1));
-    const fishId = tier === 1 ? I.SMALL_FISH : tier === 3 ? I.PRIZED_FISH : I.RIVER_FISH;
+    const fishId = tier === 1 ? I.SMALL_FISH : tier === 3 ? I.PRIZED_FISH : tier === 4 ? I.TROPHY_FISH : I.RIVER_FISH;
     this.awardGrant(client, { source: 'fishing', items: [{ id: fishId, count }] });
   }
   unlockUtility(client, id, reason = '') {

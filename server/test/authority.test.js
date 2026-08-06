@@ -677,6 +677,8 @@ test('fishing catch grants the tiered fish, gated by a rod', () => {
   assert.equal(itemCount(prof, C.I.PRIZED_FISH), 2, 'tier-3 catch grants Prized Fish x2');
   room.handleFishCatch(withRod, { tier: 1, count: 1 });
   assert.equal(itemCount(prof, C.I.SMALL_FISH), 1, 'tier-1 catch grants a Small Fish');
+  room.handleFishCatch(withRod, { tier: 4, count: 1 });
+  assert.equal(itemCount(prof, C.I.TROPHY_FISH), 1, 'tier-4 catch grants a Trophy Fish');
 
   const noRod = makeClient('rodless');
   const { prof: p2 } = seedPlayer(room, noRod, { inv: [] });

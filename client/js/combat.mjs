@@ -441,6 +441,11 @@ function startMine(hit){
     sysMsg('Dungeon blocks are sealed by the Gate.');
     return;
   }
+  if(dim==='fishing_lake'){
+    mining=null;
+    sysMsg('The fishing lake is a protected sanctuary — its blocks can\'t be changed.');
+    return;
+  }
   const info=BREAK[hit.id];
   if(!info){ mining=null; return; }
   const tool=toolFor(hit.id);
@@ -5924,7 +5929,7 @@ function buildPlacementPreview(){
   if(!hit || isPlacementInteractionHit(hit)) return null;
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2], placeId=s.id;
   const cur=inWorld(px,py,pz)?getB(px,py,pz):B.BEDROCK;
-  const valid=dim!=='dungeon'
+  const valid=dim!=='dungeon' && dim!=='fishing_lake'
     && inWorld(px,py,pz)
     && (cur===B.AIR || cur===B.WATER)
     && !(dim==='overworld' && !canBuildHere(px,pz,py,placeId))
@@ -6474,6 +6479,10 @@ function placeSelectedBlockAtHit(hit){
   if(!s || ITEMS[s.id].place===undefined) return false;
   if(dim==='dungeon'){
     sysMsg('Dungeon blocks are sealed by the Gate.');
+    return false;
+  }
+  if(dim==='fishing_lake'){
+    sysMsg('The fishing lake is a protected sanctuary — you can\'t place blocks here.');
     return false;
   }
   const px=hit.x+hit.face[0], py=hit.y+hit.face[1], pz=hit.z+hit.face[2];

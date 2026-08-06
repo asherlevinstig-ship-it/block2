@@ -278,6 +278,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   APPRENTICE_ROBE:222, ARCWEAVE_ROBE:223, STORMWEAVE_ROBE:224,
   FISHING_ROD:225,
   SMALL_FISH:226, PRIZED_FISH:227, COOKED_SMALL_FISH:228, COOKED_RIVER_FISH:229, COOKED_PRIZED_FISH:230,
+  TROPHY_FISH:231, COOKED_TROPHY_FISH:232,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -741,6 +742,8 @@ ITEMS[I.PRIZED_FISH]={name:'Prized Fish',stack:64,icon:iconCanvas(ctx=>drawPatte
 ITEMS[I.COOKED_SMALL_FISH]={name:'Cooked Small Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_SMALL,{b:'#7a3b1c',B:'#d98a4a',W:'#ffe1b0'}))};
 ITEMS[I.COOKED_RIVER_FISH]={name:'Cooked River Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_RIVER,{b:'#6e3417',B:'#cf7a3a',W:'#ffd9a6'}))};
 ITEMS[I.COOKED_PRIZED_FISH]={name:'Cooked Prized Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#5c2c12',B:'#c46f30',W:'#ffcf95',G:'#ffe08a'}))};
+ITEMS[I.TROPHY_FISH]={name:'Trophy Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#7a5a12',B:'#f0c74a',W:'#fff4c0',G:'#fff6d0'}))};
+ITEMS[I.COOKED_TROPHY_FISH]={name:'Cooked Trophy Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#7a3b12',B:'#e69a2e',W:'#ffe6a8',G:'#fff0c0'}))};
 ITEMS[I.FISHING_ROD]={name:'Fishing Rod',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
 ".............lll",
 "............l...",
@@ -758,7 +761,7 @@ ITEMS[I.FISHING_ROD]={name:'Fishing Rod',stack:1,icon:iconCanvas(ctx=>drawPatter
 "s...............",
 "................",
 "................"],{s:'#8a5d33',l:'#dff8ff'}))};
-const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.SMALL_FISH]:{hunger:6,heal:1}, [I.RIVER_FISH]:{hunger:10,heal:1}, [I.PRIZED_FISH]:{hunger:14,heal:2}, [I.COOKED_SMALL_FISH]:{hunger:18,heal:2}, [I.COOKED_RIVER_FISH]:{hunger:30,heal:3}, [I.COOKED_PRIZED_FISH]:{hunger:44,heal:5}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
+const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.SMALL_FISH]:{hunger:6,heal:1}, [I.RIVER_FISH]:{hunger:10,heal:1}, [I.PRIZED_FISH]:{hunger:14,heal:2}, [I.COOKED_SMALL_FISH]:{hunger:18,heal:2}, [I.COOKED_RIVER_FISH]:{hunger:30,heal:3}, [I.COOKED_PRIZED_FISH]:{hunger:44,heal:5}, [I.TROPHY_FISH]:{hunger:20,heal:3}, [I.COOKED_TROPHY_FISH]:{hunger:60,heal:8,buff:'restore'}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
 
 const TOOL_DEFS = [
   ['PICK',  PICK_ROWS,  'pick',  'Pickaxe'],

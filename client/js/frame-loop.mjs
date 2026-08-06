@@ -2469,8 +2469,13 @@ const FISHING_FISH=[
   {id:'diver',name:'Deep Diver',chance:.15,hook:860,stamina:82,power:1.05,reel:.85,reward:2,style:'pulls hard downward'},
   {id:'heavy',name:'Old Heavy Carp',chance:.13,hook:1050,stamina:105,power:1.28,reel:.62,reward:2,style:'slow but powerful'},
   {id:'erratic',name:'Erratic Flashfish',chance:.10,hook:690,stamina:64,power:.95,reel:1.2,reward:2,style:'changes direction repeatedly'},
+  {id:'minnow',name:'Glass Minnow',chance:.16,hook:1000,stamina:38,power:.5,reel:1.0,reward:1,style:'tiny and skittish'},
+  {id:'perch',name:'Sunset Perch',chance:.11,hook:820,stamina:70,power:1.0,reel:.9,reward:2,style:'steady, stubborn pull'},
   {id:'ambusher',name:'Ambusher Pike',chance:.06,hook:520,stamina:88,power:1.45,reel:.82,reward:3,style:'calm, then one violent escape'},
-  {id:'bottom',name:'Rockbelly Bottom-Dweller',chance:.02,hook:900,stamina:96,power:1.12,reel:.72,reward:3,style:'dives toward rocks'}
+  {id:'bottom',name:'Rockbelly Bottom-Dweller',chance:.02,hook:900,stamina:96,power:1.12,reel:.72,reward:3,style:'dives toward rocks'},
+  {id:'eel',name:'Shadow Eel',chance:.05,hook:700,stamina:92,power:1.3,reel:1.15,reward:3,style:'whips side to side'},
+  {id:'goldfin',name:'Goldscale Titan',chance:.02,hook:600,stamina:120,power:1.6,reel:.68,reward:4,style:'a legendary, relentless fighter'},
+  {id:'sturgeon',name:'Moonlit Sturgeon',chance:.01,hook:760,stamina:135,power:1.5,reel:.6,reward:4,style:'ancient, immensely heavy'}
 ];
 const fishingState={phase:'idle',fish:null,startedAt:0,nextAt:0,biteAt:0,hookUntil:0,castQuality:0,tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:null,castVisualStart:0,aimOrigin:null};
 let fishingHudEl=null;
@@ -2712,10 +2717,10 @@ function hookFishing(){
   }
   return false;
 }
-const FISH_TIER_ITEM={1:I.SMALL_FISH,2:I.RIVER_FISH,3:I.PRIZED_FISH};
+const FISH_TIER_ITEM={1:I.SMALL_FISH,2:I.RIVER_FISH,3:I.PRIZED_FISH,4:I.TROPHY_FISH};
 function completeFishing(){
   const f=fishingState.fish||FISHING_FISH[0];
-  const tier=Math.max(1,Math.min(3,f.reward|0));
+  const tier=Math.max(1,Math.min(4,f.reward|0));
   const count=Math.max(1,Math.min(4,f.reward+(fishingState.castQuality>.82?1:0)+(fishingState.qualityBonus>1?1:0)));
   const fishId=FISH_TIER_ITEM[tier]||I.RIVER_FISH;
   // Server-authoritative when online (keeps inventory in sync — no client-only drift); local grant
@@ -3239,18 +3244,24 @@ function tick(now){
         }
         lastGroundT=-1e9; jumpPressT=-1e9;
       } else if(feetWater && !player.onGround){
-        // swim up: accelerate, and keep thrusting while breaching the surface
-        player.vel.y=Math.min(player.vel.y+30*dt, waistWater?3.6:4.6);
-        // climb out: pushing toward a low bank boosts you over the lip
+        // swim up: strong, snappy thrust so a player who falls in can breach and hop out on their own
+        player.vel.y=Math.min(player.vel.y+38*dt, waistWater?4.8:6.6);
+        // climb out: pushing toward a bank vaults you over the lip. Probe the direction the player is
+        // steering (falls back to velocity) so it fires immediately, and only needs one clear block above.
         if(f!==0||s!==0){
-          const hl=Math.hypot(player.vel.x,player.vel.z)||1;
-          const ax=Math.floor(player.pos.x+player.vel.x/hl*.75), az=Math.floor(player.pos.z+player.vel.z/hl*.75);
+          const yaw=Number(player.yaw)||0;
+          let pdx=Math.sin(yaw)*f+Math.cos(yaw)*s, pdz=Math.cos(yaw)*f-Math.sin(yaw)*s;
+          const pl=Math.hypot(pdx,pdz);
+          if(pl<.1){ const vl=Math.hypot(player.vel.x,player.vel.z)||1; pdx=player.vel.x/vl; pdz=player.vel.z/vl; }
+          else { pdx/=pl; pdz/=pl; }
+          const ax=Math.floor(player.pos.x+pdx*.75), az=Math.floor(player.pos.z+pdz*.75);
           const fy=Math.floor(player.pos.y);
           let wallY=-1;
           if(isSolid(getB(ax,fy,az))) wallY=fy;
           else if(isSolid(getB(ax,fy+1,az))) wallY=fy+1;
-          if(wallY>=0 && !isSolid(getB(ax,wallY+1,az)) && !isSolid(getB(ax,wallY+2,az))){
-            player.vel.y=Math.max(player.vel.y, 8.4);
+          if(wallY>=0 && !isSolid(getB(ax,wallY+1,az))){
+            player.vel.y=Math.max(player.vel.y, 9.6);
+            player.vel.x+=pdx*2.2; player.vel.z+=pdz*2.2;   // nudge onto the bank
             SFX.splash(false);
             burst(player.pos.x, player.pos.y+.3, player.pos.z, [.45,.62,.85], 10, 2.2, 2, .4);
           }
