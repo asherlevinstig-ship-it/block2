@@ -163,7 +163,7 @@ function approachAngle(current,target,rate,dt){
 }
 let cameraYaw=player.yaw,cameraPitch=player.pitch;
 
-const DIRECTOR_CAMERA_MODES=['first','third','orbit','side'];
+const DIRECTOR_CAMERA_MODES=['first','third','orbit','side','freefly'];
 const directorCamera={
   enabled:false,
   mode:'third',
@@ -172,8 +172,15 @@ const directorCamera={
   side:3.6,
   orbitAngle:0,
   cleanHud:false,
-  lastHudHTML:''
+  lastHudHTML:'',
+  _pos:null,        // persistent smoothed camera position (fixes per-frame reset)
+  freePos:null,     // free-fly camera position
+  freeYaw:0,
+  freePitch:0,
+  freeSeeded:false
 };
+function directorCameraActive(){ return !!directorCamera.enabled; }
+function directorFreeFlyActive(){ return !!(directorCamera.enabled&&directorCamera.mode==='freefly'); }
 let directorHudEl=null,directorStyleEl=null;
 function ensureDirectorCameraStyle(){
   if(directorStyleEl)return;
@@ -215,13 +222,20 @@ function directorCameraStatus(){
 function toggleDirectorCamera(){
   directorCamera.enabled=!directorCamera.enabled;
   if(directorCamera.enabled&&directorCamera.mode==='first')directorCamera.mode='third';
-  if(directorCamera.enabled)directorCamera.orbitAngle=player.yaw+Math.PI;
+  if(directorCamera.enabled){
+    directorCamera.orbitAngle=player.yaw+Math.PI;
+    directorCamera._pos=null;       // reseed smoothed position on enable
+    directorCamera.freeSeeded=false;
+  }else{
+    if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.setVisible)globalThis.BlockcraftSelfAvatar.setVisible(false);
+  }
   refreshDirectorCameraHud();
   directorCameraNotify(directorCamera.enabled?'Director camera: '+directorCamera.mode.toUpperCase():'Director camera off');
   return directorCamera.enabled;
 }
 function setDirectorCameraMode(mode){
   if(DIRECTOR_CAMERA_MODES.includes(mode))directorCamera.mode=mode;
+  if(directorCamera.mode==='freefly')directorCamera.freeSeeded=false; // reseed free camera from current view
   refreshDirectorCameraHud();
   directorCameraNotify('Director: '+directorCamera.mode.toUpperCase());
   return directorCamera.mode;
@@ -248,13 +262,32 @@ function toggleDirectorCleanHud(){
   directorCameraNotify(directorCamera.cleanHud?'Clean HUD on':'Clean HUD off');
   return directorCamera.cleanHud;
 }
+function updateDirectorSelfAvatar(show,moving,now,dt){
+  const av=globalThis.BlockcraftSelfAvatar;
+  if(!av||!av.ensure)return;
+  if(!show){ if(av.setVisible)av.setVisible(false); return; }
+  av.ensure();
+  av.setVisible(true);
+  const eye=(player&&player.eye)||1.6;
+  av.update(player.pos.x,player.pos.y,player.pos.z,Number(player.yaw)||0,!!moving,now,dt,eye);
+}
 function applyDirectorCamera(now,dt){
-  if(!directorCamera.enabled||directorCamera.mode==='first'||claimMode||cutscene)return false;
+  if(!directorCamera.enabled||directorCamera.mode==='first'||claimMode||cutscene){
+    updateDirectorSelfAvatar(false);
+    return false;
+  }
   const focus=new THREE.Vector3(player.pos.x,player.pos.y+Math.max(.8,player.eye*.72),player.pos.z);
   const yaw=Number(player.yaw)||0;
   const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
   const behind=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
   const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+  // Self-avatar so there's a character to film (first-person game has no local body).
+  const moving=!!(player&&player.vel&&Math.hypot(player.vel.x||0,player.vel.z||0)>.6);
+  updateDirectorSelfAvatar(true,moving,now,dt);
+  if(directorCamera.mode==='freefly'){
+    // Free-fly is driven from the tick input branch; just keep the avatar updated here.
+    return true;
+  }
   let pos;
   if(directorCamera.mode==='orbit'){
     directorCamera.orbitAngle+=dt*.34;
@@ -270,8 +303,38 @@ function applyDirectorCamera(now,dt){
     pos=focus.clone().addScaledVector(behind,directorCamera.distance).addScaledVector(forward,-.35);
     pos.y+=directorCamera.height;
   }
-  camera.position.lerp(pos,1-Math.exp(-dt*8));
+  // Persistent smoothed position: the normal camera path resets camera.position to the player eye
+  // every frame, so we must keep our own accumulator and assign it (lerping camera.position directly
+  // would restart from the player each frame and never reach the framing).
+  if(!directorCamera._pos)directorCamera._pos=pos.clone();
+  else directorCamera._pos.lerp(pos,1-Math.exp(-dt*8));
+  camera.position.copy(directorCamera._pos);
   camera.lookAt(focus.x,focus.y+.35,focus.z);
+  return true;
+}
+// Free-fly camera: flown directly from the tick input branch (player stays put).
+function applyDirectorFreeFly(now,dt,move,mouse){
+  if(!directorFreeFlyActive())return false;
+  const d=directorCamera;
+  if(!d.freeSeeded||!d.freePos){
+    d.freePos=camera.position.clone();
+    d.freeYaw=cameraYaw; d.freePitch=cameraPitch;
+    d.freeSeeded=true;
+  }
+  const sens=0.0022;
+  d.freeYaw-= (mouse&&mouse.x||0)*sens;
+  d.freePitch-= (mouse&&mouse.y||0)*sens;
+  d.freePitch=Math.max(-Math.PI/2+0.02,Math.min(Math.PI/2-0.02,d.freePitch));
+  const yaw=d.freeYaw,pitch=d.freePitch;
+  const fwd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));
+  const rgt=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+  const speed=(move&&move.fast?16:7)*dt;
+  d.freePos.addScaledVector(fwd,(move&&move.f||0)*speed);
+  d.freePos.addScaledVector(rgt,(move&&move.s||0)*speed);
+  d.freePos.y+=(move&&move.up||0)*speed;
+  camera.position.copy(d.freePos);
+  camera.rotation.order='YXZ';
+  camera.rotation.set(pitch,yaw,0);
   return true;
 }
 globalThis.BlockcraftDirectorCamera={
@@ -2974,9 +3037,13 @@ function tick(now){
   if(deathControlLocked&&player&&player.vel)player.vel.set(0,0,0);
   const fishingPlacementLocked=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.placementActive&&globalThis.BlockcraftFishing.placementActive());
   if(fishingPlacementLocked&&player&&player.vel)player.vel.set(0,0,0);
-  const gameplayMoveAllowed=!deathControlLocked&&!fishingPlacementLocked&&(combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true));
-  if(!deathControlLocked&&(locked||gameplayMoveAllowed)){
+  const directorFree=directorFreeFlyActive();
+  if(directorFree&&player&&player.vel)player.vel.set(0,0,0);
+  let directorFreeMouse={x:0,y:0};
+  const gameplayMoveAllowed=!deathControlLocked&&!fishingPlacementLocked&&!directorFree&&(combatApi.gameplayMovementAllowed?combatApi.gameplayMovementAllowed():(combatApi.gameplayCameraInputAllowed?combatApi.gameplayCameraInputAllowed():true));
+  if(!deathControlLocked&&(locked||gameplayMoveAllowed||directorFree)){
     const mouseLook=combatApi.consumeMouseLookDelta?combatApi.consumeMouseLookDelta():{x:0,y:0};
+    if(directorFree)directorFreeMouse=mouseLook;
     const lookX=gameplayMoveAllowed?((keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0)):0;
     const lookY=gameplayMoveAllowed?((keys['ArrowUp']?1:0)-(keys['ArrowDown']?1:0)):0;
     const mouseLookSensitivity=combatState.mouseLookSensitivity||.00215;
@@ -3193,6 +3260,15 @@ function tick(now){
       camera.lookAt(focus.x,focus.y+5,focus.z);
     } else if(cutscene){
       /* camera is driven by tickCutscene at the top of the frame */
+    } else if(directorFree){
+      applyDirectorCamera(now,dt); // keeps the self-avatar updated (returns early for freefly)
+      applyDirectorFreeFly(now,dt,{
+        f:(keys['KeyW']?1:0)-(keys['KeyS']?1:0),
+        s:(keys['KeyD']?1:0)-(keys['KeyA']?1:0),
+        up:((keys['Space']?1:0)-((keys['ControlLeft']||keys['ControlRight'])?1:0)),
+        fast:!!(keys['ShiftLeft']||keys['ShiftRight'])
+      },directorFreeMouse);
+      refreshDirectorCameraHud();
     } else {
     camera.position.set(player.pos.x, player.pos.y+player.eye+(mounted?mountEye(mountKind):0)+(pantherView&&pantherView.bob||0), player.pos.z);
     cameraYaw=approachAngle(cameraYaw,player.yaw,18,dt);

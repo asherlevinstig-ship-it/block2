@@ -2989,6 +2989,43 @@ function makeRemoteAvatar(look){
   grp.add(blobShadow(1));
   return {grp, legs, arms, head, look, hair, blink, idle, sword, aegisGlow, cape, capeSegments};
 }
+// ---------------- local self-avatar (for the director camera / third-person filming) ----------------
+// First-person play has no local body model; the director camera needs one to film. Reuse the remote
+// hunter avatar built from the local player's own appearance.
+let selfAvatar=null, selfAvatarLookKey='', selfAvatarStride=0;
+function selfAvatarLookSignature(look){
+  if(!look)return '';
+  return [look.armorId,look.armorType,look.heldId,look.skin,look.hair,look.shirt,look.pants,look.outfitStyle,look.hairStyle,look.accessory,Array.isArray(look.cosmetics)?look.cosmetics.join(','):''].join('|');
+}
+function ensureSelfAvatar(){
+  const look=playerAppearance();
+  const key=selfAvatarLookSignature(look);
+  if(selfAvatar&&key===selfAvatarLookKey)return selfAvatar;
+  if(selfAvatar){ scene.remove(selfAvatar.grp); disposeObjectTree(selfAvatar.grp); selfAvatar=null; }
+  selfAvatar=makeRemoteAvatar(look);
+  selfAvatar.phase=0;
+  selfAvatar.grp.visible=false;
+  scene.add(selfAvatar.grp);
+  selfAvatarLookKey=key;
+  return selfAvatar;
+}
+globalThis.BlockcraftSelfAvatar={
+  ensure(){ return ensureSelfAvatar(); },
+  setVisible(v){ if(selfAvatar)selfAvatar.grp.visible=!!v; },
+  refresh(){ selfAvatarLookKey='__stale__'; },
+  update(x,y,z,yaw,moving,now,dt,eye){
+    const a=ensureSelfAvatar();
+    if(!a)return;
+    // makeRemoteAvatar builds feet at y=0; place feet at the player's feet (pos.y is feet level).
+    a.grp.position.set(x,y,z);
+    a.grp.rotation.y=(Number(yaw)||0)+Math.PI; // avatar faces +z at yaw 0; add PI so it faces the player's look dir
+    const t=(now||0)/1000+(a.phase||0);
+    const sw=moving?Math.sin(t*7.5)*.55:0;
+    if(a.legs&&a.legs.length>=2){ a.legs[0].rotation.x+=(sw-a.legs[0].rotation.x)*Math.min(1,(dt||.016)*14); a.legs[1].rotation.x+=(-sw-a.legs[1].rotation.x)*Math.min(1,(dt||.016)*14); }
+    if(a.arms&&a.arms.length>=2){ a.arms[0].rotation.x+=(-sw*.7-a.arms[0].rotation.x)*Math.min(1,(dt||.016)*14); a.arms[1].rotation.x+=(sw*.7-a.arms[1].rotation.x)*Math.min(1,(dt||.016)*14); }
+    if(a.capeSegments&&a.capeSegments.length&&typeof animateAvatarCape==='function'){ const spd=moving?2.4:0; animateAvatarCape(a,now||0,spd,sw,dt||.016); }
+  }
+};
 function makePantherAvatar(){
   const grp=new THREE.Group(), legs=[], mats=[];
   const reg=m=>{mats.push(m);return m;};

@@ -7274,7 +7274,9 @@ Object.defineProperty(globalThis,'BlockcraftViewmodelFx',{value:Object.freeze({p
 function vmTick(dt, now){
   if(!vmReady) return;
   const fishingActive=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active());
-  vm.visible=!isMeditating && !cutscene && !fishingActive;
+  const dc=globalThis.BlockcraftDirectorCamera;
+  const directorThirdPerson=!!(dc&&dc.active&&dc.active()&&dc.status&&dc.status().mode!=='first');
+  vm.visible=!isMeditating && !cutscene && !fishingActive && !directorThirdPerson;
   vmSwingT=Math.max(0,vmSwingT-dt*4.2);
   vmDip=Math.max(0,vmDip-dt*1.4);
   const dx2=player.pos.x-vmPX, dz2=player.pos.z-vmPZ;
