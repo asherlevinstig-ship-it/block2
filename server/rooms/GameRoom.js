@@ -3162,21 +3162,14 @@ class GameRoom extends Room {
     this.sendProfile(client, prof);
     client.send('inventorySortResult', { ok: true, changed, range: 'backpack', groups });
   }
-  // Client sends its full 36-slot layout after rearranging (drag/drop). Server-authoritative:
-  // apply ONLY if the proposed layout conserves every item (reorder / stack split+merge allowed;
-  // creating, deleting, or inflating items is rejected to make duplication impossible).
-  // The signature covers only economic identity (id + gear attributes). Provenance/UI flags
-  // (source, locked) are deliberately excluded: the client's cleanServerInventoryStack strips
-  // `source`/`locked` from non-tool items (e.g. the admin fishing rod granted with source:'admin',
-  // the locked appearance mirror), so including them would reject every legitimate rearrange.
-  inventoryConservationMap(inv) {
-    const map = new Map();
-    for (const s of inv) {
-      if (!s) continue;
-      const sig = JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique });
-      map.set(sig, (map.get(sig) || 0) + (s.count | 0));
-    }
-    return map;
+  // Client sends its desired 36-slot layout after rearranging (drag/drop). Rather than trust or
+  // whole-inventory-match the client (its mirror can drift from ours via client-side adds like
+  // fishing catches, and it strips provenance fields), we REBUILD the layout from the server's OWN
+  // authoritative stacks placed into the client's requested positions. This can never duplicate,
+  // create, or inflate items (only the server's real stacks are ever placed, each exactly once) and
+  // it is robust to drift: client-only phantom items simply have no match and are ignored.
+  inventoryEconomicSig(s) {
+    return JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique });
   }
   handleInventoryArrange(client, m) {
     const rec = this.profileFor(client);
@@ -3185,42 +3178,29 @@ class GameRoom extends Room {
     prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
     while (prof.inv.length < 36) prof.inv.push(null);
     const proposed = (Array.isArray(m && m.inv) ? m.inv : []).slice(0, 36).map(cleanSlot);
-    while (proposed.length < 36) proposed.push(null);
-    const before = this.inventoryConservationMap(prof.inv);
-    const after = this.inventoryConservationMap(proposed);
-    let conserved = before.size === after.size;
-    if (conserved) for (const [sig, count] of before) { if (after.get(sig) !== count) { conserved = false; break; } }
-    // Not conserved (real cheat, or the client's mirror of inventory has drifted): ignore the
-    // layout — never mutate (no duplication) and never snap the client back mid-drag (no jarring
-    // revert). It simply doesn't persist this time; the authoritative inv reasserts on next load.
-    if (!conserved) return;
-    if (JSON.stringify(prof.inv) === JSON.stringify(proposed)) return; // no-op
-    // Preserve server-authoritative provenance/UI flags the client strips, matched by economic
-    // signature, so a rearrange can't silently wipe source/locked (e.g. keep the mirror locked).
-    this.reattachInventoryProvenance(prof.inv, proposed);
-    prof.inv = proposed; // inventory isn't part of broadcast player state, so no syncPlayerProfile needed
+    const pool = prof.inv.filter(Boolean);           // the server's real stacks (authoritative)
+    const used = new Array(pool.length).fill(false);
+    const result = new Array(36).fill(null);
+    // Pass 1: honor each requested position with a matching, still-unused server stack. Prefer an
+    // exact id+attributes+count match, then fall back to id+attributes (whole-stack move; client
+    // count is ignored so a forged/split count can't matter).
+    for (let i = 0; i < 36; i++) {
+      const p = proposed[i];
+      if (!p) continue;
+      const sig = this.inventoryEconomicSig(p);
+      let idx = pool.findIndex((s, j) => !used[j] && this.inventoryEconomicSig(s) === sig && (s.count | 0) === (p.count | 0));
+      if (idx < 0) idx = pool.findIndex((s, j) => !used[j] && this.inventoryEconomicSig(s) === sig);
+      if (idx >= 0) { used[idx] = true; result[i] = pool[idx]; }
+    }
+    // Pass 2: any server stack the client's layout didn't account for keeps a home (first free slot).
+    for (let j = 0; j < pool.length; j++) {
+      if (used[j]) continue;
+      const empty = result.indexOf(null);
+      if (empty >= 0) { result[empty] = pool[j]; used[j] = true; }
+    }
+    if (JSON.stringify(result) === JSON.stringify(prof.inv)) return; // no change
+    prof.inv = result; // inventory isn't part of broadcast player state, so no syncPlayerProfile needed
     this.dirtyPlayers.add(rec.token);
-  }
-  // Re-apply source/locked from the old layout onto the new one, matching by economic signature,
-  // since the client can't be trusted to (and doesn't) round-trip those fields.
-  reattachInventoryProvenance(oldInv, proposed) {
-    const pools = new Map();
-    const sigOf = s => JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique });
-    for (const s of oldInv) {
-      if (!s || (s.source == null && s.locked == null)) continue;
-      const k = sigOf(s);
-      if (!pools.has(k)) pools.set(k, []);
-      pools.get(k).push({ source: s.source, locked: s.locked });
-    }
-    for (const s of proposed) {
-      if (!s) continue;
-      const q = pools.get(sigOf(s));
-      if (q && q.length) {
-        const p = q.shift();
-        if (p.source != null && s.source == null) s.source = p.source;
-        if (p.locked != null && s.locked == null) s.locked = p.locked;
-      }
-    }
   }
   unlockUtility(client, id, reason = '') {
     if (!UTILITY_IDS.has(id)) return false;
