@@ -162,131 +162,6 @@ function approachAngle(current,target,rate,dt){
   return current+delta*(1-Math.exp(-Math.max(0,rate)*Math.max(0,dt)));
 }
 let cameraYaw=player.yaw,cameraPitch=player.pitch;
-
-const DIRECTOR_CAMERA_MODES=['first','third','orbit','side'];
-const directorCamera={
-  enabled:false,
-  mode:'third',
-  distance:7.5,
-  height:2.6,
-  side:3.6,
-  orbitAngle:0,
-  cleanHud:false,
-  lastHudHTML:''
-};
-let directorHudEl=null,directorStyleEl=null;
-function ensureDirectorCameraStyle(){
-  if(directorStyleEl)return;
-  directorStyleEl=document.createElement('style');
-  directorStyleEl.textContent=
-    '#directorhud{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:120;min-width:360px;padding:10px 14px;border:1px solid rgba(255,210,74,.55);border-radius:10px;background:rgba(5,10,18,.72);box-shadow:0 16px 40px rgba(0,0,0,.42),0 0 20px rgba(255,210,74,.12);color:#fff7c8;font-family:inherit;text-align:center;text-shadow:0 2px 0 #000;pointer-events:none}'+
-    '#directorhud.hidden{display:none}#directorhud b{display:block;color:#ffd24a;letter-spacing:2.5px;font-size:12px}#directorhud span{display:block;margin-top:4px;color:#dbeafe;font-size:11px;letter-spacing:.6px}'+
-    'body.director-clean-hud #locationhud,body.director-clean-hud #coords,body.director-clean-hud #currentquest,body.director-clean-hud #homeworkhud,body.director-clean-hud #activitytracker,body.director-clean-hud #bugreportbtn,body.director-clean-hud #eventhud,body.director-clean-hud #keyprompthud,body.director-clean-hud #encounterprompt,body.director-clean-hud #gateprompt,body.director-clean-hud #stats,body.director-clean-hud #abilities,body.director-clean-hud #hotbar,body.director-clean-hud #utilitybar,body.director-clean-hud #statpointnudge,body.director-clean-hud #recallrechargenudge,body.director-clean-hud #sysmsgs,body.director-clean-hud #coachhud,body.director-clean-hud #tutorialhud,body.director-clean-hud #landmap{display:none!important}';
-  document.head.appendChild(directorStyleEl);
-}
-function directorHud(){
-  ensureDirectorCameraStyle();
-  if(directorHudEl)return directorHudEl;
-  directorHudEl=document.createElement('div');
-  directorHudEl.id='directorhud';
-  directorHudEl.className='hidden';
-  document.body.appendChild(directorHudEl);
-  return directorHudEl;
-}
-function directorModeLabel(){
-  return String(directorCamera.mode||'first').toUpperCase()+' · '+directorCamera.distance.toFixed(1)+'m · height '+directorCamera.height.toFixed(1)+'m'+(directorCamera.cleanHud?' · CLEAN HUD':'');
-}
-function refreshDirectorCameraHud(){
-  const el=directorHud();
-  el.classList.toggle('hidden',!directorCamera.enabled);
-  document.body.classList.toggle('director-camera-active',directorCamera.enabled);
-  document.body.classList.toggle('director-clean-hud',directorCamera.enabled&&directorCamera.cleanHud);
-  if(!directorCamera.enabled)return;
-  const html='<b>DIRECTOR CAMERA</b><span>F6 mode · [ ] distance · - = height · F7 clean HUD · F10 off<br>'+directorModeLabel()+'</span>';
-  if(el.innerHTML!==html)el.innerHTML=html;
-}
-function directorCameraNotify(text){
-  if(typeof showName==='function')showName(text);
-  try{globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('director.camera',{text,status:directorCameraStatus()});}catch(e){}
-}
-function directorCameraStatus(){
-  return {enabled:!!directorCamera.enabled,mode:directorCamera.mode,distance:+directorCamera.distance.toFixed(2),height:+directorCamera.height.toFixed(2),cleanHud:!!directorCamera.cleanHud};
-}
-function toggleDirectorCamera(){
-  directorCamera.enabled=!directorCamera.enabled;
-  if(directorCamera.enabled&&directorCamera.mode==='first')directorCamera.mode='third';
-  if(directorCamera.enabled)directorCamera.orbitAngle=player.yaw+Math.PI;
-  refreshDirectorCameraHud();
-  directorCameraNotify(directorCamera.enabled?'Director camera: '+directorCamera.mode.toUpperCase():'Director camera off');
-  return directorCamera.enabled;
-}
-function setDirectorCameraMode(mode){
-  if(DIRECTOR_CAMERA_MODES.includes(mode))directorCamera.mode=mode;
-  refreshDirectorCameraHud();
-  directorCameraNotify('Director: '+directorCamera.mode.toUpperCase());
-  return directorCamera.mode;
-}
-function cycleDirectorCameraMode(){
-  const i=DIRECTOR_CAMERA_MODES.indexOf(directorCamera.mode);
-  return setDirectorCameraMode(DIRECTOR_CAMERA_MODES[(i+1+DIRECTOR_CAMERA_MODES.length)%DIRECTOR_CAMERA_MODES.length]);
-}
-function adjustDirectorCameraDistance(delta){
-  directorCamera.distance=Math.max(2.5,Math.min(18,directorCamera.distance+(Number(delta)||0)));
-  refreshDirectorCameraHud();
-  directorCameraNotify('Director distance '+directorCamera.distance.toFixed(1)+'m');
-  return directorCamera.distance;
-}
-function adjustDirectorCameraHeight(delta){
-  directorCamera.height=Math.max(.5,Math.min(8,directorCamera.height+(Number(delta)||0)));
-  refreshDirectorCameraHud();
-  directorCameraNotify('Director height '+directorCamera.height.toFixed(1)+'m');
-  return directorCamera.height;
-}
-function toggleDirectorCleanHud(){
-  directorCamera.cleanHud=!directorCamera.cleanHud;
-  refreshDirectorCameraHud();
-  directorCameraNotify(directorCamera.cleanHud?'Clean HUD on':'Clean HUD off');
-  return directorCamera.cleanHud;
-}
-function applyDirectorCamera(now,dt){
-  if(!directorCamera.enabled||directorCamera.mode==='first'||claimMode||cutscene)return false;
-  const focus=new THREE.Vector3(player.pos.x,player.pos.y+Math.max(.8,player.eye*.72),player.pos.z);
-  const yaw=Number(player.yaw)||0;
-  const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
-  const behind=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));
-  const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-  let pos;
-  if(directorCamera.mode==='orbit'){
-    directorCamera.orbitAngle+=dt*.34;
-    pos=new THREE.Vector3(
-      focus.x+Math.sin(directorCamera.orbitAngle)*directorCamera.distance,
-      focus.y+directorCamera.height,
-      focus.z+Math.cos(directorCamera.orbitAngle)*directorCamera.distance
-    );
-  }else if(directorCamera.mode==='side'){
-    pos=focus.clone().addScaledVector(right,directorCamera.side).addScaledVector(behind,directorCamera.distance*.52);
-    pos.y+=directorCamera.height*.82;
-  }else{
-    pos=focus.clone().addScaledVector(behind,directorCamera.distance).addScaledVector(forward,-.35);
-    pos.y+=directorCamera.height;
-  }
-  camera.position.lerp(pos,1-Math.exp(-dt*8));
-  camera.lookAt(focus.x,focus.y+.35,focus.z);
-  return true;
-}
-globalThis.BlockcraftDirectorCamera={
-  toggle:toggleDirectorCamera,
-  cycle:cycleDirectorCameraMode,
-  setMode:setDirectorCameraMode,
-  distance:adjustDirectorCameraDistance,
-  height:adjustDirectorCameraHeight,
-  cleanHud:toggleDirectorCleanHud,
-  status:directorCameraStatus,
-  active:()=>!!directorCamera.enabled,
-  modes:()=>DIRECTOR_CAMERA_MODES.slice()
-};
-refreshDirectorCameraHud();
-
 let lastFishingCameraDebugAt=0,lastFishingCameraPitch=player.pitch,lastFishingHeartbeatAt=0;
 function fishingCameraDebug(reason,extra={},now=performance.now()){
   if(dimensionsState.kind!=='fishing_lake')return;
@@ -2430,12 +2305,12 @@ function fishingTargetScreenHud(){
   fishingTargetScreenEl=document.createElement('div');
   fishingTargetScreenEl.id='fishingtargethud';
   fishingTargetScreenEl.className='hidden';
-  fishingTargetScreenEl.style.cssText='position:fixed;z-index:92;min-width:92px;padding:6px 9px;border:1px solid rgba(34,211,238,.86);border-radius:999px;background:rgba(3,12,22,.72);box-shadow:0 0 18px rgba(34,211,238,.4);color:#dffbff;font-size:11px;letter-spacing:1.5px;text-align:center;text-shadow:0 2px 0 #000;pointer-events:none;transform:translate(-50%,-50%);';
-  fishingTargetScreenEl.innerHTML='⬥ CAST TARGET';
+  fishingTargetScreenEl.style.cssText='position:fixed;z-index:92;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8af2ff;font-size:12px;font-weight:700;letter-spacing:1.5px;text-align:center;pointer-events:none;transform:translate(-50%,-50%);filter:drop-shadow(0 0 7px rgba(34,211,238,.95));';
+  fishingTargetScreenEl.innerHTML='<div style="font-size:40px;line-height:.7;text-shadow:0 0 10px #22d3ee">◎</div><div class="fishingtargetlabel" style="padding:3px 9px;border-radius:999px;background:rgba(3,12,22,.72);border:1px solid rgba(34,211,238,.86);text-shadow:0 2px 0 #000;white-space:nowrap">CAST TARGET</div>';
   document.body.appendChild(fishingTargetScreenEl);
   return fishingTargetScreenEl;
 }
-function setFishingTargetScreenHud(show,x=0,y=0,text='⬥ CAST TARGET'){
+function setFishingTargetScreenHud(show,x=0,y=0,text='CAST TARGET'){
   const el=fishingTargetScreenHud();
   const shouldShow=show&&fishingState.phase==='aim';
   el.classList.toggle('hidden',!shouldShow);
@@ -2445,7 +2320,8 @@ function setFishingTargetScreenHud(show,x=0,y=0,text='⬥ CAST TARGET'){
   const clampedY=Math.max(margin,Math.min(innerHeight-margin,Number(y)||innerHeight*.5));
   el.style.left=Math.round(clampedX)+'px';
   el.style.top=Math.round(clampedY)+'px';
-  if(el.innerHTML!==text)el.innerHTML=text;
+  const label=el.querySelector('.fishingtargetlabel');
+  if(label&&label.textContent!==text)label.textContent=text;
 }
 function fishingTargetDebug(reason,extra={},now=performance.now()){
   const payload={reason,at:Date.now(),phase:fishingState.phase,target:fishingState.target?{x:+fishingState.target.x.toFixed(3),y:+fishingState.target.y.toFixed(3),z:+fishingState.target.z.toFixed(3)}:null,dim,dgn:NET&&NET.dgn||'',extra};
@@ -2744,14 +2620,14 @@ function makeFishingVisuals(){
   const targetGroup=new THREE.Group();
   targetGroup.name='fishing-cast-target';
   const targetMat=new THREE.MeshBasicMaterial({color:0x22d3ee,transparent:true,opacity:.98,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending});
-  const targetRing=new THREE.Mesh(new THREE.TorusGeometry(1.05,.052,8,72),targetMat);
+  const targetRing=new THREE.Mesh(new THREE.TorusGeometry(1.35,.09,10,80),targetMat);
   targetRing.rotation.x=Math.PI/2;
-  const targetInner=new THREE.Mesh(new THREE.TorusGeometry(.36,.026,8,48),targetMat);
-  targetInner.rotation.x=Math.PI/2;targetInner.position.y=.03;
-  const targetBeam=new THREE.Mesh(new THREE.CylinderGeometry(.055,.18,1.65,12,1,true),targetMat);
-  targetBeam.position.y=.82;
-  const targetCore=new THREE.Mesh(new THREE.SphereGeometry(.18,14,10),targetMat);
-  targetCore.position.y=.08;
+  const targetInner=new THREE.Mesh(new THREE.TorusGeometry(.5,.05,10,56),targetMat);
+  targetInner.rotation.x=Math.PI/2;targetInner.position.y=.04;
+  const targetBeam=new THREE.Mesh(new THREE.CylinderGeometry(.11,.34,3.6,14,1,true),targetMat);
+  targetBeam.position.y=1.75;
+  const targetCore=new THREE.Mesh(new THREE.SphereGeometry(.26,16,12),targetMat);
+  targetCore.position.y=.1;
   targetGroup.add(targetRing,targetInner,targetBeam,targetCore);
   targetGroup.visible=false;targetGroup.frustumCulled=false;scene.add(targetGroup);
   fishingVisuals={rodGroup,rod,tip,grip,reel,tipAnchor,line,bobberGroup,ring,targetGroup,targetRing,targetInner,targetBeam,targetCore};
@@ -2824,7 +2700,7 @@ function tickFishingVisuals(now,dt){
       const projected=new THREE.Vector3(target.x,target.y+1.15,target.z).project(camera);
       const onScreen=projected.z>-1&&projected.z<1&&projected.x>=-1.25&&projected.x<=1.25&&projected.y>=-1.25&&projected.y<=1.25;
       const sx=(projected.x*.5+.5)*innerWidth,sy=(-projected.y*.5+.5)*innerHeight;
-      setFishingTargetScreenHud(true,sx,sy,onScreen?'⬥ CAST TARGET':'⬥ TARGET OFF-SCREEN');
+      setFishingTargetScreenHud(true,sx,sy,onScreen?('CAST · '+Math.round((fishingState.castQuality||0)*100)+'%'):'TARGET OFF-SCREEN · turn to face it');
       if(now-lastFishingTargetDebugAt>900){
         lastFishingTargetDebugAt=now;
         fishingTargetDebug('aim.visible',{targetGroupVisible:!!v.targetGroup.visible,bobberVisible:!!v.bobberGroup.visible,onScreen,screen:{x:Math.round(sx),y:Math.round(sy)},camera:{x:+camera.position.x.toFixed(3),y:+camera.position.y.toFixed(3),z:+camera.position.z.toFixed(3)}} ,now);
@@ -3205,8 +3081,6 @@ function tick(now){
     if(isMeditating){
       applyMeditationCamera();
     }
-    applyDirectorCamera(now,dt);
-    refreshDirectorCameraHud();
     }
     if(camShake>0){
       camShake=Math.max(0,camShake-dt*2.2);
