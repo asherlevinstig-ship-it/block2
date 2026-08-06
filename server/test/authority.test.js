@@ -621,6 +621,38 @@ test('server grants and block placement refresh the trade inventory snapshot', (
   assert.equal(itemCount(prof, W.B.SAND), 2);
 });
 
+test('inventory arrange persists slot layout but rejects duplication', () => {
+  const room = makeRoom();
+  const client = makeClient('arranger');
+  // Two stacks in the backpack; the client wants to move one into a hotbar slot.
+  const { prof } = seedPlayer(room, client, {
+    inv: [null, null, null, null, null, null, null, null, null, { id: W.B.SAND, count: 5 }, { id: W.B.DIRT, count: 3 }],
+  });
+
+  // Valid rearrangement: SAND -> hotbar slot 0, DIRT stays; same items, same counts.
+  const good = new Array(36).fill(null);
+  good[0] = { id: W.B.SAND, count: 5 };
+  good[10] = { id: W.B.DIRT, count: 3 };
+  room.handleInventoryArrange(client, { inv: good });
+  assert.ok(prof.inv[0] && prof.inv[0].id === W.B.SAND && prof.inv[0].count === 5, 'sand moved into hotbar slot 0');
+  assert.equal(prof.inv[9], null, 'original sand slot cleared');
+  assert.ok(prof.inv[10] && prof.inv[10].id === W.B.DIRT && prof.inv[10].count === 3, 'dirt preserved');
+
+  // Duplication attempt: inflate a count. Must be rejected and leave the layout untouched.
+  const snapshot = JSON.stringify(prof.inv);
+  const cheat = JSON.parse(JSON.stringify(good));
+  cheat[0].count = 64; // conjure 59 extra sand
+  room.handleInventoryArrange(client, { inv: cheat });
+  assert.equal(JSON.stringify(prof.inv), snapshot, 'inflated-count layout rejected, inventory unchanged');
+  assert.equal(itemCount(prof, W.B.SAND), 5, 'no sand duplicated');
+
+  // Adding a brand-new item is also rejected.
+  const conjure = JSON.parse(JSON.stringify(prof.inv));
+  conjure[5] = { id: W.B.STONE, count: 10 };
+  room.handleInventoryArrange(client, { inv: conjure });
+  assert.equal(itemCount(prof, W.B.STONE), 0, 'conjured item rejected');
+});
+
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that
 // tickInstanceHazards / onDungeonTrashDeath read, without generating a real dungeon.
 function hazInstance(room, id, mods, plus = 0) {

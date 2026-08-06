@@ -252,6 +252,7 @@ function closeUI(relock=true){
   // return crafting grid + cursor to inventory
   for(let i=0;i<craftCells.length;i++){ const s=craftCells[i]; if(s) addItem(s.id,s.count); craftCells[i]=null; }
   if(cursorStack){ addItem(cursorStack.id,cursorStack.count); cursorStack=null; renderCursor(); }
+  flushInventoryArrangeSync();
   uiOpen=false; uiMode=null; uiFurnaceKey=null;
   uiEl.classList.remove('open');
   refreshHUD();
@@ -881,7 +882,7 @@ function slotInteract(acc, e, opts={}){
       if(!arr[i]){ arr[i]= s.dur!==undefined ? {...s, count:Math.min(count,1)} : newStack(s.id,Math.min(count,stackMax(s.id))); if(s.dur!==undefined) arr[i].dur=s.dur; count-= arr[i].count; }
     }
     if(count<=0) acc.set(null); else s.count=count;
-    renderUI(); refreshHUD(); return;
+    renderUI(); refreshHUD(); scheduleInventoryArrangeSync(); return;
   }
   if(e.button===0){
     if(!cursorStack && s){ cursorStack=s; acc.set(null); }
@@ -902,9 +903,31 @@ function slotInteract(acc, e, opts={}){
       cursorStack={...s, count:half}; s.count-=half;
     } else if(s){ cursorStack=s; acc.set(null); }
   }
-  renderUI(); refreshHUD(); renderCursor();
+  renderUI(); refreshHUD(); renderCursor(); scheduleInventoryArrangeSync();
 }
 
+// Sync the full inventory/hotbar layout to the server so slot placement (esp. hotbar) survives
+// relogin. Server validates it as a conservation-preserving rearrangement (no duplication).
+let invArrangeTimer=null, lastSentInvArrange='';
+function inventoryArrangePayload(){
+  return inv.slice(0,36).map(s=>s?{id:s.id,count:s.count,plus:s.plus,dur:s.dur,gearRank:s.gearRank,armorType:s.armorType,rarity:s.rarity,unique:s.unique,locked:s.locked,source:s.source}:null);
+}
+function sendInventoryArrange(){
+  if(!(NET.on&&NET.room&&NET.room.name==='blockcraft')||cursorStack)return;
+  const payload=inventoryArrangePayload(),json=JSON.stringify(payload);
+  if(json===lastSentInvArrange)return;
+  lastSentInvArrange=json;
+  try{NET.room.send('invArrange',{inv:payload});}catch(e){}
+}
+function scheduleInventoryArrangeSync(){
+  if(!(NET.on&&NET.room)||cursorStack)return;
+  if(invArrangeTimer)clearTimeout(invArrangeTimer);
+  invArrangeTimer=setTimeout(()=>{invArrangeTimer=null;sendInventoryArrange();},350);
+}
+function flushInventoryArrangeSync(){
+  if(invArrangeTimer){clearTimeout(invArrangeTimer);invArrangeTimer=null;}
+  sendInventoryArrange();
+}
 function makeSlotEl(acc, opts={}){
   const el=document.createElement('div'); el.className='slot';
   fillSlotEl(el, acc.get());

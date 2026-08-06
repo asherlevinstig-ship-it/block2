@@ -9,7 +9,7 @@ const { TeamManager } = require('../teams');
 const W = require('../world');
 const D = require('../dungeon');
 const AI = require('../ai');
-const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS, ensureAsherAdminFishingRod } = require('../store');
+const { createStore, cleanSlot, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, cleanShardId, sanitizeUtilityLoadout, sanitizeEquippedCosmetics, sanitizeMeditationGrowth, sanitizeActiveRoom, sanitizeActiveRoomPosition, JOB_TUTORIAL_ROOMS, TUTORIAL_VERSIONS, DRAGON_GROW_MS, DRAGON_JUVENILE_MS, ensureAsherAdminFishingRod } = require('../store');
 const { getAuthService } = require('../auth');
 const { hunterXpForActivity } = require('./xp-economy');
 const { PHRASES: QUICK_CHAT, RULES: COMMS_RULES } = require('../../shared/comms-rules');
@@ -509,6 +509,7 @@ class GameRoom extends Room {
     this.onMessage('lootRecovery', (client, m) => this.handleLootRecovery(client, m));
     this.onMessage('gearLock', (client, m) => this.handleGearLock(client, m));
     this.onMessage('inventorySort', (client, m) => this.handleInventorySort(client, m));
+    this.onMessage('invArrange', (client, m) => this.handleInventoryArrange(client, m));
     this.onMessage('tradeOffer', (client, m) => this.handleTradeOffer(client, m));
     this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
@@ -3160,6 +3161,35 @@ class GameRoom extends Room {
     this.syncPlayerProfile(client, prof);
     this.sendProfile(client, prof);
     client.send('inventorySortResult', { ok: true, changed, range: 'backpack', groups });
+  }
+  // Client sends its full 36-slot layout after rearranging (drag/drop). Server-authoritative:
+  // apply ONLY if the proposed layout conserves every item (reorder / stack split+merge allowed;
+  // creating, deleting, or inflating items is rejected to make duplication impossible).
+  inventoryConservationMap(inv) {
+    const map = new Map();
+    for (const s of inv) {
+      if (!s) continue;
+      const sig = JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique, locked: s.locked, source: s.source });
+      map.set(sig, (map.get(sig) || 0) + (s.count | 0));
+    }
+    return map;
+  }
+  handleInventoryArrange(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || this.rateLimited(client, 'invArrange', 4, 6)) return;
+    const prof = rec.prof;
+    prof.inv = Array.isArray(prof.inv) ? prof.inv : [];
+    while (prof.inv.length < 36) prof.inv.push(null);
+    const proposed = (Array.isArray(m && m.inv) ? m.inv : []).slice(0, 36).map(cleanSlot);
+    while (proposed.length < 36) proposed.push(null);
+    const before = this.inventoryConservationMap(prof.inv);
+    const after = this.inventoryConservationMap(proposed);
+    let conserved = before.size === after.size;
+    if (conserved) for (const [sig, count] of before) { if (after.get(sig) !== count) { conserved = false; break; } }
+    if (!conserved) { this.sendProfile(client, prof); return; } // reject → snap client back to server truth
+    if (JSON.stringify(prof.inv) === JSON.stringify(proposed)) return; // no-op
+    prof.inv = proposed; // inventory isn't part of broadcast player state, so no syncPlayerProfile needed
+    this.dirtyPlayers.add(rec.token);
   }
   unlockUtility(client, id, reason = '') {
     if (!UTILITY_IDS.has(id)) return false;
