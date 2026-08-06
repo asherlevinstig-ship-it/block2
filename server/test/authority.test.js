@@ -653,6 +653,21 @@ test('inventory arrange persists slot layout but rejects duplication', () => {
   assert.equal(itemCount(prof, W.B.STONE), 0, 'conjured item rejected');
 });
 
+test('inventory arrange conserves items whose provenance the client strips (admin rod / mirror)', () => {
+  const room = makeRoom();
+  const client = makeClient('rod-mover');
+  // Server holds an item with a `source` flag the client cleaner drops for non-tool items
+  // (mirrors the admin fishing rod granted with source:'admin', or the locked appearance mirror).
+  const { prof } = seedPlayer(room, client, { inv: [null, null, null, null, null, null, null, null, null, { id: W.B.SAND, count: 1, source: 'admin' }] });
+  // Client proposes moving it to hotbar slot 0 WITHOUT the source field (as the real client does).
+  const good = new Array(36).fill(null);
+  good[0] = { id: W.B.SAND, count: 1 };
+  room.handleInventoryArrange(client, { inv: good });
+  assert.ok(prof.inv[0] && prof.inv[0].id === W.B.SAND, 'item moved to hotbar despite stripped source');
+  assert.equal(prof.inv[9], null, 'original slot cleared');
+  assert.equal(prof.inv[0].source, 'admin', 'server re-attached the stripped provenance flag');
+});
+
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that
 // tickInstanceHazards / onDungeonTrashDeath read, without generating a real dungeon.
 function hazInstance(room, id, mods, plus = 0) {

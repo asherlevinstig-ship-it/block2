@@ -3165,11 +3165,15 @@ class GameRoom extends Room {
   // Client sends its full 36-slot layout after rearranging (drag/drop). Server-authoritative:
   // apply ONLY if the proposed layout conserves every item (reorder / stack split+merge allowed;
   // creating, deleting, or inflating items is rejected to make duplication impossible).
+  // The signature covers only economic identity (id + gear attributes). Provenance/UI flags
+  // (source, locked) are deliberately excluded: the client's cleanServerInventoryStack strips
+  // `source`/`locked` from non-tool items (e.g. the admin fishing rod granted with source:'admin',
+  // the locked appearance mirror), so including them would reject every legitimate rearrange.
   inventoryConservationMap(inv) {
     const map = new Map();
     for (const s of inv) {
       if (!s) continue;
-      const sig = JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique, locked: s.locked, source: s.source });
+      const sig = JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique });
       map.set(sig, (map.get(sig) || 0) + (s.count | 0));
     }
     return map;
@@ -3186,10 +3190,37 @@ class GameRoom extends Room {
     const after = this.inventoryConservationMap(proposed);
     let conserved = before.size === after.size;
     if (conserved) for (const [sig, count] of before) { if (after.get(sig) !== count) { conserved = false; break; } }
-    if (!conserved) { this.sendProfile(client, prof); return; } // reject → snap client back to server truth
+    // Not conserved (real cheat, or the client's mirror of inventory has drifted): ignore the
+    // layout — never mutate (no duplication) and never snap the client back mid-drag (no jarring
+    // revert). It simply doesn't persist this time; the authoritative inv reasserts on next load.
+    if (!conserved) return;
     if (JSON.stringify(prof.inv) === JSON.stringify(proposed)) return; // no-op
+    // Preserve server-authoritative provenance/UI flags the client strips, matched by economic
+    // signature, so a rearrange can't silently wipe source/locked (e.g. keep the mirror locked).
+    this.reattachInventoryProvenance(prof.inv, proposed);
     prof.inv = proposed; // inventory isn't part of broadcast player state, so no syncPlayerProfile needed
     this.dirtyPlayers.add(rec.token);
+  }
+  // Re-apply source/locked from the old layout onto the new one, matching by economic signature,
+  // since the client can't be trusted to (and doesn't) round-trip those fields.
+  reattachInventoryProvenance(oldInv, proposed) {
+    const pools = new Map();
+    const sigOf = s => JSON.stringify({ id: s.id, plus: s.plus, dur: s.dur, gearRank: s.gearRank, armorType: s.armorType, rarity: s.rarity, unique: s.unique });
+    for (const s of oldInv) {
+      if (!s || (s.source == null && s.locked == null)) continue;
+      const k = sigOf(s);
+      if (!pools.has(k)) pools.set(k, []);
+      pools.get(k).push({ source: s.source, locked: s.locked });
+    }
+    for (const s of proposed) {
+      if (!s) continue;
+      const q = pools.get(sigOf(s));
+      if (q && q.length) {
+        const p = q.shift();
+        if (p.source != null && s.source == null) s.source = p.source;
+        if (p.locked != null && s.locked == null) s.locked = p.locked;
+      }
+    }
   }
   unlockUtility(client, id, reason = '') {
     if (!UTILITY_IDS.has(id)) return false;
