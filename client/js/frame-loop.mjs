@@ -2522,6 +2522,58 @@ function fishingTargetDebug(reason,extra={},now=performance.now()){
   if(globalThis.BlockcraftVerboseDebug)console.warn('[bc-fishing-target]',payload);
   return payload;
 }
+// ---- Live on-screen fishing debug (target + rod). On by default during a cast; set
+// globalThis.BlockcraftFishingDebug=false to hide, =true to force. Data also at BlockcraftFishingDebugData.
+let fishingDebugEl=null;
+const _fishFwd=new THREE.Vector3();
+function fishFmt3(v,p=1){return '('+v.x.toFixed(p)+', '+v.y.toFixed(p)+', '+v.z.toFixed(p)+')';}
+function fishingDebugHud(){
+  if(fishingDebugEl)return fishingDebugEl;
+  fishingDebugEl=document.createElement('div');
+  fishingDebugEl.id='fishingdebughud';
+  fishingDebugEl.className='hidden';
+  fishingDebugEl.style.cssText='position:fixed;left:10px;bottom:10px;z-index:96;max-width:520px;padding:8px 11px;border:1px solid rgba(34,211,238,.55);border-radius:8px;background:rgba(2,9,16,.86);color:#a9edff;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;white-space:pre;pointer-events:none;text-shadow:0 1px 0 #000;';
+  document.body.appendChild(fishingDebugEl);
+  return fishingDebugEl;
+}
+function updateFishingDebugHud(now){
+  const active=fishingState.phase&&fishingState.phase!=='idle'&&fishingState.phase!=='cooldown';
+  const auth=globalThis.BlockcraftAuthUI||globalThis.AUTH_UI;
+  const isAdmin=!!(auth&&auth.isAdminAccount&&auth.isAdminAccount());
+  // Shows during a cast for admins by default; anyone can force with BlockcraftFishingDebug=true, or hide with =false.
+  const on=active&&globalThis.BlockcraftFishingDebug!==false&&(globalThis.BlockcraftFishingDebug===true||isAdmin);
+  const el=fishingDebugHud();
+  el.classList.toggle('hidden',!on);
+  if(!on)return;
+  const R=180/Math.PI, t=fishingState.target;
+  const fwd=camera.getWorldDirection(_fishFwd).clone();
+  let d3=0,dh=0,yawDelta=0,pitchToT=0,onScreen=false,sx=0,sy=0,pz=0;
+  if(t){
+    const dx=t.x-camera.position.x,dy=t.y-camera.position.y,dz=t.z-camera.position.z;
+    d3=Math.hypot(dx,dy,dz); dh=Math.hypot(dx,dz);
+    const fyaw=Math.atan2(fwd.x,fwd.z),tyaw=Math.atan2(dx,dz);
+    yawDelta=Math.atan2(Math.sin(tyaw-fyaw),Math.cos(tyaw-fyaw))*R;
+    pitchToT=Math.atan2(dy,dh)*R;
+    const p=new THREE.Vector3(t.x,t.y+1.15,t.z).project(camera);
+    pz=p.z; onScreen=p.z>-1&&p.z<1&&Math.abs(p.x)<=1&&Math.abs(p.y)<=1;
+    sx=Math.round((p.x*.5+.5)*innerWidth); sy=Math.round((-p.y*.5+.5)*innerHeight);
+  }
+  const v=makeFishingVisuals(), rodTip=fishingRodTipWorld();
+  const side=yawDelta>3?('RIGHT '+Math.round(yawDelta)+'°'):yawDelta<-3?('LEFT '+Math.round(-yawDelta)+'°'):'AHEAD';
+  const lines=[
+    'FISH DEBUG  phase='+fishingState.phase+'  dim='+dim,
+    'player  '+fishFmt3(player.pos)+'  yaw '+(player.yaw*R).toFixed(0)+'°  pitch '+(player.pitch*R).toFixed(0)+'°',
+    'camera  '+fishFmt3(camera.position)+'  fwd '+fishFmt3(fwd,2),
+    t?('target  '+fishFmt3(t)+'  dist '+d3.toFixed(1)+'m (flat '+dh.toFixed(1)+')'):'target  <none>',
+    t?('  vs look:  '+side+'   pitch-to-target '+pitchToT.toFixed(0)+'°'):'',
+    t?('  project: z='+pz.toFixed(2)+' screen '+sx+','+sy+'  '+(onScreen?'ON-SCREEN':'OFF-SCREEN (behind='+(pz>1)+')')):'',
+    'targetGrp vis='+!!(v.targetGroup&&v.targetGroup.visible)+'   reticle='+(document.getElementById('fishingtargethud')&&!document.getElementById('fishingtargethud').classList.contains('hidden')),
+    'rod     grpVis='+!!(v.rodGroup&&v.rodGroup.visible)+'   tip '+fishFmt3(rodTip)
+  ].filter(Boolean);
+  const text=lines.join('\n');
+  if(el.textContent!==text)el.textContent=text;
+  globalThis.BlockcraftFishingDebugData={phase:fishingState.phase,target:t?{x:+t.x.toFixed(2),y:+t.y.toFixed(2),z:+t.z.toFixed(2)}:null,distM:+d3.toFixed(2),yawDeltaDeg:+yawDelta.toFixed(1),pitchDeg:+pitchToT.toFixed(1),onScreen,screen:{x:sx,y:sy},rodGrpVisible:!!(v.rodGroup&&v.rodGroup.visible),rodTip:{x:+rodTip.x.toFixed(2),y:+rodTip.y.toFixed(2),z:+rodTip.z.toFixed(2)}};
+}
 function fishByCastQuality(q){
   let roll=Math.random()*(.72+q*.46),acc=0;
   for(const f of FISHING_FISH){acc+=f.chance*(f.reward>1?(.65+q*.65):1);if(roll<=acc)return f;}
@@ -2876,6 +2928,7 @@ function tickFishingVisuals(now,dt){
   const v=makeFishingVisuals();
   const active=fishingState.phase&&fishingState.phase!=='idle'&&fishingState.phase!=='cooldown';
   updateFishingRodVisual(v,now,dt,active);
+  updateFishingDebugHud(now);
   v.line.visible=active&&!!fishingState.target&&fishingState.phase!=='aim';
   v.bobberGroup.visible=active&&!!fishingState.target&&fishingState.phase!=='aim';
   if(v.targetGroup)v.targetGroup.visible=fishingState.phase==='aim'&&!!fishingState.target;
