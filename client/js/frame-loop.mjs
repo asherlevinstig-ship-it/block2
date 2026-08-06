@@ -209,7 +209,10 @@ function refreshDirectorCameraHud(){
   document.body.classList.toggle('director-camera-active',directorCamera.enabled);
   document.body.classList.toggle('director-clean-hud',directorCamera.enabled&&directorCamera.cleanHud);
   if(!directorCamera.enabled)return;
-  const html='<b>DIRECTOR CAMERA</b><span>F6 mode · [ ] distance · - = height · F7 clean HUD · F10 off<br>'+directorModeLabel()+'</span>';
+  const controls=directorCamera.mode==='freefly'
+    ?'F6 mode · WASD fly · Arrows look · Space up · Shift down · F7 clean HUD · F10 off'
+    :'F6 mode · [ ] distance · - = height · F7 clean HUD · F10 off';
+  const html='<b>DIRECTOR CAMERA</b><span>'+controls+'<br>'+directorModeLabel()+'</span>';
   if(el.innerHTML!==html)el.innerHTML=html;
 }
 function directorCameraNotify(text){
@@ -321,14 +324,16 @@ function applyDirectorFreeFly(now,dt,move,mouse){
     d.freeYaw=cameraYaw; d.freePitch=cameraPitch;
     d.freeSeeded=true;
   }
-  const sens=0.0022;
+  const sens=0.0022,rotSpeed=1.8; // arrow-key rotation rad/sec (mouse still works too)
   d.freeYaw-= (mouse&&mouse.x||0)*sens;
+  d.freeYaw+= (move&&move.rotY||0)*rotSpeed*dt;
   d.freePitch-= (mouse&&mouse.y||0)*sens;
+  d.freePitch+= (move&&move.rotX||0)*rotSpeed*dt;
   d.freePitch=Math.max(-Math.PI/2+0.02,Math.min(Math.PI/2-0.02,d.freePitch));
   const yaw=d.freeYaw,pitch=d.freePitch;
   const fwd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));
   const rgt=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
-  const speed=(move&&move.fast?16:7)*dt;
+  const speed=9*dt;
   d.freePos.addScaledVector(fwd,(move&&move.f||0)*speed);
   d.freePos.addScaledVector(rgt,(move&&move.s||0)*speed);
   d.freePos.y+=(move&&move.up||0)*speed;
@@ -3265,8 +3270,9 @@ function tick(now){
       applyDirectorFreeFly(now,dt,{
         f:(keys['KeyW']?1:0)-(keys['KeyS']?1:0),
         s:(keys['KeyD']?1:0)-(keys['KeyA']?1:0),
-        up:((keys['Space']?1:0)-((keys['ControlLeft']||keys['ControlRight'])?1:0)),
-        fast:!!(keys['ShiftLeft']||keys['ShiftRight'])
+        up:((keys['Space']?1:0)-((keys['ShiftLeft']||keys['ShiftRight'])?1:0)),
+        rotY:(keys['ArrowLeft']?1:0)-(keys['ArrowRight']?1:0),
+        rotX:(keys['ArrowUp']?1:0)-(keys['ArrowDown']?1:0)
       },directorFreeMouse);
       refreshDirectorCameraHud();
     } else {
