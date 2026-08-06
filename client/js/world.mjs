@@ -277,6 +277,7 @@ const I = { STICK:100, COAL:101, IRON_INGOT:102, DIAMOND:103, CHARCOAL:104,
   APPEARANCE_MIRROR:221,
   APPRENTICE_ROBE:222, ARCWEAVE_ROBE:223, STORMWEAVE_ROBE:224,
   FISHING_ROD:225,
+  SMALL_FISH:226, PRIZED_FISH:227, COOKED_SMALL_FISH:228, COOKED_RIVER_FISH:229, COOKED_PRIZED_FISH:230,
   CHRONO_DAGGER:160, TITAN_HAMMER:161, METEOR_STAFF:162,
   SOUL_REAPER_SCYTHE:163, GRAVITY_BOW:164, WARDEN_CLEAVER:165,
   ECLIPSE_KATANA:166, PHOENIX_SWORD:167, FROSTBITE_CHAKRAM:168,
@@ -731,8 +732,15 @@ ITEMS[I.APPEARANCE_MIRROR]={name:'Hunter Mirror',stack:1,icon:iconCanvas(ctx=>dr
 "......bb.......",
 ".....bbbb......",
 "................"],{s:'#6b7280',i:'#d1d5db',w:'#f8fafc',d:'#7dd3fc',l:'#bae6fd',g:'#ffffff',b:'#5c2c24'}))};
-ITEMS[I.RIVER_FISH]={name:'Silverfin',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,[
-"................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"],{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
+const FISH_SHAPE_SMALL=["................","................",".....bbb........","....bBBBb..b....","...bBWBBBbbb....","....bBBBb..b....",".....bbb........","................"];
+const FISH_SHAPE_RIVER=["................","................","....bbbb........","..bbBBBBbb..b...",".bBBWWBBBBbbBb..","..bbBBBBbb..b...","....bbbb........","................"];
+const FISH_SHAPE_PRIZED=["................","....bbbb........","..bbBBBBbb.Gb...",".bBBWWBBBBbGGb..",".bBBWWBBBBbGGb..","..bbBBBBbb.Gb...","....bbbb........","................"];
+ITEMS[I.SMALL_FISH]={name:'Small Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_SMALL,{b:'#3f6f86',B:'#8fd0e0',W:'#eafcff'}))};
+ITEMS[I.RIVER_FISH]={name:'River Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_RIVER,{b:'#31566b',B:'#6fa9bd',W:'#dff8ff'}))};
+ITEMS[I.PRIZED_FISH]={name:'Prized Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#2b4f66',B:'#7bb9cf',W:'#eafcff',G:'#ffd24a'}))};
+ITEMS[I.COOKED_SMALL_FISH]={name:'Cooked Small Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_SMALL,{b:'#7a3b1c',B:'#d98a4a',W:'#ffe1b0'}))};
+ITEMS[I.COOKED_RIVER_FISH]={name:'Cooked River Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_RIVER,{b:'#6e3417',B:'#cf7a3a',W:'#ffd9a6'}))};
+ITEMS[I.COOKED_PRIZED_FISH]={name:'Cooked Prized Fish',stack:64,icon:iconCanvas(ctx=>drawPattern(ctx,FISH_SHAPE_PRIZED,{b:'#5c2c12',B:'#c46f30',W:'#ffcf95',G:'#ffe08a'}))};
 ITEMS[I.FISHING_ROD]={name:'Fishing Rod',stack:1,icon:iconCanvas(ctx=>drawPattern(ctx,[
 ".............lll",
 "............l...",
@@ -750,7 +758,7 @@ ITEMS[I.FISHING_ROD]={name:'Fishing Rod',stack:1,icon:iconCanvas(ctx=>drawPatter
 "s...............",
 "................",
 "................"],{s:'#8a5d33',l:'#dff8ff'}))};
-const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
+const FOOD_VALUES={ [I.BREAD]:{hunger:30,heal:2}, [I.MONSTER_MEAT]:{hunger:22,heal:1}, [I.COOKED_MEAT]:{hunger:36,heal:3}, [I.SMALL_FISH]:{hunger:6,heal:1}, [I.RIVER_FISH]:{hunger:10,heal:1}, [I.PRIZED_FISH]:{hunger:14,heal:2}, [I.COOKED_SMALL_FISH]:{hunger:18,heal:2}, [I.COOKED_RIVER_FISH]:{hunger:30,heal:3}, [I.COOKED_PRIZED_FISH]:{hunger:44,heal:5}, [I.HEARTY_SANDWICH]:{hunger:58,heal:6}, [I.GOLDEN_BROTH]:{hunger:52,heal:12,buff:'restore'}, [I.TRAIL_RATION]:{hunger:70,heal:7,buff:'ration'}, [I.FEAST_PLATTER]:{hunger:100,heal:12,buff:'feast'} };
 
 const TOOL_DEFS = [
   ['PICK',  PICK_ROWS,  'pick',  'Pickaxe'],
@@ -10652,6 +10660,54 @@ function updateRoadBirds(dt,tt){
     b.grp.rotation.y=-a;const flap=Math.sin(tt*7+b.phase)*.65;b.wings[0].rotation.z=flap;b.wings[1].rotation.z=-flap;
   }
 }
+// Ambient swimming fish — decorative schools just under the water surface in the fishing lake and
+// overworld ponds (modeled on roadBirds). Not catchable; purely atmospheric.
+const AMBIENT_FISH=[];
+const fishBodyMat=new THREE.MeshLambertMaterial({color:0x4f97ad});
+const fishBellyMat=new THREE.MeshLambertMaterial({color:0xdaf3fa});
+function makeAmbientFish(){
+  const grp=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.42,.17,.15),fishBodyMat);grp.add(body);
+  const belly=new THREE.Mesh(new THREE.BoxGeometry(.3,.07,.11),fishBellyMat);belly.position.y=-.06;grp.add(belly);
+  const tail=new THREE.Group();tail.position.set(-.2,0,0);grp.add(tail);
+  const fin=new THREE.Mesh(new THREE.BoxGeometry(.13,.2,.05),fishBodyMat);fin.position.x=-.07;tail.add(fin);
+  grp.scale.setScalar(.7+Math.random()*.5);
+  grp.visible=false;grp.frustumCulled=false;scene.add(grp);
+  return {grp,tail,cx:0,cy:0,cz:0,r:.9+Math.random()*1.8,phase:Math.random()*Math.PI*2,speed:.28+Math.random()*.3};
+}
+for(let i=0;i<12;i++)AMBIENT_FISH.push(makeAmbientFish());
+let fishAnchors=[],fishAnchorsAreLake=false,nextFishScanAt=0;
+function fishLakeAnchors(){
+  const L=FISHING_LAKE,out=[];
+  for(const [dx,dz] of [[-14,-2],[8,6],[-6,10],[14,-6],[0,-9],[17,4],[-17,3],[6,-13],[-10,-7],[12,11],[-3,5],[3,-4]]) out.push({x:L.x+dx+.5,y:L.G-.8,z:L.z+dz+.5});
+  return out;
+}
+function scanOverworldPondAnchors(){
+  const out=[]; if(!player||!player.pos)return out;
+  const px=Math.floor(player.pos.x),py=Math.floor(player.pos.y),pz=Math.floor(player.pos.z);
+  for(let dx=-16;dx<=16&&out.length<12;dx+=2)for(let dz=-16;dz<=16&&out.length<12;dz+=2){
+    for(let dy=-3;dy<=2;dy++){const y=py+dy;if(getB(px+dx,y,pz+dz)===B.WATER&&getB(px+dx,y+1,pz+dz)===B.AIR){out.push({x:px+dx+.5,y:y+.72,z:pz+dz+.5});break;}}
+  }
+  return out;
+}
+function updateFishSchools(dt,tt){
+  const inLake=dim==='fishing_lake',inOver=dim==='overworld';
+  if(!inLake&&!inOver){for(const f of AMBIENT_FISH)f.grp.visible=false;return;}
+  const now=performance.now();
+  if(inLake){ if(!fishAnchorsAreLake){fishAnchors=fishLakeAnchors();fishAnchorsAreLake=true;} }
+  else if(now>=nextFishScanAt){ nextFishScanAt=now+1200; fishAnchors=scanOverworldPondAnchors(); fishAnchorsAreLake=false; }
+  const n=fishAnchors.length;
+  for(let i=0;i<AMBIENT_FISH.length;i++){
+    const f=AMBIENT_FISH[i],a=n?fishAnchors[i%n]:null;
+    if(!a){f.grp.visible=false;continue;}
+    const near=inLake||playerOverworldDistanceSq(a.x,a.z)<44*44;
+    f.grp.visible=near; if(!near)continue;
+    const ang=tt*f.speed+f.phase;
+    f.grp.position.set(a.x+Math.cos(ang)*f.r,a.y+Math.sin(tt*.9+f.phase)*.05,a.z+Math.sin(ang)*f.r);
+    f.grp.rotation.y=-ang+Math.PI/2;
+    f.tail.rotation.y=Math.sin(tt*8+f.phase)*.5;
+  }
+}
 function updateSkyDragons(dt,tt){
   const petRoom=JOB_TUTORIAL_MEADOWS.pet_tamer;
   const inPetTamerRoom=dim==='job'&&petRoom&&Math.hypot(player.pos.x-petRoom.x,player.pos.z-petRoom.z)<petRoom.R+18;
@@ -11510,6 +11566,7 @@ const legacyWorldBindings={
   "updateParticles":{get:()=>updateParticles},
   "updateRoadBirds":{get:()=>updateRoadBirds},
   "updateSkyDragons":{get:()=>updateSkyDragons},
+  "updateFishSchools":{get:()=>updateFishSchools},
   "refreshRoadSafetyScenes":{get:()=>refreshRoadSafetyScenes},
   "roadSafetySceneGroup":{get:()=>roadSafetySceneGroup},
   "updateTavernNightEffects":{get:()=>updateTavernNightEffects},

@@ -2660,12 +2660,18 @@ function hookFishing(){
   }
   return false;
 }
+const FISH_TIER_ITEM={1:I.SMALL_FISH,2:I.RIVER_FISH,3:I.PRIZED_FISH};
 function completeFishing(){
   const f=fishingState.fish||FISHING_FISH[0];
+  const tier=Math.max(1,Math.min(3,f.reward|0));
   const count=Math.max(1,Math.min(4,f.reward+(fishingState.castQuality>.82?1:0)+(fishingState.qualityBonus>1?1:0)));
-  if(typeof addItem==='function')addItem(I.RIVER_FISH,count);
+  const fishId=FISH_TIER_ITEM[tier]||I.RIVER_FISH;
+  // Server-authoritative when online (keeps inventory in sync — no client-only drift); local grant
+  // only as a solo/offline fallback.
+  if(NET.on&&NET.room)NET.room.send('fishCatch',{tier,count});
+  else if(typeof addItem==='function')addItem(fishId,count);
   showName('Landed: '+f.name);
-  sysMsg('Fishing: caught <b>'+escHTML(f.name)+'</b> x'+count+'.','good');
+  sysMsg('Fishing: caught <b>'+escHTML(f.name)+'</b> x'+count+' ('+escHTML(ITEMS[fishId]&&ITEMS[fishId].name||'fish')+').','good');
   Object.assign(fishingState,{phase:'cooldown',nextAt:performance.now()+900,fish:null,target:null});
   document.body.classList.remove('fishing-placement-active');
   setFishingTargetScreenHud(false);
@@ -3406,6 +3412,7 @@ function tick(now){
   updateEmitters(dt);
   updateRoadBirds(dt,now/1000);
   updateSkyDragons(dt,now/1000);
+  updateFishSchools(dt,now/1000);
   updateTavernNightEffects(dt, now);
   tickExplorationPresentation(now,dt);
   { // flame flicker

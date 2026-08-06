@@ -43,6 +43,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 };
 
 const W = require('../world');
+const C = require('../rooms/constants');
 const JOB_SYSTEM = require('../../shared/job-system');
 const GEAR_SYSTEM = require('../../shared/gear-system');
 const FAMILIAR_SYSTEM = require('../../shared/familiar-system');
@@ -666,6 +667,34 @@ test('inventory arrange conserves items whose provenance the client strips (admi
   assert.ok(prof.inv[0] && prof.inv[0].id === W.B.SAND, 'item moved to hotbar despite stripped source');
   assert.equal(prof.inv[9], null, 'original slot cleared');
   assert.equal(prof.inv[0].source, 'admin', 'server re-attached the stripped provenance flag');
+});
+
+test('fishing catch grants the tiered fish, gated by a rod', () => {
+  const room = makeRoom();
+  const withRod = makeClient('angler');
+  const { prof } = seedPlayer(room, withRod, { inv: [{ id: C.I.FISHING_ROD, count: 1 }] });
+  room.handleFishCatch(withRod, { tier: 3, count: 2 });
+  assert.equal(itemCount(prof, C.I.PRIZED_FISH), 2, 'tier-3 catch grants Prized Fish x2');
+  room.handleFishCatch(withRod, { tier: 1, count: 1 });
+  assert.equal(itemCount(prof, C.I.SMALL_FISH), 1, 'tier-1 catch grants a Small Fish');
+
+  const noRod = makeClient('rodless');
+  const { prof: p2 } = seedPlayer(room, noRod, { inv: [] });
+  room.handleFishCatch(noRod, { tier: 2, count: 3 });
+  assert.equal(itemCount(p2, C.I.RIVER_FISH), 0, 'no rod → no fish (no free food)');
+});
+
+test('cooked fish is edible food that heals and is consumed', () => {
+  const room = makeRoom();
+  const client = makeClient('eater');
+  // Seed HP below max so the food isn't rejected as "full" (hunger is auto-protected in the harness).
+  const { prof } = seedPlayer(room, client, { inv: [{ id: C.I.COOKED_PRIZED_FISH, count: 2 }], hp: 10 });
+  assert.ok(C.FOOD_VALUES[C.I.COOKED_PRIZED_FISH], 'cooked prized fish is registered as food');
+  const before = room.ensurePlayerHp(client).hp;
+  room.handleUseFood(client, { slot: 0 });
+  const after = room.ensurePlayerHp(client).hp;
+  assert.ok(after > before, 'eating cooked fish healed HP');
+  assert.equal(itemCount(prof, C.I.COOKED_PRIZED_FISH), 1, 'one cooked fish consumed');
 });
 
 // Minimal dungeon instance carrying the shard-hazard bookkeeping that

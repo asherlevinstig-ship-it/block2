@@ -510,6 +510,7 @@ class GameRoom extends Room {
     this.onMessage('gearLock', (client, m) => this.handleGearLock(client, m));
     this.onMessage('inventorySort', (client, m) => this.handleInventorySort(client, m));
     this.onMessage('invArrange', (client, m) => this.handleInventoryArrange(client, m));
+    this.onMessage('fishCatch', (client, m) => this.handleFishCatch(client, m));
     this.onMessage('tradeOffer', (client, m) => this.handleTradeOffer(client, m));
     this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
@@ -3201,6 +3202,22 @@ class GameRoom extends Room {
     if (JSON.stringify(result) === JSON.stringify(prof.inv)) return; // no change
     prof.inv = result; // inventory isn't part of broadcast player state, so no syncPlayerProfile needed
     this.dirtyPlayers.add(rec.token);
+  }
+  // Fishing mini-game landed a catch on the client. The outcome is client-driven, so the server
+  // can't verify the reel skill; it gates abuse instead: must hold a rod, be in a fishing-capable
+  // space (overworld or the fishing lake), and rate-limited to roughly the mini-game's pace. Grants
+  // the tier's raw fish through the normal authoritative grant path so it persists (no client drift).
+  handleFishCatch(client, m) {
+    const rec = this.profileFor(client);
+    if (!rec || this.rateLimited(client, 'fishCatch', 0.5, 3)) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    if (p.dgn && p.dgn !== 'fishing_lake') return;                 // no fishing inside dungeons/other rooms
+    if (!(Array.isArray(rec.prof.inv) && rec.prof.inv.some(s => s && s.id === I.FISHING_ROD))) return; // must own a rod
+    const tier = Math.max(1, Math.min(3, (m && m.tier) | 0 || 1));
+    const count = Math.max(1, Math.min(4, (m && m.count) | 0 || 1));
+    const fishId = tier === 1 ? I.SMALL_FISH : tier === 3 ? I.PRIZED_FISH : I.RIVER_FISH;
+    this.awardGrant(client, { source: 'fishing', items: [{ id: fishId, count }] });
   }
   unlockUtility(client, id, reason = '') {
     if (!UTILITY_IDS.has(id)) return false;

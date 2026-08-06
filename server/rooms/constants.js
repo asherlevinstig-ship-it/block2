@@ -111,6 +111,7 @@ const I = {
   APPEARANCE_MIRROR: 221,
   APPRENTICE_ROBE: 222, ARCWEAVE_ROBE: 223, STORMWEAVE_ROBE: 224,
   FISHING_ROD: 225,
+  SMALL_FISH: 226, PRIZED_FISH: 227, COOKED_SMALL_FISH: 228, COOKED_RIVER_FISH: 229, COOKED_PRIZED_FISH: 230,
 };
 // Familiars. Quest familiars are stronger; pet familiars are rare wildlife finds.
 const FAMILIAR_KINDS = new Set(['shade', 'fang', 'mote', 'sprite', 'cat', 'dog', 'wolf']);
@@ -564,7 +565,9 @@ const TAVERN_SELL = [[I.WHEAT, 4, 6], [I.GOLDEN_WHEAT, 1, 18], [I.BREAD, 1, 7], 
 const ITEM_NAMES = {
   [I.WINDSEED]: 'Prairie Windseed', [I.HEARTWOOD_RESIN]: 'Heartwood Resin', [I.SUNSHARD]: 'Sunshard',
   [I.MESA_AMBER]: 'Mesa Amber', [I.FROST_CRYSTAL]: 'Frost Crystal', [I.MIRE_BLOOM]: 'Mire Bloom',
-  [I.RIVER_FISH]: 'Silverfin', [I.IRON_INGOT]: 'Iron Ingot', [I.DIAMOND]: 'Diamond',
+  [I.RIVER_FISH]: 'River Fish', [I.SMALL_FISH]: 'Small Fish', [I.PRIZED_FISH]: 'Prized Fish',
+  [I.COOKED_SMALL_FISH]: 'Cooked Small Fish', [I.COOKED_RIVER_FISH]: 'Cooked River Fish', [I.COOKED_PRIZED_FISH]: 'Cooked Prized Fish',
+  [I.IRON_INGOT]: 'Iron Ingot', [I.DIAMOND]: 'Diamond',
   [I.COMPOST]: 'Compost', [I.GOLDEN_WHEAT]: 'Golden Wheat',
   [I.GOLDEN_BROTH]: 'Golden Broth', [I.TRAIL_RATION]: 'Trail Ration', [I.FEAST_PLATTER]: 'Feast Platter',
   [I.GEODE]: 'Prismatic Geode', [I.RAINWAKE_PETAL]: 'Rainwake Petal', [I.STORMGLASS]: 'Stormglass Shard', [I.SOLAR_GLYPH]: 'Solar Glyph',
@@ -581,13 +584,19 @@ const FOOD_VALUES = {
   [I.BREAD]: { hunger: 30, heal: 2 },
   [I.MONSTER_MEAT]: { hunger: 22, heal: 1 },
   [I.COOKED_MEAT]: { hunger: 36, heal: 3 },
+  [I.SMALL_FISH]: { hunger: 6, heal: 1 },
+  [I.RIVER_FISH]: { hunger: 10, heal: 1 },
+  [I.PRIZED_FISH]: { hunger: 14, heal: 2 },
+  [I.COOKED_SMALL_FISH]: { hunger: 18, heal: 2 },
+  [I.COOKED_RIVER_FISH]: { hunger: 30, heal: 3 },
+  [I.COOKED_PRIZED_FISH]: { hunger: 44, heal: 5 },
   [I.HEARTY_SANDWICH]: { hunger: 58, heal: 6 },
   [I.GOLDEN_BROTH]: { hunger: 52, heal: 12, buff: 'restore' },
   [I.TRAIL_RATION]: { hunger: 70, heal: 7, buff: 'ration' },
   [I.FEAST_PLATTER]: { hunger: 100, heal: 12, buff: 'feast' },
 };
 const MAX_HUNGER = 100;
-const SMELT = { [W.B.SAND]: [W.B.GLASS, 1], [W.B.RED_SAND]: [W.B.GLASS, 1], [W.B.COBBLE]: [W.B.STONE, 1], [W.B.IRON_ORE]: [I.IRON_INGOT, 1], [W.B.LOG]: [I.CHARCOAL, 1], [I.MONSTER_MEAT]: [I.COOKED_MEAT, 1], [I.RIVER_FISH]: [I.COOKED_MEAT, 1] };
+const SMELT = { [W.B.SAND]: [W.B.GLASS, 1], [W.B.RED_SAND]: [W.B.GLASS, 1], [W.B.COBBLE]: [W.B.STONE, 1], [W.B.IRON_ORE]: [I.IRON_INGOT, 1], [W.B.LOG]: [I.CHARCOAL, 1], [I.MONSTER_MEAT]: [I.COOKED_MEAT, 1], [I.SMALL_FISH]: [I.COOKED_SMALL_FISH, 1], [I.RIVER_FISH]: [I.COOKED_RIVER_FISH, 1], [I.PRIZED_FISH]: [I.COOKED_PRIZED_FISH, 1] };
 const FUEL = new Set([I.COAL, I.CHARCOAL, W.B.PLANKS, W.B.LOG, I.STICK, W.B.TABLE, W.B.LEAVES]);
 const SMELT_MS = 5000;
 const RECIPES = [
@@ -610,6 +619,9 @@ const RECIPES = [
   { shape: ['PPP', 'P P', 'PPP'], keys: { P: W.B.PLANKS }, out: [W.B.CHEST, 1] },
   { shape: ['..s', '.sW', 's..'], keys: { s: I.STICK, W: I.WHEAT }, out: [I.FISHING_ROD, 1] },
   { shapeless: [I.BREAD, I.COOKED_MEAT], out: [I.HEARTY_SANDWICH, 1] },
+  { shapeless: [I.BREAD, I.COOKED_RIVER_FISH], out: [I.HEARTY_SANDWICH, 1] },
+  { shapeless: [I.COOKED_SMALL_FISH, I.COOKED_SMALL_FISH, I.WHEAT], out: [I.GOLDEN_BROTH, 1], job: 'cook', level: 3 },
+  { shapeless: [I.COOKED_PRIZED_FISH, I.BREAD, I.WHEAT], out: [I.TRAIL_RATION, 1], job: 'cook', level: 8 },
   { shape: ['WWW'], keys: { W: I.WHEAT }, out: [I.BREAD, 1] },
   { shapeless: [I.COOKED_MEAT, I.COOKED_MEAT, I.COAL], out: [I.DRAGON_TREAT, 2] },
   { shapeless: [I.COAL, I.COAL, I.COAL, I.DIAMOND], out: [I.SHADOW_SIGIL, 1] },
