@@ -10666,29 +10666,32 @@ function updateRoadBirds(dt,tt){
 // Ambient swimming fish — decorative schools just under the water surface in the fishing lake and
 // overworld ponds (modeled on roadBirds). Not catchable; purely atmospheric.
 const AMBIENT_FISH=[];
-const fishBodyMat=new THREE.MeshLambertMaterial({color:0x4f97ad});
 const fishBellyMat=new THREE.MeshLambertMaterial({color:0xdaf3fa});
+const FISH_COLORS=[0x4f97ad,0x6fae7a,0xc98a4a,0x8f7ad0,0x5aa0c8,0xd0b24a,0xcf6f6f,0x7fbf9a,0x9ad0e0,0xe0913a];
 function makeAmbientFish(){
   const grp=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.BoxGeometry(.42,.17,.15),fishBodyMat);grp.add(body);
+  const bodyM=new THREE.MeshLambertMaterial({color:FISH_COLORS[Math.floor(Math.random()*FISH_COLORS.length)]});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.42,.17,.15),bodyM);grp.add(body);
   const belly=new THREE.Mesh(new THREE.BoxGeometry(.3,.07,.11),fishBellyMat);belly.position.y=-.06;grp.add(belly);
   const tail=new THREE.Group();tail.position.set(-.2,0,0);grp.add(tail);
-  const fin=new THREE.Mesh(new THREE.BoxGeometry(.13,.2,.05),fishBodyMat);fin.position.x=-.07;tail.add(fin);
-  grp.scale.setScalar(.7+Math.random()*.5);
+  const fin=new THREE.Mesh(new THREE.BoxGeometry(.13,.2,.05),bodyM);fin.position.x=-.07;tail.add(fin);
+  grp.scale.setScalar(.55+Math.random()*.75);
   grp.visible=false;grp.frustumCulled=false;scene.add(grp);
-  return {grp,tail,cx:0,cy:0,cz:0,r:.9+Math.random()*1.8,phase:Math.random()*Math.PI*2,speed:.28+Math.random()*.3};
+  return {grp,tail,cx:0,cy:0,cz:0,r:.8+Math.random()*2.0,phase:Math.random()*Math.PI*2,speed:.24+Math.random()*.34};
 }
-for(let i=0;i<12;i++)AMBIENT_FISH.push(makeAmbientFish());
+for(let i=0;i<40;i++)AMBIENT_FISH.push(makeAmbientFish());
 let fishAnchors=[],fishAnchorsAreLake=false,nextFishScanAt=0;
 function fishLakeAnchors(){
   const L=FISHING_LAKE,out=[];
-  for(const [dx,dz] of [[-14,-2],[8,6],[-6,10],[14,-6],[0,-9],[17,4],[-17,3],[6,-13],[-10,-7],[12,11],[-3,5],[3,-4]]) out.push({x:L.x+dx+.5,y:L.G-.8,z:L.z+dz+.5});
+  // Spread schools across both lobes of the lake so the whole surface looks alive.
+  const pts=[[-16,-2],[-12,-14],[-10,-8],[-6,10],[-3,5],[0,-9],[3,-4],[4,14],[6,6],[8,-13],[10,0],[12,11],[14,-6],[16,3],[18,10],[20,-2],[22,6],[24,-8],[-18,4],[26,2]];
+  for(const [dx,dz] of pts) out.push({x:L.x+dx+.5,y:L.G-.8,z:L.z+dz+.5});
   return out;
 }
 function scanOverworldPondAnchors(){
   const out=[]; if(!player||!player.pos)return out;
   const px=Math.floor(player.pos.x),py=Math.floor(player.pos.y),pz=Math.floor(player.pos.z);
-  for(let dx=-16;dx<=16&&out.length<12;dx+=2)for(let dz=-16;dz<=16&&out.length<12;dz+=2){
+  for(let dx=-20;dx<=20&&out.length<20;dx+=2)for(let dz=-20;dz<=20&&out.length<20;dz+=2){
     for(let dy=-3;dy<=2;dy++){const y=py+dy;if(getB(px+dx,y,pz+dz)===B.WATER&&getB(px+dx,y+1,pz+dz)===B.AIR){out.push({x:px+dx+.5,y:y+.72,z:pz+dz+.5});break;}}
   }
   return out;
