@@ -2614,6 +2614,33 @@ function fishingWaterAtPoint(x,z,search=1.6){
   }
   return best;
 }
+// Cast where the player is LOOKING: march the camera's real forward ray and return the first water
+// cell it crosses. (The camera faces (-sin,-cos); nearbyFishingWaterInfo uses (+sin,+cos), which is
+// why the old placement landed ~90-170° off the crosshair.)
+function fishingLookWater(maxDist=20){
+  if(dim!=='fishing_lake'&&dim!=='overworld')return null;
+  const fwd=camera.getWorldDirection(new THREE.Vector3());
+  const ox=camera.position.x,oy=camera.position.y,oz=camera.position.z;
+  const hit=(gx,gy,gz)=>{
+    const wx=gx+.5,wy=gy+.5,wz=gz+.5;
+    const dist=Math.hypot(wx-player.pos.x,wz-player.pos.z);
+    return {x:wx,y:wy,z:wz,dist,align:1,depth:Math.max(1,Math.min(5,player.pos.y-wy+2))};
+  };
+  // Walk the crosshair ray across the lake; the water surface sits a few blocks below the camera, so
+  // at each step drop straight down to find the first water surface the crosshair passes over.
+  // A solid block above water in a column means it's land/dock — skip it and keep marching.
+  for(let d=1.0;d<=maxDist;d+=0.4){
+    const gx=Math.floor(ox+fwd.x*d),ry=oy+fwd.y*d,gz=Math.floor(oz+fwd.z*d);
+    const top=Math.floor(ry);
+    if(getB(gx,top,gz)===B.WATER)return hit(gx,top,gz);
+    for(let gy=top;gy>=top-8;gy--){
+      const b=getB(gx,gy,gz);
+      if(b===B.WATER)return hit(gx,gy,gz);
+      if(isSolid(b))break;
+    }
+  }
+  return null;
+}
 function beginFishingCastPlacement(){
   if(!locked||uiOpen||statOpen||qOpen||claimMode||onboardingActive)return false;
   const strayQ=document.getElementById('qwin');
@@ -2623,7 +2650,9 @@ function beginFishingCastPlacement(){
     fishingTargetDebug('aim.closed-stray-qwin',{reason:'fishing-start'});
   }
   if(!ensureFishingRodEquipped())return false;
-  const water=nearbyFishingWaterInfo(12);
+  const gate=nearbyFishingWaterInfo(12);
+  if(!gate)return false;
+  const water=fishingLookWater()||gate; // start the target where you're aiming; fall back to nearest water
   if(!water)return false;
   const now=performance.now();
   Object.assign(fishingState,{phase:'aim',fish:null,startedAt:now,nextAt:0,biteAt:0,hookUntil:0,castQuality:fishingCastQuality(water),tension:0,progress:0,fishStamina:0,burstAt:0,biteCue:'Move the target with WASD. Press G to cast, Escape to cancel.',lastCueAt:0,earlyHooks:0,reelHeld:false,landingUntil:0,qualityBonus:0,target:{x:water.x,y:water.y+.18,z:water.z},aimOrigin:{x:player.pos.x,z:player.pos.z},aimCursor:{x:water.x,z:water.z},castVisualStart:now});
