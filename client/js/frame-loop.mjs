@@ -163,7 +163,7 @@ function approachAngle(current,target,rate,dt){
 }
 let cameraYaw=player.yaw,cameraPitch=player.pitch;
 
-const DIRECTOR_CAMERA_MODES=['first','third','orbit','side','freefly'];
+const DIRECTOR_CAMERA_MODES=['first','third','orbit','side','topdown','freefly'];
 const directorCamera={
   enabled:false,
   mode:'third',
@@ -211,6 +211,8 @@ function refreshDirectorCameraHud(){
   if(!directorCamera.enabled)return;
   const controls=directorCamera.mode==='freefly'
     ?'F6 mode · WASD fly · Arrows look · Space up · Shift down · F7 clean HUD · F10 off'
+    :directorCamera.mode==='topdown'
+    ?'F6 mode · [ ] altitude · - = height · F7 clean HUD · F10 off'
     :'F6 mode · [ ] distance · - = height · F7 clean HUD · F10 off';
   const html='<b>DIRECTOR CAMERA</b><span>'+controls+'<br>'+directorModeLabel()+'</span>';
   if(el.innerHTML!==html)el.innerHTML=html;
@@ -302,6 +304,12 @@ function applyDirectorCamera(now,dt){
   }else if(directorCamera.mode==='side'){
     pos=focus.clone().addScaledVector(right,directorCamera.side).addScaledVector(behind,directorCamera.distance*.52);
     pos.y+=directorCamera.height*.82;
+  }else if(directorCamera.mode==='topdown'){
+    // Sky/bird's-eye: high above the player, looking down. [ ]/-= adjust altitude. A small `behind`
+    // offset keeps the look-down orientation stable (player's forward reads toward screen-top).
+    const alt=12+directorCamera.distance*2.2+directorCamera.height;
+    pos=focus.clone().addScaledVector(behind,Math.max(.6,alt*.05));
+    pos.y=focus.y+alt;
   }else{
     pos=focus.clone().addScaledVector(behind,directorCamera.distance).addScaledVector(forward,-.35);
     pos.y+=directorCamera.height;
