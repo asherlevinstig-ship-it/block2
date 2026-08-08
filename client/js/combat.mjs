@@ -169,10 +169,38 @@ function collides(p){
     if(isSolid(getB(x,y,z))) return true;
   return false;
 }
+// ---- collision debug (temporary) ----
+// Auto-logs within ~25 blocks of the tavern; force anywhere with
+// window.BlockcraftCollisionDebug = true. Shows which solid block(s) block a
+// horizontal move, so a stray obstruction can be pinpointed by coordinate.
+let bcLastCollideLog=0;
+function bcBlockName(id){ for(const k in B) if(B[k]===id) return k; return 'id:'+id; }
+function bcCollisionSolids(p){
+  const out=[];
+  const minX=Math.floor(p.x-player.w), maxX=Math.floor(p.x+player.w);
+  const minY=Math.floor(p.y),          maxY=Math.floor(p.y+player.h);
+  const minZ=Math.floor(p.z-player.w), maxZ=Math.floor(p.z+player.w);
+  for(let x=minX;x<=maxX;x++)for(let y=minY;y<=maxY;y++)for(let z=minZ;z<=maxZ;z++){
+    const b=getB(x,y,z);
+    if(isSolid(b)) out.push({x,y,z,b,name:bcBlockName(b)});
+  }
+  return out;
+}
+function bcLogCollision(axis,amt){
+  const nearTavern=dim==='overworld'&&HUB.tavern&&Math.hypot(player.pos.x-HUB.tavern.x,player.pos.z-HUB.tavern.z)<=25;
+  if(!(globalThis.BlockcraftCollisionDebug||nearTavern)) return;
+  const now=performance.now();
+  if(now-bcLastCollideLog<300) return;
+  bcLastCollideLog=now;
+  console.log('[bc-collide]', axis, 'amt', +amt.toFixed(3),
+    'pos', {x:+player.pos.x.toFixed(2),y:+player.pos.y.toFixed(2),z:+player.pos.z.toFixed(2)},
+    'yaw', +(player.yaw||0).toFixed(2), 'blockedBy', bcCollisionSolids(player.pos).slice(0,8));
+}
 function moveAxis(axis, amt){
   if(amt===0) return;
   player.pos[axis]+=amt;
   if(collides(player.pos)){
+    if(axis==='x'||axis==='z') bcLogCollision(axis,amt);
     player.pos[axis]-=amt;
     let step=amt/2;
     for(let i=0;i<5;i++){
