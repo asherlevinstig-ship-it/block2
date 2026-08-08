@@ -10,6 +10,18 @@ const sources = ['/assets/intro/vid1.mp4', '/assets/intro/vid2.mp4'];
 
 function createOpeningReady() {
   if (!root || !video || !sources.length) return Promise.resolve();
+  const params = new URLSearchParams(location.search);
+  let skipOpening = params.has('e2e') || params.has('skipOpening');
+  try { skipOpening = skipOpening || localStorage.getItem('bc_skip_opening') === '1'; } catch (_) {}
+  if (skipOpening) {
+    root.classList.add('done','hidden');
+    try {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    } catch (_) {}
+    return Promise.resolve();
+  }
   let index = 0;
   let done = false;
   let startedWithGesture = false;

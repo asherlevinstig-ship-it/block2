@@ -171,6 +171,11 @@ async function main() {
     await waitForServer(server, PORT);
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    await context.addInitScript(() => {
+      localStorage.setItem('bc_introcut', '1');
+      localStorage.setItem('bc_gatecut_v1', '1');
+      localStorage.setItem('bc_skip_opening', '1');
+    });
     await context.addCookies([{ name: 'bc_session', value: accounts[0].sid, url: 'http://127.0.0.1:' + PORT + '/' }]);
     const page = await context.newPage();
     await page.goto('http://127.0.0.1:' + PORT + '/?e2e=1', { waitUntil: 'domcontentloaded' });
