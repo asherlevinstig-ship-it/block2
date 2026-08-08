@@ -2250,7 +2250,6 @@ function buildTown(){
   for(const x of [tx1+3,tx1+8,tx1+13])for(let y=G+2;y<=G+3;y++)setB(x,y,gamesZ2,B.GLASS);
   fillBox(tx1-1,G+5,tz2,tx2+1,G+5,gamesZ2+1,B.PLANKS);
   for(const x of [tx1,tx1+5,tx1+10,tx1+15,tx2])fillBox(x,G+4,tz2+1,x,G+4,gamesZ2-1,B.LOG);
-  for(const [x,z] of [[tavX(74),tavZ(89)],[tavX(79),tavZ(89)],[tavX(84),tavZ(89)]])setB(x,G+1,z,B.LOG);
 
   // --- the meditation hall (north-east shrine district, separated from guild traffic) ---
   const shrX=v=>dtx(v,'shrine'), shrZ=v=>dtz(v,'shrine');
