@@ -6529,6 +6529,10 @@ function interactWithVillager(vill){
     sysMsg('<b>'+escHTML(vill.name||'Westwind Travel Clerk')+':</b> "The Westwind flies to distant regions. Reach <b>S-Rank</b>, bring <b>1,000 gold</b>, then stand at the gangway and press <b>G</b> to board."');
   }
   else if(vill.role==='bartender') openTavernUI();
+  else if(vill.role==='tavern_scholar'){
+    sysMsg('<b>'+escHTML(vill.name||'Scholar Table Host')+':</b> "Choose a stake, answer cleanly, and the table pays for sharp thinking."');
+    if(globalThis.BlockcraftKnowledgeChallenge) globalThis.BlockcraftKnowledgeChallenge.open();
+  }
   else if(vill.role==='traveling_merchant'){
     sysMsg('<b>Road Merchant:</b> "What the town lacks, the road provides."');
     const s=nearbySmallDiscovery(8);

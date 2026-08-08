@@ -4228,6 +4228,8 @@ test('knowledge challenge is wired from client to server',()=>{
   const boot=fs.readFileSync(path.join(__dirname,'..','..','client','js','boot.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
   const mixin=fs.readFileSync(path.join(__dirname,'..','rooms','knowledge-challenge.mixin.js'),'utf8');
   // client controller + entry
@@ -4236,8 +4238,11 @@ test('knowledge challenge is wired from client to server',()=>{
   assert.match(kc,/send\('kcStart'/);
   assert.match(kc,/send\('kcAnswer'/);
   assert.match(boot,/knowledge-challenge\.mjs/);
-  assert.match(menus,/KNOWLEDGE CHALLENGE/);
+  assert.match(menus,/SCHOLAR TABLE/);
   assert.match(menus,/BlockcraftKnowledgeChallenge\.open/);
+  assert.match(world,/buildScholarTable/);
+  assert.match(world,/BlockcraftTavernChallengeFx/);
+  assert.match(combat,/vill\.role==='tavern_scholar'/);
   // networking relays the server messages
   for(const t of ['kcShiftStarted','kcCase','kcResult','kcShiftReport','kcReject'])
     assert.match(networking,new RegExp(t));

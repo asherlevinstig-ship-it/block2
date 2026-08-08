@@ -28,6 +28,12 @@ function say(html) { if (typeof sysMsg === 'function') sysMsg(html); }
 function sfx(name) { try { if (typeof SFX !== 'undefined' && SFX && typeof SFX[name] === 'function') SFX[name](); } catch (_) {} }
 function subject() { try { return localStorage.getItem('bc_recall_subject') || 'Computer Science'; } catch (_) { return 'Computer Science'; } }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function tavernFx(kind, detail) {
+  try {
+    const fx = globalThis.BlockcraftTavernChallengeFx;
+    if (fx && typeof fx.pulse === 'function') fx.pulse(kind, detail || {});
+  } catch (_) {}
+}
 
 function ensure() {
   if (overlay) return;
@@ -53,8 +59,9 @@ function close() {
 
 function renderChooser() {
   ensure(); panel.innerHTML = '';
-  panel.appendChild(el('h2', 'kc-title', 'KNOWLEDGE CHALLENGE'));
-  panel.appendChild(el('p', 'kc-note', 'Pay gold to enter. Answer the cases well and you win back more than your stake — and mastery pays a bonus. Struggle and you lose it.'));
+  panel.appendChild(el('h2', 'kc-title', 'SCHOLAR TABLE'));
+  panel.appendChild(el('p', 'kc-note kc-tavern-note', 'A tavern table game for sharp hunters. Put gold down, answer a run of questions, and win back more if your thinking holds under pressure.'));
+  panel.appendChild(el('p', 'kc-note', 'Better accuracy, streaks, recovery answers, and mastery progress improve the payout. Walk away early and the table keeps the stake.'));
   const grid = el('div', 'kc-grid');
   for (const type of Object.keys(ENTRY)) {
     const card = el('button', 'kc-shift'); card.type = 'button';
@@ -68,7 +75,7 @@ function renderChooser() {
   row.appendChild(leave); panel.appendChild(row);
 }
 
-function start(type) { if (busy) return; busy = true; send('kcStart', { shiftType: type, subject: subject() }); }
+function start(type) { if (busy) return; busy = true; tavernFx('start', { shiftType: type }); send('kcStart', { shiftType: type, subject: subject() }); }
 
 function caseHeader(m) {
   const head = el('div', 'kc-head');
@@ -195,9 +202,10 @@ function onResult(m) {
 function onReport(m) {
   shift = null; pending = null; awaitingContinue = false; buffered = null;
   ensure(); show(); panel.innerHTML = '';
-  panel.appendChild(el('h2', 'kc-title', 'SHIFT REPORT'));
+  panel.appendChild(el('h2', 'kc-title', 'TABLE RESULT'));
   const t = m.totals || {};
   const delta = (m.payout | 0) - (m.entry | 0);
+  tavernFx(delta >= 0 ? 'win' : 'loss', { delta, payout: m.payout | 0, entry: m.entry | 0 });
   panel.appendChild(el('p', 'kc-note', 'Stake <b>' + (m.entry | 0) + '</b> · Payout <b>' + (m.payout | 0) + '</b> · Net <b class="' + (delta >= 0 ? 'kc-up' : 'kc-down') + '">' + (delta >= 0 ? '+' : '') + delta + ' gold</b>'));
   const stats = el('div', 'kc-stats');
   const rows = [
@@ -268,6 +276,7 @@ const STYLE = `
 .kc-panel{width:min(560px,92vw);max-height:88vh;overflow:auto;padding:20px;border-radius:12px;border:1px solid rgba(125,211,252,.28);background:linear-gradient(160deg,rgba(12,20,34,.98),rgba(7,11,18,.98));color:#e6eefc;box-shadow:0 24px 60px rgba(0,0,0,.5)}
 .kc-title{margin:0 0 8px;letter-spacing:2px;color:#9ad7ff;font-size:20px}
 .kc-note{margin:0 0 14px;color:#aebfd4;line-height:1.45;font-size:13px}
+.kc-tavern-note{padding:10px 12px;border-radius:9px;border:1px solid rgba(255,210,74,.25);background:rgba(55,32,10,.35);color:#f5dfaa}
 .kc-note b{color:#ffe39a}.kc-up{color:#86efac}.kc-down{color:#ff8a8a}
 .kc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .kc-shift{display:flex;flex-direction:column;gap:3px;padding:14px;border-radius:9px;border:1px solid rgba(125,211,252,.24);background:rgba(10,20,32,.8);color:#dbe7f6;cursor:pointer;font-family:inherit;text-align:left}

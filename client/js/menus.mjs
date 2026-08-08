@@ -8050,7 +8050,7 @@ function openTavernUI(){
   const refresh=()=>{ sub.innerHTML='GRETA WARMUG, KEEPER OF THE TAVERN \u00b7 YOUR GOLD: <b style="color:#ffd24a">'+gold+'</b>'; };
   refresh();
   const flavor=document.createElement('p'); flavor.className='qtext';
-  flavor.innerHTML='"'+escHTML(bartender.line)+'"<br><small style="color:#7f93aa">Personality: '+escHTML(bartender.personality)+'</small><br><span style="opacity:.75">Buy supplies, or sell farmed and hunted food for gold.</span>';
+  flavor.innerHTML='"'+escHTML(bartender.line)+'"<br><small style="color:#7f93aa">Personality: '+escHTML(bartender.personality)+'</small><br><span style="opacity:.75">Buy supplies, sell farmed and hunted food, or try the Scholar&apos;s Table in the back room.</span>';
   qpanelEl.appendChild(flavor);
   const buyTitle=document.createElement('div'); buyTitle.className='sub2'; buyTitle.textContent='BUY'; qpanelEl.appendChild(buyTitle);
   const travelFood=[I.COOKED_MEAT,1,8];
@@ -8110,7 +8110,7 @@ function openTavernUI(){
   const row=document.createElement('div'); row.className='qrow'; row.style.marginTop='10px'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('KITCHEN', ()=>openCookServicesUI()));
   row.appendChild(qBtn('TAVERN QUEST', ()=>openQuestUI({...bartender, role:'bartender', questSource:'npc'})));
-  row.appendChild(qBtn('KNOWLEDGE CHALLENGE', ()=>{ closeQWin(); if(globalThis.BlockcraftKnowledgeChallenge) globalThis.BlockcraftKnowledgeChallenge.open(); }));
+  row.appendChild(qBtn('SCHOLAR TABLE', ()=>{ closeQWin(); if(globalThis.BlockcraftKnowledgeChallenge) globalThis.BlockcraftKnowledgeChallenge.open(); }));
   row.appendChild(qBtn('LEAVE', ()=>closeQWin(), true));
 }
 

@@ -5934,7 +5934,7 @@ function makeNpcNameplate(name, role, color){
   return sp;
 }
 function npcRoleColor(role){
-  return role==='smith'?'#ffb45e':role==='scholar'?'#7dd3fc':role==='quartermaster'?'#ffd24a':
+  return role==='smith'?'#ffb45e':role==='scholar'||role==='tavern_scholar'?'#7dd3fc':role==='quartermaster'?'#ffd24a':
     role==='warden'?'#d8f2ff':role==='guide'?'#9ad26b':role==='bartender'||role==='cook'?'#ffd24a':
     role==='guild_receptionist'||role==='job_mentor'||role==='worker_tutor'?'#f2c75c':role==='stablemaster'||role==='skyship_attendant'?'#66f0ff':role==='miner'?'#b8c0cc':role==='farmer'?'#86efac':role==='monk'?'#7dd3fc':'#e8dcc0';
 }
@@ -10780,7 +10780,11 @@ const propIron=new THREE.MeshLambertMaterial({color:0x3c3c44});
 const propMug=new THREE.MeshLambertMaterial({color:0xc8a060});
 const propWhite=new THREE.MeshLambertMaterial({color:0xeae6da});
 const propBrass=new THREE.MeshLambertMaterial({color:0xd2a43f});
+const propInk=new THREE.MeshLambertMaterial({color:0x111827});
+const propParchment=new THREE.MeshLambertMaterial({color:0xe9d8a6});
+const propBlueGlass=new THREE.MeshLambertMaterial({color:0x7dd3fc, emissive:0x0b4a6b, emissiveIntensity:.45, transparent:true, opacity:.82});
 const potionVapors=[];
+let tavernChallengeTableRoot=null;
 function townPropDistrict(x,z){
   if(z>=68 || (x>=70 && z>=60)) return 'tavern';
   if(x>=70 && z<=56) return 'forge';
@@ -10797,6 +10801,40 @@ function addProp(geo,mat,x,y,z,ry){
 function buildProps(){
   const topGeo=new THREE.CylinderGeometry(.58,.58,.07,12);
   const mugGeo=new THREE.CylinderGeometry(.09,.075,.18,8);
+  function addScholarCard(root,x,z,rot,label,col){
+    const card=new THREE.Mesh(new THREE.BoxGeometry(.42,.025,.28), propParchment);
+    card.position.set(x,.2,z);card.rotation.y=rot||0;root.add(card);
+    const mark=new THREE.Mesh(new THREE.BoxGeometry(.18,.03,.035), new THREE.MeshLambertMaterial({color:col||0x7dd3fc}));
+    mark.position.set(x,.225,z);mark.rotation.y=rot||0;root.add(mark);
+    const rune=makeTextSprite(label||'?',col===0xffd24a?'#ffd24a':'#7dd3fc');
+    rune.position.set(x,.72,z);rune.scale.set(.8,.4,1);rune.renderOrder=34;root.add(rune);
+  }
+  function buildScholarTable(){
+    const root=new THREE.Group();
+    const tableMat=new THREE.MeshLambertMaterial({color:0x4b2d18});
+    const trimMat=new THREE.MeshLambertMaterial({color:0xd2a43f});
+    const feltMat=new THREE.MeshLambertMaterial({color:0x123f3a, emissive:0x041b18, emissiveIntensity:.18});
+    const top=new THREE.Mesh(new THREE.CylinderGeometry(1.05,1.05,.14,16), tableMat);top.position.y=.48;root.add(top);
+    const felt=new THREE.Mesh(new THREE.CylinderGeometry(.82,.82,.035,16), feltMat);felt.position.y=.57;root.add(felt);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(1.06,.045,8,32), trimMat);rim.position.y=.6;rim.rotation.x=Math.PI/2;root.add(rim);
+    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(.18,.25,.55,10), tableMat);pillar.position.y=.22;root.add(pillar);
+    for(const [x,z] of [[-.72,-.72],[.72,-.72],[-.72,.72],[.72,.72]]){
+      const leg=new THREE.Mesh(new THREE.BoxGeometry(.12,.48,.12), tableMat);leg.position.set(x,.2,z);root.add(leg);
+    }
+    addScholarCard(root,-.34,-.14,-.18,'A',0x7dd3fc);
+    addScholarCard(root,.18,-.08,.16,'B',0xffd24a);
+    addScholarCard(root,-.05,.28,.08,'?',0x86efac);
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(.18,12,12), propBlueGlass);orb.position.set(.5,.88,.18);root.add(orb);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.46,.025,8,32), new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.72,blending:THREE.AdditiveBlending,depthWrite:false}));
+    ring.position.y=.64;ring.rotation.x=Math.PI/2;root.add(ring);
+    const label=makeTextSprite('SCHOLAR TABLE','#7dd3fc');
+    label.position.set(0,1.72,0);label.scale.set(2.15,.9,1);label.renderOrder=34;root.add(label);
+    root.position.set(townPropX(79.5,89.5),TG+1,townPropZ(79.5,89.5));
+    root.userData={orb,ring,label,baseY:root.position.y};
+    townGroup.add(root);
+    tavernChallengeTableRoot=root;
+    return root;
+  }
   function chunkyMug(x,y,z,ry){
     const grp=new THREE.Group();
     const body=new THREE.Mesh(mugGeo, propMug); body.position.y=.09; grp.add(body);
@@ -10888,6 +10926,7 @@ function buildProps(){
   ]) candle(p[0],TG+1.05,p[1]);
   candle(74.5,TG+2.2,74.5); candle(74.5,TG+2.2,80.5); // dining tables
   candle(74.5,TG+2.2,89.5); candle(79.5,TG+2.2,89.5); candle(84.5,TG+2.2,89.5); // games room
+  buildScholarTable();
   tavernNightLight(79.5,TG+2.25,85.25,0xff6b25,1.8,9.5);
   tavernNightLight(82.7,TG+2.3,77.5,0xffb35c,.75,6.5);
   // smithy: anvil on the stone block, ingot pile, wall tool rack
@@ -10921,8 +10960,43 @@ function buildProps(){
     'Road north is quiet today. I never trust quiet.');
   tavernPatron('Noll Brisk','Miner',80.4,74.4,-Math.PI*.8,'#8a5a32','#6b4524',
     'If Tobin asks, I was never here before noon.');
+  tavernPatron('Iris Quill','Scholar Table Host',79.6,87.1,0,'#24415a','#17283a',
+    'Gold on the table, mind on the question. Greta calls it showing off; I call it revision with consequences.');
+  const host=villagers[villagers.length-1];
+  if(host){host.role='tavern_scholar';host.shortName='Iris';host.home=[dtx(79,'tavern'),dtz(87,'tavern')];}
 }
 buildProps();
+
+function tavernChallengeFx(kind='start', detail={}){
+  const root=tavernChallengeTableRoot;
+  const x=root?root.position.x:townPropX(79.5,89.5), y=root?root.position.y:TG+1, z=root?root.position.z:townPropZ(79.5,89.5);
+  const win=kind==='win'||(detail&&detail.delta>0), lose=kind==='loss'||(detail&&detail.delta<0);
+  const col=win?0x86efac:lose?0xfb7185:0x7dd3fc;
+  ringPulse(x,y+.08,z,win?2.6:lose?1.7:2.05,col,win?.9:.62);
+  ringPulse(x,y+.95,z,win?1.15:.82,col,.48);
+  if(win) coinBurstVfx(x,y+.7,z,18);
+  else if(lose) burst(x,y+1.05,z,[1,.28,.38],22,2.3,2.0,.55);
+  else {
+    coinBurstVfx(x,y+.55,z,8);
+    burst(x,y+1.0,z,[.49,.83,.99],18,2.1,2.2,.52);
+  }
+  if(root&&root.userData){
+    if(root.userData.orb)root.userData.orb.scale.setScalar(win?1.55:lose?1.25:1.35);
+    if(root.userData.ring)root.userData.ring.material.opacity=win?.98:lose?.78:.9;
+    setTimeout(()=>{
+      if(root.userData&&root.userData.orb)root.userData.orb.scale.setScalar(1);
+      if(root.userData&&root.userData.ring)root.userData.ring.material.opacity=.72;
+    },520);
+  }
+  const label=makeTextSprite(win?'TABLE WON':lose?'TABLE LOST':'STAKE PLACED',win?'#86efac':lose?'#fb7185':'#ffd24a');
+  label.position.set(x,y+2.9,z);
+  label.material.depthTest=false;
+  label.renderOrder=36;
+  townGroup.add(label);
+  const now=performance.now();
+  recallLecternBursts.push({sprite:label,created:now,expires:now+1450,startY:label.position.y});
+}
+globalThis.BlockcraftTavernChallengeFx=Object.freeze({pulse:tavernChallengeFx});
 
 // Road safety is server-owned, but its consequences should be visible before a player opens a menu.
 // These lightweight scenes are deterministic decoration only: they never alter blocks or collision.
