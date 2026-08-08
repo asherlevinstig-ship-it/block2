@@ -66,12 +66,12 @@ function close() {
 function renderChooser() {
   ensure(); panel.innerHTML = '';
   panel.appendChild(el('h2', 'kc-title', 'SCHOLAR TABLE'));
-  panel.appendChild(el('p', 'kc-note kc-tavern-note', 'A tavern table game for sharp hunters. Put gold down, answer a run of questions, and win back more if your thinking holds under pressure.'));
+  panel.appendChild(el('p', 'kc-note kc-tavern-note', 'Choose your stake. Once the gold hits the table, the first challenge is dealt immediately.'));
   panel.appendChild(el('p', 'kc-note', 'Better accuracy, streaks, recovery answers, and mastery progress improve the payout. Walk away early and the table keeps the stake.'));
   const grid = el('div', 'kc-grid');
   for (const type of Object.keys(ENTRY)) {
     const card = el('button', 'kc-shift'); card.type = 'button';
-    card.innerHTML = '<b>' + type.toUpperCase() + '</b><span>' + (PLANNED[type] ? PLANNED[type] + ' cases' : 'endless') + '</span><em>' + ENTRY[type] + ' gold</em>';
+    card.innerHTML = '<b>' + ENTRY[type] + ' GOLD</b><span>' + type.toUpperCase() + ' · ' + (PLANNED[type] ? PLANNED[type] + ' cases' : 'endless') + '</span><em>Put stake on table</em>';
     card.onclick = () => start(type);
     grid.appendChild(card);
   }
@@ -81,10 +81,21 @@ function renderChooser() {
   row.appendChild(leave); panel.appendChild(row);
 }
 
+function renderDealing(type) {
+  ensure(); panel.innerHTML = '';
+  panel.classList.remove('kc-hit', 'kc-miss');
+  panel.appendChild(el('h2', 'kc-title', 'GOLD ON THE TABLE'));
+  panel.appendChild(el('p', 'kc-note kc-tavern-note', 'Stake locked: <b>' + (ENTRY[type] | 0) + ' gold</b>. The Scholar is dealing your first challenge...'));
+  const deal = el('div', 'kc-dealing');
+  deal.innerHTML = '<span></span><span></span><span></span>';
+  panel.appendChild(deal);
+}
+
 function start(type) {
   if (busy) return;
   busy = true;
   tableHeat = 0; lastStreak = 0;
+  renderDealing(type);
   tavernFx('start', { shiftType: type });
   send('kcStart', { shiftType: type, subject: subject(), fallbackSubject: FALLBACK_SUBJECT });
 }
@@ -353,6 +364,9 @@ const STYLE = `
 .kc-shift{display:flex;flex-direction:column;gap:3px;padding:14px;border-radius:9px;border:1px solid rgba(125,211,252,.24);background:rgba(10,20,32,.8);color:#dbe7f6;cursor:pointer;font-family:inherit;text-align:left}
 .kc-shift:hover{border-color:#9ad7ff;box-shadow:0 0 16px rgba(154,215,255,.16)}
 .kc-shift b{font-size:14px;letter-spacing:1.5px;color:#fff}.kc-shift span{font-size:11px;color:#8ea6c2}.kc-shift em{font-style:normal;color:#ffd24a;font-weight:bold}
+.kc-dealing{display:flex;justify-content:center;gap:14px;padding:18px 0 8px}
+.kc-dealing span{width:54px;height:76px;border-radius:8px;border:1px solid rgba(255,210,74,.45);background:linear-gradient(145deg,rgba(20,34,54,.95),rgba(6,10,18,.95));box-shadow:0 8px 18px rgba(0,0,0,.32),inset 0 0 18px rgba(154,215,255,.08);animation:kcDeal 1s ease-in-out infinite}
+.kc-dealing span:nth-child(2){animation-delay:.14s}.kc-dealing span:nth-child(3){animation-delay:.28s}
 .kc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .kc-tag{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#03111d;background:#9ad7ff;padding:3px 8px;border-radius:20px;font-weight:bold}
 .kc-count{color:#8ea6c2;font-size:12px}
@@ -407,6 +421,7 @@ const STYLE = `
 @keyframes kcHit{0%{transform:scale(1);box-shadow:0 24px 60px rgba(0,0,0,.5)}35%{transform:scale(1.012);box-shadow:0 0 34px rgba(52,211,153,.22),0 24px 60px rgba(0,0,0,.5)}100%{transform:scale(1);box-shadow:0 24px 60px rgba(0,0,0,.5)}}
 @keyframes kcMiss{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}55%{transform:translateX(4px)}80%{transform:translateX(-2px)}}
 @keyframes kcSpark{0%{opacity:0;transform:translate(0,0) scale(.7)}15%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.35)}}
+@keyframes kcDeal{0%,100%{transform:translateY(0) rotate(-2deg);opacity:.55}45%{transform:translateY(-9px) rotate(2deg);opacity:1}}
 `;
 
 globalThis.BlockcraftKnowledgeChallenge = Object.freeze({
