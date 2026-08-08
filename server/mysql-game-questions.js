@@ -1605,7 +1605,7 @@ class MySqlGameQuestionStore {
       return Object.assign({}, fallback, { requestedSubject, subjectFallback: !!requested && fallback.subjectId !== requested.subjectId });
     }
 
-    const [rows] = await this.getPool().execute(
+    let [rows] = await this.getPool().execute(
       `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
        FROM subjects s
        JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
@@ -1620,6 +1620,28 @@ class MySqlGameQuestionStore {
        LIMIT 1`,
       [schoolId, schoolId, fallbackSubject, fallbackSubject, schoolId],
     );
+    if (!rows || !rows.length) {
+      [rows] = await this.getPool().execute(
+        `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
+         FROM subjects s
+         JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
+         JOIN game_question q ON q.primary_atom_id = a.id
+          AND q.subject_id = s.id
+          AND q.is_active = 1
+          AND q.review_status IN ('approved', 'teacher-reviewed')
+         WHERE s.is_active = 1
+         GROUP BY s.id, s.name, s.code, s.school_id
+         ORDER BY CASE
+                    WHEN LOWER(s.name) = LOWER(?) OR LOWER(s.code) = LOWER(?) THEN 0
+                    WHEN s.school_id = ? THEN 1
+                    WHEN s.school_id IS NULL THEN 2
+                    ELSE 3
+                  END,
+                  playable_atoms DESC, s.id ASC
+         LIMIT 1`,
+        [fallbackSubject, fallbackSubject, schoolId],
+      );
+    }
     const s = rows && rows[0];
     return s ? {
       subjectId: Number(s.id),
@@ -1657,24 +1679,42 @@ class MySqlGameQuestionStore {
        WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
        GROUP BY s.id, s.name, s.code, s.school_id
        ORDER BY playable_atoms DESC, approved_questions DESC, active_atoms DESC, s.id ASC
-       LIMIT 12`,
+      LIMIT 12`,
       [schoolId, schoolId],
     );
+    const [anyRows] = await this.getPool().execute(
+      `SELECT s.id, s.name, s.code, s.school_id,
+              COUNT(DISTINCT a.id) AS active_atoms,
+              COUNT(DISTINCT q.primary_atom_id) AS playable_atoms,
+              COUNT(q.id) AS approved_questions
+       FROM subjects s
+       LEFT JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
+       LEFT JOIN game_question q ON q.primary_atom_id = a.id
+        AND q.subject_id = s.id
+        AND q.is_active = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE s.is_active = 1
+       GROUP BY s.id, s.name, s.code, s.school_id
+       ORDER BY playable_atoms DESC, approved_questions DESC, active_atoms DESC, s.id ASC
+       LIMIT 12`,
+    );
+    const mapRow = r => ({
+      subjectId: Number(r.id) || 0,
+      name: r.name || '',
+      code: r.code || '',
+      schoolId: r.school_id == null ? null : Number(r.school_id),
+      activeAtoms: Number(r.active_atoms) || 0,
+      playableAtoms: Number(r.playable_atoms) || 0,
+      approvedQuestions: Number(r.approved_questions) || 0,
+    });
     return {
       schoolId,
       requestedSubject,
       fallbackSubject,
       requested: await withCount(this, requested),
       fallback: await withCount(this, fallback),
-      available: (rows || []).map(r => ({
-        subjectId: Number(r.id) || 0,
-        name: r.name || '',
-        code: r.code || '',
-        schoolId: r.school_id == null ? null : Number(r.school_id),
-        activeAtoms: Number(r.active_atoms) || 0,
-        playableAtoms: Number(r.playable_atoms) || 0,
-        approvedQuestions: Number(r.approved_questions) || 0,
-      })),
+      available: (rows || []).map(mapRow),
+      availableAnySchool: (anyRows || []).map(mapRow),
     };
   }
 

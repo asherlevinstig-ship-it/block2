@@ -37,7 +37,7 @@ function tavernFx(kind, detail) {
 }
 function trace(event, data) {
   try { if (globalThis.BlockcraftTrace) globalThis.BlockcraftTrace(event, data || {}); } catch (_) {}
-  try { console.info('[kc-trace]', event, data || {}); } catch (_) {}
+  try { console.info('[kc-trace]', event, JSON.stringify(data || {}, null, 2)); } catch (_) { try { console.info('[kc-trace]', event, data || {}); } catch (__) {} }
 }
 
 function ensure() {
