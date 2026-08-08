@@ -2288,6 +2288,14 @@ function netAttachRoom(room,name,client){
     room.onMessage('eventTeleport', m=>applyEventTeleport(m));
     room.onMessage('positionCorrection', m=>{
       if(!m||!Number.isFinite(+m.x)||!Number.isFinite(+m.y)||!Number.isFinite(+m.z))return;
+      // Push-back diagnostic: what the client tried vs where the server put us back,
+      // and whether the server considered the destination solid ("buried"). Throttled.
+      const clientWas=player&&player.pos?{x:+player.pos.x.toFixed(2),y:+player.pos.y.toFixed(2),z:+player.pos.z.toFixed(2)}:null;
+      {const now=performance.now();if(!globalThis.__bcPosCorr||now-globalThis.__bcPosCorr>250){globalThis.__bcPosCorr=now;
+        console.log('[bc-pos-correct] reason='+m.reason,'clientWas',clientWas,
+          'serverPutMeAt',{x:+(+m.x).toFixed(2),y:+(+m.y).toFixed(2),z:+(+m.z).toFixed(2)},
+          'iRequested',m.requested,'serverTried',m.attempted,
+          'buriedAttempt',m.buriedAttempt,'buriedNow',m.buriedNow,'floorY',m.floorY,'dgn',m.rawDgn);}}
       const before=dimensionsState.kind==='fishing_lake'&&player&&player.pos?{x:+player.pos.x.toFixed(3),y:+player.pos.y.toFixed(3),z:+player.pos.z.toFixed(3),yaw:Number.isFinite(player.yaw)?+player.yaw.toFixed(4):null,pitch:Number.isFinite(player.pitch)?+player.pitch.toFixed(4):null}:null;
       const lastSent=NET&&NET.lastMoveSent?{...NET.lastMoveSent}:null;
       player.pos.set(+m.x,+m.y,+m.z);

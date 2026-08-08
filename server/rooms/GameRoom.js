@@ -7532,6 +7532,21 @@ class GameRoom extends Room {
       }
       return false;
     };
+    // Tavern push-back diagnostic: log server-side move rejections near the tavern
+    // (throttled per player) so client vs server vs building can be compared.
+    const bcTavernLog = (reason, ax, ay, az) => {
+      if (rawDgn || !W.HUB || !W.HUB.tavern || Math.hypot(p.x - W.HUB.tavern.x, p.z - W.HUB.tavern.z) > 32) return;
+      if (!this.tavernLogAt) this.tavernLogAt = new Map();
+      const nowMs = Date.now();
+      if (nowMs - (this.tavernLogAt.get(client.sessionId) || 0) < 400) return;
+      this.tavernLogAt.set(client.sessionId, nowMs);
+      console.warn('[bc-move-reject]', reason, JSON.stringify({
+        at: { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2) },
+        requested: { x: +nx.toFixed(2), z: +nz.toFixed(2) },
+        attempted: { x: +ax.toFixed(2), y: +ay.toFixed(2), z: +az.toFixed(2) },
+        buriedAttempt: buried(ax, ay, az), buriedNow: buried(p.x, p.y, p.z),
+      }));
+    };
     if (!buried(p.x, p.y, p.z) && buried(sx, sy, sz)) {
       const rejects = (this.moveRejects.get(client.sessionId) || 0) + 1;
       const rx = clampN(nx, borderMin, borderMax), rz = clampN(nz, borderMin, borderMax);
@@ -7542,6 +7557,7 @@ class GameRoom extends Room {
         this.moveRejects.set(client.sessionId, rejects);
         this.pvel.set(client.sessionId, { x: 0, z: 0 });
         p.yaw = clampN(m.yaw, -10, 10);
+        bcTavernLog('solid', sx, sy, sz);
         client.send('positionCorrection', {
           x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'solid',
           requested: { x: nx, y: ny, z: nz },
@@ -7564,6 +7580,7 @@ class GameRoom extends Room {
     if (!buried(p.x, p.y, p.z) && crossesSolid(p.x, p.y, p.z, sx, sy, sz)) {
       this.pvel.set(client.sessionId, { x: 0, z: 0 });
       p.yaw = clampN(m.yaw, -10, 10);
+      bcTavernLog('wall', sx, sy, sz);
       client.send('positionCorrection', {
         x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'wall',
         requested: { x: nx, y: ny, z: nz },
