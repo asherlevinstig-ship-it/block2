@@ -5482,7 +5482,13 @@ addEventListener('keydown', e=>{
       primaryAction();
     }
     if(e.code==='KeyG' && !e.repeat){
-      if(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyDown&&globalThis.BlockcraftFishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
+      const fishing=globalThis.BlockcraftFishing;
+      const fishingBusy=!!(fishing&&fishing.active&&fishing.active());
+      // The return portal wins over *starting* a new cast, so pressing G on the
+      // portal leaves the fishing room instead of the rod grabbing the press.
+      // An in-progress cast (aim/wait/bite/fight) still owns G.
+      if(!fishingBusy && nearFishingLakeExit()){ e.preventDefault(); if(typeof exitFishingLake==='function')exitFishingLake(); return; }
+      if(fishing&&fishing.handleKeyDown&&fishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
       placeKeyHeld=true; nextHeldPlaceAt=performance.now()+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction();
     }
     if(e.code==='KeyJ' && !e.repeat){ if(!castDragonAbility()) castArmorPower(); }
