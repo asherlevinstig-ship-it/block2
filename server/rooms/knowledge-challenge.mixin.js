@@ -433,6 +433,12 @@ class KnowledgeChallengeMixin {
       try { await store.endShift(shift.id, { status: abandoned ? 'abandoned' : 'ended', payoutGold: payout, totals }); } catch (_) {}
     }
     if (client && !abandoned) {
+      const net = (payout | 0) - (shift.entry | 0);
+      client.send('chat', {
+        name: '[Scholar Table]',
+        text: 'Finished ' + String(shift.type || 'shift') + ': payout +' + (payout | 0) + ' gold'
+          + ' (net ' + (net >= 0 ? '+' : '') + net + ' after stake).',
+      });
       client.send('kcShiftReport', {
         shiftId: shift.id, reason, payout, entry: shift.entry,
         gold: rec && rec.prof ? rec.prof.gold | 0 : 0, totals,

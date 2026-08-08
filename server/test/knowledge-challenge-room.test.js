@@ -136,6 +136,10 @@ test('completing the planned cases pays out and credits gold', async () => {
   assert.equal(room.kcShifts.has('s1'), false, 'shift closed');
   const report = client.sent.find(s => s.type === 'kcShiftReport');
   assert.equal(report.msg.payout, 39);
+  const log = client.sent.find(s => s.type === 'chat' && s.msg.name === '[Scholar Table]');
+  assert.ok(log);
+  assert.match(log.msg.text, /payout \+39 gold/);
+  assert.match(log.msg.text, /net \+19 after stake/);
   assert.equal(store._calls.endShift[0].status, 'ended');
   assert.equal(store._calls.endShift[0].payoutGold, 39);
 });
