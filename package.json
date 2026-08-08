@@ -25,6 +25,8 @@
     "test:perf:interest": "node tools/interest-radius-matrix.js",
     "firebase:smoke": "node tools/firebase-smoke-test.js",
     "mysql:auth:smoke": "node tools/mysql-auth-smoke-test.js",
+    "mysql:kc:seed": "node tools/seed-knowledge-challenge.js",
+    "mysql:kc:status": "node tools/knowledge-challenge-status.js",
     "firebase:wipe:dry": "node tools/wipe-firestore.js --dry-run",
     "firebase:wipe": "node tools/wipe-firestore.js",
     "balance:loot": "node tools/loot-progression-sim.js",

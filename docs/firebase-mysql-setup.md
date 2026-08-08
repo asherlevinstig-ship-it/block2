@@ -119,6 +119,42 @@ The smoke test for live credentials is:
 npm run mysql:auth:smoke
 ```
 
+## 5b. Scholar Table / Knowledge Challenge Content
+
+The tavern Scholar Table uses the same SiteGround MySQL connection. It needs:
+
+- `AUTH_BACKEND=mysql` on the running Node/Colyseus server.
+- Valid `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD`.
+- A seeded Knowledge Challenge subject in the `kc_*` tables and atom-linked `game_question` rows.
+
+Check whether the configured SiteGround database has playable Scholar Table content:
+
+```powershell
+npm run mysql:kc:status
+```
+
+Check a specific subject:
+
+```powershell
+npm run mysql:kc:status -- --subject "Computer Science"
+npm run mysql:kc:status -- --subject-id 123
+```
+
+Seed the pilot content pack into SiteGround MySQL:
+
+```powershell
+npm run mysql:kc:seed
+```
+
+Or seed a specific subject/school:
+
+```powershell
+npm run mysql:kc:seed -- --subject-id 123 --school-id 3
+```
+
+The default pack is `content/knowledge-challenge/sample-pack.json`. Re-running the seed is
+idempotent: existing entities, atoms, questions, and confusion pairs are updated in place.
+
 ## 6. Reset A Player Game Profile
 
 To reset one player's game progress without deleting their SiteGround/MySQL
