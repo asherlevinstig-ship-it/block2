@@ -10785,6 +10785,7 @@ const propParchment=new THREE.MeshLambertMaterial({color:0xe9d8a6});
 const propBlueGlass=new THREE.MeshLambertMaterial({color:0x7dd3fc, emissive:0x0b4a6b, emissiveIntensity:.45, transparent:true, opacity:.82});
 const potionVapors=[];
 let tavernChallengeTableRoot=null;
+const tavernChallengeTableRoots=[];
 function townPropDistrict(x,z){
   if(z>=68 || (x>=70 && z>=60)) return 'tavern';
   if(x>=70 && z<=56) return 'forge';
@@ -10809,7 +10810,7 @@ function buildProps(){
     const rune=makeTextSprite(label||'?',col===0xffd24a?'#ffd24a':'#7dd3fc');
     rune.position.set(x,.72,z);rune.scale.set(.8,.4,1);rune.renderOrder=34;root.add(rune);
   }
-  function buildScholarTable(){
+  function buildScholarTable(x=79.5,z=89.5,labelText='SCHOLAR TABLE'){
     const root=new THREE.Group();
     const tableMat=new THREE.MeshLambertMaterial({color:0x4b2d18});
     const trimMat=new THREE.MeshLambertMaterial({color:0xd2a43f});
@@ -10827,12 +10828,13 @@ function buildProps(){
     const orb=new THREE.Mesh(new THREE.SphereGeometry(.18,12,12), propBlueGlass);orb.position.set(.5,.88,.18);root.add(orb);
     const ring=new THREE.Mesh(new THREE.TorusGeometry(.46,.025,8,32), new THREE.MeshBasicMaterial({color:0x7dd3fc,transparent:true,opacity:.72,blending:THREE.AdditiveBlending,depthWrite:false}));
     ring.position.y=.64;ring.rotation.x=Math.PI/2;root.add(ring);
-    const label=makeTextSprite('SCHOLAR TABLE','#7dd3fc');
+    const label=makeTextSprite(labelText,'#7dd3fc');
     label.position.set(0,1.72,0);label.scale.set(2.15,.9,1);label.renderOrder=34;root.add(label);
-    root.position.set(townPropX(79.5,89.5),TG+1,townPropZ(79.5,89.5));
+    root.position.set(townPropX(x,z),TG+1,townPropZ(x,z));
     root.userData={orb,ring,label,baseY:root.position.y};
     townGroup.add(root);
-    tavernChallengeTableRoot=root;
+    tavernChallengeTableRoots.push(root);
+    if(!tavernChallengeTableRoot || Math.abs(x-79.5)<.05)tavernChallengeTableRoot=root;
     return root;
   }
   function chunkyMug(x,y,z,ry){
@@ -10872,6 +10874,11 @@ function buildProps(){
     chunkyMug(x+.18,TG+2.25,z-.12);
     plateMeal(x-.14,TG+2.23,z+.12);
   }
+  // scholar-table corner: multiple playable tables so the mini-game feels like
+  // a tavern activity instead of a single prototype prop.
+  buildScholarTable(76.1,89.0,'SCHOLAR TABLE');
+  buildScholarTable(79.5,89.5,'SCHOLAR TABLE');
+  buildScholarTable(82.9,89.0,'SCHOLAR TABLE');
   // barrels: tavern corner + smithy
   function barrel(x,z){
     const g=new THREE.Group();
@@ -10962,8 +10969,14 @@ function buildProps(){
     'If Tobin asks, I was never here before noon.');
   tavernPatron('Iris Quill','Scholar Table Host',79.6,87.1,0,'#24415a','#17283a',
     'Gold on the table, mind on the question. Greta calls it showing off; I call it revision with consequences.');
-  const host=villagers[villagers.length-1];
-  if(host){host.role='tavern_scholar';host.shortName='Iris';host.home=[dtx(79,'tavern'),dtz(87,'tavern')];}
+  tavernPatron('Oren Chalk','Scholar Table Host',76.0,86.8,.18,'#1f4a44','#15332f',
+    'Small stake, sharp answer, warm purse. Sit if you dare.');
+  tavernPatron('Saffi Ledger','Scholar Table Host',83.0,86.8,-.18,'#4a345f','#2f213d',
+    'A streak is not luck if your brain can prove it twice.');
+  for(const [i,homeX] of [[1,83],[2,76],[3,79]]){
+    const host=villagers[villagers.length-i];
+    if(host){host.role='tavern_scholar';host.shortName=host.name.split(' ')[0];host.home=[dtx(homeX,'tavern'),dtz(87,'tavern')];}
+  }
 }
 buildProps();
 
