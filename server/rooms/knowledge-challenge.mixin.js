@@ -114,11 +114,24 @@ class KnowledgeChallengeMixin {
     if ((rec.prof.gold | 0) < entry) return client.send('kcReject', { reason: 'gold', gold: rec.prof.gold | 0, entry });
 
     let subject = null;
-    try { subject = await store.resolvePlaySubject(account, { subject: m.subject, subjectId: m.subjectId }); } catch (_) {}
+    const subjectQuery = { subject: m.subject, subjectId: m.subjectId, fallbackSubject: m.fallbackSubject || 'Computer Science' };
+    try {
+      subject = typeof store.findPlayableChallengeSubject === 'function'
+        ? await store.findPlayableChallengeSubject(account, subjectQuery)
+        : await store.resolvePlaySubject(account, subjectQuery);
+    } catch (_) {}
     if (!subject) return client.send('kcReject', { reason: 'subject' });
     let atoms = [];
-    try { atoms = (await store.loadStudentAtoms(account, { subjectId: subject.subjectId })).atoms; } catch (_) {}
-    if (!atoms || !atoms.length) return client.send('kcReject', { reason: 'no_content' });
+    try { atoms = (await store.loadStudentAtoms(account, { subjectId: subject.subjectId, playableOnly: true })).atoms; } catch (_) {}
+    if (!atoms || !atoms.length) {
+      return client.send('kcReject', {
+        reason: 'no_content',
+        subjectId: subject.subjectId,
+        subjectName: subject.subjectName || m.subject || '',
+        requestedSubject: m.subject || '',
+        fallbackSubject: m.fallbackSubject || 'Computer Science',
+      });
+    }
 
     // Debit the stake before serving anything.
     rec.prof.gold = Math.max(0, (rec.prof.gold | 0) - entry);
@@ -143,7 +156,13 @@ class KnowledgeChallengeMixin {
       pending: null, corrective: null, confusionPairs, remediation: [], totals: freshTotals(),
     };
     this.kcShifts.set(client.sessionId, shift);
-    client.send('kcShiftStarted', { shiftId, shiftType: type, planned: shift.planned, entry, gold: rec.prof.gold | 0 });
+    client.send('kcShiftStarted', {
+      shiftId, shiftType: type, planned: shift.planned, entry, gold: rec.prof.gold | 0,
+      subjectId: subject.subjectId,
+      subjectName: subject.subjectName || '',
+      requestedSubject: subject.requestedSubject || m.subject || '',
+      subjectFallback: !!subject.subjectFallback,
+    });
     await this.kcServeNextCase(client, shift);
   }
 

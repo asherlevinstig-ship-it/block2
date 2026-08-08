@@ -6,6 +6,7 @@
 // server's KC_CONFIG is the source of truth.
 const ENTRY = { quick: 20, standard: 40, full: 60, timed: 40, endless: 25 };
 const PLANNED = { quick: 10, standard: 20, full: 30, timed: 20, endless: 0 };
+const FALLBACK_SUBJECT = 'Computer Science';
 const REASON_LABEL = {
   weakness: 'Weak spot', retrieval: 'Due review', confusion: 'Easily confused',
   maintenance: 'Keep sharp', near_transfer: 'New context', remediation: 'Recovery', fallback: 'Practice',
@@ -26,7 +27,7 @@ function room() { return (typeof NET !== 'undefined' && NET && NET.on && NET.roo
 function send(type, msg) { const r = room(); if (r) r.send(type, msg); }
 function say(html) { if (typeof sysMsg === 'function') sysMsg(html); }
 function sfx(name) { try { if (typeof SFX !== 'undefined' && SFX && typeof SFX[name] === 'function') SFX[name](); } catch (_) {} }
-function subject() { try { return localStorage.getItem('bc_recall_subject') || 'Computer Science'; } catch (_) { return 'Computer Science'; } }
+function subject() { try { return localStorage.getItem('bc_recall_subject') || FALLBACK_SUBJECT; } catch (_) { return FALLBACK_SUBJECT; } }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function tavernFx(kind, detail) {
   try {
@@ -75,7 +76,12 @@ function renderChooser() {
   row.appendChild(leave); panel.appendChild(row);
 }
 
-function start(type) { if (busy) return; busy = true; tavernFx('start', { shiftType: type }); send('kcStart', { shiftType: type, subject: subject() }); }
+function start(type) {
+  if (busy) return;
+  busy = true;
+  tavernFx('start', { shiftType: type });
+  send('kcStart', { shiftType: type, subject: subject(), fallbackSubject: FALLBACK_SUBJECT });
+}
 
 function caseHeader(m) {
   const head = el('div', 'kc-head');
@@ -224,7 +230,10 @@ function onReject(m) {
   busy = false;
   const r = m && m.reason;
   if (r === 'gold') say('You need <b>' + (m.entry | 0) + ' gold</b> to enter that shift.');
-  else if (r === 'no_content') say('No challenge content is loaded for this subject yet.');
+  else if (r === 'no_content') {
+    const subj = esc((m && (m.subjectName || m.requestedSubject || m.subject)) || 'this subject');
+    say('No Knowledge Challenge content is loaded for <b>' + subj + '</b> yet.');
+  }
   else if (r === 'unavailable') say('The Knowledge Challenge is not available right now.');
   else if (r === 'active') say('Finish your current shift first.');
   else if (r === 'subject') say('That subject has no challenge content.');

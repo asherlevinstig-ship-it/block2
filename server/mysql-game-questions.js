@@ -1549,18 +1549,18 @@ class MySqlGameQuestionStore {
     const byId = clampInt(input.subjectId || input.subject_id, 0, 2147483647);
     if (byId) {
       const [rows] = await pool.execute(
-        `SELECT id, school_id FROM subjects
+        `SELECT id, name, code, school_id FROM subjects
          WHERE id = ? AND is_active = 1 AND (school_id IS NULL OR ? = 0 OR school_id = ?)
          LIMIT 1`,
         [byId, schoolId, schoolId],
       );
       const s = rows && rows[0];
-      return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id) } : null;
+      return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id), subjectName: s.name || '', subjectCode: s.code || '' } : null;
     }
     const name = cleanText(input.subject, 96);
     if (!name) return null;
     const [rows] = await pool.execute(
-      `SELECT id, school_id FROM subjects
+      `SELECT id, name, code, school_id FROM subjects
        WHERE is_active = 1 AND (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?))
          AND (school_id IS NULL OR ? = 0 OR school_id = ?)
        ORDER BY CASE WHEN school_id = ? THEN 0 ELSE 1 END, id ASC
@@ -1568,7 +1568,67 @@ class MySqlGameQuestionStore {
       [name, name, schoolId, schoolId, schoolId],
     );
     const s = rows && rows[0];
-    return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id) } : null;
+    return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id), subjectName: s.name || '', subjectCode: s.code || '' } : null;
+  }
+
+  async challengeContentCount(subjectId) {
+    await this.ensureSchema();
+    subjectId = clampInt(subjectId, 1, 2147483647);
+    if (!subjectId) return 0;
+    const [rows] = await this.getPool().execute(
+      `SELECT COUNT(DISTINCT a.id) AS n
+       FROM kc_atom a
+       JOIN game_question q ON q.primary_atom_id = a.id
+        AND q.subject_id = a.subject_id
+        AND q.is_active = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE a.subject_id = ? AND a.is_active = 1`,
+      [subjectId],
+    );
+    return Number(rows && rows[0] && rows[0].n) || 0;
+  }
+
+  async findPlayableChallengeSubject(account, input = {}) {
+    await this.ensureSchema();
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const requestedSubject = cleanText(input.subject, 96);
+    const requested = await this.resolvePlaySubject(account, input).catch(() => null);
+    if (requested && await this.challengeContentCount(requested.subjectId)) {
+      return Object.assign({}, requested, { requestedSubject, subjectFallback: false });
+    }
+
+    const fallbackSubject = cleanText(input.fallbackSubject, 96) || 'Computer Science';
+    const fallback = fallbackSubject && fallbackSubject !== requestedSubject
+      ? await this.resolvePlaySubject(account, { subject: fallbackSubject }).catch(() => null)
+      : null;
+    if (fallback && await this.challengeContentCount(fallback.subjectId)) {
+      return Object.assign({}, fallback, { requestedSubject, subjectFallback: !!requested && fallback.subjectId !== requested.subjectId });
+    }
+
+    const [rows] = await this.getPool().execute(
+      `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
+       FROM subjects s
+       JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
+       JOIN game_question q ON q.primary_atom_id = a.id
+        AND q.subject_id = s.id
+        AND q.is_active = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+       GROUP BY s.id, s.name, s.code, s.school_id
+       ORDER BY CASE WHEN LOWER(s.name) = LOWER(?) OR LOWER(s.code) = LOWER(?) THEN 0 WHEN s.school_id = ? THEN 1 ELSE 2 END,
+                playable_atoms DESC, s.id ASC
+       LIMIT 1`,
+      [schoolId, schoolId, fallbackSubject, fallbackSubject, schoolId],
+    );
+    const s = rows && rows[0];
+    return s ? {
+      subjectId: Number(s.id),
+      scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id),
+      subjectName: s.name || '',
+      subjectCode: s.code || '',
+      requestedSubject,
+      subjectFallback: !requested || Number(s.id) !== requested.subjectId,
+    } : null;
   }
 
   // Student-merged atoms for the selector: every active atom in the subject,
@@ -1578,6 +1638,14 @@ class MySqlGameQuestionStore {
     const accountId = String(account && account.id || '');
     const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
     if (!subjectId) return { subjectId: 0, atoms: [] };
+    const playableOnly = !!query.playableOnly;
+    const playableJoin = playableOnly
+      ? `JOIN game_question playable_q ON playable_q.primary_atom_id = a.id
+          AND playable_q.subject_id = a.subject_id
+          AND playable_q.is_active = 1
+          AND playable_q.review_status IN ('approved', 'teacher-reviewed')`
+      : '';
+    const params = [accountId, subjectId];
     const [rows] = await this.getPool().execute(
       `SELECT a.id AS atom_id, a.difficulty, a.entity_id,
               sa.stage, sa.attempts, sa.correct, sa.first_attempt_correct, sa.streak,
@@ -1586,10 +1654,16 @@ class MySqlGameQuestionStore {
               sa.delayed_success, sa.last_shift_id, sa.sessions_seen,
               UNIX_TIMESTAMP(sa.last_seen_at) * 1000 AS last_seen_ms
        FROM kc_atom a
+       ${playableJoin}
        LEFT JOIN kc_student_atom sa ON sa.atom_id = a.id AND sa.account_id = ?
        WHERE a.subject_id = ? AND a.is_active = 1
+       GROUP BY a.id, a.difficulty, a.entity_id,
+                sa.stage, sa.attempts, sa.correct, sa.first_attempt_correct, sa.streak,
+                sa.ease, sa.interval_idx, sa.next_due, sa.formats_seen, sa.discriminated,
+                sa.near_transfer_ok, sa.explained, sa.delayed_success, sa.last_shift_id,
+                sa.sessions_seen, sa.last_seen_at
        ORDER BY a.id ASC`,
-      [accountId, subjectId],
+      params,
     );
     const atoms = (rows || []).map(row => ({
       atomId: Number(row.atom_id) || 0,
