@@ -1631,6 +1631,53 @@ class MySqlGameQuestionStore {
     } : null;
   }
 
+  async debugChallengeSubjects(account, input = {}) {
+    await this.ensureSchema();
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const requestedSubject = cleanText(input.subject, 96);
+    const fallbackSubject = cleanText(input.fallbackSubject, 96) || 'Computer Science';
+    const requested = requestedSubject ? await this.resolvePlaySubject(account, input).catch(e => ({ error: e && e.message || String(e) })) : null;
+    const fallback = fallbackSubject ? await this.resolvePlaySubject(account, { subject: fallbackSubject }).catch(e => ({ error: e && e.message || String(e) })) : null;
+    async function withCount(store, subject) {
+      if (!subject || subject.error || !subject.subjectId) return subject || null;
+      const playableAtoms = await store.challengeContentCount(subject.subjectId).catch(() => -1);
+      return Object.assign({}, subject, { playableAtoms });
+    }
+    const [rows] = await this.getPool().execute(
+      `SELECT s.id, s.name, s.code, s.school_id,
+              COUNT(DISTINCT a.id) AS active_atoms,
+              COUNT(DISTINCT q.primary_atom_id) AS playable_atoms,
+              COUNT(q.id) AS approved_questions
+       FROM subjects s
+       LEFT JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
+       LEFT JOIN game_question q ON q.primary_atom_id = a.id
+        AND q.subject_id = s.id
+        AND q.is_active = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+       GROUP BY s.id, s.name, s.code, s.school_id
+       ORDER BY playable_atoms DESC, approved_questions DESC, active_atoms DESC, s.id ASC
+       LIMIT 12`,
+      [schoolId, schoolId],
+    );
+    return {
+      schoolId,
+      requestedSubject,
+      fallbackSubject,
+      requested: await withCount(this, requested),
+      fallback: await withCount(this, fallback),
+      available: (rows || []).map(r => ({
+        subjectId: Number(r.id) || 0,
+        name: r.name || '',
+        code: r.code || '',
+        schoolId: r.school_id == null ? null : Number(r.school_id),
+        activeAtoms: Number(r.active_atoms) || 0,
+        playableAtoms: Number(r.playable_atoms) || 0,
+        approvedQuestions: Number(r.approved_questions) || 0,
+      })),
+    };
+  }
+
   // Student-merged atoms for the selector: every active atom in the subject,
   // LEFT JOINed to this account's fluency record (null state for unseen atoms).
   async loadStudentAtoms(account, query = {}) {

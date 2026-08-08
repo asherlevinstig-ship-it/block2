@@ -35,6 +35,10 @@ function tavernFx(kind, detail) {
     if (fx && typeof fx.pulse === 'function') fx.pulse(kind, detail || {});
   } catch (_) {}
 }
+function trace(event, data) {
+  try { if (globalThis.BlockcraftTrace) globalThis.BlockcraftTrace(event, data || {}); } catch (_) {}
+  try { console.info('[kc-trace]', event, data || {}); } catch (_) {}
+}
 
 function ensure() {
   if (overlay) return;
@@ -228,6 +232,7 @@ function onReport(m) {
 }
 function onReject(m) {
   busy = false;
+  trace('knowledge-challenge.reject', m || {});
   const r = m && m.reason;
   if (r === 'gold') say('You need <b>' + (m.entry | 0) + ' gold</b> to enter that shift.');
   else if (r === 'no_content') {
@@ -240,6 +245,10 @@ function onReject(m) {
   else say('That could not start.');
   sfx('error');
   if (overlay && !overlay.classList.contains('hidden') && !shift) renderChooser();
+}
+
+function onTrace(m) {
+  trace('knowledge-challenge.server', m || {});
 }
 
 function onCorrective(m) {
@@ -340,7 +349,7 @@ globalThis.BlockcraftKnowledgeChallenge = Object.freeze({
   open, close, start,
   get active() { return !!shift; },
   handle(type, m) {
-    const map = { kcShiftStarted: onStarted, kcCase: onCase, kcResult: onResult, kcCorrective: onCorrective, kcCorrectiveResult: onCorrectiveResult, kcShiftReport: onReport, kcReject: onReject };
+    const map = { kcShiftStarted: onStarted, kcCase: onCase, kcResult: onResult, kcCorrective: onCorrective, kcCorrectiveResult: onCorrectiveResult, kcShiftReport: onReport, kcReject: onReject, kcTrace: onTrace };
     (map[type] || function () {})(m);
   },
 });

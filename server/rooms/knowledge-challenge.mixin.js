@@ -17,6 +17,10 @@ function freshTotals() {
   };
 }
 
+function safeKcValue(v) {
+  try { return JSON.parse(JSON.stringify(v)); } catch (_) { return v == null ? null : String(v); }
+}
+
 class KnowledgeChallengeMixin {
   initKnowledgeChallengeState() {
     this.kcShifts = new Map(); // sessionId -> shift state
@@ -34,6 +38,11 @@ class KnowledgeChallengeMixin {
   kcSyncGold(client, prof) {
     if (typeof this.syncPlayerProfile === 'function') this.syncPlayerProfile(client, prof);
     else if (typeof this.sendProfile === 'function') this.sendProfile(client, prof);
+  }
+  kcTrace(client, event, data = {}) {
+    const payload = Object.assign({ event, at: Date.now() }, safeKcValue(data) || {});
+    try { if (client && typeof client.send === 'function') client.send('kcTrace', payload); } catch (_) {}
+    try { console.log('[kc-trace] ' + JSON.stringify(payload)); } catch (_) { console.log('[kc-trace] ' + event); }
   }
 
   // Present a challenge to the client, shuffling multiple-choice answers so the
@@ -108,21 +117,52 @@ class KnowledgeChallengeMixin {
     if (this.kcShifts.has(client.sessionId)) return client.send('kcReject', { reason: 'active' });
     const store = this.kcStore(), account = this.kcAccountFor(client);
     const rec = typeof this.profileFor === 'function' ? this.profileFor(client) : null;
-    if (!store || !account || !rec || !rec.prof) return client.send('kcReject', { reason: 'unavailable' });
+    if (!store || !account || !rec || !rec.prof) {
+      this.kcTrace(client, 'start.unavailable', {
+        hasStore: !!store,
+        hasAccount: !!account,
+        hasProfile: !!(rec && rec.prof),
+      });
+      return client.send('kcReject', { reason: 'unavailable' });
+    }
     const type = KC.SHIFT_TYPES[m.shiftType] ? m.shiftType : 'standard';
     const entry = Math.max(0, this.kcConfig().entry[type] | 0);
     if ((rec.prof.gold | 0) < entry) return client.send('kcReject', { reason: 'gold', gold: rec.prof.gold | 0, entry });
 
     let subject = null;
     const subjectQuery = { subject: m.subject, subjectId: m.subjectId, fallbackSubject: m.fallbackSubject || 'Computer Science' };
+    this.kcTrace(client, 'start.request', {
+      accountId: account && account.id,
+      schoolId: account && account.schoolId,
+      shiftType: type,
+      requestedSubject: subjectQuery.subject || '',
+      requestedSubjectId: subjectQuery.subjectId || 0,
+      fallbackSubject: subjectQuery.fallbackSubject,
+    });
     try {
       subject = typeof store.findPlayableChallengeSubject === 'function'
         ? await store.findPlayableChallengeSubject(account, subjectQuery)
         : await store.resolvePlaySubject(account, subjectQuery);
-    } catch (_) {}
-    if (!subject) return client.send('kcReject', { reason: 'subject' });
+    } catch (e) {
+      this.kcTrace(client, 'start.subject-error', { message: e && e.message || String(e) });
+    }
+    if (!subject) {
+      let debug = null;
+      try { if (typeof store.debugChallengeSubjects === 'function') debug = await store.debugChallengeSubjects(account, subjectQuery); } catch (e) { debug = { error: e && e.message || String(e) }; }
+      this.kcTrace(client, 'start.no-subject', { query: subjectQuery, debug });
+      return client.send('kcReject', { reason: 'subject', requestedSubject: subjectQuery.subject || '', fallbackSubject: subjectQuery.fallbackSubject, debug });
+    }
     let atoms = [];
-    try { atoms = (await store.loadStudentAtoms(account, { subjectId: subject.subjectId, playableOnly: true })).atoms; } catch (_) {}
+    try { atoms = (await store.loadStudentAtoms(account, { subjectId: subject.subjectId, playableOnly: true })).atoms; } catch (e) {
+      this.kcTrace(client, 'start.atoms-error', { subject, message: e && e.message || String(e) });
+    }
+    let contentDebug = null;
+    try { if (typeof store.debugChallengeSubjects === 'function') contentDebug = await store.debugChallengeSubjects(account, subjectQuery); } catch (e) { contentDebug = { error: e && e.message || String(e) }; }
+    this.kcTrace(client, 'start.resolved', {
+      subject,
+      playableAtoms: atoms && atoms.length || 0,
+      debug: contentDebug,
+    });
     if (!atoms || !atoms.length) {
       return client.send('kcReject', {
         reason: 'no_content',
@@ -130,6 +170,7 @@ class KnowledgeChallengeMixin {
         subjectName: subject.subjectName || m.subject || '',
         requestedSubject: m.subject || '',
         fallbackSubject: m.fallbackSubject || 'Computer Science',
+        debug: contentDebug,
       });
     }
 
@@ -156,6 +197,14 @@ class KnowledgeChallengeMixin {
       pending: null, corrective: null, confusionPairs, remediation: [], totals: freshTotals(),
     };
     this.kcShifts.set(client.sessionId, shift);
+    this.kcTrace(client, 'start.shift-created', {
+      shiftId,
+      subjectId: shift.subjectId,
+      subjectName: subject.subjectName || '',
+      playableAtoms: atoms.length,
+      shiftType: type,
+      entry,
+    });
     client.send('kcShiftStarted', {
       shiftId, shiftType: type, planned: shift.planned, entry, gold: rec.prof.gold | 0,
       subjectId: subject.subjectId,
