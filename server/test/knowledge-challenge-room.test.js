@@ -39,9 +39,12 @@ function makeRoom(store, prof) {
   room.profileFor = () => ({ prof, token: 't' });
   room.dirtyPlayers = new Set();
   room._econ = [];
+  room._broadcasts = [];
   room.recordEconomyGold = (...a) => { room._econ.push(a); };
   room.syncPlayerProfile = () => {};
   room.rateLimited = () => false;
+  room.playerFor = () => ({ name: 'TestAccount' });
+  room.broadcast = (type, msg) => { room._broadcasts.push({ type, msg }); };
   return room;
 }
 
@@ -136,9 +139,9 @@ test('completing the planned cases pays out and credits gold', async () => {
   assert.equal(room.kcShifts.has('s1'), false, 'shift closed');
   const report = client.sent.find(s => s.type === 'kcShiftReport');
   assert.equal(report.msg.payout, 39);
-  const log = client.sent.find(s => s.type === 'chat' && s.msg.name === '[Scholar Table]');
+  const log = room._broadcasts.find(s => s.type === 'chat' && s.msg.name === '[Tavern] [Scholar Table]');
   assert.ok(log);
-  assert.match(log.msg.text, /payout \+39 gold/);
+  assert.match(log.msg.text, /TestAccount finished quick: payout \+39 gold/);
   assert.match(log.msg.text, /net \+19 after stake/);
   assert.equal(store._calls.endShift[0].status, 'ended');
   assert.equal(store._calls.endShift[0].payoutGold, 39);

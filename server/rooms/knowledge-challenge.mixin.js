@@ -434,11 +434,13 @@ class KnowledgeChallengeMixin {
     }
     if (client && !abandoned) {
       const net = (payout | 0) - (shift.entry | 0);
-      client.send('chat', {
-        name: '[Scholar Table]',
-        text: 'Finished ' + String(shift.type || 'shift') + ': payout +' + (payout | 0) + ' gold'
-          + ' (net ' + (net >= 0 ? '+' : '') + net + ' after stake).',
-      });
+      const player = typeof this.playerFor === 'function' ? this.playerFor(client) : null;
+      const line = (player && player.name ? player.name : 'A hunter') + ' finished ' + String(shift.type || 'shift')
+        + ': payout +' + (payout | 0) + ' gold'
+        + ' (net ' + (net >= 0 ? '+' : '') + net + ' after stake).';
+      const msg = { name: '[Tavern] [Scholar Table]', text: line };
+      if (typeof this.broadcast === 'function') this.broadcast('chat', msg);
+      else client.send('chat', msg);
       client.send('kcShiftReport', {
         shiftId: shift.id, reason, payout, entry: shift.entry,
         gold: rec && rec.prof ? rec.prof.gold | 0 : 0, totals,
