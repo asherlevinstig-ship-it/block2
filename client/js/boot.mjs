@@ -114,7 +114,7 @@ try {
     set: value => { uiShellState.qMode = typeof value === 'string' ? value : ''; },
     configurable: true,
   });
-  for (const src of ['./world.mjs', './dimensions.mjs', './recall.mjs', './combat.mjs', './hud.mjs', './menus.mjs', './teacher-link.mjs', './networking.mjs']) {
+  for (const src of ['./world.mjs', './dimensions.mjs', './recall.mjs', './knowledge-challenge.mjs', './combat.mjs', './hud.mjs', './menus.mjs', './teacher-link.mjs', './networking.mjs']) {
     await import(src);
     gameContext.markModuleLoaded(src.slice(src.lastIndexOf('/') + 1, src.lastIndexOf('.')));
   }

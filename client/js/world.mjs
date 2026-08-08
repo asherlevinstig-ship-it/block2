@@ -1987,9 +1987,6 @@ const HUB = {
   meditate: { x: dpx(47.5, 'shrine'), z: dpz(46.5, 'shrine') },
   smith: { x: dpx(78.5, 'forge'), z: dpz(50, 'forge') },
   tavern: { x: dpx(83.5, 'tavern'), z: dpz(77.5, 'tavern') },
-  tavernDice: { x: dpx(74.5, 'tavern'), z: dpz(89.5, 'tavern') },
-  tavernBlackjack: { x: dpx(79.5, 'tavern'), z: dpz(89.5, 'tavern') },
-  tavernRoulette: { x: dpx(84.5, 'tavern'), z: dpz(89.5, 'tavern') },
   tavernHearth: { x: dpx(79.5, 'tavern'), z: dpz(85.45, 'tavern') },
   tavernChimney: { x: dpx(79.5, 'tavern'), z: dpz(86.5, 'tavern') },
   forgeFire: { x: dpx(81.7, 'forge'), z: dpz(48.5, 'forge') },
@@ -4697,15 +4694,6 @@ function tickVillagers(dt, t){
       v.nameplate.visible=v.nameplate.material.opacity>.04;
     }
     updateNpcQuestMarker(v,dt,t,pd);
-    if(v.role==='game_dealer'&&v.gameActiveUntil>t&&v.arms){
-      const pulse=Math.sin(t*11+v.phase),strength=v.gamePhase==='win'?1.05:v.gamePhase==='lose'?.35:.72;
-      v.arms[0].rotation.x=-.55-strength*Math.max(0,pulse);v.arms[1].rotation.x=-.55-strength*Math.max(0,-pulse);
-      v.head.rotation.x=v.gamePhase==='lose'?.16:-.08;p.y=TOWN.G+1+Math.abs(Math.sin(t*7))*.035;
-    }
-    if(v.role==='patron'&&v.gameWatchUntil>t&&v.gameWatchTarget){
-      const want=Math.atan2(v.gameWatchTarget.x-p.x,v.gameWatchTarget.z-p.z);
-      v.grp.rotation.y+=angDiff(want,v.grp.rotation.y)*Math.min(1,dt*5);v.head.rotation.y=0;
-    }
     if(v.static){ p.y=(v.fixedY==null?TOWN.G+1:v.fixedY)+Math.sin(t*1.3+v.phase)*.012; continue; }   // static NPC breathes in place
     // indoors at night; step back out at dawn
     if(v.inside){
@@ -6133,9 +6121,6 @@ addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bb
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);
 addTownInteractLabel('Farm Work', HUB.farm.x, TOWN.G+3.45, HUB.farm.z, '#86efac', 9);
 addTownInteractLabel('Cook Work', dpx(81,'tavern'), TOWN.G+3.5, dpz(75,'tavern'), '#ffd24a', 8);
-addTownInteractLabel('Dice Table · G', HUB.tavernDice.x, TOWN.G+3.65, HUB.tavernDice.z, '#ffd24a', 6);
-addTownInteractLabel('Blackjack Table · G', HUB.tavernBlackjack.x, TOWN.G+3.65, HUB.tavernBlackjack.z, '#9ad7ff', 5);
-addTownInteractLabel('Roulette Table · G', HUB.tavernRoulette.x, TOWN.G+3.65, HUB.tavernRoulette.z, '#ff8aa8', 5);
 addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Taming Land Portal', HUB.tamingPortal.x, TOWN.G+5.95, HUB.tamingPortal.z, '#9efc72', 14);
@@ -10795,15 +10780,6 @@ const propMug=new THREE.MeshLambertMaterial({color:0xc8a060});
 const propWhite=new THREE.MeshLambertMaterial({color:0xeae6da});
 const propBrass=new THREE.MeshLambertMaterial({color:0xd2a43f});
 const potionVapors=[];
-const tavernGameDealers=[];
-function tavernGameAction(game,phase='play'){
-  const now=performance.now()/1000,dealer=tavernGameDealers.find(v=>v.game===game);
-  if(dealer){dealer.gamePhase=phase;dealer.gameActiveUntil=now+(phase==='play'?2.4:1.3);}
-  for(const v of villagers){
-    if(v.role!=='patron'||!dealer||Math.hypot(v.grp.position.x-dealer.grp.position.x,v.grp.position.z-dealer.grp.position.z)>9)continue;
-    v.gameWatchUntil=now+2.8;v.gameWatchTarget=dealer.grp.position;
-  }
-}
 function townPropDistrict(x,z){
   if(z>=68 || (x>=70 && z>=60)) return 'tavern';
   if(x>=70 && z<=56) return 'forge';
@@ -10857,28 +10833,6 @@ function buildProps(){
     chunkyMug(x+.18,TG+2.25,z-.12);
     plateMeal(x-.14,TG+2.23,z+.12);
   }
-  function diceCube(x,z,n){
-    const g=new THREE.Group();
-    const cube=new THREE.Mesh(new THREE.BoxGeometry(.22,.22,.22), propWhite);
-    g.add(cube);
-    const pipGeo=new THREE.BoxGeometry(.035,.012,.035);
-    const pipMat=new THREE.MeshLambertMaterial({color:0x10151f});
-    const spots={1:[[0,0]],2:[[-.055,-.055],[.055,.055]],3:[[-.06,-.06],[0,0],[.06,.06]],4:[[-.06,-.06],[.06,-.06],[-.06,.06],[.06,.06]],5:[[-.06,-.06],[.06,-.06],[0,0],[-.06,.06],[.06,.06]],6:[[-.065,-.06],[.065,-.06],[-.065,0],[.065,0],[-.065,.06],[.065,.06]]};
-    for(const [px,pz] of spots[n]||spots[1]){
-      const pip=new THREE.Mesh(pipGeo,pipMat);
-      pip.position.set(px,.116,pz);
-      g.add(pip);
-    }
-    g.position.set(townPropX(x,z),TG+2.31,townPropZ(x,z));
-    g.rotation.y=Math.random()*Math.PI;
-    townGroup.add(g);
-    return g;
-  }
-  for(const [x,z] of [[74.5,89.5],[79.5,89.5],[84.5,89.5]])addProp(topGeo,propWoodL,townPropX(x,z),TG+2.16,townPropZ(x,z));
-  diceCube(74.35,89.35,5); diceCube(74.66,89.58,2);
-  addProp(new THREE.CylinderGeometry(.26,.26,.025,16), new THREE.MeshLambertMaterial({color:0x10151f}), townPropX(84.5,89.5), TG+2.285, townPropZ(84.5,89.5));
-  addProp(new THREE.CylinderGeometry(.18,.18,.03,16), new THREE.MeshLambertMaterial({color:0x8a2020}), townPropX(84.5,89.5), TG+2.32, townPropZ(84.5,89.5));
-  addProp(new THREE.BoxGeometry(.58,.035,.32), new THREE.MeshLambertMaterial({color:0x1a2634}), townPropX(79.5,89.5), TG+2.285, townPropZ(79.5,89.5), .08);
   // barrels: tavern corner + smithy
   function barrel(x,z){
     const g=new THREE.Group();
@@ -10950,27 +10904,6 @@ function buildProps(){
     addProp(new THREE.BoxGeometry(.06,.6,.06), propWood, townPropX(79.6+i*.8,45.62), TG+2.6, townPropZ(79.6+i*.8,45.62));
     addProp(new THREE.BoxGeometry(.2,.18,.06), propIron, townPropX(79.6+i*.8,45.62), TG+2.82, townPropZ(79.6+i*.8,45.62));
   }
-  function rulesBoard(title,lines,x,z,rot,color='#ffd24a'){
-    const c=document.createElement('canvas');c.width=384;c.height=240;const g=c.getContext('2d');
-    g.fillStyle='#111827';g.fillRect(0,0,c.width,c.height);g.strokeStyle='#9a6b32';g.lineWidth=14;g.strokeRect(7,7,c.width-14,c.height-14);
-    g.fillStyle=color;g.font='bold 30px Courier New';g.textAlign='center';g.fillText(title,192,48);
-    g.fillStyle='#eadfc9';g.font='20px Courier New';lines.forEach((line,i)=>g.fillText(line,192,92+i*32));
-    const tex=new THREE.CanvasTexture(c);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
-    const board=new THREE.Mesh(new THREE.PlaneGeometry(2.25,1.4),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));
-    board.position.set(townPropX(x,z),TG+2.55,townPropZ(x,z));board.rotation.y=rot;townGroup.add(board);
-  }
-  function gameDealer(game,name,title,x,z,rot,robe,trim){
-    const d={...makeVillager(robe,trim,true),role:'game_dealer',game,name,shortName:name.split(' ')[0],title,
-      personality:'tavern dealer',line:'Place your call. The table settles every wager fairly.',static:true,inside:false,
-      wait:0,tx:0,tz:0,speed:0,phase:Math.random()*10,home:[dtx(74,'tavern'),dtz(76,'tavern')],stuck:0,gameActiveUntil:0,gamePhase:''};
-    d.grp.position.set(townPropX(x,z),TG+1,townPropZ(x,z));d.grp.rotation.y=rot;attachNpcNameplate(d);townGroup.add(d.grp);villagers.push(d);tavernGameDealers.push(d);
-  }
-  gameDealer('dice','Rook Tallow','Dice Caller',74.5,92.0,Math.PI,'#70462b','#4b2d1d');
-  gameDealer('blackjack','Vera Slate','Card Dealer',79.5,92.0,Math.PI,'#294a63','#182f43');
-  gameDealer('roulette','Orrin Vale','Wheel Keeper',84.5,92.0,Math.PI,'#6b263d','#441727');
-  rulesBoard('DICE',['LOW / SEVEN / HIGH','2x / 4x / 2x','MAX 25 TOKENS'],74.5,93.82,Math.PI);
-  rulesBoard('BLACKJACK',['BEAT 21','DEALER STANDS 17','MAX 25 TOKENS'],79.5,93.82,Math.PI,'#9ad7ff');
-  rulesBoard('ROULETTE',['COLOUR 2x / DOZEN 3x','ZERO 20x','MAX 25 TOKENS'],84.5,93.82,Math.PI,'#ff8aa8');
   function tavernPatron(name,title,x,z,rot,robe,trim,line){
     const p={...makeVillager(robe,trim,false), role:'patron', name, shortName:name.split(' ')[0], title,
       personality:'tavern regular', line, static:true, inside:false, wait:0, tx:0, tz:0, speed:0,
@@ -11175,7 +11108,6 @@ gameContext.registerModule('world', Object.freeze({
   setBuildGhostPreview,
   setTargetBlockHighlight,
   ancientCityDiscoverySpecs,
-  tavernGameAction,
   inOverworldBattle,
   resetParticleBudget,
   particleBudgetStats,

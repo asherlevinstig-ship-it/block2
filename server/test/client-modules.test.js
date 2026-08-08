@@ -433,10 +433,6 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   const progression = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
 
-  assert.match(world, /tavernDice: \{ x: dpx\(74\.5, 'tavern'\), z: dpz\(89\.5, 'tavern'\) \}/);
-  assert.match(combat, /HUB\.tavernDice\.x/);
-  assert.match(combat, /HUB\.tavernBlackjack\.x/);
-  assert.match(combat, /HUB\.tavernRoulette\.x/);
   assert.match(menus, /HUB\.smith\.x/);
   assert.match(networking, /HUB\.smith\.x/);
   assert.match(menus, /MENU_TOWN_DISTRICTS=Object\.freeze/);
@@ -454,9 +450,6 @@ test('Town systems use district anchors instead of stale compact-town coordinate
   assert.match(frameLoop, /HUB\.forgeFire\.x/);
   assert.match(world, /const district=townPropDistrict\(x,z\)/);
   assert.match(world, /\{x:HUB\.tavernChimney\.x, y:TG\+12\.7,\s+z:HUB\.tavernChimney\.z,\s+type:'smoke',\s+rate:4,\s+nightOnly:true,\s+maxDist:28\}/);
-  assert.match(economy, /townTavernAnchor\(74\.5, 89\.5\)/);
-  assert.match(economy, /townTavernAnchor\(79\.5, 89\.5\)/);
-  assert.match(economy, /townTavernAnchor\(84\.5, 89\.5\)/);
   assert.doesNotMatch(combat, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5/);
   assert.doesNotMatch(economy, /TOWN\.TC\+10\.5|TOWN\.TC\+15\.5|TOWN\.TC\+20\.5|TOWN\.TC\+19\.5|TOWN\.TC\+12\.5/);
   assert.doesNotMatch(menus + networking + room, /TOWN\.TC\+14\.5|TOWN\.TC-14/);
@@ -4211,44 +4204,49 @@ test('Rank Journey presents ten-level bands, promotion unlocks, and reward previ
   assert.match(css, /\.rank-journey-hero/);
 });
 
-test('tavern gambling has server-backed dice roulette and blackjack table entry points',()=>{
+test('tavern gambling games and token economy are fully removed',()=>{
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
+  const frameLoop=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
   const economy=fs.readFileSync(path.join(__dirname,'..','rooms','economy.mixin.js'),'utf8');
-  assert.match(menus,/function openTavernDiceUI/);
-  assert.match(menus,/function openTavernRouletteUI/);
-  assert.match(menus,/function openTavernBlackjackUI/);
-  assert.match(menus,/NET\.room\.send\('tavernDice'/);
-  assert.match(menus,/NET\.room\.send\('tavernRoulette'/);
-  assert.match(menus,/NET\.room\.send\('tavernBlackjack'/);
-  assert.match(menus,/LOW/);
-  assert.match(menus,/LUCKY 7/);
-  assert.match(menus,/HIGH/);
-  assert.match(menus,/RED/);
-  assert.match(menus,/ZERO/);
-  assert.match(combat,/nearTavernDiceTable/);
-  assert.match(combat,/nearTavernRouletteTable/);
-  assert.match(combat,/nearTavernBlackjackTable/);
-  assert.match(combat,/openTavernDiceUI\(\)/);
-  assert.match(combat,/openTavernRouletteUI\(\)/);
-  assert.match(combat,/openTavernBlackjackUI\(\)/);
-  assert.match(networking,/room\.onMessage\('tavernDiceResult'/);
-  assert.match(networking,/room\.onMessage\('tavernRouletteResult'/);
-  assert.match(networking,/room\.onMessage\('tavernBlackjackState'/);
-  assert.match(world,/Dice Table/);
-  assert.match(world,/Blackjack Table · G/);
-  assert.match(world,/Roulette Table · G/);
-  assert.match(room,/onMessage\('tavernDice'/);
-  assert.match(room,/onMessage\('tavernRoulette'/);
-  assert.match(room,/onMessage\('tavernBlackjack'/);
-  assert.match(economy,/handleTavernDice/);
-  assert.match(economy,/handleTavernRoulette/);
-  assert.match(economy,/handleTavernBlackjack/);
-  assert.match(economy,/blackjackTotal/);
-  assert.match(economy,/Math\.max\(1, Math\.min\(25/);
+  const store=fs.readFileSync(path.join(__dirname,'..','store.js'),'utf8');
+  for(const src of [menus,combat,networking,world,frameLoop]){
+    assert.doesNotMatch(src,/tavernDice|tavernRoulette|tavernBlackjack|tavernToken|TavernDice|TavernRoulette|TavernBlackjack|TavernToken|TavernCashier|tavernGameAction|game_dealer/);
+  }
+  assert.doesNotMatch(economy,/handleTavernDice|handleTavernRoulette|handleTavernBlackjack|handleTavernTokenExchange|blackjack|rouletteColor/);
+  assert.doesNotMatch(room,/onMessage\('tavern(Dice|Roulette|Blackjack|TokenExchange)'|refundTavernBlackjack/);
+  assert.doesNotMatch(store,/tavernToken/);
+  // the tavern food/potion shop stays
+  assert.match(menus,/function openTavernUI/);
+});
+
+test('knowledge challenge is wired from client to server',()=>{
+  const kc=fs.readFileSync(path.join(__dirname,'..','..','client','js','knowledge-challenge.mjs'),'utf8');
+  const boot=fs.readFileSync(path.join(__dirname,'..','..','client','js','boot.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const room=fs.readFileSync(path.join(__dirname,'..','rooms','GameRoom.js'),'utf8');
+  const mixin=fs.readFileSync(path.join(__dirname,'..','rooms','knowledge-challenge.mixin.js'),'utf8');
+  // client controller + entry
+  assert.match(kc,/globalThis\.BlockcraftKnowledgeChallenge/);
+  assert.match(kc,/NET\.room/);
+  assert.match(kc,/send\('kcStart'/);
+  assert.match(kc,/send\('kcAnswer'/);
+  assert.match(boot,/knowledge-challenge\.mjs/);
+  assert.match(menus,/KNOWLEDGE CHALLENGE/);
+  assert.match(menus,/BlockcraftKnowledgeChallenge\.open/);
+  // networking relays the server messages
+  for(const t of ['kcShiftStarted','kcCase','kcResult','kcShiftReport','kcReject'])
+    assert.match(networking,new RegExp(t));
+  // server routes + mixin
+  assert.match(room,/onMessage\('kcStart'/);
+  assert.match(room,/onMessage\('kcAnswer'/);
+  assert.match(room,/onMessage\('kcEnd'/);
+  assert.match(room,/initKnowledgeChallengeState/);
+  assert.match(mixin,/handleKcStart|handleKcAnswer|kcEndShift/);
 });
 
 test('quest log progression director introduces one system at a time',()=>{

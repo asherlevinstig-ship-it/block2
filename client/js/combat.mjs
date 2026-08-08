@@ -6160,8 +6160,6 @@ function nearbyInteractionPrompt(){
   const petPracticeDragon=nearPetTamerPracticeDragon();
   if(petPracticeDragon&&jobTutorialPetDragonStep>0&&jobTutorialPetDragonStep<5)push({key:petTamerTutorialPromptKey(),title:'Your Hatched Dragon',small:jobTutorialPetDragonSeen?'Lesson complete':petTamerTutorialProgressLabel()+' - '+petTamerTutorialAction().key,priority:118},petPracticeDragon.distance);
   if(nearJobBoard())push({key:'G',title:'Job Board',small:'Open profession and contract work',priority:96},0);
-  const table=nearbyTavernGameTable();
-  if(table)push({key:'G',title:table.label,small:'Play tavern games',priority:94},table.distance);
   if(guardianUnderCrosshair(8)||nearbyGuardian())push({key:'G',title:'Aegis Guardian',small:'Open Guardian trials and rewards',priority:93},0);
   const vill=villagerUnderCrosshair(4.5)||nearbyVillager(3.7);
   if(vill)push({key:'G',title:vill.name||vill.shortName||'Villager',small:vill.title||'Talk',priority:90},vill.distance||0);
@@ -6228,26 +6226,6 @@ function claimReadyQuestAtService(){
 }
 function nearDragonRoost(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.roost.x, player.pos.z-HUB.roost.z)<13;
-}
-function nearTavernDiceTable(){
-  return dim==='overworld' && Math.hypot(player.pos.x-HUB.tavernDice.x, player.pos.z-HUB.tavernDice.z)<3.2;
-}
-function nearTavernRouletteTable(){
-  return dim==='overworld' && Math.hypot(player.pos.x-HUB.tavernRoulette.x, player.pos.z-HUB.tavernRoulette.z)<3.2;
-}
-function nearTavernBlackjackTable(){
-  return dim==='overworld' && Math.hypot(player.pos.x-HUB.tavernBlackjack.x, player.pos.z-HUB.tavernBlackjack.z)<3.2;
-}
-function nearbyTavernGameTable(range=3.8){
-  if(dim!=='overworld')return null;
-  const tables=[
-    {id:'dice',label:'Dice Table',x:HUB.tavernDice.x,z:HUB.tavernDice.z},
-    {id:'blackjack',label:'Blackjack Table',x:HUB.tavernBlackjack.x,z:HUB.tavernBlackjack.z},
-    {id:'roulette',label:'Roulette Table',x:HUB.tavernRoulette.x,z:HUB.tavernRoulette.z},
-  ];
-  let nearest=null,best=range;
-  for(const table of tables){const distance=Math.hypot(player.pos.x-table.x,player.pos.z-table.z);if(distance<best){best=distance;nearest={...table,distance};}}
-  return nearest;
 }
 function nearSkyshipGangway(){
   return dim==='overworld' && player.pos.x>=HUB.skyport.x-15.5 && player.pos.x<=HUB.skyport.x-6.5 &&
@@ -6407,9 +6385,6 @@ function secondaryAction(){
     return;
   }
   if(nearJobBoard()){ openJobsUI(); return; }
-  if(nearTavernDiceTable()){ openTavernDiceUI(); return; }
-  if(nearTavernRouletteTable()){ openTavernRouletteUI(); return; }
-  if(nearTavernBlackjackTable()){ openTavernBlackjackUI(); return; }
   if(nearDragonRoost()){ openDragonBondUI(); return; }
   const treasureClue=nearbyTreasureClue();
   if(treasureClue){if(NET.on&&NET.room)NET.room.send('treasureMapAdvance',{id:treasureClue.id});return;}
@@ -6554,7 +6529,6 @@ function interactWithVillager(vill){
     sysMsg('<b>'+escHTML(vill.name||'Westwind Travel Clerk')+':</b> "The Westwind flies to distant regions. Reach <b>S-Rank</b>, bring <b>1,000 gold</b>, then stand at the gangway and press <b>G</b> to board."');
   }
   else if(vill.role==='bartender') openTavernUI();
-  else if(vill.role==='token_cashier') openTavernCashierUI();
   else if(vill.role==='traveling_merchant'){
     sysMsg('<b>Road Merchant:</b> "What the town lacks, the road provides."');
     const s=nearbySmallDiscovery(8);
@@ -6692,7 +6666,6 @@ gameContext.registerModule('combat', Object.freeze({
   },
   showAbilityAwakening,
   startAbilityTraining,
-  nearbyTavernGameTable,
   nearbyInteractionPrompt,
   nearFellowshipNoticeBoard,
   nearFellowshipWeeklyCache,

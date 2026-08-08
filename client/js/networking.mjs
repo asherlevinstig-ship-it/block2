@@ -2444,6 +2444,8 @@ function netAttachRoom(room,name,client){
     room.onMessage('recallResult',m=>globalThis.BlockcraftRecall.result(m));
     room.onMessage('recallReject',m=>globalThis.BlockcraftRecall.reject(m));
     room.onMessage('recallMastery',m=>globalThis.BlockcraftRecall.setMastery(m));
+    for(const kcType of ['kcShiftStarted','kcCase','kcResult','kcCorrective','kcCorrectiveResult','kcShiftReport','kcReject'])
+      room.onMessage(kcType,m=>{if(globalThis.BlockcraftKnowledgeChallenge)globalThis.BlockcraftKnowledgeChallenge.handle(kcType,m);});
     room.onMessage('devMana', m=>{
       if(typeof m.int==='number') S.int=Math.max(S.int|0, m.int|0);   // raise client INT so maxMp/cast checks allow it
       if(typeof m.mp==='number') mp=Math.min(maxMp(), m.mp);
@@ -2483,10 +2485,6 @@ function netAttachRoom(room,name,client){
     room.onMessage('craftReject', m=>{ SFX.error(); sysMsg(m&&m.reason==='profession'?'Equip <b>'+((JOBS[m.job]&&JOBS[m.job].name)||'Cook')+'</b> and reach Lv '+(m.level||1)+' for that recipe':'Crafting failed: missing server-side ingredients'); });
     room.onMessage('shopResult', m=>{applyShopResult(m);if(m&&ITEMS[m.id])eventFeed('[Trade]',(m.action==='sell'?'Sold ':'Bought ')+feedStackText(m.id,m.count||1)+(m.gold?' for '+Math.abs(m.gold|0)+' gold':'')+'.',{key:'shop:'+String(m.vendor||'')+':'+String(m.action||'')+':'+m.id,cooldown:1500});});
     room.onMessage('shopReject', m=>shopRejected(m));
-    room.onMessage('tavernDiceResult', m=>applyTavernDiceResult(m));
-    room.onMessage('tavernRouletteResult', m=>applyTavernRouletteResult(m));
-    room.onMessage('tavernBlackjackState', m=>applyTavernBlackjackState(m));
-    room.onMessage('tavernTokenResult', m=>applyTavernTokenResult(m));
     room.onMessage('landClaims', m=>applyLandClaims(m));
     room.onMessage('landClaimUpdate', m=>applyLandClaimUpdate(m));
     room.onMessage('landClaimResult', m=>applyLandClaimResult(m));
@@ -2820,8 +2818,6 @@ function netRestoreProfile(m){
     utilityLoadout=clampUtilityLoadout(m.utilityLoadout);
     removeEquippedArmorCopies();
     if(typeof m.gold==='number') gold=Math.max(0,m.gold|0);
-    if(typeof m.tavernTokens==='number') tavernTokens=Math.max(0,m.tavernTokens|0);
-    {const today=new Date().toISOString().slice(0,10);tavernTokenRemaining=m.tavernTokenDay===today?Math.max(0,100-(m.tavernTokenBoughtToday|0)):100;}
     serverFirstQuestComplete=m.firstQuestRewardClaimed===true;
     firstQuestRewardRequestPending=false;
     if(m.e2eSkipFirstQuestRewardPresentation&&typeof markFirstQuestRewardPresentationSeen==='function') markFirstQuestRewardPresentationSeen();

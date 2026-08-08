@@ -2331,12 +2331,6 @@ function updateEncounterPrompt(){
       encounterPromptEl.innerHTML='<span class="key">G</span><b>Fellowship Weather Vane</b><small>Press G for active weather sites and sky planning</small>';
       return;
     }
-  const table=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive?combatApi.nearbyTavernGameTable():null;
-  if(table){
-    encounterPromptEl.classList.remove('danger','hidden');
-    encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(table.label)+'</b><small>Press G to interact</small>';
-    return;
-  }
   const ancient=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&combatApi.nearbyAncientCityInteractable&&combatApi.nearbyAncientCityInteractable(6.5);
   if(ancient){
     const prompt=ancient.type==='ancient_vault'

@@ -393,9 +393,6 @@ function defaultProfile(name) {
     highestGateRankCleared: -1,
     gold: 100,
     starterGoldGranted: true,
-    tavernTokens: 0,
-    tavernTokenDay: '',
-    tavernTokenBoughtToday: 0,
     firstQuestRewardClaimed: false,
     maraRoadReadySwordGranted: false,
     npcQuestChains: {},
@@ -976,9 +973,6 @@ function sanitizeProfile(p) {
   // to reach 100, without refilling players who spend it afterward.
   out.starterGoldGranted = true;
   if (p.starterGoldGranted !== true) out.gold = Math.max(100, out.gold);
-  out.tavernTokens = clampI(p.tavernTokens, 0, 1000000);
-  out.tavernTokenDay = typeof p.tavernTokenDay === 'string' ? p.tavernTokenDay.slice(0, 10) : '';
-  out.tavernTokenBoughtToday = clampI(p.tavernTokenBoughtToday, 0, 100);
   if (p.skyshipTransit && typeof p.skyshipTransit === 'object') {
     out.skyshipTransit = {
       route: p.skyshipTransit.route === 'western' ? 'western' : 'western',

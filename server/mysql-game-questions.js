@@ -1,3 +1,4 @@
+const KC = require('../shared/knowledge-challenge');
 const cleanText = (value, max = 255) => String(value || '').replace(/[<>]/g, '').trim().slice(0, max);
 const cleanStatus = value => {
   const status = String(value || 'draft').trim().toLowerCase();
@@ -65,6 +66,32 @@ function sourceIdFromAccount(account, type) {
   const id = String(account && account.id || '');
   const match = id.match(new RegExp('^' + type + '_([0-9]+)$'));
   return match ? Number(match[1]) : 0;
+}
+
+// Map a kc_student_atom row (snake_case, seconds) into the camelCase / epoch-ms
+// shape the pure engine (shared/knowledge-challenge.js) expects. A missing row
+// (unseen atom) returns {} so the engine applies its defaults.
+function atomStateFromRow(row) {
+  if (!row || row.stage == null) return {};
+  const bool = v => v === 1 || v === true;
+  return {
+    stage: Number(row.stage) || 0,
+    attempts: Number(row.attempts) || 0,
+    correct: Number(row.correct) || 0,
+    firstAttemptCorrect: Number(row.first_attempt_correct) || 0,
+    streak: Number(row.streak) || 0,
+    ease: row.ease == null ? 250 : Number(row.ease),
+    intervalIdx: Number(row.interval_idx) || 0,
+    nextDue: row.next_due_ms == null ? null : Number(row.next_due_ms),
+    formatsSeen: Number(row.formats_seen) || 0,
+    discriminated: bool(row.discriminated),
+    nearTransferOk: bool(row.near_transfer_ok),
+    explained: bool(row.explained),
+    delayedSuccess: bool(row.delayed_success),
+    lastShiftId: row.last_shift_id == null ? null : Number(row.last_shift_id),
+    sessionsSeen: Number(row.sessions_seen) || 0,
+    lastSeenAt: row.last_seen_ms == null ? 0 : Number(row.last_seen_ms),
+  };
 }
 
 function isCurriculumAdminAccount(account) {
@@ -289,9 +316,263 @@ class MySqlGameQuestionStore {
       KEY idx_ghp_student_subject (student_id, subject_id),
       KEY idx_ghp_homework (homework_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await this.ensureKnowledgeChallengeSchema(pool);
     await this.ensureCurriculumRequestColumns(pool);
     await this.ensureHomeworkColumns(pool);
+    await this.ensureKnowledgeChallengeColumns(pool);
+    await this.seedKnowledgeChallengeAtomTypes(pool);
     this.ready = true;
+  }
+
+  // Knowledge Challenge (adaptive practice engine) tables. See
+  // docs/KNOWLEDGE_CHALLENGE_DB.md. All additive: the press-p multiple_choice
+  // flow keeps using game_question / game_question_attempt unchanged.
+  async ensureKnowledgeChallengeSchema(pool) {
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_entity (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      school_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      code VARCHAR(64) NOT NULL,
+      name VARCHAR(120) NOT NULL,
+      topic VARCHAR(96) NOT NULL DEFAULT '',
+      stage VARCHAR(32) NOT NULL DEFAULT '',
+      summary TEXT NOT NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_kc_entity_code (subject_id, code),
+      KEY idx_kc_entity_subject (subject_id, is_active),
+      KEY idx_kc_entity_topic (topic)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_atom_type (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      subject_id INT UNSIGNED NULL,
+      code VARCHAR(48) NOT NULL,
+      label VARCHAR(96) NOT NULL,
+      sort_order SMALLINT NOT NULL DEFAULT 0,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_kc_atom_type (subject_id, code)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_atom (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      subject_id INT UNSIGNED NOT NULL,
+      entity_id INT UNSIGNED NOT NULL,
+      atom_type_id INT UNSIGNED NOT NULL,
+      code VARCHAR(96) NOT NULL,
+      statement TEXT NOT NULL,
+      difficulty TINYINT UNSIGNED NOT NULL DEFAULT 1,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_kc_atom_code (subject_id, code),
+      KEY idx_kc_atom_entity (entity_id),
+      KEY idx_kc_atom_type (atom_type_id),
+      KEY idx_kc_atom_subject (subject_id, is_active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_confusion_pair (
+      id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+      subject_id INT UNSIGNED NOT NULL,
+      atom_a_id INT UNSIGNED NOT NULL,
+      atom_b_id INT UNSIGNED NOT NULL,
+      note VARCHAR(240) NOT NULL DEFAULT '',
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_kc_confusion (subject_id, atom_a_id, atom_b_id),
+      KEY idx_kc_confusion_a (atom_a_id),
+      KEY idx_kc_confusion_b (atom_b_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_student_atom (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      student_id INT UNSIGNED NULL,
+      account_id VARCHAR(96) NOT NULL DEFAULT '',
+      subject_id INT UNSIGNED NOT NULL,
+      atom_id INT UNSIGNED NOT NULL,
+      stage TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      attempts INT UNSIGNED NOT NULL DEFAULT 0,
+      correct INT UNSIGNED NOT NULL DEFAULT 0,
+      first_attempt_correct INT UNSIGNED NOT NULL DEFAULT 0,
+      streak SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      ease SMALLINT NOT NULL DEFAULT 250,
+      interval_idx TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      next_due TIMESTAMP NULL,
+      formats_seen INT UNSIGNED NOT NULL DEFAULT 0,
+      discriminated TINYINT(1) NOT NULL DEFAULT 0,
+      near_transfer_ok TINYINT(1) NOT NULL DEFAULT 0,
+      explained TINYINT(1) NOT NULL DEFAULT 0,
+      last_shift_id BIGINT UNSIGNED NULL,
+      sessions_seen SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      delayed_success TINYINT(1) NOT NULL DEFAULT 0,
+      last_seen_at TIMESTAMP NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_ksa (account_id, atom_id),
+      KEY idx_ksa_due (account_id, subject_id, next_due),
+      KEY idx_ksa_stage (account_id, subject_id, stage),
+      KEY idx_ksa_student (student_id, subject_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_remediation (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      account_id VARCHAR(96) NOT NULL DEFAULT '',
+      student_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      atom_id INT UNSIGNED NOT NULL,
+      confusion_pair_id INT UNSIGNED NULL,
+      reason VARCHAR(48) NOT NULL DEFAULT 'wrong',
+      stage_of_loop TINYINT UNSIGNED NOT NULL DEFAULT 0,
+      corrective_passed TINYINT(1) NOT NULL DEFAULT 0,
+      recovery_passed TINYINT(1) NOT NULL DEFAULT 0,
+      due_after_cases SMALLINT UNSIGNED NOT NULL DEFAULT 4,
+      status ENUM('open','done','failed') NOT NULL DEFAULT 'open',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMP NULL,
+      PRIMARY KEY (id),
+      KEY idx_kc_rem_open (account_id, subject_id, status),
+      KEY idx_kc_rem_atom (atom_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_shift (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      account_id VARCHAR(96) NOT NULL DEFAULT '',
+      student_id INT UNSIGNED NULL,
+      school_id INT UNSIGNED NULL,
+      subject_id INT UNSIGNED NOT NULL,
+      shift_type ENUM('quick','standard','full','timed','endless') NOT NULL DEFAULT 'standard',
+      planned_cases SMALLINT UNSIGNED NOT NULL DEFAULT 20,
+      entry_cost_gold INT UNSIGNED NOT NULL DEFAULT 0,
+      payout_gold INT UNSIGNED NOT NULL DEFAULT 0,
+      status ENUM('active','ended','abandoned') NOT NULL DEFAULT 'active',
+      completed_cases SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      first_attempt_correct SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      independent_correct SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      near_transfer_correct SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      recovery_cases SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      handbook_uses SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      best_streak SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      stages_advanced SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      avg_response_ms INT UNSIGNED NOT NULL DEFAULT 0,
+      started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ended_at TIMESTAMP NULL,
+      PRIMARY KEY (id),
+      KEY idx_kc_shift_acct (account_id, subject_id, started_at),
+      KEY idx_kc_shift_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+    await pool.execute(`CREATE TABLE IF NOT EXISTS kc_shift_case (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      shift_id BIGINT UNSIGNED NOT NULL,
+      ordinal SMALLINT UNSIGNED NOT NULL,
+      question_id INT UNSIGNED NOT NULL,
+      atom_id INT UNSIGNED NOT NULL,
+      format VARCHAR(32) NOT NULL DEFAULT 'multiple_choice',
+      selector_reason VARCHAR(24) NOT NULL DEFAULT '',
+      first_attempt_correct TINYINT(1) NOT NULL DEFAULT 0,
+      corrected TINYINT(1) NOT NULL DEFAULT 0,
+      independent TINYINT(1) NOT NULL DEFAULT 1,
+      response_ms INT UNSIGNED NOT NULL DEFAULT 0,
+      gold_delta INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      KEY idx_kc_case_shift (shift_id, ordinal),
+      KEY idx_kc_case_atom (atom_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  }
+
+  // Extend the existing MCQ tables with atom/format/shift linkage. Idempotent:
+  // guarded by SHOW COLUMNS, mirroring ensureHomeworkColumns.
+  async ensureKnowledgeChallengeColumns(pool) {
+    const columnsOf = async table => {
+      try {
+        const [rows] = await pool.execute(`SHOW COLUMNS FROM ${table}`);
+        return Array.isArray(rows) ? rows.map(row => String(row.Field || '').toLowerCase()) : [];
+      } catch (_) {
+        return null;
+      }
+    };
+    const question = await columnsOf('game_question');
+    if (question) {
+      if (!question.includes('format')) {
+        await pool.execute(`ALTER TABLE game_question ADD COLUMN format ENUM(
+          'multiple_choice','classify','approve_reject','replace','compare',
+          'repair_diagram','predict_consequence','construct_justification'
+        ) NOT NULL DEFAULT 'multiple_choice' AFTER spec`);
+      }
+      if (!question.includes('entity_id')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN entity_id INT UNSIGNED NULL AFTER format');
+      }
+      if (!question.includes('primary_atom_id')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN primary_atom_id INT UNSIGNED NULL AFTER entity_id, ADD KEY idx_gq_atom (primary_atom_id)');
+      }
+      if (!question.includes('confusion_pair_id')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN confusion_pair_id INT UNSIGNED NULL AFTER primary_atom_id, ADD KEY idx_gq_confusion (confusion_pair_id)');
+      }
+      if (!question.includes('payload_json')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN payload_json LONGTEXT NULL AFTER explanation');
+      }
+    }
+    const attempt = await columnsOf('game_question_attempt');
+    if (attempt) {
+      if (!attempt.includes('atom_id')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN atom_id INT UNSIGNED NULL AFTER question_id, ADD KEY idx_gqa_atom (atom_id, created_at)');
+      }
+      if (!attempt.includes('format')) {
+        await pool.execute("ALTER TABLE game_question_attempt ADD COLUMN format VARCHAR(32) NOT NULL DEFAULT 'multiple_choice' AFTER atom_id");
+      }
+      if (!attempt.includes('shift_id')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN shift_id BIGINT UNSIGNED NULL AFTER format, ADD KEY idx_gqa_shift (shift_id)');
+      }
+      if (!attempt.includes('case_ordinal')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN case_ordinal SMALLINT UNSIGNED NULL AFTER shift_id');
+      }
+      if (!attempt.includes('first_attempt')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN first_attempt TINYINT(1) NOT NULL DEFAULT 1 AFTER case_ordinal');
+      }
+      if (!attempt.includes('required_correction')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN required_correction TINYINT(1) NOT NULL DEFAULT 0 AFTER first_attempt');
+      }
+      if (!attempt.includes('corrective_passed')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN corrective_passed TINYINT(1) NOT NULL DEFAULT 0 AFTER required_correction');
+      }
+      if (!attempt.includes('recovery_passed')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN recovery_passed TINYINT(1) NOT NULL DEFAULT 0 AFTER corrective_passed');
+      }
+      if (!attempt.includes('independent')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN independent TINYINT(1) NOT NULL DEFAULT 1 AFTER recovery_passed');
+      }
+      if (!attempt.includes('handbook_used')) {
+        await pool.execute('ALTER TABLE game_question_attempt ADD COLUMN handbook_used TINYINT(1) NOT NULL DEFAULT 0 AFTER independent');
+      }
+      if (!attempt.includes('selector_reason')) {
+        await pool.execute("ALTER TABLE game_question_attempt ADD COLUMN selector_reason VARCHAR(24) NOT NULL DEFAULT '' AFTER handbook_used");
+      }
+    }
+  }
+
+  // Seed the default global atom facets (subject_id NULL). Idempotent: only
+  // inserts when the global set is missing. Subjects may add their own later.
+  async seedKnowledgeChallengeAtomTypes(pool) {
+    let existing = 0;
+    try {
+      const [rows] = await pool.execute('SELECT COUNT(*) AS n FROM kc_atom_type WHERE subject_id IS NULL');
+      existing = Array.isArray(rows) && rows[0] ? Number(rows[0].n) || 0 : 0;
+    } catch (_) {
+      return;
+    }
+    if (existing > 0) return;
+    const defaults = [
+      ['recognition', 'Recognition', 10],
+      ['category', 'Category', 20],
+      ['purpose', 'Purpose', 30],
+      ['use', 'Use', 40],
+      ['advantage', 'Advantage', 50],
+      ['disadvantage', 'Disadvantage', 60],
+      ['comparison', 'Comparison', 70],
+      ['system_role', 'System role', 80],
+      ['contextual_justification', 'Contextual justification', 90],
+    ];
+    for (const [code, label, sort] of defaults) {
+      await pool.execute(
+        'INSERT INTO kc_atom_type (subject_id, code, label, sort_order) VALUES (NULL, ?, ?, ?)',
+        [code, label, sort],
+      ).catch(() => {});
+    }
   }
 
   async ensureCurriculumRequestColumns(pool) {
@@ -1212,6 +1493,422 @@ class MySqlGameQuestionStore {
     );
     const homeworkObjectives = await this.recordHomeworkProgress(account, subjectId, { fallbackToAnyActive: true });
     return { recorded: true, subjectId, questionId, studentId, homeworkObjectives };
+  }
+
+  // ---- Knowledge Challenge persistence (see docs/KNOWLEDGE_CHALLENGE_DB.md) ----
+  // Bridges the pure engine (shared/knowledge-challenge.js) to the kc_* tables.
+  // Player state keys on account_id (VARCHAR) so it works for any account;
+  // student_id is filled in when the account is a "student_N".
+
+  async resolvePlaySubject(account, input = {}) {
+    await this.ensureSchema();
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const pool = this.getPool();
+    const byId = clampInt(input.subjectId || input.subject_id, 0, 2147483647);
+    if (byId) {
+      const [rows] = await pool.execute(
+        `SELECT id, school_id FROM subjects
+         WHERE id = ? AND is_active = 1 AND (school_id IS NULL OR ? = 0 OR school_id = ?)
+         LIMIT 1`,
+        [byId, schoolId, schoolId],
+      );
+      const s = rows && rows[0];
+      return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id) } : null;
+    }
+    const name = cleanText(input.subject, 96);
+    if (!name) return null;
+    const [rows] = await pool.execute(
+      `SELECT id, school_id FROM subjects
+       WHERE is_active = 1 AND (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?))
+         AND (school_id IS NULL OR ? = 0 OR school_id = ?)
+       ORDER BY CASE WHEN school_id = ? THEN 0 ELSE 1 END, id ASC
+       LIMIT 1`,
+      [name, name, schoolId, schoolId, schoolId],
+    );
+    const s = rows && rows[0];
+    return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id) } : null;
+  }
+
+  // Student-merged atoms for the selector: every active atom in the subject,
+  // LEFT JOINed to this account's fluency record (null state for unseen atoms).
+  async loadStudentAtoms(account, query = {}) {
+    await this.ensureSchema();
+    const accountId = String(account && account.id || '');
+    const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
+    if (!subjectId) return { subjectId: 0, atoms: [] };
+    const [rows] = await this.getPool().execute(
+      `SELECT a.id AS atom_id, a.difficulty, a.entity_id,
+              sa.stage, sa.attempts, sa.correct, sa.first_attempt_correct, sa.streak,
+              sa.ease, sa.interval_idx, UNIX_TIMESTAMP(sa.next_due) * 1000 AS next_due_ms,
+              sa.formats_seen, sa.discriminated, sa.near_transfer_ok, sa.explained,
+              sa.delayed_success, sa.last_shift_id, sa.sessions_seen,
+              UNIX_TIMESTAMP(sa.last_seen_at) * 1000 AS last_seen_ms
+       FROM kc_atom a
+       LEFT JOIN kc_student_atom sa ON sa.atom_id = a.id AND sa.account_id = ?
+       WHERE a.subject_id = ? AND a.is_active = 1
+       ORDER BY a.id ASC`,
+      [accountId, subjectId],
+    );
+    const atoms = (rows || []).map(row => ({
+      atomId: Number(row.atom_id) || 0,
+      difficulty: Number(row.difficulty) || 1,
+      entityId: Number(row.entity_id) || 0,
+      state: atomStateFromRow(row),
+    }));
+    return { subjectId, atoms };
+  }
+
+  // Fetch a servable challenge for a selected atom, optionally avoiding a format
+  // the atom was just shown in. Returns null when the atom has no live question.
+  async loadChallengeForAtom(subjectId, atomId, opts = {}) {
+    await this.ensureSchema();
+    subjectId = clampInt(subjectId, 1, 2147483647);
+    atomId = clampInt(atomId, 1, 2147483647);
+    if (!subjectId || !atomId) return null;
+    const [rows] = await this.getPool().execute(
+      `SELECT id, format, prompt, answers, correct_index, explanation, payload_json,
+              entity_id, primary_atom_id, confusion_pair_id, difficulty
+       FROM game_question
+       WHERE subject_id = ? AND primary_atom_id = ? AND is_active = 1
+         AND review_status IN ('approved', 'teacher-reviewed')
+       ORDER BY RAND()
+       LIMIT 8`,
+      [subjectId, atomId],
+    );
+    let list = rows || [];
+    if (!list.length) return null;
+    const avoid = cleanText(opts.avoidFormat, 32);
+    if (avoid) { const filtered = list.filter(r => r.format !== avoid); if (filtered.length) list = filtered; }
+    const row = list[0];
+    let answers = [];
+    try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
+    if (!Array.isArray(answers)) answers = [];
+    let payload = null;
+    if (row.payload_json) { try { payload = JSON.parse(row.payload_json); } catch (_) {} }
+    return {
+      questionId: Number(row.id) || 0,
+      atomId,
+      format: row.format || 'multiple_choice',
+      prompt: row.prompt || '',
+      answers,
+      correctIndex: Number(row.correct_index) || 0,
+      explanation: row.explanation || '',
+      payload,
+      entityId: row.entity_id == null ? null : Number(row.entity_id),
+      confusionPairId: row.confusion_pair_id == null ? null : Number(row.confusion_pair_id),
+      difficulty: Number(row.difficulty) || 1,
+    };
+  }
+
+  async loadConfusionPairs(subjectId) {
+    await this.ensureSchema();
+    subjectId = clampInt(subjectId, 1, 2147483647);
+    if (!subjectId) return [];
+    const [rows] = await this.getPool().execute(
+      'SELECT atom_a_id, atom_b_id FROM kc_confusion_pair WHERE subject_id = ?',
+      [subjectId],
+    );
+    return (rows || []).map(r => ({ atomAId: Number(r.atom_a_id) || 0, atomBId: Number(r.atom_b_id) || 0 }));
+  }
+
+  // Idempotent bulk import of a content pack for one subject: entities -> atoms
+  // -> atom-linked questions, plus confusion pairs. Re-running updates in place
+  // (entities/atoms dedupe on their stable code; questions on subject+prompt).
+  async importContentPack(subjectId, pack = {}, opts = {}) {
+    await this.ensureSchema();
+    subjectId = clampInt(subjectId, 1, 2147483647);
+    if (!subjectId) throw Object.assign(new Error('A subjectId is required.'), { code: 'subject' });
+    const pool = this.getPool();
+    const schoolId = clampInt(opts.schoolId, 0, 2147483647) || null;
+    const counts = { atomTypes: 0, entities: 0, atoms: 0, questions: 0, pairs: 0 };
+
+    for (const t of Array.isArray(pack.atomTypes) ? pack.atomTypes : []) {
+      const code = cleanText(t.code, 48);
+      if (!code) continue;
+      await pool.execute(
+        `INSERT INTO kc_atom_type (subject_id, code, label, sort_order) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE label = VALUES(label), sort_order = VALUES(sort_order)`,
+        [subjectId, code, cleanText(t.label, 96) || code, clampInt(t.sortOrder, 0, 32767)],
+      );
+      counts.atomTypes++;
+    }
+
+    // Resolve atom-type code -> id (subject-specific wins over the global default set).
+    const [typeRows] = await pool.execute(
+      'SELECT id, code, subject_id FROM kc_atom_type WHERE subject_id = ? OR subject_id IS NULL',
+      [subjectId],
+    );
+    const typeByCode = new Map();
+    for (const r of typeRows || []) {
+      const prev = typeByCode.get(r.code);
+      if (!prev || (prev.subject_id == null && r.subject_id != null)) typeByCode.set(r.code, r);
+    }
+
+    const atomIdByCode = new Map();
+    for (const e of Array.isArray(pack.entities) ? pack.entities : []) {
+      const eCode = cleanText(e.code, 64);
+      if (!eCode) continue;
+      const topic = cleanText(e.topic, 96);
+      const stage = cleanText(e.stage, 32);
+      const [er] = await pool.execute(
+        `INSERT INTO kc_entity (school_id, subject_id, code, name, topic, stage, summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), name = VALUES(name), topic = VALUES(topic), stage = VALUES(stage), summary = VALUES(summary)`,
+        [schoolId, subjectId, eCode, cleanText(e.name, 120) || eCode, topic, stage, cleanText(e.summary, 2000)],
+      );
+      const entityId = Number(er.insertId) || 0;
+      counts.entities++;
+      for (const a of Array.isArray(e.atoms) ? e.atoms : []) {
+        const typeRow = typeByCode.get(cleanText(a.type, 48));
+        if (!typeRow) continue;
+        const difficulty = clampInt(a.difficulty || 1, 1, 3);
+        const code = eCode + '.' + typeRow.code;
+        const [ar] = await pool.execute(
+          `INSERT INTO kc_atom (subject_id, entity_id, atom_type_id, code, statement, difficulty)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), entity_id = VALUES(entity_id), atom_type_id = VALUES(atom_type_id), statement = VALUES(statement), difficulty = VALUES(difficulty)`,
+          [subjectId, entityId, Number(typeRow.id), code, cleanText(a.statement, 2000), difficulty],
+        );
+        const atomId = Number(ar.insertId) || 0;
+        atomIdByCode.set(code, atomId);
+        counts.atoms++;
+        for (const q of Array.isArray(a.questions) ? a.questions : []) {
+          const prompt = cleanText(q.prompt, 500);
+          if (prompt.length < 3) continue;
+          const format = KC.FORMATS.includes(q.format) ? q.format : 'multiple_choice';
+          const answers = JSON.stringify(Array.isArray(q.answers) ? q.answers.map(v => cleanText(v, 160)).filter(Boolean) : []);
+          const correct = clampInt(q.correct, 0, 15);
+          const explanation = cleanText(q.explanation, 800);
+          const payload = q.payload ? JSON.stringify(q.payload) : null;
+          const [existing] = await pool.execute('SELECT id FROM game_question WHERE subject_id = ? AND prompt = ? LIMIT 1', [subjectId, prompt]);
+          const qid = (existing && existing[0] && Number(existing[0].id)) || 0;
+          if (qid) {
+            await pool.execute(
+              `UPDATE game_question SET format = ?, entity_id = ?, primary_atom_id = ?, answers = ?, correct_index = ?, explanation = ?, payload_json = ?, topic = ?, stage = ?, difficulty = ?, review_status = 'approved', is_active = 1 WHERE id = ?`,
+              [format, entityId, atomId, answers, correct, explanation, payload, topic, stage, difficulty, qid],
+            );
+          } else {
+            await pool.execute(
+              `INSERT INTO game_question
+               (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active, format, entity_id, primary_atom_id, payload_json)
+               VALUES (?, ?, NULL, ?, ?, ?, 'kc-pack', ?, ?, ?, ?, 'approved', 1, ?, ?, ?, ?)`,
+              [schoolId, subjectId, topic, stage, difficulty, prompt, answers, correct, explanation, format, entityId, atomId, payload],
+            );
+          }
+          counts.questions++;
+        }
+      }
+    }
+
+    for (const p of Array.isArray(pack.confusionPairs) ? pack.confusionPairs : []) {
+      const aId = atomIdByCode.get(cleanText(p.a, 96));
+      const bId = atomIdByCode.get(cleanText(p.b, 96));
+      if (!aId || !bId) continue;
+      await pool.execute(
+        `INSERT INTO kc_confusion_pair (subject_id, atom_a_id, atom_b_id, note) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE note = VALUES(note)`,
+        [subjectId, aId, bId, cleanText(p.note, 240)],
+      );
+      counts.pairs++;
+    }
+    return counts;
+  }
+
+  async listOpenRemediation(account, query = {}) {
+    await this.ensureSchema();
+    const accountId = String(account && account.id || '');
+    const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
+    if (!accountId || !subjectId) return [];
+    const [rows] = await this.getPool().execute(
+      `SELECT id, atom_id, confusion_pair_id, reason, stage_of_loop,
+              corrective_passed, recovery_passed, due_after_cases
+       FROM kc_remediation
+       WHERE account_id = ? AND subject_id = ? AND status = 'open'
+       ORDER BY created_at ASC`,
+      [accountId, subjectId],
+    );
+    return (rows || []).map(r => ({
+      id: Number(r.id) || 0,
+      atomId: Number(r.atom_id) || 0,
+      confusionPairId: r.confusion_pair_id == null ? null : Number(r.confusion_pair_id),
+      reason: r.reason || 'wrong',
+      stageOfLoop: Number(r.stage_of_loop) || 0,
+      correctivePassed: r.corrective_passed === 1 || r.corrective_passed === true,
+      recoveryPassed: r.recovery_passed === 1 || r.recovery_passed === true,
+      dueAfterCases: Number(r.due_after_cases) || 0,
+    }));
+  }
+
+  // Load -> run the pure stage machine -> upsert. Returns the engine verdict.
+  async recordAtomReview(account, input = {}) {
+    await this.ensureSchema();
+    const accountId = String(account && account.id || '');
+    const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
+    const atomId = clampInt(input.atomId || input.atom_id, 1, 2147483647);
+    if (!accountId || !subjectId || !atomId) return { recorded: false, reason: 'context' };
+    const now = Number(input.now) || Date.now();
+    const pool = this.getPool();
+    const [rows] = await pool.execute(
+      `SELECT stage, attempts, correct, first_attempt_correct, streak, ease, interval_idx,
+              UNIX_TIMESTAMP(next_due) * 1000 AS next_due_ms, formats_seen,
+              discriminated, near_transfer_ok, explained, delayed_success,
+              last_shift_id, sessions_seen, UNIX_TIMESTAMP(last_seen_at) * 1000 AS last_seen_ms
+       FROM kc_student_atom WHERE account_id = ? AND atom_id = ? LIMIT 1`,
+      [accountId, atomId],
+    );
+    const prev = atomStateFromRow(rows && rows[0]);
+    const result = KC.reviewAtom(prev, input.event || {}, now);
+    const s = result.state;
+    const b = v => (v ? 1 : 0);
+    const studentId = sourceIdFromAccount(account, 'student') || null;
+    await pool.execute(
+      `INSERT INTO kc_student_atom
+       (student_id, account_id, subject_id, atom_id, stage, attempts, correct, first_attempt_correct,
+        streak, ease, interval_idx, next_due, formats_seen, discriminated, near_transfer_ok, explained,
+        delayed_success, last_shift_id, sessions_seen, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000), ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000))
+       ON DUPLICATE KEY UPDATE
+         stage = VALUES(stage), attempts = VALUES(attempts), correct = VALUES(correct),
+         first_attempt_correct = VALUES(first_attempt_correct), streak = VALUES(streak),
+         ease = VALUES(ease), interval_idx = VALUES(interval_idx), next_due = VALUES(next_due),
+         formats_seen = VALUES(formats_seen), discriminated = VALUES(discriminated),
+         near_transfer_ok = VALUES(near_transfer_ok), explained = VALUES(explained),
+         delayed_success = VALUES(delayed_success), last_shift_id = VALUES(last_shift_id),
+         sessions_seen = VALUES(sessions_seen), last_seen_at = VALUES(last_seen_at)`,
+      [
+        studentId, accountId, subjectId, atomId, s.stage, s.attempts, s.correct, s.firstAttemptCorrect,
+        s.streak, s.ease, s.intervalIdx, s.nextDue, s.formatsSeen, b(s.discriminated), b(s.nearTransferOk),
+        b(s.explained), b(s.delayedSuccess), s.lastShiftId, s.sessionsSeen, s.lastSeenAt,
+      ],
+    );
+    return { recorded: true, state: s, advanced: result.advanced, regressed: result.regressed, reachedMaintain: result.reachedMaintain };
+  }
+
+  async openRemediation(account, input = {}) {
+    await this.ensureSchema();
+    const accountId = String(account && account.id || '');
+    const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
+    const atomId = clampInt(input.atomId || input.atom_id, 1, 2147483647);
+    if (!accountId || !subjectId || !atomId) return { opened: false };
+    const studentId = sourceIdFromAccount(account, 'student') || null;
+    const reason = ['wrong', 'confusion', 'regression'].includes(String(input.reason || '')) ? String(input.reason) : 'wrong';
+    const dueAfterCases = clampInt(input.dueAfterCases == null ? 4 : input.dueAfterCases, 1, 20);
+    const [result] = await this.getPool().execute(
+      `INSERT INTO kc_remediation
+       (account_id, student_id, subject_id, atom_id, confusion_pair_id, reason, due_after_cases)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [accountId, studentId, subjectId, atomId, clampInt(input.confusionPairId, 0, 2147483647) || null, reason, dueAfterCases],
+    );
+    return { opened: true, id: Number(result && result.insertId) || 0 };
+  }
+
+  async resolveRemediation(id, patch = {}) {
+    await this.ensureSchema();
+    id = clampInt(id, 1, Number.MAX_SAFE_INTEGER);
+    if (!id) return { updated: false };
+    const status = ['open', 'done', 'failed'].includes(String(patch.status || '')) ? String(patch.status) : 'done';
+    const done = status !== 'open';
+    await this.getPool().execute(
+      `UPDATE kc_remediation
+       SET stage_of_loop = ?, corrective_passed = ?, recovery_passed = ?, status = ?,
+           resolved_at = ${done ? 'NOW()' : 'NULL'}
+       WHERE id = ?`,
+      [clampInt(patch.stageOfLoop, 0, 2), patch.correctivePassed ? 1 : 0, patch.recoveryPassed ? 1 : 0, status, id],
+    );
+    return { updated: true };
+  }
+
+  async startShift(account, input = {}) {
+    await this.ensureSchema();
+    const accountId = String(account && account.id || '');
+    const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
+    if (!accountId || !subjectId) return { started: false };
+    const types = ['quick', 'standard', 'full', 'timed', 'endless'];
+    const shiftType = types.includes(String(input.shiftType || '')) ? String(input.shiftType) : 'standard';
+    const plannedCases = clampInt(input.plannedCases, 0, 200);
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647) || null;
+    const studentId = sourceIdFromAccount(account, 'student') || null;
+    const [result] = await this.getPool().execute(
+      `INSERT INTO kc_shift
+       (account_id, student_id, school_id, subject_id, shift_type, planned_cases, entry_cost_gold, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active')`,
+      [accountId, studentId, schoolId, subjectId, shiftType, plannedCases, clampInt(input.entryCostGold, 0, 1000000)],
+    );
+    return { started: true, id: Number(result && result.insertId) || 0, shiftType, plannedCases };
+  }
+
+  async recordShiftCase(input = {}) {
+    await this.ensureSchema();
+    const shiftId = clampInt(input.shiftId || input.shift_id, 1, Number.MAX_SAFE_INTEGER);
+    if (!shiftId) return { recorded: false };
+    await this.getPool().execute(
+      `INSERT INTO kc_shift_case
+       (shift_id, ordinal, question_id, atom_id, format, selector_reason,
+        first_attempt_correct, corrected, independent, response_ms, gold_delta)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        shiftId, clampInt(input.ordinal, 0, 65535), clampInt(input.questionId, 0, 2147483647),
+        clampInt(input.atomId, 0, 2147483647), cleanText(input.format || 'multiple_choice', 32),
+        cleanText(input.selectorReason, 24), input.firstAttemptCorrect ? 1 : 0, input.corrected ? 1 : 0,
+        input.independent === false ? 0 : 1, clampInt(input.responseMs, 0, 60 * 60 * 1000),
+        Math.round(Number(input.goldDelta) || 0),
+      ],
+    );
+    return { recorded: true };
+  }
+
+  // Finalise a shift with its payout and roll-up totals. Only touches an 'active'
+  // shift, so a double end / late disconnect cannot overwrite the result.
+  async endShift(shiftId, input = {}) {
+    await this.ensureSchema();
+    shiftId = clampInt(shiftId, 1, Number.MAX_SAFE_INTEGER);
+    if (!shiftId) return { ended: false };
+    const status = ['ended', 'abandoned'].includes(String(input.status || '')) ? String(input.status) : 'ended';
+    const t = input.totals || {};
+    const [result] = await this.getPool().execute(
+      `UPDATE kc_shift SET
+         status = ?, payout_gold = ?, completed_cases = ?, first_attempt_correct = ?,
+         independent_correct = ?, near_transfer_correct = ?, recovery_cases = ?, handbook_uses = ?,
+         best_streak = ?, stages_advanced = ?, avg_response_ms = ?, ended_at = NOW()
+       WHERE id = ? AND status = 'active'`,
+      [
+        status, clampInt(input.payoutGold, 0, 1000000), clampInt(t.completedCases, 0, 65535),
+        clampInt(t.firstAttemptCorrect, 0, 65535), clampInt(t.independentCorrect, 0, 65535),
+        clampInt(t.nearTransferCorrect, 0, 65535), clampInt(t.recoveryCases, 0, 65535),
+        clampInt(t.handbookUses, 0, 65535), clampInt(t.bestStreak, 0, 65535),
+        clampInt(t.stagesAdvanced, 0, 65535), clampInt(t.avgResponseMs, 0, 60 * 60 * 1000), shiftId,
+      ],
+    );
+    return { ended: (result && result.affectedRows) ? true : false, status };
+  }
+
+  async logChallengeAttempt(account, input = {}) {
+    await this.ensureSchema();
+    const accountId = String(account && account.id || '');
+    const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
+    const questionId = clampInt(input.questionId || input.question_id, 1, 2147483647);
+    if (!accountId || !subjectId || !questionId) return { recorded: false };
+    const studentId = sourceIdFromAccount(account, 'student') || null;
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647) || null;
+    await this.getPool().execute(
+      `INSERT INTO game_question_attempt
+       (school_id, subject_id, class_id, question_id, student_id, account_id, answer_index, correct,
+        duration_ms, source, atom_id, format, shift_id, case_ordinal, first_attempt, required_correction,
+        corrective_passed, recovery_passed, independent, handbook_used, selector_reason)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        schoolId, subjectId, questionId, studentId, accountId,
+        clampInt(input.answerIndex, 0, 15), input.correct ? 1 : 0,
+        clampInt(input.durationMs, 0, 60 * 60 * 1000), cleanText(input.source || 'knowledge_challenge', 32),
+        clampInt(input.atomId, 0, 2147483647) || null, cleanText(input.format || 'multiple_choice', 32),
+        clampInt(input.shiftId, 0, Number.MAX_SAFE_INTEGER) || null,
+        input.caseOrdinal == null ? null : clampInt(input.caseOrdinal, 0, 65535),
+        input.firstAttempt === false ? 0 : 1, input.requiredCorrection ? 1 : 0,
+        input.correctivePassed ? 1 : 0, input.recoveryPassed ? 1 : 0,
+        input.independent === false ? 0 : 1, input.handbookUsed ? 1 : 0, cleanText(input.selectorReason, 24),
+      ],
+    );
+    return { recorded: true };
   }
 
   async analytics(account, query = {}) {

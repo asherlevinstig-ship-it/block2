@@ -266,6 +266,7 @@ class GameRoom extends Room {
     this.trades = new Map();
     this.tradeSeq = 0;
     this.initRecallState();
+    this.initKnowledgeChallengeState();
 
     // ---- dungeon / gate lifecycle (dungeon.mixin.js) ----
     this.initDungeonState();        // must precede restoreSavedGates (populates gateSeq/gateTtls)
@@ -413,6 +414,10 @@ class GameRoom extends Room {
     this.onMessage('recallStart', (client, m) => this.handleRecallStart(client, m));
     this.onMessage('recallAnswer', (client, m) => this.handleRecallAnswer(client, m));
     this.onMessage('recallSubject', (client, m) => this.handleRecallSubject(client, m));
+    this.onMessage('kcStart', (client, m) => this.handleKcStart(client, m));
+    this.onMessage('kcAnswer', (client, m) => this.handleKcAnswer(client, m));
+    this.onMessage('kcCorrective', (client, m) => this.handleKcCorrective(client, m));
+    this.onMessage('kcEnd', (client, m) => this.handleKcEnd(client, m));
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
     this.onMessage('adminGateTeleport', (client, m) => this.handleAdminGateTeleport(client, m));
     this.onMessage('adminQuickGate', (client, m) => this.handleAdminQuickGate(client, m));
@@ -725,10 +730,6 @@ class GameRoom extends Room {
     this.onMessage('attuneShard', (client, m) => this.handleAttuneShard(client, m));
     this.onMessage('craft', (client, m) => this.handleCraft(client, m));
     this.onMessage('shop', (client, m) => this.handleShop(client, m));
-    this.onMessage('tavernDice', (client, m) => this.handleTavernDice(client, m));
-    this.onMessage('tavernRoulette', (client, m) => this.handleTavernRoulette(client, m));
-    this.onMessage('tavernBlackjack', (client, m) => this.handleTavernBlackjack(client, m));
-    this.onMessage('tavernTokenExchange', (client, m) => this.handleTavernTokenExchange(client, m));
     this.onMessage('farm', (client, m) => this.handleFarm(client, m));
     this.onMessage('prospect', client => this.handleProspect(client));
     this.onMessage('eventJoin', (client) => this.handleEventJoin(client));
@@ -1275,7 +1276,7 @@ class GameRoom extends Room {
   }
 
   async finalizeLeave(client) {
-    if (typeof this.refundTavernBlackjack === 'function') this.refundTavernBlackjack(client, 'disconnect');
+    if (typeof this.kcAbandon === 'function') this.kcAbandon(client);
     if (this.sleepingPlayers) this.sleepingPlayers.delete(client.sessionId);
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
     if (this.petTamerServices) {
@@ -4997,7 +4998,6 @@ class GameRoom extends Room {
     add('mounts',Array.isArray(prof.mountUnlocks)&&prof.mountUnlocks.length>0);
     add('specialisation',!!prof.abilitySpec);
     add('roads',(prof.roadWardenRep|0)>0||!!prof.regionalContract);
-    add('gambling',(prof.tavernTokens|0)>0||(prof.tavernTokenBoughtToday|0)>0);
     add('dragons',Array.isArray(prof.mountUnlocks)&&prof.mountUnlocks.some(v=>String(v).startsWith('dragon:')));
     add('dragon_mastery',rank>=4&&Array.isArray(prof.mountUnlocks)&&prof.mountUnlocks.some(v=>String(v).startsWith('dragon:')));
     add('frontier',Array.isArray(prof.pos)&&prof.pos[0]>=W.LAVA_BORDER_WIDTH+20);
@@ -8043,6 +8043,7 @@ applyMixin(GameRoom, require('./combat.mixin'));
 applyMixin(GameRoom, require('./teams.mixin'));
 applyMixin(GameRoom, require('./metrics.mixin'));
 applyMixin(GameRoom, require('./recall.mixin'));
+applyMixin(GameRoom, require('./knowledge-challenge.mixin'));
 
 
 module.exports = {

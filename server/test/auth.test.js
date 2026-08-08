@@ -178,6 +178,7 @@ test('MySQL auth backend exchanges MIS teacher auth_token for a Blockcraft sessi
         }]];
       }
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 22, name: 'Riverside School', domain: 'riverside.test' }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -216,6 +217,7 @@ test('MySQL auth backend preserves admin teacher role and resolves linked school
         domain: null,
       }]];
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -245,6 +247,7 @@ test('MySQL auth backend resolves teacher school from teacher domain when school
       }]];
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[]];
       if (/FROM schools WHERE LOWER\(domain\) = \?/i.test(sql) && params[0] === 'town.ac.uk') return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -296,6 +299,7 @@ test('MySQL auth backend resolves existing personal-email students through their
         school_id: 12,
       }]];
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -322,6 +326,7 @@ test('MySQL auth backend falls back to school email domain when student school_i
       }]];
       if (/FROM schools WHERE id = \?/i.test(sql)) return [[]];
       if (/FROM schools WHERE LOWER\(domain\) = \?/i.test(sql)) return [[{ id: 12, name: 'Town Academy', domain: 'town.ac.uk' }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -347,6 +352,7 @@ test('MySQL student registration inserts a bcrypt student account with optional 
         inserts.push({ sql, params });
         return [{ insertId: 77 }];
       }
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -384,6 +390,7 @@ test('MySQL student registration works when students has no year_group column', 
         insert = { sql, params };
         return [{ insertId: 78 }];
       }
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -404,6 +411,7 @@ test('MySQL student registration rejects email domains without a matching school
       if (/FROM teachers/i.test(sql)) return [[]];
       if (/FROM students/i.test(sql)) return [[]];
       if (/FROM schools/i.test(sql)) return [[]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -454,6 +462,7 @@ test('MySQL game question store creates the game_question table and teacher-owne
         review_status: 'teacher-reviewed',
         is_active: 1,
       }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -480,6 +489,39 @@ test('MySQL game question store creates the game_question table and teacher-owne
   assert.equal(inserted.params[0], 12);
   assert.equal(inserted.params[1], 5);
   assert.equal(inserted.params[2], 7);
+});
+
+test('MySQL store provisions the Knowledge Challenge schema and seeds the default atom types', async () => {
+  const calls = [];
+  const atomTypeInserts = [];
+  const pool = {
+    async execute(sql, params = []) {
+      calls.push(sql);
+      if (/^\s*SHOW COLUMNS FROM/i.test(sql)) return [[]]; // no columns yet -> ALTERs fire
+      if (/SELECT COUNT\(\*\) AS n FROM kc_atom_type/i.test(sql)) return [[{ n: 0 }]];
+      if (/^\s*INSERT INTO kc_atom_type/i.test(sql)) { atomTypeInserts.push(params); return [{ insertId: atomTypeInserts.length }]; }
+      return [{ affectedRows: 0 }];
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  await store.ensureSchema();
+  const joined = calls.join('\n');
+  for (const table of ['kc_entity', 'kc_atom_type', 'kc_atom', 'kc_confusion_pair', 'kc_student_atom', 'kc_remediation', 'kc_shift', 'kc_shift_case']) {
+    assert.match(joined, new RegExp('CREATE TABLE IF NOT EXISTS ' + table + '\\b'), 'missing table ' + table);
+  }
+  // Existing MCQ tables are extended, not replaced.
+  assert.match(joined, /ALTER TABLE game_question ADD COLUMN format ENUM/);
+  assert.match(joined, /ALTER TABLE game_question ADD COLUMN primary_atom_id/);
+  assert.match(joined, /ALTER TABLE game_question_attempt ADD COLUMN first_attempt/);
+  assert.match(joined, /ALTER TABLE game_question_attempt ADD COLUMN selector_reason/);
+  // The nine default atom facets are seeded globally (subject_id NULL).
+  assert.equal(atomTypeInserts.length, 9);
+  assert.deepEqual(atomTypeInserts.map(p => p[0]), [
+    'recognition', 'category', 'purpose', 'use', 'advantage',
+    'disadvantage', 'comparison', 'system_role', 'contextual_justification',
+  ]);
+  // Seeds globally: subject_id is a literal NULL in the statement, not a bound param.
+  assert.match(joined, /INSERT INTO kc_atom_type \(subject_id, code, label, sort_order\) VALUES \(NULL/);
 });
 
 test('MySQL game question store lists a shared subject question bank', async () => {
@@ -514,6 +556,7 @@ test('MySQL game question store lists a shared subject question bank', async () 
         review_status: 'approved',
         is_active: 1,
       }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -551,6 +594,7 @@ test('MySQL game question store records Recall attempts for student analytics', 
         inserts.push({ kind: 'question', sql, params });
         return [{ insertId: 44 }];
       }
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -626,6 +670,7 @@ test('MySQL game question store counts Recall attempts toward active homework', 
         status: 'live',
         notes: '',
       }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -704,6 +749,7 @@ test('MySQL game question store credits active homework when tutorial Recall sub
           notes: '',
         }]];
       }
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -763,6 +809,7 @@ test('MySQL game question store creates scheduled homework for teacher classes',
         status: 'scheduled',
         notes: 'Focus on routers and DNS.',
       }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -864,6 +911,7 @@ test('MySQL game question store lists student subjects from assigned classes', a
         { id: 6, name: 'Maths', code: 'MATH', school_id: 12 },
       ]];
       if (/JOIN classes c ON c.subject_id = s.id/i.test(sql)) return [[]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
@@ -1034,6 +1082,7 @@ test('MySQL game question analytics includes class students with zero attempts',
         attempts: 2,
         correct: 1,
       }]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
       throw new Error('unexpected SQL: ' + sql);
     },
   };
