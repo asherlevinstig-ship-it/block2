@@ -20,6 +20,7 @@ const FORMAT_INSTRUCTION = {
 
 let overlay = null, panel = null, shift = null, pending = null, caseAt = 0, busy = false;
 let awaitingContinue = false, buffered = null;
+let tableHeat = 0, lastStreak = 0;
 
 function now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
 function el(tag, cls, html) { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; }
@@ -59,7 +60,7 @@ function open() {
 }
 function close() {
   if (shift && !busy) send('kcEnd', { reason: 'ended' });
-  hide(); shift = null; pending = null; awaitingContinue = false; buffered = null;
+  hide(); shift = null; pending = null; awaitingContinue = false; buffered = null; tableHeat = 0; lastStreak = 0;
 }
 
 function renderChooser() {
@@ -83,8 +84,29 @@ function renderChooser() {
 function start(type) {
   if (busy) return;
   busy = true;
+  tableHeat = 0; lastStreak = 0;
   tavernFx('start', { shiftType: type });
   send('kcStart', { shiftType: type, subject: subject(), fallbackSubject: FALLBACK_SUBJECT });
+}
+
+function heatLabel() {
+  if (tableHeat >= 90) return 'ON FIRE';
+  if (tableHeat >= 65) return 'HOT HAND';
+  if (tableHeat >= 35) return 'WARMING';
+  return 'QUIET TABLE';
+}
+
+function renderTableStatus(m) {
+  const wrap = el('div', 'kc-table-status');
+  const heat = el('div', 'kc-heat');
+  heat.innerHTML = '<span>TABLE HEAT</span><b>' + heatLabel() + '</b><i style="width:' + Math.max(4, Math.min(100, tableHeat | 0)) + '%"></i>';
+  const streak = el('div', 'kc-streak');
+  streak.innerHTML = '<span>STREAK</span><b>x' + Math.max(0, lastStreak | 0) + '</b>';
+  const pot = el('div', 'kc-pot');
+  const left = m && m.planned ? Math.max(0, (m.planned | 0) - (m.ordinal | 0) + 1) : 0;
+  pot.innerHTML = '<span>' + (left ? 'CASES LEFT' : 'POT') + '</span><b>' + (left || 'OPEN') + '</b>';
+  wrap.appendChild(heat); wrap.appendChild(streak); wrap.appendChild(pot);
+  panel.appendChild(wrap);
 }
 
 function caseHeader(m) {
@@ -92,6 +114,7 @@ function caseHeader(m) {
   head.appendChild(el('span', 'kc-tag', esc(REASON_LABEL[m.reason] || 'Practice')));
   head.appendChild(el('span', 'kc-count', (m.ordinal | 0) + (m.planned ? ' / ' + m.planned : '')));
   panel.appendChild(head);
+  renderTableStatus(m);
   const instr = FORMAT_INSTRUCTION[m.format];
   if (instr) panel.appendChild(el('div', 'kc-instruction', esc(instr)));
   panel.appendChild(el('p', 'kc-prompt', esc(m.prompt || '')));
@@ -195,19 +218,47 @@ function onCase(m) {
 }
 function onResult(m) {
   busy = false;
+  lastStreak = Math.max(0, m && (m.streak | 0) || 0);
+  tableHeat = m && m.correct ? Math.min(100, tableHeat + 18 + Math.min(18, lastStreak * 3)) : Math.max(0, tableHeat - 22);
+  if (panel) {
+    panel.classList.remove('kc-hit', 'kc-miss');
+    panel.offsetHeight; // restart animation
+    panel.classList.add(m.correct ? 'kc-hit' : 'kc-miss');
+  }
   const answers = panel ? panel.querySelectorAll('.kc-answer') : [];
   if (answers && Number.isInteger(m.correctIndex) && answers[m.correctIndex]) answers[m.correctIndex].classList.add('kc-correct');
   if (answers && Number.isInteger(m.answerIndex) && !m.correct && answers[m.answerIndex]) answers[m.answerIndex].classList.add('kc-wrong');
   const fb = el('div', 'kc-feedback ' + (m.correct ? 'ok' : 'no'));
-  fb.innerHTML = (m.correct ? '<b>Correct.</b> ' : '<b>Not quite.</b> ') + esc(m.explanation || '')
+  const headline = m.correct
+    ? (lastStreak >= 5 ? 'TABLE ROARS!' : lastStreak >= 3 ? 'HOT STREAK!' : 'CLEAN HIT!')
+    : 'THE TABLE BITES BACK';
+  fb.innerHTML = '<strong>' + headline + '</strong> '
+    + (m.correct ? '<b>Correct.</b> ' : '<b>Not quite.</b> ')
+    + esc(m.explanation || '')
+    + (lastStreak > 1 ? ' <em>x' + lastStreak + ' streak</em>' : '')
     + (m.advanced ? ' <em>Fluency up.</em>' : '') + (m.reachedMaintain ? ' <em>Maintained!</em>' : '');
   if (panel) panel.appendChild(fb);
+  if (m.correct && panel) burst(panel, lastStreak);
   sfx(m.correct ? 'coin' : 'error');
   pending = null; awaitingContinue = true;
-  const cont = el('button', 'kc-btn kc-continue', 'CONTINUE'); cont.type = 'button'; cont.disabled = !buffered;
+  const cont = el('button', 'kc-btn kc-continue', m.correct ? (lastStreak >= 3 ? 'PRESS THE STREAK' : 'KEEP THE RUN ALIVE') : 'RECOVER THE HAND');
+  cont.type = 'button'; cont.disabled = !buffered;
   cont.onclick = () => proceed();
   if (panel) panel.appendChild(cont);
   if (buffered) cont.disabled = false;
+}
+
+function burst(root, streak) {
+  const n = Math.min(14, 5 + (streak | 0));
+  for (let i = 0; i < n; i++) {
+    const p = el('span', 'kc-spark', Math.random() < .35 ? '✦' : '+');
+    p.style.left = (30 + Math.random() * 40) + '%';
+    p.style.top = (40 + Math.random() * 20) + '%';
+    p.style.setProperty('--dx', ((Math.random() - .5) * 180).toFixed(0) + 'px');
+    p.style.setProperty('--dy', (-50 - Math.random() * 90).toFixed(0) + 'px');
+    root.appendChild(p);
+    setTimeout(() => { try { p.remove(); } catch (_) {} }, 900);
+  }
 }
 function onReport(m) {
   shift = null; pending = null; awaitingContinue = false; buffered = null;
@@ -291,7 +342,9 @@ function onCorrectiveResult(m) {
 const STYLE = `
 .kc-overlay{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,.72);backdrop-filter:blur(2px);font-family:inherit}
 .kc-overlay.hidden{display:none}
-.kc-panel{width:min(560px,92vw);max-height:88vh;overflow:auto;padding:20px;border-radius:12px;border:1px solid rgba(125,211,252,.28);background:linear-gradient(160deg,rgba(12,20,34,.98),rgba(7,11,18,.98));color:#e6eefc;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.kc-panel{position:relative;width:min(620px,92vw);max-height:88vh;overflow:auto;padding:20px;border-radius:12px;border:1px solid rgba(125,211,252,.28);background:radial-gradient(circle at 50% 0,rgba(255,210,74,.08),transparent 34%),linear-gradient(160deg,rgba(12,20,34,.98),rgba(7,11,18,.98));color:#e6eefc;box-shadow:0 24px 60px rgba(0,0,0,.5)}
+.kc-panel.kc-hit{animation:kcHit .42s ease}
+.kc-panel.kc-miss{animation:kcMiss .36s ease}
 .kc-title{margin:0 0 8px;letter-spacing:2px;color:#9ad7ff;font-size:20px}
 .kc-note{margin:0 0 14px;color:#aebfd4;line-height:1.45;font-size:13px}
 .kc-tavern-note{padding:10px 12px;border-radius:9px;border:1px solid rgba(255,210,74,.25);background:rgba(55,32,10,.35);color:#f5dfaa}
@@ -303,6 +356,12 @@ const STYLE = `
 .kc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .kc-tag{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#03111d;background:#9ad7ff;padding:3px 8px;border-radius:20px;font-weight:bold}
 .kc-count{color:#8ea6c2;font-size:12px}
+.kc-table-status{display:grid;grid-template-columns:1fr 84px 92px;gap:8px;margin:0 0 12px}
+.kc-heat,.kc-streak,.kc-pot{position:relative;overflow:hidden;min-height:42px;padding:7px 9px;border-radius:9px;border:1px solid rgba(255,210,74,.22);background:rgba(9,17,28,.72)}
+.kc-heat span,.kc-streak span,.kc-pot span{display:block;font-size:9px;letter-spacing:1.6px;color:#8ea6c2}
+.kc-heat b,.kc-streak b,.kc-pot b{position:relative;z-index:1;display:block;margin-top:2px;color:#ffe39a;font-size:13px;letter-spacing:1px}
+.kc-heat i{position:absolute;left:0;bottom:0;height:4px;border-radius:0 6px 6px 0;background:linear-gradient(90deg,#22d3ee,#facc15,#fb7185);box-shadow:0 0 18px rgba(250,204,21,.45);transition:width .28s ease}
+.kc-streak b{color:#86efac;font-size:18px}.kc-pot b{color:#9ad7ff}
 .kc-prompt{font-size:16px;line-height:1.4;margin:0 0 14px;color:#f4f8ff}
 .kc-answers{display:grid;gap:8px}
 .kc-answer{display:flex;gap:10px;align-items:center;padding:11px 13px;border-radius:8px;border:1px solid rgba(125,211,252,.22);background:rgba(9,17,28,.85);color:#e6eefc;cursor:pointer;font-family:inherit;font-size:13px;text-align:left}
@@ -312,9 +371,11 @@ const STYLE = `
 .kc-answer.kc-correct{border-color:#34d399;background:rgba(52,211,153,.14)}
 .kc-answer.kc-wrong{border-color:#fb7185;background:rgba(251,113,133,.12)}
 .kc-feedback{margin-top:12px;padding:11px;border-radius:8px;font-size:13px;line-height:1.4}
+.kc-feedback strong{display:block;margin-bottom:4px;font-size:14px;letter-spacing:1.4px;color:#ffe39a;text-transform:uppercase}
 .kc-feedback.ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3)}
 .kc-feedback.no{background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.3)}
 .kc-feedback em{font-style:normal;color:#ffe39a}
+.kc-spark{position:absolute;z-index:4;pointer-events:none;color:#ffe39a;text-shadow:0 0 12px rgba(255,210,74,.9);font-weight:bold;animation:kcSpark .9s ease-out forwards}
 .kc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
 .kc-stat{padding:10px;border-radius:8px;background:rgba(9,17,28,.7);text-align:center}
 .kc-stat b{display:block;font-size:20px;color:#9ad7ff}.kc-stat span{font-size:10px;color:#8ea6c2;letter-spacing:.5px}
@@ -343,6 +404,9 @@ const STYLE = `
 .kc-piece:hover:not(:disabled){border-color:#fff0a8}
 .kc-piece.placed{opacity:.4;cursor:default}
 .kc-submit{margin-top:6px}
+@keyframes kcHit{0%{transform:scale(1);box-shadow:0 24px 60px rgba(0,0,0,.5)}35%{transform:scale(1.012);box-shadow:0 0 34px rgba(52,211,153,.22),0 24px 60px rgba(0,0,0,.5)}100%{transform:scale(1);box-shadow:0 24px 60px rgba(0,0,0,.5)}}
+@keyframes kcMiss{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}55%{transform:translateX(4px)}80%{transform:translateX(-2px)}}
+@keyframes kcSpark{0%{opacity:0;transform:translate(0,0) scale(.7)}15%{opacity:1}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(1.35)}}
 `;
 
 globalThis.BlockcraftKnowledgeChallenge = Object.freeze({
