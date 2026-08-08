@@ -953,7 +953,18 @@ function buildTown() {
     setB(tc(40) + w, G, z, B.COBBLE);
   }
   // buildings as solid collision footprints (visual detail lives on the client)
-  fillBox(dtx(71, 'tavern'), G + 1, dtz(69, 'tavern'), dtx(87, 'tavern'), G + 4, dtz(94, 'tavern'), B.PLANKS); // tavern
+  // The tavern is a hollow shell with a west door instead of a solid block, so the
+  // server's collision matches the client's walkable interior and players can enter.
+  {
+    const vx1 = dtx(71, 'tavern'), vx2 = dtx(87, 'tavern'), vz1 = dtz(69, 'tavern'), vz2 = dtz(94, 'tavern');
+    for (let x = vx1; x <= vx2; x++) for (let z = vz1; z <= vz2; z++) {
+      if (x === vx1 || x === vx2 || z === vz1 || z === vz2) fillBox(x, G + 1, z, x, G + 4, z, B.PLANKS);
+    }
+    const vdz = dtz(76, 'tavern');
+    // Clear the full collision column: standHeight() scans from above, so a solid
+    // lintel here makes the server snap players onto the doorway instead of in.
+    fillBox(vx1, G + 1, vdz - 1, vx1, G + 4, vdz, B.AIR);
+  }
   fillBox(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE); // smithy
   fillBox(dtx(42, 'shrine'), G + 1, dtz(40, 'shrine'), dtx(52, 'shrine'), G + 5, dtz(56, 'shrine'), B.BRICK); // meditation hall
   // Dragon roost: a big open pen for bonded dragons (paved yard + low fence, nothing inside).
@@ -1043,7 +1054,19 @@ function createWorld() {
       setLocal(tc(64) + w, G, z, B.COBBLE);
       setLocal(tc(40) + w, G, z, B.COBBLE);
     }
-    fillLocal(dtx(71, 'tavern'), G + 1, dtz(69, 'tavern'), dtx(87, 'tavern'), G + 4, dtz(94, 'tavern'), B.PLANKS);
+    // Match the client tavern: walkable interior with a west doorway.
+    // GameRoom uses createWorld(), so this collision shell must stay in sync
+    // with buildTown() above or players get pushed back at the visible door.
+    {
+      const vx1 = dtx(71, 'tavern'), vx2 = dtx(87, 'tavern'), vz1 = dtz(69, 'tavern'), vz2 = dtz(94, 'tavern');
+      for (let x = vx1; x <= vx2; x++) for (let z = vz1; z <= vz2; z++) {
+        if (x === vx1 || x === vx2 || z === vz1 || z === vz2) fillLocal(x, G + 1, z, x, G + 4, z, B.PLANKS);
+      }
+      const vdz = dtz(76, 'tavern');
+      // Clear the full collision column: standHeight() scans from above, so a solid
+      // lintel here makes the server snap players onto the doorway instead of in.
+      fillLocal(vx1, G + 1, vdz - 1, vx1, G + 4, vdz, B.AIR);
+    }
     fillLocal(dtx(74, 'forge'), G + 1, dtz(45, 'forge'), dtx(83, 'forge'), G + 4, dtz(54, 'forge'), B.COBBLE);
     fillLocal(dtx(42, 'shrine'), G + 1, dtz(40, 'shrine'), dtx(52, 'shrine'), G + 5, dtz(56, 'shrine'), B.BRICK);
     {
