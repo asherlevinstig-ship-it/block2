@@ -983,6 +983,7 @@ const NETWORK=SESSION.controller;
 const NET=SESSION.state;
 let e2eJourneyResult=null;
 const bugReportBtn=document.getElementById('bugreportbtn');
+const stuckRescueBtn=document.getElementById('stuckrescuebtn');
 const bugReportWin=document.getElementById('bugreportwin');
 const bugReportMsg=document.getElementById('bugreportmsg');
 const bugReportMeta=document.getElementById('bugreportmeta');
@@ -1024,9 +1025,23 @@ function bugReportSetStatus(text, kind=''){
   bugReportStatus.className=kind||'';
 }
 function bugReportRefreshVisible(){
-  if(!bugReportBtn)return;
-  bugReportBtn.classList.toggle('hidden', !(NET&&NET.on&&NET.profileReady));
+  const visible=!!(NET&&NET.on&&NET.profileReady);
+  if(bugReportBtn)bugReportBtn.classList.toggle('hidden', !visible);
+  if(stuckRescueBtn)stuckRescueBtn.classList.toggle('hidden', !visible);
   if(globalThis.BlockcraftModal&&typeof globalThis.BlockcraftModal.sync==='function')globalThis.BlockcraftModal.sync();
+}
+let stuckRescuePending=false;
+function requestStuckRescue(){
+  if(stuckRescuePending||!(NET&&NET.on&&NET.room))return;
+  stuckRescuePending=true;
+  if(stuckRescueBtn)stuckRescueBtn.disabled=true;
+  globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.stuck-rescue.request', bugReportClientContext());
+  try{NET.room.send('stuckRescue',{x:player&&player.pos&&player.pos.x,y:player&&player.pos&&player.pos.y,z:player&&player.pos&&player.pos.z,yaw:player&&player.yaw});}
+  catch(e){
+    stuckRescuePending=false;
+    if(stuckRescueBtn)stuckRescueBtn.disabled=false;
+    if(typeof sysMsg==='function')sysMsg('<b>Stuck rescue failed.</b> Try again in a moment.');
+  }
 }
 function openBugReport(){
   if(!bugReportWin)return;
@@ -1114,6 +1129,7 @@ function applyBugReportResult(m){
   }
 }
 if(bugReportBtn)bugReportBtn.addEventListener('click',openBugReport);
+if(stuckRescueBtn)stuckRescueBtn.addEventListener('click',requestStuckRescue);
 if(bugReportCancel)bugReportCancel.addEventListener('click',closeBugReport);
 if(bugReportSend)bugReportSend.addEventListener('click',sendBugReport);
 if(bugReportWin)bugReportWin.addEventListener('click',e=>{if(e.target===bugReportWin)closeBugReport();});
@@ -2305,6 +2321,25 @@ function netAttachRoom(room,name,client){
       const delta=before?{x:+((+m.x)-before.x).toFixed(3),y:+((+m.y)-before.y).toFixed(3),z:+((+m.z)-before.z).toFixed(3)}:null;
       fishingNetworkDebug('positionCorrection',{message:m,before,after,delta,lastSent});
       if(m.reason==='town_floor')showName('Returned to safe town ground');
+    });
+    room.onMessage('stuckRescueResult', m=>{
+      stuckRescuePending=false;
+      if(stuckRescueBtn)stuckRescueBtn.disabled=false;
+      const ok=!!(m&&m.ok);
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.stuck-rescue.result', m||{});
+      if(ok&&Number.isFinite(+m.x)&&Number.isFinite(+m.y)&&Number.isFinite(+m.z)){
+        player.pos.set(+m.x,+m.y,+m.z);
+        if(player.vel)player.vel.set(0,0,0);
+        if(Number.isFinite(+m.yaw))player.yaw=+m.yaw;
+        const reason=String(m.reason||'nearby');
+        const text=reason==='already_safe'?'You already look clear, but I nudged you onto safe ground.':reason==='dungeon_spawn'?'Moved to the dungeon safe zone.':reason==='town_fallback'?'Moved to Town of Beginnings safe spawn.':'Moved to the nearest safe space.';
+        showName('Stuck rescue');
+        if(typeof sysMsg==='function')sysMsg('<b>Stuck rescue:</b> '+escHTML(text));
+      }else{
+        const r=String(m&&m.reason||'failed');
+        const text=r==='rate'?'Please wait a moment before trying rescue again.':r==='dead'?'Use the death respawn button.':r==='combat'?'Move away from combat first, then try rescue.':'Could not find a safe nearby spot.';
+        if(typeof sysMsg==='function')sysMsg('<b>Stuck rescue:</b> '+escHTML(text));
+      }
     });
     room.onMessage('adminGateTeleportResult', m=>{
       if(m&&m.returnOverworld&&NETWORK&&NETWORK.returnToPrimary){

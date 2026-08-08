@@ -653,7 +653,7 @@ function layoutRightHudStack(){
   }
 }
 function layoutLeftHudExtras(){
-  const coords=document.getElementById('coords'),homework=document.getElementById('homeworkhud'),bug=document.getElementById('bugreportbtn');
+  const coords=document.getElementById('coords'),homework=document.getElementById('homeworkhud'),bug=document.getElementById('bugreportbtn'),stuck=document.getElementById('stuckrescuebtn');
   const narrow=window.innerWidth<=760;
   let top=narrow?54:250;
   if(coords&&!coords.classList.contains('hidden')&&getComputedStyle(coords).display!=='none'){
@@ -676,9 +676,20 @@ function layoutLeftHudExtras(){
     if(visible){
       bug.style.left=(narrow?8:16)+'px';
       bug.style.top=top+'px';
+      top+=Math.ceil(bug.getBoundingClientRect().height)+(narrow?6:8);
     }else{
       bug.style.left='';
       bug.style.top='';
+    }
+  }
+  if(stuck){
+    const visible=!stuck.classList.contains('hidden')&&getComputedStyle(stuck).display!=='none';
+    if(visible){
+      stuck.style.left=(narrow?8:16)+'px';
+      stuck.style.top=top+'px';
+    }else{
+      stuck.style.left='';
+      stuck.style.top='';
     }
   }
 }

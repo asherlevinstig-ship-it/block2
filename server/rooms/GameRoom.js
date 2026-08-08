@@ -521,6 +521,7 @@ class GameRoom extends Room {
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
     this.onMessage('friendAdd', (client, m) => this.handleFriendAdd(client, m));
     this.onMessage('bugReport', (client, m) => this.handleBugReport(client, m));
+    this.onMessage('stuckRescue', (client, m) => this.handleStuckRescue(client, m));
 
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
@@ -6184,6 +6185,99 @@ class GameRoom extends Room {
       this.sendDungeonStatus(dgn);
     }
     client.send('dungeonSpiritQuit', result ? { ...town, ...vitals, result } : { ...town, ...vitals });
+    return true;
+  }
+  stuckRescueSpace(client, p) {
+    const rawDgn = p && (p.dgn || (this.isDungeonRoom && this.instance ? this.instance.id : '')) || '';
+    const inst = rawDgn ? this.activeDungeonInstance(rawDgn) : null;
+    const activeDgn = inst ? rawDgn : '';
+    const solid = this.spaceSolid(rawDgn);
+    const bodyBlocked = (x, y, z) => solid(Math.floor(x), Math.floor(y + .2), Math.floor(z))
+      || solid(Math.floor(x), Math.floor(y + 1.05), Math.floor(z))
+      || solid(Math.floor(x), Math.floor(y + 1.72), Math.floor(z));
+    const groundAt = (x, z, fromY = p && p.y || W.WH - 2) => {
+      if (activeDgn) {
+        if (!inst || !inst.world) return -1;
+        return typeof D.safeStandHeightIn === 'function'
+          ? D.safeStandHeightIn(inst.world, x, z)
+          : D.standHeightIn(inst.world, x, z, Math.min(12, fromY));
+      }
+      if (rawDgn) return Number.isFinite(+fromY) ? +fromY : -1;
+      return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, W.WH - 2) : -1;
+    };
+    const clear = (x, y, z) => {
+      if (!Number.isFinite(+x) || !Number.isFinite(+y) || !Number.isFinite(+z)) return false;
+      if (!rawDgn) {
+        const borderMin = W.LAVA_BORDER_WIDTH + 1.35;
+        const borderMax = W.WX - W.LAVA_BORDER_WIDTH - 1.35;
+        if (x < borderMin || z < borderMin || x > borderMax || z > borderMax) return false;
+      }
+      return !bodyBlocked(x, y, z);
+    };
+    return { rawDgn, activeDgn, inst, bodyBlocked, groundAt, clear };
+  }
+  stuckRescueCandidates(p, yaw = 0, space = null) {
+    const out = [];
+    const a = Number.isFinite(+yaw) ? +yaw : Number.isFinite(+p.yaw) ? +p.yaw : 0;
+    const forward = { x: -Math.sin(a), z: -Math.cos(a) };
+    const right = { x: Math.cos(a), z: -Math.sin(a) };
+    const add = (x, z, reason = 'nearby') => {
+      const y = space ? space.groundAt(x, z, p.y) : p.y;
+      if (Number.isFinite(+y) && y > -20) out.push({ x, y: +y + .01, z, reason });
+    };
+    for (const r of [1.35, 2.4, 3.6, 5.2, 7.2]) {
+      add(p.x + forward.x * r, p.z + forward.z * r);
+      add(p.x - forward.x * r, p.z - forward.z * r);
+      add(p.x + right.x * r, p.z + right.z * r);
+      add(p.x - right.x * r, p.z - right.z * r);
+      add(p.x + forward.x * r + right.x * r * .75, p.z + forward.z * r + right.z * r * .75);
+      add(p.x + forward.x * r - right.x * r * .75, p.z + forward.z * r - right.z * r * .75);
+      add(p.x - forward.x * r + right.x * r * .75, p.z - forward.z * r + right.z * r * .75);
+      add(p.x - forward.x * r - right.x * r * .75, p.z - forward.z * r - right.z * r * .75);
+    }
+    return out;
+  }
+  handleStuckRescue(client, m = {}) {
+    if (!client || this.rateLimited(client, 'stuckRescue', 2, 20)) return client && client.send && client.send('stuckRescueResult', { ok: false, reason: 'rate' });
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return false;
+    const hp = this.ensurePlayerHp(client);
+    if (hp && hp.hp <= 0) return client.send('stuckRescueResult', { ok: false, reason: 'dead' });
+    const now = Date.now();
+    if (now - (client._lastStuckRescueAt || 0) < 7500) return client.send('stuckRescueResult', { ok: false, reason: 'rate' });
+    client._lastStuckRescueAt = now;
+    const space = this.stuckRescueSpace(client, p);
+    const yaw = Number.isFinite(+m.yaw) ? clampN(+m.yaw, -10, 10) : p.yaw;
+    let chosen = null;
+    const currentY = Number.isFinite(+p.y) ? +p.y : 0;
+    for (const candidate of this.stuckRescueCandidates(p, yaw, space)) {
+      if (space.clear(candidate.x, candidate.y, candidate.z)) { chosen = candidate; break; }
+    }
+    if (!chosen && space.activeDgn && space.inst && space.inst.safeSpawn) {
+      const safe = space.inst.safeSpawn;
+      const y = Number.isFinite(+safe.y) ? +safe.y : space.groundAt(+safe.x, +safe.z, currentY);
+      if (space.clear(+safe.x, +y + .01, +safe.z)) chosen = { x: +safe.x, y: +y + .01, z: +safe.z, reason: 'dungeon_spawn' };
+    }
+    if (!chosen && !space.rawDgn) {
+      const y = this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.z, W.WH - 2) : TOWN_RETURN_SPAWN.y;
+      chosen = { x: TOWN_RETURN_SPAWN.x, y: (Number.isFinite(+y) ? +y : TOWN_RETURN_SPAWN.y) + .01, z: TOWN_RETURN_SPAWN.z, reason: 'town_fallback' };
+    }
+    if (!chosen && space.clear(p.x, currentY, p.z)) chosen = { x: p.x, y: currentY, z: p.z, reason: 'already_safe' };
+    if (!chosen) return client.send('stuckRescueResult', { ok: false, reason: 'no_safe_spot', buriedNow: space.bodyBlocked(p.x, currentY, p.z), dgn: space.rawDgn });
+    p.x = chosen.x;
+    p.y = chosen.y;
+    p.z = chosen.z;
+    p.yaw = yaw;
+    p.mount = '';
+    this.pvel.set(client.sessionId, { x: 0, z: 0 });
+    if (this.fallState) this.fallState.delete(client.sessionId);
+    if (this.moveRejects) this.moveRejects.delete(client.sessionId);
+    const rec = this.profileFor(client);
+    if (rec && rec.prof) {
+      if (!p.dgn) rec.prof.pos = [p.x, p.y, p.z];
+      this.dirtyPlayers.add(rec.token);
+    }
+    client.send('stuckRescueResult', { ok: true, x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: chosen.reason, dgn: space.rawDgn });
     return true;
   }
   handleRespawnTown(client, m = {}) {

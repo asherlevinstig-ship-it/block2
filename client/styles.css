@@ -50,6 +50,10 @@
   #bugreportbtn{position:fixed;left:10px;top:310px;z-index:12;height:34px;padding:0 12px;border:1px solid rgba(255,138,91,.72);border-radius:6px;background:linear-gradient(180deg,rgba(48,22,20,.94),rgba(16,10,13,.9));box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 16px rgba(255,138,91,.18),inset 0 0 14px rgba(255,255,255,.04);color:#ffc7ad;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
   #bugreportbtn.hidden{display:none}
   #bugreportbtn:hover{filter:brightness(1.16);border-color:#ffd24a;color:#fff1c2}
+  #stuckrescuebtn{position:fixed;left:10px;top:352px;z-index:12;height:34px;padding:0 12px;border:1px solid rgba(125,211,252,.72);border-radius:6px;background:linear-gradient(180deg,rgba(13,39,57,.94),rgba(7,14,24,.9));box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 16px rgba(125,211,252,.16),inset 0 0 14px rgba(255,255,255,.04);color:#bfecff;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
+  #stuckrescuebtn.hidden{display:none}
+  #stuckrescuebtn:hover{filter:brightness(1.16);border-color:#bff4ff;color:#fff}
+  #stuckrescuebtn:disabled{opacity:.55;cursor:wait;filter:saturate(.7)}
   #bugreportwin{position:fixed;inset:0;z-index:92;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,7,14,.72);backdrop-filter:blur(4px)}
   #bugreportwin.hidden{display:none}
   #bugreportpanel{width:min(680px,calc(100vw - 36px));max-height:calc(100vh - 36px);overflow:auto;padding:22px 24px;border:1px solid rgba(255,138,91,.72);border-radius:10px;background:linear-gradient(160deg,rgba(11,18,31,.98),rgba(20,9,9,.98));box-shadow:0 18px 60px rgba(0,0,0,.58),0 0 34px rgba(255,138,91,.22),inset 0 0 28px rgba(255,255,255,.04);color:#eaf6ff;font-family:inherit;text-shadow:0 2px 0 #000}
@@ -1334,6 +1338,8 @@
   #homeworkhud .hwcta{justify-self:end;color:#ffe680;border:1px solid rgba(242,199,92,.55);border-radius:5px;background:rgba(58,38,10,.72);padding:8px 13px;font-size:10px;letter-spacing:1.4px}
   #bugreportbtn{left:16px;top:430px;min-width:176px;height:38px;padding:0 14px;border-color:rgba(255,171,80,.58);background:linear-gradient(180deg,rgba(35,20,14,.9),rgba(8,9,14,.82));color:#ffd39f;font-size:10px;letter-spacing:1.5px}
   #bugreportbtn:before{content:"⚠ ";color:#ffd24a}
+  #stuckrescuebtn{left:16px;top:476px;min-width:176px;height:38px;padding:0 14px;border-color:rgba(125,211,252,.58);background:linear-gradient(180deg,rgba(11,30,43,.9),rgba(8,9,14,.82));color:#c8f0ff;font-size:10px;letter-spacing:1.5px}
+  #stuckrescuebtn:before{content:"↟ ";color:#7dd3fc}
   #currentquest{right:24px;top:260px;width:345px;padding:0;border-color:rgba(242,199,92,.5);border-radius:7px;background:linear-gradient(180deg,rgba(5,11,21,.9),rgba(2,6,13,.8));box-shadow:0 14px 34px rgba(0,0,0,.42),inset 0 0 24px rgba(242,199,92,.035);text-shadow:none;overflow:hidden}
   #currentquest .qt{padding:12px 15px;margin:0;border-bottom:1px solid rgba(242,199,92,.18);color:#ffe680;font-size:12px;letter-spacing:2px}
   #currentquest .qv{padding:13px 15px;color:#dce8f4;font:500 13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -1604,7 +1610,7 @@
   #deathsub{color:#9c8b85;font-size:11px;letter-spacing:2px;text-shadow:1px 1px 0 #000}
   #deathrespawn{margin-top:10px;padding:13px 22px;border:1px solid rgba(255,210,74,.74);border-radius:7px;background:linear-gradient(180deg,#8b1d1d,#4b0909);color:#fff0ba;font:900 13px inherit;letter-spacing:2px;text-shadow:0 2px 0 #000;box-shadow:0 8px 24px rgba(0,0,0,.45),inset 0 0 18px rgba(255,210,74,.08);cursor:pointer}
   #deathrespawn:hover{filter:brightness(1.15);border-color:#fff0ba;color:#fff}
-  body.death-active #hotbar,body.death-active #stats,body.death-active #abilities,body.death-active #keyprompthud,body.death-active #currentquest,body.death-active #homeworkhud,body.death-active #activitytracker,body.death-active #bugreportbtn{display:none!important}
+  body.death-active #hotbar,body.death-active #stats,body.death-active #abilities,body.death-active #keyprompthud,body.death-active #currentquest,body.death-active #homeworkhud,body.death-active #activitytracker,body.death-active #bugreportbtn,body.death-active #stuckrescuebtn{display:none!important}
   @keyframes deathPulse{from{filter:saturate(1);opacity:.88}to{filter:saturate(1.35);opacity:1}}
   #admindungeonpicker{position:fixed;inset:0;z-index:52;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(1,5,13,.76);backdrop-filter:blur(7px)}
   #admindungeonpicker.show{display:flex}
@@ -1734,6 +1740,7 @@
     #currentquest .oact .qaction{max-width:150px}
     #homeworkhud{left:8px;top:190px;width:min(270px,calc(100vw - 16px));padding:0}
     #bugreportbtn{left:8px;top:254px}
+    #stuckrescuebtn{left:8px;top:298px}
     #activitytracker,#townchoices{right:8px;top:76px;width:min(270px,calc(100vw - 16px));padding:7px 9px}
     #dungeonparty{right:8px;top:84px;width:min(280px,calc(100vw - 16px))}
     #keyprompthud{right:8px;bottom:62px;min-width:190px;max-width:min(260px,calc(100vw - 16px));padding:7px 9px 7px 7px;gap:7px}
