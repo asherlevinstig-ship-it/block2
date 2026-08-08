@@ -352,6 +352,9 @@ class KnowledgeChallengeMixin {
           independent, handbookUsed, selectorReason: pending.reason, source: 'knowledge_challenge',
         });
       } catch (_) {}
+      if (typeof this.recordHomeworkActivity === 'function') {
+        await this.recordHomeworkActivity(client, shift.subjectId, { source: 'knowledge_challenge' });
+      }
       // Remediation return-loop: a recovery case closes (or, if failed, re-schedules)
       // the remediation; any other miss opens a fresh one that returns 3-5 cases later.
       if (isRecovery) {

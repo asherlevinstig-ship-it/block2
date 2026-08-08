@@ -1288,6 +1288,9 @@ class ProgressionMixin {
     this.dirtyPlayers.add(rec.token);
     client.send('meditationGrowth', { ok: true, completed: true, growth: prof.meditationGrowth, award, capped });
     this.sendProfile ? this.sendProfile(client, prof) : client.send('profile', prof);
+    if (typeof this.recordHomeworkActivity === 'function') {
+      this.recordHomeworkActivity(client, 0, { source: 'meditation' });
+    }
     return true;
   }
 

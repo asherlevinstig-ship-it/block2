@@ -142,6 +142,24 @@ class RecallMixin{
       else client&&client.send&&client.send('homeworkProgress',{homework:result.homeworkObjectives});
     }).catch(e=>{if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] recall attempt log failed:',e&&e.message||e);});
   }
+  recordHomeworkActivity(client,subjectId=0,options={}){
+    const account=client&&client._account;
+    if(!account||String(account.accountType||account.role||'').toLowerCase()==='teacher')return Promise.resolve([]);
+    let store=null;
+    try{const auth=getAuthService();if(!auth)return Promise.resolve([]);store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return Promise.resolve([]);}
+    if(!store||typeof store.recordHomeworkProgress!=='function')return Promise.resolve([]);
+    return Promise.resolve(store.recordHomeworkProgress(account,subjectId,{fallbackToAnyActive:true,...options})).then(list=>{
+      const rec=typeof this.profileFor==='function'&&this.profileFor(client);
+      if(!rec||!rec.prof||!Array.isArray(list))return list;
+      rec.prof.homeworkObjectives=list;
+      if(typeof this.sendProfile==='function')this.sendProfile(client,rec.prof);
+      else client&&client.send&&client.send('homeworkProgress',{homework:list});
+      return list;
+    }).catch(e=>{
+      if(process.env.NODE_ENV!=='test')console.warn('[teacher-analytics] homework activity failed:',e&&e.message||e);
+      return [];
+    });
+  }
   refreshHomeworkObjectives(client,prof){
     const account=client&&client._account;
     if(!account||String(account.accountType||account.role||'').toLowerCase()==='teacher')return;
