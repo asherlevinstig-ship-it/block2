@@ -29,6 +29,7 @@ const ymdUTC = value => {
   return d.toISOString().slice(0, 10);
 };
 const homeworkWeekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const KC_QUESTION_ATOM_OFFSET = 1000000000;
 const QUESTION_DB_PREFIXES = ['GAME_QUESTION_MYSQL_', 'LIVEWEAVE_MYSQL_', 'QUESTION_MYSQL_'];
 const QUESTION_DB_KEYS = ['HOST', 'PORT', 'USER', 'PASSWORD', 'DATABASE'];
 function firstEnv(env, names, fallback = '') {
@@ -1588,12 +1589,26 @@ class MySqlGameQuestionStore {
     return Number(rows && rows[0] && rows[0].n) || 0;
   }
 
+  async approvedQuestionCount(subjectId) {
+    await this.ensureSchema();
+    subjectId = clampInt(subjectId, 1, 2147483647);
+    if (!subjectId) return 0;
+    const [rows] = await this.getPool().execute(
+      `SELECT COUNT(*) AS n
+       FROM game_question
+       WHERE subject_id = ? AND is_active = 1
+         AND review_status IN ('approved', 'teacher-reviewed')`,
+      [subjectId],
+    );
+    return Number(rows && rows[0] && rows[0].n) || 0;
+  }
+
   async findPlayableChallengeSubject(account, input = {}) {
     await this.ensureSchema();
     const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
     const requestedSubject = cleanText(input.subject, 96);
     const requested = await this.resolvePlaySubject(account, input).catch(() => null);
-    if (requested && await this.challengeContentCount(requested.subjectId)) {
+    if (requested && ((await this.challengeContentCount(requested.subjectId)) || (await this.approvedQuestionCount(requested.subjectId)))) {
       return Object.assign({}, requested, { requestedSubject, subjectFallback: false });
     }
 
@@ -1601,22 +1616,20 @@ class MySqlGameQuestionStore {
     const fallback = fallbackSubject && fallbackSubject !== requestedSubject
       ? await this.resolvePlaySubject(account, { subject: fallbackSubject }).catch(() => null)
       : null;
-    if (fallback && await this.challengeContentCount(fallback.subjectId)) {
+    if (fallback && ((await this.challengeContentCount(fallback.subjectId)) || (await this.approvedQuestionCount(fallback.subjectId)))) {
       return Object.assign({}, fallback, { requestedSubject, subjectFallback: !!requested && fallback.subjectId !== requested.subjectId });
     }
 
     let [rows] = await this.getPool().execute(
       `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
        FROM subjects s
-       JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
-       JOIN game_question q ON q.primary_atom_id = a.id
-        AND q.subject_id = s.id
-        AND q.is_active = 1
+       JOIN game_question q ON q.subject_id = s.id AND q.is_active = 1
         AND q.review_status IN ('approved', 'teacher-reviewed')
+       LEFT JOIN kc_atom a ON a.id = q.primary_atom_id AND a.subject_id = s.id AND a.is_active = 1
        WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
        GROUP BY s.id, s.name, s.code, s.school_id
        ORDER BY CASE WHEN LOWER(s.name) = LOWER(?) OR LOWER(s.code) = LOWER(?) THEN 0 WHEN s.school_id = ? THEN 1 ELSE 2 END,
-                playable_atoms DESC, s.id ASC
+                playable_atoms DESC, COUNT(q.id) DESC, s.id ASC
        LIMIT 1`,
       [schoolId, schoolId, fallbackSubject, fallbackSubject, schoolId],
     );
@@ -1624,11 +1637,9 @@ class MySqlGameQuestionStore {
       [rows] = await this.getPool().execute(
         `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
          FROM subjects s
-         JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
-         JOIN game_question q ON q.primary_atom_id = a.id
-          AND q.subject_id = s.id
-          AND q.is_active = 1
+         JOIN game_question q ON q.subject_id = s.id AND q.is_active = 1
           AND q.review_status IN ('approved', 'teacher-reviewed')
+         LEFT JOIN kc_atom a ON a.id = q.primary_atom_id AND a.subject_id = s.id AND a.is_active = 1
          WHERE s.is_active = 1
          GROUP BY s.id, s.name, s.code, s.school_id
          ORDER BY CASE
@@ -1637,7 +1648,7 @@ class MySqlGameQuestionStore {
                     WHEN s.school_id IS NULL THEN 2
                     ELSE 3
                   END,
-                  playable_atoms DESC, s.id ASC
+                  playable_atoms DESC, COUNT(q.id) DESC, s.id ASC
          LIMIT 1`,
         [fallbackSubject, fallbackSubject, schoolId],
       );
@@ -1663,13 +1674,17 @@ class MySqlGameQuestionStore {
     async function withCount(store, subject) {
       if (!subject || subject.error || !subject.subjectId) return subject || null;
       const playableAtoms = await store.challengeContentCount(subject.subjectId).catch(() => -1);
-      return Object.assign({}, subject, { playableAtoms });
+      const approvedQuestions = await store.approvedQuestionCount(subject.subjectId).catch(() => -1);
+      return Object.assign({}, subject, { playableAtoms, approvedQuestions });
     }
     const [rows] = await this.getPool().execute(
       `SELECT s.id, s.name, s.code, s.school_id,
               COUNT(DISTINCT a.id) AS active_atoms,
               COUNT(DISTINCT q.primary_atom_id) AS playable_atoms,
-              COUNT(q.id) AS approved_questions
+              COUNT(q.id) AS approved_questions,
+              (SELECT COUNT(*) FROM game_question gq
+               WHERE gq.subject_id = s.id AND gq.is_active = 1
+                 AND gq.review_status IN ('approved', 'teacher-reviewed')) AS raw_approved_questions
        FROM subjects s
        LEFT JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
        LEFT JOIN game_question q ON q.primary_atom_id = a.id
@@ -1686,7 +1701,10 @@ class MySqlGameQuestionStore {
       `SELECT s.id, s.name, s.code, s.school_id,
               COUNT(DISTINCT a.id) AS active_atoms,
               COUNT(DISTINCT q.primary_atom_id) AS playable_atoms,
-              COUNT(q.id) AS approved_questions
+              COUNT(q.id) AS approved_questions,
+              (SELECT COUNT(*) FROM game_question gq
+               WHERE gq.subject_id = s.id AND gq.is_active = 1
+                 AND gq.review_status IN ('approved', 'teacher-reviewed')) AS raw_approved_questions
        FROM subjects s
        LEFT JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
        LEFT JOIN game_question q ON q.primary_atom_id = a.id
@@ -1706,6 +1724,7 @@ class MySqlGameQuestionStore {
       activeAtoms: Number(r.active_atoms) || 0,
       playableAtoms: Number(r.playable_atoms) || 0,
       approvedQuestions: Number(r.approved_questions) || 0,
+      rawApprovedQuestions: Number(r.raw_approved_questions) || 0,
     });
     return {
       schoolId,
@@ -1758,6 +1777,29 @@ class MySqlGameQuestionStore {
       entityId: Number(row.entity_id) || 0,
       state: atomStateFromRow(row),
     }));
+    if (!atoms.length && query.questionFallback !== false) {
+      const [questionRows] = await this.getPool().execute(
+        `SELECT q.id, q.difficulty, q.topic, q.stage
+         FROM game_question q
+         WHERE q.subject_id = ? AND q.is_active = 1
+           AND q.review_status IN ('approved', 'teacher-reviewed')
+         ORDER BY q.id ASC
+         LIMIT 500`,
+        [subjectId],
+      );
+      for (const row of questionRows || []) {
+        const questionId = Number(row.id) || 0;
+        if (!questionId) continue;
+        atoms.push({
+          atomId: KC_QUESTION_ATOM_OFFSET + questionId,
+          questionId,
+          syntheticQuestionAtom: true,
+          difficulty: Number(row.difficulty) || 1,
+          entityId: 0,
+          state: {},
+        });
+      }
+    }
     return { subjectId, atoms };
   }
 
@@ -1768,16 +1810,27 @@ class MySqlGameQuestionStore {
     subjectId = clampInt(subjectId, 1, 2147483647);
     atomId = clampInt(atomId, 1, 2147483647);
     if (!subjectId || !atomId) return null;
-    const [rows] = await this.getPool().execute(
-      `SELECT id, format, prompt, answers, correct_index, explanation, payload_json,
-              entity_id, primary_atom_id, confusion_pair_id, difficulty
-       FROM game_question
-       WHERE subject_id = ? AND primary_atom_id = ? AND is_active = 1
-         AND review_status IN ('approved', 'teacher-reviewed')
-       ORDER BY RAND()
-       LIMIT 8`,
-      [subjectId, atomId],
-    );
+    const syntheticQuestionId = atomId >= KC_QUESTION_ATOM_OFFSET ? atomId - KC_QUESTION_ATOM_OFFSET : 0;
+    const [rows] = syntheticQuestionId
+      ? await this.getPool().execute(
+        `SELECT id, format, prompt, answers, correct_index, explanation, payload_json,
+                entity_id, primary_atom_id, confusion_pair_id, difficulty
+         FROM game_question
+         WHERE id = ? AND subject_id = ? AND is_active = 1
+           AND review_status IN ('approved', 'teacher-reviewed')
+         LIMIT 1`,
+        [syntheticQuestionId, subjectId],
+      )
+      : await this.getPool().execute(
+        `SELECT id, format, prompt, answers, correct_index, explanation, payload_json,
+                entity_id, primary_atom_id, confusion_pair_id, difficulty
+         FROM game_question
+         WHERE subject_id = ? AND primary_atom_id = ? AND is_active = 1
+           AND review_status IN ('approved', 'teacher-reviewed')
+         ORDER BY RAND()
+         LIMIT 8`,
+        [subjectId, atomId],
+      );
     let list = rows || [];
     if (!list.length) return null;
     const avoid = cleanText(opts.avoidFormat, 32);
