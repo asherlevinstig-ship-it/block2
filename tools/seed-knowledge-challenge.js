@@ -6,11 +6,13 @@
 //
 // Defaults to content/knowledge-challenge/sample-pack.json. The subject is taken
 // from --subject-id, else resolved by the pack's "subject" name against the
-// existing `subjects` table (it must already exist). Reads MySQL_* env vars, the
-// same ones the server uses. Idempotent: re-running updates content in place.
+// existing `subjects` table (it must already exist). Reads the same game-question
+// DB env vars as the server: GAME_QUESTION_MYSQL_* first, then LIVEWEAVE_MYSQL_*,
+// QUESTION_MYSQL_*, and finally legacy MYSQL_* auth DB vars. Idempotent:
+// re-running updates content in place.
 const fs = require('fs');
 const path = require('path');
-const { MySqlGameQuestionStore } = require('../server/mysql-game-questions');
+const { MySqlGameQuestionStore, gameQuestionDbConfig } = require('../server/mysql-game-questions');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -34,12 +36,15 @@ async function main() {
   const file = path.resolve(arg('file', 'content/knowledge-challenge/sample-pack.json'));
   const pack = JSON.parse(fs.readFileSync(file, 'utf8'));
   const mysql = require('mysql2/promise');
-  const pool = mysql.createPool({
+  const config = gameQuestionDbConfig(process.env) || {
     host: process.env.MYSQL_HOST || 'localhost',
     port: Number(process.env.MYSQL_PORT || 3306),
     user: process.env.MYSQL_USER,
     password: process.env.MYSQL_PASSWORD,
     database: process.env.MYSQL_DATABASE,
+  };
+  const pool = mysql.createPool({
+    ...config,
     waitForConnections: true,
     connectionLimit: 4,
     charset: 'utf8mb4',

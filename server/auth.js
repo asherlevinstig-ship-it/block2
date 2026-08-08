@@ -396,7 +396,7 @@ class AuthService {
 
   getGameQuestionStore() {
     if (this.gameQuestionStore) return this.gameQuestionStore;
-    this.gameQuestionStore = new MySqlGameQuestionStore({ authBackend: this.authBackend });
+    this.gameQuestionStore = new MySqlGameQuestionStore({ authBackend: this.authBackend, env: this.env });
     return this.gameQuestionStore;
   }
 

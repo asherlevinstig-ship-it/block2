@@ -117,7 +117,7 @@ class RecallMixin{
     const account=client&&client._account;
     if(!account||String(account.accountType||account.role||'').toLowerCase()==='teacher')return;
     let store=null;
-    try{const auth=getAuthService();if(!auth||!auth.authBackend)return;store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return;}
+    try{const auth=getAuthService();if(!auth)return;store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return;}
     if(!store||typeof store.recordRecallAttempt!=='function')return;
     const durationMs=Math.max(0,now-(challenge.startedAt||now));
     Promise.resolve(store.recordRecallAttempt(account,{
@@ -146,7 +146,7 @@ class RecallMixin{
     const account=client&&client._account;
     if(!account||String(account.accountType||account.role||'').toLowerCase()==='teacher')return;
     let store=null;
-    try{const auth=getAuthService();if(!auth||!auth.authBackend)return;store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return;}
+    try{const auth=getAuthService();if(!auth)return;store=typeof auth.getGameQuestionStore==='function'&&auth.getGameQuestionStore();}catch(_){return;}
     if(!store||typeof store.homeworkProgressForStudent!=='function')return;
     Promise.resolve(store.homeworkProgressForStudent(account,{})).then(list=>{
       if(!prof||!Array.isArray(list))return;

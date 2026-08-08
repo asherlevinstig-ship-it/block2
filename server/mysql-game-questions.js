@@ -29,6 +29,36 @@ const ymdUTC = value => {
   return d.toISOString().slice(0, 10);
 };
 const homeworkWeekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const QUESTION_DB_PREFIXES = ['GAME_QUESTION_MYSQL_', 'LIVEWEAVE_MYSQL_', 'QUESTION_MYSQL_'];
+const QUESTION_DB_KEYS = ['HOST', 'PORT', 'USER', 'PASSWORD', 'DATABASE'];
+function firstEnv(env, names, fallback = '') {
+  for (const name of names) {
+    const value = env && env[name];
+    if (String(value || '').trim()) return value;
+  }
+  return fallback;
+}
+function gameQuestionDbConfig(env = process.env) {
+  const prefixed = suffix => firstEnv(env, QUESTION_DB_PREFIXES.map(prefix => prefix + suffix), '');
+  const host = prefixed('HOST');
+  const database = prefixed('DATABASE');
+  const user = prefixed('USER');
+  const password = prefixed('PASSWORD');
+  if (!host && !database && !user && !password) return null;
+  for (const key of QUESTION_DB_KEYS) {
+    if (key === 'PORT') continue;
+    if (!String(prefixed(key) || '').trim()) {
+      throw Object.assign(new Error('Game question MySQL override requires ' + QUESTION_DB_PREFIXES[0] + key + ' (or LIVEWEAVE_MYSQL_' + key + ').'), { status: 503, code: 'mysql_question_config' });
+    }
+  }
+  return {
+    host,
+    port: Number(prefixed('PORT') || 3306),
+    user,
+    password,
+    database,
+  };
+}
 function homeworkPeriodKey(row, now = new Date()) {
   const cadence = cleanHomeworkCadence(row && row.cadence);
   if (cadence === 'daily') return 'day:' + ymdUTC(now);
@@ -197,11 +227,23 @@ class MySqlGameQuestionStore {
   constructor(options = {}) {
     this.authBackend = options.authBackend || null;
     this.pool = options.pool || null;
+    this.env = options.env || process.env;
     this.ready = false;
   }
 
   getPool() {
     if (this.pool) return this.pool;
+    const questionDb = gameQuestionDbConfig(this.env);
+    if (questionDb) {
+      const mysql = require('mysql2/promise');
+      this.pool = mysql.createPool({
+        ...questionDb,
+        waitForConnections: true,
+        connectionLimit: Number(this.env.GAME_QUESTION_MYSQL_CONNECTION_LIMIT || this.env.LIVEWEAVE_MYSQL_CONNECTION_LIMIT || this.env.MYSQL_CONNECTION_LIMIT || 10),
+        charset: 'utf8mb4',
+      });
+      return this.pool;
+    }
     if (!this.authBackend || typeof this.authBackend.getPool !== 'function') {
       throw Object.assign(new Error('MySQL teacher tools are not configured.'), { status: 503, code: 'mysql' });
     }
@@ -2454,4 +2496,4 @@ class MySqlGameQuestionStore {
   }
 }
 
-module.exports = { MySqlGameQuestionStore, sourceIdFromAccount, publicQuestion };
+module.exports = { MySqlGameQuestionStore, sourceIdFromAccount, publicQuestion, gameQuestionDbConfig };

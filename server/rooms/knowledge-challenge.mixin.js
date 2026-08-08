@@ -26,7 +26,7 @@ class KnowledgeChallengeMixin {
   kcStore() {
     try {
       const auth = getAuthService();
-      if (!auth || !auth.authBackend) return null;
+      if (!auth) return null;
       const store = typeof auth.getGameQuestionStore === 'function' ? auth.getGameQuestionStore() : null;
       return store && typeof store.loadStudentAtoms === 'function' ? store : null;
     } catch (_) { return null; }

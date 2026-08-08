@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { MySqlGameQuestionStore } = require('../mysql-game-questions');
+const { MySqlGameQuestionStore, gameQuestionDbConfig } = require('../mysql-game-questions');
 
 const T = 1_000_000_000_000;
 
@@ -26,6 +26,41 @@ function kcPool(calls, handler) {
   };
 }
 const find = (calls, re) => calls.find(c => re.test(c.sql));
+
+test('game question DB config prefers dedicated LiveWeave env over legacy auth MySQL env', () => {
+  const cfg = gameQuestionDbConfig({
+    MYSQL_HOST: 'old-auth-db.example',
+    MYSQL_PORT: '3306',
+    MYSQL_USER: 'auth_user',
+    MYSQL_PASSWORD: 'auth_pass',
+    MYSQL_DATABASE: 'auth_db',
+    GAME_QUESTION_MYSQL_HOST: 'liveweave.net',
+    GAME_QUESTION_MYSQL_PORT: '3307',
+    GAME_QUESTION_MYSQL_USER: 'question_user',
+    GAME_QUESTION_MYSQL_PASSWORD: 'question_pass',
+    GAME_QUESTION_MYSQL_DATABASE: 'question_db',
+  });
+  assert.deepEqual(cfg, {
+    host: 'liveweave.net',
+    port: 3307,
+    user: 'question_user',
+    password: 'question_pass',
+    database: 'question_db',
+  });
+});
+
+test('game question DB config accepts LIVEWEAVE_MYSQL aliases', () => {
+  const cfg = gameQuestionDbConfig({
+    LIVEWEAVE_MYSQL_HOST: 'liveweave.net',
+    LIVEWEAVE_MYSQL_USER: 'u',
+    LIVEWEAVE_MYSQL_PASSWORD: 'p',
+    LIVEWEAVE_MYSQL_DATABASE: 'd',
+  });
+  assert.equal(cfg.host, 'liveweave.net');
+  assert.equal(cfg.port, 3306);
+  assert.equal(cfg.user, 'u');
+  assert.equal(cfg.database, 'd');
+});
 
 test('recordAtomReview runs the stage machine and upserts the advanced state', async () => {
   const calls = [];

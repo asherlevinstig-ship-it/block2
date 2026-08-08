@@ -4,10 +4,12 @@
 //
 //   node tools/knowledge-challenge-status.js [--subject "Computer Science"] [--subject-id N]
 //
-// Reads MYSQL_* env vars, same as the server and seed tool. This is intentionally
-// read-only apart from the store's additive ensureSchema() migration.
+// Reads the same game-question DB env vars as the server:
+// GAME_QUESTION_MYSQL_* first, then LIVEWEAVE_MYSQL_*, QUESTION_MYSQL_*,
+// and finally the legacy MYSQL_* auth DB vars.
+// This is intentionally read-only apart from the store's additive ensureSchema() migration.
 const mysql = require('mysql2/promise');
-const { MySqlGameQuestionStore } = require('../server/mysql-game-questions');
+const { MySqlGameQuestionStore, gameQuestionDbConfig } = require('../server/mysql-game-questions');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -20,6 +22,16 @@ function required(name) {
   return value;
 }
 
+function legacyMysqlConfig() {
+  return {
+    host: required('MYSQL_HOST'),
+    port: Number(process.env.MYSQL_PORT || 3306),
+    user: required('MYSQL_USER'),
+    password: required('MYSQL_PASSWORD'),
+    database: required('MYSQL_DATABASE'),
+  };
+}
+
 async function scalar(pool, sql, params = []) {
   const [rows] = await pool.execute(sql, params);
   const row = rows && rows[0] || {};
@@ -28,12 +40,9 @@ async function scalar(pool, sql, params = []) {
 }
 
 async function main() {
+  const config = gameQuestionDbConfig(process.env) || legacyMysqlConfig();
   const pool = mysql.createPool({
-    host: required('MYSQL_HOST'),
-    port: Number(process.env.MYSQL_PORT || 3306),
-    user: required('MYSQL_USER'),
-    password: required('MYSQL_PASSWORD'),
-    database: required('MYSQL_DATABASE'),
+    ...config,
     waitForConnections: true,
     connectionLimit: 2,
     charset: 'utf8mb4',
@@ -64,7 +73,7 @@ async function main() {
       kc_shift: await scalar(pool, 'SELECT COUNT(*) AS n FROM kc_shift'),
     };
 
-    const result = { ok: true, mysql: { host: process.env.MYSQL_HOST, database: process.env.MYSQL_DATABASE }, tableCounts };
+    const result = { ok: true, mysql: { host: config.host, database: config.database }, tableCounts };
     if (!subject) {
       result.playable = false;
       result.reason = explicitSubjectId ? 'subject_id_not_found' : 'subject_not_found';

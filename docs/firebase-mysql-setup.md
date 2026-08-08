@@ -73,7 +73,7 @@ Set these env vars to enable the MySQL auth bridge:
 
 ```powershell
 $env:AUTH_BACKEND = "mysql"
-$env:MYSQL_HOST = "your-mysql-host"
+$env:MYSQL_HOST = "liveweave.net"
 $env:MYSQL_PORT = "3306"
 $env:MYSQL_DATABASE = "your-database-name"
 $env:MYSQL_USER = "your-database-user"
@@ -86,14 +86,37 @@ For existing students whose `students.email` is not a school-domain email addres
 
 Teacher/admin logins use the `teachers` table first. The bridge preserves `teachers.role` values such as `teacher` or `admin`, resolves the school from `teachers.school_id`, then falls back to `teachers.domain` and the login email domain.
 
-## 5a. Game Question Bank
+## 5a. LiveWeave Game Question Bank
 
 The game owns a separate MySQL table named `game_question`. This is intentional:
 assessment `questions` remain for formal tests and markbooks, while
 `game_question` powers Recall, quests, and other in-game learning moments.
 
-The Node server creates `game_question` on first teacher-tool use when
-`AUTH_BACKEND=mysql` is configured. Rows link back to the existing school model:
+For Blockcraft homework/question gameplay, point the question store at the
+LiveWeave database. This is the database used by:
+
+- press-`P` Recall / Question Hall attempts,
+- homework progress,
+- the tavern Scholar Table / Knowledge Challenge,
+- teacher dashboard game-question authoring and analytics.
+
+The server checks these environment variables first:
+
+```powershell
+$env:GAME_QUESTION_MYSQL_HOST = "liveweave.net"
+$env:GAME_QUESTION_MYSQL_PORT = "3306"
+$env:GAME_QUESTION_MYSQL_DATABASE = "your-liveweave-question-database"
+$env:GAME_QUESTION_MYSQL_USER = "your-liveweave-question-user"
+$env:GAME_QUESTION_MYSQL_PASSWORD = "your-liveweave-question-password"
+```
+
+Aliases are also accepted in this order: `LIVEWEAVE_MYSQL_*`,
+`QUESTION_MYSQL_*`, then the older shared `MYSQL_*` values. Use the dedicated
+`GAME_QUESTION_MYSQL_*` values when the login database and question database are
+not exactly the same.
+
+The Node server creates `game_question` on first teacher-tool use when a MySQL
+question connection is configured. Rows link back to the existing school model:
 
 - `subjects.id`
 - `teachers.id`
@@ -121,13 +144,14 @@ npm run mysql:auth:smoke
 
 ## 5b. Scholar Table / Knowledge Challenge Content
 
-The tavern Scholar Table uses the same SiteGround MySQL connection. It needs:
+The tavern Scholar Table uses the LiveWeave game-question connection. It needs:
 
-- `AUTH_BACKEND=mysql` on the running Node/Colyseus server.
-- Valid `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, and `MYSQL_PASSWORD`.
+- Valid `GAME_QUESTION_MYSQL_HOST`, `GAME_QUESTION_MYSQL_PORT`,
+  `GAME_QUESTION_MYSQL_DATABASE`, `GAME_QUESTION_MYSQL_USER`, and
+  `GAME_QUESTION_MYSQL_PASSWORD`.
 - A seeded Knowledge Challenge subject in the `kc_*` tables and atom-linked `game_question` rows.
 
-Check whether the configured SiteGround database has playable Scholar Table content:
+Check whether the configured LiveWeave database has playable Scholar Table content:
 
 ```powershell
 npm run mysql:kc:status
@@ -140,7 +164,7 @@ npm run mysql:kc:status -- --subject "Computer Science"
 npm run mysql:kc:status -- --subject-id 123
 ```
 
-Seed the pilot content pack into SiteGround MySQL:
+Seed the pilot content pack into LiveWeave MySQL:
 
 ```powershell
 npm run mysql:kc:seed
@@ -157,7 +181,7 @@ idempotent: existing entities, atoms, questions, and confusion pairs are updated
 
 ## 6. Reset A Player Game Profile
 
-To reset one player's game progress without deleting their SiteGround/MySQL
+To reset one player's game progress without deleting their LiveWeave/MySQL
 school account, set a long random server-only token:
 
 ```env

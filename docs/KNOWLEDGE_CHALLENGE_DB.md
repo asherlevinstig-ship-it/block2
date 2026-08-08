@@ -3,7 +3,7 @@
 Design for the new **paid knowledge challenge** (gold in → gold out) built on the adaptive
 practice engine. This document is the schema/structure proposal only; no tables are created yet.
 
-It **extends the existing MySQL teacher-tools store**
+It **extends the LiveWeave-backed MySQL teacher-tools store**
 ([`server/mysql-game-questions.js`](../server/mysql-game-questions.js)) rather than replacing it,
 so teacher authoring, analytics and homework keep working and the press‑`p`
 multiple‑choice flow keeps running throughout.
