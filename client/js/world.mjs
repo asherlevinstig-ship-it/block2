@@ -10879,6 +10879,9 @@ function buildProps(){
   buildScholarTable(76.1,89.0,'SCHOLAR TABLE');
   buildScholarTable(79.5,89.5,'SCHOLAR TABLE');
   buildScholarTable(82.9,89.0,'SCHOLAR TABLE');
+  // Main-room scholar table: keeps the quiz mini-game visible in the tavern's
+  // central play space, not only tucked away in the games corner.
+  buildScholarTable(77.0,78.8,'SCHOLAR TABLE');
   // barrels: tavern corner + smithy
   function barrel(x,z){
     const g=new THREE.Group();
@@ -10973,9 +10976,15 @@ function buildProps(){
     'Small stake, sharp answer, warm purse. Sit if you dare.');
   tavernPatron('Saffi Ledger','Scholar Table Host',83.0,86.8,-.18,'#4a345f','#2f213d',
     'A streak is not luck if your brain can prove it twice.');
-  for(const [i,homeX] of [[1,83],[2,76],[3,79]]){
-    const host=villagers[villagers.length-i];
-    if(host){host.role='tavern_scholar';host.shortName=host.name.split(' ')[0];host.home=[dtx(homeX,'tavern'),dtz(87,'tavern')];}
+  tavernPatron('Bryn Tally','Scholar Table Host',76.9,77.0,Math.PI*.08,'#2b415f','#1b2a3f',
+    'Main room table is open. Put down gold and make the whole tavern believe you.');
+  for(const [back,homeX,homeZ] of [[4,79,87],[3,76,87],[2,83,87],[1,77,77]]){
+    const host=villagers[villagers.length-back];
+    if(host){
+      host.role='tavern_scholar';
+      host.shortName=host.name.split(' ')[0];
+      host.home=[dtx(homeX,'tavern'),dtz(homeZ,'tavern')];
+    }
   }
 }
 buildProps();
