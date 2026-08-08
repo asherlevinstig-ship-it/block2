@@ -2208,11 +2208,13 @@ function buildTown(){
   for(let x=tx1+2;x<=tx2-2;x+=4)for(const z of [tz1,tz2])           // windows, long walls
     for(let y=G+2;y<=G+3;y++) setB(x,y,z,B.GLASS);
   for(let z=tz1+3;z<=tz2-3;z+=4)for(let y=G+2;y<=G+3;y++) setB(tx2,y,z,B.GLASS);
-  // doorway with log frame, facing west toward the fountain
-  fillBox(tx1,G+1,dz0, tx1,G+2,dz0, B.AIR);
-  fillBox(tx1,G+1,dz0-1, tx1,G+2,dz0-1, B.LOG);
+  // doorway with log frame, facing west toward the fountain.
+  // Two blocks wide: a 0.6-wide player barely fits a 1-wide gap, so it read as
+  // getting shoved back at the threshold. Widened north (toward the plaza path).
+  fillBox(tx1,G+1,dz0-1, tx1,G+2,dz0, B.AIR);
+  fillBox(tx1,G+1,dz0-2, tx1,G+2,dz0-2, B.LOG);
   fillBox(tx1,G+1,dz0+1, tx1,G+2,dz0+1, B.LOG);
-  setB(tx1,G+3,dz0,B.LOG);
+  fillBox(tx1,G+3,dz0-1, tx1,G+3,dz0, B.LOG);
   for(const wz of [dz0-5,dz0+5]) for(let y=G+2;y<=G+3;y++) setB(tx1,y,wz,B.GLASS);
   // cobble step path from plaza to the door
   for(let z=Math.min(TC+5,dz0);z<=Math.max(TC+5,dz0);z++) for(let w=-1;w<=1;w++) setB(TC+w,G,z,B.COBBLE);
