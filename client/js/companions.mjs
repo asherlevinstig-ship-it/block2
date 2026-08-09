@@ -2994,16 +2994,20 @@ function makeRemoteAvatar(look){
       const mat=voxelMats(base,shadeHex(base,28),shadeHex(base,-28),shadeHex(base,-44));
       addBox(sword,[.28,.28,.28],[.08,.06,.1],mat,[.25,.4,.15]);
       addBox(sword,[.22,.055,.22],[.08,.23,.1],voxelMats(shadeHex(base,18),shadeHex(base,36),base,shadeHex(base,-24)),[.25,.4,.15]);
-    } else if(heldGeneric&&heldGeneric.icon){
-      const tex=new THREE.CanvasTexture(heldGeneric.icon);
-      tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
-      const plate=new THREE.Mesh(
-        new THREE.PlaneGeometry(.34,.34),
-        new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide})
-      );
-      plate.position.set(.1,.08,.14);
-      plate.rotation.set(.25,-.55,.28);
-      sword.add(plate);
+    } else if(heldGeneric){
+      if(heldGeneric.icon){
+        const tex=new THREE.CanvasTexture(heldGeneric.icon);
+        tex.magFilter=THREE.NearestFilter; tex.minFilter=THREE.NearestFilter;
+        const plate=new THREE.Mesh(
+          new THREE.PlaneGeometry(.34,.34),
+          new THREE.MeshBasicMaterial({map:tex,transparent:true,side:THREE.DoubleSide})
+        );
+        plate.position.set(.1,.08,.14);
+        plate.rotation.set(.25,-.55,.28);
+        sword.add(plate);
+      }else{
+        addBox(sword,[.2,.2,.08],[.1,.08,.14],voxelMats('#8aa0b8','#dbeafe','#334155','#172033'),[.25,-.55,.28]);
+      }
       addBox(sword,[.26,.025,.26],[.1,.07,.13],voxelMats('#d7c6a5','#fff0c8','#7a6540','#3a2c1d'),[.25,-.55,.28]);
     }
   }
