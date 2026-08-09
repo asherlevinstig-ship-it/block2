@@ -2076,6 +2076,7 @@ function netAttachRoom(room,name,client){
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
       if(typeof applyDeathRespawnVitals==='function')applyDeathRespawnVitals(m);
       else {hp=Math.max(1,Math.ceil(maxHp()*.25));renderBars();}
+      titleFlashNet('Respawned','Returned safely',{kind:'blue',duration:1200});
       sysMsg('<b>Respawned.</b> You returned safely to the Town of Beginnings.');
     });
     room.onMessage('dungeonFailed', m=>{
@@ -2090,6 +2091,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('gateBreach', m=>{
       const rankName=RANKS[Math.max(0,Math.min(4,(m&&m.rank)|0))].n;
       const place=Number.isFinite(m&&m.x)&&Number.isFinite(m&&m.z)?' near '+escHTML(Math.round(m.x)+', '+Math.round(m.z)):' nearby';
+      titleFlashNet(rankName+'-Rank Breach','Escaped boss in the overworld',{kind:'danger',duration:1800});
       sysMsg('<b>Gate Breach Emergency.</b> '+escHTML((m&&m.bossName)||'The escaped boss')+' escaped'+place+' with '+((m&&m.count)|0)+' dungeon threat'+(((m&&m.count)|0)===1?'':'s')+'. Track it as a public cleanup bounty: reduced XP + materials, no keys. Full clear rewards only come from beating the Gate before collapse.',{tier:'major',title:rankName+'-Rank Breach'});
       try{ SFX.boom&&SFX.boom(); }catch(e){}
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)) burst(m.x,m.y+1.5,m.z,[1,.35,.18],42,4.5,4,.95);
@@ -2097,6 +2099,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('gateBreachCleared',m=>{
       const pct=Math.max(0,(m&&m.cleanupRatio)|0);
       const recap=pct?(' Cleanup paid '+pct+'% clear XP plus materials only, no keys.'):' Cleanup paid reduced XP plus materials only, no keys.';
+      titleFlashNet('Breach Contained',String((m&&m.bossName)||'Escaped boss')+' defeated',{kind:'success',duration:1500});
       sysMsg('<b>Gate breach contained.</b> '+escHTML((m&&m.bossName)||'The escaped boss')+' is down.'+recap,{tier:'major',title:'Breach Contained'});
       if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)) burst(m.x,m.y+1.5,m.z,[1,.82,.3],36,3.2,3,.9);
     });
@@ -2273,29 +2276,6 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('roadsideEncounterReject',()=>sysMsg('Move closer and aim at the wounded hunter to provide aid.'));
     room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
-    let worldEventAlertTimer=0;
-    function showWorldEventAlert(title,subtitle,meta){
-      try{
-        let el=document.getElementById('worldeventalert');
-        if(!el){
-          el=document.createElement('div');
-          el.id='worldeventalert';
-          el.className='hidden';
-          el.innerHTML='<div class="wea-panel"><div class="wea-kicker">WORLD EVENT</div><div class="wea-title"></div><div class="wea-subtitle"></div><div class="wea-meta"></div></div>';
-          document.body.appendChild(el);
-        }
-        const t=el.querySelector('.wea-title'),s=el.querySelector('.wea-subtitle'),m=el.querySelector('.wea-meta');
-        if(t)t.textContent=String(title||'WORLD EVENT');
-        if(s)s.textContent=String(subtitle||'');
-        if(m)m.textContent=String(meta||'');
-        el.classList.remove('hidden');
-        el.classList.remove('show');
-        void el.offsetWidth;
-        el.classList.add('show');
-        clearTimeout(worldEventAlertTimer);
-        worldEventAlertTimer=setTimeout(()=>{el.classList.remove('show');el.classList.add('hidden');},5200);
-      }catch(_){}
-    }
     function playMeteorEventCue(state){
       try{
         if(state==='falling'){
@@ -2308,20 +2288,23 @@ function netAttachRoom(room,name,client){
         }
       }catch(_){}
     }
+    function titleFlashNet(title,subtitle,opts){
+      try{if(globalThis.BlockcraftTitleFlash)globalThis.BlockcraftTitleFlash(title,subtitle,opts||{});}catch(_){}
+    }
     room.onMessage('meteorEvent',m=>{
       if(!m)return;
       try{console.debug('[meteor-client] event',JSON.stringify({id:m.id||'',state:m.state||'',x:m.x,y:m.y,z:m.z,impactAt:m.impactAt||0,expiresAt:m.expiresAt||0,bossId:m.bossId||'',minions:m.minions||0}));}catch(_){}
       overworldActivity={...(overworldActivity||{}),meteor:m};
       if(m.state==='falling'){
         const loc='Impact near X '+Math.round(Number(m.x)||0)+', Z '+Math.round(Number(m.z)||0);
-        showWorldEventAlert('FALLING STAR','A meteor is tearing through the sky',loc);
+        titleFlashNet('Falling Star','A meteor is tearing through the sky',{kind:'danger',duration:1600});
         playMeteorEventCue('falling');
         sysMsg('<b>Falling Star:</b> a meteor is coming down in the wilderness.',{tier:'major',title:'Falling Star'});
         eventFeed('[Falling Star]','Meteor incoming. '+loc+'.',{key:'meteor:start:'+String(m.id||''),cooldown:0});
         netFx({t:'meteorFalling',x:m.x,y:m.y,z:m.z,impactAt:m.impactAt,dgn:''});
       }else if(m.state==='active'){
         const remain=Math.max(0,Math.ceil((Number(m.expiresAt||0)-Date.now())/60000));
-        showWorldEventAlert('METEOR CRATER ACTIVE','Eldritch Heartwood has awakened',remain?('Crater collapses in '+remain+' min if undefeated'):'Crater collapsing soon');
+        titleFlashNet('Meteor Crater Active','Eldritch Heartwood awakened',{kind:'danger',duration:1600});
         playMeteorEventCue('active');
         sysMsg('<b>Meteor crater active:</b> hostile creatures and an Eldritch Heartwood are at the impact site.',{tier:'major',title:'Meteor Crater'});
         eventFeed('[Falling Star]','Meteor crater active. Defeat the Eldritch Heartwood before it withdraws.',{key:'meteor:active:'+String(m.id||''),cooldown:0});

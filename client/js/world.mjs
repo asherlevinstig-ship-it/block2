@@ -7825,7 +7825,6 @@ const coachDismissBtn=document.getElementById('coachdismiss');
 let serverEvent=null;
 let eventWorld=null, eventReturnWorld=null, eventMode=false, eventId='';
 let lastEventAlertId='';
-let eventQueueAnnounceId='', eventQueueAnnounceUntil=0;
 let pendingEventResult=null;
 let eventStageAnchor=null;
 let kingAnnouncement=null, lastKingMinuteWarnId='';
@@ -8365,13 +8364,11 @@ function applyEventStatus(m){
   if(!serverEvent||serverEvent.id!==previousEventId||serverEvent.kind!=='caravan'||serverEvent.phase==='ended')lastCaravanRewardTier=null;
   if(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id!==lastEventAlertId){
     lastEventAlertId=serverEvent.id;
-    eventQueueAnnounceId=serverEvent.id;
-    eventQueueAnnounceUntil=Date.now()+1400;
+    titleFlash((serverEvent.name||'Server Event')+' Event','Queue is open - join from the event banner',{kind:'gold',duration:1400});
     sysMsg('<b>Event Alert:</b> '+escHTML(serverEvent.name||'Server Event')+' queue is open. Join from the event banner before the countdown ends. <b>Reward:</b> '+Math.max(0,serverEvent.reward||2)+' Legendary Tokens'+(serverEvent.rewardXp?' + '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' Hunter XP':'')+'.');
     pulseEventHud();
   }else if(serverEvent&&serverEvent.phase==='queue'&&!previousJoined&&serverEvent.joined){
-    eventQueueAnnounceId=serverEvent.id||eventQueueAnnounceId;
-    eventQueueAnnounceUntil=Date.now()+1100;
+    titleFlash('Signed up for '+(serverEvent.name||'Event'),'Watch the event banner for staging',{kind:'blue',duration:1100});
     pulseEventHud();
   }else if(serverEvent&&serverEvent.phase==='starting'&&previousPhase!=='starting'&&serverEvent.participating){
     pulseEventHud();
@@ -8534,16 +8531,27 @@ function eventCompleted(m){
   renderEventHud();
   if(serverEvent&&serverEvent.kind==='parkour')parkourFinishFx();
   if(serverEvent&&serverEvent.kind==='caravan')caravanFinishFx();
-  if(serverEvent&&serverEvent.kind==='caravan')sysMsg('<b>Route secured!</b> Your reward scales with the wagon health that remained.');
-  else sysMsg('<b>'+escHTML(serverEvent&&serverEvent.name||'Event')+' complete!</b> You earned <b>2 Legendary Weapon Tokens</b>.');
+  if(serverEvent&&serverEvent.kind==='caravan'){
+    titleFlash('Route Secured','Caravan Defence complete',{kind:'success',duration:1500});
+    sysMsg('<b>Route secured!</b> Your reward scales with the wagon health that remained.');
+  }else{
+    titleFlash((serverEvent&&serverEvent.name||'Event')+' Complete','Reward earned',{kind:'success',duration:1500});
+    sysMsg('<b>'+escHTML(serverEvent&&serverEvent.name||'Event')+' complete!</b> You earned <b>2 Legendary Weapon Tokens</b>.');
+  }
 }
 function eventFailed(m){
   const nm=(m&&m.name)||serverEvent&&serverEvent.name||'Event';
   if((m&&m.kind)==='caravan'||(serverEvent&&serverEvent.kind)==='caravan'){
     const reason=m&&m.reason==='timeout'?'The route was not secured before time ran out.':'The wagon was destroyed by the bandits.';
+    titleFlash('Caravan Lost','No event reward',{kind:'danger',duration:1500});
     sysMsg('<b>Caravan lost.</b> '+reason+' No event reward was awarded.');
-  } else if(m&&m.winner) sysMsg('<b>'+escHTML(nm)+' ended.</b> Winner: <b>'+escHTML(m.winner)+'</b>.');
-  else sysMsg('<b>'+escHTML(nm)+' ended.</b> No event reward this time.');
+  } else if(m&&m.winner){
+    titleFlash(nm+' Ended','Winner: '+m.winner,{kind:'gold',duration:1500});
+    sysMsg('<b>'+escHTML(nm)+' ended.</b> Winner: <b>'+escHTML(m.winner)+'</b>.');
+  }else{
+    titleFlash(nm+' Ended','No event reward',{kind:'danger',duration:1500});
+    sysMsg('<b>'+escHTML(nm)+' ended.</b> No event reward this time.');
+  }
 }
 function escHTML(v){
   return String(v).replace(/[&<>"']/g, ch=>({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
@@ -8557,6 +8565,26 @@ const sysRecent=new Map();
 sysEl.setAttribute('aria-live','polite');
 const rewardFeedEl=document.getElementById('rewardfeed');
 const rewardGainActive=new Map();
+let titleFlashTimer=0;
+function titleFlash(title, subtitle='', opts={}){
+  try{
+    let el=document.getElementById('titleflash');
+    if(!el){
+      el=document.createElement('div');
+      el.id='titleflash';
+      el.className='hidden';
+      el.innerHTML='<div class="titleflash-main"></div><div class="titleflash-sub"></div>';
+      document.body.appendChild(el);
+    }
+    const main=el.querySelector('.titleflash-main'),sub=el.querySelector('.titleflash-sub');
+    if(main)main.textContent=String(title||'').slice(0,80);
+    if(sub)sub.textContent=String(subtitle||'').slice(0,120);
+    el.className='show '+String(opts.kind||'gold');
+    clearTimeout(titleFlashTimer);
+    titleFlashTimer=setTimeout(()=>{el.className='hidden';},Math.max(700,Math.min(4000,Number(opts.duration)||1400)));
+  }catch(_){}
+}
+globalThis.BlockcraftTitleFlash=titleFlash;
 function rewardGain(kind, amount, label, opts={}){
   amount=Math.max(0,Math.round(Number(amount)||0));
   if(!rewardFeedEl||!amount)return;
@@ -8790,7 +8818,10 @@ function applyGateProgress(p){
   const before=localPlayerRankIndex();
   highestGateRankCleared=Math.max(-1,Math.min(4,p.highestGateRankCleared|0));
   const after=localPlayerRankIndex();
-  if(after>before) sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(after)+'-Rank gates are now available.',{tier:'major',title:'Rank Advanced'});
+  if(after>before){
+    titleFlash('Rank Advanced',localPlayerRankName()+' - '+gateRankLetter(after)+'-Rank gates unlocked',{kind:'success',duration:1700});
+    sysMsg('Player rank advanced to <b>'+localPlayerRankName()+'</b>. '+gateRankLetter(after)+'-Rank gates are now available.',{tier:'major',title:'Rank Advanced'});
+  }
   refreshAppearanceDummy();
 }
 function showDungeonReward(m, earned){
@@ -8866,27 +8897,16 @@ function holdEventStartPosition(){
 }
 function renderEventStart(){
   if(!eventStartWin)return;
-  const now=Date.now();
   const starting=!!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);
-  const queueing=!!(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id===eventQueueAnnounceId&&now<eventQueueAnnounceUntil);
-  const showing=starting||queueing;
+  const showing=starting;
   eventStartWin.classList.toggle('hidden',!showing);
   if(!showing)return;
   const king=serverEvent.kind==='king';
   const caravan=serverEvent.kind==='caravan';
   const side=serverEvent.eventTeam||{};
   const source=side.source==='party'?'party kept together':side.source==='fellowship'?'fellowship kept together':'ability-balanced assignment';
-  eventStartWin.classList.toggle('queue',queueing);
+  eventStartWin.classList.remove('queue');
   eventStartWin.classList.toggle('king',king);
-  if(queueing){
-    eventStartName.textContent=(serverEvent.joined?'SIGNED UP FOR ':'')+(serverEvent.name||'Server Event')+' Event';
-    eventStartObjective.textContent=serverEvent.joined?'Watch the event banner for staging':'Queue is open - join from the event banner';
-    eventStartRules.textContent='';
-    eventStartReward.textContent='';
-    eventStartCount.textContent='';
-    eventStartCount.classList.add('ready');
-    return;
-  }
   eventStartName.textContent=(serverEvent.name||'Server Event').toUpperCase();
   eventStartObjective.textContent=king?'Hold the crown longer than every rival':caravan?'Protect the wagon through four bandit ambushes':'Reach every checkpoint, then cross the finish';
   eventStartRules.textContent=king
@@ -8918,6 +8938,7 @@ function eventGo(m){
   eventStageAnchor=null;
   if(eventStartWin)eventStartWin.classList.add('hidden');
   pulseEventHud();
+  titleFlash('GO!',m&&m.kind==='king'?'Take the crown':m&&m.kind==='caravan'?'Defend the wagon':'Follow the checkpoints',{kind:'success',duration:1200});
   sysMsg('<b>GO!</b> '+(m&&m.kind==='king'?'Take and hold the crown.':m&&m.kind==='caravan'?'Defend the wagon through every ambush.':'Follow the checkpoint beacons to the finish.'));
 }
 function eventAfk(m){
@@ -9029,6 +9050,7 @@ function gainXP(n){
   if(leveled){
     hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
     const shouldRunLevel2Cutscene=S.lvl>=2 && S.path && dim==='overworld' && !cutsceneSeen();
+    titleFlash('Level '+S.lvl,'+'+((S.lvl-beforeLevel)*3)+' stat points',{kind:'success',duration:1500});
     if(S.lvl>=2 && S.path && !abilityTutorialDone() && !shouldRunLevel2Cutscene) showAbilityAwakening();
     else sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>+'+((S.lvl-beforeLevel)*3)+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
     const afterRank=localPlayerRankIndex();
@@ -9042,7 +9064,10 @@ function gainXP(n){
       for(const unlockedLevel of [2,4,8]){
         if(unlockedLevel<=beforeLevel||unlockedLevel>S.lvl)continue;
         const ul=[2,4,8].indexOf(unlockedLevel);
-        if(PATHS[S.path].ab[ul])sysMsg('Ability unlocked: <b>'+PATHS[S.path].ab[ul].n+'</b>',{tier:'major',title:'New Power'});
+        if(PATHS[S.path].ab[ul]){
+          titleFlash('Ability Unlocked',PATHS[S.path].ab[ul].n,{kind:'blue',duration:1500});
+          sysMsg('Ability unlocked: <b>'+PATHS[S.path].ab[ul].n+'</b>',{tier:'major',title:'New Power'});
+        }
       }
     }
     renderAbilities();
