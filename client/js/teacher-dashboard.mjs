@@ -1665,12 +1665,6 @@ createApp({
               </select></label>
             </div>
 
-            <section class="teacher-vue-bank-tabs" aria-label="Question bank screens">
-              <button type="button" :class="{ active: state.view === 'recall-bank' }" @click="openView('recall-bank')">P Recall <strong>{{ bankCounts.recall }}</strong></button>
-              <button type="button" :class="{ active: state.view === 'meditation-bank' }" @click="openView('meditation-bank')">Meditation <strong>{{ bankCounts.meditation }}</strong></button>
-              <button type="button" :class="{ active: state.view === 'scholar-bank' }" @click="openView('scholar-bank')">Knowledge <strong>{{ bankCounts.scholar }}</strong></button>
-            </section>
-
             <section class="teacher-vue-templates">
               <article v-if="activeQuestionMode === 'recall'">
                 <b>P Recall / Question Hall</b>
@@ -1678,8 +1672,8 @@ createApp({
                 <em>Template: “Which option best describes ____?”</em>
               </article>
               <article v-if="activeQuestionMode === 'meditation'">
-                <b>Meditation Focus</b>
-                <span>Best for calm fill-the-gap recall. Put a blank in the prompt and add accepted answers below.</span>
+                <b>Meditation Fill in the Gap</b>
+                <span>Write one sentence with a blank, then add the accepted answer. Optional alternatives are only for spelling or equivalent wording.</span>
                 <em>Template: “A variable stores a value that can ____ while a program runs.”</em>
               </article>
               <article v-if="activeQuestionMode === 'scholar'">
@@ -1771,10 +1765,10 @@ createApp({
             <label class="teacher-vue-wide">Question prompt<textarea v-model="state.form.prompt" maxlength="500" rows="4"></textarea></label>
 
             <fieldset class="teacher-vue-answers">
-              <legend>{{ activeQuestionMode === 'meditation' ? 'Accepted fill-gap answers' : 'Multiple-choice answers' }}</legend>
+              <legend>{{ activeQuestionMode === 'meditation' ? 'Fill-in-the-gap answer' : 'Multiple-choice answers' }}</legend>
               <label v-for="index in [0,1,2,3]" :key="index">
                 <input v-if="activeQuestionMode !== 'meditation'" type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
-                <span>{{ ['A','B','C','D'][index] }}</span>
+                <span>{{ activeQuestionMode === 'meditation' ? (index === 0 ? 'Answer' : 'Alt ' + index) : ['A','B','C','D'][index] }}</span>
                 <input v-model="state.form.answers[index]" maxlength="160" :placeholder="activeQuestionMode === 'meditation' ? (index === 0 ? 'Main accepted answer' : 'Optional alternative spelling/wording') : activeQuestionMode === 'scholar' ? (index === state.form.correct ? 'Secure target idea' : 'Plausible misconception') : ''">
               </label>
             </fieldset>
