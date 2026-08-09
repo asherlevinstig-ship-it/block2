@@ -10337,6 +10337,60 @@ test('admin meteor command targets the caller position', () => {
   assert.equal(client.sent.some(e => e.type === 'chat' && /your position/i.test(e.msg.text)), true);
 });
 
+test('meteor random timer is stable while waiting to start', () => {
+  const room = makeRoom();
+  const now = 10_000_000;
+
+  room.initMeteorEventState(now);
+  const first = room.nextMeteorAt;
+  room.initMeteorEventState(now + 60_000);
+
+  assert.equal(room.nextMeteorAt, first);
+  assert.equal(first >= now + 8 * 60 * 1000, true);
+  assert.equal(first < now + 16 * 60 * 1000, true);
+});
+
+test('meteor event remains active for ten minutes after impact', () => {
+  const room = makeRoom();
+  const client = makeClient('meteor_duration_admin');
+  room.clients = [client];
+  room.mobSeq = 0;
+  room.broadcast = (type, msg) => client.sent.push({ type, msg });
+  room.sendOverworldActivities = () => {};
+  seedPlayer(room, client, { x: 412, y: 18, z: 376 });
+
+  const ev = room.startMeteorEvent(20_000_000, { x: 412, z: 376 }, { forceNearPreferred: true });
+
+  assert.ok(ev);
+  assert.equal(ev.expiresAt - ev.impactAt, 10 * 60 * 1000);
+});
+
+test('meteor impact broadcasts active crater and expiry cleans it up', () => {
+  const room = makeRoom();
+  const client = makeClient('meteor_expiry_admin');
+  room.clients = [client];
+  room.mobSeq = 0;
+  room.broadcast = (type, msg) => client.sent.push({ type, msg });
+  room.sendOverworldActivities = () => {};
+  seedPlayer(room, client, { x: 488, y: 18, z: 586 });
+  const now = 30_000_000;
+  const ev = room.startMeteorEvent(now, { x: 488, z: 586 }, { forceNearPreferred: true });
+
+  room.maintainMeteorEvent(0, null, ev.impactAt + 1);
+
+  assert.equal(room.meteorEvent.state, 'active');
+  assert.equal(client.sent.some(e => e.type === 'meteorEvent' && e.msg.state === 'active'), true);
+  assert.ok(room.meteorEvent.bossId);
+
+  const bossId = room.meteorEvent.bossId;
+  room.maintainMeteorEvent(0, null, room.meteorEvent.expiresAt + 1);
+
+  assert.equal(room.meteorEvent, null);
+  assert.equal(room.state.mobs.has(bossId), false);
+  assert.equal(room.nextMeteorAt >= ev.expiresAt + 1 + 12 * 60 * 1000, true);
+  assert.equal(room.nextMeteorAt < ev.expiresAt + 1 + 20 * 60 * 1000, true);
+});
+
 test('admin meteor command replaces stale meteor and broadcasts falling fx', () => {
   const room = makeRoom();
   const client = makeClient('meteor_replace_admin');

@@ -14,6 +14,17 @@ const D = require('../dungeon');
 const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
+const METEOR_FALL_MS = 5200;
+const METEOR_ACTIVE_MS = 10 * 60 * 1000;
+const METEOR_FIRST_MIN_MS = 8 * 60 * 1000;
+const METEOR_FIRST_JITTER_MS = 8 * 60 * 1000;
+const METEOR_REPEAT_MIN_MS = 12 * 60 * 1000;
+const METEOR_REPEAT_JITTER_MS = 8 * 60 * 1000;
+const METEOR_AFTER_KILL_MIN_MS = 14 * 60 * 1000;
+const METEOR_AFTER_KILL_JITTER_MS = 10 * 60 * 1000;
+const METEOR_RETRY_MS = 90 * 1000;
+const randomMeteorDelay = (minMs, jitterMs) => minMs + Math.floor(Math.random() * jitterMs);
+
 class SpawningMixin {
   // ---------------- open-world meteor event ----------------
   debugMeteorEvent(stage, data = {}) {
@@ -28,9 +39,9 @@ class SpawningMixin {
   }
 
   initMeteorEventState(now = Date.now()) {
-    if (!this.meteorEvent) {
-      this.meteorEvent = null;
-      this.nextMeteorAt = now + 6 * 60 * 1000 + Math.floor(Math.random() * 8 * 60 * 1000);
+    if (typeof this.meteorEvent === 'undefined') this.meteorEvent = null;
+    if (!Number.isFinite(this.nextMeteorAt)) {
+      this.nextMeteorAt = now + randomMeteorDelay(METEOR_FIRST_MIN_MS, METEOR_FIRST_JITTER_MS);
       this.debugMeteorEvent('init', { now, nextMeteorAt: this.nextMeteorAt });
     }
   }
@@ -98,7 +109,7 @@ class SpawningMixin {
     if (this.meteorEvent) return null;
     const point = this.meteorSpawnPoint(preferred, opts);
     if (!point) {
-      this.nextMeteorAt = now + 90 * 1000;
+      this.nextMeteorAt = now + METEOR_RETRY_MS;
       this.debugMeteorEvent('start:no-point', { nextMeteorAt: this.nextMeteorAt });
       return null;
     }
@@ -108,8 +119,8 @@ class SpawningMixin {
       x: point.x, y: point.y, z: point.z, ring,
       state: 'falling',
       createdAt: now,
-      impactAt: now + 5200,
-      expiresAt: now + 8 * 60 * 1000,
+      impactAt: now + METEOR_FALL_MS,
+      expiresAt: now + METEOR_FALL_MS + METEOR_ACTIVE_MS,
       nextFallingFxAt: now + 700,
       bossId: '',
       minionIds: new Set(),
@@ -256,7 +267,7 @@ class SpawningMixin {
     if (ev) {
       for (const id of ev.minionIds || []) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
       this.meteorEvent = null;
-      this.nextMeteorAt = Date.now() + 14 * 60 * 1000 + Math.floor(Math.random() * 10 * 60 * 1000);
+      this.nextMeteorAt = Date.now() + randomMeteorDelay(METEOR_AFTER_KILL_MIN_MS, METEOR_AFTER_KILL_JITTER_MS);
       this.sendOverworldActivities();
     }
     return true;
@@ -279,21 +290,23 @@ class SpawningMixin {
       const bossId = this.spawnMeteorBoss(ev);
       for (let i = 0; i < 6; i++) this.spawnMeteorMinion(ev, i);
       this.debugMeteorEvent('impact:complete', { id: ev.id, edits, bossId, minions: ev.minionIds.size });
+      this.broadcast('meteorEvent', this.meteorEventPayload(ev));
       this.sendOverworldActivities();
     }
-    if (ev.state === 'active') {
+    if (ev.state === 'active' && now < ev.expiresAt) {
       ev.minionIds = new Set([...ev.minionIds].filter(id => this.state.mobs.has(id)));
       const boss = ev.bossId ? this.state.mobs.get(ev.bossId) : null;
-      if (!boss) return;
-      const desired = 4 + Math.min(3, ev.ring | 0);
-      while (ev.minionIds.size < desired && (!clusters || this.localHostileBudgetAllows(ev.x, ev.z, clusters, 0))) this.spawnMeteorMinion(ev, ev.minionIds.size + 1);
+      if (boss) {
+        const desired = 4 + Math.min(3, ev.ring | 0);
+        while (ev.minionIds.size < desired && (!clusters || this.localHostileBudgetAllows(ev.x, ev.z, clusters, 0))) this.spawnMeteorMinion(ev, ev.minionIds.size + 1);
+      }
     }
     if (now >= ev.expiresAt) {
       this.debugMeteorEvent('expired', this.meteorEventPayload(ev));
       for (const id of [ev.bossId, ...ev.minionIds]) { if (id) { this.state.mobs.delete(id); delete this.mobMeta[id]; } }
       this.broadcast('chat', { name: '[Falling Star]', text: 'The crater quiets. The Heartwood withdraws beneath the ash.' });
       this.meteorEvent = null;
-      this.nextMeteorAt = now + 10 * 60 * 1000 + Math.floor(Math.random() * 8 * 60 * 1000);
+      this.nextMeteorAt = now + randomMeteorDelay(METEOR_REPEAT_MIN_MS, METEOR_REPEAT_JITTER_MS);
       this.sendOverworldActivities();
     }
   }

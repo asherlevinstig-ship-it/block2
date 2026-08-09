@@ -2273,14 +2273,59 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('roadsideEncounterReject',()=>sysMsg('Move closer and aim at the wounded hunter to provide aid.'));
     room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
+    let worldEventAlertTimer=0;
+    function showWorldEventAlert(title,subtitle,meta){
+      try{
+        let el=document.getElementById('worldeventalert');
+        if(!el){
+          el=document.createElement('div');
+          el.id='worldeventalert';
+          el.className='hidden';
+          el.innerHTML='<div class="wea-panel"><div class="wea-kicker">WORLD EVENT</div><div class="wea-title"></div><div class="wea-subtitle"></div><div class="wea-meta"></div></div>';
+          document.body.appendChild(el);
+        }
+        const t=el.querySelector('.wea-title'),s=el.querySelector('.wea-subtitle'),m=el.querySelector('.wea-meta');
+        if(t)t.textContent=String(title||'WORLD EVENT');
+        if(s)s.textContent=String(subtitle||'');
+        if(m)m.textContent=String(meta||'');
+        el.classList.remove('hidden');
+        el.classList.remove('show');
+        void el.offsetWidth;
+        el.classList.add('show');
+        clearTimeout(worldEventAlertTimer);
+        worldEventAlertTimer=setTimeout(()=>{el.classList.remove('show');el.classList.add('hidden');},5200);
+      }catch(_){}
+    }
+    function playMeteorEventCue(state){
+      try{
+        if(state==='falling'){
+          if(SFX.roar)SFX.roar();
+          if(SFX.slamWarn)setTimeout(()=>SFX.slamWarn(),220);
+          if(SFX.boom)setTimeout(()=>SFX.boom(),900);
+        }else{
+          if(SFX.boom)SFX.boom();
+          if(SFX.roar)setTimeout(()=>SFX.roar(),260);
+        }
+      }catch(_){}
+    }
     room.onMessage('meteorEvent',m=>{
       if(!m)return;
       try{console.debug('[meteor-client] event',JSON.stringify({id:m.id||'',state:m.state||'',x:m.x,y:m.y,z:m.z,impactAt:m.impactAt||0,expiresAt:m.expiresAt||0,bossId:m.bossId||'',minions:m.minions||0}));}catch(_){}
       overworldActivity={...(overworldActivity||{}),meteor:m};
       if(m.state==='falling'){
+        const loc='Impact near X '+Math.round(Number(m.x)||0)+', Z '+Math.round(Number(m.z)||0);
+        showWorldEventAlert('FALLING STAR','A meteor is tearing through the sky',loc);
+        playMeteorEventCue('falling');
         sysMsg('<b>Falling Star:</b> a meteor is coming down in the wilderness.',{tier:'major',title:'Falling Star'});
-        netFx({t:'meteorFalling',x:m.x,y:m.y,z:m.z,dgn:''});
-      }else if(m.state==='active')sysMsg('<b>Meteor crater active:</b> hostile creatures and an Eldritch Heartwood are at the impact site.',{tier:'major',title:'Meteor Crater'});
+        eventFeed('[Falling Star]','Meteor incoming. '+loc+'.',{key:'meteor:start:'+String(m.id||''),cooldown:0});
+        netFx({t:'meteorFalling',x:m.x,y:m.y,z:m.z,impactAt:m.impactAt,dgn:''});
+      }else if(m.state==='active'){
+        const remain=Math.max(0,Math.ceil((Number(m.expiresAt||0)-Date.now())/60000));
+        showWorldEventAlert('METEOR CRATER ACTIVE','Eldritch Heartwood has awakened',remain?('Crater collapses in '+remain+' min if undefeated'):'Crater collapsing soon');
+        playMeteorEventCue('active');
+        sysMsg('<b>Meteor crater active:</b> hostile creatures and an Eldritch Heartwood are at the impact site.',{tier:'major',title:'Meteor Crater'});
+        eventFeed('[Falling Star]','Meteor crater active. Defeat the Eldritch Heartwood before it withdraws.',{key:'meteor:active:'+String(m.id||''),cooldown:0});
+      }
       updateLandMinimap();
     });
     room.onMessage('roadSafetyChanged',m=>{
