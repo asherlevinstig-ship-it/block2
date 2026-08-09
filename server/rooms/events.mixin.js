@@ -746,7 +746,11 @@ class EventsMixin {
       if (ev) return client.send('chat', { name: '[Event]', text: 'Falling Star forced at your position: ' + Math.round(ev.x) + ', ' + Math.round(ev.z) + '.' });
       return client.send('chat', { name: '[Event]', text: 'Falling Star could not find a valid impact site near you yet.' });
     }
-    if (!BETA_EVENT_TEST) return client.send('eventReject', { reason: 'closed' });
+    if (kind === 'help' || kind === 'list' || kind === 'status' || kind === '') {
+      const cur = this.currentEventInstance() || this.serverEvent;
+      return client.send('chat', { name: '[Event]', text: 'Admin event checks: /event parkour, /event king, /event caravan, /event meteor.' + (cur ? ' Current: ' + (cur.name || cur.kind || 'event') + ' ' + (cur.phase || 'idle') + '.' : '') });
+    }
+    if (!BETA_EVENT_TEST && !admin) return client.send('eventReject', { reason: 'closed' });
     const forcedKind = kind === 'king' || kind === 'koth' ? EVENT_KING.kind
       : kind === 'caravan' || kind === 'defence' || kind === 'defense' ? EVENT_CARAVAN.kind
       : kind === 'parkour' ? EVENT_PARKOUR.kind

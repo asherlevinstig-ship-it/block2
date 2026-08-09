@@ -10319,6 +10319,45 @@ test('parkour beta test shortcut opens and accelerates the event queue', () => {
   assert.equal(client.sent.some(e => e.type === 'eventJoined' && e.msg.joined), true);
 });
 
+test('admin event commands force each queue and auto-join the admin', () => {
+  for (const [command, kind] of [['/event parkour', 'parkour'], ['/event king', 'king'], ['/event caravan', 'caravan']]) {
+    const room = makeRoom();
+    const client = makeClient('admin_event_' + kind);
+    client._accountRole = 'admin';
+    room.clients = [client];
+    room.eventSeq = 0;
+    room.eventCourseBlocks = new Set();
+    seedPlayer(room, client, { token: 'admin_event_' + kind + '_token_123', lvl: 10 });
+    room.serverEvent = room.createIdleEvent(Date.now() + 600000, 'parkour');
+
+    room.handleDevEvent(client, command);
+
+    assert.equal(room.serverEvent.kind, kind);
+    assert.equal(room.serverEvent.phase, 'queue');
+    assert.equal(room.serverEvent.queue.has(client.sessionId), true);
+    assert.equal(client.sent.some(e => e.type === 'eventJoined' && e.msg.kind === kind && e.msg.joined), true);
+  }
+});
+
+test('admin event help lists force commands and current status', () => {
+  const room = makeRoom();
+  const client = makeClient('admin_event_help');
+  client._accountRole = 'admin';
+  room.clients = [client];
+  seedPlayer(room, client, { token: 'admin_event_help_token_123' });
+  room.serverEvent = room.createIdleEvent(Date.now() + 600000, 'caravan');
+
+  room.handleDevEvent(client, '/event help');
+
+  const msg = client.sent.find(e => e.type === 'chat' && /Admin event checks/i.test(e.msg.text));
+  assert.ok(msg);
+  assert.match(msg.msg.text, /\/event parkour/);
+  assert.match(msg.msg.text, /\/event king/);
+  assert.match(msg.msg.text, /\/event caravan/);
+  assert.match(msg.msg.text, /\/event meteor/);
+  assert.match(msg.msg.text, /Current:/);
+});
+
 test('admin meteor command targets the caller position', () => {
   const room = makeRoom();
   const client = makeClient('meteor_admin');
@@ -10424,6 +10463,14 @@ test('admin meteor command is not blocked by the production beta event gate', ()
   const meteorOnly = meteorBranch.slice(0, meteorBranch.indexOf('}\n    if (!BETA_EVENT_TEST)'));
   assert.match(meteorBranch, /!BETA_EVENT_TEST && !admin/);
   assert.doesNotMatch(meteorOnly, /if \(!BETA_EVENT_TEST\) return/);
+});
+
+test('admin parkour king and caravan event commands are not blocked by the production beta event gate', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'events.mixin.js'), 'utf8');
+  const devStart = source.indexOf('handleDevEvent(client, text)');
+  const devBranch = source.slice(devStart, source.indexOf('clearEventCourse()', devStart));
+  assert.match(devBranch, /if \(!BETA_EVENT_TEST && !admin\) return client\.send\('eventReject', \{ reason: 'closed' \}\);/);
+  assert.doesNotMatch(devBranch, /if \(!BETA_EVENT_TEST\) return client\.send\('eventReject', \{ reason: 'closed' \}\);/);
 });
 
 test('public gate refill can spawn every missing unlocked rank at once', () => {
