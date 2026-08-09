@@ -222,6 +222,7 @@ export function createOnboardingUI(deps) {
       '<div class="rnote"><b>Your next three steps:</b><br>Follow the green light to Mara, accept your first field quest, then return at Level 2 to awaken your combat path.</div>' +
       '<button id="trainingcontinue">MEET MARA</button>';
     rewardWin.classList.remove('hidden');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rewardWin);
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     clearRewardTimer();
@@ -252,6 +253,7 @@ export function createOnboardingUI(deps) {
       '<button id="graduationcontinue">TRACK D-RANK GATE</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rewardWin);
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     clearRewardTimer();
@@ -286,6 +288,7 @@ export function createOnboardingUI(deps) {
       '<button id="promotioncontinue">TRACK NEXT STEP</button>';
     rewardWin.classList.remove('hidden');
     rewardWin.classList.add('promotion-open');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rewardWin);
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     clearRewardTimer();
@@ -327,6 +330,7 @@ export function createOnboardingUI(deps) {
       '<div class="runext"><b>Next target:</b> ' + escHTML(details.next) + '.<br>Keep earning Hunter XP from quests, contracts, Gates, events, and hostile threats.</div>' +
       '<button id="rankupcontinue">CONTINUE</button>';
     rankUpWin.classList.remove('hidden');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(rankUpWin);
     if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
     releasePointerLock();
     const btn = document.getElementById('rankupcontinue');

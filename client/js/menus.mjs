@@ -227,6 +227,8 @@ function openUI(mode, furnaceKey){
   craftCells = new Array(craftW*craftW).fill(null);
   releasePointerLockWithoutCameraFallback(false);
   uiEl.classList.add('open');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(uiEl);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   refreshPlayUi();
   if(mode==='inv'&&gearInspectSlot<0){
     const held=inv[combatState.selectedSlot],heldItem=held&&ITEMS[held.id];
@@ -245,6 +247,7 @@ function closeUI(relock=true){
   flushInventoryArrangeSync();
   uiOpen=false; uiMode=null; uiFurnaceKey=null;
   uiEl.classList.remove('open');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   refreshHUD();
   if(relock) resumeGameplayCamera();
   else {
@@ -2395,6 +2398,7 @@ function showFirstVillagerReward(onContinue){
     continued=true;
     try{localStorage.setItem(FIRST_QUEST_REWARD_PRESENTED_KEY,'1');}catch{}
     rewardWin.classList.add('hidden');
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     townGuidanceSequenceHold=false;
     if(typeof onContinue==='function') setTimeout(onContinue,100);
   };
@@ -2408,6 +2412,8 @@ function showFirstVillagerReward(onContinue){
     '<div class="rnote">You reached Level 2. Next you will choose a combat path, learn your first ability, then optionally try a job room.</div>'+
     '<button id="rewardclose">CHOOSE PATH</button>';
   rewardWin.classList.remove('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   const btn=document.getElementById('rewardclose');
   if(btn) btn.onclick=continueSequence;
   clearTimeout(rewardHideTimer);
@@ -2597,10 +2603,12 @@ function awardAegisTrialLoot(){
       '<div class="rnote">'+escHTML(entry.note)+'</div>'+
       '<button id="rewardclose">CLOSE</button>';
     rewardWin.classList.remove('hidden');
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     const btn=document.getElementById('rewardclose');
-    if(btn) btn.onclick=()=>rewardWin.classList.add('hidden');
+    if(btn) btn.onclick=()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();};
     clearTimeout(rewardHideTimer);
-    rewardHideTimer=setTimeout(()=>rewardWin.classList.add('hidden'), 9000);
+    rewardHideTimer=setTimeout(()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}, 9000);
   }
   return {kind:entry.kind, id, label};
 }
@@ -2799,6 +2807,8 @@ function openQWin(mode='dialog'){
   qwinEl.classList.remove('trade-offer-open');
   qwinEl.classList.remove('gate-lobby-open');
   qwinEl.classList.remove('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(qwinEl);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   refreshPlayUi();
 }
 function closeQWin(relock=true){
@@ -2808,6 +2818,7 @@ function closeQWin(relock=true){
   qpanelEl.dataset.modal='';
   qwinEl.classList.remove('trade-offer-open');
   qwinEl.classList.remove('gate-lobby-open');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   if(relock) resumeGameplayCamera();
   else {
     overlay.classList.remove('hidden');
@@ -4252,7 +4263,9 @@ function showTreasureParchment(map,title='TREASURE MAP'){
   if(!el){el=document.createElement('div');el.id='treasureparchment';document.body.appendChild(el);}
   el.className='';
   el.innerHTML='<div class="tpaper"><small>'+escHTML(title)+' - CLUE '+(((map.stage|0)+1)||1)+' / '+((map.total|0)||3)+'</small><h2>Follow the Ink</h2><p>'+escHTML(map.clue||'The ink points toward an uncharted landmark.')+'</p><b>Follow the gold mark on your map. At the landmark, press G.</b><button>GOT IT</button></div>';
-  const btn=el.querySelector('button');if(btn)btn.onclick=()=>el.classList.add('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(el);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+  const btn=el.querySelector('button');if(btn)btn.onclick=()=>{el.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();};
 }
 globalThis.BlockcraftTreasureParchment=showTreasureParchment;
 function openCartographerUI(state=cartographerState){

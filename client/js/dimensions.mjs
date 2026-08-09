@@ -982,6 +982,8 @@ function openStat(){
   statOpen=true;
   releasePointerLockWithoutCameraFallback(false);
   statEl.classList.remove('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(statEl);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   refreshPlayUi();
   renderStat();
 }
@@ -989,6 +991,7 @@ function closeStat(relock=true){
   if(statOpen) SFX.uiClose();
   statOpen=false;
   statEl.classList.add('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   if(relock) resumeGameplayCamera();
   else {
     overlay.classList.remove('hidden');

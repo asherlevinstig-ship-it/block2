@@ -526,7 +526,7 @@ let adminDungeonPickerEl=null;
 function closeAdminDungeonPicker(resume=true){
   if(!adminDungeonPickerEl)return;
   adminDungeonPickerEl.classList.remove('show');
-  document.body.classList.remove('game-modal-open');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   if(resume){refreshPlayUi();resumeGameplayCamera();}
 }
 function openAdminDungeonPicker(){
@@ -562,8 +562,9 @@ function openAdminDungeonPicker(){
     return '<section><h3>'+escHTML(rankName)+'-Rank Gates</h3><div class="admindungeon-cards">'+cards+'</div></section>';
   }).join('');
   releasePointerLockWithoutCameraFallback(false);
-  document.body.classList.add('game-modal-open');
   adminDungeonPickerEl.classList.add('show');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(adminDungeonPickerEl);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   refreshPlayUi();
   return true;
 }
@@ -666,16 +667,18 @@ function showDungeonSpirit(m){
       const btn=e.target&&e.target.closest&&e.target.closest('button[data-action]');
       if(!btn)return;
       e.stopPropagation();
-      if(btn.dataset.action==='stay'){dungeonSpiritEl.classList.add('minimized');sysMsg('<b>Staying as spirit.</b> You are a floating orb-ghost. Watch for party recovery, or use Respawn in Town when you want out.','minor');return;}
+      if(btn.dataset.action==='stay'){dungeonSpiritEl.classList.add('minimized');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();sysMsg('<b>Staying as spirit.</b> You are a floating orb-ghost. Watch for party recovery, or use Respawn in Town when you want out.','minor');return;}
       if(NET.room)NET.room.send('quitDungeonSpirit',{});
     });
     (document.getElementById('game')||document.body).appendChild(dungeonSpiritEl);
   }
   dungeonSpiritEl.classList.add('show');dungeonSpiritEl.classList.remove('minimized');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(dungeonSpiritEl);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   if(m&&Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z))player.pos.set(m.x,m.y,m.z);
   ensureLocalSpiritFx();
 }
-function hideDungeonSpirit(){if(dungeonSpiritEl)dungeonSpiritEl.classList.remove('show','minimized');}
+function hideDungeonSpirit(){if(dungeonSpiritEl)dungeonSpiritEl.classList.remove('show','minimized');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}
 function localSpiritTexture(){
   if(localSpiritTexture.tex)return localSpiritTexture.tex;
   const c=document.createElement('canvas');c.width=c.height=96;
@@ -735,7 +738,7 @@ function ensureDeathLimboEl(){
   deathLimboEl.innerHTML='<div class="deathlimbo-panel"><div class="deathlimbo-kicker">LIMBO RECOVERY</div><h2 id="deathlimbotitle">Recover your items</h2><div id="deathlimboitem"></div><div id="deathlimboq"></div><div id="deathlimboanswers"></div><div id="deathlimbofeedback"></div></div>';
   document.body.appendChild(deathLimboEl);return deathLimboEl;
 }
-function hideDeathLimbo(){if(deathLimboEl)deathLimboEl.classList.remove('show');deathLimboState=null;}
+function hideDeathLimbo(){if(deathLimboEl)deathLimboEl.classList.remove('show');deathLimboState=null;if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}
 function renderDeathLimbo(m){
   if(!m||!m.question||!m.item)return;
   deathLimboState=m;
@@ -751,6 +754,8 @@ function renderDeathLimbo(m){
   });
   if(Number.isFinite(m.x)&&Number.isFinite(m.y)&&Number.isFinite(m.z)){player.pos.set(m.x,m.y,m.z);player.vel.set(0,0,0);}
   el.classList.add('show');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(el);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
 }
 function applyDeathLimboResult(m){
   const el=ensureDeathLimboEl(),feedback=el.querySelector('#deathlimbofeedback');
@@ -1047,9 +1052,12 @@ function openBugReport(){
   if(!bugReportWin)return;
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.open', { location:bugReportPositionText() });
   try{ if(document.pointerLockElement&&document.exitPointerLock)document.exitPointerLock(); }catch(_e){}
-  if(typeof releasePointerLockWithoutCameraFallback==='function')releasePointerLockWithoutCameraFallback(false);
-  document.body.classList.add('game-modal-open');
-  bugReportWin.classList.remove('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.open)globalThis.BlockcraftModal.open(bugReportWin,'bug-report');
+  else{
+    if(typeof releasePointerLockWithoutCameraFallback==='function')releasePointerLockWithoutCameraFallback(false);
+    document.body.classList.add('game-modal-open');
+    bugReportWin.classList.remove('hidden');
+  }
   if(bugReportMeta)bugReportMeta.textContent='Attached location: '+bugReportPositionText();
   bugReportSetStatus('', '');
   if(bugReportMsg){ bugReportMsg.focus(); bugReportMsg.select&&bugReportMsg.select(); }
@@ -1061,8 +1069,11 @@ function closeBugReport(){
   bugReportPendingTimer=0;
   bugReportFallbackTimer=0;
   if(bugReportSend)bugReportSend.disabled=false;
-  bugReportWin.classList.add('hidden');
-  document.body.classList.remove('game-modal-open');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.close)globalThis.BlockcraftModal.close(bugReportWin,{relock:true,reason:'bug-report'});
+  else{
+    bugReportWin.classList.add('hidden');
+    document.body.classList.remove('game-modal-open');
+  }
   bugReportSetStatus('', '');
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('ui.bug-report.close');
   if(typeof refreshPlayUi==='function')refreshPlayUi();
@@ -1192,6 +1203,7 @@ function showFellowshipTutorial(m={},mode='joined'){
     '<button id="fellowshipcontinue" class="secondary">GOT IT</button>';
   rewardWin.classList.remove('hidden');
   rewardWin.classList.add('promotion-open');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
   if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
   const close=()=>{rewardWin.classList.add('hidden');rewardWin.classList.remove('promotion-open');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();resumeGameplayCamera();};
@@ -1716,6 +1728,7 @@ function netAttachRoom(room,name,client){
             '<button id="milestonecontinue">'+escHTML(m.action||'CONTINUE')+'</button>';
           rewardWin.classList.remove('hidden');
           rewardWin.classList.add('promotion-open');
+          if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
           if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
           releasePointerLockWithoutCameraFallback(false);refreshPlayUi();
           const btn=document.getElementById('milestonecontinue');

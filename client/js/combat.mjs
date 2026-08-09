@@ -694,6 +694,22 @@ function layoutLeftHudExtras(){
   }
 }
 let hudStateObserver=null, homeworkHudObserved=false;
+let modalFrontZ=160;
+const blockingModalIds=['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice','rewardwin','rankupwin','gearrewardwin','bugreportwin','admindungeonpicker','deathlimbo','treasureparchment'];
+function modalSurfaceVisible(el){
+  if(!el)return false;
+  if(el.id==='ui')return el.classList.contains('open');
+  if(el.id==='admindungeonpicker'||el.id==='deathlimbo')return el.classList.contains('show');
+  if(el.id==='dungeonspirit')return el.classList.contains('show')&&!el.classList.contains('minimized');
+  if(el.classList.contains('kc-overlay'))return !el.classList.contains('hidden');
+  return !el.classList.contains('hidden');
+}
+function bringModalToFront(el){
+  if(!el)return false;
+  el.style.zIndex=String(++modalFrontZ);
+  if(modalFrontZ>900)modalFrontZ=160;
+  return true;
+}
 function syncHudLayerState(){
   if(hudStateObserver&&!homeworkHudObserved){
     const homeworkEl=document.getElementById('homeworkhud');
@@ -706,11 +722,10 @@ function syncHudLayerState(){
   const coachVisible=!!(coachHudStateEl&&!coachHudStateEl.classList.contains('hidden'));
   const jobTutorialRoom=dim==='job'||dimensionsState.kind==='job';
   const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
-  const gameModalOpen=['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice','rewardwin','rankupwin','gearrewardwin'].some(id=>{
-    const el=document.getElementById(id);
-    if(!el) return false;
-    return id==='ui' ? el.classList.contains('open') : !el.classList.contains('hidden');
-  });
+  const gameModalOpen=blockingModalIds.some(id=>modalSurfaceVisible(document.getElementById(id)))||
+    modalSurfaceVisible(document.getElementById('dungeonspirit'))||
+    !!document.querySelector('.kc-overlay:not(.hidden)')||
+    !!document.querySelector('.character-creator.floating:not(.hidden)');
   document.body.classList.toggle('game-modal-open', gameModalOpen);
   document.body.classList.toggle('job-tutorial-room', jobTutorialRoom);
   document.body.classList.toggle('off-main-room', offMainRoom);
@@ -726,7 +741,7 @@ if(globalThis.MutationObserver){
   const homeworkEl=document.getElementById('homeworkhud');
   if(homeworkEl){ hudStateObserver.observe(homeworkEl,{attributes:true,attributeFilter:['class']}); homeworkHudObserved=true; }
   else hudStateObserver.observe(document.body,{childList:true});
-  for(const id of ['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice','rewardwin','rankupwin','gearrewardwin']){
+  for(const id of blockingModalIds){
     const el=document.getElementById(id);
     if(el) hudStateObserver.observe(el,{attributes:true,attributeFilter:['class']});
   }
@@ -738,6 +753,7 @@ function openBlockingGameModal(el,reason='modal'){
   if(loadscreen)loadscreen.classList.add('hidden');
   document.body.classList.add('game-modal-open');
   el.classList.remove('hidden');
+  bringModalToFront(el);
   releasePointerLockWithoutCameraFallback(false);
   syncHudLayerState();
   refreshPlayUi();
@@ -758,6 +774,7 @@ function closeBlockingGameModal(el,{relock=true,reason='modal'}={}){
 globalThis.BlockcraftModal=Object.freeze({
   open:openBlockingGameModal,
   close:closeBlockingGameModal,
+  bringToFront:bringModalToFront,
   sync:syncHudLayerState,
 });
 const pathSelectEl=document.getElementById('pathselect');
@@ -4950,6 +4967,7 @@ function closeDevResetPanel(){
   devReset.classList.add('hidden');
   setDevResetStatus('');
   setAdminInspectOut(null);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
 }
 function openDevResetPanel(){
   if(!devReset)return;
@@ -4965,6 +4983,8 @@ function openDevResetPanel(){
   }
   try{if(devResetToken&&!devResetToken.value)devResetToken.value=sessionStorage.getItem('bc_admin_reset_token')||'';}catch(e){}
   devReset.classList.remove('hidden');
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(devReset);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   setDevResetStatus(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount()?'Admin account recognized. Token is optional.':'Inspect, patch, or reset a live player game profile.');
   setTimeout(()=>{if(devResetTarget)devResetTarget.focus();},0);
 }
@@ -5439,12 +5459,13 @@ addEventListener('keydown', e=>{
     if(rankUpWin&&!rankUpWin.classList.contains('hidden')){
       const rankContinue=document.getElementById('rankupcontinue');
       if(rankContinue)rankContinue.click();else rankUpWin.classList.add('hidden');
+      if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
       closed=true;
     }
     if(uiOpen){ closeUI(); closed=true; }
     if(statOpen){ closeStat(); closed=true; }
     if(uiShellState.qOpen){ closeQWin(); closed=true; }
-    if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); closed=true; }
+    if(rewardWin && !rewardWin.classList.contains('hidden')){ rewardWin.classList.add('hidden'); if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync(); closed=true; }
     if(claimMode){ toggleClaimMode(false); closed=true; }
     if(closed){ e.preventDefault(); return; }
     if(cursorReleased){

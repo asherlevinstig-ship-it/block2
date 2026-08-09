@@ -8780,9 +8780,9 @@ function showDungeonReward(m, earned){
   rewardWin.classList.remove('hidden');
   rewardWin.classList.toggle('promotion-open',!!milestone);
   rewardWin.style.pointerEvents=milestone?'auto':'';
-  rewardWin.style.zIndex=milestone?'62':'';
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(rewardWin);
+  if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
   if(milestone){
-    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     releasePointerLockWithoutCameraFallback(false);
     refreshPlayUi();
   }
@@ -8791,14 +8791,13 @@ function showDungeonReward(m, earned){
     rewardWin.classList.add('hidden');
     rewardWin.classList.remove('promotion-open');
     rewardWin.style.pointerEvents='';
-    rewardWin.style.zIndex='';
     if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     if(resumePlay){
       resumeGameplayCamera();
     }
   };
   clearTimeout(rewardHideTimer);
-  if(!milestone) rewardHideTimer=setTimeout(()=>rewardWin.classList.add('hidden'), 12000);
+  if(!milestone) rewardHideTimer=setTimeout(()=>{rewardWin.classList.add('hidden');if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();}, 12000);
 }
 function eventStartLocked(){
   return !!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);

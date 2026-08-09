@@ -172,7 +172,8 @@ export function createAuthController({ user, password, playerName, status, play,
     if (!creator) return;
     const wasMirror = creator.dataset.mode === 'mirror';
     creator.classList.remove('floating');
-    if (typeof document !== 'undefined') document.body.classList.remove('game-modal-open');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
+    else if (typeof document !== 'undefined') document.body.classList.remove('game-modal-open');
     if (wasMirror) finishAppearancePreview(false);
     mountCharacterCreator('setup');
     creator.classList.toggle('hidden', !!(state.gameProfile && state.gameProfile.nameSet));
@@ -189,7 +190,9 @@ export function createAuthController({ user, password, playerName, status, play,
     setAppearance(state.gameProfile && state.gameProfile.appearance || draftAppearance);
     creator.classList.remove('hidden');
     creator.classList.toggle('floating', mode === 'mirror');
-    if (typeof document !== 'undefined') document.body.classList.toggle('game-modal-open', mode === 'mirror');
+    if (mode === 'mirror' && globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(creator);
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
+    else if (typeof document !== 'undefined') document.body.classList.toggle('game-modal-open', mode === 'mirror');
     renderCharacterCreator(mode);
     if (mode === 'mirror') {
       try {

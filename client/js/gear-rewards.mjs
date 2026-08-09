@@ -53,6 +53,7 @@ export function createGearRewardPresenter({
   const queue=[];let active=null;
   const close=()=>{
     active=null;win.classList.add('hidden');panel.innerHTML='';
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     if(onClose)onClose();
     if(queue.length)show(queue.shift());
   };
@@ -117,6 +118,8 @@ export function createGearRewardPresenter({
     }
     actions.appendChild(button(recovered?'GOT IT':'KEEP',close));panel.appendChild(actions);
     win.classList.remove('hidden');
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.bringToFront)globalThis.BlockcraftModal.bringToFront(win);
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
     if(onReveal)onReveal({...entry,summary});
   }
   return Object.freeze({

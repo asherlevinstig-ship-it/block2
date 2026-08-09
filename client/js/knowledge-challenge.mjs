@@ -55,8 +55,17 @@ function ensure() {
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
   document.body.appendChild(overlay);
 }
-function show() { ensure(); overlay.classList.remove('hidden'); document.body.classList.add('kc-open'); }
-function hide() { if (overlay) { overlay.classList.add('hidden'); document.body.classList.remove('kc-open'); } }
+function show() {
+  ensure(); overlay.classList.remove('hidden'); document.body.classList.add('kc-open');
+  if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.bringToFront) globalThis.BlockcraftModal.bringToFront(overlay);
+  if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
+}
+function hide() {
+  if (overlay) {
+    overlay.classList.add('hidden'); document.body.classList.remove('kc-open');
+    if (globalThis.BlockcraftModal && globalThis.BlockcraftModal.sync) globalThis.BlockcraftModal.sync();
+  }
+}
 
 function open() {
   if (!room()) { say('The Knowledge Challenge needs a live connection.'); return; }
