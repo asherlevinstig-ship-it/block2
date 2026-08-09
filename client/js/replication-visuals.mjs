@@ -373,7 +373,7 @@ function tickEncounterReadability(m,dt,t){
   if(u.alert){const aware=['draw','windup','bruteWind','rally'].includes(r.state);u.alert.visible=!aware&&r.state!=='surrender'&&r.state!=='retreat';if(u.engaged)u.engaged.visible=aware;}
   if(r.state==='retreat'){u.label.material.color.set(0xffd26b);if(u.ring)u.ring.material.color.set(0xffc34d);}else if(u.ring)u.ring.material.color.set(u.friendly?0x5dd5ff:0xff5c46);
   if(m.spawnT>0){m.spawnT=Math.max(0,m.spawnT-dt);m.grp.scale.y=1+Math.sin((2.2-m.spawnT)*8)*.08;if(u.tell){u.tell.visible=true;u.tell.scale.setScalar(1+(2.2-m.spawnT)*.8);u.tell.material.opacity=m.spawnT/2.2;}}
-  else if(u.tell){const warning=['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind'].includes(r.state);u.tell.visible=warning;if(u.attackStatus)u.attackStatus.visible=warning;if(u.stunStatus)u.stunStatus.visible=r.state==='stun';if(u.frozenStatus)u.frozenStatus.visible=r.state==='frozen';if(warning){const charge=Math.min(1,(m.aT||0)/(r.state==='captainCleave'?.9:.7));u.tell.scale.setScalar(.72+charge*.28+Math.sin(t*18)*.025);u.tell.material.opacity=.42+charge*.5;}}
+  else if(u.tell){const warning=['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind','eldritchLeapWind','eldritchLeap'].includes(r.state);u.tell.visible=warning;if(u.attackStatus)u.attackStatus.visible=warning;if(u.stunStatus)u.stunStatus.visible=r.state==='stun';if(u.frozenStatus)u.frozenStatus.visible=r.state==='frozen';if(warning){const charge=Math.min(1,(m.aT||0)/(r.state==='captainCleave'?.9:.7));u.tell.scale.setScalar(.72+charge*.28+Math.sin(t*18)*.025);u.tell.material.opacity=.42+charge*.5;}}
   if(m.wagon){const wreck=r.kind==='caravan_wreck',damaged=pct<.65,critical=pct<.3;m.grp.rotation.z=wreck?.22:0;if(m.mats[0])m.mats[0].color.set(wreck?0x34271f:critical?0x49301f:damaged?0x5b3822:0x704321);if((damaged||wreck)&&m.grp.visible&&Math.random()<dt*(wreck?18:critical?14:6))spawnParticle({x:m.grp.position.x+(Math.random()-.5),y:m.grp.position.y+1.2,z:m.grp.position.z+(Math.random()-.5),vx:(Math.random()-.5)*.25,vy:.8,vz:(Math.random()-.5)*.25,life:1,grav:-.1,r:.28,g:.28,b:.28});}
 }
 function makeCaravanWagon(wrecked){
@@ -649,7 +649,7 @@ function netMobTick(m, dt, t){
   const st=r.state||'';
   if(st!==m.lastState){
     m.lastState=st; m.aT=0;
-    if(['bruteWind','packWind','graveWind','captainCleave','slamWind','bossMeleeWind','graveRingWind','chargeWind','volleyWind','spikeWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind'].includes(st)&&
+    if(['bruteWind','packWind','graveWind','captainCleave','slamWind','bossMeleeWind','graveRingWind','chargeWind','volleyWind','spikeWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind','eldritchLeapWind','eldritchLeap'].includes(st)&&
        m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<11&&
        (m.boss||m.elite||m.kind==='bandit_captain'||m.kind==='bandit_brute'||m.kind==='redclaw'||m.kind==='gale_stalker'))SFX.slamWarn();
     if(st==='draw'&&m.kind==='sun_archer'&&m.grp.visible&&Math.hypot(p.x-player.pos.x,p.z-player.pos.z)<14)ringPulse(p.x,p.y+.08,p.z,.72,0xffd34f,.22);
@@ -708,9 +708,10 @@ function netMobTick(m, dt, t){
       if(Math.random()<dt*10)
           spawnParticle({x:p.x+m.cdx*k2*1.35, y:p.y+.15, z:p.z+m.cdz*k2*1.35,
           vx:0, vy:.5, vz:0, life:.3, grav:0, r:.85, g:.55, b:.15});
-  } else if(st==='foremanWind'||st==='regentWind'||st==='rootWind'||st==='controlWind'||st==='ossuaryWind'||st==='blightWind'||st==='watcherWind'||st==='cinderWind'||st==='castellanWind'||st==='choirWind'||st==='priorWind'||st==='rimeWind'||st==='thunderWind'||st==='buriedWind'||st==='abyssalWind'||st==='riftWind'){
-    const col=st==='foremanWind'||st==='cinderWind'?[.9,.45,.16]:st==='regentWind'||st==='abyssalWind'?[.18,.7,1]:st==='thunderWind'?[.25,.82,1]:st==='rimeWind'||st==='choirWind'?[.64,.94,1]:(st==='rootWind'||st==='controlWind')?[.25,.85,.32]:st==='ossuaryWind'||st==='castellanWind'||st==='buriedWind'?[.78,.68,.45]:st==='blightWind'?[.45,.95,.2]:[.68,.45,1];
+  } else if(st==='foremanWind'||st==='regentWind'||st==='rootWind'||st==='controlWind'||st==='ossuaryWind'||st==='blightWind'||st==='watcherWind'||st==='cinderWind'||st==='castellanWind'||st==='choirWind'||st==='priorWind'||st==='rimeWind'||st==='thunderWind'||st==='buriedWind'||st==='abyssalWind'||st==='riftWind'||st==='eldritchLeapWind'||st==='eldritchLeap'){
+    const col=st==='foremanWind'||st==='cinderWind'?[.9,.45,.16]:st==='regentWind'||st==='abyssalWind'?[.18,.7,1]:st==='thunderWind'?[.25,.82,1]:st==='rimeWind'||st==='choirWind'?[.64,.94,1]:st==='eldritchLeapWind'||st==='eldritchLeap'?[.35,1,.42]:(st==='rootWind'||st==='controlWind')?[.25,.85,.32]:st==='ossuaryWind'||st==='castellanWind'||st==='buriedWind'?[.78,.68,.45]:st==='blightWind'?[.45,.95,.2]:[.68,.45,1];
     m.arms[0].rotation.x=m.arms[1].rotation.x=-1.35;
+    if(st==='eldritchLeap')m.grp.rotation.z=Math.sin(t*18)*.045;
     if(Math.random()<dt*38)spawnParticle({x:p.x+(Math.random()-.5)*2.4,y:p.y+.15+Math.random()*2,z:p.z+(Math.random()-.5)*2.4,vx:0,vy:.45,vz:0,life:.4,grav:0,r:col[0],g:col[1],b:col[2]});
   } else if(st==='stun'){
     m.arms[0].rotation.x=m.arms[1].rotation.x=.9;
@@ -957,6 +958,28 @@ function netFx(m){
     SFX.slamWarn();
     ringPulse(m.x,m.y+.08,m.z,m.radius||1.6,0xff5a35,.72);
     if(m.label)showName(String(m.label)+' - dodge out!');
+  } else if(m.t==='eldritchLeapWarn'){
+    SFX.slamWarn();
+    const tx=Number.isFinite(+m.tx)?+m.tx:m.x,ty=Number.isFinite(+m.ty)?+m.ty:m.y,tz=Number.isFinite(+m.tz)?+m.tz:m.z,r=Number(m.radius)||5.2;
+    ringPulse(tx,ty+.08,tz,r,0x5cff7a,1.35);
+    ringPulse(tx,ty+.1,tz,r*.45,0x18381d,1.35);
+    energyTrailVfx(m.x,m.y+2.2,m.z,tx,ty+1.2,tz,0x5cff7a,.05,1.05,.82);
+    burst(tx,ty+.4,tz,[.22,.9,.32],28,3.2,3.8,.75,3);
+    showName('Heartwood Leap - leave the circle!');
+  } else if(m.t==='eldritchLeapLaunch'){
+    const tx=Number.isFinite(+m.tx)?+m.tx:m.x,ty=Number.isFinite(+m.ty)?+m.ty:m.y,tz=Number.isFinite(+m.tz)?+m.tz:m.z;
+    SFX.roar&&SFX.roar();
+    energyTrailVfx(m.x,m.y+1.6,m.z,tx,ty+8,tz,0x5cff7a,.12,.85,1.05);
+    burst(m.x,m.y+.9,m.z,[.22,.9,.32],44,4.6,6.2,.85,3);
+    ringPulse(m.x,m.y+.08,m.z,3.2,0x5cff7a,.45);
+  } else if(m.t==='eldritchLeapLand'){
+    const r=Number(m.radius)||5.2;
+    SFX.boom&&SFX.boom();camShake=Math.max(camShake,.72);
+    ringPulse(m.x,m.y+.08,m.z,r,0x5cff7a,.55);
+    ringPulse(m.x,m.y+.1,m.z,r*.58,0xffd24a,.45);
+    burst(m.x,m.y+.7,m.z,[.18,.8,.25],74,7.4,5.6,.82,3);
+    rootClutchVfx(m.x,m.y,m.z,r*.8);
+    showName('HEARTWOOD IMPACT');
   } else if(m.t==='rangedWarn'){
     SFX.growl();
     const tx=Number.isFinite(m.tx)?m.tx:m.x,tz=Number.isFinite(m.tz)?m.tz:m.z,ty=Number.isFinite(m.ty)?m.ty:m.y+1;

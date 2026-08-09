@@ -335,6 +335,7 @@ class SpawningMixin {
       buried: 'ossuary',
       abyssal: 'control',
       rift: 'charge',
+      eldritchLeap: 'root',
     }[pat];
     if (follow && follow !== pat) meta.layeredNext = follow;
   }
@@ -369,6 +370,47 @@ class SpawningMixin {
     }
 
     const st = m.state || '';
+    if (st === 'eldritchLeapWind') {
+      faceBest();
+      if (meta.stateT <= 0) {
+        const target = meta.leapTarget || (best ? { x: best.p.x, z: best.p.z } : { x: m.x, z: m.z });
+        const gy = ground(target.x, target.z, m.y + 14);
+        meta.leapTarget = { x: target.x, y: gy > 0 ? gy : m.y, z: target.z };
+        meta.leapStart = { x: m.x, y: m.y, z: m.z };
+        meta.leapDuration = .95 * haste;
+        meta.stateT = meta.leapDuration;
+        m.state = 'eldritchLeap';
+        this.sendSpace(m.dgn, 'fx', { t: 'eldritchLeapLaunch', x: m.x, y: m.y, z: m.z, tx: meta.leapTarget.x, ty: meta.leapTarget.y, tz: meta.leapTarget.z, dgn: m.dgn || '' });
+      }
+      return true;
+    }
+    if (st === 'eldritchLeap') {
+      const start = meta.leapStart || { x: m.x, y: m.y, z: m.z };
+      const target = meta.leapTarget || { x: m.x, y: m.y, z: m.z };
+      const duration = Math.max(.25, meta.leapDuration || .95);
+      const progress = Math.max(0, Math.min(1, 1 - (meta.stateT / duration)));
+      const arc = Math.sin(progress * Math.PI) * 8.5;
+      m.x = start.x + (target.x - start.x) * progress;
+      m.z = start.z + (target.z - start.z) * progress;
+      m.y = target.y + arc;
+      m.yaw = Math.atan2(target.x - start.x, target.z - start.z);
+      if (meta.stateT <= 0) {
+        m.x = target.x; m.y = target.y; m.z = target.z;
+        this.sendSpace(m.dgn, 'fx', { t: 'eldritchLeapLand', x: m.x, y: m.y, z: m.z, radius: 5.2, dgn: m.dgn || '' });
+        for (const s of candidates) {
+          if (Math.hypot(s.p.x - m.x, s.p.z - m.z) > 5.2 || Math.abs(s.p.y - m.y) > 3.8) continue;
+          const c = this.clients.find(client => client.sessionId === s.sid);
+          if (c) {
+            this.hurtPlayer(c, meta.slamDmg + 4, 'eldritch_leap', { attack: 'Heartwood Leap' });
+            this.applyBiomeStatus(c, 'sturdy');
+          }
+        }
+        meta.leapStart = null;
+        meta.leapTarget = null;
+        this.bossRecover(m, meta, .85, 3.25, haste);
+      }
+      return true;
+    }
     if (st === 'slamWind') {
       faceBest();
       if (meta.stateT <= 0) {
@@ -669,6 +711,8 @@ class SpawningMixin {
       if (rank >= 4 && meta.bossStyle === 'buried_monarch' && bd < 17) picks.push('buried');
       if (rank >= 4 && meta.bossStyle === 'abyssal_gatekeeper' && bd < 15) picks.push('abyssal');
       if (rank >= 4 && meta.bossStyle === 'rift_monarch' && bd < 18) picks.push('rift');
+      if (meta.bossStyle === 'eldritch_tree' && bd > 3.5 && bd < 26) picks.push('eldritchLeap', 'eldritchLeap');
+      if (meta.bossStyle === 'eldritch_tree' && bd < 18) picks.push('root');
       if (rank >= 3 && bd < 13) picks.push('control');
       if (picks.length) {
         const combos = {
@@ -687,6 +731,7 @@ class SpawningMixin {
           buried_monarch: ['buried', 'ossuary', 'graveRing', 'slam'],
           abyssal_gatekeeper: ['abyssal', 'regent', 'control', 'slam'],
           rift_monarch: ['rift', 'watcher', 'charge', 'spikes'],
+          eldritch_tree: ['eldritchLeap', 'root', 'slam', 'charge'],
         };
         const combo = combos[meta.bossStyle];
         let pat = meta.forcePat || '';
@@ -706,6 +751,11 @@ class SpawningMixin {
         if (pat === 'slam') {
           m.state = 'slamWind'; meta.stateT = 1.1 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'slamWarn', x: m.x, y: m.y, z: m.z, radius: 4.6, dgn: m.dgn || '' });
+        } else if (pat === 'eldritchLeap') {
+          m.state = 'eldritchLeapWind'; meta.stateT = 1.25 * haste;
+          const tx = best.p.x, tz = best.p.z, ty = ground(tx, tz, best.p.y + 8);
+          meta.leapTarget = { x: tx, y: ty > 0 ? ty : best.p.y, z: tz };
+          this.sendSpace(m.dgn, 'fx', { t: 'eldritchLeapWarn', x: m.x, y: m.y, z: m.z, tx, ty: meta.leapTarget.y, tz, radius: 5.2, dgn: m.dgn || '' });
         } else if (pat === 'graveRing') {
           m.state = 'graveRingWind'; meta.stateT = 1.35 * haste;
           this.sendSpace(m.dgn, 'fx', { t: 'graveRingWarn', x: m.x, y: m.y, z: m.z, dgn: m.dgn || '' });

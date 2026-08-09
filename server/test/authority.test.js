@@ -3980,6 +3980,45 @@ test('legendary weapons validate selected item and apply server effects', () => 
   assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.kind === 'meteorImpact'), true);
 });
 
+test('eldritch meteor boss leaps into the air and lands on marked players', () => {
+  const room = makeRoom();
+  const client = makeClient('heartwood_target');
+  room.clients = [client];
+  room.sendSpace = (dgn, type, msg) => client.send(type, msg);
+  seedPlayer(room, client, { x: 30, y: 16, z: 30, hp: 20 });
+  const player = room.state.players.get(client.sessionId);
+  const boss = new Mob();
+  boss.kind = 'boss';
+  boss.bossStyle = 'eldritch_tree';
+  boss.displayName = 'Eldritch Heartwood';
+  boss.x = 20; boss.y = 16; boss.z = 20; boss.hp = boss.maxHp = 500; boss.state = 'eldritchLeapWind';
+  room.state.mobs.set('heartwood', boss);
+  const meta = room.freshMeta(boss.x, boss.z, 8, 1.1, 'boss', 1, true);
+  meta.bossStyle = 'eldritch_tree';
+  meta.meteorBoss = true;
+  meta.woke = true;
+  meta.stateT = -0.01;
+  meta.gcd = 0;
+  meta.slamDmg = 7;
+  meta.leapTarget = { x: player.x, y: player.y, z: player.z };
+  room.mobMeta.heartwood = meta;
+  const ground = () => 16;
+  const solid = () => false;
+  const candidates = [{ sid: client.sessionId, p: player }];
+
+  assert.equal(room.bossBrain(boss, 'heartwood', meta, 0.01, candidates[0], Math.hypot(player.x - boss.x, player.z - boss.z), candidates, ground, solid), true);
+  assert.equal(boss.state, 'eldritchLeap');
+  assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.t === 'eldritchLeapLaunch'), true);
+
+  const hpBefore = room.playerHp.get(client.sessionId).hp;
+  meta.stateT = -0.01;
+  assert.equal(room.bossBrain(boss, 'heartwood', meta, 0.01, candidates[0], 0, candidates, ground, solid), true);
+  assert.equal(Math.round(boss.x), Math.round(player.x));
+  assert.equal(Math.round(boss.z), Math.round(player.z));
+  assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.t === 'eldritchLeapLand'), true);
+  assert.equal(room.playerHp.get(client.sessionId).hp < hpBefore, true);
+});
+
 test('second legendary weapon batch drains lifts and pierces server-side', () => {
   const room = makeRoom();
   const client = makeClient('legend2');

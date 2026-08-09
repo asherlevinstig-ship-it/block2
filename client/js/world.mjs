@@ -9311,7 +9311,7 @@ const mobs=[];
 let mobSpawnT=2;
 const BATTLE_MUSIC_CLOSE_RANGE=7;
 const BATTLE_MUSIC_ACTIVE_RANGE=22;
-const BATTLE_MUSIC_STATES=new Set(['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind']);
+const BATTLE_MUSIC_STATES=new Set(['draw','windup','bruteWind','captainCleave','graveWind','graveRingWind','slamWind','bossMeleeWind','chargeWind','volleyWind','spikeWind','packWind','foremanWind','regentWind','rootWind','controlWind','ossuaryWind','blightWind','watcherWind','cinderWind','castellanWind','choirWind','priorWind','rimeWind','thunderWind','buriedWind','abyssalWind','riftWind','eldritchLeapWind','eldritchLeap']);
 function isBattleMusicMob(m){
   if(!m||!m.grp||m.shadowAlly||m.demoDummy||m.animal||m.kind==='shadow_soldier')return false;
   if(m.dungeon||m.boss&&dim==='dungeon')return false;
