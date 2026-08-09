@@ -5135,7 +5135,7 @@ class GameRoom extends Room {
       this.deathLimbo.delete(client.sessionId);
       const town = this.homesteadHomePointForProfile && this.homesteadHomePointForProfile(rec.prof) || townReturnPoint(W.TOWN.G + 2);
       if (p) { p.x = town.x; p.y = town.y; p.z = town.z; p.dgn = ''; }
-      const vitals = this.applyDeathRespawnVitals(client, rec.prof);
+      const vitals = this.applyDeathRespawnVitals(client, rec.prof, { full: true, policy: 'death_limbo_full_v1' });
       client.send('deathLimboComplete', { ...town, ...vitals });
     } else client.send('deathLimboQuestion', this.publicDeathLimbo(limbo, p));
   }
@@ -6286,7 +6286,7 @@ class GameRoom extends Room {
     if (p && p.dgn && p.spirit) return this.handleQuitDungeonSpirit(client);
     const rec = this.profileFor(client);
     const town = townReturnPoint(W.TOWN.G + 2);
-    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof);
+    const vitals = this.applyDeathRespawnVitals(client, rec && rec.prof, { full: true, policy: 'town_death_full_v1' });
     if (p) {
       p.spirit = false;
       p.dim = 'overworld';

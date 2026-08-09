@@ -3773,13 +3773,13 @@ test('death limbo quizzes inventory and equipped armor, dropping failed answers 
   assert.equal(room.state.players.get(client.sessionId).armorId, I.IRON_ARMOR);
   assert.equal(client.sent.some(e => e.type === 'deathLimboComplete'), true);
   const complete = client.sent.find(e => e.type === 'deathLimboComplete').msg;
-  assert.equal(complete.hp, 5, 'limbo returns the player alive but not full health');
-  assert.equal(complete.mp, 3, 'limbo does not refill mana');
-  assert.equal(complete.sp, 6, 'limbo does not refill stamina');
-  assert.equal(complete.hunger, 21, 'limbo does not refill food');
+  assert.equal(complete.hp, 20, 'limbo returns the player at full health');
+  assert.equal(complete.mp, 20, 'limbo refills mana');
+  assert.equal(complete.sp, 100, 'limbo refills stamina');
+  assert.equal(complete.hunger, 100, 'limbo refills food');
 });
 
-test('town respawn revives low without refilling mana stamina or food', () => {
+test('town respawn refills vitals so the player can move and recover', () => {
   const room = makeRoom();
   const client = makeClient('respawn_no_refill');
   const { prof } = seedPlayer(room, client, { lvl: 5, hp: 1, hunger: 18 });
@@ -3792,11 +3792,11 @@ test('town respawn revives low without refilling mana stamina or food', () => {
   room.handleRespawnTown(client, { reason: 'test' });
 
   const msg = client.sent.find(e => e.type === 'worldRespawn').msg;
-  assert.equal(msg.hp, 5);
-  assert.equal(msg.mp, 4);
-  assert.equal(msg.sp, 7);
-  assert.equal(msg.hunger, 18);
-  assert.deepEqual(prof.vitals, { hp: 5, mp: 4, sp: 7, hunger: 18 });
+  assert.equal(msg.hp, 20);
+  assert.equal(msg.mp, 20);
+  assert.equal(msg.sp, 100);
+  assert.equal(msg.hunger, 100);
+  assert.deepEqual(prof.vitals, { hp: 20, mp: 20, sp: 100, hunger: 100 });
 });
 
 test('boss dragon eggs favor species the player has not hatched yet', () => {
