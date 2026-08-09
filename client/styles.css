@@ -1439,14 +1439,18 @@
   .equiprow .hint{font-size:10px;color:#666}
 
   /* inventory / crafting UI */
-  #ui{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,10,14,.55);z-index:8}
+  #ui{position:fixed;inset:0;display:none;align-items:stretch;justify-content:stretch;background:rgba(8,10,14,.76);z-index:8;padding:12px;box-sizing:border-box}
   #ui.open{display:flex}
-  #uipanel{background:#c6c6c6;border:3px solid #555;border-radius:8px;padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.6);max-height:92vh;overflow:auto}
+  #uipanel{box-sizing:border-box;width:100%;height:100%;background:#c6c6c6;border:3px solid #555;border-radius:8px;padding:14px 18px 18px;box-shadow:0 10px 40px rgba(0,0,0,.6);overflow:auto}
+  .inventory-modal-head{position:sticky;top:-14px;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-14px -18px 14px;padding:12px 14px;background:linear-gradient(180deg,#d9d9d9,#b9b9b9);border-bottom:2px solid #555}
+  #uipanel .inventory-modal-head h2{font-size:15px;color:#3a3a3a;margin:0;letter-spacing:1px}
+  .inventory-close{width:42px;height:36px;border:2px solid;border-color:#f0f0f0 #555 #555 #f0f0f0;background:#8b8b8b;color:#151515;font:900 16px system-ui,Arial,sans-serif;cursor:pointer}
+  .inventory-close:hover,.inventory-close:focus{background:#d7d7d7;outline:2px solid #f8d66d;outline-offset:1px}
   #uipanel h2{font-size:15px;color:#3a3a3a;margin-bottom:10px;letter-spacing:1px}
   #uipanel .slot{background:var(--slot-bg);border:2px solid;border-color:var(--slot-dark) var(--slot-light) var(--slot-light) var(--slot-dark);border-radius:0;cursor:pointer}
   #uipanel .slot:hover{box-shadow:inset 0 0 0 999px rgba(255,255,255,.25)}
   #uipanel .slot.gear-inspected{outline:3px solid #f8d66d;outline-offset:1px;box-shadow:0 0 13px rgba(248,214,109,.8),inset 0 0 8px rgba(255,255,255,.35)}
-  .gear-compare{width:465px;box-sizing:border-box;margin:0 0 12px;padding:10px 12px;color:#eaf6ff;background:linear-gradient(145deg,#101927,#080d15);border:1px solid #52677f;border-radius:6px;box-shadow:inset 0 0 18px rgba(79,216,255,.05),0 3px 10px rgba(0,0,0,.24)}
+  .gear-compare{width:min(465px,100%);box-sizing:border-box;margin:0 0 12px;padding:10px 12px;color:#eaf6ff;background:linear-gradient(145deg,#101927,#080d15);border:1px solid #52677f;border-radius:6px;box-shadow:inset 0 0 18px rgba(79,216,255,.05),0 3px 10px rgba(0,0,0,.24)}
   .gear-compare header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding-bottom:7px;border-bottom:1px solid rgba(159,216,255,.18)}
   .gear-compare header small{display:block;color:#7892ad;font-size:8px;letter-spacing:1.8px}.gear-compare header h3{margin:2px 0 1px!important;font-size:12px!important;text-shadow:0 0 8px currentColor}.gear-compare header b{font-size:11px;color:#f6fbff}
   .gear-compare header strong{font-size:10px;letter-spacing:1.5px;padding:5px 8px;border:1px solid;border-radius:3px}.gear-compare header strong.upgrade{color:#86efac;background:rgba(34,197,94,.12)}.gear-compare header strong.downgrade{color:#fda4af;background:rgba(244,63,94,.12)}.gear-compare header strong.sidegrade{color:#fde68a;background:rgba(234,179,8,.12)}.gear-compare header strong.equipped{color:#7dd3fc;background:rgba(14,165,233,.12)}
@@ -1495,6 +1499,16 @@
   #cursoritem{position:fixed;width:36px;height:36px;pointer-events:none;z-index:50;display:none}
   #cursoritem canvas{width:36px;height:36px;image-rendering:pixelated}
   #cursoritem .cnt{position:absolute;bottom:-4px;right:-2px;font-size:13px;font-weight:bold;color:#fff;text-shadow:1px 1px 0 #000}
+  @media(max-width:700px){
+    #ui{padding:0}
+    #uipanel{border-radius:0;border-width:0;padding:12px}
+    .inventory-modal-head{top:-12px;margin:-12px -12px 12px;padding:10px 12px}
+    .craftwrap{flex-direction:column;gap:12px}
+    .recipebook{box-sizing:border-box;width:100%;max-height:34vh}
+    .uisec,.row,#craftarea{max-width:100%;overflow-x:auto;padding-bottom:4px}
+    .gear-stat-grid,.gear-traits{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .gear-actions{flex-wrap:wrap}.gear-actions .qbtn{min-width:120px}
+  }
 
   /* pause / start overlay */
   #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 34%,rgba(70,104,48,.16),transparent 36%),linear-gradient(180deg,rgba(2,6,10,.84),rgba(2,5,10,.92));backdrop-filter:blur(6px);z-index:10}

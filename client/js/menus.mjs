@@ -1107,10 +1107,19 @@ function chestSupplyModeHint(reason){
 
 function renderUI(){
   uipanel.innerHTML='';
-  const title=document.createElement('h2');
   const chestTitleState=uiMode==='chest' ? getChest(uiFurnaceKey) : null;
+  const head=document.createElement('div');head.className='inventory-modal-head';
+  const title=document.createElement('h2');
   title.textContent = uiMode==='table' ? 'CRAFTING TABLE' : uiMode==='furnace' ? 'FURNACE' : uiMode==='chest' ? (chestTitleState.supply?'HOMESTEAD SUPPLY':'CHEST') : 'INVENTORY';
-  uipanel.appendChild(title);
+  head.appendChild(title);
+  const close=document.createElement('button');
+  close.type='button';
+  close.className='inventory-close';
+  close.setAttribute('aria-label','Close inventory');
+  close.textContent='X';
+  close.addEventListener('click',()=>closeUI());
+  head.appendChild(close);
+  uipanel.appendChild(head);
 
   if(uiMode==='inv'){
     const equip=document.createElement('div'); equip.className='equiprow';
