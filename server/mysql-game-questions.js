@@ -1083,15 +1083,21 @@ class MySqlGameQuestionStore {
   }
 
   normalizeQuestionPatch(input = {}) {
+    const modes = cleanQuestionModes(input);
     const answers = Array.isArray(input.answers) ? input.answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
-    if (answers.length !== 4 || new Set(answers.map(v => v.toLowerCase())).size !== 4) {
-      throw Object.assign(new Error('Game questions need four unique answers.'), { status: 400, code: 'answers' });
+    const answerSet = new Set(answers.map(v => v.toLowerCase()));
+    const meditationOnly = modes.meditation && !modes.recall && !modes.scholar;
+    if (meditationOnly) {
+      if (!answers.length || answerSet.size !== answers.length) {
+        throw Object.assign(new Error('Meditation fill-gap questions need at least one accepted answer.'), { status: 400, code: 'answers' });
+      }
+    } else if (answers.length !== 4 || answerSet.size !== 4) {
+      throw Object.assign(new Error('Recall and Scholar Table questions need four unique answers.'), { status: 400, code: 'answers' });
     }
     const prompt = cleanText(input.prompt, 500);
     if (prompt.length < 10) throw Object.assign(new Error('Question prompt is too short.'), { status: 400, code: 'prompt' });
     const explanation = cleanText(input.explanation, 800);
     if (explanation.length < 10) throw Object.assign(new Error('Add a short teaching explanation.'), { status: 400, code: 'explanation' });
-    const modes = cleanQuestionModes(input);
     return {
       topic: cleanText(input.topic, 96),
       stage: cleanText(input.stage, 32),
@@ -1099,7 +1105,7 @@ class MySqlGameQuestionStore {
       spec: cleanText(input.spec, 96),
       prompt,
       answers,
-      correct: clampInt(input.correct, 0, 3),
+      correct: meditationOnly ? 0 : clampInt(input.correct, 0, 3),
       explanation,
       reviewStatus: cleanStatus(input.reviewStatus || input.review_status),
       active: input.active !== false && Number(input.is_active) !== 0,
@@ -2065,13 +2071,13 @@ class MySqlGameQuestionStore {
     for (const row of rows || []) {
       let answers = [];
       try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
-      if (!Array.isArray(answers) || answers.length < 2) continue;
+      if (!Array.isArray(answers) || answers.length < 1) continue;
       answers = answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4);
-      if (answers.length < 2) continue;
+      if (answers.length < 1) continue;
       return {
         id: 'db-' + (Number(row.id) || 0) + '-' + Date.now().toString(36),
         questionId: Number(row.id) || 0,
-        type: 'multiple_choice',
+        type: 'fill_gap',
         subjectId: subject.subjectId,
         subjectName: subject.subjectName || '',
         topic: row.topic || '',
@@ -2079,11 +2085,86 @@ class MySqlGameQuestionStore {
         difficulty: Number(row.difficulty) || 1,
         prompt: row.prompt || '',
         answers,
-        correctIndex: Math.max(0, Math.min(answers.length - 1, Number(row.correct_index) || 0)),
         explanation: row.explanation || '',
       };
     }
     return null;
+  }
+
+  async loadRecallQuestion(account, input = {}) {
+    await this.ensureSchema();
+    const subject = await this.findPlayableRecallSubject(account, input);
+    if (!subject || !subject.subjectId) return null;
+    const [rows] = await this.getPool().execute(
+      `SELECT id, prompt, answers, correct_index, explanation, topic, stage, difficulty, spec
+       FROM game_question
+       WHERE subject_id = ? AND is_active = 1
+         AND COALESCE(use_recall, 1) = 1
+         AND review_status IN ('approved', 'teacher-reviewed')
+       ORDER BY RAND()
+       LIMIT 25`,
+      [subject.subjectId],
+    );
+    for (const row of rows || []) {
+      let answers = [];
+      try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
+      if (!Array.isArray(answers)) continue;
+      answers = answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4);
+      if (answers.length !== 4) continue;
+      return {
+        id: 'db-recall-' + (Number(row.id) || 0),
+        questionId: Number(row.id) || 0,
+        subject: subject.subjectName || cleanText(input.subject, 96) || 'General',
+        topic: row.topic || '',
+        stage: row.stage || '',
+        difficulty: Number(row.difficulty) || 1,
+        spec: row.spec || 'teacher-db',
+        prompt: row.prompt || '',
+        answers,
+        correct: Math.max(0, Math.min(3, Number(row.correct_index) || 0)),
+        explanation: row.explanation || '',
+      };
+    }
+    return null;
+  }
+
+  async findPlayableRecallSubject(account, input = {}) {
+    await this.ensureSchema();
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const requestedSubject = cleanText(input.subject, 96);
+    const requested = requestedSubject ? await this.resolvePlaySubject(account, input).catch(() => null) : null;
+    const hasRecall = async subjectId => {
+      if (!subjectId) return false;
+      const [rows] = await this.getPool().execute(
+        `SELECT COUNT(*) AS n
+         FROM game_question
+         WHERE subject_id = ? AND is_active = 1
+           AND COALESCE(use_recall, 1) = 1
+           AND review_status IN ('approved', 'teacher-reviewed')`,
+        [subjectId],
+      );
+      return (Number(rows && rows[0] && rows[0].n) || 0) > 0;
+    };
+    if (requested && await hasRecall(requested.subjectId)) return requested;
+    const fallbackSubject = cleanText(input.fallbackSubject, 96) || 'Computer Science';
+    const fallback = fallbackSubject ? await this.resolvePlaySubject(account, { subject: fallbackSubject }).catch(() => null) : null;
+    if (fallback && await hasRecall(fallback.subjectId)) return fallback;
+    const [rows] = await this.getPool().execute(
+      `SELECT s.id, s.name, s.code, s.school_id, COUNT(q.id) AS n
+       FROM subjects s
+       JOIN game_question q ON q.subject_id = s.id
+        AND q.is_active = 1
+        AND COALESCE(q.use_recall, 1) = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+       GROUP BY s.id, s.name, s.code, s.school_id
+       ORDER BY CASE WHEN LOWER(s.name) = LOWER(?) OR LOWER(s.code) = LOWER(?) THEN 0 WHEN s.school_id = ? THEN 1 ELSE 2 END,
+                n DESC, s.id ASC
+       LIMIT 1`,
+      [schoolId, schoolId, fallbackSubject, fallbackSubject, schoolId],
+    );
+    const s = rows && rows[0];
+    return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id), subjectName: s.name || '', subjectCode: s.code || '' } : null;
   }
 
   async findPlayableMeditationSubject(account, input = {}) {

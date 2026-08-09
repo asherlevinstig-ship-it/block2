@@ -655,11 +655,21 @@ createApp({
     }
 
     function validateForm() {
+      const modes = {
+        recall: state.form.modes && state.form.modes.recall !== false,
+        scholar: state.form.modes && state.form.modes.scholar !== false,
+        meditation: !!(state.form.modes && state.form.modes.meditation),
+      };
+      const meditationOnly = modes.meditation && !modes.recall && !modes.scholar;
       const answers = state.form.answers.map(value => String(value || '').trim());
-      const unique = new Set(answers.map(value => value.toLowerCase()).filter(Boolean));
+      const filledAnswers = answers.filter(Boolean);
+      const unique = new Set(filledAnswers.map(value => value.toLowerCase()));
       if (!state.subjectId) throw new Error('Choose a subject first.');
       if (String(state.form.prompt || '').trim().length < 10) throw new Error('Question prompt needs at least 10 characters.');
-      if (answers.some(value => !value) || unique.size !== 4) throw new Error('Add four unique answer choices.');
+      if (!modes.recall && !modes.scholar && !modes.meditation) throw new Error('Choose at least one game mode for this question.');
+      if (meditationOnly) {
+        if (!filledAnswers.length || unique.size !== filledAnswers.length) throw new Error('Meditation fill-gap needs at least one accepted answer.');
+      } else if (answers.some(value => !value) || unique.size !== 4) throw new Error('P Recall and Knowledge Challenge need four unique answer choices.');
       if (String(state.form.explanation || '').trim().length < 10) throw new Error('Add a short teaching explanation.');
       return {
         subjectId: Number(state.subjectId),
@@ -668,16 +678,12 @@ createApp({
         difficulty: Number(state.form.difficulty) || 1,
         spec: state.form.spec,
         prompt: state.form.prompt,
-        answers,
-        correct: Number(state.form.correct) || 0,
+        answers: meditationOnly ? filledAnswers : answers,
+        correct: meditationOnly ? 0 : Number(state.form.correct) || 0,
         explanation: state.form.explanation,
         reviewStatus: state.form.reviewStatus,
         active: !!state.form.active,
-        modes: {
-          recall: state.form.modes && state.form.modes.recall !== false,
-          scholar: state.form.modes && state.form.modes.scholar !== false,
-          meditation: !!(state.form.modes && state.form.modes.meditation),
-        },
+        modes,
       };
     }
 
@@ -1549,20 +1555,38 @@ createApp({
             </div>
 
             <fieldset class="teacher-vue-modes">
-              <legend>Use this question in</legend>
-              <label><input type="checkbox" v-model="state.form.modes.recall"> Recall / Question Hall</label>
-              <label><input type="checkbox" v-model="state.form.modes.scholar"> Scholar Table</label>
-              <label><input type="checkbox" v-model="state.form.modes.meditation"> Meditation Focus</label>
+              <legend>Game mode</legend>
+              <label><input type="checkbox" v-model="state.form.modes.recall"> P Recall · multiple choice</label>
+              <label><input type="checkbox" v-model="state.form.modes.meditation"> Meditation · fill the gap</label>
+              <label><input type="checkbox" v-model="state.form.modes.scholar"> Scholar Table · Knowledge Challenge</label>
             </fieldset>
+
+            <section class="teacher-vue-templates">
+              <article v-if="state.form.modes.recall">
+                <b>P Recall / Question Hall</b>
+                <span>Best for quick retrieval. Write one clear question and four plausible choices. Avoid silly distractors.</span>
+                <em>Template: “Which option best describes ____?”</em>
+              </article>
+              <article v-if="state.form.modes.meditation">
+                <b>Meditation Focus</b>
+                <span>Best for calm fill-the-gap recall. Put a blank in the prompt and add accepted answers below.</span>
+                <em>Template: “A variable stores a value that can ____ while a program runs.”</em>
+              </article>
+              <article v-if="state.form.modes.scholar">
+                <b>Scholar Table / Knowledge Challenge</b>
+                <span>Best for adaptive practice. Use a strong correct answer and plausible misconceptions; the table turns them into compare, replace, consequence, and justification cases.</span>
+                <em>Template: correct idea + common confusion + short explanation of the decisive difference.</em>
+              </article>
+            </section>
 
             <label class="teacher-vue-wide">Question prompt<textarea v-model="state.form.prompt" maxlength="500" rows="4"></textarea></label>
 
             <fieldset class="teacher-vue-answers">
-              <legend>Answers</legend>
+              <legend>{{ state.form.modes.meditation && !state.form.modes.recall && !state.form.modes.scholar ? 'Accepted fill-gap answers' : 'Multiple-choice answers' }}</legend>
               <label v-for="index in [0,1,2,3]" :key="index">
-                <input type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
+                <input v-if="!(state.form.modes.meditation && !state.form.modes.recall && !state.form.modes.scholar)" type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
                 <span>{{ ['A','B','C','D'][index] }}</span>
-                <input v-model="state.form.answers[index]" maxlength="160">
+                <input v-model="state.form.answers[index]" maxlength="160" :placeholder="state.form.modes.meditation && !state.form.modes.recall && !state.form.modes.scholar ? (index === 0 ? 'Main accepted answer' : 'Optional alternative spelling/wording') : ''">
               </label>
             </fieldset>
 

@@ -81,7 +81,7 @@ class RecallMixin{
       return typeof this.recallPillarClear==='function'?this.recallResolvePillar(p,base,forward,right):base;
     });
   }
-  handleRecallStart(client,message={}){
+  async handleRecallStart(client,message={}){
     if(!client||this.rateLimited(client,'action',4,8))return;
     const p=this.state.players.get(client.sessionId),now=Date.now();
     if(!p)return;
@@ -105,7 +105,15 @@ class RecallMixin{
       ruinId=ruin.id;
     }
     const tutorial=this.recallTutorialSpace(p),questionHall=questionHallRequest;
-    const q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);this.recallSeq++;
+    let q=null;
+    try{
+      const auth=getAuthService(),store=auth&&typeof auth.getGameQuestionStore==='function'?auth.getGameQuestionStore():null;
+      if(store&&client&&client._account&&typeof store.loadRecallQuestion==='function'){
+        q=await store.loadRecallQuestion(client._account,{subject,fallbackSubject:'Computer Science'});
+      }
+    }catch(_){}
+    if(!q)q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);
+    this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const dungeonRecall=this.recallDungeonSpace(p);
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
