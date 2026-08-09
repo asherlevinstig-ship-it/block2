@@ -18,6 +18,13 @@ const cleanDate = value => {
   const text = String(value || '').trim().slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
 };
+const cleanCode = (value, fallback = 'item', max = 64) => {
+  const text = String(value || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, max);
+  return text || fallback;
+};
 const publicDate = value => {
   if (!value) return '';
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
@@ -317,6 +324,12 @@ function publicQuestion(row) {
     explanation: row.explanation || '',
     reviewStatus: row.review_status || 'draft',
     active: Number(row.is_active) !== 0,
+    format: row.format || 'multiple_choice',
+    knowledge: {
+      entityId: row.entity_id == null ? null : Number(row.entity_id) || null,
+      primaryAtomId: row.primary_atom_id == null ? null : Number(row.primary_atom_id) || null,
+      confusionPairId: row.confusion_pair_id == null ? null : Number(row.confusion_pair_id) || null,
+    },
     modes: {
       recall: row.use_recall == null ? true : Number(row.use_recall) !== 0,
       scholar: row.use_scholar == null ? true : Number(row.use_scholar) !== 0,
@@ -1113,6 +1126,138 @@ class MySqlGameQuestionStore {
     };
   }
 
+  normalizeKnowledgePatch(input = {}) {
+    const source = input.knowledge && typeof input.knowledge === 'object' ? input.knowledge : input;
+    return {
+      entityId: clampInt(source.entityId || source.entity_id, 0, 2147483647),
+      entityName: cleanText(source.entityName || source.entity_name, 120),
+      entitySummary: cleanText(source.entitySummary || source.entity_summary, 2000),
+      atomId: clampInt(source.atomId || source.primaryAtomId || source.primary_atom_id, 0, 2147483647),
+      atomType: cleanCode(source.atomType || source.atom_type || 'purpose', 'purpose', 48),
+      atomStatement: cleanText(source.atomStatement || source.atom_statement, 2000),
+      confusionAtomId: clampInt(source.confusionAtomId || source.confusion_atom_id, 0, 2147483647),
+      misconceptionName: cleanText(source.misconceptionName || source.misconception_name, 120),
+      misconceptionStatement: cleanText(source.misconceptionStatement || source.misconception_statement, 2000),
+      misconceptionNote: cleanText(source.misconceptionNote || source.misconception_note, 240),
+    };
+  }
+
+  async resolveKnowledgeAtomType(subjectId, code, label = '') {
+    const clean = cleanCode(code || 'purpose', 'purpose', 48);
+    const [rows] = await this.getPool().execute(
+      'SELECT id, code, subject_id FROM kc_atom_type WHERE (subject_id = ? OR subject_id IS NULL) AND code = ? ORDER BY subject_id IS NULL ASC LIMIT 1',
+      [subjectId, clean],
+    );
+    const existing = rows && rows[0];
+    if (existing) return { id: Number(existing.id) || 0, code: existing.code || clean };
+    const [result] = await this.getPool().execute(
+      'INSERT INTO kc_atom_type (subject_id, code, label, sort_order) VALUES (?, ?, ?, ?)',
+      [subjectId, clean, cleanText(label, 96) || clean.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), 50],
+    );
+    return { id: Number(result.insertId) || 0, code: clean };
+  }
+
+  async getKnowledgeEntityForSubject(subjectId, entityId) {
+    if (!entityId) return null;
+    const [rows] = await this.getPool().execute(
+      'SELECT id, code, name, topic, stage, summary FROM kc_entity WHERE id = ? AND subject_id = ? AND is_active = 1 LIMIT 1',
+      [entityId, subjectId],
+    );
+    return rows && rows[0] || null;
+  }
+
+  async getKnowledgeAtomForSubject(subjectId, atomId) {
+    if (!atomId) return null;
+    const [rows] = await this.getPool().execute(
+      `SELECT a.id, a.code, a.entity_id, a.atom_type_id, a.statement, a.difficulty, e.code AS entity_code
+       FROM kc_atom a
+       JOIN kc_entity e ON e.id = a.entity_id
+       WHERE a.id = ? AND a.subject_id = ? AND a.is_active = 1
+       LIMIT 1`,
+      [atomId, subjectId],
+    );
+    return rows && rows[0] || null;
+  }
+
+  async ensureKnowledgeAuthoring(account, subjectId, questionPatch, input = {}) {
+    const { schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
+    const scopeSchoolId = subject.school_id == null ? (schoolId || null) : subject.school_id;
+    const knowledge = this.normalizeKnowledgePatch(input);
+    const topic = questionPatch.topic || knowledge.topic || '';
+    const stage = questionPatch.stage || knowledge.stage || '';
+    const pool = this.getPool();
+
+    let atom = await this.getKnowledgeAtomForSubject(subjectId, knowledge.atomId);
+    let entity = atom && atom.entity_id ? await this.getKnowledgeEntityForSubject(subjectId, Number(atom.entity_id)) : null;
+    if (!entity) entity = await this.getKnowledgeEntityForSubject(subjectId, knowledge.entityId);
+    if (!entity) {
+      if (!knowledge.entityName) {
+        throw Object.assign(new Error('Knowledge Challenge needs a concept name or selected concept.'), { status: 400, code: 'knowledge_concept' });
+      }
+      const entityCode = cleanCode(knowledge.entityName, 'concept', 64);
+      const [result] = await pool.execute(
+        `INSERT INTO kc_entity (school_id, subject_id, code, name, topic, stage, summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), name = VALUES(name), topic = VALUES(topic), stage = VALUES(stage), summary = VALUES(summary), is_active = 1`,
+        [scopeSchoolId, subjectId, entityCode, knowledge.entityName, topic, stage, knowledge.entitySummary],
+      );
+      entity = { id: Number(result.insertId) || 0, code: entityCode, name: knowledge.entityName };
+    }
+
+    if (!atom) {
+      if (!knowledge.atomStatement) {
+        throw Object.assign(new Error('Knowledge Challenge needs an atom statement or selected atom.'), { status: 400, code: 'knowledge_atom' });
+      }
+      const type = await this.resolveKnowledgeAtomType(subjectId, knowledge.atomType || 'purpose');
+      const atomCode = cleanCode((entity.code || 'concept') + '.' + type.code + '.' + knowledge.atomStatement, 'atom', 96);
+      const [result] = await pool.execute(
+        `INSERT INTO kc_atom (subject_id, entity_id, atom_type_id, code, statement, difficulty)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), entity_id = VALUES(entity_id), atom_type_id = VALUES(atom_type_id), statement = VALUES(statement), difficulty = VALUES(difficulty), is_active = 1`,
+        [subjectId, Number(entity.id), Number(type.id), atomCode, knowledge.atomStatement, questionPatch.difficulty],
+      );
+      atom = { id: Number(result.insertId) || 0, code: atomCode, entity_id: Number(entity.id), statement: knowledge.atomStatement };
+    }
+
+    let confusionPairId = 0;
+    let confusionAtom = await this.getKnowledgeAtomForSubject(subjectId, knowledge.confusionAtomId);
+    if (!confusionAtom && knowledge.misconceptionStatement) {
+      const type = await this.resolveKnowledgeAtomType(subjectId, 'misconception', 'Misconception');
+      const misconceptionCode = cleanCode((entity.code || 'concept') + '.misconception.' + (knowledge.misconceptionName || knowledge.misconceptionStatement), 'misconception', 96);
+      const [result] = await pool.execute(
+        `INSERT INTO kc_atom (subject_id, entity_id, atom_type_id, code, statement, difficulty)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), statement = VALUES(statement), difficulty = VALUES(difficulty), is_active = 1`,
+        [subjectId, Number(entity.id), Number(type.id), misconceptionCode, knowledge.misconceptionStatement, questionPatch.difficulty],
+      );
+      confusionAtom = { id: Number(result.insertId) || 0 };
+    }
+    if (confusionAtom && Number(confusionAtom.id) !== Number(atom.id)) {
+      const aId = Math.min(Number(atom.id), Number(confusionAtom.id));
+      const bId = Math.max(Number(atom.id), Number(confusionAtom.id));
+      const [result] = await pool.execute(
+        `INSERT INTO kc_confusion_pair (subject_id, atom_a_id, atom_b_id, note)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id), note = VALUES(note)`,
+        [subjectId, aId, bId, knowledge.misconceptionNote || 'Common misconception link'],
+      );
+      confusionPairId = Number(result.insertId) || 0;
+    }
+
+    return {
+      format: 'multiple_choice',
+      entityId: Number(entity.id) || null,
+      primaryAtomId: Number(atom.id) || null,
+      confusionPairId: confusionPairId || null,
+      payloadJson: JSON.stringify({
+        concept: knowledge.entityName || entity.name || '',
+        atomType: knowledge.atomType || '',
+        misconception: knowledge.misconceptionName || '',
+        misconceptionNote: knowledge.misconceptionNote || '',
+      }),
+    };
+  }
+
   async listQuestions(account, query = {}) {
     await this.ensureSchema();
     const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
@@ -1148,10 +1293,13 @@ class MySqlGameQuestionStore {
     const subjectId = clampInt(input.subjectId || input.subject_id, 1, 2147483647);
     const { teacherId, schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
     const patch = this.normalizeQuestionPatch(input);
+    const knowledgeLink = patch.modes.scholar && !patch.modes.recall && !patch.modes.meditation
+      ? await this.ensureKnowledgeAuthoring(account, subjectId, patch, input)
+      : { format: 'multiple_choice', entityId: null, primaryAtomId: null, confusionPairId: null, payloadJson: null };
     const [result] = await this.getPool().execute(
       `INSERT INTO game_question
-       (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active, use_recall, use_scholar, use_meditation)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active, use_recall, use_scholar, use_meditation, format, entity_id, primary_atom_id, confusion_pair_id, payload_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         subject.school_id == null ? (schoolId || null) : subject.school_id,
         subjectId,
@@ -1169,6 +1317,11 @@ class MySqlGameQuestionStore {
         patch.modes.recall ? 1 : 0,
         patch.modes.scholar ? 1 : 0,
         patch.modes.meditation ? 1 : 0,
+        knowledgeLink.format,
+        knowledgeLink.entityId,
+        knowledgeLink.primaryAtomId,
+        knowledgeLink.confusionPairId,
+        knowledgeLink.payloadJson,
       ],
     );
     return this.getQuestion(account, Number(result.insertId || 0));
@@ -1200,11 +1353,14 @@ class MySqlGameQuestionStore {
     await this.ensureSchema();
     const existing = await this.getQuestion(account, questionId);
     const next = this.normalizeQuestionPatch({ ...existing, ...input, answers: input.answers || existing.answers, correct: Object.prototype.hasOwnProperty.call(input, 'correct') ? input.correct : existing.correct });
+    const knowledgeLink = next.modes.scholar && !next.modes.recall && !next.modes.meditation
+      ? await this.ensureKnowledgeAuthoring(account, next.subjectId || input.subjectId || existing.subjectId, next, input)
+      : { format: 'multiple_choice', entityId: null, primaryAtomId: null, confusionPairId: null, payloadJson: null };
     await this.getPool().execute(
       `UPDATE game_question
-       SET topic = ?, stage = ?, difficulty = ?, spec = ?, prompt = ?, answers = ?, correct_index = ?, explanation = ?, review_status = ?, is_active = ?, use_recall = ?, use_scholar = ?, use_meditation = ?
+       SET topic = ?, stage = ?, difficulty = ?, spec = ?, prompt = ?, answers = ?, correct_index = ?, explanation = ?, review_status = ?, is_active = ?, use_recall = ?, use_scholar = ?, use_meditation = ?, format = ?, entity_id = ?, primary_atom_id = ?, confusion_pair_id = ?, payload_json = ?
        WHERE id = ?`,
-      [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, next.modes.recall ? 1 : 0, next.modes.scholar ? 1 : 0, next.modes.meditation ? 1 : 0, existing.id],
+      [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, next.modes.recall ? 1 : 0, next.modes.scholar ? 1 : 0, next.modes.meditation ? 1 : 0, knowledgeLink.format, knowledgeLink.entityId, knowledgeLink.primaryAtomId, knowledgeLink.confusionPairId, knowledgeLink.payloadJson, existing.id],
     );
     return this.getQuestion(account, existing.id);
   }
@@ -2238,9 +2394,10 @@ class MySqlGameQuestionStore {
       entityParams,
     );
     const [atomRows] = await this.getPool().execute(
-      `SELECT a.id, a.code, a.statement, a.difficulty,
+      `SELECT a.id, a.code, a.entity_id, a.statement, a.difficulty,
               e.name AS entity_name, e.topic, e.stage,
               COALESCE(t.label, t.code, '') AS type_label,
+              COALESCE(t.code, '') AS type_code,
               COUNT(q.id) AS playable_cases
        FROM kc_atom a
        JOIN kc_entity e ON e.id = a.entity_id
@@ -2251,13 +2408,13 @@ class MySqlGameQuestionStore {
         AND COALESCE(q.use_scholar, 1) = 1
         AND q.review_status IN ('approved', 'teacher-reviewed')
        WHERE a.subject_id = ? AND a.is_active = 1
-       GROUP BY a.id, a.code, a.statement, a.difficulty, e.name, e.topic, e.stage, t.label, t.code
+       GROUP BY a.id, a.code, a.entity_id, a.statement, a.difficulty, e.name, e.topic, e.stage, t.label, t.code
        ORDER BY e.topic ASC, e.name ASC, t.sort_order ASC, a.id ASC
        LIMIT 500`,
       [subjectId],
     );
     const [pairRows] = await this.getPool().execute(
-      `SELECT cp.id, cp.note,
+      `SELECT cp.id, cp.atom_a_id, cp.atom_b_id, cp.note,
               aa.code AS atom_a_code, aa.statement AS atom_a_statement,
               ab.code AS atom_b_code, ab.statement AS atom_b_statement
        FROM kc_confusion_pair cp
@@ -2279,16 +2436,20 @@ class MySqlGameQuestionStore {
     const atoms = (atomRows || []).map(row => ({
       id: Number(row.id) || 0,
       code: row.code || '',
+      entityId: Number(row.entity_id) || 0,
       entityName: row.entity_name || '',
       topic: row.topic || '',
       stage: row.stage || '',
       typeLabel: row.type_label || '',
+      typeCode: row.type_code || '',
       statement: row.statement || '',
       difficulty: Number(row.difficulty) || 1,
       playableCases: Number(row.playable_cases) || 0,
     }));
     const confusionPairs = (pairRows || []).map(row => ({
       id: Number(row.id) || 0,
+      atomAId: Number(row.atom_a_id) || 0,
+      atomBId: Number(row.atom_b_id) || 0,
       atomA: row.atom_a_code || row.atom_a_statement || '',
       atomB: row.atom_b_code || row.atom_b_statement || '',
       note: row.note || '',

@@ -146,6 +146,18 @@ const emptyForm = (mode = 'recall') => ({
   reviewStatus: 'draft',
   active: true,
   modes: modesForBank(mode),
+  knowledge: {
+    entityId: '',
+    entityName: '',
+    entitySummary: '',
+    atomId: '',
+    atomType: 'purpose',
+    atomStatement: '',
+    confusionAtomId: '',
+    misconceptionName: '',
+    misconceptionStatement: '',
+    misconceptionNote: '',
+  },
 });
 
 const emptyCurriculum = () => ({
@@ -182,6 +194,7 @@ function cleanQuestion(question) {
       meditation: !!(question.modes && question.modes.meditation),
     },
     creatorName: String(question.creatorName || question.creatorEmail || '').trim(),
+    knowledge: question.knowledge && typeof question.knowledge === 'object' ? question.knowledge : {},
   };
 }
 
@@ -256,6 +269,8 @@ createApp({
       meditation: state.questions.filter(q => primaryQuestionBankMode(q) === 'meditation').length,
       scholar: state.questions.filter(q => primaryQuestionBankMode(q) === 'scholar').length,
     }));
+    const knowledgeEntityOptions = computed(() => Array.isArray(state.knowledgePlan.entities) ? state.knowledgePlan.entities : []);
+    const knowledgeAtomOptions = computed(() => Array.isArray(state.knowledgePlan.atoms) ? state.knowledgePlan.atoms : []);
     const stats = computed(() => ({
       total: state.questions.length,
       draft: state.questions.filter(q => q.reviewStatus === 'draft').length,
@@ -468,6 +483,7 @@ createApp({
 
     function fillForm(question) {
       const q = cleanQuestion(question || {});
+      const base = emptyForm(primaryQuestionBankMode(q));
       state.form = {
         id: q.id || 0,
         topic: q.topic || '',
@@ -481,6 +497,11 @@ createApp({
         reviewStatus: q.reviewStatus || 'draft',
         active: q.active,
         modes: { ...q.modes },
+        knowledge: {
+          ...base.knowledge,
+          entityId: q.knowledge && q.knowledge.entityId ? String(q.knowledge.entityId) : '',
+          atomId: q.knowledge && q.knowledge.primaryAtomId ? String(q.knowledge.primaryAtomId) : '',
+        },
       };
       state.selectedId = q.id || 0;
     }
@@ -727,6 +748,7 @@ createApp({
     function validateForm() {
       const modes = modesForBank(activeQuestionMode.value);
       const meditationOnly = modes.meditation && !modes.recall && !modes.scholar;
+      const scholarOnly = modes.scholar && !modes.recall && !modes.meditation;
       const answers = state.form.answers.map(value => String(value || '').trim());
       const filledAnswers = answers.filter(Boolean);
       const unique = new Set(filledAnswers.map(value => value.toLowerCase()));
@@ -735,6 +757,11 @@ createApp({
       if (meditationOnly) {
         if (!filledAnswers.length || unique.size !== filledAnswers.length) throw new Error('Meditation fill-gap needs at least one accepted answer.');
       } else if (answers.some(value => !value) || unique.size !== 4) throw new Error(activeQuestionBank.value.title + ' needs four unique answer choices.');
+      const knowledge = state.form.knowledge || {};
+      if (scholarOnly) {
+        if (!String(knowledge.atomId || '').trim() && !String(knowledge.entityId || '').trim() && String(knowledge.entityName || '').trim().length < 2) throw new Error('Add or select the concept this Knowledge Challenge case belongs to.');
+        if (!String(knowledge.atomId || '').trim() && String(knowledge.atomStatement || '').trim().length < 10) throw new Error('Add or select the atom: the exact knowledge claim being tested.');
+      }
       if (String(state.form.explanation || '').trim().length < 10) throw new Error('Add a short teaching explanation.');
       return {
         subjectId: Number(state.subjectId),
@@ -749,6 +776,18 @@ createApp({
         reviewStatus: state.form.reviewStatus,
         active: !!state.form.active,
         modes,
+        knowledge: scholarOnly ? {
+          entityId: knowledge.entityId || '',
+          entityName: knowledge.entityName || '',
+          entitySummary: knowledge.entitySummary || '',
+          atomId: knowledge.atomId || '',
+          atomType: knowledge.atomType || 'purpose',
+          atomStatement: knowledge.atomStatement || '',
+          confusionAtomId: knowledge.confusionAtomId || '',
+          misconceptionName: knowledge.misconceptionName || '',
+          misconceptionStatement: knowledge.misconceptionStatement || '',
+          misconceptionNote: knowledge.misconceptionNote || '',
+        } : undefined,
       };
     }
 
@@ -1000,6 +1039,8 @@ createApp({
       recentActivity,
       stats,
       bankCounts,
+      knowledgeEntityOptions,
+      knowledgeAtomOptions,
       activeQuestionBank,
       activeQuestionMode,
       dashboardLinks,
@@ -1672,6 +1713,58 @@ createApp({
                   <span v-for="pair in state.knowledgePlan.confusionPairs.slice(0, 5)" :key="'pair-' + pair.id">{{ pair.atomA }} ⇄ {{ pair.atomB }} <small>{{ pair.note }}</small></span>
                   <em v-if="!state.knowledgePlan.confusionPairs.length">Plan confusing pairs like stack vs queue, router vs switch, variable vs constant.</em>
                 </article>
+              </div>
+              <div class="teacher-vue-plan-author">
+                <h4>Attach this playable case to the concept map</h4>
+                <p>Save will create/select the concept, create/select the atom being tested, then optionally link the atom to a misconception. This is what turns a Scholar Table question into Concepts → atoms → misconception links.</p>
+                <div class="teacher-vue-author-grid">
+                  <label>
+                    Existing concept
+                    <select v-model="state.form.knowledge.entityId">
+                      <option value="">Create a new concept</option>
+                      <option v-for="entity in knowledgeEntityOptions" :key="'concept-option-' + entity.id" :value="String(entity.id)">{{ entity.name }}{{ entity.topic ? ' · ' + entity.topic : '' }}</option>
+                    </select>
+                  </label>
+                  <label>
+                    New concept name
+                    <input v-model="state.form.knowledge.entityName" maxlength="120" placeholder="e.g. Network routing">
+                  </label>
+                  <label class="teacher-vue-wide">
+                    Concept summary
+                    <textarea v-model="state.form.knowledge.entitySummary" maxlength="2000" rows="2" placeholder="What should the learner understand about this concept?"></textarea>
+                  </label>
+                  <label>
+                    Existing atom
+                    <select v-model="state.form.knowledge.atomId">
+                      <option value="">Create a new atom</option>
+                      <option v-for="atom in knowledgeAtomOptions" :key="'atom-option-' + atom.id" :value="String(atom.id)">{{ atom.entityName }} → {{ atom.typeLabel || atom.typeCode || 'Atom' }} · {{ atom.statement }}</option>
+                    </select>
+                  </label>
+                  <label>
+                    Atom type
+                    <input v-model="state.form.knowledge.atomType" maxlength="48" placeholder="purpose / behaviour / difference">
+                  </label>
+                  <label class="teacher-vue-wide">
+                    Atom statement
+                    <textarea v-model="state.form.knowledge.atomStatement" maxlength="2000" rows="2" placeholder="The exact knowledge claim this case tests, e.g. A router forwards packets between networks."></textarea>
+                  </label>
+                  <label>
+                    Link to existing misconception atom
+                    <select v-model="state.form.knowledge.confusionAtomId">
+                      <option value="">Create/link a new misconception below</option>
+                      <option v-for="atom in knowledgeAtomOptions" :key="'confusion-option-' + atom.id" :value="String(atom.id)">{{ atom.entityName }} → {{ atom.statement }}</option>
+                    </select>
+                  </label>
+                  <label>
+                    Misconception name
+                    <input v-model="state.form.knowledge.misconceptionName" maxlength="120" placeholder="e.g. Router stores websites">
+                  </label>
+                  <label class="teacher-vue-wide">
+                    Misconception atom / link note
+                    <textarea v-model="state.form.knowledge.misconceptionStatement" maxlength="2000" rows="2" placeholder="The wrong idea a plausible distractor reveals."></textarea>
+                    <input v-model="state.form.knowledge.misconceptionNote" maxlength="240" placeholder="Why learners confuse them / decisive difference">
+                  </label>
+                </div>
               </div>
             </section>
 
