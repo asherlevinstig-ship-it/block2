@@ -1107,11 +1107,17 @@ function chestSupplyModeHint(reason){
 
 function renderUI(){
   uipanel.innerHTML='';
+  uipanel.classList.toggle('inventory-redesign',uiMode==='inv');
   const chestTitleState=uiMode==='chest' ? getChest(uiFurnaceKey) : null;
   const head=document.createElement('div');head.className='inventory-modal-head';
   const title=document.createElement('h2');
   title.textContent = uiMode==='table' ? 'CRAFTING TABLE' : uiMode==='furnace' ? 'FURNACE' : uiMode==='chest' ? (chestTitleState.supply?'HOMESTEAD SUPPLY':'CHEST') : 'INVENTORY';
   head.appendChild(title);
+  if(uiMode==='inv'){
+    const bond=qBtn('DRAGON BONDS',()=>openDragonBondUI(),!dragonUnlocks.length);
+    bond.classList.add('inventory-dragon-bonds');
+    head.appendChild(bond);
+  }
   const close=document.createElement('button');
   close.type='button';
   close.className='inventory-close';
@@ -1120,6 +1126,70 @@ function renderUI(){
   close.addEventListener('click',()=>closeUI());
   head.appendChild(close);
   uipanel.appendChild(head);
+
+  if(uiMode==='inv'){
+    const sectionTitle=(label,icon='')=>{
+      const h=document.createElement('div');
+      h.className='inventory-section-title';
+      h.innerHTML=(icon?'<span>'+escHTML(icon)+'</span>':'')+'<b>'+escHTML(label)+'</b>';
+      return h;
+    };
+    const shell=document.createElement('div');shell.className='inventory-layout';
+    const equipped=document.createElement('section');equipped.className='inventory-panel inventory-equipped-panel';
+    equipped.appendChild(sectionTitle('EQUIPPED','Q'));
+    const equip=document.createElement('div'); equip.className='equiprow';
+    equip.appendChild(makeSlotEl({get:()=>armorSlot,set:v=>{armorSlot=v;}}, {armor:true}));
+    const label=document.createElement('div');
+    const armor=equippedArmor();
+    label.innerHTML='<b>ARMOR</b><div class="hint">'+(armor?'Click once to inspect equipped armour':'Equip any armour here')+'</div>';
+    equip.appendChild(label);
+    equipped.appendChild(equip);
+    try{equipped.appendChild(renderGearComparison());}
+    catch(error){
+      console.error('[gear comparison]',error);
+      const fallback=document.createElement('section');fallback.className='gear-compare';
+      fallback.innerHTML='<div class="gear-empty"><b>GEAR INSPECTION</b><span>Comparison data is temporarily unavailable.</span></div>';
+      equipped.appendChild(fallback);
+    }
+    const bindingPanel=renderSelectedBindingAction();
+    if(bindingPanel) equipped.appendChild(bindingPanel);
+    const treatPanel=renderSelectedDragonTreatAction();
+    if(treatPanel) equipped.appendChild(treatPanel);
+    shell.appendChild(equipped);
+
+    const bagPanel=document.createElement('section');bagPanel.className='inventory-panel inventory-bag-panel';
+    const bagHead=document.createElement('div');bagHead.className='inventory-panel-head';
+    bagHead.appendChild(sectionTitle('INVENTORY','B'));
+    bagHead.appendChild(qBtn('SORT BAG',()=>requestInventorySort()));
+    bagPanel.appendChild(bagHead);
+    const bag=document.createElement('div'); bag.className='grid inventory-bag-grid';
+    bag.style.gridTemplateColumns='repeat(6, 48px)';
+    for(let i=9;i<36;i++) bag.appendChild(makeSlotEl(makeAccessor(()=>inv,i), {section:'bag',inventorySlot:i}));
+    bagPanel.appendChild(bag);
+    const hotTitle=document.createElement('div');hotTitle.className='inventory-hotbar-title';hotTitle.textContent='HOTBAR';
+    bagPanel.appendChild(hotTitle);
+    const hotRow=document.createElement('div'); hotRow.className='row inventory-hotbar-row';
+    for(let i=0;i<9;i++) hotRow.appendChild(makeSlotEl(makeAccessor(()=>inv,i), {section:'hot',inventorySlot:i}));
+    bagPanel.appendChild(hotRow);
+    shell.appendChild(bagPanel);
+
+    const recipePanel=document.createElement('section');recipePanel.className='inventory-panel inventory-recipe-panel';
+    recipePanel.appendChild(sectionTitle('KNOWN RECIPES','R'));
+    const craftArea=document.createElement('div');craftArea.id='craftarea';craftArea.className='inventory-craft-strip';
+    const grid=document.createElement('div'); grid.className='grid';
+    grid.style.gridTemplateColumns='repeat('+craftW+', 48px)';
+    for(let i=0;i<craftW*craftW;i++) grid.appendChild(makeSlotEl(makeAccessor(()=>craftCells,i), {section:'craft'}));
+    craftArea.appendChild(grid);
+    const ar=document.createElement('div'); ar.className='arrow'; ar.textContent='\u2192';
+    craftArea.appendChild(ar);
+    const r=craftResult();
+    craftArea.appendChild(makeSlotEl({get:()=> r?newStack(r.out[0],r.out[1]):null, set:()=>{}}, {result:true}));
+    recipePanel.appendChild(craftArea);
+    recipePanel.appendChild(renderRecipeBook('craft'));
+    shell.appendChild(recipePanel);
+    uipanel.appendChild(shell);
+    return;
+  }
 
   if(uiMode==='inv'){
     const equip=document.createElement('div'); equip.className='equiprow';

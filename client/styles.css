@@ -1496,6 +1496,49 @@
   .flameicon{width:22px;height:22px;display:block}
   #smeltbar{width:60px;height:10px;background:#9a9a9a;border:1px solid #555;position:relative}
   #smeltbar i{position:absolute;left:0;top:0;bottom:0;background:#e8e8e8;display:block}
+  #uipanel.inventory-redesign{background:linear-gradient(180deg,#16191b,#0b1118);border:1px solid #8b6430;border-radius:0;padding:0;color:#f4ead8;box-shadow:0 18px 70px rgba(0,0,0,.72),inset 0 0 0 2px rgba(255,210,126,.12),inset 0 0 48px rgba(0,0,0,.42)}
+  #uipanel.inventory-redesign .inventory-modal-head{position:sticky;top:0;margin:0;padding:16px 20px;background:linear-gradient(180deg,rgba(32,36,38,.98),rgba(15,20,27,.98));border-bottom:1px solid rgba(190,145,78,.55);box-shadow:inset 0 0 0 1px rgba(255,236,180,.08)}
+  #uipanel.inventory-redesign .inventory-modal-head h2{font-size:34px;color:#fff3df;letter-spacing:4px;text-shadow:0 2px 0 #000;font-family:Georgia,serif;font-weight:600}
+  #uipanel.inventory-redesign .inventory-modal-head h2:before{content:'Q';display:inline-grid;place-items:center;width:52px;height:52px;margin-right:18px;border:1px solid rgba(224,172,91,.7);border-radius:50%;background:linear-gradient(150deg,#3d3328,#111820);color:#d9a95e;font:900 23px system-ui;vertical-align:middle;box-shadow:inset 0 0 18px rgba(0,0,0,.55)}
+  .inventory-dragon-bonds{margin:0 58px 0 auto!important;padding:10px 18px!important;border-color:#d7a64f!important;background:linear-gradient(180deg,#6d4818,#2f210e)!important;color:#ffdf8d!important;box-shadow:inset 0 0 0 1px rgba(255,236,180,.2),0 4px 14px rgba(0,0,0,.35)}
+  #uipanel.inventory-redesign .inventory-close{position:absolute;right:14px;top:13px;width:38px;height:38px;border-color:#d39a54;background:linear-gradient(180deg,#7d2d25,#321412);color:#ffd7a0;font-size:19px;box-shadow:inset 0 0 0 1px rgba(255,226,170,.22),0 4px 12px rgba(0,0,0,.45)}
+  .inventory-layout{display:grid;grid-template-columns:minmax(330px,1.05fr) minmax(340px,.95fr) minmax(370px,1fr);gap:22px;min-height:calc(100% - 86px);padding:22px}
+  .inventory-panel{min-width:0;padding:18px 20px;border-left:1px solid rgba(214,165,91,.42);background:linear-gradient(180deg,rgba(18,23,29,.72),rgba(7,12,18,.46));box-shadow:inset 0 0 0 1px rgba(255,244,210,.04)}
+  .inventory-panel:first-child{border-left:0}
+  .inventory-section-title{display:flex;align-items:center;gap:10px;margin:0 0 14px;color:#f4ead8;font-family:Georgia,serif;letter-spacing:2px}
+  .inventory-section-title span{display:inline-grid;place-items:center;width:28px;height:28px;border:1px solid rgba(215,166,79,.58);border-radius:4px;background:rgba(199,154,79,.12);color:#d8ad62;font:900 13px system-ui}
+  .inventory-section-title b{font-size:17px;font-weight:600}
+  #uipanel.inventory-redesign .equiprow{color:#e9dcc8;margin-bottom:18px}
+  #uipanel.inventory-redesign .equiprow .hint{color:#a99b85}
+  #uipanel.inventory-redesign .gear-compare{width:100%;background:linear-gradient(145deg,#09111b,#050a10);border-color:rgba(119,153,184,.42);border-radius:4px}
+  #uipanel.inventory-redesign .gear-actions .qbtn,#uipanel.inventory-redesign .inventory-panel-head .qbtn{border-color:#b8862d;background:linear-gradient(180deg,#6a4815,#33220c);color:#ffe0a0}
+  .inventory-panel-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px}
+  .inventory-panel-head .inventory-section-title{margin:0}
+  .inventory-bag-grid{gap:6px;margin-bottom:18px}
+  .inventory-hotbar-title{margin:6px 0 8px;color:#a7987e;font-size:10px;letter-spacing:2px}
+  .inventory-hotbar-row{gap:6px;overflow-x:auto;padding-bottom:4px}
+  #uipanel.inventory-redesign .slot{background:linear-gradient(145deg,#25292b,#10161a);border:1px solid #786b5b;border-radius:2px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),inset 0 -10px 24px rgba(0,0,0,.24)}
+  #uipanel.inventory-redesign .slot:hover{box-shadow:0 0 0 1px #d8a64f,inset 0 0 18px rgba(255,210,100,.08)}
+  #uipanel.inventory-redesign .slot.gear-inspected{outline:2px solid #f1bd35;box-shadow:0 0 14px rgba(241,189,53,.55),inset 0 0 14px rgba(255,210,90,.12)}
+  .inventory-craft-strip{justify-content:flex-start;margin:0 0 14px;padding:10px;border:1px solid rgba(184,134,45,.38);background:rgba(0,0,0,.18);overflow-x:auto}
+  #uipanel.inventory-redesign .recipebook{box-sizing:border-box;width:100%;max-height:calc(100vh - 260px);background:transparent;border:0;padding:0;color:#eadfcd}
+  #uipanel.inventory-redesign .recipebook h3{display:none}
+  #uipanel.inventory-redesign .recipetabs{gap:7px;margin-bottom:12px}
+  #uipanel.inventory-redesign .recipetabs button{min-width:72px;padding:8px 10px;border-color:rgba(177,137,83,.5);background:rgba(22,23,24,.88);color:#d8c7ae}
+  #uipanel.inventory-redesign .recipetabs button.active{background:linear-gradient(180deg,#5b4225,#191717);border-color:#d6a75b;color:#fff0d0}
+  #uipanel.inventory-redesign .recipeitem{grid-template-columns:56px minmax(0,1fr) auto;gap:14px;min-height:86px;margin-bottom:8px;padding:12px 14px;background:linear-gradient(90deg,rgba(103,84,62,.78),rgba(53,43,33,.86));border:1px solid rgba(177,137,83,.42);box-shadow:inset 0 0 0 1px rgba(255,238,195,.05)}
+  #uipanel.inventory-redesign .recipeitem.ready{background:linear-gradient(90deg,rgba(111,91,66,.9),rgba(60,49,37,.92))}
+  #uipanel.inventory-redesign .recipeitem.missing{opacity:.84}
+  #uipanel.inventory-redesign .recipeicon{width:52px;height:52px}
+  #uipanel.inventory-redesign .recipeout{font-family:Georgia,serif;font-size:20px;color:#fff2dd;font-weight:500}
+  #uipanel.inventory-redesign .recipehint,#uipanel.inventory-redesign .recipeuse{font-size:12px;color:#e2d3bb}
+  #uipanel.inventory-redesign .recipetags{font-size:10px;color:#bcae9a}
+  #uipanel.inventory-redesign .recipebadge{padding:8px 10px;border:1px solid rgba(221,158,79,.58);border-radius:4px;background:rgba(89,49,20,.78);color:#fff0ce;font-size:12px}
+  @media(max-width:1180px){
+    .inventory-layout{grid-template-columns:1fr 1fr}
+    .inventory-recipe-panel{grid-column:1/-1}
+    #uipanel.inventory-redesign .recipebook{max-height:36vh}
+  }
   #cursoritem{position:fixed;width:36px;height:36px;pointer-events:none;z-index:50;display:none}
   #cursoritem canvas{width:36px;height:36px;image-rendering:pixelated}
   #cursoritem .cnt{position:absolute;bottom:-4px;right:-2px;font-size:13px;font-weight:bold;color:#fff;text-shadow:1px 1px 0 #000}
