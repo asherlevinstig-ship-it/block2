@@ -402,6 +402,7 @@ class EventsMixin {
     };
   }
   minParticipantsForEvent(ev) {
+    if (ev && ev.adminForced) return 1;
     return ev && (ev.kind === EVENT_KING.kind || ev.kind === EVENT_CARAVAN.kind) ? 2 : 1;
   }
   createParkourInstance(now, startsAt) {
@@ -765,6 +766,7 @@ class EventsMixin {
     this.activeEventInstanceId = '';
     const now = Date.now();
     const ev = this.announceServerEvent(now, forcedKind);
+    if (admin) ev.adminForced = true;
     ev.startsAt = now + EVENT_TEST_QUEUE_MS;
     ev.queue.add(client.sessionId);
     client.send('eventJoined', this.eventPayload(client));
@@ -1142,7 +1144,7 @@ class EventsMixin {
       eligible.push(sid);
     }
     const assignments = this.buildKingEventTeams(eligible);
-    if (new Set([...assignments.values()].map(assignment => assignment.teamId)).size < 2) {
+    if (!ev.adminForced && new Set([...assignments.values()].map(assignment => assignment.teamId)).size < 2) {
       ev.phase = 'queue';
       ev.waitingForPlayers = true;
       ev.waitingReason = 'teams';
@@ -1521,7 +1523,7 @@ class EventsMixin {
     const teamCount = ev.kind === EVENT_KING.kind
       ? new Set([...ev.participants.values()].map(part => part.teamId)).size
       : 1;
-    if (ev.participants.size < minimum || teamCount < 2 && ev.kind === EVENT_KING.kind)
+    if (ev.participants.size < minimum || !ev.adminForced && teamCount < 2 && ev.kind === EVENT_KING.kind)
       return this.cancelStagedEvent(ev, 'players', now);
     if (ev.goAt) {
       if (now >= ev.goAt) this.beginStagedEvent(ev, now);
@@ -1544,7 +1546,7 @@ class EventsMixin {
     const remainingTeams = ev.kind === EVENT_KING.kind
       ? new Set([...ev.participants.values()].map(part => part.teamId)).size
       : 1;
-    if (ev.participants.size < minimum || remainingTeams < 2 && ev.kind === EVENT_KING.kind)
+    if (ev.participants.size < minimum || !ev.adminForced && remainingTeams < 2 && ev.kind === EVENT_KING.kind)
       return this.cancelStagedEvent(ev, 'afk', now);
     this.armEventCountdown(ev, now);
   }
@@ -1862,7 +1864,7 @@ class EventsMixin {
         const p = this.state.players.get(sid);
         return p && !p.dgn && this.clients.some(client => client.sessionId === sid);
       });
-      const lacksTeams = ev.kind === EVENT_KING.kind && eligible.length >= minimum && this.kingEventTeamCount(eligible) < 2;
+      const lacksTeams = !ev.adminForced && ev.kind === EVENT_KING.kind && eligible.length >= minimum && this.kingEventTeamCount(eligible) < 2;
       if (eligible.length < minimum || lacksTeams) {
         ev.waitingForPlayers = true;
         ev.waitingReason = lacksTeams ? 'teams' : 'players';

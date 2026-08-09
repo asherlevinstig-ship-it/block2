@@ -10339,6 +10339,37 @@ test('admin event commands force each queue and auto-join the admin', () => {
   }
 });
 
+test('admin forced King and Caravan do not cancel for solo testing', () => {
+  for (const [command, kind] of [['/event king', 'king'], ['/event caravan', 'caravan']]) {
+    const room = makeRoom();
+    const client = makeClient('admin_solo_' + kind);
+    client._accountRole = 'admin';
+    room.clients = [client];
+    room.eventSeq = 0;
+    room.mobSeq = 0;
+    room.eventCourseBlocks = new Set();
+    seedPlayer(room, client, { token: 'admin_solo_' + kind + '_token_123', lvl: 10 });
+    room.serverEvent = room.createIdleEvent(Date.now() + 600000, 'parkour');
+
+    room.handleDevEvent(client, command);
+    const ev = room.serverEvent;
+
+    assert.equal(ev.adminForced, true);
+    assert.equal(ev.queue.has(client.sessionId), true);
+    room.tickServerEvent(ev.startsAt + 1);
+    assert.equal(ev.phase, 'starting');
+    assert.equal(ev.participants.has(client.sessionId), true);
+    assert.equal(client.sent.some(e => e.type === 'eventCancelled'), false);
+
+    room.handleEventReady(client);
+    room.tickServerEvent(Date.now() + 1);
+    assert.ok(ev.goAt);
+    room.tickServerEvent(ev.goAt + 1);
+    assert.equal(ev.phase, 'active');
+    assert.equal(client.sent.some(e => e.type === 'eventGo' && e.msg.kind === kind), true);
+  }
+});
+
 test('admin event help lists force commands and current status', () => {
   const room = makeRoom();
   const client = makeClient('admin_event_help');
