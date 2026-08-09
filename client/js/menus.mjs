@@ -1314,10 +1314,10 @@ function renderUI(){
 // ---------------- audio (synthesized, no assets) ----------------
 const SFX=(()=>{
   const MASTER_VOLUME=.18;
-  const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08, FOREST_MUSIC_VOLUME=.075, BATTLE_MUSIC_VOLUME=.095;
+  const MENU_MUSIC_VOLUME=.11, TOWN_MUSIC_VOLUME=.08, TAVERN_MUSIC_VOLUME=.08, FOREST_MUSIC_VOLUME=.075, BATTLE_MUSIC_VOLUME=.095, TAMING_MUSIC_VOLUME=.08;
   const TUTORIAL_MUSIC_VOLUME=.045, QUESTIONS_MUSIC_VOLUME=.045;
   const MUSIC_FADE_IN=1.8, MUSIC_FADE_OUT=5.5, MUSIC_SILENCE=.002;
-  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null, forestMusic=null, battleMusic=null, tutorialMusic=null, questionsMusic=null;
+  let ctx=null, master=null, nbuf=null, windGain=null, rainGain=null, menuMusic=null, townMusic=null, tavernMusic=null, forestMusic=null, battleMusic=null, tamingMusic=null, tutorialMusic=null, questionsMusic=null;
   let activeMusicMode='none';
   let muted=false, cricketT=0, popT=0, fireVol=0;
   function createMusic(src){
@@ -1339,6 +1339,7 @@ const SFX=(()=>{
     if(muted||inCutscene)return 'none';
     if(inMenu)return 'menu';
     if(dimension==='questions'||inMeditation)return 'questions';
+    if(dimension==='taming_land'||tutorialJob==='pet_tamer')return 'taming';
     const tutorial=tutorialMusicMode(tutorialJob,dimension);
     if(tutorial)return tutorial;
     if(inTavern)return 'tavern';
@@ -1392,6 +1393,7 @@ const SFX=(()=>{
     tavernMusic=createMusic('audio/tavern.mp3');
     forestMusic=createMusic('audio/ancientforest.mp3');
     battleMusic=createMusic('audio/battle.mp3');
+    tamingMusic=createMusic('audio/tame.mp3');
     tutorialMusic=createMusic('audio/tutorial.mp3');
     questionsMusic=createMusic('audio/questions.mp3');
   }
@@ -1427,6 +1429,7 @@ function noise(dur,vol,fc,q,delay,type){
       if(tavernMusic) tavernMusic.muted=muted;
       if(forestMusic) forestMusic.muted=muted;
       if(battleMusic) battleMusic.muted=muted;
+      if(tamingMusic) tamingMusic.muted=muted;
       if(tutorialMusic) tutorialMusic.muted=muted;
       if(questionsMusic) questionsMusic.muted=muted;
       return muted;
@@ -1498,6 +1501,7 @@ function noise(dur,vol,fc,q,delay,type){
           tavern:tavernMusic?tavernMusic.volume:0,
           forest:forestMusic?forestMusic.volume:0,
           battle:battleMusic?battleMusic.volume:0,
+          taming:tamingMusic?tamingMusic.volume:0,
           tutorial:tutorialMusic?tutorialMusic.volume:0,
           questions:questionsMusic?questionsMusic.volume:0,
         },
@@ -1516,6 +1520,7 @@ function noise(dur,vol,fc,q,delay,type){
       updateMusicTrack(tavernMusic, activeMusicMode==='tavern', TAVERN_MUSIC_VOLUME, dt);
       updateMusicTrack(forestMusic, activeMusicMode==='forest', FOREST_MUSIC_VOLUME, dt);
       updateMusicTrack(battleMusic, activeMusicMode==='battle', BATTLE_MUSIC_VOLUME, dt);
+      updateMusicTrack(tamingMusic, activeMusicMode==='taming', TAMING_MUSIC_VOLUME, dt);
       updateMusicTrack(tutorialMusic, activeMusicMode==='tutorial', TUTORIAL_MUSIC_VOLUME, dt);
       updateMusicTrack(questionsMusic, activeMusicMode==='questions', QUESTIONS_MUSIC_VOLUME, dt);
       if(!muted && fireVol>.04){
