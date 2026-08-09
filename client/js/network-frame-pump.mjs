@@ -47,7 +47,7 @@ export function createNetworkFramePump({
     }
     if(dim!=='ability'&&now-NET.lastMove>80){
       NET.lastMove=now;
-      const movePayload={x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw};
+      const movePayload={x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:displayHeldId()};
       NET.lastMoveSent={
         at:Date.now(),
         now:Math.round(now),

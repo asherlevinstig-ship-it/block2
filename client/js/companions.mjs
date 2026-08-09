@@ -2492,6 +2492,7 @@ function makeRemoteAvatar(look){
   const hasAegis=hasArmor&&armorType==='aegis';
   const hasDiaArmor=(look.armorId|0)===184;
   const heldKind=equipmentKind(look.heldId);
+  const heldBlock=!heldKind&&ITEMS[look.heldId]&&ITEMS[look.heldId].place!==undefined?ITEMS[look.heldId].place|0:0;
   const hasCartographerMantle=Array.isArray(look.cosmetics)&&look.cosmetics.includes('cartographers_mantle');
   const hairStyle=['windswept','cropped','long','braided'].includes(look.hairStyle)?look.hairStyle:'windswept';
   const outfitStyle=['tunic','coat','tabard','wanderer'].includes(look.outfitStyle)?look.outfitStyle:'tunic';
@@ -2902,9 +2903,11 @@ function makeRemoteAvatar(look){
     grp.add(arm); arms.push(arm);
   }
   let sword=null;
-  if(heldKind){
-    sword=new THREE.Group(); grp.add(sword); idle.push(sword);
-    const x=.55, y=1.12, z=.44, rot=[.82,0,.2];
+  if(heldKind||heldBlock){
+    sword=new THREE.Group(); arms[1].add(sword);
+    sword.position.set(.02,-.39,-.045);
+    sword.rotation.set(.18,0,-.15);
+    const x=0, y=0, z=0, rot=[.82,0,.2];
     if(heldKind==='sword'){
       addBox(sword,[.055,.42,.055],[x,y,z],beltM,rot);
       addBox(sword,[.36,.055,.07],[x+.09,y+.2,z+.14],guardM,rot);
@@ -2984,6 +2987,12 @@ function makeRemoteAvatar(look){
       addBox(sword,[.16,.16,.16],[x+.2,y+.76,z+.3],isMeteor?meteorM:voidCoreM,rot);
       addBox(sword,[.28,.045,.045],[x+.2,y+.76,z+.3],isMeteor?meteorM:aegisGlowM,rot);
       addBox(sword,[.045,.28,.045],[x+.2,y+.76,z+.3],isMeteor?meteorM:aegisGlowM,rot);
+    } else if(heldBlock){
+      const c=(globalThis.BLOCK_COLORS&&globalThis.BLOCK_COLORS[heldBlock])||[.55,.55,.55];
+      const base='#'+[c[0],c[1],c[2]].map(v=>Math.max(0,Math.min(255,Math.round(v*255))).toString(16).padStart(2,'0')).join('');
+      const mat=voxelMats(base,shadeHex(base,28),shadeHex(base,-28),shadeHex(base,-44));
+      addBox(sword,[.28,.28,.28],[.08,.06,.1],mat,[.25,.4,.15]);
+      addBox(sword,[.22,.055,.22],[.08,.23,.1],voxelMats(shadeHex(base,18),shadeHex(base,36),base,shadeHex(base,-24)),[.25,.4,.15]);
     }
   }
   grp.add(blobShadow(1));

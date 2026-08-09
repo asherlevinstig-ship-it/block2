@@ -7545,6 +7545,7 @@ class GameRoom extends Room {
   handleMove(client, m) {
     const p = this.state.players.get(client.sessionId);
     if (!p || !m) return;
+    if (m.heldId != null) p.heldId = clampN(m.heldId, 0, 999) | 0;
     if (p.spirit) {
       this.pvel.set(client.sessionId, { x: 0, z: 0 });
       return;
