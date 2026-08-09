@@ -484,9 +484,11 @@
   #eventstartpanel{width:min(600px,calc(100vw - 40px));text-align:center;color:#eaf6ff;background:linear-gradient(155deg,rgba(8,20,38,.94),rgba(12,10,28,.96));border:1px solid #4fd8ff;border-radius:13px;padding:25px 32px 21px;box-shadow:0 0 45px rgba(79,216,255,.28),inset 0 0 38px rgba(79,216,255,.06);position:relative;overflow:hidden}
   #eventstartpanel:before{content:"";position:absolute;left:9%;right:9%;top:0;height:3px;background:linear-gradient(90deg,transparent,#4fd8ff,#ffd24a,#b88cff,transparent)}
   #eventstart.king #eventstartpanel{border-color:#ff9f62;background:linear-gradient(155deg,rgba(37,15,16,.95),rgba(23,12,29,.97));box-shadow:0 0 45px rgba(255,120,72,.24),inset 0 0 38px rgba(255,120,72,.06)}
+  #eventstart.queue #eventstartpanel{border-color:#ffd24a;background:linear-gradient(155deg,rgba(30,20,5,.95),rgba(8,18,30,.96));box-shadow:0 0 48px rgba(255,210,74,.3),inset 0 0 40px rgba(255,210,74,.08)}
   #eventstart .eskicker{font-size:10px;letter-spacing:5px;color:#8fb8d8}
   #eventstart h1{font-size:29px;letter-spacing:7px;margin:8px 0 16px;color:#dff8ff;text-shadow:0 0 18px rgba(79,216,255,.65)}
   #eventstart.king h1{color:#ffe3c7;text-shadow:0 0 18px rgba(255,130,75,.6)}
+  #eventstart.queue h1{color:#fff5c4;text-shadow:0 0 18px rgba(255,210,74,.68)}
   #eventstart .esobjective{padding:11px 12px;border:1px solid rgba(79,216,255,.28);border-radius:7px;background:rgba(4,12,24,.58)}
   #eventstart .esobjective span{display:block;font-size:8px;letter-spacing:2.5px;color:#7896b8;margin-bottom:5px}
   #eventstart .esobjective b{font-size:14px;letter-spacing:1px;color:#fff;font-weight:normal}

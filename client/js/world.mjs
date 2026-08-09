@@ -7825,6 +7825,7 @@ const coachDismissBtn=document.getElementById('coachdismiss');
 let serverEvent=null;
 let eventWorld=null, eventReturnWorld=null, eventMode=false, eventId='';
 let lastEventAlertId='';
+let eventQueueAnnounceId='', eventQueueAnnounceUntil=0;
 let pendingEventResult=null;
 let eventStageAnchor=null;
 let kingAnnouncement=null, lastKingMinuteWarnId='';
@@ -8364,9 +8365,13 @@ function applyEventStatus(m){
   if(!serverEvent||serverEvent.id!==previousEventId||serverEvent.kind!=='caravan'||serverEvent.phase==='ended')lastCaravanRewardTier=null;
   if(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id!==lastEventAlertId){
     lastEventAlertId=serverEvent.id;
+    eventQueueAnnounceId=serverEvent.id;
+    eventQueueAnnounceUntil=Date.now()+12000;
     sysMsg('<b>Event Alert:</b> '+escHTML(serverEvent.name||'Server Event')+' queue is open. Join from the event banner before the countdown ends. <b>Reward:</b> '+Math.max(0,serverEvent.reward||2)+' Legendary Tokens'+(serverEvent.rewardXp?' + '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' Hunter XP':'')+'.');
     pulseEventHud();
   }else if(serverEvent&&serverEvent.phase==='queue'&&!previousJoined&&serverEvent.joined){
+    eventQueueAnnounceId=serverEvent.id||eventQueueAnnounceId;
+    eventQueueAnnounceUntil=Date.now()+3500;
     pulseEventHud();
   }else if(serverEvent&&serverEvent.phase==='starting'&&previousPhase!=='starting'&&serverEvent.participating){
     pulseEventHud();
@@ -8861,14 +8866,32 @@ function holdEventStartPosition(){
 }
 function renderEventStart(){
   if(!eventStartWin)return;
-  const showing=!!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);
+  const now=Date.now();
+  const starting=!!(serverEvent&&serverEvent.phase==='starting'&&serverEvent.participating);
+  const queueing=!!(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id===eventQueueAnnounceId&&now<eventQueueAnnounceUntil);
+  const showing=starting||queueing;
   eventStartWin.classList.toggle('hidden',!showing);
   if(!showing)return;
   const king=serverEvent.kind==='king';
   const caravan=serverEvent.kind==='caravan';
   const side=serverEvent.eventTeam||{};
   const source=side.source==='party'?'party kept together':side.source==='fellowship'?'fellowship kept together':'ability-balanced assignment';
+  eventStartWin.classList.toggle('queue',queueing);
   eventStartWin.classList.toggle('king',king);
+  if(queueing){
+    const queueSize=Math.max(0,serverEvent.queueSize|0),queueCapacity=Math.max(1,serverEvent.queueCapacity||8);
+    const left=Math.max(0,(serverEvent.startsAt||0)-now);
+    const rewardLabel=caravan
+      ?Math.max(1,serverEvent.rewardMin|0)+'-'+Math.max(1,serverEvent.rewardMax|0)+' LEGENDARY TOKENS - BASED ON WAGON HEALTH'
+      :Math.max(0,serverEvent.reward||2)+' LEGENDARY TOKENS';
+    eventStartName.textContent=((serverEvent.name||'Server Event')+' QUEUE OPEN').toUpperCase();
+    eventStartObjective.textContent=serverEvent.joined?'You are signed up. Watch for staging.':'Join the queue from the event banner before the countdown ends';
+    eventStartRules.textContent='Queued '+queueSize+'/'+queueCapacity+' - '+(serverEvent.waitingForPlayers?'waiting for enough hunters':'starting soon');
+    eventStartReward.textContent=rewardLabel+(serverEvent.rewardXp?' - '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' HUNTER XP':'');
+    eventStartCount.textContent=(serverEvent.joined?'SIGNED UP - ':'QUEUE UP - ')+fmtClock(left);
+    eventStartCount.classList.add('ready');
+    return;
+  }
   eventStartName.textContent=(serverEvent.name||'Server Event').toUpperCase();
   eventStartObjective.textContent=king?'Hold the crown longer than every rival':caravan?'Protect the wagon through four bandit ambushes':'Reach every checkpoint, then cross the finish';
   eventStartRules.textContent=king
