@@ -149,6 +149,137 @@ function atomStateFromRow(row) {
   };
 }
 
+function shuffleList(list) {
+  const out = Array.isArray(list) ? list.slice() : [];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = out[i]; out[i] = out[j]; out[j] = t;
+  }
+  return out;
+}
+
+function scholarSyntheticFormatFor(row, opts = {}) {
+  const rawAnswers = Array.isArray(row && row._answers) ? row._answers : [];
+  const correct = clampInt(row && row.correct_index, 0, Math.max(0, rawAnswers.length - 1));
+  const distractors = rawAnswers.map((text, index) => ({ text, index })).filter(a => a.index !== correct && a.text);
+  const candidates = ['multiple_choice'];
+  if (distractors.length) candidates.push('approve_reject', 'compare', 'replace', 'predict_consequence');
+  if (row && row.explanation && rawAnswers[correct]) candidates.push('construct_justification');
+  const reason = cleanText(opts.reason, 32);
+  const preferred = reason === 'confusion' || reason === 'remediation'
+    ? ['compare', 'approve_reject', 'replace', 'multiple_choice']
+    : reason === 'near_transfer'
+      ? ['predict_consequence', 'replace', 'compare', 'multiple_choice']
+      : reason === 'weakness'
+        ? ['construct_justification', 'approve_reject', 'multiple_choice']
+        : reason === 'maintenance'
+          ? ['construct_justification', 'compare', 'multiple_choice']
+          : ['multiple_choice', 'approve_reject', 'compare', 'replace', 'construct_justification'];
+  const avoid = cleanText(opts.avoidFormat, 32);
+  const pool = preferred.filter(f => candidates.includes(f) && f !== avoid);
+  return pool.length ? pool[0] : candidates.find(f => f !== avoid) || 'multiple_choice';
+}
+
+function syntheticScholarChallenge(row, atomId, opts = {}) {
+  const answers = Array.isArray(row && row._answers) ? row._answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
+  const correctIndex = clampInt(row && row.correct_index, 0, Math.max(0, answers.length - 1));
+  const correctAnswer = answers[correctIndex] || '';
+  const distractors = answers.map((text, index) => ({ text, index })).filter(a => a.index !== correctIndex && a.text);
+  const basePrompt = cleanText(row && row.prompt, 500);
+  const explanation = cleanText(row && row.explanation, 800);
+  const format = scholarSyntheticFormatFor({ ...row, _answers: answers }, opts);
+  const common = {
+    questionId: Number(row && row.id) || 0,
+    atomId,
+    format,
+    entityId: row && row.entity_id == null ? null : Number(row.entity_id),
+    confusionPairId: row && row.confusion_pair_id == null ? null : Number(row.confusion_pair_id),
+    difficulty: Number(row && row.difficulty) || 1,
+    payload: null,
+  };
+  if (format === 'approve_reject' && distractors.length) {
+    const candidate = Math.random() < 0.55 ? distractors[Math.floor(Math.random() * distractors.length)] : { text: correctAnswer, index: correctIndex };
+    const isRight = candidate.index === correctIndex;
+    return {
+      ...common,
+      prompt: basePrompt + '\n\nA hunter at the table answers: "' + candidate.text + '". Should the table accept it?',
+      answers: ['Approve - this answer fits', 'Reject - this answer is a misconception'],
+      correctIndex: isRight ? 0 : 1,
+      explanation,
+      payload: { consequence: isRight ? 'Rejecting a correct answer would lose secure knowledge.' : 'Accepting this would practise the misconception instead of the target idea.' },
+    };
+  }
+  if (format === 'compare' && distractors.length) {
+    const wrong = distractors[Math.floor(Math.random() * distractors.length)].text;
+    const pair = shuffleList([correctAnswer, wrong]);
+    return {
+      ...common,
+      prompt: basePrompt + '\n\nTwo plausible answers are on the table. Which one is the stronger answer?',
+      answers: pair,
+      correctIndex: pair.indexOf(correctAnswer),
+      explanation,
+      payload: { consequence: 'This is a discrimination check: the wrong option is plausible enough to trap surface learning.' },
+    };
+  }
+  if (format === 'replace' && distractors.length) {
+    const wrong = distractors[Math.floor(Math.random() * distractors.length)].text;
+    const pool = shuffleList([correctAnswer, ...distractors.map(d => d.text).filter(v => v !== wrong)]).slice(0, Math.min(4, answers.length));
+    if (!pool.includes(correctAnswer)) pool[0] = correctAnswer;
+    return {
+      ...common,
+      prompt: 'A student tried this question:\n\n' + basePrompt + '\n\nThey wrote: "' + wrong + '". Which replacement best fixes the answer?',
+      answers: pool,
+      correctIndex: pool.indexOf(correctAnswer),
+      explanation,
+      payload: { consequence: 'The first answer failed retrieval. Replacing it checks whether the correction is understood.' },
+    };
+  }
+  if (format === 'predict_consequence' && distractors.length) {
+    const wrong = distractors[Math.floor(Math.random() * distractors.length)].text;
+    return {
+      ...common,
+      prompt: 'Predict the consequence: in this situation, a learner chooses "' + wrong + '" for:\n\n' + basePrompt,
+      answers: [
+        'They have used the target idea correctly',
+        'They have chosen a plausible but wrong idea',
+        'There is not enough information to answer',
+        'All answers become equally valid',
+      ],
+      correctIndex: 1,
+      explanation,
+      payload: { consequence: 'The table is checking whether the player can spot why the misconception matters.' },
+    };
+  }
+  if (format === 'construct_justification' && correctAnswer && explanation) {
+    const bank = [
+      { text: 'Answer: ' + correctAnswer, correct: true },
+      { text: explanation, correct: true },
+      ...distractors.slice(0, 3).map(d => ({ text: 'Distractor: ' + d.text, correct: false })),
+    ];
+    return {
+      ...common,
+      prompt: 'Build a complete justification for:\n\n' + basePrompt,
+      answers: [],
+      correctIndex: -1,
+      explanation,
+      payload: {
+        kind: 'construct_justification',
+        prompt: 'Select the answer and the reason that prove it.',
+        bank,
+        consequence: 'Recognition is not enough here: the Scholar Table wants the answer plus the reason.',
+      },
+    };
+  }
+  return {
+    ...common,
+    format: 'multiple_choice',
+    prompt: basePrompt,
+    answers,
+    correctIndex,
+    explanation,
+  };
+}
+
 function isCurriculumAdminAccount(account) {
   const role = String(account && (account.role || account.accountType) || '').trim().toLowerCase();
   const username = String(account && (account.username || account.email) || '').trim().toLowerCase();
@@ -1899,6 +2030,9 @@ class MySqlGameQuestionStore {
     if (!Array.isArray(answers)) answers = [];
     let payload = null;
     if (row.payload_json) { try { payload = JSON.parse(row.payload_json); } catch (_) {} }
+    if (syntheticQuestionId && (!row.primary_atom_id || (row.format || 'multiple_choice') === 'multiple_choice')) {
+      return syntheticScholarChallenge({ ...row, _answers: answers }, atomId, opts);
+    }
     return {
       questionId: Number(row.id) || 0,
       atomId,

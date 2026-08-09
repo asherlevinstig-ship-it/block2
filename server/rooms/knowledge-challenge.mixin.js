@@ -231,7 +231,7 @@ class KnowledgeChallengeMixin {
     }, Math.random);
     if (!pick) return this.kcEndShift(client, 'exhausted');
     let challenge = null;
-    try { challenge = await store.loadChallengeForAtom(shift.subjectId, pick.atomId, {}); } catch (_) {}
+    try { challenge = await store.loadChallengeForAtom(shift.subjectId, pick.atomId, { reason: pick.reason, avoidFormat: shift.lastFormat || '' }); } catch (_) {}
     if (!challenge) return this.kcEndShift(client, 'exhausted');
 
     let recovery = null;
@@ -242,6 +242,7 @@ class KnowledgeChallengeMixin {
 
     shift.ordinal = nextOrdinal;
     shift.lastAtomId = pick.atomId;
+    shift.lastFormat = challenge.format || '';
     const built = this.kcBuildCase(challenge);
     shift.pending = {
       atomId: pick.atomId, questionId: challenge.questionId, format: challenge.format,
