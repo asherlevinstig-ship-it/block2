@@ -1704,7 +1704,7 @@ test('restored Mara progress clears provisional first-quest town guidance', asyn
 
 test('stale chat state cannot permanently swallow movement keys',()=>{
   const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
-  assert.match(social,/chatTyping&&!document\.body\.classList\.contains\('chat-open'\)&&chatWheelEl\.classList\.contains\('hidden'\)/);
+  assert.match(social,/chatTyping&&!document\.body\.classList\.contains\('chat-open'\)&&!document\.body\.classList\.contains\('admin-chat-open'\)&&chatWheelEl\.classList\.contains\('hidden'\)/);
   assert.match(social,/get chatTyping\(\)\{ return chatInputActive\(\); \}/);
 });
 

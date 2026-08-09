@@ -14,6 +14,9 @@ export function createSocialSystem({
 const chatLogEl=document.getElementById('chatlog');
 const chatInEl=document.getElementById('chatin');
 const chatBarEl=document.getElementById('chatbar');
+const adminChatBarEl=document.getElementById('adminchatbar');
+const adminChatInEl=document.getElementById('adminchatin');
+const adminChatCloseEl=document.getElementById('adminchatclose');
 const chatModeEl=document.getElementById('chatmode');
 const chatTargetEl=document.getElementById('chattarget');
 const chatMuteEl=document.getElementById('chatmute');
@@ -30,7 +33,7 @@ let dragonWheel=null;
 const mutedPlayers=new Set();
 let commsSound=localStorage.getItem('bc_comms_sound')!=='0';
 function chatInputActive(){
-  if(chatTyping&&!document.body.classList.contains('chat-open')&&chatWheelEl.classList.contains('hidden'))chatTyping=false;
+  if(chatTyping&&!document.body.classList.contains('chat-open')&&!document.body.classList.contains('admin-chat-open')&&chatWheelEl.classList.contains('hidden'))chatTyping=false;
   return chatTyping;
 }
 const {PHRASES:QUICK_CHAT_OPTIONS,CONTEXTS:QUICK_CHAT_CONTEXTS,CHANNELS:COMMS_CHANNELS,RULES:COMMS_RULES,phraseIdsFor}=globalThis.BlockcraftCommsRules;
@@ -341,6 +344,69 @@ function applyBlockList(message){
   qpanelEl.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
 function playCommsCue(mode){if(!commsSound||typeof SFX==='undefined')return;if(mode==='whisper')SFX.quest();else if(mode==='party')SFX.success();else SFX.uiClick();}
+function adminChatAllowed(){
+  const auth=globalThis.AUTH_UI||globalThis.BlockcraftAuthUI;
+  if(auth&&auth.isAdminAccount&&auth.isAdminAccount())return true;
+  const account=auth&&auth.state&&auth.state.account;
+  const username=String(account&&account.username||'').trim().toLowerCase();
+  return username==='asherlevin85@gmail.com';
+}
+function openAdminChat(prefill=''){
+  if(!adminChatBarEl||!adminChatInEl)return false;
+  if(!adminChatAllowed()){chatLine('[Admin]','Admin command box is not available for this account.','blocked');return false;}
+  if(chatWheel||dragonWheel)closeAnyWheel(false);
+  closeChat(false);
+  chatTyping=true;
+  for(const k in keys)keys[k]=false;
+  releasePointerLockWithoutCameraFallback(false);
+  document.body.classList.add('admin-chat-open');
+  adminChatInEl.value=prefill;
+  adminChatInEl.focus();
+  adminChatInEl.setSelectionRange(adminChatInEl.value.length,adminChatInEl.value.length);
+  return true;
+}
+function closeAdminChat(relock=false){
+  if(!adminChatBarEl||!adminChatInEl)return;
+  chatTyping=false;
+  document.body.classList.remove('admin-chat-open');
+  adminChatInEl.blur();
+  if(relock)resumeGameplayCamera();
+}
+function submitAdminChat(){
+  if(!adminChatInEl)return;
+  const text=adminChatInEl.value.replace(/[<>]/g,'').trim().slice(0,140);
+  if(!text){closeAdminChat(true);return;}
+  if(NET.on&&NET.room)NET.room.send('chat',{text});
+  else chatLine('[Admin]','Connect to the live server before running commands.','blocked');
+  closeAdminChat(true);
+}
+function isTextEntryTarget(target){
+  const tag=target&&target.tagName?String(target.tagName).toLowerCase():'';
+  return tag==='input'||tag==='textarea'||tag==='select'||!!(target&&target.isContentEditable);
+}
+if(adminChatBarEl){
+  for(const eventName of ['pointerdown','mousedown','click','wheel'])adminChatBarEl.addEventListener(eventName,event=>event.stopPropagation());
+  adminChatBarEl.addEventListener('submit',event=>{event.preventDefault();submitAdminChat();});
+}
+if(adminChatInEl)adminChatInEl.addEventListener('keydown',event=>{
+  event.stopPropagation();
+  if(event.code==='Enter'){event.preventDefault();submitAdminChat();}
+  else if(event.code==='Escape'){event.preventDefault();closeAdminChat(true);}
+});
+if(adminChatCloseEl)adminChatCloseEl.addEventListener('click',()=>closeAdminChat(true));
+addEventListener('keydown',event=>{
+  if(event.repeat||isTextEntryTarget(event.target)||chatTyping||document.body.classList.contains('game-modal-open'))return;
+  if(!adminChatAllowed())return;
+  if(event.code==='F8'){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openAdminChat('');
+  }else if(event.code==='Slash'){
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openAdminChat('/');
+  }
+});
 
 // ---- teams ----
 const TEAM_COLS=['#ffd24a','#6ee06a','#ff9a4a','#c08aff','#4fd8ff','#ff6a8a'];
@@ -485,6 +551,8 @@ function openTeamUI(){
     chatLine,
     openChat,
     closeChat,
+    openAdminChat,
+    closeAdminChat,
     setChatMode,
     showChatBubble,
     startQuickChatWheel,
