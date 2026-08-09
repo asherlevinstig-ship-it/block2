@@ -2275,6 +2275,7 @@ function netAttachRoom(room,name,client){
     room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
     room.onMessage('meteorEvent',m=>{
       if(!m)return;
+      try{console.debug('[meteor-client] event',JSON.stringify({id:m.id||'',state:m.state||'',x:m.x,y:m.y,z:m.z,impactAt:m.impactAt||0,expiresAt:m.expiresAt||0,bossId:m.bossId||'',minions:m.minions||0}));}catch(_){}
       overworldActivity={...(overworldActivity||{}),meteor:m};
       if(m.state==='falling'){
         sysMsg('<b>Falling Star:</b> a meteor is coming down in the wilderness.',{tier:'major',title:'Falling Star'});

@@ -16,15 +16,28 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 
 class SpawningMixin {
   // ---------------- open-world meteor event ----------------
+  debugMeteorEvent(stage, data = {}) {
+    try {
+      console.log('[meteor]', stage, JSON.stringify({
+        roomId: this.roomId || '',
+        players: this.state && this.state.players ? this.state.players.size | 0 : 0,
+        active: !!this.meteorEvent,
+        ...data,
+      }));
+    } catch (_) {}
+  }
+
   initMeteorEventState(now = Date.now()) {
     if (!this.meteorEvent) {
       this.meteorEvent = null;
       this.nextMeteorAt = now + 6 * 60 * 1000 + Math.floor(Math.random() * 8 * 60 * 1000);
+      this.debugMeteorEvent('init', { now, nextMeteorAt: this.nextMeteorAt });
     }
   }
 
   meteorSpawnPoint(preferred = null, opts = {}) {
     const forceNearPreferred = !!(opts && opts.forceNearPreferred);
+    this.debugMeteorEvent('spawn-point:start', { preferred, forceNearPreferred });
     if (preferred && Number.isFinite(+preferred.x) && Number.isFinite(+preferred.z)) {
       const baseX = Math.max(12, Math.min(W.WX - 12, +preferred.x));
       const baseZ = Math.max(12, Math.min(W.WX - 12, +preferred.z));
@@ -41,9 +54,16 @@ class SpawningMixin {
       for (const c of candidates) {
         if (W.isLavaBorderLand(c.x, c.z)) continue;
         const y = this.world.standHeight(c.x, c.z, W.WH - 2);
-        if (y > 2) return { x: c.x, y, z: c.z, forced: true };
+        if (y > 2) {
+          const point = { x: c.x, y, z: c.z, forced: true };
+          this.debugMeteorEvent('spawn-point:preferred-hit', point);
+          return point;
+        }
       }
-      if (forceNearPreferred) return null;
+      if (forceNearPreferred) {
+        this.debugMeteorEvent('spawn-point:preferred-miss', { baseX, baseZ });
+        return null;
+      }
     }
     const players = [];
     this.state.players.forEach(p => { if (p && !p.dgn && !this.isTownProtected(p.x, p.z)) players.push(p); });
@@ -55,16 +75,26 @@ class SpawningMixin {
       const z = Math.max(12, Math.min(W.WX - 12, (anchor ? anchor.z : W.TOWN.TC) + Math.sin(a) * d));
       if (this.isTownProtected(x, z) || W.isLavaBorderLand(x, z) || this.landClaimFor(Math.floor(x), Math.floor(z))) continue;
       const y = this.world.standHeight(x, z, W.WH - 2);
-      if (y > 2) return { x, y, z };
+      if (y > 2) {
+        const point = { x, y, z, anchor: anchor ? { x: anchor.x, z: anchor.z } : null };
+        this.debugMeteorEvent('spawn-point:random-hit', point);
+        return point;
+      }
     }
+    this.debugMeteorEvent('spawn-point:failed', { preferred, forceNearPreferred });
     return null;
   }
 
   startMeteorEvent(now = Date.now(), preferred = null, opts = {}) {
     this.initMeteorEventState(now);
+    this.debugMeteorEvent('start:request', { now, preferred, opts, existingId: this.meteorEvent && this.meteorEvent.id || '' });
     if (this.meteorEvent) return null;
     const point = this.meteorSpawnPoint(preferred, opts);
-    if (!point) { this.nextMeteorAt = now + 90 * 1000; return null; }
+    if (!point) {
+      this.nextMeteorAt = now + 90 * 1000;
+      this.debugMeteorEvent('start:no-point', { nextMeteorAt: this.nextMeteorAt });
+      return null;
+    }
     const ring = dangerRingAt(point.x, point.z);
     const ev = {
       id: 'meteor-' + now.toString(36) + '-' + (++this.mobSeq),
@@ -78,6 +108,7 @@ class SpawningMixin {
       cratered: false,
     };
     this.meteorEvent = ev;
+    this.debugMeteorEvent('start:created', this.meteorEventPayload(ev));
     this.broadcast('meteorEvent', this.meteorEventPayload(ev));
     this.broadcast('chat', { name: '[Falling Star]', text: 'A star is tearing across the sky. Watch for the impact.' });
     this.sendOverworldActivities();
@@ -99,12 +130,16 @@ class SpawningMixin {
     if (!ev || ev.cratered) return 0;
     ev.cratered = true;
     let edits = 0;
+    let skippedProtected = 0, skippedClaim = 0, skippedLava = 0;
     const cx = Math.round(ev.x), cz = Math.round(ev.z);
     for (let dx = -7; dx <= 7; dx++) for (let dz = -7; dz <= 7; dz++) {
       const dist = Math.hypot(dx, dz);
       if (dist > 7.2) continue;
       const x = cx + dx, z = cz + dz;
-      if (!W.inWorld(x, 1, z) || this.isTownProtected(x, z) || W.isLavaBorderLand(x, z) || this.landClaimFor(x, z)) continue;
+      if (!W.inWorld(x, 1, z)) continue;
+      if (this.isTownProtected(x, z)) { skippedProtected++; continue; }
+      if (W.isLavaBorderLand(x, z)) { skippedLava++; continue; }
+      if (this.landClaimFor(x, z)) { skippedClaim++; continue; }
       const top = this.world.standHeight(x, z, W.WH - 2);
       if (top < 2) continue;
       const depth = Math.max(1, Math.round(4.2 - dist * .45));
@@ -126,6 +161,7 @@ class SpawningMixin {
     }
     this.dirtyWorld = true;
     this.sendSpace('', 'fx', { t: 'meteorImpact', x: ev.x, y: ev.y, z: ev.z, radius: 7, dgn: '' });
+    this.debugMeteorEvent('impact:crater', { id: ev.id, x: ev.x, y: ev.y, z: ev.z, edits, skippedProtected, skippedClaim, skippedLava });
     return edits;
   }
 
@@ -150,6 +186,7 @@ class SpawningMixin {
     if (index % 3 === 1) meta.arrowDmg = Math.round((3 + ring) * cfg.dmg);
     this.mobMeta[id] = meta;
     ev.minionIds.add(id);
+    this.debugMeteorEvent('minion:spawned', { id, eventId: ev.id, kind, x, y, z, ring });
     return id;
   }
 
@@ -170,6 +207,7 @@ class SpawningMixin {
     meta.bossStyle = 'eldritch_tree'; meta.woke = true; meta.gcd = 1.8; meta.stateT = 1.4; meta.damageBySid = new Map();
     this.mobMeta[id] = meta;
     ev.bossId = id;
+    this.debugMeteorEvent('boss:spawned', { id, eventId: ev.id, x: mob.x, y: mob.y, z: mob.z, hp: mob.hp, ring });
     this.sendSpace('', 'fx', { t: 'eldritchTreeSpawn', id, x: mob.x, y: mob.y, z: mob.z, dgn: '' });
     this.broadcast('chat', { name: '[Falling Star]', text: 'The crater roots itself. The Eldritch Heartwood has awakened.' });
     return id;
@@ -203,6 +241,7 @@ class SpawningMixin {
       });
       topClient.send('meteorBossReward', { id: meta.meteorEventId || '', item: I.METEOR_STAFF, topDamage: Math.round(topDamage), x: mob.x, y: mob.y, z: mob.z });
     }
+    this.debugMeteorEvent('boss:killed', { eventId: meta.meteorEventId || '', mobId, topSid, topDamage: Math.round(topDamage), rewarded: !!topClient });
     this.broadcast('chat', { name: '[Falling Star]', text: 'The Eldritch Heartwood falls' + (topClient ? ' to ' + (this.profileFor(topClient)?.prof?.name || 'a hunter') : '') + '. The Meteor Staff chooses the top contributor.' });
     this.sendSpace('', 'fx', { t: 'meteorBossDefeated', x: mob.x, y: mob.y, z: mob.z, dgn: '' });
     if (ev) {
@@ -222,9 +261,11 @@ class SpawningMixin {
     if (!ev) return;
     if (ev.state === 'falling' && now >= ev.impactAt) {
       ev.state = 'active';
-      this.applyMeteorCrater(ev);
-      this.spawnMeteorBoss(ev);
+      this.debugMeteorEvent('impact:start', this.meteorEventPayload(ev));
+      const edits = this.applyMeteorCrater(ev);
+      const bossId = this.spawnMeteorBoss(ev);
       for (let i = 0; i < 6; i++) this.spawnMeteorMinion(ev, i);
+      this.debugMeteorEvent('impact:complete', { id: ev.id, edits, bossId, minions: ev.minionIds.size });
       this.sendOverworldActivities();
     }
     if (ev.state === 'active') {
@@ -235,6 +276,7 @@ class SpawningMixin {
       while (ev.minionIds.size < desired && (!clusters || this.localHostileBudgetAllows(ev.x, ev.z, clusters, 0))) this.spawnMeteorMinion(ev, ev.minionIds.size + 1);
     }
     if (now >= ev.expiresAt) {
+      this.debugMeteorEvent('expired', this.meteorEventPayload(ev));
       for (const id of [ev.bossId, ...ev.minionIds]) { if (id) { this.state.mobs.delete(id); delete this.mobMeta[id]; } }
       this.broadcast('chat', { name: '[Falling Star]', text: 'The crater quiets. The Heartwood withdraws beneath the ash.' });
       this.meteorEvent = null;

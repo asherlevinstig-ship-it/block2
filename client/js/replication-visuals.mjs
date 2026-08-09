@@ -829,6 +829,7 @@ function netFx(m){
   if(m.t==='deityPower'){deityPowerFx(m);return;}
   if(m.t==='meteorFalling'){
     const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+    try{console.debug('[meteor-client] fx',JSON.stringify({type:m.t,x,y,z}));}catch(_){}
     const fromX=x-42,fromY=y+68,fromZ=z-38;
     SFX.slamWarn&&SFX.slamWarn();
     energyTrailVfx(fromX,fromY,fromZ,x,y+2,z,0xfff4a3,.09,1.35,1.15);
@@ -839,6 +840,7 @@ function netFx(m){
   }
   if(m.t==='meteorImpact'){
     const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z,r=Number(m.radius)||7;
+    try{console.debug('[meteor-client] fx',JSON.stringify({type:m.t,x,y,z,r}));}catch(_){}
     SFX.boom&&SFX.boom();camShake=Math.max(camShake,.9);
     ringPulse(x,y+.08,z,r,0xff6b2a,.68);
     ringPulse(x,y+.12,z,r*.55,0xffd24a,.72);
@@ -850,6 +852,7 @@ function netFx(m){
   }
   if(m.t==='eldritchTreeSpawn'){
     const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+    try{console.debug('[meteor-client] fx',JSON.stringify({type:m.t,id:m.id||'',x,y,z}));}catch(_){}
     SFX.roar&&SFX.roar();camShake=Math.max(camShake,.5);
     ringPulse(x,y+.08,z,5.8,0x5cff7a,.85);
     burst(x,y+1,z,[.24,.9,.32],70,5.8,5.2,1.0,3);
