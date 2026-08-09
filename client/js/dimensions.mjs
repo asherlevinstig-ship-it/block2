@@ -1947,6 +1947,11 @@ function localTutorialSpaceId(kind){
   if(kind==='fishing_lake')return 'fishing_lake';
   return 'tutorial-'+kind+'-'+(NET.room&&NET.room.sessionId||'local');
 }
+function triggerPlayerArrivalVfx(label,delay=120){
+  const fx=globalThis.BlockcraftPlayerArrivalVfx;
+  if(typeof fx!=='function'||!player||!player.pos)return false;
+  return fx(player.pos,{key:'local:'+String(label||dim||'room'),local:true,delay});
+}
 function announceArrivalTitle(kicker,title,subtitle){
   if(typeof showArrivalTitle==='function')showArrivalTitle({kicker,title,subtitle});
 }
@@ -2218,6 +2223,7 @@ function enterJobTutorialRoom(jobId){
   NET.dgn=localTutorialSpaceId('job_'+jobId);
   world.id=NET.dgn;
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
+  triggerPlayerArrivalVfx('job:'+jobId,160);
   if(!opts.serverSynced){
     const job=typeof JOBS!=='undefined'&&JOBS&&JOBS[jobId]||null;
     announceArrivalTitle('JOB TUTORIAL',(job&&job.name||'JOB')+' ROOM','Practice the basics, then return to town');
@@ -2236,6 +2242,7 @@ function exitJobTutorialRoom(){
   NET.dgn='';
   rebuildAllChunks(); refreshTorchMeshes(); applyDim();
   placePlayerAtTownReturn();
+  triggerPlayerArrivalVfx('town:from-job',130);
   jobTutorialRoomReturn=null;
   jobTutorialRoomJob='';
   if(NET.on&&NET.room) NET.room.send('tutorialExit',{destination:'town'});
@@ -2316,6 +2323,7 @@ function enterQuestionRoom(){
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
+  triggerPlayerArrivalVfx('questions',130);
   dimDebug('questions.enter.complete',{spawn:dimDebugPos(player.pos),questionGrid:dimDebugGrid(world)});
   announceArrivalTitle('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare');
   return true;
@@ -2335,6 +2343,7 @@ function exitQuestionRoom(){
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
   questionRoomReturn=null;
+  triggerPlayerArrivalVfx('town:from-questions',130);
   dimDebug('questions.exit.complete',{after:dimDebugPos(player&&player.pos),world:dimDebugGrid(world)});
   announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   return true;
@@ -2401,6 +2410,7 @@ function enterTamingLand(){
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;
+  triggerPlayerArrivalVfx('taming_land',130);
   if(!opts.resume)announceArrivalTitle('REGION','TAMING LAND','Dragon sanctuary and familiar practice');
   if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'taming_land'});
   sysMsg('<b>Taming Land:</b> a peaceful sanctuary for eggs, familiars, and dragon practice. Use the green return portal to go back to town.');
@@ -2421,6 +2431,7 @@ function exitTamingLand(){
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
   tamingLandReturn=null;
+  triggerPlayerArrivalVfx('town:from-taming_land',130);
   if(!opts.resume)announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
   return true;
@@ -2536,6 +2547,7 @@ function enterFishingLake(){
   player.yaw=Math.PI;
   player.pitch=0;
   suppressRoomMouseLook(900,'enterFishingLake');
+  triggerPlayerArrivalVfx('fishing_lake',130);
   if(!opts.resume)announceArrivalTitle('REGION','FISHING LAKE','Peaceful waters, docks, and fishing practice');
   if(NET.on&&NET.room&&!opts.serverSynced)NET.room.send('tutorialEnter',{kind:'fishing_lake'});
   sysMsg('<b>Fishing Lake:</b> a peaceful fishing room. Walk the docks and use the blue return portal to go back to town.');
@@ -2556,6 +2568,7 @@ function exitFishingLake(){
   rebuildAllChunks();refreshTorchMeshes();applyDim();
   placePlayerAtTownReturn();
   fishingLakeReturn=null;
+  triggerPlayerArrivalVfx('town:from-fishing_lake',130);
   if(!opts.resume)announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
   return true;
@@ -2662,6 +2675,7 @@ function beginDungeon(ri, seed, editLog, opts){
       spawnDungeonMob(dungeon.bossRoom.x, dungeon.bossRoom.z, true, ri);
     }
     const dungeonName=dungeon.definition&&dungeon.definition.name;
+    triggerPlayerArrivalVfx('dungeon:'+String(NET.dgn||dungeon.id||seed),160);
     announceArrivalTitle('GATE',dungeonName||((RANKS[ri]&&RANKS[ri].n||'Hunter')+'-Rank Gate'),gateKindLabel(dungeon.kind||'public')+' dungeon');
     sysMsg('You have entered <b>'+(dungeonName||RANKS[ri].n+'-Rank Gate')+'</b>. Slay the boss');
     sleepEl.style.opacity=0;
@@ -2690,6 +2704,7 @@ function exitDungeon(instant){
     NET.pendingDungeonStatus=null;
     NET.pendingDungeonPartyStatus=null;
     gateTimer=120;
+    triggerPlayerArrivalVfx('town:from-dungeon',130);
     announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Returned from the Gate');
     if(!instant) sleepEl.style.opacity=0;
   };

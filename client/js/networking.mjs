@@ -1250,7 +1250,10 @@ function netAttachRoom(room,name,client){
           if(sid===room.sessionId)return;
           live.add(sid);
           if(NET.remotes[sid])NET.remotes[sid].ref=p;
-          else netAddRemote(sid,p);
+          else {
+            netAddRemote(sid,p);
+            schedulePlayerArrivalVfx(p,{key:'remote:'+sid,remote:true,delay:80});
+          }
         });
         for(const sid in NET.remotes)if(!live.has(sid))netRemoveRemote(sid);
       }catch(e){
@@ -1260,7 +1263,10 @@ function netAttachRoom(room,name,client){
     $(room.state).players.onAdd((p,sid)=>{
       if(sid===room.sessionId)return;
       if(NET.remotes[sid])NET.remotes[sid].ref=p;
-      else netAddRemote(sid,p);
+      else {
+        netAddRemote(sid,p);
+        schedulePlayerArrivalVfx(p,{key:'remote:'+sid,remote:true,delay:80});
+      }
     });
     $(room.state).players.onRemove((p,sid)=>netRemoveRemote(sid));
     syncRemotePlayerSnapshot();
@@ -2967,6 +2973,7 @@ function netRestoreProfile(m){
     if(progressionFocus&&!ONBOARD.isSeen())setTimeout(()=>ONBOARD.showFirstPromotion(),80);
     eventLog((m.name||'Hunter')+' returned — progress restored');
     finishWorldLoading('profile');
+    schedulePlayerArrivalVfx(player&&player.pos,{key:'local:'+String(NET.roomName||'room')+':'+String(dim||'world')+':'+String(NET.dgn||'main'),local:true,delay:320});
     if(!restoreJobRoom&&!restoreTamingLand&&dim==='overworld'&&combatApi.shouldShowFirstTownArrivalChoice&&combatApi.shouldShowFirstTownArrivalChoice()){
       setTimeout(()=>combatApi.showFirstTownArrivalChoice&&combatApi.showFirstTownArrivalChoice(),120);
     }
@@ -3729,6 +3736,54 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
 const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
+const ARRIVAL_VFX_COOLDOWN_MS=550;
+const arrivalVfxLastByKey=new Map();
+function schedulePlayerArrivalVfx(pos,opts={}){
+  const x=Number(pos&&pos.x),y=Number(pos&&pos.y),z=Number(pos&&pos.z);
+  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z))return false;
+  const key=opts.key||'arrival:'+Math.round(x*2)+','+Math.round(y*2)+','+Math.round(z*2);
+  const now=performance.now();
+  if(now-(arrivalVfxLastByKey.get(key)||0)<ARRIVAL_VFX_COOLDOWN_MS)return false;
+  arrivalVfxLastByKey.set(key,now);
+  setTimeout(()=>playerArrivalVfx({x,y,z},opts),Math.max(0,opts.delay|0));
+  return true;
+}
+function playerArrivalVfx(pos,opts={}){
+  const x=Number(pos&&pos.x),y=Number(pos&&pos.y),z=Number(pos&&pos.z);
+  if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z))return false;
+  const local=opts.local!==false&&!opts.remote;
+  const primary=local?0x7dd3fc:0xbfe8ff;
+  const secondary=local?0x8b5cf6:0x38bdf8;
+  const cols=local?[[.49,.83,.99],[.55,.35,.96],[.95,.98,1]]:[[.75,.91,1],[.22,.83,.95],[.95,.98,1]];
+  if(typeof ringPulse==='function'){
+    ringPulse(x,y+.08,z,.72,primary,.52);
+    setTimeout(()=>ringPulse(x,y+.1,z,1.35,secondary,.58),60);
+    setTimeout(()=>ringPulse(x,y+1.15,z,.62,primary,.38),105);
+  }
+  if(typeof glowFlash==='function')glowFlash(x,y+1.05,z,primary,2.15,.24);
+  for(let i=0;i<44;i++){
+    const a=Math.random()*Math.PI*2;
+    const r=.18+Math.random()*.8;
+    const col=cols[i%cols.length];
+    const inward=i%3===0?-1:1;
+    if(typeof spawnParticle==='function')spawnParticle({
+      x:x+Math.cos(a)*r,
+      y:y+.12+Math.random()*2.05,
+      z:z+Math.sin(a)*r,
+      vx:Math.cos(a)*(.08+Math.random()*.42)*inward,
+      vy:.42+Math.random()*1.75,
+      vz:Math.sin(a)*(.08+Math.random()*.42)*inward,
+      life:.42+Math.random()*.48,
+      grav:.08,
+      r:col[0],
+      g:col[1],
+      b:col[2],
+      priority:3,
+    });
+  }
+  return true;
+}
+Object.defineProperty(globalThis,'BlockcraftPlayerArrivalVfx',{value:(pos,opts)=>schedulePlayerArrivalVfx(pos,opts||{}),configurable:true});
 
 // ---- local third-person appearance dummy ----
 var appearanceDummy=null, appearanceBackDummy=null;
