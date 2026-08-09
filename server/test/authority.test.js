@@ -9840,6 +9840,18 @@ test('parkour server event queues teleports protects course and grants completio
   assert.equal(reset.msg.y, firstCheckpoint.y);
   assert.equal(reset.msg.z, firstCheckpoint.z);
 
+  player.x = course.finish.x;
+  player.y = course.finish.y + 20;
+  player.z = course.finish.z;
+  const resetsBefore = room.serverEvent.participants.get(client.sessionId).resets | 0;
+  room.serverEvent.participants.get(client.sessionId).lastResetRequestAt = 0;
+  room.handleEventReset(client, { reason: 'client_fall' });
+  const requestedReset = client.sent.filter(e => e.type === 'eventTeleport' && e.msg.reason === 'reset').at(-1);
+  assert.equal(requestedReset.msg.x, firstCheckpoint.x);
+  assert.equal(requestedReset.msg.y, firstCheckpoint.y);
+  assert.equal(requestedReset.msg.z, firstCheckpoint.z);
+  assert.equal((room.serverEvent.participants.get(client.sessionId).resets | 0), resetsBefore + 1);
+
   for (const checkpoint of course.checkpoints.slice(1)) {
     player.x = checkpoint.x;
     player.y = checkpoint.y;

@@ -8038,6 +8038,7 @@ function renderParkourHud(){
   parkourHud.classList.toggle('hidden',!live);
   if(!live){clearParkourObjectiveVisuals();return;}
   renderParkourObjectiveVisuals();
+  recoverParkourFallIfNeeded();
   const progress=serverEvent.checkpointProgress||{},passed=Math.max(0,progress.passed|0),total=Math.max(0,progress.total|0);
   const elapsed=serverEvent.phase==='active'&&progress.startedAt?Date.now()-progress.startedAt:0;
   if(parkourTime)parkourTime.textContent=serverEvent.phase==='starting'?'STAGING':fmtRace(elapsed);
@@ -8053,6 +8054,34 @@ function renderParkourHud(){
     parkourAnnounce.classList.toggle('hidden',!show);
     if(show)parkourAnnounce.textContent=parkourAnnouncement.text;
   }
+}
+let lastParkourFallRecoveryAt=0;
+function parkourRespawnPoint(){
+  const course=serverEvent&&serverEvent.course;
+  if(!course)return null;
+  const progress=serverEvent.checkpointProgress||{};
+  const checkpoints=Array.isArray(course.checkpoints)?course.checkpoints:[];
+  const passed=Math.max(0,progress.passed|0);
+  return passed>0&&checkpoints[passed-1]?checkpoints[passed-1]:course.start;
+}
+function recoverParkourFallIfNeeded(){
+  if(!serverEvent||serverEvent.kind!=='parkour'||!serverEvent.participating||!serverEvent.course||dim!=='event')return false;
+  const course=serverEvent.course;
+  const fallY=Number(course.fallY);
+  const margin=2;
+  const outside=Number.isFinite(course.minX)&&Number.isFinite(course.maxX)&&Number.isFinite(course.minZ)&&Number.isFinite(course.maxZ)
+    &&(player.pos.x<course.minX-margin||player.pos.x>course.maxX+margin||player.pos.z<course.minZ-margin||player.pos.z>course.maxZ+margin);
+  const falling=Number.isFinite(fallY)&&player.pos.y<fallY;
+  if(!falling&&!outside)return false;
+  const now=Date.now();
+  if(now-lastParkourFallRecoveryAt<800)return false;
+  lastParkourFallRecoveryAt=now;
+  const respawn=parkourRespawnPoint();
+  if(respawn)enterParkourEvent({eventId:serverEvent.id,course,x:respawn.x,y:respawn.y,z:respawn.z,reason:'reset'});
+  if(NET.on&&NET.room)try{NET.room.send('eventReset',{reason:falling?'fall':'outside'});}catch(_e){}
+  if(respawn&&NET.on&&NET.room)try{NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw||0,pitch:player.pitch||0,dgn:NET.dgn||'',dim});}catch(_e){}
+  sysMsg('You fell out of the event course. Returning to your latest checkpoint.','minor');
+  return true;
 }
 function parkourCheckpointReached(m){
   if(!m||!serverEvent||serverEvent.kind!=='parkour')return;

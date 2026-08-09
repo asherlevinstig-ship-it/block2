@@ -736,6 +736,7 @@ class GameRoom extends Room {
     this.onMessage('eventJoin', (client) => this.handleEventJoin(client));
     this.onMessage('eventLeave', (client) => this.handleEventLeave(client));
     this.onMessage('eventReady', (client) => this.handleEventReady(client));
+    this.onMessage('eventReset', (client, m) => this.handleEventReset(client, m));
     this.onMessage('eventDebugStart', (client) => this.handleEventDebugStart(client));
     this.onMessage('chestOpen', (client, m) => this.handleChestOpen(client, m));
     this.onMessage('chestDeposit', (client, m) => this.handleChestDeposit(client, m));

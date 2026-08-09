@@ -716,6 +716,19 @@ class EventsMixin {
     client.send('eventReady', this.eventPayload(client));
     this.broadcastEventStatus(true);
   }
+  handleEventReset(client, m) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    const part = ev && ev.kind === EVENT_PARKOUR.kind && (ev.phase === 'starting' || ev.phase === 'active')
+      && ev.participants && ev.participants.get(client.sessionId);
+    if (!part || !ev.course || ev.completed && ev.completed.has(client.sessionId)) return;
+    const now = Date.now();
+    if (now - (part.lastResetRequestAt || 0) < 600) return;
+    part.lastResetRequestAt = now;
+    part.resets = (part.resets | 0) + 1;
+    const checkpoints = ev.course.checkpoints || [];
+    const respawn = part.checkpointsPassed > 0 ? checkpoints[part.checkpointsPassed - 1] : ev.course.start;
+    this.teleportEventPlayer(client, respawn, 'reset', ev);
+  }
   handleEventDebugStart(client) {
     if (!BETA_EVENT_TEST) return client.send('eventReject', { reason: 'closed' });
     const p = this.state.players.get(client.sessionId);
