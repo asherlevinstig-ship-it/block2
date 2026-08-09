@@ -23,6 +23,7 @@ const chatMuteEl=document.getElementById('chatmute');
 const chatReportEl=document.getElementById('chatreport');
 const chatBlockedEl=document.getElementById('chatblocked');
 const chatSoundEl=document.getElementById('chatsound');
+const chatCloseEl=document.getElementById('chatclose');
 const chatWheelEl=document.getElementById('chatwheel');
 const chatWheelItemsEl=document.getElementById('chatwheelitems');
 const chatWheelModeEl=document.getElementById('chatwheelmode');
@@ -300,6 +301,7 @@ chatReportEl.addEventListener('click',()=>{const target=chatTargetEl.value;if(ta
 chatBlockedEl.addEventListener('click',()=>{if(NET.on)NET.room.send('commsBlockList',{});});
 chatSoundEl.classList.toggle('off',!commsSound);
 chatSoundEl.addEventListener('click',()=>{commsSound=!commsSound;localStorage.setItem('bc_comms_sound',commsSound?'1':'0');chatSoundEl.classList.toggle('off',!commsSound);});
+if(chatCloseEl)chatCloseEl.addEventListener('click',()=>closeChat(true));
 chatInEl.addEventListener('change',()=>{
   if(!document.body.classList.contains('chat-open'))return;
   sendQuickPhrase(chatInEl.value);
@@ -351,9 +353,9 @@ function adminChatAllowed(){
   const username=String(account&&account.username||'').trim().toLowerCase();
   return username==='asherlevin85@gmail.com';
 }
-function openAdminChat(prefill=''){
+function openAdminChat(prefill='',silent=false){
   if(!adminChatBarEl||!adminChatInEl)return false;
-  if(!adminChatAllowed()){chatLine('[Admin]','Admin command box is not available for this account.','blocked');return false;}
+  if(!adminChatAllowed()){if(!silent)chatLine('[Admin]','Admin command box is not available for this account.','blocked');return false;}
   if(chatWheel||dragonWheel)closeAnyWheel(false);
   closeChat(false);
   chatTyping=true;

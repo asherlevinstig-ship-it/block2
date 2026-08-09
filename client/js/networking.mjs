@@ -871,6 +871,7 @@ const legacyNetworkingBindings={
   "netTick":{get:()=>netTick},
   "NETWORK":{get:()=>NETWORK},
   "ONBOARD":{get:()=>ONBOARD},
+  "openAdminChat":{get:()=>openAdminChat},
   "openChat":{get:()=>openChat},
   "openTeamUI":{get:()=>openTeamUI},
   "perchedDragons":{get:()=>perchedDragons},
@@ -5296,7 +5297,8 @@ const SOCIAL=createSocialSystem({
 });
 globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
 globalThis.startDragonCommandWheel=SOCIAL.startDragonCommandWheel;
-const {chatLine,openChat,closeChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
+globalThis.openAdminChat=SOCIAL.openAdminChat;
+const {chatLine,openChat,closeChat,openAdminChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
 
 // ---- smart top-screen player suggestions ----
 const SMART_SUGGESTION_KEY='bc_smart_suggestions_v1';

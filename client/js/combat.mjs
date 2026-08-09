@@ -5380,7 +5380,13 @@ addEventListener('keydown', e=>{
     showStartHelp();
     return;
   }
-  if((e.code==='Slash' || e.code==='Backquote') && gameInput){
+  if(e.code==='Slash' && gameInput){
+    e.preventDefault();
+    if(typeof openAdminChat==='function'&&openAdminChat('/',true))return;
+    openChat();
+    return;
+  }
+  if(e.code==='Backquote' && gameInput){
     e.preventDefault();
     openChat();
     return;
