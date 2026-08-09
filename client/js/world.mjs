@@ -8366,12 +8366,12 @@ function applyEventStatus(m){
   if(serverEvent&&serverEvent.phase==='queue'&&serverEvent.id&&serverEvent.id!==lastEventAlertId){
     lastEventAlertId=serverEvent.id;
     eventQueueAnnounceId=serverEvent.id;
-    eventQueueAnnounceUntil=Date.now()+12000;
+    eventQueueAnnounceUntil=Date.now()+1400;
     sysMsg('<b>Event Alert:</b> '+escHTML(serverEvent.name||'Server Event')+' queue is open. Join from the event banner before the countdown ends. <b>Reward:</b> '+Math.max(0,serverEvent.reward||2)+' Legendary Tokens'+(serverEvent.rewardXp?' + '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' Hunter XP':'')+'.');
     pulseEventHud();
   }else if(serverEvent&&serverEvent.phase==='queue'&&!previousJoined&&serverEvent.joined){
     eventQueueAnnounceId=serverEvent.id||eventQueueAnnounceId;
-    eventQueueAnnounceUntil=Date.now()+3500;
+    eventQueueAnnounceUntil=Date.now()+1100;
     pulseEventHud();
   }else if(serverEvent&&serverEvent.phase==='starting'&&previousPhase!=='starting'&&serverEvent.participating){
     pulseEventHud();
@@ -8879,16 +8879,11 @@ function renderEventStart(){
   eventStartWin.classList.toggle('queue',queueing);
   eventStartWin.classList.toggle('king',king);
   if(queueing){
-    const queueSize=Math.max(0,serverEvent.queueSize|0),queueCapacity=Math.max(1,serverEvent.queueCapacity||8);
-    const left=Math.max(0,(serverEvent.startsAt||0)-now);
-    const rewardLabel=caravan
-      ?Math.max(1,serverEvent.rewardMin|0)+'-'+Math.max(1,serverEvent.rewardMax|0)+' LEGENDARY TOKENS - BASED ON WAGON HEALTH'
-      :Math.max(0,serverEvent.reward||2)+' LEGENDARY TOKENS';
-    eventStartName.textContent=((serverEvent.name||'Server Event')+' QUEUE OPEN').toUpperCase();
-    eventStartObjective.textContent=serverEvent.joined?'You are signed up. Watch for staging.':'Join the queue from the event banner before the countdown ends';
-    eventStartRules.textContent='Queued '+queueSize+'/'+queueCapacity+' - '+(serverEvent.waitingForPlayers?'waiting for enough hunters':'starting soon');
-    eventStartReward.textContent=rewardLabel+(serverEvent.rewardXp?' - '+(serverEvent.rewardXp|0).toLocaleString('en-US')+' HUNTER XP':'');
-    eventStartCount.textContent=(serverEvent.joined?'SIGNED UP - ':'QUEUE UP - ')+fmtClock(left);
+    eventStartName.textContent=(serverEvent.joined?'SIGNED UP FOR ':'')+(serverEvent.name||'Server Event')+' Event';
+    eventStartObjective.textContent=serverEvent.joined?'Watch the event banner for staging':'Queue is open - join from the event banner';
+    eventStartRules.textContent='';
+    eventStartReward.textContent='';
+    eventStartCount.textContent='';
     eventStartCount.classList.add('ready');
     return;
   }
