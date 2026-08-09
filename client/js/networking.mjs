@@ -5297,7 +5297,6 @@ const SOCIAL=createSocialSystem({
 });
 globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
 globalThis.startDragonCommandWheel=SOCIAL.startDragonCommandWheel;
-globalThis.openAdminChat=SOCIAL.openAdminChat;
 const {chatLine,openChat,closeChat,openAdminChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
 
 // ---- smart top-screen player suggestions ----
