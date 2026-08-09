@@ -1013,6 +1013,16 @@ function createWorld() {
   const buildTownLocal = () => {
     const { TC, HS, G } = TOWN;
     const x1 = TC - HS, x2 = TC + HS, z1 = TC - HS, z2 = TC + HS;
+    const reopenGateApproachesLocal = () => {
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (let i = HS - 2; i <= HS + 20; i++) for (let w = -1; w <= 1; w++) {
+          const x = TC + dx * i + (dz !== 0 ? w : 0);
+          const z = TC + dz * i + (dx !== 0 ? w : 0);
+          setLocal(x, G, z, B.COBBLE);
+          for (let y = G + 1; y <= G + 4; y++) setLocal(x, y, z, B.AIR);
+        }
+      }
+    };
     for (let x = x1 - 2; x <= x2 + 2; x++) for (let z = z1 - 2; z <= z2 + 2; z++) {
       for (let y = G + 1; y < WH; y++) setLocal(x, y, z, B.AIR);
       for (let y = 1; y < G; y++) {
@@ -1030,6 +1040,7 @@ function createWorld() {
       const gateO = (onXWall && Math.abs(z - TC) <= 1 && !onZWall) || (onZWall && Math.abs(x - TC) <= 1 && !onXWall);
       for (let y = G + 1; y <= G + 5; y++) setLocal(x, y, z, gateO && y <= G + 4 ? B.AIR : B.BRICK);
     }
+    reopenGateApproachesLocal();
     for (const [cx, cz] of [[x1, z1], [x1, z2], [x2, z1], [x2, z2]])
       fillLocal(cx - 2, G + 1, cz - 2, cx + 2, G + 7, cz + 2, B.BRICK);
     for (let x = TC - 4; x <= TC + 4; x++) for (let z = TC - 4; z <= TC + 4; z++) {
@@ -1080,6 +1091,10 @@ function createWorld() {
     buildGuildHallBase(setLocal);
     buildSkyportBlocks(setLocal);
     buildTownFarmWorksite(setLocal, G);
+    // Keep createWorld() aligned with the global/client generator. GameRoom uses
+    // this local world for movement authority, so the four visible exits must be
+    // cleared here as well as in buildTown().
+    reopenGateApproachesLocal();
   };
   const generateLocal = () => {
     buf.fill(B.AIR);

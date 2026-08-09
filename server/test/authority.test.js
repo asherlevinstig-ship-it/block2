@@ -1543,6 +1543,8 @@ test('movement below valid ground is snapped back to the authoritative floor',()
 test('town exit movement ignores overhead arch blocks when finding the floor',()=>{
   const room=makeRoom(),client=makeClient('town_exit_hunter');
   room.lastMoveMsg=new Map();
+  room.world = W.createWorld();
+  room.world.generate();
   const x=500.366, y=16, z=570.987;
   seedPlayer(room,client,{x,z,y,hp:20});
   room.lastMoveMsg.set(client.sessionId,Date.now()-100);
@@ -1552,8 +1554,35 @@ test('town exit movement ignores overhead arch blocks when finding the floor',()
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),false);
 });
 
+test('generated room world keeps south town exit clear at reported bug location',()=>{
+  const world=W.createWorld();
+  world.generate();
+  const x=500.679,z=575.613,ground=W.TOWN.G+1;
+  assert.equal(world.standHeight(x,z,18.25),ground,'local height probe should stay on the south gate causeway');
+  assert.equal(world.standHeight(x,z,W.WH-2) <= ground + 5,true,'high scans must not find a generated hill plugging the exit');
+  for(let y=W.TOWN.G+1;y<=W.TOWN.G+4;y++){
+    assert.equal(W.isSolid(world.getB(Math.floor(x),y,Math.floor(z))),false,`south gate exit blocked at ${Math.floor(x)},${y},${Math.floor(z)}`);
+  }
+});
+
+test('movement through reported south town exit coordinate is not corrected',()=>{
+  const room=makeRoom(),client=makeClient('south_exit_reported_hunter');
+  room.lastMoveMsg=new Map();
+  room.world = W.createWorld();
+  room.world.generate();
+  const x=500.679, y=16, z=574.613;
+  seedPlayer(room,client,{x,z,y,hp:20});
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  room.handleMove(client,{x,y,z:575.613,yaw:-3.138});
+  const p=room.state.players.get(client.sessionId);
+  assert.equal(p.z > z,true,'player should advance out through the reported south exit coordinate');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'),false);
+});
+
 test('stuck rescue candidates near town exits ignore overhead arch blocks',()=>{
   const room=makeRoom(),client=makeClient('town_exit_rescue_hunter');
+  room.world = W.createWorld();
+  room.world.generate();
   const x=500.366, y=16, z=570.987;
   seedPlayer(room,client,{x,z,y,hp:20});
   const p=room.state.players.get(client.sessionId);
