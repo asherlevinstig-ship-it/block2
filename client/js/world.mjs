@@ -3470,7 +3470,7 @@ function updateLandMinimap(force=true){
     overworldActivity&&overworldActivity.encounter&&overworldActivity.encounter.id||'',
     overworldActivity&&overworldActivity.gateBreach&&overworldActivity.gateBreach.id||'',
     overworldActivity&&overworldActivity.gateScar&&overworldActivity.gateScar.id||'',
-    activeTrail&&activeTrail.id||'',dragonMarkers.length,Math.floor(now/250)
+    activeTrail&&activeTrail.id||'',dragonMarkers.length,treasureCaches.length,Math.floor(now/250)
   ].join(',');
   if(!force&&mapSig===lastLandMinimapSig)return;
   lastLandMinimapSig=mapSig;
@@ -3562,6 +3562,35 @@ function updateLandMinimap(force=true){
     landMapCtx.fillStyle=hinted?'#ffd24a':col;landMapCtx.fillRect(x,z,size,size);
     if(hinted){landMapCtx.strokeStyle='rgba(255,210,74,.85)';landMapCtx.strokeRect(x-2,z-2,size+4,size+4);}
   };
+  const leadMarker=(s,col,size=2)=>{
+    if(!mapUtility||worldMap||claimMode||!miniMap||!nearMapMarker(s)||discoveredOrHinted(s)||claimedDiscoveryIds.has(s.id))return;
+    const x=mapPx(s.x),z=mapPz(s.z),pulse=1+Math.floor((now/360)%2);
+    landMapCtx.save();
+    landMapCtx.globalAlpha=.58;
+    landMapCtx.fillStyle=col;
+    landMapCtx.fillRect(x,z,size,size);
+    landMapCtx.globalAlpha=.45;
+    landMapCtx.strokeStyle='rgba(159,215,255,.9)';
+    landMapCtx.strokeRect(x-3-pulse,z-3-pulse,size+6+pulse*2,size+6+pulse*2);
+    landMapCtx.restore();
+  };
+  const cacheMarker=s=>{
+    if(!mapUtility||claimMode||!s||!Number.isFinite(s.x)||!Number.isFinite(s.z))return;
+    const known=discoveredOrHinted(s)||claimedDiscoveryIds.has(s.id);
+    if(miniMap&&!worldMap&&!nearPlayer(s))return;
+    if(worldMap&&!known&&!nearPlayer(s))return;
+    const x=mapPx(s.x),z=mapPz(s.z),pulse=1+Math.floor((now/320)%2);
+    landMapCtx.save();
+    landMapCtx.fillStyle=known?'#ffd24a':'#d7a34a';
+    landMapCtx.fillRect(x-1,z-1,3,3);
+    landMapCtx.strokeStyle=known?'rgba(255,210,74,.9)':'rgba(215,163,74,.72)';
+    landMapCtx.strokeRect(x-4-pulse,z-3-pulse,8+pulse*2,6+pulse*2);
+    if(worldMap&&!claimMode&&known){
+      landMapCtx.font='bold 8px Courier New';
+      landMapCtx.fillText('Cache',x+6,z+4);
+    }
+    landMapCtx.restore();
+  };
   const caveMarker=s=>{
     if(!s||s.type!=='cave')return false;
     const visibleCave=discoveredOrHinted(s)||(mapUtility&&nearPlayer(s));
@@ -3582,6 +3611,18 @@ function updateLandMinimap(force=true){
   for(const s of ancientCities)if(discoveredOrHinted(s))marker(s,'#7dd3fc',3);
   const discoveryColors={rare_plant:'#7ee06a',buried_chest:'#d7a34a',lore_tablet:'#c8bca8',monster_nest:'#ff5d5d',fishing_pool:'#58cfff',ore_outcrop:'#b9c2ca',traveling_merchant:'#d596ff',puzzle_shrine:'#ff9be8',rain_bloom:'#67d6ff',storm_crystal:'#b79cff',sun_dial:'#ffd24a'};
   for(const s of smallDiscoveries)marker(s,discoveryColors[s.type]||'#fff',2);
+  if(mapUtility&&miniMap&&!worldMap&&!claimMode){
+    for(const s of regionalLandmarks){
+      if(s.type==='cave')continue;
+      leadMarker(s,s.major?'#ffd24a':'#e8c77b',s.major?3:2);
+    }
+    for(const s of ancientCities)leadMarker(s,'#7dd3fc',3);
+    for(const s of smallDiscoveries){
+      if(weatherMapReq[s.type]===currentWeather)continue;
+      leadMarker(s,discoveryColors[s.type]||'#fff',2);
+    }
+  }
+  for(const s of treasureCaches)cacheMarker(s);
   if(miniMap&&!worldMap){
     for(const s of smallDiscoveries){
       if(discoveredIds.has(s.id)||claimedDiscoveryIds.has(s.id)||weatherMapReq[s.type]!==currentWeather||!nearMapMarker(s))continue;
@@ -3591,7 +3632,7 @@ function updateLandMinimap(force=true){
     }
   }
   if(worldMap&&!claimMode){
-    const sites=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[])];
+    const sites=[...regionalLandmarks,...smallDiscoveries,...(ancientCities||[]),...treasureCaches];
     const contractSite=regionalContract&&regionalContract.targetId?sites.find(s=>s.id===regionalContract.targetId):null;
     if(contractSite)cartographerMapTarget(contractSite,'#7dd3fc','C');
     const treasure=globalThis.BlockcraftTreasureMap,treasureSite=treasure&&treasure.targetId?sites.find(s=>s.id===treasure.targetId):null;
