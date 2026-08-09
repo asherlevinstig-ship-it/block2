@@ -3470,6 +3470,7 @@ function updateLandMinimap(force=true){
     overworldActivity&&overworldActivity.encounter&&overworldActivity.encounter.id||'',
     overworldActivity&&overworldActivity.gateBreach&&overworldActivity.gateBreach.id||'',
     overworldActivity&&overworldActivity.gateScar&&overworldActivity.gateScar.id||'',
+    overworldActivity&&overworldActivity.meteor&&overworldActivity.meteor.id||'',
     activeTrail&&activeTrail.id||'',dragonMarkers.length,treasureCaches.length,Math.floor(now/250)
   ].join(',');
   if(!force&&mapSig===lastLandMinimapSig)return;
@@ -3659,6 +3660,15 @@ function updateLandMinimap(force=true){
     }
     if(overworldActivity.trailSense&&(!overworldActivity.trailSense.expiresAt||overworldActivity.trailSense.expiresAt>Date.now())){
       dynamic(overworldActivity.trailSense,'#8ff7c7',5);
+    }
+    if(overworldActivity.meteor&&Number.isFinite(overworldActivity.meteor.x)&&Number.isFinite(overworldActivity.meteor.z)&&(!miniMap||worldMap||nearPlayer(overworldActivity.meteor))){
+      const mx=mapPx(overworldActivity.meteor.x),mz=mapPz(overworldActivity.meteor.z);
+      const falling=overworldActivity.meteor.state==='falling',pulse=1+Math.floor((now/180)%3);
+      landMapCtx.fillStyle=falling?'#ffffff':'#ff6b2a';landMapCtx.fillRect(mx-2,mz-2,5,5);
+      landMapCtx.strokeStyle=falling?'rgba(255,255,255,.95)':'rgba(255,107,42,.9)';
+      landMapCtx.lineWidth=2;landMapCtx.strokeRect(mx-5-pulse,mz-5-pulse,11+pulse*2,11+pulse*2);
+      landMapCtx.strokeStyle='rgba(255,210,74,.85)';
+      landMapCtx.beginPath();landMapCtx.moveTo(mx-8,mz-8);landMapCtx.lineTo(mx+8,mz+8);landMapCtx.moveTo(mx+8,mz-8);landMapCtx.lineTo(mx-8,mz+8);landMapCtx.stroke();
     }
     dynamic(overworldActivity.patrol,'#e85b4d',3);dynamic(overworldActivity.camp,'#ff8b52',3);
   }

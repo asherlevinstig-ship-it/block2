@@ -2165,6 +2165,9 @@ function netAttachRoom(room,name,client){
         eventFeed('[Reward]','Received '+grantTriage+'.',{key:'grant:'+String(m.source||'reward')+':'+grantTriage,cooldown:2500});
       }
     });
+    room.onMessage('meteorBossReward',m=>{
+      sysMsg('<b>Eldritch Heartwood defeated.</b> You dealt the most damage and earned the <b>Meteor Staff</b>.',{tier:'major',title:'Meteor Staff'});
+    });
     room.onMessage('biomeFind', m=>{
       if(m&&m.name) sysMsg('Regional discovery: <b>'+escHTML(m.name)+(m.count>1?' x'+(m.count|0):'')+'</b>');
       if(m&&m.name) eventFeed('[Discovery]','Found regional material: '+String(m.name)+(m.count>1?' x'+(m.count|0):'')+'.',{key:'biome:'+String(m.name),cooldown:6000});
@@ -2269,6 +2272,15 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('roadsideEncounterReject',()=>sysMsg('Move closer and aim at the wounded hunter to provide aid.'));
     room.onMessage('overworldActivity',m=>{overworldActivity=m||null;if(m&&m.roadSafety){roadSafety=Math.max(0,Math.min(100,m.roadSafety.score|0));refreshRoadSafetyScenes();}updateLandMinimap();});
+    room.onMessage('meteorEvent',m=>{
+      if(!m)return;
+      overworldActivity={...(overworldActivity||{}),meteor:m};
+      if(m.state==='falling'){
+        sysMsg('<b>Falling Star:</b> a meteor is coming down in the wilderness.',{tier:'major',title:'Falling Star'});
+        netFx({t:'meteorFalling',x:m.x,y:m.y,z:m.z,dgn:''});
+      }else if(m.state==='active')sysMsg('<b>Meteor crater active:</b> hostile creatures and an Eldritch Heartwood are at the impact site.',{tier:'major',title:'Meteor Crater'});
+      updateLandMinimap();
+    });
     room.onMessage('roadSafetyChanged',m=>{
       if(!m)return;roadSafety=Math.max(0,Math.min(100,m.score|0));
       OVERWORLD_RESULTS.recordSafety(m);

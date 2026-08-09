@@ -373,6 +373,7 @@ class GameRoom extends Room {
     this.ancientWardenAlarms = new Map();
     this.instances = {};
     this.initCombatState();     // combat-domain sim state lives in combat.mixin.js
+    this.initMeteorEventState();
     this.teamMgr = new TeamManager(5);
     this.teamRecords = new Map();
     try {
@@ -7510,6 +7511,7 @@ class GameRoom extends Room {
     this.maintainEliteCamps(dt, surfaceClusters);
     this.maintainDiscoveryNests(dt, surfaceClusters);
     this.maintainUndergroundThreats(dt);
+    this.maintainMeteorEvent(dt, surfaceClusters);
     if (dayF > .35) this.maintainBanditCamps(dt, surfaceClusters);
     else {
       const gone=[];this.state.mobs.forEach((m,id)=>{if(!m.dgn&&this.mobMeta[id]&&this.mobMeta[id].bandit)gone.push(id);});

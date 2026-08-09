@@ -37,6 +37,7 @@ const BOSS_CONCEPT_STYLE={
   buried_monarch:{accent:0xfacc15,particle:'sand',rate:18,scale:1.09,float:0,weapon:'golden khopesh'},
   abyssal_gatekeeper:{accent:0x22d3ee,particle:'bubble',rate:18,scale:1.1,float:.02,weapon:'anchor chain'},
   rift_monarch:{accent:0xf472b6,particle:'rift',rate:24,scale:1.1,float:.12,orbit:true,weapon:'rift scepter'},
+  eldritch_tree:{accent:0x5cff7a,particle:'leaf',rate:28,scale:1.34,float:0,orbit:true,weapon:'star roots'},
 };
 const EFFECT_BIOME={flanker:'plains',sturdy:'forest',quickshot:'desert',brute:'mesa',frost:'snowy',venom:'swamp',root:'forest'};
 function decorateBiomeHostile(m,kind){
@@ -195,6 +196,7 @@ function attachBossReadableSilhouette(m,style,hex){
   else if(style==='abyssal_gatekeeper'){for(const sx of [-.72,-.42,.42,.72])box([.1,1.1,.1],[sx,1.45,-.45],[.35,0,sx>0?-.7:.7]);}
   else if(style==='void_prior'){box([.85,1.28,.08],[0,1.1,-.48],[-.08,0,0],additiveMat(0x1b1038,.72));box([.48,.48,.1],[0,1.86,-.44],[0,0,0],solid);}
   else if(style==='rootkeeper'){for(const sx of [-.56,-.28,.28,.56])box([.08,.9,.08],[sx,1.98,-.34],[0,0,sx>0?-1:1]);}
+  else if(style==='eldritch_tree'){for(const sx of [-.72,-.42,-.18,.18,.42,.72])box([.11,1.35,.11],[sx,2.05,-.38],[0,0,sx>0?-1.05:1.05]);box([1.05,.22,.22],[0,2.28,-.42],[0,0,0]);}
   else if(style==='regent'){for(const sx of [-.44,0,.44])box([.08,.9,.08],[sx,1.92,-.34],[0,0,sx*.5]);}
   else if(style==='ossuary'){for(const sx of [-.45,-.18,.18,.45])box([.08,.8,.08],[sx,1.82,-.36],[0,0,sx*.65],additiveMat(0xf8fafc,.72));}
   else if(style==='watcher'){const ring=new THREE.Mesh(new THREE.TorusGeometry(.72,.055,8,32),glow);ring.position.set(0,1.58,-.46);ring.rotation.x=Math.PI/2;ring.userData.bossGlow=1.2;g.add(ring);}
@@ -224,6 +226,7 @@ function applyBossBodyPlan(m,style,hex){
   else if(style==='foreman'){scalePart(head,[1.08,.82,1.06],[0,1.54,.03]);arms.forEach((a,i)=>scalePart(a,[i?1.2:1.8,1.1,1.55],[i?.42:-.5,1.16,.08]));legs.forEach((l,i)=>scalePart(l,[1.22,.72,1.12],[i?.22:-.22,.58,0]));bossPlanBox(m,[.98,.48,.48],[0,1.0,.03],0x5b3b1e);m.grp.scale.set(1.16,.9,1.08);}
   else if(style==='regent'){scalePart(head,[.86,1.16,.86],[0,1.92,.03]);arms.forEach((a,i)=>scalePart(a,[.58,1.8,.58],[i?.46:-.46,1.34,.06]));legs.forEach((l,i)=>scalePart(l,[.32,.48,.32],[i?.1:-.1,.42,0]));bossPlanBox(m,[.62,1.1,.28],[0,1.02,.02],0x0f3d56,[0,0,0],true);m.grp.scale.set(.9,1.18,.9);}
   else if(style==='rootkeeper'){scalePart(head,[1.18,1.08,1.1],[0,1.72,.03]);arms.forEach((a,i)=>scalePart(a,[1.45,1.75,1.18],[i?.58:-.58,1.18,.06]));legs.forEach((l,i)=>scalePart(l,[.75,1.55,.75],[i?.22:-.22,.66,0]));bossPlanBox(m,[.78,1.15,.42],[0,.98,.02],0x254b24);m.grp.scale.set(1.08,1.2,1.05);}
+  else if(style==='eldritch_tree'){scalePart(head,[1.35,.9,1.25],[0,2.12,.03]);arms.forEach((a,i)=>scalePart(a,[2.15,2.1,1.6],[i?.72:-.72,1.28,.06]));legs.forEach((l,i)=>scalePart(l,[1.1,1.95,1.05],[i?.28:-.28,.68,0]));bossPlanBox(m,[1.05,1.75,.58],[0,1.08,.02],0x1f3a20);m.grp.scale.set(1.28,1.38,1.2);}
   else if(style==='ossuary'){scalePart(head,[.95,.95,.86],[0,1.82,.03]);arms.forEach((a,i)=>scalePart(a,[.7,1.6,.65],[i?.44:-.44,1.22,.06]));legs.forEach((l,i)=>scalePart(l,[.58,1.45,.55],[i?.15:-.15,.66,0]));bossPlanBox(m,[.5,1.05,.24],[0,1.0,.03],0xd8d2bc,[0,0,0],true);m.grp.scale.set(.88,1.18,.86);}
   else if(style==='watcher'){scalePart(head,[1.45,1.1,1.35],[0,1.72,.03]);arms.forEach((a,i)=>scalePart(a,[.42,1.45,.42],[i?.58:-.58,1.2,.06]));legs.forEach((l,i)=>scalePart(l,[.22,.18,.22],[i?.06:-.06,.28,0]));bossPlanBox(m,[.7,.7,.22],[0,1.18,.06],0x312e81,[0,0,0],true);m.grp.scale.set(1.0,1.02,1);}
 }
@@ -258,6 +261,12 @@ function decorateDungeonVariant(m,ref){
     tintModel(m,[.48,.42,.52]);m.grp.scale.set(1.16,1.05,1.1);
     attachBox(m.grp,[.34,.18,.44],[-.38,1.34,.02],0x3d3748);
     if(m.arms&&m.arms[1])attachBox(m.arms[1],[.46,.62,.08],[0,.02,.6],0x43384f);
+  }else if(v==='meteor'){
+    tintModel(m,[.72,.28,.16]);
+    if(m.head)markBossGlow(attachBox(m.head,[.32,.09,.08],[0,.04,.29],0xffd24a,[0,0,0],true),1.1);
+    for(const sx of [-.18,.18])markBossGlow(attachBox(m.grp,[.08,.48,.08],[sx,1.66,-.22],0xff6b2a,[0,0,sx],true),.8);
+    const aura=new THREE.Mesh(new THREE.TorusGeometry(.68,.035,8,30),new THREE.MeshBasicMaterial({color:0xff6b2a,transparent:true,opacity:.52,blending:THREE.AdditiveBlending,depthWrite:false}));
+    aura.rotation.x=Math.PI/2;aura.position.y=.06;m.grp.add(aura);m.variantAura=aura;
   }
   if(bossy&&!m.elite){const aura=new THREE.Mesh(new THREE.TorusGeometry(.68,.03,8,30),new THREE.MeshBasicMaterial({color:0x7c3aed,transparent:true,opacity:.48,blending:THREE.AdditiveBlending,depthWrite:false}));aura.rotation.x=Math.PI/2;aura.position.y=.06;m.grp.add(aura);m.variantAura=aura;}
 }
@@ -280,6 +289,7 @@ function decorateBossStyle(m,ref){
     abyssal_gatekeeper:{col:[.12,.42,.55],hex:0x22d3ee,parts:()=>{if(m.head){attachCrown(m.head,0x164e63,0x67e8f9);markBossGlow(attachBox(m.head,[.44,.09,.09],[0,.04,.31],0x67e8f9,[0,0,0],true),1.2);}attachTentacles(m.grp,0x115e59,7,.58);attachTatteredRobe(m.grp,0x082f49,0x22d3ee,.78,.92);for(const sx of [-.4,.4])attachBox(m.grp,[.1,.75,.1],[sx,1.36,-.26],0x083344,[.4,0,sx*.5]);if(m.arms&&m.arms[0])attachChain(m.arms[0],0,.82,0x1f2937,8);markCrystalHalo(m.grp,0x22d3ee,.82);}},
     rift_monarch:{col:[.65,.22,.72],hex:0xf472b6,parts:()=>{if(m.head){attachCrown(m.head,0x2e1065,0xf472b6);markBossGlow(attachBox(m.head,[.38,.12,.08],[0,.06,.31],0xf472b6,[0,0,0],true),1.4);}attachTatteredRobe(m.grp,0x1e1b4b,0xf472b6,.86,1.08);for(const sx of [-.34,.34])attachBox(m.grp,[.09,.72,.09],[sx,1.5,-.22],0x3b0764,[.3,0,sx>0?-.8:.8]);markCrystalHalo(m.grp,0xf472b6,1.12);attachRiftFragments(m.grp,0xf472b6,10,1.25);if(m.arms&&m.arms[0])attachStaff(m.arms[0],0x312e81,0xf472b6,'orb');}},
     ancient_warden:{col:[.06,.22,.26],hex:0x35d0c8,parts:()=>{if(m.head){attachBox(m.head,[.56,.12,.1],[0,.06,.32],0x78fff2,[0,0,0],true);for(const sx of [-.24,.24])attachBox(m.head,[.08,.5,.08],[sx,.42,.02],0x0f2f35,[0,0,sx>0?-.28:.28]);}for(const sx of [-.52,.52])attachBox(m.grp,[.22,.72,.24],[sx,1.38,.02],0x12353a);attachBox(m.grp,[.7,.12,.16],[0,1.62,-.18],0x35d0c8,[0,0,0],true);}},
+    eldritch_tree:{col:[.22,.58,.18],hex:0x5cff7a,parts:()=>{if(m.head){for(const sx of [-.42,-.2,.2,.42])attachBox(m.head,[.1,.72,.1],[sx,.45,.02],0x274e24,[0,0,sx>0?-.95:.95]);markBossGlow(attachBox(m.head,[.38,.14,.1],[0,.04,.32],0x8bff7a,[0,0,0],true),1.35);}for(const sx of [-.62,-.32,0,.32,.62])attachBox(m.grp,[.13,1.45,.13],[sx,1.72,-.32],sx?0x2f5f2c:0x5b381c,[-.35,0,sx*.55]);attachTentacles(m.grp,0x18381d,10,.75);attachFloatingShards(m.grp,0x5cff7a,9,1.32,1.25);markCrystalHalo(m.grp,0x5cff7a,1.35);if(m.arms&&m.arms[0])attachStaff(m.arms[0],0x3b2415,0x8bff7a,'orb');if(m.arms&&m.arms[1])attachBlade(m.arms[1],0x274e24,0x5cff7a,[0,-.08,1.0],1.1);}},
   };
   const spec=styles[s];if(!spec)return;tintModel(m,spec.col);applyBossBodyPlan(m,s,spec.hex);spec.parts();
   const concept=BOSS_CONCEPT_STYLE[s];
@@ -817,6 +827,45 @@ function deityPowerFx(m){
 function netFx(m){
   if((m.dgn||'')!==NET.dgn) return;
   if(m.t==='deityPower'){deityPowerFx(m);return;}
+  if(m.t==='meteorFalling'){
+    const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+    const fromX=x-42,fromY=y+68,fromZ=z-38;
+    SFX.slamWarn&&SFX.slamWarn();
+    energyTrailVfx(fromX,fromY,fromZ,x,y+2,z,0xfff4a3,.09,1.35,1.15);
+    addLightningBeam(fromX,fromY,fromZ,x,y+2,z,1.1);
+    glowFlash(x,y+5,z,0xfff4a3,9,.52);
+    showName('FALLING STAR');
+    return;
+  }
+  if(m.t==='meteorImpact'){
+    const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z,r=Number(m.radius)||7;
+    SFX.boom&&SFX.boom();camShake=Math.max(camShake,.9);
+    ringPulse(x,y+.08,z,r,0xff6b2a,.68);
+    ringPulse(x,y+.12,z,r*.55,0xffd24a,.72);
+    burst(x,y+1.2,z,[1,.34,.12],90,9,7,.95,3);
+    burst(x,y+.5,z,[.45,.32,.22],70,8,3.2,.85,3);
+    glowFlash(x,y+2,z,0xff6b2a,10,.65);
+    showName('METEOR IMPACT');
+    return;
+  }
+  if(m.t==='eldritchTreeSpawn'){
+    const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+    SFX.roar&&SFX.roar();camShake=Math.max(camShake,.5);
+    ringPulse(x,y+.08,z,5.8,0x5cff7a,.85);
+    burst(x,y+1,z,[.24,.9,.32],70,5.8,5.2,1.0,3);
+    rootClutchVfx(x,y,z,5.2);
+    showName('ELDRITCH HEARTWOOD AWAKENS');
+    return;
+  }
+  if(m.t==='meteorBossDefeated'){
+    const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
+    SFX.level&&SFX.level();SFX.treasure&&SFX.treasure();camShake=Math.max(camShake,.65);
+    ringPulse(x,y+.08,z,6.5,0xffd24a,.72);
+    burst(x,y+1.4,z,[1,.86,.28],84,7,5.5,1.05,3);
+    glowFlash(x,y+2,z,0xffd24a,9,.72);
+    showName('METEOR STAFF CLAIMED');
+    return;
+  }
   if(m.t==='familiarSummon'||m.t==='familiarDismiss'){
     if(NET.room&&m.sid===NET.room.sessionId) return;
     const col=m.kind==='shade'?[.45,.2,.7]:m.kind==='fang'?[.55,.4,.3]:m.kind==='mote'?[.55,1,.38]:[1,.85,.3];

@@ -740,11 +740,16 @@ class EventsMixin {
     if (p.dgn) return client.send('eventReject', { reason: 'dungeon' });
     const arg = String(text || '').split(/\s+/)[1] || '';
     const kind = arg.toLowerCase();
+    if (kind === 'meteor' || kind === 'star') {
+      const ev = this.startMeteorEvent ? this.startMeteorEvent(Date.now()) : null;
+      if (ev) return client.send('chat', { name: '[Event]', text: 'Falling Star forced at ' + Math.round(ev.x) + ', ' + Math.round(ev.z) + '.' });
+      return client.send('chat', { name: '[Event]', text: 'Falling Star could not find a safe wilderness impact site yet.' });
+    }
     const forcedKind = kind === 'king' || kind === 'koth' ? EVENT_KING.kind
       : kind === 'caravan' || kind === 'defence' || kind === 'defense' ? EVENT_CARAVAN.kind
       : kind === 'parkour' ? EVENT_PARKOUR.kind
       : '';
-    if (!forcedKind) return client.send('chat', { name: '[Event]', text: 'use /event parkour, /event king, or /event caravan' });
+    if (!forcedKind) return client.send('chat', { name: '[Event]', text: 'use /event parkour, /event king, /event caravan, or /event meteor' });
     const cur = this.currentEventInstance() || this.serverEvent;
     if (cur && cur.phase === 'active') return client.send('eventReject', { reason: 'active' });
     if (cur && cur.phase === 'queue') {

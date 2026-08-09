@@ -15,6 +15,213 @@ const AI = require('../ai');
 const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToken, sanitizeUtilityLoadout } = require('../store');
 
 class SpawningMixin {
+  // ---------------- open-world meteor event ----------------
+  initMeteorEventState(now = Date.now()) {
+    if (!this.meteorEvent) {
+      this.meteorEvent = null;
+      this.nextMeteorAt = now + 6 * 60 * 1000 + Math.floor(Math.random() * 8 * 60 * 1000);
+    }
+  }
+
+  meteorSpawnPoint() {
+    const players = [];
+    this.state.players.forEach(p => { if (p && !p.dgn && !this.isTownProtected(p.x, p.z)) players.push(p); });
+    const anchor = players.length ? players[(Math.random() * players.length) | 0] : null;
+    for (let i = 0; i < 28; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = anchor ? 85 + Math.random() * 125 : 150 + Math.random() * 170;
+      const x = Math.max(12, Math.min(W.WX - 12, (anchor ? anchor.x : W.TOWN.TC) + Math.cos(a) * d));
+      const z = Math.max(12, Math.min(W.WX - 12, (anchor ? anchor.z : W.TOWN.TC) + Math.sin(a) * d));
+      if (this.isTownProtected(x, z) || W.isLavaBorderLand(x, z) || this.landClaimFor(Math.floor(x), Math.floor(z))) continue;
+      const y = this.world.standHeight(x, z, W.WH - 2);
+      if (y > 2) return { x, y, z };
+    }
+    return null;
+  }
+
+  startMeteorEvent(now = Date.now()) {
+    this.initMeteorEventState(now);
+    if (this.meteorEvent) return null;
+    const point = this.meteorSpawnPoint();
+    if (!point) { this.nextMeteorAt = now + 90 * 1000; return null; }
+    const ring = dangerRingAt(point.x, point.z);
+    const ev = {
+      id: 'meteor-' + now.toString(36) + '-' + (++this.mobSeq),
+      x: point.x, y: point.y, z: point.z, ring,
+      state: 'falling',
+      createdAt: now,
+      impactAt: now + 5200,
+      expiresAt: now + 8 * 60 * 1000,
+      bossId: '',
+      minionIds: new Set(),
+      cratered: false,
+    };
+    this.meteorEvent = ev;
+    this.broadcast('meteorEvent', this.meteorEventPayload(ev));
+    this.broadcast('chat', { name: '[Falling Star]', text: 'A star is tearing across the sky. Watch for the impact.' });
+    this.sendOverworldActivities();
+    return ev;
+  }
+
+  meteorEventPayload(ev = this.meteorEvent) {
+    if (!ev) return null;
+    const boss = ev.bossId ? this.state.mobs.get(ev.bossId) : null;
+    return {
+      id: ev.id, x: ev.x, y: ev.y, z: ev.z, ring: ev.ring | 0, state: ev.state || 'falling',
+      impactAt: ev.impactAt || 0, expiresAt: ev.expiresAt || 0,
+      bossId: ev.bossId || '', bossHp: boss ? boss.hp : 0, bossMaxHp: boss ? boss.maxHp : 0,
+      minions: ev.minionIds ? [...ev.minionIds].filter(id => this.state.mobs.has(id)).length : 0,
+    };
+  }
+
+  applyMeteorCrater(ev) {
+    if (!ev || ev.cratered) return 0;
+    ev.cratered = true;
+    let edits = 0;
+    const cx = Math.round(ev.x), cz = Math.round(ev.z);
+    for (let dx = -7; dx <= 7; dx++) for (let dz = -7; dz <= 7; dz++) {
+      const dist = Math.hypot(dx, dz);
+      if (dist > 7.2) continue;
+      const x = cx + dx, z = cz + dz;
+      if (!W.inWorld(x, 1, z) || this.isTownProtected(x, z) || W.isLavaBorderLand(x, z) || this.landClaimFor(x, z)) continue;
+      const top = this.world.standHeight(x, z, W.WH - 2);
+      if (top < 2) continue;
+      const depth = Math.max(1, Math.round(4.2 - dist * .45));
+      for (let y = top + 4; y >= Math.max(1, top - depth); y--) {
+        const id = this.world.getB(x, y, z);
+        if (id === W.B.AIR || id === W.B.BEDROCK || id === W.B.CHEST || id === W.B.FURNACE) continue;
+        this.world.setB(x, y, z, W.B.AIR);
+        this.state.edits.set(x + ',' + y + ',' + z, W.B.AIR);
+        edits++;
+      }
+      if (dist < 5.6) {
+        const floorY = Math.max(1, top - depth - 1);
+        const oreRoll = W.hash2(x * 71 + cx, z * 97 + cz);
+        const ore = oreRoll > .88 ? W.B.DIAMOND_ORE : oreRoll > .58 ? W.B.IRON_ORE : W.B.COAL_ORE;
+        this.world.setB(x, floorY, z, dist < 1.8 || oreRoll > .34 ? ore : W.B.STONE);
+        this.state.edits.set(x + ',' + floorY + ',' + z, this.world.getB(x, floorY, z));
+        edits++;
+      }
+    }
+    this.dirtyWorld = true;
+    this.sendSpace('', 'fx', { t: 'meteorImpact', x: ev.x, y: ev.y, z: ev.z, radius: 7, dgn: '' });
+    return edits;
+  }
+
+  spawnMeteorMinion(ev, index) {
+    if (!ev) return '';
+    const ring = Math.max(1, Math.min(3, ev.ring | 0));
+    const cfg = DANGER_RINGS[ring];
+    const a = index / 6 * Math.PI * 2 + Math.random() * .4, d = 6 + Math.random() * 7;
+    const x = Math.max(2, Math.min(W.WX - 2, ev.x + Math.cos(a) * d));
+    const z = Math.max(2, Math.min(W.WX - 2, ev.z + Math.sin(a) * d));
+    const y = this.world.standHeight(x, z, W.WH - 2);
+    if (y < 2) return '';
+    const kind = (index % 3 === 1 ? cfg.family[1] : cfg.family[0]) || 'zombie';
+    const id = String(++this.mobSeq), mob = new Mob();
+    mob.kind = kind; mob.x = x; mob.y = y; mob.z = z;
+    mob.variant = 'meteor';
+    mob.displayName = index % 3 === 1 ? 'Star-Burned Archer' : 'Star-Burned Horror';
+    mob.maxHp = mob.hp = Math.round((20 + ring * 5) * cfg.hp);
+    this.state.mobs.set(id, mob);
+    const meta = this.freshMeta(x, z, Math.round((4 + ring) * cfg.dmg), 1.45 + ring * .08, kind, ring, true);
+    meta.meteorEventId = ev.id; meta.dangerRing = ring; meta.dayActive = true; meta.alert = true; meta.biomeDrop = I.GEODE;
+    if (index % 3 === 1) meta.arrowDmg = Math.round((3 + ring) * cfg.dmg);
+    this.mobMeta[id] = meta;
+    ev.minionIds.add(id);
+    return id;
+  }
+
+  spawnMeteorBoss(ev) {
+    if (!ev || ev.bossId) return '';
+    const ring = Math.max(1, Math.min(3, ev.ring | 0));
+    const id = String(++this.mobSeq), mob = new Mob();
+    mob.kind = 'boss';
+    mob.bossStyle = 'eldritch_tree';
+    mob.displayName = 'Eldritch Heartwood';
+    mob.variant = 'meteor';
+    mob.x = ev.x; mob.y = this.world.standHeight(ev.x, ev.z, W.WH - 2); mob.z = ev.z;
+    mob.maxHp = mob.hp = 420 + ring * 180;
+    mob.state = 'slamWind';
+    this.state.mobs.set(id, mob);
+    const meta = this.freshMeta(mob.x, mob.z, 8 + ring * 2, 1.05 + ring * .06, 'boss', ring, true);
+    meta.meteorBoss = true; meta.meteorEventId = ev.id; meta.dangerRing = ring; meta.dayActive = true; meta.alert = true;
+    meta.bossStyle = 'eldritch_tree'; meta.woke = true; meta.gcd = 1.8; meta.stateT = 1.4; meta.damageBySid = new Map();
+    this.mobMeta[id] = meta;
+    ev.bossId = id;
+    this.sendSpace('', 'fx', { t: 'eldritchTreeSpawn', id, x: mob.x, y: mob.y, z: mob.z, dgn: '' });
+    this.broadcast('chat', { name: '[Falling Star]', text: 'The crater roots itself. The Eldritch Heartwood has awakened.' });
+    return id;
+  }
+
+  recordMeteorBossDamage(client, mobId, damage) {
+    if (!client || !Number.isFinite(damage) || damage <= 0) return;
+    const meta = this.mobMeta[String(mobId)];
+    if (!meta || !meta.meteorBoss) return;
+    if (!meta.damageBySid) meta.damageBySid = new Map();
+    meta.damageBySid.set(client.sessionId, (meta.damageBySid.get(client.sessionId) || 0) + damage);
+  }
+
+  resolveMeteorBossKill(killerClient, mobId, mob, meta) {
+    if (!meta || !meta.meteorBoss) return false;
+    const ev = this.meteorEvent && this.meteorEvent.id === meta.meteorEventId ? this.meteorEvent : null;
+    let topSid = killerClient && killerClient.sessionId || '', topDamage = topSid && meta.damageBySid ? meta.damageBySid.get(topSid) || 0 : 0;
+    if (meta.damageBySid) for (const [sid, dmg] of meta.damageBySid.entries()) if (dmg > topDamage) { topSid = sid; topDamage = dmg; }
+    const topClient = topSid ? this.clients.find(c => c.sessionId === topSid) : null;
+    if (topClient) {
+      this.awardGrant(topClient, {
+        source: 'meteor_boss',
+        event: 'Falling Star',
+        xp: 600 + Math.max(0, meta.dangerRing | 0) * 180,
+        items: [
+          { id: I.METEOR_STAFF, count: 1, rarity: 'mythic', locked: true, gear: true, source: 'meteor_boss' },
+          { id: I.LEGEND_TOKEN, count: 2 },
+          { id: I.GEODE, count: 4 + Math.max(0, meta.dangerRing | 0) * 2 },
+          { id: I.DIAMOND, count: 1 + Math.max(0, meta.dangerRing | 0) },
+        ],
+      });
+      topClient.send('meteorBossReward', { id: meta.meteorEventId || '', item: I.METEOR_STAFF, topDamage: Math.round(topDamage), x: mob.x, y: mob.y, z: mob.z });
+    }
+    this.broadcast('chat', { name: '[Falling Star]', text: 'The Eldritch Heartwood falls' + (topClient ? ' to ' + (this.profileFor(topClient)?.prof?.name || 'a hunter') : '') + '. The Meteor Staff chooses the top contributor.' });
+    this.sendSpace('', 'fx', { t: 'meteorBossDefeated', x: mob.x, y: mob.y, z: mob.z, dgn: '' });
+    if (ev) {
+      for (const id of ev.minionIds || []) { this.state.mobs.delete(id); delete this.mobMeta[id]; }
+      this.meteorEvent = null;
+      this.nextMeteorAt = Date.now() + 14 * 60 * 1000 + Math.floor(Math.random() * 10 * 60 * 1000);
+      this.sendOverworldActivities();
+    }
+    return true;
+  }
+
+  maintainMeteorEvent(dt, clusters = null, now = Date.now()) {
+    this.initMeteorEventState(now);
+    const playerCount = this.state.players.size | 0;
+    if (!this.meteorEvent && playerCount && now >= (this.nextMeteorAt || 0)) this.startMeteorEvent(now);
+    const ev = this.meteorEvent;
+    if (!ev) return;
+    if (ev.state === 'falling' && now >= ev.impactAt) {
+      ev.state = 'active';
+      this.applyMeteorCrater(ev);
+      this.spawnMeteorBoss(ev);
+      for (let i = 0; i < 6; i++) this.spawnMeteorMinion(ev, i);
+      this.sendOverworldActivities();
+    }
+    if (ev.state === 'active') {
+      ev.minionIds = new Set([...ev.minionIds].filter(id => this.state.mobs.has(id)));
+      const boss = ev.bossId ? this.state.mobs.get(ev.bossId) : null;
+      if (!boss) return;
+      const desired = 4 + Math.min(3, ev.ring | 0);
+      while (ev.minionIds.size < desired && (!clusters || this.localHostileBudgetAllows(ev.x, ev.z, clusters, 0))) this.spawnMeteorMinion(ev, ev.minionIds.size + 1);
+    }
+    if (now >= ev.expiresAt) {
+      for (const id of [ev.bossId, ...ev.minionIds]) { if (id) { this.state.mobs.delete(id); delete this.mobMeta[id]; } }
+      this.broadcast('chat', { name: '[Falling Star]', text: 'The crater quiets. The Heartwood withdraws beneath the ash.' });
+      this.meteorEvent = null;
+      this.nextMeteorAt = now + 10 * 60 * 1000 + Math.floor(Math.random() * 8 * 60 * 1000);
+      this.sendOverworldActivities();
+    }
+  }
+
   // ---------------- boss pattern machine ----------------
   bossRecover(m, meta, stateT, gcd, haste = 1) {
     m.state = 'recover';
@@ -1033,7 +1240,8 @@ class SpawningMixin {
         const d = Math.hypot(payload.x - p.x, payload.z - p.z);
         if (d < gateScarBest) { gateScarBest = d; gateScarPayload = payload; }
       }
-      client.send('overworldActivity', { caravan: caravanPayload, camp: campPayload, patrol: patrolPayload, recoveryCamp, encounter: encounterPayload, gateBreach: gateBreachPayload, gateScar: gateScarPayload, roadSafety: this.roadSafetySnapshot(), discountUntil, now: Date.now() });
+      const meteor = this.meteorEvent ? this.meteorEventPayload(this.meteorEvent) : null;
+      client.send('overworldActivity', { caravan: caravanPayload, camp: campPayload, patrol: patrolPayload, recoveryCamp, encounter: encounterPayload, gateBreach: gateBreachPayload, gateScar: gateScarPayload, meteor, roadSafety: this.roadSafetySnapshot(), discountUntil, now: Date.now() });
     }
   }
 

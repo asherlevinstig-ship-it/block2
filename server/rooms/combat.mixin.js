@@ -838,6 +838,7 @@ class CombatMixin {
     if (this.mobMeta[String(mobId)] && this.mobMeta[String(mobId)].friendly) return;
     if (!this.isAnimalKind(mob.kind)) this.alertPack(String(mobId));
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, damage);
+    if (mob.kind === 'boss' && !mob.dgn && this.recordMeteorBossDamage) this.recordMeteorBossDamage(client, mobId, damage);
     const raw=Math.max(0,damage);
     const multiplier=this.banditProtectionMultiplier(String(mobId),mob);
     const beforeHp=mob.hp;
@@ -942,6 +943,7 @@ class CombatMixin {
     }else this.weaponMomentum.delete(client.sessionId);
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
+    if (mob.kind === 'boss' && !mob.dgn && this.recordMeteorBossDamage) this.recordMeteorBossDamage(client, mobId, dmg);
     const rawDmg=dmg,mitigationMultiplier=this.banditProtectionMultiplier(mobId,mob),beforeHp=mob.hp;
     const applied=dmg*mitigationMultiplier;
     this.emitDamageNumber(client,mob,applied,crit,mob.hp-applied<=0);
@@ -1068,6 +1070,7 @@ class CombatMixin {
       this.broadcast('chat', { name: '[Ancient City]', text: 'The Warden falls. The sealed echo answers.' });
     }
     else if (wasBoss && !dgn && killedMeta.gateBreachBoss && this.resolveGateBreachBoss && this.resolveGateBreachBoss(client, String(mobId), { ...mob, x: dx, y: dy, z: dz }, killedMeta)) { /* breach cleanup reward handled by gate lifecycle */ }
+    else if (wasBoss && !dgn && killedMeta.meteorBoss && this.resolveMeteorBossKill && this.resolveMeteorBossKill(client, String(mobId), { ...mob, x: dx, y: dy, z: dz }, killedMeta)) { /* meteor boss reward handled by open-world event lifecycle */ }
     else if (kind === 'orb' || kind === 'ghost') { /* hazard entities: no reward */ }
     else if (client) {
       const ring = dgn ? 0 : Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
