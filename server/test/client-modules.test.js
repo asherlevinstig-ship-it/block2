@@ -4668,8 +4668,12 @@ test('parkour event has a client-side fall recovery request', () => {
   const worldSource = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
   const gameRoomSource = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
   assert.match(worldSource, /function recoverParkourFallIfNeeded\(\)/);
+  assert.match(worldSource, /function isParkourEventActive\(\)/);
+  assert.match(worldSource, /isParkourEventActive,/);
   assert.match(worldSource, /recoverParkourFallIfNeeded\(\)/);
   assert.match(worldSource, /NET\.room\.send\('eventReset'/);
   assert.match(worldSource, /enterParkourEvent\(\{eventId:serverEvent\.id,course/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8'), /parkourFreeMovement/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /parkourEventActive/);
   assert.match(gameRoomSource, /onMessage\('eventReset'/);
 });

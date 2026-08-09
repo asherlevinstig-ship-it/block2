@@ -729,6 +729,11 @@ class EventsMixin {
     const respawn = part.checkpointsPassed > 0 ? checkpoints[part.checkpointsPassed - 1] : ev.course.start;
     this.teleportEventPlayer(client, respawn, 'reset', ev);
   }
+  isParkourEventPlayer(client) {
+    const ev = this.currentEventInstance() || this.serverEvent;
+    return !!(client && ev && ev.kind === EVENT_PARKOUR.kind && (ev.phase === 'starting' || ev.phase === 'active')
+      && ev.participants && ev.participants.has(client.sessionId));
+  }
   handleEventDebugStart(client) {
     if (!BETA_EVENT_TEST) return client.send('eventReject', { reason: 'closed' });
     const p = this.state.players.get(client.sessionId);

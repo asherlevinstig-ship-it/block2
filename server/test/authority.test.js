@@ -9773,7 +9773,7 @@ test('parkour server event queues teleports protects course and grants completio
   room.clients = [client];
   room.eventSeq = 0;
   room.eventCourseBlocks = new Set();
-  const { prof } = seedPlayer(room, client, { token: 'runner_token_123' });
+  const { prof } = seedPlayer(room, client, { token: 'runner_token_123', lvl: 3 });
 
   room.serverEvent = room.createIdleEvent(Date.now() - 1);
   room.tickServerEvent(Date.now());
@@ -9815,6 +9815,11 @@ test('parkour server event queues teleports protects course and grants completio
   assert.equal(room.state.players.get(client.sessionId).dgn, room.serverEvent.id);
   assert.equal(client.sent.some(e => e.type === 'eventTeleport' && e.msg.eventId === room.serverEvent.id && e.msg.course && e.msg.course.blocks.length > 0), true);
   assert.equal(client.sent.some(e => e.type === 'eventStarted' && e.msg.course && e.msg.course.blocks.length > 0), true);
+
+  const eventHunger = room.ensurePlayerHunger(client);
+  eventHunger.hunger = 12;
+  room.updatePlayerHunger(20);
+  assert.equal(eventHunger.hunger, 12, 'parkour participants do not lose hunger during the event');
 
   const course = room.serverEvent.course;
   const finish = course.finish;

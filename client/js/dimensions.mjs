@@ -799,7 +799,10 @@ function tickAbilities(dt,t){
   if(buffs.armor>0 && Math.random()<dt*3.5) guardShellVfx(player.pos.x,player.pos.y,player.pos.z,.32);
   if(buffs.panther>0 && Math.random()<dt*5) spawnParticle({x:player.pos.x+(Math.random()-.5)*.8,y:player.pos.y+.2+Math.random()*1.2,z:player.pos.z+(Math.random()-.5)*.8,
     vx:(Math.random()-.5)*.6,vy:.35+Math.random()*.5,vz:(Math.random()-.5)*.6,life:.45,grav:.2,r:.08,g:.85,b:.28});
-  if(S.lvl<3 && hunger<maxHunger()){
+  const parkourEventActive=!!(worldApi.isParkourEventActive&&worldApi.isParkourEventActive());
+  if(parkourEventActive){
+    hungerAcc=0;starvationAcc=0;
+  }else if(S.lvl<3 && hunger<maxHunger()){
     hunger=maxHunger();hungerAcc=0;starvationAcc=0;renderBars();
   }else if(!NET.on && locked && hp>0 && !sleeping && !tutorialSafe()){
     const moveRate=sprintingNow?1.8:(keys['KeyW']||keys['KeyA']||keys['KeyS']||keys['KeyD'])?1.25:.55;

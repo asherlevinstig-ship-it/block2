@@ -6322,6 +6322,11 @@ class GameRoom extends Room {
         this.sendHungerSync(client, h);
         continue;
       }
+      if (typeof this.isParkourEventPlayer === 'function' && this.isParkourEventPlayer(client)) {
+        h.acc = 0;
+        h.syncAcc = 0;
+        continue;
+      }
       if (hp.hp <= 0) continue;
       const focus = this.abilityBuffs.get(client.sessionId);
       if (focus && focus.monkRegenUntil > Date.now() && hp.hp < hp.max) hp.hp = Math.min(hp.max, hp.hp + JOB_SYSTEM.MONK_RULES.regenPerSecond * dt);
@@ -7582,7 +7587,8 @@ class GameRoom extends Room {
     const rec=this.profileFor(client),armorStack=rec&&rec.prof&&rec.prof.armor,armorInfo=armorStack&&ARMOR_INFO[armorStack.id];
     const deityFlight = !mounted && rec && rec.prof && this.hasDeityPower(client, rec.prof, 'flight') && (this.isAdminClient(client) ? client._deityActive && client._deityActive.flight === true : rec.prof.deity && rec.prof.deity.active && rec.prof.deity.active.flight === true);
     const armorMove=!mounted&&armorInfo?GEAR_SYSTEM.armorProfile(armorInfo,armorStack).moveMultiplier:1;
-    const hungerState = !mounted && this.playerHunger && this.playerHunger.get(client.sessionId);
+    const parkourEventPlayer = typeof this.isParkourEventPlayer === 'function' && this.isParkourEventPlayer(client);
+    const hungerState = !parkourEventPlayer && !mounted && this.playerHunger && this.playerHunger.get(client.sessionId);
     const hungerMove = hungerState && hungerState.hunger <= 0 ? 0.62 : 1;
     const maxStep = (deityFlight ? 19 : mounted ? 20 : 12*armorMove*hungerMove) * dt + 1.25;
     const velCap = deityFlight ? 15 : mounted ? 16 : 9*armorMove*hungerMove;

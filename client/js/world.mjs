@@ -8083,6 +8083,9 @@ function recoverParkourFallIfNeeded(){
   sysMsg('You fell out of the event course. Returning to your latest checkpoint.','minor');
   return true;
 }
+function isParkourEventActive(){
+  return !!(serverEvent&&serverEvent.kind==='parkour'&&(serverEvent.phase==='starting'||serverEvent.phase==='active')&&serverEvent.participating&&serverEvent.course&&dim==='event');
+}
 function parkourCheckpointReached(m){
   if(!m||!serverEvent||serverEvent.kind!=='parkour')return;
   const progress=serverEvent.checkpointProgress||(serverEvent.checkpointProgress={passed:0,total:m.total|0,splitTimes:[],startedAt:Date.now()});
@@ -11313,6 +11316,7 @@ gameContext.registerModule('world', Object.freeze({
   rebuildVisible:updateVisibleChunks,
   prepareEvent:prepareEventDimension,
   leaveEvent:leaveEventDimension,
+  isParkourEventActive,
   message:sysMsg,
   goldDeltaText,
   goldDeltaHTML,
