@@ -87,7 +87,53 @@ function isTeacherAccount(account) {
   return role === 'teacher' || role === 'admin' || id.startsWith('teacher_');
 }
 
-const emptyForm = () => ({
+const questionBankModes = {
+  'recall-bank': {
+    mode: 'recall',
+    title: 'P Recall Questions',
+    nav: 'P Recall',
+    icon: 'P',
+    subtitle: 'Multiple-choice questions used by pressing P / Question Hall.',
+    formTitle: 'P Recall multiple-choice question',
+    listEmpty: 'No P Recall questions in this subject bank yet.',
+  },
+  'meditation-bank': {
+    mode: 'meditation',
+    title: 'Meditation Fill Gaps',
+    nav: 'Meditation',
+    icon: 'M',
+    subtitle: 'Fill-in-the-gap prompts used by meditation and focus rooms.',
+    formTitle: 'Meditation fill-the-gap prompt',
+    listEmpty: 'No Meditation fill-gap prompts in this subject bank yet.',
+  },
+  'scholar-bank': {
+    mode: 'scholar',
+    title: 'Knowledge Challenge',
+    nav: 'Knowledge',
+    icon: 'K',
+    subtitle: 'Scholar Table content built from concepts, relationships, misconceptions, and adaptive challenge cases.',
+    formTitle: 'Knowledge Challenge case',
+    listEmpty: 'No Scholar Table / Knowledge Challenge cases in this subject bank yet.',
+  },
+};
+const questionBankViews = Object.keys(questionBankModes);
+
+function modesForBank(mode = 'recall') {
+  return {
+    recall: mode === 'recall',
+    scholar: mode === 'scholar',
+    meditation: mode === 'meditation',
+  };
+}
+
+function primaryQuestionBankMode(question) {
+  const modes = question && question.modes || {};
+  if (modes.meditation) return 'meditation';
+  if (modes.scholar && !modes.recall) return 'scholar';
+  return 'recall';
+}
+
+const emptyForm = (mode = 'recall') => ({
   id: 0,
   topic: '',
   stage: '',
@@ -99,7 +145,7 @@ const emptyForm = () => ({
   explanation: '',
   reviewStatus: 'draft',
   active: true,
-  modes: { recall: true, scholar: true, meditation: false },
+  modes: modesForBank(mode),
 });
 
 const emptyCurriculum = () => ({
@@ -150,6 +196,7 @@ createApp({
       analytics: { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 },
       curriculumRequests: [],
       curriculumAdmin: false,
+      knowledgePlan: { entities: [], atoms: [], confusionPairs: [], counts: { entities: 0, atoms: 0, confusionPairs: 0, playableCases: 0 } },
       selectedId: 0,
       subjectId: '',
       classId: '',
@@ -177,6 +224,8 @@ createApp({
       form: emptyForm(),
     });
 
+    const activeQuestionBank = computed(() => questionBankModes[state.view] || questionBankModes['recall-bank']);
+    const activeQuestionMode = computed(() => activeQuestionBank.value.mode);
     const selectedSubject = computed(() => state.subjects.find(s => String(s.id) === String(state.subjectId)) || null);
     const isAsherAdmin = computed(() => {
       const username = String(state.account && (state.account.username || state.account.email) || '').trim().toLowerCase();
@@ -185,15 +234,16 @@ createApp({
       return state.curriculumAdmin || role === 'admin' || ['asherlevin85@gmail.com', 'asherlevin85', 'asherlevin'].includes(username) || ['asherlevin', 'asher levin'].includes(displayName);
     });
     const selectedQuestion = computed(() => state.questions.find(q => q.id === state.selectedId) || null);
-    const topicOptions = computed(() => [...new Set(state.questions.map(q => String(q.topic || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
-    const stageOptions = computed(() => [...new Set(state.questions.map(q => String(q.stage || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
-    const difficultyOptions = computed(() => [...new Set(state.questions.map(q => Number(q.difficulty) || 1).filter(Boolean))].sort((a, b) => a - b));
+    const bankQuestions = computed(() => state.questions.filter(q => primaryQuestionBankMode(q) === activeQuestionMode.value));
+    const topicOptions = computed(() => [...new Set(bankQuestions.value.map(q => String(q.topic || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const stageOptions = computed(() => [...new Set(bankQuestions.value.map(q => String(q.stage || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+    const difficultyOptions = computed(() => [...new Set(bankQuestions.value.map(q => Number(q.difficulty) || 1).filter(Boolean))].sort((a, b) => a - b));
     const filteredQuestions = computed(() => {
       const needle = state.search.trim().toLowerCase();
       const topic = String(state.topicFilter || '').trim().toLowerCase();
       const stage = String(state.stageFilter || '').trim().toLowerCase();
       const difficulty = Number(state.difficultyFilter || 0) || 0;
-      return state.questions.filter(q => {
+      return bankQuestions.value.filter(q => {
         if (topic && String(q.topic || '').trim().toLowerCase() !== topic) return false;
         if (stage && String(q.stage || '').trim().toLowerCase() !== stage) return false;
         if (difficulty && Number(q.difficulty || 0) !== difficulty) return false;
@@ -201,6 +251,11 @@ createApp({
         return [q.topic, q.stage, q.spec, q.prompt].some(value => String(value || '').toLowerCase().includes(needle));
       });
     });
+    const bankCounts = computed(() => ({
+      recall: state.questions.filter(q => primaryQuestionBankMode(q) === 'recall').length,
+      meditation: state.questions.filter(q => primaryQuestionBankMode(q) === 'meditation').length,
+      scholar: state.questions.filter(q => primaryQuestionBankMode(q) === 'scholar').length,
+    }));
     const stats = computed(() => ({
       total: state.questions.length,
       draft: state.questions.filter(q => q.reviewStatus === 'draft').length,
@@ -313,13 +368,15 @@ createApp({
     ]);
     const recentActivity = computed(() => [
       (selectedSubject.value ? selectedSubject.value.name : 'Subject') + ' dashboard refreshed',
-      stats.value.active + ' active shared subject-bank questions available for Recall',
+      bankCounts.value.recall + ' P Recall, ' + bankCounts.value.meditation + ' Meditation, and ' + bankCounts.value.scholar + ' Knowledge Challenge items ready',
       state.homeworks.length + ' homework schedules ready',
       state.analytics.totals.attempts + ' student attempts in the current window',
       'Curriculum requests email through the SiteGround bridge',
     ]);
     const dashboardLinks = computed(() => [
-      { id: 'questions', title: 'Add Questions', value: stats.value.active, detail: 'Shared subject bank', tone: 'blue' },
+      { id: 'recall-bank', title: 'P Recall Bank', value: bankCounts.value.recall, detail: 'Multiple choice', tone: 'blue' },
+      { id: 'meditation-bank', title: 'Meditation Bank', value: bankCounts.value.meditation, detail: 'Fill the gap', tone: 'purple' },
+      { id: 'scholar-bank', title: 'Knowledge Bank', value: bankCounts.value.scholar, detail: 'Relationships', tone: 'green' },
       { id: 'homework', title: 'Set Homework', value: state.homeworks.length, detail: 'Scheduled practice', tone: 'purple' },
       { id: 'students', title: 'Analysis', value: needingSupport.value, detail: 'Students, topics, classes, schools', tone: 'red' },
       { id: 'question-analysis', title: 'Question Analysis', value: state.analytics.totals.accuracy + '%', detail: 'Average accuracy', tone: 'green' },
@@ -399,6 +456,7 @@ createApp({
       state.analytics = { totals: { attempts: 0, correct: 0, accuracy: 0 }, students: [], questions: [], windowDays: 30 };
       state.curriculumRequests = [];
       state.curriculumAdmin = false;
+      state.knowledgePlan = { entities: [], atoms: [], confusionPairs: [], counts: { entities: 0, atoms: 0, confusionPairs: 0, playableCases: 0 } };
       state.analyticsScope = 'school';
       state.analysisView = 'students';
       state.yearGroup = '';
@@ -427,10 +485,12 @@ createApp({
       state.selectedId = q.id || 0;
     }
 
-    function newQuestion() {
-      state.view = 'questions';
+    function newQuestion(mode = '') {
+      const cleanMode = String(mode || activeQuestionMode.value || 'recall');
+      const view = questionBankViews.find(id => questionBankModes[id].mode === cleanMode) || 'recall-bank';
+      state.view = view;
       state.selectedId = 0;
-      state.form = emptyForm();
+      state.form = emptyForm(questionBankModes[view].mode);
       setNotice('');
     }
 
@@ -444,7 +504,8 @@ createApp({
     }
 
     function openView(view) {
-      state.view = ['questions', 'homework', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
+      state.view = [...questionBankViews, 'homework', 'students', 'question-analysis', 'curriculum'].includes(view) ? view : 'overview';
+      if (questionBankViews.includes(state.view) && state.form && !state.form.id) state.form.modes = modesForBank(activeQuestionMode.value);
       setNotice('');
     }
 
@@ -456,7 +517,8 @@ createApp({
 
     function editQuestionFromAnalysis(row) {
       const full = state.questions.find(question => Number(question.id) === Number(row && row.id));
-      openView('questions');
+      const modes = full && full.modes || {};
+      openView(modes.scholar ? 'scholar-bank' : modes.meditation ? 'meditation-bank' : 'recall-bank');
       if (full) fillForm(full);
     }
 
@@ -556,6 +618,14 @@ createApp({
       state.questions = (questionsData.questions || []).map(cleanQuestion);
       state.analytics = analyticsData.analytics || state.analytics;
       state.homeworks = homeworkData.homework || [];
+      if (selectedSubject.value) {
+        try {
+          const planData = await requestJson('/auth/teacher/knowledge-plan?subjectId=' + encodeURIComponent(state.subjectId));
+          state.knowledgePlan = planData.plan || { entities: [], atoms: [], confusionPairs: [], counts: { entities: 0, atoms: 0, confusionPairs: 0, playableCases: 0 } };
+        } catch (_) {
+          state.knowledgePlan = { entities: [], atoms: [], confusionPairs: [], counts: { entities: 0, atoms: 0, confusionPairs: 0, playableCases: 0 } };
+        }
+      }
       if (state.selectedStudentKey && !(state.analytics.students || []).some(row => studentKey(row) === state.selectedStudentKey)) state.selectedStudentKey = '';
       if (state.selectedId && !selectedQuestion.value) newQuestion();
     }
@@ -581,7 +651,7 @@ createApp({
         await loadSubjects();
         await loadSubjectData();
         await loadCurriculumRequests();
-        setNotice('Shared subject question bank loaded.');
+        setNotice('Separate game-mode banks loaded.');
       } catch (e) {
         setError(e.message || 'Could not load teacher dashboard.');
       } finally {
@@ -655,21 +725,16 @@ createApp({
     }
 
     function validateForm() {
-      const modes = {
-        recall: state.form.modes && state.form.modes.recall !== false,
-        scholar: state.form.modes && state.form.modes.scholar !== false,
-        meditation: !!(state.form.modes && state.form.modes.meditation),
-      };
+      const modes = modesForBank(activeQuestionMode.value);
       const meditationOnly = modes.meditation && !modes.recall && !modes.scholar;
       const answers = state.form.answers.map(value => String(value || '').trim());
       const filledAnswers = answers.filter(Boolean);
       const unique = new Set(filledAnswers.map(value => value.toLowerCase()));
       if (!state.subjectId) throw new Error('Choose a subject first.');
       if (String(state.form.prompt || '').trim().length < 10) throw new Error('Question prompt needs at least 10 characters.');
-      if (!modes.recall && !modes.scholar && !modes.meditation) throw new Error('Choose at least one game mode for this question.');
       if (meditationOnly) {
         if (!filledAnswers.length || unique.size !== filledAnswers.length) throw new Error('Meditation fill-gap needs at least one accepted answer.');
-      } else if (answers.some(value => !value) || unique.size !== 4) throw new Error('P Recall and Knowledge Challenge need four unique answer choices.');
+      } else if (answers.some(value => !value) || unique.size !== 4) throw new Error(activeQuestionBank.value.title + ' needs four unique answer choices.');
       if (String(state.form.explanation || '').trim().length < 10) throw new Error('Add a short teaching explanation.');
       return {
         subjectId: Number(state.subjectId),
@@ -719,7 +784,7 @@ createApp({
         });
         await loadSubjectData();
         if (data.question && data.question.id) fillForm(data.question);
-        setNotice(copy ? 'Saved as a new shared subject-bank question.' : 'Shared subject-bank question saved.');
+        setNotice(copy ? 'Saved as a new ' + activeQuestionBank.value.title + ' item.' : activeQuestionBank.value.title + ' item saved.');
       } catch (e) {
         setError(e.message || 'Could not save question.');
       } finally {
@@ -934,6 +999,9 @@ createApp({
       attentionItems,
       recentActivity,
       stats,
+      bankCounts,
+      activeQuestionBank,
+      activeQuestionMode,
       dashboardLinks,
       analysisTabs,
       studentChart,
@@ -1007,8 +1075,10 @@ createApp({
           </div>
         </div>
         <nav class="teacher-vue-nav" aria-label="Teacher dashboard">
+          <button type="button" :class="{ active: state.view === 'recall-bank' }" @click="openView('recall-bank')"><span>P</span>P Recall</button>
+          <button type="button" :class="{ active: state.view === 'meditation-bank' }" @click="openView('meditation-bank')"><span>M</span>Meditation</button>
+          <button type="button" :class="{ active: state.view === 'scholar-bank' }" @click="openView('scholar-bank')"><span>K</span>Knowledge</button>
           <button type="button" :class="{ active: state.view === 'overview' }" @click="openView('overview')"><span>⌂</span>Home</button>
-          <button type="button" :class="{ active: state.view === 'questions' }" @click="openView('questions')"><span>▤</span>Add Questions</button>
           <button type="button" :class="{ active: state.view === 'homework' }" @click="openView('homework')"><span>◷</span>Set Homework</button>
           <button type="button" :class="{ active: state.view === 'students' }" @click="openView('students')"><span>◌</span>Classes</button>
           <button type="button" :class="{ active: state.view === 'question-analysis' }" @click="openView('question-analysis')"><span>□</span>Subject Bank</button>
@@ -1030,8 +1100,8 @@ createApp({
       <main class="teacher-vue-main">
         <header class="teacher-vue-topbar">
           <div>
-            <h1>{{ state.view === 'questions' ? 'Add Questions' : state.view === 'homework' ? 'Set Homework' : state.view === 'students' ? 'Student insights' : state.view === 'question-analysis' ? 'Question analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Good morning, ' + (state.account && state.account.displayName || 'Mr Levin') }}</h1>
-            <p>{{ selectedSubject ? (state.view === 'questions' || state.view === 'question-analysis' ? selectedSubject.name + ' uses one shared subject question bank.' : "Here's what's happening in " + selectedSubject.name + " today.") : "Here's what's happening with your homework today." }}</p>
+            <h1>{{ ['recall-bank','meditation-bank','scholar-bank'].includes(state.view) ? activeQuestionBank.title : state.view === 'homework' ? 'Set Homework' : state.view === 'students' ? 'Student insights' : state.view === 'question-analysis' ? 'Question analysis' : state.view === 'curriculum' ? 'Curriculum Requests' : 'Good morning, ' + (state.account && state.account.displayName || 'Mr Levin') }}</h1>
+            <p>{{ selectedSubject ? (['recall-bank','meditation-bank','scholar-bank'].includes(state.view) ? activeQuestionBank.subtitle : state.view === 'question-analysis' ? selectedSubject.name + ' analysis across all game-mode banks.' : "Here's what's happening in " + selectedSubject.name + " today.") : "Here's what's happening with your homework today." }}</p>
           </div>
           <div class="teacher-vue-toolbar">
             <select v-model="state.subjectId" @change="changeSubject">
@@ -1061,7 +1131,7 @@ createApp({
               <option :value="90">Last 90 days</option>
               <option :value="180">Last 180 days</option>
             </select>
-            <button type="button" class="teacher-vue-primary" @click="state.view === 'homework' ? clearHomework() : newQuestion()">{{ state.view === 'homework' ? '+ New homework' : '+ Add question' }}</button>
+            <button type="button" class="teacher-vue-primary" @click="state.view === 'homework' ? clearHomework() : newQuestion()">{{ state.view === 'homework' ? '+ New homework' : ['recall-bank','meditation-bank','scholar-bank'].includes(state.view) ? '+ New ' + activeQuestionBank.nav : '+ Add question' }}</button>
           </div>
         </header>
 
@@ -1524,7 +1594,7 @@ createApp({
                 <i>{{ question.stage || 'No stage' }} / D{{ question.difficulty }} / {{ question.reviewStatus }}{{ question.creatorName ? ' / added by ' + question.creatorName : '' }}</i>
               </button>
               <div class="teacher-vue-empty" v-if="!filteredQuestions.length">
-                No questions match this view.
+                {{ activeQuestionBank.listEmpty }}
               </div>
             </div>
           </div>
@@ -1532,8 +1602,8 @@ createApp({
           <form class="teacher-vue-editor" @submit.prevent="saveQuestion(false)">
             <div class="teacher-vue-editor-head">
               <div>
-                <span>{{ state.form.id ? 'Editing shared question #' + state.form.id : 'New shared subject-bank question' }}</span>
-                <h2>Question details</h2>
+                <span>{{ state.form.id ? 'Editing ' + activeQuestionBank.nav + ' item #' + state.form.id : 'New ' + activeQuestionBank.nav + ' bank item' }}</span>
+                <h2>{{ activeQuestionBank.formTitle }}</h2>
               </div>
               <label class="teacher-vue-toggle"><input type="checkbox" v-model="state.form.active"> Active</label>
             </div>
@@ -1554,39 +1624,65 @@ createApp({
               </select></label>
             </div>
 
-            <fieldset class="teacher-vue-modes">
-              <legend>Game mode</legend>
-              <label><input type="checkbox" v-model="state.form.modes.recall"> P Recall · multiple choice</label>
-              <label><input type="checkbox" v-model="state.form.modes.meditation"> Meditation · fill the gap</label>
-              <label><input type="checkbox" v-model="state.form.modes.scholar"> Scholar Table · Knowledge Challenge</label>
-            </fieldset>
+            <section class="teacher-vue-bank-tabs" aria-label="Question bank screens">
+              <button type="button" :class="{ active: state.view === 'recall-bank' }" @click="openView('recall-bank')">P Recall <strong>{{ bankCounts.recall }}</strong></button>
+              <button type="button" :class="{ active: state.view === 'meditation-bank' }" @click="openView('meditation-bank')">Meditation <strong>{{ bankCounts.meditation }}</strong></button>
+              <button type="button" :class="{ active: state.view === 'scholar-bank' }" @click="openView('scholar-bank')">Knowledge <strong>{{ bankCounts.scholar }}</strong></button>
+            </section>
 
             <section class="teacher-vue-templates">
-              <article v-if="state.form.modes.recall">
+              <article v-if="activeQuestionMode === 'recall'">
                 <b>P Recall / Question Hall</b>
                 <span>Best for quick retrieval. Write one clear question and four plausible choices. Avoid silly distractors.</span>
                 <em>Template: “Which option best describes ____?”</em>
               </article>
-              <article v-if="state.form.modes.meditation">
+              <article v-if="activeQuestionMode === 'meditation'">
                 <b>Meditation Focus</b>
                 <span>Best for calm fill-the-gap recall. Put a blank in the prompt and add accepted answers below.</span>
                 <em>Template: “A variable stores a value that can ____ while a program runs.”</em>
               </article>
-              <article v-if="state.form.modes.scholar">
+              <article v-if="activeQuestionMode === 'scholar'">
                 <b>Scholar Table / Knowledge Challenge</b>
-                <span>Best for adaptive practice. Use a strong correct answer and plausible misconceptions; the table turns them into compare, replace, consequence, and justification cases.</span>
-                <em>Template: correct idea + common confusion + short explanation of the decisive difference.</em>
+                <span>Best for adaptive practice. Plan the concept, the atom being tested, the misconception it is confused with, and the relationship that separates them.</span>
+                <em>Template: concept + atom statement + common confusion + decisive difference + consequence.</em>
               </article>
+            </section>
+
+            <section class="teacher-vue-knowledge-plan" v-if="activeQuestionMode === 'scholar'">
+              <header>
+                <div>
+                  <span>Knowledge Challenge planning</span>
+                  <h3>Concept map coverage</h3>
+                </div>
+                <small>{{ state.knowledgePlan.counts.entities || 0 }} concepts · {{ state.knowledgePlan.counts.atoms || 0 }} atoms · {{ state.knowledgePlan.counts.confusionPairs || 0 }} misconception links · {{ state.knowledgePlan.counts.playableCases || bankCounts.scholar }} playable cases</small>
+              </header>
+              <div class="teacher-vue-plan-grid">
+                <article>
+                  <b>1. Concepts</b>
+                  <span v-for="entity in state.knowledgePlan.entities.slice(0, 5)" :key="'entity-' + entity.id">{{ entity.name }} <small>{{ entity.topic || 'No topic' }}</small></span>
+                  <em v-if="!state.knowledgePlan.entities.length">Add concepts through curriculum packs/content requests.</em>
+                </article>
+                <article>
+                  <b>2. Atoms</b>
+                  <span v-for="atom in state.knowledgePlan.atoms.slice(0, 5)" :key="'atom-' + atom.id">{{ atom.entityName }} → {{ atom.typeLabel }} <small>{{ atom.statement }}</small></span>
+                  <em v-if="!state.knowledgePlan.atoms.length">Atoms are the individual knowledge claims the table tracks.</em>
+                </article>
+                <article>
+                  <b>3. Misconception links</b>
+                  <span v-for="pair in state.knowledgePlan.confusionPairs.slice(0, 5)" :key="'pair-' + pair.id">{{ pair.atomA }} ⇄ {{ pair.atomB }} <small>{{ pair.note }}</small></span>
+                  <em v-if="!state.knowledgePlan.confusionPairs.length">Plan confusing pairs like stack vs queue, router vs switch, variable vs constant.</em>
+                </article>
+              </div>
             </section>
 
             <label class="teacher-vue-wide">Question prompt<textarea v-model="state.form.prompt" maxlength="500" rows="4"></textarea></label>
 
             <fieldset class="teacher-vue-answers">
-              <legend>{{ state.form.modes.meditation && !state.form.modes.recall && !state.form.modes.scholar ? 'Accepted fill-gap answers' : 'Multiple-choice answers' }}</legend>
+              <legend>{{ activeQuestionMode === 'meditation' ? 'Accepted fill-gap answers' : 'Multiple-choice answers' }}</legend>
               <label v-for="index in [0,1,2,3]" :key="index">
-                <input v-if="!(state.form.modes.meditation && !state.form.modes.recall && !state.form.modes.scholar)" type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
+                <input v-if="activeQuestionMode !== 'meditation'" type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
                 <span>{{ ['A','B','C','D'][index] }}</span>
-                <input v-model="state.form.answers[index]" maxlength="160" :placeholder="state.form.modes.meditation && !state.form.modes.recall && !state.form.modes.scholar ? (index === 0 ? 'Main accepted answer' : 'Optional alternative spelling/wording') : ''">
+                <input v-model="state.form.answers[index]" maxlength="160" :placeholder="activeQuestionMode === 'meditation' ? (index === 0 ? 'Main accepted answer' : 'Optional alternative spelling/wording') : activeQuestionMode === 'scholar' ? (index === state.form.correct ? 'Secure target idea' : 'Plausible misconception') : ''">
               </label>
             </fieldset>
 

@@ -1125,6 +1125,10 @@ class MySqlGameQuestionStore {
     if (scopeSchoolId) { where += ' AND (gq.school_id IS NULL OR gq.school_id = ?)'; params.push(scopeSchoolId); }
     if (topic) { where += ' AND LOWER(gq.topic) = LOWER(?)'; params.push(topic); }
     if (query.reviewStatus || query.review_status) { where += ' AND gq.review_status = ?'; params.push(status); }
+    const mode = cleanText(query.mode || query.bank || '', 32).toLowerCase();
+    if (mode === 'recall') where += ' AND COALESCE(gq.use_recall, 1) = 1';
+    else if (mode === 'scholar' || mode === 'knowledge') where += ' AND COALESCE(gq.use_scholar, 1) = 1';
+    else if (mode === 'meditation') where += ' AND COALESCE(gq.use_meditation, 0) = 1';
     if (query.includeInactive !== true && query.include_inactive !== '1') where += ' AND gq.is_active = 1';
     const [rows] = await this.getPool().execute(
       `SELECT gq.*, s.name AS subject_name, s.code AS subject_code, t.name AS creator_name, t.email AS creator_email
@@ -2215,6 +2219,93 @@ class MySqlGameQuestionStore {
       [subjectId],
     );
     return (rows || []).map(r => ({ atomAId: Number(r.atom_a_id) || 0, atomBId: Number(r.atom_b_id) || 0 }));
+  }
+
+  async listKnowledgePlan(account, query = {}) {
+    await this.ensureSchema();
+    const subjectId = clampInt(query.subjectId || query.subject_id, 1, 2147483647);
+    const { schoolId, subject } = await this.assertTeacherSubject(account, subjectId);
+    const scopeSchoolId = subject.school_id == null ? schoolId : Number(subject.school_id);
+    const entityParams = [subjectId];
+    let entityWhere = 'subject_id = ? AND is_active = 1';
+    if (scopeSchoolId) { entityWhere += ' AND (school_id IS NULL OR school_id = ?)'; entityParams.push(scopeSchoolId); }
+    const [entityRows] = await this.getPool().execute(
+      `SELECT id, code, name, topic, stage, summary
+       FROM kc_entity
+       WHERE ${entityWhere}
+       ORDER BY topic ASC, name ASC, id ASC
+       LIMIT 200`,
+      entityParams,
+    );
+    const [atomRows] = await this.getPool().execute(
+      `SELECT a.id, a.code, a.statement, a.difficulty,
+              e.name AS entity_name, e.topic, e.stage,
+              COALESCE(t.label, t.code, '') AS type_label,
+              COUNT(q.id) AS playable_cases
+       FROM kc_atom a
+       JOIN kc_entity e ON e.id = a.entity_id
+       LEFT JOIN kc_atom_type t ON t.id = a.atom_type_id
+       LEFT JOIN game_question q ON q.primary_atom_id = a.id
+        AND q.subject_id = a.subject_id
+        AND q.is_active = 1
+        AND COALESCE(q.use_scholar, 1) = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE a.subject_id = ? AND a.is_active = 1
+       GROUP BY a.id, a.code, a.statement, a.difficulty, e.name, e.topic, e.stage, t.label, t.code
+       ORDER BY e.topic ASC, e.name ASC, t.sort_order ASC, a.id ASC
+       LIMIT 500`,
+      [subjectId],
+    );
+    const [pairRows] = await this.getPool().execute(
+      `SELECT cp.id, cp.note,
+              aa.code AS atom_a_code, aa.statement AS atom_a_statement,
+              ab.code AS atom_b_code, ab.statement AS atom_b_statement
+       FROM kc_confusion_pair cp
+       JOIN kc_atom aa ON aa.id = cp.atom_a_id
+       JOIN kc_atom ab ON ab.id = cp.atom_b_id
+       WHERE cp.subject_id = ?
+       ORDER BY cp.id ASC
+       LIMIT 300`,
+      [subjectId],
+    );
+    const entities = (entityRows || []).map(row => ({
+      id: Number(row.id) || 0,
+      code: row.code || '',
+      name: row.name || '',
+      topic: row.topic || '',
+      stage: row.stage || '',
+      summary: row.summary || '',
+    }));
+    const atoms = (atomRows || []).map(row => ({
+      id: Number(row.id) || 0,
+      code: row.code || '',
+      entityName: row.entity_name || '',
+      topic: row.topic || '',
+      stage: row.stage || '',
+      typeLabel: row.type_label || '',
+      statement: row.statement || '',
+      difficulty: Number(row.difficulty) || 1,
+      playableCases: Number(row.playable_cases) || 0,
+    }));
+    const confusionPairs = (pairRows || []).map(row => ({
+      id: Number(row.id) || 0,
+      atomA: row.atom_a_code || row.atom_a_statement || '',
+      atomB: row.atom_b_code || row.atom_b_statement || '',
+      note: row.note || '',
+    }));
+    return {
+      subjectId,
+      subjectName: String(subject.name || ''),
+      entities,
+      atoms,
+      confusionPairs,
+      counts: {
+        entities: entities.length,
+        atoms: atoms.length,
+        confusionPairs: confusionPairs.length,
+        playableCases: atoms.reduce((sum, atom) => sum + Number(atom.playableCases || 0), 0),
+      },
+    };
   }
 
   // Idempotent bulk import of a content pack for one subject: entities -> atoms

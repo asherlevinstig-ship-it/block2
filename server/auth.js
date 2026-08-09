@@ -1264,6 +1264,17 @@ class AuthService {
         res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load game questions.' });
       }
     });
+    app.get('/auth/teacher/knowledge-plan', async (req, res) => {
+      const account = this.authorizeTeacher(req);
+      if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });
+      try {
+        const store = this.getGameQuestionStore();
+        const plan = store && typeof store.listKnowledgePlan === 'function' ? await store.listKnowledgePlan(account, req.query || {}) : { entities: [], atoms: [], confusionPairs: [], counts: {} };
+        res.json({ ok: true, plan });
+      } catch (e) {
+        res.status(e.status || 500).json({ ok: false, code: e.code || 'server', error: e.status ? e.message : 'Could not load Knowledge Challenge plan.' });
+      }
+    });
     app.get('/auth/teacher/analytics', async (req, res) => {
       const account = this.authorizeTeacher(req);
       if (!account) return res.status(403).json({ ok: false, error: 'Teacher account required.' });

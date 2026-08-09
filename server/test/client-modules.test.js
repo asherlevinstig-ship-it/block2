@@ -801,7 +801,9 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /By school/);
   assert.match(teacherDashboardSource, /Question Analysis/);
   assert.match(teacherDashboardSource, /Curriculum Requests/);
-  assert.match(teacherDashboardSource, /title: 'Add Questions'/);
+  assert.match(teacherDashboardSource, /title: 'P Recall Bank'/);
+  assert.match(teacherDashboardSource, /title: 'Meditation Bank'/);
+  assert.match(teacherDashboardSource, /title: 'Knowledge Bank'/);
   assert.match(teacherDashboardSource, /title: 'Set Homework'/);
   assert.match(teacherDashboardSource, /title: 'Analysis'/);
   assert.match(teacherDashboardSource, /title: 'Question Analysis'/);
@@ -815,8 +817,9 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /syncClassSelectionWithSubject/);
   assert.match(teacherDashboardSource, /state\.classId = '';\s+state\.homework\.classId = '';\s+state\.loading = true;/);
   assert.match(teacherDashboardSource, /const classesData = await requestJson\('\/auth\/teacher\/classes\?subjectId='/);
-  assert.match(teacherDashboardSource, /Shared subject bank/);
-  assert.match(teacherDashboardSource, /one shared subject question bank/);
+  assert.match(teacherDashboardSource, /Separate game-mode banks loaded/);
+  assert.match(teacherDashboardSource, /\/auth\/teacher\/knowledge-plan/);
+  assert.match(teacherDashboardSource, /Concept map coverage/);
   assert.match(teacherDashboardSource, /added by/);
   assert.match(teacherDashboardSource, /topicOptions = computed/);
   assert.match(teacherDashboardSource, /stageOptions = computed/);
@@ -848,7 +851,8 @@ test('client dimensions and server consume the shared grid contract', () => {
   assert.match(teacherDashboardSource, /deleteCurriculumRequest/);
   assert.match(teacherDashboardSource, /Mark done/);
   assert.match(teacherDashboardSource, /curriculumRequests/);
-  assert.match(teacherDashboardSource, /Add four unique answer choices/);
+  assert.match(teacherDashboardSource, /Meditation fill-gap needs at least one accepted answer/);
+  assert.match(teacherDashboardSource, /needs four unique answer choices/);
   const serverAuthSource = fs.readFileSync(path.join(__dirname, '..', 'auth.js'), 'utf8');
   const sitegroundMailBridge = fs.readFileSync(path.join(__dirname, '..', '..', 'deploy', 'siteground', 'blockcraft_curriculum_mail.php'), 'utf8');
   const sitegroundMailCron = fs.readFileSync(path.join(__dirname, '..', '..', 'deploy', 'siteground', 'blockcraft_curriculum_mail_cron.php'), 'utf8');
