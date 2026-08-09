@@ -1540,6 +1540,18 @@ test('movement below valid ground is snapped back to the authoritative floor',()
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),true);
 });
 
+test('town exit movement ignores overhead arch blocks when finding the floor',()=>{
+  const room=makeRoom(),client=makeClient('town_exit_hunter');
+  room.lastMoveMsg=new Map();
+  const x=500.366, y=16, z=570.987;
+  seedPlayer(room,client,{x,z,y,hp:20});
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  room.handleMove(client,{x,y,z:571.2,yaw:3.134});
+  const p=room.state.players.get(client.sessionId);
+  assert.equal(p.y < 17,true,'the player remains on the walkway instead of snapping onto the arch');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),false);
+});
+
 test('movement cannot tunnel through a thin wall between valid air cells',()=>{
   const room=makeRoom(),client=makeClient('wall_tunnel_hunter');
   room.lastMoveMsg=new Map();

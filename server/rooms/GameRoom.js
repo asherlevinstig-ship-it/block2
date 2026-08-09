@@ -7614,7 +7614,8 @@ class GameRoom extends Room {
       return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1;
     };
     const townFloorStrict = !activeDgn && this.world && this.isTownProtected(sx, sz);
-    const floorY = groundAt(sx, sz, W.WH - 2);
+    const floorProbeY = activeDgn ? W.WH - 2 : Math.min(W.WH - 2, Math.max(sy, p.y) + 2.25);
+    const floorY = groundAt(sx, sz, floorProbeY);
     if (activeDgn && !deityFlight && !buried(p.x, p.y, p.z) && floorY > 0 && sy > floorY + 2.25) {
       sy = floorY + .01;
       corrected = true;
