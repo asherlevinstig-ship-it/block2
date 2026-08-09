@@ -187,6 +187,19 @@ function scholarSyntheticFormatFor(row, opts = {}) {
   return pool.length ? pool[0] : candidates.find(f => f !== avoid) || 'multiple_choice';
 }
 
+function constructReasonWithoutAnswer(explanation, correctAnswer) {
+  const answer = cleanText(correctAnswer, 160);
+  let reason = cleanText(explanation, 800);
+  if (!answer || !reason) return reason;
+  const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  reason = reason
+    .replace(new RegExp('^\\s*' + escaped + '\\s+(is|are|means|refers to|stores|uses|allows|provides)\\b\\s*', 'i'), 'It $1 ')
+    .replace(new RegExp('^\\s*' + escaped + '\\s*[:\\-–—]\\s*', 'i'), '')
+    .replace(new RegExp('\\b' + escaped + '\\b\\s+(is|are|means|refers to|stores|uses|allows|provides)\\b', 'i'), 'It $1')
+    .trim();
+  return reason.length >= 18 ? reason : 'This statement gives the reason that supports the selected answer.';
+}
+
 function syntheticScholarChallenge(row, atomId, opts = {}) {
   const answers = Array.isArray(row && row._answers) ? row._answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
   const correctIndex = clampInt(row && row.correct_index, 0, Math.max(0, answers.length - 1));
@@ -258,9 +271,10 @@ function syntheticScholarChallenge(row, atomId, opts = {}) {
     };
   }
   if (format === 'construct_justification' && correctAnswer && explanation) {
+    const reason = constructReasonWithoutAnswer(explanation, correctAnswer);
     const bank = [
       { text: correctAnswer, correct: true },
-      { text: explanation, correct: true },
+      { text: reason, correct: true },
       ...distractors.slice(0, 3).map(d => ({ text: d.text, correct: false })),
     ];
     return {
