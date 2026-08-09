@@ -10324,6 +10324,15 @@ test('admin meteor command replaces stale meteor and broadcasts falling fx', () 
   assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.t === 'meteorFalling'), true);
 });
 
+test('admin meteor command is not blocked by the production beta event gate', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'events.mixin.js'), 'utf8');
+  const meteorStart = source.indexOf("if (kind === 'meteor'");
+  const meteorBranch = source.slice(meteorStart, source.indexOf('const forcedKind =', meteorStart));
+  const meteorOnly = meteorBranch.slice(0, meteorBranch.indexOf('}\n    if (!BETA_EVENT_TEST)'));
+  assert.match(meteorBranch, /!BETA_EVENT_TEST && !admin/);
+  assert.doesNotMatch(meteorOnly, /if \(!BETA_EVENT_TEST\) return/);
+});
+
 test('public gate refill can spawn every missing unlocked rank at once', () => {
   const room = makeRoom();
   const spawned = [];

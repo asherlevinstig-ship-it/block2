@@ -734,17 +734,19 @@ class EventsMixin {
     this.broadcastEventStatus(true);
   }
   handleDevEvent(client, text) {
-    if (!BETA_EVENT_TEST) return client.send('eventReject', { reason: 'closed' });
+    const admin = typeof this.isAdminClient === 'function' && this.isAdminClient(client);
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
     if (p.dgn) return client.send('eventReject', { reason: 'dungeon' });
     const arg = String(text || '').split(/\s+/)[1] || '';
     const kind = arg.toLowerCase();
     if (kind === 'meteor' || kind === 'star') {
+      if (!BETA_EVENT_TEST && !admin) return client.send('eventReject', { reason: 'closed' });
       const ev = this.startMeteorEvent ? this.startMeteorEvent(Date.now(), { x: p.x, z: p.z }, { forceNearPreferred: true, forceReplace: true }) : null;
       if (ev) return client.send('chat', { name: '[Event]', text: 'Falling Star forced at your position: ' + Math.round(ev.x) + ', ' + Math.round(ev.z) + '.' });
       return client.send('chat', { name: '[Event]', text: 'Falling Star could not find a valid impact site near you yet.' });
     }
+    if (!BETA_EVENT_TEST) return client.send('eventReject', { reason: 'closed' });
     const forcedKind = kind === 'king' || kind === 'koth' ? EVENT_KING.kind
       : kind === 'caravan' || kind === 'defence' || kind === 'defense' ? EVENT_CARAVAN.kind
       : kind === 'parkour' ? EVENT_PARKOUR.kind
