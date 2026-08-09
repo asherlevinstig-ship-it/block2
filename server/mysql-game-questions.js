@@ -259,13 +259,13 @@ function syntheticScholarChallenge(row, atomId, opts = {}) {
   }
   if (format === 'construct_justification' && correctAnswer && explanation) {
     const bank = [
-      { text: 'Answer: ' + correctAnswer, correct: true },
+      { text: correctAnswer, correct: true },
       { text: explanation, correct: true },
-      ...distractors.slice(0, 3).map(d => ({ text: 'Distractor: ' + d.text, correct: false })),
+      ...distractors.slice(0, 3).map(d => ({ text: d.text, correct: false })),
     ];
     return {
       ...common,
-      prompt: 'Build a complete justification for:\n\n' + basePrompt,
+      prompt: basePrompt,
       answers: [],
       correctIndex: -1,
       explanation,
