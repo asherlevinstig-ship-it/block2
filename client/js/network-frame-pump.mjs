@@ -95,7 +95,9 @@ export function createNetworkFramePump({
       const maintenanceMs=tier===0?PERFORMANCE_BUDGETS.remoteMaintenanceNearMs:(tier===1?PERFORMANCE_BUDGETS.remoteMaintenanceMediumMs:PERFORMANCE_BUDGETS.remoteMaintenanceFarMs);
       if(!r._nextMaintenanceAt)r._nextMaintenanceAt=now+Math.random()*maintenanceMs;
       const maintenanceDue=now>=r._nextMaintenanceAt;
-      if(maintenanceDue){
+      const heldChanged=r._heldIdSeen!==(ref.heldId|0);
+      if(heldChanged||maintenanceDue){
+        r._heldIdSeen=ref.heldId|0;
         r._nextMaintenanceAt=now+maintenanceMs;
         netRefreshRemoteAvatar(sid,r);
       }
