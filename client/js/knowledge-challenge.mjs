@@ -15,7 +15,7 @@ const FORMAT_INSTRUCTION = {
   classify: 'Classify this device.', approve_reject: 'Approve or reject the proposal.',
   replace: 'Choose the better component.', compare: 'Pick the decisive difference.',
   predict_consequence: 'Predict what happens.', repair_diagram: 'Arrange a valid system flow.',
-  construct_justification: 'Choose every statement that belongs in a strong explanation.',
+  construct_justification: 'Choose one answer, then choose the reason that proves it.',
 };
 
 let overlay = null, panel = null, shift = null, pending = null, caseAt = 0, busy = false;
@@ -161,16 +161,62 @@ function renderChoices(m) {
 // construct_justification: multi-select the parts that form a complete justification.
 function renderConstruct(m, p) {
   const chosen = new Set();
-  const bank = el('div', 'kc-bank');
-  (p.bank || []).forEach((text, i) => {
-    const b = el('button', 'kc-chip'); b.type = 'button'; b.textContent = displayText(text);
-    b.onclick = () => { if (chosen.has(i)) { chosen.delete(i); b.classList.remove('on'); } else { chosen.add(i); b.classList.add('on'); } };
-    bank.appendChild(b);
-  });
-  panel.appendChild(bank);
-  const submitBtn = el('button', 'kc-btn kc-submit', 'CHECK EXPLANATION'); submitBtn.type = 'button';
-  submitBtn.onclick = () => submitAssembly({ selected: Array.from(chosen) }, bank.querySelectorAll('.kc-chip'), submitBtn);
+  const correctSet = new Set(Array.isArray(p.correctSet) ? p.correctSet.map(n => n | 0) : []);
+  const roles = Array.isArray(p.roles) ? p.roles : [];
+  const items = (p.bank || []).map((text, index) => ({ text, index, correct: correctSet.has(index), role: String(roles[index] || '') }));
+  let answerItems = items.filter(item => item.role === 'answer');
+  let reasonItems = items.filter(item => item.role === 'reason');
+  if (!answerItems.length || !reasonItems.length) {
+    const answerHint = items.find(item => item.correct && displayText(item.text).length <= 42) || items.find(item => item.correct) || null;
+    answerItems = items.filter(item => item.index === (answerHint && answerHint.index));
+    reasonItems = items.filter(item => item.index !== (answerHint && answerHint.index));
+  }
+
+  const help = el('p', 'kc-task-help', 'Select the correct answer first. Then select the explanation that proves why it is correct.');
+  panel.appendChild(help);
+
+  const board = el('div', 'kc-construct');
+  const answerSection = el('section', 'kc-choice-group');
+  answerSection.appendChild(el('h3', '', '1. Answer'));
+  const answerBank = el('div', 'kc-bank');
+  answerItems.forEach(item => answerBank.appendChild(constructChip(item, chosen, true)));
+  answerSection.appendChild(answerBank);
+
+  const reasonSection = el('section', 'kc-choice-group');
+  reasonSection.appendChild(el('h3', '', '2. Reason'));
+  const reasonBank = el('div', 'kc-bank');
+  reasonItems.forEach(item => reasonBank.appendChild(constructChip(item, chosen, false)));
+  reasonSection.appendChild(reasonBank);
+  board.append(answerSection, reasonSection);
+  panel.appendChild(board);
+
+  const submitBtn = el('button', 'kc-btn kc-submit', 'CHECK ANSWER AND REASON'); submitBtn.type = 'button';
+  submitBtn.onclick = () => {
+    if (chosen.size < 2) { say('Choose one answer and one reason first.'); return; }
+    submitAssembly({ selected: Array.from(chosen) }, panel.querySelectorAll('.kc-chip'), submitBtn);
+  };
   panel.appendChild(submitBtn);
+}
+
+function constructChip(item, chosen, exclusive) {
+  const b = el('button', 'kc-chip'); b.type = 'button'; b.textContent = displayText(item.text);
+  b.onclick = () => {
+    if (chosen.has(item.index)) {
+      chosen.delete(item.index); b.classList.remove('on'); return;
+    }
+    if (exclusive) {
+      const group = b.closest('.kc-choice-group');
+      if (group) Array.prototype.forEach.call(group.querySelectorAll('.kc-chip.on'), chip => chip.classList.remove('on'));
+      const items = Array.prototype.slice.call(group ? group.querySelectorAll('.kc-chip') : []);
+      items.forEach((chip) => {
+        const idx = Number(chip.dataset.index);
+        if (Number.isFinite(idx)) chosen.delete(idx);
+      });
+    }
+    chosen.add(item.index); b.classList.add('on');
+  };
+  b.dataset.index = String(item.index);
+  return b;
 }
 
 // repair_diagram: place pool pieces, in order, into the flow slots.
@@ -409,6 +455,10 @@ const STYLE = `
 .kc-decisive{margin:0 0 10px;font-size:12px;line-height:1.4;color:#cfe0f2}.kc-decisive b{color:#9ad7ff}
 .kc-corrective-q{margin:0 0 10px;font-size:14px;color:#fff}
 .kc-instruction{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#9ad7ff;margin-bottom:10px;font-weight:800}
+.kc-task-help{margin:0 0 14px;color:#cfe0f2;font-size:14px;line-height:1.45}
+.kc-construct{display:grid;gap:14px;margin-top:6px}
+.kc-choice-group{display:grid;gap:10px;padding:14px;border:1px solid rgba(125,211,252,.2);border-radius:14px;background:rgba(8,16,28,.5)}
+.kc-choice-group h3{margin:0;color:#f4f8ff;font-size:14px;letter-spacing:.04em}
 .kc-answers.kc-two{grid-template-columns:1fr 1fr}
 .kc-answers.kc-grid-opts{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
 .kc-bank{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 18px}

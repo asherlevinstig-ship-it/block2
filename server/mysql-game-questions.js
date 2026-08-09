@@ -273,9 +273,9 @@ function syntheticScholarChallenge(row, atomId, opts = {}) {
   if (format === 'construct_justification' && correctAnswer && explanation) {
     const reason = constructReasonWithoutAnswer(explanation, correctAnswer);
     const bank = [
-      { text: correctAnswer, correct: true },
-      { text: reason, correct: true },
-      ...distractors.slice(0, 3).map(d => ({ text: d.text, correct: false })),
+      { text: correctAnswer, correct: true, role: 'answer' },
+      { text: reason, correct: true, role: 'reason' },
+      ...distractors.slice(0, 3).map(d => ({ text: d.text, correct: false, role: 'answer' })),
     ];
     return {
       ...common,

@@ -73,12 +73,12 @@ class KnowledgeChallengeMixin {
   kcBuildCase(challenge) {
     const fmt = challenge.format, payload = challenge.payload;
     if (fmt === 'construct_justification' && payload && Array.isArray(payload.bank)) {
-      const bank = payload.bank.map(b => ({ text: String((b && b.text) || ''), correct: !!(b && b.correct) }));
+      const bank = payload.bank.map(b => ({ text: String((b && b.text) || ''), correct: !!(b && b.correct), role: String((b && b.role) || '').trim() }));
       this.kcShuffle(bank);
       const correctSet = bank.map((b, i) => (b.correct ? i : -1)).filter(i => i >= 0);
       return {
         answers: [], correctIndex: -1, grade: { kind: 'construct', correctSet },
-        payload: { kind: 'construct_justification', instruction: String(payload.prompt || 'Select the parts that make a complete justification.'), bank: bank.map(b => b.text) },
+        payload: { kind: 'construct_justification', instruction: String(payload.prompt || 'Select the answer and the reason that prove it.'), bank: bank.map(b => b.text), roles: bank.map(b => b.role), correctSet },
       };
     }
     if (fmt === 'repair_diagram' && payload && Array.isArray(payload.pool) && Array.isArray(payload.solution)) {
