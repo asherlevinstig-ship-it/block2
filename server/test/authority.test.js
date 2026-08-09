@@ -8451,6 +8451,33 @@ test('cached active room profiles are normalized before spawning on join', async
   assert.equal(room.dirtyPlayers.has(token), true);
 });
 
+test('returning overworld profiles respawn at their exact saved coordinates', async () => {
+  const room = makeRoom(), client = makeClient('cached-overworld-position');
+  const token = 'student_exact_position';
+  const cached = defaultProfile('Exact Position');
+  cached.nameSet = true;
+  cached.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  cached.pos = [44.5, 18, 55.5];
+  room.profiles.set(token, cached);
+  room.store = {
+    async loadPlayer() {
+      throw new Error('cached profile should not load from store');
+    },
+  };
+
+  await room.onJoin(client, { name: 'Exact Position' }, {
+    id: token,
+    displayName: 'Exact Position',
+    accountType: 'student',
+    role: 'student',
+  });
+
+  const prof = room.profiles.get(token);
+  const p = room.state.players.get(client.sessionId);
+  assert.deepEqual(prof.pos, [44.5, 18, 55.5]);
+  assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [44.5, 18.01, 55.5]);
+});
+
 test('registered profiles receive a town map backfill without losing current progress', () => {
   const room = makeRoom();
   const prof = defaultProfile('Any Hunter');

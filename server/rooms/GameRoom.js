@@ -1050,18 +1050,9 @@ class GameRoom extends Room {
       if (!prof.activeRoom && this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
       if (this.ensureTownMapBackfill(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
       const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
-      if (!prof.activeRoom && returningOrLegacyProfile && Array.isArray(prof.pos) && prof.pos[0] < 160 && prof.pos[2] < 160) {
-        prof.pos = townReturnArray();
-        this.dirtyPlayers.add(token);
-      }
       // Move profiles saved at the old cramped plaza spawn into the new open
       // arrival point so returning players receive the same readable opening.
       if (!prof.activeRoom && returningOrLegacyProfile && Array.isArray(prof.pos) && Math.hypot(prof.pos[0]-(W.TOWN.TC+.5),prof.pos[2]-(W.TOWN.TC+7.5))<2.25) {
-        prof.pos = townReturnArray();
-        this.dirtyPlayers.add(token);
-      }
-      const openingMaraStep=prof.npcQuestChains&&(prof.npcQuestChains['Mara Vale']|0)||0;
-      if (!prof.activeRoom && returningOrLegacyProfile && (prof.S&&prof.S.lvl|0)<=1 && openingMaraStep===0 && !prof.quest) {
         prof.pos = townReturnArray();
         this.dirtyPlayers.add(token);
       }

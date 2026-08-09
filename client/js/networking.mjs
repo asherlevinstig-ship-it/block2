@@ -3466,7 +3466,7 @@ function currentRuntimeActiveRoom(){
 }
 function netSnapshot(){
   const activeRoom=currentRuntimeActiveRoom();
-  const pos=activeRoom&&player?[player.pos.x,player.pos.y,player.pos.z]:null;
+  const pos=player?[player.pos.x,player.pos.y,player.pos.z]:null;
   if(activeRoom)storeJobTutorialResume(activeRoom,pos);
   else if(NET.profileReady===true)storeJobTutorialResume(null,null);
   const vitals={

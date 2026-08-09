@@ -2291,6 +2291,7 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(networking,/function readJobTutorialResume\(\)/);
   assert.match(networking,/const serverHasActiveRoom=!!\(m&&Object\.prototype\.hasOwnProperty\.call\(m,'activeRoom'\)\)/);
   assert.match(networking,/const localActiveRoom=readJobTutorialResume\(\)/);
+  assert.match(networking,/const pos=player\?\[player\.pos\.x,player\.pos\.y,player\.pos\.z\]:null/);
   assert.match(networking,/dimensionsApi\.enterJobTutorialRoom\(restoreJobRoom\.job,\{serverSynced:!!serverActiveRoom\}\)/);
   assert.match(networking,/combatApi\.resumeJobTutorial\(restoreJobRoom\.job,restoreJobRoom\)/);
   assert.match(networking,/serverHasActiveRoom&&dim==='job'&&dimensionsApi\.exitJobTutorialRoom/);
