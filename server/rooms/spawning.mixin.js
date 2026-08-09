@@ -23,7 +23,28 @@ class SpawningMixin {
     }
   }
 
-  meteorSpawnPoint() {
+  meteorSpawnPoint(preferred = null, opts = {}) {
+    const forceNearPreferred = !!(opts && opts.forceNearPreferred);
+    if (preferred && Number.isFinite(+preferred.x) && Number.isFinite(+preferred.z)) {
+      const baseX = Math.max(12, Math.min(W.WX - 12, +preferred.x));
+      const baseZ = Math.max(12, Math.min(W.WX - 12, +preferred.z));
+      const candidates = [{ x: baseX, z: baseZ }];
+      for (let r = 4; r <= 28; r += 4) {
+        for (let i = 0; i < 10; i++) {
+          const a = i / 10 * Math.PI * 2;
+          candidates.push({
+            x: Math.max(12, Math.min(W.WX - 12, baseX + Math.cos(a) * r)),
+            z: Math.max(12, Math.min(W.WX - 12, baseZ + Math.sin(a) * r)),
+          });
+        }
+      }
+      for (const c of candidates) {
+        if (W.isLavaBorderLand(c.x, c.z)) continue;
+        const y = this.world.standHeight(c.x, c.z, W.WH - 2);
+        if (y > 2) return { x: c.x, y, z: c.z, forced: true };
+      }
+      if (forceNearPreferred) return null;
+    }
     const players = [];
     this.state.players.forEach(p => { if (p && !p.dgn && !this.isTownProtected(p.x, p.z)) players.push(p); });
     const anchor = players.length ? players[(Math.random() * players.length) | 0] : null;
@@ -39,10 +60,10 @@ class SpawningMixin {
     return null;
   }
 
-  startMeteorEvent(now = Date.now()) {
+  startMeteorEvent(now = Date.now(), preferred = null, opts = {}) {
     this.initMeteorEventState(now);
     if (this.meteorEvent) return null;
-    const point = this.meteorSpawnPoint();
+    const point = this.meteorSpawnPoint(preferred, opts);
     if (!point) { this.nextMeteorAt = now + 90 * 1000; return null; }
     const ring = dangerRingAt(point.x, point.z);
     const ev = {

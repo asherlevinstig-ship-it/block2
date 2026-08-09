@@ -10228,6 +10228,24 @@ test('parkour beta test shortcut opens and accelerates the event queue', () => {
   assert.equal(client.sent.some(e => e.type === 'eventJoined' && e.msg.joined), true);
 });
 
+test('admin meteor command targets the caller position', () => {
+  const room = makeRoom();
+  const client = makeClient('meteor_admin');
+  room.clients = [client];
+  room.mobSeq = 0;
+  room.broadcast = (type, msg) => client.sent.push({ type, msg });
+  room.sendOverworldActivities = () => {};
+  const x = 412.25, z = 376.75;
+  seedPlayer(room, client, { x, y: 18, z });
+
+  room.handleDevEvent(client, '/event meteor');
+
+  assert.ok(room.meteorEvent);
+  assert.equal(Math.round(room.meteorEvent.x), Math.round(x));
+  assert.equal(Math.round(room.meteorEvent.z), Math.round(z));
+  assert.equal(client.sent.some(e => e.type === 'chat' && /your position/i.test(e.msg.text)), true);
+});
+
 test('public gate refill can spawn every missing unlocked rank at once', () => {
   const room = makeRoom();
   const spawned = [];

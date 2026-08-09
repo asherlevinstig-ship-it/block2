@@ -741,9 +741,9 @@ class EventsMixin {
     const arg = String(text || '').split(/\s+/)[1] || '';
     const kind = arg.toLowerCase();
     if (kind === 'meteor' || kind === 'star') {
-      const ev = this.startMeteorEvent ? this.startMeteorEvent(Date.now()) : null;
-      if (ev) return client.send('chat', { name: '[Event]', text: 'Falling Star forced at ' + Math.round(ev.x) + ', ' + Math.round(ev.z) + '.' });
-      return client.send('chat', { name: '[Event]', text: 'Falling Star could not find a safe wilderness impact site yet.' });
+      const ev = this.startMeteorEvent ? this.startMeteorEvent(Date.now(), { x: p.x, z: p.z }, { forceNearPreferred: true }) : null;
+      if (ev) return client.send('chat', { name: '[Event]', text: 'Falling Star forced at your position: ' + Math.round(ev.x) + ', ' + Math.round(ev.z) + '.' });
+      return client.send('chat', { name: '[Event]', text: 'Falling Star could not find a valid impact site near you yet.' });
     }
     const forcedKind = kind === 'king' || kind === 'koth' ? EVENT_KING.kind
       : kind === 'caravan' || kind === 'defence' || kind === 'defense' ? EVENT_CARAVAN.kind
