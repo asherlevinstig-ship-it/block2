@@ -3026,11 +3026,11 @@ globalThis.BlockcraftSelfAvatar={
     const swing=Math.sin(selfAvatarSwingT*Math.PI);
     if(a.legs&&a.legs.length>=2){ a.legs[0].rotation.x+=(sw-a.legs[0].rotation.x)*Math.min(1,(dt||.016)*14); a.legs[1].rotation.x+=(-sw-a.legs[1].rotation.x)*Math.min(1,(dt||.016)*14); }
     if(a.arms&&a.arms.length>=2){
-      const leftTarget=-sw*.7+swing*.18;
-      const rightTarget=sw*.7-swing*1.35;
+      const leftTarget=-sw*.7-swing*.18;
+      const rightTarget=sw*.7+swing*1.35;
       a.arms[0].rotation.x+=(leftTarget-a.arms[0].rotation.x)*Math.min(1,(dt||.016)*16);
       a.arms[1].rotation.x+=(rightTarget-a.arms[1].rotation.x)*Math.min(1,(dt||.016)*16);
-      a.arms[1].rotation.z+=((-0.08-swing*.24)-a.arms[1].rotation.z)*Math.min(1,(dt||.016)*16);
+      a.arms[1].rotation.z+=((-0.08+swing*.24)-a.arms[1].rotation.z)*Math.min(1,(dt||.016)*16);
     }
     if(a.capeSegments&&a.capeSegments.length&&typeof animateAvatarCape==='function'){ const spd=moving?2.4:0; animateAvatarCape(a,now||0,spd,sw,dt||.016); }
   }
@@ -3276,15 +3276,23 @@ function netAddRemote(sid, ref){
   NET.remotes[sid]=r;
   netUpdateTag(r);
 }
+function triggerRemotePlayerAction(sid, strength=1){
+  const r=NET.remotes&&NET.remotes[sid];
+  if(!r)return false;
+  const amt=Math.max(.25,Math.min(1.25,Number(strength)||1));
+  r.swingT=Math.max(r.swingT||0,amt);
+  return true;
+}
 function netRefreshRemoteAvatar(sid, r){
   const sig=equipmentSignatureFrom(r.ref);
   if(sig===r.equipSig) return;
-  const pos=r.grp.position.clone(), rot=r.grp.rotation.y, tag=r.tag, pantherUntil=r.pantherUntil||0;
+  const pos=r.grp.position.clone(), rot=r.grp.rotation.y, tag=r.tag, pantherUntil=r.pantherUntil||0, swingT=r.swingT||0;
   scene.remove(r.grp);
   const fresh=makeRemoteAvatar(remoteAppearance(r.ref));
   Object.assign(r, fresh);
   r.grp.position.copy(pos);
   r.grp.rotation.y=rot;
+  r.swingT=swingT;
   r.equipSig=sig;
   r.mountObj=null;                  // rebuilt fresh by ensureRemoteMount next frame
   r.invisibilityVisual=null;
@@ -3452,6 +3460,7 @@ function netRemoveRemote(sid){
     tickLocalPantherFormVisual,
     netAddRemote,
     netRefreshRemoteAvatar,
+    triggerRemotePlayerAction,
     netUpdateTag,
     tickSpiritVisual,
     pulseAegisGlow,

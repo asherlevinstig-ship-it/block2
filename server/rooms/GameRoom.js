@@ -524,6 +524,7 @@ class GameRoom extends Room {
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
     this.onMessage('attack', (client, m) => this.handleAttack(client, m));
+    this.onMessage('playerAction', (client, m) => this.handlePlayerAction(client, m));
     this.onMessage('banditSpare', (client, m) => this.handleBanditSpare(client, m));
     this.onMessage('roadsideInteract', (client, m) => this.handleRoadsideInteract(client, m));
     this.onMessage('eventHit', (client, m) => this.handleEventHit(client, m));
@@ -2760,6 +2761,13 @@ class GameRoom extends Room {
       const q = this.state.players.get(c.sessionId);
       if (q && (q.dgn || '') === (dgn || '')) c.send(type, msg);
     }
+  }
+  handlePlayerAction(client, m = {}) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const kind = String(m && m.kind || 'primary').slice(0, 24);
+    const strength = Math.max(0.25, Math.min(1.25, Number(m && m.strength) || 1));
+    this.sendSpace(p.dgn || '', 'playerAction', { sid: client.sessionId, kind, strength, dgn: p.dgn || '' });
   }
   activeDungeonInstance(dgn) {
     const id = String(dgn || '');

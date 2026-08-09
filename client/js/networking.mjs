@@ -1250,6 +1250,10 @@ function netAttachRoom(room,name,client){
       try{localStorage.setItem('bc_shard_id',id);}catch(e){}
     });
     room.onMessage('dayCycleSync', m=>applyDayCycleSync(m));
+    room.onMessage('playerAction', m=>{
+      if(!m||m.sid===room.sessionId)return;
+      triggerRemotePlayerAction(String(m.sid||''),m.strength);
+    });
     if(isOverworldRoom) room.send('dayCycleSyncRequest', {});
     $(room.state).edits.onAdd((id,key)=>netApplyEdit(key,id));
     $(room.state).edits.onChange((id,key)=>netApplyEdit(key,id));
@@ -3745,7 +3749,7 @@ Object.defineProperty(globalThis,'BlockcraftDragonWorld',{value:Object.freeze({
   react:(type,mood)=>COMPANIONS.dragonReaction ? COMPANIONS.dragonReaction(type,mood) : false,
 }),configurable:true});
 Object.defineProperty(globalThis,'BlockcraftDragonCommandFx',{value:dragonCommandFx,configurable:true});
-const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,netAddRemote,netRefreshRemoteAvatar,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
+const {DRAGON_TYPES_LIST,DRAGON_TYPES,DRAGON_EGG_TO_TYPE,dragonType,dragonTrailColor,emitDragonTrail,emitDragonAura,mountLift,mountEye,animateMountWings,animateDragonMotion,ensureRemoteMount,applyMount,toggleMount,cycleDragon,DRAGON_ABILITIES,dragonHappiness,setDragonCare,castDragonAbility,feedMountedDragon,firstDragonEggSlot,hatchDragonEgg,claimLocalIncubation,applyDragonIncubationStart,applyDragonIncubationReady,applyDragonIncubationComplete,dragonHatchRejected,applyDragonRenameResult,dragonRenameRejected,perchRejected,tickLocalMount,tickCompanionDragons,tickPetTamerTutorialDragons,tickPetTamerTutorialGroundDragon,tickDragonRoost,DRAGON_PERCH_SLOTS_C,perchedDragons,perchKeysAt,addPerchedDragon,removePerchedDragon,tickPerchedDragons,dragonBreedFx,perchMyDragon,feedNestDragon,recallNestDragon,dragonBreathe,spriteForageChance,FAMILIARS,FAMILIAR_BY_SIGIL,tickFamiliars,spriteForage,fangSnap,tickWatchfulShade,cycleFamiliar,updateFamiliarHUD,shadowStep,applyShadeStepResult,bindFamiliarItem,familiarBoundLocal,makeRemoteAvatar,animateAvatarCape,netAddRemote,netRefreshRemoteAvatar,triggerRemotePlayerAction,netUpdateTag,tickSpiritVisual,pulseAegisGlow,tickPantherFormVisual,tickLocalPantherFormVisual,netRemoveRemote}=COMPANIONS;
 const ARRIVAL_VFX_COOLDOWN_MS=550;
 const arrivalVfxLastByKey=new Map();
 function schedulePlayerArrivalVfx(pos,opts={}){
@@ -5482,6 +5486,18 @@ const netTick=createNetworkFramePump({
   tickPantherFormVisual,
   tickLocalSpiritVisual,
   updateTag:netUpdateTag,
+  tickRemotePlayerAction:(r,dt,moving,stride)=>{
+    if(!r||!r.arms||r.arms.length<2)return;
+    r.swingT=Math.max(0,(r.swingT||0)-(dt||.016)*3.8);
+    const swing=Math.sin((r.swingT||0)*Math.PI);
+    const walk=Number(stride)||0;
+    const leftTarget=-walk*.7-swing*.18;
+    const rightTarget=walk*.7+swing*1.35;
+    const lerp=Math.min(1,(dt||.016)*16);
+    r.arms[0].rotation.x+=(leftTarget-r.arms[0].rotation.x)*lerp;
+    r.arms[1].rotation.x+=(rightTarget-r.arms[1].rotation.x)*lerp;
+    r.arms[1].rotation.z+=((-0.08+swing*.24)-r.arms[1].rotation.z)*lerp;
+  },
 });
 
 gameContext.registerState('networking', Object.freeze({

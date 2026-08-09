@@ -17,6 +17,7 @@ export function createNetworkFramePump({
   tickPantherFormVisual,
   tickLocalSpiritVisual,
   updateTag:netUpdateTag,
+  tickRemotePlayerAction,
 }){
   return function netTick(dt,now){
     if(!NET.on) return;
@@ -133,6 +134,7 @@ export function createNetworkFramePump({
         r.legs[1].rotation.x=-sw;
         stride=sw;
       }
+      if(tickRemotePlayerAction)tickRemotePlayerAction(r,stepDt,moving,stride);
       if(animateAvatarCape)animateAvatarCape(r,now,moving?.85:(ref.mount?.25:.06),stride,stepDt);
       pulseAegisGlow(r,now);
       if(maintenanceDue)netUpdateTag(r);

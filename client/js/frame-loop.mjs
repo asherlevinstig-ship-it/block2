@@ -3423,6 +3423,7 @@ function tick(now){
           SFX.chip(BREAK[mining.id]?BREAK[mining.id].cls:null);
           vmSwingT=Math.max(vmSwingT,.5);                        // punch with every chip
           if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.swing)globalThis.BlockcraftSelfAvatar.swing(.55);
+          if(NET.on&&NET.room)NET.room.send('playerAction',{kind:'mine',strength:.55});
           const critC=Math.min(.45, .10+S.str*.012);             // STR scales crit chance
           if(mining.effective && Math.random()<critC){
             mining.progress+=mining.total*.12;

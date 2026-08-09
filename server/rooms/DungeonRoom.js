@@ -134,6 +134,7 @@ class DungeonRoom extends GameRoom {
     this.onMessage('recallAnswer', (c, m) => this.handleRecallAnswer(c, m));
     this.onMessage('recallSubject', (c, m) => this.handleRecallSubject(c, m));
     this.onMessage('attack', (c, m) => this.handleAttack(c, m));
+    this.onMessage('playerAction', (c, m) => this.handlePlayerAction(c, m));
     this.onMessage('ability', (c, m) => this.handleAbility(c, m));
     this.onMessage('deityPowerChoose', (c, m) => this.handleDeityPowerChoose(c, m));
     this.onMessage('deityPowerUse', (c, m) => this.handleDeityPowerUse(c, m));

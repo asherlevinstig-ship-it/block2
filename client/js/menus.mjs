@@ -6943,6 +6943,7 @@ function updateViewModel(){
 function vmSwing(){
   vmSwingT=1;
   if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.swing)globalThis.BlockcraftSelfAvatar.swing(1);
+  if(NET.on&&NET.room)NET.room.send('playerAction',{kind:'primary',strength:1});
 }
 function vmAbility(kind){
   vmAbilityKind=kind;vmAbilityT=0;vmAbilityDuration=kind==='dash'?.42:kind==='shockwave'?.68:kind==='secondwind'?1.0:.78;
