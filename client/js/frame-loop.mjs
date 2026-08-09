@@ -3422,6 +3422,7 @@ function tick(now){
           burst(mining.x+.5, mining.y+.6, mining.z+.5, BLOCK_COLORS[mining.id]||[.5,.5,.5], 2, 1.5, 1.1, .35);
           SFX.chip(BREAK[mining.id]?BREAK[mining.id].cls:null);
           vmSwingT=Math.max(vmSwingT,.5);                        // punch with every chip
+          if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.swing)globalThis.BlockcraftSelfAvatar.swing(.55);
           const critC=Math.min(.45, .10+S.str*.012);             // STR scales crit chance
           if(mining.effective && Math.random()<critC){
             mining.progress+=mining.total*.12;

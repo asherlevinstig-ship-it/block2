@@ -6927,7 +6927,10 @@ function updateViewModel(){
   vm.add(mesh);
   vmDip=.22;
 }
-function vmSwing(){ vmSwingT=1; }
+function vmSwing(){
+  vmSwingT=1;
+  if(globalThis.BlockcraftSelfAvatar&&globalThis.BlockcraftSelfAvatar.swing)globalThis.BlockcraftSelfAvatar.swing(1);
+}
 function vmAbility(kind){
   vmAbilityKind=kind;vmAbilityT=0;vmAbilityDuration=kind==='dash'?.42:kind==='shockwave'?.68:kind==='secondwind'?1.0:.78;
 }

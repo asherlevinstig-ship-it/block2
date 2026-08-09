@@ -2992,7 +2992,7 @@ function makeRemoteAvatar(look){
 // ---------------- local self-avatar (for the director camera / third-person filming) ----------------
 // First-person play has no local body model; the director camera needs one to film. Reuse the remote
 // hunter avatar built from the local player's own appearance.
-let selfAvatar=null, selfAvatarLookKey='', selfAvatarStride=0;
+let selfAvatar=null, selfAvatarLookKey='', selfAvatarStride=0, selfAvatarSwingT=0;
 function selfAvatarLookSignature(look){
   if(!look)return '';
   return [look.armorId,look.armorType,look.heldId,look.skin,look.hair,look.shirt,look.pants,look.outfitStyle,look.hairStyle,look.accessory,Array.isArray(look.cosmetics)?look.cosmetics.join(','):''].join('|');
@@ -3013,6 +3013,7 @@ globalThis.BlockcraftSelfAvatar={
   ensure(){ return ensureSelfAvatar(); },
   setVisible(v){ if(selfAvatar)selfAvatar.grp.visible=!!v; },
   refresh(){ selfAvatarLookKey='__stale__'; },
+  swing(strength=1){ selfAvatarSwingT=Math.max(selfAvatarSwingT,Math.max(.35,Math.min(1,Number(strength)||1))); },
   update(x,y,z,yaw,moving,now,dt,eye){
     const a=ensureSelfAvatar();
     if(!a)return;
@@ -3021,8 +3022,16 @@ globalThis.BlockcraftSelfAvatar={
     a.grp.rotation.y=(Number(yaw)||0)+Math.PI; // avatar faces +z at yaw 0; add PI so it faces the player's look dir
     const t=(now||0)/1000+(a.phase||0);
     const sw=moving?Math.sin(t*7.5)*.55:0;
+    selfAvatarSwingT=Math.max(0,selfAvatarSwingT-(dt||.016)*3.8);
+    const swing=Math.sin(selfAvatarSwingT*Math.PI);
     if(a.legs&&a.legs.length>=2){ a.legs[0].rotation.x+=(sw-a.legs[0].rotation.x)*Math.min(1,(dt||.016)*14); a.legs[1].rotation.x+=(-sw-a.legs[1].rotation.x)*Math.min(1,(dt||.016)*14); }
-    if(a.arms&&a.arms.length>=2){ a.arms[0].rotation.x+=(-sw*.7-a.arms[0].rotation.x)*Math.min(1,(dt||.016)*14); a.arms[1].rotation.x+=(sw*.7-a.arms[1].rotation.x)*Math.min(1,(dt||.016)*14); }
+    if(a.arms&&a.arms.length>=2){
+      const leftTarget=-sw*.7+swing*.18;
+      const rightTarget=sw*.7-swing*1.35;
+      a.arms[0].rotation.x+=(leftTarget-a.arms[0].rotation.x)*Math.min(1,(dt||.016)*16);
+      a.arms[1].rotation.x+=(rightTarget-a.arms[1].rotation.x)*Math.min(1,(dt||.016)*16);
+      a.arms[1].rotation.z+=((-0.08-swing*.24)-a.arms[1].rotation.z)*Math.min(1,(dt||.016)*16);
+    }
     if(a.capeSegments&&a.capeSegments.length&&typeof animateAvatarCape==='function'){ const spd=moving?2.4:0; animateAvatarCape(a,now||0,spd,sw,dt||.016); }
   }
 };
