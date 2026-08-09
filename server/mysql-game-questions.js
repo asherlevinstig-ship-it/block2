@@ -1097,9 +1097,10 @@ class MySqlGameQuestionStore {
 
   normalizeQuestionPatch(input = {}) {
     const modes = cleanQuestionModes(input);
-    const answers = Array.isArray(input.answers) ? input.answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4) : [];
-    const answerSet = new Set(answers.map(v => v.toLowerCase()));
     const meditationOnly = modes.meditation && !modes.recall && !modes.scholar;
+    const answerLimit = meditationOnly ? 12 : 4;
+    const answers = Array.isArray(input.answers) ? input.answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, answerLimit) : [];
+    const answerSet = new Set(answers.map(v => v.toLowerCase()));
     if (meditationOnly) {
       if (!answers.length || answerSet.size !== answers.length) {
         throw Object.assign(new Error('Meditation fill-gap questions need at least one accepted answer.'), { status: 400, code: 'answers' });
@@ -2232,7 +2233,7 @@ class MySqlGameQuestionStore {
       let answers = [];
       try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
       if (!Array.isArray(answers) || answers.length < 1) continue;
-      answers = answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4);
+      answers = answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 12);
       if (answers.length < 1) continue;
       return {
         id: 'db-' + (Number(row.id) || 0) + '-' + Date.now().toString(36),

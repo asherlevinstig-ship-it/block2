@@ -141,6 +141,7 @@ const emptyForm = (mode = 'recall') => ({
   spec: '',
   prompt: '',
   answers: ['', '', '', ''],
+  meditationAlternatives: '',
   correct: 0,
   explanation: '',
   reviewStatus: 'draft',
@@ -182,9 +183,13 @@ const emptyHomework = () => ({
 const weekdayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function cleanQuestion(question) {
+  const mode = primaryQuestionBankMode(question);
+  const limit = mode === 'meditation' ? 12 : 4;
+  const answers = Array.isArray(question.answers) ? question.answers.slice(0, limit).concat(['', '', '', '']).slice(0, Math.max(4, limit)) : ['', '', '', ''];
   return {
     ...question,
-    answers: Array.isArray(question.answers) ? question.answers.slice(0, 4).concat(['', '', '', '']).slice(0, 4) : ['', '', '', ''],
+    answers,
+    meditationAlternatives: mode === 'meditation' ? answers.slice(1).filter(Boolean).join('\n') : '',
     difficulty: Number(question.difficulty) || 1,
     correct: Math.max(0, Math.min(3, Number(question.correct) || 0)),
     active: question.active !== false,
@@ -492,6 +497,7 @@ createApp({
         spec: q.spec || '',
         prompt: q.prompt || '',
         answers: q.answers,
+        meditationAlternatives: q.meditationAlternatives || '',
         correct: q.correct,
         explanation: q.explanation || '',
         reviewStatus: q.reviewStatus || 'draft',
@@ -749,7 +755,11 @@ createApp({
       const modes = modesForBank(activeQuestionMode.value);
       const meditationOnly = modes.meditation && !modes.recall && !modes.scholar;
       const scholarOnly = modes.scholar && !modes.recall && !modes.meditation;
-      const answers = state.form.answers.map(value => String(value || '').trim());
+      const meditationAnswers = [
+        String(state.form.answers[0] || '').trim(),
+        ...String(state.form.meditationAlternatives || '').split(/[\n,]+/).map(value => value.trim()),
+      ].filter(Boolean).slice(0, 12);
+      const answers = meditationOnly ? meditationAnswers : state.form.answers.slice(0, 4).map(value => String(value || '').trim());
       const filledAnswers = answers.filter(Boolean);
       const unique = new Set(filledAnswers.map(value => value.toLowerCase()));
       if (!state.subjectId) throw new Error('Choose a subject first.');
@@ -1764,12 +1774,24 @@ createApp({
 
             <label class="teacher-vue-wide">Question prompt<textarea v-model="state.form.prompt" maxlength="500" rows="4"></textarea></label>
 
-            <fieldset class="teacher-vue-answers">
-              <legend>{{ activeQuestionMode === 'meditation' ? 'Fill-in-the-gap answer' : 'Multiple-choice answers' }}</legend>
+            <fieldset v-if="activeQuestionMode === 'meditation'" class="teacher-vue-fillgap">
+              <legend>Fill-in-the-gap answer</legend>
+              <label>
+                Main accepted answer
+                <input v-model="state.form.answers[0]" maxlength="160" placeholder="e.g. change">
+              </label>
+              <label>
+                Other possible answers
+                <textarea v-model="state.form.meditationAlternatives" maxlength="520" rows="3" placeholder="Optional: one per line, or comma separated. e.g. vary, be updated"></textarea>
+              </label>
+            </fieldset>
+
+            <fieldset v-else class="teacher-vue-answers">
+              <legend>Multiple-choice answers</legend>
               <label v-for="index in [0,1,2,3]" :key="index">
-                <input v-if="activeQuestionMode !== 'meditation'" type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
-                <span>{{ activeQuestionMode === 'meditation' ? (index === 0 ? 'Answer' : 'Alt ' + index) : ['A','B','C','D'][index] }}</span>
-                <input v-model="state.form.answers[index]" maxlength="160" :placeholder="activeQuestionMode === 'meditation' ? (index === 0 ? 'Main accepted answer' : 'Optional alternative spelling/wording') : activeQuestionMode === 'scholar' ? (index === state.form.correct ? 'Secure target idea' : 'Plausible misconception') : ''">
+                <input type="radio" name="correctAnswer" :value="index" v-model.number="state.form.correct">
+                <span>{{ ['A','B','C','D'][index] }}</span>
+                <input v-model="state.form.answers[index]" maxlength="160" :placeholder="activeQuestionMode === 'scholar' ? (index === state.form.correct ? 'Secure target idea' : 'Plausible misconception') : ''">
               </label>
             </fieldset>
 
