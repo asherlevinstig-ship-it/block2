@@ -23,6 +23,30 @@ const publicDate = value => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
   return cleanDate(value);
 };
+function boolFlag(value, fallback = false) {
+  if (value == null || value === '') return !!fallback;
+  if (typeof value === 'boolean') return value;
+  const text = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(text)) return true;
+  if (['0', 'false', 'no', 'off'].includes(text)) return false;
+  return Number(value) !== 0;
+}
+function cleanQuestionModes(input = {}) {
+  const modes = input.modes && typeof input.modes === 'object' ? input.modes : {};
+  const has = key => hasOwn(modes, key) || hasOwn(input, key);
+  const read = (key, alt, fallback) => {
+    if (hasOwn(modes, key)) return boolFlag(modes[key], fallback);
+    if (hasOwn(input, key)) return boolFlag(input[key], fallback);
+    if (alt && hasOwn(input, alt)) return boolFlag(input[alt], fallback);
+    return !!fallback;
+  };
+  const any = ['recall', 'scholar', 'meditation', 'useRecall', 'useScholar', 'useMeditation', 'use_recall', 'use_scholar', 'use_meditation'].some(has);
+  return {
+    recall: any ? read('recall', 'use_recall', true) && read('useRecall', '', true) : true,
+    scholar: any ? read('scholar', 'use_scholar', true) && read('useScholar', '', true) : true,
+    meditation: any ? read('meditation', 'use_meditation', false) || read('useMeditation', '', false) : false,
+  };
+}
 const ymdUTC = value => {
   const d = value instanceof Date ? value : new Date(value || Date.now());
   if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
@@ -162,6 +186,11 @@ function publicQuestion(row) {
     explanation: row.explanation || '',
     reviewStatus: row.review_status || 'draft',
     active: Number(row.is_active) !== 0,
+    modes: {
+      recall: row.use_recall == null ? true : Number(row.use_recall) !== 0,
+      scholar: row.use_scholar == null ? true : Number(row.use_scholar) !== 0,
+      meditation: row.use_meditation == null ? false : Number(row.use_meditation) !== 0,
+    },
     createdAt: row.created_at || null,
     updatedAt: row.updated_at || null,
   };
@@ -270,6 +299,9 @@ class MySqlGameQuestionStore {
       explanation TEXT NOT NULL,
       review_status ENUM('draft','teacher-reviewed','approved') NOT NULL DEFAULT 'draft',
       is_active TINYINT(1) NOT NULL DEFAULT 1,
+      use_recall TINYINT(1) NOT NULL DEFAULT 1,
+      use_scholar TINYINT(1) NOT NULL DEFAULT 1,
+      use_meditation TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
@@ -548,6 +580,15 @@ class MySqlGameQuestionStore {
       }
       if (!question.includes('payload_json')) {
         await pool.execute('ALTER TABLE game_question ADD COLUMN payload_json LONGTEXT NULL AFTER explanation');
+      }
+      if (!question.includes('use_recall')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN use_recall TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active');
+      }
+      if (!question.includes('use_scholar')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN use_scholar TINYINT(1) NOT NULL DEFAULT 1 AFTER use_recall');
+      }
+      if (!question.includes('use_meditation')) {
+        await pool.execute('ALTER TABLE game_question ADD COLUMN use_meditation TINYINT(1) NOT NULL DEFAULT 0 AFTER use_scholar');
       }
     }
     const attempt = await columnsOf('game_question_attempt');
@@ -919,6 +960,7 @@ class MySqlGameQuestionStore {
     if (prompt.length < 10) throw Object.assign(new Error('Question prompt is too short.'), { status: 400, code: 'prompt' });
     const explanation = cleanText(input.explanation, 800);
     if (explanation.length < 10) throw Object.assign(new Error('Add a short teaching explanation.'), { status: 400, code: 'explanation' });
+    const modes = cleanQuestionModes(input);
     return {
       topic: cleanText(input.topic, 96),
       stage: cleanText(input.stage, 32),
@@ -930,6 +972,7 @@ class MySqlGameQuestionStore {
       explanation,
       reviewStatus: cleanStatus(input.reviewStatus || input.review_status),
       active: input.active !== false && Number(input.is_active) !== 0,
+      modes,
     };
   }
 
@@ -966,8 +1009,8 @@ class MySqlGameQuestionStore {
     const patch = this.normalizeQuestionPatch(input);
     const [result] = await this.getPool().execute(
       `INSERT INTO game_question
-       (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (school_id, subject_id, teacher_id, topic, stage, difficulty, spec, prompt, answers, correct_index, explanation, review_status, is_active, use_recall, use_scholar, use_meditation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         subject.school_id == null ? (schoolId || null) : subject.school_id,
         subjectId,
@@ -982,6 +1025,9 @@ class MySqlGameQuestionStore {
         patch.explanation,
         patch.reviewStatus,
         patch.active ? 1 : 0,
+        patch.modes.recall ? 1 : 0,
+        patch.modes.scholar ? 1 : 0,
+        patch.modes.meditation ? 1 : 0,
       ],
     );
     return this.getQuestion(account, Number(result.insertId || 0));
@@ -1015,9 +1061,9 @@ class MySqlGameQuestionStore {
     const next = this.normalizeQuestionPatch({ ...existing, ...input, answers: input.answers || existing.answers, correct: Object.prototype.hasOwnProperty.call(input, 'correct') ? input.correct : existing.correct });
     await this.getPool().execute(
       `UPDATE game_question
-       SET topic = ?, stage = ?, difficulty = ?, spec = ?, prompt = ?, answers = ?, correct_index = ?, explanation = ?, review_status = ?, is_active = ?
+       SET topic = ?, stage = ?, difficulty = ?, spec = ?, prompt = ?, answers = ?, correct_index = ?, explanation = ?, review_status = ?, is_active = ?, use_recall = ?, use_scholar = ?, use_meditation = ?
        WHERE id = ?`,
-      [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, existing.id],
+      [next.topic, next.stage, next.difficulty, next.spec, next.prompt, JSON.stringify(next.answers), next.correct, next.explanation, next.reviewStatus, next.active ? 1 : 0, next.modes.recall ? 1 : 0, next.modes.scholar ? 1 : 0, next.modes.meditation ? 1 : 0, existing.id],
     );
     return this.getQuestion(account, existing.id);
   }
@@ -1582,6 +1628,7 @@ class MySqlGameQuestionStore {
        JOIN game_question q ON q.primary_atom_id = a.id
         AND q.subject_id = a.subject_id
         AND q.is_active = 1
+        AND COALESCE(q.use_scholar, 1) = 1
         AND q.review_status IN ('approved', 'teacher-reviewed')
        WHERE a.subject_id = ? AND a.is_active = 1`,
       [subjectId],
@@ -1597,6 +1644,7 @@ class MySqlGameQuestionStore {
       `SELECT COUNT(*) AS n
        FROM game_question
        WHERE subject_id = ? AND is_active = 1
+         AND COALESCE(use_scholar, 1) = 1
          AND review_status IN ('approved', 'teacher-reviewed')`,
       [subjectId],
     );
@@ -1624,6 +1672,7 @@ class MySqlGameQuestionStore {
       `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
        FROM subjects s
        JOIN game_question q ON q.subject_id = s.id AND q.is_active = 1
+        AND COALESCE(q.use_scholar, 1) = 1
         AND q.review_status IN ('approved', 'teacher-reviewed')
        LEFT JOIN kc_atom a ON a.id = q.primary_atom_id AND a.subject_id = s.id AND a.is_active = 1
        WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
@@ -1638,6 +1687,7 @@ class MySqlGameQuestionStore {
         `SELECT s.id, s.name, s.code, s.school_id, COUNT(DISTINCT a.id) AS playable_atoms
          FROM subjects s
          JOIN game_question q ON q.subject_id = s.id AND q.is_active = 1
+          AND COALESCE(q.use_scholar, 1) = 1
           AND q.review_status IN ('approved', 'teacher-reviewed')
          LEFT JOIN kc_atom a ON a.id = q.primary_atom_id AND a.subject_id = s.id AND a.is_active = 1
          WHERE s.is_active = 1
@@ -1684,12 +1734,14 @@ class MySqlGameQuestionStore {
               COUNT(q.id) AS approved_questions,
               (SELECT COUNT(*) FROM game_question gq
                WHERE gq.subject_id = s.id AND gq.is_active = 1
+                 AND COALESCE(gq.use_scholar, 1) = 1
                  AND gq.review_status IN ('approved', 'teacher-reviewed')) AS raw_approved_questions
        FROM subjects s
        LEFT JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
        LEFT JOIN game_question q ON q.primary_atom_id = a.id
         AND q.subject_id = s.id
         AND q.is_active = 1
+        AND COALESCE(q.use_scholar, 1) = 1
         AND q.review_status IN ('approved', 'teacher-reviewed')
        WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
        GROUP BY s.id, s.name, s.code, s.school_id
@@ -1704,12 +1756,14 @@ class MySqlGameQuestionStore {
               COUNT(q.id) AS approved_questions,
               (SELECT COUNT(*) FROM game_question gq
                WHERE gq.subject_id = s.id AND gq.is_active = 1
+                 AND COALESCE(gq.use_scholar, 1) = 1
                  AND gq.review_status IN ('approved', 'teacher-reviewed')) AS raw_approved_questions
        FROM subjects s
        LEFT JOIN kc_atom a ON a.subject_id = s.id AND a.is_active = 1
        LEFT JOIN game_question q ON q.primary_atom_id = a.id
         AND q.subject_id = s.id
         AND q.is_active = 1
+        AND COALESCE(q.use_scholar, 1) = 1
         AND q.review_status IN ('approved', 'teacher-reviewed')
        WHERE s.is_active = 1
        GROUP BY s.id, s.name, s.code, s.school_id
@@ -1749,6 +1803,7 @@ class MySqlGameQuestionStore {
       ? `JOIN game_question playable_q ON playable_q.primary_atom_id = a.id
           AND playable_q.subject_id = a.subject_id
           AND playable_q.is_active = 1
+          AND COALESCE(playable_q.use_scholar, 1) = 1
           AND playable_q.review_status IN ('approved', 'teacher-reviewed')`
       : '';
     const params = [accountId, subjectId];
@@ -1782,6 +1837,7 @@ class MySqlGameQuestionStore {
         `SELECT q.id, q.difficulty, q.topic, q.stage
          FROM game_question q
          WHERE q.subject_id = ? AND q.is_active = 1
+           AND COALESCE(q.use_scholar, 1) = 1
            AND q.review_status IN ('approved', 'teacher-reviewed')
          ORDER BY q.id ASC
          LIMIT 500`,
@@ -1817,6 +1873,7 @@ class MySqlGameQuestionStore {
                 entity_id, primary_atom_id, confusion_pair_id, difficulty
          FROM game_question
          WHERE id = ? AND subject_id = ? AND is_active = 1
+           AND COALESCE(use_scholar, 1) = 1
            AND review_status IN ('approved', 'teacher-reviewed')
          LIMIT 1`,
         [syntheticQuestionId, subjectId],
@@ -1826,6 +1883,7 @@ class MySqlGameQuestionStore {
                 entity_id, primary_atom_id, confusion_pair_id, difficulty
          FROM game_question
          WHERE subject_id = ? AND primary_atom_id = ? AND is_active = 1
+           AND COALESCE(use_scholar, 1) = 1
            AND review_status IN ('approved', 'teacher-reviewed')
          ORDER BY RAND()
          LIMIT 8`,
@@ -1854,6 +1912,83 @@ class MySqlGameQuestionStore {
       confusionPairId: row.confusion_pair_id == null ? null : Number(row.confusion_pair_id),
       difficulty: Number(row.difficulty) || 1,
     };
+  }
+
+  async loadMeditationChallenge(account, input = {}) {
+    await this.ensureSchema();
+    const subject = await this.findPlayableMeditationSubject(account, input);
+    if (!subject || !subject.subjectId) return null;
+    const [rows] = await this.getPool().execute(
+      `SELECT id, prompt, answers, correct_index, explanation, topic, stage, difficulty
+       FROM game_question
+       WHERE subject_id = ? AND is_active = 1
+         AND COALESCE(use_meditation, 0) = 1
+         AND review_status IN ('approved', 'teacher-reviewed')
+       ORDER BY RAND()
+       LIMIT 25`,
+      [subject.subjectId],
+    );
+    for (const row of rows || []) {
+      let answers = [];
+      try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
+      if (!Array.isArray(answers) || answers.length < 2) continue;
+      answers = answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4);
+      if (answers.length < 2) continue;
+      return {
+        id: 'db-' + (Number(row.id) || 0) + '-' + Date.now().toString(36),
+        questionId: Number(row.id) || 0,
+        type: 'multiple_choice',
+        subjectId: subject.subjectId,
+        subjectName: subject.subjectName || '',
+        topic: row.topic || '',
+        stage: row.stage || '',
+        difficulty: Number(row.difficulty) || 1,
+        prompt: row.prompt || '',
+        answers,
+        correctIndex: Math.max(0, Math.min(answers.length - 1, Number(row.correct_index) || 0)),
+        explanation: row.explanation || '',
+      };
+    }
+    return null;
+  }
+
+  async findPlayableMeditationSubject(account, input = {}) {
+    await this.ensureSchema();
+    const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
+    const requestedSubject = cleanText(input.subject, 96);
+    const requested = requestedSubject ? await this.resolvePlaySubject(account, input).catch(() => null) : null;
+    const hasMeditation = async subjectId => {
+      if (!subjectId) return false;
+      const [rows] = await this.getPool().execute(
+        `SELECT COUNT(*) AS n
+         FROM game_question
+         WHERE subject_id = ? AND is_active = 1
+           AND COALESCE(use_meditation, 0) = 1
+           AND review_status IN ('approved', 'teacher-reviewed')`,
+        [subjectId],
+      );
+      return (Number(rows && rows[0] && rows[0].n) || 0) > 0;
+    };
+    if (requested && await hasMeditation(requested.subjectId)) return requested;
+    const fallbackSubject = cleanText(input.fallbackSubject, 96) || 'Computer Science';
+    const fallback = fallbackSubject ? await this.resolvePlaySubject(account, { subject: fallbackSubject }).catch(() => null) : null;
+    if (fallback && await hasMeditation(fallback.subjectId)) return fallback;
+    const [rows] = await this.getPool().execute(
+      `SELECT s.id, s.name, s.code, s.school_id, COUNT(q.id) AS n
+       FROM subjects s
+       JOIN game_question q ON q.subject_id = s.id
+        AND q.is_active = 1
+        AND COALESCE(q.use_meditation, 0) = 1
+        AND q.review_status IN ('approved', 'teacher-reviewed')
+       WHERE s.is_active = 1 AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
+       GROUP BY s.id, s.name, s.code, s.school_id
+       ORDER BY CASE WHEN LOWER(s.name) = LOWER(?) OR LOWER(s.code) = LOWER(?) THEN 0 WHEN s.school_id = ? THEN 1 ELSE 2 END,
+                n DESC, s.id ASC
+       LIMIT 1`,
+      [schoolId, schoolId, fallbackSubject, fallbackSubject, schoolId],
+    );
+    const s = rows && rows[0];
+    return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id), subjectName: s.name || '', subjectCode: s.code || '' } : null;
   }
 
   async loadConfusionPairs(subjectId) {

@@ -99,6 +99,7 @@ const emptyForm = () => ({
   explanation: '',
   reviewStatus: 'draft',
   active: true,
+  modes: { recall: true, scholar: true, meditation: false },
 });
 
 const emptyCurriculum = () => ({
@@ -129,6 +130,11 @@ function cleanQuestion(question) {
     difficulty: Number(question.difficulty) || 1,
     correct: Math.max(0, Math.min(3, Number(question.correct) || 0)),
     active: question.active !== false,
+    modes: {
+      recall: !question.modes || question.modes.recall !== false,
+      scholar: !question.modes || question.modes.scholar !== false,
+      meditation: !!(question.modes && question.modes.meditation),
+    },
     creatorName: String(question.creatorName || question.creatorEmail || '').trim(),
   };
 }
@@ -416,6 +422,7 @@ createApp({
         explanation: q.explanation || '',
         reviewStatus: q.reviewStatus || 'draft',
         active: q.active,
+        modes: { ...q.modes },
       };
       state.selectedId = q.id || 0;
     }
@@ -666,6 +673,11 @@ createApp({
         explanation: state.form.explanation,
         reviewStatus: state.form.reviewStatus,
         active: !!state.form.active,
+        modes: {
+          recall: state.form.modes && state.form.modes.recall !== false,
+          scholar: state.form.modes && state.form.modes.scholar !== false,
+          meditation: !!(state.form.modes && state.form.modes.meditation),
+        },
       };
     }
 
@@ -1535,6 +1547,13 @@ createApp({
                 <option value="approved">Approved</option>
               </select></label>
             </div>
+
+            <fieldset class="teacher-vue-modes">
+              <legend>Use this question in</legend>
+              <label><input type="checkbox" v-model="state.form.modes.recall"> Recall / Question Hall</label>
+              <label><input type="checkbox" v-model="state.form.modes.scholar"> Scholar Table</label>
+              <label><input type="checkbox" v-model="state.form.modes.meditation"> Meditation Focus</label>
+            </fieldset>
 
             <label class="teacher-vue-wide">Question prompt<textarea v-model="state.form.prompt" maxlength="500" rows="4"></textarea></label>
 

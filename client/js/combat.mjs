@@ -5684,8 +5684,8 @@ function showMeditationQuestion(m){
   meditationHud.classList.add('meditation-recall');
   meditationHud.classList.remove('hidden');
   document.body.classList.add('recall-active');
-  if(meditationSubjectEl)meditationSubjectEl.textContent='MEDITATION FOCUS';
-  if(meditationTimeEl)meditationTimeEl.textContent=m.type==='sort'?'SORT':'FILL';
+  if(meditationSubjectEl)meditationSubjectEl.textContent=m.subjectName?('MEDITATION · '+String(m.subjectName).slice(0,32).toUpperCase()):'MEDITATION FOCUS';
+  if(meditationTimeEl)meditationTimeEl.textContent=m.type==='sort'?'SORT':m.type==='multiple_choice'?'CHOOSE':'FILL';
   meditationQuestionEl.textContent=String(m.prompt||'Complete the focus question.');
   meditationFeedbackEl.className='hidden';meditationFeedbackEl.textContent='';
   meditationFallbackEl.innerHTML='';
@@ -5693,6 +5693,18 @@ function showMeditationQuestion(m){
   if(m.type==='sort'){
     meditationSortOrder=Array.isArray(m.choices)?m.choices.map(c=>({id:String(c.id||''),text:String(c.text||'')})):[];
     renderMeditationSort();
+  }else if(m.type==='multiple_choice'){
+    const list=document.createElement('div');list.className='meditationsort meditationmcq';
+    (Array.isArray(m.answers)?m.answers:[]).slice(0,4).forEach((answer,index)=>{
+      const b=document.createElement('button');b.className='meditationsort-chip';b.type='button';
+      b.textContent=String.fromCharCode(65+index)+'. '+String(answer||'');
+      b.onclick=()=>{
+        meditationFallbackEl.querySelectorAll('button').forEach(el=>el.disabled=true);
+        if(NET.on&&NET.room)NET.room.send('meditationAnswer',{id:meditationChallenge.id,index});
+      };
+      list.appendChild(b);
+    });
+    meditationFallbackEl.appendChild(list);
   }else{
     const input=document.createElement('input');input.className='meditation-fill-input';input.type='text';input.placeholder='Type the missing word';input.autocomplete='off';
     input.addEventListener('keydown',e=>{if(e.key==='Enter')submitMeditationAnswer();e.stopPropagation();});
@@ -5711,6 +5723,7 @@ function submitMeditationAnswer(){
   }
   if(!NET.on||!NET.room)return;
   if(meditationChallenge.type==='sort')NET.room.send('meditationAnswer',{id:meditationChallenge.id,order:meditationSortOrder.map(c=>c.id)});
+  else if(meditationChallenge.type==='multiple_choice')return;
   else {
     const input=meditationFallbackEl&&meditationFallbackEl.querySelector('.meditation-fill-input');
     NET.room.send('meditationAnswer',{id:meditationChallenge.id,answer:String(input&&input.value||'')});

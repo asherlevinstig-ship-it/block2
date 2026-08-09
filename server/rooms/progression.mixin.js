@@ -7,6 +7,7 @@ const {
   ARMOR_INFO, I, JOB_IDS, TOOL_INFO, hunterActivityXpForLevel, jobLevelFromXp, jobPerkTier,
 } = require('./constants');
 const { sanitizeMeditationGrowth, meditationGrowthCapsForLevel } = require('../store');
+const { getAuthService } = require('../auth');
 
 const STAT_KEYS = new Set(['str', 'agi', 'vit', 'int']);
 const PROFESSION_IDS = new Set(['', ...JOB_SYSTEM.PROFESSION_IDS]);
@@ -84,7 +85,20 @@ const MEDITATION_CHALLENGES = Object.freeze([
 function cleanMeditationAnswer(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
-function meditationChallengeForClient(client) {
+async function meditationChallengeForClient(room, client) {
+  try {
+    const rec = room && typeof room.profileFor === 'function' ? room.profileFor(client) : null;
+    const auth = getAuthService();
+    const store = auth && typeof auth.getGameQuestionStore === 'function' ? auth.getGameQuestionStore() : null;
+    const account = client && client._account;
+    if (store && account && typeof store.loadMeditationChallenge === 'function') {
+      const db = await store.loadMeditationChallenge(account, {
+        subject: rec && rec.prof && rec.prof.recallSubject || '',
+        fallbackSubject: 'Computer Science',
+      });
+      if (db && db.prompt && Array.isArray(db.answers) && db.answers.length >= 2) return db;
+    }
+  } catch (_) {}
   const base = MEDITATION_CHALLENGES[Math.floor(Math.random() * MEDITATION_CHALLENGES.length)];
   const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
   if (base.type === 'sort') {
@@ -1196,11 +1210,11 @@ class ProgressionMixin {
     return this.meditationChallenges;
   }
 
-  handleMeditationChallenge(client) {
+  async handleMeditationChallenge(client) {
     const reason = this.meditationAccessReason(client);
     if (reason) return client.send('meditationQuestion', { ok: false, reason });
     if (this.rateLimited(client, 'meditationChallenge', 1, 3)) return client.send('meditationQuestion', { ok: false, reason: 'rate' });
-    const challenge = meditationChallengeForClient(client);
+    const challenge = await meditationChallengeForClient(this, client);
     const record = {
       id: challenge.id,
       type: challenge.type,
@@ -1209,11 +1223,17 @@ class ProgressionMixin {
       explanation: challenge.explanation || '',
       answer: challenge.type === 'sort'
         ? challenge.correct.join('|')
-        : challenge.answers.map(cleanMeditationAnswer),
+        : challenge.type === 'multiple_choice'
+          ? String(challenge.correctIndex | 0)
+          : challenge.answers.map(cleanMeditationAnswer),
     };
     this.ensureMeditationChallenges().set(client.sessionId, record);
     const payload = { ok: true, id: challenge.id, type: challenge.type, prompt: challenge.prompt, explanation: challenge.explanation };
     if (challenge.type === 'sort') payload.choices = challenge.choices;
+    if (challenge.type === 'multiple_choice') {
+      payload.answers = challenge.answers;
+      payload.subjectName = challenge.subjectName || '';
+    }
     client.send('meditationQuestion', payload);
     return true;
   }
@@ -1229,6 +1249,8 @@ class ProgressionMixin {
     if (record.type === 'sort') {
       const order = Array.isArray(message.order) ? message.order.map(v => String(v || '')).join('|') : '';
       correct = order === record.answer;
+    } else if (record.type === 'multiple_choice') {
+      correct = String(message.index | 0) === String(record.answer);
     } else {
       correct = record.answer.includes(cleanMeditationAnswer(message.answer));
     }
