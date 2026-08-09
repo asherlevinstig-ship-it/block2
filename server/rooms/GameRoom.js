@@ -165,10 +165,8 @@ function isLegacyUnsafeTownReturn(pos) {
   if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return true;
   const inTown = Math.abs((x | 0) - W.TOWN.TC) <= W.TOWN.HS + 2 && Math.abs((z | 0) - W.TOWN.TC) <= W.TOWN.HS + 2;
   if (!inTown) return false;
-  const oldArrival = Math.hypot(x - (W.TOWN.TC + .5), z - (W.TOWN.TC + 14.5));
-  const oldControlsSpawn = Math.hypot(x - (W.TOWN.TC + .5), z - (W.TOWN.TC + 7.5));
   const townReturnDrop = Math.hypot(x - TOWN_RETURN_SPAWN.x, z - TOWN_RETURN_SPAWN.z) < 8 && y > W.TOWN.G + 6;
-  return y < W.TOWN.G + .75 || oldArrival < 10 || oldControlsSpawn < 3 || townReturnDrop;
+  return y < W.TOWN.G + .75 || townReturnDrop;
 }
 
 function angleDelta(a, b) {

@@ -2974,9 +2974,6 @@ function netRestoreProfile(m){
     eventLog((m.name||'Hunter')+' returned — progress restored');
     finishWorldLoading('profile');
     schedulePlayerArrivalVfx(player&&player.pos,{key:'local:'+String(NET.roomName||'room')+':'+String(dim||'world')+':'+String(NET.dgn||'main'),local:true,delay:320});
-    if(!restoreJobRoom&&!restoreTamingLand&&dim==='overworld'&&combatApi.shouldShowFirstTownArrivalChoice&&combatApi.shouldShowFirstTownArrivalChoice()){
-      setTimeout(()=>combatApi.showFirstTownArrivalChoice&&combatApi.showFirstTownArrivalChoice(),120);
-    }
   }catch(e){ console.warn('profile restore failed', e); finishWorldLoading('profile-error'); }
 }
 function applyAbilitySync(m){

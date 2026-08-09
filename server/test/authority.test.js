@@ -8478,6 +8478,34 @@ test('returning overworld profiles respawn at their exact saved coordinates', as
   assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [44.5, 18.01, 55.5]);
 });
 
+test('returning overworld profiles keep saved main courtyard coordinates', async () => {
+  const room = makeRoom(), client = makeClient('cached-courtyard-position');
+  const token = 'student_courtyard_position';
+  const savedPos = [W.TOWN.TC + .5, W.TOWN.G + 2, W.TOWN.TC + 14.5];
+  const cached = defaultProfile('Courtyard Position');
+  cached.nameSet = true;
+  cached.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
+  cached.pos = savedPos.slice();
+  room.profiles.set(token, cached);
+  room.store = {
+    async loadPlayer() {
+      throw new Error('cached profile should not load from store');
+    },
+  };
+
+  await room.onJoin(client, { name: 'Courtyard Position' }, {
+    id: token,
+    displayName: 'Courtyard Position',
+    accountType: 'student',
+    role: 'student',
+  });
+
+  const prof = room.profiles.get(token);
+  const p = room.state.players.get(client.sessionId);
+  assert.deepEqual(prof.pos, savedPos);
+  assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [savedPos[0], Math.round((savedPos[1] + .01) * 100) / 100, savedPos[2]]);
+});
+
 test('registered profiles receive a town map backfill without losing current progress', () => {
   const room = makeRoom();
   const prof = defaultProfile('Any Hunter');
