@@ -10298,6 +10298,32 @@ test('admin meteor command targets the caller position', () => {
   assert.equal(client.sent.some(e => e.type === 'chat' && /your position/i.test(e.msg.text)), true);
 });
 
+test('admin meteor command replaces stale meteor and broadcasts falling fx', () => {
+  const room = makeRoom();
+  const client = makeClient('meteor_replace_admin');
+  room.clients = [client];
+  room.mobSeq = 0;
+  room.broadcast = (type, msg) => client.sent.push({ type, msg });
+  room.sendOverworldActivities = () => {};
+  room.meteorEvent = { id: 'old-meteor', x: 100, y: 16, z: 100, state: 'active', bossId: 'oldboss', minionIds: new Set(['oldminion']) };
+  room.state.mobs.set('oldboss', new Mob());
+  room.state.mobs.set('oldminion', new Mob());
+  room.mobMeta.oldboss = { meteorBoss: true };
+  room.mobMeta.oldminion = { meteorEventId: 'old-meteor' };
+  const x = 488.25, z = 586.75;
+  seedPlayer(room, client, { x, y: 18, z });
+
+  room.handleDevEvent(client, '/event meteor');
+
+  assert.ok(room.meteorEvent);
+  assert.notEqual(room.meteorEvent.id, 'old-meteor');
+  assert.equal(room.state.mobs.has('oldboss'), false);
+  assert.equal(room.state.mobs.has('oldminion'), false);
+  assert.equal(Math.round(room.meteorEvent.x), Math.round(x));
+  assert.equal(Math.round(room.meteorEvent.z), Math.round(z));
+  assert.equal(client.sent.some(e => e.type === 'fx' && e.msg.t === 'meteorFalling'), true);
+});
+
 test('public gate refill can spawn every missing unlocked rank at once', () => {
   const room = makeRoom();
   const spawned = [];

@@ -741,7 +741,7 @@ class EventsMixin {
     const arg = String(text || '').split(/\s+/)[1] || '';
     const kind = arg.toLowerCase();
     if (kind === 'meteor' || kind === 'star') {
-      const ev = this.startMeteorEvent ? this.startMeteorEvent(Date.now(), { x: p.x, z: p.z }, { forceNearPreferred: true }) : null;
+      const ev = this.startMeteorEvent ? this.startMeteorEvent(Date.now(), { x: p.x, z: p.z }, { forceNearPreferred: true, forceReplace: true }) : null;
       if (ev) return client.send('chat', { name: '[Event]', text: 'Falling Star forced at your position: ' + Math.round(ev.x) + ', ' + Math.round(ev.z) + '.' });
       return client.send('chat', { name: '[Event]', text: 'Falling Star could not find a valid impact site near you yet.' });
     }

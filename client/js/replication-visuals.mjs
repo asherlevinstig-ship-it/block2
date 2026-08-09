@@ -830,11 +830,17 @@ function netFx(m){
   if(m.t==='meteorFalling'){
     const x=Number(m.x)||player.pos.x,y=Number(m.y)||player.pos.y,z=Number(m.z)||player.pos.z;
     try{console.debug('[meteor-client] fx',JSON.stringify({type:m.t,x,y,z}));}catch(_){}
-    const fromX=x-42,fromY=y+68,fromZ=z-38;
+    const remaining=Math.max(0,Number(m.impactAt||0)-Date.now());
+    const phase=remaining?1-Math.min(1,remaining/5200):.65;
+    const fromX=x-58+phase*24,fromY=y+86-phase*58,fromZ=z-52+phase*22;
     SFX.slamWarn&&SFX.slamWarn();
-    energyTrailVfx(fromX,fromY,fromZ,x,y+2,z,0xfff4a3,.09,1.35,1.15);
-    addLightningBeam(fromX,fromY,fromZ,x,y+2,z,1.1);
-    glowFlash(x,y+5,z,0xfff4a3,9,.52);
+    energyTrailVfx(fromX,fromY,fromZ,x,y+2,z,0xfff4a3,.18,1.05,1.25);
+    energyTrailVfx(fromX+3,fromY-2,fromZ-2,x,y+2.4,z,0xff6b2a,.09,.95,1.05);
+    energyTrailVfx(fromX-2,fromY-1,fromZ+3,x,y+1.8,z,0xffffff,.045,.75,1.2);
+    addLightningBeam(fromX,fromY,fromZ,x,y+2,z,1.75);
+    ringPulse(x,y+.1,z,4.2+phase*4.5,0xffd24a,.5);
+    glowFlash(x,y+6,z,0xfff4a3,12,.72);
+    burst(x,y+2,z,[1,.82,.3],26,5.2,5,.55,3);
     showName('FALLING STAR');
     return;
   }

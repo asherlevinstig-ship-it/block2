@@ -88,6 +88,13 @@ class SpawningMixin {
   startMeteorEvent(now = Date.now(), preferred = null, opts = {}) {
     this.initMeteorEventState(now);
     this.debugMeteorEvent('start:request', { now, preferred, opts, existingId: this.meteorEvent && this.meteorEvent.id || '' });
+    if (this.meteorEvent && opts && opts.forceReplace) {
+      const old = this.meteorEvent;
+      for (const id of [old.bossId, ...old.minionIds || []]) { if (id) { this.state.mobs.delete(id); delete this.mobMeta[id]; } }
+      this.meteorEvent = null;
+      this.debugMeteorEvent('start:force-replaced', { oldId: old.id || '' });
+      this.sendOverworldActivities();
+    }
     if (this.meteorEvent) return null;
     const point = this.meteorSpawnPoint(preferred, opts);
     if (!point) {
@@ -103,6 +110,7 @@ class SpawningMixin {
       createdAt: now,
       impactAt: now + 5200,
       expiresAt: now + 8 * 60 * 1000,
+      nextFallingFxAt: now + 700,
       bossId: '',
       minionIds: new Set(),
       cratered: false,
@@ -110,6 +118,7 @@ class SpawningMixin {
     this.meteorEvent = ev;
     this.debugMeteorEvent('start:created', this.meteorEventPayload(ev));
     this.broadcast('meteorEvent', this.meteorEventPayload(ev));
+    this.sendSpace('', 'fx', { t: 'meteorFalling', x: ev.x, y: ev.y, z: ev.z, impactAt: ev.impactAt, dgn: '' });
     this.broadcast('chat', { name: '[Falling Star]', text: 'A star is tearing across the sky. Watch for the impact.' });
     this.sendOverworldActivities();
     return ev;
@@ -259,6 +268,10 @@ class SpawningMixin {
     if (!this.meteorEvent && playerCount && now >= (this.nextMeteorAt || 0)) this.startMeteorEvent(now);
     const ev = this.meteorEvent;
     if (!ev) return;
+    if (ev.state === 'falling' && now >= (ev.nextFallingFxAt || 0)) {
+      this.sendSpace('', 'fx', { t: 'meteorFalling', x: ev.x, y: ev.y, z: ev.z, impactAt: ev.impactAt, dgn: '' });
+      ev.nextFallingFxAt = now + 850;
+    }
     if (ev.state === 'falling' && now >= ev.impactAt) {
       ev.state = 'active';
       this.debugMeteorEvent('impact:start', this.meteorEventPayload(ev));
