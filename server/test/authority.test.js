@@ -1552,6 +1552,17 @@ test('town exit movement ignores overhead arch blocks when finding the floor',()
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),false);
 });
 
+test('stuck rescue candidates near town exits ignore overhead arch blocks',()=>{
+  const room=makeRoom(),client=makeClient('town_exit_rescue_hunter');
+  const x=500.366, y=16, z=570.987;
+  seedPlayer(room,client,{x,z,y,hp:20});
+  const p=room.state.players.get(client.sessionId);
+  const space=room.stuckRescueSpace(client,p);
+  const candidate=room.stuckRescueCandidates(p,3.134,space).find(c=>Math.abs(c.z-571.2)<.75);
+  assert.ok(candidate,'a nearby candidate exists on the north exit path');
+  assert.equal(candidate.y < 17,true,'rescue stays on the walkway instead of lifting to the arch');
+});
+
 test('movement cannot tunnel through a thin wall between valid air cells',()=>{
   const room=makeRoom(),client=makeClient('wall_tunnel_hunter');
   room.lastMoveMsg=new Map();

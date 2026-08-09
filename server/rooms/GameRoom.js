@@ -6203,7 +6203,8 @@ class GameRoom extends Room {
           : D.standHeightIn(inst.world, x, z, Math.min(12, fromY));
       }
       if (rawDgn) return Number.isFinite(+fromY) ? +fromY : -1;
-      return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, W.WH - 2) : -1;
+      const probeY = Math.min(W.WH - 2, Math.max(Number.isFinite(+fromY) ? +fromY : 0, p && Number.isFinite(+p.y) ? +p.y : 0) + 2.25);
+      return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, probeY) : -1;
     };
     const clear = (x, y, z) => {
       if (!Number.isFinite(+x) || !Number.isFinite(+y) || !Number.isFinite(+z)) return false;
