@@ -899,6 +899,13 @@ function tickAbilities(dt,t){
 // ability HUD
 const abEl=document.getElementById('abilities');
 const abSlots=[];
+function dispatchAbilityHudKey(code){
+  const keyMap={KeyQ:'q',KeyR:'r',KeyH:'h',KeyJ:'j',KeyF:'f'};
+  try{
+    window.dispatchEvent(new KeyboardEvent('keydown',{code,key:keyMap[code]||code,bubbles:true,cancelable:true}));
+    setTimeout(()=>window.dispatchEvent(new KeyboardEvent('keyup',{code,key:keyMap[code]||code,bubbles:true,cancelable:true})),48);
+  }catch(e){}
+}
 function renderAbilities(){
   abEl.innerHTML=''; abSlots.length=0;
   const rows=[];
@@ -935,7 +942,26 @@ function renderAbilities(){
     const d=document.createElement('div'); d.className='abslot'+(row.pathPending?' path-pending':'');
     d.style.borderColor=row.col; d.style.color=row.col;
     d.title=row.pathPending?'Choose your ability path with C':(row.a.n||'Ability');
+    d.dataset.abilityKey=row.key==='Q'?'KeyQ':row.key==='R'?'KeyR':row.key==='H'?'KeyH':row.key==='J'?'KeyJ':row.key==='F'?'KeyF':'';
+    d.setAttribute('role','button');
+    d.setAttribute('tabindex','0');
+    d.setAttribute('aria-label',(row.a.n||'Ability')+' - '+row.key);
     d.innerHTML='<span class="k">'+row.key+'</span>'+row.a.g+'<div class="cdov"></div><span class="lk">'+(row.pathPending?'PATH':'')+'</span>';
+    d.addEventListener('pointerdown',e=>{
+      const code=d.dataset.abilityKey||'';
+      if(!code)return;
+      e.preventDefault();
+      e.stopPropagation();
+      dispatchAbilityHudKey(code);
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.ability-tap',{key:row.key,name:row.a.n||'Ability'});
+    });
+    d.addEventListener('keydown',e=>{
+      if(e.code!=='Enter'&&e.code!=='Space')return;
+      const code=d.dataset.abilityKey||'';
+      if(!code)return;
+      e.preventDefault();
+      dispatchAbilityHudKey(code);
+    });
     abEl.appendChild(d); abSlots.push(d);
   });
 }
