@@ -24,8 +24,17 @@ let nameTimer=null, arrivalTitleTimer=null;
 const hudSlots=[];
 for(let i=0;i<9;i++){
   const slot=document.createElement('div'); slot.className='slot';
+  slot.dataset.hotbarSlot=String(i);
+  slot.setAttribute('role','button');
+  slot.setAttribute('aria-label','Select hotbar slot '+(i+1));
   const key=document.createElement('span'); key.className='key'; key.textContent=i+1;
   slot.appendChild(key);
+  slot.addEventListener('pointerdown',e=>{
+    if(!document.body.classList.contains('tablet-mode'))return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectSlot(i);
+  });
   hotbarEl.appendChild(slot);
   hudSlots.push(slot);
 }
@@ -241,6 +250,7 @@ function refreshHUD(){
   for(let i=0;i<9;i++){
     fillSlotEl(hudSlots[i], inv[i]);
     hudSlots[i].classList.toggle('sel', i===combatState.selectedSlot);
+    hudSlots[i].setAttribute('aria-pressed',i===combatState.selectedSlot?'true':'false');
   }
   refreshUtilityHUD();
   refreshStatPointNudge();

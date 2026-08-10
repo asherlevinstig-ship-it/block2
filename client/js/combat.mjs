@@ -694,6 +694,11 @@ function ensureTabletControls(){
   root.innerHTML=
     '<div class="tablet-look-zone" aria-hidden="true"></div>'+
     '<div class="tablet-stick" aria-label="Move"><div class="tablet-stick-knob"></div></div>'+
+    '<div class="tablet-slot-controls" aria-label="Select hotbar item">'+
+      '<button data-tablet-slot-dir="-1" aria-label="Previous hotbar slot">‹</button>'+
+      '<span>Slot</span>'+
+      '<button data-tablet-slot-dir="1" aria-label="Next hotbar slot">›</button>'+
+    '</div>'+
     '<div class="tablet-actions">'+
       '<button data-tablet-key="KeyF" data-hold="1">Attack</button>'+
       '<button data-tablet-key="KeyG">Interact</button>'+
@@ -763,16 +768,33 @@ function ensureTabletControls(){
     btn.addEventListener('pointerup',release);
     btn.addEventListener('pointercancel',release);
   });
+  root.querySelectorAll('[data-tablet-slot-dir]').forEach(btn=>{
+    const dir=Number(btn.dataset.tabletSlotDir)||0;
+    btn.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();
+      const next=(selected+dir+9)%9;
+      selectSlot(next);
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.hotbar-cycle',{slot:next,dir});
+    });
+  });
   tabletInputState.controls=root;
   return root;
 }
 function refreshTabletMode(){
   detectTabletInput();
   const controls=ensureTabletControls();
-  const modalInputOpen=uiOpen||statOpen||uiShellState.qOpen||pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||document.body.classList.contains('game-modal-open');
+  const modalInputOpen=uiOpen||statOpen||uiShellState.qOpen||pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
+    document.body.classList.contains('game-modal-open')||
+    document.body.classList.contains('chat-open')||
+    document.body.classList.contains('admin-chat-open')||
+    document.body.classList.contains('death-active')||
+    document.body.classList.contains('path-selecting')||
+    !!globalThis.dungeonLobbyOpen;
   const shouldShow=tabletInputState.tablet&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
   controls.classList.toggle('portrait',innerHeight>innerWidth);
   controls.classList.toggle('landscape',innerWidth>=innerHeight);
+  const slotLabel=controls.querySelector('.tablet-slot-controls span');
+  if(slotLabel)slotLabel.textContent='Slot '+(selected+1);
   controls.classList.toggle('hidden',!shouldShow);
   if(!shouldShow){
     tabletReleaseMovementKeys();
@@ -798,6 +820,7 @@ globalThis.BlockcraftTabletDebug=()=>({
   touch:tabletInputState.touch,
   forced:tabletInputState.forced,
   visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden')),
+  selectedSlot:selected,
   pressed:Array.from(tabletInputState.pressed),
   viewport:{w:innerWidth,h:innerHeight},
 });
