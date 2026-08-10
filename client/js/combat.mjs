@@ -12,6 +12,13 @@ const enterJobTutorialRoom=dimensionsApi.enterJobTutorialRoom,exitJobTutorialRoo
 const enterQuestionRoom=dimensionsApi.enterQuestionRoom,exitQuestionRoomToTown=dimensionsApi.exitQuestionRoomToTown;
 function isDragon(kind){ return typeof kind==='string' && kind.slice(0,6)==='dragon'; }
 const BLOCK_PLACE_REACH=4.5;
+function networkingCutsceneActive(){ return !!globalThis.cutscene; }
+function acknowledgeSmartSuggestionKeySafe(code){
+  if(typeof globalThis.acknowledgeSmartSuggestionKey==='function')globalThis.acknowledgeSmartSuggestionKey(code);
+}
+function skipCutsceneSafe(){
+  if(typeof globalThis.skipCutscene==='function')globalThis.skipCutscene();
+}
 
 const legacyCombatBindings={
   "isDragon":{get:()=>isDragon},
@@ -888,7 +895,7 @@ function refreshTabletMode(){
     locked=true;
   }
   const touchPlaying=locked||overlayHidden;
-  const shouldShow=tabletInputState.gameplayTouch&&!portraitMobile&&touchPlaying&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  const shouldShow=tabletInputState.gameplayTouch&&!portraitMobile&&touchPlaying&&!modalInputOpen&&!claimMode&&!worldLoading&&!networkingCutsceneActive();
   document.body.classList.toggle('phone-portrait-blocked',!!(portraitMobile&&overlayHidden&&!modalInputOpen));
   document.body.classList.toggle('mobile-portrait-blocked',!!(portraitMobile&&overlayHidden&&!modalInputOpen));
   document.body.classList.toggle('touch-controls-visible',!!shouldShow);
@@ -919,7 +926,7 @@ function refreshTabletMode(){
       controlsClass:controls.className,
       bodyClass:document.body.className,
       viewport:{w:innerWidth,h:innerHeight},
-      gates:{overlayHidden,locked:!!locked,cursorReleased:!!cursorReleased,modalInputOpen:!!modalInputOpen,claimMode:!!claimMode,worldLoading:!!worldLoading,cutscene:!!cutscene,portraitMobile:!!portraitMobile},
+      gates:{overlayHidden,locked:!!locked,cursorReleased:!!cursorReleased,modalInputOpen:!!modalInputOpen,claimMode:!!claimMode,worldLoading:!!worldLoading,cutscene:networkingCutsceneActive(),portraitMobile:!!portraitMobile},
     });
   }
 }
@@ -4965,12 +4972,12 @@ function refreshPlayUi(){
   document.getElementById('locationhud').classList.toggle('hidden', !showHud);
   document.getElementById('coords').classList.toggle('hidden', !showHud);
   document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus && !(Array.isArray(activeObjectives)&&activeObjectives.length)));
-  if(questionBtn)questionBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || cutscene);
-  if(socialBtn)socialBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || cutscene);
+  if(questionBtn)questionBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || networkingCutsceneActive());
+  if(socialBtn)socialBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || networkingCutsceneActive());
   document.getElementById('landmap').classList.toggle('hidden', true);
   document.getElementById('eventhud').classList.toggle('hidden', true);
   const fishingActive=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active());
-  updateKeyPromptHud(showHud&&!fishingActive&&!modalInputOpen&&!claimMode&&!worldLoading&&!document.body.classList.contains('portal-transitioning')&&!document.body.classList.contains('chat-open')&&!cutscene);
+  updateKeyPromptHud(showHud&&!fishingActive&&!modalInputOpen&&!claimMode&&!worldLoading&&!document.body.classList.contains('portal-transitioning')&&!document.body.classList.contains('chat-open')&&!networkingCutsceneActive());
   hintEl.classList.add('hidden');
   updateLandMinimap();
   syncHudLayerState();
@@ -5748,7 +5755,7 @@ addEventListener('keydown', e=>{
     return;
   }
   keys[e.code]=true;
-  acknowledgeSmartSuggestionKey(e.code);
+  acknowledgeSmartSuggestionKeySafe(e.code);
   if(e.code==='Space' && !e.repeat){ jumpPressT=performance.now(); if(onboardingActive&&onboardingArrived&&onboardingKind()==='jump') onboardingFlags.jumped=true; }
   if(String(e.key||'').toLowerCase()==='p'&&!e.repeat&&gameInput){
     e.preventDefault();
@@ -5803,7 +5810,7 @@ addEventListener('keydown', e=>{
     if(e.code==='KeyK' && !e.repeat){ e.preventDefault(); cycleFamiliar(); return; }
   }
   if(e.code==='Escape'&&globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.handleKeyDown&&globalThis.BlockcraftFishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
-  if(e.code==='Escape' && cutscene){ e.preventDefault(); skipCutscene(); return; }
+  if(e.code==='Escape' && networkingCutsceneActive()){ e.preventDefault(); skipCutsceneSafe(); return; }
   if(e.code==='Escape'){
     let closed=false;
     const mirrorPreview=globalThis.BlockcraftAppearancePreview;
@@ -5921,7 +5928,7 @@ addEventListener('mousemove', e=>{
   }
 });
 function primaryAction(){
-  if(cutscene){ skipCutscene(); return; }
+  if(networkingCutsceneActive()){ skipCutsceneSafe(); return; }
   if(isMeditating){ stopMeditation(); return; }
   if(isDragon(mountKind)){ mouseL=true; dragonBreathe(); return; }   // ride: primary action breathes
   vmSwing();
