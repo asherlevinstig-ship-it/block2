@@ -717,6 +717,14 @@ function openQuestionsFromHud(){
   return true;
 }
 function openSocialFromHud(){
+  const wheel=document.getElementById('chatwheel');
+  if(tabletInputState.gameplayTouch){
+    if(wheel&&!wheel.classList.contains('hidden')&&typeof closeQuickChatWheel==='function'){
+      closeQuickChatWheel(true);
+      return true;
+    }
+    if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
+  }
   if(typeof qModalIs==='function'&&qModalIs('social')&&typeof closeQWin==='function'){
     closeQWin(true);
     return true;

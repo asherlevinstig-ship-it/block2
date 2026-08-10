@@ -2772,7 +2772,8 @@ function netAttachRoom(room,name,client){
       if(!m)return;
       const channel=(globalThis.BlockcraftCommsRules.CHANNELS[m.mode]||globalThis.BlockcraftCommsRules.CHANNELS.local),label=channel.icon+' '+channel.label;
       chatLine(label+' · '+(m.name||'Hunter'),m.text||'',m.mode||'local');SOCIAL.playCommsCue(m.mode||'local');
-      if(m.fromSid&&m.fromSid!==room.sessionId)SOCIAL.showChatBubble(m.fromSid,m.text||'',m.mode||'local');
+      if(m.fromSid&&m.fromSid===room.sessionId&&SOCIAL.showLocalChatBubble)SOCIAL.showLocalChatBubble(m.text||'',m.mode||'local');
+      else if(m.fromSid)SOCIAL.showChatBubble(m.fromSid,m.text||'',m.mode||'local');
     });
     room.onMessage('commsReject',m=>chatLine('[Comms]',m&&m.reason==='party'?'Join a party before using Party chat.':m&&m.reason==='target'?'That whisper target is no longer online.':m&&m.reason==='muted'?'That player has muted your communications.':m&&m.reason==='duplicate'?'Please avoid repeating the same phrase.':m&&m.reason==='rate'?'Communication cooldown active.':'Only approved quick-chat phrases are allowed.','blocked'));
     room.onMessage('commsMuteResult',m=>SOCIAL.applyMuteResult(m));
@@ -5357,6 +5358,7 @@ const SOCIAL=createSocialSystem({
   resetLevel2AbilityFlow,
 });
 globalThis.startQuickChatWheel=SOCIAL.startQuickChatWheel;
+globalThis.closeQuickChatWheel=SOCIAL.closeQuickChatWheel;
 globalThis.startDragonCommandWheel=SOCIAL.startDragonCommandWheel;
 const {chatLine,openChat,closeChat,openAdminChat,pendingTeamInvites,teamCol,teamName,myTeamId,isMyTeamLeader,netTeamHud,openTeamUI}=SOCIAL;
 

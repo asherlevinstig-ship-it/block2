@@ -87,6 +87,18 @@ function sendQuickPhrase(phrase){
   else if(NET.on)NET.room.send('comms',{mode:chatMode,target,phrase});
   else chatLine('You',QUICK_CHAT_OPTIONS[phrase]||'');
 }
+function bindWheelAction(item,run){
+  let used=false;
+  const handler=event=>{
+    event.preventDefault();
+    event.stopPropagation();
+    if(used)return;
+    used=true;
+    run();
+  };
+  item.addEventListener('pointerdown',handler);
+  item.addEventListener('click',handler);
+}
 function renderQuickChatWheel(){
   if(!chatWheel)return;
   chatWheelEl.classList.remove('dragonwheel');
@@ -97,7 +109,7 @@ function renderQuickChatWheel(){
   chatWheel.ids.forEach((id,index)=>{
     const angle=-Math.PI/2+index*Math.PI*2/count,item=document.createElement('button');item.type='button';
     item.className='wheelitem'+(index===chatWheel.selected?' selected':'');item.textContent=QUICK_CHAT_OPTIONS[id];
-    item.addEventListener('click',()=>{sendQuickPhrase(id);closeQuickChatWheel(true);});
+    bindWheelAction(item,()=>{sendQuickPhrase(id);closeQuickChatWheel(true);});
     item.style.left=(215+Math.cos(angle)*155)+'px';item.style.top=(215+Math.sin(angle)*155)+'px';chatWheelItemsEl.appendChild(item);
   });
 }
@@ -337,6 +349,22 @@ function showChatBubble(sid,text,mode){
     sprite.visible=distance<64;sprite.material.opacity=Math.max(.08,Math.min(1,1-distance/70))*(clear?1:.22);
   },100);
 }
+function showLocalChatBubble(text,mode){
+  let el=document.getElementById('localchatbubble');
+  if(!el){
+    el=document.createElement('div');
+    el.id='localchatbubble';
+    document.body.appendChild(el);
+  }
+  const channel=COMMS_CHANNELS[mode]||COMMS_CHANNELS.local;
+  el.style.setProperty('--bubble-color',channel.color||'#7dd3fc');
+  el.textContent=String(text||'').slice(0,90);
+  el.classList.remove('hidden','show');
+  void el.offsetWidth;
+  el.classList.add('show');
+  clearTimeout(el._hideTimer);
+  el._hideTimer=setTimeout(()=>el.classList.remove('show'),4200);
+}
 function applyMuteResult(message){if(!message||!message.ok)return;if(message.muted){mutedPlayers.add(message.target);if(message.targetToken)mutedPlayers.add(message.targetToken);}else{mutedPlayers.delete(message.target);mutedPlayers.delete(message.targetToken);}updateMuteButton();chatLine('[Comms]',message.muted?'Player muted.':'Player unmuted.',message.muted?'blocked':'whisper');}
 function applyBlockList(message){
   closeChat();openQWin('management');qpanelEl.innerHTML='<h2>BLOCKED HUNTERS</h2><div class="sub2">ACCOUNT-LEVEL COMMUNICATION BLOCKS</div>';
@@ -557,7 +585,9 @@ function openTeamUI(){
     closeAdminChat,
     setChatMode,
     showChatBubble,
+    showLocalChatBubble,
     startQuickChatWheel,
+    closeQuickChatWheel,
     startDragonCommandWheel,
     applyMuteResult,
     applyBlockList,
