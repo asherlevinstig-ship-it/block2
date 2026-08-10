@@ -260,6 +260,33 @@ function setActiveObjectives(next, opts={}){
   activeObjectives=list;
   seenClaimableObjectiveIds=claimable;
   objectiveFeedPrimed=true;
+  globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();
+  globalThis.BlockcraftRefreshHomeworkHud&&globalThis.BlockcraftRefreshHomeworkHud();
+}
+function homeworkObjectiveFromProgress(hw){
+  if(!hw||typeof hw!=='object')return null;
+  const required=Math.max(1,Math.min(100,Number(hw.questionCount)||1));
+  const current=Math.max(0,Math.min(required,Number(hw.answeredCount)||0));
+  const complete=current>=required||hw.completed===true;
+  return {
+    id:'homework:'+String(hw.id||'active')+':'+String(hw.periodKey||'run'),
+    source:'homework',
+    category:'homework',
+    questType:'homework',
+    title:String(hw.title||'Homework').slice(0,80),
+    status:complete?'complete':'active',
+    text:complete?'Homework complete for this run.':'Answer '+String(required-current)+' more homework question'+(required-current===1?'':'s')+'.',
+    location:hw.subjectName||hw.className||hw.periodLabel||'Homework',
+    action:complete?null:{type:'recall',label:'START RECALL'},
+    progress:{current,required},
+    priority:complete?95:22,
+  };
+}
+function applyHomeworkProgressList(list){
+  const homeworkObjectives=(Array.isArray(list)?list:[]).map(homeworkObjectiveFromProgress).filter(Boolean);
+  const current=Array.isArray(activeObjectives)?activeObjectives:[];
+  const withoutHomework=current.filter(o=>!(o&&(o.source==='homework'||o.questType==='homework'||String(o.id||'').startsWith('homework:'))));
+  setActiveObjectives([...withoutHomework,...homeworkObjectives],{announce:false});
 }
 function receiveRewardItemLegacy(it){
   if(!it||!ITEMS[it.id])return;
@@ -1366,6 +1393,11 @@ function netAttachRoom(room,name,client){
       progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
       setActiveObjectives(m&&m.activeObjectives,{announce:true});
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.progressionFocus.received', { focus:progressionFocus, activeObjectives:m&&m.activeObjectives });
+      refreshHUD(); refreshPlayUi();
+    });
+    room.onMessage('homeworkProgress', m=>{
+      applyHomeworkProgressList(m&&m.homework);
+      globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.homeworkProgress.received', { homework:m&&m.homework });
       refreshHUD(); refreshPlayUi();
     });
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});

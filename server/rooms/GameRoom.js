@@ -4820,7 +4820,7 @@ class GameRoom extends Room {
         status: complete ? 'complete' : 'active',
         text: complete
           ? 'Homework complete for this run.'
-          : `Answer ${required - current} more Recall question${required - current === 1 ? '' : 's'} for homework completion.`,
+          : `Answer ${required - current} more homework question${required - current === 1 ? '' : 's'} for homework completion.`,
         location: hw && (hw.subjectName || hw.className || hw.periodLabel) || 'Recall Cast',
         action: complete ? null : { type: 'recall', label: 'START RECALL' },
         progress: { current, required },

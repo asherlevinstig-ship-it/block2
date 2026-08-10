@@ -976,6 +976,7 @@ function refreshHomeworkHud(){
       '<div class="hwfooter"><span class="hwbook">▰</span><span class="hwcta">'+(complete?'View Results':'View Quest')+'</span></div>'+
     '</button>';
 }
+globalThis.BlockcraftRefreshHomeworkHud=refreshHomeworkHud;
 function serverObjectiveProgressText(o){
   const p=o&&o.progress;
   if(!p||!Number.isFinite(p.current)||!Number.isFinite(p.required))return '';
