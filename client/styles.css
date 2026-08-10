@@ -2158,6 +2158,38 @@ body.mobile-play-mode #currentquest small{
   -webkit-box-orient:vertical!important;
   overflow:hidden!important;
 }
+body.mobile-play-mode #landmap.map-utility{
+  top:calc(8px + env(safe-area-inset-top,0px))!important;
+  right:calc(10px + env(safe-area-inset-right,0px))!important;
+  width:128px!important;
+  padding:5px!important;
+  border-radius:10px!important;
+  background:linear-gradient(180deg,rgba(5,12,22,.76),rgba(2,6,13,.6))!important;
+  backdrop-filter:blur(5px);
+  z-index:27!important;
+}
+body.mobile-play-mode #landmap.map-utility .mt{
+  margin-bottom:3px!important;
+  font-size:8px!important;
+  letter-spacing:1.4px!important;
+}
+body.mobile-play-mode #landmap.map-utility canvas{
+  width:116px!important;
+  height:116px!important;
+}
+body.mobile-play-mode #landmap.map-utility.worldmap{
+  width:174px!important;
+}
+body.mobile-play-mode #landmap.map-utility.worldmap canvas{
+  width:162px!important;
+  height:162px!important;
+}
+body.mobile-play-mode:has(#landmap.map-utility:not(.hidden)) #currentquest{
+  top:calc(162px + env(safe-area-inset-top,0px))!important;
+}
+body.mobile-play-mode:has(#landmap.map-utility.worldmap:not(.hidden)) #currentquest{
+  top:calc(218px + env(safe-area-inset-top,0px))!important;
+}
 body.mobile-play-mode #homeworkhud{
   display:block!important;
   left:calc(12px + env(safe-area-inset-left,0px))!important;
@@ -2373,5 +2405,11 @@ body.mobile-play-mode .mobile-quick-menu button{
   body.tablet-mode .tablet-actions .tablet-action-menu{right:122px;width:62px;height:62px}
   body.tablet-mode #hotbar .slot.mobile-quick{width:54px;height:54px;min-width:54px;min-height:54px}
   body.tablet-mode .tablet-slot-controls{bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+}
+body.tablet-mode.mobile-play-mode:has(#landmap.map-utility:not(.hidden)) #currentquest{
+  top:calc(168px + env(safe-area-inset-top,0px))!important;
+}
+body.tablet-mode.mobile-play-mode:has(#landmap.map-utility.worldmap:not(.hidden)) #currentquest{
+  top:calc(224px + env(safe-area-inset-top,0px))!important;
 }
 
