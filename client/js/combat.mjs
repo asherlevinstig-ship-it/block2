@@ -633,6 +633,7 @@ const tabletInputState={
   joystick:{active:false,id:null,cx:0,cy:0,keys:new Set()},
   look:{active:false,id:null,x:0,y:0},
   pressed:new Set(),
+  sprintToggled:false,
   lastDebugSig:'',
 };
 function detectTabletInput(){
@@ -669,7 +670,7 @@ function tryLockLandscapeOrientation(){
   }catch{}
 }
 function dispatchVirtualKey(code,type='keydown'){
-  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyP:'p',KeyC:'c',KeyO:'o',Space:' ',Escape:'Escape'};
+  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyP:'p',KeyC:'c',KeyO:'o',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
   const event=new KeyboardEvent(type,{code,key:keyMap[code]||code,bubbles:true,cancelable:true});
   window.dispatchEvent(event);
 }
@@ -687,6 +688,17 @@ function tabletSetKey(code,on){
 function tabletReleaseMovementKeys(){
   for(const code of ['KeyW','KeyA','KeyS','KeyD'])tabletSetKey(code,false);
   tabletInputState.joystick.keys.clear();
+}
+function tabletSetSprintToggle(on){
+  tabletInputState.sprintToggled=!!on;
+  tabletSetKey('ShiftLeft',tabletInputState.sprintToggled);
+  const btn=tabletInputState.controls&&tabletInputState.controls.querySelector('[data-tablet-sprint]');
+  if(btn){
+    btn.classList.toggle('active',tabletInputState.sprintToggled);
+    btn.setAttribute('aria-pressed',tabletInputState.sprintToggled?'true':'false');
+    const label=btn.querySelector('span');
+    if(label)label.textContent=tabletInputState.sprintToggled?'Sprint On':'Sprint';
+  }
 }
 function tabletApplyJoystick(dx,dy){
   const dead=16;
@@ -720,6 +732,7 @@ function ensureTabletControls(){
   root.innerHTML=
     '<div class="tablet-look-zone" aria-hidden="true"></div>'+
     '<div class="tablet-stick" aria-label="Move"><div class="tablet-stick-knob"></div></div>'+
+    '<button class="tablet-sprint-toggle" data-tablet-sprint="1" type="button" aria-pressed="false"><b>↯</b><span>Sprint</span></button>'+
     '<div class="tablet-slot-controls" aria-label="Select hotbar item">'+
       '<button data-tablet-slot-dir="-1" aria-label="Previous hotbar slot">‹</button>'+
       '<span>Slot</span>'+
@@ -745,6 +758,11 @@ function ensureTabletControls(){
   const stick=root.querySelector('.tablet-stick');
   const look=root.querySelector('.tablet-look-zone');
   const mobileQuickMenu=root.querySelector('.mobile-quick-menu');
+  root.querySelector('[data-tablet-sprint]')?.addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();
+    tabletSetSprintToggle(!tabletInputState.sprintToggled);
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.sprint-toggle',{on:tabletInputState.sprintToggled});
+  });
   stick.addEventListener('pointerdown',e=>{
     if(!tabletInputState.gameplayTouch)return;
     e.preventDefault();e.stopPropagation();
@@ -854,6 +872,7 @@ function refreshTabletMode(){
   controls.classList.toggle('hidden',!shouldShow);
   if(!shouldShow){
     tabletReleaseMovementKeys();
+    tabletSetSprintToggle(false);
     for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
     controls.querySelector('.mobile-quick-menu')?.classList.add('hidden');
   }
@@ -883,6 +902,7 @@ globalThis.BlockcraftTabletDebug=()=>({
   visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden')),
   selectedSlot:selected,
   pressed:Array.from(tabletInputState.pressed),
+  sprintToggled:tabletInputState.sprintToggled,
   viewport:{w:innerWidth,h:innerHeight},
 });
 function keyPromptMarkup(prompt,index){
@@ -6914,6 +6934,7 @@ addEventListener('contextmenu', e=> e.preventDefault());
 addEventListener('blur', ()=>{
   mouseR=false; placeKeyHeld=false; mouseLookDelta.x=mouseLookDelta.y=0;
   tabletReleaseMovementKeys();
+  tabletSetSprintToggle(false);
   for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
 });
 addEventListener('wheel', e=>{ if(locked&&isWorldPointerTarget(e.target)) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
