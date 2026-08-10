@@ -2844,6 +2844,7 @@ function netRestoreProfile(m){
     playerCustomAppearance=parseReplicatedAppearance(m&&m.appearance);
     if(AUTH_UI&&AUTH_UI.state&&AUTH_UI.state.gameProfile)AUTH_UI.state.gameProfile.appearance=playerCustomAppearance;
     if(m&&Array.isArray(m.activeObjectives))setActiveObjectives(m.activeObjectives,{announce:false});
+    if(m&&Array.isArray(m.homeworkObjectives))applyHomeworkProgressList(m.homeworkObjectives);
     if(!onboardingDone()){
       if(!onboardingActive) beginOnboarding();
       eventLog('Tutorial active - saved profile ignored until training is complete');

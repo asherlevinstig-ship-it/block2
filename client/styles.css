@@ -1994,7 +1994,6 @@ body.mobile-play-mode #activitytracker,
 body.mobile-play-mode #townchoices,
 body.mobile-play-mode #bugreportbtn,
 body.mobile-play-mode #stuckrescuebtn,
-body.mobile-play-mode #homeworkhud,
 body.mobile-play-mode #utilitybar,
 body.mobile-play-mode #abilities,
 body.mobile-play-mode #statpointnudge,
@@ -2159,6 +2158,38 @@ body.mobile-play-mode #currentquest small{
   -webkit-box-orient:vertical!important;
   overflow:hidden!important;
 }
+body.mobile-play-mode #homeworkhud{
+  display:block!important;
+  left:calc(12px + env(safe-area-inset-left,0px))!important;
+  top:calc(70px + env(safe-area-inset-top,0px))!important;
+  width:min(244px,30vw)!important;
+  max-width:min(244px,30vw)!important;
+  z-index:28!important;
+  pointer-events:auto!important;
+}
+body.mobile-play-mode #homeworkhud.hidden{display:none!important}
+body.mobile-play-mode #homeworkhud button{
+  min-height:0!important;
+  padding:8px 10px!important;
+  gap:4px 8px!important;
+  border-radius:10px!important;
+  background:linear-gradient(180deg,rgba(5,13,23,.76),rgba(4,20,18,.62))!important;
+  backdrop-filter:blur(5px);
+}
+body.mobile-play-mode #homeworkhud .hwkicker{
+  font-size:8px!important;
+  letter-spacing:1.4px!important;
+}
+body.mobile-play-mode #homeworkhud strong{
+  font-size:11px!important;
+  line-height:1.12!important;
+}
+body.mobile-play-mode #homeworkhud small,
+body.mobile-play-mode #homeworkhud .hwfooter{display:none!important}
+body.mobile-play-mode #homeworkhud .hwprogress{margin-top:0!important;gap:4px!important}
+body.mobile-play-mode #homeworkhud .hwprogress b{font-size:11px!important}
+body.mobile-play-mode #homeworkhud .hwprogress em{font-size:8px!important;text-transform:uppercase}
+body.mobile-play-mode #homeworkhud i{height:4px!important;margin-top:1px!important}
 body.mobile-play-mode #hotbar{
   left:50%!important;
   bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;
