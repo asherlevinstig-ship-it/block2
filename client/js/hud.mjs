@@ -30,7 +30,7 @@ for(let i=0;i<9;i++){
   const key=document.createElement('span'); key.className='key'; key.textContent=i+1;
   slot.appendChild(key);
   slot.addEventListener('pointerdown',e=>{
-    if(!document.body.classList.contains('tablet-mode'))return;
+    if(!document.body.classList.contains('mobile-play-mode'))return;
     e.preventDefault();
     e.stopPropagation();
     selectSlot(i);

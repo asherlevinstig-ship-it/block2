@@ -626,6 +626,8 @@ let keyPromptIndex=-1,keyPromptNextAt=0;
 const tabletInputState={
   touch:false,
   tablet:false,
+  phone:false,
+  gameplayTouch:false,
   forced:false,
   controls:null,
   joystick:{active:false,id:null,cx:0,cy:0,keys:new Set()},
@@ -642,13 +644,29 @@ function detectTabletInput(){
   const longest=Math.max(innerWidth||0,innerHeight||0);
   let forced=new URLSearchParams(location.search).has('tablet');
   try{ forced=forced||(localStorage&&localStorage.blockcraftForceTablet==='1'); }catch{}
+  const phone=touch&&!ipad&&shortest<600;
   const tablet=forced||(touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900));
+  const gameplayTouch=forced||tablet||phone;
   tabletInputState.forced=!!forced;
   tabletInputState.touch=forced||touch||coarse;
+  tabletInputState.phone=!!phone;
   tabletInputState.tablet=!!tablet;
+  tabletInputState.gameplayTouch=!!gameplayTouch;
   document.body.classList.toggle('touch-mode',tabletInputState.touch);
   document.body.classList.toggle('tablet-mode',tabletInputState.tablet);
+  document.body.classList.toggle('phone-mode',tabletInputState.phone);
+  document.body.classList.toggle('mobile-play-mode',tabletInputState.gameplayTouch);
   return tabletInputState;
+}
+function isTouchGameplayDevice(){
+  return !!(tabletInputState.gameplayTouch||tabletInputState.phone||(navigator.maxTouchPoints>0&&typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches));
+}
+function tryLockLandscapeOrientation(){
+  if(!isTouchGameplayDevice())return;
+  try{
+    const lock=typeof screen!=='undefined'&&screen.orientation&&screen.orientation.lock;
+    if(typeof lock==='function')lock.call(screen.orientation,'landscape').catch(()=>{});
+  }catch{}
 }
 function dispatchVirtualKey(code,type='keydown'){
   const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyP:'p',KeyC:'c',KeyO:'o',Space:' ',Escape:'Escape'};
@@ -713,7 +731,7 @@ function ensureTabletControls(){
   const stick=root.querySelector('.tablet-stick');
   const look=root.querySelector('.tablet-look-zone');
   stick.addEventListener('pointerdown',e=>{
-    if(!tabletInputState.tablet)return;
+    if(!tabletInputState.gameplayTouch)return;
     e.preventDefault();e.stopPropagation();
     stick.setPointerCapture&&stick.setPointerCapture(e.pointerId);
     const r=stick.getBoundingClientRect();
@@ -737,7 +755,7 @@ function ensureTabletControls(){
   stick.addEventListener('pointerup',endStick);
   stick.addEventListener('pointercancel',endStick);
   look.addEventListener('pointerdown',e=>{
-    if(!tabletInputState.tablet||!gameplayCameraInputAllowed())return;
+    if(!tabletInputState.gameplayTouch||!gameplayCameraInputAllowed())return;
     e.preventDefault();e.stopPropagation();
     look.setPointerCapture&&look.setPointerCapture(e.pointerId);
     tabletInputState.look.active=true;tabletInputState.look.id=e.pointerId;tabletInputState.look.x=e.clientX;tabletInputState.look.y=e.clientY;
@@ -790,7 +808,11 @@ function refreshTabletMode(){
     document.body.classList.contains('death-active')||
     document.body.classList.contains('path-selecting')||
     !!globalThis.dungeonLobbyOpen;
-  const shouldShow=tabletInputState.tablet&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  const portraitPhone=tabletInputState.phone&&innerHeight>innerWidth;
+  const shouldShow=tabletInputState.gameplayTouch&&!portraitPhone&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  document.body.classList.toggle('phone-portrait-blocked',!!(portraitPhone&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
+  const rotateEl=document.getElementById('rotatephone');
+  if(rotateEl)rotateEl.classList.toggle('hidden',!document.body.classList.contains('phone-portrait-blocked'));
   controls.classList.toggle('portrait',innerHeight>innerWidth);
   controls.classList.toggle('landscape',innerWidth>=innerHeight);
   const slotLabel=controls.querySelector('.tablet-slot-controls span');
@@ -800,11 +822,13 @@ function refreshTabletMode(){
     tabletReleaseMovementKeys();
     for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
   }
-  const debugSig=[tabletInputState.tablet?'tablet':'not-tablet',tabletInputState.forced?'forced':'auto',shouldShow?'shown':'hidden',innerWidth+'x'+innerHeight].join('|');
+  const debugSig=[tabletInputState.phone?'phone':tabletInputState.tablet?'tablet':'not-touch-gameplay',tabletInputState.forced?'forced':'auto',portraitPhone?'portrait':'landscape',shouldShow?'shown':'hidden',innerWidth+'x'+innerHeight].join('|');
   if(tabletInputState.lastDebugSig!==debugSig){
     tabletInputState.lastDebugSig=debugSig;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.controls', {
       tablet:tabletInputState.tablet,
+      phone:tabletInputState.phone,
+      gameplayTouch:tabletInputState.gameplayTouch,
       touch:tabletInputState.touch,
       forced:tabletInputState.forced,
       visible:shouldShow,
@@ -817,6 +841,8 @@ addEventListener('resize',()=>refreshTabletMode());
 addEventListener('orientationchange',()=>setTimeout(refreshTabletMode,120));
 globalThis.BlockcraftTabletDebug=()=>({
   tablet:tabletInputState.tablet,
+  phone:tabletInputState.phone,
+  gameplayTouch:tabletInputState.gameplayTouch,
   touch:tabletInputState.touch,
   forced:tabletInputState.forced,
   visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden')),
@@ -4879,6 +4905,12 @@ function hasUserGesture(){
   }
 }
 function requestPointerLockSafe(onFail=enterPlayFallback){
+  detectTabletInput();
+  if(isTouchGameplayDevice()){
+    gameplayInputDebug('pointerlock.skip-touch');
+    if(onFail)onFail();
+    return false;
+  }
   try{
     suppressNextLockFallback=false;
     pointerLockRequestPending=true;
@@ -4918,12 +4950,15 @@ async function startPlaying(create=false){
   }
   if(globalThis.BlockcraftOpeningAudio&&typeof globalThis.BlockcraftOpeningAudio.stop==='function')globalThis.BlockcraftOpeningAudio.stop();
   SFX.init();
+  tryLockLandscapeOrientation();
   if(!NET.tried) showWorldLoading('Preparing world...');
   netConnect();
   lockFallback=false;
   locked=true;
   refreshPlayUi();
-  if(hasUserGesture()){
+  if(isTouchGameplayDevice()){
+    enterPlayFallback();
+  }else if(hasUserGesture()){
     requestPointerLockSafe(enterPlayFallback);
     setTimeout(()=>{ if(document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
   }else{
@@ -5288,6 +5323,11 @@ document.addEventListener('pointerlockchange', ()=>{
     !!globalThis.dungeonLobbyOpen ||
     document.body.classList.contains('game-modal-open');
   if(hasLock){ pointerLockRequestPending=false; lockFallback=false; suppressNextLockFallback=false; }
+  else if(isTouchGameplayDevice()&&wasPlaying&&!modalInputOpen){
+    pointerLockRequestPending=false;
+    lockFallback=true;
+    cursorReleased=false;
+  }
   else if(suppressNextLockFallback){ lockFallback=false; suppressNextLockFallback=false; }
   else if(pointerLockRequestPending&&overlay.classList.contains('hidden')&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!pathChoiceOpen&&!jobChoiceOpen&&!firstTownChoiceOpen&&!abilityAwakeningOpen)lockFallback=true;
   else if(wasPlaying&&!modalInputOpen)cursorReleased=true;
@@ -5299,7 +5339,11 @@ document.addEventListener('pointerlockchange', ()=>{
   refreshPlayUi();
   gameplayInputDebug('pointerlock.change',{hasLock,wasPlaying,modalInputOpen});
 });
-document.addEventListener('pointerlockerror', ()=>{ pointerLockRequestPending=false; gameplayInputDebug('pointerlock.error'); if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback(); });
+document.addEventListener('pointerlockerror', ()=>{
+  pointerLockRequestPending=false;
+  gameplayInputDebug(isTouchGameplayDevice()?'pointerlock.error-touch':'pointerlock.error');
+  if(!uiOpen && !statOpen && !uiShellState.qOpen) enterPlayFallback();
+});
 
 let hintDone=false;
 function isTextEntryTarget(target){
@@ -5453,6 +5497,10 @@ function resumeGameplayCamera(){
   lockFallback=false;
   locked=true;
   refreshPlayUi();
+  if(isTouchGameplayDevice()){
+    enterPlayFallback();
+    return true;
+  }
   requestPointerLockSafe(enterPlayFallback);
   setTimeout(()=>{ if(locked&&!cursorReleased&&document.pointerLockElement!==renderer.domElement) enterPlayFallback(); }, 250);
   return true;
@@ -6869,7 +6917,7 @@ gameContext.registerState('combat', Object.freeze({
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
   get abilityReady(){ return abilityHudAvailable(); },
   get abilityTutorialDone(){ return abilityTutorialDone(); },
-  get tabletInput(){ return {touch:tabletInputState.touch,tablet:tabletInputState.tablet,visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden'))}; },
+  get tabletInput(){ return {touch:tabletInputState.touch,tablet:tabletInputState.tablet,phone:tabletInputState.phone,gameplayTouch:tabletInputState.gameplayTouch,visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden'))}; },
 }));
 gameContext.registerModule('combat', Object.freeze({
   collides,

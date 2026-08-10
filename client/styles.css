@@ -1897,7 +1897,13 @@
   @media(max-width:650px){.weather-codex{grid-template-columns:1fr}}
 
 /* Tablet/touch gameplay controls */
-body.tablet-mode,body.tablet-mode canvas{touch-action:none;overscroll-behavior:none}
+body.mobile-play-mode,body.mobile-play-mode canvas{touch-action:none;overscroll-behavior:none}
+#rotatephone{position:fixed;inset:0;z-index:160;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 35%,rgba(79,216,255,.18),transparent 34%),linear-gradient(180deg,rgba(3,7,14,.94),rgba(4,7,13,.98));color:#eef9ff;text-align:center;pointer-events:auto}
+#rotatephone.hidden{display:none!important}
+#rotatephone div{width:min(360px,calc(100vw - 42px));padding:24px 20px;border:1px solid rgba(125,211,252,.62);border-radius:18px;background:linear-gradient(160deg,rgba(9,19,33,.94),rgba(5,9,18,.96));box-shadow:0 0 34px rgba(79,216,255,.24),inset 0 0 30px rgba(255,255,255,.04)}
+#rotatephone b{display:block;margin-bottom:10px;color:#ffd24a;font-size:24px;letter-spacing:3px;text-transform:uppercase;text-shadow:0 3px 0 #000}
+#rotatephone b:before{content:"⤾";display:block;margin:0 auto 12px;width:72px;height:72px;border:2px solid rgba(255,210,74,.65);border-radius:18px;color:#4fd8ff;font-size:46px;line-height:66px;box-shadow:0 0 22px rgba(79,216,255,.24)}
+#rotatephone span{display:block;color:#bfe7ff;font-size:13px;line-height:1.45}
 #tabletcontrols{--tablet-bottom:154px;--tablet-side:28px;position:fixed;inset:0;z-index:34;pointer-events:none;touch-action:none;user-select:none}
 #tabletcontrols.hidden{display:none!important}
 .tablet-look-zone{position:fixed;top:86px;right:0;bottom:272px;left:38%;pointer-events:auto;touch-action:none;background:transparent}
@@ -1911,14 +1917,14 @@ body.tablet-mode,body.tablet-mode canvas{touch-action:none;overscroll-behavior:n
 .tablet-actions{position:fixed;right:calc(var(--tablet-side) + env(safe-area-inset-right,0px));bottom:calc(var(--tablet-bottom) + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(2,88px);gap:9px;pointer-events:none}
 .tablet-actions button{pointer-events:auto;touch-action:none;min-height:48px;border:1px solid rgba(125,211,252,.54);border-radius:12px;background:linear-gradient(180deg,rgba(8,22,38,.86),rgba(3,8,16,.9));color:#eaf8ff;font-family:inherit;font-weight:800;font-size:10px;letter-spacing:1.1px;text-transform:uppercase;text-shadow:0 2px 0 #000;box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 5px 16px rgba(0,0,0,.34)}
 .tablet-actions button:active{transform:translateY(2px);filter:brightness(1.22);box-shadow:inset 0 0 18px rgba(79,216,255,.22),0 2px 8px rgba(0,0,0,.34)}
-body.tablet-mode #keyprompthud{display:none!important}
-body.tablet-mode #hint{bottom:176px}
-body.tablet-mode #stats{left:50%;transform:translateX(-50%);bottom:86px;max-width:58vw}
-body.tablet-mode #hotbar{left:50%;transform:translateX(-50%);bottom:12px;max-width:58vw;overflow:hidden}
-body.tablet-mode #hotbar .slot{cursor:pointer}
-body.tablet-mode #hotbar .slot:active{transform:translateY(2px) scale(.96);filter:brightness(1.25)}
-body.tablet-mode #utilitybar{left:calc(50% - min(29vw,360px) - 96px);bottom:22px}
-body.tablet-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);bottom:22px}
+body.mobile-play-mode #keyprompthud{display:none!important}
+body.mobile-play-mode #hint{bottom:176px}
+body.mobile-play-mode #stats{left:50%;transform:translateX(-50%);bottom:86px;max-width:58vw}
+body.mobile-play-mode #hotbar{left:50%;transform:translateX(-50%);bottom:12px;max-width:58vw;overflow:hidden}
+body.mobile-play-mode #hotbar .slot{cursor:pointer}
+body.mobile-play-mode #hotbar .slot:active{transform:translateY(2px) scale(.96);filter:brightness(1.25)}
+body.mobile-play-mode #utilitybar{left:calc(50% - min(29vw,360px) - 96px);bottom:22px}
+body.mobile-play-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);bottom:22px}
 @media(max-width:900px),(max-height:620px){
   #tabletcontrols{--tablet-bottom:126px;--tablet-side:14px}
   .tablet-look-zone{top:70px;bottom:228px;left:34%}
@@ -1929,9 +1935,9 @@ body.tablet-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);bottom:22p
   .tablet-slot-controls span{font-size:8px}
   .tablet-actions{grid-template-columns:repeat(2,78px);gap:8px}
   .tablet-actions button{min-height:42px;font-size:9px}
-  body.tablet-mode #stats,body.tablet-mode #hotbar{max-width:56vw}
-  body.tablet-mode #utilitybar{left:8px;bottom:18px}
-  body.tablet-mode #abilities{right:8px;bottom:18px}
+  body.mobile-play-mode #stats,body.mobile-play-mode #hotbar{max-width:56vw}
+  body.mobile-play-mode #utilitybar{left:8px;bottom:18px}
+  body.mobile-play-mode #abilities{right:8px;bottom:18px}
 }
 @media(orientation:portrait){
   #tabletcontrols{--tablet-bottom:176px;--tablet-side:18px}
@@ -1940,8 +1946,27 @@ body.tablet-mode #abilities{right:calc(50% - min(29vw,360px) - 132px);bottom:22p
   .tablet-actions button{min-height:44px}
   .tablet-stick{bottom:calc(212px + env(safe-area-inset-bottom,0px))}
   .tablet-slot-controls{bottom:calc(62px + env(safe-area-inset-bottom,0px))}
-  body.tablet-mode #stats,body.tablet-mode #hotbar{max-width:calc(100vw - 24px)}
-  body.tablet-mode #abilities{right:12px;bottom:16px}
-  body.tablet-mode #utilitybar{left:12px;bottom:16px}
+  body.mobile-play-mode #stats,body.mobile-play-mode #hotbar{max-width:calc(100vw - 24px)}
+  body.mobile-play-mode #abilities{right:12px;bottom:16px}
+  body.mobile-play-mode #utilitybar{left:12px;bottom:16px}
+}
+@media(orientation:landscape) and (max-height:520px){
+  #tabletcontrols{--tablet-bottom:84px;--tablet-side:10px}
+  .tablet-look-zone{top:46px;bottom:138px;left:32%}
+  .tablet-stick{width:96px;height:96px}
+  .tablet-stick:before{top:8px;font-size:7px}
+  .tablet-stick-knob{width:44px;height:44px;margin:-22px 0 0 -22px}
+  .tablet-actions{grid-template-columns:repeat(4,64px);gap:6px;bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+  .tablet-actions button{min-height:36px;border-radius:9px;font-size:7px;letter-spacing:.7px}
+  .tablet-slot-controls{bottom:calc(50px + env(safe-area-inset-bottom,0px));grid-template-columns:32px auto 32px;padding:3px 6px}
+  .tablet-slot-controls button{width:32px;height:26px;font-size:18px}
+  .tablet-slot-controls span{min-width:34px;font-size:7px}
+  body.phone-mode #stats{bottom:54px;max-width:50vw}
+  body.phone-mode #hotbar{bottom:4px;max-width:52vw;padding:4px;gap:3px}
+  body.phone-mode #hotbar .slot{min-width:30px;min-height:30px;width:30px;height:30px}
+  body.phone-mode #utilitybar{left:4px;bottom:6px}
+  body.phone-mode #utilitybar .utilityslot{width:34px;height:34px}
+  body.phone-mode #abilities{right:4px;bottom:6px}
+  body.phone-mode #abilities .abslot{width:34px;height:34px}
 }
 
