@@ -705,13 +705,9 @@ function tabletSetSprintToggle(on){
   }
 }
 function openQuestionsFromHud(){
-  if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
-  if(dim==='questions'){startQuestionHallMeditationPose();releaseGameplayCursor();}
-  if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.start){
-    globalThis.BlockcraftRecall.start(dim==='questions'?{source:'question_hall'}:undefined);
-    return true;
-  }
-  return false;
+  dispatchVirtualKey('KeyP');
+  dispatchVirtualKey('KeyP','keyup');
+  return true;
 }
 function openSocialFromHud(){
   if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
