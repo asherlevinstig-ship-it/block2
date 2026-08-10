@@ -247,10 +247,15 @@ function fillSlotEl(el, stack, keepKey){
   }
 }
 function refreshHUD(){
+  const mobileQuick=document.body.classList.contains('mobile-play-mode');
+  const selected=Math.max(0,Math.min(8,combatState.selectedSlot|0));
+  const start=Math.max(0,Math.min(4,selected-2));
+  const end=start+4;
   for(let i=0;i<9;i++){
     fillSlotEl(hudSlots[i], inv[i]);
-    hudSlots[i].classList.toggle('sel', i===combatState.selectedSlot);
-    hudSlots[i].setAttribute('aria-pressed',i===combatState.selectedSlot?'true':'false');
+    hudSlots[i].classList.toggle('sel', i===selected);
+    hudSlots[i].classList.toggle('mobile-quick', !mobileQuick || (i>=start&&i<=end));
+    hudSlots[i].setAttribute('aria-pressed',i===selected?'true':'false');
   }
   refreshUtilityHUD();
   refreshStatPointNudge();

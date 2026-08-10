@@ -703,6 +703,14 @@ function tabletApplyJoystick(dx,dy){
     knob.style.transform='translate('+Math.round(dx*scale)+'px,'+Math.round(dy*scale)+'px)';
   }
 }
+function refreshMobileHotbarWindow(){
+  const slots=document.querySelectorAll('#hotbar .slot');
+  if(!slots.length)return;
+  const mobile=document.body.classList.contains('mobile-play-mode');
+  const start=Math.max(0,Math.min(4,(selected|0)-2));
+  const end=start+4;
+  slots.forEach((slot,i)=>slot.classList.toggle('mobile-quick',!mobile||(i>=start&&i<=end)));
+}
 function ensureTabletControls(){
   if(tabletInputState.controls)return tabletInputState.controls;
   const root=document.createElement('div');
@@ -718,18 +726,25 @@ function ensureTabletControls(){
       '<button data-tablet-slot-dir="1" aria-label="Next hotbar slot">›</button>'+
     '</div>'+
     '<div class="tablet-actions">'+
-      '<button data-tablet-key="KeyF" data-hold="1">Attack</button>'+
-      '<button data-tablet-key="KeyG">Interact</button>'+
-      '<button data-tablet-key="Space">Jump</button>'+
-      '<button data-tablet-key="KeyP">Questions</button>'+
-      '<button data-tablet-key="KeyE">Bag</button>'+
-      '<button data-tablet-key="KeyC">Stats</button>'+
-      '<button data-tablet-key="KeyO">Quests</button>'+
-      '<button data-tablet-key="Escape">Free</button>'+
+      '<button class="tablet-action-attack" data-tablet-key="KeyF" data-hold="1"><b>⚔</b><span>Attack</span></button>'+
+      '<button class="tablet-action-interact" data-tablet-key="KeyG"><b>✋</b><span>Interact</span></button>'+
+      '<button class="tablet-action-jump" data-tablet-key="Space"><b>↥</b><span>Jump</span></button>'+
+      '<button class="tablet-action-menu" data-tablet-menu="1"><b>☰</b><span>Menu</span></button>'+
+    '</div>'+
+    '<div class="mobile-quick-menu hidden" role="dialog" aria-label="Mobile menu">'+
+      '<button data-mobile-menu-action="bag">Bag</button>'+
+      '<button data-mobile-menu-action="stats">Stats</button>'+
+      '<button data-mobile-menu-action="quests">Quests</button>'+
+      '<button data-mobile-menu-action="questions">Questions</button>'+
+      '<button data-mobile-menu-action="stuck">I’m Stuck</button>'+
+      '<button data-mobile-menu-action="bug">Report Bug</button>'+
+      '<button data-mobile-menu-action="free">Free Cursor</button>'+
+      '<button data-mobile-menu-action="close">Close</button>'+
     '</div>';
   document.body.appendChild(root);
   const stick=root.querySelector('.tablet-stick');
   const look=root.querySelector('.tablet-look-zone');
+  const mobileQuickMenu=root.querySelector('.mobile-quick-menu');
   stick.addEventListener('pointerdown',e=>{
     if(!tabletInputState.gameplayTouch)return;
     e.preventDefault();e.stopPropagation();
@@ -795,6 +810,23 @@ function ensureTabletControls(){
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.hotbar-cycle',{slot:next,dir});
     });
   });
+  root.querySelectorAll('[data-tablet-menu]').forEach(btn=>btn.addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();
+    mobileQuickMenu.classList.toggle('hidden');
+  }));
+  root.querySelectorAll('[data-mobile-menu-action]').forEach(btn=>btn.addEventListener('pointerdown',e=>{
+    e.preventDefault();e.stopPropagation();
+    const action=btn.dataset.mobileMenuAction||'';
+    if(action==='bag')dispatchVirtualKey('KeyE');
+    else if(action==='stats')dispatchVirtualKey('KeyC');
+    else if(action==='quests')dispatchVirtualKey('KeyO');
+    else if(action==='questions')dispatchVirtualKey('KeyP');
+    else if(action==='free')dispatchVirtualKey('Escape');
+    else if(action==='bug')document.getElementById('bugreportbtn')?.click();
+    else if(action==='stuck')document.getElementById('stuckrescuebtn')?.click();
+    if(action!=='close')globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.menu-action',{action});
+    mobileQuickMenu.classList.add('hidden');
+  }));
   tabletInputState.controls=root;
   return root;
 }
@@ -817,10 +849,12 @@ function refreshTabletMode(){
   controls.classList.toggle('landscape',innerWidth>=innerHeight);
   const slotLabel=controls.querySelector('.tablet-slot-controls span');
   if(slotLabel)slotLabel.textContent='Slot '+(selected+1);
+  refreshMobileHotbarWindow();
   controls.classList.toggle('hidden',!shouldShow);
   if(!shouldShow){
     tabletReleaseMovementKeys();
     for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
+    controls.querySelector('.mobile-quick-menu')?.classList.add('hidden');
   }
   const debugSig=[tabletInputState.phone?'phone':tabletInputState.tablet?'tablet':'not-touch-gameplay',tabletInputState.forced?'forced':'auto',portraitPhone?'portrait':'landscape',shouldShow?'shown':'hidden',innerWidth+'x'+innerHeight].join('|');
   if(tabletInputState.lastDebugSig!==debugSig){
