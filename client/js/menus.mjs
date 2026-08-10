@@ -153,6 +153,7 @@ const legacyMenuBindings={
   "questKill":{get:()=>questKill},
   "questLogOpen":{get:()=>questLogOpen,set:value=>{questLogOpen=value;}},
   "questMine":{get:()=>questMine},
+  "qModalIs":{get:()=>qModalIs},
   "questModel":{get:()=>questModel},
   "questProgressText":{get:()=>questProgressText},
   "questSystemCheck":{get:()=>questSystemCheck},

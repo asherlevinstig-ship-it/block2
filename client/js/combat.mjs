@@ -717,6 +717,10 @@ function openQuestionsFromHud(){
   return true;
 }
 function openSocialFromHud(){
+  if(typeof qModalIs==='function'&&qModalIs('social')&&typeof closeQWin==='function'){
+    closeQWin(true);
+    return true;
+  }
   if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
   if(socialTarget&&typeof openPlayerSocialUI==='function'){
