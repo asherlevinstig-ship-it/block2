@@ -623,6 +623,158 @@ const KEY_PROMPTS=[
   {key:'SHIFT',title:'Sprint',text:'Hold while moving to run'},
 ];
 let keyPromptIndex=-1,keyPromptNextAt=0;
+const tabletInputState={
+  touch:false,
+  tablet:false,
+  controls:null,
+  joystick:{active:false,id:null,cx:0,cy:0,keys:new Set()},
+  look:{active:false,id:null,x:0,y:0},
+  pressed:new Set(),
+};
+function detectTabletInput(){
+  const coarse=!!(typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches);
+  const touch=!!(navigator.maxTouchPoints>0||('ontouchstart' in window));
+  const ua=String(navigator.userAgent||'');
+  const ipad=/iPad/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  const shortest=Math.min(innerWidth||0,innerHeight||0);
+  const longest=Math.max(innerWidth||0,innerHeight||0);
+  const tablet=touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900);
+  tabletInputState.touch=touch||coarse;
+  tabletInputState.tablet=tablet;
+  document.body.classList.toggle('touch-mode',tabletInputState.touch);
+  document.body.classList.toggle('tablet-mode',tabletInputState.tablet);
+  return tabletInputState;
+}
+function dispatchVirtualKey(code,type='keydown'){
+  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyP:'p',KeyC:'c',KeyO:'o',Space:' ',Escape:'Escape'};
+  const event=new KeyboardEvent(type,{code,key:keyMap[code]||code,bubbles:true,cancelable:true});
+  window.dispatchEvent(event);
+}
+function tabletSetKey(code,on){
+  if(on){
+    if(tabletInputState.pressed.has(code))return;
+    tabletInputState.pressed.add(code);
+    dispatchVirtualKey(code,'keydown');
+  }else{
+    if(!tabletInputState.pressed.has(code))return;
+    tabletInputState.pressed.delete(code);
+    dispatchVirtualKey(code,'keyup');
+  }
+}
+function tabletReleaseMovementKeys(){
+  for(const code of ['KeyW','KeyA','KeyS','KeyD'])tabletSetKey(code,false);
+  tabletInputState.joystick.keys.clear();
+}
+function tabletApplyJoystick(dx,dy){
+  const dead=16;
+  const next=new Set();
+  if(dy<-dead)next.add('KeyW');
+  if(dy>dead)next.add('KeyS');
+  if(dx<-dead)next.add('KeyA');
+  if(dx>dead)next.add('KeyD');
+  for(const code of ['KeyW','KeyA','KeyS','KeyD'])tabletSetKey(code,next.has(code));
+  tabletInputState.joystick.keys=next;
+  const knob=tabletInputState.controls&&tabletInputState.controls.querySelector('.tablet-stick-knob');
+  if(knob){
+    const len=Math.hypot(dx,dy)||1,scale=Math.min(42,len)/len;
+    knob.style.transform='translate('+Math.round(dx*scale)+'px,'+Math.round(dy*scale)+'px)';
+  }
+}
+function ensureTabletControls(){
+  if(tabletInputState.controls)return tabletInputState.controls;
+  const root=document.createElement('div');
+  root.id='tabletcontrols';
+  root.className='tabletcontrols hidden';
+  root.setAttribute('aria-label','Tablet game controls');
+  root.innerHTML=
+    '<div class="tablet-look-zone" aria-hidden="true"></div>'+
+    '<div class="tablet-stick" aria-label="Move"><div class="tablet-stick-knob"></div></div>'+
+    '<div class="tablet-actions">'+
+      '<button data-tablet-key="KeyF" data-hold="1">Attack</button>'+
+      '<button data-tablet-key="KeyG">Interact</button>'+
+      '<button data-tablet-key="Space">Jump</button>'+
+      '<button data-tablet-key="KeyP">Questions</button>'+
+      '<button data-tablet-key="KeyE">Bag</button>'+
+      '<button data-tablet-key="KeyC">Stats</button>'+
+      '<button data-tablet-key="KeyO">Quests</button>'+
+      '<button data-tablet-key="Escape">Free</button>'+
+    '</div>';
+  document.body.appendChild(root);
+  const stick=root.querySelector('.tablet-stick');
+  const look=root.querySelector('.tablet-look-zone');
+  stick.addEventListener('pointerdown',e=>{
+    if(!tabletInputState.tablet)return;
+    e.preventDefault();e.stopPropagation();
+    stick.setPointerCapture&&stick.setPointerCapture(e.pointerId);
+    const r=stick.getBoundingClientRect();
+    tabletInputState.joystick.active=true;tabletInputState.joystick.id=e.pointerId;
+    tabletInputState.joystick.cx=r.left+r.width/2;tabletInputState.joystick.cy=r.top+r.height/2;
+    tabletApplyJoystick(e.clientX-tabletInputState.joystick.cx,e.clientY-tabletInputState.joystick.cy);
+  });
+  stick.addEventListener('pointermove',e=>{
+    if(!tabletInputState.joystick.active||tabletInputState.joystick.id!==e.pointerId)return;
+    e.preventDefault();e.stopPropagation();
+    tabletApplyJoystick(e.clientX-tabletInputState.joystick.cx,e.clientY-tabletInputState.joystick.cy);
+  });
+  const endStick=e=>{
+    if(tabletInputState.joystick.id!==e.pointerId)return;
+    e.preventDefault();e.stopPropagation();
+    tabletInputState.joystick.active=false;tabletInputState.joystick.id=null;
+    tabletReleaseMovementKeys();
+    const knob=root.querySelector('.tablet-stick-knob');
+    if(knob)knob.style.transform='translate(0,0)';
+  };
+  stick.addEventListener('pointerup',endStick);
+  stick.addEventListener('pointercancel',endStick);
+  look.addEventListener('pointerdown',e=>{
+    if(!tabletInputState.tablet||!gameplayCameraInputAllowed())return;
+    e.preventDefault();e.stopPropagation();
+    look.setPointerCapture&&look.setPointerCapture(e.pointerId);
+    tabletInputState.look.active=true;tabletInputState.look.id=e.pointerId;tabletInputState.look.x=e.clientX;tabletInputState.look.y=e.clientY;
+  });
+  look.addEventListener('pointermove',e=>{
+    if(!tabletInputState.look.active||tabletInputState.look.id!==e.pointerId)return;
+    e.preventDefault();e.stopPropagation();
+    const dx=e.clientX-tabletInputState.look.x,dy=e.clientY-tabletInputState.look.y;
+    tabletInputState.look.x=e.clientX;tabletInputState.look.y=e.clientY;
+    if(gameplayCameraInputAllowed())queueMouseLook(dx*1.35,dy*1.35);
+  });
+  const endLook=e=>{
+    if(tabletInputState.look.id!==e.pointerId)return;
+    tabletInputState.look.active=false;tabletInputState.look.id=null;
+  };
+  look.addEventListener('pointerup',endLook);
+  look.addEventListener('pointercancel',endLook);
+  root.querySelectorAll('[data-tablet-key]').forEach(btn=>{
+    const code=btn.dataset.tabletKey;
+    const hold=btn.dataset.hold==='1';
+    btn.addEventListener('pointerdown',e=>{
+      e.preventDefault();e.stopPropagation();
+      btn.setPointerCapture&&btn.setPointerCapture(e.pointerId);
+      tabletSetKey(code,true);
+      if(!hold)setTimeout(()=>tabletSetKey(code,false),42);
+    });
+    const release=e=>{if(hold){e.preventDefault();e.stopPropagation();tabletSetKey(code,false);}};
+    btn.addEventListener('pointerup',release);
+    btn.addEventListener('pointercancel',release);
+  });
+  tabletInputState.controls=root;
+  return root;
+}
+function refreshTabletMode(){
+  detectTabletInput();
+  const controls=ensureTabletControls();
+  const modalInputOpen=uiOpen||statOpen||uiShellState.qOpen||pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||document.body.classList.contains('game-modal-open');
+  const shouldShow=tabletInputState.tablet&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  controls.classList.toggle('hidden',!shouldShow);
+  if(!shouldShow){
+    tabletReleaseMovementKeys();
+    for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
+  }
+}
+detectTabletInput();
+addEventListener('resize',()=>refreshTabletMode());
+addEventListener('orientationchange',()=>setTimeout(refreshTabletMode,120));
 function keyPromptMarkup(prompt,index){
   const dots=KEY_PROMPTS.map((_,i)=>'<i class="'+(i===index?'active':'')+'"></i>').join('');
   return '<div class="keyart">'+escHTML(prompt.key)+'</div><div class="keycopy"><b>Press '+escHTML(prompt.key)+' - '+escHTML(prompt.title)+'</b><span>'+escHTML(prompt.text)+'</span></div><div class="keydots">'+dots+'</div>';
@@ -4641,6 +4793,7 @@ function refreshPlayUi(){
   hintEl.classList.add('hidden');
   updateLandMinimap();
   syncHudLayerState();
+  refreshTabletMode();
   playbtn.textContent='RESUME';
   if(!gameplayCameraInputAllowed()) mouseLookDelta.x=mouseLookDelta.y=0;
   if(!locked) mouseL=false, mining=null;
@@ -6626,7 +6779,11 @@ addEventListener('mousedown', e=>{
 });
 addEventListener('mouseup', e=>{ if(e.button===0) stopPrimaryAction(); if(e.button===2) mouseR=false; });
 addEventListener('contextmenu', e=> e.preventDefault());
-addEventListener('blur', ()=>{ mouseR=false; placeKeyHeld=false; mouseLookDelta.x=mouseLookDelta.y=0; });
+addEventListener('blur', ()=>{
+  mouseR=false; placeKeyHeld=false; mouseLookDelta.x=mouseLookDelta.y=0;
+  tabletReleaseMovementKeys();
+  for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
+});
 addEventListener('wheel', e=>{ if(locked&&isWorldPointerTarget(e.target)) selectSlot((selected + (e.deltaY>0?1:-1) + 9)%9); });
 
 gameContext.registerState('combat', Object.freeze({
@@ -6663,6 +6820,7 @@ gameContext.registerState('combat', Object.freeze({
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
   get abilityReady(){ return abilityHudAvailable(); },
   get abilityTutorialDone(){ return abilityTutorialDone(); },
+  get tabletInput(){ return {touch:tabletInputState.touch,tablet:tabletInputState.tablet,visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden'))}; },
 }));
 gameContext.registerModule('combat', Object.freeze({
   collides,
@@ -6675,6 +6833,7 @@ gameContext.registerModule('combat', Object.freeze({
   releaseGameplayCursor,
   releasePointerLockWithoutCameraFallback,
   resumeGameplayCamera,
+  refreshTabletMode,
   openBlockingGameModal,
   closeBlockingGameModal,
   primaryAction,
