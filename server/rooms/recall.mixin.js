@@ -116,7 +116,7 @@ class RecallMixin{
     this.recallSeq++;
     const yaw=Number.isFinite(message.yaw)?clampN(message.yaw,-10,10):p.yaw;
     const dungeonRecall=this.recallDungeonSpace(p);
-    const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
+    const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
     const source=message.source==='lectern'?'lectern':(questionHall?'question_hall':(tutorial?'tutorial':''));
     this.recallChallenges.set(client.sessionId,{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source});
     client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',questionHall:source==='question_hall',dungeonRecall,mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
