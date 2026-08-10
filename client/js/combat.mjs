@@ -852,6 +852,7 @@ function ensureTabletControls(){
 function refreshTabletMode(){
   detectTabletInput();
   const controls=ensureTabletControls();
+  const overlayHidden=!!(overlay&&overlay.classList.contains('hidden'));
   const modalInputOpen=uiOpen||statOpen||uiShellState.qOpen||pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||
     document.body.classList.contains('game-modal-open')||
     document.body.classList.contains('chat-open')||
@@ -860,15 +861,16 @@ function refreshTabletMode(){
     document.body.classList.contains('path-selecting')||
     !!globalThis.dungeonLobbyOpen;
   const portraitMobile=tabletInputState.gameplayTouch&&innerHeight>innerWidth;
-  if(tabletInputState.gameplayTouch&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen){
+  if(tabletInputState.gameplayTouch&&overlayHidden&&!modalInputOpen){
     cursorReleased=false;
     lockFallback=true;
     locked=true;
   }
-  const touchPlaying=locked||(overlay&&overlay.classList.contains('hidden'));
+  const touchPlaying=locked||overlayHidden;
   const shouldShow=tabletInputState.gameplayTouch&&!portraitMobile&&touchPlaying&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
-  document.body.classList.toggle('phone-portrait-blocked',!!(portraitMobile&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
-  document.body.classList.toggle('mobile-portrait-blocked',!!(portraitMobile&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
+  document.body.classList.toggle('phone-portrait-blocked',!!(portraitMobile&&overlayHidden&&!modalInputOpen));
+  document.body.classList.toggle('mobile-portrait-blocked',!!(portraitMobile&&overlayHidden&&!modalInputOpen));
+  document.body.classList.toggle('touch-controls-visible',!!shouldShow);
   const rotateEl=document.getElementById('rotatephone');
   if(rotateEl)rotateEl.classList.toggle('hidden',!document.body.classList.contains('phone-portrait-blocked'));
   controls.classList.toggle('portrait',innerHeight>innerWidth);
@@ -893,11 +895,15 @@ function refreshTabletMode(){
       touch:tabletInputState.touch,
       forced:tabletInputState.forced,
       visible:shouldShow,
+      controlsClass:controls.className,
+      bodyClass:document.body.className,
       viewport:{w:innerWidth,h:innerHeight},
+      gates:{overlayHidden,locked:!!locked,cursorReleased:!!cursorReleased,modalInputOpen:!!modalInputOpen,claimMode:!!claimMode,worldLoading:!!worldLoading,cutscene:!!cutscene,portraitMobile:!!portraitMobile},
     });
   }
 }
 detectTabletInput();
+setInterval(()=>{ if(tabletInputState.gameplayTouch)refreshTabletMode(); },500);
 addEventListener('resize',()=>refreshTabletMode());
 addEventListener('orientationchange',()=>setTimeout(refreshTabletMode,120));
 globalThis.BlockcraftTabletDebug=()=>({
@@ -907,6 +913,8 @@ globalThis.BlockcraftTabletDebug=()=>({
   touch:tabletInputState.touch,
   forced:tabletInputState.forced,
   visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden')),
+  controlsClass:tabletInputState.controls?tabletInputState.controls.className:'',
+  bodyClass:document.body.className,
   selectedSlot:selected,
   pressed:Array.from(tabletInputState.pressed),
   sprintToggled:tabletInputState.sprintToggled,
