@@ -3204,7 +3204,13 @@ function tick(now){
     const outOfFood=!parkourFreeMovement&&!mounted && hunger<=0;
     const sprintIntent=!!(sprintKey && movementInput && !mounted && !outOfFood);
     if(parkourFreeMovement)staminaExhausted=false;
-    else if(!pantherMove&&!mounted&&sp<=1)staminaExhausted=true;
+    else if(!pantherMove&&!mounted&&sp<=1){
+      staminaExhausted=true;
+      if(combatState.tabletInput&&combatState.tabletInput.sprintToggled&&combatApi.setTabletSprintToggle){
+        combatApi.setTabletSprintToggle(false);
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.sprint-auto-off',{reason:'stamina-empty',sp:Math.round(sp*100)/100});
+      }
+    }
     else if(staminaExhausted&&sp>=maxSp()*MOVEMENT_FEEL.recoverSprintAt)staminaExhausted=false;
     const exhausted=!pantherMove&&!mounted&&staminaExhausted;
     const sprintReady=parkourFreeMovement||(!staminaExhausted&&sp>0);
@@ -3222,7 +3228,13 @@ function tick(now){
     if(globalThis.COMBAT_FEEDBACK)globalThis.COMBAT_FEEDBACK.updateMovement(camera,sprint,movementInput,dt);
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
-    if(!parkourFreeMovement&&sprintFactor>.05&&!pantherMove&&movementInput) sp=Math.max(0,sp-stCost(3.5)*armorStamina*sprintFactor*dt);
+    if(!parkourFreeMovement&&sprintFactor>.05&&!pantherMove&&movementInput){
+      sp=Math.max(0,sp-stCost(3.5)*armorStamina*sprintFactor*dt);
+      if(sp<=1&&combatState.tabletInput&&combatState.tabletInput.sprintToggled&&combatApi.setTabletSprintToggle){
+        combatApi.setTabletSprintToggle(false);
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.sprint-auto-off',{reason:'stamina-drained',sp:Math.round(sp*100)/100});
+      }
+    }
     const dragFly=flying?(deityFlying?12:((DRAGON_TYPES[dragonType(mountKind)]||{}).fly||13)):0;
     const baseSpd=flying?dragFly:(mounted?9.6:(pantherMove?PANTHER_FORM.speed:(MOVEMENT_FEEL.walk+(MOVEMENT_FEEL.sprint-MOVEMENT_FEEL.walk)*sprintFactor)));
     const speed=baseSpd*(exhausted?MOVEMENT_FEEL.exhaustedWalk:1)*(outOfFood&&!pantherMove?0.62:1)*(1+0.015*(S.agi-1))*(buffs.spd>0?1.25:1)*(armorMovement?armorMovement.moveMultiplier:1);

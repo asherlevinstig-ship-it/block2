@@ -6988,7 +6988,7 @@ gameContext.registerState('combat', Object.freeze({
   get abilityTrainingUsed(){ return abilityTrainingUsed; },
   get abilityReady(){ return abilityHudAvailable(); },
   get abilityTutorialDone(){ return abilityTutorialDone(); },
-  get tabletInput(){ return {touch:tabletInputState.touch,tablet:tabletInputState.tablet,phone:tabletInputState.phone,gameplayTouch:tabletInputState.gameplayTouch,visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden'))}; },
+  get tabletInput(){ return {touch:tabletInputState.touch,tablet:tabletInputState.tablet,phone:tabletInputState.phone,gameplayTouch:tabletInputState.gameplayTouch,visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden')),sprintToggled:!!tabletInputState.sprintToggled}; },
 }));
 gameContext.registerModule('combat', Object.freeze({
   collides,
@@ -7002,6 +7002,7 @@ gameContext.registerModule('combat', Object.freeze({
   releasePointerLockWithoutCameraFallback,
   resumeGameplayCamera,
   refreshTabletMode,
+  setTabletSprintToggle:tabletSetSprintToggle,
   openBlockingGameModal,
   closeBlockingGameModal,
   primaryAction,
