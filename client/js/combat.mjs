@@ -644,7 +644,7 @@ function detectTabletInput(){
   const longest=Math.max(innerWidth||0,innerHeight||0);
   let forced=new URLSearchParams(location.search).has('tablet');
   try{ forced=forced||(localStorage&&localStorage.blockcraftForceTablet==='1'); }catch{}
-  const phone=touch&&!ipad&&shortest<600;
+  const phone=!forced&&touch&&!ipad&&shortest<600;
   const tablet=forced||(touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900));
   const gameplayTouch=forced||tablet||phone;
   tabletInputState.forced=!!forced;
@@ -840,9 +840,10 @@ function refreshTabletMode(){
     document.body.classList.contains('death-active')||
     document.body.classList.contains('path-selecting')||
     !!globalThis.dungeonLobbyOpen;
-  const portraitPhone=tabletInputState.phone&&innerHeight>innerWidth;
-  const shouldShow=tabletInputState.gameplayTouch&&!portraitPhone&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
-  document.body.classList.toggle('phone-portrait-blocked',!!(portraitPhone&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
+  const portraitMobile=tabletInputState.gameplayTouch&&innerHeight>innerWidth;
+  const shouldShow=tabletInputState.gameplayTouch&&!portraitMobile&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  document.body.classList.toggle('phone-portrait-blocked',!!(portraitMobile&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
+  document.body.classList.toggle('mobile-portrait-blocked',!!(portraitMobile&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
   const rotateEl=document.getElementById('rotatephone');
   if(rotateEl)rotateEl.classList.toggle('hidden',!document.body.classList.contains('phone-portrait-blocked'));
   controls.classList.toggle('portrait',innerHeight>innerWidth);
@@ -856,7 +857,7 @@ function refreshTabletMode(){
     for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
     controls.querySelector('.mobile-quick-menu')?.classList.add('hidden');
   }
-  const debugSig=[tabletInputState.phone?'phone':tabletInputState.tablet?'tablet':'not-touch-gameplay',tabletInputState.forced?'forced':'auto',portraitPhone?'portrait':'landscape',shouldShow?'shown':'hidden',innerWidth+'x'+innerHeight].join('|');
+  const debugSig=[tabletInputState.phone?'phone':tabletInputState.tablet?'tablet':'not-touch-gameplay',tabletInputState.forced?'forced':'auto',portraitMobile?'portrait':'landscape',shouldShow?'shown':'hidden',innerWidth+'x'+innerHeight].join('|');
   if(tabletInputState.lastDebugSig!==debugSig){
     tabletInputState.lastDebugSig=debugSig;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.controls', {

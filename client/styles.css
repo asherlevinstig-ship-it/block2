@@ -1982,6 +1982,14 @@ body.mobile-play-mode #utilitybar,
 body.mobile-play-mode #abilities,
 body.mobile-play-mode #statpointnudge,
 body.mobile-play-mode #recallrechargenudge{display:none!important}
+body.mobile-portrait-blocked #tabletcontrols,
+body.mobile-portrait-blocked #currentquest,
+body.mobile-portrait-blocked #eventhud,
+body.mobile-portrait-blocked #keyprompthud,
+body.mobile-portrait-blocked #coachhud,
+body.mobile-portrait-blocked #tutorialhud,
+body.mobile-portrait-blocked #stats,
+body.mobile-portrait-blocked #hotbar{display:none!important}
 body.mobile-play-mode #stats{
   left:calc(10px + env(safe-area-inset-left,0px))!important;
   top:calc(8px + env(safe-area-inset-top,0px))!important;
@@ -2088,6 +2096,13 @@ body.mobile-play-mode #currentquest .pathstrip,
 body.mobile-play-mode #currentquest .prepchecklist,
 body.mobile-play-mode #currentquest .prephint,
 body.mobile-play-mode #currentquest .qactions,
+body.mobile-play-mode #currentquest .activequest-actions,
+body.mobile-play-mode #currentquest .activequest-meta,
+body.mobile-play-mode #currentquest .activequest-kicker,
+body.mobile-play-mode #currentquest .other-quests,
+body.mobile-play-mode #currentquest .otherquests,
+body.mobile-play-mode #currentquest [class*="other"],
+body.mobile-play-mode #currentquest button,
 body.mobile-play-mode #currentquest .chapter-kicker,
 body.mobile-play-mode #currentquest .olabel,
 body.mobile-play-mode #currentquest .oact{display:none!important}
@@ -2105,6 +2120,26 @@ body.mobile-play-mode #currentquest .obody span{
   -webkit-line-clamp:1!important;
 }
 body.mobile-play-mode #currentquest .obar{height:3px;margin-top:5px}
+body.mobile-play-mode #currentquest > *:nth-child(n+4){display:none!important}
+body.mobile-play-mode #currentquest h1,
+body.mobile-play-mode #currentquest h2,
+body.mobile-play-mode #currentquest h3,
+body.mobile-play-mode #currentquest strong{
+  font-size:12px!important;
+  line-height:1.15!important;
+  margin:0 0 3px!important;
+  color:#ffe680!important;
+}
+body.mobile-play-mode #currentquest p,
+body.mobile-play-mode #currentquest small{
+  font-size:10px!important;
+  line-height:1.22!important;
+  margin:0!important;
+  display:-webkit-box!important;
+  -webkit-line-clamp:1!important;
+  -webkit-box-orient:vertical!important;
+  overflow:hidden!important;
+}
 body.mobile-play-mode #hotbar{
   left:50%!important;
   bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;
@@ -2233,5 +2268,42 @@ body.mobile-play-mode .mobile-quick-menu button{
   font-weight:800;
   letter-spacing:1px;
   text-transform:uppercase;
+}
+@media(orientation:landscape) and (min-height:700px){
+  body.tablet-mode #stats{
+    grid-template-columns:48px minmax(150px,205px);
+    padding:7px 10px 7px 7px;
+  }
+  body.tablet-mode #lvlbadge{width:44px;height:44px;min-width:44px;font-size:18px}
+  body.tablet-mode #stats .bar{height:14px}
+  body.tablet-mode #stats .bar span{line-height:14px;font-size:10px}
+  body.tablet-mode #eventhud{
+    width:min(440px,36vw)!important;
+    max-width:min(440px,36vw)!important;
+    padding:6px 8px;
+  }
+  body.tablet-mode #currentquest{
+    top:calc(62px + env(safe-area-inset-top,0px))!important;
+    width:min(245px,24vw)!important;
+    max-width:min(245px,24vw)!important;
+  }
+  body.tablet-mode .tablet-stick{
+    width:132px;
+    height:132px;
+    bottom:calc(58px + env(safe-area-inset-bottom,0px));
+  }
+  body.tablet-mode .tablet-stick-knob{width:56px;height:56px;margin:-28px 0 0 -28px}
+  body.tablet-mode .tablet-actions{
+    width:220px;
+    height:190px;
+    right:calc(34px + env(safe-area-inset-right,0px));
+    bottom:calc(46px + env(safe-area-inset-bottom,0px));
+  }
+  body.tablet-mode .tablet-actions .tablet-action-attack{width:108px;height:108px}
+  body.tablet-mode .tablet-actions .tablet-action-interact{right:106px;bottom:72px;width:70px;height:70px}
+  body.tablet-mode .tablet-actions .tablet-action-jump{width:72px;height:72px;bottom:120px}
+  body.tablet-mode .tablet-actions .tablet-action-menu{right:122px;width:62px;height:62px}
+  body.tablet-mode #hotbar .slot.mobile-quick{width:54px;height:54px;min-width:54px;min-height:54px}
+  body.tablet-mode .tablet-slot-controls{bottom:calc(72px + env(safe-area-inset-bottom,0px))}
 }
 
