@@ -626,10 +626,12 @@ let keyPromptIndex=-1,keyPromptNextAt=0;
 const tabletInputState={
   touch:false,
   tablet:false,
+  forced:false,
   controls:null,
   joystick:{active:false,id:null,cx:0,cy:0,keys:new Set()},
   look:{active:false,id:null,x:0,y:0},
   pressed:new Set(),
+  lastDebugSig:'',
 };
 function detectTabletInput(){
   const coarse=!!(typeof matchMedia==='function'&&matchMedia('(pointer: coarse)').matches);
@@ -638,9 +640,12 @@ function detectTabletInput(){
   const ipad=/iPad/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const shortest=Math.min(innerWidth||0,innerHeight||0);
   const longest=Math.max(innerWidth||0,innerHeight||0);
-  const tablet=touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900);
-  tabletInputState.touch=touch||coarse;
-  tabletInputState.tablet=tablet;
+  let forced=new URLSearchParams(location.search).has('tablet');
+  try{ forced=forced||(localStorage&&localStorage.blockcraftForceTablet==='1'); }catch{}
+  const tablet=forced||(touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900));
+  tabletInputState.forced=!!forced;
+  tabletInputState.touch=forced||touch||coarse;
+  tabletInputState.tablet=!!tablet;
   document.body.classList.toggle('touch-mode',tabletInputState.touch);
   document.body.classList.toggle('tablet-mode',tabletInputState.tablet);
   return tabletInputState;
@@ -737,7 +742,7 @@ function ensureTabletControls(){
     e.preventDefault();e.stopPropagation();
     const dx=e.clientX-tabletInputState.look.x,dy=e.clientY-tabletInputState.look.y;
     tabletInputState.look.x=e.clientX;tabletInputState.look.y=e.clientY;
-    if(gameplayCameraInputAllowed())queueMouseLook(dx*1.35,dy*1.35);
+    if(gameplayCameraInputAllowed())queueMouseLook(dx*0.92,dy*0.92);
   });
   const endLook=e=>{
     if(tabletInputState.look.id!==e.pointerId)return;
@@ -766,15 +771,36 @@ function refreshTabletMode(){
   const controls=ensureTabletControls();
   const modalInputOpen=uiOpen||statOpen||uiShellState.qOpen||pathChoiceOpen||jobChoiceOpen||firstTownChoiceOpen||abilityAwakeningOpen||document.body.classList.contains('game-modal-open');
   const shouldShow=tabletInputState.tablet&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  controls.classList.toggle('portrait',innerHeight>innerWidth);
+  controls.classList.toggle('landscape',innerWidth>=innerHeight);
   controls.classList.toggle('hidden',!shouldShow);
   if(!shouldShow){
     tabletReleaseMovementKeys();
     for(const code of Array.from(tabletInputState.pressed))tabletSetKey(code,false);
   }
+  const debugSig=[tabletInputState.tablet?'tablet':'not-tablet',tabletInputState.forced?'forced':'auto',shouldShow?'shown':'hidden',innerWidth+'x'+innerHeight].join('|');
+  if(tabletInputState.lastDebugSig!==debugSig){
+    tabletInputState.lastDebugSig=debugSig;
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.controls', {
+      tablet:tabletInputState.tablet,
+      touch:tabletInputState.touch,
+      forced:tabletInputState.forced,
+      visible:shouldShow,
+      viewport:{w:innerWidth,h:innerHeight},
+    });
+  }
 }
 detectTabletInput();
 addEventListener('resize',()=>refreshTabletMode());
 addEventListener('orientationchange',()=>setTimeout(refreshTabletMode,120));
+globalThis.BlockcraftTabletDebug=()=>({
+  tablet:tabletInputState.tablet,
+  touch:tabletInputState.touch,
+  forced:tabletInputState.forced,
+  visible:!!(tabletInputState.controls&&!tabletInputState.controls.classList.contains('hidden')),
+  pressed:Array.from(tabletInputState.pressed),
+  viewport:{w:innerWidth,h:innerHeight},
+});
 function keyPromptMarkup(prompt,index){
   const dots=KEY_PROMPTS.map((_,i)=>'<i class="'+(i===index?'active':'')+'"></i>').join('');
   return '<div class="keyart">'+escHTML(prompt.key)+'</div><div class="keycopy"><b>Press '+escHTML(prompt.key)+' - '+escHTML(prompt.title)+'</b><span>'+escHTML(prompt.text)+'</span></div><div class="keydots">'+dots+'</div>';
