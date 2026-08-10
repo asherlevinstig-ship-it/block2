@@ -646,7 +646,8 @@ function detectTabletInput(){
   let forced=new URLSearchParams(location.search).has('tablet');
   try{ forced=forced||(localStorage&&localStorage.blockcraftForceTablet==='1'); }catch{}
   const phone=!forced&&touch&&!ipad&&shortest<600;
-  const tablet=forced||(touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900));
+  const tabletViewport=shortest>=700&&longest>=900&&longest<=1500;
+  const tablet=forced||(touch&&(ipad||/Android/.test(ua)&&shortest>=600||coarse&&shortest>=600&&longest>=900))||(tabletViewport&&new URLSearchParams(location.search).has('tablet'));
   const gameplayTouch=forced||tablet||phone;
   tabletInputState.forced=!!forced;
   tabletInputState.touch=forced||touch||coarse;
@@ -859,7 +860,13 @@ function refreshTabletMode(){
     document.body.classList.contains('path-selecting')||
     !!globalThis.dungeonLobbyOpen;
   const portraitMobile=tabletInputState.gameplayTouch&&innerHeight>innerWidth;
-  const shouldShow=tabletInputState.gameplayTouch&&!portraitMobile&&locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
+  if(tabletInputState.gameplayTouch&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen){
+    cursorReleased=false;
+    lockFallback=true;
+    locked=true;
+  }
+  const touchPlaying=locked||(overlay&&overlay.classList.contains('hidden'));
+  const shouldShow=tabletInputState.gameplayTouch&&!portraitMobile&&touchPlaying&&!modalInputOpen&&!claimMode&&!worldLoading&&!cutscene;
   document.body.classList.toggle('phone-portrait-blocked',!!(portraitMobile&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
   document.body.classList.toggle('mobile-portrait-blocked',!!(portraitMobile&&overlay&&overlay.classList.contains('hidden')&&!modalInputOpen));
   const rotateEl=document.getElementById('rotatephone');
