@@ -1769,7 +1769,7 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(room,/questionHall=questionHallRequest/);
   assert.match(room,/questionHallRequest=message\.source==='question_hall'/);
   assert.match(room,/if\(questionHallRequest&&active\.source==='question_hall'\)this\.recallChallenges\.delete\(client\.sessionId\)/);
-  assert.match(room,/fallback=pillars\.some/);
+  assert.match(room,/fallback=questionHall\|\|pillars\.some/);
   assert.match(room,/questionHall:source==='question_hall'/);
   assert.match(room,/const hall=challenge\.source==='question_hall',freezeMs=hall\?0:RECALL\.FREEZE_MS/);
 });

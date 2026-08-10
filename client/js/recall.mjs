@@ -59,24 +59,16 @@ function showQuestion(m){
   const hall=!!(m&&m.questionHall)||questionHallOpen;
   clearRecall({keepQuestionHall:hall});active=m;answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
   if(hall)questionHallOpen=true;
-  if(!m.fallback)m.pillars.forEach((p,i)=>{
+  if(!m.fallback&&!hall)m.pillars.forEach((p,i)=>{
     const compact=!!m.dungeonRecall||dim==='dungeon';
     const letter=String.fromCharCode(65+i),root=new THREE.Group(),mat=new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:.38,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
     const beamH=compact?4.2:7,beamR=compact?.72:1.05,ringR=compact?.92:1.28;
     const beam=new THREE.Mesh(new THREE.CylinderGeometry(beamR,beamR,beamH,24,1,true),mat),ring=new THREE.Mesh(new THREE.TorusGeometry(ringR,.12,10,36),new THREE.MeshBasicMaterial({color:colors[i],transparent:true,opacity:1,depthTest:true,depthWrite:false})),light=new THREE.PointLight(colors[i],1.45,compact?7:10);
     beam.position.y=beamH/2;ring.rotation.x=Math.PI/2;ring.position.y=.12;light.position.y=compact?1.7:2;root.position.set(p.x,p.y,p.z);root.add(beam,ring,light,makeLabel(m.answers[i],labelColor(i),letter,compact));root.userData.index=i;group.add(root);
   });
-  if(!m.fallback){
-    scene.add(group);
-    fallbackEl.innerHTML='';
-    fallbackEl.classList.add('hidden');
-  }else{
-    fallbackEl.innerHTML='';
-    m.answers.forEach((answer,i)=>{const b=document.createElement('button');b.className='recallchoice';b.style.setProperty('--answer',labelColor(i));b.textContent=String.fromCharCode(65+i)+'  '+answer;b.onclick=()=>submitAnswer(i);fallbackEl.appendChild(b);});
-    fallbackEl.classList.remove('hidden');
-  }
+  if(!m.fallback&&!hall)scene.add(group);else{fallbackEl.innerHTML='';m.answers.forEach((answer,i)=>{const b=document.createElement('button');b.className='recallchoice';b.style.setProperty('--answer',labelColor(i));b.textContent=String.fromCharCode(65+i)+'  '+answer;b.onclick=()=>submitAnswer(i);fallbackEl.appendChild(b);});fallbackEl.classList.remove('hidden');}
   subjectEl.textContent=(hall?'QUESTION HALL · ':(m.ruinBonus?'RUIN INSCRIPTION · ':''))+m.stage+' · '+m.subject+(m.topic?' · '+m.topic:'');
-  timeEl.textContent=m.fallback?'CHOOSE':'MOVE';
+  timeEl.textContent=hall?'CLOSE':(m.fallback?'CHOOSE':'MOVE');
   questionEl.textContent=m.prompt;feedbackEl.className='hidden';feedbackEl.textContent='';
   document.body.classList.add('recall-active');document.body.classList.toggle('question-hall-recall-open',hall);hud.classList.toggle('question-hall-recall',hall);updateQuestionHallProgress();hud.classList.remove('hidden');
 }
@@ -121,7 +113,7 @@ function tick(now=performance.now()){
   if(freezeUntil>now){keys.KeyW=keys.KeyA=keys.KeyS=keys.KeyD=keys.Space=keys.ShiftLeft=keys.ShiftRight=false;player.vel.x=0;player.vel.z=0;}
   if(!active)return;
   if(group)group.children.forEach((p,i)=>{p.children[0].material.opacity=.34+Math.sin(now*.004+i)*.12;p.children[1].rotation.z+=.012;p.children[2].intensity=1.5+Math.sin(now*.006+i)*.45;});
-  if(answerPending||active.fallback)return;
+  if(answerPending||active.fallback||active.questionHall)return;
   for(const p of active.pillars)if(Math.hypot(player.pos.x-p.x,player.pos.z-p.z)<1.15){submitAnswer(p.index);break;}
 }
 function setMastery(value){if(value&&typeof value==='object')masterySummary=value;}
