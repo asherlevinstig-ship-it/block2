@@ -613,6 +613,8 @@ const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
 const keyPromptHud=document.getElementById('keyprompthud');
+const questionBtn=document.getElementById('questionbtn');
+const socialBtn=document.getElementById('socialbtn');
 const KEY_PROMPTS=[
   {key:'TAB',title:'Chat',text:'Open Local quick chat - press Tab again for Team / Whisper'},
   {key:'F',title:'Action',text:'Mine, attack, harvest, or use the focused action'},
@@ -676,6 +678,7 @@ function dispatchVirtualKey(code,type='keydown'){
   window.dispatchEvent(event);
 }
 function tabletSetKey(code,on){
+  keys[code]=!!on;
   if(on){
     if(tabletInputState.pressed.has(code))return;
     tabletInputState.pressed.add(code);
@@ -700,6 +703,26 @@ function tabletSetSprintToggle(on){
     const label=btn.querySelector('span');
     if(label)label.textContent=tabletInputState.sprintToggled?'Sprint On':'Sprint';
   }
+}
+function openQuestionsFromHud(){
+  if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
+  if(dim==='questions'){startQuestionHallMeditationPose();releaseGameplayCursor();}
+  if(globalThis.BlockcraftRecall&&globalThis.BlockcraftRecall.start){
+    globalThis.BlockcraftRecall.start(dim==='questions'?{source:'question_hall'}:undefined);
+    return true;
+  }
+  return false;
+}
+function openSocialFromHud(){
+  if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
+  const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
+  if(socialTarget&&typeof openPlayerSocialUI==='function'){
+    openPlayerSocialUI(socialTarget);
+    return true;
+  }
+  if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
+  if(typeof openChat==='function'){ openChat(); return true; }
+  return false;
 }
 function tabletApplyJoystick(dx,dy){
   const dead=16;
@@ -750,6 +773,7 @@ function ensureTabletControls(){
       '<button data-mobile-menu-action="stats">Stats</button>'+
       '<button data-mobile-menu-action="quests">Quests</button>'+
       '<button data-mobile-menu-action="questions">Questions</button>'+
+      '<button data-mobile-menu-action="social">Social</button>'+
       '<button data-mobile-menu-action="stuck">I’m Stuck</button>'+
       '<button data-mobile-menu-action="bug">Report Bug</button>'+
       '<button data-mobile-menu-action="free">Free Cursor</button>'+
@@ -840,6 +864,7 @@ function ensureTabletControls(){
     else if(action==='stats')dispatchVirtualKey('KeyC');
     else if(action==='quests')dispatchVirtualKey('KeyO');
     else if(action==='questions')dispatchVirtualKey('KeyP');
+    else if(action==='social')openSocialFromHud();
     else if(action==='free')dispatchVirtualKey('Escape');
     else if(action==='bug')document.getElementById('bugreportbtn')?.click();
     else if(action==='stuck')document.getElementById('stuckrescuebtn')?.click();
@@ -936,6 +961,23 @@ function updateKeyPromptHud(show=false,force=false){
   keyPromptHud.classList.remove('hidden');
 }
 if(keyPromptHud)setInterval(()=>updateKeyPromptHud(!keyPromptHud.classList.contains('hidden')),1000);
+function bindHudActionButton(btn,handler,name){
+  if(!btn)return;
+  let lastRunAt=0;
+  const run=e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const now=performance.now();
+    if(now-lastRunAt<180)return;
+    lastRunAt=now;
+    const ok=handler();
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('hud.button',{name,ok});
+  };
+  btn.addEventListener('click',run);
+  btn.addEventListener('pointerdown',run);
+}
+bindHudActionButton(questionBtn,openQuestionsFromHud,'questions');
+bindHudActionButton(socialBtn,openSocialFromHud,'social');
 const rightHudStackIds=['currentquest','activitytracker','townchoices'];
 function layoutRightHudStack(){
   const narrow=window.innerWidth<=760;
@@ -950,7 +992,7 @@ function layoutRightHudStack(){
   }
 }
 function layoutLeftHudExtras(){
-  const coords=document.getElementById('coords'),homework=document.getElementById('homeworkhud'),bug=document.getElementById('bugreportbtn'),stuck=document.getElementById('stuckrescuebtn');
+  const coords=document.getElementById('coords'),homework=document.getElementById('homeworkhud'),bug=document.getElementById('bugreportbtn'),stuck=document.getElementById('stuckrescuebtn'),chat=document.getElementById('chatlog');
   const narrow=window.innerWidth<=760;
   let top=narrow?54:250;
   if(coords&&!coords.classList.contains('hidden')&&getComputedStyle(coords).display!=='none'){
@@ -968,26 +1010,22 @@ function layoutLeftHudExtras(){
       homework.style.top='';
     }
   }
-  if(bug){
-    const visible=!bug.classList.contains('hidden')&&getComputedStyle(bug).display!=='none';
+  for(const el of [questionBtn,socialBtn,bug,stuck]){
+    if(!el)continue;
+    const visible=!el.classList.contains('hidden')&&getComputedStyle(el).display!=='none';
     if(visible){
-      bug.style.left=(narrow?8:16)+'px';
-      bug.style.top=top+'px';
-      top+=Math.ceil(bug.getBoundingClientRect().height)+(narrow?6:8);
+      el.style.left=(narrow?8:16)+'px';
+      el.style.top=top+'px';
+      top+=Math.ceil(el.getBoundingClientRect().height)+(narrow?6:8);
     }else{
-      bug.style.left='';
-      bug.style.top='';
+      el.style.left='';
+      el.style.top='';
     }
   }
-  if(stuck){
-    const visible=!stuck.classList.contains('hidden')&&getComputedStyle(stuck).display!=='none';
-    if(visible){
-      stuck.style.left=(narrow?8:16)+'px';
-      stuck.style.top=top+'px';
-    }else{
-      stuck.style.left='';
-      stuck.style.top='';
-    }
+  if(chat){
+    chat.style.left=(narrow?8:16)+'px';
+    chat.style.top=top+'px';
+    chat.style.bottom='auto';
   }
 }
 let hudStateObserver=null, homeworkHudObserved=false;
@@ -4931,6 +4969,8 @@ function refreshPlayUi(){
   document.getElementById('locationhud').classList.toggle('hidden', !showHud);
   document.getElementById('coords').classList.toggle('hidden', !showHud);
   document.getElementById('currentquest').classList.toggle('hidden', !showHud || minimal || (calm && !quest && !jobContract && !regionalContract && !townGuidanceActive && !progressionFocus && !(Array.isArray(activeObjectives)&&activeObjectives.length)));
+  if(questionBtn)questionBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || cutscene);
+  if(socialBtn)socialBtn.classList.toggle('hidden', !showHud || modalInputOpen || claimMode || cutscene);
   document.getElementById('landmap').classList.toggle('hidden', true);
   document.getElementById('eventhud').classList.toggle('hidden', true);
   const fishingActive=!!(globalThis.BlockcraftFishing&&globalThis.BlockcraftFishing.active&&globalThis.BlockcraftFishing.active());

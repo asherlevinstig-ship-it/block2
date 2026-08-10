@@ -109,6 +109,7 @@ let pantherLocalUntil=0,pantherShiftStart=-1e9,pantherShiftMs=PANTHER_FORM.shift
 const MOVEMENT_FEEL={walk:4.3,sprint:6.2,sprintRampUp:.25,sprintRampDown:.18,exhaustedWalk:.8,recoverSprintAt:.12,groundAccel:22,groundSprintAccel:28,groundBrake:34,airAccel:6.5,airBrake:2.8,waterAccel:10};
 const FALL_DAMAGE={safeDrop:5,featherAbsorbDrop:16,hardScale:1.25,featherScale:.5,maxDamage:18};
 let sprintRamp=0,staminaExhausted=false,locomotionBobT=0,locomotionBob=0,locomotionRoll=0,locomotionPitch=0,landingDip=0,lastPlanarSpeed=0,localFallPeakY=0,localFallAirborne=false;
+let lastTabletSprintDrainTraceAt=0;
 const movementState={grounded:false,airborne:true,swimming:false,sprinting:false,exhausted:false,panther:false,state:'airborne',speed:0,targetSpeed:0,sprintFactor:0};
 function pantherFormActive(now=performance.now()){
   return pantherLocalUntil>now || !!(buffs&&buffs.panther>0);
@@ -3230,6 +3231,10 @@ function tick(now){
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
     if(!parkourFreeMovement&&sprintFactor>.05&&!pantherMove&&movementInput){
       sp=Math.max(0,sp-stCost(3.5)*armorStamina*sprintFactor*dt);
+      if(combatState.tabletInput&&combatState.tabletInput.sprintToggled&&now-lastTabletSprintDrainTraceAt>1000){
+        lastTabletSprintDrainTraceAt=now;
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.sprint-drain',{sp:Math.round(sp*100)/100,sprintFactor:Math.round(sprintFactor*100)/100,movementInput,keys:{w:!!keys.KeyW,a:!!keys.KeyA,s:!!keys.KeyS,d:!!keys.KeyD,shift:!!keys.ShiftLeft}});
+      }
       if(sp<=1&&combatState.tabletInput&&combatState.tabletInput.sprintToggled&&combatApi.setTabletSprintToggle){
         combatApi.setTabletSprintToggle(false);
         globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.sprint-auto-off',{reason:'stamina-drained',sp:Math.round(sp*100)/100});

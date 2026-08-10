@@ -216,6 +216,12 @@ function renderCursor(){
   cursorEl.appendChild(c);
   if(cursorStack.count>1){ const s=document.createElement('span'); s.className='cnt'; s.textContent=cursorStack.count; cursorEl.appendChild(s); }
 }
+function moveCursorItemTo(clientX,clientY){
+  if(!cursorEl)return;
+  cursorEl.style.left=(Math.round(clientX)-18)+'px';
+  cursorEl.style.top=(Math.round(clientY)-18)+'px';
+}
+addEventListener('pointermove', e=>{ if(cursorStack)moveCursorItemTo(e.clientX,e.clientY); }, {passive:true});
 
 let craftCells=[], craftW=2; // crafting grid contents (stacks)
 let uiAccessors=[]; // for re-render
@@ -925,7 +931,19 @@ function makeSlotEl(acc, opts={}){
   const el=document.createElement('div'); el.className='slot';
   fillSlotEl(el, acc.get());
   if((opts.armor&&gearInspectSlot===-2)||(opts.inventorySlot!=null&&gearInspectSlot===opts.inventorySlot))el.classList.add('gear-inspected');
-  el.addEventListener('mousedown', e=>{ e.preventDefault(); slotInteract(acc, e, opts); });
+  let lastSlotPointerAt=0;
+  el.addEventListener('pointerdown', e=>{
+    lastSlotPointerAt=performance.now();
+    e.preventDefault();
+    e.stopPropagation();
+    moveCursorItemTo(e.clientX,e.clientY);
+    slotInteract(acc, e, opts);
+  });
+  el.addEventListener('mousedown', e=>{
+    if(performance.now()-lastSlotPointerAt<220)return;
+    e.preventDefault();
+    slotInteract(acc, e, opts);
+  });
   return el;
 }
 
