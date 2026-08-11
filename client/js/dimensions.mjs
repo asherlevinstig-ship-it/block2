@@ -900,6 +900,7 @@ function tickAbilities(dt,t){
 const abEl=document.getElementById('abilities');
 const abSlots=[];
 function dispatchAbilityHudKey(code){
+  if(!document.body.classList.contains('mobile-play-mode'))return;
   const keyMap={KeyQ:'q',KeyR:'r',KeyH:'h',KeyJ:'j',KeyF:'f'};
   try{
     window.dispatchEvent(new KeyboardEvent('keydown',{code,key:keyMap[code]||code,bubbles:true,cancelable:true}));
