@@ -6085,6 +6085,13 @@ addEventListener('keydown', e=>{
       // portal leaves the fishing room instead of the rod grabbing the press.
       // An in-progress cast (aim/wait/bite/fight) still owns G.
       if(!fishingBusy && nearFishingLakeExit()){ e.preventDefault(); if(typeof exitFishingLake==='function')exitFishingLake(); return; }
+      const wildTrack=!fishingBusy&&globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.nearby&&globalThis.BlockcraftTamingLandTracks.nearby();
+      if(wildTrack){
+        e.preventDefault();
+        if(NET.on&&NET.room)NET.room.send('tamingTrack',{id:wildTrack.id});
+        else showName('The trail stirs, but the server is reconnecting');
+        return;
+      }
       if(fishing&&fishing.handleKeyDown&&fishing.handleKeyDown(e.code)){ e.preventDefault(); return; }
       placeKeyHeld=true; nextHeldPlaceAt=performance.now()+BLOCK_PLACE_INITIAL_DELAY_MS; secondaryAction();
     }

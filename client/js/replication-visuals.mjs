@@ -887,6 +887,12 @@ function netFx(m){
     return;
   }
   if(m.t==='fangBite'){ const strikes=Math.max(1,m.strikes|0); burst(m.x, m.y, m.z, [.7,.6,.5], 4+strikes*3, 1.6, 1.1, .25); fangSnap(m.x, m.z, strikes); return; }
+  if(m.t==='tamingTrack'){
+    const col=m.kind==='wolf'?[.55,.72,1]:m.kind==='boar'?[1,.52,.2]:m.kind==='cat'?[1,.62,.84]:m.kind==='deer'?[1,.86,.45]:[.62,1,.82];
+    burst(m.x,m.y,m.z,col,22,2.7,2.3,.62);
+    ringPulse(m.x,m.y-.25,m.z,1.8,m.kind==='boar'?0xfb923c:m.kind==='cat'?0xf9a8d4:m.kind==='wolf'?0x93c5fd:0xa7f3d0,.42);
+    return;
+  }
   if(m.t==='shadeStep'){ shadowDashVfx({x:m.sx,y:m.sy,z:m.sz},{x:m.x,y:m.y,z:m.z}); return; }
   if(m.t==='biomeSlam'){burst(m.x,m.y+.15,m.z,BIOME_VFX.mesa.col,30,4.8,2.2,.55);ringPulse(m.x,m.y+.08,m.z,3.8,BIOME_VFX.mesa.hex,.34);SFX.boom();return;}
   if(m.t==='soldierStrike'){ shadowSoldierStrikeVfx(m.x, m.y, m.z, m.yaw||0); return; }

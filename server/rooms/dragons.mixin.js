@@ -1198,6 +1198,7 @@ class DragonsMixin {
       this.fangCd.set(sid, now + fangCooldown(lvl));
       this.damageMobByAbility(c, bestId, best, fangDamage(lvl)*strikes);
       this.awardFamiliarXp(c,'fang',lethal?12:2,lethal?'pack_kill':'pack_attack');
+      c.send('familiarTrait',{kind:'fang',trait:'fang_bite',strikes,damage:fangDamage(lvl)*strikes,target:best.kind||'mob'});
       this.sendSpace(p.dgn || '', 'fx', { t: 'fangBite', x: best.x, y: best.y + 0.6, z: best.z, strikes, dgn: p.dgn || '' });
     });
   }
@@ -1220,7 +1221,7 @@ class DragonsMixin {
         if (whole > 0) {
           acc -= whole;
           const heal = Math.min(whole, hp.max - hp.hp);
-          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal, reason:'mote_regen' }); this.awardFamiliarXp(c,'mote',heal,'effective_heal'); if (token) this.dirtyPlayers.add(token); }
+          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal, reason:'mote_regen' }); c.send('familiarTrait',{kind:'mote',trait:'mote_regen',heal}); this.awardFamiliarXp(c,'mote',heal,'effective_heal'); if (token) this.dirtyPlayers.add(token); }
         }
         this.moteAcc.set(sid, acc);
       }
@@ -1230,7 +1231,7 @@ class DragonsMixin {
         if (threat) {
           this.moteBurstCd.set(sid, now + moteBurstCooldown(lvl));
           const heal = Math.min(moteBurst(lvl), hp.max - hp.hp);
-          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal, reason:'mote_burst' }); this.awardFamiliarXp(c,'mote',heal*2,'emergency_bloom'); if (token) this.dirtyPlayers.add(token); }
+          if (heal > 0) { hp.hp += heal; c.send('hurt', { n: -heal, reason:'mote_burst' }); c.send('familiarTrait',{kind:'mote',trait:'mote_burst',heal}); this.awardFamiliarXp(c,'mote',heal*2,'emergency_bloom'); if (token) this.dirtyPlayers.add(token); }
           this.sendSpace(p.dgn || '', 'fx', { t: 'moteBurst', x: p.x, y: p.y + 1, z: p.z, dgn: p.dgn || '' });
         }
       }

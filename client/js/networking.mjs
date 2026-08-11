@@ -2556,7 +2556,38 @@ function netAttachRoom(room,name,client){
     room.onMessage('perchReject', m=>perchRejected(m));
     room.onMessage('familiarBound', m=>{ const kind=(m&&m.kind)||'shade'; const sig=FAMILIARS[kind]&&FAMILIARS[kind].sigil; let i=Math.max(0,Math.min(35,(m&&m.slot)|0)); if(!(m&&m.slot>=0&&inv[i]&&inv[i].id===sig))i=inv.findIndex(s=>s&&s.id===sig); if(i>=0){ const s=inv[i]; s.count--; if(s.count<=0) inv[i]=null; refreshHUD(); if(uiOpen) renderUI(); } familiarBoundLocal(kind); eventFeed('[Familiar]',((FAMILIARS[kind]&&FAMILIARS[kind].name)||'Familiar')+' bound to you.',{key:'familiar:bound:'+kind,cooldown:0}); });
     room.onMessage('familiarBond', m=>{COMPANIONS.applyFamiliarBond(m);if(m&&m.challenge&&m.challenge.justCompleted&&FAMILIARS[m.kind])eventFeed('[Familiar]',FAMILIARS[m.kind].name+' bond challenge complete.',{key:'familiar:challenge:'+m.kind+':'+String(m.challenge.id||m.challenge.title||''),cooldown:0});});
-    room.onMessage('familiarTrait', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.familiarReaction(m.kind,1); eventFeed('[Familiar]',FAMILIARS[m.kind].name+' helped you.',{key:'familiar:trait:'+String(m.trait||m.kind),cooldown:2500}); } });
+    room.onMessage('familiarTrait', m=>{
+      if(!(m&&FAMILIARS[m.kind]))return;
+      COMPANIONS.familiarReaction(m.kind,1);
+      const name=FAMILIARS[m.kind].name;
+      const trait=String(m.trait||m.kind);
+      const line=trait==='soft_paws'?name+' softened your fall'+(m.saved?' (-'+((m.saved)|0)+' damage)':'')+'.'
+        :trait==='guarding_shade'?name+' guarded you'+(m.saved?' (-'+Math.round(Number(m.saved)||0)+' damage)':'')+'.'
+        :trait==='fang_bite'?name+' bit the enemy'+(m.damage?' for '+((m.damage)|0):'')+'.'
+        :trait==='mote_regen'?name+' restored '+Math.max(1,(m.heal||0)|0)+' HP.'
+        :trait==='mote_burst'?name+' bloomed for '+Math.max(1,(m.heal||0)|0)+' HP.'
+        :trait==='trail_nose'?name+' sniffed out extra meat.'
+        :trait==='hunter_howl'?name+' howled: +'+Math.max(1,(m.bonus||0)|0)+' XP.'
+        :trait==='bonus_find'?name+' found +'+Math.max(1,(m.count||0)|0)+' extra drop'+(((m.count||0)|0)===1?'':'s')+'.'
+        :name+' helped you.';
+      eventFeed('[Companion]',line,{key:'familiar:trait:'+trait,cooldown:1800});
+      if(typeof sysMsg==='function')sysMsg('<b>Companion:</b> '+line,{key:'companion:'+trait,cooldown:2600});
+    });
+    room.onMessage('tamingTrackResult', m=>{
+      if(!(m&&m.ok)){
+        const r=m&&m.reason;
+        if(typeof sysMsg==='function'){
+          if(r==='range')sysMsg('Move closer to the wild tracks.');
+          else if(r==='room')sysMsg('Those tracks belong in Taming Land.');
+          else if(r!=='rate')sysMsg('The trail is too faint to read.');
+        }
+        return;
+      }
+      if(globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.markFound)globalThis.BlockcraftTamingLandTracks.markFound(m.id,m);
+      const xp=m.jobXp&&m.jobXp.gained?(' +'+((m.jobXp.gained)|0)+' Pet Tamer XP'):'';
+      eventFeed('[Pet Tamer]',(m.label||'Wild tracks')+' read.'+xp,{key:'taming:track:'+String(m.id||''),cooldown:0});
+      if(typeof sysMsg==='function')sysMsg('<b>Wild tracks:</b> '+String(m.clue||m.label||'Trail discovered')+xp);
+    });
     room.onMessage('familiarSummoned', m=>{ if(m&&FAMILIARS[m.kind]){ COMPANIONS.activeFamiliar=m.kind; eventFeed('[Familiar]',FAMILIARS[m.kind].name+' summoned.',{key:'familiar:summon:'+m.kind,cooldown:3000}); } });
     room.onMessage('familiarDismissed', ()=>{ COMPANIONS.activeFamiliar=''; eventFeed('[Familiar]','Familiar dismissed.',{key:'familiar:dismiss',cooldown:3000}); });
     room.onMessage('familiarReject', m=>{

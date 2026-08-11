@@ -34,6 +34,13 @@ const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const DEFAULT_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockcraft_curriculum_mail.php';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
 const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
+const TAMING_WILD_TRACKS = Object.freeze({
+  rabbit_meadow: { id: 'rabbit_meadow', kind: 'rabbit', label: 'Rabbit Meadow Tracks', x: 396.5, y: 20.16, z: 933.5, clue: 'Tiny quick prints weave through the clover.' },
+  deer_grove: { id: 'deer_grove', kind: 'deer', label: 'Deer Grove Tracks', x: 390.5, y: 20.16, z: 953.5, clue: 'Careful hoof marks circle the quiet trees.' },
+  boar_mud: { id: 'boar_mud', kind: 'boar', label: 'Boar Mud Tracks', x: 450.5, y: 20.16, z: 943.5, clue: 'Heavy scrapes and churned earth point to a stubborn beast.' },
+  cat_sun: { id: 'cat_sun', kind: 'cat', label: 'Sun Cat Pawprints', x: 450.5, y: 20.16, z: 907.5, clue: 'Soft pawprints vanish beside a warm stone.' },
+  wolf_ridge: { id: 'wolf_ridge', kind: 'wolf', label: 'Wolf Ridge Trail', x: 392.5, y: 20.16, z: 901.5, clue: 'A cold trail cuts around the ridge stones.' },
+});
 
 function cleanBugText(value, max = 1600) {
   return String(value || '')
@@ -449,6 +456,7 @@ class GameRoom extends Room {
     this.onMessage('dragonLoanCancel', (client, m) => this.handleDragonLoanCancel(client, m));
     this.onMessage('dragonLoanReturn', (client, m) => this.handleDragonLoanReturn(client, m));
     this.onMessage('petTamerService', (client, m) => this.handlePetTamerService(client, m));
+    this.onMessage('tamingTrack', (client, m) => this.handleTamingTrack(client, m));
     this.onMessage('perchDragon', (client, m) => this.handlePerchDragon(client, m));
     this.onMessage('recallDragon', (client, m) => this.handleRecallDragon(client, m));
     this.onMessage('feedDragon', (client, m) => this.handleFeedDragon(client, m));
@@ -1861,6 +1869,39 @@ class GameRoom extends Room {
     if (!pos) return false;
     prof.activeRoom = activeRoom;
     prof.pos = pos;
+    return true;
+  }
+
+  handleTamingTrack(client, m) {
+    const p = client && this.state.players.get(client.sessionId);
+    const rec = client && this.profileFor(client);
+    const id = String(m && m.id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 48);
+    const track = TAMING_WILD_TRACKS[id];
+    if (!p || !rec || !track) return client && client.send && client.send('tamingTrackResult', { ok: false, reason: 'track' });
+    const activeRoom = sanitizeActiveRoom(rec.prof && rec.prof.activeRoom);
+    const inTamingLand = p.dim === 'tutorial' && p.dgn === this.tutorialSpaceId(client, 'taming_land') && activeRoom && activeRoom.dim === 'taming_land';
+    if (!inTamingLand) return client.send('tamingTrackResult', { ok: false, reason: 'room' });
+    if (this.rateLimited(client, 'tamingTrack', 1.2, 3)) return client.send('tamingTrackResult', { ok: false, reason: 'rate' });
+    const dist = Math.hypot(Number(p.x) - track.x, Number(p.z) - track.z);
+    if (!Number.isFinite(dist) || dist > 6.4) return client.send('tamingTrackResult', { ok: false, reason: 'range' });
+    const isPetTamer = rec.prof && rec.prof.job === 'pet_tamer';
+    const jobXp = isPetTamer && this.grantJobXp ? this.grantJobXp(client, 'pet_tamer', 6) : null;
+    if (isPetTamer && this.progressJobContract) this.progressJobContract(client, 'tame', 1, 0);
+    if (!Array.isArray(rec.prof.tamingTrackLog)) rec.prof.tamingTrackLog = [];
+    rec.prof.tamingTrackLog = rec.prof.tamingTrackLog.filter(t => t && t.id !== id).slice(-24);
+    rec.prof.tamingTrackLog.push({ id, kind: track.kind, at: Date.now() });
+    this.dirtyPlayers.add(rec.token);
+    client.send('tamingTrackResult', {
+      ok: true,
+      id,
+      kind: track.kind,
+      label: track.label,
+      clue: track.clue,
+      petTamer: isPetTamer,
+      jobXp: jobXp ? { xp: jobXp.xp, level: jobXp.level, gained: jobXp.gained || 0 } : null,
+      contract: rec.prof.jobContract || null,
+    });
+    this.sendSpace(p.dgn || '', 'fx', { t: 'tamingTrack', id, kind: track.kind, x: track.x, y: track.y + .4, z: track.z, sid: client.sessionId, dgn: p.dgn || '' });
     return true;
   }
 
@@ -5797,7 +5838,9 @@ class GameRoom extends Room {
     const p = this.state.players.get(client.sessionId);
     if (p && p.familiar === 'shade' && !this.familiarMechanicsSuspended(client.sessionId)) {
       const beforeShade=amount; amount *= (1-shadeMitigation(this.familiarPowerLevel(client,'shade')));
-      this.awardFamiliarXp(client,'shade',Math.min(5,Math.max(1,Math.round(beforeShade-amount))),'damage_prevented');
+      const saved=Math.max(0,beforeShade-amount);
+      this.awardFamiliarXp(client,'shade',Math.min(5,Math.max(1,Math.round(saved))),'damage_prevented');
+      if(saved>0)client.send('familiarTrait',{kind:'shade',trait:'guarding_shade',saved,damage:Math.max(0,Math.round(amount))});
     }
     const hp = this.ensurePlayerHp(client);
     const dmg = Math.max(0, Math.round(amount));

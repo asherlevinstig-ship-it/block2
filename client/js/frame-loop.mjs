@@ -2352,6 +2352,12 @@ function updateEncounterPrompt(){
     encounterPromptEl.innerHTML='<span class="key">G</span><b>'+escHTML(dragon.name||'Dragon')+'</b><small>'+escHTML((dragon.stage||'adult').toUpperCase()+' - '+(dragon.role||'follow').toUpperCase())+'</small>';
     return;
   }
+  const wildTrack=locked&&!uiOpen&&!statOpen&&!qOpen&&!claimMode&&!onboardingActive&&globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.nearby&&globalThis.BlockcraftTamingLandTracks.nearby();
+  if(wildTrack){
+    encounterPromptEl.classList.remove('danger','hidden');
+    encounterPromptEl.innerHTML='<span class="key">G</span><b>Wild Pet Tracks</b><small>'+escHTML(wildTrack.label||'Read tracks')+' - press G to inspect</small>';
+    return;
+  }
   const fishingPrompt=nearbyFishingWaterPrompt();
   if(fishingPrompt){
     encounterPromptEl.classList.remove('danger','hidden');
@@ -3119,6 +3125,7 @@ function tick(now){
   tickPerchedDragons(now, dt);
   tickFamiliars(now, dt);
   tickPetTamerTutorialVisuals(now, dt);
+  if(globalThis.BlockcraftTamingLandTracks&&globalThis.BlockcraftTamingLandTracks.tick)globalThis.BlockcraftTamingLandTracks.tick(now,dt);
   tickWatchfulShade(now);
   updateFamiliarHUD();
   if(cutscene) tickCutscene(now, dt);   // cinematic drives its own camera, regardless of pointer-lock

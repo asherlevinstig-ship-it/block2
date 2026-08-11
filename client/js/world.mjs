@@ -925,6 +925,13 @@ const TRAINING_MEADOW={x:560,z:840,G:18,R:58};
 const TRAINING_MEADOW_TOWN_PORTAL=Object.freeze({dx:0,dz:40,range:5.8});
 const ABILITY_MEADOW={x:805,z:835,G:18,R:36};
 const TAMING_LAND=Object.freeze({x:420,z:925,G:20,R:68,exit:{dx:0,dz:26},spawn:{dx:0,dz:-18}});
+const TAMING_WILD_TRACKS=Object.freeze([
+  {id:'rabbit_meadow',kind:'rabbit',label:'Rabbit Meadow Tracks',dx:-24,dz:8,color:0xa7f3d0,ground:B.GRASS,clue:'Tiny quick prints weave through the clover.'},
+  {id:'deer_grove',kind:'deer',label:'Deer Grove Tracks',dx:-30,dz:28,color:0xfde68a,ground:B.SNOW,clue:'Careful hoof marks circle the quiet trees.'},
+  {id:'boar_mud',kind:'boar',label:'Boar Mud Tracks',dx:30,dz:18,color:0xfb923c,ground:B.RED_SAND,clue:'Heavy scrapes and churned earth point to a stubborn beast.'},
+  {id:'cat_sun',kind:'cat',label:'Sun Cat Pawprints',dx:30,dz:-18,color:0xf9a8d4,ground:B.SAND,clue:'Soft pawprints vanish beside a warm stone.'},
+  {id:'wolf_ridge',kind:'wolf',label:'Wolf Ridge Trail',dx:-28,dz:-24,color:0x93c5fd,ground:B.COBBLE,clue:'A cold trail cuts around the ridge stones.'},
+]);
 const FISHING_LAKE=Object.freeze({x:345,z:925,G:18,R:62,exit:{dx:0,dz:30},spawn:{dx:0,dz:-23}});
 const JOB_TUTORIAL_MEADOWS=Object.freeze({
   miner:{x:610,z:925,G:18,R:34,ground:B.STONE},
@@ -1208,6 +1215,18 @@ function buildTamingLand(setBlock=setB){
       if(Math.abs(x-(cx+ox))+Math.abs(z-(cz+oz))<3)setBlock(x,G+8,z,B.GRASS);
     }
     setBlock(cx+ox,G+9,cz+oz,B.LANTERN);
+  }
+  for(const tr of TAMING_WILD_TRACKS){
+    const tx=cx+tr.dx,tz=cz+tr.dz;
+    for(let x=tx-3;x<=tx+3;x++)for(let z=tz-3;z<=tz+3;z++){
+      const d=Math.hypot(x-tx,z-tz);
+      if(d<=3.15)setFlat(x,z,d>2.35?B.COBBLE:(tr.ground||B.GRASS),tr.ground===B.COBBLE?B.STONE:B.DIRT);
+    }
+    for(const [sx,sz] of [[-3,0],[3,0],[0,-3],[0,3]]){
+      setBlock(tx+sx,G+1,tz+sz,B.LOG);
+      setBlock(tx+sx,G+2,tz+sz,B.LANTERN);
+    }
+    setBlock(tx,G+1,tz,B.GLASS);
   }
   for(let x=cx-6;x<=cx+6;x++)for(let z=cz+TAMING_LAND.exit.dz-3;z<=cz+TAMING_LAND.exit.dz+3;z++)setFlat(x,z,B.GLASS,B.STONE);
   setBlock(cx,G+1,cz+TAMING_LAND.exit.dz,B.LANTERN);
@@ -4929,6 +4948,98 @@ function updateTamingLandSky(dt,th){
     root.userData.core.material.opacity=.84+breathe*.12;
   }
 }
+const tamingTrackPawCanvas=document.createElement('canvas');
+tamingTrackPawCanvas.width=tamingTrackPawCanvas.height=64;
+{
+  const p=tamingTrackPawCanvas.getContext('2d');
+  p.clearRect(0,0,64,64);
+  p.fillStyle='rgba(255,255,255,0.95)';
+  p.beginPath();p.ellipse(32,40,13,10,0,0,Math.PI*2);p.fill();
+  for(const [x,y,r] of [[18,25,6],[29,19,6],[42,23,6],[48,34,5]]){
+    p.beginPath();p.arc(x,y,r,0,Math.PI*2);p.fill();
+  }
+}
+const tamingTrackPawTex=new THREE.CanvasTexture(tamingTrackPawCanvas);
+const tamingTrackGroup=new THREE.Group();
+tamingTrackGroup.visible=false;
+scene.add(tamingTrackGroup);
+const tamingTrackState={foundUntil:Object.create(null),lastNearParticleAt:0};
+function tamingHexToRgb(hex){
+  const n=Number(hex)||0xffffff;
+  return {r:((n>>16)&255)/255,g:((n>>8)&255)/255,b:(n&255)/255};
+}
+function tamingTrackWorld(spec){return {x:TAMING_LAND.x+spec.dx+.5,y:TAMING_LAND.G+.16,z:TAMING_LAND.z+spec.dz+.5};}
+function makeTamingTrackMarker(spec){
+  const root=new THREE.Group();
+  const color=spec.color||0xa7f3d0;
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(1.15,.045,8,48),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.45,depthWrite:false,blending:THREE.AdditiveBlending}));
+  ring.rotation.x=Math.PI/2; ring.position.y=.06;
+  const core=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color,transparent:true,opacity:.38,depthWrite:false,blending:THREE.AdditiveBlending}));
+  core.scale.set(2.4,2.4,1); core.position.y=.34;
+  root.add(ring,core);
+  for(let i=0;i<5;i++){
+    const paw=new THREE.Sprite(new THREE.SpriteMaterial({map:tamingTrackPawTex,color,transparent:true,opacity:.62,depthWrite:false,blending:THREE.AdditiveBlending}));
+    const a=i*.82+(spec.dx+spec.dz)*.04;
+    paw.position.set(Math.cos(a)*(.35+i*.25),.08,Math.sin(a)*(.35+i*.25));
+    paw.scale.set(.5,.5,1);
+    root.add(paw);
+  }
+  const pos=tamingTrackWorld(spec);
+  root.position.set(pos.x,pos.y,pos.z);
+  root.userData={spec,ring,core};
+  tamingTrackGroup.add(root);
+  return root;
+}
+const tamingTrackMarkers=TAMING_WILD_TRACKS.map(makeTamingTrackMarker);
+function nearbyTamingLandWildTrack(range=5.4){
+  if(dim!=='taming_land'||!player||!player.pos)return null;
+  let best=null,bd=range;
+  for(const spec of TAMING_WILD_TRACKS){
+    const pos=tamingTrackWorld(spec);
+    const d=Math.hypot(player.pos.x-pos.x,player.pos.z-pos.z);
+    if(d<bd){bd=d;best={...spec,x:pos.x,y:pos.y,z:pos.z,distance:d};}
+  }
+  return best;
+}
+function markTamingLandWildTrackFound(id,payload={}){
+  const spec=TAMING_WILD_TRACKS.find(t=>t.id===id);
+  if(!spec)return false;
+  const now=typeof performance!=='undefined'?performance.now():Date.now();
+  tamingTrackState.foundUntil[id]=now+6500;
+  const pos=tamingTrackWorld(spec), rgb=tamingHexToRgb(spec.color||0xa7f3d0);
+  burst(pos.x,pos.y+.35,pos.z,[rgb.r,rgb.g,rgb.b],24,2.8,2.4,.75);
+  for(let i=0;i<18;i++)spawnParticle({x:pos.x+(Math.random()-.5)*1.8,y:pos.y+.18+Math.random()*.6,z:pos.z+(Math.random()-.5)*1.8,vx:(Math.random()-.5)*.28,vy:.18+Math.random()*.2,vz:(Math.random()-.5)*.28,life:.7+Math.random()*.45,grav:0,r:rgb.r,g:rgb.g,b:rgb.b});
+  if(payload&&payload.clue)sysMsg('<b>Wild tracks:</b> '+escHTML(payload.clue));
+  return true;
+}
+function tickTamingLandWildTracks(now,dt){
+  const active=dim==='taming_land';
+  tamingTrackGroup.visible=active;
+  if(!active)return;
+  const nearest=nearbyTamingLandWildTrack(6.2);
+  for(const root of tamingTrackMarkers){
+    const spec=root.userData.spec,pos=tamingTrackWorld(spec);
+    root.position.set(pos.x,pos.y,pos.z);
+    root.rotation.y=now*.00055+(spec.dx+spec.dz)*.01;
+    const near=nearest&&nearest.id===spec.id;
+    const found=now<(tamingTrackState.foundUntil[spec.id]||0);
+    const pulse=.5+.5*Math.sin(now*.005+(spec.dx-spec.dz)*.03);
+    root.userData.ring.material.opacity=(near?.78:.38)+pulse*.12+(found?.22:0);
+    root.userData.core.material.opacity=(near?.48:.28)+pulse*.16+(found?.24:0);
+    root.scale.setScalar(near?1.15:found?1.08:1);
+  }
+  if(nearest&&now-tamingTrackState.lastNearParticleAt>420){
+    tamingTrackState.lastNearParticleAt=now;
+    const rgb=tamingHexToRgb(nearest.color||0xa7f3d0);
+    spawnParticle({x:nearest.x+(Math.random()-.5)*1.3,y:nearest.y+.2,z:nearest.z+(Math.random()-.5)*1.3,vx:0,vy:.22,vz:0,life:.85,grav:0,r:rgb.r,g:rgb.g,b:rgb.b});
+  }
+}
+globalThis.BlockcraftTamingLandTracks={
+  list:()=>TAMING_WILD_TRACKS.map(t=>({...t,x:TAMING_LAND.x+t.dx+.5,z:TAMING_LAND.z+t.dz+.5})),
+  nearby:nearbyTamingLandWildTrack,
+  markFound:markTamingLandWildTrackFound,
+  tick:tickTamingLandWildTracks
+};
 for(const [lx,lz] of [[TOWN.TC-6,TOWN.TC-6],[TOWN.TC+6,TOWN.TC-6],[TOWN.TC-6,TOWN.TC+6],[TOWN.TC+6,TOWN.TC+6]]){
   const sp=new THREE.Sprite(glowMat);
   sp.position.set(lx+.5, TOWN.G+4.5, lz+.5);

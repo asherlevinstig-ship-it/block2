@@ -1085,6 +1085,7 @@ class CombatMixin {
             items.push({ id: I.MONSTER_MEAT, count: 1 });
             this.awardFamiliarXp(client, 'dog', 12, 'trail_nose');
             this.awardFamiliarXp(client, 'dog', 1, 'extra_meat');
+            client.send('familiarTrait', { kind: 'dog', trait: 'trail_nose', item: I.MONSTER_MEAT, count: 1 });
           }
         }
       }
@@ -1123,6 +1124,7 @@ class CombatMixin {
         xp += bonus;
         this.awardFamiliarXp(client, 'wolf', bonus, 'hostile_xp_bonus');
         this.awardFamiliarXp(client, 'wolf', 1, 'hunter_howl');
+        client.send('familiarTrait', { kind: 'wolf', trait: 'hunter_howl', bonus });
       }
       this.awardGrant(client, { source: animal ? 'hunt' : 'mob', xp, items, dangerRing: ring, elite });
       if (animal) this.recordHuntProgress(client);
@@ -1155,7 +1157,8 @@ class CombatMixin {
     const fp = this.state.players.get(client.sessionId);
     const spriteLevel=fp&&fp.familiar==='sprite'?this.familiarPowerLevel(client,'sprite'):1;
     const spriteBonus = !!(fp && fp.familiar === 'sprite' && Math.random() < spriteForageChance(spriteLevel));
-    if (spriteBonus){items[0].count += spriteBonusDrops(spriteLevel);this.awardFamiliarXp(client,'sprite',12,'bonus_find');}
+    const spriteCount=spriteBonus?spriteBonusDrops(spriteLevel):0;
+    if (spriteBonus){items[0].count += spriteCount;this.awardFamiliarXp(client,'sprite',12,'bonus_find');client.send('familiarTrait',{kind:'sprite',trait:'bonus_find',count:spriteCount});}
 
     if (blockId === W.B.GRASS && Math.random() < 0.35) items.push({ id: I.WHEAT_SEEDS, count: 1 });
     if (Number.isFinite(x) && Number.isFinite(z)) {
@@ -1175,7 +1178,7 @@ class CombatMixin {
       xp: Math.round((drop.xp || 0) * DANGER_RINGS[Number.isFinite(x) && Number.isFinite(z) ? dangerRingAt(x, z) : 0].loot),
       items,
     });
-    if (spriteBonus) this.sendSpace(fp.dgn || '', 'fx', { t:'spriteBonus', x:Number.isFinite(x)?x+.5:fp.x, y:Number.isFinite(y)?y+.6:fp.y+1, z:Number.isFinite(z)?z+.5:fp.z, count:spriteBonusDrops(spriteLevel), sid:client.sessionId, dgn:fp.dgn || '' });
+    if (spriteBonus) this.sendSpace(fp.dgn || '', 'fx', { t:'spriteBonus', x:Number.isFinite(x)?x+.5:fp.x, y:Number.isFinite(y)?y+.6:fp.y+1, z:Number.isFinite(z)?z+.5:fp.z, count:spriteCount, sid:client.sessionId, dgn:fp.dgn || '' });
     this.recordMineProgress(client, blockId);
   }
   rollBossKeyDrops(rank) {
