@@ -885,7 +885,8 @@ function ensureTabletControls(){
     else if(action==='free')dispatchVirtualKey('Escape');
     else if(action==='bug')document.getElementById('bugreportbtn')?.click();
     else if(action==='stuck')document.getElementById('stuckrescuebtn')?.click();
-    if(action!=='close')globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.menu-action',{action});
+    else if(action==='close')closeDismissibleGamePanel(true,'tablet-menu');
+    globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.menu-action',{action});
     mobileQuickMenu.classList.add('hidden');
   }));
   tabletInputState.controls=root;
@@ -1085,6 +1086,104 @@ function syncHudLayerState(){
   document.body.classList.toggle('coach-hud-active', coachVisible&&!tutorialVisible&&!gameModalOpen);
   layoutRightHudStack();
   layoutLeftHudExtras();
+}
+function visiblePanel(el){
+  return !!(el&&modalSurfaceVisible(el));
+}
+function clickPanelButtonByText(root,labels){
+  if(!root)return false;
+  const wanted=new Set((labels||[]).map(s=>String(s).trim().toUpperCase()));
+  const buttons=[...root.querySelectorAll('button')];
+  for(const btn of buttons){
+    if(btn.disabled)continue;
+    const text=String(btn.textContent||btn.getAttribute('aria-label')||'').trim().toUpperCase();
+    if(wanted.has(text)){btn.click();return true;}
+  }
+  return false;
+}
+function closeDismissibleGamePanel(relock=true,reason='dismiss-panel'){
+  let closed=false;
+  const kc=globalThis.BlockcraftKnowledgeChallenge;
+  if(kc&&kc.active){
+    if(typeof kc.close==='function')kc.close();
+    closed=true;
+  }
+  const recall=globalThis.BlockcraftRecall;
+  if(recall&&recall.questionHallActive&&recall.questionHallActive()){
+    if(typeof recall.closeQuestionHall==='function')recall.closeQuestionHall();
+    closed=true;
+  }
+  if(uiOpen){ closeUI(relock); closed=true; }
+  if(statOpen){ closeStat(relock); closed=true; }
+  if(uiShellState.qOpen){ closeQWin(relock); closed=true; }
+  const bug=document.getElementById('bugreportwin');
+  if(visiblePanel(bug)){
+    const cancel=document.getElementById('bugreportcancel');
+    if(cancel)cancel.click();
+    else if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.close)globalThis.BlockcraftModal.close(bug,{relock,reason:'bug-report'});
+    else bug.classList.add('hidden');
+    closed=true;
+  }
+  const gear=document.getElementById('gearrewardwin');
+  if(visiblePanel(gear)){
+    if(!clickPanelButtonByText(gear,['KEEP','GOT IT','CLOSE'])){
+      gear.classList.add('hidden');
+      if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+    }
+    closed=true;
+  }
+  const rank=document.getElementById('rankupwin');
+  if(visiblePanel(rank)){
+    const cont=document.getElementById('rankupcontinue');
+    if(cont)cont.click();else rank.classList.add('hidden');
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+    closed=true;
+  }
+  const reward=document.getElementById('rewardwin');
+  if(visiblePanel(reward)){
+    const btn=document.getElementById('jobtutorialrewardclose')||
+      document.getElementById('milestonecontinue')||
+      document.getElementById('rewardclose')||
+      document.getElementById('trainingcontinue')||
+      document.getElementById('promotioncontinue')||
+      document.getElementById('graduationcontinue');
+    if(btn)btn.click();
+    else{
+      reward.classList.add('hidden');
+      if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+    }
+    closed=true;
+  }
+  const treasure=document.getElementById('treasureparchment');
+  if(visiblePanel(treasure)){
+    if(!clickPanelButtonByText(treasure,['GOT IT','CLOSE'])){
+      treasure.classList.add('hidden');
+      if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+    }
+    closed=true;
+  }
+  const adminPicker=globalThis.BlockcraftAdminDungeonPicker;
+  if(adminPicker&&adminPicker.isOpen&&adminPicker.isOpen()){
+    if(typeof adminPicker.close==='function')adminPicker.close(relock);
+    closed=true;
+  }
+  const dev=document.getElementById('devreset');
+  if(visiblePanel(dev)){
+    const cancel=document.getElementById('devresetcancel');
+    if(cancel)cancel.click();
+    else if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.close)globalThis.BlockcraftModal.close(dev,{relock,reason:'dev-editor'});
+    else dev.classList.add('hidden');
+    closed=true;
+  }
+  const chatClose=document.getElementById('chatclose');
+  if(document.body.classList.contains('chat-open')&&chatClose){chatClose.click();closed=true;}
+  const adminChatClose=document.getElementById('adminchatclose');
+  if(document.body.classList.contains('admin-chat-open')&&adminChatClose){adminChatClose.click();closed=true;}
+  if(closed){
+    if(globalThis.BlockcraftModal&&globalThis.BlockcraftModal.sync)globalThis.BlockcraftModal.sync();
+    refreshPlayUi();
+  }
+  return closed;
 }
 if(globalThis.MutationObserver){
   hudStateObserver=new MutationObserver(syncHudLayerState);
@@ -5836,6 +5935,10 @@ addEventListener('keydown', e=>{
     if(mirrorPreview&&mirrorPreview.active&&mirrorPreview.active()&&mirrorPreview.dismiss){
       e.preventDefault();
       mirrorPreview.dismiss();
+      return;
+    }
+    if(closeDismissibleGamePanel(true,'escape')){
+      e.preventDefault();
       return;
     }
     const rankUpWin=document.getElementById('rankupwin');
