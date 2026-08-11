@@ -3203,7 +3203,7 @@ function tick(now){
     const pantherMove=pantherFormActive(now)&&!mounted&&movementInput;
     const parkourFreeMovement=!!(worldApi.isParkourEventActive&&worldApi.isParkourEventActive());
     const outOfFood=!parkourFreeMovement&&!mounted && hunger<=0;
-    const sprintIntent=!!(sprintKey && movementInput && !mounted && !outOfFood);
+    const sprintIntent=!!(sprintKey && movementInput && !mounted);
     if(parkourFreeMovement)staminaExhausted=false;
     else if(!pantherMove&&!mounted&&sp<=1){
       staminaExhausted=true;
@@ -3230,7 +3230,20 @@ function tick(now){
     const armorMovement=!mounted&&equippedArmor()?armorProfileFor(equippedArmor()):null;
     const armorStamina=armorMovement?armorMovement.staminaCostMultiplier:1;
     if(!parkourFreeMovement&&sprintFactor>.05&&!pantherMove&&movementInput){
+      const beforeSp=sp;
       sp=Math.max(0,sp-stCost(3.5)*armorStamina*sprintFactor*dt);
+      if(now-(NET.lastSprintDrainTraceAt||0)>1500){
+        NET.lastSprintDrainTraceAt=now;
+        globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('movement.sprint-drain',{
+          before:Math.round(beforeSp*100)/100,
+          after:Math.round(sp*100)/100,
+          drain:Math.round((beforeSp-sp)*100)/100,
+          sprintFactor:Math.round(sprintFactor*100)/100,
+          hunger:Math.round(hunger*100)/100,
+          outOfFood,
+          tablet:!!(combatState.tabletInput&&combatState.tabletInput.gameplayTouch),
+        });
+      }
       if(combatState.tabletInput&&combatState.tabletInput.sprintToggled&&now-lastTabletSprintDrainTraceAt>1000){
         lastTabletSprintDrainTraceAt=now;
         globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('tablet.sprint-drain',{sp:Math.round(sp*100)/100,sprintFactor:Math.round(sprintFactor*100)/100,movementInput,keys:{w:!!keys.KeyW,a:!!keys.KeyA,s:!!keys.KeyS,d:!!keys.KeyD,shift:!!keys.ShiftLeft}});
