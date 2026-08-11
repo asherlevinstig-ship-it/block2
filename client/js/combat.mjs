@@ -680,7 +680,7 @@ function tryLockLandscapeOrientation(){
   }catch{}
 }
 function dispatchVirtualKey(code,type='keydown'){
-  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyP:'p',KeyC:'c',KeyO:'o',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
+  const keyMap={KeyW:'w',KeyA:'a',KeyS:'s',KeyD:'d',KeyE:'e',KeyF:'f',KeyG:'g',KeyH:'h',KeyI:'i',KeyJ:'j',KeyO:'o',KeyP:'p',KeyQ:'q',KeyR:'r',Tab:'Tab',ShiftLeft:'Shift',Space:' ',Escape:'Escape'};
   const event=new KeyboardEvent(type,{code,key:keyMap[code]||code,bubbles:true,cancelable:true});
   window.dispatchEvent(event);
 }
@@ -788,6 +788,7 @@ function ensureTabletControls(){
       '<button data-mobile-menu-action="stats">Stats</button>'+
       '<button data-mobile-menu-action="quests">Quests</button>'+
       '<button data-mobile-menu-action="questions">Questions</button>'+
+      '<button data-mobile-menu-action="utilities">Utilities</button>'+
       '<button data-mobile-menu-action="social">Social</button>'+
       '<button data-mobile-menu-action="stuck">I’m Stuck</button>'+
       '<button data-mobile-menu-action="bug">Report Bug</button>'+
@@ -879,6 +880,7 @@ function ensureTabletControls(){
     else if(action==='stats')dispatchVirtualKey('KeyC');
     else if(action==='quests')dispatchVirtualKey('KeyO');
     else if(action==='questions')dispatchVirtualKey('KeyP');
+    else if(action==='utilities'){ if(typeof openUtilitiesUI==='function')openUtilitiesUI(); else dispatchVirtualKey('KeyI'); }
     else if(action==='social')openSocialFromHud();
     else if(action==='free')dispatchVirtualKey('Escape');
     else if(action==='bug')document.getElementById('bugreportbtn')?.click();
