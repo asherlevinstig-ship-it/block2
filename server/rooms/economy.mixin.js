@@ -606,7 +606,7 @@ class EconomyMixin {
     const isRoad = m.vendor === 'road';
     const isGuild = m.vendor === 'guild';
     const vendor = isTavern ? 'tavern' : isRoad ? 'road' : isGuild ? 'guild' : 'market';
-    const reject = reason => client.send('shopReject', { reason, vendor });
+    const reject = (reason, extra = null) => client.send('shopReject', Object.assign({ reason, vendor }, extra || {}));
     if (this.rateLimited(client, 'shop', 8, 16)) return reject('rate');
     const p=this.state.players.get(client.sessionId);
     const tavern=this.townTavernAnchor(83.5,77.5);
@@ -639,7 +639,7 @@ class EconomyMixin {
     if (action === 'buy') {
       const kr = this.keyRank(id);
       if (kr >= 0 && kr > this.maxUnlockedGateRankForKey(client, TEAM_KEYS.includes(id) ? 'team' : 'solo')) return reject('rank');
-      if ((rec.prof.gold | 0) < price) return reject('gold');
+      if ((rec.prof.gold | 0) < price) return reject('gold', { id, action, price, gold: rec.prof.gold | 0, count });
       if (this.inventorySpaceFor(rec.prof, id, count) < count) return reject('full');
       rec.prof.gold -= price;
       this.addRewardItem(rec.prof, id, count);

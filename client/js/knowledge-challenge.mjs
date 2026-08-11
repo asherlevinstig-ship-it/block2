@@ -356,7 +356,11 @@ function onReject(m) {
   busy = false;
   trace('knowledge-challenge.reject', m || {});
   const r = m && m.reason;
-  if (r === 'gold') say('You need <b>' + (m.entry | 0) + ' gold</b> to enter that shift.');
+  if (r === 'gold') {
+    const entry = Math.max(0, (m.entry | 0));
+    const have = Number.isFinite(Number(m.gold)) ? Math.max(0, Number(m.gold) | 0) : 0;
+    say('<b>Not enough gold.</b> The Scholar Table needs <b>' + entry + ' gold</b>; you have <b>' + have + ' gold</b>.');
+  }
   else if (r === 'no_content') {
     const subj = esc((m && (m.subjectName || m.requestedSubject || m.subject)) || 'this subject');
     say('No Knowledge Challenge content is loaded for <b>' + subj + '</b> yet.');

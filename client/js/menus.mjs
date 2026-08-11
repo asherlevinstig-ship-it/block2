@@ -2271,7 +2271,14 @@ function shopRejected(m){
   SFX.error();
   const reason=m&&m.reason;
   const vendor=m&&m.vendor||'market';
-  if(reason==='gold') sysMsg('Not enough <b>gold</b>');
+  if(reason==='gold'){
+    const price=Number.isFinite(Number(m&&m.price))?Math.max(0,Number(m.price)|0):0;
+    const have=Number.isFinite(Number(m&&m.gold))?Math.max(0,Number(m.gold)|0):Math.max(0,Number(gold)||0);
+    const item=m&&ITEMS[m.id]?ITEMS[m.id].name:'that';
+    const where=vendor==='tavern'?'The tavern':vendor==='road'?'The road merchant':vendor==='guild'?'The guild hall':'The merchant';
+    const detail=price?': need <b>'+price+' gold</b>, you have <b>'+have+' gold</b>.':' for '+escHTML(item)+'.';
+    sysMsg('<b>Not enough gold.</b> '+where+' cannot sell you <b>'+escHTML(item)+'</b>'+detail);
+  }
   else if(reason==='item') sysMsg('Nothing to sell');
   else if(reason==='rank') sysMsg('Clear the previous gate rank first');
   else if(reason==='range') sysMsg(vendor==='tavern'?'Stand closer to <b>Greta at the tavern counter</b>':vendor==='road'?'Stand closer to the <b>road merchant</b>':'Stand closer to the <b>guild reception desk</b>');
