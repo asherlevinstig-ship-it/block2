@@ -1073,10 +1073,10 @@ function renderSelectedBindingAction(){
   const panel=document.createElement('section');
   panel.className='gear-compare';
   panel.innerHTML='<header><div><small>FAMILIAR BINDING</small><h3>'+escHTML(def.name)+'</h3><b>'+escHTML((ITEMS[stack.id]&&ITEMS[stack.id].name)||'Binding item')+'</b></div><strong class="'+(bound?'equipped':'upgrade')+'">'+(bound?'BOUND':'READY')+'</strong></header>'+
-    '<div class="gear-traits"><span><b>USE</b>Bind this familiar permanently, then summon or dismiss it from Dragon Bonds or with K.</span><span><b>SLOT</b>Hotbar '+(slot+1)+'</span></div>';
+    '<div class="gear-traits"><span><b>USE</b>Bind this pet or familiar permanently, then summon or dismiss it from Companions or with K.</span><span><b>SLOT</b>Hotbar '+(slot+1)+'</span></div>';
   const actions=document.createElement('div');actions.className='gear-actions';
   actions.appendChild(qBtn(bound?'ALREADY BOUND':'BIND '+def.name.toUpperCase(),()=>{bindFamiliarItem(slot);renderUI();},bound));
-  actions.appendChild(qBtn('DRAGON BONDS',()=>openDragonBondUI()));
+  actions.appendChild(qBtn('COMPANIONS',()=>openDragonBondUI()));
   panel.appendChild(actions);
   return panel;
 }
@@ -1112,7 +1112,7 @@ function renderSelectedDragonTreatAction(){
   actions.appendChild(qBtn('FEED MOUNTED',()=>{feedMountedDragon(slot);renderUI();},!mountedType));
   actions.appendChild(qBtn('CARE NEARBY',()=>{if(nearby&&COMPANIONS.careDragon)COMPANIONS.careDragon(nearby.type,slot);renderUI();},!nearby));
   actions.appendChild(qBtn('FEED NEST',()=>{if(nestKey&&COMPANIONS.feedNestDragon)COMPANIONS.feedNestDragon(nestKey,slot);renderUI();},!nestKey));
-  actions.appendChild(qBtn('DRAGON BONDS',()=>openDragonBondUI(),!dragonUnlocks.length));
+  actions.appendChild(qBtn('COMPANIONS',()=>openDragonBondUI()));
   panel.appendChild(actions);
   return panel;
 }
@@ -1136,7 +1136,7 @@ function renderUI(){
   title.textContent = uiMode==='table' ? 'CRAFTING TABLE' : uiMode==='furnace' ? 'FURNACE' : uiMode==='chest' ? (chestTitleState.supply?'HOMESTEAD SUPPLY':'CHEST') : 'INVENTORY';
   head.appendChild(title);
   if(uiMode==='inv'){
-    const bond=qBtn('DRAGON BONDS',()=>openDragonBondUI(),!dragonUnlocks.length);
+    const bond=qBtn('COMPANIONS',()=>openDragonBondUI());
     bond.classList.add('inventory-dragon-bonds');
     head.appendChild(bond);
   }
@@ -1220,7 +1220,7 @@ function renderUI(){
     const armor=equippedArmor();
     label.innerHTML='<b>ARMOR</b><div class="hint">'+(armor?'Click once to inspect equipped armour':'Equip any armour here')+'</div>';
     equip.appendChild(label);
-    const bond=qBtn('DRAGON BONDS', ()=>openDragonBondUI(), !dragonUnlocks.length);
+    const bond=qBtn('COMPANIONS', ()=>openDragonBondUI());
     bond.style.marginLeft='auto';
     equip.appendChild(bond);
     uipanel.appendChild(equip);
@@ -4755,7 +4755,7 @@ function openPetTamerServicesUI(shouldRequest=true){
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('REFRESH',()=>requestPetTamerServices()));
-  row.appendChild(qBtn('DRAGON BONDS',()=>openDragonBondUI(),true));
+  row.appendChild(qBtn('COMPANIONS',()=>openDragonBondUI(),true));
   row.appendChild(qBtn('STABLEMASTER',()=>openStablemasterUI(),true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   if(shouldRequest)requestPetTamerServices();
@@ -4767,7 +4767,7 @@ function openStablemasterUI(v={name:'Rook Emberstall'}){
   qpanelEl.innerHTML='';
   const h=document.createElement('h2'); h.textContent=v.name||'ROOST STABLEMASTER'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='DRAGON BONDS - NAMES, CARE, ROOSTING';
+  sub.textContent='DRAGON CARE - NAMES - ROOSTING';
   qpanelEl.appendChild(sub);
   const intro=document.createElement('p'); intro.className='qtext';
   intro.innerHTML=
@@ -4815,7 +4815,7 @@ function openStablemasterUI(v={name:'Rook Emberstall'}){
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
   row.appendChild(qBtn('ROOST QUEST', ()=>openQuestUI({...v, role:'roost', questSource:'npc'})));
-  row.appendChild(qBtn('DRAGON BONDS', ()=>openDragonBondUI()));
+  row.appendChild(qBtn('COMPANIONS', ()=>openDragonBondUI()));
   row.appendChild(qBtn('TAMER SERVICES', ()=>openPetTamerServicesUI()));
   row.appendChild(qBtn('COMMANDS', ()=>openDragonCommandUI()));
   row.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI(), !dragonUnlocks.length));
@@ -4871,7 +4871,7 @@ function openDragonCommandUI(){
     }
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
-  row.appendChild(qBtn('BONDS', ()=>openDragonBondUI()));
+  row.appendChild(qBtn('COMPANIONS', ()=>openDragonBondUI()));
   row.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI(), !dragonUnlocks.length));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
@@ -4952,7 +4952,7 @@ function openDragonProgressionUI(){
     grid.appendChild(card);
   }
   const row=document.createElement('div'); row.className='qrow'; qpanelEl.appendChild(row);
-  row.appendChild(qBtn('BONDS', ()=>openDragonBondUI()));
+  row.appendChild(qBtn('COMPANIONS', ()=>openDragonBondUI()));
   row.appendChild(qBtn('TAMER SERVICES', ()=>openPetTamerServicesUI(), true));
   row.appendChild(qBtn('COMMANDS', ()=>openDragonCommandUI(), !dragonUnlocks.length));
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
@@ -5008,7 +5008,7 @@ function openDragonInteractUI(type){
     clearDragonStayPost(type, ()=>openDragonInteractUI(type));
   }, !adult || !spot));
   actions.appendChild(qBtn('SHOW MAP', ()=>showDragonStayPost(type), !adult || !spot));
-  actions.appendChild(qBtn('BONDS', ()=>openDragonBondUI()));
+  actions.appendChild(qBtn('COMPANIONS', ()=>openDragonBondUI()));
   actions.appendChild(qBtn('PROGRESSION', ()=>openDragonProgressionUI()));
   actions.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
@@ -5086,10 +5086,14 @@ function openDragonBondUI(){
   if(uiOpen) closeUI(false);
   openQWin('management');
   qpanelEl.innerHTML='';
-  const h=document.createElement('h2'); h.textContent='DRAGON BONDS'; qpanelEl.appendChild(h);
+  const h=document.createElement('h2'); h.textContent='COMPANIONS'; qpanelEl.appendChild(h);
   const sub=document.createElement('div'); sub.className='sub2';
-  sub.textContent='BONDED COMPANIONS - CARE, SUMMON, ABILITIES';
+  sub.textContent='PETS - FAMILIARS - DRAGONS - CARE - SUMMON';
   qpanelEl.appendChild(sub);
+  const overview=document.createElement('div'); overview.className='familiar-guide companion-guide';
+  overview.innerHTML='<span><b>PETS</b>found from collars and wild trails</span><span><b>FAMILIARS</b>magic companions with Bond XP</span><span><b>DRAGONS</b>hatch, care, ride, and train</span>';
+  qpanelEl.appendChild(overview);
+  const dh=document.createElement('h2'); dh.textContent='DRAGON COMPANIONS'; qpanelEl.appendChild(dh);
   const intro=document.createElement('p'); intro.className='qtext';
   intro.innerHTML=dragonUnlocks.length
     ? 'Feed a mounted dragon with <b>Dragon Treats</b> to raise happiness. Happier dragons recover their mounted ability faster.<br><br>'+dragonChallengeHTML()
@@ -5149,12 +5153,12 @@ function openDragonBondUI(){
     }
     grid.appendChild(card);
   }
-  const fh=document.createElement('h2'); fh.textContent='FAMILIAR BONDS'; qpanelEl.appendChild(fh);
+  const fh=document.createElement('h2'); fh.textContent='PET & FAMILIAR BONDS'; qpanelEl.appendChild(fh);
   const fint=document.createElement('p'); fint.className='qtext familiar-intro';
-  fint.innerHTML='<b>One familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Pet collars can drop from animals outside town; put one on your hotbar and use it to bind that pet. Familiars grow through <b>Bond XP</b> earned only while they are active.';
+  fint.innerHTML='<b>One pet or familiar can travel with you at a time.</b> Press <b>K</b> to call or cycle them. Pet collars can drop from animals outside town; put one on your hotbar and use it to bind that pet. Companions grow through <b>Bond XP</b> earned only while they are active.';
   qpanelEl.appendChild(fint);
   const fguide=document.createElement('div'); fguide.className='familiar-guide';
-  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>COLLARS</b> hunt wildlife outside town</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active familiar only</span>';
+  fguide.innerHTML='<span><b>K</b> summon / cycle</span><span><b>COLLARS</b> hunt wildlife outside town</span><span><b>N</b> Shade Dark Passage</span><span><b>Bond XP</b> active companion only</span>';
   qpanelEl.appendChild(fguide);
   const fgrid=document.createElement('div'); fgrid.className='bondgrid familiargrid'; qpanelEl.appendChild(fgrid);
   const familiarCards=familiarBondCards();
@@ -5428,11 +5432,11 @@ function applyDragonLoanOffer(m){
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(m.fromName||'Hunter').toUpperCase()+' OFFERS '+dragonLoanName(m.type).toUpperCase();qpanelEl.appendChild(sub);
   const p=document.createElement('p');p.className='qtext';
   p.innerHTML='<b>'+escHTML(String(m.fromName||'Hunter'))+'</b> wants to lend you <b>'+escHTML(dragonLoanName(m.type))+'</b> for training.<br><br>'+
-    'You pay <b>'+Math.max(0,(m.feeGold|0)).toLocaleString('en-US')+'g</b> now. You can train and ride the dragon for up to <b>12 real hours</b>. It returns automatically, or either player can return it manually from Dragon Bonds.'+
+    'You pay <b>'+Math.max(0,(m.feeGold|0)).toLocaleString('en-US')+'g</b> now. You can train and ride the dragon for up to <b>12 real hours</b>. It returns automatically, or either player can return it manually from Companions.'+
     (playerJob==='pet_tamer'?'':'<br><br><b>Requires Pet Tamer job.</b>');
   qpanelEl.appendChild(p);
   const note=document.createElement('div');note.className='trade-error-panel';
-  note.innerHTML='<b>Training loop:</b> accept, open <b>Dragon Bonds</b>, summon the borrowed dragon, then use role training to improve it for the owner.';
+  note.innerHTML='<b>Training loop:</b> accept, open <b>Companions</b>, summon the borrowed dragon, then use role training to improve it for the owner.';
   qpanelEl.appendChild(note);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   row.appendChild(qBtn('ACCEPT LOAN',()=>{NET.room.send('dragonLoanAccept',{loanId:m.id});closeQWin();}));
@@ -5445,7 +5449,7 @@ function applyDragonLoanResult(m){
   const ownerView=loan.role==='owner';
   const other=ownerView?String(loan.tamerName||'the tamer'):String(loan.ownerName||'the owner');
   sysMsg('<b>Dragon loan accepted.</b><br>'+escHTML(dragonLoanName(loan.type))+' '+(ownerView?'loaned to ':'borrowed from ')+'<b>'+escHTML(other)+'</b>.'+
-    '<br>Return timer: <b>'+dragonLoanTimeLeftText(loan.dueAt)+'</b>. Open <b>Dragon Bonds</b> to view or return it manually.',{tier:'major',title:'Dragon Loan'});
+    '<br>Return timer: <b>'+dragonLoanTimeLeftText(loan.dueAt)+'</b>. Open <b>Companions</b> to view or return it manually.',{tier:'major',title:'Dragon Loan'});
 }
 function applyDragonLoanReject(m){
   const reason=String(m&&m.reason||'invalid');

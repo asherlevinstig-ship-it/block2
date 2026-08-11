@@ -2342,7 +2342,7 @@ function showFamiliarTutorial(kind){
   familiarTutorialKind=kind;
   const el=document.getElementById('tutorialhud'); if(!el)return;
   const role=kind==='shade'?'guard you':kind==='fang'?'hunt beside you':kind==='mote'?'restore your health':kind==='sprite'?'find bonus drops':kind==='cat'?'soften rough landings':kind==='dog'?'help animal hunts':'strengthen hostile hunts';
-  el.innerHTML='<div class="tutpill">Familiar bond</div><div class="tutkey">K</div><div class="tuttext">Call '+FAMILIARS[kind].name+' to '+role+'</div><div class="tutsub">Open Dragon Bonds with B to see Bond XP, daily challenge, and upgrades.</div>';
+  el.innerHTML='<div class="tutpill">Companion bond</div><div class="tutkey">K</div><div class="tuttext">Call '+FAMILIARS[kind].name+' to '+role+'</div><div class="tutsub">Open Companions to see Bond XP, daily challenge, and upgrades.</div>';
   el.classList.remove('hidden');
 }
 function finishFamiliarTutorial(kind){
@@ -2352,7 +2352,7 @@ function finishFamiliarTutorial(kind){
   try{localStorage.setItem('bc_familiar_tutorial_v1','1');}catch(e){}
   if(NET.on&&NET.room)NET.room.send('tutorialComplete',{tutorial:'familiar',version:1});
   const extra=kind==='shade'?' At Bond Tier 3, press <b>N</b> for Dark Passage.':'';
-  sysMsg('<b>Familiar ready.</b> Its live effect appears in the lower-right bond panel.'+extra);
+  sysMsg('<b>Companion ready.</b> Its live effect appears in the lower-right companion panel.'+extra);
 }
 function setFamiliar(kind){
   if(kind===activeFamiliar) return;
