@@ -6577,6 +6577,44 @@ test('player trade and pet training loans require shared social-space proximity'
   assert.equal(owner.sent.at(-1).msg.sameSpace, false);
 });
 
+test('player robbery transfers limited gold only in unsafe close proximity', () => {
+  const room = makeRoom(), thief = makeClient('rob_thief'), victim = makeClient('rob_victim');
+  const { prof: thiefProf } = seedPlayer(room, thief, { name: 'Thief', gold: 3, dgn: 'robbery_test_gate', x: 8, y: 12, z: 8 });
+  const { prof: victimProf } = seedPlayer(room, victim, { name: 'Victim', gold: 200, dgn: 'robbery_test_gate', x: 10, y: 12, z: 8 });
+  room.clients = [thief, victim];
+
+  room.handleRobPlayer(thief, { targetSid: victim.sessionId });
+
+  assert.equal(thiefProf.gold, 27, 'robber receives 12% of victim gold');
+  assert.equal(victimProf.gold, 176, 'victim loses the transferred gold');
+  assert.equal(thief.sent.at(-1).type, 'robResult');
+  assert.equal(thief.sent.at(-1).msg.ok, true);
+  assert.equal(thief.sent.at(-1).msg.gold, 24);
+  assert.equal(victim.sent.at(-1).type, 'robbedNotice');
+  assert.equal(victim.sent.at(-1).msg.gold, 24);
+});
+
+test('player robbery rejects protected town/social spaces and distant targets', () => {
+  const room = makeRoom(), thief = makeClient('safe_thief'), victim = makeClient('safe_victim');
+  seedPlayer(room, thief, { name: 'Thief', gold: 0, ...townPlayerPos(0, 0) });
+  const { prof: victimProf } = seedPlayer(room, victim, { name: 'Victim', gold: 90, ...townPlayerPos(1, 0) });
+  room.clients = [thief, victim];
+
+  room.handleRobPlayer(thief, { targetSid: victim.sessionId });
+  assert.equal(thief.sent.at(-1).type, 'robResult');
+  assert.equal(thief.sent.at(-1).msg.reason, 'safe');
+  assert.equal(victimProf.gold, 90);
+
+  const thiefPlayer = room.state.players.get(thief.sessionId);
+  const victimPlayer = room.state.players.get(victim.sessionId);
+  thiefPlayer.dim = 'dungeon'; thiefPlayer.dgn = 'far_gate'; thiefPlayer.x = 5; thiefPlayer.y = 12; thiefPlayer.z = 5;
+  victimPlayer.dim = 'dungeon'; victimPlayer.dgn = 'far_gate'; victimPlayer.x = 35; victimPlayer.y = 12; victimPlayer.z = 5;
+  thief.sent.length = 0;
+  room.handleRobPlayer(thief, { targetSid: victim.sessionId });
+  assert.equal(thief.sent.at(-1).msg.reason, 'range');
+  assert.equal(victimProf.gold, 90);
+});
+
 test('pet tamer service board lists online tamers and delivers owner pings', () => {
   const room = makeRoom(), owner = makeClient('service_owner'), tamer = makeClient('service_tamer'), miner = makeClient('service_miner');
   seedPlayer(room, owner, { name: 'Owner', ...townPlayerPos(0, 0) });

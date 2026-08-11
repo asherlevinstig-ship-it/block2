@@ -528,6 +528,7 @@ class GameRoom extends Room {
     this.onMessage('tradeAccept', (client, m) => this.handleTradeAccept(client, m));
     this.onMessage('tradeCancel', (client, m) => this.handleTradeCancel(client, m));
     this.onMessage('friendAdd', (client, m) => this.handleFriendAdd(client, m));
+    this.onMessage('robPlayer', (client, m) => this.handleRobPlayer(client, m));
     this.onMessage('bugReport', (client, m) => this.handleBugReport(client, m));
     this.onMessage('stuckRescue', (client, m) => this.handleStuckRescue(client, m));
 
@@ -4269,6 +4270,86 @@ class GameRoom extends Room {
       if (dist < bestDist) { best = c; bestDist = dist; }
     }
     return best;
+  }
+  playersShareRobberySpace(pa, pb) {
+    if (!pa || !pb) return false;
+    const aDim = String(pa.dim || 'overworld'), bDim = String(pb.dim || 'overworld');
+    const aDgn = String(pa.dgn || ''), bDgn = String(pb.dgn || '');
+    if (aDim !== bDim || aDgn !== bDgn) return false;
+    if (!aDgn && !bDgn) return !this.isTownProtected(pa.x, pa.z) && !this.isTownProtected(pb.x, pb.z);
+    if (aDgn === 'taming_land' || aDgn === 'fishing_lake' || /^tutorial/i.test(aDgn) || aDim === 'tutorial') return false;
+    return aDim === 'dungeon' && !!aDgn;
+  }
+  robberyDistanceInfo(a, b) {
+    const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
+    if (!pa || !pb) return {};
+    return {
+      distance: Math.round(Math.hypot((pa.x || 0) - (pb.x || 0), (pa.z || 0) - (pb.z || 0)) * 10) / 10,
+      yDelta: Math.round(Math.abs((pa.y || 0) - (pb.y || 0)) * 10) / 10,
+      sameSpace: this.playersShareRobberySpace(pa, pb),
+    };
+  }
+  robberyPlayersClose(a, b, range = 4.8) {
+    const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
+    if (!pa || !pb || !this.playersShareRobberySpace(pa, pb)) return false;
+    if (Math.hypot((pa.x || 0) - (pb.x || 0), (pa.z || 0) - (pb.z || 0)) > range) return false;
+    if (Math.abs((pa.y || 0) - (pb.y || 0)) > 5) return false;
+    const solid = this.spaceSolid(String(pa.dgn || ''));
+    return !solid || AI.losClear(solid, pa.x, (pa.y || 0) + 1.15, pa.z, pb.x, (pb.y || 0) + 1.15, pb.z);
+  }
+  findRobTarget(client, m = {}) {
+    const targetSid = String(m.targetSid || '');
+    const bySid = targetSid && this.clients.find(c => c.sessionId === targetSid);
+    if (bySid && bySid !== client) return bySid;
+    const wantedName = cleanName(m.targetName || '').toLowerCase();
+    if (!wantedName) return null;
+    let best = null, bestDist = Infinity;
+    const pa = client && this.state.players.get(client.sessionId);
+    if (!pa) return null;
+    for (const c of this.clients || []) {
+      if (!c || c === client) continue;
+      const p = this.state.players.get(c.sessionId);
+      if (!p || cleanName(p.name || '').toLowerCase() !== wantedName) continue;
+      if (!this.robberyPlayersClose(client, c, 6)) continue;
+      const dist = Math.hypot((pa.x || 0) - (p.x || 0), (pa.z || 0) - (p.z || 0));
+      if (dist < bestDist) { best = c; bestDist = dist; }
+    }
+    return best;
+  }
+  handleRobPlayer(client, m = {}) {
+    const rec = this.profileFor(client);
+    const targetSid = String(m.targetSid || '');
+    const target = this.findRobTarget(client, m);
+    const targetRec = target && this.profileFor(target);
+    const reject = (reason, extra = {}) => client.send('robResult', { ok: false, reason, targetSid, targetName: String(m.targetName || ''), ...extra });
+    if (!rec || !target || !targetRec || target === client) return reject('target', { online: (this.clients || []).length });
+    const fromP = this.state.players.get(client.sessionId), toP = this.state.players.get(target.sessionId);
+    if (!fromP || !toP) return reject('target');
+    const fromHp = this.playerHp && this.playerHp.get(client.sessionId);
+    const toHp = this.playerHp && this.playerHp.get(target.sessionId);
+    if (fromP.spirit || toP.spirit || (fromHp && (fromHp.hp | 0) <= 0) || (toHp && (toHp.hp | 0) <= 0)) return reject('downed');
+    if (!this.playersShareRobberySpace(fromP, toP)) return reject('safe', this.robberyDistanceInfo(client, target));
+    if (!this.robberyPlayersClose(client, target)) return reject('range', this.robberyDistanceInfo(client, target));
+    const victimGold = Math.max(0, targetRec.prof.gold | 0);
+    if (victimGold <= 0) return reject('empty');
+    if (this.rateLimited(client, 'robPlayer', 0.18, 1)) return reject('rate');
+    const robberName = cleanName(fromP.name || rec.prof.name || 'Hunter') || 'Hunter';
+    const targetName = cleanName(toP.name || targetRec.prof.name || 'Hunter') || 'Hunter';
+    const amount = Math.max(1, Math.min(75, Math.ceil(victimGold * 0.12)));
+    targetRec.prof.gold = Math.max(0, victimGold - amount);
+    rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + amount));
+    this.dirtyPlayers.add(rec.token);
+    this.dirtyPlayers.add(targetRec.token);
+    this.syncPlayerProfile(client, rec.prof);
+    this.syncPlayerProfile(target, targetRec.prof);
+    this.sendProfile(client, rec.prof);
+    this.sendProfile(target, targetRec.prof);
+    if (this.recordEconomyGold) {
+      this.recordEconomyGold(client, amount, 'player_robbery', 'rob_gain', { targetSid: target.sessionId, targetName });
+      this.recordEconomyGold(target, -amount, 'player_robbery', 'rob_loss', { robberSid: client.sessionId, robberName });
+    }
+    client.send('robResult', { ok: true, targetSid: target.sessionId, targetName, gold: amount, totalGold: rec.prof.gold | 0 });
+    target.send('robbedNotice', { robberSid: client.sessionId, robberName, gold: amount, totalGold: targetRec.prof.gold | 0 });
   }
   socialPlayersCloseInTown(a, b, range = 8) {
     return this.tradePlayersClose(a, b, range);

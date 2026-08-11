@@ -10023,6 +10023,56 @@ function townSocialTargetNear(range=4.8){
   }
   return best;
 }
+function robberyTargetAllowedAt(ref,x,z){
+  if(!player) return false;
+  const localDgn=String(NET&&NET.dgn||'');
+  const remoteDgn=String(ref&&ref.dgn||'');
+  if(localDgn!==remoteDgn) return false;
+  if(dim==='overworld'&&!localDgn&&!remoteDgn){
+    return !isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))&&!isTownLand(Math.floor(x),Math.floor(z));
+  }
+  if(dim==='tutorial'||localDgn==='taming_land'||localDgn==='fishing_lake'||/^tutorial/i.test(localDgn)) return false;
+  return dim==='dungeon'&&!!localDgn;
+}
+function robberyTargetNear(range=4.8){
+  if(!NET.on||!NET.room||!NET.remotes||!player) return null;
+  let best=null,bd=range;
+  for(const sid in NET.remotes){
+    const r=NET.remotes[sid];
+    if(!r||!r.grp||!r.grp.visible) continue;
+    const ref=r.ref;
+    const x=r.grp.position.x,z=r.grp.position.z,y=r.grp.position.y;
+    if(!robberyTargetAllowedAt(ref,x,z)) continue;
+    const dist=Math.hypot(x-player.pos.x,z-player.pos.z);
+    if(dist>range||Math.abs((y||0)-player.pos.y)>5) continue;
+    if(dist<bd){bd=dist;best={sid,remote:r,name:String(ref&&ref.name||'Hunter'),distance:dist,robberyOnly:true};}
+  }
+  return best;
+}
+function robberyTargetUnderCrosshair(range=4.8){
+  if(!NET.on||!NET.room||!NET.remotes||!player) return null;
+  const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
+  const o=new THREE.Vector3(player.pos.x,player.pos.y+player.eye,player.pos.z);
+  let best=null, bd=range;
+  const v=new THREE.Vector3();
+  for(const sid in NET.remotes){
+    const r=NET.remotes[sid];
+    if(!r||!r.grp||!r.grp.visible) continue;
+    const ref=r.ref;
+    if(!robberyTargetAllowedAt(ref,r.grp.position.x,r.grp.position.z)) continue;
+    v.set(r.grp.position.x-o.x, r.grp.position.y+1.0-o.y, r.grp.position.z-o.z);
+    const t=v.dot(dir);
+    if(t<0||t>range) continue;
+    const perp=Math.sqrt(Math.max(0,v.lengthSq()-t*t));
+    if(perp<.9&&t<bd){bd=t;best={sid,remote:r,name:String(ref&&ref.name||'Hunter'),distance:t,robberyOnly:true};}
+  }
+  return best;
+}
+globalThis.BlockcraftRobberyTargets={
+  near:robberyTargetNear,
+  underCrosshair:robberyTargetUnderCrosshair,
+  allowedAt:robberyTargetAllowedAt,
+};
 function playerCanUseSocialSpaceAt(x,z){
   const dgn=String(NET&&NET.dgn||'');
   if(dim==='overworld'&&!dgn) return isTownLand(Math.floor(x),Math.floor(z));

@@ -757,8 +757,10 @@ function openSocialFromHud(){
   }
   if(!gameplayInputActive()||uiOpen||statOpen||uiShellState.qOpen||claimMode||firstTownChoiceOpen||pathChoiceOpen||jobChoiceOpen)return false;
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
-  if(socialTarget&&typeof openPlayerSocialUI==='function'){
-    openPlayerSocialUI(socialTarget);
+  const robberyTargets=globalThis.BlockcraftRobberyTargets;
+  const robberyTarget=!socialTarget&&robberyTargets&&robberyTargets.near?robberyTargets.near(4.8):null;
+  if((socialTarget||robberyTarget)&&typeof openPlayerSocialUI==='function'){
+    openPlayerSocialUI(socialTarget||robberyTarget);
     return true;
   }
   if(typeof startQuickChatWheel==='function'){ startQuickChatWheel(); return true; }
@@ -5965,10 +5967,12 @@ addEventListener('keydown', e=>{
         interactWithVillager(nearbyVillager);
       } else {
         const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
+        const robberyTargets=globalThis.BlockcraftRobberyTargets;
+        const robberyTarget=!socialTarget&&robberyTargets&&robberyTargets.near?robberyTargets.near(4.8):null;
         const tradeTarget=socialTarget||(typeof tradeTargetUnderCrosshair==='function'?tradeTargetUnderCrosshair(4.8):null);
-        if(socialTarget&&typeof openPlayerSocialUI==='function'){
+        if((socialTarget||robberyTarget)&&typeof openPlayerSocialUI==='function'){
           e.preventDefault();
-          openPlayerSocialUI(socialTarget);
+          openPlayerSocialUI(socialTarget||robberyTarget);
         } else if(tradeTarget&&typeof openPlayerTradeUI==='function'){
           e.preventDefault();
           openPlayerTradeUI(tradeTarget);

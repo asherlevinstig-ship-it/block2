@@ -1372,6 +1372,31 @@ function netAttachRoom(room,name,client){
     room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
     room.onMessage('tradeReject', m=>applyTradeReject(m));
     room.onMessage('tradeCancel', m=>applyTradeCancel(m));
+    room.onMessage('robResult', m=>{
+      if(m&&typeof m.totalGold==='number'){gold=Math.max(0,m.totalGold|0);refreshHUD();refreshPlayUi();}
+      if(m&&m.ok){
+        const amount=Math.max(0,m.gold|0);
+        const targetName=String(m.targetName||'Hunter');
+        sysMsg('You robbed <b>'+escHTML(targetName)+'</b> for <b>'+amount+' gold</b>.',{tier:'major',title:'Outlaw'});
+        eventFeed('[Outlaw]','You robbed '+targetName+' for '+amount+' gold.',{key:'rob:gain:'+String(Date.now()),cooldown:0});
+      }else{
+        const reason=String(m&&m.reason||'failed');
+        const text=reason==='safe'?'You cannot rob players in protected rooms or town.'
+          :reason==='range'?'Move closer and keep line of sight before robbing.'
+          :reason==='rate'?'You need a moment before trying to rob again.'
+          :reason==='empty'?'That hunter has no gold to steal.'
+          :reason==='downed'?'You cannot rob downed or spirit players.'
+          :'Robbery failed.';
+        sysMsg(text,{tier:'minor',title:'Outlaw'});
+      }
+    });
+    room.onMessage('robbedNotice', m=>{
+      if(m&&typeof m.totalGold==='number'){gold=Math.max(0,m.totalGold|0);refreshHUD();refreshPlayUi();}
+      const amount=Math.max(0,m&&m.gold|0);
+      const robberName=String(m&&m.robberName||'Hunter');
+      sysMsg('<b>'+escHTML(robberName)+'</b> robbed you for <b>'+amount+' gold</b>.',{tier:'danger',title:'Outlaw'});
+      eventFeed('[Outlaw]',robberName+' robbed you for '+amount+' gold.',{key:'rob:loss:'+String(Date.now()),cooldown:0});
+    });
     const receiveDragonLoanOffer=m=>{
       if(m&&m.toSid&&m.toSid!==room.sessionId)return;
       applyDragonLoanOffer(m);
