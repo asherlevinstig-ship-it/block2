@@ -4275,10 +4275,7 @@ class GameRoom extends Room {
     if (!pa || !pb) return false;
     const aDim = String(pa.dim || 'overworld'), bDim = String(pb.dim || 'overworld');
     const aDgn = String(pa.dgn || ''), bDgn = String(pb.dgn || '');
-    if (aDim !== bDim || aDgn !== bDgn) return false;
-    if (!aDgn && !bDgn) return !this.isTownProtected(pa.x, pa.z) && !this.isTownProtected(pb.x, pb.z);
-    if (aDgn === 'taming_land' || aDgn === 'fishing_lake' || /^tutorial/i.test(aDgn) || aDim === 'tutorial') return false;
-    return aDim === 'dungeon' && !!aDgn;
+    return aDim === bDim && aDgn === bDgn;
   }
   robberyDistanceInfo(a, b) {
     const pa = a && this.state.players.get(a.sessionId), pb = b && this.state.players.get(b.sessionId);
@@ -4328,7 +4325,7 @@ class GameRoom extends Room {
     const fromHp = this.playerHp && this.playerHp.get(client.sessionId);
     const toHp = this.playerHp && this.playerHp.get(target.sessionId);
     if (fromP.spirit || toP.spirit || (fromHp && (fromHp.hp | 0) <= 0) || (toHp && (toHp.hp | 0) <= 0)) return reject('downed');
-    if (!this.playersShareRobberySpace(fromP, toP)) return reject('safe', this.robberyDistanceInfo(client, target));
+    if (!this.playersShareRobberySpace(fromP, toP)) return reject('space', this.robberyDistanceInfo(client, target));
     if (!this.robberyPlayersClose(client, target)) return reject('range', this.robberyDistanceInfo(client, target));
     const victimGold = Math.max(0, targetRec.prof.gold | 0);
     if (victimGold <= 0) return reject('empty');

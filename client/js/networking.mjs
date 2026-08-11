@@ -1381,7 +1381,7 @@ function netAttachRoom(room,name,client){
         eventFeed('[Outlaw]','You robbed '+targetName+' for '+amount+' gold.',{key:'rob:gain:'+String(Date.now()),cooldown:0});
       }else{
         const reason=String(m&&m.reason||'failed');
-        const text=reason==='safe'?'You cannot rob players in protected rooms or town.'
+        const text=reason==='space'?'You must be in the same room as that hunter.'
           :reason==='range'?'Move closer and keep line of sight before robbing.'
           :reason==='rate'?'You need a moment before trying to rob again.'
           :reason==='empty'?'That hunter has no gold to steal.'

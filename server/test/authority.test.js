@@ -6594,16 +6594,17 @@ test('player robbery transfers limited gold only in unsafe close proximity', () 
   assert.equal(victim.sent.at(-1).msg.gold, 24);
 });
 
-test('player robbery rejects protected town/social spaces and distant targets', () => {
+test('player robbery works in town/social spaces but still rejects distant targets', () => {
   const room = makeRoom(), thief = makeClient('safe_thief'), victim = makeClient('safe_victim');
-  seedPlayer(room, thief, { name: 'Thief', gold: 0, ...townPlayerPos(0, 0) });
+  const { prof: thiefProf } = seedPlayer(room, thief, { name: 'Thief', gold: 0, ...townPlayerPos(0, 0) });
   const { prof: victimProf } = seedPlayer(room, victim, { name: 'Victim', gold: 90, ...townPlayerPos(1, 0) });
   room.clients = [thief, victim];
 
   room.handleRobPlayer(thief, { targetSid: victim.sessionId });
   assert.equal(thief.sent.at(-1).type, 'robResult');
-  assert.equal(thief.sent.at(-1).msg.reason, 'safe');
-  assert.equal(victimProf.gold, 90);
+  assert.equal(thief.sent.at(-1).msg.ok, true);
+  assert.equal(thiefProf.gold, 11);
+  assert.equal(victimProf.gold, 79);
 
   const thiefPlayer = room.state.players.get(thief.sessionId);
   const victimPlayer = room.state.players.get(victim.sessionId);
@@ -6612,7 +6613,7 @@ test('player robbery rejects protected town/social spaces and distant targets', 
   thief.sent.length = 0;
   room.handleRobPlayer(thief, { targetSid: victim.sessionId });
   assert.equal(thief.sent.at(-1).msg.reason, 'range');
-  assert.equal(victimProf.gold, 90);
+  assert.equal(victimProf.gold, 79);
 });
 
 test('pet tamer service board lists online tamers and delivers owner pings', () => {

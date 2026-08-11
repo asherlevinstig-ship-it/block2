@@ -10027,12 +10027,7 @@ function robberyTargetAllowedAt(ref,x,z){
   if(!player) return false;
   const localDgn=String(NET&&NET.dgn||'');
   const remoteDgn=String(ref&&ref.dgn||'');
-  if(localDgn!==remoteDgn) return false;
-  if(dim==='overworld'&&!localDgn&&!remoteDgn){
-    return !isTownLand(Math.floor(player.pos.x),Math.floor(player.pos.z))&&!isTownLand(Math.floor(x),Math.floor(z));
-  }
-  if(dim==='tutorial'||localDgn==='taming_land'||localDgn==='fishing_lake'||/^tutorial/i.test(localDgn)) return false;
-  return dim==='dungeon'&&!!localDgn;
+  return localDgn===remoteDgn;
 }
 function robberyTargetNear(range=4.8){
   if(!NET.on||!NET.room||!NET.remotes||!player) return null;

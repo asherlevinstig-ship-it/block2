@@ -5401,15 +5401,15 @@ function openDragonLoanUI(target){
 function openPlayerSocialUI(target){
   if(!NET.on||!NET.room){sysMsg('Player social actions require the live world server.');return;}
   target=target||(typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null)||(globalThis.BlockcraftRobberyTargets&&globalThis.BlockcraftRobberyTargets.near?globalThis.BlockcraftRobberyTargets.near(4.8):null);
-  if(!target||!target.sid){sysMsg('Stand near another hunter, then press <b>E</b>. Friendly actions work in safe social spaces; robbery only works outside safe zones.');return;}
+  if(!target||!target.sid){sysMsg('Stand near another hunter, then press <b>E</b>.');return;}
   if(uiOpen)closeUI(false);
   openQWin('social');qpanelEl.innerHTML='';
   const h=document.createElement('h2');h.textContent='NEARBY HUNTER';qpanelEl.appendChild(h);
   const sub=document.createElement('div');sub.className='sub2';sub.textContent=String(target.name||'Hunter').toUpperCase();qpanelEl.appendChild(sub);
   const intro=document.createElement('p');intro.className='qtext';
   intro.innerHTML=target.robberyOnly
-    ? 'You are close enough for an outlaw action. Robbery steals a small amount of gold and only works outside protected rooms.'
-    : 'Choose what to do with this nearby player. Trade, friends, and pet training are safe social actions. <b>Rob</b> is an outlaw action and only works outside protected rooms.';
+    ? 'You are close enough for an outlaw action. Robbery steals a small amount of gold if you stay close and keep line of sight.'
+    : 'Choose what to do with this nearby player. Trade, friends, pet training, or an outlaw <b>Rob</b> attempt.';
   qpanelEl.appendChild(intro);
   const row=document.createElement('div');row.className='qrow';qpanelEl.appendChild(row);
   if(!target.robberyOnly){
@@ -5421,7 +5421,7 @@ function openPlayerSocialUI(target){
     row.appendChild(qBtn('ADD FRIEND',()=>{NET.room.send('friendAdd',{targetSid:target.sid});closeQWin();},true));
   }
   const robBtn=qBtn('ROB',()=>{NET.room.send('robPlayer',{targetSid:target.sid,targetName:String(target.name||'')});closeQWin();},true);
-  robBtn.title='Outlaw action: steal a small amount of gold if you are close enough outside a protected room.';
+  robBtn.title='Outlaw action: steal a small amount of gold if you are close enough and have line of sight.';
   row.appendChild(robBtn);
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
 }
