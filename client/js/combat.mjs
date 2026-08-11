@@ -1041,9 +1041,16 @@ function layoutLeftHudExtras(){
     }
   }
   if(chat){
-    chat.style.left=(narrow?8:16)+'px';
-    chat.style.top=top+'px';
-    chat.style.bottom='auto';
+    const mobile=document.body.classList.contains('mobile-play-mode');
+    if(mobile){
+      chat.style.left=(narrow?8:16)+'px';
+      chat.style.top=top+'px';
+      chat.style.bottom='auto';
+    }else{
+      chat.style.left='';
+      chat.style.top='';
+      chat.style.bottom='';
+    }
   }
 }
 let hudStateObserver=null, homeworkHudObserved=false;
