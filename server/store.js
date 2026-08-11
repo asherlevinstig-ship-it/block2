@@ -392,6 +392,7 @@ function defaultProfile(name) {
     adventurerContractsCompleted: 0,
     highestGateRankCleared: -1,
     gold: 100,
+    karma: 0,
     starterGoldGranted: true,
     firstQuestRewardClaimed: false,
     maraRoadReadySwordGranted: false,
@@ -969,6 +970,7 @@ function sanitizeProfile(p) {
   out.jobContractOffers = out.jobContractOffers.filter(c=>c.job==='adventurer'||c.job===out.job);
   out.highestGateRankCleared = clampI(p.highestGateRankCleared, -1, 4);
   out.gold = clampI(p.gold, 0, 1e9);          // harmless if the client doesn't use gold yet
+  out.karma = p.karma == null ? 0 : clampI(p.karma, -1000, 1000);
   // One-time migration: existing profiles created before starter gold receive enough
   // to reach 100, without refilling players who spend it afterward.
   out.starterGoldGranted = true;

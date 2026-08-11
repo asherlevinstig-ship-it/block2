@@ -4313,6 +4313,13 @@ class GameRoom extends Room {
     }
     return best;
   }
+  adjustKarma(rec, delta = 0) {
+    if (!rec || !rec.prof) return { value: 0, delta: 0 };
+    const before = Math.max(-1000, Math.min(1000, rec.prof.karma | 0));
+    const next = Math.max(-1000, Math.min(1000, before + (delta | 0)));
+    rec.prof.karma = next;
+    return { value: next, delta: next - before };
+  }
   handleRobPlayer(client, m = {}) {
     const rec = this.profileFor(client);
     const targetSid = String(m.targetSid || '');
@@ -4335,6 +4342,7 @@ class GameRoom extends Room {
     const amount = Math.max(1, Math.min(75, Math.ceil(victimGold * 0.12)));
     targetRec.prof.gold = Math.max(0, victimGold - amount);
     rec.prof.gold = Math.max(0, Math.min(1e9, (rec.prof.gold | 0) + amount));
+    const karma = this.adjustKarma(rec, -10);
     this.dirtyPlayers.add(rec.token);
     this.dirtyPlayers.add(targetRec.token);
     this.syncPlayerProfile(client, rec.prof);
@@ -4345,7 +4353,7 @@ class GameRoom extends Room {
       this.recordEconomyGold(client, amount, 'player_robbery', 'rob_gain', { targetSid: target.sessionId, targetName });
       this.recordEconomyGold(target, -amount, 'player_robbery', 'rob_loss', { robberSid: client.sessionId, robberName });
     }
-    client.send('robResult', { ok: true, targetSid: target.sessionId, targetName, gold: amount, totalGold: rec.prof.gold | 0 });
+    client.send('robResult', { ok: true, targetSid: target.sessionId, targetName, gold: amount, totalGold: rec.prof.gold | 0, karma: karma.value, karmaDelta: karma.delta });
     target.send('robbedNotice', { robberSid: client.sessionId, robberName, gold: amount, totalGold: targetRec.prof.gold | 0 });
   }
   socialPlayersCloseInTown(a, b, range = 8) {
@@ -4365,6 +4373,8 @@ class GameRoom extends Room {
     const targetAlready = targetRec.prof.friends.includes(rec.token);
     if (!already) rec.prof.friends.push(targetRec.token);
     if (!targetAlready) targetRec.prof.friends.push(rec.token);
+    const fromKarma = !already ? this.adjustKarma(rec, 2) : { value: rec.prof.karma | 0, delta: 0 };
+    const targetKarma = !targetAlready ? this.adjustKarma(targetRec, 2) : { value: targetRec.prof.karma | 0, delta: 0 };
     rec.prof.friends = [...new Set(rec.prof.friends)].slice(0, 256);
     targetRec.prof.friends = [...new Set(targetRec.prof.friends)].slice(0, 256);
     this.dirtyPlayers.add(rec.token);
@@ -4373,8 +4383,8 @@ class GameRoom extends Room {
     this.sendProfile(target, targetRec.prof);
     const fromName = (this.state.players.get(client.sessionId) || {}).name || rec.prof.name || 'Hunter';
     const targetName = (this.state.players.get(target.sessionId) || {}).name || targetRec.prof.name || 'Hunter';
-    client.send('friendResult', { ok: true, action: already ? 'already' : 'add', targetSid: target.sessionId, targetToken: targetRec.token, targetName });
-    target.send('friendResult', { ok: true, action: targetAlready ? 'already' : 'add', targetSid: client.sessionId, targetToken: rec.token, targetName: fromName });
+    client.send('friendResult', { ok: true, action: already ? 'already' : 'add', targetSid: target.sessionId, targetToken: targetRec.token, targetName, karma: fromKarma.value, karmaDelta: fromKarma.delta });
+    target.send('friendResult', { ok: true, action: targetAlready ? 'already' : 'add', targetSid: client.sessionId, targetToken: rec.token, targetName: fromName, karma: targetKarma.value, karmaDelta: targetKarma.delta });
   }
   handleTradeOffer(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');

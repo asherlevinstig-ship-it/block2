@@ -1377,8 +1377,11 @@ function netAttachRoom(room,name,client){
       if(m&&m.ok){
         const amount=Math.max(0,m.gold|0);
         const targetName=String(m.targetName||'Hunter');
-        sysMsg('You robbed <b>'+escHTML(targetName)+'</b> for <b>'+amount+' gold</b>.',{tier:'major',title:'Outlaw'});
-        eventFeed('[Outlaw]','You robbed '+targetName+' for '+amount+' gold.',{key:'rob:gain:'+String(Date.now()),cooldown:0});
+        if(typeof m.karma==='number')globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,m.karma|0));
+        const kDelta=(m.karmaDelta|0);
+        const karmaLine=kDelta?'<br><b>Karma:</b> '+(kDelta>0?'+':'')+kDelta+' · now '+(globalThis.BlockcraftKarma|0):'';
+        sysMsg('You robbed <b>'+escHTML(targetName)+'</b> for <b>'+amount+' gold</b>.'+karmaLine,{tier:'major',title:'Outlaw'});
+        eventFeed('[Outlaw]','You robbed '+targetName+' for '+amount+' gold'+(kDelta?' · Karma '+(kDelta>0?'+':'')+kDelta:'')+'.',{key:'rob:gain:'+String(Date.now()),cooldown:0});
       }else{
         const reason=String(m&&m.reason||'failed');
         const text=reason==='space'?'You must be in the same room as that hunter.'
@@ -1412,7 +1415,15 @@ function netAttachRoom(room,name,client){
     room.onMessage('petTamerServices', m=>applyPetTamerServices(m));
     room.onMessage('petTamerPing', m=>{applyPetTamerPing(m);eventFeed('[Pet Tamer]',String(m&&m.fromName||'Hunter')+' is looking for dragon training help.',{key:'pettamer:ping:'+String(m&&m.fromSid||''),cooldown:3000});});
     room.onMessage('petTamerPingResult', m=>applyPetTamerPingResult(m));
-    room.onMessage('friendResult', m=>{applyFriendResult(m);if(m&&m.ok&&m.action!=='already')eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});});
+    room.onMessage('friendResult', m=>{
+      applyFriendResult(m);
+      if(m&&typeof m.karma==='number')globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,m.karma|0));
+      if(m&&m.ok&&m.action!=='already'){
+        const kDelta=(m.karmaDelta|0);
+        if(kDelta)sysMsg('Friendship formed with <b>'+escHTML(String(m.targetName||'Hunter'))+'</b>.<br><b>Karma:</b> +'+kDelta+' · now '+(globalThis.BlockcraftKarma|0),{tier:'minor',title:'Friends'});
+        eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend'+(kDelta?' · Karma +'+kDelta:'')+'.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});
+      }
+    });
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
       progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
@@ -3023,6 +3034,7 @@ function netRestoreProfile(m){
     if(m.aegisTrialReady&&!quest)quest={source:'guardian',type:'pvp_bounty',have:1,need:1,giver:'Aegis Guardian',role:'guardian',title:'Silent Bounty',gold:135+(S.lvl||1)*8,xp:130+(S.lvl||1)*12};
     regionalContract=clampRegionalContract(m.regionalContract);
     roadWardenRep=Math.max(0,m.roadWardenRep|0);
+    globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,(m.karma||0)|0));
     utilityUnlocks=clampUtilityUnlocks(m.utilityUnlocks);
     utilityLoadout=clampUtilityLoadout(m.utilityLoadout);
     removeEquippedArmorCopies();

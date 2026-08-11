@@ -498,13 +498,17 @@ test('profiles always receive one Hunter Mirror in inventory', () => {
   const fresh = defaultProfile('Mirror Hunter');
   assert.equal(itemCount(fresh, I.APPEARANCE_MIRROR), 1);
   assert.equal(fresh.inv[0].locked, true);
+  assert.equal(fresh.karma, 0);
 
   const legacy = sanitizeProfile({ name: 'Legacy Hunter', inv: [{ id: I.BREAD, count: 2 }] });
   assert.equal(itemCount(legacy, I.APPEARANCE_MIRROR), 1);
   assert.equal(itemCount(legacy, I.BREAD), 2);
+  assert.equal(legacy.karma, 0);
 
   const resanitized = sanitizeProfile(legacy);
   assert.equal(itemCount(resanitized, I.APPEARANCE_MIRROR), 1);
+  assert.equal(sanitizeProfile({ name: 'Villain', karma: -5000 }).karma, -1000);
+  assert.equal(sanitizeProfile({ name: 'Saint', karma: 5000 }).karma, 1000);
 
   const full = sanitizeProfile({
     name: 'Packed Hunter',
@@ -6587,9 +6591,11 @@ test('player robbery transfers limited gold only in unsafe close proximity', () 
 
   assert.equal(thiefProf.gold, 27, 'robber receives 12% of victim gold');
   assert.equal(victimProf.gold, 176, 'victim loses the transferred gold');
+  assert.equal(thiefProf.karma, -10, 'robbery lowers robber karma');
   assert.equal(thief.sent.at(-1).type, 'robResult');
   assert.equal(thief.sent.at(-1).msg.ok, true);
   assert.equal(thief.sent.at(-1).msg.gold, 24);
+  assert.equal(thief.sent.at(-1).msg.karmaDelta, -10);
   assert.equal(victim.sent.at(-1).type, 'robbedNotice');
   assert.equal(victim.sent.at(-1).msg.gold, 24);
 });
@@ -6605,6 +6611,7 @@ test('player robbery works in town/social spaces but still rejects distant targe
   assert.equal(thief.sent.at(-1).msg.ok, true);
   assert.equal(thiefProf.gold, 11);
   assert.equal(victimProf.gold, 79);
+  assert.equal(thiefProf.karma, -10);
 
   const thiefPlayer = room.state.players.get(thief.sessionId);
   const victimPlayer = room.state.players.get(victim.sessionId);
@@ -6824,12 +6831,14 @@ test('town friendship creates a mutual persistent friend link', () => {
 
   assert.deepEqual(aProf.friends, [bToken]);
   assert.deepEqual(bProf.friends, [aToken]);
+  assert.equal(aProf.karma, 2);
+  assert.equal(bProf.karma, 2);
   assert.ok(room.dirtyPlayers.has(aToken));
   assert.ok(room.dirtyPlayers.has(bToken));
   assert.ok(alice.sent.some(e => e.type === 'profile'));
   assert.ok(bob.sent.some(e => e.type === 'profile'));
-  assert.ok(alice.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Bob'));
-  assert.ok(bob.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Alice'));
+  assert.ok(alice.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Bob' && e.msg.karmaDelta === 2));
+  assert.ok(bob.sent.some(e => e.type === 'friendResult' && e.msg.ok && e.msg.targetName === 'Alice' && e.msg.karmaDelta === 2));
 });
 
 test('town friendship rejects players outside town or out of proximity', () => {
