@@ -2468,6 +2468,17 @@ function netAttachRoom(room,name,client){
       sysMsg(text);
       try{window.dispatchEvent(new CustomEvent('blockcraft-admin-gate-teleport',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
     });
+    room.onMessage('adminSpawnResult', m=>{
+      const count=Math.max(0,(m&&m.count)|0),kind=String(m&&m.kind||'actor').replace(/_/g,' ');
+      sysMsg('<b>Admin spawn:</b> '+count+' '+escHTML(kind)+' spawned near you.');
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-spawn',{detail:m||{}}));}catch(e){}
+    });
+    room.onMessage('adminSpawnReject', m=>{
+      const r=m&&m.reason;
+      const text=r==='admin'?'Spawn tools are admin-only.':r==='dungeon'?'Spawn tools are only available in the overworld.':r==='player'?'No live player position found.':'Spawn failed.';
+      sysMsg(text);
+      try{window.dispatchEvent(new CustomEvent('blockcraft-admin-spawn',{detail:{ok:false,reason:r||'failed'}}));}catch(e){}
+    });
     room.onMessage('adminQuickGateResult', m=>{
       const rank=RANKS[Math.max(0,Math.min(RANKS.length-1,(m&&m.rank)|0))];
       sysMsg('<b>Admin quick gate:</b> '+escHTML((m&&m.dungeonName)||'Dungeon')+' · '+escHTML(rank&&rank.n||'Hunter')+'-Rank ('+(((m&&m.index)|0)+1)+'/'+((m&&m.total)|0||1)+').');

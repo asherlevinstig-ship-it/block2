@@ -289,28 +289,32 @@
   .job-choice-card button{position:relative;width:100%;align-self:end;font-family:inherit;font-size:10px;letter-spacing:1.8px;padding:10px;border:0;border-radius:6px;background:var(--job-col);color:#06101a;border-bottom:4px solid rgba(0,0,0,.28);cursor:pointer}
   .job-choice-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px}.job-choice-actions button{font-family:inherit;font-size:11px;letter-spacing:2px;padding:10px 14px;border-radius:6px;border:1px solid rgba(255,210,74,.48);background:rgba(74,52,14,.54);color:#ffe39a;cursor:pointer}.job-choice-actions button:hover{border-color:#fff1aa;box-shadow:0 0 14px rgba(255,210,74,.2)}
   body.path-selecting #chatlog,body.path-selecting #sysmsgs,body.path-selecting #rewardfeed,body.path-selecting #hotbar,body.path-selecting #statpointnudge,body.path-selecting #recallrechargenudge,body.path-selecting #stats,body.path-selecting #abilities,body.path-selecting #dragonhud,body.path-selecting #familiarhud,body.path-selecting #currentquest,body.path-selecting #homeworkhud,body.path-selecting #landmap,body.path-selecting #eventhud,body.path-selecting #coachhud,body.path-selecting #crosshair,body.path-selecting #tutorialhud{display:none!important}
-  #devreset{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(2,5,10,.72);backdrop-filter:blur(6px);color:#eef7ff}
+  #devreset{position:fixed;inset:0;z-index:120;display:flex;align-items:stretch;justify-content:stretch;padding:0;background:radial-gradient(circle at 82% 8%,rgba(24,114,183,.2),transparent 34%),linear-gradient(135deg,rgba(2,10,22,.96),rgba(3,18,34,.94) 48%,rgba(2,6,14,.97));backdrop-filter:blur(8px);color:#eef7ff}
   #devreset.hidden{display:none}
-  #devresetpanel{width:min(760px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;padding:22px;border:1px solid rgba(125,211,252,.65);border-radius:8px;background:linear-gradient(180deg,rgba(18,20,28,.98),rgba(8,10,16,.98));box-shadow:0 20px 70px rgba(0,0,0,.65),inset 0 0 24px rgba(125,211,252,.05)}
-  #devreset .drpill{margin-bottom:8px;color:#7dd3fc;font-size:10px;letter-spacing:3px}
-  #devreset h2{margin:0 0 8px;color:#fff;font-size:18px;letter-spacing:2px}
-  #devreset p{margin:0 0 14px;color:#aebbd0;font-size:12px;line-height:1.45}
+  #devresetpanel{position:relative;width:100vw;height:100vh;max-height:none;overflow:auto;padding:34px 34px 86px 268px;border:0;border-radius:0;background:linear-gradient(180deg,rgba(4,20,38,.74),rgba(3,8,18,.72));box-shadow:inset 0 0 80px rgba(43,176,255,.07)}
+  #devresetpanel:before{content:"ADMIN TOOLS\\A\\AOverview\\APlayer Profiles\\AInventory Grants\\AGates\\AWorld Events\\ASpawn Tools\\AReports\\ASettings";white-space:pre-line;position:fixed;left:0;top:0;bottom:0;width:218px;padding:34px 22px;background:linear-gradient(180deg,rgba(4,23,44,.96),rgba(2,9,20,.96));border-right:1px solid rgba(77,184,255,.22);box-shadow:10px 0 34px rgba(0,0,0,.22);color:#dcecff;font:600 13px/3.2 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:.2px}
+  #devresetpanel:after{content:"Admin User\\AAdministrator · Online";white-space:pre-line;position:fixed;left:16px;bottom:16px;width:166px;padding:14px 16px 14px 50px;border:1px solid rgba(125,211,252,.22);border-radius:10px;background:rgba(5,18,34,.78);color:#dcecff;font:700 12px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 12px 26px rgba(0,0,0,.28)}
+  #devreset .drpill{margin-bottom:10px;color:#38c7ff;font-size:11px;letter-spacing:2.6px;text-transform:uppercase}
+  #devreset h2{margin:0 0 8px;color:#fff;font:800 clamp(28px,3.2vw,46px)/1.05 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:-1.2px;text-shadow:0 0 22px rgba(75,190,255,.16)}
+  #devreset p{margin:0 0 20px;color:#b9c8df;font:500 14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
   #devreset input,#devreset select{width:100%;height:38px;margin:0;padding:0 11px;border:1px solid rgba(125,211,252,.42);border-radius:5px;background:#07111d;color:#eaf6ff;font-family:inherit;font-size:12px;letter-spacing:1px;user-select:text}
   #devreset select{appearance:none;background:#07111d;color:#bde8ff}
   #devreset input.admin-recognized{border-color:rgba(154,210,107,.72);background:#081711;color:#c8ffa7}
-  .admineditgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin-top:10px}
+  .admineditgrid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr));gap:14px 18px;margin-top:14px;padding:22px;border:1px solid rgba(68,164,232,.22);border-radius:12px;background:linear-gradient(180deg,rgba(10,42,72,.52),rgba(4,15,30,.62));box-shadow:inset 0 0 28px rgba(76,184,255,.04),0 14px 38px rgba(0,0,0,.2)}
   #devreset label{display:block;margin:0 0 10px;color:#7dd3fc;font-size:10px;letter-spacing:2px;text-transform:uppercase}
   .admineditgrid label{margin:0}
   .admineditgrid .adminspan{grid-column:1/-1}
+  .adminsection{display:flex!important;align-items:center;justify-content:space-between;margin-top:8px;padding:14px 16px;border:1px solid rgba(125,211,252,.2);border-radius:10px;background:linear-gradient(90deg,rgba(13,55,88,.78),rgba(6,21,40,.72));color:#fff;text-transform:none}
+  .adminsection small{color:#38c7ff;font:800 11px/1 system-ui,-apple-system,Segoe UI,sans-serif;letter-spacing:2px;text-transform:uppercase}.adminsection b{color:#eaf6ff;font:700 14px/1.2 system-ui,-apple-system,Segoe UI,sans-serif}
   .admineditgrid .admincheck{display:flex;align-items:center;gap:9px;min-height:43px;border:1px solid rgba(125,211,252,.34);border-radius:6px;padding:8px 12px;background:#07111d;color:#dff7ff;letter-spacing:1.6px}
   .admineditgrid .admincheck input{width:auto;height:auto;margin:0;accent-color:#7dd3fc}
   .admineditgrid .admincheck button{width:100%;height:34px;border:1px solid rgba(125,211,252,.54);border-radius:5px;background:#12314a;color:#dff7ff;font-family:inherit;font-size:11px;letter-spacing:2px;cursor:pointer}
   .admineditgrid .admincheck button:disabled{opacity:.55;cursor:wait}
-  #admininspectout{max-height:170px;overflow:auto;margin:2px 0 11px;padding:10px;border:1px solid rgba(125,211,252,.24);border-radius:5px;background:#050b12;color:#bde8ff;font-size:10px;line-height:1.45;white-space:pre-wrap;user-select:text}
+  #admininspectout{max-height:220px;overflow:auto;margin:12px 0 11px;padding:14px;border:1px solid rgba(125,211,252,.24);border-radius:9px;background:#050b12;color:#bde8ff;font-size:10px;line-height:1.45;white-space:pre-wrap;user-select:text}
   #admininspectout.hidden{display:none}
   #devresetstatus{min-height:18px;margin:3px 0 11px;color:#ffcf9a;font-size:11px;line-height:1.4}
   #devresetstatus.ok{color:#9be76d}#devresetstatus.bad{color:#ff8f8f}
-  .devresetactions{display:flex;justify-content:flex-end;gap:8px}
+  .devresetactions{position:fixed;right:26px;bottom:20px;left:244px;display:flex;justify-content:flex-end;gap:10px;padding:12px 0;background:linear-gradient(90deg,transparent,rgba(2,8,18,.82) 18%,rgba(2,8,18,.92));z-index:2}
   .devresetactions button{font-family:inherit;font-size:12px;letter-spacing:2px;padding:10px 14px;border-radius:5px;border:1px solid rgba(255,255,255,.16);background:#162133;color:#dceaff;cursor:pointer}
   .devresetactions #admininspectgo,.devresetactions #adminpatchgo,.devresetactions #adminpreviewmodel{background:#12314a;border-color:#7dd3fc;color:#dff7ff}
   .devresetactions #devresetgo{background:#6b241f;border-color:#ff695c;color:#fff}
@@ -355,6 +359,7 @@
   #overlay.compact #teacherdeskbtn{height:46px;background:#12314a;color:#dff7ff;border-color:rgba(79,216,255,.72);border-bottom:3px solid #245a7c;font-size:11px;letter-spacing:1.2px}
   @media(max-width:980px){.teacher-vue-shell{grid-template-columns:1fr}.teacher-vue-sidebar{border-right:0;border-bottom:1px solid #e5e7eb}.teacher-vue-side-spacer{display:none}.teacher-vue-nav{grid-template-columns:repeat(2,minmax(0,1fr))}.teacher-vue-workspace,.teacher-vue-analysis,.teacher-vue-curriculum,.teacher-vue-homework,.teacher-vue-form-grid,.teacher-vue-answers,.teacher-vue-overview,.teacher-vue-list-head,.teacher-vue-request-card,.teacher-vue-analysis-tabs{grid-template-columns:1fr}.teacher-vue-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.teacher-vue-topbar{align-items:flex-start;flex-direction:column}.teacher-vue-toolbar{justify-content:flex-start}.teacher-vue-list{max-height:420px}.teacher-vue-analysis-row{grid-template-columns:minmax(0,1fr) 76px 76px}.teacher-vue-analysis-row span:last-child,.teacher-vue-analysis-row i{display:none}}
   @media(max-width:980px){.teacher-vue-filter-row,.teacher-vue-answer-row{grid-template-columns:1fr}.teacher-vue-topic-row{grid-template-columns:minmax(0,1fr) 56px 56px 64px}.teacher-vue-answer-row.head{display:none}.teacher-vue-answer-row{align-items:start}}
+  @media(max-width:1100px){#devresetpanel{padding-left:24px}#devresetpanel:before,#devresetpanel:after{display:none}.admineditgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.devresetactions{left:20px}}
   @media(max-width:560px){.admineditgrid{grid-template-columns:1fr}.devresetactions{flex-wrap:wrap}.devresetactions button{flex:1 1 42%}}
   .character-creator{margin-top:10px;padding:12px;border:1px solid rgba(125,211,252,.32);border-radius:8px;background:linear-gradient(180deg,rgba(5,13,24,.68),rgba(4,10,18,.58));color:#dceaff;text-align:left}
   .character-creator.hidden{display:none}

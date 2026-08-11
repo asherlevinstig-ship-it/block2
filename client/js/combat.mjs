@@ -578,6 +578,24 @@ function ensureAdminExtendedControls(){
       '<label class="admincheck"><button id="admingateteleport" type="button">TELEPORT TO GATE</button></label>';
     while(wrap.firstChild)grid.appendChild(wrap.firstChild);
   }
+  if(grid&&!document.getElementById('adminworldeventparkour')){
+    const wrap=document.createElement('div');
+    wrap.innerHTML=
+      '<div class="adminsection adminspan"><small>WORLD CONTROL</small><b>Events, spawns, and live-room actions</b></div>'+
+      '<label class="admincheck"><button id="adminworldeventparkour" type="button">START PARKOUR</button></label>'+
+      '<label class="admincheck"><button id="adminworldeventking" type="button">START KING EVENT</button></label>'+
+      '<label class="admincheck"><button id="adminworldeventcaravan" type="button">START CARAVAN</button></label>'+
+      '<label class="admincheck"><button id="adminworldeventmeteor" type="button">DROP METEOR HERE</button></label>'+
+      '<label>Spawn<select id="adminspawnkind"><option value="zombie">Zombie</option><option value="skeleton">Skeleton</option><option value="bandit">Bandit</option><option value="bandit_archer">Bandit Archer</option><option value="bandit_brute">Bandit Brute</option><option value="wolf">Wolf</option><option value="boss">Boss</option><option value="ancient_warden">Ancient Warden</option></select></label>'+
+      '<label>Count<input id="adminspawncount" type="number" min="1" max="12" value="1"></label>'+
+      '<label>Rank<input id="adminspawnrank" type="number" min="0" max="5" value="0"></label>'+
+      '<label>Radius<input id="adminspawnradius" type="number" min="2" max="30" value="6"></label>'+
+      '<label>Boss style<select id="adminspawnstyle"><option value="">Default</option><option value="cinder_smith">Cinder Smith</option><option value="hollow_castellan">Hollow Castellan</option><option value="glass_choir">Glass Choir</option><option value="silent_prior">Silent Prior</option><option value="rimebound_giant">Rimebound Giant</option><option value="thunder_warden">Thunder Warden</option><option value="buried_monarch">Buried Monarch</option><option value="abyssal_gatekeeper">Abyssal Gatekeeper</option><option value="rift_monarch">Rift Monarch</option><option value="ancient_warden">Ancient Warden</option></select></label>'+
+      '<label class="admincheck"><button id="adminspawnhere" type="button">SPAWN NEAR ME</button></label>'+
+      '<label class="adminspan">Raw command<input id="adminrawcommand" maxlength="140" placeholder="/event help"></label>'+
+      '<label class="admincheck adminspan"><button id="adminruncommand" type="button">RUN RAW COMMAND</button></label>';
+    while(wrap.firstChild)grid.appendChild(wrap.firstChild);
+  }
 }
 ensureAdminExtendedControls();
 const devResetCancel=document.getElementById('devresetcancel');
@@ -611,6 +629,14 @@ const adminUtilityPassive=document.getElementById('adminutilitypassive');
 const adminGateSelect=document.getElementById('admingateselect');
 const adminGateRefresh=document.getElementById('admingaterefresh');
 const adminGateTeleport=document.getElementById('admingateteleport');
+const adminRawCommand=document.getElementById('adminrawcommand');
+const adminRunCommand=document.getElementById('adminruncommand');
+const adminSpawnKind=document.getElementById('adminspawnkind');
+const adminSpawnCount=document.getElementById('adminspawncount');
+const adminSpawnRank=document.getElementById('adminspawnrank');
+const adminSpawnRadius=document.getElementById('adminspawnradius');
+const adminSpawnStyle=document.getElementById('adminspawnstyle');
+const adminSpawnHere=document.getElementById('adminspawnhere');
 const loadscreen=document.getElementById('loadscreen');
 const loadstatus=document.getElementById('loadstatus');
 const uiEl=document.getElementById('ui');
@@ -5356,6 +5382,34 @@ function runAdminGateTeleport(){
   try{NET.room.send('adminGateTeleport',{id});}
   catch(e){adminGateTeleport.disabled=false;setDevResetStatus(e&&e.message||'Gate teleport failed.','bad');}
 }
+function adminSendCommand(text){
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Admin command is admin-only.','bad');return false;}
+  if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before running admin commands.','bad');return false;}
+  const clean=String(text||'').replace(/[<>]/g,'').trim().slice(0,140);
+  if(!clean){setDevResetStatus('Enter a command first.','bad');return false;}
+  try{
+    NET.room.send('chat',{text:clean});
+    setDevResetStatus('Sent command: '+clean,'ok');
+    return true;
+  }catch(e){
+    setDevResetStatus(e&&e.message||'Command failed.','bad');
+    return false;
+  }
+}
+function runAdminSpawnHere(){
+  if(!adminSpawnHere)return;
+  if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Spawn tools are admin-only.','bad');return;}
+  if(!(NET&&NET.on&&NET.room)){setDevResetStatus('Enter the world before spawning world actors.','bad');return;}
+  const kind=String(adminSpawnKind&&adminSpawnKind.value||'zombie');
+  const count=Math.max(1,Math.min(12,Number(adminSpawnCount&&adminSpawnCount.value)||1));
+  const rank=Math.max(0,Math.min(5,Number(adminSpawnRank&&adminSpawnRank.value)||0));
+  const radius=Math.max(2,Math.min(30,Number(adminSpawnRadius&&adminSpawnRadius.value)||6));
+  const bossStyle=String(adminSpawnStyle&&adminSpawnStyle.value||'');
+  adminSpawnHere.disabled=true;
+  setDevResetStatus('Spawning '+count+' '+kind.replace(/_/g,' ')+'...');
+  try{NET.room.send('adminSpawnMob',{kind,count,rank,radius,bossStyle});}
+  catch(e){adminSpawnHere.disabled=false;setDevResetStatus(e&&e.message||'Spawn failed.','bad');}
+}
 function adminCsv(value){
   return String(value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 }
@@ -5528,6 +5582,18 @@ if(adminPatchGo)adminPatchGo.addEventListener('click',runAdminPatch);
 if(adminItemId)adminItemId.addEventListener('change',syncAdminGearFields);
 if(adminGateRefresh)adminGateRefresh.addEventListener('click',()=>{const gates=refreshAdminGateSelect();setDevResetStatus(gates.length?'Loaded '+gates.length+' active gate'+(gates.length===1?'':'s')+'.':'No active gates found.',gates.length?'ok':'bad');});
 if(adminGateTeleport)adminGateTeleport.addEventListener('click',runAdminGateTeleport);
+for(const [id,command] of [
+  ['adminworldeventparkour','/event parkour'],
+  ['adminworldeventking','/event king'],
+  ['adminworldeventcaravan','/event caravan'],
+  ['adminworldeventmeteor','/event meteor'],
+]){
+  const btn=document.getElementById(id);
+  if(btn)btn.addEventListener('click',()=>adminSendCommand(command));
+}
+if(adminRunCommand)adminRunCommand.addEventListener('click',()=>adminSendCommand(adminRawCommand&&adminRawCommand.value));
+if(adminRawCommand)adminRawCommand.addEventListener('keydown',e=>{if(e.code==='Enter'){e.preventDefault();adminSendCommand(adminRawCommand.value);}});
+if(adminSpawnHere)adminSpawnHere.addEventListener('click',runAdminSpawnHere);
 if(adminPreviewModel)adminPreviewModel.addEventListener('click',()=>{
   if(!(AUTH_UI&&AUTH_UI.isAdminAccount&&AUTH_UI.isAdminAccount())){setDevResetStatus('Model preview is admin-only.','bad');return;}
   const preview=globalThis.BlockcraftAppearancePreview;
@@ -5543,6 +5609,12 @@ window.addEventListener('blockcraft-admin-gate-teleport',e=>{
   if(d.ok===false){setDevResetStatus(d.reason==='none'?'No active gates found.':d.reason==='admin'?'Gate teleport is admin-only.':'Gate teleport failed.','bad');return;}
   if(d.id||d.gateId)setDevResetStatus('Teleported to gate '+(d.id||d.gateId)+'.','ok');
   refreshAdminGateSelect();
+});
+window.addEventListener('blockcraft-admin-spawn',e=>{
+  if(adminSpawnHere)adminSpawnHere.disabled=false;
+  const d=e&&e.detail||{};
+  if(d.ok===false){setDevResetStatus(d.reason==='admin'?'Spawn tools are admin-only.':d.reason==='dungeon'?'Leave the dungeon before using overworld spawn tools.':d.reason==='player'?'No live admin player found.':'Spawn failed.','bad');return;}
+  setDevResetStatus('Spawned '+(d.count||0)+' '+String(d.kind||'actor').replace(/_/g,' ')+'.','ok');
 });
 if(devReset)devReset.addEventListener('click',e=>{if(e.target===devReset)closeDevResetPanel();});
 if(devReset)devReset.addEventListener('keydown',e=>{if(e.code==='Escape'){e.preventDefault();closeDevResetPanel();}});

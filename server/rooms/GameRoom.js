@@ -419,6 +419,7 @@ class GameRoom extends Room {
     this.onMessage('kcEnd', (client, m) => this.handleKcEnd(client, m));
     this.onMessage('deathLimboAnswer', (client, m) => this.handleDeathLimboAnswer(client, m));
     this.onMessage('adminGateTeleport', (client, m) => this.handleAdminGateTeleport(client, m));
+    this.onMessage('adminSpawnMob', (client, m) => this.handleAdminSpawnMob(client, m));
     this.onMessage('adminQuickGate', (client, m) => this.handleAdminQuickGate(client, m));
     this.onMessage('profileRequest', (client, m = {}) => {
       const rec = this.profileFor(client);
@@ -3535,6 +3536,60 @@ class GameRoom extends Room {
       x: fresh.x, y: fresh.y, z: fresh.z, yaw: fresh.yaw,
       gateX: gate.x, gateY: gate.y, gateZ: gate.z,
     });
+    return true;
+  }
+  handleAdminSpawnMob(client, m = {}) {
+    if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminSpawnReject', { reason: 'admin' });
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return client.send('adminSpawnReject', { reason: 'player' });
+    if (p.dgn) return client.send('adminSpawnReject', { reason: 'dungeon' });
+    const allowed = new Set(['zombie', 'skeleton', 'bandit', 'bandit_archer', 'bandit_brute', 'wolf', 'boss', 'ancient_warden']);
+    let kind = String(m.kind || 'zombie').toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (!allowed.has(kind)) kind = 'zombie';
+    const count = Math.max(1, Math.min(12, Number(m.count) | 0 || 1));
+    const rank = Math.max(0, Math.min(5, Number(m.rank) | 0 || 0));
+    const radius = Math.max(2, Math.min(30, Number(m.radius) || 6));
+    const bossStyle = String(m.bossStyle || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
+    const spawned = [];
+    for (let i = 0; i < count; i++) {
+      const a = (p.yaw || 0) + Math.PI + (i - (count - 1) / 2) * .42;
+      const r = radius + Math.floor(i / 5) * 2 + (i % 2) * 1.35;
+      const x = clampN(p.x + Math.sin(a) * r, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+      const z = clampN(p.z + Math.cos(a) * r, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+      const y = this.world && this.world.standHeight ? this.world.standHeight(x, z, W.WH - 2) : p.y;
+      if (!Number.isFinite(y) || y < 2) continue;
+      const mob = new Mob();
+      mob.x = x; mob.y = y + .01; mob.z = z; mob.yaw = (p.yaw || 0) + Math.PI;
+      mob.kind = kind === 'ancient_warden' ? 'boss' : kind;
+      mob.dgn = '';
+      mob.elite = kind === 'boss' || kind === 'ancient_warden' || rank >= 3;
+      mob.bossStyle = kind === 'ancient_warden' ? 'ancient_warden' : (kind === 'boss' ? (bossStyle || 'cinder_smith') : '');
+      mob.displayName = kind === 'ancient_warden' ? 'Admin Warden' : kind === 'boss' ? 'Admin Boss' : '';
+      const boss = mob.kind === 'boss';
+      mob.maxHp = mob.hp = boss ? 120 + rank * 55 : 16 + rank * 10 + (mob.elite ? 18 : 0);
+      mob.state = boss ? 'chase' : '';
+      const id = 'm' + (++this.mobSeq);
+      this.state.mobs.set(id, mob);
+      const meta = this.freshMeta(mob.x, mob.z, boss ? 8 + rank * 3 : 3 + rank * 2, boss ? 1.12 + rank * .05 : 1.45 + rank * .08, mob.kind, rank, true);
+      meta.adminSpawn = true;
+      meta.alert = true;
+      meta.woke = boss;
+      if (boss) {
+        meta.bossStyle = mob.bossStyle;
+        meta.gcd = 1.6;
+        meta.slamDmg = 8 + rank * 3;
+        meta.sum1 = rank >= 2;
+        meta.sum2 = rank >= 4;
+      }
+      if (mob.kind === 'bandit_archer') meta.ranged = true;
+      if (mob.kind === 'bandit_brute') meta.brute = true;
+      this.mobMeta[id] = meta;
+      spawned.push(id);
+    }
+    if (!spawned.length) return client.send('adminSpawnReject', { reason: 'space' });
+    client.send('adminSpawnResult', { ok: true, kind, count: spawned.length, rank, radius, bossStyle });
+    this.broadcast('chat', { name: '[Admin]', text: (p.name || 'Admin') + ' spawned ' + spawned.length + ' ' + kind.replace(/_/g, ' ') + (spawned.length === 1 ? '' : 's') + ' in the world.' });
+    this.sendSpace('', 'fx', { t: 'adminSpawn', x: p.x, y: p.y, z: p.z, kind, count: spawned.length, dgn: '' });
     return true;
   }
   handleAdminQuickGate(client, m = {}) {
