@@ -2028,7 +2028,7 @@ body.mobile-play-mode #stats{
   pointer-events:none;
 }
 body.mobile-play-mode #lvlbadge{
-  grid-row:1/4;
+  grid-row:1/5;
   width:38px;
   height:38px;
   min-width:38px;
@@ -2052,7 +2052,8 @@ body.mobile-play-mode #stats .bar span{
   right:6px;
   letter-spacing:.2px;
 }
-body.mobile-play-mode #stats .hub,
+body.mobile-play-mode #stats .hub{display:block!important}
+body.mobile-play-mode #stats .hub:before{content:"FOOD"}
 body.mobile-play-mode #stats .xpb{display:none!important}
 body.mobile-play-mode #eventhud{
   top:calc(8px + env(safe-area-inset-top,0px))!important;
