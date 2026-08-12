@@ -154,6 +154,11 @@ const GAME_DUNGEON_MOB_INTEREST_EXIT_RADIUS = Math.max(GAME_DUNGEON_MOB_INTEREST
 const JOIN_SNAPSHOT_DELAY_MS = Math.max(0, Number(process.env.JOIN_SNAPSHOT_DELAY_MS || 100));
 const BLOCK_EDIT_REACH = 4.5;
 const PLAYER_EYE_HEIGHT = 1.62;
+const KARMA_HUNTER_THRESHOLD = -100;
+const KARMA_HUNTER_MAX_HOURLY_CHANCE = 0.9;
+const KARMA_HUNTER_MIN_INTERVAL_MS = 20 * 60 * 1000;
+const KARMA_HUNTER_LIFETIME_MS = 8 * 60 * 1000;
+const KARMA_GIFT_REDEEM = 6;
 const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + 14.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 27.5 });
 const ADMIN_QUICK_GATE_ROTATION = Object.freeze(DUNGEON_POOLS.flatMap((ids, rank) => ids.map(dungeonId => Object.freeze({ rank, dungeonId }))));
 const adminQuickGateIndices = new Map();
@@ -270,6 +275,7 @@ class GameRoom extends Room {
     this.deathDropSeq = 0;
     this.trades = new Map();
     this.tradeSeq = 0;
+    this.karmaHunterState = new Map();
     this.initRecallState();
     this.initKnowledgeChallengeState();
 
@@ -3675,6 +3681,115 @@ class GameRoom extends Room {
     }));
     return true;
   }
+  activeKarmaHunterIdsForSid(sid) {
+    if (!this.karmaHunterState) this.karmaHunterState = new Map();
+    const out = [];
+    this.state.mobs.forEach((mob, id) => {
+      const meta = this.mobMeta[id];
+      if (meta && meta.karmaHunter && meta.targetSid === sid && mob && mob.hp > 0) out.push(String(id));
+    });
+    return out;
+  }
+  karmaHunterSpawnPoint(p) {
+    if (!p || !this.world || typeof this.world.standHeight !== 'function') return null;
+    const solid = this.spaceSolid('');
+    for (let i = 0; i < 14; i++) {
+      const a = (p.yaw || 0) + Math.PI + (Math.random() - .5) * Math.PI * 1.6;
+      const r = 18 + Math.random() * 14;
+      const x = clampN((p.x || 0) + Math.sin(a) * r, W.LAVA_BORDER_WIDTH + 2, W.WX - W.LAVA_BORDER_WIDTH - 2);
+      const z = clampN((p.z || 0) + Math.cos(a) * r, W.LAVA_BORDER_WIDTH + 2, W.WX - W.LAVA_BORDER_WIDTH - 2);
+      if (this.isTownProtected(x, z)) continue;
+      const y = this.world.standHeight(x, z, W.WH - 2);
+      if (!Number.isFinite(y) || y < 2) continue;
+      if (solid && (solid(Math.floor(x), Math.floor(y + .1), Math.floor(z)) || solid(Math.floor(x), Math.floor(y + 1.4), Math.floor(z)))) continue;
+      return { x, y: y + .01, z, yaw: Math.atan2((p.x || x) - x, (p.z || z) - z) };
+    }
+    return null;
+  }
+  spawnKarmaHunterSquad(client, rec, now = Date.now()) {
+    if (!this.karmaHunterState) this.karmaHunterState = new Map();
+    const p = client && this.state.players.get(client.sessionId);
+    if (!p || p.dgn || p.dim !== 'overworld' || this.isTownProtected(p.x, p.z)) return false;
+    if (this.activeKarmaHunterIdsForSid(client.sessionId).length) return false;
+    const karma = rec && rec.prof ? rec.prof.karma | 0 : 0;
+    if (karma > KARMA_HUNTER_THRESHOLD) return false;
+    const severity = Math.max(1, Math.min(5, Math.ceil((Math.abs(karma) - Math.abs(KARMA_HUNTER_THRESHOLD)) / 175) + 1));
+    const count = Math.max(1, Math.min(4, 1 + Math.floor(severity / 2)));
+    const spawned = [];
+    for (let i = 0; i < count; i++) {
+      const spot = this.karmaHunterSpawnPoint(p);
+      if (!spot) continue;
+      const mob = new Mob();
+      mob.x = spot.x; mob.y = spot.y; mob.z = spot.z; mob.yaw = spot.yaw;
+      mob.kind = i === 1 && severity >= 3 ? 'bandit_archer' : (i === 2 && severity >= 4 ? 'bandit_brute' : 'bandit');
+      mob.dgn = '';
+      mob.elite = severity >= 4;
+      mob.displayName = severity >= 4 ? 'Karma Captain' : 'Karma Soldier';
+      mob.maxHp = mob.hp = 20 + severity * 9 + (mob.elite ? 12 : 0);
+      mob.state = 'chase';
+      const id = 'karma_' + (++this.mobSeq);
+      this.state.mobs.set(id, mob);
+      const meta = this.freshMeta(mob.x, mob.z, 3 + severity * 2, 1.45 + severity * .08, mob.kind, Math.max(0, severity - 1), true);
+      meta.karmaHunter = true;
+      meta.targetSid = client.sessionId;
+      meta.targetToken = rec.token;
+      meta.expiresAt = now + KARMA_HUNTER_LIFETIME_MS;
+      meta.alert = true;
+      meta.dayActive = true;
+      if (mob.kind === 'bandit_archer') meta.ranged = true;
+      if (mob.kind === 'bandit_brute') meta.brute = true;
+      this.mobMeta[id] = meta;
+      spawned.push(id);
+    }
+    if (!spawned.length) return false;
+    this.karmaHunterState.set(client.sessionId, { lastSpawnAt: now, activeIds: spawned });
+    client.send('karmaHunterSpawned', { count: spawned.length, karma, severity, lifetimeMs: KARMA_HUNTER_LIFETIME_MS });
+    this.sendSpace('', 'fx', { t: 'adminSpawn', x: p.x, y: p.y, z: p.z, kind: 'karma_hunter', count: spawned.length, dgn: '' });
+    this.broadcast('chat', { name: '[Karma]', text: (p.name || rec.prof.name || 'A hunter') + ' is being hunted by karma soldiers.' });
+    return true;
+  }
+  tickKarmaHunters(dt, now = Date.now()) {
+    if (!this.karmaHunterState) this.karmaHunterState = new Map();
+    const stale = [];
+    this.state.mobs.forEach((mob, id) => {
+      const meta = this.mobMeta[id];
+      if (!meta || !meta.karmaHunter) return;
+      const targetClient = this.clients.find(c => c.sessionId === meta.targetSid);
+      const targetRec = targetClient && this.profileFor(targetClient);
+      const targetP = targetClient && this.state.players.get(targetClient.sessionId);
+      if (!targetClient || !targetRec || !targetP || targetP.dgn || (targetRec.prof.karma | 0) > KARMA_HUNTER_THRESHOLD || now >= (meta.expiresAt || 0)) stale.push(String(id));
+    });
+    for (const id of stale) {
+      const meta = this.mobMeta[id] || {};
+      this.state.mobs.delete(id);
+      delete this.mobMeta[id];
+      if (meta.targetSid) {
+        const st = this.karmaHunterState.get(meta.targetSid);
+        if (st && Array.isArray(st.activeIds)) st.activeIds = st.activeIds.filter(x => x !== id);
+      }
+    }
+    for (const [sid, st] of [...this.karmaHunterState]) {
+      if (!this.clients.find(c => c.sessionId === sid)) { this.karmaHunterState.delete(sid); continue; }
+      if (Array.isArray(st.activeIds)) st.activeIds = st.activeIds.filter(id => this.state.mobs.has(id));
+      if (!st.activeIds || !st.activeIds.length) st.activeIds = [];
+    }
+    for (const client of this.clients || []) {
+      const rec = this.profileFor(client);
+      const p = this.state.players.get(client.sessionId);
+      if (!rec || !p || p.dgn || p.dim !== 'overworld' || this.isTownProtected(p.x, p.z)) continue;
+      const karma = rec.prof.karma | 0;
+      if (karma > KARMA_HUNTER_THRESHOLD) continue;
+      const state = this.karmaHunterState.get(client.sessionId) || { lastSpawnAt: 0, activeIds: [] };
+      state.activeIds = state.activeIds.filter(id => this.state.mobs.has(id));
+      this.karmaHunterState.set(client.sessionId, state);
+      if (state.activeIds.length) continue;
+      if (now - (state.lastSpawnAt || 0) < KARMA_HUNTER_MIN_INTERVAL_MS) continue;
+      const severity01 = Math.max(0, Math.min(1, (Math.abs(karma) - Math.abs(KARMA_HUNTER_THRESHOLD)) / 900));
+      const hourlyChance = 0.12 + severity01 * (KARMA_HUNTER_MAX_HOURLY_CHANCE - 0.12);
+      const tickChance = hourlyChance * Math.max(0, dt) / 3600;
+      if (Math.random() < tickChance) this.spawnKarmaHunterSquad(client, rec, now);
+    }
+  }
   landKey(x, z) {
     return (x | 0) + ',' + (z | 0);
   }
@@ -4320,6 +4435,25 @@ class GameRoom extends Room {
     rec.prof.karma = next;
     return { value: next, delta: next - before };
   }
+  tradeOfferHasGiftValue(offer) {
+    return !!(offer && (offer.stack || (offer.gold | 0) > 0));
+  }
+  tradeOfferIsEmpty(offer) {
+    return !offer || (!offer.stack && !(offer.gold | 0));
+  }
+  awardGiftKarmaIfAny(giver, giverRec, receiver, receiverRec, gave, received, tradeId) {
+    if (!giver || !giverRec || !receiver || !receiverRec) return null;
+    if (!this.tradeOfferHasGiftValue(gave) || !this.tradeOfferIsEmpty(received)) return null;
+    const karma = this.adjustKarma(giverRec, KARMA_GIFT_REDEEM);
+    if (!karma.delta) return null;
+    this.dirtyPlayers.add(giverRec.token);
+    this.sendProfile(giver, giverRec.prof);
+    const giverName = (this.state.players.get(giver.sessionId) || {}).name || giverRec.prof.name || 'Hunter';
+    const receiverName = (this.state.players.get(receiver.sessionId) || {}).name || receiverRec.prof.name || 'Hunter';
+    giver.send('karmaResult', { ok: true, reason: 'gift_trade', tradeId, targetSid: receiver.sessionId, targetName: receiverName, karma: karma.value, karmaDelta: karma.delta });
+    receiver.send('karmaNotice', { reason: 'gift_trade', fromSid: giver.sessionId, fromName: giverName, karmaDelta: karma.delta });
+    return karma;
+  }
   handleRobPlayer(client, m = {}) {
     const rec = this.profileFor(client);
     const targetSid = String(m.targetSid || '');
@@ -4436,6 +4570,8 @@ class GameRoom extends Room {
     fromRec.prof.gold = Math.max(0, Math.min(1e9, (fromRec.prof.gold | 0) - (trade.offer.gold | 0) + (response.gold | 0)));
     toRec.prof.gold = Math.max(0, Math.min(1e9, (toRec.prof.gold | 0) - (response.gold | 0) + (trade.offer.gold | 0)));
     this.dirtyPlayers.add(fromRec.token); this.dirtyPlayers.add(toRec.token);
+    this.awardGiftKarmaIfAny(from, fromRec, client, toRec, trade.offer, response, id);
+    this.awardGiftKarmaIfAny(client, toRec, from, fromRec, response, trade.offer, id);
     this.syncPlayerProfile(from, fromRec.prof); this.syncPlayerProfile(client, toRec.prof);
     this.sendProfile(from, fromRec.prof); this.sendProfile(client, toRec.prof);
     if (this.recordEconomyGold) {
@@ -7694,6 +7830,7 @@ class GameRoom extends Room {
     });
     this.updatePlayerHunger(dt);
     this.tickBiomeStatuses(dt);
+    this.tickKarmaHunters(dt);
     this.tickCaveSurveyContracts(Date.now());
 
     if (dayF > 0.5) {
@@ -7984,6 +8121,7 @@ class GameRoom extends Room {
       const candidates = (spaces[m.dgn || ''] || []).filter(s => {
         const hp = s && this.playerHp.get(s.sid);
         return s && s.p && s.p.invisible !== true && (!hp || hp.hp > 0) &&
+          (!meta.karmaHunter || s.sid === meta.targetSid) &&
           (!m.dgn || !this.isInDungeonSpawnSafeZone(m.dgn, s.p.x, s.p.z, .75));
       });
       meta.atkCd -= dt;

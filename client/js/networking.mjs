@@ -1380,6 +1380,21 @@ function netAttachRoom(room,name,client){
     room.onMessage('tradeOfferBroadcast', receiveTradeOffer);
     room.onMessage('tradePending', m=>applyTradePending(m));
     room.onMessage('tradeResult', m=>{applyTradeResult(m);eventFeed('[Trade]','Trade completed with '+String(m&&m.withName||'Hunter')+'.',{key:'trade:done:'+String(m&&m.id||''),cooldown:0});});
+    room.onMessage('karmaResult', m=>{
+      const delta=m&&m.karmaDelta|0;
+      showKarmaFeedback(delta,m&&m.karma,m&&m.reason||'karma');
+      if(m&&m.reason==='gift_trade'&&delta)sysMsg('Your generous trade restored <b>+'+delta+' karma</b>.',{tier:'minor',title:'Karma'});
+      else if(m&&m.reason==='hunter_defeated'&&delta)sysMsg('You defeated a karma hunter. <b>+'+delta+' karma</b>.',{tier:'minor',title:'Karma'});
+    });
+    room.onMessage('karmaNotice', m=>{
+      if(m&&m.reason==='gift_trade')eventFeed('[Karma]',String(m.fromName||'Hunter')+' redeemed karma by gifting through trade.',{key:'karma:gift-notice:'+String(m.fromSid||'')+':'+String(Date.now()),cooldown:0});
+    });
+    room.onMessage('karmaHunterSpawned', m=>{
+      const count=Math.max(1,m&&m.count|0);
+      showName('KARMA SOLDIERS');
+      sysMsg('<b>Karma soldiers are hunting you.</b><br>Defeat them or redeem your reputation through generous trades.',{tier:'danger',title:'Karma'});
+      eventFeed('[Karma]',count+' karma soldier'+(count===1?' is':'s are')+' hunting you.',{key:'karma:hunter:'+String(Date.now()),cooldown:0});
+    });
     room.onMessage('tradeReject', m=>applyTradeReject(m));
     room.onMessage('tradeCancel', m=>applyTradeCancel(m));
     room.onMessage('robResult', m=>{

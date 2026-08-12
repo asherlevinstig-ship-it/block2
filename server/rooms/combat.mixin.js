@@ -1072,6 +1072,21 @@ class CombatMixin {
     else if (wasBoss && !dgn && killedMeta.gateBreachBoss && this.resolveGateBreachBoss && this.resolveGateBreachBoss(client, String(mobId), { ...mob, x: dx, y: dy, z: dz }, killedMeta)) { /* breach cleanup reward handled by gate lifecycle */ }
     else if (wasBoss && !dgn && killedMeta.meteorBoss && this.resolveMeteorBossKill && this.resolveMeteorBossKill(client, String(mobId), { ...mob, x: dx, y: dy, z: dz }, killedMeta)) { /* meteor boss reward handled by open-world event lifecycle */ }
     else if (kind === 'orb' || kind === 'ghost') { /* hazard entities: no reward */ }
+    else if (!dgn && killedMeta.karmaHunter && client) {
+      const rec = this.profileFor(client);
+      const karma = rec && killedMeta.targetSid === client.sessionId ? this.adjustKarma(rec, 4) : null;
+      if (rec && karma && karma.delta) {
+        this.dirtyPlayers.add(rec.token);
+        this.sendProfile(client, rec.prof);
+        client.send('karmaResult', { ok: true, reason: 'hunter_defeated', karma: karma.value, karmaDelta: karma.delta });
+      }
+      if (killedMeta.targetSid && this.karmaHunterState) {
+        const st = this.karmaHunterState.get(killedMeta.targetSid);
+        if (st && Array.isArray(st.activeIds)) st.activeIds = st.activeIds.filter(x => x !== String(mobId));
+      }
+      this.awardGrant(client, { source: 'karma_hunter', xp: threatXpForRing(Math.min(3, killedMeta.rank | 0), { elite: !!killedMeta.elite }), items: [], dangerRing: Math.min(3, killedMeta.rank | 0), elite: !!killedMeta.elite });
+      this.recordKillProgress(client, true);
+    }
     else if (client) {
       const ring = dgn ? 0 : Math.max(0, Math.min(3, killedMeta.dangerRing | 0));
       let items = dgn ? [] : this.rollOverworldKeyDrops(ring);

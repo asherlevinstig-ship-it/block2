@@ -6511,6 +6511,9 @@ test('player trade can be accepted without an item or gold in return', () => {
   assert.equal(itemCount(bProf, I.BREAD), 2);
   assert.equal(aProf.gold, 2);
   assert.equal(bProf.gold, 0);
+  assert.equal(aProf.karma, 6, 'generous zero-gold gift trades redeem karma');
+  assert.ok(alice.sent.some(e => e.type === 'karmaResult' && e.msg.reason === 'gift_trade' && e.msg.karmaDelta === 6));
+  assert.ok(bob.sent.some(e => e.type === 'karmaNotice' && e.msg.reason === 'gift_trade'));
   assert.ok(alice.sent.some(e => e.type === 'tradeResult' && e.msg.received && !e.msg.received.stack && !e.msg.received.gold));
   assert.ok(bob.sent.some(e => e.type === 'tradeResult' && e.msg.gave && !e.msg.gave.stack && !e.msg.gave.gold));
 });
@@ -6529,6 +6532,8 @@ test('player trade supports item-for-item swaps', () => {
   assert.equal(itemCount(aProf, I.IRON_INGOT), 2);
   assert.equal(itemCount(bProf, I.BREAD), 1);
   assert.equal(itemCount(bProf, I.IRON_INGOT), 1);
+  assert.equal(aProf.karma, 0);
+  assert.equal(bProf.karma, 0);
 });
 
 test('player trade validates range before creating an offer', () => {
@@ -6621,6 +6626,51 @@ test('player robbery works in town/social spaces but still rejects distant targe
   room.handleRobPlayer(thief, { targetSid: victim.sessionId });
   assert.equal(thief.sent.at(-1).msg.reason, 'range');
   assert.equal(victimProf.gold, 79);
+});
+
+test('negative karma can spawn a targeted hunter squad that cleans up after redemption', () => {
+  const room = makeRoom(), outlaw = makeClient('karma_outlaw'), bystander = makeClient('karma_bystander');
+  const { prof } = seedPlayer(room, outlaw, { name: 'Outlaw', x: W.TOWN.TC + W.TOWN.HS + 18, y: W.TOWN.G + 2, z: W.TOWN.TC + W.TOWN.HS + 18 });
+  seedPlayer(room, bystander, { name: 'Bystander', x: W.TOWN.TC + W.TOWN.HS + 21, y: W.TOWN.G + 2, z: W.TOWN.TC + W.TOWN.HS + 18 });
+  prof.karma = -275;
+  room.clients = [outlaw, bystander];
+  room.world.standHeight = () => W.TOWN.G + 1;
+
+  assert.equal(room.spawnKarmaHunterSquad(outlaw, room.profileFor(outlaw), Date.now()), true);
+  const ids = room.activeKarmaHunterIdsForSid(outlaw.sessionId);
+  assert.equal(ids.length >= 1, true);
+  assert.equal(ids.every(id => room.mobMeta[id].karmaHunter && room.mobMeta[id].targetSid === outlaw.sessionId), true);
+  const mob = room.state.mobs.get(ids[0]);
+  const meta = room.mobMeta[ids[0]];
+  const candidates = {
+    '': [
+      { p: room.state.players.get(bystander.sessionId), sid: bystander.sessionId },
+      { p: room.state.players.get(outlaw.sessionId), sid: outlaw.sessionId },
+    ],
+  };
+  room.simulateMob(mob, ids[0], meta, .1, candidates);
+  assert.notEqual(meta.tx, room.state.players.get(bystander.sessionId).x, 'karma hunter ignores bystanders as targets');
+
+  prof.karma = 0;
+  room.tickKarmaHunters(.1, Date.now());
+  assert.equal(ids.every(id => !room.state.mobs.has(id)), true, 'redeeming karma despawns active hunters');
+});
+
+test('defeating a karma hunter redeems a small amount of karma', () => {
+  const room = makeRoom(), outlaw = makeClient('karma_duelist');
+  const { prof } = seedPlayer(room, outlaw, { name: 'Outlaw', x: W.TOWN.TC + W.TOWN.HS + 20, y: W.TOWN.G + 2, z: W.TOWN.TC + W.TOWN.HS + 20 });
+  prof.karma = -160;
+  room.clients = [outlaw];
+  room.world.standHeight = () => W.TOWN.G + 1;
+
+  assert.equal(room.spawnKarmaHunterSquad(outlaw, room.profileFor(outlaw), Date.now()), true);
+  const id = room.activeKarmaHunterIdsForSid(outlaw.sessionId)[0];
+  const mob = room.state.mobs.get(id);
+  room.finishMobKill(outlaw, id, mob);
+
+  assert.equal(prof.karma, -156);
+  assert.equal(room.state.mobs.has(id), false);
+  assert.ok(outlaw.sent.some(e => e.type === 'karmaResult' && e.msg.reason === 'hunter_defeated' && e.msg.karmaDelta === 4));
 });
 
 test('pet tamer service board lists online tamers and delivers owner pings', () => {
