@@ -74,6 +74,16 @@ function eventFeed(name,text,opts={}){
   }
   if(typeof eventLog==='function')eventLog(body,label);
 }
+function showKarmaFeedback(delta,value,reason='karma'){
+  const kDelta=delta|0;
+  if(!kDelta)return;
+  if(typeof value==='number')globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,value|0));
+  const current=globalThis.BlockcraftKarma|0;
+  const label=(kDelta>0?'+':'')+kDelta;
+  const mood=current<=-100?' reputation is becoming darker.':current>=100?' reputation is becoming brighter.':' karma shifted.';
+  eventFeed('[Karma]',label+' karma · now '+current+'. Your'+mood,{key:'karma:'+reason+':'+String(Date.now()),cooldown:0});
+  if(worldApi&&typeof worldApi.karmaPulseVfx==='function')worldApi.karmaPulseVfx(kDelta,current,player&&player.pos);
+}
 function fishingNetworkDebug(reason,extra={}){
   if(dimensionsState.kind!=='fishing_lake'&&!(extra&&extra.force))return;
   const canvas=worldState.renderer&&worldState.renderer.domElement;
@@ -1377,11 +1387,11 @@ function netAttachRoom(room,name,client){
       if(m&&m.ok){
         const amount=Math.max(0,m.gold|0);
         const targetName=String(m.targetName||'Hunter');
-        if(typeof m.karma==='number')globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,m.karma|0));
         const kDelta=(m.karmaDelta|0);
+        showKarmaFeedback(kDelta,m.karma,'rob');
         const karmaLine=kDelta?'<br><b>Karma:</b> '+(kDelta>0?'+':'')+kDelta+' · now '+(globalThis.BlockcraftKarma|0):'';
         sysMsg('You robbed <b>'+escHTML(targetName)+'</b> for <b>'+amount+' gold</b>.'+karmaLine,{tier:'major',title:'Outlaw'});
-        eventFeed('[Outlaw]','You robbed '+targetName+' for '+amount+' gold'+(kDelta?' · Karma '+(kDelta>0?'+':'')+kDelta:'')+'.',{key:'rob:gain:'+String(Date.now()),cooldown:0});
+        eventFeed('[Outlaw]','You robbed '+targetName+' for '+amount+' gold.',{key:'rob:gain:'+String(Date.now()),cooldown:0});
       }else{
         const reason=String(m&&m.reason||'failed');
         const text=reason==='space'?'You must be in the same room as that hunter.'
@@ -1417,11 +1427,11 @@ function netAttachRoom(room,name,client){
     room.onMessage('petTamerPingResult', m=>applyPetTamerPingResult(m));
     room.onMessage('friendResult', m=>{
       applyFriendResult(m);
-      if(m&&typeof m.karma==='number')globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,m.karma|0));
       if(m&&m.ok&&m.action!=='already'){
         const kDelta=(m.karmaDelta|0);
+        showKarmaFeedback(kDelta,m.karma,'friend');
         if(kDelta)sysMsg('Friendship formed with <b>'+escHTML(String(m.targetName||'Hunter'))+'</b>.<br><b>Karma:</b> +'+kDelta+' · now '+(globalThis.BlockcraftKarma|0),{tier:'minor',title:'Friends'});
-        eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend'+(kDelta?' · Karma +'+kDelta:'')+'.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});
+        eventFeed('[Friends]','Added '+String(m.targetName||'Hunter')+' as a friend.',{key:'friend:'+String(m.targetToken||m.targetSid||''),cooldown:0});
       }
     });
     room.onMessage('progressionFocus', m=>{

@@ -10222,39 +10222,72 @@ function updateParticles(dt){
 // and we float a short-lived billboard sprite over the mob. No client prediction.
 const dmgNums=[];
 const dmgNumPool=[];
-function paintDamageNumber(sp,n,crit){
+function paintDamageNumber(sp,n,crit,opts={}){
   const c=sp.userData.canvas;
   const g=c.getContext('2d');
   g.clearRect(0,0,c.width,c.height);
-  g.font='bold '+(crit?52:42)+'px system-ui, Arial, sans-serif';
+  const txt=String(opts.text!=null?opts.text:n).slice(0,28);
+  const fontSize=Math.max(18,Math.min(56,Number(opts.fontSize)||(crit?52:42)));
+  g.font='bold '+fontSize+'px system-ui, Arial, sans-serif';
   g.textAlign='center'; g.textBaseline='middle';
-  const txt=String(n);
-  g.lineWidth=7; g.strokeStyle='rgba(0,0,0,.85)'; g.strokeText(txt,64,34);
-  g.fillStyle=crit?'#ffd24a':'#ffffff'; g.fillText(txt,64,34);
+  const cx=c.width/2, cy=c.height/2;
+  g.lineWidth=Math.max(5,Math.round(fontSize*.16));
+  g.strokeStyle=opts.stroke||'rgba(0,0,0,.85)';
+  g.strokeText(txt,cx,cy);
+  g.fillStyle=opts.color||(crit?'#ffd24a':'#ffffff');
+  g.fillText(txt,cx,cy);
   sp.material.map.needsUpdate=true;
-  const s=crit?1.35:1.0;sp.scale.set(s,s*.5,1);sp.material.opacity=1;
+  const s=Math.max(.55,Math.min(1.8,Number(opts.scale)||(crit?1.35:1.0)));
+  const wide=opts.wide!=null?Number(opts.wide):Math.max(1,Math.min(1.75,txt.length/8));
+  sp.scale.set(s*wide,s*.5,1);sp.material.opacity=1;
   return sp;
 }
-function makeDamageNumber(n, crit){
-  const c=document.createElement('canvas'); c.width=128; c.height=64;
+function makeDamageNumber(n, crit, opts={}){
+  const c=document.createElement('canvas'); c.width=256; c.height=96;
   const tex=new THREE.CanvasTexture(c);
   tex.magFilter=THREE.LinearFilter; tex.minFilter=THREE.LinearFilter;
   const mat=new THREE.SpriteMaterial({map:tex, transparent:true, depthWrite:false, depthTest:false});
   const sp=new THREE.Sprite(mat);
-  const s=crit?1.35:1.0;
+  const s=Math.max(.55,Math.min(1.8,Number(opts.scale)||(crit?1.35:1.0)));
   sp.scale.set(s, s*.5, 1);
   sp.renderOrder=999;
   sp.userData.canvas=c;
-  return paintDamageNumber(sp,n,crit);
+  return paintDamageNumber(sp,n,crit,opts);
 }
 function recycleDmgNum(d){scene.remove(d.sprite);dmgNumPool.push(d.sprite);}
 function spawnDamageNumber(m){
   if(!m || !scene) return;
   while(dmgNums.length>=32) recycleDmgNum(dmgNums.shift());
-  const sp=dmgNumPool.length?paintDamageNumber(dmgNumPool.pop(),m.n|0,!!m.crit):makeDamageNumber(m.n|0,!!m.crit);
+  const opts={text:m.text,color:m.color,stroke:m.stroke,fontSize:m.fontSize,scale:m.scale,wide:m.wide};
+  const sp=dmgNumPool.length?paintDamageNumber(dmgNumPool.pop(),m.n|0,!!m.crit,opts):makeDamageNumber(m.n|0,!!m.crit,opts);
   sp.position.set((+m.x||0)+(Math.random()-.5)*.5, (+m.y||0)+1.5, (+m.z||0)+(Math.random()-.5)*.5);
   scene.add(sp);
-  dmgNums.push({sprite:sp, t:0, life:.85, vy:1.8, base:sp.scale.x});
+  dmgNums.push({sprite:sp, t:0, life:Math.max(.25,Number(m.life)||.85), vy:Number(m.vy)||1.8, baseX:sp.scale.x, baseY:sp.scale.y});
+}
+function karmaPulseVfx(delta, value, pos){
+  const d=delta|0;
+  if(!d)return;
+  const good=d>0, p=pos&&Number.isFinite(+pos.x)&&Number.isFinite(+pos.y)&&Number.isFinite(+pos.z)?pos:(player&&player.pos);
+  if(!p)return;
+  const color=good?'#86efac':'#fb7185';
+  const rgb=good?[.52,.94,.67]:[.98,.22,.39];
+  const ring=good?0x86efac:0xfb7185;
+  spawnDamageNumber({
+    x:p.x,
+    y:(p.y||0)+.95,
+    z:p.z,
+    text:(good?'+':'')+d+' KARMA',
+    color,
+    fontSize:34,
+    scale:.9,
+    wide:1.45,
+    life:1.05,
+    vy:1.45,
+  });
+  burst(p.x,(p.y||0)+1.05,p.z,rgb,good?22:18,good?1.7:1.35,good?1.9:1.25,good?.7:.58);
+  ringPulse(p.x,(p.y||0)+.1,p.z,good?1.75:1.45,ring,good?.72:.58);
+  if(!good)glowFlash(p.x,(p.y||0)+.9,p.z,0x3f0715,2.5,.24);
+  if(Number.isFinite(value))globalThis.BlockcraftKarma=Math.max(-1000,Math.min(1000,value|0));
 }
 function updateDamageNumbers(dt){
   for(let i=dmgNums.length-1;i>=0;i--){
@@ -10265,7 +10298,7 @@ function updateDamageNumbers(dt){
     d.sprite.position.y+=d.vy*dt; d.vy*=(1-dt*1.6);                       // rise, decelerating
     d.sprite.material.opacity = u<.12 ? u/.12 : 1-(u-.12)/.88;           // quick in, slow fade
     const pop=1+Math.max(0,.22-u)*1.3;                                   // small spawn pop
-    d.sprite.scale.set(d.base*pop, d.base*.5*pop, 1);
+    d.sprite.scale.set(d.baseX*pop, d.baseY*pop, 1);
   }
 }
 function shadowDashVfx(start,end){
@@ -11490,6 +11523,7 @@ gameContext.registerModule('world', Object.freeze({
   inOverworldBattle,
   resetParticleBudget,
   particleBudgetStats,
+  karmaPulseVfx,
   buildTamingLand,
   isOverworldGrid,
   activateOverworldGrid,
