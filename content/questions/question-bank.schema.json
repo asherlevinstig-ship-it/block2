@@ -8,7 +8,7 @@
     "required": ["id", "subject", "stage", "topic", "difficulty", "spec", "prompt", "answers", "correct", "explanation", "reviewStatus"],
     "properties": {
       "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]{2,48}$" },
-      "subject": { "enum": ["Computer Science", "Information Technology", "Religious Education", "English"] },
+      "subject": { "enum": ["Information Technology", "Religious Education", "English", "Maths", "Biology", "Chemistry", "Physics", "Geography", "History"] },
       "stage": { "enum": ["KS3", "GCSE"] },
       "topic": { "type": "string", "minLength": 2, "maxLength": 64 },
       "difficulty": { "type": "integer", "minimum": 1, "maximum": 3 },

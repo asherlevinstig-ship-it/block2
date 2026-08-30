@@ -1539,7 +1539,7 @@ createApp({
               </select></label>
             </div>
             <label class="teacher-vue-wide">Topics to cover<textarea v-model="state.curriculum.topics" maxlength="5000" rows="5" placeholder="Algorithms: decomposition, abstraction, flowcharts..."></textarea></label>
-            <label class="teacher-vue-wide">Syllabus or exam board<textarea v-model="state.curriculum.syllabus" maxlength="5000" rows="5" placeholder="AQA GCSE Computer Science 8525, section 3.1..."></textarea></label>
+            <label class="teacher-vue-wide">Syllabus or exam board<textarea v-model="state.curriculum.syllabus" maxlength="5000" rows="5" placeholder="Edexcel GCSE Maths, algebra and ratio..."></textarea></label>
             <label class="teacher-vue-wide">Notes<textarea v-model="state.curriculum.notes" maxlength="5000" rows="4" placeholder="Common misconceptions, class priorities, preferred question style..."></textarea></label>
             <label class="teacher-vue-wide teacher-vue-dropzone"><i>⇧</i><strong>Drop curriculum files here</strong><small>or click to upload PDFs, DOCX, PPTX, images, and spreadsheets</small><input id="teacherCurriculumFiles" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg" @change="handleCurriculumFiles"></label>
             <div class="teacher-vue-file-list" v-if="state.curriculum.files.length">
@@ -1715,7 +1715,7 @@ createApp({
                 <article>
                   <b>3. Misconception links</b>
                   <span v-for="pair in state.knowledgePlan.confusionPairs.slice(0, 5)" :key="'pair-' + pair.id">{{ pair.atomA }} ⇄ {{ pair.atomB }} <small>{{ pair.note }}</small></span>
-                  <em v-if="!state.knowledgePlan.confusionPairs.length">Plan confusing pairs like stack vs queue, router vs switch, variable vs constant.</em>
+                  <em v-if="!state.knowledgePlan.confusionPairs.length">Plan confusing pairs like radius vs diameter, simile vs metaphor, erosion vs deposition.</em>
                 </article>
               </div>
               <div class="teacher-vue-plan-author">

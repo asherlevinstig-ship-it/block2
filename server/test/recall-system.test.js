@@ -46,23 +46,21 @@ test('adaptive selection prioritises due work and interleaves topics',()=>{
 });
 
 test('mastery summary reports accuracy, due work, and durable successes',()=>{
-  const q=RECALL.QUESTIONS.find(item=>item.subject==='Computer Science');
+  const q=RECALL.QUESTIONS.find(item=>item.subject==='English');
   const history={items:{[q.id]:{attempts:5,correct:4,stage:4,nextDue:0}},totalAttempts:5,totalCorrect:4};
-  const summary=RECALL.masterySummary(history,'Computer Science');
+  const summary=RECALL.masterySummary(history,'English');
   assert.equal(summary.seen,1);assert.equal(summary.mastered,1);assert.equal(summary.due,1);assert.equal(summary.accuracy,.8);
 });
 
-test('Computer Science bank covers the current curriculum with stable validated items',()=>{
+test('built-in recall bank no longer ships Computer Science questions',()=>{
   const questions=RECALL.QUESTIONS.filter(q=>q.subject==='Computer Science');
-  assert.ok(questions.length>=30,'the adaptive scheduler needs enough variation to space and interleave practice');
+  assert.equal(questions.length,0);
+  assert.equal(RECALL.SUBJECTS.includes('Computer Science'),false);
   assert.deepEqual(RECALL.validateQuestionBank(RECALL.QUESTIONS),[]);
-  const topics=new Set(questions.map(q=>q.topic));
-  for(const topic of ['Algorithms','Programming','Data representation','Computer systems','Networks','Cyber security','Databases','Impacts of technology'])assert.ok(topics.has(topic),topic);
-  assert.ok(questions.every(q=>q.spec&&q.explanation.length>=20));
 });
 
 test('question validation rejects duplicate prompts and weak distractor sets',()=>{
-  const base={id:'test_item_001',subject:'Computer Science',stage:'KS3',topic:'Algorithms',difficulty:1,spec:'DfE-KS3',prompt:'Which statement describes an algorithm?',answers:['A sequence of steps','A password','A password','A monitor'],correct:0,explanation:'An algorithm is a precise sequence of steps used to solve a problem.'};
+  const base={id:'test_item_001',subject:'Maths',stage:'KS3',topic:'Number',difficulty:1,spec:'DfE-KS3',prompt:'Which statement describes a percentage?',answers:['A part per hundred','A password','A password','A monitor'],correct:0,explanation:'A percentage describes a proportion as a number of parts per hundred.'};
   const errors=RECALL.validateQuestionBank([base,{...base,id:'test_item_002',answers:['A sequence of steps','A variable','A monitor','A router']}]);
   assert.ok(errors.some(error=>error.includes('four unique answers')));
   assert.ok(errors.some(error=>error.includes('duplicates a prompt')));

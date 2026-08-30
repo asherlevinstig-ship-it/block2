@@ -246,14 +246,12 @@ test('importContentPack updates a question in place when the prompt already exis
   assert.equal(upd.params[upd.params.length - 1], 42, 'targets the existing question id');
 });
 
-test('the shipped sample pack imports cleanly', async () => {
+test('the shipped sample pack is an empty placeholder', async () => {
   const pack = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'content', 'knowledge-challenge', 'sample-pack.json'), 'utf8'));
   const store = new MySqlGameQuestionStore({ pool: importMockPool([]) });
   const counts = await store.importContentPack(5, pack, {});
-  assert.equal(counts.entities, 3);
-  assert.equal(counts.atoms, 5);
-  assert.equal(counts.questions, 6);
-  assert.equal(counts.pairs, 1);
+  assert.equal(pack.subject, '');
+  assert.deepEqual(counts, { atomTypes: 0, entities: 0, atoms: 0, questions: 0, pairs: 0 });
 });
 
 test('loadChallengeForAtom returns a parsed, servable challenge or null', async () => {

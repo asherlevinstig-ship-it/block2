@@ -160,7 +160,7 @@ npm run mysql:kc:status
 Check a specific subject:
 
 ```powershell
-npm run mysql:kc:status -- --subject "Computer Science"
+npm run mysql:kc:status -- --subject "English"
 npm run mysql:kc:status -- --subject-id 123
 ```
 
@@ -178,6 +178,19 @@ npm run mysql:kc:seed -- --subject-id 123 --school-id 3
 
 The default pack is `content/knowledge-challenge/sample-pack.json`. Re-running the seed is
 idempotent: existing entities, atoms, questions, and confusion pairs are updated in place.
+The checked-in default pack is an empty placeholder so removed Computer Science pilot content
+cannot be accidentally reseeded.
+
+To soft-delete Computer Science question content from the configured LiveWeave question DB:
+
+```powershell
+npm run mysql:questions:delete-cs
+$env:CONFIRM_DELETE_COMPUTER_SCIENCE_QUESTIONS = "DELETE_COMPUTER_SCIENCE_QUESTIONS"
+npm run mysql:questions:delete-cs -- --force
+```
+
+This deactivates matching `game_question`, `kc_entity`, and `kc_atom` rows and closes open
+Computer Science homework without deleting historical attempts.
 
 ## 6. Reset A Player Game Profile
 

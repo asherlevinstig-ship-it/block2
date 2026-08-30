@@ -2862,7 +2862,7 @@ function qBtn(label, cb, dim2){
   b.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); SFX.uiClick(); cb(e); });
   return b;
 }
-const DEFAULT_RECALL_SUBJECTS=['Computer Science','Information Technology','Religious Education','English'];
+const DEFAULT_RECALL_SUBJECTS=['Information Technology','Religious Education','English'];
 let schoolRecallSubjects=null,schoolRecallSubjectsAt=0,schoolRecallSubjectsLoading=null;
 function subjectNames(list){return (Array.isArray(list)?list:[]).map(s=>String(s&&s.name||s||'').trim()).filter(Boolean);}
 function recallSubjectOptions(){const names=subjectNames(schoolRecallSubjects);return names.length?names:DEFAULT_RECALL_SUBJECTS;}

@@ -6,7 +6,7 @@
 // server's KC_CONFIG is the source of truth.
 const ENTRY = { quick: 20, standard: 40, full: 60, timed: 40, endless: 25 };
 const PLANNED = { quick: 10, standard: 20, full: 30, timed: 20, endless: 0 };
-const FALLBACK_SUBJECT = 'Computer Science';
+const FALLBACK_SUBJECT = 'English';
 const REASON_LABEL = {
   weakness: 'Focus practice', retrieval: 'Review due', confusion: 'Common confusion',
   maintenance: 'Keep sharp', near_transfer: 'New context', remediation: 'Recovery question', fallback: 'Practice',

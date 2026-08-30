@@ -2,7 +2,7 @@
 'use strict';
 // Check whether the MySQL-backed Scholar Table / Knowledge Challenge has playable content.
 //
-//   node tools/knowledge-challenge-status.js [--subject "Computer Science"] [--subject-id N]
+//   node tools/knowledge-challenge-status.js [--subject "English"] [--subject-id N]
 //
 // Reads the same game-question DB env vars as the server:
 // GAME_QUESTION_MYSQL_* first, then LIVEWEAVE_MYSQL_*, QUESTION_MYSQL_*,
@@ -52,7 +52,7 @@ async function main() {
     await store.ensureSchema();
 
     const explicitSubjectId = Number(arg('subject-id', 0)) || 0;
-    const subjectName = String(arg('subject', 'Computer Science') || '').trim();
+    const subjectName = String(arg('subject', 'English') || '').trim();
     let subject = null;
     if (explicitSubjectId) {
       const [rows] = await pool.execute('SELECT id, name, code FROM subjects WHERE id = ? LIMIT 1', [explicitSubjectId]);

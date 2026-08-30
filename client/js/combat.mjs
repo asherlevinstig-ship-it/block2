@@ -1392,7 +1392,7 @@ ONBOARDING_STEPS.splice(11,0,{
   pillar:'Lesson 12 / 14 - Subject Focus',
   key:'LEFT ALT',
   text:'Press Left Alt and choose your Recall subject.',
-  sub:'Recall Cast and death limbo questions use this subject. Pick Computer Science, IT, RE, or English.',
+  sub:'Recall Cast and death limbo questions use this subject. Pick IT, RE, English, or another loaded subject.',
   done:()=>onboardingArrived&&onboardingFlags.subject
 });
 
