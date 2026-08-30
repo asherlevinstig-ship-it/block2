@@ -192,7 +192,31 @@ npm run mysql:questions:delete-cs -- --force
 This deactivates matching `game_question`, `kc_entity`, and `kc_atom` rows and closes open
 Computer Science homework without deleting historical attempts.
 
-## 6. Reset A Player Game Profile
+## 6. Lightweave Login Handoff
+
+Logging in on the SiteGround/Lightweave site does not automatically authenticate
+`block2.vercel.app`, because browser cookies are scoped by domain. To carry the
+login forward, Lightweave should create a short, random, single-use `auth_token`
+for the logged-in teacher or student row, then redirect to Blockcraft with it:
+
+```text
+https://block2.vercel.app/?auth_token=<short-lived-random-token>
+```
+
+Blockcraft exchanges that token at `/auth/token-login`, creates its own `bc_session`,
+stores the returned `sessionToken` in local storage, and removes the token from the URL.
+
+Teacher handoff uses the existing `teachers.auth_token` column. Student handoff is enabled
+when the LiveWeave `students` table has an `auth_token` column:
+
+```sql
+ALTER TABLE students ADD COLUMN auth_token VARCHAR(255) NULL;
+CREATE INDEX idx_students_auth_token ON students (auth_token);
+```
+
+After successful exchange, Blockcraft clears `auth_token` so the handoff cannot be replayed.
+
+## 7. Reset A Player Game Profile
 
 To reset one player's game progress without deleting their LiveWeave/MySQL
 school account, set a long random server-only token:
@@ -216,7 +240,7 @@ Invoke-RestMethod `
 The next login creates a fresh Firebase player profile and runs first-time
 onboarding again.
 
-## 7. Wipe Existing Firestore Data
+## 8. Wipe Existing Firestore Data
 
 If your Firebase project already has old test collections, run a dry-run first:
 

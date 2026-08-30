@@ -200,6 +200,77 @@ test('MySQL auth backend exchanges MIS teacher auth_token for a Blockcraft sessi
   auth.stop();
 });
 
+test('MySQL auth backend exchanges student auth_token for a Blockcraft session account', async () => {
+  const pool = {
+    async execute(sql, params) {
+      if (/SHOW COLUMNS FROM students/i.test(sql)) {
+        return [[
+          { Field: 'id' },
+          { Field: 'name' },
+          { Field: 'email' },
+          { Field: 'password_hash' },
+          { Field: 'school_id' },
+          { Field: 'auth_token' },
+          { Field: 'last_login_at' },
+        ]];
+      }
+      if (/FROM teachers WHERE auth_token = \?/i.test(sql)) return [[]];
+      if (/FROM students WHERE auth_token = \?/i.test(sql)) {
+        assert.equal(params[0], 'student-token-1234567890abcdef');
+        return [[{
+          id: 82,
+          name: 'Demo Student',
+          email: 'demos@demo.com',
+          password_hash: 'unused',
+          school_id: 3,
+        }]];
+      }
+      if (/FROM students WHERE LOWER\(email\) = \?/i.test(sql)) {
+        assert.equal(params[0], 'demos@demo.com');
+        return [[{
+          id: 82,
+          name: 'Demo Student',
+          email: 'demos@demo.com',
+          password_hash: 'unused',
+          school_id: 3,
+        }]];
+      }
+      if (/FROM schools WHERE id = \?/i.test(sql)) return [[{ id: 3, name: 'Demo School', domain: 'demo.com' }]];
+      if (/UPDATE students SET auth_token = NULL WHERE id = \?/i.test(sql)) return [{ affectedRows: 1 }];
+      if (/UPDATE students SET last_login_at = NOW\(\) WHERE id = \?/i.test(sql)) return [{ affectedRows: 1 }];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-student-token-'));
+  const auth = new AuthService(dir, { authBackend: backend });
+  const account = await auth.loginHandoffToken('student-token-1234567890abcdef');
+  assert.deepEqual(account, {
+    id: 'student_82',
+    username: 'demos@demo.com',
+    displayName: 'Demo Student',
+    accountType: 'student',
+    role: 'student',
+    schoolId: '3',
+    schoolName: 'Demo School',
+  });
+  const sid = await auth.issueSession(account);
+  assert.equal(auth.authenticateRequest({ headers: { authorization: 'Bearer ' + sid } }).id, 'student_82');
+  auth.stop();
+});
+
+test('MySQL auth backend ignores student handoff when students.auth_token is absent', async () => {
+  const pool = {
+    async execute(sql) {
+      if (/FROM teachers WHERE auth_token = \?/i.test(sql)) return [[]];
+      if (/SHOW COLUMNS FROM students/i.test(sql)) return [[{ Field: 'id' }, { Field: 'email' }]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const backend = new MySqlAuthBackend({ pool });
+  await assert.rejects(() => backend.loginHandoffToken('student-token-1234567890abcdef'), /Invalid login handoff token/);
+});
+
 test('MySQL auth backend preserves admin teacher role and resolves linked school', async () => {
   const hash = await bcrypt.hash('correct horse admin', 10);
   const calls = [];

@@ -104,6 +104,21 @@ class MySqlAuthBackend {
     return account;
   }
 
+  async findStudentByAuthToken(token) {
+    const cleanToken = String(token || '').trim();
+    if (!cleanToken || cleanToken.length < 16 || cleanToken.length > 255) return null;
+    const pool = this.getPool();
+    const columns = await this.studentColumns(pool);
+    if (!columns.has('auth_token')) return null;
+    const [rows] = await pool.execute(
+      'SELECT id, name, email, password_hash, school_id FROM students WHERE auth_token = ? LIMIT 1',
+      [cleanToken],
+    );
+    const row = rows && rows[0];
+    if (!row) return null;
+    return this.findStudent(pool, row.email);
+  }
+
   async findStudent(pool, email) {
     const [rows] = await pool.execute(
       'SELECT id, name, email, password_hash, school_id FROM students WHERE LOWER(email) = ? LIMIT 1',
@@ -257,6 +272,8 @@ class MySqlAuthBackend {
       return;
     }
     if (account.accountType === 'student') {
+      const columns = await this.studentColumns(pool);
+      if (columns.has('auth_token')) await pool.execute('UPDATE students SET auth_token = NULL WHERE id = ?', [account.sourceId]).catch(() => {});
       await pool.execute('UPDATE students SET last_login_at = NOW() WHERE id = ?', [account.sourceId]).catch(() => {});
     }
   }
@@ -275,6 +292,15 @@ class MySqlAuthBackend {
     if (typeof this.findTeacherByAuthToken !== 'function') return null;
     const account = await this.findTeacherByAuthToken(token);
     if (!account) throw Object.assign(new Error('Invalid teacher handoff token.'), { status: 401, code: 'teacher_token' });
+    delete account.sourceId;
+    return account;
+  }
+
+  async loginHandoffToken(token) {
+    const account = await this.findTeacherByAuthToken(token) || await this.findStudentByAuthToken(token);
+    if (!account) throw Object.assign(new Error('Invalid login handoff token.'), { status: 401, code: 'handoff_token' });
+    await this.touchLastLogin(account);
+    delete account.passwordHash;
     delete account.sourceId;
     return account;
   }

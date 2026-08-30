@@ -230,6 +230,31 @@ export function createAuthController({ user, password, playerName, status, play,
     return token ? { ...base, Authorization: 'Bearer ' + token } : base;
   }
 
+  function handoffTokenFromUrl() {
+    try {
+      const params = new URLSearchParams(location.search || '');
+      const token = params.get('auth_token') || params.get('authToken') || params.get('handoff') || params.get('token') || '';
+      const clean = String(token || '').trim();
+      return clean.length >= 16 && clean.length <= 255 ? clean : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function clearHandoffTokenFromUrl() {
+    try {
+      const url = new URL(location.href);
+      let changed = false;
+      for (const key of ['auth_token', 'authToken', 'handoff', 'token']) {
+        if (url.searchParams.has(key)) {
+          url.searchParams.delete(key);
+          changed = true;
+        }
+      }
+      if (changed && history && history.replaceState) history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+    } catch (_) {}
+  }
+
   function hasHunterName() {
     return !!(state.gameProfile && state.gameProfile.nameSet);
   }
@@ -291,6 +316,30 @@ export function createAuthController({ user, password, playerName, status, play,
   async function check() {
     if (state.checked) return state.account;
     state.checked = true;
+    const handoffToken = handoffTokenFromUrl();
+    if (handoffToken) {
+      setStatus('RESTORING LIGHTWEAVE LOGIN...');
+      try {
+        const data = await json('/auth/token-login', { authToken: handoffToken });
+        if (data.sessionToken) storeSession(data.sessionToken);
+        clearWorldSession();
+        clearHandoffTokenFromUrl();
+        state.account = data.account || null;
+        state.gameProfile = data.gameProfile || null;
+        setAppearance(state.gameProfile && state.gameProfile.appearance);
+        if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
+        else if (state.account) playerName.value = '';
+        render();
+        return state.account;
+      } catch (e) {
+        clearHandoffTokenFromUrl();
+        storeSession('');
+        clearWorldSession();
+        state.account = null;
+        state.gameProfile = null;
+        setStatus(e.message || 'LIGHTWEAVE LOGIN EXPIRED', 'bad');
+      }
+    }
     try {
       const data = await json('/auth/me');
       if (data.sessionToken) storeSession(data.sessionToken);
