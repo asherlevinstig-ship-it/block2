@@ -235,7 +235,7 @@ export function createAuthController({ user, password, playerName, status, play,
       const params = new URLSearchParams(location.search || '');
       const token = params.get('auth_token') || params.get('authToken') || params.get('handoff') || params.get('token') || '';
       const clean = String(token || '').trim();
-      return clean.length >= 16 && clean.length <= 255 ? clean : '';
+      return clean.length >= 16 && clean.length <= 4096 ? clean : '';
     } catch (_) {
       return '';
     }
