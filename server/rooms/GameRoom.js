@@ -181,6 +181,41 @@ function isLegacyUnsafeTownReturn(pos) {
   return y < W.TOWN.G + .75 || townReturnDrop;
 }
 
+function safeOverworldJoinPosition(world, pos) {
+  const fallback = townReturnArray();
+  if (!world || typeof world.standHeight !== 'function' || typeof world.getB !== 'function') return fallback;
+  if (!Array.isArray(pos) || pos.length < 3) return fallback;
+  const px = Number(pos[0]), py = Number(pos[1]), pz = Number(pos[2]);
+  if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return fallback;
+  const min = Math.max(1, W.LAVA_BORDER_WIDTH + .5);
+  const max = Math.min(W.WX - 2, W.WX - W.LAVA_BORDER_WIDTH - .5);
+  if (px < min || pz < min || px > max || pz > max || py < 1 || py > W.WH + 8) return fallback;
+  const solid = (x, y, z) => W.isSolid(world.getB(x, y, z));
+  const candidates = [
+    [px, pz],
+    [px + 1.5, pz], [px - 1.5, pz], [px, pz + 1.5], [px, pz - 1.5],
+    [px + 2.5, pz + 2.5], [px - 2.5, pz + 2.5], [px + 2.5, pz - 2.5], [px - 2.5, pz - 2.5],
+    [TOWN_RETURN_SPAWN.x, TOWN_RETURN_SPAWN.z],
+  ];
+  for (let i = 0; i < candidates.length; i++) {
+    const [rawX, rawZ] = candidates[i];
+    const x = Math.max(min, Math.min(max, Number(rawX)));
+    const z = Math.max(min, Math.min(max, Number(rawZ)));
+    const y = world.standHeight(x, z, W.WH - 2);
+    if (!Number.isFinite(y) || y < 2 || y > W.WH - 1) continue;
+    const bx = Math.floor(x), bz = Math.floor(z);
+    if (i === 0 && py >= y - .25 && py <= y + 4) {
+      const savedY = Math.max(1, Math.min(W.WH - 1, py));
+      const sy = Math.floor(savedY);
+      if (!solid(bx, sy, bz) && !solid(bx, sy + 1, bz) && !solid(bx, sy + 2, bz)) return [x, savedY, z];
+    }
+    const by = Math.floor(y);
+    if (solid(bx, by, bz) || solid(bx, by + 1, bz) || solid(bx, by + 2, bz)) continue;
+    return [x, y + .01, z];
+  }
+  return fallback;
+}
+
 function angleDelta(a, b) {
   let d = (Number(a) || 0) - (Number(b) || 0);
   while (d > Math.PI) d -= Math.PI * 2;
@@ -1078,13 +1113,19 @@ class GameRoom extends Room {
         this.dirtyPlayers.add(token);
       }
       client._mutedComms = new Set(prof.mutedPlayers || []);
-      if (Array.isArray(prof.pos) && !prof.activeRoom) {
-        const bx = Math.floor(prof.pos[0]), by = Math.floor(prof.pos[1]), bz = Math.floor(prof.pos[2]);
-        const feetBlocked = W.isSolid(this.world.getB(bx, by, bz));
-        const headBlocked = W.isSolid(this.world.getB(bx, by + 1, bz));
-        if (feetBlocked || headBlocked) {
-          prof.pos = townReturnArray();
+      if (!prof.activeRoom) {
+        const beforePos = Array.isArray(prof.pos) ? prof.pos.slice(0, 3) : null;
+        const safePos = safeOverworldJoinPosition(this.world, prof.pos);
+        const changed = !beforePos || Math.hypot((beforePos[0] || 0) - safePos[0], (beforePos[2] || 0) - safePos[2]) > .05 || Math.abs((beforePos[1] || 0) - safePos[1]) > .2;
+        if (changed) {
+          prof.pos = safePos;
           this.dirtyPlayers.add(token);
+          logRoomLifecycle('overworld.join.spawn_repaired', {
+            sidHash: shortHash(client.sessionId),
+            token,
+            before: beforePos,
+            after: safePos,
+          });
         }
       }
     }

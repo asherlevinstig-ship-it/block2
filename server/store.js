@@ -23,6 +23,7 @@ const APPEARANCE_SYSTEM = require('../shared/appearance-system');
 const ABILITY_PROGRESSION = require('../shared/ability-progression');
 const FAMILIAR_SYSTEM = require('../shared/familiar-system');
 const { parseFirebaseServiceAccountFromEnv } = require('./firebase-credentials');
+const WORLD = require('./world');
 
 // ---------------- validation ----------------
 const INV_MAX = 36;
@@ -36,6 +37,7 @@ const TUTORIAL_VERSIONS = Object.freeze({
   onboarding: 7, ability: 2, intro: 1, gate: 1,
   townJob: 1, townTavern: 1, townLand: 1, familiar: 1,
 });
+const DEFAULT_TOWN_RETURN_POS = Object.freeze([WORLD.TOWN.TC + 14.5, WORLD.TOWN.G + 1, WORLD.TOWN.TC + 27.5]);
 const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, Math.round(v))) : a; };
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
 function cleanShardId(value) {
@@ -455,7 +457,7 @@ function defaultProfile(name) {
     skyshipTransit: null,
     vitals: { hp: 20, mp: 20, sp: 100, hunger: 100 },
     vitalsSavedAt: 0,
-    pos: [64.5, 20, 71.5],
+    pos: [...DEFAULT_TOWN_RETURN_POS],
   };
 }
 
@@ -1157,8 +1159,12 @@ function sanitizeProfile(p) {
     if(duplicate>=0)out.inv[duplicate]=null;
   }
   let pos = Array.isArray(p.pos) ? p.pos : [];
-  if (pos.length !== 3 || pos.some(v => !isFinite(+v))) pos = [64.5, 20, 71.5];  // bad data -> plaza spawn
-  out.pos = [clampF(pos[0], 0, 1000), clampF(pos[1], 1, 80), clampF(pos[2], 0, 1000)];
+  if (pos.length !== 3 || pos.some(v => !isFinite(+v))) pos = [...DEFAULT_TOWN_RETURN_POS];  // bad data -> current town spawn
+  out.pos = [
+    clampF(pos[0], 0, WORLD.WX - 1),
+    clampF(pos[1], 1, WORLD.WH - 1),
+    clampF(pos[2], 0, WORLD.WX - 1),
+  ];
   out.activeRoom = sanitizeActiveRoom(p.activeRoom);
   if (out.activeRoom) {
     const roomPos = sanitizeActiveRoomPosition(out.activeRoom, out.pos);

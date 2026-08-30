@@ -8450,6 +8450,9 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   assert.deepEqual(defaultProfile('New').tutorials, {
     onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0,
   });
+  assert.deepEqual(defaultProfile('New').pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(sanitizeProfile({ name: 'Bad Spawn', pos: [99999, -100, 99999] }).pos, [W.WX - 1, 1, W.WX - 1]);
+  assert.deepEqual(sanitizeProfile({ name: 'Missing Spawn', pos: ['nope'] }).pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
   const legacy = sanitizeProfile({
     name: 'Legacy',
     S: { lvl: 3, path: 'mage' },
@@ -8693,6 +8696,33 @@ test('returning overworld profiles keep saved main courtyard coordinates', async
   const p = room.state.players.get(client.sessionId);
   assert.deepEqual(prof.pos, savedPos);
   assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [savedPos[0], Math.round((savedPos[1] + .01) * 100) / 100, savedPos[2]]);
+});
+
+test('off-map overworld profiles are repaired to town before spawning on join', async () => {
+  const room = makeRoom(), client = makeClient('cached-off-map-position');
+  const token = 'student_off_map_position';
+  const cached = defaultProfile('Lost Newcomer');
+  cached.nameSet = true;
+  cached.pos = [9999, 20, 9999];
+  room.profiles.set(token, cached);
+  room.store = {
+    async loadPlayer() {
+      throw new Error('cached profile should not load from store');
+    },
+  };
+
+  await room.onJoin(client, { name: 'Lost Newcomer' }, {
+    id: token,
+    displayName: 'Lost Newcomer',
+    accountType: 'student',
+    role: 'student',
+  });
+
+  const prof = room.profiles.get(token);
+  const p = room.state.players.get(client.sessionId);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1.01, W.TOWN.TC + 27.5]);
+  assert.equal(room.dirtyPlayers.has(token), true);
 });
 
 test('registered profiles receive a town map backfill without losing current progress', () => {
