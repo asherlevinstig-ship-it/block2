@@ -255,6 +255,27 @@ export function createAuthController({ user, password, playerName, status, play,
     } catch (_) {}
   }
 
+  function liveweaveLoginUrl() {
+    return 'https://liveweave.net/blockcraft_login.php';
+  }
+
+  function shouldUseLiveweaveLogin() {
+    try {
+      const params = new URLSearchParams(location.search || '');
+      if (params.get('manual_login') === '1') return false;
+      return /^block2\.vercel\.app$/i.test(location.hostname || '');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function openLiveweaveLogin() {
+    try {
+      setStatus('OPENING LIVEWEAVE LOGIN...');
+      location.assign(liveweaveLoginUrl());
+    } catch (_) {}
+  }
+
   function hasHunterName() {
     return !!(state.gameProfile && state.gameProfile.nameSet);
   }
@@ -350,11 +371,18 @@ export function createAuthController({ user, password, playerName, status, play,
       else if (state.account) playerName.value = '';
     } catch (_) { state.account = null; state.gameProfile = null; }
     render();
+    if (!state.account && !handoffToken && shouldUseLiveweaveLogin()) {
+      setTimeout(openLiveweaveLogin, 120);
+    }
     return state.account;
   }
 
   async function authenticate(create = false) {
     await check();
+    if (!state.account && shouldUseLiveweaveLogin()) {
+      openLiveweaveLogin();
+      return false;
+    }
     const username = (user.value || '').trim();
     const secret = password.value || '';
     if (state.account) {
