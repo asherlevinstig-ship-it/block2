@@ -241,6 +241,15 @@ export function createAuthController({ user, password, playerName, status, play,
     }
   }
 
+  function hasHandoffTokenParam() {
+    try {
+      const params = new URLSearchParams(location.search || '');
+      return ['auth_token', 'authToken', 'handoff', 'token'].some(key => params.has(key));
+    } catch (_) {
+      return false;
+    }
+  }
+
   function clearHandoffTokenFromUrl() {
     try {
       const url = new URL(location.href);
@@ -337,7 +346,19 @@ export function createAuthController({ user, password, playerName, status, play,
   async function check() {
     if (state.checked) return state.account;
     state.checked = true;
+    const hadHandoffParam = hasHandoffTokenParam();
     const handoffToken = handoffTokenFromUrl();
+    if (hadHandoffParam && !handoffToken) {
+      console.warn('[blockcraft-auth] Lightweave handoff parameter was present but not readable by client.');
+      clearHandoffTokenFromUrl();
+      storeSession('');
+      clearWorldSession();
+      state.account = null;
+      state.gameProfile = null;
+      setStatus('LIGHTWEAVE LOGIN TOKEN COULD NOT BE READ - PLEASE TRY AGAIN', 'bad');
+      render();
+      return null;
+    }
     if (handoffToken) {
       setStatus('RESTORING LIGHTWEAVE LOGIN...');
       try {
@@ -371,7 +392,7 @@ export function createAuthController({ user, password, playerName, status, play,
       else if (state.account) playerName.value = '';
     } catch (_) { state.account = null; state.gameProfile = null; }
     render();
-    if (!state.account && !handoffToken && shouldUseLiveweaveLogin()) {
+    if (!state.account && !hadHandoffParam && shouldUseLiveweaveLogin()) {
       setTimeout(openLiveweaveLogin, 120);
     }
     return state.account;
