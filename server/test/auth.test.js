@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { AuthService } = require('../auth');
 const { MySqlAuthBackend, normalizeBcryptHash } = require('../mysql-auth');
@@ -253,6 +254,37 @@ test('MySQL auth backend exchanges student auth_token for a Blockcraft session a
     role: 'student',
     schoolId: '3',
     schoolName: 'Demo School',
+  });
+  const sid = await auth.issueSession(account);
+  assert.equal(auth.authenticateRequest({ headers: { authorization: 'Bearer ' + sid } }).id, 'student_82');
+  auth.stop();
+});
+
+test('AuthService exchanges signed Liveweave handoff tokens without shared MySQL token lookup', async () => {
+  const secret = 'lw-bc-handoff-v1-2026-rotate-me-9a3f2d7c1e8b4a6d';
+  const payload64 = Buffer.from(JSON.stringify({
+    kind: 'student',
+    id: 82,
+    email: 'demos@demo.com',
+    name: 'Demo Student',
+    schoolId: '3',
+    role: 'student',
+    iat: Date.now(),
+    exp: Date.now() + 120000,
+    nonce: 'test-nonce',
+  })).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(payload64).digest('base64url');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bc-signed-handoff-'));
+  const auth = new AuthService(dir, { authBackend: null });
+  const account = await auth.loginHandoffToken('lw1.' + payload64 + '.' + sig);
+  assert.deepEqual(account, {
+    id: 'student_82',
+    username: 'demos@demo.com',
+    displayName: 'Demo Student',
+    accountType: 'student',
+    role: 'student',
+    schoolId: '3',
+    sourceId: 82,
   });
   const sid = await auth.issueSession(account);
   assert.equal(auth.authenticateRequest({ headers: { authorization: 'Bearer ' + sid } }).id, 'student_82');

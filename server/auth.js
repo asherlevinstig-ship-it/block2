@@ -21,6 +21,8 @@ const DEFAULT_CURRICULUM_MAIL_BRIDGE_URL = 'https://compscigo.com/teacher/blockc
 const DEFAULT_BUG_REPORT_TO = 'asherlevin85@gmail.com';
 const BUG_REPORT_SENSITIVE_KEY = /password|pass|token|secret|credential|private|cookie|authorization/i;
 const BUG_REPORT_MAIL_TIMEOUT_MS = Math.max(2000, Math.min(15000, Number(process.env.BUG_REPORT_MAIL_TIMEOUT_MS || 8000) | 0));
+const LIGHTWEAVE_HANDOFF_SECRET = String(process.env.BLOCKCRAFT_LIGHTWEAVE_HANDOFF_SECRET || 'lw-bc-handoff-v1-2026-rotate-me-9a3f2d7c1e8b4a6d').trim();
+const LIGHTWEAVE_HANDOFF_MAX_AGE_MS = 2 * 60 * 1000;
 
 const b64url = buf => Buffer.from(buf).toString('base64url');
 const cleanUsername = value => String(value || '').trim().toLowerCase();
@@ -75,6 +77,45 @@ const curriculumAllowedMime = new Set([
 
 function hasOwn(obj, key) {
   return !!obj && Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function safeEqualString(a, b) {
+  const ab = Buffer.from(String(a || ''), 'utf8');
+  const bb = Buffer.from(String(b || ''), 'utf8');
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+
+function verifyLightweaveHandoffToken(token) {
+  const clean = String(token || '').trim();
+  const match = clean.match(/^lw1\.([A-Za-z0-9_-]{20,})\.([A-Za-z0-9_-]{32,})$/);
+  if (!match || !LIGHTWEAVE_HANDOFF_SECRET) return null;
+  const payload64 = match[1];
+  const sig = match[2];
+  const expected = crypto.createHmac('sha256', LIGHTWEAVE_HANDOFF_SECRET).update(payload64).digest('base64url');
+  if (!safeEqualString(sig, expected)) return null;
+  let payload = null;
+  try { payload = JSON.parse(Buffer.from(payload64, 'base64url').toString('utf8')); } catch (_) { return null; }
+  const now = Date.now();
+  const issuedAt = Number(payload && payload.iat) || 0;
+  const expiresAt = Number(payload && payload.exp) || 0;
+  if (!issuedAt || !expiresAt || expiresAt < now || Math.abs(now - issuedAt) > LIGHTWEAVE_HANDOFF_MAX_AGE_MS) return null;
+  const kind = String(payload.kind || payload.type || '').toLowerCase();
+  if (kind !== 'student' && kind !== 'teacher') return null;
+  const sourceId = Math.max(1, Math.round(Number(payload.id) || 0));
+  const username = cleanUsername(payload.email || payload.username);
+  if (!sourceId || !username || !username.includes('@')) return null;
+  const schoolId = String(payload.schoolId || payload.school_id || '').trim();
+  const displayName = cleanDisplayName(payload.name || payload.displayName || username.split('@')[0]);
+  const role = kind === 'teacher' ? String(payload.role || 'teacher').trim().toLowerCase() || 'teacher' : 'student';
+  return {
+    id: kind + '_' + sourceId,
+    username,
+    displayName,
+    accountType: kind,
+    role,
+    schoolId,
+    sourceId,
+  };
 }
 
 function adminMaxHp(profile) {
@@ -1022,12 +1063,13 @@ class AuthService {
   }
 
   async loginHandoffToken(token) {
-    if (!this.authBackend || typeof this.authBackend.loginHandoffToken !== 'function') {
-      throw Object.assign(new Error('Login handoff is not configured.'), { status: 503, code: 'handoff_token_config' });
+    const signedAccount = verifyLightweaveHandoffToken(token);
+    if (signedAccount) return signedAccount;
+    if (this.authBackend && typeof this.authBackend.loginHandoffToken === 'function') {
+      const account = await this.authBackend.loginHandoffToken(token);
+      if (account) return account;
     }
-    const account = await this.authBackend.loginHandoffToken(token);
-    if (!account) throw Object.assign(new Error('Invalid login handoff token.'), { status: 401, code: 'handoff_token' });
-    return account;
+    throw Object.assign(new Error('Invalid login handoff token.'), { status: 401, code: 'handoff_token' });
   }
 
   async login(username, password) {
