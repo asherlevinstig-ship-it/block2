@@ -726,6 +726,15 @@ function tabletReleaseMovementKeys(){
   for(const code of ['KeyW','KeyA','KeyS','KeyD'])tabletSetKey(code,false);
   tabletInputState.joystick.keys.clear();
 }
+function releaseGameplayMovementInput(reason=''){
+  for(const code of ['KeyW','KeyA','KeyS','KeyD','Space','ShiftLeft','ShiftRight'])keys[code]=false;
+  tabletReleaseMovementKeys();
+  tabletSetSprintToggle(false);
+  if(player&&player.vel)player.vel.set(0,0,0);
+  mouseR=false;placeKeyHeld=false;
+  if(globalThis.BlockcraftTrace)globalThis.BlockcraftTrace('input.release-movement',{reason:String(reason||'')});
+}
+Object.defineProperty(globalThis,'BlockcraftReleaseMovementInput',{value:releaseGameplayMovementInput,configurable:true});
 function tabletSetSprintToggle(on){
   tabletInputState.sprintToggled=!!on;
   tabletSetKey('ShiftLeft',tabletInputState.sprintToggled);
