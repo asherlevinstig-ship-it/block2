@@ -1043,6 +1043,18 @@ class MySqlGameQuestionStore {
        ORDER BY s.name ASC`,
       [schoolId, schoolId],
     )));
+    rows = this.uniqueSubjectRows(rows.concat(await this.safeQuery(
+      `SELECT DISTINCT s.id, s.name, s.code, s.school_id
+       FROM subjects s
+       WHERE s.is_active = 1
+         AND (
+           LOWER(TRIM(s.name)) = 'computer science'
+           OR LOWER(TRIM(s.code)) IN ('cs','computer_science','computerscience')
+         )
+       ORDER BY CASE WHEN s.school_id = ? THEN 0 WHEN s.school_id IS NULL THEN 1 ELSE 2 END, s.name ASC
+       LIMIT 1`,
+      [schoolId],
+    )));
     return (rows || []).map(row => ({
       id: Number(row.id) || 0,
       name: String(row.name || ''),

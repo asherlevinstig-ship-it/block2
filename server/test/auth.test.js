@@ -1015,6 +1015,9 @@ test('MySQL game question store lists student subjects from assigned classes', a
         { id: 6, name: 'Maths', code: 'MATH', school_id: 12 },
       ]];
       if (/JOIN classes c ON c.subject_id = s.id/i.test(sql)) return [[]];
+      if (/LOWER\(TRIM\(s\.name\)\) = 'computer science'/i.test(sql)) return [[
+        { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
+      ]];
       if (/FROM subjects s\s+WHERE s\.is_active = 1/i.test(sql)) return [[
         { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
         { id: 6, name: 'Maths', code: 'MATH', school_id: 12 },
@@ -1049,6 +1052,9 @@ test('MySQL game question store includes shared active subjects for guest studen
       if (/JOIN classes c ON c.subject_id = s.id/i.test(sql)) return [[
         { id: 9542, name: 'Information Technology', code: 'IT', school_id: 12 },
       ]];
+      if (/LOWER\(TRIM\(s\.name\)\) = 'computer science'/i.test(sql)) return [[
+        { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
+      ]];
       if (/FROM subjects s\s+WHERE s\.is_active = 1/i.test(sql)) return [[
         { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
         { id: 9542, name: 'Information Technology', code: 'IT', school_id: 12 },
@@ -1064,6 +1070,35 @@ test('MySQL game question store includes shared active subjects for guest studen
     { id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 },
   ]);
   assert.ok(queries.some(q => /liveweave_escape_class_guests/i.test(q.sql)));
+});
+
+test('MySQL game question store always includes Computer Science for students', async () => {
+  const pool = {
+    async execute(sql) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT class_id FROM students/i.test(sql)) return [[{ class_id: null }]];
+      if (/SELECT class_id FROM student_classes/i.test(sql)) return [[]];
+      if (/SELECT class_id FROM class_students/i.test(sql)) return [[]];
+      if (/SELECT class_id FROM liveweave_escape_class_guests/i.test(sql)) return [[]];
+      if (/LOWER\(TRIM\(s\.name\)\) = 'computer science'/i.test(sql)) return [[
+        { id: 5, name: 'Computer Science', code: 'CS', school_id: 12 },
+      ]];
+      if (/FROM subjects s\s+WHERE s\.is_active = 1/i.test(sql)) return [[
+        { id: 8, name: 'History', code: 'HIST', school_id: 99 },
+      ]];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const subjects = await store.listStudentSubjects({ id: 'student_77', accountType: 'student', role: 'student', schoolId: '99' });
+  assert.deepEqual(subjects, [
+    { id: 8, name: 'History', code: 'HIST', schoolId: 99 },
+    { id: 5, name: 'Computer Science', code: 'CS', schoolId: 12 },
+  ]);
 });
 
 test('MySQL game question analytics includes class students with zero attempts', async () => {
