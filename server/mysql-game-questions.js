@@ -1939,7 +1939,21 @@ class MySqlGameQuestionStore {
        LIMIT 1`,
       [name, name, schoolId, schoolId, schoolId],
     );
-    const s = rows && rows[0];
+    let s = rows && rows[0];
+    if (!s && /^(computer\s*science|cs|computer_science)$/i.test(name)) {
+      const [globalRows] = await pool.execute(
+        `SELECT id, name, code, school_id FROM subjects
+         WHERE is_active = 1
+           AND (
+             LOWER(TRIM(name)) = 'computer science'
+             OR LOWER(TRIM(code)) IN ('cs','computer_science','computerscience')
+           )
+         ORDER BY CASE WHEN school_id = ? THEN 0 WHEN school_id IS NULL THEN 1 ELSE 2 END, id ASC
+         LIMIT 1`,
+        [schoolId],
+      );
+      s = globalRows && globalRows[0];
+    }
     return s ? { subjectId: Number(s.id), scopeSchoolId: s.school_id == null ? schoolId : Number(s.school_id), subjectName: s.name || '', subjectCode: s.code || '' } : null;
   }
 

@@ -2862,10 +2862,15 @@ function qBtn(label, cb, dim2){
   b.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); SFX.uiClick(); cb(e); });
   return b;
 }
-const DEFAULT_RECALL_SUBJECTS=['Information Technology','Religious Education','English'];
+const DEFAULT_RECALL_SUBJECTS=['Computer Science','Information Technology','Religious Education','English'];
 let schoolRecallSubjects=null,schoolRecallSubjectsAt=0,schoolRecallSubjectsLoading=null;
 function subjectNames(list){return (Array.isArray(list)?list:[]).map(s=>String(s&&s.name||s||'').trim()).filter(Boolean);}
-function recallSubjectOptions(){const names=subjectNames(schoolRecallSubjects);return names.length?names:DEFAULT_RECALL_SUBJECTS;}
+function recallSubjectOptions(){
+  const names=subjectNames(schoolRecallSubjects);
+  const options=names.length?names:DEFAULT_RECALL_SUBJECTS.slice();
+  if(!options.some(s=>String(s).trim().toLowerCase()==='computer science'))options.unshift('Computer Science');
+  return options;
+}
 function selectedRecallSubject(){const options=recallSubjectOptions();try{const value=localStorage.getItem('bc_recall_subject');return options.includes(value)?value:(options[0]||'English');}catch{return options[0]||'English';}}
 function authHeader(){try{const token=localStorage.getItem('blockcraft.auth.session')||'';return token?{Authorization:'Bearer '+token}:{};}catch{return {};}}
 async function loadSchoolRecallSubjects(force=false){
