@@ -1101,6 +1101,53 @@ test('MySQL game question store always includes Computer Science for students', 
   ]);
 });
 
+test('MySQL game question store limits Computer Science Recall to number systems', async () => {
+  let recallSql = '';
+  const pool = {
+    async execute(sql, params = []) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT id, name, code, school_id FROM subjects/i.test(sql) && /LOWER\(name\) = LOWER\(\?\)/i.test(sql)) {
+        return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
+      }
+      if (/SELECT COUNT\(\*\) AS n\s+FROM game_question/i.test(sql)) {
+        assert.match(sql, /number-systems-base2-base10-base16/);
+        assert.deepEqual(params, [5]);
+        return [[{ n: 1 }]];
+      }
+      if (/SELECT id, prompt, answers, correct_index/i.test(sql)) {
+        recallSql = sql;
+        assert.match(sql, /number-systems-base2-base10-base16/);
+        assert.deepEqual(params, [5]);
+        return [[{
+          id: 91,
+          prompt: 'What is binary 1010 in denary?',
+          answers: JSON.stringify(['10', '8', '12', '1010']),
+          correct_index: 0,
+          explanation: 'Binary 1010 is 8 plus 2, which equals 10.',
+          topic: 'Number systems',
+          stage: 'KS3',
+          difficulty: 1,
+          spec: 'number-systems-base2-base10-base16',
+        }]];
+      }
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const question = await store.loadRecallQuestion(
+    { id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' },
+    { subject: 'Computer Science' },
+  );
+  assert.equal(question.prompt, 'What is binary 1010 in denary?');
+  assert.equal(question.topic, 'Number systems');
+  assert.equal(question.spec, 'number-systems-base2-base10-base16');
+  assert.match(recallSql, /number-systems-base2-base10-base16/);
+});
+
 test('MySQL game question analytics includes class students with zero attempts', async () => {
   const pool = {
     async execute(sql, params = []) {

@@ -52,10 +52,15 @@ test('mastery summary reports accuracy, due work, and durable successes',()=>{
   assert.equal(summary.seen,1);assert.equal(summary.mastered,1);assert.equal(summary.due,1);assert.equal(summary.accuracy,.8);
 });
 
-test('built-in recall bank no longer ships Computer Science questions',()=>{
+test('built-in Computer Science recall bank is number systems only',()=>{
   const questions=RECALL.QUESTIONS.filter(q=>q.subject==='Computer Science');
-  assert.equal(questions.length,0);
-  assert.equal(RECALL.SUBJECTS.includes('Computer Science'),false);
+  assert.ok(questions.length>=20);
+  assert.equal(RECALL.SUBJECTS.includes('Computer Science'),true);
+  assert.ok(questions.every(q=>q.topic==='Number systems'));
+  assert.ok(questions.every(q=>q.spec==='number-systems-base2-base10-base16'));
+  assert.ok(questions.some(q=>/binary/i.test(q.prompt)));
+  assert.ok(questions.some(q=>/denary/i.test(q.prompt)));
+  assert.ok(questions.some(q=>/hexadecimal/i.test(q.prompt)));
   assert.deepEqual(RECALL.validateQuestionBank(RECALL.QUESTIONS),[]);
 });
 

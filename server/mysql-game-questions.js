@@ -2297,12 +2297,15 @@ class MySqlGameQuestionStore {
     await this.ensureSchema();
     const subject = await this.findPlayableRecallSubject(account, input);
     if (!subject || !subject.subjectId) return null;
+    const numberSystemsOnly = /^(computer\s*science|cs|computer_science)$/i.test(cleanText(input.subject || subject.subjectName || subject.subjectCode, 96));
+    const extraWhere = numberSystemsOnly ? " AND (spec = 'number-systems-base2-base10-base16' OR LOWER(topic) IN ('number systems','binary denary hex','binary, denary and hex'))" : '';
     const [rows] = await this.getPool().execute(
       `SELECT id, prompt, answers, correct_index, explanation, topic, stage, difficulty, spec
        FROM game_question
        WHERE subject_id = ? AND is_active = 1
          AND COALESCE(use_recall, 1) = 1
          AND review_status IN ('approved', 'teacher-reviewed')
+         ${extraWhere}
        ORDER BY RAND()
        LIMIT 25`,
       [subject.subjectId],
@@ -2334,23 +2337,26 @@ class MySqlGameQuestionStore {
     await this.ensureSchema();
     const schoolId = clampInt(account && account.schoolId, 0, 2147483647);
     const requestedSubject = cleanText(input.subject, 96);
+    const requestedNumberSystemsOnly = /^(computer\s*science|cs|computer_science)$/i.test(requestedSubject);
     const requested = requestedSubject ? await this.resolvePlaySubject(account, input).catch(() => null) : null;
-    const hasRecall = async subjectId => {
+    const hasRecall = async (subjectId, numberSystemsOnly = false) => {
       if (!subjectId) return false;
       const [rows] = await this.getPool().execute(
         `SELECT COUNT(*) AS n
          FROM game_question
          WHERE subject_id = ? AND is_active = 1
            AND COALESCE(use_recall, 1) = 1
-           AND review_status IN ('approved', 'teacher-reviewed')`,
+           AND review_status IN ('approved', 'teacher-reviewed')
+           ${numberSystemsOnly ? "AND (spec = 'number-systems-base2-base10-base16' OR LOWER(topic) IN ('number systems','binary denary hex','binary, denary and hex'))" : ''}`,
         [subjectId],
       );
       return (Number(rows && rows[0] && rows[0].n) || 0) > 0;
     };
-    if (requested && await hasRecall(requested.subjectId)) return requested;
+    if (requested && await hasRecall(requested.subjectId, requestedNumberSystemsOnly)) return requested;
     const fallbackSubject = cleanText(input.fallbackSubject, 96) || 'Computer Science';
+    const fallbackNumberSystemsOnly = /^(computer\s*science|cs|computer_science)$/i.test(fallbackSubject);
     const fallback = fallbackSubject ? await this.resolvePlaySubject(account, { subject: fallbackSubject }).catch(() => null) : null;
-    if (fallback && await hasRecall(fallback.subjectId)) return fallback;
+    if (fallback && await hasRecall(fallback.subjectId, fallbackNumberSystemsOnly)) return fallback;
     const [rows] = await this.getPool().execute(
       `SELECT s.id, s.name, s.code, s.school_id, COUNT(q.id) AS n
        FROM subjects s
