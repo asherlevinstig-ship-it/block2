@@ -1035,14 +1035,14 @@ class MySqlGameQuestionStore {
       ));
     }
     rows = this.uniqueSubjectRows(rows);
-    if (!rows.length) rows = this.uniqueSubjectRows(await this.safeQuery(
+    rows = this.uniqueSubjectRows(rows.concat(await this.safeQuery(
       `SELECT DISTINCT s.id, s.name, s.code, s.school_id
        FROM subjects s
        WHERE s.is_active = 1
          AND (s.school_id IS NULL OR ? = 0 OR s.school_id = ?)
        ORDER BY s.name ASC`,
       [schoolId, schoolId],
-    ));
+    )));
     return (rows || []).map(row => ({
       id: Number(row.id) || 0,
       name: String(row.name || ''),
@@ -1463,6 +1463,7 @@ class MySqlGameQuestionStore {
       ['SELECT class_id FROM students WHERE id = ? LIMIT 1', [id]],
       ['SELECT class_id FROM student_classes WHERE student_id = ?', [id]],
       ['SELECT class_id FROM class_students WHERE student_id = ?', [id]],
+      ['SELECT class_id FROM liveweave_escape_class_guests WHERE student_id = ? AND COALESCE(active, 1) = 1', [id]],
     ];
     for (const [sql, params] of queries) {
       try {
