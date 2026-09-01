@@ -825,6 +825,7 @@ function ensureTabletControls(){
       '<button data-mobile-menu-action="stats">Stats</button>'+
       '<button data-mobile-menu-action="quests">Quests</button>'+
       '<button data-mobile-menu-action="questions">Questions</button>'+
+      '<button data-mobile-menu-action="subject">Subject</button>'+
       '<button data-mobile-menu-action="utilities">Utilities</button>'+
       '<button data-mobile-menu-action="social">Social</button>'+
       '<button data-mobile-menu-action="stuck">I’m Stuck</button>'+
@@ -917,6 +918,7 @@ function ensureTabletControls(){
     else if(action==='stats')dispatchVirtualKey('KeyC');
     else if(action==='quests')dispatchVirtualKey('KeyO');
     else if(action==='questions')dispatchVirtualKey('KeyP');
+    else if(action==='subject'){ if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open(); }
     else if(action==='utilities'){ if(typeof openUtilitiesUI==='function')openUtilitiesUI(); else dispatchVirtualKey('KeyI'); }
     else if(action==='social')openSocialFromHud();
     else if(action==='free')dispatchVirtualKey('Escape');
