@@ -1401,7 +1401,7 @@ ONBOARDING_STEPS.splice(11,0,{
   pillar:'Lesson 12 / 14 - Subject Focus',
   key:'CLICK A SUBJECT',
   text:'Choose your Recall subject in the panel that opens.',
-  sub:'The panel opens for you here (or press Left Alt). Recall Cast and death limbo questions use this subject. Pick IT, RE, English, or another loaded subject.',
+  sub:'The panel opens for you here (or press Left Alt / Page Up). Recall Cast and death limbo questions use this subject. Pick IT, RE, English, or another loaded subject.',
   done:()=>onboardingArrived&&onboardingFlags.subject
 });
 
@@ -5910,7 +5910,7 @@ addEventListener('keydown', e=>{
     }
   }
   if(!e.repeat&&['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)&&!gameplayMovementAllowed())gameplayInputDebug('keydown:'+e.code);
-  if(e.code==='AltLeft'&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!globalThis.BlockcraftRecall.active){
+  if((e.code==='AltLeft'||e.code==='PageUp')&&!e.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&!claimMode&&!globalThis.BlockcraftRecall.active){
     e.preventDefault();
     if(globalThis.BlockcraftSubjectFocus)globalThis.BlockcraftSubjectFocus.open();
     return;
@@ -6738,7 +6738,7 @@ function nearbyInteractionPrompt(){
   if(nearFishingLakeExit())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
   if(nearTrainingMeadowTownPortal())push({key:'G',title:'Town Portal',small:'Enter the Town of Beginnings',priority:119},0);
   if(nearQuestionHallTownPortal())push({key:'G',title:'Return Portal',small:'Travel back to Town of Beginnings',priority:119},0);
-  if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer questions · ALT changes subject',priority:118},0);
+  if(dim==='questions')push({key:'P',title:'Question Hall',small:'Answer questions · ALT / PgUp changes subject',priority:118},0);
   if(nearSkyshipGangway())push({key:'G',title:'Westwind Skyship',small:skyshipJourney&&skyshipJourney.boarded?'Leave before departure':'Board for the western journey',priority:115},0);
   if(isMeditating||inMeditationSpot())push({key:'G',title:'Meditation Hall',small:isMeditating?'Stop meditating':(meditationUnlocked()?'Begin focus meditation':'Unlocks at '+hunterRankLevelLabel(MEDITATION_UNLOCK_LEVEL)),priority:112},0);
   const socialTarget=typeof townSocialTargetNear==='function'?townSocialTargetNear(4.8):null;
