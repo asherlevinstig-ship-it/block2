@@ -1277,7 +1277,7 @@ const pathPanelEl=document.getElementById('pathpanel');
 const arrivalChoiceEl=document.getElementById('arrivalchoice');
 const awakeningWin=document.getElementById('awakeningwin');
 const awakeningPanel=document.getElementById('awakeningpanel');
-let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[];
+let onboardingActive=false,onboardingStep=0,onboardingNextAt=0,onboardingStartPos=null,onboardingArrived=false,onboardingRoute=[],onboardingSubjectPromptAt=0;
 const TUTORIAL_VERSIONS={onboarding:7,ability:2,intro:1,gate:1,townJob:1,townTavern:1,townLand:1,familiar:1};
 let serverTutorials={onboarding:0,ability:0,intro:0,gate:0,townJob:0,townTavern:0,townLand:0,familiar:0};
 function applyServerTutorials(raw){
@@ -1399,9 +1399,9 @@ for(const step of ONBOARDING_STEPS){
 ONBOARDING_STEPS.splice(11,0,{
   kind:'subject',
   pillar:'Lesson 12 / 14 - Subject Focus',
-  key:'LEFT ALT',
-  text:'Press Left Alt and choose your Recall subject.',
-  sub:'Recall Cast and death limbo questions use this subject. Pick IT, RE, English, or another loaded subject.',
+  key:'CLICK A SUBJECT',
+  text:'Choose your Recall subject in the panel that opens.',
+  sub:'The panel opens for you here (or press Left Alt). Recall Cast and death limbo questions use this subject. Pick IT, RE, English, or another loaded subject.',
   done:()=>onboardingArrived&&onboardingFlags.subject
 });
 
@@ -5076,6 +5076,16 @@ function tickOnboarding(now){
     if(countItem(I.BREAD)+countHeldCursorItem(I.BREAD)<=0) ensureOnboardingItem(I.BREAD,1);
     selectItemForOnboarding(I.BREAD);
     makeOnboardingPlayerHungry();
+  }
+  // Subject Focus: open the picker for the player instead of relying on Left Alt,
+  // which many school devices (Chromebooks) don't expose. Choosing a subject is a
+  // click, so it works everywhere; keep it available until they pick one.
+  if(onboardingKind()==='subject'&&onboardingArrived&&!onboardingFlags.subject){
+    const pickerOpen=typeof qModalIs==='function'&&qModalIs('subject-focus');
+    if(!pickerOpen&&now-onboardingSubjectPromptAt>1200&&globalThis.BlockcraftSubjectFocus){
+      onboardingSubjectPromptAt=now;
+      globalThis.BlockcraftSubjectFocus.open();
+    }
   }
   const target=onboardingRoute[onboardingStep];
   const wasArrived=onboardingArrived;
