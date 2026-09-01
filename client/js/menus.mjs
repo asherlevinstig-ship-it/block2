@@ -2893,7 +2893,9 @@ function renderSubjectFocusUI(loading=false){
   const grid=document.createElement('div');grid.className='subject-grid';const current=selectedRecallSubject(),options=recallSubjectOptions();
   if(loading&&!subjectNames(schoolRecallSubjects).length){const note=document.createElement('p');note.className='qtext';note.textContent='Loading your assigned school subjects...';qpanelEl.appendChild(note);}
   for(const subject of options){const button=qBtn(subject,()=>{try{localStorage.setItem('bc_recall_subject',subject);}catch{}if(globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markSubjectFocus();if(NET.on&&NET.room)NET.room.send('recallSubject',{subject});sysMsg('Recall subject set to <b>'+escHTML(subject)+'</b>.');closeQWin();});button.classList.toggle('selected',subject===current);button.innerHTML='<b>'+escHTML(subject)+'</b><span>'+(subject===current?'CURRENT FOCUS':'SELECT SUBJECT')+'</span>';grid.appendChild(button);}
-  qpanelEl.appendChild(grid);const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
+  qpanelEl.appendChild(grid);
+  const hint=document.createElement('p');hint.className='qtext subject-reopen-hint';hint.innerHTML='Change this anytime: press <b>Left Alt</b> or <b>Page Up</b>, or tap <b>Subject</b> in the on-screen menu.';qpanelEl.appendChild(hint);
+  const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
 }
 function openSubjectFocusUI(){
   if(uiOpen)closeUI(false);openQWin('subject-focus');
