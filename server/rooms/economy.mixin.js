@@ -427,7 +427,7 @@ class EconomyMixin {
     }
     return left;
   }
-  handleCraftLegendary(client, m) {
+  async handleCraftLegendary(client, m) {
     const rec = this.profileFor(client);
     const id = m && (m.id | 0);
     const craft = LEGENDARY_CRAFTS[id];
@@ -448,6 +448,10 @@ class EconomyMixin {
     else this.addRewardItem(rec.prof, id, 1);
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
+    // Crafting changes the authoritative inventory, so make it durable before
+    // acknowledging success. A player may refresh into another room/process
+    // immediately after this message and must not reload the pre-craft profile.
+    await this.savePlayerProfileNow(rec.token, rec.prof);
     client.send('craftLegendaryResult', { id, count: 1, cost: craft.cost, name: craft.name });
   }
   consumeItem(prof, id, count) {
@@ -556,7 +560,7 @@ class EconomyMixin {
     for (const id of cells) if (id) needs[id] = (needs[id] || 0) + 1;
     return needs;
   }
-  handleCraft(client, m) {
+  async handleCraft(client, m) {
     const rec = this.profileFor(client);
     if (!rec || !m) return;
     if (this.rateLimited(client, 'craft', 8, 16)) return client.send('craftReject', {});
@@ -590,6 +594,9 @@ class EconomyMixin {
     if ((outId | 0) === W.B.TABLE || (outId | 0) === W.B.FURNACE) this.advanceProgressionDirector(client, 'crafted_station', { profile: false });
     const msg = { out: { id: outId, count: outCount }, times, inv: rec.prof.inv };
     if (finalCount !== outCount * times) msg.finalCount = finalCount;
+    // Do not expose the crafted result until both the consumed ingredients and
+    // output item are persisted. This closes the fast-refresh loss window.
+    await this.savePlayerProfileNow(rec.token, rec.prof);
     client.send('craftResult', msg);
   }
   findCatalogEntry(list, id) {

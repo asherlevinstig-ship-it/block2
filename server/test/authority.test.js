@@ -2393,7 +2393,7 @@ test('Aegis trial claims emit the unified quest reward summary', () => {
   assert.equal(summary.msg.claimLocation, 'Aegis Guardian');
 });
 
-test('progression director introduces Road Ready, first E-rank Gate, then base and contract systems', () => {
+test('progression director introduces Road Ready, first E-rank Gate, then base and contract systems', async () => {
   const room = makeRoom(), client = makeClient('director_owner');
   const { prof } = seedPlayer(room, client, {
     token: 'director_token_123',
@@ -2443,7 +2443,7 @@ test('progression director introduces Road Ready, first E-rank Gate, then base a
   assert.equal(prof.utilityUnlocks.includes('feather_step'), true, 'first E-rank clear grants mobility safety before base building');
   assert.equal(client.sent.some(e => e.type === 'utilityUnlock' && e.msg.id === 'feather_step' && e.msg.reason === 'First E-rank Gate cleared'), true);
 
-  room.handleCraft(client, { w: 2, cells: [W.B.PLANKS, W.B.PLANKS, W.B.PLANKS, W.B.PLANKS] });
+  await room.handleCraft(client, { w: 2, cells: [W.B.PLANKS, W.B.PLANKS, W.B.PLANKS, W.B.PLANKS] });
   assert.equal(prof.progressionFocus, 'first_land_claim');
   assert.equal(client.sent.some(e => e.type === 'progressionFocus' && e.msg.progressionFocus === 'first_land_claim'), true);
   assert.equal(prof.progressionMilestoneRewards.includes('craft_station'), true);
@@ -4332,12 +4332,12 @@ test('chest persistence sanitizes metadata and old slot-array saves', () => {
   assert.equal(saved['bad:key'], undefined);
 });
 
-test('crafting consumes persisted ingredients and grants the server recipe result', () => {
+test('crafting consumes persisted ingredients and grants the server recipe result', async () => {
   const room = makeRoom();
   const client = makeClient('p1');
   const { prof } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 2 }] });
 
-  room.handleCraft(client, { w: 2, cells: [{ id: W.B.LOG, count: 2 }, 0, 0, 0], shift: true });
+  await room.handleCraft(client, { w: 2, cells: [{ id: W.B.LOG, count: 2 }, 0, 0, 0], shift: true });
 
   assert.equal(itemCount(prof, W.B.LOG), 0);
   assert.equal(itemCount(prof, W.B.PLANKS), 8);
@@ -4346,6 +4346,33 @@ test('crafting consumes persisted ingredients and grants the server recipe resul
   assert.equal(client.sent.at(-1).msg.times, 2);
   assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
   assert.equal(room.dirtyPlayers.has(room.tokens.get(client.sessionId)), true);
+});
+
+test('crafting is saved durably before its success result can be followed by a refresh', async () => {
+  const room = makeRoom();
+  const client = makeClient('durable-crafter');
+  const { token } = seedPlayer(room, client, { inv: [{ id: W.B.LOG, count: 1 }] });
+  room.clients = [client];
+  let finishSave;
+  let saved = null;
+  room.store = {
+    savePlayer(savedToken, profile) {
+      saved = { token: savedToken, profile: JSON.parse(JSON.stringify(profile)) };
+      return new Promise(resolve => { finishSave = resolve; });
+    },
+  };
+
+  const crafting = room.handleCraft(client, { w: 2, cells: [{ id: W.B.LOG, count: 1 }, 0, 0, 0] });
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(saved.token, token);
+  assert.equal(itemCount(saved.profile, W.B.LOG), 0);
+  assert.equal(itemCount(saved.profile, W.B.PLANKS), 4);
+  assert.equal(client.sent.some(entry => entry.type === 'craftResult'), false, 'client cannot refresh after success while the durable save is pending');
+
+  finishSave();
+  await crafting;
+  assert.equal(client.sent.at(-1).type, 'craftResult');
 });
 
 test('DungeonRoom registers normal crafting and inventory arrangement', () => {
@@ -4358,7 +4385,7 @@ test('DungeonRoom registers normal crafting and inventory arrangement', () => {
   assert.equal(registered.has('invArrange'), true);
 });
 
-test('server crafting accepts familiar binding recipes advertised by the client', () => {
+test('server crafting accepts familiar binding recipes advertised by the client', async () => {
   const cases = [
     {
       name: 'shade',
@@ -4391,7 +4418,7 @@ test('server crafting accepts familiar binding recipes advertised by the client'
     const client = makeClient('crafter_' + spec.name);
     const { prof } = seedPlayer(room, client, { inv: spec.inv });
 
-    room.handleCraft(client, { w: 2, cells: spec.cells });
+    await room.handleCraft(client, { w: 2, cells: spec.cells });
 
     assert.equal(itemCount(prof, spec.out), 1, spec.name + ' binding item should be crafted');
     assert.equal(client.sent.at(-1).type, 'craftResult');
@@ -4401,35 +4428,35 @@ test('server crafting accepts familiar binding recipes advertised by the client'
   }
 });
 
-test('guardian legendary crafting consumes tokens and grants one selected item', () => {
+test('guardian legendary crafting consumes tokens and grants one selected item', async () => {
   const room = makeRoom();
   const client = makeClient('legendcrafter');
   const { prof } = seedPlayer(room, client, { x: GUARDIAN_POS.x, z: GUARDIAN_POS.z, inv: [{ id: I.LEGEND_TOKEN, count: 3 }] });
 
-  room.handleCraftLegendary(client, { id: I.CHRONO_DAGGER });
+  await room.handleCraftLegendary(client, { id: I.CHRONO_DAGGER });
 
   assert.equal(itemCount(prof, I.LEGEND_TOKEN), 1);
   assert.equal(itemCount(prof, I.CHRONO_DAGGER), 1);
   assert.deepEqual(client.sent.at(-1), { type: 'craftLegendaryResult', msg: { id: I.CHRONO_DAGGER, count: 1, cost: 2, name: 'Chrono Dagger' } });
 
   client.sent.length = 0;
-  room.handleCraftLegendary(client, { id: I.TITAN_HAMMER });
+  await room.handleCraftLegendary(client, { id: I.TITAN_HAMMER });
   assert.equal(itemCount(prof, I.LEGEND_TOKEN), 1);
   assert.equal(itemCount(prof, I.TITAN_HAMMER), 0);
   assert.deepEqual(client.sent.at(-1), { type: 'craftLegendaryReject', msg: { reason: 'tokens', id: I.TITAN_HAMMER, cost: 3 } });
 
   client.sent.length = 0;
   room.state.players.get(client.sessionId).x = 20;
-  room.handleCraftLegendary(client, { id: I.LEGEND_SWORD });
+  await room.handleCraftLegendary(client, { id: I.LEGEND_SWORD });
   assert.deepEqual(client.sent.at(-1), { type: 'craftLegendaryReject', msg: { reason: 'range' } });
 });
 
-test('normal armor crafts from ingots and diamonds', () => {
+test('normal armor crafts from ingots and diamonds', async () => {
   const room = makeRoom();
   const client = makeClient('armorer');
   const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 8 }, { id: I.DIAMOND, count: 8 }] });
 
-  room.handleCraft(client, { w: 3, cells: [
+  await room.handleCraft(client, { w: 3, cells: [
     { id: I.IRON_INGOT, count: 1 }, 0, { id: I.IRON_INGOT, count: 1 },
     { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
     { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
@@ -4441,7 +4468,7 @@ test('normal armor crafts from ingots and diamonds', () => {
   assert.equal(client.sent.at(-1).msg.times, 1);
   assert.deepEqual(client.sent.at(-1).msg.inv, prof.inv);
 
-  room.handleCraft(client, { w: 3, cells: [
+  await room.handleCraft(client, { w: 3, cells: [
     { id: I.DIAMOND, count: 1 }, 0, { id: I.DIAMOND, count: 1 },
     { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 },
     { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.DIAMOND, count: 1 },
@@ -4450,11 +4477,11 @@ test('normal armor crafts from ingots and diamonds', () => {
   assert.equal(itemCount(prof, I.DIA_ARMOR), 1);
 });
 
-test('expanded armor bases craft from monster hides chain and stormglass', () => {
+test('expanded armor bases craft from monster hides chain and stormglass', async () => {
   {
     const room = makeRoom(), client = makeClient('hide_armorer');
     const { prof } = seedPlayer(room, client, { inv: [{ id: I.MONSTER_MEAT, count: 8 }] });
-    room.handleCraft(client, { w: 3, cells: [
+    await room.handleCraft(client, { w: 3, cells: [
       { id: I.MONSTER_MEAT, count: 1 }, 0, { id: I.MONSTER_MEAT, count: 1 },
       { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 },
       { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 }, { id: I.MONSTER_MEAT, count: 1 },
@@ -4464,7 +4491,7 @@ test('expanded armor bases craft from monster hides chain and stormglass', () =>
   {
     const room = makeRoom(), client = makeClient('chain_armorer');
     const { prof } = seedPlayer(room, client, { inv: [{ id: I.IRON_INGOT, count: 7 }, { id: I.COAL, count: 1 }] });
-    room.handleCraft(client, { w: 3, cells: [
+    await room.handleCraft(client, { w: 3, cells: [
       { id: I.IRON_INGOT, count: 1 }, 0, { id: I.IRON_INGOT, count: 1 },
       { id: I.IRON_INGOT, count: 1 }, { id: I.COAL, count: 1 }, { id: I.IRON_INGOT, count: 1 },
       { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 }, { id: I.IRON_INGOT, count: 1 },
@@ -4474,7 +4501,7 @@ test('expanded armor bases craft from monster hides chain and stormglass', () =>
   {
     const room = makeRoom(), client = makeClient('stormglass_armorer');
     const { prof } = seedPlayer(room, client, { inv: [{ id: I.STORMGLASS, count: 7 }, { id: I.DIAMOND, count: 1 }] });
-    room.handleCraft(client, { w: 3, cells: [
+    await room.handleCraft(client, { w: 3, cells: [
       { id: I.STORMGLASS, count: 1 }, 0, { id: I.STORMGLASS, count: 1 },
       { id: I.STORMGLASS, count: 1 }, { id: I.DIAMOND, count: 1 }, { id: I.STORMGLASS, count: 1 },
       { id: I.STORMGLASS, count: 1 }, { id: I.STORMGLASS, count: 1 }, { id: I.STORMGLASS, count: 1 },
@@ -7106,7 +7133,7 @@ test('chest batch deposit materials skips gear keys and rare progression items',
   assert.equal(owner.sent.some(e => e.type === 'chestBatchResult' && e.msg.mode === 'materials' && e.msg.count === 19), true);
 });
 
-test('crafting a legendary with a full bag is rejected without spending tokens', () => {
+test('crafting a legendary with a full bag is rejected without spending tokens', async () => {
   const room = makeRoom();
   const client = makeClient('crafter');
   const inv = Array.from({ length: 35 }, (_, i) => ({ id: 800 + i, count: 64 }));
@@ -7114,7 +7141,7 @@ test('crafting a legendary with a full bag is rejected without spending tokens',
   const { prof } = seedPlayer(room, client, { x: GUARDIAN_POS.x, z: GUARDIAN_POS.z, inv });
   room.clients = [client];
 
-  room.handleCraftLegendary(client, { id: I.LEGEND_SWORD });
+  await room.handleCraftLegendary(client, { id: I.LEGEND_SWORD });
 
   assert.equal(client.sent.at(-1).type, 'craftLegendaryReject');
   assert.equal(client.sent.at(-1).msg.reason, 'full');
@@ -8049,11 +8076,11 @@ test('farming tills plants grows and harvests through server transactions', () =
   assert.equal(client.sent.some(e => e.type === 'grant' && e.msg.source === 'farm'), true);
 });
 
-test('Cook recipes are profession-level gated and batch through the authoritative craft transaction', () => {
+test('Cook recipes are profession-level gated and batch through the authoritative craft transaction', async () => {
   const room = makeRoom(), client = makeClient('cook-craft');
   const { prof } = seedPlayer(room, client, { inv: [{ id: I.WHEAT, count: 2 }, { id: I.BREAD, count: 2 }, { id: I.COOKED_MEAT, count: 2 }] });
   const cells = [{ id: I.WHEAT, count: 1 }, { id: I.BREAD, count: 1 }, { id: I.COOKED_MEAT, count: 1 }, null];
-  room.handleCraft(client, { w: 2, cells });
+  await room.handleCraft(client, { w: 2, cells });
   assert.equal(client.sent.at(-1).type, 'craftReject');
   assert.equal(client.sent.at(-1).msg.reason, 'profession');
   assert.equal(itemCount(prof, I.WHEAT), 2, 'a rejected recipe consumes nothing');
@@ -8061,7 +8088,7 @@ test('Cook recipes are profession-level gated and batch through the authoritativ
   prof.job = 'cook';
   prof.jobXpByJob.cook = [1, 2, 3, 4].reduce((xp, level) => xp + JOB_SYSTEM.jobXpNeed(level), 0);
   const oldRandom = Math.random; Math.random = () => 1;
-  try { room.handleCraft(client, { w: 2, cells }); } finally { Math.random = oldRandom; }
+  try { await room.handleCraft(client, { w: 2, cells }); } finally { Math.random = oldRandom; }
   assert.equal(itemCount(prof, I.GOLDEN_BROTH), 1);
   assert.equal(itemCount(prof, I.WHEAT), 1);
   assert.equal(client.sent.at(-1).type, 'craftResult');
@@ -8133,7 +8160,7 @@ test('Zen Master meditation shares focus only with nearby party members', () => 
   assert.equal(room.monkAuraAt.get(monk.sessionId) > 0, true);
 });
 
-test('Meditation Hall completions unlock at level four and grow rank-capped mana', () => {
+test('Meditation Hall completions unlock at level four and grow rank-capped mana', async () => {
   const room = makeRoom(), novice = makeClient('med-novice'), adept = makeClient('med-adept');
   room.clients = [novice, adept];
   const sx = W.HUB.meditate.x, sz = W.HUB.meditate.z;
@@ -8142,7 +8169,7 @@ test('Meditation Hall completions unlock at level four and grow rank-capped mana
   prof.meditationGrowth = { completed: 2, next: 3, hp: 0, mp: 0, sp: 0, hunger: 0 };
   room.handleMeditationComplete(novice, { seconds: 8 });
   assert.equal(novice.sent.at(-1).msg.reason, 'level');
-  room.handleMeditationChallenge(adept);
+  await room.handleMeditationChallenge(adept);
   const challenge = room.meditationChallenges.get(adept.sessionId);
   if (challenge.type === 'sort') room.handleMeditationAnswer(adept, { id: challenge.id, order: challenge.answer.split('|') });
   else room.handleMeditationAnswer(adept, { id: challenge.id, answer: challenge.answer[0] });
