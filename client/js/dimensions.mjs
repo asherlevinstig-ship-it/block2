@@ -2352,7 +2352,8 @@ function enterQuestionRoom(){
   NET.dgn=localTutorialSpaceId('questions');
   world.id=NET.dgn;
   rebuildAllChunks();refreshTorchMeshes();applyDim();ensureQuestionHallTownPortal();
-  player.pos.set(QUESTION_ROOM.x+.5,QUESTION_ROOM.G+2,QUESTION_ROOM.z+10.5);
+  // Start well inside the hall, clear of the return portal's automatic trigger.
+  player.pos.set(QUESTION_ROOM.x+.5,QUESTION_ROOM.G+2,QUESTION_ROOM.z+3.5);
   player.vel.set(0,0,0);
   player.yaw=Math.PI;
   player.pitch=0;

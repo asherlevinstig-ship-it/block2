@@ -3692,6 +3692,7 @@ test('Asher can choose the Question Hall or the full game before entering', () =
   assert.match(combat, /CHOOSE HOW YOU WANT TO ENTER BLOCKCRAFT/);
   assert.match(networking, /BlockcraftRequestedStartMode==='questions'/);
   assert.match(networking, /dimensionsApi\.enterQuestionRoom\(\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /player\.pos\.set\(QUESTION_ROOM\.x\+\.5,QUESTION_ROOM\.G\+2,QUESTION_ROOM\.z\+3\.5\)/);
 });
 
 test('rendering runtime owns renderer initialization resize and draw', async () => {

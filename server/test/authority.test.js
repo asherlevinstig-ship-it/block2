@@ -9085,7 +9085,8 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   const qp = questionRoom.state.players.get(scholar.sessionId);
   assert.equal(qp.dim, 'tutorial');
   assert.match(qp.dgn, /^tutorial-questions-/);
-  assert.deepEqual([qp.x, qp.y, qp.z], [930.5, 20, 865.5]);
+  assert.deepEqual([qp.x, qp.y, qp.z], [930.5, 20, 858.5]);
+  assert.ok(Math.hypot(qp.x-930.5,qp.z-867.5)>2.35,'Question Hall spawn is outside the automatic town-portal trigger');
   assert.equal(questionRoom.spaceSolid(qp.dgn)(qp.x,qp.y,qp.z), false, 'Question Hall never collides against the overworld map');
   assert.equal(scholar.sent.some(e=>e.type==='tutorialDimension'&&e.msg.active&&e.msg.kind==='questions'),true);
   assert.equal(questionRoom.leaveTutorialDimension(scholar),true);
