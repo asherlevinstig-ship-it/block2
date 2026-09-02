@@ -1443,15 +1443,6 @@ function e2eCurrentObjectiveAction(){
   const action=currentObjectiveAction();
   return action ? {type:action.type||'',label:action.label||'',outputId:action.outputId||0,kind:action.kind||''} : null;
 }
-const objectiveTrackerExpanded=new Set();
-function objectiveTrackerKey(line,index=0){
-  const server=line&&line.serverObjective;
-  return String(server&&server.id||'')||[line&&line.kind||'objective',line&&line.label||'',line&&line.title||'',index].join(':');
-}
-function trackerExpandButton(line,index){
-  const key=objectiveTrackerKey(line,index),open=objectiveTrackerExpanded.has(key);
-  return '<button type="button" class="oexpand" data-objective-toggle="'+escHTML(key)+'" aria-expanded="'+(open?'true':'false')+'">'+(open?'−':'+')+'</button>';
-}
 function trackerGuideButton(line,index){
   if(!line)return '';
   const server=line.serverObjective||null;
@@ -1467,19 +1458,16 @@ function trackerGuideButton(line,index){
 function objectiveHudHTML(obj){
   if(!obj) return '';
   const checklistHTML=line=>Array.isArray(line&&line.checklist)?'<div class="prepchecklist">'+line.checklist.map(c=>'<div class="'+(c.done?'done':'todo')+'"><b>'+(c.done?'&#10003;':'&#9675;')+'</b><span>'+escHTML(c.label||'Check')+'</span></div>').join('')+'</div>':'';
-  const activeQuestCard=(line,others=0)=>{
+  const activeQuestCard=line=>{
     const progress=line&&line.progress?line.progress:null;
     const progressBar=progress?'<div class="activequest-progress"><b>'+progress.current+' / '+progress.required+' '+escHTML(progress.label||'')+'</b><i><em style="width:'+progress.pct+'%"></em></i></div>':'';
     const objective=line&&line.text?line.text:'Continue the active objective.';
     return '<div class="activequest-card '+escHTML(line&&line.kind||'objective')+'">'+
-      '<div class="activequest-head"><span>Active Quest</span><i>✦</i></div>'+
+      '<div class="activequest-head"><span>Active Quest</span><button type="button" class="activequest-open" data-objective-action="questlog" title="View all quests (O)" aria-label="View all quests">✦<b>O</b></button></div>'+
       '<h3>'+escHTML(line&&line.title||line&&line.label||'Current Quest')+'</h3>'+
       '<p>'+escHTML(objective)+'</p>'+
       progressBar+
-      '<div class="activequest-current"><b>Current Objective</b><span>'+escHTML(objective)+'</span></div>'+
-      '<div class="activequest-actions">'+trackerGuideButton(line,0)+trackerActionButton({type:'questlog',label:'OPEN QUEST (O)'})+'</div>'+
-      '</div>'+
-      '<button type="button" class="otherquests-row" data-objective-toggle="__other_quests" aria-expanded="false"><span>Other Quests</span><b>'+Math.max(0,others)+'</b><i>⌄</i></button>';
+      '</div>';
   };
   if(obj.nextBest&&obj.line){
     const line=obj.line;
@@ -1496,23 +1484,7 @@ function objectiveHudHTML(obj){
   }
   if(obj.unified&&Array.isArray(obj.lines)){
     const primary=obj.lines[0];
-    if(primary){
-      const otherCount=Math.max(0,obj.lines.length-1);
-      if(!objectiveTrackerExpanded.has('__other_quests')) return activeQuestCard(primary,otherCount);
-    }
-    const rows=obj.lines.map((line,index)=>{
-      const key=objectiveTrackerKey(line,index),expanded=objectiveTrackerExpanded.has(key);
-      const progress=line.progress?'<i style="width:'+line.progress.pct+'%"></i>':'';
-      const progressText=line.progress?'<em>'+line.progress.current+'/'+line.progress.required+'</em>':'';
-      const chapter=line.chapter?'<div class="chapter-kicker">'+escHTML(line.chapter.title||'Chapter')+(line.chapter.step?'<span>'+Math.max(1,line.chapter.step|0)+'/'+Math.max(1,line.chapter.total|0)+'</span>':'')+'</div>':'';
-      return '<div class="objective-line '+escHTML(line.kind||'objective')+(expanded?' expanded':' collapsed')+'" data-objective-row="'+escHTML(key)+'">'+
-        '<div class="olabel">'+escHTML(line.label||'Objective')+'</div>'+
-        '<div class="obody">'+chapter+'<b>'+escHTML(line.title||'Objective')+'</b><span>'+escHTML(line.text||'')+'</span>'+checklistHTML(line)+(line.progress?'<div class="obar">'+progress+'</div>':'')+'</div>'+
-        '<div class="oact">'+progressText+trackerGuideButton(line,index)+trackerExpandButton(line,index)+trackerActionButton(line.action)+'</div>'+
-      '</div>';
-    }).join('');
-    return '<div class="qt">Objective Tracker</div><div class="objective-list">'+rows+'</div>'+
-      '<button type="button" class="otherquests-row minimize" data-objective-toggle="__other_quests" aria-expanded="true"><span>Minimise Quests</span><b>−</b><i>⌃</i></button>';
+    return primary?activeQuestCard(primary):'';
   }
   const action=currentObjectiveAction(obj);
   return ONBOARD.objectiveHudHTML(action?{...obj,actionHTML:trackerActionButton(action)}:obj);
@@ -1686,17 +1658,6 @@ if(currentQuestEl){
         menusApi.openQuestLog&&menusApi.openQuestLog();
         sysMsg('<b>Guide unavailable:</b> Quest Log opened for this objective.');
       }
-      return;
-    }
-    const toggle=e.target&&e.target.closest&&e.target.closest('[data-objective-toggle]');
-    if(toggle){
-      e.preventDefault();
-      e.stopPropagation();
-      const key=toggle.dataset.objectiveToggle||'';
-      if(objectiveTrackerExpanded.has(key))objectiveTrackerExpanded.delete(key);
-      else objectiveTrackerExpanded.add(key);
-      lastObjectiveHudHTML='';
-      refreshObjectiveTracker();
       return;
     }
     const btn=e.target&&e.target.closest&&e.target.closest('[data-objective-action]');

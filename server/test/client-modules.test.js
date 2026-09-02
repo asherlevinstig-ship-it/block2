@@ -2455,7 +2455,7 @@ test('objective tracker buttons open actions on pointerdown above the HUD layer'
   assert.match(styles,/#qwin\{position:fixed;inset:0;[\s\S]*z-index:32/);
 });
 
-test('objective tracker shows one collapsed row per available quest category with expand toggles',()=>{
+test('objective tracker shows only the active quest with an all-quests shortcut',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
@@ -2463,16 +2463,14 @@ test('objective tracker shows one collapsed row per available quest category wit
   assert.match(frame,/return lines\.filter\(line=>\{const key=line\.kind\+':'\+line\.title/);
   assert.match(frame,/\.slice\(0,6\)/);
   assert.match(frame,/if\(lines\.length\)return \{label:'Objective Tracker',text:'Active quest categories',unified:true,lines\};/);
-  assert.match(frame,/const objectiveTrackerExpanded=new Set\(\);/);
-  assert.match(frame,/function trackerGuideButton\(line,index\)/);
-  assert.match(frame,/data-objective-guide="1"/);
-  assert.match(frame,/GUIDE ME/);
-  assert.match(frame,/BlockcraftGuideObjective/);
-  assert.match(frame,/data-objective-toggle/);
-  assert.match(frame,/objective-line '\+escHTML\(line\.kind\|\|'objective'\)\+\(expanded\?' expanded':' collapsed'\)/);
-  assert.match(styles,/#currentquest \.objective-line\.collapsed \.obody span/);
-  assert.match(styles,/#currentquest \.oexpand/);
-  assert.match(styles,/#currentquest \.qaction\.guide/);
+  assert.match(frame,/const activeQuestCard=line=>\{/);
+  assert.match(frame,/class="activequest-open" data-objective-action="questlog" title="View all quests \(O\)"/);
+  assert.match(frame,/return primary\?activeQuestCard\(primary\):'';/);
+  assert.doesNotMatch(frame,/data-objective-toggle/);
+  assert.doesNotMatch(frame,/class="activequest-current"/);
+  assert.doesNotMatch(frame,/class="otherquests-row/);
+  assert.match(styles,/\.activequest-open\{position:relative;display:grid/);
+  assert.match(styles,/body\.mobile-play-mode #currentquest \.activequest-open\{display:grid!important/);
   assert.match(world,/BlockcraftGuideObjective/);
   assert.match(world,/function manualGuidanceTargetInfo\(\)/);
   assert.match(world,/action==='craft'\|\|loc\.includes\('crafting'\)\|\|loc\.includes\('craft station'\)\|\|title\.includes\('craft station'\)/);
