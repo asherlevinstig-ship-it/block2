@@ -6,7 +6,7 @@
 // server's KC_CONFIG is the source of truth.
 const ENTRY = { quick: 20, standard: 40, full: 60, timed: 40, endless: 25 };
 const PLANNED = { quick: 10, standard: 20, full: 30, timed: 20, endless: 0 };
-const FALLBACK_SUBJECT = 'English';
+const FALLBACK_SUBJECT = 'Computer Science';
 const REASON_LABEL = {
   weakness: 'Focus practice', retrieval: 'Review due', confusion: 'Common confusion',
   maintenance: 'Keep sharp', near_transfer: 'New context', remediation: 'Recovery question', fallback: 'Practice',
@@ -28,7 +28,7 @@ function room() { return (typeof NET !== 'undefined' && NET && NET.on && NET.roo
 function send(type, msg) { const r = room(); if (r) r.send(type, msg); }
 function say(html) { if (typeof sysMsg === 'function') sysMsg(html); }
 function sfx(name) { try { if (typeof SFX !== 'undefined' && SFX && typeof SFX[name] === 'function') SFX[name](); } catch (_) {} }
-function subject() { try { return localStorage.getItem('bc_recall_subject') || FALLBACK_SUBJECT; } catch (_) { return FALLBACK_SUBJECT; } }
+function subject() { return FALLBACK_SUBJECT; }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function displayText(s) {
   return String(s == null ? '' : s)

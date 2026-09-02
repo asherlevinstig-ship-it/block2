@@ -14,8 +14,8 @@ class RecallMixin{
     return !!(p&&p.dim==='dungeon'&&p.dgn&&!this.recallTutorialSpace(p));
   }
   handleRecallSubject(client,message={}){
-    const subject=this.cleanRecallSubject(message.subject);
-    if(!client||!subject)return;
+    const subject='Computer Science';
+    if(!client)return;
     this.recallSubjects.set(client.sessionId,subject);
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);if(rec){rec.prof.recallSubject=subject;this.dirtyPlayers.add(rec.token);client.send('recallMastery',{subject,...RECALL.masterySummary(rec.prof.recallMastery||{},subject)});}
   }
@@ -91,9 +91,7 @@ class RecallMixin{
       else return client.send('recallReject',{reason:'active'});
     }
     const rec=typeof this.profileFor==='function'&&this.profileFor(client);
-    const requested=this.cleanRecallSubject(message.subject);
-    const stored=this.cleanRecallSubject(this.recallSubjects.get(client.sessionId)||(rec&&rec.prof.recallSubject)||'');
-    const subject=requested||stored||'English';
+    const subject='Computer Science';
     this.recallSubjects.set(client.sessionId,subject);
     if(rec)rec.prof.recallSubject=subject;
     let ruinId='';
@@ -197,7 +195,7 @@ class RecallMixin{
     if(rec){
       const question=RECALL.QUESTIONS.find(q=>q.id===challenge.questionId)||{id:challenge.questionId,topic:challenge.topic};
       review=RECALL.reviewQuestion(rec.prof.recallMastery||{},question,correct,now);rec.prof.recallMastery=review.history;this.dirtyPlayers.add(rec.token);
-      mastery=RECALL.masterySummary(review.history,rec.prof.recallSubject||'English');
+      mastery=RECALL.masterySummary(review.history,'Computer Science');
     }
     this.recordRecallAnalytics(client,challenge,index,correct,now);
     if(correct){

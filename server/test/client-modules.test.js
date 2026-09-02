@@ -1750,7 +1750,7 @@ test('Question Hall opens Recall as a modal loop with progress and close',()=>{
   assert.match(combat,/applyMeditationCamera\(\)/);
   assert.match(combat,/const baseY=player&&player\.pos\?player\.pos\.y:TOWN\.G\+1/);
   assert.match(combat,/if\(dim==='questions'\)\{startQuestionHallMeditationPose\(\);releaseGameplayCursor\(\);\}/);
-  assert.match(combat,/key:'P',title:'Question Hall',small:'Answer questions · ALT changes subject'/);
+  assert.match(combat,/key:'P',title:'Question Hall',small:'Answer Computer Science questions'/);
   assert.match(combat,/function recoverQuestionHallAfterRecall\(\)/);
   assert.match(combat,/standHeight\(player\.pos\.x,player\.pos\.z,WH-2\)/);
   assert.match(combat,/player\.vel\.set\(0,0,0\);/);
@@ -2413,16 +2413,16 @@ test('death drops render as timed public world loot and onboarding teaches Recal
   assert.match(networking,/deathDropSnapshot[\s\S]*deathDropExpired/);
   assert.match(frame,/BlockcraftDeathDrops\)globalThis\.BlockcraftDeathDrops\.tick\(now\)/);
   assert.match(combat,/kind:'recall'[\s\S]*key:'P'/);
-  assert.match(combat,/Lesson 13 \/ 14 - Recall Cast/);
+  assert.match(combat,/Lesson 12 \/ 13 - Recall Cast/);
   assert.match(combat,/Death sends carried items to limbo[\s\S]*mistakes become public loot/);
 });
 
-test('Left Alt opens subject focus while Escape only closes or releases cursor',()=>{
+test('Recall is temporarily locked to Computer Science without subject-switch shortcuts',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const recall=fs.readFileSync(path.join(__dirname,'..','..','client','js','recall.mjs'),'utf8');
-  assert.match(combat,/if\(e\.code==='AltLeft'&&!e\.repeat&&gameInput&&!uiOpen&&!statOpen&&!uiShellState\.qOpen&&!claimMode&&!globalThis\.BlockcraftRecall\.active\)\{/);
-  assert.match(combat,/if\(globalThis\.BlockcraftSubjectFocus\)globalThis\.BlockcraftSubjectFocus\.open\(\);/);
+  assert.doesNotMatch(combat,/e\.code==='AltLeft'|e\.code==='PageUp'|e\.code==='PageDown'/);
+  assert.doesNotMatch(combat,/data-mobile-menu-action="subject"/);
   assert.match(combat,/if\(document\.pointerLockElement===renderer\.domElement\)\{\s*e\.preventDefault\(\);\s*releaseGameplayCursor\(\);\s*return;\s*\}/);
   assert.match(combat,/if\(lockFallback\)\{\s*e\.preventDefault\(\);\s*releaseGameplayCursor\(\);\s*return;\s*\}/);
   const escapeCloseBlock=combat.slice(combat.indexOf("if(e.code==='Escape'){\n    let closed=false;"),combat.indexOf("if(locked){",combat.indexOf("if(e.code==='Escape'){\n    let closed=false;")));
@@ -2431,10 +2431,9 @@ test('Left Alt opens subject focus while Escape only closes or releases cursor',
   assert.match(escapeCloseBlock,/if\(uiShellState\.qOpen\)\{ closeQWin\(\); closed=true; \}/);
   assert.doesNotMatch(escapeCloseBlock,/closeUI\(false\)|closeStat\(false\)|closeQWin\(false\)/);
   assert.doesNotMatch(combat,/overlay\.classList\.contains\('hidden'\)&&!limboOpen&&!globalThis\.BlockcraftRecall\.active/);
-  assert.match(menus,/BlockcraftSubjectFocus[\s\S]*open:openSubjectFocusUI/);
-  assert.match(menus,/fetch\('\/auth\/profile\/subjects',\{headers:authHeader\(\),credentials:'include'\}\)/);
-  assert.match(menus,/function recallSubjectOptions\(\)\{const names=subjectNames\(schoolRecallSubjects\);return names\.length\?names:DEFAULT_RECALL_SUBJECTS;\}/);
-  assert.match(menus,/Loading your assigned school subjects/);
+  assert.match(menus,/function selectedRecallSubject\(\)\{return 'Computer Science';\}/);
+  assert.doesNotMatch(menus,/CHANGE SUBJECT/);
+  assert.match(recall,/function selectedSubject\(\)\{return 'Computer Science';\}/);
   assert.match(recall,/NET\.room\.send\('recallStart',\{yaw:player\.yaw,subject:selectedSubject\(\),source\}\)/);
 });
 
@@ -2637,16 +2636,15 @@ test('admin zero hotkey opens a dungeon boss model gallery',()=>{
     assert.match(visuals,new RegExp(style.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+':\\{'));
 });
 
-test('first ten minute guidance teaches subject focus and explicit quest acceptance',()=>{
+test('first ten minute guidance skips subject selection and teaches explicit quest acceptance',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
-  assert.match(combat,/Lesson 12 \/ 14 - Subject Focus/);
-  assert.match(combat,/key:'LEFT ALT'/);
-  assert.match(combat,/Press Left Alt and choose your Recall subject/);
-  assert.match(menus,/BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markSubjectFocus\(\)/);
+  assert.doesNotMatch(combat,/Subject Focus|CLICK A SUBJECT|choose your Recall subject/i);
+  assert.match(combat,/Lesson 12 \/ 13 - Recall Cast/);
+  assert.match(combat,/Lesson 13 \/ 13 - Departure/);
   assert.match(combat,/Town Step 1 - Accept First Quest/);
   assert.match(combat,/Nothing gives XP until you explicitly accept it/);
   assert.match(frame,/Accept Mara’s first quest/);
@@ -2735,11 +2733,11 @@ test('onboarding teaches Escape cursor release after jumping and shows a large a
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   assert.match(combat,/jumped:false,cursor:false,tree:false/);
   assert.match(combat,/kind:'jump'[\s\S]*kind:'cursor'[\s\S]*kind:'tree'/);
-  assert.match(combat,/Lesson 5 \/ 14 - Cursor/);
+  assert.match(combat,/Lesson 5 \/ 13 - Cursor/);
   assert.match(combat,/key:'ESCAPE'/);
   assert.match(combat,/Press Escape to free the cursor/);
   assert.match(combat,/onboardingActive&&onboardingArrived&&onboardingKind\(\)==='cursor'[\s\S]*onboardingFlags\.cursor=true/);
-  assert.match(combat,/ONBOARDING_STEPS\.splice\(11,0/);
+  assert.doesNotMatch(combat,/ONBOARDING_STEPS\.splice\(11,0|kind:'subject'/);
   assert.match(combat,/tutprogress/);
   assert.match(styles,/#tutorialhud \.tutprogress b\{font-size:42px/);
 });
@@ -2749,7 +2747,7 @@ test('onboarding teaches Shift sprinting after basic movement',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   assert.match(combat,/sprint:false,arrowLook:false/);
   assert.match(combat,/kind:'move'[\s\S]*kind:'sprint'[\s\S]*kind:'arrows'/);
-  assert.match(combat,/Lesson 2 \/ 14 - Sprinting/);
+  assert.match(combat,/Lesson 2 \/ 13 - Sprinting/);
   assert.match(combat,/key:'SHIFT \+ W'/);
   assert.match(combat,/Hold Shift while moving to run into the next light\./);
   assert.match(combat,/Running uses stamina\. Answer Recall questions later to recharge it\./);
@@ -2802,7 +2800,7 @@ test('onboarding recall lesson completes from a correct answer away from the way
   const network=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
   const room=fs.readFileSync(path.join(__dirname,'..','rooms','recall.mixin.js'),'utf8');
   assert.match(combat,/markRecall:\(\)=>\{if\(onboardingActive&&onboardingKind\(\)==='recall'\)onboardingFlags\.recall=true;\}/);
-  assert.match(combat,/Press P and answer one knowledge challenge\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
+  assert.match(combat,/Press P and answer one Computer Science challenge\.[\s\S]*done:\(\)=>onboardingFlags\.recall/);
   assert.doesNotMatch(combat,/done:\(\)=>onboardingArrived&&onboardingFlags\.recall/);
   assert.match(recall,/if\(m\.correct&&globalThis\.BlockcraftOnboarding\)globalThis\.BlockcraftOnboarding\.markRecall\(\);/);
   assert.match(network,/if\(m&&Array\.isArray\(m\.activeObjectives\)\)setActiveObjectives\(m\.activeObjectives,\{announce:false\}\);\s*if\(!onboardingDone\(\)\)\{/);

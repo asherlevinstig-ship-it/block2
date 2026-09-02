@@ -2873,7 +2873,7 @@ function recallSubjectOptions(){
   if(!options.some(s=>String(s).trim().toLowerCase()==='computer science'))options.unshift('Computer Science');
   return options;
 }
-function selectedRecallSubject(){const options=recallSubjectOptions();try{const value=localStorage.getItem('bc_recall_subject');return options.includes(value)?value:(options[0]||'English');}catch{return options[0]||'English';}}
+function selectedRecallSubject(){return 'Computer Science';}
 function authHeader(){try{const token=localStorage.getItem('blockcraft.auth.session')||'';return token?{Authorization:'Bearer '+token}:{};}catch{return {};}}
 async function loadSchoolRecallSubjects(force=false){
   const now=Date.now();
@@ -2925,7 +2925,6 @@ function openRecallLecternUI(){
   const wrapper=document.createElement('div');wrapper.innerHTML=recallMasteryHTML();qpanelEl.appendChild(wrapper);
   const row=document.createElement('div');row.className='qrow';
   row.appendChild(qBtn('START LECTERN RECALL',()=>{closeQWin();if(globalThis.BlockcraftRecall)globalThis.BlockcraftRecall.start({source:'lectern'});}));
-  row.appendChild(qBtn('CHANGE SUBJECT',()=>openSubjectFocusUI(),true));
   row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));
   qpanelEl.appendChild(row);
   if(NET.on&&NET.room)NET.room.send('recallSubject',{subject:current});

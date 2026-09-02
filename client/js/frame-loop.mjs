@@ -3600,7 +3600,6 @@ if((location.hostname==='127.0.0.1'||location.hostname==='localhost')&&new URLSe
     else if(kind==='farm')onboardingFlags.farmed=true;
     else if(kind==='eat')onboardingFlags.ate=true;
     else if(kind==='combat')onboardingFlags.dummy=3;
-    else if(kind==='subject')onboardingFlags.subject=true;
     else if(kind==='recall')onboardingFlags.recall=true;
     onboardingNextAt=performance.now()-1;
     tickOnboarding(performance.now());

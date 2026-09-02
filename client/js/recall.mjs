@@ -90,7 +90,7 @@ function clearRecall(opts={}){
   clearMeshes();fallbackEl.innerHTML='';fallbackEl.classList.add('hidden');feedbackEl.className='hidden';hud.classList.remove('question-hall-recall');hud.classList.add('hidden');document.body.classList.remove('recall-active','question-hall-recall-open');
   if(!opts.keepQuestionHall){questionHallOpen=false;questionHallAnswered=0;}updateQuestionHallProgress();
 }
-function selectedSubject(){try{return localStorage.getItem('bc_recall_subject')||'English';}catch{return 'English';}}
+function selectedSubject(){return 'Computer Science';}
 function start(opts={}){
   if(!NET.on||!NET.room)return sysMsg('Recall Cast requires a server connection.');
   const source=opts&&opts.source==='lectern'?'lectern':(opts&&opts.source==='question_hall'?'question_hall':'');

@@ -5455,7 +5455,7 @@ class GameRoom extends Room {
   deathItemLabel(stack) {
     return (stack && ITEM_NAMES[stack.id]) || ('Item #' + (stack && (stack.id | 0) || 0));
   }
-  deathLimboQuestion(seq = 0, subject = 'English', history = {}) {
+  deathLimboQuestion(seq = 0, subject = 'Computer Science', history = {}) {
     const q = RECALL.selectQuestion(subject, history, Date.now(), Math.random);
     return { id:q.id, topic:q.topic, difficulty:q.difficulty, subject: q.subject, stage: q.stage, prompt: q.prompt, answers: q.answers, correct: q.correct, explanation: q.explanation };
   }
@@ -5467,7 +5467,7 @@ class GameRoom extends Room {
     if (!client || !rec || !rec.prof || !p || this.deathLimbo.has(client.sessionId)) return false;
     const inv = Array.isArray(rec.prof.inv) ? rec.prof.inv : (rec.prof.inv = []);
     const items = [];
-    const subject = this.recallSubjects && this.recallSubjects.get(client.sessionId) || rec.prof.recallSubject || 'English';
+    const subject = 'Computer Science';
     let selectionHistory = rec.prof.recallMastery || {};
     for (let slot = 0; slot < Math.min(36, inv.length); slot++) {
       const item = this.cloneDeathItem(inv[slot]);
@@ -5571,7 +5571,7 @@ class GameRoom extends Room {
     limbo.index++;
     this.dirtyPlayers.add(rec.token);
     this.sendProfile(client, rec.prof);
-    client.send('deathLimboResult', { id: limbo.id, correct, item: { id: entry.item.id, count: entry.item.count || 1, label: entry.label }, correctIndex: entry.question.correct, explanation: entry.question.explanation, nextDue:review.record.nextDue, mastery:RECALL.masterySummary(review.history,rec.prof.recallSubject||'English') });
+    client.send('deathLimboResult', { id: limbo.id, correct, item: { id: entry.item.id, count: entry.item.count || 1, label: entry.label }, correctIndex: entry.question.correct, explanation: entry.question.explanation, nextDue:review.record.nextDue, mastery:RECALL.masterySummary(review.history,'Computer Science') });
     const p = this.state.players.get(client.sessionId);
     if (limbo.index >= limbo.items.length) {
       this.deathLimbo.delete(client.sessionId);

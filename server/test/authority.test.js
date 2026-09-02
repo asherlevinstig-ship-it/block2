@@ -12740,6 +12740,21 @@ test('Recall Lectern study can earn paced fellowship renown', () => {
   assert.equal(guild.renown, 1);
 });
 
+test('Recall subject selection is temporarily locked to Computer Science', () => {
+  const room = makeRoom(), client = makeClient('recall_subject_lock');
+  room.initRecallState();
+  const { prof } = seedPlayer(room, client, { token: 'recall_subject_lock_token', name: 'Locked Scholar' });
+  prof.recallSubject = 'English';
+
+  room.handleRecallSubject(client, { subject: 'Religious Education' });
+
+  assert.equal(room.recallSubjects.get(client.sessionId), 'Computer Science');
+  assert.equal(prof.recallSubject, 'Computer Science');
+  const mastery = client.sent.find(e => e.type === 'recallMastery');
+  assert.ok(mastery);
+  assert.equal(mastery.msg.subject, 'Computer Science');
+});
+
 test('Recall correct answers restore stamina in authoritative profile vitals', () => {
   const room = makeRoom(), client = makeClient('recall_stamina_restore');
   room.initRecallState();
