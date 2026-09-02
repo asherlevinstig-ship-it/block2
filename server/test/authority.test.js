@@ -4348,6 +4348,16 @@ test('crafting consumes persisted ingredients and grants the server recipe resul
   assert.equal(room.dirtyPlayers.has(room.tokens.get(client.sessionId)), true);
 });
 
+test('DungeonRoom registers normal crafting and inventory arrangement', () => {
+  const registered = new Set();
+  const room = { onMessage(type) { registered.add(type); } };
+
+  DungeonRoom.prototype.registerRaidHandlers.call(room);
+
+  assert.equal(registered.has('craft'), true);
+  assert.equal(registered.has('invArrange'), true);
+});
+
 test('server crafting accepts familiar binding recipes advertised by the client', () => {
   const cases = [
     {

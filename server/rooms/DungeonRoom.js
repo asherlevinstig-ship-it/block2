@@ -144,6 +144,10 @@ class DungeonRoom extends GameRoom {
     this.onMessage('blackhole', (c, m) => this.handleBlackholeStaff(c, m));
     this.onMessage('legendaryWeapon', (c, m) => this.handleLegendaryWeapon(c, m));
     this.onMessage('craftLegendary', (c, m) => this.handleCraftLegendary(c, m));
+    // The bag and normal crafting UI are available in every dimension. Dedicated
+    // dungeon rooms must therefore own these authoritative transactions too.
+    this.onMessage('craft', (c, m) => this.handleCraft(c, m));
+    this.onMessage('invArrange', (c, m) => this.handleInventoryArrange(c, m));
     this.onMessage('bindFamiliar', (c, m) => this.handleBindFamiliar(c, m));
     this.onMessage('summonFamiliar', (c, m) => this.handleSummonFamiliar(c, m));
     this.onMessage('dismissFamiliar', (c) => this.handleDismissFamiliar(c));

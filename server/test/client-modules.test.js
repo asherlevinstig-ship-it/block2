@@ -2833,6 +2833,12 @@ test('online craft result restores the authoritative inventory snapshot',()=>{
   assert.match(menus,/if\(!restoreInventorySnapshot\(m\.inv\)\) addCraftedItem\(m\.out\.id, made\);/);
 });
 
+test('inventory layout sync waits while crafting ingredients are staged',()=>{
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  assert.match(menus,/\['blockcraft','dungeon'\]\.includes\(NET\.room\.name\)/);
+  assert.match(menus,/\|\|craftCells\.some\(Boolean\)\)return;/);
+});
+
 test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');

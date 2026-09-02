@@ -913,7 +913,9 @@ function inventoryArrangePayload(){
   return inv.slice(0,36).map(s=>s?{id:s.id,count:s.count,plus:s.plus,dur:s.dur,gearRank:s.gearRank,armorType:s.armorType,rarity:s.rarity,unique:s.unique,locked:s.locked,source:s.source}:null);
 }
 function sendInventoryArrange(){
-  if(!(NET.on&&NET.room&&NET.room.name==='blockcraft')||cursorStack)return;
+  // A staged crafting ingredient lives outside `inv`. Do not publish an incomplete
+  // inventory layout while a craft is being assembled or awaiting its server result.
+  if(!(NET.on&&NET.room&&['blockcraft','dungeon'].includes(NET.room.name))||cursorStack||craftCells.some(Boolean))return;
   const payload=inventoryArrangePayload(),json=JSON.stringify(payload);
   if(json===lastSentInvArrange)return;
   lastSentInvArrange=json;
