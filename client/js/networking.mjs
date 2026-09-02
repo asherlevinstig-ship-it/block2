@@ -1254,6 +1254,27 @@ function showFellowshipTutorial(m={},mode='joined'){
 }
 
 const netConnect=SESSION.connect;
+const ONLINE_POPULATION_NOTICE_INTERVAL_MS=3*60*1000;
+let onlinePopulationNoticeTimer=0;
+let onlinePopulationNoticeIntroTimer=0;
+function stopOnlinePopulationNotices(){
+  clearTimeout(onlinePopulationNoticeIntroTimer);
+  clearInterval(onlinePopulationNoticeTimer);
+  onlinePopulationNoticeIntroTimer=0;
+  onlinePopulationNoticeTimer=0;
+}
+function showOnlinePopulationNotice(room){
+  if(!room||NET.room!==room||room.name!=='blockcraft'||document.hidden)return;
+  const players=room.state&&room.state.players;
+  const count=players&&Number.isFinite(players.size)?Math.max(1,players.size|0):1;
+  chatLine('[Online]',count===1?'1 player is online.':count+' players are online.');
+}
+function startOnlinePopulationNotices(room){
+  stopOnlinePopulationNotices();
+  if(!room||room.name!=='blockcraft')return;
+  onlinePopulationNoticeIntroTimer=setTimeout(()=>showOnlinePopulationNotice(room),8000);
+  onlinePopulationNoticeTimer=setInterval(()=>showOnlinePopulationNotice(room),ONLINE_POPULATION_NOTICE_INTERVAL_MS);
+}
 
 function netAttachRoom(room,name,client){
     NET.profileReady=room&&room.name==='dungeon';
@@ -1262,6 +1283,7 @@ function netAttachRoom(room,name,client){
     let staleLocalMobs=0;
     for(let i=mobs.length-1;i>=0;i--) if(!mobs[i].net){ removeMob(i); staleLocalMobs++; }
     eventLog('Connected as '+name);
+    startOnlinePopulationNotices(room);
     // Colyseus can deliver startup sync messages before this large attach
     // routine has registered every handler. Keep those early packets from
     // turning into noisy SDK warnings while the explicit handlers below come online.

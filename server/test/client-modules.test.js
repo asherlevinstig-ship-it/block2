@@ -2880,6 +2880,17 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.doesNotMatch(social,/held<220|movementX|movementY|Release Tab/);
 });
 
+test('overworld periodically reports the live player count in chat',()=>{
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(networking,/ONLINE_POPULATION_NOTICE_INTERVAL_MS=3\*60\*1000/);
+  assert.match(networking,/NET\.room!==room\|\|room\.name!=='blockcraft'\|\|document\.hidden/);
+  assert.match(networking,/players\.size\)\?Math\.max\(1,players\.size\|0\):1/);
+  assert.match(networking,/chatLine\('\[Online\]',count===1\?'1 player is online\.':count\+' players are online\.'\)/);
+  assert.match(networking,/onlinePopulationNoticeIntroTimer=setTimeout\(\(\)=>showOnlinePopulationNotice\(room\),8000\)/);
+  assert.match(networking,/onlinePopulationNoticeTimer=setInterval\(\(\)=>showOnlinePopulationNotice\(room\),ONLINE_POPULATION_NOTICE_INTERVAL_MS\)/);
+  assert.match(networking,/eventLog\('Connected as '\+name\);\s*startOnlinePopulationNotices\(room\);/);
+});
+
 test('social mentor NPC teaches friends chat teams and safety without creating a quest',()=>{
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
