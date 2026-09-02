@@ -1573,6 +1573,25 @@ test('town exit movement ignores overhead arch blocks when finding the floor',()
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),false);
 });
 
+test('overworld movement ignores low tree canopy at reported teleport coordinate',()=>{
+  const room=makeRoom(),client=makeClient('tree_canopy_hunter');
+  room.lastMoveMsg=new Map();
+  room.world=W.createWorld();
+  room.world.generate();
+  const x=566.72,z=695.343;
+  const ground=room.world.standHeight(x,z,24.99);
+  assert.equal(ground,25,'near-feet probe resolves the natural ground');
+  assert.equal(room.world.standHeight(x,z,W.WH-2),29,'a high probe sees the overhead leaf canopy');
+  seedPlayer(room,client,{x,z,y:ground,hp:20});
+  const rescueSpace=room.stuckRescueSpace(client,room.state.players.get(client.sessionId));
+  assert.equal(rescueSpace.groundAt(x,z,ground),ground,'stuck rescue also ignores the canopy');
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  room.handleMove(client,{x:x+.05,y:ground,z,yaw:1.212});
+  const p=room.state.players.get(client.sessionId);
+  assert.ok(p.y<26,'walking below the leaves must not teleport the player onto the canopy');
+  assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='floor'),false);
+});
+
 test('generated room world keeps south town exit clear at reported bug location',()=>{
   const world=W.createWorld();
   world.generate();

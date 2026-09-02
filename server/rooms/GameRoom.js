@@ -6647,7 +6647,11 @@ class GameRoom extends Room {
           : D.standHeightIn(inst.world, x, z, Math.min(12, fromY));
       }
       if (rawDgn) return Number.isFinite(+fromY) ? +fromY : -1;
-      const probeY = Math.min(W.WH - 2, Math.max(Number.isFinite(+fromY) ? +fromY : 0, p && Number.isFinite(+p.y) ? +p.y : 0) + 2.25);
+      // Search from the player's current foot layer down. standHeight() itself
+      // starts one cell above fromY, so the small offset prevents low leaves from
+      // being mistaken for ground while still including a one-block step.
+      const feetY = Math.max(Number.isFinite(+fromY) ? +fromY : 0, p && Number.isFinite(+p.y) ? +p.y : 0);
+      const probeY = Math.min(W.WH - 2, Math.floor(feetY) - .01);
       return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, probeY) : -1;
     };
     const clear = (x, y, z) => {
@@ -8066,7 +8070,9 @@ class GameRoom extends Room {
       return this.world && typeof this.world.standHeight === 'function' ? this.world.standHeight(x, z, fromY) : -1;
     };
     const townFloorStrict = !activeDgn && this.world && this.isTownProtected(sx, sz);
-    const floorProbeY = activeDgn ? W.WH - 2 : Math.min(W.WH - 2, Math.max(sy, p.y) + 2.25);
+    // Search from the current foot layer down. The client reports its stepped-up
+    // Y itself; scanning higher here would turn low leaves/arches into false floors.
+    const floorProbeY = activeDgn ? W.WH - 2 : Math.min(W.WH - 2, Math.floor(Math.max(sy, p.y)) - .01);
     const floorY = groundAt(sx, sz, floorProbeY);
     if (activeDgn && !deityFlight && !buried(p.x, p.y, p.z) && floorY > 0 && sy > floorY + 2.25) {
       sy = floorY + .01;
