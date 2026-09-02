@@ -323,6 +323,7 @@ function makeRoom() {
   room._timers = [];
   room.clock = { setTimeout(fn) { room._timers.push(fn); } };
   room.dirtyPlayers = new Set();
+  room.persistedInventorySignatures = new Map();
   room.dirtyWorld = false;
   room.dirtyWorldProgress = false;
   room.dirtyChests = false;
@@ -4373,6 +4374,36 @@ test('crafting is saved durably before its success result can be followed by a r
   finishSave();
   await crafting;
   assert.equal(client.sent.at(-1).type, 'craftResult');
+});
+
+test('every rewarded or discovered inventory change is durable before its next player message', async () => {
+  const room = makeRoom();
+  const client = makeClient('durable-discovery');
+  const { token, prof } = seedPlayer(room, client, { inv: [] });
+  room.clients = [client];
+  room.persistedInventorySignatures.set(token, room.inventoryPersistenceSignature(prof));
+  let finishSave;
+  let saved = null;
+  room.store = {
+    savePlayer(savedToken, profile) {
+      saved = { token: savedToken, profile: JSON.parse(JSON.stringify(profile)) };
+      return new Promise(resolve => { finishSave = resolve; });
+    },
+  };
+  room.protectDurableInventoryMessages(client);
+
+  room.addRewardItem(prof, I.GEODE, 1);
+  room.dirtyPlayers.add(token);
+  const reply = client.send('discoveryResult', { id: 'test-discovery', items: [{ id: I.GEODE, count: 1 }] });
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(saved.token, token);
+  assert.equal(itemCount(saved.profile, I.GEODE), 1);
+  assert.equal(client.sent.length, 0, 'discovery notification waits for the durable inventory snapshot');
+
+  finishSave();
+  await reply;
+  assert.equal(client.sent.at(-1).type, 'discoveryResult');
 });
 
 test('DungeonRoom registers normal crafting and inventory arrangement', () => {

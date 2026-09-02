@@ -168,6 +168,7 @@ class DungeonRoom extends GameRoom {
 
   async onJoin(client, options, auth) {
     this.monitorClient(client);
+    this.protectDurableInventoryMessages(client);
     client._account = auth && typeof auth === 'object' ? { ...auth } : null;
     client._accountRole = String(auth && auth.role || '').toLowerCase();
     client._accountType = String(auth && auth.accountType || '').toLowerCase();
@@ -188,6 +189,7 @@ class DungeonRoom extends GameRoom {
       this.profiles.set(token, prof);
     }
     this.tokens.set(client.sessionId, token);
+    this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(prof));
     if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
     if (ensureAsherAdminFishingRod(prof, auth)) this.dirtyPlayers.add(token);
 

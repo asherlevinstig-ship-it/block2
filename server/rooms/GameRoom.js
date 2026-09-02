@@ -1025,6 +1025,7 @@ class GameRoom extends Room {
       role: String(auth && auth.role || '').toLowerCase(),
     });
     this.monitorClient(client);
+    this.protectDurableInventoryMessages(client);
     this.initGameInterestView(client);
     client.send('shard', { id: this.shardId || 'main', maxClients: this.maxClients });
     client._account = auth && typeof auth === 'object' ? { ...auth } : null;
@@ -1094,6 +1095,7 @@ class GameRoom extends Room {
           });
         }
       }
+      this.persistedInventorySignatures.set(token, this.inventoryPersistenceSignature(prof));
       if (this.ensureDeityState(prof)) this.dirtyPlayers.add(token);
       if (ensureAsherAdminFishingRod(prof, auth)) this.dirtyPlayers.add(token);
       const grantedArmor = this.ensureStarterArmor(prof);
@@ -1463,6 +1465,61 @@ class GameRoom extends Room {
     this.dirtyNests = false;
     this.dirtyPlayers = new Set();
     this.lastSaveMsg = new Map();
+    this.persistedInventorySignatures = new Map();
+  }
+
+  inventoryPersistenceSignature(prof) {
+    if (!prof) return '';
+    try {
+      return JSON.stringify({
+        inv: Array.isArray(prof.inv) ? prof.inv : [],
+        armor: prof.armor || null,
+        lootRecovery: Array.isArray(prof.lootRecovery) ? prof.lootRecovery : [],
+      });
+    } catch (_) {
+      return '';
+    }
+  }
+
+  playerProfileSnapshot(prof) {
+    return JSON.parse(JSON.stringify(prof));
+  }
+
+  // Any server-owned inventory change must reach durable storage before the
+  // next player-facing message. This protects every acquisition path (loot,
+  // mining, discoveries, quests, shops, fishing, furnaces, trades, etc.)
+  // without relying on each feature remembering its own save barrier.
+  protectDurableInventoryMessages(client) {
+    if (!client || client.__durableInventorySendWrapped || typeof client.send !== 'function') return;
+    const original = client.send.bind(client);
+    client.send = (type, payload) => {
+      if (!this.store || typeof this.store.savePlayer !== 'function' || typeof this.flush !== 'function') return original(type, payload);
+      const token = this.tokens && this.tokens.get(client.sessionId);
+      const prof = token && this.profiles && this.profiles.get(token);
+      const signature = prof && this.inventoryPersistenceSignature(prof);
+      const durable = token && this.persistedInventorySignatures && this.persistedInventorySignatures.get(token);
+      const pending = client.__durableInventorySendQueue || null;
+      if (!pending && (!token || !prof || !signature || signature === durable)) return original(type, payload);
+      const task = (pending || Promise.resolve()).catch(() => {}).then(async () => {
+        const currentToken = this.tokens && this.tokens.get(client.sessionId);
+        const currentProf = currentToken && this.profiles && this.profiles.get(currentToken);
+        if (currentToken && currentProf) {
+          const currentSignature = this.inventoryPersistenceSignature(currentProf);
+          const currentDurable = this.persistedInventorySignatures && this.persistedInventorySignatures.get(currentToken);
+          if (currentSignature && currentSignature !== currentDurable) {
+            this.dirtyPlayers.add(currentToken);
+            await this.flush();
+          }
+        }
+        return original(type, payload);
+      });
+      client.__durableInventorySendQueue = task;
+      task.finally(() => {
+        if (client.__durableInventorySendQueue === task) client.__durableInventorySendQueue = null;
+      }).catch(() => {});
+      return task;
+    };
+    client.__durableInventorySendWrapped = true;
   }
 
   flush() {
@@ -1602,7 +1659,12 @@ class GameRoom extends Room {
       if (!prof || prof.noPersist) continue;   // never overwrite a save we couldn't load
       const live = (this.clients || []).find(c => this.tokens.get(c.sessionId) === t);
       if (live) this.syncProfileVitals(live, prof);
-      try { await this.store.savePlayer(t, prof); }
+      const snapshot = this.playerProfileSnapshot(prof);
+      const inventorySignature = this.inventoryPersistenceSignature(snapshot);
+      try {
+        await this.store.savePlayer(t, snapshot);
+        if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(t, inventorySignature);
+      }
       catch (e) { console.warn('[persist] player save failed:', e.message); this.dirtyPlayers.add(t); }
     }
   }
@@ -1612,9 +1674,15 @@ class GameRoom extends Room {
     if (!t || !prof || prof.noPersist || !this.store || typeof this.store.savePlayer !== 'function') return false;
     const live = (this.clients || []).find(c => this.tokens.get(c.sessionId) === t);
     if (live) this.syncProfileVitals(live, prof);
+    const snapshot = this.playerProfileSnapshot(prof);
+    const inventorySignature = this.inventoryPersistenceSignature(snapshot);
     try {
-      await this.store.savePlayer(t, prof);
-      if (this.dirtyPlayers) this.dirtyPlayers.delete(t);
+      await this.store.savePlayer(t, snapshot);
+      if (this.persistedInventorySignatures) this.persistedInventorySignatures.set(t, inventorySignature);
+      if (this.dirtyPlayers) {
+        if (this.inventoryPersistenceSignature(prof) === inventorySignature) this.dirtyPlayers.delete(t);
+        else this.dirtyPlayers.add(t);
+      }
       return true;
     } catch (e) {
       console.warn('[persist] immediate player save failed:', e.message);
