@@ -1,3 +1,5 @@
+import {CUTSCENES_ENABLED} from './feature-flags.mjs';
+
 const root = document.getElementById('introcinematic');
 const video = document.getElementById('introvideo');
 const audio = document.getElementById('introaudio');
@@ -9,6 +11,20 @@ const statusEl = document.getElementById('introstatus');
 const sources = ['/assets/intro/vid1.mp4', '/assets/intro/vid2.mp4'];
 
 function createOpeningReady() {
+  if (!CUTSCENES_ENABLED) {
+    if (root) root.classList.add('done', 'hidden');
+    for (const media of [video, audio]) {
+      try {
+        if (media) {
+          media.pause();
+          media.removeAttribute('src');
+          media.load();
+        }
+      } catch (_) {}
+    }
+    globalThis.BlockcraftOpeningAudio = { startAmbient: () => Promise.resolve(), stop() {}, get active() { return false; } };
+    return Promise.resolve();
+  }
   if (!root || !video || !sources.length) return Promise.resolve();
   const params = new URLSearchParams(location.search);
   let skipOpening = params.has('e2e') || params.has('skipOpening');

@@ -3572,14 +3572,20 @@ test('appearance creator exposes style presets and avatar style dimensions', () 
   assert.match(styles, /body\.character-setup-open \.ccpresetbar\{grid-template-columns:repeat\(4,minmax\(104px,1fr\)\)\}/);
 });
 
-test('opening cinematic plays bundled videos before auto-resume', () => {
+test('all cutscene entry points are disabled while their assets remain dormant', () => {
   const index = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   const opening = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'opening-cinematic.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const flags = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'feature-flags.mjs'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
   assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'vid1.mp4')));
   assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'vid2.mp4')));
   assert.ok(fs.existsSync(path.join(__dirname, '..', '..', 'client', 'assets', 'intro', 'opening.mp3')));
+  assert.match(flags, /export const CUTSCENES_ENABLED = false;/);
+  assert.match(opening, /if \(!CUTSCENES_ENABLED\) \{/);
+  assert.match(networking, /function startGateUnlockCutscene\(replay=false\)\{\s*if\(!CUTSCENES_ENABLED\) return false;/);
+  assert.match(networking, /function startIntroCutscene\(replay, previewPath\)\{\s*if\(!CUTSCENES_ENABLED\) return false;/);
   assert.match(index, /id="introcinematic"/);
   assert.match(index, /id="introvideo" playsinline muted preload="auto"/);
   assert.match(index, /id="introaudio" src="\/assets\/intro\/opening\.mp3" preload="auto"/);

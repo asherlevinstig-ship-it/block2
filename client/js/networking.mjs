@@ -15,6 +15,7 @@ import {biomeStatus} from './biome-status.mjs';
 import {normalizeRewardGear} from './reward-items.mjs';
 import {apiUrl,backendWsUrl} from './config.mjs';
 import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,hunterRankLevelLabel,isDeityLevel} from './progression.mjs';
+import {CUTSCENES_ENABLED} from './feature-flags.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -3172,7 +3173,7 @@ function netRestoreProfile(m){
       eventLog('First villager quest complete — server reward: +100 gold.');
       showFirstVillagerReward(requestTownJobGuidance);
     } else if(Number((npcQuestChains&&npcQuestChains['Mara Vale'])||0)>0) awardFirstVillagerQuestBonus();
-    if(gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
+    if(CUTSCENES_ENABLED && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     syncLocalTutorialsToServer();
     if(!restoreJobRoom&&!restoreTamingLand&&dim==='overworld')startTownGuidance();
     if(typeof refreshProgressionDirectorNotice==='function')refreshProgressionDirectorNotice();
@@ -4860,10 +4861,13 @@ let cutscene=null;
 let gateCutscenePending=false;
 let gateCutsceneReturn=null;
 function queueGateUnlockCutscene(){
+  if(!CUTSCENES_ENABLED){gateCutscenePending=false;return false;}
   gateCutscenePending=true;
   setTimeout(()=>tryStartQueuedGateCutscene(),650);
+  return true;
 }
 function tryStartQueuedGateCutscene(){
+  if(!CUTSCENES_ENABLED){gateCutscenePending=false;return false;}
   if(!gateCutscenePending || gateCutsceneSeen() || !gateSystemUnlocked()) return false;
   if(cutscene || dim!=='overworld' || qOpen || uiOpen || statOpen || pathChoiceOpen || jobChoiceOpen || abilityAwakeningOpen || abilityTrainingActive) return false;
   if(startGateUnlockCutscene(false)){ gateCutscenePending=false; markGateCutsceneSeen(); return true; }
@@ -4913,6 +4917,7 @@ function cutsceneSeen(){ try{ return serverTutorials.intro>=1||localStorage.getI
 function markCutsceneSeen(){ try{ localStorage.setItem('bc_introcut','1'); }catch(e){} markTutorialComplete('intro',1); }
 function resetCutsceneSeen(){ try{ localStorage.removeItem('bc_introcut'); }catch(e){} }
 function runLevel2CutsceneThenTutorial(){
+  if(!CUTSCENES_ENABLED) return false;
   if(S.lvl<2 || !S.path || dim!=='overworld' || cutsceneSeen()) return false;
   markCutsceneSeen();
   return startIntroCutscene(false);
@@ -5137,6 +5142,7 @@ function addGateCutsceneLights(set,cx){
   set.userData.cutsceneLights={top,portalL,hallL,bossKey,bossRim,lootL};
 }
 function startGateUnlockCutscene(replay=false){
+  if(!CUTSCENES_ENABLED) return false;
   if(cutscene || typeof THREE==='undefined' || dim!=='overworld') return false;
   const ret={world, dungeon, exitPortal, gate, pos:player.pos.clone(), yaw:player.yaw, pitch:player.pitch};
   gateCutsceneReturn=ret;
@@ -5308,6 +5314,7 @@ function endGateCutscene(){
   sysMsg('<b>Gates unlocked.</b> Public Gates can now appear in the wilderness.');
 }
 function startIntroCutscene(replay, previewPath){
+  if(!CUTSCENES_ENABLED) return false;
   if(cutscene || typeof THREE==='undefined' || (dim!=='overworld' && dim!=='ability')) return false;
   if(dim==='overworld' && !enterAbilityRoom()) return false;
   const ret=abilityRoomReturn ? {x:abilityRoomReturn.pos.x,y:abilityRoomReturn.pos.y,z:abilityRoomReturn.pos.z,yaw:abilityRoomReturn.yaw,pitch:abilityRoomReturn.pitch} :
@@ -5444,18 +5451,18 @@ function resetLevel2AbilityFlow(){
     abilityTrainingReturn=null;
   }
   if(S.lvl<2){
-    sysMsg('Level 2 cutscene and tutorial reset. Reach <b>Level 2</b> to see them again.');
+    sysMsg('Level 2 ability tutorial reset. Reach <b>Level 2</b> to begin it.');
     return;
   }
   if(!S.path){
-    sysMsg('Level 2 cutscene reset. Choose a <b>path</b> with C to unlock the ability tutorial.');
+    sysMsg('Ability tutorial reset. Choose a <b>path</b> with C to unlock it.');
     return;
   }
   if(dim!=='overworld'){
-    sysMsg('Level 2 cutscene reset. Return to the <b>overworld</b> to replay it.');
+    sysMsg('Ability tutorial reset. Return to the <b>overworld</b> to begin it.');
     return;
   }
-  markCutsceneSeen();
+  if(CUTSCENES_ENABLED)markCutsceneSeen();
   if(!startIntroCutscene(false)) showAbilityAwakening();
 }
 

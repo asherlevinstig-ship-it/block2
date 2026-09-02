@@ -1,6 +1,7 @@
 import {disposeObjectTree} from './three-disposal.mjs';
 import {createPrng,varyColor,paintAtlasTile} from './world-textures.mjs';
 import {createParticleBudget} from './performance-budget.mjs';
+import {CUTSCENES_ENABLED} from './feature-flags.mjs';
 
 /* Blockcraft world runtime module. World data, generation, rendering, entities, and shared game foundations.
  * Exposes a temporary live-binding compatibility surface for modules not yet migrated to ESM.
@@ -9196,7 +9197,7 @@ function gainXP(n){
   while(S.xp>=xpNeed()){ S.xp-=xpNeed(); S.lvl++; S.pts+=3; leveled=true; }
   if(leveled){
     hp=maxHp(); mp=maxMp(); sp=maxSp(); hunger=maxHunger();
-    const shouldRunLevel2Cutscene=S.lvl>=2 && S.path && dim==='overworld' && !cutsceneSeen();
+    const shouldRunLevel2Cutscene=CUTSCENES_ENABLED && S.lvl>=2 && S.path && dim==='overworld' && !cutsceneSeen();
     titleFlash('Level '+S.lvl,'+'+((S.lvl-beforeLevel)*3)+' stat points',{kind:'success',duration:1500});
     if(S.lvl>=2 && S.path && !abilityTutorialDone() && !shouldRunLevel2Cutscene) showAbilityAwakening();
     else sysMsg('Level <b>'+beforeLevel+' → '+S.lvl+'</b><br>+'+((S.lvl-beforeLevel)*3)+' stat points · HP, MP, SP, and food restored',{tier:'major',title:'Level Up'});
@@ -9205,7 +9206,7 @@ function gainXP(n){
     SFX.level();
     burst(player.pos.x, player.pos.y+1, player.pos.z, [1,.85,.3], 26, 2.6, 3, .8);
     if(shouldRunLevel2Cutscene){ markCutsceneSeen(); setTimeout(()=>startIntroCutscene(false), 500); }
-    if(!hadGateSystem && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
+    if(CUTSCENES_ENABLED && !hadGateSystem && gateSystemUnlocked() && !gateCutsceneSeen()) queueGateUnlockCutscene();
     if(S.lvl>=2 && !S.path) sysMsg('You have <b>awakened</b>. Press <b>C</b> to choose your path');
     if(S.path){
       for(const unlockedLevel of [2,4,8]){
