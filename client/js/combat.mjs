@@ -7300,6 +7300,14 @@ addEventListener('mousedown', e=>{
     }
     return;
   }
+  // Authentication and room restoration are asynchronous, so browsers can
+  // reject their initial pointer-lock request and leave us in finite fallback
+  // mouse-look. Upgrade on the next genuine world click while user activation
+  // is available; otherwise the hidden cursor eventually reaches a screen edge.
+  if(lockFallback&&document.pointerLockElement!==renderer.domElement&&!isTouchGameplayDevice()){
+    gameplayInputDebug('pointerlock.upgrade-fallback');
+    requestPointerLockSafe(null);
+  }
   if(e.button===0){
     primaryAction();
   }

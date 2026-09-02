@@ -4725,3 +4725,9 @@ test('captured desktop gameplay hides the system cursor while retaining the cros
   assert.match(combat, /document\.body\.classList\.toggle\('gameplay-cursor-captured',gameplayCursorCaptured\)/);
   assert.match(styles, /body\.gameplay-cursor-captured,body\.gameplay-cursor-captured \*\{cursor:none!important\}/);
 });
+
+test('a desktop world click upgrades finite fallback mouse-look to native pointer lock', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  assert.match(combat, /if\(lockFallback&&document\.pointerLockElement!==renderer\.domElement&&!isTouchGameplayDevice\(\)\)/);
+  assert.match(combat, /gameplayInputDebug\('pointerlock\.upgrade-fallback'\);\s*requestPointerLockSafe\(null\)/);
+});
