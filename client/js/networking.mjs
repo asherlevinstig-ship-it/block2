@@ -2841,7 +2841,6 @@ function netAttachRoom(room,name,client){
       COMBAT_FEEDBACK.showTelegraph(m);netFx(m);
     });
     room.onMessage('dmgnum', m=>{COMBAT_FEEDBACK.confirmHit(m);camShake=Math.max(camShake,(m&&m.lethal)?0.32:(m&&m.crit)?0.24:0.1);spawnDamageNumber(m);});
-    room.onMessage('combatDebug', m=>{ if(COMBAT_FEEDBACK.showDebug)COMBAT_FEEDBACK.showDebug(m); });
     room.onMessage('vitalsDebug', m=>{
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('server.vitals-debug',m||{});
       try{console.info('[bc-vitals:server] '+vitalsDebugText(m||{}));}catch(e){}

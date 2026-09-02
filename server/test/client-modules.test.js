@@ -2560,7 +2560,7 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(feedback,/VOLLEY - LEAVE THE LANES/);
   assert.match(feedback,/sound\.crit/);
   assert.match(feedback,/sound\.block/);
-  assert.match(feedback,/showDebug/);
+  assert.doesNotMatch(feedback,/showDebug|combatdebug|COMBAT DEBUG/);
   assert.match(world,/deathEl\.innerHTML='<div id="deathtint"><\/div><div id="deathpanel">/);
   assert.match(world,/showDeathScreen\(deathCauseText\(lastDamageSource\),'Respawn in the Town of Beginnings'/);
   assert.match(world,/buttonLabel:'RESPAWN IN TOWN'/);
@@ -2581,7 +2581,7 @@ test('ordinary combat exposes health, telegraphs, statuses, impact pause, and de
   assert.match(styles,/#deathrecap/);
   assert.match(styles,/#deathrespawn/);
   assert.match(styles,/body\.death-active #hotbar/);
-  assert.match(styles,/#combatdebug/);
+  assert.doesNotMatch(styles,/#combatdebug/);
   assert.match(styles,/body\.combat-hit #game canvas/);
 });
 

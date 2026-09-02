@@ -307,17 +307,10 @@ class CombatMixin {
       this.sendAbilitySync(client, st);
       return client.send('abilityReject', { slot, reason: 'stamina' });
     }
-    const resourceBefore = { mp: st.mp, sp: st.sp };
     st.mp -= manaCost;
     st.sp = Math.max(0, st.sp - staminaCost);
     st.cds[cdKey] = now + cooldown;
     this.sendAbilitySync(client, st);
-    this.sendCombatDebug(client, {
-      kind: 'ability-cast',
-      ability: { path, slot, name: def.name || def.kind, kind: def.kind },
-      resources: this.combatResourceSnapshot(client, resourceBefore, st),
-      buffs: this.combatBuffSnapshot(client.sessionId, now),
-    });
     if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
 
     const fx = { t: 'ability', path, slot, kind: def.kind, x: p.x, y: p.y, z: p.z, yaw: p.yaw || 0, sid: client.sessionId, dgn: p.dgn || '' };
@@ -841,16 +834,9 @@ class CombatMixin {
     if (mob.kind === 'boss' && !mob.dgn && this.recordMeteorBossDamage) this.recordMeteorBossDamage(client, mobId, damage);
     const raw=Math.max(0,damage);
     const multiplier=this.banditProtectionMultiplier(String(mobId),mob);
-    const beforeHp=mob.hp;
     const applied=raw*multiplier;
     this.emitDamageNumber(client,mob,applied,false,mob.hp-applied<=0);
     mob.hp -= applied;
-    this.sendCombatDebug(client,{
-      kind:'ability-hit',
-      target:{id:String(mobId),kind:mob.kind,state:mob.state||'',hp:Math.max(0,Math.round(mob.hp)),maxHp:Math.round(mob.maxHp||beforeHp||0)},
-      damage:{raw:Math.round(raw*10)/10,applied:Math.round(applied*10)/10,mitigated:Math.round(Math.max(0,raw-applied)*10)/10,multiplier:Math.round(multiplier*100)/100},
-      buffs:this.combatBuffSnapshot(client&&client.sessionId),
-    });
     if (mob.hp <= 0) this.finishMobKill(client, mobId, mob);
   }
   rollPetFamiliarDrop(client, animalKind, ring = 0) {
@@ -863,37 +849,6 @@ class CombatMixin {
     const chance = Math.min(.16, drop.chance + Math.max(0, ring | 0) * .018);
     return Math.random() < chance ? { id: drop.item, count: 1 } : null;
   }
-  combatBuffSnapshot(sid, now = Date.now()) {
-    const buffs = this.abilityBuffs && this.abilityBuffs.get(sid) || {};
-    const labels = {
-      umbralUntil: 'umbral',
-      shadowBurstUntil: 'shadow_burst',
-      ironUntil: 'iron_skin',
-      pantherUntil: 'panther',
-      verdantRegenUntil: 'verdant_regen',
-      mealMightUntil: 'meal_might',
-      monkRegenUntil: 'monk_regen',
-      monkSpeedUntil: 'monk_speed',
-      monkStoneUntil: 'stone_body',
-    };
-    return Object.entries(labels).filter(([key]) => Number(buffs[key]) > now)
-      .map(([key, id]) => ({ id, ms: Math.max(0, Math.round(Number(buffs[key]) - now)) }));
-  }
-  combatResourceSnapshot(client, before = null, after = null) {
-    const st = after || (client && this.abilityState && this.abilityState.get(client.sessionId)) || null;
-    return {
-      mp: st ? Math.floor(st.mp) : 0,
-      maxMp: st ? st.maxMp | 0 : 0,
-      sp: st ? Math.floor(st.sp) : 0,
-      maxSp: st ? st.maxSp | 0 : 0,
-      mpSpent: before && st ? Math.max(0, Math.round((before.mp - st.mp) * 10) / 10) : 0,
-      spSpent: before && st ? Math.max(0, Math.round((before.sp - st.sp) * 10) / 10) : 0,
-    };
-  }
-  sendCombatDebug(client, payload = {}) {
-    if (!client || typeof this.isAdminClient !== 'function' || !this.isAdminClient(client)) return;
-    client.send('combatDebug', { at: Date.now(), ...payload });
-  }
   // Tell the attacker the actual damage their hit dealt, so the client can float a
   // number over the mob. Server-authoritative — no client-side damage prediction.
   emitDamageNumber(client, mob, damage, crit, lethal=mob.hp-damage<=0) {
@@ -903,9 +858,7 @@ class CombatMixin {
     client.send('dmgnum', { x: mob.x, y: mob.y, z: mob.z, n, crit: !!crit, lethal: !!lethal });
   }
   handleAttack(client, m) {
-    const reject = (reason, extra = {}) => {
-      this.sendCombatDebug(client, { kind: 'melee-reject', reason, ...extra });
-    };
+    const reject = () => {};
     if (!m) return reject('payload');
     const mobId = String(m.id);
     const mob = this.state.mobs.get(mobId);
@@ -951,23 +904,10 @@ class CombatMixin {
     if (!this.isAnimalKind(mob.kind)) this.alertPack(mobId);
     if (mob.kind === 'boss' && mob.dgn) this.recordBossContribution(client, mob.dgn, dmg);
     if (mob.kind === 'boss' && !mob.dgn && this.recordMeteorBossDamage) this.recordMeteorBossDamage(client, mobId, dmg);
-    const rawDmg=dmg,mitigationMultiplier=this.banditProtectionMultiplier(mobId,mob),beforeHp=mob.hp;
+    const mitigationMultiplier=this.banditProtectionMultiplier(mobId,mob);
     const applied=dmg*mitigationMultiplier;
     this.emitDamageNumber(client,mob,applied,crit,mob.hp-applied<=0);
     mob.hp -= applied;
-    this.sendCombatDebug(client,{
-      kind:'melee',
-      weapon:profile.archetype||'hand',
-      reach,
-      panther,
-      crit,
-      execute: executeReady,
-      classPath,
-      target:{id:mobId,kind:mob.kind,state:mob.state||'',hp:Math.max(0,Math.round(mob.hp)),maxHp:Math.round(mob.maxHp||beforeHp||0)},
-      damage:{raw:Math.round(rawDmg*10)/10,applied:Math.round(applied*10)/10,mitigated:Math.round(Math.max(0,rawDmg-applied)*10)/10,multiplier:Math.round(mitigationMultiplier*100)/100},
-      resources:this.combatResourceSnapshot(client),
-      buffs:this.combatBuffSnapshot(client.sessionId,now),
-    });
     if(crit||executeReady)this.sendSpace(mob.dgn||'','fx',{t:'combatReact',kind:executeReady?'execute':'crit',x:mob.x,y:mob.y,z:mob.z,dgn:mob.dgn||''});
     if (panther) {
       const pantherBefore = buffs.pantherUntil || now;
@@ -1006,8 +946,7 @@ class CombatMixin {
     }
   }
   handlePlayerAttack(client, m) {
-    const reject = (reason, extra = {}) => {
-      this.sendCombatDebug(client, { kind: 'pvp-reject', reason, ...extra });
+    const reject = (reason) => {
       if (client) client.send('pvpReject', { reason });
     };
     if (!client || !m) return reject('payload');
@@ -1044,12 +983,6 @@ class CombatMixin {
     this.playerLastHit.set(targetSid, { attackerSid, at: now, kind: 'pvp' });
     this.hurtPlayer(targetClient, raw, 'pvp', { attack: 'Hunter Strike', attackerSid });
     client.send('dmgnum', { x: target.x, y: target.y + 1, z: target.z, n: raw, crit: false, lethal: false });
-    this.sendCombatDebug(client, {
-      kind: 'pvp',
-      target: { sid: targetSid, name: target.name || 'Hunter' },
-      damage: { raw, applied: raw },
-      resources: this.combatResourceSnapshot(client),
-    });
     this.sendSpace(attackerDgn, 'fx', { t: 'combatReact', kind: 'pvp', x: target.x, y: target.y, z: target.z, fromX: attacker.x, fromY: attacker.y + 1, fromZ: attacker.z, sid: attackerSid, targetSid, dgn: attackerDgn });
   }
   breakBlocksInRadius(client, x, y, z, radius, maxBreaks) {

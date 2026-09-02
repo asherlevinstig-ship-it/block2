@@ -2847,7 +2847,7 @@ test('Verdant Shifter heals allies, snares mobs, and shifts into panther form',(
   assert.ok((room.abilityBuffs.get(healer.sessionId).pantherUntil||0)>Date.now(),'Panther Form is stored as an authoritative buff');
   assert.equal(st.sp,6,'Panther Form spends authoritative stamina');
   assert.equal(healer.sent.some(e=>e.type==='abilityResult'&&e.msg.kind==='panther'&&e.msg.durationMs>13000),true,'Panther Form tells the local client how long the first-person transformation lasts');
-  assert.equal(healer.sent.some(e=>e.type==='combatDebug'&&e.msg.kind==='ability-cast'&&e.msg.ability.kind==='panther'&&e.msg.resources.spSpent===4),true,'admin combat debug shows Panther Form stamina spend');
+  assert.equal(healer.sent.some(e=>e.type==='combatDebug'),false,'combat debug messages are not sent');
   assert.ok(room.serverDamageFor(room.state.players.get(healer.sessionId),healer.sessionId)>baseline,'Panther Form increases authoritative melee damage');
   const pantherMob = new Mob(); pantherMob.kind = 'zombie'; pantherMob.x = 21.8; pantherMob.y = 10; pantherMob.z = 20; pantherMob.hp = 80; pantherMob.maxHp = 80; room.state.mobs.set('panther_prey', pantherMob);
   room.mobMeta.panther_prey = room.freshMeta(21.8, 20, 3, 1.5, 'zombie', 0, true);
@@ -2871,7 +2871,7 @@ test('class combat identities have distinct server-side mechanics', () => {
   shadowRoom.mobMeta.shadow_doomed = shadowRoom.freshMeta(doomed.x, doomed.z, 3, 1.5, 'zombie', 0, true);
   shadowRoom.handleAttack(shadow, { id: 'shadow_doomed' });
   assert.equal(shadowRoom.state.mobs.has('shadow_doomed'), false, 'Shadow burst executes low-health enemies');
-  assert.equal(shadow.sent.some(e => e.type === 'combatDebug' && e.msg.kind === 'melee' && e.msg.execute === true), true, 'admin combat debug exposes Shadow execute state');
+  assert.equal(shadow.sent.some(e => e.type === 'combatDebug'), false, 'combat debug messages are not sent');
 
   const mageRoom = makeRoom(), mage = makeClient('mage_identity');
   const { prof: mageProf } = seedPlayer(mageRoom, mage, { lvl: 12, x: 20, y: 10, z: 20 });
