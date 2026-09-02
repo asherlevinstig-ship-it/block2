@@ -903,25 +903,32 @@ class CombatMixin {
     client.send('dmgnum', { x: mob.x, y: mob.y, z: mob.z, n, crit: !!crit, lethal: !!lethal });
   }
   handleAttack(client, m) {
-    if (!m) return;
+    const reject = (reason, extra = {}) => {
+      this.sendCombatDebug(client, { kind: 'melee-reject', reason, ...extra });
+    };
+    if (!m) return reject('payload');
     const mobId = String(m.id);
     const mob = this.state.mobs.get(mobId);
-    if (!mob) return;
-    if (this.mobMeta[mobId] && this.mobMeta[mobId].friendly) return;
+    if (!mob) return reject('target', { id: mobId });
+    if (this.mobMeta[mobId] && this.mobMeta[mobId].friendly) return reject('friendly', { id: mobId, targetKind: mob.kind });
     const p = this.state.players.get(client.sessionId);
-    if (!p || (p.dgn || '') !== (mob.dgn || '')) return;
-    if (!this.isPlayerAlive(client)) return;
+    if (!p) return reject('player');
+    if ((p.dgn || '') !== (mob.dgn || '')) return reject('space', { id: mobId, playerDgn: p.dgn || '', mobDgn: mob.dgn || '' });
+    if (!this.isPlayerAlive(client)) return reject('dead');
     const now = Date.now();
     if (!this.lastAttackMsg) this.lastAttackMsg = new Map();
     const profile = this.meleeProfile(p, client.sessionId);
-    if (now - (this.lastAttackMsg.get(client.sessionId) || 0) < profile.cd) return;   // per-weapon swing cadence
+    if (now - (this.lastAttackMsg.get(client.sessionId) || 0) < profile.cd) return reject('cooldown', { cd: profile.cd });   // per-weapon swing cadence
     this.lastAttackMsg.set(client.sessionId, now);
     const buffs = this.abilityBuffs.get(client.sessionId);
     const panther = !!(buffs && buffs.pantherUntil > now);
     const reach = panther ? 5.6 : 4.1;
-    if (Math.hypot(mob.x - p.x, mob.z - p.z) > reach || Math.abs(mob.y - p.y) > 3) return;   // melee reach (3D)
+    const distance = Math.hypot(mob.x - p.x, mob.z - p.z);
+    const yDelta = Math.abs(mob.y - p.y);
+    const verticalReach = mob.kind === 'boss' ? 6 : 4.5;
+    if (distance > reach || yDelta > verticalReach) return reject('range', { id: mobId, distance: Math.round(distance * 100) / 100, yDelta: Math.round(yDelta * 100) / 100, reach, verticalReach });   // tolerate tall bosses and stepped dungeon floors
     // require line of sight, matching the mob side — no hitting through walls
-    if (!AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, mob.x, mob.y + 0.9, mob.z)) return;
+    if (!AI.losClear(this.spaceSolid(p.dgn || ''), p.x, p.y + 1.2, p.z, mob.x, mob.y + 0.9, mob.z)) return reject('sight', { id: mobId });
     if (typeof this.revealDeityInvisibility === 'function') this.revealDeityInvisibility(client, 'attack');
     const crit = mob.state === 'stun';
     const rec = this.profileFor(client);
@@ -997,6 +1004,53 @@ class CombatMixin {
       client.send('weaponIdentity',{kind:'stagger',boss:mob.kind==='boss',durationMs:Math.round((mob.kind==='boss'?rule.bossSeconds:rule.normalSeconds)*1000)});
       this.sendSpace(mob.dgn||'','fx',{t:'weaponStagger',x:mob.x,y:mob.y,z:mob.z,boss:mob.kind==='boss',dgn:mob.dgn||''});
     }
+  }
+  handlePlayerAttack(client, m) {
+    const reject = (reason, extra = {}) => {
+      this.sendCombatDebug(client, { kind: 'pvp-reject', reason, ...extra });
+      if (client) client.send('pvpReject', { reason });
+    };
+    if (!client || !m) return reject('payload');
+    const attackerSid = client.sessionId;
+    const targetSid = String(m.sid || '');
+    if (!targetSid || targetSid === attackerSid) return reject('target');
+    const attacker = this.state.players.get(attackerSid);
+    const target = this.state.players.get(targetSid);
+    const targetClient = (this.clients || []).find(c => c.sessionId === targetSid);
+    if (!attacker || !target || !targetClient) return reject('target');
+    const attackerDgn = attacker.dgn || '';
+    const targetDgn = target.dgn || '';
+    if (attackerDgn !== targetDgn) return reject('space', { attackerDgn, targetDgn });
+    if (typeof this.isKingParticipant === 'function' && (this.isKingParticipant(attackerSid) || this.isKingParticipant(targetSid))) return reject('event');
+    if (!this.isPlayerAlive(client) || !this.isPlayerAlive(targetClient)) return reject('dead');
+    const attackerTeam = String(attacker.team || '');
+    const targetTeam = String(target.team || '');
+    if (attackerTeam && targetTeam && attackerTeam === targetTeam) return reject('team');
+    if (!attackerDgn && (this.isTownProtected(attacker.x, attacker.z) || this.isTownProtected(target.x, target.z))) return reject('town');
+    const reach = 4.4;
+    const distance = Math.hypot(attacker.x - target.x, attacker.z - target.z);
+    const yDelta = Math.abs(attacker.y - target.y);
+    const verticalReach = 4.5;
+    if (distance > reach || yDelta > verticalReach) return reject('range', { distance: Math.round(distance * 100) / 100, yDelta: Math.round(yDelta * 100) / 100, reach, verticalReach });
+    const solid = this.spaceSolid(attackerDgn);
+    if (solid(Math.floor(attacker.x), Math.floor(attacker.y + 0.9), Math.floor(attacker.z)) ||
+        solid(Math.floor(attacker.x), Math.floor(attacker.y + 1.5), Math.floor(attacker.z))) return reject('noclip');
+    if (!AI.losClear(solid, attacker.x, attacker.y + 1.2, attacker.z, target.x, target.y + 1.2, target.z)) return reject('sight');
+    const now = Date.now();
+    if (!this.lastPlayerAttackMsg) this.lastPlayerAttackMsg = new Map();
+    if (now - (this.lastPlayerAttackMsg.get(attackerSid) || 0) < 450) return reject('cooldown');
+    this.lastPlayerAttackMsg.set(attackerSid, now);
+    const raw = Math.max(3, Math.round(this.serverDamageFor(attacker, attackerSid) * .65));
+    this.playerLastHit.set(targetSid, { attackerSid, at: now, kind: 'pvp' });
+    this.hurtPlayer(targetClient, raw, 'pvp', { attack: 'Hunter Strike', attackerSid });
+    client.send('dmgnum', { x: target.x, y: target.y + 1, z: target.z, n: raw, crit: false, lethal: false });
+    this.sendCombatDebug(client, {
+      kind: 'pvp',
+      target: { sid: targetSid, name: target.name || 'Hunter' },
+      damage: { raw, applied: raw },
+      resources: this.combatResourceSnapshot(client),
+    });
+    this.sendSpace(attackerDgn, 'fx', { t: 'combatReact', kind: 'pvp', x: target.x, y: target.y, z: target.z, fromX: attacker.x, fromY: attacker.y + 1, fromZ: attacker.z, sid: attackerSid, targetSid, dgn: attackerDgn });
   }
   breakBlocksInRadius(client, x, y, z, radius, maxBreaks) {
     const p = this.state.players.get(client.sessionId);

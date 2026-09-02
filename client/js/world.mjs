@@ -9970,7 +9970,7 @@ function mobUnderCrosshair(range=3.5){
 function remoteUnderCrosshair(range=4.4){
   const bounty=activeAegisBounty();
   const kingHit=serverEvent&&serverEvent.kind==='king'&&serverEvent.phase==='active'&&serverEvent.participating;
-  if(!NET.on||!NET.room||(!kingHit&&!bounty)) return null;
+  if(!NET.on||!NET.room) return null;
   const dir=new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(player.pitch,player.yaw,0,'YXZ'));
   const o=new THREE.Vector3(player.pos.x,player.pos.y+player.eye,player.pos.z);
   let best=null, bd=range;

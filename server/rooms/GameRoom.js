@@ -576,6 +576,7 @@ class GameRoom extends Room {
     this.onMessage('dedit', (client, m) => this.handleDungeonEdit(client, m));
 
     this.onMessage('attack', (client, m) => this.handleAttack(client, m));
+    this.onMessage('playerAttack', (client, m) => this.handlePlayerAttack(client, m));
     this.onMessage('playerAction', (client, m) => this.handlePlayerAction(client, m));
     this.onMessage('banditSpare', (client, m) => this.handleBanditSpare(client, m));
     this.onMessage('roadsideInteract', (client, m) => this.handleRoadsideInteract(client, m));

@@ -2566,6 +2566,15 @@ function netAttachRoom(room,name,client){
       else if(r==='none') sysMsg('No active Aegis bounty.');
       else sysMsg('Aegis bounty strike failed.');
     });
+    room.onMessage('pvpReject', m=>{
+      const r=m&&m.reason;
+      if(r==='town') showName('Town is a combat safe zone');
+      else if(r==='team') showName('You cannot attack a teammate');
+      else if(r==='event') showName('Use the active event combat rules');
+      else if(r==='range') showName('Player is out of melee range');
+      else if(r==='sight') showName('Your attack is blocked');
+      else if(r!=='cooldown') showName('Player attack rejected');
+    });
     room.onMessage('pvpBountySlain', ()=>sysMsg('You were slain by an <b>Aegis bounty</b>.'));
     room.onMessage('eventCrown', m=>{
       if(!m) return;

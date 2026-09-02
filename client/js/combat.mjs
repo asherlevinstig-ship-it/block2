@@ -6182,7 +6182,8 @@ function primaryAction(){
       const p=rival.remote.grp.position;
       burst(p.x, p.y+1.1, p.z, [1,.82,.18], 6, 1.5, 1.1, .3);
       if(activeAegisBounty()) NET.room.send('pvpBountyHit',{sid:rival.sid});
-      else NET.room.send('eventHit',{sid:rival.sid});
+      else if(serverEvent&&serverEvent.kind==='king'&&serverEvent.phase==='active'&&serverEvent.participating) NET.room.send('eventHit',{sid:rival.sid});
+      else NET.room.send('playerAttack',{sid:rival.sid});
       return;
     }
   }

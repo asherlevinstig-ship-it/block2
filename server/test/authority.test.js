@@ -4782,6 +4782,64 @@ test('melee requires line of sight — no hitting a mob through a wall', () => {
   assert.ok(room.state.mobs.get('z1').hp < 20, 'the hit lands with clear line of sight');
 });
 
+test('melee tolerates stepped dungeon floors and tall boss origins', () => {
+  const room = makeRoom();
+  const client = makeClient('dungeon_fighter');
+  seedPlayer(room, client, { x: 20.5, y: 10, z: 20.5, lvl: 8, dgn: 'depths' });
+  room.state.mobs.set('raised', { x: 21.5, y: 14.2, z: 20.5, yaw: 0, hp: 60, maxHp: 60, kind: 'zombie', dgn: 'depths', state: '' });
+  room.mobMeta.raised = room.freshMeta(21.5, 20.5, 3, 1.5, 'zombie', 0, true);
+
+  room.handleAttack(client, { id: 'raised' });
+  assert.ok(room.state.mobs.get('raised').hp < 60, 'a visible mob on the next dungeon step can be hit');
+
+  room.state.mobs.set('tall_boss', { x: 21.5, y: 15.5, z: 20.5, yaw: 0, hp: 200, maxHp: 200, kind: 'boss', dgn: 'depths', state: '' });
+  room.mobMeta.tall_boss = room.freshMeta(21.5, 20.5, 8, 1.5, 'boss', 1, true);
+  room.lastAttackMsg.set(client.sessionId, 0);
+  room.handleAttack(client, { id: 'tall_boss' });
+  assert.ok(room.state.mobs.get('tall_boss').hp < 200, 'a tall boss origin does not invalidate a close melee hit');
+});
+
+test('ordinary pvp melee damages a nearby player outside protected town', () => {
+  const room = makeRoom();
+  const attacker = makeClient('duelistA');
+  const target = makeClient('duelistB');
+  seedPlayer(room, attacker, { x: 20.5, y: 16, z: 20.5, lvl: 9 });
+  seedPlayer(room, target, { x: 22.5, y: 16, z: 20.5, hp: 20 });
+  room.clients = [attacker, target];
+
+  room.handlePlayerAttack(attacker, { sid: target.sessionId });
+  assert.ok(room.playerHp.get(target.sessionId).hp < 20, 'server-authoritative pvp damage is applied');
+  assert.equal(attacker.sent.some(e => e.type === 'dmgnum'), true, 'attacker receives visible hit feedback');
+  assert.equal(room.playerLastHit.get(target.sessionId).attackerSid, attacker.sessionId, 'the attacker is recorded for death attribution');
+});
+
+test('ordinary pvp melee respects teams, walls, and town protection', () => {
+  const room = makeRoom();
+  const attacker = makeClient('guardA');
+  const target = makeClient('guardB');
+  seedPlayer(room, attacker, { x: 20.5, y: 16, z: 20.5, team: 'guild', lvl: 9 });
+  seedPlayer(room, target, { x: 22.5, y: 16, z: 20.5, team: 'guild', hp: 20 });
+  room.clients = [attacker, target];
+
+  room.handlePlayerAttack(attacker, { sid: target.sessionId });
+  assert.equal(room.playerHp.get(target.sessionId).hp, 20, 'teammates cannot damage each other');
+  assert.equal(attacker.sent.at(-1).msg.reason, 'team');
+
+  room.state.players.get(target.sessionId).team = 'rivals';
+  for (let y = 15; y <= 18; y++) room.world.setB(21, y, 20, W.B.STONE);
+  room.handlePlayerAttack(attacker, { sid: target.sessionId });
+  assert.equal(room.playerHp.get(target.sessionId).hp, 20, 'walls block ordinary pvp melee');
+  assert.equal(attacker.sent.at(-1).msg.reason, 'sight');
+
+  for (let y = 15; y <= 18; y++) room.world.setB(21, y, 20, W.B.AIR);
+  const inTown = { x: W.TOWN.TC + 0.5, z: W.TOWN.TC + 0.5 };
+  Object.assign(room.state.players.get(attacker.sessionId), inTown);
+  Object.assign(room.state.players.get(target.sessionId), { x: W.TOWN.TC + 2.5, z: W.TOWN.TC + 0.5 });
+  room.handlePlayerAttack(attacker, { sid: target.sessionId });
+  assert.equal(room.playerHp.get(target.sessionId).hp, 20, 'town remains a pvp safe zone');
+  assert.equal(attacker.sent.at(-1).msg.reason, 'town');
+});
+
 test('pvp bounty strike requires line of sight — no hitting a target through a wall', () => {
   const room = makeRoom();
   const attacker = makeClient('hunterA');
