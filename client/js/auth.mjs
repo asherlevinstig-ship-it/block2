@@ -1,4 +1,4 @@
-export function createAuthController({ user, password, playerName, status, play, register, logout, request = fetch, apiUrl = path => path }) {
+export function createAuthController({ user, password, playerName, status, play, questionsPlay = null, register, logout, request = fetch, apiUrl = path => path }) {
   const state = { checked: false, account: null, gameProfile: null, busy: false };
   const cleanHunterName = value => String(value || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
   const hunterSetup = typeof document === 'undefined' ? null : document.getElementById('huntersetup');
@@ -303,6 +303,8 @@ export function createAuthController({ user, password, playerName, status, play,
 
   function render() {
     const signed = !!state.account;
+    const signedUsername = String(state.account && state.account.username || '').trim().toLowerCase();
+    const asherChoice = signed && signedUsername === 'asherlevin85@gmail.com' && hasHunterName();
     const editingMirror = mirrorOpen();
     if (typeof document !== 'undefined' && document.body) document.body.classList.toggle('character-setup-open', signed && !hasHunterName() && !editingMirror);
     user.classList.toggle('hidden', signed);
@@ -313,7 +315,8 @@ export function createAuthController({ user, password, playerName, status, play,
     register.classList.add('hidden');
     register.hidden = true;
     logout.classList.toggle('hidden', !signed);
-    play.textContent = signed && !hasHunterName() ? 'SAVE HUNTER NAME' : signed ? 'PLAY' : 'SIGN IN & PLAY';
+    if (questionsPlay) questionsPlay.classList.toggle('hidden', !asherChoice);
+    play.textContent = signed && !hasHunterName() ? 'SAVE HUNTER NAME' : asherChoice ? 'PLAY GAME' : signed ? 'PLAY' : 'SIGN IN & PLAY';
     if (signed) {
       if (hasHunterName()) setStatus('SIGNED IN AS ' + state.account.username.toUpperCase(), 'ok');
       else setStatus('CHOOSE YOUR HUNTER NAME');

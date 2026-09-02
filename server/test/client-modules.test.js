@@ -3677,7 +3677,21 @@ test('stored signed-in sessions auto-resume into the live room after refresh', (
   assert.match(combatSource, /checkAuth\(\)\.then\(account=>\{/);
   assert.match(combatSource, /account && AUTH_UI\.hasHunterName\(\) && !NET\.tried/);
   assert.match(combatSource, /setAuthStatus\('RESTORING GAME\.\.\.'\);/);
-  assert.match(combatSource, /startPlaying\(false\);/);
+  assert.match(combatSource, /startPlaying\(false,'game'\)/);
+});
+
+test('Asher can choose the Question Hall or the full game before entering', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const auth = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'auth.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(html, /id="questionsplaybtn"[\s\S]*JUST ANSWER QUESTIONS/);
+  assert.match(auth, /signedUsername === 'asherlevin85@gmail.com'/);
+  assert.match(auth, /asherChoice \? 'PLAY GAME'/);
+  assert.match(combat, /startPlaying\(false,'questions'\)/);
+  assert.match(combat, /CHOOSE HOW YOU WANT TO ENTER BLOCKCRAFT/);
+  assert.match(networking, /BlockcraftRequestedStartMode==='questions'/);
+  assert.match(networking, /dimensionsApi\.enterQuestionRoom\(\)/);
 });
 
 test('rendering runtime owns renderer initialization resize and draw', async () => {

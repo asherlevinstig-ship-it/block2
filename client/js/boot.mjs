@@ -124,7 +124,7 @@ try {
   document.documentElement.dataset.gamePhase = 'ready';
   window.BlockcraftTrace && window.BlockcraftTrace('boot.ready', { modules: gameContext.snapshot().loadedModules });
   document.documentElement.dataset.gameModules = gameContext.snapshot().loadedModules.join(',');
-  for (const id of ['playbtn', 'registerbtn', 'logoutbtn']) {
+  for (const id of ['playbtn', 'questionsplaybtn', 'registerbtn', 'logoutbtn']) {
     const button = document.getElementById(id);
     if (button) button.disabled = false;
   }

@@ -541,6 +541,7 @@ const MOUSE_LOOK_SENSITIVITY=.00175;
 let mouseLookSuppressedUntil=0;
 const overlay=document.getElementById('overlay');
 const playbtn=document.getElementById('playbtn');
+const questionsplaybtn=document.getElementById('questionsplaybtn');
 const registerbtn=document.getElementById('registerbtn');
 const logoutbtn=document.getElementById('logoutbtn');
 const authuser=document.getElementById('authuser');
@@ -5277,17 +5278,18 @@ function requestPointerLockSafe(onFail=enterPlayFallback){
     return false;
   }
 }
-const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,register:registerbtn,logout:logoutbtn,apiUrl});
+const AUTH_UI=createAuthController({user:authuser,password:authpass,playerName:document.getElementById('playername'),status:authstatus,play:playbtn,questionsPlay:questionsplaybtn,register:registerbtn,logout:logoutbtn,apiUrl});
 const AUTH=AUTH_UI.state;
 const openingCinematicReady=globalThis.BlockcraftOpeningReady&&typeof globalThis.BlockcraftOpeningReady.then==='function'?globalThis.BlockcraftOpeningReady:Promise.resolve();
 const setAuthStatus=(text,kind='')=>AUTH_UI.setStatus(text,kind);
 const renderAuthState=()=>AUTH_UI.render();
 const checkAuth=()=>AUTH_UI.check();
 const authenticate=(create=false)=>AUTH_UI.authenticate(create);
-async function startPlaying(create=false){
-  if(AUTH.busy)return;AUTH.busy=true;playbtn.disabled=true;registerbtn.disabled=true;
+async function startPlaying(create=false,startMode=''){
+  if(AUTH.busy)return;AUTH.busy=true;playbtn.disabled=true;if(questionsplaybtn)questionsplaybtn.disabled=true;registerbtn.disabled=true;
+  const wasSignedIn=!!AUTH.account;
   const authenticated=await authenticate(false);
-  AUTH.busy=false;playbtn.disabled=false;registerbtn.disabled=false;
+  AUTH.busy=false;playbtn.disabled=false;if(questionsplaybtn)questionsplaybtn.disabled=false;registerbtn.disabled=false;
   if(!authenticated)return;
   if(!AUTH_UI.hasHunterName()){
     const hunterName=AUTH_UI.requireHunterName();
@@ -5299,6 +5301,17 @@ async function startPlaying(create=false){
       setAuthStatus(e.message||'COULD NOT SAVE HUNTER PROFILE','bad');
       return;
     }
+  }
+  const signedUsername=String(AUTH.account&&AUTH.account.username||'').trim().toLowerCase();
+  const isAsher=signedUsername==='asherlevin85@gmail.com';
+  if(isAsher&&!wasSignedIn&&!startMode){
+    renderAuthState();
+    setAuthStatus('CHOOSE HOW YOU WANT TO ENTER BLOCKCRAFT','ok');
+    return;
+  }
+  if(isAsher){
+    firstTownChoiceDismissedThisSession=true;
+    globalThis.BlockcraftRequestedStartMode=startMode==='questions'?'questions':'game';
   }
   if(globalThis.BlockcraftOpeningAudio&&typeof globalThis.BlockcraftOpeningAudio.stop==='function')globalThis.BlockcraftOpeningAudio.stop();
   SFX.init();
@@ -5320,8 +5333,12 @@ async function startPlaying(create=false){
 try{ const sn=localStorage.getItem('bc_name'); if(sn) document.getElementById('playername').value=sn; }catch(e){}
 checkAuth().then(account=>{
   if(account && AUTH_UI.hasHunterName() && !NET.tried){
-    setAuthStatus('RESTORING GAME...');
-    openingCinematicReady.then(()=>startPlaying(false));
+    if(String(account.username||'').trim().toLowerCase()==='asherlevin85@gmail.com'){
+      setAuthStatus('CHOOSE HOW YOU WANT TO ENTER BLOCKCRAFT','ok');
+    }else{
+      setAuthStatus('RESTORING GAME...');
+      openingCinematicReady.then(()=>startPlaying(false,'game'));
+    }
   }
 }).catch(()=>{});
 function primeMenuAudio(){
@@ -5337,7 +5354,8 @@ if(authpassshow&&authpass)authpassshow.addEventListener('click',()=>{
   authpassshow.setAttribute('aria-pressed', visible?'false':'true');
   authpass.focus();
 });
-playbtn.addEventListener('click', ()=>{ primeMenuAudio(); startPlaying(false); });
+playbtn.addEventListener('click', ()=>{ primeMenuAudio(); startPlaying(false,AUTH.account?'game':''); });
+if(questionsplaybtn)questionsplaybtn.addEventListener('click',()=>{primeMenuAudio();startPlaying(false,'questions');});
 logoutbtn.addEventListener('click',async()=>{
   const rankContinue=document.getElementById('rankupcontinue');
   if(rankContinue)rankContinue.click();

@@ -3179,6 +3179,12 @@ function netRestoreProfile(m){
     if(progressionFocus&&!ONBOARD.isSeen())setTimeout(()=>ONBOARD.showFirstPromotion(),80);
     eventLog((m.name||'Hunter')+' returned — progress restored');
     finishWorldLoading('profile');
+    if(globalThis.BlockcraftRequestedStartMode==='questions'){
+      globalThis.BlockcraftRequestedStartMode='';
+      setTimeout(()=>{
+        if(dim==='overworld'&&dimensionsApi.enterQuestionRoom)dimensionsApi.enterQuestionRoom();
+      },80);
+    }else if(globalThis.BlockcraftRequestedStartMode==='game')globalThis.BlockcraftRequestedStartMode='';
     schedulePlayerArrivalVfx(player&&player.pos,{key:'local:'+String(NET.roomName||'room')+':'+String(dim||'world')+':'+String(NET.dgn||'main'),local:true,delay:320});
   }catch(e){ console.warn('profile restore failed', e); finishWorldLoading('profile-error'); }
 }
