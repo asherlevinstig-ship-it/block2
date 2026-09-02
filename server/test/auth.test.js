@@ -1148,6 +1148,34 @@ test('MySQL game question store limits Computer Science Recall to number systems
   assert.match(recallSql, /number-systems-base2-base10-base16/);
 });
 
+test('MySQL Recall avoids recently served questions when alternatives exist', async () => {
+  const pool = {
+    async execute(sql) {
+      if (/CREATE TABLE IF NOT EXISTS game_question/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS teacher_curriculum_request/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS game_homework_progress/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/CREATE TABLE IF NOT EXISTS kc_/i.test(sql)) return [{ affectedRows: 0 }];
+      if (/SELECT id, name, code, school_id FROM subjects/i.test(sql) && /LOWER\(name\) = LOWER\(\?\)/i.test(sql)) {
+        return [[{ id: 5, name: 'Computer Science', code: 'CS', school_id: 12 }]];
+      }
+      if (/SELECT COUNT\(\*\) AS n\s+FROM game_question/i.test(sql)) return [[{ n: 2 }]];
+      if (/SELECT id, prompt, answers, correct_index/i.test(sql)) return [[
+        { id: 91, prompt: 'Repeated question', answers: JSON.stringify(['A', 'B', 'C', 'D']), correct_index: 0, topic: 'Number systems', stage: 'KS3', difficulty: 1, spec: 'number-systems-base2-base10-base16' },
+        { id: 92, prompt: 'Fresh question', answers: JSON.stringify(['A', 'B', 'C', 'D']), correct_index: 1, topic: 'Number systems', stage: 'KS3', difficulty: 1, spec: 'number-systems-base2-base10-base16' },
+      ]];
+      throw new Error('unexpected SQL: ' + sql);
+    },
+  };
+  const store = new MySqlGameQuestionStore({ pool });
+  const question = await store.loadRecallQuestion(
+    { id: 'student_9', accountType: 'student', role: 'student', schoolId: '12' },
+    { subject: 'Computer Science', avoidQuestionIds: ['db-recall-91'] },
+  );
+  assert.equal(question.questionId, 92);
+  assert.equal(question.prompt, 'Fresh question');
+});
+
 test('MySQL game question analytics includes class students with zero attempts', async () => {
   const pool = {
     async execute(sql, params = []) {

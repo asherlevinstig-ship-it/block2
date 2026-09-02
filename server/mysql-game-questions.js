@@ -2310,13 +2310,18 @@ class MySqlGameQuestionStore {
        LIMIT 25`,
       [subject.subjectId],
     );
+    const avoidInput = (Array.isArray(input.avoidQuestionIds) ? input.avoidQuestionIds : [input.avoidQuestionId])
+      .filter(v => v != null && v !== '');
+    const avoided = new Set(avoidInput.flatMap(v => { const raw = String(v); return [raw, raw.replace(/^db-recall-/, '')]; }));
+    const immediate = avoidInput.length ? String(avoidInput[0]).replace(/^db-recall-/, '') : '';
+    const candidates = [];
     for (const row of rows || []) {
       let answers = [];
       try { answers = JSON.parse(row.answers || '[]'); } catch (_) {}
       if (!Array.isArray(answers)) continue;
       answers = answers.map(v => cleanText(v, 160)).filter(Boolean).slice(0, 4);
       if (answers.length !== 4) continue;
-      return {
+      candidates.push({
         id: 'db-recall-' + (Number(row.id) || 0),
         questionId: Number(row.id) || 0,
         subject: subject.subjectName || cleanText(input.subject, 96) || 'General',
@@ -2328,9 +2333,12 @@ class MySqlGameQuestionStore {
         answers,
         correct: Math.max(0, Math.min(3, Number(row.correct_index) || 0)),
         explanation: row.explanation || '',
-      };
+      });
     }
-    return null;
+    return candidates.find(q => !avoided.has(String(q.id)) && !avoided.has(String(q.questionId)))
+      || candidates.find(q => String(q.questionId) !== immediate)
+      || candidates[0]
+      || null;
   }
 
   async findPlayableRecallSubject(account, input = {}) {

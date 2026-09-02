@@ -64,7 +64,10 @@ function releaseRecallMovement(reason){
     if(NET&&NET.on&&NET.room&&player&&player.pos)NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});
   }catch(e){}
 }
-function submitAnswer(index){if(!active||answerPending)return;answerPending=true;releaseRecallMovement('recall-submit');fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);NET.room.send('recallAnswer',{id:active.id,index});}
+function syncRecallPose(){
+  try{if(NET&&NET.on&&NET.room&&player&&player.pos)NET.room.send('move',{x:player.pos.x,y:player.pos.y,z:player.pos.z,yaw:player.yaw,heldId:typeof displayHeldId==='function'?displayHeldId():undefined});}catch(e){}
+}
+function submitAnswer(index){if(!active||answerPending)return;answerPending=true;syncRecallPose();fallbackEl.querySelectorAll('button').forEach(b=>b.disabled=true);NET.room.send('recallAnswer',{id:active.id,index});}
 function showQuestion(m){
   const hall=!!(m&&m.questionHall)||questionHallOpen;
   clearRecall({keepQuestionHall:hall});active=m;answerPending=false;masterySummary=m.mastery||masterySummary;group=new THREE.Group();
@@ -108,7 +111,7 @@ function queueQuestionHallNext(delay=900){
 function reviewTiming(nextDue){const ms=Math.max(0,(Number(nextDue)||0)-Date.now());if(ms<3*60*1000)return 'again soon';if(ms<60*60*1000)return 'in '+Math.max(1,Math.round(ms/60000))+' minutes';if(ms<36*60*60*1000)return 'tomorrow';return 'in '+Math.max(2,Math.round(ms/86400000))+' days';}
 function result(m){
   if(!m)return;if(m.expired){clearRecall();return sysMsg('The Recall Cast faded.');}
-  releaseRecallMovement(m.correct?'recall-correct':'recall-wrong');
+  if(m.correct)syncRecallPose();else releaseRecallMovement('recall-wrong');
   masterySummary=m.mastery||masterySummary;
   const hall=questionHallOpen||!!m.questionHall,answer=active&&active.answers&&active.answers[m.correctIndex]||'';
   if(m.correct&&globalThis.BlockcraftOnboarding)globalThis.BlockcraftOnboarding.markRecall();

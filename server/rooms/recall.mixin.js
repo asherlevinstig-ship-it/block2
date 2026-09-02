@@ -5,7 +5,7 @@ const W=require('../world');
 const { getAuthService }=require('../auth');
 
 class RecallMixin{
-  initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
+  initRecallState(){this.recallChallenges=new Map();this.recallFrozenUntil=new Map();this.recallSubjects=new Map();this.recallRecentQuestions=new Map();this.recallSeq=0;this.recallLecternRenownAt=new Map();}
   cleanRecallSubject(value){return String(value||'').replace(/[<>]/g,'').replace(/\s+/g,' ').trim().slice(0,96);}
   recallTutorialSpace(p){
     return !!(p&&(p.dim==='tutorial'||String(p.dgn||'').startsWith('tutorial-')));
@@ -109,7 +109,8 @@ class RecallMixin{
     try{
       const auth=getAuthService(),store=auth&&typeof auth.getGameQuestionStore==='function'?auth.getGameQuestionStore():null;
       if(store&&client&&client._account&&typeof store.loadRecallQuestion==='function'){
-        q=await store.loadRecallQuestion(client._account,{subject,fallbackSubject:'Computer Science'});
+        const mastery=rec&&rec.prof&&rec.prof.recallMastery||{},recent=this.recallRecentQuestions.get(client.sessionId)||[];
+        q=await store.loadRecallQuestion(client._account,{subject,fallbackSubject:'Computer Science',avoidQuestionIds:[mastery.lastQuestionId,...recent]});
       }
     }catch(_){}
     if(!q)q=RECALL.selectQuestion(subject,rec&&rec.prof.recallMastery||{},now,Math.random);
@@ -118,6 +119,10 @@ class RecallMixin{
     const dungeonRecall=this.recallDungeonSpace(p);
     const id=now.toString(36)+'-'+Math.random().toString(36).slice(2,8),pillars=this.recallPositions(p,yaw),fallback=questionHall||pillars.some(v=>v.blocked),expiresAt=now+RECALL.QUESTION_MS;
     const source=message.source==='lectern'?'lectern':(questionHall?'question_hall':(tutorial?'tutorial':''));
+    if(q&&q.id){
+      const recent=this.recallRecentQuestions.get(client.sessionId)||[];
+      this.recallRecentQuestions.set(client.sessionId,[q.id,...recent.filter(id=>id!==q.id)].slice(0,4));
+    }
     this.recallChallenges.set(client.sessionId,{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,spec:q.spec,prompt:q.prompt,answers:q.answers,correct:q.correct,explanation:q.explanation,pillars,fallback,expiresAt,startedAt:now,ruinId,source});
     client.send('recallQuestion',{id,questionId:q.id,subject:q.subject,stage:q.stage,topic:q.topic,difficulty:q.difficulty,prompt:q.prompt,answers:q.answers,pillars,fallback,expiresAt,ruinBonus:!!ruinId,lectern:source==='lectern',questionHall:source==='question_hall',dungeonRecall,mastery:RECALL.masterySummary(rec&&rec.prof.recallMastery||{},subject)});
   }
@@ -240,6 +245,6 @@ class RecallMixin{
     const until=this.recallFrozenUntil&&this.recallFrozenUntil.get(sessionId)||0;
     if(until<=now){if(until&&this.recallFrozenUntil)this.recallFrozenUntil.delete(sessionId);return false;}return true;
   }
-  clearRecallState(sessionId){if(this.recallChallenges)this.recallChallenges.delete(sessionId);if(this.recallFrozenUntil)this.recallFrozenUntil.delete(sessionId);if(this.recallSubjects)this.recallSubjects.delete(sessionId);}
+  clearRecallState(sessionId){if(this.recallChallenges)this.recallChallenges.delete(sessionId);if(this.recallFrozenUntil)this.recallFrozenUntil.delete(sessionId);if(this.recallSubjects)this.recallSubjects.delete(sessionId);if(this.recallRecentQuestions)this.recallRecentQuestions.delete(sessionId);}
 }
 module.exports=RecallMixin.prototype;

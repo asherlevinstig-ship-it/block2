@@ -1806,6 +1806,11 @@ test('Recall Cast restores stamina and level-one town HUD shows the stamina bar'
   assert.match(room,/recordRecallAttempt/);
   assert.match(recall,/Number\.isFinite\(\+m\.stamina\)/);
   assert.match(recall,/Number\.isFinite\(\+m\.sp\)/);
+  assert.match(recall,/function submitAnswer\(index\)\{if\(!active\|\|answerPending\)return;answerPending=true;syncRecallPose\(\)/);
+  assert.match(recall,/if\(m\.correct\)syncRecallPose\(\);else releaseRecallMovement\('recall-wrong'\)/);
+  assert.doesNotMatch(recall,/releaseRecallMovement\('recall-submit'\)/);
+  assert.match(room,/avoidQuestionIds:\[mastery\.lastQuestionId,\.\.\.recent\]/);
+  assert.match(room,/this\.recallRecentQuestions\.set\(client\.sessionId,\[q\.id,\.\.\.recent\.filter/);
   assert.match(recall,/renderBars\(\);active=null;answerPending=false;if\(hall\)queueQuestionHallNext/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.mpb,body\.calm-town:not\(\.level-two-hud\) #stats \.hub\{display:none\}/);
   assert.doesNotMatch(css,/body\.calm-town:not\(\.level-two-hud\) #stats \.spb[^{}]*\{display:none\}/);
