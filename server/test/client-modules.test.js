@@ -4717,3 +4717,11 @@ test('releasing the gameplay cursor explains how Escape restores character contr
   assert.match(styles, /#controlpauseprompt\{/);
   assert.match(styles, /body\.mobile-play-mode #controlpauseprompt\{display:none!important\}/);
 });
+
+test('captured desktop gameplay hides the system cursor while retaining the crosshair', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(combat, /const gameplayCursorCaptured=!!\(locked&&!cursorReleased&&!modalInputOpen/);
+  assert.match(combat, /document\.body\.classList\.toggle\('gameplay-cursor-captured',gameplayCursorCaptured\)/);
+  assert.match(styles, /body\.gameplay-cursor-captured,body\.gameplay-cursor-captured \*\{cursor:none!important\}/);
+});

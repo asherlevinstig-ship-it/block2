@@ -5215,6 +5215,8 @@ function refreshPlayUi(){
   document.body.classList.toggle('control-focus-paused',controlPaused);
   if(modalInputOpen) releasePointerLockWithoutCameraFallback(false);
   overlay.classList.toggle('hidden', showHud);
+  const gameplayCursorCaptured=!!(locked&&!cursorReleased&&!modalInputOpen&&!claimMode&&!networkingCutsceneActive()&&showHud&&!regionTransitioning);
+  document.body.classList.toggle('gameplay-cursor-captured',gameplayCursorCaptured);
   document.body.classList.toggle('claim-mode', !!claimMode);
   document.getElementById('crosshair').classList.toggle('hidden', !locked || cursorReleased || claimMode);
   const offMainRoom=dim!=='overworld'||dimensionsState.kind!=='overworld';
