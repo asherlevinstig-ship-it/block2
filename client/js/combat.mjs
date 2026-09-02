@@ -1095,6 +1095,7 @@ function layoutLeftHudExtras(){
 let hudStateObserver=null, homeworkHudObserved=false;
 let modalFrontZ=160;
 const blockingModalIds=['ui','statwin','qwin','pathselect','awakeningwin','devreset','arrivalchoice','rewardwin','rankupwin','gearrewardwin','bugreportwin','admindungeonpicker','deathlimbo','treasureparchment'];
+const closableModalIds=[...blockingModalIds,'dungeonspirit','eventstart','eventresult','overworldresult'];
 function modalSurfaceVisible(el){
   if(!el)return false;
   if(el.id==='ui')return el.classList.contains('open');
@@ -1109,7 +1110,85 @@ function bringModalToFront(el){
   if(modalFrontZ>900)modalFrontZ=160;
   return true;
 }
+function modalCloseHost(el){
+  if(!el)return null;
+  if(el.id==='ui')return document.getElementById('uipanel')||el;
+  return el.firstElementChild||el;
+}
+function dismissSpecificGamePanel(el,relock=true){
+  if(!el)return false;
+  const id=el.id||'';
+  if(id==='ui'){closeUI(relock);return true;}
+  if(id==='statwin'){closeStat(relock);return true;}
+  if(id==='qwin'){closeQWin(relock);return true;}
+  if(id==='bugreportwin'){
+    const cancel=document.getElementById('bugreportcancel');
+    if(cancel)cancel.click();else closeBlockingGameModal(el,{relock,reason:'bug-report'});
+    return true;
+  }
+  if(id==='admindungeonpicker'&&globalThis.BlockcraftAdminDungeonPicker){globalThis.BlockcraftAdminDungeonPicker.close(relock);return true;}
+  if(id==='dungeonspirit'){
+    const stay=el.querySelector('button[data-action="stay"]');
+    if(stay)stay.click();
+    return true;
+  }
+  if(id==='arrivalchoice'){chooseFirstTownArrival('adventure');return true;}
+  if(id==='pathselect'){
+    const later=document.getElementById('jobchoicelater');
+    if(jobChoiceOpen&&later){later.click();return true;}
+    pathChoiceOpen=false;jobChoiceOpen=false;pathChoiceDismissedThisSession=true;
+    document.body.classList.remove('path-selecting');
+    closeBlockingGameModal(el,{relock,reason:'path-choice-dismiss'});
+    return true;
+  }
+  if(id==='awakeningwin'){
+    abilityAwakeningOpen=false;abilityAwakeningDismissedThisSession=true;
+    closeBlockingGameModal(el,{relock,reason:'ability-awakening-dismiss'});
+    return true;
+  }
+  if(id==='devreset'){
+    const cancel=document.getElementById('devresetcancel');
+    if(cancel)cancel.click();else closeBlockingGameModal(el,{relock,reason:'dev-editor'});
+    return true;
+  }
+  if(id==='gearrewardwin'&&clickPanelButtonByText(el,['KEEP','GOT IT','CLOSE']))return true;
+  if(id==='rankupwin'){
+    const cont=document.getElementById('rankupcontinue');
+    if(cont){cont.click();return true;}
+  }
+  if(id==='rewardwin'){
+    const btn=document.getElementById('jobtutorialrewardclose')||document.getElementById('milestonecontinue')||document.getElementById('rewardclose')||document.getElementById('trainingcontinue')||document.getElementById('promotioncontinue')||document.getElementById('graduationcontinue');
+    if(btn){btn.click();return true;}
+  }
+  if(id==='treasureparchment'&&clickPanelButtonByText(el,['GOT IT','CLOSE']))return true;
+  if(el.classList.contains('character-creator')){
+    const cancel=el.querySelector('#cccancel');
+    if(cancel)cancel.click();
+    return true;
+  }
+  if(el.classList.contains('kc-overlay')&&globalThis.BlockcraftKnowledgeChallenge&&typeof globalThis.BlockcraftKnowledgeChallenge.close==='function'){
+    globalThis.BlockcraftKnowledgeChallenge.close();return true;
+  }
+  el.classList.remove('show','open');el.classList.add('hidden');
+  syncHudLayerState();refreshPlayUi();
+  return true;
+}
+function ensureModalCloseControl(el){
+  if(!el||el.id==='deathlimbo'||el.querySelector(':scope > .bc-modal-close'))return;
+  const host=modalCloseHost(el);
+  if(!host||host.querySelector(':scope > .bc-modal-close'))return;
+  host.classList.add('bc-modal-close-host');
+  const btn=document.createElement('button');
+  btn.type='button';btn.className='bc-modal-close';btn.setAttribute('aria-label','Close');btn.title='Close';btn.textContent='×';
+  btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();dismissSpecificGamePanel(el,true);});
+  host.appendChild(btn);
+}
+function ensureAllModalCloseControls(){
+  for(const id of closableModalIds)ensureModalCloseControl(document.getElementById(id));
+  document.querySelectorAll('[role="dialog"],.kc-overlay,.character-creator.floating').forEach(ensureModalCloseControl);
+}
 function syncHudLayerState(){
+  ensureAllModalCloseControls();
   if(hudStateObserver&&!homeworkHudObserved){
     const homeworkEl=document.getElementById('homeworkhud');
     if(homeworkEl){
@@ -1242,6 +1321,13 @@ if(globalThis.MutationObserver){
     const el=document.getElementById(id);
     if(el) hudStateObserver.observe(el,{attributes:true,attributeFilter:['class']});
   }
+  let modalCloseQueued=false;
+  const modalCloseObserver=new MutationObserver(records=>{
+    if(modalCloseQueued||!records.some(record=>record.addedNodes&&record.addedNodes.length))return;
+    modalCloseQueued=true;
+    queueMicrotask(()=>{modalCloseQueued=false;ensureAllModalCloseControls();});
+  });
+  modalCloseObserver.observe(document.body,{childList:true,subtree:true});
 }
 window.addEventListener('resize', syncHudLayerState);
 function openBlockingGameModal(el,reason='modal'){
@@ -1324,11 +1410,11 @@ function cancelOnboardingForProfileRestore(){
   tutorialPillarGroup.visible=false;
   tutorialDummyGroup.visible=false;
 }
-let pathChoiceOpen=false;
+let pathChoiceOpen=false,pathChoiceDismissedThisSession=false;
 let jobChoiceOpen=false;
 let firstTownChoiceOpen=false;
 let firstTownChoiceDismissedThisSession=false;
-let abilityAwakeningOpen=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
+let abilityAwakeningOpen=false,abilityAwakeningDismissedThisSession=false,abilityTrainingActive=false,abilityTrainingReturn=null,abilityTrainingUsed=false,abilityTrainingFinishAt=0;
 let level2JobChoiceForced=false;
 const onboardingFlags={sprint:false,arrowLook:false,jumped:false,cursor:false,tree:false,crafted:false,built:0,farmed:false,ate:false,dummy:0,subject:false,recall:false,inventory:false,finish:false};
 Object.defineProperty(globalThis,'BlockcraftOnboarding',{value:Object.freeze({
@@ -1824,7 +1910,7 @@ function portalTransitionVisible(){
   return !!(el && el.classList.contains('active'));
 }
 function showAbilityAwakening(){
-  if(abilityAwakeningOpen || abilityTrainingActive || abilityTutorialDone() || !S.path || !abilityHudAvailable()) return false;
+  if(abilityAwakeningOpen || abilityAwakeningDismissedThisSession || abilityTrainingActive || abilityTutorialDone() || !S.path || !abilityHudAvailable()) return false;
   if(onboardingActive || pathChoiceOpen || (dim!=='overworld' && dim!=='ability')) return false;
   if(portalTransitionVisible()){
     setTimeout(()=>showAbilityAwakening(), 650);
@@ -4961,7 +5047,7 @@ function pathCardHTML(key){
 function shouldOpenLevel2PathChoice(){
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const firstQuestRewardPending=!!(npcQuestChains&&Number(npcQuestChains['Mara Vale']||0)>=1&&!serverFirstQuestComplete);
-  return !!(S && S.lvl>=2 && !S.path && !level2JobChoiceForced && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
+  return !!(S && S.lvl>=2 && !S.path && !pathChoiceDismissedThisSession && !level2JobChoiceForced && !firstQuestRewardPending && !firstQuestRewardRequestPending && !rewardOpen && !townGuidanceSequenceHold && !onboardingActive && !pathChoiceOpen && !jobChoiceOpen && !abilityAwakeningOpen && !abilityTrainingActive && !uiOpen && !statOpen && !uiShellState.qOpen && dim==='overworld' && overlay && overlay.classList.contains('hidden'));
 }
 function showPathSelection(){
   pathChoiceOpen=true;

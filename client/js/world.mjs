@@ -8809,31 +8809,35 @@ function sysBursting(now=Date.now()){
 function spawnSysToast(html,tier,title){
   const d=document.createElement('div'); d.className='sysmsg '+tier;
   d.innerHTML=tier==='minor'
-    ? '<span class="noticecopy">'+html+'</span><span class="noticecount" style="display:none"></span>'
+    ? '<span class="noticecopy">'+html+'</span><span class="noticecount" style="display:none"></span><button class="sysmsgclose" type="button" aria-label="Dismiss notice">×</button>'
     : '<span class="noticecrest" aria-hidden="true">'+(tier==='major'?'&#9733;':'&#10022;')+'</span>'
       +'<span><b class="noticetitle">'+escHTML(title||(tier==='major'?'Major Notice':'Hunter Notice'))+'</b>'
-      +'<span class="noticecopy">'+html+'</span></span><span class="noticecount" style="display:none"></span>';
+      +'<span class="noticecopy">'+html+'</span></span><span class="noticecount" style="display:none"></span><button class="sysmsgclose" type="button" aria-label="Dismiss notice">×</button>';
   sysEl.appendChild(d);
   document.body.classList.add('system-notice-active');
   const t={el:d,key:tier+'|'+html,count:1,tier,hideTimer:0};
   sysActive.push(t);
+  const close=d.querySelector('.sysmsgclose');
+  if(close)close.addEventListener('click',()=>dismissSysToast(t,true));
   const now=Date.now();sysSpawnedAt.push(now);while(sysSpawnedAt.length&&now-sysSpawnedAt[0]>SYS_BURST_WINDOW_MS)sysSpawnedAt.shift();
   requestAnimationFrame(()=>{ d.style.opacity=1; d.style.transform='translateY(0)'; });
   armSysHide(t);
 }
+function dismissSysToast(t,immediate=false){
+  if(!t||!t.el||!t.el.isConnected)return;
+  clearTimeout(t.hideTimer);
+  const remove=()=>{
+    if(t.el&&t.el.isConnected)t.el.remove();
+    const i=sysActive.indexOf(t);if(i>=0)sysActive.splice(i,1);
+    if(!sysEl.children.length)document.body.classList.remove('system-notice-active');
+    const next=sysPending.shift();if(next)spawnSysToast(next.html,next.tier,next.title);
+  };
+  if(immediate){remove();return;}
+  t.el.style.opacity=0;t.el.style.transform='translateY(-4px)';setTimeout(remove,500);
+}
 function armSysHide(t){
   const dur=t.tier==='major'?6000:t.tier==='minor'?3200:4200;
-  t.hideTimer=setTimeout(()=>{
-    t.el.style.opacity=0;
-    t.el.style.transform='translateY(-4px)';
-    setTimeout(()=>{
-      t.el.remove();
-      const i=sysActive.indexOf(t); if(i>=0) sysActive.splice(i,1);
-      if(!sysEl.children.length) document.body.classList.remove('system-notice-active');
-      const next=sysPending.shift();
-      if(next) spawnSysToast(next.html,next.tier,next.title);
-    },500);
-  },dur);
+  t.hideTimer=setTimeout(()=>dismissSysToast(t),dur);
 }
 function eventLog(text, name='[Event]'){
   if(dim!=='overworld')return;

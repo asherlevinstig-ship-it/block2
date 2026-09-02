@@ -4677,3 +4677,18 @@ test('parkour event has a client-side fall recovery request', () => {
   assert.match(fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8'), /parkourEventActive/);
   assert.match(gameRoomSource, /onMessage\('eventReset'/);
 });
+
+test('dismissible game modals and notices expose a consistent close control', () => {
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(combat, /function ensureModalCloseControl\(el\)/);
+  assert.match(combat, /btn\.className='bc-modal-close'/);
+  assert.match(combat, /function dismissSpecificGamePanel\(el,relock=true\)/);
+  assert.match(combat, /document\.querySelectorAll\('\[role="dialog"\],\.kc-overlay,\.character-creator\.floating'\)/);
+  assert.match(combat, /el\.id==='deathlimbo'/, 'mandatory death recovery cannot be hidden into an unusable dead state');
+  assert.match(world, /class="sysmsgclose"/);
+  assert.match(world, /dismissSysToast\(t,true\)/);
+  assert.match(styles, /\.bc-modal-close\{/);
+  assert.match(styles, /\.sysmsgclose\{/);
+});
