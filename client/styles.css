@@ -46,6 +46,15 @@
   #keyprompthud .keydots{grid-column:1/-1;display:flex;gap:4px;justify-content:flex-end;margin-top:2px}
   #keyprompthud .keydots i{display:block;width:5px;height:5px;border-radius:50%;background:rgba(159,216,255,.25)}
   #keyprompthud .keydots i.active{background:#ffd24a;box-shadow:0 0 8px rgba(255,210,74,.65)}
+  #controlpauseprompt{position:fixed;left:50%;top:22%;z-index:155;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:14px;width:min(560px,calc(100vw - 36px));box-sizing:border-box;padding:15px 18px;border:2px solid rgba(242,199,92,.82);border-radius:10px;background:linear-gradient(155deg,rgba(10,17,29,.98),rgba(8,10,17,.96));box-shadow:0 18px 54px rgba(0,0,0,.62),0 0 28px rgba(242,199,92,.18),inset 0 0 24px rgba(255,255,255,.035);color:#eef7ff;transform:translateX(-50%);font-family:inherit;pointer-events:none}
+  #controlpauseprompt.hidden{display:none}
+  #controlpauseprompt kbd{display:grid;place-items:center;min-width:70px;height:48px;padding:0 9px;border:1px solid #fff4ca;border-bottom:5px solid #786129;border-radius:8px;background:linear-gradient(180deg,#fff7d5,#d5b85f);color:#191406;font:900 15px/1 system-ui;letter-spacing:2px;box-shadow:inset 0 2px 0 rgba(255,255,255,.8),0 5px 0 rgba(0,0,0,.34)}
+  #controlpauseprompt span{display:grid;gap:4px;min-width:0}
+  #controlpauseprompt b{color:#ffe28a;font-size:14px;letter-spacing:2.1px}
+  #controlpauseprompt small{color:#d9e7f3;font:600 13px/1.4 system-ui;letter-spacing:.15px}
+  body.control-focus-paused #crosshair{display:none!important}
+  body.mobile-play-mode #controlpauseprompt{display:none!important}
+  @media(max-width:700px){#controlpauseprompt{top:14%;gap:10px;padding:11px 13px}#controlpauseprompt kbd{min-width:56px;height:42px;font-size:12px}#controlpauseprompt b{font-size:11px}#controlpauseprompt small{font-size:11px}}
   @keyframes keyPromptSweep{0%,38%{transform:translateX(-105%)}52%,100%{transform:translateX(105%)}}
   #bugreportbtn{position:fixed;left:10px;top:310px;z-index:12;height:34px;padding:0 12px;border:1px solid rgba(255,138,91,.72);border-radius:6px;background:linear-gradient(180deg,rgba(48,22,20,.94),rgba(16,10,13,.9));box-shadow:0 8px 22px rgba(0,0,0,.38),0 0 16px rgba(255,138,91,.18),inset 0 0 14px rgba(255,255,255,.04);color:#ffc7ad;font:800 10px inherit;letter-spacing:1.3px;text-shadow:0 2px 0 #000;cursor:pointer}
   #bugreportbtn.hidden{display:none}

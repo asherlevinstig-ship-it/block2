@@ -646,6 +646,7 @@ const hintEl=document.getElementById('hint');
 const tutorialEl=document.getElementById('tutorialhud');
 const coachHudStateEl=document.getElementById('coachhud');
 const keyPromptHud=document.getElementById('keyprompthud');
+const controlPausePrompt=document.getElementById('controlpauseprompt');
 const questionBtn=document.getElementById('questionbtn');
 const socialBtn=document.getElementById('socialbtn');
 const KEY_PROMPTS=[
@@ -5209,6 +5210,9 @@ function refreshPlayUi(){
     !!(rewardWin && !rewardWin.classList.contains('hidden')) ||
     !!globalThis.dungeonLobbyOpen ||
     document.body.classList.contains('game-modal-open');
+  const controlPaused=!!(cursorReleased&&!modalInputOpen&&!claimMode&&!networkingCutsceneActive()&&overlay.classList.contains('hidden'));
+  if(controlPausePrompt)controlPausePrompt.classList.toggle('hidden',!controlPaused);
+  document.body.classList.toggle('control-focus-paused',controlPaused);
   if(modalInputOpen) releasePointerLockWithoutCameraFallback(false);
   overlay.classList.toggle('hidden', showHud);
   document.body.classList.toggle('claim-mode', !!claimMode);

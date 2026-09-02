@@ -4692,3 +4692,16 @@ test('dismissible game modals and notices expose a consistent close control', ()
   assert.match(styles, /\.bc-modal-close\{/);
   assert.match(styles, /\.sysmsgclose\{/);
 });
+
+test('releasing the gameplay cursor explains how Escape restores character control', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'index.html'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'styles.css'), 'utf8');
+  assert.match(html, /id="controlpauseprompt"/);
+  assert.match(html, /Press Escape to go back into the game and control your character\./);
+  assert.match(combat, /const controlPaused=!!\(cursorReleased/);
+  assert.match(combat, /controlPausePrompt\.classList\.toggle\('hidden',!controlPaused\)/);
+  assert.match(combat, /if\(cursorReleased\)[\s\S]*resumeGameplayCamera\(\)/);
+  assert.match(styles, /#controlpauseprompt\{/);
+  assert.match(styles, /body\.mobile-play-mode #controlpauseprompt\{display:none!important\}/);
+});
