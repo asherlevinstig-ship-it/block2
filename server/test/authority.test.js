@@ -1545,6 +1545,20 @@ test('movement below valid ground is snapped back to the authoritative floor',()
   assert.equal(client.sent.some(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor'),true);
 });
 
+test('floor correction preserves accepted horizontal movement and normalizes yaw',()=>{
+  const room=makeRoom(),client=makeClient('floor_reconcile_hunter');
+  room.lastMoveMsg=new Map();
+  const startX=W.TOWN.TC+14.5,z=W.TOWN.TC+27.5,ground=room.world.standHeight(startX,z,W.WH-2);
+  seedPlayer(room,client,{x:startX,z,y:ground,hp:20});
+  room.lastMoveMsg.set(client.sessionId,Date.now()-100);
+  const acceptedX=startX+.2;
+  room.handleMove(client,{x:acceptedX,y:ground-1,z,yaw:Math.PI*9});
+  const correction=client.sent.find(e=>e.type==='positionCorrection'&&e.msg.reason==='town_floor');
+  assert.ok(correction,'server sends the accepted floor reconciliation');
+  assert.equal(correction.msg.x,acceptedX,'replication deadband cannot pull the local player backward');
+  assert.ok(Math.abs(correction.msg.yaw)<=Math.PI,'correction yaw stays in the same normalized range as the client');
+});
+
 test('town exit movement ignores overhead arch blocks when finding the floor',()=>{
   const room=makeRoom(),client=makeClient('town_exit_hunter');
   room.lastMoveMsg=new Map();
@@ -9020,6 +9034,7 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   assert.equal(p.dim, 'tutorial');
   assert.match(p.dgn, /^tutorial-onboarding-/);
   assert.deepEqual([p.x, p.y, p.z], [W.TRAINING_MEADOW.x - 32, W.TRAINING_MEADOW.G + 2, W.TRAINING_MEADOW.z + 24]);
+  assert.equal(onboardingRoom.spaceSolid(p.dgn)(p.x,p.y,p.z),false,'private onboarding movement never checks the overworld map');
   assert.equal(newcomer.sent.some(e => e.type === 'tutorialDimension' && e.msg.active && e.msg.spaceId === p.dgn), true);
 
   onboardingRoom.handleWorldEdit(newcomer, { x: W.TRAINING_MEADOW.x, y: W.TRAINING_MEADOW.G + 1, z: W.TRAINING_MEADOW.z, id: W.B.PLANKS });
@@ -9038,10 +9053,25 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   const ap = abilityRoom.state.players.get(awakened.sessionId);
   assert.equal(ap.dim, 'tutorial');
   assert.match(ap.dgn, /^tutorial-ability-/);
+  assert.equal(abilityRoom.spaceSolid(ap.dgn)(ap.x,ap.y,ap.z),false,'private ability-room movement never checks the overworld map');
   abilityRoom.handleTutorialComplete(awakened, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability });
   assert.equal(ap.dim, 'overworld');
   assert.equal(ap.dgn, '');
   assert.deepEqual([ap.x, ap.y, ap.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+
+  const questionRoom = makeRoom(), scholar = makeClient('question-scholar');
+  seedPlayer(questionRoom, scholar, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5 });
+  questionRoom.clients = [scholar];
+  assert.equal(questionRoom.handleTutorialEnter(scholar, { kind: 'questions' }), true);
+  const qp = questionRoom.state.players.get(scholar.sessionId);
+  assert.equal(qp.dim, 'tutorial');
+  assert.match(qp.dgn, /^tutorial-questions-/);
+  assert.deepEqual([qp.x, qp.y, qp.z], [930.5, 20, 865.5]);
+  assert.equal(questionRoom.spaceSolid(qp.dgn)(qp.x,qp.y,qp.z), false, 'Question Hall never collides against the overworld map');
+  assert.equal(scholar.sent.some(e=>e.type==='tutorialDimension'&&e.msg.active&&e.msg.kind==='questions'),true);
+  assert.equal(questionRoom.leaveTutorialDimension(scholar),true);
+  assert.equal(qp.dim,'overworld');
+  assert.equal(qp.dgn,'');
 
   const jobRoom = makeRoom(), miner = makeClient('miner');
   const { prof: minerProfile } = seedPlayer(jobRoom, miner, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5, lvl: 2 });

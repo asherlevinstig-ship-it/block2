@@ -2357,6 +2357,7 @@ function enterQuestionRoom(){
   player.yaw=Math.PI;
   player.pitch=0;
   triggerPlayerArrivalVfx('questions',130);
+  if(NET.on&&NET.room)NET.room.send('tutorialEnter',{kind:'questions'});
   dimDebug('questions.enter.complete',{spawn:dimDebugPos(player.pos),questionGrid:dimDebugGrid(world)});
   announceArrivalTitle('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare');
   return true;
@@ -2377,6 +2378,7 @@ function exitQuestionRoom(){
   placePlayerAtTownReturn();
   questionRoomReturn=null;
   triggerPlayerArrivalVfx('town:from-questions',130);
+  if(NET.on&&NET.room)NET.room.send('tutorialExit',{destination:'town'});
   dimDebug('questions.exit.complete',{after:dimDebugPos(player&&player.pos),world:dimDebugGrid(world)});
   announceArrivalTitle('REGION','TOWN OF BEGINNINGS','Back to the hunter hub');
   return true;

@@ -1331,9 +1331,9 @@ function netAttachRoom(room,name,client){
     room.onMessage('trainingReset', ()=>{if(dim==='tutorial')resetTrainingMeadowLocal();});
     room.onMessage('tutorialDimension', m=>{
       if(m&&m.active){
-        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job')||(m.kind==='taming_land'&&dim==='taming_land')||(m.kind==='fishing_lake'&&dim==='fishing_lake');
+        const matching=(m.kind==='onboarding'&&dim==='tutorial')||(m.kind==='ability'&&dim==='ability')||(m.kind==='job'&&dim==='job')||(m.kind==='questions'&&dim==='questions')||(m.kind==='taming_land'&&dim==='taming_land')||(m.kind==='fishing_lake'&&dim==='fishing_lake');
         if(matching&&m.spaceId) NET.dgn=String(m.spaceId);
-      }else if(dim==='tutorial'||dim==='ability'||dim==='job'||dim==='taming_land'||dim==='fishing_lake'){
+      }else if(dim==='tutorial'||dim==='ability'||dim==='job'||dim==='questions'||dim==='taming_land'||dim==='fishing_lake'){
         NET.dgn='';
       }
     });

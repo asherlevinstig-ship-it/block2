@@ -2376,6 +2376,9 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.doesNotMatch(dimensions,/world=\(ret&&ret\.world\)\|\|owWorld\|\|world/);
   assert.match(dimensions,/function exitQuestionRoomToTown\(\)/);
   assert.match(dimensions,/function enterQuestionRoom\(\)/);
+  assert.match(dimensions,/tutorialEnter',\{kind:'questions'\}/);
+  assert.match(dimensions,/tutorialExit',\{destination:'town'\}/);
+  assert.match(networking,/m\.kind==='questions'&&dim==='questions'/);
   assert.match(dimensions,/announceArrivalTitle\('STUDY ROOM','QUESTION HALL','Answer questions, learn, and prepare'\)/);
   assert.match(dimensions,/enterQuestionRoom,\s*\n {2}exitQuestionRoom,\s*\n {2}exitQuestionRoomToTown,/);
 });

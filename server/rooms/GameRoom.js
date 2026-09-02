@@ -223,6 +223,12 @@ function angleDelta(a, b) {
   return Math.abs(d);
 }
 
+function normalizeYaw(value, fallback = 0) {
+  const raw = Number(value);
+  const yaw = Number.isFinite(raw) ? raw : (Number(fallback) || 0);
+  return Math.atan2(Math.sin(yaw), Math.cos(yaw));
+}
+
 function setReplicatedMobPose(m, x, y, z, yaw) {
   if (!m) return;
   const posEps = m.dgn ? DUNGEON_MOB_REPLICATION_POS_EPS : OVERWORLD_MOB_REPLICATION_POS_EPS;
@@ -2026,7 +2032,7 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     const rec = client && this.profileFor(client);
     const kind = m && String(m.kind || '');
-    if (!p || !rec || !['onboarding', 'ability', 'job', 'taming_land', 'fishing_lake'].includes(kind)) return false;
+    if (!p || !rec || !['onboarding', 'ability', 'job', 'questions', 'taming_land', 'fishing_lake'].includes(kind)) return false;
     if (kind === 'taming_land') {
       if (p.dgn && p.dim !== 'tutorial') {
         client.send('tutorialDimension', { active: false, kind, reason: 'busy' });
@@ -2110,7 +2116,9 @@ class GameRoom extends Room {
     const spaceId = this.tutorialSpaceId(client, kind);
     const spawn = kind === 'ability'
       ? { x: 805, y: 20, z: 847 }
-      : { x: W.TRAINING_MEADOW.x - 32, y: W.TRAINING_MEADOW.G + 2, z: W.TRAINING_MEADOW.z + 24 };
+      : kind === 'questions'
+        ? { x: 930.5, y: 20, z: 865.5 }
+        : { x: W.TRAINING_MEADOW.x - 32, y: W.TRAINING_MEADOW.G + 2, z: W.TRAINING_MEADOW.z + 24 };
     p.dim = 'tutorial';
     p.dgn = spaceId;
     p.mount = '';
@@ -2169,7 +2177,7 @@ class GameRoom extends Room {
     const p = client && this.state.players.get(client.sessionId);
     if (!p || p.dim !== 'tutorial' || !p.dgn) return false;
     const jobMatch = p.dgn.match(/^tutorial-job_([a-z]+)-/);
-    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn === 'taming_land' ? 'taming_land' : p.dgn === 'fishing_lake' ? 'fishing_lake' : 'onboarding';
+    const kind = jobMatch ? 'job' : p.dgn.includes('-ability-') ? 'ability' : p.dgn.includes('-questions-') ? 'questions' : p.dgn === 'taming_land' ? 'taming_land' : p.dgn === 'fishing_lake' ? 'fishing_lake' : 'onboarding';
     client.send('tutorialDimension', { active: true, kind, job: jobMatch && jobMatch[1] || undefined, spaceId: p.dgn, x: p.x, y: p.y, z: p.z });
     return true;
   }
@@ -2953,7 +2961,10 @@ class GameRoom extends Room {
     return Math.hypot(+x - safe.x, +z - safe.z) <= safe.r + Math.max(0, +extra || 0);
   }
   spaceSolid(dgn) {
-    if (dgn && (/^tutorial-job_/.test(String(dgn)) || dgn === 'taming_land' || dgn === 'fishing_lake')) return () => false;
+    // Every tutorial-* realm uses a client-owned private DimensionGrid. Testing
+    // those coordinates against the overworld makes unrelated hills/buildings
+    // behave like invisible walls and produces correction snaps.
+    if (dgn && (/^tutorial-/.test(String(dgn)) || dgn === 'taming_land' || dgn === 'fishing_lake')) return () => false;
     if (dgn && typeof this.eventSpaceSolid === 'function') {
       const eventSolid = this.eventSpaceSolid(dgn);
       if (eventSolid) return eventSolid;
@@ -7995,16 +8006,16 @@ class GameRoom extends Room {
       return;
     }
     if (this.deathLimbo && this.deathLimbo.has(client.sessionId)) {
-      p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
+      p.yaw = normalizeYaw(m.yaw, p.yaw); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
     }
     if (typeof this.recallMovementLocked === 'function' && this.recallMovementLocked(client.sessionId)) {
-      p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
+      p.yaw = normalizeYaw(m.yaw, p.yaw); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
     }
     if (this.skyshipPassengers && this.skyshipPassengers.has(client.sessionId)) {
-      p.yaw = clampN(m.yaw, -10, 10); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
+      p.yaw = normalizeYaw(m.yaw, p.yaw); this.pvel.set(client.sessionId, { x: 0, z: 0 }); return;
     }
     if (typeof this.eventMovementLocked === 'function' && this.eventMovementLocked(client.sessionId)) {
-      p.yaw = clampN(m.yaw, -10, 10);
+      p.yaw = normalizeYaw(m.yaw, p.yaw);
       this.pvel.set(client.sessionId, { x: 0, z: 0 });
       return;
     }
@@ -8094,7 +8105,7 @@ class GameRoom extends Room {
       } else {
         this.moveRejects.set(client.sessionId, rejects);
         this.pvel.set(client.sessionId, { x: 0, z: 0 });
-        p.yaw = clampN(m.yaw, -10, 10);
+        p.yaw = normalizeYaw(m.yaw, p.yaw);
         bcTavernLog('solid', sx, sy, sz);
         client.send('positionCorrection', {
           x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'solid',
@@ -8117,7 +8128,7 @@ class GameRoom extends Room {
     }
     if (!buried(p.x, p.y, p.z) && crossesSolid(p.x, p.y, p.z, sx, sy, sz)) {
       this.pvel.set(client.sessionId, { x: 0, z: 0 });
-      p.yaw = clampN(m.yaw, -10, 10);
+      p.yaw = normalizeYaw(m.yaw, p.yaw);
       bcTavernLog('wall', sx, sy, sz);
       client.send('positionCorrection', {
         x: p.x, y: p.y, z: p.z, yaw: p.yaw, reason: 'wall',
@@ -8135,10 +8146,10 @@ class GameRoom extends Room {
       z: Math.max(-velCap, Math.min(velCap, (sz - p.z) / dt)),
     });
     const fromY = p.y;
-    const yaw = clampN(m.yaw, -10, 10);
+    const yaw = normalizeYaw(m.yaw, p.yaw);
     setReplicatedPlayerPose(p, sx, sy, sz, yaw);
     if (corrected) client.send('positionCorrection', {
-      x: p.x, y: p.y, z: p.z, yaw: p.yaw,
+      x: sx, y: sy, z: sz, yaw,
       reason: townFloorStrict ? 'town_floor' : activeDgn ? 'dungeon_floor' : 'floor',
       requested: { x: nx, y: ny, z: nz },
       attempted: { x: sx, y: sy, z: sz },

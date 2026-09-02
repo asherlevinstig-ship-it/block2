@@ -3165,7 +3165,7 @@ function tick(now){
         if(onboardingArrowTurn>=ONBOARDING_FULL_TURN) onboardingFlags.arrowLook=true;
         updateOnboardingHud();
       }
-      player.yaw += yawDelta;
+      player.yaw = Math.atan2(Math.sin(player.yaw+yawDelta),Math.cos(player.yaw+yawDelta));
       player.pitch += lookY*lookSpeed*.85*dt+mousePitch;
       player.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, player.pitch));
       if(dimensionsState.kind==='fishing_lake'){
