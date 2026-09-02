@@ -2848,6 +2848,7 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   assert.match(html,/Click a phrase to send/);
+  assert.match(html,/id="chatwheelclose"[^>]+aria-label="Close quick chat"/);
   assert.match(html,/Teams, quick comms, and closing open panels\./);
   assert.match(html,/aria-label="Quick comms phrase"/);
   assert.doesNotMatch(html,/chat commands/);
@@ -2857,6 +2858,7 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(social,/function chatModeLabel\(\)\{return chatMode==='party'\?'TEAM':chatMode\.toUpperCase\(\);\}/);
   assert.match(social,/setChatMode\('local'\);/);
   assert.match(social,/Tab again for Team \/ Whisper/);
+  assert.match(social,/chatWheelCloseEl\.addEventListener\('click',event=>\{event\.preventDefault\(\);closeAnyWheel\(true\);\}\);/);
   assert.match(combat,/Open Local quick chat - press Tab again for Team \/ Whisper/);
   assert.match(social,/USE PARTY QUICK PHRASES TO COORDINATE/);
   assert.doesNotMatch(social,/Message nearby hunters|Message your party|Whisper privately|\/t TO TALK TO YOUR TEAM/);
@@ -2867,7 +2869,7 @@ test('quick chat uses Tab then click to send instead of hold and release',()=>{
   assert.match(combat,/function isWorldPointerTarget\(target\)\{\s*return target===renderer\.domElement\|\|target===document\.body\|\|target===document\.documentElement;\s*\}/);
   assert.match(combat,/addEventListener\('mousedown', e=>\{\s*if\(globalThis\.chatTyping\) return;\s*if\(!isWorldPointerTarget\(e\.target\)\) return;/);
   assert.match(combat,/addEventListener\('wheel', e=>\{ if\(locked&&isWorldPointerTarget\(e\.target\)\) selectSlot/);
-  assert.match(social,/createElement\('button'\)[\s\S]*addEventListener\('click',\(\)=>\{sendQuickPhrase\(id\);closeQuickChatWheel\(true\);\}\)/);
+  assert.match(social,/createElement\('button'\)[\s\S]*bindWheelAction\(item,\(\)=>\{sendQuickPhrase\(id\);closeQuickChatWheel\(true\);\}\)/);
   assert.match(social,/if\(e\.code==='Enter'\)\{\s*e\.preventDefault\(\);\s*sendQuickPhrase\(chatInEl\.value\);\s*closeChat\(true\);\s*return;\s*\}/);
   assert.match(social,/cycleChatMode\(\);\s*renderQuickChatWheel\(\);/);
   assert.doesNotMatch(social,/event\.code==='Tab'&&chatWheel\)[\s\S]*startDragonCommandWheel\(\)/);

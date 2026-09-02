@@ -25,6 +25,7 @@ const chatBlockedEl=document.getElementById('chatblocked');
 const chatSoundEl=document.getElementById('chatsound');
 const chatCloseEl=document.getElementById('chatclose');
 const chatWheelEl=document.getElementById('chatwheel');
+const chatWheelCloseEl=document.getElementById('chatwheelclose');
 const chatWheelItemsEl=document.getElementById('chatwheelitems');
 const chatWheelModeEl=document.getElementById('chatwheelmode');
 let chatTyping=false;
@@ -271,6 +272,10 @@ function closeDragonCommandWheel(relock=false){
 function closeAnyWheel(relock=false){
   if(dragonWheel)closeDragonCommandWheel(relock);
   else closeQuickChatWheel(relock);
+}
+if(chatWheelCloseEl){
+  for(const eventName of ['pointerdown','mousedown','click','wheel'])chatWheelCloseEl.addEventListener(eventName,event=>event.stopPropagation());
+  chatWheelCloseEl.addEventListener('click',event=>{event.preventDefault();closeAnyWheel(true);});
 }
 addEventListener('keyup',event=>{if(event.code==='Tab'&&(chatWheel||dragonWheel))event.preventDefault();});
 addEventListener('keydown',event=>{
