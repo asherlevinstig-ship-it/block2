@@ -4,6 +4,9 @@
   else root.BlockcraftJobSystem = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function jobSystemFactory() {
   'use strict';
+  // Temporary release switch. Keep the complete implementation and saved data
+  // intact so the system can be restored later without a migration.
+  const ENABLED = false;
   const CAREER_ID = 'adventurer';
   const PROFESSION_IDS = Object.freeze(['miner','farmer','cook','blacksmith','monk','pet_tamer']);
   const JOB_IDS = Object.freeze([CAREER_ID,...PROFESSION_IDS]);
@@ -287,5 +290,5 @@
     }
     return hooks;
   }
-  return Object.freeze({CAREER_ID,PROFESSION_IDS,JOB_IDS,JOBS,TITLES,MILESTONES,REFORGE_MODIFIERS,REFORGE_ACTIONS,FARMER_RULES,COOK_RULES,MONK_RULES,MINER_RULES,PET_TAMER_RULES,CONTRACTS,FIRST_HUNTER_CONTRACT,GUIDE_STEPS,OFFER_REFRESH_MS,PROFESSION_REWARD_MULTIPLIER,OFFER_TIERS,LOCATIONS,jobXpNeed,jobLevelFromXp,jobXpIntoLevel,contractScaleFromXp,perkTierFromLevel,perkChance,titleFor,milestonesFor,milestoneState,milestoneAt,milestoneReward,reforgeModifier,reforgeCost,contractPool,contractOffers,contractTags,contractBestFor,guideSteps,firstHunterContract,gameplayHooks});
+  return Object.freeze({ENABLED,CAREER_ID,PROFESSION_IDS,JOB_IDS,JOBS,TITLES,MILESTONES,REFORGE_MODIFIERS,REFORGE_ACTIONS,FARMER_RULES,COOK_RULES,MONK_RULES,MINER_RULES,PET_TAMER_RULES,CONTRACTS,FIRST_HUNTER_CONTRACT,GUIDE_STEPS,OFFER_REFRESH_MS,PROFESSION_REWARD_MULTIPLIER,OFFER_TIERS,LOCATIONS,jobXpNeed,jobLevelFromXp,jobXpIntoLevel,contractScaleFromXp,perkTierFromLevel,perkChance,titleFor,milestonesFor,milestoneState,milestoneAt,milestoneReward,reforgeModifier,reforgeCost,contractPool,contractOffers,contractTags,contractBestFor,guideSteps,firstHunterContract,gameplayHooks});
 });

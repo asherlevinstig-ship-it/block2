@@ -1108,6 +1108,11 @@ class GameRoom extends Room {
       const grantedLegend = this.ensureStarterLegendaryWeapon(prof);
       const grantedFarm = BETA_FARM_TEST && this.ensureFarmTestKit(prof);
       if (!prof.noPersist && (grantedArmor || grantedLegend || grantedFarm)) this.dirtyPlayers.add(token);
+      if (!JOB_SYSTEM.ENABLED && prof.activeRoom && prof.activeRoom.dim === 'job') {
+        prof.activeRoom = null;
+        prof.pos = townReturnArray();
+        this.dirtyPlayers.add(token);
+      }
       if (!prof.activeRoom && this.moveCompletedTutorialProfileToTown(prof)) this.dirtyPlayers.add(token);
       if (this.ensureTownMapBackfill(prof) || this.ensureTownMapIntroduction(prof)) this.dirtyPlayers.add(token);
       const returningOrLegacyProfile = this.returningOrLegacyProfile(prof);
@@ -1164,7 +1169,7 @@ class GameRoom extends Room {
     if (prof) {
       p.lvl = prof.S.lvl;
       p.path = prof.S.path;
-      p.job = JOB_IDS.has(prof.job) ? prof.job : '';
+      p.job = JOB_SYSTEM.ENABLED && JOB_IDS.has(prof.job) ? prof.job : '';
       p.jobLvl = p.job ? jobLevelFromXp((prof.jobXpByJob && prof.jobXpByJob[p.job]) || prof.jobXp) : 0;
       p.armorId = prof.armor && ARMOR_INFO[prof.armor.id] ? prof.armor.id : 0;
       p.armorType = p.armorId ? GEAR_SYSTEM.armorProfile(ARMOR_INFO[p.armorId], prof.armor).type.id : '';
@@ -1180,7 +1185,7 @@ class GameRoom extends Room {
       p.dragonHatchedAt = this.publicDragonHatchedAt(prof, token);
       p.cosmetics = this.publicCosmetics(prof);
       p.x = prof.pos[0]; p.y = prof.pos[1] + .01; p.z = prof.pos[2];
-      if (prof.activeRoom && prof.activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[prof.activeRoom.job]) {
+      if (JOB_SYSTEM.ENABLED && prof.activeRoom && prof.activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[prof.activeRoom.job]) {
         p.dim = 'tutorial';
         p.dgn = this.tutorialSpaceId(client, 'job_' + prof.activeRoom.job);
       } else if (prof.activeRoom && prof.activeRoom.dim === 'taming_land') {
@@ -1846,6 +1851,10 @@ class GameRoom extends Room {
   handleTutorialComplete(client, m) {
     const rec = this.profileFor(client);
     const tutorial = m && typeof m.tutorial === 'string' ? m.tutorial : '';
+    if (!JOB_SYSTEM.ENABLED && tutorial === 'townJob') {
+      if (client) client.send('tutorialProgress', { ok: false, tutorial, reason: 'disabled' });
+      return false;
+    }
     const expected = TUTORIAL_VERSIONS[tutorial] | 0;
     const version = m && (m.version | 0);
     if (!rec || !expected || version !== expected) {
@@ -1963,7 +1972,7 @@ class GameRoom extends Room {
     } else if (activeRoom.dim === 'taming_land') {
       kind = 'taming_land';
       fallback = [420.5, 21.05, 907.5];
-    } else if (activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[activeRoom.job]) {
+    } else if (JOB_SYSTEM.ENABLED && activeRoom.dim === 'job' && JOB_TUTORIAL_ROOMS[activeRoom.job]) {
       kind = 'job_' + activeRoom.job;
       const room = JOB_TUTORIAL_ROOMS[activeRoom.job];
       fallback = [room.x + .5, room.g + 1.05, room.z + 14.5];
@@ -2068,6 +2077,10 @@ class GameRoom extends Room {
       return true;
     }
     if (kind === 'job') {
+      if (!JOB_SYSTEM.ENABLED) {
+        client.send('tutorialDimension', { active: false, kind, reason: 'disabled' });
+        return false;
+      }
       const job = m && typeof m.job === 'string' ? m.job : '';
       const room = JOB_TUTORIAL_ROOMS[job];
       if (!room) {
@@ -3197,9 +3210,9 @@ class GameRoom extends Room {
     const rank = hunterRankIndexForLevel(S.lvl);
     const deityAscended = !beforeDeity && this.ensureDeityState(prof);
     if (rank > beforeRank && beforeRank === 0) {
-      prof.progressionFocus = prof.job === 'adventurer'
-        ? (prof.jobContract ? '' : 'first_promotion_contract')
-        : 'first_promotion_job';
+      prof.progressionFocus = JOB_SYSTEM.ENABLED
+        ? (prof.job === 'adventurer' ? (prof.jobContract ? '' : 'first_promotion_contract') : 'first_promotion_job')
+        : 'first_d_gate';
       prof.firstPromotionSeen = false;
     }
     if (client && levels > 0) {
@@ -5067,6 +5080,7 @@ class GameRoom extends Room {
         type: String(objective.action.type || '').slice(0, 32),
         label: String(objective.action.label || '').slice(0, 32),
       } : null;
+      if (!JOB_SYSTEM.ENABLED && (source === 'job' || action && action.type === 'jobs')) return;
       if (action && objective.action.rank != null) action.rank = Math.max(0, Math.min(4, objective.action.rank | 0));
       const payload = {
         id: String(objective.id).slice(0, 96),
@@ -5274,6 +5288,7 @@ class GameRoom extends Room {
     return objectives.sort((a, b) => a.priority - b.priority || a.title.localeCompare(b.title));
   }
   progressionObjective(focus, client = null) {
+    if (!JOB_SYSTEM.ENABLED && ['first_profession_contract','first_promotion_job','first_promotion_contract','next_adventurer_contract'].includes(focus)) return null;
     const map = {
       first_town_map: ['progression:first_town_map', 'progression', 'Town Map', 'Pick up a Town of Beginnings map from Orin Mapwell.', 'Orin Mapwell', 'cartographer', 'VISIT ORIN', 45],
       first_road_ready: ['progression:first_road_ready', 'progression', 'Road Ready', 'Accept or finish Road Ready from Mara, use the starter sword, and prove you can survive outside town.', 'Mara Vale', 'quest_log', 'OPEN QUEST', 50],
@@ -5284,13 +5299,13 @@ class GameRoom extends Room {
       first_base_setup: ['progression:first_base_setup', 'progression', 'Base Setup', 'Inside your Homestead, place storage, light, and a station.', 'Claimed land', 'land', 'OPEN LAND', 50],
       first_homestead_upgrade: ['progression:first_homestead_upgrade', 'progression', 'Homestead Upgrade', 'Your Homestead is ready. Open Land Claims while standing in your base and choose your first upgrade.', 'Your Homestead', 'land', 'OPEN HOMESTEAD', 50],
       first_profession_contract: ['progression:first_profession_contract', 'progression', 'First Contract', 'Take your first profession or Adventurer contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
-      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', 'Use contracts, gates, and field work to grow toward D-rank.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
+      e_rank_climb: ['progression:e_rank_climb', 'progression', 'E-rank Climb', JOB_SYSTEM.ENABLED ? 'Use contracts, gates, and field work to grow toward D-rank.' : 'Use gates, quests, events, and field work to grow toward D-rank.', JOB_SYSTEM.ENABLED ? 'Job Board' : 'Quest Log', JOB_SYSTEM.ENABLED ? 'jobs' : 'quest_log', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN QUEST LOG', 70],
       first_promotion_job: ['progression:first_promotion_job', 'progression', 'Choose Work Path', 'Choose Adventurer or a profession before promotion work.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       first_promotion_contract: ['progression:first_promotion_contract', 'progression', 'Promotion Contract', 'Take the first Adventurer promotion contract.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 50],
       first_d_gate: ['progression:first_d_gate', 'progression', 'D-rank Gate Prep', 'Prepare for the first D-rank Gate and its ranged-volley lesson: iron weapon, iron armor, three food, a healthy utility tool, and a D-rank key. Then clear the Gate.', 'Gate prep', 'quest_log', 'OPEN PREP', 50],
-      c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', 'Build Hunter XP through rotating Adventurer contracts, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
-      c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
-      b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Your specialization makes you a regional anchor. Stabilize roads, contain Gate breaches, and build toward B-rank Gates.', 'Regional pressure', 'jobs', 'OPEN JOB BOARD', 70],
+      c_rank_climb: ['progression:c_rank_climb', 'progression', 'C-rank Climb', JOB_SYSTEM.ENABLED ? 'Build Hunter XP through rotating Adventurer contracts, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.' : 'Build Hunter XP through quests, D-rank Gates, regional trouble, and events. Prepare for C-rank positioning checks before taking a C-rank Gate.', 'Gate prep', 'gate_prep', 'C PREP CHECK', 70, 2],
+      c_rank_specialization: ['progression:c_rank_specialization', 'progression', 'C-rank Specialization', JOB_SYSTEM.ENABLED ? 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then return to rotating contracts.' : 'The C-rank positioning trial is cleared. Choose one permanent specialization for your combat path, then continue through Gates, quests, and regional threats.', 'Character', 'choose_spec', 'CHOOSE SPEC', 40],
+      b_rank_pressure: ['progression:b_rank_pressure', 'progression', 'Gate Pressure', 'Your specialization makes you a regional anchor. Stabilize roads, contain Gate breaches, and build toward B-rank Gates.', 'Regional pressure', JOB_SYSTEM.ENABLED ? 'jobs' : 'gate_prep', JOB_SYSTEM.ENABLED ? 'OPEN JOB BOARD' : 'OPEN PREP', 70],
       next_adventurer_contract: ['progression:next_adventurer_contract', 'progression', 'C-rank Loop', 'Your C-rank specialization is set. Use rotating Adventurer contracts, higher Gates, events, and field threats to keep climbing.', 'Job Board', 'jobs', 'OPEN JOB BOARD', 70],
     };
     const spec = map[focus];

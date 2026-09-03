@@ -703,7 +703,7 @@ class ProgressionMixin {
     else if (event === 'land_claimed' && ['first_craft_station', 'first_land_claim'].includes(prof.progressionFocus)) next = hasExpandedLand() ? 'first_base_setup' : 'first_claim_expand';
     else if (event === 'land_claimed' && ['first_claim_expand', 'first_land_claim'].includes(prof.progressionFocus) && hasExpandedLand()) next = 'first_base_setup';
     else if (event === 'base_setup_completed' && prof.progressionFocus === 'first_base_setup') next = 'first_homestead_upgrade';
-    else if (event === 'homestead_upgrade_chosen' && prof.progressionFocus === 'first_homestead_upgrade') next = 'first_profession_contract';
+    else if (event === 'homestead_upgrade_chosen' && prof.progressionFocus === 'first_homestead_upgrade') next = JOB_SYSTEM.ENABLED ? 'first_profession_contract' : 'e_rank_climb';
     else if (event === 'job_contract_taken' && prof.progressionFocus === 'first_profession_contract') next = 'e_rank_climb';
     if (next === prof.progressionFocus) return false;
     if (!next) return false;
@@ -766,6 +766,7 @@ class ProgressionMixin {
   }
 
   handleSetJob(client, m) {
+    if (!JOB_SYSTEM.ENABLED) return this.progressionReject(client, 'job', 'disabled');
     const rec = this.profileFor(client);
     const requestedJob = m && typeof m.job === 'string' ? m.job : '';
     const job = requestedJob === 'adventurer' ? '' : requestedJob;
@@ -800,6 +801,7 @@ class ProgressionMixin {
   }
 
   seedFirstTutorialJobContract(client, requestedJob = '') {
+    if (!JOB_SYSTEM.ENABLED) return null;
     const rec = this.profileFor(client);
     const job = typeof requestedJob === 'string' ? requestedJob : '';
     if (!rec || !JOB_SYSTEM.PROFESSION_IDS.includes(job) || rec.prof.jobContract) return null;
@@ -958,6 +960,7 @@ class ProgressionMixin {
   }
 
   sendJobContractOffers(client,requested=''){
+    if(!JOB_SYSTEM.ENABLED)return this.progressionReject(client,'jobContract','disabled');
     const rec=this.profileFor(client);if(!rec)return false;
     const offers=this.jobContractOffers(rec,requested);
     client.send('jobContractOffers',{job:requested==='adventurer'?'adventurer':(rec.prof.job||'adventurer'),offers,refreshAt:(rec.prof.jobContractOffersAt||0)+JOB_SYSTEM.OFFER_REFRESH_MS});
@@ -965,6 +968,7 @@ class ProgressionMixin {
   }
 
   handleJobContract(client, m) {
+    if (!JOB_SYSTEM.ENABLED) return this.progressionReject(client, 'jobContract', 'disabled');
     const rec = this.profileFor(client);
     const action = m && typeof m.action === 'string' ? m.action : '';
     if (!rec) return this.progressionReject(client, 'jobContract', 'job');
@@ -1098,6 +1102,7 @@ class ProgressionMixin {
   }
 
   grantJobXp(client, job, amount) {
+    if (!JOB_SYSTEM.ENABLED) return false;
     const rec = this.profileFor(client);
     amount = Math.max(0, Math.min(1000, Math.round(Number(amount) || 0)));
     if (!rec || !amount || (job !== 'adventurer' && rec.prof.job !== job)) return false;
@@ -1117,6 +1122,7 @@ class ProgressionMixin {
   }
 
   progressJobContract(client, type, count = 1, target = 0) {
+    if (!JOB_SYSTEM.ENABLED) return false;
     const rec = this.profileFor(client);
     const c = rec && rec.prof.jobContract;
     if (!c || (c.job !== 'adventurer' && c.job !== rec.prof.job) || c.type !== type || (c.have | 0) >= (c.need | 0)) return false;

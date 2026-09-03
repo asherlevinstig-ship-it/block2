@@ -4763,3 +4763,32 @@ test('a desktop world click upgrades finite fallback mouse-look to native pointe
   assert.match(combat, /if\(lockFallback&&document\.pointerLockElement!==renderer\.domElement&&!isTouchGameplayDevice\(\)\)/);
   assert.match(combat, /gameplayInputDebug\('pointerlock\.upgrade-fallback'\);\s*requestPointerLockSafe\(null\)/);
 });
+
+test('job system is disabled while ordinary work activities remain available', () => {
+  const world = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'world.mjs'), 'utf8');
+  const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
+  const dimensions = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'dimensions.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const room = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'GameRoom.js'), 'utf8');
+  const progression = fs.readFileSync(path.join(__dirname, '..', 'rooms', 'progression.mixin.js'), 'utf8');
+
+  assert.equal(sharedJobs.ENABLED, false);
+  assert.match(world, /if\(JOBS_ENABLED\)makeJobBoardDecor\(\)/);
+  assert.match(world, /!\['job_mentor','worker_tutor'\]\.includes\(def\.role\)/);
+  assert.match(combat, /function shouldOpenLevel2JobChoice\(\)\{\s*if\(!JOBS_ENABLED\)return false/);
+  assert.match(dimensions, /function enterJobTutorialRoom\(jobId\)\{[\s\S]*?if\(!JOBS_ENABLED\) return false/);
+  assert.match(menus, /if\(!JOBS_ENABLED\)\{sysMsg\('The <b>Job Board<\/b> is temporarily unavailable/);
+  assert.match(menus, /!JOBS_ENABLED&&\['JOBS','JOB BOARD','COOK JOBS','FARMER WORK','MONK WORK','MINER WORK'\]/);
+  assert.match(menus, /filter\(entry=>JOBS_ENABLED\|\|entry\.id!=='jobs'\)/);
+  assert.match(networking, /const restoreJobRoom=JOBS_ENABLED&&/);
+  assert.match(networking, /normalized\.filter\(o=>o&&o\.source!=='job'/);
+  assert.match(room, /if \(!JOB_SYSTEM\.ENABLED && prof\.activeRoom && prof\.activeRoom\.dim === 'job'\)/);
+  assert.match(room, /if \(!JOB_SYSTEM\.ENABLED && tutorial === 'townJob'\)/);
+  assert.match(progression, /if \(!JOB_SYSTEM\.ENABLED\) return this\.progressionReject\(client, 'job', 'disabled'\)/);
+  assert.match(progression, /if \(!JOB_SYSTEM\.ENABLED\) return false;[\s\S]*?progressJobContract/);
+  assert.match(world, /addTownInteractLabel\('Quarry Work'/);
+  assert.match(world, /addTownInteractLabel\('Farm Work'/);
+  assert.match(world, /addTownInteractLabel\('Cook Work'/);
+  assert.match(world, /addTownInteractLabel\('Meditation Hall'/);
+});

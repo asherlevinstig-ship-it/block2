@@ -244,6 +244,7 @@ const inv = new Array(36).fill(null);
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
+const JOBS_ENABLED=!!JOB_SYSTEM.ENABLED;
 let selected = 0;
 let inventoryModel=null,equipmentModel=null;
 const stackMax=id=>inventoryModel.stackMax(id);
@@ -4242,6 +4243,7 @@ function completeJobTutorial(){
   sendProfileSaveNow();
 }
 function startJobTutorial(jobId){
+  if(!JOBS_ENABLED)return false;
   const job=JOBS[jobId], room=JOB_TUTORIAL_MEADOWS&&JOB_TUTORIAL_MEADOWS[jobId]||null;
   if(!job||!room||typeof enterJobTutorialRoom!=='function'||!enterJobTutorialRoom(jobId)){
     return guideJobTutorialChoice(jobId);
@@ -4717,11 +4719,13 @@ function chooseJobFromLevel2Banner(jobId){
   if(!NET.on||!NET.room){ sendPlayerMetaNow(); sendProfileSaveNow(); }
 }
 function shouldOpenLevel2JobChoice(){
+  if(!JOBS_ENABLED)return false;
   const rewardOpen=rewardWin&&!rewardWin.classList.contains('hidden');
   const guidanceReady=level2JobChoiceForced||shouldOfferTownJobGuidance();
   return !!(S&&S.lvl>=2&&!playerJob&&progressionFocus!=='first_d_gate'&&progressionFocus!=='c_rank_climb'&&progressionFocus!=='b_rank_pressure'&&progressionFocus!=='next_adventurer_contract'&&!level2JobChoiceSeen()&&guidanceReady&&!rewardOpen&&!townGuidanceSequenceHold&&!onboardingActive&&!pathChoiceOpen&&!jobChoiceOpen&&!abilityAwakeningOpen&&!abilityTrainingActive&&!jobTutorialActive&&!globalThis.dungeonLobbyState&&!globalThis.dungeonLobbyOpen&&!uiOpen&&!statOpen&&!uiShellState.qOpen&&dim==='overworld'&&overlay&&overlay.classList.contains('hidden'));
 }
 function openLevel2JobChoice(force=false){
+  if(!JOBS_ENABLED)return false;
   if(globalThis.dungeonLobbyState||globalThis.dungeonLobbyOpen) return false;
   if(!force && !shouldOpenLevel2JobChoice()) return false;
   if(!pathSelectEl||!pathPanelEl) return false;
@@ -6635,7 +6639,7 @@ function useRepairKit(slot=selected){
   return true;
 }
 function isJobBoardHit(hit){
-  if(!hit || dim!=='overworld') return false;
+  if(!JOBS_ENABLED||!hit || dim!=='overworld') return false;
   const jbx=(HUB.jobs.x|0), jbz=(HUB.jobs.z|0);
   return Math.abs(hit.x-jbx)<=1 && Math.abs(hit.z-jbz)<=1 && hit.y>=TOWN.G+1 && hit.y<=TOWN.G+3 &&
     (hit.id===B.PLANKS || hit.id===B.LOG);
@@ -6672,7 +6676,7 @@ function updateBuildPreview(active=true){
   worldApi.setBuildGhostPreview(active?buildPlacementPreview():null);
 }
 function nearJobBoard(){
-  return dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<3.4;
+  return JOBS_ENABLED&&dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<3.4;
 }
 function nearGuildContractDesk(){
   return dim==='overworld' && Math.hypot(player.pos.x-HUB.guild.x, player.pos.z-HUB.guild.z)<7.5;

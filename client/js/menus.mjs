@@ -7,6 +7,7 @@ import {hunterRankLevelForGlobalLevel,hunterRankLevelLabel} from './progression.
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
+const JOBS_ENABLED=!!(JOB_SYSTEM&&JOB_SYSTEM.ENABLED);
 const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 const NPC_QUEST_REGISTRY=globalThis.BlockcraftNpcQuestChains;
 const uiShellState=gameContext.requireState('uiShell');
@@ -2861,6 +2862,7 @@ function qBtn(label, cb, dim2){
   b.type='button';
   b.className='qbtn'+(dim2?' dim':'');
   b.textContent=label;
+  if(!JOBS_ENABLED&&['JOBS','JOB BOARD','COOK JOBS','FARMER WORK','MONK WORK','MINER WORK'].includes(String(label).toUpperCase()))b.hidden=true;
   b.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); SFX.uiClick(); cb(e); });
   return b;
 }
@@ -4089,8 +4091,8 @@ function progressionRoadmap(){
     {id:'foundations',title:'Hunter Foundations',requirement:'Begin the training meadow',eligible:true,action:'Complete movement, combat, gathering and Recall training.',where:'Training Meadow'},
     {id:'story',title:'Mara’s Story',requirement:'Finish initial training',eligible:!onboardingActive,action:'Accept and continue Mara’s current story quest.',where:'Mara Vale'},
     {id:'jobs',title:'Jobs and Contracts',requirement:'Reach E-Rank Level 2',eligible:S.lvl>=2&&!onboardingActive,action:!playerJob?'Choose one job tutorial, then take your first real contract.':jobContract?'Complete and claim your active contract.':'Take your first real contract at the Job Board.',where:!playerJob?'Job choice cards':'Job Board'},
-    {id:'combat_path',title:'Combat Path',requirement:'Complete your first job contract',eligible:S.lvl>=2&&(jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
-    {id:'gates',title:'Ranked Gates',requirement:'Finish Mara’s first town arc and a starter job contract',eligible:S.lvl>=3&&(jobProgress||progressionFocus==='first_d_gate'||highestGateRankCleared>=0),action:'Prepare supplies, then complete Mara’s first Gate invitation.',where:'Mara → wilderness Gate'},
+    {id:'combat_path',title:'Combat Path',requirement:JOBS_ENABLED?'Complete your first job contract':'Reach E-Rank Level 2',eligible:S.lvl>=2&&(!JOBS_ENABLED||jobProgress||highestGateRankCleared>=0||progressionFocus==='first_d_gate'||progressionFocus==='c_rank_climb'||progressionFocus==='b_rank_pressure'||progressionFocus==='next_adventurer_contract'),action:S.path?'Practice your first ability when prompted.':'Choose your first combat path when the story asks for it.',where:'Character progression'},
+    {id:'gates',title:'Ranked Gates',requirement:JOBS_ENABLED?'Finish Mara’s first town arc and a starter job contract':'Finish Mara’s first town arc',eligible:S.lvl>=3&&(!JOBS_ENABLED||jobProgress||progressionFocus==='first_d_gate'||highestGateRankCleared>=0),action:'Prepare supplies, then complete Mara’s first Gate invitation.',where:'Mara → wilderness Gate'},
     {id:'familiars',title:'Familiars',requirement:'Reach D-Rank progression',eligible:highestGateRankCleared>=1,action:'Follow Mara’s companion quest and bind your first familiar.',where:'Mara Vale'},
     {id:'mounts',title:'Mounts',requirement:'Reach C-Rank progression',eligible:rank>=2,action:'Complete the first bonded-mount lesson.',where:'Dragon Roost'},
     {id:'specialisation',title:'Specialisation',requirement:'Reach C-Rank Level 1',eligible:rank>=2&&S.lvl>=21,action:'Review and choose carefully: this combat-path specialisation is permanent.',where:'Mara Vale'},
@@ -4098,7 +4100,7 @@ function progressionRoadmap(){
     {id:'fellowships',title:'Fellowships',requirement:'Reach A-Rank',eligible:rank>=4,action:'Join or establish a fellowship.',where:'Fellowship Hall'},
     {id:'dragon_mastery',title:'Dragon Mastery',requirement:'Reach S-Rank',eligible:rank>=5,action:'Learn incubation, care, mounted abilities and breeding.',where:'Rook Emberstall · Dragon Roost'},
     {id:'frontier',title:'Western Frontier',requirement:'Reach S-Rank and hold 1,000 gold',eligible:rank>=5&&gold>=1000,action:'Board the Westwind for the Western Frontier.',where:'Skyport'},
-  ].map(entry=>({...entry,introduced:has(entry.id)}));
+  ].filter(entry=>JOBS_ENABLED||entry.id!=='jobs').map(entry=>({...entry,introduced:has(entry.id)}));
 }
 function whatNextQuestLogCard(){
   const next=progressionDirectorCandidate() || progressionRoadmap().find(entry=>!entry.introduced);
@@ -4126,10 +4128,10 @@ function progressionRoadmapHTML(){
 }
 const HUNTER_RANK_STARTS=[1,11,21,31,41,51];
 const HUNTER_RANK_UNLOCKS=[
-  ['Ranked Gates','Jobs and contracts','Combat path'],
-  ['D-Rank Gates and keys','Familiars','Stronger contract rewards'],
+  ['Ranked Gates',JOBS_ENABLED?'Jobs and contracts':'Field activities','Combat path'],
+  ['D-Rank Gates and keys','Familiars',JOBS_ENABLED?'Stronger contract rewards':'Stronger quest rewards'],
   ['C-Rank Gates and keys','Combat specialisation','Mount progression'],
-  ['B-Rank Gates and keys','Road Warden region','Advanced regional contracts'],
+  ['B-Rank Gates and keys','Road Warden region',JOBS_ENABLED?'Advanced regional contracts':'Advanced regional quests'],
   ['A-Rank Gates and keys','Fellowships','High-rank equipment'],
   ['Western Frontier','Dragon mastery','S-Rank endgame'],
 ];
@@ -4153,7 +4155,7 @@ function openRankJourneyUI(){
   const unlocks=document.createElement('div');unlocks.className='rank-unlocks';
   const nextRank=progress.maxRank?rank:progress.nextRank;
   unlocks.innerHTML='<div class="sub2">'+(progress.maxRank?'CURRENT S-RANK FEATURES':'UNLOCKS AT '+hunterRankLetter(nextRank)+'-RANK')+'</div>'+(HUNTER_RANK_UNLOCKS[nextRank]||[]).map(v=>'<div class="rank-unlock"><i>◆</i><span>'+escHTML(v)+'</span></div>').join('');qpanelEl.appendChild(unlocks);
-  const sources=document.createElement('p');sources.className='qtext rank-sources';sources.innerHTML='<b>Earn Hunter XP:</b> quests, contracts, Gates, events, and hostile threats. Higher-rank work pays more XP; low-risk starter enemies remain supplementary.';qpanelEl.appendChild(sources);
+  const sources=document.createElement('p');sources.className='qtext rank-sources';sources.innerHTML='<b>Earn Hunter XP:</b> '+(JOBS_ENABLED?'quests, contracts, Gates':'quests, Gates')+', events, and hostile threats. Higher-rank work pays more XP; low-risk starter enemies remain supplementary.';qpanelEl.appendChild(sources);
   const row=document.createElement('div');row.className='qrow';row.appendChild(qBtn('QUEST LOG',()=>openQuestLogUI()));row.appendChild(qBtn('JOBS',()=>openJobsUI()));row.appendChild(qBtn('CLOSE',()=>closeQWin(),true));qpanelEl.appendChild(row);
 }
 const DIRECTED_SYSTEMS=new Set(['story','combat_path','gates','jobs','familiars','mounts','specialisation','roads','fellowships','dragon_mastery','frontier']);
@@ -6216,6 +6218,7 @@ function openJobsUILegacy(focusJob='', sourceTitle=''){
   row.appendChild(qBtn('CLOSE', ()=>closeQWin(), true));
 }
 function openJobsUI(focusJob='', sourceTitle=''){
+  if(!JOBS_ENABLED){sysMsg('The <b>Job Board</b> is temporarily unavailable. You can still mine, farm, cook, craft, meditate, care for pets, and explore normally.');return;}
   if(onboardingActive&&onboardingArrived) onboardingFlags.jobBoard=true;
   if(statOpen){ statOpen=false; statEl.classList.add('hidden'); }
   openQWin('management');

@@ -2,6 +2,7 @@ import {api as worldApi,state as worldState} from './world.mjs';
 import {DEITY_LEVEL,DEITY_POWER_DEFS,hunterRankLevelLabel} from './progression.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
+const JOBS_ENABLED=!!(globalThis.BlockcraftJobSystem&&globalThis.BlockcraftJobSystem.ENABLED);
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 function suppressRoomMouseLook(ms,reason){
   try{
@@ -1076,7 +1077,7 @@ function renderStat(){
     ['int','INTELLIGENCE','+3 max MP, stronger spells'],
   ];
   const hunterName=escHTML(((document.getElementById('playername')&&document.getElementById('playername').value)||'Hunter').slice(0,16)||'Hunter');
-  const ji=jobXpIntoLevel(jobXp), jd=activeJob(), P=S.path?PATHS[S.path]:null;
+  const ji=jobXpIntoLevel(jobXp), jd=JOBS_ENABLED?activeJob():null, P=S.path?PATHS[S.path]:null;
   const pathName=P?P.name:'Unawakened', pathCol=P?P.col:'#9ad26b';
   const deity=globalThis.BlockcraftDeityState;
   let ascensionLabel='Not ascended';
@@ -1093,11 +1094,11 @@ function renderStat(){
   const robeMagic=armorProfile&&armorProfile.projectileMagicMultiplier>1?' &middot; +'+Math.round((armorProfile.projectileMagicMultiplier-1)*100)+'% projectile magic':'';
   const armorText=armor?armorProfile.rank.name+' '+armorProfile.rarity.name+' '+armorProfile.type.name+' &middot; -'+Math.round(armorProfile.mitigation*100)+'% damage &middot; '+Math.round(armorProfile.moveMultiplier*100)+'% movement &middot; '+Math.round(armorProfile.staminaCostMultiplier*100)+'% stamina cost'+robeMagic+' &middot; '+(armor.dur==null?armorProfile.maxDur:armor.dur)+'/'+armorProfile.maxDur+' durability'+(armorInfo.power==='aegis'?' &middot; J Aegis Pulse':''):'None';
   let h='<div class="stat-sheet">';
-  h+='<div class="stat-sheet-header"><div class="stat-avatar" style="border-color:'+pathCol+';color:'+pathCol+'">'+(P?(P.ab[0]&&P.ab[0].g)||hunterRankLetter(hunterRankIdx):hunterRankLetter(hunterRankIdx))+'</div><div class="stat-title"><h2>'+hunterName+'</h2><small>HUNTER PROFILE</small><div class="stat-tags"><span style="color:'+pathCol+'">'+pathName+'</span><span style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jd.name:'Adventurer')+'</span><span>'+hunterRankLevelLabel(S.lvl,{long:true})+'</span></div></div><button id="statclose" class="stat-close-x" type="button">X</button></div>';
+  h+='<div class="stat-sheet-header"><div class="stat-avatar" style="border-color:'+pathCol+';color:'+pathCol+'">'+(P?(P.ab[0]&&P.ab[0].g)||hunterRankLetter(hunterRankIdx):hunterRankLetter(hunterRankIdx))+'</div><div class="stat-title"><h2>'+hunterName+'</h2><small>HUNTER PROFILE</small><div class="stat-tags"><span style="color:'+pathCol+'">'+pathName+'</span>'+(JOBS_ENABLED?'<span style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jd.name:'Adventurer')+'</span>':'')+'<span>'+hunterRankLevelLabel(S.lvl,{long:true})+'</span></div></div><button id="statclose" class="stat-close-x" type="button">X</button></div>';
   h+='<div class="stat-main-grid"><div class="stat-left-column">';
   h+='<section class="stat-card stat-profile-card">'+statPanelTitleHTML('HUNTER SUMMARY')+'<div class="stat-summary-grid">';
   h+='<div class="srow"><span>CLASS</span><b style="color:'+pathCol+'">'+pathName+'</b></div>';
-  h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
+  if(JOBS_ENABLED)h+='<div class="srow"><span>JOB</span><b style="color:'+(jd?jd.col:'#d8f2ff')+'">'+(jd?jobTitleFor(playerJob,ji.lvl):'Adventurer')+(jd?' &middot; '+jd.name+' Lv '+ji.lvl+' &middot; '+ji.xp+' / '+ji.need:'')+'</b></div>';
   h+='<div class="srow"><span>HUNTER LEVEL</span><b>'+hunterRankLevelLabel(S.lvl,{long:true})+'</b></div>';
   h+='<div class="srow"><span>ASCENSION</span><b style="color:#ffd76a">'+ascensionLabel+'</b></div>';
   h+='<div class="srow"><span>PLAYER RANK</span><b>'+hunterRankLevelLabel(S.lvl)+' Hunter</b></div>';
@@ -2239,6 +2240,7 @@ function generateJobTutorialRoom(jobId){
 }
 function enterJobTutorialRoom(jobId){
   const opts=arguments[1]||{};
+  if(!JOBS_ENABLED) return false;
   if(!JOB_TUTORIAL_MEADOWS||!JOB_TUTORIAL_MEADOWS[jobId]) return false;
   if(dim==='job'&&jobTutorialRoomJob===jobId) return true;
   if(dim!=='overworld'&&dim!=='job') return false;

@@ -14,6 +14,7 @@ const questJobModule=gameContext.requireService('quests');
 const networkModule=gameContext.requireService('network');
 const renderingModule=gameContext.requireService('rendering');
 const onboardingModule=gameContext.requireService('onboarding');
+const JOBS_ENABLED=!!(globalThis.BlockcraftJobSystem&&globalThis.BlockcraftJobSystem.ENABLED);
 const {createAuthController}=authModule;
 const {bindProgressionMessages,gateRankIndexForLevel,hunterActivityXpForLevel,hunterRankIndexForLevel,hunterRankLevelForGlobalLevel,hunterRankLevelLabel,hunterXpForActivity,nextHunterRankLevel,rankProgressForLevel,xpNeedForLevel,PROGRESSION_FOCUS_STATES}=progressionModule;
 const {createInventoryModel,createEquipmentModel}=inventoryModule;
@@ -4689,8 +4690,9 @@ function npcNewTarget(v){
   v.tx=v.grp.position.x; v.tz=v.grp.position.z;
 }
 function spawnVillagers(n){
-  for(let i=0;i<n;i++){
-    const def=NPC_ROLES[i]||NPC_ROLES[NPC_ROLES.length-1];
+  const roles=JOBS_ENABLED?NPC_ROLES:NPC_ROLES.filter(def=>!['job_mentor','worker_tutor'].includes(def.role));
+  for(let i=0;i<Math.min(n,roles.length);i++){
+    const def=roles[i]||roles[roles.length-1];
     const [r,rd]=ROBES[i%ROBES.length];
     const v={...makeVillager(r,rd,i%2===1), wait:Math.random()*2, tx:0, tz:0,
              speed:1+Math.random()*.5, phase:Math.random()*10,
@@ -5993,7 +5995,7 @@ function makeJobBoardDecor(){
   grp.position.set(HUB.jobs.x,TOWN.G+1,HUB.jobs.z);
   townGroup.add(grp);
 }
-makeJobBoardDecor();
+if(JOBS_ENABLED)makeJobBoardDecor();
 
 let guildNoticeBoardLabel=null,guildNoticeBoardLabelKey='';
 function makeFellowshipNoticeBoardDecor(){
@@ -6281,7 +6283,7 @@ function addTownQuestMarker(type,x,y,z){
 addTownInteractLabel('Dungeon Shard', (HUB.shard.x|0)+.5, TOWN.G+4.7, (HUB.shard.z|0)+.5, '#7dd3fc', 8);
 addTownInteractLabel('Market Stall', HUB.marketX-.9, TOWN.G+4.9, TOWN.TC-.5, '#ffd24a', 9);
 addTownInteractLabel('1 Quest Giver', HUB.guide.x, TOWN.G+3.15, HUB.guide.z, '#9ad26b', 18);
-addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 9);
+if(JOBS_ENABLED)addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 9);
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);
 addTownInteractLabel('Farm Work', HUB.farm.x, TOWN.G+3.45, HUB.farm.z, '#86efac', 9);
 addTownInteractLabel('Cook Work', dpx(81,'tavern'), TOWN.G+3.5, dpz(75,'tavern'), '#ffd24a', 8);
@@ -6298,7 +6300,7 @@ addTownInteractLabel('Meditation Hall', dpx(47.5,'shrine'), TOWN.G+5.2, dpz(56.5
 addTownInteractLabel('Meditation Hall', HUB.shrine.x, TOWN.G+2.85, HUB.shrine.z, '#7dd3fc', 9);
 addTownInteractLabel('Westwind Skyport · G to board · S-Rank · 1000 gold', HUB.skyport.x, HUB.skyport.y+4.2, HUB.skyport.z, '#ffd98a', 20);
 addTownInteractLabel('G BOARD · Requires S-Rank + 1,000 gold', HUB.skyport.x-12.5, HUB.skyport.y+3.2, HUB.skyport.z, '#ffcf6a', 7);
-addTownQuestMarker('jobs',HUB.jobs.x,TOWN.G+4.55,HUB.jobs.z+.35);
+if(JOBS_ENABLED)addTownQuestMarker('jobs',HUB.jobs.x,TOWN.G+4.55,HUB.jobs.z+.35);
 addTownQuestMarker('guild_contracts',HUB.guild.x,TOWN.G+5.0,dtz(36,'guild')+.4);
 addTownQuestMarker('claim_aegis',HUB.guardian.x,TOWN.G+5.8,HUB.guardian.z);
 let guildHallState={floors:[],fellowships:[],guild:null,projectCatalog:[],noticeObjectiveCatalog:[],nextFloor:1,nextPrice:500,maxFloors:6};

@@ -22,6 +22,7 @@ const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
 const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
 const APPEARANCE_SYSTEM=globalThis.BlockcraftAppearanceSystem;
 if(!JOB_SYSTEM)throw new Error('Shared job system failed to load');
+const JOBS_ENABLED=!!JOB_SYSTEM.ENABLED;
 const player=combatState.player,inv=combatState.inventory;
 const OVERWORLD_RESULTS=createOverworldResultPresenter({document,itemName:id=>ITEMS[id]?ITEMS[id].name:'Supplies'});
 biomeStatus.init(document);
@@ -254,7 +255,8 @@ function showDeityAscension(m){
   refreshHUD();
 }
 function setActiveObjectives(next, opts={}){
-  const list=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(next):(Array.isArray(next)?next:[]);
+  const normalized=QUEST_OBJECTIVES&&QUEST_OBJECTIVES.normalizeObjectiveList?QUEST_OBJECTIVES.normalizeObjectiveList(next):(Array.isArray(next)?next:[]);
+  const list=JOBS_ENABLED?normalized:normalized.filter(o=>o&&o.source!=='job'&&!(o.action&&o.action.type==='jobs'));
   const claimable=new Set(list.filter(o=>o&&o.id&&(o.status==='claimable'||o.status==='complete')).map(o=>String(o.id)));
   if(opts.announce&&objectiveFeedPrimed){
     for(const o of list){
@@ -1474,7 +1476,8 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('progressionFocus', m=>{
       const focus=String(m&& (m.progressionFocus||m.focus) || '');
-      progressionFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
+      const restoredFocus=PROGRESSION_FOCUS_STATES.includes(focus)?focus:'';
+      progressionFocus=!JOBS_ENABLED&&['first_profession_contract','first_promotion_job','first_promotion_contract','next_adventurer_contract'].includes(restoredFocus)?'':restoredFocus;
       setActiveObjectives(m&&m.activeObjectives,{announce:true});
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.progressionFocus.received', { focus:progressionFocus, activeObjectives:m&&m.activeObjectives });
       refreshHUD(); refreshPlayUi();
@@ -1487,7 +1490,7 @@ function netAttachRoom(room,name,client){
     if(room&&room.name==='blockcraft')room.send('profileRequest',{});
     room.onMessage('tutorialProgress', m=>{
       if(m&&m.ok&&m.tutorials)applyServerTutorials(m.tutorials);
-      const starter=clampJobContract(m&&m.starterContract);
+      const starter=JOBS_ENABLED?clampJobContract(m&&m.starterContract):null;
       if(starter){
         jobContract=starter;
         if(starter.job&&starter.job!=='adventurer')playerJob=starter.job;
@@ -1662,6 +1665,7 @@ function netAttachRoom(room,name,client){
       refresh:()=>{renderBars();renderStat();refreshHUD();globalThis.BlockcraftRefreshObjectiveTracker&&globalThis.BlockcraftRefreshObjectiveTracker();refreshAppearanceDummy();if(qOpen&&qMode==='management'){if(holdFirstShiftPanelRefresh)holdFirstShiftPanelRefresh=false;else openJobsUI();}},
     });
     room.onMessage('jobContractOffers',m=>{
+      if(!JOBS_ENABLED)return;
       jobContractOffers=Array.isArray(m&&m.offers)?m.offers.map(clampJobContract).filter(Boolean):[];
       jobContractOffersJob=String(m&&m.job||'');jobContractRefreshAt=Math.max(0,Number(m&&m.refreshAt)||0);
       if(qOpen&&qMode==='management')openJobsUI(jobContractOffersJob==='adventurer'?'':jobContractOffersJob);
@@ -3070,17 +3074,18 @@ function netRestoreProfile(m){
       }
     }
     for(const t of COMPANIONS.dragonUnlocks) if(COMPANIONS.dragonHatchedAt[t]==null) COMPANIONS.dragonHatchedAt[t]=0;
-    playerJob=m.job&&m.job!=='adventurer'&&JOBS[m.job]?m.job:'';
+    playerJob=JOBS_ENABLED&&m.job&&m.job!=='adventurer'&&JOBS[m.job]?m.job:'';
     for(const id of Object.keys(jobXpByJob))jobXpByJob[id]=Math.max(0,(m.jobXpByJob&&m.jobXpByJob[id])|0);
     if(!m.jobXpByJob)jobXpByJob[playerJob||'adventurer']=Math.max(0,m.jobXp|0);
     jobXp=jobXpFor(playerJob||'adventurer');
-    jobContract=clampJobContract(m.jobContract);
+    jobContract=JOBS_ENABLED?clampJobContract(m.jobContract):null;
     homesteadWorkOrder=clampHomesteadWorkOrder(m.homesteadWorkOrder);
     homesteadUpgrades=clampHomesteadUpgrades(m.homesteadUpgrades);
-    jobContractOffers=Array.isArray(m.jobContractOffers)?m.jobContractOffers.map(clampJobContract).filter(Boolean):[];
-    jobContractOffersJob=String(m.jobContractOfferJob||'');
+    jobContractOffers=JOBS_ENABLED&&Array.isArray(m.jobContractOffers)?m.jobContractOffers.map(clampJobContract).filter(Boolean):[];
+    jobContractOffersJob=JOBS_ENABLED?String(m.jobContractOfferJob||''):'';
     jobContractRefreshAt=Math.max(0,Number(m.jobContractOffersAt)||0)+JOB_SYSTEM.OFFER_REFRESH_MS;
-    progressionFocus=PROGRESSION_FOCUS_STATES.includes(m.progressionFocus)?m.progressionFocus:'';
+    const restoredProgressionFocus=PROGRESSION_FOCUS_STATES.includes(m.progressionFocus)?m.progressionFocus:'';
+    progressionFocus=!JOBS_ENABLED&&['first_profession_contract','first_promotion_job','first_promotion_contract','next_adventurer_contract'].includes(restoredProgressionFocus)?'':restoredProgressionFocus;
     setActiveObjectives(m.activeObjectives,{announce:false});
     ONBOARD.setSeen(m.firstPromotionSeen===true);
     applyServerNpcQuestChains(m.npcQuestChains);
@@ -3124,7 +3129,7 @@ function netRestoreProfile(m){
     if(mergedActiveRoom&&localActiveRoom&&mergedActiveRoom.dim==='job'&&localActiveRoom.dim==='job'&&mergedActiveRoom.job===localActiveRoom.job&&jobRoomProgress(localActiveRoom)>jobRoomProgress(mergedActiveRoom)){
       mergedActiveRoom={...mergedActiveRoom,...localActiveRoom};
     }
-    const restoreJobRoom=mergedActiveRoom&&mergedActiveRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[mergedActiveRoom.job]?mergedActiveRoom:null;
+    const restoreJobRoom=JOBS_ENABLED&&mergedActiveRoom&&mergedActiveRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[mergedActiveRoom.job]?mergedActiveRoom:null;
     const restoreTamingLand=mergedActiveRoom&&mergedActiveRoom.dim==='taming_land'?mergedActiveRoom:null;
     const restoreFishingLake=mergedActiveRoom&&mergedActiveRoom.dim==='fishing_lake'?mergedActiveRoom:null;
     if(restoreJobRoom){
@@ -3639,7 +3644,7 @@ function readJobTutorialResume(){
     const raw=JSON.parse(localStorage.getItem(JOB_TUTORIAL_RESUME_KEY)||'null');
     if(!raw||(raw.auth&&raw.auth!==currentAuthSessionToken())||Date.now()-(raw.at||0)>24*60*60*1000)return null;
     const activeRoom=raw.activeRoom&&typeof raw.activeRoom==='object'?raw.activeRoom:null;
-    if(!activeRoom||!((activeRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job])||activeRoom.dim==='taming_land'||activeRoom.dim==='fishing_lake'))return null;
+    if(!activeRoom||!((JOBS_ENABLED&&activeRoom.dim==='job'&&worldState.JOB_TUTORIAL_MEADOWS&&worldState.JOB_TUTORIAL_MEADOWS[activeRoom.job])||activeRoom.dim==='taming_land'||activeRoom.dim==='fishing_lake'))return null;
     let pos=Array.isArray(raw.pos)&&raw.pos.length===3&&raw.pos.every(v=>Number.isFinite(+v))?raw.pos.map(Number):null;
     if(activeRoom.dim==='taming_land'&&pos){
       const room=worldState&&worldState.TAMING_LAND;
@@ -3664,7 +3669,7 @@ function readJobTutorialResume(){
   }catch(e){return null;}
 }
 function currentRuntimeActiveRoom(){
-  if(dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob){
+  if(JOBS_ENABLED&&dimensionsState.kind==='job'&&combatState.jobTutorialActive&&combatState.jobTutorialJob){
     const room={
       dim:'job',
       job:combatState.jobTutorialJob,

@@ -538,6 +538,7 @@ function jobLevelFor(prof, job) {
   return jobLevelFromXp(xp);
 }
 function jobPerkTier(prof, job) {
+  if (!JOB_SYSTEM.ENABLED) return 0;
   const lvl = jobLevelFor(prof, job);
   return JOB_SYSTEM.perkTierFromLevel(lvl);
 }

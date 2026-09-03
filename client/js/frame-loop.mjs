@@ -8,6 +8,7 @@ import {createPerformanceDiagnostics} from './performance-budget.mjs';
 import {biomeStatus} from './biome-status.mjs';
 const gameContext=window.BlockcraftGameContext;
 const QUEST_OBJECTIVES=globalThis.BlockcraftQuestObjectives;
+const JOBS_ENABLED=!!(globalThis.BlockcraftJobSystem&&globalThis.BlockcraftJobSystem.ENABLED);
 const player=combatState.player,inv=combatState.inventory;
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
 const refreshHUD=hudApi.refresh;
@@ -764,7 +765,7 @@ function currentLocationInfo(){
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.skyport.x, player.pos.z-HUB.skyport.z)<12){
     return { cls:'town', name:'Westwind Skyport', meta:'G to board - requires S-Rank and 1,000 gold' };
   }
-  if(dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6){
+  if(JOBS_ENABLED&&dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6){
     return { cls:'town', name:'Job Board', meta:'Profession contracts and non-combat work' };
   }
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.cartographer.x, player.pos.z-HUB.cartographer.z)<7){
@@ -1729,7 +1730,7 @@ function currentObjective(){
   if(guild) return guild;
   const promotion=ONBOARD.firstPromotionObjective();
   if(promotion) return promotion;
-  if(dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6)
+  if(JOBS_ENABLED&&dim==='overworld' && Math.hypot(player.pos.x-HUB.jobs.x, player.pos.z-HUB.jobs.z)<6)
     return {label:'Current Goal', text:'Choose or claim work at the Job Board'};
   if(dim==='overworld' && Math.hypot(player.pos.x-HUB.quarry.x, player.pos.z-HUB.quarry.z)<7)
     return {label:'Current Goal', text:'Speak with Garrik for miner work'};
