@@ -1,6 +1,7 @@
 const path = require('path');
 const express = require('express');
 const { Encoder } = require('@colyseus/schema');
+const schemaVersion = require(path.join(path.dirname(require.resolve('@colyseus/schema')), '..', 'package.json')).version;
 const { validateStartup } = require('./startup-config');
 const { securityHeaders } = require('./security-headers');
 const { metricsHttpHandler, readinessHttpHandler } = require('./metrics-registry');
@@ -23,6 +24,7 @@ function attachHttpRoutes(app, config, getGameServer = () => null) {
     uptimeSec: Math.round(process.uptime() * 100) / 100,
     storage: config.storage,
     authBackend: String(process.env.AUTH_BACKEND || 'file').toLowerCase(),
+    schemaVersion,
     readyPath: '/readyz',
   }));
   app.get('/readyz', readinessHttpHandler());

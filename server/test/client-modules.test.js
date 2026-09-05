@@ -1644,15 +1644,16 @@ test('chosen path exposes the ability hotbar immediately with locked-level guida
   assert.match(css, /#abilities:before\{content:attr\(data-path-label\)/, 'the desktop hotbar identifies the selected path');
 });
 
-test('production build rejects Colyseus browser and server schema version skew', () => {
+test('production build bundles the same Colyseus schema used by the server', () => {
   const build = fs.readFileSync(path.join(__dirname, '..', '..', 'tools', 'build-static-client.js'), 'utf8');
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
-  const browserSdk = fs.readFileSync(path.join(__dirname, '..', '..', 'node_modules', '@colyseus', 'sdk', 'dist', 'colyseus.js'), 'utf8');
-  const bundled = browserSdk.match(/@colyseus\/schema\s+([0-9]+\.[0-9]+\.[0-9]+)/);
+  const schemaPackage = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'node_modules', '@colyseus', 'schema', 'package.json'), 'utf8'));
 
-  assert.equal(packageJson.dependencies['@colyseus/schema'], bundled && bundled[1], 'server schema is pinned to the browser wire-format version');
+  assert.equal(packageJson.dependencies['@colyseus/schema'], schemaPackage.version, 'server schema is exactly pinned');
   assert.match(build, /assertColyseusSchemaCompatibility\(\)/);
   assert.match(build, /Colyseus schema mismatch/);
+  assert.match(build, /entryPoints: \['@colyseus\/sdk'\]/, 'browser SDK is rebuilt against installed dependencies');
+  assert.match(build, /globalName: 'Colyseus'/, 'bundle preserves the browser global expected by the game');
 });
 
 test('first Gate clears produce the right onboarding handoffs', async () => {

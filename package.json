@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@colyseus/core": "^0.17.44",
-    "@colyseus/schema": "4.0.13",
+    "@colyseus/schema": "4.0.31",
     "@colyseus/sdk": "^0.17.43",
     "@colyseus/ws-transport": "^0.17.13",
     "bcryptjs": "^3.0.3",
@@ -48,6 +48,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
+    "esbuild": "0.25.9",
     "eslint": "^9.39.4"
   }
 }
