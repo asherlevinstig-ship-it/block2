@@ -5500,7 +5500,9 @@ function applyFriendResult(m){
   const name=escHTML(String(m&&m.targetName||'Hunter'));
   if(m&&m.ok){
     SFX.level();
-    sysMsg((m.action==='already'?'You are already friends with ':'Added ')+('<b>'+name+'</b>')+(m.action==='already'?'.':' as a friend.'),{tier:'minor',title:'Friends'});
+    sysMsg(m.test
+      ? '<b>Test friend interaction succeeded.</b> No friend data changed.'
+      : (m.action==='already'?'You are already friends with ':'Added ')+('<b>'+name+'</b>')+(m.action==='already'?'.':' as a friend.'),{tier:'minor',title:m.test?'Test Player':'Friends'});
     return;
   }
   const reason=String(m&&m.reason||'invalid');
@@ -5549,7 +5551,9 @@ function applyTradeOffer(m){
 function applyTradeResult(m){
   if(!m||m.ok===false){applyTradeReject(m);return;}
   SFX.coin();
-  sysMsg('<b>Trade complete with '+escHTML(String(m.withName||'Hunter'))+'.</b><br>You gave '+tradeOfferSummary(m.gave)+'.<br>You received '+tradeOfferSummary(m.received)+'.',{tier:'major',title:'Trade'});
+  sysMsg(m.test
+    ? '<b>Test trade interaction succeeded.</b><br>No items or gold were moved.'
+    : '<b>Trade complete with '+escHTML(String(m.withName||'Hunter'))+'.</b><br>You gave '+tradeOfferSummary(m.gave)+'.<br>You received '+tradeOfferSummary(m.received)+'.',{tier:m.test?'minor':'major',title:m.test?'Test Player':'Trade'});
 }
 function applyTradeReject(m){
   const reason=String(m&&m.reason||'invalid');

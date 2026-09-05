@@ -1424,6 +1424,10 @@ function netAttachRoom(room,name,client){
     room.onMessage('tradeCancel', m=>applyTradeCancel(m));
     room.onMessage('robResult', m=>{
       if(m&&typeof m.totalGold==='number'){gold=Math.max(0,m.totalGold|0);refreshHUD();refreshPlayUi();}
+      if(m&&m.test){
+        sysMsg('<b>Test robbery interaction succeeded.</b> No gold or karma changed.',{tier:'minor',title:'Test Player'});
+        return;
+      }
       if(m&&m.ok){
         const amount=Math.max(0,m.gold|0);
         const targetName=String(m.targetName||'Hunter');
@@ -2558,7 +2562,9 @@ function netAttachRoom(room,name,client){
     });
     room.onMessage('adminSpawnResult', m=>{
       const count=Math.max(0,(m&&m.count)|0),kind=String(m&&m.kind||'actor').replace(/_/g,' ');
-      sysMsg('<b>Admin spawn:</b> '+count+' '+escHTML(kind)+' spawned near you.');
+      sysMsg(m&&m.kind==='test_player'
+        ? '<b>Test Player ready.</b> Stand beside them and press <b>E</b> to test Trade, Add Friend, and Rob safely.'
+        : '<b>Admin spawn:</b> '+count+' '+escHTML(kind)+' spawned near you.');
       try{window.dispatchEvent(new CustomEvent('blockcraft-admin-spawn',{detail:m||{}}));}catch(e){}
     });
     room.onMessage('adminSpawnReject', m=>{

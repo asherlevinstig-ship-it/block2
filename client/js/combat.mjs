@@ -588,7 +588,7 @@ function ensureAdminExtendedControls(){
       '<label class="admincheck"><button id="adminworldeventking" type="button">START KING EVENT</button></label>'+
       '<label class="admincheck"><button id="adminworldeventcaravan" type="button">START CARAVAN</button></label>'+
       '<label class="admincheck"><button id="adminworldeventmeteor" type="button">DROP METEOR HERE</button></label>'+
-      '<label>Spawn<select id="adminspawnkind"><option value="zombie">Zombie</option><option value="skeleton">Skeleton</option><option value="bandit">Bandit</option><option value="bandit_archer">Bandit Archer</option><option value="bandit_brute">Bandit Brute</option><option value="wolf">Wolf</option><option value="boss">Boss</option><option value="ancient_warden">Ancient Warden</option></select></label>'+
+      '<label>Spawn<select id="adminspawnkind"><option value="test_player">Test Player</option><option value="zombie">Zombie</option><option value="skeleton">Skeleton</option><option value="bandit">Bandit</option><option value="bandit_archer">Bandit Archer</option><option value="bandit_brute">Bandit Brute</option><option value="wolf">Wolf</option><option value="boss">Boss</option><option value="ancient_warden">Ancient Warden</option></select></label>'+
       '<label>Count<input id="adminspawncount" type="number" min="1" max="12" value="1"></label>'+
       '<label>Rank<input id="adminspawnrank" type="number" min="0" max="5" value="0"></label>'+
       '<label>Radius<input id="adminspawnradius" type="number" min="2" max="30" value="6"></label>'+

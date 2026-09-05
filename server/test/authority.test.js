@@ -1673,6 +1673,37 @@ test('admin gate teleport lists active gates server-side and rejects normal play
   assert.equal(admin.sent.some(e=>e.type==='adminGateTeleportResult'&&e.msg.id===g.id),true);
 });
 
+test('admin can spawn one persistent test player for safe social interaction checks',()=>{
+  const room=makeRoom(),admin=makeClient('interaction_admin'),normal=makeClient('interaction_normal');
+  admin._accountRole='admin';
+  const {prof}=seedPlayer(room,admin,{...townPlayerPos(0,0),gold:25,inv:[{id:I.BREAD,count:3}]});
+  seedPlayer(room,normal,{...townPlayerPos(1,0)});
+
+  room.handleAdminSpawnMob(normal,{kind:'test_player'});
+  assert.equal(normal.sent.some(e=>e.type==='adminSpawnReject'&&e.msg.reason==='admin'),true);
+
+  room.handleAdminSpawnMob(admin,{kind:'test_player',radius:2});
+  const result=admin.sent.find(e=>e.type==='adminSpawnResult'&&e.msg.kind==='test_player');
+  assert.ok(result);
+  const sid=result.msg.sid,bot=room.state.players.get(sid);
+  assert.ok(bot);
+  assert.equal(bot.name,'Test Player');
+  assert.equal(Math.hypot(bot.x-W.TOWN.TC,bot.z-W.TOWN.TC)<=3,true);
+
+  const before={bread:itemCount(prof,I.BREAD),gold:prof.gold,karma:prof.karma|0,friends:[...(prof.friends||[])]};
+  room.handleFriendAdd(admin,{targetSid:sid});
+  room.handleTradeOffer(admin,{targetSid:sid,targetName:'Test Player',slot:0,count:1,gold:0});
+  room.handleRobPlayer(admin,{targetSid:sid,targetName:'Test Player'});
+
+  assert.equal(admin.sent.some(e=>e.type==='friendResult'&&e.msg.ok&&e.msg.test),true);
+  assert.equal(admin.sent.some(e=>e.type==='tradeResult'&&e.msg.ok&&e.msg.test),true);
+  assert.equal(admin.sent.some(e=>e.type==='robResult'&&e.msg.ok&&e.msg.test),true);
+  assert.deepEqual({bread:itemCount(prof,I.BREAD),gold:prof.gold,karma:prof.karma|0,friends:[...(prof.friends||[])]},before);
+
+  room.handleAdminSpawnMob(admin,{kind:'test_player',radius:3});
+  assert.equal([...room.state.players.keys()].filter(id=>id.startsWith('admin_test_player:')).length,1);
+});
+
 test('admin gate teleport from DungeonRoom returns the hunter to the hosted gate',()=>{
   const room=makeDungeonRoom(),admin=makeClient('dungeon_gate_admin');
   admin._accountRole='admin';

@@ -1790,6 +1790,17 @@ test('cursor item follows the mouse without relying on a leaked module global',(
   assert.match(combat,/if\(cursorEl\)\{cursorEl\.style\.left=.*cursorEl\.style\.top=/);
 });
 
+test('admin tools expose a safe interactive Test Player',()=>{
+  const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
+  const menus=fs.readFileSync(path.join(__dirname,'..','..','client','js','menus.mjs'),'utf8');
+  const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  assert.match(combat,/<option value="test_player">Test Player<\/option>/);
+  assert.match(networking,/Test Player ready\.[\s\S]*press <b>E<\/b> to test Trade, Add Friend, and Rob safely/);
+  assert.match(menus,/Test trade interaction succeeded/);
+  assert.match(menus,/Test friend interaction succeeded/);
+  assert.match(networking,/Test robbery interaction succeeded/);
+});
+
 test('low mana or stamina creates a standout event-log suggestion without popup prompts',()=>{
   const frame=fs.readFileSync(path.join(__dirname,'..','..','client','js','frame-loop.mjs'),'utf8');
   const hud=fs.readFileSync(path.join(__dirname,'..','..','client','js','hud.mjs'),'utf8');

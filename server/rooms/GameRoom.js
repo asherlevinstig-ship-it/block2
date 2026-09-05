@@ -1443,6 +1443,7 @@ class GameRoom extends Room {
     this.bossContrib.forEach(byPlayer => byPlayer.delete(client.sessionId));
     this.pvel.delete(client.sessionId);
     if (p) this.broadcast('chat', { name: '[System]', text: p.name + ' has left' });
+    this.state.players.delete('admin_test_player:' + client.sessionId);
     this.state.players.delete(client.sessionId);
     try { await this.flush(); }   // persist the departing player's final state now (README: flush on each departure)
     catch (e) { console.warn('[persist] leave flush failed:', e.message); }
@@ -3720,13 +3721,39 @@ class GameRoom extends Room {
     });
     return true;
   }
+  adminTestPlayerTarget(client, m = {}, range = 8, robbery = false) {
+    if (!this.isAdminClient(client)) return null;
+    const sid = String(m.targetSid || '');
+    if (!sid.startsWith('admin_test_player:')) return null;
+    const actor = this.state.players.get(client.sessionId), target = this.state.players.get(sid);
+    if (!actor || !target) return null;
+    const shared = robbery ? this.playersShareRobberySpace(actor, target) : this.playersShareSocialSpace(actor, target);
+    if (!shared || Math.hypot(actor.x - target.x, actor.z - target.z) > range || Math.abs((actor.y || 0) - (target.y || 0)) > 6) return null;
+    return { sid, name: target.name || 'Test Player', player: target };
+  }
+  spawnAdminTestPlayer(client, p, radius = 3) {
+    const sid = 'admin_test_player:' + client.sessionId;
+    const a = (p.yaw || 0) + Math.PI;
+    const x = clampN(p.x + Math.sin(a) * radius, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+    const z = clampN(p.z + Math.cos(a) * radius, W.LAVA_BORDER_WIDTH + 1.5, W.WX - W.LAVA_BORDER_WIDTH - 1.5);
+    const ground = this.world && this.world.standHeight ? this.world.standHeight(x, z, W.WH - 2) : p.y;
+    if (!Number.isFinite(ground) || ground < 2) return client.send('adminSpawnReject', { reason: 'space' });
+    const bot = new Player();
+    bot.x = x; bot.y = ground + .01; bot.z = z; bot.yaw = (p.yaw || 0) + Math.PI;
+    bot.name = 'Test Player'; bot.schoolId = 'INTERACTION BOT'; bot.lvl = Math.max(1, p.lvl | 0);
+    bot.path = 'guardian'; bot.dim = p.dim || 'overworld'; bot.dgn = p.dgn || '';
+    this.state.players.set(sid, bot);
+    client.send('adminSpawnResult', { ok: true, kind: 'test_player', count: 1, sid, x: bot.x, y: bot.y, z: bot.z });
+    return true;
+  }
   handleAdminSpawnMob(client, m = {}) {
     if (!client || !this.isAdminClient(client)) return client && client.send && client.send('adminSpawnReject', { reason: 'admin' });
     const p = this.state.players.get(client.sessionId);
     if (!p) return client.send('adminSpawnReject', { reason: 'player' });
     if (p.dgn) return client.send('adminSpawnReject', { reason: 'dungeon' });
-    const allowed = new Set(['zombie', 'skeleton', 'bandit', 'bandit_archer', 'bandit_brute', 'wolf', 'boss', 'ancient_warden']);
     let kind = String(m.kind || 'zombie').toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (kind === 'test_player') return this.spawnAdminTestPlayer(client, p, Math.max(2, Math.min(8, Number(m.radius) || 3)));
+    const allowed = new Set(['zombie', 'skeleton', 'bandit', 'bandit_archer', 'bandit_brute', 'wolf', 'boss', 'ancient_warden']);
     if (!allowed.has(kind)) kind = 'zombie';
     const count = Math.max(1, Math.min(12, Number(m.count) | 0 || 1));
     const rank = Math.max(0, Math.min(5, Number(m.rank) | 0 || 0));
@@ -4591,6 +4618,14 @@ class GameRoom extends Room {
   handleRobPlayer(client, m = {}) {
     const rec = this.profileFor(client);
     const targetSid = String(m.targetSid || '');
+    const testTarget = this.adminTestPlayerTarget(client, m, 8, true);
+    if (rec && testTarget) {
+      client.send('robResult', {
+        ok: true, test: true, targetSid: testTarget.sid, targetName: testTarget.name,
+        gold: 0, totalGold: rec.prof.gold | 0, karma: rec.prof.karma | 0, karmaDelta: 0,
+      });
+      return;
+    }
     const target = this.findRobTarget(client, m);
     const targetRec = target && this.profileFor(target);
     const reject = (reason, extra = {}) => client.send('robResult', { ok: false, reason, targetSid, targetName: String(m.targetName || ''), ...extra });
@@ -4629,6 +4664,11 @@ class GameRoom extends Room {
   }
   handleFriendAdd(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
+    const testTarget = this.adminTestPlayerTarget(client, m);
+    if (rec && testTarget) {
+      client.send('friendResult', { ok: true, test: true, action: 'add', targetSid: testTarget.sid, targetToken: '', targetName: testTarget.name, karma: rec.prof.karma | 0, karmaDelta: 0 });
+      return;
+    }
     const target = this.clients.find(c => c.sessionId === targetSid);
     const targetRec = target && this.profileFor(target);
     const reject = reason => client.send('friendResult', { ok: false, reason });
@@ -4656,12 +4696,23 @@ class GameRoom extends Room {
   }
   handleTradeOffer(client, m = {}) {
     const rec = this.profileFor(client), targetSid = String(m.targetSid || '');
-    const target = this.findTradeTarget(client, m);
-    const targetRec = target && this.profileFor(target);
     const reject = (reason, extra = {}) => {
       if ((reason === 'empty' || reason === 'item') && rec) this.sendTradeInventory(client, rec.prof);
       client.send('tradeReject', { reason, targetSid, targetName: String(m.targetName || ''), ...extra });
     };
+    const testTarget = this.adminTestPlayerTarget(client, m);
+    if (rec && testTarget) {
+      if (this.rateLimited(client, 'trade', 3, 6)) return reject('rate');
+      const offer = this.tradeOfferFromMessage(rec.prof, m);
+      if (!offer.stack && !offer.gold) return reject('empty', this.tradeOfferDebug(rec.prof, m));
+      if (offer.gold > (rec.prof.gold | 0)) return reject('gold');
+      const id = 'test_trade_' + Date.now().toString(36);
+      client.send('tradePending', { id, toSid: testTarget.sid, toName: testTarget.name, offer, test: true });
+      client.send('tradeResult', { ok: true, test: true, id, withName: testTarget.name, gave: offer, received: { gold: 0, stack: null } });
+      return;
+    }
+    const target = this.findTradeTarget(client, m);
+    const targetRec = target && this.profileFor(target);
     if (!rec || !target || !targetRec || target === client) return reject('target', { online: (this.clients || []).length });
     if (this.rateLimited(client, 'trade', 3, 6)) return reject('rate');
     if (!this.tradePlayersClose(client, target)) return reject('range', this.tradeDistanceInfo(client, target));
