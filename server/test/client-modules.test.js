@@ -211,9 +211,15 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /tavern commons and player storage yard/);
   assert.match(world, /forge district training yard/);
   assert.match(world, /airship cargo apron/);
-  assert.match(world, /central court fountain base: flat collision/);
+  assert.match(world, /Grand Fountain: oversized landmark with a broad, open walking ring/);
   assert.match(world, /function createCentralFountainVisual\(\)/);
-  assert.match(world, /new THREE\.CircleGeometry\(3\.62,64\)/);
+  assert.match(world, /new THREE\.CircleGeometry\(7\.25,72\)/);
+  assert.match(world, /for\(let z=TC-HS;z<=TC\+HS;z\+\+\)for\(let w=-3;w<=3;w\+\+\)/);
+  assert.match(world, /addTownDistrictLabel\('ARRIVAL ROAD'/);
+  assert.match(world, /addTownDistrictLabel\('CENTRAL PLAZA'/);
+  assert.match(world, /addTownDistrictLabel\('PORTAL COURT'/);
+  assert.match(world, /BlockcraftTownArrivalGuide/);
+  assert.match(world, /Job Board · Tamsin/);
   assert.match(world, /\{x:HUB\.forgeChimney\.x, y:TG\+9\.6,\s+z:HUB\.forgeChimney\.z,\s+type:'smoke',\s+rate:2\.2,\s+maxDist:16\}/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-e\.x,player\.pos\.z-e\.z\)>\(e\.maxDist\|\|105\)/);
   assert.match(world, /Math\.hypot\(player\.pos\.x-p\.x,player\.pos\.z-p\.z\)>38\) continue/);
@@ -263,8 +269,8 @@ test('Taming Land is a dedicated client realm reached from a town portal', () =>
   const frame = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'frame-loop.mjs'), 'utf8');
 
   assert.match(world, /const TAMING_LAND=Object\.freeze/);
-  assert.match(world, /tamingPortal: \{ x: dpx\(86, 'roost'\), z: dpz\(78, 'roost'\) \}/);
-  assert.match(world, /questionPortal: \{ x: dpx\(48, 'market'\), z: dpz\(54, 'market'\) \}/);
+  assert.match(world, /tamingPortal: \{ x: TOWN\.TC \+ 45\.5, z: TOWN\.TC \+ 3\.5 \}/);
+  assert.match(world, /questionPortal: \{ x: TOWN\.TC \+ 25\.5, z: TOWN\.TC \+ 3\.5 \}/);
   assert.match(world, /function buildTamingLand\(setBlock=setB\)/);
   assert.match(world, /setBlock\(cx\+ox,G\+1,cz\+oz,B\.EGG_INSULATOR\)/);
   assert.match(world, /const TAMING_LAND_SUNS=Object\.freeze/);
@@ -2331,12 +2337,13 @@ test('level two job chooser presents six profession tutorial cards',()=>{
   assert.match(styles,/#townchoices \.tcrow\.job-choice/);
 });
 
-test('first town arrival offers adventure or question room destinations',()=>{
+test('first town arrival stages the fountain, Tamsin, and Question Portal',()=>{
   const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const styles=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const combat=fs.readFileSync(path.join(__dirname,'..','..','client','js','combat.mjs'),'utf8');
   const dimensions=fs.readFileSync(path.join(__dirname,'..','..','client','js','dimensions.mjs'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
   assert.match(html,/id="arrivalchoice"/);
   assert.match(html,/data-arrival-choice="adventure"/);
   assert.match(html,/data-arrival-choice="questions"/);
@@ -2346,7 +2353,7 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(styles,/\.arrival-choice-card\.questions/);
   assert.match(combat,/let firstTownChoiceDismissedThisSession=false/);
   assert.match(combat,/function showFirstTownArrivalChoice\(\)/);
-  assert.match(combat,/onboardingDone\(\)&&!firstTownChoiceDismissedThisSession&&!firstQuestMilestoneComplete\(\)&&dim==='overworld'/);
+  assert.match(combat,/function shouldShowFirstTownArrivalChoice\(\)\{[\s\S]*return false;/);
   assert.doesNotMatch(combat,/shouldShowFirstTownArrivalChoice\(\)\{[\s\S]*!quest&&!playerJob/);
   assert.match(combat,/finishWorldLoading\('town-arrival'\); if\(deferArrivalChoice\)showFirstTownArrivalChoice\(\);/);
   assert.match(combat,/chooseFirstTownArrival\(card\.dataset\.arrivalChoice\)/);
@@ -2367,8 +2374,12 @@ test('first town arrival offers adventure or question room destinations',()=>{
   assert.match(combat,/title:'Return Portal',small:'Travel back to Town of Beginnings'/);
   assert.match(combat,/if\(nearQuestionHallTownPortal\(\)\)\{ if\(typeof exitQuestionRoomToTown==='function'\)exitQuestionRoomToTown\(\); return; \}/);
   assert.match(combat,/shouldShowFirstTownArrivalChoice,\s*\n {2}showFirstTownArrivalChoice,/);
-  assert.match(networking,/combatApi\.shouldShowFirstTownArrivalChoice&&combatApi\.shouldShowFirstTownArrivalChoice\(\)/);
-  assert.match(networking,/setTimeout\(\(\)=>combatApi\.showFirstTownArrivalChoice&&combatApi\.showFirstTownArrivalChoice\(\),120\)/);
+  assert.match(world,/const TOWN_ARRIVAL_KEY='bc_town_arrival_v1'/);
+  assert.match(world,/stage==='fountain'.*Grand Fountain/);
+  assert.match(world,/stage==='tamsin'.*Tamsin at the Job Board/);
+  assert.match(world,/stage==='portal'.*Question Portal/);
+  assert.match(combat,/arrival\.stage\(\)==='tamsin'/);
+  assert.match(combat,/arrival\.introducePortal\(\)/);
   assert.match(dimensions,/const QUESTION_ROOM=\{x:930,z:855,G:18,R:28\}/);
   assert.match(dimensions,/function generateQuestionRoom\(\)/);
   assert.match(dimensions,/const QUESTION_HALL_TOWN_PORTAL=Object\.freeze\(\{dx:0,dz:12,range:4\.8\}\)/);
@@ -2988,9 +2999,11 @@ test('the regional side tracker requires a contract except public gate breach st
   assert.match(frame,/TRAIL SENSE/);
 });
 
-test('cartographer utilities split Mini Map local awareness from World Map planning',()=>{
+test('every player receives the map with full regional planning features',()=>{
   const world=fs.readFileSync(path.join(__dirname,'..','..','client','js','world.mjs'),'utf8');
-  assert.match(world,/miniMap = utilityEquipped\('minimap'\), worldMap = utilityEquipped\('world_map'\)/);
+  assert.match(world,/const miniMap = true, worldMap = true/);
+  assert.match(world,/slot:'builtin'.*Available to every player/);
+  assert.match(world,/id==='minimap'\|\|id==='world_map'\|\|utilityUnlocks\.includes\(id\)/);
   assert.match(world,/MINI MAP/);
   assert.match(world,/function updateLandMinimap/);
   assert.match(world,/const drawDangerRings=/);
@@ -3294,7 +3307,9 @@ test('utility ability screen explains slots, unlock sources, and gameplay use ca
   assert.match(dimensions,/globalThis\.useActiveUtility\(\)/);
   assert.match(world,/function useUtilityHotkey\(slotIndex\)/);
   assert.match(world,/function utilityPassiveHotkeyMessage\(id,u\)/);
-  assert.match(world,/id==='minimap'[\s\S]*small exploration map on the HUD[\s\S]*does not need the active slot/);
+  assert.match(world,/id==='minimap'\|\|id==='world_map'[\s\S]*built in and always available without using a utility slot/);
+  assert.match(menus,/u\.slot==='builtin'\?'BUILT-IN UTILITY'/);
+  assert.match(menus,/Available to every player without using a slot/);
   assert.doesNotMatch(world,/is running passively/);
   assert.match(world,/"useUtilityHotkey":\{get:\(\)=>useUtilityHotkey\}/);
   assert.match(hud,/utilityBarEl\.id='utilitybar'/);

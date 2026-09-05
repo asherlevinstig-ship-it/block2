@@ -19,7 +19,7 @@ const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
 const tp = v => TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING;
 const TOWN_DISTRICTS = Object.freeze({
   guild: { x: -18, z: -24 },
-  shrine: { x: 34, z: -26 },
+  shrine: { x: 18, z: -22 },
   forge: { x: 24, z: -22 },
   tavern: { x: -44, z: 18 },
   roost: { x: 12, z: 24 },
@@ -34,14 +34,14 @@ const dpz = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.z || 0);
 const townPos = (x, z, district) => ({ x: dpx(x, district), z: dpz(z, district) });
 const townBlockPos = (x, z, district) => ({ x: dtx(x, district), z: dtz(z, district) });
 const HUB = Object.freeze({
-  guide: { x: TOWN.TC + 8.5, z: TOWN.TC - 4.5 },
-  jobs: { x: TOWN.TC + 4.5, z: TOWN.TC - 8.5 },
-  cartographer: { x: TOWN.TC - 22.5, z: TOWN.TC - 11.5 },
+  guide: { x: TOWN.TC + 7.5, z: TOWN.TC - 14.5 },
+  jobs: { x: TOWN.TC + .5, z: TOWN.TC - 15.5 },
+  cartographer: { x: TOWN.TC - 20.5, z: TOWN.TC + 12.5 },
   quarry: townPos(79, 39, 'forge'),
   farm: townPos(56, 79, 'farm'),
   roost: townPos(96, 65, 'roost'),
   skyport: { ...townPos(32, 64, 'skyport'), y: TOWN.G + 24 },
-  guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
+  guardian: { x: TOWN.TC - 17.5, z: TOWN.TC - 43.5 },
   guild: townPos(54.5, 26.5, 'guild'),
   guildNoticeBoard: townPos(47, 26.7, 'guild'),
   socialMentor: townPos(43.5, 34, 'guild'),
@@ -49,6 +49,10 @@ const HUB = Object.freeze({
   meditate: townPos(47.5, 46.5, 'shrine'),
   smith: townPos(78.5, 50, 'forge'),
   tavern: townPos(83.5, 77.5, 'tavern'),
+  questionPortal: { x: TOWN.TC + 25.5, z: TOWN.TC + 3.5 },
+  fishingPortal: { x: TOWN.TC + 35.5, z: TOWN.TC + 7.5 },
+  tamingPortal: { x: TOWN.TC + 45.5, z: TOWN.TC + 3.5 },
+  shard: { x: TOWN.TC + 17, z: TOWN.TC - 43 },
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 });
 function isTownFarmWorksite(x, z) {
@@ -902,19 +906,25 @@ function buildTown() {
     const inside = x >= x1 && x <= x2 && z >= z1 && z <= z2;
     setB(x, G, z, inside ? B.CONCRETE : B.GRASS);
   }
-  // walls with gates (mobs must respect these when chasing into town)
+  // Dominant Arrival Road and medium district branches.
+  for (let x = TC - 15; x <= TC + 15; x++) for (let z = TC - 15; z <= TC + 15; z++)
+    if (Math.hypot(x - TC, z - TC) <= 14.5) setB(x, G, z, B.COBBLE);
+  for (let z = TC - HS; z <= TC + HS; z++) for (let w = -3; w <= 3; w++)
+    setB(TC + w, G, z, Math.abs(w) === 3 ? B.BRICK : B.COBBLE);
+  for (let x = TC - HS + 8; x <= TC - 14; x++) for (let w = -2; w <= 2; w++) setB(x, G, TC + w, Math.abs(w) === 2 ? B.BRICK : B.COBBLE);
+  for (let x = TC + 14; x <= TC + 58; x++) for (let w = -2; w <= 2; w++) setB(x, G, TC + w, Math.abs(w) === 2 ? B.BRICK : B.COBBLE);
+  // Walls expose only the South arrival and North adventure gates.
   for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
     const ex = Math.max(Math.abs(x - TC), Math.abs(z - TC));
     if (ex < HS - 1) continue;
     const onXWall = Math.abs(x - TC) >= HS - 1;
     const onZWall = Math.abs(z - TC) >= HS - 1;
-    const gateO = (onXWall && Math.abs(z - TC) <= 1 && !onZWall) || (onZWall && Math.abs(x - TC) <= 1 && !onXWall);
+    const gateO = onZWall && Math.abs(x - TC) <= 3 && !onXWall;
     for (let y = G + 1; y <= G + 5; y++) setB(x, y, z, gateO && y <= G + 4 ? B.AIR : B.BRICK);
   }
-  // Deterministic cleared approaches prevent generated hills, vegetation,
-  // snow, or water from blocking the four functional town gates.
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    for (let i = HS - 2; i <= HS + 20; i++) for (let w = -1; w <= 1; w++) {
+  // Deterministic cleared approaches for the two functional gates.
+  for (const [dx, dz] of [[0, 1], [0, -1]]) {
+    for (let i = HS - 2; i <= HS + 20; i++) for (let w = -3; w <= 3; w++) {
       const x = TC + dx * i + (dz !== 0 ? w : 0);
       const z = TC + dz * i + (dx !== 0 ? w : 0);
       setB(x, G, z, B.COBBLE);
@@ -926,13 +936,18 @@ function buildTown() {
     fillBox(cx - 2, G + 1, cz - 2, cx + 2, G + 7, cz + 2, B.BRICK);
   // Central court fountain base. Keep collision broad and flat so the plaza reads
   // cleanly; the client renders the water as a non-blocking visual.
-  for (let x = TC - 8; x <= TC + 8; x++) for (let z = TC - 8; z <= TC + 8; z++) {
+  for (let x = TC - 13; x <= TC + 13; x++) for (let z = TC - 13; z <= TC + 13; z++) {
     const d = Math.hypot(x - TC, z - TC);
-    if (d > 7.4) continue;
+    if (d > 12.4) continue;
     for (let y = G + 1; y <= G + 6; y++) setB(x, y, z, B.AIR);
-    setB(x, G, z, d > 6.3 ? B.COBBLE : d > 4.6 ? B.BRICK : d > 2.2 ? B.COBBLE : B.CONCRETE);
+    setB(x, G, z, d > 11.1 ? B.COBBLE : d > 8.1 ? B.BRICK : d > 3.6 ? B.COBBLE : B.CONCRETE);
   }
-  for (const [ox, oz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) setB(TC + ox, G + 1, TC + oz, B.LANTERN);
+  for (const [ox, oz] of [[-10, 0], [10, 0], [0, -10], [0, 10]]) setB(TC + ox, G + 1, TC + oz, B.LANTERN);
+  const portalCourtX = TC + 35, portalCourtZ = TC + 5;
+  for (let x = portalCourtX - 17; x <= portalCourtX + 17; x++) for (let z = portalCourtZ - 13; z <= portalCourtZ + 13; z++) {
+    const d = Math.hypot(x - portalCourtX, (z - portalCourtZ) * 1.2);
+    if (d <= 16) setB(x, G, z, d > 14.7 ? B.BRICK : B.COBBLE);
+  }
   // Open district footprints replacing the old NPC cottages. These are
   // ground-level only so server collision agrees with the cleaned client town.
   const paveDistrict = (xa, za, xb, zb, fill = B.COBBLE, edge = B.BRICK) => {
@@ -979,10 +994,9 @@ function buildTown() {
   buildGuildHallBase(setB);
   buildSkyportBlocks(setB);
   buildTownFarmWorksite(setB, G);
-  // Reopen gate approaches after every district has been generated. Without
-  // this final pass, the dragon pen can overwrite the east gate corridor.
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    for (let i = HS - 2; i <= HS + 20; i++) for (let w = -1; w <= 1; w++) {
+  // Reopen the two intentional gates after every district has been generated.
+  for (const [dx, dz] of [[0, 1], [0, -1]]) {
+    for (let i = HS - 2; i <= HS + 20; i++) for (let w = -3; w <= 3; w++) {
       const x = TC + dx * i + (dz !== 0 ? w : 0);
       const z = TC + dz * i + (dx !== 0 ? w : 0);
       setB(x, G, z, B.COBBLE);
@@ -1014,8 +1028,8 @@ function createWorld() {
     const { TC, HS, G } = TOWN;
     const x1 = TC - HS, x2 = TC + HS, z1 = TC - HS, z2 = TC + HS;
     const reopenGateApproachesLocal = () => {
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        for (let i = HS - 2; i <= HS + 20; i++) for (let w = -1; w <= 1; w++) {
+      for (const [dx, dz] of [[0, 1], [0, -1]]) {
+        for (let i = HS - 2; i <= HS + 20; i++) for (let w = -3; w <= 3; w++) {
           const x = TC + dx * i + (dz !== 0 ? w : 0);
           const z = TC + dz * i + (dx !== 0 ? w : 0);
           setLocal(x, G, z, B.COBBLE);
@@ -1032,21 +1046,34 @@ function createWorld() {
       const inside = x >= x1 && x <= x2 && z >= z1 && z <= z2;
       setLocal(x, G, z, inside ? B.CONCRETE : B.GRASS);
     }
+    for (let x = TC - 15; x <= TC + 15; x++) for (let z = TC - 15; z <= TC + 15; z++)
+      if (Math.hypot(x - TC, z - TC) <= 14.5) setLocal(x, G, z, B.COBBLE);
+    for (let z = TC - HS; z <= TC + HS; z++) for (let w = -3; w <= 3; w++)
+      setLocal(TC + w, G, z, Math.abs(w) === 3 ? B.BRICK : B.COBBLE);
+    for (let x = TC - HS + 8; x <= TC - 14; x++) for (let w = -2; w <= 2; w++) setLocal(x, G, TC + w, Math.abs(w) === 2 ? B.BRICK : B.COBBLE);
+    for (let x = TC + 14; x <= TC + 58; x++) for (let w = -2; w <= 2; w++) setLocal(x, G, TC + w, Math.abs(w) === 2 ? B.BRICK : B.COBBLE);
     for (let x = x1; x <= x2; x++) for (let z = z1; z <= z2; z++) {
       const ex = Math.max(Math.abs(x - TC), Math.abs(z - TC));
       if (ex < HS - 1) continue;
       const onXWall = Math.abs(x - TC) >= HS - 1;
       const onZWall = Math.abs(z - TC) >= HS - 1;
-      const gateO = (onXWall && Math.abs(z - TC) <= 1 && !onZWall) || (onZWall && Math.abs(x - TC) <= 1 && !onXWall);
+      const gateO = onZWall && Math.abs(x - TC) <= 3 && !onXWall;
       for (let y = G + 1; y <= G + 5; y++) setLocal(x, y, z, gateO && y <= G + 4 ? B.AIR : B.BRICK);
     }
     reopenGateApproachesLocal();
     for (const [cx, cz] of [[x1, z1], [x1, z2], [x2, z1], [x2, z2]])
       fillLocal(cx - 2, G + 1, cz - 2, cx + 2, G + 7, cz + 2, B.BRICK);
-    for (let x = TC - 4; x <= TC + 4; x++) for (let z = TC - 4; z <= TC + 4; z++) {
+    for (let x = TC - 13; x <= TC + 13; x++) for (let z = TC - 13; z <= TC + 13; z++) {
       const d = Math.hypot(x - TC, z - TC);
-      if (d >= 3 && d < 4) setLocal(x, G + 1, z, B.BRICK);
-      else if (d < 3) setLocal(x, G + 1, z, B.WATER);
+      if (d > 12.4) continue;
+      for (let y = G + 1; y <= G + 6; y++) setLocal(x, y, z, B.AIR);
+      setLocal(x, G, z, d > 11.1 ? B.COBBLE : d > 8.1 ? B.BRICK : d > 3.6 ? B.COBBLE : B.CONCRETE);
+    }
+    for (const [ox, oz] of [[-10, 0], [10, 0], [0, -10], [0, 10]]) setLocal(TC + ox, G + 1, TC + oz, B.LANTERN);
+    const portalCourtX = TC + 35, portalCourtZ = TC + 5;
+    for (let x = portalCourtX - 17; x <= portalCourtX + 17; x++) for (let z = portalCourtZ - 13; z <= portalCourtZ + 13; z++) {
+      const d = Math.hypot(x - portalCourtX, (z - portalCourtZ) * 1.2);
+      if (d <= 16) setLocal(x, G, z, d > 14.7 ? B.BRICK : B.COBBLE);
     }
     const paveDistrict = (xa, za, xb, zb, fill = B.COBBLE, edge = B.BRICK) => {
       for (let x = xa; x <= xb; x++) for (let z = za; z <= zb; z++) {
@@ -1092,7 +1119,7 @@ function createWorld() {
     buildSkyportBlocks(setLocal);
     buildTownFarmWorksite(setLocal, G);
     // Keep createWorld() aligned with the global/client generator. GameRoom uses
-    // this local world for movement authority, so the four visible exits must be
+    // this local world for movement authority, so the two visible exits must be
     // cleared here as well as in buildTown().
     reopenGateApproachesLocal();
   };

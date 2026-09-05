@@ -33,6 +33,14 @@ The town center (`TOWN.TC`, world middle) is safe and build-protected; a lava bo
 rings the world edge. A separate **Training Meadow** (`TRAINING_MEADOW`) is a resettable
 sandbox whose edits are never persisted into the shared world.
 
+The **Town of Beginnings** is organized around one seven-block-wide Arrival Road from
+the South Gate to the North Gate and an oversized Grand Fountain in the Central Plaza.
+New characters spawn just inside the South Gate facing north, then receive a short local
+orientation: reach the fountain, speak to Tamsin at the Job Board, and inspect the blue
+Question Portal in the eastern Portal Court. Other district callouts unlock after that
+sequence. Market services sit west, adventuring services north, crafting northeast, and
+farm/roost activities southeast. Only the north and south walls have gates.
+
 ---
 
 ## Classes, paths & abilities
@@ -386,7 +394,8 @@ shrine, or visit the road merchant. Contracts are validated and credited server-
 persist only for the player's active job. Road-flavored contracts (`road_*`) additionally
 build **Road Warden reputation** with milestones at 3 (Trail Sense + iron in the road
 merchant's stock), 6 (cooked provisions + permanent price cuts), and 9 (maximum discount).
-Trail Sense can also unlock from the Trailblazer exploration milestone after 10 mapped
+The Mini Map and its complete regional-planning feature set are built in for every player
+and do not consume passive utility slots. Trail Sense can also unlock from the Trailblazer exploration milestone after 10 mapped
 discoveries, so road scouts and cartographers both get an active tracking utility.
 Utility feedback is deliberately in-world as well as textual: Trail Sense paints a short-lived
 track marker and activity card, Party Compass adds distance-bearing HUD states plus urgent

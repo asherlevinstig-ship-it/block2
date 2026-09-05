@@ -16,7 +16,7 @@ const { createStore, sanitizeProfile, mergeClientSave, defaultProfile, cleanToke
 const { canonicalDungeonId } = require('../../shared/dungeon-pools');
 const { issueDungeonAdmission } = require('./dungeon-admission');
 const MAX_ACTIVE_GATE_BREACHES = 3;
-const SAFE_TOWN_RETURN = Object.freeze([W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+const SAFE_TOWN_RETURN = Object.freeze([W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 function safeTownReturn() {
   return SAFE_TOWN_RETURN.slice();
 }
@@ -1530,7 +1530,7 @@ class DungeonMixin {
     p.dgn = '';
     p.dim = 'overworld';
     const town = safeTownReturn();
-    p.x = town[0]; p.y = town[1]; p.z = town[2]; p.yaw = Math.PI;
+    p.x = town[0]; p.y = town[1]; p.z = town[2]; p.yaw = 0;
     const token = this.tokens.get(sid);
     const prof = token && this.profiles.get(token);
     if (prof) {
@@ -1554,7 +1554,7 @@ class DungeonMixin {
     p.x = town[0];
     p.y = town[1];
     p.z = town[2];
-    p.yaw = Math.PI;
+    p.yaw = 0;
     const token = this.tokens.get(sid);
     const prof = token && this.profiles.get(token);
     if (prof) {

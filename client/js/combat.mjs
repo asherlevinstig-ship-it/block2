@@ -165,7 +165,7 @@ const player = {
   w:0.3, h:1.8, eye:1.62,
   onGround:false,
 };
-player.pos.set(TOWN.TC+.5, TOWN.G+1, TOWN.TC+14.5); // open plaza, facing the fountain and Mara trail
+player.pos.set(TOWN.TC+.5, TOWN.G+1, TOWN.TC+62.5); // just inside the South Gate, facing north up Arrival Road
 updateVisibleChunks(true);
 
 function collides(p){
@@ -1950,7 +1950,7 @@ function startAbilityTraining(){
   abilityTrainingActive=true;
   abilityTrainingUsed=false;
   abilityTrainingFinishAt=0;
-  abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5));
+  abilityTrainingReturn=abilityRoomReturn&&abilityRoomReturn.pos ? abilityRoomReturn.pos.clone() : (player?player.pos.clone():new THREE.Vector3(TOWN.TC+.5,TOWN.G+1,TOWN.TC+62.5));
   if(player){
     player.pos.set(ABILITY_MEADOW.x,ABILITY_MEADOW.G+2,ABILITY_MEADOW.z+12);
     player.vel.set(0,0,0);
@@ -4879,9 +4879,9 @@ function finishOnboardingToTown(){
   tutorialDummyGroup.visible=false;
   if(dim==='tutorial') exitOnboardingRoom({destination:'town'});
   else if(player){
-    player.pos.set(TOWN.TC+14.5,TOWN.G+1,TOWN.TC+27.5);
+    player.pos.set(TOWN.TC+.5,TOWN.G+1,TOWN.TC+62.5);
     player.vel.set(0,0,0);
-    player.yaw=Math.PI;
+    player.yaw=0;
     player.pitch=0;
   }
   try{localStorage.setItem('bc_onboarding_done_v7','1');}catch(e){}
@@ -4889,7 +4889,6 @@ function finishOnboardingToTown(){
   sysMsg('<b>Training complete.</b> Welcome to the Town of Beginnings.');
   const deferArrivalChoice=shouldShowFirstTownArrivalChoice();
   if(!deferArrivalChoice){
-    startTownGuidance();
     setTimeout(()=>ONBOARD.showTrainingComplete(),120);
   }
   sendPlayerMetaNow();
@@ -4906,7 +4905,8 @@ function finishOnboardingToTown(){
   setTimeout(()=>{ finishWorldLoading('town-arrival'); if(deferArrivalChoice)showFirstTownArrivalChoice(); },720);
 }
 function shouldShowFirstTownArrivalChoice(){
-  return !!(arrivalChoiceEl&&onboardingDone()&&!firstTownChoiceDismissedThisSession&&!firstQuestMilestoneComplete()&&dim==='overworld');
+  // The town now teaches itself in-world: fountain, Tamsin, then Question Portal.
+  return false;
 }
 function resumeCameraAfterArrivalChoice(){
   lockFallback=true;
@@ -4929,9 +4929,9 @@ function settleFirstTownAdventureSpawn(){
   mouseLookDelta.y=0;
   if(isMeditating)stopMeditation({silent:true});
   if(player){
-    player.pos.set(TOWN.TC+.5,TOWN.G+2,TOWN.TC+14.5);
+    player.pos.set(TOWN.TC+.5,TOWN.G+1,TOWN.TC+62.5);
     player.vel.set(0,0,0);
-    player.yaw=Math.PI;
+    player.yaw=0;
     player.pitch=0;
     player.onGround=true;
   }
@@ -7231,6 +7231,11 @@ function heldPlaceAction(now=performance.now()){
 function interactWithVillager(vill){
   if(!vill) return false;
   if(vill.role==='road_warden'){
+    const arrival=globalThis.BlockcraftTownArrivalGuide;
+    if(arrival&&arrival.stage&&arrival.stage()==='tamsin'){
+      arrival.introducePortal();
+      return true;
+    }
     let first=false;try{first=!localStorage.getItem('bc_tamsin_intro_seen');if(first)localStorage.setItem('bc_tamsin_intro_seen','1');}catch(e){}
     sysMsg(first
       ? '<b>Tamsin Rook:</b> "Take one Road Warden contract, follow the road tracker, then come back for reputation. Camps, caravans, stolen cargo, mercy calls — that is how we make roads boring again."'

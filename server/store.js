@@ -37,7 +37,7 @@ const TUTORIAL_VERSIONS = Object.freeze({
   onboarding: 7, ability: 2, intro: 1, gate: 1,
   townJob: 1, townTavern: 1, townLand: 1, familiar: 1,
 });
-const DEFAULT_TOWN_RETURN_POS = Object.freeze([WORLD.TOWN.TC + 14.5, WORLD.TOWN.G + 1, WORLD.TOWN.TC + 27.5]);
+const DEFAULT_TOWN_RETURN_POS = Object.freeze([WORLD.TOWN.TC + .5, WORLD.TOWN.G + 1, WORLD.TOWN.TC + 62.5]);
 const clampI = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, Math.round(v))) : a; };
 const clampF = (v, a, b) => { v = +v; return isFinite(v) ? Math.min(b, Math.max(a, v)) : a; };
 function cleanShardId(value) {

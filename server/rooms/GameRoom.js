@@ -159,7 +159,7 @@ const KARMA_HUNTER_MAX_HOURLY_CHANCE = 0.9;
 const KARMA_HUNTER_MIN_INTERVAL_MS = 20 * 60 * 1000;
 const KARMA_HUNTER_LIFETIME_MS = 8 * 60 * 1000;
 const KARMA_GIFT_REDEEM = 6;
-const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + 14.5, y: W.TOWN.G + 1, z: W.TOWN.TC + 27.5 });
+const TOWN_RETURN_SPAWN = Object.freeze({ x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 62.5 });
 const ADMIN_QUICK_GATE_ROTATION = Object.freeze(DUNGEON_POOLS.flatMap((ids, rank) => ids.map(dungeonId => Object.freeze({ rank, dungeonId }))));
 const adminQuickGateIndices = new Map();
 
@@ -1887,7 +1887,7 @@ class GameRoom extends Room {
         if (p) {
           p.dim = 'overworld'; p.dgn = '';
           p.x = spawn[0]; p.y = spawn[1]; p.z = spawn[2];
-          p.yaw = Math.PI;
+          p.yaw = 0;
         }
       }
     }
@@ -2171,7 +2171,7 @@ class GameRoom extends Room {
     p.dim = 'overworld';
     p.dgn = '';
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
-    p.yaw = Math.PI;
+    p.yaw = 0;
     if (this.tutorialReturns) this.tutorialReturns.delete(client.sessionId);
     if (rec && rec.prof) {
       rec.prof.activeRoom = null;
@@ -7240,7 +7240,7 @@ class GameRoom extends Room {
   cartographerInRange(client) {
     const p=client&&this.state.players.get(client.sessionId);
     if(!p||p.dgn)return false;
-    const cartographer={x:W.TOWN.TC-22.5,z:W.TOWN.TC-11.5};
+    const cartographer=W.HUB.cartographer;
     if(Math.hypot(p.x-cartographer.x,p.z-cartographer.z)<11)return true;
     const guild=W.townPos(54.5,26.5,'guild');
     const atFellowshipMapTable=Math.hypot(p.x-(guild.x-3.7),p.z-(guild.z+1.2))<5.2;

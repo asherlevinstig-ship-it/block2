@@ -1970,14 +1970,14 @@ generateWorld();
 
 // ---------------- Town of Beginnings ----------------
 const TOWN = { TC: WX/2, HS: 72, G: 15 }; // center, wall half-size, ground level
-const TOWN_RETURN_SPAWN = Object.freeze({ x: TOWN.TC + 14.5, y: TOWN.G + 2, z: TOWN.TC + 27.5 });
+const TOWN_RETURN_SPAWN = Object.freeze({ x: TOWN.TC + .5, y: TOWN.G + 1, z: TOWN.TC + 62.5 });
 const OLD_TOWN_TC = 64;
 const TOWN_SPACING = 1.14;
 const tc = v => Math.round(TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING);
 const tp = v => TOWN.TC + (v - OLD_TOWN_TC) * TOWN_SPACING;
 const TOWN_DISTRICTS = Object.freeze({
   guild: { x: -18, z: -24 },
-  shrine: { x: 34, z: -26 },
+  shrine: { x: 18, z: -22 },
   forge: { x: 24, z: -22 },
   tavern: { x: -44, z: 18 },
   roost: { x: 12, z: 24 },
@@ -1990,17 +1990,17 @@ const dtz = (v, district) => tc(v) + (TOWN_DISTRICTS[district]?.z || 0);
 const dpx = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.x || 0);
 const dpz = (v, district) => tp(v) + (TOWN_DISTRICTS[district]?.z || 0);
 const HUB = {
-  guide: { x: TOWN.TC + 8.5, z: TOWN.TC - 4.5 },
-  jobs: { x: TOWN.TC + 4.5, z: TOWN.TC - 8.5 },
-  cartographer: { x: TOWN.TC - 22.5, z: TOWN.TC - 11.5 },
+  guide: { x: TOWN.TC + 7.5, z: TOWN.TC - 14.5 },
+  jobs: { x: TOWN.TC + .5, z: TOWN.TC - 15.5 },
+  cartographer: { x: TOWN.TC - 20.5, z: TOWN.TC + 12.5 },
   quarry: { x: dpx(79, 'forge'), z: dpz(39, 'forge') },
   farm: { x: dpx(56, 'farm'), z: dpz(79, 'farm') },
   roost: { x: dpx(96, 'roost'), z: dpz(65, 'roost') },
-  tamingPortal: { x: dpx(86, 'roost'), z: dpz(78, 'roost') },
-  questionPortal: { x: dpx(48, 'market'), z: dpz(54, 'market') },
-  fishingPortal: { x: dpx(61, 'farm'), z: dpz(61, 'farm') },
+  questionPortal: { x: TOWN.TC + 25.5, z: TOWN.TC + 3.5 },
+  fishingPortal: { x: TOWN.TC + 35.5, z: TOWN.TC + 7.5 },
+  tamingPortal: { x: TOWN.TC + 45.5, z: TOWN.TC + 3.5 },
   skyport: { x: dpx(32, 'skyport'), z: dpz(64, 'skyport'), y: TOWN.G + 24 },
-  guardian: { x: TOWN.TC + .5, z: TOWN.TC - 24.5 },
+  guardian: { x: TOWN.TC - 17.5, z: TOWN.TC - 43.5 },
   guild: { x: dpx(54.5, 'guild'), z: dpz(26.5, 'guild') },
   guildNoticeBoard: { x: dpx(47, 'guild'), z: dpz(26.7, 'guild') },
   socialMentor: { x: dpx(43.5, 'guild'), z: dpz(34, 'guild') },
@@ -2012,7 +2012,7 @@ const HUB = {
   tavernChimney: { x: dpx(79.5, 'tavern'), z: dpz(86.5, 'tavern') },
   forgeFire: { x: dpx(81.7, 'forge'), z: dpz(48.5, 'forge') },
   forgeChimney: { x: dpx(82.5, 'forge'), z: dpz(47.5, 'forge') },
-  shard: { x: TOWN.TC + 19, z: TOWN.TC + 1 },
+  shard: { x: TOWN.TC + 17, z: TOWN.TC - 43 },
   marketX: dpx(43, 'market'),
   northGate: { x: TOWN.TC + .5, z: TOWN.TC - TOWN.HS + .5 },
 };
@@ -2139,29 +2139,33 @@ function buildTown(){
     setB(x,G,z, inside?B.CONCRETE:B.GRASS);
   }
 
-  // --- clean orientation plaza + paths to the four gates ---
-  for(let x=TC-8;x<=TC+8;x++)for(let z=TC-8;z<=TC+8;z++)
-    if(Math.hypot(x-TC,z-TC)<=7.5) setB(x,G,z,B.COBBLE);
-  for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]])
-    for(let i=8;i<=HS;i++)for(let w=-1;w<=1;w++)
-      setB(TC+dx*i+(dz!==0?w:0), G, TC+dz*i+(dx!==0?w:0), B.COBBLE);
+  // --- navigation hierarchy: a dominant north/south Arrival Road, medium
+  // district branches, and a generous circular Central Plaza ---
+  for(let x=TC-15;x<=TC+15;x++)for(let z=TC-15;z<=TC+15;z++)
+    if(Math.hypot(x-TC,z-TC)<=14.5) setB(x,G,z,B.COBBLE);
+  for(let z=TC-HS;z<=TC+HS;z++)for(let w=-3;w<=3;w++)
+    setB(TC+w,G,z,Math.abs(w)===3?B.BRICK:B.COBBLE);
+  for(let x=TC-HS+8;x<=TC-14;x++)for(let w=-2;w<=2;w++)setB(x,G,TC+w,Math.abs(w)===2?B.BRICK:B.COBBLE);
+  for(let x=TC+14;x<=TC+58;x++)for(let w=-2;w<=2;w++)setB(x,G,TC+w,Math.abs(w)===2?B.BRICK:B.COBBLE);
+  for(const z of [TC+18,TC+34,TC+50])for(const x of [TC-4,TC+4]){
+    setB(x,G+1,z,B.LOG);setB(x,G+2,z,B.LOG);setB(x,G+3,z,B.LANTERN);
+  }
 
-  // --- Aegis shrine at the north end: legendary NPC lives here, not in the spawn plaza ---
-  for(let x=TC-7;x<=TC+7;x++)for(let z=TC-29;z<=TC-21;z++){
-    const inner=Math.abs(x-TC)<=4 && z>=TC-27 && z<=TC-23;
+  // --- Aegis shrine on Adventurer's Row ---
+  const aegisX=HUB.guardian.x|0,aegisZ=HUB.guardian.z|0;
+  for(let x=aegisX-7;x<=aegisX+7;x++)for(let z=aegisZ-5;z<=aegisZ+4;z++){
+    const inner=Math.abs(x-aegisX)<=4 && z>=aegisZ-3 && z<=aegisZ+1;
     setB(x,G, z, inner?B.COBBLE:B.BRICK);
   }
-  for(let x=TC-6;x<=TC+6;x++) setB(x,G+1,TC-29,B.BRICK);            // rear altar curb
-  fillBox(TC-2,G+1,TC-28, TC+2,G+2,TC-28, B.BRICK);                 // raised altar behind guardian
-  setB(TC,G+3,TC-28,B.GLASS);                                       // oath crystal
-  for(const x of [TC-6,TC+6]){
-    for(let y=G+1;y<=G+5;y++) setB(x,y,TC-27,y===G+5?B.GLASS:B.BRICK);
-    for(let y=G+1;y<=G+4;y++) setB(x,y,TC-22,y===G+4?B.GLASS:B.LOG);
+  for(let x=aegisX-6;x<=aegisX+6;x++) setB(x,G+1,aegisZ-5,B.BRICK);
+  fillBox(aegisX-2,G+1,aegisZ-4,aegisX+2,G+2,aegisZ-4,B.BRICK);
+  setB(aegisX,G+3,aegisZ-4,B.GLASS);
+  for(const x of [aegisX-6,aegisX+6]){
+    for(let y=G+1;y<=G+5;y++) setB(x,y,aegisZ-3,y===G+5?B.GLASS:B.BRICK);
+    for(let y=G+1;y<=G+4;y++) setB(x,y,aegisZ+2,y===G+4?B.GLASS:B.LOG);
   }
-  fillBox(TC-6,G+5,TC-27, TC+6,G+5,TC-27, B.PLANKS);                // shrine lintel
-  setB(TC-3,G+1,TC-25,B.TORCH); setB(TC+3,G+1,TC-25,B.TORCH);
-  setB(TC-5,G+1,TC-23,B.TORCH); setB(TC+5,G+1,TC-23,B.TORCH);
-  for(let z=TC-21;z<=TC-8;z++) for(let w=-1;w<=1;w++) setB(TC+w,G,z,B.COBBLE);
+  fillBox(aegisX-6,G+5,aegisZ-3,aegisX+6,G+5,aegisZ-3,B.PLANKS);
+  setB(aegisX-3,G+1,aegisZ-1,B.TORCH);setB(aegisX+3,G+1,aegisZ-1,B.TORCH);
 
   // --- shard terrace: an arcane corner separated from spawn and the guardian ---
   const sx=HUB.shard.x|0, sz=HUB.shard.z|0;
@@ -2173,23 +2177,23 @@ function buildTown(){
   setB(sx, G+2, sz, B.BRICK);
   for(let x=TC+8;x<=sx-4;x++) for(let w=-1;w<=1;w++) setB(x,G,sz+w,B.COBBLE);
 
-  // --- central court fountain base: flat collision; water is rendered as a thin client visual ---
-  for(let x=TC-8;x<=TC+8;x++)for(let z=TC-8;z<=TC+8;z++){
+  // --- Grand Fountain: oversized landmark with a broad, open walking ring ---
+  for(let x=TC-13;x<=TC+13;x++)for(let z=TC-13;z<=TC+13;z++){
     const d=Math.hypot(x-TC,z-TC);
-    if(d>7.4) continue;
+    if(d>12.4) continue;
     for(let y=G+1;y<=G+6;y++) setB(x,y,z,B.AIR);
-    setB(x,G,z,d>6.3?B.COBBLE:d>4.6?B.BRICK:d>2.2?B.COBBLE:B.CONCRETE);
+    setB(x,G,z,d>11.1?B.COBBLE:d>8.1?B.BRICK:d>3.6?B.COBBLE:B.CONCRETE);
   }
-  for(const [ox,oz] of [[-5,0],[5,0],[0,-5],[0,5]]) setB(TC+ox,G+1,TC+oz,B.LANTERN);
+  for(const [ox,oz] of [[-10,0],[10,0],[0,-10],[0,10]]) setB(TC+ox,G+1,TC+oz,B.LANTERN);
 
-  // --- town walls (2 thick, gated on all four sides) ---
+  // --- town walls: only the South arrival and North adventure gates are open ---
   for(let x=x1;x<=x2;x++)for(let z=z1;z<=z2;z++){
     const ex=Math.max(Math.abs(x-TC),Math.abs(z-TC));
     if(ex<HS-1) continue;
     const onXWall = Math.abs(x-TC)>=HS-1;
     const onZWall = Math.abs(z-TC)>=HS-1;
-    const gate  = (onXWall && Math.abs(z-TC)<=1 && !onZWall) || (onZWall && Math.abs(x-TC)<=1 && !onXWall);
-    const frame = (onXWall && Math.abs(z-TC)===2 && !onZWall) || (onZWall && Math.abs(x-TC)===2 && !onXWall);
+    const gate  = onZWall && Math.abs(x-TC)<=3 && !onXWall;
+    const frame = onZWall && Math.abs(x-TC)===4 && !onXWall;
     for(let y=G+1;y<=G+5;y++){
       if(gate){ setB(x,y,z, y<=G+4 ? B.AIR : B.LOG); continue; }   // opening + log lintel
       setB(x,y,z, frame ? B.LOG : wallMat(x,y,z));
@@ -2199,12 +2203,23 @@ function buildTown(){
 
   // Keep every gate traversable regardless of surrounding terrain. These
   // causeways remove hills, trees, snow, and water that could plug an opening.
-  for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
-    for(let i=HS-2;i<=HS+20;i++) for(let w=-1;w<=1;w++){
+  for(const [dx,dz] of [[0,1],[0,-1]]){
+    for(let i=HS-2;i<=HS+20;i++) for(let w=-3;w<=3;w++){
       const x=TC+dx*i+(dz!==0?w:0),z=TC+dz*i+(dx!==0?w:0);
       setB(x,G,z,B.COBBLE);
       for(let y=G+1;y<=G+4;y++) setB(x,y,z,B.AIR);
     }
+  }
+
+  // --- Portal Court: all basic activity portals share one readable rule ---
+  const portalCourtX=TC+35,portalCourtZ=TC+5;
+  for(let x=portalCourtX-17;x<=portalCourtX+17;x++)for(let z=portalCourtZ-13;z<=portalCourtZ+13;z++){
+    const d=Math.hypot(x-portalCourtX,(z-portalCourtZ)*1.2);
+    if(d<=16)setB(x,G,z,d>14.7?B.BRICK:B.COBBLE);
+  }
+  for(const p of [HUB.questionPortal,HUB.fishingPortal,HUB.tamingPortal]){
+    const px=p.x|0,pz=p.z|0;
+    for(let x=px-3;x<=px+3;x++)for(let z=pz-2;z<=pz+2;z++)setB(x,G,z,B.COBBLE);
   }
 
   // --- corner towers ---
@@ -2429,9 +2444,8 @@ function buildTown(){
   setB(dtx(76,'forge'),G+1,dtz(46,'forge'),B.TORCH); setB(dtx(76,'forge'),G+1,dtz(53,'forge'),B.TORCH); // smithy
   buildGuildHallBase();
   buildSkyportBlocks();
-  // Final egress pass: town districts (especially the dragon pen and skyport)
-  // are built after the walls, so reopen every functional gate last.
-  for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]) for(let i=HS-2;i<=HS+20;i++) for(let w=-1;w<=1;w++){
+  // Reopen only the two intentional gates after districts are generated.
+  for(const [dx,dz] of [[0,1],[0,-1]]) for(let i=HS-2;i<=HS+20;i++) for(let w=-3;w<=3;w++){
     const x=TC+dx*i+(dz!==0?w:0),z=TC+dz*i+(dx!==0?w:0);
     setB(x,G,z,B.COBBLE);
     for(let y=G+1;y<=G+4;y++) setB(x,y,z,B.AIR);
@@ -3467,7 +3481,9 @@ function firstLandClaimGuidanceHTML(){
 }
 function updateLandMinimap(force=true){
   const hasOwn = editableClaimCount()>0;
-  const miniMap = utilityEquipped('minimap'), worldMap = utilityEquipped('world_map');
+  // Navigation maps are built-in for every player. Keep both modes enabled so
+  // newcomers receive the complete regional marker set without using utility slots.
+  const miniMap = true, worldMap = true;
   const hasTownMap = typeof countItem==='function' && countItem(I.TOWN_MAP)>0;
   const mapUtility = dim==='overworld' && (miniMap || worldMap || hasTownMap);
   const calmTown = calmTownHud();
@@ -4654,14 +4670,14 @@ const NPC_ROLES=[
    done:'You are speaking like someone others can trust.',
    focus:'social'},
   {name:'Tamsin Rook',shortName:'Tamsin',role:'road_warden',title:'Road Warden',personality:'watchful, practical, unimpressed by excuses',
-   work:[HUB.jobs.x+2,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
+   work:[HUB.jobs.x,HUB.jobs.z],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'The roads do not stay safe by themselves. I post camp, escort, rescue, recovery, and mercy contracts. Wildlife may drop pet collars for hunters who pay attention.',
    accept:'Keep the merchants moving and the camps nervous.',done:'Another mile of road belongs to honest folk.',focus:'kill',job:'adventurer'},
   {name:'Bryn Notice',shortName:'Bryn',role:'job_mentor',title:'Job Board Helper',personality:'clear, encouraging, points with both hands',
-   work:[HUB.jobs.x-2.2,HUB.jobs.z+.8],home:[HUB.jobs.x,HUB.jobs.z],static:true,
+   work:[HUB.jobs.x-4,HUB.jobs.z+2],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'The board is your loop when you feel stuck: pick a job, take one contract, finish it, then come back for XP, gold, and profession progress. Milo beside me can send you back into any worker tutorial.'},
   {name:'Milo Waywright',shortName:'Milo',role:'worker_tutor',title:'Worker Tutor',personality:'upbeat, patient, carries six different tool belts',
-   work:[HUB.jobs.x+.25,HUB.jobs.z+3.25],home:[HUB.jobs.x,HUB.jobs.z],static:true,
+   work:[HUB.jobs.x+4,HUB.jobs.z+2],home:[HUB.jobs.x,HUB.jobs.z],static:true,
    line:'Want to try a different worker path? I can send you to Miner, Farmer, Cook, Blacksmith, Monk, or Pet Tamer practice rooms any time.'},
   {name:'Orin Mapwell',shortName:'Orin',role:'cartographer',title:'Royal Cartographer',personality:'curious, ink-stained, delighted by blank spaces',
    work:[HUB.cartographer.x,HUB.cartographer.z],home:[HUB.cartographer.x,HUB.cartographer.z],static:true,
@@ -5389,6 +5405,51 @@ Object.defineProperty(globalThis,'BlockcraftGuideObjective',{value:Object.freeze
   clear:()=>{manualGuidanceTarget=null;return true;},
   current:()=>manualGuidanceTarget?{...manualGuidanceTarget}:null,
 }),configurable:true});
+const TOWN_ARRIVAL_KEY='bc_town_arrival_v1';
+let townArrivalStageCache='';
+function townArrivalStage(){
+  if(townArrivalStageCache)return townArrivalStageCache;
+  try{townArrivalStageCache=localStorage.getItem(TOWN_ARRIVAL_KEY)||'';}catch(e){}
+  if(!['fountain','tamsin','portal','done'].includes(townArrivalStageCache))
+    townArrivalStageCache=S&&S.lvl>1?'done':'fountain';
+  return townArrivalStageCache;
+}
+function setTownArrivalStage(stage,announce=''){
+  townArrivalStageCache=stage;
+  try{localStorage.setItem(TOWN_ARRIVAL_KEY,stage);}catch(e){}
+  if(announce)sysMsg('<b>Town guide:</b> '+announce);
+}
+function townArrivalObjective(){
+  const stage=townArrivalStage();
+  if(stage==='fountain')return {label:'Town Arrival',text:'Follow Arrival Road to the Grand Fountain'};
+  if(stage==='tamsin')return {label:'Town Arrival',text:'Speak with Tamsin at the Job Board, north of the fountain'};
+  if(stage==='portal')return {label:'Town Arrival',text:'Follow the east path to the blue ? Question Portal'};
+  return null;
+}
+function townArrivalGuidanceInfo(){
+  let stage=townArrivalStage();
+  if(stage==='done')return null;
+  if(stage==='fountain'&&Math.hypot(player.pos.x-TOWN.TC,player.pos.z-TOWN.TC)<13.5){
+    setTownArrivalStage('tamsin','You found the Grand Fountain. Tamsin is waiting at the Job Board just north of the plaza.');
+    stage='tamsin';
+  }
+  if(stage==='portal'&&Math.hypot(player.pos.x-HUB.questionPortal.x,player.pos.z-HUB.questionPortal.z)<6.5){
+    setTownArrivalStage('done','The blue ? portal opens Question Hall. Market Square is west, Adventurer\'s Row north, Crafting Row northeast, and the Nature District southeast.');
+    return null;
+  }
+  const target=stage==='fountain'?{x:TOWN.TC,z:TOWN.TC}:stage==='tamsin'?HUB.jobs:HUB.questionPortal;
+  const route=stage==='fountain'
+    ? [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC+18},target]
+    : stage==='portal'
+      ? [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC+14,z:TOWN.TC},{x:HUB.questionPortal.x,z:HUB.questionPortal.z}]
+      : [{x:player.pos.x,z:player.pos.z},{x:TOWN.TC,z:TOWN.TC-8},target];
+  return {kind:'town-arrival-'+stage,color:stage==='portal'?0x7dd3fc:0xffd24a,target,route};
+}
+Object.defineProperty(globalThis,'BlockcraftTownArrivalGuide',{value:Object.freeze({
+  stage:()=>townArrivalStage(),
+  objective:()=>townArrivalObjective(),
+  introducePortal:()=>{if(townArrivalStage()==='tamsin')setTownArrivalStage('portal','Tamsin points east. Follow the blue markers to the ? Question Portal.');},
+}),configurable:true});
 function guidanceTargetInfo(){
   if(dim!=='overworld') return null;
   if(coachTrail){
@@ -5404,6 +5465,8 @@ function guidanceTargetInfo(){
   }
   const manualTarget=manualGuidanceTargetInfo();
   if(manualTarget)return manualTarget;
+  const arrivalTarget=townArrivalGuidanceInfo();
+  if(arrivalTarget)return arrivalTarget;
   if(quest){
     if(questDone()){
       const p=(quest.source==='guardian') ? HUB.guardian : guidanceNpcPosition(quest.giver);
@@ -5866,7 +5929,7 @@ function makeTamingLandPortalDecor(){
     motes.push({sp,px,py,phase:hash2(i*97,13)*Math.PI*2});
   }
   for(const [x,y] of [[-3.08,.38],[3.08,.38],[-2.82,5.18],[2.82,5.18]])addBox(grp,[.36,.36,.36],[x,y,-.48],rune);
-  const label=makeTextSprite('TAMING LAND','#9efc72');
+  const label=makeTextSprite('PAW  TAMING','#9efc72');
   label.position.set(0,6.1,-.36);
   label.scale.set(3.05,1.45,1);
   grp.add(label);
@@ -5908,7 +5971,7 @@ function makeQuestionHallPortalDecor(){
   grp.add(ring);
   const core=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x93c5fd,transparent:true,opacity:.22,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
   core.position.set(0,2.45,-.72);core.scale.set(3.8,4.4,1);grp.add(core);
-  const label=makeTextSprite('QUESTION HALL','#7dd3fc');
+  const label=makeTextSprite('?  QUESTION','#7dd3fc');
   label.position.set(0,5.72,-.3);
   label.scale.set(3.25,1.45,1);
   grp.add(label);
@@ -5947,7 +6010,7 @@ function makeFishingLakePortalDecor(){
   grp.add(veil);
   const core=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(glowTexCanvas),color:0x67e8f9,transparent:true,opacity:.2,depthWrite:false,depthTest:false,blending:THREE.AdditiveBlending}));
   core.position.set(0,2.35,-.7);core.scale.set(4,4.4,1);grp.add(core);
-  const label=makeTextSprite('FISHING LAKE','#67e8f9');
+  const label=makeTextSprite('><>  FISHING','#67e8f9');
   label.position.set(0,5.72,-.3);
   label.scale.set(3.15,1.4,1);
   grp.add(label);
@@ -6251,6 +6314,13 @@ function addTownInteractLabel(text, x, y, z, color, radius){
   townInteractLabels.push(sp);
   return sp;
 }
+function addTownDistrictLabel(text,x,y,z,color,reveal='done'){
+  const sp=addTownInteractLabel(text,x,y,z,color,96);
+  sp.scale.set(5.4,1.46,1);
+  sp.userData.districtLabel=true;
+  sp.userData.reveal=reveal;
+  return sp;
+}
 function serviceObjectiveFor(type, statuses=['claimable','complete','offered']){
   if(!Array.isArray(activeObjectives))return null;
   return activeObjectives.find(o=>{
@@ -6282,12 +6352,12 @@ function addTownQuestMarker(type,x,y,z){
 }
 addTownInteractLabel('Dungeon Shard', (HUB.shard.x|0)+.5, TOWN.G+4.7, (HUB.shard.z|0)+.5, '#7dd3fc', 8);
 addTownInteractLabel('Market Stall', HUB.marketX-.9, TOWN.G+4.9, TOWN.TC-.5, '#ffd24a', 9);
-addTownInteractLabel('1 Quest Giver', HUB.guide.x, TOWN.G+3.15, HUB.guide.z, '#9ad26b', 18);
-if(JOBS_ENABLED)addTownInteractLabel('Job Board', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 9);
+addTownInteractLabel('Mara · Town Guide', HUB.guide.x, TOWN.G+3.15, HUB.guide.z, '#9ad26b', 8);
+if(JOBS_ENABLED)addTownInteractLabel('Job Board · Tamsin', HUB.jobs.x, TOWN.G+3.75, HUB.jobs.z+.35, '#8bbf5a', 14);
 addTownInteractLabel('Quarry Work', HUB.quarry.x, TOWN.G+3.9, HUB.quarry.z, '#b8c0cc', 9);
 addTownInteractLabel('Farm Work', HUB.farm.x, TOWN.G+3.45, HUB.farm.z, '#86efac', 9);
 addTownInteractLabel('Cook Work', dpx(81,'tavern'), TOWN.G+3.5, dpz(75,'tavern'), '#ffd24a', 8);
-addTownInteractLabel('2 Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
+addTownInteractLabel('Smithy / Crafting', HUB.smith.x, TOWN.G+4.7, HUB.smith.z, '#ffb45e', 12);
 addTownInteractLabel('Dragon Roost', HUB.roost.x, TOWN.G+5.7, HUB.roost.z, '#66f0ff', 24);
 addTownInteractLabel('Taming Land Portal', HUB.tamingPortal.x, TOWN.G+5.95, HUB.tamingPortal.z, '#9efc72', 14);
 addTownInteractLabel('Question Hall Portal', HUB.questionPortal.x, TOWN.G+5.95, HUB.questionPortal.z, '#7dd3fc', 14);
@@ -6295,11 +6365,18 @@ addTownInteractLabel('Fishing Lake Portal', HUB.fishingPortal.x, TOWN.G+5.95, HU
 addTownInteractLabel('Guild Hall', HUB.guild.x, TOWN.G+4.2, dtz(36,'guild')+.4, '#f2c75c', 14);
 addTownInteractLabel('Social Mentor - Tab Chat', HUB.socialMentor.x, TOWN.G+3.75, HUB.socialMentor.z, '#82e6a7', 9);
 addTownInteractLabel('Notice Board · G', HUB.guildNoticeBoard.x, TOWN.G+3.95, HUB.guildNoticeBoard.z+.35, '#f2c75c', 9);
-addTownInteractLabel('3 North Gate', HUB.northGate.x, TOWN.G+5.4, HUB.northGate.z+1.3, '#d8f2ff', 14);
+addTownInteractLabel('North Gate', HUB.northGate.x, TOWN.G+5.4, HUB.northGate.z+1.3, '#d8f2ff', 14);
 addTownInteractLabel('Meditation Hall', dpx(47.5,'shrine'), TOWN.G+5.2, dpz(56.5,'shrine'), '#d8f2ff', 12);
 addTownInteractLabel('Meditation Hall', HUB.shrine.x, TOWN.G+2.85, HUB.shrine.z, '#7dd3fc', 9);
 addTownInteractLabel('Westwind Skyport · G to board · S-Rank · 1000 gold', HUB.skyport.x, HUB.skyport.y+4.2, HUB.skyport.z, '#ffd98a', 20);
 addTownInteractLabel('G BOARD · Requires S-Rank + 1,000 gold', HUB.skyport.x-12.5, HUB.skyport.y+3.2, HUB.skyport.z, '#ffcf6a', 7);
+addTownDistrictLabel('ARRIVAL ROAD',TOWN.TC,TOWN.G+7,TOWN.TC+39,'#d8f2ff','always');
+addTownDistrictLabel('CENTRAL PLAZA',TOWN.TC,TOWN.G+8,TOWN.TC,'#ffd24a','always');
+addTownDistrictLabel('PORTAL COURT',TOWN.TC+35,TOWN.G+8,TOWN.TC+5,'#c4b5fd','portal');
+addTownDistrictLabel('MARKET SQUARE',TOWN.TC-39,TOWN.G+8,TOWN.TC+11,'#86efac');
+addTownDistrictLabel("ADVENTURER'S ROW",TOWN.TC,TOWN.G+9,TOWN.TC-45,'#93c5fd');
+addTownDistrictLabel('CRAFTING ROW',TOWN.TC+42,TOWN.G+8,TOWN.TC-38,'#fdba74');
+addTownDistrictLabel('NATURE DISTRICT',TOWN.TC+40,TOWN.G+8,TOWN.TC+37,'#86efac');
 if(JOBS_ENABLED)addTownQuestMarker('jobs',HUB.jobs.x,TOWN.G+4.55,HUB.jobs.z+.35);
 addTownQuestMarker('guild_contracts',HUB.guild.x,TOWN.G+5.0,dtz(36,'guild')+.4);
 addTownQuestMarker('claim_aegis',HUB.guardian.x,TOWN.G+5.8,HUB.guardian.z);
@@ -6847,7 +6924,13 @@ function tickTownInteractLabels(dt){
   for(const sp of townInteractLabels){
     const r=sp.userData.labelRadius||8;
     const d=showTown ? Math.hypot(player.pos.x-sp.position.x, player.pos.z-sp.position.z) : Infinity;
-    const target=d<r ? Math.min(.92, (r-d)/2.2) : 0;
+    let target=0;
+    if(sp.userData.districtLabel){
+      const stage=townArrivalStage();
+      const reveal=sp.userData.reveal;
+      const unlocked=reveal==='always'||stage==='done'||(reveal==='portal'&&stage==='portal');
+      target=unlocked&&d>11&&d<r?Math.min(.82,(d-11)/8,(r-d)/12):0;
+    }else target=d<r ? Math.min(.92, (r-d)/2.2) : 0;
     sp.material.opacity += (target-sp.material.opacity)*Math.min(1,dt*9);
     sp.visible=sp.material.opacity>.03;
   }
@@ -7465,8 +7548,8 @@ const GATE_RANK_LETTERS='EDCBA';
 const HUNTER_RANK_LETTERS='EDCBAS';
 const UTILITY_DEFS={
   compass:{name:'Compass Sense', icon:'C', slot:'passive', unlock:'Claim your first Guild Contract.', use:'Keeps your current objective on the HUD.', desc:'Adds a bearing and distance readout toward your current quest, guild contract, gate, or town objective.'},
-  minimap:{name:'Mini Map', icon:'M', slot:'passive', unlock:'Map your first discovery.', use:'Improves nearby awareness while exploring.', desc:'Local cartography: keeps nearby mapped sites, road trouble, and active weather discoveries visible while adventuring.'},
-  world_map:{name:'World Map', icon:'W', slot:'passive', unlock:'Map 5 landmarks or small discoveries.', use:'Turns the map into a regional planning tool.', desc:'Regional cartography: expands the map with danger rings, contract targets, treasure clues, and long-route planning markers.'},
+  minimap:{name:'Mini Map', icon:'M', slot:'builtin', unlock:'Available to every player.', use:'Always-on nearby awareness while exploring.', desc:'Built-in local cartography keeps nearby mapped sites, road trouble, and active weather discoveries visible while adventuring.'},
+  world_map:{name:'Full Map Features', icon:'W', slot:'builtin', unlock:'Available to every player.', use:'Always-on regional planning tools.', desc:'Built-in regional cartography adds danger rings, contract targets, treasure clues, and long-route planning markers.'},
   feather_step:{name:'Feather Step', icon:'F', slot:'passive', unlock:'Clear your first E-rank Gate or finish a Parkour event.', use:'Protects risky climbs, bridges, towers, and dungeon drops.', desc:'Absorbs normal hard falls and softens extreme drops, with server-authoritative landing protection.'},
   party_compass:{name:'Party Compass', icon:'P', slot:'passive', unlock:'Create or join a team.', use:'Keeps parties together before gates and inside dungeons.', desc:'Coordinates groups: prioritizes gate rally, dungeon pings, downed or spirit allies, and separated teammates.'},
   trail_sense:{name:'Trail Sense', icon:'T', slot:'active', unlock:'Reach Road Warden reputation III or map 10 discoveries.', use:'Press I to reveal nearby road danger, patrols, or breach trouble.', desc:'Active utility. Reveals nearby road danger, bandit patrols, or breach trouble for a short tracking window.'},
@@ -7602,14 +7685,14 @@ function clampUtilityLoadout(raw){
   const passive=Array.isArray(raw.passive)?raw.passive:[];
   for(const k of passive){
     const id=String(k||'');
-    if(!UTILITY_DEFS[id]||UTILITY_DEFS[id].slot==='active'||!owned.has(id)||out.passive.includes(id)) continue;
+    if(!UTILITY_DEFS[id]||UTILITY_DEFS[id].slot!=='passive'||!owned.has(id)||out.passive.includes(id)) continue;
     out.passive.push(id);
     if(out.passive.length>=3) break;
   }
   return out;
 }
-function utilityUnlocked(id){ return utilityUnlocks.includes(id); }
-function utilityEquipped(id){ return utilityLoadout.active===id || utilityLoadout.passive.includes(id); }
+function utilityUnlocked(id){ return id==='minimap'||id==='world_map'||utilityUnlocks.includes(id); }
+function utilityEquipped(id){ return id==='minimap'||id==='world_map'||utilityLoadout.active===id || utilityLoadout.passive.includes(id); }
 function utilityEquippedNames(){
   const ids=[utilityLoadout.active,...utilityLoadout.passive].filter((id,i,a)=>id&&a.indexOf(id)===i&&UTILITY_DEFS[id]);
   return ids.map(id=>UTILITY_DEFS[id].name).join(', ');
@@ -7622,6 +7705,7 @@ function setUtilityLoadout(next){
 }
 function toggleUtilityEquip(id){
   if(!utilityUnlocked(id)) return sysMsg('Locked utility: <b>'+escHTML(UTILITY_DEFS[id].name)+'</b> - '+escHTML(UTILITY_DEFS[id].unlock));
+  if(id==='minimap'||id==='world_map') return sysMsg('<b>'+escHTML(UTILITY_DEFS[id].name)+'</b> is built in and always on.');
   if(UTILITY_DEFS[id]&&UTILITY_DEFS[id].slot==='active'){
     setUtilityLoadout({active:utilityLoadout.active===id?'':id,passive:utilityLoadout.passive});
     renderUtilitiesUI();
@@ -7644,8 +7728,7 @@ function useActiveUtility(){
   NET.room.send('utilityUse',{id});
 }
 function utilityPassiveHotkeyMessage(id,u){
-  if(id==='minimap')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped in a passive slot to show the small exploration map on the HUD; it does not need the active slot.';
-  if(id==='world_map')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to upgrade the HUD map into regional planning; it does not need the active slot.';
+  if(id==='minimap'||id==='world_map')return '<b>'+escHTML(u.name)+'</b> is built in and always available without using a utility slot.';
   if(id==='compass')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to add bearing and distance hints toward your current objective.';
   if(id==='party_compass')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to reveal party rally, ping, downed ally, and split-team guidance.';
   if(id==='feather_step')return '<b>'+escHTML(u.name)+'</b> is a <b>passive</b> utility. Keep it equipped to soften dangerous falls automatically.';
@@ -10698,31 +10781,50 @@ function createCentralFountainVisual(){
   const cx=tp(64), cz=tp(64);
   root.position.set(cx,TG+1.035,cz);
   const waterMat=new THREE.MeshBasicMaterial({color:0x55b8ff,transparent:true,opacity:.34,depthWrite:false,side:THREE.DoubleSide});
-  const water=new THREE.Mesh(new THREE.CircleGeometry(3.62,64),waterMat);
+  const water=new THREE.Mesh(new THREE.CircleGeometry(7.25,72),waterMat);
   water.rotation.x=-Math.PI/2;
   water.renderOrder=2;
   root.add(water);
-  const rippleMat=new THREE.MeshBasicMaterial({color:0xb7ecff,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-  const rippleA=new THREE.Mesh(new THREE.RingGeometry(1.15,1.22,64),rippleMat.clone());
-  const rippleB=new THREE.Mesh(new THREE.RingGeometry(2.45,2.53,64),rippleMat.clone());
-  for(const r of [rippleA,rippleB]){r.rotation.x=-Math.PI/2;r.position.y=.018;r.renderOrder=3;root.add(r);}
   const stone=new THREE.MeshLambertMaterial({color:0x6b747c});
-  const pedestal=new THREE.Mesh(new THREE.CylinderGeometry(.48,.62,.34,14),stone);
-  pedestal.position.y=.17;
+  const paleStone=new THREE.MeshLambertMaterial({color:0xaeb8bf});
+  const outerRim=new THREE.Mesh(new THREE.TorusGeometry(7.45,.34,10,72),paleStone);
+  outerRim.rotation.x=Math.PI/2;
+  outerRim.position.y=.12;
+  root.add(outerRim);
+  const rippleMat=new THREE.MeshBasicMaterial({color:0xb7ecff,transparent:true,opacity:.42,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
+  const rippleA=new THREE.Mesh(new THREE.RingGeometry(2.5,2.62,64),rippleMat.clone());
+  const rippleB=new THREE.Mesh(new THREE.RingGeometry(5.25,5.38,64),rippleMat.clone());
+  for(const r of [rippleA,rippleB]){r.rotation.x=-Math.PI/2;r.position.y=.018;r.renderOrder=3;root.add(r);}
+  const pedestal=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.55,.8,18),stone);
+  pedestal.position.y=.4;
   root.add(pedestal);
-  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(.86,.98,.13,24),stone);
-  bowl.position.y=.42;
+  const column=new THREE.Mesh(new THREE.CylinderGeometry(.5,.72,4.1,16),paleStone);
+  column.position.y=2.65;
+  root.add(column);
+  const lowerCrown=new THREE.Mesh(new THREE.CylinderGeometry(1.72,1.95,.28,24),stone);
+  lowerCrown.position.y=1.03;
+  root.add(lowerCrown);
+  const bowl=new THREE.Mesh(new THREE.CylinderGeometry(1.85,2.18,.24,28),stone);
+  bowl.position.y=4.75;
   root.add(bowl);
-  const bowlWater=new THREE.Mesh(new THREE.CircleGeometry(.72,36),waterMat.clone());
+  const bowlWater=new THREE.Mesh(new THREE.CircleGeometry(1.72,48),waterMat.clone());
   bowlWater.material.opacity=.48;
   bowlWater.rotation.x=-Math.PI/2;
-  bowlWater.position.y=.495;
+  bowlWater.position.y=4.885;
   bowlWater.renderOrder=4;
   root.add(bowlWater);
   const jetMat=new THREE.MeshBasicMaterial({color:0xbdefff,transparent:true,opacity:.55,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending});
-  const jet=new THREE.Mesh(new THREE.CylinderGeometry(.035,.075,1.15,10,1,true),jetMat);
-  jet.position.y=1.05;
+  const jet=new THREE.Mesh(new THREE.CylinderGeometry(.06,.13,3.6,12,1,true),jetMat);
+  jet.position.y=6.7;
   root.add(jet);
+  for(const [ox,oz] of [[-4.8,0],[4.8,0],[0,-4.8],[0,4.8]]){
+    const plinth=new THREE.Mesh(new THREE.CylinderGeometry(.6,.78,1.05,12),stone);
+    plinth.position.set(ox,.52,oz);
+    root.add(plinth);
+    const statue=new THREE.Mesh(new THREE.ConeGeometry(.52,1.9,8),paleStone);
+    statue.position.set(ox,1.75,oz);
+    root.add(statue);
+  }
   townGroup.add(root);
   return {root,water,bowlWater,rippleA,rippleB,jet,phase:Math.random()*Math.PI*2};
 }

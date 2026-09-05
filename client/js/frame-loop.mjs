@@ -1709,6 +1709,9 @@ function currentObjective(){
   }
   if(dim==='taming_land') return {label:'Taming Land', text:'Explore the sanctuary, then press G at the green return portal to go back to town'};
   if(dim==='fishing_lake') return {label:'Fishing Lake', text:'Walk the docks and press G at the blue return portal to go back to town'};
+  const townArrival=globalThis.BlockcraftTownArrivalGuide&&globalThis.BlockcraftTownArrivalGuide.objective
+    ?globalThis.BlockcraftTownArrivalGuide.objective():null;
+  if(dim==='overworld'&&townArrival)return townArrival;
   const transition=transitionRecoveryAction();
   const deferTransition=shouldDeferTransitionAction(transition,{story:!!quest||!!serverObjectiveBySource('story','manhunt'),job:!!jobContract});
   if(transition&&!deferTransition){
@@ -3354,7 +3357,7 @@ function tick(now){
     } else if(!player.onGround) stepAcc=1.6;
     // --- end water & jump physics ---
     tickLavaBorder(now);
-    if(player.pos.y<-12){ player.pos.set(TOWN.TC+14.5, TOWN.G+2, TOWN.TC+27.5); player.vel.set(0,0,0); }
+    if(player.pos.y<-12){ player.pos.set(TOWN.TC+.5, TOWN.G+1, TOWN.TC+62.5); player.vel.set(0,0,0); player.yaw=0; }
     updateAppearanceDummy(dt, now, false);
     tickLocalMount(now, dt);
     const pantherView=tickLocalPantherForm(now,dt,f!==0||s!==0);

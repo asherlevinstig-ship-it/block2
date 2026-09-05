@@ -5776,10 +5776,12 @@ function renderCosmeticsUI(){
 }
 function utilitySlotLabel(id){
   const u=UTILITY_DEFS[id];
+  if(u&&u.slot==='builtin')return 'BUILT IN';
   return u&&u.slot==='active'?'ACTIVE SLOT':'PASSIVE SLOT';
 }
 function utilityStatusText(id){
   if(!utilityUnlocked(id))return 'LOCKED';
+  if(UTILITY_DEFS[id]&&UTILITY_DEFS[id].slot==='builtin')return 'ALWAYS ON';
   if(utilityLoadout.active===id)return 'ACTIVE';
   if(utilityLoadout.passive.includes(id))return 'EQUIPPED';
   return 'UNLOCKED';
@@ -5792,6 +5794,7 @@ function utilityStatusClass(id){
 function utilityActionLabel(id){
   const u=UTILITY_DEFS[id], owned=utilityUnlocked(id);
   if(!owned)return 'LOCKED';
+  if(u&&u.slot==='builtin')return 'ALWAYS ON';
   if(u&&u.slot==='active')return utilityLoadout.active===id?'CLEAR ACTIVE':'SET ACTIVE';
   return utilityEquipped(id)?'UNEQUIP':'EQUIP';
 }
@@ -5826,11 +5829,11 @@ function utilityDetailHTML(id){
   const u=UTILITY_DEFS[id]||UTILITY_DEFS[UTILITY_ORDER[0]],owned=!!u&&utilityUnlocked(id),equipped=!!u&&utilityEquipped(id),hotkey=u?utilityHotkeyText(id):'';
   if(!u)return '';
   return '<section class="utility-detail '+utilityStatusClass(id)+'">'+
-    '<div class="utility-detail-icon"><b>'+escHTML(u.icon)+'</b></div><div class="utility-detail-copy"><small>'+escHTML(u.slot==='active'?'ACTIVE UTILITY':'PASSIVE UTILITY')+'</small><h3>'+escHTML(u.name)+'</h3><p>'+escHTML(u.use||u.desc)+'</p></div>'+
+    '<div class="utility-detail-icon"><b>'+escHTML(u.icon)+'</b></div><div class="utility-detail-copy"><small>'+escHTML(u.slot==='builtin'?'BUILT-IN UTILITY':u.slot==='active'?'ACTIVE UTILITY':'PASSIVE UTILITY')+'</small><h3>'+escHTML(u.name)+'</h3><p>'+escHTML(u.use||u.desc)+'</p></div>'+
     '<div class="utility-detail-rule">'+escHTML(u.desc)+'</div>'+
     '<div class="utility-unlock-box"><b>UNLOCK REQUIREMENT</b><span>'+escHTML(u.unlock)+'</span></div>'+
-    '<button type="button" class="utility-equip-button '+(equipped?'equipped':'')+'" data-utility-equip="'+escHTML(id)+'" '+(owned?'':'disabled')+'>'+(owned?utilityActionLabel(id):'LOCKED')+'</button>'+
-    '<em>'+(equipped?(hotkey?'Equipped - hotkey '+escHTML(hotkey):'Equipped'):(owned?'Ready to equip.':'Find this utility through progression.'))+'</em></section>';
+    '<button type="button" class="utility-equip-button '+(equipped?'equipped':'')+'" data-utility-equip="'+escHTML(id)+'" '+(owned&&u.slot!=='builtin'?'':'disabled')+'>'+(owned?utilityActionLabel(id):'LOCKED')+'</button>'+
+    '<em>'+(u.slot==='builtin'?'Available to every player without using a slot.':equipped?(hotkey?'Equipped - hotkey '+escHTML(hotkey):'Equipped'):(owned?'Ready to equip.':'Find this utility through progression.'))+'</em></section>';
 }
 function renderUtilitiesUI(){
   if(!qOpen || !utilityPanelOpen || qpanelEl.className!=='management') return;

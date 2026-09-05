@@ -1603,6 +1603,19 @@ test('generated room world keeps south town exit clear at reported bug location'
   }
 });
 
+test('Town of Beginnings has one continuous arrival axis and only north/south gates',()=>{
+  const world=W.createWorld();
+  world.generate();
+  const {TC,HS,G}=W.TOWN;
+  for(let z=TC-HS;z<=TC+HS;z++)
+    assert.equal(W.isSolid(world.getB(TC,G,z)),true,`Arrival Road has no floor at ${TC},${G},${z}`);
+  for(const z of [TC-HS,TC+HS])
+    for(let y=G+1;y<=G+4;y++)assert.equal(W.isSolid(world.getB(TC,y,z)),false,'north/south gate stays open');
+  for(const x of [TC-HS,TC+HS])
+    assert.equal(W.isSolid(world.getB(x,G+1,TC)),true,'east/west wall stays sealed');
+  assert.equal(world.standHeight(TC+.5,TC+62.5,W.WH-2),G+1,'new player spawn stands on Arrival Road');
+});
+
 test('movement through reported south town exit coordinate is not corrected',()=>{
   const room=makeRoom(),client=makeClient('south_exit_reported_hunter');
   room.lastMoveMsg=new Map();
@@ -5782,7 +5795,7 @@ test('DungeonRoom timer breach exports live enemies and returns party to town', 
   assert.equal(payload.mobs.length, 2);
   assert.equal(payload.mobs.some(m => m.kind === 'boss'), true);
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
-  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 2, W.TOWN.TC + 27.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   const failed = client.sent.find(e => e.type === 'dungeonFailed').msg;
   assert.equal(failed.reason, 'breach');
   assert.equal(failed.respawnPolicy, 'dungeon_town_full_v1');
@@ -5912,7 +5925,7 @@ test('joining a DungeonRoom arms a crash-recovery marker keyed to the overworld 
   assert.ok(prof.dungeonRecovery, 'the switchRoom entry armed recovery like the overworld enterGate path does');
   assert.equal(prof.dungeonRecovery.gateId, 'dr-recovery', 'keyed to the overworld gate id, not the dungeon-internal state');
   assert.equal(prof.dungeonRecovery.bootId, 'dr-boot', 'stamped with this room process boot');
-  assert.deepEqual(prof.dungeonRecovery.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5], 'return position is the safe Town of Beginnings spawn');
+  assert.deepEqual(prof.dungeonRecovery.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5], 'return position is the safe Town of Beginnings spawn');
   assert.ok(room.dirtyPlayers.has(token), 'the armed marker is queued for persistence');
 });
 
@@ -5961,7 +5974,7 @@ test('a clean DungeonRoom leave retires the crash-recovery marker it armed on en
   assert.deepEqual(saved.map(s => s[0]), [token], 'the clean leave flushed the profile');
   assert.equal(saved[0][1].dungeonRecovery, null,
     'so a later overworld join is not mistaken for a restart and does not wrongly refund/teleport');
-  assert.deepEqual(saved[0][1].pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5],
+  assert.deepEqual(saved[0][1].pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5],
     'clean dedicated-room exits also hand off at the safe Town of Beginnings spawn');
 });
 
@@ -6005,7 +6018,7 @@ test('an unclean DungeonRoom disconnect whose reconnect window elapses tears dow
   assert.equal(room.state.players.get(client.sessionId), undefined, 'the entity is torn down once the window lapses');
   assert.deepEqual(saved.map(s => s[0]), [token], 'the profile was flushed on the durable leave');
   assert.equal(saved[0][1].dungeonRecovery, null, 'and its crash-recovery marker retired');
-  assert.deepEqual(saved[0][1].pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5],
+  assert.deepEqual(saved[0][1].pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5],
     'timeout teardown returns the profile to the safe Town of Beginnings spawn');
   const handedOff = takeHandoff(token);
   assert.ok(handedOff && handedOff.gold === 7, 'the dungeon-earned progress was handed off to the overworld room');
@@ -8609,9 +8622,9 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   assert.deepEqual(defaultProfile('New').tutorials, {
     onboarding: 0, ability: 0, intro: 0, gate: 0, townJob: 0, townTavern: 0, townLand: 0, familiar: 0,
   });
-  assert.deepEqual(defaultProfile('New').pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(defaultProfile('New').pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   assert.deepEqual(sanitizeProfile({ name: 'Bad Spawn', pos: [99999, -100, 99999] }).pos, [W.WX - 1, 1, W.WX - 1]);
-  assert.deepEqual(sanitizeProfile({ name: 'Missing Spawn', pos: ['nope'] }).pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(sanitizeProfile({ name: 'Missing Spawn', pos: ['nope'] }).pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   const legacy = sanitizeProfile({
     name: 'Legacy',
     S: { lvl: 3, path: 'mage' },
@@ -8645,14 +8658,14 @@ test('tutorial milestones are server-owned and legacy progressed hunters migrate
   p.x = W.TRAINING_MEADOW.x; p.y = W.TRAINING_MEADOW.G + 1; p.z = W.TRAINING_MEADOW.z;
   prof.pos = [p.x, p.y, p.z];
   assert.equal(room.handleTutorialComplete(client, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding }), true);
-  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   assert.deepEqual([p.x, p.y, p.z], prof.pos, 'completion moves both server state and the durable profile to town');
 
   const affected = defaultProfile('Already Complete');
   affected.tutorials.onboarding = TUTORIAL_VERSIONS.onboarding;
   affected.pos = [W.TRAINING_MEADOW.x, W.TRAINING_MEADOW.G + 1, W.TRAINING_MEADOW.z];
   assert.equal(room.moveCompletedTutorialProfileToTown(affected), true);
-  assert.deepEqual(affected.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(affected.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 });
 
 test('job tutorial completion seeds one first real profession contract', () => {
@@ -8717,11 +8730,11 @@ test('job tutorial completion returns players to town before profile sync', () =
 
   assert.equal(room.handleTutorialComplete(client, { tutorial: 'townJob', version: TUTORIAL_VERSIONS.townJob, job: 'miner' }), true);
   assert.equal(prof.activeRoom, null);
-  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   assert.equal(p.dim, 'overworld');
   assert.equal(p.dgn, '');
-  assert.equal(p.x, W.TOWN.TC + 14.5);
-  assert.equal(p.z, W.TOWN.TC + 27.5);
+  assert.equal(p.x, W.TOWN.TC + .5);
+  assert.equal(p.z, W.TOWN.TC + 62.5);
   const profile = client.sent.find(e => e.type === 'profile');
   assert.deepEqual(profile && profile.msg && profile.msg.pos, prof.pos);
   assert.equal(profile && profile.msg && profile.msg.activeRoom, null);
@@ -8765,7 +8778,7 @@ test('completed onboarding is persisted immediately for refresh-safe restore', a
   assert.equal(saved.length, 1);
   assert.equal(saved[0].id, token);
   assert.equal(saved[0].profile.tutorials.onboarding, TUTORIAL_VERSIONS.onboarding);
-  assert.deepEqual(saved[0].profile.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(saved[0].profile.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   assert.equal(room.dirtyPlayers.has(token), false);
 });
 
@@ -8879,8 +8892,8 @@ test('off-map overworld profiles are repaired to town before spawning on join', 
 
   const prof = room.profiles.get(token);
   const p = room.state.players.get(client.sessionId);
-  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
-  assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1.01, W.TOWN.TC + 27.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
+  assert.deepEqual([p.x, Math.round(p.y * 100) / 100, p.z], [W.TOWN.TC + .5, W.TOWN.G + 1.01, W.TOWN.TC + 62.5]);
   assert.equal(room.dirtyPlayers.has(token), true);
 });
 
@@ -9061,7 +9074,8 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   onboardingRoom.handleTutorialComplete(newcomer, { tutorial: 'onboarding', version: TUTORIAL_VERSIONS.onboarding });
   assert.equal(p.dim, 'overworld');
   assert.equal(p.dgn, '');
-  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
+  assert.equal(p.yaw,0,'newcomers face north along Arrival Road');
   assert.deepEqual(prof.pos, [p.x, p.y, p.z]);
 
   const abilityRoom = makeRoom(), awakened = makeClient('awakened');
@@ -9076,7 +9090,7 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   abilityRoom.handleTutorialComplete(awakened, { tutorial: 'ability', version: TUTORIAL_VERSIONS.ability });
   assert.equal(ap.dim, 'overworld');
   assert.equal(ap.dgn, '');
-  assert.deepEqual([ap.x, ap.y, ap.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual([ap.x, ap.y, ap.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 
   const questionRoom = makeRoom(), scholar = makeClient('question-scholar');
   seedPlayer(questionRoom, scholar, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5 });
@@ -9108,9 +9122,9 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   assert.equal(jobRoom.leaveTutorialDimension(miner), true);
   assert.equal(mp.dim, 'overworld');
   assert.equal(mp.dgn, '');
-  assert.deepEqual([mp.x, mp.y, mp.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual([mp.x, mp.y, mp.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
   assert.equal(minerProfile.activeRoom, null);
-  assert.deepEqual(minerProfile.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual(minerProfile.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 
   const tamerRoom = makeRoom(), tamer = makeClient('taming-room');
   const { prof: tamerProfile } = seedPlayer(tamerRoom, tamer, { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 14.5, lvl: 2 });
@@ -9127,8 +9141,8 @@ test('tutorial rooms use private server spaces and return to the safe town spawn
   assert.equal(tamer.sent.some(e => e.type === 'tutorialDimension' && e.msg.active && e.msg.kind === 'taming_land'), true);
   assert.equal(tamerRoom.leaveTutorialDimension(tamer), true);
   assert.equal(tamerProfile.activeRoom, null);
-  assert.deepEqual([tp.x, tp.y, tp.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
-  assert.deepEqual(tamerProfile.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual([tp.x, tp.y, tp.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
+  assert.deepEqual(tamerProfile.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 
   const sharedRoom = makeRoom(), one = makeClient('tamer-one'), two = makeClient('tamer-two');
   const visibleOne = new Set(), visibleTwo = new Set();
@@ -9193,8 +9207,8 @@ test('legacy dungeon instance exits return players to the safe town spawn', () =
   const p = room.state.players.get(client.sessionId);
   assert.equal(p.dim, 'overworld');
   assert.equal(p.dgn, '');
-  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
-  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+  assert.deepEqual([p.x, p.y, p.z], [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 });
 
 test('team gate lobby waits until all joined hunters are ready', () => {
@@ -9753,7 +9767,7 @@ test('solo dungeon death leaves a fixed spirit until the player chooses town', (
 
   room.handleQuitDungeonSpirit(client);
   assert.equal(room.state.players.get(client.sessionId).dgn, '');
-  assert.deepEqual(prof.pos, [W.TOWN.TC + 14.5, W.TOWN.G + 2, W.TOWN.TC + 27.5]);
+  assert.deepEqual(prof.pos, [W.TOWN.TC + .5, W.TOWN.G + 2, W.TOWN.TC + 62.5]);
   const quit = client.sent.find(e => e.type === 'dungeonSpiritQuit').msg;
   assert.equal(quit.respawnPolicy, 'dungeon_town_full_v1');
   assert.equal(quit.hp, 20);

@@ -1990,7 +1990,7 @@ function announceArrivalTitle(kicker,title,subtitle){
   if(typeof showArrivalTitle==='function')showArrivalTitle({kicker,title,subtitle});
 }
 function townReturnPoint(){
-  return {x:TOWN.TC+14.5,y:TOWN.G+1,z:TOWN.TC+27.5};
+  return {x:TOWN.TC+.5,y:TOWN.G+1,z:TOWN.TC+62.5};
 }
 function dimDebugGrid(grid){
   if(!grid)return null;

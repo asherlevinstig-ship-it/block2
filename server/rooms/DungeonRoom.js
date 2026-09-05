@@ -18,7 +18,7 @@ const DUNGEON_PLAYER_INTEREST_RADIUS = Number(process.env.DUNGEON_PLAYER_INTERES
 const DUNGEON_FX_INTEREST_RADIUS = Number(process.env.DUNGEON_FX_INTEREST_RADIUS || 44);
 const DUNGEON_STATUS_INTERVAL_MS = Math.max(1000, Number(process.env.DUNGEON_STATUS_INTERVAL_MS || 10000));
 const DUNGEON_PATCH_RATE_MS = Math.max(50, Number(process.env.DUNGEON_PATCH_RATE_MS || 200));
-const SAFE_TOWN_RETURN = Object.freeze([W.TOWN.TC + 14.5, W.TOWN.G + 1, W.TOWN.TC + 27.5]);
+const SAFE_TOWN_RETURN = Object.freeze([W.TOWN.TC + .5, W.TOWN.G + 1, W.TOWN.TC + 62.5]);
 
 // One gate instance hosted in its own Colyseus room — the DungeonRoom split (Phases 2a–2c).
 //
@@ -318,7 +318,7 @@ class DungeonRoom extends GameRoom {
     if (!p || !p.dgn || !p.spirit || !hp || hp.hp > 0) return false;
     const inst = this.instance || this.instances[p.dgn];
     const rec = this.profileFor(client);
-    const town = { x: W.TOWN.TC + 14.5, y: W.TOWN.G + 2, z: W.TOWN.TC + 27.5 };
+    const town = { x: W.TOWN.TC + .5, y: W.TOWN.G + 1, z: W.TOWN.TC + 62.5 };
     const result = inst ? this.dungeonResultPayload(inst, 'failed', 'wipe') : null;
     const dgn = p.dgn;
     p.spirit = false;
@@ -350,15 +350,15 @@ class DungeonRoom extends GameRoom {
     if (!p || !inst) return client.send('adminGateTeleportReject', { reason: 'gate' });
     const token = this.tokens.get(client.sessionId);
     const rec = token && this.profileFor(client);
-    const x = Number.isFinite(inst.gateX) ? inst.gateX + 2.1 : W.TOWN.TC + 14.5;
-    const z = Number.isFinite(inst.gateZ) ? inst.gateZ : W.TOWN.TC + 27.5;
+    const x = Number.isFinite(inst.gateX) ? inst.gateX + 2.1 : W.TOWN.TC + .5;
+    const z = Number.isFinite(inst.gateZ) ? inst.gateZ : W.TOWN.TC + 62.5;
     const y = Number.isFinite(inst.gateY) ? inst.gateY + .01 : W.TOWN.G + 1.01;
     p.dgn = '';
     p.dim = 'overworld';
     p.x = x;
     p.y = y;
     p.z = z;
-    p.yaw = Math.PI;
+    p.yaw = 0;
     p.spirit = false;
     const hp = this.playerHp.get(client.sessionId);
     if (hp && hp.hp <= 0) hp.hp = Math.max(1, hp.max);
@@ -440,7 +440,7 @@ class DungeonRoom extends GameRoom {
       at: now,
     });
     const result = this.dungeonResultPayload(inst, 'failed', 'breach');
-    const tx = W.TOWN.TC + 14.5, ty = W.TOWN.G + 2, tz = W.TOWN.TC + 27.5;
+    const tx = W.TOWN.TC + .5, ty = W.TOWN.G + 1, tz = W.TOWN.TC + 62.5;
     for (const sid of [...inst.players]) {
       const p = this.state.players.get(sid);
       if (p) { p.x = tx; p.y = ty; p.z = tz; p.dgn = ''; p.dim = 'overworld'; }
