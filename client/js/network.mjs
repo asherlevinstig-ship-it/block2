@@ -127,8 +127,14 @@ export function createNetworkController(options) {
       const authToken = options.authToken ? String(options.authToken() || '').trim() : '';
       const authOptions = authToken ? { authToken } : {};
       try {
+        let advertisedRoomId = '';
+        if (options.resolvePrimaryRoomId && joinOptions.shardId === 'main') {
+          try { advertisedRoomId = String(await options.resolvePrimaryRoomId(joinOptions) || ''); } catch (_) {}
+        }
         const room = await joinRoomWithRetries(
-          () => client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }),
+          () => advertisedRoomId && typeof client.joinById === 'function'
+            ? client.joinById(advertisedRoomId, { name, ...joinOptions, ...authOptions })
+            : client.joinOrCreate(options.roomName, { name, ...joinOptions, ...authOptions }),
           { roomName: options.roomName, shardAttempt, shardId: joinOptions.shardId || 'main' },
         );
         primaryJoinOptions = { ...joinOptions };

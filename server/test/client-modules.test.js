@@ -3938,6 +3938,38 @@ test('network controller sends saved auth token during room matchmaking', async 
   assert.equal(joinedOptions.name, 'Hunter');
 });
 
+test('network controller joins the advertised main room by id before using room discovery', async () => {
+  const { createNetworkController } = await clientModule('network.mjs');
+  const events = [];
+  const room = { reconnectionToken: 'main:token', onLeave() {} };
+  class Client {
+    async joinById(roomId, options) {
+      events.push(['joinById', roomId, options.shardId, options.authToken]);
+      return room;
+    }
+    async joinOrCreate() { throw new Error('room discovery should not run when readiness advertises main'); }
+  }
+  const controller = createNetworkController({
+    Client, endpoint: () => 'ws://test', roomName: 'blockcraft', tokenKey: 'resume',
+    primaryJoinOptions: () => ({ shardId: 'main' }),
+    resolvePrimaryRoomId: async () => 'ready-main-room',
+    authToken: () => 'session-token',
+    sessionStorage: { getItem: () => '', setItem() {}, removeItem() {} },
+    onAttach() {}, onUnavailable() {}, onInterrupted() {}, onReconnectAttempt() {}, onRestored() {},
+    onFailure(error) { throw error; },
+  });
+  controller.connect('Hunter');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(events, [['joinById', 'ready-main-room', 'main', 'session-token']]);
+  assert.equal(controller.state.room, room);
+});
+
+test('live network session resolves the healthy main room from readiness', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  assert.match(source, /fetch\(apiUrl\('\/readyz'\),\{cache:'no-store'\}\)/);
+  assert.match(source, /shard\.shardId==='main'&&shard\.roomId/);
+});
+
 test('network controller clears stale room resume token when auth session changes', async () => {
   const { createNetworkController } = await clientModule('network.mjs');
   const storage = new Map([['resume', 'admin-room-token'], ['resume:auth', 'admin-session']]);

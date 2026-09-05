@@ -15,6 +15,7 @@ export function createNetworkSession({
   joinRetry,
   getPlayerName,
   authToken,
+  resolvePrimaryRoomId,
   beforeConnect,
 }) {
   const shardKey='bc_shard_id';
@@ -59,6 +60,7 @@ export function createNetworkSession({
     onJoinAttempt:joinAttempt,
     onJoinRetry:joinRetry,
     authToken,
+    resolvePrimaryRoomId,
   });
   const state=controller.state;
 

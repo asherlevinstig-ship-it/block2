@@ -1025,6 +1025,13 @@ const SESSION=createNetworkSession({
   authToken:()=>{
     try{return String(localStorage.getItem('blockcraft.auth.session')||'').trim();}catch(e){return '';}
   },
+  resolvePrimaryRoomId:async()=>{
+    const response=await fetch(apiUrl('/readyz'),{cache:'no-store'});
+    if(!response.ok)return '';
+    const readiness=await response.json();
+    const main=Array.isArray(readiness&&readiness.shards)?readiness.shards.find(shard=>shard&&shard.shardId==='main'&&shard.roomId):null;
+    return main?String(main.roomId):'';
+  },
   beforeConnect:()=>setWorldLoadingStatus('Connecting to world server...'),
 });
 const NETWORK=SESSION.controller;
