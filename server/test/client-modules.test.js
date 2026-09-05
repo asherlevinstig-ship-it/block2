@@ -2921,11 +2921,17 @@ test('social mentor NPC teaches friends chat teams and safety without creating a
 });
 
 test('local quick chat remains visible in a Minecraft-style bottom-left feed',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','..','client','index.html'),'utf8');
   const css=fs.readFileSync(path.join(__dirname,'..','..','client','styles.css'),'utf8');
   const networking=fs.readFileSync(path.join(__dirname,'..','..','client','js','networking.mjs'),'utf8');
+  const social=fs.readFileSync(path.join(__dirname,'..','..','client','js','social.mjs'),'utf8');
+  assert.match(html,/id="chatlog" role="log" aria-live="polite"/);
   assert.doesNotMatch(css,/body\.calm-town #chatlog/);
-  assert.match(css,/#chatlog\{position:fixed;left:10px;bottom:82px[\s\S]*align-items:flex-start/);
+  assert.match(css,/#chatlog\{position:fixed;left:10px;bottom:82px[\s\S]*max-height:min\(38vh,360px\)[\s\S]*overflow-y:auto[\s\S]*pointer-events:auto/);
   assert.match(css,/\.chatline\{[\s\S]*background:rgba\(0,0,0,\.48\)[\s\S]*'Courier New'/);
+  assert.match(social,/while\(chatLogEl\.children\.length>100\) chatLogEl\.firstChild\.remove\(\)/);
+  assert.match(social,/if\(followLatest\)requestAnimationFrame\(\(\)=>\{chatLogEl\.scrollTop=chatLogEl\.scrollHeight;\}\)/);
+  assert.doesNotMatch(social,/d\.style\.opacity=0|setTimeout\(\(\)=>d\.remove/);
   assert.match(networking,/room\.onMessage\('comms',[\s\S]*chatLine\(label\+[\s\S]*m\.mode\|\|'local'/);
 });
 

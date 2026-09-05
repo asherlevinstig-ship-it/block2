@@ -40,12 +40,13 @@ function chatInputActive(){
 }
 const {PHRASES:QUICK_CHAT_OPTIONS,CONTEXTS:QUICK_CHAT_CONTEXTS,CHANNELS:COMMS_CHANNELS,RULES:COMMS_RULES,phraseIdsFor}=globalThis.BlockcraftCommsRules;
 function chatLine(name, text, channel=''){
+  const followLatest=chatLogEl.scrollHeight-chatLogEl.scrollTop-chatLogEl.clientHeight<24;
   const d=document.createElement('div'); d.className='chatline';
   if(channel)d.classList.add(channel);
   d.innerHTML='<b>'+escHTML(name)+'</b> '+escHTML(text);
   chatLogEl.appendChild(d);
-  while(chatLogEl.children.length>8) chatLogEl.firstChild.remove();
-  setTimeout(()=>{ d.style.opacity=0; setTimeout(()=>d.remove(),1100); }, 9000);
+  while(chatLogEl.children.length>100) chatLogEl.firstChild.remove();
+  if(followLatest)requestAnimationFrame(()=>{chatLogEl.scrollTop=chatLogEl.scrollHeight;});
 }
 function populateWhisperTargets(){
   const previous=chatTargetEl.value;chatTargetEl.innerHTML='';
