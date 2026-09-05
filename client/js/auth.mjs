@@ -1,3 +1,5 @@
+import {pathDebug} from './path-debug.mjs';
+
 export function createAuthController({ user, password, playerName, status, play, questionsPlay = null, register, logout, request = fetch, apiUrl = path => path }) {
   const state = { checked: false, account: null, gameProfile: null, busy: false };
   const cleanHunterName = value => String(value || '').replace(/[^A-Za-z0-9 _-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
@@ -32,17 +34,24 @@ export function createAuthController({ user, password, playerName, status, play,
         path: clean,
       }));
     } catch (_) {}
+    pathDebug('auth.path.remember', { path: clean, accountId: String(state.account && state.account.id || '').slice(0, 24), hasUsername: !!(state.account && state.account.username) });
     return clean;
   }
 
   function savedPath() {
     const profilePath = state.gameProfile && state.gameProfile.path;
-    if (/^(shadow|mage|guardian|verdant)$/.test(String(profilePath || ''))) return rememberPath(profilePath);
+    if (/^(shadow|mage|guardian|verdant)$/.test(String(profilePath || ''))) {
+      pathDebug('auth.path.resolve', { source: 'login-profile', path: profilePath });
+      return rememberPath(profilePath);
+    }
     const key = pathStorageKey();
     if (!key) return '';
     try {
       const localPath = String(localStorage.getItem(key) || '');
-      if (/^(shadow|mage|guardian|verdant)$/.test(localPath)) return localPath;
+      if (/^(shadow|mage|guardian|verdant)$/.test(localPath)) {
+        pathDebug('auth.path.resolve', { source: 'account-cache', path: localPath });
+        return localPath;
+      }
       const record = JSON.parse(localStorage.getItem(pathRecordKey) || 'null');
       const accountId = String(state.account && state.account.id || '');
       const username = String(state.account && state.account.username || '').trim().toLowerCase();
@@ -50,8 +59,13 @@ export function createAuthController({ user, password, playerName, status, play,
         (accountId && String(record.accountId || '') === accountId)
         || (username && String(record.username || '').trim().toLowerCase() === username)
       );
-      return matchesAccount && /^(shadow|mage|guardian|verdant)$/.test(String(record.path || '')) ? String(record.path) : '';
-    } catch (_) { return ''; }
+      const resolved = matchesAccount && /^(shadow|mage|guardian|verdant)$/.test(String(record.path || '')) ? String(record.path) : '';
+      pathDebug('auth.path.resolve', { source: resolved ? 'identity-cache' : 'none', path: resolved, accountIdMatch: !!(record && accountId && String(record.accountId || '') === accountId), usernameMatch: !!(record && username && String(record.username || '').trim().toLowerCase() === username) });
+      return resolved;
+    } catch (error) {
+      pathDebug('auth.path.resolve', { source: 'cache-error', path: '', error: String(error && error.message || error) });
+      return '';
+    }
   }
 
   function forgetRememberedPath(account = state.account) {
@@ -71,9 +85,11 @@ export function createAuthController({ user, password, playerName, status, play,
   async function savePath(path) {
     const clean = rememberPath(path);
     if (!clean) throw new Error('Unknown ability path');
+    pathDebug('auth.path.save.request', { path: clean });
     const data = await json('/auth/profile/path', { path: clean });
     if (data.gameProfile) state.gameProfile = data.gameProfile;
     rememberPath(data.gameProfile && data.gameProfile.path || clean);
+    pathDebug('auth.path.save.result', { path: data.gameProfile && data.gameProfile.path || clean, ok: true });
     return data.gameProfile || { path: clean };
   }
 
@@ -436,6 +452,7 @@ export function createAuthController({ user, password, playerName, status, play,
         clearHandoffTokenFromUrl();
         state.account = data.account || null;
         state.gameProfile = data.gameProfile || null;
+        pathDebug('auth.hydrate', { source: 'handoff', accountId: String(state.account && state.account.id || '').slice(0, 24), path: state.gameProfile && state.gameProfile.path || '' });
         setAppearance(state.gameProfile && state.gameProfile.appearance);
         if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
         else if (state.account) playerName.value = '';
@@ -455,6 +472,7 @@ export function createAuthController({ user, password, playerName, status, play,
       if (data.sessionToken) storeSession(data.sessionToken);
       state.account = data.account || null;
       state.gameProfile = data.gameProfile || null;
+      pathDebug('auth.hydrate', { source: 'session', accountId: String(state.account && state.account.id || '').slice(0, 24), path: state.gameProfile && state.gameProfile.path || '' });
       setAppearance(state.gameProfile && state.gameProfile.appearance);
       if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
       else if (state.account) playerName.value = '';
@@ -494,6 +512,7 @@ export function createAuthController({ user, password, playerName, status, play,
       if (data.sessionToken) storeSession(data.sessionToken);
       state.account = data.account;
       state.gameProfile = data.gameProfile || null;
+      pathDebug('auth.hydrate', { source: 'login', accountId: String(state.account && state.account.id || '').slice(0, 24), path: state.gameProfile && state.gameProfile.path || '' });
       setAppearance(state.gameProfile && state.gameProfile.appearance);
       if (state.gameProfile && state.gameProfile.name) playerName.value = state.gameProfile.name;
       else playerName.value = '';

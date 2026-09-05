@@ -1630,6 +1630,8 @@ test('path selection persists and returns directly to town without ability train
   assert.match(combat, /AUTH_UI\.rememberPath\(path\)/, 'confirmed choices update the account-scoped pathway cache immediately');
   assert.match(combat, /AUTH_UI\.savePath\(path\)/, 'path choices also use authenticated profile storage instead of relying only on the room lifecycle');
   assert.match(combat, /result\.reason==='locked'/, 'a pre-existing server pathway is restored instead of reopening the picker');
+  assert.match(combat, /pathDebug\('ui\.path\.confirm'/, 'path confirmation is recorded for live diagnosis');
+  assert.match(networking, /pathDebug\('room\.path\.resolve'/, 'room and login pathway sources are recorded before modal decisions');
   assert.match(networking, /AUTH_UI\.savedPath\(\)/, 'login hydration can recover a confirmed path from the account-scoped browser cache');
   assert.match(combat, /if\(!onboardingDone\(\)\)\{\s*beginOnboarding\(\)/, 'a confirmed first path enters unfinished onboarding');
   assert.match(combat, /dimensionsApi\.placePlayerAtTownReturn\(\)/, 'completed players return through the dimension-owned safe town point');

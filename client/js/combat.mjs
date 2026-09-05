@@ -2,6 +2,7 @@ import {api as worldApi,state as worldState} from './world.mjs';
 import {api as dimensionsApi,state as dimensionsState} from './dimensions.mjs';
 import {apiUrl} from './config.mjs';
 import {hunterRankLevelLabel} from './progression.mjs';
+import {pathDebug} from './path-debug.mjs';
 const gameContext=window.BlockcraftGameContext;
 const uiShellState=gameContext.requireState('uiShell');
 const getB=worldApi.getBlock,setB=worldApi.setBlock;
@@ -4893,6 +4894,7 @@ function showPathSelection(){
   pathChoiceOpen=true;
   jobChoiceOpen=false;
   globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.open', { level:S&&S.lvl, path:S&&S.path, dim });
+  pathDebug('ui.path.open', { level:S&&S.lvl, path:S&&S.path||'', dim, netOn:!!NET.on, profileReady:NET.profileReady===true, onboardingActive:!!onboardingActive });
   onboardingActive=false;
   document.body.classList.remove('onboarding');
   document.body.classList.add('path-selecting');
@@ -4927,10 +4929,14 @@ function showPathSelection(){
     confirm.disabled=true;
     const path=selectedPath;
     globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('path.select.click', { path, beforePath:S&&S.path });
+    pathDebug('ui.path.click', { path, beforePath:S&&S.path||'', netOn:!!NET.on, hasRoom:!!NET.room });
     pendingPathConfirmation=path;
     if(AUTH_UI&&typeof AUTH_UI.rememberPath==='function')AUTH_UI.rememberPath(path);
     if(AUTH_UI&&typeof AUTH_UI.savePath==='function'){
-      AUTH_UI.savePath(path).catch(error=>console.warn('[path] authenticated save failed:',error&&error.message||error));
+      AUTH_UI.savePath(path).catch(error=>{
+        pathDebug('auth.path.save.result', { path, ok: false, error: String(error&&error.message||error) });
+        console.warn('[path] authenticated save failed:',error&&error.message||error);
+      });
     }
     confirm.textContent='SAVING '+PATHS[path].name.toUpperCase()+'...';
     if(NET.on&&NET.room){
@@ -4943,6 +4949,7 @@ function showPathSelection(){
 }
 function confirmPathSelection(result){
   const path=String(result&&result.path||pendingPathConfirmation||'');
+  pathDebug('ui.path.confirm', { pending: pendingPathConfirmation||'', resultPath:path, ok:result&&result.ok===true, reason:String(result&&result.reason||'') });
   if(!pendingPathConfirmation)return false;
   const restoredLockedPath=!!(result&&result.reason==='locked'&&PATHS[path]);
   if(!result||(result.ok!==true&&!restoredLockedPath)||(path!==pendingPathConfirmation&&!restoredLockedPath)||!PATHS[path]){

@@ -16,6 +16,7 @@ import {normalizeRewardGear} from './reward-items.mjs';
 import {apiUrl,backendWsUrl} from './config.mjs';
 import {DEITY_LEVEL,DEITY_POWER_DEFS,DEITY_POWER_IDS,hunterRankLevelLabel,isDeityLevel} from './progression.mjs';
 import {CUTSCENES_ENABLED} from './feature-flags.mjs';
+import {pathDebug} from './path-debug.mjs';
 const gameContext=window.BlockcraftGameContext;
 const GEAR_SYSTEM=globalThis.BlockcraftGearSystem;
 const JOB_SYSTEM=globalThis.BlockcraftJobSystem;
@@ -1363,6 +1364,7 @@ function netAttachRoom(room,name,client){
       }
     });
     room.onMessage('profile', m=>{
+      pathDebug('room.profile.received', { path:m&&m.S&&m.S.path||'', level:m&&m.S&&m.S.lvl||0, onboarding:m&&m.tutorials&&m.tutorials.onboarding||0, abilityTutorial:m&&m.tutorials&&m.tutorials.ability||0 });
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.received', {
         name:m&&m.name,
         level:m&&m.S&&m.S.lvl,
@@ -1386,6 +1388,7 @@ function netAttachRoom(room,name,client){
       globalThis.BlockcraftTrace&&globalThis.BlockcraftTrace('net.profile.applied');
     });
     room.onMessage('pathResult', m=>{
+      pathDebug('room.path.result', { ok:m&&m.ok===true, path:m&&m.path||'', reason:m&&m.reason||'' });
       if(combatApi.confirmPathSelection)combatApi.confirmPathSelection(m);
     });
     room.onMessage('appearanceResult', m=>{
@@ -2997,11 +3000,13 @@ function netRestoreProfile(m){
     const cachedPath=AUTH_UI&&typeof AUTH_UI.savedPath==='function'?AUTH_UI.savedPath():'';
     const authPath=cachedPath&&PATHS[cachedPath]?cachedPath:'';
     const serverPath=m&&m.S&&m.S.path&&PATHS[m.S.path]?m.S.path:'';
+    pathDebug('room.path.resolve', { roomPath:serverPath, recoveredPath:authPath, loginPath:authGameProfile&&authGameProfile.path||'' });
     if(m&&m.S){
       S.lvl=m.S.lvl||1; S.xp=m.S.xp||0; S.pts=m.S.pts||0;
       S.str=m.S.str||1; S.agi=m.S.agi||1; S.vit=m.S.vit||1; S.int=m.S.int||1;
     }
     S.path=serverPath||authPath||'';
+    pathDebug('room.path.applied', { path:S.path, source:serverPath?'room':authPath?'auth-or-cache':'none' });
     if(authGameProfile&&S.path)authGameProfile.path=S.path;
     if(!serverPath&&authPath&&NET.on&&NET.room){
       const healKey=String(NET.room.sessionId||'')+':'+authPath;
@@ -3012,6 +3017,7 @@ function netRestoreProfile(m){
       }
     }
     if(!S.path){
+      pathDebug('ui.path.scheduled', { reason:'hydrated-without-path', profileReady:NET.profileReady===true, dim });
       if(onboardingActive)cancelOnboardingForProfileRestore();
       finishWorldLoading('path-choice');
       setTimeout(()=>{if(!S.path&&combatApi.showPathSelection)combatApi.showPathSelection();},0);

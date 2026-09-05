@@ -1269,6 +1269,7 @@ class CombatMixin {
   }
   async setPath(client, path) {
     const rec = this.profileFor(client);
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.request', account: rec&&rec.token?String(rec.token).slice(0,12):'', requestedPath:path, currentPath:rec&&rec.prof&&rec.prof.S&&rec.prof.S.path||'' }));
     if (!rec || !rec.prof) {
       client.send('pathResult', { ok: false, path, reason: 'profile' });
       return false;
@@ -1284,6 +1285,7 @@ class CombatMixin {
         return false;
       }
       const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
+      console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.resave', account: String(rec.token).slice(0,12), path: rec.prof.S.path, saved }));
       client.send('pathResult', { ok: saved, path: rec.prof.S.path, reason: saved ? 'already' : 'save' });
       return saved;
     }
@@ -1292,6 +1294,7 @@ class CombatMixin {
     this.syncPlayerProfile(client, rec.prof);
     this.dirtyPlayers.add(rec.token);
     const saved=await this.savePlayerProfileNow(rec.token, rec.prof);
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'room.path.saved', account: String(rec.token).slice(0,12), path, saved }));
     client.send('pathResult', { ok: saved, path, reason: saved ? '' : 'save' });
     return saved;
   }

@@ -729,6 +729,7 @@ class AuthService {
         return { name: '', nameSet: false, path: '', appearance: APPEARANCE_SYSTEM.sanitizeAppearance(null) };
       }
       const profile = sanitizeProfile(raw);
+      console.warn('[bc-path:server]', JSON.stringify({ event: 'auth.profile.read', account: shortHash(id), path: profile.S && profile.S.path || '' }));
       if (ensureAsherAdminFishingRod(profile, account)) {
         await this.getProfileStore().savePlayer(id, profile);
       }
@@ -1009,6 +1010,7 @@ class AuthService {
     const publicAccount = this.publicAccount(account);
     if (!publicAccount || !publicAccount.id) throw Object.assign(new Error('Not signed in.'), { status: 401, code: 'auth' });
     const nextPath = resolveAdminAbilityPath(value);
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'auth.path.save.request', account: shortHash(publicAccount.id), path: nextPath }));
     if (!nextPath) throw Object.assign(new Error('Choose an ability path.'), { status: 400, code: 'ability_path' });
     const store = this.getProfileStore();
     let profile = null;
@@ -1019,6 +1021,7 @@ class AuthService {
       throw Object.assign(new Error('Could not load profile.'), { status: 500, code: 'profile' });
     }
     const currentPath = profile.S && profile.S.path || '';
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'auth.path.save.loaded', account: shortHash(publicAccount.id), currentPath, nextPath }));
     if (currentPath && currentPath !== nextPath) {
       throw Object.assign(new Error('Your hunter path is already locked.'), { status: 409, code: 'path_locked', path: currentPath });
     }
@@ -1026,6 +1029,7 @@ class AuthService {
     profile.tutorials.ability = Math.max(profile.tutorials.ability | 0, TUTORIAL_VERSIONS.ability);
     await store.savePlayer(publicAccount.id, profile);
     await updateLivePlayerProfiles(publicAccount.id, { path: nextPath });
+    console.warn('[bc-path:server]', JSON.stringify({ event: 'auth.path.save.complete', account: shortHash(publicAccount.id), path: nextPath }));
     return { name: profile.nameSet ? profile.name : '', nameSet: profile.nameSet === true, path: nextPath, appearance: APPEARANCE_SYSTEM.sanitizeAppearance(profile.appearance) };
   }
 
