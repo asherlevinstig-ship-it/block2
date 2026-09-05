@@ -2778,6 +2778,9 @@ test('First Hands guides the player through the first real objective',()=>{
   assert.match(world,/mara-first-hands-logs/);
   assert.match(world,/North Gate reached ✓/);
   assert.match(world,/HUB\.northGate\.z\+1\.2/);
+  assert.match(world,/function guidanceGroundY\(x,z\)/);
+  assert.match(world,/if\(isTownLand\(bx,bz\)\) return TOWN\.G\+1\.08/);
+  assert.match(world,/marker\.group\.position\.set\(p\.x,guidanceGroundY\(p\.x,p\.z\),p\.z\)/);
   assert.match(menus,/Quest accepted: First Hands[\s\S]*north gate/);
   assert.match(menus,/First Hands complete[\s\S]*gold trail back/);
   assert.match(networking,/Quest accepted: First Hands[\s\S]*north gate/);

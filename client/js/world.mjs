@@ -5103,13 +5103,23 @@ for(let i=0;i<GUIDE_PATH_MAX;i++){
     map:new THREE.CanvasTexture(glowTexCanvas), color:0x9ad26b, transparent:true, opacity:0,
     depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
   }));
+  // Keep a billboarded glow at the heart of every marker. Ground geometry can
+  // disappear into shallow voxel surfaces at grazing camera angles, while a
+  // sprite remains readable from first-person view and on uneven terrain.
+  const core=new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(glowTexCanvas), color:0x9ad26b, transparent:true, opacity:0,
+    depthWrite:false, depthTest:false, blending:THREE.AdditiveBlending
+  }));
+  core.scale.set(.92,.92,1);
+  core.position.y=.46;
+  core.renderOrder=30;
   wisp.scale.set(.26,.5,1);
   wisp.position.y=.24;
   wisp.renderOrder=29;
-  group.add(halo,chevron,wisp);
+  group.add(halo,chevron,core,wisp);
   group.visible=false;
   guidePathGroup.add(group);
-  guidePathMarkers.push({group,halo,chevron,wisp});
+  guidePathMarkers.push({group,halo,chevron,core,wisp});
 }
 const guideBeaconGroup=new THREE.Group();
 guideBeaconGroup.visible=false;
@@ -5605,9 +5615,18 @@ function routePoints(route, spacing=1.35){
   }
   return pts.slice(0,GUIDE_PATH_MAX);
 }
+function guidanceGroundY(x,z){
+  const bx=Math.floor(x),bz=Math.floor(z);
+  // surfaceY intentionally finds the highest block, which includes roofs,
+  // lamps, trees, and decorative pillars. Navigation markers need the
+  // walkable ground instead.
+  if(isTownLand(bx,bz)) return TOWN.G+1.08;
+  return Math.max(SEA+2.08,terrainHeight(bx,bz)+1.08);
+}
 function setGuideMarkerOpacity(marker,value){
   marker.chevron.material.opacity=value;
   marker.halo.material.opacity=value*.42;
+  marker.core.material.opacity=value*.72;
   marker.group.visible=value>.02;
 }
 function tickGuidancePath(dt, now){
@@ -5636,10 +5655,12 @@ function tickGuidancePath(dt, now){
       const forwardPulse=Math.max(0,1-pulseDistance/1.15);
       marker.chevron.material.color.setHex(info.color);
       marker.halo.material.color.setHex(info.color);
+      marker.core.material.color.setHex(info.color);
       marker.wisp.material.color.setHex(info.color);
-      marker.group.position.set(p.x,surfaceY(p.x,p.z)+.04,p.z);
+      marker.group.position.set(p.x,guidanceGroundY(p.x,p.z),p.z);
       marker.group.rotation.y=Math.atan2(-dx,-dz);
       marker.chevron.scale.set(.9+forwardPulse*.16,1.12+forwardPulse*.2,1);
+      marker.core.scale.setScalar(.82+forwardPulse*.28);
       const d=Math.hypot(player.pos.x-p.x, player.pos.z-p.z);
       const target=d<1.05 ? .04 : .48+forwardPulse*.47;
       const opacity=marker.chevron.material.opacity+(target-marker.chevron.material.opacity)*Math.min(1,dt*12);
@@ -5654,7 +5675,7 @@ function tickGuidancePath(dt, now){
       marker.wisp.material.opacity=opacity*.25;
     }
   }
-  const baseY=surfaceY(info.target.x,info.target.z)+.04;
+  const baseY=guidanceGroundY(info.target.x,info.target.z);
   const beaconPulse=.85+.15*Math.sin(now/420);
   setGuideBeaconColor(info.color);
   guideBeaconGroup.position.set(info.target.x,baseY,info.target.z);
