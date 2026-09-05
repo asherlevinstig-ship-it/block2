@@ -221,6 +221,7 @@ test('Town of Beginnings removes NPC cottages in favor of open districts', () =>
   assert.match(world, /BlockcraftTownArrivalGuide/);
   assert.match(world, /Job Board · Tamsin/);
   assert.match(world, /aegisApproach: \{ x: TOWN\.TC - 17\.5, z: TOWN\.TC - 40\.7 \}/);
+  assert.match(world, /grp\.position\.set\(HUB\.guardian\.x, TOWN\.G\+1\.06, HUB\.guardian\.z\)/);
   assert.match(world, /title:'AEGIS SHRINE'.*x:HUB\.guardian\.x-4\.7,z:HUB\.guardian\.z\+3\.7/);
   assert.match(world, /kind:'server-aegis'.*target:HUB\.aegisApproach/);
   assert.match(world, /\{x:HUB\.forgeChimney\.x, y:TG\+9\.6,\s+z:HUB\.forgeChimney\.z,\s+type:'smoke',\s+rate:2\.2,\s+maxDist:16\}/);

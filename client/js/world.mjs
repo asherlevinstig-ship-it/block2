@@ -5753,7 +5753,7 @@ townGroup.add(giantGuardian.grp);
 
 function makeAegisShrineDecor(){
   const grp=new THREE.Group();
-  grp.position.set(TOWN.TC+.5, TOWN.G+1.06, TOWN.TC-25.5);
+  grp.position.set(HUB.guardian.x, TOWN.G+1.06, HUB.guardian.z);
   const goldM=voxelMats('#b9852e','#ffd873','#765018','#402808');
   const blueM=glowVoxelMats('#145ea8','#9be8ff','#08345f','#67e8f9',1.2);
   const stoneM=voxelMats('#5b6070','#9098aa','#343944','#1d222c');
