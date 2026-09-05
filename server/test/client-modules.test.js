@@ -4824,6 +4824,18 @@ test('desktop social control is a bottom-right chat button', () => {
   assert.doesNotMatch(combat.match(/function openSocialFromHud\(\)[\s\S]*?\n\}/)?.[0]||'', /openPlayerSocialUI/);
 });
 
+test('nearby player menu can finish rendering every core action', () => {
+  const menus = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'menus.mjs'), 'utf8');
+  const networking = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'networking.mjs'), 'utf8');
+  const socialMenu = menus.match(/function openPlayerSocialUI\(target\)\{[\s\S]*?\n\}/)?.[0] || '';
+
+  assert.match(networking, /"COMPANIONS":\{get:\(\)=>COMPANIONS\}/);
+  assert.match(socialMenu, /qBtn\('TRADE'/);
+  assert.match(socialMenu, /qBtn\('ADD FRIEND'/);
+  assert.match(socialMenu, /qBtn\('ROB'/);
+  assert.match(socialMenu, /qBtn\('CLOSE'/);
+});
+
 test('a desktop world click upgrades finite fallback mouse-look to native pointer lock', () => {
   const combat = fs.readFileSync(path.join(__dirname, '..', '..', 'client', 'js', 'combat.mjs'), 'utf8');
   assert.match(combat, /if\(lockFallback&&document\.pointerLockElement!==renderer\.domElement&&!isTouchGameplayDevice\(\)\)/);

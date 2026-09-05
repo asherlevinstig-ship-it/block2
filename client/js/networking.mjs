@@ -854,6 +854,7 @@ function showProspectMarkers(m){
 const legacyNetworkingBindings={
   "acknowledgeSmartSuggestionKey":{get:()=>acknowledgeSmartSuggestionKey},
   "activeFamiliar":{get:()=>COMPANIONS.activeFamiliar,set:value=>{COMPANIONS.activeFamiliar=value;}},
+  "COMPANIONS":{get:()=>COMPANIONS},
   "addLightningBeam":{get:()=>addLightningBeam},
   "appearanceBackDummy":{get:()=>appearanceBackDummy,set:value=>{appearanceBackDummy=value;}},
   "appearanceDummy":{get:()=>appearanceDummy,set:value=>{appearanceDummy=value;}},
